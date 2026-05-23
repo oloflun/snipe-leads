@@ -19,6 +19,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..700,30..100&family=JetBrains+Mono:wght@400;500&display=swap"
           rel="stylesheet"
         />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Geist:wght@400;450;500;600;700&display=swap"
+          rel="stylesheet"
+        />
       </head>
       <body className="noise">
         <LocaleProvider>{children}</LocaleProvider>

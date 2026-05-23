@@ -1,5 +1,5 @@
-import { LandingPage } from "@/components/LandingPage";
+import { DraftLanding } from "@/components/DesignDrafts";
 
 export default function Page() {
-  return <LandingPage />;
+  return <DraftLanding variant="editorial-clean" asMain />;
 }

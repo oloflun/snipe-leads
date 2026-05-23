@@ -47,3 +47,13 @@ Codex rebuilt the project from the prompt into a Next.js App Router SaaS mock/pr
 ## 2026-05-22 Conclude
 - Session log updated at `session-logs/2026-05-22-codex-snipra-rebuild.md`.
 - Next focus: connect mockdata to Supabase, generate database types after schema application, implement real AI/mail adapters, add browser/UI regression coverage, and split `components/WorkspaceViews.tsx` before the next large feature pass.
+
+## 2026-05-24 Design Draft Polish — Claude
+- Landing page (`/` → `editorial-clean` variant) **APPROVED** by user.
+- Fixed gradient (ochre tint): replaced blurred blob (clipped by `body { overflow-x: hidden }`) with pure CSS radial-gradient div on `<main>` at `top-0`. No filter = no clipping.
+- Header frosted glass: `bg-paper/30 backdrop-blur-xl` (was `/60` — now 50% more see-through).
+- Gradient: `circle at 18% 0%`, opacity 0.3, transparent 65%, h-860px, mask fades 78%→100%.
+- Dashboard portal needs further work — open thread for next session.
+- Session log: `session-logs/2026-05-24-session-log.md`
+- Active plan: `plans/2026-05-24-snipra-design-drafts.md`
+- **Next focus: dashboard portal improvements** (`/design-drafts/editorial-clean/portal`).
