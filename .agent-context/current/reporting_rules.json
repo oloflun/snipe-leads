@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "global_rules": {
+    "grouped_reporting_default": true,
+    "authoritative_vs_derived_paths": []
+  },
+  "task_families": {
+    "lookup": {
+      "optional_verify_budget": 1,
+      "stop_after": "Stop after the authoritative source and one optional supporting check.",
+      "stop_unless": [
+        "a structured artifact references a missing file",
+        "markdown and structured artifacts disagree",
+        "code contradicts the structured contract",
+        "the task explicitly asks for concrete instances rather than grouped families"
+      ],
+      "groupable_families": [],
+      "never_enumerate_individually": []
+    },
+    "impact_analysis": {
+      "optional_verify_budget": 2,
+      "stop_after": "Stop after the blast radius is complete and required families are grouped correctly.",
+      "stop_unless": [
+        "a structured artifact references a missing file",
+        "markdown and structured artifacts disagree",
+        "code contradicts the structured contract",
+        "the task explicitly asks for concrete instances rather than grouped families"
+      ],
+      "groupable_families": [],
+      "never_enumerate_individually": []
+    },
+    "planning": {
+      "optional_verify_budget": 2,
+      "stop_after": "Stop after the plan is executable without further repo browsing.",
+      "stop_unless": [
+        "a structured artifact references a missing file",
+        "markdown and structured artifacts disagree",
+        "code contradicts the structured contract",
+        "the task explicitly asks for concrete instances rather than grouped families"
+      ],
+      "groupable_families": [],
+      "never_enumerate_individually": []
+    },
+    "diagnosis": {
+      "optional_verify_budget": 3,
+      "stop_after": "Stop after the ranked runtime chain is established and each cause has a confirmation method.",
+      "stop_unless": [
+        "a structured artifact references a missing file",
+        "markdown and structured artifacts disagree",
+        "code contradicts the structured contract",
+        "the task explicitly asks for concrete instances rather than grouped families"
+      ],
+      "groupable_families": [],
+      "never_enumerate_individually": []
+    }
+  }
+}

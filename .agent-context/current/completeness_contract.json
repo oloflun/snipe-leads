@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "task_families": {
+    "lookup": {
+      "minimum_sufficient_evidence": [
+        "exact answer",
+        "authoritative source path",
+        "one supporting chain only if the task asks for authority"
+      ],
+      "required_chain_members": [],
+      "contractually_required_files": [],
+      "required_file_families": []
+    },
+    "impact_analysis": {
+      "minimum_sufficient_evidence": [
+        "complete blast radius",
+        "required file families",
+        "contractually required pass-through layers"
+      ],
+      "required_chain_members": [],
+      "contractually_required_files": [],
+      "required_file_families": []
+    },
+    "planning": {
+      "minimum_sufficient_evidence": [
+        "files to create or modify",
+        "commands in order",
+        "validation criteria"
+      ],
+      "required_chain_members": [],
+      "contractually_required_files": [],
+      "required_file_families": []
+    },
+    "diagnosis": {
+      "minimum_sufficient_evidence": [
+        "ranked root causes",
+        "runtime path or failure chain",
+        "confirmation method for each cause"
+      ],
+      "required_chain_members": [],
+      "contractually_required_files": [],
+      "required_file_families": []
+    }
+  }
+}

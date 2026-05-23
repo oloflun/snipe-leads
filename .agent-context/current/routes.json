@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "task_routes": {
+    "lookup": {
+      "description": "Find a value, threshold, URL, or authoritative file.",
+      "pack_read_order": [
+        "00_START_HERE.md",
+        "20_CODE_MAP.md",
+        "reporting_rules.json"
+      ],
+      "fallback_files": [
+        "30_BEHAVIORAL_INVARIANTS.md"
+      ],
+      "completeness_ref": "lookup",
+      "reporting_ref": "lookup"
+    },
+    "impact_analysis": {
+      "description": "List every file or file family that must change.",
+      "pack_read_order": [
+        "00_START_HERE.md",
+        "30_BEHAVIORAL_INVARIANTS.md",
+        "completeness_contract.json",
+        "reporting_rules.json",
+        "20_CODE_MAP.md"
+      ],
+      "fallback_files": [
+        "10_SYSTEM_OVERVIEW.md"
+      ],
+      "completeness_ref": "impact_analysis",
+      "reporting_ref": "impact_analysis"
+    },
+    "planning": {
+      "description": "Write an implementation plan with files, commands, and validation.",
+      "pack_read_order": [
+        "00_START_HERE.md",
+        "20_CODE_MAP.md",
+        "30_BEHAVIORAL_INVARIANTS.md",
+        "completeness_contract.json",
+        "reporting_rules.json"
+      ],
+      "fallback_files": [
+        "40_OPERATIONS_AND_RELEASE.md"
+      ],
+      "completeness_ref": "planning",
+      "reporting_ref": "planning"
+    },
+    "diagnosis": {
+      "description": "Rank likely root causes and cite the runtime path.",
+      "pack_read_order": [
+        "00_START_HERE.md",
+        "10_SYSTEM_OVERVIEW.md",
+        "30_BEHAVIORAL_INVARIANTS.md",
+        "completeness_contract.json",
+        "reporting_rules.json"
+      ],
+      "fallback_files": [
+        "20_CODE_MAP.md"
+      ],
+      "completeness_ref": "diagnosis",
+      "reporting_ref": "diagnosis"
+    }
+  }
+}

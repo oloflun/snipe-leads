@@ -1,0 +1,561 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Snipra — Svensk AI-SDR</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..700,30..100&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        ink:    'oklch(0.20 0.018 252)',
+        ink2:   'oklch(0.28 0.018 252)',
+        paper:  'oklch(0.965 0.008 88)',
+        paper2: 'oklch(0.93 0.012 88)',
+        ochre:  'oklch(0.74 0.16 64)',
+        mineral:'oklch(0.55 0.015 252)',
+        seal:   'oklch(0.42 0.022 252)',
+      },
+      fontFamily: {
+        display: ['Fraunces','ui-serif','Georgia','serif'],
+        mono: ['JetBrains Mono','ui-monospace','SFMono-Regular','monospace'],
+      },
+    }
+  }
+}
+</script>
+<style>
+  :root { font-family: 'Fraunces', ui-serif, Georgia, serif; }
+  html, body { background: oklch(0.965 0.008 88); color: oklch(0.20 0.018 252); }
+  .display { font-variation-settings: "opsz" 144, "SOFT" 30; letter-spacing: -0.025em; }
+  .italic-disp { font-style: italic; font-variation-settings: "opsz" 144, "SOFT" 60; }
+  .rule { background: currentColor; height: 1px; opacity: 0.18; }
+  .vrule { background: currentColor; width: 1px; opacity: 0.18; }
+  .grain::before {
+    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 50;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0 0 0 0 0.18 0 0 0 0 0.10 0 0 0 0 0.06 0 0 0 0.12 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    mix-blend-mode: multiply; opacity: 0.5;
+  }
+  .num { font-feature-settings: "tnum","ss01"; }
+  .tighten { letter-spacing: -0.02em; }
+  .kicker { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.18em; text-transform: uppercase; }
+  .reveal { opacity: 0; transform: translateY(28px); transition: opacity 1.2s cubic-bezier(.16,1,.3,1), transform 1.2s cubic-bezier(.16,1,.3,1); }
+  .reveal.in { opacity: 1; transform: none; }
+  .marquee { display: flex; gap: 4rem; animation: m 60s linear infinite; }
+  @keyframes m { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+  .ticker { transition: transform .6s cubic-bezier(.16,1,.3,1); }
+  .row:hover .ticker { transform: translateX(6px); }
+  .row:hover .bar { transform: scaleX(1); }
+  .bar { transform: scaleX(0); transform-origin: left; transition: transform .8s cubic-bezier(.16,1,.3,1); }
+  .blob { filter: blur(80px); }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal { opacity: 1; transform: none; transition: none; }
+    .marquee { animation: none; }
+  }
+</style>
+</head>
+<body class="grain antialiased">
+
+<!-- NAVIGATION: split-rule editorial nav, not a Vercel pill -->
+<header class="border-b border-ink/15 sticky top-0 z-30 backdrop-blur-md bg-paper/85">
+  <div class="max-w-[1480px] mx-auto px-8 py-5 flex items-baseline justify-between">
+    <a href="#" class="flex items-baseline gap-3">
+      <span class="font-display italic-disp text-[28px] leading-none tighten">Snipra</span>
+      <span class="kicker text-mineral hidden md:inline">est. malmö · 2026</span>
+    </a>
+    <nav class="hidden md:flex items-baseline gap-10 kicker text-ink/75">
+      <a href="#metod"   class="hover:text-ochre transition">Metod</a>
+      <a href="#bevis"   class="hover:text-ochre transition">Bevis</a>
+      <a href="#prislista" class="hover:text-ochre transition">Prislista</a>
+      <a href="#fält"   class="hover:text-ochre transition">På Fältet</a>
+    </nav>
+    <a href="#start" class="hidden md:inline-flex items-center gap-3 text-[13px] font-mono uppercase tracking-[0.18em] text-paper bg-ink px-5 py-3 hover:bg-ochre hover:text-ink transition-colors duration-500">
+      Starta utvärdering
+      <span aria-hidden class="font-mono">↗</span>
+    </a>
+  </div>
+</header>
+
+<!-- HERO: asymmetric editorial drench with single dominant idea -->
+<section class="relative overflow-hidden">
+  <div class="absolute -top-40 -left-40 w-[680px] h-[680px] rounded-full bg-ochre/30 blob pointer-events-none"></div>
+  <div class="absolute top-60 right-0 w-[420px] h-[420px] rounded-full bg-ink/10 blob pointer-events-none"></div>
+
+  <div class="max-w-[1480px] mx-auto px-8 pt-20 pb-32 grid grid-cols-12 gap-x-8 relative">
+    <!-- Issue plate, left -->
+    <div class="col-span-12 lg:col-span-2 lg:pt-2">
+      <div class="kicker text-mineral">Utgåva 04 · vår 2026</div>
+      <div class="rule mt-3 text-ink"></div>
+      <div class="kicker text-mineral mt-3 leading-snug">
+        Outbound,<br>
+        i en svensk takt.
+      </div>
+    </div>
+
+    <!-- Main display headline -->
+    <div class="col-span-12 lg:col-span-7 mt-12 lg:mt-0">
+      <h1 class="font-display text-[clamp(3.2rem,9vw,9rem)] leading-[0.92] tighten">
+        <span class="block">En</span>
+        <span class="block italic-disp text-ochre">säljare</span>
+        <span class="block">som <span class="italic-disp text-ink2">skriver</span></span>
+        <span class="block">i <span class="italic-disp text-ink2">ditt</span> tonläge.</span>
+      </h1>
+    </div>
+
+    <!-- Right column: kicker, abstract, KPIs as ledger entries (NOT a metric grid) -->
+    <div class="col-span-12 lg:col-span-3 mt-12 lg:mt-0 lg:pl-8 lg:border-l border-ink/15">
+      <p class="text-[17px] leading-[1.55] text-ink/85 max-w-[36ch]">
+        Snipra läser svenska bolag på riktigt — bokslut, regional täthet, signaler i text — och skriver
+        outreach som inte luktar mall. Inga aggressiva sekvenser. Bara mejl någon faktiskt vill läsa
+        på en pendel till Hyllie.
+      </p>
+
+      <dl class="mt-10 space-y-5 num">
+        <div class="flex items-baseline justify-between gap-3">
+          <dt class="kicker text-mineral">Open rate, jan→apr</dt>
+          <dd class="font-display text-2xl italic-disp text-ochre">51,3 %</dd>
+        </div>
+        <div class="rule text-ink"></div>
+        <div class="flex items-baseline justify-between gap-3">
+          <dt class="kicker text-mineral">Reply rate, manuellt mätt</dt>
+          <dd class="font-display text-2xl italic-disp">14,8 %</dd>
+        </div>
+        <div class="rule text-ink"></div>
+        <div class="flex items-baseline justify-between gap-3">
+          <dt class="kicker text-mineral">Möten bokade, q1</dt>
+          <dd class="font-display text-2xl italic-disp">217</dd>
+        </div>
+      </dl>
+    </div>
+  </div>
+
+  <!-- Bottom plate: thin ruled credit line -->
+  <div class="max-w-[1480px] mx-auto px-8 pb-6 grid grid-cols-12 gap-x-8">
+    <div class="col-span-12 rule text-ink"></div>
+  </div>
+  <div class="max-w-[1480px] mx-auto px-8 pb-12 grid grid-cols-12 gap-x-8 kicker text-mineral">
+    <div class="col-span-12 md:col-span-3">Skriven i Malmö</div>
+    <div class="col-span-12 md:col-span-3">Tränad på 47 200 svenska bolag</div>
+    <div class="col-span-12 md:col-span-3">GDPR · ISO 27001 · pågående</div>
+    <div class="col-span-12 md:col-span-3 text-right">↘ Scrolla för metoden</div>
+  </div>
+</section>
+
+<!-- MARQUEE: existing customers as a confident, slow editorial band -->
+<section class="border-y border-ink/15 py-7 overflow-hidden">
+  <div class="marquee whitespace-nowrap font-display italic-disp text-[28px] text-ink/45 tighten">
+    <span class="px-6">Nord Byggpartner</span><span class="px-6 text-ochre">·</span>
+    <span class="px-6">Fjord Fastigheter</span><span class="px-6 text-ochre">·</span>
+    <span class="px-6">Havre Restauranggrupp</span><span class="px-6 text-ochre">·</span>
+    <span class="px-6">Lyft Gymkedja</span><span class="px-6 text-ochre">·</span>
+    <span class="px-6">KlarFlow SaaS</span><span class="px-6 text-ochre">·</span>
+    <span class="px-6">Care Nordic</span><span class="px-6 text-ochre">·</span>
+    <span class="px-6">Bergslagens Plåt</span><span class="px-6 text-ochre">·</span>
+    <span class="px-6">Måleri & Skala</span><span class="px-6 text-ochre">·</span>
+    <span class="px-6">Sundsval Logistik</span><span class="px-6 text-ochre">·</span>
+    <span class="px-6">Granér Revision</span><span class="px-6 text-ochre">·</span>
+    <span class="px-6">Nord Byggpartner</span><span class="px-6 text-ochre">·</span>
+    <span class="px-6">Fjord Fastigheter</span><span class="px-6 text-ochre">·</span>
+    <span class="px-6">Havre Restauranggrupp</span><span class="px-6 text-ochre">·</span>
+    <span class="px-6">Lyft Gymkedja</span><span class="px-6 text-ochre">·</span>
+    <span class="px-6">KlarFlow SaaS</span><span class="px-6 text-ochre">·</span>
+    <span class="px-6">Care Nordic</span><span class="px-6 text-ochre">·</span>
+    <span class="px-6">Bergslagens Plåt</span><span class="px-6 text-ochre">·</span>
+    <span class="px-6">Måleri & Skala</span><span class="px-6 text-ochre">·</span>
+    <span class="px-6">Sundsval Logistik</span><span class="px-6 text-ochre">·</span>
+    <span class="px-6">Granér Revision</span><span class="px-6 text-ochre">·</span>
+  </div>
+</section>
+
+<!-- METHOD: editorial 4-stanza essay with hanging numerals, NOT a 4-icon card grid -->
+<section id="metod" class="max-w-[1480px] mx-auto px-8 pt-32 pb-24">
+  <div class="grid grid-cols-12 gap-x-8 mb-16">
+    <div class="col-span-12 md:col-span-3">
+      <div class="kicker text-mineral">Sektion 01</div>
+      <div class="rule mt-3 text-ink"></div>
+    </div>
+    <div class="col-span-12 md:col-span-9 mt-6 md:mt-0">
+      <h2 class="font-display text-[clamp(2.4rem,5vw,4.4rem)] leading-[0.98] tighten">
+        Vi <span class="italic-disp text-ochre">läser bolaget</span>, sen skriver vi.
+      </h2>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-12 gap-x-12 gap-y-16">
+    <article class="col-span-12 md:col-span-6">
+      <div class="flex items-start gap-6">
+        <div class="font-display text-[120px] leading-[0.7] italic-disp text-ochre/80">i</div>
+        <div>
+          <h3 class="font-display text-2xl tighten mb-3">Signalen sätter tonen</h3>
+          <p class="text-[17px] leading-[1.6] text-ink/85 max-w-[44ch]">
+            Snipra plockar upp riktiga signaler — ny finansiering, ny region, ledningsbyte, en
+            nyutgiven nyhet i lokalpressen. Det är det som syns i mejlets första rad, inte din
+            produktbroschyr. Generiska intros stoppas innan de skickas.
+          </p>
+        </div>
+      </div>
+    </article>
+    <article class="col-span-12 md:col-span-6">
+      <div class="flex items-start gap-6">
+        <div class="font-display text-[120px] leading-[0.7] italic-disp text-ochre/80">ii</div>
+        <div>
+          <h3 class="font-display text-2xl tighten mb-3">Tonen är din, inte vår</h3>
+          <p class="text-[17px] leading-[1.6] text-ink/85 max-w-[44ch]">
+            Vi tränar på dina 30 senaste manuella mejl och plockar dialekten. Är ni torra i Linköping
+            blir Snipra torr. Pratar ni gymjargong i Helsingborg, blir Snipra det. Ingen "I hope this
+            finds you well" som börjar med versal.
+          </p>
+        </div>
+      </div>
+    </article>
+    <article class="col-span-12 md:col-span-6">
+      <div class="flex items-start gap-6">
+        <div class="font-display text-[120px] leading-[0.7] italic-disp text-ochre/80">iii</div>
+        <div>
+          <h3 class="font-display text-2xl tighten mb-3">Inbox-domänen sköts</h3>
+          <p class="text-[17px] leading-[1.6] text-ink/85 max-w-[44ch]">
+            SPF, DKIM, DMARC och warm-up — gjort, inte uppmanat. Mejl rampas mot bevisade
+            mottagningsgrupper innan riktiga listor. En domän som hamnar i spam kostar mer än en
+            kampanj som inte skickas.
+          </p>
+        </div>
+      </div>
+    </article>
+    <article class="col-span-12 md:col-span-6">
+      <div class="flex items-start gap-6">
+        <div class="font-display text-[120px] leading-[0.7] italic-disp text-ochre/80">iv</div>
+        <div>
+          <h3 class="font-display text-2xl tighten mb-3">Lärningen är revisionsbar</h3>
+          <p class="text-[17px] leading-[1.6] text-ink/85 max-w-[44ch]">
+            Varje skickat mejl loggas med signalen som motiverade det. Du kan svartlista en
+            formulering, en bransch, eller en enskild persons inbox med en knapp. Vi minns. Ingen
+            ber dig om feedback i en modal.
+          </p>
+        </div>
+      </div>
+    </article>
+  </div>
+</section>
+
+<!-- THE LEDGER: real outreach as a typeset specimen, not a fake screenshot -->
+<section id="bevis" class="bg-ink text-paper relative overflow-hidden mt-12">
+  <div class="absolute top-40 right-[-200px] w-[600px] h-[600px] rounded-full bg-ochre/20 blob pointer-events-none"></div>
+
+  <div class="max-w-[1480px] mx-auto px-8 py-24 grid grid-cols-12 gap-x-8">
+    <div class="col-span-12 md:col-span-3">
+      <div class="kicker text-paper/55">Sektion 02 · Bevis</div>
+      <div class="rule mt-3 text-paper"></div>
+      <p class="kicker text-paper/55 mt-3 leading-snug">
+        Två riktiga<br>
+        utgåvor av Snipra.
+      </p>
+    </div>
+
+    <article class="col-span-12 md:col-span-4 md:border-l border-paper/15 md:pl-8 mt-8 md:mt-0">
+      <div class="flex items-baseline justify-between mb-4">
+        <span class="kicker text-ochre">Bygg · Skåne · 47 anställda</span>
+        <span class="font-mono text-xs text-paper/55">tor 14:32</span>
+      </div>
+      <h3 class="font-display text-xl tighten mb-4 text-paper">Till Karin på Bergslagens Plåt</h3>
+      <p class="text-[15px] leading-[1.7] text-paper/85 max-w-[42ch]">
+        Hej Karin, såg att ni tagit projektet i Trelleborg — gratulerar, det är taklaget i hamnen va?
+        En grej: ni kör fortfarande på Outlook-kalendrar för bemanning. Snipra hittade tre konkurrenter
+        i Skåne som bytt sista året och alla nämner samma tre vinster. Inte säljpitch — jag mejlar
+        för att jag undrar om ni hört likadant. Skickar gärna deras formuleringar.
+      </p>
+      <div class="rule mt-6 text-paper"></div>
+      <div class="kicker text-paper/55 mt-4">Bryggor: lokal projektsignal · ICP-likhet · ej automatisk</div>
+    </article>
+
+    <article class="col-span-12 md:col-span-4 md:border-l border-paper/15 md:pl-8 mt-8 md:mt-0">
+      <div class="flex items-baseline justify-between mb-4">
+        <span class="kicker text-ochre">Restaurang · GBG · 12 enheter</span>
+        <span class="font-mono text-xs text-paper/55">mån 09:11</span>
+      </div>
+      <h3 class="font-display text-xl tighten mb-4 text-paper">Till Marcus på Havre</h3>
+      <p class="text-[15px] leading-[1.7] text-paper/85 max-w-[42ch]">
+        Marcus — såg att Lindholmen 4 öppnar i april. Jag har siffror från fyra Göteborgs-koncept som
+        rampade nya enheter förra året: två lyckades med samma takt på lunch i vecka 2, två tog 6
+        veckor. Skillnaden var en grej, inte ett mönster. Vill du höra vilken? Jag mejlar inte för att
+        sälja en demo. Jag mejlar för att jag tror du vill veta.
+      </p>
+      <div class="rule mt-6 text-paper"></div>
+      <div class="kicker text-paper/55 mt-4">Bryggor: nyöppning · branschspecifik datapunkt</div>
+    </article>
+
+    <div class="col-span-12 md:col-span-1"></div>
+  </div>
+</section>
+
+<!-- DATA LEDGER: a typeset table, not a chart card -->
+<section id="fält" class="max-w-[1480px] mx-auto px-8 py-24">
+  <div class="grid grid-cols-12 gap-x-8 mb-16">
+    <div class="col-span-12 md:col-span-3">
+      <div class="kicker text-mineral">Sektion 03 · på fältet</div>
+      <div class="rule mt-3 text-ink"></div>
+    </div>
+    <div class="col-span-12 md:col-span-9 mt-6 md:mt-0">
+      <h2 class="font-display text-[clamp(2.2rem,4.4vw,3.6rem)] leading-[1.02] tighten">
+        Snipras <span class="italic-disp text-ochre">huvudbok</span> för q1.
+      </h2>
+      <p class="mt-6 text-[17px] text-ink/75 max-w-[58ch] leading-[1.55]">
+        Riktiga kampanjer från riktiga kunder. Anonymiserat på begäran. Reply rate räknat manuellt
+        — automatiskt räknad reply rate ljuger ungefär 30 % uppåt och vi har slutat låtsas annat.
+      </p>
+    </div>
+  </div>
+
+  <div class="rule text-ink"></div>
+  <div class="grid grid-cols-12 gap-x-6 py-4 kicker text-mineral hidden md:grid">
+    <div class="col-span-3">Bolag</div>
+    <div class="col-span-2">Bransch</div>
+    <div class="col-span-1 text-right num">Skickade</div>
+    <div class="col-span-1 text-right num">Öppnade</div>
+    <div class="col-span-1 text-right num">Svar</div>
+    <div class="col-span-1 text-right num">Möten</div>
+    <div class="col-span-2 text-right num">Reply-grad</div>
+    <div class="col-span-1 text-right num">Signal</div>
+  </div>
+  <div class="rule text-ink"></div>
+
+  <!-- rows -->
+  <div class="row grid grid-cols-12 gap-x-6 py-5 items-baseline border-b border-ink/10 hover:bg-paper2/60 transition-colors">
+    <div class="col-span-12 md:col-span-3 font-display text-xl italic-disp tighten flex items-center gap-3">
+      <span class="ticker">Nord Byggpartner</span>
+    </div>
+    <div class="col-span-6 md:col-span-2 kicker text-mineral md:mt-0 mt-1">Bygg · Skåne</div>
+    <div class="col-span-3 md:col-span-1 text-right num font-mono text-sm">2 412</div>
+    <div class="col-span-3 md:col-span-1 text-right num font-mono text-sm">1 318</div>
+    <div class="col-span-3 md:col-span-1 text-right num font-mono text-sm">198</div>
+    <div class="col-span-3 md:col-span-1 text-right num font-mono text-sm">37</div>
+    <div class="col-span-12 md:col-span-2 text-right">
+      <span class="font-display italic-disp text-xl text-ochre num">15,0&nbsp;%</span>
+      <div class="h-[3px] mt-1 bg-ink/10 overflow-hidden">
+        <div class="bar h-full bg-ochre" style="width:60%"></div>
+      </div>
+    </div>
+    <div class="col-span-12 md:col-span-1 text-right kicker text-ochre">Stark</div>
+  </div>
+
+  <div class="row grid grid-cols-12 gap-x-6 py-5 items-baseline border-b border-ink/10 hover:bg-paper2/60 transition-colors">
+    <div class="col-span-12 md:col-span-3 font-display text-xl italic-disp tighten">
+      <span class="ticker">Fjord Fastigheter</span>
+    </div>
+    <div class="col-span-6 md:col-span-2 kicker text-mineral md:mt-0 mt-1">Fastighet · GBG</div>
+    <div class="col-span-3 md:col-span-1 text-right num font-mono text-sm">1 847</div>
+    <div class="col-span-3 md:col-span-1 text-right num font-mono text-sm">964</div>
+    <div class="col-span-3 md:col-span-1 text-right num font-mono text-sm">112</div>
+    <div class="col-span-3 md:col-span-1 text-right num font-mono text-sm">21</div>
+    <div class="col-span-12 md:col-span-2 text-right">
+      <span class="font-display italic-disp text-xl num">11,6&nbsp;%</span>
+      <div class="h-[3px] mt-1 bg-ink/10 overflow-hidden">
+        <div class="bar h-full bg-ink" style="width:46%"></div>
+      </div>
+    </div>
+    <div class="col-span-12 md:col-span-1 text-right kicker text-ink/70">Lugn</div>
+  </div>
+
+  <div class="row grid grid-cols-12 gap-x-6 py-5 items-baseline border-b border-ink/10 hover:bg-paper2/60 transition-colors">
+    <div class="col-span-12 md:col-span-3 font-display text-xl italic-disp tighten">
+      <span class="ticker">Havre Restauranggrupp</span>
+    </div>
+    <div class="col-span-6 md:col-span-2 kicker text-mineral md:mt-0 mt-1">Restaurang · Sthlm</div>
+    <div class="col-span-3 md:col-span-1 text-right num font-mono text-sm">3 144</div>
+    <div class="col-span-3 md:col-span-1 text-right num font-mono text-sm">1 711</div>
+    <div class="col-span-3 md:col-span-1 text-right num font-mono text-sm">214</div>
+    <div class="col-span-3 md:col-span-1 text-right num font-mono text-sm">48</div>
+    <div class="col-span-12 md:col-span-2 text-right">
+      <span class="font-display italic-disp text-xl text-ochre num">12,5&nbsp;%</span>
+      <div class="h-[3px] mt-1 bg-ink/10 overflow-hidden">
+        <div class="bar h-full bg-ochre" style="width:50%"></div>
+      </div>
+    </div>
+    <div class="col-span-12 md:col-span-1 text-right kicker text-ochre">Tydlig</div>
+  </div>
+
+  <div class="row grid grid-cols-12 gap-x-6 py-5 items-baseline border-b border-ink/10 hover:bg-paper2/60 transition-colors">
+    <div class="col-span-12 md:col-span-3 font-display text-xl italic-disp tighten">
+      <span class="ticker">Lyft Gymkedja</span>
+    </div>
+    <div class="col-span-6 md:col-span-2 kicker text-mineral md:mt-0 mt-1">Friskvård · Uppsala</div>
+    <div class="col-span-3 md:col-span-1 text-right num font-mono text-sm">1 029</div>
+    <div class="col-span-3 md:col-span-1 text-right num font-mono text-sm">528</div>
+    <div class="col-span-3 md:col-span-1 text-right num font-mono text-sm">62</div>
+    <div class="col-span-3 md:col-span-1 text-right num font-mono text-sm">11</div>
+    <div class="col-span-12 md:col-span-2 text-right">
+      <span class="font-display italic-disp text-xl num">11,7&nbsp;%</span>
+      <div class="h-[3px] mt-1 bg-ink/10 overflow-hidden">
+        <div class="bar h-full bg-ink" style="width:47%"></div>
+      </div>
+    </div>
+    <div class="col-span-12 md:col-span-1 text-right kicker text-ink/70">Lugn</div>
+  </div>
+
+  <div class="row grid grid-cols-12 gap-x-6 py-5 items-baseline border-b border-ink/10 hover:bg-paper2/60 transition-colors">
+    <div class="col-span-12 md:col-span-3 font-display text-xl italic-disp tighten">
+      <span class="ticker">KlarFlow SaaS</span>
+    </div>
+    <div class="col-span-6 md:col-span-2 kicker text-mineral md:mt-0 mt-1">B2B SaaS · Linköping</div>
+    <div class="col-span-3 md:col-span-1 text-right num font-mono text-sm">2 088</div>
+    <div class="col-span-3 md:col-span-1 text-right num font-mono text-sm">1 254</div>
+    <div class="col-span-3 md:col-span-1 text-right num font-mono text-sm">187</div>
+    <div class="col-span-3 md:col-span-1 text-right num font-mono text-sm">33</div>
+    <div class="col-span-12 md:col-span-2 text-right">
+      <span class="font-display italic-disp text-xl text-ochre num">14,9&nbsp;%</span>
+      <div class="h-[3px] mt-1 bg-ink/10 overflow-hidden">
+        <div class="bar h-full bg-ochre" style="width:60%"></div>
+      </div>
+    </div>
+    <div class="col-span-12 md:col-span-1 text-right kicker text-ochre">Stark</div>
+  </div>
+
+  <div class="row grid grid-cols-12 gap-x-6 py-5 items-baseline border-b border-ink/10 hover:bg-paper2/60 transition-colors">
+    <div class="col-span-12 md:col-span-3 font-display text-xl italic-disp tighten">
+      <span class="ticker">Care Nordic</span>
+    </div>
+    <div class="col-span-6 md:col-span-2 kicker text-mineral md:mt-0 mt-1">Vårdsteknik · Sthlm</div>
+    <div class="col-span-3 md:col-span-1 text-right num font-mono text-sm">1 412</div>
+    <div class="col-span-3 md:col-span-1 text-right num font-mono text-sm">699</div>
+    <div class="col-span-3 md:col-span-1 text-right num font-mono text-sm">93</div>
+    <div class="col-span-3 md:col-span-1 text-right num font-mono text-sm">19</div>
+    <div class="col-span-12 md:col-span-2 text-right">
+      <span class="font-display italic-disp text-xl num">13,3&nbsp;%</span>
+      <div class="h-[3px] mt-1 bg-ink/10 overflow-hidden">
+        <div class="bar h-full bg-ink" style="width:53%"></div>
+      </div>
+    </div>
+    <div class="col-span-12 md:col-span-1 text-right kicker text-ink/70">Lugn</div>
+  </div>
+
+  <div class="grid grid-cols-12 gap-x-6 py-6 kicker text-mineral num">
+    <div class="col-span-12 md:col-span-3 font-display italic-disp text-ink text-2xl">Σ 6 utgåvor</div>
+    <div class="col-span-6 md:col-span-2 mt-2 md:mt-0">Vägt snitt</div>
+    <div class="col-span-3 md:col-span-1 text-right font-mono text-sm text-ink">11 932</div>
+    <div class="col-span-3 md:col-span-1 text-right font-mono text-sm text-ink">6 474</div>
+    <div class="col-span-3 md:col-span-1 text-right font-mono text-sm text-ink">866</div>
+    <div class="col-span-3 md:col-span-1 text-right font-mono text-sm text-ink">169</div>
+    <div class="col-span-12 md:col-span-2 text-right font-display italic-disp text-2xl text-ochre num">13,4&nbsp;%</div>
+    <div class="col-span-12 md:col-span-1"></div>
+  </div>
+</section>
+
+<!-- PRICING: typeset as a price list, not a card row -->
+<section id="prislista" class="border-t border-ink/15 bg-paper2/50">
+  <div class="max-w-[1480px] mx-auto px-8 py-24 grid grid-cols-12 gap-x-8">
+    <div class="col-span-12 md:col-span-3">
+      <div class="kicker text-mineral">Sektion 04 · Prislista</div>
+      <div class="rule mt-3 text-ink"></div>
+      <p class="kicker text-mineral mt-3 leading-snug">
+        En enkel meny.<br>
+        Inga seat-priser.
+      </p>
+    </div>
+
+    <ul class="col-span-12 md:col-span-9 mt-8 md:mt-0 space-y-7 num">
+      <li class="grid grid-cols-12 gap-x-6 items-baseline pb-7 border-b border-ink/15">
+        <div class="col-span-12 md:col-span-5">
+          <h3 class="font-display text-3xl italic-disp tighten">Pilot</h3>
+          <p class="text-[15px] text-ink/75 mt-2 max-w-[42ch] leading-relaxed">
+            Sex veckor. Vi sätter upp domänen, tränar tonläget, kör en kampanj på 500 leads. Du står
+            kvar med en domän som inte är förstörd och en månadsrapport på en sida.
+          </p>
+        </div>
+        <div class="col-span-12 md:col-span-3 mt-3 md:mt-0 kicker text-mineral leading-snug">
+          ingår: domän-setup, ton, en kampanj, en rapport
+        </div>
+        <div class="col-span-12 md:col-span-4 mt-3 md:mt-0 text-right font-display italic-disp text-5xl tighten">
+          24 800 kr<span class="kicker text-mineral ml-3">/ pilot</span>
+        </div>
+      </li>
+      <li class="grid grid-cols-12 gap-x-6 items-baseline pb-7 border-b border-ink/15">
+        <div class="col-span-12 md:col-span-5">
+          <h3 class="font-display text-3xl italic-disp tighten text-ochre">Operativ</h3>
+          <p class="text-[15px] text-ink/75 mt-2 max-w-[42ch] leading-relaxed">
+            Löpande. Du har en pipeline som lever. Vi roterar mellan tre tonlägen och sex segment.
+            Möten landar i din kalender, inte i en CRM-rapport du måste tolka.
+          </p>
+        </div>
+        <div class="col-span-12 md:col-span-3 mt-3 md:mt-0 kicker text-mineral leading-snug">
+          obegränsade kampanjer · bokade möten · veckorapport
+        </div>
+        <div class="col-span-12 md:col-span-4 mt-3 md:mt-0 text-right font-display italic-disp text-5xl tighten">
+          18 400 kr<span class="kicker text-mineral ml-3">/ mån</span>
+        </div>
+      </li>
+      <li class="grid grid-cols-12 gap-x-6 items-baseline pb-1">
+        <div class="col-span-12 md:col-span-5">
+          <h3 class="font-display text-3xl italic-disp tighten">Hus</h3>
+          <p class="text-[15px] text-ink/75 mt-2 max-w-[42ch] leading-relaxed">
+            För dig som har en säljchef som vill ha veckomöten med oss och en VD som vill veta varför
+            reply rate dippade i v18. Vi kommer in, sitter med er en dag i månaden, och flyttar
+            ratten.
+          </p>
+        </div>
+        <div class="col-span-12 md:col-span-3 mt-3 md:mt-0 kicker text-mineral leading-snug">
+          en dag på plats per månad · direktnummer
+        </div>
+        <div class="col-span-12 md:col-span-4 mt-3 md:mt-0 text-right font-display italic-disp text-5xl tighten">
+          42 000 kr<span class="kicker text-mineral ml-3">/ mån</span>
+        </div>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- COLOPHON CTA: not a button-stuffed footer, but a typeset signature page -->
+<section id="start" class="bg-ink text-paper relative overflow-hidden">
+  <div class="absolute -bottom-40 -right-40 w-[700px] h-[700px] rounded-full bg-ochre/25 blob pointer-events-none"></div>
+  <div class="max-w-[1480px] mx-auto px-8 py-28 grid grid-cols-12 gap-x-8 relative">
+    <div class="col-span-12 md:col-span-7">
+      <h2 class="font-display text-[clamp(3rem,7vw,7rem)] leading-[0.92] tighten">
+        Skicka <span class="italic-disp text-ochre">ett mejl</span>,<br>
+        så svarar någon.<br>
+        <span class="italic-disp">På riktigt.</span>
+      </h2>
+    </div>
+    <div class="col-span-12 md:col-span-5 mt-8 md:mt-0 md:pl-10 md:border-l border-paper/15 flex flex-col justify-between">
+      <p class="text-[17px] leading-[1.6] text-paper/85 max-w-[44ch]">
+        Mejla oss på <a href="mailto:hej@snipra.se" class="text-ochre underline decoration-ochre/40 underline-offset-[6px] decoration-[1px] hover:decoration-ochre transition">hej@snipra.se</a>.
+        Hellre ett vanligt mejl än en demo-bokning. Vi svarar samma dag — och om vi inte gör det är
+        det rimligt att fråga sig varför du skulle anlita oss för att skriva åt dig.
+      </p>
+      <div class="mt-10 flex flex-wrap items-center gap-5">
+        <a href="mailto:hej@snipra.se" class="inline-flex items-center gap-3 text-[13px] font-mono uppercase tracking-[0.18em] text-ink bg-paper px-6 py-4 hover:bg-ochre transition-colors duration-500">
+          Skriv till oss <span class="font-mono">↗</span>
+        </a>
+        <a href="#prislista" class="inline-flex items-center gap-3 text-[13px] font-mono uppercase tracking-[0.18em] text-paper border border-paper/35 px-6 py-4 hover:border-ochre hover:text-ochre transition-colors">
+          Eller läs prislistan
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="border-t border-paper/15">
+    <div class="max-w-[1480px] mx-auto px-8 py-8 grid grid-cols-12 gap-x-8 kicker text-paper/55">
+      <div class="col-span-12 md:col-span-3">Snipra AB · Föreningsgatan 41 · Malmö</div>
+      <div class="col-span-12 md:col-span-3 mt-2 md:mt-0">Org. 559412-8804</div>
+      <div class="col-span-12 md:col-span-3 mt-2 md:mt-0">hej@snipra.se · 040-220 814</div>
+      <div class="col-span-12 md:col-span-3 mt-2 md:mt-0 md:text-right">© MMXXVI · Tryckt i en webbläsare</div>
+    </div>
+  </div>
+</section>
+
+<script>
+  // Intersection-observer reveals (transform + opacity only — GPU-safe)
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, { threshold: 0.15 });
+  document.querySelectorAll('section, h1, h2, h3, article').forEach(el => { el.classList.add('reveal'); io.observe(el); });
+  // Trigger bars on hover OR when visible
+  const bo = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) e.target.querySelectorAll('.bar').forEach(b => b.style.transform = 'scaleX(1)'); });
+  }, { threshold: 0.4 });
+  document.querySelectorAll('.row').forEach(r => bo.observe(r));
+</script>
+</body>
+</html>

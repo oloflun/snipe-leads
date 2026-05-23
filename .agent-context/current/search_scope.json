@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "description": "Search scope boundaries for search-and-verify agents (e.g. Codex). Bounds WHERE to search, not WHEN to stop.",
+  "task_families": {
+    "lookup": {
+      "search_directories": [],
+      "exclude_from_search": [],
+      "verification_shortcuts": {}
+    },
+    "impact_analysis": {
+      "search_directories": [],
+      "exclude_from_search": [],
+      "verification_shortcuts": {},
+      "derived_file_policy": "Do not list generated/compiled/bundled output files as change targets. They are produced by a build/generate step."
+    },
+    "planning": {
+      "search_directories": [],
+      "exclude_from_search": [],
+      "verification_shortcuts": {}
+    },
+    "diagnosis": {
+      "search_directories": [],
+      "exclude_from_search": [],
+      "verification_shortcuts": {}
+    }
+  }
+}
