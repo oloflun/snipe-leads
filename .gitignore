@@ -6,3 +6,5 @@ tsconfig.tsbuildinfo
 dist/
 coverage/
 .agent-chorus/
+
+.vercel

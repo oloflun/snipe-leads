@@ -1,12 +1,12 @@
 "use client";
 
+import { createContext, useContext } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
   Building2,
   ChartNoAxesColumn,
   CircleDot,
-  LayoutPanelLeft,
   Mail,
   MessageSquare,
   Search,
@@ -31,6 +31,13 @@ import type { DraftVariant } from "@/lib/design-drafts";
 import { useLocale } from "@/lib/i18n";
 import type { Localized } from "@/lib/i18n";
 import { cn, formatCurrency, formatDate, formatPercent } from "@/lib/utils";
+
+// ─── Portal nav context ──────────────────────────────────────────────────────
+// Holds the base path for all internal portal links so the portal renders
+// correctly both at /design-drafts/editorial-clean/portal and at /dashboard.
+
+const PortalNavContext = createContext("/design-drafts/editorial-clean/portal");
+function usePortalNav() { return useContext(PortalNavContext); }
 
 // ─── Static data ────────────────────────────────────────────────────────────
 
@@ -284,7 +291,7 @@ function EditorialLandingHeader({ variant, asMain = false }: Readonly<{ variant:
         <nav className="hidden items-baseline gap-12 md:flex kicker text-ink/80">
           <a href="#metod" className="transition hover:text-ochre">{locale === "sv" ? "Metod" : "Method"}</a>
           <a href="#bevis" className="transition hover:text-ochre">{locale === "sv" ? "Bevis" : "Proof"}</a>
-          <a href="#portal" className="transition hover:text-ochre">Portal</a>
+          <Link href={asMain ? "/dashboard" : draftPath(variant, "portal")} className="transition hover:text-ochre">Portal</Link>
           <a href="#prislista" className="transition hover:text-ochre">{locale === "sv" ? "Prislista" : "Pricing"}</a>
           <LangToggle />
         </nav>
@@ -746,70 +753,47 @@ const editorialPortalNav = [
 
 function EditorialIterationPortal({ slug }: Readonly<{ slug: string[] }>) {
   const route = parsePortalSlug(slug);
+  const navBase = usePortalNav();
 
   return (
     <div className="min-h-screen bg-paper font-modern text-ink">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[324px] border-r border-ink/10 bg-paper/88 px-5 py-6 backdrop-blur-xl lg:flex lg:flex-col">
-        <div className="flex items-start gap-4">
-          <Link href="/" className="relative block h-14 w-14 shrink-0 border border-ink/15 bg-paper">
-            <Image src="/snipe_logo.svg" alt="" fill sizes="56px" className="object-contain p-2.5" priority />
-          </Link>
-          <div className="min-w-0">
-            <div className="flex items-start gap-4">
-              <Link href="/" className="font-display italic-disp text-[28px] leading-none tighten">
-                Snipra
-              </Link>
-              <span className="rounded-[9px] border border-ink/10 bg-paper/70 px-3 py-2 text-[13px] leading-none text-ink/85 shadow-[0_1px_1px_oklch(var(--ink)/0.03)]">
-                Editorial clean
-              </span>
-            </div>
-            <div className="kicker mt-3 text-mineral">Sales os</div>
-          </div>
-        </div>
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[243px] border-r border-ink/10 bg-paper/88 px-4 py-5 backdrop-blur-xl lg:flex lg:flex-col">
+        <Link href="/" className="flex items-center gap-3">
+          <span className="relative block h-11 w-[72px] shrink-0">
+            <Image src="/snipe_logo.svg" alt="" fill sizes="72px" className="object-contain object-left" priority />
+          </span>
+          <span className="font-display italic-disp text-[28px] leading-none tighten">Snipra</span>
+        </Link>
 
-        <nav className="mt-9 space-y-2">
+        <nav className="mt-7 space-y-1">
           {editorialPortalNav.map(({ key, href, label, Icon }) => {
             const active = route.navKey === key || (key === "portal" && route.kind === "dashboard");
+            const navHref = href === "portal" ? navBase : `${navBase}/${href.replace(/^portal\//, "")}`;
             return (
               <Link
                 key={key}
-                href={draftPath("editorial-clean", href)}
+                href={navHref}
                 className={cn(
-                  "flex h-[50px] items-center gap-4 rounded-[9px] px-4 text-[18px] font-semibold transition",
+                  "flex h-[42px] items-center gap-3 rounded-[8px] px-3 text-[15px] font-semibold transition",
                   active ? "bg-ink text-paper" : "text-ink hover:bg-ink/5"
                 )}
               >
-                <Icon className="h-[21px] w-[21px] shrink-0" strokeWidth={1.9} />
+                <Icon className="h-[17px] w-[17px] shrink-0" strokeWidth={1.9} />
                 <span>{label}</span>
               </Link>
             );
           })}
         </nav>
 
-        <div className="mt-auto rounded-[10px] border border-ink/12 bg-paper/62 p-5 shadow-[inset_0_1px_0_oklch(var(--paper)/0.9)]">
+        <div className="mt-auto rounded-[9px] border border-ink/12 bg-paper/62 p-4 shadow-[inset_0_1px_0_oklch(var(--paper)/0.9)]">
           <div className="kicker text-mineral">Showcase</div>
-          <p className="mt-5 text-[17px] leading-[1.75] text-ink/88">
+          <p className="mt-4 text-[14px] leading-[1.7] text-ink/88">
             Alla nuvarande produktområden finns kvar som preview-sidor i draften.
           </p>
         </div>
       </aside>
 
-      <div className="lg:pl-[324px]">
-        <header className="sticky top-0 z-20 flex h-[86px] items-center border-b border-ink/10 bg-paper/78 px-6 backdrop-blur-xl lg:px-10">
-          <div className="flex min-w-0 items-center gap-5 text-[18px] font-medium">
-            <LayoutPanelLeft className="h-5 w-5 text-ink/70" strokeWidth={1.9} />
-            <span className="truncate">Design draft / Editorial clean</span>
-          </div>
-          <div className="ml-auto flex items-center gap-3">
-            <Link href="/" className="rounded-[10px] border border-ink/10 bg-paper/70 px-5 py-3 text-[17px] font-medium transition hover:border-ochre hover:text-ochre">
-              Landning
-            </Link>
-            <Link href="/" className="rounded-[10px] bg-ink px-5 py-3 text-[17px] font-semibold text-paper transition hover:bg-ochre hover:text-ink">
-              Live site
-            </Link>
-          </div>
-        </header>
-
+      <div className="lg:pl-[243px]">
         <main className="px-6 py-7 lg:px-10">
           <EditorialIterationContent route={route} />
         </main>
@@ -948,6 +932,7 @@ function EditorialIterationLeads() {
 }
 
 function EditorialCompanyTable({ mode }: Readonly<{ mode: "overview" | "leads" }>) {
+  const navBase = usePortalNav();
   const rows = companies.slice(0, 5);
   const grid = mode === "leads"
     ? "grid-cols-[1.15fr_0.85fr_0.85fr_1.25fr_0.45fr_0.8fr]"
@@ -966,7 +951,7 @@ function EditorialCompanyTable({ mode }: Readonly<{ mode: "overview" | "leads" }
           return (
             <Link
               key={company.id}
-              href={draftPath("editorial-clean", `portal/companies/${company.id}`)}
+              href={`${navBase}/companies/${company.id}`}
               className={cn("grid gap-x-7 gap-y-4 px-5 py-6 text-[18px] leading-[1.45] transition hover:bg-ochre/5 md:grid", grid)}
             >
               <div>
@@ -1117,11 +1102,12 @@ function ModernPortalContent({ route }: Readonly<{ route: PortalRoute }>) {
 
 // ─── DraftPortal entry point ──────────────────────────────────────────────────
 
-export function DraftPortal({ variant, slug }: Readonly<{ variant: DraftVariant; slug: string[] }>) {
+export function DraftPortal({ variant, slug, asMain = false }: Readonly<{ variant: DraftVariant; slug: string[]; asMain?: boolean }>) {
+  const navBase = asMain ? "/dashboard" : `/design-drafts/${variant}/portal`;
   if (isModern(variant)) {
-    return <ModernPortal slug={slug} />;
+    return <PortalNavContext.Provider value={navBase}><ModernPortal slug={slug} /></PortalNavContext.Provider>;
   }
-  return <EditorialIterationPortal slug={slug} />;
+  return <PortalNavContext.Provider value={navBase}><EditorialIterationPortal slug={slug} /></PortalNavContext.Provider>;
 }
 
 // ─── Shared content components ────────────────────────────────────────────────
@@ -1317,15 +1303,16 @@ function CompanyDetailShowcase({ variant, id }: Readonly<{ variant: DraftVariant
 function ContactsShowcase({ variant }: Readonly<{ variant: DraftVariant }>) {
   return (
     <div className="divide-y divide-ink/15 border-y border-ink/15">
-      {contacts.map((contact) => <ContactRow key={contact.id} contact={contact} variant={variant} />)}
+      {contacts.map((contact) => <ContactRow key={contact.id} contact={contact} />)}
     </div>
   );
 }
 
-function ContactRow({ contact, variant }: Readonly<{ contact: Contact; variant: DraftVariant }>) {
+function ContactRow({ contact }: Readonly<{ contact: Contact }>) {
+  const navBase = usePortalNav();
   const company = findCompany(contact.companyId);
   return (
-    <Link href={`/design-drafts/${variant}/portal/contacts/${contact.id}`} className="row grid grid-cols-12 gap-x-6 py-5 transition hover:bg-ochre/5">
+    <Link href={`${navBase}/contacts/${contact.id}`} className="row grid grid-cols-12 gap-x-6 py-5 transition hover:bg-ochre/5">
       <div className="ticker col-span-12 md:col-span-4">
         <p className="font-display text-2xl italic-disp tighten">{contact.fullName}</p>
         <p className="mt-1 text-sm text-ink/55">{contact.email}</p>
@@ -1364,11 +1351,12 @@ function ContactDetailShowcase({ variant, id }: Readonly<{ variant: DraftVariant
 }
 
 function CampaignsShowcase({ variant }: Readonly<{ variant: DraftVariant }>) {
+  const navBase = usePortalNav();
   const { locale } = useLocale();
   return (
     <div className="divide-y divide-ink/15 border-y border-ink/15">
       {campaigns.map((campaign) => (
-        <Link key={campaign.id} href={`/design-drafts/${variant}/portal/campaigns/${campaign.id}`} className="row grid grid-cols-12 gap-x-6 py-6 transition hover:bg-ochre/5">
+        <Link key={campaign.id} href={`${navBase}/campaigns/${campaign.id}`} className="row grid grid-cols-12 gap-x-6 py-6 transition hover:bg-ochre/5">
           <div className="ticker col-span-12 md:col-span-4">
             <h2 className="font-display text-3xl italic-disp tighten">{locale === "sv" ? campaign.name.sv : campaign.name.en}</h2>
             <p className="mt-2 max-w-[44ch] text-[15px] leading-6 text-ink/65">{locale === "sv" ? campaign.segment.sv : campaign.segment.en}</p>
@@ -1584,6 +1572,7 @@ function MetricStrip({ variant, metrics }: Readonly<{ variant: DraftVariant; met
 }
 
 function CompanyLedger({ variant, rows }: Readonly<{ variant: DraftVariant; rows: Company[] }>) {
+  const navBase = usePortalNav();
   const { locale } = useLocale();
   return (
     <div className={cn("border-y border-ink/15", isModern(variant) ? "font-modern" : "")}>
@@ -1597,7 +1586,7 @@ function CompanyLedger({ variant, rows }: Readonly<{ variant: DraftVariant; rows
         {rows.map((company) => {
           const contact = company.contacts[0];
           return (
-            <Link key={company.id} href={`/design-drafts/${variant}/portal/companies/${company.id}`} className="row grid grid-cols-12 gap-x-5 gap-y-3 py-5 transition hover:bg-ochre/5">
+            <Link key={company.id} href={`${navBase}/companies/${company.id}`} className="row grid grid-cols-12 gap-x-5 gap-y-3 py-5 transition hover:bg-ochre/5">
               <div className="ticker col-span-8 md:col-span-4">
                 <p className="font-display text-[22px] italic-disp leading-none tighten">{company.name}</p>
                 <p className="mt-1 text-sm text-ink/55">{company.website}</p>
