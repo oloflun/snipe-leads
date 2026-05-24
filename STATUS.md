@@ -66,3 +66,10 @@ Codex rebuilt the project from the prompt into a Next.js App Router SaaS mock/pr
 - Both pipelines verified working end-to-end.
 - Session log: `session-logs/2026-05-24-session-log-2.md`
 - **Next focus: dashboard portal improvements** — ask user what specifically needs fixing.
+
+## 2026-05-24 Skill Registry Fix — Claude
+- `/skill` SKILL.md: fixed iCloud→`~/.agents/skills/` path, documented flat structure (no category subdir), fixed evolve script path.
+- `/conclude` SKILL.md: Step 5b added skills path/commit note; Step 2e replaced broken `py - <<'PYEOF'` with PowerShell `$script | & "C:\Python314\python.exe" -`.
+- `~/CLAUDE.md`: `/skill` table entry corrected to `~/.agents/skills/`.
+- `~/.claude/skills/` converted from unlinked copy to junction → `~/.agents/skills/` (backup at `skills-backup-20260524`).
+- Session log: `session-logs/2026-05-24-session-log-3.md`
