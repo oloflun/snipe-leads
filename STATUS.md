@@ -48,6 +48,12 @@ Codex rebuilt the project from the prompt into a Next.js App Router SaaS mock/pr
 - Session log updated at `session-logs/2026-05-22-codex-snipra-rebuild.md`.
 - Next focus: connect mockdata to Supabase, generate database types after schema application, implement real AI/mail adapters, add browser/UI regression coverage, and split `components/WorkspaceViews.tsx` before the next large feature pass.
 
+## 2026-05-24 Global MCP Fix — Claude
+- Fixed `agentmemory` MCP (-32000 error): changed `~/.claude.json` command from `npx -y @agentmemory/mcp` → `node dist/cli.mjs mcp` (avoids unreliable npx spawn on Windows).
+- Fixed `carl-mcp` (not showing up): added to `~/.claude.json` top-level `mcpServers` and `~/.claude/settings.json` `enabledMcpjsonServers`. Now global across all projects.
+- Session log: `session-logs/2026-05-24-session-log-4.md`
+- **Next action: restart session to verify both MCP servers appear.**
+
 ## 2026-05-24 Design Draft Polish — Claude
 - Landing page (`/` → `editorial-clean` variant) **APPROVED** by user.
 - Fixed gradient (ochre tint): replaced blurred blob (clipped by `body { overflow-x: hidden }`) with pure CSS radial-gradient div on `<main>` at `top-0`. No filter = no clipping.
