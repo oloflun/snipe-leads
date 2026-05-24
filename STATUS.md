@@ -57,3 +57,12 @@ Codex rebuilt the project from the prompt into a Next.js App Router SaaS mock/pr
 - Session log: `session-logs/2026-05-24-session-log.md`
 - Active plan: `plans/2026-05-24-snipra-design-drafts.md`
 - **Next focus: dashboard portal improvements** (`/design-drafts/editorial-clean/portal`).
+
+## 2026-05-24 Vercel CI/CD — Claude
+- Vercel project `snipra` created under `olofluns-projects` and linked to `https://github.com/oloflun/snipe-leads`.
+- GitHub Actions workflows added: `main` → production, `development` → preview.
+- `vercel.json` with `"git": {"deploymentEnabled": false}` prevents duplicate deploys from Vercel's own Git integration.
+- `package-lock.json` committed (required by `actions/setup-node@v4 cache: npm`).
+- Both pipelines verified working end-to-end.
+- Session log: `session-logs/2026-05-24-session-log-2.md`
+- **Next focus: dashboard portal improvements** — ask user what specifically needs fixing.

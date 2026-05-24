@@ -25,11 +25,18 @@ Polish both design draft variants (`editorial-clean`, `modern-blend`) in `compon
 - Connecting mockdata to Supabase (separate initiative)
 - `modern-blend` variant until `editorial-clean` is fully approved
 
+## Completed (2026-05-24 session 2)
+- [x] Vercel project created (`snipra`, team `olofluns-projects`)
+- [x] GitHub Actions deploy workflows: `main` → production, `development` → preview
+- [x] `vercel.json` with `"git": {"deploymentEnabled": false}` to prevent duplicate deploys
+- [x] `package-lock.json` generated and committed (required by `actions/setup-node@v4 cache: npm`)
+- [x] Both pipelines verified working end-to-end
+
 ## Blockers
 None currently.
 
 ## Next Steps
-1. Open `/design-drafts/editorial-clean/portal` and ask user what specifically needs fixing on the dashboard
+1. Ask user what specifically needs fixing on the dashboard portal
 2. Address dashboard feedback
 3. Review other portal pages if needed
 4. Then assess `modern-blend` variant
