@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { PageShell } from "@/components/AppShell";
+import { LoginForm } from "@/components/auth/LoginForm";
+import { OnboardingForm } from "@/components/auth/OnboardingForm";
 import {
   analyticsSeries,
   businessContext,
@@ -533,21 +535,10 @@ export function LoginView() {
             <p className="kicker text-paper/55">Snipra workspace</p>
             <h1 className="mt-8 break-words font-display text-[clamp(2.15rem,10vw,7rem)] leading-[0.92] tighten">Logga in till din svenska AI-SDR.</h1>
           </div>
-          <p className="mt-12 max-w-[44ch] text-[16px] leading-7 text-paper/70">Demo-auth i UI:t. Supabase Auth-strukturen finns för att kopplas in när projektet får riktiga credentials.</p>
+          <p className="mt-12 max-w-[44ch] text-[16px] leading-7 text-paper/70">Logga in med lösenord eller magic link. Efter första inloggningen konfigurerar du business context innan dashboarden öppnas.</p>
         </section>
         <section className="col-span-12 mt-8 flex items-center md:col-span-6 md:mt-0 md:pl-10">
-          <form className="w-full max-w-xl">
-            <h2 className="font-display text-5xl italic-disp tighten">Välkommen tillbaka</h2>
-            <label className="mt-10 grid gap-2 text-[15px]">
-              <span className="kicker text-mineral">Email</span>
-              <input className="h-14 border border-ink/15 bg-paper2/70 px-4 outline-none focus:border-ochre" placeholder="du@bolag.se" />
-            </label>
-            <label className="mt-5 grid gap-2 text-[15px]">
-              <span className="kicker text-mineral">Lösenord</span>
-              <input type="password" className="h-14 border border-ink/15 bg-paper2/70 px-4 outline-none focus:border-ochre" placeholder="••••••••" />
-            </label>
-            <div className="mt-8"><EditorialButton href="/dashboard">Logga in</EditorialButton></div>
-          </form>
+          <LoginForm />
         </section>
       </div>
     </main>
@@ -555,18 +546,6 @@ export function LoginView() {
 }
 
 export function OnboardingView() {
-  const fields = [
-    ["Produkt eller tjänst", "AI-driven outbound för svenska B2B-team"],
-    ["Målgrupp / ICP", "Tjänstebolag 10-200 anställda"],
-    ["Fokusbranscher", "bygg, fastighet, konsult, SaaS"],
-    ["Geografi", "Skåne, Stockholm, Göteborg"],
-    ["Tonalitet", "lågmäld, specifik, professionell"],
-    ["Erbjudande", "första analys av outbound-potential"],
-    ["CTA", "skicka två konkreta exempel"],
-    ["Roller att kontakta", "VD, Försäljningschef, Marknadschef"],
-    ["Mailbox", "sales@snipra-demo.se"],
-    ["Kalenderlänk", "cal.com/snipra/demo"]
-  ];
   return (
     <main className="min-h-screen bg-paper text-ink">
       <div className="mx-auto max-w-[1480px] px-6 py-10 md:px-8">
@@ -578,18 +557,7 @@ export function OnboardingView() {
           </div>
           <div className="col-span-12 mt-8 md:col-span-9 md:mt-0">
             <h1 className="max-w-5xl break-words font-display text-[clamp(2.15rem,10vw,7rem)] leading-[0.9] tighten">Lär Snipra hur ni säljer innan första leadet hämtas.</h1>
-            <div className="mt-12 grid grid-cols-12 gap-x-8 gap-y-6">
-              {fields.map(([label, value]) => (
-                <label key={label} className="col-span-12 grid gap-2 border-t border-ink/15 pt-4 md:col-span-6">
-                  <span className="kicker text-mineral">{label}</span>
-                  <input className="h-14 border border-ink/15 bg-paper2/70 px-4 text-[15px] outline-none focus:border-ochre" defaultValue={value} />
-                </label>
-              ))}
-            </div>
-            <div className="mt-10 flex flex-wrap gap-4">
-              <EditorialButton href="/dashboard">Spara business context</EditorialButton>
-              <Link href="/settings/mailboxes" className="inline-flex items-center border border-ink/15 px-5 py-3 font-mono text-[13px] uppercase tracking-[0.18em] transition hover:border-ochre hover:text-ochre">Koppla mailbox senare</Link>
-            </div>
+            <OnboardingForm />
           </div>
         </div>
       </div>

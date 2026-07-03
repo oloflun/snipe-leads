@@ -24,3 +24,30 @@ export const settingsRoutes = [
   { href: "/settings/team", label: { sv: "Team", en: "Team" } },
   { href: "/settings/billing", label: { sv: "Fakturering", en: "Billing" } }
 ] as const;
+
+// Auth route guards (pure, no server dependencies — safe for middleware)
+export const protectedRoutePrefixes = [
+  "/dashboard",
+  "/assistant",
+  "/leads",
+  "/companies",
+  "/contacts",
+  "/campaigns",
+  "/emails",
+  "/analytics",
+  "/inbox",
+  "/settings",
+  "/onboarding"
+] as const;
+
+export const authRoutes = ["/login", "/auth/callback"] as const;
+
+export function isProtectedRoute(pathname: string): boolean {
+  return protectedRoutePrefixes.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+  );
+}
+
+export function isAuthRoute(pathname: string): boolean {
+  return authRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+}
