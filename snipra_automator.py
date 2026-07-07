@@ -37,7 +37,16 @@ def main(
         console.print(ctx.get_help())
         ctx.exit()
 
-ACTIONS = ["Kortare", "Mer personlig", "Tydligare CTA", "Skriv om"]
+ACTIONS = [
+    "Kortare",
+    "Skriv om",
+    "Förbättra",
+    "Personalisera",
+    "Översätt",
+    "A/B-varianter",
+    "Uppföljning",
+    "Analysera",
+]
 
 def get_playwright_context(p, headless: bool):
     """Get browser, context (with stored auth if available), and page."""

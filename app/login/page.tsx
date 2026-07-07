@@ -8,3 +8,9 @@ export default function Page() {
     </Suspense>
   );
 }
+
+/**
+ * Per Snipra Prompt: Användare kan skapa konto enbart med email (magic link recommended).
+ * Omedelbar tillgång till Email Studio efter registrering utan tung verifikation i första steget.
+ * Magic link defaultar till /emails för direkt test av Kortare / Skriv om m.fl.
+ */

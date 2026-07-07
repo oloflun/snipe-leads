@@ -13,7 +13,8 @@ type AuthMode = "login" | "signup" | "magic";
 
 export function LoginForm() {
   const searchParams = useSearchParams();
-  const nextPath = searchParams.get("next") ?? "/dashboard";
+  // Per Snipra Prompt: quick email-only + immediate Email Studio access
+  const nextPath = searchParams.get("next") ?? "/emails";
   const [mode, setMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -148,6 +149,10 @@ export function LoginForm() {
           <span aria-hidden>↗</span>
         </button>
       </div>
+
+      <p className="mt-4 text-[12px] text-mineral">
+        Magic link = snabbast väg till Email Studio (endast email, omedelbar tillgång efter inloggning). Använd "Magic link" ovan för att testa Kortare, Skriv om, Förbättra m.fl. direkt.
+      </p>
     </form>
   );
 }

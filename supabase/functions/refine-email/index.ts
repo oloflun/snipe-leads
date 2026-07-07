@@ -1,11 +1,11 @@
 import { createChatCompletion } from "../_shared/llm.ts";
-import { buildEmailStudioPrompt, type EmailRefineAction } from "../_shared/prompts/email-studio.ts";
+import { buildEmailStudioPrompt, type EmailStudioAction } from "../_shared/prompts/email-studio.ts";
 import { json } from "../_shared/types.ts";
 
 type RefineEmailRequest = {
   subject: string;
   body: string;
-  action: EmailRefineAction;
+  action: EmailStudioAction;
   locale?: "sv" | "en";
   businessContext?: {
     product: string;
@@ -21,27 +21,59 @@ type RefineEmailRequest = {
   contactName?: string;
 };
 
-function parseRefinedEmail(content: string) {
+export type RichRefineResult = {
+  original_version?: string | null;
+  new_version: string;
+  explanation: string;
+  subject_suggestions: string[];
+  confidence_tips?: string;
+  // For special actions
+  variants?: string[];
+  analysis?: string;
+};
+
+function parseRichRefine(content: string): RichRefineResult {
   const trimmed = content.trim();
 
+  // Try direct JSON
   try {
-    const parsed = JSON.parse(trimmed) as { subject?: string; body?: string };
-    if (parsed.subject && parsed.body) {
-      return { subject: parsed.subject.trim(), body: parsed.body.trim() };
+    const p = JSON.parse(trimmed);
+    if (p && typeof p.new_version === "string") {
+      return {
+        original_version: p.original_version ?? null,
+        new_version: p.new_version.trim(),
+        explanation: (p.explanation || "").trim(),
+        subject_suggestions: Array.isArray(p.subject_suggestions) ? p.subject_suggestions.map((s: string) => s.trim()) : [],
+        confidence_tips: p.confidence_tips || undefined
+      };
     }
-  } catch {
-    // continue
-  }
+  } catch {}
 
+  // Try fenced
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fenced) {
-    const parsed = JSON.parse(fenced[1]) as { subject?: string; body?: string };
-    if (parsed.subject && parsed.body) {
-      return { subject: parsed.subject.trim(), body: parsed.body.trim() };
-    }
+    try {
+      const p = JSON.parse(fenced[1]);
+      if (p && typeof p.new_version === "string") {
+        return {
+          original_version: p.original_version ?? null,
+          new_version: p.new_version.trim(),
+          explanation: (p.explanation || "").trim(),
+          subject_suggestions: Array.isArray(p.subject_suggestions) ? p.subject_suggestions.map((s: string) => s.trim()) : [],
+          confidence_tips: p.confidence_tips || undefined
+        };
+      }
+    } catch {}
   }
 
-  throw new Error("Could not parse refined email");
+  // Fallback: treat whole as new body
+  return {
+    original_version: null,
+    new_version: trimmed,
+    explanation: "Agent returnerade oformaterat svar. Använder rå text som ny version.",
+    subject_suggestions: [],
+    confidence_tips: undefined
+  };
 }
 
 Deno.serve(async (request: Request) => {
@@ -75,20 +107,20 @@ Deno.serve(async (request: Request) => {
         { role: "user", content: prompt.user }
       ],
       responseFormat: "json_object",
-      temperature: 0.35,
-      maxTokens: 1400
+      temperature: 0.4,
+      maxTokens: 1800
     });
 
-    const refined = parseRefinedEmail(completion.content);
+    const rich = parseRichRefine(completion.content);
 
     return json({
       ok: true,
       data: {
-        subject: refined.subject,
-        body: refined.body,
+        ...rich,
         skillCount: prompt.skillCount,
         model: completion.model,
-        provider: completion.provider
+        provider: completion.provider,
+        action: payload.action
       }
     });
   } catch (error) {

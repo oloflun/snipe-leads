@@ -1,5 +1,41 @@
 # Snipra Status
 
+## 2026-07-07 — Grok — Email Studio full automation per Snipra Prompt (1).md
+
+**Fokus:** Automatisera Email-Studio så företag kan skapa konto (endast email/magic link), logga in och omedelbart testa alla funktioner "Kortare", "Skriv om", "Förbättra", "Personalisera", "Översätt", "A/B-varianter", "Uppföljning", "Analysera" på https://snipra.vercel.app/emails (och /dashboard).
+
+**Kritisk regel implementerad:** VARJE åtgärd utgår från https://github.com/coreyhaines31/marketingskills (cold-email, copywriting, copy-editing, ab-testing, emails, marketing-psychology etc). 
+
+### Completed (per spec i "Snipra - Prompt (1).md")
+- Utökade till exakt 8 funktioner med svenska etiketter + interna instruktioner bundna till skills.
+- Uppdaterade system-prompt i både lib/agent/email-studio-prompt.ts och supabase/functions/_shared/prompts/email-studio.ts:
+  - Full "Du är Email Studio..." + KRITISK REGEL + sub-agent arkitektur + kvalitetskontroller + exakt output-format.
+  - Inkluderar few-shot + explicit referenser till SKILL.md:er.
+  - Använder loadAllMarketingSkills() / bundled corpus.
+- Ändrade output till rikt strukturerad JSON (original_version, new_version, explanation (med skills-ref), subject_suggestions (2-3), confidence_tips).
+- Uppdaterade UI (EmailStudioEditor.tsx):
+  - 8 knappar.
+  - Resultatpanel som visar exakt formatet: Ursprunglig, Ny version, Förklaring, Ämnesradsförslag, Konfidens/Tips.
+  - "Använd ny version" + direkt apply för vanliga åtgärder.
+  - Notis om marketingskills.
+- Uppdaterade parsers i actions + edge function + types för rich result.
+- Auth: Magic link default till /emails för omedelbar Email Studio access. Endast email + magic recommended för snabb registrering utan extra verifikation. Notiser + hjälptext i LoginForm.
+- Legacy mock i WorkspaceViews uppdaterad till nya 8 knappar.
+- Följt AGENT.md: Läste marketingskills SKILL.md innan kod (cold-email, copywriting, emails, ab-testing, marketing-psychology). Skyddade filer orörda. Uppdaterade STATUS.md.
+
+### Verification steps (rekommenderas lokalt)
+- npm run type-check
+- Starta dev: C:\Program Files\nodejs\npm.cmd run dev
+- Gå till /login → välj "Magic link" → ange testmail → efter login → /emails → prova alla 8 knappar.
+- Kontrollera att förklaringar refererar skills och output matchar spec.
+
+### Notes
+- Kräver giltig LLM-nyckel (DeepSeek/OpenAI) i env för att knapparna ska producera riktiga resultat.
+- För prod: edge function (refine-email) och Supabase secrets.
+- Automator (snipra_automator.py) bör nu kunna klicka de nya knapparna (text "Kortare" etc matchar).
+- Nästa: spara user preferences (ton etc) explicit i profile/business_context + feedback loop för smakprofil (enligt tidigare email-studio plan).
+- Git: Inget .git synligt i workspace — använd temp overlay + feature branch + gh pr per AGENT.md när push ska göras.
+
 ## 2026-06-30 — Grok — snipra_automator + Persistent Login State
 Completed reliable login automation + artifact persistence for testing the Email Studio.
 

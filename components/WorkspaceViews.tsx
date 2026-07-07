@@ -414,7 +414,7 @@ function EmailManuscript({ compact = false }: Readonly<{ compact?: boolean }>) {
           defaultValue={text(selected.body)}
         />
         <div className="mt-5 flex flex-wrap gap-3">
-          {["Make shorter", "More persuasive", "More professional", "More human", "Rewrite"].map((action) => (
+          {["Kortare", "Skriv om", "Förbättra", "Personalisera", "Översätt", "A/B-varianter", "Uppföljning", "Analysera"].map((action) => (
             <button key={action} type="button" className="border border-ink/15 px-4 py-3 font-mono text-xs uppercase tracking-[0.16em] transition hover:border-ochre hover:text-ochre active:translate-y-px">
               {action}
             </button>

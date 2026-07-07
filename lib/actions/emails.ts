@@ -1,13 +1,13 @@
 "use server";
 
-import { buildEmailStudioPrompt, type EmailRefineAction } from "@/lib/agent/email-studio-prompt";
+import { buildEmailStudioPrompt, type EmailStudioAction } from "@/lib/agent/email-studio-prompt";
 import { createChatCompletion } from "@/lib/agent/llm";
 
 export type RefineEmailInput = {
   emailId: string;
   subject: string;
   body: string;
-  action: EmailRefineAction;
+  action: EmailStudioAction;
   locale?: "sv" | "en";
   context?: {
     companyName?: string;
@@ -18,39 +18,60 @@ export type RefineEmailInput = {
   };
 };
 
+export type RichRefineData = {
+  original_version?: string | null;
+  new_version: string;
+  explanation: string;
+  subject_suggestions: string[];
+  confidence_tips?: string;
+  skillCount?: number;
+  model?: string;
+  provider?: string;
+  action?: string;
+};
+
 export type RefineEmailResult = {
   success: boolean;
-  data?: {
-    subject: string;
-    body: string;
-    skillCount: number;
-    model: string;
-    provider: string;
-  };
+  data?: RichRefineData & { subject?: string; body?: string }; // compat + rich
   error?: string;
 };
 
-function parseRefinedEmail(content: string): { subject: string; body: string } {
+function parseRichRefine(content: string): { new_version: string; explanation: string; subject_suggestions: string[]; original_version?: string | null; confidence_tips?: string } {
   const trimmed = content.trim();
-
   try {
-    const parsed = JSON.parse(trimmed) as { subject?: string; body?: string };
-    if (parsed.subject && parsed.body) {
-      return { subject: parsed.subject.trim(), body: parsed.body.trim() };
+    const p = JSON.parse(trimmed);
+    if (p && typeof p.new_version === "string") {
+      return {
+        original_version: p.original_version ?? null,
+        new_version: p.new_version.trim(),
+        explanation: (p.explanation || "").trim(),
+        subject_suggestions: Array.isArray(p.subject_suggestions) ? p.subject_suggestions.map((s: any) => String(s).trim()) : [],
+        confidence_tips: p.confidence_tips
+      };
     }
-  } catch {
-    // fall through
-  }
-
+  } catch {}
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fenced) {
-    const parsed = JSON.parse(fenced[1]) as { subject?: string; body?: string };
-    if (parsed.subject && parsed.body) {
-      return { subject: parsed.subject.trim(), body: parsed.body.trim() };
-    }
+    try {
+      const p = JSON.parse(fenced[1]);
+      if (p && typeof p.new_version === "string") {
+        return {
+          original_version: p.original_version ?? null,
+          new_version: p.new_version.trim(),
+          explanation: (p.explanation || "").trim(),
+          subject_suggestions: Array.isArray(p.subject_suggestions) ? p.subject_suggestions.map((s: any) => String(s).trim()) : [],
+          confidence_tips: p.confidence_tips
+        };
+      }
+    } catch {}
   }
-
-  throw new Error("Kunde inte tolka agentens svar");
+  return {
+    original_version: null,
+    new_version: trimmed,
+    explanation: "Oformaterat svar från agenten.",
+    subject_suggestions: [],
+    confidence_tips: undefined
+  };
 }
 
 export async function refineEmail(input: RefineEmailInput): Promise<RefineEmailResult> {
@@ -78,29 +99,35 @@ export async function refineEmail(input: RefineEmailInput): Promise<RefineEmailR
         { role: "user", content: prompt.user }
       ],
       responseFormat: "json_object",
-      temperature: 0.35,
-      maxTokens: 1400
+      temperature: 0.4,
+      maxTokens: 1800
     });
 
-    const refined = parseRefinedEmail(completion.content);
+    const rich = parseRichRefine(completion.content);
+
+    // For simple replace actions, use first line-ish or keep existing subject if not changed in rich
+    const newSubject = rich.subject_suggestions?.[0] || input.subject;
+    const newBody = rich.new_version;
 
     if (workspaceContext && !input.emailId.startsWith("email-")) {
       const { saveEmailDraft } = await import("@/lib/data/emails");
       await saveEmailDraft({
         emailId: input.emailId,
-        subject: refined.subject,
-        body: refined.body
+        subject: newSubject,
+        body: newBody
       });
     }
 
     return {
       success: true,
       data: {
-        subject: refined.subject,
-        body: refined.body,
+        ...rich,
+        subject: newSubject,
+        body: newBody,
         skillCount: prompt.skillCount,
         model: completion.model,
-        provider: completion.provider
+        provider: completion.provider,
+        action: input.action
       }
     };
   } catch (error) {

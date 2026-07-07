@@ -61,7 +61,7 @@ export async function signUpWithPassword(
   };
 }
 
-export async function signInWithMagicLink(email: string, nextPath = "/dashboard"): Promise<AuthActionResult> {
+export async function signInWithMagicLink(email: string, nextPath = "/emails"): Promise<AuthActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithOtp({
     email,
@@ -76,7 +76,7 @@ export async function signInWithMagicLink(email: string, nextPath = "/dashboard"
 
   return {
     success: true,
-    message: "Magic link skickad. Kontrollera din inkorg."
+    message: "Magic link skickad. Kontrollera din inkorg. Du får direkt tillgång till Email Studio."
   };
 }
 

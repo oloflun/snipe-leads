@@ -14,12 +14,13 @@ export type OutreachRequest = {
 
 export type EmailRefineAction =
   | "shorter"
-  | "more_personal"
-  | "clearer_cta"
   | "rewrite"
-  | "more_professional"
-  | "more_human"
-  | "more_persuasive";
+  | "improve"
+  | "personalize"
+  | "translate"
+  | "ab_variants"
+  | "followup"
+  | "analyze";
 
 export type RefineEmailRequest = {
   subject: string;
