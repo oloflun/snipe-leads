@@ -1,10 +1,16 @@
 .next/
 node_modules/
 tsconfig.tsbuildinfo
+.env
 .env*.local
+supabase/.db-password.txt
 .vercel/
 dist/
 coverage/
 .agent-chorus/
+marketingskills.zip
 
 .vercel
+
+.snipra-auth-state.json
+screenshots/cookies-dump.json

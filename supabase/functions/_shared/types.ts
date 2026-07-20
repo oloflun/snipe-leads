@@ -12,6 +12,35 @@ export type OutreachRequest = {
   variantType: "cold" | "followup-1" | "followup-2" | "final";
 };
 
+export type EmailRefineAction =
+  | "shorter"
+  | "rewrite"
+  | "improve"
+  | "personalize"
+  | "translate"
+  | "ab_variants"
+  | "followup"
+  | "analyze";
+
+export type RefineEmailRequest = {
+  subject: string;
+  body: string;
+  action: EmailRefineAction;
+  locale?: "sv" | "en";
+  businessContext?: {
+    product: string;
+    target_audience: string;
+    tone: string;
+    offer: string;
+    cta: string;
+  } | null;
+  companyName?: string;
+  signal?: string;
+  offer?: string;
+  cta?: string;
+  contactName?: string;
+};
+
 export function json<T>(payload: JsonResponse<T>, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,

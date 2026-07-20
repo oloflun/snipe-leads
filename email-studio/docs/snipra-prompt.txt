@@ -1,0 +1,701 @@
+Bygg en modern AI-driven SaaS-webapp för intelligent outbound sales automation riktad mot svenska företag.Använd HTML-sidan i Project root som grund för landing page, utveckla från det och bygg vidare undersidor och funktioner utifrån samma visuella tema. Updatera sidan med riktiga placeholders för mockdata som senare enkelt kan ersättas med riktig.
+Döp det till Snipra. Använd logotypen i Project-root.
+Det fanns en tidigare build som inte höll måttet visuellt, återanvänd de moduler och beståndsdelar som du kan för att spara resurser men vetta alla noggrant för att försäkra dig om att de uppfyller ALLA kraven nedan och inte bara är "good enough".
+
+Viktigt:
+Tänk som en kombination av senior product designer, staff engineer, AI architect och svensk B2B-säljchef.
+Arbeta metodiskt och komponent-för-komponent.
+Om något är oklart: ställ endast blockerande frågor. Om det inte är blockerande, välj rimliga defaults och fortsätt.
+Skapa först en mycket stark produktstruktur med realistisk mockdata och full UI/UX, och koppla sedan på Supabase, RLS, Edge Functions och integrationer stegvis med en enhetlig design.
+Generera också en Project Knowledge-fil för projektet så att hela arkitekturen, tonaliteten, databasen och guardrails finns kvar i agentens minne.
+Var noga med att hela tiden scanna efter lämpliga skills som kan förbättra utförandet av varje enskild uppgift, eller deluppgift.
+Bygg alla textelement interchangeable mellan svenska/engelska, viktigt att detta följs för ytterligare funktioner.
+
+Bygg alla funktioner utifrån marketing-skills stacken, sätt dig först in i hur alla skills för att förstå hur varje skill fungerar. Utvärdera alltid vilken/vilka skills som krävs för varje task och var flexibel, byt om det krävs för att uppnå önskat resultat. 
+Spara denna plan som referensmall att återkomma till i projektroten för att inte förlora scope/vision. 
+
+Produktmål:
+Bygg ett premium AI-first sales tool för svenska företag som vill ersätta manuellt cold emailing med AI-driven, högpersonaliserad outbound.
+Appen ska kännas som en virtuell svensk SDR / sales assistant som hjälper användaren hitta rätt företag, analysera dem, skapa relevanta säljmails, skicka utskick, följa upp automatiskt och boka fler möten.
+
+Målgrupp:
+Svenska B2B-företag, konsulter, byråer, SaaS-bolag och tjänsteföretag som säljer mot andra företag i Sverige.
+
+Språk och lokalisering:
+- Default language: svenska
+- Locale: sv-SE
+- Timezone: Europe/Stockholm
+- Valutaformat, datumformat och copy ska kännas svenska
+- All kundnära copy ska vara professionell svensk B2B-ton, lågmäld, personlig, trovärdig och aldrig aggressivt amerikansk
+
+Tonalitetsregler för AI-genererade emails:
+- mänskliga
+- professionella
+- relevanta
+- svenska
+- lågmälda
+- specifika
+- naturliga
+Undvik:
+- spamkänsla
+- överdrivna claims
+- clickbait
+- “I hope this email finds you well”
+- för pushy amerikansk sales-ton
+- generiska AI-formuleringar
+
+Kärnidé:
+Användaren anger:
+- vilken produkt eller tjänst de säljer
+- målgrupp
+- geografiskt område
+- tonalitet
+- erbjudande
+- CTA
+
+Systemet ska sedan automatiskt:
+- hitta relevanta svenska företag
+- analysera deras verksamhet
+- identifiera behov och säljmöjligheter
+- generera personliga säljmails
+- skicka emails automatiskt
+- följa upp leads automatiskt
+- hjälpa användaren boka fler möten
+
+Övergripande produktprincip:
+Bygg produkten som en embedded AI sales assistant, inte som ett separat AI-chatfönster bredvid appen.
+Ha en command palette / assistant panel som kan styra discovery, research, email generation, sequence-building och analys.
+Användarens produkt, målgrupp, erbjudande, tonalitet och CTA ska lagras som persistent business context och återanvändas i hela appen.
+
+Bygg dessa huvudsidor och routes:
+- /
+- /login
+- /onboarding
+- /dashboard
+- /assistant
+- /leads
+- /companies
+- /companies/[id]
+- /contacts
+- /contacts/[id]
+- /campaigns
+- /campaigns/[id]
+- /emails
+- /analytics
+- /inbox
+- /settings
+- /settings/mailboxes
+- /settings/team
+- /settings/billing
+
+Landningssida:
+Skapa en mycket premium SaaS-landing page med tydlig positioning för svensk AI-driven outbound automation.
+Inkludera:
+- hero med stark headline
+- kort demo-preview av dashboard
+- sections för AI lead discovery, company analysis, hyper-personalized outreach, follow-ups, analytics
+- proof-style layouts
+- pricing placeholder
+- CTA till “Starta gratis” / “Boka demo”
+Designspråk: Linear + Stripe + Notion, men med egen identitet och mycket ren typografi.
+
+Onboarding:
+Skapa en onboarding wizard där användaren fyller i:
+- produkt/tjänst
+- målgrupp / ICP
+- fokusbranscher
+- geografi
+- tonalitet
+- erbjudande
+- CTA
+- önskade roller att kontakta
+- ev. mailbox-integration
+- ev. kalenderlänk
+Spara detta som business context som AI använder överallt.
+
+AI Lead Discovery Engine:
+Bygg ett discovery-workspace där AI kan hitta relevanta svenska företag baserat på:
+- bransch
+- geografi
+- bolagsstorlek
+- lokala signaler
+- tillväxtsignaler
+- jobbsignaler
+- offentliga nyheter
+- företagets webbplats
+- kontaktbarhet
+- potential score
+
+Stöd dessa målbranscher från start:
+- bygg
+- restaurang
+- gym
+- fastighet
+- konsult
+- e-handel
+- industri
+- SaaS
+- vård
+- utbildning
+
+Stöd dessa kontaktroller från start:
+- VD
+- Marknadschef
+- Försäljningschef
+- HR
+- Operations
+- Grundare
+
+Bygg lead discovery med dessa koncept:
+- filter panel
+- smart search input
+- saved searches
+- ICP templates
+- region filters
+- company size filters
+- signal filters
+- status filters
+- “AI rekommenderar” panel
+- result table + card view
+- batch actions
+
+Lead-tabellen ska visa:
+- företag
+- bransch
+- ort
+- storlek
+- kontaktperson
+- roll
+- email
+- LinkedIn
+- lead score
+- senaste signal
+- status
+
+Bygg en signalmotor för:
+- nya lokaler / ny adress
+- nyanställningar
+- expansionssignaler
+- ökad rekrytering
+- nyheter / press
+- ny sida på webbplats
+- tjänsteutbud
+- geografisk expansion
+- förändringar i digital närvaro
+
+Exempel på beteende:
+Om ett företag öppnar en ny lokal i Malmö ska systemet kunna markera detta som en expansion signal och föreslå personaliserad outreach till rätt företag eller kontaktpersoner i Malmö.
+
+AI Company Analysis:
+Varje företag ska ha en egen intelligence-sida som analyserar:
+- företagets verksamhet
+- deras tjänster
+- deras positionering
+- bolagsstorlek
+- tillväxtmönster
+- public signals
+- sannolika pain points
+- relevanta use cases
+- rekommenderad säljangel
+- recommended CTA
+- varför företaget är relevant just nu
+
+Den sidan ska ha:
+- company summary card
+- signal timeline
+- website highlights
+- business observations
+- AI-generated pain points
+- AI-generated opportunities
+- suggested messaging angles
+- key contacts
+- source provenance panel
+- notes panel
+
+AI Personalization Engine:
+Detta är den viktigaste funktionen.
+Bygg en email engine som genererar mycket personliga emails baserat på:
+- företagsnamn
+- bransch
+- geografi
+- senaste nyheter
+- expansionssignaler
+- observerade pain points
+- företagets erbjudande / tjänster
+- lokala observationer
+- användarens produkt/tjänst
+- användarens tonalitet
+- användarens erbjudande
+- användarens CTA
+
+Emails måste låta som en professionell svensk B2B-säljare.
+De ska vara:
+- mänskliga
+- lugna
+- precisa
+- kontextdrivna
+- realistiska
+- trovärdiga
+
+Generera:
+- subject lines
+- cold email
+- follow-up 1
+- follow-up 2
+- final follow-up
+- CTA-förslag
+- personaliserade öppningsrader
+
+Skapa tre längdvarianter:
+- kort
+- medium
+- lång
+
+I email editorn ska det finnas knappar för:
+- Make shorter
+- More persuasive
+- More professional
+- More human
+- Rewrite
+
+Email studio:
+Bygg en elegant email composer med:
+- subject field
+- rich text editor
+- preview mode
+- tone selector
+- version switcher
+- source-aware personalization notes
+- AI suggestions side panel
+- action buttons
+- test send
+- save draft
+- add to sequence
+
+Automatic Email Sending:
+Bygg ett mailbox center med stöd för:
+- Gmail
+- Outlook
+- SMTP
+
+Mailbox center ska ha:
+- mailbox list
+- connection status
+- sending health
+- daily send limits
+- default sender
+- reply sync status
+- authentication hints
+- warmup / trust indicators placeholder
+
+Funktioner:
+- scheduled sending
+- smart send timing
+- auto follow-ups
+- reply detection
+- unsubscribe management
+- spam protection
+- bounce handling
+- do-not-contact suppression
+
+Smart Follow-Up System:
+Om lead inte svarar ska AI:
+- vänta X dagar
+- generera en relevant follow-up
+- anpassa tonen utifrån tidigare interaktion
+- sluta automatiskt om lead svarar
+- respektera unsubscribe / do-not-contact
+
+Bygg sequence builder:
+- sequence overview
+- delay settings
+- stop conditions
+- send schedule
+- business hours by timezone
+- follow-up templates
+- AI recommendations for best next step
+
+CRM Dashboard:
+Bygg ett modernt dashboard där användaren ser:
+- open rate
+- reply rate
+- click rate
+- booked meetings
+- conversion rate
+- delivered emails
+- opt-outs
+- bounce rate
+- meetings pipeline
+- top performing sequences
+- low performing sequences
+- activity over time
+
+Leaddashboard ska visa:
+- företag
+- kontaktperson
+- status
+- senaste aktivitet
+- senaste signal
+- nästa planerade steg
+
+Statusar:
+- Ej kontaktad
+- Mail skickat
+- Öppnat
+- Svarat
+- Möte bokat
+- Inte intresserad
+
+AI Sales Assistant:
+Bygg en assistant-vy där användaren kan skriva naturliga instruktioner som:
+- “Hitta växande fastighetsbolag i Malmö”
+- “Skriv tre emails till restauranger i Göteborg”
+- “Visa vilka kampanjer som presterat bäst”
+- “Föreslå bättre säljanglar för gymkedjor”
+- “Prioritera företag med starka expansionssignaler”
+- “Följ upp alla leads som öppnat men inte svarat”
+- "Sök efter Linkedin inlägg om expansion"
+
+Assistanten ska kunna:
+- optimera outreach
+- förbättra emails
+- analysera performance
+- föreslå bättre säljanglar
+- bygga listor
+- föreslå sekvenser
+- generera handlingsbara nästa steg
+
+Dashboard UI/UX:
+
+Designsystem:
+Designen ska kännas:
+- premium
+- modern
+- minimalistisk
+- snabb
+- clean
+- elegant
+- responsive
+
+Visuell inspiration:
+- Apollo.io
+- Vercel.com
+- Notion.com
+
+
+Färgtema:
+- äggskalsvit
+- gråbeige
+- accentfärg: marinblå
+
+Designkomponenter:
+- crisp borders
+- subtle shadows
+- soft gradients sparsamt
+- airy spacing
+- clean typography
+- compact tables
+- premium empty states
+- command menu
+- subtle hover states
+- tasteful micro animations
+- responsive layouts
+- sticky top nav på dashboard
+- left sidebar för app navigation
+- assistant drawer / side panel
+
+
+Teknisk stack:
+- Next.js
+- React
+- TypeScript
+- TailwindCSS
+- Supabase
+- OpenAI API
+
+Du får gärna använda:
+- App Router
+- server components där det passar
+- shadcn/ui-liknande patterns
+- TanStack Table för datatabeller
+- React Hook Form + Zod för formulär
+
+Supabase och säkerhet:
+Detta är affärskritiskt.
+- Lägg aldrig hemligheter i frontend
+- Använd Supabase Edge Functions för OpenAI, mail integrationer, schedulers, webhook processing och reply detection
+- Använd Row Level Security på alla tenant-tabeller
+- Bygg multitenancy med workspaces
+- Lägg audit_logs för känsliga åtgärder
+- Ha suppression_list / do_not_contact
+- Ha source provenance per lead/contact
+- Ha flags för lawful basis / objection / suppression status
+- Bygg med tydlig separering mellan UI, orchestration och data access
+
+Schemalagda jobb:
+Stöd recurring jobs för:
+- auto follow-ups
+- refresh av lead-signaler
+- inbox sync
+- reply detection
+- analytics aggregation
+- campaign health checks
+
+Databasmodell:
+Behåll användarens önskade bastabeller men normalisera dem för SaaS.
+Skapa minst dessa tabeller:
+
+workspaces
+- id
+- name
+- locale
+- timezone
+- created_at
+
+workspace_members
+- id
+- workspace_id
+- user_id
+- role
+
+users
+- id
+- email
+- full_name
+- subscription_plan
+- created_at
+
+mailboxes
+- id
+- workspace_id
+- provider
+- email
+- status
+- daily_limit
+- warmup_status
+- connected_at
+
+companies
+- id
+- workspace_id
+- company_name
+- website
+- industry
+- location
+- company_size
+- source
+- created_at
+
+contacts
+- id
+- workspace_id
+- company_id
+- full_name
+- role
+- email
+- linkedin
+- source
+- objection_status
+- suppression_status
+- created_at
+
+lead_signals
+- id
+- workspace_id
+- company_id
+- signal_type
+- signal_title
+- signal_summary
+- source_url
+- detected_at
+- confidence_score
+
+company_insights
+- id
+- workspace_id
+- company_id
+- summary
+- pain_points
+- opportunities
+- recommended_angle
+- recommended_cta
+- updated_at
+
+campaigns
+- id
+- workspace_id
+- name
+- product
+- target_audience
+- geography
+- tonalitet
+- offer
+- cta
+- status
+- created_at
+
+sequences
+- id
+- workspace_id
+- campaign_id
+- name
+- stop_on_reply
+- send_window
+- status
+- created_at
+
+generated_emails
+- id
+- workspace_id
+- campaign_id
+- contact_id
+- sequence_id
+- subject
+- body
+- variant_length
+- variant_type
+- tone_version
+- status
+- sent_at
+- created_at
+
+email_events
+- id
+- workspace_id
+- generated_email_id
+- event_type
+- event_timestamp
+- metadata
+
+meetings
+- id
+- workspace_id
+- contact_id
+- campaign_id
+- status
+- booked_for
+- source
+
+suppressions
+- id
+- workspace_id
+- contact_id
+- email
+- reason
+- created_at
+
+audit_logs
+- id
+- workspace_id
+- actor_user_id
+- action
+- entity_type
+- entity_id
+- metadata
+- created_at
+
+AI-arkitektur:
+Bygg AI-lagret som separata moduler / agents:
+- Discovery Agent
+- Company Research Agent
+- Signal Detection Agent
+- Contact Prioritization Agent
+- Personalization Agent
+- Email Generation Agent
+- Follow-Up Planner
+- Reply Classifier
+- Analytics Insight Agent
+
+Arbetsflödeslogik:
+Implementera ett tydligt stateful workflow:
+1. Fetch leads
+2. Enrich company
+3. Detect signals
+4. Analyze company
+5. Score relevance
+6. Generate outreach angle
+7. Generate email variants
+8. Queue sending
+9. Watch for replies/events
+10. Generate follow-up if needed
+11. Update CRM/analytics
+
+Bygg detta så att flödet är modulärt och lätt att byta ut och återanvända.
+
+LinkedIn-regel:
+Designa LinkedIn-lagret som en pluggable provider abstraction.
+Anta inte fri scraping av personprofiler.
+Stöd:
+- company page references
+- user-authorized LinkedIn inputs
+- external enrichment providers via adapter pattern
+- manual enrichment fallback
+Gör detta tydligt i arkitekturen.
+
+Datakällor och signaler:
+Modellera systemet så att det kan använda:
+- företagswebbplatser
+- offentliga nyheter
+- Google place/business data
+- företagsregister
+- arbetsmarknads- / jobbsignaler
+- användarens egna anteckningar
+- externa enrichment providers via adapters
+
+UI-detaljer som måste finnas:
+- command palette
+- sidebar navigation
+- KPI cards
+- signal badges
+- lead tables
+- detail drawers
+- tabbed company profile pages
+- activity timeline
+- email preview cards
+- sequence step cards
+- analytics charts
+- mailbox health cards
+- polished empty states
+- loading skeletons
+- success/error toasts
+- mobile responsive breakpoints
+
+Mockdata:
+Skapa realistisk svensk mockdata för företag, orter, branscher, kontakter och kampanjer.
+Använd inte riktiga personuppgifter om du inte behöver det.
+Det ska kännas som ett riktigt säljbart svenskt SaaS-verktyg.
+
+Byggordning:
+1. Skapa app shell, navigation, layout och design system
+2. Skapa onboarding och dashboard med mockdata
+3. Skapa leads / companies / contacts / campaigns / analytics-sidor
+4. Skapa AI assistant panel och email studio
+5. Skapa Supabase schema och auth
+6. Lägg RLS policies
+7. Lägg Edge Functions för AI, scheduler, inbox sync och sending
+8. Knyt ihop mockdataflöden med riktig datamodell
+9. Polera states, responsiveness, loading och errors
+10. Skapa en tydlig production-ready file structure
+
+Kodkvalitet:
+Koden måste vara:
+- scalable
+- reusable
+- clean
+- production-ready
+- modular
+- typed
+- maintainable
+
+Viktigt slutkrav:
+Appen ska kännas som ett riktigt modernt AI-salesverktyg redo att säljas till svenska företag.
+Den ska inte kännas som ett demo-projekt.
+Fokusera på premiumkänsla, tydlig struktur, stark UX och en trovärdig svensk outbound-ton.
+
+Börja med att:
+- skapa den fulla appstrukturen
+- generera routes och UI-shell
+- bygga de viktigaste sidorna med snygg, realistisk mockdata
+- därefter skapa Supabase schema, RLS och Edge Functions
+- visa en tydlig file structure
+- håll allting konsekvent med denna produktvision

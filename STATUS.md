@@ -1,5 +1,68 @@
 # Snipra Status
 
+## 2026-07-07 — Grok — Email Studio full automation per Snipra Prompt (1).md
+
+**Fokus:** Automatisera Email-Studio så företag kan skapa konto (endast email/magic link), logga in och omedelbart testa alla funktioner "Kortare", "Skriv om", "Förbättra", "Personalisera", "Översätt", "A/B-varianter", "Uppföljning", "Analysera" på https://snipra.vercel.app/emails (och /dashboard).
+
+**Kritisk regel implementerad:** VARJE åtgärd utgår från https://github.com/coreyhaines31/marketingskills (cold-email, copywriting, copy-editing, ab-testing, emails, marketing-psychology etc). 
+
+### Completed (per spec i "Snipra - Prompt (1).md")
+- Utökade till exakt 8 funktioner med svenska etiketter + interna instruktioner bundna till skills.
+- Uppdaterade system-prompt i både lib/agent/email-studio-prompt.ts och supabase/functions/_shared/prompts/email-studio.ts:
+  - Full "Du är Email Studio..." + KRITISK REGEL + sub-agent arkitektur + kvalitetskontroller + exakt output-format.
+  - Inkluderar few-shot + explicit referenser till SKILL.md:er.
+  - Använder loadAllMarketingSkills() / bundled corpus.
+- Ändrade output till rikt strukturerad JSON (original_version, new_version, explanation (med skills-ref), subject_suggestions (2-3), confidence_tips).
+- Uppdaterade UI (EmailStudioEditor.tsx):
+  - 8 knappar.
+  - Resultatpanel som visar exakt formatet: Ursprunglig, Ny version, Förklaring, Ämnesradsförslag, Konfidens/Tips.
+  - "Använd ny version" + direkt apply för vanliga åtgärder.
+  - Notis om marketingskills.
+- Uppdaterade parsers i actions + edge function + types för rich result.
+- Auth: Magic link default till /emails för omedelbar Email Studio access. Endast email + magic recommended för snabb registrering utan extra verifikation. Notiser + hjälptext i LoginForm.
+- Legacy mock i WorkspaceViews uppdaterad till nya 8 knappar.
+- Följt AGENT.md: Läste marketingskills SKILL.md innan kod (cold-email, copywriting, emails, ab-testing, marketing-psychology). Skyddade filer orörda. Uppdaterade STATUS.md.
+
+### Verification steps (rekommenderas lokalt)
+- npm run type-check
+- Starta dev: C:\Program Files\nodejs\npm.cmd run dev
+- Gå till /login → välj "Magic link" → ange testmail → efter login → /emails → prova alla 8 knappar.
+- Kontrollera att förklaringar refererar skills och output matchar spec.
+
+### Notes
+- Kräver giltig LLM-nyckel (DeepSeek/OpenAI) i env för att knapparna ska producera riktiga resultat.
+- För prod: edge function (refine-email) och Supabase secrets.
+- Automator (snipra_automator.py) bör nu kunna klicka de nya knapparna (text "Kortare" etc matchar).
+- Nästa: spara user preferences (ton etc) explicit i profile/business_context + feedback loop för smakprofil (enligt tidigare email-studio plan).
+- Git: Inget .git synligt i workspace — använd temp overlay + feature branch + gh pr per AGENT.md när push ska göras.
+
+## 2026-06-30 — Grok — snipra_automator + Persistent Login State
+Completed reliable login automation + artifact persistence for testing the Email Studio.
+
+### Completed
+- Diagnosed and fixed `python snipra_automator.py login <email> <pass>` (was timing out waiting for email input).
+  - Root cause: `get_playwright_context` always loaded existing `.snipra-auth-state.json` → middleware instantly redirected `/login` → form never rendered.
+  - Fix: `login` command now forces a completely fresh context (`browser.new_context()`, never passes `storage_state`). Other commands (`run`, `demo`, `interactive`) still load the state file to appear "already logged in".
+  - Improved robustness: `domcontentloaded` + explicit waits, `type=` locators (primary) + placeholder fallbacks, detailed debug dumps, better navigation waits (lambda + networkidle), onboarding auto-fill path.
+- Executed successful login with test account `snipra.dev.1782852323729@example.com`.
+- User request "spara ner allt till snipe-leads mappen":
+  - Re-saved `.snipra-auth-state.json` after navigating to actual pages (captures latest session).
+  - Captured full-page screenshots: `screenshots/logged-in-dashboard.png` and `screenshots/logged-in-emails.png`.
+  - Exported `screenshots/cookies-dump.json`.
+- Verified end-to-end: loading state + going to `/emails` lands on the real editor (textarea[aria-label="Mejltext"], refine buttons present). No login redirect.
+- Background dev server restarts performed cleanly when needed (npm.cmd via hidden processes because of PowerShell policy).
+
+### Verification
+- `python snipra_automator.py login ...` → exit 0 + "✓ Logged in successfully! State saved".
+- Direct Playwright load with the state file → `/emails` + editor visible.
+- Screenshots and state file present in project root after conclude.
+
+### Notes
+- Auth token lifetime ~1h (Supabase). Re-login will be needed for long-lived sessions.
+- Dev server processes frequently disappear in the agent shell; start locally with `C:\Program Files\nodejs\npm.cmd run dev` for interactive work.
+- The four refine buttons (Kortare etc.) are now testable via `python snipra_automator.py run` or `demo` once a valid LLM key is configured.
+- Session log: `session-logs/2026-06-30-session-log.md`
+
 ## 2026-05-22
 Codex rebuilt the project from the prompt into a Next.js App Router SaaS mock/product scaffold.
 
@@ -72,6 +135,59 @@ Codex rebuilt the project from the prompt into a Next.js App Router SaaS mock/pr
 - Both pipelines verified working end-to-end.
 - Session log: `session-logs/2026-05-24-session-log-2.md`
 - **Next focus: dashboard portal improvements** — ask user what specifically needs fixing.
+
+## 2026-06-10 Phase 1: Supabase & Auth — Grok (in progress)
+
+### Completed
+- Added Supabase client layer: `lib/supabase/client.ts`, `server.ts`, `admin.ts`
+- Added `lib/database.types.ts` (hand-written from schema; regenerate with `npx supabase gen types typescript --linked` after linking project)
+- Added `lib/auth.ts`, `lib/workspace.ts`, `middleware.ts`, `app/auth/callback/route.ts`
+- Added server actions: `lib/actions/auth.ts`, `lib/actions/onboarding.ts`
+- Wired `LoginView` and `OnboardingView` to Supabase Auth (password, magic link, signup) and `business_contexts` save flow
+- Added `components/auth/LoginForm.tsx`, `OnboardingForm.tsx`, `useUser.ts`
+- Added signup trigger migration: `supabase/migrations/001_handle_new_user.sql`
+- Added `.env.local.example`; added `@supabase/ssr` dependency for cookie-based App Router auth
+
+### 2026-06-10 Schema applied — Grok
+- Project: `https://spsmblyvasagpekjmgmf.supabase.co`
+- `.env` configured (gitignored): URL, API keys, `SUPABASE_DB_PASSWORD`
+- `npm run apply:schema` succeeded — all 15 public tables + signup trigger live
+- Verified: admin user creation → workspace + profile auto-created via `handle_new_user` trigger
+- Server/middleware use `SUPABASE_SERVICE_ROLE_KEY` (publishable key still rejected by API)
+
+### Remaining before Phase 1 sign-off
+- **Dashboard**: Authentication → Providers → Email → disable **Confirm email** (`mailer_autoconfirm` still false; public signup hits rate limit)
+- ~~**Dashboard**: copy valid Publishable key~~ — `sb_publishable_...` verified working in `.env`
+- **Git**: not available in collaborator environment; feature branch `feature/supabase-auth-setup` must be created locally before PR
+- **Marketing skills**: `/customer-research` and `/marketing-psychology` skills not found locally; onboarding defaults applied from `.agents/product-marketing.md` — review workflow with user before marking Phase 1 complete
+
+### Verification (pending credentials)
+- [ ] Sign up → workspace + profile created via trigger
+- [ ] Login → protected routes accessible
+- [ ] Incomplete onboarding → redirect to `/onboarding`
+- [ ] Save business context → redirect to `/dashboard`
+- [ ] Auth persists across refresh
+- [ ] `npm run type-check` and `npm run build`
+
+## 2026-06-10 Email Studio + Conclude — Grok
+
+### Completed
+- Installed 44 marketing skills to `references/marketingskills-main/` (coreyhaines31/marketingskills)
+- Email Studio agent: skill loader (all skills/call), DeepSeek LLM, `refineEmail` action, `EmailStudioEditor` UI
+- Edge Function `refine-email` + shared prompts/LLM layer
+- `/emails` wired to data loader (Supabase with mock fallback)
+- User decisions: DeepSeek yes, GDPR yes, no feedback UI, skills in repo references/
+- Restored `~/.agents/skills/conclude/SKILL.md` on collaborator machine (partial — Step 1 only)
+- `npm run type-check` passes; `npm run bundle:skills` bundles corpus
+
+### Remaining
+- Add `DEEPSEEK_API_KEY` to `.env` and test studio buttons
+- Phase 1 sign-off items (confirm email off, auth E2E, git PR)
+- Seed `generated_emails` for real Supabase data on `/emails`
+- Paste full `/conclude` SKILL.md (Steps 2–5) from KB
+
+- Session log: `session-logs/2026-06-10-session-log.md`
+- **Next focus:** DeepSeek key + Email Studio live test + Phase 1 verification
 
 ## 2026-05-24 Skill Registry Fix — Claude
 - `/skill` SKILL.md: fixed iCloud→`~/.agents/skills/` path, documented flat structure (no category subdir), fixed evolve script path.
