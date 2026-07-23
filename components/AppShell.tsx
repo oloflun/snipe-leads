@@ -29,7 +29,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
             <Logo />
           </Link>
           <nav className="kicker col-span-12 order-3 mt-4 flex min-w-0 gap-5 overflow-x-auto text-ink/70 md:order-none md:col-span-6 md:mt-0 md:justify-center md:overflow-visible">
-            {appRoutes.slice(0, 8).map((route) => {
+            {appRoutes.slice(0, 9).map((route) => {
               const active = pathname === route.href || pathname.startsWith(`${route.href}/`);
               return (
                 <Link

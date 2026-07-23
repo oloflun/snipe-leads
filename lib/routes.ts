@@ -14,6 +14,7 @@ export const appRoutes: AppRoute[] = [
   { href: "/contacts", labelKey: "nav.contacts", group: "sales" },
   { href: "/campaigns", labelKey: "nav.campaigns", group: "sales" },
   { href: "/emails", labelKey: "nav.emails", group: "sales" },
+  { href: "/snajp-support", labelKey: "nav.snajpSupport", group: "workspace" },
   { href: "/analytics", labelKey: "nav.analytics", group: "workspace" },
   { href: "/inbox", labelKey: "nav.inbox", group: "workspace" },
   { href: "/settings", labelKey: "nav.settings", group: "admin" }

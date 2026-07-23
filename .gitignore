@@ -3,6 +3,18 @@ node_modules/
 tsconfig.tsbuildinfo
 .env
 .env*.local
+.venv/
+__pycache__/
+.pytest_cache/
+.claude/settings.local.json
+
+# Local scratch files (not project source)
+auth_err.txt
+auth_out.txt
+new_auth_err.txt
+new_auth_out.txt
+*.zip
+*.zip.lnk
 supabase/.db-password.txt
 .vercel/
 dist/
