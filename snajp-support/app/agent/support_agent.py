@@ -12,12 +12,12 @@ from agents import Agent, Runner
 from ..config import get_settings
 from ..storage.base import Storage
 from .context import SupportContext
+from .llm import get_agent_model
 from .prompt import SYSTEM_PROMPT
 from .tools import ALL_TOOLS
 
 
 def build_agent(channel_tone: str, max_length: int) -> Agent[SupportContext]:
-    settings = get_settings()
     instructions = (
         SYSTEM_PROMPT
         + f"\n## Aktuell kanal\nTon: {channel_tone}. Maxlängd på svaret: {max_length} tecken."
@@ -25,7 +25,7 @@ def build_agent(channel_tone: str, max_length: int) -> Agent[SupportContext]:
     return Agent[SupportContext](
         name="Snajp-Support",
         instructions=instructions,
-        model=settings.model,
+        model=get_agent_model(),
         tools=ALL_TOOLS,
     )
 
@@ -34,8 +34,12 @@ def _build_input(message: str, subject: str, attachments: list[str]) -> list[dic
     content: list[dict[str, Any]] = []
     text = message if not subject else f"Ämne: {subject}\n\n{message}"
     content.append({"type": "input_text", "text": text})
-    for data_url in attachments:
-        content.append({"type": "input_image", "image_url": data_url, "detail": "auto"})
+    # Vision stöds bara av OpenAI-modellerna; DeepSeek deepseek-chat är textbaserad.
+    if attachments and get_settings().llm_provider == "openai":
+        for data_url in attachments:
+            content.append({"type": "input_image", "image_url": data_url, "detail": "auto"})
+    elif attachments:
+        content[0]["text"] += "\n\n[Bild bifogad — bildanalys stöds ej av nuvarande modell.]"
     return [{"role": "user", "content": content}]
 
 

@@ -51,12 +51,16 @@ async def lifespan(app: FastAPI):
     app.state.jobs = jobs
 
     if settings.is_simulation():
-        logger.info("OpenAI-nyckel saknas/platshållare — SIMULERINGSLÄGE aktivt.")
+        logger.info("LLM-nyckel saknas/platshållare — SIMULERINGSLÄGE aktivt.")
     else:
-        from agents import set_default_openai_key
+        from .agent.llm import configure_agents_sdk
 
-        set_default_openai_key(settings.openai_api_key)
-        logger.info("OpenAI-nyckel hittad — riktig agent (%s) aktiv.", settings.model)
+        configure_agents_sdk()
+        logger.info(
+            "LLM-nyckel hittad — riktig agent aktiv (provider=%s, modell=%s).",
+            settings.llm_provider,
+            settings.model,
+        )
 
     yield
 

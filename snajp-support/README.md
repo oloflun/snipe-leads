@@ -6,14 +6,12 @@ FastAPI som tunt HTTP-lager, agentloop via OpenAI Agents SDK, Postgres/pgvector 
 CRM + semantisk kunskapsbas, async jobb med 202 + polling, eskaleringsregler och
 kanalspecifik ton. Frontend/demo bor i Next-appen på `/snajp-support`.
 
-## Snabbstart (localhost)
+## Snabbstart (localhost, Docker — ingen venv)
 
 ```powershell
-# Terminal 1 — backend (port 8000)
+# Terminal 1 — backend (port 8000). Kopiera .env.example -> .env och fyll i.
 cd snajp-support
-python -m venv .venv                       # första gången
-.venv\Scripts\pip install -r requirements.txt
-.venv\Scripts\uvicorn app.main:app --port 8000
+docker compose up
 
 # Terminal 2 — frontend (port 3000)
 npm run dev
@@ -21,15 +19,28 @@ npm run dev
 
 Öppna http://localhost:3000/snajp-support
 
+## LLM-provider (OpenAI eller DeepSeek)
+
+Backenden är provider-agnostisk via `LLM_PROVIDER`:
+
+- `LLM_PROVIDER=openai` → OpenAI (`gpt-4o-mini`), vision + embeddings.
+- `LLM_PROVIDER=deepseek` → DeepSeek (`deepseek-chat`) via OpenAI-kompatibla
+  `https://api.deepseek.com`. Sätt `DEEPSEEK_API_KEY`.
+
+DeepSeek saknar embeddings-endpoint och vision. Vektorsökning i KB kräver därför en
+separat `EMBEDDING_API_KEY` (OpenAI); utan den faller KB tillbaka på full-text-sökning,
+och bildbilagor noteras i text istället för att analyseras.
+
 ## Lägen (graceful degradation)
 
 | Beroende | Finns | Saknas |
 |---|---|---|
-| `OPENAI_API_KEY` (riktig) | Riktig agent (gpt-4o-mini), vision, embeddings + vektorsökning | **Simuleringsläge**: deterministisk svensk regelpipeline, nyckelords-KB-sökning, svar flaggas `simulation: true` |
+| LLM-nyckel för aktiv provider (`OPENAI_API_KEY`/`DEEPSEEK_API_KEY`) | Riktig agent + triage | **Simuleringsläge**: deterministisk svensk regelpipeline, nyckelords-KB-sökning, svar flaggas `simulation: true` |
+| `EMBEDDING_API_KEY` (OpenAI) | Embeddings + pgvector-sökning | Full-text-sökning i KB |
 | `DATABASE_URL` (Supabase) | Postgres-lagring (`ss_`-tabeller, pgvector) | In-memory-lagring med samma gränssnitt |
 | `REDIS_URL` | Redis-jobbkö | In-memory-jobbkö (TTL + 5 min auto-fail) |
 
-`GET /health` visar aktivt läge.
+`GET /health` visar aktivt läge, provider och modell.
 
 ## Aktivera riktig AI + Supabase
 
@@ -78,11 +89,22 @@ Fack: `teknisk_support`, `leverans`, `betalning`, `retur_reklamation`, `konto`, 
 
 ```powershell
 cd snajp-support
-.venv\Scripts\python -m pytest tests -q
+docker compose run --rm api python -m pytest tests -q
 ```
 
-## Deploy
+Testerna kör i simuleringsläge och kräver inga nycklar.
 
-`Dockerfile` + `docker-compose.yml` medföljer (API + Redis). Sätt env-variablerna
-från `.env.example` som secrets. Kubernetes-mönstret från referensrepot (probes mot
-`/health/live` och `/health/ready`) fungerar rakt av.
+## Deploy (Render)
+
+Backenden auto-deployas från GitHub via `render.yaml` (Blueprint):
+
+1. Skapa en Blueprint i Render och peka på repot → Render läser `snajp-support/render.yaml`.
+2. Sätt secrets i dashboarden: `DEEPSEEK_API_KEY`, `SNAJP_MASTER_API_KEY`,
+   `SNAJP_DEMO_API_KEY` (och valfritt `DATABASE_URL`, `EMBEDDING_API_KEY`).
+3. Notera tjänstens URL, t.ex. `https://snajp-support.onrender.com`.
+4. På Vercel: sätt `SNAJP_SUPPORT_URL` = Render-URL:en och `SNAJP_INTERNAL_API_KEY`
+   = samma värde som `SNAJP_DEMO_API_KEY`. Frontenden pratar då med Render-backenden.
+
+Free-tier spinner ner vid inaktivitet → första anropet efter idle tar ~30–60 s (cold
+start). Health-probes: `/health/live`, `/health/ready`. `docker-compose.yml` (API + Redis)
+finns kvar för lokal körning.

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
-// Tunn proxy mot den headless Snajp-Support-backenden (FastAPI, port 8000).
+// Tunn proxy mot den headless Snajp-Support-backenden (FastAPI, hostas på Render).
 // Webbläsaren träffar bara Next-appen; den interna API-nyckeln sätts server-side.
+// SNAJP_SUPPORT_URL sätts på Vercel till Render-URL:en; lokalt defaultar den till 8000.
 
 export const SNAJP_SUPPORT_URL = process.env.SNAJP_SUPPORT_URL ?? "http://127.0.0.1:8000";
 export const SNAJP_INTERNAL_API_KEY =
@@ -12,7 +13,7 @@ export function offlineResponse() {
     {
       offline: true,
       error:
-        "Snajp-Support-backenden svarar inte. Starta den med: cd snajp-support && .venv\\Scripts\\uvicorn app.main:app --port 8000"
+        "Snajp-Support-backenden svarar inte. Kontrollera att SNAJP_SUPPORT_URL pekar på Render-tjänsten (eller kör lokalt: docker compose up i snajp-support/)."
     },
     { status: 503 }
   );
