@@ -7,9 +7,8 @@ lättviktigt jämfört med hela agent-loopen, avsett för batch-sortering.
 import json
 from typing import Any
 
-from openai import AsyncOpenAI
-
 from ..config import CATEGORIES, CATEGORY_LABELS, get_settings
+from .llm import get_llm_client
 
 _TRIAGE_PROMPT = """Du är Snajp-Supports triagemotor. Klassificera kundmailet och
 skriv ett svenskt svarsutkast. Om bilder bifogats: beskriv kort vad du ser i
@@ -39,15 +38,6 @@ Från: {sender}
 
 {body}"""
 
-_client: AsyncOpenAI | None = None
-
-
-def _get_client() -> AsyncOpenAI:
-    global _client
-    if _client is None:
-        _client = AsyncOpenAI(api_key=get_settings().openai_api_key)
-    return _client
-
 
 async def triage_email_llm(
     *,
@@ -60,13 +50,15 @@ async def triage_email_llm(
     settings = get_settings()
     kb_text = "\n\n".join(f"### {a['title']}\n{a['content']}" for a in kb_articles) or "(tom)"
     prompt = _TRIAGE_PROMPT.format(kb=kb_text, sender=sender, subject=subject, body=body)
-    # Vision: bifogade bilder skickas med som image_url-delar (data-URLs).
+    # Vision stöds bara av OpenAI-modellerna; DeepSeek (deepseek-chat) är textbaserad.
     content: str | list[dict[str, Any]] = prompt
-    if image_urls:
+    if image_urls and settings.llm_provider == "openai":
         content = [{"type": "text", "text": prompt}] + [
             {"type": "image_url", "image_url": {"url": url}} for url in image_urls[:3]
         ]
-    response = await _get_client().chat.completions.create(
+    elif image_urls:
+        content = prompt + "\n\n[Bild bifogad — bildanalys stöds ej av nuvarande modell.]"
+    response = await get_llm_client().chat.completions.create(
         model=settings.model,
         response_format={"type": "json_object"},
         temperature=0.3,

@@ -1,24 +1,17 @@
-"""Embeddings via OpenAI (endast riktig nyckel)."""
+"""Embeddings via OpenAI. DeepSeek saknar embeddings — kräver separat OpenAI-nyckel.
 
-from openai import AsyncOpenAI
+Utan giltig embeddings-klient returneras None och storage-lagret faller tillbaka
+på svensk full-text-sökning i kunskapsbasen.
+"""
 
 from ..config import get_settings
-
-_client: AsyncOpenAI | None = None
-
-
-def _get_client() -> AsyncOpenAI:
-    global _client
-    if _client is None:
-        _client = AsyncOpenAI(api_key=get_settings().openai_api_key)
-    return _client
+from .llm import get_embedding_client
 
 
 async def embed_text(text: str) -> list[float] | None:
-    settings = get_settings()
-    if settings.is_simulation():
+    client = get_embedding_client()
+    if client is None:
         return None
-    response = await _get_client().embeddings.create(
-        model=settings.embedding_model, input=text[:8000]
-    )
+    settings = get_settings()
+    response = await client.embeddings.create(model=settings.embedding_model, input=text[:8000])
     return response.data[0].embedding

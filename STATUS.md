@@ -195,3 +195,34 @@ Codex rebuilt the project from the prompt into a Next.js App Router SaaS mock/pr
 - `~/CLAUDE.md`: `/skill` table entry corrected to `~/.agents/skills/`.
 - `~/.claude/skills/` converted from unlinked copy to junction → `~/.agents/skills/` (backup at `skills-backup-20260524`).
 - Session log: `session-logs/2026-05-24-session-log-3.md`
+
+## 2026-07-25 Snajp-Support: Render + DeepSeek portability — Claude
+
+**Bakgrund:** Snajp-Support (headless AI-kundtjänstbackend, `snajp-support/`) körde bara lokalt via en `.venv` + `uvicorn --port 8000`, bunden till en enskild dators filsystem. Två samarbetande utvecklare + krav på publik demo-miljö → allt måste fungera reproducerbart över GitHub + Vercel, ingen maskinbunden state.
+
+### Completed
+- **DeepSeek-kompatibilitet i backenden** (var OpenAI-only):
+  - Ny `snajp-support/app/agent/llm.py` — central klientfabrik. Provider styrs av `LLM_PROVIDER` (`openai`|`deepseek`); DeepSeek går mot `https://api.deepseek.com` (OpenAI-kompatibel chat-completions).
+  - `support_agent.py`: Agents SDK tvingas till `OpenAIChatCompletionsModel` (DeepSeek saknar stöd för Responses API) + `set_tracing_disabled(True)` i live-läge. Vision (bildbilagor) degraderar till textnotis när provider=deepseek (DeepSeek `deepseek-chat` är inte multimodal).
+  - `embeddings.py`: embeddings går **alltid** mot OpenAI (`EMBEDDING_API_KEY`, separat från chat-nyckeln) — DeepSeek har ingen embeddings-endpoint. Utan nyckel → `None` → KB faller tillbaka på Postgres full-text-sökning (befintligt mönster, oförändrat).
+  - `config.py`: nya fält `llm_provider`, `llm_base_url`, `deepseek_api_key`, `embedding_api_key`, `active_llm_key()`; auto-korrigerar `gpt-*`-default → `deepseek-chat` när provider=deepseek; `is_simulation()` kollar nu aktiv providers nyckel.
+  - Verifierat: 15/15 pytest passerar (simuleringsläge), samt manuell konstruktionskontroll av båda provider-vägarna (base_url, modelltyp, embedding-klient None/set) i en engångs-venv i scratchpad — ingen `.venv` skapad i repot.
+- **Render-deploy** (backend-host, beslutat av användaren över "allt på Vercel" pga serverless-inkompatibilitet — bakgrundsjobb via `asyncio.create_task` + in-memory job-store överlever inte serverless-invocations):
+  - Ny `snajp-support/render.yaml` (Blueprint, IaC) — pekar på befintlig `Dockerfile` oförändrad.
+  - `Dockerfile`: CMD respekterar nu `$PORT` (Render injicerar den; lokalt defaultar 8000).
+- **Vercel-koppling** (ingen frontend-kodändring — proxyn var redan ren):
+  - `vercel.json`: `git.deploymentEnabled` false → **true** (auto-deploy från GitHub aktiverat).
+  - `app/api/snajp-support/_lib.ts`: offline-hint uppdaterad (pekade tidigare på lokal venv-uvicorn-kommando, nu på Render/`SNAJP_SUPPORT_URL`).
+- Env-dokumentation: `snajp-support/.env.example` + rotens `.env.local.example` (lade till `SNAJP_SUPPORT_URL`/`SNAJP_INTERNAL_API_KEY` som saknades där helt).
+- `snajp-support/README.md`: Docker-quickstart ersätter venv-instruktioner, DeepSeek-konfig, Render-deploy-steg.
+- Branch: `feature/email-studio-sync-2026-07-20`.
+
+### Open threads / next agent
+- **Render dashboard-setup (ej gjort, kräver användarens konto):** skapa Blueprint mot repot (`snajp-support/render.yaml`), sätt secrets `DEEPSEEK_API_KEY`, `SNAJP_MASTER_API_KEY`, `SNAJP_DEMO_API_KEY`. Notera den publika Render-URL:en.
+- **Vercel env-vars (ej gjort):** sätt `SNAJP_SUPPORT_URL` = Render-URL:en, `SNAJP_INTERNAL_API_KEY` = samma värde som Renders `SNAJP_DEMO_API_KEY`.
+- **Valfritt men rekommenderat för stabil demo:** kör migrationerna `supabase/migrations/002_snajp_support.sql` + `003_snajp_multitenant.sql` mot Supabase-projektet, sätt `DATABASE_URL` på Render — annars nollställs tickets/KB vid Renders free-tier spin-down (in-memory).
+- **Ej verifierat mot riktigt DeepSeek-API** — bara konstruktions-/wiring-verifiering lokalt (ingen faktisk API-nyckel användes). Första riktiga end-to-end-test bör göras efter Render-deploy: `POST /api/chat` → polla `/api/jobs/{id}` → riktigt svenskt svar.
+- Free-tier Render spinner ner vid inaktivitet → cold start ~30–60s på första anropet; `SupportChat`-komponenten pollar upp till 90 ggr så det tolereras, men vet om det.
+- `.claude/launch.json`: dev-servern kör nu på **port 3005** (inte 3000) — porten var upptagen av ett annat lokalt projekt på användarens maskin. `autoPort: true` är satt som fallback.
+- Ospårade filer i arbetskatalogen som INTE ingår i denna commit (fanns redan innan detta arbete, orörda): `References/` (First/Original/Second/Third iteration), `session-logs/2026-05-27-session-log.md`. Okänt syfte — fråga användaren om de ska committas eller är skräp.
+- `package-lock.json` hade oskarpt npm-versions-brus (borttagna `libc`-fält) från en lokal `npm install` — **inte committat**, lämnat orört i arbetskatalogen för att undvika onödigt diff-brus. Kör `npm install` igen och committa separat om det stör CI.

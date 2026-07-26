@@ -1,0 +1,26 @@
+# Render Blueprint — auto-deploy av Snajp-Support-backenden från GitHub.
+# Peka Render på denna fil (Blueprint). Secrets (sync:false) sätts i dashboarden.
+services:
+  - type: web
+    name: snajp-support
+    runtime: docker
+    rootDir: snajp-support
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health/live
+    plan: free
+    envVars:
+      - key: LLM_PROVIDER
+        value: deepseek
+      - key: MODEL
+        value: deepseek-chat
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: SNAJP_MASTER_API_KEY
+        sync: false
+      - key: SNAJP_DEMO_API_KEY
+        sync: false
+      # Valfritt — persistens (Supabase pooler) och embeddings (OpenAI-nyckel):
+      - key: DATABASE_URL
+        sync: false
+      - key: EMBEDDING_API_KEY
+        sync: false

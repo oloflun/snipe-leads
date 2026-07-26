@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Default-tenanten (Nordlys Handel) — samma fasta UUID som i 003_snajp_multitenant.sql.
@@ -36,7 +37,12 @@ DEFAULT_CATEGORY_RULES = {category: "draft" for category in CATEGORIES}
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
+    # LLM-provider: "openai" eller "deepseek" (OpenAI-kompatibel endpoint).
+    llm_provider: str = "openai"
+    llm_base_url: str = ""  # tom => härleds från provider (se agent/llm.py)
     openai_api_key: str = ""
+    deepseek_api_key: str = ""
+    embedding_api_key: str = ""  # valfri OpenAI-nyckel — DeepSeek saknar embeddings
     model: str = "gpt-4o-mini"
     embedding_model: str = "text-embedding-3-small"
     database_url: str = ""
@@ -52,9 +58,21 @@ class Settings(BaseSettings):
     imap_password: str = ""  # Gmail: app-lösenord; Outlook: app-lösenord/IMAP-auth
     imap_folder: str = "INBOX"
 
+    @model_validator(mode="after")
+    def _default_model_for_provider(self) -> "Settings":
+        # Undvik footgun: gpt-default mot DeepSeek => byt till deepseek-chat.
+        if self.llm_provider == "deepseek" and self.model.startswith("gpt-"):
+            self.model = "deepseek-chat"
+        return self
+
+    def active_llm_key(self) -> str:
+        if self.llm_provider == "deepseek":
+            return self.deepseek_api_key
+        return self.openai_api_key
+
     def is_simulation(self) -> bool:
         # Samma platshållar-heuristik som app/api/email-studio/route.ts i Next-appen.
-        key = self.openai_api_key or ""
+        key = self.active_llm_key() or ""
         return len(key) < 20 or "..." in key or "din-" in key
 
 
