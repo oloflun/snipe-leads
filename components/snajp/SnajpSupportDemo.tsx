@@ -3,13 +3,15 @@
 import { useState } from "react";
 import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { Dashboard } from "./Dashboard";
 import { InboxTriage } from "./InboxTriage";
 import { IntegrationSection } from "./IntegrationSection";
 import { SupportChat } from "./SupportChat";
 
 const tabs = [
-  { id: "chat", label: { sv: "Chatta med agenten", en: "Chat with the agent" } },
-  { id: "inbox", label: { sv: "Inkorg-triage", en: "Inbox triage" } },
+  { id: "dashboard", label: { sv: "Dashboard", en: "Dashboard" } },
+  { id: "chat", label: { sv: "Live-chatt (preview)", en: "Live chat (preview)" } },
+  { id: "inbox", label: { sv: "Snabb-triage", en: "Quick triage" } },
   { id: "integration", label: { sv: "Integration & API", en: "Integration & API" } }
 ] as const;
 
@@ -48,7 +50,7 @@ const highlights = [
 
 export function SnajpSupportDemo() {
   const { text } = useLocale();
-  const [tab, setTab] = useState<TabId>("chat");
+  const [tab, setTab] = useState<TabId>("dashboard");
 
   return (
     <div className="space-y-12">
@@ -82,6 +84,7 @@ export function SnajpSupportDemo() {
         </div>
 
         <div className="mt-8">
+          {tab === "dashboard" ? <Dashboard /> : null}
           {tab === "chat" ? (
             <div className="mx-auto max-w-3xl">
               <SupportChat />

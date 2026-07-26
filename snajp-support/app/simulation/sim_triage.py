@@ -31,6 +31,13 @@ _CATEGORY_PATTERNS: list[tuple[str, re.Pattern]] = [
         ),
     ),
     (
+        "orderstatus",
+        re.compile(
+            r"orderstatus|status på (min )?(order|beställning)|orderbekräftelse|bekräftelse på (min )?(order|beställning)|har min (order|beställning) gått igenom|när skickas (min )?(order|beställning)",
+            re.IGNORECASE,
+        ),
+    ),
+    (
         "teknisk_support",
         re.compile(
             r"fungerar inte|funkar inte|felkod|fel\s*meddelande|felmeddelande|logga in|inloggning|lösenord|krasch|bugg|hemsida|app(en)?\b|sidan|laddar|kassan|e-\d{3}",

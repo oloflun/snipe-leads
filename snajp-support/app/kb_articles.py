@@ -130,6 +130,17 @@ KB_ARTICLES: list[dict] = [
         ),
     },
     {
+        "title": "Orderstatus och orderbekräftelse",
+        "category": "orderstatus",
+        "content": (
+            "Direkt efter köpet skickas en orderbekräftelse via mail — kommer den inte inom "
+            "15 minuter, kontrollera skräpposten. Under Mina sidor → Beställningar ser du "
+            "alltid aktuell status: Mottagen, Packas, Skickad eller Levererad. När ordern "
+            "skickas får du ett spårningsnummer. En order kan ändras eller avbrytas fram "
+            "tills den packas, oftast inom 1–2 timmar från beställning."
+        ),
+    },
+    {
         "title": "Uppdatera kontouppgifter och adress",
         "category": "konto",
         "content": (

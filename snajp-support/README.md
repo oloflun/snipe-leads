@@ -58,6 +58,32 @@ Tjänsten är multi-tenant: varje kundföretag (tenant) är helt isolerat.
   `ss_tenants`, `tenant_id` på alla kunddatatabeller (backfyllt till default-
   tenanten), RLS med `FORCE ROW LEVEL SECURITY`.
 
+## Email-pipeline (inkorg → triage → utkast/autosvar → granskning)
+
+Agenten tar emot riktiga kundservicemail, sorterar dem i fack och genererar svar:
+
+1. **Inkorg**: mock-testmail (`POST /api/inbox/mock`), API-ingest från externa system
+   (`POST /api/inbox/ingest`) eller riktig inkorg via **IMAP** — täcker både Gmail
+   (`IMAP_HOST=imap.gmail.com` + app-lösenord) och Microsoft 365/Outlook
+   (`IMAP_HOST=outlook.office365.com`). Sätt `IMAP_HOST/IMAP_USER/IMAP_PASSWORD` i
+   `.env` och synka med `POST /api/inbox/sync`, eller sätt `INBOX_POLL_SECONDS=60`
+   för bakgrundspolling. Råmail + bilagor (bilder som data-URLs) sparas i databasen.
+2. **Triage**: varje mail klassificeras (teknisk_support, leverans, betalning,
+   retur_reklamation, orderstatus, konto, ovrigt) med konfidens, sentiment och
+   motivering. Bilder tolkas med vision i riktigt läge.
+3. **Säkert autosvar**: default är **utkast som kräver godkännande**. Regler per fack
+   (`PUT /api/rules`): `auto` skickar direkt endast om konfidens ≥ 0.75 och tonen inte
+   är negativ; `escalate` går alltid till människa. Pengar/juridik/GDPR/arga kunder
+   och KB-missar eskaleras alltid, oavsett regel.
+4. **Granskning**: dashboarden på `/snajp-support` (fliken Dashboard) visar fack,
+   status, konfidens och beslutslogg. Godkänn/redigera (`POST /api/drafts/{id}/approve`),
+   avvisa (`/reject`) eller ta över (`POST /api/inbox/{id}/takeover`).
+5. **Beslutslogg**: varje steg (mottaget, klassificerat, eskalerat, autosvar, godkänt)
+   loggas i `ss_decision_log` med motivering.
+
+Utgående sändning är i detta steg **simulerad och loggad** (samma avgränsning som
+referensrepot) — riktig SMTP/Gmail/Graph-sändning är nästa iteration.
+
 ## API (X-API-Key krävs, se `.env`)
 
 | Metod | Endpoint | Beskrivning |
@@ -70,6 +96,15 @@ Tjänsten är multi-tenant: varje kundföretag (tenant) är helt isolerat.
 | POST | `/api/keys` | Skapa tenant + API-nyckel (kräver master-nyckel) |
 | GET | `/api/kb` | Lista tenantens egna kunskapsbasartiklar |
 | POST | `/api/kb` | Lägg till artiklar i tenantens kunskapsbas |
+| POST | `/api/inbox/mock` | Seeda och processa svenska testmail |
+| POST | `/api/inbox/ingest` | API-first: externa system postar inkommande mail |
+| POST | `/api/inbox/sync` | Hämta nya mail från IMAP (Gmail/Outlook) nu |
+| GET | `/api/inbox?status=&category=&q=` | Lista mail med klassificering + utkast |
+| GET | `/api/inbox/{id}` | Detalj: bilagor, klassificering, beslutslogg |
+| POST | `/api/inbox/{id}/takeover` | Människa tar över ärendet |
+| POST | `/api/drafts/{id}/approve` | Godkänn (ev. redigerat) och skicka |
+| POST | `/api/drafts/{id}/reject` | Avvisa utkastet |
+| GET/PUT | `/api/rules` | Autosvarsregler per fack (auto/draft/escalate) |
 | GET | `/health` `/health/live` `/health/ready` | Status/probes |
 
 Fack: `teknisk_support`, `leverans`, `betalning`, `retur_reklamation`, `konto`, `ovrigt`.

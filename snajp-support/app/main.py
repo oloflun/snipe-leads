@@ -11,7 +11,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from .api import chat, kb, keys, tickets, triage
+import asyncio
+
+from .api import chat, drafts, inbox, kb, keys, rules, tickets, triage
 from .config import get_settings
 from .jobs.store import MemoryJobStore, RedisJobStore
 from .storage.memory import MemoryStorage
@@ -58,8 +60,16 @@ async def lifespan(app: FastAPI):
         set_default_openai_key(settings.openai_api_key)
         logger.info("OpenAI-nyckel hittad — riktig agent (%s) aktiv.", settings.model)
 
+    poller_task = None
+    if settings.inbox_poll_seconds > 0:
+        from .email_pipeline.poller import run_poller
+
+        poller_task = asyncio.create_task(run_poller(app.state))
+
     yield
 
+    if poller_task:
+        poller_task.cancel()
     await storage.close()
 
 
@@ -70,6 +80,9 @@ app.include_router(triage.router)
 app.include_router(tickets.router)
 app.include_router(keys.router)
 app.include_router(kb.router)
+app.include_router(inbox.router)
+app.include_router(drafts.router)
+app.include_router(rules.router)
 
 
 @app.get("/health")

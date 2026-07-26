@@ -14,6 +14,7 @@ CATEGORIES = (
     "leverans",
     "betalning",
     "retur_reklamation",
+    "orderstatus",
     "konto",
     "ovrigt",
 )
@@ -23,9 +24,13 @@ CATEGORY_LABELS = {
     "leverans": "Leverans",
     "betalning": "Betalning",
     "retur_reklamation": "Retur & reklamation",
+    "orderstatus": "Orderstatus",
     "konto": "Konto",
     "ovrigt": "Övrigt",
 }
+
+# Regler per fack: auto = skicka direkt, draft = kräver godkännande, escalate = alltid människa.
+DEFAULT_CATEGORY_RULES = {category: "draft" for category in CATEGORIES}
 
 
 class Settings(BaseSettings):
@@ -38,6 +43,14 @@ class Settings(BaseSettings):
     redis_url: str = ""
     snajp_master_api_key: str = "snajp_master_dev_key_change_me"
     snajp_demo_api_key: str = "snajp_demo_2f8c1a9e4b7d"
+
+    # Email-pipeline
+    inbox_poll_seconds: int = 0  # 0 = ingen bakgrundspolling (mock triggas manuellt)
+    auto_send_min_confidence: float = 0.75
+    imap_host: str = ""  # t.ex. imap.gmail.com eller outlook.office365.com
+    imap_user: str = ""
+    imap_password: str = ""  # Gmail: app-lösenord; Outlook: app-lösenord/IMAP-auth
+    imap_folder: str = "INBOX"
 
     def is_simulation(self) -> bool:
         # Samma platshållar-heuristik som app/api/email-studio/route.ts i Next-appen.

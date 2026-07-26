@@ -418,6 +418,337 @@ class PostgresStorage:
                 value,
             )
 
+    # -- Email-pipeline -------------------------------------------------------
+
+    async def save_email(
+        self,
+        tenant_id: str,
+        *,
+        provider: str,
+        provider_message_id: str,
+        from_email: str,
+        from_name: str | None,
+        subject: str,
+        body_text: str,
+        received_at: str | None = None,
+    ) -> dict[str, Any] | None:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                insert into ss_emails
+                  (tenant_id, provider, provider_message_id, from_email, from_name,
+                   subject, body_text, received_at)
+                values ($1, $2, $3, $4, $5, $6, $7, coalesce($8::timestamptz, now()))
+                on conflict (tenant_id, provider_message_id) do nothing
+                returning *
+                """,
+                tenant_id,
+                provider,
+                provider_message_id,
+                from_email,
+                from_name,
+                subject,
+                body_text,
+                received_at,
+            )
+        return _row(record)
+
+    async def list_emails(
+        self,
+        tenant_id: str,
+        *,
+        status: str | None = None,
+        category: str | None = None,
+        search: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select e.*,
+                  (select row_to_json(c) from ss_classifications c
+                   where c.email_id = e.id order by c.created_at desc limit 1) as classification,
+                  (select row_to_json(d) from ss_drafts d
+                   where d.email_id = e.id order by d.created_at desc limit 1) as draft,
+                  (select count(*) from ss_email_attachments a where a.email_id = e.id) as attachment_count,
+                  exists(select 1 from ss_email_attachments a
+                         where a.email_id = e.id and a.is_image) as has_image
+                from ss_emails e
+                where e.tenant_id = $1
+                  and ($2::text is null or e.status = $2)
+                  and ($3::text is null or exists(
+                        select 1 from ss_classifications c
+                        where c.email_id = e.id and c.category = $3))
+                  and ($4::text is null or
+                       e.subject ilike '%' || $4 || '%' or e.body_text ilike '%' || $4 || '%'
+                       or e.from_email ilike '%' || $4 || '%')
+                order by e.received_at desc
+                limit $5
+                """,
+                tenant_id,
+                status,
+                category,
+                search,
+                limit,
+            )
+        results = []
+        for record in records:
+            data = _row(record)
+            for key in ("classification", "draft"):
+                if isinstance(data.get(key), str):
+                    data[key] = json.loads(data[key])
+            results.append(data)
+        return results
+
+    async def get_email(self, tenant_id: str, email_id: str) -> dict[str, Any] | None:
+        rows = await self.list_emails(tenant_id, limit=1000)
+        email = next((e for e in rows if e["id"] == email_id), None)
+        if not email:
+            return None
+        async with self._scoped(tenant_id) as conn:
+            attachments = await conn.fetch(
+                "select * from ss_email_attachments where tenant_id = $1 and email_id = $2",
+                tenant_id,
+                email_id,
+            )
+        email["attachments"] = [_row(a) for a in attachments]
+        email["decisions"] = await self.list_decisions(tenant_id, email_id)
+        return email
+
+    async def update_email(
+        self,
+        tenant_id: str,
+        email_id: str,
+        *,
+        status: str | None = None,
+        ticket_id: str | None = None,
+    ) -> dict[str, Any] | None:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                update ss_emails set
+                  status = coalesce($3, status),
+                  ticket_id = coalesce($4::uuid, ticket_id),
+                  updated_at = now()
+                where tenant_id = $1 and id = $2 returning *
+                """,
+                tenant_id,
+                email_id,
+                status,
+                ticket_id,
+            )
+        return _row(record)
+
+    async def add_attachment(
+        self,
+        tenant_id: str,
+        *,
+        email_id: str,
+        filename: str,
+        content_type: str,
+        data_url: str | None,
+        is_image: bool,
+        size_bytes: int = 0,
+    ) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                insert into ss_email_attachments
+                  (tenant_id, email_id, filename, content_type, data_url, is_image, size_bytes)
+                values ($1, $2, $3, $4, $5, $6, $7) returning *
+                """,
+                tenant_id,
+                email_id,
+                filename,
+                content_type,
+                data_url,
+                is_image,
+                size_bytes,
+            )
+        return _row(record)
+
+    async def save_classification(
+        self,
+        tenant_id: str,
+        *,
+        email_id: str,
+        category: str,
+        priority: str,
+        sentiment: float | None,
+        confidence: float,
+        escalate: bool,
+        escalation_reason: str | None,
+        reasoning: str,
+        kb_sources: list[dict[str, Any]],
+        model: str,
+    ) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                insert into ss_classifications
+                  (tenant_id, email_id, category, priority, sentiment, confidence,
+                   escalate, escalation_reason, reasoning, kb_sources, model)
+                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11) returning *
+                """,
+                tenant_id,
+                email_id,
+                category,
+                priority,
+                sentiment,
+                confidence,
+                escalate,
+                escalation_reason,
+                reasoning,
+                json.dumps(kb_sources, ensure_ascii=False),
+                model,
+            )
+        return _row(record)
+
+    async def create_draft(
+        self,
+        tenant_id: str,
+        *,
+        email_id: str,
+        ticket_id: str | None,
+        content: str,
+        status: str,
+        auto: bool,
+        confidence: float,
+    ) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                insert into ss_drafts
+                  (tenant_id, email_id, ticket_id, content, status, auto, confidence)
+                values ($1, $2, $3::uuid, $4, $5, $6, $7) returning *
+                """,
+                tenant_id,
+                email_id,
+                ticket_id,
+                content,
+                status,
+                auto,
+                confidence,
+            )
+        return _row(record)
+
+    async def get_draft(self, tenant_id: str, draft_id: str) -> dict[str, Any] | None:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                "select * from ss_drafts where tenant_id = $1 and id = $2",
+                tenant_id,
+                draft_id,
+            )
+        return _row(record)
+
+    async def update_draft(
+        self,
+        tenant_id: str,
+        draft_id: str,
+        *,
+        status: str | None = None,
+        content: str | None = None,
+    ) -> dict[str, Any] | None:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                update ss_drafts set
+                  status = coalesce($3, status),
+                  content = coalesce($4, content),
+                  updated_at = now()
+                where tenant_id = $1 and id = $2 returning *
+                """,
+                tenant_id,
+                draft_id,
+                status,
+                content,
+            )
+        return _row(record)
+
+    async def add_review(
+        self,
+        tenant_id: str,
+        *,
+        draft_id: str,
+        action: str,
+        edited_content: str | None = None,
+        note: str | None = None,
+    ) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                insert into ss_human_reviews (tenant_id, draft_id, action, edited_content, note)
+                values ($1, $2, $3, $4, $5) returning *
+                """,
+                tenant_id,
+                draft_id,
+                action,
+                edited_content,
+                note,
+            )
+        return _row(record)
+
+    async def get_category_rules(self, tenant_id: str) -> dict[str, str]:
+        from ..config import DEFAULT_CATEGORY_RULES
+
+        rules = dict(DEFAULT_CATEGORY_RULES)
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                "select category, mode from ss_category_rules where tenant_id = $1",
+                tenant_id,
+            )
+        for record in records:
+            rules[record["category"]] = record["mode"]
+        return rules
+
+    async def set_category_rule(self, tenant_id: str, category: str, mode: str) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                """
+                insert into ss_category_rules (tenant_id, category, mode)
+                values ($1, $2, $3)
+                on conflict (tenant_id, category) do update set mode = excluded.mode
+                """,
+                tenant_id,
+                category,
+                mode,
+            )
+
+    async def log_decision(
+        self, tenant_id: str, *, email_id: str | None, event: str, detail: dict[str, Any]
+    ) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                """
+                insert into ss_decision_log (tenant_id, email_id, event, detail)
+                values ($1, $2::uuid, $3, $4::jsonb)
+                """,
+                tenant_id,
+                email_id,
+                event,
+                json.dumps(detail, ensure_ascii=False),
+            )
+
+    async def list_decisions(
+        self, tenant_id: str, email_id: str
+    ) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select * from ss_decision_log
+                where tenant_id = $1 and email_id = $2 order by created_at
+                """,
+                tenant_id,
+                email_id,
+            )
+        results = []
+        for record in records:
+            data = _row(record)
+            if isinstance(data.get("detail"), str):
+                data["detail"] = json.loads(data["detail"])
+            results.append(data)
+        return results
+
     # -- API-nycklar --------------------------------------------------------
 
     async def validate_api_key(self, raw_key: str) -> dict[str, Any] | None:

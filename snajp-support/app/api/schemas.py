@@ -41,3 +41,36 @@ class KbArticle(BaseModel):
 
 class KbArticleRequest(BaseModel):
     articles: list[KbArticle] = Field(..., min_length=1, max_length=50)
+
+
+class IngestAttachment(BaseModel):
+    filename: str = "bilaga"
+    content_type: str = "application/octet-stream"
+    data_url: str | None = None
+
+
+class IngestEmailRequest(BaseModel):
+    """API-first-ingest: externa system (Zendesk, CRM, webhook) postar mail hit."""
+
+    from_email: str = Field(..., alias="from", min_length=3)
+    from_name: str | None = None
+    subject: str = ""
+    body: str = Field(..., min_length=1, max_length=16000)
+    provider_message_id: str | None = None
+    attachments: list[IngestAttachment] = []
+
+    model_config = {"populate_by_name": True}
+
+
+class ApproveDraftRequest(BaseModel):
+    edited_content: str | None = Field(default=None, max_length=16000)
+    note: str | None = None
+
+
+class RejectDraftRequest(BaseModel):
+    note: str | None = None
+
+
+class CategoryRuleRequest(BaseModel):
+    category: str
+    mode: str = Field(..., pattern="^(auto|draft|escalate)$")

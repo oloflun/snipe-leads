@@ -96,6 +96,117 @@ class Storage(Protocol):
         self, tenant_id: str, *, ticket_id: str | None, metric_name: str, value: float | None
     ) -> None: ...
 
+    # -- Email-pipeline ------------------------------------------------------
+
+    async def save_email(
+        self,
+        tenant_id: str,
+        *,
+        provider: str,
+        provider_message_id: str,
+        from_email: str,
+        from_name: str | None,
+        subject: str,
+        body_text: str,
+        received_at: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Sparar ett inkommande mail. Returnerar None vid dublett (dedupe)."""
+        ...
+
+    async def list_emails(
+        self,
+        tenant_id: str,
+        *,
+        status: str | None = None,
+        category: str | None = None,
+        search: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]: ...
+
+    async def get_email(self, tenant_id: str, email_id: str) -> dict[str, Any] | None: ...
+
+    async def update_email(
+        self,
+        tenant_id: str,
+        email_id: str,
+        *,
+        status: str | None = None,
+        ticket_id: str | None = None,
+    ) -> dict[str, Any] | None: ...
+
+    async def add_attachment(
+        self,
+        tenant_id: str,
+        *,
+        email_id: str,
+        filename: str,
+        content_type: str,
+        data_url: str | None,
+        is_image: bool,
+        size_bytes: int = 0,
+    ) -> dict[str, Any]: ...
+
+    async def save_classification(
+        self,
+        tenant_id: str,
+        *,
+        email_id: str,
+        category: str,
+        priority: str,
+        sentiment: float | None,
+        confidence: float,
+        escalate: bool,
+        escalation_reason: str | None,
+        reasoning: str,
+        kb_sources: list[dict[str, Any]],
+        model: str,
+    ) -> dict[str, Any]: ...
+
+    async def create_draft(
+        self,
+        tenant_id: str,
+        *,
+        email_id: str,
+        ticket_id: str | None,
+        content: str,
+        status: str,
+        auto: bool,
+        confidence: float,
+    ) -> dict[str, Any]: ...
+
+    async def get_draft(self, tenant_id: str, draft_id: str) -> dict[str, Any] | None: ...
+
+    async def update_draft(
+        self,
+        tenant_id: str,
+        draft_id: str,
+        *,
+        status: str | None = None,
+        content: str | None = None,
+    ) -> dict[str, Any] | None: ...
+
+    async def add_review(
+        self,
+        tenant_id: str,
+        *,
+        draft_id: str,
+        action: str,
+        edited_content: str | None = None,
+        note: str | None = None,
+    ) -> dict[str, Any]: ...
+
+    async def get_category_rules(self, tenant_id: str) -> dict[str, str]: ...
+
+    async def set_category_rule(self, tenant_id: str, category: str, mode: str) -> None: ...
+
+    async def log_decision(
+        self, tenant_id: str, *, email_id: str | None, event: str, detail: dict[str, Any]
+    ) -> None: ...
+
+    async def list_decisions(
+        self, tenant_id: str, email_id: str
+    ) -> list[dict[str, Any]]: ...
+
     # -- API-nycklar (validering sker INNAN tenant är känd) -----------------
 
     async def validate_api_key(self, raw_key: str) -> dict[str, Any] | None: ...

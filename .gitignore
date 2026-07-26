@@ -8,6 +8,12 @@ __pycache__/
 .pytest_cache/
 .claude/settings.local.json
 
+# Stale backup copy of snajp-support (from Downloads, 2026-07-22) — not source
+snajp-support/00-LASMIG.md
+snajp-support/backend/
+snajp-support/frontend/
+snajp-support/databas/
+
 # Local scratch files (not project source)
 auth_err.txt
 auth_out.txt
