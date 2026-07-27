@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Applies supabase/migrations/002_snajp_support.sql via direct Postgres connection.
+ * Applies the snajp-support migrations (002, 003, 004) via direct Postgres connection.
  *
  * Usage:
  *   $env:SUPABASE_DB_PASSWORD = "your-database-password"
@@ -55,7 +55,13 @@ const poolerHosts = [
   "aws-1-eu-west-3.pooler.supabase.com"
 ];
 
-const files = [join(root, "supabase", "migrations", "002_snajp_support.sql")];
+// Alla snajp-migrationer i ordning. Samtliga är idempotenta (CREATE ... IF NOT
+// EXISTS, DROP ... IF EXISTS), så skriptet kan köras om utan biverkningar.
+const files = [
+  "002_snajp_support.sql",
+  "003_snajp_multitenant.sql",
+  "004_snajp_email_pipeline.sql"
+].map((name) => join(root, "supabase", "migrations", name));
 
 async function connectClient() {
   let lastError;
