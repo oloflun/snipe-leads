@@ -247,3 +247,19 @@ Codex rebuilt the project from the prompt into a Next.js App Router SaaS mock/pr
 - **Projekt-ref:en i koden är korrekt och ska INTE ändras.** `fgaquwmqajjaboyqliij` är ett organisations-ID, inte en projekt-ref (verifierat: `fgaquwmqajjaboyqliij.supabase.co` är NXDOMAIN, medan `spsmblyvasagpekjmgmf.supabase.co` löser upp och svarar 401). De fyra skripten i `scripts/` som hårdkodar `spsmblyvasagpekjmgmf` pekar alltså rätt.
 - **Varning inför demon:** DeepSeek utan `EMBEDDING_API_KEY` ger full-text-sökning istället för vektorsökning i KB. Grundningsregeln eskalerar allt utan KB-träff — demon riskerar att eskalera nästan varje mail. Sätt en OpenAI-nyckel som `EMBEDDING_API_KEY` på Render om demon ska svara i stället för att eskalera.
 - `next-env.d.ts` växlar mellan `.next/dev/types` och `.next/types` beroende på om `dev` eller `build` kördes sist. Generad fil — committa den inte, det skapar bara konflikter mellan er två.
+
+## 2026-07-27 Demo redo i deploy + två åtkomstspärrar kvar — Claude
+
+### Completed
+- **KB-landmina åtgärdad** (`870f8bc`): med `DATABASE_URL` mot färsk Supabase var `ss_knowledge_base` tom → grundningsregeln i `processor.py` hade eskalerat *varje* ärende. `ensure_default_kb()` bruten ur `seed_kb.py`, anropas nu vid uppstart i Postgres-läget. Seedar text utan embeddings (blockerar inte Renders health check), idempotent, fäller aldrig uppstarten.
+- **`render.yaml` kräver inga hemligheter**: utan `DEEPSEEK_API_KEY` kör tjänsten simuleringsläge. `SNAJP_MASTER_API_KEY` genereras av Render (föll annars tillbaka på publik platshållare — verklig svaghet). `SNAJP_DEMO_API_KEY` satt explicit = frontendens fallback, så Vercel/Render matchar utan konfiguration.
+- Migrationerna 002/003/004 **applicerade** mot `spsmblyvasagpekjmgmf` via `supabase-snipra`-MCP:n. Alla 14 `ss_`-tabeller + 4 extra från 004 finns, RLS aktivt, default-tenant seedad.
+- **Multi-org Supabase-MCP löst**: `.mcp.json` (HTTP-typ, PAT via `${SUPABASE_PAT_SNIPRA}`) vid sidan av OAuth-connectorn. Gitignorad. Kräver att env-varen finns i processen *vid start* — `setx` + helt nytt terminalfönster, inte bara ny `claude`-process i samma fönster.
+- `development` och feature-branchen står på `870f8bc`, identiska. Alla Vercel-deployer sedan byggfixen är READY.
+- Deployad sida verifierad via Vercel-MCP:ns `web_fetch_vercel_url`: HTTP 200, korrekt titel, alla fyra flikar, alla sju fack.
+
+### Open threads / next agent
+- **Preview-URL:erna ligger bakom Vercel Deployment Protection** — `snipra-git-development-…vercel.app` ger 302 → `vercel.com/sso-api`. Fungerar för inloggade, men är INTE en publik demo. Åtgärd: stäng av Deployment Protection i Vercel-projektets inställningar (Settings → Deployment Protection).
+- **Produktionsdomänen är inaktuell**: `snipra.vercel.app/snajp-support` ger 404. Produktion är låst till en gammal deploy från `main` (commit `a10d919`, från innan Snajp-Support fanns). `main` har medvetet inte rörts. Ska demon ligga på produktionsdomänen krävs en merge till `main`.
+- **Render är fortfarande inte uppsatt** — utan `SNAJP_SUPPORT_URL` visar demon tomt läge/offline-text. Blueprint + `SNAJP_SUPPORT_URL` på Vercel är allt som återstår för fungerande demo.
+- **Säkerhetsskuld inför publik demo** (användaren: "vi fixar det i nästa runda"): demo-nyckeln är publik i repot, så vem som helst med backend-URL:en kan anropa API:t. Harmlöst i simuleringsläge; med riktig `DEEPSEEK_API_KEY` blir det tokenbränning. Byt `SNAJP_DEMO_API_KEY` till ett hemligt värde och sätt samma som `SNAJP_INTERNAL_API_KEY` på Vercel innan riktig AI slås på publikt.
