@@ -24,3 +24,17 @@ services:
         sync: false
       - key: EMBEDDING_API_KEY
         sync: false
+      # Email-pipeline. Polling av (0) tills en riktig inkorg kopplas.
+      - key: INBOX_POLL_SECONDS
+        value: "0"
+      - key: AUTO_SEND_MIN_CONFIDENCE
+        value: "0.75"
+      # IMAP (Gmail/Outlook) — sätts i dashboarden när en inkorg ska kopplas.
+      - key: IMAP_HOST
+        sync: false
+      - key: IMAP_USER
+        sync: false
+      - key: IMAP_PASSWORD
+        sync: false
+      - key: IMAP_FOLDER
+        value: INBOX

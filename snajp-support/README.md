@@ -44,11 +44,16 @@ och bildbilagor noteras i text istället för att analyseras.
 
 ## Aktivera riktig AI + Supabase
 
-1. Fyll i riktig `OPENAI_API_KEY` i `snajp-support/.env` (och i rotens `.env.local` om Email Studio också ska bli live).
-2. Fyll i riktigt `SUPABASE_DB_PASSWORD` i rotens `.env` och kör `node scripts/apply-snajp-migration.mjs` (skapar `ss_`-tabellerna).
-3. Sätt `DATABASE_URL` i `snajp-support/.env` (pooler-format, host `aws-0-eu-west-1.pooler.supabase.com`, se `.env.example`).
-4. Seeda kunskapsbasen: `.venv\Scripts\python -m app.scripts.seed_kb` (beräknar embeddings med riktig nyckel).
-5. Starta om uvicorn.
+1. Fyll i nyckel för vald provider i `snajp-support/.env` (`OPENAI_API_KEY` eller
+   `DEEPSEEK_API_KEY` + `LLM_PROVIDER`). Vill du ha vektorsökning i KB: sätt även
+   `EMBEDDING_API_KEY` (OpenAI).
+2. Kör migrationerna mot Supabase — `002`, `003` och `004` (email-pipeline):
+   `npx supabase link --project-ref <ref>` följt av `npx supabase db push`.
+3. Sätt `DATABASE_URL` i `snajp-support/.env` (pooler-format, host
+   `aws-0-eu-west-1.pooler.supabase.com`, se `.env.example`).
+4. Seeda kunskapsbasen: `docker compose run --rm api python -m app.scripts.seed_kb`
+   (beräknar embeddings om `EMBEDDING_API_KEY` är satt).
+5. Starta om tjänsten (`docker compose restart`, eller redeploy på Render).
 
 ## Multi-tenant
 
@@ -118,7 +123,8 @@ referensrepot) — riktig SMTP/Gmail/Graph-sändning är nästa iteration.
 | GET/PUT | `/api/rules` | Autosvarsregler per fack (auto/draft/escalate) |
 | GET | `/health` `/health/live` `/health/ready` | Status/probes |
 
-Fack: `teknisk_support`, `leverans`, `betalning`, `retur_reklamation`, `konto`, `ovrigt`.
+Fack: `teknisk_support`, `leverans`, `betalning`, `retur_reklamation`, `orderstatus`,
+`konto`, `ovrigt`.
 
 ## Tester
 
