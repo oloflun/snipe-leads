@@ -274,7 +274,7 @@ export async function POST(request: NextRequest) {
       system: EMAIL_STUDIO_SYSTEM_PROMPT,
       prompt: userPrompt,
       temperature: 0.4,
-      maxTokens: 1800,
+      maxOutputTokens: 1800,
     });
 
     const rich = parseRichRefine(text); // reuse or define parse
