@@ -33,6 +33,17 @@ async def lifespan(app: FastAPI):
 
             storage = await PostgresStorage.connect(settings.database_url)
             logger.info("Lagring: Postgres (Supabase)")
+            # En färsk databas har tom KB. Utan artiklar tvingar grundningsregeln
+            # eskalering av varje ärende — seeda text direkt (embeddings via
+            # `python -m app.scripts.seed_kb` när en EMBEDDING_API_KEY finns).
+            try:
+                from .scripts.seed_kb import ensure_default_kb
+
+                added = await ensure_default_kb(storage)
+                if added:
+                    logger.info("Kunskapsbasen var tom — seedade %s artiklar.", added)
+            except Exception as error:  # noqa: BLE001 — seedning får aldrig fälla uppstarten
+                logger.warning("Kunde inte seeda kunskapsbasen (%s).", error)
         except Exception as error:
             logger.warning("Postgres otillgänglig (%s) — faller tillbaka till in-memory.", error)
     if storage is None:

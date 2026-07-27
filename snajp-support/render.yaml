@@ -1,5 +1,9 @@
 # Render Blueprint — auto-deploy av Snajp-Support-backenden från GitHub.
-# Peka Render på denna fil (Blueprint). Secrets (sync:false) sätts i dashboarden.
+# Peka Render på denna fil (Blueprint). sync:false = värdet sätts i dashboarden.
+#
+# Deployen fungerar UTAN att något hemligt sätts: saknas DEEPSEEK_API_KEY kör
+# tjänsten i simuleringsläge (deterministiska svenska svar, inga API-kostnader).
+# Lägg till nyckeln när demon ska drivas av riktig AI.
 services:
   - type: web
     name: snajp-support
@@ -13,12 +17,18 @@ services:
         value: deepseek
       - key: MODEL
         value: deepseek-chat
+      # Utan värde => simuleringsläge. Sätt för riktig AI.
       - key: DEEPSEEK_API_KEY
         sync: false
+      # Administrativ nyckel (skapa tenants/nycklar). Slumpas av Render så den
+      # aldrig faller tillbaka på den publika platshållaren i config.py.
       - key: SNAJP_MASTER_API_KEY
-        sync: false
+        generateValue: true
+      # Demo-nyckel för default-tenanten. Medvetet publik — samma värde är redan
+      # fallback i app/api/snajp-support/_lib.ts, så frontend och backend matchar
+      # utan extra konfiguration.
       - key: SNAJP_DEMO_API_KEY
-        sync: false
+        value: snajp_demo_2f8c1a9e4b7d
       # Valfritt — persistens (Supabase pooler) och embeddings (OpenAI-nyckel):
       - key: DATABASE_URL
         sync: false
