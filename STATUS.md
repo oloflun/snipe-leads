@@ -318,3 +318,41 @@ Codex rebuilt the project from the prompt into a Next.js App Router SaaS mock/pr
   i stället för att göra den till produktion.
 - **Prioriterad demo-URL:** https://snipra-oloflun-olofluns-projects.vercel.app/snajp-support
   (alias mot `dpl_BpCmCG495MbPdd5rXeAMqHXkZxLb`, branch `development`).
+
+## 2026-07-29 Pilot-arbetsyta skild från publik demo — Claude
+
+### Completed
+- **"IMAP är inte konfigurerat" löst — men inte genom att bara sätta variablerna.**
+  Roten var att `/snajp-support` är en publik sida utan inloggning: IMAP där hade
+  gjort en riktig Gmail läsbar för vem som helst som besöker sidan eller anropar
+  API:t med demo-nyckeln (som ligger i repot). Verifierat innan åtgärd: ett
+  `curl` med den publika nyckeln nådde inkorgs-API:t utifrån.
+- **Två arbetsytor, separerade på data- OCH åtkomstnivå:**
+  - Demo (`/snajp-support`, publik): tenant "Nordlys Handel", enbart testmail.
+    `IMAP_TENANT=pilot` gör att dess synk avvisas med förklaring.
+  - Pilot (`/kundtjanst`, inloggning krävs): tenant `…0002`, riktig Gmail-inkorg.
+    Skyddad i `middleware.ts` + sessionskontroll i `app/api/kundtjanst`-proxyn.
+- **Nycklar roterade.** Gamla publika `snajp_demo_2f8c1a9e4b7d` ger nu 401.
+  Nya hemliga demo-, pilot- och master-nycklar satta på Render + Vercel.
+- **Supabase-env saknades helt på Vercel** → `MIDDLEWARE_INVOCATION_FAILED` (500)
+  på alla skyddade routes. Ingen hade märkt det eftersom bara publika sidor
+  användes. `NEXT_PUBLIC_SUPABASE_URL/ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` och
+  `NEXT_PUBLIC_SITE_URL` satta; `/dashboard`, `/emails`, `/kundtjanst` redirectar
+  nu korrekt till `/login`.
+- Verifierat i deploy: demon kan varken synka eller se pilotens ärenden, piloten
+  hämtade ett riktigt mail, gammal nyckel spärrad, pilotsidan kräver inloggning.
+  32/32 pytest inkl. fem nya isolationstester.
+
+### Varningar till nästa agent
+- **Renders `PUT /v1/services/{id}/env-vars` ERSÄTTER hela listan.** Första
+  anropet raderade `LLM_PROVIDER`, `MODEL`, `SNAJP_MASTER_API_KEY` m.fl. utan
+  varning. Läs alltid ut nuvarande lista och skicka den kompletta uppsättningen.
+- **Master-nyckeln på Render var `generateValue: true` och gick förlorad** i det
+  anropet. En ny slumpad är satt — den gamla finns ingenstans.
+- **Vercel-teamet tvingar `type: sensitive`** på alla env-vars, så värden går
+  inte att läsa tillbaka via API:t. Verifiera genom att deploya och testa.
+- `DATABASE_URL` är fortfarande inte satt på Render → in-memory. Pilotens ärenden
+  försvinner vid spin-down (15 min inaktivitet). Måste sättas före skarp pilot.
+- Kunskapsbasen är fortfarande e-handelsinnehåll (Nordlys Handel). Pilot-tenanten
+  har TOM kunskapsbas → grundningsregeln eskalerar varje ärende tills innehåll om
+  hjärtstartare läggs in via `POST /api/kb`.
