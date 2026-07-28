@@ -4,7 +4,11 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from ..email_pipeline.connectors.mock import build_mock_emails
+from ..email_pipeline.connectors.mock import (
+    DEFAULT_SCENARIO,
+    build_mock_emails,
+    list_scenarios,
+)
 from ..email_pipeline.ingest import ingest_email
 from ..email_pipeline.models import InboundAttachment, InboundEmail
 from ..email_pipeline.poller import sync_imap_once
@@ -15,17 +19,27 @@ from .schemas import IngestEmailRequest
 router = APIRouter()
 
 
+@router.get("/api/inbox/scenarios")
+async def get_scenarios(tenant: dict = Depends(require_tenant)) -> dict:
+    """Tillgängliga demoscenarier att fylla inkorgen med."""
+    return {"scenarios": list_scenarios(), "default": DEFAULT_SCENARIO}
+
+
 @router.post("/api/inbox/mock", status_code=201)
-async def seed_mock_inbox(request: Request, tenant: dict = Depends(require_tenant)) -> dict:
-    """Fyller inkorgen med svenska testmail och processar dem direkt."""
+async def seed_mock_inbox(
+    request: Request,
+    tenant: dict = Depends(require_tenant),
+    scenario: str = Query(default=DEFAULT_SCENARIO),
+) -> dict:
+    """Fyller inkorgen med svenska demomail och processar dem direkt."""
     storage = request.app.state.storage
     results = []
-    for inbound in build_mock_emails():
+    for inbound in build_mock_emails(scenario):
         email = await ingest_email(storage, tenant["tenant_id"], inbound)
         if email:
             outcome = await process_email(storage, tenant["tenant_id"], email)
             results.append({"email_id": email["id"], **outcome})
-    return {"ingested": len(results), "results": results}
+    return {"ingested": len(results), "scenario": scenario, "results": results}
 
 
 @router.post("/api/inbox/sync")

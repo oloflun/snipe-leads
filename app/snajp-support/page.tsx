@@ -9,8 +9,8 @@ export default function Page() {
   return (
     <PageShell
       kicker="Snajp-Support"
-      title="Kundtjänst som svarar sig själv."
-      description="En AI-agent som läser inkommande kundmail, sorterar dem i rätt fack, svarar utifrån er kunskapsbas — och lämnar över till en människa exakt när det behövs. Testa demon nedan, sedan lyfter vi in den i ert affärssystem eller via API."
+      title="Förstahandssupporten som aldrig gissar."
+      description="En AI-agent som läser inkommande kundmail, sorterar dem i rätt fack och skriver färdiga svar grundade i er egen kunskapsbas. Ni granskar och godkänner — agenten skickar aldrig något på egen hand. Demon nedan visar ett bolag som säljer hjärtstartare; ladda ett scenario och se hela flödet."
     >
       <SnajpSupportDemo />
     </PageShell>

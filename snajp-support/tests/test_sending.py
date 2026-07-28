@@ -146,7 +146,7 @@ async def test_auto_rule_is_blocked_by_global_switch(monkeypatch):
             )
             await client.post("/api/inbox/mock", headers=DEMO)
             emails = (await client.get("/api/inbox", headers=DEMO)).json()["emails"]
-            paket = next(e for e in emails if e["subject"] == "Var är mitt paket?")
+            paket = next(e for e in emails if e["subject"] == "Var är vår leverans?")
 
             assert paket["status"] == "awaiting_approval"  # INTE auto_sent
             detail = (await client.get(f"/api/inbox/{paket['id']}", headers=DEMO)).json()

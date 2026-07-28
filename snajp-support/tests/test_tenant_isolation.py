@@ -108,15 +108,14 @@ async def test_kb_is_tenant_specific():
 
             # Tom KB ⇒ grundningsregeln tvingar eskalering hos tenant B,
             # medan samma fråga får ett grundat svar hos tenant A.
+            fraga = "Vad omfattar garantin och hur lång är garantitiden?"
             result_b = await _chat_and_wait(
-                client, tenant_b["api_key"], "Vilka betalsätt accepterar ni?", "kund-b@example.com"
+                client, tenant_b["api_key"], fraga, "kund-b@example.com"
             )
             assert result_b["escalated"] is True
             assert result_b["kb_sources"] == []
 
-            result_a = await _chat_and_wait(
-                client, DEMO_KEY, "Vilka betalsätt accepterar ni?", "kund-a@example.com"
-            )
+            result_a = await _chat_and_wait(client, DEMO_KEY, fraga, "kund-a@example.com")
             assert result_a["escalated"] is False
             assert len(result_a["kb_sources"]) > 0
 

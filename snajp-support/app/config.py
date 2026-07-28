@@ -18,22 +18,37 @@ PILOT_TENANT_SLUG = "pilot"
 
 CATEGORIES = (
     "teknisk_support",
+    "garanti",
     "leverans",
-    "betalning",
+    "utbildning",
     "retur_reklamation",
+    "betalning",
     "orderstatus",
-    "konto",
     "ovrigt",
 )
 
 CATEGORY_LABELS = {
     "teknisk_support": "Teknisk support",
-    "leverans": "Leverans",
-    "betalning": "Betalning",
-    "retur_reklamation": "Retur & reklamation",
+    "garanti": "Garanti",
+    "leverans": "Leverans & frakt",
+    "utbildning": "Utbildning & användarstöd",
+    "retur_reklamation": "Reklamation & retur",
+    "betalning": "Betalning & faktura",
     "orderstatus": "Orderstatus",
-    "konto": "Konto",
     "ovrigt": "Övrigt",
+}
+
+# Kort förklaring per fack — visas i dashboarden så en icke-teknisk användare
+# förstår vad agenten menar med varje kategori.
+CATEGORY_HINTS = {
+    "teknisk_support": "Larm, felkoder, självtest, batteri- och elektrodproblem",
+    "garanti": "Garantitid, vad som täcks, garantiärenden",
+    "leverans": "Frakt, spårning, förseningar, leveransadress",
+    "utbildning": "HLR-kurser, handhavande, manualer och användarstöd",
+    "retur_reklamation": "Trasig vara, returer, byten och ångerrätt",
+    "betalning": "Fakturor, priser, offerter och betalningsvillkor",
+    "orderstatus": "Orderbekräftelse, status på beställning, nya beställningar",
+    "ovrigt": "Allt som inte passar i övriga fack",
 }
 
 # Regler per fack: auto = skicka direkt, draft = kräver godkännande, escalate = alltid människa.

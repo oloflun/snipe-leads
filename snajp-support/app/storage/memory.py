@@ -7,6 +7,7 @@ Default-tenanten (Nordlys Handel) seedas med demo-kunskapsbasen.
 """
 
 import hashlib
+import math
 import re
 import unicodedata
 import uuid
@@ -45,6 +46,26 @@ def _tokenize(text: str) -> set[str]:
                 break
         stemmed.add(token)
     return stemmed
+
+
+_PREFIX_MIN = 5
+
+
+def _matches(token: str, article_tokens: set[str]) -> bool:
+    """Träffar ordet artikeln? Prefix-tolerant för svenska böjningar.
+
+    "garanti", "garantin" och "garantitid" är samma sak för kunden men tre
+    olika strängar. Prefixmatchning kräver fem tecken — kortare ger
+    slumpträffar som "leve" i både "leverans" och "leverera".
+    """
+    if token in article_tokens:
+        return True
+    if len(token) < _PREFIX_MIN:
+        return False
+    return any(
+        other.startswith(token) or (len(other) >= _PREFIX_MIN and token.startswith(other))
+        for other in article_tokens
+    )
 
 
 def _now() -> str:
@@ -276,21 +297,39 @@ class MemoryStorage:
         limit: int = 3,
     ) -> list[dict[str, Any]]:
         query_tokens = _tokenize(query)
-        if not query_tokens:
+        articles = self.kb.get(tenant_id, [])
+        if not query_tokens or not articles:
             return []
+
+        # Sällsynta ord väger tyngre (IDF). Utan det vinner artiklar som råkar
+        # dela många generiska ord med mailet — "hjärtstartare" förekommer i
+        # nästan varje artikel och säger inget om vilken som är rätt, medan
+        # "garantin" pekar direkt på en.
+        total = len(articles)
+        weights: dict[str, float] = {}
+        for token in query_tokens:
+            hits = sum(1 for a in articles if _matches(token, a["tokens"]))
+            # +1 så att ett ord som finns i alla artiklar fortfarande väger något.
+            weights[token] = math.log((total + 1) / (hits + 1)) + 0.1
+
+        best_possible = sum(weights.values()) or 1.0
         scored = []
-        for article in self.kb.get(tenant_id, []):
-            overlap = len(query_tokens & article["tokens"])
-            title_overlap = len(query_tokens & article["title_tokens"])
-            if overlap:
-                # Titelträffar väger dubbelt så att rätt artikel vinner vid likvärdigt innehåll.
-                scored.append(((overlap + 2 * title_overlap) / len(query_tokens), article))
+        for article in articles:
+            score = 0.0
+            for token in query_tokens:
+                if _matches(token, article["tokens"]):
+                    # Titelträffar räknas dubbelt — rubriken sammanfattar artikeln.
+                    multiplier = 2.0 if _matches(token, article["title_tokens"]) else 1.0
+                    score += weights[token] * multiplier
+            if score:
+                scored.append((min(score / best_possible, 1.0), article))
+
         scored.sort(key=lambda pair: pair[0], reverse=True)
         return [
             {"id": a["id"], "title": a["title"], "content": a["content"],
              "category": a["category"], "similarity": round(score, 2)}
             for score, a in scored[:limit]
-            if score >= 0.2
+            if score >= 0.12
         ]
 
     async def list_kb(self, tenant_id: str) -> list[dict[str, Any]]:

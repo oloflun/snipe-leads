@@ -1,5 +1,5 @@
 import { PageShell } from "@/components/AppShell";
-import { Dashboard } from "@/components/snajp/Dashboard";
+import { PilotWorkspace } from "@/components/snajp/PilotWorkspace";
 
 export const metadata = {
   title: "Kundtjänst — Snajp-Support"
@@ -15,7 +15,7 @@ export default function Page() {
       title="Dagens ärenden."
       description="Inkommande kundmail sorterade i fack med färdiga svarsförslag. Granska, redigera och skicka — inget går ut utan att du godkänt det."
     >
-      <Dashboard mode="pilot" apiBase="/api/kundtjanst" />
+      <PilotWorkspace />
     </PageShell>
   );
 }

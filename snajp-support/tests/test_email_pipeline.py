@@ -34,14 +34,16 @@ async def test_mock_seed_triages_and_creates_drafts():
 
             by_subject = {e["subject"]: e for e in emails}
 
-            login = by_subject["Kan inte logga in på mitt konto"]
-            assert login["classification"]["category"] == "teknisk_support"
-            assert login["status"] == "awaiting_approval"
-            assert login["has_image"] is True
+            teknik = by_subject["Hjärtstartaren piper och visar rött kryss"]
+            assert teknik["classification"]["category"] == "teknisk_support"
+            assert teknik["status"] == "awaiting_approval"
+            assert teknik["has_image"] is True
 
-            refund = by_subject["Trasig vara — kräver återbetalning"]
-            assert refund["classification"]["escalate"] is True
-            assert refund["status"] == "escalated"
+            garanti = by_subject["Täcks batteribyte av garantin?"]
+            assert garanti["classification"]["category"] == "garanti"
+
+            utbildning = by_subject["HLR-utbildning för personalen"]
+            assert utbildning["classification"]["category"] == "utbildning"
 
             order = by_subject["Har min beställning gått igenom?"]
             assert order["classification"]["category"] == "orderstatus"
@@ -57,7 +59,7 @@ async def test_email_detail_has_attachments_and_decision_log():
         async with _client() as client:
             await client.post("/api/inbox/mock", headers=DEMO)
             emails = (await client.get("/api/inbox", headers=DEMO)).json()["emails"]
-            login = next(e for e in emails if "logga in" in e["subject"])
+            login = next(e for e in emails if e["has_image"])
 
             detail = (await client.get(f"/api/inbox/{login['id']}", headers=DEMO)).json()
             assert detail["attachments"][0]["is_image"] is True
@@ -122,10 +124,10 @@ async def test_auto_rule_sends_when_globally_enabled(monkeypatch):
 
             await client.post("/api/inbox/mock", headers=DEMO)
             emails = (await client.get("/api/inbox", headers=DEMO)).json()["emails"]
-            paket = next(e for e in emails if e["subject"] == "Var är mitt paket?")
+            paket = next(e for e in emails if e["subject"] == "Var är vår leverans?")
             assert paket["status"] == "auto_sent"
             assert paket["draft"]["auto"] is True
-            assert sent == ["johan.berg@mail.se"]
+            assert sent == ["sara.nystrom@industriab.se"]
 
             detail = (await client.get(f"/api/inbox/{paket['id']}", headers=DEMO)).json()
             assert "auto_sent" in [d["event"] for d in detail["decisions"]]

@@ -4,14 +4,14 @@ import { useState } from "react";
 import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { Dashboard } from "./Dashboard";
-import { InboxTriage } from "./InboxTriage";
 import { IntegrationSection } from "./IntegrationSection";
+import { KnowledgeBase } from "./KnowledgeBase";
 import { SupportChat } from "./SupportChat";
 
 const tabs = [
-  { id: "dashboard", label: { sv: "Dashboard", en: "Dashboard" } },
-  { id: "chat", label: { sv: "Live-chatt (preview)", en: "Live chat (preview)" } },
-  { id: "inbox", label: { sv: "Snabb-triage", en: "Quick triage" } },
+  { id: "dashboard", label: { sv: "Inkorg & triage", en: "Inbox & triage" } },
+  { id: "kb", label: { sv: "Kunskapsbas", en: "Knowledge base" } },
+  { id: "chat", label: { sv: "Live-chatt", en: "Live chat" } },
   { id: "integration", label: { sv: "Integration & API", en: "Integration & API" } }
 ] as const;
 
@@ -19,31 +19,31 @@ type TabId = (typeof tabs)[number]["id"];
 
 const highlights = [
   {
-    title: { sv: "Sorterar i fack", en: "Sorts into queues" },
+    title: { sv: "Sorterar i åtta fack", en: "Sorts into eight queues" },
     body: {
-      sv: "Teknisk support, leverans, betalning, retur & reklamation, konto — varje ärende klassas och prioriteras automatiskt.",
-      en: "Technical support, delivery, payment, returns & claims, account — every case is classified and prioritised automatically."
+      sv: "Teknisk support, garanti, leverans, utbildning, reklamation, betalning och orderstatus — varje mail klassas med konfidens.",
+      en: "Technical support, warranty, delivery, training, claims, payment and order status — each email classified with a confidence score."
     }
   },
   {
     title: { sv: "Hittar aldrig på", en: "Never makes things up" },
     body: {
-      sv: "Svaren grundas enbart i er kunskapsbas via semantisk sökning. Saknas svar eskaleras ärendet till en människa.",
-      en: "Replies are grounded solely in your knowledge base via semantic search. If no answer exists, the case escalates to a human."
+      sv: "Svaren bygger enbart på er kunskapsbas. Saknas underlag skrivs inget svar — ärendet går till en människa.",
+      en: "Replies draw solely on your knowledge base. Without grounding it writes nothing — the case goes to a human."
     }
   },
   {
-    title: { sv: "Ser vad kunden ser", en: "Sees what the customer sees" },
+    title: { sv: "Ni godkänner varje svar", en: "You approve every reply" },
     body: {
-      sv: "Skärmdumpar på felmeddelanden och bilder på skadade paket tolkas direkt och styr ärendet till rätt fack.",
-      en: "Screenshots of error messages and photos of damaged parcels are interpreted directly and route the case correctly."
+      sv: "Agenten skriver utkast, ni granskar och skickar. Inget lämnar systemet utan att någon tryckt godkänn.",
+      en: "The agent drafts, you review and send. Nothing leaves the system until a person approves it."
     }
   },
   {
     title: { sv: "Vet när människor behövs", en: "Knows when humans are needed" },
     body: {
-      sv: "Återbetalningar, juridik, GDPR och arga kunder lämnas alltid vidare — med komplett ärendehistorik.",
-      en: "Refunds, legal matters, GDPR and angry customers are always handed over — with the full case history."
+      sv: "Återbetalningar, juridik, GDPR och ärenden som rör en inträffad incident lämnas alltid vidare.",
+      en: "Refunds, legal matters, GDPR and anything touching a real incident are always handed over."
     }
   }
 ];
@@ -85,12 +85,12 @@ export function SnajpSupportDemo() {
 
         <div className="mt-8">
           {tab === "dashboard" ? <Dashboard /> : null}
+          {tab === "kb" ? <KnowledgeBase apiBase="/api/snajp-support" /> : null}
           {tab === "chat" ? (
             <div className="mx-auto max-w-3xl">
               <SupportChat />
             </div>
           ) : null}
-          {tab === "inbox" ? <InboxTriage /> : null}
           {tab === "integration" ? <IntegrationSection /> : null}
         </div>
       </div>

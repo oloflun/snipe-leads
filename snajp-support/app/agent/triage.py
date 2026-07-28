@@ -15,7 +15,7 @@ skriv ett svenskt svarsutkast. Om bilder bifogats: beskriv kort vad du ser i
 "reasoning" och låt dem påverka fack och svar (felskärmdump → teknisk_support,
 skadad vara → retur_reklamation). Svara ENBART med JSON:
 {{
-  "category": "teknisk_support|leverans|betalning|retur_reklamation|orderstatus|konto|ovrigt",
+  "category": "teknisk_support|garanti|leverans|utbildning|retur_reklamation|betalning|orderstatus|ovrigt",
   "priority": "low|normal|high",
   "sentiment": 0.0-1.0,
   "confidence": 0.0-1.0,
@@ -25,7 +25,8 @@ skadad vara → retur_reklamation). Svara ENBART med JSON:
   "draft_reply": "komplett svenskt svarsutkast grundat ENBART i kunskapsbasen"
 }}
 
-Eskalera vid: återbetalning, juridik/ARN, GDPR/kontoradering, sentiment < 0.3.
+Eskalera vid: återbetalning, juridik/ARN, GDPR, sentiment < 0.3, samt allt som
+rör inträffad incident, patientskada eller pågående nödsituation.
 Vid eskalering ska draft_reply vara ett artigt hållsvar. Hitta ALDRIG på fakta
 som inte står i kunskapsbasen — sätt låg confidence och eskalera hellre.
 

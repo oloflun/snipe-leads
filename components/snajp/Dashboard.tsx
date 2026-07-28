@@ -62,11 +62,12 @@ type Rule = { category: string; label: string; mode: "auto" | "draft" | "escalat
 
 const CATEGORY_LABELS: Record<string, string> = {
   teknisk_support: "Teknisk support",
-  leverans: "Leverans",
-  betalning: "Betalning",
-  retur_reklamation: "Retur & reklamation",
+  garanti: "Garanti",
+  leverans: "Leverans & frakt",
+  utbildning: "Utbildning & användarstöd",
+  retur_reklamation: "Reklamation & retur",
+  betalning: "Betalning & faktura",
   orderstatus: "Orderstatus",
-  konto: "Konto",
   ovrigt: "Övrigt"
 };
 
@@ -143,6 +144,8 @@ export function Dashboard({ mode = "demo", apiBase = "/api/snajp-support" }: Rea
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [scenarios, setScenarios] = useState<{ id: string; label: string; description: string }[]>([]);
+  const [scenario, setScenario] = useState("blandat");
 
   const api = useCallback(async (path: string, init?: RequestInit) => {
     const response = await fetch(`${apiBase}${path}`, {
@@ -186,6 +189,12 @@ export function Dashboard({ mode = "demo", apiBase = "/api/snajp-support" }: Rea
     void refresh();
     void loadRules();
     // Avgör om utskick och inkorg är möjliga, så knapparna inte lovar mer än de håller.
+    if (mode === "demo") {
+      fetch(`${apiBase}/inbox/scenarios`)
+        .then((r) => r.json())
+        .then((d) => setScenarios(d.scenarios ?? []))
+        .catch(() => setScenarios([]));
+    }
     fetch(`${apiBase}/health`)
       .then((r) => r.json())
       .then((h) =>
@@ -197,7 +206,7 @@ export function Dashboard({ mode = "demo", apiBase = "/api/snajp-support" }: Rea
         })
       )
       .catch(() => setHealth(null));
-  }, [refresh, loadRules, apiBase]);
+  }, [refresh, loadRules, apiBase, mode]);
 
   const openEmail = useCallback(
     async (id: string) => {
@@ -233,8 +242,10 @@ export function Dashboard({ mode = "demo", apiBase = "/api/snajp-support" }: Rea
 
   const seedMock = () =>
     act("seed", async () => {
-      await api("/inbox/mock", { method: "POST" });
+      setSyncInfo(null);
+      const r = await api(`/inbox/mock?scenario=${encodeURIComponent(scenario)}`, { method: "POST" });
       setSelected(null);
+      setSyncInfo(`${r.ingested} demomail inlästa och sorterade.`);
     });
 
   const syncInbox = () =>
@@ -311,15 +322,30 @@ export function Dashboard({ mode = "demo", apiBase = "/api/snajp-support" }: Rea
             Hämta nya mail
           </button>
         ) : (
-          <button
-            type="button"
-            onClick={seedMock}
-            disabled={busy !== null}
-            className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-[7px] bg-ink px-4 py-2.5 text-sm font-semibold text-paper transition hover:bg-copper hover:text-ink disabled:opacity-40"
-          >
-            {busy === "seed" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Inbox className="h-4 w-4" />}
-            Hämta testmail
-          </button>
+          <div className="inline-flex overflow-hidden rounded-[7px] border border-ink/12">
+            <select
+              value={scenario}
+              onChange={(event) => setScenario(event.target.value)}
+              title={scenarios.find((s) => s.id === scenario)?.description}
+              className="focus-ring min-h-11 border-r border-ink/12 bg-paper2/70 px-3 text-sm text-ink/75 outline-none"
+            >
+              {scenarios.length === 0 ? <option value="blandat">Blandad inkorg</option> : null}
+              {scenarios.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={seedMock}
+              disabled={busy !== null}
+              className="focus-ring inline-flex min-h-11 items-center gap-2 bg-ink px-4 py-2.5 text-sm font-semibold text-paper transition hover:bg-copper hover:text-ink disabled:opacity-40"
+            >
+              {busy === "seed" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Inbox className="h-4 w-4" />}
+              Ladda demo
+            </button>
+          </div>
         )}
         <button
           type="button"
