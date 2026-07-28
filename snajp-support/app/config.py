@@ -5,10 +5,16 @@ from functools import lru_cache
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Default-tenanten (Nordlys Handel) — samma fasta UUID som i 003_snajp_multitenant.sql.
+# Demo-tenanten (Nordlys Handel) — samma fasta UUID som i 003_snajp_multitenant.sql.
+# Publik: nås av marknadsföringsdemon och innehåller ENBART testmail.
 DEFAULT_TENANT_ID = "00000000-0000-4000-a000-000000000001"
 DEFAULT_TENANT_SLUG = "nordlys-handel"
 DEFAULT_TENANT_NAME = "Nordlys Handel"
+
+# Pilot-tenanten — skyddad arbetsyta med riktig kundinkorg. Skapas vid uppstart
+# när SNAJP_PILOT_API_KEY är satt. Håll dess data borta från den publika demon.
+PILOT_TENANT_ID = "00000000-0000-4000-a000-000000000002"
+PILOT_TENANT_SLUG = "pilot"
 
 CATEGORIES = (
     "teknisk_support",
@@ -49,6 +55,9 @@ class Settings(BaseSettings):
     redis_url: str = ""
     snajp_master_api_key: str = "snajp_master_dev_key_change_me"
     snajp_demo_api_key: str = "snajp_demo_2f8c1a9e4b7d"
+    # Pilotens nyckel. Tom => ingen pilot-arbetsyta (bara publik demo).
+    snajp_pilot_api_key: str = ""
+    pilot_tenant_name: str = "Pilot"
 
     # Email-pipeline
     inbox_poll_seconds: int = 0  # 0 = ingen bakgrundspolling (mock triggas manuellt)
@@ -57,6 +66,9 @@ class Settings(BaseSettings):
     imap_user: str = ""
     imap_password: str = ""  # Gmail: app-lösenord; Outlook: app-lösenord/IMAP-auth
     imap_folder: str = "INBOX"
+    # Vilken arbetsyta den riktiga inkorgen tillhör. "pilot" = bara pilot-tenanten
+    # får synka; den publika demon blockeras och kan aldrig dra in riktiga mail.
+    imap_tenant: str = "pilot"
 
     # Utgående mail. Tomma fält ärver IMAP-uppgifterna (samma Gmail-konto).
     smtp_host: str = ""  # tom + Gmail-IMAP => smtp.gmail.com
@@ -98,6 +110,10 @@ class Settings(BaseSettings):
     def can_send_email(self) -> bool:
         host, _, user, password = self.smtp_credentials()
         return bool(host and user and password)
+
+    def imap_tenant_id(self) -> str:
+        """Vilken tenant som äger den konfigurerade inkorgen."""
+        return PILOT_TENANT_ID if self.imap_tenant == "pilot" else DEFAULT_TENANT_ID
 
     def is_simulation(self) -> bool:
         # Samma platshållar-heuristik som app/api/email-studio/route.ts i Next-appen.

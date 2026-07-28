@@ -87,6 +87,23 @@ class PostgresStorage:
             )
         return _row(record)
 
+    async def ensure_tenant(
+        self, tenant_id: str, *, slug: str, name: str
+    ) -> dict[str, Any]:
+        # Administrativ operation — körs utan tenant-kontext.
+        async with self.pool.acquire() as conn:
+            record = await conn.fetchrow(
+                """
+                insert into ss_tenants (id, slug, name) values ($1::uuid, $2, $3)
+                on conflict (id) do update set name = excluded.name
+                returning *
+                """,
+                tenant_id,
+                slug,
+                name,
+            )
+        return _row(record)
+
     async def get_tenant(self, tenant_id: str) -> dict[str, Any] | None:
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow("select * from ss_tenants where id = $1", tenant_id)

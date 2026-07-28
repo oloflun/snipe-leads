@@ -9,7 +9,9 @@ degraderar tjänsten gracefully till in-memory + simuleringsläge.
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
+
+from .api.deps import require_tenant
 
 import asyncio
 
@@ -75,6 +77,18 @@ async def lifespan(app: FastAPI):
             settings.model,
         )
 
+    # Pilot-arbetsytan: skyddad tenant med riktig inkorg, skild från publika demon.
+    if settings.snajp_pilot_api_key:
+        from .config import PILOT_TENANT_ID, PILOT_TENANT_SLUG
+
+        try:
+            await storage.ensure_tenant(
+                PILOT_TENANT_ID, slug=PILOT_TENANT_SLUG, name=settings.pilot_tenant_name
+            )
+            logger.info("Pilot-arbetsyta aktiv: %s", settings.pilot_tenant_name)
+        except Exception as error:  # noqa: BLE001 — får inte fälla uppstarten
+            logger.warning("Kunde inte skapa pilot-arbetsytan: %s", error)
+
     poller_task = None
     if settings.inbox_poll_seconds > 0:
         from .email_pipeline.poller import run_poller
@@ -100,8 +114,15 @@ app.include_router(drafts.router)
 app.include_router(rules.router)
 
 
-def _health_payload() -> dict:
+def _health_payload(tenant_id: str | None = None) -> dict:
     settings = get_settings()
+    has_inbox = bool(
+        tenant_id
+        and tenant_id == settings.imap_tenant_id()
+        and settings.imap_host
+        and settings.imap_user
+        and settings.imap_password
+    )
     return {
         "status": "ok",
         "mode": "simulation" if settings.is_simulation() else "live",
@@ -110,6 +131,8 @@ def _health_payload() -> dict:
         "jobs": app.state.jobs.name,
         "can_send_email": settings.can_send_email(),
         "auto_send_enabled": settings.allow_auto_send,
+        # Har DENNA arbetsyta en kopplad riktig inkorg?
+        "has_inbox": has_inbox,
     }
 
 
@@ -119,9 +142,12 @@ async def health() -> dict:
 
 
 # Alias under /api så frontendens catch-all-proxy (som prefixar /api) når den.
+# Tenant-medveten: svaret speglar den anropande arbetsytans möjligheter.
 @app.get("/api/health")
-async def api_health() -> dict:
-    return _health_payload()
+async def api_health(tenant: dict = Depends(require_tenant)) -> dict:
+    payload = _health_payload(tenant["tenant_id"])
+    payload["tenant_name"] = tenant["tenant_name"]
+    return payload
 
 
 @app.get("/health/live")

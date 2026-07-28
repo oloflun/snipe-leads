@@ -30,6 +30,7 @@ const commonCopy = {
   "nav.campaigns": { sv: "Kampanjer", en: "Campaigns" },
   "nav.emails": { sv: "Emails", en: "Emails" },
   "nav.snajpSupport": { sv: "Snajp-Support", en: "Snajp-Support" },
+  "nav.kundtjanst": { sv: "Kundtjänst", en: "Support desk" },
   "nav.analytics": { sv: "Analys", en: "Analytics" },
   "nav.inbox": { sv: "Inkorg", en: "Inbox" },
   "nav.settings": { sv: "Inställningar", en: "Settings" },

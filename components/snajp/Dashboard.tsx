@@ -117,7 +117,14 @@ function ConfidenceBar({ value }: Readonly<{ value: number }>) {
   );
 }
 
-export function Dashboard() {
+type DashboardProps = {
+  /** "demo" = publik marknadsföringsdemo med testmail. "pilot" = riktig inkorg. */
+  mode?: "demo" | "pilot";
+  apiBase?: string;
+};
+
+export function Dashboard({ mode = "demo", apiBase = "/api/snajp-support" }: Readonly<DashboardProps>) {
+  const isPilot = mode === "pilot";
   const [emails, setEmails] = useState<EmailRow[]>([]);
   const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({});
   const [selected, setSelected] = useState<EmailDetail | null>(null);
@@ -127,13 +134,18 @@ export function Dashboard() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [syncInfo, setSyncInfo] = useState<string | null>(null);
-  const [health, setHealth] = useState<{ can_send_email: boolean; auto_send_enabled: boolean } | null>(null);
+  const [health, setHealth] = useState<{
+    can_send_email: boolean;
+    auto_send_enabled: boolean;
+    has_inbox: boolean;
+    tenant_name?: string;
+  } | null>(null);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
 
   const api = useCallback(async (path: string, init?: RequestInit) => {
-    const response = await fetch(`/api/snajp-support${path}`, {
+    const response = await fetch(`${apiBase}${path}`, {
       headers: { "Content-Type": "application/json" },
       ...init
     });
@@ -145,7 +157,7 @@ export function Dashboard() {
       throw new Error(payload.detail ?? payload.error ?? "Okänt fel");
     }
     return payload;
-  }, []);
+  }, [apiBase]);
 
   const refresh = useCallback(async () => {
     try {
@@ -173,12 +185,19 @@ export function Dashboard() {
   useEffect(() => {
     void refresh();
     void loadRules();
-    // Avgör om utskick är möjligt, så knappen inte lovar mer än den kan hålla.
-    fetch("/api/snajp-support/health")
+    // Avgör om utskick och inkorg är möjliga, så knapparna inte lovar mer än de håller.
+    fetch(`${apiBase}/health`)
       .then((r) => r.json())
-      .then((h) => setHealth({ can_send_email: !!h.can_send_email, auto_send_enabled: !!h.auto_send_enabled }))
+      .then((h) =>
+        setHealth({
+          can_send_email: !!h.can_send_email,
+          auto_send_enabled: !!h.auto_send_enabled,
+          has_inbox: !!h.has_inbox,
+          tenant_name: h.tenant_name
+        })
+      )
       .catch(() => setHealth(null));
-  }, [refresh, loadRules]);
+  }, [refresh, loadRules, apiBase]);
 
   const openEmail = useCallback(
     async (id: string) => {
@@ -280,25 +299,28 @@ export function Dashboard() {
     <div className="space-y-6">
       {/* Åtgärdsrad */}
       <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={seedMock}
-          disabled={busy !== null}
-          className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-[7px] bg-ink px-4 py-2.5 text-sm font-semibold text-paper transition hover:bg-copper hover:text-ink disabled:opacity-40"
-        >
-          {busy === "seed" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Inbox className="h-4 w-4" />}
-          Hämta testmail
-        </button>
-        <button
-          type="button"
-          onClick={syncInbox}
-          disabled={busy !== null}
-          title="Hämtar olästa mail från kopplad Gmail/Outlook-inkorg (IMAP)"
-          className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-[7px] border border-ink/12 bg-paper2/70 px-4 py-2.5 text-sm font-semibold text-ink/70 transition hover:border-ochre hover:text-ink disabled:opacity-40"
-        >
-          {busy === "sync" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
-          Synka inkorg
-        </button>
+        {isPilot ? (
+          <button
+            type="button"
+            onClick={syncInbox}
+            disabled={busy !== null}
+            title="Hämtar olästa mail från den kopplade inkorgen"
+            className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-[7px] bg-ink px-4 py-2.5 text-sm font-semibold text-paper transition hover:bg-copper hover:text-ink disabled:opacity-40"
+          >
+            {busy === "sync" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+            Hämta nya mail
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={seedMock}
+            disabled={busy !== null}
+            className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-[7px] bg-ink px-4 py-2.5 text-sm font-semibold text-paper transition hover:bg-copper hover:text-ink disabled:opacity-40"
+          >
+            {busy === "seed" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Inbox className="h-4 w-4" />}
+            Hämta testmail
+          </button>
+        )}
         <button
           type="button"
           onClick={() => void refresh()}
@@ -373,7 +395,7 @@ export function Dashboard() {
         <div className="rounded-[8px] border border-moss/25 bg-moss/5 px-4 py-3 text-sm text-ink/80">{syncInfo}</div>
       ) : null}
 
-      {/* Pilotläge: gör det omöjligt att missförstå vad agenten får göra själv. */}
+      {/* Driftläge: gör det omöjligt att missförstå vad agenten får göra själv. */}
       {health ? (
         <div className="flex flex-wrap items-center gap-2 rounded-[8px] border border-ink/10 bg-paper2/50 px-4 py-2.5 text-xs text-ink/65">
           <Badge tone={health.auto_send_enabled ? "warn" : "good"}>
@@ -384,11 +406,19 @@ export function Dashboard() {
               ? "Agenten kan skicka svar automatiskt enligt reglerna nedan."
               : "Inget skickas utan att du godkänt det — agenten skriver bara utkast."}
           </span>
-          {health.can_send_email ? null : (
+          {isPilot && !health.has_inbox ? (
+            <span className="text-danger">
+              · Ingen inkorg är kopplad till den här arbetsytan än.
+            </span>
+          ) : null}
+          {isPilot && health.can_send_email === false ? (
             <span className="text-danger">
               · Utskick är inte konfigurerat, så svar kan bara godkännas och kopieras.
             </span>
-          )}
+          ) : null}
+          {!isPilot ? (
+            <span className="text-ink/45">· Demoläge med testmail — inga riktiga kunder berörs.</span>
+          ) : null}
         </div>
       ) : null}
 

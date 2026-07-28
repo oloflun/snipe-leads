@@ -14,6 +14,7 @@ export const appRoutes: AppRoute[] = [
   { href: "/contacts", labelKey: "nav.contacts", group: "sales" },
   { href: "/campaigns", labelKey: "nav.campaigns", group: "sales" },
   { href: "/emails", labelKey: "nav.emails", group: "sales" },
+  { href: "/kundtjanst", labelKey: "nav.kundtjanst", group: "workspace" },
   { href: "/snajp-support", labelKey: "nav.snajpSupport", group: "workspace" },
   { href: "/analytics", labelKey: "nav.analytics", group: "workspace" },
   { href: "/inbox", labelKey: "nav.inbox", group: "workspace" },
@@ -38,7 +39,8 @@ export const protectedRoutePrefixes = [
   "/analytics",
   "/inbox",
   "/settings",
-  "/onboarding"
+  "/onboarding",
+  "/kundtjanst"
 ] as const;
 
 export const authRoutes = ["/login", "/auth/callback"] as const;

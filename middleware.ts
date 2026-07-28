@@ -108,6 +108,7 @@ export const config = {
     "/inbox/:path*",
     "/settings/:path*",
     "/onboarding/:path*",
+    "/kundtjanst/:path*",
     "/login",
     "/auth/callback"
   ]

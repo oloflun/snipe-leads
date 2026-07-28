@@ -118,6 +118,23 @@ class MemoryStorage:
         self.kb.setdefault(tenant["id"], [])
         return tenant
 
+    async def ensure_tenant(
+        self, tenant_id: str, *, slug: str, name: str
+    ) -> dict[str, Any]:
+        existing = self.tenants.get(tenant_id)
+        if existing:
+            return existing
+        tenant = {
+            "id": tenant_id,
+            "slug": slug,
+            "name": name,
+            "active": True,
+            "created_at": _now(),
+        }
+        self.tenants[tenant_id] = tenant
+        self.kb.setdefault(tenant_id, [])
+        return tenant
+
     async def get_tenant(self, tenant_id: str) -> dict[str, Any] | None:
         return self.tenants.get(tenant_id)
 

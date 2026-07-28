@@ -19,6 +19,12 @@ class Storage(Protocol):
 
     async def create_tenant(self, *, slug: str, name: str) -> dict[str, Any]: ...
 
+    async def ensure_tenant(
+        self, tenant_id: str, *, slug: str, name: str
+    ) -> dict[str, Any]:
+        """Skapar en tenant med FÖRUTBESTÄMT id om den saknas (idempotent)."""
+        ...
+
     async def get_tenant(self, tenant_id: str) -> dict[str, Any] | None: ...
 
     # -- Kunddata (alltid tenant-skopade) -----------------------------------

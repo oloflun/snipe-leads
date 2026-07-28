@@ -9,7 +9,12 @@ Varje nyckel mappar till exakt en tenant:
 
 from fastapi import Header, HTTPException, Request
 
-from ..config import DEFAULT_TENANT_ID, DEFAULT_TENANT_NAME, get_settings
+from ..config import (
+    DEFAULT_TENANT_ID,
+    DEFAULT_TENANT_NAME,
+    PILOT_TENANT_ID,
+    get_settings,
+)
 
 
 async def require_api_key(
@@ -20,6 +25,12 @@ async def require_api_key(
     settings = get_settings()
     if x_api_key == settings.snajp_demo_api_key:
         return {"tenant_id": DEFAULT_TENANT_ID, "tenant_name": DEFAULT_TENANT_NAME, "master": False}
+    if settings.snajp_pilot_api_key and x_api_key == settings.snajp_pilot_api_key:
+        return {
+            "tenant_id": PILOT_TENANT_ID,
+            "tenant_name": settings.pilot_tenant_name,
+            "master": False,
+        }
     if x_api_key == settings.snajp_master_api_key:
         return {"tenant_id": None, "tenant_name": "master", "master": True}
     record = await request.app.state.storage.validate_api_key(x_api_key)
