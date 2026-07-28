@@ -6,6 +6,7 @@ import {
   Image as ImageIcon,
   Inbox,
   Loader2,
+  Mail,
   RefreshCw,
   Search,
   Send,
@@ -120,6 +121,7 @@ export function Dashboard() {
   const [rulesOpen, setRulesOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [syncInfo, setSyncInfo] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
@@ -205,6 +207,18 @@ export function Dashboard() {
       setSelected(null);
     });
 
+  const syncInbox = () =>
+    act("sync", async () => {
+      setSyncInfo(null);
+      const result = await api("/inbox/sync", { method: "POST" });
+      if (result.error) {
+        throw new Error(result.error);
+      }
+      setSyncInfo(
+        `Synk klar: ${result.fetched} nya mail hämtade, ${result.processed} processade.`
+      );
+    });
+
   const approve = () =>
     selected?.draft &&
     act("approve", () =>
@@ -255,6 +269,16 @@ export function Dashboard() {
         >
           {busy === "seed" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Inbox className="h-4 w-4" />}
           Hämta testmail
+        </button>
+        <button
+          type="button"
+          onClick={syncInbox}
+          disabled={busy !== null}
+          title="Hämtar olästa mail från kopplad Gmail/Outlook-inkorg (IMAP)"
+          className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-[7px] border border-ink/12 bg-paper2/70 px-4 py-2.5 text-sm font-semibold text-ink/70 transition hover:border-ochre hover:text-ink disabled:opacity-40"
+        >
+          {busy === "sync" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+          Synka inkorg
         </button>
         <button
           type="button"
@@ -325,6 +349,9 @@ export function Dashboard() {
 
       {error ? (
         <div className="rounded-[8px] border border-danger/25 bg-danger/5 px-4 py-3 text-sm text-ink/80">{error}</div>
+      ) : null}
+      {syncInfo ? (
+        <div className="rounded-[8px] border border-moss/25 bg-moss/5 px-4 py-3 text-sm text-ink/80">{syncInfo}</div>
       ) : null}
 
       {/* Fack-översikt */}

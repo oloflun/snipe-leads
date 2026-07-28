@@ -2,6 +2,8 @@
 node_modules/
 tsconfig.tsbuildinfo
 .env
+.env.*
+!.env.example
 .env*.local
 .venv/
 __pycache__/
