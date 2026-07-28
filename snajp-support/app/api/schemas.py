@@ -65,6 +65,8 @@ class IngestEmailRequest(BaseModel):
 class ApproveDraftRequest(BaseModel):
     edited_content: str | None = Field(default=None, max_length=16000)
     note: str | None = None
+    # False = godkänn utan att skicka (texten hanteras manuellt).
+    send: bool = True
 
 
 class RejectDraftRequest(BaseModel):

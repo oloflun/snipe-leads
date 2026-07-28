@@ -3,6 +3,7 @@
 import {
   CheckCircle2,
   ChevronDown,
+  ClipboardCopy,
   Image as ImageIcon,
   Inbox,
   Loader2,
@@ -72,12 +73,13 @@ const CATEGORY_LABELS: Record<string, string> = {
 const STATUS_META: Record<string, { label: string; tone: "neutral" | "good" | "warn" | "danger" }> = {
   new: { label: "Ny", tone: "neutral" },
   processing: { label: "Bearbetas", tone: "neutral" },
-  awaiting_approval: { label: "Väntar på godkännande", tone: "warn" },
-  auto_sent: { label: "Autosvar skickat", tone: "good" },
-  sent: { label: "Besvarat", tone: "good" },
+  awaiting_approval: { label: "Utkast", tone: "warn" },
+  approved: { label: "Godkänt", tone: "good" },
+  auto_sent: { label: "Skickat (auto)", tone: "good" },
+  sent: { label: "Skickat", tone: "good" },
   escalated: { label: "Eskalerat", tone: "danger" },
-  rejected: { label: "Utkast avvisat", tone: "neutral" },
-  taken_over: { label: "Manuellt övertaget", tone: "neutral" },
+  rejected: { label: "Avvisat", tone: "neutral" },
+  taken_over: { label: "Övertaget manuellt", tone: "neutral" },
   failed: { label: "Fel", tone: "danger" }
 };
 
@@ -87,7 +89,10 @@ const EVENT_LABELS: Record<string, string> = {
   escalated: "Eskalerat till människa",
   draft_created: "Utkast skapat",
   auto_sent: "Autosvar skickat",
-  approved_and_sent: "Godkänt & skickat",
+  auto_send_blocked: "Autoskick stoppat — kräver godkännande",
+  approved_and_sent: "Godkänt och skickat till kund",
+  approved_no_send: "Godkänt utan utskick",
+  send_failed: "Utskicket misslyckades",
   draft_rejected: "Utkast avvisat",
   taken_over: "Manuellt övertaget",
   failed: "Fel vid bearbetning",
@@ -122,6 +127,7 @@ export function Dashboard() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [syncInfo, setSyncInfo] = useState<string | null>(null);
+  const [health, setHealth] = useState<{ can_send_email: boolean; auto_send_enabled: boolean } | null>(null);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
@@ -167,6 +173,11 @@ export function Dashboard() {
   useEffect(() => {
     void refresh();
     void loadRules();
+    // Avgör om utskick är möjligt, så knappen inte lovar mer än den kan hålla.
+    fetch("/api/snajp-support/health")
+      .then((r) => r.json())
+      .then((h) => setHealth({ can_send_email: !!h.can_send_email, auto_send_enabled: !!h.auto_send_enabled }))
+      .catch(() => setHealth(null));
   }, [refresh, loadRules]);
 
   const openEmail = useCallback(
@@ -219,16 +230,24 @@ export function Dashboard() {
       );
     });
 
-  const approve = () =>
+  const approve = (send: boolean) =>
     selected?.draft &&
-    act("approve", () =>
-      api(`/drafts/${selected.draft!.id}/approve`, {
+    act(send ? "approve" : "approveNoSend", async () => {
+      setSyncInfo(null);
+      const body: Record<string, unknown> = { send };
+      if (draftText !== selected.draft!.content) {
+        body.edited_content = draftText;
+      }
+      const result = await api(`/drafts/${selected.draft!.id}/approve`, {
         method: "POST",
-        body: JSON.stringify(
-          draftText !== selected.draft!.content ? { edited_content: draftText } : {}
-        )
-      })
-    );
+        body: JSON.stringify(body)
+      });
+      setSyncInfo(
+        result.delivered
+          ? `Svaret är skickat till ${selected.from_email}.`
+          : "Godkänt. Inget mail skickades — kopiera texten och skicka den själv."
+      );
+    });
 
   const reject = () =>
     selected?.draft &&
@@ -352,6 +371,25 @@ export function Dashboard() {
       ) : null}
       {syncInfo ? (
         <div className="rounded-[8px] border border-moss/25 bg-moss/5 px-4 py-3 text-sm text-ink/80">{syncInfo}</div>
+      ) : null}
+
+      {/* Pilotläge: gör det omöjligt att missförstå vad agenten får göra själv. */}
+      {health ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-[8px] border border-ink/10 bg-paper2/50 px-4 py-2.5 text-xs text-ink/65">
+          <Badge tone={health.auto_send_enabled ? "warn" : "good"}>
+            {health.auto_send_enabled ? "Autosvar PÅ" : "Granskningsläge"}
+          </Badge>
+          <span>
+            {health.auto_send_enabled
+              ? "Agenten kan skicka svar automatiskt enligt reglerna nedan."
+              : "Inget skickas utan att du godkänt det — agenten skriver bara utkast."}
+          </span>
+          {health.can_send_email ? null : (
+            <span className="text-danger">
+              · Utskick är inte konfigurerat, så svar kan bara godkännas och kopieras.
+            </span>
+          )}
+        </div>
       ) : null}
 
       {/* Fack-översikt */}
@@ -538,10 +576,12 @@ export function Dashboard() {
                       {selected.draft.status === "auto_sent"
                         ? "Autosvar (skickat)"
                         : selected.draft.status === "approved"
-                          ? "Skickat svar"
+                          ? selected.status === "sent"
+                            ? "Skickat till kunden"
+                            : "Godkänt — inte skickat"
                           : selected.draft.status === "rejected"
                             ? "Avvisat utkast"
-                            : "AI-utkast — väntar på godkännande"}
+                            : "AI-utkast — granska innan det skickas"}
                     </p>
                     <ConfidenceBar value={selected.draft.confidence} />
                   </div>
@@ -561,8 +601,13 @@ export function Dashboard() {
                     <div className="mt-3 flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={approve}
-                        disabled={busy !== null}
+                        onClick={() => approve(true)}
+                        disabled={busy !== null || health?.can_send_email === false}
+                        title={
+                          health?.can_send_email === false
+                            ? "Utskick är inte konfigurerat — använd Godkänn utan att skicka"
+                            : `Skickar svaret till ${selected.from_email}`
+                        }
                         className="focus-ring inline-flex min-h-10 items-center gap-2 rounded-[7px] bg-ink px-4 py-2 text-sm font-semibold text-paper transition hover:bg-moss disabled:opacity-40"
                       >
                         {busy === "approve" ? (
@@ -570,7 +615,32 @@ export function Dashboard() {
                         ) : (
                           <Send className="h-4 w-4" />
                         )}
-                        Godkänn & skicka
+                        Godkänn &amp; skicka
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => approve(false)}
+                        disabled={busy !== null}
+                        title="Markerar som godkänt utan att skicka mail — du hanterar utskicket själv"
+                        className="focus-ring inline-flex min-h-10 items-center gap-2 rounded-[7px] border border-ink/15 px-4 py-2 text-sm font-semibold text-ink/70 transition hover:border-moss hover:text-ink disabled:opacity-40"
+                      >
+                        {busy === "approveNoSend" ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="h-4 w-4" />
+                        )}
+                        Godkänn utan att skicka
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void navigator.clipboard?.writeText(draftText);
+                          setSyncInfo("Svarstexten är kopierad till urklipp.");
+                        }}
+                        className="focus-ring inline-flex min-h-10 items-center gap-2 rounded-[7px] border border-ink/15 px-4 py-2 text-sm font-semibold text-ink/70 transition hover:border-ochre hover:text-ink"
+                      >
+                        <ClipboardCopy className="h-4 w-4" />
+                        Kopiera text
                       </button>
                       <button
                         type="button"

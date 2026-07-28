@@ -211,30 +211,54 @@ async def process_email(
         content = (greeting + (triage.get("draft_body") or _NO_MATCH_BODY) + _SIGNATURE).strip()
 
         # 4: autosvar — bara om regeln säger auto OCH säkerhetsvillkoren håller.
+        # ALLOW_AUTO_SEND är en hård global spärr: under pilot ska inget lämna
+        # systemet utan mänskligt godkännande, oavsett hur reglerna är satta.
         auto_ok = (
-            rule == "auto"
+            settings.allow_auto_send
+            and rule == "auto"
             and confidence >= settings.auto_send_min_confidence
             and (sentiment is None or sentiment >= 0.4)
         )
-        if auto_ok:
-            draft = await storage.create_draft(
-                tenant_id, email_id=email_id, ticket_id=ticket["id"],
-                content=content, status="auto_sent", auto=True, confidence=confidence,
-            )
-            await storage.save_message(
-                tenant_id, conversation_id=ticket["conversation_id"],
-                direction="outbound", content=content,
-            )
-            await storage.update_ticket(tenant_id, ticket["id"], status="resolved")
-            await storage.update_email(tenant_id, email_id, status="auto_sent")
+        if rule == "auto" and not settings.allow_auto_send:
             await storage.log_decision(
-                tenant_id, email_id=email_id, event="auto_sent",
+                tenant_id,
+                email_id=email_id,
+                event="auto_send_blocked",
                 detail={
-                    "rule": rule, "confidence": confidence,
-                    "note": "Utskick simulerat — riktig SMTP/Graph-sändning är nästa steg.",
+                    "rule": rule,
+                    "note": "ALLOW_AUTO_SEND är av — svaret lades som utkast för godkännande.",
                 },
             )
-            return {"action": "auto_sent", "draft_id": draft["id"], "ticket_id": ticket["id"]}
+        if auto_ok:
+            from .sender import send_reply
+
+            sent, result = await send_reply(
+                to_email=email["from_email"],
+                subject=email["subject"] or "Ditt ärende",
+                body=content,
+                in_reply_to=email.get("provider_message_id"),
+            )
+            if sent:
+                draft = await storage.create_draft(
+                    tenant_id, email_id=email_id, ticket_id=ticket["id"],
+                    content=content, status="auto_sent", auto=True, confidence=confidence,
+                )
+                await storage.save_message(
+                    tenant_id, conversation_id=ticket["conversation_id"],
+                    direction="outbound", content=content,
+                )
+                await storage.update_ticket(tenant_id, ticket["id"], status="resolved")
+                await storage.update_email(tenant_id, email_id, status="auto_sent")
+                await storage.log_decision(
+                    tenant_id, email_id=email_id, event="auto_sent",
+                    detail={"rule": rule, "confidence": confidence, "note": f"Skickat ({result})."},
+                )
+                return {"action": "auto_sent", "draft_id": draft["id"], "ticket_id": ticket["id"]}
+            # Sändningen failade — falla tillbaka på utkast så ärendet inte tappas.
+            await storage.log_decision(
+                tenant_id, email_id=email_id, event="send_failed",
+                detail={"error": result, "note": "Autosvaret lades som utkast i stället."},
+            )
 
         # 5: default — utkast som väntar på godkännande.
         draft = await storage.create_draft(
@@ -247,10 +271,12 @@ async def process_email(
             detail={
                 "rule": rule, "confidence": confidence,
                 "why_not_auto": (
-                    "Regeln är 'draft'" if rule != "auto"
+                    "Regeln är 'draft' — svaret kräver godkännande" if rule != "auto"
+                    else "Autoskick är avstängt globalt (ALLOW_AUTO_SEND)"
+                    if not settings.allow_auto_send
                     else f"Konfidens {confidence} under tröskeln {settings.auto_send_min_confidence}"
                     if confidence < settings.auto_send_min_confidence
-                    else "Negativt sentiment"
+                    else "Negativt sentiment — lämnas till människa"
                 ),
             },
         )

@@ -58,6 +58,17 @@ class Settings(BaseSettings):
     imap_password: str = ""  # Gmail: app-lösenord; Outlook: app-lösenord/IMAP-auth
     imap_folder: str = "INBOX"
 
+    # Utgående mail. Tomma fält ärver IMAP-uppgifterna (samma Gmail-konto).
+    smtp_host: str = ""  # tom + Gmail-IMAP => smtp.gmail.com
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from_name: str = "Kundtjänst"
+
+    # HÅRD SPÄRR: autosvar skickas aldrig utan att en människa godkänt, oavsett
+    # vad kategorireglerna säger. Sätt till true först när piloten är utvärderad.
+    allow_auto_send: bool = False
+
     @model_validator(mode="after")
     def _default_model_for_provider(self) -> "Settings":
         # Undvik footgun: gpt-default mot DeepSeek => byt till deepseek-chat.
@@ -69,6 +80,24 @@ class Settings(BaseSettings):
         if self.llm_provider == "deepseek":
             return self.deepseek_api_key
         return self.openai_api_key
+
+    def smtp_credentials(self) -> tuple[str, int, str, str]:
+        """(host, port, user, password) — ärver IMAP-kontot när SMTP inte är satt."""
+        user = self.smtp_user or self.imap_user
+        password = self.smtp_password or self.imap_password
+        host = self.smtp_host
+        if not host and self.imap_host:
+            # Gmail/Outlook har kända SMTP-motsvarigheter till sina IMAP-värdar.
+            known = {
+                "imap.gmail.com": "smtp.gmail.com",
+                "outlook.office365.com": "smtp.office365.com",
+            }
+            host = known.get(self.imap_host.lower(), "")
+        return host, self.smtp_port, user, password
+
+    def can_send_email(self) -> bool:
+        host, _, user, password = self.smtp_credentials()
+        return bool(host and user and password)
 
     def is_simulation(self) -> bool:
         # Samma platshållar-heuristik som app/api/email-studio/route.ts i Next-appen.

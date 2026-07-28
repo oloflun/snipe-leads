@@ -97,7 +97,22 @@ async def test_approve_with_edit_sends_and_logs_review():
 
 
 @pytest.mark.anyio
-async def test_auto_rule_sends_without_approval():
+async def test_auto_rule_sends_when_globally_enabled(monkeypatch):
+    """Autoskick kräver BÅDE kategoriregeln 'auto' OCH den globala spärren öppen.
+
+    Spärren är av under pilot; testet öppnar den explicit och mockar SMTP.
+    """
+    from app.config import get_settings
+
+    sent: list[str] = []
+
+    async def fake_send(*, to_email, subject, body, in_reply_to=None):
+        sent.append(to_email)
+        return True, "<auto-test@snajp>"
+
+    monkeypatch.setattr("app.email_pipeline.sender.send_reply", fake_send)
+    monkeypatch.setattr(get_settings(), "allow_auto_send", True, raising=False)
+
     async with app.router.lifespan_context(app):
         async with _client() as client:
             rule = await client.put(
@@ -110,6 +125,7 @@ async def test_auto_rule_sends_without_approval():
             paket = next(e for e in emails if e["subject"] == "Var är mitt paket?")
             assert paket["status"] == "auto_sent"
             assert paket["draft"]["auto"] is True
+            assert sent == ["johan.berg@mail.se"]
 
             detail = (await client.get(f"/api/inbox/{paket['id']}", headers=DEMO)).json()
             assert "auto_sent" in [d["event"] for d in detail["decisions"]]

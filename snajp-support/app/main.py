@@ -100,8 +100,7 @@ app.include_router(drafts.router)
 app.include_router(rules.router)
 
 
-@app.get("/health")
-async def health() -> dict:
+def _health_payload() -> dict:
     settings = get_settings()
     return {
         "status": "ok",
@@ -109,7 +108,20 @@ async def health() -> dict:
         "model": settings.model,
         "storage": app.state.storage.name,
         "jobs": app.state.jobs.name,
+        "can_send_email": settings.can_send_email(),
+        "auto_send_enabled": settings.allow_auto_send,
     }
+
+
+@app.get("/health")
+async def health() -> dict:
+    return _health_payload()
+
+
+# Alias under /api så frontendens catch-all-proxy (som prefixar /api) når den.
+@app.get("/api/health")
+async def api_health() -> dict:
+    return _health_payload()
 
 
 @app.get("/health/live")

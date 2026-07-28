@@ -97,8 +97,24 @@ Agenten tar emot riktiga kundservicemail, sorterar dem i fack och genererar svar
 5. **Beslutslogg**: varje steg (mottaget, klassificerat, eskalerat, autosvar, godkänt)
    loggas i `ss_decision_log` med motivering.
 
-Utgående sändning är i detta steg **simulerad och loggad** (samma avgränsning som
-referensrepot) — riktig SMTP/Gmail/Graph-sändning är nästa iteration.
+### Utgående svar (SMTP)
+
+Godkända utkast skickas **på riktigt** till kunden via SMTP. Utan `SMTP_*` ärvs
+IMAP-kontot (`imap.gmail.com` → `smtp.gmail.com`), så en kopplad Gmail-inkorg
+kan både läsa och svara med samma app-lösenord. Svaret trådas mot kundens
+ursprungliga mail via `In-Reply-To`/`References`.
+
+Två säkerhetsregler är inbyggda:
+
+- **Ett ärende markeras som `sent` endast om leveransen lyckades.** Misslyckas
+  SMTP ligger utkastet kvar som `pending`, felet returneras (502) och loggas som
+  `send_failed` — ingen ska tro att kunden fått svar när den inte har det.
+- **`ALLOW_AUTO_SEND=false` är en hård global spärr.** Även om en kategori står
+  på `auto` skickas ingenting utan mänskligt godkännande; försöket loggas som
+  `auto_send_blocked` och svaret läggs som utkast. Håll den avstängd under pilot.
+
+`POST /api/drafts/{id}/approve` tar `send: false` för att godkänna utan utskick
+(texten hanteras då manuellt — dashboarden har en kopieringsknapp).
 
 ## API (X-API-Key krävs, se `.env`)
 
