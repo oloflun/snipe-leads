@@ -309,5 +309,12 @@ Codex rebuilt the project from the prompt into a Next.js App Router SaaS mock/pr
   anropet efter viloläge kan visa offline-text; ladda om.
 - **`DATABASE_URL` är inte satt på Render** → in-memory-lagring, allt nollställs vid
   spin-down. Migrationerna är applicerade, så det räcker att sätta pooler-strängen.
-- **Produktionsdomänen `snipra.vercel.app`** pekar nu också på development-deployen
-  (aliasades automatiskt av produktionsdeployen) — `main` är fortfarande orörd.
+- **`snipra.vercel.app` ska INTE röras** (användarens beslut 2026-07-28). Den pekar på
+  den gamla main-deployen från 2026-05-24 (`dpl_FyddcYVEApuJEUUFNyYHga1tYVZa`,
+  commit `a10d919`) och `/snajp-support` ger 404 där — det är avsiktligt.
+  Varning: att deploya med `target: production` flyttar aliaset dit automatiskt.
+  Det hände under denna session och fick återställas manuellt. Vill du deploya om
+  demon, aliasa `snipra-oloflun-olofluns-projects.vercel.app` mot den nya deployen
+  i stället för att göra den till produktion.
+- **Prioriterad demo-URL:** https://snipra-oloflun-olofluns-projects.vercel.app/snajp-support
+  (alias mot `dpl_BpCmCG495MbPdd5rXeAMqHXkZxLb`, branch `development`).
