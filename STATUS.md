@@ -263,3 +263,51 @@ Codex rebuilt the project from the prompt into a Next.js App Router SaaS mock/pr
 - **Produktionsdomänen är inaktuell**: `snipra.vercel.app/snajp-support` ger 404. Produktion är låst till en gammal deploy från `main` (commit `a10d919`, från innan Snajp-Support fanns). `main` har medvetet inte rörts. Ska demon ligga på produktionsdomänen krävs en merge till `main`.
 - **Render är fortfarande inte uppsatt** — utan `SNAJP_SUPPORT_URL` visar demon tomt läge/offline-text. Blueprint + `SNAJP_SUPPORT_URL` på Vercel är allt som återstår för fungerande demo.
 - **Säkerhetsskuld inför publik demo** (användaren: "vi fixar det i nästa runda"): demo-nyckeln är publik i repot, så vem som helst med backend-URL:en kan anropa API:t. Harmlöst i simuleringsläge; med riktig `DEEPSEEK_API_KEY` blir det tokenbränning. Byt `SNAJP_DEMO_API_KEY` till ett hemligt värde och sätt samma som `SNAJP_INTERNAL_API_KEY` på Vercel innan riktig AI slås på publikt.
+
+## 2026-07-28 Publik demo live + Gmail-inkorg verifierad — Claude
+
+### Completed
+- **Demon fungerar publikt**: https://snipra-oloflun-olofluns-projects.vercel.app/snajp-support
+  Hela kedjan verifierad mot deployen: 6 mockmail seedade → klassificerade i sex fack
+  (konf 0.4–0.9) → 2 eskalerade, 4 utkast → godkännande i UI:t → status `sent`.
+- **Render-backenden deployad**: `snajp-support` (`srv-d9k99ktg1s2s73fl0v6g`,
+  https://snajp-support.onrender.com), Docker, rootDir `snajp-support`, branch
+  `development`, healthCheck `/health/live`. Kör simuleringsläge (ingen DeepSeek-nyckel).
+- **Tre fel som blockerade demon, alla åtgärdade:**
+  1. Render-tjänsten `snipe-leads` (`srv-d9k8u6jm8hqs73bukveg`) var felkonfigurerad — en
+     Node-tjänst som byggde Next.js-frontenden från repo-roten, alltså en dubblett av
+     Vercel, inte Python-backenden. Ligger kvar orörd; **kan pausas/raderas, den fyller
+     ingen funktion** (kräver användarens beslut).
+  2. `SNAJP_SUPPORT_URL` fanns på Vercel men med **tomt värde** och bara target
+     `production` — medan deployerna som servar demon är previews. Satt till
+     Render-URL:en för production+preview. OBS: teamet tvingar `type: sensitive` på
+     alla env-vars, så värdet går inte att läsa tillbaka via API:t.
+  3. `snipra-oloflun-olofluns-projects.vercel.app` var aliasad till en **gammal deploy**
+     utan env-varen. Ompekad till den nya produktionsdeployen.
+- **Gmail-IMAP verifierad live lokalt**: 3 riktiga mail hämtade från `snajpsupport@gmail.com`,
+  parsade (multipart→text, svenska tecken korrekt), klassificerade, utkast skapade,
+  beslutslogg komplett. Omkörd synk gav 0 nya → dedupe på Message-ID håller.
+- **Dashboard: "Synka inkorg"-knapp** + proxyn skiljer nu på "env-var saknas" och
+  "backend svarar inte" och skriver ut vilken adress den försökte nå (`df597a6`).
+  Den diagnostiken var det som gjorde fel 2 och 3 ovan synliga.
+- `.gitignore`: `.env.*` (utom `.env.example`). En `.env.txt`-kopia med riktiga
+  IMAP-credentials låg untracked och hade följt med nästa `git add`.
+- MCP: `.mcp.json` med `supabase-snipra` **och** `render` (https://mcp.render.com/mcp),
+  båda med env-var-referenser. Vercel CLI v58 installerad.
+
+### Open threads / next agent
+- **IMAP är medvetet INTE satt på Render.** Demo-nyckeln är publik i repot, så vem som
+  helst med backend-URL:en kunde annars anropa `/api/inbox/sync` och läsa användarens
+  riktiga Gmail via `/api/inbox`. Säkra `SNAJP_DEMO_API_KEY` först (se skulden ovan),
+  sätt sedan `IMAP_HOST/USER/PASSWORD` i Render-dashboarden.
+- **Nyskapad Render-tjänst routar inte direkt.** Första ~10 min gav
+  `x-render-routing: no-server` intermittent (mätt 7/12), därefter 12/12. Bygget och
+  health-checkarna var gröna hela tiden — vänta ut propageringen, felsök inte bygget.
+  (Renders gräns är 750 instanstimmar/månad delat på alla gratistjänster, **inte** ett
+  tak på antal tjänster — den hypotesen testades och avfärdades.)
+- **Free-tier spinner ner efter 15 min** utan trafik, spin-up tar ~1 min. Första
+  anropet efter viloläge kan visa offline-text; ladda om.
+- **`DATABASE_URL` är inte satt på Render** → in-memory-lagring, allt nollställs vid
+  spin-down. Migrationerna är applicerade, så det räcker att sätta pooler-strängen.
+- **Produktionsdomänen `snipra.vercel.app`** pekar nu också på development-deployen
+  (aliasades automatiskt av produktionsdeployen) — `main` är fortfarande orörd.
