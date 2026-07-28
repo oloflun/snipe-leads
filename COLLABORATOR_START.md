@@ -20,6 +20,10 @@ git pull origin development
 git checkout -b feature/supabase-auth-setup
 ```
 
+Then connect Claude Code to the Snipra database — see **`SUPABASE_MCP_SETUP.md`**.
+Takes ~5 minutes, one time per machine. It lets Claude apply migrations and
+inspect tables directly, without anyone sharing the database password.
+
 ## Before You Write a Single Line of Code
 
 Read these files in order:
