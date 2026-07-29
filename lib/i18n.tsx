@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 export type Locale = "sv" | "en";
 export type Localized = { sv: string; en: string };
@@ -28,10 +28,10 @@ const commonCopy = {
   "nav.companies": { sv: "Företag", en: "Companies" },
   "nav.contacts": { sv: "Kontakter", en: "Contacts" },
   "nav.campaigns": { sv: "Kampanjer", en: "Campaigns" },
-  "nav.emails": { sv: "Emails", en: "Emails" },
-  "nav.snajpSupport": { sv: "Snajp-Support", en: "Snajp-Support" },
+  "nav.emails": { sv: "Email studio", en: "Email studio" },
+  "nav.support": { sv: "Kundtjänst", en: "Support" },
   "nav.analytics": { sv: "Analys", en: "Analytics" },
-  "nav.inbox": { sv: "Inkorg", en: "Inbox" },
+  "nav.inbox": { sv: "Svar", en: "Replies" },
   "nav.settings": { sv: "Inställningar", en: "Settings" },
   "state.loading": { sv: "Laddar arbetsyta", en: "Loading workspace" },
   "state.empty": { sv: "Inga poster ännu", en: "No records yet" },
@@ -47,6 +47,13 @@ const LocaleContext = createContext<LocaleContextValue | null>(null);
 
 export function LocaleProvider({ children }: Readonly<{ children: React.ReactNode }>) {
   const [locale, setLocale] = useState<Locale>("sv");
+
+  // The document was rendered with lang="sv". Without this the attribute keeps
+  // claiming Swedish after the user switches, so a screen reader reads English
+  // copy with Swedish pronunciation rules.
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
 
   const text = useCallback((value: Localized) => value[locale], [locale]);
   const t = useCallback((key: CopyKey) => commonCopy[key][locale], [locale]);

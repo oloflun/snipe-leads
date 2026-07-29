@@ -35,3 +35,7 @@ marketingskills.zip
 
 .snipra-auth-state.json
 screenshots/cookies-dump.json
+
+# Verification screenshots — 73 MB of session evidence, not source. They stay on
+# disk and the plans reference them by path; nothing builds or runs from them.
+.shots/

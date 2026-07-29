@@ -48,6 +48,15 @@ function mockStudioData(locale: "sv" | "en" = "sv"): EmailStudioData {
   };
 }
 
+/**
+ * Public marketing surfaces always render example data, never a workspace's real
+ * email. Deliberately synchronous and Supabase-free so /, /leads and /support stay
+ * renderable with no session and no database.
+ */
+export function loadPublicEmailStudioData(locale: "sv" | "en" = "sv"): EmailStudioData {
+  return mockStudioData(locale);
+}
+
 export async function loadEmailStudioData(): Promise<EmailStudioData> {
   const { getWorkspaceContext } = await import("@/lib/workspace");
   const context = await getWorkspaceContext();

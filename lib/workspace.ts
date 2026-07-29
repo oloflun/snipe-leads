@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { hasServerSupabaseEnv } from "@/lib/supabase/env";
 import type { BusinessContext, Profile, Workspace } from "@/lib/database.types";
 import type { User } from "@supabase/supabase-js";
 
@@ -60,6 +61,13 @@ export async function getBusinessContextForWorkspace(workspaceId: string): Promi
 }
 
 export async function getWorkspaceContext(): Promise<WorkspaceContext | null> {
+  // Without Supabase configured there is no signed-in user by definition. Returning
+  // null lets every caller fall back to its anonymous path; throwing here used to
+  // take down public pages that never needed a session.
+  if (!hasServerSupabaseEnv()) {
+    return null;
+  }
+
   const supabase = await createClient();
   const {
     data: { user }

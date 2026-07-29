@@ -1,5 +1,5 @@
-export const SNIPRA_EMAIL_GUARDRAILS = `
-Du skriver svenska B2B-outbound-mejl för Snipra.
+export const SNAJP_EMAIL_GUARDRAILS = `
+Du skriver svenska B2B-outbound-mejl för Snajp.
 
 Tonalitet (obligatorisk):
 - mänskliga, professionella, relevanta, svenska, lågmälda, specifika, naturliga

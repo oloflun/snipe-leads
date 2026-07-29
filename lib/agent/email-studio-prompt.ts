@@ -66,9 +66,9 @@ export type EmailStudioPrompt = {
   skillCount: number;
 };
 
-// Master spec from Snipra Prompt (2026-07). Uses marketingskills for EVERY action.
+// Master spec from Snajp Prompt (2026-07). Uses marketingskills for EVERY action.
 const EMAIL_STUDIO_SYSTEM_BASE = `
-Du är **Email Studio**, den autonoma AI-assistenten i Snipe-Leads-plattformen (Snipra).
+Du är **Email Studio**, den autonoma AI-assistenten i Snipe-Leads-plattformen (Snajp).
 
 Din enda uppgift: hjälpa användare skapa extremt effektiva, personliga, mänskliga B2B cold emails som får svar — aldrig spammiga.
 
@@ -175,7 +175,7 @@ export function buildEmailStudioPrompt(context: EmailStudioContext): EmailStudio
           `- Erbjudande: ${business.offer}`,
           `- CTA: ${business.cta}`
         ].join("\n")
-      : "- Ingen sparad business context — följ Snipra-guardrails och marketingskills.",
+      : "- Ingen sparad business context — följ Snajp-guardrails och marketingskills.",
     "",
     "Mejl-kontext:",
     context.companyName ? `- Företag: ${context.companyName}` : "",
