@@ -356,3 +356,30 @@ Codex rebuilt the project from the prompt into a Next.js App Router SaaS mock/pr
 - Kunskapsbasen är fortfarande e-handelsinnehåll (Nordlys Handel). Pilot-tenanten
   har TOM kunskapsbas → grundningsregeln eskalerar varje ärende tills innehåll om
   hjärtstartare läggs in via `POST /api/kb`.
+
+## 2026-07-29 (forts.) Pilotanpassning verifierad i deploy — Claude
+
+Fullständig genomgång av den live-deployade demon efter kategori-/kunskapsbas-
+arbetet (`3fe1663`). Allt nedan testat mot
+`snipra-oloflun-olofluns-projects.vercel.app`, inte lokalt.
+
+- **Åtkomst:** `/snajp-support` och `/` ger 200. `/kundtjanst`, `/dashboard` och
+  `/emails` ger 307 → `/login?next=…`. Pilot-API:t utan session ger
+  "Du måste vara inloggad".
+- **Backend:** demo-arbetsytan (Nordlys Handel), simuleringsläge, `auto_send_enabled`
+  false, `has_inbox` false. 8 fack, 17 KB-artiklar (0 platshållare), samtliga
+  kategoriregler på `draft`.
+- **Triage:** alla tre scenarier inlästa, 14 mail sorterade i 7 fack. De fyra
+  känsliga fallen eskalerade korrekt (återbetalning, GDPR, incident, KB-miss).
+  Incidentmailet klassas nu teknisk_support 0.9 — var ovrigt 0.4 före
+  nyckelordstillägget.
+- **Granskningsflöde:** godkänn-utan-utskick gav status `approved` +
+  `approved_no_send` i loggen; avvisa gav `rejected`. KB-källor visas per ärende.
+- **UI:** fyra flikar renderar, granskningsbanner syns, scenarioväljare finns,
+  kunskapsbasen visar alla 8 fackrubriker + båda knapparna.
+- **Live-chatt:** "Hur lång är garantitiden?" → fack garanti, rätt KB-artikel
+  först, grundat svar, ingen eskalering.
+
+Utskick testades medvetet INTE skarpt — mockadresserna ligger på riktiga
+domäner (vardcentralen.se, brfsolsidan.se m.fl.). Använd en egen adress vid
+skarpt sändtest.
