@@ -212,7 +212,15 @@ export function LandingPhoto({
           <div
             className="absolute inset-0"
             aria-hidden="true"
-            style={{ background: "linear-gradient(to bottom, oklch(var(--ink) / 0.93), oklch(var(--ink) / 0.86))" }}
+            /* Two layers. The ink gradient darkens; the ochre wash pulls the
+               photograph back toward the palette. The Haga street is cool cream
+               and green, and under ink alone the whole band read blue against a
+               warm page. Same fix the facade divider needed. */
+            style={{
+              background:
+                "linear-gradient(to bottom, oklch(var(--ink) / 0.93), oklch(var(--ink) / 0.86)), " +
+                "linear-gradient(to bottom, oklch(var(--ochre) / 0.10), oklch(var(--ochre) / 0.06))"
+            }}
           />
           <div className="relative mx-auto max-w-[1480px] px-6 py-28 text-center md:px-10 md:py-40">
             <p className="text-[0.8125rem] font-medium tracking-[0.14em] text-ochre">
