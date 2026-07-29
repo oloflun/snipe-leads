@@ -1,135 +1,134 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { Logo } from "@/components/Logo";
+import { useDashboard } from "@/components/dashboard/DashboardContext";
+import { ScopeSwitch } from "@/components/dashboard/ScopeSwitch";
 import { useLocale } from "@/lib/i18n";
-import { appRoutes } from "@/lib/routes";
-import { businessContext, companies } from "@/lib/mock-data";
+import { routesForProducts } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
-const commandSuggestions = [
-  "Hitta byggbolag i Malmö med expansionssignal",
-  "Skriv mediumvariant för Byggkompaniet Syd",
-  "Visa leads där reply rate ligger över 14 %",
-  "Pausa uppföljning om kontakt har svarat"
-];
-
+/**
+ * Operate mode. Same tokens as the marketing surfaces, product cadence: fixed
+ * type scale, dense rows, no hero, no reveals, no daylight wash.
+ *
+ * The nav renders only what the workspace is entitled to, so a Support-only
+ * customer never learns that Leads exists.
+ */
 export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) {
   const pathname = usePathname();
-  const { t, text, locale, toggleLocale } = useLocale();
-  const [paletteOpen, setPaletteOpen] = useState(false);
+  const router = useRouter();
+  const { t, locale, toggleLocale } = useLocale();
+  const { products, workspaceName, availableScopes, shows } = useDashboard();
+
+  // Entitlement decides what exists; the scope switch decides what is on screen
+  // right now. A nav listing eight Leads sections while the scope reads "Support"
+  // contradicts the control the user just used.
+  const navRoutes = routesForProducts(products).filter(
+    (route) => route.product === "shared" || shows(route.product)
+  );
+
+  // Narrowing the scope while standing on a section it excludes would strand the
+  // user on a page they can no longer navigate back to.
+  const stranded = navRoutes.every(
+    (route) => route.href === "/dashboard" || !pathname.startsWith(route.href)
+  );
+
+  useEffect(() => {
+    if (pathname.startsWith("/dashboard/") && stranded) {
+      router.replace("/dashboard");
+    }
+  }, [pathname, stranded, router]);
 
   return (
     <div className="min-h-screen bg-paper text-ink">
-      <header className="sticky top-0 z-30 border-b border-ink/15 bg-paper/88 backdrop-blur-md">
-        <div className="mx-auto grid max-w-[1480px] grid-cols-12 items-center gap-x-6 px-6 py-4 md:px-8">
-          <Link href="/" className="col-span-8 min-w-0 focus-ring md:col-span-3">
+      <header className="sticky top-0 z-30 bg-paper/85 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3 md:px-6">
+          <Link href="/dashboard" className="focus-ring inline-flex min-h-11 items-center rounded-input">
             <Logo />
           </Link>
-          <nav className="kicker col-span-12 order-3 mt-4 flex min-w-0 gap-5 overflow-x-auto text-ink/70 md:order-none md:col-span-6 md:mt-0 md:justify-center md:overflow-visible">
-            {appRoutes.slice(0, 9).map((route) => {
-              const active = pathname === route.href || pathname.startsWith(`${route.href}/`);
+
+          {workspaceName ? (
+            <span className="hidden text-sm text-ink/45 sm:inline">{workspaceName}</span>
+          ) : null}
+
+          <div className="ml-auto flex items-center gap-1.5">
+            {availableScopes.length > 1 ? <ScopeSwitch /> : null}
+            <button
+              type="button"
+              onClick={toggleLocale}
+              className="focus-ring min-h-11 rounded-input px-3 text-sm font-medium text-ink/55 transition-colors hover:text-ink"
+            >
+              {locale === "sv" ? "EN" : "SV"}
+            </button>
+          </div>
+
+          <nav
+            aria-label={t("nav.dashboard")}
+            className="thin-scrollbar order-last -mx-1 flex w-full min-w-0 gap-1 overflow-x-auto px-1 pb-1"
+          >
+            {navRoutes.map((route) => {
+              const active =
+                route.href === "/dashboard"
+                  ? pathname === "/dashboard"
+                  : pathname === route.href || pathname.startsWith(`${route.href}/`);
               return (
                 <Link
                   key={route.href}
                   href={route.href}
-                  className={cn("whitespace-nowrap transition hover:text-ochre", active ? "text-ochre" : "")}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "focus-ring inline-flex min-h-11 shrink-0 items-center rounded-input px-3 text-sm font-medium transition-colors",
+                    active ? "bg-paper2 text-ink" : "text-ink/55 hover:bg-paper2/60 hover:text-ink"
+                  )}
                 >
                   {t(route.labelKey)}
                 </Link>
               );
             })}
           </nav>
-          <div className="col-span-4 flex min-w-0 items-center justify-end gap-2 md:col-span-3">
-            <button
-              type="button"
-              onClick={toggleLocale}
-              className="focus-ring border border-ink/15 bg-paper2 px-3 py-2 font-mono text-xs font-medium uppercase tracking-[0.16em] text-ink transition hover:border-ochre hover:text-ochre"
-            >
-              {locale === "sv" ? "EN" : "SV"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setPaletteOpen(true)}
-              className="focus-ring hidden border border-ink/15 bg-ink px-4 py-2 font-mono text-xs uppercase tracking-[0.16em] text-paper transition hover:bg-ochre hover:text-ink md:inline-flex"
-            >
-              Command
-            </button>
-          </div>
         </div>
       </header>
 
-      <div className="border-b border-ink/15">
-        <div className="kicker mx-auto grid max-w-[1480px] grid-cols-12 gap-x-8 px-6 py-4 text-mineral md:px-8">
-          <div className="col-span-12 min-w-0 md:col-span-3">Business context</div>
-          <div className="col-span-12 mt-2 min-w-0 break-words md:col-span-5 md:mt-0">{text(businessContext.icp)}</div>
-          <div className="col-span-12 mt-2 min-w-0 break-words md:col-span-4 md:mt-0 md:text-right">{text(companies[0].latestSignal)}</div>
-        </div>
-      </div>
-
       <main>{children}</main>
-
-      {paletteOpen ? (
-        <div className="fixed inset-0 z-40 bg-ink/35 p-4 backdrop-blur-sm" onClick={() => setPaletteOpen(false)}>
-          <div
-            className="mx-auto mt-20 max-w-3xl border border-ink/20 bg-paper shadow-lift"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="grid grid-cols-12 border-b border-ink/15">
-              <div className="kicker col-span-12 border-b border-ink/15 px-5 py-4 text-mineral md:col-span-3 md:border-b-0 md:border-r">
-                Styr Snipra
-              </div>
-              <div className="col-span-12 md:col-span-9">
-                <input
-                  autoFocus
-                  className="h-16 w-full bg-transparent px-5 text-[18px] outline-none placeholder:text-ink/35"
-                  placeholder="Sök, analysera, skriv eller pausa..."
-                />
-              </div>
-            </div>
-            <div className="divide-y divide-ink/15">
-              {commandSuggestions.map((item, index) => (
-                <button
-                  key={item}
-                  type="button"
-                  className="row grid w-full grid-cols-12 gap-x-6 px-5 py-4 text-left transition hover:bg-ochre/5"
-                >
-                  <span className="kicker col-span-2 text-mineral">0{index + 1}</span>
-                  <span className="ticker col-span-10 text-[15px]">{item}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
 
+/**
+ * Section wrapper. Signature is unchanged from the editorial version so every
+ * workspace view keeps working; only the register changed. `kicker` is now a
+ * product label rather than a mono eyebrow, and the title is a fixed rem size:
+ * a clamp-sized heading that shrinks inside a dense layout looks worse, not
+ * better.
+ */
 export function PageShell({
   kicker,
   title,
   description,
   children,
   action
-}: Readonly<{ kicker: string; title: string; description: string; children: React.ReactNode; action?: React.ReactNode }>) {
+}: Readonly<{
+  kicker: string;
+  title: string;
+  description: string;
+  children: React.ReactNode;
+  action?: React.ReactNode;
+}>) {
   return (
     <AppShell>
-      <section className="mx-auto max-w-[1480px] px-6 py-12 md:px-8 md:py-16">
-        <div className="grid grid-cols-12 gap-x-8">
-          <aside className="col-span-12 min-w-0 md:col-span-3">
-            <div className="kicker text-mineral">{kicker}</div>
-            <div className="rule mt-3 text-ink" />
-            {action ? <div className="mt-6">{action}</div> : null}
-          </aside>
-          <div className="col-span-12 mt-8 min-w-0 md:col-span-9 md:mt-0">
-            <h1 className="max-w-[980px] break-words font-display text-[clamp(2.15rem,10vw,7rem)] leading-[0.92] tighten">{title}</h1>
-            <p className="mt-7 max-w-[62ch] text-[17px] leading-[1.65] text-ink/75">{description}</p>
+      <section className="mx-auto max-w-[1400px] px-4 py-8 md:px-6 md:py-10">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-[0.8125rem] font-medium text-ink/45">{kicker}</p>
+            <h1 className="mt-1 text-[1.5rem] font-semibold leading-tight tracking-[-0.02em]">{title}</h1>
+            <p className="mt-2 max-w-[68ch] text-[0.9375rem] leading-[1.6] text-ink/65">{description}</p>
           </div>
+          {action ? <div className="shrink-0">{action}</div> : null}
         </div>
-        <div className="mt-14">{children}</div>
+        <div className="mt-8">{children}</div>
       </section>
     </AppShell>
   );

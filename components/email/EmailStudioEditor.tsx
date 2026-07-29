@@ -3,24 +3,45 @@
 import { useState, useTransition } from "react";
 import type { EmailStudioAction } from "@/lib/agent/email-studio-prompt";
 import type { EmailStudioData } from "@/lib/data/emails";
+import { btnPrimary } from "@/components/ui";
 import { useLocale } from "@/lib/i18n";
+import type { Localized } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 type StudioActionDef = {
   action: EmailStudioAction;
-  label: string;
+  label: Localized;
 };
 
 const STUDIO_ACTIONS: StudioActionDef[] = [
-  { action: "shorter", label: "Kortare" },
-  { action: "rewrite", label: "Skriv om" },
-  { action: "improve", label: "Förbättra" },
-  { action: "personalize", label: "Personalisera" },
-  { action: "translate", label: "Översätt" },
-  { action: "ab_variants", label: "A/B-varianter" },
-  { action: "followup", label: "Uppföljning" },
-  { action: "analyze", label: "Analysera" }
+  { action: "shorter", label: { sv: "Kortare", en: "Shorter" } },
+  { action: "rewrite", label: { sv: "Skriv om", en: "Rewrite" } },
+  { action: "improve", label: { sv: "Förbättra", en: "Improve" } },
+  { action: "personalize", label: { sv: "Personalisera", en: "Personalise" } },
+  { action: "translate", label: { sv: "Översätt", en: "Translate" } },
+  { action: "ab_variants", label: { sv: "A/B-varianter", en: "A/B variants" } },
+  { action: "followup", label: { sv: "Uppföljning", en: "Follow-up" } },
+  { action: "analyze", label: { sv: "Analysera", en: "Analyse" } }
 ];
+
+const ui = {
+  subjectLabel: { sv: "Ämnesrad", en: "Subject line" },
+  bodyLabel: { sv: "Mejltext", en: "Email body" },
+  working: { sv: "Skriver om", en: "Rewriting" },
+  original: { sv: "Ursprunglig version", en: "Original version" },
+  updated: { sv: "Ny version", en: "New version" },
+  explanation: { sv: "Vad som ändrades", en: "What changed" },
+  subjects: { sv: "Förslag på ämnesrad", en: "Subject line suggestions" },
+  tips: { sv: "Konfidens och tips", en: "Confidence and tips" },
+  apply: { sv: "Använd ny version", en: "Use new version" },
+  dismiss: { sv: "Stäng", en: "Close" },
+  failed: { sv: "Åtgärden gick inte att köra", en: "That action could not run" },
+  network: { sv: "Nätverksfel", en: "Network error" },
+  company: { sv: "Företag", en: "Company" },
+  signal: { sv: "Signal", en: "Signal" },
+  offer: { sv: "Erbjudande", en: "Offer" },
+  cta: { sv: "CTA", en: "CTA" }
+} satisfies Record<string, Localized>;
 
 type RichResult = {
   original_version?: string | null;
@@ -41,8 +62,11 @@ function toRefineContext(data: EmailStudioData) {
   };
 }
 
-export function EmailStudioEditor({ data, compact = false }: Readonly<{ data: EmailStudioData; compact?: boolean }>) {
-  const { locale, t } = useLocale();
+export function EmailStudioEditor({
+  data,
+  compact = false
+}: Readonly<{ data: EmailStudioData; compact?: boolean }>) {
+  const { text } = useLocale();
   const [subject, setSubject] = useState(data.email.subject);
   const [body, setBody] = useState(data.email.body);
   const [error, setError] = useState<string | null>(null);
@@ -59,21 +83,21 @@ export function EmailStudioEditor({ data, compact = false }: Readonly<{ data: Em
 
     startTransition(async () => {
       try {
-        const res = await fetch('/api/email-studio', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        const res = await fetch("/api/email-studio", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             action,
             draft: body,
             subject,
             context: refineContext,
-            userId: 'current-user', // could be dynamic
-          }),
+            userId: "current-user"
+          })
         });
         const apiRes = await res.json();
 
         if (!res.ok || !apiRes.success || !apiRes.data) {
-          setError(apiRes.error || 'Kunde inte utföra åtgärden');
+          setError(apiRes.error || text(ui.failed));
           setActiveAction(null);
           return;
         }
@@ -90,8 +114,8 @@ export function EmailStudioEditor({ data, compact = false }: Readonly<{ data: Em
 
         setLastResult(rich);
 
-        // For analyze/ab/followup we keep original editor state; user decides to apply
-        // For direct rewrite actions, auto-apply the new body (and a suggested subject if present)
+        // Direct rewrites apply straight away; analyse/AB/follow-up keep the editor
+        // untouched so the user decides.
         const directApply = ["shorter", "rewrite", "improve", "personalize", "translate"].includes(action);
         if (directApply) {
           if (rich.subject_suggestions[0]) setSubject(rich.subject_suggestions[0]);
@@ -99,8 +123,8 @@ export function EmailStudioEditor({ data, compact = false }: Readonly<{ data: Em
         }
 
         setActiveAction(null);
-      } catch (e: any) {
-        setError(e.message || 'Nätverksfel');
+      } catch (e) {
+        setError(e instanceof Error ? e.message : text(ui.network));
         setActiveAction(null);
       }
     });
@@ -110,107 +134,56 @@ export function EmailStudioEditor({ data, compact = false }: Readonly<{ data: Em
     if (!lastResult) return;
     if (lastResult.subject_suggestions[0]) setSubject(lastResult.subject_suggestions[0]);
     setBody(lastResult.new_version);
-    // keep the result visible for review
-  }
-
-  function dismissResult() {
-    setLastResult(null);
   }
 
   const inputRows = [
-    ["Företag", data.email.companyName],
-    ["Signal", data.email.signal],
-    ["Erbjudande", data.email.offer ?? data.businessContext?.offer],
-    ["CTA", data.email.cta ?? data.businessContext?.cta]
+    [text(ui.company), data.email.companyName],
+    [text(ui.signal), data.email.signal],
+    [text(ui.offer), data.email.offer ?? data.businessContext?.offer],
+    [text(ui.cta), data.email.cta ?? data.businessContext?.cta]
   ].filter(([, value]) => Boolean(value)) as [string, string][];
 
+  const activeLabel = STUDIO_ACTIONS.find((item) => item.action === activeAction)?.label;
+
   return (
-    <div className={cn("grid grid-cols-12 gap-x-8 gap-y-10", compact ? "" : "")}>
+    <div className={cn("grid gap-6", !compact && inputRows.length > 0 ? "lg:grid-cols-12" : "")}>
       {!compact && inputRows.length > 0 ? (
-        <aside className="col-span-12 md:col-span-4">
-          <h2 className="kicker text-mineral">Inputs</h2>
-          <div className="mt-5 divide-y divide-ink/15 border-y border-ink/15">
+        <aside className="lg:col-span-4">
+          <dl className="space-y-5">
             {inputRows.map(([label, value]) => (
-              <div key={label} className="py-4">
-                <p className="kicker text-mineral">{label}</p>
-                <p className="mt-2 text-[15px] leading-6 text-ink/72">{value}</p>
+              <div key={label}>
+                <dt className="text-[0.8125rem] font-medium text-ink/45">{label}</dt>
+                <dd className="mt-1 text-[0.9375rem] leading-6 text-ink/80">{value}</dd>
               </div>
             ))}
-          </div>
+          </dl>
         </aside>
       ) : null}
 
-      <section className={cn("col-span-12", compact ? "" : inputRows.length > 0 ? "md:col-span-8" : "")}>
-        <div className="border-y border-ink/15 py-5">
-          <p className="kicker text-ochre">
-            {data.email.variantLength} · {data.email.variantType}
-            {data.source === "mock" ? " · demo" : ""}
-          </p>
-          <input
-            value={subject}
-            onChange={(event) => setSubject(event.target.value)}
-            className="mt-4 w-full bg-transparent font-display text-4xl italic-disp tighten outline-none"
-            aria-label="Ämnesrad"
-          />
-        </div>
-
-        <textarea
-          value={body}
-          onChange={(event) => setBody(event.target.value)}
-          className="mt-6 min-h-[420px] w-full resize-y border border-ink/15 bg-paper2/70 p-6 text-[16px] leading-8 text-ink outline-none transition focus:border-ochre"
-          aria-label="Mejltext"
+      <section className={cn(!compact && inputRows.length > 0 ? "lg:col-span-8" : "")}>
+        <label htmlFor="studio-subject" className="block text-[0.8125rem] font-medium text-ink/45">
+          {text(ui.subjectLabel)}
+        </label>
+        <input
+          id="studio-subject"
+          maxLength={200}
+          value={subject}
+          onChange={(event) => setSubject(event.target.value)}
+          className="focus-ring mt-2 w-full rounded-input bg-paper px-4 py-3 text-[1.25rem] font-semibold tracking-[-0.01em] outline-none transition-colors"
         />
 
-        {error ? <p className="mt-4 text-sm text-ochre">{error}</p> : null}
-        {isPending ? <p className="mt-4 font-mono text-xs uppercase tracking-[0.16em] text-mineral">Email Studio använder marketingskills…</p> : null}
+        <label htmlFor="studio-body" className="mt-6 block text-[0.8125rem] font-medium text-ink/45">
+          {text(ui.bodyLabel)}
+        </label>
+        <textarea
+          id="studio-body"
+          maxLength={8000}
+          value={body}
+          onChange={(event) => setBody(event.target.value)}
+          className="focus-ring mt-2 min-h-[320px] w-full resize-y rounded-card bg-paper p-5 text-[1rem] leading-7 text-ink outline-none transition-colors"
+        />
 
-        {/* Rich result panel per Snipra Prompt spec */}
-        {lastResult && !isPending && (
-          <div className="mt-6 border border-ochre/40 bg-paper2/60 p-5 text-[15px]">
-            <div className="flex items-center justify-between">
-              <p className="kicker text-ochre uppercase tracking-[0.16em]">Email Studio resultat — {lastResult.action}</p>
-              <div className="flex gap-2">
-                <button onClick={applyResult} className="border border-ink/15 px-3 py-1 text-xs uppercase tracking-widest hover:border-ochre">Använd ny version</button>
-                <button onClick={dismissResult} className="border border-ink/15 px-3 py-1 text-xs uppercase tracking-widest hover:border-ochre">Stäng</button>
-              </div>
-            </div>
-
-            {lastResult.original_version && (
-              <>
-                <p className="mt-4 text-xs uppercase tracking-[0.16em] text-mineral">Ursprunglig version</p>
-                <pre className="mt-1 whitespace-pre-wrap text-ink/80 text-sm border-l-2 pl-3 border-ink/20">{lastResult.original_version}</pre>
-              </>
-            )}
-
-            <p className="mt-4 text-xs uppercase tracking-[0.16em] text-mineral">Ny version</p>
-            <pre className="mt-1 whitespace-pre-wrap text-ink text-sm border-l-2 pl-3 border-ochre/60">{lastResult.new_version}</pre>
-
-            {lastResult.explanation && (
-              <>
-                <p className="mt-4 text-xs uppercase tracking-[0.16em] text-mineral">Förklaring av förändringarna</p>
-                <p className="mt-1 text-ink/80">{lastResult.explanation}</p>
-              </>
-            )}
-
-            {lastResult.subject_suggestions?.length > 0 && (
-              <>
-                <p className="mt-4 text-xs uppercase tracking-[0.16em] text-mineral">Förslag på ämnesrad</p>
-                <ul className="mt-1 list-disc pl-5 text-ink/80">
-                  {lastResult.subject_suggestions.map((s, i) => <li key={i}>{s}</li>)}
-                </ul>
-              </>
-            )}
-
-            {lastResult.confidence_tips && (
-              <>
-                <p className="mt-4 text-xs uppercase tracking-[0.16em] text-mineral">Konfidens / Tips</p>
-                <p className="mt-1 text-ink/80">{lastResult.confidence_tips}</p>
-              </>
-            )}
-          </div>
-        )}
-
-        <div className="mt-5 flex flex-wrap gap-3">
+        <div className="mt-5 flex flex-wrap gap-2">
           {STUDIO_ACTIONS.map((item) => {
             const isActive = activeAction === item.action && isPending;
             return (
@@ -220,19 +193,100 @@ export function EmailStudioEditor({ data, compact = false }: Readonly<{ data: Em
                 disabled={isPending}
                 onClick={() => runAction(item.action)}
                 className={cn(
-                  "border border-ink/15 px-4 py-3 font-mono text-xs uppercase tracking-[0.16em] transition hover:border-ochre hover:text-ochre active:translate-y-px disabled:cursor-wait disabled:opacity-60",
-                  isActive && "border-ochre text-ochre"
+                  // States are mutually exclusive rather than layered: `cn` is a plain
+                  // join with no tailwind-merge, so a base `bg-paper text-ink` plus an
+                  // appended `bg-ink text-paper` left BOTH in the class list, and the
+                  // cascade picked paper for both. The running button rendered paper
+                  // text on paper ground, i.e. invisible.
+                  "focus-ring inline-flex min-h-11 items-center rounded-input px-4 text-[0.875rem] font-medium transition-colors active:translate-y-px disabled:cursor-wait disabled:opacity-50",
+                  isActive ? "bg-ink text-paper" : "bg-paper text-ink hover:bg-ink hover:text-paper"
                 )}
               >
-                {item.label}
+                {text(item.label)}
               </button>
             );
           })}
         </div>
 
-        <p className="mt-3 text-[11px] uppercase tracking-[0.2em] text-mineral">
-          Alla åtgärder använder marketingskills (cold-email, copywriting, ab-testing, emails, marketing-psychology m.fl.)
-        </p>
+        <div aria-live="polite" className="mt-4">
+          {isPending && activeLabel ? (
+            <p className="text-[0.875rem] text-ink/50">
+              {text(ui.working)}
+              <span className="ml-1 inline-flex">
+                <span className="animate-pulse">.</span>
+                <span className="animate-pulse [animation-delay:150ms]">.</span>
+                <span className="animate-pulse [animation-delay:300ms]">.</span>
+              </span>
+            </p>
+          ) : null}
+
+          {error ? (
+            <p className="rounded-input bg-danger/10 px-4 py-3 text-[0.875rem] text-danger">{error}</p>
+          ) : null}
+        </div>
+
+        {lastResult && !isPending ? (
+          <div className="reveal mt-5 rounded-card bg-paper p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-[0.8125rem] font-semibold text-ochre">{text(ui.updated)}</p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={applyResult}
+                  className={btnPrimary}
+                >
+                  {text(ui.apply)}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLastResult(null)}
+                  className="focus-ring inline-flex min-h-11 items-center rounded-input px-4 text-[0.875rem] font-medium text-ink/60 transition-colors hover:text-ink"
+                >
+                  {text(ui.dismiss)}
+                </button>
+              </div>
+            </div>
+
+            {lastResult.original_version ? (
+              <>
+                <p className="mt-5 text-[0.8125rem] font-medium text-ink/45">{text(ui.original)}</p>
+                <p className="mt-1 whitespace-pre-wrap text-[0.9375rem] leading-7 text-ink/55">
+                  {lastResult.original_version}
+                </p>
+              </>
+            ) : null}
+
+            <p className="mt-5 text-[0.8125rem] font-medium text-ink/45">{text(ui.updated)}</p>
+            <p className="mt-1 whitespace-pre-wrap text-[0.9375rem] leading-7 text-ink">
+              {lastResult.new_version}
+            </p>
+
+            {lastResult.explanation ? (
+              <>
+                <p className="mt-5 text-[0.8125rem] font-medium text-ink/45">{text(ui.explanation)}</p>
+                <p className="mt-1 text-[0.9375rem] leading-7 text-ink/80">{lastResult.explanation}</p>
+              </>
+            ) : null}
+
+            {lastResult.subject_suggestions?.length > 0 ? (
+              <>
+                <p className="mt-5 text-[0.8125rem] font-medium text-ink/45">{text(ui.subjects)}</p>
+                <ul className="mt-1 space-y-1 text-[0.9375rem] leading-7 text-ink/80">
+                  {lastResult.subject_suggestions.map((suggestion) => (
+                    <li key={suggestion}>{suggestion}</li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
+
+            {lastResult.confidence_tips ? (
+              <>
+                <p className="mt-5 text-[0.8125rem] font-medium text-ink/45">{text(ui.tips)}</p>
+                <p className="mt-1 text-[0.9375rem] leading-7 text-ink/80">{lastResult.confidence_tips}</p>
+              </>
+            ) : null}
+          </div>
+        ) : null}
       </section>
     </div>
   );

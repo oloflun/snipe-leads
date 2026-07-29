@@ -16,7 +16,7 @@ import {
   X
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Badge } from "@/components/ui";
+import { Badge, btnPrimary, btnSecondary } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 type Classification = {
@@ -265,7 +265,7 @@ export function Dashboard() {
           type="button"
           onClick={seedMock}
           disabled={busy !== null}
-          className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-[7px] bg-ink px-4 py-2.5 text-sm font-semibold text-paper transition hover:bg-copper hover:text-ink disabled:opacity-40"
+          className={btnPrimary}
         >
           {busy === "seed" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Inbox className="h-4 w-4" />}
           Hämta testmail
@@ -275,7 +275,7 @@ export function Dashboard() {
           onClick={syncInbox}
           disabled={busy !== null}
           title="Hämtar olästa mail från kopplad Gmail/Outlook-inkorg (IMAP)"
-          className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-[7px] border border-ink/12 bg-paper2/70 px-4 py-2.5 text-sm font-semibold text-ink/70 transition hover:border-ochre hover:text-ink disabled:opacity-40"
+          className={btnSecondary}
         >
           {busy === "sync" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
           Synka inkorg
@@ -283,7 +283,7 @@ export function Dashboard() {
         <button
           type="button"
           onClick={() => void refresh()}
-          className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-[7px] border border-ink/12 bg-paper2/70 px-4 py-2.5 text-sm font-semibold text-ink/70 transition hover:border-ochre hover:text-ink"
+          className={btnSecondary}
         >
           <RefreshCw className="h-4 w-4" />
           Uppdatera
@@ -294,13 +294,13 @@ export function Dashboard() {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Sök avsändare, ämne eller innehåll…"
-            className="focus-ring min-h-11 w-full rounded-[7px] border border-ink/12 bg-paper py-2.5 pl-9 pr-3 text-sm outline-none placeholder:text-ink/35"
+            className="focus-ring min-h-11 w-full rounded-input bg-paper py-2.5 pl-9 pr-3 text-sm outline-none placeholder:text-ink/35"
           />
         </div>
         <select
           value={statusFilter ?? ""}
           onChange={(event) => setStatusFilter(event.target.value || null)}
-          className="focus-ring min-h-11 rounded-[7px] border border-ink/12 bg-paper px-3 py-2.5 text-sm"
+          className="focus-ring min-h-11 rounded-input bg-paper px-3 py-2.5 text-sm"
         >
           <option value="">Alla statusar</option>
           {Object.entries(STATUS_META).map(([value, meta]) => (
@@ -312,7 +312,7 @@ export function Dashboard() {
         <button
           type="button"
           onClick={() => setRulesOpen((open) => !open)}
-          className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-[7px] border border-ink/12 bg-paper2/70 px-4 py-2.5 text-sm font-semibold text-ink/70 transition hover:border-ochre hover:text-ink"
+          className={btnSecondary}
         >
           <Settings2 className="h-4 w-4" />
           Regler
@@ -321,8 +321,8 @@ export function Dashboard() {
       </div>
 
       {rulesOpen ? (
-        <div className="rounded-[10px] border border-ink/12 bg-paper p-5 shadow-hairline">
-          <p className="kicker text-mineral">Autosvarsregler per fack</p>
+        <div className="rounded-card bg-paper p-5">
+          <p className="text-[0.8125rem] font-medium text-ink/45">Autosvarsregler per fack</p>
           <p className="mt-2 max-w-[70ch] text-sm leading-6 text-ink/60">
             <strong>Utkast</strong> = svaret väntar på ditt godkännande (default). <strong>Auto</strong> = skickas
             direkt om konfidensen är hög och tonen inte är negativ. <strong>Eskalera</strong> = alltid till människa.
@@ -330,12 +330,12 @@ export function Dashboard() {
           </p>
           <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {rules.map((rule) => (
-              <div key={rule.category} className="flex items-center justify-between gap-2 rounded-[7px] border border-ink/10 bg-paper2/50 px-3 py-2.5">
+              <div key={rule.category} className="flex items-center justify-between gap-2 rounded-input border border-ink/10 bg-paper2/50 px-3 py-2.5">
                 <span className="text-sm font-medium">{rule.label}</span>
                 <select
                   value={rule.mode}
                   onChange={(event) => void setRule(rule.category, event.target.value)}
-                  className="focus-ring rounded-[6px] border border-ink/12 bg-paper px-2 py-1.5 text-xs"
+                  className="focus-ring rounded-input bg-paper px-2 py-1.5 text-xs"
                 >
                   <option value="draft">Utkast</option>
                   <option value="auto">Auto</option>
@@ -360,10 +360,10 @@ export function Dashboard() {
           type="button"
           onClick={() => setCategoryFilter(null)}
           className={cn(
-            "focus-ring rounded-[7px] border px-3 py-2 text-xs font-semibold transition",
+            "focus-ring rounded-input border px-3 py-2 text-xs font-semibold transition",
             categoryFilter === null
               ? "border-ochre bg-ochre/10 text-ink"
-              : "border-ink/12 bg-paper2/60 text-ink/60 hover:text-ink"
+              : "bg-paper2/60 text-ink/60 hover:text-ink"
           )}
         >
           Alla ({emails.length})
@@ -374,10 +374,10 @@ export function Dashboard() {
             type="button"
             onClick={() => setCategoryFilter(categoryFilter === category ? null : category)}
             className={cn(
-              "focus-ring rounded-[7px] border px-3 py-2 text-xs font-semibold transition",
+              "focus-ring rounded-input border px-3 py-2 text-xs font-semibold transition",
               categoryFilter === category
                 ? "border-ochre bg-ochre/10 text-ink"
-                : "border-ink/12 bg-paper2/60 text-ink/60 hover:text-ink"
+                : "bg-paper2/60 text-ink/60 hover:text-ink"
             )}
           >
             {label} ({categoryCounts[category] ?? 0})
@@ -393,7 +393,7 @@ export function Dashboard() {
         {/* Maillista */}
         <div className={cn("min-w-0", selected ? "xl:col-span-6" : "xl:col-span-12")}>
           {emails.length === 0 ? (
-            <div className="rounded-[10px] border border-dashed border-ink/15 bg-paper/45 p-10 text-center">
+            <div className="rounded-card border border-dashed border-ink/15 bg-paper/45 p-10 text-center">
               <Inbox className="mx-auto h-6 w-6 text-mineral" />
               <h3 className="mt-4 font-semibold">Inkorgen är tom</h3>
               <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-ink/60">
@@ -402,7 +402,7 @@ export function Dashboard() {
               </p>
             </div>
           ) : (
-            <div className="divide-y divide-ink/10 overflow-hidden rounded-[10px] border border-ink/12 bg-paper shadow-hairline">
+            <div className="divide-y divide-ink/10 overflow-hidden rounded-card bg-paper">
               {emails.map((email) => {
                 const meta = STATUS_META[email.status] ?? STATUS_META.new;
                 return (
@@ -451,7 +451,7 @@ export function Dashboard() {
         {/* Detaljpanel */}
         {selected ? (
           <div className="min-w-0 xl:col-span-6">
-            <div className="space-y-5 rounded-[10px] border border-ink/12 bg-paper p-5 shadow-lift">
+            <div className="space-y-5 rounded-card bg-paper p-5">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h3 className="break-words font-semibold">{selected.subject || "(utan ämne)"}</h3>
@@ -470,7 +470,7 @@ export function Dashboard() {
                 </button>
               </div>
 
-              <div className="rounded-[7px] bg-ink/[0.03] p-4 text-sm leading-6 text-ink/75">
+              <div className="rounded-input bg-ink/[0.03] p-4 text-sm leading-6 text-ink/75">
                 <p className="whitespace-pre-wrap">{selected.body_text}</p>
                 {selected.attachments.filter((a) => a.is_image && a.data_url).length > 0 ? (
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -483,7 +483,7 @@ export function Dashboard() {
                           src={a.data_url!}
                           alt={a.filename}
                           title={a.filename}
-                          className="h-20 max-w-40 rounded-[6px] border border-ink/10 object-cover"
+                          className="h-20 max-w-40 rounded-input border border-ink/10 object-cover"
                         />
                       ))}
                   </div>
@@ -491,7 +491,7 @@ export function Dashboard() {
               </div>
 
               {selected.classification ? (
-                <div className="rounded-[7px] border border-ink/10 bg-paper2/50 p-4">
+                <div className="rounded-input border border-ink/10 bg-paper2/50 p-4">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge tone="neutral">{CATEGORY_LABELS[selected.classification.category]}</Badge>
                     <ConfidenceBar value={selected.classification.confidence} />
@@ -532,16 +532,16 @@ export function Dashboard() {
               ) : null}
 
               {selected.draft ? (
-                <div className="rounded-[7px] border border-moss/20 bg-moss/5 p-4">
+                <div className="rounded-input border border-moss/20 bg-moss/5 p-4">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="kicker text-moss">
+                    <p className="text-[0.8125rem] font-medium text-moss">
                       {selected.draft.status === "auto_sent"
                         ? "Autosvar (skickat)"
                         : selected.draft.status === "approved"
                           ? "Skickat svar"
                           : selected.draft.status === "rejected"
                             ? "Avvisat utkast"
-                            : "AI-utkast — väntar på godkännande"}
+                            : "AI-utkast, väntar på godkännande"}
                     </p>
                     <ConfidenceBar value={selected.draft.confidence} />
                   </div>
@@ -550,7 +550,7 @@ export function Dashboard() {
                       value={draftText}
                       onChange={(event) => setDraftText(event.target.value)}
                       rows={8}
-                      className="focus-ring mt-3 w-full resize-y rounded-[7px] border border-ink/12 bg-paper p-3 text-sm leading-6 outline-none"
+                      className="focus-ring mt-3 w-full resize-y rounded-input bg-paper p-3 text-sm leading-6 outline-none"
                     />
                   ) : (
                     <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-ink/75">
@@ -563,7 +563,7 @@ export function Dashboard() {
                         type="button"
                         onClick={approve}
                         disabled={busy !== null}
-                        className="focus-ring inline-flex min-h-10 items-center gap-2 rounded-[7px] bg-ink px-4 py-2 text-sm font-semibold text-paper transition hover:bg-moss disabled:opacity-40"
+                        className={btnPrimary}
                       >
                         {busy === "approve" ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
@@ -576,7 +576,7 @@ export function Dashboard() {
                         type="button"
                         onClick={reject}
                         disabled={busy !== null}
-                        className="focus-ring inline-flex min-h-10 items-center gap-2 rounded-[7px] border border-danger/30 px-4 py-2 text-sm font-semibold text-danger transition hover:bg-danger/10 disabled:opacity-40"
+                        className="focus-ring inline-flex min-h-10 items-center gap-2 rounded-input border border-danger/30 px-4 py-2 text-sm font-semibold text-danger transition hover:bg-danger/10 disabled:opacity-40"
                       >
                         <X className="h-4 w-4" />
                         Avvisa
@@ -585,7 +585,7 @@ export function Dashboard() {
                         type="button"
                         onClick={takeover}
                         disabled={busy !== null}
-                        className="focus-ring inline-flex min-h-10 items-center gap-2 rounded-[7px] border border-ink/15 px-4 py-2 text-sm font-semibold text-ink/70 transition hover:border-ochre hover:text-ink disabled:opacity-40"
+                        className="focus-ring inline-flex min-h-10 items-center gap-2 rounded-input border border-ink/15 px-4 py-2 text-sm font-semibold text-ink/70 transition hover:text-ink disabled:opacity-40"
                       >
                         <UserRound className="h-4 w-4" />
                         Ta över ärendet
@@ -597,7 +597,7 @@ export function Dashboard() {
 
               {selected.decisions.length > 0 ? (
                 <div>
-                  <p className="kicker text-mineral">Beslutslogg</p>
+                  <p className="text-[0.8125rem] font-medium text-ink/45">Beslutslogg</p>
                   <ol className="mt-3 space-y-2 border-l border-ink/10 pl-4">
                     {selected.decisions.map((decision, index) => (
                       <li key={index} className="relative text-xs leading-5 text-ink/65">
@@ -605,10 +605,10 @@ export function Dashboard() {
                         <span className="font-semibold text-ink/80">
                           {EVENT_LABELS[decision.event] ?? decision.event}
                         </span>
-                        {decision.detail?.reasoning ? <> — {String(decision.detail.reasoning)}</> : null}
-                        {decision.detail?.reason ? <> — {String(decision.detail.reason)}</> : null}
-                        {decision.detail?.why_not_auto ? <> — {String(decision.detail.why_not_auto)}</> : null}
-                        {decision.detail?.note ? <> — {String(decision.detail.note)}</> : null}
+                        {decision.detail?.reasoning ? <>. {String(decision.detail.reasoning)}</> : null}
+                        {decision.detail?.reason ? <>. {String(decision.detail.reason)}</> : null}
+                        {decision.detail?.why_not_auto ? <>. {String(decision.detail.why_not_auto)}</> : null}
+                        {decision.detail?.note ? <>. {String(decision.detail.note)}</> : null}
                       </li>
                     ))}
                   </ol>

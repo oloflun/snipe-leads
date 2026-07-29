@@ -231,7 +231,7 @@ function DraftLogo({ compact = false, light = false }: Readonly<{ compact?: bool
       {!compact ? (
         <span className="relative z-0 flex flex-col leading-none">
           <span className={cn("font-display text-2xl font-semibold tracking-normal md:text-3xl", light ? "text-paper" : "text-ink")}>
-            Snipra
+            Snajp
           </span>
           <span className={cn("kicker mt-2", light ? "text-paper/55" : "text-mineral")}>sales os</span>
         </span>
@@ -286,7 +286,7 @@ function EditorialLandingHeader({ variant, asMain = false }: Readonly<{ variant:
           <span className="relative block h-11 w-[72px] shrink-0">
             <Image src="/snipe_logo.svg" alt="" fill sizes="72px" className="object-contain object-left" />
           </span>
-          <span className="font-display italic-disp text-[30px] leading-none tighten md:text-[34px]">Snipra</span>
+          <span className="font-display italic-disp text-[30px] leading-none tighten md:text-[34px]">Snajp</span>
         </Link>
         <nav className="hidden items-baseline gap-12 md:flex kicker text-ink/80">
           <a href="#metod" className="transition hover:text-ochre">{locale === "sv" ? "Metod" : "Method"}</a>
@@ -338,14 +338,14 @@ export function DraftLanding({ variant, asMain = false }: Readonly<{ variant: Dr
               {modern ? (
                 locale === "sv" ? (
                   <>
-                    <span className="block">Snipra</span>
+                    <span className="block">Snajp</span>
                     <span className="block italic-disp text-ochre">hittar</span>
                     <span className="block">rätt läge</span>
                     <span className="block italic-disp text-ink2">för nästa mejl.</span>
                   </>
                 ) : (
                   <>
-                    <span className="block">Snipra</span>
+                    <span className="block">Snajp</span>
                     <span className="block italic-disp text-ochre">finds</span>
                     <span className="block">the right moment</span>
                     <span className="block italic-disp text-ink2">for the next email.</span>
@@ -374,8 +374,8 @@ export function DraftLanding({ variant, asMain = false }: Readonly<{ variant: Dr
           <div className="reveal reveal-delay-1 col-span-12 mt-12 min-w-0 border-ink/15 lg:col-span-3 lg:mt-0 lg:border-l lg:pl-8">
             <p className="max-w-[36ch] text-[17px] leading-[1.55] text-ink/85">
               {locale === "sv"
-                ? "Snipra läser svenska bolagssignaler, matchar dem mot er ICP och skriver outreach med källor, timing och CTA nära till hands."
-                : "Snipra reads Swedish company signals, matches them against your ICP and writes outreach with sources, timing and CTA close at hand."}
+                ? "Snajp läser svenska bolagssignaler, matchar dem mot er ICP och skriver outreach med källor, timing och CTA nära till hands."
+                : "Snajp reads Swedish company signals, matches them against your ICP and writes outreach with sources, timing and CTA close at hand."}
             </p>
 
             <dl className="num mt-10 space-y-5">
@@ -466,7 +466,7 @@ export function DraftLanding({ variant, asMain = false }: Readonly<{ variant: Dr
               {
                 meta: "Restaurang · Göteborg · 12 enheter",
                 title: "Till Marcus på Havre",
-                body: "Ni verkar flytta cateringdelen närmare företagsevent. Om målet är fler återkommande kontorsluncher kan Snipra hitta HR- och office-roller där tajmingen redan syns.",
+                body: "Ni verkar flytta cateringdelen närmare företagsevent. Om målet är fler återkommande kontorsluncher kan Snajp hitta HR- och office-roller där tajmingen redan syns.",
                 bridge: "Bryggor: nyöppning · branschspecifik datapunkt"
               }
             ].map((mail) => (
@@ -608,13 +608,13 @@ export function DraftLanding({ variant, asMain = false }: Readonly<{ variant: Dr
           <div className="col-span-12 mt-8 flex flex-col justify-between border-paper/15 md:col-span-5 md:mt-0 md:border-l md:pl-10">
             <p className="max-w-[44ch] text-[17px] leading-[1.6] text-paper/85">
               {locale === "sv" ? (
-                <>Mejla oss på <a href="mailto:hej@snipra.se" className="text-ochre underline decoration-ochre/40 underline-offset-[6px] decoration-[1px] transition hover:decoration-ochre">hej@snipra.se</a>. Hellre ett vanligt mejl än en demo-bokning. Vi svarar samma dag.</>
+                <>Mejla oss på <a href="mailto:hej@snajp.se" className="text-ochre underline decoration-ochre/40 underline-offset-[6px] decoration-[1px] transition hover:decoration-ochre">hej@snajp.se</a>. Hellre ett vanligt mejl än en demo-bokning. Vi svarar samma dag.</>
               ) : (
-                <>Email us at <a href="mailto:hej@snipra.se" className="text-ochre underline decoration-ochre/40 underline-offset-[6px] decoration-[1px] transition hover:decoration-ochre">hej@snipra.se</a>. A plain email beats a demo booking. We reply the same day.</>
+                <>Email us at <a href="mailto:hej@snajp.se" className="text-ochre underline decoration-ochre/40 underline-offset-[6px] decoration-[1px] transition hover:decoration-ochre">hej@snajp.se</a>. A plain email beats a demo booking. We reply the same day.</>
               )}
             </p>
             <div className="mt-10 flex flex-wrap items-center gap-5">
-              <a href="mailto:hej@snipra.se" className="inline-flex items-center gap-3 bg-paper px-6 py-4 font-mono text-[13px] uppercase tracking-[0.18em] text-ink transition-colors duration-500 hover:bg-ochre">
+              <a href="mailto:hej@snajp.se" className="inline-flex items-center gap-3 bg-paper px-6 py-4 font-mono text-[13px] uppercase tracking-[0.18em] text-ink transition-colors duration-500 hover:bg-ochre">
                 {locale === "sv" ? "Skriv till oss" : "Write to us"} <span className="font-mono">↗</span>
               </a>
               <a href="#prislista" className="inline-flex items-center gap-3 border border-paper/35 px-6 py-4 font-mono text-[13px] uppercase tracking-[0.18em] text-paper transition-colors hover:border-ochre hover:text-ochre">
@@ -625,9 +625,9 @@ export function DraftLanding({ variant, asMain = false }: Readonly<{ variant: Dr
         </div>
         <div className="border-t border-paper/15">
           <div className="mx-auto grid max-w-[1480px] grid-cols-12 gap-x-8 px-6 py-8 md:px-8 kicker text-paper/55">
-            <div className="col-span-12 md:col-span-3">Snipra AB · Föreningsgatan 41 · Malmö</div>
+            <div className="col-span-12 md:col-span-3">Snajp AB · Föreningsgatan 41 · Malmö</div>
             <div className="col-span-12 mt-2 md:col-span-3 md:mt-0">Org. 559412-8804</div>
-            <div className="col-span-12 mt-2 md:col-span-3 md:mt-0">hej@snipra.se · 040-220 814</div>
+            <div className="col-span-12 mt-2 md:col-span-3 md:mt-0">hej@snajp.se · 040-220 814</div>
             <div className="col-span-12 mt-2 md:col-span-3 md:mt-0 md:text-right">© MMXXVI · {locale === "sv" ? "Tryckt i en webbläsare" : "Printed in a browser"}</div>
           </div>
         </div>
@@ -661,8 +661,8 @@ function EditorialScrollShowcase({ variant }: Readonly<{ variant: DraftVariant }
           </h1>
           <p className="mt-8 max-w-[54ch] text-[17px] leading-[1.6] text-ink/75">
             {locale === "sv"
-              ? "Alla vyer i ett flöde. Scrolla för att se hur Snipra hanterar discovery, research, skrivarbete och analys i en sammanhängande arbetsyta."
-              : "All views in one flow. Scroll to see how Snipra handles discovery, research, copywriting and analytics in a connected workspace."}
+              ? "Alla vyer i ett flöde. Scrolla för att se hur Snajp hanterar discovery, research, skrivarbete och analys i en sammanhängande arbetsyta."
+              : "All views in one flow. Scroll to see how Snajp handles discovery, research, copywriting and analytics in a connected workspace."}
           </p>
         </div>
       </div>
@@ -762,7 +762,7 @@ function EditorialIterationPortal({ slug }: Readonly<{ slug: string[] }>) {
           <span className="relative block h-11 w-[72px] shrink-0">
             <Image src="/snipe_logo.svg" alt="" fill sizes="72px" className="object-contain object-left" priority />
           </span>
-          <span className="font-display italic-disp text-[28px] leading-none tighten">Snipra</span>
+          <span className="font-display italic-disp text-[28px] leading-none tighten">Snajp</span>
         </Link>
 
         <nav className="mt-7 space-y-1">
@@ -1190,14 +1190,14 @@ function AssistantShowcase({ variant }: Readonly<{ variant: DraftVariant }>) {
   const { locale } = useLocale();
   const messages = locale === "sv" ? [
     ["Du", "Hitta byggbolag i Malmö med expansions- eller rekryteringssignal."],
-    ["Snipra", "37 bolag hittade. Byggkompaniet Syd är starkast: ny lokal i Hyllie, fyra platsannonser och tydlig kontaktroll."],
+    ["Snajp", "37 bolag hittade. Byggkompaniet Syd är starkast: ny lokal i Hyllie, fyra platsannonser och tydlig kontaktroll."],
     ["Du", "Generera ett första mejl i mediumlängd."],
-    ["Snipra", "Jag använder Hyllie-signalen, rekryteringen och CTA:n från business context."]
+    ["Snajp", "Jag använder Hyllie-signalen, rekryteringen och CTA:n från business context."]
   ] : [
     ["You", "Find construction companies in Malmö with expansion or hiring signals."],
-    ["Snipra", "37 companies found. Byggkompaniet Syd is strongest: new office in Hyllie, four job listings and a clear contact role."],
+    ["Snajp", "37 companies found. Byggkompaniet Syd is strongest: new office in Hyllie, four job listings and a clear contact role."],
     ["You", "Generate a first email in medium length."],
-    ["Snipra", "Using the Hyllie signal, the hiring and the CTA from business context."]
+    ["Snajp", "Using the Hyllie signal, the hiring and the CTA from business context."]
   ];
 
   return (
@@ -1516,7 +1516,7 @@ function SettingsShowcase({
       </nav>
       <div className="col-span-12 md:col-span-9">
         {section === "general" ? <BusinessContextSettings locale={locale} /> : null}
-        {section === "mailboxes" ? <TextList title="Mailbox health" items={["sales@snipra-demo.se · healthy · 96 skick per dag", "elin@kundbolag.se · warming · 34 skick per dag"]} /> : null}
+        {section === "mailboxes" ? <TextList title="Mailbox health" items={["sales@snajp-demo.se · healthy · 96 skick per dag", "elin@kundbolag.se · warming · 34 skick per dag"]} /> : null}
         {section === "team" ? <TextList title={locale === "sv" ? "Teamroller" : "Team roles"} items={[locale === "sv" ? "Owner · full åtkomst" : "Owner · full access", locale === "sv" ? "Sales lead · kampanjer och inbox" : "Sales lead · campaigns and inbox", locale === "sv" ? "Researcher · bolag och signaler" : "Researcher · companies and signals", locale === "sv" ? "Viewer · läsbehörighet" : "Viewer · read access"]} /> : null}
         {section === "billing" ? <TextList title="Billing" items={[locale === "sv" ? "Plan · Team · 14 900 kr/mån" : "Plan · Team · SEK 14,900/mo", locale === "sv" ? "Leads · 312 av 1000 denna månad" : "Leads · 312 of 1,000 this month", locale === "sv" ? "Seats · 4 av 8 aktiva användare" : "Seats · 4 of 8 active users"]} /> : null}
       </div>

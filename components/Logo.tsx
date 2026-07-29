@@ -1,16 +1,26 @@
 import Image from "next/image";
 
-export function Logo({ compact = false }: Readonly<{ compact?: boolean }>) {
+/**
+ * Wordmark is set in Geist, not Fraunces: DESIGN.md limits the display serif to a
+ * single hero per page, and a serif wordmark would compete with it.
+ * The bordered tile and the "sales os" kicker were editorial cues and are gone.
+ */
+export function Logo({
+  compact = false,
+  tone = "ink"
+}: Readonly<{ compact?: boolean; tone?: "ink" | "paper" }>) {
   return (
-    <span className="inline-flex items-center gap-3">
-      <span className="grid h-11 w-11 place-items-center overflow-hidden border border-ink/15 bg-paper2">
-        <Image src="/snipe_logo.svg" alt="" width={34} height={22} className="object-contain" />
-      </span>
+    <span className="inline-flex items-center gap-2.5">
+      <Image
+        src="/snipe_logo.svg"
+        alt=""
+        width={30}
+        height={19}
+        className={tone === "paper" ? "h-[18px] w-auto object-contain invert" : "h-[18px] w-auto object-contain"}
+        priority
+      />
       {!compact ? (
-        <span className="flex flex-col leading-none">
-          <span className="font-display text-xl font-semibold tracking-normal">Snipra</span>
-          <span className="kicker mt-2 text-mineral">sales os</span>
-        </span>
+        <span className="text-[19px] font-semibold leading-none tracking-[-0.02em]">Snajp</span>
       ) : null}
     </span>
   );

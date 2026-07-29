@@ -2,6 +2,21 @@ import { ArrowUpRight, CheckCircle2, Loader2 } from "lucide-react";
 import type { Localized } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
+/**
+ * One button vocabulary for every product surface. Six variants had drifted apart
+ * (different padding, weight, size, and one hovering to moss green), and a save
+ * button that looks different in two places means one of them is wrong.
+ *
+ * Exported as class strings rather than a component so existing call sites adopt
+ * them with a one-line change and keep their own element and handlers.
+ */
+export const btnBase =
+  "focus-ring inline-flex min-h-11 items-center justify-center gap-2 rounded-input px-5 text-[0.9375rem] font-semibold transition-colors active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40";
+
+export const btnPrimary = `${btnBase} bg-ink text-paper hover:bg-ink2`;
+
+export const btnSecondary = `${btnBase} bg-paper2 text-ink hover:bg-paper2/70`;
+
 export function Badge({ children, tone = "neutral" }: Readonly<{ children: React.ReactNode; tone?: "neutral" | "good" | "warn" | "danger" }>) {
   const tones = {
     neutral: "border-ink/10 bg-ink/[0.035] text-ink/70",

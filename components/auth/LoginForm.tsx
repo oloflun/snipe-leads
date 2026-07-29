@@ -13,7 +13,7 @@ type AuthMode = "login" | "signup" | "magic";
 
 export function LoginForm() {
   const searchParams = useSearchParams();
-  // Per Snipra Prompt: quick email-only + immediate Email Studio access
+  // Per Snajp Prompt: quick email-only + immediate Email Studio access
   const nextPath = searchParams.get("next") ?? "/emails";
   const [mode, setMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");

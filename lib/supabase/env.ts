@@ -1,3 +1,15 @@
+/**
+ * True when a server Supabase client can actually be built. Callers that must
+ * degrade rather than fail (public marketing pages, anonymous visitors) check
+ * this instead of catching the throws below.
+ */
+export function hasServerSupabaseEnv(): boolean {
+  return Boolean(
+    process.env.NEXT_PUBLIC_SUPABASE_URL &&
+      (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)
+  );
+}
+
 export function getSupabaseUrl(): string {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (!url) {

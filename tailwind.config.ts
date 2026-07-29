@@ -20,10 +20,22 @@ const config: Config = {
         danger: "oklch(var(--danger) / <alpha-value>)"
       },
       fontFamily: {
-        display: ["Fraunces", "ui-serif", "Georgia", "serif"],
-        mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"]
+        // Fraunces is reachable only through `font-display`, and DESIGN.md limits
+        // that to one hero per page.
+        display: ["var(--font-fraunces)", "ui-serif", "Georgia", "serif"],
+        sans: ["var(--font-geist)", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "sans-serif"],
+        mono: ["var(--font-jetbrains)", "ui-monospace", "SFMono-Regular", "monospace"]
+      },
+      borderRadius: {
+        panel: "20px",
+        card: "12px",
+        input: "8px"
+      },
+      transitionTimingFunction: {
+        out: "cubic-bezier(0.16, 1, 0.3, 1)"
       },
       boxShadow: {
+        // Product surfaces only. DESIGN.md forbids shadow as marketing elevation.
         hairline: "0 0 0 1px oklch(var(--ink) / 0.09)",
         lift: "0 24px 70px oklch(var(--ink) / 0.12)"
       }

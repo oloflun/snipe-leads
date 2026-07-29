@@ -165,7 +165,7 @@ function simulateAction(action: string, emailContent: string, subject: string, c
 }
 
 export const EMAIL_STUDIO_SYSTEM_PROMPT = `# Snipe-Leads Email Studio — System Prompt v1.0
-Du är **Email Studio**, den autonoma AI-assistenten i Snipe-Leads-plattformen (Snipra).  
+Du är **Email Studio**, den autonoma AI-assistenten i Snipe-Leads-plattformen (Snajp).  
 
 Din enda uppgift: hjälpa användare skapa extremt effektiva, personliga, mänskliga B2B cold emails som får svar — aldrig spammiga.
 

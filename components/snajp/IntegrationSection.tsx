@@ -13,7 +13,7 @@ const endpoints = [
   { method: "POST", path: "/api/keys", note: { sv: "Utfärda API-nyckel per kund (master)", en: "Issue per-tenant API key (master)" } }
 ];
 
-const curlExample = `curl -X POST https://api.snipra.se/snajp-support/api/chat \\
+const curlExample = `curl -X POST https://api.snajp.se/snajp-support/api/chat \\
   -H "X-API-Key: snajp_live_..." \\
   -H "Content-Type: application/json" \\
   -d '{

@@ -2,7 +2,7 @@
 
 import { ImagePlus, Loader2, Send, ShieldAlert, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Badge } from "@/components/ui";
+import { Badge, btnPrimary } from "@/components/ui";
 import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -30,7 +30,7 @@ const examplePrompts = [
   "Min faktura drogs två gånger från kortet, vad gör jag?",
   "Mitt paket är försenat och spårningen har inte uppdaterats på fyra dagar.",
   "Jag får felkod E-101 i kassan när jag försöker betala.",
-  "Varan kom fram trasig — jag vill ha pengarna tillbaka NU!"
+  "Varan kom fram trasig. Jag vill ha pengarna tillbaka NU!"
 ];
 
 async function downscaleImage(file: File, maxSize = 1024): Promise<string> {
@@ -60,6 +60,10 @@ async function downscaleImage(file: File, maxSize = 1024): Promise<string> {
 }
 
 export function SupportChat() {
+  // The poll loop runs up to 90 iterations; without this it keeps writing state
+  // after the component is gone.
+  const alive = useRef(true);
+  useEffect(() => () => { alive.current = false; }, []);
   const { text } = useLocale();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -128,6 +132,7 @@ export function SupportChat() {
             ]);
             return;
           }
+          if (!alive.current) return;
           if (job.status === "completed" && job.result) {
             setMode(job.result.simulation ? "simulation" : "live");
             setMessages((current) => [
@@ -145,14 +150,14 @@ export function SupportChat() {
             throw new Error(job.error ?? "Agentkörningen misslyckades");
           }
         }
-        throw new Error("Svaret tog för lång tid — försök igen.");
+        throw new Error("Svaret tog för lång tid. Försök igen.");
       } catch (error) {
         setMessages((current) => [
           ...current,
           {
             id: crypto.randomUUID(),
             role: "system",
-            content: error instanceof Error ? error.message : "Något gick fel — försök igen."
+            content: error instanceof Error ? error.message : "Något gick fel. Försök igen."
           }
         ]);
       } finally {
@@ -186,8 +191,8 @@ export function SupportChat() {
           : text({ sv: "Online", en: "Online" });
 
   return (
-    <div className="overflow-hidden rounded-[10px] border border-ink/12 bg-paper shadow-lift">
-      <div className="flex items-center justify-between gap-4 border-b border-ink/12 bg-paper2/60 px-5 py-4">
+    <div className="overflow-hidden rounded-card bg-paper">
+      <div className="flex items-center justify-between gap-4 bg-paper2/70 px-5 py-4">
         <div className="flex items-center gap-3">
           <span className="relative flex h-2.5 w-2.5">
             <span
@@ -203,21 +208,21 @@ export function SupportChat() {
               )}
             />
           </span>
-          <div>
-            <p className="text-sm font-semibold">Snajp-Support</p>
-            <p className="text-xs text-ink/55">{statusLabel}</p>
-          </div>
+          <p className="text-sm font-semibold">
+            Snajp Support
+            <span className="ml-2 font-normal text-ink/50">{statusLabel}</span>
+          </p>
         </div>
-        <span className="kicker hidden text-mineral md:block">Nordlys Handel · Web</span>
+        <span className="hidden text-sm text-ink/45 md:block">Nordlys Handel</span>
       </div>
 
       <div ref={scrollRef} className="h-[420px] space-y-4 overflow-y-auto px-5 py-6">
         {messages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-5 text-center">
-            <p className="max-w-md text-sm leading-6 text-ink/60">
+            <p className="max-w-md text-[0.9375rem] leading-6 text-ink/60">
               {text({
-                sv: "Skriv som en kund till den fiktiva butiken Nordlys Handel — eller ladda upp en skärmdump eller bild på en skadad vara.",
-                en: "Write as a customer of the fictional store Nordlys Handel — or upload a screenshot or a photo of a damaged item."
+                sv: "Skriv som en kund till den påhittade butiken Nordlys Handel. Du kan också ladda upp en skärmdump eller en bild på en skadad vara.",
+                en: "Write as a customer of the invented store Nordlys Handel. You can also upload a screenshot or a photo of a damaged item."
               })}
             </p>
             <div className="flex max-w-lg flex-wrap justify-center gap-2">
@@ -226,7 +231,7 @@ export function SupportChat() {
                   key={prompt}
                   type="button"
                   onClick={() => send(prompt)}
-                  className="focus-ring rounded-[7px] border border-ink/12 bg-paper2/70 px-3 py-2 text-left text-xs leading-5 text-ink/75 transition hover:border-ochre hover:text-ink"
+                  className="focus-ring min-h-11 rounded-input bg-paper2/80 px-3 py-2 text-left text-[0.8125rem] leading-5 text-ink/75 transition-colors hover:bg-paper2 hover:text-ink"
                 >
                   {prompt}
                 </button>
@@ -239,12 +244,12 @@ export function SupportChat() {
           <div key={message.id} className={cn("flex", message.role === "user" ? "justify-end" : "justify-start")}>
             <div
               className={cn(
-                "max-w-[85%] rounded-[10px] px-4 py-3 text-sm leading-6",
+                "max-w-[85%] rounded-card px-4 py-3 text-[0.9375rem] leading-6",
                 message.role === "user"
                   ? "bg-ink text-paper"
                   : message.role === "system"
-                    ? "border border-danger/25 bg-danger/5 text-ink/80"
-                    : "border border-ink/10 bg-paper2/70 text-ink"
+                    ? "bg-danger/10 text-ink/80"
+                    : "bg-paper2/80 text-ink"
               )}
             >
               {message.imagePreview ? (
@@ -252,7 +257,7 @@ export function SupportChat() {
                 <img
                   src={message.imagePreview}
                   alt="Bifogad bild"
-                  className="mb-2 max-h-40 rounded-[7px] border border-paper/25"
+                  className="mb-2 max-h-40 rounded-input"
                 />
               ) : null}
               <p className="whitespace-pre-wrap">{message.content}</p>
@@ -286,19 +291,19 @@ export function SupportChat() {
 
         {busy ? (
           <div className="flex justify-start">
-            <div className="inline-flex items-center gap-2 rounded-[10px] border border-ink/10 bg-paper2/70 px-4 py-3 text-sm text-ink/60">
+            <div className="inline-flex items-center gap-2 rounded-card bg-paper2/80 px-4 py-3 text-[0.9375rem] text-ink/60">
               <Loader2 className="h-4 w-4 animate-spin" />
-              {text({ sv: "Snajp-Support arbetar…", en: "Snajp-Support is working…" })}
+              {text({ sv: "Agenten arbetar", en: "The agent is working" })}
             </div>
           </div>
         ) : null}
       </div>
 
-      <div className="border-t border-ink/12 px-5 py-4">
+      <div className="bg-paper2/40 px-5 py-4">
         {attachment ? (
-          <div className="mb-3 inline-flex items-center gap-2 rounded-[7px] border border-ink/12 bg-paper2/70 p-1.5 pr-2">
+          <div className="mb-3 inline-flex items-center gap-2 rounded-input bg-paper p-1.5 pr-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={attachment} alt="Förhandsvisning" className="h-10 w-10 rounded-[5px] object-cover" />
+            <img src={attachment} alt="Förhandsvisning" className="h-10 w-10 rounded-[6px] object-cover" />
             <span className="text-xs text-ink/60">{text({ sv: "Bild bifogad", en: "Image attached" })}</span>
             <button
               type="button"
@@ -330,7 +335,7 @@ export function SupportChat() {
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
-            className="focus-ring inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[7px] border border-ink/12 bg-paper2/70 text-ink/60 transition hover:border-ochre hover:text-ochre"
+            className="focus-ring inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-input bg-paper text-ink/60 transition-colors hover:text-ink"
             aria-label={text({ sv: "Bifoga bild", en: "Attach image" })}
           >
             <ImagePlus className="h-4 w-4" />
@@ -345,13 +350,14 @@ export function SupportChat() {
               }
             }}
             rows={1}
+            maxLength={2000}
             placeholder={text({ sv: "Skriv ditt meddelande…", en: "Type your message…" })}
-            className="focus-ring min-h-11 flex-1 resize-none rounded-[7px] border border-ink/12 bg-paper px-4 py-2.5 text-sm outline-none placeholder:text-ink/35"
+            className="focus-ring min-h-11 flex-1 resize-none rounded-input bg-paper px-4 py-2.5 text-[1rem] outline-none placeholder:text-ink/35"
           />
           <button
             type="submit"
             disabled={busy || !input.trim()}
-            className="focus-ring inline-flex h-11 items-center gap-2 rounded-[7px] bg-ink px-4 text-sm font-semibold text-paper transition hover:bg-copper hover:text-ink disabled:opacity-40"
+            className={btnPrimary}
           >
             <Send className="h-4 w-4" />
             {text({ sv: "Skicka", en: "Send" })}
