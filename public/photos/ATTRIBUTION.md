@@ -8,8 +8,8 @@ photographer would not be right.
 
 | File | Photographer | Source |
 |---|---|---|
-| `stockholm-golden.webp` | [@trapnation](https://unsplash.com/@trapnation) | [unsplash.com/photos/1730653784025-2266f3baa0f8](https://unsplash.com/photos/1730653784025-2266f3baa0f8) |
-| `gamla-stan.webp` | [@gwendal](https://unsplash.com/@gwendal) | [unsplash.com/photos/1714930723042-8a4b7bca8a14](https://unsplash.com/photos/1714930723042-8a4b7bca8a14) |
+| `goteborg-golden.webp` | Aron Fjell, [@addekalk](https://unsplash.com/@addekalk) | [unsplash.com/photos/wmrYHqSHoek](https://unsplash.com/photos/wmrYHqSHoek) |
+| `haga.webp` | Patrick Federi, [@federi](https://unsplash.com/@federi) | [unsplash.com/photos/U5PrXTqxF2A](https://unsplash.com/photos/U5PrXTqxF2A) |
 | `desk.webp` | [@photo_sergiub](https://unsplash.com/@photo_sergiub) | [unsplash.com/photos/1611269154421-4e27233ac5c7](https://unsplash.com/photos/1611269154421-4e27233ac5c7) |
 | `facade.webp` | [@nasa](https://unsplash.com/@nasa) | [unsplash.com/photos/1564515836665-083f987752a8](https://unsplash.com/photos/1564515836665-083f987752a8) |
 
@@ -19,8 +19,16 @@ instead of the handle, open the source link.
 ## Processing
 
 Downloaded at their display width, longest edge capped at 2200px, re-encoded to
-WebP at quality 78. Total went from 2996 KB to 1147 KB, a 62% reduction, with no
-visible loss at the sizes the page renders them.
+WebP at quality 78, with no visible loss at the sizes the page renders them.
+
+`haga.webp` is the exception on both counts. The original is portrait, so it was
+cropped to the upper band that holds the facade, the walker and the perspective;
+the lower 40% was empty paving. Cobblestone texture is expensive to encode, so it
+sits at 2000px and quality 74 (524 KB against 666 KB at the standard settings).
+A 1:1 comparison against the uncompressed crop showed no visible difference.
+
+The two Stockholm photographs this pair replaced were removed when the place copy
+moved to Gothenburg.
 
 They were hotlinked from `images.unsplash.com` during development. Serving them
 from `public/` removes a third-party dependency from the critical render path:

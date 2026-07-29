@@ -63,13 +63,16 @@ const leads: SectionCopy = {
     }
   ],
   placeLabel: { sv: "Var det kommer ifrån", en: "Where it comes from" },
+  /* The accent word carries the section: "här" means this market, not this city.
+     That is why the two offices sit in the body and the heading stays short
+     enough to hold at 15ch. */
   placeHeading: {
-    sv: "Byggt i Malmö, för bolag som säljer *här*.",
-    en: "Built in Malmö, for companies selling *here*."
+    sv: "Byggt i Göteborg, för bolag som säljer *här*.",
+    en: "Built in Gothenburg, for companies selling *here*."
   },
   placeBody: {
-    sv: "Svensk B2B är ett litet rum. Tonen är lågmäld, namnen känns igen och ett utskick som luktar mall syns direkt. Snajp är byggt för det rummet, inte översatt till det.",
-    en: "Swedish B2B is a small room. The register is understated, the names recur, and a mass mailing is spotted on sight. Snajp is built for that room rather than translated into it."
+    sv: "Svensk B2B är ett litet rum. Tonen är lågmäld, namnen känns igen och ett utskick som luktar mall syns direkt. Snajp är byggt för det rummet, inte översatt till det. Vi sitter i Göteborg och Umeå och jobbar med bolag i hela landet.",
+    en: "Swedish B2B is a small room. The register is understated, the names recur, and a mass mailing is spotted on sight. Snajp is built for that room rather than translated into it. We work from Gothenburg and Umeå, with companies across the country."
   },
   objectionsHeading: {
     sv: "Det du undrar *innan* du testar.",
@@ -173,21 +176,26 @@ export const imagery = {
   /**
    * Photographs are vendored into `public/photos` rather than hotlinked. Each was
    * sourced from Unsplash, verified to load, and looked at before selection; the
-   * originals were then downsized and re-encoded to WebP, cutting 2996 KB to
-   * 1147 KB. Credits live in `public/photos/credits.json`.
+   * originals were then downsized and re-encoded to WebP. Credits live in
+   * `public/photos/credits.json`.
+   *
+   * The two Stockholm photographs were replaced when the place copy moved to
+   * Göteborg. The old pairing put a Gamla stan street next to the words "built
+   * in Malmö" and nobody caught it for a whole session: a place claim and a
+   * photograph of a place are the same claim made twice.
    */
   hero: {
-    src: "/photos/stockholm-golden.webp",
+    src: "/photos/goteborg-golden.webp",
     alt: {
-      sv: "Stockholms silhuett i gyllene kvällsljus",
-      en: "The Stockholm skyline in golden evening light"
+      sv: "Göteborg sett från höjden i gyllene kvällsljus",
+      en: "Gothenburg seen from above in golden evening light"
     }
   },
   street: {
-    src: "/photos/gamla-stan.webp",
+    src: "/photos/haga.webp",
     alt: {
-      sv: "Gata i Gamla stan med varmt upplysta fasader",
-      en: "A street in Gamla stan with warmly lit facades"
+      sv: "Kullerstensgata i Haga med landshövdingehus",
+      en: "A cobblestone street in Haga, Gothenburg"
     }
   },
   grid: {

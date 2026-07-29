@@ -1,13 +1,15 @@
 {
- "stockholm-golden": {
-  "id": "1730653784025-2266f3baa0f8",
-  "photographer": "@trapnation",
-  "source": "https://unsplash.com/photos/1730653784025-2266f3baa0f8"
+ "goteborg-golden": {
+  "id": "1618738359513-77ffd74b3c1c",
+  "photographer": "@addekalk",
+  "name": "Aron Fjell",
+  "source": "https://unsplash.com/photos/wmrYHqSHoek"
  },
- "gamla-stan": {
-  "id": "1714930723042-8a4b7bca8a14",
-  "photographer": "@gwendal",
-  "source": "https://unsplash.com/photos/1714930723042-8a4b7bca8a14"
+ "haga": {
+  "id": "1691519552019-ad72076158eb",
+  "photographer": "@federi",
+  "name": "Patrick Federi",
+  "source": "https://unsplash.com/photos/U5PrXTqxF2A"
  },
  "desk": {
   "id": "1611269154421-4e27233ac5c7",

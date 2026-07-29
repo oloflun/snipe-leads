@@ -47,8 +47,8 @@ export const shared = {
   },
   closingCta: { sv: "hej@snajp.se", en: "hej@snajp.se" },
   footerNote: {
-    sv: "Snajp, Malmö. Byggt för svensk B2B.",
-    en: "Snajp, Malmö. Built for Swedish B2B."
+    sv: "Snajp, Göteborg och Umeå. Byggt för svensk B2B.",
+    en: "Snajp, Gothenburg and Umeå. Built for Swedish B2B."
   }
 } satisfies Record<string, Localized>;
 

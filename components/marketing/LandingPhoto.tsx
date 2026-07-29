@@ -167,7 +167,9 @@ export function LandingPhoto({
                   <ProductSwitch value={product} onChange={setProduct} tone="paper" />
                 </div>
                 <div className="mt-4 border-t border-paper/25 pt-3">
-                  <Label tone="paper">Malmö · GDPR · RLS</Label>
+                  {/* Jurisdiction, not address. The two offices are named in the
+                      place section; four items would wrap in this column. */}
+                  <Label tone="paper">Sverige · GDPR · RLS</Label>
                 </div>
               </div>
             </div>
