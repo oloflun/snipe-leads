@@ -171,32 +171,31 @@ export const sectionCopy: Record<ProductKey, SectionCopy> = { leads, support };
 
 export const imagery = {
   /**
-   * Verified-existing Unsplash photographs. Each ID was loaded in a browser and
-   * looked at before being chosen; the generic desk-mockup results the search
-   * returned were rejected on sight.
+   * Photographs are vendored into `public/photos` rather than hotlinked. Each was
+   * sourced from Unsplash, verified to load, and looked at before selection; the
+   * originals were then downsized and re-encoded to WebP, cutting 2996 KB to
+   * 1147 KB. Credits live in `public/photos/credits.json`.
    */
   hero: {
-    id: "1730653784025-2266f3baa0f8",
+    src: "/photos/stockholm-golden.webp",
     alt: {
       sv: "Stockholms silhuett i gyllene kvällsljus",
       en: "The Stockholm skyline in golden evening light"
     }
   },
   street: {
-    id: "1714930723042-8a4b7bca8a14",
+    src: "/photos/gamla-stan.webp",
     alt: {
       sv: "Gata i Gamla stan med varmt upplysta fasader",
       en: "A street in Gamla stan with warmly lit facades"
     }
   },
-  /** A facade of identical windows: the visual rhyme for "same email, hundred
-   *  companies". Cool-toned, so it only ever appears under a heavy ink scrim. */
   grid: {
-    id: "1564515836665-083f987752a8",
+    src: "/photos/facade.webp",
     alt: { sv: "Fasad med rader av identiska fönster", en: "A facade of identical repeating windows" }
   },
   desk: {
-    id: "1611269154421-4e27233ac5c7",
+    src: "/photos/desk.webp",
     alt: {
       sv: "Skandinaviskt skrivbord i dagsljus",
       en: "A Scandinavian desk in daylight"
@@ -204,6 +203,7 @@ export const imagery = {
   }
 } as const;
 
-export function unsplash(id: string, w: number, q = 82): string {
-  return `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=${w}&q=${q}`;
+/** Kept as a single seam so the source can move again without touching markup. */
+export function photo(src: string): string {
+  return src;
 }

@@ -236,6 +236,53 @@ button {
   animation-delay: 120ms;
 }
 
+/* Scroll reveal, driven by the single IntersectionObserver in useReveal.ts.
+   Distinct from .reveal above, which fires on load: .rise waits for the element
+   to enter the viewport, so a long page settles section by section instead of
+   animating everything at once behind the fold.
+
+   This starts at opacity 0, so without JavaScript the page would be blank. The
+   <noscript> block in app/layout.tsx forces it visible; do not remove one
+   without the other. */
+.rise {
+  opacity: 0;
+  transform: translateY(10px);
+  transition:
+    opacity var(--dur-mid) var(--ease-out),
+    transform var(--dur-mid) var(--ease-out);
+}
+
+.rise.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+.rise-1 {
+  transition-delay: 70ms;
+}
+
+.rise-2 {
+  transition-delay: 140ms;
+}
+
+/* Full-bleed photographic band. `cover` is the load-bearing part: without it the
+   image renders at its natural size and clips, which is what a missing
+   definition looked like on the statement band and the grid-break photo.
+
+   `fixed` attachment only on a real pointer. Touch browsers either ignore it or
+   jitter, and iOS repaints the whole band on every scroll frame. */
+.parallax {
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .parallax {
+    background-attachment: fixed;
+  }
+}
+
 .marquee {
   display: flex;
   gap: 4rem;

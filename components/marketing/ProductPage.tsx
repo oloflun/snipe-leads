@@ -1,5 +1,5 @@
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
-import { ProductLanding } from "@/components/marketing/ProductLanding";
+import { LandingPhoto } from "@/components/marketing/LandingPhoto";
 import { SupportShowcase } from "@/components/marketing/SupportShowcase";
 import { loadPublicEmailStudioData } from "@/lib/data/emails";
 import type { ProductKey } from "@/lib/routes";
@@ -16,7 +16,7 @@ export function ProductPage({ initial }: Readonly<{ initial: ProductKey }>) {
   const emailData = loadPublicEmailStudioData();
 
   return (
-    <ProductLanding
+    <LandingPhoto
       initial={initial}
       leadsDemo={<EmailStudioEditor data={emailData} compact />}
       supportDemo={<SupportShowcase />}

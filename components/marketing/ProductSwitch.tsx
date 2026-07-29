@@ -17,8 +17,9 @@ import { cn } from "@/lib/utils";
  */
 export function ProductSwitch({
   value,
-  onChange
-}: Readonly<{ value: ProductKey; onChange: (next: ProductKey) => void }>) {
+  onChange,
+  tone = "ink"
+}: Readonly<{ value: ProductKey; onChange: (next: ProductKey) => void; tone?: "ink" | "paper" }>) {
   const { text } = useLocale();
   const refs = useRef<Record<string, HTMLButtonElement | null>>({});
 
@@ -50,7 +51,7 @@ export function ProductSwitch({
         return (
           <span key={key} className="inline">
             {index > 0 ? (
-              <span aria-hidden="true" className="mx-1 text-ink/20 md:mx-2">
+              <span aria-hidden="true" className={cn("mx-1 md:mx-2", tone === "paper" ? "text-paper/30" : "text-ink/20")}>
                 /
               </span>
             ) : null}
@@ -67,12 +68,14 @@ export function ProductSwitch({
               onClick={() => onChange(key)}
               onKeyDown={onKeyDown}
               className={cn(
-                // The tabs shrink with the clamped hero type and fell to 36px at
-                // mobile, under the 44px tap-target floor.
-                "focus-ring min-h-11 rounded-input align-baseline transition-colors duration-200 ease-out",
+                "focus-ring inline-flex min-h-11 items-center rounded-input transition-colors duration-200 ease-out",
                 selected
-                  ? "italic-disp text-ink"
-                  : "text-ink/25 hover:text-ink/60 active:text-ink/70"
+                  ? tone === "paper"
+                    ? "italic-disp text-paper"
+                    : "italic-disp text-ink"
+                  : tone === "paper"
+                    ? "text-paper/40 hover:text-paper/75"
+                    : "text-ink/25 hover:text-ink/60 active:text-ink/70"
               )}
             >
               {text(productCopy[key].word)}

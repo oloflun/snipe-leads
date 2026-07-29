@@ -5,7 +5,10 @@ import Image from "next/image";
  * single hero per page, and a serif wordmark would compete with it.
  * The bordered tile and the "sales os" kicker were editorial cues and are gone.
  */
-export function Logo({ compact = false }: Readonly<{ compact?: boolean }>) {
+export function Logo({
+  compact = false,
+  tone = "ink"
+}: Readonly<{ compact?: boolean; tone?: "ink" | "paper" }>) {
   return (
     <span className="inline-flex items-center gap-2.5">
       <Image
@@ -13,7 +16,7 @@ export function Logo({ compact = false }: Readonly<{ compact?: boolean }>) {
         alt=""
         width={30}
         height={19}
-        className="h-[18px] w-auto object-contain"
+        className={tone === "paper" ? "h-[18px] w-auto object-contain invert" : "h-[18px] w-auto object-contain"}
         priority
       />
       {!compact ? (

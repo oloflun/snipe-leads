@@ -13,6 +13,15 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="sv" className={fontVariables}>
+      <head>
+        {/* .rise starts at opacity 0 and is revealed by an IntersectionObserver.
+            Without JavaScript that observer never runs and the page renders
+            blank. This is the fallback, and it belongs next to the .rise rule in
+            globals.css — neither survives alone. */}
+        <noscript>
+          <style>{`.rise{opacity:1!important;transform:none!important}`}</style>
+        </noscript>
+      </head>
       <body>
         <LocaleProvider>{children}</LocaleProvider>
       </body>
