@@ -89,7 +89,18 @@ class Settings(BaseSettings):
     # Tom = av, vilket räcker för vår egen frontend (den proxar server-side).
     allowed_origins: str = ""
 
-    # Utgående mail. Tomma fält ärver IMAP-uppgifterna (samma Gmail-konto).
+    # Utgående mail: "smtp" eller "resend".
+    #
+    # OBS: Renders GRATISPLAN blockerar utgående SMTP (portarna 25/465/587)
+    # sedan september 2025. På gratis krävs därför "resend", som skickar över
+    # HTTPS. Betald Render-plan klarar SMTP.
+    email_provider: str = "smtp"
+    resend_api_key: str = ""
+    # Avsändaradress för Resend. Måste tillhöra en verifierad domän hos dem;
+    # onboarding@resend.dev fungerar för test utan egen domän.
+    email_from: str = ""
+
+    # SMTP. Tomma fält ärver IMAP-uppgifterna (samma Gmail-konto).
     smtp_host: str = ""  # tom + Gmail-IMAP => smtp.gmail.com
     smtp_port: int = 587
     smtp_user: str = ""
@@ -127,8 +138,14 @@ class Settings(BaseSettings):
         return host, self.smtp_port, user, password
 
     def can_send_email(self) -> bool:
+        if self.email_provider == "resend":
+            return bool(self.resend_api_key and (self.email_from or self.imap_user))
         host, _, user, password = self.smtp_credentials()
         return bool(host and user and password)
+
+    def sender_address(self) -> str:
+        """Adressen kunden ser som avsändare."""
+        return self.email_from or self.smtp_user or self.imap_user
 
     def imap_tenant_id(self) -> str:
         """Vilken tenant som äger den konfigurerade inkorgen."""

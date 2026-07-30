@@ -39,8 +39,23 @@ Sätts under **Environment** → *Add Environment Variable* → **Save, rebuild,
 `INBOX_POLL_SECONDS=0` · `IMAP_HOST/USER/PASSWORD/FOLDER` · `IMAP_TENANT=pilot` ·
 `SMTP_FROM_NAME`
 
-SMTP-uppgifterna behöver inte sättas separat — de ärver IMAP-kontot
-(`imap.gmail.com` → `smtp.gmail.com`).
+### Utgående mail — viktigt på gratisplanen
+
+**Render blockerar utgående SMTP (portarna 25/465/587) på gratis web services**
+sedan september 2025. Godkända svar kan därför inte skickas via Gmails SMTP
+därifrån; felet blir *"Network is unreachable"*. Ärendet markeras aldrig som
+skickat när det händer — utkastet ligger kvar och kan skickas om.
+
+Två vägar framåt:
+
+| Val | Vad som krävs |
+|---|---|
+| **Resend** (gratis, rekommenderas) | Skapa konto på [resend.com](https://resend.com), hämta API-nyckel. Sätt `EMAIL_PROVIDER=resend`, `RESEND_API_KEY=<nyckel>`, `EMAIL_FROM=onboarding@resend.dev` (eller egen verifierad domän). Går över HTTPS, alltså opåverkat av blockeringen. 3000 mail/mån gratis. |
+| **Betald Render-plan** | Uppgradera till Starter (~7 USD/mån) → SMTP-portarna öppnas och Gmail-uppgifterna räcker. |
+
+Kör du lokalt eller på en plattform utan blockering fungerar SMTP direkt — det
+är default, och uppgifterna ärvs från IMAP-kontot (`imap.gmail.com` →
+`smtp.gmail.com`).
 
 ### Kallstart
 

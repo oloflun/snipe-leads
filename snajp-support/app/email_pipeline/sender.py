@@ -61,6 +61,43 @@ def _send_sync(
     return message["Message-ID"]
 
 
+async def _send_via_resend(
+    *, to_email: str, subject: str, body: str, in_reply_to: str | None
+) -> tuple[bool, str]:
+    """Skickar över HTTPS i stället för SMTP.
+
+    Krävs på Renders gratisplan, som blockerar utgående SMTP-portar sedan
+    september 2025. Fungerar även där SMTP är öppet.
+    """
+    import httpx
+
+    settings = get_settings()
+    payload: dict[str, object] = {
+        "from": f"{settings.smtp_from_name} <{settings.sender_address()}>",
+        "to": [to_email],
+        "subject": subject if subject.lower().startswith("re:") else f"Re: {subject}",
+        "text": body,
+    }
+    reply_to = _normalise_message_id(in_reply_to)
+    if reply_to:
+        # Trådning: samma headers som SMTP-vägen sätter.
+        payload["headers"] = {"In-Reply-To": reply_to, "References": reply_to}
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(
+                "https://api.resend.com/emails",
+                headers={"Authorization": f"Bearer {settings.resend_api_key}"},
+                json=payload,
+            )
+        if response.status_code >= 400:
+            return False, f"Resend avvisade sändningen ({response.status_code}): {response.text[:200]}"
+        return True, response.json().get("id", "skickat")
+    except Exception as error:  # noqa: BLE001 — sändfel får aldrig fälla tjänsten
+        logger.warning("Resend-sändning misslyckades: %s", error)
+        return False, f"Sändningen misslyckades: {error}"
+
+
 async def send_reply(
     *,
     to_email: str,
@@ -70,8 +107,15 @@ async def send_reply(
 ) -> tuple[bool, str]:
     """Skickar ett svar. Returnerar (lyckades, meddelande-id eller felbeskrivning)."""
     settings = get_settings()
-    host, port, user, password = settings.smtp_credentials()
 
+    if settings.email_provider == "resend":
+        if not settings.resend_api_key:
+            return False, "RESEND_API_KEY saknas. Svaret har inte skickats."
+        return await _send_via_resend(
+            to_email=to_email, subject=subject, body=body, in_reply_to=in_reply_to
+        )
+
+    host, port, user, password = settings.smtp_credentials()
     if not (host and user and password):
         return False, (
             "SMTP är inte konfigurerat (SMTP_HOST/SMTP_USER/SMTP_PASSWORD, eller "
@@ -98,6 +142,15 @@ async def send_reply(
         return False, "SMTP-inloggningen nekades — kontrollera app-lösenordet."
     except smtplib.SMTPRecipientsRefused:
         return False, f"Mottagaradressen {to_email} avvisades av servern."
+    except OSError as error:
+        # Renders gratisplan blockerar portarna 25/465/587 sedan sep 2025.
+        if getattr(error, "errno", None) in (101, 111, 110):
+            return False, (
+                "Utgående SMTP är blockerat i den här miljön (vanligt på gratis "
+                "hostingplaner). Sätt EMAIL_PROVIDER=resend med en RESEND_API_KEY, "
+                "eller uppgradera till en betald plan."
+            )
+        return False, f"Sändningen misslyckades: {error}"
     except Exception as error:  # noqa: BLE001 — sändfel får aldrig fälla tjänsten
         logger.warning("SMTP-sändning misslyckades: %s", error)
         return False, f"Sändningen misslyckades: {error}"
