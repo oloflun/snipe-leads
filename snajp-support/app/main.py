@@ -6,17 +6,16 @@ semantisk kunskapsbas, async jobb med 202 + polling. Utan databas/Redis/nyckel
 degraderar tjänsten gracefully till in-memory + simuleringsläge.
 """
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI
-
-from .api.deps import require_tenant
-
-import asyncio
+from fastapi import Depends, FastAPI, Response
+from fastapi.middleware.cors import CORSMiddleware
 
 from .api import chat, drafts, inbox, kb, keys, rules, tickets, triage
-from .config import get_settings
+from .api.deps import require_tenant
+from .config import DEFAULT_TENANT_ID, get_settings
 from .jobs.store import MemoryJobStore, RedisJobStore
 from .storage.memory import MemoryStorage
 
@@ -104,6 +103,20 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Snajp-Support", version="0.1.0", lifespan=lifespan)
 
+# CORS behövs inte för vår egen frontend — Next-proxyn anropar backenden
+# server-side, så webbläsaren träffar aldrig den här tjänsten direkt. Det
+# behövs däremot när en kund vill anropa API:t från sin egen webbapp.
+# ALLOWED_ORIGINS är en kommaseparerad lista; tom => ingen CORS alls.
+_origins = [o.strip() for o in get_settings().allowed_origins.split(",") if o.strip()]
+if _origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_origins,
+        allow_credentials=False,  # auth sker med X-API-Key, inte cookies
+        allow_methods=["GET", "POST", "PUT", "OPTIONS"],
+        allow_headers=["Content-Type", "X-API-Key"],
+    )
+
 app.include_router(chat.router)
 app.include_router(triage.router)
 app.include_router(tickets.router)
@@ -152,9 +165,50 @@ async def api_health(tenant: dict = Depends(require_tenant)) -> dict:
 
 @app.get("/health/live")
 async def health_live() -> dict:
+    """Liveness: processen svarar. Används av Renders health check."""
     return {"status": "ok"}
 
 
 @app.get("/health/ready")
-async def health_ready() -> dict:
-    return {"status": "ok", "storage": app.state.storage.name}
+async def health_ready(response: Response) -> dict:
+    """Readiness: kan tjänsten faktiskt göra sitt jobb?
+
+    Returnerar 200 även vid degraderat läge (tjänsten fungerar, men med
+    simulerade svar eller utan persistens) — annars hade Render tagit ner en
+    fullt användbar demo. `degraded` + `warnings` säger vad som saknas, och
+    503 ges bara när lagringen är helt otillgänglig.
+    """
+    settings = get_settings()
+    warnings: list[str] = []
+
+    if settings.is_simulation():
+        warnings.append(
+            "Ingen giltig LLM-nyckel — svaren genereras av den deterministiska "
+            "regelmotorn, inte av AI."
+        )
+    if app.state.storage.name == "memory":
+        warnings.append(
+            "Ingen DATABASE_URL — data ligger i minnet och försvinner vid omstart."
+        )
+    if not settings.can_send_email():
+        warnings.append("SMTP saknas — godkända svar kan inte skickas till kund.")
+    if not (settings.imap_host and settings.imap_user and settings.imap_password):
+        warnings.append("IMAP saknas — inga inkommande mail hämtas.")
+
+    storage_ok = True
+    try:
+        await app.state.storage.get_channel_config(DEFAULT_TENANT_ID, "web")
+    except Exception as error:  # noqa: BLE001
+        storage_ok = False
+        warnings.append(f"Lagringen svarar inte: {error}")
+
+    if not storage_ok:
+        response.status_code = 503
+
+    return {
+        "status": "ok" if storage_ok else "unavailable",
+        "degraded": bool(warnings),
+        "storage": app.state.storage.name,
+        "mode": "simulation" if settings.is_simulation() else "live",
+        "warnings": warnings,
+    }

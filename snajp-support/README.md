@@ -55,6 +55,17 @@ och bildbilagor noteras i text istället för att analyseras.
    (beräknar embeddings om `EMBEDDING_API_KEY` är satt).
 5. Starta om tjänsten (`docker compose restart`, eller redeploy på Render).
 
+## Driftsättning
+
+Ska tjänsten ta emot riktiga kundmail: följ **[DRIFTSATTNING.md](DRIFTSATTNING.md)**
+— exakta env-vars för Render och Vercel, Gmail-koppling, KB-seedning och ett
+verifieringsflöde för ett skarpt testmail.
+
+För den som ska *använda* systemet dagligen finns **[PILOT-GUIDE.md](PILOT-GUIDE.md)**
+(skriven utan teknisk jargong).
+
+`GET /health/ready` listar allt som saknas för full drift i klartext.
+
 ## Multi-tenant
 
 Tjänsten är multi-tenant: varje kundföretag (tenant) är helt isolerat.

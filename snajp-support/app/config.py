@@ -85,6 +85,10 @@ class Settings(BaseSettings):
     # får synka; den publika demon blockeras och kan aldrig dra in riktiga mail.
     imap_tenant: str = "pilot"
 
+    # CORS: kommaseparerade origins som får anropa API:t direkt från webbläsare.
+    # Tom = av, vilket räcker för vår egen frontend (den proxar server-side).
+    allowed_origins: str = ""
+
     # Utgående mail. Tomma fält ärver IMAP-uppgifterna (samma Gmail-konto).
     smtp_host: str = ""  # tom + Gmail-IMAP => smtp.gmail.com
     smtp_port: int = 587
