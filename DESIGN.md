@@ -140,8 +140,24 @@ Reveal on scroll via one IntersectionObserver, `.rise` → `is-visible`, unobser
 reveal. Parallax only on `hover: hover and pointer: fine`; touch browsers ignore or jitter on
 `background-attachment: fixed`.
 
-**`.rise` starts at `opacity: 0`.** Without JavaScript the page would be blank, so a `<noscript>`
-block must force it visible. Reduced motion is handled globally and needs no per-component fallback.
+**`.rise` starts at `opacity: 0`, so the reveal system is load-bearing and must fail toward
+visible.** Anything it misses is not an animation that did not play, it is a heading with nothing
+under it. That shipped once: twelve elements stayed invisible on every route of a live deploy.
+Four guards, all required, all in `components/marketing/useReveal.ts`:
+
+- `threshold: 0`. An element taller than the viewport can never reach a non-zero ratio, because the
+  ratio is capped at viewport height over element height. A threshold of 0.08 silently excluded
+  every tall section.
+- Reveal whatever is already on or above the screen at mount. Land mid-page from a restored scroll
+  position or an anchor and the elements above never intersect again.
+- A timed failsafe reveals the rest after 1200ms.
+- A `<noscript>` block in `app/layout.tsx` forces `.rise` visible. Neither it nor the CSS rule
+  survives alone.
+
+`scripts/check_reveal.py` counts un-revealed elements across three routes × three entry modes. It
+was confirmed to **fail** against the broken version, 12 per page, before it was trusted.
+
+Reduced motion is handled globally and needs no per-component fallback.
 
 ## Honest-proof rule
 
@@ -179,6 +195,33 @@ A screenshot you did not read does not count. Computed-style assertions are not 
 looking: it is possible to pass every mechanical rule and ship an empty page, and that has already
 happened once in this project.
 
-Measure, in this order: look at it, sweep the breakpoints by element bounds, tab through it, measure
-contrast with the text hidden, then measure production LCP and CLS against a real production build.
-Dev-mode bundle size is meaningless (3.8 MB dev against 650 KB production here).
+The procedure is CARL DESIGN rules 5 to 10, and the pass list is in the design skill's Step 5.
+In short: capture and **read** fold, full page and mobile; squint test at 5px; sweep the breakpoints
+by **element bounds**, not `scrollWidth`; tab through; measure contrast with the text hidden,
+sampling pure background; test any JS-driven reveal with JavaScript off; then production LCP and
+CLS from a real production build. Dev-mode bundle size is meaningless (3.8 MB dev against 650 KB
+production here). Finish with `detect.mjs` over the changed files.
+
+If the browser preview cannot produce a screenshot, fall back to Playwright and `Read` the PNGs.
+If nothing works, stop and fix the capture. Never guess from the code.
+
+**Iterate until a full pass finds nothing**, not until the output is acceptable, and say plainly
+when a pass comes back clean.
+
+### Measured floors — the numbers the next change has to hold
+
+These are the current page, measured. They exist because "empty but rule-compliant" is not
+detectable without numbers.
+
+| | Editorial original | The flat redesign | Current |
+|---|---|---|---|
+| Hairline rules | 106 | 2 | 13 |
+| Ochre at display scale (≥28px) | 30 | 0 | 11 |
+| Display type steps | 6 | 1 | 6 |
+| Distinct font sizes | 20 | 9 | 15 |
+| Images | 1 | 1 | 7 |
+| Production LCP | — | — | 440 ms |
+| CLS | — | — | 0 |
+
+`scripts/measure.py` produces this table. Run it against the previous version as well as the new
+one: the ratio is the diagnosis, not the absolute number.
