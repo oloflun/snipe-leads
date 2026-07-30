@@ -21,8 +21,8 @@ const highlights = [
   {
     title: { sv: "Sorterar i fack", en: "Sorts into queues" },
     body: {
-      sv: "Teknisk support, leverans, betalning, retur & reklamation, konto — varje ärende klassas och prioriteras automatiskt.",
-      en: "Technical support, delivery, payment, returns & claims, account — every case is classified and prioritised automatically."
+      sv: "Teknisk support, garanti, leverans, utbildning, reklamation, betalning och orderstatus — varje ärende klassas och prioriteras automatiskt.",
+      en: "Technical support, warranty, delivery, training, claims, payment and order status — every case is classified and prioritised automatically."
     }
   },
   {
