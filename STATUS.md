@@ -419,3 +419,34 @@ skarpt sändtest.
   embeddings; nu används nyckelordssökning.
 - **Pilotens kunskapsbas** innehåller mallens platshållare — de filtreras bort
   som underlag, så agenten eskalerar tills riktigt material lagts in.
+
+## 2026-07-31 snajp.vercel.app kopplad till backenden — Claude
+
+Felet "SNAJP_SUPPORT_URL är inte satt" på snajp-sidan.
+
+### Orsak
+Vercel-projektet **snajp** (`prj_ZXXMG8Jlz0zHeLdg5NTMhN0tHpw9`) är ett EGET
+projekt som bygger från branchen **`snajp-redesign`**, inte från `development`
+som projektet `snipra` gör. Det hade **noll env-vars**, så proxyn föll tillbaka
+på localhost. Notera också att kodens fallback-nyckel är den gamla publika
+`snajp_demo_2f8c1a9e4b7d` som roterats bort — utan `SNAJP_INTERNAL_API_KEY`
+hade det blivit 401 även med rätt URL.
+
+### Åtgärdat
+- `SNAJP_SUPPORT_URL` + `SNAJP_INTERNAL_API_KEY` satta på projektet snajp
+  (production + preview), deployat om. `/support` → 200, proxyn når backenden
+  i `mode: live`, demo-scenarier laddar och sorteras i alla sju fack.
+- Kirurgiska fixar på `snajp-redesign` (`64420ac`), utan att röra
+  redesign-arbetet: `CATEGORY_LABELS` saknade `garanti`/`utbildning` så de
+  facken visades utan etikett, och proxyn saknade kallstartslogiken.
+
+### Öppen tråd
+**`snajp-redesign` ligger 10 commits efter `development`** och en merge är inte
+trivial: 162 filer skiljer, konflikter finns, och det finns en
+**migrationskollision** — båda brancherna har en `005_*.sql`
+(`005_snajp_pilot_categories.sql` vs `005_workspace_products.sql`). Bara den
+förstnämnda är applicerad mot databasen. Reder ut tillsammans med Anton innan
+merge; numrera om den ena.
+
+Backenden påverkas inte av branch-läget — Render bygger från `development`, så
+båda frontenderna pratar med samma aktuella tjänst.
