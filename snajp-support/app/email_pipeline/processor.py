@@ -60,13 +60,22 @@ async def _triage_email(
     email: dict[str, Any],
     image_urls: list[str],
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    """Returnerar (triage-resultat med confidence/reasoning/draft_body, KB-träffar)."""
+    """Returnerar (triage-resultat med confidence/reasoning/draft_body, KB-träffar).
+
+    Platshållarartiklar filtreras bort innan de når modellen. De är mall-text,
+    inte bolagets policy — används de som underlag kan svaret innehålla villkor
+    ingen står bakom. Blir det inget kvar faller ärendet på grundningsregeln
+    och eskaleras, vilket är rätt utfall.
+    """
     settings = get_settings()
     query = f"{email['subject']} {email['body_text']}".strip()
 
+    def _usable(found: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [a for a in found if not a.get("content", "").startswith(PLACEHOLDER_PREFIX)]
+
     if settings.is_simulation():
         triage = classify(email["subject"], email["body_text"])
-        articles = await storage.search_kb(tenant_id, query)
+        articles = _usable(await storage.search_kb(tenant_id, query))
         triage["confidence"] = _sim_confidence(triage["category"], articles)
         triage["reasoning"] = (
             f"Nyckelordsmatchning gav facket {CATEGORY_LABELS[triage['category']]} "
@@ -94,7 +103,7 @@ async def _triage_email(
     from ..agent.triage import triage_email_llm
 
     embedding = await embed_text(query)
-    articles = await storage.search_kb(tenant_id, query, embedding=embedding)
+    articles = _usable(await storage.search_kb(tenant_id, query, embedding=embedding))
     result = await triage_email_llm(
         sender=email["from_email"],
         subject=email["subject"],
@@ -138,19 +147,10 @@ async def process_email(
         escalation_reason = triage.get("escalation_reason")
         if not must_escalate and not articles:
             must_escalate = True
-            escalation_reason = "Ingen träff i kunskapsbasen — grundningsregeln kräver människa."
-        # Kodspärr utöver prompten: bygger svaret på ofärdig mall-text kan det
-        # innehålla villkor bolaget inte står bakom. En modell som ombeds låta
-        # bli kan ändå glida; den här kontrollen kan inte.
-        if not must_escalate and any(
-            a.get("content", "").startswith(PLACEHOLDER_PREFIX) for a in articles
-        ):
-            must_escalate = True
             escalation_reason = (
-                "Underlaget är en platshållare i kunskapsbasen, inte färdigt "
-                "kundmaterial — svaret måste granskas av en människa."
+                "Inget användbart underlag i kunskapsbasen — grundningsregeln "
+                "kräver människa. (Platshållartext räknas inte som underlag.)"
             )
-
         await storage.save_classification(
             tenant_id,
             email_id=email_id,

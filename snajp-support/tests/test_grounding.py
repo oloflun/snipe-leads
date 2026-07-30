@@ -56,14 +56,22 @@ async def test_placeholder_kb_forces_escalation(pilot):
             detail = (await client.get(f"/api/inbox/{email_id}", headers=PILOT)).json()
             assert detail["status"] == "escalated"
             reason = detail["classification"]["escalation_reason"] or ""
-            assert "platshållare" in reason.lower()
+            assert "platshållartext" in reason.lower()
+            # Platshållare får inte ens citeras som källa.
+            assert detail["classification"]["kb_sources"] == []
 
 
 @pytest.mark.anyio
-async def test_real_content_is_answerable(pilot):
-    """Motsatsen: färdigt material ska ge ett utkast, inte eskalering."""
+async def test_real_content_answerable_despite_placeholders(pilot):
+    """Färdigt material ska ge utkast även när mallartiklar också finns.
+
+    Platshållarna filtreras bort ur underlaget i stället för att blockera hela
+    svaret — annars hade en enda mallartikel i topplistan gjort en fullt
+    besvarbar fråga obesvarbar.
+    """
     async with app.router.lifespan_context(app):
         async with _client() as client:
+            await client.post("/api/kb/template", headers=PILOT)  # mall = platshållare
             await client.post(
                 "/api/kb",
                 headers=PILOT,
