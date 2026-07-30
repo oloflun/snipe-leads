@@ -15,6 +15,7 @@ import logging
 from typing import Any
 
 from ..config import CATEGORY_LABELS, get_settings
+from ..kb_templates import PLACEHOLDER_PREFIX
 from ..simulation.sim_triage import classify
 from ..storage.base import Storage
 
@@ -104,6 +105,9 @@ async def _triage_email(
     result["draft_body"] = result.pop("draft_reply", None)
     result.setdefault("reasoning", "LLM-klassificering.")
     result["model"] = get_settings().model
+    # Modellen skriver egen hälsning och signatur. Mallen nedan lägger till
+    # sina egna bara i simuleringsläge — annars blir svaret dubblerat.
+    result["self_contained"] = True
     return result, articles
 
 
@@ -127,6 +131,26 @@ async def process_email(
             {"title": a["title"], "similarity": a["similarity"]} for a in articles
         ]
 
+        # Eskaleringsbeslutet tas FÖRE klassificeringen sparas, så att skälet
+        # följer med till dashboarden. Annars ser användaren "Eskalerat" utan
+        # att få veta varför.
+        must_escalate = bool(triage.get("escalate"))
+        escalation_reason = triage.get("escalation_reason")
+        if not must_escalate and not articles:
+            must_escalate = True
+            escalation_reason = "Ingen träff i kunskapsbasen — grundningsregeln kräver människa."
+        # Kodspärr utöver prompten: bygger svaret på ofärdig mall-text kan det
+        # innehålla villkor bolaget inte står bakom. En modell som ombeds låta
+        # bli kan ändå glida; den här kontrollen kan inte.
+        if not must_escalate and any(
+            a.get("content", "").startswith(PLACEHOLDER_PREFIX) for a in articles
+        ):
+            must_escalate = True
+            escalation_reason = (
+                "Underlaget är en platshållare i kunskapsbasen, inte färdigt "
+                "kundmaterial — svaret måste granskas av en människa."
+            )
+
         await storage.save_classification(
             tenant_id,
             email_id=email_id,
@@ -134,8 +158,8 @@ async def process_email(
             priority=triage.get("priority", "normal"),
             sentiment=triage.get("sentiment"),
             confidence=round(float(triage.get("confidence", 0.5)), 2),
-            escalate=bool(triage.get("escalate")),
-            escalation_reason=triage.get("escalation_reason"),
+            escalate=must_escalate,
+            escalation_reason=escalation_reason,
             reasoning=triage.get("reasoning", ""),
             kb_sources=kb_sources,
             model=triage.get("model", "simulation"),
@@ -180,13 +204,7 @@ async def process_email(
         confidence = float(triage.get("confidence", 0.5))
         sentiment = triage.get("sentiment")
 
-        # 1–2: obligatorisk eskalering (triage eller tom KB).
-        must_escalate = bool(triage.get("escalate"))
-        escalation_reason = triage.get("escalation_reason")
-        if not must_escalate and not articles:
-            must_escalate = True
-            escalation_reason = "Ingen träff i kunskapsbasen — grundningsregeln kräver människa."
-
+        # 1–2: eskaleringsbeslutet togs redan ovan (före klassificeringen sparades).
         if must_escalate or rule == "escalate":
             reason = escalation_reason or f"Regeln för facket {CATEGORY_LABELS[triage['category']]} kräver mänsklig granskning."
             body = _ESCALATION_BODY if must_escalate and articles else (
@@ -208,7 +226,10 @@ async def process_email(
             )
             return {"action": "escalated", "draft_id": draft["id"], "ticket_id": ticket["id"]}
 
-        content = (greeting + (triage.get("draft_body") or _NO_MATCH_BODY) + _SIGNATURE).strip()
+        body = triage.get("draft_body") or _NO_MATCH_BODY
+        content = body.strip() if triage.get("self_contained") and triage.get("draft_body") else (
+            greeting + body + _SIGNATURE
+        ).strip()
 
         # 4: autosvar — bara om regeln säger auto OCH säkerhetsvillkoren håller.
         # ALLOW_AUTO_SEND är en hård global spärr: under pilot ska inget lämna
