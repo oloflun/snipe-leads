@@ -383,3 +383,39 @@ arbetet (`3fe1663`). Allt nedan testat mot
 Utskick testades medvetet INTE skarpt — mockadresserna ligger på riktiga
 domäner (vardcentralen.se, brfsolsidan.se m.fl.). Använd en egen adress vid
 skarpt sändtest.
+
+## 2026-07-30 Riktig AI live + tre buggar funna i skarpt test — Claude
+
+### Completed
+- **DeepSeek-nyckel satt på Render** → `mode: live`. Verifierat med riktigt
+  anrop: svar genereras av modellen (`simulation: false`), grundat i KB.
+- **Migration 005 applicerad** via `supabase-snipra`-MCP. Var en blockerare:
+  DB:ns CHECK-villkor saknade `garanti`/`utbildning`, så `DATABASE_URL` hade
+  fått varje ärende avvisat. Verifierat efteråt.
+- `/health/ready` speglar nu verkligt läge och listar vad som saknas i klartext.
+- Proxyn tål Renders kallstart (avbryter själv efter 8 s, tre försök).
+- CORS via `ALLOWED_ORIGINS` (av som default — behövs ej för egen frontend).
+- `DRIFTSATTNING.md`: checklista i rätt ordning för Render, Vercel, Gmail, KB
+  och verifiering av skarpt testmail.
+
+### Tre buggar som skarpt test avslöjade (alla åtgärdade)
+1. **Hallucinerad garantitid.** KB sa "under garantitiden" utan siffra; utkastet
+   påstod "tre år från leveransdatum". Prompterna förbjuder nu uttryckligen att
+   fylla i siffror som inte står ordagrant, OCH platshållarartiklar filtreras
+   bort ur underlaget innan de når modellen (prompt räcker inte som skydd).
+2. **Dubblerad hälsning/signatur** — modellen skriver ett komplett mail, mallen
+   lade till sina egna ovanpå.
+3. **Render blockerar utgående SMTP** (portarna 25/465/587) på gratisplanen
+   sedan sep 2025 → `EMAIL_PROVIDER=resend` som HTTPS-alternativ tillagt.
+
+### Kvar för fullt skarp pilot
+- **`DATABASE_URL` på Render.** Värdet användaren la i `SUPABASE_DB_PASSWORD`
+  var en Supabase API-nyckel (`sb_...`), inte databaslösenordet — anslutningen
+  nekas. Rätt lösenord finns i Supabase → Project Settings → Database.
+  Utan detta: in-memory, allt nollställs vid spin-down var 15:e minut.
+- **Utskicksväg:** `RESEND_API_KEY` + `EMAIL_PROVIDER=resend`, alternativt
+  betald Render-plan.
+- **`EMBEDDING_API_KEY`** (OpenAI) för semantisk KB-sökning. DeepSeek saknar
+  embeddings; nu används nyckelordssökning.
+- **Pilotens kunskapsbas** innehåller mallens platshållare — de filtreras bort
+  som underlag, så agenten eskalerar tills riktigt material lagts in.
