@@ -1,5 +1,53 @@
 # Snipra Status
 
+## 2026-07-30 — Claude — Snajp deployad, designsystemet härdat
+
+### Live
+- **https://snajp.vercel.app** — landningssidan, eget Vercel-projekt `snajp`, publik.
+- **https://snajp-showcase.vercel.app** — processidan, eget projekt `snajp-showcase`, publik.
+- `snipra.vercel.app` **orörd**, pekar fortfarande på main-deployen från 2026-05-24.
+  Verifierat efter varje deploy: gammal titel, `/snajp-support` ger 404.
+
+### Gjort
+- Allt committat och pushat. `snajp-redesign` (huvudträdet) och `nordic-photo` (E2) ligger på
+  GitHub. `.shots/` gitignorerat, 73 MB sessionsbevis som inte hör hemma i historiken.
+- E2 sammanslagen in i huvudträdet. Tre CSS-verktyg som handoffen påstod fanns saknades i båda
+  träden: `.parallax` (bakgrundsbilder renderade i naturlig storlek och klipptes), `.rise`
+  (avslöjandet gjorde ingenting) och `.hrule` (stegraden saknade linjer). Hittade genom att titta
+  på den körande servern, inte genom att läsa dokumentationen.
+- `<p>` låg inuti `<p>` under demon. Ogiltig HTML, hydreringen bröts, hela sidan ritades om
+  på klienten.
+- **Malmö → Göteborg och Umeå.** Två nya fotografier: `goteborg-golden.webp` (@addekalk) och
+  `haga.webp` (@federi), valda ur ~40 kandidater som lästes som bilder. Statement-bandets scrim
+  fick en ockra-komponent, annars läste Haga-gatan kallblått mot den varma paletten.
+- **Avslöjandet vid scroll lämnade tolv element permanent osynliga** på varje route i den första
+  deployen — sektionsrubriker med tomt under. Infört av mig när `.rise` fick tillbaka
+  `opacity: 0`. Fyra spärrar nu, och `scripts/check_reveal.py` som föll mot den trasiga versionen
+  innan den litades på.
+- Showcasen fångad och läst för första gången. Slutversionen visade Stockholm-E2:an med
+  dev-overlay; omfångad från produktionsdeployen. Skärmdumparna gick från 3656 KB till 396 KB.
+- **CARL DESIGN har regel 5–10** och beslutet `design-003`: fallback-kedja för visuell
+  verifiering, referenser fångas före första raden kod, iterera tills en hel genomgång är ren
+  *och* resultatet slår referenserna, misstro mätningen före ögonen, inga förbudsbara designsystem,
+  avslöjandesystem ska fela mot synligt.
+- `~/.agents/skills/design/` fick steg 1b (referensfångst), fallback-kedjan i steg 5, och
+  `scripts/` med shoot, shoot_slices, measure och check_reveal.
+
+### Kvar
+- **Alunix-sidan är inte byggd.** Nytt Next.js-projekt i `C:\Users\Anton L\alunix-site`, svenska
+  och engelska. Underlag i `HANDOFF-2026-07-29.md` §10, referenslista i planen.
+- **Demodatan säger fortfarande Malmö.** Icke-kritiskt, hela Sverige täcks. Fem filer:
+  `lib/mock-data.ts`, `components/WorkspaceViews.tsx`, `app/api/email-studio/route.ts`,
+  `lib/agent/email-studio-prompt.ts`, `components/DesignDrafts.tsx`.
+- **Vercel-token ligger i sessionstranskriptet och bör roteras.**
+- Migration `005_workspace_products.sql` är skriven men inte applicerad.
+- Env-vars är inte satta på `snajp`-projektet: `SNAJP_SUPPORT_URL` och Supabase-nycklarna.
+  Support-demon visar offline-text tills de finns.
+- Worktrees `snajp-copyedit`, `snajp-humanized`, `snajp-original` och dev-servrarna på
+  3008–3023 lever kvar. Allt är committat, så de kan rivas.
+- `MEMORY.md` över taket (2358/2200), `USER.md` på 98 %.
+- `.agent-context/current/*` är fortfarande en ofylld mall trots att CLAUDE.md kräver att den läses.
+
 ## 2026-07-07 — Grok — Email Studio full automation per Snipra Prompt (1).md
 
 **Fokus:** Automatisera Email-Studio så företag kan skapa konto (endast email/magic link), logga in och omedelbart testa alla funktioner "Kortare", "Skriv om", "Förbättra", "Personalisera", "Översätt", "A/B-varianter", "Uppföljning", "Analysera" på https://snipra.vercel.app/emails (och /dashboard).
