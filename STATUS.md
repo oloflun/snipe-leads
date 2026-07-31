@@ -450,3 +450,34 @@ merge; numrera om den ena.
 
 Backenden påverkas inte av branch-läget — Render bygger från `development`, så
 båda frontenderna pratar med samma aktuella tjänst.
+
+## 2026-07-31 (forts.) Kallstarten löst i tre lager — Claude
+
+Symptom: "This operation was aborted" mot en fullt frisk backend. Render
+free-tier somnar efter 15 min och tar ~1 min att vakna, medan Vercels
+serverless-funktioner dör efter 10 s som default. Anropet hann alltså aldrig
+fram.
+
+### Åtgärdat
+- **`maxDuration = 60`** på alla fem proxy-routes (både `/api/snajp-support`
+  och `/api/kundtjanst`), så Vercel låter anropet leva genom uppvakningen.
+- **Retry-budget 5 × 10 s** (var 3 × 8 s) — täcker faktiskt en kallstart.
+- **`.github/workflows/keep-backend-awake.yml`** pingar `/health/live` var
+  tionde minut, **vardagar 06–17 UTC**. Testkörd manuellt: success.
+- **Redundanta Render-tjänsten `snipe-leads` pausad** (Next.js-dubbletten som
+  Vercel redan serverar) för att inte äta av samma kvot.
+
+### Varför schemat är begränsat — läs innan ni ändrar
+Gratisnivån ger **750 instanstimmar/månad delat på ALLA gratistjänster** i
+workspacet. Dygnet-runt-pingning kostar ~730 h och skulle spränga kvoten —
+Render stänger då av **allt** till nästa månad. Kontorstid landar på ~250 h
+med god marginal. Utanför den tiden får första besökaren vänta ~1 min, vilket
+proxyn numera klarar utan felmeddelande.
+
+**Permanent lösning:** Render Starter (~7 USD/mån) tar bort spin-down helt
+*och* SMTP-blockeringen — alltså både kallstart och utskick i ett.
+
+### Verifierat
+Backenden pausades och återstartades för att framkalla en äkta kallstart.
+Första anropet därefter: `snipra-oloflun-…` lyckades efter **24 s**,
+`snajp.vercel.app` efter 1 s. Tidigare dog båda efter 10 s.
