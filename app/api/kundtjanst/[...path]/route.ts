@@ -11,6 +11,9 @@ import { offlineResponse, SNAJP_SUPPORT_URL } from "@/app/api/snajp-support/_lib
 //     åtkomst till pilotens data i stället för demons.
 
 export const runtime = "nodejs";
+// Render free-tier tar ~1 min att vakna. Utan detta dödar Vercel
+// funktionen efter 10 s och en frisk backend ser ut att vara nere.
+export const maxDuration = 60;
 
 const PILOT_API_KEY = process.env.SNAJP_PILOT_API_KEY ?? "";
 

@@ -24,12 +24,12 @@ export function offlineResponse(cause?: unknown) {
   );
 }
 
-// Render free-tier somnar efter 15 min och tar ~1 min att vakna. Det första
-// anropet efter viloläge hänger tills instansen är uppe — längre än Vercels
-// funktionsgräns. Vi avbryter därför själva och gör om försöket, i stället för
-// att låta plattformen döda anropet och visa "offline" på en frisk tjänst.
-const ATTEMPT_TIMEOUT_MS = 8000;
-const MAX_ATTEMPTS = 3;
+// Render free-tier somnar efter 15 min och tar ~1 min att vakna. Ett enskilt
+// försök kan alltså inte lyckas — men hela budgeten nedan (5 × 10 s) täcker
+// uppvakningen, förutsatt att route-filerna sätter `maxDuration = 60` så att
+// Vercel inte dödar funktionen på vägen.
+const ATTEMPT_TIMEOUT_MS = 10_000;
+const MAX_ATTEMPTS = 5;
 
 export async function proxyToBackend(path: string, init: RequestInit) {
   let lastCause: unknown;
@@ -55,7 +55,7 @@ export async function proxyToBackend(path: string, init: RequestInit) {
       // Bara timeout/nätverksfel är värt att göra om — ett riktigt HTTP-svar
       // har redan returnerats ovan.
       if (attempt < MAX_ATTEMPTS - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     } finally {
       clearTimeout(timer);

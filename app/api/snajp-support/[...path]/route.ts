@@ -5,6 +5,9 @@ import { proxyToBackend } from "../_lib";
 // triage) matchar före denna. Endast /api/-prefixade backend-vägar tillåts.
 
 export const runtime = "nodejs";
+// Render free-tier tar ~1 min att vakna. Utan detta dödar Vercel
+// funktionen efter 10 s och en frisk backend ser ut att vara nere.
+export const maxDuration = 60;
 
 function backendPath(path: string[], search: string): string {
   return `/api/${path.map(encodeURIComponent).join("/")}${search}`;
