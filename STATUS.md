@@ -1,5 +1,34 @@
 # Snipra Status
 
+## 2026-08-01 — Claude — Designsystemet ombyggt till register, tre projekt härdade
+
+Arkeologi över tre tidigare sessioner visade att v2-omarbetningen fixade mekaniska fel
+(hooks som inte utlöstes, varumärkeskontaminering) men aldrig frågade varför v1:s output
+faktiskt var bra. Den enda husstilen (editorial print) ersattes med en registertabell vald
+ur verksamheten; utgångsribban gjordes mekanisk (`design-stop.py` blockerar avslut om UI-ändringar
+finns utan att en rendering lästs efteråt, i stället för att bero på att användaren skriver
+ett explicit mål varje session).
+
+Verifierat med tre blinda one-shot-byggen från fräscha subagenter (Tidvatten, Vintergatan,
+Vinterspelen — inklusive ett register utan arbetat exempel på disk), alla godkända vid
+första försöket. `verify-design-system.py` 80/80.
+
+Tillämpat på:
+- **`anti-slop-design`** — sex demo-register, showcase-sidan omskriven och tre gates den
+  själv bröt mot rättade (handritad webbläsarkrom, `1fr`-rutnät som drog 1200px horisontell
+  scroll vid 320px, 21 tankstreck). Committad och pushad.
+- **`alunix-site`** → klonad till **`alunix`** (nytt fristående repo, historik bevarad,
+  ingen fjärrkoppling). Grafanimationen ombyggd till en "dolly" (princip lånad från
+  21st.dev, körd baklänges), plus en regression hittad och rättad: reducerad rörelse
+  klippte hela stegprogressionen i stället för bara rörelsen.
+- **`klova-hamnkrog`** — audit + 8 fynd åtgärdade (saknad accent-token, IA-dubblett,
+  kontrastfel, riktad hero-scrim).
+- **`super-intelligence`** 0.4.4 → 0.4.5, committad lokalt, **ej pushad**.
+
+**Öppet:** `alunix-site` och `alunix` existerar båda på disk — bestäm vilken som är
+kanonisk. Alunix-sidan i övrigt behöver mer arbete enligt användaren själv.
+Full session-logg: `session-logs/2026-08-01-session-log.md`.
+
 ## 2026-07-30 — Claude — Snajp deployad, designsystemet härdat
 
 ### Live
