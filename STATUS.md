@@ -1,5 +1,29 @@
 # Snipra Status
 
+## 2026-08-01 (forts.) — Claude — Distribuerat, och conclude-protokollet parallelliserat
+
+**Designsystemet är helt i `super-intelligence` 0.4.5** och pushat till grenen
+`design-system-v2` (inte `main` — PR-länk finns om du vill merga). Verifierat identiskt:
+126 filer i `skills/design`, alla nio hooks, båda syskonskillen, hash för hash.
+
+**Installer-wiringen är gjord** — den öppna tråden från förra passet. Registreringstabellen
+i `install.mjs` och `upgrade.mjs` gick från 6 till 8 poster, och båda mergarna stämmer nu av
+en **ändrad** matcher: `design-verify-gate` breddades till att täcka Chrome-tillägget, och
+den gamla närvarokontrollen hade lämnat befintliga installationer på det gamla värdet för
+alltid. Testat mot en simulerad 0.4.4-`settings.json`: 6 ändringar första passet, 0 andra,
+och ett orelaterat `carl-hook.py`-block i samma eventarray orört.
+
+**`alunix` är canon.** `alunix-site` ligger kvar med `SUPERSEDED.md` i stället för att
+raderas — två levande kopior är precis hur fel katalog blir redigerad, men radering är
+ditt beslut, inte ett automatiskt städsteg.
+
+**`/conclude` byggdes om.** Dess mekaniska halva (sessions.db, globala STATUS.md,
+minnesspegling, vault-backup, qmd, gbrain, chorus) kör nu parallellt i
+`~/.agents/scripts/conclude-finalize.py`, startad i bakgrunden så snart sessionsloggen
+finns. Inget steg togs bort. Två buggar som bara körning kunde hitta: npm-shims på Windows
+löses inte av `subprocess` utan `shutil.which`, och `gbrain` är faktiskt okonfigurerat
+(`Source "default" has no local_path`) — tidigare tyst, nu synligt.
+
 ## 2026-08-01 — Claude — Designsystemet ombyggt till register, tre projekt härdade
 
 Arkeologi över tre tidigare sessioner visade att v2-omarbetningen fixade mekaniska fel
