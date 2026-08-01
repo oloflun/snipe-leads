@@ -1,5 +1,37 @@
 # Snipra Status
 
+## 2026-08-02 — Claude — Merget till main, alla trådar utom Alunix stängda, två tysta länkfel
+
+**`super-intelligence` 0.4.5 merget till `main` och pushat.** Fast-forward, gjord utan
+utcheckning eftersom 22 ospårade impeccable v3-filer blockerade den — `git push
+origin design-system-v2:main` gav samma resultat utan att röra arbetsträdet.
+Installer-wiringen klar: registreringstabellen 6 → 8 poster plus **matcheravstämning**,
+för den gamla mergen frågade bara "finns skriptet?" och hade lämnat den breddade
+`design-verify-gate`-matchern på sitt gamla värde hos alla befintliga installationer.
+Testad mot en simulerad 0.4.4: 6 ändringar första passet, 0 andra, orelaterat
+`carl-hook.py` orört.
+
+**Trådar stängda:** `gbrain` (felet var scope, inte trasig installation — `sync` utan
+argument riktar sig mot en federerad källa utan sökväg), `.next` i Klova och
+`.impeccable` i snipe-leads avspårade, `alunix` canon och `alunix-site` raderad efter
+verifiering (bygget rent, 104 `.shots`-filer kopierade som klonen missat).
+
+**`/conclude` byggdes om** — mekaniska halvan kör parallellt i
+`.agents/scripts/conclude-finalize.py`, startad i bakgrunden. Mätt: 3 min 54 s mot
+uppskattade 12–14 innan. Inget steg togs bort.
+
+### Två tysta länkfel, samma orsak
+En arbetsgranskning avslöjade att **`~/vault-local` är död** (WSL-arv) men fem skills
+skrev fortfarande dit — separat katalog på disk, nådd bara av ett fördröjt jobb.
+Åtgärdat, CARL GLOBAL-regel 10.
+
+Och **`~/STATUS.md` är ingen hårdlänk längre** trots att `CLAUDE.md` påstår det.
+Valvkopian är fryst sedan 11 juni. Det är tredje bekräftade instansen av samma fel,
+och orsaken finns i varmt minne sedan maj: **Edit-verktyget skriver via temp-fil och
+byter namn, vilket kapar hårdlänkar.** Båda sökvägarna fortsätter fungera, den ena
+slutar bara vara samma fil. **Öppen tråd — kräver ett beslut om vilken sida som vinner,
+och ett svep över alla dokumenterade junctions.**
+
 ## 2026-08-01 (forts.) — Claude — Distribuerat, och conclude-protokollet parallelliserat
 
 **Designsystemet är helt i `super-intelligence` 0.4.5** och pushat till grenen
