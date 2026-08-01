@@ -40,3 +40,8 @@ screenshots/cookies-dump.json
 # disk and the plans reference them by path; nothing builds or runs from them.
 .shots/
 .vercel
+
+# Design-hook telemetry: per-turn session reports and the ledger. Machine
+# state, regenerated every run, never read from git. Untracked 2026-08-01;
+# files stay on disk.
+.impeccable/

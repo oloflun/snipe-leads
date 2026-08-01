@@ -1,2 +1,0 @@
-{"ts": "2026-07-31T22:22:44+00:00", "event": "intent", "tier": "0-prose", "signal": "build", "detail": "verb=build"}
-{"ts": "2026-07-31T22:24:53+00:00", "event": "skill", "skill": "conclude", "tier": "0-prose"}
