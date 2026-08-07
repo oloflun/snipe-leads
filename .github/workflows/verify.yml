@@ -1,0 +1,65 @@
+name: Verify
+
+on:
+  pull_request:
+  push:
+    branches:
+      - development
+      - main
+
+jobs:
+  python-tests:
+    name: pytest (snajp-support)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: snajp-support/requirements.txt
+
+      - name: Install dependencies
+        working-directory: snajp-support
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        working-directory: snajp-support
+        run: pytest
+
+  invariants:
+    name: Architecture invariants
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: snajp-support/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r snajp-support/requirements.txt
+
+      - name: Print active waivers
+        run: cat waivers.yml
+
+      - name: Run invariant tests
+        run: pytest tests/invariants
+
+  type-check:
+    name: npm run type-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run type-check

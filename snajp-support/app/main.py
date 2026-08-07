@@ -13,7 +13,7 @@ from fastapi import FastAPI
 
 import asyncio
 
-from .api import chat, drafts, inbox, kb, keys, rules, tickets, triage
+from .api import chat, demo, drafts, inbox, kb, keys, leads, rules, tickets, triage
 from .config import get_settings
 from .jobs.store import MemoryJobStore, RedisJobStore
 from .storage.memory import MemoryStorage
@@ -37,11 +37,14 @@ async def lifespan(app: FastAPI):
             # eskalering av varje ärende — seeda text direkt (embeddings via
             # `python -m app.scripts.seed_kb` när en EMBEDDING_API_KEY finns).
             try:
-                from .scripts.seed_kb import ensure_default_kb
+                from .scripts.seed_kb import ensure_default_kb, ensure_public_demo_kb
 
                 added = await ensure_default_kb(storage)
                 if added:
                     logger.info("Kunskapsbasen var tom — seedade %s artiklar.", added)
+                demo_added = await ensure_public_demo_kb(storage)
+                if demo_added:
+                    logger.info("G8-demons kunskapsbas var tom — seedade %s artiklar.", demo_added)
             except Exception as error:  # noqa: BLE001 — seedning får aldrig fälla uppstarten
                 logger.warning("Kunde inte seeda kunskapsbasen (%s).", error)
         except Exception as error:
@@ -81,10 +84,18 @@ async def lifespan(app: FastAPI):
 
         poller_task = asyncio.create_task(run_poller(app.state))
 
+    send_scheduler_task = None
+    if settings.send_queue_poll_seconds > 0:
+        from .leads.scheduler import run_send_scheduler
+
+        send_scheduler_task = asyncio.create_task(run_send_scheduler(app.state))
+
     yield
 
     if poller_task:
         poller_task.cancel()
+    if send_scheduler_task:
+        send_scheduler_task.cancel()
     await storage.close()
 
 
@@ -95,6 +106,8 @@ app.include_router(triage.router)
 app.include_router(tickets.router)
 app.include_router(keys.router)
 app.include_router(kb.router)
+app.include_router(leads.router)
+app.include_router(demo.router)
 app.include_router(inbox.router)
 app.include_router(drafts.router)
 app.include_router(rules.router)

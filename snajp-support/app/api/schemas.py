@@ -39,6 +39,48 @@ class KbArticle(BaseModel):
     category: str = "ovrigt"
 
 
+class ContextDocRequest(BaseModel):
+    """Leads Fas A (Del F): produktmarknadsföring, kundresearch, uppladdat
+    material, eller retentionsplaybook. `content` är redan extraherad text —
+    fil-till-text-parsning (PDF/DOCX) sker inte här, se app/api/leads.py."""
+
+    kind: str = Field(..., pattern=r"^(product_marketing|customer_research|upload|retention_playbook)$")
+    content: str = Field(..., min_length=1, max_length=50000)
+    source: str = ""
+
+
+class OnboardingChatRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=8000)
+
+
+class ProspectRequest(BaseModel):
+    company_name: str = Field(..., min_length=1, max_length=200)
+    contact_name: str | None = None
+    contact_email: str | None = None
+
+
+class ProspectSourceRequest(BaseModel):
+    source_url: str = Field(..., min_length=4, max_length=2000)
+    source_type: str = Field(
+        default="company_website",
+        pattern=r"^(company_website|public_news|business_register|job_signal|manual_note|enrichment_adapter|linkedin|other)$",
+    )
+    lawful_basis: str = Field(..., min_length=3, max_length=500)
+
+
+class ResearchStepRequest(BaseModel):
+    prospect_id: str
+    brief: str = Field(..., min_length=1, max_length=2000)
+
+
+class OutreachDraftRequest(BaseModel):
+    thread_id: str
+    prospect_email: str
+    company_name: str = Field(..., min_length=1, max_length=200)
+    offer_summary: str = Field(..., min_length=1, max_length=2000)
+    brief: str = Field(..., min_length=1, max_length=2000)
+
+
 class KbArticleRequest(BaseModel):
     articles: list[KbArticle] = Field(..., min_length=1, max_length=50)
 

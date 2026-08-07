@@ -16,7 +16,7 @@ services:
       - key: LLM_PROVIDER
         value: deepseek
       - key: MODEL
-        value: deepseek-chat
+        value: deepseek-v4-flash
       # Utan värde => simuleringsläge. Sätt för riktig AI.
       - key: DEEPSEEK_API_KEY
         sync: false
@@ -29,8 +29,13 @@ services:
       # utan extra konfiguration.
       - key: SNAJP_DEMO_API_KEY
         value: snajp_demo_2f8c1a9e4b7d
-      # Valfritt — persistens (Supabase pooler) och embeddings (OpenAI-nyckel):
+      # Valfritt — persistens (Supabase pooler):
       - key: DATABASE_URL
+        sync: false
+      # Gemini (gratisnivå) — driver vision-sidovagnen (G9) och embeddings.
+      # Utan den: ingen bildbeskrivning, KB använder fulltextsökning i stället
+      # för vektorsökning. Skaffa nyckel: https://aistudio.google.com/apikey
+      - key: GEMINI_API_KEY
         sync: false
       - key: EMBEDDING_API_KEY
         sync: false

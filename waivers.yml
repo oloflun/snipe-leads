@@ -1,0 +1,12 @@
+# Committed record of active exceptions to ARCHITECTURE_INVARIANTS.md.
+# Breaking an active invariant requires an entry here — not a chat approval.
+# CI (tests/invariants/test_meta_invariants.py) fails the build on any entry
+# past its `expires` date. Remove the entry once the underlying gap is closed;
+# do not let an expired waiver linger as a silent bypass.
+#
+# - id: INV-SEC-005
+#   reason: "Pilot mot ny datakälla, allowlista klar v.34"
+#   owner: anton
+#   expires: 2026-09-01
+
+[]

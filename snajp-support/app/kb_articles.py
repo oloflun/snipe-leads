@@ -4,6 +4,43 @@ Används både av seed-skriptet (Postgres) och in-memory-lagringen, så att
 demon alltid har samma innehåll oavsett lagringsläge.
 """
 
+# G8: den PUBLIKA, oautentiserade demons kunskapsbas — om Snajp själv, inte
+# om en fiktiv kund. Egen tenant (PUBLIC_DEMO_TENANT_ID), delar ingenting
+# med Nordlys Handel eller en betalande kund.
+DEMO_KB_ARTICLES: list[dict] = [
+    {
+        "title": "Vad är Snajp?",
+        "category": "ovrigt",
+        "content": (
+            "Snajp bygger AI-agenter för svensk kundsupport och B2B-leads. "
+            "Supportagenten svarar kunder grundat i företagets egen kunskapsbas "
+            "och eskalerar till en människa när underlag saknas. Leads-agenten "
+            "researchar prospekt och skriver signalbaserade, lågmälda utskick — "
+            "aldrig massutskick."
+        ),
+    },
+    {
+        "title": "Hur fungerar supportagenten?",
+        "category": "ovrigt",
+        "content": (
+            "Agenten läser en kunds kunskapsbas, klassificerar ärendet, och svarar "
+            "ENBART grundat i den kunskapsbasen. Saknas svar eskalerar den till en "
+            "människa i stället för att gissa. Den här demon visar samma "
+            "resonemang, men utan att skapa ett riktigt ärende eller spara något."
+        ),
+    },
+    {
+        "title": "Är den här demon kopplad till en riktig kund?",
+        "category": "ovrigt",
+        "content": (
+            "Nej. Demon körs i ett isolerat läge utan kunddata, utan ärende- eller "
+            "kundregistrering, och utan möjlighet att skicka något. Den är till för "
+            "att visa hur agenten resonerar, inte för att testa en riktig "
+            "integration."
+        ),
+    },
+]
+
 KB_ARTICLES: list[dict] = [
     {
         "title": "Inloggningsproblem och återställning av lösenord",

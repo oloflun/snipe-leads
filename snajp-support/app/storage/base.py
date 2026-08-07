@@ -98,6 +98,131 @@ class Storage(Protocol):
 
     async def get_channel_config(self, tenant_id: str, channel: str) -> dict[str, Any]: ...
 
+    async def get_agent_taxonomy(self, tenant_id: str) -> tuple[str, ...]:
+        """A4: kundkonfigurerbar ärendetaxonomi. Tomt/saknat agent_configs-rad
+        -> global default (config.CATEGORIES)."""
+        ...
+
+    # -- Leads: kontextdokument (Fas A, Del C punkt 1) -----------------------
+
+    async def save_context_doc(
+        self, tenant_id: str, *, kind: str, content: str, source: str = ""
+    ) -> dict[str, Any]: ...
+
+    async def list_context_docs(
+        self, tenant_id: str, *, kind: str | None = None
+    ) -> list[dict[str, Any]]: ...
+
+    async def get_latest_context_doc(self, tenant_id: str, *, kind: str) -> dict[str, Any] | None:
+        """Senaste versionen av en given kind — det kontextpaketet faktiskt läser."""
+        ...
+
+    # -- Leads: send_queue-schemaläggaren (Del J, Fas C-E) -------------------
+
+    async def list_due_send_queue(self, tenant_id: str, now: Any) -> list[dict[str, Any]]:
+        """status='queued' och scheduled_at <= now."""
+        ...
+
+    async def update_send_queue_status(
+        self, tenant_id: str, item_id: str, *, status: str, gate_checks: dict[str, Any]
+    ) -> None: ...
+
+    async def get_outreach_thread(self, tenant_id: str, thread_id: str) -> dict[str, Any] | None: ...
+
+    async def get_pending_outreach_message(
+        self, tenant_id: str, thread_id: str
+    ) -> dict[str, Any] | None:
+        """Det äldsta outbound-meddelandet i tråden utan sent_at."""
+        ...
+
+    async def mark_outreach_message_sent(self, tenant_id: str, message_id: str, sent_at: Any) -> None: ...
+
+    # -- G11: segmentaggregatet (den enda avsiktliga tenantgränsöverskridningen) --
+
+    async def get_segment_ab_aggregate(self) -> list[dict[str, Any]]:
+        """Inget tenant_id-argument — se app/leads/segment_aggregate.py och
+        migration 013 för varför det är avsiktligt."""
+        ...
+
+    # -- G10: revisionslogg per agentkörning --------------------------------
+
+    async def log_agent_run(
+        self,
+        tenant_id: str,
+        *,
+        agent_type: str,
+        pack_version: str,
+        skills_used: list[str],
+        input_text: str,
+        output_text: str,
+        step_log: list[dict[str, Any]],
+        tokens_in: int,
+        tokens_out: int,
+        latency_ms: int,
+    ) -> dict[str, Any]:
+        """Skrivs för VARJE körning. Krävs för DSAR och för att kunna felsöka
+        ett dåligt svar i efterhand (plan G10)."""
+        ...
+
+    async def list_agent_runs(
+        self, tenant_id: str, *, agent_type: str | None = None, limit: int = 50
+    ) -> list[dict[str, Any]]: ...
+
+    # -- Leads: skriva ett utkast + köa (aldrig skicka, INV-SEC-004) --------
+
+    async def queue_outreach_message(
+        self,
+        tenant_id: str,
+        *,
+        thread_id: str,
+        body: str,
+        subject: str,
+        humanizer_variant: str,
+        scheduled_at: Any,
+    ) -> dict[str, Any]:
+        """Skapar meddelandet (sent_at=NULL) OCH send_queue-raden
+        (status='queued') i samma operation — det finns ingen kodväg som
+        skapar det ena utan det andra."""
+        ...
+
+    # -- Leads: proveniensregister (Fas B, INV-DATA-001, research-verktygets allowlist) --
+
+    async def create_prospect(
+        self,
+        tenant_id: str,
+        *,
+        company_name: str,
+        contact_name: str | None = None,
+        contact_email: str | None = None,
+    ) -> dict[str, Any]:
+        """Ingången till hela leads-pipelinen. Utan den här fanns inget sätt
+        att skapa ett prospekt alls — research/outreach kunde aldrig köras."""
+        ...
+
+    async def get_prospect(self, tenant_id: str, prospect_id: str) -> dict[str, Any] | None: ...
+
+    async def list_prospects(self, tenant_id: str, *, limit: int = 100) -> list[dict[str, Any]]: ...
+
+    async def update_prospect(
+        self, tenant_id: str, prospect_id: str, *, status: str | None = None
+    ) -> dict[str, Any] | None: ...
+
+    async def create_prospect_source(
+        self,
+        tenant_id: str,
+        *,
+        prospect_id: str,
+        source_url: str,
+        source_type: str,
+        lawful_basis: str,
+    ) -> dict[str, Any]: ...
+
+    async def list_prospect_source_urls(self, tenant_id: str, prospect_id: str) -> set[str]:
+        """URL:er redan registrerade som källor för prospektet — det
+        app/agent/research_tools.py:s skrapningsverktyg kontrollerar
+        url-argumentet mot innan det gör ett riktigt nätverksanrop."""
+        ...
+
     async def log_metric(
         self, tenant_id: str, *, ticket_id: str | None, metric_name: str, value: float | None
     ) -> None: ...

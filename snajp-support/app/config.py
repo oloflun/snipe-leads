@@ -1,6 +1,7 @@
 """Central konfiguration för Snajp-Support-tjänsten."""
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -9,6 +10,30 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 DEFAULT_TENANT_ID = "00000000-0000-4000-a000-000000000001"
 DEFAULT_TENANT_SLUG = "nordlys-handel"
 DEFAULT_TENANT_NAME = "Nordlys Handel"
+
+# A2b/Del F steg 12: Snajp som sin egen tenant — mk:churn-prevention är
+# direkt tillämplig på Snajp självt (Snajp ÄR SaaS med prenumerationer),
+# vilket gör den till ett testfall innan den blir policygenerator åt andra.
+# Onboarding (product-marketing.md, customer-research, retentionsplaybook)
+# är ett live-steg, inte något som körs vid migrationstillfället.
+SNAJP_TENANT_ID = "00000000-0000-4000-a000-000000000002"
+SNAJP_TENANT_SLUG = "snajp"
+SNAJP_TENANT_NAME = "Snajp"
+
+# G8: den publika, oautentiserade demon. Egen tenant, egen (tom/generisk) KB
+# — delar ingenting med Nordlys Handel eller någon betalande kund. Skiljer
+# sig från SNAJP_DEMO_API_KEY (som kräver en nyckel och pekar på Nordlys
+# Handels fulla, seedade KB) — G8-demon kräver ingen nyckel alls.
+PUBLIC_DEMO_TENANT_ID = "00000000-0000-4000-a000-000000000099"
+PUBLIC_DEMO_TENANT_SLUG = "public-demo"
+PUBLIC_DEMO_TENANT_NAME = "Snajp — offentlig demo"
+
+# G8 rate-tak: "en publik LLM-endpoint utan tak är en räkning som skriver
+# sig själv." Två oberoende tak — vilket som helst som slår i stoppar anropet.
+PUBLIC_DEMO_MAX_PER_SESSION = 15
+PUBLIC_DEMO_SESSION_WINDOW_SECONDS = 30 * 60
+PUBLIC_DEMO_MAX_PER_IP = 30
+PUBLIC_DEMO_IP_WINDOW_SECONDS = 60 * 60
 
 # MÅSTE matcha check-villkoret ss_knowledge_base_category_check i databasen.
 # Låg de isär klassificerade agenten ärenden som databasen sedan vägrade spara.
@@ -40,16 +65,54 @@ DEFAULT_CATEGORY_RULES = {category: "draft" for category in CATEGORIES}
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    # ABSOLUT sökväg, inte ".env" — en relativ sökväg löses mot cwd, vilket
+    # gjorde att nycklarna tyst försvann så fort tjänsten/ett skript kördes
+    # från någon annan katalog än snajp-support/ (upptäckt när
+    # scripts/run_live_tests.py kördes från repo-roten och ALLA live-anrop
+    # föll på "Missing credentials").
+    model_config = SettingsConfigDict(
+        env_file=str(Path(__file__).resolve().parent.parent / ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     # LLM-provider: "openai" eller "deepseek" (OpenAI-kompatibel endpoint).
     llm_provider: str = "openai"
     llm_base_url: str = ""  # tom => härleds från provider (se agent/llm.py)
     openai_api_key: str = ""
     deepseek_api_key: str = ""
-    embedding_api_key: str = ""  # valfri OpenAI-nyckel — DeepSeek saknar embeddings
+    # Gemini (Google AI Studio, OpenAI-kompatibel endpoint) driver vision-
+    # sidovagnen och embeddings — vald för gratisnivån, se scripts/keys.py.
+    gemini_api_key: str = ""
+    embedding_api_key: str = ""  # tom => faller tillbaka på gemini_api_key
     model: str = "gpt-4o-mini"
-    embedding_model: str = "text-embedding-3-small"
+    embedding_model: str = "gemini-embedding-001"
+    # G9: vision-sidovagn. deepseek-v4-flash saknar dokumenterat bildstöd, så
+    # bilder beskrivs separat (Gemini, gratisnivå) och matas in som text i
+    # DeepSeek-loopen. Bilden lagras aldrig efter beskrivningen.
+    vision_model: str = "gemini-3.6-flash"
+
+    # DeepSeek v4 kör "thinking mode" som DEFAULT — modellen producerar
+    # reasoning_content före sitt svar, vilket kostar output-tokens och latens.
+    #
+    # GLOBAL DEFAULT: "disabled". Beslut 2026-08-07 efter skarp jämförelse
+    # (docs/THINKING_MODE_COMPARISON.md, 66 anrop): identiska klassificerings-
+    # och eskaleringsbeslut i båda lägena, 11x fler tokens och 6x längre
+    # latens med thinking PÅ (130-209s/ärende — odugligt i livechatt).
+    # Enskilda playbook-steg kan override:a detta (PlaybookStep.thinking) —
+    # se app/agent/support_playbook.py, där cs:customer-escalation medvetet
+    # kör med thinking PÅ trots den här defaulten.
+    #
+    # Leads-flödet HAR INGET BESLUT ÄNNU. Mailbaserat => ingen tidspress,
+    # kvalitet är prioritet över kostnad. Playbook-stegen i
+    # app/leads/*_playbook.py lämnas därför utan override tills en fullständig
+    # jämförelse av VARJE delmoment i research+outreach är klar. Ändra inte
+    # den globala defaulten för att "lösa" leads — testa och besluta separat.
+    thinking_mode: str = "disabled"
+
+    # Fas B research (G4). Tomt => research-verktyget vägrar med ett tydligt
+    # fel i stället för att krascha eller tyst hoppa över skrapningen.
+    scrapegraphai_api_key: str = ""
     database_url: str = ""
     redis_url: str = ""
     snajp_master_api_key: str = "snajp_master_dev_key_change_me"
@@ -57,6 +120,11 @@ class Settings(BaseSettings):
 
     # Email-pipeline
     inbox_poll_seconds: int = 0  # 0 = ingen bakgrundspolling (mock triggas manuellt)
+
+    # Leads send_queue-schemaläggare (Del J). Samma mönster som
+    # inbox_poll_seconds: 0 = av (ingen bakgrundstask), sätts explicit i
+    # produktion. Håller test/dev-uppstart fri från överraskande bakgrundsjobb.
+    send_queue_poll_seconds: int = 0
     auto_send_min_confidence: float = 0.75
     imap_host: str = ""  # t.ex. imap.gmail.com eller outlook.office365.com
     imap_user: str = ""
@@ -65,9 +133,10 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _default_model_for_provider(self) -> "Settings":
-        # Undvik footgun: gpt-default mot DeepSeek => byt till deepseek-chat.
+        # Undvik footgun: gpt-default mot DeepSeek => byt till deepseek-v4-flash
+        # (1M kontext, 384K output, $0.14/$0.28 per 1M token — se plan-dokumentet).
         if self.llm_provider == "deepseek" and self.model.startswith("gpt-"):
-            self.model = "deepseek-chat"
+            self.model = "deepseek-v4-flash"
         return self
 
     def active_llm_key(self) -> str:

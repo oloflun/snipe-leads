@@ -13,8 +13,15 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from ..config import DEFAULT_TENANT_ID, DEFAULT_TENANT_NAME, DEFAULT_TENANT_SLUG
-from ..kb_articles import KB_ARTICLES
+from ..config import (
+    DEFAULT_TENANT_ID,
+    DEFAULT_TENANT_NAME,
+    DEFAULT_TENANT_SLUG,
+    PUBLIC_DEMO_TENANT_ID,
+    PUBLIC_DEMO_TENANT_NAME,
+    PUBLIC_DEMO_TENANT_SLUG,
+)
+from ..kb_articles import DEMO_KB_ARTICLES, KB_ARTICLES
 from .base import status_transition_allowed
 
 _STOPWORDS = {
@@ -79,6 +86,21 @@ class MemoryStorage:
         self.api_keys: dict[str, dict[str, Any]] = {}
         self.kb: dict[str, list[dict[str, Any]]] = {}
         self.channel_overrides: dict[tuple[str, str], dict[str, Any]] = {}
+        self.taxonomy_overrides: dict[str, tuple[str, ...]] = {}
+        self.context_docs: dict[str, list[dict[str, Any]]] = {}
+        # Leads Fas C-E (Del J/scheduler). Ingen API-yta bygger dessa än
+        # (Fas C-E:s persistenslager är en egen, senare ökning) — seedas
+        # direkt i tester tills vidare.
+        self.send_queue: dict[str, list[dict[str, Any]]] = {}
+        self.outreach_threads: dict[str, dict[str, dict[str, Any]]] = {}
+        self.outreach_messages: dict[str, list[dict[str, Any]]] = {}
+        # G11: (tenant_id, segment, lever) -> {sent, replies, positive}. Seedas
+        # direkt i tester — ingen API-yta skriver hit än (samma status som
+        # send_queue/outreach_* ovan).
+        self.ab_results: list[dict[str, Any]] = []
+        self.prospects: dict[str, list[dict[str, Any]]] = {}
+        self.prospect_sources: dict[str, list[dict[str, Any]]] = {}
+        self.agent_runs: dict[str, list[dict[str, Any]]] = {}
 
         # Email-pipeline
         # In-memory-läget har inga riktiga inkorgar — mock-mail matas in direkt
@@ -104,6 +126,18 @@ class MemoryStorage:
             "created_at": _now(),
         }
         self.kb[DEFAULT_TENANT_ID] = [_kb_row(DEFAULT_TENANT_ID, a) for a in KB_ARTICLES]
+
+        # G8: den publika demons egen, isolerade tenant + KB.
+        self.tenants[PUBLIC_DEMO_TENANT_ID] = {
+            "id": PUBLIC_DEMO_TENANT_ID,
+            "slug": PUBLIC_DEMO_TENANT_SLUG,
+            "name": PUBLIC_DEMO_TENANT_NAME,
+            "active": True,
+            "created_at": _now(),
+        }
+        self.kb[PUBLIC_DEMO_TENANT_ID] = [
+            _kb_row(PUBLIC_DEMO_TENANT_ID, a) for a in DEMO_KB_ARTICLES
+        ]
 
     # -- Tenants ------------------------------------------------------------
 
@@ -270,6 +304,14 @@ class MemoryStorage:
         embedding: list[float] | None = None,
         limit: int = 3,
     ) -> list[dict[str, Any]]:
+        # OBS: `embedding` ignoreras helt här — ren tokenöverlappning, aldrig
+        # semantisk. Missar synonymer/ordformer ("betalsätt" mot
+        # "Betalningsmetoder" delar inga tokens). Upptäckt 2026-08-07 när en
+        # Gemini-embeddingnyckel sattes och en KB-sökbugg INTE försvann — den
+        # gick att spåra hit, inte till PostgresStorage (som faktiskt kör
+        # pgvector-cosine-likhet, se postgres.py). Kvalitetstester av
+        # KB-sökning mot MemoryStorage bevisar därför ingenting om
+        # embeddings-kvalitet — de måste köras mot PostgresStorage.
         query_tokens = _tokenize(query)
         if not query_tokens:
             return []
@@ -315,6 +357,245 @@ class MemoryStorage:
         if override:
             return override
         return _GLOBAL_CHANNEL_CONFIGS.get(channel, _GLOBAL_CHANNEL_CONFIGS["web"])
+
+    async def save_context_doc(
+        self, tenant_id: str, *, kind: str, content: str, source: str = ""
+    ) -> dict[str, Any]:
+        existing = [d for d in self.context_docs.get(tenant_id, []) if d["kind"] == kind]
+        version = max((d["version"] for d in existing), default=0) + 1
+        doc = {
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "kind": kind,
+            "content": content,
+            "source": source,
+            "version": version,
+            "created_at": _now(),
+        }
+        self.context_docs.setdefault(tenant_id, []).append(doc)
+        return doc
+
+    async def list_context_docs(
+        self, tenant_id: str, *, kind: str | None = None
+    ) -> list[dict[str, Any]]:
+        docs = self.context_docs.get(tenant_id, [])
+        if kind:
+            docs = [d for d in docs if d["kind"] == kind]
+        return sorted(docs, key=lambda d: d["created_at"], reverse=True)
+
+    async def get_latest_context_doc(self, tenant_id: str, *, kind: str) -> dict[str, Any] | None:
+        docs = [d for d in self.context_docs.get(tenant_id, []) if d["kind"] == kind]
+        if not docs:
+            return None
+        return max(docs, key=lambda d: d["version"])
+
+    async def list_due_send_queue(self, tenant_id: str, now) -> list[dict[str, Any]]:
+        return [
+            item
+            for item in self.send_queue.get(tenant_id, [])
+            if item["status"] == "queued" and item["scheduled_at"] <= now
+        ]
+
+    async def update_send_queue_status(
+        self, tenant_id: str, item_id: str, *, status: str, gate_checks: dict[str, Any]
+    ) -> None:
+        for item in self.send_queue.get(tenant_id, []):
+            if item["id"] == item_id:
+                item["status"] = status
+                item["gate_checks"] = gate_checks
+                return
+
+    async def get_outreach_thread(self, tenant_id: str, thread_id: str) -> dict[str, Any] | None:
+        return self.outreach_threads.get(tenant_id, {}).get(thread_id)
+
+    async def get_pending_outreach_message(
+        self, tenant_id: str, thread_id: str
+    ) -> dict[str, Any] | None:
+        candidates = [
+            m
+            for m in self.outreach_messages.get(tenant_id, [])
+            if m["thread_id"] == thread_id and m["direction"] == "outbound" and m["sent_at"] is None
+        ]
+        return candidates[0] if candidates else None
+
+    async def mark_outreach_message_sent(self, tenant_id: str, message_id: str, sent_at) -> None:
+        for message in self.outreach_messages.get(tenant_id, []):
+            if message["id"] == message_id:
+                message["sent_at"] = sent_at
+                return
+
+    async def queue_outreach_message(
+        self,
+        tenant_id: str,
+        *,
+        thread_id: str,
+        body: str,
+        subject: str,
+        humanizer_variant: str,
+        scheduled_at,
+    ) -> dict[str, Any]:
+        message = {
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "thread_id": thread_id,
+            "direction": "outbound",
+            "body": body,
+            "subject": subject,
+            "humanizer_variant": humanizer_variant,
+            "sent_at": None,
+        }
+        queue_item = {
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "thread_id": thread_id,
+            "scheduled_at": scheduled_at,
+            "status": "queued",
+            "gate_checks": {},
+        }
+        self.outreach_messages.setdefault(tenant_id, []).append(message)
+        self.send_queue.setdefault(tenant_id, []).append(queue_item)
+        return {"message": message, "queue_item": queue_item}
+
+    async def create_prospect(
+        self,
+        tenant_id: str,
+        *,
+        company_name: str,
+        contact_name: str | None = None,
+        contact_email: str | None = None,
+    ) -> dict[str, Any]:
+        prospect = {
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "company_name": company_name,
+            "contact_name": contact_name,
+            "contact_email": contact_email,
+            "language_state": "sv",
+            "status": "new",
+            "created_at": _now(),
+        }
+        self.prospects.setdefault(tenant_id, []).append(prospect)
+        return prospect
+
+    async def get_prospect(self, tenant_id: str, prospect_id: str) -> dict[str, Any] | None:
+        return next(
+            (p for p in self.prospects.get(tenant_id, []) if p["id"] == prospect_id), None
+        )
+
+    async def list_prospects(self, tenant_id: str, *, limit: int = 100) -> list[dict[str, Any]]:
+        return sorted(
+            self.prospects.get(tenant_id, []), key=lambda p: p["created_at"], reverse=True
+        )[:limit]
+
+    async def update_prospect(
+        self, tenant_id: str, prospect_id: str, *, status: str | None = None
+    ) -> dict[str, Any] | None:
+        prospect = await self.get_prospect(tenant_id, prospect_id)
+        if prospect and status is not None:
+            prospect["status"] = status
+        return prospect
+
+    async def create_prospect_source(
+        self,
+        tenant_id: str,
+        *,
+        prospect_id: str,
+        source_url: str,
+        source_type: str,
+        lawful_basis: str,
+    ) -> dict[str, Any]:
+        source = {
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "prospect_id": prospect_id,
+            "source_url": source_url,
+            "source_type": source_type,
+            "lawful_basis": lawful_basis,
+            "retrieved_at": _now(),
+        }
+        self.prospect_sources.setdefault(tenant_id, []).append(source)
+        return source
+
+    async def list_prospect_source_urls(self, tenant_id: str, prospect_id: str) -> set[str]:
+        return {
+            s["source_url"]
+            for s in self.prospect_sources.get(tenant_id, [])
+            if s["prospect_id"] == prospect_id
+        }
+
+    async def log_agent_run(
+        self,
+        tenant_id: str,
+        *,
+        agent_type: str,
+        pack_version: str,
+        skills_used: list[str],
+        input_text: str,
+        output_text: str,
+        step_log: list[dict[str, Any]],
+        tokens_in: int,
+        tokens_out: int,
+        latency_ms: int,
+    ) -> dict[str, Any]:
+        run = {
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "agent_type": agent_type,
+            "pack_version": pack_version,
+            "skills_used": skills_used,
+            "input": input_text,
+            "output": output_text,
+            "step_log": step_log,
+            "tokens_in": tokens_in,
+            "tokens_out": tokens_out,
+            "latency_ms": latency_ms,
+            "created_at": _now(),
+        }
+        self.agent_runs.setdefault(tenant_id, []).append(run)
+        return run
+
+    async def list_agent_runs(
+        self, tenant_id: str, *, agent_type: str | None = None, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        runs = self.agent_runs.get(tenant_id, [])
+        if agent_type:
+            runs = [r for r in runs if r["agent_type"] == agent_type]
+        return sorted(runs, key=lambda r: r["created_at"], reverse=True)[:limit]
+
+    async def get_segment_ab_aggregate(self) -> list[dict[str, Any]]:
+        from ..leads.segment_aggregate import AbResultRow, compute_segment_aggregate
+
+        rows = [
+            AbResultRow(
+                tenant_id=r["tenant_id"],
+                segment=r["segment"],
+                lever=r["lever"],
+                sent=r["sent"],
+                replies=r["replies"],
+                positive=r["positive"],
+            )
+            for r in self.ab_results
+        ]
+        aggregated = compute_segment_aggregate(rows)
+        return [
+            {
+                "segment": a.segment,
+                "lever": a.lever,
+                "tenant_count": a.tenant_count,
+                "sent": a.sent,
+                "replies": a.replies,
+                "positive": a.positive,
+            }
+            for a in aggregated
+        ]
+
+    async def get_agent_taxonomy(self, tenant_id: str) -> tuple[str, ...]:
+        # A4: taxonomy_overrides finns för test/simuleringsläge. Postgres-läget
+        # läser den riktiga agent_configs-tabellen (se PostgresStorage).
+        from ..config import CATEGORIES
+
+        override = self.taxonomy_overrides.get(tenant_id)
+        return tuple(override) if override else CATEGORIES
 
     async def log_metric(
         self, tenant_id: str, *, ticket_id: str | None, metric_name: str, value: float | None

@@ -88,7 +88,7 @@ async def _triage_email(
         triage["model"] = "simulation"
         return triage, articles
 
-    # Riktigt läge: embeddings + gpt-4o-mini med vision (bilderna skickas med).
+    # Riktigt läge: embeddings + Gemini-vision (bilderna skickas med, se agent/vision.py).
     from ..agent.embeddings import embed_text
     from ..agent.triage import triage_email_llm
 

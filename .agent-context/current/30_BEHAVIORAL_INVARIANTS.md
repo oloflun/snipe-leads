@@ -1,6 +1,9 @@
 # Behavioral Invariants
 
-<!-- AGENT: List contract-level constraints to preserve. -->
+Machine-enforced architecture invariants live in [ARCHITECTURE_INVARIANTS.md](../../ARCHITECTURE_INVARIANTS.md)
+at the repo root — this file is an index into that one, not a parallel system (plan Del L6).
+Every entry there has a stable id, a `Test:` path enforced by `.github/workflows/verify.yml`, and
+can only be broken via a dated, expiring entry in [waivers.yml](../../waivers.yml).
 
 ## Core Invariants
 <!-- AGENT: 3-8 numbered items. Each must be a testable statement, not a description.

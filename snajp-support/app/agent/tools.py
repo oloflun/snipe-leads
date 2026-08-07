@@ -6,11 +6,60 @@ API-svaret kan byggas efter körningen.
 """
 
 import json
+import re
 
 from agents import RunContextWrapper, function_tool
 
 from ..config import CATEGORIES
 from .context import SupportContext
+
+# cs:draft-response kräver "plain text, ingen markdown" (plan Del E) — en
+# regel som inte står i den vendorade skillens eget innehåll (kontrollerat:
+# agent-core/skills/cs/draft-response/SKILL.md nämner varken "markdown" eller
+# "plain text"). En prompt går att prata omkull; det här är grinden.
+_MARKDOWN_PATTERNS = (
+    (re.compile(r"\*\*(.+?)\*\*"), r"\1"),  # **fet**
+    (re.compile(r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)"), r"\1"),  # *kursiv*
+    (re.compile(r"__(.+?)__"), r"\1"),  # __fet__
+    (re.compile(r"`([^`]+)`"), r"\1"),  # `kod`
+    (re.compile(r"^#{1,6}\s+", re.MULTILINE), ""),  # # rubrik
+    (re.compile(r"^\s*[-*]\s+", re.MULTILINE), "– "),  # - punktlista -> tankstreck
+    (re.compile(r"\[([^\]]+)\]\([^)]+\)"), r"\1"),  # [text](url) -> text
+)
+
+
+# Mallrester som modellen lämnar kvar i signaturer: "[Your name]",
+# "[Kundtjänst]", "[Ditt namn]". Upptäckt i skarp körning 2026-08-07 — 3 av
+# 10 svar innehöll en sådan platshållare, dvs. den hade skickats till en
+# riktig kund. Uppträder i BÅDA thinking-lägena, så det går inte att
+# resonera bort med modellval; det måste vara en grind.
+#
+# Bara hakparenteser som ser ut som platshållare tas bort (ett kort
+# fragment utan skiljetecken). "[1]" eller "[se villkor, punkt 3]" i
+# löptext lämnas orört.
+_PLACEHOLDER_RE = re.compile(r"\[[^\[\]\n]{1,40}\]")
+
+
+def strip_placeholders(text: str) -> str:
+    def replace(match: re.Match) -> str:
+        inner = match.group(0)[1:-1].strip()
+        # Behåll rena sifferreferenser och allt som innehåller skiljetecken
+        # som antyder verklig löptext.
+        if inner.isdigit() or any(ch in inner for ch in ".,;:!?"):
+            return match.group(0)
+        return ""
+
+    cleaned = _PLACEHOLDER_RE.sub(replace, text)
+    # Städa upp tomrader/dubbla mellanslag som borttagningen kan lämna.
+    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return "\n".join(line.rstrip() for line in cleaned.splitlines()).strip()
+
+
+def strip_markdown(text: str) -> str:
+    for pattern, replacement in _MARKDOWN_PATTERNS:
+        text = pattern.sub(replacement, text)
+    return strip_placeholders(text)
 
 
 @function_tool
@@ -151,6 +200,7 @@ async def send_response(ctx: RunContextWrapper[SupportContext], reply: str) -> s
         reply: Det fullständiga svenska svaret till kunden.
     """
     support = ctx.context
+    reply = strip_markdown(reply)
     config = await support.storage.get_channel_config(support.tenant_id, support.channel)
     if len(reply) > config["max_length"]:
         reply = reply[: config["max_length"] - 1].rstrip() + "…"
@@ -193,3 +243,11 @@ ALL_TOOLS = [
     send_response,
     log_metric,
 ]
+
+# G8: den publika demon får en STRIKT delmängd — inga verktyg som skapar
+# eller skriver kunddata (find_or_create_customer, create_ticket,
+# save_inbound_message, log_metric) och inget sändverktyg mot en riktig
+# mottagare (escalate_to_human rör ett riktigt ärende som inte finns i
+# demoläge). send_response är kvar — den svarar bara i den pågående
+# webbläsarsessionen, den skickar ingenting externt. INV-SEC-008.
+DEMO_TOOLS = [search_knowledge_base, send_response]

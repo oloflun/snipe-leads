@@ -45,3 +45,7 @@ screenshots/cookies-dump.json
 # state, regenerated every run, never read from git. Untracked 2026-08-01;
 # files stay on disk.
 .impeccable/
+
+# Materialized per-tenant context packs (snajp-support/app/leads/context_pack.py)
+# — runtime state derived from agent_context_docs, regenerated every run.
+snajp-support/var/

@@ -14,8 +14,14 @@ grundningsregeln eskalering av varje ärende.
 import asyncio
 import logging
 
-from ..config import DEFAULT_TENANT_ID, DEFAULT_TENANT_NAME, get_settings
-from ..kb_articles import KB_ARTICLES
+from ..config import (
+    DEFAULT_TENANT_ID,
+    DEFAULT_TENANT_NAME,
+    PUBLIC_DEMO_TENANT_NAME,
+    PUBLIC_DEMO_TENANT_SLUG,
+    get_settings,
+)
+from ..kb_articles import DEMO_KB_ARTICLES, KB_ARTICLES
 
 logger = logging.getLogger("snajp-support.seed")
 
@@ -40,6 +46,26 @@ async def ensure_default_kb(storage, *, embeddings: list[list[float] | None] | N
             embedding=embedding,
         )
     return len(KB_ARTICLES)
+
+
+async def ensure_public_demo_kb(storage, *, embeddings: list[list[float] | None] | None = None) -> int:
+    """G8: seedar den publika demons EGEN, isolerade tenant + KB (om tom).
+    Ingen relation till DEFAULT_TENANT_ID/Nordlys Handel."""
+    tenant = await storage.create_tenant(
+        slug=PUBLIC_DEMO_TENANT_SLUG, name=PUBLIC_DEMO_TENANT_NAME
+    )
+    if await storage.list_kb(tenant["id"]):
+        return 0
+    vectors = embeddings or [None] * len(DEMO_KB_ARTICLES)
+    for article, embedding in zip(DEMO_KB_ARTICLES, vectors):
+        await storage.add_kb_article(
+            tenant["id"],
+            title=article["title"],
+            content=article["content"],
+            category=article["category"],
+            embedding=embedding,
+        )
+    return len(DEMO_KB_ARTICLES)
 
 
 async def seed_tenant(storage, tenant_slug: str, *, embeddings=None) -> int:

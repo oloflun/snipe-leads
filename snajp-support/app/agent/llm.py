@@ -1,8 +1,10 @@
-"""Central LLM-klient — stödjer OpenAI och DeepSeek (OpenAI-kompatibel endpoint).
+"""Central LLM-klient — stödjer OpenAI, DeepSeek och Gemini, alla via samma
+AsyncOpenAI-klient (DeepSeek och Gemini exponerar OpenAI-kompatibla endpoints).
 
-En enda plats som bygger AsyncOpenAI-klienten så triage, agent och embeddings
-delar konfiguration. DeepSeek exponerar en OpenAI-kompatibel chat-completions-API
-på https://api.deepseek.com men saknar embeddings — de kräver en OpenAI-nyckel.
+En enda plats som bygger klienten så triage, agent, vision och embeddings
+delar konfiguration. Primärmodellen är DeepSeek; DeepSeek saknar embeddings
+och dokumenterat bildstöd, så vision-sidovagnen (G9) och embeddings går mot
+Gemini i stället — vald för gratisnivån (se scripts/keys.py, DEPLOY_KEYS.md).
 """
 
 from functools import lru_cache
@@ -12,6 +14,7 @@ from openai import AsyncOpenAI
 from ..config import Settings, get_settings
 
 _DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
 
 def _resolve_base_url(settings: Settings) -> str | None:
@@ -35,12 +38,26 @@ def get_llm_client() -> AsyncOpenAI:
 
 @lru_cache
 def get_embedding_client() -> AsyncOpenAI | None:
-    """Embeddings går alltid mot OpenAI. None => ingen vektor-embedding (full-text-fallback)."""
+    """Embeddings går mot Gemini (gratisnivå). None => ingen vektor-embedding
+    (full-text-fallback i KB-sökningen)."""
     settings = get_settings()
-    key = settings.embedding_api_key or settings.openai_api_key
+    key = settings.embedding_api_key or settings.gemini_api_key
     if not _looks_real(key):
         return None
-    return AsyncOpenAI(api_key=key)
+    return AsyncOpenAI(api_key=key, base_url=_GEMINI_BASE_URL)
+
+
+@lru_cache
+def get_vision_client() -> AsyncOpenAI | None:
+    """G9: vision-sidovagnen går mot Gemini (gratisnivå), oavsett llm_provider
+    — deepseek-v4-flash saknar dokumenterat bildstöd. Samma nyckelupplösning
+    som embeddings. None => ingen bildbeskrivning möjlig (se agent/vision.py
+    för fallback-beteendet)."""
+    settings = get_settings()
+    key = settings.embedding_api_key or settings.gemini_api_key
+    if not _looks_real(key):
+        return None
+    return AsyncOpenAI(api_key=key, base_url=_GEMINI_BASE_URL)
 
 
 def get_agent_model():

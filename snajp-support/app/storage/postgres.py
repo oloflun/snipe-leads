@@ -427,6 +427,311 @@ class PostgresStorage:
                 )
         return _row(record) or {"channel": "web", "tone": "halvformell", "max_length": 1500}
 
+    async def get_agent_taxonomy(self, tenant_id: str) -> tuple[str, ...]:
+        from ..config import CATEGORIES  # undvik cirkulär import vid modulnivå
+
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                select taxonomy from agent_configs
+                where tenant_id = $1 and agent_type = 'support'
+                """,
+                tenant_id,
+            )
+        taxonomy = record["taxonomy"] if record else None
+        return tuple(taxonomy) if taxonomy else CATEGORIES
+
+    async def save_context_doc(
+        self, tenant_id: str, *, kind: str, content: str, source: str = ""
+    ) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            existing = await conn.fetchval(
+                "select max(version) from agent_context_docs where tenant_id = $1 and kind = $2",
+                tenant_id,
+                kind,
+            )
+            record = await conn.fetchrow(
+                """
+                insert into agent_context_docs (tenant_id, kind, content, source, version)
+                values ($1, $2, $3, $4, $5) returning *
+                """,
+                tenant_id,
+                kind,
+                content,
+                source,
+                (existing or 0) + 1,
+            )
+        return _row(record)
+
+    async def list_context_docs(
+        self, tenant_id: str, *, kind: str | None = None
+    ) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            if kind:
+                records = await conn.fetch(
+                    """
+                    select * from agent_context_docs where tenant_id = $1 and kind = $2
+                    order by created_at desc
+                    """,
+                    tenant_id,
+                    kind,
+                )
+            else:
+                records = await conn.fetch(
+                    "select * from agent_context_docs where tenant_id = $1 order by created_at desc",
+                    tenant_id,
+                )
+        return [_row(r) for r in records]
+
+    async def get_latest_context_doc(self, tenant_id: str, *, kind: str) -> dict[str, Any] | None:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                select * from agent_context_docs where tenant_id = $1 and kind = $2
+                order by version desc limit 1
+                """,
+                tenant_id,
+                kind,
+            )
+        return _row(record)
+
+    async def list_due_send_queue(self, tenant_id: str, now) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                "select * from send_queue where tenant_id = $1 and status = 'queued' and scheduled_at <= $2",
+                tenant_id,
+                now,
+            )
+        return [_row(r) for r in records]
+
+    async def update_send_queue_status(
+        self, tenant_id: str, item_id: str, *, status: str, gate_checks: dict[str, Any]
+    ) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                "update send_queue set status = $2, gate_checks = $3 where tenant_id = $1 and id = $4",
+                tenant_id,
+                status,
+                json.dumps(gate_checks),
+                item_id,
+            )
+
+    async def get_outreach_thread(self, tenant_id: str, thread_id: str) -> dict[str, Any] | None:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                "select * from outreach_threads where tenant_id = $1 and id = $2", tenant_id, thread_id
+            )
+        return _row(record)
+
+    async def get_pending_outreach_message(
+        self, tenant_id: str, thread_id: str
+    ) -> dict[str, Any] | None:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                select * from outreach_messages
+                where tenant_id = $1 and thread_id = $2 and direction = 'outbound' and sent_at is null
+                order by id limit 1
+                """,
+                tenant_id,
+                thread_id,
+            )
+        return _row(record)
+
+    async def mark_outreach_message_sent(self, tenant_id: str, message_id: str, sent_at) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                "update outreach_messages set sent_at = $2 where tenant_id = $1 and id = $3",
+                tenant_id,
+                sent_at,
+                message_id,
+            )
+
+    async def queue_outreach_message(
+        self,
+        tenant_id: str,
+        *,
+        thread_id: str,
+        body: str,
+        subject: str,
+        humanizer_variant: str,
+        scheduled_at,
+    ) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            message = await conn.fetchrow(
+                """
+                insert into outreach_messages
+                  (tenant_id, thread_id, direction, body, subject, humanizer_variant, sent_at)
+                values ($1, $2, 'outbound', $3, $4, $5, null)
+                returning *
+                """,
+                tenant_id,
+                thread_id,
+                body,
+                subject,
+                humanizer_variant,
+            )
+            queue_item = await conn.fetchrow(
+                """
+                insert into send_queue (tenant_id, thread_id, scheduled_at, status, gate_checks)
+                values ($1, $2, $3, 'queued', '{}'::jsonb)
+                returning *
+                """,
+                tenant_id,
+                thread_id,
+                scheduled_at,
+            )
+        return {"message": _row(message), "queue_item": _row(queue_item)}
+
+    async def create_prospect(
+        self,
+        tenant_id: str,
+        *,
+        company_name: str,
+        contact_name: str | None = None,
+        contact_email: str | None = None,
+    ) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                insert into prospects (tenant_id, company_name, contact_name, contact_email)
+                values ($1, $2, $3, $4) returning *
+                """,
+                tenant_id,
+                company_name,
+                contact_name,
+                contact_email,
+            )
+        return _row(record)
+
+    async def get_prospect(self, tenant_id: str, prospect_id: str) -> dict[str, Any] | None:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                "select * from prospects where tenant_id = $1 and id = $2", tenant_id, prospect_id
+            )
+        return _row(record)
+
+    async def list_prospects(self, tenant_id: str, *, limit: int = 100) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                "select * from prospects where tenant_id = $1 order by created_at desc limit $2",
+                tenant_id,
+                limit,
+            )
+        return [_row(r) for r in records]
+
+    async def update_prospect(
+        self, tenant_id: str, prospect_id: str, *, status: str | None = None
+    ) -> dict[str, Any] | None:
+        if status is None:
+            return await self.get_prospect(tenant_id, prospect_id)
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                "update prospects set status = $3 where tenant_id = $1 and id = $2 returning *",
+                tenant_id,
+                prospect_id,
+                status,
+            )
+        return _row(record)
+
+    async def create_prospect_source(
+        self,
+        tenant_id: str,
+        *,
+        prospect_id: str,
+        source_url: str,
+        source_type: str,
+        lawful_basis: str,
+    ) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                insert into prospect_sources (tenant_id, prospect_id, source_url, source_type, lawful_basis)
+                values ($1, $2, $3, $4, $5) returning *
+                """,
+                tenant_id,
+                prospect_id,
+                source_url,
+                source_type,
+                lawful_basis,
+            )
+        return _row(record)
+
+    async def list_prospect_source_urls(self, tenant_id: str, prospect_id: str) -> set[str]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                "select source_url from prospect_sources where tenant_id = $1 and prospect_id = $2",
+                tenant_id,
+                prospect_id,
+            )
+        return {r["source_url"] for r in records}
+
+    async def log_agent_run(
+        self,
+        tenant_id: str,
+        *,
+        agent_type: str,
+        pack_version: str,
+        skills_used: list[str],
+        input_text: str,
+        output_text: str,
+        step_log: list[dict[str, Any]],
+        tokens_in: int,
+        tokens_out: int,
+        latency_ms: int,
+    ) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                insert into agent_runs
+                  (tenant_id, agent_type, pack_version, skills_used, input, output,
+                   step_log, tokens_in, tokens_out, latency_ms)
+                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                returning *
+                """,
+                tenant_id,
+                agent_type,
+                pack_version,
+                skills_used,
+                input_text,
+                output_text,
+                json.dumps(step_log, ensure_ascii=False),
+                tokens_in,
+                tokens_out,
+                latency_ms,
+            )
+        return _row(record)
+
+    async def list_agent_runs(
+        self, tenant_id: str, *, agent_type: str | None = None, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            if agent_type:
+                records = await conn.fetch(
+                    """select * from agent_runs where tenant_id = $1 and agent_type = $2
+                       order by created_at desc limit $3""",
+                    tenant_id,
+                    agent_type,
+                    limit,
+                )
+            else:
+                records = await conn.fetch(
+                    "select * from agent_runs where tenant_id = $1 order by created_at desc limit $2",
+                    tenant_id,
+                    limit,
+                )
+        return [_row(r) for r in records]
+
+    async def get_segment_ab_aggregate(self) -> list[dict[str, Any]]:
+        # AVSIKTLIGT ingen _scoped(tenant_id) — den här funktionen har inget
+        # tenant-sammanhang. select * from segment_ab_aggregate() kör som
+        # funktionens SECURITY DEFINER-ägare (BYPASSRLS), inte som
+        # snajp_app-sessionen, och returnerar bara aggregerade rader för
+        # segment med >= 3 bidragande tenants (HAVING i själva funktionen).
+        async with self.pool.acquire() as conn:
+            records = await conn.fetch("select * from segment_ab_aggregate()")
+        return [_row(r) for r in records]
+
     async def log_metric(
         self, tenant_id: str, *, ticket_id: str | None, metric_name: str, value: float | None
     ) -> None:

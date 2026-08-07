@@ -1,0 +1,1495 @@
+{
+  "results": {
+    "S1-neutral-fraga::enabled": {
+      "reply": "Hej!\n\nJust nu har vi ingen lista över betalsätt här. Du ser alla alternativ i kassan när du beställer, eller på vår webbplats.\n\nHar du fler frågor om din order, leverans eller retur? Hör gärna av dig!\n\nMed vänliga hälsningar,\nKundtjänst",
+      "ticket_id": "cd104588-36cf-4206-b9c8-e41c8565cc66",
+      "customer_id": "f7fd2807-28d1-4723-942b-52fa62c9f5f5",
+      "category": "betalning",
+      "category_label": "Betalning",
+      "sentiment": 0.5,
+      "escalated": true,
+      "escalation_reason": "Kunskapsbasen saknar information om tillgängliga betalsätt, och enligt instruktionerna ska ärendet eskaleras om kunskapsbasen saknar svar.",
+      "kb_sources": [
+        {
+          "title": "Försenat eller försvunnet paket",
+          "similarity": 0.33
+        },
+        {
+          "title": "Så gör du en retur",
+          "similarity": 0.33
+        }
+      ],
+      "returning_customer": false,
+      "simulation": false,
+      "skills_used": [
+        "cs:ticket-triage",
+        "cs:customer-research",
+        "cs:draft-response",
+        "cs:customer-escalation",
+        "cs:kb-article",
+        "snajp:humanizer-svenska"
+      ],
+      "step_log": [
+        {
+          "skill": "cs:ticket-triage",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 4009,
+          "tokens_in": 2959,
+          "tokens_out": 332,
+          "reasoning_tokens": 209,
+          "injected_chars": 11234,
+          "sources_used": [],
+          "context_refs": []
+        },
+        {
+          "skill": "cs:customer-research",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 14616,
+          "tokens_in": 2903,
+          "tokens_out": 1318,
+          "reasoning_tokens": 1170,
+          "injected_chars": 10206,
+          "sources_used": [
+            "Försenat eller försvunnet paket",
+            "Så gör du en retur"
+          ],
+          "context_refs": [
+            "Försenat eller försvunnet paket",
+            "Så gör du en retur"
+          ]
+        },
+        {
+          "skill": "cs:draft-response",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 36359,
+          "tokens_in": 4021,
+          "tokens_out": 2890,
+          "reasoning_tokens": 2734,
+          "injected_chars": 14543,
+          "sources_used": [],
+          "context_refs": []
+        },
+        {
+          "skill": "cs:customer-escalation",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 3431,
+          "tokens_in": 2985,
+          "tokens_out": 360,
+          "reasoning_tokens": 284,
+          "injected_chars": 11165,
+          "sources_used": [],
+          "context_refs": []
+        },
+        {
+          "skill": "cs:kb-article",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 30636,
+          "tokens_in": 3477,
+          "tokens_out": 2475,
+          "reasoning_tokens": 2257,
+          "injected_chars": 12130,
+          "sources_used": [
+            "Kunskapsbas: Försenat eller försvunnet paket",
+            "Kunskapsbas: Så gör du en retur",
+            "Kundmeddelande från Test Kund"
+          ],
+          "context_refs": [
+            "Kunskapsbasen",
+            "Ärendet"
+          ]
+        },
+        {
+          "skill": "snajp:humanizer-svenska",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 29217,
+          "tokens_in": 9579,
+          "tokens_out": 2508,
+          "reasoning_tokens": 2398,
+          "injected_chars": 27081,
+          "sources_used": [],
+          "context_refs": []
+        }
+      ],
+      "cancellation_risk": false,
+      "pack_version": "1ec41e2d0551:support/v1",
+      "_ok": true,
+      "_wall_ms": 129591,
+      "_scenario": {
+        "id": "S1-neutral-fraga",
+        "beskrivning": "Neutral faktafråga som KB täcker — ska INTE eskalera",
+        "message": "Hej! Vilka betalsätt kan jag använda när jag handlar hos er?",
+        "subject": "Fråga om betalsätt"
+      },
+      "_thinking_mode": "enabled"
+    },
+    "S2-irriterad-leverans::enabled": {
+      "reply": "Hej!\n\nTråkigt att paketet inte kommit fram och att du inte hört något på tre dagar. Det hade jag också tyckt var dåligt.\n\nSkicka ditt ordernummer så kollar jag vad som hänt. Jag ser till att en kollega på leverans tar tag i det direkt och återkommer till dig med besked.\n\nDu behöver inte göra något mer just nu.\n\nMed vänlig hälsning",
+      "ticket_id": "2ee5e36a-0bea-48e9-a516-cb1a7a826bf7",
+      "customer_id": "41676950-e26e-47dc-a745-4f8465fe35a7",
+      "category": "leverans",
+      "category_label": "Leverans",
+      "sentiment": 0.2,
+      "escalated": true,
+      "escalation_reason": "retention_risk",
+      "kb_sources": [
+        {
+          "title": "Försenat eller försvunnet paket",
+          "similarity": 0.5
+        },
+        {
+          "title": "Reklamation av skadad eller defekt vara",
+          "similarity": 0.3
+        },
+        {
+          "title": "Ångra eller ändra en beställning",
+          "similarity": 0.2
+        }
+      ],
+      "returning_customer": false,
+      "simulation": false,
+      "skills_used": [
+        "cs:ticket-triage",
+        "cs:customer-research",
+        "cs:draft-response",
+        "cs:customer-escalation",
+        "cs:kb-article",
+        "snajp:retention-conversation",
+        "snajp:humanizer-svenska"
+      ],
+      "step_log": [
+        {
+          "skill": "cs:ticket-triage",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 16854,
+          "tokens_in": 2964,
+          "tokens_out": 1350,
+          "reasoning_tokens": 1176,
+          "injected_chars": 11234,
+          "sources_used": [],
+          "context_refs": []
+        },
+        {
+          "skill": "cs:customer-research",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 30504,
+          "tokens_in": 3010,
+          "tokens_out": 2678,
+          "reasoning_tokens": 2437,
+          "injected_chars": 10206,
+          "sources_used": [
+            "Kunskapsbas: Försenat eller försvunnet paket"
+          ],
+          "context_refs": [
+            "Kundens meddelande"
+          ]
+        },
+        {
+          "skill": "cs:draft-response",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 34969,
+          "tokens_in": 4218,
+          "tokens_out": 3346,
+          "reasoning_tokens": 3117,
+          "injected_chars": 14543,
+          "sources_used": [
+            "Försenat eller försvunnet paket (kunskapsbas)"
+          ],
+          "context_refs": [
+            "Försenat eller försvunnet paket"
+          ]
+        },
+        {
+          "skill": "cs:customer-escalation",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 14572,
+          "tokens_in": 3080,
+          "tokens_out": 1153,
+          "reasoning_tokens": 1101,
+          "injected_chars": 11165,
+          "sources_used": [
+            "Kunskapsbasen: vägledning för försenade leveranser"
+          ],
+          "context_refs": []
+        },
+        {
+          "skill": "cs:kb-article",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 6865,
+          "tokens_in": 3584,
+          "tokens_out": 569,
+          "reasoning_tokens": 508,
+          "injected_chars": 12130,
+          "sources_used": [
+            "Försenat eller försvunnet paket"
+          ],
+          "context_refs": [
+            "Försenat eller försvunnet paket"
+          ]
+        },
+        {
+          "skill": "snajp:retention-conversation",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 61012,
+          "tokens_in": 5141,
+          "tokens_out": 5135,
+          "reasoning_tokens": 4911,
+          "injected_chars": 12976,
+          "sources_used": [
+            "snajp:retention-conversation",
+            "Kundens retentionsplaybook (saknas)"
+          ],
+          "context_refs": [
+            "Nuvarande utkast"
+          ]
+        },
+        {
+          "skill": "snajp:humanizer-svenska",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 37886,
+          "tokens_in": 9609,
+          "tokens_out": 3148,
+          "reasoning_tokens": 2989,
+          "injected_chars": 27081,
+          "sources_used": [
+            "snajp:humanizer-svenska"
+          ],
+          "context_refs": [
+            "Kundens meddelande",
+            "Text att humanisera"
+          ]
+        }
+      ],
+      "cancellation_risk": true,
+      "pack_version": "1ec41e2d0551:support/v1",
+      "_ok": true,
+      "_wall_ms": 208798,
+      "_scenario": {
+        "id": "S2-irriterad-leverans",
+        "beskrivning": "Irriterad men saklig — leveransfråga",
+        "message": "Mitt paket skulle kommit för tre dagar sedan och ingen har hört av sig. Var är det?",
+        "subject": "Försenad leverans"
+      },
+      "_thinking_mode": "enabled"
+    },
+    "S3-arg-aterbetalning::enabled": {
+      "reply": "Hej!\n\nVad tråkigt att höra att produkten gick sönder efter bara två dagar. Det är inte okej, och jag förstår att du vill ha pengarna tillbaka.\n\nJag kan inte själv godkänna en återbetalning, men jag har skickat din begäran vidare till en kollega som sköter återbetalningsärenden. Hen tar itu med det och återkommer till dig med besked.\n\nHar du ordernumret framme? Det underlättar.\n\nDu behöver inte göra något mer nu – vi tar hand om det och hör av oss.\n\nVänliga hälsningar\nKundtjänst",
+      "ticket_id": "7139d12f-2e3f-4ad8-9bc3-d0f3216df7be",
+      "customer_id": "3159a780-f2ed-4d77-8560-7d6b6af94b22",
+      "category": "retur_reklamation",
+      "category_label": "Retur & reklamation",
+      "sentiment": 0.2,
+      "escalated": true,
+      "escalation_reason": "Kunden kräver återbetalning, vilket alltid ska eskaleras till en medarbetare. Ärendet gäller en trasig produkt och kunskapsbasen saknar information om returrätt, garanti eller återbetalningsprocess.",
+      "kb_sources": [
+        {
+          "title": "Dubbeldragning eller felaktig debitering",
+          "similarity": 0.21
+        },
+        {
+          "title": "Radera konto och personuppgifter (GDPR)",
+          "similarity": 0.21
+        }
+      ],
+      "returning_customer": false,
+      "simulation": false,
+      "skills_used": [
+        "cs:ticket-triage",
+        "cs:customer-research",
+        "cs:draft-response",
+        "cs:customer-escalation",
+        "cs:kb-article",
+        "snajp:retention-conversation",
+        "snajp:humanizer-svenska"
+      ],
+      "step_log": [
+        {
+          "skill": "cs:ticket-triage",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 4146,
+          "tokens_in": 2980,
+          "tokens_out": 355,
+          "reasoning_tokens": 174,
+          "injected_chars": 11234,
+          "sources_used": [],
+          "context_refs": []
+        },
+        {
+          "skill": "cs:customer-research",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 22091,
+          "tokens_in": 2907,
+          "tokens_out": 2002,
+          "reasoning_tokens": 1711,
+          "injected_chars": 10206,
+          "sources_used": [
+            "Dubbeldragning eller felaktig debitering"
+          ],
+          "context_refs": [
+            "Dubbeldragning eller felaktig debitering"
+          ]
+        },
+        {
+          "skill": "cs:draft-response",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 20270,
+          "tokens_in": 4129,
+          "tokens_out": 1666,
+          "reasoning_tokens": 1406,
+          "injected_chars": 14543,
+          "sources_used": [
+            "Dubbeldragning eller felaktig debitering",
+            "Research (kontext)"
+          ],
+          "context_refs": [
+            "Dubbeldragning eller felaktig debitering",
+            "Research"
+          ]
+        },
+        {
+          "skill": "cs:customer-escalation",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 8684,
+          "tokens_in": 3110,
+          "tokens_out": 718,
+          "reasoning_tokens": 616,
+          "injected_chars": 11165,
+          "sources_used": [
+            "Research-sammanfattning"
+          ],
+          "context_refs": []
+        },
+        {
+          "skill": "cs:kb-article",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 33304,
+          "tokens_in": 3481,
+          "tokens_out": 2977,
+          "reasoning_tokens": 2543,
+          "injected_chars": 12130,
+          "sources_used": [
+            "Dubbeldragning eller felaktig debitering",
+            "Radera konto och personuppgifter (GDPR)"
+          ],
+          "context_refs": [
+            "Dubbeldragning eller felaktig debitering",
+            "Radera konto och personuppgifter (GDPR)"
+          ]
+        },
+        {
+          "skill": "snajp:retention-conversation",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 49316,
+          "tokens_in": 5171,
+          "tokens_out": 4798,
+          "reasoning_tokens": 4469,
+          "injected_chars": 12976,
+          "sources_used": [
+            "snajp:retention-conversation (SKILL.md)",
+            "references/support-objection-library.md",
+            "Kundens retentionsplaybook (tom)"
+          ],
+          "context_refs": [
+            "snajp:retention-conversation",
+            "references/support-objection-library.md",
+            "Kundens meddelande"
+          ]
+        },
+        {
+          "skill": "snajp:humanizer-svenska",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 49967,
+          "tokens_in": 9686,
+          "tokens_out": 4946,
+          "reasoning_tokens": 4739,
+          "injected_chars": 27081,
+          "sources_used": [
+            "snajp:humanizer-svenska"
+          ],
+          "context_refs": []
+        }
+      ],
+      "cancellation_risk": true,
+      "pack_version": "1ec41e2d0551:support/v1",
+      "_ok": true,
+      "_wall_ms": 196625,
+      "_scenario": {
+        "id": "S3-arg-aterbetalning",
+        "beskrivning": "Arg + återbetalningskrav — MÅSTE eskalera",
+        "message": "Det här är helt oacceptabelt!! Produkten gick sönder efter två dagar och jag KRÄVER pengarna tillbaka omedelbart.",
+        "subject": "Kräver återbetalning"
+      },
+      "_thinking_mode": "enabled"
+    },
+    "S4-uppsagning-ultimatum::enabled": {
+      "reply": "Hej,\n\nJag förstår din frustration. Det här är tredje gången samma fel, och det är inte okej. Ursäkta.\n\nAtt du överväger att säga upp avtalet förstår jag. Jag kan inte fatta beslut om uppsägning själv, så jag har skickat ärendet vidare till en kollega som har rätt att fatta beslut i sådana ärenden. Kollegan återkommer till dig.\n\nJag har dokumenterat det du berättat, så du behöver inte upprepa dig. Om du har något ärendenummer från tidigare kontakter, skicka det som svar på det här mejlet så bifogar jag det.\n\nVi förstår att det är bråttom och jobbar på en lösning.\n\nMed vänliga hälsningar,\n[Your name]",
+      "ticket_id": "757b50a9-292a-4eba-861f-a5b1d88ac434",
+      "customer_id": "3475251c-c481-4ccc-ba4c-fc045f996a18",
+      "category": "teknisk_support",
+      "category_label": "Teknisk support",
+      "sentiment": 0.1,
+      "escalated": true,
+      "escalation_reason": "Kunskapsbasen saknar svar om kundens ärende. Kunden hotar med uppsägning och anger att det är tredje gången samma fel. Ärendet kräver mänsklig handläggning för att utreda och åtgärda.",
+      "kb_sources": [],
+      "returning_customer": false,
+      "simulation": false,
+      "skills_used": [
+        "cs:ticket-triage",
+        "cs:customer-research",
+        "cs:draft-response",
+        "cs:customer-escalation",
+        "cs:kb-article",
+        "snajp:retention-conversation",
+        "snajp:humanizer-svenska"
+      ],
+      "step_log": [
+        {
+          "skill": "cs:ticket-triage",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 15492,
+          "tokens_in": 2976,
+          "tokens_out": 1350,
+          "reasoning_tokens": 1216,
+          "injected_chars": 11234,
+          "sources_used": [],
+          "context_refs": []
+        },
+        {
+          "skill": "cs:customer-research",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 6848,
+          "tokens_in": 2690,
+          "tokens_out": 520,
+          "reasoning_tokens": 321,
+          "injected_chars": 10206,
+          "sources_used": [],
+          "context_refs": []
+        },
+        {
+          "skill": "cs:draft-response",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 30930,
+          "tokens_in": 3840,
+          "tokens_out": 2890,
+          "reasoning_tokens": 2532,
+          "injected_chars": 14543,
+          "sources_used": [],
+          "context_refs": []
+        },
+        {
+          "skill": "cs:customer-escalation",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 7356,
+          "tokens_in": 3034,
+          "tokens_out": 685,
+          "reasoning_tokens": 576,
+          "injected_chars": 11165,
+          "sources_used": [],
+          "context_refs": [
+            "customer_message",
+            "kb_supports_answer"
+          ]
+        },
+        {
+          "skill": "cs:kb-article",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 7767,
+          "tokens_in": 3264,
+          "tokens_out": 649,
+          "reasoning_tokens": 612,
+          "injected_chars": 12130,
+          "sources_used": [],
+          "context_refs": []
+        },
+        {
+          "skill": "snajp:retention-conversation",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 47222,
+          "tokens_in": 5308,
+          "tokens_out": 4614,
+          "reasoning_tokens": 4218,
+          "injected_chars": 12976,
+          "sources_used": [
+            "snajp:retention-conversation",
+            "references/support-objection-library.md"
+          ],
+          "context_refs": [
+            "Kundens meddelande: ultimatum, tredje gången samma fel",
+            "Kundens retentionsplaybook: ingen playbook finns"
+          ]
+        },
+        {
+          "skill": "snajp:humanizer-svenska",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 53124,
+          "tokens_in": 9756,
+          "tokens_out": 5376,
+          "reasoning_tokens": 5129,
+          "injected_chars": 27081,
+          "sources_used": [
+            "snajp:humanizer-svenska"
+          ],
+          "context_refs": []
+        }
+      ],
+      "cancellation_risk": true,
+      "pack_version": "1ec41e2d0551:support/v1",
+      "_ok": true,
+      "_wall_ms": 172352,
+      "_scenario": {
+        "id": "S4-uppsagning-ultimatum",
+        "beskrivning": "Uppsägningshot/ultimatum — ska trigga retention-skillen OCH eskalera",
+        "message": "Om ni inte löser det här idag så säger jag upp allt och byter leverantör. Tredje gången samma fel.",
+        "subject": "Sista varningen"
+      },
+      "_thinking_mode": "enabled"
+    },
+    "S5-gdpr::enabled": {
+      "reply": "Hej!\n\nVi har fått din begäran om radering av dina personuppgifter. Vår personuppgiftsansvarige tar hand om ärendet och du får en bekräftelse inom 30 dagar.\n\nObservera att orderhistorik som vi är skyldiga att spara enligt bokföringslagen kommer att finnas kvar i 7 år, även om dina övriga uppgifter raderas.\n\nHör gärna av dig om du har fler funderingar!\n\nVänliga hälsningar,\nKundtjänst",
+      "ticket_id": "bb489ad1-de60-44c0-9583-5bbe91b32d5a",
+      "customer_id": "06ecc1bf-60ed-4bd9-99fb-9c3af1ba9b4f",
+      "category": "ovrigt",
+      "category_label": "Övrigt",
+      "sentiment": 0.6,
+      "escalated": true,
+      "escalation_reason": "Ärendet avser GDPR-radering av personuppgifter. Enligt instruktionerna ska GDPR-radering alltid eskaleras, och begäran hanteras manuellt av personuppgiftsansvarig.",
+      "kb_sources": [
+        {
+          "title": "Radera konto och personuppgifter (GDPR)",
+          "similarity": 1.0
+        }
+      ],
+      "returning_customer": false,
+      "simulation": false,
+      "skills_used": [
+        "cs:ticket-triage",
+        "cs:customer-research",
+        "cs:draft-response",
+        "cs:customer-escalation",
+        "cs:kb-article",
+        "snajp:humanizer-svenska"
+      ],
+      "step_log": [
+        {
+          "skill": "cs:ticket-triage",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 8627,
+          "tokens_in": 2964,
+          "tokens_out": 840,
+          "reasoning_tokens": 675,
+          "injected_chars": 11234,
+          "sources_used": [],
+          "context_refs": []
+        },
+        {
+          "skill": "cs:customer-research",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 19667,
+          "tokens_in": 2772,
+          "tokens_out": 1876,
+          "reasoning_tokens": 1617,
+          "injected_chars": 10206,
+          "sources_used": [
+            "Radera konto och personuppgifter (GDPR)"
+          ],
+          "context_refs": [
+            "Kunskapsbas: Radera konto och personuppgifter (GDPR)",
+            "Ärende: Radering av persondata"
+          ]
+        },
+        {
+          "skill": "cs:draft-response",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 11164,
+          "tokens_in": 3952,
+          "tokens_out": 1301,
+          "reasoning_tokens": 1089,
+          "injected_chars": 14543,
+          "sources_used": [
+            "Radera konto och personuppgifter (GDPR)"
+          ],
+          "context_refs": [
+            "Kunskapsbas: Radera konto och personuppgifter (GDPR)"
+          ]
+        },
+        {
+          "skill": "cs:customer-escalation",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 4217,
+          "tokens_in": 3052,
+          "tokens_out": 358,
+          "reasoning_tokens": 248,
+          "injected_chars": 11165,
+          "sources_used": [
+            "Kunskapsbasen: GDPR-radering"
+          ],
+          "context_refs": [
+            "kb_supports_answer",
+            "Kundens meddelande"
+          ]
+        },
+        {
+          "skill": "cs:kb-article",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 2974,
+          "tokens_in": 3346,
+          "tokens_out": 285,
+          "reasoning_tokens": 220,
+          "injected_chars": 12130,
+          "sources_used": [
+            "Radera konto och personuppgifter (GDPR)"
+          ],
+          "context_refs": [
+            "Radera konto och personuppgifter (GDPR)"
+          ]
+        },
+        {
+          "skill": "snajp:humanizer-svenska",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 13954,
+          "tokens_in": 9604,
+          "tokens_out": 1328,
+          "reasoning_tokens": 1140,
+          "injected_chars": 27081,
+          "sources_used": [
+            "snajp:humanizer-svenska"
+          ],
+          "context_refs": [
+            "kundens meddelande",
+            "text att humanisera"
+          ]
+        }
+      ],
+      "cancellation_risk": false,
+      "pack_version": "1ec41e2d0551:support/v1",
+      "_ok": true,
+      "_wall_ms": 74555,
+      "_scenario": {
+        "id": "S5-gdpr",
+        "beskrivning": "GDPR-radering — MÅSTE eskalera oavsett ton",
+        "message": "Hej, jag skulle vilja att ni raderar all min persondata enligt GDPR. Tack på förhand!",
+        "subject": "Radering av persondata"
+      },
+      "_thinking_mode": "enabled"
+    },
+    "S1-neutral-fraga::disabled": {
+      "reply": "Hej! Tack för din fråga. Just nu har vi ingen information om vilka betalsätt som finns tillgängliga. Bäst är att kolla på vår webbplats eller höra av dig till kundservice för aktuell information. Om du har en pågående beställning, tänk på att återbetalning alltid sker till samma betalsätt som användes vid köpet. Hoppas det hjälper!",
+      "ticket_id": "6be2f7f2-edd9-4de1-8d68-5f317585532d",
+      "customer_id": "50002073-e704-4195-927c-87761cab299d",
+      "category": "betalning",
+      "category_label": "Betalning",
+      "sentiment": 0.5,
+      "escalated": true,
+      "escalation_reason": "Kunskapsbasen saknar information om vilka betalsätt som accepteras vid köp, och ärendet kan därför inte besvaras korrekt utan mänsklig handläggning.",
+      "kb_sources": [
+        {
+          "title": "Försenat eller försvunnet paket",
+          "similarity": 0.33
+        },
+        {
+          "title": "Så gör du en retur",
+          "similarity": 0.33
+        }
+      ],
+      "returning_customer": false,
+      "simulation": false,
+      "skills_used": [
+        "cs:ticket-triage",
+        "cs:customer-research",
+        "cs:draft-response",
+        "cs:customer-escalation",
+        "cs:kb-article",
+        "snajp:humanizer-svenska"
+      ],
+      "step_log": [
+        {
+          "skill": "cs:ticket-triage",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 3038,
+          "tokens_in": 2880,
+          "tokens_out": 185,
+          "reasoning_tokens": 0,
+          "injected_chars": 11234,
+          "sources_used": [],
+          "context_refs": []
+        },
+        {
+          "skill": "cs:customer-research",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 2708,
+          "tokens_in": 2824,
+          "tokens_out": 173,
+          "reasoning_tokens": 0,
+          "injected_chars": 10206,
+          "sources_used": [],
+          "context_refs": []
+        },
+        {
+          "skill": "cs:draft-response",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 2211,
+          "tokens_in": 3970,
+          "tokens_out": 132,
+          "reasoning_tokens": 0,
+          "injected_chars": 14543,
+          "sources_used": [],
+          "context_refs": []
+        },
+        {
+          "skill": "cs:customer-escalation",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 1842,
+          "tokens_in": 2934,
+          "tokens_out": 79,
+          "reasoning_tokens": 0,
+          "injected_chars": 11165,
+          "sources_used": [],
+          "context_refs": []
+        },
+        {
+          "skill": "cs:kb-article",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 2541,
+          "tokens_in": 3398,
+          "tokens_out": 169,
+          "reasoning_tokens": 0,
+          "injected_chars": 12130,
+          "sources_used": [],
+          "context_refs": []
+        },
+        {
+          "skill": "snajp:humanizer-svenska",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 2172,
+          "tokens_in": 9483,
+          "tokens_out": 128,
+          "reasoning_tokens": 0,
+          "injected_chars": 27081,
+          "sources_used": [],
+          "context_refs": []
+        }
+      ],
+      "cancellation_risk": false,
+      "pack_version": "1ec41e2d0551:support/v1",
+      "_ok": true,
+      "_wall_ms": 16251,
+      "_scenario": {
+        "id": "S1-neutral-fraga",
+        "beskrivning": "Neutral faktafråga som KB täcker — ska INTE eskalera",
+        "message": "Hej! Vilka betalsätt kan jag använda när jag handlar hos er?",
+        "subject": "Fråga om betalsätt"
+      },
+      "_thinking_mode": "disabled"
+    },
+    "S2-irriterad-leverans::disabled": {
+      "reply": "Hej! Tråkigt att paketet inte kommit fram och att ingen hört av sig – det förstår jag att du är irriterad över. För att jag ska kunna hjälpa dig vidare, kan du dela ditt ordernummer? Då ser jag till att en kollega tar över ärendet och följer upp leveransen med transportören. Du behöver inte upprepa dig – vi tar det härifrån. Vi återkommer med besked inom kort.",
+      "ticket_id": "e494a275-fbb7-4fa7-9073-19e58e5e16ab",
+      "customer_id": "c0141f86-256a-4583-9f38-6edea9ab44be",
+      "category": "leverans",
+      "category_label": "Leverans",
+      "sentiment": 0.6,
+      "escalated": true,
+      "escalation_reason": "retention_risk",
+      "kb_sources": [
+        {
+          "title": "Försenat eller försvunnet paket",
+          "similarity": 0.5
+        },
+        {
+          "title": "Reklamation av skadad eller defekt vara",
+          "similarity": 0.3
+        },
+        {
+          "title": "Ångra eller ändra en beställning",
+          "similarity": 0.2
+        }
+      ],
+      "returning_customer": false,
+      "simulation": false,
+      "skills_used": [
+        "cs:ticket-triage",
+        "cs:customer-research",
+        "cs:draft-response",
+        "cs:customer-escalation",
+        "cs:kb-article",
+        "snajp:retention-conversation",
+        "snajp:humanizer-svenska"
+      ],
+      "step_log": [
+        {
+          "skill": "cs:ticket-triage",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 2566,
+          "tokens_in": 2885,
+          "tokens_out": 166,
+          "reasoning_tokens": 0,
+          "injected_chars": 11234,
+          "sources_used": [],
+          "context_refs": []
+        },
+        {
+          "skill": "cs:customer-research",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 3334,
+          "tokens_in": 2931,
+          "tokens_out": 272,
+          "reasoning_tokens": 0,
+          "injected_chars": 10206,
+          "sources_used": [
+            "Försenat eller försvunnet paket"
+          ],
+          "context_refs": [
+            "Försenat eller försvunnet paket"
+          ]
+        },
+        {
+          "skill": "cs:draft-response",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 3092,
+          "tokens_in": 4181,
+          "tokens_out": 244,
+          "reasoning_tokens": 0,
+          "injected_chars": 14543,
+          "sources_used": [
+            "Försenat eller försvunnet paket"
+          ],
+          "context_refs": [
+            "Kunskapsbas: Försenat eller försvunnet paket"
+          ]
+        },
+        {
+          "skill": "cs:customer-escalation",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 1536,
+          "tokens_in": 3043,
+          "tokens_out": 54,
+          "reasoning_tokens": 0,
+          "injected_chars": 11165,
+          "sources_used": [
+            "Kunskapsbas: Leveransförseningar"
+          ],
+          "context_refs": [
+            "kb_supports_answer: True"
+          ]
+        },
+        {
+          "skill": "cs:kb-article",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 1274,
+          "tokens_in": 3505,
+          "tokens_out": 73,
+          "reasoning_tokens": 0,
+          "injected_chars": 12130,
+          "sources_used": [
+            "Försenat eller försvunnet paket"
+          ],
+          "context_refs": [
+            "Kundens meddelande",
+            "Kunskapsbas: Försenat eller försvunnet paket"
+          ]
+        },
+        {
+          "skill": "snajp:retention-conversation",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 3176,
+          "tokens_in": 5086,
+          "tokens_out": 208,
+          "reasoning_tokens": 0,
+          "injected_chars": 12976,
+          "sources_used": [
+            "snajp:retention-conversation",
+            "references/support-objection-library.md"
+          ],
+          "context_refs": [
+            "retention_playbook: none",
+            "customer_message",
+            "current_draft"
+          ]
+        },
+        {
+          "skill": "snajp:humanizer-svenska",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 2335,
+          "tokens_in": 9519,
+          "tokens_out": 136,
+          "reasoning_tokens": 0,
+          "injected_chars": 27081,
+          "sources_used": [],
+          "context_refs": []
+        }
+      ],
+      "cancellation_risk": true,
+      "pack_version": "1ec41e2d0551:support/v1",
+      "_ok": true,
+      "_wall_ms": 22895,
+      "_scenario": {
+        "id": "S2-irriterad-leverans",
+        "beskrivning": "Irriterad men saklig — leveransfråga",
+        "message": "Mitt paket skulle kommit för tre dagar sedan och ingen har hört av sig. Var är det?",
+        "subject": "Försenad leverans"
+      },
+      "_thinking_mode": "disabled"
+    },
+    "S3-arg-aterbetalning::disabled": {
+      "reply": "Hej Test Kund,\n\nVad tråkigt att höra att produkten gick sönder efter bara två dagar – det är verkligen inte okej. Jag förstår att du är frustrerad och vill ha pengarna tillbaka.\n\nEftersom återbetalningar hanteras av en särskild avdelning har jag skickat vidare ditt ärende dit. För att de ska kunna hjälpa dig så snabbt som möjligt, kan du skicka ditt ordernummer och datum för köpet? Då kan vi utreda vad som hänt och hitta en lösning.\n\nDu får svar inom kort. Jag ska göra mitt bästa för att det ska gå smidigt.\n\nHör gärna av dig om du har fler frågor.\n\nVänliga hälsningar,\n[Your name]",
+      "ticket_id": "3e753806-0bd4-4407-9c29-25a1998e4156",
+      "customer_id": "5b1de375-c76e-4ceb-bf39-106316946942",
+      "category": "retur_reklamation",
+      "category_label": "Retur & reklamation",
+      "sentiment": 0.9,
+      "escalated": true,
+      "escalation_reason": "Kunden kräver återbetalning för en trasig produkt, vilket inte täcks av kunskapsbasen. Ärendet kräver mänsklig handläggning för att hantera reklamation och eventuell kompensation.",
+      "kb_sources": [
+        {
+          "title": "Dubbeldragning eller felaktig debitering",
+          "similarity": 0.21
+        },
+        {
+          "title": "Radera konto och personuppgifter (GDPR)",
+          "similarity": 0.21
+        }
+      ],
+      "returning_customer": false,
+      "simulation": false,
+      "skills_used": [
+        "cs:ticket-triage",
+        "cs:customer-research",
+        "cs:draft-response",
+        "cs:customer-escalation",
+        "cs:kb-article",
+        "snajp:retention-conversation",
+        "snajp:humanizer-svenska"
+      ],
+      "step_log": [
+        {
+          "skill": "cs:ticket-triage",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 2310,
+          "tokens_in": 2901,
+          "tokens_out": 169,
+          "reasoning_tokens": 0,
+          "injected_chars": 11234,
+          "sources_used": [],
+          "context_refs": []
+        },
+        {
+          "skill": "cs:customer-research",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 2836,
+          "tokens_in": 2828,
+          "tokens_out": 238,
+          "reasoning_tokens": 0,
+          "injected_chars": 10206,
+          "sources_used": [
+            "Dubbeldragning eller felaktig debitering",
+            "Radera konto och personuppgifter (GDPR)"
+          ],
+          "context_refs": []
+        },
+        {
+          "skill": "cs:draft-response",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 4779,
+          "tokens_in": 3993,
+          "tokens_out": 340,
+          "reasoning_tokens": 0,
+          "injected_chars": 14543,
+          "sources_used": [
+            "Dubbeldragning eller felaktig debitering"
+          ],
+          "context_refs": [
+            "Kunskapsbas: Dubbeldragning eller felaktig debitering"
+          ]
+        },
+        {
+          "skill": "cs:customer-escalation",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 1241,
+          "tokens_in": 2974,
+          "tokens_out": 89,
+          "reasoning_tokens": 0,
+          "injected_chars": 11165,
+          "sources_used": [],
+          "context_refs": []
+        },
+        {
+          "skill": "cs:kb-article",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 1399,
+          "tokens_in": 3402,
+          "tokens_out": 69,
+          "reasoning_tokens": 0,
+          "injected_chars": 12130,
+          "sources_used": [
+            "Dubbeldragning eller felaktig debitering",
+            "Radera konto och personuppgifter (GDPR)"
+          ],
+          "context_refs": [
+            "kunskapsbas"
+          ]
+        },
+        {
+          "skill": "snajp:retention-conversation",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 4308,
+          "tokens_in": 5182,
+          "tokens_out": 360,
+          "reasoning_tokens": 0,
+          "injected_chars": 12976,
+          "sources_used": [
+            "snajp:retention-conversation",
+            "references/support-objection-library.md"
+          ],
+          "context_refs": [
+            "retention_playbook: none",
+            "customer_message",
+            "current_draft"
+          ]
+        },
+        {
+          "skill": "snajp:humanizer-svenska",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 3267,
+          "tokens_in": 9673,
+          "tokens_out": 236,
+          "reasoning_tokens": 0,
+          "injected_chars": 27081,
+          "sources_used": [],
+          "context_refs": []
+        }
+      ],
+      "cancellation_risk": true,
+      "pack_version": "1ec41e2d0551:support/v1",
+      "_ok": true,
+      "_wall_ms": 24063,
+      "_scenario": {
+        "id": "S3-arg-aterbetalning",
+        "beskrivning": "Arg + återbetalningskrav — MÅSTE eskalera",
+        "message": "Det här är helt oacceptabelt!! Produkten gick sönder efter två dagar och jag KRÄVER pengarna tillbaka omedelbart.",
+        "subject": "Kräver återbetalning"
+      },
+      "_thinking_mode": "disabled"
+    },
+    "S4-uppsagning-ultimatum::disabled": {
+      "reply": "Hej Test Kund,\n\nJag förstår din frustration – det är tredje gången samma fel, och det är inte okej. Jag ber om ursäkt för att du har fått uppleva det här.\n\nJag kan inte själv lösa problemet inom den tidsram du satt, men jag har sett till att en kollega med rätt befogenheter tar över ditt ärende direkt. Du behöver inte upprepa dig – vi har all information vi behöver.\n\nEn kollega kontaktar dig inom kort med besked om hur vi går vidare.\n\nMed vänliga hälsningar,\n[Kundtjänst]",
+      "ticket_id": "347dc288-5d62-427c-8034-6dfa7c9b8b88",
+      "customer_id": "86e9f84e-9f27-417b-9f18-84896f815b09",
+      "category": "teknisk_support",
+      "category_label": "Teknisk support",
+      "sentiment": 0.9,
+      "escalated": true,
+      "escalation_reason": "Kunden hotar med uppsägning och byta leverantör om felet inte åtgärdas idag. Detta är en allvarlig affärspåverkan och kräver mänsklig hantering för att bedöma situationen, eventuellt erbjuda kompensation och förhindra kundförlust.",
+      "kb_sources": [],
+      "returning_customer": false,
+      "simulation": false,
+      "skills_used": [
+        "cs:ticket-triage",
+        "cs:customer-research",
+        "cs:draft-response",
+        "cs:customer-escalation",
+        "cs:kb-article",
+        "snajp:retention-conversation",
+        "snajp:humanizer-svenska"
+      ],
+      "step_log": [
+        {
+          "skill": "cs:ticket-triage",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 2904,
+          "tokens_in": 2897,
+          "tokens_out": 189,
+          "reasoning_tokens": 0,
+          "injected_chars": 11234,
+          "sources_used": [],
+          "context_refs": []
+        },
+        {
+          "skill": "cs:customer-research",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 3141,
+          "tokens_in": 2611,
+          "tokens_out": 217,
+          "reasoning_tokens": 0,
+          "injected_chars": 10206,
+          "sources_used": [],
+          "context_refs": []
+        },
+        {
+          "skill": "cs:draft-response",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 4645,
+          "tokens_in": 3783,
+          "tokens_out": 293,
+          "reasoning_tokens": 0,
+          "injected_chars": 14543,
+          "sources_used": [],
+          "context_refs": []
+        },
+        {
+          "skill": "cs:customer-escalation",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 2432,
+          "tokens_in": 2977,
+          "tokens_out": 110,
+          "reasoning_tokens": 0,
+          "injected_chars": 11165,
+          "sources_used": [],
+          "context_refs": []
+        },
+        {
+          "skill": "cs:kb-article",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 1139,
+          "tokens_in": 3185,
+          "tokens_out": 36,
+          "reasoning_tokens": 0,
+          "injected_chars": 12130,
+          "sources_used": [],
+          "context_refs": []
+        },
+        {
+          "skill": "snajp:retention-conversation",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 3836,
+          "tokens_in": 5167,
+          "tokens_out": 310,
+          "reasoning_tokens": 0,
+          "injected_chars": 12976,
+          "sources_used": [
+            "snajp:retention-conversation",
+            "references/support-objection-library.md"
+          ],
+          "context_refs": [
+            "retention_playbook",
+            "kundens meddelande"
+          ]
+        },
+        {
+          "skill": "snajp:humanizer-svenska",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 2648,
+          "tokens_in": 9626,
+          "tokens_out": 182,
+          "reasoning_tokens": 0,
+          "injected_chars": 27081,
+          "sources_used": [],
+          "context_refs": []
+        }
+      ],
+      "cancellation_risk": true,
+      "pack_version": "1ec41e2d0551:support/v1",
+      "_ok": true,
+      "_wall_ms": 38860,
+      "_scenario": {
+        "id": "S4-uppsagning-ultimatum",
+        "beskrivning": "Uppsägningshot/ultimatum — ska trigga retention-skillen OCH eskalera",
+        "message": "Om ni inte löser det här idag så säger jag upp allt och byter leverantör. Tredje gången samma fel.",
+        "subject": "Sista varningen"
+      },
+      "_thinking_mode": "disabled"
+    },
+    "S5-gdpr::disabled": {
+      "reply": "Hej,\n\nTack för att du hör av dig. Vi tar bort dina personuppgifter enligt GDPR.\n\nDin begäran hanteras manuellt av vår personuppgiftsansvarige, och vi bekräftar inom 30 dagar. Tänk på att orderhistorik som krävs enligt bokföringslagen sparas i 7 år även efter raderingen.\n\nVi återkommer med bekräftelse och eventuell ytterligare information.\n\nMed vänliga hälsningar,\nKundtjänst",
+      "ticket_id": "9da75fac-5807-45eb-b30e-f0592845ba27",
+      "customer_id": "738f09a3-98db-4eab-9e60-4a8b24fa7f13",
+      "category": "ovrigt",
+      "category_label": "Övrigt",
+      "sentiment": 0.5,
+      "escalated": true,
+      "escalation_reason": "GDPR-begäran om radering av personuppgifter kräver manuell hantering av personuppgiftsansvarig och kan inte hanteras automatiskt.",
+      "kb_sources": [
+        {
+          "title": "Radera konto och personuppgifter (GDPR)",
+          "similarity": 1.0
+        }
+      ],
+      "returning_customer": false,
+      "simulation": false,
+      "skills_used": [
+        "cs:ticket-triage",
+        "cs:customer-research",
+        "cs:draft-response",
+        "cs:customer-escalation",
+        "cs:kb-article",
+        "snajp:retention-conversation",
+        "snajp:humanizer-svenska"
+      ],
+      "step_log": [
+        {
+          "skill": "cs:ticket-triage",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 2777,
+          "tokens_in": 2885,
+          "tokens_out": 214,
+          "reasoning_tokens": 0,
+          "injected_chars": 11234,
+          "sources_used": [],
+          "context_refs": []
+        },
+        {
+          "skill": "cs:customer-research",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 2687,
+          "tokens_in": 2693,
+          "tokens_out": 235,
+          "reasoning_tokens": 0,
+          "injected_chars": 10206,
+          "sources_used": [
+            "Radera konto och personuppgifter (GDPR)"
+          ],
+          "context_refs": [
+            "Radera konto och personuppgifter (GDPR)"
+          ]
+        },
+        {
+          "skill": "cs:draft-response",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 2645,
+          "tokens_in": 3894,
+          "tokens_out": 187,
+          "reasoning_tokens": 0,
+          "injected_chars": 14543,
+          "sources_used": [
+            "Radera konto och personuppgifter (GDPR)"
+          ],
+          "context_refs": [
+            "Radera konto och personuppgifter (GDPR)"
+          ]
+        },
+        {
+          "skill": "cs:customer-escalation",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 1507,
+          "tokens_in": 2994,
+          "tokens_out": 93,
+          "reasoning_tokens": 0,
+          "injected_chars": 11165,
+          "sources_used": [
+            "Kunskapsbasen: GDPR-radering"
+          ],
+          "context_refs": [
+            "kb_supports_answer: True"
+          ]
+        },
+        {
+          "skill": "cs:kb-article",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 1242,
+          "tokens_in": 3267,
+          "tokens_out": 64,
+          "reasoning_tokens": 0,
+          "injected_chars": 12130,
+          "sources_used": [
+            "Radera konto och personuppgifter (GDPR)"
+          ],
+          "context_refs": [
+            "Radera konto och personuppgifter (GDPR)"
+          ]
+        },
+        {
+          "skill": "snajp:retention-conversation",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 1976,
+          "tokens_in": 5022,
+          "tokens_out": 170,
+          "reasoning_tokens": 0,
+          "injected_chars": 12976,
+          "sources_used": [],
+          "context_refs": []
+        },
+        {
+          "skill": "snajp:humanizer-svenska",
+          "attempts": 1,
+          "escalated": false,
+          "escalation_reason": null,
+          "latency_ms": 2043,
+          "tokens_in": 9508,
+          "tokens_out": 156,
+          "reasoning_tokens": 0,
+          "injected_chars": 27081,
+          "sources_used": [],
+          "context_refs": []
+        }
+      ],
+      "cancellation_risk": true,
+      "pack_version": "1ec41e2d0551:support/v1",
+      "_ok": true,
+      "_wall_ms": 26299,
+      "_scenario": {
+        "id": "S5-gdpr",
+        "beskrivning": "GDPR-radering — MÅSTE eskalera oavsett ton",
+        "message": "Hej, jag skulle vilja att ni raderar all min persondata enligt GDPR. Tack på förhand!",
+        "subject": "Radering av persondata"
+      },
+      "_thinking_mode": "disabled"
+    }
+  },
+  "skill_integrity": {
+    "cs:ticket-triage": {
+      "expected_full_chars": 11234,
+      "injected_chars": 11234,
+      "complete": true
+    },
+    "cs:customer-research": {
+      "expected_full_chars": 10206,
+      "injected_chars": 10206,
+      "complete": true
+    },
+    "cs:draft-response": {
+      "expected_full_chars": 14543,
+      "injected_chars": 14543,
+      "complete": true
+    },
+    "cs:customer-escalation": {
+      "expected_full_chars": 11165,
+      "injected_chars": 11165,
+      "complete": true
+    },
+    "cs:kb-article": {
+      "expected_full_chars": 12130,
+      "injected_chars": 12130,
+      "complete": true
+    },
+    "snajp:humanizer-svenska": {
+      "expected_full_chars": 27081,
+      "injected_chars": 27081,
+      "complete": true
+    },
+    "snajp:retention-conversation": {
+      "expected_full_chars": 12976,
+      "injected_chars": 12976,
+      "complete": true
+    }
+  }
+}
