@@ -10,23 +10,28 @@ DEFAULT_TENANT_ID = "00000000-0000-4000-a000-000000000001"
 DEFAULT_TENANT_SLUG = "nordlys-handel"
 DEFAULT_TENANT_NAME = "Nordlys Handel"
 
+# MÅSTE matcha check-villkoret ss_knowledge_base_category_check i databasen.
+# Låg de isär klassificerade agenten ärenden som databasen sedan vägrade spara.
+# Live-uppsättningen innehåller garanti och utbildning men inte konto.
 CATEGORIES = (
     "teknisk_support",
+    "garanti",
     "leverans",
-    "betalning",
+    "utbildning",
     "retur_reklamation",
+    "betalning",
     "orderstatus",
-    "konto",
     "ovrigt",
 )
 
 CATEGORY_LABELS = {
     "teknisk_support": "Teknisk support",
+    "garanti": "Garanti",
     "leverans": "Leverans",
-    "betalning": "Betalning",
+    "utbildning": "Utbildning",
     "retur_reklamation": "Retur & reklamation",
+    "betalning": "Betalning",
     "orderstatus": "Orderstatus",
-    "konto": "Konto",
     "ovrigt": "Övrigt",
 }
 

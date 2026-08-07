@@ -38,9 +38,23 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
   }
 
   const { getProfileForUser } = await import("@/lib/workspace");
-  const profile = await getProfileForUser(user.id);
+  let profile = await getProfileForUser(user.id);
+
   if (!profile) {
-    return { success: false, error: "Profil saknas. Försök logga in igen." };
+    // "Försök logga in igen" var en återvändsgränd: en ny inloggning gav aldrig
+    // en profilrad, eftersom bara signup-triggern kunde skapa den. Läk istället.
+    const { error: repairError } = await supabase.rpc("ensure_workspace_for_current_user");
+    if (repairError) {
+      return {
+        success: false,
+        error: `Ditt konto saknar ett workspace och kunde inte repareras: ${repairError.message}`
+      };
+    }
+    profile = await getProfileForUser(user.id);
+  }
+
+  if (!profile) {
+    return { success: false, error: "Ditt konto saknar ett workspace. Kontakta support." };
   }
 
   const payload: BusinessContextInsert = {

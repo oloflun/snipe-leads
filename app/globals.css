@@ -200,6 +200,16 @@ button {
   outline-color: oklch(var(--ochre));
 }
 
+/* DESIGN.md: "Focus ring är ochre, 2px, 2px offset, no exceptions." Som opt-in
+   via .focus-ring blev det i praktiken undantag överallt — auth-formulären hade
+   `outline-none` och enbart en kantfärgsändring, vilket är osynligt för den som
+   tabbar. :where() ger specificitet 0, så en komponent kan fortfarande skriva
+   över den medvetet. */
+:where(a, button, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid oklch(var(--ochre));
+  outline-offset: 2px;
+}
+
 .thin-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: oklch(var(--mineral) / 0.35) transparent;

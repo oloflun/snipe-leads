@@ -1,5 +1,40 @@
 # Snipra Status
 
+## 2026-08-07 — Claude — Auth fixat, Livrustning live (chat-only), agent-backend-plan under granskning
+
+**Registrering med privat mailadress fungerar.** Grundorsaken var en trigger som
+kunde misslyckas tyst och lämna en `auth.users`-rad utan profil — inte
+mailleverantören. Migration 006 gör triggern självläkande
+(`ensure_workspace_for_user()`, sväljer sina egna fel) och lägger till
+`workspace_invites` för invite-only-flöden. `proxy.ts` hade dessutom en tyst bugg:
+`proxyConfig` (fel exportnamn) gjorde att matchern aldrig applicerades, så varje
+anonym sidladdning körde ett Supabase-anrop. Verifierat i dev-loggen, fixat till
+`config`. Se `AUTH.md`.
+
+**Livrustning AB är live som tenant på `livrustning.snajp.se`.** Byggdes först som
+fem statiska sidor (Om oss, Villkor, Garanti, Integritetspolicy, Kontakt) —
+**rivet igen efter uttrycklig rättning**: Snajp bygger inte om kundens hemsida,
+bara supportchatten. `/chat/livrustning` är den enda ytan, med kundens logga
+("Powered by Snajp") och en riktig kunskapsbas (22 artiklar, sourcead från alla
+sex sidor på livrustning.se, inte bara startsidan). En tenant-isoleringsgenomgång
+hittade att Snajps egna marknadsföringssidor (`/`, `/leads`, `/support`,
+`/design-drafts`) läckte igenom på kundens domän — täppt med en enda
+`notFoundOnTenant()`-vakt. Se `TENANTS.md` för onboarding-rutinen till nästa kund.
+
+**Öppen fråga hos kunden, inte hos oss:** vilken garanti gäller för en lös
+hjärtstartare — 1 år (deras villkor) eller 8 år (Hjärtsäker zon-bundlens copy på
+livrustning.se)? Agenten eskalerar tills Livrustning bekräftat. Inget annat
+blockerar deploy förutom att sätta `SNAJP_KEY_LIVRUSTNING` och
+`IMAP_PASSWORD_LIVRUSTNING` i Vercel.
+
+**Ny arkitekturplan (DeepSeek v4 Flash agent-backend) är INTE godkänd.** Läst
+varenda skill i den begärda kedjan ordagrant, inte bara beskrivningarna — hittade
+och rättade två felval (`competitors` istället för `competitor-profiling`,
+`revops` som lät rätt men innehöll fel sak) samt att repot helt saknar test-CI.
+Planen ligger kvar i `.claude/plans/hej-f-rfina-denna-plan-dreamy-yao.md` och en
+statussammanfattning i `plans/2026-08-07-agent-backend-deepseek.md`. **Ingen kod
+skriven än — invänta explicit godkännande innan implementation påbörjas.**
+
 ## 2026-08-02 — Claude — Merget till main, alla trådar utom Alunix stängda, två tysta länkfel
 
 **`super-intelligence` 0.4.5 merget till `main` och pushat.** Fast-forward, gjord utan

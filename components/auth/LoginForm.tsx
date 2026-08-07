@@ -20,7 +20,13 @@ export function LoginForm() {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Callbacken skickar hit ?error= när verifieringslänken inte gick att växla in.
+  // Utan detta landade användaren på en tom inloggningssida utan förklaring.
+  const [error, setError] = useState<string | null>(
+    searchParams.get("error") === "auth_callback_failed"
+      ? "Länken gick inte att använda. Den kan ha gått ut eller redan vara förbrukad — begär en ny nedan."
+      : null
+  );
   const [isPending, startTransition] = useTransition();
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -92,7 +98,7 @@ export function LoginForm() {
         <label className="mt-10 grid gap-2 text-[15px]">
           <span className="kicker text-mineral">Namn</span>
           <input
-            className="h-14 border border-ink/15 bg-paper2/70 px-4 outline-none focus:border-ochre"
+            className="h-14 border border-ink/15 bg-paper2/70 px-4 focus:border-ochre"
             placeholder="Ditt namn"
             value={fullName}
             onChange={(event) => setFullName(event.target.value)}
@@ -104,7 +110,7 @@ export function LoginForm() {
       <label className="mt-10 grid gap-2 text-[15px]">
         <span className="kicker text-mineral">Email</span>
         <input
-          className="h-14 border border-ink/15 bg-paper2/70 px-4 outline-none focus:border-ochre"
+          className="h-14 border border-ink/15 bg-paper2/70 px-4 focus:border-ochre"
           placeholder="du@bolag.se"
           type="email"
           required
@@ -119,7 +125,7 @@ export function LoginForm() {
           <span className="kicker text-mineral">Lösenord</span>
           <input
             type="password"
-            className="h-14 border border-ink/15 bg-paper2/70 px-4 outline-none focus:border-ochre"
+            className="h-14 border border-ink/15 bg-paper2/70 px-4 focus:border-ochre"
             placeholder="••••••••"
             required
             minLength={8}
@@ -130,8 +136,21 @@ export function LoginForm() {
         </label>
       ) : null}
 
-      {error ? <p className="mt-6 text-[14px] text-ochre">{error}</p> : null}
-      {message ? <p className="mt-6 text-[14px] text-moss">{message}</p> : null}
+      {/* Fel var tidigare ochre — samma token som primär-CTA och fokusringen, vid
+          L=0.74 mot papper L=0.965. Det lästes som hjälptext, inte som ett fel.
+          DESIGN.md reserverar ochre för accenten och har --danger för fel. */}
+      {error ? (
+        <p role="alert" className="mt-6 break-words text-[14px] text-danger">
+          {error}
+        </p>
+      ) : null}
+      {/* break-words: meddelandet innehåller användarens mailadress, och en lång
+          adress är en obruten sträng som annars spräcker kolumnen. */}
+      {message ? (
+        <p role="status" className="mt-6 break-words text-[14px] text-moss">
+          {message}
+        </p>
+      ) : null}
 
       <div className="mt-8">
         <button

@@ -81,6 +81,10 @@ class MemoryStorage:
         self.channel_overrides: dict[tuple[str, str], dict[str, Any]] = {}
 
         # Email-pipeline
+        # In-memory-läget har inga riktiga inkorgar — mock-mail matas in direkt
+        # via /api/inbox. Dicten finns för att lagringsgränssnittet ska vara
+        # detsamma i båda lägena.
+        self.mailboxes: dict[str, dict[str, Any]] = {}
         self.emails: dict[str, dict[str, Any]] = {}
         self.email_dedupe: set[tuple[str, str]] = set()  # (tenant_id, provider_message_id)
         self.attachments: dict[str, list[dict[str, Any]]] = {}  # email_id → [...]
@@ -120,6 +124,14 @@ class MemoryStorage:
 
     async def get_tenant(self, tenant_id: str) -> dict[str, Any] | None:
         return self.tenants.get(tenant_id)
+
+    async def list_tenants(self) -> list[dict[str, Any]]:
+        return [t for t in self.tenants.values() if t.get("active", True)]
+
+    # -- Inkorgar -----------------------------------------------------------
+
+    async def list_mailboxes(self, tenant_id: str) -> list[dict[str, Any]]:
+        return [m for m in self.mailboxes.values() if m["tenant_id"] == tenant_id]
 
     # -- Kunddata -----------------------------------------------------------
 

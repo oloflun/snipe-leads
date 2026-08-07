@@ -57,11 +57,18 @@ const poolerHosts = [
 
 // Alla snajp-migrationer i ordning. Samtliga är idempotenta (CREATE ... IF NOT
 // EXISTS, DROP ... IF EXISTS), så skriptet kan köras om utan biverkningar.
-const files = [
+//
+// Filnamn kan även anges som argument, för att köra en enskild migration:
+//   node scripts/apply-snajp-migration.mjs 006_auth_selfheal.sql
+const defaultFiles = [
   "002_snajp_support.sql",
   "003_snajp_multitenant.sql",
   "004_snajp_email_pipeline.sql"
-].map((name) => join(root, "supabase", "migrations", name));
+];
+
+const files = (process.argv.slice(2).length ? process.argv.slice(2) : defaultFiles).map((name) =>
+  join(root, "supabase", "migrations", name)
+);
 
 async function connectClient() {
   let lastError;

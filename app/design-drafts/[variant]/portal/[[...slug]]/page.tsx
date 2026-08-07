@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { DraftPortal } from "@/components/DesignDrafts";
 import { isDraftVariant, showcaseStaticSlugs } from "@/lib/design-drafts";
+import { notFoundOnTenant } from "@/lib/tenants/server";
 
 export function generateStaticParams() {
   return ["editorial-clean", "modern-blend"].flatMap((variant) =>
@@ -12,6 +13,9 @@ export default async function Page({
   params
 }: Readonly<{ params: Promise<{ variant: string; slug?: string[] }> }>) {
   const { variant, slug = [] } = await params;
+
+  // Snajps interna designutkast finns inte på en kunds domän.
+  await notFoundOnTenant();
 
   if (!isDraftVariant(variant)) {
     notFound();

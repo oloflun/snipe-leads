@@ -92,6 +92,30 @@ class PostgresStorage:
             record = await conn.fetchrow("select * from ss_tenants where id = $1", tenant_id)
         return _row(record)
 
+    async def list_tenants(self) -> list[dict[str, Any]]:
+        # Administrativ, körs utan tenant-kontext: pollern måste se alla tenants
+        # för att kunna hämta post åt var och en. RLS-policyn tenant_lookup
+        # tillåter select när app.tenant_id inte är satt.
+        async with self.pool.acquire() as conn:
+            records = await conn.fetch(
+                "select * from ss_tenants where active order by created_at"
+            )
+        return [_row(r) for r in records]
+
+    # -- Inkorgar -----------------------------------------------------------
+
+    async def list_mailboxes(self, tenant_id: str) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select id, tenant_id, provider, address, status, imap_host,
+                       last_sync_at, last_error
+                from ss_mailboxes where tenant_id = $1 order by created_at
+                """,
+                tenant_id,
+            )
+        return [_row(r) for r in records]
+
     # -- Kunddata -----------------------------------------------------------
 
     async def find_or_create_customer(

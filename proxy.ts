@@ -103,7 +103,11 @@ export async function proxy(request: NextRequest) {
   return supabaseResponse;
 }
 
-export const proxyConfig = {
+// Namnet är inte valfritt: Next läser matchern från en export som heter `config`
+// (parseMiddlewareConfig i next/dist/build/analysis/get-page-static-info.js).
+// Som `proxyConfig` ignorerades den, och proxyn körde auth-anrop på varenda
+// request — inklusive anonym trafik på marknadsföringssidorna.
+export const config = {
   // Only the authenticated surface. The old matcher still listed /leads, /companies,
   // /emails and friends, which are now either public product pages or 308s into
   // /dashboard, so the proxy was running on anonymous marketing traffic.

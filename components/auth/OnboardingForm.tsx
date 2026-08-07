@@ -45,12 +45,15 @@ export function OnboardingForm() {
 
   return (
     <form onSubmit={handleSubmit}>
-      <div className="mt-12 grid grid-cols-12 gap-x-8 gap-y-6">
+      {/* gap-x först vid md: under md är varje fält col-span-12, och 11 gap à
+          32px blir då bredare än viewporten. body har overflow-x: clip, så
+          resultatet syns inte som scroll — fältens högerkant kapas bara bort. */}
+      <div className="mt-12 grid grid-cols-12 gap-y-6 md:gap-x-8">
         {fieldConfig.map(([key, label]) => (
           <label key={key} className="col-span-12 grid gap-2 border-t border-ink/15 pt-4 md:col-span-6">
             <span className="kicker text-mineral">{label}</span>
             <input
-              className="h-14 border border-ink/15 bg-paper2/70 px-4 text-[15px] outline-none focus:border-ochre"
+              className="h-14 border border-ink/15 bg-paper2/70 px-4 text-[15px] focus:border-ochre"
               value={fields[key]}
               onChange={(event) =>
                 setFields((current) => ({
@@ -64,7 +67,12 @@ export function OnboardingForm() {
         ))}
       </div>
 
-      {error ? <p className="mt-6 text-[14px] text-ochre">{error}</p> : null}
+      {/* Samma tokenbyte som i LoginForm: ochre är accenten, --danger är fel. */}
+      {error ? (
+        <p role="alert" className="mt-6 break-words text-[14px] text-danger">
+          {error}
+        </p>
+      ) : null}
 
       <div className="mt-10 flex flex-wrap gap-4">
         <button

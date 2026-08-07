@@ -21,6 +21,12 @@ class Storage(Protocol):
 
     async def get_tenant(self, tenant_id: str) -> dict[str, Any] | None: ...
 
+    async def list_tenants(self) -> list[dict[str, Any]]: ...
+
+    # -- Inkorgar -----------------------------------------------------------
+
+    async def list_mailboxes(self, tenant_id: str) -> list[dict[str, Any]]: ...
+
     # -- Kunddata (alltid tenant-skopade) -----------------------------------
 
     async def find_or_create_customer(

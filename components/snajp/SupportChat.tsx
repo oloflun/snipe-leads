@@ -4,6 +4,7 @@ import { ImagePlus, Loader2, Send, ShieldAlert, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge, btnPrimary } from "@/components/ui";
 import { useLocale } from "@/lib/i18n";
+import { getTenant } from "@/lib/tenants";
 import { cn } from "@/lib/utils";
 
 type KbSource = { title: string; similarity: number };
@@ -59,7 +60,25 @@ async function downscaleImage(file: File, maxSize = 1024): Promise<string> {
   return canvas.toDataURL("image/jpeg", 0.85);
 }
 
-export function SupportChat() {
+/**
+ * `tenant` och `session` sätts av den publika supportlänken
+ * (/chat/<kund>/<session>). Utan dem beter sig komponenten som demon på
+ * marknadsföringssidan gjorde tidigare — samma kod, två användningar.
+ */
+export type SupportChatProps = {
+  tenant?: string;
+  session?: string;
+};
+
+export function SupportChat({ tenant, session }: SupportChatProps = {}) {
+  // Demons varumärke och exempelfrågor gäller demon. På en kunds supportsida är
+  // "Nordlys Handel" och frågor om felkoder i kassan direkt vilseledande — de
+  // namnger en påhittad butik och ett sortiment kunden inte har.
+  const tenantConfig = tenant ? getTenant(tenant) : null;
+  const brandLabel = tenantConfig?.name ?? "Nordlys Handel";
+  const intro = tenantConfig?.supportIntro ?? null;
+  const prompts = tenantConfig?.supportPrompts ?? examplePrompts;
+
   // The poll loop runs up to 90 iterations; without this it keeps writing state
   // after the component is gone.
   const alive = useRef(true);
@@ -74,6 +93,12 @@ export function SupportChat() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    // Bara när det finns meddelanden att scrolla till. På en tom chatt scrollade
+    // detta förbi introtexten och startfrågorna, vilket på smala skärmar såg ut
+    // som att sidan var avklippt i överkant.
+    if (messages.length === 0) {
+      return;
+    }
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, busy]);
 
@@ -102,8 +127,12 @@ export function SupportChat() {
           body: JSON.stringify({
             message: trimmed,
             channel: "web",
-            customer_email: "demo@nordlyshandel.se",
-            customer_name: "Demo Kund",
+            // Demons påhittade kund gäller bara demon. En riktig session
+            // identifieras av sitt session-id tills besökaren uppger något mer.
+            customer_email: session ? `${session}@session.snajp.se` : "demo@nordlyshandel.se",
+            customer_name: session ? "Webbesökare" : "Demo Kund",
+            session_key: session,
+            tenant,
             attachments
           })
         });
@@ -213,20 +242,26 @@ export function SupportChat() {
             <span className="ml-2 font-normal text-ink/50">{statusLabel}</span>
           </p>
         </div>
-        <span className="hidden text-sm text-ink/45 md:block">Nordlys Handel</span>
+        <span className="hidden text-sm text-ink/45 md:block">{brandLabel}</span>
       </div>
 
       <div ref={scrollRef} className="h-[420px] space-y-4 overflow-y-auto px-5 py-6">
         {messages.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-5 text-center">
+          // m-auto i stället för justify-center: i en scrollcontainer gör
+          // justify-center att överskottet ovanför blir oåtkomligt, och vid 320px
+          // kapades introtextens första rad. Auto-marginaler centrerar när det
+          // finns plats och släpper taget när det inte gör det.
+          <div className="flex min-h-full flex-col items-center text-center">
+            <div className="m-auto flex flex-col items-center gap-5 py-2">
             <p className="max-w-md text-[0.9375rem] leading-6 text-ink/60">
-              {text({
-                sv: "Skriv som en kund till den påhittade butiken Nordlys Handel. Du kan också ladda upp en skärmdump eller en bild på en skadad vara.",
-                en: "Write as a customer of the invented store Nordlys Handel. You can also upload a screenshot or a photo of a damaged item."
-              })}
+              {intro ??
+                text({
+                  sv: "Skriv som en kund till den påhittade butiken Nordlys Handel. Du kan också ladda upp en skärmdump eller en bild på en skadad vara.",
+                  en: "Write as a customer of the invented store Nordlys Handel. You can also upload a screenshot or a photo of a damaged item."
+                })}
             </p>
             <div className="flex max-w-lg flex-wrap justify-center gap-2">
-              {examplePrompts.map((prompt) => (
+              {prompts.map((prompt) => (
                 <button
                   key={prompt}
                   type="button"
@@ -236,6 +271,7 @@ export function SupportChat() {
                   {prompt}
                 </button>
               ))}
+            </div>
             </div>
           </div>
         ) : null}
@@ -351,7 +387,9 @@ export function SupportChat() {
             }}
             rows={1}
             maxLength={2000}
-            placeholder={text({ sv: "Skriv ditt meddelande…", en: "Type your message…" })}
+            // Kort med flit: fältet är en textarea med fast höjd, så en längre
+            // platshållare radbryts och andra raden kapas på mobil.
+            placeholder={text({ sv: "Skriv här…", en: "Type here…" })}
             // 16px floor: iOS Safari force-zooms a focused input below it, which throws
             // the whole demo layout off on the device most visitors arrive on.
             className="focus-ring min-h-11 flex-1 resize-none rounded-input bg-paper px-4 py-2.5 text-[1rem] outline-none placeholder:text-ink/35"
@@ -359,10 +397,14 @@ export function SupportChat() {
           <button
             type="submit"
             disabled={busy || !input.trim()}
+            // Ordet "Skicka" åt sig 120px av 327 vid 375px bredd, så textfältet
+            // krympte till 114px och platshållaren kapades mitt i ordet. Ikonen
+            // ensam räcker på små skärmar; aria-label bär betydelsen.
+            aria-label={text({ sv: "Skicka", en: "Send" })}
             className={btnPrimary}
           >
             <Send className="h-4 w-4" />
-            {text({ sv: "Skicka", en: "Send" })}
+            <span className="hidden sm:inline">{text({ sv: "Skicka", en: "Send" })}</span>
           </button>
         </form>
       </div>

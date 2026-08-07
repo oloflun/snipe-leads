@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ProductPage } from "@/components/marketing/ProductPage";
+import { notFoundOnTenant } from "@/lib/tenants/server";
 
 export const metadata: Metadata = {
   title: "Snajp Leads, säljmejl som låter som du",
@@ -8,6 +9,7 @@ export const metadata: Metadata = {
   alternates: { canonical: "/leads" }
 };
 
-export default function Page() {
+export default async function Page() {
+  await notFoundOnTenant();
   return <ProductPage initial="leads" />;
 }

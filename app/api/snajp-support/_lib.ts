@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getTenant } from "@/lib/tenants";
 
 // Tunn proxy mot den headless Snajp-Support-backenden (FastAPI, hostas på Render).
 // Webbläsaren träffar bara Next-appen; den interna API-nyckeln sätts server-side.
@@ -12,6 +13,35 @@ export const SNAJP_INTERNAL_API_KEY =
 // ser båda felen likadana ut i UI:t och man felsöker åt fel håll.
 const URL_IS_CONFIGURED = Boolean(process.env.SNAJP_SUPPORT_URL);
 
+/**
+ * Nyckeln avgör vilken tenant backenden skriver till. Tidigare skickades alltid
+ * demonyckeln, vilket innebar att varje kunds trafik hamnade hos demo-tenanten
+ * Nordlys Handel. Varje kund har numera sin egen nyckel i env, och saknas den
+ * faller anropet tillbaka på demonyckeln i stället för att läcka in i fel kunds
+ * data — men vi säger ifrån i loggen.
+ */
+export function apiKeyForTenant(tenantSlug?: string | null): string {
+  if (!tenantSlug) {
+    return SNAJP_INTERNAL_API_KEY;
+  }
+
+  const tenant = getTenant(tenantSlug);
+  if (!tenant) {
+    console.warn(`snajp-support: okänd tenant "${tenantSlug}", använder demonyckeln.`);
+    return SNAJP_INTERNAL_API_KEY;
+  }
+
+  const key = process.env[tenant.supportKeyEnv];
+  if (!key) {
+    console.warn(
+      `snajp-support: ${tenant.supportKeyEnv} saknas, ${tenant.name} faller tillbaka på demonyckeln.`
+    );
+    return SNAJP_INTERNAL_API_KEY;
+  }
+
+  return key;
+}
+
 export function offlineResponse(cause?: unknown) {
   const reason = cause instanceof Error ? cause.message : undefined;
   const error = URL_IS_CONFIGURED
@@ -21,13 +51,13 @@ export function offlineResponse(cause?: unknown) {
   return NextResponse.json({ offline: true, configured: URL_IS_CONFIGURED, target: SNAJP_SUPPORT_URL, error }, { status: 503 });
 }
 
-export async function proxyToBackend(path: string, init: RequestInit) {
+export async function proxyToBackend(path: string, init: RequestInit, tenantSlug?: string | null) {
   try {
     const response = await fetch(`${SNAJP_SUPPORT_URL}${path}`, {
       ...init,
       headers: {
         "Content-Type": "application/json",
-        "X-API-Key": SNAJP_INTERNAL_API_KEY,
+        "X-API-Key": apiKeyForTenant(tenantSlug),
         ...(init.headers ?? {})
       },
       cache: "no-store"

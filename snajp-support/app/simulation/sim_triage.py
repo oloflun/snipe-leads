@@ -45,12 +45,22 @@ _CATEGORY_PATTERNS: list[tuple[str, re.Pattern]] = [
         ),
     ),
     (
-        "konto",
+        "garanti",
         re.compile(
-            r"konto|gdpr|personuppgift|radera|registerutdrag|uppgifter|mail\s*adress|e-post\s*adress|nyhetsbrev|avregistrer|prenumeration",
+            r"garanti|garantitid|garantin|tillverkningsfel|supportavtal|hjärtsäker zon|ss280000",
             re.IGNORECASE,
         ),
     ),
+    (
+        "utbildning",
+        re.compile(
+            r"utbildning|kurs(en|er|tillfälle)?\b|hlr|första hjälpen|ehlr|eförstahjälpen|l-abcde|brandutbildning|släckövning|krisstöd|krishantering|deltagare|boka",
+            re.IGNORECASE,
+        ),
+    ),
+    # Kontofrågor (GDPR, personuppgifter) har ingen egen kategori i databasen och
+    # hamnar i ovrigt. De eskaleras ändå via _ESCALATION_PATTERN nedan, så de
+    # landar hos en människa oavsett fack.
 ]
 
 _ESCALATION_PATTERN = re.compile(

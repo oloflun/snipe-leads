@@ -23,9 +23,21 @@ def test_retur():
 
 
 def test_konto_gdpr_eskaleras():
+    # Kategorin konto finns inte i databasens check-villkor, så GDPR-ärenden
+    # hamnar i ovrigt. Det som faktiskt spelar roll är att de eskaleras.
     result = classify("GDPR", "Jag vill radera mitt konto och alla personuppgifter.")
-    assert result["category"] == "konto"
+    assert result["category"] == "ovrigt"
     assert result["escalate"]
+
+
+def test_garanti_far_eget_fack():
+    result = classify("Garanti", "Hur lång är garantin på hjärtstartaren jag köpte?")
+    assert result["category"] == "garanti"
+
+
+def test_utbildning_far_eget_fack():
+    result = classify("Kurs", "Vi är 15 personer och vill boka en HLR-kurs.")
+    assert result["category"] == "utbildning"
 
 
 def test_aterbetalning_eskaleras():

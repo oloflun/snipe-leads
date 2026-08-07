@@ -42,7 +42,43 @@ async def ensure_default_kb(storage, *, embeddings: list[list[float] | None] | N
     return len(KB_ARTICLES)
 
 
+async def seed_tenant(storage, tenant_slug: str, *, embeddings=None) -> int:
+    """Seedar en kunds kunskapsbas. Returnerar antal nya artiklar.
+
+    Idempotent: en tenant som redan har artiklar lämnas orörd, så skriptet kan
+    köras om utan att dubblera kunskapsbasen.
+    """
+    from ..tenants import kb_for_tenant, name_for_tenant
+
+    articles = kb_for_tenant(tenant_slug)
+    if articles is None:
+        raise SystemExit(f"Okänd tenant: {tenant_slug}")
+
+    # create_tenant är en upsert (on conflict do update ... returning *), så den
+    # både hämtar en befintlig tenant och skapar en som saknas. Ingen extra
+    # lagringsmetod behövs.
+    tenant = await storage.create_tenant(
+        slug=tenant_slug, name=name_for_tenant(tenant_slug) or tenant_slug
+    )
+
+    if await storage.list_kb(tenant["id"]):
+        return 0
+
+    vectors = embeddings or [None] * len(articles)
+    for article, embedding in zip(articles, vectors):
+        await storage.add_kb_article(
+            tenant["id"],
+            title=article["title"],
+            content=article["content"],
+            category=article["category"],
+            embedding=embedding,
+        )
+    return len(articles)
+
+
 async def main() -> None:
+    import sys
+
     settings = get_settings()
     if not settings.database_url:
         print("DATABASE_URL saknas — in-memory-läget seedar sig självt. Inget att göra.")
@@ -50,8 +86,20 @@ async def main() -> None:
 
     from ..storage.postgres import PostgresStorage
 
+    # Utan argument seedas demo-tenanten som förut; med argument seedas en kund.
+    tenant_slug = sys.argv[1] if len(sys.argv) > 1 else None
+
     storage = await PostgresStorage.connect(settings.database_url)
     try:
+        if tenant_slug:
+            added = await seed_tenant(storage, tenant_slug)
+            print(
+                f"Seedade {added} artiklar till {tenant_slug}."
+                if added
+                else f"{tenant_slug} har redan en kunskapsbas — hoppar över."
+            )
+            return
+
         embeddings: list[list[float] | None] | None = None
         if not settings.is_simulation():
             from ..agent.embeddings import embed_text

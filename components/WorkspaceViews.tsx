@@ -529,7 +529,9 @@ function BillingSettings() {
 export function LoginView() {
   return (
     <main className="min-h-screen bg-paper text-ink">
-      <div className="mx-auto grid min-h-screen max-w-[1480px] grid-cols-12 gap-x-8 px-6 py-10 md:px-8">
+      {/* gap-x först vid md — se kommentaren i OnboardingForm: under md är båda
+          sektionerna col-span-12, och gapen ensamma är bredare än viewporten. */}
+      <div className="mx-auto grid min-h-screen max-w-[1480px] grid-cols-12 px-6 py-10 md:gap-x-8 md:px-8">
         <section className="col-span-12 flex flex-col justify-between bg-ink p-8 text-paper md:col-span-6">
           <div>
             <p className="kicker text-paper/55">Snajp workspace</p>
@@ -549,7 +551,7 @@ export function OnboardingView() {
   return (
     <main className="min-h-screen bg-paper text-ink">
       <div className="mx-auto max-w-[1480px] px-6 py-10 md:px-8">
-        <div className="grid grid-cols-12 gap-x-8">
+        <div className="grid grid-cols-12 md:gap-x-8">
           <div className="col-span-12 md:col-span-3">
             <Link href="/" className="kicker text-mineral hover:text-ochre">Till startsidan</Link>
             <div className="rule mt-3 text-ink" />
