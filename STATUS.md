@@ -1,5 +1,44 @@
 # Snipra Status
 
+## 2026-08-08 — Claude — Agent-backend implementerad, live-testad, kritiska luckor hittade och täppta
+
+**Hela DeepSeek v4 Flash-planen implementerad** efter godkännande (`/goal`-invokering
+räknades som godkännande, tre `ExitPlanMode`-avslag var för ren kontext, inte
+invändning). Full teknisk status: [HANDOFF.md](HANDOFF.md) — läs den, inte denna
+rad, för detaljer. Plan: `plans/2026-08-07-agent-backend-deepseek.md`.
+
+**Användarens skepsis efter en första "15/15 klart"-rapport var befogad.** Allt var
+enhetstestat, nästan inget var kopplat till en riktig kodväg — `agent_runs`
+skrevs aldrig, leads-pipelinen saknade ett sätt att skapa ett prospekt,
+läsgarantin (`check_output_contract`) anropades aldrig live. Rättat: supportagenten
+byggdes om från EN hopklistrad agentloop-prompt till ETT LLM-anrop per skill-steg
+(`app/agent/step_runner.py`) — den mekanism som gör läsgarantin faktiskt verifierbar.
+
+**Live-testat mot riktiga DeepSeek/ScrapeGraphAI-nycklar.** 66 skarpa anrop i
+supportflödet (`docs/THINKING_MODE_COMPARISON.md`), hittade och fixade en
+kundvänd bugg (`[Your name]`-mallrester i 3/10 svar). **Beslut:** thinking AV
+i support (identiska beslut i båda lägen, 11x fler tokens/6x latens PÅ),
+UTOM `cs:customer-escalation` (thinking PÅ, medvetet).
+
+**Leads-jämförelsen kördes — och är OGILTIG.** 12 körningar lyckades tekniskt,
+men `THINKING_MODE` hade noll effekt: `leads_agent.py` kör `Runner.run`
+(Agents SDK-loopen) och rör aldrig `step_runner.run_step`. Alltså inga
+`reasoning_tokens`, inget `step_log`, ingen `agent_runs`-loggning, inget
+utdatakontrakt per steg. **Leads har samma arkitekturfel som support hade före
+omskrivningen.** Upptäckt genom att latenserna var identiska mellan lägena där
+support visade 6× skillnad. Leads måste migreras till per-steg-körning innan
+någon jämförelse betyder något — se `docs/THINKING_MODE_COMPARISON.md` §6.
+
+**Vision + embeddings bytt OpenAI → Gemini** (gratisnivå, användarens uttryckliga
+önskan). Ny generaliserad skill `~/.agents/skills/api-key-setup/` byggd från
+sessionens nyckel-friktion.
+
+**Öppet:** `DATABASE_URL` inte satt lokalt → KB-sökning bara testad mot
+`MemoryStorage` (ignorerar embeddings helt, ren tokenmatchning) — den riktiga
+pgvector-vägen overifierad. `snajp_app`-rollens lösenord är inte satt
+(`execute_sql` blockerad av miljöns klassificerare, se `BLOCKS.md`).
+`discover-leads`/`generate-outreach` edge functions fortfarande orörda stubbar.
+
 ## 2026-08-07 — Claude — Auth fixat, Livrustning live (chat-only), agent-backend-plan under granskning
 
 **Registrering med privat mailadress fungerar.** Grundorsaken var en trigger som

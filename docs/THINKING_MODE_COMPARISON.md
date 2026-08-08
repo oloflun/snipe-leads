@@ -4,8 +4,8 @@
 5 scenarier × 2 lägen × 6–7 skill-steg = **66 skarpa LLM-anrop**
 **Rådata:** `docs/live-tests/support-20260807-200723.{json,md}`
 
-> **Leads (research + outreach) är ÄNNU INTE kört.** Denna rapport täcker
-> bara support. Se HANDOFF.md Steg 1.
+> **Leads (research + outreach): körd 2026-08-08, men RESULTATET ÄR OGILTIGT.**
+> Se §6 nedan. Denna rapports slutsatser gäller bara support.
 
 ---
 
@@ -132,6 +132,62 @@ latens, och de kvalitetsfördelar som fanns var små och inkonsekventa.
    ett globalt `THINKING_MODE` — att göra det till ett fält på `PlaybookStep`
    är en liten ändring och bör utvärderas.
 
-**Leads-flödet är inte utvärderat.** Research är det steg där thinking
-teoretiskt gör mest nytta (väga källor, dra slutsatser om ett bolag) — och
-det är just där ingen data finns än.
+**Leads-flödet är fortfarande inte utvärderat** — en körning gjordes
+2026-08-08 men gav ogiltig data, se §6. Research är det steg där thinking
+teoretiskt gör mest nytta (väga källor, dra slutsatser om ett bolag), så
+det förblir den intressantaste öppna frågan.
+
+---
+
+## 6. Leads: körningen är OGILTIG — leads-agenten kör inte per-steg-vägen
+
+**Kört 2026-08-08:** 3 prospekt × 2 tenants × 2 lägen = 12 körningar,
+samtliga tekniskt lyckade (`research=OK draft=OK`). Rådata:
+`docs/live-tests/leads-20260807-225625.json`.
+
+**Slutsatsen som INTE går att dra:** något om thinking mode.
+
+Första signalen var att latenserna var i praktiken identiska mellan lägena,
+och i hälften av fallen *lägre* med thinking PÅ:
+
+| Tenant/prospekt | disabled | enabled |
+| --- | --- | --- |
+| snajp/Gina Tricot (research) | 48.5 s | 46.4 s |
+| snajp/Gina Tricot (draft) | 40.0 s | 28.8 s |
+| kunder/Blomsterlandet (research) | 81.4 s | 73.7 s |
+
+I supportflödet var thinking PÅ 6× långsammare. Att skillnaden försvinner
+helt är inte ett resultat — det är ett symptom.
+
+**Orsak, verifierad i koden:** `app/agent/leads_agent.py` kör
+`Runner.run(...)` (OpenAI Agents SDK:s egen loop) på tre ställen, och rör
+aldrig `app/agent/step_runner.run_step`. Därmed:
+
+- `thinking_kwargs()` anropas aldrig → `THINKING_MODE` har **noll effekt**
+  på leads-flödet. Båda "lägena" körde identisk konfiguration.
+- Inget `step_log`, inga `reasoning_tokens`, inget `thinking_mode`-fält —
+  utdatan innehåller bara `scraped_sources`, `skills_used`, `final_output`.
+- Ingen `agent_runs`-loggning (G10) för leads.
+- Inget utdatakontrakt per steg (Del C p.4).
+
+**Detta är samma arkitekturfel som supportagenten hade före omskrivningen:**
+alla skills hopklistrade i en enda agentloop. `skills_used` listar vad som
+deklarerats, inte vad modellen faktiskt läste — precis den overifierbarhet
+som per-steg-vägen byggdes för att lösa.
+
+**Konsekvens för användarens krav.** Begäran var att "bevaka hur skillsen
+anropas" och jämföra "VARJE delmoment". Det är **inte möjligt** med
+leads-agentens nuvarande arkitektur. Migrering till `step_runner` är ett
+förkrav för en meningsfull leads-jämförelse, inte en förbättring att göra
+efteråt.
+
+**Nästa steg (ersätter det tidigare "kör leads-jämförelsen"):**
+1. Migrera `leads_agent.py`:s tre `Runner.run`-anrop till per-steg-körning
+   via `step_runner.run_step`, precis som `support_agent.py`. Playbookarna
+   (`app/leads/*_playbook.py`) finns redan och deklarerar stegen.
+2. Verifiera med `--skill-audit` + `step_log.injected_chars` att varje skill
+   injiceras komplett per steg.
+3. Kör OM jämförelsen. Först då säger den något.
+
+Rådatafilen behålls som bevis för att körningen skedde, men får **inte**
+citeras som en thinking-jämförelse.

@@ -208,18 +208,49 @@ enda plats embeddings-nyckeln faktiskt kan bevisa något.
 latensdelen (§1) är fortfarande giltig eftersom samma trasiga retrieval
 drabbade båda thinking-lägena lika.
 
-### Steg 1: LEADS-jämförelsen — STARTAD 2026-08-07, kolla status
+### Steg 1: MIGRERA leads-agenten till per-steg — jämförelsen är körd och OGILTIG
+
+**Kört 2026-08-08, resultatet går inte att använda.** 12 körningar (3 prospekt
+× 2 tenants × 2 lägen), alla tekniskt lyckade, men `THINKING_MODE` hade noll
+effekt: `app/agent/leads_agent.py` kör `Runner.run(...)` (Agents SDK-loopen)
+på tre ställen och rör aldrig `app/agent/step_runner.run_step`. Alltså:
+
+- `thinking_kwargs()` anropas aldrig → båda "lägena" körde identisk config
+  (avslöjades av att latenserna var identiska, ibland lägre med thinking PÅ —
+  i support var PÅ 6× långsammare)
+- inget `step_log`, inga `reasoning_tokens`, ingen `agent_runs`-loggning (G10)
+- inget utdatakontrakt per steg (Del C p.4)
+- `skills_used` listar deklarerade skills, inte lästa — **samma
+  overifierbarhet som supportagenten hade före omskrivningen**
+
+Användarens krav ("bevaka hur skillsen anropas", jämför "VARJE delmoment")
+är alltså **inte uppfyllbart** med leads-agentens nuvarande arkitektur.
+
+**Gör i denna ordning:**
+1. Migrera `leads_agent.py`:s tre `Runner.run`-anrop till `step_runner.run_step`,
+   precis som `support_agent.py` gjordes. Playbookarna finns redan
+   (`app/leads/{onboarding,research,outreach}_playbook.py`) och deklarerar
+   stegen — det som saknas är själva körvägen.
+2. Verifiera med `--skill-audit` + `step_log.injected_chars` per körning.
+3. Kör OM jämförelsen (kommandot nedan). Först då säger den något.
+4. Sätt `PlaybookStep.thinking` per leads-steg utifrån den datan — **inte**
+   genom analogi till supportbeslutet (mailbaserat, ingen tidspress,
+   kvalitet väger tyngre än latens).
+
+Full analys: `docs/THINKING_MODE_COMPARISON.md` §6. Rådata behålls som bevis
+på att körningen skedde: `docs/live-tests/leads-20260807-225625.json` — får
+**inte** citeras som en thinking-jämförelse.
+
+### Steg 1b: kommandot (efter migreringen ovan)
 
 ```bash
 python scripts/run_live_tests.py --leads --modes disabled,enabled
 ```
 
-kördes i bakgrund, output till `docs/live-tests/leads-run.log` under
-körning, slutresultat till `docs/live-tests/leads-<stamp>.json` när klar.
-**Kontrollera om den är klar innan du startar en ny** — den är
-tidskrävande (3 prospekt × 2 lägen × 2 tenants × ~11 skill-steg = över 100
-skarpa anrop, flera med thinking PÅ som tog 100-200s/anrop i
-support-mätningen).
+Output till `docs/live-tests/leads-run.log` under körning, slutresultat till
+`docs/live-tests/leads-<stamp>.json`. Tidskrävande: 12 körningar tog ~50 min
+i 2026-08-08-passet. **Kör den inte förrän migreringen i Steg 1 är klar** —
+utan den mäter den ingenting (det var precis felet 2026-08-08).
 
 `scripts/run_live_leads.py`: tre riktiga svenska bolag (Gina Tricot,
 Blomsterlandet, Sportamore), research via ScrapeGraphAI mot deras publika
