@@ -25,6 +25,23 @@ from ..leads.untrusted_content import wrap_untrusted_content
 from .leads_context import ResearchContext
 
 
+def _as_markdown(data: object) -> str:
+    """ScrapeGraphAI returnerar results['markdown']['data'] som en LISTA av
+    sidsegment, inte som en sträng — trots att fältet heter 'data'.
+
+    Att inte hantera det gav två tysta fel samtidigt (hittade 2026-08-08 i
+    en live-körning, inte av testerna, eftersom testmocken modellerade
+    fältet som en sträng): `len(markdown)` blev 1 i stället för ~4000, så
+    scraped_sources rapporterade "1 tecken hämtat", OCH innehållet
+    injicerades i prompten som en Python-listrepr med LITERALA '\\n' i
+    stället för riktiga radbrytningar. Modellen fick alltså sidan som en
+    enda oformaterad rad.
+    """
+    if isinstance(data, (list, tuple)):
+        return "\n\n".join(str(part) for part in data if part)
+    return str(data or "")
+
+
 async def _scrape_registered_source_impl(research: ResearchContext, url: str) -> str:
     registered = await research.storage.list_prospect_source_urls(
         research.tenant_id, research.prospect_id
@@ -57,7 +74,7 @@ async def _scrape_registered_source_impl(research: ResearchContext, url: str) ->
             {"error": f"Skrapning misslyckades: {result.error or 'okänt fel'}"}, ensure_ascii=False
         )
 
-    markdown = (result.data.results or {}).get("markdown", {}).get("data", "")
+    markdown = _as_markdown((result.data.results or {}).get("markdown", {}).get("data", ""))
     if not markdown:
         return json.dumps({"error": "Skrapningen gav inget markdown-innehåll."}, ensure_ascii=False)
 

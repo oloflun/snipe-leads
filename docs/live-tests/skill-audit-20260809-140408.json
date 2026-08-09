@@ -1,0 +1,416 @@
+{
+  "support/v1": [
+    {
+      "skill": "cs:ticket-triage",
+      "requires": [
+        "context_pack"
+      ],
+      "scoped": false,
+      "scope": [],
+      "rationale": null,
+      "skill_md_chars": 11234,
+      "full_chars": 11234,
+      "rendered_chars": 11234,
+      "reference_files": [],
+      "reference_count": 0,
+      "renders_complete": true,
+      "all_references_present_in_render": null
+    },
+    {
+      "skill": "cs:customer-research",
+      "requires": [
+        "skill:cs:ticket-triage"
+      ],
+      "scoped": false,
+      "scope": [],
+      "rationale": null,
+      "skill_md_chars": 10206,
+      "full_chars": 10206,
+      "rendered_chars": 10206,
+      "reference_files": [],
+      "reference_count": 0,
+      "renders_complete": true,
+      "all_references_present_in_render": null
+    },
+    {
+      "skill": "cs:draft-response",
+      "requires": [
+        "skill:cs:customer-research"
+      ],
+      "scoped": false,
+      "scope": [],
+      "rationale": null,
+      "skill_md_chars": 14543,
+      "full_chars": 14543,
+      "rendered_chars": 14543,
+      "reference_files": [],
+      "reference_count": 0,
+      "renders_complete": true,
+      "all_references_present_in_render": null
+    },
+    {
+      "skill": "cs:customer-escalation",
+      "requires": [
+        "skill:cs:draft-response"
+      ],
+      "scoped": false,
+      "scope": [],
+      "rationale": null,
+      "skill_md_chars": 11165,
+      "full_chars": 11165,
+      "rendered_chars": 11165,
+      "reference_files": [],
+      "reference_count": 0,
+      "renders_complete": true,
+      "all_references_present_in_render": null
+    },
+    {
+      "skill": "cs:kb-article",
+      "requires": [
+        "skill:cs:customer-escalation"
+      ],
+      "scoped": false,
+      "scope": [],
+      "rationale": null,
+      "skill_md_chars": 12130,
+      "full_chars": 12130,
+      "rendered_chars": 12130,
+      "reference_files": [],
+      "reference_count": 0,
+      "renders_complete": true,
+      "all_references_present_in_render": null
+    },
+    {
+      "skill": "snajp:retention-conversation",
+      "requires": [
+        "skill:cs:draft-response"
+      ],
+      "scoped": false,
+      "scope": [],
+      "rationale": null,
+      "skill_md_chars": 7422,
+      "full_chars": 12976,
+      "rendered_chars": 12976,
+      "reference_files": [
+        "references/support-objection-library.md"
+      ],
+      "reference_count": 1,
+      "renders_complete": true,
+      "all_references_present_in_render": true
+    },
+    {
+      "skill": "snajp:humanizer-svenska",
+      "requires": [
+        "skill:cs:kb-article"
+      ],
+      "scoped": false,
+      "scope": [],
+      "rationale": null,
+      "skill_md_chars": 27081,
+      "full_chars": 27081,
+      "rendered_chars": 27081,
+      "reference_files": [],
+      "reference_count": 0,
+      "renders_complete": true,
+      "all_references_present_in_render": null
+    }
+  ],
+  "leads/onboarding-v1": [
+    {
+      "skill": "mk:product-marketing",
+      "requires": [
+        "session_start"
+      ],
+      "scoped": false,
+      "scope": [],
+      "rationale": null,
+      "skill_md_chars": 7618,
+      "full_chars": 7618,
+      "rendered_chars": 7618,
+      "reference_files": [],
+      "reference_count": 0,
+      "renders_complete": true,
+      "all_references_present_in_render": null
+    },
+    {
+      "skill": "mk:customer-research",
+      "requires": [
+        "skill:mk:product-marketing"
+      ],
+      "scoped": false,
+      "scope": [],
+      "rationale": null,
+      "skill_md_chars": 11807,
+      "full_chars": 27923,
+      "rendered_chars": 27923,
+      "reference_files": [
+        "references/source-guides.md"
+      ],
+      "reference_count": 1,
+      "renders_complete": true,
+      "all_references_present_in_render": true
+    },
+    {
+      "skill": "mk:churn-prevention",
+      "requires": [
+        "skill:mk:customer-research"
+      ],
+      "scoped": false,
+      "scope": [],
+      "rationale": null,
+      "skill_md_chars": 17745,
+      "full_chars": 40149,
+      "rendered_chars": 40149,
+      "reference_files": [
+        "references/cancel-flow-patterns.md",
+        "references/dunning-playbook.md"
+      ],
+      "reference_count": 2,
+      "renders_complete": true,
+      "all_references_present_in_render": true
+    }
+  ],
+  "leads/research-v1": [
+    {
+      "skill": "mk:customer-research",
+      "requires": [
+        "context_pack"
+      ],
+      "scoped": false,
+      "scope": [],
+      "rationale": null,
+      "skill_md_chars": 11807,
+      "full_chars": 27923,
+      "rendered_chars": 27923,
+      "reference_files": [
+        "references/source-guides.md"
+      ],
+      "reference_count": 1,
+      "renders_complete": true,
+      "all_references_present_in_render": true
+    },
+    {
+      "skill": "mk:prospecting",
+      "requires": [
+        "skill:mk:customer-research"
+      ],
+      "scoped": false,
+      "scope": [],
+      "rationale": null,
+      "skill_md_chars": 15043,
+      "full_chars": 51779,
+      "rendered_chars": 51779,
+      "reference_files": [
+        "references/b2b-prospecting.md",
+        "references/compliance.md",
+        "references/data-sources.md",
+        "references/local-prospecting.md",
+        "references/saas-prospecting.md"
+      ],
+      "reference_count": 5,
+      "renders_complete": true,
+      "all_references_present_in_render": true
+    },
+    {
+      "skill": "sa:account-research",
+      "requires": [
+        "skill:mk:prospecting"
+      ],
+      "scoped": false,
+      "scope": [],
+      "rationale": null,
+      "skill_md_chars": 7352,
+      "full_chars": 7352,
+      "rendered_chars": 7352,
+      "reference_files": [],
+      "reference_count": 0,
+      "renders_complete": true,
+      "all_references_present_in_render": null
+    },
+    {
+      "skill": "mk:competitor-profiling",
+      "requires": [
+        "skill:sa:account-research"
+      ],
+      "scoped": false,
+      "scope": [],
+      "rationale": null,
+      "skill_md_chars": 14123,
+      "full_chars": 25754,
+      "rendered_chars": 25754,
+      "reference_files": [
+        "references/templates.md",
+        "references/tool-reference.md"
+      ],
+      "reference_count": 2,
+      "renders_complete": true,
+      "all_references_present_in_render": true
+    },
+    {
+      "skill": "mk:competitors",
+      "requires": [
+        "skill:mk:competitor-profiling"
+      ],
+      "scoped": false,
+      "scope": [],
+      "rationale": null,
+      "skill_md_chars": 8326,
+      "full_chars": 21107,
+      "rendered_chars": 21107,
+      "reference_files": [
+        "references/content-architecture.md",
+        "references/templates.md"
+      ],
+      "reference_count": 2,
+      "renders_complete": true,
+      "all_references_present_in_render": true
+    },
+    {
+      "skill": "mk:sales-enablement",
+      "requires": [
+        "skill:mk:competitors"
+      ],
+      "scoped": true,
+      "scope": [
+        "§ Objection Handling Docs",
+        "references/objection-library.md"
+      ],
+      "rationale": "Kall e-post behöver invändningar, inte pitchdeck eller demoskript (Del I) — hela skillen späder en modell som då börjar föreslå ROI-kalkylatorer och demoskript i ett kallt mejl.",
+      "skill_md_chars": 14502,
+      "full_chars": 53162,
+      "rendered_chars": 14853,
+      "reference_files": [
+        "references/deck-frameworks.md",
+        "references/demo-scripts.md",
+        "references/objection-library.md",
+        "references/one-pager-templates.md"
+      ],
+      "reference_count": 4,
+      "renders_complete": null,
+      "all_references_present_in_render": null
+    },
+    {
+      "skill": "mk:offers",
+      "requires": [
+        "skill:mk:sales-enablement"
+      ],
+      "scoped": false,
+      "scope": [],
+      "rationale": null,
+      "skill_md_chars": 9252,
+      "full_chars": 69574,
+      "rendered_chars": 69574,
+      "reference_files": [
+        "references/bonus-stacking.md",
+        "references/examples.md",
+        "references/guarantee-design.md",
+        "references/offer-anatomy.md",
+        "references/offer-formats.md",
+        "references/scarcity-urgency.md",
+        "references/value-equation.md"
+      ],
+      "reference_count": 7,
+      "renders_complete": true,
+      "all_references_present_in_render": true
+    },
+    {
+      "skill": "mk:ab-testing",
+      "requires": [
+        "skill:mk:offers"
+      ],
+      "scoped": false,
+      "scope": [],
+      "rationale": null,
+      "skill_md_chars": 11150,
+      "full_chars": 25095,
+      "rendered_chars": 25095,
+      "reference_files": [
+        "references/sample-size-guide.md",
+        "references/test-templates.md"
+      ],
+      "reference_count": 2,
+      "renders_complete": true,
+      "all_references_present_in_render": true
+    }
+  ],
+  "leads/outreach-v1": [
+    {
+      "skill": "sa:draft-outreach",
+      "requires": [
+        "offer_selected"
+      ],
+      "scoped": false,
+      "scope": [],
+      "rationale": null,
+      "skill_md_chars": 10074,
+      "full_chars": 10074,
+      "rendered_chars": 10074,
+      "reference_files": [],
+      "reference_count": 0,
+      "renders_complete": true,
+      "all_references_present_in_render": null
+    },
+    {
+      "skill": "mk:cold-email",
+      "requires": [
+        "skill:sa:draft-outreach"
+      ],
+      "scoped": true,
+      "scope": [
+        "references/personalization.md"
+      ],
+      "rationale": "Skapandesteget behöver personaliseringssignaler, inte hela mk:cold-email-metodiken än.",
+      "skill_md_chars": 7286,
+      "full_chars": 29690,
+      "rendered_chars": 4565,
+      "reference_files": [
+        "references/benchmarks.md",
+        "references/follow-up-sequences.md",
+        "references/frameworks.md",
+        "references/personalization.md",
+        "references/subject-lines.md"
+      ],
+      "reference_count": 5,
+      "renders_complete": null,
+      "all_references_present_in_render": null
+    },
+    {
+      "skill": "mk:cold-email",
+      "requires": [
+        "skill:mk:cold-email"
+      ],
+      "scoped": false,
+      "scope": [],
+      "rationale": null,
+      "skill_md_chars": 7286,
+      "full_chars": 29690,
+      "rendered_chars": 29690,
+      "reference_files": [
+        "references/benchmarks.md",
+        "references/follow-up-sequences.md",
+        "references/frameworks.md",
+        "references/personalization.md",
+        "references/subject-lines.md"
+      ],
+      "reference_count": 5,
+      "renders_complete": true,
+      "all_references_present_in_render": true
+    },
+    {
+      "skill": "snajp:humanizer-svenska",
+      "requires": [
+        "skill:mk:cold-email"
+      ],
+      "scoped": false,
+      "scope": [],
+      "rationale": null,
+      "skill_md_chars": 27081,
+      "full_chars": 27081,
+      "rendered_chars": 27081,
+      "reference_files": [],
+      "reference_count": 0,
+      "renders_complete": true,
+      "all_references_present_in_render": null
+    }
+  ]
+}

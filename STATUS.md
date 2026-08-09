@@ -1,5 +1,56 @@
 # Snipra Status
 
+## 2026-08-10 — Claude — Leads migrerad till per-steg, thinking BESLUTAT AV, skill-grind mekaniserad
+
+**Leads-agenten kör per-steg.** `leads_agent.py`s tre `Runner.run`-anrop ersattes
+med `step_runner.run_step` — Fas B (8 steg) och Fas C (4 steg), ett LLM-anrop per
+skill. Det var förkravet för att `THINKING_MODE` överhuvudtaget skulle nå
+API-anropet; utan det mätte 2026-08-08 års jämförelse ingenting. Skrapningen och
+köningen av utkast flyttades till kod: G4 och INV-SEC-004 blir kodvägar i stället
+för hopp om att modellen anropar rätt verktyg. **Fas A (onboarding) kör medvetet
+kvar på `Runner.run`** — flerturssamtal passar inte per-steg-kontrakt, och den
+saknar därför fortfarande thinking-kontroll och `step_log`. Det är en kvarvarande
+lucka, inte klart.
+
+**BESLUT: thinking HELT AV i leadsflödet.** Användarens beslut efter genomläsning
+av rådatan från 72 skarpa anrop (3 bolag × 2 lägen × 12 steg). **Beslutet
+underkände min rekommendation, som var PÅ** — jag drog slutsatser ur mätvärden
+(PÅ bröt utdatakontraktet noll gånger mot AV:s sex, differentierade sina
+konfidenssiffror), användaren läste vad modellen faktiskt producerade. Där var AV
+bättre: personligare utkast med rätt ton, medan PÅ blev hackigt och robotaktigt
+trots övertänkandet. AV hade dessutom **rätt** om att B2C passar supportprodukten;
+PÅ:s underkännande av alla tre bolagen var pessimism, inte skärpa. Beslutet är
+pinnat explicit per steg (`research_playbook.THINKING`), inte ärvt från
+`settings.thinking_mode`, och låst av två tester. Se
+`docs/THINKING_MODE_COMPARISON.md` §8.5 för hela resonemanget inklusive varför
+min slutsats var fel.
+
+**HÅRD REGEL, nu mekaniskt tvingad: skillsen ändras aldrig.** INV-SKILL-005
+(`tests/invariants/test_inv_skill_005.py`) jämför varje fil under
+`agent-core/skills/` mot sitt sha256 i manifestet och fäller builden på tyst
+redigering, tillagd eller borttagen fil. Verifierad genom att faktiskt ändra
+`mk:offers`, se testet fälla, och återställa. Justering av output sker i stället
+med **tilläggsinstruktioner** i playbookens `task`/`case_context` — det spåret
+utvärderas i kommande tester (§8.6).
+
+**Tre buggar som körningen avslöjade, två åtgärdade:**
+1. ScrapeGraphAI returnerar `markdown.data` som **lista**, inte sträng → längden
+   rapporterades som 1 i stället för ~4 000, och sidan injicerades som listrepr
+   med literala `\n`. Fixad (`_as_markdown`). Testmocken antog sträng — samma
+   felklass som `MemoryStorage.search_kb` förra sessionen.
+2. Hängande signatur i 5/6 utkast: modellen skrev `[Signatur]`,
+   platshållargrinden tog bort den (rätt) och lämnade "Med vänliga hälsningar,"
+   naket. Fixad (`sign_off`).
+3. **EJ ÅTGÄRDAD — påhittad statistik i ett kundvänt utkast.** AV-utkastet till
+   Sportamore påstod "minskat sina återkommande frågor med 30 procent inom 30
+   dagar"; kontextpaketet innehåller noll procentsiffror. Ingen kodgrind fångar
+   ogrundade påståenden i dag. **Detta är den högsta prioriteten nästa session.**
+
+**Öppet:** grundningsgrind mot påhittade påståenden · Fas A-migrering ·
+utvärdering av tilläggsinstruktioner · `DATABASE_URL` fortfarande osatt
+(pgvector-vägen overifierad, `snajp_app`-lösenordet aldrig satt) · död kod från
+första passet · edge-function-stubbar · `BLOCKS.md` 7 060 tecken mot 3 000 i tak.
+
 ## 2026-08-08 — Claude — Agent-backend implementerad, live-testad, kritiska luckor hittade och täppta
 
 **Hela DeepSeek v4 Flash-planen implementerad** efter godkännande (`/goal`-invokering

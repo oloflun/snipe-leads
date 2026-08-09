@@ -18,18 +18,29 @@ from __future__ import annotations
 from ..agent.tools import strip_markdown
 from ..agentcore.packs import Playbook, PlaybookStep, RunLedger, check_preconditions
 
+# thinking AV i hela leadsflödet — se research_playbook.THINKING för beslutet.
+from .research_playbook import THINKING  # noqa: E402
+
 OUTREACH_V1 = Playbook(
     name="leads/outreach-v1",
     steps=(
-        PlaybookStep(skill="sa:draft-outreach", requires=("offer_selected",)),
+        PlaybookStep(skill="sa:draft-outreach", requires=("offer_selected",), thinking=THINKING),
         PlaybookStep(
             skill="mk:cold-email",
             requires=("skill:sa:draft-outreach",),
             scope=("references/personalization.md",),
             rationale="Skapandesteget behöver personaliseringssignaler, inte hela mk:cold-email-metodiken än.",
+            thinking=THINKING,
         ),
-        PlaybookStep(skill="mk:cold-email", requires=("skill:mk:cold-email",)),  # granska: hel skill
-        PlaybookStep(skill="snajp:humanizer-svenska", requires=("skill:mk:cold-email",)),
+        # granska: hel skill
+        PlaybookStep(
+            skill="mk:cold-email", requires=("skill:mk:cold-email",), thinking=THINKING
+        ),
+        PlaybookStep(
+            skill="snajp:humanizer-svenska",
+            requires=("skill:mk:cold-email",),
+            thinking=THINKING,
+        ),
     ),
 )
 

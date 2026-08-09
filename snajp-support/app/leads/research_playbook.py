@@ -16,15 +16,38 @@ from __future__ import annotations
 
 from ..agentcore.packs import Playbook, PlaybookStep, RunLedger, check_preconditions
 
+# BESLUT 2026-08-10 (användaren, efter att ha läst hela jämförelsen):
+# thinking AV i HELA leadsflödet. Sätts explicit per steg, inte genom att
+# ärva settings.thinking_mode — supportbeslutet råkar ge samma default i
+# dag, och ett leadsbeslut som tyst hänger på ett supportbeslut är inget
+# beslut alls. Ändras defaulten för support ligger leads still.
+#
+# Grund: docs/THINKING_MODE_COMPARISON.md §8. Kort — thinking PÅ övertänkte,
+# gav hackiga och robotaktiga utkast med för lite kontext, och underkände
+# B2C-prospekt som i själva verket passar supportprodukten bra.
+THINKING = "disabled"
+
 RESEARCH_V1 = Playbook(
     name="leads/research-v1",
     steps=(
-        PlaybookStep(skill="mk:customer-research", requires=("context_pack",)),
-        PlaybookStep(skill="mk:prospecting", requires=("skill:mk:customer-research",)),
-        PlaybookStep(skill="sa:account-research", requires=("skill:mk:prospecting",)),
-        PlaybookStep(skill="mk:competitor-profiling", requires=("skill:sa:account-research",)),
+        PlaybookStep(skill="mk:customer-research", requires=("context_pack",), thinking=THINKING),
+        PlaybookStep(
+            skill="mk:prospecting", requires=("skill:mk:customer-research",), thinking=THINKING
+        ),
+        PlaybookStep(
+            skill="sa:account-research", requires=("skill:mk:prospecting",), thinking=THINKING
+        ),
+        PlaybookStep(
+            skill="mk:competitor-profiling",
+            requires=("skill:sa:account-research",),
+            thinking=THINKING,
+        ),
         # A1: competitor-profiling FÖRE competitors — dossiern som competitors sedan formar.
-        PlaybookStep(skill="mk:competitors", requires=("skill:mk:competitor-profiling",)),
+        PlaybookStep(
+            skill="mk:competitors",
+            requires=("skill:mk:competitor-profiling",),
+            thinking=THINKING,
+        ),
         PlaybookStep(
             skill="mk:sales-enablement",
             requires=("skill:mk:competitors",),
@@ -34,9 +57,12 @@ RESEARCH_V1 = Playbook(
                 "(Del I) — hela skillen späder en modell som då börjar föreslå "
                 "ROI-kalkylatorer och demoskript i ett kallt mejl."
             ),
+            thinking=THINKING,
         ),
-        PlaybookStep(skill="mk:offers", requires=("skill:mk:sales-enablement",)),
-        PlaybookStep(skill="mk:ab-testing", requires=("skill:mk:offers",)),
+        PlaybookStep(
+            skill="mk:offers", requires=("skill:mk:sales-enablement",), thinking=THINKING
+        ),
+        PlaybookStep(skill="mk:ab-testing", requires=("skill:mk:offers",), thinking=THINKING),
     ),
 )
 

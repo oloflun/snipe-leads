@@ -1,20 +1,33 @@
-"""Leads-pipelinen live: onboarding -> prospekt -> research -> outreach-utkast.
+"""Leads-pipelinen live: research -> outreach-utkast, för Snajps EGEN tenant.
 
-Körs via run_live_tests.py --leads. Separat modul för att hålla filerna läsbara.
+Körs via `python scripts/run_live_tests.py --leads --modes disabled,enabled`.
 
-Kör HELA kedjan i båda thinking-lägena mot samma prospekt, så att outputen
-går att jämföra rakt av. Skickar ALDRIG något — utkasten hamnar i send_queue
-med status='queued' (INV-SEC-004).
+Vad som körs (2026-08-08, efter per-steg-migreringen):
+  3 riktiga svenska bolag x 2 thinking-lägen = 6 fulla pipelinekörningar,
+  varje körning = 8 research-steg + 4 outreach-steg = 12 LLM-anrop.
+  Totalt 72 skarpa anrop. Varje stegs KOMPLETTA utdata sparas.
+
+Avsiktlig avgränsning mot 2026-08-07-versionen: den körde både en kund utan
+onboarding (Nordlys Handel) och Snajp. Här körs bara Snajp-tenanten, för att
+uppgiften är "marknadsför Snajps tjänster till tre bolag" — luckhanteringen
+utan onboarding är en separat fråga med eget test
+(tests/leads/test_onboarding_state.py).
+
+Skickar ALDRIG något: utkasten hamnar i send_queue med status='queued'
+(INV-SEC-004). Resultatet skrivs inkrementellt efter varje körning så att en
+avbruten körning inte kastar bort det som redan kostat pengar.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import time
+from pathlib import Path
 
-# Tre riktiga svenska bolag som matchar Snajps ICP (mindre e-handel/tjänste-
-# bolag med kundtjänst). Publika företagswebbplatser — INV-DATA-002 uppfylls
-# genom att company_website alltid registreras som första källa.
+# Tre riktiga svenska bolag som matchar Snajps ICP (e-handel med en kundtjänst
+# som får återkommande frågor). Publika företagswebbplatser — INV-DATA-002
+# uppfylls genom att company_website alltid registreras som FÖRSTA källa.
 PROSPECTS = [
     {
         "company_name": "Gina Tricot",
@@ -33,7 +46,6 @@ PROSPECTS = [
     },
 ]
 
-# Snajps egen profil (användarkrav: "skapa en egen profil för oss på Snajp").
 SNAJP_TENANT = "00000000-0000-4000-a000-000000000002"
 SNAJP_CONTEXT = {
     "product_marketing": """# Snajp — produktmarknadsföring
@@ -103,35 +115,34 @@ Därför är godkännandeflödet (utkast innan utskick) viktigare än autonomin.
 """,
 }
 
+PARTIAL_PATH = Path(__file__).resolve().parent.parent / "docs" / "live-tests" / "leads-partial.json"
+
 
 async def _ensure_snajp_context(storage) -> None:
     for kind, content in SNAJP_CONTEXT.items():
-        existing = await storage.get_latest_context_doc(SNAJP_TENANT, kind=kind)
-        if not existing:
+        if not await storage.get_latest_context_doc(SNAJP_TENANT, kind=kind):
             await storage.save_context_doc(
                 SNAJP_TENANT, kind=kind, content=content, source="snajp-egen-profil"
             )
 
 
-async def _run_one(storage, tenant_id, tenant_name, prospect_spec, mode, context_pack) -> dict:
+async def _run_one(storage, tenant_id, tenant_name, spec, mode, context_pack) -> dict:
     from app.agent.leads_agent import run_outreach_draft, run_research_step
     from app.config import get_settings
 
     os.environ["THINKING_MODE"] = mode
     get_settings.cache_clear()
 
-    record = {"prospect": prospect_spec["company_name"], "thinking_mode": mode}
+    record = {"prospect": spec["company_name"], "thinking_mode": mode, "tenant": tenant_name}
 
     prospect = await storage.create_prospect(
-        tenant_id,
-        company_name=prospect_spec["company_name"],
-        contact_email=prospect_spec["contact_email"],
+        tenant_id, company_name=spec["company_name"], contact_email=spec["contact_email"]
     )
     # INV-DATA-002: företagswebben registreras som FÖRSTA källa.
     await storage.create_prospect_source(
         tenant_id,
         prospect_id=prospect["id"],
-        source_url=prospect_spec["url"],
+        source_url=spec["url"],
         source_type="company_website",
         lawful_basis="Publikt tillgänglig företagsinformation (berättigat intresse)",
     )
@@ -145,57 +156,53 @@ async def _run_one(storage, tenant_id, tenant_name, prospect_spec, mode, context
             tenant_name=tenant_name,
             context_pack=context_pack,
             brief=(
-                f"Researcha {prospect_spec['company_name']}. Deras webbplats är "
-                f"{prospect_spec['url']} och den är redan registrerad som källa — "
-                "hämta den med scrape_registered_source och grunda din analys i "
-                "det du faktiskt läser. Bedöm om de är ett bra prospekt för "
-                f"{tenant_name}, vilka problem de sannolikt har, och vilken "
-                "vinkel ett första mejl borde ta."
+                f"Researcha {spec['company_name']} ({spec['url']}) som prospekt för "
+                f"{tenant_name}. Källmaterialet från deras webbplats är redan hämtat och "
+                "ligger i kontexten — grunda analysen i det du faktiskt läser där. Bedöm "
+                "om de är ett bra prospekt, vilka kundtjänstproblem de sannolikt har, och "
+                "vilken vinkel ett första mejl borde ta."
             ),
         )
         record["research"] = research
         record["research_ms"] = int((time.monotonic() - started) * 1000)
-    except Exception as error:  # noqa: BLE001
+    except Exception as error:  # noqa: BLE001 — en trasig körning ska rapporteras, inte döljas
         record["research_error"] = f"{type(error).__name__}: {error}"
         return record
 
-    thread = {"id": None}
-    try:
-        thread_row = await storage.create_outreach_thread(tenant_id, prospect_id=prospect["id"])
-        thread["id"] = thread_row["id"]
-    except AttributeError:
-        thread["id"] = f"thread-{prospect['id']}"
-        storage.outreach_threads.setdefault(tenant_id, {})[thread["id"]] = {
-            "id": thread["id"],
-            "language_state": "sv",
-            "last_inbound_at": None,
-            "prospect_email": prospect_spec["contact_email"],
-        }
+    thread_id = f"thread-{prospect['id']}"
+    storage.outreach_threads.setdefault(tenant_id, {})[thread_id] = {
+        "id": thread_id,
+        "language_state": "sv",
+        "last_inbound_at": None,
+        "prospect_email": spec["contact_email"],
+    }
 
     started = time.monotonic()
     try:
         draft = await run_outreach_draft(
             storage,
             tenant_id,
-            thread_id=thread["id"],
-            prospect_email=prospect_spec["contact_email"],
+            thread_id=thread_id,
+            prospect_email=spec["contact_email"],
             tenant_name=tenant_name,
-            company_name=prospect_spec["company_name"],
-            offer_summary=(
-                "Svensk AI-supportagent som svarar grundat i kundens egen "
-                "kunskapsbas och eskalerar i stället för att gissa."
-            ),
+            company_name=spec["company_name"],
+            # Erbjudandet kommer nu från researchens mk:offers-steg i stället
+            # för en hårdkodad sträng — hela poängen med att köra kedjan.
+            offer_summary=research["offer_summary"],
             context_pack=context_pack,
+            research_summary=research["final_output"],
             brief=(
-                "Skriv ett kort, lågmält första mejl baserat på researchen. "
-                "Konkret, ingen hype, inga superlativ. Ren text. Köa det — "
-                "skicka inte."
+                "Skriv ett kort, lågmält första mejl baserat på researchen. Konkret, "
+                "ingen hype, inga superlativ, ren text. Köa det — skicka inte."
             ),
         )
         record["draft"] = draft
         record["draft_ms"] = int((time.monotonic() - started) * 1000)
-        messages = storage.outreach_messages.get(tenant_id, [])
-        queued = [m for m in messages if m["thread_id"] == thread["id"]]
+        queued = [
+            m
+            for m in storage.outreach_messages.get(tenant_id, [])
+            if m["thread_id"] == thread_id
+        ]
         record["queued_message"] = queued[-1] if queued else None
     except Exception as error:  # noqa: BLE001
         record["draft_error"] = f"{type(error).__name__}: {error}"
@@ -209,30 +216,33 @@ async def run_leads(modes: list[str]) -> dict:
     storage = MemoryStorage()
     await _ensure_snajp_context(storage)
 
-    out = {"kunder": {}, "snajp": {}}
+    pack, missing = await build_context_pack(storage, SNAJP_TENANT)
+    out: dict = {
+        "tenant": "Snajp",
+        "onboarding_missing": list(missing),
+        "context_pack_chars": len(pack),
+        "prospects": [p["company_name"] for p in PROSPECTS],
+        "modes": modes,
+        "snajp": {},
+    }
 
-    # 1) Kundfallet: Nordlys Handel UTAN onboarding (användarens uttryckliga
-    #    krav — pipelinen ska jobba med det den har, inte fastna).
-    customer_tenant = "00000000-0000-4000-a000-000000000001"
-    customer_pack, customer_missing = await build_context_pack(storage, customer_tenant)
-    out["kund_onboarding_missing"] = list(customer_missing)
+    total = len(modes) * len(PROSPECTS)
+    done = 0
     for mode in modes:
         for spec in PROSPECTS:
+            done += 1
             key = f"{spec['company_name']}::{mode}"
-            print(f"  [kund] {key} ...", flush=True)
-            out["kunder"][key] = await _run_one(
-                storage, customer_tenant, "Nordlys Handel", spec, mode, customer_pack
-            )
-
-    # 2) Snajps egen pipeline MED fullständig profil.
-    snajp_pack, snajp_missing = await build_context_pack(storage, SNAJP_TENANT)
-    out["snajp_onboarding_missing"] = list(snajp_missing)
-    for mode in modes:
-        for spec in PROSPECTS:
-            key = f"{spec['company_name']}::{mode}"
-            print(f"  [snajp] {key} ...", flush=True)
+            print(f"  [{done}/{total}] {key} ...", flush=True)
+            started = time.monotonic()
             out["snajp"][key] = await _run_one(
-                storage, SNAJP_TENANT, "Snajp", spec, mode, snajp_pack
+                storage, SNAJP_TENANT, "Snajp", spec, mode, pack
+            )
+            print(f"      klart på {int(time.monotonic() - started)}s", flush=True)
+            # Inkrementell skrivning: en avbruten körning kastar inte bort
+            # det som redan kostat riktiga API-anrop.
+            PARTIAL_PATH.parent.mkdir(parents=True, exist_ok=True)
+            PARTIAL_PATH.write_text(
+                json.dumps(out, indent=2, ensure_ascii=False, default=str), encoding="utf-8"
             )
 
     return out

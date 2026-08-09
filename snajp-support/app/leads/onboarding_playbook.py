@@ -13,12 +13,27 @@ from __future__ import annotations
 
 from ..agentcore.packs import Playbook, PlaybookStep, RunLedger, check_preconditions
 
+# thinking AV i hela leadsflödet — se research_playbook.THINKING.
+# OBS: Fas A kör fortfarande Runner.run (flerturssamtal), och den vägen läser
+# INTE PlaybookStep.thinking. Fältet är satt här för att beslutet ska stå på
+# samma ställe som för Fas B/C, men det får verkan först när Fas A migreras
+# till per-steg. Se docs/THINKING_MODE_COMPARISON.md §7.
+from .research_playbook import THINKING  # noqa: E402
+
 ONBOARDING_V1 = Playbook(
     name="leads/onboarding-v1",
     steps=(
-        PlaybookStep(skill="mk:product-marketing", requires=("session_start",)),
-        PlaybookStep(skill="mk:customer-research", requires=("skill:mk:product-marketing",)),
-        PlaybookStep(skill="mk:churn-prevention", requires=("skill:mk:customer-research",)),
+        PlaybookStep(skill="mk:product-marketing", requires=("session_start",), thinking=THINKING),
+        PlaybookStep(
+            skill="mk:customer-research",
+            requires=("skill:mk:product-marketing",),
+            thinking=THINKING,
+        ),
+        PlaybookStep(
+            skill="mk:churn-prevention",
+            requires=("skill:mk:customer-research",),
+            thinking=THINKING,
+        ),
     ),
 )
 

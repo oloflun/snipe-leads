@@ -4,7 +4,7 @@ type: project
 status: active
 project_slug: snipe-leads
 repo: C:\Users\Anton L\snipe-leads
-updated: 2026-08-08
+updated: 2026-08-10
 ---
 
 # Snipra / Snajp
@@ -33,7 +33,7 @@ stays theirs).
 | Frontend | Next.js App Router, Vercel, multi-tenant via workspace/proxy routing | `app/` |
 | Support backend | FastAPI, tenant-scoped Postgres RLS, agent runtime | `snajp-support/` |
 | Agent core | Skill registry + read-guarantee mechanism (Del C) | `snajp-support/app/agentcore/` |
-| Agent execution | One LLM call per skill step, not a concatenated prompt | `snajp-support/app/agent/step_runner.py` |
+| Agent execution | One LLM call per skill step, not a concatenated prompt. Support AND leads Fas B/C since 2026-08-09; Fas A (onboarding) still `Runner.run` | `snajp-support/app/agent/step_runner.py` |
 | Skill content | Vendored `mk:`/`cs:`/`sa:`/`snajp:` skills, sha256-manifested | `agent-core/skills/` |
 | Playbooks | Which skills run, in what order, for which agent type | `snajp-support/app/agent/support_playbook.py`, `snajp-support/app/leads/*_playbook.py` |
 | DB | Multi-tenant Postgres via Supabase, migrations 001–015 | `supabase/migrations/` |
@@ -45,6 +45,14 @@ its own output contract (`sources_used`/`context_refs`), not a step inside
 one big prompt — that separation is what makes the "did it actually read the
 skill" guarantee checkable instead of assumed.
 
+**Decision flow for a leads prospect:** *(code scrapes registered sources
+first)* → customer-research → prospecting → account-research →
+competitor-profiling → competitors → sales-enablement *(scoped)* → offers →
+ab-testing, then outreach: draft-outreach → cold-email *(scoped)* →
+cold-email *(full review)* → humanizer-svenska, and finally **code** queues
+the draft through the language and timing gates. Thinking is pinned **off**
+on every leads step (see below).
+
 ## Document map
 
 | File | Carries |
@@ -54,7 +62,9 @@ skill" guarantee checkable instead of assumed.
 | [ARCHITECTURE_INVARIANTS.md](ARCHITECTURE_INVARIANTS.md) | Machine-enforced rules (CI-checked). `INV-SKILL-*`, `INV-SEC-*`, etc. |
 | [plans/2026-08-07-agent-backend-deepseek.md](plans/2026-08-07-agent-backend-deepseek.md) | Plan-level scope/progress tracker for the agent-backend work; points to the full design doc. |
 | [DEPLOY_KEYS.md](DEPLOY_KEYS.md) | How to set API keys locally and at deploy; `scripts/keys.py`. |
-| [docs/THINKING_MODE_COMPARISON.md](docs/THINKING_MODE_COMPARISON.md) | DeepSeek thinking-mode on/off comparison, real API calls, per flow. |
+| [docs/THINKING_MODE_COMPARISON.md](docs/THINKING_MODE_COMPARISON.md) | DeepSeek thinking-mode on/off comparison, real API calls, per flow. **§7** = the leads per-step migration, **§8** = the valid leads comparison and the decision (incl. why the first recommendation was wrong). |
+| [docs/LEADS_THINKING_COMPARISON.md](docs/LEADS_THINKING_COMPARISON.md) | **Generated raw data** (811 KB) — every one of the 72 LLM calls with its complete output. Overwritten by the next run; conclusions live in the file above, deliberately kept separate. |
+| `scripts/render_leads_report.py` | Renders the report above from a run's JSON, so it can be rebuilt without re-running 72 paid calls. |
 | [TENANTS.md](TENANTS.md) | Runbook for onboarding a new customer tenant. |
 | [AUTH.md](AUTH.md) | Auth flow, config checklist, test procedure. |
 | `agent-core/README.md` | Skill registry: namespaces, sources, how to vendor/update. |
@@ -63,10 +73,23 @@ skill" guarantee checkable instead of assumed.
 
 ## Invariants and gotchas
 
-- **Skills are never edited to fix a routing problem.** If a skill call fails
-  or seems unread, harden the precondition gate / output contract
-  (`app/agentcore/packs.py`) — never the vendored skill content
-  (`agent-core/skills/`).
+- **Skills are never edited — HARD RULE, mechanically enforced
+  (`INV-SKILL-005`).** If a skill call fails or seems unread, harden the
+  precondition gate / output contract (`app/agentcore/packs.py`). If the
+  *output* needs tuning, write SUPPLEMENTARY INSTRUCTIONS in the playbook's
+  `task`/`case_context` — never the vendored skill content.
+  `tests/invariants/test_inv_skill_005.py` compares every file under
+  `agent-core/skills/` to its sha256 in the manifest and fails the build on
+  silent edits. It doesn't forbid a change; it makes one impossible to make
+  unnoticed.
+- **Thinking mode is OFF for the whole leads flow**, pinned per step via
+  `leads/research_playbook.THINKING` — deliberately NOT inherited from
+  `settings.thinking_mode`, so a future support-side change can't drag leads
+  with it. Decided 2026-08-10 from 72 real calls; see THINKING_MODE_COMPARISON §8.
+- **Nothing gates fabricated claims yet.** A live draft asserted "30 % fewer
+  repeat questions in 30 days" — a figure that exists nowhere in the context
+  pack. `strip_placeholders` catches template residue, not ungrounded claims.
+  Open, and the highest-priority customer-facing gap.
 - **Secrets never go in the database** (`INV-SEC-006`) — env only, see
   `DEPLOY_KEYS.md`. This was raised and explicitly declined as an option.
 - **`pydantic-settings` `env_file` must be an absolute path.** A relative one
@@ -104,14 +127,16 @@ python scripts/run_live_tests.py --support --modes disabled,enabled
 python scripts/run_live_tests.py --leads   --modes disabled,enabled
 ```
 
-## Current status (2026-08-08)
+## Current status (2026-08-10)
 
-Agent backend implemented and partially live-verified (support flow, both
-DeepSeek thinking modes, real KB + real replies). Leads pipeline has real
-entry points (prospect creation, research, outreach draft) but its
-thinking-mode comparison was still running in the background at last
-session close. `DATABASE_URL` is not set locally, so the real pgvector
-KB-search path is unverified — everything tested so far used the in-memory
-storage backend, which doesn't do semantic search at all. See
-[HANDOFF.md](HANDOFF.md) for the full built/dead/missing breakdown and next
-steps.
+Support and leads both run per-step with verifiable skill loading, per-call
+thinking control, and a reviewable `agent_runs.step_log`. Support: thinking
+off except the escalation step. Leads: thinking off everywhere, decided from
+a 72-call comparison. 275 tests green (269 unit + 6 invariant).
+
+Next: a grounding gate against fabricated figures in drafts, then evaluating
+supplementary instructions (`sa:draft-outreach` + the humanizer first) as the
+tuning mechanism now that editing skills is ruled out. Still open: Fas A
+onboarding runs `Runner.run`; `DATABASE_URL` unset so the real pgvector KB
+path is unverified; dead modules from the first pass; edge-function stubs.
+See [HANDOFF.md](HANDOFF.md) for the authoritative breakdown.

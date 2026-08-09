@@ -56,19 +56,28 @@ a future contributor.
 - [x] Support thinking-mode decision made from real data: disabled globally,
       enabled only for the escalation-determination step
 
-## In Progress
-- [ ] **Migrate `leads_agent.py` to per-step execution.** The 2026-08-08
-      thinking-mode comparison ran (12 runs, all technically successful) but
-      is invalid: `leads_agent.py` uses `Runner.run` (Agents SDK loop), never
-      `step_runner.run_step`, so `THINKING_MODE` had no effect and there is
-      no `step_log`/`reasoning_tokens`/`agent_runs` telemetry. Same
-      architectural flaw the support agent had before its rewrite. Migration
-      is a prerequisite for any meaningful leads comparison — and for the
-      user's requirement to observe skill calls per step.
-- [ ] Leads thinking-mode decision — blocked on the above. Explicit user
-      instruction: decide from full real-output comparison, not by analogy
-      to the support decision (mail-based, no latency pressure, quality
-      weighs heavier than cost).
+## Completed (leads per-steg + thinking-beslut, 2026-08-09/10)
+- [x] **`leads_agent.py` migrerad till per-steg-körning.** Fas B (8 steg) och
+      Fas C (4 steg) kör via `step_runner.run_step`. `THINKING_MODE` når nu
+      varje anrop, `agent_runs` skrivs, utdatakontrakt gäller per steg.
+      Skrapning och köning flyttade till kod. Fas A medvetet kvar på
+      `Runner.run` (flerturssamtal) — kvarvarande lucka, inte klart.
+- [x] Regressionstest som inspekterar de kwargs LLM-klienten FAKTISKT fick
+      (`test_thinking_mode_reaches_the_api_call`) — hade fällt 2026-08-08-
+      körningen innan den kostade 50 minuter.
+- [x] **Giltig leads-jämförelse körd:** 3 bolag × 2 lägen × 12 steg = 72 skarpa
+      anrop, varje stegs kompletta utdata dokumenterad
+      (`docs/LEADS_THINKING_COMPARISON.md`, 811 KB).
+- [x] **Leads thinking-beslut fattat: HELT AV.** Användarens beslut efter
+      genomläsning av rådatan, som underkände min rekommendation (PÅ). Pinnat
+      explicit per steg via `research_playbook.THINKING`, låst av två tester.
+      Motivering och min felslutsatsanalys: `THINKING_MODE_COMPARISON.md` §8.5.
+- [x] Två buggar funna och åtgärdade: ScrapeGraphAI returnerar markdown som
+      LISTA (gav längd 1 och listrepr i prompten), och hängande signatur i
+      5/6 utkast efter att platshållargrinden gjort sitt jobb (`sign_off()`).
+- [x] **INV-SKILL-005** — "ändra aldrig skillsen" är nu mekaniskt tvingad via
+      sha256 mot manifestet, inte en instruktion i ett dokument. Verifierad
+      genom att faktiskt fälla på en ändring.
 
 ## Remaining (see HANDOFF.md §2 and §5 for the authoritative, detailed list)
 1. Get `DATABASE_URL` working; re-verify KB retrieval against real pgvector
@@ -104,7 +113,13 @@ a future contributor.
   entire invariant system is advisory, not enforced
 
 ## Next Steps
-1. Check/finish the leads thinking-mode comparison job
-2. Resolve the `DATABASE_URL` blocker, re-verify KB retrieval
-3. Decide leads thinking-mode default from real data
-4. Work through HANDOFF.md's dead-code list (wire in or delete)
+1. **Grundningsgrind mot påhittade påståenden.** AV-utkastet till Sportamore
+   innehöll en påhittad siffra ("30 procent inom 30 dagar") som inte finns i
+   kontextpaketet. `strip_placeholders` tar mallrester, inte ogrundade
+   påståenden. Allvarligaste kvarvarande kundvända felet.
+2. **Utvärdera tilläggsinstruktioner** (`THINKING_MODE_COMPARISON.md` §8.6) —
+   `sa:draft-outreach` + `snajp:humanizer-svenska` först, det är där tonen
+   avgörs. HÅRD REGEL: aldrig genom att ändra i skillen (INV-SKILL-005).
+3. Ta ställning till Fas A-migreringen (onboarding, `Runner.run`).
+4. `DATABASE_URL`-blockeraren och den overifierade pgvector-vägen.
+5. Beta av HANDOFF.md:s döda-kod-lista (väck in eller radera).

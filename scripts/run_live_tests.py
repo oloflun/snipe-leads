@@ -268,11 +268,13 @@ async def main() -> None:
         print(f"\nSkrev docs/live-tests/support-{stamp}.md")
 
     if args.leads:
-        from run_live_leads import run_leads  # separat modul, se filen
+        from render_leads_report import render as render_leads_markdown
+        from run_live_leads import run_leads  # separata moduler, se filerna
 
         payload = await run_leads(modes)
         _write(OUT_DIR / f"leads-{stamp}.json", json.dumps(payload, indent=2, ensure_ascii=False))
-        print(f"\nSkrev docs/live-tests/leads-{stamp}.json")
+        _write(ROOT / "docs" / "LEADS_THINKING_COMPARISON.md", render_leads_markdown(payload))
+        print(f"\nSkrev docs/live-tests/leads-{stamp}.json + docs/LEADS_THINKING_COMPARISON.md")
 
 
 if __name__ == "__main__":

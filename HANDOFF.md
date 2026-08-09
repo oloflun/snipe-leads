@@ -130,7 +130,54 @@ Grunddata: `docs/THINKING_MODE_COMPARISON.md` §1 (kostnad, giltig) och §2
 `thinking="enabled"`? Användaren sa uttryckligen "vid eskalering" om
 bedömningssteget — fråga innan du ändrar detta.
 
-### Leads (research + outreach) — INGET BESLUT ÄNNU, testas nu
+### Leads (research + outreach) — BESLUTAT 2026-08-10: thinking AV, helt
+
+**Beslutet är fattat och verkställt i kod. Ändra det inte utan att prata
+med användaren.**
+
+Varje steg i `app/leads/{onboarding,research,outreach}_playbook.py` sätter
+explicit `thinking="disabled"` via `research_playbook.THINKING`. Det ärvs
+medvetet INTE från `settings.thinking_mode` — supportbeslutet ger samma
+värde i dag, och ett leadsbeslut som tyst hänger på ett supportbeslut
+flyttar med när supportbeslutet ändras. Låst av två tester i
+`tests/agent/test_leads_agent_wiring.py`.
+
+**Grunden:** 72 skarpa anrop (3 bolag × 2 lägen × 12 steg). Rådata
+`docs/LEADS_THINKING_COMPARISON.md`, analys `THINKING_MODE_COMPARISON.md` §8.
+
+Användaren läste igenom materialet och underkände min rekommendation, som
+var PÅ. **Läs §8.5 innan du rör det här** — den beskriver varför jag hade
+fel, och felet är lärorikt: jag drog slutsatser ur mätvärden (brutna
+utdatakontrakt, differentierade konfidenssiffror, skeptiskare ICP-bedömning)
+och läste dem som kvalitet. Användaren läste vad modellen faktiskt
+producerade. Kort:
+
+- Utkasten är **bättre** med AV — personligare, rätt ton, tillräcklig
+  kontext. PÅ blev hackigt och robotaktigt trots övertänkandet.
+- AV hade **rätt** om att B2C passar supportprodukten. PÅ:s underkännande
+  av alla tre var inte skärpa utan pessimism — precis vad §8.3 varnade för.
+- AV:s research var genuint bra: kollade om bolagen redan hade chatbot,
+  hittade en öppning via Instagram, förberedde rimliga invändningar.
+
+### Nästa spår: finjustering via TILLÄGGSINSTRUKTIONER
+
+**HÅRD REGEL: vi går inte in och ändrar i skillsen.** Justering av output
+sker med tilläggsinstruktioner ovanpå skillen — playbookens `task` och
+`case_context`, som är våra egna. Undantag kräver att det är absolut
+nödvändigt, och då körs `agent-core/build_manifest.py` i samma commit.
+
+Regeln är mekanisk sedan 2026-08-10: **INV-SKILL-005**
+(`tests/invariants/test_inv_skill_005.py`) jämför varje fil under
+`agent-core/skills/` mot sitt sha256 i manifestet och fäller på tyst
+redigering, tillagd eller borttagen fil. Verifierat att den faktiskt fäller.
+
+Vad som ska utvärderas härnäst — se §8.6 för resonemanget:
+1. `sa:draft-outreach` + `snajp:humanizer-svenska` — tonen avgörs där.
+2. Grundningskrav på siffror och kundreferenser i utkast (se §8.4 om den
+   påhittade "30 procent"-siffran — den saknar fortfarande kodgrind).
+3. `mk:prospecting` — behåll AV:s bedömning, be den motivera tydligare.
+
+### (historik) Uppdraget innan datan fanns
 
 Uttrycklig instruktion 2026-08-07: *"Eftersom det är mailbaserat har vi inte
 samma tidspress och kvalitet på output är största prioritet, men det är
@@ -208,7 +255,25 @@ enda plats embeddings-nyckeln faktiskt kan bevisa något.
 latensdelen (§1) är fortfarande giltig eftersom samma trasiga retrieval
 drabbade båda thinking-lägena lika.
 
-### Steg 1: MIGRERA leads-agenten till per-steg — jämförelsen är körd och OGILTIG
+### Steg 1: KLART 2026-08-09 — leads är migrerad, jämförelsen omkörd
+
+> **Status:** migreringen nedan är **gjord**. `app/agent/leads_agent.py` kör
+> Fas B (8 steg) och Fas C (4 steg) via `step_runner.run_step`.
+> `THINKING_MODE` når nu varje anrop, `agent_runs` skrivs, utdatakontraktet
+> gäller per steg, och skrapningen sker i kod före steg 1.
+>
+> - Ny jämförelse (giltig): [`docs/LEADS_THINKING_COMPARISON.md`](docs/LEADS_THINKING_COMPARISON.md)
+> - Vad som ändrades: `docs/THINKING_MODE_COMPARISON.md` §7
+> - Regressionstest för själva grundfelet:
+>   `tests/agent/test_leads_agent_wiring.py::test_thinking_mode_reaches_the_api_call`
+>   — det inspekterar de kwargs LLM-klienten FICK, inte vad koden påstår.
+> - **Kvarstår:** Fas A (`run_onboarding_turn`) kör medvetet kvar på
+>   `Runner.run` (flerturssamtal) och saknar därför fortfarande
+>   thinking-kontroll och `step_log`.
+>
+> Texten nedan står kvar som beskrivning av felet som åtgärdades.
+
+#### (historik) Jämförelsen 2026-08-08 var OGILTIG
 
 **Kört 2026-08-08, resultatet går inte att använda.** 12 körningar (3 prospekt
 × 2 tenants × 2 lägen), alla tekniskt lyckade, men `THINKING_MODE` hade noll
@@ -327,9 +392,13 @@ Avgörs på riktig research-output från Steg 1 — inte på arkitekturresoneman
    felet i den första rundan: 15/15 "klart", men läsgarantin anropades aldrig,
    `agent_runs` skrevs aldrig, och leads-pipelinen saknade ingång (inget sätt
    att skapa ett prospekt). Kör flödet live innan du säger att det fungerar.
-2. **Rör aldrig innehållet i `agent-core/skills/`.** Användarens uttryckliga
-   instruktion: om ett skill-anrop fallerar eller verkar oläst — hårdna
-   routingen, ändra aldrig skillen.
+2. **Rör aldrig innehållet i `agent-core/skills/` — HÅRD REGEL, numera
+   mekaniskt tvingad (INV-SKILL-005).** Om ett skill-anrop fallerar eller
+   verkar oläst: hårdna routingen. Om outputen behöver justeras: skriv
+   TILLÄGGSINSTRUKTIONER i playbookens `task`/`case_context`. Ändra aldrig
+   skillen. `tests/invariants/test_inv_skill_005.py` fäller builden på varje
+   tyst redigering — den förbjuder inte ändringen, den gör den omöjlig att
+   göra omärkt.
 3. **Simuleringsläget döljer allt.** `is_simulation()` gör att support faller
    till `app/simulation/sim_agent.py` och leads-ytorna svarar 503. Ett grönt
    testresultat i simuleringsläge bevisar ingenting om agenten.

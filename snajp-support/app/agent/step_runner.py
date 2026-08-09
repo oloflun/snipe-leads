@@ -111,6 +111,19 @@ class RunTrace:
             for s in self.steps
         ]
 
+    def as_full(self) -> list[dict[str, Any]]:
+        """Som as_log(), plus HELA stegets utdata och dess reasoning_content.
+        Går till API-anroparen/rapporten, inte till agent_runs.step_log —
+        DB-loggen ska vara granskbar, inte en andra kopia av allt innehåll."""
+        return [
+            {
+                **entry,
+                "output": step.output,
+                "reasoning_content": step.reasoning_content,
+            }
+            for entry, step in zip(self.as_log(), self.steps)
+        ]
+
 
 async def run_step(
     step: PlaybookStep,
@@ -120,6 +133,7 @@ async def run_step(
     task: str,
     case_context: str,
     required_context_refs: tuple[str, ...] = (),
+    playbook_role: str = "en svensk kundtjänst-playbook",
 ) -> dict[str, Any]:
     """Kör ETT skill-steg som ett eget LLM-anrop.
 
@@ -136,7 +150,7 @@ async def run_step(
         {
             "role": "system",
             "content": (
-                f"Du utför ETT steg i en svensk kundtjänst-playbook. Steget styrs av "
+                f"Du utför ETT steg i {playbook_role}. Steget styrs av "
                 f"skillen {step.skill}, vars fullständiga innehåll följer nedan. Följ "
                 f"den. Uppfinn aldrig fakta.\n\n{skill_text}\n\n{_CONTRACT_INSTRUCTION}"
             ),

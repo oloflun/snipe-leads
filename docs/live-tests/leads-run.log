@@ -1,66 +1,14 @@
-  [kund] Gina Tricot::disabled ...
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-  [kund] Blomsterlandet::disabled ...
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-  [kund] Sportamore::disabled ...
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-  [kund] Gina Tricot::enabled ...
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-  [kund] Blomsterlandet::enabled ...
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-  [kund] Sportamore::enabled ...
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-  [snajp] Gina Tricot::disabled ...
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-  [snajp] Blomsterlandet::disabled ...
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-  [snajp] Sportamore::disabled ...
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-  [snajp] Gina Tricot::enabled ...
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-  [snajp] Blomsterlandet::enabled ...
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-  [snajp] Sportamore::enabled ...
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
-OPENAI_API_KEY is not set, skipping trace export
+  [1/6] Gina Tricot::disabled ...
+      klart på 116s
+  [2/6] Blomsterlandet::disabled ...
+      klart på 100s
+  [3/6] Sportamore::disabled ...
+      klart på 91s
+  [4/6] Gina Tricot::enabled ...
+      klart på 697s
+  [5/6] Blomsterlandet::enabled ...
+      klart på 810s
+  [6/6] Sportamore::enabled ...
+      klart på 635s
 
-Skrev docs/live-tests/leads-20260807-225625.json
-OPENAI_API_KEY is not set, skipping trace export
+Skrev docs/live-tests/leads-20260809-140940.json

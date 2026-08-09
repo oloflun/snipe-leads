@@ -90,6 +90,26 @@ generiska resultat, inte grundade i just den här kundens verksamhet.
 Test: snajp-support/tests/leads/test_research_playbook.py
 Införd: 2026-08-07 · Upphävs endast genom waiver
 
+### INV-SKILL-005 — Vendorade skills ändras aldrig i tysthet
+Varje fil under `agent-core/skills/` måste matcha sitt sha256 i
+`agent-core/manifest.json`. Tillagda och borttagna filer fälls också, och
+`manifest_hash` måste vara härledd ur filerna (inte handredigerad).
+**Hård regel: vi går inte in och ändrar i skillsen.** Ska agentens output
+justeras görs det med TILLÄGGSINSTRUKTIONER ovanpå skillen — i playbookens
+`task`/`case_context` — aldrig genom att redigera skillens innehåll.
+Varför: skillsen är vendorad tredjepart under låst commit, och deras
+sha256 ÄR baseline-versionen (Del B/D) som varje `pack_version` i
+`agent_runs` pekar på. En tyst redigering gör hela revisionsloggen
+osann — den refererar en baseline som aldrig funnits. Regeln fanns
+tidigare bara som en fälla i HANDOFF.md, alltså som en förhoppning om att
+nästa agent läser rätt rad. Grinden förbjuder inte en ändring, den gör den
+omöjlig att göra omärkt: `build_manifest.py` måste köras, vilket syns i
+diffen. Verifierat att testet faktiskt fäller (ändrade `mk:offers`, testet
+föll, återställde, testet passerade) — en grind som inte kan fela är ingen
+grind.
+Test: tests/invariants/test_inv_skill_005.py
+Införd: 2026-08-10 · Upphävs endast genom waiver
+
 ### INV-DATA-001 — Varje prospektfaktum har källa, datum och laglig grund
 `prospect_sources.source_url/retrieved_at/lawful_basis` är `NOT NULL`
 (migration 010) — verkställt av databasen, inte bara konvention.

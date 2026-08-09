@@ -4,8 +4,10 @@
 5 scenarier × 2 lägen × 6–7 skill-steg = **66 skarpa LLM-anrop**
 **Rådata:** `docs/live-tests/support-20260807-200723.{json,md}`
 
-> **Leads (research + outreach): körd 2026-08-08, men RESULTATET ÄR OGILTIGT.**
-> Se §6 nedan. Denna rapports slutsatser gäller bara support.
+> **Denna rapports slutsatser gäller bara support.**
+> Leads-körningen 2026-08-08 var ogiltig (§6); grundorsaken är åtgärdad
+> 2026-08-09 (§7) och den giltiga leads-jämförelsen ligger i
+> [`LEADS_THINKING_COMPARISON.md`](LEADS_THINKING_COMPARISON.md).
 
 ---
 
@@ -139,7 +141,15 @@ det förblir den intressantaste öppna frågan.
 
 ---
 
-## 6. Leads: körningen är OGILTIG — leads-agenten kör inte per-steg-vägen
+## 6. Leads: körningen 2026-08-08 var OGILTIG — ÅTGÄRDAD 2026-08-09
+
+> **Status 2026-08-09:** grundorsaken nedan är rättad. `leads_agent.py` kör
+> per-steg via `step_runner.run_step`, och en ny, giltig jämförelse finns i
+> [`LEADS_THINKING_COMPARISON.md`](LEADS_THINKING_COMPARISON.md). Avsnittet
+> nedan står kvar oförändrat som beskrivning av felet och hur det upptäcktes
+> — se §7 för vad som faktiskt ändrades.
+
+
 
 **Kört 2026-08-08:** 3 prospekt × 2 tenants × 2 lägen = 12 körningar,
 samtliga tekniskt lyckade (`research=OK draft=OK`). Rådata:
@@ -191,3 +201,245 @@ efteråt.
 
 Rådatafilen behålls som bevis för att körningen skedde, men får **inte**
 citeras som en thinking-jämförelse.
+
+---
+
+## 7. Migreringen (2026-08-09) — vad som ändrades
+
+`app/agent/leads_agent.py` skrevs om från tre `Runner.run`-anrop till
+per-steg-körning, samma arkitektur som `support_agent.py`.
+
+| | Före | Efter |
+| --- | --- | --- |
+| Fas B research | 1 agentloop, 8 skills i en systemprompt | 8 LLM-anrop, ett per skill |
+| Fas C outreach | 1 agentloop, 4 skills i en systemprompt | 4 LLM-anrop, ett per skill |
+| `THINKING_MODE` | nådde aldrig API-anropet | `extra_body` per steg, loggat i `step_log.thinking_mode` |
+| `agent_runs` (G10) | skrevs aldrig för leads | skrivs per körning, `leads_research` / `leads_outreach` |
+| Utdatakontrakt | fanns inte | per steg, ett omförsök, sedan eskalering |
+| Skrapning | modellverktyg (`scrape_registered_source`) | **i kod, före steg 1** |
+| Köning av utkast | modellverktyg | **i kod**, efter språk- och tidsgrind |
+
+### Skrapningen flyttades till kod — varför
+
+Allowlisten är oförändrad (`_scrape_registered_source_impl` vägrar
+fortfarande en URL som inte ligger i `prospect_sources` för just det
+prospektet). Skillnaden är att hämtningen nu **alltid** sker. Tidigare
+berodde den på att modellen kom ihåg att anropa verktyget — G4 var ett hopp,
+inte en kodväg. Samma princip som support: modellen resonerar, koden agerar.
+
+### Fas A (onboarding) migrerades INTE
+
+`run_onboarding_turn` kör fortfarande `Runner.run`. Det är ett
+flerturssamtal med kunden, inte en kedja av envägssteg, och per-steg-
+kontrakt passar inte den formen. **Konsekvens: Fas A saknar fortfarande
+thinking-kontroll, `step_log` och `agent_runs`-loggning.** Det är ett
+medvetet val, inte ett förbiseende — men det är en kvarvarande lucka och
+ska inte beskrivas som klart.
+
+### En bugg som migreringen avslöjade — ÅTGÄRDAD
+
+ScrapeGraphAI returnerar `results['markdown']['data']` som en **lista** av
+sidsegment, inte som en sträng. Koden behandlade den som en sträng, vilket
+gav två fel samtidigt:
+
+1. `len(markdown)` blev **1** i stället för ~4 000 → `scraped_sources`
+   rapporterade att en (1) tecken hämtats.
+2. Innehållet injicerades i prompten som en **Python-listrepr** med literala
+   `\n` i stället för radbrytningar — modellen fick hela webbsidan som en
+   enda oformaterad rad.
+
+Fixat med `_as_markdown()` i `app/agent/research_tools.py`.
+Regressionstest: `tests/agent/test_research_tools.py::
+test_markdown_returned_as_a_list_is_joined_not_stringified`.
+
+**Varför testerna inte fångade det:** testmocken (`_fake_scrape_result`)
+modellerade fältet som en sträng. Mocken var fel, inte koden — samma
+felklass som `MemoryStorage.search_kb` (§3.2). En mock som gissar
+API-formatet bevisar bara att koden är konsekvent med gissningen.
+
+### Regressionstestet för själva grundfelet
+
+`tests/agent/test_leads_agent_wiring.py::test_thinking_mode_reaches_the_api_call`
+inspekterar de kwargs LLM-klienten **faktiskt fick**, inte vad koden påstår:
+
+- `THINKING_MODE=disabled` → `extra_body={"thinking": {"type": "disabled"}}`
+  på alla 8 research-anrop
+- `THINKING_MODE=enabled` → inget `extra_body` alls
+- `agent_runs.step_log[*].thinking_mode` matchar i båda fallen
+
+Det testet hade fällt hela 2026-08-08-körningen innan den kostade 50 minuter
+och 12 meningslösa körningar.
+
+---
+
+## 8. Leads: den GILTIGA jämförelsen (2026-08-09)
+
+**Körning:** Snajps egen tenant × 3 svenska e-handlare (Gina Tricot,
+Blomsterlandet, Sportamore) × 2 lägen = 6 fulla pipelinekörningar,
+12 skill-steg vardera = **72 skarpa LLM-anrop.**
+Fullt rådata, varje stegs kompletta utdata:
+[`LEADS_THINKING_COMPARISON.md`](LEADS_THINKING_COMPARISON.md) ·
+[`live-tests/leads-20260809-140940.json`](live-tests/leads-20260809-140940.json)
+
+### 8.1 Kostnad
+
+| | AV | PÅ | Faktor |
+| --- | --- | --- | --- |
+| in-tokens | 466 586 | 397 782 | **0,85×** |
+| ut-tokens | 24 108 | 210 395 | **8,7×** |
+| reasoning-tokens | 0 | 182 637 | — |
+| latens totalt | 303 s | 2 143 s | **7,1×** |
+| latens per prospekt | 101 s | 714 s | 1,7 min → 11,9 min |
+| omförsök (brutet utdatakontrakt) | **6** | **0** | — |
+
+Två saker är kontraintuitiva och värda att notera:
+
+**PÅ använde FÄRRE input-tokens.** Inte trots utan på grund av kontraktet:
+AV bröt utdatakontraktet 6 gånger (`mk:offers` ×2, `sa:draft-outreach` ×2,
+`mk:prospecting`, `mk:sales-enablement`) och varje omförsök skickar hela
+meddelandekedjan igen — inklusive den fullt injicerade skillen, som för
+`mk:offers` är 69 574 tecken. PÅ bröt kontraktet **noll** gånger.
+
+**`reasoning_tokens = 0` i AV-läget** är beviset att toggeln faktiskt biter.
+Det var precis det som saknades 2026-08-08.
+
+### 8.2 Kvalitet — lägena fattar OLIKA BESLUT
+
+Detta är den avgörande skillnaden mot supportflödet, där båda lägena
+klassificerade alla fem ärendena identiskt.
+
+| Prospekt | icp_fit AV | icp_fit PÅ | Kvalificerad AV | Kvalificerad PÅ |
+| --- | --- | --- | --- | --- |
+| Gina Tricot | 0,7 | 0,3 | **JA** | **NEJ** |
+| Blomsterlandet | 0,85 | 0,5 | **JA** | **NEJ** |
+| Sportamore | 0,85 | 0,3 | **JA** | **NEJ** |
+
+Kvalificeringsbeslutet kastades om för **samtliga tre**.
+
+**Det mest talande fyndet ligger i AV-lägets egen motivering.** Om Gina
+Tricot skrev AV-läget, ordagrant:
+
+> "De är ett medelstort bolag, inte ett litet SMB, **men fortfarande inom
+> målgruppen** 'svenska små och medelstora bolag'. […] Inga tydliga
+> disqualifiers hittades."
+
+Det såg alltså avvikelsen mot ICP:t och resonerade sig förbi den i samma
+mening. PÅ-läget såg samma faktum och drog motsatt slutsats:
+
+> "dels är de sannolikt en större kedja snarare än ett små- eller medelstort
+> bolag, dels är de ett B2C-företag. Snajps produkter är positionerade för
+> svenska SMB-bolag och B2B-leads, så Gina Tricot hamnar utanför målgruppen."
+
+Samma mönster i `mk:ab-testing`: AV svarade `offer_confidence = 0,55` för
+**alla tre** bolagen — ett rimligt mittenvärde som inte skiljer på fallen.
+PÅ differentierade (0,3 / 0,4 / 0,55).
+
+### 8.3 VIKTIG BEGRÄNSNING — datan kan inte skilja träffsäkerhet från pessimism
+
+Alla tre testprospekten är stora B2C-e-handlare, och PÅ underkände alla tre.
+Det är konsekvent, men **inget prospekt i testet BORDE ha kvalificerat sig**.
+Därför går det inte att avgöra om PÅ är mer träffsäkert eller bara mer
+negativt. En modell som säger nej till allt har inte omdöme, den har bias.
+
+**Nödvändigt nästa test innan beslutet låses:** kör om med minst ett prospekt
+som otvetydigt matchar Snajps ICP — ett litet/medelstort svenskt bolag med
+kundtjänst, gärna ett B2B-bolag. Säger PÅ nej även där är slutsatsen i 8.2
+värdelös. Säger PÅ ja är den bekräftad.
+
+### 8.4 Två kundvända fynd som körningen avslöjade
+
+**1. Påhittad statistik nådde ett utkast — INTE åtgärdat i modellen.**
+Utkastet till Sportamore (thinking AV) innehöll:
+
+> "En liknande kund har minskat sina återkommande frågor med **30 procent
+> inom 30 dagar**."
+
+Snajps kontextpaket innehåller **noll** procentsiffror — verifierat
+programmatiskt. Siffran är påhittad, och den hade gått ut i Snajps namn till
+en riktig mottagare. 1 av 6 utkast, bara i AV-läget. Ingen kodgrind fångar
+detta i dag: `strip_placeholders` tar mallrester, inte ogrundade påståenden.
+**Detta är den starkaste enskilda kvalitetsinvändningen mot AV i leadsflödet**
+— ett kallt mejl är första intrycket i en kundrelation, och grundningsregeln
+är själva säljargumentet.
+
+**2. Hängande signatur i 5 av 6 utkast — ÅTGÄRDAT.**
+Utkasten slutade `"Med vänliga hälsningar,"` utan avsändare. Orsaken var inte
+en bugg utan en grind som gjorde sitt jobb: modellen skrev `[Signatur]`,
+`strip_placeholders` tog bort platshållaren (rätt) och lämnade hälsningen
+hängande. Drabbade BÅDA lägena → kodfel, inte modellfel.
+Fixat med `sign_off()` i `app/agent/leads_agent.py`, regressionstester i
+`tests/agent/test_leads_agent_wiring.py`.
+
+### 8.5 BESLUT 2026-08-10: thinking AV i hela leadsflödet
+
+**Beslutat av användaren efter genomläsning av rådatan** (hela materialet
+för Gina Tricot samt samtliga sex färdiga mejlutkast).
+
+**Min rekommendation i en tidigare version av det här avsnittet var PÅ. Den
+var fel, och det är värt att skriva ut varför.** Jag drog slutsatsen ur
+mätvärden — brutna utdatakontrakt, differentierade konfidenssiffror, en
+mer skeptisk ICP-bedömning — och läste dem som kvalitet. Användaren läste
+det som modellen faktiskt PRODUCERADE. Det är den enda mätning som räknas
+i ett flöde vars output går till en människa.
+
+**Vad genomläsningen visade:**
+
+1. **Utkasten är bättre med AV.** Samtliga tre kändes mer personliga,
+   mänskliga, med rätt ton och tillräcklig kontext. PÅ-utkasten blev
+   kortfattade, hackiga och robotaktiga trots — eller på grund av — allt
+   övertänkande. Exempel: PÅ skrev bara *"i drift hos Livrustning"* utan
+   någon förklaring av vad det betyder eller varför det är relevant.
+2. **AV hade RÄTT i ICP-bedömningen, inte fel.** B2C-e-handel passar
+   supportprodukten mycket bra: hög volym privatkunder med enkla,
+   återkommande ärenden är precis den belastning agenten avlastar. PÅ:s
+   underkännande av alla tre var inte skärpa — det var det som §8.3
+   varnade för, en modell som säger nej till allt.
+3. **AV:s research var genuint bra.** Den undersökte om bolagen redan hade
+   en chatbotlösning på sajten, och identifierade en öppning via Instagram
+   där en stor del av deras kunder faktiskt befinner sig. Den förberedde
+   rimliga invändningar och formulerade raka, användbara svar redan i
+   researchsteget.
+
+**Alltså: §8.2 ovan ska INTE läsas som att PÅ hade bättre omdöme.** Den
+observationen (att AV "resonerade sig förbi" en ICP-avvikelse) står kvar som
+beskrivning av vad som skrevs, men tolkningen var min och den var felaktig
+— AV:s slutsats var den riktiga, och dess motivering var kortfattad snarare
+än slarvig.
+
+**Verkställt i kod, inte bara i det här dokumentet:** varje steg i
+`leads/{onboarding,research,outreach}_playbook.py` sätter nu explicit
+`thinking="disabled"` via `research_playbook.THINKING`. Det ärvs medvetet
+INTE från `settings.thinking_mode` — supportbeslutet ger samma värde i dag,
+och ett leadsbeslut som tyst hänger på ett supportbeslut är inget beslut.
+Låst av `test_every_leads_step_pins_thinking_disabled` och
+`test_leads_runs_thinking_off_even_if_the_global_default_is_on`.
+
+### 8.6 Nästa spår: finjustering via TILLÄGGSINSTRUKTIONER
+
+Riktningen framåt är inte thinking, utan bättre styrning av AV-flödet.
+
+**HÅRD REGEL — vi går inte in och ändrar i skillsen.** Ska output justeras
+görs det med tilläggsinstruktioner ovanpå skillen: playbookens `task` och
+`case_context`, som är våra egna och fritt redigerbara. Undantag kräver att
+det är absolut nödvändigt, och då ska `agent-core/build_manifest.py` köras
+i samma commit så att baseline-bytet syns.
+
+Regeln är sedan 2026-08-10 mekanisk, inte en förhoppning:
+**INV-SKILL-005** (`tests/invariants/test_inv_skill_005.py`) jämför varje
+fil under `agent-core/skills/` mot sitt sha256 i manifestet och fäller
+builden på tyst redigering, tillagd fil eller borttagen fil. Verifierat att
+grinden faktiskt fäller — en grind som inte kan fela är ingen grind.
+
+**Att utvärdera i kommande tester:** var tilläggsinstruktionerna gör mest
+nytta. Kandidater ur den här körningen:
+
+- **`sa:draft-outreach` och `snajp:humanizer-svenska`** — det är här tonen
+  avgörs, och det var här PÅ tappade mest. Vad i AV:s utkast som gjorde dem
+  personliga bör göras till en explicit instruktion i stället för tur.
+- **Grundningskrav på påståenden i utkast.** AV producerade den påhittade
+  "30 procent"-siffran (§8.4). En tilläggsinstruktion som kräver att varje
+  siffra och varje kundreferens går att peka ut i kontextpaketet är det
+  billigaste motmedlet — och på sikt en kodgrind, som `strip_placeholders`.
+- **`mk:prospecting`** — bevara AV:s bedömning men be den skriva ut sitt
+  resonemang tydligare, så att en människa kan granska varför ett prospekt
+  kvalificerades.
