@@ -86,6 +86,14 @@ on every leads step (see below).
   `leads/research_playbook.THINKING` — deliberately NOT inherited from
   `settings.thinking_mode`, so a future support-side change can't drag leads
   with it. Decided 2026-08-10 from 72 real calls; see THINKING_MODE_COMPARISON §8.
+- **Scroll reveal fails toward VISIBLE, never blank.** `.rise` is only hidden
+  while `<html>` carries `reveal-armed`, a class `useReveal` adds before first
+  paint and owns. No JS, no hook, an element the hook never saw — all land on
+  visible-without-animation. Do not move `opacity: 0` back onto bare `.rise`;
+  that is exactly what shipped sections as "heading with nothing under it"
+  twice. Guard it with `python scripts/check_reveal.py <base-url>`, which
+  measures computed opacity (not the `is-visible` class) and includes a mode
+  that strips `reveal-armed` to prove the default is legible.
 - **Nothing gates fabricated claims yet.** A live draft asserted "30 % fewer
   repeat questions in 30 days" — a figure that exists nowhere in the context
   pack. `strip_placeholders` catches template residue, not ungrounded claims.

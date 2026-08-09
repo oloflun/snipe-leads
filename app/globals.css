@@ -251,15 +251,29 @@ button {
    to enter the viewport, so a long page settles section by section instead of
    animating everything at once behind the fold.
 
-   This starts at opacity 0, so without JavaScript the page would be blank. The
-   <noscript> block in app/layout.tsx forces it visible; do not remove one
-   without the other. */
+   VISIBLE BY DEFAULT — this is the load-bearing decision, changed 2026-08-10
+   after sections shipped permanently blank for the second time.
+
+   `.rise` used to carry `opacity: 0` on its own, which made INVISIBLE the
+   default state and every reveal a JS action that had to succeed. Any element
+   the observer missed — mounted after the effect's snapshot, added by a later
+   render, orphaned because the chunk was slow — stayed invisible forever, and
+   the page showed a section heading with nothing under it.
+
+   Now the hiding is scoped to `.reveal-armed`, a class useReveal puts on <html>
+   before first paint and only while it is actually driving the animation. Every
+   failure path — no JS, blocked JS, hook never mounted, element the hook never
+   saw — now lands on VISIBLE. The animation is the enhancement; legibility is
+   the default. Do not move `opacity: 0` back onto bare `.rise`. */
 .rise {
-  opacity: 0;
-  transform: translateY(10px);
   transition:
     opacity var(--dur-mid) var(--ease-out),
     transform var(--dur-mid) var(--ease-out);
+}
+
+.reveal-armed .rise:not(.is-visible) {
+  opacity: 0;
+  transform: translateY(10px);
 }
 
 .rise.is-visible {

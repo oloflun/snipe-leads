@@ -29,13 +29,13 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   return (
     <html lang="sv" className={fontVariables}>
       <head>
-        {/* .rise starts at opacity 0 and is revealed by an IntersectionObserver.
-            Without JavaScript that observer never runs and the page renders
-            blank. This is the fallback, and it belongs next to the .rise rule in
-            globals.css — neither survives alone. */}
-        <noscript>
-          <style>{`.rise{opacity:1!important;transform:none!important}`}</style>
-        </noscript>
+        {/* Här låg tidigare en <noscript>-override som tvingade .rise synlig,
+            eftersom .rise startade på opacity 0 och en utebliven observer gav
+            en blank sida. Den behövs inte längre: sedan 2026-08-10 döljer
+            globals.css bara .rise medan <html> bär `reveal-armed`, som
+            useReveal sätter och äger. Utan JS armeras aldrig sidan, och allt
+            är synligt. Borttagen i stället för kvarlämnad, för död kod som ser
+            bärande ut är precis vad nästa person snubblar på. */}
         {/* Kundens palett skriver över :root. Komponenterna läser redan dessa
             variabler, så en ny kund kräver ingen komponentändring alls. */}
         {tenant ? <style>{paletteToCss(tenant.palette)}</style> : null}

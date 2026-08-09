@@ -46,6 +46,28 @@ utvärderas i kommande tester (§8.6).
    dagar"; kontextpaketet innehåller noll procentsiffror. Ingen kodgrind fångar
    ogrundade påståenden i dag. **Detta är den högsta prioriteten nästa session.**
 
+**Avslöjandebuggen inverterad (efter sessionens slut).** Sektioner på `/leads`
+renderade som rubrik med tomt under — andra gången samma felklass. Orsaken var
+inte en trasig vakt: alla tre vakterna (`threshold: 0`, guard-2, 1200 ms-
+failsafe) var deployade och verifierade. Problemet var **riktningen**: CSS gav
+`.rise` `opacity: 0` som grundtillstånd, så synlighet krävde att JS lyckades,
+och varje element hooken missade blev osynligt för alltid.
+
+Nu döljer CSS bara `.rise` medan `<html>` bär `reveal-armed` — en klass
+`useReveal` sätter före första paint och äger. Kör hooken inte alls (ingen JS,
+blockerad JS, route utan hooken, undantag vid mount) är sidan fullt läsbar utan
+animation. Dessutom fångar en `MutationObserver` noder som tillkommer efter
+mount, och deadlinen är per nod i stället för en engångstimer över en snapshot.
+`<noscript>`-overriden i `layout.tsx` togs bort — den är död kod nu, och död kod
+som ser bärande ut är vad nästa person snubblar på.
+
+`scripts/check_reveal.py` mäter nu **computed opacity** i stället för klassen
+`is-visible` (klassen är inte längre det som avgör synlighet), och har ett
+fjärde läge som tar bort `reveal-armed` och kräver att allt ändå syns.
+Verifierat att checken FÄLLER mot den gamla CSS:en och passerar mot den nya —
+en check som inte kan fela är ingen check. Sveptes över 320/375/414/768/1440 ×
+3 sidor: inga dolda element, ingen horisontell scroll. Skärmdumpar lästa.
+
 **Öppet:** grundningsgrind mot påhittade påståenden · Fas A-migrering ·
 utvärdering av tilläggsinstruktioner · `DATABASE_URL` fortfarande osatt
 (pgvector-vägen overifierad, `snajp_app`-lösenordet aldrig satt) · död kod från
