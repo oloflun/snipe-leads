@@ -26,6 +26,13 @@ new_auth_out.txt
 *.zip.lnk
 supabase/.db-password.txt
 .vercel/
+# Vercel-länkning under eget namn (t.ex. `.vercel-snipra/` från en andra
+# projektlänk i samma repo). `.vercel` matchar inte de varianterna, så de låg
+# ospårade men synliga i `git status` och riskerade att svepas med i ett brett
+# `git add`. Vercels egen README i mappen är entydig: "you should not share
+# the '.vercel' folder with anyone" — den innehåller projectId och orgId för
+# just den här maskinens länkning.
+.vercel-*/
 dist/
 coverage/
 .agent-chorus/
