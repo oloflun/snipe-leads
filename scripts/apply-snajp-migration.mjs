@@ -44,16 +44,49 @@ if (!password) {
   process.exit(1);
 }
 
-const poolerHosts = [
+// Platshållaren ger "password authentication failed" långt senare, efter att
+// åtta värdar provats — ett fel som ser ut som ett nätverksproblem men inte är
+// det. Fånga det här i stället, med besked om vad som faktiskt saknas.
+if (/^(your[-_]?db[-_]?password|din[-_].*|<.*>)$/i.test(password)) {
+  console.error("SUPABASE_DB_PASSWORD är fortfarande platshållaren i .env.");
+  console.error("Hämta det riktiga lösenordet: Supabase Dashboard → Project Settings");
+  console.error("→ Database → Database password, och klistra in det i .env.");
+  process.exit(1);
+}
+
+// Reservlista. Rätt värd hämtas i första hand från Management API (se nedan) —
+// den här används bara när ingen PAT finns. Flera av namnen existerar inte för
+// ett givet projekt och ger DNS-fel, vilket är förväntat.
+const fallbackPoolerHosts = [
   "aws-0-eu-west-1.pooler.supabase.com",
   "aws-0-eu-central-1.pooler.supabase.com",
   "aws-0-eu-north-1.pooler.supabase.com",
   "aws-1-eu-west-1.pooler.supabase.com",
   "aws-1-eu-central-1.pooler.supabase.com",
-  "aws-1-eu-north-1.pooler.supabase.com",
-  "aws-1-eu-west-2.pooler.supabase.com",
-  "aws-1-eu-west-3.pooler.supabase.com"
+  "aws-1-eu-north-1.pooler.supabase.com"
 ];
+
+/** Projektets faktiska pooler-värd, enligt Supabase själv. */
+async function resolvePoolerHost() {
+  const pat = process.env.SUPABASE_PAT_SNIPRA ?? process.env.SUPABASE_ACCESS_TOKEN;
+  if (!pat) {
+    return null;
+  }
+  try {
+    const response = await fetch(
+      `https://api.supabase.com/v1/projects/${projectRef}/config/database/pooler`,
+      { headers: { Authorization: `Bearer ${pat}` } }
+    );
+    if (!response.ok) {
+      return null;
+    }
+    const entries = await response.json();
+    const primary = entries.find((e) => e.database_type === "PRIMARY") ?? entries[0];
+    return primary?.db_host ?? null;
+  } catch {
+    return null;
+  }
+}
 
 // Alla snajp-migrationer i ordning. Samtliga är idempotenta (CREATE ... IF NOT
 // EXISTS, DROP ... IF EXISTS), så skriptet kan köras om utan biverkningar.
@@ -67,9 +100,15 @@ const files = [
 ].map((name) => join(root, "supabase", "migrations", name));
 
 async function connectClient() {
-  let lastError;
+  const resolved = await resolvePoolerHost();
+  const hosts = resolved ? [resolved] : fallbackPoolerHosts;
+  if (resolved) {
+    console.log(`Pooler-värd enligt Supabase: ${resolved}`);
+  }
 
-  for (const host of poolerHosts) {
+  const failures = [];
+
+  for (const host of hosts) {
     const connectionString = `postgresql://postgres.${projectRef}:${encodeURIComponent(password)}@${host}:6543/postgres`;
     const client = new pg.Client({ connectionString, ssl: { rejectUnauthorized: false } });
 
@@ -78,12 +117,27 @@ async function connectClient() {
       console.log(`Connected via ${host}`);
       return client;
     } catch (error) {
-      lastError = error;
+      failures.push({ host, error });
       await client.end().catch(() => undefined);
     }
   }
 
-  throw lastError ?? new Error("Could not connect to database");
+  // Tidigare kastades bara SISTA felet — nästan alltid ett DNS-fel från en värd
+  // som inte finns för det här projektet. Det dolde den verkliga orsaken (fel
+  // lösenord) bakom något som såg ut som ett nätverksproblem.
+  const authFailure = failures.find((f) => f.error.code === "28P01");
+  if (authFailure) {
+    throw new Error(
+      `Fel lösenord: databasen på ${authFailure.host} nekade inloggningen (28P01). ` +
+        "Kontrollera SUPABASE_DB_PASSWORD i .env mot Supabase Dashboard → Project " +
+        "Settings → Database."
+    );
+  }
+
+  const detail = failures
+    .map((f) => `  ${f.host}: ${f.error.code ?? ""} ${f.error.message}`)
+    .join("\n");
+  throw new Error(`Kunde inte ansluta till databasen.\n${detail}`);
 }
 
 async function main() {

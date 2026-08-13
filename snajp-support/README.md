@@ -47,10 +47,16 @@ och bildbilagor noteras i text istället för att analyseras.
 1. Fyll i nyckel för vald provider i `snajp-support/.env` (`OPENAI_API_KEY` eller
    `DEEPSEEK_API_KEY` + `LLM_PROVIDER`). Vill du ha vektorsökning i KB: sätt även
    `EMBEDDING_API_KEY` (OpenAI).
-2. Kör migrationerna mot Supabase — `002`, `003` och `004` (email-pipeline):
-   `npx supabase link --project-ref <ref>` följt av `npx supabase db push`.
+2. Kör migrationerna `002`–`007` mot Supabase: `node scripts/apply-snajp-migration.mjs`
+   (alla är idempotenta och kan köras om). **Kräver att `SUPABASE_DB_PASSWORD` i
+   repots `.env` är det riktiga lösenordet** — hämtas i Supabase Dashboard →
+   Project Settings → Database → Database password. Så länge det står kvar som
+   platshållare avbryter skriptet direkt med besked om det.
+   Alternativt: `npx supabase link --project-ref <ref>` + `npx supabase db push`.
 3. Sätt `DATABASE_URL` i `snajp-support/.env` (pooler-format, host
-   `aws-0-eu-west-1.pooler.supabase.com`, se `.env.example`).
+   `aws-0-eu-west-1.pooler.supabase.com`, se `.env.example`). Rätt värd för ett
+   projekt kan alltid slås upp via Management API:t
+   (`/v1/projects/<ref>/config/database/pooler`).
 4. Seeda kunskapsbasen: `docker compose run --rm api python -m app.scripts.seed_kb`
    (beräknar embeddings om `EMBEDDING_API_KEY` är satt).
 5. Starta om tjänsten (`docker compose restart`, eller redeploy på Render).
