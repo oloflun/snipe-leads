@@ -93,6 +93,38 @@ export type Database = {
         };
         Relationships: [];
       };
+      // Kopplingen workspace → Snajp-Support-tenant (007_snajp_workspace_link.sql).
+      // Läses BARA med service-role-nyckeln; api_key får aldrig nå webbläsaren.
+      snajp_workspace_tenants: {
+        Row: {
+          workspace_id: string;
+          tenant_id: string;
+          tenant_slug: string | null;
+          api_key: string;
+          key_prefix: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          workspace_id: string;
+          tenant_id: string;
+          tenant_slug?: string | null;
+          api_key: string;
+          key_prefix?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          workspace_id?: string;
+          tenant_id?: string;
+          tenant_slug?: string | null;
+          api_key?: string;
+          key_prefix?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;

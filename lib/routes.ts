@@ -40,7 +40,10 @@ export const protectedRoutePrefixes = [
   "/inbox",
   "/settings",
   "/onboarding",
-  "/kundtjanst"
+  "/kundtjanst",
+  // Kundens egen Snajp-arbetsyta. Den publika demon ligger på /demo/snajp och
+  // är avsiktligt INTE med här.
+  "/snajp-support"
 ] as const;
 
 export const authRoutes = ["/login", "/auth/callback"] as const;

@@ -31,6 +31,25 @@ class TriageRequest(BaseModel):
 class CreateKeyRequest(BaseModel):
     tenant_name: str = Field(..., min_length=2, max_length=80)
     slug: str | None = Field(default=None, min_length=2, max_length=80, pattern=r"^[a-z0-9-]+$")
+    label: str | None = Field(default=None, max_length=80)
+
+
+class CreateOwnKeyRequest(BaseModel):
+    """Nyckel för den egna tenanten — ingen tenant_name, den är redan given."""
+
+    label: str | None = Field(default=None, max_length=80)
+
+
+class TenantSettingsRequest(BaseModel):
+    """Self-service-inställningar. Utelämnat fält = oförändrat."""
+
+    name: str | None = Field(default=None, min_length=2, max_length=80)
+    company_name: str | None = Field(default=None, max_length=120)
+    # Tonen som skickas till modellen, t.ex. "formell och kortfattad".
+    tone: str | None = Field(default=None, max_length=300)
+    # Bolagets egen verksamhetsbeskrivning. Läggs FÖRE kärnreglerna i prompten
+    # och kan därför inte upphäva grundningsregeln eller eskaleringarna.
+    system_prompt_extra: str | None = Field(default=None, max_length=4000)
 
 
 class KbArticle(BaseModel):
@@ -41,6 +60,14 @@ class KbArticle(BaseModel):
 
 class KbArticleRequest(BaseModel):
     articles: list[KbArticle] = Field(..., min_length=1, max_length=50)
+
+
+class KbArticleUpdate(BaseModel):
+    """Partiell uppdatering — utelämnat fält lämnas orört."""
+
+    title: str | None = Field(default=None, min_length=3, max_length=200)
+    content: str | None = Field(default=None, min_length=10, max_length=8000)
+    category: str | None = None
 
 
 class IngestAttachment(BaseModel):

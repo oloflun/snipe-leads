@@ -27,6 +27,18 @@ class Storage(Protocol):
 
     async def get_tenant(self, tenant_id: str) -> dict[str, Any] | None: ...
 
+    async def update_tenant(
+        self,
+        tenant_id: str,
+        *,
+        name: str | None = None,
+        company_name: str | None = None,
+        tone: str | None = None,
+        system_prompt_extra: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Tenantens egna inställningar (self-service). None = lämna oförändrad."""
+        ...
+
     # -- Kunddata (alltid tenant-skopade) -----------------------------------
 
     async def find_or_create_customer(
@@ -96,11 +108,47 @@ class Storage(Protocol):
         embedding: list[float] | None = None,
     ) -> dict[str, Any]: ...
 
+    async def update_kb_article(
+        self,
+        tenant_id: str,
+        article_id: str,
+        *,
+        title: str | None = None,
+        content: str | None = None,
+        category: str | None = None,
+        embedding: list[float] | None = None,
+    ) -> dict[str, Any] | None:
+        """None om artikeln inte finns ELLER tillhör en annan tenant."""
+        ...
+
+    async def delete_kb_article(self, tenant_id: str, article_id: str) -> bool: ...
+
     async def get_channel_config(self, tenant_id: str, channel: str) -> dict[str, Any]: ...
 
     async def log_metric(
         self, tenant_id: str, *, ticket_id: str | None, metric_name: str, value: float | None
     ) -> None: ...
+
+    # -- Förbrukning (underlag för tak/fakturering) -------------------------
+
+    async def log_usage(
+        self,
+        tenant_id: str,
+        *,
+        kind: str = "chat",
+        model: str = "simulation",
+        simulated: bool = False,
+        prompt_tokens: int = 0,
+        completion_tokens: int = 0,
+        total_tokens: int = 0,
+        responses: int = 1,
+        ticket_id: str | None = None,
+        email_id: str | None = None,
+    ) -> None: ...
+
+    async def get_usage(self, tenant_id: str, *, days: int = 30) -> dict[str, Any]:
+        """Summering för perioden + uppdelning per kind."""
+        ...
 
     # -- Email-pipeline ------------------------------------------------------
 
@@ -218,8 +266,16 @@ class Storage(Protocol):
     async def validate_api_key(self, raw_key: str) -> dict[str, Any] | None: ...
 
     async def create_api_key(
-        self, tenant_id: str, *, tenant_name: str, raw_key: str
+        self, tenant_id: str, *, tenant_name: str, raw_key: str, label: str | None = None
     ) -> dict[str, Any]: ...
+
+    async def list_api_keys(self, tenant_id: str) -> list[dict[str, Any]]:
+        """Tenantens egna nycklar — prefix och metadata, ALDRIG hash eller klartext."""
+        ...
+
+    async def revoke_api_key(self, tenant_id: str, key_id: str) -> bool:
+        """False om nyckeln inte finns ELLER tillhör en annan tenant."""
+        ...
 
     async def close(self) -> None: ...
 

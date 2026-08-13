@@ -157,6 +157,101 @@ async def test_same_customer_email_is_isolated_per_tenant():
 
 
 @pytest.mark.anyio
+async def test_tenant_b_cannot_read_tenant_a_messages():
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            tenant_b = await _create_tenant_b(client)
+
+            result_a = await _chat_and_wait(
+                client,
+                DEMO_KEY,
+                "Jag vill ha pengarna tillbaka för order 5512.",
+                "kund-a@example.com",
+            )
+            ticket_id = result_a["ticket_id"]
+            customer_id = result_a["customer_id"]
+
+            # Tenant A ser meddelandehistoriken i sitt eget ärende.
+            own = (
+                await client.get(f"/api/tickets/{ticket_id}", headers={"X-API-Key": DEMO_KEY})
+            ).json()
+            assert len(own["messages"]) > 0
+            assert any("5512" in m["content"] for m in own["messages"])
+
+            # Tenant B når varken ärendet eller kundens historik.
+            key_b = {"X-API-Key": tenant_b["api_key"]}
+            assert (await client.get(f"/api/tickets/{ticket_id}", headers=key_b)).status_code == 404
+
+            # Historik-endpointen svarar alltid 200 — det som ska bevisas är att
+            # listan är TOM för fel tenant, inte att anropet nekas.
+            history = await client.get(f"/api/customers/{customer_id}/history", headers=key_b)
+            assert history.status_code == 200
+            assert history.json()["tickets"] == []
+
+            # Samma kund-id hos rätt tenant ger däremot ärendet.
+            own_history = await client.get(
+                f"/api/customers/{customer_id}/history", headers={"X-API-Key": DEMO_KEY}
+            )
+            assert len(own_history.json()["tickets"]) == 1
+
+
+@pytest.mark.anyio
+async def test_tenant_b_cannot_edit_or_delete_tenant_a_kb():
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            tenant_b = await _create_tenant_b(client)
+            key_b = {"X-API-Key": tenant_b["api_key"]}
+
+            articles_a = (
+                await client.get("/api/kb", headers={"X-API-Key": DEMO_KEY})
+            ).json()["articles"]
+            target = articles_a[0]
+
+            # Redigering och radering av en främmande artikel: 404, inte 403.
+            edited = await client.put(
+                f"/api/kb/{target['id']}",
+                headers=key_b,
+                json={"content": "Kapad text som aldrig ska nå tenant A."},
+            )
+            assert edited.status_code == 404
+
+            deleted = await client.delete(f"/api/kb/{target['id']}", headers=key_b)
+            assert deleted.status_code == 404
+
+            # Tenant A:s artikel är orörd.
+            after = (
+                await client.get("/api/kb", headers={"X-API-Key": DEMO_KEY})
+            ).json()["articles"]
+            assert len(after) == len(articles_a)
+            assert next(a for a in after if a["id"] == target["id"])["content"] == target["content"]
+
+
+@pytest.mark.anyio
+async def test_tenant_b_cannot_see_tenant_a_keys_or_settings():
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            tenant_b = await _create_tenant_b(client)
+            key_b = {"X-API-Key": tenant_b["api_key"]}
+
+            # Demo-tenanten sätter en inställning och utfärdar en nyckel.
+            await client.put(
+                "/api/tenant",
+                headers={"X-API-Key": DEMO_KEY},
+                json={"system_prompt_extra": "Hemlig intern beskrivning."},
+            )
+            created = await client.post(
+                "/api/keys/self", headers={"X-API-Key": DEMO_KEY}, json={"label": "Intern"}
+            )
+            assert created.status_code == 201
+
+            # Tenant B ser bara sitt eget — varken nyckeln eller texten läcker.
+            keys_b = (await client.get("/api/keys", headers=key_b)).json()["keys"]
+            assert all(k["label"] != "Intern" for k in keys_b)
+            settings_b = (await client.get("/api/tenant", headers=key_b)).json()
+            assert settings_b["system_prompt_extra"] is None
+
+
+@pytest.mark.anyio
 async def test_master_key_cannot_touch_customer_data():
     async with app.router.lifespan_context(app):
         async with _client() as client:

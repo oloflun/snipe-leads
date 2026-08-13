@@ -11,7 +11,7 @@ import math
 import re
 import unicodedata
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from ..config import DEFAULT_TENANT_ID, DEFAULT_TENANT_NAME, DEFAULT_TENANT_SLUG
@@ -72,6 +72,22 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _tenant_row(tenant_id: str, slug: str, name: str) -> dict[str, Any]:
+    """Samma kolumnuppsättning som ss_tenants efter 006 — inklusive de tomma
+    self-service-fälten, så att API:t ser likadant ut i båda lägena."""
+    return {
+        "id": tenant_id,
+        "slug": slug,
+        "name": name,
+        "company_name": None,
+        "tone": None,
+        "system_prompt_extra": None,
+        "active": True,
+        "created_at": _now(),
+        "updated_at": _now(),
+    }
+
+
 def _kb_row(tenant_id: str, article: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": str(uuid.uuid4()),
@@ -97,6 +113,7 @@ class MemoryStorage:
         self.conversations: dict[str, dict[str, Any]] = {}
         self.messages: dict[str, list[dict[str, Any]]] = {}
         self.metrics: list[dict[str, Any]] = []
+        self.usage: list[dict[str, Any]] = []
         self.api_keys: dict[str, dict[str, Any]] = {}
         self.kb: dict[str, list[dict[str, Any]]] = {}
         self.channel_overrides: dict[tuple[str, str], dict[str, Any]] = {}
@@ -113,13 +130,9 @@ class MemoryStorage:
         self.decisions: list[dict[str, Any]] = []
 
         # Default-tenanten med demo-kunskapsbasen (motsvarar migrationens backfill + seed).
-        self.tenants[DEFAULT_TENANT_ID] = {
-            "id": DEFAULT_TENANT_ID,
-            "slug": DEFAULT_TENANT_SLUG,
-            "name": DEFAULT_TENANT_NAME,
-            "active": True,
-            "created_at": _now(),
-        }
+        self.tenants[DEFAULT_TENANT_ID] = _tenant_row(
+            DEFAULT_TENANT_ID, DEFAULT_TENANT_SLUG, DEFAULT_TENANT_NAME
+        )
         self.kb[DEFAULT_TENANT_ID] = [_kb_row(DEFAULT_TENANT_ID, a) for a in KB_ARTICLES]
 
     # -- Tenants ------------------------------------------------------------
@@ -128,13 +141,7 @@ class MemoryStorage:
         for tenant in self.tenants.values():
             if tenant["slug"] == slug:
                 return tenant
-        tenant = {
-            "id": str(uuid.uuid4()),
-            "slug": slug,
-            "name": name,
-            "active": True,
-            "created_at": _now(),
-        }
+        tenant = _tenant_row(str(uuid.uuid4()), slug, name)
         self.tenants[tenant["id"]] = tenant
         self.kb.setdefault(tenant["id"], [])
         return tenant
@@ -145,19 +152,36 @@ class MemoryStorage:
         existing = self.tenants.get(tenant_id)
         if existing:
             return existing
-        tenant = {
-            "id": tenant_id,
-            "slug": slug,
-            "name": name,
-            "active": True,
-            "created_at": _now(),
-        }
+        tenant = _tenant_row(tenant_id, slug, name)
         self.tenants[tenant_id] = tenant
         self.kb.setdefault(tenant_id, [])
         return tenant
 
     async def get_tenant(self, tenant_id: str) -> dict[str, Any] | None:
         return self.tenants.get(tenant_id)
+
+    async def update_tenant(
+        self,
+        tenant_id: str,
+        *,
+        name: str | None = None,
+        company_name: str | None = None,
+        tone: str | None = None,
+        system_prompt_extra: str | None = None,
+    ) -> dict[str, Any] | None:
+        tenant = self.tenants.get(tenant_id)
+        if not tenant:
+            return None
+        for field, value in (
+            ("name", name),
+            ("company_name", company_name),
+            ("tone", tone),
+            ("system_prompt_extra", system_prompt_extra),
+        ):
+            if value is not None:
+                tenant[field] = value
+        tenant["updated_at"] = _now()
+        return tenant
 
     # -- Kunddata -----------------------------------------------------------
 
@@ -352,6 +376,51 @@ class MemoryStorage:
         self.kb.setdefault(tenant_id, []).append(row)
         return {"id": row["id"], "title": title, "category": category}
 
+    def _find_kb(self, tenant_id: str, article_id: str) -> dict[str, Any] | None:
+        # Söker BARA i tenantens egen lista — en artikel hos en annan tenant är
+        # osynlig här, precis som RLS-policyn gör den i Postgres-läget.
+        for article in self.kb.get(tenant_id, []):
+            if article["id"] == article_id:
+                return article
+        return None
+
+    async def update_kb_article(
+        self,
+        tenant_id: str,
+        article_id: str,
+        *,
+        title: str | None = None,
+        content: str | None = None,
+        category: str | None = None,
+        embedding: list[float] | None = None,
+    ) -> dict[str, Any] | None:
+        article = self._find_kb(tenant_id, article_id)
+        if not article:
+            return None
+        if title is not None:
+            article["title"] = title
+        if content is not None:
+            article["content"] = content
+        if category is not None:
+            article["category"] = category
+        # Sökindexet är härlett ur texten och måste räknas om vid varje ändring,
+        # annars söker agenten vidare på den gamla lydelsen.
+        article["tokens"] = _tokenize(article["title"] + " " + article["content"])
+        article["title_tokens"] = _tokenize(article["title"])
+        return {
+            "id": article["id"],
+            "title": article["title"],
+            "content": article["content"],
+            "category": article["category"],
+        }
+
+    async def delete_kb_article(self, tenant_id: str, article_id: str) -> bool:
+        article = self._find_kb(tenant_id, article_id)
+        if not article:
+            return False
+        self.kb[tenant_id].remove(article)
+        return True
+
     # -- Kanaler & metrics --------------------------------------------------
 
     async def get_channel_config(self, tenant_id: str, channel: str) -> dict[str, Any]:
@@ -367,6 +436,63 @@ class MemoryStorage:
             {"tenant_id": tenant_id, "ticket_id": ticket_id, "metric_name": metric_name,
              "value": value, "created_at": _now()}
         )
+
+    # -- Förbrukning ----------------------------------------------------------
+
+    async def log_usage(
+        self,
+        tenant_id: str,
+        *,
+        kind: str = "chat",
+        model: str = "simulation",
+        simulated: bool = False,
+        prompt_tokens: int = 0,
+        completion_tokens: int = 0,
+        total_tokens: int = 0,
+        responses: int = 1,
+        ticket_id: str | None = None,
+        email_id: str | None = None,
+    ) -> None:
+        self.usage.append(
+            {
+                "id": str(uuid.uuid4()),
+                "tenant_id": tenant_id,
+                "kind": kind,
+                "model": model,
+                "simulated": simulated,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": total_tokens,
+                "responses": responses,
+                "ticket_id": ticket_id,
+                "email_id": email_id,
+                "created_at": _now(),
+            }
+        )
+
+    async def get_usage(self, tenant_id: str, *, days: int = 30) -> dict[str, Any]:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        rows = [
+            r for r in self.usage
+            if r["tenant_id"] == tenant_id
+            and datetime.fromisoformat(r["created_at"]) >= cutoff
+        ]
+        per_kind: dict[str, dict[str, int]] = {}
+        for row in rows:
+            bucket = per_kind.setdefault(row["kind"], {"responses": 0, "total_tokens": 0})
+            bucket["responses"] += row["responses"]
+            bucket["total_tokens"] += row["total_tokens"]
+        return {
+            "days": days,
+            "responses": sum(r["responses"] for r in rows),
+            "prompt_tokens": sum(r["prompt_tokens"] for r in rows),
+            "completion_tokens": sum(r["completion_tokens"] for r in rows),
+            "total_tokens": sum(r["total_tokens"] for r in rows),
+            "simulated_responses": sum(r["responses"] for r in rows if r["simulated"]),
+            "per_kind": [
+                {"kind": kind, **totals} for kind, totals in sorted(per_kind.items())
+            ],
+        }
 
     # -- Email-pipeline -------------------------------------------------------
 
@@ -653,7 +779,7 @@ class MemoryStorage:
         return None
 
     async def create_api_key(
-        self, tenant_id: str, *, tenant_name: str, raw_key: str
+        self, tenant_id: str, *, tenant_name: str, raw_key: str, label: str | None = None
     ) -> dict[str, Any]:
         key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
         record = {
@@ -661,12 +787,44 @@ class MemoryStorage:
             "tenant_id": tenant_id,
             "tenant_name": tenant_name,
             "key_prefix": raw_key[:12],
+            "label": label,
             "active": True,
+            "revoked_at": None,
             "created_at": _now(),
             "last_used_at": None,
         }
         self.api_keys[key_hash] = record
         return record
+
+    async def list_api_keys(self, tenant_id: str) -> list[dict[str, Any]]:
+        # Hashen är dict-nyckeln och kommer aldrig med i utdatat.
+        keys = [
+            {
+                "id": r["id"],
+                "label": r.get("label"),
+                "key_prefix": r["key_prefix"],
+                "active": r["active"],
+                "revoked_at": r.get("revoked_at"),
+                "created_at": r["created_at"],
+                "last_used_at": r.get("last_used_at"),
+            }
+            for r in self.api_keys.values()
+            if r["tenant_id"] == tenant_id
+        ]
+        keys.sort(key=lambda k: k["created_at"], reverse=True)
+        return keys
+
+    async def revoke_api_key(self, tenant_id: str, key_id: str) -> bool:
+        for record in self.api_keys.values():
+            if (
+                record["id"] == key_id
+                and record["tenant_id"] == tenant_id
+                and not record.get("revoked_at")
+            ):
+                record["active"] = False
+                record["revoked_at"] = _now()
+                return True
+        return False
 
     async def close(self) -> None:
         return None

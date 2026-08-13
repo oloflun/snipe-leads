@@ -61,7 +61,9 @@ const files = [
   "002_snajp_support.sql",
   "003_snajp_multitenant.sql",
   "004_snajp_email_pipeline.sql",
-  "005_snajp_pilot_categories.sql"
+  "005_snajp_pilot_categories.sql",
+  "006_snajp_selfservice_usage.sql",
+  "007_snajp_workspace_link.sql"
 ].map((name) => join(root, "supabase", "migrations", name));
 
 async function connectClient() {

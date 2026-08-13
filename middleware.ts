@@ -26,7 +26,35 @@ async function hasBusinessContext(
   return Boolean(businessContext);
 }
 
+// Demo-deployen (snajp.vercel.app) saknar Supabase-variabler helt. Utan den här
+// grinden kastar getSupabaseUrl() och /snajp-support ger 500 i stället för demon.
+// Saknas auth-lagret finns ingen inloggning att tala om: alla besökare är
+// utloggade, och den enda vettiga åtgärden är att visa den publika demon.
+function authIsConfigured(): boolean {
+  return Boolean(
+    process.env.NEXT_PUBLIC_SUPABASE_URL &&
+      (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)
+  );
+}
+
+function demoRedirect(request: NextRequest) {
+  const demoUrl = request.nextUrl.clone();
+  demoUrl.pathname = "/demo/snajp";
+  demoUrl.search = "";
+  return NextResponse.redirect(demoUrl);
+}
+
+function isSnajpWorkspace(pathname: string): boolean {
+  return pathname === "/snajp-support" || pathname.startsWith("/snajp-support/");
+}
+
 export async function middleware(request: NextRequest) {
+  if (!authIsConfigured()) {
+    return isSnajpWorkspace(request.nextUrl.pathname)
+      ? demoRedirect(request)
+      : NextResponse.next({ request });
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(getSupabaseUrl(), getServerSupabaseKey(), {
@@ -53,6 +81,12 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (isProtectedRoute(pathname) && !user) {
+    // Snajp-Support är också en publik säljdemo. En utloggad besökare — ofta
+    // via en marknadsföringslänk — ska landa i demon, inte i en inloggningsruta.
+    if (isSnajpWorkspace(pathname)) {
+      return demoRedirect(request);
+    }
+
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
     loginUrl.searchParams.set("next", pathname);
@@ -109,6 +143,7 @@ export const config = {
     "/settings/:path*",
     "/onboarding/:path*",
     "/kundtjanst/:path*",
+    "/snajp-support/:path*",
     "/login",
     "/auth/callback"
   ]

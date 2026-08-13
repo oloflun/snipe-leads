@@ -13,13 +13,22 @@ from ..config import get_settings
 from ..storage.base import Storage
 from .context import SupportContext
 from .llm import get_agent_model
-from .prompt import SYSTEM_PROMPT
+from .prompt import build_system_prompt
 from .tools import ALL_TOOLS
+from .usage import log_run_usage
 
 
-def build_agent(channel_tone: str, max_length: int) -> Agent[SupportContext]:
+def build_agent(
+    channel_tone: str,
+    max_length: int,
+    *,
+    company_name: str | None = None,
+    system_prompt_extra: str | None = None,
+) -> Agent[SupportContext]:
     instructions = (
-        SYSTEM_PROMPT
+        build_system_prompt(
+            company_name=company_name, system_prompt_extra=system_prompt_extra
+        )
         + f"\n## Aktuell kanal\nTon: {channel_tone}. Maxlängd på svaret: {max_length} tecken."
     )
     return Agent[SupportContext](
@@ -55,7 +64,14 @@ async def run_support_agent(
     attachments: list[str],
 ) -> dict[str, Any]:
     config = await storage.get_channel_config(tenant_id, channel)
-    agent = build_agent(config["tone"], config["max_length"])
+    tenant = await storage.get_tenant(tenant_id) or {}
+    agent = build_agent(
+        # Tenantens egen ton vinner över kanalens default när den är satt.
+        tenant.get("tone") or config["tone"],
+        config["max_length"],
+        company_name=tenant.get("company_name") or tenant.get("name"),
+        system_prompt_extra=tenant.get("system_prompt_extra"),
+    )
     context = SupportContext(
         storage=storage,
         tenant_id=tenant_id,
@@ -71,6 +87,10 @@ async def run_support_agent(
         _build_input(message, subject, attachments),
         context=context,
         max_turns=20,
+    )
+
+    await log_run_usage(
+        storage, tenant_id, result, kind="chat", ticket_id=context.ticket_id
     )
 
     # send_response är källan till kundsvaret; final_output är fallback.

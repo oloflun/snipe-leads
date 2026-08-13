@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { proxyToBackend } from "../_lib";
+import { proxyAsTenant } from "../_auth";
 
 export const runtime = "nodejs";
 // Render free-tier tar ~1 min att vakna. Utan detta dödar Vercel
@@ -8,5 +8,5 @@ export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   const body = await request.text();
-  return proxyToBackend("/api/triage", { method: "POST", body });
+  return proxyAsTenant("/api/triage", { method: "POST", body });
 }

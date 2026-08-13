@@ -66,10 +66,15 @@ async def triage_email_llm(
     body: str,
     kb_articles: list[dict[str, Any]],
     image_urls: list[str] | None = None,
+    company_context: str | None = None,
 ) -> dict[str, Any]:
     settings = get_settings()
     kb_text = "\n\n".join(f"### {a['title']}\n{a['content']}" for a in kb_articles) or "(tom)"
     prompt = _TRIAGE_PROMPT.format(kb=kb_text, sender=sender, subject=subject, body=body)
+    # Tenantens egen verksamhetsbeskrivning, när den satt en. Läggs FÖRE reglerna
+    # så att den inte kan upphäva förbudet mot att hitta på uppgifter.
+    if company_context and company_context.strip():
+        prompt = f"## Om verksamheten\n{company_context.strip()}\n\n{prompt}"
     # Vision stöds bara av OpenAI-modellerna; DeepSeek (deepseek-chat) är textbaserad.
     content: str | list[dict[str, Any]] = prompt
     if image_urls and settings.llm_provider == "openai":
@@ -88,7 +93,15 @@ async def triage_email_llm(
     category = data.get("category", "ovrigt")
     if category not in CATEGORIES:
         category = "ovrigt"
+    # Tokens följer med tillbaka så anroparen kan bokföra förbrukningen på rätt
+    # tenant — här är tenant_id inte känt.
+    usage = getattr(response, "usage", None)
     return {
+        "usage": {
+            "prompt_tokens": getattr(usage, "prompt_tokens", 0) or 0,
+            "completion_tokens": getattr(usage, "completion_tokens", 0) or 0,
+            "total_tokens": getattr(usage, "total_tokens", 0) or 0,
+        },
         "category": category,
         "category_label": CATEGORY_LABELS[category],
         "priority": data.get("priority", "normal"),

@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api import chat, drafts, inbox, kb, keys, rules, tickets, triage
+from .api import chat, drafts, inbox, kb, keys, rules, tenant, tickets, triage
 from .api.deps import require_tenant
 from .config import DEFAULT_TENANT_ID, get_settings
 from .jobs.store import MemoryJobStore, RedisJobStore
@@ -125,6 +125,7 @@ app.include_router(kb.router)
 app.include_router(inbox.router)
 app.include_router(drafts.router)
 app.include_router(rules.router)
+app.include_router(tenant.router)
 
 
 def _health_payload(tenant_id: str | None = None) -> dict:

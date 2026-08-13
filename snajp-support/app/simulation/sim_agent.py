@@ -138,6 +138,14 @@ async def run_sim_agent(
         tenant_id, ticket_id=ticket["id"], metric_name="escalated", value=1.0 if escalated else 0.0
     )
 
+    # Simulerade svar kostar inga tokens men räknas som aktivitet — annars ser
+    # ett konto som bara testkörts ut som helt oanvänt.
+    from ..agent.usage import log_usage
+
+    await log_usage(
+        storage, tenant_id, kind="chat", simulated=True, ticket_id=ticket["id"]
+    )
+
     return {
         "reply": reply,
         "ticket_id": ticket["id"],

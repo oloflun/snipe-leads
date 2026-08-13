@@ -35,3 +35,4 @@ marketingskills.zip
 
 .snipra-auth-state.json
 screenshots/cookies-dump.json
+.env*

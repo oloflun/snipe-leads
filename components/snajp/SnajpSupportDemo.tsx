@@ -48,7 +48,12 @@ const highlights = [
   }
 ];
 
-export function SnajpSupportDemo() {
+// apiBase avgör VILKEN arbetsyta datan hämtas från — utseendet är detsamma.
+// "/api/snajp-demo" = publik demo (låst till demo-tenanten), "/api/snajp-support"
+// = den inloggade kundens egen tenant.
+export function SnajpSupportDemo({
+  apiBase = "/api/snajp-support"
+}: Readonly<{ apiBase?: string }>) {
   const { text } = useLocale();
   const [tab, setTab] = useState<TabId>("dashboard");
 
@@ -84,11 +89,11 @@ export function SnajpSupportDemo() {
         </div>
 
         <div className="mt-8">
-          {tab === "dashboard" ? <Dashboard /> : null}
-          {tab === "kb" ? <KnowledgeBase apiBase="/api/snajp-support" /> : null}
+          {tab === "dashboard" ? <Dashboard apiBase={apiBase} /> : null}
+          {tab === "kb" ? <KnowledgeBase apiBase={apiBase} /> : null}
           {tab === "chat" ? (
             <div className="mx-auto max-w-3xl">
-              <SupportChat />
+              <SupportChat apiBase={apiBase} />
             </div>
           ) : null}
           {tab === "integration" ? <IntegrationSection /> : null}

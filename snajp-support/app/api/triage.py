@@ -58,6 +58,7 @@ async def triage(
     storage = request.app.state.storage
     tenant_id = tenant["tenant_id"]
     results = []
+    tokens = {"prompt": 0, "completion": 0, "total": 0}
 
     for email in payload.emails:
         if settings.is_simulation():
@@ -70,14 +71,35 @@ async def triage(
             articles = await storage.search_kb(
                 tenant_id, f"{email.subject} {email.body}".strip(), embedding=embedding
             )
+            tenant_row = await storage.get_tenant(tenant_id) or {}
             result = await triage_email_llm(
                 sender=email.sender, subject=email.subject, body=email.body,
                 kb_articles=articles,
+                company_context=tenant_row.get("system_prompt_extra"),
             )
+            used = result.pop("usage", {})
+            tokens["prompt"] += used.get("prompt_tokens", 0)
+            tokens["completion"] += used.get("completion_tokens", 0)
+            tokens["total"] += used.get("total_tokens", 0)
             result["kb_sources"] = [
                 {"title": a["title"], "similarity": a["similarity"]} for a in articles
             ]
             result["simulation"] = False
         results.append({"from": email.sender, "subject": email.subject, **result})
+
+    # En rad för hela batchen, med antalet mail som responses — annars blir
+    # radantalet i ss_usage missvisande som "antal svar".
+    from ..agent.usage import log_usage
+
+    await log_usage(
+        storage,
+        tenant_id,
+        kind="triage",
+        simulated=settings.is_simulation(),
+        prompt_tokens=tokens["prompt"],
+        completion_tokens=tokens["completion"],
+        total_tokens=tokens["total"],
+        responses=len(results),
+    )
 
     return {"results": results}

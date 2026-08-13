@@ -14,6 +14,7 @@ Varje steg loggas i ss_decision_log med motivering.
 import logging
 from typing import Any
 
+from ..agent.usage import log_usage
 from ..config import CATEGORY_LABELS, get_settings
 from ..kb_templates import PLACEHOLDER_PREFIX
 from ..simulation.sim_triage import classify
@@ -96,6 +97,9 @@ async def _triage_email(
         else:
             triage["draft_body"] = None
         triage["model"] = "simulation"
+        await log_usage(
+            storage, tenant_id, kind="email_draft", simulated=True, email_id=email["id"]
+        )
         return triage, articles
 
     # Riktigt läge: embeddings + gpt-4o-mini med vision (bilderna skickas med).
@@ -104,12 +108,25 @@ async def _triage_email(
 
     embedding = await embed_text(query)
     articles = _usable(await storage.search_kb(tenant_id, query, embedding=embedding))
+    tenant = await storage.get_tenant(tenant_id) or {}
     result = await triage_email_llm(
         sender=email["from_email"],
         subject=email["subject"],
         body=email["body_text"],
         kb_articles=articles,
         image_urls=image_urls,
+        company_context=tenant.get("system_prompt_extra"),
+    )
+    tokens = result.pop("usage", {})
+    await log_usage(
+        storage,
+        tenant_id,
+        kind="email_draft",
+        simulated=False,
+        prompt_tokens=tokens.get("prompt_tokens", 0),
+        completion_tokens=tokens.get("completion_tokens", 0),
+        total_tokens=tokens.get("total_tokens", 0),
+        email_id=email["id"],
     )
     result["draft_body"] = result.pop("draft_reply", None)
     result.setdefault("reasoning", "LLM-klassificering.")

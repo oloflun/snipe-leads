@@ -61,7 +61,9 @@ const categoryOrder = [
   "ovrigt"
 ];
 
-export function InboxTriage() {
+export function InboxTriage({
+  apiBase = "/api/snajp-support"
+}: Readonly<{ apiBase?: string }>) {
   const { text } = useLocale();
   const [results, setResults] = useState<TriageResult[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -85,7 +87,7 @@ export function InboxTriage() {
     setBusy(true);
     setError(null);
     try {
-      const response = await fetch("/api/snajp-support/triage", {
+      const response = await fetch(`${apiBase}/triage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ emails: sampleEmails })

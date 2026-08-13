@@ -59,7 +59,9 @@ async function downscaleImage(file: File, maxSize = 1024): Promise<string> {
   return canvas.toDataURL("image/jpeg", 0.85);
 }
 
-export function SupportChat() {
+export function SupportChat({
+  apiBase = "/api/snajp-support"
+}: Readonly<{ apiBase?: string }>) {
   const { text } = useLocale();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -92,7 +94,7 @@ export function SupportChat() {
       setBusy(true);
 
       try {
-        const response = await fetch("/api/snajp-support/chat", {
+        const response = await fetch(`${apiBase}/chat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -118,7 +120,7 @@ export function SupportChat() {
 
         for (let attempt = 0; attempt < 90; attempt += 1) {
           await new Promise((resolve) => setTimeout(resolve, attempt < 5 ? 800 : 2000));
-          const jobResponse = await fetch(`/api/snajp-support/jobs/${payload.job_id}`);
+          const jobResponse = await fetch(`${apiBase}/jobs/${payload.job_id}`);
           const job = await jobResponse.json();
           if (job.offline) {
             setMode("offline");

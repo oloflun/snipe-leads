@@ -73,17 +73,63 @@ Tjänsten är multi-tenant: varje kundföretag (tenant) är helt isolerat.
 - **En API-nyckel = en tenant.** Demo-nyckeln mappar till default-tenanten
   (Nordlys Handel). Master-nyckeln är enbart administrativ (skapa tenants/nycklar)
   och kan inte läsa kunddata.
-- **Onboarda ett nytt företag:** `POST /api/keys` med master-nyckeln och
-  `{"tenant_name": "Företaget AB"}` → skapar tenant + returnerar `snajp_live_`-nyckel
-  (visas en gång). Fyll sedan företagets kunskapsbas via `POST /api/kb` med den nyckeln.
-- **Isolering:** all data (kunder, ärenden, meddelanden, KB, metrics, jobb) bär
-  `tenant_id` och filtreras i varje query. I Postgres-läget sätts dessutom
+- **Isolering:** all data (kunder, ärenden, meddelanden, KB, metrics, förbrukning,
+  jobb) bär `tenant_id` och filtreras i varje query. I Postgres-läget sätts dessutom
   `app.tenant_id` per transaktion så RLS-policyerna i
   `supabase/migrations/003_snajp_multitenant.sql` verkställs (försvar-på-djupet).
   Samma kund-e-post hos två tenants blir två separata kundposter.
-- **Migrationen `003_snajp_multitenant.sql` körs manuellt** (efter 002):
-  `ss_tenants`, `tenant_id` på alla kunddatatabeller (backfyllt till default-
-  tenanten), RLS med `FORCE ROW LEVEL SECURITY`.
+- **Migrationerna körs manuellt**, i ordning efter 002: `003` (tenants + RLS),
+  `004` (email-pipeline), `005` (pilotkategorier), `006` (self-service +
+  `ss_usage`), `007` (kopplingen workspace → tenant).
+
+### Inloggning: ett workspace = en tenant
+
+Kunder når sin arbetsyta genom **samma inloggning som resten av snipe-leads**.
+Ingen hanterar API-nycklar för hand:
+
+1. En inloggad användare öppnar `/snajp-support` i Next-appen.
+2. Proxyn (`lib/snajp/tenant.ts`) slår upp organisationens workspace i
+   `snajp_workspace_tenants`. Saknas raden skapas tenanten **lat** via
+   `POST /api/keys` med master-nyckeln, och nyckeln sparas.
+3. Varje efterföljande anrop proxas med den tenantens nyckel — backendens
+   tenant-separation gör resten.
+
+Nyckeln lagras i en tabell med RLS *utan policyer* och läses bara med
+service-role-nyckeln server-side. Den når aldrig webbläsaren.
+
+| Route | Åtkomst | Tenant |
+|---|---|---|
+| `/demo/snajp` + `/api/snajp-demo/*` | Publik | Demo-tenanten (låst, allowlistade vägar) |
+| `/snajp-support` + `/api/snajp-support/*` | Kräver inloggning | Den egna organisationens |
+| `/kundtjanst` + `/api/kundtjanst/*` | Kräver inloggning | Pilot-tenanten (`SNAJP_PILOT_API_KEY`) |
+
+Utloggade besökare på `/snajp-support` skickas till `/demo/snajp` i stället för
+till inloggningen, så marknadsföringslänkar fortsätter fungera.
+
+### Self-service
+
+En inloggad kund sköter hela uppsättningen själv — inga seed-script, ingen
+`.env`-redigering:
+
+- **Kunskapsbas:** `POST/PUT/DELETE /api/kb` (+ `POST /api/kb/template` för
+  branschmallen som platshållare).
+- **Ton och systemprompt:** `PUT /api/tenant`. Kundens text läggs **före**
+  kärnreglerna i prompten och kan därför inte upphäva grundningsregeln eller
+  eskaleringarna. En tenant utan egen text får default-prompten oförändrad.
+- **Egna API-nycklar:** `POST /api/keys/self`, `GET /api/keys`,
+  `DELETE /api/keys/{id}`. Nyckeln visas en gång; bara sha256-hashen sparas.
+- **Checklista:** `GET /api/onboarding/status` säger vad som återstår innan
+  arbetsytan är redo att svara kunder.
+
+### Förbrukning
+
+Varje svar bokförs i `ss_usage` per tenant: antal svar, tokens (in/ut/totalt),
+modell och källa (`chat`, `triage`, `email_draft`). Simulerade svar loggas med
+`simulated=true` och noll tokens, så ett testkört konto inte ser oanvänt ut.
+`GET /api/usage?days=30` ger summering + uppdelning per källa.
+
+Mätningen är avsiktligt **bara mätning** — inga tak, ingen fakturering ännu.
+Loggningen kan aldrig fälla ett kundsvar; misslyckas den loggas en varning.
 
 ## Email-pipeline (inkorg → triage → utkast/autosvar → granskning)
 
@@ -137,8 +183,16 @@ Två säkerhetsregler är inbyggda:
 | GET | `/api/tickets/{id}` | Ärende med meddelandehistorik |
 | GET | `/api/customers/{id}/history` | Kundens alla ärenden |
 | POST | `/api/keys` | Skapa tenant + API-nyckel (kräver master-nyckel) |
+| GET | `/api/keys` | Lista egna nycklar (prefix + metadata, aldrig hemligheten) |
+| POST | `/api/keys/self` | Utfärda ny nyckel till den egna tenanten |
+| DELETE | `/api/keys/{id}` | Återkalla en egen nyckel (slutar gälla direkt) |
+| GET/PUT | `/api/tenant` | Egna inställningar: namn, ton, systemprompt |
+| GET | `/api/usage?days=30` | Egen förbrukning: antal svar och tokens |
+| GET | `/api/onboarding/status` | Checklista: vad som återstår innan skarp drift |
 | GET | `/api/kb` | Lista tenantens egna kunskapsbasartiklar |
 | POST | `/api/kb` | Lägg till artiklar i tenantens kunskapsbas |
+| PUT | `/api/kb/{id}` | Redigera en egen artikel (embedding räknas om) |
+| DELETE | `/api/kb/{id}` | Radera en egen artikel |
 | POST | `/api/inbox/mock` | Seeda och processa svenska testmail |
 | POST | `/api/inbox/ingest` | API-first: externa system postar inkommande mail |
 | POST | `/api/inbox/sync` | Hämta nya mail från IMAP (Gmail/Outlook) nu |

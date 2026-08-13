@@ -109,6 +109,36 @@ class PostgresStorage:
             record = await conn.fetchrow("select * from ss_tenants where id = $1", tenant_id)
         return _row(record)
 
+    async def update_tenant(
+        self,
+        tenant_id: str,
+        *,
+        name: str | None = None,
+        company_name: str | None = None,
+        tone: str | None = None,
+        system_prompt_extra: str | None = None,
+    ) -> dict[str, Any] | None:
+        # coalesce => None lämnar kolumnen orörd, tom sträng nollställer den.
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                update ss_tenants set
+                  name = coalesce($2, name),
+                  company_name = coalesce($3, company_name),
+                  tone = coalesce($4, tone),
+                  system_prompt_extra = coalesce($5, system_prompt_extra),
+                  updated_at = now()
+                where id = $1
+                returning *
+                """,
+                tenant_id,
+                name,
+                company_name,
+                tone,
+                system_prompt_extra,
+            )
+        return _row(record)
+
     # -- Kunddata -----------------------------------------------------------
 
     async def find_or_create_customer(
@@ -397,6 +427,49 @@ class PostgresStorage:
             )
         return _row(record)
 
+    async def update_kb_article(
+        self,
+        tenant_id: str,
+        article_id: str,
+        *,
+        title: str | None = None,
+        content: str | None = None,
+        category: str | None = None,
+        embedding: list[float] | None = None,
+    ) -> dict[str, Any] | None:
+        # tenant_id i where-satsen gör att en artikel hos en annan tenant inte
+        # bara nekas — den existerar inte ur den här tenantens synvinkel.
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                update ss_knowledge_base set
+                  title = coalesce($3, title),
+                  content = coalesce($4, content),
+                  category = coalesce($5, category),
+                  embedding = coalesce($6::vector, embedding),
+                  -- Redigerad text är inte längre mallens platshållare.
+                  is_placeholder = case when $4::text is null then is_placeholder else false end
+                where id = $2 and tenant_id = $1
+                returning id, title, content, category
+                """,
+                tenant_id,
+                article_id,
+                title,
+                content,
+                category,
+                embedding,
+            )
+        return _row(record)
+
+    async def delete_kb_article(self, tenant_id: str, article_id: str) -> bool:
+        async with self._scoped(tenant_id) as conn:
+            result = await conn.execute(
+                "delete from ss_knowledge_base where id = $2 and tenant_id = $1",
+                tenant_id,
+                article_id,
+            )
+        return result.endswith(" 1")
+
     # -- Kanaler & metrics --------------------------------------------------
 
     async def get_channel_config(self, tenant_id: str, channel: str) -> dict[str, Any]:
@@ -434,6 +507,87 @@ class PostgresStorage:
                 metric_name,
                 value,
             )
+
+    # -- Förbrukning ----------------------------------------------------------
+
+    async def log_usage(
+        self,
+        tenant_id: str,
+        *,
+        kind: str = "chat",
+        model: str = "simulation",
+        simulated: bool = False,
+        prompt_tokens: int = 0,
+        completion_tokens: int = 0,
+        total_tokens: int = 0,
+        responses: int = 1,
+        ticket_id: str | None = None,
+        email_id: str | None = None,
+    ) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                """
+                insert into ss_usage (
+                  tenant_id, kind, model, simulated, prompt_tokens,
+                  completion_tokens, total_tokens, responses, ticket_id, email_id
+                ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                """,
+                tenant_id,
+                kind,
+                model,
+                simulated,
+                prompt_tokens,
+                completion_tokens,
+                total_tokens,
+                responses,
+                ticket_id,
+                email_id,
+            )
+
+    async def get_usage(self, tenant_id: str, *, days: int = 30) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            total = await conn.fetchrow(
+                """
+                select
+                  coalesce(sum(responses), 0) as responses,
+                  coalesce(sum(prompt_tokens), 0) as prompt_tokens,
+                  coalesce(sum(completion_tokens), 0) as completion_tokens,
+                  coalesce(sum(total_tokens), 0) as total_tokens,
+                  coalesce(sum(responses) filter (where simulated), 0) as simulated_responses
+                from ss_usage
+                where tenant_id = $1 and created_at >= now() - ($2 || ' days')::interval
+                """,
+                tenant_id,
+                str(days),
+            )
+            per_kind = await conn.fetch(
+                """
+                select kind,
+                       coalesce(sum(responses), 0) as responses,
+                       coalesce(sum(total_tokens), 0) as total_tokens
+                from ss_usage
+                where tenant_id = $1 and created_at >= now() - ($2 || ' days')::interval
+                group by kind order by kind
+                """,
+                tenant_id,
+                str(days),
+            )
+        return {
+            "days": days,
+            "responses": int(total["responses"]),
+            "prompt_tokens": int(total["prompt_tokens"]),
+            "completion_tokens": int(total["completion_tokens"]),
+            "total_tokens": int(total["total_tokens"]),
+            "simulated_responses": int(total["simulated_responses"]),
+            "per_kind": [
+                {
+                    "kind": r["kind"],
+                    "responses": int(r["responses"]),
+                    "total_tokens": int(r["total_tokens"]),
+                }
+                for r in per_kind
+            ],
+        }
 
     # -- Email-pipeline -------------------------------------------------------
 
@@ -776,7 +930,7 @@ class PostgresStorage:
                 """
                 select k.*, t.active as tenant_active from ss_api_keys k
                 join ss_tenants t on t.id = k.tenant_id
-                where k.key_hash = $1 and k.active
+                where k.key_hash = $1 and k.active and k.revoked_at is null
                 """,
                 key_hash,
             )
@@ -788,23 +942,48 @@ class PostgresStorage:
         return None
 
     async def create_api_key(
-        self, tenant_id: str, *, tenant_name: str, raw_key: str
+        self, tenant_id: str, *, tenant_name: str, raw_key: str, label: str | None = None
     ) -> dict[str, Any]:
         key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
                 """
-                insert into ss_api_keys (tenant_id, tenant_name, key_prefix, key_hash)
-                values ($1, $2, $3, $4)
-                on conflict (key_hash) do update set active = true
+                insert into ss_api_keys (tenant_id, tenant_name, key_prefix, key_hash, label)
+                values ($1, $2, $3, $4, $5)
+                on conflict (key_hash) do update set active = true, revoked_at = null
                 returning *
                 """,
                 tenant_id,
                 tenant_name,
                 raw_key[:12],
                 key_hash,
+                label,
             )
         return _row(record)
+
+    async def list_api_keys(self, tenant_id: str) -> list[dict[str, Any]]:
+        # key_hash utelämnas medvetet — den ska aldrig lämna lagringslagret.
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select id, label, key_prefix, active, revoked_at, created_at, last_used_at
+                from ss_api_keys where tenant_id = $1 order by created_at desc
+                """,
+                tenant_id,
+            )
+        return [_row(r) for r in records]
+
+    async def revoke_api_key(self, tenant_id: str, key_id: str) -> bool:
+        async with self._scoped(tenant_id) as conn:
+            result = await conn.execute(
+                """
+                update ss_api_keys set active = false, revoked_at = now()
+                where id = $2 and tenant_id = $1 and revoked_at is null
+                """,
+                tenant_id,
+                key_id,
+            )
+        return result.endswith(" 1")
 
     async def close(self) -> None:
         await self.pool.close()

@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { proxyToBackend } from "../../_lib";
+import { proxyAsTenant } from "../../_auth";
 
 export const runtime = "nodejs";
 // Render free-tier tar ~1 min att vakna. Utan detta dödar Vercel
@@ -11,5 +11,5 @@ export async function GET(
   { params }: { params: Promise<{ jobId: string }> }
 ) {
   const { jobId } = await params;
-  return proxyToBackend(`/api/jobs/${encodeURIComponent(jobId)}`, { method: "GET" });
+  return proxyAsTenant(`/api/jobs/${encodeURIComponent(jobId)}`, { method: "GET" });
 }
