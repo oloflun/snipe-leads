@@ -351,12 +351,32 @@ class PostgresStorage:
                     for r in records
                     if float(r["similarity"]) >= 0.25
                 ]
+            # websearch_to_tsquery ANDar alla ord. En riktig kundfråga innehåller
+            # alltid "vad", "hur", "kommer" och liknande, så villkoret att SAMMA
+            # artikel ska innehålla varje ord uppfylls i praktiken aldrig:
+            # "frakt" gav 1 träff, men "Vad kostar frakten och hur snabbt kommer
+            # varan?" gav 0. Fallbacken var alltså i praktiken död, och varje
+            # fråga eskalerades så fort embeddings saknades.
+            #
+            # plainto_tsquery ANDar också, medan `|` mellan orden ger OR: minst
+            # ett ord ska finnas, och ts_rank rangordnar efter hur många och hur
+            # ovanliga de är. Ord som saknas i det svenska ordförrådet faller
+            # bort av to_tsquery själv.
             records = await conn.fetch(
                 """
-                select id, title, content, category,
-                       ts_rank(search_tsv, websearch_to_tsquery('swedish', $2)) as rank
-                from ss_knowledge_base
-                where tenant_id = $1 and search_tsv @@ websearch_to_tsquery('swedish', $2)
+                with q as (
+                  select array_to_string(
+                    array(
+                      select lexeme from unnest(to_tsvector('swedish', $2))
+                    ), ' | '
+                  ) as expr
+                )
+                select k.id, k.title, k.content, k.category,
+                       ts_rank(k.search_tsv, to_tsquery('swedish', q.expr)) as rank
+                from ss_knowledge_base k, q
+                where k.tenant_id = $1
+                  and q.expr <> ''
+                  and k.search_tsv @@ to_tsquery('swedish', q.expr)
                 order by rank desc
                 limit $3
                 """,
