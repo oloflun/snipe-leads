@@ -83,6 +83,27 @@ Ran concurrently in the background (wall 42.0s vs. 125.6s serial):
 - memory mirror: OK, 3 files mirrored
 - sessions.db: OK, row written (57 total)
 
+## Push & Merge
+Before pushing, `origin/snajp-redesign` was found 2 commits ahead of local — `64420ac` and
+`6581e42` (author: Sebbe, 2026-07-30/31, "snajp-sidan matchar backendens kategorier" +
+"kallstartståligheten även på snajp-sidan": Render free-tier cold-start handling for the
+production snajp page — `maxDuration=60`, a 5×10s retry budget, a keep-alive GitHub Action).
+Not visible before the push attempt because the last fetch predates those commits.
+
+Merged (not rebased, not force-pushed) via `git merge origin/snajp-redesign`. One real
+conflict in `app/api/snajp-support/_lib.ts`: local history had added per-tenant API key
+resolution (`apiKeyForTenant(tenantSlug)`) to `proxyToBackend`, remote had added the
+retry/timeout loop to the same function — genuinely composable, not competing. Resolved by
+hand: the retry loop now calls `apiKeyForTenant(tenantSlug)` once outside the loop instead of
+the flat demo key. Four route files with `maxDuration=60` additions merged automatically with
+no conflict. Verified: no leftover conflict markers, `tsc --noEmit` clean, 366+27 tests still
+green after the merge, then pushed as `b45d623`.
+
+**`.claude/launch.json` was left uncommitted** — a small pre-existing modification (adds a
+`backend` launch config) visible in the working tree since before this session started. Not
+touched or bundled into either commit; still sitting locally for the user or next session to
+decide on.
+
 ## Current State After This Session
 All seven workstreams from the approved plan are implemented, tested, and verified against real
 rendered pixels for the UI portion. The repo is on branch `snajp-redesign` (not `development` or
