@@ -1,0 +1,41 @@
+name: Håll Snajp-Support vaken
+
+# Render free-tier somnar efter 15 minuters inaktivitet och tar ~1 minut att
+# vakna. En ping var tionde minut håller den varm.
+#
+# KVOTEN ÄR SKÄLET TILL SCHEMAT: gratisnivån ger 750 instanstimmar/månad delat
+# på ALLA gratistjänster i workspacet. Dygnet-runt-pingning kostar ~730 h och
+# skulle spränga kvoten — och då stänger Render av allt till nästa månad.
+# Därför bara vardagar 06–17 UTC (07–18 svensk tid, 08–19 sommartid), vilket
+# landar på ~250 h/månad. Utanför den tiden får första besökaren vänta en
+# minut, vilket är acceptabelt.
+#
+# Behöver ni dygnet-runt-drift: uppgradera Render till Starter (~7 USD/mån).
+# Det tar också bort SMTP-blockeringen, så utskick fungerar utan Resend.
+
+on:
+  schedule:
+    - cron: "*/10 6-17 * * 1-5"
+  workflow_dispatch: # går att köra manuellt från Actions-fliken
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Väck backenden
+        run: |
+          URL="https://snajp-support.onrender.com/health/live"
+          # Kallstart kan ta en minut — vänta ut den i stället för att ge upp direkt.
+          for i in 1 2 3 4 5 6; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$URL" || echo "000")
+            if [ "$code" = "200" ]; then
+              echo "Vaken (försök $i, HTTP $code)"
+              exit 0
+            fi
+            echo "Försök $i gav HTTP $code — väntar 15 s"
+            sleep 15
+          done
+          echo "::warning::Backenden svarade inte inom ~2 minuter."
+          # Failar inte jobbet: en enstaka missad ping är inte värt ett rött kryss
+          # i Actions, och nästa körning är om tio minuter.
+          exit 0

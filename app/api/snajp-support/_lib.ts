@@ -45,26 +45,55 @@ export function apiKeyForTenant(tenantSlug?: string | null): string {
 export function offlineResponse(cause?: unknown) {
   const reason = cause instanceof Error ? cause.message : undefined;
   const error = URL_IS_CONFIGURED
-    ? `Snajp-Support-backenden på ${SNAJP_SUPPORT_URL} svarar inte${reason ? ` (${reason})` : ""}. Kontrollera att Render-tjänsten är deployad och vaken.`
+    ? `Snajp-Support-backenden på ${SNAJP_SUPPORT_URL} svarar inte${reason ? ` (${reason})` : ""}. Gratisplanen på Render somnar efter 15 minuters inaktivitet och tar ungefär en minut att vakna — vänta och försök igen.`
     : "SNAJP_SUPPORT_URL är inte satt i denna miljö — proxyn föll tillbaka på localhost, som inte finns i deploy. Sätt env-varen till Render-URL:en och deploya om.";
 
-  return NextResponse.json({ offline: true, configured: URL_IS_CONFIGURED, target: SNAJP_SUPPORT_URL, error }, { status: 503 });
+  return NextResponse.json(
+    { offline: true, configured: URL_IS_CONFIGURED, target: SNAJP_SUPPORT_URL, error },
+    { status: 503 }
+  );
 }
 
+// Render free-tier somnar efter 15 min och tar ~1 min att vakna. Ett enskilt
+// försök kan alltså inte lyckas — men hela budgeten nedan (5 × 10 s) täcker
+// uppvakningen, förutsatt att route-filerna sätter `maxDuration = 60` så att
+// Vercel inte dödar funktionen på vägen.
+const ATTEMPT_TIMEOUT_MS = 10_000;
+const MAX_ATTEMPTS = 5;
+
 export async function proxyToBackend(path: string, init: RequestInit, tenantSlug?: string | null) {
-  try {
-    const response = await fetch(`${SNAJP_SUPPORT_URL}${path}`, {
-      ...init,
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-Key": apiKeyForTenant(tenantSlug),
-        ...(init.headers ?? {})
-      },
-      cache: "no-store"
-    });
-    const body = await response.json();
-    return NextResponse.json(body, { status: response.status });
-  } catch (cause) {
-    return offlineResponse(cause);
+  let lastCause: unknown;
+  // Nyckeln slås upp EN gång utanför loopen — den beror bara på tenantSlug,
+  // inte på försöksnumret, och att slå upp den igen per retry vore bara brus.
+  const apiKey = apiKeyForTenant(tenantSlug);
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), ATTEMPT_TIMEOUT_MS);
+    try {
+      const response = await fetch(`${SNAJP_SUPPORT_URL}${path}`, {
+        ...init,
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-Key": apiKey,
+          ...(init.headers ?? {})
+        },
+        cache: "no-store",
+        signal: controller.signal
+      });
+      const body = await response.json();
+      return NextResponse.json(body, { status: response.status });
+    } catch (cause) {
+      lastCause = cause;
+      // Bara timeout/nätverksfel är värt att göra om — ett riktigt HTTP-svar
+      // har redan returnerats ovan.
+      if (attempt < MAX_ATTEMPTS - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    } finally {
+      clearTimeout(timer);
+    }
   }
+
+  return offlineResponse(lastCause);
 }

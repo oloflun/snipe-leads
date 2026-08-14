@@ -59,13 +59,17 @@ type EmailDetail = EmailRow & {
 
 type Rule = { category: string; label: string; mode: "auto" | "draft" | "escalate" };
 
+// Måste spegla CATEGORIES i snajp-support/app/config.py. Backenden (som
+// deployas från development) klassar numera i garanti och utbildning; utan
+// dem här visades facken utan etikett i den här vyn.
 const CATEGORY_LABELS: Record<string, string> = {
   teknisk_support: "Teknisk support",
-  leverans: "Leverans",
-  betalning: "Betalning",
-  retur_reklamation: "Retur & reklamation",
+  garanti: "Garanti",
+  leverans: "Leverans & frakt",
+  utbildning: "Utbildning & användarstöd",
+  retur_reklamation: "Reklamation & retur",
+  betalning: "Betalning & faktura",
   orderstatus: "Orderstatus",
-  konto: "Konto",
   ovrigt: "Övrigt"
 };
 
