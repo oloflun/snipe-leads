@@ -38,6 +38,27 @@ _NO_MATCH_REPLY = (
     "kollega som återkommer till dig så snart som möjligt."
 )
 
+# Fack som får svara på varandras frågor. Enbart 'ovrigt' är avsiktligt tomt:
+# en allmän fråga besvaras av en allmän artikel, men en allmän artikel duger
+# ALDRIG som svar på ett tekniskt fel, en garantifråga eller en reklamation.
+_COMPATIBLE_CATEGORIES: dict[str, set[str]] = {
+    "garanti": {"garanti", "retur_reklamation"},
+    "retur_reklamation": {"retur_reklamation", "garanti"},
+}
+
+
+def article_in_category(articles: list[dict], category: str) -> dict | None:
+    """Bäst rankade artikeln som faktiskt hör till ärendets fack.
+
+    Returnerar None när ingen träff gör det — då finns inget underlag att svara
+    utifrån, oavsett hur högt sökningen råkade ranka något annat.
+    """
+    allowed = _COMPATIBLE_CATEGORIES.get(category, {category})
+    for article in articles:
+        if article.get("category") in allowed:
+            return article
+    return None
+
 
 def _first_name(name: str | None) -> str:
     if not name:
@@ -93,14 +114,37 @@ async def run_sim_agent(
     escalated = triage["escalate"]
     escalation_reason = triage["escalation_reason"]
 
+    # Sökningen är nyckelordsbaserad i simuleringsläge och matchar på ord som
+    # förekommer i nästan varje artikel ("hjärtstartare"). Den bäst rankade
+    # träffen kan därför handla om något helt annat än frågan: ett larm om att
+    # utrustningen inte fungerar besvarades tidigare med bolagets kursutbud,
+    # eftersom den artikeln råkade dela flest ord med meddelandet.
+    #
+    # Kravet är därför inte "fanns någon träff" utan "fanns underlag i det fack
+    # ärendet tillhör". Saknas det lämnar vi över till en människa — samma
+    # princip som grundningsregeln i övrigt: en lucka är alltid rätt, en gissning
+    # alltid fel.
+    grounded = article_in_category(articles, triage["category"])
+
     if escalated:
         reply_body = _ESCALATION_REPLY
     elif not articles:
         escalated = True
         escalation_reason = "Ingen träff i kunskapsbasen — svar lämnas till människa."
         reply_body = _NO_MATCH_REPLY
+    elif grounded is None:
+        escalated = True
+        escalation_reason = (
+            f"Kunskapsbasen saknar underlag om "
+            f"{CATEGORY_LABELS[triage['category']].lower()} — träffarna handlar om "
+            "något annat. Svar lämnas till människa."
+        )
+        reply_body = _NO_MATCH_REPLY
+        # Träffar i fel fack är inte källor till något svar och ska inte
+        # presenteras som om de vore det.
+        articles = []
     else:
-        top = articles[0]
+        top = grounded
         reply_body = (
             f"Tack för att du hör av dig om {CATEGORY_LABELS[triage['category']].lower()}. "
             f"{vision_note}Så här fungerar det hos oss:\n\n{top['content']}\n\n"
@@ -147,8 +191,12 @@ async def run_sim_agent(
         "sentiment": triage["sentiment"],
         "escalated": escalated,
         "escalation_reason": escalation_reason,
+        # Artikeln svaret faktiskt bygger på ligger först. UI:t visar "Källa: X"
+        # och skulle annars kunna peka ut en artikel som inte användes, bara för
+        # att sökningen råkade ranka den högst.
         "kb_sources": [
-            {"title": a["title"], "similarity": a["similarity"]} for a in articles
+            {"title": a["title"], "similarity": a["similarity"]}
+            for a in sorted(articles, key=lambda a: a is not grounded)
         ],
         "returning_customer": len(history) > 0,
         "simulation": True,

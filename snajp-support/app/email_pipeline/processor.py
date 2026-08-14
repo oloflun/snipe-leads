@@ -15,6 +15,7 @@ import logging
 from typing import Any
 
 from ..config import CATEGORY_LABELS, get_settings
+from ..simulation.sim_agent import article_in_category
 from ..simulation.sim_triage import classify
 from ..storage.base import Storage
 
@@ -77,16 +78,23 @@ async def _triage_email(
         vision_note = ""
         if image_urls:
             vision_note = _VISION_NOTES.get(triage["category"], _VISION_NOTES["default"])
-        if articles and not triage["escalate"]:
+        # Samma krav som i chatten: underlaget måste höra till ärendets fack.
+        # Nyckelordssökningen rankar gärna en allmän artikel högst bara för att
+        # den delar många ord, och då blir utkastet ett svar på en annan fråga
+        # än den kunden ställde.
+        grounded = article_in_category(articles, triage["category"])
+        if grounded is not None and not triage["escalate"]:
             triage["draft_body"] = (
                 f"Tack för att du hör av dig om {CATEGORY_LABELS[triage['category']].lower()}. "
-                f"{vision_note}Så här fungerar det hos oss:\n\n{articles[0]['content']}\n\n"
+                f"{vision_note}Så här fungerar det hos oss:\n\n{grounded['content']}\n\n"
                 "Hör gärna av dig om något är oklart!"
             )
         else:
             triage["draft_body"] = None
         triage["model"] = "simulation"
-        return triage, articles
+        # Träffar i fel fack är inget underlag. Att returnera dem hade fått
+        # grundningsgrinden nedan att tro att ärendet var täckt.
+        return triage, ([] if grounded is None else articles)
 
     # Riktigt läge: embeddings + Gemini-vision (bilderna skickas med, se agent/vision.py).
     from ..agent.embeddings import embed_text
