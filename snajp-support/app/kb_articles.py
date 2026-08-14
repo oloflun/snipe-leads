@@ -179,7 +179,14 @@ KB_ARTICLES: list[dict] = [
     },
     {
         "title": "Uppdatera kontouppgifter och adress",
-        "category": "konto",
+        # Facket "konto" togs bort ur CATEGORIES när taxonomin lades om, men
+        # artiklarna följde inte med. Databasens check-villkor avvisar därför
+        # raden, och eftersom seedningen avbryts på första felet fick demo-
+        # tenanten INGEN kunskapsbas alls i Postgres-läge.
+        # Migrationen som tog bort facket flyttade befintliga rader till
+        # teknisk_support (där inloggnings- och kontofrågor hamnar) — samma
+        # mappning används här.
+        "category": "teknisk_support",
         "content": (
             "Under Mina sidor → Inställningar ändrar du namn, e-postadress, telefonnummer "
             "och sparade adresser. Byter du e-postadress skickas en bekräftelselänk till den "
@@ -189,7 +196,10 @@ KB_ARTICLES: list[dict] = [
     },
     {
         "title": "Radera konto och personuppgifter (GDPR)",
-        "category": "konto",
+        # GDPR-ärenden tvingas ändå alltid till människa av eskaleringsreglerna,
+        # så facket styr bara var artikeln går att hitta. "ovrigt" är rätt plats
+        # för en allmän policytext.
+        "category": "ovrigt",
         "content": (
             "Du kan begära ett registerutdrag eller radering av dina personuppgifter enligt "
             "GDPR. Begäran om radering hanteras alltid manuellt av vår personuppgifts-"
