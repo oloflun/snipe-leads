@@ -1,14 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getWorkspaceContext } from "@/lib/workspace";
+import { isPilotWorkspace } from "@/lib/snajp/pilot";
 import { offlineResponse, SNAJP_SUPPORT_URL } from "@/app/api/snajp-support/_lib";
 
 // Proxy för PILOT-arbetsytan: riktig kundinkorg, riktiga utskick.
 //
-// Två skillnader mot den publika /api/snajp-support-proxyn:
-//  1. Varje anrop kräver en inloggad Supabase-session — annars 401. Utan detta
-//     hade vem som helst kunnat läsa kundmail via den publika sidan.
-//  2. Pilotens egen API-nyckel används, så backendens tenant-separation ger
+// Tre skillnader mot /api/snajp-support-proxyn:
+//  1. Kräver en inloggad Supabase-session.
+//  2. Kräver att användarens ORGANISATION står på pilot-allowlisten. Tidigare
+//     räckte det att vara inloggad över huvud taget — och eftersom vem som helst
+//     kan registrera sig innebar det att varje ny kund kunde läsa pilotbolagets
+//     riktiga kundmail, och till och med skicka svar från deras inkorg.
+//  3. Pilotens egen API-nyckel används, så backendens tenant-separation ger
 //     åtkomst till pilotens data i stället för demons.
+//
+// Allowlisten är medvetet fail-closed: är SNAJP_PILOT_WORKSPACE_IDS inte satt
+// släpps INGEN in. Att öppna för alla när konfigurationen saknas är precis den
+// bugg som fanns här.
 
 export const runtime = "nodejs";
 // Render free-tier tar ~1 min att vakna. Utan detta dödar Vercel
@@ -17,24 +25,29 @@ export const maxDuration = 60;
 
 const PILOT_API_KEY = process.env.SNAJP_PILOT_API_KEY ?? "";
 
+
 function backendPath(path: string[], search: string): string {
   return `/api/${path.map(encodeURIComponent).join("/")}${search}`;
 }
 
-async function requireSession() {
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  return user;
-}
-
 async function proxy(request: NextRequest, path: string[], method: string, body?: string) {
-  const user = await requireSession();
-  if (!user) {
+  const context = await getWorkspaceContext();
+  if (!context) {
     return NextResponse.json(
       { error: "Du måste vara inloggad för att se kundtjänstärenden." },
       { status: 401 }
+    );
+  }
+  if (!isPilotWorkspace(context.workspace.id)) {
+    // 403 och inte 404: användaren ÄR inloggad och vet redan att vyn finns —
+    // det som saknas är behörighet, och det ska sägas rakt ut.
+    return NextResponse.json(
+      {
+        error:
+          "Din organisation har inte åtkomst till pilot-arbetsytan. Den " +
+          "innehåller ett annat bolags riktiga kundärenden."
+      },
+      { status: 403 }
     );
   }
   if (!PILOT_API_KEY) {
