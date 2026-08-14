@@ -12,11 +12,21 @@ export type OnboardingInput = {
   offer: string;
   cta: string;
   contactRoles: string;
+  // Supportsidan — valfria. Lämnas de tomma fungerar onboarding precis som
+  // förut, men kundservice-agenten saknar då underlag och eskalerar allt.
+  companyName?: string;
+  guarantee?: string;
+  terms?: string;
+  delivery?: string;
+  returnsPolicy?: string;
+  supportEmail?: string;
 };
 
 export type OnboardingActionResult = {
   success: boolean;
   error?: string;
+  /** Hur det gick att lära upp supportagenten. Blockerar aldrig onboarding. */
+  supportAgent?: { synced: boolean; articles: number; error?: string };
 };
 
 function splitList(value: string): string[] {
@@ -53,6 +63,12 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
     offer: input.offer.trim(),
     cta: input.cta.trim(),
     contact_roles: splitList(input.contactRoles),
+    company_name: input.companyName?.trim() || null,
+    guarantee: input.guarantee?.trim() || null,
+    terms: input.terms?.trim() || null,
+    delivery: input.delivery?.trim() || null,
+    returns_policy: input.returnsPolicy?.trim() || null,
+    support_email: input.supportEmail?.trim() || null,
     updated_at: new Date().toISOString()
   };
 
@@ -72,6 +88,29 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
 
   if (error) {
     return { success: false, error: error.message };
+  }
+
+  // Lär upp kundservice-agenten på bolagets egna villkor. Bäst-möjligt: går
+  // backenden inte att nå ska onboarding ändå slutföras — profilen ligger kvar
+  // i databasen och kan synkas om från inställningarna.
+  const { syncCompanyProfileToSnajp } = await import("@/lib/snajp/profile");
+  const sync = await syncCompanyProfileToSnajp({
+    companyName: input.companyName,
+    product: input.product,
+    targetAudience: input.targetAudience,
+    tone: input.tone,
+    guarantee: input.guarantee,
+    terms: input.terms,
+    delivery: input.delivery,
+    returnsPolicy: input.returnsPolicy,
+    supportEmail: input.supportEmail
+  });
+
+  if (sync.synced) {
+    await supabase
+      .from("business_contexts")
+      .update({ support_synced_at: new Date().toISOString() })
+      .eq("workspace_id", profile.workspace_id);
   }
 
   redirect("/dashboard");

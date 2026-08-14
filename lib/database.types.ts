@@ -63,6 +63,13 @@ export type Database = {
           offer: string;
           cta: string;
           contact_roles: string[];
+          company_name: string | null;
+          guarantee: string | null;
+          terms: string | null;
+          delivery: string | null;
+          returns_policy: string | null;
+          support_email: string | null;
+          support_synced_at: string | null;
           updated_at: string;
         };
         Insert: {
@@ -76,6 +83,13 @@ export type Database = {
           offer: string;
           cta: string;
           contact_roles?: string[];
+          company_name?: string | null;
+          guarantee?: string | null;
+          terms?: string | null;
+          delivery?: string | null;
+          returns_policy?: string | null;
+          support_email?: string | null;
+          support_synced_at?: string | null;
           updated_at?: string;
         };
         Update: {
@@ -89,6 +103,13 @@ export type Database = {
           offer?: string;
           cta?: string;
           contact_roles?: string[];
+          company_name?: string | null;
+          guarantee?: string | null;
+          terms?: string | null;
+          delivery?: string | null;
+          returns_policy?: string | null;
+          support_email?: string | null;
+          support_synced_at?: string | null;
           updated_at?: string;
         };
         Relationships: [];
