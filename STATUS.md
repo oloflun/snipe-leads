@@ -47,8 +47,36 @@ oåtgärdade.
 
 **Öppet:** bekräfta DB-spegel-scope · skarp körning mot riktiga DeepSeek-nycklar
 (`scripts/run_live_tests.py --leads`, mät `grounding.fired`-frekvens, injicera medvetet ett
-påhittat påstående och verifiera att grinden fäller) · `docker-smoke` overifierat ·
-tre grid-collapse-ställen kvar · `--mineral`/`--danger` under AA (4.4:1) repo-brett.
+påhittat påstående och verifiera att grinden fäller) · tre grid-collapse-ställen kvar ·
+`--mineral`/`--danger` under AA (4.4:1) repo-brett.
+
+### 2026-08-14 (forts.) — `main` fast-forwardad till produktion, på användarens explicita instruktion
+
+**`main` låg fryst på `a10d919` sedan 2026-05-24** (avsiktligt beslut 2026-07-28: `snipra.vercel.app`
+skulle INTE röras medan redesignen pågick på `snajp-redesign`). Användaren instruerade explicit,
+två gånger i den här sessionen, att pusha allt till `main`. Verifierat innan push: `main` hade **0
+commits `snajp-redesign` saknade** — en ren fast-forward, inga konflikter att lösa på den fronten.
+
+`git push origin snajp-redesign:main` — `a10d919..858b533`, 45 commits på en gång. Blockerades
+först av auto-mode-klassificeraren (produktionspush är en egen skyddsgrind); användaren godkände
+explicit, pushen kördes om och lyckades.
+
+**Detta utlöste en RIKTIG produktionsdeploy** (`.github/workflows/deploy-production.yml` triggar
+på push till `main`, `vercel.json` har `git.deploymentEnabled: true`). Verifierat via `gh run list`
+och pollning till slutfört: **`Deploy — Production` lyckades**, och **`snipra.vercel.app` är nu
+aliaserat till den nya deployen** (`https://snipra-76rq0l4x3-olofluns-projects.vercel.app`) —
+2026-07-28-frysningen är alltså medvetet upphävd. `Verify`-workflowet kördes samtidigt och blev
+grönt, inklusive **`docker-smoke`-jobbet på riktigt** (INV-DEPLOY-001 var tidigare bara verifierad
+genom en handbyggd containersimulering lokalt — nu bekräftad i skarp CI).
+
+**Render (backend) påverkas INTE av den här pushen** — `render.yaml` har ingen branch-inställning,
+Render styrs av sin egen dashboard-konfiguration (historiskt `development`, inte `main`). Skills
+och grundningsgrinden finns alltså på produktionsFRONTENDEN nu, men backend-agenten som faktiskt
+kör dem är oförändrad tills en separat Render-deploy görs.
+
+**En utförlig handoff till Sebbe skriven:** [HANDOFF-2026-08-14-SEBBE.md](HANDOFF-2026-08-14-SEBBE.md)
+— täcker sammanslagningskonflikten i `_lib.ts` (hans kallstart-retry-logik + den nyare per-tenant-
+nyckelhämtningen, komponerade för hand, inte en av-sidorna-vinner-lösning), samt alla öppna punkter.
 
 ## 2026-08-10 — Claude — Leads migrerad till per-steg, thinking BESLUTAT AV, skill-grind mekaniserad
 

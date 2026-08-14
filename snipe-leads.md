@@ -212,6 +212,18 @@ python scripts/run_live_tests.py --support --modes disabled,enabled
 python scripts/run_live_tests.py --leads   --modes disabled,enabled
 ```
 
+## Live
+
+- **https://snipra.vercel.app** — production frontend. Aliased 2026-08-14 to the `main` deploy
+  at commit `858b533`, after `main` sat frozen at `a10d919` (2026-05-24) for over two months by
+  deliberate 2026-07-28 decision. That freeze is now explicitly lifted — `main` was fast-forwarded
+  from `snajp-redesign` (45 commits, zero conflicts on the `main` side) on explicit user
+  instruction, twice given. See `HANDOFF-2026-08-14-SEBBE.md` for the full merge/deploy account.
+- **Render backend is NOT affected by that push.** `render.yaml` carries no branch pin; Render
+  redeploys from whatever branch its own dashboard points at (historically `development`). The
+  grounding gate, skill lock, and SOUL layer now ship in the frontend bundle, but the Python
+  agent backend that actually executes them is on a separate, unchanged deploy cadence.
+
 ## Current status (2026-08-14)
 
 Support and leads both run per-step with verifiable skill loading, per-call
