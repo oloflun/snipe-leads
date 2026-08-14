@@ -35,6 +35,15 @@ async def _process(
     settings = get_settings()
     storage = app_state.storage
     try:
+        # Kvoten kollas INNAN modellen anropas — annars betalar vi för ett svar
+        # kunden inte har rätt till, och kunden får ett svar som inte ingår.
+        from ..billing.quota import check_quota, quota_exceeded_result
+
+        quota = await check_quota(storage, tenant_id)
+        if quota["exceeded"]:
+            await app_state.jobs.complete(job_id, quota_exceeded_result(quota))
+            return
+
         if settings.is_simulation():
             from ..simulation.sim_agent import run_sim_agent
 
@@ -61,6 +70,9 @@ async def _process(
                 customer_name=request.customer_name,
                 attachments=attachments,
             )
+        # Varningen följer med svaret så UI:t kan visa den utan ett extra anrop.
+        if quota.get("warn"):
+            result["quota_warning"] = quota
         await app_state.jobs.complete(job_id, result)
     except Exception as error:  # noqa: BLE001 — jobbet får aldrig fastna i processing
         await app_state.jobs.fail(job_id, f"Agentkörningen misslyckades: {error}")

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { PageShell } from "@/components/AppShell";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { OnboardingForm } from "@/components/auth/OnboardingForm";
+import { BillingPanel } from "@/components/billing/BillingPanel";
 import {
   analyticsSeries,
   businessContext,
@@ -523,7 +524,10 @@ function TeamSettings() {
 }
 
 function BillingSettings() {
-  return <TextList title="Billing" items={["Plan · Team · 14 900 kr/mån", "Leads · 312 av 1000 denna månad", "Seats · 4 av 8 aktiva användare"]} />;
+  // Ersatte en hårdkodad mock ("Plan · Team · 14 900 kr/mån"). Panelen visar
+  // organisationens verkliga nivå och förbrukning, hämtad från samma ss_usage
+  // som kvotkontrollen blockerar på — så det som står här är det som gäller.
+  return <BillingPanel />;
 }
 
 export function LoginView() {

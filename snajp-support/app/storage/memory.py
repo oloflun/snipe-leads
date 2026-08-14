@@ -114,6 +114,7 @@ class MemoryStorage:
         self.messages: dict[str, list[dict[str, Any]]] = {}
         self.metrics: list[dict[str, Any]] = []
         self.usage: list[dict[str, Any]] = []
+        self.subscriptions: dict[str, dict[str, Any]] = {}
         self.api_keys: dict[str, dict[str, Any]] = {}
         self.kb: dict[str, list[dict[str, Any]]] = {}
         self.channel_overrides: dict[tuple[str, str], dict[str, Any]] = {}
@@ -134,6 +135,24 @@ class MemoryStorage:
             DEFAULT_TENANT_ID, DEFAULT_TENANT_SLUG, DEFAULT_TENANT_NAME
         )
         self.kb[DEFAULT_TENANT_ID] = [_kb_row(DEFAULT_TENANT_ID, a) for a in KB_ARTICLES]
+
+        # Demo och pilot är egna arbetsytor och ska aldrig kvotstoppas — samma
+        # seed som i 010_snajp_subscriptions.sql.
+        from ..config import PILOT_TENANT_ID
+
+        for internal_id in (DEFAULT_TENANT_ID, PILOT_TENANT_ID):
+            self.subscriptions[internal_id] = {
+                "tenant_id": internal_id,
+                "plan_id": "intern",
+                "status": "active",
+                "stripe_customer_id": None,
+                "stripe_subscription_id": None,
+                "current_period_start": None,
+                "current_period_end": None,
+                "cancel_at_period_end": False,
+                "created_at": _now(),
+                "updated_at": _now(),
+            }
 
     # -- Tenants ------------------------------------------------------------
 
@@ -493,6 +512,66 @@ class MemoryStorage:
                 {"kind": kind, **totals} for kind, totals in sorted(per_kind.items())
             ],
         }
+
+    async def count_responses_since(self, tenant_id: str, since: str) -> int:
+        cutoff = datetime.fromisoformat(since)
+        return sum(
+            row["responses"]
+            for row in self.usage
+            if row["tenant_id"] == tenant_id
+            and datetime.fromisoformat(row["created_at"]) >= cutoff
+        )
+
+    # -- Abonnemang -----------------------------------------------------------
+
+    async def get_subscription(self, tenant_id: str) -> dict[str, Any] | None:
+        return self.subscriptions.get(tenant_id)
+
+    async def upsert_subscription(
+        self,
+        tenant_id: str,
+        *,
+        plan_id: str | None = None,
+        status: str | None = None,
+        stripe_customer_id: str | None = None,
+        stripe_subscription_id: str | None = None,
+        current_period_start: str | None = None,
+        current_period_end: str | None = None,
+        cancel_at_period_end: bool | None = None,
+    ) -> dict[str, Any]:
+        record = self.subscriptions.setdefault(
+            tenant_id,
+            {
+                "tenant_id": tenant_id,
+                "plan_id": "free",
+                "status": "none",
+                "stripe_customer_id": None,
+                "stripe_subscription_id": None,
+                "current_period_start": None,
+                "current_period_end": None,
+                "cancel_at_period_end": False,
+                "created_at": _now(),
+            },
+        )
+        for field, value in (
+            ("plan_id", plan_id),
+            ("status", status),
+            ("stripe_customer_id", stripe_customer_id),
+            ("stripe_subscription_id", stripe_subscription_id),
+            ("current_period_start", current_period_start),
+            ("current_period_end", current_period_end),
+            ("cancel_at_period_end", cancel_at_period_end),
+        ):
+            if value is not None:
+                record[field] = value
+        record["updated_at"] = _now()
+        return record
+
+    async def find_tenant_by_stripe_customer(self, customer_id: str) -> str | None:
+        for tenant_id, record in self.subscriptions.items():
+            if record.get("stripe_customer_id") == customer_id:
+                return tenant_id
+        return None
 
     # -- Email-pipeline -------------------------------------------------------
 

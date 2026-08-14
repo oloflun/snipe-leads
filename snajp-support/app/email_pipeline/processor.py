@@ -146,6 +146,27 @@ async def process_email(
     try:
         await storage.update_email(tenant_id, email_id, status="processing")
 
+        # Kvoten kollas innan modellen anropas. Mailet tas emot och syns i
+        # inkorgen — det får aldrig försvinna för att abonnemanget tagit slut —
+        # men inget svar genereras, och ärendet går till en människa.
+        from ..billing.quota import check_quota
+
+        quota = await check_quota(storage, tenant_id)
+        if quota["exceeded"]:
+            await storage.update_email(tenant_id, email_id, status="escalated")
+            await storage.log_decision(
+                tenant_id,
+                email_id=email_id,
+                event="quota_exceeded",
+                detail={
+                    "reason": "Abonnemangets svarskvot är förbrukad för perioden.",
+                    "used": quota["used"],
+                    "cap": quota["cap"],
+                    "plan": quota["plan_id"],
+                },
+            )
+            return {"status": "escalated", "quota_exceeded": True}
+
         detail = await storage.get_email(tenant_id, email_id)
         image_urls = [
             a["data_url"] for a in detail.get("attachments", [])

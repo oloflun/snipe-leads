@@ -150,6 +150,31 @@ class Storage(Protocol):
         """Summering för perioden + uppdelning per kind."""
         ...
 
+    async def count_responses_since(self, tenant_id: str, since: str) -> int:
+        """Antal AI-svar sedan `since` (ISO-8601). Underlag för kvotkontrollen."""
+        ...
+
+    # -- Abonnemang (speglar Stripe) ----------------------------------------
+
+    async def get_subscription(self, tenant_id: str) -> dict[str, Any] | None: ...
+
+    async def upsert_subscription(
+        self,
+        tenant_id: str,
+        *,
+        plan_id: str | None = None,
+        status: str | None = None,
+        stripe_customer_id: str | None = None,
+        stripe_subscription_id: str | None = None,
+        current_period_start: str | None = None,
+        current_period_end: str | None = None,
+        cancel_at_period_end: bool | None = None,
+    ) -> dict[str, Any]: ...
+
+    async def find_tenant_by_stripe_customer(self, customer_id: str) -> str | None:
+        """Slår upp tenant INNAN tenant är känd — används av webhooken."""
+        ...
+
     # -- Email-pipeline ------------------------------------------------------
 
     async def save_email(

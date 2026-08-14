@@ -99,7 +99,8 @@ const files = [
   "007_snajp_workspace_link.sql",
   // 008 (snajp_app-rollen) körs INTE här: den kräver att ett lösenord sätts
   // manuellt i filen först, och ska köras medvetet — inte som en sidoeffekt.
-  "009_company_profile.sql"
+  "009_company_profile.sql",
+  "010_snajp_subscriptions.sql"
 ].map((name) => join(root, "supabase", "migrations", name));
 
 async function connectClient() {

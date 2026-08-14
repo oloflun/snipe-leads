@@ -589,6 +589,83 @@ class PostgresStorage:
             ],
         }
 
+    async def count_responses_since(self, tenant_id: str, since: str) -> int:
+        async with self._scoped(tenant_id) as conn:
+            total = await conn.fetchval(
+                """
+                select coalesce(sum(responses), 0) from ss_usage
+                where tenant_id = $1 and created_at >= $2::timestamptz
+                """,
+                tenant_id,
+                since,
+            )
+        return int(total or 0)
+
+    # -- Abonnemang -----------------------------------------------------------
+
+    async def get_subscription(self, tenant_id: str) -> dict[str, Any] | None:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                "select * from ss_subscriptions where tenant_id = $1", tenant_id
+            )
+        return _row(record)
+
+    async def upsert_subscription(
+        self,
+        tenant_id: str,
+        *,
+        plan_id: str | None = None,
+        status: str | None = None,
+        stripe_customer_id: str | None = None,
+        stripe_subscription_id: str | None = None,
+        current_period_start: str | None = None,
+        current_period_end: str | None = None,
+        cancel_at_period_end: bool | None = None,
+    ) -> dict[str, Any]:
+        # coalesce på UPDATE-grenen: None lämnar kolumnen orörd, så en webhook
+        # som bara bär statusändring inte nollar perioden.
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                insert into ss_subscriptions (
+                  tenant_id, plan_id, status, stripe_customer_id, stripe_subscription_id,
+                  current_period_start, current_period_end, cancel_at_period_end
+                ) values (
+                  $1, coalesce($2, 'free'), coalesce($3, 'none'), $4, $5,
+                  $6::timestamptz, $7::timestamptz, coalesce($8, false)
+                )
+                on conflict (tenant_id) do update set
+                  plan_id = coalesce($2, ss_subscriptions.plan_id),
+                  status = coalesce($3, ss_subscriptions.status),
+                  stripe_customer_id = coalesce($4, ss_subscriptions.stripe_customer_id),
+                  stripe_subscription_id = coalesce($5, ss_subscriptions.stripe_subscription_id),
+                  current_period_start = coalesce($6::timestamptz, ss_subscriptions.current_period_start),
+                  current_period_end = coalesce($7::timestamptz, ss_subscriptions.current_period_end),
+                  cancel_at_period_end = coalesce($8, ss_subscriptions.cancel_at_period_end),
+                  updated_at = now()
+                returning *
+                """,
+                tenant_id,
+                plan_id,
+                status,
+                stripe_customer_id,
+                stripe_subscription_id,
+                current_period_start,
+                current_period_end,
+                cancel_at_period_end,
+            )
+        return _row(record)
+
+    async def find_tenant_by_stripe_customer(self, customer_id: str) -> str | None:
+        # Körs INNAN tenant är känd (webhook) — utan tenant-kontext, som
+        # nyckelvalideringen. Se subscription_lookup-policyn i 010.
+        async with self.pool.acquire() as conn:
+            found = await conn.fetchval(
+                "select tenant_id from ss_subscriptions where stripe_customer_id = $1",
+                customer_id,
+            )
+        return str(found) if found else None
+
     # -- Email-pipeline -------------------------------------------------------
 
     async def save_email(

@@ -24,7 +24,9 @@ MASTER_KEY = settings.snajp_master_api_key
 PUBLIC_PATHS = {"/health", "/health/live", "/health/ready"}
 
 # Endpoints som ÄR administrativa och därför ska fungera med master-nyckeln.
-MASTER_ENDPOINTS = {("POST", "/api/keys")}
+# Abonnemangssynken hör hit: den skrivs av Stripe-webhooken, aldrig av kunden —
+# annars hade en tenant kunnat uppgradera sig själv utan att betala.
+MASTER_ENDPOINTS = {("POST", "/api/keys"), ("PUT", "/api/billing/subscription")}
 
 DUMMY_ID = "00000000-0000-4000-a000-0000000000ff"
 

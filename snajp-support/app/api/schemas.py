@@ -52,6 +52,19 @@ class TenantSettingsRequest(BaseModel):
     system_prompt_extra: str | None = Field(default=None, max_length=4000)
 
 
+class SubscriptionUpdateRequest(BaseModel):
+    """Synk från Stripe-webhooken. Antingen tenant_id ELLER stripe_customer_id."""
+
+    tenant_id: str | None = None
+    stripe_customer_id: str | None = None
+    plan_id: str | None = None
+    status: str | None = None
+    stripe_subscription_id: str | None = None
+    current_period_start: str | None = None
+    current_period_end: str | None = None
+    cancel_at_period_end: bool | None = None
+
+
 class KbArticle(BaseModel):
     title: str = Field(..., min_length=3, max_length=200)
     content: str = Field(..., min_length=10, max_length=8000)

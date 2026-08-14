@@ -134,8 +134,39 @@ modell och källa (`chat`, `triage`, `email_draft`). Simulerade svar loggas med
 `simulated=true` och noll tokens, så ett testkört konto inte ser oanvänt ut.
 `GET /api/usage?days=30` ger summering + uppdelning per källa.
 
-Mätningen är avsiktligt **bara mätning** — inga tak, ingen fakturering ännu.
 Loggningen kan aldrig fälla ett kundsvar; misslyckas den loggas en varning.
+
+### Abonnemang och kvot
+
+Nivåerna definieras på **ett** ställe: `app/billing/plans.py`. Taket är antal
+AI-svar per månad (Prova 50, Bas 500, Plus 2000, Pro 10000, plus en intern nivå
+utan tak för demo och pilot). Att justera en nivå är en radändring där — ingen
+migration behövs.
+
+| Andel av taket | Vad som händer |
+|---|---|
+| < 80 % | Inget särskilt |
+| ≥ 80 % | `quota_warning` följer med svaret; UI:t varnar |
+| ≥ 100 % | Inget LLM-anrop. Kunden får ett vänligt svenskt besked, ärendet eskaleras till människa |
+
+Två principer är inbyggda och värda att behålla:
+
+- **En slut kvot är inte ett fel.** Jobbet lyckas, kunden får ett begripligt
+  svar, och agenten hittar inte på något. Inkommande mail tas fortfarande emot
+  — de lämnas bara över till en människa i stället för att besvaras.
+- **En trasig kvotkontroll blockerar aldrig.** Går uppslaget inte att göra
+  (databasen nere, tabellen inte migrerad) släpps svaret igenom och en varning
+  loggas. Att stoppa en betalande kunds support för att vår mätning krånglar
+  vore värre än några extra svar.
+
+Betalningen sköts av Stripe i **testläge**. Priserna ligger hos Stripe, taken
+hos oss — `plan_id` binder ihop dem. Utan `STRIPE_SECRET_KEY` är betalning
+avstängd och endpointsen svarar 503 med förklaring; resten fungerar som vanligt.
+
+`PUT /api/billing/subscription` kräver **master-nyckeln** och anropas bara av
+webhooken, så en kund inte kan sätta sin egen nivå. Webhookens signatur
+verifieras mot rå body med replayskydd — den kontrollen *är* autentiseringen,
+eftersom endpointen måste vara öppen.
 
 ## Email-pipeline (inkorg → triage → utkast/autosvar → granskning)
 
