@@ -230,7 +230,10 @@ KB_ARTICLES: list[dict] = [
     },
     {
         "title": "Priser och offert",
-        "category": "ovrigt",
+        # Låg i 'ovrigt', vilket gjorde att prisfrågor lämnades över trots att
+        # svaret stod här: underlaget måste höra till ärendets fack, och en
+        # prisfråga klassas som betalning.
+        "category": "betalning",
         "content": (
             "Utbildningar prissätts via offert eftersom priset beror på antal deltagare och "
             "plats. Priser på hjärtstartare finns i webbutiken hjartstartarbutiken.com. Begär "

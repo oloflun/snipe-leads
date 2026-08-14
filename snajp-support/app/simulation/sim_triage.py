@@ -16,17 +16,23 @@ _CATEGORY_PATTERNS: list[tuple[str, re.Pattern]] = [
             re.IGNORECASE,
         ),
     ),
-    (
-        "betalning",
-        re.compile(
-            r"faktur|betal|drogs|dragning|debiter|kort(et|betalning)?\b|klarna|swish|belopp|avgift|kvitto|pris|moms|dubbel",
-            re.IGNORECASE,
-        ),
-    ),
+    # Leverans FÖRE betalning med flit: "vad kostar frakten" är en fraktfråga,
+    # inte en betalningsfråga. Mönstren prövas i ordning och första träffen
+    # vinner, så den som äger ordet "frakt" måste komma först.
     (
         "leverans",
         re.compile(
             r"leverans|levere|paket|försen|frakt|spårning|spåra|postnord|instabox|ombud|skicka(t|s)?\b|kommit fram|inte kommit|adress",
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        "betalning",
+        re.compile(
+            r"faktur|betal|drogs|dragning|debiter|kort(et|betalning)?\b|klarna|swish|belopp|avgift|kvitto"
+            # "pris" fanns, men kunder skriver oftare "vad kostar" — utan detta
+            # hamnade prisfrågor i ovrigt och besvarades ur en produktartikel.
+            r"|pris|kostar|kostnad|offert|moms|dubbel|delbetal|ränta",
             re.IGNORECASE,
         ),
     ),
@@ -40,14 +46,24 @@ _CATEGORY_PATTERNS: list[tuple[str, re.Pattern]] = [
     (
         "teknisk_support",
         re.compile(
-            r"fungerar inte|funkar inte|felkod|fel\s*meddelande|felmeddelande|logga in|inloggning|lösenord|krasch|bugg|hemsida|app(en)?\b|sidan|laddar|kassan|e-\d{3}",
+            r"fungerar inte|funkar inte|felkod|fel\s*meddelande|felmeddelande|logga in|inloggning|lösenord|krasch|bugg|hemsida|app(en)?\b|sidan|laddar|kassan|e-\d{3}"
+            # Utrustningen, inte webbplatsen. En hjärtstartare som larmar eller
+            # har utgångna elektroder hamnade tidigare i ovrigt och besvarades ur
+            # en säljartikel — ett larm om trasig medicinteknisk utrustning måste
+            # nå en människa.
+            r"|larm(ar|et)?\b|blinkar|blinkande|piper|pipljud|indikator|självtest"
+            r"|batteri|elektrod|gått ut|utgången|utgånget|går inte att starta|startar inte",
             re.IGNORECASE,
         ),
     ),
     (
         "garanti",
         re.compile(
-            r"garanti|garantitid|garantin|tillverkningsfel|supportavtal|hjärtsäker zon|ss280000",
+            # "hjärtsäker zon"/"ss280000" låg här tidigare eftersom paketet har
+            # egen garantitid — men det kapade varje fråga om vad Hjärtsäker zon
+            # ÄR till garantifacket, och svaret kom då ur garantiartikeln.
+            # Konceptet hör till ovrigt; garantitiden nämns i garantiartikeln.
+            r"garanti|garantitid|garantin|tillverkningsfel|supportavtal",
             re.IGNORECASE,
         ),
     ),

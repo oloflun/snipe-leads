@@ -151,7 +151,12 @@ export function SupportChat({ tenant, session }: SupportChatProps = {}) {
 
         for (let attempt = 0; attempt < 90; attempt += 1) {
           await new Promise((resolve) => setTimeout(resolve, attempt < 5 ? 800 : 2000));
-          const jobResponse = await fetch(`/api/snajp-support/jobs/${payload.job_id}`);
+          // Tenanten måste med: jobbet skapades med kundens nyckel, och utan
+          // den pollar vi demo-tenanten där jobbet inte finns.
+          const jobUrl = tenant
+            ? `/api/snajp-support/jobs/${payload.job_id}?tenant=${encodeURIComponent(tenant)}`
+            : `/api/snajp-support/jobs/${payload.job_id}`;
+          const jobResponse = await fetch(jobUrl);
           const job = await jobResponse.json();
           if (job.offline) {
             setMode("offline");

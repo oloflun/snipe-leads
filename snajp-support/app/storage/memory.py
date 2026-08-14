@@ -54,6 +54,41 @@ def _tokenize(text: str) -> set[str]:
     return stemmed
 
 
+# Kundens ord är sällan artikelns ord. "Vad kostar den?" besvaras av en artikel
+# som heter "Priser och offert", och den grova stamningen gör det värre:
+# "kostar" kapas till "kost", som är för kort för prefixmatchning och dessutom
+# ett helt annat ord. Frågan hittade därför ingenting och lämnades över trots
+# att svaret fanns.
+#
+# Utvidgningen sker BARA på frågesidan och kan bara lägga till kandidater.
+# Att den inte kan orsaka fel svar beror på fackfiltret i sim_agent: en
+# tillagd kandidat används ändå bara om den hör till ärendets fack.
+_QUERY_SYNONYMS: dict[str, tuple[str, ...]] = {
+    "kost": ("pris", "kostnad"),          # "kostar" → "kost" efter stamning
+    "kostnad": ("pris",),
+    "pris": ("kostnad",),
+    "delbetal": ("delbetalning", "avbetalning", "faktur"),
+    "avbetal": ("delbetalning",),
+    "fraktbolag": ("frakt", "leverans"),
+    "frakt": ("leverans",),
+    "leverans": ("frakt",),
+    "snabbt": ("leveranstid", "arbetsdag"),
+    "ångra": ("ångerrätt", "öppet köp", "retur"),
+    "byta": ("retur", "reklamation"),
+    "trasig": ("reklamation", "skadad"),
+    "kurs": ("utbildning",),
+    "utbildning": ("kurs",),
+}
+
+
+def _expand_query(tokens: set[str]) -> set[str]:
+    """Frågans tokens plus kända synonymer. Rör aldrig artiklarnas tokens."""
+    expanded = set(tokens)
+    for token in tokens:
+        expanded.update(_QUERY_SYNONYMS.get(token, ()))
+    return expanded
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -305,7 +340,7 @@ class MemoryStorage:
         tenant_id: str,
         query: str,
         embedding: list[float] | None = None,
-        limit: int = 3,
+        limit: int = 5,
     ) -> list[dict[str, Any]]:
         # OBS: `embedding` ignoreras helt här — ren tokenöverlappning, aldrig
         # semantisk. Missar synonymer/ordformer ("betalsätt" mot
@@ -315,7 +350,7 @@ class MemoryStorage:
         # pgvector-cosine-likhet, se postgres.py). Kvalitetstester av
         # KB-sökning mot MemoryStorage bevisar därför ingenting om
         # embeddings-kvalitet — de måste köras mot PostgresStorage.
-        query_tokens = _tokenize(query)
+        query_tokens = _expand_query(_tokenize(query))
         if not query_tokens:
             return []
         scored = []
@@ -330,7 +365,12 @@ class MemoryStorage:
             {"id": a["id"], "title": a["title"], "content": a["content"],
              "category": a["category"], "similarity": round(score, 2)}
             for score, a in scored[:limit]
-            if score >= 0.2
+            # Tröskeln var 0.2. Sedan svaret måste komma ur ärendets fack
+            # (article_in_category) kostar en svag träff inget: den kan bara
+            # användas om den ändå hör till rätt fack. Lägre tröskel ger därför
+            # fler chanser att hitta RÄTT artikel utan att öppna för fel svar —
+            # frågor som "hur snabbt kommer varan" föll tidigare mellan stolarna.
+            if score >= 0.12
         ]
 
     async def list_kb(self, tenant_id: str) -> list[dict[str, Any]]:

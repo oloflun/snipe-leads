@@ -21,12 +21,22 @@ def _force_simulation_mode(monkeypatch):
     # Tomma värden override:ar .env-filen (env-variabler har högre prioritet
     # i pydantic-settings). Det gör is_simulation() sann och håller varje
     # oavsiktlig live-väg stängd.
+    #
+    # DATABASE_URL hörde inte till listan från början, och exakt det som
+    # docstringen varnar för hände igen: så fort den sattes i .env körde hela
+    # sviten mot den RIKTIGA databasen. Testerna skapade skräptenants i
+    # produktion, skrev över en befintlig tenants namn (create_tenant gör
+    # `on conflict (slug) do update set name`) och tog 6,5 minuter i stället
+    # för 5 sekunder. Utan den här raden är sviten inte hermetisk — den är
+    # destruktiv.
     for name in (
         "DEEPSEEK_API_KEY",
         "OPENAI_API_KEY",
         "GEMINI_API_KEY",
         "EMBEDDING_API_KEY",
         "SCRAPEGRAPHAI_API_KEY",
+        "DATABASE_URL",
+        "REDIS_URL",
     ):
         monkeypatch.setenv(name, "")
     get_settings.cache_clear()

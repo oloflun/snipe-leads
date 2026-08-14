@@ -20,6 +20,24 @@ const URL_IS_CONFIGURED = Boolean(process.env.SNAJP_SUPPORT_URL);
  * faller anropet tillbaka på demonyckeln i stället för att läcka in i fel kunds
  * data — men vi säger ifrån i loggen.
  */
+/**
+ * En registrerad kund saknar sin API-nyckel i miljön. Kastas i stället för att
+ * tyst svara ur demo-tenantens kunskapsbas.
+ */
+export class MissingTenantKeyError extends Error {
+  constructor(
+    readonly tenantName: string,
+    readonly envVar: string
+  ) {
+    super(
+      `${tenantName} har ingen egen API-nyckel i den här miljön (${envVar} saknas). ` +
+        "Supporten svarar inte förrän nyckeln är satt — annars hade svaren kommit " +
+        "ur ett annat bolags kunskapsbas."
+    );
+    this.name = "MissingTenantKeyError";
+  }
+}
+
 export function apiKeyForTenant(tenantSlug?: string | null): string {
   if (!tenantSlug) {
     return SNAJP_INTERNAL_API_KEY;
@@ -33,10 +51,15 @@ export function apiKeyForTenant(tenantSlug?: string | null): string {
 
   const key = process.env[tenant.supportKeyEnv];
   if (!key) {
-    console.warn(
-      `snajp-support: ${tenant.supportKeyEnv} saknas, ${tenant.name} faller tillbaka på demonyckeln.`
-    );
-    return SNAJP_INTERNAL_API_KEY;
+    // INGEN fallback till demonyckeln här. En registrerad kund utan egen nyckel
+    // hade annars fått svar ur demo-tenantens kunskapsbas — alltså ett ANNAT
+    // bolags villkor, presenterade som kundens egna. För Livrustning betyder det
+    // en annan tillverkares garantitider på medicinteknisk utrustning.
+    //
+    // Ett tydligt fel är alltid bättre än ett trovärdigt men felaktigt svar.
+    // Okänd slug (ovan) faller fortfarande tillbaka, eftersom den bara kan komma
+    // från en förfalskad payload och inte från en riktig kund.
+    throw new MissingTenantKeyError(tenant.name, tenant.supportKeyEnv);
   }
 
   return key;
@@ -65,7 +88,19 @@ export async function proxyToBackend(path: string, init: RequestInit, tenantSlug
   let lastCause: unknown;
   // Nyckeln slås upp EN gång utanför loopen — den beror bara på tenantSlug,
   // inte på försöksnumret, och att slå upp den igen per retry vore bara brus.
-  const apiKey = apiKeyForTenant(tenantSlug);
+  let apiKey: string;
+  try {
+    apiKey = apiKeyForTenant(tenantSlug);
+  } catch (error) {
+    if (error instanceof MissingTenantKeyError) {
+      // 503, inte 500: tjänsten är riktigt konfigurerad men saknar en nyckel i
+      // just den här miljön. Meddelandet namnger variabeln så felet går att
+      // åtgärda utan att läsa koden.
+      console.error(`snajp-support: ${error.message}`);
+      return NextResponse.json({ error: error.message, configured: false }, { status: 503 });
+    }
+    throw error;
+  }
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
     const controller = new AbortController();
