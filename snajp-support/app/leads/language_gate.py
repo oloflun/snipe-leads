@@ -15,6 +15,7 @@ LanguageGateError. En prompt går att prata omkull; en grind gör det inte
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 VALID_LANGUAGE_STATES = ("sv", "en_confirmed")
@@ -23,6 +24,29 @@ _HUMANIZER_VARIANT_BY_LANGUAGE_STATE = {
     "sv": "snajp:humanizer-svenska",
     "en_confirmed": "snajp:humanizer",
 }
+
+HUMANIZER_VARIANTS = frozenset(_HUMANIZER_VARIANT_BY_LANGUAGE_STATE.values())
+
+
+def last_humanizer_variant(skills_executed: Sequence[str]) -> str | None:
+    """Den humanizer som FAKTISKT kördes sist, härledd ur körningens spår.
+
+    Ersätter ett hårdkodat `steps[3].skill` i run_outreach_draft. Två skäl:
+
+    1. Indexet var ett påstående om en tuple som en refaktorering tyst kan
+       ordna om. `check_send_gate` hade då kastat LanguageGateError på en
+       plats där felmeddelandet inte pekar på orsaken.
+    2. Efter en delta-humanisering (GROUNDING_V1) är påståendet dessutom
+       FALSKT — det är inte längre OUTREACH_V1:s fjärde steg som rörde
+       texten sist.
+
+    Tar en lista med skill-namn, inte en RunTrace, så språkgrinden slipper
+    importera från app/agent/ och förblir testbar utan agentlagret.
+    """
+    for skill in reversed(list(skills_executed)):
+        if skill in HUMANIZER_VARIANTS:
+            return skill
+    return None
 
 
 class LanguageGateError(RuntimeError):

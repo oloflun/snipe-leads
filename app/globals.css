@@ -15,6 +15,12 @@
   --moss: 0.42 0.071 142;
   --danger: 0.57 0.18 27;
   --focus: 0.74 0.16 64;
+  /* Textsäker variant av ochre. --ochre (L 0.74) är en ACCENT — den ger 2.17:1
+     mot paper (uppmätt), vilket duger för stora sifferdisplayer och rutor men
+     inte för 16px text. L 0.54 i samma nyans ger 4.75:1 och klarar AA.
+     Använd den här när ochre bär en text ett fel beror på; använd --ochre när
+     den bara dekorerar. */
+  --warning: 0.54 0.16 64;
 
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   /* Alias — ~40 existing usages reference the old name. Same curve, no churn. */

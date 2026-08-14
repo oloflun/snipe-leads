@@ -185,6 +185,11 @@ async def _run_outreach(storage, llm, **kwargs):
         "id": "thread-1",
         "language_state": kwargs.pop("language_state", "sv"),
     }
+    # Standardutkastet i _FakeLLM citerar "fri retur i 30 dagar". Det är ett
+    # RIKTIGT researchfynd, så det ska ligga i underlaget — annars fäller
+    # grundningsgrinden (INV-GROUND-001) korrekt på ett påstående som bara
+    # saknar sin källa i fixturen, och testerna hade mätt fel sak.
+    kwargs.setdefault("research_evidence", ("Fri retur inom 30 dagar",))
     with patch("app.agent.step_runner.get_llm_client", return_value=llm):
         return await run_outreach_draft(
             storage,
@@ -369,6 +374,9 @@ async def test_outreach_makes_one_llm_call_per_skill_step_in_declared_order():
 
     assert llm.calls == OUTREACH_ORDER
     assert result["skills_used"] == OUTREACH_ORDER
+    # Ett rent utkast ska kosta FYRA anrop. Fyrar grinden i onödan blir
+    # varje körning 50 % dyrare, och det ska synas här och inte i fakturan.
+    assert result["grounding"]["fired"] is False
 
 
 @pytest.mark.anyio

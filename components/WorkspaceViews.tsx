@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+
+import { SoulEditor } from "@/components/SoulEditor";
 import { PageShell } from "@/components/AppShell";
 import { btnPrimary, btnSecondary } from "@/components/ui";
 import { LoginForm } from "@/components/auth/LoginForm";
@@ -465,19 +467,47 @@ export function InboxView() {
   );
 }
 
-export function SettingsView({ section = "general" }: Readonly<{ section?: "general" | "mailboxes" | "team" | "billing" }>) {
+export function SettingsView({ section = "general" }: Readonly<{ section?: "general" | "mailboxes" | "team" | "billing" | "soul" }>) {
   const titles = {
     general: "Business context som alla agentmoduler använder.",
     mailboxes: "Mailboxar och skickhälsa i svensk takt.",
     team: "Teamroller och audit-logik.",
-    billing: "Plan, fakturering och användning."
+    billing: "Plan, fakturering och användning.",
+    soul: "Er röst"
+  };
+  // Beskrivningen var tidigare EN generisk sträng för alla sektioner. På
+  // röstsidan blev den både felaktig (den beskriver inte sektionen) och
+  // olämplig: den räknar upp Supabase Auth och RLS för en KUND, som varken
+  // känner igen orden eller behöver veta vår stack.
+  const descriptions: Record<typeof section, string> = {
+    general: "Inställningarna är ett arbetsblad för Supabase Auth, RLS, teamroller, mailboxes och billing.",
+    mailboxes: "Inställningarna är ett arbetsblad för Supabase Auth, RLS, teamroller, mailboxes och billing.",
+    team: "Inställningarna är ett arbetsblad för Supabase Auth, RLS, teamroller, mailboxes och billing.",
+    billing: "Inställningarna är ett arbetsblad för Supabase Auth, RLS, teamroller, mailboxes och billing.",
+    soul: "Beskriv hur ni låter. Agenten skriver så i era mejl och svar."
   };
   return (
-    <PageShell kicker="Settings" title={titles[section]} description="Inställningarna är ett arbetsblad för Supabase Auth, RLS, teamroller, mailboxes och billing.">
-      <div className="grid grid-cols-12 gap-x-8 gap-y-10">
-        <nav className="kicker col-span-12 flex flex-wrap gap-5 text-mineral md:col-span-3 md:block md:space-y-4">
+    <PageShell kicker="Settings" title={titles[section]} description={descriptions[section]}>
+      {/* gap-x först från md. grid-cols-12 med gap-x-8 kräver 11 x 32px = 352px
+          BARA till mellanrum: vid 320px-vyn (288px container) klampades alla
+          tolv kolumner till 0px, och rutnätet blev 352px brett oavsett
+          innehåll — "BILLING" hamnade utanför vyn, dolt av
+          body{overflow-x:hidden} i stället för att synas som horisontell
+          scroll. Uppmätt via gridTemplateColumns = "0px 0px 0px ...".
+          På mobil ligger allt ändå staplat i col-span-12, så x-mellanrummet
+          gjorde ingen nytta där. Samma mönster finns på tre ställen till i
+          den här filen — de är inte visuellt verifierade och lämnas orörda. */}
+      <div className="grid grid-cols-12 gap-x-0 gap-y-10 md:gap-x-8">
+        {/* min-w-0: ett grid-barn har min-width:auto som default och vägrar
+            därför krympa under sitt innehåll — flex-wrap får aldrig chansen
+            att bryta raden. Med fyra flikar rymdes raden ändå (281px); den
+            femte ("Röst") tog den till 334px mot 288px tillgängligt vid
+            320px-vyn, och "BILLING" klipptes av body{overflow-x:hidden}
+            i stället för att radbrytas. Uppmätt, inte gissat. */}
+        <nav className="kicker col-span-12 flex min-w-0 flex-wrap gap-5 text-mineral md:col-span-3 md:block md:space-y-4">
           {[
             ["/settings", "General"],
+            ["/settings/soul", "Röst"],
             ["/settings/mailboxes", "Mailboxes"],
             ["/settings/team", "Team"],
             ["/settings/billing", "Billing"]
@@ -485,6 +515,7 @@ export function SettingsView({ section = "general" }: Readonly<{ section?: "gene
         </nav>
         <div className="col-span-12 md:col-span-9">
           {section === "general" ? <BusinessContextSettings /> : null}
+          {section === "soul" ? <SoulEditor /> : null}
           {section === "mailboxes" ? <MailboxSettings /> : null}
           {section === "team" ? <TeamSettings /> : null}
           {section === "billing" ? <BillingSettings /> : null}

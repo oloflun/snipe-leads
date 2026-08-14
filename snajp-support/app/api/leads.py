@@ -13,6 +13,7 @@ from ..config import get_settings
 from ..leads.context_pack import build_context_pack, materialize_product_marketing
 from ..leads.onboarding_state import REQUIRED_KINDS, get_onboarding_state
 from .deps import require_tenant
+from ..leads.soul import SOUL_KIND, SOUL_MAX_CHARS
 from .schemas import (
     ContextDocRequest,
     OnboardingChatRequest,
@@ -20,6 +21,7 @@ from .schemas import (
     ProspectRequest,
     ProspectSourceRequest,
     ResearchStepRequest,
+    SoulRequest,
 )
 
 router = APIRouter()
@@ -147,6 +149,39 @@ async def add_prospect_source(
     return {"source": source}
 
 
+# -- SOUL: kundens röstdokument -------------------------------------------
+
+
+@router.get("/api/leads/soul")
+async def get_soul(request: Request, tenant: dict = Depends(require_tenant)) -> dict:
+    doc = await request.app.state.storage.get_latest_context_doc(
+        tenant["tenant_id"], kind=SOUL_KIND
+    )
+    return {
+        "content": (doc or {}).get("content", ""),
+        "version": (doc or {}).get("version"),
+        "max_chars": SOUL_MAX_CHARS,
+    }
+
+
+@router.put("/api/leads/soul")
+async def put_soul(
+    request: Request, payload: SoulRequest, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Enda vägen SOUL skrivs.
+
+    MEDVETET INTE exponerad som ett agentverktyg: kind-allowlisten i
+    leads_tools._save_context_doc_impl utesluter 'soul' och ska fortsätta
+    göra det. Onboarding-agenten ska inte kunna skriva kundens röstdokument
+    — det är kundens egen text, och en agent som kan skriva den kan också
+    skriva instruktioner till sig själv i den.
+    """
+    doc = await request.app.state.storage.save_context_doc(
+        tenant["tenant_id"], kind=SOUL_KIND, content=payload.content, source="tenant-edit"
+    )
+    return {"saved": True, "version": doc["version"], "chars": len(payload.content)}
+
+
 # -- Fas B/C: research och outreach ---------------------------------------
 
 
@@ -193,6 +228,8 @@ async def outreach_draft(
         offer_summary=payload.offer_summary,
         context_pack=context_pack,
         brief=payload.brief,
+        research_summary=payload.research_summary,
+        research_evidence=tuple(payload.research_evidence),
     )
     result["onboarding_missing"] = list(missing)
     return result

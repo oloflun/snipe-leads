@@ -17,7 +17,8 @@ const config: Config = {
         moss: "oklch(var(--moss) / <alpha-value>)",
         copper: "oklch(var(--ochre) / <alpha-value>)",
         frost: "oklch(var(--paper2) / <alpha-value>)",
-        danger: "oklch(var(--danger) / <alpha-value>)"
+        danger: "oklch(var(--danger) / <alpha-value>)",
+        warning: "oklch(var(--warning) / <alpha-value>)"
       },
       fontFamily: {
         // Fraunces is reachable only through `font-display`, and DESIGN.md limits

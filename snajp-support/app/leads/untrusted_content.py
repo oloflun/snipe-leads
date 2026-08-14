@@ -9,11 +9,17 @@ samma mönster Supabase-MCP:n i den här miljön själv använder
 (Agent(instructions=...)), bara i användarmeddelandets innehåll, tydligt
 separerad från systeminstruktionerna.
 
-Detta är ÅTERANVÄNDBAR infrastruktur, redo för när Fas B:s faktiska
-research-verktyg (webbskrapning) byggs — det finns ännu inget verktyg i
-kodbasen som hämtar en prospekts webbplats, så INV-SEC-003 ligger kvar i
-ARCHITECTURE_INVARIANTS.md Roadmap tills det finns en riktig anropsplats
-att verifiera mot, inte bara mekanismen isolerat.
+Två skarpa anropsplatser i dag (INV-SEC-003 är Active sedan 2026-08-07, inte
+Roadmap som den här docstringen tidigare påstod):
+
+  app/agent/research_tools.py   skrapad text från prospektets webbplats
+  app/leads/soul.py             kundens eget röstdokument (INV-SEC-009)
+
+Den andra är värd en kommentar: SOUL är skriven av vår egen kund, inte av en
+okänd tredje part, och det är frestande att behandla den som betrodd. Den är
+det inte. Kunden är inte fientlig, men kunden är heller inte granskad — och en
+kund som skriver "ignorera reglerna ovan" i sitt tondokument ska få en agent
+som skriver i rätt ton, inte en agent som lyder.
 """
 
 from __future__ import annotations

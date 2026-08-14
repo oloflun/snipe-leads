@@ -79,6 +79,19 @@ class OutreachDraftRequest(BaseModel):
     company_name: str = Field(..., min_length=1, max_length=200)
     offer_summary: str = Field(..., min_length=1, max_length=2000)
     brief: str = Field(..., min_length=1, max_length=2000)
+    # Fas B:s underlag, vidarebefordrat av anroparen. Utan det har
+    # grundningsgrinden ingenting att mäta utkastets påståenden mot — och det
+    # var precis därför den påhittade "30 procent"-siffran var ofalsifierbar
+    # (fältet research_summary fanns i signaturen men skickades aldrig).
+    research_summary: str = Field(default="", max_length=8000)
+    research_evidence: list[str] = Field(default_factory=list, max_length=60)
+
+
+class SoulRequest(BaseModel):
+    # Taket verkställs på TVÅ ställen: här vid API-gränsen och i
+    # soul.render_soul. Ett dokument som stoppats direkt i databasen ska inte
+    # kunna gå förbi bara för att det aldrig passerade den här modellen.
+    content: str = Field(default="", max_length=4000)
 
 
 class KbArticleRequest(BaseModel):

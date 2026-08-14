@@ -4,6 +4,7 @@
     python .../scripts/keys.py --check                                  # bara verifiera
     python .../scripts/keys.py --pull                                   # hämta från Vercel
     python .../scripts/keys.py --push                                   # skicka till Vercel
+    python .../scripts/keys.py --new-unlock-key                         # generera skill-låsnyckeln
 
 Sökvägar löses ur __file__, aldrig ur cwd — skriptet kan köras varifrån som
 helst. Värden läses med getpass (syns aldrig, hamnar aldrig i shell-historiken)
@@ -16,6 +17,8 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import hashlib
+import secrets
 import subprocess
 import sys
 from pathlib import Path
@@ -23,12 +26,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 BACKEND_ENV = ROOT / "snajp-support" / ".env"
 FRONTEND_ENV = ROOT / ".env.local"
+UNLOCK_HASH = ROOT / "agent-core" / ".unlock-hash"
 
 
 class Key:
-    def __init__(self, name, files, blurb, *, required, where):
+    def __init__(self, name, files, blurb, *, required, where, generated=False):
         self.name, self.files, self.blurb = name, files, blurb
         self.required, self.where = required, where
+        # generated=True => klistras aldrig in för hand, så cmd_set frågar inte
+        # efter den. Den har ett eget kommando som skapar värdet lokalt.
+        self.generated = generated
 
 
 KEYS = [
@@ -55,6 +62,16 @@ KEYS = [
         "— sätt den innan nästa testomgång.",
         required=False,
         where="https://aistudio.google.com/apikey",
+    ),
+    Key(
+        "SNAJP_SKILL_UNLOCK_KEY",
+        [BACKEND_ENV],
+        "Avsiktlighetsgrind för agent-core/skills/ — INTE en säkerhetsmekanism. "
+        "Krävs för att regenerera manifestet eller publicera skills till DB:n. "
+        "Bara på den här maskinen; aldrig i Render/Vercel/CI.",
+        required=False,
+        where="genereras lokalt: python scripts/keys.py --new-unlock-key",
+        generated=True,
     ),
 ]
 
@@ -110,6 +127,9 @@ def cmd_check() -> bool:
         elif looks_placeholder(value):
             status = "PLATSHÅLLARE — tjänsten kör i SIMULERINGSLÄGE"
             ok = False
+        elif key.generated:
+            # Ingen svans för genererade nycklar — du bad om att aldrig se den.
+            status = f"OK (len={len(value)})"
         else:
             status = f"OK (len={len(value)}, ...{value[-4:]})"
         flag = "KRÄVS" if key.required else "valfri"
@@ -132,6 +152,8 @@ def cmd_set() -> None:
     print("Du behöver BARA DeepSeek för att komma igång — de andra kan vänta.\n")
 
     for key in KEYS:
+        if key.generated:
+            continue  # eget kommando, klistras aldrig in för hand
         current = read_env(key.files[0]).get(key.name, "")
         marker = " [redan satt]" if current and not looks_placeholder(current) else ""
         print(f"{key.name}{marker}")
@@ -152,6 +174,42 @@ def cmd_set() -> None:
             upsert(path, name, value)
     print("Satte LLM_PROVIDER=deepseek, MODEL=deepseek-v4-flash\n")
     cmd_check()
+
+
+def cmd_new_unlock_key() -> None:
+    """Genererar SNAJP_SKILL_UNLOCK_KEY och committar bara dess sha256.
+
+    Nyckeln skrivs ALDRIG till stdout. Den hamnar direkt i den gitignorerade
+    snajp-support/.env och existerar därefter bara där. Det är hela poängen:
+    en nyckel du har sett är en nyckel som ligger i ett terminaltranskript, och
+    repot har redan bränt en Vercel-token på precis det sättet (STATUS.md
+    2026-07-30).
+
+    Roterar du nyckeln måste .unlock-hash committas, annars kan ingen annan
+    maskin verifiera den.
+    """
+    guard_gitignored()
+    existing = read_env(BACKEND_ENV).get("SNAJP_SKILL_UNLOCK_KEY", "")
+    if existing:
+        answer = input(
+            "SNAJP_SKILL_UNLOCK_KEY finns redan. Rotera den? Den gamla slutar "
+            "fungera direkt. [j/N]: "
+        ).strip().lower()
+        if answer not in ("j", "ja", "y", "yes"):
+            print("Avbrutet — nyckeln är oförändrad.")
+            return
+
+    key = secrets.token_urlsafe(32)
+    upsert(BACKEND_ENV, "SNAJP_SKILL_UNLOCK_KEY", key)
+
+    digest = hashlib.sha256(key.encode("utf-8")).hexdigest()
+    UNLOCK_HASH.parent.mkdir(parents=True, exist_ok=True)
+    UNLOCK_HASH.write_text(digest + "\n", encoding="utf-8")
+    del key  # inget kvar i minnet efter den här punkten som skrivs ut
+
+    print(f"Nyckeln skrevs till {BACKEND_ENV.relative_to(ROOT).as_posix()} (visas inte).")
+    print(f"sha256 skrevs till {UNLOCK_HASH.relative_to(ROOT).as_posix()}: {digest}")
+    print("\nCOMMITTA agent-core/.unlock-hash. Nyckeln själv committas aldrig.")
 
 
 def cmd_pull() -> None:
@@ -223,11 +281,18 @@ def main() -> None:
     parser.add_argument("--check", action="store_true", help="verifiera utan att ändra")
     parser.add_argument("--pull", action="store_true", help="hämta från Vercel")
     parser.add_argument("--push", action="store_true", help="skicka till Vercel")
+    parser.add_argument(
+        "--new-unlock-key",
+        action="store_true",
+        help="generera SNAJP_SKILL_UNLOCK_KEY (värdet skrivs aldrig ut)",
+    )
     args = parser.parse_args()
 
     if args.check:
         sys.exit(0 if cmd_check() else 1)
-    if args.pull:
+    if args.new_unlock_key:
+        cmd_new_unlock_key()
+    elif args.pull:
         cmd_pull()
     elif args.push:
         cmd_push()

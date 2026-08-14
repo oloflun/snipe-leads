@@ -23,9 +23,21 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from ..agentcore.overlays import load_global_instructions, load_overlay
 from ..agentcore.packs import PlaybookStep, RunLedger, check_output_contract, check_preconditions
 from ..config import get_settings
 from .llm import get_llm_client
+
+_GLOBAL_OPEN = """## GLOBALA REGLER (Snajp — gäller varje steg, varje kund)
+Dessa gäller ÖVER skillen nedan där de krockar. De är policy, inte stil.
+"""
+_GLOBAL_CLOSE = "## SLUT GLOBALA REGLER"
+
+_OVERLAY_OPEN = """## TILLÄGGSINSTRUKTIONER (Snajp-overlay: {name})
+Dessa kommer FRÅN OSS, inte från skillen ovan, och gäller ÖVER den där de
+krockar. De ersätter aldrig kodgrindarna — grindarna körs efter dig.
+"""
+_OVERLAY_CLOSE = "## SLUT TILLÄGGSINSTRUKTIONER"
 
 _CONTRACT_INSTRUCTION = """
 Svara ENBART med ett JSON-objekt. Utöver de fält uppgiften kräver MÅSTE du
@@ -67,6 +79,13 @@ class StepResult:
     # bara en rubrik — se agentcore/registry.load_full_skill.
     injected_chars: int = 0
     thinking_mode: str = "disabled"
+    # Vilken overlay som formade steget, och hur mycket text den bidrog med.
+    # Utan detta i revisionsloggen går det inte att svara på "varför skrev den
+    # så här?" — skill-namnet ensamt räcker inte när tuninglagret är fritt
+    # redigerbart (INV-AUDIT-001).
+    overlay: str | None = None
+    overlay_chars: int = 0
+    global_chars: int = 0
 
 
 @dataclass
@@ -105,6 +124,9 @@ class RunTrace:
                 "reasoning_tokens": s.reasoning_tokens,
                 "injected_chars": s.injected_chars,
                 "thinking_mode": s.thinking_mode,
+                "overlay": s.overlay,
+                "overlay_chars": s.overlay_chars,
+                "global_chars": s.global_chars,
                 "sources_used": s.output.get("sources_used", []),
                 "context_refs": s.output.get("context_refs", []),
             }
@@ -146,15 +168,35 @@ async def run_step(
     client = get_llm_client()
     skill_text = step.render()
 
+    # Systempromptens ordning är inte godtycklig:
+    #   1. AGENTS.md   — mest generell policy, så skill/overlay kan specialisera
+    #   2. skill_text  — den vendorade metodiken
+    #   3. overlay     — vår specialisering; "senare vinner vid konflikt", och
+    #                    delimitertexten säger det explicit
+    #   4. kontraktet  — SIST och ovillkorligt. Läggs på av kod som varken en
+    #                    overlay eller en SOUL kan nå, så utdatakontraktet inte
+    #                    kan försvagas av något av tuninglagren.
+    # ALLT här är VÅR text. Kundskriven text (SOUL) går i user-position, aldrig
+    # här — den skillnaden ÄR säkerhetsgränsen, se app/leads/soul.py.
+    global_text = load_global_instructions()
+    overlay_text = load_overlay(step.overlay) if step.overlay else ""
+
+    system_parts: list[str] = []
+    if global_text:
+        system_parts.append(f"{_GLOBAL_OPEN}\n{global_text}\n{_GLOBAL_CLOSE}")
+    system_parts.append(
+        f"Du utför ETT steg i {playbook_role}. Steget styrs av "
+        f"skillen {step.skill}, vars fullständiga innehåll följer nedan. Följ "
+        f"den. Uppfinn aldrig fakta.\n\n{skill_text}"
+    )
+    if overlay_text:
+        system_parts.append(
+            f"{_OVERLAY_OPEN.format(name=step.overlay)}\n{overlay_text}\n{_OVERLAY_CLOSE}"
+        )
+    system_parts.append(_CONTRACT_INSTRUCTION)
+
     messages = [
-        {
-            "role": "system",
-            "content": (
-                f"Du utför ETT steg i {playbook_role}. Steget styrs av "
-                f"skillen {step.skill}, vars fullständiga innehåll följer nedan. Följ "
-                f"den. Uppfinn aldrig fakta.\n\n{skill_text}\n\n{_CONTRACT_INSTRUCTION}"
-            ),
-        },
+        {"role": "system", "content": "\n\n".join(system_parts)},
         {"role": "user", "content": f"{case_context}\n\n## Din uppgift i det här steget\n{task}"},
     ]
 
@@ -234,6 +276,9 @@ async def run_step(
             reasoning_content=reasoning_content,
             injected_chars=len(skill_text),
             thinking_mode=effective_mode,
+            overlay=step.overlay,
+            overlay_chars=len(overlay_text),
+            global_chars=len(global_text),
         )
     )
     return output

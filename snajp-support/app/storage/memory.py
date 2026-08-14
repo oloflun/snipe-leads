@@ -101,6 +101,9 @@ class MemoryStorage:
         self.prospects: dict[str, list[dict[str, Any]]] = {}
         self.prospect_sources: dict[str, list[dict[str, Any]]] = {}
         self.agent_runs: dict[str, list[dict[str, Any]]] = {}
+        # Nycklad på manifest_hash, inte tenant_id — delad baselinekatalog
+        # (migration 016). Samma undantag som segmentaggregatet.
+        self.skill_files: dict[str, list[dict[str, Any]]] = {}
 
         # Email-pipeline
         # In-memory-läget har inga riktiga inkorgar — mock-mail matas in direkt
@@ -561,6 +564,24 @@ class MemoryStorage:
         if agent_type:
             runs = [r for r in runs if r["agent_type"] == agent_type]
         return sorted(runs, key=lambda r: r["created_at"], reverse=True)[:limit]
+
+    async def list_skill_files(self, *, manifest_hash: str) -> list[dict[str, Any]]:
+        return list(self.skill_files.get(manifest_hash, []))
+
+    async def publish_skill_files(
+        self, *, manifest_hash: str, rows: list[dict[str, Any]], published_by: str = ""
+    ) -> int:
+        existing = self.skill_files.setdefault(manifest_hash, [])
+        seen = {(r["namespace"], r["relative_path"]) for r in existing}
+        added = 0
+        for row in rows:
+            key = (row["namespace"], row["relative_path"])
+            if key in seen:
+                continue  # samma idempotens som unique-villkoret i migration 016
+            existing.append({**row, "published_by": published_by})
+            seen.add(key)
+            added += 1
+        return added
 
     async def get_segment_ab_aggregate(self) -> list[dict[str, Any]]:
         from ..leads.segment_aggregate import AbResultRow, compute_segment_aggregate

@@ -1,5 +1,55 @@
 # Snipra Status
 
+## 2026-08-14 — Claude — Grundningsgrind, skill-lås, tre-lagers instruktionssystem, DB-spegel
+
+**Den öppna tråden från 2026-08-10 är stängd.** Sportamore-incidenten (AV-utkastet påstod
+"minskat återkommande frågor med 30 procent" mot ett kontextpaket utan en enda procentsiffra)
+har nu en kodgrind: `app/leads/grounding_gate.py` extraherar siffror/procent/belopp/
+kundreferenser/superlativ ur ett utkast, jämför mot en tillåten faktamängd byggd ur
+kontextpaket + Fas B:s research-evidence + erbjudandet, och fäller om något saknar täckning.
+En reparationsrunda (max 1) försöker laga det specifika påståendet, bara de ändrade
+meningarna delta-humaniseras (`app/leads/text_delta.py` — meningsoffsets, förlustfritt),
+och kvarstår felet går utkastet till en människa i stället för `send_queue`. Ny invariant
+INV-GROUND-001, regressionstestad mot exakt incidenten.
+
+**Produktionsbugg fixad innan den hann utlösas.** `render.yaml` satte `rootDir: snajp-support`,
+så `agent-core/` (i repo-roten) låg utanför Dockers byggkontext och kunde inte kopieras in.
+Containern startade grönt (agentimporterna är uppskjutna in i request-handlers), och kraschen
+skulle ha kommit på det FÖRSTA riktiga agentanropet — alltså exakt när `DEEPSEEK_API_KEY`
+sätts för att gå live. Fixat (`rootDir: .` + `COPY agent-core`), reproducerat och verifierat
+för hand (Docker saknas lokalt — `docker-smoke`-CI-jobbet är oprövat till nästa PR).
+Ny invariant INV-DEPLOY-001.
+
+**Tre-lagers instruktionssystem byggt** som svar på "var justerar jag agentens output utan
+att röra en vendorad skill": `agent-core/AGENTS.md` (global policy, opinnad, aldrig ton),
+`agent-core/overlays/*.md` (per-steg, pinnad via `overlay_hash`, den sanktionerade
+tuningytan), och SOUL (`agent_context_docs kind='soul'`, kundredigerbar i `/settings/soul`,
+renderas ENDAST i användarposition — aldrig systemprompt). `pack_version` bär nu tre hashar
+så en körning går att spåra till exakt vilken kombination av lager som formade den.
+INV-SEC-009 bevisar SOUL-gränsen med ett riktigt injektionstest (`"IGNORERA REGLERNA OVAN..."`)
+som fångar de faktiska meddelandena och asserterar sentinel aldrig når `messages[0]`.
+
+**DB-spegel för skills byggd, men SMALARE än begärt — obekräftat med användaren.**
+`skill_source="filesystem"` är default i ALL miljö, `render.yaml` sätter aldrig
+`SKILL_SOURCE`. Motivering: kan databasen leverera skill-text containern inte har på disk
+är git bara källa till sanning i intentionen, och INV-SKILL-005 (som hashar filsystemet)
+slutar fungera som lås. Spegeln är i stället en granskningspost — vilken exakt text
+producerade en given `agent_runs`-rad. **Kräver ett beslut från användaren nästa session.**
+
+**Fem UI-defekter hittade genom att faktiskt läsa renderade pixlar**, inte kodgranskning
+(en `design-stop`-hook blockerade första försöket att avsluta av precis det skälet):
+90-tecken radlängd, ett fält 3/4 tomt, en kvarhängande "Sparat"-kvittens samtidigt som
+"för långt"-felet, 2.17:1 kontrast på felfärgen (ny `--warning`-token, 4.75:1), och en
+`grid-cols-12`/`gap-x-8`-kollaps som gjorde att "BILLING" försvann helt vid 320px bredd
+(alla tolv kolumner klampade till 0px — `overflow-x:hidden` dolde det i stället för att
+visa horisontell scroll). Tre andra ställen i `WorkspaceViews.tsx` har samma mönster,
+oåtgärdade.
+
+**Öppet:** bekräfta DB-spegel-scope · skarp körning mot riktiga DeepSeek-nycklar
+(`scripts/run_live_tests.py --leads`, mät `grounding.fired`-frekvens, injicera medvetet ett
+påhittat påstående och verifiera att grinden fäller) · `docker-smoke` overifierat ·
+tre grid-collapse-ställen kvar · `--mineral`/`--danger` under AA (4.4:1) repo-brett.
+
 ## 2026-08-10 — Claude — Leads migrerad till per-steg, thinking BESLUTAT AV, skill-grind mekaniserad
 
 **Leads-agenten kör per-steg.** `leads_agent.py`s tre `Runner.run`-anrop ersattes

@@ -10,6 +10,16 @@ baseline som en pinnad kund inte når förrän den passerat evalgrinden
 Inte en del av verify.yml — manifestet är källdata som checkas in, inte
 något CI härleder på nytt (skulle annars falla på varje ordagrann
 whitespace-skillnad i en vendorad tredjepartsfil).
+
+KÖRS INTE LÄNGRE DIREKT. `python agent-core/build_manifest.py` kräver sedan
+2026-08-14 SNAJP_SKILL_UNLOCK_KEY och hänvisar till scripts/unlock_skills.py,
+som visar diffen och kräver en bekräftelse innan den skriver. Skälet: att
+regenerera manifestet är att byta baseline för varje kund, och det var
+tidigare ett kommando vem som helst kunde köra av misstag mitt i något annat.
+
+Grinden ligger i `__main__`, ALDRIG i `build()` — testerna och
+unlock_skills.py måste kunna anropa `build()` fritt för att räkna ut vad som
+skulle ändras utan att ha nyckeln.
 """
 
 import hashlib
@@ -84,6 +94,24 @@ def build() -> dict:
 
 
 if __name__ == "__main__":
+    import sys
+
+    # Avsiktlighetsgrind. Ligger här och inte i build() — build() måste
+    # förbli fritt anropbar för tester och för unlock_skills.py:s diff.
+    sys.path.insert(0, str(ROOT.parent / "snajp-support"))
+    from app.agentcore.unlock import SkillLockedError, verify_unlock_key
+
+    try:
+        verify_unlock_key()
+    except SkillLockedError as error:
+        sys.exit(
+            f"LÅST: {error}\n\n"
+            "Använd scripts/unlock_skills.py — den visar vad som ändrats och "
+            "kräver en bekräftelse innan baseline byts:\n"
+            "    python scripts/unlock_skills.py --check\n"
+            "    python scripts/unlock_skills.py --rebuild-manifest"
+        )
+
     manifest = build()
     out = ROOT / "manifest.json"
     out.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

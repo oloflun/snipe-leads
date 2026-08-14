@@ -131,6 +131,23 @@ class Settings(BaseSettings):
     imap_password: str = ""  # Gmail: app-lösenord; Outlook: app-lösenord/IMAP-auth
     imap_folder: str = "INBOX"
 
+    # AVSIKTLIGHETSGRIND — inte en säkerhetsmekanism. Se scripts/unlock_skills.py.
+    #
+    # Nyckeln hindrar ingen angripare: vem som helst med repo-write kan redigera
+    # agent-core/skills/ direkt. Vad den hindrar är att ett MISSTAG eller en
+    # AUTONOM AGENTKÖRNING regenererar manifestet eller publicerar skills till
+    # databasen, eftersom värdet bara finns i snajp-support/.env på en enda
+    # maskin och aldrig i Render/Vercel. Skriv aldrig om den här kommentaren
+    # till något som låter som access control.
+    snajp_skill_unlock_key: str = ""
+
+    # "filesystem" | "db" — varifrån agent-core/skills/ läses (se agentcore/registry.py).
+    # DEFAULT filesystem i ALL miljö. DB-spegeln är en granskningspost över vilken
+    # text en agent_runs-rad producerades ur, inte en uppdateringskanal: kan DB:n
+    # leverera text containern inte har på disk är git bara källa till sanning i
+    # intentionen. render.yaml ska aldrig sätta SKILL_SOURCE.
+    skill_source: str = "filesystem"
+
     @model_validator(mode="after")
     def _default_model_for_provider(self) -> "Settings":
         # Undvik footgun: gpt-default mot DeepSeek => byt till deepseek-v4-flash

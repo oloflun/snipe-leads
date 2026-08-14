@@ -49,6 +49,40 @@ jobs:
       - name: Run invariant tests
         run: pytest tests/invariants
 
+      - name: INV-SKILL-006 — vendor-bump deklarerad
+        # Bara på pull requests: kräver en jämförelsereferens, och på en push
+        # till development finns ingen meningsfull bas att diffa mot.
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=50 origin "${{ github.base_ref }}"
+          python scripts/check_vendor_bump.py --base "origin/${{ github.base_ref }}"
+
+  docker-smoke:
+    name: agent-core laddas i den byggda imagen
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bygg imagen från repo-roten
+        # Byggkontexten ÄR repo-roten (punkten sist). agent-core/ ligger
+        # utanför snajp-support/ och kan inte COPY:as annars.
+        run: docker build -f snajp-support/Dockerfile -t snajp-smoke .
+
+      - name: Importera en playbook inuti containern
+        # Starkaste enradiga beviset som finns: PlaybookStep.__post_init__
+        # anropar parse_skill_name, så själva importen kastar om någon av de
+        # fyra skillsen saknas på disk. Ett textpåstående om Dockerfilens
+        # innehåll hade inte fångat en felaktig rootDir.
+        run: |
+          docker run --rm snajp-smoke python -c "
+          from app.agentcore.registry import load_full_skill
+          from app.leads.outreach_playbook import OUTREACH_V1
+          from app.agent.support_playbook import SUPPORT_V1
+          assert len(load_full_skill('mk:cold-email')) > 1000
+          assert len(OUTREACH_V1.steps) == 4
+          assert len(SUPPORT_V1.steps) > 0
+          print('agent-core OK i containern')"
+
   type-check:
     name: npm run type-check
     runs-on: ubuntu-latest

@@ -1,0 +1,22 @@
+# INV-SKILL-005 hashar RÅA BYTES (build_manifest._hash_file -> read_bytes).
+#
+# En EOL-normalisering vid checkout ändrar därför varje sha256 i manifest.json
+# på en gång. Felmeddelandet blir "ändrade skill-filer" på alla 414 filerna
+# samtidigt, vilket skickar felsökaren rakt åt fel håll — ingen har redigerat
+# något, git konverterade dem vid utcheckning.
+#
+# Samma sak bryter DB-spegelns verifiering (INV-SKILL-007): den jämför
+# sha256(row.content.encode("utf-8")) mot filens byte-hash, vilket bara är
+# samma sak för UTF-8 utan BOM med oförändrade radslut.
+#
+# Verifierat 2026-08-14: alla 414 filer under agent-core/skills/ är LF, UTF-8,
+# utan BOM. -text betyder "rör aldrig radsluten", oavsett core.autocrlf på
+# maskinen som klonar.
+#
+# Medvetet INGEN global `* text=auto`-rad: den hade tvingat fram en
+# renormalisering av hela repot i nästa commit, vilket är en stor diff för att
+# lösa ett problem som bara gäller de hashade katalogerna.
+agent-core/skills/**   -text
+agent-core/overlays/** -text
+agent-core/AGENTS.md   -text
+agent-core/manifest.json -text

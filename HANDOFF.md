@@ -159,12 +159,27 @@ producerade. Kort:
 - AV:s research var genuint bra: kollade om bolagen redan hade chatbot,
   hittade en öppning via Instagram, förberedde rimliga invändningar.
 
-### Nästa spår: finjustering via TILLÄGGSINSTRUKTIONER
+### Finjustering via TILLÄGGSINSTRUKTIONER — BYGGT 2026-08-14
 
-**HÅRD REGEL: vi går inte in och ändrar i skillsen.** Justering av output
-sker med tilläggsinstruktioner ovanpå skillen — playbookens `task` och
-`case_context`, som är våra egna. Undantag kräver att det är absolut
-nödvändigt, och då körs `agent-core/build_manifest.py` i samma commit.
+**HÅRD REGEL: vi går inte in och ändrar i skillsen.** Regeln är oförändrad,
+men den har numera en anvisad plats i stället för att bara vara ett förbud:
+
+| Vill du ändra | Ändra då | Kräver |
+| --- | --- | --- |
+| en säkerhets-/sanningsregel för ALLA kunder | `agent-core/AGENTS.md` | PR |
+| hur ett visst steg formulerar sig | `agent-core/overlays/<namn>.md` + `PlaybookStep(overlay=...)` | PR |
+| en enskild kunds röst och ton | kundens SOUL-dokument (`/settings/soul`) | inget, kunden äger den |
+| en vendorad metodik | `scripts/unlock_skills.py --rebuild-manifest` | `SNAJP_SKILL_UNLOCK_KEY` + `VENDOR-BUMP:`-trailer |
+
+`agent-core/AGENTS.md` är **opinnad** — den slår igenom hos alla direkt. Därför
+bara policy där, aldrig ton. Kryper tuning in dit finns en väg att ändra varje
+kunds agent utan pin och utan godkännande.
+
+`pack_version` bär nu tre hashar (`manifest+overlay+global`), så en körning går
+att reproducera trots att två av lagren är fritt redigerbara (INV-AUDIT-001).
+
+**`python agent-core/build_manifest.py` kräver numera nyckeln** och hänvisar
+till `scripts/unlock_skills.py`, som visar diffen och kräver bekräftelse.
 
 Regeln är mekanisk sedan 2026-08-10: **INV-SKILL-005**
 (`tests/invariants/test_inv_skill_005.py`) jämför varje fil under
@@ -173,9 +188,15 @@ redigering, tillagd eller borttagen fil. Verifierat att den faktiskt fäller.
 
 Vad som ska utvärderas härnäst — se §8.6 för resonemanget:
 1. `sa:draft-outreach` + `snajp:humanizer-svenska` — tonen avgörs där.
-2. Grundningskrav på siffror och kundreferenser i utkast (se §8.4 om den
-   påhittade "30 procent"-siffran — den saknar fortfarande kodgrind).
+   Justeras i `agent-core/overlays/leads-hard-rules.md`.
+2. ~~Grundningskrav på siffror och kundreferenser i utkast~~ — **BYGGT
+   2026-08-14.** `app/leads/grounding_gate.py` fäller ostödda påståenden,
+   `GROUNDING_V1` reparerar en gång, delta-humaniserar bara de ändrade
+   meningarna, och grindar om. Kvarstår ett ostött påstående går utkastet
+   till en människa (INV-GROUND-001). Den påhittade "30 procent"-siffran är
+   regressionstestad i `tests/leads/test_grounding_gate.py`.
 3. `mk:prospecting` — behåll AV:s bedömning, be den motivera tydligare.
+   Ny overlay, inte en skill-ändring.
 
 ### (historik) Uppdraget innan datan fanns
 

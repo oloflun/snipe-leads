@@ -168,6 +168,27 @@ class Storage(Protocol):
         self, tenant_id: str, *, agent_type: str | None = None, limit: int = 50
     ) -> list[dict[str, Any]]: ...
 
+    # -- Skill-spegeln (INV-SKILL-007) --------------------------------------
+    #
+    # Ingen tenant_id: delad baselinekatalog, samma avsiktliga undantag som
+    # get_segment_ab_aggregate. PostgresStorage använder därför inte _scoped()
+    # här — det är inte en glömd RLS-scoping, det finns ingen kolumn att
+    # scopa på (se migration 016).
+
+    async def list_skill_files(
+        self, *, manifest_hash: str
+    ) -> list[dict[str, Any]]:
+        """Alla speglade filer för EN manifest_hash. Uppslagning sker alltid
+        på den lokalt utcheckade hashen, vilket gör versionsskev strukturellt
+        omöjlig."""
+        ...
+
+    async def publish_skill_files(
+        self, *, manifest_hash: str, rows: list[dict[str, Any]], published_by: str = ""
+    ) -> int:
+        """Idempotent publicering. Returnerar antal nya rader."""
+        ...
+
     # -- Leads: skriva ett utkast + köa (aldrig skicka, INV-SEC-004) --------
 
     async def queue_outreach_message(

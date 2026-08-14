@@ -722,6 +722,46 @@ class PostgresStorage:
                 )
         return [_row(r) for r in records]
 
+    async def list_skill_files(self, *, manifest_hash: str) -> list[dict[str, Any]]:
+        # AVSIKTLIGT ingen _scoped(tenant_id): agent_skill_files har ingen
+        # tenant_id-kolumn (migration 016, delad baselinekatalog). Det är
+        # inte en glömd RLS-scoping — det finns inget att scopa på.
+        async with self._pool.acquire() as conn:
+            records = await conn.fetch(
+                """select namespace, relative_path, content, sha256
+                   from agent_skill_files where manifest_hash = $1""",
+                manifest_hash,
+            )
+        return [_row(r) for r in records]
+
+    async def publish_skill_files(
+        self, *, manifest_hash: str, rows: list[dict[str, Any]], published_by: str = ""
+    ) -> int:
+        # snajp_app har REVOKE insert på tabellen (migration 016) — tjänsten
+        # kan inte skriva om sina egna skills. Publicering körs därför med en
+        # administrativ anslutning via scripts/publish_skills.py.
+        async with self._pool.acquire() as conn:
+            result = await conn.executemany(
+                """insert into agent_skill_files
+                     (manifest_hash, namespace, relative_path, content, sha256,
+                      byte_size, published_by)
+                   values ($1, $2, $3, $4, $5, $6, $7)
+                   on conflict (manifest_hash, namespace, relative_path) do nothing""",
+                [
+                    (
+                        manifest_hash,
+                        row["namespace"],
+                        row["relative_path"],
+                        row["content"],
+                        row["sha256"],
+                        row["byte_size"],
+                        published_by,
+                    )
+                    for row in rows
+                ],
+            )
+        return len(rows) if result is None else len(rows)
+
     async def get_segment_ab_aggregate(self) -> list[dict[str, Any]]:
         # AVSIKTLIGT ingen _scoped(tenant_id) — den här funktionen har inget
         # tenant-sammanhang. select * from segment_ab_aggregate() kör som

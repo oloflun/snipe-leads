@@ -17,7 +17,9 @@ from __future__ import annotations
 import time
 from typing import Any
 
+from ..agentcore.overlays import pack_version
 from ..agentcore.packs import RunLedger
+from ..leads.soul import load_soul
 from ..config import CATEGORY_LABELS, get_settings
 from ..storage.base import Storage
 from .retention_classifier import classify_cancellation_risk, is_cancellation_risk
@@ -65,12 +67,18 @@ async def run_support_agent(
         intent, dissatisfaction = 0.0, 0.0
     cancellation_risk = is_cancellation_risk(intent, dissatisfaction)
 
+    # Kundens röstdokument. Ligger i case_context, alltså i USERposition —
+    # aldrig i systemprompten. Se app/leads/soul.py för varför den gränsen
+    # är själva mekanismen och inte en försiktighetsåtgärd (INV-SEC-009).
+    soul_block = await load_soul(storage, tenant_id)
+
     case_context = (
         f"## Ärendet\nKanal: {channel} (ton: {config['tone']}, max {config['max_length']} tecken)\n"
         f"Kund: {customer_name or 'okänd'} <{customer_email or 'okänd'}>\n"
         f"Ämne: {subject or '(inget)'}\n\n"
         f"Kundens meddelande:\n{message}{vision_note}\n\n"
         f"Giltiga kategorier för den här kunden: {', '.join(taxonomy)}"
+        + (f"\n\n{soul_block}" if soul_block else "")
     )
 
     ledger = RunLedger(satisfied={"context_pack"})
@@ -270,11 +278,11 @@ async def run_support_agent(
     )
 
     latency_ms = int((time.monotonic() - started) * 1000)
-    manifest_hash = _manifest_hash()
+    pack = pack_version(SUPPORT_V1.name)
     await storage.log_agent_run(
         tenant_id,
         agent_type="support",
-        pack_version=f"{manifest_hash}:{SUPPORT_V1.name}",
+        pack_version=pack,
         skills_used=trace.skills_used,
         input_text=message,
         output_text=reply,
@@ -299,16 +307,5 @@ async def run_support_agent(
         "skills_used": trace.skills_used,
         "step_log": trace.as_log(),
         "cancellation_risk": cancellation_risk,
-        "pack_version": f"{manifest_hash}:{SUPPORT_V1.name}",
+        "pack_version": pack,
     }
-
-
-def _manifest_hash() -> str:
-    """Baseline-versionen (Del B/D) — manifestets hash över alla vendorade filer."""
-    import json
-    from pathlib import Path
-
-    manifest = Path(__file__).resolve().parents[3] / "agent-core" / "manifest.json"
-    if not manifest.is_file():
-        return "unknown"
-    return json.loads(manifest.read_text(encoding="utf-8")).get("manifest_hash", "unknown")[:12]

@@ -21,24 +21,40 @@ from ..agentcore.packs import Playbook, PlaybookStep, RunLedger, check_precondit
 # thinking AV i hela leadsflödet — se research_playbook.THINKING för beslutet.
 from .research_playbook import THINKING  # noqa: E402
 
+# De hårda reglerna (LinkedIn-förbudet, ren text, språkläget) låg tidigare som
+# en f-sträng mitt i leads_agent.run_outreach_draft, alltså i USER-position och
+# på ett ställe ingen letade. Nu är de en overlay i SYSTEM-position: samma text,
+# starkare placering, och versionerad via overlay_hash i pack_version.
+_HARD_RULES = "leads-hard-rules"
+
 OUTREACH_V1 = Playbook(
     name="leads/outreach-v1",
     steps=(
-        PlaybookStep(skill="sa:draft-outreach", requires=("offer_selected",), thinking=THINKING),
+        PlaybookStep(
+            skill="sa:draft-outreach",
+            requires=("offer_selected",),
+            overlay=_HARD_RULES,
+            thinking=THINKING,
+        ),
         PlaybookStep(
             skill="mk:cold-email",
             requires=("skill:sa:draft-outreach",),
             scope=("references/personalization.md",),
             rationale="Skapandesteget behöver personaliseringssignaler, inte hela mk:cold-email-metodiken än.",
+            overlay=_HARD_RULES,
             thinking=THINKING,
         ),
         # granska: hel skill
         PlaybookStep(
-            skill="mk:cold-email", requires=("skill:mk:cold-email",), thinking=THINKING
+            skill="mk:cold-email",
+            requires=("skill:mk:cold-email",),
+            overlay=_HARD_RULES,
+            thinking=THINKING,
         ),
         PlaybookStep(
             skill="snajp:humanizer-svenska",
             requires=("skill:mk:cold-email",),
+            overlay=_HARD_RULES,
             thinking=THINKING,
         ),
     ),

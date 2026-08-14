@@ -8,8 +8,12 @@ services:
   - type: web
     name: snajp-support
     runtime: docker
-    rootDir: snajp-support
-    dockerfilePath: ./Dockerfile
+    # rootDir MÅSTE vara repo-roten: agent-core/ ligger utanför snajp-support/
+    # och Docker kan inte COPY:a utanför byggkontexten. Med rootDir:
+    # snajp-support startade containern grönt och föll först på det första
+    # riktiga agentanropet (UnknownSkillError). Se Dockerfile + .dockerignore.
+    rootDir: .
+    dockerfilePath: ./snajp-support/Dockerfile
     healthCheckPath: /health/live
     plan: free
     envVars:

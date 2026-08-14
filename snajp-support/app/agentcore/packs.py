@@ -48,9 +48,21 @@ class PlaybookStep:
     # där lämnas utan override tills den fullständiga jämförelsen är klar,
     # se docs/THINKING_MODE_COMPARISON.md.
     thinking: str | None = None  # "enabled" | "disabled" | None
+    # Den sanktionerade finjusteringsytan (INV-SKILL-005: "justera med
+    # tilläggsinstruktioner ovanpå skillen, aldrig i skillen"). Namn på en fil
+    # i agent-core/overlays/, injicerad i SYSTEMposition efter skill-texten.
+    # Fritt redigerbar, versionerad via overlays.overlay_hash() i pack_version.
+    # Behöver du ändra vad ett steg säger: gör det här, inte i skillen.
+    overlay: str | None = None
 
     def __post_init__(self):
         parse_skill_name(self.skill)  # kastar direkt om oprefixerat/okänt (INV-SKILL-001)
+        if self.overlay:
+            # Samma fail-fast som skill-namnet: ett felstavat overlay-namn
+            # fäller modulimporten, alltså CI, aldrig först i produktion.
+            from .overlays import parse_overlay_name
+
+            parse_overlay_name(self.overlay)
         if self.scope and not self.rationale:
             raise ScopeWithoutRationaleError(
                 f"{self.skill}: en skopa kräver en rationale i playbooken (INV-SKILL-003). "
