@@ -131,6 +131,12 @@ class Settings(BaseSettings):
     imap_password: str = ""  # Gmail: app-lösenord; Outlook: app-lösenord/IMAP-auth
     imap_folder: str = "INBOX"
 
+    # CORS: kommaseparerade origins som får anropa API:t direkt från en
+    # webbläsare. Tom = av, vilket räcker för vår egen frontend — Next-proxyn
+    # anropar backenden server-side, så webbläsaren träffar aldrig den här
+    # tjänsten. Behövs den dag en kund vill anropa API:t från sin egen webbapp.
+    allowed_origins: str = ""
+
     # AVSIKTLIGHETSGRIND — inte en säkerhetsmekanism. Se scripts/unlock_skills.py.
     #
     # Nyckeln hindrar ingen angripare: vem som helst med repo-write kan redigera
