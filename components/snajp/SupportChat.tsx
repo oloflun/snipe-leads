@@ -1,8 +1,8 @@
 "use client";
 
-import { ImagePlus, Loader2, Send, ShieldAlert, X } from "lucide-react";
+import { ImagePlus, Loader2, Send, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Badge, btnPrimary } from "@/components/ui";
+import { btnPrimary } from "@/components/ui";
 import { useLocale } from "@/lib/i18n";
 import { getTenant } from "@/lib/tenants";
 import { cn } from "@/lib/utils";
@@ -215,14 +215,13 @@ export function SupportChat({ tenant, session }: SupportChatProps = {}) {
     }
   }, []);
 
+  // Bara uppe eller nere. Om svaret kom från en riktig modell eller en simulering
+  // är vår information, inte kundens — "Online · Live-AI" bredvid företagsnamnet
+  // säger ingenting kunden kan använda och avslöjar hur vi kör tjänsten.
   const statusLabel =
     mode === "offline"
       ? text({ sv: "Offline", en: "Offline" })
-      : mode === "simulation"
-        ? text({ sv: "Online · Demo-läge", en: "Online · Demo mode" })
-        : mode === "live"
-          ? text({ sv: "Online · Live-AI", en: "Online · Live AI" })
-          : text({ sv: "Online", en: "Online" });
+      : text({ sv: "Online", en: "Online" });
 
   return (
     <div className="overflow-hidden rounded-card bg-paper">
@@ -301,31 +300,16 @@ export function SupportChat({ tenant, session }: SupportChatProps = {}) {
                   className="mb-2 max-h-40 rounded-input"
                 />
               ) : null}
+              {/* Ren chattbubbla. Kategori, sentiment, eskaleringsflagga, demo-märke
+                  och källartikel renderades här tidigare — allt tillsammans en
+                  intern bedömning av kunden, visad FÖR kunden. "Sentiment 0.1"
+                  bredvid ett svar om ett dödsfall är det tydligaste exemplet.
+
+                  Datat finns kvar i message.meta och används av den interna vyn
+                  (components/snajp/Dashboard.tsx:497-536) och av admin-spårningen.
+                  Ingen prop styr det här: en kundvänd komponent ska inte gå att
+                  konfigurera till att läcka. */}
               <p className="whitespace-pre-wrap">{message.content}</p>
-              {message.meta ? (
-                <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-ink/10 pt-3">
-                  {message.meta.category_label ? <Badge tone="neutral">{message.meta.category_label}</Badge> : null}
-                  {typeof message.meta.sentiment === "number" ? (
-                    <Badge tone={message.meta.sentiment < 0.3 ? "danger" : message.meta.sentiment > 0.6 ? "good" : "warn"}>
-                      Sentiment {message.meta.sentiment.toFixed(1)}
-                    </Badge>
-                  ) : null}
-                  {message.meta.escalated ? (
-                    <Badge tone="danger">
-                      <ShieldAlert className="h-3 w-3" />
-                      {text({ sv: "Eskalerat till människa", en: "Escalated to human" })}
-                    </Badge>
-                  ) : null}
-                  {message.meta.simulation ? (
-                    <Badge tone="warn">{text({ sv: "Demo-läge", en: "Demo mode" })}</Badge>
-                  ) : null}
-                  {message.meta.kb_sources?.length ? (
-                    <span className="text-xs text-ink/50">
-                      {text({ sv: "Källa", en: "Source" })}: {message.meta.kb_sources[0].title}
-                    </span>
-                  ) : null}
-                </div>
-              ) : null}
             </div>
           </div>
         ))}
@@ -357,7 +341,17 @@ export function SupportChat({ tenant, session }: SupportChatProps = {}) {
           </div>
         ) : null}
         <form
-          className="flex items-end gap-2"
+          // Bryter till två rader under 360px. Uppmätt vid 320: formuläret har
+          // 198px att dela på, knapparna tar 44 + 56 + 16 i mellanrum, och
+          // textfältet blev 82px — innehållsytan 50px efter px-4. Platshållaren
+          // radbröts och andra raden kapades (scrollHeight 68 mot clientHeight 44).
+          // Vid 360px och uppåt är raden oförändrad; det är bara den smalaste
+          // skärmen som inte rymmer allt bredvid varandra.
+          //
+          // Omordningen ligger på max-[359px] och inte på det breda läget, så att
+          // tabbordningen följer den synliga ordningen överallt utom på den
+          // smalaste skärmen. DOM-ordningen är oförändrad.
+          className="flex flex-wrap items-end gap-2"
           onSubmit={(event) => {
             event.preventDefault();
             void send(input);
@@ -376,7 +370,7 @@ export function SupportChat({ tenant, session }: SupportChatProps = {}) {
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
-            className="focus-ring inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-input bg-paper text-ink/60 transition-colors hover:text-ink"
+            className="focus-ring inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-input bg-paper text-ink/60 transition-colors hover:text-ink max-[359px]:order-2"
             aria-label={text({ sv: "Bifoga bild", en: "Attach image" })}
           >
             <ImagePlus className="h-4 w-4" />
@@ -397,7 +391,7 @@ export function SupportChat({ tenant, session }: SupportChatProps = {}) {
             placeholder={text({ sv: "Skriv här…", en: "Type here…" })}
             // 16px floor: iOS Safari force-zooms a focused input below it, which throws
             // the whole demo layout off on the device most visitors arrive on.
-            className="focus-ring min-h-11 flex-1 resize-none rounded-input bg-paper px-4 py-2.5 text-[1rem] outline-none placeholder:text-ink/35"
+            className="focus-ring min-h-11 flex-1 resize-none rounded-input bg-paper px-4 py-2.5 text-[1rem] outline-none placeholder:text-ink/35 max-[359px]:order-1 max-[359px]:w-full max-[359px]:flex-none"
           />
           <button
             type="submit"
@@ -406,7 +400,7 @@ export function SupportChat({ tenant, session }: SupportChatProps = {}) {
             // krympte till 114px och platshållaren kapades mitt i ordet. Ikonen
             // ensam räcker på små skärmar; aria-label bär betydelsen.
             aria-label={text({ sv: "Skicka", en: "Send" })}
-            className={btnPrimary}
+            className={cn(btnPrimary, "max-[359px]:order-3 max-[359px]:ml-auto")}
           >
             <Send className="h-4 w-4" />
             <span className="hidden sm:inline">{text({ sv: "Skicka", en: "Send" })}</span>
