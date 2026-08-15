@@ -12,6 +12,23 @@ Read these three files BEFORE opening any repo source files. Then open only the 
 For architecture questions, also read `10_SYSTEM_OVERVIEW.md`. For test/deploy questions, also read `40_OPERATIONS_AND_RELEASE.md`.
 <!-- agent-chorus:context-pack:claude:end -->
 
+## Projektregler — drift
+
+**Allt arbete går till `development`, aldrig direkt till `main`.** Push till
+`development` deployar frontenden till Vercel Preview och backenden till
+Render-tjänsten `snajp-support-dev`. `main` rörs först när något är verifierat
+i previewen.
+
+**Preview-databasen är en SPEGEL av produktionen.** Supabase-grenen
+`development` skapas alltid med `--with-data`, så att en ändring går att
+utvärdera med allt annat lika. En tom databas testar bara att koden startar.
+
+**Följden:** previewen innehåller riktiga kunders ärenden och mejladresser och
+ska behandlas med samma sekretess som produktionen — inga länkar till
+utomstående, inga skärmdumpar med kunddata.
+
+Fullständig beskrivning av miljöer, variabler och fällor: [`DEPLOY.md`](DEPLOY.md).
+
 <!-- agent-chorus:claude:start -->
 ## Agent Chorus Integration
 
