@@ -19,7 +19,7 @@ import { proxyWithApiKey } from "./_lib";
 export async function proxyAsTenant(path: string, init: RequestInit) {
   try {
     const tenant = await requireSnajpTenant();
-    return await proxyWithApiKey(path, init, tenant.apiKey);
+    return await proxyWithApiKey(path, init, tenant.apiKey, tenant.userId);
   } catch (error) {
     if (error instanceof SnajpTenantError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

@@ -6,6 +6,14 @@ export const runtime = "nodejs";
 // funktionen efter 10 s och en frisk backend ser ut att vara nere.
 export const maxDuration = 60;
 
+/**
+ * ANONYM MED FLIT (INV-SEC-010). Routen pollar ett jobb som den lika anonyma
+ * chat-routen startade — hade den krävt session hade den publika demon aldrig
+ * kunnat hämta sitt eget svar.
+ *
+ * Ytan är smal: bara läsning, bara ett jobb, och backenden kontrollerar att
+ * jobbet tillhör den tenant nyckeln pekar på.
+ */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ jobId: string }> }

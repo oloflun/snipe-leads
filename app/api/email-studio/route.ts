@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateText } from 'ai';
 import { openai } from '@ai-sdk/openai';
+import { getWorkspaceContext } from '@/lib/workspace';
 
 function parseRichRefine(content: string) {
   const trimmed = content.trim();
@@ -238,7 +239,26 @@ Vore det intressant att höra hur ni tänker kring det just nu?
 Du har tillgång till tidigare konversationer och användardata via Supabase för bättre kontext över tid.
 `;
 
+/**
+ * Sessionsgrind. Routen anropar generateText mot OpenAI och var anonymt
+ * nåbar — samma hålklass som catch-all-proxyn, men med en direkt kostnad:
+ * vem som helst kunde bränna OPENAI_API_KEY genom att posta hit i en loop.
+ *
+ * Den togs inte upp i plattformsplanens Fas 1, som handlade om
+ * snajp-support-proxyn. Den fanns ändå, och INV-SEC-010 hittar den.
+ */
+async function requireSession() {
+  const context = await getWorkspaceContext();
+  if (!context) {
+    return NextResponse.json({ error: "Du måste vara inloggad." }, { status: 401 });
+  }
+  return null;
+}
+
 export async function POST(request: NextRequest) {
+  const denied = await requireSession();
+  if (denied) return denied;
+
   try {
     const body = await request.json();
     const { action, draft = '', subject = '', body: emailBody = '', context = {}, locale = 'sv', userId } = body;
@@ -295,6 +315,9 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET() {
+  const denied = await requireSession();
+  if (denied) return denied;
+
   return NextResponse.json({
     message: 'Email Studio API route. POST with { action, subject, body, context? } to get the system prompt + request data.',
     systemPromptLength: EMAIL_STUDIO_SYSTEM_PROMPT.length,

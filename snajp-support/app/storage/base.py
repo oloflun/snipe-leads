@@ -367,6 +367,19 @@ class Storage(Protocol):
         self, tenant_id: str, *, tenant_name: str, raw_key: str
     ) -> dict[str, Any]: ...
 
+    # -- Rate limiting (plattformsnivå, inte tenant-skopad) ------------------
+    #
+    # Ligger UTANFÖR tenant-skopet med flit: ett av tre scope är en IP-adress
+    # från den anonyma demon, som per definition inte har någon tenant.
+
+    async def count_rate_events(
+        self, *, scope_kind: str, scope_id: str, kind: str, since: Any
+    ) -> int: ...
+
+    async def record_rate_events(
+        self, *, scope_kind: str, scope_id: str, kind: str, count: int
+    ) -> None: ...
+
     async def close(self) -> None: ...
 
 

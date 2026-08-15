@@ -136,6 +136,9 @@ class MemoryStorage:
         self.prospects: dict[str, list[dict[str, Any]]] = {}
         self.prospect_sources: dict[str, list[dict[str, Any]]] = {}
         self.agent_runs: dict[str, list[dict[str, Any]]] = {}
+        # (scope_kind, scope_id, kind) -> tidsstämplar. Inte tenant-nycklad,
+        # eftersom demons IP-scope inte har någon tenant (migration 019).
+        self.rate_events: dict[tuple[str, str, str], list[datetime]] = {}
         # Nycklad på manifest_hash, inte tenant_id — delad baselinekatalog
         # (migration 016). Samma undantag som segmentaggregatet.
         self.skill_files: dict[str, list[dict[str, Any]]] = {}
@@ -965,6 +968,27 @@ class MemoryStorage:
         }
         self.api_keys[key_hash] = record
         return record
+
+    # -- Rate limiting ------------------------------------------------------
+    #
+    # Speglar Postgres-beteendet, inklusive att räknaren INTE är tenant-skopad.
+    # MemoryStorage får aldrig sacka efter protokollet — det var precis så
+    # agent_runs.agent_type-buggen kunde gömma sig i ett halvår: villkoret
+    # fanns bara i Postgres, och testerna körde mot minnet.
+
+    async def count_rate_events(
+        self, *, scope_kind: str, scope_id: str, kind: str, since: Any
+    ) -> int:
+        events = self.rate_events.get((scope_kind, scope_id, kind), [])
+        return sum(1 for at in events if at >= since)
+
+    async def record_rate_events(
+        self, *, scope_kind: str, scope_id: str, kind: str, count: int
+    ) -> None:
+        if count <= 0:
+            return
+        now = datetime.now(timezone.utc)
+        self.rate_events.setdefault((scope_kind, scope_id, kind), []).extend([now] * count)
 
     async def close(self) -> None:
         return None

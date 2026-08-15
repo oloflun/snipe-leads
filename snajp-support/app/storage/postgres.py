@@ -1178,5 +1178,49 @@ class PostgresStorage:
             )
         return _row(record)
 
+    # -- Rate limiting ------------------------------------------------------
+
+    async def count_rate_events(
+        self, *, scope_kind: str, scope_id: str, kind: str, since: Any
+    ) -> int:
+        # Oskopad anslutning: tabellen har ingen tenant-kolumn, och ett av
+        # scopen (ip) tillhör den anonyma demon som saknar tenant helt.
+        async with self.pool.acquire() as conn:
+            return await conn.fetchval(
+                """
+                select count(*) from platform_rate_events
+                where scope_kind = $1 and scope_id = $2 and kind = $3 and created_at >= $4
+                """,
+                scope_kind,
+                scope_id,
+                kind,
+                since,
+            )
+
+    async def record_rate_events(
+        self, *, scope_kind: str, scope_id: str, kind: str, count: int
+    ) -> None:
+        if count <= 0:
+            return
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                insert into platform_rate_events (scope_kind, scope_id, kind)
+                select $1, $2, $3 from generate_series(1, $4)
+                """,
+                scope_kind,
+                scope_id,
+                kind,
+                count,
+            )
+            # Städning i samma anslutning. Fönstret är en timme; allt äldre än
+            # ett dygn är avfall. Ser dyrt ut att köra varje gång, är det inte:
+            # med platform_rate_events_created_idx hittar den noll rader på en
+            # indexskanning i normalfallet. Det är billigare än pg_cron att
+            # underhålla och kan inte glömmas bort vid en miljöflytt.
+            await conn.execute(
+                "delete from platform_rate_events where created_at < now() - interval '1 day'"
+            )
+
     async def close(self) -> None:
         await self.pool.close()

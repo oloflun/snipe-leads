@@ -9,6 +9,7 @@ import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ..config import get_settings
+from . import rate_limit_db
 from .deps import require_tenant
 from .schemas import ChatRequest
 
@@ -30,7 +31,12 @@ def _validate_attachments(request: ChatRequest) -> list[str]:
 
 
 async def _process(
-    app_state, job_id: str, tenant_id: str, request: ChatRequest, attachments: list[str]
+    app_state,
+    job_id: str,
+    tenant_id: str,
+    request: ChatRequest,
+    attachments: list[str],
+    scopes: list[rate_limit_db.Scope] | None = None,
 ) -> None:
     settings = get_settings()
     storage = app_state.storage
@@ -61,6 +67,10 @@ async def _process(
                 customer_name=request.customer_name,
                 attachments=attachments,
             )
+        # Bokför de LLM-anrop körningen FAKTISKT gjorde — ett steg är ett
+        # anrop, och antalet varierar med eskalering och omkörning. Ett tak
+        # räknat i meddelanden hade mätt fel storhet (migration 019).
+        await rate_limit_db.record(storage, scopes or [], len(result.get("step_log") or []))
         await app_state.jobs.complete(job_id, result)
     except Exception as error:  # noqa: BLE001 — jobbet får aldrig fastna i processing
         await app_state.jobs.fail(job_id, f"Agentkörningen misslyckades: {error}")
@@ -71,9 +81,23 @@ async def chat(
     request: Request, payload: ChatRequest, tenant: dict = Depends(require_tenant)
 ) -> dict:
     attachments = _validate_attachments(payload)
+
+    # X-Snajp-User sätts av Next-proxyn efter sessionen. Den är frivillig:
+    # saknas den gäller bara tenant-taket, och en förfalskad rubrik kan bara
+    # ge en snävare kvot åt den som förfalskar den.
+    scopes = rate_limit_db.scopes_for(
+        tenant["tenant_id"], request.headers.get("x-snajp-user")
+    )
+    try:
+        await rate_limit_db.enforce(request.app.state.storage, scopes)
+    except rate_limit_db.RateLimitDbExceededError as error:
+        # 429 med svenskt besked. En slut kvot är inte ett fel i koden, och
+        # meddelandet ska gå att förstå utan att läsa loggen.
+        raise HTTPException(status_code=429, detail=str(error)) from error
+
     job_id = await request.app.state.jobs.create(tenant_id=tenant["tenant_id"])
     asyncio.create_task(
-        _process(request.app.state, job_id, tenant["tenant_id"], payload, attachments)
+        _process(request.app.state, job_id, tenant["tenant_id"], payload, attachments, scopes)
     )
     return {"job_id": job_id, "status": "processing"}
 

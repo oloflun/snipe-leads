@@ -29,6 +29,14 @@ export type SnajpTenant = {
   workspaceId: string;
   slug: string;
   apiKey: string;
+  /**
+   * auth.users.id. Går vidare till backenden som X-Snajp-User och används
+   * enbart till timtaket per användare (migration 019). Backenden behandlar
+   * det som ett ogenomskinligt id — den slår aldrig upp det mot auth.users,
+   * och en förfalskad rubrik kan därför bara ge en SNÄVARE kvot, aldrig en
+   * vidare. Tenant-taket sitter kvar oavsett vad som står här.
+   */
+  userId: string;
 };
 
 export async function requireSnajpTenant(): Promise<SnajpTenant> {
@@ -37,7 +45,7 @@ export async function requireSnajpTenant(): Promise<SnajpTenant> {
     throw new SnajpTenantError(401, "Du måste vara inloggad.");
   }
 
-  const { workspace } = context;
+  const { workspace, user } = context;
 
   // Ingen slug betyder att workspacet aldrig kopplats till en kund i
   // ss_tenants. Att då tyst låna demo-tenantens data är precis felet vi
@@ -67,5 +75,5 @@ export async function requireSnajpTenant(): Promise<SnajpTenant> {
     );
   }
 
-  return { workspaceId: workspace.id, slug: workspace.slug, apiKey };
+  return { workspaceId: workspace.id, slug: workspace.slug, apiKey, userId: user.id };
 }

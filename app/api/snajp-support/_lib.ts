@@ -92,7 +92,12 @@ const MAX_ATTEMPTS = 5;
  * proxyAsTenant i _auth.ts; anonyma går via proxyToBackend nedan, som slår upp
  * nyckeln ur en slug först.
  */
-export async function proxyWithApiKey(path: string, init: RequestInit, apiKey: string) {
+export async function proxyWithApiKey(
+  path: string,
+  init: RequestInit,
+  apiKey: string,
+  userId?: string
+) {
   let lastCause: unknown;
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
@@ -104,6 +109,9 @@ export async function proxyWithApiKey(path: string, init: RequestInit, apiKey: s
         headers: {
           "Content-Type": "application/json",
           "X-API-Key": apiKey,
+          // Enbart till timtaket per användare. Sätts efter sessionen, aldrig
+          // från klienten — och backenden kan bara BEGRÄNSA på den, inte höja.
+          ...(userId ? { "X-Snajp-User": userId } : {}),
           ...(init.headers ?? {})
         },
         cache: "no-store",
