@@ -106,6 +106,59 @@ export type Database = {
         };
         Relationships: [];
       };
+      // Finns sedan 006_auth_selfheal.sql men har saknats i den här filen —
+      // därför fanns ingen typad skrivväg, och därför blev TeamSettings fyra
+      // hårdkodade strängar i stället för riktiga inbjudningar.
+      workspace_invites: {
+        Row: {
+          id: string;
+          email: string;
+          workspace_id: string;
+          role: string;
+          invited_by: string | null;
+          accepted_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          email: string;
+          workspace_id: string;
+          role?: string;
+          invited_by?: string | null;
+          accepted_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          email?: string;
+          workspace_id?: string;
+          role?: string;
+          invited_by?: string | null;
+          accepted_at?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      // 020_platform_admins.sql. Egen dimension, inte profiles.role — den
+      // senare är workspace-scopad och säger inget om plattformsåtkomst.
+      platform_admins: {
+        Row: {
+          user_id: string;
+          granted_by: string | null;
+          granted_at: string;
+        };
+        Insert: {
+          user_id: string;
+          granted_by?: string | null;
+          granted_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          granted_by?: string | null;
+          granted_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;

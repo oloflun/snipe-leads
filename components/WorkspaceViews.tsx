@@ -6,6 +6,7 @@ import { SoulEditor } from "@/components/SoulEditor";
 import { PageShell } from "@/components/AppShell";
 import { btnPrimary, btnSecondary } from "@/components/ui";
 import { LoginForm } from "@/components/auth/LoginForm";
+import { TeamSettings } from "@/components/settings/TeamSettings";
 import { OnboardingForm } from "@/components/auth/OnboardingForm";
 import {
   analyticsSeries,
@@ -549,9 +550,10 @@ function MailboxSettings() {
   return <TextList title="Mailbox health" items={["sales@snajp-demo.se · healthy · 96 skick per dag", "elin@kundbolag.se · warming · 34 skick per dag"]} />;
 }
 
-function TeamSettings() {
-  return <TextList title="Teamroller" items={["Owner · full åtkomst", "Sales lead · kampanjer och inbox", "Researcher · bolag och signaler", "Viewer · läsbehörighet"]} />;
-}
+// TeamSettings bor numera i components/settings/TeamSettings.tsx och läser
+// den faktiska arbetsytan. Den gamla versionen här var fyra hårdkodade
+// strängar om roller som aldrig funnits i schemat ('Sales lead', 'Researcher',
+// 'Viewer') — profiles.role har två värden: owner och member.
 
 function BillingSettings() {
   return <TextList title="Billing" items={["Plan · Team · 14 900 kr/mån", "Leads · 312 av 1000 denna månad", "Seats · 4 av 8 aktiva användare"]} />;

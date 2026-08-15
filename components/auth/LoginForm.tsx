@@ -3,18 +3,21 @@
 import { useState, useTransition } from "react";
 import { useSearchParams } from "next/navigation";
 import {
+  requestPasswordReset,
   signInWithMagicLink,
+  signInWithOAuth,
   signInWithPassword,
   signUpWithPassword
 } from "@/lib/actions/auth";
 import { cn } from "@/lib/utils";
 
-type AuthMode = "login" | "signup" | "magic";
+type AuthMode = "login" | "signup" | "magic" | "reset";
 
 export function LoginForm() {
   const searchParams = useSearchParams();
-  // Per Snajp Prompt: quick email-only + immediate Email Studio access
-  const nextPath = searchParams.get("next") ?? "/emails";
+  // /emails finns inte — routen heter /dashboard/emails (lib/routes.ts). Den
+  // gamla defaulten skickade varje lyckad inloggning utan ?next= till en 404.
+  const nextPath = searchParams.get("next") ?? "/dashboard/emails";
   const [mode, setMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -35,6 +38,16 @@ export function LoginForm() {
     setError(null);
 
     startTransition(async () => {
+      if (mode === "reset") {
+        const result = await requestPasswordReset(email);
+        if (result.success) {
+          setMessage(result.message ?? "Återställningslänk skickad.");
+        } else {
+          setError(result.error ?? "Något gick fel.");
+        }
+        return;
+      }
+
       if (mode === "magic") {
         const result = await signInWithMagicLink(email, nextPath);
         if (result.success) {
@@ -62,11 +75,57 @@ export function LoginForm() {
     });
   }
 
+  function handleOAuth(provider: "google" | "azure") {
+    setMessage(null);
+    setError(null);
+    startTransition(async () => {
+      const result = await signInWithOAuth(provider, nextPath);
+      if (result.success && result.url) {
+        // Navigeringen sker här, inte på servern: skipBrowserRedirect är satt
+        // i action:en eftersom en server-side redirect till providern hade
+        // hamnat i en fetch utan webbläsare att samtycka i.
+        window.location.assign(result.url);
+        return;
+      }
+      setError(result.error ?? "Inloggningen kunde inte startas.");
+    });
+  }
+
   return (
     <form className="w-full max-w-xl" onSubmit={handleSubmit}>
       <h2 className="font-display text-5xl italic-disp tighten">
-        {mode === "signup" ? "Skapa konto" : "Välkommen tillbaka"}
+        {mode === "signup"
+          ? "Skapa konto"
+          : mode === "reset"
+            ? "Återställ lösenordet"
+            : "Välkommen tillbaka"}
       </h2>
+
+      {/* Ink-outline, inte färgade märkesknappar. DESIGN.md har EN accent, och
+          Googles fyrfärgslogotyp är inte den — två identiteter på samma sida
+          gör att ingen av dem läses som avsändare. */}
+      <div className="mt-8 grid gap-3 sm:grid-cols-2">
+        {([
+          ["google", "Fortsätt med Google"],
+          ["azure", "Fortsätt med Microsoft"]
+        ] as const).map(([provider, label]) => (
+          <button
+            key={provider}
+            type="button"
+            disabled={isPending}
+            onClick={() => handleOAuth(provider)}
+            className="border border-ink/15 px-4 py-3 font-mono text-[12px] uppercase tracking-[0.18em] text-mineral transition hover:border-ochre hover:text-ochre disabled:opacity-60"
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-8 flex items-center gap-4">
+        <span className="hrule h-px flex-1 bg-ink/15" />
+        <span className="kicker text-mineral">eller med e-post</span>
+        <span className="hrule h-px flex-1 bg-ink/15" />
+      </div>
 
       <div className="mt-8 flex flex-wrap gap-3">
         {([
@@ -120,7 +179,7 @@ export function LoginForm() {
         />
       </label>
 
-      {mode !== "magic" ? (
+      {mode === "login" || mode === "signup" ? (
         <label className="mt-5 grid gap-2 text-[15px]">
           <span className="kicker text-mineral">Lösenord</span>
           <input
@@ -134,6 +193,27 @@ export function LoginForm() {
             autoComplete={mode === "signup" ? "new-password" : "current-password"}
           />
         </label>
+      ) : null}
+
+      {mode === "login" ? (
+        <button
+          type="button"
+          onClick={() => {
+            setMode("reset");
+            setError(null);
+            setMessage(null);
+          }}
+          className="mt-3 text-[13px] text-mineral underline underline-offset-4 transition hover:text-ochre"
+        >
+          Glömt lösenordet?
+        </button>
+      ) : null}
+
+      {mode === "reset" ? (
+        <p className="mt-5 text-[14px] text-mineral">
+          Skriv adressen du registrerade dig med. Vi skickar en länk som låter dig
+          sätta ett nytt lösenord.
+        </p>
       ) : null}
 
       {/* Fel var tidigare ochre — samma token som primär-CTA och fokusringen, vid
@@ -164,14 +244,30 @@ export function LoginForm() {
               ? "Skapa konto"
               : mode === "magic"
                 ? "Skicka magic link"
-                : "Logga in"}
+                : mode === "reset"
+                  ? "Skicka återställningslänk"
+                  : "Logga in"}
           <span aria-hidden>↗</span>
         </button>
       </div>
 
-      <p className="mt-4 text-[12px] text-mineral">
-        Magic link = snabbast väg till Email Studio (endast email, omedelbar tillgång efter inloggning). Använd "Magic link" ovan för att testa Kortare, Skriv om, Förbättra m.fl. direkt.
-      </p>
+      {mode === "reset" ? (
+        <button
+          type="button"
+          onClick={() => {
+            setMode("login");
+            setError(null);
+            setMessage(null);
+          }}
+          className="mt-4 text-[13px] text-mineral underline underline-offset-4 transition hover:text-ochre"
+        >
+          Tillbaka till inloggningen
+        </button>
+      ) : (
+        <p className="mt-4 text-[12px] text-mineral">
+          Magic link = snabbast väg till Email Studio (endast email, omedelbar tillgång efter inloggning). Använd "Magic link" ovan för att testa Kortare, Skriv om, Förbättra m.fl. direkt.
+        </p>
+      )}
     </form>
   );
 }
