@@ -14,6 +14,7 @@ modellen via verktyg. Modellen resonerar, koden agerar. Det gör att
 
 from __future__ import annotations
 
+import re
 import time
 from typing import Any
 
@@ -31,6 +32,53 @@ from .vision import describe_image
 # Sentiment under denna tröskel eskalerar oavsett vad modellen tycker
 # (samma regel som tidigare låg i den handskrivna prompten).
 SENTIMENT_ESCALATION_THRESHOLD = 0.3
+
+# Hur mycket av samtalet som följer med in i prompten. Varje meddelande i
+# chatten öppnar ett eget ärende, så "tidigare turer" är tidigare ärenden för
+# samma kund.
+MAX_HISTORY_TICKETS = 3
+MAX_HISTORY_TURNS = 8
+
+# Samma fel som i leads (_DANGLING_SIGN_OFF där): modellen skriver
+# "Vänliga hälsningar," och sedan ett namn eller en platshållare som
+# strip_placeholders plockar bort. I ett mejl löses det genom att sätta dit
+# avsändaren; i en chatt finns ingen avsändare att sätta dit, så raden ska bort.
+_DANGLING_SIGN_OFF = re.compile(
+    r"\n*\s*(?:med\s+vänliga\s+hälsningar|vänliga\s+hälsningar|hälsningar|mvh|"
+    r"bästa\s+hälsningar|vänligen)\s*[,.!]?\s*$",
+    re.IGNORECASE,
+)
+
+
+def strip_dangling_sign_off(text: str) -> str:
+    """Tar bort en avslutningsfras som inte följs av något.
+
+    Grinden ligger i kod och inte bara i overlayen eftersom felet uppträdde i
+    BÅDA thinking-lägena — samma resonemang som strip_placeholders. En regel som
+    bara står i en instruktion är en förhoppning.
+    """
+    return _DANGLING_SIGN_OFF.sub("", text.rstrip()).rstrip()
+
+
+async def _render_conversation(storage, tenant_id: str, history: list) -> tuple[str, int]:
+    """Tidigare turer som en läsbar utskrift, plus antalet turer.
+
+    Utan detta fick utkaststeget bara ANTALET tidigare kontakter — en siffra,
+    aldrig samtalet. Modellen kunde därför inte veta att den var mitt i ett
+    samtal, och varje svar blev formellt sett ett första meddelande: "Hej" på
+    varje replik och "Vänliga hälsningar," under varje.
+    """
+    turns: list[str] = []
+    for ticket in reversed(history[:MAX_HISTORY_TICKETS]):  # äldst först
+        for msg in await storage.get_messages(tenant_id, ticket["conversation_id"]):
+            who = "Kunden" if msg["direction"] == "inbound" else "Du"
+            content = (msg.get("content") or "").strip()
+            if content:
+                turns.append(f"{who}: {content}")
+
+    if not turns:
+        return "", 0
+    return "## Tidigare i samtalet\n" + "\n".join(turns[-MAX_HISTORY_TURNS:]), len(turns)
 
 
 def _steps_by_skill() -> dict[str, Any]:
@@ -104,6 +152,22 @@ async def run_support_agent(
         tenant_id, email=customer_email, phone=None, name=customer_name
     )
     history = await storage.get_customer_history(tenant_id, customer["id"])
+
+    # Samtalsläget är ett VÄRDE i ärendekontexten, inte i overlayen. Overlays
+    # laddas ordagrant utan .format() (se agentcore/overlays.py), så kördata hör
+    # hemma här och regeln som läser den står i support-conversation.md.
+    conversation_block, turn_count = await _render_conversation(storage, tenant_id, history)
+    conversation_state = (
+        "## Samtalsläge\n"
+        + (
+            "Det här är ditt FÖRSTA svar till kunden."
+            if turn_count == 0
+            else f"Samtalet pågår redan ({turn_count} tidigare repliker). Det här är en fortsättning."
+        )
+        + (f"\n\n{conversation_block}" if conversation_block else "")
+    )
+    case_context = f"{case_context}\n\n{conversation_state}"
+
     ticket = await storage.create_ticket(
         tenant_id,
         customer_id=customer["id"],
@@ -144,7 +208,7 @@ async def run_support_agent(
         ),
         case_context=(
             f"{case_context}\n\n## Kunskapsbas (ENDA tillåtna faktakällan)\n{kb_block}\n\n"
-            f"Tidigare kontakter från kunden: {len(history)}"
+            f"Tidigare ärenden från kunden: {len(history)}"
         ),
     )
 
@@ -248,6 +312,9 @@ async def run_support_agent(
     )
 
     reply = strip_markdown(humanized.get("final_reply") or current_draft or "").strip()
+    # Efter humaniseraren, före längdkapningen: en avslutningsfras utan namn
+    # under är trasig oavsett vilket steg som skrev den.
+    reply = strip_dangling_sign_off(reply)
     if not reply:
         reply = (
             "Tack för ditt meddelande! Jag har öppnat ett ärende och en kollega "

@@ -20,7 +20,16 @@ SUPPORT_V1 = Playbook(
     steps=(
         PlaybookStep(skill="cs:ticket-triage", requires=("context_pack",)),
         PlaybookStep(skill="cs:customer-research", requires=("skill:cs:ticket-triage",)),
-        PlaybookStep(skill="cs:draft-response", requires=("skill:cs:customer-research",)),
+        # Overlayen bär samtalsformen: hälsa bara i första turen, ingen
+        # avslutningsfras i chatt, och kort öppen motfråga när kunden inte sagt
+        # vad ärendet gäller. cs:draft-response är skriven för MEJL, där både
+        # hälsning och avsked hör till formen — utan overlayen ser varje replik
+        # i en chatt ut som ett nytt brev.
+        PlaybookStep(
+            skill="cs:draft-response",
+            requires=("skill:cs:customer-research",),
+            overlay="support-conversation",
+        ),
         # thinking PÅ, medvetet mot den globala AV-defaulten: det enda steget
         # där "ska detta till en människa?" avgörs. En felaktig eskalering
         # (åt endera hållet) är dyrare än den extra latensen. Beslut 2026-08-07.
@@ -40,6 +49,14 @@ SUPPORT_V1 = Playbook(
             requires=("skill:cs:draft-response",),
             condition="cancellation_risk",
         ),
-        PlaybookStep(skill="snajp:humanizer-svenska", requires=("skill:cs:kb-article",)),
+        # Samma overlay här: humaniseraren är sista handen på texten och skulle
+        # annars glatt sätta tillbaka ett "Hej" och en avslutningsfras som
+        # utkaststeget just avstått från. Overlays nycklas på syfte, inte på
+        # skill (se agentcore/overlays.py), så den delas mellan stegen.
+        PlaybookStep(
+            skill="snajp:humanizer-svenska",
+            requires=("skill:cs:kb-article",),
+            overlay="support-conversation",
+        ),
     ),
 )

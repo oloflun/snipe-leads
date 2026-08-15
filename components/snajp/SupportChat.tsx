@@ -70,6 +70,27 @@ export type SupportChatProps = {
   session?: string;
 };
 
+/**
+ * Ett id per flik för demon, som saknar session i URL:en.
+ *
+ * Alla demobesökare delade tidigare EN kundidentitet hos backenden. Så länge
+ * agenten bara fick ANTALET tidigare kontakter var det ofarligt. Nu följer
+ * utskriften av samtalet med in i prompten, och då hade nästa besökare fått
+ * föregående besökares repliker som kontext.
+ *
+ * Läses vid utskick och inte i en effekt, så att det aldrig finns ett fönster
+ * där identiteten är null och adressen blir "null@session.snajp.se".
+ */
+function demoSessionId(): string {
+  const KEY = "snajp.demo.session";
+  let id = window.sessionStorage.getItem(KEY);
+  if (!id) {
+    id = crypto.randomUUID();
+    window.sessionStorage.setItem(KEY, id);
+  }
+  return id;
+}
+
 export function SupportChat({ tenant, session }: SupportChatProps = {}) {
   // Demons varumärke och exempelfrågor gäller demon. På en kunds supportsida är
   // "Nordlys Handel" och frågor om felkoder i kassan direkt vilseledande — de
@@ -91,6 +112,7 @@ export function SupportChat({ tenant, session }: SupportChatProps = {}) {
   const [mode, setMode] = useState<"unknown" | "simulation" | "live" | "offline">("unknown");
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
 
   useEffect(() => {
     // Bara när det finns meddelanden att scrolla till. På en tom chatt scrollade
@@ -127,11 +149,12 @@ export function SupportChat({ tenant, session }: SupportChatProps = {}) {
           body: JSON.stringify({
             message: trimmed,
             channel: "web",
-            // Demons påhittade kund gäller bara demon. En riktig session
-            // identifieras av sitt session-id tills besökaren uppger något mer.
-            customer_email: session ? `${session}@session.snajp.se` : "demo@nordlyshandel.se",
+            // En besökare identifieras av sitt session-id tills hen uppger något
+            // mer. Demon får ett eget id per flik (demoSession) i stället för en
+            // delad identitet, så att ingen ser spår av föregående besökare.
+            customer_email: `${session ?? demoSessionId()}@session.snajp.se`,
             customer_name: session ? "Webbesökare" : "Demo Kund",
-            session_key: session,
+            session_key: session ?? demoSessionId(),
             tenant,
             attachments
           })
