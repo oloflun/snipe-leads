@@ -113,6 +113,13 @@ har sju faser; Fas 0, 5 och 7 är klara, Fas 1 till hälften.
   med BYPASSRLS, så varje `tenant_isolation`-policy är dekorativ för den anslutningen.
 - **Repeterad artighetsfras.** "Har du fler frågor är du välkommen att höra av dig!"
   avslutar nu varje svar ordagrant. Inte en avskedsfras, men robotaktigt i längden.
+- **`design-stop`-hookens ROUTE GAP gav falskt positivt två gånger** för
+  `react-components` (Stitch-till-komponent-konvertering, matchar inte en
+  targeterad JSX-borttagning i en befintlig Next-komponent). Eskalerat till
+  CARL-domän `design` som `design-005` — öppet ärende i hook-configen, user-level,
+  inte knutet till detta projekt. Se `HANDOFF-2026-08-15.md`.
+- **Handoff skriven till nästa session:** `HANDOFF-2026-08-15.md`, fullständig
+  kontext för att fortsätta Fas 1:s resterande tre punkter samt Fas 2–4 och 6.
 
 ## Cross-Project Handoffs
 
