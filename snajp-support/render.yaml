@@ -1,13 +1,30 @@
 # Render Blueprint — auto-deploy av Snajp-Support-backenden från GitHub.
-# Peka Render på denna fil (Blueprint). sync:false = värdet sätts i dashboarden.
+# Peka Render på denna fil (Blueprint). sync:false = värdet sätts utifrån.
 #
 # Deployen fungerar UTAN att något hemligt sätts: saknas DEEPSEEK_API_KEY kör
 # tjänsten i simuleringsläge (deterministiska svenska svar, inga API-kostnader).
 # Lägg till nyckeln när demon ska drivas av riktig AI.
+#
+# TVÅ TJÄNSTER, TVÅ GRENAR:
+#   snajp-support      ← main         (produktion)
+#   snajp-support-dev  ← development  (preview)
+#
+# `branch:` står nu i git och inte bara i dashboarden. Det är inte kosmetik:
+# grenvalet var ett osynligt dashboardfält, och två produktionsincidenter kom ur
+# att det pekade fel utan att synas i någon diff. Samma klass av fel som Root
+# Directory, som återgått till `snajp-support` av sig självt och fällt ett
+# Docker-bygge med `"/agent-core": not found`.
+#
+# KVOTEN: gratisnivån ger 750 instanstimmar/månad delat på ALLA gratistjänster i
+# workspacet. keep-backend-awake.yml pingar därför bara PRODUKTIONEN (~250 h/mån).
+# Två varma tjänster hade landat på ~500 h, och när taket spricker stänger Render
+# av allt till nästa månad. Previewen får en minuts kallstart — rätt avvägning
+# för en testmiljö.
 services:
   - type: web
     name: snajp-support
     runtime: docker
+    branch: main
     # rootDir MÅSTE vara repo-roten: agent-core/ ligger utanför snajp-support/
     # och Docker kan inte COPY:a utanför byggkontexten. Med rootDir:
     # snajp-support startade containern grönt och föll först på det första
@@ -48,7 +65,61 @@ services:
         value: "0"
       - key: AUTO_SEND_MIN_CONFIDENCE
         value: "0.75"
-      # IMAP (Gmail/Outlook) — sätts i dashboarden när en inkorg ska kopplas.
+      # IMAP (Gmail/Outlook) — sätts när en inkorg ska kopplas.
+      - key: IMAP_HOST
+        sync: false
+      - key: IMAP_USER
+        sync: false
+      - key: IMAP_PASSWORD
+        sync: false
+      - key: IMAP_FOLDER
+        value: INBOX
+
+  # --- Preview: samma image, egen gren, egen databas -----------------------
+  #
+  # Skild från produktionen på de tre punkter som faktiskt spelar roll:
+  # DATABASE_URL pekar på preview-Supabase-projektet, masternyckeln slumpas
+  # separat, och demo-nyckeln är EN ANNAN. Att dela demo-nyckel hade betytt att
+  # en preview-frontend kunde tala med produktionsbackenden utan att någon
+  # märkte det — precis den sortens tysta korskoppling som gör att "det funkade
+  # i preview" slutar betyda något.
+  - type: web
+    name: snajp-support-dev
+    runtime: docker
+    branch: development
+    # Samma som produktionen och av samma tvingande skäl: agent-core/ ligger
+    # utanför snajp-support/ och kan inte COPY:as om kontexten är undermappen.
+    rootDir: .
+    dockerfilePath: ./snajp-support/Dockerfile
+    healthCheckPath: /health/live
+    plan: free
+    envVars:
+      - key: LLM_PROVIDER
+        value: deepseek
+      - key: MODEL
+        value: deepseek-v4-flash
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      # Egen masternyckel. Delad hade gjort produktionens /api/admin nåbar med
+      # previewens nyckel.
+      - key: SNAJP_MASTER_API_KEY
+        generateValue: true
+      # Egen demo-nyckel, INTE produktionens publika värde.
+      - key: SNAJP_DEMO_API_KEY
+        generateValue: true
+      # Preview-Supabase-projektet, som snajp_app-rollen. Previewen är rätt
+      # ställe att köra utan BYPASSRLS: då prövas RLS skarpt innan produktionen
+      # byter roll (INV-SEC-001).
+      - key: DATABASE_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: EMBEDDING_API_KEY
+        sync: false
+      - key: INBOX_POLL_SECONDS
+        value: "0"
+      - key: AUTO_SEND_MIN_CONFIDENCE
+        value: "0.75"
       - key: IMAP_HOST
         sync: false
       - key: IMAP_USER
