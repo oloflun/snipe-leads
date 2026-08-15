@@ -1317,5 +1317,128 @@ class PostgresStorage:
                 "delete from platform_rate_events where created_at < now() - interval '1 day'"
             )
 
+    # -- Admin: cross-tenant-läsning (Fas 6) --------------------------------
+    #
+    # Oskopade anslutningar med flit: de här frågorna spänner över alla
+    # tenants och kan inte köras under app.tenant_id. Skyddet ligger i
+    # API-lagret (require_master_key) och i att metoderna bara anropas
+    # därifrån — inte i RLS, som per definition inte kan uttrycka
+    # "alla tenants".
+
+    async def list_tenants_with_stats(self) -> list[dict[str, Any]]:
+        async with self.pool.acquire() as conn:
+            records = await conn.fetch(
+                """
+                select t.id, t.slug, t.name, t.active, t.created_at,
+                       coalesce(k.tickets, 0)      as tickets,
+                       coalesce(r.runs, 0)         as runs,
+                       coalesce(r.tokens_in, 0)    as tokens_in,
+                       coalesce(r.tokens_out, 0)   as tokens_out,
+                       coalesce(e.errors, 0)       as errors,
+                       r.last_activity
+                from ss_tenants t
+                left join lateral (
+                  select count(*) as tickets from ss_tickets where tenant_id = t.id
+                ) k on true
+                left join lateral (
+                  select count(*) as runs,
+                         sum(tokens_in) as tokens_in,
+                         sum(tokens_out) as tokens_out,
+                         max(created_at) as last_activity
+                  from agent_runs where tenant_id = t.id
+                ) r on true
+                left join lateral (
+                  select count(*) as errors from platform_events
+                  where tenant_id = t.id and level = 'error'
+                ) e on true
+                order by r.last_activity desc nulls last, t.created_at
+                """
+            )
+        return [_row(r) for r in records]
+
+    async def list_agent_runs_all(
+        self,
+        *,
+        tenant_id: str | None = None,
+        agent_type: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        async with self.pool.acquire() as conn:
+            records = await conn.fetch(
+                """
+                select r.*, t.slug as tenant_slug, t.name as tenant_name
+                from agent_runs r
+                join ss_tenants t on t.id = r.tenant_id
+                where ($1::uuid is null or r.tenant_id = $1)
+                  and ($2::text is null or r.agent_type = $2)
+                order by r.created_at desc
+                limit $3
+                """,
+                tenant_id,
+                agent_type,
+                limit,
+            )
+        return [_row(r) for r in records]
+
+    async def get_agent_run(self, run_id: str) -> dict[str, Any] | None:
+        async with self.pool.acquire() as conn:
+            record = await conn.fetchrow(
+                """
+                select r.*, t.slug as tenant_slug, t.name as tenant_name
+                from agent_runs r join ss_tenants t on t.id = r.tenant_id
+                where r.id = $1
+                """,
+                run_id,
+            )
+        return _row(record)
+
+    async def list_platform_events(
+        self,
+        *,
+        level: str | None = None,
+        tenant_id: str | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        async with self.pool.acquire() as conn:
+            records = await conn.fetch(
+                """
+                select e.*, t.slug as tenant_slug
+                from platform_events e
+                left join ss_tenants t on t.id = e.tenant_id
+                where ($1::text is null or e.level = $1)
+                  and ($2::uuid is null or e.tenant_id = $2)
+                order by e.created_at desc
+                limit $3
+                """,
+                level,
+                tenant_id,
+                limit,
+            )
+        return [_row(r) for r in records]
+
+    async def log_platform_event(
+        self,
+        *,
+        level: str,
+        source: str,
+        message: str,
+        tenant_id: str | None = None,
+        run_id: str | None = None,
+        detail: dict[str, Any] | None = None,
+    ) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                insert into platform_events (tenant_id, level, source, message, detail, run_id)
+                values ($1, $2, $3, $4, $5::jsonb, $6)
+                """,
+                tenant_id,
+                level,
+                source,
+                message,
+                json.dumps(detail or {}, ensure_ascii=False),
+                run_id,
+            )
+
     async def close(self) -> None:
         await self.pool.close()

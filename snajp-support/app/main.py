@@ -13,7 +13,8 @@ from fastapi import FastAPI
 
 import asyncio
 
-from .api import chat, demo, drafts, inbox, kb, keys, leads, rules, tickets, triage
+from .api import admin, chat, demo, drafts, inbox, kb, keys, leads, rules, tickets, triage
+from .api.events import install_exception_handler
 from .config import get_settings
 from .jobs.store import MemoryJobStore, RedisJobStore
 from .storage.memory import MemoryStorage
@@ -111,6 +112,11 @@ app.include_router(demo.router)
 app.include_router(inbox.router)
 app.include_router(drafts.router)
 app.include_router(rules.router)
+app.include_router(admin.router)
+
+# Ohanterade fel hamnar i platform_events i stället för att rulla förbi i
+# Renders stdout och försvinna vid nästa spin-down (migration 026).
+install_exception_handler(app)
 
 
 @app.get("/health")

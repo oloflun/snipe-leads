@@ -52,9 +52,16 @@ ANON_ALLOWLIST: dict[str, str] = {
     ),
 }
 
-#: Vad som räknas som en sessionsgrind. Alla tre härleder identiteten ur
-#: sessionen på servern; ingen av dem litar på något klienten skickar.
-SESSION_GATES = ("proxyAsTenant", "requireSnajpTenant", "getWorkspaceContext")
+#: Vad som räknas som en sessionsgrind. Alla härleder identiteten ur sessionen
+#: på servern; ingen av dem litar på något klienten skickar.
+#: `getPlatformAdmin` är den strängaste — den kräver dessutom en rad i
+#: platform_admins — och används av /api/admin.
+SESSION_GATES = (
+    "proxyAsTenant",
+    "requireSnajpTenant",
+    "getWorkspaceContext",
+    "getPlatformAdmin",
+)
 
 #: Anonyma routes får aldrig nå den administrativa ytan. `keys` är den farliga:
 #: catch-allen kunde tidigare adressera POST /api/keys, och det enda som
@@ -130,7 +137,16 @@ def test_proxy_matchern_utokas_inte_till_api():
     source = proxy.read_text(encoding="utf-8")
     matcher = re.search(r"matcher\s*:\s*\[(.*?)\]", source, re.DOTALL)
     assert matcher, "Hittade ingen matcher i proxy.ts — testet mäter ingenting."
-    assert "/api" not in matcher.group(1), (
-        "proxy.ts-matchern täcker /api. Ta bort det: en omdirigering till "
-        "/login är fel svarsform för ett API-anrop och döljer 401:an."
+
+    # Bara de faktiska strängposterna. Att söka i råtexten fällde på en
+    # KOMMENTAR som förklarade varför /api medvetet utelämnas — testet
+    # anklagade alltså filen för det den uttryckligen inte gör.
+    entries = re.findall(r'"([^"]+)"', matcher.group(1))
+    assert entries, "Matchern innehåller inga poster — testet mäter ingenting."
+
+    offending = [entry for entry in entries if entry.startswith("/api")]
+    assert not offending, (
+        f"proxy.ts-matchern täcker {offending}. Ta bort det: en omdirigering "
+        f"till /login är fel svarsform för ett API-anrop och döljer 401:an. "
+        f"Grinden hör hemma i routen."
     )

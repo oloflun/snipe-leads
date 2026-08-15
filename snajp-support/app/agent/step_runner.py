@@ -86,6 +86,12 @@ class StepResult:
     overlay: str | None = None
     overlay_chars: int = 0
     global_chars: int = 0
+    # Vad modellen faktiskt FICK. Utan de här kan spårvyn visa skillnamn,
+    # tokens och latens men inte svara på "varför skrev den så här?" — och
+    # skill-texten är fritt redigerbar, så namnet ensamt räcker inte
+    # (INV-AUDIT-001, migration 027).
+    system_prompt: str = ""
+    user_message: str = ""
 
 
 @dataclass
@@ -111,7 +117,25 @@ class RunTrace:
     def total_reasoning_tokens(self) -> int:
         return sum(s.reasoning_tokens for s in self.steps)
 
-    def as_log(self) -> list[dict[str, Any]]:
+    #: Kapning per fält i step_log. Räcker till felsökning; hela prompten är
+    #: sällan det man läser, och en spårvy som drar 200 kB per rad är en
+    #: spårvy ingen öppnar.
+    #: ponytail: 8k per fält; flytta till objektlagring om vi behöver mer.
+    TRACE_FIELD_MAX_CHARS = 8_000
+
+    def as_log(self, *, verbose: bool = True) -> list[dict[str, Any]]:
+        """Det som skrivs till agent_runs.step_log.
+
+        `verbose` styrs av agent_configs.settings.trace_verbose och är PÅ som
+        default: vi är i pilotfas och behöver spåret mer än vi behöver
+        diskutrymmet. Utan det innehåller loggen mätvärden men ingen text,
+        vilket räcker för att se ATT ett steg gick fel och inte för att se
+        varför."""
+        def _cap(value: str | None) -> str | None:
+            if value is None:
+                return None
+            return value[: RunTrace.TRACE_FIELD_MAX_CHARS]
+
         return [
             {
                 "skill": s.skill,
@@ -129,6 +153,18 @@ class RunTrace:
                 "global_chars": s.global_chars,
                 "sources_used": s.output.get("sources_used", []),
                 "context_refs": s.output.get("context_refs", []),
+                **(
+                    {
+                        "system_prompt": _cap(s.system_prompt),
+                        "user_message": _cap(s.user_message),
+                        "raw_output": _cap(
+                            json.dumps(s.output, ensure_ascii=False) if s.output else ""
+                        ),
+                        "reasoning_content": _cap(s.reasoning_content),
+                    }
+                    if verbose
+                    else {}
+                ),
             }
             for s in self.steps
         ]
@@ -279,6 +315,12 @@ async def run_step(
             overlay=step.overlay,
             overlay_chars=len(overlay_text),
             global_chars=len(global_text),
+            # messages[0]/[1] är systemprompten och användarmeddelandet SOM DE
+            # SÅG UT VID FÖRSTA ANROPET. Eventuella omförsök lägger till fler
+            # meddelanden i listan, men det är den första uppsättningen som
+            # svarar på "vad bad vi om".
+            system_prompt=messages[0]["content"],
+            user_message=messages[1]["content"],
         )
     )
     return output

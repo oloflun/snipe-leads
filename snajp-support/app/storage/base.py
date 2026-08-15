@@ -422,6 +422,52 @@ class Storage(Protocol):
         """Utkast som väntar på granskning (send_queue.status='awaiting_review')."""
         ...
 
+    # -- Admin: cross-tenant-läsning (Fas 6, kräver master-nyckel) ----------
+    #
+    # Ingen tenant_id-parameter är inte en glömd scoping — det ÄR poängen.
+    # require_tenant avvisar master-nyckeln mot kunddata (deps.py), rätt
+    # designat, och därför behöver admin-vyn en egen väg. Metoderna nedan
+    # anropas ENBART från app/api/admin.py, som helt ligger bakom
+    # require_master_key.
+    #
+    # Implementeras i BÅDA lagringarna. MemoryStorage får aldrig sacka efter
+    # protokollet — det är precis så agent_runs.agent_type-buggen kunde gömma
+    # sig i ett halvår.
+
+    async def list_tenants_with_stats(self) -> list[dict[str, Any]]:
+        """Alla tenants med nyckeltal: ärenden, körningar, tokens, senaste
+        aktivitet."""
+        ...
+
+    async def list_agent_runs_all(
+        self,
+        *,
+        tenant_id: str | None = None,
+        agent_type: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]: ...
+
+    async def get_agent_run(self, run_id: str) -> dict[str, Any] | None: ...
+
+    async def list_platform_events(
+        self,
+        *,
+        level: str | None = None,
+        tenant_id: str | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]: ...
+
+    async def log_platform_event(
+        self,
+        *,
+        level: str,
+        source: str,
+        message: str,
+        tenant_id: str | None = None,
+        run_id: str | None = None,
+        detail: dict[str, Any] | None = None,
+    ) -> None: ...
+
     async def close(self) -> None: ...
 
 

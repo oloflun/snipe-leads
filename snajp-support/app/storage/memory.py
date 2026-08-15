@@ -141,6 +141,10 @@ class MemoryStorage:
         self.rate_events: dict[tuple[str, str, str], list[datetime]] = {}
         # (tenant_id, agent_type) -> agent_configs.settings (migration 023)
         self.agent_settings: dict[tuple[str, str], dict[str, Any]] = {}
+        # Plattformsnivå, inte tenant-nycklad: ett fel i proxyn eller i
+        # schemaläggaren innan den vet vilken kund det gäller hör hemma här
+        # också (migration 026, tenant_id nullable).
+        self.platform_events: list[dict[str, Any]] = []
         # Nycklad på manifest_hash, inte tenant_id — delad baselinekatalog
         # (migration 016). Samma undantag som segmentaggregatet.
         self.skill_files: dict[str, list[dict[str, Any]]] = {}
@@ -1042,6 +1046,93 @@ class MemoryStorage:
             return
         now = datetime.now(timezone.utc)
         self.rate_events.setdefault((scope_kind, scope_id, kind), []).extend([now] * count)
+
+    # -- Admin: cross-tenant-läsning (Fas 6) --------------------------------
+
+    async def list_tenants_with_stats(self) -> list[dict[str, Any]]:
+        rows = []
+        for tenant in self.tenants.values():
+            tid = tenant["id"]
+            runs = self.agent_runs.get(tid, [])
+            rows.append(
+                {
+                    **tenant,
+                    "tickets": sum(1 for t in self.tickets.values() if t["tenant_id"] == tid),
+                    "runs": len(runs),
+                    "tokens_in": sum(r.get("tokens_in") or 0 for r in runs),
+                    "tokens_out": sum(r.get("tokens_out") or 0 for r in runs),
+                    "errors": sum(
+                        1
+                        for e in self.platform_events
+                        if e["tenant_id"] == tid and e["level"] == "error"
+                    ),
+                    "last_activity": max((r["created_at"] for r in runs), default=None),
+                }
+            )
+        return rows
+
+    async def list_agent_runs_all(
+        self,
+        *,
+        tenant_id: str | None = None,
+        agent_type: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        runs = [
+            run
+            for tid, tenant_runs in self.agent_runs.items()
+            if tenant_id is None or tid == tenant_id
+            for run in tenant_runs
+        ]
+        if agent_type:
+            runs = [r for r in runs if r["agent_type"] == agent_type]
+        runs.sort(key=lambda r: r["created_at"], reverse=True)
+        return runs[:limit]
+
+    async def get_agent_run(self, run_id: str) -> dict[str, Any] | None:
+        for tenant_runs in self.agent_runs.values():
+            for run in tenant_runs:
+                if run["id"] == run_id:
+                    return run
+        return None
+
+    async def list_platform_events(
+        self,
+        *,
+        level: str | None = None,
+        tenant_id: str | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        events = list(self.platform_events)
+        if level:
+            events = [e for e in events if e["level"] == level]
+        if tenant_id:
+            events = [e for e in events if e["tenant_id"] == tenant_id]
+        events.sort(key=lambda e: e["created_at"], reverse=True)
+        return events[:limit]
+
+    async def log_platform_event(
+        self,
+        *,
+        level: str,
+        source: str,
+        message: str,
+        tenant_id: str | None = None,
+        run_id: str | None = None,
+        detail: dict[str, Any] | None = None,
+    ) -> None:
+        self.platform_events.append(
+            {
+                "id": str(uuid.uuid4()),
+                "tenant_id": tenant_id,
+                "level": level,
+                "source": source,
+                "message": message,
+                "detail": detail or {},
+                "run_id": run_id,
+                "created_at": _now(),
+            }
+        )
 
     async def close(self) -> None:
         return None

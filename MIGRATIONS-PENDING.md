@@ -69,6 +69,72 @@ går inte att rekonstruera i efterhand.
 
 ---
 
+## 020_platform_admins.sql + 021_seed_platform_admin.sql — Fas 2
+
+`platform_admins`, egen dimension skild från `profiles.role`. Inga
+skrivpolicyer — admin ges bara via service-rollen eller SQL-editorn.
+
+**021 kräver att kontot finns först.** Skapa `snajpsupport@gmail.com` på
+`/login` (signup-fliken), kör sedan 021. Den är idempotent, så kör om den om
+den första körningen inte matchade något.
+
+**Verifiera:**
+```sql
+select u.email, pa.granted_at
+from public.platform_admins pa join auth.users u on u.id = pa.user_id;
+```
+Tom rad = kontot fanns inte än. `/admin` ger 404 för ett vanligt konto och
+200 för admin-kontot — det är den riktiga verifieringen.
+
+---
+
+## 022_workspace_addons.sql — Fas 3
+
+`workspaces.addons text[]` med check mot sex enumererade värden.
+
+**Verifiera:** `select addons from workspaces limit 5;` → `{}` för alla.
+Entitlements är fail-closed sedan Fas 3, så tomt betyder inga tillägg.
+
+---
+
+## 023_agent_config_settings.sql + 024_prospect_icp_fit.sql — Fas 4
+
+`agent_configs.settings` (autonomi + ICP), `send_queue`-status
+`awaiting_review`, och `prospects.icp_fit / qualified / disqualifiers`.
+
+023 sätter `autonomy='draft'` för varje befintlig kund.
+
+**Verifiera:**
+```sql
+select tenant_id, settings->>'autonomy' from agent_configs where agent_type = 'leads';
+select pg_get_constraintdef(oid) from pg_constraint where conname = 'send_queue_status_check';
+-- ska innehålla awaiting_review
+```
+
+Utan `awaiting_review` hade ett draft-utkast legat i samma kö som ett godkänt
+och skickats så fort `SEND_QUEUE_POLL_SECONDS` sätts. Autonominivån hade
+varit dekorativ.
+
+---
+
+## 026_platform_events.sql + 027_step_traces.sql — Fas 6
+
+`platform_events` (notiscentret) och en kommentar plus ett index för
+spårvyn. 027 ändrar inget schema — beteendeändringen ligger i
+`step_runner.py`, som nu sparar systemprompt, användarmeddelande, råsvar och
+reasoning i `step_log`, kapade till 8 000 tecken vardera.
+
+**Verifiera:**
+```sql
+select count(*) from platform_events;   -- 0, inte fel
+select polname from pg_policy where polrelid = 'public.platform_events'::regclass;
+```
+
+Framkalla sedan ett medvetet fel (t.ex. en död skrapkälla) och kontrollera
+att det dyker upp i `/admin/handelser` med rätt `run_id`.
+
+---
+
 ## Fortfarande öppet, kräver dig — inte en migration
 
 1. **`snajp_app`-rollens lösenord** är osatt sedan 2026-08-07. Tills dess kör
