@@ -14,6 +14,7 @@ export type Database = {
           locale: string;
           timezone: string;
           products: string[];
+          addons: string[];
           slug: string | null;
           ss_tenant_id: string | null;
           created_at: string;
@@ -24,6 +25,7 @@ export type Database = {
           locale?: string;
           timezone?: string;
           products?: string[];
+          addons?: string[];
           slug?: string | null;
           ss_tenant_id?: string | null;
           created_at?: string;
@@ -34,6 +36,7 @@ export type Database = {
           locale?: string;
           timezone?: string;
           products?: string[];
+          addons?: string[];
           slug?: string | null;
           ss_tenant_id?: string | null;
           created_at?: string;

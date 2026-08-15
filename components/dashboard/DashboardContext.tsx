@@ -19,6 +19,7 @@ type DashboardContextValue = DashboardState & {
 
 const FALLBACK: DashboardState = {
   products: ["leads", "support"],
+  addons: [],
   variant: "demo",
   workspaceName: null,
   signedIn: false
@@ -35,7 +36,10 @@ export function DashboardProvider({
   const availableScopes: Scope[] =
     state.products.length > 1 ? ["both", ...state.products] : [...state.products];
 
-  const [scope, setScopeState] = useState<Scope>(availableScopes[0]);
+  // products kan vara TOM sedan entitlements blev fail-closed (Fas 3). Utan
+  // fallbacken här blir initialvärdet undefined, och shows() jämför mot det —
+  // vilket ser ut som ett renderingsfel långt från orsaken.
+  const [scope, setScopeState] = useState<Scope>(availableScopes[0] ?? "both");
 
   // Restore after mount rather than during render: reading localStorage while
   // rendering would desync the server and client markup.

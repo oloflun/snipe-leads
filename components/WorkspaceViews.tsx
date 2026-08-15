@@ -7,6 +7,7 @@ import { PageShell } from "@/components/AppShell";
 import { btnPrimary, btnSecondary } from "@/components/ui";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { TeamSettings } from "@/components/settings/TeamSettings";
+import { AddonSettings } from "@/components/settings/AddonSettings";
 import { OnboardingForm } from "@/components/auth/OnboardingForm";
 import {
   analyticsSeries,
@@ -468,13 +469,14 @@ export function InboxView() {
   );
 }
 
-export function SettingsView({ section = "general" }: Readonly<{ section?: "general" | "mailboxes" | "team" | "billing" | "soul" }>) {
+export function SettingsView({ section = "general" }: Readonly<{ section?: "general" | "mailboxes" | "team" | "billing" | "soul" | "addons" }>) {
   const titles = {
     general: "Business context som alla agentmoduler använder.",
     mailboxes: "Mailboxar och skickhälsa i svensk takt.",
     team: "Teamroller och audit-logik.",
     billing: "Plan, fakturering och användning.",
-    soul: "Er röst"
+    soul: "Er röst",
+    addons: "Tillägg"
   };
   // Beskrivningen var tidigare EN generisk sträng för alla sektioner. På
   // röstsidan blev den både felaktig (den beskriver inte sektionen) och
@@ -485,7 +487,8 @@ export function SettingsView({ section = "general" }: Readonly<{ section?: "gene
     mailboxes: "Inställningarna är ett arbetsblad för Supabase Auth, RLS, teamroller, mailboxes och billing.",
     team: "Inställningarna är ett arbetsblad för Supabase Auth, RLS, teamroller, mailboxes och billing.",
     billing: "Inställningarna är ett arbetsblad för Supabase Auth, RLS, teamroller, mailboxes och billing.",
-    soul: "Beskriv hur ni låter. Agenten skriver så i era mejl och svar."
+    soul: "Beskriv hur ni låter. Agenten skriver så i era mejl och svar.",
+    addons: "Det agenten kan göra utöver det som ingår i er plan."
   };
   return (
     <PageShell kicker="Settings" title={titles[section]} description={descriptions[section]}>
@@ -511,6 +514,7 @@ export function SettingsView({ section = "general" }: Readonly<{ section?: "gene
             ["/settings/soul", "Röst"],
             ["/settings/mailboxes", "Mailboxes"],
             ["/settings/team", "Team"],
+            ["/settings/addons", "Tillägg"],
             ["/settings/billing", "Billing"]
           ].map(([href, label]) => <Link key={href} href={href} className="block hover:text-ochre">{label}</Link>)}
         </nav>
@@ -519,6 +523,7 @@ export function SettingsView({ section = "general" }: Readonly<{ section?: "gene
           {section === "soul" ? <SoulEditor /> : null}
           {section === "mailboxes" ? <MailboxSettings /> : null}
           {section === "team" ? <TeamSettings /> : null}
+          {section === "addons" ? <AddonSettings /> : null}
           {section === "billing" ? <BillingSettings /> : null}
         </div>
       </div>
