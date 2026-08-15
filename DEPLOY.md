@@ -188,3 +188,35 @@ Bevisade mot preview-spegeln, med produktionens verkliga datamängd:
 
 Efter båda, mätt som `snajp_app` utan BYPASSRLS: rätt antal överallt, och
 skopade frågor ger fortfarande en delmängd — isoleringen håller.
+
+
+---
+
+## Två fällor som slog till på riktigt vid uppsättningen
+
+**1. `vercel env rm NAME preview` raderar HELA posten.**
+Vercel lagrar en variabel som gäller flera miljöer som EN post. `SNAJP_SUPPORT_URL`
+och `SNAJP_INTERNAL_API_KEY` gällde "Production, Preview" — att sätta ett
+preview-värde tog bort dem ur **produktionen**. Upptäckt genom att lista
+scopet efteråt, inte av något felmeddelande.
+
+`scripts/keys.py:vercel_env_set()` vägrar numera skriva till en delad post och
+säger vad man ska göra i stället. Varje variabel bör vara en post per miljö.
+
+**2. Preview-deployen är SSO-skyddad, och ska förbli det.**
+`ssoProtection` är på för allt utom egna domäner, så `*.vercel.app` kräver
+Vercel-inloggning. Med spegelregeln innehåller previewen riktig kunddata —
+att stänga av skyddet vore ett dataläckage.
+
+Följden: automatiserad verifiering (`scripts/verify_inv_sec_010.sh`) når inte
+preview-frontenden. Skapa en **Protection Bypass for Automation**-token i
+Vercel → Settings → Deployment Protection, och skicka den som
+`x-vercel-protection-bypass`. Då kommer skript in medan människor fortfarande
+måste logga in.
+
+**3. Supabases direktvärd (`db.<ref>.supabase.co`) nås inte från Render.**
+Den är IPv6-only. `DATABASE_URL` måste använda pooler-värden
+(`aws-1-eu-west-1.pooler.supabase.com:6543`) med användarnamnet
+`<roll>.<projektref>`. Symptomet är inte ett anslutningsfel utan att tjänsten
+tyst faller tillbaka på `MemoryStorage` — vilket `/health/ready` numera säger
+rakt ut med `storage: "memory"`.

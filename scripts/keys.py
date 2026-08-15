@@ -247,6 +247,38 @@ def _vercel() -> str:
     return found
 
 
+def _shared_environments(name: str, environment: str) -> set[str]:
+    """Vilka ANDRA miljöer samma variabelpost gäller för.
+
+    Vercel lagrar en variabel som gäller flera miljöer som EN post. `env rm`
+    tar bort posten, inte målet — så att sätta ett preview-värde på en delad
+    variabel raderar produktionens. Tom mängd = säkert att skriva över.
+
+    Läser `vercel env ls` och matchar radens miljökolumn. Misslyckas
+    uppslaget returneras tomt: spärren ska inte blockera arbete när CLI:t
+    krånglar, den ska fånga det kända fallet.
+    """
+    result = subprocess.run(
+        [_vercel(), "env", "ls"], cwd=ROOT, capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        return set()
+
+    kanda = {"production", "preview", "development"}
+    for line in result.stdout.splitlines():
+        delar = line.split()
+        if not delar or delar[0] != name:
+            continue
+        miljoer = {d.strip(",").lower() for d in delar[1:]} & kanda
+        # Avgörande: bedöm PER RAD. En delad post renderas som EN rad med flera
+        # miljöer ("Production, Preview"); två separata poster blir två rader
+        # med en miljö var. Att unionera över rader hade gjort det senare —
+        # som är helt säkert — omöjligt att skriva till.
+        if environment in miljoer and len(miljoer) > 1:
+            return miljoer - {environment}
+    return set()
+
+
 def vercel_env_set(name: str, value: str, environment: str) -> bool:
     """Sätter EN variabel i ETT Vercel-scope. Returnerar True vid lyckat.
 
@@ -258,6 +290,17 @@ def vercel_env_set(name: str, value: str, environment: str) -> bool:
     ren `add` på en variabel som redan finns misslyckas tyst nog för att se ut
     som att den lyckades. Felet ignoreras med flit: variabeln finns oftast inte.
     """
+    delade = _shared_environments(name, environment)
+    if delade:
+        sys.exit(
+            f"AVBRYTER: {name} är EN post som gäller {', '.join(sorted(delade | {environment}))}.\n"
+            f"`vercel env rm {name} {environment}` tar då bort HELA posten, inte bara "
+            f"{environment} — och de andra miljöerna tappar variabeln utan förvarning.\n"
+            f"Det hände skarpt 2026-08-15: SNAJP_SUPPORT_URL och SNAJP_INTERNAL_API_KEY "
+            f"försvann ur Production när preview-värdena sattes.\n"
+            f"Ta bort posten manuellt och lägg till en per miljö först."
+        )
+
     subprocess.run(
         [_vercel(), "env", "rm", name, environment, "--yes"],
         cwd=ROOT,
