@@ -70,7 +70,10 @@ async def test_queue_outreach_draft_writes_to_storage_never_marks_sent():
 
     assert ctx.queued is True
     queued = storage.send_queue[TENANT][0]
-    assert queued["status"] == "queued"  # ALDRIG 'sent' — bara schemaläggaren gör det
+    # awaiting_review, inte queued: autonominivån är 'draft' som default
+    # (migration 023), och draft betyder att ingenting lämnar huset utan att
+    # en människa tryckt skicka. ALDRIG 'sent' — bara schemaläggaren gör det.
+    assert queued["status"] == "awaiting_review"
     message = storage.outreach_messages[TENANT][0]
     assert "**" not in message["body"]  # markdown-grinden kördes
 

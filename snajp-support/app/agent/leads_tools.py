@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 
 from agents import RunContextWrapper, function_tool
 
+from ..leads.autonomy import allowed_action
 from ..leads.language_gate import LanguageGateError, check_send_gate
 from ..leads.outreach_playbook import finalize_outreach_body
 from ..leads.timing_gate import check_cold_outreach_gate
@@ -61,6 +62,13 @@ async def _queue_outreach_draft_impl(
     # grindarna igen ändå vid faktisk utskickstid (Del J).
     scheduled_at = now if timing.allowed else now.replace(hour=8, minute=0, second=0, microsecond=0)
 
+    # Kundens autonominivå avgör om utkastet får gå till schemaläggaren eller
+    # måste granskas av en människa först. Regeln bor i app/leads/autonomy.py
+    # och anropas från exakt två ställen — här och i scheduler.process_due_item.
+    settings = await outreach.storage.get_agent_settings(outreach.tenant_id, agent_type="leads")
+    action = allowed_action(settings.get("autonomy"), outreach.sequence_index)
+    queue_status = "queued" if action == "send" else "awaiting_review"
+
     result = await outreach.storage.queue_outreach_message(
         outreach.tenant_id,
         thread_id=outreach.thread_id,
@@ -68,10 +76,17 @@ async def _queue_outreach_draft_impl(
         subject=subject,
         humanizer_variant=humanizer_variant,
         scheduled_at=scheduled_at,
+        status=queue_status,
     )
     outreach.queued = True
     return json.dumps(
-        {"queued": True, "queue_item_id": result["queue_item"]["id"]}, ensure_ascii=False
+        {
+            "queued": True,
+            "queue_item_id": result["queue_item"]["id"],
+            "status": queue_status,
+            "awaiting_review": queue_status == "awaiting_review",
+        },
+        ensure_ascii=False,
     )
 
 

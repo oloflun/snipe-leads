@@ -576,6 +576,7 @@ class PostgresStorage:
         subject: str,
         humanizer_variant: str,
         scheduled_at,
+        status: str = "queued",
     ) -> dict[str, Any]:
         async with self._scoped(tenant_id) as conn:
             message = await conn.fetchrow(
@@ -594,12 +595,13 @@ class PostgresStorage:
             queue_item = await conn.fetchrow(
                 """
                 insert into send_queue (tenant_id, thread_id, scheduled_at, status, gate_checks)
-                values ($1, $2, $3, 'queued', '{}'::jsonb)
+                values ($1, $2, $3, $4, '{}'::jsonb)
                 returning *
                 """,
                 tenant_id,
                 thread_id,
                 scheduled_at,
+                status,
             )
         return {"message": _row(message), "queue_item": _row(queue_item)}
 
@@ -641,16 +643,39 @@ class PostgresStorage:
         return [_row(r) for r in records]
 
     async def update_prospect(
-        self, tenant_id: str, prospect_id: str, *, status: str | None = None
+        self,
+        tenant_id: str,
+        prospect_id: str,
+        *,
+        status: str | None = None,
+        icp_fit: float | None = None,
+        qualified: bool | None = None,
+        disqualifiers: list[str] | None = None,
     ) -> dict[str, Any] | None:
-        if status is None:
+        # Dynamisk SET-lista: en PATCH ska kunna sätta ETT fält utan att nolla
+        # de andra, och en fast update-sats hade krävt att anroparen skickar
+        # allt varje gång — vilket är hur en bedömning råkar skrivas över.
+        updates = {
+            "status": status,
+            "icp_fit": icp_fit,
+            "qualified": qualified,
+            "disqualifiers": disqualifiers,
+        }
+        fields = {name: value for name, value in updates.items() if value is not None}
+        if not fields:
             return await self.get_prospect(tenant_id, prospect_id)
+
+        # Kolumnnamnen kommer ur dicten ovan, aldrig ur anroparen — värdena
+        # går som parametrar.
+        assignments = ", ".join(
+            f"{name} = ${index}" for index, name in enumerate(fields, start=3)
+        )
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
-                "update prospects set status = $3 where tenant_id = $1 and id = $2 returning *",
+                f"update prospects set {assignments} where tenant_id = $1 and id = $2 returning *",
                 tenant_id,
                 prospect_id,
-                status,
+                *fields.values(),
             )
         return _row(record)
 
@@ -1177,6 +1202,76 @@ class PostgresStorage:
                 key_hash,
             )
         return _row(record)
+
+    async def list_outreach_messages(
+        self, tenant_id: str, thread_id: str
+    ) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select * from outreach_messages
+                where tenant_id = $1 and thread_id = $2
+                order by created_at
+                """,
+                tenant_id,
+                thread_id,
+            )
+        return [_row(r) for r in records]
+
+    # -- Agentkonfiguration (autonomi + ICP, migration 023) -----------------
+
+    async def get_agent_settings(self, tenant_id: str, *, agent_type: str) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            value = await conn.fetchval(
+                "select settings from agent_configs where tenant_id = $1 and agent_type = $2",
+                tenant_id,
+                agent_type,
+            )
+        if value is None:
+            return {}
+        return json.loads(value) if isinstance(value, str) else dict(value)
+
+    async def set_agent_settings(
+        self, tenant_id: str, *, agent_type: str, settings: dict[str, Any]
+    ) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            # Raden kan saknas helt: agent_configs skapas inte vid onboarding,
+            # bara när någon faktiskt konfigurerar agenten. unique(tenant_id,
+            # agent_type) finns sedan 010 och gör upserten säker.
+            value = await conn.fetchval(
+                """
+                insert into agent_configs (tenant_id, agent_type, settings)
+                values ($1, $2, $3::jsonb)
+                on conflict (tenant_id, agent_type)
+                do update set settings = excluded.settings, updated_at = now()
+                returning settings
+                """,
+                tenant_id,
+                agent_type,
+                json.dumps(settings, ensure_ascii=False),
+            )
+        return json.loads(value) if isinstance(value, str) else dict(value)
+
+    async def list_review_queue(self, tenant_id: str, *, limit: int = 100) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select q.*, m.subject, m.body, m.id as message_id, t.prospect_email
+                from send_queue q
+                join outreach_threads t on t.id = q.thread_id
+                left join lateral (
+                  select * from outreach_messages om
+                  where om.thread_id = q.thread_id and om.sent_at is null
+                  order by om.created_at limit 1
+                ) m on true
+                where q.tenant_id = $1 and q.status = 'awaiting_review'
+                order by q.scheduled_at
+                limit $2
+                """,
+                tenant_id,
+                limit,
+            )
+        return [_row(r) for r in records]
 
     # -- Rate limiting ------------------------------------------------------
 

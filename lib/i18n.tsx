@@ -29,6 +29,7 @@ const commonCopy = {
   "nav.contacts": { sv: "Kontakter", en: "Contacts" },
   "nav.campaigns": { sv: "Kampanjer", en: "Campaigns" },
   "nav.emails": { sv: "Email studio", en: "Email studio" },
+  "nav.leadsControl": { sv: "Kontroll", en: "Controls" },
   "nav.support": { sv: "Kundtjänst", en: "Support" },
   "nav.analytics": { sv: "Analys", en: "Analytics" },
   "nav.inbox": { sv: "Svar", en: "Replies" },

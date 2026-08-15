@@ -139,6 +139,8 @@ class MemoryStorage:
         # (scope_kind, scope_id, kind) -> tidsstämplar. Inte tenant-nycklad,
         # eftersom demons IP-scope inte har någon tenant (migration 019).
         self.rate_events: dict[tuple[str, str, str], list[datetime]] = {}
+        # (tenant_id, agent_type) -> agent_configs.settings (migration 023)
+        self.agent_settings: dict[tuple[str, str], dict[str, Any]] = {}
         # Nycklad på manifest_hash, inte tenant_id — delad baselinekatalog
         # (migration 016). Samma undantag som segmentaggregatet.
         self.skill_files: dict[str, list[dict[str, Any]]] = {}
@@ -479,6 +481,7 @@ class MemoryStorage:
         subject: str,
         humanizer_variant: str,
         scheduled_at,
+        status: str = "queued",
     ) -> dict[str, Any]:
         message = {
             "id": str(uuid.uuid4()),
@@ -495,7 +498,7 @@ class MemoryStorage:
             "tenant_id": tenant_id,
             "thread_id": thread_id,
             "scheduled_at": scheduled_at,
-            "status": "queued",
+            "status": status,
             "gate_checks": {},
         }
         self.outreach_messages.setdefault(tenant_id, []).append(message)
@@ -534,11 +537,26 @@ class MemoryStorage:
         )[:limit]
 
     async def update_prospect(
-        self, tenant_id: str, prospect_id: str, *, status: str | None = None
+        self,
+        tenant_id: str,
+        prospect_id: str,
+        *,
+        status: str | None = None,
+        icp_fit: float | None = None,
+        qualified: bool | None = None,
+        disqualifiers: list[str] | None = None,
     ) -> dict[str, Any] | None:
         prospect = await self.get_prospect(tenant_id, prospect_id)
-        if prospect and status is not None:
-            prospect["status"] = status
+        if not prospect:
+            return None
+        for field, value in (
+            ("status", status),
+            ("icp_fit", icp_fit),
+            ("qualified", qualified),
+            ("disqualifiers", disqualifiers),
+        ):
+            if value is not None:
+                prospect[field] = value
         return prospect
 
     async def create_prospect_source(
@@ -977,6 +995,32 @@ class MemoryStorage:
         }
         self.api_keys[key_hash] = record
         return record
+
+    async def list_outreach_messages(
+        self, tenant_id: str, thread_id: str
+    ) -> list[dict[str, Any]]:
+        return [
+            m for m in self.outreach_messages.get(tenant_id, []) if m["thread_id"] == thread_id
+        ]
+
+    # -- Agentkonfiguration (autonomi + ICP) --------------------------------
+
+    async def get_agent_settings(self, tenant_id: str, *, agent_type: str) -> dict[str, Any]:
+        return dict(self.agent_settings.get((tenant_id, agent_type), {}))
+
+    async def set_agent_settings(
+        self, tenant_id: str, *, agent_type: str, settings: dict[str, Any]
+    ) -> dict[str, Any]:
+        self.agent_settings[(tenant_id, agent_type)] = dict(settings)
+        return dict(settings)
+
+    async def list_review_queue(self, tenant_id: str, *, limit: int = 100) -> list[dict[str, Any]]:
+        items = [
+            item
+            for item in self.send_queue.get(tenant_id, [])
+            if item["status"] == "awaiting_review"
+        ]
+        return items[:limit]
 
     # -- Rate limiting ------------------------------------------------------
     #

@@ -36,16 +36,23 @@ def render_context_pack(
     customer_research: str | None,
     retention_playbook: str | None = None,
     gap_notice: str = "",
+    icp: str = "",
 ) -> str:
     """Textinjektionen som kompletterar filmaterialiseringen. Rubriceras med
     samma sökväg skillens eget kontrakt refererar till.
 
     `gap_notice` (från leads/onboarding_state.render_gap_notice) läggs FÖRST
     när onboarding är ofullständig — agenten ska se luckorna innan den ser
-    underlaget, inte tvärtom."""
+    underlaget, inte tvärtom.
+
+    `icp` (från leads/icp.render_icp) läggs ÖVER produktbeskrivningen: frågan
+    "ska det här prospektet bearbetas alls" kommer före hur erbjudandet
+    formuleras. SOUL styr ton, ICP styr urval."""
     parts = []
     if gap_notice:
         parts.append(gap_notice)
+    if icp:
+        parts.append(icp)
     parts.append(f"### Kontextpaket: {PRODUCT_MARKETING_RELATIVE_PATH}")
     parts.append(
         product_marketing
@@ -66,9 +73,11 @@ async def build_context_pack(storage, tenant_id: str) -> tuple[str, tuple[str, .
     (renderat paket, saknade onboarding-delar) — paketet är ALLTID
     användbart, så förvillkoret context_pack kan alltid uppfyllas och
     pipelinen aldrig dödlåser sig på utebliven onboarding."""
+    from .icp import render_icp
     from .onboarding_state import get_onboarding_state, render_gap_notice
 
     state = await get_onboarding_state(storage, tenant_id)
+    settings = await storage.get_agent_settings(tenant_id, agent_type="leads")
     docs = {
         kind: await storage.get_latest_context_doc(tenant_id, kind=kind)
         for kind in ("product_marketing", "customer_research", "retention_playbook")
@@ -78,5 +87,6 @@ async def build_context_pack(storage, tenant_id: str) -> tuple[str, tuple[str, .
         customer_research=docs["customer_research"]["content"] if docs["customer_research"] else None,
         retention_playbook=docs["retention_playbook"]["content"] if docs["retention_playbook"] else None,
         gap_notice=render_gap_notice(state),
+        icp=render_icp(settings.get("icp")),
     )
     return rendered, state.missing

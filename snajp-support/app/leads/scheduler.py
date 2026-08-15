@@ -19,21 +19,60 @@ from datetime import datetime, timezone
 
 from ..config import get_settings
 from ..storage.base import Storage
+from .autonomy import allowed_action, normalize
 from .send_decision import decide_send_action
 from .send_provider import SendProvider, get_send_provider
 
 logger = logging.getLogger("snajp-support.leads-scheduler")
 
 
+async def _outbound_sent_count(storage: Storage, tenant_id: str, thread_id: str) -> int:
+    """Hur många utgående meddelanden som redan gått iväg i tråden.
+
+    Det är sekvensindexet för nästa: har inget skickats är nästa nr 0, alltså
+    första kontakten. Räknas ur faktiskt skickade rader i stället för ur en
+    räknarkolumn — en räknare hade kunnat glida isär med verkligheten, och
+    det här är fältet som avgör om ett mejl går ut utan mänsklig granskning.
+    """
+    thread_messages = await storage.list_outreach_messages(tenant_id, thread_id)
+    return sum(
+        1
+        for message in thread_messages
+        if message.get("direction") == "outbound" and message.get("sent_at")
+    )
+
+
 async def process_due_item(
     storage: Storage, tenant_id: str, item: dict, provider: SendProvider, *, now: datetime
 ) -> str:
-    """Returnerar 'sent' | 'requeued' | 'blocked'."""
+    """Returnerar 'sent' | 'requeued' | 'blocked' | 'awaiting_review'."""
     thread = await storage.get_outreach_thread(tenant_id, item["thread_id"])
     message = (
         await storage.get_pending_outreach_message(tenant_id, item["thread_id"]) if thread else None
     )
     decision = decide_send_action(now=now, thread=thread, message=message)
+
+    # Andra anropsplatsen för autonomiregeln. Grinden vid köningen räcker inte:
+    # ett item kan ha köats innan kunden sänkte sin nivå, och det som ligger i
+    # kön ska då stoppas — inte skickas för att det hann bli godkänt av en
+    # regel som gällde igår.
+    #
+    # sequence_index räknas ur trådens redan skickade utgående meddelanden.
+    if decision.action == "send":
+        sent_before = await _outbound_sent_count(storage, tenant_id, item["thread_id"])
+        settings = await storage.get_agent_settings(tenant_id, agent_type="leads")
+        if allowed_action(settings.get("autonomy"), sent_before) != "send":
+            await storage.update_send_queue_status(
+                tenant_id,
+                item["id"],
+                status="awaiting_review",
+                gate_checks={
+                    "decision": decision.reason,
+                    "autonomy": normalize(settings.get("autonomy")),
+                    "held": "autonominivån tillåter inte utskick av det här steget",
+                },
+            )
+            return "awaiting_review"
 
     if decision.action == "send":
         await provider.send(

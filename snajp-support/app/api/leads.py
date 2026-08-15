@@ -7,15 +7,24 @@ som saknas, och kontextpaketet byggs alltid (med explicita luckmarkeringar)
 så att Fas B/C kan köra på det som finns i stället för att dödlåsa sig.
 """
 
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ..config import get_settings
+from ..leads.autonomy import LEVELS as AUTONOMY_LEVELS
+from ..leads.autonomy import describe as describe_autonomy
+from ..leads.autonomy import normalize as normalize_autonomy
 from ..leads.context_pack import build_context_pack, materialize_product_marketing
+from ..leads.icp import normalize_icp
 from ..leads.onboarding_state import REQUIRED_KINDS, get_onboarding_state
 from .deps import require_tenant
 from ..leads.soul import SOUL_KIND, SOUL_MAX_CHARS
 from .schemas import (
     ContextDocRequest,
+    LeadsBatchRequest,
+    LeadsConfigRequest,
+    ProspectPatchRequest,
     OnboardingChatRequest,
     OutreachDraftRequest,
     ProspectRequest,
@@ -252,3 +261,186 @@ async def list_runs(
         tenant["tenant_id"], agent_type=agent_type, limit=min(limit, 200)
     )
     return {"runs": runs}
+
+
+# -- Fas 4: kundens kontroller över agenten -------------------------------
+#
+# Autonominivå, målgrupp (ICP) och granskningskö. Det är kunden som bestämmer
+# hur långt agenten får gå, och det beslutet ska gå att ändra utan att vi
+# deployar något.
+
+
+@router.get("/api/leads/config")
+async def get_leads_config(request: Request, tenant: dict = Depends(require_tenant)) -> dict:
+    settings = await request.app.state.storage.get_agent_settings(
+        tenant["tenant_id"], agent_type="leads"
+    )
+    autonomy = normalize_autonomy(settings.get("autonomy"))
+    return {
+        "autonomy": autonomy,
+        "autonomy_description": describe_autonomy(autonomy),
+        "autonomy_levels": [
+            {"value": level, "description": describe_autonomy(level)} for level in AUTONOMY_LEVELS
+        ],
+        "icp": normalize_icp(settings.get("icp")),
+    }
+
+
+@router.put("/api/leads/config")
+async def put_leads_config(
+    request: Request, payload: LeadsConfigRequest, tenant: dict = Depends(require_tenant)
+) -> dict:
+    storage = request.app.state.storage
+    current = await storage.get_agent_settings(tenant["tenant_id"], agent_type="leads")
+
+    # Slår ihop i stället för att ersätta: UI:t har två separata formulär
+    # (autonomi och ICP), och en PUT från det ena får inte nolla det andra.
+    merged = dict(current)
+    if payload.autonomy is not None:
+        merged["autonomy"] = normalize_autonomy(payload.autonomy)
+    if payload.icp is not None:
+        merged["icp"] = normalize_icp(payload.icp)
+
+    saved = await storage.set_agent_settings(
+        tenant["tenant_id"], agent_type="leads", settings=merged
+    )
+    autonomy = normalize_autonomy(saved.get("autonomy"))
+    return {
+        "autonomy": autonomy,
+        "autonomy_description": describe_autonomy(autonomy),
+        "icp": normalize_icp(saved.get("icp")),
+    }
+
+
+@router.get("/api/leads/queue")
+async def list_review_queue(
+    request: Request, tenant: dict = Depends(require_tenant), limit: int = 100
+) -> dict:
+    """Utkast som väntar på granskning. Tom lista är ett giltigt svar och
+    betyder att agenten inte har något att visa — inte att något är fel."""
+    items = await request.app.state.storage.list_review_queue(
+        tenant["tenant_id"], limit=min(limit, 200)
+    )
+    return {"items": items}
+
+
+@router.post("/api/leads/queue/{item_id}/approve")
+async def approve_queue_item(
+    request: Request, item_id: str, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Släpper ett granskat utkast till schemaläggaren.
+
+    Går via status 'queued', inte direkt till utskick: schemaläggaren kör
+    språk- och tidsgrindarna en gång till vid faktisk utskickstid, och den
+    kontrollen ska inte gå att hoppa över genom att godkänna."""
+    await request.app.state.storage.update_send_queue_status(
+        tenant["tenant_id"],
+        item_id,
+        status="queued",
+        gate_checks={"approved_by": "human", "via": "granskningskön"},
+    )
+    return {"id": item_id, "status": "queued"}
+
+
+@router.post("/api/leads/queue/{item_id}/reject")
+async def reject_queue_item(
+    request: Request, item_id: str, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Avbryter ett utkast. 'cancelled' fanns i check-villkoret sedan 010 men
+    hade ingen kodväg som någonsin skrev det."""
+    await request.app.state.storage.update_send_queue_status(
+        tenant["tenant_id"],
+        item_id,
+        status="cancelled",
+        gate_checks={"rejected_by": "human", "via": "granskningskön"},
+    )
+    return {"id": item_id, "status": "cancelled"}
+
+
+@router.patch("/api/leads/prospects/{prospect_id}")
+async def patch_prospect(
+    request: Request,
+    prospect_id: str,
+    payload: ProspectPatchRequest,
+    tenant: dict = Depends(require_tenant),
+) -> dict:
+    """Exponerar storage.update_prospect, som funnits men varit onåbar över
+    HTTP. Granskningskön behöver kunna skriva tillbaka en bedömning."""
+    fields = payload.model_dump(exclude_none=True)
+    if not fields:
+        raise HTTPException(status_code=422, detail="Inga fält att uppdatera.")
+
+    updated = await request.app.state.storage.update_prospect(
+        tenant["tenant_id"], prospect_id, **fields
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Prospektet finns inte.")
+    return {"prospect": updated}
+
+
+@router.post("/api/leads/runs/batch", status_code=202)
+async def start_batch_run(
+    request: Request, payload: LeadsBatchRequest, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Startar en körning över N prospekt.
+
+    En jobbrad PER PROSPEKT, inte en för hela batchen: ett prospekt med en död
+    skrapkälla ska inte fälla de andra nitton, och en enda jobbrad hade gjort
+    "fyra av tjugo gick fel" omöjligt att se — batchen hade bara varit röd.
+    """
+    _require_live_llm()
+    storage = request.app.state.storage
+
+    prospects = await storage.list_prospects(tenant["tenant_id"], limit=payload.limit)
+    if not prospects:
+        raise HTTPException(
+            status_code=422,
+            detail="Inga prospekt att köra på. Lägg till prospekt först.",
+        )
+
+    jobs = []
+    for prospect in prospects[: payload.limit]:
+        job_id = await request.app.state.jobs.create(tenant_id=tenant["tenant_id"])
+        asyncio.create_task(
+            _run_batch_prospect(
+                request.app.state,
+                job_id,
+                tenant,
+                prospect_id=prospect["id"],
+                scope=payload.scope,
+            )
+        )
+        jobs.append({"job_id": job_id, "prospect_id": prospect["id"]})
+
+    return {"jobs": jobs, "scope": payload.scope, "count": len(jobs)}
+
+
+async def _run_batch_prospect(app_state, job_id: str, tenant: dict, *, prospect_id: str, scope: str) -> None:
+    from ..agent.leads_agent import run_research_step
+
+    storage = app_state.storage
+    try:
+        context_pack, missing = await build_context_pack(storage, tenant["tenant_id"])
+        result = await run_research_step(
+            storage,
+            tenant["tenant_id"],
+            prospect_id=prospect_id,
+            tenant_name=tenant["tenant_name"],
+            context_pack=context_pack,
+            brief="",
+        )
+        result["onboarding_missing"] = list(missing)
+        result["prospect_id"] = prospect_id
+
+        if scope == "research_and_draft":
+            # Utkastet skrivs i samma jobb men KÖAS enligt autonominivån —
+            # batchen ger aldrig agenten mer befogenhet än den enskilda
+            # körningen gör.
+            result["draft_note"] = (
+                "Utkast skrivs av /api/leads/outreach/draft när tråden finns. "
+                "Batchen researchar; utkastet kräver ett thread_id."
+            )
+
+        await app_state.jobs.complete(job_id, result)
+    except Exception as error:  # noqa: BLE001 — ett trasigt prospekt fäller inte batchen
+        await app_state.jobs.fail(job_id, f"Prospekt {prospect_id}: {error}")

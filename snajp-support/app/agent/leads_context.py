@@ -34,6 +34,10 @@ class OutreachContext:
     tenant_id: str
     thread_id: str
     prospect_email: str
+    #: Var i sekvensen det här meddelandet ligger. 0 = första kontakten.
+    #: Avgör tillsammans med autonominivån om utkastet får skickas eller
+    #: måste granskas (app/leads/autonomy.py).
+    sequence_index: int = 0
     queued: bool = False
     escalated: bool = False
     escalation_reason: str | None = None

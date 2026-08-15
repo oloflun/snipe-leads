@@ -59,6 +59,28 @@ class ProspectRequest(BaseModel):
     contact_email: str | None = None
 
 
+class LeadsConfigRequest(BaseModel):
+    """Båda fälten är valfria: UI:t har två separata formulär, och en PUT från
+    det ena får inte nolla det andra."""
+
+    autonomy: str | None = Field(default=None, pattern=r"^(draft|first_contact|meeting)$")
+    icp: dict | None = None
+
+
+class LeadsBatchRequest(BaseModel):
+    scope: str = Field(default="research", pattern=r"^(research|research_and_draft)$")
+    # Taket på 50 är ekonomiskt, inte tekniskt: varje prospekt är åtta
+    # LLM-anrop, så en batch på 50 är 400 — exakt tenant-timtaket.
+    limit: int = Field(default=10, ge=1, le=50)
+
+
+class ProspectPatchRequest(BaseModel):
+    status: str | None = None
+    icp_fit: float | None = Field(default=None, ge=0, le=1)
+    qualified: bool | None = None
+    disqualifiers: list[str] | None = None
+
+
 class ProspectSourceRequest(BaseModel):
     source_url: str = Field(..., min_length=4, max_length=2000)
     source_type: str = Field(

@@ -15,6 +15,7 @@ import {
   InboxView,
   LeadsView
 } from "@/components/WorkspaceViews";
+import { LeadsControls } from "@/components/leads/LeadsControls";
 import { loadEmailStudioData } from "@/lib/data/emails";
 import { resolveDashboardState } from "@/lib/data/dashboard";
 import type { ProductKey } from "@/lib/routes";
@@ -60,7 +61,10 @@ export default async function Page({
 
   switch (section) {
     case "leads":
-      return <LeadsView />;
+      // /dashboard/leads/kontroll. Egen sektion i sectionProduct hade betytt
+      // /dashboard/kontroll, vilket inte är där kontrollerna hör hemma —
+      // de gäller leads och ska ligga under leads.
+      return id === "kontroll" ? <LeadsControlSection /> : <LeadsView />;
     case "companies":
       return id ? <CompanyDetailView id={id} /> : <CompaniesView />;
     case "contacts":
@@ -92,6 +96,18 @@ async function EmailStudioSection() {
       description="Ämnesrad, brödtext och uppföljning. Varje åtgärd visar vad den ändrade och varför."
     >
       <EmailStudioEditor data={data} />
+    </PageShell>
+  );
+}
+
+function LeadsControlSection() {
+  return (
+    <PageShell
+      kicker="Leads · kontroll"
+      title="Vad agenten får göra"
+      description="Hur långt den får gå, vilka bolag den ska leta efter, och vad som väntar på ditt godkännande."
+    >
+      <LeadsControls />
     </PageShell>
   );
 }

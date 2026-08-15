@@ -387,7 +387,8 @@ async def test_outreach_is_queued_by_code_never_sent():
     assert result["queued"] is True
     assert result["escalated"] is False
     queue = storage.send_queue[TENANT]
-    assert [item["status"] for item in queue] == ["queued"]
+    # 'awaiting_review' eftersom autonominivån är 'draft' som default.
+    assert [item["status"] for item in queue] == ["awaiting_review"]
     assert storage.outreach_messages[TENANT][0]["sent_at"] is None
 
 

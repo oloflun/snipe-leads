@@ -39,6 +39,7 @@ export const appRoutes: AppRoute[] = [
   { href: "/dashboard/leads", labelKey: "nav.leads", product: "leads" },
   { href: "/dashboard/campaigns", labelKey: "nav.campaigns", product: "leads" },
   { href: "/dashboard/emails", labelKey: "nav.emails", product: "leads" },
+  { href: "/dashboard/leads/kontroll", labelKey: "nav.leadsControl", product: "leads" },
   { href: "/dashboard/companies", labelKey: "nav.companies", product: "leads", preview: true },
   { href: "/dashboard/contacts", labelKey: "nav.contacts", product: "leads", preview: true },
   { href: "/dashboard/inbox", labelKey: "nav.inbox", product: "leads", preview: true },

@@ -43,3 +43,15 @@ export async function PUT(request: NextRequest, { params }: Params) {
     body: body || undefined
   });
 }
+
+// PATCH för delvisa uppdateringar (prospektets bedömning). Ingen DELETE här:
+// ingen backend-endpoint tar DELETE, och en metod som proxas utan mottagare
+// är bara en yta till att hålla stängd.
+export async function PATCH(request: NextRequest, { params }: Params) {
+  const { path } = await params;
+  const body = await request.text();
+  return proxyAsTenant(backendPath(path, request.nextUrl.search), {
+    method: "PATCH",
+    body: body || undefined
+  });
+}

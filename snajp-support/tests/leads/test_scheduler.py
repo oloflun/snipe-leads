@@ -25,7 +25,11 @@ class _FakeSendProvider:
         self.sent.append({"to": to, "subject": subject, "body": body})
 
 
-def _seed(storage: MemoryStorage, *, scheduled_at, language_state="sv", humanizer_variant="snajp:humanizer-svenska", last_inbound_at=None):
+def _seed(storage: MemoryStorage, *, scheduled_at, language_state="sv", humanizer_variant="snajp:humanizer-svenska", last_inbound_at=None, autonomy="first_contact"):
+    # autonomy default 'first_contact' här, inte 'draft': testerna nedan mäter
+    # SÄNDNINGSVÄGEN, och med produktionsdefaulten 'draft' hade de mätt
+    # autonomigrinden i stället. Draft-beteendet har egna tester längst ned.
+    storage.agent_settings[(TENANT, "leads")] = {"autonomy": autonomy}
     thread_id = str(uuid.uuid4())
     message_id = str(uuid.uuid4())
     item_id = str(uuid.uuid4())
@@ -142,3 +146,74 @@ async def test_process_all_due_skips_items_not_yet_due():
     provider = _FakeSendProvider()
     results = await process_all_due(storage, provider)
     assert results == []  # inget är due än
+
+
+# -- Autonominivån (Fas 4.1) -------------------------------------------------
+#
+# Grinden sitter på BÅDA ställena: vid köningen och här. Ett item kan ha köats
+# innan kunden sänkte sin nivå, och då ska det stoppas — inte skickas för att
+# det hann godkännas av en regel som gällde igår.
+
+
+@pytest.mark.anyio
+async def test_draft_haller_kvar_aven_ett_koat_item():
+    storage = MemoryStorage()
+    item_id, thread_id, _ = _seed(storage, scheduled_at=WITHIN_WINDOW_UTC, autonomy="draft")
+    provider = _FakeSendProvider()
+
+    outcome = await process_due_item(
+        storage, TENANT, {"id": item_id, "thread_id": thread_id}, provider, now=WITHIN_WINDOW_UTC
+    )
+
+    assert outcome == "awaiting_review"
+    assert provider.sent == []
+    assert storage.send_queue[TENANT][0]["status"] == "awaiting_review"
+
+
+@pytest.mark.anyio
+async def test_first_contact_skickar_forsta_men_haller_uppfoljningen():
+    storage = MemoryStorage()
+    item_id, thread_id, _ = _seed(
+        storage, scheduled_at=WITHIN_WINDOW_UTC, autonomy="first_contact"
+    )
+    provider = _FakeSendProvider()
+
+    first = await process_due_item(
+        storage, TENANT, {"id": item_id, "thread_id": thread_id}, provider, now=WITHIN_WINDOW_UTC
+    )
+    assert first == "sent"
+
+    # Uppföljning i samma tråd: ett skickat meddelande finns nu, alltså
+    # sequence_index 1, som first_contact inte tillåter.
+    follow_up_id = str(uuid.uuid4())
+    storage.outreach_messages[TENANT].append(
+        {
+            "id": follow_up_id,
+            "thread_id": thread_id,
+            "direction": "outbound",
+            "sent_at": None,
+            "body": "Hör bara av mig igen.",
+            "subject": "Uppföljning",
+            "humanizer_variant": "snajp:humanizer-svenska",
+        }
+    )
+    second_item_id = str(uuid.uuid4())
+    storage.send_queue[TENANT].append(
+        {
+            "id": second_item_id,
+            "thread_id": thread_id,
+            "scheduled_at": WITHIN_WINDOW_UTC,
+            "status": "queued",
+            "gate_checks": {},
+        }
+    )
+
+    second = await process_due_item(
+        storage,
+        TENANT,
+        {"id": second_item_id, "thread_id": thread_id},
+        provider,
+        now=WITHIN_WINDOW_UTC,
+    )
+    assert second == "awaiting_review"
+    assert len(provider.sent) == 1

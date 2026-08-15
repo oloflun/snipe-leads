@@ -137,6 +137,15 @@ class Storage(Protocol):
 
     async def mark_outreach_message_sent(self, tenant_id: str, message_id: str, sent_at: Any) -> None: ...
 
+    async def list_outreach_messages(
+        self, tenant_id: str, thread_id: str
+    ) -> list[dict[str, Any]]:
+        """Alla meddelanden i en tråd, äldst först. Schemaläggaren räknar
+        sekvensindex ur den här i stället för ur en räknarkolumn — en räknare
+        kan glida isär med verkligheten, och det här avgör om ett mejl går ut
+        utan mänsklig granskning."""
+        ...
+
     # -- G11: segmentaggregatet (den enda avsiktliga tenantgränsöverskridningen) --
 
     async def get_segment_ab_aggregate(self) -> list[dict[str, Any]]:
@@ -200,10 +209,15 @@ class Storage(Protocol):
         subject: str,
         humanizer_variant: str,
         scheduled_at: Any,
+        status: str = "queued",
     ) -> dict[str, Any]:
-        """Skapar meddelandet (sent_at=NULL) OCH send_queue-raden
-        (status='queued') i samma operation — det finns ingen kodväg som
-        skapar det ena utan det andra."""
+        """Skapar meddelandet (sent_at=NULL) OCH send_queue-raden i samma
+        operation — det finns ingen kodväg som skapar det ena utan det andra.
+
+        `status` avgörs av kundens autonominivå (app/leads/autonomy.py):
+        'queued' släpps till schemaläggaren, 'awaiting_review' väntar på att
+        en människa godkänner. Default är 'queued' för att inte ändra
+        beteendet för anropare som inte känner till nivån."""
         ...
 
     # -- Leads: proveniensregister (Fas B, INV-DATA-001, research-verktygets allowlist) --
@@ -225,8 +239,20 @@ class Storage(Protocol):
     async def list_prospects(self, tenant_id: str, *, limit: int = 100) -> list[dict[str, Any]]: ...
 
     async def update_prospect(
-        self, tenant_id: str, prospect_id: str, *, status: str | None = None
-    ) -> dict[str, Any] | None: ...
+        self,
+        tenant_id: str,
+        prospect_id: str,
+        *,
+        status: str | None = None,
+        icp_fit: float | None = None,
+        qualified: bool | None = None,
+        disqualifiers: list[str] | None = None,
+    ) -> dict[str, Any] | None:
+        """Fas B:s bedömning (icp_fit, qualified, disqualifiers) landar här,
+        migration 024. Innan den fanns räknades icp_fit ut av modellen och
+        kastades bort — den gick inte att sortera, mäta eller motivera i
+        efterhand."""
+        ...
 
     async def create_prospect_source(
         self,
@@ -379,6 +405,22 @@ class Storage(Protocol):
     async def record_rate_events(
         self, *, scope_kind: str, scope_id: str, kind: str, count: int
     ) -> None: ...
+
+    # -- Agentkonfiguration (autonomi + ICP, migration 023) ------------------
+
+    async def get_agent_settings(self, tenant_id: str, *, agent_type: str) -> dict[str, Any]:
+        """agent_configs.settings, eller {} om raden saknas. En saknad rad är
+        inte ett fel — den betyder att kunden aldrig rört inställningarna, och
+        då gäller defaultarna i autonomy.py."""
+        ...
+
+    async def set_agent_settings(
+        self, tenant_id: str, *, agent_type: str, settings: dict[str, Any]
+    ) -> dict[str, Any]: ...
+
+    async def list_review_queue(self, tenant_id: str, *, limit: int = 100) -> list[dict[str, Any]]:
+        """Utkast som väntar på granskning (send_queue.status='awaiting_review')."""
+        ...
 
     async def close(self) -> None: ...
 
