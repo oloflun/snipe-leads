@@ -228,6 +228,33 @@ def cmd_pull() -> None:
     cmd_check()
 
 
+def vercel_env_set(name: str, value: str, environment: str) -> bool:
+    """Sätter EN variabel i ETT Vercel-scope. Returnerar True vid lyckat.
+
+    Bruten ur cmd_push() för att onboard_tenant.py sätter per-kund-nycklar och
+    behöver exakt samma sekvens. Två kopior hade glidit isär, och den här
+    hanterar hemligheter.
+
+    `rm` före `add` för att Vercel inte skriver över ett befintligt värde — en
+    ren `add` på en variabel som redan finns misslyckas tyst nog för att se ut
+    som att den lyckades. Felet ignoreras med flit: variabeln finns oftast inte.
+    """
+    subprocess.run(
+        ["vercel", "env", "rm", name, environment, "--yes"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    result = subprocess.run(
+        ["vercel", "env", "add", name, environment],
+        cwd=ROOT,
+        input=value + "\n",
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0
+
+
 def cmd_push() -> None:
     """Skickar lokala nycklar till Vercel så deployen fungerar.
 
@@ -252,21 +279,8 @@ def cmd_push() -> None:
             print(f"  {key.name}: hoppar över (saknas lokalt)")
             continue
         for environment in ("production", "preview"):
-            subprocess.run(
-                ["vercel", "env", "rm", key.name, environment, "--yes"],
-                cwd=ROOT,
-                capture_output=True,
-                text=True,
-            )
-            result = subprocess.run(
-                ["vercel", "env", "add", key.name, environment],
-                cwd=ROOT,
-                input=value + "\n",
-                capture_output=True,
-                text=True,
-            )
-            state = "OK" if result.returncode == 0 else f"FEL: {result.stderr.strip()[:80]}"
-            print(f"  {key.name} -> vercel {environment}: {state}")
+            ok = vercel_env_set(key.name, value, environment)
+            print(f"  {key.name} -> vercel {environment}: {'OK' if ok else 'FEL'}")
 
     print(
         "\nBackend (Render) sätts separat — Render CLI:t kan inte skriva env utan "
