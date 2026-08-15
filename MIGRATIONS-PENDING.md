@@ -1,146 +1,81 @@
-# Migrationer som väntar på att köras i produktion
+# Migrationer — status
 
-Skrivna och committade i `supabase/migrations/`, men **inte applicerade**.
-DDL mot produktionsdatabasen blockerades av behörighetsklassificeraren i den
-session som skrev dem — det är en spärr i verktyget, inte ett fel i SQL:en.
+Tio migrationer skrivna 2026-08-15. **Nio är körda och verifierade mot
+produktionsdatabasen.** En återstår och kan inte köras än, av ett skäl som
+inte är tekniskt.
 
-Kör dem i **nummerordning** i Supabase SQL-editorn eller via
-`mcp__supabase-snipra__apply_migration`. Verifieringen efter varje är den som
-räknas; en applicerad migration som ingen mätt är en oapplicerad migration.
+## Körda och verifierade
 
----
+| Migration | Verifierat med |
+|---|---|
+| `018_rpc_hardening` | `pg_proc.proacl` visar varken PUBLIC (`=X`) eller `anon` på `handle_new_user` och `rls_auto_enable`. `ensure_workspace_for_current_user` har kvar `authenticated=X` — utan den går ingen att logga in. Supabase säkerhetsrådgivare flaggar inte längre någon av de två. |
+| `018b` (tillägg) | `current_workspace_id()` har nu låst `search_path`. Rådgivarens `function_search_path_mutable` för den är borta. |
+| `019_rate_limit` | `platform_rate_events` finns, RLS på, en policy (`snajp_app`), sekvensgrant satt. |
+| `020_platform_admins` | RLS på, `platform_admins_self_read` för `authenticated`, **inga skrivpolicyer**. |
+| `022_workspace_addons` | Check-villkoret räknar upp de sex tilläggen. |
+| `023_agent_config_settings` | `send_queue_status_check` innehåller `awaiting_review`. Autonomi-villkoret på plats. Inga befintliga `agent_configs`-rader att sätta default på — varje ny rad får `draft` från koden. |
+| `024_prospect_icp_fit` | `icp_fit`, `qualified`, `disqualifiers` finns med index. |
+| `025_agent_runs_fix` | **Blockeraren är löst.** En rad med `agent_type='leads_research'` gick att spara i produktionsdatabasen, vilket den aldrig gjort. Testraden raderad efteråt. |
+| `026_platform_events` | RLS på, en policy (`snajp_app`), tabellen svarar på `select count(*)`. |
+| `027_step_traces` | Kommentar och `agent_runs_tenant_created_idx` på plats. |
 
-## 018_rpc_hardening.sql — P0, säkerhet
+## Återstår
 
-Fyra `security definer`-funktioner hade EXECUTE till PUBLIC och var anropbara
-som `anon` via `/rest/v1/rpc/…`.
+### `021_seed_platform_admin.sql`
 
-**Verifiera efteråt:**
-```sql
-select p.proname, array_to_string(p.proacl, ' | ') as acl
-from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-where n.nspname = 'public'
-  and p.proname in ('handle_new_user', 'rls_auto_enable', 'ensure_workspace_for_current_user');
-```
-Förväntat: ingen `=X/postgres` (PUBLIC) och inget `anon=X` kvar.
-`ensure_workspace_for_current_user` ska ha `authenticated=X` — den anropas av
-`app/auth/callback/route.ts` efter inloggning, och utan den graden går ingen
-att logga in.
+Kan inte köras än: `snajpsupport@gmail.com` finns **inte** i `auth.users`
+(kontrollerat). Migrationen hade blivit en tyst no-op.
 
-**Konsolmoment i samma svep:** slå på leaked-password-skyddet i
-Supabase Auth → Providers → Email.
+1. Registrera kontot på `/login` → fliken "Skapa konto".
+2. Kör migrationen — den är idempotent.
+3. Verifiera:
+   ```sql
+   select u.email, pa.granted_at
+   from public.platform_admins pa join auth.users u on u.id = pa.user_id;
+   ```
+4. Den riktiga verifieringen: `/admin` ska ge 404 för ett vanligt konto och
+   200 för admin-kontot.
 
----
+Lösenordet sätter du. Aldrig en agent, aldrig en migration.
 
-## 019_rate_limit.sql — P0, kostnadsspärr
+## Fortfarande öppet — inte migrationer
 
-Tabellen `platform_rate_events` + policy för `snajp_app` + grants.
+1. **`SNAJP_MASTER_API_KEY` på Vercel.** Utan den svarar `/api/admin/*` med
+   503 och ett meddelande som namnger variabeln.
+2. **`snajp_app`-rollens lösenord** är osatt sedan 2026-08-07. Tills det är
+   satt kör backenden som `postgres` med BYPASSRLS, och varje
+   `tenant_isolation`-policy är dekorativ för den anslutningen (INV-SEC-001).
+   **De två nya tabellernas policyer gäller `snajp_app`** — de är alltså
+   skrivna för den dag rollen faktiskt används, och otestade tills dess.
+3. **`SNAJP_KEY_LIVRUSTNING` på Vercel.**
+4. **Leaked-password-skyddet** i Supabase Auth → Providers → Email. Rådgivaren
+   flaggar det fortfarande.
+5. **OAuth-konsolerna** (Google Cloud, Microsoft Entra). Checklista i `AUTH.md`.
 
-**Verifiera efteråt:**
-```sql
-select count(*) from platform_rate_events;                  -- ska ge 0, inte fel
-select polname, polroles::regrole[] from pg_policy
-where polrelid = 'public.platform_rate_events'::regclass;   -- ska ge snajp_app
-```
+## Kvarvarande rådgivarvarningar som är avsiktliga
 
-Koden är redan fail-open: utan tabellen släpps alla anrop igenom och en
-varning loggas. Det är alltså inte trasigt före migrationen — bara oskyddat.
+- `current_workspace_id()` går att anropa som `anon` och `authenticated`.
+  Avsiktligt: den anropas inifrån varje workspace-scopad RLS-policy, och de
+  policyerna gäller rollen `public`. Utan graden får anon ett behörighetsfel
+  i stället för noll rader — samma resultat, sämre form. Funktionen läser
+  bara anroparens egen workspace via `auth.uid()` och läcker ingenting.
+- `ensure_workspace_for_current_user()` går att anropa som `authenticated`.
+  Krävs — `app/auth/callback/route.ts` anropar den efter inloggning.
+- `vector` i public-schemat och `chorus_*`-funktionernas search_path är äldre
+  än det här arbetet och rörs inte här.
 
----
+## Vad som fortfarande INTE är verifierat
 
-## 025_agent_runs_fix.sql — P0, blockerar Fas 6
+Backenden har ingen `DATABASE_URL` i den här miljön, så hela Python-stacken
+har bara körts mot `MemoryStorage`. Schemat är verifierat med SQL direkt mot
+produktionen (ovan), men **ingen kodväg har läst eller skrivit de nya
+tabellerna via `PostgresStorage`.**
 
-`agent_runs.agent_type` avvisar `leads_research` och `leads_outreach`, som är
-exakt vad koden skriver. **Ingen leads-körning har någonsin sparats.**
+Kvarstår att göra efter deploy:
 
-**Verifiera efteråt:**
-```sql
-select pg_get_constraintdef(oid) from pg_constraint
-where conname = 'agent_runs_agent_type_check';
--- ska innehålla leads_research, leads_outreach, demo
-
-insert into agent_runs (tenant_id, agent_type, pack_version)
-select id, 'leads_research', 'test' from ss_tenants limit 1;
--- ska lyckas. Radera raden efteråt.
-```
-
-Kör den här **tidigt även om admin-UI:t dröjer**. Spårdata som inte samlades
-går inte att rekonstruera i efterhand.
-
----
-
-## 020_platform_admins.sql + 021_seed_platform_admin.sql — Fas 2
-
-`platform_admins`, egen dimension skild från `profiles.role`. Inga
-skrivpolicyer — admin ges bara via service-rollen eller SQL-editorn.
-
-**021 kräver att kontot finns först.** Skapa `snajpsupport@gmail.com` på
-`/login` (signup-fliken), kör sedan 021. Den är idempotent, så kör om den om
-den första körningen inte matchade något.
-
-**Verifiera:**
-```sql
-select u.email, pa.granted_at
-from public.platform_admins pa join auth.users u on u.id = pa.user_id;
-```
-Tom rad = kontot fanns inte än. `/admin` ger 404 för ett vanligt konto och
-200 för admin-kontot — det är den riktiga verifieringen.
-
----
-
-## 022_workspace_addons.sql — Fas 3
-
-`workspaces.addons text[]` med check mot sex enumererade värden.
-
-**Verifiera:** `select addons from workspaces limit 5;` → `{}` för alla.
-Entitlements är fail-closed sedan Fas 3, så tomt betyder inga tillägg.
-
----
-
-## 023_agent_config_settings.sql + 024_prospect_icp_fit.sql — Fas 4
-
-`agent_configs.settings` (autonomi + ICP), `send_queue`-status
-`awaiting_review`, och `prospects.icp_fit / qualified / disqualifiers`.
-
-023 sätter `autonomy='draft'` för varje befintlig kund.
-
-**Verifiera:**
-```sql
-select tenant_id, settings->>'autonomy' from agent_configs where agent_type = 'leads';
-select pg_get_constraintdef(oid) from pg_constraint where conname = 'send_queue_status_check';
--- ska innehålla awaiting_review
+```bash
+bash scripts/verify_inv_sec_010.sh https://<deploy>
 ```
 
-Utan `awaiting_review` hade ett draft-utkast legat i samma kö som ett godkänt
-och skickats så fort `SEND_QUEUE_POLL_SECONDS` sätts. Autonominivån hade
-varit dekorativ.
-
----
-
-## 026_platform_events.sql + 027_step_traces.sql — Fas 6
-
-`platform_events` (notiscentret) och en kommentar plus ett index för
-spårvyn. 027 ändrar inget schema — beteendeändringen ligger i
-`step_runner.py`, som nu sparar systemprompt, användarmeddelande, råsvar och
-reasoning i `step_log`, kapade till 8 000 tecken vardera.
-
-**Verifiera:**
-```sql
-select count(*) from platform_events;   -- 0, inte fel
-select polname from pg_policy where polrelid = 'public.platform_events'::regclass;
-```
-
-Framkalla sedan ett medvetet fel (t.ex. en död skrapkälla) och kontrollera
-att det dyker upp i `/admin/handelser` med rätt `run_id`.
-
----
-
-## Fortfarande öppet, kräver dig — inte en migration
-
-1. **`snajp_app`-rollens lösenord** är osatt sedan 2026-08-07. Tills dess kör
-   backenden som `postgres` med BYPASSRLS, och varje `tenant_isolation`-policy
-   är dekorativ för den anslutningen (INV-SEC-001).
-2. **`SNAJP_KEY_LIVRUSTNING`** är osatt på Vercel-projektet `snajp`.
-3. **Lösenordet till `snajpsupport@gmail.com`** — regel, inte förmåga.
-4. **OAuth-konsolerna** (Google Cloud, Microsoft Entra, Supabase Auth Providers).
-   Checklista i `AUTH.md`.
+och en riktig leads-körning mot en testtenant, för att se en `agent_runs`-rad
+skapas av koden och inte av en handskriven insert.

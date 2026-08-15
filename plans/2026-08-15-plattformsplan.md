@@ -9,9 +9,9 @@ Sju faser: stänga den anonyma API-ytan, ge varje kund en vy som bara innehålle
 betalar för, bygga en admin-vy som spårar allt ner till varje LLM-steg, och ge kunden
 kontroll över hur långt leads-agenten får gå.
 
-**Alla sju faser är kodklara** (2026-08-15). Tio migrationer väntar på att köras mot
-produktionsdatabasen — se `MIGRATIONS-PENDING.md`. Inget av det som byggts är verifierat
-mot Postgres förrän de är körda.
+**Alla sju faser är kodklara** (2026-08-15). **Nio av tio migrationer är körda och
+verifierade mot produktionsdatabasen**; `021_seed_platform_admin` väntar på att kontot
+`snajpsupport@gmail.com` skapas. Se `MIGRATIONS-PENDING.md`.
 
 ## Completed
 
@@ -63,14 +63,21 @@ mot Postgres förrän de är körda.
 - En riktig supportkörning: `/api/admin/tenants` visar rätt nyckeltal, och spårvyns
   `system_prompt` mäter exakt 8 000 tecken (kapningen verkställs).
 
-**Inte verifierat:** ingenting mot Postgres. Migrationerna är inte körda, så RLS-
-policyer, check-villkor och de nya tabellerna är oprövade i drift. Den lokala stacken
-kör `MemoryStorage`.
+- Mot produktionsdatabasen: alla nio körda migrationer verifierade med SQL. Rådgivaren
+  flaggar inte längre `handle_new_user` eller `rls_auto_enable`. **Blockeraren är löst** —
+  en `leads_research`-rad gick att spara i `agent_runs`, vilket den aldrig gjort.
+  Testraden raderad.
+- Två av tre nya tabeller har RLS på med exakt en policy vardera, scopad till `snajp_app`;
+  `platform_admins` har läspolicy för `authenticated` och inga skrivpolicyer.
+
+**Inte verifierat:** backenden saknar `DATABASE_URL` i den här miljön, så hela
+Python-stacken har bara körts mot `MemoryStorage`. Schemat är prövat med SQL, men ingen
+kodväg har läst eller skrivit de nya tabellerna via `PostgresStorage`.
 
 ## Blockers
 
-- **Tio migrationer väntar** (018–027). DDL mot produktionen blockerades av
-  behörighetsklassificeraren. Ordning och verifieringsfrågor i `MIGRATIONS-PENDING.md`.
+- **`021_seed_platform_admin` kan inte köras** förrän `snajpsupport@gmail.com` finns i
+  `auth.users`. Kontrollerat: kontot finns inte. Migrationen hade blivit en tyst no-op.
 - **`snajp_app`-rollens lösenord osatt** (sedan 2026-08-07). Backenden kör som
   `postgres` med BYPASSRLS; varje `tenant_isolation`-policy är dekorativ för den
   anslutningen (INV-SEC-001).
@@ -92,8 +99,9 @@ kör `MemoryStorage`.
 
 ## Next Steps
 
-1. Kör migrationerna 018–027 i ordning, med verifieringsfrågan efter varje.
-2. Sätt `SNAJP_MASTER_API_KEY` på Vercel, skapa `snajpsupport@gmail.com` och kör om 021.
-3. Kör en riktig leads-körning mot en testtenant och bekräfta att en `agent_runs`-rad
-   faktiskt skapas i Postgres — det är den som aldrig fungerat.
+1. Skapa `snajpsupport@gmail.com` på `/login` och kör `021`.
+2. Sätt `SNAJP_MASTER_API_KEY` på Vercel — annars svarar `/api/admin/*` 503.
+3. Kör en riktig leads-körning mot en testtenant och bekräfta att `agent_runs`-raden
+   skapas av KODEN. Schemat tar emot den nu; att kodvägen gör det är oprövat, eftersom
+   den aldrig kunnat köras mot Postgres härifrån.
 4. `bash scripts/verify_inv_sec_010.sh https://<deploy>` efter deploy.

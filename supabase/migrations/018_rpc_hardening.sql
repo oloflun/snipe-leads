@@ -40,3 +40,15 @@ grant execute on function public.ensure_workspace_for_current_user() to authenti
 --    Postgres default-privilegier ger EXECUTE till PUBLIC på nya funktioner;
 --    det är den regeln som gjorde att detta uppstod utan att någon skrev det.
 alter default privileges in schema public revoke execute on functions from public;
+
+-- Tillägg efter att migrationen kördes: Supabase-rådgivaren flaggade
+-- `current_workspace_id()` för mutable search_path. Den är security definer
+-- och anropas inifrån VARJE workspace-scopad RLS-policy — en injicerad
+-- search_path hade kunnat byta ut vilka tabeller den läser, alltså under
+-- policyn som ska skydda dem.
+--
+-- Funktionen behåller sin EXECUTE till anon och authenticated med flit: den
+-- anropas av policyerna, som gäller rollen `public`. Utan graden får anon ett
+-- behörighetsfel i stället för noll rader — samma resultat, sämre form. Den
+-- läser dessutom bara anroparens EGEN workspace via auth.uid().
+alter function public.current_workspace_id() set search_path = public, pg_temp;
