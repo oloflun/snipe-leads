@@ -1,8 +1,14 @@
 import { NextRequest } from "next/server";
-import { proxyToBackend } from "../_lib";
+import { proxyAsTenant } from "../_auth";
 
-// Catch-all-proxy för inkorg/utkast/regler m.m. — specifika routes (chat, jobs,
-// triage) matchar före denna. Endast /api/-prefixade backend-vägar tillåts.
+// Catch-all-proxy för inkorg/utkast/regler/kunskapsbas/leads — specifika routes
+// (chat, jobs, triage) matchar före denna.
+//
+// KRÄVER INLOGGNING, och tenanten kommer ur sessionen. Tidigare skickades ingen
+// tenant alls härifrån, vilket gav två fel på samma rad: hela ytan var anonymt
+// nåbar, och varje inloggad kunds data lästes ur demo-tenanten. Den kunde
+// dessutom adressera POST /api/keys — räddat enbart av att den interna nyckeln
+// råkade vara demonyckeln och inte master.
 
 export const runtime = "nodejs";
 // Render free-tier tar ~1 min att vakna. Utan detta dödar Vercel
@@ -17,13 +23,13 @@ type Params = { params: Promise<{ path: string[] }> };
 
 export async function GET(request: NextRequest, { params }: Params) {
   const { path } = await params;
-  return proxyToBackend(backendPath(path, request.nextUrl.search), { method: "GET" });
+  return proxyAsTenant(backendPath(path, request.nextUrl.search), { method: "GET" });
 }
 
 export async function POST(request: NextRequest, { params }: Params) {
   const { path } = await params;
   const body = await request.text();
-  return proxyToBackend(backendPath(path, request.nextUrl.search), {
+  return proxyAsTenant(backendPath(path, request.nextUrl.search), {
     method: "POST",
     body: body || undefined
   });
@@ -32,7 +38,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 export async function PUT(request: NextRequest, { params }: Params) {
   const { path } = await params;
   const body = await request.text();
-  return proxyToBackend(backendPath(path, request.nextUrl.search), {
+  return proxyAsTenant(backendPath(path, request.nextUrl.search), {
     method: "PUT",
     body: body || undefined
   });

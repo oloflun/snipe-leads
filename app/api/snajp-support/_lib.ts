@@ -14,13 +14,6 @@ export const SNAJP_INTERNAL_API_KEY =
 const URL_IS_CONFIGURED = Boolean(process.env.SNAJP_SUPPORT_URL);
 
 /**
- * Nyckeln avgör vilken tenant backenden skriver till. Tidigare skickades alltid
- * demonyckeln, vilket innebar att varje kunds trafik hamnade hos demo-tenanten
- * Nordlys Handel. Varje kund har numera sin egen nyckel i env, och saknas den
- * faller anropet tillbaka på demonyckeln i stället för att läcka in i fel kunds
- * data — men vi säger ifrån i loggen.
- */
-/**
  * En registrerad kund saknar sin API-nyckel i miljön. Kastas i stället för att
  * tyst svara ur demo-tenantens kunskapsbas.
  */
@@ -38,6 +31,16 @@ export class MissingTenantKeyError extends Error {
   }
 }
 
+/**
+ * Nyckelval för de ANONYMA routerna — den publika chatten och jobbpollningen.
+ * Där kommer sluggen från klienten, och det är i sin ordning: nyckeln finns bara
+ * på servern, och jobb-id är UUID.
+ *
+ * Inloggad trafik använder INTE den här vägen. Den går via requireSnajpTenant()
+ * i lib/snajp/tenant.ts, som härleder tenanten ur sessionen. Att de två skiljer
+ * sig åt ÄR säkerhetsgränsen: en slug från en klient får aldrig avgöra vilken
+ * kunds inkorg, kunskapsbas eller röstdokument som öppnas.
+ */
 export function apiKeyForTenant(tenantSlug?: string | null): string {
   if (!tenantSlug) {
     return SNAJP_INTERNAL_API_KEY;
@@ -84,23 +87,13 @@ export function offlineResponse(cause?: unknown) {
 const ATTEMPT_TIMEOUT_MS = 10_000;
 const MAX_ATTEMPTS = 5;
 
-export async function proxyToBackend(path: string, init: RequestInit, tenantSlug?: string | null) {
+/**
+ * Vidarebefordran med en REDAN upplöst nyckel. Inloggade routes går hit via
+ * proxyAsTenant i _auth.ts; anonyma går via proxyToBackend nedan, som slår upp
+ * nyckeln ur en slug först.
+ */
+export async function proxyWithApiKey(path: string, init: RequestInit, apiKey: string) {
   let lastCause: unknown;
-  // Nyckeln slås upp EN gång utanför loopen — den beror bara på tenantSlug,
-  // inte på försöksnumret, och att slå upp den igen per retry vore bara brus.
-  let apiKey: string;
-  try {
-    apiKey = apiKeyForTenant(tenantSlug);
-  } catch (error) {
-    if (error instanceof MissingTenantKeyError) {
-      // 503, inte 500: tjänsten är riktigt konfigurerad men saknar en nyckel i
-      // just den här miljön. Meddelandet namnger variabeln så felet går att
-      // åtgärda utan att läsa koden.
-      console.error(`snajp-support: ${error.message}`);
-      return NextResponse.json({ error: error.message, configured: false }, { status: 503 });
-    }
-    throw error;
-  }
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
     const controller = new AbortController();
@@ -131,4 +124,23 @@ export async function proxyToBackend(path: string, init: RequestInit, tenantSlug
   }
 
   return offlineResponse(lastCause);
+}
+
+/** Anonym väg: slug från klienten → nyckel → vidarebefordran. */
+export async function proxyToBackend(path: string, init: RequestInit, tenantSlug?: string | null) {
+  let apiKey: string;
+  try {
+    apiKey = apiKeyForTenant(tenantSlug);
+  } catch (error) {
+    if (error instanceof MissingTenantKeyError) {
+      // 503, inte 500: tjänsten är riktigt konfigurerad men saknar en nyckel i
+      // just den här miljön. Meddelandet namnger variabeln så felet går att
+      // åtgärda utan att läsa koden.
+      console.error(`snajp-support: ${error.message}`);
+      return NextResponse.json({ error: error.message, configured: false }, { status: 503 });
+    }
+    throw error;
+  }
+
+  return proxyWithApiKey(path, init, apiKey);
 }
