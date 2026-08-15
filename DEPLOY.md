@@ -169,11 +169,32 @@ logotyp och besiktning kräver ögon och skrivs ut som checklista. Se `TENANTS.m
 
 Hemligheter och anslutningssträngar ligger i `.env.deploy` (gitignorerad).
 
-**Render-tjänsten skapades via API:t, inte genom att synka blueprinten.** Att
-synka hade krävt att `render.yaml` fanns på den gren blueprinten läser
-(`main`), och inget går till `main` innan det verifierats i preview. Blueprinten
-och de två tjänsterna beskriver alltså samma sak, men tjänsterna skapades
-separat — synka blueprinten nästa gång `main` uppdateras, så de inte glider isär.
+### Det finns ingen Render Blueprint
+
+`GET /v1/blueprints` returnerar en **tom lista**. Båda tjänsterna är
+fristående — produktionen skapad i dashboarden, previewen via API:t.
+`render.yaml` läses alltså inte av någonting.
+
+Det betyder att `INV-DEPLOY-001` vaktar en fil som inte styr driften, och att
+sanningen ligger i Renders databas där ingen diff visar den. Det är precis den
+luckan som orsakade två incidenter: Root Directory som svängde tillbaka till
+`snajp-support`, och grenvalet som pekade mot `development` medan frontenden
+deployade från `main`.
+
+**Fixen är en driftkontroll, inte en blueprint:**
+
+```bash
+python scripts/verify_render.py
+```
+
+Den jämför Renders faktiska tjänster mot `render.yaml` — gren, rootDir,
+dockerfilePath, healthCheckPath och plan — och returnerar 1 vid avvikelse.
+Kör den efter varje ändring i dashboarden och som del av driftsättningsrutinen.
+Filen beskriver avsikten; skriptet bevisar att verkligheten stämmer.
+
+Att i stället registrera en riktig Blueprint hade krävt att `render.yaml` fanns
+på den gren blueprinten läser (`main`), alltså en push till produktion innan
+något verifierats i preview. Fel ordning.
 
 ## Migrationer 028 och 029 — kör BÅDA före rollbytet
 
@@ -220,3 +241,35 @@ Den är IPv6-only. `DATABASE_URL` måste använda pooler-värden
 `<roll>.<projektref>`. Symptomet är inte ett anslutningsfel utan att tjänsten
 tyst faller tillbaka på `MemoryStorage` — vilket `/health/ready` numera säger
 rakt ut med `storage: "memory"`.
+
+
+---
+
+## Neon som fallback
+
+Beslut 2026-08-16: vi utvärderar Supabase-branching, och behåller Neon som
+alternativ om speglingen visar sig otillräcklig. Neon har mer trogen
+grenspegling och gratis branching (100 projekt, 10 grenar per projekt).
+
+**Priset för ett byte är inte databasen — det är inloggningen.** Mätt i den här
+kodbasen:
+
+- **21 referenser** till `auth.users` / `auth.uid()` i 6 migrationsfiler
+- **14 auth-anrop** över **13 filer** (`signInWithOAuth`,
+  `exchangeCodeForSession`, `resetPasswordForEmail` …)
+- Främmande nycklar från `platform_admins`, `workspace_invites` och `profiles`
+  rakt in i `auth.users`
+- Triggern `on_auth_user_created`, som skapar workspacet vid registrering
+
+Ett byte kräver alltså att autentiseringen skrivs om — mot Neon Auth, Clerk
+eller Auth.js — inte bara att anslutningssträngen ändras.
+
+**Vad som skulle göra bytet billigare:** RLS-policyerna delar redan databasen i
+två halvor. Backendens tabeller (`ss_*`, `agent_*`) grindas enbart på
+`app.tenant_id` och rör aldrig `auth.uid()`. Bara dashboardens tabeller behöver
+Supabase. Backenden skulle alltså kunna flytta först, med
+`workspaces.ss_tenant_id` nedgraderad från främmande nyckel till mjuk referens.
+
+Utvärderingskriterium: om Supabase-grenens spegling driver isär från
+produktionen på ett sätt som gör utvärderingar otillförlitliga, är det signalen
+att ta Neon-spåret.
