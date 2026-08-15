@@ -219,18 +219,55 @@ python scripts/run_live_tests.py --leads   --modes disabled,enabled
   deliberate 2026-07-28 decision. That freeze is now explicitly lifted — `main` was fast-forwarded
   from `snajp-redesign` (45 commits, zero conflicts on the `main` side) on explicit user
   instruction, twice given. See `HANDOFF-2026-08-14-SEBBE.md` for the full merge/deploy account.
-- **Render backend is NOT affected by that push.** `render.yaml` carries no branch pin; Render
-  redeploys from whatever branch its own dashboard points at (historically `development`). The
-  grounding gate, skill lock, and SOUL layer now ship in the frontend bundle, but the Python
-  agent backend that actually executes them is on a separate, unchanged deploy cadence.
+- **Render backend now tracks `main` too** (changed 2026-08-15). It had pointed at
+  `development`, a branch that forked at `32c58cd` and never saw the Livrustning tenant, the
+  category-grounding filter, or the grounding gate — which is why the frontend looked current
+  while the agent behaved like an older product. `render.yaml` carries no branch pin; the
+  branch lives in Render's own dashboard, so this is not visible in the repo. Root Directory
+  must stay **empty** (repo root): `snajp-support/Dockerfile` does `COPY agent-core`, and
+  `agent-core/` sits outside `snajp-support/`, so a Root Directory of `snajp-support` fails the
+  build with `"/agent-core": not found`.
+- The redundant Render service `snipe-leads` (a misconfigured Node build of the Next frontend,
+  duplicating Vercel) was deleted 2026-08-15. The leads agent has never had its own service —
+  it runs in the same FastAPI app as support (`main.py`, `app.include_router(leads.router)`).
 
-## Current status (2026-08-14)
+## Auth topology (rewritten 2026-08-15)
+
+Three surfaces, and the difference between them is the security boundary:
+
+| Surface | Routes | Gate | Tenant comes from |
+|---|---|---|---|
+| Public chat | `app/api/snajp-support/chat`, `jobs/[jobId]` | none, deliberately | slug in the client payload |
+| Public demo | `app/api/snajp-support/triage` | none, deliberately | demo key (read-only endpoint) |
+| Signed-in | `app/api/snajp-support/[...path]` | `proxyAsTenant` → `requireSnajpTenant()` | **the session** |
+
+`proxy.ts`'s matcher covers only `/dashboard`, `/settings`, `/onboarding`, `/login`,
+`/auth/callback`. It is deliberately **not** widened to `/api`: it answers with a redirect to
+`/login`, which is the wrong shape for an API call and would mask the 401. The gate belongs in
+the route.
+
+Until 2026-08-15 the catch-all had no gate at all and passed no tenant, so the entire backend
+API was anonymously readable and writable in production, and every signed-in customer's inbox,
+KB and SOUL resolved to the demo tenant. Both halves are one bug: a missing argument with a
+silent fallback. Read `lib/snajp/tenant.ts` before adding any route under `app/api/`.
+
+## Current status (2026-08-15)
 
 Support and leads both run per-step with verifiable skill loading, per-call
 thinking control, and a reviewable `agent_runs.step_log`. The grounding gate,
 skill lock, three-layer instruction system, and SOUL are all built and unit-
-tested — 366 backend tests + 27 invariants + `tsc --noEmit`, all green. The
+tested — 388 backend tests + invariants + `tsc --noEmit`, all green. The
 Docker deploy bug that would have crashed the first live agent call is fixed.
+Frontend and backend now deploy from the same branch, and the anonymous API
+surface is closed (see "Auth topology" above), verified against production.
+
+**Blocking bug found 2026-08-15, not yet fixed:** `agent_runs.agent_type` has
+`check in ('support','leads')` while `leads_agent.py` writes `"leads_research"`
+and `"leads_outreach"`. Against Postgres both raise a check violation;
+`MemoryStorage` has no constraint, which is why the test suite never caught it.
+**No leads run has ever been persisted in production.** `GET /api/leads/runs`
+filters on the same impossible values. This blocks the entire admin trace view —
+it is a schema bug, not a UI one.
 
 Not yet done: **live-mode verification** — `scripts/run_live_tests.py --leads`
 against real DeepSeek keys, checking that `result["grounding"]["fired"]` is

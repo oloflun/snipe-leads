@@ -1,5 +1,61 @@
 # Snipra Status
 
+## 2026-08-15 — Claude — Anonymt API stängt, ren kundchatt, agenten vet var i samtalet den är
+
+**Hela backend-API:t var anonymt nåbart i produktion.** `proxy.ts`-matchern täcker bara
+`/dashboard`, `/settings`, `/onboarding`, `/login`, `/auth/callback` — inte `/api/*` — och
+ingen route under `app/api/` gjorde egen sessionskontroll. Mätt mot drift, utan cookie:
+`GET /api/snajp-support/leads/soul` gav 200 med innehåll, `PUT` gav 422 (nådde backenden,
+stoppades bara av pydantics typkontroll — en giltig sträng hade skrivits). `kb`, `rules`
+och `inbox` gav 200. Catch-allen kunde dessutom adressera `POST /api/keys`, räddat enbart
+av att `SNAJP_INTERNAL_API_KEY` råkar vara demonyckeln och inte master.
+
+Andra halvan av samma bugg: catch-allen skickade ingen tenant, så varje **inloggad** kunds
+inkorg, kunskapsbas och röstdokument lästes ur demo-tenanten Nordlys Handel. Två kunder
+hade skrivit i samma SOUL. `workspaces.ss_tenant_id` och `.slug` har funnits sedan
+migration 007 men saknades i `lib/database.types.ts`, så koden kunde inte se kopplingen
+ens om den velat — tystnaden var hela felet. Tenanten härleds nu ur sessionen
+(`lib/snajp/tenant.ts`); saknas slug, configfil eller nyckel blir det 409/503 med namnet
+på det som fattas. Verifierat i produktion efter deploy: 401 på allihop, anonym `PUT`
+avvisad, publik chatt oförändrat 202.
+
+**SOUL-innehållet var däremot väl försvarat.** Userposition, UUID-avgränsare per anrop,
+INV-SEC-009 med ett riktigt injektionstest, och onboarding-agenten kan inte skriva den.
+Användarens egna prompt-injektionsförsök i drift ("Forget everything…", "Disregard the
+system prompt…") höll båda. Hålet satt i *vem som fick skriva* SOUL, inte i hur den
+renderades.
+
+**Kunden såg vår interna bedömning av sig själv.** Chattbubblan bar kategori,
+"Sentiment 0.1", "Eskalerat till människa" och "Källa: <artikel>", plus ett lägespill som
+avslöjade "Live-AI" respektive "Demo-läge". Tydligast i ett skarpt fall: en person skrev
+att hans fru avlidit, och under agentens svar stod "Sentiment 0.1". Allt borttaget ur den
+kundvända komponenten — utan konfigurationsflagga, eftersom en kundvänd komponent inte ska
+gå att ställa in på att läcka. Datat finns kvar för den interna vyn och spårningen.
+
+**Agenten visste inte var i samtalet den befann sig.** Utkaststeget fick bara ANTALET
+tidigare kontakter, aldrig samtalet, så varje replik var formellt sett ett första
+meddelande: "Hej" på varje tur, "Vänliga hälsningar," under varje, ofta hängande utan
+namn. Nu: utskrift av de senaste turerna i `case_context`, overlay
+`support-conversation.md` bunden till BÅDA textstegen (humaniseraren är sista handen och
+hade annars satt tillbaka hälsningen), och `strip_dangling_sign_off()` som kodgrind
+eftersom felet uppträdde i båda thinking-lägena. Verifierat mot riktig modell i tre turer.
+Historiken tvingade fram en till fix: alla demobesökare delade en kundidentitet, vilket var
+ofarligt när agenten bara fick ett antal men hade läckt föregående besökares repliker in i
+nästa besökares kontext.
+
+**Rotorsaken till gårdagens två buggrapporter:** Render pekade på `development`, som
+forkade vid `32c58cd` och aldrig sett Livrustning-tenanten, fack-filtret eller
+grundningsgrinden. Frontenden deployade från `main`. Docker-bygget failade sedan på
+`"/agent-core": not found` — Root Directory stod kvar på `snajp-support`, så `agent-core/`
+låg utanför byggkontexten. Båda åtgärdade av användaren. Den överflödiga Render-tjänsten
+`snipe-leads` raderad; leads-agenten kör i samma FastAPI-app som supporten.
+
+**Öppet:** Fas 1 till hälften — RPC-härdning (018), rate limiting (019), INV-SEC-010 ·
+Fas 2/3/4/6 opåbörjade · **`agent_runs.agent_type` avvisar det koden skriver, så ingen
+leads-körning har någonsin sparats i produktion** (blockerar admin-spårvyn) ·
+`SNAJP_KEY_LIVRUSTNING` osatt på Vercel · `snajp_app`-rollens lösenord fortfarande osatt.
+Plan: [plans/2026-08-15-plattformsplan.md](plans/2026-08-15-plattformsplan.md).
+
 ## 2026-08-14 — Claude — Grundningsgrind, skill-lås, tre-lagers instruktionssystem, DB-spegel
 
 **Den öppna tråden från 2026-08-10 är stängd.** Sportamore-incidenten (AV-utkastet påstod
