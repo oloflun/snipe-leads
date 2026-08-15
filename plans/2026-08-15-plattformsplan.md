@@ -9,73 +9,91 @@ Sju faser: stänga den anonyma API-ytan, ge varje kund en vy som bara innehålle
 betalar för, bygga en admin-vy som spårar allt ner till varje LLM-steg, och ge kunden
 kontroll över hur långt leads-agenten får gå.
 
+**Alla sju faser är kodklara** (2026-08-15). Tio migrationer väntar på att köras mot
+produktionsdatabasen — se `MIGRATIONS-PENDING.md`. Inget av det som byggts är verifierat
+mot Postgres förrän de är körda.
+
 ## Completed
 
 - [x] **Fas 0 — synk.** `snajp-redesign` fast-forwardad till `origin/main` (`c2ca092`),
-      `.claude/launch.json` committad, 376 tester + `tsc` som utgångsläge.
+      `.claude/launch.json` committad.
 - [x] **Fas 1.1 — sessionshärledd tenant.** `lib/snajp/tenant.ts`,
       `app/api/snajp-support/_auth.ts`, `proxyWithApiKey()` bruten ur `proxyToBackend()`.
-      Catch-allen kräver inloggning; tenant ur `workspaces.slug`/`ss_tenant_id`.
 - [x] **Fas 1.2 — anonyma ytor avgränsade.** Chat, jobs och triage förblir öppna med
-      skriven motivering. Ingen separat `/api/snajp-demo`-route behövdes: de specifika
-      routerna ÄR den anonyma ytan, och det var catch-allen som var hålet.
-- [x] **Fas 5 — ren kundchatt.** Badge-raden och lägespillret borta. Plus en 320px-defekt
-      som syntes först då: composern bryter till två rader under 360px.
-- [x] **Fas 7 — samtalsform.** Historik i `case_context`, overlay på båda textstegen,
-      `strip_dangling_sign_off()`, eget demo-session-id per flik. 12 nya tester.
+      skriven motivering i respektive fil.
+- [x] **Fas 1.3 — RPC-härdning** (`018_rpc_hardening.sql`). Fyra `security definer`-
+      funktioner hade EXECUTE till PUBLIC. Att bara revoka från `anon` räcker inte —
+      PUBLIC-graden ärvs, så den revokas först i varje block.
+- [x] **Fas 1.4 — rate limiting** (`019_rate_limit.sql` + `app/api/rate_limit_db.py`).
+      Tre tak räknade i LLM-anrop: 400/h tenant, 120/h användare, 30/h demo-IP.
+      Fail-open. Kontrollera-först, bokför-efter — taket kan överskridas med som mest
+      en körning, dokumenterat som ponytail-ceiling i filen.
+- [x] **Fas 1.5 — INV-SEC-010.** Statisk invariant över varje `route.ts` under
+      `app/api/`, plus `scripts/verify_inv_sec_010.sh` för levande verifiering.
+      Falsifierad mot en ohejdad route innan den litades på.
+- [x] **Fas 2 — roller och inlogg.** `020_platform_admins.sql`,
+      `021_seed_platform_admin.sql`, `lib/auth/admin.ts` (fail-closed, `server-only`),
+      glömt-lösenord via callbacken, Google/Microsoft-OAuth, `lib/actions/team.ts`.
+      `nextPath`-buggen (`/emails` → `/dashboard/emails`) fixad.
+- [x] **Fas 3 — kundens vy.** Fail-closed entitlements, `app/settings/layout.tsx`
+      (saknades helt — hela trädet körde på FALLBACK-kontexten),
+      `022_workspace_addons.sql`, sex tillägg i `lib/addons.ts`, fem mock-drivna
+      rutter bakom `preview`.
+- [x] **Fas 4 — leads-kontroller.** `023`/`024`, `app/leads/autonomy.py` (en regel,
+      två anropsplatser), `app/leads/icp.py`, körkontroll-endpoints,
+      `/dashboard/leads/kontroll`.
+- [x] **Fas 5 — ren kundchatt.** Badge-raden och lägespillret borta.
+- [x] **Fas 6 — admin master control.** `026`/`027`, `app/api/admin.py`,
+      cross-tenant-metoder i BÅDA lagringarna, `app/admin/**` grindad på tre nivåer,
+      `app/api/events.py` med FastAPI-exception-handler.
+- [x] **Fas 7 — samtalsform.** Historik i `case_context`, overlay på båda textstegen.
+- [x] **Blockeraren** `025_agent_runs_fix.sql`, plus `AGENT_RUN_TYPES` i `base.py` så
+      att MemoryStorage validerar samma värdemängd som Postgres.
 
-## In Progress
+## Verifierat
 
-- [ ] **Fas 1.3 — RPC-härdning** (migration `018_rpc_hardening.sql`).
-      `handle_new_user()` och `rls_auto_enable()` är `security definer` och anropbara av
-      `anon` via `/rest/v1/rpc/…`. Bekräftat av Supabase security advisor.
-      Slå även på leaked-password-skyddet i Supabase Auth (konsolmoment).
-- [ ] **Fas 1.4 — rate limiting** (migration `019_rate_limit.sql` +
-      `snajp-support/app/api/rate_limit_db.py`). Dagens `rate_limit.py` är en
-      process-lokal deque som bara skyddar demon och nollställs vid varje spin-down.
-      Tre tak, räknade i LLM-anrop: 400/h per tenant, 120/h per användare, 30/h per demo-IP.
-      Fail-open vid trasigt uppslag.
-- [ ] **Fas 1.5 — INV-SEC-010.** Anonymt anrop mot varje route-fil under `app/api/`,
-      kräver 401 utom för den allowlistade demon. Verifiera mot en medvetet trasig
-      version innan testet litas på.
+- 447 backend-tester + 1 överhoppad, 38 invarianter + 3 överhoppade.
+- `npx tsc --noEmit` och `npx next build` rena.
+- Levande mot lokal stack: alla åtta grindade routes ger 401 anonymt, demon svarar 202,
+  `/admin` och `/api/admin/*` ger 404 utan adminrad, `/auth/reset` utan session visar
+  "Länken gäller inte längre", inloggningen renderar OAuth-knappar och
+  återställningslänk.
+- `PUT /api/leads/config` med en insmugglad `system_prompt`-nyckel: nyckeln ströks,
+  autonomin och ICP:n kom tillbaka oförändrade i övrigt.
+- En riktig supportkörning: `/api/admin/tenants` visar rätt nyckeltal, och spårvyns
+  `system_prompt` mäter exakt 8 000 tecken (kapningen verkställs).
 
-## Remaining
-
-- [ ] **Fas 2 — roller och inlogg.** `platform_admins`-tabell (egen dimension, inte
-      `profiles.role` som är workspace-scopad), `snajpsupport@gmail.com` som admin,
-      glömt-lösenord, Google/Microsoft-SSO, skrivväg för `workspace_invites`.
-      Buggfix på vägen: `nextPath` defaultar till `/emails` som inte finns.
-- [ ] **Fas 3 — kundens vy.** Fail-closed entitlements (i dag faller `lib/data/dashboard.ts`
-      tillbaka på BÅDA produkterna), `workspaces.addons`, sex låsta tilläggstjänster,
-      `app/settings/layout.tsx` (saknas, så inställningarna kör på FALLBACK-kontexten).
-- [ ] **Fas 4 — leads-kontroller.** Autonominivå (`draft` default), ICP-konfiguration,
-      körkontroller, granskningskö.
-- [ ] **Fas 6 — admin master control.** `app/api/admin.py`, cross-tenant-metoder på
-      `Storage`, tre migrationer, `/admin`-route-gruppen.
+**Inte verifierat:** ingenting mot Postgres. Migrationerna är inte körda, så RLS-
+policyer, check-villkor och de nya tabellerna är oprövade i drift. Den lokala stacken
+kör `MemoryStorage`.
 
 ## Blockers
 
-- **`agent_runs.agent_type` avvisar det koden skriver.** Check-villkoret tillåter
-  `('support','leads')`; `leads_agent.py` skriver `"leads_research"`/`"leads_outreach"`.
-  Mot Postgres kastar båda check-violation, `MemoryStorage` har inget villkor.
-  **Ingen leads-körning har någonsin sparats i produktion.** Blockerar hela Fas 6 —
-  spårvyn har noll historik att visa. Fixas i `025_agent_runs_fix.sql`.
-- **`snajp_app`-rollens lösenord osatt** (sedan 2026-08-07). Backenden kör som `postgres`
-  med BYPASSRLS; varje `tenant_isolation`-policy är dekorativ för den anslutningen.
-- **`SNAJP_KEY_LIVRUSTNING` osatt på Vercel.** Ger nu 503 i stället för fel kunds svar.
+- **Tio migrationer väntar** (018–027). DDL mot produktionen blockerades av
+  behörighetsklassificeraren. Ordning och verifieringsfrågor i `MIGRATIONS-PENDING.md`.
+- **`snajp_app`-rollens lösenord osatt** (sedan 2026-08-07). Backenden kör som
+  `postgres` med BYPASSRLS; varje `tenant_isolation`-policy är dekorativ för den
+  anslutningen (INV-SEC-001).
+- **`SNAJP_KEY_LIVRUSTNING` osatt på Vercel.**
+- **`SNAJP_MASTER_API_KEY` måste sättas på Vercel** — annars svarar `/api/admin/*` 503.
+- **Konsolmoment:** OAuth-appar hos Google Cloud och Microsoft Entra, leaked-password-
+  skyddet i Supabase Auth, lösenordet till `snajpsupport@gmail.com`. Checklistor i
+  `AUTH.md`.
 
 ## Deferred
 
-- **Kvotgrenen mergas inte.** `feature/snajp-multitenant-saas` divergerade vid `32c58cd`
-  (21 fram, 34 bakom, 39 filer i konflikt, dubbla migrationssläktled 005–010).
-  Plocka i stället ut `app/billing/plans.py`, `quota.py`, `agent/usage.py`,
-  `lib/billing/stripe.ts` och omnumrera migrationen till `018+` när Fas 3 behöver dem.
-- Fas A (onboarding) skriver fortfarande ingen `agent_runs`-rad — den kör `Runner.run`.
-  Känd lucka, dokumenteras i admin-vyn som "ingen spårning" snarare än tom data.
+- **Kvotgrenen mergas inte.** `feature/snajp-multitenant-saas` divergerade vid `32c58cd`.
+  Plocka ut `app/billing/plans.py`, `quota.py`, `agent/usage.py`, `lib/billing/stripe.ts`
+  och omnumrera migrationen till `028+` när kvotlogiken behövs.
+- Fas A (onboarding) skriver ingen `agent_runs`-rad — den kör `Runner.run`. Känd lucka,
+  visas i spårvyn som "ingen spårning" i stället för som tom data.
+- `meeting`-nivån beter sig som `first_contact` för uppföljningar tills `handoff.py`
+  får en produktionsanropare (`MEETING_REQUIRES_HANDOFF` i `autonomy.py`).
 
 ## Next Steps
 
-1. Migration 018 + 019, `rate_limit_db.py`, INV-SEC-010 — avsluta Fas 1.
-2. Migration 025 (`agent_runs.agent_type`) tidigt, även om admin-UI:t dröjer: utan den
-   samlas ingen spårdata och historiken går inte att rekonstruera i efterhand.
-3. Fas 2, som Fas 3 och 4 bygger på.
+1. Kör migrationerna 018–027 i ordning, med verifieringsfrågan efter varje.
+2. Sätt `SNAJP_MASTER_API_KEY` på Vercel, skapa `snajpsupport@gmail.com` och kör om 021.
+3. Kör en riktig leads-körning mot en testtenant och bekräfta att en `agent_runs`-rad
+   faktiskt skapas i Postgres — det är den som aldrig fungerat.
+4. `bash scripts/verify_inv_sec_010.sh https://<deploy>` efter deploy.
