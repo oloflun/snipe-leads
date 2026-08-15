@@ -6,8 +6,8 @@ Två miljöer, två grenar. Inget deployas genom att någon klickar i en dashboa
 |---|---|---|
 | Gren | `main` | `development` |
 | Frontend | Vercel-projekt `snajp` | samma projekt, Preview-scope |
-| Backend | Render `snajp-support` | Render `snajp-support-dev` |
-| Databas | Supabase `spsmblyvasagpekjmgmf` | Supabase-gren `development` |
+| Backend | Render `snajp-support` (`main`) | Render `snajp-support-dev` (`development`) |
+| Databas | Supabase `spsmblyvasagpekjmgmf` | Supabase-gren `development` (`eppgmjswfnrfwnqvtrge`) |
 | Utlöses av | push till `main` | push till `development` |
 
 **Allt arbete går till `development`.** `main` rörs bara när något är verifierat
@@ -152,3 +152,39 @@ python scripts/onboard_tenant.py --slug bolaget --name "Bolaget AB" --env previe
 Skriptet gör de fem maskinella stegen: tenant + API-nyckel, workspace-kopplingen,
 configfilen, KB-stubben och nyckeln till rätt Vercel-scope. Research, KB-innehåll,
 logotyp och besiktning kräver ögon och skrivs ut som checklista. Se `TENANTS.md`.
+
+
+---
+
+## Faktiska identiteter (2026-08-15)
+
+| | Värde |
+|---|---|
+| Vercel-projekt | `snajp` — `prj_ZXXMG8Jlz0zHeLdg5NTMhN0tHpw9` |
+| Preview-alias | `https://snajp-git-development-olofluns-projects.vercel.app` |
+| Render produktion | `srv-d9k99ktg1s2s73fl0v6g` — https://snajp-support.onrender.com |
+| Render preview | `srv-da0dopojo6nc73ea3b6g` — https://snajp-support-dev.onrender.com |
+| Supabase produktion | `spsmblyvasagpekjmgmf` (org Snipe, eu-west-1) |
+| Supabase preview-gren | `eppgmjswfnrfwnqvtrge`, persistent, `with_data: true` |
+
+Hemligheter och anslutningssträngar ligger i `.env.deploy` (gitignorerad).
+
+**Render-tjänsten skapades via API:t, inte genom att synka blueprinten.** Att
+synka hade krävt att `render.yaml` fanns på den gren blueprinten läser
+(`main`), och inget går till `main` innan det verifierats i preview. Blueprinten
+och de två tjänsterna beskriver alltså samma sak, men tjänsterna skapades
+separat — synka blueprinten nästa gång `main` uppdateras, så de inte glider isär.
+
+## Migrationer 028 och 029 — kör BÅDA före rollbytet
+
+Bevisade mot preview-spegeln, med produktionens verkliga datamängd:
+
+- **028** stoppar kraschen `invalid input syntax for type uuid: ""`. Efter en
+  skopad fråga blir `app.tenant_id` tom sträng, inte NULL, för resten av
+  anslutningen — och varje senare oskopad fråga föll på `''::uuid`.
+- **029** stoppar TYSTNADEN. 028 räckte inte: `list_agent_runs_all` gav 0 rader
+  trots 10 i databasen, och kundöversikten fyra kunder med nollställda tal.
+  Trovärdiga men felaktiga siffror är värre än en tom vy.
+
+Efter båda, mätt som `snajp_app` utan BYPASSRLS: rätt antal överallt, och
+skopade frågor ger fortfarande en delmängd — isoleringen håller.

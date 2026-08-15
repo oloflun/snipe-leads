@@ -19,6 +19,7 @@ import argparse
 import getpass
 import hashlib
 import secrets
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -228,6 +229,24 @@ def cmd_pull() -> None:
     cmd_check()
 
 
+def _vercel() -> str:
+    """Sökvägen till Vercel CLI:t.
+
+    På Windows är `vercel` en .cmd-shim, och subprocess utan shell=True hittar
+    inte den — den faller på `FileNotFoundError: [WinError 2]`, som inte med ett
+    ord nämner vilket program som saknades. shutil.which löser upp shimmen på
+    alla tre plattformarna; shell=True hade fungerat men skickar argumenten
+    genom en kommandotolk, och ett av argumenten här är en hemlighet.
+    """
+    found = shutil.which("vercel")
+    if not found:
+        sys.exit(
+            "AVBRYTER: hittar inte Vercel CLI:t i PATH. Installera med "
+            "`npm i -g vercel` och logga in med `vercel login`."
+        )
+    return found
+
+
 def vercel_env_set(name: str, value: str, environment: str) -> bool:
     """Sätter EN variabel i ETT Vercel-scope. Returnerar True vid lyckat.
 
@@ -240,13 +259,13 @@ def vercel_env_set(name: str, value: str, environment: str) -> bool:
     som att den lyckades. Felet ignoreras med flit: variabeln finns oftast inte.
     """
     subprocess.run(
-        ["vercel", "env", "rm", name, environment, "--yes"],
+        [_vercel(), "env", "rm", name, environment, "--yes"],
         cwd=ROOT,
         capture_output=True,
         text=True,
     )
     result = subprocess.run(
-        ["vercel", "env", "add", name, environment],
+        [_vercel(), "env", "add", name, environment],
         cwd=ROOT,
         input=value + "\n",
         capture_output=True,
