@@ -70,9 +70,14 @@ verifierade mot produktionsdatabasen**; `021_seed_platform_admin` väntar på at
 - Två av tre nya tabeller har RLS på med exakt en policy vardera, scopad till `snajp_app`;
   `platform_admins` har läspolicy för `authenticated` och inga skrivpolicyer.
 
-**Inte verifierat:** backenden saknar `DATABASE_URL` i den här miljön, så hela
-Python-stacken har bara körts mot `MemoryStorage`. Schemat är prövat med SQL, men ingen
-kodväg har läst eller skrivit de nya tabellerna via `PostgresStorage`.
+- Varje SQL-fråga `PostgresStorage` skickar kördes mot produktionsschemat. Tre
+  kolumnbuggar hittades och rättades — de hade kraschat vid första riktiga anropet och
+  syntes inte i sviten, eftersom den kör mot `MemoryStorage` där testernas seed hade
+  hittat på fälten.
+
+**Inte verifierat:** backenden saknar `DATABASE_URL` här (lösenordet bor bara på Render),
+så Python-koden runt frågorna — anslutningshantering, `_scoped()`-transaktionen,
+typkodningen — har aldrig kört mot Postgres.
 
 ## Blockers
 

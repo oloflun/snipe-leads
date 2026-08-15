@@ -64,12 +64,28 @@ Lösenordet sätter du. Aldrig en agent, aldrig en migration.
 - `vector` i public-schemat och `chorus_*`-funktionernas search_path är äldre
   än det här arbetet och rörs inte här.
 
-## Vad som fortfarande INTE är verifierat
+## SQL-vägarna — verifierade utan att kunna köra koden
 
-Backenden har ingen `DATABASE_URL` i den här miljön, så hela Python-stacken
-har bara körts mot `MemoryStorage`. Schemat är verifierat med SQL direkt mot
-produktionen (ovan), men **ingen kodväg har läst eller skrivit de nya
-tabellerna via `PostgresStorage`.**
+Backenden har ingen `DATABASE_URL` i den här miljön (lösenordet bor bara på
+Render), så `PostgresStorage` går inte att köra härifrån. I stället kördes
+**exakt de frågor metoderna skickar** mot produktionsschemat. Det fångade tre
+buggar som hade kraschat vid första riktiga anropet:
+
+1. `list_review_queue` sorterade på `om.created_at` — `outreach_messages` har
+   ingen sådan kolumn.
+2. Samma query läste `t.prospect_email` — `outreach_threads` har `prospect_id`.
+3. Följdfynd, äldre än det här arbetet: `get_outreach_thread` returnerade
+   `select *`, och `scheduler.py` läser `prospect_email` ur resultatet. Mot
+   Postgres hade varje utskick adresserats till strängen `"okänd"`.
+
+Alla tre rättade och omkörda. Läsvägarna ger riktiga rader
+(`list_tenants_with_stats` → fyra kunder); skrivvägarna kördes och städades:
+`generate_series`-inserten, upserten på `agent_configs`, `platform_events` och
+den dynamiska SET-listan i `update_prospect`.
+
+**Det som fortfarande återstår:** frågorna är giltiga, men Python-koden runt
+dem har aldrig kört mot Postgres — anslutningshantering, `_scoped()`-
+transaktionen och typkodningen är oprövade i den här kombinationen.
 
 Kvarstår att göra efter deploy:
 
