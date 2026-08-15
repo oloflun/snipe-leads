@@ -273,3 +273,39 @@ Supabase. Backenden skulle alltså kunna flytta först, med
 Utvärderingskriterium: om Supabase-grenens spegling driver isär från
 produktionen på ett sätt som gör utvärderingar otillförlitliga, är det signalen
 att ta Neon-spåret.
+
+
+---
+
+## Varför Supabase-workflowen visade MIGRATIONS: FAILED
+
+Två numreringssystem som aldrig möttes.
+
+Repots filer heter `000_base_schema.sql`, `019_rate_limit.sql` och så vidare —
+Supabase läser versionen som `000`, `019`. Men allt som faktiskt applicerats
+gjordes via Management-API:t, som registrerar sina egna **14-siffriga
+tidsstämplar** (`20260815150826`).
+
+Uppmätt i produktionen före fixen:
+
+    totalt: 30    tidsstämplade: 30    repo-numrerade: 0
+
+Branching-workflowen läser `supabase/migrations/` från git-grenen, ser
+versionerna `000`–`029`, hittar ingen av dem i `schema_migrations` och försöker
+applicera **alla trettio**. De faller direkt, eftersom tabellerna och policyerna
+redan finns.
+
+Det var alltså aldrig ett fel i migrationerna. Databasen var korrekt hela
+tiden — bokföringen sa bara emot.
+
+**Fixen:** repots versionsnummer är nu registrerade som applicerade i BÅDE
+produktionen och grenen. Ingen SQL kördes om; bara liggaren stämmer nu med
+verkligheten.
+
+**Regel framåt:** applicera migrationer så att versionen matchar filnamnet, och
+kontrollera efteråt:
+
+```sql
+select count(*) from supabase_migrations.schema_migrations where version ~ '^[0-9]{1,3}$';
+-- ska vara lika många som antalet filer i supabase/migrations/
+```
