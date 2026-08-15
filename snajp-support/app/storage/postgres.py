@@ -539,7 +539,14 @@ class PostgresStorage:
     async def get_outreach_thread(self, tenant_id: str, thread_id: str) -> dict[str, Any] | None:
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
-                "select * from outreach_threads where tenant_id = $1 and id = $2", tenant_id, thread_id
+                """
+                select t.*, p.contact_email as prospect_email, p.company_name
+                from outreach_threads t
+                left join prospects p on p.id = t.prospect_id
+                where t.tenant_id = $1 and t.id = $2
+                """,
+                tenant_id,
+                thread_id,
             )
         return _row(record)
 
@@ -1211,7 +1218,7 @@ class PostgresStorage:
                 """
                 select * from outreach_messages
                 where tenant_id = $1 and thread_id = $2
-                order by created_at
+                order by id
                 """,
                 tenant_id,
                 thread_id,
@@ -1256,13 +1263,18 @@ class PostgresStorage:
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(
                 """
-                select q.*, m.subject, m.body, m.id as message_id, t.prospect_email
+                select q.*, m.subject, m.body, m.id as message_id,
+                       p.contact_email as prospect_email, p.company_name
                 from send_queue q
                 join outreach_threads t on t.id = q.thread_id
+                left join prospects p on p.id = t.prospect_id
                 left join lateral (
+                  -- order by id, inte created_at: outreach_messages HAR ingen
+                  -- created_at (migration 010). Samma sortering som
+                  -- get_pending_outreach_message redan använder.
                   select * from outreach_messages om
                   where om.thread_id = q.thread_id and om.sent_at is null
-                  order by om.created_at limit 1
+                  order by om.id limit 1
                 ) m on true
                 where q.tenant_id = $1 and q.status = 'awaiting_review'
                 order by q.scheduled_at
