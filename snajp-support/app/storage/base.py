@@ -383,6 +383,14 @@ class Storage(Protocol):
     async def close(self) -> None: ...
 
 
+# Värdemängden för agent_runs.agent_type, spegel av check-villkoret i
+# migration 025. Bor här, inte i respektive lagring, av ett skäl som kostade
+# ett halvår att lära sig: villkoret fanns bara i Postgres, MemoryStorage tog
+# emot vad som helst, testerna körde mot minnet och var gröna — samtidigt som
+# ingen enda leads-körning sparades i produktion.
+AGENT_RUN_TYPES = ("support", "leads", "leads_research", "leads_outreach", "demo")
+
+
 # Framåtriktade statusövergångar, som i referensrepot (forward-only).
 STATUS_ORDER = ["open", "in_progress", "escalated", "resolved", "closed"]
 

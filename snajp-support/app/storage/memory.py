@@ -22,7 +22,7 @@ from ..config import (
     PUBLIC_DEMO_TENANT_SLUG,
 )
 from ..kb_articles import DEMO_KB_ARTICLES, KB_ARTICLES
-from .base import status_transition_allowed
+from .base import AGENT_RUN_TYPES, status_transition_allowed
 
 _STOPWORDS = {
     "och", "att", "det", "som", "en", "ett", "jag", "har", "min", "mitt", "mina",
@@ -583,6 +583,15 @@ class MemoryStorage:
         tokens_out: int,
         latency_ms: int,
     ) -> dict[str, Any]:
+        # Samma värdemängd som check-villkoret i migration 025. Utan den här
+        # raden tar minnet emot vad som helst medan Postgres kastar — och det
+        # är exakt hur "ingen leads-körning har någonsin sparats" kunde vara
+        # sant i ett halvår med grön testsvit.
+        if agent_type not in AGENT_RUN_TYPES:
+            raise ValueError(
+                f"agent_type={agent_type!r} finns inte i agent_runs check-villkoret "
+                f"{AGENT_RUN_TYPES}. Mot Postgres hade det här kastat check-violation."
+            )
         run = {
             "id": str(uuid.uuid4()),
             "tenant_id": tenant_id,
