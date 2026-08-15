@@ -7,6 +7,13 @@
       "runtimeArgs": ["run", "dev"],
       "port": 3005,
       "autoPort": true
+    },
+    {
+      "name": "backend",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--port", "8000"],
+      "cwd": "snajp-support",
+      "port": 8000
     }
   ]
 }
