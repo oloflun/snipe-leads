@@ -42,11 +42,17 @@ Lösenordet sätter du. Aldrig en agent, aldrig en migration.
 
 1. **`SNAJP_MASTER_API_KEY` på Vercel.** Utan den svarar `/api/admin/*` med
    503 och ett meddelande som namnger variabeln.
-2. **`snajp_app`-rollens lösenord** är osatt sedan 2026-08-07. Tills det är
-   satt kör backenden som `postgres` med BYPASSRLS, och varje
-   `tenant_isolation`-policy är dekorativ för den anslutningen (INV-SEC-001).
-   **De två nya tabellernas policyer gäller `snajp_app`** — de är alltså
-   skrivna för den dag rollen faktiskt används, och otestade tills dess.
+2. **`snajp_app`-rollens lösenord är nu satt** (2026-08-15, med ditt
+   godkännande). Rollen är `nobypassrls` och verifierad: RLS-isoleringstestet
+   kördes skarpt mot produktionen som den rollen och gav noll rader för fel
+   tenant. Det är första gången INV-SEC-001 är BEVISAD och inte bara påstådd.
+
+   **Men cutovern är blockerad av `028` — läs nästa avsnitt innan du byter
+   DATABASE_URL på Render.**
+
+   Lösenordet står i klartext i den här sessionens transkript, eftersom det
+   fick skrivas in i ett SQL-anrop. Rotera med en rad om det stör:
+   `alter role snajp_app with password '<nytt>';`
 3. **`SNAJP_KEY_LIVRUSTNING` på Vercel.**
 4. **Leaked-password-skyddet** i Supabase Auth → Providers → Email. Rådgivaren
    flaggar det fortfarande.
@@ -63,6 +69,39 @@ Lösenordet sätter du. Aldrig en agent, aldrig en migration.
   Krävs — `app/auth/callback/route.ts` anropar den efter inloggning.
 - `vector` i public-schemat och `chorus_*`-funktionernas search_path är äldre
   än det här arbetet och rörs inte här.
+
+## 028 — MÅSTE köras innan DATABASE_URL byts till snajp_app
+
+**Skriven men INTE applicerad.** Den skriver om 33 RLS-policyer i produktionen,
+och det ska du se först.
+
+Uppmätt mot produktionen: `set_config('app.tenant_id', <id>, true)` är
+transaktionslokal, men efter COMMIT återgår GUC:en till `''` — inte NULL. En
+custom-GUC som aldrig satts på sessionsnivå har tom sträng som utgångsvärde,
+och varken `RESET` eller `set_config(..., NULL, false)` gör den NULL igen
+(båda testade).
+
+Följden på en POOLAD anslutning: så fort en skopad fråga har körts möter varje
+senare **oskopad** fråga policyer som gör `''::uuid` och kastar
+`invalid input syntax for type uuid: ""`.
+
+Vad som går sönder vid cutovern:
+
+- `ss_tenants.tenant_lookup` (`current_setting(...) IS NULL`) slutar gälla, och
+  `tenant_self` kastar på castet. **`list_tenants()` är det schemaläggaren
+  använder för att räkna upp kunder.**
+- `list_agent_runs_all`, `get_agent_run`, `list_platform_events` — adminvyns
+  oskopade läsningar — kastar likadant.
+- Dessutom, redan verifierat: `list_agent_runs_all` ger **noll rader** under
+  `snajp_app` även utan kraschen, eftersom `agent_runs.tenant_isolation` kräver
+  ett satt `app.tenant_id`. Adminvyn hade visat en tom lista som ser ut som
+  "inga körningar" i stället för som ett fel. `list_tenants_with_stats` ger då
+  fyra kunder med nollställda siffror — **trovärdiga men fel tal**, vilket är
+  värre än tomt.
+
+Buggen har legat latent sedan multi-tenancy infördes. Ingen har märkt den
+eftersom backenden kör som `postgres` med BYPASSRLS och policyerna aldrig
+evalueras.
 
 ## SQL-vägarna — verifierade utan att kunna köra koden
 
@@ -83,9 +122,15 @@ Alla tre rättade och omkörda. Läsvägarna ger riktiga rader
 `generate_series`-inserten, upserten på `agent_configs`, `platform_events` och
 den dynamiska SET-listan i `update_prospect`.
 
-**Det som fortfarande återstår:** frågorna är giltiga, men Python-koden runt
-dem har aldrig kört mot Postgres — anslutningshantering, `_scoped()`-
-transaktionen och typkodningen är oprövade i den här kombinationen.
+**Uppdatering:** Python-koden HAR nu körts mot Postgres, som `snajp_app`.
+`PostgresStorage` exercerades skarpt — `list_tenants_with_stats`,
+`get_agent_settings`, `set_agent_settings`, `list_review_queue`,
+`count_rate_events`, `record_rate_events`, `log_platform_event`,
+`list_platform_events`. All testdata raderad och frånvaron kontrollerad.
+Hela sviten kör nu 448 gröna med **noll överhoppade** — RLS-testet kördes för
+första gången.
+
+Det var den körningen som hittade `028` ovan.
 
 Kvarstår att göra efter deploy:
 

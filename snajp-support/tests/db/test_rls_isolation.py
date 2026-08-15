@@ -41,6 +41,13 @@ async def test_snajp_app_role_cannot_read_another_tenants_ticket_by_direct_id():
         tx = conn.transaction()
         await tx.start()
         try:
+            # Scopa till tenant A INNAN seedningen. Utan den här raden kan
+            # testet bara köras som en roll med BYPASSRLS — alltså precis den
+            # roll vars frånvaro testet finns för att bevisa. Kört som
+            # snajp_app föll insert:en på WITH CHECK-policyn i stället för att
+            # mäta något, vilket är varför det aldrig gick att lita på.
+            await conn.execute("select set_config('app.tenant_id', $1, true)", str(tenant_a))
+
             await conn.execute(
                 "insert into ss_customers (id, tenant_id, name) values ($1, $2, 'RLS-isoleringstest')",
                 customer_id,
