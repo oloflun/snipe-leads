@@ -104,7 +104,12 @@ export function LoginForm() {
       {/* Ink-outline, inte färgade märkesknappar. DESIGN.md har EN accent, och
           Googles fyrfärgslogotyp är inte den — två identiteter på samma sida
           gör att ingen av dem läses som avsändare. */}
-      <div className="mt-8 grid gap-3 sm:grid-cols-2">
+      {/* Staplade, inte två i bredd. Vid 768 bröts "FORTSÄTT MED MICROSOFT"
+          till TRE rader i en tvåkolumnsgrid — 12px versaler med 0.18em
+          spärr är bredare än den halva kolumnen nästan överallt utom vid
+          1440. Full bredd ger alltid en rad och matchar dessutom fälten
+          under, som också är fullbreda. Uppmätt vid 320/375/414/768/1440. */}
+      <div className="mt-8 grid gap-3">
         {([
           ["google", "Fortsätt med Google"],
           ["azure", "Fortsätt med Microsoft"]
@@ -127,7 +132,12 @@ export function LoginForm() {
         <span className="hrule h-px flex-1 bg-ink/15" />
       </div>
 
-      <div className="mt-8 flex flex-wrap gap-3">
+      {/* Tabbraden döljs i återställningsläget. Det är ett FJÄRDE läge, så
+          ingen av de tre var markerad — raden såg ut som en kontroll där
+          inget är valt, vilket läser som en bugg och inte som "du har klivit
+          åt sidan". Vägen tillbaka är den explicita länken under knappen.
+          Uppmätt i en skärmdump vid 375px, inte gissat. */}
+      <div className={cn("mt-8 flex-wrap gap-3", mode === "reset" ? "hidden" : "flex")}>
         {([
           ["login", "Logga in"],
           ["signup", "Skapa konto"],
