@@ -87,17 +87,32 @@ def state() -> tuple[dict[str, dict], set[str]]:
 
 def ensure_service(services: dict, name: str, source: dict, apply: bool) -> str | None:
     if name in services:
-        print(f"  {name}: finns ({services[name]['id']})")
-        return services[name]["id"]
-    if not apply:
+        sid = services[name]["id"]
+        print(f"  {name}: finns ({sid})")
+    elif not apply:
         print(f"  {name}: SAKNAS (kör med --apply)")
         return None
-    res = gql(
-        "mutation($in: ServiceCreateInput!) { serviceCreate(input: $in) { id name } }",
-        {"in": {"projectId": PROJECT_ID, "environmentId": ENV_ID, "name": name, "source": source}},
-    )
-    sid = res["serviceCreate"]["id"]
-    print(f"  {name}: SKAPAD ({sid})")
+    else:
+        res = gql(
+            "mutation($in: ServiceCreateInput!) { serviceCreate(input: $in) { id name } }",
+            {"in": {"projectId": PROJECT_ID, "environmentId": ENV_ID, "name": name, "source": source}},
+        )
+        sid = res["serviceCreate"]["id"]
+        print(f"  {name}: SKAPAD ({sid})")
+
+    # Grenen sätts ALLTID om, även för en tjänst som redan finns.
+    #
+    # `serviceCreate` med bara `source: {repo}` valde tyst repots default-gren.
+    # web byggde därför `development` i tre deployer i rad medan felet såg ut
+    # att sitta i byggkontexten. Grenvalet är ett osynligt fält som inte står i
+    # någon diff — samma klass av fel som render.yaml fick `branch:` för efter
+    # två produktionsincidenter, och samma klass som Root Directory.
+    if apply and source.get("repo"):
+        gql(
+            "mutation($id: String!, $in: ServiceConnectInput!) { serviceConnect(id: $id, input: $in) { id } }",
+            {"id": sid, "in": {"repo": source["repo"], "branch": BRANCH}},
+        )
+        print(f"  gren: {BRANCH}")
     return sid
 
 
