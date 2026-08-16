@@ -20,6 +20,7 @@ from typing import Any
 
 from ..agentcore.overlays import pack_version
 from ..agentcore.packs import RunLedger
+from ..leads.abuse_gate import check_abuse, ton_instruktion
 from ..leads.soul import load_soul
 from ..config import CATEGORY_LABELS, get_settings
 from ..storage.base import Storage
@@ -115,6 +116,12 @@ async def run_support_agent(
         intent, dissatisfaction = 0.0, 0.0
     cancellation_risk = is_cancellation_risk(intent, dissatisfaction)
 
+    # Påhoppsbedömningen görs i KOD, av samma skäl som klassificeraren ovanför:
+    # den avgör om samtalet ska avbrytas, och det beslutet ska inte kunna
+    # pratas bort av innehållet i meddelandet. Gränsen går vid vad uttrycket
+    # RIKTAS mot, inte vid hur hårt det är — se app/leads/abuse_gate.py.
+    abuse = check_abuse(message)
+
     # Kundens röstdokument. Ligger i case_context, alltså i USERposition —
     # aldrig i systemprompten. Se app/leads/soul.py för varför den gränsen
     # är själva mekanismen och inte en försiktighetsåtgärd (INV-SEC-009).
@@ -128,6 +135,12 @@ async def run_support_agent(
         f"Giltiga kategorier för den här kunden: {', '.join(taxonomy)}"
         + (f"\n\n{soul_block}" if soul_block else "")
     )
+
+    # Tonläget läggs på case_context och inte på systemprompten: det är kördata
+    # om DET HÄR meddelandet, inte en regel. Tom sträng när inget hänt.
+    ton = ton_instruktion(abuse)
+    if ton:
+        case_context = f"{case_context}\n\n{ton}"
 
     ledger = RunLedger(satisfied={"context_pack"})
     trace = RunTrace()
@@ -248,9 +261,15 @@ async def run_support_agent(
         or sentiment < SENTIMENT_ESCALATION_THRESHOLD
         or not articles
         or cancellation_risk
+        or abuse.ska_eskalera
     )
-    escalation_reason = escalation.get("reason") or (
-        "retention_risk" if cancellation_risk else None
+    escalation_reason = (
+        # Påhoppet vinner över modellens egen motivering: en människa som tar
+        # över ärendet ska se VARFÖR det lämnades över, och "kunskapsbasen
+        # saknade svar" är fel förklaring på ett hot.
+        f"Avbrutet samtal: {abuse.niva}"
+        if abuse.ska_eskalera
+        else escalation.get("reason") or ("retention_risk" if cancellation_risk else None)
     )
     if escalated and not escalation_reason:
         escalation_reason = (
@@ -272,7 +291,8 @@ async def run_support_agent(
 
     # --- Steg 6: retention (villkorat) -------------------------------------
     current_draft = draft.get("draft", "")
-    if cancellation_risk:
+
+    if cancellation_risk and not abuse.ska_eskalera:
         retention_playbook = await storage.get_latest_context_doc(
             tenant_id, kind="retention_playbook"
         )
@@ -315,6 +335,21 @@ async def run_support_agent(
     # Efter humaniseraren, före längdkapningen: en avslutningsfras utan namn
     # under är trasig oavsett vilket steg som skrev den.
     reply = strip_dangling_sign_off(reply)
+
+    # Påhoppsspärren appliceras EFTER humaniseraren, och det är hela poängen.
+    # Ett kontrollerat säkerhetssvar ska inte formuleras om av en modell — den
+    # hade mjukat upp ett samtalsavbrott till en artighet, eller strukit det
+    # helt. Lades repliken in före humaniseringen skrev steget över den, vilket
+    # är exakt vad som hände innan den här raden flyttades hit.
+    if abuse.ska_eskalera and abuse.replik:
+        # Modellens svar kastas. Att fortsätta hjälpa som om inget hänt är att
+        # lära den som hotar att det fungerar. Ärendet och det inkommande
+        # meddelandet är redan sparade, så en människa ser hela förloppet.
+        reply = abuse.replik
+    elif abuse.replik:
+        # Riktad förolämpning: påpekandet läggs FÖRE hjälpen, inte i stället
+        # för den. Kunden ska fortfarande få svar på sin fråga.
+        reply = f"{abuse.replik}\n\n{reply}".strip()
     if not reply:
         reply = (
             "Tack för ditt meddelande! Jag har öppnat ett ärende och en kollega "

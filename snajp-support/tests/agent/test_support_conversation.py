@@ -183,3 +183,45 @@ def test_samtalsoverlay_bunden_till_bade_utkast_och_humanisering():
     overlays = {step.skill: step.overlay for step in SUPPORT_V1.steps}
     assert overlays["cs:draft-response"] == "support-conversation"
     assert overlays["snajp:humanizer-svenska"] == "support-conversation"
+
+
+# -- Påhoppsspärren i svarsvägen -------------------------------------------
+#
+# abuse_gate har sina egna enhetstester i tests/leads/test_abuse_gate.py.
+# Testerna nedan bevisar något annat: att support-agenten faktiskt ANROPAR den
+# och att beslutet får genomslag i svaret.
+
+
+@pytest.mark.anyio
+async def test_hot_ersatter_svaret_och_eskalerar():
+    """Modellen har redan skrivit ett utkast. Det kastas — att fortsätta
+    hjälpa som om inget hänt är att lära den som hotar att det fungerar."""
+    storage, llm = MemoryStorage(), _CapturingLLM()
+    resultat = await _turn(storage, llm, "Jag ska döda dig.")
+
+    assert resultat["escalated"] is True
+    assert "avslutar" in resultat["reply"]
+    assert "Swish" not in resultat["reply"]  # modellens utkast är borta
+    assert "allvarlig" in (resultat["escalation_reason"] or "")
+
+
+@pytest.mark.anyio
+async def test_riktad_forolampning_papekas_men_hjalpen_fortsatter():
+    storage, llm = MemoryStorage(), _CapturingLLM()
+    resultat = await _turn(storage, llm, "Du är helt korkad. Vilka betalsätt har ni?")
+
+    assert "vill inte bli tilltalad så" in resultat["reply"]
+    # Hjälpen finns kvar EFTER påpekandet.
+    assert "Swish" in resultat["reply"]
+
+
+@pytest.mark.anyio
+async def test_arg_kund_far_inget_papekande():
+    """Den som skriver så är arg på en verklig sak och har oftast rätt."""
+    storage, llm = MemoryStorage(), _CapturingLLM()
+    resultat = await _turn(storage, llm, "Det här är ju för jävligt, jag har väntat i tre veckor.")
+
+    assert "vill inte bli tilltalad" not in resultat["reply"]
+    assert "avslutar" not in resultat["reply"]
+    # Men tonläget når prompten, så svaret kan möta känslan.
+    assert "frustrerad" in llm.user_by_skill["cs:draft-response"]
