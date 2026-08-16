@@ -8,6 +8,7 @@ import type { ProductKey } from "@/lib/routes";
 import { productKeys } from "@/lib/routes";
 import { productCopy, shared } from "@/components/marketing/copy";
 import { imagery, photo, sectionCopy } from "@/components/marketing/copy-sections";
+import { PricingSection } from "@/components/marketing/PricingSection";
 import { ProductSwitch } from "@/components/marketing/ProductSwitch";
 import { useReveal } from "@/components/marketing/useReveal";
 import { cn } from "@/lib/utils";
@@ -387,6 +388,10 @@ export function LandingPhoto({
             </ul>
           </div>
         </section>
+
+        {/* Priset är den sista frågan läsaren har innan kontaktuppmaningen,
+            alltså före avslutningssektionen och inte efter den. */}
+        <PricingSection />
 
         <section className="relative overflow-hidden">
           {/* eslint-disable-next-line @next/next/no-img-element */}

@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from app.leads.icp import validate_icp
-from app.leads.scoring import MISS, TRAFF, score_prospect
+from app.leads.scoring import DELVIS, MISS, TRAFF, score_prospect
 from app.leads.sources import AllabolagSource, BolagsverketSource, CsvSource, Prospect, SourceError
 
 FIXTURER = Path(__file__).resolve().parents[2] / "fixtures"
@@ -192,6 +192,25 @@ def test_kant_varde_utanfor_spannet_diskvalificerar():
 def test_okand_plats_diskvalificerar_nar_geo_ar_satt():
     score = score_prospect(Prospect(company_name="Okänd AB"), {"geo": ["umea"]})
     assert score.diskvalificerad
+
+
+def test_personlig_adress_rankas_under_funktionsadress():
+    """Efter den hårda filtreringen är varje kvarvarande prospekt godkänt. Utan
+    ett mellanläge får alla 100, och då rankar poängen ingenting."""
+    funktionell = Prospect(
+        company_name="A AB", postnr="903 27", contact_email="info@a.example"
+    )
+    personlig = Prospect(
+        company_name="B AB", postnr="903 27", contact_email="anna.lind@b.example"
+    )
+    icp = {"geo": ["umea"]}
+    assert score_prospect(funktionell, icp).total > score_prospect(personlig, icp).total
+
+    kontakt = next(
+        k for k in score_prospect(personlig, icp).breakdown if k.nyckel == "kontakt"
+    )
+    assert kontakt.utfall == DELVIS
+    assert "art. 14" in kontakt.motivering
 
 
 def test_saknad_kontaktvag_ar_en_miss():

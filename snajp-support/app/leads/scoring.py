@@ -65,6 +65,12 @@ VIKT_OMSATTNING = 10
 VIKT_KONTAKT = 10
 
 TRAFF = "träff"
+#: Halv träff. Finns för att poängen ska RANKA och inte bara bekräfta: efter
+#: den hårda filtreringen är varje kvarvarande prospekt per definition
+#: godkänt, och utan ett mellanläge får alla 100 — en siffra som inte skiljer
+#: något från något annat är sämre än ingen siffra, eftersom den ser ut att
+#: säga något.
+DELVIS = "delvis"
 MISS = "miss"
 EJ_SATT = "ej_satt"
 OKAND = "okänd"
@@ -84,7 +90,7 @@ class Kriterium:
     def raknas(self) -> bool:
         """Kriterier kunden inte satt, och sådana vi saknar data för, hålls
         utanför nämnaren. Se modulens docstring."""
-        return self.utfall in (TRAFF, MISS)
+        return self.utfall in (TRAFF, DELVIS, MISS)
 
 
 @dataclass(frozen=True)
@@ -120,7 +126,9 @@ def score_prospect(prospect: "Prospect", icp: dict[str, Any]) -> Score:
     diskvalificerad = bool(skal)
 
     namnare = sum(k.vikt for k in kriterier if k.raknas)
-    taljare = sum(k.vikt for k in kriterier if k.utfall == TRAFF)
+    taljare = sum(k.vikt for k in kriterier if k.utfall == TRAFF) + sum(
+        k.vikt // 2 for k in kriterier if k.utfall == DELVIS
+    )
 
     # Frågan "har kunden satt några urvalskriterier alls" avgörs på ICP:t, inte
     # på nämnaren. Kontaktbarhet är en egenskap hos prospektet och räknas alltid
@@ -381,15 +389,19 @@ def _kriterium_kontakt(prospect: "Prospect") -> Kriterium:
         )
 
     if prospect.epost_ar_personlig:
-        # Halv träff finns inte i modellen, och ska inte finnas: en personlig
-        # adress ÄR nåbar. Att den kräver GDPR art. 14-text är send_guards
-        # sak (regel 4), inte scoringens.
+        # DELVIS, inte träff. En personlig adress är nåbar, men sämre att
+        # inleda med: den utlöser GDPR art. 14-informationsplikt (send_guard
+        # regel 4), och mejlet måste då bära ett stycke juridik som gör det
+        # längre och kallare. En funktionsadress är helt enkelt en bättre
+        # första kontakt, och det är precis den sortens skillnad poängen finns
+        # för att uttrycka.
         return Kriterium(
             "kontakt",
             "Kontaktväg",
             VIKT_KONTAKT,
-            TRAFF,
-            f"{prospect.contact_email} är personlig — kräver art. 14-information i mejlet.",
+            DELVIS,
+            f"{prospect.contact_email} är personlig — kräver art. 14-information "
+            "i mejlet och är därmed en tyngre första kontakt än en funktionsadress.",
         )
 
     return Kriterium(
