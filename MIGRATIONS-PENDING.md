@@ -60,6 +60,36 @@ ger samma svar som `send_guard.foretagsnyckel()` i Python (`556824-9022` →
 `5568249022`, tomt org.nr → e-postdomänen), och alla ingående funktioner är
 `immutable`, vilket krävs för en `stored`-kolumn.
 
+### `032_platform_admin_bootstrap.sql`
+
+Ersätter `021`:s ordningsberoende seed med ett tillstånd.
+
+**Varför:** 021 infogar admin med en `select ... where email = ...`. Finns inte
+kontot när den körs blir den en tyst no-op, och någon måste minnas att köra om
+den efter registreringen. Symptomet när det glöms är att `/admin` svarar 404
+för rätt person utan att något ser trasigt ut.
+
+032 lägger adressen i `platform_admin_bootstrap` och ger graden via en trigger
+när adressen är BEKRÄFTAD (`email_confirmed_at is not null`). Ordningen slutar
+spela roll: registrera kontot före eller efter, graden sätts ändå.
+
+Triggerns kropp ligger i en exception-hanterare, enligt läxan i `006`: en
+trigger på `auth.users` som kastar ger registreringen 500 och låser kontot ute
+permanent. En utebliven admingrad rättas med en rad SQL; en fälld registrering
+är oreparabel för det kontot.
+
+**Kvar för dig:** registrera `snajpsupport@gmail.com` på `/login`. Lösenordet
+sätter du — aldrig en agent, aldrig en migration. Verifiera sedan:
+
+```sql
+select u.email, pa.granted_at
+  from public.platform_admins pa
+  join auth.users u on u.id = pa.user_id;
+```
+
+Och den riktiga kontrollen: `/admin` ska ge 404 för ett vanligt konto och 200
+för adminkontot.
+
 ## Återstår
 
 ### `021_seed_platform_admin.sql`
