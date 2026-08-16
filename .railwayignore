@@ -1,0 +1,26 @@
+# Railway läser den här filen i stället för .dockerignore när den packar
+# byggkontexten.
+#
+# VARFÖR DEN BEHÖVS: .dockerignore i repo-roten är en ALLOWLIST som bara
+# släpper in agent-core/ och snajp-support/app — precis rätt för api-tjänstens
+# Docker-bygge, och förödande för web. Railpack föll på
+# `"/package-lock.json": not found`, alltså inte på ett fel i Next-appen utan
+# på att hela Next-appen var bortfiltrerad innan bygget ens började.
+#
+# Den här filen är därför en DENYLIST: allt följer med utom det som är skräp i
+# båda tjänsterna. api-tjänstens Dockerfile kopierar ändå bara de sökvägar den
+# behöver, så en större kontext kostar uppladdningstid — inte korrekthet.
+.git
+node_modules
+.next
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.shots
+docs
+session-logs
+plans
+.env
+.env.*
+!.env.local.example
