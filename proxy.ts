@@ -6,9 +6,9 @@ import { isAuthRoute, isProtectedRoute } from "@/lib/routes";
  * Proxyn läser Auth.js sessions-JWT i stället för Supabases cookie.
  *
  * Den gjorde förut TVÅ databasfrågor per skyddad request för att avgöra om
- * användaren var onboardad. Nu står svaret i token (lib/auth.ts, jwt-callbacken)
- * och proxyn gör noll. Det är också vad som gör att den kan köra på Edge, där
- * `pg` inte finns.
+ * användaren var onboardad. Den frågan ställs numera i layouten i stället, där
+ * svaret är färskt, och proxyn gör noll frågor. Det är också vad som gör att
+ * den kan köra på Edge, där `pg` inte finns.
  */
 export async function proxy(request: NextRequest) {
   // Utan AUTH_SECRET finns inga sessioner att vakta. Att kasta här tog ner
@@ -40,21 +40,11 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(dashboardUrl);
   }
 
-  const onboarded = Boolean(token?.onboarded);
-
-  if (token && isProtectedRoute(pathname) && pathname !== "/onboarding" && !onboarded) {
-    const onboardingUrl = request.nextUrl.clone();
-    onboardingUrl.pathname = "/onboarding";
-    onboardingUrl.search = "";
-    return NextResponse.redirect(onboardingUrl);
-  }
-
-  if (token && pathname === "/onboarding" && onboarded) {
-    const dashboardUrl = request.nextUrl.clone();
-    dashboardUrl.pathname = "/dashboard";
-    dashboardUrl.search = "";
-    return NextResponse.redirect(dashboardUrl);
-  }
+  // Onboardingdirigeringen bor INTE här. Den låg här och läste ett anspråk ur
+  // sessions-token, vilket gav en loop i drift: raden skrevs, cookien sa
+  // fortfarande false. Proxyn avgör numera bara EN sak — finns det en session —
+  // och det är den enda frågan vars svar inte kan hinna bli inaktuellt.
+  // Se lib/auth/onboarding-gate.ts.
 
   if (token && isAuthRoute(pathname) && pathname !== "/login") {
     return NextResponse.next({ request });

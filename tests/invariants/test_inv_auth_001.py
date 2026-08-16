@@ -1,18 +1,22 @@
-"""INV-AUTH-001 — sessionsanspråk som styr routing måste utfärdas om när de
-ändras.
+"""INV-AUTH-001 — sessions-token bär BARA identitet. Föränderligt tillstånd
+läses färskt.
 
-Bakgrunden är mätt i drift, inte befarad. Onboardingen skrev `business_contexts`
-korrekt, omdirigerade till /dashboard, och proxyn skickade tillbaka till
-/onboarding — i oändlighet. Raden fanns i databasen hela tiden.
+Bakgrunden är mätt i drift, inte befarad. Onboardingstatusen låg som ett
+anspråk i sessions-JWT:n och proxyn dirigerade på den. Följden var en loop:
+onboardingen skrev `business_contexts` korrekt, skickade till /dashboard, och
+proxyn skickade tillbaka till /onboarding. Raden fanns i databasen hela tiden.
 
-Orsaken är formen, inte en glömd rad: proxyn läser den RÅA sessions-token:en
-med `getToken()` och kör aldrig `jwt`-callbacken. Ett anspråk som uppdateras i
-minnet syns därför aldrig där. Cookien måste skrivas om, och det gör bara
-`unstable_update`.
+Första försöket till fix var att utfärda cookien på nytt med
+`unstable_update`. Det höll inte — och det är den viktigare lärdomen, för
+felet var inte ett glömt anrop utan formen: en token är en ÖGONBLICKSBILD,
+signerad och cachad hos klienten. Identitet hör hemma där för att den inte
+ändras under sessionen. Föränderligt tillstånd gör det inte — det blir
+inaktuellt utan att något felar, och felet visar sig som en dirigering ingen
+kan förklara från koden hen läser.
 
-Det här är exakt den sortens fel som ingen typkontroll och inget enhetstest
-hittar: båda halvorna är korrekt kod, felet sitter i att de inte talar med
-varandra. Därför en statisk invariant över anropsstället.
+Den här invarianten spärrar därför inte "kom ihåg att uppdatera", utan
+"lägg inte dit det". Ett test som kräver ett uppdateringsanrop hade
+cementerat den lösning som bevisligen inte fungerade.
 """
 
 from __future__ import annotations
@@ -24,55 +28,74 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 AUTH = ROOT / "lib" / "auth.ts"
-ONBOARDING = ROOT / "lib" / "actions" / "onboarding.ts"
 PROXY = ROOT / "proxy.ts"
+GATE = ROOT / "lib" / "auth" / "onboarding-gate.ts"
 
-#: Anspråk i token som proxyn fattar routingbeslut på. Läggs ett till här utan
-#: att det utfärdas om vid ändring uppstår samma loop igen.
-ROUTING_CLAIMS = ("onboarded",)
+#: Tillstånd som ändras UNDER en session och därför aldrig får bo i token.
+#: Lägg till här när ett nytt sådant fält dyker upp — listan är billigare att
+#: underhålla än loopen den förhindrar.
+MUTABLE_STATE = ("onboarded", "workspaceId", "role", "addons", "products", "entitlement")
 
 
 @pytest.fixture(scope="module")
-def sources() -> dict[str, str]:
-    for path in (AUTH, ONBOARDING, PROXY):
-        assert path.exists(), f"{path} saknas — invarianten mäter ingenting."
-    return {p.name: p.read_text(encoding="utf-8") for p in (AUTH, ONBOARDING, PROXY)}
+def auth_source() -> str:
+    assert AUTH.exists(), f"{AUTH} saknas — invarianten mäter ingenting."
+    return AUTH.read_text(encoding="utf-8")
 
 
-def test_proxyn_laser_ratt_anspraak(sources: dict[str, str]):
-    """Om proxyn slutar läsa anspråket mäter resten av filen fel sak."""
-    proxy = sources["proxy.ts"]
-    assert "getToken" in proxy, "proxy.ts läser inte längre token — se över hela invarianten."
-    for claim in ROUTING_CLAIMS:
-        assert claim in proxy, f"proxy.ts läser inte anspråket {claim!r} längre."
+def _callback_body(source: str, name: str) -> str:
+    """Kroppen av en namngiven Auth.js-callback, grovt men tillräckligt."""
+    match = re.search(rf"async {name}\(.*?\n(.*?)\n    }},?\n", source, re.DOTALL)
+    assert match, f"Hittade ingen {name}-callback i lib/auth.ts — se över invarianten."
+    return match.group(1)
 
 
-def test_auth_exporterar_en_vag_att_utfarda_om(sources: dict[str, str]):
-    auth = sources["auth.ts"]
-    assert "unstable_update" in auth, (
-        "lib/auth.ts exporterar ingen väg att utfärda sessionen på nytt. Utan "
-        "den kan ett routinganspråk aldrig bli färskt i proxyn."
-    )
-    assert re.search(r"unstable_update\s*:\s*(\w+)", auth), (
-        "unstable_update måste exporteras under ett namn som går att anropa."
+@pytest.mark.parametrize("field", MUTABLE_STATE)
+def test_token_bar_inte_forandeligt_tillstand(auth_source: str, field: str):
+    body = _callback_body(auth_source, "jwt")
+    assert f"token.{field}" not in body, (
+        f"jwt-callbacken skriver token.{field}. Det är föränderligt tillstånd i "
+        f"en ögonblicksbild: det blir inaktuellt utan att något felar. Läs det "
+        f"färskt där det används i stället (lib/auth/onboarding-gate.ts är "
+        f"mönstret)."
     )
 
 
-def test_onboardingen_utfardar_sessionen_pa_nytt(sources: dict[str, str]):
-    """Den enda platsen som ändrar `onboarded` från false till true."""
-    auth = sources["auth.ts"]
-    alias = re.search(r"unstable_update\s*:\s*(\w+)", auth).group(1)
+def test_proxyn_avgor_bara_om_sessionen_finns():
+    """Proxyn läser den RÅA token:en och kör aldrig jwt-callbacken. Varje
+    routingbeslut den fattar på något annat än 'finns en session' vilar
+    därför på ett värde som kan vara godtyckligt gammalt."""
+    proxy = PROXY.read_text(encoding="utf-8")
+    for field in MUTABLE_STATE:
+        assert f"token?.{field}" not in proxy and f"token.{field}" not in proxy, (
+            f"proxy.ts dirigerar på token.{field}. Det värdet uppdateras inte av "
+            f"getToken(), så beslutet fattas på en gammal cookie."
+        )
 
-    onboarding = sources["onboarding.ts"]
-    assert alias in onboarding, (
-        f"lib/actions/onboarding.ts anropar aldrig {alias}(). Då står "
-        f"`onboarded: false` kvar i cookien och /dashboard studsar tillbaka "
-        f"till /onboarding trots att raden skrevs."
+
+def test_onboardinggrinden_finns_och_laser_databasen():
+    """Kontrollen får inte bara försvinna ur proxyn — den måste finnas kvar
+    någonstans, annars når en icke-onboardad användare dashboarden."""
+    assert GATE.exists(), (
+        "lib/auth/onboarding-gate.ts saknas. Kontrollen togs bort ur proxyn; "
+        "utan en ersättare är /dashboard öppen för en halvfärdig arbetsyta."
     )
+    gate = GATE.read_text(encoding="utf-8")
+    assert "hasCompletedOnboarding" in gate, (
+        "Grinden läser inte databasen — då är den tillbaka på ett cachat värde."
+    )
+    assert 'redirect("/onboarding")' in gate
 
-    # Ordningen spelar roll: en omutfärdning EFTER redirect() körs aldrig,
-    # eftersom redirect kastar.
-    assert onboarding.index(f"{alias}(") < onboarding.index('redirect("/dashboard")'), (
-        f"{alias}() måste anropas FÖRE redirect(). redirect() kastar, så allt "
-        f"efter den är död kod som ser levande ut."
+
+@pytest.mark.parametrize(
+    "layout",
+    ["app/dashboard/layout.tsx", "app/settings/layout.tsx"],
+)
+def test_grinden_ar_anropad_fran_varje_skyddad_yta(layout: str):
+    path = ROOT / layout
+    assert path.exists(), f"{layout} saknas — se över invarianten."
+    assert "requireOnboarded" in path.read_text(encoding="utf-8"), (
+        f"{layout} anropar inte requireOnboarded(). En grind som finns men inte "
+        f"anropas är samma sak som ingen grind — precis som signOut(), som fanns "
+        f"med noll konsumenter tills någon letade."
     )
