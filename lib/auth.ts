@@ -119,7 +119,19 @@ const providers = [
   ...(process.env.AUTH_MICROSOFT_ENTRA_ID_ID ? [MicrosoftEntraID] : [])
 ];
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+export const {
+  handlers,
+  auth,
+  signIn,
+  signOut,
+  // Utfärdar sessionscookien på nytt med färska anspråk. Krävs efter
+  // onboardingen: proxyn läser den RÅA token:en med getToken() och kör aldrig
+  // jwt-callbacken, så ett anspråk som bara uppdateras i minnet syns aldrig
+  // där. Utan det här anropet skrevs business_context, användaren skickades
+  // till /dashboard, och proxyn skickade tillbaka till /onboarding — i
+  // oändlighet. Verifierat som en riktig loop i drift, inte befarat.
+  unstable_update: refreshSession
+} = NextAuth({
   providers,
   session: { strategy: "jwt" },
   pages: { signIn: "/login", error: "/login" },
