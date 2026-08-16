@@ -1,0 +1,18 @@
+-- HISTORISK VERSIONSPOST — avsiktligt utan SQL.
+--
+-- GRENSPECIFIK. Preview-grenen och produktionen har OLIKA tidsstämplar för
+-- samma migration, eftersom 029 applicerades separat mot vardera databasen:
+--
+--     produktionen: 20260815224101
+--     grenen:       20260815213526
+--
+-- Samma katalog betjänar båda, så BÅDA versionerna behöver en fil här. Annars
+-- svarar branching-checken
+--
+--     Remote migration versions not found in local migrations directory.
+--
+-- på den databas vars version saknas.
+--
+-- SQL:en bor i 029_snajp_app_admin_reads.sql, som körs före den här (versionerna 000–031 sorterar
+-- före 2026…). Att upprepa DDL:en hade betytt att varje ny databas kör samma
+-- ändring två gånger.

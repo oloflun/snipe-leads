@@ -1,0 +1,16 @@
+-- HISTORISK VERSIONSPOST — avsiktligt utan SQL, och den här gången är
+-- tomheten inte bara städning utan ett krav.
+--
+-- Den ursprungliga migrationen INFOGADE RADER I LIGGAREN. Den registrerade
+-- repots versionsnummer (000–029) som applicerade, för att stoppa felet
+-- `MIGRATIONS: FAILED` — branching-workflowen såg trettio versioner den inte
+-- kände igen och försökte köra om allihop mot ett schema som redan hade dem.
+--
+-- Att köra om den mot en NY databas vore fel i grunden: den hade påstått att
+-- trettio migrationer redan är gjorda på en databas där ingen av dem körts,
+-- och den databasen hade blivit tom men bokförd som färdig.
+--
+-- Att fixet löste ena riktningen och skapade den andra är värt att skriva ned:
+-- liggaren fick repots nummer, men behöll sina egna tidsstämplar, och då
+-- klagade integrationen i stället på att fjärrversioner saknade lokala filer.
+-- Det är den andra halvan de här filerna stänger.

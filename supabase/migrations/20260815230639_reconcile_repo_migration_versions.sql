@@ -1,0 +1,8 @@
+-- HISTORISK VERSIONSPOST — tom med flit, och tomheten är ett KRAV.
+--
+-- Grenens motsvarighet till 20260815230625 i produktionen. Se den filen för
+-- hela resonemanget.
+--
+-- Kort: originalet INFOGADE RADER I LIGGAREN för att stoppa `MIGRATIONS:
+-- FAILED`. Mot en NY databas hade den påstått att trettio migrationer redan är
+-- gjorda på en databas där ingen körts — tom, men bokförd som färdig.

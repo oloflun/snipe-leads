@@ -1,0 +1,18 @@
+-- HISTORISK VERSIONSPOST — avsiktligt utan SQL.
+--
+-- GRENSPECIFIK. Preview-grenen och produktionen har OLIKA tidsstämplar för
+-- samma migration, eftersom 028 applicerades separat mot vardera databasen:
+--
+--     produktionen: 20260815224044
+--     grenen:       20260815213200
+--
+-- Samma katalog betjänar båda, så BÅDA versionerna behöver en fil här. Annars
+-- svarar branching-checken
+--
+--     Remote migration versions not found in local migrations directory.
+--
+-- på den databas vars version saknas.
+--
+-- SQL:en bor i 028_rls_empty_string_guard.sql, som körs före den här (versionerna 000–031 sorterar
+-- före 2026…). Att upprepa DDL:en hade betytt att varje ny databas kör samma
+-- ändring två gånger.

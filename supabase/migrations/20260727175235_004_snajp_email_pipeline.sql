@@ -1,0 +1,19 @@
+-- HISTORISK VERSIONSPOST — avsiktligt utan SQL.
+--
+-- Den här migrationen applicerades via Supabases Management-API innan repot
+-- hade sin egen numrering. API:t registrerar en 14-siffrig tidsstämpel som
+-- version, medan repots filer heter 000, 001, 002 och så vidare. Databasen
+-- fick alltså SAMMA ändring bokförd två gånger, under två numreringssystem.
+--
+-- Filen finns därför att branching-integrationen kräver att varje version i
+-- `supabase_migrations.schema_migrations` har en motsvarande fil i den här
+-- katalogen. Saknas den svarar checken
+--
+--     Remote migration versions not found in local migrations directory.
+--
+-- Den är TOM med flit. SQL:en bor i 004_snajp_email_pipeline.sql, som körs före den här
+-- (versionerna 000–031 sorterar före 2026…). Att upprepa DDL:en hade betytt
+-- att varje ny databas kör samma ändring två gånger.
+--
+-- Radera inte filen för att den ser tom ut. Radera den den dag versionen är
+-- borta ur liggaren — inte innan.

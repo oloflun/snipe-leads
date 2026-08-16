@@ -1,0 +1,19 @@
+-- HISTORISK VERSIONSPOST — tom, och den här filen får ALDRIG fyllas i.
+--
+-- Finns bara i preview-grenen (20260815213243), inte i produktionen. Den satte
+-- lösenordet på databasrollen `snajp_app` på spegeln:
+--
+--     alter role snajp_app with password '<hemlighet>';
+--
+-- DÄRFÖR ÄR DEN TOM: att återställa den registrerade SQL:en hit hade committat
+-- ett produktionsnära databaslösenord till git, i klartext, i ett repo med
+-- fler läsare än rollen har. Det vore ett läckage, inte en återställning.
+--
+-- Filen finns enbart för att branching-checken kräver en lokal fil per
+-- fjärrversion. Behöver rollen ett lösenord på en ny databas sätts det för
+-- hand, utanför git:
+--
+--     alter role snajp_app with password '<nytt>';
+--
+-- Se MIGRATIONS-PENDING.md om rotation. Lösenord hör hemma i Render/Vercels
+-- env-scope, aldrig i en migration.
