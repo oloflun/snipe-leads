@@ -96,6 +96,19 @@ async def _run_with_soul(soul: str) -> _Capturing:
         "id": "thread-1",
         "language_state": "sv",
     }
+    # Produktbeskrivningen är sedan DEL 2.1 ett förvillkor för outreach: en tom
+    # sådan avbryter körningen före första LLM-anropet. De här testerna mäter
+    # SOUL-inramningen (INV-SEC-009), så de behöver ett giltigt underlag för
+    # att alls nå fram till stegen de granskar.
+    await storage.save_context_doc(
+        TENANT,
+        kind="product_marketing",
+        content=(
+            "Snajp säljer en kundservice- och leadsagent till svenska småföretag. "
+            "Målgruppen är bolag med 1–49 anställda som får fler mejl än de hinner "
+            "besvara. Agenten grundar varje svar i kundens egen kunskapsbas."
+        ),
+    )
     llm = _Capturing()
     with patch("app.agent.step_runner.get_llm_client", return_value=llm):
         await run_outreach_draft(
