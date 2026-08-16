@@ -1,106 +1,66 @@
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { getToken } from "next-auth/jwt";
 import { NextResponse, type NextRequest } from "next/server";
 import { isAuthRoute, isProtectedRoute } from "@/lib/routes";
-import { getServerSupabaseKey, getSupabaseUrl, hasServerSupabaseEnv } from "@/lib/supabase/env";
 
-async function hasBusinessContext(
-  supabase: ReturnType<typeof createServerClient>,
-  userId: string
-): Promise<boolean> {
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("workspace_id")
-    .eq("id", userId)
-    .maybeSingle<{ workspace_id: string }>();
-
-  if (!profile?.workspace_id) {
-    return false;
-  }
-
-  const { data: businessContext } = await supabase
-    .from("business_contexts")
-    .select("id")
-    .eq("workspace_id", profile.workspace_id)
-    .maybeSingle<{ id: string }>();
-
-  return Boolean(businessContext);
-}
-
+/**
+ * Proxyn läser Auth.js sessions-JWT i stället för Supabases cookie.
+ *
+ * Den gjorde förut TVÅ databasfrågor per skyddad request för att avgöra om
+ * användaren var onboardad. Nu står svaret i token (lib/auth.ts, jwt-callbacken)
+ * och proxyn gör noll. Det är också vad som gör att den kan köra på Edge, där
+ * `pg` inte finns.
+ */
 export async function proxy(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request });
-
-  // Without Supabase configured there are no sessions to guard. Throwing here
-  // took down every route including the public product pages, so stand aside
-  // instead: protected routes stay unreachable in practice because they have no
-  // data to show.
-  if (!hasServerSupabaseEnv()) {
-    return supabaseResponse;
+  // Utan AUTH_SECRET finns inga sessioner att vakta. Att kasta här tog ner
+  // varenda route inklusive de publika produktsidorna, så stå åt sidan i
+  // stället: skyddade rutter är ändå onåbara i praktiken, de har ingen data
+  // att visa.
+  if (!process.env.AUTH_SECRET) {
+    return NextResponse.next({ request });
   }
 
-  const supabase = createServerClient(getSupabaseUrl(), getServerSupabaseKey(), {
-    cookies: {
-      getAll() {
-        return request.cookies.getAll();
-      },
-      setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
-        cookiesToSet.forEach(({ name, value }) => {
-          request.cookies.set(name, value);
-        });
-        supabaseResponse = NextResponse.next({ request });
-        cookiesToSet.forEach(({ name, value, options }) => {
-          supabaseResponse.cookies.set(name, value, options);
-        });
-      }
-    }
+  const token = await getToken({
+    req: request,
+    secret: process.env.AUTH_SECRET,
+    secureCookie: request.nextUrl.protocol === "https:"
   });
-
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-
   const { pathname } = request.nextUrl;
 
-  if (isProtectedRoute(pathname) && !user) {
+  if (isProtectedRoute(pathname) && !token) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
     loginUrl.searchParams.set("next", pathname);
     return NextResponse.redirect(loginUrl);
   }
 
-  if (user && pathname === "/login") {
+  if (token && pathname === "/login") {
     const dashboardUrl = request.nextUrl.clone();
     dashboardUrl.pathname = "/dashboard";
     dashboardUrl.search = "";
     return NextResponse.redirect(dashboardUrl);
   }
 
-  if (user && isProtectedRoute(pathname) && pathname !== "/onboarding") {
-    const onboarded = await hasBusinessContext(supabase, user.id);
+  const onboarded = Boolean(token?.onboarded);
 
-    if (!onboarded) {
-      const onboardingUrl = request.nextUrl.clone();
-      onboardingUrl.pathname = "/onboarding";
-      onboardingUrl.search = "";
-      return NextResponse.redirect(onboardingUrl);
-    }
+  if (token && isProtectedRoute(pathname) && pathname !== "/onboarding" && !onboarded) {
+    const onboardingUrl = request.nextUrl.clone();
+    onboardingUrl.pathname = "/onboarding";
+    onboardingUrl.search = "";
+    return NextResponse.redirect(onboardingUrl);
   }
 
-  if (user && pathname === "/onboarding") {
-    const onboarded = await hasBusinessContext(supabase, user.id);
-
-    if (onboarded) {
-      const dashboardUrl = request.nextUrl.clone();
-      dashboardUrl.pathname = "/dashboard";
-      dashboardUrl.search = "";
-      return NextResponse.redirect(dashboardUrl);
-    }
+  if (token && pathname === "/onboarding" && onboarded) {
+    const dashboardUrl = request.nextUrl.clone();
+    dashboardUrl.pathname = "/dashboard";
+    dashboardUrl.search = "";
+    return NextResponse.redirect(dashboardUrl);
   }
 
-  if (user && isAuthRoute(pathname) && pathname !== "/login") {
-    return supabaseResponse;
+  if (token && isAuthRoute(pathname) && pathname !== "/login") {
+    return NextResponse.next({ request });
   }
 
-  return supabaseResponse;
+  return NextResponse.next({ request });
 }
 
 // Namnet är inte valfritt: Next läser matchern från en export som heter `config`

@@ -1,5 +1,5 @@
 import { getWorkspaceContext } from "@/lib/workspace";
-import { hasServerSupabaseEnv } from "@/lib/supabase/env";
+import { hasDatabase } from "@/lib/db";
 import { isProductKey, type ProductKey } from "@/lib/routes";
 import { isAddonKey, type AddonKey } from "@/lib/addons";
 
@@ -44,7 +44,7 @@ const ANONYMOUS: DashboardState = {
 };
 
 export async function resolveDashboardState(): Promise<DashboardState> {
-  if (!hasServerSupabaseEnv()) {
+  if (!hasDatabase()) {
     return ANONYMOUS;
   }
 
@@ -66,7 +66,7 @@ export async function resolveDashboardState(): Promise<DashboardState> {
   return {
     products,
     addons: (context.workspace.addons ?? []).filter(isAddonKey),
-    variant: (await workspaceHasData(context.workspace.id)) ? "demo" : "fresh",
+    variant: (await workspaceHasData(context.workspace.id, context.user.id)) ? "demo" : "fresh",
     workspaceName: context.workspace.name,
     signedIn: true
   };
@@ -77,28 +77,25 @@ export async function resolveDashboardState(): Promise<DashboardState> {
  * has been filled in at all.
  *
  * Leads still renders from `lib/mock-data.ts`, so today "seeded" means "show the
- * dataset". When Leads is wired to Supabase this function keeps its meaning and
- * only the view's data source changes.
+ * dataset". When Leads is wired to the database this function keeps its meaning
+ * and only the view's data source changes.
  */
-async function workspaceHasData(workspaceId: string): Promise<boolean> {
+async function workspaceHasData(workspaceId: string, userId: string): Promise<boolean> {
   try {
-    const { createClient } = await import("@/lib/supabase/server");
-    const supabase = await createClient();
-
-    const { count, error } = await supabase
-      .from("companies")
-      .select("id", { count: "exact", head: true })
-      .eq("workspace_id", workspaceId);
-
-    if (error) {
-      // A failed probe must not decide the user's dashboard. Treat it as fresh:
-      // an empty state is recoverable, a demo dataset shown to a real customer
-      // is not.
-      return false;
-    }
-
-    return (count ?? 0) > 0;
+    const { sqlAsUser } = await import("@/lib/db");
+    // `exists` i stället för `count`: frågan är om det finns någon rad alls, och
+    // en räkning över hela tabellen för att jämföra med noll är arbete ingen
+    // ville ha.
+    const rows = await sqlAsUser<{ present: boolean }>(
+      userId,
+      "select exists (select 1 from public.companies where workspace_id = $1) as present",
+      [workspaceId]
+    );
+    return Boolean(rows[0]?.present);
   } catch {
+    // A failed probe must not decide the user's dashboard. Treat it as fresh:
+    // an empty state is recoverable, a demo dataset shown to a real customer
+    // is not.
     return false;
   }
 }

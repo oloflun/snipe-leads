@@ -250,18 +250,22 @@ Du har tillgång till tidigare konversationer och användardata via Supabase fö
 async function requireSession() {
   const context = await getWorkspaceContext();
   if (!context) {
-    return NextResponse.json({ error: "Du måste vara inloggad." }, { status: 401 });
+    return { denied: NextResponse.json({ error: "Du måste vara inloggad." }, { status: 401 }) };
   }
-  return null;
+  return { userId: context.user.id };
 }
 
 export async function POST(request: NextRequest) {
-  const denied = await requireSession();
-  if (denied) return denied;
+  const session = await requireSession();
+  if (session.denied) return session.denied;
 
   try {
     const body = await request.json();
-    const { action, draft = '', subject = '', body: emailBody = '', context = {}, locale = 'sv', userId } = body;
+    const { action, draft = '', subject = '', body: emailBody = '', context = {}, locale = 'sv' } = body;
+    // userId kommer ur SESSIONEN, aldrig ur request-body. Fältet gick förut
+    // att sätta fritt av den som postade, och gick rakt in i prompten som en
+    // uppgift om vem anroparen var.
+    const userId = session.userId;
     const emailContent = draft || emailBody;
 
     // Simulation for demo (real LLM needs valid OPENAI_API_KEY)
@@ -315,8 +319,8 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET() {
-  const denied = await requireSession();
-  if (denied) return denied;
+  const session = await requireSession();
+  if (session.denied) return session.denied;
 
   return NextResponse.json({
     message: 'Email Studio API route. POST with { action, subject, body, context? } to get the system prompt + request data.',

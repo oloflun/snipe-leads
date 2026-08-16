@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { sqlAsUser } from "@/lib/db";
 import { getWorkspaceContext } from "@/lib/workspace";
 
 export type TeamActionResult = {
@@ -33,10 +33,11 @@ type Role = (typeof ROLES)[number];
  * oavsett inloggningssätt, så en rad här är allt som krävs för att en
  * inbjudan ska fungera.
  *
- * Går via service-rollen med flit: RLS på tabellen har SELECT-policy men inga
- * skrivpolicyer, vilket är rätt — en klient ska aldrig kunna skriva en
- * inbjudan direkt, eftersom `workspace_id` då hade kommit från klienten.
- * Här kommer det ur sessionen.
+ * Gick förut via service-rollen, alltså en anslutning utan radsäkerhet, för att
+ * tabellen saknade skrivpolicyer. Nu finns de (032): `workspace_id` måste vara
+ * anroparens egen och bara ägaren släpps igenom, kontrollerat av databasen.
+ * Ägarkontrollen nedan står kvar ändå — den ger ett begripligt svenskt
+ * felmeddelande i stället för ett nakent policyavslag.
  */
 export async function inviteMember(email: string, role: string): Promise<TeamActionResult> {
   const normalized = email.trim().toLowerCase();
@@ -59,25 +60,24 @@ export async function inviteMember(email: string, role: string): Promise<TeamAct
     return { success: false, error: "Bara arbetsytans ägare kan bjuda in nya medlemmar." };
   }
 
-  const admin = createAdminClient();
-  const { error } = await admin.from("workspace_invites").insert({
-    email: normalized,
-    workspace_id: context.workspace.id,
-    role,
-    invited_by: context.user.id
-  });
-
-  if (error) {
+  try {
+    await sqlAsUser(
+      context.user.id,
+      `insert into public.workspace_invites (email, workspace_id, role, invited_by)
+       values ($1, $2, $3, $4)`,
+      [normalized, context.workspace.id, role, context.user.id]
+    );
+  } catch (error) {
     // Det delvis unika indexet workspace_invites_open_key tillåter en obrukad
     // inbjudan per adress och workspace. En kollision är alltså inte ett fel
     // utan ett tillstånd användaren ska få veta om.
-    if (error.code === "23505") {
+    if ((error as { code?: string }).code === "23505") {
       return {
         success: false,
         error: `${normalized} har redan en inbjudan som väntar.`
       };
     }
-    return { success: false, error: error.message };
+    return { success: false, error: (error as Error).message };
   }
 
   revalidatePath("/settings/team");
@@ -101,35 +101,28 @@ export async function listTeam(): Promise<TeamMember[]> {
     return [];
   }
 
-  const admin = createAdminClient();
+  // Två frågor blev en union: samma två tillstånd, ett tur och retur, och
+  // ordningen (medlemmar först) blir databasens jobb i stället för en
+  // konkatenering som råkar hamna rätt.
+  const rows = await sqlAsUser<{
+    id: string;
+    label: string;
+    role: string;
+    status: "member" | "invited";
+  }>(
+    context.user.id,
+    `select id, coalesce(nullif(full_name, ''), 'Namnlös medlem') as label,
+            coalesce(role, 'member') as role, 'member' as status, 0 as sort
+       from public.profiles where workspace_id = $1
+     union all
+     select id, email as label, coalesce(role, 'member') as role, 'invited' as status, 1 as sort
+       from public.workspace_invites
+      where workspace_id = $1 and accepted_at is null
+     order by sort, label`,
+    [context.workspace.id]
+  );
 
-  const [{ data: profiles }, { data: invites }] = await Promise.all([
-    admin
-      .from("profiles")
-      .select("id, full_name, role")
-      .eq("workspace_id", context.workspace.id),
-    admin
-      .from("workspace_invites")
-      .select("id, email, role")
-      .eq("workspace_id", context.workspace.id)
-      .is("accepted_at", null)
-  ]);
-
-  const members: TeamMember[] = (profiles ?? []).map((row) => ({
-    id: row.id as string,
-    label: (row.full_name as string) || "Namnlös medlem",
-    role: (row.role as string) ?? "member",
-    status: "member"
-  }));
-
-  const pending: TeamMember[] = (invites ?? []).map((row) => ({
-    id: row.id as string,
-    label: row.email as string,
-    role: (row.role as string) ?? "member",
-    status: "invited"
-  }));
-
-  return [...members, ...pending];
+  return rows.map(({ id, label, role, status }) => ({ id, label, role, status }));
 }
 
 export async function revokeInvite(inviteId: string): Promise<TeamActionResult> {
@@ -141,19 +134,18 @@ export async function revokeInvite(inviteId: string): Promise<TeamActionResult> 
     return { success: false, error: "Bara arbetsytans ägare kan ta bort inbjudningar." };
   }
 
-  const admin = createAdminClient();
-  // workspace_id i where-satsen är inte överflödig: utan den hade ett id från
-  // en annan arbetsyta gått att radera härifrån, eftersom service-rollen inte
-  // begränsas av RLS.
-  const { error } = await admin
-    .from("workspace_invites")
-    .delete()
-    .eq("id", inviteId)
-    .eq("workspace_id", context.workspace.id)
-    .is("accepted_at", null);
-
-  if (error) {
-    return { success: false, error: error.message };
+  // workspace_id och accepted_at står kvar i where-satsen trots att policyn
+  // (032) nu kräver båda. Dubbelt, med flit: villkoret i policyn är grinden,
+  // villkoret här är det som gör avsikten läsbar på anropsstället.
+  try {
+    await sqlAsUser(
+      context.user.id,
+      `delete from public.workspace_invites
+        where id = $1 and workspace_id = $2 and accepted_at is null`,
+      [inviteId, context.workspace.id]
+    );
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 
   revalidatePath("/settings/team");

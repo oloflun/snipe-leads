@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createClient } from "@/lib/supabase/server";
+import { sqlAsUser } from "@/lib/db";
 import { getWorkspaceContext } from "@/lib/workspace";
 
 /**
@@ -17,26 +17,24 @@ import { getWorkspaceContext } from "@/lib/workspace";
  */
 
 export async function isPlatformAdmin(userId: string): Promise<boolean> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("platform_admins")
-    .select("user_id")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (error) {
+  try {
+    const rows = await sqlAsUser<{ user_id: string }>(
+      userId,
+      "select user_id from public.platform_admins where user_id = $1",
+      [userId]
+    );
+    return rows.length > 0;
+  } catch (error) {
     // Fail-closed. Ett uppslag som inte gick att göra betyder INTE admin —
     // motsatt val hade gjort ett databasavbrott till en behörighetshöjning.
-    console.error("isPlatformAdmin:", error.message);
+    console.error("isPlatformAdmin:", (error as Error).message);
     return false;
   }
-
-  return Boolean(data);
 }
 
 export type PlatformAdmin = {
   userId: string;
-  email: string | undefined;
+  email: string | null;
 };
 
 /**

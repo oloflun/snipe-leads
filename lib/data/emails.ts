@@ -20,7 +20,7 @@ export type GeneratedEmailRecord = {
 export type EmailStudioData = {
   email: GeneratedEmailRecord;
   businessContext: BusinessContext | null;
-  source: "supabase" | "mock";
+  source: "database" | "mock";
 };
 
 function mockStudioData(locale: "sv" | "en" = "sv"): EmailStudioData {
@@ -65,15 +65,28 @@ export async function loadEmailStudioData(): Promise<EmailStudioData> {
     return mockStudioData();
   }
 
-  const supabase = await import("@/lib/supabase/server").then((m) => m.createClient());
-  const { data: emails, error } = await supabase
-    .from("generated_emails")
-    .select("id, subject, body, variant_length, variant_type, status, contact_id, campaign_id")
-    .eq("workspace_id", context.workspace.id)
-    .order("created_at", { ascending: false })
-    .limit(1);
+  const { sqlAsUser } = await import("@/lib/db");
+  // Mejlet och kontaktnamnet i en fråga: kontakten hämtades förut i ett andra
+  // anrop efter att raden kommit tillbaka, alltså ett tur och retur som alltid
+  // följde på det första.
+  let emails: Array<Record<string, unknown>> = [];
+  try {
+    emails = await sqlAsUser(
+      context.user.id,
+      `select ge.id, ge.subject, ge.body, ge.variant_length, ge.variant_type,
+              ge.status, ge.contact_id, ge.campaign_id, c.full_name as contact_name
+         from public.generated_emails ge
+         left join public.contacts c on c.id = ge.contact_id
+        where ge.workspace_id = $1
+        order by ge.created_at desc
+        limit 1`,
+      [context.workspace.id]
+    );
+  } catch {
+    emails = [];
+  }
 
-  if (error || !emails?.length) {
+  if (!emails.length) {
     const mock = mockStudioData(context.workspace.locale === "en" ? "en" : "sv");
 
     if (context.businessContext) {
@@ -96,21 +109,13 @@ export async function loadEmailStudioData(): Promise<EmailStudioData> {
     status: string;
     contact_id: string | null;
     campaign_id: string | null;
+    contact_name: string | null;
   };
 
-  let contactName: string | null = null;
-  if (row.contact_id) {
-    const { data: contact } = await supabase
-      .from("contacts")
-      .select("full_name, company_id")
-      .eq("id", row.contact_id)
-      .maybeSingle();
-
-    contactName = (contact as { full_name?: string } | null)?.full_name ?? null;
-  }
+  const contactName = row.contact_name ?? null;
 
   return {
-    source: "supabase",
+    source: "database",
     businessContext: context.businessContext,
     email: {
       id: row.id,
@@ -141,19 +146,17 @@ export async function saveEmailDraft(input: {
     return { success: false, error: "Inte inloggad" };
   }
 
-  const supabase = await import("@/lib/supabase/server").then((m) => m.createClient());
-  const { error } = await supabase
-    .from("generated_emails")
-    .update({
-      subject: input.subject,
-      body: input.body,
-      status: "draft"
-    })
-    .eq("id", input.emailId)
-    .eq("workspace_id", context.workspace.id);
-
-  if (error) {
-    return { success: false, error: error.message };
+  const { sqlAsUser } = await import("@/lib/db");
+  try {
+    await sqlAsUser(
+      context.user.id,
+      `update public.generated_emails
+          set subject = $1, body = $2, status = 'draft'
+        where id = $3 and workspace_id = $4`,
+      [input.subject, input.body, input.emailId, context.workspace.id]
+    );
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 
   return { success: true };
