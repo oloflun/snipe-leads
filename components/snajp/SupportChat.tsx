@@ -3,6 +3,7 @@
 import { ImagePlus, Loader2, Send, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { btnPrimary } from "@/components/ui";
+import { AgentMenu } from "@/components/snajp/AgentMenu";
 import { useLocale } from "@/lib/i18n";
 import { getTenant } from "@/lib/tenants";
 import { cn } from "@/lib/utils";
@@ -269,7 +270,13 @@ export function SupportChat({ tenant, session }: SupportChatProps = {}) {
             <span className="ml-2 font-normal text-ink/50">{statusLabel}</span>
           </p>
         </div>
-        <span className="hidden text-sm text-ink/45 md:block">{brandLabel}</span>
+        <div className="flex items-center gap-3">
+          <span className="hidden text-sm text-ink/45 md:block">{brandLabel}</span>
+          {/* Menyn sitter i chattens huvud och inte i sidfoten: den som vill
+              anmäla ett felaktigt svar eller läsa dataskyddstexten letar
+              uppåt, inte nedanför en scrollande meddelandelista. */}
+          <AgentMenu yta="kundservice" kontext={tenant ? `tenant=${tenant}` : "demo"} />
+        </div>
       </div>
 
       <div ref={scrollRef} className="h-[420px] space-y-4 overflow-y-auto px-5 py-6">
