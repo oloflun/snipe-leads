@@ -108,6 +108,7 @@ query($id: String!) {
       serviceInstances { edges { node {
         environmentId rootDirectory dockerfilePath healthcheckPath
         domains { serviceDomains { domain } }
+        latestDeployment { status meta }
         source { image repo }
       } } }
     } } }
