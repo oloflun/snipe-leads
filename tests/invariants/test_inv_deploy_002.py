@@ -36,34 +36,49 @@ def source() -> str:
 
 
 def test_grenen_ar_utskriven(source: str):
-    """En namngiven gren, inte 'repots default'."""
-    match = re.search(r'^BRANCH\s*=\s*"([^"]+)"', source, re.MULTILINE)
-    assert match, "BRANCH saknas i railway_provision.py — grenen blir då repots default, tyst."
-    assert match.group(1).strip(), "BRANCH är tom."
+    """En namngiven gren PER MILJÖ, inte 'repots default'.
 
-
-def test_serviceconnect_satter_grenen(source: str):
-    """Det räcker inte att BRANCH finns — den måste faktiskt skickas till Railway.
-
-    Konstanten fanns redan när felet uppstod. Den användes bara aldrig.
+    Uppgraderad från en enda BRANCH-konstant till ENVIRONMENTS-mappen när
+    upplägget blev två miljöer: gren-per-miljö är själva mekanismen som gör
+    main och development åtskiljbara, och den bärs av deployment-triggern.
     """
-    assert "serviceConnect" in source, "railway_provision.py anropar aldrig serviceConnect."
-    connect = source[source.index("serviceConnect") : source.index("serviceConnect") + 400]
-    assert '"branch": BRANCH' in connect, (
-        "serviceConnect anropas utan branch: BRANCH. Då väljer Railway repots "
-        "default-gren, och tjänsten bygger tyst fel kod."
+    match = re.search(r"ENVIRONMENTS\s*:\s*dict\[str,\s*str\]\s*=\s*\{([^}]+)\}", source)
+    assert match, "ENVIRONMENTS-mappen saknas — grenen per miljö blir då odefinierad."
+    body = match.group(1)
+    assert '"railway-main"' in body and '"railway-development"' in body, (
+        "ENVIRONMENTS måste binda main och development till sina grenar."
     )
 
 
-def test_grenen_satts_aven_for_befintlig_tjanst(source: str):
-    """Fällan var att tjänsten redan fanns.
+def test_grenen_satts_via_deployment_trigger(source: str):
+    """Grenen sätts på deployment-triggern, som är miljöspecifik.
 
-    Ett `if name in services: return` hade hoppat över grenvalet för precis de
-    tjänster som redan drivit fel — alltså i det enda läge där kontrollen behövs.
+    serviceConnect sätter tjänstens default-gren och gäller ALLA miljöer — fel
+    verktyg när två miljöer ska följa olika grenar. deploymentTriggerCreate bär
+    både branch och environmentId, vilket är det som gör dev och main
+    åtskiljbara. Det var frånvaron av en miljöspecifik gren som lät web bygga
+    fel gren i tre deployer i rad.
     """
-    assert re.search(r"if apply and source\.get\(\"repo\"\)", source), (
-        "Grenen sätts inte om för en tjänst som redan finns. Den tjänst som "
-        "redan pekar fel är den som aldrig blir rättad."
+    assert "deploymentTriggerCreate" in source, (
+        "railway_provision.py skapar aldrig en deployment-trigger — grenen blir "
+        "då tjänstens default och gäller alla miljöer."
+    )
+    assert re.search(r'"branch":\s*branch', source), (
+        "deployment-triggern sätts utan branch. Då väljer Railway repots "
+        "default-gren och tjänsten bygger tyst fel kod."
+    )
+
+
+def test_grenen_uppdateras_for_befintlig_trigger(source: str):
+    """Fällan var att triggern redan fanns och pekade fel.
+
+    ensure_trigger måste UPPDATERA en befintlig trigger vars gren avviker, inte
+    bara skapa nya. En trigger som redan pekar mot fel gren är den som aldrig
+    blir rättad annars.
+    """
+    assert "deploymentTriggerUpdate" in source, (
+        "En befintlig trigger med fel gren rättas aldrig — den byggde fel kod "
+        "och skulle fortsätta göra det."
     )
 
 

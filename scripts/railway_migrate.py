@@ -38,15 +38,19 @@ create table if not exists supabase_migrations.schema_migrations (
 """
 
 
-def dsn(env: dict[str, str]) -> str:
-    url = env.get("RAILWAY_DATABASE_URL")
-    if url:
-        return url
-    pw = env.get("RAILWAY_PG_PASSWORD")
-    host = env.get("RAILWAY_PG_HOST")
-    port = env.get("RAILWAY_PG_PORT")
+def dsn(env: dict[str, str], environment: str = "main") -> str:
+    """Superuser-DSN (postgres-rollen) för migrationer, per miljö.
+
+    Miljöprefixet (RAILWAY_MAIN_*, RAILWAY_DEVELOPMENT_*) är det som gör att
+    `--env development` inte kan råka köra mot main-databasen. Faller tillbaka
+    på de gamla omiljöade namnen bara för main, som redan kör med dem.
+    """
+    p = f"RAILWAY_{environment.upper()}_"
+    pw = env.get(f"{p}PG_PASSWORD") or (env.get("RAILWAY_PG_PASSWORD") if environment == "main" else None)
+    host = env.get(f"{p}PG_HOST") or (env.get("RAILWAY_PG_HOST") if environment == "main" else None)
+    port = env.get(f"{p}PG_PORT") or (env.get("RAILWAY_PG_PORT") if environment == "main" else None)
     if not (pw and host and port):
-        sys.exit("Saknar RAILWAY_DATABASE_URL eller RAILWAY_PG_{PASSWORD,HOST,PORT} i .env.deploy")
+        sys.exit(f"Saknar RAILWAY_{environment.upper()}_PG_{{PASSWORD,HOST,PORT}} i .env.deploy")
     return f"postgresql://postgres:{pw}@{host}:{port}/railway"
 
 
@@ -59,11 +63,14 @@ def planned() -> list[tuple[str, Path]]:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--apply", action="store_true")
+    ap.add_argument("--env", choices=("main", "development"), default="main",
+                    help="vilken Railway-miljös databas (default: main)")
     ap.add_argument("--reset", action="store_true",
                     help="RADERAR public/auth/liggaren först. Bara mot Railway, aldrig mot produktion.")
     args = ap.parse_args()
 
-    conn = psycopg2.connect(dsn(env_read()), connect_timeout=20)
+    print(f"miljö: {args.env}")
+    conn = psycopg2.connect(dsn(env_read(), args.env), connect_timeout=20)
     conn.autocommit = False
     cur = conn.cursor()
 
