@@ -498,10 +498,10 @@ export function SettingsView({ section = "general" }: Readonly<{ section?: "gene
   // gjorde texten dessutom osann — vilket är själva argumentet mot att skriva
   // ut infrastruktur i en kundvänd yta.
   const descriptions: Record<typeof section, string> = {
-    general: "Uppgifterna som alla agentmoduler utgår från när de skriver åt er.",
+    general: "Ändrar du något här ändras allt agenten skriver, i alla moduler.",
     mailboxes: "Avsändaradresser och hur mycket som får skickas per dag.",
     team: "Vilka som har tillgång till arbetsytan, och vad de får göra.",
-    billing: "Plan, förbrukning och fakturering.",
+    billing: "Vad ni har förbrukat den här månaden, och vad nästa faktura blir.",
     soul: "Beskriv hur ni låter. Agenten skriver så i era mejl och svar.",
     addons: "Det agenten kan göra utöver det som ingår i er plan."
   };
