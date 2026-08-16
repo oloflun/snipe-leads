@@ -29,6 +29,24 @@ COPY agent-core ./agent-core
 
 WORKDIR /srv/snajp-support
 
+# UTF-8 oavsett vilken lokal basimagen råkar ha.
+#
+# python:3.12-slim sätter ingen LANG, så locale blir C och
+# locale.getpreferredencoding() blir ASCII. Kodbasen är genomgående svensk —
+# tenantnamn, kundtext, loggrader, agentens svar — och den FÖRSTA skarpa
+# agentkörningen mot en riktig LLM föll på
+# `'ascii' codec can't encode character 'à' in position 7`.
+#
+# Att jaga det enskilda anropsstället är whack-a-mole: nästa svenska sträng som
+# passerar en oencodad väg faller likadant. PYTHONUTF8 stänger hela klassen, och
+# den gäller även bibliotek vi inte äger.
+#
+# Det syntes inte i 454 tester eftersom de kör på en utvecklarmaskin där
+# lokalen redan är UTF-8. Det är en miljöskillnad, inte en kodskillnad — och
+# därför precis den sortens fel som bara en skarp körning hittar.
+ENV PYTHONUTF8=1
+ENV LANG=C.UTF-8
+
 EXPOSE 8000
 # Render (och liknande) injicerar $PORT; lokalt defaultar den till 8000.
 ENV PORT=8000
