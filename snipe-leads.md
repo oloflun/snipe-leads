@@ -4,7 +4,7 @@ type: project
 status: active
 project_slug: snipe-leads
 repo: C:\Users\Anton L\snipe-leads
-updated: 2026-08-14
+updated: 2026-08-16
 ---
 
 # Snipra / Snajp
@@ -251,36 +251,46 @@ API was anonymously readable and writable in production, and every signed-in cus
 KB and SOUL resolved to the demo tenant. Both halves are one bug: a missing argument with a
 silent fallback. Read `lib/snajp/tenant.ts` before adding any route under `app/api/`.
 
-## Current status (2026-08-15)
+## Miljöer och drift (2026-08-16)
 
-Support and leads both run per-step with verifiable skill loading, per-call
-thinking control, and a reviewable `agent_runs.step_log`. The grounding gate,
-skill lock, three-layer instruction system, and SOUL are all built and unit-
-tested — 388 backend tests + invariants + `tsc --noEmit`, all green. The
-Docker deploy bug that would have crashed the first live agent call is fixed.
-Frontend and backend now deploy from the same branch, and the anonymous API
-surface is closed (see "Auth topology" above), verified against production.
+| | Produktion | Preview |
+|---|---|---|
+| Gren | `main` | `development` |
+| Frontend | Vercel `snajp` (`prj_ZXXMG8Jlz0zHeLdg5NTMhN0tHpw9`) | samma projekt, Preview-scope |
+| Backend | Render `srv-d9k99ktg1s2s73fl0v6g` | Render `srv-da0dopojo6nc73ea3b6g` |
+| Databas | Supabase `spsmblyvasagpekjmgmf` | gren `eppgmjswfnrfwnqvtrge`, spegel med data |
 
-**Blocking bug found 2026-08-15, not yet fixed:** `agent_runs.agent_type` has
-`check in ('support','leads')` while `leads_agent.py` writes `"leads_research"`
-and `"leads_outreach"`. Against Postgres both raise a check violation;
-`MemoryStorage` has no constraint, which is why the test suite never caught it.
-**No leads run has ever been persisted in production.** `GET /api/leads/runs`
-filters on the same impossible values. This blocks the entire admin trace view —
-it is a schema bug, not a UI one.
+Full beskrivning: [`DEPLOY.md`](DEPLOY.md). **Ingen Render Blueprint existerar** —
+`render.yaml` är avsikten, `scripts/verify_render.py` är kontrollen.
 
-Not yet done: **live-mode verification** — `scripts/run_live_tests.py --leads`
-against real DeepSeek keys, checking that `result["grounding"]["fired"]` is
-neither always-true (gate too strict) nor always-false (deliberately inject a
-fabricated claim and confirm it fires) on real model output, not just test
-fixtures. The DB-mirror scope decision (filesystem-default vs. the originally
-requested "readable anywhere") needs explicit user confirmation. Three other
-`grid-cols-12`/`gap-x-8` sites in `WorkspaceViews.tsx` share the narrow-
-viewport column-collapse bug fixed in `SettingsView` but weren't visually
-re-verified. Still open from before: Fas A onboarding runs `Runner.run`;
-`DATABASE_URL` unset locally so the real pgvector/RLS path for the new
-storage methods (`list_skill_files`, `save_context_doc(kind='soul')`) is
-untested against real Postgres; dead modules from the first pass;
-edge-function stubs. See [HANDOFF.md](HANDOFF.md) and
-[session-logs/2026-08-14-session-log.md](session-logs/2026-08-14-session-log.md)
-for the full breakdown.
+**Projektregel:** preview-databasen skapas alltid med `--with-data`, som en spegel
+av produktionen. Följden är att previewen innehåller riktig kunddata och ska
+behandlas med samma sekretess.
+
+## Ny kund
+
+```bash
+python scripts/onboard_tenant.py --slug bolaget --name "Bolaget AB" --env preview
+```
+
+Gör de fem maskinella stegen: tenant + API-nyckel, workspace-kopplingen, configfilen,
+KB-stubben, nyckeln till Vercel. Research, KB-innehåll, logotyp och besiktning kräver
+ögon och skrivs ut som checklista. Se `TENANTS.md`.
+
+## Current status (2026-08-16)
+
+**Alla sju faser i plattformsplanen är byggda.** 454 backend-tester och 47 invarianter
+gröna. Migration 000–029 körda och verifierade i produktion, inklusive de två RLS-fixar
+(028, 029) som bara syntes vid skarp körning som `snajp_app` utan BYPASSRLS.
+
+**Grenar:** `feature/plattform-fas1-7` är FRYST säkerhetskopia. `feature/railway-stack`
+är arbetsgrenen för en utvärdering av en enad Railway-stack. `main` ligger 20 commits
+efter och är orörd.
+
+**Öppna trådar:** Railway-prototypen ej byggd · `MIGRATIONS: FAILED` på Supabase-grenen ·
+rotera Render-API-nyckeln (läckt i transkript) · `021` väntar på att kontot skapas ·
+produktionens `DATABASE_URL` till `snajp_app` · Vercel bypass-token för automatik ·
+ingen utloggningsknapp finns · `email-studio` läser `userId` ur request-body ·
+mailutskicket saknas helt.
+
+Senaste sessionslogg: `session-logs/2026-08-16-session-log.md`
