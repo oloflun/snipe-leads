@@ -101,7 +101,13 @@ plats.
 8. **`email-studio/route.ts:259` läser `userId` ur request-body** — klientstyrt.
 9. **Mailutskicket saknas helt** — `email_pipeline/sender.py` finns inte i den här kodlinjen.
 10. **`main` ligger 20 commits efter** och är orörd.
-11. **CARL-MCP:n faller på ENOENT** — skriver `.carl/decisions/<domän>.json` utan att skapa katalogen.
+11. **Sex UI-ytor är obesiktigade i pixlar.** Pixelpasset gjordes på
+    inloggningsytorna (`/login`, `/auth/reset`) i fem bredder och hittade två
+    defekter. Men `TeamSettings`, `AddonSettings`, `LeadsControls`, `/admin`,
+    `/admin/korningar` och `/admin/handelser` kräver en inloggad session, och
+    previewen är SSO-skyddad — de har aldrig setts renderade. Byggda och
+    typkontrollerade, inte visuellt verifierade.
+12. **CARL-MCP:n faller på ENOENT** — skriver `.carl/decisions/<domän>.json` utan att skapa katalogen.
 
 ## Cross-Project Handoffs
 
@@ -171,7 +177,7 @@ files_modified:
   - AGENTS.md
   - CLAUDE.md
 decisions_made: 7
-open_threads: 11
+open_threads: 12
 handoffs_pending: []
 priority_changes: true
 status_updated: true
