@@ -1,5 +1,28 @@
 # Railway-prototyp: en enad stack, byggd vid sidan av
 
+> **STATUS 2026-08-16 (kväll): BYGGD OCH VERIFIERAD.** Alla sju
+> verifieringspunkter nedan är körda. Beslutsgrundens "gå vidare"-villkor är
+> uppfyllda utom gren-miljön, som inte prövats (punkt 6). Drift och kommandon:
+> [`RAILWAY.md`](../RAILWAY.md). Löpande kontroll:
+> `python scripts/verify_railway.py`.
+>
+> | Punkt | Utfall |
+> |---|---|
+> | 1. Byggkontexten | **OK** — `COPY agent-core` går igenom med tom Root Directory |
+> | 2. Migration 000–033 från noll | **OK** — kedjan var dock INTE självbärande; se `0000_rls_auto_enable.sql` |
+> | 3. 454 backend-tester mot Railway-Postgres | **OK** — 460 nu, inkl. RLS-isolering som `snajp_app` utan BYPASSRLS |
+> | 4. Auth end-to-end | **OK** för lösenord: konto skapat, workspace via triggern, /dashboard nådd, /admin 404 för vanligt konto. OAuth ej prövat (nycklar saknas) |
+> | 5. Isoleringen | **OK** — skopad fråga ger delmängd, adminläsning hela mängden |
+> | 6. Gren-miljön | **DELVIS** — tre tjänster, egna domäner och egen Postgres reste sig UTAN handpåläggning, men `${{Postgres.RAILWAY_PRIVATE_DOMAIN}}` löstes inte ut i klonen, så api startade utan databas. Ett manuellt ingrepp i stället för fyra |
+> | 7. Sida vid sida | **OK** — `scripts/verify_railway.py` motsvarar `verify_render.py` |
+>
+> **Fem fel som bara den här ombyggnaden hittade**, alla i den befintliga
+> kodbasen och alla kvar i produktionen tills de deployas:
+> `rls_auto_enable()` saknades i migrationskedjan · `platform_admins`-policyn var
+> självrefererande så adminytan aldrig kunnat renderas · `business_contexts`
+> saknade unikt index · onboardingstatus i sessions-token gav en loop ·
+> `DEEPSEEK_API_KEY` är korrumperad och tjänsten påstod sig vara live.
+
 ## Context
 
 Preview-miljön är byggd och fungerar — men den kostade åtta separata
