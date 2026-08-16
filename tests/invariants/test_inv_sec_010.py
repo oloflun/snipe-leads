@@ -50,6 +50,11 @@ ANON_ALLOWLIST: dict[str, str] = {
         "Triagering av ett inkommande meddelande innan avsändaren är känd — "
         "samma anonyma yta som chatten, samma tak."
     ),
+    "health/route.ts": (
+        "Hälsokontroll. Railways healthcheck skickar ingen cookie, så en "
+        "grindad kontroll kan inte användas av det som ska kontrollera hälsan. "
+        "Svarar bara ok/degraded — inga tabellnamn, inga rader, ingen version."
+    ),
     "auth/[...nextauth]/route.ts": (
         "Själva inloggningen. Att kräva en session för att få skapa en session "
         "är en cirkel: /api/auth/signin, /api/auth/callback/<provider>, "
