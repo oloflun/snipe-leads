@@ -153,11 +153,5 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
     return { success: false, error: (error as Error).message };
   }
 
-  // Sessionen bär onboardingstatusen, och proxyn läser den råa token:en. Utan
-  // en ny cookie här står `onboarded: false` kvar och /dashboard studsar
-  // tillbaka hit — trots att raden precis skrevs.
-  const { refreshSession } = await import("@/lib/auth");
-  await refreshSession({});
-
   redirect("/dashboard");
 }

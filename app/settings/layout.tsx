@@ -1,5 +1,6 @@
 import { DashboardProvider } from "@/components/dashboard/DashboardContext";
 import { resolveDashboardState } from "@/lib/data/dashboard";
+import { requireOnboarded } from "@/lib/auth/onboarding-gate";
 
 /**
  * Speglar app/dashboard/layout.tsx.
@@ -13,6 +14,7 @@ import { resolveDashboardState } from "@/lib/data/dashboard";
 export default async function SettingsLayout({
   children
 }: Readonly<{ children: React.ReactNode }>) {
+  await requireOnboarded();
   const state = await resolveDashboardState();
 
   return <DashboardProvider state={state}>{children}</DashboardProvider>;

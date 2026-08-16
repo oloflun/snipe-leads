@@ -15,15 +15,25 @@ import { verifyPassword } from "@/lib/password";
  * `on_auth_user_created` (001/006) fortsätter skapa workspace och profil, så
  * inbjudningsmodellen håller oförändrad.
  *
- * Sessionen är en JWT, inte en databasrad. Skälet är proxyn: den kördes förut
- * på varje skyddad request och gjorde TVÅ databasfrågor för att avgöra om
- * användaren var onboardad. Med workspace-id och onboardingstatus i token
- * blir det noll — och middleware kan köra på Edge, där `pg` inte finns.
+ * Sessionen är en JWT, inte en databasrad. Det gör att proxyn kan köra på Edge,
+ * där `pg` inte finns, och att den inte behöver en databasfråga för att avgöra
+ * om någon är inloggad — den gjorde förut TVÅ per skyddad request.
+ *
+ * Token bär BARA IDENTITET. Onboardingstatus och workspace-tillhörighet låg
+ * här först, som anspråk, och gav en loop i drift: onboardingen skrev raden,
+ * skickade till /dashboard, och proxyn skickade tillbaka — cookien sa
+ * fortfarande false, och `unstable_update` skrev inte om den.
+ *
+ * En token är en ögonblicksbild, signerad och cachad hos klienten. Identitet
+ * hör hemma där för att den inte ändras under sessionen. Föränderligt tillstånd
+ * gör det inte: det blir inaktuellt utan att något felar, och felet visar sig
+ * som en dirigering som inte går att förklara från koden man läser. Sådant
+ * läses färskt — se lib/auth/onboarding-gate.ts.
  */
 
 declare module "next-auth" {
   interface Session {
-    user: { id: string; workspaceId: string | null; onboarded: boolean } & DefaultSession["user"];
+    user: { id: string } & DefaultSession["user"];
   }
 }
 
@@ -55,30 +65,6 @@ async function upsertOAuthUser(email: string, fullName: string | null): Promise<
     [email, fullName]
   );
   return rows[0];
-}
-
-/**
- * Workspace + onboardingstatus i en enda fråga.
- *
- * getWorkspaceContext() gjorde fyra PostgREST-anrop och skapade fyra klienter
- * per anrop. Det här är samma svar för ett tur och retur.
- */
-export async function workspaceClaims(
-  userId: string
-): Promise<{ workspaceId: string | null; onboarded: boolean }> {
-  const rows = await sql<{ workspace_id: string | null; onboarded: boolean }>(
-    `select p.workspace_id,
-            (bc.id is not null) as onboarded
-       from public.profiles p
-       left join public.business_contexts bc on bc.workspace_id = p.workspace_id
-      where p.id = $1
-      limit 1`,
-    [userId]
-  );
-  return {
-    workspaceId: rows[0]?.workspace_id ?? null,
-    onboarded: Boolean(rows[0]?.onboarded)
-  };
 }
 
 /** Läker konton som saknar profilrad — samma funktion som triggern använder. */
@@ -119,19 +105,7 @@ const providers = [
   ...(process.env.AUTH_MICROSOFT_ENTRA_ID_ID ? [MicrosoftEntraID] : [])
 ];
 
-export const {
-  handlers,
-  auth,
-  signIn,
-  signOut,
-  // Utfärdar sessionscookien på nytt med färska anspråk. Krävs efter
-  // onboardingen: proxyn läser den RÅA token:en med getToken() och kör aldrig
-  // jwt-callbacken, så ett anspråk som bara uppdateras i minnet syns aldrig
-  // där. Utan det här anropet skrevs business_context, användaren skickades
-  // till /dashboard, och proxyn skickade tillbaka till /onboarding — i
-  // oändlighet. Verifierat som en riktig loop i drift, inte befarat.
-  unstable_update: refreshSession
-} = NextAuth({
+export const { handlers, auth, signIn, signOut } = NextAuth({
   providers,
   session: { strategy: "jwt" },
   pages: { signIn: "/login", error: "/login" },
@@ -145,24 +119,16 @@ export const {
       user.id = row.id;
       return true;
     },
-    async jwt({ token, user, trigger }) {
+    async jwt({ token, user }) {
+      // Bara identitet. Allt annat läses färskt där det används.
       if (user?.id) {
         token.sub = user.id;
         await ensureWorkspace(user.id);
-      }
-      // Onboardingen sätter business_context EFTER inloggningen, så anspråken
-      // måste kunna räknas om utan att användaren loggar ut och in.
-      if (token.sub && (user || trigger === "update" || token.workspaceId === undefined)) {
-        const claims = await workspaceClaims(token.sub);
-        token.workspaceId = claims.workspaceId;
-        token.onboarded = claims.onboarded;
       }
       return token;
     },
     async session({ session, token }) {
       session.user.id = token.sub ?? "";
-      session.user.workspaceId = (token.workspaceId as string | null) ?? null;
-      session.user.onboarded = Boolean(token.onboarded);
       return session;
     }
   }
