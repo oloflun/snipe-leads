@@ -171,7 +171,13 @@ async def health_ready(response: Response) -> dict:
     settings = get_settings()
     warnings: list[str] = []
 
-    if settings.is_simulation():
+    # En TRASIG nyckel får sitt eget besked. "Ingen giltig LLM-nyckel" är sant
+    # men oanvändbart när nyckeln är satt: den som läser det letar efter en
+    # saknad variabel, inte efter ett felaktigt tecken i den som redan finns.
+    key_fault = settings.llm_key_fault()
+    if key_fault:
+        warnings.append(key_fault)
+    elif settings.is_simulation():
         warnings.append(
             "Ingen giltig LLM-nyckel — svaren genereras av den deterministiska "
             "regelmotorn, inte av AI."

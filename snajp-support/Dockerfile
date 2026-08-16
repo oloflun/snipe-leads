@@ -31,19 +31,17 @@ WORKDIR /srv/snajp-support
 
 # UTF-8 oavsett vilken lokal basimagen råkar ha.
 #
-# python:3.12-slim sätter ingen LANG, så locale blir C och
-# locale.getpreferredencoding() blir ASCII. Kodbasen är genomgående svensk —
-# tenantnamn, kundtext, loggrader, agentens svar — och den FÖRSTA skarpa
-# agentkörningen mot en riktig LLM föll på
-# `'ascii' codec can't encode character 'à' in position 7`.
+# ÄRLIGHET OM VARFÖR RADERNA STÅR HÄR: de lades till som fix för
+# `'ascii' codec can't encode character 'à' in position 7`, och de var INTE
+# fixen. Traceback:en (som blev läsbar först när except-blocket i chat.py
+# började logga stacken) visade att felet satt i ett HTTP-huvud: httpx kodar
+# huvudvärden som ASCII oavsett lokal, och API-nyckeln innehöll ett tecken över
+# 127. Position 7 är första tecknet efter "Bearer ".
 #
-# Att jaga det enskilda anropsstället är whack-a-mole: nästa svenska sträng som
-# passerar en oencodad väg faller likadant. PYTHONUTF8 stänger hela klassen, och
-# den gäller även bibliotek vi inte äger.
-#
-# Det syntes inte i 454 tester eftersom de kör på en utvecklarmaskin där
-# lokalen redan är UTF-8. Det är en miljöskillnad, inte en kodskillnad — och
-# därför precis den sortens fel som bara en skarp körning hittar.
+# Raderna får ändå stå kvar, men på egna meriter: python:3.12-slim sätter ingen
+# LANG, kodbasen är genomgående svensk, och en tjänst vars textbehandling beror
+# på basimagens lokal är en tidsinställd bugg. De löser bara inte den bugg de
+# skrevs för.
 ENV PYTHONUTF8=1
 ENV LANG=C.UTF-8
 
