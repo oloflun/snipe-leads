@@ -163,9 +163,20 @@ class PostgresStorage:
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(
                 """
+                -- Tiebreakern gör radordningen DEFINIERAD. Utan andra
+                -- sorteringsnyckel är ordningen mellan rader med samma
+                -- created_at odefinierad i SQL, och support_agent plockar då
+                -- fel tre ärenden ur history[:MAX_HISTORY_TICKETS].
+                --
+                -- Här räcker id, till skillnad från i MemoryStorage: exakt
+                -- lika created_at kan bara uppstå för ärenden skapade i SAMMA
+                -- transaktion (now() är transaktionens tidsstämpel), och varje
+                -- ärende skapas i sin egen request. Ordningen mellan två
+                -- sådana är godtycklig men stabil, vilket är tillräckligt —
+                -- de är samtidiga och har ingen sann inbördes ordning.
                 select * from ss_tickets
                 where tenant_id = $1 and customer_id = $2
-                order by created_at desc limit 20
+                order by created_at desc, id desc limit 20
                 """,
                 tenant_id,
                 customer_id,
@@ -549,6 +560,74 @@ class PostgresStorage:
                 thread_id,
             )
         return _row(record)
+
+    # -- Underlaget send_guard dömer på (DEL 2.3) ---------------------------
+    # Spegelbild av MemoryStorage. Skiljer de sig åt är minnesvägen en lögn om
+    # vad produktionen gör — precis den luckan som dolde agent_type-buggen.
+
+    async def list_suppressions(self, tenant_id: str) -> set[str]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                "select email from suppressions where tenant_id = $1", tenant_id
+            )
+        return {str(r["email"]).strip().casefold() for r in records}
+
+    async def add_suppression(self, tenant_id: str, *, email: str, reason: str) -> None:
+        adress = str(email or "").strip().casefold()
+        if not adress:
+            raise ValueError("add_suppression kräver en e-postadress.")
+        async with self._scoped(tenant_id) as conn:
+            # workspace_id hämtas ur kopplingen; kolumnen är not null sedan 000.
+            # Finns ingen workspace för tenanten är det ett riktigt fel — en
+            # avregistrering som tyst inte sparas är det värsta utfallet här.
+            await conn.execute(
+                """
+                insert into suppressions (workspace_id, tenant_id, email, reason)
+                select w.id, $1, $2, $3
+                  from workspaces w
+                 where w.ss_tenant_id = $1
+                on conflict do nothing
+                """,
+                tenant_id,
+                adress,
+                reason,
+            )
+
+    async def count_sent_outreach(self, tenant_id: str, *, since=None) -> int:
+        async with self._scoped(tenant_id) as conn:
+            return await conn.fetchval(
+                """
+                select count(*) from outreach_messages
+                 where tenant_id = $1
+                   and direction = 'outbound'
+                   and sent_at is not null
+                   and ($2::timestamptz is null or sent_at >= $2)
+                """,
+                tenant_id,
+                since,
+            )
+
+    async def last_contact_with_company(self, tenant_id: str, foretagsnyckel: str):
+        if not foretagsnyckel:
+            return None
+        async with self._scoped(tenant_id) as conn:
+            return await conn.fetchval(
+                """
+                -- foretagsnyckel är en GENERERAD kolumn (migration 031). Att
+                -- räkna fram den här också hade varit en andra uträkning av
+                -- samma sak, alltså ett andra tillfälle att räkna fel.
+                select max(m.sent_at)
+                  from outreach_messages m
+                  join outreach_threads t on t.id = m.thread_id
+                  left join prospects p on p.id = t.prospect_id
+                 where m.tenant_id = $1
+                   and m.direction = 'outbound'
+                   and m.sent_at is not null
+                   and p.foretagsnyckel = $2
+                """,
+                tenant_id,
+                foretagsnyckel,
+            )
 
     async def get_pending_outreach_message(
         self, tenant_id: str, thread_id: str

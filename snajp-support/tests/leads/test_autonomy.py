@@ -78,6 +78,17 @@ def test_varje_niva_har_en_beskrivning_kunden_kan_lasa(level):
 
 def test_nivaerna_ar_stigande_i_befogenhet():
     """Ordningen i LEVELS är inte kosmetisk — UI:t renderar den som en
-    segmenterad kontroll där vänster är försiktigast."""
+    segmenterad kontroll där vänster är försiktigast.
+
+    draft köar allt; de tre övriga får skicka första kontakten.
+    """
     sends_first = [allowed_action(level, 0) == "send" for level in LEVELS]
-    assert sends_first == [False, True, True]
+    assert sends_first == [False, True, True, True]
+
+
+def test_bara_auto_send_skickar_uppfoljningar_sjalvt():
+    """Det är HELA skillnaden mellan auto_send och nivåerna under den. Utan
+    det här testet kan `meeting` glida till att bete sig som auto_send utan
+    att någon märker det förrän en uppföljning gått ut."""
+    uppfoljning = [allowed_action(level, 1) == "send" for level in LEVELS]
+    assert uppfoljning == [False, False, False, True]

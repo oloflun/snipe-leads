@@ -19,6 +19,47 @@ inte är tekniskt.
 | `026_platform_events` | RLS på, en policy (`snajp_app`), tabellen svarar på `select count(*)`. |
 | `027_step_traces` | Kommentar och `agent_runs_tenant_created_idx` på plats. |
 
+## Skrivna 2026-08-16 — INTE körda mot produktionen
+
+Båda går via preview-grenen först, enligt DEPLOY.md:s ordning. De applicerades
+alltså av Supabase-integrationen vid push till `development`, inte för hand.
+
+### `030_suppressions_tenant_scope.sql`
+
+Ger `public.suppressions` en `tenant_id`-kolumn.
+
+**Varför:** tabellen var workspace-skopad och lästes bara av dashboarden. Koden
+som avgör om ett mejl går iväg — `send_guard` regel 3 — kör i backenden, som
+bara känner `tenant_id`. Utan kolumnen skrevs avregistreringen på ett ställe
+och kontrollerades inte alls på det andra: den som klickat "avregistrera" hade
+fått nästa utskick ändå.
+
+En kolumn, inte en ny tabell. Två suppressionslistor som kan säga emot varandra
+är värre än ingen — vilken som gällde hade avgjorts av vilken kodväg som råkade
+fråga, och den frågan besvaras alltid efter att mejlet gått.
+
+Backfillen är en no-op i dag: `suppressions` har noll rader i produktionen
+(kontrollerat).
+
+### `031_prospect_nischfalt.sql`
+
+Ger `public.prospects` sju nischfält, `score_breakdown`, `score_total` och en
+genererad `foretagsnyckel`.
+
+**Varför:** tabellen hade company_name, contact_name, contact_email,
+language_state, status, icp_fit, qualified och disqualifiers — alltså inget av
+orgnr, ort, postnr, sni, hemsida, anställda eller omsättning. Det är exakt de
+fält DEL 1:s källor producerar och scoringen dömer på. Utan dem kunde en
+körning hitta rätt bolag men bara spara namnet, och `send_guard` regel 5:s
+karens per företag hade saknat nyckel att räkna på.
+
+`foretagsnyckel` är GENERERAD och får inte skrivas av koden: två uträkningar av
+samma nyckel är två tillfällen att räkna olika, och den skillnaden syns först
+när ett dubbelutskick redan gått. Uttrycket är verifierat mot produktionen — det
+ger samma svar som `send_guard.foretagsnyckel()` i Python (`556824-9022` →
+`5568249022`, tomt org.nr → e-postdomänen), och alla ingående funktioner är
+`immutable`, vilket krävs för en `stored`-kolumn.
+
 ## Återstår
 
 ### `021_seed_platform_admin.sql`

@@ -14,9 +14,20 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from ..config import get_settings
 from ..leads.autonomy import LEVELS as AUTONOMY_LEVELS
 from ..leads.autonomy import describe as describe_autonomy
+from ..leads.autonomy import kan_aktivera_auto_send
 from ..leads.autonomy import normalize as normalize_autonomy
+from ..leads.business_context import ar_ifyllt as business_context_ar_ifyllt
 from ..leads.context_pack import build_context_pack, materialize_product_marketing
-from ..leads.icp import normalize_icp
+from ..leads.geo import beskriv_region, kanda_regioner
+from ..leads.icp import (
+    MAX_PROSPECTS_TAK,
+    SMAFORETAG_ANSTALLDA,
+    IcpValidationError,
+    normalize_icp,
+    validate_icp,
+)
+from ..leads.icp import is_empty as icp_ar_tomt
+from ..leads.sni import SNI_NAMN, beskriv_kod
 from ..leads.onboarding_state import REQUIRED_KINDS, get_onboarding_state
 from .deps import require_tenant
 from ..leads.soul import SOUL_KIND, SOUL_MAX_CHARS
@@ -283,6 +294,21 @@ async def get_leads_config(request: Request, tenant: dict = Depends(require_tena
             {"value": level, "description": describe_autonomy(level)} for level in AUTONOMY_LEVELS
         ],
         "icp": normalize_icp(settings.get("icp")),
+        # Valen som finns att välja MELLAN, inte kundens val. UI:t ska kunna
+        # rendera en lista utan att ha en egen kopia av geo.py och sni.py —
+        # en andra kopia hade drivit isär, och symptomet blivit att ett
+        # regionval som ser giltigt ut i webbläsaren ger 422 vid sparning.
+        "options": {
+            "geo": [
+                {"value": nyckel, "label": beskriv_region(nyckel)}
+                for nyckel in kanda_regioner()
+            ],
+            "sni": [
+                {"value": kod, "label": beskriv_kod(kod)} for kod in sorted(SNI_NAMN)
+            ],
+            "max_prospects_per_run_tak": MAX_PROSPECTS_TAK,
+            "smaforetag_anstallda": list(SMAFORETAG_ANSTALLDA),
+        },
     }
 
 
@@ -299,7 +325,42 @@ async def put_leads_config(
     if payload.autonomy is not None:
         merged["autonomy"] = normalize_autonomy(payload.autonomy)
     if payload.icp is not None:
-        merged["icp"] = normalize_icp(payload.icp)
+        # Skrivvägen är STRIKT (DEL 1.1). Ett ICP som inte går att tolka ska ge
+        # 422 med ett begripligt svenskt fel — aldrig tyst falla tillbaka på
+        # "alla företag i Sverige", vilket är vad ett bortfiltrerat geo-fält
+        # hade betytt i praktiken.
+        #
+        # validate_icp returnerar det normaliserade värdet, så den tysta
+        # borttagningen av okända nycklar (skyddet mot insmugglade
+        # `system_prompt`) ligger kvar oförändrad. Se app/leads/icp.py.
+        try:
+            merged["icp"] = validate_icp(payload.icp)
+        except IcpValidationError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from None
+
+    # auto_send-grinden körs EFTER sammanslagningen, mot det ICP som faktiskt
+    # kommer att gälla. Hade den körts mot `current` kunde en och samma PUT
+    # både fylla i målgruppen och slå på automatiskt utskick, och grinden
+    # hade bedömt ett läge som var sant en millisekund tidigare.
+    if merged.get("autonomy") == "auto_send":
+        produkt = await storage.get_latest_context_doc(
+            tenant["tenant_id"], kind="product_marketing"
+        )
+        beslut = kan_aktivera_auto_send(
+            icp_ar_ifyllt=not icp_ar_tomt(normalize_icp(merged.get("icp"))),
+            business_context_ar_ifyllt=business_context_ar_ifyllt(
+                (produkt or {}).get("content")
+            ),
+            avsandardoman=merged.get("sender_domain") or tenant.get("sender_domain"),
+        )
+        if not beslut.tillaten:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Automatiskt utskick går inte att aktivera än. "
+                    + " ".join(beslut.hinder)
+                ),
+            )
 
     saved = await storage.set_agent_settings(
         tenant["tenant_id"], agent_type="leads", settings=merged

@@ -25,13 +25,14 @@ produktion. Nivån går att välja, men se `MEETING_REQUIRES_HANDOFF` nedan.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Literal
 
-Autonomy = Literal["draft", "first_contact", "meeting"]
+Autonomy = Literal["draft", "first_contact", "meeting", "auto_send"]
 Action = Literal["queue", "send", "hold"]
 
 DEFAULT_AUTONOMY: Autonomy = "draft"
-LEVELS: tuple[Autonomy, ...] = ("draft", "first_contact", "meeting")
+LEVELS: tuple[Autonomy, ...] = ("draft", "first_contact", "meeting", "auto_send")
 
 #: `meeting` förutsätter att handoff.py har en produktionsanropare. Den har
 #: ingen i dag. Tills dess beter sig meeting som first_contact — dokumenterat
@@ -77,6 +78,13 @@ def allowed_action(autonomy: object, sequence_index: int) -> Action:
     if level == "first_contact":
         return "send" if sequence_index == 0 else "queue"
 
+    if level == "auto_send":
+        # Enda nivån där även uppföljningar går ut självt. Den är omöjlig att
+        # SÄTTA utan att `kan_aktivera_auto_send` godkänt — se den funktionen.
+        # Att den ändå tolkas här, och inte antas vara giltig, är avsiktligt:
+        # en rad som redan ligger i databasen har inte passerat någon grind.
+        return "send"
+
     # meeting
     if MEETING_REQUIRES_HANDOFF and sequence_index > 0:
         # handoff.py saknar produktionsanropare. Att låta agenten driva tråden
@@ -85,6 +93,58 @@ def allowed_action(autonomy: object, sequence_index: int) -> Action:
         return "queue"
 
     return "send"
+
+
+# -- Grinden framför auto_send ----------------------------------------------
+
+
+@dataclass(frozen=True)
+class Aktiveringsbeslut:
+    tillaten: bool
+    hinder: tuple[str, ...]
+
+
+def kan_aktivera_auto_send(
+    *,
+    icp_ar_ifyllt: bool,
+    business_context_ar_ifyllt: bool,
+    avsandardoman: str | None,
+) -> Aktiveringsbeslut:
+    """Får den här tenanten sättas till `auto_send`?
+
+    Tre förutsättningar, och alla tre är samma fråga i olika form: vet vi
+    tillräckligt för att ett mejl som går ut UTAN mänsklig granskning ska bli
+    rätt?
+
+    * **ICP** — utan urvalskriterier vet agenten inte vem som ska kontaktas,
+      och "alla" är svaret som gör produkten till skräppost.
+    * **Produktbeskrivning** — utan `business_contexts` skriver modellen
+      generisk AI-text om ett erbjudande den gissat sig till. Se
+      `MissingBusinessContextError` i leads_agent.
+    * **Avsändardomän** — utan egen domän går utskicket från fel avsändare,
+      och avregistreringslänken pekar på någon annans varumärke.
+
+    Returnerar HINDER, inte bara ett nej. En kund som får "det går inte" utan
+    att veta vad som saknas hör av sig till oss i stället för att fylla i
+    fältet.
+    """
+    hinder: list[str] = []
+    if not icp_ar_ifyllt:
+        hinder.append(
+            "Målgruppen (ICP) är tom. Utan urvalskriterier finns ingen gräns för "
+            "vilka bolag agenten kontaktar."
+        )
+    if not business_context_ar_ifyllt:
+        hinder.append(
+            "Produktbeskrivningen saknas. Ett utskick grundat på en tom "
+            "produktbeskrivning blir generisk AI-text."
+        )
+    if not (avsandardoman or "").strip():
+        hinder.append(
+            "Avsändardomänen är inte ifylld. Utskicket skulle gå från fel "
+            "avsändare och avregistreringslänken peka på fel varumärke."
+        )
+    return Aktiveringsbeslut(tillaten=not hinder, hinder=tuple(hinder))
 
 
 def describe(autonomy: object) -> str:
@@ -98,5 +158,10 @@ def describe(autonomy: object) -> str:
             "Agenten får driva samtalet till ett bokat möte."
             + (" Uppföljningar köas fortfarande — överlämningen är inte påkopplad än."
                if MEETING_REQUIRES_HANDOFF else "")
+        ),
+        "auto_send": (
+            "Agenten skickar självt, även uppföljningar. Kräver ifylld målgrupp, "
+            "produktbeskrivning och egen avsändardomän — och de tre första "
+            "utskicken granskas ändå manuellt."
         ),
     }[level]

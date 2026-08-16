@@ -146,6 +146,37 @@ class Storage(Protocol):
         utan mänsklig granskning."""
         ...
 
+    # -- Leads: underlaget send_guard dömer på (DEL 2.3) --------------------
+    #
+    # VARJE metod här har en motsvarighet i BÅDE MemoryStorage och
+    # PostgresStorage, med samma validering. Det var precis den luckan som
+    # dolde agent_type-buggen i månader: en väg som fungerade i minnet och
+    # tyst gjorde något annat mot Postgres.
+
+    async def list_suppressions(self, tenant_id: str) -> set[str]:
+        """Adresser som avregistrerat sig. Gäller HELA tenanten, inte en
+        enskild kampanj — en avregistrering som bara gällde kampanjen hade
+        gjort löftet i mejlet till ett brutet löfte."""
+        ...
+
+    async def add_suppression(self, tenant_id: str, *, email: str, reason: str) -> None:
+        """Skrivs av avregistreringslänken. Ska gälla omedelbart."""
+        ...
+
+    async def count_sent_outreach(self, tenant_id: str, *, since: Any = None) -> int:
+        """Antal FAKTISKT skickade utgående meddelanden. Räknas ur sent_at och
+        inte ur send_queue-status, eftersom det är sent_at som betyder att ett
+        mejl lämnat huset."""
+        ...
+
+    async def last_contact_with_company(
+        self, tenant_id: str, foretagsnyckel: str
+    ) -> Any | None:
+        """När bolaget senast kontaktades, oavsett kontaktperson. Nyckeln är
+        FÖRETAGET — ett bolag som byter kontaktperson ska inte kunna få ett
+        nytt kallmejl dagen efter."""
+        ...
+
     # -- G11: segmentaggregatet (den enda avsiktliga tenantgränsöverskridningen) --
 
     async def get_segment_ab_aggregate(self) -> list[dict[str, Any]]:

@@ -10,6 +10,27 @@ Dessa regler ÅSIDOSÄTTER skillens standardbeteende där de krockar.
   trådens faktiska tillstånd, inte ett antagande — härled det aldrig ur
   bolagsnamn, webbplats eller en gissning om mottagaren.
 
+## Tonläge — fyra uttryckliga förbud (DEL 2.4)
+
+`PROJECT_KNOWLEDGE.md` § Voice säger svenskt, konkret, lågmält. Det är en
+riktning. Nedan står de fyra sakerna som ALDRIG får förekomma, därför att en
+riktning inte går att kontrollera men ett förbud gör det:
+
+- Skriv ALDRIG "Hoppas detta mejl finner dig väl" eller någon variant av den.
+  Frasen är en direktöversättning av "I hope this email finds you well" och
+  läses i Sverige som ett maskinskrivet mejl innan mottagaren hunnit till
+  andra raden.
+- ALDRIG utropstecken i ämnesraden. Ett utropstecken där är den enskilt
+  starkaste skräppostsignalen i svenska inkorgar.
+- Hitta ALDRIG på siffror om mottagarens verksamhet — omsättning, antal
+  anställda, tillväxttal, marknadsandel. Står talet inte i researchunderlaget
+  existerar det inte. Ett påhittat tal som råkar vara fel är det snabbaste
+  sättet att förlora affären; ett som råkar vara rätt är fortfarande en
+  gissning vi inte kan stå för.
+- Påstå ALDRIG tidigare kontakt som inte skett. Inget "som vi pratade om",
+  "när vi hördes senast" eller "jag följer upp mitt förra mejl" om det inte
+  finns i tråden.
+
 > Overlays laddas ordagrant, utan `.format()`. Därför står regeln här och
 > VÄRDET (`sv` / `en_confirmed`) i ärendekontexten: en overlay som behövde
 > interpoleras hade gjort varje `{` i vilken overlay som helst till en

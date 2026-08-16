@@ -63,7 +63,12 @@ class LeadsConfigRequest(BaseModel):
     """Båda fälten är valfria: UI:t har två separata formulär, och en PUT från
     det ena får inte nolla det andra."""
 
-    autonomy: str | None = Field(default=None, pattern=r"^(draft|first_contact|meeting)$")
+    # `auto_send` finns med i mönstret men släpps inte igenom av routen utan
+    # att kan_aktivera_auto_send() godkänt. Att avvisa den redan här hade gett
+    # ett pydantic-fel utan förklaring; kunden ska få veta VAD som saknas.
+    autonomy: str | None = Field(
+        default=None, pattern=r"^(draft|first_contact|meeting|auto_send)$"
+    )
     icp: dict | None = None
 
 

@@ -180,11 +180,27 @@ async def _run_research(storage, llm, scrape=None):
         )
 
 
+#: Produktbeskrivningen är sedan DEL 2.1 ett FÖRVILLKOR för outreach: en tom
+#: sådan avbryter körningen med MissingBusinessContextError, eftersom modellen
+#: annars skriver generisk AI-text om ett erbjudande den gissat sig till.
+#: Testerna nedan mäter något annat, så de får ett giltigt underlag här.
+PRODUKTBESKRIVNING = (
+    "Snajp säljer en kundservice- och leadsagent till svenska småföretag. "
+    "Målgruppen är bolag med 1–49 anställda som får fler mejl än de hinner "
+    "besvara. Det som skiljer oss från konkurrenterna är att agenten grundar "
+    "varje svar i kundens egen kunskapsbas i stället för att gissa."
+)
+
+
 async def _run_outreach(storage, llm, **kwargs):
     storage.outreach_threads.setdefault(TENANT, {})["thread-1"] = {
         "id": "thread-1",
         "language_state": kwargs.pop("language_state", "sv"),
     }
+    if kwargs.pop("med_produktbeskrivning", True):
+        await storage.save_context_doc(
+            TENANT, kind="product_marketing", content=PRODUKTBESKRIVNING
+        )
     # Standardutkastet i _FakeLLM citerar "fri retur i 30 dagar". Det är ett
     # RIKTIGT researchfynd, så det ska ligga i underlaget — annars fäller
     # grundningsgrinden (INV-GROUND-001) korrekt på ett påstående som bara

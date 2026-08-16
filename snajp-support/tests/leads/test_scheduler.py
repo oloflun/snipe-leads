@@ -25,11 +25,45 @@ class _FakeSendProvider:
         self.sent.append({"to": to, "subject": subject, "body": body})
 
 
-def _seed(storage: MemoryStorage, *, scheduled_at, language_state="sv", humanizer_variant="snajp:humanizer-svenska", last_inbound_at=None, autonomy="first_contact"):
+#: En brödtext som passerar send_guard regel 1 och 2 (avsändaridentifikation
+#: och avregistreringslänk). Testerna i den här filen mäter SCHEMALÄGGAREN, så
+#: de behöver ett mejl som spärrarna släpper igenom — annars hade de mätt
+#: send_guard i stället, och den har sina egna tester i test_send_guard.py.
+GODKAND_BRODTEXT = """Hej, jag såg en signal som gör tajmingen relevant.
+
+Testbolaget AB · Org.nr 556000-0000 · Testgatan 1, 111 22 Stockholm
+Avregistrera dig: https://testbolaget.example/avregistrera?t=abc
+"""
+
+
+def _seed(storage: MemoryStorage, *, scheduled_at, language_state="sv", humanizer_variant="snajp:humanizer-svenska", last_inbound_at=None, autonomy="first_contact", body=GODKAND_BRODTEXT):
     # autonomy default 'first_contact' här, inte 'draft': testerna nedan mäter
     # SÄNDNINGSVÄGEN, och med produktionsdefaulten 'draft' hade de mätt
     # autonomigrinden i stället. Draft-beteendet har egna tester längst ned.
     storage.agent_settings[(TENANT, "leads")] = {"autonomy": autonomy}
+    # send_guard regel 1 läser avsändaridentiteten ur tenanten, och regel 6
+    # kräver att de tre första utskicken redan är gjorda för att inte tvinga
+    # allt till granskning.
+    storage.tenants[TENANT] = {
+        "id": TENANT,
+        "name": "Testbolaget AB",
+        "company_name": "Testbolaget AB",
+        "orgnr": "556000-0000",
+        "postal_address": "Testgatan 1, 111 22 Stockholm",
+        "created_at": scheduled_at - timedelta(days=365),
+    }
+    for _ in range(3):
+        storage.outreach_messages.setdefault(TENANT, []).append(
+            {
+                "id": str(uuid.uuid4()),
+                "thread_id": "historik",
+                "direction": "outbound",
+                "sent_at": scheduled_at - timedelta(days=200),
+                "body": "",
+                "subject": "",
+                "humanizer_variant": humanizer_variant,
+            }
+        )
     thread_id = str(uuid.uuid4())
     message_id = str(uuid.uuid4())
     item_id = str(uuid.uuid4())
@@ -46,7 +80,7 @@ def _seed(storage: MemoryStorage, *, scheduled_at, language_state="sv", humanize
             "thread_id": thread_id,
             "direction": "outbound",
             "sent_at": None,
-            "body": "Hej, jag såg en signal som gör tajmingen relevant.",
+            "body": body,
             "subject": "En idé till er",
             "humanizer_variant": humanizer_variant,
         }
@@ -82,7 +116,7 @@ async def test_sends_and_marks_message_and_queue_item_when_gates_pass(monkeypatc
         {
             "to": "prospect@example.se",
             "subject": "En idé till er",
-            "body": "Hej, jag såg en signal som gör tajmingen relevant.",
+            "body": GODKAND_BRODTEXT,
         }
     ]
     message = next(m for m in storage.outreach_messages[TENANT] if m["id"] == message_id)
@@ -217,3 +251,75 @@ async def test_first_contact_skickar_forsta_men_haller_uppfoljningen():
     )
     assert second == "awaiting_review"
     assert len(provider.sent) == 1
+
+
+# -- send_guard sitter i sändvägen (DEL 2.3) -------------------------------
+#
+# De sex reglerna har sina egna tester i test_send_guard.py. Testerna nedan
+# bevisar något annat och lika viktigt: att schemaläggaren faktiskt ANROPAR
+# dem. En spärr som ingen anropar är dekoration.
+
+
+@pytest.mark.anyio
+async def test_send_guard_blockerar_mejl_utan_avregistreringslank():
+    storage = MemoryStorage()
+    item_id, thread_id, _ = _seed(
+        storage,
+        scheduled_at=WITHIN_WINDOW_UTC,
+        body="Hej! Köp något.\n\nTestbolaget AB · Org.nr 556000-0000 · Testgatan 1, 111 22 Stockholm",
+    )
+    provider = _FakeSendProvider()
+
+    outcome = await process_due_item(
+        storage, TENANT, {"id": item_id, "thread_id": thread_id}, provider, now=WITHIN_WINDOW_UTC
+    )
+
+    assert outcome == "blocked"
+    assert provider.sent == []
+    item = storage.send_queue[TENANT][0]
+    assert item["gate_checks"]["send_guard_regel"] == "2_avregistrering"
+
+
+@pytest.mark.anyio
+async def test_send_guard_blockerar_avregistrerad_mottagare():
+    """Avregistreringen kan ha skett MEDAN utkastet låg i kön. Det är hela
+    skälet till att kontrollen sker i sändningsögonblicket."""
+    storage = MemoryStorage()
+    item_id, thread_id, _ = _seed(storage, scheduled_at=WITHIN_WINDOW_UTC)
+    await storage.add_suppression(TENANT, email="Prospect@Example.se", reason="klickade avregistrera")
+    provider = _FakeSendProvider()
+
+    outcome = await process_due_item(
+        storage, TENANT, {"id": item_id, "thread_id": thread_id}, provider, now=WITHIN_WINDOW_UTC
+    )
+
+    assert outcome == "blocked"
+    assert provider.sent == []
+    assert storage.send_queue[TENANT][0]["gate_checks"]["send_guard_regel"] == "3_suppression"
+
+
+@pytest.mark.anyio
+async def test_send_guard_lagger_de_tre_forsta_i_granskning():
+    """Regel 6 gäller oavsett autonominivå — här är den first_contact."""
+    storage = MemoryStorage()
+    item_id, thread_id, _ = _seed(storage, scheduled_at=WITHIN_WINDOW_UTC)
+    storage.outreach_messages[TENANT] = [
+        m for m in storage.outreach_messages[TENANT] if m["thread_id"] != "historik"
+    ]
+    provider = _FakeSendProvider()
+
+    outcome = await process_due_item(
+        storage, TENANT, {"id": item_id, "thread_id": thread_id}, provider, now=WITHIN_WINDOW_UTC
+    )
+
+    assert outcome == "awaiting_review"
+    assert provider.sent == []
+    assert storage.send_queue[TENANT][0]["gate_checks"]["send_guard_regel"] == "6_granskningsko"
+
+
+@pytest.mark.anyio
+async def test_avregistrering_ar_idempotent():
+    storage = MemoryStorage()
+    await storage.add_suppression(TENANT, email="a@b.se", reason="första")
+    await storage.add_suppression(TENANT, email="A@B.se", reason="andra")
+    assert await storage.list_suppressions(TENANT) == {"a@b.se"}

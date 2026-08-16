@@ -1,0 +1,13 @@
+foretagsnamn,orgnr,ort,postnr,sni,hemsida,kontaktadress,anstallda,omsattning,kalla
+Frölunda Restaurangkök AB,556000-0201,Göteborg,421 32,56.100,https://frolunda-restaurangkok.example,info@frolunda-restaurangkok.example,28,24800000,syntetisk fixtur
+Majornas Byggservice AB,556000-0202,Göteborg,414 55,41.200,https://majornas-byggservice.example,kontakt@majornas-byggservice.example,34,58000000,syntetisk fixtur
+Gårda Elteknik AB,556000-0203,Göteborg,411 03,43.210,https://garda-elteknik.example,info@garda-elteknik.example,21,29500000,syntetisk fixtur
+Mölndals Plåt och Smide AB,556000-0204,Mölndal,431 30,25.620,https://molndals-plat.example,order@molndals-plat.example,26,37200000,syntetisk fixtur
+Partille Storkök AB,556000-0205,Partille,433 30,56.210,https://partille-storkok.example,bokning@partille-storkok.example,17,15400000,syntetisk fixtur
+Mölnlycke Tandvård AB,556000-0206,Mölnlycke,435 30,86.230,https://molnlycke-tandvard.example,erik.sandberg@molnlycke-tandvard.example,12,13100000,syntetisk fixtur
+Kungsbacka Lokalvård AB,556000-0207,Kungsbacka,434 30,81.210,https://kungsbacka-lokalvard.example,info@kungsbacka-lokalvard.example,45,31000000,syntetisk fixtur
+Kungälvs Mekaniska Verkstad AB,556000-0208,Kungälv,442 30,33.120,https://kungalvs-mekaniska.example,verkstad@kungalvs-mekaniska.example,23,28900000,syntetisk fixtur
+Lerums Trägolv AB,556000-0209,Lerum,443 30,43.330,https://lerums-tragolv.example,info@lerums-tragolv.example,9,10200000,syntetisk fixtur
+Landvetter Logistik AB,556000-0210,Landvetter,438 80,49.410,https://landvetter-logistik.example,trafik@landvetter-logistik.example,38,64000000,syntetisk fixtur
+Borås Textilservice AB,556000-0211,Borås,503 38,81.210,https://boras-textilservice.example,info@boras-textilservice.example,22,19800000,syntetisk fixtur — SKA falla på geografifiltret
+Västsvenska Entreprenad AB,556000-0212,Göteborg,417 55,41.200,https://vastsvenska-entreprenad.example,info@vastsvenska-entreprenad.example,310,1240000000,syntetisk fixtur — SKA falla på storleksfiltret

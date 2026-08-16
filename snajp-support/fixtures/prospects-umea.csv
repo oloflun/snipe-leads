@@ -1,0 +1,13 @@
+foretagsnamn,orgnr,ort,postnr,sni,hemsida,kontaktadress,anstallda,omsattning,kalla
+Norrlands Elservice AB,556000-0101,Umeå,903 27,43.210,https://norrlands-elservice.example,info@norrlands-elservice.example,8,9200000,syntetisk fixtur
+Ume VVS och Värme AB,556000-0102,Umeå,904 22,43.220,https://ume-vvs.example,kontakt@ume-vvs.example,14,18400000,syntetisk fixtur
+Backens Bygg AB,556000-0103,Umeå,906 21,41.200,https://backensbygg.example,info@backensbygg.example,22,41000000,syntetisk fixtur
+Teg Måleri AB,556000-0104,Umeå,907 30,43.341,https://tegmaleri.example,anna.lindqvist@tegmaleri.example,6,4800000,syntetisk fixtur
+Vännäs Mekaniska AB,556000-0105,Vännäs,911 32,25.620,https://vannas-mekaniska.example,order@vannas-mekaniska.example,17,23500000,syntetisk fixtur
+Nordmalings Trähus AB,556000-0106,Nordmaling,914 31,16.230,https://nordmalings-trahus.example,info@nordmalings-trahus.example,31,52000000,syntetisk fixtur
+Robertsfors Åkeri AB,556000-0107,Robertsfors,915 31,49.410,https://robertsfors-akeri.example,trafik@robertsfors-akeri.example,12,16700000,syntetisk fixtur
+Holmsunds Bilverkstad AB,556000-0108,Holmsund,913 31,45.200,https://holmsunds-bilverkstad.example,verkstad@holmsunds-bilverkstad.example,5,6100000,syntetisk fixtur
+Umeå Redovisningsbyrå AB,556000-0109,Umeå,903 30,69.201,https://umea-redovisning.example,info@umea-redovisning.example,9,11300000,syntetisk fixtur
+Kodverkstan i Umeå AB,556000-0110,Umeå,907 19,62.020,https://kodverkstan.example,hej@kodverkstan.example,11,14900000,syntetisk fixtur
+Skellefteå Industriservice AB,556000-0111,Skellefteå,931 57,33.120,https://skelleftea-industriservice.example,info@skelleftea-industriservice.example,19,26000000,syntetisk fixtur — SKA falla på geografifiltret
+Norrbottens Storbygg AB,556000-0112,Umeå,906 40,41.200,https://norrbottens-storbygg.example,info@norrbottens-storbygg.example,240,890000000,syntetisk fixtur — SKA falla på storleksfiltret

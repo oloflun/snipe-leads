@@ -40,6 +40,7 @@ from agents import Agent, Runner
 
 from ..agentcore.overlays import pack_version
 from ..agentcore.packs import RunLedger
+from ..leads.business_context import require_business_context
 from ..leads.grounding_gate import PermittedFacts, build_permitted_facts, check_grounding
 from ..leads.grounding_playbook import GROUNDING_V1
 from ..leads.language_gate import last_humanizer_variant
@@ -490,6 +491,13 @@ async def run_outreach_draft(
 ) -> dict[str, Any]:
     """Fas C: fyra skill-steg, sedan köar KODEN utkastet (INV-SEC-004 —
     modellen har inget sändverktyg och kan inte köa själv)."""
+    # DEL 2.1: mejlet ska sälja HYRESKUNDENS produkt. Saknas underlaget
+    # avbryts körningen med ett namngivet fel i stället för att modellen
+    # skriver generisk AI-text om ett erbjudande den gissat sig till.
+    # Kontrollen ligger FÖRST, före första LLM-anropet — ett avbrott efter
+    # fyra skill-steg hade kostat tokens för ett resultat vi ändå kastar.
+    await require_business_context(storage, tenant_id)
+
     started = time.monotonic()
     steps = OUTREACH_V1.steps
 

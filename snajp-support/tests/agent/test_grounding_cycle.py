@@ -111,11 +111,24 @@ class _Scripted:
         return _Response()
 
 
+#: Produktbeskrivningen är sedan DEL 2.1 ett förvillkor för outreach — en tom
+#: sådan avbryter körningen innan första LLM-anropet. De här testerna mäter
+#: grundningscykeln, så de får ett giltigt underlag.
+PRODUKTBESKRIVNING = (
+    "Snajp säljer en kundservice- och leadsagent till svenska småföretag. "
+    "Målgruppen är bolag med 1–49 anställda som får fler mejl än de hinner "
+    "besvara. Agenten grundar varje svar i kundens egen kunskapsbas."
+)
+
+
 async def _run(storage, llm, **kwargs):
     storage.outreach_threads.setdefault(TENANT, {})["thread-1"] = {
         "id": "thread-1",
         "language_state": kwargs.pop("language_state", "sv"),
     }
+    await storage.save_context_doc(
+        TENANT, kind="product_marketing", content=PRODUKTBESKRIVNING
+    )
     with patch("app.agent.step_runner.get_llm_client", return_value=llm):
         return await run_outreach_draft(
             storage, TENANT,

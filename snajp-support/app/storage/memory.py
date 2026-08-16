@@ -115,6 +115,10 @@ class MemoryStorage:
         # (tenant_id, typ, värde) → customer_id: samma e-post kan finnas hos flera tenants.
         self.identifiers: dict[tuple[str, str, str], str] = {}
         self.tickets: dict[str, dict[str, Any]] = {}
+        # ticket_id → insättningsnummer. Håller ordningen stabil när flera
+        # ärenden delar created_at. Ligger BREDVID ärendet och inte i det, så
+        # att ett internt sorteringshjälpmedel inte läcker ut i API-svar.
+        self._ticket_order: dict[str, int] = {}
         self.conversations: dict[str, dict[str, Any]] = {}
         self.messages: dict[str, list[dict[str, Any]]] = {}
         self.metrics: list[dict[str, Any]] = []
@@ -127,6 +131,9 @@ class MemoryStorage:
         # (Fas C-E:s persistenslager är en egen, senare ökning) — seedas
         # direkt i tester tills vidare.
         self.send_queue: dict[str, list[dict[str, Any]]] = {}
+        # Avregistreringar, tenant-skopade. Motsvarar public.suppressions med
+        # tenant_id från migration 030.
+        self.suppressions: dict[str, list[dict[str, Any]]] = {}
         self.outreach_threads: dict[str, dict[str, dict[str, Any]]] = {}
         self.outreach_messages: dict[str, list[dict[str, Any]]] = {}
         # G11: (tenant_id, segment, lever) -> {sent, replies, positive}. Seedas
@@ -235,12 +242,25 @@ class MemoryStorage:
     async def get_customer_history(
         self, tenant_id: str, customer_id: str
     ) -> list[dict[str, Any]]:
+        # Tiebreakern är INSÄTTNINGSORDNINGEN, inte id:t. Skillnaden är hela
+        # poängen: `created_at` kommer från `datetime.now()`, vars upplösning
+        # inte räcker när sex ärenden skapas i en snabb loop — på Windows kan
+        # flera hamna på samma mikrosekund. Ordningen mellan dem blev då
+        # godtycklig, och `history[:MAX_HISTORY_TICKETS]` i support_agent
+        # plockade FEL tre ärenden. Agenten läste samtalet i skakad ordning
+        # och trodde att kunden frågat något innan de gjort det.
+        #
+        # Ett första försök bröt likheter på `id`. Det var fel och värt att
+        # skriva ut: id är ett slumpat uuid4, så ordningen blev deterministisk
+        # inom en körning men fortfarande godtycklig mellan körningar — ett
+        # flakigt test i stället för ett trasigt, vilket är sämre eftersom det
+        # ser fixat ut.
         return sorted(
             (
                 t for t in self.tickets.values()
                 if t["customer_id"] == customer_id and t["tenant_id"] == tenant_id
             ),
-            key=lambda t: t["created_at"],
+            key=lambda t: (t["created_at"], self._ticket_order.get(t["id"], 0)),
             reverse=True,
         )
 
@@ -268,6 +288,7 @@ class MemoryStorage:
             "updated_at": _now(),
         }
         self.tickets[ticket["id"]] = ticket
+        self._ticket_order[ticket["id"]] = len(self._ticket_order)
         conversation = {
             "id": str(uuid.uuid4()),
             "tenant_id": tenant_id,
@@ -459,6 +480,54 @@ class MemoryStorage:
 
     async def get_outreach_thread(self, tenant_id: str, thread_id: str) -> dict[str, Any] | None:
         return self.outreach_threads.get(tenant_id, {}).get(thread_id)
+
+    # -- Underlaget send_guard dömer på (DEL 2.3) ---------------------------
+    # Samma signaturer och samma normalisering som PostgresStorage. Skiljer de
+    # sig åt är minnesvägen en lögn om vad produktionen gör.
+
+    async def list_suppressions(self, tenant_id: str) -> set[str]:
+        return {
+            str(rad["email"]).strip().casefold()
+            for rad in self.suppressions.get(tenant_id, [])
+        }
+
+    async def add_suppression(self, tenant_id: str, *, email: str, reason: str) -> None:
+        adress = str(email or "").strip().casefold()
+        if not adress:
+            raise ValueError("add_suppression kräver en e-postadress.")
+        rader = self.suppressions.setdefault(tenant_id, [])
+        if any(str(r["email"]).strip().casefold() == adress for r in rader):
+            return  # Idempotent: en andra avregistrering är inte ett fel.
+        rader.append(
+            {
+                "id": str(uuid.uuid4()),
+                "tenant_id": tenant_id,
+                "email": adress,
+                "reason": reason,
+                "created_at": datetime.now(timezone.utc),
+            }
+        )
+
+    async def count_sent_outreach(self, tenant_id: str, *, since=None) -> int:
+        return sum(
+            1
+            for m in self.outreach_messages.get(tenant_id, [])
+            if m.get("direction") == "outbound"
+            and m.get("sent_at") is not None
+            and (since is None or m["sent_at"] >= since)
+        )
+
+    async def last_contact_with_company(self, tenant_id: str, foretagsnyckel: str):
+        if not foretagsnyckel:
+            return None
+        tidpunkter = [
+            m["sent_at"]
+            for m in self.outreach_messages.get(tenant_id, [])
+            if m.get("direction") == "outbound"
+            and m.get("sent_at") is not None
+            and m.get("foretagsnyckel") == foretagsnyckel
+        ]
+        return max(tidpunkter) if tidpunkter else None
 
     async def get_pending_outreach_message(
         self, tenant_id: str, thread_id: str
