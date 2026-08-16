@@ -259,54 +259,30 @@ Du har tillgång till tidigare konversationer och användardata via Supabase fö
  * Den togs inte upp i plattformsplanens Fas 1, som handlade om
  * snajp-support-proxyn. Den fanns ändå, och INV-SEC-010 hittar den.
  */
-async function harSession(): Promise<boolean> {
-  // Fail-closed OCH krascha aldrig.
-  //
-  // Anropet ligger före try-blocket i POST och bygger en Supabase-klient. Är
-  // Supabase felkonfigurerad kastar den — och eftersom inget fångade det svarade
-  // routen 500 UTAN kropp. Editorn anropade .json() på den tomma kroppen och
-  // visade "Unexpected end of JSON input" för besökaren, mitt i produktdemon.
-  // Det hände i produktion 2026-08-17 på ett trasigt NEXT_PUBLIC_SUPABASE_URL.
-  //
-  // "Vet inte" måste betyda "utloggad" här, aldrig "släpp igenom": utloggad ger
-  // simuleringen, som är gratis. Ett konfigurationsfel kan alltså kosta en
-  // besökare det riktiga modellsvaret, men aldrig ge bort modellen — och aldrig
-  // fälla sidan.
-  try {
-    return Boolean(await getWorkspaceContext());
-  } catch (error) {
-    console.error("[email-studio] kunde inte avgöra session, behandlar som utloggad:", error);
-    return false;
+async function requireSession() {
+  const context = await getWorkspaceContext();
+  if (!context) {
+    return { denied: NextResponse.json({ error: "Du måste vara inloggad." }, { status: 401 }) };
   }
+  return { userId: context.user.id };
 }
 
 export async function POST(request: NextRequest) {
-  // Grinden är inte borta — den är omformulerad till det den faktiskt skyddar.
-  //
-  // Skälet till 401:an var kostnaden: vem som helst kunde bränna
-  // OPENAI_API_KEY genom att posta hit i en loop. Den risken gäller BARA
-  // LLM-vägen. Simuleringsvägen anropar ingenting, kostar ingenting och kan
-  // därför inte missbrukas på det sättet.
-  //
-  // Utloggade får alltså simuleringen och ALDRIG modellen, oavsett om en
-  // nyckel finns satt. Det är hela mekaniken bakom att /demo kan visa
-  // knapparna fungera utan konto: de gör något riktigt, men de gör det
-  // gratis.
-  //
-  // Ändras raden nedan så att en utloggad kan nå generateText är hålet
-  // tillbaka, och det syns inte i något test — därför står skälet här.
-  const inloggad = await harSession();
+  const session = await requireSession();
+  if (session.denied) return session.denied;
 
   try {
     const body = await request.json();
-    const { action, draft = '', subject = '', body: emailBody = '', context = {}, locale = 'sv', userId } = body;
+    const { action, draft = '', subject = '', body: emailBody = '', context = {}, locale = 'sv' } = body;
+    // userId kommer ur SESSIONEN, aldrig ur request-body. Fältet gick förut
+    // att sätta fritt av den som postade, och gick rakt in i prompten som en
+    // uppgift om vem anroparen var.
+    const userId = session.userId;
     const emailContent = draft || emailBody;
 
-    // Simulering när nyckeln saknas ELLER när anroparen är utloggad. Se
-    // kommentaren i POST ovan om varför utloggad alltid hamnar här.
+    // Simulation for demo (real LLM needs valid OPENAI_API_KEY)
     const key = process.env.OPENAI_API_KEY || '';
-    const nyckelnDuger = key.length >= 20 && !key.includes('...') && !key.includes('din-');
-    const useSimulation = !inloggad || !nyckelnDuger;
+    const useSimulation = !key || key.length < 20 || key.includes('...') || key.includes('din-');
     if (useSimulation) {
       const sim = simulateAction(action, emailContent, subject, context);
 
@@ -355,12 +331,8 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET() {
-  // GET returnerar systempromptens längd och en beskrivning av routen. Den
-  // förblir sessionsgrindad: den säger något om hur agenten är byggd, och det
-  // är inget en anonym besökare behöver för att prova knapparna.
-  if (!(await harSession())) {
-    return NextResponse.json({ error: "Du måste vara inloggad." }, { status: 401 });
-  }
+  const session = await requireSession();
+  if (session.denied) return session.denied;
 
   return NextResponse.json({
     message: 'Email Studio API route. POST with { action, subject, body, context? } to get the system prompt + request data.',

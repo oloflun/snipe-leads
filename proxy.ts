@@ -1,155 +1,66 @@
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { getToken } from "next-auth/jwt";
 import { NextResponse, type NextRequest } from "next/server";
 import { isAuthRoute, isProtectedRoute } from "@/lib/routes";
-import { getServerSupabaseKey, getSupabaseUrl, hasServerSupabaseEnv } from "@/lib/supabase/env";
 
-async function hasBusinessContext(
-  supabase: ReturnType<typeof createServerClient>,
-  userId: string
-): Promise<boolean> {
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("workspace_id")
-    .eq("id", userId)
-    .maybeSingle<{ workspace_id: string }>();
-
-  if (!profile?.workspace_id) {
-    return false;
-  }
-
-  const { data: businessContext } = await supabase
-    .from("business_contexts")
-    .select("id")
-    .eq("workspace_id", profile.workspace_id)
-    .maybeSingle<{ id: string }>();
-
-  return Boolean(businessContext);
-}
-
+/**
+ * Proxyn läser Auth.js sessions-JWT i stället för Supabases cookie.
+ *
+ * Den gjorde förut TVÅ databasfrågor per skyddad request för att avgöra om
+ * användaren var onboardad. Nu står svaret i token (lib/auth.ts, jwt-callbacken)
+ * och proxyn gör noll. Det är också vad som gör att den kan köra på Edge, där
+ * `pg` inte finns.
+ */
 export async function proxy(request: NextRequest) {
-  try {
-    return await proxyMedSession(request);
-  } catch (error) {
-    // Proxyn kör FÖRE varje route i matchern. Kastar den blir svaret 500 med tom
-    // body på HELA den inloggade ytan samtidigt — inloggning, dashboard,
-    // inställningar, onboarding och admin — och felet syns inte i UI:t, bara i
-    // Vercel-loggen. Det hände 2026-08-17 på en enda felstavad miljövariabel.
-    //
-    // Samma val som vid saknad env nedan: stå åt sidan hellre än att fälla allt.
-    // Grinden som bär är inte den här — det är requirePlatformAdmin() och
-    // sidornas egna sessionskontroller, som fortfarande kör. Utan session ser en
-    // skyddad sida ingen data att visa.
-    console.error("[proxy] stod åt sidan efter oväntat fel:", error);
+  // Utan AUTH_SECRET finns inga sessioner att vakta. Att kasta här tog ner
+  // varenda route inklusive de publika produktsidorna, så stå åt sidan i
+  // stället: skyddade rutter är ändå onåbara i praktiken, de har ingen data
+  // att visa.
+  if (!process.env.AUTH_SECRET) {
     return NextResponse.next({ request });
   }
-}
 
-async function proxyMedSession(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request });
-
-  // Without Supabase configured there are no sessions to guard. Throwing here
-  // took down every route including the public product pages, so stand aside
-  // instead: protected routes stay unreachable in practice because they have no
-  // data to show.
-  if (!hasServerSupabaseEnv()) {
-    return supabaseResponse;
-  }
-
-  const supabase = createServerClient(getSupabaseUrl(), getServerSupabaseKey(), {
-    cookies: {
-      getAll() {
-        return request.cookies.getAll();
-      },
-      setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
-        cookiesToSet.forEach(({ name, value }) => {
-          request.cookies.set(name, value);
-        });
-        supabaseResponse = NextResponse.next({ request });
-        cookiesToSet.forEach(({ name, value, options }) => {
-          supabaseResponse.cookies.set(name, value, options);
-        });
-      }
-    }
+  const token = await getToken({
+    req: request,
+    secret: process.env.AUTH_SECRET,
+    secureCookie: request.nextUrl.protocol === "https:"
   });
-
-
-  /**
-   * Varje omdirigering MÅSTE bära med sig sessionscookies.
-   *
-   * `supabase.auth.getUser()` roterar refresh-token och skriver de nya
-   * värdena till `supabaseResponse` via setAll(). Ett `NextResponse.redirect()`
-   * är ett HELT NYTT svar — utan den här kopieringen kastas de nya cookies
-   * bort, och webbläsaren sitter kvar med en förbrukad token.
-   *
-   * Följden, uppmätt i produktionens Vercel-logg 2026-08-17 13:13:
-   *
-   *     /login → /dashboard → /onboarding → /login → /dashboard → ...
-   *
-   * /login såg en användare och skickade vidare; /onboarding såg ingen och
-   * skickade tillbaka. Samma session, olika svar, beroende på om just den
-   * requesten råkade komma före eller efter rotationen. Symptomen var
-   * "Internal Server Error", "Sidan finns inte" och en inloggning som verkade
-   * lyckas utan att leda någonstans — tre olika felbilder ur samma orsak.
-   *
-   * Detta är den dokumenterade fällan i Supabases SSR-mellanvara. Lägger någon
-   * till en ny redirect här utan att gå via den här funktionen är loopen
-   * tillbaka, och den syns inte i något test.
-   */
-  function redirectMedSession(url: URL): NextResponse {
-    const svar = NextResponse.redirect(url);
-    supabaseResponse.cookies.getAll().forEach((cookie) => {
-      svar.cookies.set(cookie);
-    });
-    return svar;
-  }
-
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-
   const { pathname } = request.nextUrl;
 
-  if (isProtectedRoute(pathname) && !user) {
+  if (isProtectedRoute(pathname) && !token) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
     loginUrl.searchParams.set("next", pathname);
-    return redirectMedSession(loginUrl);
+    return NextResponse.redirect(loginUrl);
   }
 
-  if (user && pathname === "/login") {
+  if (token && pathname === "/login") {
     const dashboardUrl = request.nextUrl.clone();
     dashboardUrl.pathname = "/dashboard";
     dashboardUrl.search = "";
-    return redirectMedSession(dashboardUrl);
+    return NextResponse.redirect(dashboardUrl);
   }
 
-  if (user && isProtectedRoute(pathname) && pathname !== "/onboarding") {
-    const onboarded = await hasBusinessContext(supabase, user.id);
+  const onboarded = Boolean(token?.onboarded);
 
-    if (!onboarded) {
-      const onboardingUrl = request.nextUrl.clone();
-      onboardingUrl.pathname = "/onboarding";
-      onboardingUrl.search = "";
-      return redirectMedSession(onboardingUrl);
-    }
+  if (token && isProtectedRoute(pathname) && pathname !== "/onboarding" && !onboarded) {
+    const onboardingUrl = request.nextUrl.clone();
+    onboardingUrl.pathname = "/onboarding";
+    onboardingUrl.search = "";
+    return NextResponse.redirect(onboardingUrl);
   }
 
-  if (user && pathname === "/onboarding") {
-    const onboarded = await hasBusinessContext(supabase, user.id);
-
-    if (onboarded) {
-      const dashboardUrl = request.nextUrl.clone();
-      dashboardUrl.pathname = "/dashboard";
-      dashboardUrl.search = "";
-      return redirectMedSession(dashboardUrl);
-    }
+  if (token && pathname === "/onboarding" && onboarded) {
+    const dashboardUrl = request.nextUrl.clone();
+    dashboardUrl.pathname = "/dashboard";
+    dashboardUrl.search = "";
+    return NextResponse.redirect(dashboardUrl);
   }
 
-  if (user && isAuthRoute(pathname) && pathname !== "/login") {
-    return supabaseResponse;
+  if (token && isAuthRoute(pathname) && pathname !== "/login") {
+    return NextResponse.next({ request });
   }
 
-  return supabaseResponse;
+  return NextResponse.next({ request });
 }
 
 // Namnet är inte valfritt: Next läser matchern från en export som heter `config`
