@@ -247,26 +247,37 @@ Du har tillgång till tidigare konversationer och användardata via Supabase fö
  * Den togs inte upp i plattformsplanens Fas 1, som handlade om
  * snajp-support-proxyn. Den fanns ändå, och INV-SEC-010 hittar den.
  */
-async function requireSession() {
-  const context = await getWorkspaceContext();
-  if (!context) {
-    return NextResponse.json({ error: "Du måste vara inloggad." }, { status: 401 });
-  }
-  return null;
+async function harSession(): Promise<boolean> {
+  return Boolean(await getWorkspaceContext());
 }
 
 export async function POST(request: NextRequest) {
-  const denied = await requireSession();
-  if (denied) return denied;
+  // Grinden är inte borta — den är omformulerad till det den faktiskt skyddar.
+  //
+  // Skälet till 401:an var kostnaden: vem som helst kunde bränna
+  // OPENAI_API_KEY genom att posta hit i en loop. Den risken gäller BARA
+  // LLM-vägen. Simuleringsvägen anropar ingenting, kostar ingenting och kan
+  // därför inte missbrukas på det sättet.
+  //
+  // Utloggade får alltså simuleringen och ALDRIG modellen, oavsett om en
+  // nyckel finns satt. Det är hela mekaniken bakom att /demo kan visa
+  // knapparna fungera utan konto: de gör något riktigt, men de gör det
+  // gratis.
+  //
+  // Ändras raden nedan så att en utloggad kan nå generateText är hålet
+  // tillbaka, och det syns inte i något test — därför står skälet här.
+  const inloggad = await harSession();
 
   try {
     const body = await request.json();
     const { action, draft = '', subject = '', body: emailBody = '', context = {}, locale = 'sv', userId } = body;
     const emailContent = draft || emailBody;
 
-    // Simulation for demo (real LLM needs valid OPENAI_API_KEY)
+    // Simulering när nyckeln saknas ELLER när anroparen är utloggad. Se
+    // kommentaren i POST ovan om varför utloggad alltid hamnar här.
     const key = process.env.OPENAI_API_KEY || '';
-    const useSimulation = !key || key.length < 20 || key.includes('...') || key.includes('din-');
+    const nyckelnDuger = key.length >= 20 && !key.includes('...') && !key.includes('din-');
+    const useSimulation = !inloggad || !nyckelnDuger;
     if (useSimulation) {
       const sim = simulateAction(action, emailContent, subject, context);
 
@@ -315,8 +326,12 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET() {
-  const denied = await requireSession();
-  if (denied) return denied;
+  // GET returnerar systempromptens längd och en beskrivning av routen. Den
+  // förblir sessionsgrindad: den säger något om hur agenten är byggd, och det
+  // är inget en anonym besökare behöver för att prova knapparna.
+  if (!(await harSession())) {
+    return NextResponse.json({ error: "Du måste vara inloggad." }, { status: 401 });
+  }
 
   return NextResponse.json({
     message: 'Email Studio API route. POST with { action, subject, body, context? } to get the system prompt + request data.',
