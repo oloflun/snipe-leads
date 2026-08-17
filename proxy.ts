@@ -54,6 +54,37 @@ export async function proxy(request: NextRequest) {
     }
   });
 
+
+  /**
+   * Varje omdirigering MÅSTE bära med sig sessionscookies.
+   *
+   * `supabase.auth.getUser()` roterar refresh-token och skriver de nya
+   * värdena till `supabaseResponse` via setAll(). Ett `NextResponse.redirect()`
+   * är ett HELT NYTT svar — utan den här kopieringen kastas de nya cookies
+   * bort, och webbläsaren sitter kvar med en förbrukad token.
+   *
+   * Följden, uppmätt i produktionens Vercel-logg 2026-08-17 13:13:
+   *
+   *     /login → /dashboard → /onboarding → /login → /dashboard → ...
+   *
+   * /login såg en användare och skickade vidare; /onboarding såg ingen och
+   * skickade tillbaka. Samma session, olika svar, beroende på om just den
+   * requesten råkade komma före eller efter rotationen. Symptomen var
+   * "Internal Server Error", "Sidan finns inte" och en inloggning som verkade
+   * lyckas utan att leda någonstans — tre olika felbilder ur samma orsak.
+   *
+   * Detta är den dokumenterade fällan i Supabases SSR-mellanvara. Lägger någon
+   * till en ny redirect här utan att gå via den här funktionen är loopen
+   * tillbaka, och den syns inte i något test.
+   */
+  function redirectMedSession(url: URL): NextResponse {
+    const svar = NextResponse.redirect(url);
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      svar.cookies.set(cookie);
+    });
+    return svar;
+  }
+
   const {
     data: { user }
   } = await supabase.auth.getUser();
@@ -64,14 +95,14 @@ export async function proxy(request: NextRequest) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
     loginUrl.searchParams.set("next", pathname);
-    return NextResponse.redirect(loginUrl);
+    return redirectMedSession(loginUrl);
   }
 
   if (user && pathname === "/login") {
     const dashboardUrl = request.nextUrl.clone();
     dashboardUrl.pathname = "/dashboard";
     dashboardUrl.search = "";
-    return NextResponse.redirect(dashboardUrl);
+    return redirectMedSession(dashboardUrl);
   }
 
   if (user && isProtectedRoute(pathname) && pathname !== "/onboarding") {
@@ -81,7 +112,7 @@ export async function proxy(request: NextRequest) {
       const onboardingUrl = request.nextUrl.clone();
       onboardingUrl.pathname = "/onboarding";
       onboardingUrl.search = "";
-      return NextResponse.redirect(onboardingUrl);
+      return redirectMedSession(onboardingUrl);
     }
   }
 
@@ -92,7 +123,7 @@ export async function proxy(request: NextRequest) {
       const dashboardUrl = request.nextUrl.clone();
       dashboardUrl.pathname = "/dashboard";
       dashboardUrl.search = "";
-      return NextResponse.redirect(dashboardUrl);
+      return redirectMedSession(dashboardUrl);
     }
   }
 
