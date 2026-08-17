@@ -9,7 +9,6 @@ import { LeadsControls } from "@/components/leads/LeadsControls";
 import {
   AnalyticsView,
   AssistantView,
-  CampaignsView,
   CompaniesView,
   ContactsView,
   InboxView,
@@ -70,7 +69,6 @@ const SEKTIONER = [
   ["", "Översikt"],
   ["leads", "Leads"],
   ["emails", "Email studio"],
-  ["campaigns", "Kampanjer"],
   ["companies", "Företag"],
   ["contacts", "Kontakter"],
   ["inbox", "Svar"],
@@ -147,8 +145,6 @@ function renderSektion(sektion: string | undefined): React.ReactNode | null {
       return <LeadsView />;
     case "emails":
       return <EmailStudioDemo />;
-    case "campaigns":
-      return <CampaignsView />;
     case "companies":
       return <CompaniesView />;
     case "contacts":

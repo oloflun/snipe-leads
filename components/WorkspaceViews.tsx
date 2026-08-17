@@ -12,17 +12,15 @@ import { OnboardingForm } from "@/components/auth/OnboardingForm";
 import {
   analyticsSeries,
   businessContext,
-  campaigns,
   companies,
   contacts,
   emailVariants,
-  findCampaign,
   findCompany,
   findContact,
   signals,
   workflowSteps
 } from "@/lib/mock-data";
-import type { Campaign, Company, Contact } from "@/lib/mock-data";
+import type { Company, Contact } from "@/lib/mock-data";
 import { useLocale } from "@/lib/i18n";
 import { cn, formatCurrency, formatDate, formatPercent } from "@/lib/utils";
 
@@ -82,26 +80,6 @@ function CompanyLedger({ rows = companies }: Readonly<{ rows?: Company[] }>) {
           );
         })}
       </div>
-    </div>
-  );
-}
-
-function CampaignLedger({ rows = campaigns }: Readonly<{ rows?: Campaign[] }>) {
-  const { text } = useLocale();
-  return (
-    <div className="divide-y divide-ink/15 border-y border-ink/15">
-      {rows.map((campaign) => (
-        <Link key={campaign.id} href={`/dashboard/campaigns/${campaign.id}`} className="row grid grid-cols-12 gap-x-6 py-6 transition hover:bg-paper2/60">
-          <div className="ticker col-span-12 md:col-span-4">
-            <h2 className="text-[1.25rem] font-semibold tracking-[-0.02em]">{text(campaign.name)}</h2>
-            <p className="mt-2 max-w-[44ch] text-[15px] leading-6 text-ink/65">{text(campaign.segment)}</p>
-          </div>
-          <div className="kicker col-span-6 mt-4 text-mineral md:col-span-2 md:mt-0">{campaign.geography}</div>
-          <div className="num col-span-2 mt-4 text-[1.0625rem] font-semibold tabular-nums md:mt-0">{campaign.volume}</div>
-          <div className="num col-span-2 mt-4 text-[1.0625rem] font-semibold tabular-nums md:mt-0">{formatPercent(campaign.replyRate)}</div>
-          <div className="num col-span-2 mt-4 text-right text-[1.0625rem] font-semibold tabular-nums md:mt-0">{campaign.meetings}</div>
-        </Link>
-      ))}
     </div>
   );
 }
@@ -329,48 +307,6 @@ export function ContactDetailView({ id }: Readonly<{ id: string }>) {
           ))}
         </dl>
         <div className="col-span-12 md:col-span-7"><EmailManuscript compact /></div>
-      </div>
-    </PageShell>
-  );
-}
-
-export function CampaignsView() {
-  return (
-    <PageShell kicker="Campaigns" title="Sekvenser som stannar vid svar och lär av signalen." description="Kampanjerna visas som operativa utgåvor: segment, volym, reply rate och mötesutfall.">
-      <CampaignLedger />
-    </PageShell>
-  );
-}
-
-export function CampaignDetailView({ id }: Readonly<{ id: string }>) {
-  const { text } = useLocale();
-  const campaign = findCampaign(id);
-  return (
-    <PageShell kicker={campaign.geography} title={text(campaign.name)} description={text(campaign.segment)} action={<EditorialButton href="/dashboard/emails">Öppna email studio</EditorialButton>}>
-      <div className="grid grid-cols-12 gap-x-8 gap-y-10">
-        <section className="col-span-12 md:col-span-7">
-          <h2 className="kicker text-mineral">Sequence steps</h2>
-          <div className="mt-5 divide-y divide-ink/15 border-y border-ink/15">
-            {campaign.sequence.map((step) => (
-              <div key={`${step.day}-${text(step.label)}`} className="grid grid-cols-12 gap-x-6 py-5">
-                <div className="num col-span-2 text-[1.25rem] font-semibold tabular-nums text-ink/55">D{step.day}</div>
-                <div className="col-span-10">
-                  <p className="text-[1.0625rem] font-semibold tracking-[-0.01em]">{text(step.label)}</p>
-                  <p className="mt-2 text-[15px] leading-6 text-ink/68">{text(step.goal)}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-        <aside className="col-span-12 border-y border-ink/15 py-6 md:col-span-5">
-          <h2 className="kicker text-mineral">Guardrails</h2>
-          <div className="mt-5 space-y-4 text-[16px] leading-7 text-ink/75">
-            <p>Stop on reply är aktiverat.</p>
-            <p>Skickfönster: tisdag till torsdag, 08:30 till 15:20.</p>
-            <p>Suppression kontrolleras före varje queue.</p>
-            <p>Ton: {text(businessContext.tone)}</p>
-          </div>
-        </aside>
       </div>
     </PageShell>
   );

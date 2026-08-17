@@ -6,8 +6,6 @@ import { Dashboard as SupportDashboard } from "@/components/snajp/Dashboard";
 import {
   AnalyticsView,
   AssistantView,
-  CampaignDetailView,
-  CampaignsView,
   CompaniesView,
   CompanyDetailView,
   ContactDetailView,
@@ -29,7 +27,6 @@ const sectionProduct: Record<string, ProductKey> = {
   leads: "leads",
   companies: "leads",
   contacts: "leads",
-  campaigns: "leads",
   emails: "leads",
   inbox: "leads",
   analytics: "leads",
@@ -69,8 +66,6 @@ export default async function Page({
       return id ? <CompanyDetailView id={id} /> : <CompaniesView />;
     case "contacts":
       return id ? <ContactDetailView id={id} /> : <ContactsView />;
-    case "campaigns":
-      return id ? <CampaignDetailView id={id} /> : <CampaignsView />;
     case "emails":
       return <EmailStudioSection />;
     case "inbox":
