@@ -27,6 +27,24 @@ async function hasBusinessContext(
 }
 
 export async function proxy(request: NextRequest) {
+  try {
+    return await proxyMedSession(request);
+  } catch (error) {
+    // Proxyn kör FÖRE varje route i matchern. Kastar den blir svaret 500 med tom
+    // body på HELA den inloggade ytan samtidigt — inloggning, dashboard,
+    // inställningar, onboarding och admin — och felet syns inte i UI:t, bara i
+    // Vercel-loggen. Det hände 2026-08-17 på en enda felstavad miljövariabel.
+    //
+    // Samma val som vid saknad env nedan: stå åt sidan hellre än att fälla allt.
+    // Grinden som bär är inte den här — det är requirePlatformAdmin() och
+    // sidornas egna sessionskontroller, som fortfarande kör. Utan session ser en
+    // skyddad sida ingen data att visa.
+    console.error("[proxy] stod åt sidan efter oväntat fel:", error);
+    return NextResponse.next({ request });
+  }
+}
+
+async function proxyMedSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
   // Without Supabase configured there are no sessions to guard. Throwing here

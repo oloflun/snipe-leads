@@ -158,3 +158,80 @@ snajp-support/.venv/Scripts/python.exe -m pytest tests/invariants -q
 Båda krävs. Invariantsviten ligger i repots ROT och körs av ett eget
 CI-jobb — den fångas inte av backendsvitens `pytest`, vilket jag lärde mig
 genom att pusha rött.
+
+---
+
+# TILLÄGG — sessionens andra halva
+
+Gren `feature/plattform-fas1-7`, speglad till `development`. Produktionen
+deployad manuellt via `npx.cmd vercel deploy --prod --yes`.
+
+## Tre fel som alla gömde sig bakom gröna checkar
+
+Det här var sessionens egentliga innehåll, och de hänger ihop i karaktär:
+**något såg friskt ut på den yta man tittade på, medan sanningen fanns
+någon annanstans.**
+
+### 1. Produktionsdeployen hade fallerat sedan maj
+
+`VERCEL_PROJECT_ID` och `VERCEL_ORG_ID` pekade på det gamla `snipra`-projektet.
+Varje körning dog på `Error: Project not found`. Verify-jobbet gick grönt hela
+tiden, så commiten såg deployad ut — och `main` kunde vara i perfekt fas med
+`development` utan att en rad av koden fanns live.
+
+Jag felsökte en hel dag i kod som aldrig deployats. **Kontrollera
+`gh run list --workflow "Deploy — Production"` INNAN du felsöker något som
+"redan är ute".**
+
+Hemligheterna är lagade. `workflow_dispatch` tillagd så deployen går att köra
+om utan låtsas-commit.
+
+### 2. Inloggningsloopen — proxyn tappade sessionscookies
+
+`NextResponse.redirect()` bar inte med sig de roterade auth-cookies som
+`getUser()` skrivit till `supabaseResponse`. Symptomen var TRE olika:
+"Internal Server Error", "Sidan finns inte" på `/admin`, och inloggningar som
+verkade lyckas utan att leda någonstans. En orsak.
+
+Loggen avslöjade det: `/login → /dashboard → /onboarding → /login`.
+
+**Varje ny redirect i `proxy.ts` måste gå via `redirectMedSession()`.** Annars
+är loopen tillbaka, och den syns inte i något test.
+
+### 3. RLS-policyn läste sin egen tabell
+
+`platform_admins_self_read` gav `infinite recursion`. `isPlatformAdmin()` är
+fail-closed och svalde felet, så `/admin` svarade bara 404 — adminraden fanns,
+allt såg rätt ut, sidan fanns ändå inte.
+
+**Läxan för alla tre: verifiera som `authenticated`, aldrig som `postgres`.**
+MCP:n kör med BYPASSRLS och ser rätt även när appen inte gör det.
+
+## Byggt i den här halvan
+
+- **Menyn** på kundservice- och leadsytorna: kontakt, språkval sv/en, GDPR-flik,
+  eskalering via mailto (ingen mejltransport finns — ett API-anrop hade sett ut
+  att fungera och tyst inte nått fram)
+- **`/demo`** — hela arbetsytan utan konto, elva sektioner, mot mockdata.
+  Grinden på `/dashboard` är ORÖRD; att öppna den hade varit ett dataläckage
+- **`/duo-demo`** och `DuoSummary` — duo-ytan, dold för enproduktskunder
+- **Adminöversikten** med intäkt, kostnad, marginal och åtgärdslista, plus en
+  rådgivare som RÄKNAR i stället för att fråga en modell
+- **Affärskontext på fyra fält** (org.nr, webbplats, produkt, fokus) med
+  Luhn-validering — det gamla formuläret hade åtta fält förifyllda med
+  påhittade värden som gick att skicka in rakt av
+- **USP:n** på förstasidan
+- **`lib/tenants/snajp.ts`**, migrationerna 030–033 applicerade mot produktionen
+
+## Kvar
+
+- **`SNAJP_KEY_SNAJP`** — `python scripts/onboard_tenant.py --slug snajp --name "Snajp" --env production`
+- **DEL 3.4** — leads-körningen med tre utkast och `agent_runs`-beviset. Kräver
+  LLM-nyckel; `LLM_PROVIDER`, `DEEPSEEK_API_KEY` och `OPENAI_API_KEY` är alla
+  tomma. **Fortfarande obevisad mot både Postgres och MemoryStorage.**
+- **Inget JS-testramverk finns.** Ekonomimatematiken i `lib/admin/halsa.ts` är
+  verifierad en gång med ett engångsskript, men inte bevakad. Införs vitest bör
+  de fjorton kontrollerna bli permanenta.
+- Admin saknar inställningsvy, per-kund-detalj och prognos
+- `border-ink/12` genereras inte av Tailwind och renderas grå över hela
+  marknadssajten

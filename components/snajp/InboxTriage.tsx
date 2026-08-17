@@ -3,6 +3,7 @@
 import { ChevronDown, Inbox, Loader2, ShieldAlert, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Badge, btnPrimary } from "@/components/ui";
+import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -90,17 +91,22 @@ export function InboxTriage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ emails: sampleEmails })
       });
-      const payload = await response.json();
+      const payload =
+        (await readJsonBody<{
+          offline?: boolean;
+          error?: string;
+          results?: TriageResult[];
+        }>(response)) ?? {};
       if (payload.offline) {
-        setError(payload.error);
+        setError(payload.error ?? "Tjänsten är inte tillgänglig just nu. Försök igen om en stund.");
         return;
       }
       if (!response.ok) {
         throw new Error(payload.error ?? "Okänt fel");
       }
-      setResults(payload.results as TriageResult[]);
+      setResults(payload.results ?? []);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Något gick fel. Försök igen.");
+      setError(felmeddelande(caught));
     } finally {
       setBusy(false);
     }

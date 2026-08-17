@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import type { EmailStudioAction } from "@/lib/agent/email-studio-prompt";
 import type { EmailStudioData } from "@/lib/data/emails";
 import { btnPrimary } from "@/components/ui";
+import { felmeddelande, readJson } from "@/lib/http/json";
 import { useLocale } from "@/lib/i18n";
 import type { Localized } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -52,6 +53,20 @@ type RichResult = {
   action?: string;
 };
 
+/**
+ * Så som API:t faktiskt svarar — lösare än RichResult, eftersom modellen inte
+ * alltid fyller varje fält. Fälten vägs ihop till en RichResult nedan.
+ */
+type RichApiPayload = {
+  original_version?: string | null;
+  new_version?: string;
+  body?: string;
+  explanation?: string;
+  subject?: string;
+  subject_suggestions?: string[];
+  confidence_tips?: string;
+};
+
 function toRefineContext(data: EmailStudioData) {
   return {
     companyName: data.email.companyName ?? undefined,
@@ -94,10 +109,15 @@ export function EmailStudioEditor({
             userId: "current-user"
           })
         });
-        const apiRes = await res.json();
+        // readJson kastar med ett läsbart meddelande vid tom kropp, icke-JSON
+        // eller felstatus — catch nedan visar det. Ett rått
+        // "Unexpected end of JSON input" når aldrig kunden.
+        const apiRes = await readJson<{ success?: boolean; data?: RichApiPayload; error?: string }>(
+          res
+        );
 
-        if (!res.ok || !apiRes.success || !apiRes.data) {
-          setError(apiRes.error || text(ui.failed));
+        if (!apiRes?.success || !apiRes.data) {
+          setError(apiRes?.error || text(ui.failed));
           setActiveAction(null);
           return;
         }
@@ -124,7 +144,7 @@ export function EmailStudioEditor({
 
         setActiveAction(null);
       } catch (e) {
-        setError(e instanceof Error ? e.message : text(ui.network));
+        setError(felmeddelande(e, text(ui.network)));
         setActiveAction(null);
       }
     });

@@ -9,6 +9,7 @@ import { productKeys } from "@/lib/routes";
 import { productCopy, shared } from "@/components/marketing/copy";
 import { imagery, photo, sectionCopy } from "@/components/marketing/copy-sections";
 import { PricingSection } from "@/components/marketing/PricingSection";
+import { UspSection } from "@/components/marketing/UspSection";
 import { ProductSwitch } from "@/components/marketing/ProductSwitch";
 import { useReveal } from "@/components/marketing/useReveal";
 import { cn } from "@/lib/utils";
@@ -176,6 +177,11 @@ export function LandingPhoto({
             </div>
           </div>
         </section>
+
+        {/* LÖFTET, direkt efter hjältebilden. Det här är det första en
+            besökare läser efter rubriken, och det ska svara på "vad får jag"
+            innan sidan hinner beskriva problemet. */}
+        <UspSection />
 
         {/* PROBLEM. Named before the solution is offered. */}
         <section className="border-b border-ink/12">

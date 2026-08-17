@@ -3,6 +3,18 @@ import { generateText } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { getWorkspaceContext } from '@/lib/workspace';
 
+/**
+ * Routen väntar på ett LLM-anrop och var den ENDA under app/api som saknade
+ * maxDuration. Vercels standardtak är betydligt kortare än en omskrivning tar,
+ * så funktionen dödades mitt i — och ett dödat anrop svarar UTAN kropp.
+ * Editorn anropade `.json()` på det tomma svaret och visade webbläsarens råa
+ * "Unexpected end of JSON input" för kunden. Det var den felrapporten.
+ *
+ * 60 s är taket på Vercels nuvarande plan. Håll raden och lägg till den på
+ * varje ny route som väntar på en modell.
+ */
+export const maxDuration = 60;
+
 function parseRichRefine(content: string) {
   const trimmed = content.trim();
 
@@ -248,7 +260,24 @@ Du har tillgång till tidigare konversationer och användardata via Supabase fö
  * snajp-support-proxyn. Den fanns ändå, och INV-SEC-010 hittar den.
  */
 async function harSession(): Promise<boolean> {
-  return Boolean(await getWorkspaceContext());
+  // Fail-closed OCH krascha aldrig.
+  //
+  // Anropet ligger före try-blocket i POST och bygger en Supabase-klient. Är
+  // Supabase felkonfigurerad kastar den — och eftersom inget fångade det svarade
+  // routen 500 UTAN kropp. Editorn anropade .json() på den tomma kroppen och
+  // visade "Unexpected end of JSON input" för besökaren, mitt i produktdemon.
+  // Det hände i produktion 2026-08-17 på ett trasigt NEXT_PUBLIC_SUPABASE_URL.
+  //
+  // "Vet inte" måste betyda "utloggad" här, aldrig "släpp igenom": utloggad ger
+  // simuleringen, som är gratis. Ett konfigurationsfel kan alltså kosta en
+  // besökare det riktiga modellsvaret, men aldrig ge bort modellen — och aldrig
+  // fälla sidan.
+  try {
+    return Boolean(await getWorkspaceContext());
+  } catch (error) {
+    console.error("[email-studio] kunde inte avgöra session, behandlar som utloggad:", error);
+    return false;
+  }
 }
 
 export async function POST(request: NextRequest) {

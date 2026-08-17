@@ -117,8 +117,44 @@ export async function proxyWithApiKey(
         cache: "no-store",
         signal: controller.signal
       });
-      const body = await response.json();
-      return NextResponse.json(body, { status: response.status });
+      // Ett riktigt HTTP-svar ska vidarebefordras, inte göras om.
+      //
+      // Tidigare stod `await response.json()` här, i samma try som fetch. En
+      // kropp som inte var JSON — Renders HTML-sida vid 502, eller en tom kropp
+      // när tjänsten dödades mitt i — kastade då likadant som ett nätverksfel
+      // och föll in i retry-slingan. Fem försök à 10 s plus pauser tog över 50
+      // sekunder, vilket i sin tur sprängde Vercels maxDuration. Klienten fick
+      // ett TOMT svar, och frontends `.json()` kastade "Unexpected end of JSON
+      // input" — ett felmeddelande som pekar på frontend fast orsaken satt här.
+      //
+      // Kroppen läses därför som text först, och bara fetch-fel når catch.
+      const rawBody = (await response.text()).trim();
+
+      if (response.status === 204 || response.status === 205) {
+        return new NextResponse(null, { status: response.status });
+      }
+
+      if (!rawBody) {
+        return NextResponse.json(
+          {
+            error: `Backenden svarade ${response.status} utan innehåll.`,
+            upstreamStatus: response.status
+          },
+          { status: response.status >= 400 ? response.status : 502 }
+        );
+      }
+
+      try {
+        return NextResponse.json(JSON.parse(rawBody), { status: response.status });
+      } catch {
+        return NextResponse.json(
+          {
+            error: `Backenden svarade ${response.status} med ett innehåll som inte är JSON.`,
+            upstreamStatus: response.status
+          },
+          { status: response.status >= 400 ? response.status : 502 }
+        );
+      }
     } catch (cause) {
       lastCause = cause;
       // Bara timeout/nätverksfel är värt att göra om — ett riktigt HTTP-svar

@@ -4,6 +4,7 @@ import { ImagePlus, Loader2, Send, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { btnPrimary } from "@/components/ui";
 import { AgentMenu } from "@/components/snajp/AgentMenu";
+import { readJsonBody } from "@/lib/http/json";
 import { useLocale } from "@/lib/i18n";
 import { getTenant } from "@/lib/tenants";
 import { cn } from "@/lib/utils";
@@ -160,12 +161,23 @@ export function SupportChat({ tenant, session }: SupportChatProps = {}) {
             attachments
           })
         });
-        const payload = await response.json();
+        // readJsonBody behåller offline-läget (503 med `offline: true`) som ett
+        // läge i UI:t, men kastar läsbart om kroppen är tom eller inte JSON.
+        const payload =
+          (await readJsonBody<{
+            offline?: boolean;
+            error?: string;
+            job_id?: string;
+          }>(response)) ?? {};
         if (payload.offline) {
           setMode("offline");
           setMessages((current) => [
             ...current,
-            { id: crypto.randomUUID(), role: "system", content: payload.error }
+            {
+              id: crypto.randomUUID(),
+              role: "system",
+              content: payload.error ?? "Supporten är inte tillgänglig just nu. Försök igen om en stund."
+            }
           ]);
           return;
         }
@@ -181,25 +193,38 @@ export function SupportChat({ tenant, session }: SupportChatProps = {}) {
             ? `/api/snajp-support/jobs/${payload.job_id}?tenant=${encodeURIComponent(tenant)}`
             : `/api/snajp-support/jobs/${payload.job_id}`;
           const jobResponse = await fetch(jobUrl);
-          const job = await jobResponse.json();
+          const job =
+            (await readJsonBody<{
+              offline?: boolean;
+              error?: string;
+              status?: string;
+              result?: { simulation?: boolean; reply: string };
+            }>(jobResponse)) ?? {};
           if (job.offline) {
             setMode("offline");
             setMessages((current) => [
               ...current,
-              { id: crypto.randomUUID(), role: "system", content: job.error }
+              {
+                id: crypto.randomUUID(),
+                role: "system",
+                content: job.error ?? "Supporten är inte tillgänglig just nu. Försök igen om en stund."
+              }
             ]);
             return;
           }
           if (!alive.current) return;
           if (job.status === "completed" && job.result) {
-            setMode(job.result.simulation ? "simulation" : "live");
+            // Lokal bindning: inuti setMessages-callbacken kan TS inte behålla
+            // avsmalningen av job.result.
+            const resultat = job.result;
+            setMode(resultat.simulation ? "simulation" : "live");
             setMessages((current) => [
               ...current,
               {
                 id: crypto.randomUUID(),
                 role: "agent",
-                content: job.result.reply,
-                meta: job.result
+                content: resultat.reply,
+                meta: resultat
               }
             ]);
             return;

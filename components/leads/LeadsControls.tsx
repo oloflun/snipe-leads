@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { createDemoLeadsFetch } from "@/lib/demo/leads-controls";
+import { felmeddelande, readJsonBody } from "@/lib/http/json";
 
 /**
  * Kundens kontroller över leads-agenten: hur långt den får gå, vem den ska
@@ -61,31 +63,59 @@ function asList(value: string): string[] {
     .filter(Boolean);
 }
 
-export function LeadsControls() {
+/**
+ * `demo` byter ut backend-anropen mot exempeldata i webbläsaren. Se
+ * lib/demo/leads-controls.ts för skälet — grinden mot den riktiga backenden
+ * står kvar orörd, det är indatan som byts.
+ */
+export function LeadsControls({ demo = false }: Readonly<{ demo?: boolean }>) {
   const [config, setConfig] = useState<Config | null>(null);
   const [queue, setQueue] = useState<QueueItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  // En instans per monterad vy, så att ändringar i demon består mellan anrop.
+  const demoFetch = useRef<ReturnType<typeof createDemoLeadsFetch> | null>(null);
+  if (demo && !demoFetch.current) {
+    demoFetch.current = createDemoLeadsFetch();
+  }
+
+  /** Samma signatur som fetch, så anropsplatserna nedan är identiska i båda lägena. */
+  const call = useCallback(
+    (path: string, init?: RequestInit): Promise<Response> =>
+      demo && demoFetch.current ? demoFetch.current(path, init) : fetch(path, init),
+    [demo]
+  );
+
   const load = useCallback(async () => {
     setError(null);
     try {
       const [configResponse, queueResponse] = await Promise.all([
-        fetch("/api/snajp-support/leads/config", { cache: "no-store" }),
-        fetch("/api/snajp-support/leads/queue", { cache: "no-store" })
+        call("/api/snajp-support/leads/config", { cache: "no-store" }),
+        call("/api/snajp-support/leads/queue", { cache: "no-store" })
       ]);
       if (!configResponse.ok) {
-        const body = await configResponse.json().catch(() => ({}));
-        throw new Error(body.error ?? `Kunde inte hämta inställningarna (${configResponse.status}).`);
+        const body = await readJsonBody<{ error?: string }>(configResponse).catch(() => null);
+        throw new Error(
+          body?.error ?? `Kunde inte hämta inställningarna (${configResponse.status}).`
+        );
       }
-      setConfig(await configResponse.json());
-      setQueue(queueResponse.ok ? (await queueResponse.json()).items ?? [] : []);
+      const laddadConfig = await readJsonBody<Config>(configResponse);
+      if (laddadConfig) {
+        setConfig(laddadConfig);
+      }
+      // Kön är inte kritisk för vyn — en trasig kropp ska inte fälla
+      // inställningarna som redan lästs.
+      const koSvar = queueResponse.ok
+        ? await readJsonBody<{ items?: QueueItem[] }>(queueResponse).catch(() => null)
+        : null;
+      setQueue(koSvar?.items ?? []);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Något gick fel.");
+      setError(felmeddelande(cause));
       setQueue([]);
     }
-  }, []);
+  }, [call]);
 
   useEffect(() => {
     void load();
@@ -95,7 +125,7 @@ export function LeadsControls() {
     setError(null);
     setMessage(null);
     startTransition(async () => {
-      const response = await fetch("/api/snajp-support/leads/config", {
+      const response = await call("/api/snajp-support/leads/config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(patch)
@@ -114,7 +144,7 @@ export function LeadsControls() {
     setError(null);
     setMessage(null);
     startTransition(async () => {
-      const response = await fetch(`/api/snajp-support/leads/queue/${itemId}/${action}`, {
+      const response = await call(`/api/snajp-support/leads/queue/${itemId}/${action}`, {
         method: "POST"
       });
       if (!response.ok) {
