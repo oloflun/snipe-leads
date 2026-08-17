@@ -1,12 +1,13 @@
 "use client";
 
-import { ShieldCheck } from "lucide-react";
+import { LogOut, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Logo } from "@/components/Logo";
 import { AgentMenu } from "@/components/snajp/AgentMenu";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
+import { signOut } from "@/lib/actions/auth";
 import { ScopeSwitch } from "@/components/dashboard/ScopeSwitch";
 import { useLocale } from "@/lib/i18n";
 import { routesForProducts } from "@/lib/routes";
@@ -55,7 +56,8 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   const pathname = usePathname();
   const router = useRouter();
   const { t, locale, toggleLocale } = useLocale();
-  const { products, workspaceName, availableScopes, shows, isPlatformAdmin } = useDashboard();
+  const { products, workspaceName, availableScopes, shows, isPlatformAdmin, signedIn } =
+    useDashboard();
 
   // Entitlement decides what exists; the scope switch decides what is on screen
   // right now. A nav listing eight Leads sections while the scope reads "Support"
@@ -106,6 +108,26 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                 supportvyn, och en meny som bara finns på hälften av ytorna är
                 en meny användaren slutar leta efter. */}
             <AgentMenu yta="leads" kontext={`dashboard${pathname ? `:${pathname}` : ""}`} />
+
+            {/* Utloggning. Fanns inte alls: signOut() i lib/actions/auth.ts var
+                skriven och fungerande, men ingen komponent anropade den. Enda
+                sättet att byta konto var att rensa cookies för hand.
+                Samma sorts lucka som den saknade /admin-länken — funktionen var
+                byggd, vägen dit var det inte.
+
+                Formulär och inte onClick: signOut är en server action, och ett
+                formulär gör att den fungerar även innan JavaScript laddat. */}
+            {signedIn ? (
+              <form action={signOut}>
+                <button
+                  type="submit"
+                  className="focus-ring inline-flex min-h-11 items-center gap-1.5 rounded-input px-3 text-sm font-medium text-ink/55 transition-colors hover:text-ink"
+                >
+                  <LogOut className="h-4 w-4" aria-hidden />
+                  <span className="hidden sm:inline">Logga ut</span>
+                </button>
+              </form>
+            ) : null}
           </div>
 
           <nav
