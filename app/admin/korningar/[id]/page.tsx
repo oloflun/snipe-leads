@@ -3,6 +3,10 @@ import { getRun, unwrap, type StepLogEntry } from "@/lib/data/admin";
 
 export const dynamic = "force-dynamic";
 
+// Backenden ligger på Renders gratisnivå och tar upp till ~35 s att vakna.
+// Utan detta dödar Vercel renderingen mitt i uppvakningen. Se app/admin/page.tsx.
+export const maxDuration = 60;
+
 /**
  * Spårvyn. Den enda platsen i produkten med genuint hög täthet, och den enda
  * som svarar på "varför skrev den så här?".

@@ -4,6 +4,20 @@ import { listTenants, unwrap } from "@/lib/data/admin";
 export const dynamic = "force-dynamic";
 
 /**
+ * Sidan är en server-komponent som hämtar från Snajp-Support-backenden, och
+ * den ligger på Renders gratisnivå: efter 15 minuters inaktivitet somnar den
+ * och tar upp till ~35 sekunder att vakna (uppmätt 33,7 s 2026-08-17).
+ *
+ * Vercels standardtak är kortare än så. Utan den här raden dödas renderingen
+ * mitt i uppvakningen, och adminvyn ser trasig ut just när den öppnas första
+ * gången på morgonen — alltså nästan varje gång den faktiskt används.
+ *
+ * `route.ts`-filerna under app/api/ har redan raden och bevakas av
+ * INV-API-001. Sidor omfattades inte, vilket är precis varför den här saknades.
+ */
+export const maxDuration = 60;
+
+/**
  * Kundöversikten. Hela portföljen på en skärm: intäkt, uppskattad kostnad,
  * marginal och vilka kunder som kräver en åtgärd.
  *

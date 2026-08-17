@@ -37,9 +37,25 @@ UI_DIRS = (ROOT / "app", ROOT / "lib", ROOT / "components")
 #: felsemantik i den (proxyns `{ offline: true }` kommer med 503).
 SAFE_READERS = ("readJson", "readJsonBody")
 
-#: Routes som väntar på en modell eller på Render-backenden. Utan maxDuration
-#: dödas de mitt i och svarar utan kropp.
-SLOW_MARKERS = ("generateText", "proxyWithApiKey", "proxyToBackend", "proxyAsTenant")
+#: Routes och SIDOR som väntar på en modell eller på Render-backenden. Utan
+#: maxDuration dödas de mitt i och svarar utan kropp.
+#:
+#: `listTenants`/`listRuns`/`listEvents`/`getRun` står med eftersom adminsidorna
+#: är server-komponenter som hämtar direkt via lib/data/admin.ts, utan att gå
+#: genom någon route. Den vägen omfattades inte när invarianten skrevs, och
+#: följden var att varenda adminsida saknade maxDuration medan alla routes hade
+#: den — vyn hann inte renderas innan Vercel dödade den, varje gång backenden
+#: sovit.
+SLOW_MARKERS = (
+    "generateText",
+    "proxyWithApiKey",
+    "proxyToBackend",
+    "proxyAsTenant",
+    "listTenants",
+    "listRuns",
+    "listEvents",
+    "getRun",
+)
 
 #: `request.json()` är INKOMMANDE kropp i en route — Next kastar där ett
 #: hanterbart fel, och routen har ingen Response att kontrollera status på.
@@ -92,11 +108,15 @@ def _rel(path: Path) -> str:
 
 
 def _route_files() -> list[Path]:
-    return sorted(API_DIR.rglob("route.ts"))
+    """Både API-routes och sidor: en server-komponent som hämtar från backenden
+    har exakt samma tak att slå i som en route har."""
+    filer = list(API_DIR.rglob("route.ts"))
+    filer.extend((ROOT / "app").rglob("page.tsx"))
+    return sorted(set(filer))
 
 
 def _route_rel(path: Path) -> str:
-    return path.relative_to(API_DIR).as_posix()
+    return path.relative_to(ROOT).as_posix()
 
 
 def test_det_finns_filer_att_kontrollera():
