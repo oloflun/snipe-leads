@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { PageShell } from "@/components/AppShell";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
+import { DuoSummary } from "@/components/dashboard/DuoSummary";
 import { Dashboard as SupportDashboard } from "@/components/snajp/Dashboard";
 import { DashboardBody } from "@/components/WorkspaceViews";
 import { useLocale } from "@/lib/i18n";
@@ -69,6 +70,10 @@ export function Overview() {
   return (
     <PageShell kicker={text(copy.kicker)} title={text(copy.title)} description={text(description)}>
       <div className="space-y-12">
+        {/* Högst upp, och bara när båda produkterna finns. Komponenten
+            returnerar null av sig själv annars — se DuoSummary. */}
+        <DuoSummary />
+
         {shows("leads") ? (
           <section>
             {scope === "both" ? (
