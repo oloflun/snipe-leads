@@ -23,6 +23,7 @@ const FALLBACK: DashboardState = {
   variant: "demo",
   workspaceName: null,
   signedIn: false,
+  isDemo: false,
   isPlatformAdmin: false
 };
 

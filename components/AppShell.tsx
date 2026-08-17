@@ -55,7 +55,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   const pathname = usePathname();
   const router = useRouter();
   const { t, locale, toggleLocale } = useLocale();
-  const { products, workspaceName, availableScopes, shows, isPlatformAdmin, signedIn } =
+  const { products, workspaceName, availableScopes, shows, isPlatformAdmin, isDemo, signedIn } =
     useDashboard();
 
   // Entitlement decides what exists; the scope switch decides what is on screen
@@ -182,7 +182,28 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
         </div>
       </header>
 
-      <main>{children}</main>
+      <main>
+        {/* Demo-banner: en demo-workspace ska veta vad den är och vad som
+            begränsar den. Uppgraderingen till fullt konto (med planval) är
+            uppskjuten — vägen ut är kontakt just nu. */}
+        {isDemo ? (
+          <div className="border-b border-ochre/30 bg-ochre/10">
+            <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 md:px-6">
+              <span className="kicker text-ochre">Demo</span>
+              <span className="text-[13px] text-ink/70">
+                Du testar Snajp med ett begränsat antal körningar.
+              </span>
+              <a
+                href="mailto:hej@snajp.se"
+                className="kicker ml-auto text-ochre underline underline-offset-4 hover:text-ink"
+              >
+                Kontakta oss
+              </a>
+            </div>
+          </div>
+        ) : null}
+        {children}
+      </main>
     </div>
   );
 }

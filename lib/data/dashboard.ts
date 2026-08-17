@@ -28,6 +28,8 @@ export type DashboardState = {
   variant: "fresh" | "demo";
   workspaceName: string | null;
   signedIn: boolean;
+  /** Demo-läge: egen instans utan förladdad data, begränsat antal körningar. */
+  isDemo: boolean;
   /**
    * Plattformsadmin — enbart för att kunna VISA vägen till /admin.
    *
@@ -49,6 +51,7 @@ const ANONYMOUS: DashboardState = {
   variant: "demo",
   workspaceName: null,
   signedIn: false,
+  isDemo: false,
   isPlatformAdmin: false
 };
 
@@ -78,6 +81,7 @@ export async function resolveDashboardState(): Promise<DashboardState> {
     variant: (await workspaceHasData(context.workspace.id, context.user.id)) ? "demo" : "fresh",
     workspaceName: context.workspace.name,
     signedIn: true,
+    isDemo: context.workspace.is_demo,
     isPlatformAdmin: Boolean(await getPlatformAdmin())
   };
 }

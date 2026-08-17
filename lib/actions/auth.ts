@@ -3,6 +3,8 @@
 import { redirect } from "next/navigation";
 import { AuthError } from "next-auth";
 
+import { randomBytes, randomUUID } from "node:crypto";
+
 import { auth, ensureWorkspace, signIn, signOut as authSignOut } from "@/lib/auth";
 import { sql } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
@@ -133,6 +135,39 @@ export async function signUpWithPassword(
     );
   } catch (error) {
     return { success: false, error: authErrorMessage((error as Error).message) };
+  }
+
+  return signInWithPassword(email, password, "/onboarding");
+}
+
+/**
+ * Starta en demo — en isolerad workspace UTAN förladdad data, där besökaren
+ * får testa mot sitt eget bolag med begränsat antal körningar.
+ *
+ * En demo behöver ingen riktig mail eller ett lösenord användaren känner till:
+ * identiteten skapas med slumpade värden, triggern on_auth_user_created skapar
+ * workspacen, och vi märker den `is_demo` så löptaket och uppgraderingsvägen
+ * kan skilja den från ett fullt konto. Användaren skickas till /onboarding för
+ * att lägga in sina egna uppgifter.
+ */
+export async function startDemo(): Promise<AuthActionResult> {
+  const email = `demo-${randomUUID()}@snajp.se`;
+  const password = randomBytes(24).toString("base64url");
+
+  try {
+    const rows = await sql<{ id: string }>(
+      `insert into auth.users (email, encrypted_password, raw_user_meta_data, email_confirmed_at)
+       values ($1, $2, jsonb_build_object('full_name', 'Demo'), now()) returning id`,
+      [email, await hashPassword(password)]
+    );
+    // Triggern skapade workspacen med is_demo=false; markera den här.
+    await sql(
+      `update public.workspaces set is_demo = true
+       from public.profiles p where workspaces.id = p.workspace_id and p.id = $1`,
+      [rows[0].id]
+    );
+  } catch (error) {
+    return { success: false, error: "Demo kunde inte startas. Försök igen." };
   }
 
   return signInWithPassword(email, password, "/onboarding");

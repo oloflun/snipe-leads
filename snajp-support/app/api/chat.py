@@ -97,7 +97,9 @@ async def chat(
     # saknas den gäller bara tenant-taket, och en förfalskad rubrik kan bara
     # ge en snävare kvot åt den som förfalskar den.
     scopes = rate_limit_db.scopes_for(
-        tenant["tenant_id"], request.headers.get("x-snajp-user")
+        tenant["tenant_id"],
+        request.headers.get("x-snajp-user"),
+        is_demo=request.headers.get("x-snajp-demo") == "true",
     )
     try:
         await rate_limit_db.enforce(request.app.state.storage, scopes)
