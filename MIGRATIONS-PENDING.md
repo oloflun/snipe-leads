@@ -1,113 +1,41 @@
 # Migrationer — status
 
-Tio migrationer skrivna 2026-08-15. **Nio är körda och verifierade mot
-produktionsdatabasen.** En återstår och kan inte köras än, av ett skäl som
-inte är tekniskt.
+## 030–033: APPLICERADE MOT PRODUKTIONEN 2026-08-17
 
-## Körda och verifierade
+Kördes med versioner som matchar filnamnen (`030`–`033`), inte med nya
+tidsstämplar. Det är avsiktligt: Management-API:t registrerar annars egna
+14-siffriga versioner utan motsvarande fil, vilket är exakt den dubbla
+bokföring som fällde branching-checken tidigare i veckan.
 
 | Migration | Verifierat med |
 |---|---|
-| `018_rpc_hardening` | `pg_proc.proacl` visar varken PUBLIC (`=X`) eller `anon` på `handle_new_user` och `rls_auto_enable`. `ensure_workspace_for_current_user` har kvar `authenticated=X` — utan den går ingen att logga in. Supabase säkerhetsrådgivare flaggar inte längre någon av de två. |
-| `018b` (tillägg) | `current_workspace_id()` har nu låst `search_path`. Rådgivarens `function_search_path_mutable` för den är borta. |
-| `019_rate_limit` | `platform_rate_events` finns, RLS på, en policy (`snajp_app`), sekvensgrant satt. |
-| `020_platform_admins` | RLS på, `platform_admins_self_read` för `authenticated`, **inga skrivpolicyer**. |
-| `022_workspace_addons` | Check-villkoret räknar upp de sex tilläggen. |
-| `023_agent_config_settings` | `send_queue_status_check` innehåller `awaiting_review`. Autonomi-villkoret på plats. Inga befintliga `agent_configs`-rader att sätta default på — varje ny rad får `draft` från koden. |
-| `024_prospect_icp_fit` | `icp_fit`, `qualified`, `disqualifiers` finns med index. |
-| `025_agent_runs_fix` | **Blockeraren är löst.** En rad med `agent_type='leads_research'` gick att spara i produktionsdatabasen, vilket den aldrig gjort. Testraden raderad efteråt. |
-| `026_platform_events` | RLS på, en policy (`snajp_app`), tabellen svarar på `select count(*)`. |
-| `027_step_traces` | Kommentar och `agent_runs_tenant_created_idx` på plats. |
+| `030_suppressions_tenant_scope` | `tenant_id` finns på `suppressions`, index och RLS-policy för `snajp_app` på plats. Backfillen var en no-op — tabellen är tom. |
+| `031_prospect_nischfalt` | Alla åtta kolumner finns (`orgnr`, `ort`, `postnr`, `sni`, `website`, `anstallda`, `omsattning`, `foretagsnyckel`). Den genererade nyckeln räknas i databasen, inte i koden. |
+| `032_platform_admin_bootstrap` | `snajpsupport@gmail.com` står i `platform_admins`. Triggern på `auth.users` är exception-säker enligt läxan i `006`. |
+| `033_platform_admins_recursion` | Policyvillkoret är `user_id = auth.uid()` — rör inte längre sin egen tabell. |
 
-## Skrivna 2026-08-16 — INTE körda mot produktionen
-
-Båda går via preview-grenen först, enligt DEPLOY.md:s ordning. De applicerades
-alltså av Supabase-integrationen vid push till `development`, inte för hand.
-
-### `030_suppressions_tenant_scope.sql`
-
-Ger `public.suppressions` en `tenant_id`-kolumn.
-
-**Varför:** tabellen var workspace-skopad och lästes bara av dashboarden. Koden
-som avgör om ett mejl går iväg — `send_guard` regel 3 — kör i backenden, som
-bara känner `tenant_id`. Utan kolumnen skrevs avregistreringen på ett ställe
-och kontrollerades inte alls på det andra: den som klickat "avregistrera" hade
-fått nästa utskick ändå.
-
-En kolumn, inte en ny tabell. Två suppressionslistor som kan säga emot varandra
-är värre än ingen — vilken som gällde hade avgjorts av vilken kodväg som råkade
-fråga, och den frågan besvaras alltid efter att mejlet gått.
-
-Backfillen är en no-op i dag: `suppressions` har noll rader i produktionen
-(kontrollerat).
-
-### `031_prospect_nischfalt.sql`
-
-Ger `public.prospects` sju nischfält, `score_breakdown`, `score_total` och en
-genererad `foretagsnyckel`.
-
-**Varför:** tabellen hade company_name, contact_name, contact_email,
-language_state, status, icp_fit, qualified och disqualifiers — alltså inget av
-orgnr, ort, postnr, sni, hemsida, anställda eller omsättning. Det är exakt de
-fält DEL 1:s källor producerar och scoringen dömer på. Utan dem kunde en
-körning hitta rätt bolag men bara spara namnet, och `send_guard` regel 5:s
-karens per företag hade saknat nyckel att räkna på.
-
-`foretagsnyckel` är GENERERAD och får inte skrivas av koden: två uträkningar av
-samma nyckel är två tillfällen att räkna olika, och den skillnaden syns först
-när ett dubbelutskick redan gått. Uttrycket är verifierat mot produktionen — det
-ger samma svar som `send_guard.foretagsnyckel()` i Python (`556824-9022` →
-`5568249022`, tomt org.nr → e-postdomänen), och alla ingående funktioner är
-`immutable`, vilket krävs för en `stored`-kolumn.
-
-### `032_platform_admin_bootstrap.sql`
-
-Ersätter `021`:s ordningsberoende seed med ett tillstånd.
-
-**Varför:** 021 infogar admin med en `select ... where email = ...`. Finns inte
-kontot när den körs blir den en tyst no-op, och någon måste minnas att köra om
-den efter registreringen. Symptomet när det glöms är att `/admin` svarar 404
-för rätt person utan att något ser trasigt ut.
-
-032 lägger adressen i `platform_admin_bootstrap` och ger graden via en trigger
-när adressen är BEKRÄFTAD (`email_confirmed_at is not null`). Ordningen slutar
-spela roll: registrera kontot före eller efter, graden sätts ändå.
-
-Triggerns kropp ligger i en exception-hanterare, enligt läxan i `006`: en
-trigger på `auth.users` som kastar ger registreringen 500 och låser kontot ute
-permanent. En utebliven admingrad rättas med en rad SQL; en fälld registrering
-är oreparabel för det kontot.
-
-**Kvar för dig:** registrera `snajpsupport@gmail.com` på `/login`. Lösenordet
-sätter du — aldrig en agent, aldrig en migration. Verifiera sedan:
-
-```sql
-select u.email, pa.granted_at
-  from public.platform_admins pa
-  join auth.users u on u.id = pa.user_id;
-```
-
-Och den riktiga kontrollen: `/admin` ska ge 404 för ett vanligt konto och 200
-för adminkontot.
+**Den avgörande verifieringen** gjordes som `authenticated` med adminkontots
+uid, inte som `postgres`. Frågan `isPlatformAdmin()` ställer ger nu exakt en
+rad. Som `postgres` med BYPASSRLS hade den sett rätt ut hela tiden — det är
+precis den blindheten som lät rekursionen ligga oupptäckt.
 
 ## Återstår
 
+### `SNAJP_KEY_SNAJP`
+
+Vår egen arbetsyta har `slug='snajp'`, `ss_tenant_id` satt och en configfil i
+`lib/tenants/snajp.ts`. Kvar är API-nyckeln mot backenden:
+
+```bash
+python scripts/onboard_tenant.py --slug snajp --name "Snajp" --env production
+```
+
+Utan den svarar `requireSnajpTenant()` med 503 och namnger variabeln. Det är
+avsiktligt — utan nyckel svarar vi hellre inte alls än som ett annat bolag.
+
 ### `021_seed_platform_admin.sql`
 
-Kan inte köras än: `snajpsupport@gmail.com` finns **inte** i `auth.users`
-(kontrollerat). Migrationen hade blivit en tyst no-op.
-
-1. Registrera kontot på `/login` → fliken "Skapa konto".
-2. Kör migrationen — den är idempotent.
-3. Verifiera:
-   ```sql
-   select u.email, pa.granted_at
-   from public.platform_admins pa join auth.users u on u.id = pa.user_id;
-   ```
-4. Den riktiga verifieringen: `/admin` ska ge 404 för ett vanligt konto och
-   200 för admin-kontot.
-
-Lösenordet sätter du. Aldrig en agent, aldrig en migration.
+Ersatt av `032`, som gör samma sak utan ordningsberoende. Kan tas bort.
 
 ## Fortfarande öppet — inte migrationer
 
