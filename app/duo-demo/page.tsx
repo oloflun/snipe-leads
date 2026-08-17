@@ -35,6 +35,7 @@ export const metadata = {
 const DEMO_STATE = {
   // Demon är aldrig plattformsadmin: den ytan visar ALLA kunders siffror.
   isPlatformAdmin: false,
+  isDemo: false,
   // BÅDA produkterna. Det är hela poängen med ytan.
   products: ["leads", "support"] as const,
   addons: [],

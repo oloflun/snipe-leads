@@ -37,6 +37,8 @@ export type SnajpTenant = {
    * vidare. Tenant-taket sitter kvar oavsett vad som står här.
    */
   userId: string;
+  /** Demo-workspace — går till backenden som X-Snajp-Demo för ett lägre löptak. */
+  isDemo: boolean;
 };
 
 export async function requireSnajpTenant(): Promise<SnajpTenant> {
@@ -75,5 +77,11 @@ export async function requireSnajpTenant(): Promise<SnajpTenant> {
     );
   }
 
-  return { workspaceId: workspace.id, slug: workspace.slug, apiKey, userId: user.id };
+  return {
+    workspaceId: workspace.id,
+    slug: workspace.slug,
+    apiKey,
+    userId: user.id,
+    isDemo: workspace.is_demo
+  };
 }

@@ -29,6 +29,34 @@ utomstående, inga skärmdumpar med kunddata.
 
 Fullständig beskrivning av miljöer, variabler och fällor: [`DEPLOY.md`](DEPLOY.md).
 
+## Arbetssätt: automatisera först, fråga sist
+
+**Sträva alltid efter minsta möjliga friktion för användaren.** Varje fråga du
+ställer är arbete du lämpar över. Innan du ber om något:
+
+1. **Undersök om det verkligen kräver användarens hand.** Ofta finns ett CLI,
+   ett API eller en MCP som gör samma sak. Att ett moment står beskrivet som
+   "gör detta i dashboarden" betyder inte att det måste göras där.
+2. **Installera verktyget själv** om tjänsten redan används i projektet.
+   Supabase CLI (`npx supabase`), Vercel CLI, Render REST API, `gh` — alla
+   används här och får installeras och konfigureras utan att fråga.
+3. **Bygg ett skript i stället för en instruktion.** `scripts/keys.py`,
+   `scripts/onboard_tenant.py` och `scripts/verify_render.py` är mönstret: det
+   som annars blivit en punktlista i ett dokument blir ett kommando som går att
+   köra om, verifiera och falsifiera.
+4. **Fråga bara om du inte kan lösa det själv** — och säg då exakt varför, inte
+   bara att det behövs.
+
+Undantag som ALLTID kräver användaren, oavsett hur automatiserbart det ser ut:
+lösenord till konton, betalningar och planuppgraderingar, OAuth-samtycken hos
+tredjepartskonsoler, och åtgärder som är svåra att ångra (force-push som
+skriver över någon annans arbete, radering av produktionsdata).
+
+**Läckagespärr:** när du automatiserar med hemligheter — skriv aldrig ut dem.
+Läs in dem ur `.env.deploy` (gitignorerad) i skriptet, echa dem aldrig i ett
+skalkommando, och kom ihåg att en `cat` under felsökning läcker lika mycket som
+en `echo`. Det har hänt i den här kodbasen.
+
 <!-- agent-chorus:claude:start -->
 ## Agent Chorus Integration
 

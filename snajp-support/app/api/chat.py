@@ -5,6 +5,7 @@ skopade till den tenanten.
 """
 
 import asyncio
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -12,6 +13,8 @@ from ..config import get_settings
 from . import rate_limit_db
 from .deps import require_tenant
 from .schemas import ChatRequest
+
+logger = logging.getLogger("snajp-support")
 
 router = APIRouter()
 
@@ -73,6 +76,14 @@ async def _process(
         await rate_limit_db.record(storage, scopes or [], len(result.get("step_log") or []))
         await app_state.jobs.complete(job_id, result)
     except Exception as error:  # noqa: BLE001 — jobbet får aldrig fastna i processing
+        # Loggen får HELA stacken, jobbet får en mening.
+        #
+        # Utan raden nedan blev varje agentfel en enrads-gåta: en skarp körning
+        # föll på "'ascii' codec can't encode character 'à' in position 7"
+        # och ingenting i loggen sa VAR. Att felsöka en produktionsincident på
+        # ett stringifierat undantag är att gissa. Jobbet ska däremot inte bära
+        # en stack — den går till kunden.
+        logger.exception("Agentkörningen misslyckades (job %s, tenant %s)", job_id, tenant_id)
         await app_state.jobs.fail(job_id, f"Agentkörningen misslyckades: {error}")
 
 
@@ -86,7 +97,9 @@ async def chat(
     # saknas den gäller bara tenant-taket, och en förfalskad rubrik kan bara
     # ge en snävare kvot åt den som förfalskar den.
     scopes = rate_limit_db.scopes_for(
-        tenant["tenant_id"], request.headers.get("x-snajp-user")
+        tenant["tenant_id"],
+        request.headers.get("x-snajp-user"),
+        is_demo=request.headers.get("x-snajp-demo") == "true",
     )
     try:
         await rate_limit_db.enforce(request.app.state.storage, scopes)

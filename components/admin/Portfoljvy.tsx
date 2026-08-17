@@ -196,7 +196,7 @@ export function Portfoljvy({ tenants }: Readonly<{ tenants: TenantRow[] }>) {
       <Radgivare rader={rader.map(({ rad, ekonomi }) => ({ namn: rad.name, ekonomi }))} />
 
       <p className="mt-8">
-        <Link href="/admin/korningar" className="focus-ring text-[15px] text-ochre underline underline-offset-4">
+        <Link href="/dashboard/admin/korningar" className="focus-ring text-[15px] text-ochre underline underline-offset-4">
           Se alla körningar
         </Link>
       </p>

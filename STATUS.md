@@ -1,5 +1,44 @@
 # Snipra Status
 
+## 2026-08-16 — Claude — Plattformen färdig, preview-miljö byggd, riktningsbyte mot enad stack
+
+**Alla sju faser i plattformsplanen är byggda och committade.** Fas 1.3–1.5 (RPC-härdning,
+DB-baserad rate limiting, INV-SEC-010), Fas 2 (plattformsadmin, glömt lösenord, OAuth,
+inbjudningar), Fas 3 (fail-closed entitlements, tillägg, navrensning), Fas 4 (autonominivå,
+ICP, körkontroller), Fas 6 (admin master control, notiscenter, spårvy). 454 backend-tester och
+47 invarianter gröna.
+
+**Migration 018–029 körda och verifierade i produktion.** Blockeraren är löst: `agent_runs`
+avvisade varje leads-körning i ett halvår, och `MemoryStorage` saknade villkoret så testerna
+var gröna. Två RLS-buggar hittades först vid skarp körning som `snajp_app`:
+
+- **028** — `current_setting('app.tenant_id', true)` blir `''`, aldrig NULL, efter första
+  skopade transaktionen på en poolad anslutning. Varje senare oskopad fråga kastade `''::uuid`.
+- **029** — 028 stoppade kraschen men inte TYSTNADEN: adminvyn gav 0 körningar av 10, och
+  kundöversikten fyra kunder med nollställda tal. Trovärdiga men felaktiga siffror.
+
+**Preview-miljön fungerar.** Push till `development` ger Vercel Preview, Render
+`snajp-support-dev` och en Supabase-gren som är en full spegel av produktionen (`--with-data`,
+Antons beslut — konsekvensen är kunddata i preview, dokumenterat i `CLAUDE.md`).
+
+**Nio buggar som bara verklig körning avslöjade**, bland dem tre kolumnbuggar i SQL som aldrig
+exekverats, `scheduler.py` som hade adresserat mejl till strängen "okänd", migrationskedjan som
+inte var självbärande, och `INV-DEPLOY-001` som blev blind när en andra tjänst lades till.
+
+**Två misstag jag gjorde:** raderade två produktionsvariabler i Vercel (`env rm` tar hela
+posten när den delas mellan scope — återställda, spärr inbyggd), och läckte Render-API-nyckeln
+i transkriptet under felsökning. **Rotera den.**
+
+**Riktningsbyte:** upplägget kostade åtta separata infrastrukturfällor att få på plats. Anton
+vill utvärdera en enad Railway-stack. Plan skriven; kartläggningen visar att beroendet till
+Supabase går genom två strupar — `current_workspace_id()` (15 av 17 policyer) och
+`getWorkspaceContext()` (9 av 11 filer). Neon kvar som fallback.
+
+**Grenar:** `feature/plattform-fas1-7` är FRYST säkerhetskopia av allt detta.
+`feature/railway-stack` är arbetsgrenen. `main` ligger 20 commits efter och är orörd.
+
+Sessionslogg: `session-logs/2026-08-16-session-log.md`
+
 ## 2026-08-15 — Claude — Anonymt API stängt, ren kundchatt, agenten vet var i samtalet den är
 
 **Hela backend-API:t var anonymt nåbart i produktion.** `proxy.ts`-matchern täcker bara

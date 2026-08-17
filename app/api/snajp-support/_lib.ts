@@ -96,7 +96,8 @@ export async function proxyWithApiKey(
   path: string,
   init: RequestInit,
   apiKey: string,
-  userId?: string
+  userId?: string,
+  isDemo?: boolean
 ) {
   let lastCause: unknown;
 
@@ -112,6 +113,7 @@ export async function proxyWithApiKey(
           // Enbart till timtaket per användare. Sätts efter sessionen, aldrig
           // från klienten — och backenden kan bara BEGRÄNSA på den, inte höja.
           ...(userId ? { "X-Snajp-User": userId } : {}),
+          ...(isDemo ? { "X-Snajp-Demo": "true" } : {}),
           ...(init.headers ?? {})
         },
         cache: "no-store",

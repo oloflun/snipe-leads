@@ -156,16 +156,22 @@ export function LeadsControls({ demo = false }: Readonly<{ demo?: boolean }>) {
   }
 
   if (!config) {
+    // Ett fel är INTE ett laddningstillstånd. Skelettet låg kvar och pulserade
+    // under felmeddelandet, så ytan såg samtidigt ut att ladda och ha
+    // misslyckats — och skelettet lovar dessutom innehåll som aldrig kommer.
+    // Sett i pixlar vid 375px.
+    if (error) {
+      return (
+        <p role="alert" className="break-words border-t border-ink/15 pt-6 text-[14px] text-danger">
+          {error}
+        </p>
+      );
+    }
     return (
       <div className="grid gap-px">
         {[0, 1, 2, 3].map((row) => (
           <div key={row} className="h-16 animate-pulse border-t border-ink/15 bg-ink/[0.03]" />
         ))}
-        {error ? (
-          <p role="alert" className="mt-6 break-words text-[14px] text-danger">
-            {error}
-          </p>
-        ) : null}
       </div>
     );
   }

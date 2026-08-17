@@ -84,6 +84,31 @@ def looks_placeholder(value: str) -> bool:
     return len(value) < 20 or "..." in value or "din-" in value
 
 
+def key_fault(value: str) -> str | None:
+    """Varför nyckeln inte GÅR ATT SKICKA, eller None.
+
+    Samma kontroll som Settings.llm_key_fault() i snajp-support/app/config.py,
+    fast vid inklistring i stället för vid första agentanropet.
+
+    Ett API-nyckelvärde går i huvudet `Authorization: Bearer <nyckel>`, och
+    huvudvärden är per definition ASCII. En nyckel med ett tecken över 127
+    kraschar därför inte hos leverantören utan INNE i http-klienten. Det hände
+    skarpt: /health/ready svarade "riktig agent aktiv" och första körningen föll
+    på `'ascii' codec can't encode character 'à' in position 7` — position 7
+    är första tecknet efter "Bearer ".
+
+    Positionen står med i beskedet med flit. Utan den söker den som läser efter
+    ett osynligt tecken i en sträng som aldrig får skrivas ut.
+    """
+    bad = next((i for i, ch in enumerate(value) if ord(ch) > 127), None)
+    if bad is not None:
+        return (f"innehåller ett tecken utanför ASCII på position {bad} — "
+                f"kan inte skickas i ett Authorization-huvud")
+    if value != value.strip():
+        return "har inledande eller avslutande blanktecken"
+    return None
+
+
 def read_env(path: Path) -> dict[str, str]:
     if not path.exists():
         return {}
@@ -125,6 +150,12 @@ def cmd_check() -> bool:
         if not value:
             status = "SAKNAS" if key.required else "tom (valfri)"
             ok = ok and not key.required
+        elif key_fault(value):
+            # Egen rad, inte samma som PLATSHÅLLARE: den som läser "platshållare"
+            # letar efter en saknad variabel, inte efter ett osynligt tecken i
+            # den som redan finns.
+            status = f"TRASIG — {key_fault(value)}"
+            ok = False
         elif looks_placeholder(value):
             status = "PLATSHÅLLARE — tjänsten kör i SIMULERINGSLÄGE"
             ok = False
@@ -352,11 +383,87 @@ def cmd_push() -> None:
     )
 
 
+#: Nycklar som backend-tjänsten behöver i Railway. Master- och demo-nycklarna
+#: står INTE här: de är miljöspecifika med flit och sätts av
+#: railway_provision.py, som slumpar en egen per miljö.
+RAILWAY_BACKEND_KEYS = ("DEEPSEEK_API_KEY", "GEMINI_API_KEY", "SNAJP_SKILL_UNLOCK_KEY")
+
+
+def cmd_push_railway() -> None:
+    """Skicka backend-nycklarna till BÅDA Railway-miljöerna och verifiera.
+
+    Verifieringen är poängen. En satt variabel bevisar bara att API:t tog emot
+    den; att `/health/ready` går från `simulation` till `live` bevisar att
+    nyckeln faktiskt går att använda. Skillnaden kostade en hel felsökning.
+    """
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import json
+    import urllib.request
+
+    from railway_provision import (ENVIRONMENTS, env_read, envs_by_name,
+                                   services_by_name, set_vars, state, deploy)
+
+    backend = read_env(BACKEND_ENV)
+    payload = {}
+    for name in RAILWAY_BACKEND_KEYS:
+        value = backend.get(name, "")
+        if not value:
+            print(f"  {name}: saknas lokalt — hoppar över")
+            continue
+        fault = key_fault(value)
+        if fault:
+            sys.exit(f"AVBRYTER: {name} {fault}. Sätt om den med `python scripts/keys.py` först.")
+        payload[name] = value
+    if not payload:
+        sys.exit("Inga nycklar att skicka.")
+    print(f"skickar: {', '.join(sorted(payload))}")   # namn, aldrig värden
+
+    project = state()
+    environments = envs_by_name(project)
+    services = services_by_name(project)
+    deploys = {}
+    for env_name in ENVIRONMENTS:
+        if env_name not in environments:
+            print(f"  {env_name}: miljön finns inte — hoppar över")
+            continue
+        env_id = environments[env_name]
+        set_vars(services["api"]["id"], env_id, payload)
+        deploys[env_name] = deploy(services["api"]["id"], env_id)
+        print(f"  {env_name}: satt, deploy {deploys[env_name]}")
+
+    store = env_read()
+    print("\nVerifierar mot /health/ready (kan ta en minut per miljö):")
+    failed = False
+    for env_name in deploys:
+        url = store.get(f"RAILWAY_{env_name.upper()}_API_URL")
+        if not url:
+            print(f"  {env_name}: ingen API-URL i .env.deploy — kan inte verifiera")
+            failed = True
+            continue
+        mode = None
+        for _ in range(20):
+            try:
+                with urllib.request.urlopen(f"{url}/health/ready", timeout=20) as resp:
+                    mode = json.load(resp).get("mode")
+            except Exception:
+                mode = None
+            if mode == "live":
+                break
+        print(f"  {env_name}: mode={mode}")
+        if mode != "live":
+            failed = True
+    if failed:
+        sys.exit("Minst en miljö gick inte till live-läge. Se /health/ready för skälet.")
+    print("\nBåda miljöerna kör med riktig modell.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Nyckelhantering för snipra/snajp.")
     parser.add_argument("--check", action="store_true", help="verifiera utan att ändra")
     parser.add_argument("--pull", action="store_true", help="hämta från Vercel")
     parser.add_argument("--push", action="store_true", help="skicka till Vercel")
+    parser.add_argument("--push-railway", action="store_true",
+                        help="skicka backend-nycklarna till BÅDA Railway-miljöerna och verifiera")
     parser.add_argument(
         "--new-unlock-key",
         action="store_true",
@@ -370,6 +477,8 @@ def main() -> None:
         cmd_new_unlock_key()
     elif args.pull:
         cmd_pull()
+    elif args.push_railway:
+        cmd_push_railway()
     elif args.push:
         cmd_push()
     else:

@@ -7,7 +7,8 @@ import {
   signInWithMagicLink,
   signInWithOAuth,
   signInWithPassword,
-  signUpWithPassword
+  signUpWithPassword,
+  startDemo
 } from "@/lib/actions/auth";
 import { cn } from "@/lib/utils";
 
@@ -75,6 +76,19 @@ export function LoginForm() {
     });
   }
 
+  function handleDemo() {
+    setMessage(null);
+    setError(null);
+    startTransition(async () => {
+      // Vid lyckat demo redirectar servern till /onboarding, så vi når bara hit
+      // om något gick fel.
+      const result = await startDemo();
+      if (!result.success) {
+        setError(result.error ?? "Demo kunde inte startas.");
+      }
+    });
+  }
+
   function handleOAuth(provider: "google" | "azure") {
     setMessage(null);
     setError(null);
@@ -109,6 +123,18 @@ export function LoginForm() {
           spärr är bredare än den halva kolumnen nästan överallt utom vid
           1440. Full bredd ger alltid en rad och matchar dessutom fälten
           under, som också är fullbreda. Uppmätt vid 320/375/414/768/1440. */}
+      {/* Demo-läget ersätter "magic link som ger full åtkomst": en isolerad
+          workspace utan förladdad data, med begränsat antal körningar och en
+          tydlig väg att uppgradera till ett konto. */}
+      <button
+        type="button"
+        disabled={isPending}
+        onClick={handleDemo}
+        className="mt-8 w-full border border-ochre/40 bg-ochre/10 px-4 py-3 font-mono text-[12px] uppercase tracking-[0.18em] text-ochre transition hover:bg-ochre/15 disabled:opacity-60"
+      >
+        Prova demo — utan konto
+      </button>
+
       <div className="mt-8 grid gap-3">
         {([
           ["google", "Fortsätt med Google"],

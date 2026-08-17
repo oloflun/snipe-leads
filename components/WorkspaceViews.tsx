@@ -6,6 +6,7 @@ import { SoulEditor } from "@/components/SoulEditor";
 import { PageShell } from "@/components/AppShell";
 import { btnPrimary, btnSecondary } from "@/components/ui";
 import { LoginForm } from "@/components/auth/LoginForm";
+import { SignOutButton } from "@/components/auth/SignOutButton";
 import { TeamSettings } from "@/components/settings/TeamSettings";
 import { AddonSettings } from "@/components/settings/AddonSettings";
 import { OnboardingForm } from "@/components/auth/OnboardingForm";
@@ -428,13 +429,15 @@ export function SettingsView({ section = "general" }: Readonly<{ section?: "gene
   };
   // Beskrivningen var tidigare EN generisk sträng för alla sektioner. På
   // röstsidan blev den både felaktig (den beskriver inte sektionen) och
-  // olämplig: den räknar upp Supabase Auth och RLS för en KUND, som varken
-  // känner igen orden eller behöver veta vår stack.
+  // olämplig: den räknade upp "Supabase Auth och RLS" för en KUND, som varken
+  // känner igen orden eller behöver veta vår stack. Att stacken sedan byttes
+  // gjorde texten dessutom osann — vilket är själva argumentet mot att skriva
+  // ut infrastruktur i en kundvänd yta.
   const descriptions: Record<typeof section, string> = {
-    general: "Inställningarna är ett arbetsblad för Supabase Auth, RLS, teamroller, mailboxes och billing.",
-    mailboxes: "Inställningarna är ett arbetsblad för Supabase Auth, RLS, teamroller, mailboxes och billing.",
-    team: "Inställningarna är ett arbetsblad för Supabase Auth, RLS, teamroller, mailboxes och billing.",
-    billing: "Inställningarna är ett arbetsblad för Supabase Auth, RLS, teamroller, mailboxes och billing.",
+    general: "Ändrar du något här ändras allt agenten skriver, i alla moduler.",
+    mailboxes: "Avsändaradresser och hur mycket som får skickas per dag.",
+    team: "Vilka som har tillgång till arbetsytan, och vad de får göra.",
+    billing: "Vad ni har förbrukat den här månaden, och vad nästa faktura blir.",
     soul: "Beskriv hur ni låter. Agenten skriver så i era mejl och svar.",
     addons: "Det agenten kan göra utöver det som ingår i er plan."
   };
@@ -465,6 +468,12 @@ export function SettingsView({ section = "general" }: Readonly<{ section?: "gene
             ["/settings/addons", "Tillägg"],
             ["/settings/billing", "Billing"]
           ].map(([href, label]) => <Link key={href} href={href} className="block hover:text-ochre">{label}</Link>)}
+          {/* Utloggningen bor här och inte i navigationsraden: den hör till
+              kontot, inte till arbetsytan, och /settings är den enda ytan som
+              alltid kräver en session. */}
+          <div className="mt-6 w-full border-t border-ink/15 pt-6 md:mt-8">
+            <SignOutButton />
+          </div>
         </nav>
         <div className="col-span-12 md:col-span-9">
           {section === "general" ? <BusinessContextSettings /> : null}

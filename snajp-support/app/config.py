@@ -167,9 +167,40 @@ class Settings(BaseSettings):
             return self.deepseek_api_key
         return self.openai_api_key
 
+    def llm_key_fault(self) -> str | None:
+        """Varför nyckeln inte går att använda, eller None.
+
+        Ett API-nyckelvärde går i HTTP-huvudet `Authorization: Bearer <nyckel>`,
+        och huvudvärden är per definition ASCII. En nyckel med ett tecken över
+        127 kraschar därför inte hos leverantören utan INNE i http-klienten,
+        långt efter att tjänsten rapporterat sig frisk.
+
+        Det hände skarpt: /health/ready svarade "LLM-nyckel hittad — riktig
+        agent aktiv", och första riktiga körningen föll på
+        `'ascii' codec can't encode character 'à' in position 7` — position 7
+        är första tecknet efter "Bearer ". Trovärdigt men fel, alltså samma
+        klass av fel som migration 029 fick städa upp.
+        """
+        key = self.active_llm_key() or ""
+        if not key:
+            return None  # ingen nyckel alls är simuleringsläge, inte ett fel
+        bad = next((i for i, ch in enumerate(key) if ord(ch) > 127), None)
+        if bad is not None:
+            return (
+                f"LLM-nyckeln innehåller ett tecken utanför ASCII (position {bad}). "
+                f"Den kan inte skickas i ett Authorization-huvud och varje "
+                f"agentanrop kommer att falla. Sätt om nyckeln."
+            )
+        return None
+
     def is_simulation(self) -> bool:
         # Samma platshållar-heuristik som app/api/email-studio/route.ts i Next-appen.
         key = self.active_llm_key() or ""
+        # En trasig nyckel räknas som ingen nyckel. Alternativet är att tjänsten
+        # påstår sig vara live och faller på första riktiga anropet — ett läge
+        # som ser friskt ut i varje kontroll utom den som kostar en kund.
+        if self.llm_key_fault():
+            return True
         return len(key) < 20 or "..." in key or "din-" in key
 
 

@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { PageShell } from "@/components/AppShell";
 import { Overview } from "@/components/dashboard/Overview";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
@@ -16,6 +16,7 @@ import {
 import { LeadsControls } from "@/components/leads/LeadsControls";
 import { loadEmailStudioData } from "@/lib/data/emails";
 import { resolveDashboardState } from "@/lib/data/dashboard";
+import { getPlatformAdmin } from "@/lib/auth/admin";
 import type { ProductKey } from "@/lib/routes";
 
 /**
@@ -41,6 +42,11 @@ export default async function Page({
   const [section, id] = slug;
 
   if (!section) {
+    // Plattformsadmin landar på adminöversikten som startsida, inte på
+    // kundöversikten. Övriga ordinarie flikar nås som vanligt från navet.
+    if (await getPlatformAdmin()) {
+      redirect("/dashboard/admin");
+    }
     return <Overview />;
   }
 

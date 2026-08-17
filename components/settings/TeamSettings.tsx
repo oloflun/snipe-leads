@@ -108,7 +108,11 @@ export function TeamSettings() {
         <h3 className="kicker text-mineral">Bjud in</h3>
 
         <div className="mt-5 flex min-w-0 flex-wrap items-end gap-4">
-          <label className="grid min-w-0 flex-1 gap-2 text-[15px]">
+          {/* basis-full under sm: `flex-1 min-w-0` kan krympa till noll i stället
+              för att tvinga fram en radbrytning, och vid 320px lämnade Roll +
+              knappen ~30px åt adressfältet. Etiketten bröts till "E-/POST" och
+              fältet gick inte att skriva i. Uppmätt i pixlar, inte antaget. */}
+          <label className="grid min-w-0 basis-full gap-2 text-[15px] sm:flex-1 sm:basis-0">
             <span className="kicker text-mineral">E-post</span>
             <input
               type="email"
