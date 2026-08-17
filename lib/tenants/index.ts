@@ -1,5 +1,6 @@
 import type { Tenant, TenantPalette } from "./types";
 import { livrustning } from "./livrustning";
+import { snajp } from "./snajp";
 
 export type { Tenant, TenantLogo, TenantPalette } from "./types";
 
@@ -8,7 +9,10 @@ export type { Tenant, TenantLogo, TenantPalette } from "./types";
  * nytt repo och inte en kopierad mapp.
  */
 const tenants: Record<string, Tenant> = {
-  livrustning
+  livrustning,
+  // Vår egen arbetsyta. Vi använder produkten själva, och utan den här raden
+  // svarar /chat/snajp med ett internt felmeddelande.
+  snajp
 };
 
 /** Headern som proxy.ts sätter när värdnamnet pekar ut en kund. */

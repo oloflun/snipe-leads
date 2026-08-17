@@ -453,10 +453,22 @@ export function InboxView() {
   return (
     <PageShell kicker="Inbox" title="Svar klassificeras innan nästa steg." description="Reply classifier skiljer på positivt svar, invändning, frånvaro, fel person, unsubscribe och bokningsintresse.">
       <div className="divide-y divide-ink/15 border-y border-ink/15">
+        {/* Alla SEX klasser beskrivningen ovan lovar. Tidigare fanns tre, och
+            en demo som utlovar sex kategorier men visar tre ser ut som att
+            hälften av klassificeraren är trasig — vilket är precis den frågan
+            man inte vill få mitt i en pitch.
+
+            Svaren är skrivna som riktiga svenska mejlsvar: korta, ofullständiga
+            meningar, ingen artighetsfras. Ett påhittat svar som låter som en
+            broschyr avslöjar att datan är påhittad. */}
         {[
           ["Amal Hassan", "Låter relevant. Skicka gärna exempel på IT-chefer i regionen.", "positive"],
+          ["Elin Norberg", "Vi kan ta ett kort möte. Tisdag 14 eller torsdag 10 funkar.", "booking"],
+          ["Mikael Berg", "Kan du förtydliga vad ni menar med signaler? Vi har testat liknande förut.", "objection"],
           ["Jonas Åkerström", "Inte rätt läge just nu, men återkom efter sommaren.", "later"],
-          ["Mikael Berg", "Kan du förtydliga vad ni menar med signaler?", "objection"]
+          ["Karin Wikström", "Jag är föräldraledig till mars. Kontakta Petra Lund i stället.", "wrong_person"],
+          ["Automatiskt svar · Sofia Ek", "Jag är på semester till den 12 augusti och läser mejl sporadiskt.", "away"],
+          ["Tobias Lindqvist", "Ta bort mig från utskicken tack.", "unsubscribe"]
         ].map(([name, body, status]) => (
           <div key={name} className="grid grid-cols-12 gap-x-6 py-5">
             <div className="col-span-12 text-[1.0625rem] font-semibold tracking-[-0.01em] md:col-span-3">{name}</div>
