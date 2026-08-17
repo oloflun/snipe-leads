@@ -3,6 +3,7 @@ import "server-only";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/lib/auth";
+import { isPlatformAdmin } from "@/lib/auth/admin";
 import { hasCompletedOnboarding } from "@/lib/workspace";
 
 /**
@@ -29,6 +30,12 @@ export async function requireOnboarded(): Promise<void> {
     // Proxyn har redan skickat oinloggade till /login. Når vi hit ändå är det
     // rätt att inte gissa: /login är svaret, inte /onboarding.
     redirect("/login");
+  }
+  // Plattformsadmin behöver inte gå igenom kund-onboardingen — deras startsida
+  // är adminvyn, inte business-context-formuläret. De kan onboarda senare om de
+  // vill använda leads/support i Snajps eget bolag.
+  if (await isPlatformAdmin(userId)) {
+    return;
   }
   if (!(await hasCompletedOnboarding(userId))) {
     redirect("/onboarding");
