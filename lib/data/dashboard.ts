@@ -1,3 +1,4 @@
+import { getPlatformAdmin } from "@/lib/auth/admin";
 import { getWorkspaceContext } from "@/lib/workspace";
 import { hasServerSupabaseEnv } from "@/lib/supabase/env";
 import { isProductKey, type ProductKey } from "@/lib/routes";
@@ -27,6 +28,19 @@ export type DashboardState = {
   variant: "fresh" | "demo";
   workspaceName: string | null;
   signedIn: boolean;
+  /**
+   * Plattformsadmin — enbart för att kunna VISA vägen till /admin.
+   *
+   * Grinden är och förblir `requirePlatformAdmin()` i app/admin/layout.tsx, som
+   * svarar 404. Det här fältet är en navigationsledtråd, inte ett villkor: sätts
+   * det till true i devtools får man en länk som leder till en 404.
+   *
+   * Fältet finns för att ytan annars var oåtkomlig i praktiken. Vakten släppte
+   * igenom rätt person, men INGEN länk till /admin fanns någonstans i UI:t —
+   * enda vägen in var att skriva URL:en för hand, vilket ingen gör som inte
+   * redan vet att sidan finns.
+   */
+  isPlatformAdmin: boolean;
 };
 
 const ALL_PRODUCTS: ProductKey[] = ["leads", "support"];
@@ -40,7 +54,8 @@ const ANONYMOUS: DashboardState = {
   addons: [],
   variant: "demo",
   workspaceName: null,
-  signedIn: false
+  signedIn: false,
+  isPlatformAdmin: false
 };
 
 export async function resolveDashboardState(): Promise<DashboardState> {
@@ -68,7 +83,8 @@ export async function resolveDashboardState(): Promise<DashboardState> {
     addons: (context.workspace.addons ?? []).filter(isAddonKey),
     variant: (await workspaceHasData(context.workspace.id)) ? "demo" : "fresh",
     workspaceName: context.workspace.name,
-    signedIn: true
+    signedIn: true,
+    isPlatformAdmin: Boolean(await getPlatformAdmin())
   };
 }
 
