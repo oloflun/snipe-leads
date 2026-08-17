@@ -152,7 +152,11 @@ export function AgentMenu({
         <div
           role="dialog"
           aria-label={text(copy.meny as Localized)}
-          className="absolute right-0 z-40 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-input border border-ink/15 bg-paper shadow-lift"
+          // På breda skärmar hänger panelen under knappen. På smala ankras den
+          // mot VIEWPORTEN i stället, och det är inte kosmetik: knappen sitter
+          // en bit in från kanten, så en högerankrad panel på 22rem sköt ut
+          // 31px utanför vänsterkanten vid 375px bredd. Uppmätt, inte gissat.
+          className="absolute right-0 z-40 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-input border border-ink/15 bg-paper shadow-lift max-sm:fixed max-sm:inset-x-4 max-sm:top-auto max-sm:mt-0 max-sm:w-auto"
         >
           {/* Språkvalet ligger överst och inte bakom en flik: den som behöver
               det behöver det för att kunna läsa resten av menyn. */}
