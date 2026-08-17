@@ -6,12 +6,16 @@ inneburit ännu en prompt att hålla i synk.
 """
 
 from .livrustning_kb import KB_ARTICLES as LIVRUSTNING_KB
+from .snajp_kb import KB_ARTICLES as SNAJP_KB
 
 # Namnet måste stå här och inte härledas ur sluggen: create_tenant är en upsert
 # som skriver om name, så ett gissat namn ("Livrustning") skulle tyst döpa om
 # kunden i databasen.
 TENANTS: dict[str, dict] = {
     "livrustning": {"name": "Livrustning AB", "articles": LIVRUSTNING_KB},
+    # Vår egen arbetsyta. Namnet måste matcha ss_tenants.name exakt — se
+    # kommentaren ovan om att create_tenant är en upsert som skriver om name.
+    "snajp": {"name": "Snajp", "articles": SNAJP_KB},
 }
 
 
