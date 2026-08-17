@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Radgivare } from "@/components/admin/Radgivare";
 import type { TenantRow } from "@/lib/data/admin";
 import { formateraPris } from "@/lib/pricing";
 import {
@@ -187,6 +188,12 @@ export function Portfoljvy({ tenants }: Readonly<{ tenants: TenantRow[] }>) {
           paket i tabellen — och är samtidigt precis den kund raden ska varna för.
         </p>
       </div>
+
+      {/* Rådgivaren får SAMMA rader som tabellen räknat fram, inte en egen
+          hämtning. Två uträkningar av samma tal är två tillfällen att räkna
+          olika, och här skulle skillnaden synas som att sidan säger emot sig
+          själv. */}
+      <Radgivare rader={rader.map(({ rad, ekonomi }) => ({ namn: rad.name, ekonomi }))} />
 
       <p className="mt-8">
         <Link href="/admin/korningar" className="focus-ring text-[15px] text-ochre underline underline-offset-4">
