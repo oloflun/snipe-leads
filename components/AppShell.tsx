@@ -34,7 +34,6 @@ const DEMO_VAGAR: Record<string, string> = {
   "/dashboard": "/demo",
   "/dashboard/leads": "/demo/leads",
   "/dashboard/leads/kontroll": "/demo/kontroll",
-  "/dashboard/campaigns": "/demo/campaigns",
   "/dashboard/companies": "/demo/companies",
   "/dashboard/contacts": "/demo/contacts",
   "/dashboard/emails": "/demo/emails",
