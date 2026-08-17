@@ -38,6 +38,19 @@ create table if not exists supabase_migrations.schema_migrations (
 """
 
 
+def _has_sql(sql: str) -> bool:
+    """True om filen innehåller något annat än kommentarer och blanksteg.
+
+    Historiska versionsposter (t.ex. 20260727175113_002_snajp_support.sql) är
+    avsiktligt tomma — deras SQL bor i den repo-numrerade motsvarigheten. Att
+    köra dem som SQL ger "can't execute an empty query"."""
+    for line in sql.splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("--"):
+            return True
+    return False
+
+
 def dsn(env: dict[str, str], environment: str = "main") -> str:
     """Superuser-DSN (postgres-rollen) för migrationer, per miljö.
 
@@ -102,6 +115,16 @@ def main() -> int:
             print(f"  + {version} (skulle köras)")
             continue
         sql = path.read_text(encoding="utf-8")
+        if not _has_sql(sql):
+            # Avsiktligt tom (historisk versionspost): registrera versionen utan
+            # att köra något.
+            cur.execute(
+                "insert into supabase_migrations.schema_migrations (version, name) values (%s, %s)",
+                (version, path.name),
+            )
+            conn.commit()
+            print(f"  + {version} (tom, registrerad)")
+            continue
         try:
             cur.execute(sql)
             cur.execute(
