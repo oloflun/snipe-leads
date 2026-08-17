@@ -141,6 +141,40 @@ for u in / /login /dashboard /admin /demo/support; do curl -s -o /dev/null -w "%
 
 ---
 
+## Tillägg efter första rapporten
+
+### Demons två sista vyer visade ett felmeddelande i stället för produkten
+
+`/demo/support` och `/demo/kontroll` renderade `SupportDashboard` och
+`LeadsControls`, som båda anropar den inloggade API-vägen. De kör nu mot
+exempeldata i webbläsaren (`lib/demo/`), med grinden mot backenden orörd —
+sex svenska kundärenden med namn och tre köade leads-utkast. Tillståndet är
+föränderligt: godkänn, avvisa, ta över och regeländringar flyttar ärendet på
+riktigt. Genomklickat: status gick till Besvarat, räknaren 3 → 2,
+beslutsloggen fick "Godkänt & skickat", leads-kön 3 → 2.
+
+Email Studios `harSession()` låg dessutom före try-blocket och byggde en
+Supabase-klient — samma rotorsak, samma tomma 500. Den fångar nu och behandlar
+"vet inte" som utloggad, alltså simulering.
+
+### `/admin` hade varit trasig även efter deployen
+
+**Ingen sida under `app/admin/` deklarerade `maxDuration`.** Alla fyra är
+server-komponenter som hämtar via `lib/data/admin.ts` från Render-backenden,
+som tar upp till ~35 s att vakna. Vercels standardtak är kortare — renderingen
+dödades mitt i uppvakningen, alltså just när vyn öppnas första gången på
+morgonen.
+
+Felet kunde bara uppstå för att `INV-API-001` mätte `route.ts` under `app/api/`
+och ingenting annat; adminsidorna går aldrig genom en route. Invarianten täcker
+nu `page.tsx` under hela `app/`, och är falsifierad mot en sida utan raden.
+
+### PR mot main
+
+[PR #5](https://github.com/oloflun/snipe-leads/pull/5) står öppen från
+`development` mot `main`. Merge = produktionsdeploy. Jag kunde inte merga
+själv — fyra vägar prövade, alla stoppade av behörighetsspärren.
+
 ## Kvar efter deployen
 
 ### 1. Demo-nyckeln är ogiltig (blockerar `/demo/support`, `/support`, triagen)
