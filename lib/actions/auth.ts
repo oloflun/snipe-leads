@@ -18,7 +18,20 @@ function getSiteUrl(): string {
 // "Email not confirmed", som var det verkliga stoppet vid registrering med
 // privat mailadress. Okända fel går fram i original hellre än att sväljas.
 const errorMessages: Record<string, string> = {
-  "invalid login credentials": "Fel e-postadress eller lösenord.",
+  // Meddelandet säger medvetet INTE om det var adressen eller lösenordet som
+  // var fel. Att skilja dem åt hade gjort inloggningen till ett verktyg för
+  // att ta reda på vilka adresser som har konton hos oss.
+  //
+  // Men "fel e-postadress eller lösenord" ensamt är en återvändsgränd för den
+  // som glömt sitt lösenord — och det är det vanligaste skälet till att man
+  // ser meddelandet. Uppmätt i produktionens auth-loggar 2026-08-17: fyra
+  // misslyckade inloggningar i rad mot ett konto som fanns, med ett lösenord
+  // satt två månader tidigare. Vägen ut fanns på sidan hela tiden, i en flik
+  // användaren inte tittade i.
+  "invalid login credentials":
+    "Fel e-postadress eller lösenord. Har du glömt lösenordet? Välj Magic link "
+    + "ovan och skriv din adress — då får du en inloggningslänk på mailen, utan "
+    + "lösenord.",
   "email not confirmed":
     "Adressen är inte verifierad än. Klicka på länken i mailet vi skickade — kolla skräpposten om det inte kommit fram.",
   "user already registered":
