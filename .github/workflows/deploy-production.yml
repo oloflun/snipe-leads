@@ -4,6 +4,14 @@ on:
   push:
     branches:
       - main
+  # Gör deployen omkörbar utan en låtsas-commit.
+  #
+  # Den här workflowen fallerade tyst i tre månader med "Project not found":
+  # VERCEL_PROJECT_ID och VERCEL_ORG_ID pekade på det gamla snipra-projektet.
+  # Verify-jobbet gick grönt hela tiden, så allt SÅG ut att fungera utom det
+  # enda som räknades — och för att köra om deployen krävdes en ny commit,
+  # vilket gjorde felsökningen dyrare än den behövde vara.
+  workflow_dispatch:
 
 jobs:
   deploy:
