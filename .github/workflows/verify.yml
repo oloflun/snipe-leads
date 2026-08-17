@@ -33,6 +33,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # INV-SKILL-006 nedan kör `git diff origin/<bas>...HEAD`. Tre punkter
+          # betyder "sedan den gemensamma förfadern", vilket kräver att basen
+          # FINNS i den lokala historiken.
+          #
+          # actions/checkout hämtar som standard EN commit. Den efterföljande
+          # `--depth=50`-fetchen ger 50 commits av basgrenen, men ingen historik
+          # för HEAD — så någon gemensam förfader går inte att beräkna, och
+          # steget föll med `fatal: origin/main...HEAD: no merge base` på VARJE
+          # pull request. Att `push`-körningarna var gröna dolde det: steget kör
+          # bara på pull_request, så den enda gången det utvärderades var den
+          # gången det fällde.
+          #
+          # 0 = full historik. Alternativet vore ett djupare --depth, men varje
+          # sådan siffra är en gissning om hur långt grenarna hunnit divergera,
+          # och den gissningen blir fel exakt när den behöver stämma.
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -54,7 +71,9 @@ jobs:
         # till development finns ingen meningsfull bas att diffa mot.
         if: github.event_name == 'pull_request'
         run: |
-          git fetch --no-tags --depth=50 origin "${{ github.base_ref }}"
+          # Ingen --depth här: checkouten ovan hämtar full historik, och en grund
+          # fetch skulle återinföra exakt det som gjorde steget rött.
+          git fetch --no-tags origin "${{ github.base_ref }}"
           python scripts/check_vendor_bump.py --base "origin/${{ github.base_ref }}"
 
   docker-smoke:
