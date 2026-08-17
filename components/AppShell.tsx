@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Logo } from "@/components/Logo";
+import { AgentMenu } from "@/components/snajp/AgentMenu";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { ScopeSwitch } from "@/components/dashboard/ScopeSwitch";
 import { useLocale } from "@/lib/i18n";
@@ -63,6 +64,12 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
             >
               {locale === "sv" ? "EN" : "SV"}
             </button>
+            {/* Samma meny som på kundserviceytan. Den ligger i AppShell och
+                inte per sida: kontaktuppgifter, dataskydd och möjligheten att
+                anmäla ett felaktigt svar är lika relevanta på leads-vyn som på
+                supportvyn, och en meny som bara finns på hälften av ytorna är
+                en meny användaren slutar leta efter. */}
+            <AgentMenu yta="leads" kontext={`dashboard${pathname ? `:${pathname}` : ""}`} />
           </div>
 
           <nav
