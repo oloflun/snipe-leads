@@ -18,6 +18,38 @@ import { cn } from "@/lib/utils";
  * The nav renders only what the workspace is entitled to, so a Support-only
  * customer never learns that Leads exists.
  */
+
+/**
+ * Länkarna i skalet pekar på /dashboard. På demo-ytan (/demo) finns ingen
+ * session, så en sådan länk studsar besökaren till /login — mitt i det de
+ * skulle prova.
+ *
+ * Kartan är explicit och inte en strängersättning: /dashboard/leads/kontroll
+ * ligger under /demo/kontroll, alltså inte en ren prefixbyte. En regex hade
+ * tyst gett /demo/leads/kontroll, som är en 404.
+ */
+const DEMO_VAGAR: Record<string, string> = {
+  "/dashboard": "/demo",
+  "/dashboard/leads": "/demo/leads",
+  "/dashboard/leads/kontroll": "/demo/kontroll",
+  "/dashboard/campaigns": "/demo/campaigns",
+  "/dashboard/companies": "/demo/companies",
+  "/dashboard/contacts": "/demo/contacts",
+  "/dashboard/emails": "/demo/emails",
+  "/dashboard/inbox": "/demo/inbox",
+  "/dashboard/analytics": "/demo/analytics",
+  "/dashboard/assistant": "/demo/assistant",
+  "/dashboard/support": "/demo/support"
+};
+
+function iDemolage(pathname: string): boolean {
+  return pathname === "/demo" || pathname.startsWith("/demo/");
+}
+
+function demoAnpassa(href: string, pathname: string): string {
+  return iDemolage(pathname) ? (DEMO_VAGAR[href] ?? href) : href;
+}
+
 export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) {
   const pathname = usePathname();
   const router = useRouter();
@@ -47,7 +79,10 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
     <div className="min-h-screen bg-paper text-ink">
       <header className="sticky top-0 z-30 bg-paper/85 backdrop-blur-xl">
         <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3 md:px-6">
-          <Link href="/dashboard" className="focus-ring inline-flex min-h-11 items-center rounded-input">
+          <Link
+            href={demoAnpassa("/dashboard", pathname)}
+            className="focus-ring inline-flex min-h-11 items-center rounded-input"
+          >
             <Logo />
           </Link>
 
@@ -84,7 +119,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
               return (
                 <Link
                   key={route.href}
-                  href={route.href}
+                  href={demoAnpassa(route.href, pathname)}
                   aria-current={active ? "page" : undefined}
                   className={cn(
                     "focus-ring inline-flex min-h-11 shrink-0 items-center rounded-input px-3 text-sm font-medium transition-colors",
