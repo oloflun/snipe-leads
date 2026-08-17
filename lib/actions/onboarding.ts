@@ -2,16 +2,18 @@
 
 import type { BusinessContextInsert } from "@/lib/database.types";
 import { redirect } from "next/navigation";
+import { formateraOrgnr, orgnrFel } from "@/lib/orgnr";
 
+/**
+ * Fyra fält, inte åtta. Se components/auth/OnboardingForm.tsx om varför de
+ * gamla fälten var aktivt skadliga: de var förifyllda med påhittade värden som
+ * gick att skicka in rakt av.
+ */
 export type OnboardingInput = {
-  product: string;
-  targetAudience: string;
-  industries: string;
-  geography: string;
-  tone: string;
-  offer: string;
-  cta: string;
-  contactRoles: string;
+  orgnr: string;
+  webbplats: string;
+  produkt: string;
+  fokus: string;
 };
 
 export type OnboardingActionResult = {
@@ -19,11 +21,17 @@ export type OnboardingActionResult = {
   error?: string;
 };
 
-function splitList(value: string): string[] {
-  return value
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
+/**
+ * Webbadressen normaliseras men VALIDERAS INTE hårt. En kund som skriver
+ * "exempel.se" utan protokoll menar https://exempel.se, och att neka den
+ * inmatningen hade stoppat onboardingen på en formalitet. Att adressen
+ * faktiskt svarar upptäcks när agenten försöker läsa den, och det felet är
+ * begripligt på ett sätt som "ogiltig URL" inte är.
+ */
+function normaliseraWebbplats(rå: string): string {
+  const text = (rå ?? "").trim();
+  if (!text) return "";
+  return /^https?:\/\//i.test(text) ? text : `https://${text}`;
 }
 
 export async function saveBusinessContext(input: OnboardingInput): Promise<OnboardingActionResult> {
@@ -57,16 +65,55 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
     return { success: false, error: "Ditt konto saknar ett workspace. Kontakta support." };
   }
 
+  // Serversidan validerar OM. lib/orgnr.ts kör samma kontroll i webbläsaren,
+  // men klientkod går att kringgå och det som skyddar är alltid den här sidan.
+  const orgnrProblem = orgnrFel(input.orgnr);
+  if (orgnrProblem) {
+    return { success: false, error: orgnrProblem };
+  }
+
+  const webbplats = normaliseraWebbplats(input.webbplats);
+  if (!webbplats) {
+    return {
+      success: false,
+      error: "Fyll i webbplatsen. Det är den agenten läser för att förstå er."
+    };
+  }
+
+  const produkt = input.produkt.trim();
+  if (!produkt) {
+    return {
+      success: false,
+      error: "Skriv en rad om vad ni säljer. Det är det agenten ska sälja."
+    };
+  }
+
+  const fokus = input.fokus.trim();
+
+  // De gamla kolumnerna är not null i schemat och kan inte lämnas tomma. De
+  // fylls därför med det agenten VET, inte med gissningar: målgrupp, branscher,
+  // geografi och tonläge härleds ur webbplatsen i researchsteget, och att
+  // skriva in en gissning här hade gjort gissningen till ett faktum som
+  // grundningsgrinden sedan låter agenten citera.
+  const AVVAKTAR = "(läses in från webbplatsen)";
+
   const payload: BusinessContextInsert = {
     workspace_id: profile.workspace_id,
-    product: input.product.trim(),
-    target_audience: input.targetAudience.trim(),
-    industries: splitList(input.industries),
-    geography: splitList(input.geography),
-    tone: input.tone.trim(),
-    offer: input.offer.trim(),
-    cta: input.cta.trim(),
-    contact_roles: splitList(input.contactRoles),
+    product: [
+      `Organisationsnummer: ${formateraOrgnr(input.orgnr)}`,
+      `Webbplats: ${webbplats}`,
+      `Vad vi säljer: ${produkt}`,
+      fokus ? `Särskilt fokus: ${fokus}` : null
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    target_audience: AVVAKTAR,
+    industries: [],
+    geography: [],
+    tone: AVVAKTAR,
+    offer: produkt,
+    cta: AVVAKTAR,
+    contact_roles: [],
     updated_at: new Date().toISOString()
   };
 

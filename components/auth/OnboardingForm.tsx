@@ -1,95 +1,215 @@
 "use client";
 
-import Link from "next/link";
 import { useState, useTransition } from "react";
 import { saveBusinessContext } from "@/lib/actions/onboarding";
+import { formateraOrgnr, orgnrFel } from "@/lib/orgnr";
 
-const defaultFields = {
-  product: "AI-driven outbound för svenska B2B-team",
-  targetAudience: "Tjänstebolag 10-200 anställda",
-  industries: "bygg, fastighet, konsult, SaaS",
-  geography: "Skåne, Stockholm, Göteborg",
-  tone: "lågmäld, specifik, professionell",
-  offer: "första analys av outbound-potential",
-  cta: "skicka två konkreta exempel",
-  contactRoles: "VD, Försäljningschef, Marknadschef"
-} as const;
+/**
+ * Affärskontext på fyra fält i stället för åtta.
+ *
+ * ## Vad som var fel med det gamla formuläret
+ *
+ * Åtta fritextfält — produkt, målgrupp, branscher, geografi, tonalitet,
+ * erbjudande, CTA, roller — FÖRIFYLLDA med påhittade exempelvärden
+ * ("AI-driven outbound för svenska B2B-team", "Skåne, Stockholm, Göteborg").
+ *
+ * Två problem, och det andra är värre:
+ *
+ *  1. Man måste skriva en uppsats innan agenten gör något alls.
+ *  2. Defaultvärdena går att skicka in RAKT AV. Då får kunden en affärskontext
+ *     som beskriver ett påhittat bolag, agenten researchar mot den, och
+ *     mejlen säljer något kunden inte säljer. Ett tomt fält hade varit
+ *     ärligare än ett förifyllt fel.
+ *
+ * ## Vad agenten behöver i stället
+ *
+ * Organisationsnumret och webbplatsen. Resten läser den själv: bolagets egen
+ * sajt säger vad de gör, till vem och i vilken ton, bättre än vad någon orkar
+ * skriva i ett formulär klockan fyra på eftermiddagen.
+ *
+ * Webbplatsen är INTE valfri, och det är värt att veta varför. Från ett
+ * organisationsnummer ensamt går det inte att hitta ett bolags sajt utan
+ * Näringslivsregistret, och den licensen har vi inte (se
+ * `app/leads/sources/registry.py`). Numret identifierar och hamnar i mejlens
+ * sidfot enligt lag; sajten är det agenten faktiskt läser.
+ */
 
-const fieldConfig = [
-  ["product", "Produkt eller tjänst"],
-  ["targetAudience", "Målgrupp / ICP"],
-  ["industries", "Fokusbranscher"],
-  ["geography", "Geografi"],
-  ["tone", "Tonalitet"],
-  ["offer", "Erbjudande"],
-  ["cta", "CTA"],
-  ["contactRoles", "Roller att kontakta"]
-] as const;
+const PLACEHOLDER = {
+  orgnr: "556824-9022",
+  webbplats: "https://exempel.se",
+  produkt: "Utbildning i hjärt-lungräddning och första hjälpen för arbetsplatser",
+  fokus: "Vi vill helst nå bolag som redan köpt hjärtstartare men saknar utbildning"
+};
 
 export function OnboardingForm() {
-  const [fields, setFields] = useState(defaultFields);
+  const [orgnr, setOrgnr] = useState("");
+  const [webbplats, setWebbplats] = useState("");
+  const [produkt, setProdukt] = useState("");
+  const [fokus, setFokus] = useState("");
+
+  const [orgnrVarning, setOrgnrVarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  // Valideras när fältet lämnas, inte vid varje tangenttryck: ett fält som
+  // säger "tio siffror krävs" efter första siffran är ett fält som skäller.
+  function vidBlurOrgnr() {
+    if (!orgnr.trim()) {
+      setOrgnrVarning(null);
+      return;
+    }
+    const fel = orgnrFel(orgnr);
+    setOrgnrVarning(fel);
+    if (!fel) setOrgnr(formateraOrgnr(orgnr));
+  }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
 
+    const fel = orgnrFel(orgnr);
+    if (fel) {
+      setOrgnrVarning(fel);
+      return;
+    }
+    if (!produkt.trim()) {
+      setError("Skriv en rad om vad ni säljer. Det är det agenten ska sälja.");
+      return;
+    }
+    if (!webbplats.trim()) {
+      setError("Fyll i webbplatsen. Det är den agenten läser för att förstå er.");
+      return;
+    }
+
     startTransition(async () => {
-      const result = await saveBusinessContext(fields);
+      const result = await saveBusinessContext({ orgnr, webbplats, produkt, fokus });
       if (!result.success) {
-        setError(result.error ?? "Kunde inte spara business context.");
+        setError(result.error ?? "Kunde inte spara affärskontexten.");
       }
     });
   }
 
   return (
     <form onSubmit={handleSubmit}>
-      {/* gap-x först vid md: under md är varje fält col-span-12, och 11 gap à
-          32px blir då bredare än viewporten. body har overflow-x: clip, så
-          resultatet syns inte som scroll — fältens högerkant kapas bara bort. */}
-      <div className="mt-12 grid grid-cols-12 gap-y-6 md:gap-x-8">
-        {fieldConfig.map(([key, label]) => (
-          <label key={key} className="col-span-12 grid gap-2 border-t border-ink/15 pt-4 md:col-span-6">
-            <span className="kicker text-mineral">{label}</span>
-            <input
-              className="h-14 border border-ink/15 bg-paper2/70 px-4 text-[15px] focus:border-ochre"
-              value={fields[key]}
-              onChange={(event) =>
-                setFields((current) => ({
-                  ...current,
-                  [key]: event.target.value
-                }))
-              }
-              required
-            />
-          </label>
-        ))}
+      <p className="mt-4 max-w-[62ch] text-[15px] leading-[1.65] text-ink/70">
+        Fyll i fyra rader. Agenten läser er webbplats och tar reda på resten
+        själv — bransch, tonläge och hur ni beskriver er.
+      </p>
+
+      <div className="mt-10 grid grid-cols-12 gap-y-6 md:gap-x-8">
+        <Falt
+          label="Organisationsnummer"
+          hint="Identifierar er, och krävs enligt lag i sidfoten på varje utskick."
+          span="md:col-span-6"
+          value={orgnr}
+          onChange={setOrgnr}
+          onBlur={vidBlurOrgnr}
+          placeholder={PLACEHOLDER.orgnr}
+          varning={orgnrVarning}
+          inputMode="numeric"
+          autoComplete="off"
+        />
+
+        <Falt
+          label="Webbplats"
+          hint="Den här läser agenten. Utan den vet den bara ert nummer."
+          span="md:col-span-6"
+          value={webbplats}
+          onChange={setWebbplats}
+          placeholder={PLACEHOLDER.webbplats}
+          type="url"
+          autoComplete="url"
+        />
+
+        <Falt
+          label="Vad ni säljer"
+          hint="En rad räcker. Agenten fyller på från sajten."
+          span="md:col-span-12"
+          value={produkt}
+          onChange={setProdukt}
+          placeholder={PLACEHOLDER.produkt}
+        />
+
+        <Falt
+          label="Något extra att fokusera på (valfritt)"
+          hint="Till exempel en nisch, ett segment ni vill åt, eller något ni vill att agenten undviker."
+          span="md:col-span-12"
+          value={fokus}
+          onChange={setFokus}
+          placeholder={PLACEHOLDER.fokus}
+        />
       </div>
 
-      {/* Samma tokenbyte som i LoginForm: ochre är accenten, --danger är fel. */}
       {error ? (
-        <p role="alert" className="mt-6 break-words text-[14px] text-danger">
+        <p role="alert" className="mt-6 text-[15px] text-danger">
           {error}
         </p>
       ) : null}
 
-      <div className="mt-10 flex flex-wrap gap-4">
-        <button
-          type="submit"
-          disabled={isPending}
-          className="inline-flex items-center gap-3 bg-ink px-5 py-3 font-mono text-[13px] uppercase tracking-[0.18em] text-paper transition-colors duration-500 hover:bg-ochre hover:text-ink disabled:opacity-60"
-        >
-          {isPending ? "Sparar..." : "Spara business context"}
-          <span aria-hidden>↗</span>
-        </button>
-        <Link
-          href="/settings/mailboxes"
-          className="inline-flex items-center border border-ink/15 px-5 py-3 font-mono text-[13px] uppercase tracking-[0.18em] transition hover:border-ochre hover:text-ochre"
-        >
-          Koppla mailbox senare
-        </Link>
-      </div>
+      <button
+        type="submit"
+        disabled={isPending}
+        className="focus-ring mt-10 inline-flex min-h-12 items-center rounded-input bg-ink px-7 text-[0.9375rem] font-semibold text-paper transition-colors hover:bg-ink2 disabled:opacity-60"
+      >
+        {isPending ? "Sparar…" : "Spara och läs in vår sajt"}
+      </button>
+
+      <p className="mt-4 max-w-[62ch] text-[13px] leading-[1.55] text-mineral">
+        Inget skickas till någon mottagare av det här. Agenten läser er sajt och
+        förbereder underlag — utskick kräver att ni själva slår på det, och de
+        tre första granskas alltid av en människa.
+      </p>
     </form>
+  );
+}
+
+function Falt({
+  label,
+  hint,
+  span,
+  value,
+  onChange,
+  onBlur,
+  placeholder,
+  varning,
+  type = "text",
+  inputMode,
+  autoComplete
+}: Readonly<{
+  label: string;
+  hint: string;
+  span: string;
+  value: string;
+  onChange: (v: string) => void;
+  onBlur?: () => void;
+  placeholder: string;
+  varning?: string | null;
+  type?: string;
+  inputMode?: "numeric" | "text";
+  autoComplete?: string;
+}>) {
+  return (
+    // gap-x först vid md: under md är varje fält col-span-12, och 11 gap à
+    // 32px blir då bredare än viewporten. body har overflow-x: clip, så
+    // resultatet syns inte som scroll — fältens högerkant kapas bara bort.
+    <label className={`col-span-12 grid gap-2 border-t border-ink/15 pt-4 ${span}`}>
+      <span className="kicker text-mineral">{label}</span>
+      <input
+        className={`h-14 rounded-input border bg-paper2/70 px-4 text-[15px] focus:border-ochre ${
+          varning ? "border-danger" : "border-ink/15"
+        }`}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={onBlur}
+        placeholder={placeholder}
+        type={type}
+        inputMode={inputMode}
+        autoComplete={autoComplete}
+        aria-invalid={Boolean(varning)}
+      />
+      <span className={`text-[13px] leading-[1.5] ${varning ? "text-danger" : "text-mineral"}`}>
+        {varning ?? hint}
+      </span>
+    </label>
   );
 }
