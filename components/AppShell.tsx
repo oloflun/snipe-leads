@@ -1,5 +1,6 @@
 "use client";
 
+import { ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -54,7 +55,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   const pathname = usePathname();
   const router = useRouter();
   const { t, locale, toggleLocale } = useLocale();
-  const { products, workspaceName, availableScopes, shows } = useDashboard();
+  const { products, workspaceName, availableScopes, shows, isPlatformAdmin } = useDashboard();
 
   // Entitlement decides what exists; the scope switch decides what is on screen
   // right now. A nav listing eight Leads sections while the scope reads "Support"
@@ -130,6 +131,33 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                 </Link>
               );
             })}
+
+            {/* Plattformsadmin. Sist och visuellt skild från produktnavigationen:
+                den leder ut ur den egna arbetsytan och in i ALLA kunders siffror,
+                och ska inte se ut som ännu en flik bland de andra.
+
+                Villkoret är en ledtråd, inte en grind. Grinden är
+                requirePlatformAdmin() i app/admin/layout.tsx, som svarar 404 —
+                en manipulerad flagga ger alltså en länk till en 404, ingenting mer.
+
+                Utan den här länken fanns ingen väg alls till /admin i UI:t. Vakten
+                släppte igenom rätt person, men adressen gick bara att nå genom att
+                skriva den för hand. */}
+            {isPlatformAdmin ? (
+              <Link
+                href="/admin"
+                aria-current={pathname.startsWith("/admin") ? "page" : undefined}
+                className={cn(
+                  "focus-ring ml-auto inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-input px-3 text-sm font-medium transition-colors",
+                  pathname.startsWith("/admin")
+                    ? "bg-ochre/15 text-ink"
+                    : "text-ochre hover:bg-ochre/10"
+                )}
+              >
+                <ShieldCheck className="h-4 w-4" aria-hidden />
+                Admin
+              </Link>
+            ) : null}
           </nav>
         </div>
       </header>

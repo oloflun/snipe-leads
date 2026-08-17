@@ -22,7 +22,8 @@ const FALLBACK: DashboardState = {
   addons: [],
   variant: "demo",
   workspaceName: null,
-  signedIn: false
+  signedIn: false,
+  isPlatformAdmin: false
 };
 
 const DashboardContext = createContext<DashboardContextValue | null>(null);
