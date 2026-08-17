@@ -15,8 +15,9 @@ import {
   UserRound,
   X
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge, btnPrimary, btnSecondary } from "@/components/ui";
+import { createDemoSupportApi } from "@/lib/demo/support-inbox";
 import { readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
 
@@ -117,7 +118,16 @@ function ConfidenceBar({ value }: Readonly<{ value: number }>) {
   );
 }
 
-export function Dashboard() {
+/**
+ * `demo` byter ut backend-anropen mot exempeldata i webbläsaren.
+ *
+ * Den inloggade vägen går genom requireSnajpTenant(), som härleder tenanten ur
+ * SESSIONEN och inte har någon demo-väg — med flit. En anonym besökare får
+ * därför alltid 401 på /api/snajp-support/*, och /demo renderade tidigare ett
+ * felmeddelande mitt i produktdemon. Grinden står kvar orörd; det är indatan
+ * som byts, precis som app/demo/[[...slug]]/page.tsx föreskriver.
+ */
+export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
   const [emails, setEmails] = useState<EmailRow[]>([]);
   const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({});
   const [selected, setSelected] = useState<EmailDetail | null>(null);
@@ -131,11 +141,22 @@ export function Dashboard() {
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
 
+  // En instans per monterad vy, så att demons tillstånd inte delas mellan
+  // flikar eller återställs vid varje omrendering.
+  const demoApi = useRef<ReturnType<typeof createDemoSupportApi> | null>(null);
+  if (demo && !demoApi.current) {
+    demoApi.current = createDemoSupportApi();
+  }
+
   // Generisk med samma tillåtande default som tidigare (helpern returnerade
   // resultatet av response.json(), alltså any). Enda skillnaden är att kroppen
   // numera läses säkert.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const api = useCallback(async <T = any,>(path: string, init?: RequestInit): Promise<T> => {
+    if (demo && demoApi.current) {
+      return demoApi.current<T>(path, init);
+    }
+
     const response = await fetch(`/api/snajp-support${path}`, {
       headers: { "Content-Type": "application/json" },
       ...init
@@ -154,7 +175,7 @@ export function Dashboard() {
       throw new Error(payload.detail ?? payload.error ?? "Okänt fel");
     }
     return payload;
-  }, []);
+  }, [demo]);
 
   const refresh = useCallback(async () => {
     try {

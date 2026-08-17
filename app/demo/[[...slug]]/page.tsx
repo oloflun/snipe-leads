@@ -158,9 +158,9 @@ function renderSektion(sektion: string | undefined): React.ReactNode | null {
     case "assistant":
       return <AssistantView />;
     case "kontroll":
-      return <LeadsControls />;
+      return <LeadsControls demo />;
     case "support":
-      return <SupportDashboard />;
+      return <SupportDashboard demo />;
     default:
       return null;
   }
