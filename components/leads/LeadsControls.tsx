@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, useTransition } from "react";
+import { felmeddelande, readJsonBody } from "@/lib/http/json";
 
 /**
  * Kundens kontroller över leads-agenten: hur långt den får gå, vem den ska
@@ -76,13 +77,23 @@ export function LeadsControls() {
         fetch("/api/snajp-support/leads/queue", { cache: "no-store" })
       ]);
       if (!configResponse.ok) {
-        const body = await configResponse.json().catch(() => ({}));
-        throw new Error(body.error ?? `Kunde inte hämta inställningarna (${configResponse.status}).`);
+        const body = await readJsonBody<{ error?: string }>(configResponse).catch(() => null);
+        throw new Error(
+          body?.error ?? `Kunde inte hämta inställningarna (${configResponse.status}).`
+        );
       }
-      setConfig(await configResponse.json());
-      setQueue(queueResponse.ok ? (await queueResponse.json()).items ?? [] : []);
+      const laddadConfig = await readJsonBody<Config>(configResponse);
+      if (laddadConfig) {
+        setConfig(laddadConfig);
+      }
+      // Kön är inte kritisk för vyn — en trasig kropp ska inte fälla
+      // inställningarna som redan lästs.
+      const koSvar = queueResponse.ok
+        ? await readJsonBody<{ items?: QueueItem[] }>(queueResponse).catch(() => null)
+        : null;
+      setQueue(koSvar?.items ?? []);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Något gick fel.");
+      setError(felmeddelande(cause));
       setQueue([]);
     }
   }, []);

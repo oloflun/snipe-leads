@@ -314,6 +314,22 @@ betyder att felet utlöstes av att man satte `DEEPSEEK_API_KEY` för att gå liv
 Test: tests/invariants/test_inv_deploy_001.py
 Införd: 2026-08-14 · Upphävs endast genom waiver
 
+### INV-API-001 — Svar tolkas aldrig som JSON utan kontroll; långsam route sätter `maxDuration`
+Varje `await <svar>.json()` under `app/`, `lib/` och `components/` går via
+`readJson` eller `readJsonBody` i `lib/http/json.ts` (eller har `.catch()` direkt
+efter). Varje `route.ts` som anropar en modell eller Render-backenden
+(`generateText`, `proxyWithApiKey`, `proxyToBackend`, `proxyAsTenant`) exporterar
+`maxDuration`.
+Varför: de två felen ser ut som ett. `app/api/email-studio/route.ts` saknade
+`maxDuration`, så Vercel dödade funktionen mitt i LLM-anropet och svarade UTAN
+kropp; `EmailStudioEditor` anropade `res.json()` före `res.ok` och visade
+webbläsarens råa `Unexpected end of JSON input` för kunden. Orsaken satt i
+routens konfiguration medan felet pekade på frontend. Samma par uppstår mot
+Render, som svarar med en HTML-sida medan den vaknar ur viloläge — också det
+"inte JSON". Statuskontroll ensam räcker inte: en tom 200 kastar likadant.
+Test: tests/invariants/test_inv_api_001.py
+Införd: 2026-08-17 · Upphävs endast genom waiver
+
 ## Roadmap
 
 Ids this plan will introduce, in the order `Genomförandeordning` builds them. Not yet enforced by CI.

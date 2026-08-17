@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge, btnPrimary, btnSecondary } from "@/components/ui";
+import { readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
 
 type Classification = {
@@ -130,14 +131,24 @@ export function Dashboard() {
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
 
-  const api = useCallback(async (path: string, init?: RequestInit) => {
+  // Generisk med samma tillåtande default som tidigare (helpern returnerade
+  // resultatet av response.json(), alltså any). Enda skillnaden är att kroppen
+  // numera läses säkert.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const api = useCallback(async <T = any,>(path: string, init?: RequestInit): Promise<T> => {
     const response = await fetch(`/api/snajp-support${path}`, {
       headers: { "Content-Type": "application/json" },
       ...init
     });
-    const payload = await response.json();
+    // Gemensam väg för hela dashboardens API-anrop — en oskyddad .json() här
+    // slog igenom på varje yta som använder helpern.
+    const payload =
+      (await readJsonBody<T & { offline?: boolean; error?: string; detail?: string }>(response)) ??
+      ({} as T & { offline?: boolean; error?: string; detail?: string });
     if (payload.offline) {
-      throw new Error(payload.error);
+      throw new Error(
+        payload.error ?? "Tjänsten är inte tillgänglig just nu. Försök igen om en stund."
+      );
     }
     if (!response.ok) {
       throw new Error(payload.detail ?? payload.error ?? "Okänt fel");

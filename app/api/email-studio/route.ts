@@ -3,6 +3,18 @@ import { generateText } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { getWorkspaceContext } from '@/lib/workspace';
 
+/**
+ * Routen väntar på ett LLM-anrop och var den ENDA under app/api som saknade
+ * maxDuration. Vercels standardtak är betydligt kortare än en omskrivning tar,
+ * så funktionen dödades mitt i — och ett dödat anrop svarar UTAN kropp.
+ * Editorn anropade `.json()` på det tomma svaret och visade webbläsarens råa
+ * "Unexpected end of JSON input" för kunden. Det var den felrapporten.
+ *
+ * 60 s är taket på Vercels nuvarande plan. Håll raden och lägg till den på
+ * varje ny route som väntar på en modell.
+ */
+export const maxDuration = 60;
+
 function parseRichRefine(content: string) {
   const trimmed = content.trim();
 

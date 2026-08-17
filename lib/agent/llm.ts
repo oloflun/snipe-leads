@@ -1,3 +1,5 @@
+import { readJsonBody } from "@/lib/http/json";
+
 type ChatMessage = {
   role: "system" | "user" | "assistant";
   content: string;
@@ -73,19 +75,21 @@ export async function createChatCompletion(options: ChatCompletionOptions): Prom
     throw new Error(`LLM request failed (${response.status}): ${errorBody}`);
   }
 
-  const payload = (await response.json()) as {
+  // Statuskoden är redan kontrollerad ovan, men 200 garanterar ingen kropp:
+  // en avhuggen strömning eller en proxy-sida ger tomt/HTML här också.
+  const payload = await readJsonBody<{
     choices?: Array<{ message?: { content?: string } }>;
     model?: string;
-  };
+  }>(response);
 
-  const content = payload.choices?.[0]?.message?.content?.trim();
+  const content = payload?.choices?.[0]?.message?.content?.trim();
   if (!content) {
     throw new Error("LLM returned an empty response");
   }
 
   return {
     content,
-    model: payload.model ?? model,
+    model: payload?.model ?? model,
     provider
   };
 }

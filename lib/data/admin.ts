@@ -3,6 +3,7 @@ import "server-only";
 import { headers } from "next/headers";
 import { getPlatformAdmin } from "@/lib/auth/admin";
 import { proxyWithApiKey } from "@/app/api/snajp-support/_lib";
+import { readJsonBody } from "@/lib/http/json";
 
 /**
  * Adminvyns datahämtning, server-side.
@@ -31,12 +32,26 @@ async function adminFetch<T>(path: string, fallback: T): Promise<T | AdminUnavai
 
   const response = await proxyWithApiKey(`/api/admin${path}`, { method: "GET" }, masterKey);
   if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
+    const body = await readJsonBody<{ error?: string }>(response).catch(() => null);
     return new AdminUnavailableError(
-      body.error ?? `Backenden svarade ${response.status} på ${path}.`
+      body?.error ?? `Backenden svarade ${response.status} på ${path}.`
     );
   }
-  const body = (await response.json()) as Record<string, unknown>;
+
+  // Adminvyn är ett driftverktyg: en tom kropp ska bli ett synligt fel, inte
+  // en nolla som ser ut som ett mätvärde.
+  let body: Record<string, unknown> | null;
+  try {
+    body = await readJsonBody<Record<string, unknown>>(response);
+  } catch (cause) {
+    return new AdminUnavailableError(
+      cause instanceof Error ? cause.message : `Kunde inte läsa svaret från ${path}.`
+    );
+  }
+  if (!body) {
+    return new AdminUnavailableError(`Backenden svarade utan innehåll på ${path}.`);
+  }
+
   const key = Object.keys(body)[0];
   return (body[key] as T) ?? fallback;
 }
