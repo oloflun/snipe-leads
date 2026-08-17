@@ -8,6 +8,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { auth, ensureWorkspace, signIn, signOut as authSignOut } from "@/lib/auth";
 import { sql } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
+import { hasSupabaseAuthEnv, supabaseAuth } from "@/lib/supabase-auth";
 
 export type AuthActionResult = {
   success: boolean;
@@ -112,6 +113,21 @@ export async function signUpWithPassword(
     return { success: false, error: "Lösenordet är för kort." };
   }
 
+  // Supabase-stacken: GoTrue skapar användaren (bcrypt) och triggern skapar
+  // workspacen. Ingen direkt SQL mot auth.users.
+  if (hasSupabaseAuthEnv()) {
+    const { error } = await supabaseAuth().auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: fullName } }
+    });
+    if (error) {
+      return { success: false, error: authErrorMessage(error.message) };
+    }
+    return signInWithPassword(email, password, "/onboarding");
+  }
+
+  // Railway: direkt SQL (scrypt).
   const existing = await sql<{ id: string }>(
     "select id from auth.users where lower(email) = lower($1)",
     [email]
@@ -154,6 +170,25 @@ export async function startDemo(): Promise<AuthActionResult> {
   const email = `demo-${randomUUID()}@snajp.se`;
   const password = randomBytes(24).toString("base64url");
 
+  // Supabase-stacken: GoTrue skapar demoanvändaren, triggern skapar workspacen.
+  if (hasSupabaseAuthEnv()) {
+    const { data, error } = await supabaseAuth().auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: "Demo" } }
+    });
+    if (error || !data.user) {
+      return { success: false, error: "Demo kunde inte startas. Försök igen." };
+    }
+    await sql(
+      `update public.workspaces set is_demo = true
+       from public.profiles p where workspaces.id = p.workspace_id and p.id = $1`,
+      [data.user.id]
+    );
+    return signInWithPassword(email, password, "/onboarding");
+  }
+
+  // Railway: direkt SQL (scrypt).
   try {
     const rows = await sql<{ id: string }>(
       `insert into auth.users (email, encrypted_password, raw_user_meta_data, email_confirmed_at)
