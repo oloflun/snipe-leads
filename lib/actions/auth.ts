@@ -63,11 +63,30 @@ export async function signInWithPassword(
   password: string,
   nextPath = "/dashboard"
 ): Promise<AuthActionResult> {
+  // Utan databas finns ingen att logga in. Det här är en tydlig konfig-felsträng
+  // i stället för en generisk 500 "This page couldn't load" som inte säger något
+  // om orsaken — den slog till i varje deploy där DATABASE_URL saknades.
+  const { hasDatabase } = await import("@/lib/db");
+  if (!hasDatabase()) {
+    return {
+      success: false,
+      error: "Inloggningen är inte konfigurerad i den här miljön (DATABASE_URL saknas). Kontakta support."
+    };
+  }
+
   try {
     await signIn("credentials", { email, password, redirect: false });
   } catch (error) {
     if (error instanceof AuthError) {
       return { success: false, error: authErrorMessage(error.type) };
+    }
+    // Saknad AUTH_SECRET kastar inte AuthError. Samma princip som ovan: en
+    // tydlig sträng i stället för en generisk 500.
+    if (!process.env.AUTH_SECRET) {
+      return {
+        success: false,
+        error: "Inloggningen är inte konfigurerad i den här miljön (AUTH_SECRET saknas). Kontakta support."
+      };
     }
     throw error;
   }

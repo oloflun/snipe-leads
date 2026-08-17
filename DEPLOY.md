@@ -100,10 +100,24 @@ tjänst till Starter (~7 USD/mån), vilket också tar bort SMTP-blockeringen.
 
 Variabler sätts **per scope**. `vercel env add <namn> preview`.
 
-Sju variabler måste finnas i Preview-scopet:
-`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-`SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SITE_URL`, `SNAJP_SUPPORT_URL`,
-`SNAJP_INTERNAL_API_KEY`, `SNAJP_MASTER_API_KEY`.
+Efter Auth.js-bytet (`3c2cb2b`) är de kritiska Preview-variablerna:
+
+`AUTH_SECRET` — signerar sessions-JWT:n. Utan den är ALLA oinloggade: proxyn
+redirectar `/dashboard` → `/login` (fail-closed) och inloggningen svarar med en
+konfig-felsträng i stället för en generisk 500. Generera: `openssl rand -base64 32`.
+
+`DATABASE_URL` — pooler-värdet för Postgres (se fälla 3 nedan). PER MILJÖ:
+preview pekar på preview-grenens databas, production på produktionsdatabasen.
+Utan den kastar `lib/db.ts` och inloggningen 500:ar.
+
+Sedan de som redan fanns: `SNAJP_SUPPORT_URL`, `SNAJP_INTERNAL_API_KEY`,
+`SNAJP_MASTER_API_KEY` (backend-proxy + admin), `OPENAI_API_KEY` (email-studio,
+simulerar utan), `AUTH_GOOGLE_ID` / `AUTH_MICROSOFT_ENTRA_ID_ID` (SSO, valfria).
+
+De gamla Supabase-auth-variablerna (`NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
+`NEXT_PUBLIC_SITE_URL`) konsumeras INTE längre av frontenden — Supabase-klienten
+är borttagen i Auth.js-bytet.
 
 ### `NEXT_PUBLIC_SITE_URL` är fällan
 

@@ -11,11 +11,21 @@ import { isAuthRoute, isProtectedRoute } from "@/lib/routes";
  * den kan köra på Edge, där `pg` inte finns.
  */
 export async function proxy(request: NextRequest) {
-  // Utan AUTH_SECRET finns inga sessioner att vakta. Att kasta här tog ner
-  // varenda route inklusive de publika produktsidorna, så stå åt sidan i
-  // stället: skyddade rutter är ändå onåbara i praktiken, de har ingen data
-  // att visa.
+  const { pathname } = request.nextUrl;
+
+  // Utan AUTH_SECRET finns ingen session att validera — men det betyder INTE
+  // att skyddade routes ska stå öppna. Tvärtom: utan secret är ALLA oinloggade,
+  // så skyddade routes redirectas till /login i stället för att släppas igenom.
+  // Publika produktsidor fortsätter rendera. Att kasta här tog förut ner varenda
+  // route inklusive marknadsföringssidorna; en redirect bara för skyddade routes
+  // har inte det problemet. Det här är fail-CLOSED, inte fail-open.
   if (!process.env.AUTH_SECRET) {
+    if (isProtectedRoute(pathname)) {
+      const loginUrl = request.nextUrl.clone();
+      loginUrl.pathname = "/login";
+      loginUrl.searchParams.set("next", pathname);
+      return NextResponse.redirect(loginUrl);
+    }
     return NextResponse.next({ request });
   }
 
@@ -24,7 +34,6 @@ export async function proxy(request: NextRequest) {
     secret: process.env.AUTH_SECRET,
     secureCookie: request.nextUrl.protocol === "https:"
   });
-  const { pathname } = request.nextUrl;
 
   if (isProtectedRoute(pathname) && !token) {
     const loginUrl = request.nextUrl.clone();
