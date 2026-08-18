@@ -810,14 +810,17 @@ class PostgresStorage:
         tokens_in: int,
         tokens_out: int,
         latency_ms: int,
+        # Default false och inte None: "vet inte" ska inte vara ett möjligt
+        # tillstånd för om en körning räknas som kundvolym. Se migration 036.
+        is_test: bool = False,
     ) -> dict[str, Any]:
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
                 """
                 insert into agent_runs
                   (tenant_id, agent_type, pack_version, skills_used, input, output,
-                   step_log, tokens_in, tokens_out, latency_ms)
-                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                   step_log, tokens_in, tokens_out, latency_ms, is_test)
+                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                 returning *
                 """,
                 tenant_id,
@@ -830,6 +833,7 @@ class PostgresStorage:
                 tokens_in,
                 tokens_out,
                 latency_ms,
+                is_test,
             )
         return _row(record)
 

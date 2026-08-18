@@ -673,6 +673,7 @@ class MemoryStorage:
         tokens_in: int,
         tokens_out: int,
         latency_ms: int,
+        is_test: bool = False,
     ) -> dict[str, Any]:
         # Samma värdemängd som check-villkoret i migration 025. Utan den här
         # raden tar minnet emot vad som helst medan Postgres kastar — och det
@@ -687,6 +688,7 @@ class MemoryStorage:
             "id": str(uuid.uuid4()),
             "tenant_id": tenant_id,
             "agent_type": agent_type,
+            "is_test": is_test,
             "pack_version": pack_version,
             "skills_used": skills_used,
             "input": input_text,
