@@ -10,6 +10,7 @@ import { SignOutButton } from "@/components/auth/SignOutButton";
 import { TeamSettings } from "@/components/settings/TeamSettings";
 import { AddonSettings } from "@/components/settings/AddonSettings";
 import { OnboardingForm } from "@/components/auth/OnboardingForm";
+import { signOut } from "@/lib/actions/auth";
 import {
   analyticsSeries,
   businessContext,
@@ -550,6 +551,9 @@ export function OnboardingView() {
           <div className="col-span-12 md:col-span-3">
             <Link href="/" className="kicker text-mineral hover:text-ochre">Till startsidan</Link>
             <div className="rule mt-3 text-ink" />
+            <form action={signOut} className="mt-3">
+              <button type="submit" className="kicker text-mineral hover:text-ochre">Logga ut</button>
+            </form>
             <p className="kicker mt-4 text-ink/45">Steg 1 av 4</p>
           </div>
           <div className="col-span-12 mt-8 md:col-span-9 md:mt-0">
