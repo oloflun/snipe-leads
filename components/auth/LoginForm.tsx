@@ -3,16 +3,15 @@
 import { useState, useTransition } from "react";
 import { useSearchParams } from "next/navigation";
 import {
+  requestDemoAccess,
   requestPasswordReset,
-  signInWithMagicLink,
   signInWithOAuth,
   signInWithPassword,
-  signUpWithPassword,
-  startDemo
+  signUpWithPassword
 } from "@/lib/actions/auth";
 import { cn } from "@/lib/utils";
 
-type AuthMode = "login" | "signup" | "magic" | "reset";
+type AuthMode = "login" | "signup" | "demo" | "reset";
 
 export function LoginForm() {
   const searchParams = useSearchParams();
@@ -49,10 +48,10 @@ export function LoginForm() {
         return;
       }
 
-      if (mode === "magic") {
-        const result = await signInWithMagicLink(email, nextPath);
+      if (mode === "demo") {
+        const result = await requestDemoAccess(email, nextPath);
         if (result.success) {
-          setMessage(result.message ?? "Magic link skickad.");
+          setMessage(result.message ?? "Åtkomstlänk skickad.");
         } else {
           setError(result.error ?? "Något gick fel.");
         }
@@ -72,19 +71,6 @@ export function LoginForm() {
       const result = await signInWithPassword(email, password, nextPath);
       if (!result.success) {
         setError(result.error ?? "Inloggningen misslyckades.");
-      }
-    });
-  }
-
-  function handleDemo() {
-    setMessage(null);
-    setError(null);
-    startTransition(async () => {
-      // Vid lyckat demo redirectar servern till /onboarding, så vi når bara hit
-      // om något gick fel.
-      const result = await startDemo();
-      if (!result.success) {
-        setError(result.error ?? "Demo kunde inte startas.");
       }
     });
   }
@@ -123,18 +109,6 @@ export function LoginForm() {
           spärr är bredare än den halva kolumnen nästan överallt utom vid
           1440. Full bredd ger alltid en rad och matchar dessutom fälten
           under, som också är fullbreda. Uppmätt vid 320/375/414/768/1440. */}
-      {/* Demo-läget ersätter "magic link som ger full åtkomst": en isolerad
-          workspace utan förladdad data, med begränsat antal körningar och en
-          tydlig väg att uppgradera till ett konto. */}
-      <button
-        type="button"
-        disabled={isPending}
-        onClick={handleDemo}
-        className="mt-8 w-full border border-ochre/40 bg-ochre/10 px-4 py-3 font-mono text-[12px] uppercase tracking-[0.18em] text-ochre transition hover:bg-ochre/15 disabled:opacity-60"
-      >
-        Prova demo — utan konto
-      </button>
-
       <div className="mt-8 grid gap-3">
         {([
           ["google", "Fortsätt med Google"],
@@ -167,7 +141,7 @@ export function LoginForm() {
         {([
           ["login", "Logga in"],
           ["signup", "Skapa konto"],
-          ["magic", "Magic link"]
+          ["demo", "Prova demo"]
         ] as const).map(([value, label]) => (
           <button
             key={value}
@@ -278,8 +252,8 @@ export function LoginForm() {
             ? "Bearbetar..."
             : mode === "signup"
               ? "Skapa konto"
-              : mode === "magic"
-                ? "Skicka magic link"
+              : mode === "demo"
+                ? "Skicka åtkomstlänk"
                 : mode === "reset"
                   ? "Skicka återställningslänk"
                   : "Logga in"}
@@ -301,7 +275,7 @@ export function LoginForm() {
         </button>
       ) : (
         <p className="mt-4 text-[12px] text-mineral">
-          Magic link = snabbast väg till Email Studio (endast email, omedelbar tillgång efter inloggning). Använd "Magic link" ovan för att testa Kortare, Skriv om, Förbättra m.fl. direkt.
+          Prova demo: fyll i din mejl så skickar vi en åtkomstlänk. Ingen auto-inloggning — du behåller kontrollen.
         </p>
       )}
     </form>

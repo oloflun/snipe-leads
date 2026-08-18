@@ -34,9 +34,8 @@ const errorMessages: Record<string, string> = {
   // användaren inte tittade i.
   "credentialssignin": "Fel e-postadress eller lösenord.",
   "invalid login credentials":
-    "Fel e-postadress eller lösenord. Har du glömt lösenordet? Välj Magic link "
-    + "ovan och skriv din adress — då får du en inloggningslänk på mailen, utan "
-    + "lösenord.",
+    "Fel e-postadress eller lösenord. Har du glömt lösenordet? Välj Glömt lösenordet? "
+    + "ovan.",
   "email not confirmed":
     "Adressen är inte verifierad än. Klicka på länken i mailet vi skickade — kolla skräpposten om det inte kommit fram.",
   "user already registered":
@@ -209,13 +208,13 @@ export async function startDemo(): Promise<AuthActionResult> {
 }
 
 /**
- * Magic link — kräver utgående mail, som den här kodlinjen inte har.
+ * Demo-åtkomst: besökaren lämnar sin mejl, vi skickar en åtkomstlänk.
  *
- * `LoggingSendProvider` loggar och skickar ingenting; `email_pipeline/sender.py`
- * finns inte här. Att svara "länk skickad" hade varit en lögn användaren väntar
- * på i tystnad, precis som den gamla "Du kan nu logga in" var det.
+ * Ingen auto-inloggning och ingen magic link som ger full åtkomst — bara en
+ * ruta där de fyller i sin mejl. Sändvägen (email_pipeline/sender.py) är inte
+ * kopplad, så det svarar ärligt i stället för att låtsas skicka en länk.
  */
-export async function signInWithMagicLink(
+export async function requestDemoAccess(
   email: string,
   // Behålls i signaturen: anropsstället skickar den, och att ta bort parametern
   // hade dolt att vägen ska tillbaka så snart en sändväg finns.
@@ -223,7 +222,7 @@ export async function signInWithMagicLink(
 ): Promise<AuthActionResult> {
   return {
     success: false,
-    error: `Magic link är inte tillgängligt än — det kräver en utgående mailväg som inte är kopplad. Logga in med lösenord, Google eller Microsoft så länge. (${email})`
+    error: "Åtkomstlänken kan inte skickas än — den utgående mailvägen är inte kopplad. Mejla hej@snajp.se så ordnar vi en demo direkt."
   };
 }
 
