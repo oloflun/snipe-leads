@@ -74,10 +74,11 @@ export const config = {
     "/dashboard/:path*",
     "/settings/:path*",
     "/onboarding/:path*",
-    // /dashboard/admin täcks redan av /dashboard/:path* ovan. Grinden som räknas
-    // är getPlatformAdmin() i app/dashboard/admin/layout.tsx, som svarar 404 —
-    // och /api/admin, som proxyn medvetet INTE täcker (en redirect till /login
+    // /admin är tredje lagret, inte det bärande. Grinden som räknas är
+    // getPlatformAdmin() i app/admin/layout.tsx, som svarar 404 — och
+    // /api/admin, som proxyn medvetet INTE täcker (en redirect till /login
     // är fel svarsform för ett API-anrop och skulle dölja 404:an).
+    "/admin/:path*",
     "/login",
     "/auth/callback"
   ]

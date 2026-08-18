@@ -42,7 +42,7 @@ export default async function Page({
         {TYPES.map((type) => (
           <Link
             key={type || "alla"}
-            href={type ? `/dashboard/admin/korningar?agent_type=${type}` : "/dashboard/admin/korningar"}
+            href={type ? `/admin/korningar?agent_type=${type}` : "/admin/korningar"}
             className={
               active === type
                 ? "border border-ochre bg-ochre/10 px-4 py-2 font-mono text-[12px] uppercase tracking-[0.18em]"
@@ -91,7 +91,7 @@ export default async function Page({
                   <td className="py-4 text-right tabular-nums">{run.latency_ms ?? 0} ms</td>
                   <td className="py-4 text-right">
                     <Link
-                      href={`/dashboard/admin/korningar/${run.id}`}
+                      href={`/admin/korningar/${run.id}`}
                       className="underline underline-offset-4 hover:text-ochre"
                     >
                       Spår

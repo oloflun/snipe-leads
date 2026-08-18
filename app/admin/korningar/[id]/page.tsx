@@ -90,7 +90,7 @@ export default async function Page({ params }: Readonly<{ params: Promise<{ id: 
           {error ?? "Körningen finns inte."}
         </p>
         <Link
-          href="/dashboard/admin/korningar"
+          href="/admin/korningar"
           className="mt-6 inline-block underline underline-offset-4 hover:text-ochre"
         >
           Tillbaka till körningarna
@@ -103,7 +103,7 @@ export default async function Page({ params }: Readonly<{ params: Promise<{ id: 
 
   return (
     <div>
-      <Link href="/dashboard/admin/korningar" className="kicker text-mineral hover:text-ochre">
+      <Link href="/admin/korningar" className="kicker text-mineral hover:text-ochre">
         ← Körningar
       </Link>
 
