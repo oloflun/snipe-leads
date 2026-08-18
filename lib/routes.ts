@@ -1,4 +1,4 @@
-import type { CopyKey } from "@/lib/i18n";
+import type { CopyKey, Localized } from "@/lib/i18n";
 
 /**
  * Snajp ships two products. A workspace may own either or both; the server
@@ -60,19 +60,57 @@ export function routesForProducts(
 }
 
 /**
- * Måste stämma med flikraden i WorkspaceViews. De två var ur synk: den här
- * listan saknade /settings och /settings/soul, som båda finns och renderas.
- * En navigationslista som inte matchar de faktiska sidorna är en lista som
- * ingen litar på och alla därför skriver om lokalt — vilket är exakt hur de
- * hamnade ur synk.
+ * Inställningarna, GRUPPERADE PER AGENT.
+ *
+ * Listan var tidigare platt och — vilket är värre — helt oanvänd: inget
+ * renderade den, och /settings hade därför ingen flikrad alls. Sex sidor fanns
+ * men gick bara att nå genom att skriva adressen. En navigationslista som
+ * ingen läser blir också en lista ingen håller uppdaterad.
+ *
+ * `product` styr vem som ser gruppen. En arbetsyta som bara äger Support ska
+ * inte se leads-agentens röstdokument — samma fail-closed-regel som resten av
+ * menyn, och den enda grinden som räknas sitter ändå i sidan själv.
  */
-export const settingsRoutes = [
-  { href: "/settings", label: { sv: "Allmänt", en: "General" } },
-  { href: "/settings/soul", label: { sv: "Röst", en: "Voice" } },
-  { href: "/settings/mailboxes", label: { sv: "Mailboxar", en: "Mailboxes" } },
-  { href: "/settings/team", label: { sv: "Team", en: "Team" } },
-  { href: "/settings/billing", label: { sv: "Fakturering", en: "Billing" } }
-] as const;
+export type SettingsGroup = {
+  label: Localized;
+  product: ProductKey | "shared";
+  routes: { href: string; label: Localized }[];
+};
+
+export const settingsGroups: SettingsGroup[] = [
+  {
+    label: { sv: "Allmänt", en: "General" },
+    product: "shared",
+    routes: [
+      { href: "/settings", label: { sv: "Arbetsytan", en: "Workspace" } },
+      { href: "/settings/team", label: { sv: "Team", en: "Team" } },
+      { href: "/settings/billing", label: { sv: "Fakturering", en: "Billing" } },
+      { href: "/settings/addons", label: { sv: "Tillägg", en: "Add-ons" } }
+    ]
+  },
+  {
+    label: { sv: "Kundtjänstagenten", en: "Support agent" },
+    product: "support",
+    routes: [{ href: "/settings/mailboxes", label: { sv: "Inkorgar", en: "Mailboxes" } }]
+  },
+  {
+    // SOUL styr TON, ICP styr URVAL. Gränsen står utskriven i LeadsControls och
+    // hör hemma här också: läggs urvalskriterier i röstdokumentet slutar båda
+    // fungera som de ska.
+    label: { sv: "Leads-agenten", en: "Leads agent" },
+    product: "leads",
+    routes: [
+      { href: "/settings/soul", label: { sv: "Röst och tonläge", en: "Voice and tone" } },
+      { href: "/dashboard/leads/kontroll", label: { sv: "Målgrupp och autonomi", en: "Audience and autonomy" } }
+    ]
+  }
+];
+
+export function settingsGroupsForProducts(products: readonly ProductKey[]): SettingsGroup[] {
+  return settingsGroups.filter(
+    (group) => group.product === "shared" || products.includes(group.product)
+  );
+}
 
 /**
  * Public marketing surfaces. `/leads` and `/support` render the same shell with a
