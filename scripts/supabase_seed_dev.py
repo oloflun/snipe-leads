@@ -64,6 +64,7 @@ import argparse
 import io
 import os
 import sys
+import urllib.parse
 from pathlib import Path
 
 import psycopg2
@@ -119,13 +120,51 @@ def env_read(path: Path) -> dict[str, str]:
     return values
 
 
-def dsn_for(values: dict[str, str], var: str) -> str:
+PRODUCTION_POOLER = "aws-0-eu-west-1.pooler.supabase.com:6543"
+
+
+def _production_dsn_ur_env_fil(root: Path) -> str:
+    """Bygger produktions-DSN:en ur SUPABASE_DB_PASSWORD i .env.
+
+    Lösenordet ligger redan i repots .env (gitignorerad). Att kräva att det
+    dessutom klistras in i .env.deploy vore en andra kopia av samma hemlighet,
+    och två kopior betyder att den ena blir kvar när den andra roteras.
+
+    Poolervärdarna går INTE att gissa till varandra: produktionen svarar på
+    aws-0, grenen på aws-1. Direktvärden (db.<ref>.supabase.co) är IPv6-only och
+    går inte att nå härifrån alls. Uppmätt, inte antaget.
+    """
+    env = root / ".env"
+    if not env.exists():
+        return ""
+    for line in env.read_text(encoding="utf-8").splitlines():
+        if line.startswith("SUPABASE_DB_PASSWORD="):
+            pw = line.split("=", 1)[1].strip().strip('"').strip("'")
+            if pw and not pw.startswith("your-"):
+                kodat = urllib.parse.quote(pw, safe="")
+                return (
+                    f"postgresql://postgres.{SOURCE_REF}:{kodat}"
+                    f"@{PRODUCTION_POOLER}/postgres"
+                )
+    return ""
+
+
+def dsn_for(values: dict[str, str], var: str, root: Path) -> str:
     dsn = os.environ.get(var) or values.get(var, "")
+
+    # Källan kan härledas ur .env; målet kan det inte. Grenens lösenord är ett
+    # ANNAT än produktionens och sätts av en människa i en egen terminal — se
+    # scripts/set_preview_postgres_url.py, som med flit inte körs härifrån.
+    if not dsn and var == SOURCE_ENV_VAR:
+        dsn = _production_dsn_ur_env_fil(root)
+
     if not dsn:
-        sys.exit(
-            f"AVBRYT: {var} saknas. Lägg den i .env.deploy eller i miljön.\n"
-            f"Den ska vara postgres-anslutningen (pooler), inte projekt-URL:en."
+        hjalp = (
+            "Kör i din EGEN terminal: python scripts/set_preview_postgres_url.py"
+            if var == TARGET_ENV_VAR
+            else "Sätt SUPABASE_DB_PASSWORD i .env, eller lägg DSN:en i .env.deploy."
         )
+        sys.exit(f"AVBRYT: {var} saknas.\n{hjalp}")
     return dsn
 
 
@@ -261,8 +300,8 @@ def main() -> int:
     root = Path(__file__).resolve().parents[1]
     values = env_read(root / ".env.deploy")
 
-    source_dsn = dsn_for(values, SOURCE_ENV_VAR)
-    target_dsn = dsn_for(values, TARGET_ENV_VAR)
+    source_dsn = dsn_for(values, SOURCE_ENV_VAR, root)
+    target_dsn = dsn_for(values, TARGET_ENV_VAR, root)
     assert_refs(source_dsn, target_dsn)  # spärr 2
 
     src = psycopg2.connect(source_dsn, connect_timeout=20)
