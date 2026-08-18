@@ -481,6 +481,14 @@ def cmd_push_railway() -> None:
     print("\nBåda miljöerna kör med riktig modell.")
 
 
+def cmd_set_railway_db() -> None:
+    """Railway-motsvarigheten till --set-preview-db. Samma delegering, samma skäl."""
+    skript = Path(__file__).resolve().parent / "set_railway_postgres_url.py"
+    if not skript.exists():
+        sys.exit(f"Hittar inte {skript.name}.")
+    raise SystemExit(subprocess.call([sys.executable, str(skript), "--env", "development"]))
+
+
 def cmd_set_preview_db() -> None:
     """Delegerar till set_preview_postgres_url.py — ingen kopierad logik.
 
@@ -512,6 +520,11 @@ def main() -> None:
         help="sätt PREVIEW_POSTGRES_URL (lösenord via getpass, verifieras mot databasen)",
     )
     parser.add_argument(
+        "--set-railway-db",
+        action="store_true",
+        help="sätt RAILWAY_DEVELOPMENT_PG_* (lösenord via getpass, verifieras mot databasen)",
+    )
+    parser.add_argument(
         "--new-unlock-key",
         action="store_true",
         help="generera SNAJP_SKILL_UNLOCK_KEY (värdet skrivs aldrig ut)",
@@ -522,6 +535,8 @@ def main() -> None:
         sys.exit(0 if cmd_check() else 1)
     if args.set_preview_db:
         cmd_set_preview_db()
+    elif args.set_railway_db:
+        cmd_set_railway_db()
     elif args.new_unlock_key:
         cmd_new_unlock_key()
     elif args.pull:
