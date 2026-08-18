@@ -37,6 +37,7 @@ const ADMIN_TABS = [
   { href: "/admin", label: "Översikt" },
   { href: "/admin/kunder", label: "Kunder" },
   { href: "/admin/korningar", label: "Körningar" },
+  { href: "/admin/testkorningar", label: "Testkörningar" },
   { href: "/admin/handelser", label: "Händelser" }
 ];
 
