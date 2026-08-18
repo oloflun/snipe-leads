@@ -43,6 +43,14 @@ from pathlib import Path
 
 import psycopg2
 
+# Windows-konsolen kor cp1252 och kan INTE koda U+2192 (pilen). En print med
+# ett sadant tecken kastar UnicodeEncodeError och dodar skriptet INNAN det
+# hinner fraga efter nagot - exakt vad som hande 2026-08-18: kommandot kordes,
+# gav en traceback, och .env.deploy forblev tom. Felet sag ut som om anvandaren
+# aldrig kort kommandot.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 ROOT = Path(__file__).resolve().parent.parent
 DEPLOY_ENV = ROOT / ".env.deploy"
 
@@ -67,7 +75,7 @@ def main() -> None:
         print(f"Skapade {DEPLOY_ENV.name}.")
 
     print(f"Miljö: {args.env}")
-    print("Railway → brave-passion → miljön → Postgres → Variables\n")
+    print("Railway -> brave-passion -> miljön -> Postgres -> Variables\n")
 
     host = input("  RAILWAY_TCP_PROXY_DOMAIN (host): ").strip()
     port = input("  RAILWAY_TCP_PROXY_PORT (port):   ").strip()
