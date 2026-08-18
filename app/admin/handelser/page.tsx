@@ -60,7 +60,7 @@ export default async function Page({
         {LEVELS.map((value) => (
           <Link
             key={value || "alla"}
-            href={value ? `/dashboard/admin/handelser?level=${value}` : "/dashboard/admin/handelser"}
+            href={value ? `/admin/handelser?level=${value}` : "/admin/handelser"}
             className={
               level === value
                 ? "border border-ochre bg-ochre/10 px-4 py-2 font-mono text-[12px] uppercase tracking-[0.18em]"
@@ -101,7 +101,7 @@ export default async function Page({
                   <>
                     {" · "}
                     <Link
-                      href={`/dashboard/admin/korningar/${latest.run_id}`}
+                      href={`/admin/korningar/${latest.run_id}`}
                       className="underline underline-offset-4 hover:text-ochre"
                     >
                       till körningen
