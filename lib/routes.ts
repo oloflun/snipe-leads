@@ -85,7 +85,11 @@ export const publicProductRoutes = ["/", "/leads", "/support"] as const;
 // them would bounce every visitor to /login.
 export const protectedRoutePrefixes = ["/dashboard", "/settings", "/onboarding"] as const;
 
-export const authRoutes = ["/login", "/auth/callback"] as const;
+// /auth/callback är BORTA sedan Auth.js ersatte Supabase Auth (e376e71).
+// Routen raderades men stod kvar här och i proxyns matcher — en matcher som
+// listar en route som inte finns kostar en Edge-invokation per träff och gör
+// listan opålitlig att läsa. Auth.js egna vägar ligger under /api/auth/*.
+export const authRoutes = ["/login"] as const;
 
 export function isProtectedRoute(pathname: string): boolean {
   return protectedRoutePrefixes.some(

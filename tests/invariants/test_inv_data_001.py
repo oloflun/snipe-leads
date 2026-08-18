@@ -24,7 +24,17 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 SEED = ROOT / "scripts" / "railway_seed_dev.py"
+SUPABASE_SEED = ROOT / "scripts" / "supabase_seed_dev.py"
 SCRIPTS = ROOT / "scripts"
+
+#: Speglingsskript som ÄR granskade och bär alla spärrar. Varje fil här
+#: kontrolleras av test_vaktad_spegel_bar_alla_sparrar nedan — listan är
+#: alltså inte ett undantag utan en skärpning.
+VAKTADE_SPEGLAR = (SEED, SUPABASE_SEED)
+
+#: Trippelciterad rå sträng: mönstret innehåller både ' och ", och varje
+#: annan citering kräver escaping som är lätt att få fel.
+TARGET_FLAGGA = re.compile(r"""add_argument\(\s*["']--target""")
 
 
 @pytest.fixture(scope="module")
@@ -73,8 +83,9 @@ def test_markorspärrarna_finns(seed_source: str):
 def test_ingen_annan_scriptfil_bulkkopierar_mot_main():
     """En bulkkopiering (`copy ... from stdin`) mot main-DSN i någon ANNAN
     scriptfil vore en andra, ovaktad kanal in i produktionsdata."""
+    vaktade = {p.name for p in VAKTADE_SPEGLAR}
     for path in SCRIPTS.glob("*.py"):
-        if path.name == "railway_seed_dev.py":
+        if path.name in vaktade:
             continue
         text = path.read_text(encoding="utf-8")
         if re.search(r"copy_expert\(.*from stdin", text, re.IGNORECASE):
@@ -84,3 +95,33 @@ def test_ingen_annan_scriptfil_bulkkopierar_mot_main():
                 f"{path.name} innehåller en bulk-COPY-import. Om det är avsiktligt "
                 f"och säkert, undanta filen här med ett skrivet skäl."
             )
+
+
+@pytest.mark.parametrize("path", VAKTADE_SPEGLAR, ids=lambda p: p.name)
+def test_vaktad_spegel_bar_alla_sparrar(path):
+    """Att stå i VAKTADE_SPEGLAR är inget undantag — det är ett krav.
+
+    Catch-allen ovan hoppar över de här filerna, och utan det här testet vore
+    listan därmed en väg att smita förbi kontrollen: lägg till filnamnet, och
+    ingen granskar spärrarna. Här kontrolleras de i stället hårdare.
+    """
+    assert path.exists(), f"{path.name} saknas — spegeln har ingen spärr."
+    source = path.read_text(encoding="utf-8")
+
+    # Målet får aldrig komma ur argv.
+    assert not TARGET_FLAGGA.search(source), (
+        f"{path.name} får inte ha en --target-flagga. Målet ska vara hårdkodat."
+    )
+
+    # Markörspärrarna måste finnas OCH anropas, inte bara vara definierade.
+    for guard in ("mirror_meta", "assert_target_is_dev"):
+        assert guard in source, f"Spärren {guard} saknas i {path.name}."
+    assert source.count("assert_target_is_dev(") >= 2, (
+        f"assert_target_is_dev definieras men anropas inte i {path.name}."
+    )
+
+    # Lässidans spärr heter olika i de två skripten (main vs produktion), men
+    # NÅGON källkontroll måste finnas — annars går det att spegla en spegel.
+    assert re.search(r"def assert_source_is_\w+", source), (
+        f"{path.name} saknar en källkontroll. Utan den kan en spegel speglas."
+    )
