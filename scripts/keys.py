@@ -481,6 +481,14 @@ def cmd_push_railway() -> None:
     print("\nBåda miljöerna kör med riktig modell.")
 
 
+def cmd_set_railway_token() -> None:
+    """Railway-tokenen. Samma delegering och samma skal som ovriga."""
+    skript = Path(__file__).resolve().parent / "set_railway_token.py"
+    if not skript.exists():
+        sys.exit(f"Hittar inte {skript.name}.")
+    raise SystemExit(subprocess.call([sys.executable, str(skript)]))
+
+
 def cmd_set_railway_db() -> None:
     """Railway-motsvarigheten till --set-preview-db. Samma delegering, samma skäl."""
     skript = Path(__file__).resolve().parent / "set_railway_postgres_url.py"
@@ -525,6 +533,11 @@ def main() -> None:
         help="sätt RAILWAY_DEVELOPMENT_PG_* (lösenord via getpass, verifieras mot databasen)",
     )
     parser.add_argument(
+        "--set-railway-token",
+        action="store_true",
+        help="satt RAILWAY_TOKEN (via getpass, verifieras mot Railways API)",
+    )
+    parser.add_argument(
         "--new-unlock-key",
         action="store_true",
         help="generera SNAJP_SKILL_UNLOCK_KEY (värdet skrivs aldrig ut)",
@@ -537,6 +550,8 @@ def main() -> None:
         cmd_set_preview_db()
     elif args.set_railway_db:
         cmd_set_railway_db()
+    elif args.set_railway_token:
+        cmd_set_railway_token()
     elif args.new_unlock_key:
         cmd_new_unlock_key()
     elif args.pull:
