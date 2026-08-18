@@ -1,6 +1,6 @@
 """Pydantic-scheman för API:t."""
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class Attachment(BaseModel):
@@ -72,11 +72,60 @@ class LeadsConfigRequest(BaseModel):
     icp: dict | None = None
 
 
+class LeadsRunOverrides(BaseModel):
+    """Styrning som gäller EN körning, aldrig arbetsytans sparade ICP.
+
+    Skälet till att detta inte är inställningar: den som ska köra en gång mot
+    en särskild nisch vill inte ändra sin målgrupp, köra, och sedan komma ihåg
+    att ändra tillbaka. Glöms återställningen bearbetas nästa körning fel
+    målgrupp utan att någon ser det — och felet upptäcks först i utskicken.
+
+    Tomma fält betyder "använd den globala inställningen". Ett tomt värde är
+    alltså inte samma sak som "inga branscher".
+    """
+
+    industries: list[str] | None = None
+    exclude_industries: list[str] | None = None
+    geography: list[str] | None = None
+    anstallda_min: int | None = Field(default=None, ge=0)
+    anstallda_max: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def _spannet_maste_ga_ihop(self) -> "LeadsRunOverrides":
+        lo, hi = self.anstallda_min, self.anstallda_max
+        if lo is not None and hi is not None and lo > hi:
+            raise ValueError(
+                f"Minsta antal anställda ({lo}) är större än största ({hi}). "
+                "Ett spann som utesluter allt ger noll prospekt utan att säga varför."
+            )
+        return self
+
+    def har_nagot(self) -> bool:
+        return any(
+            v is not None
+            for v in (
+                self.industries,
+                self.exclude_industries,
+                self.geography,
+                self.anstallda_min,
+                self.anstallda_max,
+            )
+        )
+
+
 class LeadsBatchRequest(BaseModel):
     scope: str = Field(default="research", pattern=r"^(research|research_and_draft)$")
     # Taket på 50 är ekonomiskt, inte tekniskt: varje prospekt är åtta
     # LLM-anrop, så en batch på 50 är 400 — exakt tenant-timtaket.
     limit: int = Field(default=10, ge=1, le=50)
+
+    #: Överskrivningar för just den här körningen. Se LeadsRunOverrides.
+    overrides: LeadsRunOverrides | None = None
+
+    #: Testkörning: räknas som körning men märks så att den går att skilja från
+    #: kundtrafik i portföljvyn. Utan flaggan blir en provkörning omöjlig att
+    #: skilja från riktig volym, och hälsobedömningen ljuger.
+    is_test: bool = False
 
 
 class ProspectPatchRequest(BaseModel):

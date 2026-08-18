@@ -216,7 +216,9 @@ async def research_step(
     if not await storage.get_prospect(tenant["tenant_id"], payload.prospect_id):
         raise HTTPException(status_code=404, detail="Prospektet finns inte.")
 
-    context_pack, missing = await build_context_pack(storage, tenant["tenant_id"])
+    context_pack, missing = await build_context_pack(
+            storage, tenant["tenant_id"], overrides=overrides
+        )
     result = await run_research_step(
         storage,
         tenant["tenant_id"],
@@ -459,6 +461,14 @@ async def start_batch_run(
             detail="Inga prospekt att köra på. Lägg till prospekt först.",
         )
 
+    # Överskrivningarna löses ut EN gång, inte per prospekt: alla jobb i
+    # batchen ska köra mot samma målgrupp, annars går utfallet inte att jämföra.
+    overrides = (
+        payload.overrides.model_dump(exclude_none=True)
+        if payload.overrides and payload.overrides.har_nagot()
+        else None
+    )
+
     jobs = []
     for prospect in prospects[: payload.limit]:
         job_id = await request.app.state.jobs.create(tenant_id=tenant["tenant_id"])
@@ -469,14 +479,26 @@ async def start_batch_run(
                 tenant,
                 prospect_id=prospect["id"],
                 scope=payload.scope,
+                overrides=overrides,
             )
         )
         jobs.append({"job_id": job_id, "prospect_id": prospect["id"]})
 
-    return {"jobs": jobs, "scope": payload.scope, "count": len(jobs)}
+    return {
+        "jobs": jobs,
+        "scope": payload.scope,
+        "count": len(jobs),
+        # Ekas tillbaka så att den som startade körningen ser vad den FAKTISKT
+        # kördes med — inte vad formuläret råkade innehålla.
+        "overrides": overrides,
+        "is_test": payload.is_test,
+    }
 
 
-async def _run_batch_prospect(app_state, job_id: str, tenant: dict, *, prospect_id: str, scope: str) -> None:
+async def _run_batch_prospect(
+    app_state, job_id: str, tenant: dict, *, prospect_id: str, scope: str,
+    overrides: dict | None = None,
+) -> None:
     from ..agent.leads_agent import run_research_step
 
     storage = app_state.storage
