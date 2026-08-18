@@ -28,6 +28,9 @@ ROOT = Path(__file__).resolve().parent.parent
 BACKEND_ENV = ROOT / "snajp-support" / ".env"
 FRONTEND_ENV = ROOT / ".env.local"
 UNLOCK_HASH = ROOT / "agent-core" / ".unlock-hash"
+#: Drift- och speglingsvariabler. Egen fil, inte .env: de här läses av
+#: skripten i scripts/, aldrig av appen, och ska inte följa med en env-pull.
+DEPLOY_ENV = ROOT / ".env.deploy"
 
 
 class Key:
@@ -72,6 +75,27 @@ KEYS = [
         "Bara på den här maskinen; aldrig i Render/Vercel/CI.",
         required=False,
         where="genereras lokalt: python scripts/keys.py --new-unlock-key",
+        generated=True,
+    ),
+    Key(
+        "PREVIEW_POSTGRES_URL",
+        [DEPLOY_ENV],
+        "Postgres-anslutning till Supabase-grenen development, som postgres-rollen. "
+        "Krävs BARA av scripts/supabase_seed_dev.py (speglingen produktion → "
+        "development). Utan den är development-databasen en fryst ögonblicksbild: "
+        "konton som skapats i produktionen efteråt kan inte logga in där, och "
+        "/admin svarar 404 eftersom platform_admins saknar raden. "
+        "OBS: snajp_app- och snajp_web-rollerna DUGER INTE — de saknar "
+        "        OBS: snajp_app- och snajp_web-rollerna DUGER INTE — de saknar "
+        "rättigheter på auth-schemat, och auth.users är just det som måste kopieras.",
+        required=False,
+        where=(
+            "Supabase → snipra → Branches → development → Database → Reset password, "
+            "sedan: python scripts/set_preview_postgres_url.py"
+        ),
+        # generated=True: värdet klistras aldrig in rått här. Det egna kommandot
+        # verifierar anslutningen och bygger DSN:en, så en felstavning fångas
+        # innan den skrivs — samma resonemang som SNAJP_SKILL_UNLOCK_KEY.
         generated=True,
     ),
 ]
