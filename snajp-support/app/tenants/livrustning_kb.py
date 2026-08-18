@@ -157,12 +157,32 @@ KB_ARTICLES: list[dict] = [
         "content": "Vi lämnar 100 % nöjdhetsgaranti på våra utbildningar.",
     },
     {
-        "title": "Ångerrätt och öppet köp",
+        "title": "Ångerrätt och öppet köp — ångra köp, returnera eller skicka tillbaka en vara",
         "category": "retur_reklamation",
+        # FORMULERINGARNA I TITEL OCH FÖRSTA MENING ÄR INTE UTFYLLNAD.
+        #
+        # Utan embeddings faller hämtningen tillbaka på svensk fulltextsökning, och
+        # den delar INTE sammansatta ord: artikeln tokeniseras till 'ångerrät' medan
+        # frågan "kan jag ångra mitt köp?" blir 'ångr'. De matchar inte. Mätt mot
+        # produktionen 2026-08-17 — agenten eskalerade en fråga vars svar stod här.
+        #
+        # Därför står böjningarna och synonymerna utskrivna: ångra, ångra köpet,
+        # returnera, retur, skicka tillbaka, byta. Ta inte bort dem förrän
+        # embeddings faktiskt är beräknade (kolumnen är NULL för samtliga artiklar).
         "content": (
-            "Du har öppet köp och ångerrätt i 45 dagar vid köp i webbutiken. Varan ska vara "
-            "oskadad och i originalförpackning. Kunden betalar returfrakten. Återbetalning sker "
-            "inom 30 dagar."
+            "Vill du ångra ditt köp, ångra en beställning, returnera en vara, göra en retur "
+            "eller skicka tillbaka något du köpt gäller följande: du har öppet köp och "
+            "ångerrätt i 45 dagar vid köp i webbutiken. Det är längre än de 14 dagar lagen "
+            "kräver.
+
+"
+            "Varan ska vara oskadad och i originalförpackning. Kunden betalar returfrakten. "
+            "Återbetalning sker inom 30 dagar.
+
+"
+            "Gäller frågan en bokad utbildning och inte en vara i webbutiken: svara inte på "
+            "egen hand, utan lämna över till en människa. Avbokningsregler för kurser är inte "
+            "detsamma som öppet köp på en produkt."
         ),
     },
     {
