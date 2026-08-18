@@ -199,9 +199,17 @@ class Storage(Protocol):
         tokens_in: int,
         tokens_out: int,
         latency_ms: int,
+        is_test: bool = False,
     ) -> dict[str, Any]:
         """Skrivs för VARJE körning. Krävs för DSAR och för att kunna felsöka
-        ett dåligt svar i efterhand (plan G10)."""
+        ett dåligt svar i efterhand (plan G10).
+
+        `is_test` märker körningar startade från adminytans testyta. De skrivs
+        som alla andra men får aldrig räknas som kundvolym — se migration 036.
+        Parametern står i PROTOKOLLET och inte bara i Postgres-implementationen,
+        eftersom en signatur som skiljer sig mellan lagren är exakt hur
+        agent_runs kunde avvisa varje leads-körning i ett halvår med grön
+        testsvit."""
         ...
 
     async def list_agent_runs(

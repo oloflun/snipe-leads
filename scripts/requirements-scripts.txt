@@ -1,0 +1,12 @@
+# Beroenden för drift- och speglingsskripten i scripts/.
+#
+# Står SKILT från snajp-support/requirements.txt med flit: de här körs från en
+# utvecklingsmaskin mot databaser, aldrig i den deployade containern. Att lägga
+# psycopg2 i backendens requirements hade dragit in en byggkedja i en image som
+# inte behöver den.
+#
+#   pip install -r scripts/requirements-scripts.txt
+#
+# Upptäckt 2026-08-18: varken railway_seed_dev.py eller supabase_seed_dev.py
+# gick att köra, eftersom psycopg2 aldrig deklarerats någonstans.
+psycopg2-binary>=2.9

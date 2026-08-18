@@ -28,6 +28,9 @@ ROOT = Path(__file__).resolve().parent.parent
 BACKEND_ENV = ROOT / "snajp-support" / ".env"
 FRONTEND_ENV = ROOT / ".env.local"
 UNLOCK_HASH = ROOT / "agent-core" / ".unlock-hash"
+#: Drift- och speglingsvariabler. Egen fil, inte .env: de här läses av
+#: skripten i scripts/, aldrig av appen, och ska inte följa med en env-pull.
+DEPLOY_ENV = ROOT / ".env.deploy"
 
 
 class Key:
@@ -72,6 +75,27 @@ KEYS = [
         "Bara på den här maskinen; aldrig i Render/Vercel/CI.",
         required=False,
         where="genereras lokalt: python scripts/keys.py --new-unlock-key",
+        generated=True,
+    ),
+    Key(
+        "PREVIEW_POSTGRES_URL",
+        [DEPLOY_ENV],
+        "Postgres-anslutning till Supabase-grenen development, som postgres-rollen. "
+        "Krävs BARA av scripts/supabase_seed_dev.py (speglingen produktion → "
+        "development). Utan den är development-databasen en fryst ögonblicksbild: "
+        "konton som skapats i produktionen efteråt kan inte logga in där, och "
+        "/admin svarar 404 eftersom platform_admins saknar raden. "
+        "OBS: snajp_app- och snajp_web-rollerna DUGER INTE — de saknar "
+        "        OBS: snajp_app- och snajp_web-rollerna DUGER INTE — de saknar "
+        "rättigheter på auth-schemat, och auth.users är just det som måste kopieras.",
+        required=False,
+        where=(
+            "Supabase → snipra → Branches → development → Database → Reset password, "
+            "sedan: python scripts/set_preview_postgres_url.py"
+        ),
+        # generated=True: värdet klistras aldrig in rått här. Det egna kommandot
+        # verifierar anslutningen och bygger DSN:en, så en felstavning fångas
+        # innan den skrivs — samma resonemang som SNAJP_SKILL_UNLOCK_KEY.
         generated=True,
     ),
 ]
@@ -457,6 +481,24 @@ def cmd_push_railway() -> None:
     print("\nBåda miljöerna kör med riktig modell.")
 
 
+def cmd_set_preview_db() -> None:
+    """Delegerar till set_preview_postgres_url.py — ingen kopierad logik.
+
+    Skillen (api-key-setup) vill ha EN ingång per projekt, och det är den här
+    filen. Men verifieringen mot databasen, valet av sessionsläge framför
+    transaktionsläge, och kontrollen att rollen faktiskt får läsa auth.users
+    bor i det dedikerade skriptet. Två kopior av den logiken hade glidit isär
+    på exakt den punkt där det kostar mest: en anslutning som ser giltig ut men
+    fäller speglingen halvvägs.
+
+    Samma tolk används med flit — annars kan psycopg2 saknas i den som startar.
+    """
+    skript = Path(__file__).resolve().parent / "set_preview_postgres_url.py"
+    if not skript.exists():
+        sys.exit(f"Hittar inte {skript.name}.")
+    raise SystemExit(subprocess.call([sys.executable, str(skript)]))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Nyckelhantering för snipra/snajp.")
     parser.add_argument("--check", action="store_true", help="verifiera utan att ändra")
@@ -464,6 +506,11 @@ def main() -> None:
     parser.add_argument("--push", action="store_true", help="skicka till Vercel")
     parser.add_argument("--push-railway", action="store_true",
                         help="skicka backend-nycklarna till BÅDA Railway-miljöerna och verifiera")
+    parser.add_argument(
+        "--set-preview-db",
+        action="store_true",
+        help="sätt PREVIEW_POSTGRES_URL (lösenord via getpass, verifieras mot databasen)",
+    )
     parser.add_argument(
         "--new-unlock-key",
         action="store_true",
@@ -473,7 +520,9 @@ def main() -> None:
 
     if args.check:
         sys.exit(0 if cmd_check() else 1)
-    if args.new_unlock_key:
+    if args.set_preview_db:
+        cmd_set_preview_db()
+    elif args.new_unlock_key:
         cmd_new_unlock_key()
     elif args.pull:
         cmd_pull()

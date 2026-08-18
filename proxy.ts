@@ -79,7 +79,6 @@ export const config = {
     // /api/admin, som proxyn medvetet INTE täcker (en redirect till /login
     // är fel svarsform för ett API-anrop och skulle dölja 404:an).
     "/admin/:path*",
-    "/login",
-    "/auth/callback"
+    "/login"
   ]
 };

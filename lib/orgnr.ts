@@ -13,10 +13,6 @@
  * Ändras reglerna här måste orgnr.py ändras likadant, och tvärtom.
  */
 
-const PERSONNUMMER_SVAR =
-  "Det där ser ut som ett personnummer, inte ett organisationsnummer. Skriv inte in ditt " +
-  "personnummer här — vi behöver bolagets nummer, det som står på fakturor och registreringsbeviset.";
-
 /** Publika e-postdomäner säger ingenting om var bolaget har sin sajt. */
 const PUBLIKA_EPOSTDOMANER = new Set([
   "gmail.com", "hotmail.com", "outlook.com", "live.se", "live.com",
@@ -26,9 +22,20 @@ const PUBLIKA_EPOSTDOMANER = new Set([
 
 export function normaliseraOrgnr(rå: string): string {
   const siffror = (rå ?? "").replace(/\D/g, "");
-  // Prefixet 16 är en sekelmarkör ur myndighetsregister och ska bort innan
-  // kontrollsiffran räknas, annars faller giltiga nummer.
-  return siffror.length === 12 && siffror.startsWith("16") ? siffror.slice(2) : siffror;
+  // Sekelmarkör bort innan kontrollsiffran räknas, annars faller giltiga nummer.
+  //
+  // 16 kommer ur myndighetsregister. 19 och 20 tillkom när personnummerspärren
+  // togs bort (2026-08-18): ENSKILD FIRMA HAR PERSONNUMMER SOM
+  // ORGANISATIONSNUMMER, och den bolagsformen nekades tidigare i sin helhet.
+  //
+  // Vad som gick förlorat, så att det står skrivet: spärren fanns av ett
+  // INTEGRITETSskäl — den hindrade en privatperson från att av misstag klistra
+  // in sitt personnummer i ett fält vi behandlar som företagsdata. Det skyddet
+  // finns inte längre. Speglas i snajp-support/app/leads/orgnr.py.
+  const sekel = ["16", "19", "20"];
+  return siffror.length === 12 && sekel.includes(siffror.slice(0, 2))
+    ? siffror.slice(2)
+    : siffror;
 }
 
 function luhnStammer(siffror: string): boolean {
@@ -50,16 +57,6 @@ export function orgnrFel(rå: string): string | null {
   const siffror = normaliseraOrgnr(rå);
 
   if (!siffror) return "Fyll i organisationsnumret.";
-
-  // Före längdkontrollen: ett tolvsiffrigt personnummer hade annars fällts som
-  // "fel längd", och användaren hade rättat längden i stället för att förstå
-  // att fältet inte ska innehålla ett personnummer alls.
-  if (siffror.length === 12 && (siffror.startsWith("19") || siffror.startsWith("20"))) {
-    return PERSONNUMMER_SVAR;
-  }
-  if (siffror.length === 10 && Number(siffror[2]) < 2) {
-    return PERSONNUMMER_SVAR;
-  }
 
   if (siffror.length !== 10) {
     return `Ett organisationsnummer har tio siffror, det här har ${siffror.length}. Skriv det som 556824-9022.`;
