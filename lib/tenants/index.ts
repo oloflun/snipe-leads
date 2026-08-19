@@ -1,6 +1,7 @@
 import type { Tenant, TenantPalette } from "./types";
 import { livrustning } from "./livrustning";
 import { snajp } from "./snajp";
+import { testkund } from "./testkund";
 
 export type { Tenant, TenantLogo, TenantPalette } from "./types";
 
@@ -12,7 +13,10 @@ const tenants: Record<string, Tenant> = {
   livrustning,
   // Vår egen arbetsyta. Vi använder produkten själva, och utan den här raden
   // svarar /chat/snajp med ett internt felmeddelande.
-  snajp
+  snajp,
+  // Delad tenant för konton skapade med "Testarbetsyta" ikryssad. Utan den
+  // möter en nyskapad testkund 409 på sina egna ytor — uppmätt, se filen.
+  testkund
 };
 
 /** Headern som proxy.ts sätter när värdnamnet pekar ut en kund. */
