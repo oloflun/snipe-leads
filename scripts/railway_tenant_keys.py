@@ -55,6 +55,9 @@ from railway_provision import (envs_by_name, services_by_name,  # noqa: E402
 TENANTS = {
     "livrustning": "Livrustning AB",
     "snajp": "Snajp",
+    # Delad tenant för konton skapade med "Testarbetsyta" ikryssad i
+    # onboardingen. Se lib/tenants/testkund.ts för avvägningen.
+    "testkund": "Testarbetsyta",
 }
 
 

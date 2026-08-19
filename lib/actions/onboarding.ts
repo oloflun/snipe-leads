@@ -171,5 +171,41 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
     return { success: false, error: (error as Error).message };
   }
 
+  /**
+   * Testarbetsytan kopplas till den delade `testkund`-tenanten.
+   *
+   * Utan det här är bypassen halvfärdig. Uppmätt mot dev-deployen 2026-08-19:
+   * den nyskapade testkunden mötte 409 på Kontroll, Kundtjänst och Röst,
+   * eftersom `requireSnajpTenant()` härleder kunden ur `workspaces.slug` och
+   * den var null. En testkund som inte kan använda produkten testar ingenting.
+   *
+   * Bara för testarbetsytor. En RIKTIG kund kopplas av
+   * `scripts/onboard_tenant.py` till en EGEN tenant — en delad tenant betyder
+   * delad inkorg och delad kunskapsbas, vilket är rätt för ett test och
+   * oacceptabelt för en kund.
+   *
+   * Villkorad på att slug är tom: en workspace som redan pekar på en kund rörs
+   * aldrig härifrån, hur rutan än kryssas.
+   */
+  if (input.testkund) {
+    try {
+      await sqlAsUser(
+        user.id,
+        `update public.workspaces w
+            set slug = 'testkund',
+                ss_tenant_id = t.id,
+                is_demo = true
+           from public.ss_tenants t
+          where w.id = $1 and t.slug = 'testkund' and w.slug is null`,
+        [profile.workspace_id]
+      );
+    } catch (error) {
+      // Kopplingen får inte fälla onboardingen. Affärskontexten är sparad, och
+      // en okopplad testyta ger ett ärligt 409 med instruktion — att slänga
+      // bort ett lyckat sparande för det vore sämre.
+      console.error("[onboarding] kunde inte koppla testarbetsytan:", error);
+    }
+  }
+
   redirect("/dashboard");
 }
