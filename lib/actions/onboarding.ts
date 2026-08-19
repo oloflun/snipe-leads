@@ -189,16 +189,12 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
    */
   if (input.testkund) {
     try {
-      await sqlAsUser(
-        user.id,
-        `update public.workspaces w
-            set slug = 'testkund',
-                ss_tenant_id = t.id,
-                is_demo = true
-           from public.ss_tenants t
-          where w.id = $1 and t.slug = 'testkund' and w.slug is null`,
-        [profile.workspace_id]
-      );
+      // En UPDATE härifrån ändrade NOLL rader utan att kasta: workspaces har
+      // bara en SELECT-policy, och när ingen policy gäller kommandot ger RLS
+      // noll rader tyst. Migration 038 lägger en smal security definer-dörr i
+      // stället för en UPDATE-policy — en sådan hade låtit appen skriva om
+      // `slug`, alltså byta vilken kunds data arbetsytan ser.
+      await sqlAsUser(user.id, "select public.link_testkund_workspace()");
     } catch (error) {
       // Kopplingen får inte fälla onboardingen. Affärskontexten är sparad, och
       // en okopplad testyta ger ett ärligt 409 med instruktion — att slänga
