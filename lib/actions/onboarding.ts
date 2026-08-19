@@ -14,6 +14,19 @@ export type OnboardingInput = {
   webbplats: string;
   produkt: string;
   fokus: string;
+  /**
+   * Testarbetsyta: organisationsnumret hoppas över.
+   *
+   * Det finns inget riktigt bolag bakom en testkund, och att kräva ett giltigt
+   * nummer betyder i praktiken att någon klistrar in NÅGON ANNANS — vilket är
+   * sämre än att markera arbetsytan för vad den är.
+   *
+   * Markeringen skrivs in i produkttexten, inte bara i ett flaggfält, så att
+   * den syns för den som läser affärskontexten i adminvyn. En testkund som ser
+   * ut som en riktig kund i portföljen är exakt den sortens siffra som fattar
+   * beslut åt en.
+   */
+  testkund?: boolean;
 };
 
 export type OnboardingActionResult = {
@@ -67,7 +80,10 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
 
   // Serversidan validerar OM. lib/orgnr.ts kör samma kontroll i webbläsaren,
   // men klientkod går att kringgå och det som skyddar är alltid den här sidan.
-  const orgnrProblem = orgnrFel(input.orgnr);
+  // Serversidan validerar OM — men inte för en testarbetsyta. Kontrollen
+  // hoppas över på BÅDA sidor, annars vore klientens kryssruta verkningslös och
+  // felet hade dykt upp först vid inskickning.
+  const orgnrProblem = input.testkund ? null : orgnrFel(input.orgnr);
   if (orgnrProblem) {
     return { success: false, error: orgnrProblem };
   }
@@ -100,7 +116,9 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
   const payload: BusinessContextInsert = {
     workspace_id: profile.workspace_id,
     product: [
-      `Organisationsnummer: ${formateraOrgnr(input.orgnr)}`,
+      input.testkund
+        ? "Organisationsnummer: — (TESTARBETSYTA, inget riktigt bolag)"
+        : `Organisationsnummer: ${formateraOrgnr(input.orgnr)}`,
       `Webbplats: ${webbplats}`,
       `Vad vi säljer: ${produkt}`,
       fokus ? `Särskilt fokus: ${fokus}` : null

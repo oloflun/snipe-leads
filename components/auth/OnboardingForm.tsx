@@ -48,6 +48,7 @@ export function OnboardingForm() {
   const [fokus, setFokus] = useState("");
 
   const [orgnrVarning, setOrgnrVarning] = useState<string | null>(null);
+  const [testkund, setTestkund] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -67,7 +68,11 @@ export function OnboardingForm() {
     event.preventDefault();
     setError(null);
 
-    const fel = orgnrFel(orgnr);
+    // Testkund: organisationsnumret hoppas över helt. Det finns inget riktigt
+    // bolag bakom en testarbetsyta, och att kräva ett giltigt nummer betyder i
+    // praktiken att man klistrar in NÅGON ANNANS — vilket är sämre än att
+    // markera arbetsytan som ett test.
+    const fel = testkund ? null : orgnrFel(orgnr);
     if (fel) {
       setOrgnrVarning(fel);
       return;
@@ -82,7 +87,13 @@ export function OnboardingForm() {
     }
 
     startTransition(async () => {
-      const result = await saveBusinessContext({ orgnr, webbplats, produkt, fokus });
+      const result = await saveBusinessContext({
+        orgnr: testkund ? "" : orgnr,
+        webbplats,
+        produkt,
+        fokus,
+        testkund
+      });
       if (!result.success) {
         setError(result.error ?? "Kunde inte spara affärskontexten.");
       }
@@ -109,6 +120,34 @@ export function OnboardingForm() {
           inputMode="numeric"
           autoComplete="off"
         />
+
+        {/* Testarbetsyta.
+
+            Utan den här rutan finns bara två vägar för att skapa en testkund:
+            hitta på ett organisationsnummer som råkar klara Luhn, eller
+            klistra in ett riktigt bolags. Det andra är sämre än det ser ut —
+            numret hamnar i affärskontexten som agenten sedan säljer utifrån.
+
+            Markeringen skrivs in i affärskontexten, inte bara som ett flaggfält,
+            så att den syns för den som läser kunden i adminvyn. En testkund som
+            ser ut som en riktig kund i portföljen är precis den sortens siffra
+            som fattar beslut åt en. */}
+        <label className="col-span-12 flex items-start gap-3 md:col-span-6">
+          <input
+            type="checkbox"
+            checked={testkund}
+            onChange={(e) => {
+              setTestkund(e.target.checked);
+              if (e.target.checked) setOrgnrVarning(null);
+            }}
+            className="focus-ring mt-1 h-4 w-4 shrink-0"
+          />
+          <span className="text-[14px] leading-6 text-ink/70">
+            <span className="font-medium text-ink">Testarbetsyta</span> — hoppa över
+            organisationsnumret. Använd bara för test; arbetsytan märks som
+            testkund i affärskontexten.
+          </span>
+        </label>
 
         <Falt
           label="Webbplats"
