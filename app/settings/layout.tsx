@@ -1,5 +1,4 @@
 import { DashboardProvider } from "@/components/dashboard/DashboardContext";
-import { SettingsNav } from "@/components/settings/SettingsNav";
 import { resolveDashboardState } from "@/lib/data/dashboard";
 import { requireOnboarded } from "@/lib/auth/onboarding-gate";
 
@@ -12,8 +11,21 @@ import { requireOnboarded } from "@/lib/auth/onboarding-gate";
  * var att inställningssidorna i praktiken inte visste vem som var inloggad
  * eller vad arbetsytan äger, och grindade därför ingenting.
  *
- * SettingsNav tillkom 2026-08-18. Sidorna hade dessförinnan ingen flikrad alls
- * och gick bara att nå genom att skriva adressen.
+ * SettingsNav tillkom 2026-08-18 och renderades FÖRST här, i en egen aside
+ * bredvid `children`. Det gav två fel samtidigt, båda synliga i pixlar:
+ *
+ *  1. Två navigationer staplade. Sidan renderar sin EGEN lista via
+ *     SettingsView — sex poster, oöversatta ("General", "Mailboxes",
+ *     "Billing") och ogrupperade — ovanpå den grupperade i asiden. Två listor
+ *     över samma sex sidor är inte redundans utan en gissningslek.
+ *  2. Skalet hamnade i fel kolumn. Varje arbetsytesvy renderar sitt eget
+ *     AppShell via PageShell, och asiden låg UTANFÖR det. Logotypen och
+ *     flikraden började därför inte vid sidans vänsterkant utan vid
+ *     innehållskolumnens.
+ *
+ * Navigationen bor nu inuti SettingsView, där den gamla listan låg. Under
+ * /admin renderar AppShell bara innehåll (se den filen), så samma sida
+ * fungerar oförändrad på båda ytorna.
  */
 export default async function SettingsLayout({
   children
@@ -23,12 +35,7 @@ export default async function SettingsLayout({
 
   return (
     <DashboardProvider state={state}>
-      <div className="mx-auto grid max-w-[1400px] gap-10 px-4 py-10 md:grid-cols-[220px_1fr] md:px-6">
-        <aside className="md:sticky md:top-6 md:self-start">
-          <SettingsNav />
-        </aside>
-        <div className="min-w-0">{children}</div>
-      </div>
+      {children}
     </DashboardProvider>
   );
 }

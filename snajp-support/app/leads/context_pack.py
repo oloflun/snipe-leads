@@ -84,9 +84,15 @@ def _med_overrides(icp: dict | None, overrides: dict | None) -> dict | None:
     if not overrides:
         return icp
 
+    # Lokal import av samma skäl som render_icp nedan: icp.py importerar
+    # härifrån, och en toppnivåimport ger en cirkel.
+    from .icp import LIST_FIELDS
+
     sammanslagen = dict(icp or {})
 
-    for nyckel in ("industries", "exclude_industries", "geography"):
+    # LIST_FIELDS och inte en egen lista: två listor över samma fält glider
+    # isär, och den som glider blir en override som tyst inte gör något.
+    for nyckel in LIST_FIELDS:
         varde = overrides.get(nyckel)
         if varde is not None:
             sammanslagen[nyckel] = varde

@@ -7,6 +7,7 @@ import { PageShell, useArbetsvag } from "@/components/AppShell";
 import { btnPrimary, btnSecondary } from "@/components/ui";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { SignOutButton } from "@/components/auth/SignOutButton";
+import { SettingsNav } from "@/components/settings/SettingsNav";
 import { TeamSettings } from "@/components/settings/TeamSettings";
 import { AddonSettings } from "@/components/settings/AddonSettings";
 import { OnboardingForm } from "@/components/auth/OnboardingForm";
@@ -465,22 +466,26 @@ export function SettingsView({ section = "general" }: Readonly<{ section?: "gene
             femte ("Röst") tog den till 334px mot 288px tillgängligt vid
             320px-vyn, och "BILLING" klipptes av body{overflow-x:hidden}
             i stället för att radbrytas. Uppmätt, inte gissat. */}
-        <nav className="kicker col-span-12 flex min-w-0 flex-wrap gap-5 text-mineral md:col-span-3 md:block md:space-y-4">
-          {[
-            ["/settings", "General"],
-            ["/settings/soul", "Röst"],
-            ["/settings/mailboxes", "Mailboxes"],
-            ["/settings/team", "Team"],
-            ["/settings/addons", "Tillägg"],
-            ["/settings/billing", "Billing"]
-          ].map(([href, label]) => <Link key={href} href={href} className="block hover:text-ochre">{label}</Link>)}
+        {/* SettingsNav och inte en egen lista.
+
+            Här låg tidigare sex hårdkodade Link:ar — oöversatta ("General",
+            "Mailboxes", "Billing"), ogrupperade och utan aktiv-markering — och
+            SAMTIDIGT renderade app/settings/layout.tsx den grupperade
+            SettingsNav i en aside. Två navigationer till samma sex sidor,
+            staplade i samma vy. Uppmätt i skärmdump, inte antaget.
+
+            Grupperingen per agent är hela poängen: "Röst och tonläge" hör till
+            leads-agenten och "Inkorgar" till kundtjänstagenten, och en platt
+            lista tvingar läsaren att veta det innan hen klickar. */}
+        <div className="col-span-12 md:col-span-3">
+          <SettingsNav />
           {/* Utloggningen bor här och inte i navigationsraden: den hör till
               kontot, inte till arbetsytan, och /settings är den enda ytan som
               alltid kräver en session. */}
-          <div className="mt-6 w-full border-t border-ink/15 pt-6 md:mt-8">
+          <div className="mt-8 border-t border-ink/15 pt-6">
             <SignOutButton />
           </div>
-        </nav>
+        </div>
         <div className="col-span-12 md:col-span-9">
           {section === "general" ? <BusinessContextSettings /> : null}
           {section === "soul" ? <SoulEditor /> : null}
