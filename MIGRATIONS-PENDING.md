@@ -37,6 +37,29 @@ avsiktligt — utan nyckel svarar vi hellre inte alls än som ett annat bolag.
 
 Ersatt av `032`, som gör samma sak utan ordningsberoende. Kan tas bort.
 
+## 039 och 040 — SKRIVNA, INTE KÖRDA (2026-08-20)
+
+Koden som använder dem är deployad. Båda är additiva och kan köras när som
+helst; ingen av dem rör befintliga rader.
+
+| Migration | Vad den ger | Vad som INTE fungerar förrän den körts |
+|---|---|---|
+| `039_prospect_origin` | `prospects.origin` (`manual`/`example`/`import`) | Exempelbolagen. `POST /api/leads/prospects/exempel` svarar med ett förklarande fel; vanliga prospekt skapas som förut (fallback i `postgres.create_prospect`). |
+| `040_testkund_egen_tenant` | `workspace_tenant_keys` + `link_test_tenant()` + `tenant_api_key_for_current_workspace()` | Egen tenant per testarbetsyta. Onboardingen faller tillbaka på den DELADE `testkund`-tenanten — alltså dagens beteende, med delad kunskapsbas. |
+
+Fallbackarna är avsiktliga och inte tysta: koden deployas från grenen och
+migrationerna körs av en människa med databaslösenordet, så de landar aldrig
+samtidigt. En ny kolumn får inte ta ner den befintliga pipelinen under den
+timmen.
+
+```bash
+python scripts/railway_migrate.py --env development --apply
+```
+
+Kommandot kräver `RAILWAY_DEVELOPMENT_PG_{PASSWORD,HOST,PORT}` i `.env.deploy`.
+Verifiera efteråt som `authenticated` med ett riktigt konto, aldrig som
+`postgres` — se lärdomen från 030–033 ovan.
+
 ## Fortfarande öppet — inte migrationer
 
 1. **`SNAJP_MASTER_API_KEY` på Vercel.** Utan den svarar `/api/admin/*` med

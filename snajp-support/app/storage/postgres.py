@@ -11,12 +11,15 @@ precis som referensarkitekturen. Saknas embeddings används
 
 import hashlib
 import json
+import logging
 from contextlib import asynccontextmanager
 from typing import Any
 
 import asyncpg
 
 from .base import status_transition_allowed
+
+logger = logging.getLogger("snajp-support.storage")
 
 
 async def _init_connection(conn: asyncpg.Connection) -> None:
@@ -727,17 +730,52 @@ class PostgresStorage:
         origin: str = "manual",
     ) -> dict[str, Any]:
         async with self._scoped(tenant_id) as conn:
-            record = await conn.fetchrow(
-                """
-                insert into prospects (tenant_id, company_name, contact_name, contact_email, origin)
-                values ($1, $2, $3, $4, $5) returning *
-                """,
-                tenant_id,
-                company_name,
-                contact_name,
-                contact_email,
-                origin,
-            )
+            try:
+                record = await conn.fetchrow(
+                    """
+                    insert into prospects
+                      (tenant_id, company_name, contact_name, contact_email, origin)
+                    values ($1, $2, $3, $4, $5) returning *
+                    """,
+                    tenant_id,
+                    company_name,
+                    contact_name,
+                    contact_email,
+                    origin,
+                )
+            except asyncpg.UndefinedColumnError:
+                # Migration 039 är inte körd i den här databasen ännu.
+                #
+                # Koden deployas från grenen, migrationerna körs av en människa
+                # med databaslösenordet — de två landar alltså inte samtidigt.
+                # Utan den här grenen slutar VARJE prospekt att gå att skapa
+                # under mellantiden, inklusive de som inte har med exempelbolag
+                # att göra: en ny kolumn hade tagit ner den befintliga
+                # pipelinen.
+                #
+                # Exempelbolag kan däremot inte skapas säkert utan kolumnen —
+                # utan `origin` finns ingen markering, och utan markering kan
+                # send-guarden inte skilja dem från riktiga prospekt.
+                if origin != "manual":
+                    raise RuntimeError(
+                        "Kolumnen prospects.origin saknas (migration 039 är inte körd). "
+                        "Exempelbolag kan inte skapas utan den — de skulle inte gå att "
+                        "skilja från riktiga prospekt i utskicksspärren."
+                    ) from None
+                logger.warning(
+                    "prospects.origin saknas — migration 039 är inte körd. "
+                    "Skapar prospektet utan ursprungsmarkering."
+                )
+                record = await conn.fetchrow(
+                    """
+                    insert into prospects (tenant_id, company_name, contact_name, contact_email)
+                    values ($1, $2, $3, $4) returning *
+                    """,
+                    tenant_id,
+                    company_name,
+                    contact_name,
+                    contact_email,
+                )
         return _row(record)
 
     async def get_prospect(self, tenant_id: str, prospect_id: str) -> dict[str, Any] | None:
