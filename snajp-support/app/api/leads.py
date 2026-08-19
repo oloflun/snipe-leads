@@ -17,6 +17,7 @@ from ..leads.autonomy import describe as describe_autonomy
 from ..leads.autonomy import kan_aktivera_auto_send
 from ..leads.autonomy import normalize as normalize_autonomy
 from ..leads.business_context import ar_ifyllt as business_context_ar_ifyllt
+from ..leads.exempelbolag import bygg_exempelbolag
 from ..leads.context_pack import build_context_pack, materialize_product_marketing
 from ..leads.geo import beskriv_region, kanda_regioner
 from ..leads.icp import (
@@ -33,6 +34,7 @@ from .deps import require_tenant
 from ..leads.soul import SOUL_KIND, SOUL_MAX_CHARS
 from .schemas import (
     ContextDocRequest,
+    ExempelbolagRequest,
     LeadsBatchRequest,
     LeadsConfigRequest,
     ProspectPatchRequest,
@@ -130,6 +132,54 @@ async def create_prospect(
         contact_email=payload.contact_email,
     )
     return {"prospect": prospect}
+
+
+@router.post("/api/leads/prospects/exempel", status_code=201)
+async def create_example_prospects(
+    request: Request, payload: ExempelbolagRequest, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Exempelbolag som ligger inom ICP:t — vägen in för en tom arbetsyta.
+
+    KRÄVER INTE en riktig LLM-nyckel, till skillnad från körningen den leder
+    till. Generatorn är deterministisk (`leads/exempelbolag.py`), och en
+    demonstrationsfunktion som bara fungerar när allt annat redan fungerar
+    demonstrerar ingenting.
+
+    Bolagen märks `origin='example'` och kan aldrig mejlas: scheduler-
+    guarden slår upp kolumnen innan `provider.send()`.
+    """
+    storage = request.app.state.storage
+    settings_rad = await storage.get_agent_settings(tenant["tenant_id"], agent_type="leads")
+    icp = dict(normalize_icp(settings_rad.get("icp")))
+
+    # Överskrivningarna gäller den här genereringen, precis som de gäller
+    # körningen de leder till — annars beskriver formulärets fält en målgrupp
+    # och de skapade bolagen en annan.
+    if payload.overrides is not None and payload.overrides.har_nagot():
+        over = payload.overrides.model_dump(exclude_none=True)
+        for nyckel in ("industries", "exclude_industries", "geography", "roles",
+                       "must_have", "deal_breakers"):
+            if nyckel in over:
+                icp[nyckel] = over[nyckel]
+        if "anstallda_min" in over or "anstallda_max" in over:
+            storlek = dict(icp.get("company_size") or {})
+            if "anstallda_min" in over:
+                storlek["min"] = over["anstallda_min"]
+            if "anstallda_max" in over:
+                storlek["max"] = over["anstallda_max"]
+            icp["company_size"] = storlek
+
+    skapade = []
+    for bolag in bygg_exempelbolag(icp, antal=payload.limit):
+        prospect = await storage.create_prospect(
+            tenant["tenant_id"],
+            company_name=bolag["company_name"],
+            contact_name=bolag["contact_name"],
+            origin="example",
+        )
+        skapade.append({**prospect, "motivering": bolag["motivering"]})
+
+    return {"created": skapade, "count": len(skapade)}
 
 
 @router.get("/api/leads/prospects")

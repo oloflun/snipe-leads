@@ -22,29 +22,32 @@ def _client():
 
 @pytest.mark.anyio
 async def test_mock_seed_triages_and_creates_drafts():
+    """Urvalet roterar, så testet prövar EGENSKAPER och inte enskilda ämnen.
+
+    Det gamla testet läste ut tre bestämda ämnesrader ur inkorgen. Det gick
+    bara att skriva så länge "Hämta testmail" gav exakt samma sex mail varje
+    gång — vilket var precis felet: kunden fick ingen ny lista när de tryckte
+    igen. Kontraktet är numera blandningen, och det är den som testas.
+    """
     async with app.router.lifespan_context(app):
         async with _client() as client:
             seeded = await client.post("/api/inbox/mock", headers=DEMO)
             assert seeded.status_code == 201
             assert seeded.json()["ingested"] == 6
 
-            inbox = (await client.get("/api/inbox", headers=DEMO)).json()
-            emails = inbox["emails"]
+            emails = (await client.get("/api/inbox", headers=DEMO)).json()["emails"]
             assert len(emails) == 6
 
-            by_subject = {e["subject"]: e for e in emails}
+            # Blandat utfall: minst ett ärende som når en människa, och minst
+            # ett där agenten faktiskt skrivit ett svar. En inkorg där allt är
+            # eskalerat visar inte en agent som vägrar gissa — den visar en
+            # produkt som inte fungerar.
+            statusar = {e["status"] for e in emails}
+            assert "escalated" in statusar
+            assert statusar & {"awaiting_approval", "auto_sent"}
 
-            login = by_subject["Kan inte logga in på mitt konto"]
-            assert login["classification"]["category"] == "teknisk_support"
-            assert login["status"] == "awaiting_approval"
-            assert login["has_image"] is True
-
-            refund = by_subject["Trasig vara — kräver återbetalning"]
-            assert refund["classification"]["escalate"] is True
-            assert refund["status"] == "escalated"
-
-            order = by_subject["Har min beställning gått igenom?"]
-            assert order["classification"]["category"] == "orderstatus"
+            besvarade = [e for e in emails if e["status"] == "awaiting_approval"]
+            assert all(e["draft"]["content"] for e in besvarade)
 
             # Alla klassificeringar har konfidens + motivering (beslutslogg).
             assert all(e["classification"]["confidence"] > 0 for e in emails)
@@ -52,14 +55,61 @@ async def test_mock_seed_triages_and_creates_drafts():
 
 
 @pytest.mark.anyio
-async def test_email_detail_has_attachments_and_decision_log():
+async def test_mock_seed_replaces_previous_batch():
+    """Andra klicket BYTER UT inkorgen, det fyller inte på den.
+
+    Endpointen lade förut till sex nya mail med nya id:n varje gång. Uppmätt
+    följd: listan växte, innehållet var detsamma, och den enda vägen till en
+    ren demo var att skapa en ny arbetsyta.
+    """
     async with app.router.lifespan_context(app):
         async with _client() as client:
             await client.post("/api/inbox/mock", headers=DEMO)
-            emails = (await client.get("/api/inbox", headers=DEMO)).json()["emails"]
-            login = next(e for e in emails if "logga in" in e["subject"])
+            forsta = (await client.get("/api/inbox", headers=DEMO)).json()["emails"]
 
-            detail = (await client.get(f"/api/inbox/{login['id']}", headers=DEMO)).json()
+            andra_svar = await client.post("/api/inbox/mock", headers=DEMO)
+            assert andra_svar.json()["removed"] == 6
+
+            andra = (await client.get("/api/inbox", headers=DEMO)).json()["emails"]
+            assert len(andra) == 6
+            assert {e["id"] for e in forsta}.isdisjoint({e["id"] for e in andra})
+
+
+@pytest.mark.anyio
+async def test_email_detail_has_attachments_and_decision_log():
+    """Bilagan ingestas explicit i stället för att letas upp i testmailen.
+
+    Ett av mailen i poolen har en skärmdump, men urvalet roterar — att leta
+    efter just det mailet hade gett ett test som faller ungefär varannan
+    körning. Ingest-vägen ger samma pipeline med känd indata.
+    """
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            skapad = await client.post(
+                "/api/inbox/ingest",
+                headers=DEMO,
+                json={
+                    "from": "anna@example.com",
+                    "from_name": "Anna Lindqvist",
+                    "subject": "Kan inte logga in på mitt konto",
+                    "body": "Får ett felmeddelande vid inloggning. Bifogar skärmdump.",
+                    "attachments": [
+                        {
+                            "filename": "skarmdump-fel.png",
+                            "content_type": "image/png",
+                            "data_url": (
+                                "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
+                                "CAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+                            ),
+                        }
+                    ],
+                },
+            )
+            assert skapad.status_code == 201
+
+            detail = (
+                await client.get(f"/api/inbox/{skapad.json()['email_id']}", headers=DEMO)
+            ).json()
             assert detail["attachments"][0]["is_image"] is True
             events = [d["event"] for d in detail["decisions"]]
             assert events[0] == "received"
@@ -98,6 +148,7 @@ async def test_approve_with_edit_sends_and_logs_review():
 
 @pytest.mark.anyio
 async def test_auto_rule_sends_without_approval():
+    """Leveransärendet ingestas explicit — se testet ovan om varför."""
     async with app.router.lifespan_context(app):
         async with _client() as client:
             rule = await client.put(
@@ -105,14 +156,26 @@ async def test_auto_rule_sends_without_approval():
             )
             assert rule.status_code == 200
 
-            await client.post("/api/inbox/mock", headers=DEMO)
-            emails = (await client.get("/api/inbox", headers=DEMO)).json()["emails"]
-            paket = next(e for e in emails if e["subject"] == "Var är mitt paket?")
+            skapad = await client.post(
+                "/api/inbox/ingest",
+                headers=DEMO,
+                json={
+                    "from": "johan@example.com",
+                    "from_name": "Johan Berg",
+                    "subject": "Var är mitt paket?",
+                    "body": (
+                        "Beställde för en vecka sedan och spårningen har inte "
+                        "uppdaterats på fyra dagar. När kommer paketet?"
+                    ),
+                },
+            )
+            assert skapad.status_code == 201
+            email_id = skapad.json()["email_id"]
+
+            paket = (await client.get(f"/api/inbox/{email_id}", headers=DEMO)).json()
             assert paket["status"] == "auto_sent"
             assert paket["draft"]["auto"] is True
-
-            detail = (await client.get(f"/api/inbox/{paket['id']}", headers=DEMO)).json()
-            assert "auto_sent" in [d["event"] for d in detail["decisions"]]
+            assert "auto_sent" in [d["event"] for d in paket["decisions"]]
 
 
 @pytest.mark.anyio

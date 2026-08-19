@@ -27,6 +27,7 @@ from .send_guard import KOLA_OM as SG_KOLA_OM
 from .send_guard import SKICKA as SG_SKICKA
 from .send_guard import (
     Avsandare,
+    GuardBeslut,
     TenantHistorik,
     Utskick,
     check_send_guard,
@@ -65,6 +66,24 @@ async def _kor_send_guard(storage, tenant_id: str, thread: dict, message: dict, 
     lagstadgad avsändarinformation ska inte gå iväg bara för att vi glömt
     fylla i kunduppgifterna.
     """
+    # Spärr noll: exempelbolag lämnar aldrig huset.
+    #
+    # Ett exempelbolag är påhittat (`leads/exempelbolag.py`) och finns för att
+    # visa hur agenten arbetar innan kunden har en egen lista. Kontrollen
+    # sitter HÄR och inte i UI:t, av samma skäl som de sex reglerna gör det:
+    # det här är den enda punkt där allt är känt samtidigt, och den enda som
+    # varje utskick måste passera. Ett påhittat bolagsnamn kan råka vara ett
+    # riktigt bolag — då är mejlet inte ofarligt, det är fel mottagare.
+    prospect_id = thread.get("prospect_id")
+    if prospect_id:
+        prospect = await storage.get_prospect(tenant_id, prospect_id) or {}
+        if prospect.get("origin") == "example":
+            return GuardBeslut(
+                SG_BLOCKERA,
+                "exempelbolag",
+                "Bolaget är ett exempelbolag och kan aldrig kontaktas.",
+            )
+
     tenant = await storage.get_tenant(tenant_id) or {}
     dygnets_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     nyckel = thread.get("foretagsnyckel") or foretagsnyckel(

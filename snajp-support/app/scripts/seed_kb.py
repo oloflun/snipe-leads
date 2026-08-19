@@ -68,6 +68,35 @@ async def ensure_public_demo_kb(storage, *, embeddings: list[list[float] | None]
     return len(DEMO_KB_ARTICLES)
 
 
+async def ensure_tenant_kb(storage, tenant_id: str) -> int:
+    """Seedar EN tenants kunskapsbas med grundartiklarna om den är tom.
+
+    Skillnaden mot `seed_tenant` är att den här utgår från ett tenant-ID i
+    stället för en slug ur configregistret. Den finns för tenants som skapas i
+    DRIFT och därför inte har någon configfil — testarbetsytorna är det
+    första fallet.
+
+    Utan den möter varje ny arbetsyta samma sak: grundningsregeln
+    (`processor.py` steg 2) kräver minst en KB-träff, en tom bas ger noll
+    träffar, och följden är att agenten eskalerar allt. Det ser ut som en
+    trasig produkt och är i själva verket en tom hylla.
+
+    Idempotent: en tenant som redan har artiklar lämnas orörd. Returnerar
+    antalet nya artiklar.
+    """
+    if await storage.list_kb(tenant_id):
+        return 0
+    for article in KB_ARTICLES:
+        await storage.add_kb_article(
+            tenant_id,
+            title=article["title"],
+            content=article["content"],
+            category=article["category"],
+            embedding=None,
+        )
+    return len(KB_ARTICLES)
+
+
 async def seed_tenant(storage, tenant_slug: str, *, embeddings=None) -> int:
     """Seedar en kunds kunskapsbas. Returnerar antal nya artiklar.
 

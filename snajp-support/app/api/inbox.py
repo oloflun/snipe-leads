@@ -9,6 +9,7 @@ from ..email_pipeline.ingest import ingest_email
 from ..email_pipeline.models import InboundAttachment, InboundEmail
 from ..email_pipeline.poller import sync_imap_once
 from ..email_pipeline.processor import process_email
+from ..scripts.seed_kb import ensure_tenant_kb
 from .deps import require_tenant
 from .schemas import IngestEmailRequest
 
@@ -17,15 +18,45 @@ router = APIRouter()
 
 @router.post("/api/inbox/mock", status_code=201)
 async def seed_mock_inbox(request: Request, tenant: dict = Depends(require_tenant)) -> dict:
-    """Fyller inkorgen med svenska testmail och processar dem direkt."""
+    """Byter UT testmailen mot ett nytt urval och processar dem direkt.
+
+    Tre saker skiljer sig från den första versionen, alla tre uppmätta mot
+    dev-deployen 2026-08-19:
+
+    1. **Tidigare testmail rensas.** Endpointen lade förut till samma sex mail
+       igen, med nya id:n. Knappen heter "Hämta testmail" och gav en längre
+       lista med samma innehåll — inte en ny.
+
+    2. **Urvalet roterar.** `build_mock_emails()` väljer ur en pool och blandar
+       besvarbara ärenden med sådana som ska eskalera. Se den modulen.
+
+    3. **Kunskapsbasen säkerställs först.** Utan artiklar tvingar
+       grundningsregeln eskalering av VARJE ärende (`processor.py` steg 2), och
+       skärmen blir sex röda rader. Det var precis vad testarbetsytorna visade:
+       de delar en tenant vars KB aldrig seedats.
+
+    Ärendena (`ss_tickets`) och beslutsloggen rensas INTE. Inkorgen är en vy,
+    loggen är spåret — ett ärende som fanns har funnits, och att radera spåret
+    för att städa en demo är att göra granskningskedjan opålitlig.
+    """
     storage = request.app.state.storage
+    tenant_id = tenant["tenant_id"]
+
+    borttagna = await storage.delete_emails_by_provider(tenant_id, "mock")
+    seedade_artiklar = await ensure_tenant_kb(storage, tenant_id)
+
     results = []
     for inbound in build_mock_emails():
-        email = await ingest_email(storage, tenant["tenant_id"], inbound)
+        email = await ingest_email(storage, tenant_id, inbound)
         if email:
-            outcome = await process_email(storage, tenant["tenant_id"], email)
+            outcome = await process_email(storage, tenant_id, email)
             results.append({"email_id": email["id"], **outcome})
-    return {"ingested": len(results), "results": results}
+    return {
+        "ingested": len(results),
+        "removed": borttagna,
+        "kb_seeded": seedade_artiklar,
+        "results": results,
+    }
 
 
 @router.post("/api/inbox/sync")

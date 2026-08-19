@@ -115,6 +115,20 @@ class LeadsRunOverrides(BaseModel):
         return any(getattr(self, namn) is not None for namn in type(self).model_fields)
 
 
+class ExempelbolagRequest(BaseModel):
+    """Påhittade bolag som passar ICP:t, för en arbetsyta utan prospekt.
+
+    Taket är lågt med flit: exempelbolag är en väg in i produkten, inte en
+    lista att arbeta ur. Vill kunden ha femtio bolag ska de komma från en
+    körning mot riktiga källor.
+    """
+
+    limit: int = Field(default=3, ge=1, le=10)
+    #: Samma överskrivningar som körningen. Ett formulär som beskriver en
+    #: målgrupp och skapar bolag ur en annan är värre än inga bolag alls.
+    overrides: LeadsRunOverrides | None = None
+
+
 class LeadsBatchRequest(BaseModel):
     scope: str = Field(default="research", pattern=r"^(research|research_and_draft)$")
     # Taket på 50 är ekonomiskt, inte tekniskt: varje prospekt är åtta

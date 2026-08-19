@@ -9,7 +9,7 @@ import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { AgentMenu } from "@/components/snajp/AgentMenu";
 import { signOut } from "@/lib/actions/auth";
 import { useLocale } from "@/lib/i18n";
-import { routesForProducts } from "@/lib/routes";
+import { routesForProducts, tillAdminvag } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
 /**
@@ -43,21 +43,6 @@ const PLATTFORM = [
   { href: "/admin/testkorningar", label: "Testkörningar" },
   { href: "/admin/handelser", label: "Händelser" }
 ];
-
-/**
- * Arbetsytans flikar med /admin-prefix.
- *
- * `/dashboard` mappas till `/admin/arbetsyta` och inte till `/admin`: `/admin`
- * är portföljvyn (alla kunders siffror), och att låta "Min arbetsyta" peka dit
- * gjorde kundöversikten oåtkomlig för den enda som har två arbetsytor att välja
- * mellan. `/settings` lämnas orörd — inställningarna är workspace-scopade och
- * har ett eget skal.
- */
-function tillAdminväg(href: string): string {
-  if (href === "/dashboard") return "/admin/arbetsyta";
-  if (href.startsWith("/dashboard/")) return href.replace("/dashboard", "/admin");
-  return href;
-}
 
 function matchar(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -93,7 +78,7 @@ export function AdminShell({
   const arbetsyta = routesForProducts(products)
     .filter((route) => route.product === "shared" || shows(route.product))
     .map((route) => ({
-      href: tillAdminväg(route.href),
+      href: tillAdminvag(route.href),
       // "Min arbetsyta" och inte t("nav.dashboard") ("Översikt"): plattforms-
       // raden har redan en flik som heter Översikt, och två flikar med samma
       // namn i samma header är inte en etikett utan en gissningslek.

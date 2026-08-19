@@ -1,5 +1,5 @@
 import { DashboardProvider } from "@/components/dashboard/DashboardContext";
-import { Overview } from "@/components/dashboard/Overview";
+import { StartView } from "@/components/dashboard/StartView";
 import { notFoundOnTenant } from "@/lib/tenants/server";
 
 /**
@@ -58,7 +58,7 @@ export default async function Page() {
         </p>
       </div>
       <DashboardProvider state={{ ...DEMO_STATE, products: [...DEMO_STATE.products] }}>
-        <Overview />
+        <StartView />
       </DashboardProvider>
     </div>
   );

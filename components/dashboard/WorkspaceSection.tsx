@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { PageShell } from "@/components/AppShell";
-import { Overview } from "@/components/dashboard/Overview";
+import { StartView } from "@/components/dashboard/StartView";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { Dashboard as SupportDashboard } from "@/components/snajp/Dashboard";
 import {
@@ -52,7 +52,7 @@ export async function WorkspaceSection({ slug = [] }: Readonly<{ slug?: string[]
   const [section, id] = slug;
 
   if (!section) {
-    return <Overview />;
+    return <StartView />;
   }
 
   const product = sectionProduct[section];

@@ -585,6 +585,7 @@ class MemoryStorage:
         company_name: str,
         contact_name: str | None = None,
         contact_email: str | None = None,
+        origin: str = "manual",
     ) -> dict[str, Any]:
         prospect = {
             "id": str(uuid.uuid4()),
@@ -594,6 +595,7 @@ class MemoryStorage:
             "contact_email": contact_email,
             "language_state": "sv",
             "status": "new",
+            "origin": origin,
             "created_at": _now(),
         }
         self.prospects.setdefault(tenant_id, []).append(prospect)
@@ -806,6 +808,27 @@ class MemoryStorage:
         }
         self.emails[email["id"]] = email
         return email
+
+    async def delete_emails_by_provider(self, tenant_id: str, provider: str) -> int:
+        """Se Storage.delete_emails_by_provider.
+
+        Dedupe-nyckeln tas bort med mailet. Utan det hade samma
+        provider_message_id räknats som dublett i all framtid, och ett nytt
+        urval testmail hade tyst blivit noll mail.
+        """
+        träffar = [
+            email
+            for email in self.emails.values()
+            if email["tenant_id"] == tenant_id and email["provider"] == provider
+        ]
+        for email in träffar:
+            self.emails.pop(email["id"], None)
+            self.email_dedupe.discard((tenant_id, email["provider_message_id"]))
+            self.classifications.pop(email["id"], None)
+            draft_id = self.drafts_by_email.pop(email["id"], None)
+            if draft_id:
+                self.drafts.pop(draft_id, None)
+        return len(träffar)
 
     def _email_summary(self, email: dict[str, Any]) -> dict[str, Any]:
         classification = self.classifications.get(email["id"])

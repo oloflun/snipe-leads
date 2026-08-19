@@ -10,7 +10,7 @@ import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { signOut } from "@/lib/actions/auth";
 import { ScopeSwitch } from "@/components/dashboard/ScopeSwitch";
 import { useLocale } from "@/lib/i18n";
-import { routesForProducts } from "@/lib/routes";
+import { routesForProducts, tillAdminvag } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
 /**
@@ -66,14 +66,13 @@ function demoAnpassa(href: string, pathname: string): string {
  * fast i brödtexten.
  *
  * `/dashboard` mappas till `/admin/arbetsyta`; se AdminShell för varför.
+ * Kartan bor i lib/routes.ts, delad med AdminShell — se `tillAdminvag`.
  */
 export function useArbetsvag(): (href: string) => string {
   const pathname = usePathname();
   return (href: string) => {
     if (iAdminlage(pathname)) {
-      if (href === "/dashboard") return "/admin/arbetsyta";
-      if (href.startsWith("/dashboard/")) return href.replace("/dashboard", "/admin");
-      return href;
+      return tillAdminvag(href);
     }
     return demoAnpassa(href, pathname);
   };

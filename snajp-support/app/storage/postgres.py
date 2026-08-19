@@ -724,17 +724,19 @@ class PostgresStorage:
         company_name: str,
         contact_name: str | None = None,
         contact_email: str | None = None,
+        origin: str = "manual",
     ) -> dict[str, Any]:
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
                 """
-                insert into prospects (tenant_id, company_name, contact_name, contact_email)
-                values ($1, $2, $3, $4) returning *
+                insert into prospects (tenant_id, company_name, contact_name, contact_email, origin)
+                values ($1, $2, $3, $4, $5) returning *
                 """,
                 tenant_id,
                 company_name,
                 contact_name,
                 contact_email,
+                origin,
             )
         return _row(record)
 
@@ -949,6 +951,26 @@ class PostgresStorage:
             )
 
     # -- Email-pipeline -------------------------------------------------------
+
+    async def delete_emails_by_provider(self, tenant_id: str, provider: str) -> int:
+        """Se Storage.delete_emails_by_provider.
+
+        Bilagor, klassificeringar, utkast och beslutsloggens mailrader följer
+        med via `on delete cascade` (migration 004). Ärendena (`ss_tickets`)
+        gör det INTE — de refereras av mailet, inte tvärtom, och spåret av att
+        ett ärende funnits ska inte försvinna för att en demoinkorg städas.
+        """
+        async with self._scoped(tenant_id) as conn:
+            resultat = await conn.execute(
+                "delete from ss_emails where tenant_id = $1 and provider = $2",
+                tenant_id,
+                provider,
+            )
+        # asyncpg returnerar kommandotaggen, t.ex. "DELETE 6".
+        try:
+            return int(str(resultat).rsplit(" ", 1)[-1])
+        except ValueError:
+            return 0
 
     async def save_email(
         self,

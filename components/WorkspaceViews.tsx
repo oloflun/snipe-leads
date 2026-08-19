@@ -7,6 +7,11 @@ import { PageShell, useArbetsvag } from "@/components/AppShell";
 import { btnPrimary, btnSecondary } from "@/components/ui";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { SignOutButton } from "@/components/auth/SignOutButton";
+import { useDashboard } from "@/components/dashboard/DashboardContext";
+import { DuoSummary } from "@/components/dashboard/DuoSummary";
+import { Discovery } from "@/components/leads/Discovery";
+import { LeadsControls } from "@/components/leads/LeadsControls";
+import { KunskapsbasPanel } from "@/components/settings/Kunskapsbas";
 import { SettingsNav } from "@/components/settings/SettingsNav";
 import { TeamSettings } from "@/components/settings/TeamSettings";
 import { AddonSettings } from "@/components/settings/AddonSettings";
@@ -24,6 +29,7 @@ import {
   workflowSteps
 } from "@/lib/mock-data";
 import type { Company, Contact } from "@/lib/mock-data";
+import type { SettingsSectionKey } from "@/lib/routes";
 import { useLocale } from "@/lib/i18n";
 import { cn, formatCurrency, formatDate, formatPercent } from "@/lib/utils";
 
@@ -181,24 +187,32 @@ export function AssistantView() {
   );
 }
 
-export function LeadsView() {
-  const vag = useArbetsvag();
+/**
+ * Leads-vyns innehåll utan skal, så att startsidan kan montera den bredvid
+ * kundtjänstvyn utan att nästla två PageShell (alltså två headers).
+ *
+ * Discovery-formuläret är det som FAKTISKT startar en körning; bolagsregistret
+ * under är exempeldata tills körningen skrivit riktiga prospekt.
+ */
+export function LeadsBody({ demo = false }: Readonly<{ demo?: boolean }>) {
+  return (
+    <>
+      <Discovery demo={demo} />
+      <div className="mt-12">
+        <CompanyLedger />
+      </div>
+    </>
+  );
+}
+
+export function LeadsView({ demo = false }: Readonly<{ demo?: boolean }>) {
   return (
     <PageShell
       kicker="Lead discovery"
       title="Svenska bolag sorterade efter tajming, inte efter mall."
-      description="Filter, sparade sökningar och AI-rekommendationer visas som ett fältblad där varje rad går att revidera."
-      action={<EditorialButton href={vag("/dashboard/assistant")}>Kör discovery</EditorialButton>}
+      description="Beskriv vem ni vill träffa och starta en körning. Agenten letar upp bolagen, grundar urvalet i källor och visar vad den byggde bedömningen på."
     >
-      <div className="mb-12 grid grid-cols-12 gap-x-6 gap-y-4">
-        {["Bygg i Malmö", "Gym i Stockholm", "Fastighet Uppsala", "SaaS med rekrytering"].map((item, index) => (
-          <button key={item} type="button" className="row col-span-12 border-t border-ink/15 pt-4 text-left transition hover:text-ochre md:col-span-3">
-            <span className="kicker text-mineral">Sparad sökning 0{index + 1}</span>
-            <span className="ticker mt-3 block text-[1.0625rem] font-semibold tracking-[-0.01em]">{item}</span>
-          </button>
-        ))}
-      </div>
-      <CompanyLedger />
+      <LeadsBody demo={demo} />
     </PageShell>
   );
 }
@@ -425,12 +439,16 @@ export function InboxView() {
   );
 }
 
-export function SettingsView({ section = "general" }: Readonly<{ section?: "general" | "mailboxes" | "team" | "billing" | "soul" | "addons" }>) {
-  const titles = {
-    general: "Business context som alla agentmoduler använder.",
+export function SettingsView({ section = "foretaget" }: Readonly<{ section?: SettingsSectionKey }>) {
+  const titles: Record<SettingsSectionKey, string> = {
+    foretaget: "Företaget",
+    arbetsyta: "Min arbetsyta",
     mailboxes: "Mailboxar och skickhälsa i svensk takt.",
     team: "Teamroller och audit-logik.",
     billing: "Plan, fakturering och användning.",
+    affarskontext: "Affärskontext",
+    kunskapsbas: "Kunskapsbas",
+    leads: "Målgrupp och autonomi",
     soul: "Er röst",
     addons: "Tillägg"
   };
@@ -440,11 +458,15 @@ export function SettingsView({ section = "general" }: Readonly<{ section?: "gene
   // känner igen orden eller behöver veta vår stack. Att stacken sedan byttes
   // gjorde texten dessutom osann — vilket är själva argumentet mot att skriva
   // ut infrastruktur i en kundvänd yta.
-  const descriptions: Record<typeof section, string> = {
-    general: "Ändrar du något här ändras allt agenten skriver, i alla moduler.",
+  const descriptions: Record<SettingsSectionKey, string> = {
+    foretaget: "Bolaget bakom arbetsytan — namn, organisationsnummer och webbplats.",
+    arbetsyta: "Sammanfattningen av arbetsytan. Den låg tidigare som startsida; startsidan är numera agentens vy.",
     mailboxes: "Avsändaradresser och hur mycket som får skickas per dag.",
     team: "Vilka som har tillgång till arbetsytan, och vad de får göra.",
     billing: "Vad ni har förbrukat den här månaden, och vad nästa faktura blir.",
+    affarskontext: "Vad ni säljer och till vem. Båda agenterna läser härifrån.",
+    kunskapsbas: "Dokumenten agenten svarar ur. Ligger inget här gissar den aldrig — den eskalerar.",
+    leads: "Vilka bolag agenten ska leta efter, och hur långt den får gå på egen hand.",
     soul: "Beskriv hur ni låter. Agenten skriver så i era mejl och svar.",
     addons: "Det agenten kan göra utöver det som ingår i er plan."
   };
@@ -487,7 +509,15 @@ export function SettingsView({ section = "general" }: Readonly<{ section?: "gene
           </div>
         </div>
         <div className="col-span-12 md:col-span-9">
-          {section === "general" ? <BusinessContextSettings /> : null}
+          {section === "foretaget" ? <CompanySettings /> : null}
+          {/* Den gamla startsidan. Den flyttades hit i sin helhet: en
+              sammanfattning av arbetsytan är inte arbetsytan, och att lägga
+              den FÖRE agentens vy sköt in ett steg mellan kunden och det de
+              loggade in för att göra. */}
+          {section === "arbetsyta" ? <OverviewBody /> : null}
+          {section === "affarskontext" ? <BusinessContextSettings /> : null}
+          {section === "kunskapsbas" ? <KunskapsbasPanel /> : null}
+          {section === "leads" ? <LeadsControls /> : null}
           {section === "soul" ? <SoulEditor /> : null}
           {section === "mailboxes" ? <MailboxSettings /> : null}
           {section === "team" ? <TeamSettings /> : null}
@@ -496,6 +526,72 @@ export function SettingsView({ section = "general" }: Readonly<{ section?: "gene
         </div>
       </div>
     </PageShell>
+  );
+}
+
+/**
+ * "Min arbetsyta" — sammanfattningen som tidigare var startsida.
+ *
+ * Den ligger numera under Inställningar. Motivet står i StartView: en
+ * sammanfattning av arbetet är inte arbetet, och som startsida sköt den in ett
+ * steg mellan kunden och den enda vy de ändå skulle till.
+ */
+function OverviewBody() {
+  const { shows } = useDashboard();
+  const vag = useArbetsvag();
+  return (
+    <div className="space-y-10">
+      <DuoSummary />
+      {shows("leads") ? <DashboardBody /> : null}
+      {shows("support") ? (
+        <p className="max-w-[65ch] text-[15px] leading-7 text-ink/65">
+          Kundtjänstens ärenden och utkast ligger på{" "}
+          <Link href={vag("/dashboard")} className="underline underline-offset-4 hover:text-ochre">
+            Översikt
+          </Link>
+          . Siffrorna här uppdateras när körningarna skrivit dem.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Företaget bakom arbetsytan. Uppgifterna kommer från onboardingen och ändras
+ * där — den här sidan visar dem, den äger dem inte. Ett andra formulär mot
+ * samma rad blir två sanningar den dag bara det ena sparas.
+ */
+function CompanySettings() {
+  const { workspaceName, products, isDemo } = useDashboard();
+  return (
+    <div className="grid gap-5">
+      <div className="grid grid-cols-12 gap-x-6 border-t border-ink/15 pt-5">
+        <span className="kicker col-span-12 text-mineral md:col-span-3">Arbetsyta</span>
+        <span className="col-span-12 mt-2 text-[15px] md:col-span-9 md:mt-0">
+          {workspaceName ?? "—"}
+          {isDemo ? <span className="ml-2 text-[13px] text-ochre">testarbetsyta</span> : null}
+        </span>
+      </div>
+      <div className="grid grid-cols-12 gap-x-6 border-t border-ink/15 pt-5">
+        <span className="kicker col-span-12 text-mineral md:col-span-3">Paket</span>
+        <span className="col-span-12 mt-2 text-[15px] md:col-span-9 md:mt-0">
+          {products.length === 0
+            ? "—"
+            : products.map((p) => (p === "leads" ? "Leads" : "Kundtjänst")).join(" och ")}
+        </span>
+      </div>
+      <div className="grid grid-cols-12 gap-x-6 border-t border-ink/15 pt-5">
+        <span className="kicker col-span-12 text-mineral md:col-span-3">Bolagsuppgifter</span>
+        <p className="col-span-12 mt-2 max-w-[60ch] text-[15px] leading-7 text-ink/65 md:col-span-9 md:mt-0">
+          Organisationsnummer och webbplats fylldes i vid uppstarten och används av båda
+          agenterna.{" "}
+          <Link href="/onboarding" className="underline underline-offset-4 hover:text-ochre">
+            Ändra dem i uppstartsformuläret
+          </Link>
+          .
+        </p>
+      </div>
+    </div>
   );
 }
 

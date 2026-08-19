@@ -2,28 +2,33 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useArbetsvag } from "@/components/AppShell";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { useLocale } from "@/lib/i18n";
 import { settingsGroupsForProducts } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
 /**
- * Inställningarnas navigation, grupperad per agent.
+ * Inställningarnas navigation, grupperad efter vad inställningen ÄR.
  *
  * Den fanns inte förut. Sex inställningssidor låg under /settings utan någon
  * flikrad — de gick bara att nå genom att skriva adressen, och `settingsRoutes`
  * i lib/routes.ts exporterades utan att någon renderade den.
  *
- * Grupperingen är poängen, inte dekoration: "Röst och tonläge" och "Inkorgar"
- * är inte samma sorts inställning, och en platt lista med sex poster tvingar
- * läsaren att veta vilken agent varje sida gäller innan hen klickar.
+ * ## Varför länkarna går genom useArbetsvag
+ *
+ * Samma sidor renderas på två ytor: /settings (kunden) och /admin/installningar
+ * (plattformsadmin). En hårdkodad `/settings/...` är därför rätt på EN av dem —
+ * på adminytan tog den admin ur adminskalet, och plattformsraden försvann mitt
+ * i ett arbetsmoment. Samma fel som flikraden en gång hade, fast i sidokolumnen.
  *
  * Grupper filtreras på entitlement — en Support-only-arbetsyta ser inte
  * leads-agentens rubrik. Det är en artighet; grinden som räknar sitter i
- * respektive sida.
+ * SettingsSection.
  */
 export function SettingsNav() {
   const pathname = usePathname();
+  const vag = useArbetsvag();
   const { products } = useDashboard();
   const { text } = useLocale();
 
@@ -36,16 +41,20 @@ export function SettingsNav() {
           <p className="kicker text-mineral">{text(grupp.label)}</p>
           <ul className="mt-3 grid gap-1">
             {grupp.routes.map((route) => {
-              // Exakt matchning för /settings: annars vore den "aktiv" på varje
-              // undersida, eftersom alla börjar med samma prefix.
+              const href = vag(route.href);
+              // Exakt matchning för rotsidan: annars vore den "aktiv" på varje
+              // undersida, eftersom alla börjar med samma prefix. Jämförelsen
+              // görs mot den YTANPASSADE vägen, inte mot /settings/... — under
+              // /admin/installningar hade ingen post annars markerats.
+              const rot = vag("/settings");
               const aktiv =
-                route.href === "/settings"
-                  ? pathname === "/settings"
-                  : pathname === route.href || pathname.startsWith(`${route.href}/`);
+                href === rot
+                  ? pathname === rot
+                  : pathname === href || pathname.startsWith(`${href}/`);
               return (
                 <li key={route.href}>
                   <Link
-                    href={route.href}
+                    href={href}
                     aria-current={aktiv ? "page" : undefined}
                     className={cn(
                       "focus-ring inline-flex min-h-11 items-center rounded-input px-3 text-[15px] transition-colors",

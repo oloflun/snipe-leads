@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageShell } from "@/components/AppShell";
 import { DashboardProvider } from "@/components/dashboard/DashboardContext";
-import { Overview } from "@/components/dashboard/Overview";
+import { StartView } from "@/components/dashboard/StartView";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { Dashboard as SupportDashboard } from "@/components/snajp/Dashboard";
 import { LeadsControls } from "@/components/leads/LeadsControls";
@@ -141,9 +141,9 @@ export default async function Page({
 function renderSektion(sektion: string | undefined): React.ReactNode | null {
   switch (sektion) {
     case undefined:
-      return <Overview />;
+      return <StartView demo />;
     case "leads":
-      return <LeadsView />;
+      return <LeadsView demo />;
     case "emails":
       return <EmailStudioDemo />;
     case "companies":

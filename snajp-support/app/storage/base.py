@@ -268,6 +268,7 @@ class Storage(Protocol):
         company_name: str,
         contact_name: str | None = None,
         contact_email: str | None = None,
+        origin: str = "manual",
     ) -> dict[str, Any]:
         """Ingången till hela leads-pipelinen. Utan den här fanns inget sätt
         att skapa ett prospekt alls — research/outreach kunde aldrig köras."""
@@ -328,6 +329,15 @@ class Storage(Protocol):
         received_at: str | None = None,
     ) -> dict[str, Any] | None:
         """Sparar ett inkommande mail. Returnerar None vid dublett (dedupe)."""
+        ...
+
+    async def delete_emails_by_provider(self, tenant_id: str, provider: str) -> int:
+        """Tar bort tenantens mail från EN provider. Returnerar antalet.
+
+        Finns för "Hämta testmail", som ska BYTA UT demoinkorgen och inte fylla
+        på den. Avgränsningen till provider är spärren: ett anrop kan aldrig
+        träffa riktiga mail från IMAP eller API-ingesten, hur det än anropas.
+        """
         ...
 
     async def list_emails(
