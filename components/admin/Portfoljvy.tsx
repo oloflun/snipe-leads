@@ -76,7 +76,10 @@ export function Portfoljvy({ tenants }: Readonly<{ tenants: TenantRow[] }>) {
 
   return (
     <div>
-      <h1 className="font-display text-4xl tracking-[-0.03em]">Kunder</h1>
+      {/* "Översikt" och inte "Kunder": fliken heter Översikt, och NÄSTA flik
+          heter Kunder och leder till en annan sida. Två flikar vars sidor båda
+          rubricerades "Kunder" läste som samma vy renderad två gånger. */}
+      <h1 className="font-display text-4xl tracking-[-0.03em]">Översikt</h1>
 
       <div className="mt-8 grid gap-px overflow-hidden rounded-input border border-ink/15 bg-ink/15 sm:grid-cols-2 lg:grid-cols-4">
         <Nyckeltal

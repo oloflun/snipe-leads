@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useLocale } from "@/lib/i18n";
 import type { Localized } from "@/lib/i18n";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
+import { useArbetsvag } from "@/components/AppShell";
 
 /**
  * Den gemensamma översikten högst upp när en arbetsyta har BÅDA produkterna.
@@ -45,6 +46,7 @@ const copy = {
 export function DuoSummary() {
   const { text } = useLocale();
   const { shows, workspaceName } = useDashboard();
+  const vag = useArbetsvag();
 
   // Båda krävs. Se komponentens docstring om varför det inte finns något
   // utgråat mellanläge.
@@ -75,13 +77,13 @@ export function DuoSummary() {
         <Kort
           rubrik={text(copy.leads)}
           rad={text(copy.leadsRad)}
-          href="/dashboard/leads"
+          href={vag("/dashboard/leads")}
           knapp={text(copy.tillLeads)}
         />
         <Kort
           rubrik={text(copy.support)}
           rad={text(copy.supportRad)}
-          href="/dashboard/support"
+          href={vag("/dashboard/support")}
           knapp={text(copy.tillSupport)}
         />
       </div>

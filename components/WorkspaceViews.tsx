@@ -3,7 +3,7 @@
 import Link from "next/link";
 
 import { SoulEditor } from "@/components/SoulEditor";
-import { PageShell } from "@/components/AppShell";
+import { PageShell, useArbetsvag } from "@/components/AppShell";
 import { btnPrimary, btnSecondary } from "@/components/ui";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { SignOutButton } from "@/components/auth/SignOutButton";
@@ -52,6 +52,7 @@ function StatusWord({ value }: Readonly<{ value: string }>) {
 
 function CompanyLedger({ rows = companies }: Readonly<{ rows?: Company[] }>) {
   const { text } = useLocale();
+  const vag = useArbetsvag();
   return (
     <div className="overflow-x-auto border-y border-ink/15">
       <div className="hidden min-w-[1120px] grid-cols-12 gap-x-6 border-b border-ink/15 py-4 md:grid">
@@ -65,7 +66,7 @@ function CompanyLedger({ rows = companies }: Readonly<{ rows?: Company[] }>) {
         {rows.map((company) => {
           const contact = company.contacts[0];
           return (
-            <Link key={company.id} href={`/dashboard/companies/${company.id}`} className="row grid grid-cols-12 gap-x-6 py-5 transition hover:bg-paper2/60">
+            <Link key={company.id} href={vag(`/dashboard/companies/${company.id}`)} className="row grid grid-cols-12 gap-x-6 py-5 transition hover:bg-paper2/60">
               <div className="ticker col-span-3">
                 <p className="text-[1.0625rem] font-semibold tracking-[-0.01em]">{company.name}</p>
                 <p className="mt-1 text-sm text-ink/55">{company.website}</p>
@@ -129,12 +130,13 @@ export function DashboardBody() {
 }
 
 export function DashboardView() {
+  const vag = useArbetsvag();
   return (
     <PageShell
       kicker="Arbetsyta"
       title="Veckans läge"
       description="Prioriterade bolag, svar och nästa handling."
-      action={<EditorialButton href="/dashboard/assistant">Öppna assistent</EditorialButton>}
+      action={<EditorialButton href={vag("/dashboard/assistant")}>Öppna assistent</EditorialButton>}
     >
       <DashboardBody />
     </PageShell>
@@ -179,12 +181,13 @@ export function AssistantView() {
 }
 
 export function LeadsView() {
+  const vag = useArbetsvag();
   return (
     <PageShell
       kicker="Lead discovery"
       title="Svenska bolag sorterade efter tajming, inte efter mall."
       description="Filter, sparade sökningar och AI-rekommendationer visas som ett fältblad där varje rad går att revidera."
-      action={<EditorialButton href="/dashboard/assistant">Kör discovery</EditorialButton>}
+      action={<EditorialButton href={vag("/dashboard/assistant")}>Kör discovery</EditorialButton>}
     >
       <div className="mb-12 grid grid-cols-12 gap-x-6 gap-y-4">
         {["Bygg i Malmö", "Gym i Stockholm", "Fastighet Uppsala", "SaaS med rekrytering"].map((item, index) => (
@@ -214,12 +217,13 @@ export function CompaniesView() {
 export function CompanyDetailView({ id }: Readonly<{ id: string }>) {
   const { text } = useLocale();
   const company = findCompany(id);
+  const vag = useArbetsvag();
   return (
     <PageShell
       kicker={`${company.industry} · ${company.location}`}
       title={company.name}
       description={text(company.summary)}
-      action={<EditorialButton href="/dashboard/emails">Generera email</EditorialButton>}
+      action={<EditorialButton href={vag("/dashboard/emails")}>Generera email</EditorialButton>}
     >
       <div className="grid grid-cols-12 gap-x-8 gap-y-12">
         <dl className="col-span-12 grid grid-cols-12 gap-x-8 gap-y-8">
@@ -274,8 +278,9 @@ export function ContactsView() {
 
 function ContactRow({ contact }: Readonly<{ contact: Contact }>) {
   const company = findCompany(contact.companyId);
+  const vag = useArbetsvag();
   return (
-    <Link href={`/dashboard/contacts/${contact.id}`} className="row grid grid-cols-12 gap-x-6 py-5 transition hover:bg-paper2/60">
+    <Link href={vag(`/dashboard/contacts/${contact.id}`)} className="row grid grid-cols-12 gap-x-6 py-5 transition hover:bg-paper2/60">
       <div className="ticker col-span-12 md:col-span-4">
         <p className="text-[1.0625rem] font-semibold tracking-[-0.01em]">{contact.fullName}</p>
         <p className="mt-1 text-sm text-ink/55">{contact.email}</p>

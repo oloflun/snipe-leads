@@ -44,6 +44,32 @@ def _row(record: asyncpg.Record | None) -> dict[str, Any] | None:
     return data
 
 
+def _avkoda_jsonb(data: dict[str, Any] | None, *nycklar: str) -> dict[str, Any] | None:
+    """jsonb-kolumner kommer tillbaka som TEXT från asyncpg.
+
+    Utan en typkodare avkodar asyncpg varken json eller jsonb — värdet blir en
+    sträng som SER rätt ut i en logg och i ett JSON-svar, och först konsumenten
+    märker något. `step_log` nådde adminytans spårvy som en sträng, och sidan
+    föll på `steps.map is not a function`; det syntes aldrig i sviten, eftersom
+    MemoryStorage lämnar riktiga listor.
+
+    Kodaren sätts INTE globalt i `_init_connection`: fyra anropsställen i den
+    här filen avkodar redan för hand (`json.loads` med isinstance-vakt), och en
+    global kodare hade gett dem en dict att köra json.loads på. Avkodningen bor
+    därför där kolumnen läses, som redan är mönstret här.
+    """
+    if data is None:
+        return None
+    for nyckel in nycklar:
+        if isinstance(data.get(nyckel), str):
+            try:
+                data[nyckel] = json.loads(data[nyckel])
+            except (ValueError, TypeError):
+                # Ett ovärderbart fält är bättre än en 500 i ett driftverktyg.
+                pass
+    return data
+
+
 class PostgresStorage:
     name = "postgres"
 
@@ -1473,7 +1499,7 @@ class PostgresStorage:
                 agent_type,
                 limit,
             )
-        return [_row(r) for r in records]
+        return [_avkoda_jsonb(_row(r), "step_log", "grounding") for r in records]
 
     async def get_agent_run(self, run_id: str) -> dict[str, Any] | None:
         async with self.pool.acquire() as conn:
@@ -1485,7 +1511,7 @@ class PostgresStorage:
                 """,
                 run_id,
             )
-        return _row(record)
+        return _avkoda_jsonb(_row(record), "step_log", "grounding")
 
     async def list_platform_events(
         self,
@@ -1509,7 +1535,7 @@ class PostgresStorage:
                 tenant_id,
                 limit,
             )
-        return [_row(r) for r in records]
+        return [_avkoda_jsonb(_row(r), "detail") for r in records]
 
     async def log_platform_event(
         self,

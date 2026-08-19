@@ -3,7 +3,7 @@ import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
 
-import { hasDatabase, sql } from "@/lib/db";
+import { hasDatabase, sql, sqlAsUser } from "@/lib/db";
 import { verifyPassword } from "@/lib/password";
 import { hasSupabaseAuthEnv, supabaseAuth } from "@/lib/supabase-auth";
 
@@ -68,14 +68,33 @@ async function upsertOAuthUser(email: string, fullName: string | null): Promise<
   return rows[0];
 }
 
-/** Läker konton som saknar profilrad — samma funktion som triggern använder. */
+/**
+ * Läker konton som saknar profilrad — samma funktion som triggern använder.
+ *
+ * Anropet går via `ensure_workspace_for_current_user()` och `sqlAsUser`, inte
+ * via `ensure_workspace_for_user($1)` och `sql`. Det är inte en stilfråga:
+ *
+ *   * `ensure_workspace_for_user(uuid, text)` är REVOKED från public, anon och
+ *     authenticated i 006_auth_selfheal, med flit — en funktion som tar ett
+ *     användar-id som argument låter anroparen läka (och därmed skapa workspace
+ *     åt) vem som helst. `snajp_web` har den inte heller. Anropet föll alltså
+ *     på `permission denied for function ensure_workspace_for_user` vid VARJE
+ *     inloggning på Railway-stacken, tyst: felet fångas nedan.
+ *   * `sql()` sätter ingen identitet, så `auth.uid()` hade varit null även om
+ *     graden funnits. `sqlAsUser` sätter `app.user_id` i transaktionen, vilket
+ *     är exakt vad `ensure_workspace_for_current_user()` läser.
+ *
+ * Följden av buggen var att självläkningen aldrig körde: ett konto utan
+ * profilrad loopade mellan /dashboard och /onboarding, precis det som
+ * funktionen finns för att förhindra.
+ */
 export async function ensureWorkspace(userId: string): Promise<void> {
   try {
-    await sql("select public.ensure_workspace_for_user($1)", [userId]);
+    await sqlAsUser(userId, "select public.ensure_workspace_for_current_user()");
   } catch (error) {
     // Inloggningen ska inte falla på detta — proxyn skickar användaren till
     // /onboarding, som försöker igen och visar felet där om det kvarstår.
-    console.error("ensure_workspace_for_user:", (error as Error).message);
+    console.error("ensure_workspace_for_current_user:", (error as Error).message);
   }
 }
 
