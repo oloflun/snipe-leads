@@ -93,14 +93,57 @@ export async function signInWithPassword(
     throw error;
   }
 
-  // Konton som skapades innan signup-triggern lagades saknar profilrad. Utan
-  // detta hamnar de i en oändlig loop mellan /dashboard och /onboarding.
-  const session = await auth();
-  if (session?.user?.id) {
-    await ensureWorkspace(session.user.id);
+  // Identiteten hämtas ur auth.users på adressen, INTE ur auth().
+  //
+  // `auth()` läser sessionscookien från den INKOMMANDE requesten. Cookien som
+  // signIn() precis satte finns i SVARET och syns därför inte här — `auth()`
+  // returnerade null, varje gång. Följden var att self-healing-anropet nedan
+  // aldrig kördes: raderna såg ut att skydda mot loopen mellan /dashboard och
+  // /onboarding, och gjorde det inte. (Grinden höll ändå, eftersom jwt-
+  // callbacken i lib/auth.ts anropar samma funktion med rätt id.)
+  //
+  // Uppmätt genom att logga värdet i drift, inte antaget.
+  const userId = await anvandarId(email);
+  if (userId) {
+    await ensureWorkspace(userId);
   }
 
-  redirect(nextPath);
+  redirect(await startsidaFor(userId, nextPath));
+}
+
+async function anvandarId(email: string): Promise<string | null> {
+  try {
+    const rows = await sql<{ id: string }>(
+      "select id from auth.users where lower(email) = lower($1)",
+      [email]
+    );
+    return rows[0]?.id ?? null;
+  } catch (error) {
+    console.error("anvandarId:", (error as Error).message);
+    return null;
+  }
+}
+
+/**
+ * Vart en lyckad inloggning ska landa.
+ *
+ * En plattformsadmin hör hemma på /admin. Dirigeringen fanns redan, men i
+ * `app/dashboard/layout.tsx` — alltså ETT steg för sent: inloggningen skickade
+ * först till arbetsytan, som renderade och därefter redirectade. Det gav ett
+ * synligt mellansteg i adressfältet och en extra rendering av en vy admin inte
+ * skulle se. Layout-redirecten är kvar som skyddsnät för direktnavigering till
+ * /dashboard; den här tar bort studsen vid inloggning.
+ *
+ * Ett UTTRYCKLIGT `?next=` respekteras alltid. Den som klickat på en länk till
+ * en skyddad sida ska tillbaka dit efter inloggningen, även som admin — annars
+ * blir varje delad länk till arbetsytan värdelös för just den personen.
+ */
+async function startsidaFor(userId: string | null, nextPath: string): Promise<string> {
+  if (!userId || nextPath !== "/dashboard") {
+    return nextPath;
+  }
+  const { isPlatformAdmin } = await import("@/lib/auth/admin");
+  return (await isPlatformAdmin(userId)) ? "/admin" : nextPath;
 }
 
 export async function signUpWithPassword(

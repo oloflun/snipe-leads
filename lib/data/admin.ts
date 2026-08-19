@@ -77,7 +77,7 @@ export type RunRow = {
   tokens_out: number | null;
   latency_ms: number | null;
   created_at: string;
-  step_log?: StepLogEntry[] | null;
+  step_log?: StepLogEntry[] | string | null;
   input?: string | null;
   output?: string | null;
 };
@@ -116,9 +116,40 @@ export const listTenants = () => adminFetch<TenantRow[]>("/tenants", []);
 export const listRuns = (query = "") => adminFetch<RunRow[]>(`/runs${query}`, []);
 export const listEvents = (query = "") => adminFetch<EventRow[]>(`/events${query}`, []);
 
-export async function getRun(runId: string): Promise<RunRow | null | AdminUnavailableError> {
+/**
+ * `step_log` är jsonb i databasen och kom en tid tillbaka som en STRÄNG:
+ * asyncpg avkodar inte jsonb utan typkodare, och backenden avkodade inte
+ * kolumnen (`postgres.py::_avkoda_jsonb` gör det nu). Spårvyn föll då på
+ * `steps.map is not a function` — en vit sida, inte ett felmeddelande.
+ *
+ * Normaliseringen står kvar även efter backend-fixen, och det är inte bälte
+ * och hängslen: web och api är SKILDA tjänster på Railway och deployar var för
+ * sig. Ett web som är nyare än sitt api är ett normaltillstånd i minuterna
+ * efter en push, och en adminvy som kraschar under dem är värre än en som
+ * visar stegen.
+ */
+export type AdminRun = Omit<RunRow, "step_log"> & { step_log: StepLogEntry[] };
+
+function normaliseraSteg(run: RunRow | null): AdminRun | null {
+  if (!run) {
+    return null;
+  }
+  const rå: unknown =
+    typeof run.step_log === "string" ? tolkaJson(run.step_log) : run.step_log;
+  return { ...run, step_log: Array.isArray(rå) ? (rå as StepLogEntry[]) : [] };
+}
+
+function tolkaJson(värde: string): unknown {
+  try {
+    return JSON.parse(värde);
+  } catch {
+    return null;
+  }
+}
+
+export async function getRun(runId: string): Promise<AdminRun | null | AdminUnavailableError> {
   const result = await adminFetch<RunRow | null>(`/runs/${encodeURIComponent(runId)}`, null);
-  return result;
+  return result instanceof AdminUnavailableError ? result : normaliseraSteg(result);
 }
 
 /** Så att sidorna slipper upprepa instanceof-kontrollen. */
