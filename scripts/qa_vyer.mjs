@@ -29,9 +29,15 @@
  * redirect är ofta hela svaret), sidans h1, och om något 4xx/5xx eller
  * JS-fel utlöstes under laddningen. Sista raden summerar.
  */
+import fs from "node:fs";
 import { chromium } from "playwright";
 
 const BASE = process.env.BASE ?? "http://localhost:3000";
+// BILDER=<katalog> sparar en skärmdump per besiktad väg. Avstängt som default:
+// 46 PNG per körning är brus när man bara vill se om raden är grön, och guld
+// när någon ska granska ytan utan att köra den själv.
+const BILDER = process.env.BILDER || null;
+if (BILDER) fs.mkdirSync(BILDER, { recursive: true });
 const EXEC = process.env.PW_CHROMIUM || undefined;
 const PROXY = process.env.HTTPS_PROXY && !BASE.includes("localhost")
   ? { server: process.env.HTTPS_PROXY }
@@ -91,6 +97,11 @@ async function loggaIn(page, [epost, losen]) {
   return new URL(page.url()).pathname;
 }
 
+function bildnamn(rubrik, väg) {
+  const rent = (s) => s.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase();
+  return `${rent(rubrik)}__${rent(väg) || "rot"}.png`;
+}
+
 async function svep(page, rubrik, vagar, forvantat) {
   console.log(`\n=== ${rubrik} ===`);
   for (const väg of vagar) {
@@ -129,6 +140,12 @@ async function svep(page, rubrik, vagar, forvantat) {
     ).filter((f) => !tillatna.some((m) => m.test(f)));
     const somFörväntat = forvantat === "404" ? info.saknas : !info.saknas && status === 200;
     if (!somFörväntat || oväntadeFel.length) avvikelser++;
+
+    if (BILDER) {
+      await page
+        .screenshot({ path: `${BILDER}/${bildnamn(rubrik, väg)}`, fullPage: true })
+        .catch(() => {});
+    }
 
     page.off("response", påLyssnare);
     page.off("pageerror", påKrasch);
