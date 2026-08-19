@@ -84,9 +84,17 @@ class LeadsRunOverrides(BaseModel):
     alltså inte samma sak som "inga branscher".
     """
 
+    # Speglar `LIST_FIELDS` i app/leads/icp.py, ALLA sex. Fyra av dem saknades
+    # tidigare, och följden var att en provkörning mot en särskild nisch inte
+    # gick att styra: rollerna, signalerna som krävs och de diskvalificerande
+    # kom alltid från arbetsytans sparade ICP. Just de tre ÄR nischen — geografi
+    # och bransch är bara var man letar.
     industries: list[str] | None = None
     exclude_industries: list[str] | None = None
     geography: list[str] | None = None
+    roles: list[str] | None = None
+    must_have: list[str] | None = None
+    deal_breakers: list[str] | None = None
     anstallda_min: int | None = Field(default=None, ge=0)
     anstallda_max: int | None = Field(default=None, ge=0)
 
@@ -101,16 +109,10 @@ class LeadsRunOverrides(BaseModel):
         return self
 
     def har_nagot(self) -> bool:
-        return any(
-            v is not None
-            for v in (
-                self.industries,
-                self.exclude_industries,
-                self.geography,
-                self.anstallda_min,
-                self.anstallda_max,
-            )
-        )
+        # model_fields_set och inte en handskriven lista: listan glömdes bort
+        # när fälten utökades, och en override som inte räknas här skickas
+        # aldrig vidare — den försvinner tyst i stället för att styra körningen.
+        return any(getattr(self, namn) is not None for namn in type(self).model_fields)
 
 
 class LeadsBatchRequest(BaseModel):

@@ -76,6 +76,12 @@ export function Testkorningar() {
   const [branscher, setBranscher] = useState("");
   const [undvik, setUndvik] = useState("");
   const [geografi, setGeografi] = useState("");
+  // Roller, krävs och diskvalificerar ÄR nischen — bransch och geografi säger
+  // bara var man letar. Utan dem gick en provkörning mot en särskild nisch inte
+  // att styra: de tre kom alltid från arbetsytans sparade ICP.
+  const [roller, setRoller] = useState("");
+  const [kravs, setKravs] = useState("");
+  const [diskvalificerar, setDiskvalificerar] = useState("");
   const [minAnst, setMinAnst] = useState("");
   const [maxAnst, setMaxAnst] = useState("");
   const [leadsSvar, setLeadsSvar] = useState<LeadsSvar | null>(null);
@@ -99,6 +105,9 @@ export function Testkorningar() {
         industries: lista(branscher),
         exclude_industries: lista(undvik),
         geography: lista(geografi),
+        roles: lista(roller),
+        must_have: lista(kravs),
+        deal_breakers: lista(diskvalificerar),
         anstallda_min: tal(minAnst),
         anstallda_max: tal(maxAnst)
       };
@@ -217,6 +226,15 @@ export function Testkorningar() {
           </Rad>
           <Rad etikett="Geografi">
             <input value={geografi} onChange={(e) => setGeografi(e.target.value)} placeholder="Västra Götaland" className={fältklass} />
+          </Rad>
+          <Rad etikett="Beslutsfattarroller" hint="vem agenten ska leta efter">
+            <input value={roller} onChange={(e) => setRoller(e.target.value)} placeholder="VD, inköpschef" className={fältklass} />
+          </Rad>
+          <Rad etikett="Signaler som krävs" hint="nischen">
+            <input value={kravs} onChange={(e) => setKravs(e.target.value)} placeholder="Egen produktion, växer" className={fältklass} />
+          </Rad>
+          <Rad etikett="Diskvalificerar">
+            <input value={diskvalificerar} onChange={(e) => setDiskvalificerar(e.target.value)} placeholder="Under 10 anställda" className={fältklass} />
           </Rad>
           <div className="grid grid-cols-2 gap-3">
             <Rad etikett="Anställda, min">
