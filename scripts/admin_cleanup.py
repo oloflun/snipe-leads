@@ -3,6 +3,8 @@
 
     python scripts/admin_cleanup.py --env preview
     python scripts/admin_cleanup.py --env production
+    python scripts/admin_cleanup.py --env railway-development
+    python scripts/admin_cleanup.py --env railway-main --diagnos
 
 Gör fem saker, idempotent, mot EN miljö i taget:
 
@@ -20,6 +22,24 @@ committas. Det här körs mot en riktig databas via psycopg2 (auth-schemat nås
 inte via Supabases REST-API).
 
 Idempotent: varje steg är en upsert/delete med villkor, så det går att köra om.
+
+## Railway-miljöerna
+
+`production` och `preview` är Supabase-stacken. Railway-stacken (RAILWAY.md) hade
+ingen ingång alls här, och det märks inte förrän någon loggar in: adminraden
+skapas av det HÄR skriptet, migrationskedjan skapar den inte. Utan raden svarar
+`/admin` 404 för rätt person, och `/dashboard` slutar dirigera till adminytan —
+båda tyst, eftersom `isPlatformAdmin()` är fail-closed med flit.
+
+Uppmätt 2026-08-19 mot båda Railway-miljöerna: inloggningen lyckades,
+`/api/auth/session` gav rätt konto, och varje `/admin*` gav 404. Koden var rätt
+och deployad; raden fanns inte.
+
+`--diagnos` skriver ut vad som gäller utan att ändra något — och ställer
+adminfrågan som APPEN ställer den: som `snajp_web`, med `app.user_id` satt, så
+att RLS-policyn faktiskt evalueras. Som `postgres` (BYPASSRLS) ser den rätt ut
+även när den inte är det; det var exakt den blindheten som lät den
+självrefererande policyn i 020 ligga oupptäckt (se 033).
 """
 
 from __future__ import annotations
@@ -46,6 +66,14 @@ ADMIN_NAME = "Snajp Admin"
 ENVIRONMENTS = {
     "production": {"url_key": "DATABASE_URL", "env_files": [BACKEND_ENV, DEPLOY_ENV]},
     "preview": {"url_key": "PREVIEW_DATABASE_URL", "env_files": [DEPLOY_ENV]},
+    # Railway: DSN:en sätts inte som en färdig sträng utan byggs av delarna,
+    # exakt som railway_migrate.py gör. Ett prefix per miljö är det som gör att
+    # `--env railway-development` inte kan råka träffa main-databasen.
+    "railway-main": {"railway_prefix": "RAILWAY_MAIN_", "env_files": [DEPLOY_ENV]},
+    "railway-development": {
+        "railway_prefix": "RAILWAY_DEVELOPMENT_",
+        "env_files": [DEPLOY_ENV],
+    },
 }
 
 
@@ -83,19 +111,104 @@ def scrypt_hash(password: str) -> str:
     return f"scrypt$1${base64.b64encode(salt).decode()}${base64.b64encode(key).decode()}"
 
 
+def dsn_for(cfg: dict) -> str:
+    """DSN:en för en miljö — färdig sträng (Supabase) eller ihopsatt (Railway)."""
+    prefix = cfg.get("railway_prefix")
+    if not prefix:
+        värde = env_value(cfg["url_key"], *cfg["env_files"])
+        if not värde:
+            sys.exit(
+                f"AVBRYTER: {cfg['url_key']} saknas. Lägg den i .env.deploy / snajp-support/.env."
+            )
+        return värde
+
+    delar = {
+        del_: env_value(f"{prefix}PG_{del_}", *cfg["env_files"])
+        for del_ in ("PASSWORD", "HOST", "PORT")
+    }
+    saknas = [f"{prefix}PG_{k}" for k, v in delar.items() if not v]
+    if saknas:
+        sys.exit(
+            "AVBRYTER: " + ", ".join(saknas) + " saknas i .env.deploy. "
+            "Samma variabler som scripts/railway_migrate.py läser."
+        )
+    return (
+        f"postgresql://postgres:{delar['PASSWORD']}@{delar['HOST']}:{delar['PORT']}/railway"
+    )
+
+
+def diagnos(cur, user_id) -> None:
+    """Varför svarar /admin 404? Fem fakta, i den ordning de spelar roll.
+
+    Den sista är den enda som mäter det appen faktiskt gör: läsningen som
+    `snajp_web` med `app.user_id` satt. Som `postgres` (BYPASSRLS) evalueras
+    ingen policy, och svaret är sant men irrelevant.
+    """
+    cur.execute(
+        "select email_confirmed_at is not null from auth.users where id = %s", (user_id,)
+    )
+    bekräftad = cur.fetchone()[0]
+
+    cur.execute(
+        "select exists (select 1 from information_schema.tables "
+        "where table_schema='public' and table_name='platform_admin_bootstrap')"
+    )
+    har_bootstrap = cur.fetchone()[0]
+    i_bootstrap = None
+    if har_bootstrap:
+        cur.execute(
+            "select exists (select 1 from public.platform_admin_bootstrap "
+            "where lower(email) = lower(%s))",
+            (ADMIN_EMAIL,),
+        )
+        i_bootstrap = cur.fetchone()[0]
+
+    cur.execute("select exists (select 1 from public.platform_admins where user_id = %s)", (user_id,))
+    har_grad = cur.fetchone()[0]
+
+    cur.execute("select exists (select 1 from public.profiles where id = %s)", (user_id,))
+    har_profil = cur.fetchone()[0]
+
+    # Appens egen fråga, med appens egen roll och identitet.
+    som_appen: object
+    try:
+        cur.execute("begin")
+        cur.execute("select set_config('app.user_id', %s::text, true)", (str(user_id),))
+        cur.execute("set local role snajp_web")
+        cur.execute("select count(*) from public.platform_admins where user_id = %s", (user_id,))
+        som_appen = cur.fetchone()[0] > 0
+        cur.execute("commit")
+    except Exception as exc:  # policyfel ska SYNAS, inte bli ett tyst nej
+        cur.execute("rollback")
+        som_appen = f"FEL: {str(exc).strip().splitlines()[0]}"
+
+    print("  diagnos:")
+    print(f"    e-post bekräftad ............ {bekräftad}")
+    print(f"    bootstrap-tabell finns ...... {har_bootstrap}")
+    print(f"    adressen i bootstrap ........ {i_bootstrap}")
+    print(f"    rad i platform_admins ....... {har_grad}")
+    print(f"    profil/workspace finns ...... {har_profil}")
+    print(f"    isPlatformAdmin() som appen . {som_appen}")
+    if som_appen is not True:
+        print("    → det är detta /admin svarar 404 på.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Rensa plattformsadmin.")
     parser.add_argument(
         "--env", choices=sorted(ENVIRONMENTS), default="preview",
         help="Miljö att rensa (default: preview)",
     )
+    parser.add_argument(
+        "--diagnos", action="store_true",
+        help="Skriv bara ut tillståndet, ändra ingenting.",
+    )
     args = parser.parse_args()
 
     cfg = ENVIRONMENTS[args.env]
-    dsn = env_value(cfg["url_key"], *cfg["env_files"])
-    if not dsn:
-        sys.exit(f"AVBRYTER: {cfg['url_key']} saknas. Lägg den i .env.deploy / snajp-support/.env.")
+    dsn = dsn_for(cfg)
 
+    print(f"miljö: {args.env}")
     conn = psycopg2.connect(dsn)
     conn.autocommit = True
     cur = conn.cursor()
@@ -106,6 +219,14 @@ def main() -> None:
     if row:
         user_id = row[0]
         print(f"  konto {ADMIN_EMAIL} finns redan ({user_id})")
+        if args.diagnos:
+            diagnos(cur, user_id)
+            conn.close()
+            return
+    elif args.diagnos:
+        print(f"  konto {ADMIN_EMAIL} finns INTE i auth.users — det räcker för en 404.")
+        conn.close()
+        return
     else:
         password = os.environ.get("SNAJP_ADMIN_PASSWORD") or getpass.getpass(
             f"Lösenord för {ADMIN_EMAIL} (nytt konto, syns aldrig): "
@@ -150,6 +271,11 @@ def main() -> None:
         (user_id,),
     )
     print("  workspace-produkter: leads, support")
+
+    # Verifieringen körs ALLTID efter en skrivning. Ett skript som säger "klart"
+    # utan att ha läst tillbaka resultatet är ett påstående, inte ett bevis —
+    # och det påståendet är precis vad som saknades när /admin stod på 404.
+    diagnos(cur, user_id)
 
     conn.close()
     print("Klart.")

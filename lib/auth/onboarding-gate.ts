@@ -46,6 +46,10 @@ export async function requireOnboarded(): Promise<void> {
 export async function redirectIfOnboarded(): Promise<void> {
   const session = await auth();
   const userId = session?.user?.id;
+  // Ingen adminkontroll här, med flit. `requireOnboarded` undantar
+  // plattformsadmin från att TVINGAS hit; att också stänga dem UTE hade brutit
+  // "Fyll i affärskontext" i deras egen arbetsyta (/admin/arbetsyta), som är en
+  // länk rakt hit. Undantaget gäller kravet, inte sidan.
   if (userId && (await hasCompletedOnboarding(userId))) {
     redirect("/dashboard");
   }

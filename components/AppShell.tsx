@@ -47,8 +47,36 @@ function iDemolage(pathname: string): boolean {
   return pathname === "/demo" || pathname.startsWith("/demo/");
 }
 
+function iAdminlage(pathname: string): boolean {
+  return pathname === "/admin" || pathname.startsWith("/admin/");
+}
+
 function demoAnpassa(href: string, pathname: string): string {
   return iDemolage(pathname) ? (DEMO_VAGAR[href] ?? href) : href;
+}
+
+/**
+ * Arbetsytans länkar, anpassade till ytan de renderas på.
+ *
+ * Samma vyer renderas på tre ytor: /dashboard (kunden), /admin (plattforms-
+ * admin) och /demo (utan session). En hårdkodad `/dashboard/...` i en vy är
+ * därför rätt på en av tre. På /admin studsade den dessutom tillbaka till
+ * /admin (app/dashboard/layout.tsx skickar plattformsadmin dit), så varje
+ * innehållslänk tog admin ur den vy de stod i — samma fel som flikraden hade,
+ * fast i brödtexten.
+ *
+ * `/dashboard` mappas till `/admin/arbetsyta`; se AdminShell för varför.
+ */
+export function useArbetsvag(): (href: string) => string {
+  const pathname = usePathname();
+  return (href: string) => {
+    if (iAdminlage(pathname)) {
+      if (href === "/dashboard") return "/admin/arbetsyta";
+      if (href.startsWith("/dashboard/")) return href.replace("/dashboard", "/admin");
+      return href;
+    }
+    return demoAnpassa(href, pathname);
+  };
 }
 
 export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -76,6 +104,20 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
       router.replace("/dashboard");
     }
   }, [pathname, stranded, router]);
+
+  // Inuti adminytan äger AdminShell skalet, och det här ska bara vara innehåll.
+  //
+  // Varje arbetsytesvy renderar sitt eget AppShell via PageShell. Under /admin
+  // gav det TVÅ staplade headers, och den inre navigationen pekade på
+  // /dashboard/* — vilket för en plattformsadmin studsar tillbaka till /admin
+  // (app/dashboard/layout.tsx). Alltså: varje flik i den inre raden tog
+  // användaren ur den flik de stod i. Uppmätt i skärmdump, inte antaget.
+  //
+  // Villkoret läser pathname och inte en prop, för att PageShell anropas från
+  // ~20 vyer som inte vet vilken yta de renderas i — och inte ska behöva veta.
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) {
+    return <>{children}</>;
+  }
 
   return (
     <div className="min-h-screen bg-paper text-ink">
@@ -225,9 +267,15 @@ export function PageShell({
   children: React.ReactNode;
   action?: React.ReactNode;
 }>) {
+  const pathname = usePathname();
+  // Under /admin bär `app/admin/layout.tsx` redan containern. Två containers
+  // gav dubbel padding och en innerbredd 48px smalare än resten av ytan —
+  // syns direkt när man växlar mellan en plattformsflik och en arbetsytesflik.
+  const iAdmin = pathname === "/admin" || pathname.startsWith("/admin/");
+
   return (
     <AppShell>
-      <section className="mx-auto max-w-[1400px] px-4 py-8 md:px-6 md:py-10">
+      <section className={iAdmin ? "" : "mx-auto max-w-[1400px] px-4 py-8 md:px-6 md:py-10"}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-[0.8125rem] font-medium text-ink/45">{kicker}</p>

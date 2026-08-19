@@ -30,7 +30,7 @@ export default async function Page() {
   if (error) {
     return (
       <div>
-        <h1 className="font-display text-4xl tracking-[-0.03em]">Kunder</h1>
+        <h1 className="font-display text-4xl tracking-[-0.03em]">Översikt</h1>
         <p role="alert" className="mt-6 max-w-[70ch] break-words text-[15px] text-danger">
           {error}
         </p>

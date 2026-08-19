@@ -29,6 +29,8 @@ python scripts/railway_migrate.py --env development --apply
 python scripts/railway_seed_dev.py --apply             # spegla main -> development
 python scripts/verify_railway.py                       # driftkontroll, båda miljöerna
 python scripts/keys.py --push-railway                  # LLM-nycklar till båda + verifiera
+python scripts/admin_cleanup.py --env railway-development --diagnos  # varför 404 på /admin?
+python scripts/admin_cleanup.py --env railway-development            # skapa/laga adminraden
 ```
 
 ## Dataspegeln — envägs, och låst åt det hållet
@@ -170,6 +172,47 @@ ut. Kloning ger dessutom infrastruktur, inte data: den nya databasen är tom och
 migrationskedjan måste köras.
 
 Nettot är ett manuellt ingrepp i stället för fyra, inte noll i stället för fyra.
+
+## Plattformsadmin — raden som migrationskedjan inte skapar
+
+`/admin` grindas av `getPlatformAdmin()`, som läser `public.platform_admins`.
+Den raden skapas av `scripts/admin_cleanup.py`, **inte** av migrationskedjan.
+Skriptet hade tidigare bara Supabase-miljöer (`production`, `preview`), så
+Railway-stacken hade ingen ingång alls — och symptomet är tyst, eftersom
+`isPlatformAdmin()` är fail-closed med flit:
+
+* `/admin` och `/admin/*` svarar **404** för rätt person.
+* `/dashboard` slutar dirigera till adminytan, eftersom den dirigeringen är
+  villkorad på samma uppslag. Inloggningen ser alltså ut att "gå till fel
+  ställe" när den i själva verket går till enda stället som finns.
+
+Uppmätt 2026-08-19 mot **båda** Railway-miljöerna: inloggningen lyckades,
+`/api/auth/session` gav `snajpsupport@gmail.com`, och varje `/admin*` gav 404.
+Koden var rätt och deployad — `/login` byggd från grenens HEAD var byte-identisk
+med den utcheckade koden. Det som saknades var raden.
+
+```bash
+python scripts/admin_cleanup.py --env railway-development --diagnos   # bara läsa
+python scripts/admin_cleanup.py --env railway-development             # skapa/laga
+python scripts/admin_cleanup.py --env railway-main
+```
+
+DSN:en byggs av `RAILWAY_{MAIN,DEVELOPMENT}_PG_{PASSWORD,HOST,PORT}` i
+`.env.deploy` — samma variabler som `railway_migrate.py` läser, och samma
+miljöprefix, så `--env railway-development` inte kan träffa main.
+
+`--diagnos` ställer adminfrågan **som appen ställer den**: som `snajp_web`, med
+`app.user_id` satt, så att RLS-policyn evalueras. Som `postgres` (BYPASSRLS)
+evalueras ingen policy och svaret ser rätt ut även när det inte är det — precis
+den blindheten som lät den självrefererande policyn i `020` ligga oupptäckt
+(se `033`).
+
+### Speglingen tar med sig frånvaron
+
+`railway_seed_dev.py` kopierar alla publika tabeller **inklusive**
+`platform_admins`. Saknas raden i `main` saknas den i `development` efter varje
+spegling. Kör därför skriptet mot `railway-main` först, och mot
+`railway-development` efter varje `--apply` av spegeln.
 
 ## Kvar att lösa
 
