@@ -1,5 +1,23 @@
+import { sqlAsUser } from "@/lib/db";
 import { getWorkspaceContext } from "@/lib/workspace";
 import { getTenant } from "@/lib/tenants";
+
+/**
+ * Arbetsytans egen backend-nyckel, för tenants utan configfil.
+ *
+ * Går genom en security definer-funktion och inte en SELECT: tabellen
+ * `workspace_tenant_keys` har RLS utan policies, alltså noll rader för appen.
+ * Funktionen tar heller ingen workspace_id — med en parameter hade den varit en
+ * uppslagsbok över alla arbetsytors nycklar, och en bugg i en anropsplats hade
+ * räckt för att läsa fel kunds.
+ */
+async function tenantApiKeyForWorkspace(userId: string): Promise<string | undefined> {
+  const rows = await sqlAsUser<{ nyckel: string | null }>(
+    userId,
+    "select public.tenant_api_key_for_current_workspace() as nyckel"
+  );
+  return rows[0]?.nyckel ?? undefined;
+}
 
 /**
  * Vilken kund ett inloggat anrop mot Snajp-Support-backenden gäller.
@@ -67,7 +85,27 @@ export async function requireSnajpTenant(): Promise<SnajpTenant> {
     );
   }
 
-  const apiKey = process.env[tenant.supportKeyEnv];
+  /**
+   * Två nyckelvägar, och ordningen mellan dem är inte utbytbar.
+   *
+   * En kund med configfil har sin nyckel i en miljövariabel. En testarbetsyta
+   * har en EGEN tenant som skapades i drift (migration 040) och vars nyckel
+   * ligger i databasen — för den är miljövariabeln fel svar: `SNAJP_KEY_TESTKUND`
+   * pekar på den GAMLA delade tenanten, alltså en delad kunskapsbas. Att låta
+   * env vinna hade tyst återinfört precis det vi byggde bort.
+   */
+  const apiKey = tenant.perWorkspaceKey
+    ? await tenantApiKeyForWorkspace(user.id)
+    : process.env[tenant.supportKeyEnv];
+
+  if (!apiKey && tenant.perWorkspaceKey) {
+    throw new SnajpTenantError(
+      409,
+      "Testarbetsytan har ingen egen backend-nyckel sparad. Kör onboardingen igen " +
+        "eller koppla arbetsytan med scripts/railway_tenant_keys.py."
+    );
+  }
+
   if (!apiKey) {
     // Samma resonemang som MissingTenantKeyError i chat-proxyn: utan nyckel
     // svarar vi inte som ett annat bolag.

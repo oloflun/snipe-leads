@@ -58,6 +58,7 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
 
   const { getProfileForUser } = await import("@/lib/workspace");
   const { sqlAsUser } = await import("@/lib/db");
+  const { skapaTesttenant } = await import("@/lib/snajp/testtenant");
   let profile = await getProfileForUser(user.id);
 
   if (!profile) {
@@ -172,7 +173,12 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
   }
 
   /**
-   * Testarbetsytan kopplas till den delade `testkund`-tenanten.
+   * Testarbetsytan får en EGEN backend-tenant (migration 040).
+   *
+   * Den delade `testkund`-tenanten finns kvar som fallback och beskrivs nedan.
+   * Skälet att den inte längre är förstahandsvalet: delad tenant = delad
+   * kunskapsbas, och en testkunds villkor kunde grunda ett svar till en annan
+   * testkunds kund.
    *
    * Utan det här är bypassen halvfärdig. Uppmätt mot dev-deployen 2026-08-19:
    * den nyskapade testkunden mötte 409 på Kontroll, Kundtjänst och Röst,
@@ -189,17 +195,41 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
    */
   if (input.testkund) {
     try {
-      // En UPDATE härifrån ändrade NOLL rader utan att kasta: workspaces har
-      // bara en SELECT-policy, och när ingen policy gäller kommandot ger RLS
-      // noll rader tyst. Migration 038 lägger en smal security definer-dörr i
-      // stället för en UPDATE-policy — en sådan hade låtit appen skriva om
-      // `slug`, alltså byta vilken kunds data arbetsytan ser.
-      await sqlAsUser(user.id, "select public.link_testkund_workspace()");
+      // EGEN tenant per testarbetsyta, skapad i drift.
+      //
+      // Den delade `testkund`-tenanten (migration 038) betydde delad inkorg,
+      // delad kunskapsbas och delat röstdokument. Med flera testkunder växte
+      // basen med policys från olika bolag, och ett svar till kund A kunde
+      // grundas i kund B:s villkor — grundningsgrinden ser en träff, den kan
+      // inte se att artikeln kom från fel företag.
+      //
+      // Backenden skapar tenanten (`POST /api/keys`), och nyckeln sparas i
+      // `workspace_tenant_keys` genom en security definer-funktion. Migration
+      // 040 förklarar varför den inte får ligga i `workspaces`.
+      const tenant = await skapaTesttenant(payload.workspace_id, `Testarbetsyta ${webbplats}`);
+      const kopplad = await sqlAsUser<{ ok: boolean }>(
+        user.id,
+        "select public.link_test_tenant($1, $2, $3) as ok",
+        [tenant.slug, tenant.tenantId, tenant.apiKey]
+      );
+      if (!kopplad[0]?.ok) {
+        throw new Error("link_test_tenant nekade kopplingen (arbetsytan hade redan en kund?).");
+      }
     } catch (error) {
       // Kopplingen får inte fälla onboardingen. Affärskontexten är sparad, och
       // en okopplad testyta ger ett ärligt 409 med instruktion — att slänga
       // bort ett lyckat sparande för det vore sämre.
-      console.error("[onboarding] kunde inte koppla testarbetsytan:", error);
+      //
+      // Fallbacken är den GAMLA delade tenanten. Den är sämre (delad
+      // kunskapsbas) men fungerande, och alternativet — en arbetsyta som inte
+      // kan användas alls — är sämre än så. Att den användes syns på att
+      // workspacets slug är `testkund` utan suffix.
+      console.error("[onboarding] kunde inte skapa egen testtenant:", error);
+      try {
+        await sqlAsUser(user.id, "select public.link_testkund_workspace()");
+      } catch (fallbackError) {
+        console.error("[onboarding] kunde inte koppla testarbetsytan:", fallbackError);
+      }
     }
   }
 

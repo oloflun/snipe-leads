@@ -68,4 +68,13 @@ export type Tenant = {
   supportPrompts: string[];
   /** Hjälptexten över startfrågorna, i chattens tomma läge. */
   supportIntro: string;
+  /**
+   * Nyckeln bor PER ARBETSYTA i databasen, inte i en miljövariabel.
+   *
+   * Gäller tenants som skapas i drift och därför inte har någon configfil —
+   * testarbetsytorna är det första fallet (migration 040). För dem är
+   * `supportKeyEnv` fel väg: den pekar på en DELAD nyckel, alltså en delad
+   * kunskapsbas, vilket är exakt det egna tenants finns för att undvika.
+   */
+  perWorkspaceKey?: boolean;
 };

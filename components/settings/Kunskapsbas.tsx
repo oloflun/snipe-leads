@@ -1,7 +1,9 @@
 "use client";
 
 import { FileText, Loader2, Upload } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useArbetsvag } from "@/components/AppShell";
 import { btnPrimary, btnSecondary } from "@/components/ui";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
@@ -39,6 +41,133 @@ const LÄSBARA = [".txt", ".md", ".markdown", ".csv", ".json", ".html", ".htm"];
 function läsbar(namn: string): boolean {
   const lägre = namn.toLowerCase();
   return LÄSBARA.some((ändelse) => lägre.endsWith(ändelse));
+}
+
+/**
+ * Uppladdningen på STARTSIDAN, i kort format.
+ *
+ * Samma endpoint och samma filhantering som panelen nedan — kortet är en
+ * genväg, inte en andra implementation. Den finns för att kunskapsbasen är det
+ * enda som måste vara på plats innan någon av agenterna kan göra sitt jobb, och
+ * att gömma det steget tre klick in i inställningarna gör att det hoppas över.
+ * Kunden ser då en agent som eskalerar allt och drar slutsatsen att den inte
+ * fungerar.
+ */
+export function KunskapsbasKort() {
+  const vag = useArbetsvag();
+  const [antal, setAntal] = useState<number | null>(null);
+  const [fel, setFel] = useState<string | null>(null);
+  const [meddelande, setMeddelande] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const filväljare = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    let avbruten = false;
+    fetch("/api/snajp-support/kb", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { articles?: Artikel[] } | null) => {
+        if (!avbruten && data) setAntal(data.articles?.length ?? 0);
+      })
+      .catch(() => {
+        /* Kortet är en genväg. Att det inte kunde räkna artiklar ska inte
+           lägga ett felmeddelande överst på startsidan. */
+      });
+    return () => {
+      avbruten = true;
+    };
+  }, []);
+
+  async function väljFiler(filer: FileList | null) {
+    if (!filer || filer.length === 0) return;
+    setBusy(true);
+    setFel(null);
+    setMeddelande(null);
+    try {
+      const nya: Artikel[] = [];
+      const avvisade: string[] = [];
+      for (const fil of Array.from(filer)) {
+        if (!läsbar(fil.name)) {
+          avvisade.push(fil.name);
+          continue;
+        }
+        const innehåll = (await fil.text()).trim();
+        if (!innehåll) {
+          avvisade.push(fil.name);
+          continue;
+        }
+        nya.push({ title: fil.name.replace(/\.[^.]+$/, ""), content: innehåll });
+      }
+      if (nya.length) {
+        const response = await fetch("/api/snajp-support/kb", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ articles: nya })
+        });
+        const kropp = await readJsonBody<{ error?: string; detail?: string }>(response);
+        if (!response.ok) {
+          throw new Error(kropp?.detail ?? kropp?.error ?? `Kunde inte spara (${response.status}).`);
+        }
+        setAntal((tidigare) => (tidigare ?? 0) + nya.length);
+        setMeddelande(`${nya.length} dokument tillagda.`);
+      }
+      if (avvisade.length) {
+        setFel(`Hoppade över ${avvisade.join(", ")} — läsbara format är ${LÄSBARA.join(", ")}.`);
+      }
+    } catch (cause) {
+      setFel(felmeddelande(cause));
+    } finally {
+      setBusy(false);
+      if (filväljare.current) filväljare.current.value = "";
+    }
+  }
+
+  return (
+    <section className="rounded-card bg-paper2/50 p-5 md:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+        <div className="min-w-0">
+          <h2 className="text-[1.0625rem] font-semibold tracking-[-0.01em]">
+            Affärskontext och kunskapsbas
+          </h2>
+          <p className="mt-1 max-w-[62ch] text-[14px] leading-6 text-ink/65">
+            {antal === 0
+              ? "Tom. Agenterna svarar bara ur det ni lagt in — utan underlag eskalerar kundtjänstagenten varje ärende."
+              : `${antal ?? "—"} dokument. Ladda upp villkor, vanliga frågor och rutiner så svarar agenterna ur dem.`}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <input
+            ref={filväljare}
+            type="file"
+            multiple
+            accept={LÄSBARA.join(",")}
+            onChange={(e) => void väljFiler(e.target.files)}
+            className="sr-only"
+          />
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => filväljare.current?.click()}
+            className={btnSecondary}
+          >
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Upload className="h-4 w-4" aria-hidden />}
+            Ladda upp dokument
+          </button>
+          <Link
+            href={vag("/settings/kunskapsbas")}
+            className="focus-ring inline-flex min-h-11 items-center rounded-input px-3 text-[14px] font-medium text-ink/55 hover:text-ink"
+          >
+            Hantera
+          </Link>
+        </div>
+      </div>
+      {meddelande ? <p className="mt-3 text-[14px] text-moss">{meddelande}</p> : null}
+      {fel ? (
+        <p role="alert" className="mt-3 max-w-[70ch] break-words text-[14px] text-danger">
+          {fel}
+        </p>
+      ) : null}
+    </section>
+  );
 }
 
 export function KunskapsbasPanel() {

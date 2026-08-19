@@ -5,6 +5,7 @@ import { PageShell } from "@/components/AppShell";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { DuoSummary } from "@/components/dashboard/DuoSummary";
 import { Dashboard as SupportDashboard } from "@/components/snajp/Dashboard";
+import { KunskapsbasKort } from "@/components/settings/Kunskapsbas";
 import { LeadsBody } from "@/components/WorkspaceViews";
 import { useLocale } from "@/lib/i18n";
 import type { Localized } from "@/lib/i18n";
@@ -104,8 +105,14 @@ export function StartView({ demo = false }: Readonly<{ demo?: boolean }>) {
   return (
     <PageShell kicker={text(copy.kicker)} title={text(title)} description={text(description)}>
       <div className="space-y-12">
-        {/* Högst upp, och bara när båda produkterna visas. Komponenten
-            returnerar null av sig själv annars — se DuoSummary. */}
+        {/* Underlaget först. Kunskapsbasen är det enda som måste vara på plats
+            innan någon av agenterna kan göra sitt jobb, och tre klick in i
+            inställningarna är tre klick för långt bort för det steget.
+            Inte på demoytan: där finns ingen session att ladda upp till. */}
+        {demo ? null : <KunskapsbasKort />}
+
+        {/* Högst upp bland vyerna, och bara när båda produkterna visas.
+            Komponenten returnerar null av sig själv annars — se DuoSummary. */}
         <DuoSummary />
 
         {shows("leads") ? (
