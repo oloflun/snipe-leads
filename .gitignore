@@ -57,3 +57,7 @@ screenshots/cookies-dump.json
 # — runtime state derived from agent_context_docs, regenerated every run.
 snajp-support/var/
 .env*
+
+# Besiktningsbilder från qa_vyer.mjs (BILDER=). Sessionsbevis, inte källkod —
+# ~50 MB per körning och regenereras av ett kommando.
+screenshots/railway-dev/
