@@ -94,7 +94,23 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
 
   // Narrowing the scope while standing on a section it excludes would strand the
   // user on a page they can no longer navigate back to.
-  const stranded = navRoutes.every(
+  //
+  // Räknas mot ALLA routes arbetsytan äger, inte bara de som står i menyn.
+  // Skillnaden är `preview`-routerna: `lib/routes.ts` säger att de "nås
+  // fortfarande direkt" och att flaggan bara styr vad som VISAS i menyn — men
+  // eftersom de saknades här studsade varje sådan adress tillbaka till
+  // /dashboard. Alltså gick /dashboard/companies, /contacts, /inbox,
+  // /analytics och /assistant inte att öppna alls som kund, och koden på båda
+  // ställena såg rätt ut var för sig.
+  //
+  // Scope-skyddet står kvar orört: filtret på `shows()` gäller fortfarande, så
+  // den som smalnar av vyn till Support medan de står på en leads-sida
+  // dirigeras som förut.
+  const natbaraRoutes = routesForProducts(products, { includePreview: true }).filter(
+    (route) => route.product === "shared" || shows(route.product)
+  );
+
+  const stranded = natbaraRoutes.every(
     (route) => route.href === "/dashboard" || !pathname.startsWith(route.href)
   );
 
