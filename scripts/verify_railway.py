@@ -172,11 +172,43 @@ def verify_isolation(store: dict) -> None:
           "dev-nyckel AVVISAS av main-api")
 
 
+def scrub(text: str, store: dict) -> str:
+    """Ta bort hemligheter ur en text som ska skrivas ut.
+
+    Felmeddelanden är den väg en hemlighet läcker när ingen echar den: en DSN
+    med lösenord i klartext hamnar i undantagets str() och därifrån i loggen.
+
+    Bara hemligheterna maskeras. Värdnamn och URL:er lämnas kvar — de är inte
+    hemliga, och ett felmeddelande där adressen är bortmaskerad går inte att
+    felsöka, vilket är en annan sorts skada.
+    """
+    hemlig = ("PASSWORD", "SECRET", "KEY", "TOKEN")
+    for key, value in store.items():
+        if value and len(value) > 7 and any(h in key.upper() for h in hemlig):
+            text = text.replace(value, "***")
+    return text
+
+
 def verify_database(env_name: str, store: dict) -> None:
     global scope
     scope = env_name
     print(f"\n[{env_name}] databas")
-    conn = psycopg2.connect(dsn(store, env_name), connect_timeout=20)
+    try:
+        conn = psycopg2.connect(dsn(store, env_name), connect_timeout=20)
+    except psycopg2.OperationalError as exc:
+        # En stängd väg IN är inte samma sak som en trasig databas — men den får
+        # aldrig räknas som grönt, för kontrollerna nedan kördes inte. Ett
+        # undantag som bubblar upp hade dessutom tagit med sig hela körningen,
+        # inklusive den andra miljöns tjänst- och HTTP-kontroller som inte rör
+        # databasen alls. Det var precis vad som hände 2026-08-20.
+        check(False, "databasen går att nå",
+              scrub(str(exc).strip().splitlines()[0], store))
+        notes.append(
+            f"[{env_name}] databaskontrollerna kördes INTE. Postgres nås utifrån via "
+            "en TCP-proxy på en hög port; en miljö som bara släpper ut 443 tajmar ut "
+            "här. Kör om från en terminal med öppen utgående TCP."
+        )
+        return
     cur = conn.cursor()
 
     cur.execute("select count(*) from supabase_migrations.schema_migrations")

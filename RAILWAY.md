@@ -30,6 +30,7 @@ python scripts/railway_migrate.py --env development --apply
 python scripts/railway_seed_dev.py --apply             # spegla main -> development
 python scripts/verify_railway.py                       # driftkontroll, båda miljöerna
 python scripts/keys.py --push-railway                  # LLM-nycklar till båda + verifiera
+python scripts/railway_repair_llm_key.py --env development --apply  # laga en korrumperad LLM-nyckel
 python scripts/admin_cleanup.py --env railway-development --diagnos  # varför 404 på /admin?
 python scripts/admin_cleanup.py --env railway-development            # skapa/laga adminraden
 ```
@@ -259,9 +260,22 @@ spegling. Kör därför skriptet mot `railway-main` först, och mot
 - **Utgående mail saknas i hela kodlinjen.** Magic link och
   lösenordsåterställning svarar därför ärligt att de inte är kopplade, i stället
   för att lova ett mail som aldrig lämnar servern.
-- **`DEEPSEEK_API_KEY` i `snajp-support/.env` är korrumperad** (`\xe0` på
-  position 0 och 2). Backenden upptäcker det nu vid start och går i
-  simuleringsläge i stället för att falla på första anropet, men en skarp
-  agentkörning kräver en ny nyckel.
+- **`DEEPSEEK_API_KEY` är korrumperad** (icke-ASCII på position 0 och 2, 39
+  tecken i stället för 35). Backenden upptäcker det vid start och går i
+  simuleringsläge i stället för att falla på första anropet.
+
+  **Nyckeln är inte förlorad.** Uppmätt 2026-08-20: tas de två icke-ASCII-
+  tecknen och skräpet före `sk-` bort återstår en nyckel av rätt form, och
+  DeepSeek svarar **200** på den. Samma korrupta värde står i båda miljöerna.
+
+  ```bash
+  python scripts/railway_repair_llm_key.py --env development          # prövar, skriver inte
+  python scripts/railway_repair_llm_key.py --env development --apply  # skriver + deployar om
+  ```
+
+  Kandidaten prövas mot leverantören INNAN något skrivs, och ett avbrutet
+  TLS-handslag räknas aldrig som ett nej — annars hade en nätverksblipp dömt ut
+  en fungerande nyckel. `--env` tar en miljö åt gången med flit: att röra `main`
+  ska inte kunna bli en bieffekt.
 - **OAuth-nycklar är inte satta** (`AUTH_GOOGLE_ID`,
   `AUTH_MICROSOFT_ENTRA_ID_ID`). Providrarna registreras bara när de finns.

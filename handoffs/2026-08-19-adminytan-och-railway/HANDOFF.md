@@ -160,10 +160,13 @@ Railway-token, med fyra prov som bara kan svara så här på ny kod:
 | `api/openapi.json` → `/api/leads/prospects/exempel` | finns | `225f327` |
 | `api/openapi.json` → `LeadsRunOverrides` | alla åtta fälten, inkl. `roles`, `must_have`, `deal_breakers` | `e4a418e` |
 
-`development` och `railway-development` står båda på `d26ba0a`, och proven
-sätter web och api på `225f327` eller senare. `d26ba0a` går inte att prova
-utifrån — den rör bara fallbacken i `postgres.py`, som kräver ett autentiserat
-anrop för att synas. Det som återstår är alltså **inte** en deploy: `/admin` är 404 för att raden i `platform_admins`
+Bekräftat en timme senare med Railways egen liggare, sedan token kommit in:
+`development` kör deployment `SUCCESS` av commit `15207e3` för BÅDA tjänsterna,
+byggd från `railway-development`. Deploykedjan fungerar alltså hela vägen —
+push till gren, bygge, healthcheck, live. `main` står orörd på `0329452` från
+16 augusti, precis som projektreglerna säger.
+
+Det som återstår är alltså **inte** en deploy: `/admin` är 404 för att raden i `platform_admins`
 saknas (§3), och 039/040 är inte körda mot dev-databasen
 (`MIGRATIONS-PENDING.md`). Båda kräver `.env.deploy`, som numera går att
 återskapa ur Railway med en enda token — se `RAILWAY.md`,
