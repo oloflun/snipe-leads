@@ -21,6 +21,14 @@ import urllib.request
 from pathlib import Path
 
 ENDPOINT = "https://backboard.railway.com/graphql/v2"
+
+#: Railway sitter bakom Cloudflare, som svarar 403 (error 1010) på Python-urllibs
+#: default-UA. Det är INTE auth som faller — svaret är identiskt oavsett om
+#: tokenen duger, och ett skript som tolkar det som "tokenen avvisades" pekar
+#: felsökningen åt fel håll. Konstanten är delad med set_railway_token.py, som
+#: hade en egen kopia av anropet UTAN headern och därför avvisade giltiga tokens.
+#: Uppmätt: utan headern 403/1010, med headern 200 med ett riktigt auth-svar.
+USER_AGENT = "snajp-railway-client/1.0"
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -46,9 +54,8 @@ def gql(query: str, variables: dict | None = None) -> dict:
         headers={
             "Authorization": f"Bearer {load_token()}",
             "Content-Type": "application/json",
-            # Railway sitter bakom Cloudflare, som svarar 403 (error 1010) på
-            # Python-urllibs default-UA. Det är inte auth som faller.
-            "User-Agent": "snajp-railway-client/1.0",
+            # Se USER_AGENT ovan — utan den svarar Cloudflare 403 före auth.
+            "User-Agent": USER_AGENT,
         },
     )
     try:

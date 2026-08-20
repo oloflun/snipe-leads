@@ -32,8 +32,13 @@ import getpass
 import sys
 from pathlib import Path
 
+import urllib.error
 import urllib.request
 import json
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from railway import USER_AGENT  # noqa: E402
 
 # Windows-konsolen kor cp1252. Se set_railway_postgres_url.py for varfor det
 # har inte ar overdrivet: en print med fel tecken dodar skriptet innan det
@@ -47,21 +52,63 @@ KEY = "RAILWAY_TOKEN"
 API = "https://backboard.railway.com/graphql/v2"
 
 
-def verifiera(token: str) -> str | None:
-    """Returnerar kontonamnet, eller None. Bevisar att tokenen DUGER."""
+def verifiera(token: str) -> tuple[str | None, str]:
+    """Returnerar (kontonamn, forklaring). Kontonamn = None betyder inte OK.
+
+    ## Varfor svaret ar tvadelat
+
+    Funktionen returnerade forut bara None vid fel, och anroparen skrev
+    "Tokenen avvisades av Railways API". Det var fel i det vanligaste fallet:
+    UTAN en egen User-Agent svarar Cloudflare 403 (error 1010) INNAN Railway
+    ser tokenen, och en fullt giltig account-token avvisades darfor med ett
+    meddelande som skickade felsokningen till Railways dashboard.
+
+    Uppmatt 2026-08-20 mot backboard.railway.com med en dummy-token:
+      * utan User-Agent -> HTTP 403, kroppen "error code: 1010"
+      * med User-Agent  -> HTTP 200, GraphQL-felet "Not Authorized"
+
+    Det andra ar ett riktigt auth-svar. Det forsta ar ett natverkssvar, och de
+    tva kraver helt olika atgarder - alltsa far de inte dela felmeddelande.
+    """
     fraga = json.dumps({"query": "{ me { name email } }"}).encode()
     req = urllib.request.Request(
         API,
         data=fraga,
-        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            # Delad med scripts/railway.py. Se USER_AGENT dar.
+            "User-Agent": USER_AGENT,
+        },
     )
     try:
         with urllib.request.urlopen(req, timeout=20) as resp:
             svar = json.loads(resp.read())
-        me = (svar.get("data") or {}).get("me") or {}
-        return me.get("email") or me.get("name")
-    except Exception:
-        return None
+    except urllib.error.HTTPError as exc:
+        kropp = exc.read().decode("utf-8", "replace").strip()[:200]
+        if exc.code == 403 and "1010" in kropp:
+            return None, (
+                "Cloudflare avvisade ANROPET (403, error 1010) - tokenen "
+                "granskades aldrig. Det har ar en bugg i skriptet, inte i din "
+                "token. Kontrollera att USER_AGENT skickas med."
+            )
+        return None, f"Railway svarade HTTP {exc.code}: {kropp}"
+    except Exception as exc:  # natverk, DNS, TLS
+        return None, f"Kunde inte na Railways API ({type(exc).__name__}: {exc})."
+
+    if svar.get("errors"):
+        meddelanden = "; ".join(e.get("message", "?") for e in svar["errors"])
+        return None, (
+            f"Railway granskade tokenen och sa nej: {meddelanden}. "
+            "Vanligaste orsaken ar en PROJEKT-token - det maste vara en "
+            "Account-token (Account Settings -> Tokens)."
+        )
+
+    me = (svar.get("data") or {}).get("me") or {}
+    konto = me.get("email") or me.get("name")
+    if not konto:
+        return None, "Railway svarade utan konto. Tokenen nar inget konto."
+    return konto, "ok"
 
 
 def main() -> None:
