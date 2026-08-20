@@ -175,3 +175,41 @@ async def test_testkorningen_startar_pa_de_inladdade_bolagen(live_llm, monkeypat
             jobb = korning.json()["jobs"]
             assert len(jobb) == 3
             assert {j["prospect_id"] for j in jobb} == exempel_id
+
+
+@pytest.mark.anyio
+async def test_svaret_bar_falten_vyn_listar():
+    """Kontraktet mellan endpointen och listan i `LeadsRunForm`.
+
+    Vyn visar org.nr, ort, webbplats, antal anställda och en kort beskrivning
+    per bolag — samma form som ett riktigt prospekt får efter research. Ett
+    fält som tyst försvinner här blir ett tomt streck i en kundvänd lista, och
+    det syns inte i något annat test: `origin`-testet ovan passerar oförändrat.
+
+    De fyra första SPARAS på raden, de två sista räknas fram ur ICP:t och
+    lämnas bara i svaret — sparade hade de blivit osanna nästa gång kunden
+    ändrar sin målgrupp.
+    """
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            body = await _ladda_exempelbolag(
+                client,
+                limit=2,
+                overrides={"industries": ["Bygg"], "geography": ["Umeå"], "roles": ["Inköpschef"]},
+            )
+
+            for prospect in body["created"]:
+                for falt in ("orgnr", "ort", "website", "anstallda", "beskrivning", "bransch"):
+                    assert prospect.get(falt), f"{falt} saknas i svaret"
+
+                assert prospect["ort"] == "Umeå"
+                assert prospect["contact_name"] == "Inköpschef"
+                assert isinstance(prospect["anstallda"], int)
+
+                # Identiteten måste vara omöjlig att förväxla med ett riktigt
+                # bolag. Se app/leads/exempelbolag.py om varför.
+                assert prospect["website"].endswith(".example")
+                with pytest.raises(Exception):
+                    from app.leads.orgnr import validera_format
+
+                    validera_format(prospect["orgnr"])

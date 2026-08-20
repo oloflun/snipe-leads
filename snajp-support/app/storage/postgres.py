@@ -21,6 +21,13 @@ from .base import status_transition_allowed
 
 logger = logging.getLogger("snajp-support.storage")
 
+#: Prospektets profilfält (migration 031). ALLOWLIST, inte en genomsläpp:
+#: kolumnnamnen sätts in i SQL-satsen som text, och det enda som gör det säkert
+#: är att de aldrig kan komma från anroparen. Värdena går som parametrar.
+_PROSPEKT_PROFILFALT = frozenset(
+    {"orgnr", "ort", "postnr", "sni", "website", "anstallda", "omsattning"}
+)
+
 
 async def _init_connection(conn: asyncpg.Connection) -> None:
     # pgvector skickas som text: '[0.1,0.2,...]'
@@ -728,20 +735,36 @@ class PostgresStorage:
         contact_name: str | None = None,
         contact_email: str | None = None,
         origin: str = "manual",
+        profil: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        # Profilfälten (migration 031) sätts i SAMMA insert och inte med en
+        # efterföljande update. En prospektrad som existerar utan sin ort och
+        # sitt org.nr, om än bara i en millisekund, är en rad granskningsvyn kan
+        # hinna läsa — och `update_prospect` tar med flit bara bedömningsfälten.
+        extra = {
+            namn: värde
+            for namn, värde in (profil or {}).items()
+            if namn in _PROSPEKT_PROFILFALT and värde is not None
+        }
+        kolumner = ", ".join(extra)
+        platshallare = ", ".join(f"${i}" for i in range(6, 6 + len(extra)))
+
         async with self._scoped(tenant_id) as conn:
             try:
                 record = await conn.fetchrow(
-                    """
+                    f"""
                     insert into prospects
-                      (tenant_id, company_name, contact_name, contact_email, origin)
-                    values ($1, $2, $3, $4, $5) returning *
+                      (tenant_id, company_name, contact_name, contact_email, origin
+                       {", " + kolumner if extra else ""})
+                    values ($1, $2, $3, $4, $5{", " + platshallare if extra else ""})
+                    returning *
                     """,
                     tenant_id,
                     company_name,
                     contact_name,
                     contact_email,
                     origin,
+                    *extra.values(),
                 )
             except asyncpg.UndefinedColumnError:
                 # Migration 039 är inte körd i den här databasen ännu.

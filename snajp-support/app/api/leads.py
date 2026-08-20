@@ -176,8 +176,30 @@ async def create_example_prospects(
             company_name=bolag["company_name"],
             contact_name=bolag["contact_name"],
             origin="example",
+            # Org.nr, ort, webbplats och storlek SPARAS, de skickas inte bara
+            # tillbaka. Vyn som listar exempelbolagen är samma vy som listar
+            # riktiga prospekt, och ett bolag som bara har ett namn ser ut som
+            # ett prospekt vars research misslyckats.
+            profil={
+                "orgnr": bolag["orgnr"],
+                "ort": bolag["ort"],
+                "website": bolag["website"],
+                "anstallda": bolag["anstallda"],
+            },
         )
-        skapade.append({**prospect, "motivering": bolag["motivering"]})
+        skapade.append(
+            {
+                **prospect,
+                # Beskrivningen och motiveringen härleds ur ICP:t och hör inte
+                # hemma i en kolumn — de beror på vilket ICP som gällde vid
+                # genereringen, och sparade hade de blivit osanna nästa gång
+                # kunden ändrar sin målgrupp.
+                "beskrivning": bolag["beskrivning"],
+                "signal": bolag["signal"],
+                "bransch": bolag["bransch"],
+                "motivering": bolag["motivering"],
+            }
+        )
 
     return {"created": skapade, "count": len(skapade)}
 

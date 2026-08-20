@@ -586,6 +586,7 @@ class MemoryStorage:
         contact_name: str | None = None,
         contact_email: str | None = None,
         origin: str = "manual",
+        profil: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         prospect = {
             "id": str(uuid.uuid4()),
@@ -596,6 +597,16 @@ class MemoryStorage:
             "language_state": "sv",
             "status": "new",
             "origin": origin,
+            # Samma allowlist som Postgres-lagringen. Att spegla den här är inte
+            # dubbelarbete: sviten kör mot minnet, och ett fält som tyst faller
+            # bort i den ena lagringen hade gett gröna tester mot en vy som är
+            # tom i drift.
+            **{
+                namn: värde
+                for namn, värde in (profil or {}).items()
+                if namn in ("orgnr", "ort", "postnr", "sni", "website", "anstallda", "omsattning")
+                and värde is not None
+            },
             "created_at": _now(),
         }
         self.prospects.setdefault(tenant_id, []).append(prospect)

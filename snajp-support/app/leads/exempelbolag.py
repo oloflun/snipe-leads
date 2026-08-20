@@ -76,12 +76,81 @@ def _forsta(varde: Any, fallback: tuple[str, ...], index: int) -> str:
     return fallback[index % len(fallback)]
 
 
-def bygg_exempelbolag(icp: dict[str, Any] | None, *, antal: int) -> list[dict[str, str]]:
+#: Signaler ett bolag kan bära. De är det agenten letar efter på riktigt —
+#: nyöppning, rekrytering, ändrad tjänstesida — och exemplen ska visa formen.
+_SIGNALER = (
+    "har utökat med en andra anläggning i år",
+    "rekryterar till produktionen — tre annonser ute",
+    "har lagt om sin tjänstesida och lyfter fram service",
+    "har bytt affärssystem och skriver om det på sin blogg",
+    "har flyttat till större lokal",
+    "söker en ny {roll} sedan i våras",
+)
+
+#: Ortsfallback när ICP:t inte säger något. Städer, inte "Sverige": ett kort
+#: som säger "Sverige" under ortsrubriken ser ut som ett fält som inte fylldes i.
+_DEFAULT_ORTER = ("Göteborg", "Malmö", "Jönköping", "Västerås", "Örebro", "Umeå")
+
+
+def _falskt_orgnr(fro: str) -> str:
+    """Ett organisationsnummer som SER rätt ut men aldrig kan vara någons.
+
+    556 är aktiebolagens serie, så formen är trovärdig i en kolumn. Men
+    kontrollsiffran är MEDVETET fel: ett nummer som klarar Luhn kan vara ett
+    verkligt bolags, och då är exempelbolaget inte längre påhittat — det är ett
+    riktigt företag med påhittad information om sig.
+
+    Samma resonemang som `lib/tenants/testkund.ts`, som bär `000000-0000` av
+    exakt det skälet. `lib/orgnr.ts` och `app/leads/orgnr.py` avvisar båda det
+    här numret, vilket är avsikten: skulle det någonsin läcka in i ett riktigt
+    flöde faller det på formatvalideringen i stället för att accepteras.
+    """
+    mitten = f"{_tal(fro + 'org', 1000000):06d}"
+    siffror = f"556{mitten[:3]}{mitten[3:]}"  # nio siffror
+    korrekt = _luhn_kontrollsiffra(siffror)
+    # +5 mod 10: garanterat en annan siffra än den korrekta, alltså ogiltigt.
+    return f"{siffror[:6]}-{siffror[6:]}{(korrekt + 5) % 10}"
+
+
+def _luhn_kontrollsiffra(siffror: str) -> int:
+    summa = 0
+    for index, tecken in enumerate(reversed(siffror)):
+        varde = int(tecken)
+        if index % 2 == 0:
+            varde *= 2
+            if varde > 9:
+                varde -= 9
+        summa += varde
+    return (10 - summa % 10) % 10
+
+
+def _webbplats(namn: str) -> str:
+    """`.example` är reserverad (RFC 2606) och kan aldrig registreras.
+
+    En `.se`-adress hade kunnat tillhöra någon. Domänen syns i vyn och kan
+    klickas av misstag — då ska den leda ingenstans, inte till ett företag som
+    undrar varför de står i vår produkt.
+    """
+    stam = "".join(
+        tecken
+        for tecken in namn.lower().replace("å", "a").replace("ä", "a").replace("ö", "o")
+        if tecken.isalnum()
+    )
+    return f"{stam[:24]}.example"
+
+
+def bygg_exempelbolag(icp: dict[str, Any] | None, *, antal: int) -> list[dict[str, Any]]:
     """Bygger `antal` exempelbolag som ligger inom ICP:t.
 
-    Returnerar dictar med `company_name`, `contact_name` och en `motivering`
-    som förklarar VARFÖR bolaget passar — samma fråga en riktig kund kommer att
-    ställa om ett riktigt prospekt, och den ska gå att svara på även här.
+    Varje bolag bär samma fält som ett RIKTIGT prospekt gör efter research —
+    org.nr, ort, webbplats, antal anställda, bransch, en signal och en
+    motivering. Skälet är inte kosmetiskt: vyn som listar dem är samma vy som
+    listar riktiga prospekt, och ett exempelbolag med bara ett namn ser ut som
+    ett prospekt vars research misslyckats.
+
+    Två fält är avsiktligt omöjliga att förväxla med verkligheten:
+    organisationsnumret har fel kontrollsiffra och domänen ligger under
+    `.example`. Se `_falskt_orgnr` och `_webbplats`.
     """
     icp = icp or {}
     branscher = icp.get("industries") or list(_DEFAULT_BRANSCHER)
@@ -91,11 +160,13 @@ def bygg_exempelbolag(icp: dict[str, Any] | None, *, antal: int) -> list[dict[st
     min_anst = storlek.get("min")
     max_anst = storlek.get("max")
 
-    bolag: list[dict[str, str]] = []
+    bolag: list[dict[str, Any]] = []
     for i in range(max(antal, 0)):
         bransch = _forsta(branscher, _DEFAULT_BRANSCHER, i)
         roll = _forsta(roller, _DEFAULT_ROLLER, i)
-        ort = _forsta(geografi, ("Sverige",), i)
+        # Ortsfältet ska bära en ORT. Saknas geografi i ICP:t väljs en svensk
+        # stad — "Sverige" i en ortskolumn läser sig som ett tomt fält.
+        ort = _forsta(geografi, _DEFAULT_ORTER, i)
 
         fro = f"{bransch}|{ort}|{i}"
         namn = (
@@ -105,6 +176,16 @@ def bygg_exempelbolag(icp: dict[str, Any] | None, *, antal: int) -> list[dict[st
             f"{_BOLAGSFORM[_tal(fro + 'c', len(_BOLAGSFORM))]}"
         )
 
+        # Storleken hålls inom ICP:t när det anger ett spann. Utan spann används
+        # EU:s småföretagsdefinition, samma default som ICP-profilerna förifyller.
+        lo = min_anst if min_anst is not None else 8
+        hi = max_anst if max_anst is not None else 49
+        if hi < lo:
+            hi = lo
+        anstallda = lo + _tal(fro + "n", max(hi - lo + 1, 1))
+
+        signal = _SIGNALER[_tal(fro + "s", len(_SIGNALER))].format(roll=roll.lower())
+
         storleksrad = ""
         if min_anst is not None or max_anst is not None:
             storleksrad = f", {min_anst or 1}–{max_anst or 49} anställda"
@@ -113,6 +194,15 @@ def bygg_exempelbolag(icp: dict[str, Any] | None, *, antal: int) -> list[dict[st
             {
                 "company_name": namn,
                 "contact_name": roll,
+                "orgnr": _falskt_orgnr(fro),
+                "ort": ort,
+                "website": _webbplats(namn),
+                "anstallda": anstallda,
+                "bransch": bransch,
+                "signal": signal.capitalize() + ".",
+                "beskrivning": (
+                    f"{bransch.capitalize()} i {ort} med {anstallda} anställda. {signal.capitalize()}."
+                ),
                 "motivering": (
                     f"Exempelbolag: {bransch.lower()} i {ort}{storleksrad}. "
                     f"Beslutsfattaren agenten skulle leta efter är {roll.lower()}. "

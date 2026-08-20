@@ -53,6 +53,44 @@ type LeadsSvar = {
   detail?: string;
 };
 
+/**
+ * Ett skapat exempelbolag, som backenden lämnar det.
+ *
+ * `orgnr` har MEDVETET fel kontrollsiffra och `website` ligger under `.example`
+ * (RFC 2606, kan aldrig registreras). Se app/leads/exempelbolag.py: ett
+ * påhittat bolag med ett giltigt org.nr är inte påhittat, det är ett riktigt
+ * företag med påhittade uppgifter om sig.
+ */
+type Exempelbolag = {
+  id?: string;
+  company_name: string;
+  contact_name?: string | null;
+  orgnr?: string | null;
+  ort?: string | null;
+  website?: string | null;
+  anstallda?: number | null;
+  bransch?: string | null;
+  signal?: string | null;
+  beskrivning?: string | null;
+};
+
+/**
+ * Interna fältnamn -> etiketten kunden såg i formuläret.
+ *
+ * Ordningen är formulärets, inte objektets: en sammanfattning som räknar upp
+ * fälten i en annan ordning än de fylldes i tvingar läsaren att leta.
+ */
+const ÖVERSKRIVNINGSETIKETTER: [string, string][] = [
+  ["industries", "Branscher"],
+  ["exclude_industries", "Undviker"],
+  ["geography", "Geografi"],
+  ["roles", "Beslutsfattarroller"],
+  ["must_have", "Signaler som krävs"],
+  ["deal_breakers", "Diskvalificerar"],
+  ["anstallda_min", "Anställda, minst"],
+  ["anstallda_max", "Anställda, högst"]
+];
+
 const fältklass =
   "w-full rounded-input border border-ink/15 bg-paper px-3 py-2 text-[15px] focus-ring";
 
@@ -112,6 +150,7 @@ export function LeadsRunForm({
   const [egnaBolag, setEgnaBolag] = useState("");
   const [exempelbolag, setExempelbolag] = useState(true);
   const [svar, setSvar] = useState<LeadsSvar | null>(null);
+  const [bolag, setBolag] = useState<Exempelbolag[]>([]);
   const [status, setStatus] = useState<string | null>(null);
   const [fel, setFel] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -149,6 +188,7 @@ export function LeadsRunForm({
     setBusy(true);
     setFel(null);
     setSvar(null);
+    setBolag([]);
     setStatus(null);
     try {
       const overrides = byggÖverskrivningar();
@@ -174,7 +214,7 @@ export function LeadsRunForm({
         const saknas = (befintliga.prospects?.length ?? 0) === 0;
         if (exempelbolag || saknas) {
           setStatus("Tar fram exempelbolag som passar er produkt…");
-          await anropa("/leads/prospects/exempel", {
+          const skapade = await anropa<{ created?: Exempelbolag[] }>("/leads/prospects/exempel", {
             method: "POST",
             body: JSON.stringify({
               // Taket i ExempelbolagRequest är 10: exempelbolag är en väg IN i
@@ -184,6 +224,7 @@ export function LeadsRunForm({
               ...(overrides ? { overrides } : {})
             })
           });
+          setBolag(skapade.created ?? []);
         }
       }
 
@@ -315,25 +356,120 @@ export function LeadsRunForm({
       ) : null}
 
       {svar ? (
-        <div className="mt-5 rounded-card bg-paper2/60 p-5">
-          <p className="text-[15px]">
-            {svar.count} jobb startade · omfattning{" "}
-            <span className="font-mono text-[13px]">{svar.scope}</span>
-            {svar.is_test ? " · märkt som testkörning" : null}
-          </p>
-          {svar.overrides ? (
-            // Ekar tillbaka vad körningen FAKTISKT kördes med, inte vad
-            // formuläret råkade innehålla när knappen trycktes.
-            <pre className="thin-scrollbar mt-3 overflow-x-auto rounded-input bg-paper p-3 font-mono text-[12px] text-ink/70">
-              {JSON.stringify(svar.overrides, null, 2)}
-            </pre>
-          ) : (
-            <p className="mt-2 text-[13px] text-ink/55">
-              Inga överskrivningar — arbetsytans sparade målgrupp användes.
+        <div className="mt-6 space-y-5">
+          <div className="rounded-card bg-paper2/60 p-5">
+            <p className="text-[15px]">
+              <strong className="font-semibold">{svar.count}</strong>{" "}
+              {svar.count === 1 ? "bolag" : "bolag"} i körningen ·{" "}
+              {svar.scope === "research_and_draft" ? "research och utkast" : "bara research"}
+              {svar.is_test ? " · testkörning" : null}
             </p>
-          )}
+
+            {/* Vad körningen FAKTISKT kördes med, inte vad formuläret råkade
+                innehålla när knappen trycktes.
+
+                Det här var en <pre> med JSON.stringify. Rådata i en kundvänd vy
+                är inte transparens utan en läcka från utvecklarläget: kunden ska
+                kunna läsa vilken målgrupp som gällde utan att kunna JSON, och
+                fältnamnen (`deal_breakers`, `anstallda_min`) är dessutom våra
+                interna namn, inte etiketterna som står i formuläret ovan. */}
+            {svar.overrides ? (
+              <dl className="mt-4 grid gap-x-8 gap-y-3 sm:grid-cols-2">
+                {ÖVERSKRIVNINGSETIKETTER.map(([nyckel, etikett]) => {
+                  const värde = svar.overrides?.[nyckel];
+                  if (värde === undefined || värde === null) return null;
+                  return (
+                    <div key={nyckel} className="border-t border-ink/10 pt-2">
+                      <dt className="text-[12px] font-medium uppercase tracking-[0.04em] text-ink/45">
+                        {etikett}
+                      </dt>
+                      <dd className="mt-1 text-[14px] leading-6 text-ink/80">
+                        {Array.isArray(värde) ? värde.join(", ") : String(värde)}
+                      </dd>
+                    </div>
+                  );
+                })}
+              </dl>
+            ) : (
+              <p className="mt-2 text-[13px] text-ink/55">
+                Er sparade målgrupp användes — inga fält ändrades för den här körningen.
+              </p>
+            )}
+          </div>
+
+          {bolag.length > 0 ? <Exempelbolagslista bolag={bolag} /> : null}
         </div>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * De skapade exempelbolagen, listade som prospekt — inte som ett svar från ett API.
+ *
+ * ## Varför den ser ut som den gör
+ *
+ * Vyn speglar ärendelistan i kundtjänstvyn med flit: samma radhöjd, samma
+ * märkning uppe till höger, samma sekundärtext under rubriken. Det är samma
+ * sorts objekt för användaren — något agenten hittat och som väntar på en
+ * bedömning — och två olika listformer för samma sak tvingar läsaren att lära
+ * sig produkten två gånger.
+ *
+ * ## Varför märkningen står på varje rad
+ *
+ * "Exempel" sitter per bolag och inte bara som en rubrik över listan. Raderna
+ * hamnar i samma register som riktiga prospekt så fort körningen skrivit dem,
+ * och en märkning som bara finns i rubriken följer inte med dit. Ett påhittat
+ * bolag som läses som ett riktigt är den dyraste förväxlingen produkten kan
+ * göra — då mejlas fel mottagare.
+ */
+function Exempelbolagslista({ bolag }: Readonly<{ bolag: Exempelbolag[] }>) {
+  return (
+    <section aria-labelledby="exempelbolag" className="rounded-card bg-paper2/40 p-5 md:p-6">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+        <h3 id="exempelbolag" className="text-[1.0625rem] font-semibold tracking-[-0.01em]">
+          {bolag.length} exempelbolag inlagda
+        </h3>
+        <p className="text-[13px] text-ink/45">Påhittade — kan aldrig mejlas</p>
+      </div>
+
+      <ul className="mt-4 divide-y divide-ink/10">
+        {bolag.map((b, index) => (
+          <li key={b.id ?? `${b.company_name}-${index}`} className="py-4 first:pt-0">
+            <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+              <div className="min-w-0">
+                <p className="text-[15px] font-semibold tracking-[-0.01em]">{b.company_name}</p>
+                <p className="mt-1 font-mono text-[12px] text-ink/45">
+                  {[b.orgnr, b.ort, b.website].filter(Boolean).join(" · ")}
+                </p>
+              </div>
+              <span className="shrink-0 rounded-input bg-ochre/15 px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.06em] text-ochre">
+                Exempel
+              </span>
+            </div>
+
+            {b.beskrivning ? (
+              <p className="mt-2 max-w-[70ch] text-[14px] leading-6 text-ink/70">{b.beskrivning}</p>
+            ) : null}
+
+            <p className="mt-2 text-[13px] text-ink/50">
+              {[
+                b.contact_name ? `Beslutsfattare: ${b.contact_name}` : null,
+                typeof b.anstallda === "number" ? `${b.anstallda} anställda` : null,
+                b.bransch
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          </li>
+        ))}
+      </ul>
+
+      <p className="mt-4 border-t border-ink/10 pt-4 text-[13px] leading-6 text-ink/50">
+        Organisationsnumren har medvetet fel kontrollsiffra och webbadresserna
+        ligger under <span className="font-mono text-[12px]">.example</span>, som aldrig kan
+        registreras. Ett påhittat bolag med giltiga uppgifter hade kunnat vara någon annans.
+      </p>
+    </section>
   );
 }

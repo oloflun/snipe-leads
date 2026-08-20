@@ -13,6 +13,8 @@ Det testerna vaktar är två löften som inte syns i en diff:
     mellan två klick, och "kör igen" blir omöjligt att jämföra.
 """
 
+import pytest
+from app.leads.exempelbolag import _DEFAULT_ORTER as DEFAULT_ORTER
 from app.leads.exempelbolag import bygg_exempelbolag
 
 VVS_ICP = {
@@ -28,7 +30,14 @@ def test_ger_ratt_antal_och_alla_falt():
 
     assert len(bolag) == 3
     for b in bolag:
-        assert set(b) == {"company_name", "contact_name", "motivering"}
+        # Samma fält som ett RIKTIGT prospekt bär efter research. Ett
+        # exempelbolag med bara ett namn ser i listan ut som ett prospekt vars
+        # research misslyckats, och det är fel intryck av produkten.
+        assert set(b) == {
+            "company_name", "contact_name", "orgnr", "ort", "website",
+            "anstallda", "bransch", "signal", "beskrivning", "motivering",
+        }
+        assert all(str(v).strip() for v in b.values())
         assert b["company_name"].strip()
         # Bolagsformen är sista ledet i varje namn. Ett "bolag" utan bolagsform
         # läser som ett påhittat ord, inte som ett företag.
@@ -60,7 +69,10 @@ def test_utan_icp_faller_den_tillbaka_pa_svenska_smb_branscher():
     bolag = bygg_exempelbolag(None, antal=2)
 
     assert len(bolag) == 2
-    assert all("i Sverige" in b["motivering"] for b in bolag)
+    # Utan geografi i ICP:t väljs en svensk STAD, inte strängen "Sverige":
+    # ortskolumnen ska bära en ort, och "Sverige" där läser sig som ett fält
+    # som aldrig fylldes i.
+    assert all(b["ort"] in DEFAULT_ORTER for b in bolag)
     assert all(b["contact_name"] for b in bolag)
 
 
@@ -89,3 +101,35 @@ def test_flera_branscher_fordelas_over_bolagen():
 
     assert "bygg i Göteborg" in motiveringar
     assert "logistik i Göteborg" in motiveringar
+
+
+def test_orgnumret_ar_alltid_ogiltigt():
+    """Ett exempelbolag får ALDRIG bära ett org.nr som kan vara någons.
+
+    Formen ska se rätt ut (556-serien, sex+fyra siffror) så att kolumnen är
+    läsbar — men kontrollsiffran är medvetet fel. Klarar numret Luhn kan det
+    tillhöra ett verkligt bolag, och då är exempelbolaget inte påhittat längre:
+    det är ett riktigt företag med påhittade uppgifter om sig.
+    """
+    from app.leads.orgnr import validera_format
+
+    for b in bygg_exempelbolag(VVS_ICP, antal=6):
+        assert b["orgnr"].startswith("556")
+        assert len(b["orgnr"]) == 11 and b["orgnr"][6] == "-"
+        with pytest.raises(Exception):
+            validera_format(b["orgnr"])
+
+
+def test_webbplatsen_ligger_under_example():
+    """RFC 2606 reserverar .example — domänen kan aldrig registreras.
+
+    Adressen visas i vyn och går att klicka på av misstag. Då ska den leda
+    ingenstans, inte till ett bolag som undrar varför de står i vår produkt.
+    """
+    for b in bygg_exempelbolag(VVS_ICP, antal=4):
+        assert b["website"].endswith(".example")
+
+
+def test_storleken_haller_sig_inom_icp_spannet():
+    for b in bygg_exempelbolag(VVS_ICP, antal=8):
+        assert 10 <= b["anstallda"] <= 40

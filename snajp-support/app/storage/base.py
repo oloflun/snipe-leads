@@ -269,6 +269,7 @@ class Storage(Protocol):
         contact_name: str | None = None,
         contact_email: str | None = None,
         origin: str = "manual",
+        profil: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Ingången till hela leads-pipelinen. Utan den här fanns inget sätt
         att skapa ett prospekt alls — research/outreach kunde aldrig köras."""
