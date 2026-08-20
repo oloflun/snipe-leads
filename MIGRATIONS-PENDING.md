@@ -37,38 +37,61 @@ avsiktligt — utan nyckel svarar vi hellre inte alls än som ett annat bolag.
 
 Ersatt av `032`, som gör samma sak utan ordningsberoende. Kan tas bort.
 
-## 039 och 040 — SKRIVNA, INTE KÖRDA (2026-08-20)
+## Railway: BÅDA miljöerna är i kapp (2026-08-20 kväll)
 
-Koden som använder dem är deployad. Båda är additiva och kan köras när som
-helst; ingen av dem rör befintliga rader.
+Migrationskedjan är körd hela vägen i både `railway-development` och
+`railway-main`. Ingen migration väntar i någondera miljön.
 
-| Migration | Vad den ger | Vad som INTE fungerar förrän den körts |
+| Miljö | Före | Efter |
 |---|---|---|
-| `039_prospect_origin` | `prospects.origin` (`manual`/`example`/`import`) | Exempelbolagen. `POST /api/leads/prospects/exempel` svarar med ett förklarande fel; vanliga prospekt skapas som förut (fallback i `postgres.create_prospect`). |
-| `040_testkund_egen_tenant` | `workspace_tenant_keys` + `link_test_tenant()` + `tenant_api_key_for_current_workspace()` | Egen tenant per testarbetsyta. Onboardingen faller tillbaka på den DELADE `testkund`-tenanten — alltså dagens beteende, med delad kunskapsbas. |
+| `railway-development` | stod just före `039` | hela kedjan, inklusive 039 och 040 |
+| `railway-main` | 36 av 82 | 82 av 82 — 46 migrationer körda i en följd |
 
-Fallbackarna är avsiktliga och inte tysta: koden deployas från grenen och
-migrationerna körs av en människa med databaslösenordet, så de landar aldrig
-samtidigt. En ny kolumn får inte ta ner den befintliga pipelinen under den
-timmen.
+**Verifierat direkt mot databasen, inte via API:t:** `prospects.origin` finns,
+`public.workspace_tenant_keys` finns, och båda versionerna står i
+`supabase_migrations.schema_migrations`. Ett API-svar hade bara visat att
+tjänsten svarar; frågan var om kolumnen finns.
+
+`verify_railway.py` säger numera **"Alla kontroller gröna, båda miljöerna"** —
+inklusive radsäkerhet på varje publik tabell, `snajp_app`/`snajp_web` utan
+BYPASSRLS, och korskopplingen (mains nyckel avvisas av dev-api och tvärtom).
+
+Två skarpa prov, inte bara gröna kontroller:
+
+* **Exempelbolag i drift.** `POST /api/leads/prospects/exempel` mot
+  dev-deployen skapade `Eknäs Bygg Gruppen AB` med `origin='example'`. Raden
+  ligger kvar i dev; den kan aldrig mejlas (spärr noll i
+  `scheduler._kor_send_guard`).
+* **Plattformsadmin.** `admin_cleanup.py --diagnos` säger
+  `isPlatformAdmin() som appen . True` i BÅDA miljöerna. Frågan ställs som
+  `snajp_web` med `app.user_id` satt, alltså med RLS påslagen — som `postgres`
+  (BYPASSRLS) hade den sett rätt ut även när den inte var det. Det var precis
+  den blindheten som lät rekursionen i `033` ligga oupptäckt.
+
+**LLM-nyckeln i `main` är lagad.** Värdet hade ett tecken utanför ASCII på
+position 0 och kunde därför inte skickas i ett Authorization-huvud. Kandidaten
+prövades mot DeepSeek FÖRE skrivning (status 200), och `/health/ready` gick
+från `simulation` till `live` 50 sekunder efter omdeployen.
+
+### Fällan som kostade en körning
+
+`railway_gor_klart.py` startar varje steg med `sys.executable`. Körd med
+systemets Python — som saknar `psycopg2` — föll alla fem databassteg på
+`ModuleNotFoundError`, ett i taget, medan sammanfattningen ändå avslutade med
+"exempelbolagsvägen: GRÖN". Skriptet kontrollerar numera tolken före planen.
+Kör det med en tolk som har beroendena:
 
 ```bash
-python scripts/railway_migrate.py --env development --apply
+snajp-support/.venv/Scripts/python.exe scripts/railway_gor_klart.py --apply
 ```
 
-**Mätt 2026-08-20 mot Railway-development, utan databasanslutning:** `GET
-/api/leads/prospects` (dev-api, demo-nyckeln) svarar 200 och raden saknar
-fältet `origin`. Migration 039 är alltså inte körd där. Fälten från `031`
-(`orgnr`, `ort`, `postnr`, `sni`, `website`, `anstallda`, `omsattning`,
-`foretagsnyckel`) finns däremot allihop, så kedjan står stilla just före 039.
+### Kvar i Railway-miljöerna — inte migrationer
 
-Provet är läsande och kostar ingenting — till skillnad från
-`POST /api/leads/prospects/exempel`, som skapar rader om kolumnen finns. Det
-skiljer "inte körd" från "körd men trasig" utan att röra data.
+Två noteringar står kvar i driftkontrollen, båda i BÅDA miljöerna, och båda är
+kända öppna trådar snarare än fel:
 
-Kommandot kräver `RAILWAY_DEVELOPMENT_PG_{PASSWORD,HOST,PORT}` i `.env.deploy`.
-Verifiera efteråt som `authenticated` med ett riktigt konto, aldrig som
-`postgres` — se lärdomen från 030–033 ovan.
+* **IMAP saknas** — inga inkommande mail hämtas i någon Railway-miljö.
+* **Ingen riktig sändväg** — godkända svar loggas men skickas aldrig till kund.
 
 ## Fortfarande öppet — inte migrationer
 
