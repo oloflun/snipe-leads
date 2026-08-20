@@ -85,6 +85,34 @@ Kör det med en tolk som har beroendena:
 snajp-support/.venv/Scripts/python.exe scripts/railway_gor_klart.py --apply
 ```
 
+### Testytorna är kopplade — en tenant var (2026-08-20 kväll)
+
+Migration 040 ger nya konton en egen tenant. Den körs bara för NYA konton, så
+nio arbetsytor i development stod kvar med `slug = null` — och
+`requireSnajpTenant()` svarar 409 på varenda av deras egna ytor. En testkund
+som inte kan använda produkten testar ingenting.
+
+`scripts/koppla_testytor.py --env development --apply` kopplade fem av dem.
+Uppmätt efteråt:
+
+| Arbetsyta | Slug | Egen KB | Egen nyckel |
+|---|---|---|---|
+| Test Testsson workspace | `testkund-50287cb4` | 16 artiklar | ja |
+| Demo workspace | `testkund-1fc3df92` | 16 artiklar | ja |
+| Testkund 66677210 workspace | `testkund-1d8909f0` | 16 artiklar | ja |
+| Testkund 67000961 workspace | `testkund-02ae648c` | 16 artiklar | ja |
+| Testkund 68331404 workspace | `testkund-b5aa5b93` | 16 artiklar | ja |
+
+**Fem arbetsytor, fem SKILDA tenants.** En delad tenant hade gett en. Ingen av
+dem kan längre grunda ett svar i ett annat bolags villkor.
+
+Fyra arbetsytor hoppades över: de saknar profilrader helt. Kopplingen sker i
+den inloggades namn (`app.user_id`), så en arbetsyta utan medlem har ingen att
+göra det som — de listas i stället för att gissas åt.
+
+Den gamla delade `testkund`-tenanten har nu exakt EN arbetsyta kvar och är
+därmed i praktiken isolerad den också.
+
 ### Kvar i Railway-miljöerna — inte migrationer
 
 Två noteringar står kvar i driftkontrollen, båda i BÅDA miljöerna, och båda är
