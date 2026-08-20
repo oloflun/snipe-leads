@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { PageShell } from "@/components/AppShell";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { DuoSummary } from "@/components/dashboard/DuoSummary";
@@ -61,54 +60,25 @@ const copy = {
     sv: "Vad som kommit in, hur mycket agenten klarade själv, och vad som ligger hos dig.",
     en: "What came in, how much the agent handled on its own, and what is waiting for you."
   },
-  freshTitle: { sv: "Inget här ännu", en: "Nothing here yet" },
   freshBody: {
     sv: "Arbetsytan är tom. Beskriv vad ni säljer och vem ni säljer till, så kan Snajp börja föreslå bolag och skriva utkast.",
     en: "The workspace is empty. Describe what you sell and who you sell to, and Snajp can start suggesting companies and drafting emails."
   },
-  freshCta: { sv: "Fyll i affärskontext", en: "Add business context" },
   freshSupport: {
     sv: "Kundtjänstagenten behöver en kunskapsbas att svara ur. Lägg in era vanligaste svar, så börjar den sortera inkorgen.",
     en: "The support agent needs a knowledge base to answer from. Add your most common replies and it will start sorting the inbox."
   },
-  freshSupportCta: { sv: "Fyll kunskapsbasen", en: "Fill the knowledge base" },
   leadsHeading: { sv: "Leads", en: "Leads" },
   supportHeading: { sv: "Kundtjänst", en: "Support" }
 } satisfies Record<string, Localized>;
 
 export function StartView({ demo = false }: Readonly<{ demo?: boolean }>) {
   const { text } = useLocale();
-  const { variant, shows, scope } = useDashboard();
+  const { shows, scope } = useDashboard();
 
   const bada = shows("leads") && shows("support");
   const title = bada ? copy.titleBoth : shows("leads") ? copy.titleLeads : copy.titleSupport;
   const description = bada ? copy.descBoth : shows("leads") ? copy.descLeads : copy.descSupport;
-
-  if (variant === "fresh") {
-    // CTA:n pekar dit texten säger. Den skickade tidigare BÅDA produkterna till
-    // /onboarding, alltså en supportkund till affärskontexten fast raden ovanför
-    // bad om en kunskapsbas.
-    const leadsTomt = shows("leads");
-    return (
-      <PageShell
-        kicker={text(copy.kicker)}
-        title={text(copy.freshTitle)}
-        description={text(leadsTomt ? copy.freshBody : copy.freshSupport)}
-      >
-        <div className="rounded-card bg-paper2/60 p-6 md:p-8">
-          <p className="max-w-[60ch] text-[0.9375rem] leading-[1.6] text-ink/65">
-            {text(leadsTomt ? copy.freshBody : copy.freshSupport)}
-          </p>
-          <Link
-            href={leadsTomt ? "/settings/affarskontext" : "/settings/kunskapsbas"}
-            className="focus-ring mt-6 inline-flex min-h-11 items-center rounded-input bg-ink px-5 text-[0.9375rem] font-semibold text-paper transition-colors hover:bg-ink2"
-          >
-            {text(leadsTomt ? copy.freshCta : copy.freshSupportCta)}
-          </Link>
-        </div>
-      </PageShell>
-    );
-  }
 
   return (
     <PageShell kicker={text(copy.kicker)} title={text(title)} description={text(description)}>

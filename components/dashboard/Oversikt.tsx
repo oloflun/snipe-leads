@@ -336,6 +336,50 @@ function AttGora({
   );
 }
 
+/**
+ * Vad som saknas innan agenten kan göra sitt jobb.
+ *
+ * Den här ersätter det gamla tomläget, som var en HEL SIDA i stället för en
+ * rad: `variant === "fresh"` kortslöt startsidan till "Inget här ännu" och
+ * dolde varenda siffra bakom en knapp. Att sonden dessutom frågade en tabell
+ * ingen skriver till gjorde att den grenen visades för varje kund, för alltid
+ * (se lib/data/dashboard.ts).
+ *
+ * Nu: siffrorna står kvar, och det som fattas står ovanför dem. Blocket
+ * försvinner av sig självt när underlaget finns — till skillnad från en tom
+ * sida, som inte kan visa att den blivit mindre tom.
+ *
+ * Papper och inte bläck: den tonala inversionen är reserverad för ATT GÖRA,
+ * alltså arbete som väntar. Det här är uppstart, inte en kö.
+ */
+function Komigang({ rader }: Readonly<{ rader: { text: string; href: string; knapp: string }[] }>) {
+  if (rader.length === 0) return null;
+  // Ingen färgad kantlist på ena sidan. Den läser som ett AI-manér, och
+  // detektorn namnger den ("side-tab accent border"). Ochre bär larmet med
+  // samma prick som tillståndsraden — ett tecken på ytan, inte två.
+  return (
+    <section aria-labelledby="komigang" className="rounded-card bg-paper2/60 p-5 md:p-6">
+      <h2
+        id="komigang"
+        className="flex items-center gap-2.5 text-[1.0625rem] font-semibold tracking-[-0.01em]"
+      >
+        <span className="h-2 w-2 shrink-0 rounded-full bg-ochre" aria-hidden />
+        Innan agenten kan börja
+      </h2>
+      <ul className="mt-4 grid gap-4">
+        {rader.map((rad) => (
+          <li key={rad.href} className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+            <p className="max-w-[62ch] text-[0.9375rem] leading-6 text-ink/70">{rad.text}</p>
+            <Link href={rad.href} className={cn(btnSecondary, "shrink-0")}>
+              {rad.knapp}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 type LedgerRad = { id: string; vanster: string; mitten: string; hoger: string; ton?: "neutral" | "good" | "warn" | "danger" };
 
 function Ledger({ rader, tomtext }: Readonly<{ rader: LedgerRad[]; tomtext: string }>) {
@@ -462,6 +506,8 @@ type LeadsConfig = {
   autonomy_description?: string;
   options?: { sni?: { value: string; label: string }[] };
 };
+/** `missing` är kontextdokument agenten saknar — se leads/onboarding_state.py. */
+type Onboarding = { complete?: boolean; missing?: string[] };
 
 /** Backendens tak. Skrivs ut i vyn när listan ligger på dem — se docstringen. */
 const PROSPEKTTAK = 100;
@@ -486,25 +532,28 @@ export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
   const [ko, setKo] = useState<Koartikel[] | null>(null);
   const [config, setConfig] = useState<LeadsConfig | null>(null);
   const [kbAntal, setKbAntal] = useState<number | null>(null);
+  const [onboarding, setOnboarding] = useState<Onboarding | null>(null);
 
   useEffect(() => {
     let avbruten = false;
     setLaddar(true);
 
-    // Fem oberoende hämtningar. En som faller tar inte med sig de andra.
+    // Sex oberoende hämtningar. En som faller tar inte med sig de andra.
     void Promise.all([
       hamta<{ prospects?: Prospekt[] }>("/leads/prospects"),
       hamta<{ runs?: Korning[] }>(`/leads/runs?agent_type=leads&limit=${KORNINGSTAK}`),
       hamta<{ items?: Koartikel[] }>("/leads/queue"),
       hamta<LeadsConfig>("/leads/config"),
-      hamta<{ articles?: unknown[] }>("/kb")
-    ]).then(([p, r, q, c, kb]) => {
+      hamta<{ articles?: unknown[] }>("/kb"),
+      hamta<Onboarding>("/leads/onboarding/status")
+    ]).then(([p, r, q, c, kb, o]) => {
       if (avbruten) return;
       setProspekt(p ? (p.prospects ?? []) : null);
       setKorningar(r ? (r.runs ?? []) : null);
       setKo(q ? (q.items ?? []) : null);
       setConfig(c);
       setKbAntal(kb ? (kb.articles?.length ?? 0) : null);
+      setOnboarding(o);
       setLaddar(false);
     });
 
@@ -570,6 +619,20 @@ export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
             varde: korningar === null ? "—" : sedan(korningar[0]?.created_at)
           }
         ]}
+      />
+
+      <Komigang
+        rader={
+          onboarding?.missing?.includes("product_marketing")
+            ? [
+                {
+                  text: "Agenten vet inte vad ni säljer. Utan den texten kan den varken välja bolag eller skriva ett utkast som håller.",
+                  href: vag("/settings/affarskontext"),
+                  knapp: "Fyll i affärskontexten"
+                }
+              ]
+            : []
+        }
       />
 
       <Talrad>
@@ -831,6 +894,20 @@ export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) 
             varde: arenden === null ? "—" : sedan(rader[0]?.received_at)
           }
         ]}
+      />
+
+      <Komigang
+        rader={
+          kbAntal === 0
+            ? [
+                {
+                  text: "Kunskapsbasen är tom. Agenten gissar aldrig — den eskalerar varje ärende den inte kan grunda, så inkorgen blir en lista med röda rader tills det ligger något här.",
+                  href: vag("/settings/kunskapsbas"),
+                  knapp: "Fyll kunskapsbasen"
+                }
+              ]
+            : []
+        }
       />
 
       <Talrad>

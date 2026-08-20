@@ -60,7 +60,6 @@ const DEMO_STATE = {
   isDemo: false,
   products: ["leads", "support"] as const,
   addons: [],
-  variant: "demo" as const,
   workspaceName: "Demo AB",
   // Styr om vyerna erbjuder åtgärder som kräver session. En demo som låtsas
   // vara inloggad visar knappar som inte kan göra något.

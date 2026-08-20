@@ -24,8 +24,6 @@ export type DashboardState = {
   products: ProductKey[];
   /** Tillköpta tilläggstjänster (migration 022). Tomt = inga. */
   addons: AddonKey[];
-  /** "fresh" = nothing in the workspace yet. "demo" = seeded, render the dataset. */
-  variant: "fresh" | "demo";
   workspaceName: string | null;
   signedIn: boolean;
   /** Demo-läge: egen instans utan förladdad data, begränsat antal körningar. */
@@ -48,7 +46,6 @@ const ALL_PRODUCTS: ProductKey[] = ["leads", "support"];
 const ANONYMOUS: DashboardState = {
   products: ALL_PRODUCTS,
   addons: [],
-  variant: "demo",
   workspaceName: null,
   signedIn: false,
   isDemo: false,
@@ -78,7 +75,6 @@ export async function resolveDashboardState(): Promise<DashboardState> {
   return {
     products,
     addons: (context.workspace.addons ?? []).filter(isAddonKey),
-    variant: (await workspaceHasData(context.workspace.id, context.user.id)) ? "demo" : "fresh",
     workspaceName: context.workspace.name,
     signedIn: true,
     isDemo: context.workspace.is_demo,
@@ -87,29 +83,20 @@ export async function resolveDashboardState(): Promise<DashboardState> {
 }
 
 /**
- * Cheap existence probe, not a count: we only need to know whether the workspace
- * has been filled in at all.
+ * `workspaceHasData` och `variant` är BORTA, och det var inte en förenkling.
  *
- * Leads still renders from `lib/mock-data.ts`, so today "seeded" means "show the
- * dataset". When Leads is wired to the database this function keeps its meaning
- * and only the view's data source changes.
+ * Sonden frågade `public.companies`. Den tabellen skrivs inte av någon kodväg
+ * i appen — den är ett fossil från mock-eran, och den hade noll rader i
+ * development medan `prospects` hade 2, `business_contexts` 5 och
+ * `ss_knowledge_base` 51. Alltså returnerade den false för VARJE arbetsyta,
+ * alltid, och `variant` var permanent "fresh".
+ *
+ * Följden var mätbar i skärmdump: startsidan kortslöt till "Inget här ännu" för
+ * varje inloggad kund, oavsett hur mycket de hade konfigurerat. Översikten
+ * bakom den gick aldrig att se.
+ *
+ * Den ersätts inte av en bättre sond. Översikten ÄR sitt eget tomläge: varje
+ * ruta visar sin nolla, varje sektion säger vad som kommer att stå där, och
+ * saknas underlaget står det överst. En sida som döljer siffrorna för att de är
+ * noll döljer också att de är noll.
  */
-async function workspaceHasData(workspaceId: string, userId: string): Promise<boolean> {
-  try {
-    const { sqlAsUser } = await import("@/lib/db");
-    // `exists` i stället för `count`: frågan är om det finns någon rad alls, och
-    // en räkning över hela tabellen för att jämföra med noll är arbete ingen
-    // ville ha.
-    const rows = await sqlAsUser<{ present: boolean }>(
-      userId,
-      "select exists (select 1 from public.companies where workspace_id = $1) as present",
-      [workspaceId]
-    );
-    return Boolean(rows[0]?.present);
-  } catch {
-    // A failed probe must not decide the user's dashboard. Treat it as fresh:
-    // an empty state is recoverable, a demo dataset shown to a real customer
-    // is not.
-    return false;
-  }
-}

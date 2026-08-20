@@ -20,7 +20,6 @@ type DashboardContextValue = DashboardState & {
 const FALLBACK: DashboardState = {
   products: ["leads", "support"],
   addons: [],
-  variant: "demo",
   workspaceName: null,
   signedIn: false,
   isDemo: false,

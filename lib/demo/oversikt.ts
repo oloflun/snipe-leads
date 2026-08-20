@@ -75,6 +75,13 @@ export function demoOversiktSvar(path: string): unknown | undefined {
     };
   }
 
+  if (rutt === "/leads/onboarding/status") {
+    // Demons arbetsyta är konfigurerad, så "Innan agenten kan börja" ska inte
+    // synas här. Explicit svar i stället för att förlita sig på att demoläget
+    // kastar på en okänd väg — ett tyst fel är inte ett svar.
+    return { complete: true, missing: [] };
+  }
+
   if (rutt === "/leads/config") {
     return {
       autonomy: "draft",

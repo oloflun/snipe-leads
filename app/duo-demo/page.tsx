@@ -39,7 +39,6 @@ const DEMO_STATE = {
   // BÅDA produkterna. Det är hela poängen med ytan.
   products: ["leads", "support"] as const,
   addons: [],
-  variant: "demo" as const,
   workspaceName: "Duo Demo AB",
   // false, och det är inte kosmetik: signedIn styr om vyerna erbjuder
   // åtgärder som kräver en session. En demo som låtsas vara inloggad hade
