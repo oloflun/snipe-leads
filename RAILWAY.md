@@ -52,6 +52,27 @@ Att köra `railway_provision.py --apply` i stället är fel väg och tyst farlig
 och skriver den till tjänsten — alltså roteras Postgres-lösenordet under en
 levande stack, av ett kommando som ser ut att bara läsa läget.
 
+### Men filen räcker inte i en molnsession — bara port 443 går ut
+
+Uppmätt 2026-08-20 från en Claude Code-molnsession: utgående TCP tillåts endast
+mot port 443. `github.com:22` och en godtycklig hög port mot en publik
+ekotjänst tajmar ut; 443 mot samma värd svarar direkt.
+
+Railways Postgres nås utifrån genom en TCP-proxy på en **hög slumpad port**.
+Följden är skarp och värd att veta innan man felsöker en timme:
+
+| Skript | Går i molnsession | Varför |
+|---|---|---|
+| `railway_env_bootstrap.py` | ja | GraphQL över HTTPS |
+| `verify_railway.py` | delvis | API- och HTTP-kontrollerna går; databasdelen gör det inte |
+| `railway_migrate.py` | **nej** | psycopg2 mot proxyporten |
+| `admin_cleanup.py` | **nej** | samma |
+| `railway_seed_dev.py` | **nej** | samma |
+
+Migrationer, adminraden och speglingen körs alltså från en maskin med öppen
+utgående TCP — en vanlig terminal — eller från en miljö vars nätverkspolicy
+tillåter det. Token löser det inte; det är porten som är stängd.
+
 ## Dataspegeln — envägs, och låst åt det hållet
 
 `development` ska vara en 1:1-kopia av `main` så att en ändring kan utvärderas
