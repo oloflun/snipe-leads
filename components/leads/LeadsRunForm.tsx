@@ -423,7 +423,7 @@ export function LeadsRunForm({
  * bolag som läses som ett riktigt är den dyraste förväxlingen produkten kan
  * göra — då mejlas fel mottagare.
  */
-function Exempelbolagslista({ bolag }: Readonly<{ bolag: Exempelbolag[] }>) {
+export function Exempelbolagslista({ bolag }: Readonly<{ bolag: Exempelbolag[] }>) {
   return (
     <section aria-labelledby="exempelbolag" className="rounded-card bg-paper2/40 p-5 md:p-6">
       <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
