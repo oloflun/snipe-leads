@@ -140,34 +140,11 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
   // villkoret till databasens jobb, och två samtidiga sparningar kan inte
   // längre skapa två rader.
   try {
-    await sqlAsUser(
-      user.id,
-      `insert into public.business_contexts
-         (workspace_id, product, target_audience, industries, geography, tone, offer, cta, contact_roles, updated_at)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-       on conflict (workspace_id) do update set
-         product = excluded.product,
-         target_audience = excluded.target_audience,
-         industries = excluded.industries,
-         geography = excluded.geography,
-         tone = excluded.tone,
-         offer = excluded.offer,
-         cta = excluded.cta,
-         contact_roles = excluded.contact_roles,
-         updated_at = excluded.updated_at`,
-      [
-        payload.workspace_id,
-        payload.product,
-        payload.target_audience,
-        payload.industries,
-        payload.geography,
-        payload.tone,
-        payload.offer,
-        payload.cta,
-        payload.contact_roles,
-        payload.updated_at
-      ]
-    );
+    // EN skrivväg mot raden, delad med /settings/affarskontext. Innan den
+    // delades ägde den här filen satsen ensam och inställningssidan skrev
+    // inte alls — två vyer mot samma rad där bara den ena kunde spara.
+    const { sparaBusinessContext } = await import("@/lib/data/business-context");
+    await sparaBusinessContext(user.id, payload);
   } catch (error) {
     return { success: false, error: (error as Error).message };
   }

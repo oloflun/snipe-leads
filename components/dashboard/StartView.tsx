@@ -4,59 +4,62 @@ import Link from "next/link";
 import { PageShell } from "@/components/AppShell";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { DuoSummary } from "@/components/dashboard/DuoSummary";
-import { Dashboard as SupportDashboard } from "@/components/snajp/Dashboard";
+import { LeadsOversikt, SupportOversikt } from "@/components/dashboard/Oversikt";
 import { KunskapsbasKort } from "@/components/settings/Kunskapsbas";
-import { LeadsBody } from "@/components/WorkspaceViews";
 import { useLocale } from "@/lib/i18n";
 import type { Localized } from "@/lib/i18n";
 
 /**
- * Startsidan — agentens vy, inte en sammanfattning av den.
+ * Startsidan — en ÖVERSIKT, inte agentens råa arbetsvy.
  *
- * ## Vad som ändrades
+ * ## Två omtag, och varför det här är det rätta
  *
- * `/dashboard` renderade tidigare "Min arbetsyta": en panel med veckosiffror
- * och ett bolagsregister ur `lib/mock-data.ts`, ovanför de riktiga vyerna. För
- * en kund med ETT paket betydde det att startsidan var en sammanfattning av
- * den enda sida de ändå skulle till — ett extra klick varje gång, till en
- * siffra som inte kom från deras data.
+ * Först renderade `/dashboard` en sammanfattning ur `lib/mock-data.ts` ovanför
+ * de riktiga vyerna: ett extra klick varje gång, till siffror som inte kom ur
+ * kundens data.
  *
- * Nu gäller: en leads-kund landar i leads-vyn, en supportkund i kundtjänst-
- * vyn, och båda flikarna heter **Översikt**. Sammanfattningen finns kvar, men
- * som inställning (`/settings/arbetsyta`) — den är en rapport, inte ett
- * arbetsläge.
+ * Sedan blev startsidan agentens arbetsvy rakt av och sammanfattningen sköts
+ * in i `/settings/arbetsyta`. Det löste mock-problemet genom att ta bort
+ * översikten, vilket är en annan sorts fel: inloggningen landade i
+ * discovery-formulärets tomläge ("Inget här ännu"), och den enda vy som
+ * svarade på "vad har hänt" gick att nå först efter tre klick i
+ * inställningarna. Uppmätt i skärmdump.
+ *
+ * Nu: startsidan svarar på **vad har hänt och vad väntar på mig**, med siffror
+ * ur kundens egen tenant (se components/dashboard/Oversikt.tsx). Arbetsvyerna
+ * ligger kvar på `/dashboard/leads` och `/dashboard/support` och gör jobbet.
+ * Båda flikarna finns för alla kunder sedan `duoOnly` togs bort i
+ * lib/routes.ts — utan dem hade en enproduktskund inte nått sin arbetsvy alls.
  *
  * ## Demoytan
  *
- * `demo` går vidare till båda vyerna. Utan den anropade startsidan den
- * inloggade backenden från /demo, där ingen session finns — panelen svarade
- * "Du måste vara inloggad" mitt i produktdemon. Undersidorna (/demo/support,
- * /demo/kontroll) hade redan flaggan; startsidan var den som saknade den.
+ * `demo` går vidare till översikterna, som byter ut backend-anropen mot
+ * exempeldata i webbläsaren. Utan den flaggan anropade startsidan den
+ * inloggade backenden från /demo, där ingen session finns — och panelen svarade
+ * "Du måste vara inloggad" mitt i produktdemon.
  *
  * ## Duo-kunder
  *
- * Med båda paketen styr scope-växeln vad som visas, precis som förut, och
- * `DuoSummary` ligger kvar högst upp när båda är på. Det är också bara för
- * duo-kunder som flikarna "Leads" och "Kundtjänst" renderas (se `duoOnly` i
- * lib/routes.ts) — för alla andra ÄR Översikt den fliken.
+ * Med båda paketen styr scope-växeln vad som visas, och `DuoSummary` ligger
+ * högst upp när båda är på.
  */
 
 const copy = {
   kicker: { sv: "Översikt", en: "Overview" },
   titleLeads: { sv: "Leads", en: "Leads" },
-  titleSupport: { sv: "Inkorg och utkast", en: "Inbox and drafts" },
+  titleSupport: { sv: "Kundtjänst", en: "Support" },
   titleBoth: { sv: "Arbetsytan", en: "Workspace" },
   descBoth: {
-    sv: "Leads och kundtjänst i samma vy. Byt vad som visas uppe till höger.",
-    en: "Leads and support in one view. Change what is shown at the top right."
+    sv: "Läget i båda agenterna, och vad som väntar på dig. Byt vad som visas uppe till höger.",
+    en: "Where both agents stand, and what is waiting for you. Change what is shown at the top right."
   },
   descLeads: {
-    sv: "Bolag agenten hittat, vad den grundade urvalet i, och vad som väntar på dig.",
-    en: "Companies the agent found, what it based the selection on, and what is waiting for you."
+    sv: "Vad agenten hittat, vad den grundade urvalet i, och vad som väntar på ditt godkännande.",
+    en: "What the agent found, what it based the selection on, and what is waiting for your approval."
   },
   descSupport: {
-    sv: "Inkommande ärenden, agentens klassificering och de svar som väntar på godkännande.",
-    en: "Incoming cases, the agent's classification and the replies awaiting approval."
+    sv: "Vad som kommit in, hur mycket agenten klarade själv, och vad som ligger hos dig.",
+    en: "What came in, how much the agent handled on its own, and what is waiting for you."
   },
   freshTitle: { sv: "Inget här ännu", en: "Nothing here yet" },
   freshBody: {
@@ -68,6 +71,7 @@ const copy = {
     sv: "Kundtjänstagenten behöver en kunskapsbas att svara ur. Lägg in era vanligaste svar, så börjar den sortera inkorgen.",
     en: "The support agent needs a knowledge base to answer from. Add your most common replies and it will start sorting the inbox."
   },
+  freshSupportCta: { sv: "Fyll kunskapsbasen", en: "Fill the knowledge base" },
   leadsHeading: { sv: "Leads", en: "Leads" },
   supportHeading: { sv: "Kundtjänst", en: "Support" }
 } satisfies Record<string, Localized>;
@@ -81,21 +85,25 @@ export function StartView({ demo = false }: Readonly<{ demo?: boolean }>) {
   const description = bada ? copy.descBoth : shows("leads") ? copy.descLeads : copy.descSupport;
 
   if (variant === "fresh") {
+    // CTA:n pekar dit texten säger. Den skickade tidigare BÅDA produkterna till
+    // /onboarding, alltså en supportkund till affärskontexten fast raden ovanför
+    // bad om en kunskapsbas.
+    const leadsTomt = shows("leads");
     return (
       <PageShell
         kicker={text(copy.kicker)}
         title={text(copy.freshTitle)}
-        description={text(shows("leads") ? copy.freshBody : copy.freshSupport)}
+        description={text(leadsTomt ? copy.freshBody : copy.freshSupport)}
       >
         <div className="rounded-card bg-paper2/60 p-6 md:p-8">
           <p className="max-w-[60ch] text-[0.9375rem] leading-[1.6] text-ink/65">
-            {text(shows("leads") ? copy.freshBody : copy.freshSupport)}
+            {text(leadsTomt ? copy.freshBody : copy.freshSupport)}
           </p>
           <Link
-            href="/onboarding"
+            href={leadsTomt ? "/settings/affarskontext" : "/settings/kunskapsbas"}
             className="focus-ring mt-6 inline-flex min-h-11 items-center rounded-input bg-ink px-5 text-[0.9375rem] font-semibold text-paper transition-colors hover:bg-ink2"
           >
-            {text(copy.freshCta)}
+            {text(leadsTomt ? copy.freshCta : copy.freshSupportCta)}
           </Link>
         </div>
       </PageShell>
@@ -104,13 +112,7 @@ export function StartView({ demo = false }: Readonly<{ demo?: boolean }>) {
 
   return (
     <PageShell kicker={text(copy.kicker)} title={text(title)} description={text(description)}>
-      <div className="space-y-12">
-        {/* Underlaget först. Kunskapsbasen är det enda som måste vara på plats
-            innan någon av agenterna kan göra sitt jobb, och tre klick in i
-            inställningarna är tre klick för långt bort för det steget.
-            Inte på demoytan: där finns ingen session att ladda upp till. */}
-        {demo ? null : <KunskapsbasKort />}
-
+      <div className="space-y-14">
         {/* Högst upp bland vyerna, och bara när båda produkterna visas.
             Komponenten returnerar null av sig själv annars — se DuoSummary. */}
         <DuoSummary />
@@ -118,24 +120,33 @@ export function StartView({ demo = false }: Readonly<{ demo?: boolean }>) {
         {shows("leads") ? (
           <section>
             {scope === "both" ? (
-              <h2 className="mb-5 text-[1.125rem] font-semibold tracking-[-0.01em]">
+              <h2 className="mb-6 text-[1.125rem] font-semibold tracking-[-0.01em]">
                 {text(copy.leadsHeading)}
               </h2>
             ) : null}
-            <LeadsBody demo={demo} />
+            <LeadsOversikt demo={demo} />
           </section>
         ) : null}
 
         {shows("support") ? (
           <section>
             {scope === "both" ? (
-              <h2 className="mb-5 text-[1.125rem] font-semibold tracking-[-0.01em]">
+              <h2 className="mb-6 text-[1.125rem] font-semibold tracking-[-0.01em]">
                 {text(copy.supportHeading)}
               </h2>
             ) : null}
-            <SupportDashboard demo={demo} />
+            <SupportOversikt demo={demo} />
           </section>
         ) : null}
+
+        {/* Underlaget SIST, inte först.
+            Kortet låg tidigare överst, före allt annat på startsidan. Det är
+            rätt prioritering första dagen och fel varje dag därefter: en kund
+            med en fylld bas fick en uppladdningsruta mellan sig och sina
+            siffror. Nu står bristen i tillståndsraden högst upp (0 dokument
+            markeras), och verktyget för att åtgärda den ligger här.
+            Inte på demoytan: där finns ingen session att ladda upp till. */}
+        {demo ? null : <KunskapsbasKort />}
       </div>
     </PageShell>
   );

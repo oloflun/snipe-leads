@@ -2,7 +2,6 @@
 
 import {
   CheckCircle2,
-  ChevronDown,
   Image as ImageIcon,
   Inbox,
   Loader2,
@@ -15,7 +14,9 @@ import {
   UserRound,
   X
 } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useArbetsvag } from "@/components/AppShell";
 import { Badge, btnPrimary, btnSecondary } from "@/components/ui";
 import { createDemoSupportApi } from "@/lib/demo/support-inbox";
 import { readJsonBody } from "@/lib/http/json";
@@ -58,8 +59,6 @@ type EmailDetail = EmailRow & {
   attachments: { id: string; filename: string; content_type: string; data_url: string | null; is_image: boolean }[];
   decisions: { event: string; detail: Record<string, unknown>; created_at: string }[];
 };
-
-type Rule = { category: string; label: string; mode: "auto" | "draft" | "escalate" };
 
 // Måste spegla CATEGORIES i snajp-support/app/config.py. Backenden (som
 // deployas från development) klassar numera i garanti och utbildning; utan
@@ -128,12 +127,11 @@ function ConfidenceBar({ value }: Readonly<{ value: number }>) {
  * som byts, precis som app/demo/[[...slug]]/page.tsx föreskriver.
  */
 export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
+  const vag = useArbetsvag();
   const [emails, setEmails] = useState<EmailRow[]>([]);
   const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({});
   const [selected, setSelected] = useState<EmailDetail | null>(null);
   const [draftText, setDraftText] = useState("");
-  const [rules, setRules] = useState<Rule[]>([]);
-  const [rulesOpen, setRulesOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [syncInfo, setSyncInfo] = useState<string | null>(null);
@@ -192,18 +190,9 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
     }
   }, [api, search, statusFilter, categoryFilter]);
 
-  const loadRules = useCallback(async () => {
-    try {
-      setRules((await api("/rules")).rules);
-    } catch {
-      /* reglerna är inte kritiska för listan */
-    }
-  }, [api]);
-
   useEffect(() => {
     void refresh();
-    void loadRules();
-  }, [refresh, loadRules]);
+  }, [refresh]);
 
   const openEmail = useCallback(
     async (id: string) => {
@@ -239,8 +228,16 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
 
   const seedMock = () =>
     act("seed", async () => {
-      await api("/inbox/mock", { method: "POST" });
+      // `kb_tom` sägs ut. Utan den läser kunden sex eskalerade rader som ett
+      // produktfel, när agenten i själva verket vägrade gissa ur en tom bas —
+      // vilket är rätt beteende och fel intryck.
+      const svar = await api<{ kb_tom?: boolean }>("/inbox/mock", { method: "POST" });
       setSelected(null);
+      setSyncInfo(
+        svar?.kb_tom
+          ? "Testmailen är inlästa. Kunskapsbasen är tom, så agenten eskalerar allt tills ni lagt in något — det är avsiktligt, den gissar aldrig."
+          : null
+      );
     });
 
   const syncInbox = () =>
@@ -275,12 +272,6 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
   const takeover = () =>
     selected &&
     act("takeover", () => api(`/inbox/${selected.id}/takeover`, { method: "POST" }));
-
-  const setRule = (category: string, mode: string) =>
-    act("rule", async () => {
-      await api("/rules", { method: "PUT", body: JSON.stringify({ category, mode }) });
-      await loadRules();
-    });
 
   const totalPending = useMemo(
     () => emails.filter((e) => e.status === "awaiting_approval").length,
@@ -345,43 +336,15 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
             </option>
           ))}
         </select>
-        <button
-          type="button"
-          onClick={() => setRulesOpen((open) => !open)}
-          className={btnSecondary}
-        >
-          <Settings2 className="h-4 w-4" />
-          Regler
-          <ChevronDown className={cn("h-3.5 w-3.5 transition", rulesOpen ? "rotate-180" : "")} />
-        </button>
+        {/* Reglerna bor numera under Inställningar, bredvid leads-agentens
+            motsvarande kontroll. Se components/settings/SupportRegler.tsx. */}
+        {demo ? null : (
+          <Link href={vag("/settings/regler")} className={btnSecondary}>
+            <Settings2 className="h-4 w-4" />
+            Regler
+          </Link>
+        )}
       </div>
-
-      {rulesOpen ? (
-        <div className="rounded-card bg-paper p-5">
-          <p className="text-[0.8125rem] font-medium text-ink/45">Autosvarsregler per fack</p>
-          <p className="mt-2 max-w-[70ch] text-sm leading-6 text-ink/60">
-            <strong>Utkast</strong> = svaret väntar på ditt godkännande (default). <strong>Auto</strong> = skickas
-            direkt om konfidensen är hög och tonen inte är negativ. <strong>Eskalera</strong> = alltid till människa.
-            Pengar, juridik, GDPR och arga kunder eskaleras alltid, oavsett regel.
-          </p>
-          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {rules.map((rule) => (
-              <div key={rule.category} className="flex items-center justify-between gap-2 rounded-input border border-ink/10 bg-paper2/50 px-3 py-2.5">
-                <span className="text-sm font-medium">{rule.label}</span>
-                <select
-                  value={rule.mode}
-                  onChange={(event) => void setRule(rule.category, event.target.value)}
-                  className="focus-ring rounded-input bg-paper px-2 py-1.5 text-xs"
-                >
-                  <option value="draft">Utkast</option>
-                  <option value="auto">Auto</option>
-                  <option value="escalate">Eskalera</option>
-                </select>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
 
       {error ? (
         <div className="rounded-[8px] border border-danger/25 bg-danger/5 px-4 py-3 text-sm text-ink/80">{error}</div>

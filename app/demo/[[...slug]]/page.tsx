@@ -6,6 +6,7 @@ import { StartView } from "@/components/dashboard/StartView";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { Dashboard as SupportDashboard } from "@/components/snajp/Dashboard";
 import { LeadsControls } from "@/components/leads/LeadsControls";
+import { SupportRegler } from "@/components/settings/SupportRegler";
 import {
   AnalyticsView,
   AssistantView,
@@ -76,6 +77,7 @@ const SEKTIONER = [
   ["analytics", "Analys"],
   ["assistant", "Assistant"],
   ["kontroll", "Leads-kontroll"],
+  ["regler", "Regler"],
   ["support", "Kundtjänst"]
 ] as const;
 
@@ -158,11 +160,25 @@ function renderSektion(sektion: string | undefined): React.ReactNode | null {
       return <AssistantView />;
     case "kontroll":
       return <LeadsControls demo />;
+    case "regler":
+      return <ReglerDemo />;
     case "support":
       return <SupportDashboard demo />;
     default:
       return null;
   }
+}
+
+function ReglerDemo() {
+  return (
+    <PageShell
+      kicker="Kundtjänst"
+      title="Fack och autosvar"
+      description="Vilka ärenden agenten får besvara självt, och vilka som alltid går till en människa. Ändringarna sparas inte i demon."
+    >
+      <SupportRegler demo />
+    </PageShell>
+  );
 }
 
 function EmailStudioDemo() {

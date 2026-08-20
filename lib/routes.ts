@@ -19,22 +19,12 @@ export type AppRoute = {
   product: ProductKey | "shared";
   /** Mock-driven surface: routen finns, men den står inte i kundens meny. */
   preview?: boolean;
-  /**
-   * Flik som bara betyder något för en kund med BÅDA paketen.
-   *
-   * `/dashboard` ÄR leads-vyn för en leads-kund och kundtjänstvyn för en
-   * supportkund (se StartView). För en enproduktskund är "Leads" alltså samma
-   * sida som "Översikt", och två flikar till samma vy är inte navigation utan
-   * en gissningslek. För en duo-kund är de däremot vägen förbi scope-växeln.
-   */
-  duoOnly?: boolean;
 };
 
 /**
  * The workspace lives entirely under /dashboard. The bare /leads and /support
  * paths are the public product pages and are deliberately not app routes.
- */
-/**
+ *
  * `preview: true` betyder att routen finns och fungerar, men INTE står i
  * kundens navigation. Alla fem sådana renderar `lib/mock-data.ts` — för en
  * riktig kund är de alltså tomma skal som ser ut som produkten men inte är
@@ -43,10 +33,22 @@ export type AppRoute = {
  * Ingen fil raderas. De nås fortfarande direkt, och entitlement-grinden i
  * dispatchern gäller som förut — det här styr bara vad som visas i menyn.
  */
+
+/**
+ * `duoOnly` är BORTA, och det är inte en förenkling utan en följd.
+ *
+ * Flaggan fanns för att `/dashboard` VAR leads-vyn för en leads-kund och
+ * kundtjänstvyn för en supportkund — två flikar till samma sida är inte
+ * navigation utan en gissningslek. Sedan `/dashboard` blivit en ÖVERSIKT (se
+ * StartView) gäller det inte längre: översikten sammanfattar arbetet, den är
+ * inte arbetet. Med flaggan kvar hade en enproduktskund inte kunnat nå sin
+ * arbetsvy alls — varken "Leads" eller "Kundtjänst" hade renderats, och
+ * `/dashboard` hade slutat vara den.
+ */
 export const appRoutes: AppRoute[] = [
   { href: "/dashboard", labelKey: "nav.dashboard", product: "shared" },
-  { href: "/dashboard/leads", labelKey: "nav.leads", product: "leads", duoOnly: true },
-  { href: "/dashboard/support", labelKey: "nav.support", product: "support", duoOnly: true },
+  { href: "/dashboard/leads", labelKey: "nav.leads", product: "leads" },
+  { href: "/dashboard/support", labelKey: "nav.support", product: "support" },
   { href: "/dashboard/emails", labelKey: "nav.emails", product: "leads" },
   { href: "/dashboard/companies", labelKey: "nav.companies", product: "leads", preview: true },
   { href: "/dashboard/contacts", labelKey: "nav.contacts", product: "leads", preview: true },
@@ -60,11 +62,9 @@ export function routesForProducts(
   products: readonly ProductKey[],
   { includePreview = false }: { includePreview?: boolean } = {}
 ): AppRoute[] {
-  const duo = products.length > 1;
   return appRoutes.filter(
     (route) =>
       (includePreview || !route.preview) &&
-      (!route.duoOnly || duo) &&
       (route.product === "shared" || products.includes(route.product))
   );
 }
@@ -89,80 +89,100 @@ export function tillAdminvag(href: string): string {
 }
 
 /**
- * Inställningarna, grupperade efter VAD de är — inte efter vem som råkar
- * använda dem.
+ * Inställningarna, grupperade efter VILKEN FRÅGA de svarar på.
  *
- * Den förra grupperingen var per agent (Allmänt / Kundtjänstagenten /
- * Leads-agenten). Det höll tills en kund ägde båda paketen: då låg
- * "Arbetsytan" (som i praktiken var leads-ICP), "Röst och tonläge" (som styr
- * leads-mejl) och "Inkorgar" (som styr supportmail) i tre olika grupper, medan
- * det enda båda agenterna FAKTISKT delar — kunskapsbasen — inte hade någon
- * sida alls.
+ * ## Vad som var fel med den förra grupperingen
  *
- * Tre regler bär strukturen:
+ * Fyra grupper — Arbetsytan / Kunskap / Leads-agenten / Kundtjänstagenten —
+ * blandade tre sorters inställning i den första och delade upp resten efter
+ * agent. Tre följder, alla uppmätta i skärmdump:
  *
- *  1. **Underlag skiljs från agentinställning.** Affärskontext och kunskapsbas
- *     är indata som båda agenterna läser, och ligger i en egen grupp. En kund
- *     som lagt in sina villkor en gång ska inte göra om det per agent.
- *  2. **Ingen post pekar ut ur inställningarna.** "Målgrupp och autonomi" låg
- *     på /dashboard/leads/kontroll, alltså en arbetsytesväg — och för en
- *     plattformsadmin skickar app/dashboard/layout.tsx den vägen rakt till
- *     /admin. Länken kunde därför inte bli rätt på båda ytorna samtidigt: det
- *     är hela orsaken till att en inställningsflik "dirigerade till Översikt".
- *  3. **`product` styr vem som ser gruppen.** En supportkund ser varken
- *     leads-agentens röstdokument eller leads-ICP:t — och "Affärskontext" är
- *     numera en egen sida, inte en delad sida som råkade vara leads-ICP.
+ *  1. "Min arbetsyta" var en LEADS-sammanfattning som visades även för en
+ *     supportkund, eftersom gruppen var `shared`.
+ *  2. "Röst och tonläge" låg under Leads-agenten, fast SOUL är ett
+ *     `agent_context_docs`-dokument som styr hur BÅDA agenterna låter. En
+ *     duo-kund fick alltså leta rösten under leads.
+ *  3. Kundtjänstens motsvarighet till "Målgrupp och autonomi" — reglerna per
+ *     fack — låg inte här alls, utan i en utfällbar panel inuti inkorgen.
+ *     Samma fråga, två helt olika ställen.
+ *
+ * ## Tre grupper, ordnade efter hur ofta de rörs
+ *
+ *  1. **Vad agenten vet** — underlaget. Fylls i en gång och läses av båda
+ *     agenterna. En duo-kund gör det inte två gånger.
+ *  2. **Vad agenten får göra** — befogenheterna, en rad per agent, i samma
+ *     grupp så att symmetrin syns.
+ *  3. **Kontot** — bolaget och pengarna. Inget av det handlar om agenten.
+ *
+ * ## Varför `product` sitter på POSTEN och inte på gruppen
+ *
+ * Grupp 2 innehåller både leads- och supportposter. Med produktflaggan kvar på
+ * gruppen hade den behövt delas i två — alltså tillbaka till gruppering per
+ * agent, som är precis det vi tar bort. Gruppen renderas när minst en av dess
+ * poster överlever filtret.
  */
+export type SettingsRoute = {
+  href: string;
+  label: Localized;
+  /** Saknas = delad. Annars renderas posten bara för den produkten. */
+  product?: ProductKey;
+};
+
 export type SettingsGroup = {
   label: Localized;
-  product: ProductKey | "shared";
-  routes: { href: string; label: Localized }[];
+  routes: SettingsRoute[];
 };
 
 export const settingsGroups: SettingsGroup[] = [
   {
-    label: { sv: "Arbetsytan", en: "Workspace" },
-    product: "shared",
-    routes: [
-      { href: "/settings", label: { sv: "Företaget", en: "Company" } },
-      { href: "/settings/arbetsyta", label: { sv: "Min arbetsyta", en: "My workspace" } },
-      { href: "/settings/team", label: { sv: "Team", en: "Team" } },
-      { href: "/settings/billing", label: { sv: "Plan och fakturering", en: "Plan and billing" } },
-      { href: "/settings/addons", label: { sv: "Tillägg", en: "Add-ons" } }
-    ]
-  },
-  {
-    // Underlaget, inte agenten. Båda agenterna läser härifrån, och det är
-    // också därför dokumentuppladdningen hör hemma här och inte per agent.
-    label: { sv: "Kunskap", en: "Knowledge" },
-    product: "shared",
+    // Underlaget, inte agenten. Det är också därför dokumentuppladdningen hör
+    // hemma här och inte per agent.
+    label: { sv: "Vad agenten vet", en: "What the agent knows" },
     routes: [
       { href: "/settings/affarskontext", label: { sv: "Affärskontext", en: "Business context" } },
-      { href: "/settings/kunskapsbas", label: { sv: "Kunskapsbas", en: "Knowledge base" } }
-    ]
-  },
-  {
-    // SOUL styr TON, ICP styr URVAL. Gränsen står utskriven i LeadsControls och
-    // hör hemma här också: läggs urvalskriterier i röstdokumentet slutar båda
-    // fungera som de ska.
-    label: { sv: "Leads-agenten", en: "Leads agent" },
-    product: "leads",
-    routes: [
-      { href: "/settings/leads", label: { sv: "Målgrupp och autonomi", en: "Audience and autonomy" } },
+      { href: "/settings/kunskapsbas", label: { sv: "Kunskapsbas", en: "Knowledge base" } },
+      // SOUL styr TON, ICP styr URVAL. Gränsen står utskriven i LeadsControls.
+      // Rösten är delad: samma dokument formar både utskick och svar.
       { href: "/settings/soul", label: { sv: "Röst och tonläge", en: "Voice and tone" } }
     ]
   },
   {
-    label: { sv: "Kundtjänstagenten", en: "Support agent" },
-    product: "support",
-    routes: [{ href: "/settings/mailboxes", label: { sv: "Inkorgar", en: "Mailboxes" } }]
+    label: { sv: "Vad agenten får göra", en: "What the agent may do" },
+    routes: [
+      {
+        href: "/settings/leads",
+        label: { sv: "Leads: målgrupp och autonomi", en: "Leads: audience and autonomy" },
+        product: "leads"
+      },
+      {
+        href: "/settings/regler",
+        label: {
+          sv: "Kundtjänst: fack och autosvar",
+          en: "Support: categories and auto-replies"
+        },
+        product: "support"
+      },
+      { href: "/settings/mailboxes", label: { sv: "Inkorgar", en: "Mailboxes" }, product: "support" }
+    ]
+  },
+  {
+    label: { sv: "Kontot", en: "Account" },
+    routes: [
+      { href: "/settings", label: { sv: "Företaget", en: "Company" } },
+      { href: "/settings/team", label: { sv: "Team", en: "Team" } },
+      { href: "/settings/billing", label: { sv: "Plan och fakturering", en: "Plan and billing" } },
+      { href: "/settings/addons", label: { sv: "Tillägg", en: "Add-ons" } }
+    ]
   }
 ];
 
 export function settingsGroupsForProducts(products: readonly ProductKey[]): SettingsGroup[] {
-  return settingsGroups.filter(
-    (group) => group.product === "shared" || products.includes(group.product)
-  );
+  return settingsGroups
+    .map((group) => ({
+      ...group,
+      routes: group.routes.filter((route) => !route.product || products.includes(route.product))
+    }))
+    .filter((group) => group.routes.length > 0);
 }
 
 /**
@@ -171,29 +191,34 @@ export function settingsGroupsForProducts(products: readonly ProductKey[]): Sett
  * EN dispatcher, precis som WorkspaceSection. Sidorna låg tidigare som sex
  * nästan identiska page.tsx-filer, och varje ny inställning krävde en sjunde.
  * Okänd slug ger null, som anroparen översätter till 404.
+ *
+ * `arbetsyta` är BORTA. Sidan var en mock-sammanfattning av arbetsytan, och
+ * sammanfattningen är numera startsidan (se StartView). Två sammanfattningar
+ * av samma sak är en för många, och den som låg i inställningarna var den som
+ * ingen hittade.
  */
 export type SettingsSectionKey =
   | "foretaget"
-  | "arbetsyta"
   | "team"
   | "billing"
   | "addons"
   | "affarskontext"
   | "kunskapsbas"
-  | "leads"
   | "soul"
+  | "leads"
+  | "regler"
   | "mailboxes";
 
 const settingsSections: Record<string, SettingsSectionKey> = {
   "": "foretaget",
-  arbetsyta: "arbetsyta",
   team: "team",
   billing: "billing",
   addons: "addons",
   affarskontext: "affarskontext",
   kunskapsbas: "kunskapsbas",
-  leads: "leads",
   soul: "soul",
+  leads: "leads",
+  regler: "regler",
   mailboxes: "mailboxes"
 };
 
@@ -201,11 +226,13 @@ const settingsSections: Record<string, SettingsSectionKey> = {
  * Vilken produkt en inställningssida kräver. Saknas den är sidan delad.
  *
  * Det här är grinden, inte menyfiltret: att gruppen inte RENDERAS för en
- * supportkund hindrar ingen från att skriva /settings/soul i adressfältet.
+ * supportkund hindrar ingen från att skriva /settings/leads i adressfältet.
+ *
+ * `soul` står inte längre här. Röstdokumentet är delat — se settingsGroups.
  */
 const settingsSectionProduct: Partial<Record<SettingsSectionKey, ProductKey>> = {
   leads: "leads",
-  soul: "leads",
+  regler: "support",
   mailboxes: "support"
 };
 

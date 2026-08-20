@@ -80,3 +80,63 @@ def test_proxyprefixet_i_formularet_ar_det_proxyn_lyssnar_pa():
     # ser ut som ett backendfel.
     assert PROXY_PREFIX in FORMULAR.read_text(encoding="utf-8")
     assert (ROOT / "app" / "api" / "snajp-support" / "[...path]" / "route.ts").exists()
+
+
+# -- Översikten ------------------------------------------------------------
+#
+# Startsidan räknar sina siffror ur sju endpoints. Samma sorts strängar i båda
+# ändar som ovan, med en skillnad som gör dem värre: en 404 här ger inte ett
+# felmeddelande utan ett em-streck i en ruta. Vyn är byggd för att TÅLA en död
+# endpoint (se modulens docstring i Oversikt.tsx), så en omdöpt route ser ut
+# som att kunden inte har någon data.
+
+OVERSIKT = ROOT / "components" / "dashboard" / "Oversikt.tsx"
+REGLER = ROOT / "components" / "settings" / "SupportRegler.tsx"
+
+#: `hamta<...>("/leads/queue")` och `api<...>("/rules", …)`. Typargumentet är
+#: lazy eftersom det kan innehålla egna `>` — `Record<string, number>` fällde
+#: ett `[^>]*`-mönster tyst genom att matcha noll sökvägar.
+_OVERSIKT_RE = re.compile(r"""\b(?:hamta|api)(?:<.*?>)?\(\s*["'`](/[^"'`?]+)""")
+
+
+def _vagar_i(fil: Path) -> set[str]:
+    return set(_OVERSIKT_RE.findall(fil.read_text(encoding="utf-8")))
+
+
+def test_oversikten_anropar_de_vagar_talen_bygger_pa():
+    # Samma spärr som ovan: en tom lista hade gjort nästa test grönt utan att
+    # mäta något.
+    vagar = _vagar_i(OVERSIKT)
+
+    for vag in (
+        "/leads/prospects",
+        "/leads/runs",
+        "/leads/queue",
+        "/leads/config",
+        "/inbox",
+        "/kb",
+    ):
+        assert vag in vagar, f"Översikten hämtar inte längre {vag} — vilket tal försvann?"
+
+
+def test_varje_vag_i_oversikten_och_reglerna_finns_i_backenden():
+    registrerade = _registrerade_vagar()
+    vagar = _vagar_i(OVERSIKT) | _vagar_i(REGLER)
+
+    saknade = sorted(v for v in vagar if f"/api{v}" not in registrerade)
+
+    assert not saknade, (
+        f"Översikten anropar {saknade}, som inte finns i backenden. "
+        "Proxyn lägger på /api — se app/api/snajp-support/[...path]/route.ts."
+    )
+
+
+def test_reglerna_bor_i_installningarna_och_inte_i_inkorgen():
+    """Panelen flyttade från components/snajp/Dashboard.tsx till
+    /settings/regler. Blir den kvar på båda ställena driver de isär, och kunden
+    ändrar en regel på ett ställe där den inte gäller."""
+    inkorg = (ROOT / "components" / "snajp" / "Dashboard.tsx").read_text(encoding="utf-8")
+
+    assert "/settings/regler" in inkorg, "Inkorgen ska länka till reglerna, inte gömma dem."
+    assert "rulesOpen" not in inkorg, "Den gamla regelpanelen ligger kvar i inkorgen."
+    assert "/rules" in _vagar_i(REGLER)

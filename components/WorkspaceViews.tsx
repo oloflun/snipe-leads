@@ -8,10 +8,11 @@ import { btnPrimary, btnSecondary } from "@/components/ui";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { SignOutButton } from "@/components/auth/SignOutButton";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
-import { DuoSummary } from "@/components/dashboard/DuoSummary";
 import { Discovery } from "@/components/leads/Discovery";
 import { LeadsControls } from "@/components/leads/LeadsControls";
+import { Affarskontext } from "@/components/settings/Affarskontext";
 import { KunskapsbasPanel } from "@/components/settings/Kunskapsbas";
+import { SupportRegler } from "@/components/settings/SupportRegler";
 import { SettingsNav } from "@/components/settings/SettingsNav";
 import { TeamSettings } from "@/components/settings/TeamSettings";
 import { AddonSettings } from "@/components/settings/AddonSettings";
@@ -31,7 +32,7 @@ import {
 import type { Company, Contact } from "@/lib/mock-data";
 import type { SettingsSectionKey } from "@/lib/routes";
 import { useLocale } from "@/lib/i18n";
-import { cn, formatCurrency, formatDate, formatPercent } from "@/lib/utils";
+import { cn, formatDate, formatPercent } from "@/lib/utils";
 
 function EditorialButton({ href, children, dark = false }: Readonly<{ href: string; children: React.ReactNode; dark?: boolean }>) {
   return (
@@ -109,44 +110,6 @@ function SignalTimeline({ company }: Readonly<{ company: Company }>) {
         </div>
       ))}
     </div>
-  );
-}
-
-/**
- * Body only, no PageShell. The combined overview mounts this next to the support
- * dashboard, and nesting two shells would nest two headers.
- */
-export function DashboardBody() {
-  const latest = analyticsSeries.at(-1);
-  const sent = latest?.sent ?? 0;
-  const replies = latest?.replies ?? 0;
-  return (
-    <>
-      <dl className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <LedgerMetric label="Skickade" value={String(sent)} detail="denna vecka" />
-        <LedgerMetric label="Svar" value={formatPercent(replies / sent)} detail="efter suppression-filter" />
-        <LedgerMetric label="Möten" value="18" detail="sex med expansionssignal" />
-        <LedgerMetric label="Pipeline" value={formatCurrency(842000)} detail="exempeldata" />
-      </dl>
-      <section className="mt-10">
-        <h3 className="mb-4 text-[0.8125rem] font-medium text-ink/45">AI rekommenderar</h3>
-        <CompanyLedger rows={companies.slice(0, 4)} />
-      </section>
-    </>
-  );
-}
-
-export function DashboardView() {
-  const vag = useArbetsvag();
-  return (
-    <PageShell
-      kicker="Arbetsyta"
-      title="Veckans läge"
-      description="Prioriterade bolag, svar och nästa handling."
-      action={<EditorialButton href={vag("/dashboard/assistant")}>Öppna assistent</EditorialButton>}
-    >
-      <DashboardBody />
-    </PageShell>
   );
 }
 
@@ -442,13 +405,13 @@ export function InboxView() {
 export function SettingsView({ section = "foretaget" }: Readonly<{ section?: SettingsSectionKey }>) {
   const titles: Record<SettingsSectionKey, string> = {
     foretaget: "Företaget",
-    arbetsyta: "Min arbetsyta",
     mailboxes: "Mailboxar och skickhälsa i svensk takt.",
     team: "Teamroller och audit-logik.",
     billing: "Plan, fakturering och användning.",
     affarskontext: "Affärskontext",
     kunskapsbas: "Kunskapsbas",
     leads: "Målgrupp och autonomi",
+    regler: "Fack och autosvar",
     soul: "Er röst",
     addons: "Tillägg"
   };
@@ -460,14 +423,14 @@ export function SettingsView({ section = "foretaget" }: Readonly<{ section?: Set
   // ut infrastruktur i en kundvänd yta.
   const descriptions: Record<SettingsSectionKey, string> = {
     foretaget: "Bolaget bakom arbetsytan — namn, organisationsnummer och webbplats.",
-    arbetsyta: "Sammanfattningen av arbetsytan. Den låg tidigare som startsida; startsidan är numera agentens vy.",
     mailboxes: "Avsändaradresser och hur mycket som får skickas per dag.",
     team: "Vilka som har tillgång till arbetsytan, och vad de får göra.",
     billing: "Vad ni har förbrukat den här månaden, och vad nästa faktura blir.",
     affarskontext: "Vad ni säljer och till vem. Båda agenterna läser härifrån.",
     kunskapsbas: "Dokumenten agenten svarar ur. Ligger inget här gissar den aldrig — den eskalerar.",
     leads: "Vilka bolag agenten ska leta efter, och hur långt den får gå på egen hand.",
-    soul: "Beskriv hur ni låter. Agenten skriver så i era mejl och svar.",
+    regler: "Vilka ärenden agenten får besvara självt, och vilka som alltid går till en människa.",
+    soul: "Beskriv hur ni låter. Agenten skriver så i både utskick och svar — dokumentet är delat mellan agenterna.",
     addons: "Det agenten kan göra utöver det som ingår i er plan."
   };
   return (
@@ -510,13 +473,9 @@ export function SettingsView({ section = "foretaget" }: Readonly<{ section?: Set
         </div>
         <div className="col-span-12 md:col-span-9">
           {section === "foretaget" ? <CompanySettings /> : null}
-          {/* Den gamla startsidan. Den flyttades hit i sin helhet: en
-              sammanfattning av arbetsytan är inte arbetsytan, och att lägga
-              den FÖRE agentens vy sköt in ett steg mellan kunden och det de
-              loggade in för att göra. */}
-          {section === "arbetsyta" ? <OverviewBody /> : null}
-          {section === "affarskontext" ? <BusinessContextSettings /> : null}
+          {section === "affarskontext" ? <Affarskontext /> : null}
           {section === "kunskapsbas" ? <KunskapsbasPanel /> : null}
+          {section === "regler" ? <SupportRegler /> : null}
           {section === "leads" ? <LeadsControls /> : null}
           {section === "soul" ? <SoulEditor /> : null}
           {section === "mailboxes" ? <MailboxSettings /> : null}
@@ -529,32 +488,6 @@ export function SettingsView({ section = "foretaget" }: Readonly<{ section?: Set
   );
 }
 
-/**
- * "Min arbetsyta" — sammanfattningen som tidigare var startsida.
- *
- * Den ligger numera under Inställningar. Motivet står i StartView: en
- * sammanfattning av arbetet är inte arbetet, och som startsida sköt den in ett
- * steg mellan kunden och den enda vy de ändå skulle till.
- */
-function OverviewBody() {
-  const { shows } = useDashboard();
-  const vag = useArbetsvag();
-  return (
-    <div className="space-y-10">
-      <DuoSummary />
-      {shows("leads") ? <DashboardBody /> : null}
-      {shows("support") ? (
-        <p className="max-w-[65ch] text-[15px] leading-7 text-ink/65">
-          Kundtjänstens ärenden och utkast ligger på{" "}
-          <Link href={vag("/dashboard")} className="underline underline-offset-4 hover:text-ochre">
-            Översikt
-          </Link>
-          . Siffrorna här uppdateras när körningarna skrivit dem.
-        </p>
-      ) : null}
-    </div>
-  );
-}
 
 /**
  * Företaget bakom arbetsytan. Uppgifterna kommer från onboardingen och ändras
@@ -591,26 +524,6 @@ function CompanySettings() {
           .
         </p>
       </div>
-    </div>
-  );
-}
-
-function BusinessContextSettings() {
-  const { text } = useLocale();
-  return (
-    <div className="grid gap-5">
-      {[
-        ["Produkt", text(businessContext.product)],
-        ["ICP", text(businessContext.icp)],
-        ["Tonalitet", text(businessContext.tone)],
-        ["Erbjudande", text(businessContext.offer)],
-        ["CTA", text(businessContext.cta)]
-      ].map(([label, value]) => (
-        <label key={label} className="grid grid-cols-12 gap-x-6 border-t border-ink/15 pt-5">
-          <span className="kicker col-span-12 text-mineral md:col-span-3">{label}</span>
-          <textarea className="col-span-12 mt-3 min-h-24 border border-ink/15 bg-paper2/70 p-4 text-[15px] leading-6 outline-none focus:border-ochre md:col-span-9 md:mt-0" defaultValue={value} />
-        </label>
-      ))}
     </div>
   );
 }

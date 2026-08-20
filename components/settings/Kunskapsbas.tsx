@@ -4,6 +4,7 @@ import { FileText, Loader2, Upload } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useArbetsvag } from "@/components/AppShell";
+import { hamtaAffarskontext } from "@/lib/actions/affarskontext";
 import { btnPrimary, btnSecondary } from "@/components/ui";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
@@ -59,10 +60,16 @@ export function KunskapsbasKort() {
   const [fel, setFel] = useState<string | null>(null);
   const [meddelande, setMeddelande] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // null = inte hämtad än. Kortet lovar både affärskontext och kunskapsbas i
+  // rubriken; utan det här talade det bara om det ena.
+  const [kontextIfylld, setKontextIfylld] = useState<boolean | null>(null);
   const filväljare = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     let avbruten = false;
+    void hamtaAffarskontext().then((rad) => {
+      if (!avbruten) setKontextIfylld(Boolean(rad?.product.trim()));
+    });
     fetch("/api/snajp-support/kb", { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
       .then((data: { articles?: Artikel[] } | null) => {
@@ -132,6 +139,25 @@ export function KunskapsbasKort() {
             {antal === 0
               ? "Tom. Agenterna svarar bara ur det ni lagt in — utan underlag eskalerar kundtjänstagenten varje ärende."
               : `${antal ?? "—"} dokument. Ladda upp villkor, vanliga frågor och rutiner så svarar agenterna ur dem.`}
+          </p>
+          {/* Rubriken lovar två saker. Utan den här raden svarade kortet bara
+              på den ena, och affärskontexten var något man fick hitta själv. */}
+          <p className="mt-2 text-[13px] text-ink/55">
+            Affärskontext:{" "}
+            {kontextIfylld === null ? (
+              "hämtar…"
+            ) : kontextIfylld ? (
+              <span className="text-moss">ifylld</span>
+            ) : (
+              <span className="text-ochre">inte ifylld ännu</span>
+            )}{" "}
+            ·{" "}
+            <Link
+              href={vag("/settings/affarskontext")}
+              className="focus-ring rounded-input underline underline-offset-4 hover:text-ochre"
+            >
+              {kontextIfylld ? "Ändra" : "Fyll i"}
+            </Link>
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
