@@ -148,6 +148,27 @@ eller ett kvotmeddelande.
 Om det ÄR kvoten: hela §2 är vägen framåt tills någon vill betala. Produkten
 går att köra och besiktiga i sin helhet lokalt.
 
+### Uppdatering 2026-08-20 08:40 — deployen HAR gått
+
+Hypoteserna ovan föll. Båda tjänsterna serverar dagens kod. Mätt utifrån, utan
+Railway-token, med fyra prov som bara kan svara så här på ny kod:
+
+| Prov | Svar | Fanns först i |
+|---|---|---|
+| `GET /settings/general` | `308 → /settings/affarskontext` | `225f327` (redirect i `next.config.ts`) |
+| `GET /dashboard/leads/kontroll` | `308 → /settings/leads` | `225f327` |
+| `api/openapi.json` → `/api/leads/prospects/exempel` | finns | `225f327` |
+| `api/openapi.json` → `LeadsRunOverrides` | alla åtta fälten, inkl. `roles`, `must_have`, `deal_breakers` | `e4a418e` |
+
+`development` och `railway-development` står båda på `d26ba0a`, och proven
+sätter web och api på `225f327` eller senare. `d26ba0a` går inte att prova
+utifrån — den rör bara fallbacken i `postgres.py`, som kräver ett autentiserat
+anrop för att synas. Det som återstår är alltså **inte** en deploy: `/admin` är 404 för att raden i `platform_admins`
+saknas (§3), och 039/040 är inte körda mot dev-databasen
+(`MIGRATIONS-PENDING.md`). Båda kräver `.env.deploy`, som numera går att
+återskapa ur Railway med en enda token — se `RAILWAY.md`,
+"`.env.deploy` följer inte med en klon".
+
 ---
 
 ## 5. Vad som faktiskt lagades

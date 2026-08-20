@@ -24,6 +24,7 @@ deployer i rad.
 ## Kommandon
 
 ```bash
+python scripts/railway_env_bootstrap.py --apply        # .env.deploy ur Railway, en token räcker
 python scripts/railway_provision.py --apply            # båda miljöerna, idempotent
 python scripts/railway_migrate.py --env development --apply
 python scripts/railway_seed_dev.py --apply             # spegla main -> development
@@ -32,6 +33,24 @@ python scripts/keys.py --push-railway                  # LLM-nycklar till båda 
 python scripts/admin_cleanup.py --env railway-development --diagnos  # varför 404 på /admin?
 python scripts/admin_cleanup.py --env railway-development            # skapa/laga adminraden
 ```
+
+### `.env.deploy` följer inte med en klon
+
+Filen är gitignorerad med flit, så en ny maskin — eller en agent i en
+molnsession — checkar ut repot utan ett enda av de sex värden per miljö som
+migrationen, speglingen, adminraden och verifieringen läser. Alla finns redan i
+Railway, så en **account-token är den enda hemlighet som behöver flyttas**:
+
+```bash
+RAILWAY_TOKEN=<token> python scripts/railway_env_bootstrap.py --apply
+```
+
+Riktningen är envägs: Railway → filen. Skriptet ändrar ingenting i Railway.
+
+Att köra `railway_provision.py --apply` i stället är fel väg och tyst farlig:
+`secret()` GENERERAR en ny hemlighet när den inte hittar den i `.env.deploy`
+och skriver den till tjänsten — alltså roteras Postgres-lösenordet under en
+levande stack, av ett kommando som ser ut att bara läsa läget.
 
 ## Dataspegeln — envägs, och låst åt det hållet
 
