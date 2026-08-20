@@ -36,6 +36,7 @@ stället för att låta tre kommandon i rad tajma ut på 20 sekunder var.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import socket
 import subprocess
@@ -66,6 +67,22 @@ STEG: list[tuple[str, list[str], bool]] = [
 def kor(argv: list[str]) -> int:
     print(f"\n$ python scripts/{' '.join(argv)}", flush=True)
     return subprocess.run([PY, str(HAR / argv[0]), *argv[1:]]).returncode
+
+
+def psycopg2_finns() -> bool:
+    """Har TOLKEN som kör det här psycopg2?
+
+    Stegen startas med `sys.executable`, alltså samma tolk som den här filen
+    kördes med. Körs kommandot med systemets Python medan psycopg2 bara finns i
+    ett virtualenv faller VARJE databassteg på ett ModuleNotFoundError — fem
+    tracebacks i rad, och sammanfattningen säger "exempelbolagsvägen: GRÖN",
+    vilket ser ut som att det gick bra.
+
+    Uppmätt 2026-08-20: precis det hände. Kontrollen ligger därför före planen,
+    tillsammans med de andra förutsättningarna, i stället för att upptäckas fem
+    gånger under körningen.
+    """
+    return importlib.util.find_spec("psycopg2") is not None
 
 
 def databasen_nas(store: dict) -> tuple[bool, str]:
@@ -148,6 +165,21 @@ def main() -> int:
     if not store.get("RAILWAY_TOKEN"):
         sys.exit("RAILWAY_TOKEN saknas i .env.deploy — utan den går inget av det här.\n"
                  "Sätt den med: python scripts/set_railway_token.py")
+
+    if not psycopg2_finns():
+        sys.exit(
+            "\n".join(
+                [
+                    f"psycopg2 saknas i tolken som kör det här ({PY}).",
+                    "Databasstegen startas med SAMMA tolk och hade fallit ett i taget.",
+                    "",
+                    "  pip install -r scripts/requirements-scripts.txt",
+                    "",
+                    "eller kör kommandot med den tolk som redan har den, t.ex.",
+                    "  snajp-support/.venv/Scripts/python.exe scripts/railway_gor_klart.py --apply",
+                ]
+            )
+        )
 
     db_ok, db_detalj = (False, "hoppas över (--hoppa-db)") if args.hoppa_db else databasen_nas(store)
     print(f"databasvägen: {'ÖPPEN' if db_ok else 'STÄNGD'} — {db_detalj}")

@@ -96,19 +96,55 @@ def verifiera(token: str) -> tuple[str | None, str]:
     except Exception as exc:  # natverk, DNS, TLS
         return None, f"Kunde inte na Railways API ({type(exc).__name__}: {exc})."
 
+    me = (svar.get("data") or {}).get("me") or {}
+    konto = me.get("email") or me.get("name")
+    if konto:
+        return konto, "ok"
+
+    # `me` misslyckades. Det betyder INTE att tokenen ar oduglig.
+    #
+    # UPPMATT 2026-08-20: en TEAM-token (Workspace Settings -> Tokens) svarar
+    # "Not Authorized" pa `{ me }` - den hor inte till ett anvandarkonto - men
+    # laser projekt, tjanster och variabler utan problem. Precis det skripten
+    # behover. Den forsta versionen av den har funktionen avvisade darfor en
+    # fullt fungerande token med radet "skaffa en Account-token", vilket ar ett
+    # rad som inte loser nagonting.
+    #
+    # Fragan som avgor duglighet ar alltsa inte "vem ager tokenen" utan "ser
+    # den projekten". Den stalls harnast.
+    projekt = _lista_projekt(token)
+    if projekt:
+        return f"team-token ({', '.join(projekt)})", "ok"
+
     if svar.get("errors"):
         meddelanden = "; ".join(e.get("message", "?") for e in svar["errors"])
         return None, (
             f"Railway granskade tokenen och sa nej: {meddelanden}. "
-            "Vanligaste orsaken ar en PROJEKT-token - det maste vara en "
-            "Account-token (Account Settings -> Tokens)."
+            "Tokenen nar varken ett konto eller nagot projekt - den ar troligen "
+            "aterkallad, eller en PROJEKT-token (som bara nar en enda miljo)."
         )
+    return None, "Railway svarade utan konto och utan projekt."
 
-    me = (svar.get("data") or {}).get("me") or {}
-    konto = me.get("email") or me.get("name")
-    if not konto:
-        return None, "Railway svarade utan konto. Tokenen nar inget konto."
-    return konto, "ok"
+
+def _lista_projekt(token: str) -> list[str]:
+    """Projektnamnen tokenen ser. Tom lista = den ser inga."""
+    fraga = json.dumps({"query": "{ projects { edges { node { name } } } }"}).encode()
+    req = urllib.request.Request(
+        API,
+        data=fraga,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "User-Agent": USER_AGENT,
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            svar = json.loads(resp.read())
+    except Exception:
+        return []
+    kanter = (((svar.get("data") or {}).get("projects") or {}).get("edges")) or []
+    return [k["node"]["name"] for k in kanter if k.get("node", {}).get("name")]
 
 
 def main() -> None:
