@@ -2,7 +2,7 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 
 from ..email_pipeline.connectors.mock import build_mock_emails
 from ..email_pipeline.ingest import ingest_email
@@ -17,7 +17,11 @@ router = APIRouter()
 
 
 @router.post("/api/inbox/mock", status_code=201)
-async def seed_mock_inbox(request: Request, tenant: dict = Depends(require_tenant)) -> dict:
+async def seed_mock_inbox(
+    request: Request,
+    tenant: dict = Depends(require_tenant),
+    x_snajp_demo: str | None = Header(default=None),
+) -> dict:
     """Byter UT testmailen mot ett nytt urval och processar dem direkt.
 
     Tre saker skiljer sig från den första versionen, alla tre uppmätta mot
@@ -30,10 +34,21 @@ async def seed_mock_inbox(request: Request, tenant: dict = Depends(require_tenan
     2. **Urvalet roterar.** `build_mock_emails()` väljer ur en pool och blandar
        besvarbara ärenden med sådana som ska eskalera. Se den modulen.
 
-    3. **Kunskapsbasen säkerställs först.** Utan artiklar tvingar
-       grundningsregeln eskalering av VARJE ärende (`processor.py` steg 2), och
-       skärmen blir sex röda rader. Det var precis vad testarbetsytorna visade:
-       de delar en tenant vars KB aldrig seedats.
+    3. **Kunskapsbasen säkerställs först — men BARA för en testarbetsyta.**
+       Utan artiklar tvingar grundningsregeln eskalering av VARJE ärende
+       (`processor.py` steg 2), och skärmen blir sex röda rader.
+
+       Seedningen var först ogrindad, och det var ett fel av samma slag som
+       delade tenants: `KB_ARTICLES` är Nordlys Handels e-handelsartiklar. En
+       RIKTIG kund som tryckte på knappen fick alltså ett annat bolags
+       returpolicy inlagd i sin egen grundningskälla, och grundningsgrinden ser
+       en träff — den kan inte se att artikeln kom från fel företag.
+
+       Grinden är `X-Snajp-Demo`, som proxyn sätter ur `workspaces.is_demo`
+       (se `proxyWithApiKey` i app/api/snajp-support/_lib.ts) och som en klient
+       inte kan sätta själv. En riktig kund får testmailen och behåller sin egen
+       bas; att den är tom svarar endpointen om i `kb_tom`, så att UI:t kan säga
+       det i stället för att kunden läser sex röda rader som ett produktfel.
 
     Ärendena (`ss_tickets`) och beslutsloggen rensas INTE. Inkorgen är en vy,
     loggen är spåret — ett ärende som fanns har funnits, och att radera spåret
@@ -43,7 +58,10 @@ async def seed_mock_inbox(request: Request, tenant: dict = Depends(require_tenan
     tenant_id = tenant["tenant_id"]
 
     borttagna = await storage.delete_emails_by_provider(tenant_id, "mock")
-    seedade_artiklar = await ensure_tenant_kb(storage, tenant_id)
+
+    ar_testarbetsyta = (x_snajp_demo or "").lower() == "true"
+    seedade_artiklar = await ensure_tenant_kb(storage, tenant_id) if ar_testarbetsyta else 0
+    kb_tom = not await storage.list_kb(tenant_id)
 
     results = []
     for inbound in build_mock_emails():
@@ -55,6 +73,7 @@ async def seed_mock_inbox(request: Request, tenant: dict = Depends(require_tenan
         "ingested": len(results),
         "removed": borttagna,
         "kb_seeded": seedade_artiklar,
+        "kb_tom": kb_tom,
         "results": results,
     }
 
