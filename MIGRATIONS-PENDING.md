@@ -56,6 +56,16 @@ timmen.
 python scripts/railway_migrate.py --env development --apply
 ```
 
+**Mätt 2026-08-20 mot Railway-development, utan databasanslutning:** `GET
+/api/leads/prospects` (dev-api, demo-nyckeln) svarar 200 och raden saknar
+fältet `origin`. Migration 039 är alltså inte körd där. Fälten från `031`
+(`orgnr`, `ort`, `postnr`, `sni`, `website`, `anstallda`, `omsattning`,
+`foretagsnyckel`) finns däremot allihop, så kedjan står stilla just före 039.
+
+Provet är läsande och kostar ingenting — till skillnad från
+`POST /api/leads/prospects/exempel`, som skapar rader om kolumnen finns. Det
+skiljer "inte körd" från "körd men trasig" utan att röra data.
+
 Kommandot kräver `RAILWAY_DEVELOPMENT_PG_{PASSWORD,HOST,PORT}` i `.env.deploy`.
 Verifiera efteråt som `authenticated` med ett riktigt konto, aldrig som
 `postgres` — se lärdomen från 030–033 ovan.
