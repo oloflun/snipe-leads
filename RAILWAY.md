@@ -24,6 +24,7 @@ deployer i rad.
 ## Kommandon
 
 ```bash
+python scripts/railway_gor_klart.py --apply            # ALLT nedan, i rätt ordning, idempotent
 python scripts/railway_env_bootstrap.py --apply        # .env.deploy ur Railway, en token räcker
 python scripts/railway_provision.py --apply            # båda miljöerna, idempotent
 python scripts/railway_migrate.py --env development --apply
