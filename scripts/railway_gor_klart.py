@@ -186,6 +186,12 @@ def main() -> int:
         print("  hoppades över (databasen nås inte härifrån):")
         for namn in hoppade:
             print(f"    - {namn}")
+        if not exempel_ok:
+            # Skilj "vägen är trasig" från "steget som skulle laga den kördes
+            # inte". Samma röda rad med två helt olika åtgärder är precis den
+            # sortens rapport som får någon att felsöka fel sak.
+            print("\n  Rött ovan är VÄNTAT så länge migrationskedjan är överhoppad —")
+            print("  exempelbolag kräver kolumnen som 039 lägger till.")
         print("  Kör om det här kommandot från en maskin med öppen utgående TCP.")
     return 0 if exempel_ok and not hoppade else 1
 

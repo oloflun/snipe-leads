@@ -153,13 +153,21 @@ def main() -> int:
     # Verifieringen är poängen: en satt variabel bevisar att API:t tog emot den,
     # inte att processen kör med den. `mode` går från simulation till live först
     # när den nya containern är uppe.
-    print("\nVerifierar mot /health/ready (kan ta en minut):")
-    for _ in range(30):
+    # Vänta ORDENTLIGT mellan försöken. Utan paus tar trettio varv tre sekunder
+    # totalt, alltså långt innan den nya containern hunnit starta — och
+    # skriptet rapporterade "inte live än" om en nyckel som var korrekt skriven.
+    # Ett falskt nej är dyrare än att vänta: det som mäts nästa gång är en
+    # nyckel som någon redan hunnit sätta om i onödan.
+    print("\nVerifierar mot /health/ready (en omdeploy tar ~1–3 minuter):")
+    for forsok in range(30):
         mode = health_mode(url)
         if mode == "live":
-            print(f"  mode={mode} — riktig modell aktiv.")
+            print(f"  mode={mode} efter {forsok * 10}s — riktig modell aktiv.")
             return 0
-    print(f"  mode={health_mode(url)} — inte live än. Se /health/ready för skälet.")
+        if forsok % 3 == 0:
+            print(f"  {forsok * 10:>3}s  mode={mode}", flush=True)
+        time.sleep(10)
+    print(f"  mode={health_mode(url)} efter 300s — inte live. Se /health/ready för skälet.")
     return 1
 
 

@@ -422,6 +422,7 @@ def cmd_push_railway() -> None:
     """
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import json
+    import time
     import urllib.request
 
     from railway_provision import (ENVIRONMENTS, env_read, envs_by_name,
@@ -465,7 +466,11 @@ def cmd_push_railway() -> None:
             failed = True
             continue
         mode = None
-        for _ in range(20):
+        # time.sleep mellan försöken, inte trettio varv på tre sekunder: en
+        # omdeploy tar en till tre minuter, och utan paus svarar loopen
+        # "simulation" om en nyckel som är korrekt satt. Ett falskt nej här
+        # leder till att någon sätter om en nyckel som aldrig var fel.
+        for forsok in range(30):
             try:
                 with urllib.request.urlopen(f"{url}/health/ready", timeout=20) as resp:
                     mode = json.load(resp).get("mode")
@@ -473,6 +478,7 @@ def cmd_push_railway() -> None:
                 mode = None
             if mode == "live":
                 break
+            time.sleep(10)
         print(f"  {env_name}: mode={mode}")
         if mode != "live":
             failed = True

@@ -21,7 +21,7 @@ Det gör, i den här ordningen och idempotent:
 | Steg | Vad | Kräver databasen |
 |---|---|---|
 | 1 | `.env.deploy` läses tillbaka ur Railway | nej |
-| 2 | DeepSeek-nyckeln lagas → dev går från `simulation` till `live` | nej |
+| 2 | DeepSeek-nyckeln lagas → dev går från `simulation` till `live` | nej *(redan gjort)* |
 | 3 | Migration **039 + 040** körs mot development | **ja** |
 | 4 | Adminraden i `railway-main`, sedan i `railway-development` | **ja** |
 | 5 | `verify_railway.py` — hela driftkontrollen | **ja** |
@@ -87,8 +87,13 @@ miljöerna. Tas skräpet före `sk-` bort återstår 35 tecken av rätt form, oc
 den skriver, och skiljer ett 401 (svar: nyckeln duger inte) från ett avbrutet
 TLS-handslag (inget svar alls). `--env` tar en miljö åt gången med flit.
 
-Steg 2 i kommandot ovan kör den mot development. **`main` lämnas åt dig** —
-samma korrupta värde står där, och `main` rörs först när dev är verifierad:
+**Uppdatering samma dag, 10:40 — development är redan lagad.** Kommandot kördes
+skarpt: nyckeln skrevs, api deployades om, och `/health/ready` gick från
+`simulation` till **`live`**. Kvarvarande varningar är bara IMAP och sändvägen.
+Steg 2 säger därför "nyckeln är hel, ingenting att laga" när du kör ikväll.
+
+**`main` lämnas åt dig** — samma korrupta värde står där, kandidaten är prövad
+och godkänd av DeepSeek (status 200), men `main` rörs först när dev är verifierad:
 
 ```bash
 python scripts/railway_repair_llm_key.py --env main --apply
