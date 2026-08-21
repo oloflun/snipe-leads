@@ -36,7 +36,11 @@ import {
 
 function harledProdukter(rad: TenantRow): string[] {
   const produkter: string[] = [];
-  if (rad.runs > 0) produkter.push("leads");
+  // Provkörningar räknas MED här, till skillnad från i volymkolumnen. Frågan
+  // är vilken produkt tenanten använder, och en testkörning är leads-agenten
+  // som kört — annars tappade demokontot sin leads-halva i samma sekund som
+  // is_test började fyllas i.
+  if (rad.runs + (rad.test_runs ?? 0) > 0) produkter.push("leads");
   if (rad.tickets > 0) produkter.push("support");
   return produkter;
 }
@@ -146,7 +150,17 @@ export function Portfoljvy({ tenants }: Readonly<{ tenants: TenantRow[] }>) {
                   ) : null}
                 </div>
                 <Tal>{rad.tickets}</Tal>
-                <Tal>{rad.runs}</Tal>
+                <Tal>
+                  {rad.runs}
+                  {/* Testkörningar göms inte, de räknas bara inte som kundvolym.
+                      En siffra som tyst blivit mindre är svårare att lita på än
+                      en siffra som säger vad den utelämnat. */}
+                  {rad.test_runs ? (
+                    <span className="block text-[0.8125rem] text-ink/40">
+                      +{rad.test_runs} test
+                    </span>
+                  ) : null}
+                </Tal>
                 <Tal>{((rad.tokens_in ?? 0) + (rad.tokens_out ?? 0)).toLocaleString("sv-SE")}</Tal>
                 <Tal>{formateraPris(Math.round(ekonomi.kostnad))}</Tal>
                 <Tal>

@@ -1163,7 +1163,11 @@ class MemoryStorage:
                 {
                     **tenant,
                     "tickets": sum(1 for t in self.tickets.values() if t["tenant_id"] == tid),
-                    "runs": len(runs),
+                    # Speglar Postgres exakt. Att räkna alla här och filtrera
+                    # där hade gett en grön svit mot en vy som visar fel tal i
+                    # drift — se doktrinen i storage/base.py.
+                    "runs": sum(1 for r in runs if not r.get("is_test")),
+                    "test_runs": sum(1 for r in runs if r.get("is_test")),
                     "tokens_in": sum(r.get("tokens_in") or 0 for r in runs),
                     "tokens_out": sum(r.get("tokens_out") or 0 for r in runs),
                     "errors": sum(

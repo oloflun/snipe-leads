@@ -486,7 +486,13 @@ class Storage(Protocol):
 
     async def list_tenants_with_stats(self) -> list[dict[str, Any]]:
         """Alla tenants med nyckeltal: ärenden, körningar, tokens, senaste
-        aktivitet."""
+        aktivitet.
+
+        `runs` räknar KUNDVOLYM, alltså inte rader med `is_test`. `test_runs`
+        redovisar våra egna provkörningar separat — de göms inte, de räknas bara
+        inte som något kunden gjort. Tokens räknar båda: en provkörning kostar
+        lika mycket som en riktig.
+        """
         ...
 
     async def list_agent_runs_all(

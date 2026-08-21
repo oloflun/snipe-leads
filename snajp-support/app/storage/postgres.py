@@ -1544,6 +1544,7 @@ class PostgresStorage:
                 select t.id, t.slug, t.name, t.active, t.created_at,
                        coalesce(k.tickets, 0)      as tickets,
                        coalesce(r.runs, 0)         as runs,
+                       coalesce(r.test_runs, 0)    as test_runs,
                        coalesce(r.tokens_in, 0)    as tokens_in,
                        coalesce(r.tokens_out, 0)   as tokens_out,
                        coalesce(e.errors, 0)       as errors,
@@ -1553,7 +1554,17 @@ class PostgresStorage:
                   select count(*) as tickets from ss_tickets where tenant_id = t.id
                 ) k on true
                 left join lateral (
-                  select count(*) as runs,
+                  -- `runs` är KUNDVOLYM och räknar inte våra egna provkörningar.
+                  -- Kolumnen finns sedan migration 036 men var alltid false
+                  -- eftersom ingen anropsplats satte den; nu när den fylls i
+                  -- kan siffran betyda det den påstår.
+                  --
+                  -- Tokens räknar däremot ALLA körningar. En provkörning kostar
+                  -- lika mycket som en riktig, och en kostnadssiffra som döljer
+                  -- vår egen förbrukning är en kostnadssiffra man planerar fel
+                  -- efter.
+                  select count(*) filter (where not is_test) as runs,
+                         count(*) filter (where is_test) as test_runs,
                          sum(tokens_in) as tokens_in,
                          sum(tokens_out) as tokens_out,
                          max(created_at) as last_activity

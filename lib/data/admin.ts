@@ -61,7 +61,10 @@ export type TenantRow = {
   slug: string | null;
   name: string;
   tickets: number;
+  /** KUNDVOLYM. Räknar inte rader med `is_test` — se list_tenants_with_stats. */
   runs: number;
+  /** Våra egna provkörningar. Redovisas separat, göms inte. */
+  test_runs?: number;
   tokens_in: number;
   tokens_out: number;
   errors: number;

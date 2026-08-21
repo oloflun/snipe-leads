@@ -135,16 +135,29 @@ await bild(page, "08-kund-nekas-admin");
 
 // --- 5. Kunden når sin egen arbetsyta ------------------------------------
 console.log("\n=== Kundens egen arbetsyta ===");
-for (const v of ["/dashboard", "/dashboard/leads", "/dashboard/leads/kontroll",
-                 "/dashboard/emails", "/dashboard/support", "/settings"]) {
+// Väg → var man SKA hamna. Två av dem är inte sig själva, och båda är
+// avsiktliga 308:or i next.config.ts: "Målgrupp och autonomi" är en
+// inställning och flyttade in i inställningarna. Listan sa tidigare att varje
+// väg skulle landa på sig själv, så den flaggade en dokumenterad omdirigering
+// som en avvikelse — ett QA-skript som ropar varg slutar man läsa.
+const KUNDVAGAR = [
+  ["/dashboard", "/dashboard"],
+  ["/dashboard/leads", "/dashboard/leads"],
+  ["/dashboard/leads/kontroll", "/settings/leads"],
+  ["/dashboard/emails", "/dashboard/emails"],
+  ["/dashboard/support", "/dashboard/support"],
+  ["/settings", "/settings"]
+];
+for (const [v, forvantat] of KUNDVAGAR) {
   const r = await page.goto(BASE + v, { waitUntil: "domcontentloaded", timeout: 45000 });
   await page.waitForTimeout(400);
   const info = await page.evaluate(() => ({
     hamnade: location.pathname,
     saknas: /Sidan finns inte/.test(document.body.innerText)
   }));
-  rad(r?.status() === 200 && !info.saknas && info.hamnade === v,
-      `${v.padEnd(26)} → ${r?.status()} ${info.hamnade}`);
+  rad(r?.status() === 200 && !info.saknas && info.hamnade === forvantat,
+      `${v.padEnd(26)} → ${r?.status()} ${info.hamnade}` +
+      (forvantat === v ? "" : `   (förväntat ${forvantat})`));
   await bild(page, `09-kund${v.replace(/\//g, "-")}`);
 }
 
