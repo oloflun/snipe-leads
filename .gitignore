@@ -66,3 +66,6 @@ screenshots/railway-dev/
 # adminens mejladress — CLAUDE.md: inga skärmdumpar med kunddata. Demovyns
 # bilder är däremot påhittad Nordlys-data och får ligga kvar som bevis.
 screenshots/**/*admin*.png
+
+# Käll-hemligheter för scripts/migrera_till_railway.py — aldrig i repot.
+scripts/.kalla.env
