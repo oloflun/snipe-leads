@@ -563,7 +563,7 @@ def cmd_push_render() -> None:
         request = urllib.request.Request(
             f"{API}{path}",
             method=method,
-            data=json.dumps(body).encode("utf-8"),
+            data=json.dumps(body).encode("utf-8") if body is not None else None,
             headers={
                 "Authorization": f"Bearer {token}",
                 "Content-Type": "application/json",
@@ -572,26 +572,51 @@ def cmd_push_render() -> None:
         )
         try:
             with urllib.request.urlopen(request, timeout=60) as response:
-                return response.status, json.load(response)
+                text = response.read().decode("utf-8") or "{}"
+                return response.status, json.loads(text)
         except urllib.error.HTTPError as error:
             return error.code, {"fel": error.read().decode()[:160]}
         except Exception as error:  # nätverk, inte HTTP — ska inte se ut som avslag
             return -1, {"fel": str(error)[:160]}
 
+    def nuvarande(service_id: str) -> dict[str, str]:
+        """Vad tjänsten redan har. Sidan kommer som {envVar: {key, value}}."""
+        status, svar = anrop("GET", f"/services/{service_id}/env-vars?limit=100", None)
+        if not 0 < status < 300 or not isinstance(svar, list):
+            return {}
+        ut = {}
+        for rad in svar:
+            post = rad.get("envVar", rad) if isinstance(rad, dict) else {}
+            if post.get("key") is not None:
+                ut[post["key"]] = post.get("value") or ""
+        return ut
+
     misslyckades = False
     for service_name, (service_id, _url) in RENDER_SERVICES.items():
         print()
         print(f"{service_name}:")
+        redan = nuvarande(service_id)
+        andrade = 0
         for name in sorted(payload):
+            if redan.get(name) == payload[name]:
+                print(f"  {name} -> oförändrad")
+                continue
             status, svar = anrop("PUT", f"/services/{service_id}/env-vars/{name}", {"value": payload[name]})
             if 0 < status < 300:
-                print(f"  {name} -> OK")
+                print(f"  {name} -> satt")
+                andrade += 1
             else:
                 print(f"  {name} -> FEL {status} {svar.get('fel', '')}")
                 misslyckades = True
-        # Render deployar om av sig själv när en env-variabel ändras, men bara
-        # när autoDeploy är på — och den har varit avslagen på previewen förr.
-        # Ett explicit anrop kostar ingenting när tjänsten redan bygger.
+
+        # Ingen omdeploy när ingenting ändrats. Produktionen ligger bakom den
+        # här slingan, och en kallstart är ett verkligt avbrott för den kund som
+        # råkar skriva just då — att betala det för en no-op är fel pris.
+        if not andrade:
+            print("  deploy: hoppar över, inget ändrades")
+            continue
+        # Render deployar om av sig själv när en variabel ändras, men bara när
+        # autoDeploy är på — och den har varit avslagen på previewen förr.
         status, svar = anrop("POST", f"/services/{service_id}/deploys", {})
         if 0 < status < 300:
             print(f"  deploy: {svar.get('id', status)}")

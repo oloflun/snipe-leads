@@ -318,7 +318,7 @@ def main() -> None:
         if not args.apply:
             sys.exit("--tenant snajp kräver --apply: nyckeln måste hämtas innan något kan läsas.")
         status, svar = Api(bas, master, skarpt=True).anrop(
-            "POST", "/api/keys", {"slug": "snajp", "name": "Snajp"}
+            "POST", "/api/keys", {"tenant_name": "Snajp", "slug": "snajp"}
         )
         if not 200 <= status < 300:
             sys.exit(f"AVBRYTER: kunde inte hämta nyckel för snajp ({status}) — {svar.get('fel', '')}")
@@ -340,6 +340,19 @@ def main() -> None:
     print()
 
     seeda_kb(api, artiklar)
+
+    # Resten är NORDLYS HANDELS innehåll — affärskontexten beskriver deras
+    # sortiment, ICP:n deras målgrupp, röstdokumentet deras ton. Att skriva det
+    # i Snajps egen tenant hade gett vår leads-agent instruktionen att sälja
+    # krukor, och den sortens fel ser rimligt ut i varje enskild ruta.
+    #
+    # `--tenant snajp` seedar därför BARA kunskapsbasen. Snajps affärskontext
+    # är verklig och skrivs i produkten, inte av ett demoskript.
+    if args.tenant != DEMO_SLUG:
+        print()
+        print("Bara kunskapsbasen seedas för snajp — resten är Nordlys innehåll.")
+        return
+
     seeda_kontextdokument(api, "product_marketing", AFFARSKONTEXT, "Affärskontext")
     seeda_soul(api)
     seeda_config(api)
