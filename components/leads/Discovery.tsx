@@ -17,7 +17,7 @@ import { LeadsRunForm } from "@/components/leads/LeadsRunForm";
  * riktig körning.
  */
 export function Discovery({ demo = false }: Readonly<{ demo?: boolean }>) {
-  const { isDemo } = useDashboard();
+  const { isDemo, vy } = useDashboard();
 
   return (
     <section aria-labelledby="discovery">
@@ -30,7 +30,9 @@ export function Discovery({ demo = false }: Readonly<{ demo?: boolean }>) {
         </p>
       </div>
 
-      <LeadsRunForm isTest={isDemo} demo={demo} />
+      {/* Demovyn räknas som testkörning: den är vår egen provkörning mot
+          demokontot och ska inte synas som kundvolym i portföljvyn. */}
+      <LeadsRunForm isTest={isDemo || vy === "demo"} demo={demo} />
     </section>
   );
 }

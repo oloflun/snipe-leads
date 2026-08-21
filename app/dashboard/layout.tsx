@@ -23,14 +23,24 @@ export default async function DashboardLayout({
   // den kan bara ställas i en server-komponent.
   //
   // Ingen loop: /admin använder inte den här layouten.
-  if (state.isPlatformAdmin) {
+  // ... men bara i det SKARPA läget. Står vyväxeln på Demo är hela poängen att
+  // adminen ska stå kvar här, i kundens skal, utan adminflikar — se lib/vy.ts.
+  // Ingen loop: /admin skickar tillbaka hit i exakt det motsatta fallet, och
+  // `vy` har bara två värden.
+  if (state.isPlatformAdmin && state.vy === "admin") {
     redirect("/admin");
   }
 
   // Grinden läses här och inte i proxyn: onboardingstatus är föränderligt
   // tillstånd, och ett anspråk i sessions-token blir inaktuellt utan att
   // något felar. Se lib/auth/onboarding-gate.ts.
-  await requireOnboarded();
+  //
+  // Hoppas över i demovyn: grinden mäter ADMINENS arbetsyta, och demovyn
+  // handlar inte om den. En admin med ofullständig egen onboarding hade
+  // annars studsat till /onboarding varje gång de försökte visa produkten.
+  if (state.vy !== "demo") {
+    await requireOnboarded();
+  }
 
   return <DashboardProvider state={state}>{children}</DashboardProvider>;
 }

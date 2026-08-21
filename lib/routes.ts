@@ -4,6 +4,27 @@ import type { CopyKey, Localized } from "@/lib/i18n";
  * Snajp ships two products. A workspace may own either or both; the server
  * decides, and the nav only ever renders what the workspace owns.
  */
+/**
+ * Vad LÄGET visar just nu, inom det arbetsytan har rätt till.
+ *
+ * Typen bor här och inte i DashboardContext för att servern måste kunna läsa
+ * den: läget ligger i en cookie, och `resolveDashboardState` avgör startvärdet
+ * innan något renderas. En typ i en "use client"-modul går att importera men
+ * signalerar fel hemvist.
+ */
+export type Scope = ProductKey | "both";
+
+/**
+ * Cookien läget bor i. Låg tidigare i localStorage, vilket gjorde den osynlig
+ * för servern — och därmed kunde `/settings/*` och `/admin/*`, som renderas på
+ * servern, aldrig grinda på annat än rättighet. Att klicka "Support" ändrade
+ * alltså bara arbetsytans flikar, inte inställningarna bakom dem.
+ *
+ * Inte httpOnly: klienten skriver den när flikarna klickas. Den är ett
+ * visningsval, inte ett behörighetsval — grinden som räknar är `products`.
+ */
+export const SCOPE_COOKIE = "snajp.scope";
+
 export type ProductKey = "leads" | "support";
 
 export const productKeys = ["leads", "support"] as const;
@@ -126,6 +147,12 @@ export type SettingsRoute = {
   label: Localized;
   /** Saknas = delad. Annars renderas posten bara för den produkten. */
   product?: ProductKey;
+  /**
+   * Döljs i demovyn. Gäller idag bara Team, och skälet är konkret: sidan listar
+   * arbetsytans riktiga medlemsadresser, alltså Snajps egna, och demovyn visas
+   * för utomstående.
+   */
+  doldIDemo?: boolean;
 };
 
 export type SettingsGroup = {
@@ -169,20 +196,53 @@ export const settingsGroups: SettingsGroup[] = [
     label: { sv: "Kontot", en: "Account" },
     routes: [
       { href: "/settings", label: { sv: "Företaget", en: "Company" } },
-      { href: "/settings/team", label: { sv: "Team", en: "Team" } },
+      { href: "/settings/team", label: { sv: "Team", en: "Team" }, doldIDemo: true },
       { href: "/settings/billing", label: { sv: "Plan och fakturering", en: "Plan and billing" } },
       { href: "/settings/addons", label: { sv: "Tillägg", en: "Add-ons" } }
     ]
   }
 ];
 
-export function settingsGroupsForProducts(products: readonly ProductKey[]): SettingsGroup[] {
+/**
+ * Menyn, filtrerad på tre oberoende saker.
+ *
+ *  * `products`   — vad arbetsytan får använda. Rättighet, serverbeslut.
+ *  * `visar`      — vad LÄGET visar just nu (Duo / Leads / Support). Menyn
+ *                   listade tidigare bara på rättighet, så den som smalnade av
+ *                   vyn till Support fick fortfarande se leads-agentens
+ *                   inställningar i sidokolumnen — vilket motsäger kontrollen
+ *                   användaren precis rörde.
+ *  * `vy`         — demovyn döljer poster som avslöjar VÅR arbetsyta.
+ *
+ * `visar` är valfri av en anledning: `Vy`-typen bor i lib/vy.ts som är
+ * server-only, och den här filen importeras av klientkomponenter.
+ */
+export function settingsGroupsForProducts(
+  products: readonly ProductKey[],
+  options: {
+    visar?: (product: ProductKey) => boolean;
+    vy?: "admin" | "demo";
+  } = {}
+): SettingsGroup[] {
+  const { visar, vy } = options;
   return settingsGroups
     .map((group) => ({
       ...group,
-      routes: group.routes.filter((route) => !route.product || products.includes(route.product))
+      routes: group.routes.filter((route) => {
+        if (route.doldIDemo && vy === "demo") return false;
+        if (!route.product) return true;
+        if (!products.includes(route.product)) return false;
+        return visar ? visar(route.product) : true;
+      })
     }))
     .filter((group) => group.routes.length > 0);
+}
+
+/** Sektioner demovyn inte visar. Speglar `doldIDemo` ovan — grinden sitter i SettingsSection. */
+const demoDoldaSektioner = new Set(["team"]);
+
+export function sektionDoldIDemo(section: string): boolean {
+  return demoDoldaSektioner.has(section);
 }
 
 /**
@@ -239,6 +299,29 @@ const settingsSectionProduct: Partial<Record<SettingsSectionKey, ProductKey>> = 
 export function settingsSectionForSlug(slug: readonly string[]): SettingsSectionKey | null {
   if (slug.length > 1) return null;
   return settingsSections[slug[0] ?? ""] ?? null;
+}
+
+/**
+ * Vilken produkt inställningssidan på `pathname` tillhör, eller null.
+ *
+ * Tar båda ytorna: `/settings/leads` och `/admin/installningar/leads` är samma
+ * sida. Finns för att skalet ska kunna dirigera bort den som smalnat av läget
+ * medan de står på en sida läget inte längre visar — utan att varje anropsplats
+ * behöver känna till vilken yta den renderas på.
+ */
+export function produktForInstallningsvag(pathname: string): ProductKey | null {
+  const rot = pathname.startsWith("/admin/installningar")
+    ? "/admin/installningar"
+    : pathname.startsWith("/settings")
+      ? "/settings"
+      : null;
+  if (rot === null) return null;
+
+  const rest = pathname.slice(rot.length).replace(/^\//, "");
+  if (!rest) return null;
+
+  const section = settingsSectionForSlug([rest]);
+  return section ? productForSettingsSection(section) : null;
 }
 
 export function productForSettingsSection(section: SettingsSectionKey): ProductKey | null {

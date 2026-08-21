@@ -1,6 +1,6 @@
 "use client";
 
-import { LogOut, ShieldCheck } from "lucide-react";
+import { LogOut } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -8,9 +8,10 @@ import { Logo } from "@/components/Logo";
 import { AgentMenu } from "@/components/snajp/AgentMenu";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { signOut } from "@/lib/actions/auth";
-import { ScopeSwitch } from "@/components/dashboard/ScopeSwitch";
+import { VyVaxel } from "@/components/VyVaxel";
 import { useLocale } from "@/lib/i18n";
-import { routesForProducts, tillAdminvag } from "@/lib/routes";
+import { produktForInstallningsvag, routesForProducts, tillAdminvag } from "@/lib/routes";
+import type { Scope } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
 /**
@@ -41,6 +42,24 @@ const DEMO_VAGAR: Record<string, string> = {
   "/dashboard/analytics": "/demo/analytics",
   "/dashboard/assistant": "/demo/assistant",
   "/dashboard/support": "/demo/support"
+};
+
+/**
+ * Flikarna ÄR lägesväxeln.
+ *
+ * Tidigare fanns en separat kontroll (ScopeSwitch) bredvid flikraden, och den
+ * gjorde en annan sak än flikarna: "Leads" tog dig till leads-sidan men lämnade
+ * resten av appen i Duo, så inställningarna bakom fliken visade fortfarande
+ * båda agenterna. Två kontroller för en sak, där den ena bara gjorde halva
+ * jobbet.
+ *
+ * Nu smalnar Leads och Support av hela vyn, och Översikt tar tillbaka Duo.
+ * Kartan är explicit: en route utan post här rör inte läget.
+ */
+export const FLIKENS_LAGE: Record<string, Scope> = {
+  "/dashboard": "both",
+  "/dashboard/leads": "leads",
+  "/dashboard/support": "support"
 };
 
 function iDemolage(pathname: string): boolean {
@@ -82,7 +101,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   const pathname = usePathname();
   const router = useRouter();
   const { t, locale, toggleLocale } = useLocale();
-  const { products, workspaceName, availableScopes, shows, isPlatformAdmin, isDemo, signedIn } =
+  const { products, workspaceName, shows, isDemo, signedIn, vy, availableScopes, setScope } =
     useDashboard();
 
   // Entitlement decides what exists; the scope switch decides what is on screen
@@ -114,11 +133,21 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
     (route) => route.href === "/dashboard" || !pathname.startsWith(route.href)
   );
 
+  // Samma resonemang för inställningarna, som skyddet aldrig täckte: filtret
+  // där grindade på `products` (rättighet) och aldrig på läget, så den som
+  // smalnade av till Support stod kvar på /settings/leads med en sidokolumn
+  // som inte längre listade sidan de befann sig på. Gäller båda ytorna —
+  // hjälparen känner igen /admin/installningar också.
+  const installningsProdukt = produktForInstallningsvag(pathname);
+  const strandadIInstallningar = installningsProdukt !== null && !shows(installningsProdukt);
+
   useEffect(() => {
     if (pathname.startsWith("/dashboard/") && stranded) {
       router.replace("/dashboard");
+    } else if (strandadIInstallningar) {
+      router.replace(pathname.startsWith("/admin/") ? "/admin/installningar" : "/settings");
     }
-  }, [pathname, stranded, router]);
+  }, [pathname, stranded, strandadIInstallningar, router]);
 
   // Inuti adminytan äger AdminShell skalet, och det här ska bara vara innehåll.
   //
@@ -150,7 +179,10 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
           ) : null}
 
           <div className="ml-auto flex items-center gap-1.5">
-            {availableScopes.length > 1 ? <ScopeSwitch /> : null}
+            {/* Admin / Demo. Ersätter både den gamla /admin-länken längst ut i
+                flikraden och läges­växlaren: läget styrs numera av Leads- och
+                Support-flikarna själva, se nedan. */}
+            <VyVaxel />
             <button
               type="button"
               onClick={toggleLocale}
@@ -199,6 +231,15 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                 <Link
                   key={route.href}
                   href={demoAnpassa(route.href, pathname)}
+                  // Läget sätts vid klicket, inte i en effekt på den nya sidan:
+                  // en effekt hade hunnit rendera målsidan i det gamla läget
+                  // först, och bytet hade synts som ett hopp.
+                  onClick={() => {
+                    const lage = FLIKENS_LAGE[route.href];
+                    if (lage && availableScopes.includes(lage)) {
+                      setScope(lage);
+                    }
+                  }}
                   aria-current={active ? "page" : undefined}
                   className={cn(
                     "focus-ring inline-flex min-h-11 shrink-0 items-center rounded-input px-3 text-sm font-medium transition-colors",
@@ -210,28 +251,6 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
               );
             })}
 
-            {/* Plattformsadmin. Sist och visuellt skild från produktnavigationen:
-                den leder ut ur den egna arbetsytan och in i ALLA kunders siffror,
-                och ska inte se ut som ännu en flik bland de andra.
-
-                Villkoret är en ledtråd, inte en grind. Grinden är
-                getPlatformAdmin() i app/admin/layout.tsx, som svarar 404 — en
-                manipulerad flagga ger alltså en länk till en 404, ingenting mer. */}
-            {isPlatformAdmin ? (
-              <Link
-                href="/admin"
-                aria-current={pathname.startsWith("/admin") ? "page" : undefined}
-                className={cn(
-                  "focus-ring ml-auto inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-input px-3 text-sm font-medium transition-colors",
-                  pathname.startsWith("/admin")
-                    ? "bg-ochre/15 text-ink"
-                    : "text-ochre hover:bg-ochre/10"
-                )}
-              >
-                <ShieldCheck className="h-4 w-4" aria-hidden />
-                Admin
-              </Link>
-            ) : null}
           </nav>
         </div>
       </header>
@@ -240,19 +259,23 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
         {/* Demo-banner: en demo-workspace ska veta vad den är och vad som
             begränsar den. Uppgraderingen till fullt konto (med planval) är
             uppskjuten — vägen ut är kontakt just nu. */}
-        {isDemo ? (
+        {isDemo || vy === "demo" ? (
           <div className="border-b border-ochre/30 bg-ochre/10">
             <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 md:px-6">
               <span className="kicker text-ochre">Demo</span>
               <span className="text-[13px] text-ink/70">
-                Du testar Snajp med ett begränsat antal körningar.
+                {vy === "demo"
+                  ? "Demokontot Nordlys Handel. Allt du gör här skrivs till demokontot, aldrig till en kund."
+                  : "Du testar Snajp med ett begränsat antal körningar."}
               </span>
-              <a
-                href="mailto:hej@snajp.se"
-                className="kicker ml-auto text-ochre underline underline-offset-4 hover:text-ink"
-              >
-                Kontakta oss
-              </a>
+              {vy === "demo" ? null : (
+                <a
+                  href="mailto:hej@snajp.se"
+                  className="kicker ml-auto text-ochre underline underline-offset-4 hover:text-ink"
+                >
+                  Kontakta oss
+                </a>
+              )}
             </div>
           </div>
         ) : null}

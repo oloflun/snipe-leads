@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getPlatformAdmin } from "@/lib/auth/admin";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { DashboardProvider } from "@/components/dashboard/DashboardContext";
@@ -43,6 +43,13 @@ export default async function AdminLayout({
   }
 
   const state = await resolveDashboardState();
+
+  // Demovyn har inga adminkontroller — då är AdminShell fel skal. Utan den här
+  // raden gick det att stå kvar i plattformsramen med demokontots nyckel,
+  // alltså adminflikar ovanpå någon annans data: den sämsta av två vyer.
+  if (state.vy === "demo") {
+    redirect("/dashboard");
+  }
 
   return (
     <DashboardProvider state={state}>

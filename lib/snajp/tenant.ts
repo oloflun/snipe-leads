@@ -1,6 +1,7 @@
 import { sqlAsUser } from "@/lib/db";
 import { getWorkspaceContext } from "@/lib/workspace";
 import { getTenant } from "@/lib/tenants";
+import { DEMO_TENANT_SLUG, aktivVy } from "@/lib/vy";
 
 /**
  * Arbetsytans egen backend-nyckel, för tenants utan configfil.
@@ -66,6 +67,40 @@ export async function requireSnajpTenant(): Promise<SnajpTenant> {
   }
 
   const { workspace, user } = context;
+
+  /**
+   * Demovyn — plattformsadmin, och ENBART plattformsadmin, mot demokontot.
+   *
+   * Grenen ligger före arbetsytans slug med flit: i demoläget ska ingen del av
+   * adminens egen tenant nås, inte heller om den råkar vara felkonfigurerad.
+   *
+   * `aktivVy()` slår upp `platform_admins` och failar stängt (se lib/vy.ts),
+   * så cookien i sig är inte ett tenant-byte. Det är hela skillnaden mot den
+   * bugg filens docstring ovan beskriver: där föll varje inloggad kund tillbaka
+   * på demonyckeln, här kan bara den som redan når /admin göra det, och bara
+   * mot en enda hårdkodad tenant.
+   *
+   * Nyckeln är demonyckeln. `SNAJP_INTERNAL_API_KEY` är samma sträng i den här
+   * miljön (se app/api/snajp-support/_lib.ts) och står kvar som reserv för att
+   * en saknad variabel annars gör demovyn oöppningsbar utan att säga varför.
+   */
+  if ((await aktivVy()) === "demo") {
+    const apiKey = process.env.SNAJP_DEMO_API_KEY || process.env.SNAJP_INTERNAL_API_KEY;
+    if (!apiKey) {
+      throw new SnajpTenantError(
+        503,
+        "SNAJP_DEMO_API_KEY är inte satt i den här miljön. Demovyn kan inte nå backenden förrän den finns."
+      );
+    }
+    return {
+      workspaceId: workspace.id,
+      slug: DEMO_TENANT_SLUG,
+      apiKey,
+      userId: user.id,
+      // Se lib/data/dashboard.ts: demovyn ska köra skarpt, inte med sänkt tak.
+      isDemo: false
+    };
+  }
 
   // Ingen slug betyder att workspacet aldrig kopplats till en kund i
   // ss_tenants. Att då tyst låna demo-tenantens data är precis felet vi

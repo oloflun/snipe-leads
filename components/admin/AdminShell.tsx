@@ -4,7 +4,8 @@ import { LogOut } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Logo } from "@/components/Logo";
-import { ScopeSwitch } from "@/components/dashboard/ScopeSwitch";
+import { FLIKENS_LAGE } from "@/components/AppShell";
+import { VyVaxel } from "@/components/VyVaxel";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { AgentMenu } from "@/components/snajp/AgentMenu";
 import { signOut } from "@/lib/actions/auth";
@@ -71,7 +72,7 @@ export function AdminShell({
 }: Readonly<{ email: string | null; children: React.ReactNode }>) {
   const pathname = usePathname();
   const { t, text, locale, toggleLocale } = useLocale();
-  const { products, workspaceName, availableScopes, shows } = useDashboard();
+  const { products, workspaceName, shows, availableScopes, setScope } = useDashboard();
 
   // Samma entitlement- och scope-filter som kundens nav. Adminytan är en
   // superset av arbetsytan, inte en genväg förbi dess regler.
@@ -79,6 +80,10 @@ export function AdminShell({
     .filter((route) => route.product === "shared" || shows(route.product))
     .map((route) => ({
       href: tillAdminvag(route.href),
+      // Samma flik, samma läge. Utan den här raden byter Leads-fliken vy på
+      // kundens yta men inte på adminens, och samma knapp gör då olika saker
+      // beroende på var man står.
+      lage: FLIKENS_LAGE[route.href],
       // "Min arbetsyta" och inte t("nav.dashboard") ("Översikt"): plattforms-
       // raden har redan en flik som heter Översikt, och två flikar med samma
       // namn i samma header är inte en etikett utan en gissningslek.
@@ -113,7 +118,10 @@ export function AdminShell({
           ) : null}
 
           <div className="ml-auto flex items-center gap-1.5">
-            {availableScopes.length > 1 ? <ScopeSwitch /> : null}
+            {/* Vägen till demovyn. Samma knapp som i kundskalet, för att det
+                ska vara samma knapp på båda ytorna — en växel som ser olika ut
+                beroende på var man står är en växel man letar efter. */}
+            <VyVaxel />
 
             <button
               type="button"
@@ -181,6 +189,11 @@ export function AdminShell({
                   <Link
                     key={flik.href}
                     href={flik.href}
+                    onClick={() => {
+                      if (flik.lage && availableScopes.includes(flik.lage)) {
+                        setScope(flik.lage);
+                      }
+                    }}
                     aria-current={på ? "page" : undefined}
                     className={cn(
                       "focus-ring inline-flex min-h-11 shrink-0 items-center rounded-input px-3 text-sm font-medium transition-colors",

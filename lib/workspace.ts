@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { auth } from "@/lib/auth";
 import { hasDatabase, sqlAsUser } from "@/lib/db";
 import type { BusinessContext, Profile, Workspace } from "@/lib/database.types";
@@ -43,7 +44,14 @@ export async function getBusinessContextForWorkspace(
   return rows[0] ?? null;
 }
 
-export async function getWorkspaceContext(): Promise<WorkspaceContext | null> {
+/**
+ * Avdupliceras per request med React `cache`. Utan den ställer en enda sidladdning
+ * frågan fyra gånger: layouten, `resolveDashboardState`, `getPlatformAdmin` och
+ * `aktivVy` behöver alla samma svar, och sessionen kan inte ändras mitt i ett
+ * request. Fyra identiska rundturer till databasen är inte fel svar, bara
+ * betalda tre gånger om.
+ */
+export const getWorkspaceContext = cache(async function getWorkspaceContext(): Promise<WorkspaceContext | null> {
   // Utan databas finns per definition ingen inloggad användare. Att returnera
   // null låter varje anropare falla tillbaka på sin anonyma väg; att kasta här
   // tog förut ner publika sidor som aldrig behövde en session.
@@ -92,7 +100,7 @@ export async function getWorkspaceContext(): Promise<WorkspaceContext | null> {
     workspace: row.workspace,
     businessContext: row.business_context ?? null
   };
-}
+});
 
 export async function hasCompletedOnboarding(userId: string): Promise<boolean> {
   const rows = await sqlAsUser<{ ok: boolean }>(

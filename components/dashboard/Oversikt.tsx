@@ -541,7 +541,7 @@ export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
     // Sex oberoende hämtningar. En som faller tar inte med sig de andra.
     void Promise.all([
       hamta<{ prospects?: Prospekt[] }>("/leads/prospects"),
-      hamta<{ runs?: Korning[] }>(`/leads/runs?agent_type=leads&limit=${KORNINGSTAK}`),
+      hamta<{ runs?: Korning[] }>(`/leads/runs?limit=${KORNINGSTAK}`),
       hamta<{ items?: Koartikel[] }>("/leads/queue"),
       hamta<LeadsConfig>("/leads/config"),
       hamta<{ articles?: unknown[] }>("/kb"),
@@ -549,7 +549,15 @@ export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
     ]).then(([p, r, q, c, kb, o]) => {
       if (avbruten) return;
       setProspekt(p ? (p.prospects ?? []) : null);
-      setKorningar(r ? (r.runs ?? []) : null);
+      // Filtret satt tidigare i frågan, som `agent_type=leads`. Pipelinen
+      // skriver `leads_research` och `leads_outreach` (leads_agent.py) — den
+      // exakta strängen "leads" skrivs av ingen kodväg alls. Alltså kom noll
+      // rader tillbaka, och varje körningsräknare i översikten stod på noll
+      // hur mycket som än kördes. Backendens fråga tar ett agent_type, inte
+      // ett prefix, så urvalet görs här i stället.
+      setKorningar(
+        r ? (r.runs ?? []).filter((k) => (k.agent_type ?? "").startsWith("leads")) : null
+      );
       setKo(q ? (q.items ?? []) : null);
       setConfig(c);
       setKbAntal(kb ? (kb.articles?.length ?? 0) : null);

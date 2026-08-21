@@ -29,10 +29,14 @@ import { cn } from "@/lib/utils";
 export function SettingsNav() {
   const pathname = usePathname();
   const vag = useArbetsvag();
-  const { products } = useDashboard();
+  const { products, shows, vy } = useDashboard();
   const { text } = useLocale();
 
-  const grupper = settingsGroupsForProducts(products);
+  // Tre filter, tre olika frågor: rättighet (products), vad läget visar just nu
+  // (shows) och vad demovyn inte får avslöja (vy). Kolumnen listade tidigare
+  // bara på det första, så Support-läget visade fortfarande leads-agentens
+  // inställningar — och Team, med våra egna mejladresser, syntes i demon.
+  const grupper = settingsGroupsForProducts(products, { visar: shows, vy });
 
   return (
     <nav aria-label="Inställningar" className="grid gap-7">

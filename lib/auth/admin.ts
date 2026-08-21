@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { sqlAsUser } from "@/lib/db";
 import { getWorkspaceContext } from "@/lib/workspace";
 
@@ -42,7 +43,7 @@ export type PlatformAdmin = {
  * betyder — `/admin/layout.tsx` svarar 404, inte 403, eftersom ett 403 bekräftar
  * att ytan finns.
  */
-export async function getPlatformAdmin(): Promise<PlatformAdmin | null> {
+export const getPlatformAdmin = cache(async function getPlatformAdmin(): Promise<PlatformAdmin | null> {
   const context = await getWorkspaceContext();
   if (!context) {
     return null;
@@ -51,4 +52,4 @@ export async function getPlatformAdmin(): Promise<PlatformAdmin | null> {
     return null;
   }
   return { userId: context.user.id, email: context.user.email };
-}
+});

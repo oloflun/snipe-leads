@@ -288,9 +288,12 @@ async def research_step(
     if not await storage.get_prospect(tenant["tenant_id"], payload.prospect_id):
         raise HTTPException(status_code=404, detail="Prospektet finns inte.")
 
-    context_pack, missing = await build_context_pack(
-            storage, tenant["tenant_id"], overrides=overrides
-        )
+    # Ingen overrides-parameter: ResearchStepRequest har bara prospect_id och
+    # brief. Raden stod tidigare med `overrides=overrides` — en variabel som
+    # aldrig bands i funktionen, alltså NameError och 500 på VARJE anrop med
+    # skarp nyckel. Ingen test nådde routen, och simuleringsläget svarar 503
+    # innan den raden, så sviten var grön.
+    context_pack, missing = await build_context_pack(storage, tenant["tenant_id"])
     result = await run_research_step(
         storage,
         tenant["tenant_id"],
@@ -552,6 +555,7 @@ async def start_batch_run(
                 prospect_id=prospect["id"],
                 scope=payload.scope,
                 overrides=overrides,
+                is_test=payload.is_test,
             )
         )
         jobs.append({"job_id": job_id, "prospect_id": prospect["id"]})
@@ -570,12 +574,20 @@ async def start_batch_run(
 async def _run_batch_prospect(
     app_state, job_id: str, tenant: dict, *, prospect_id: str, scope: str,
     overrides: dict | None = None,
+    is_test: bool = False,
 ) -> None:
     from ..agent.leads_agent import run_research_step
 
     storage = app_state.storage
     try:
-        context_pack, missing = await build_context_pack(storage, tenant["tenant_id"])
+        # `overrides` togs emot av funktionen men skickades aldrig vidare, så
+        # varje jobb i batchen kördes mot den SPARADE ICP:n oavsett vad
+        # formuläret angav — och svaret ekade ändå tillbaka överskrivningarna
+        # som om de gällt. Ett tyst fel: utfallet såg rimligt ut, det svarade
+        # bara på fel fråga.
+        context_pack, missing = await build_context_pack(
+            storage, tenant["tenant_id"], overrides=overrides
+        )
         result = await run_research_step(
             storage,
             tenant["tenant_id"],
@@ -583,6 +595,7 @@ async def _run_batch_prospect(
             tenant_name=tenant["tenant_name"],
             context_pack=context_pack,
             brief="",
+            is_test=is_test,
         )
         result["onboarding_missing"] = list(missing)
         result["prospect_id"] = prospect_id

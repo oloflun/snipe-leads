@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { SettingsView } from "@/components/WorkspaceViews";
 import { resolveDashboardState } from "@/lib/data/dashboard";
-import { productForSettingsSection, settingsSectionForSlug } from "@/lib/routes";
+import { productForSettingsSection, sektionDoldIDemo, settingsSectionForSlug } from "@/lib/routes";
 
 /**
  * Inställningarnas dispatcher — EN sida, två ytor.
@@ -30,12 +30,17 @@ export async function SettingsSection({ slug = [] }: Readonly<{ slug?: string[] 
   // Grinden. Att gruppen inte renderas i menyn för en supportkund hindrar
   // ingen från att skriva /settings/soul i adressfältet — det här är det lager
   // som faktiskt säger nej, och det körs på servern.
+  const state = await resolveDashboardState();
+
   const product = productForSettingsSection(section);
-  if (product) {
-    const { products } = await resolveDashboardState();
-    if (!products.includes(product)) {
-      notFound();
-    }
+  if (product && !state.products.includes(product)) {
+    notFound();
+  }
+
+  // Demovyn döljer Team i menyn. Att bara dölja den hade lämnat adressen öppen,
+  // och den sidan listar VÅRA mejladresser för någon vi visar produkten för.
+  if (state.vy === "demo" && sektionDoldIDemo(section)) {
+    notFound();
   }
 
   return <SettingsView section={section} />;

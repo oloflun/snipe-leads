@@ -288,6 +288,11 @@ async def run_research_step(
     tenant_name: str,
     context_pack: str,
     brief: str,
+    # Markerar raden i agent_runs som vår egen provkörning. Kolumnen finns
+    # sedan migration 036, men ingen kodväg satte den: varje körning skrevs
+    # med default false, och portföljvyn räknade alltså in vårt eget provande
+    # som kundvolym. Se `is_test` i LeadsBatchRequest.
+    is_test: bool = False,
 ) -> dict[str, Any]:
     """Fas B för ETT prospekt: åtta skill-steg, ett LLM-anrop vardera."""
     started = time.monotonic()
@@ -427,6 +432,7 @@ async def run_research_step(
         tokens_in=trace.total_tokens_in,
         tokens_out=trace.total_tokens_out,
         latency_ms=latency_ms,
+        is_test=is_test,
     )
 
     # Underlaget grundningsgrinden (W5) mäter utkastets påståenden mot.
@@ -488,6 +494,7 @@ async def run_outreach_draft(
     # kunna köras DAGAR efter researchen behövs persistens — då är tabellen
     # rätt form. Ingen har uttryckt det behovet 2026-08-14.
     research_evidence: tuple[str, ...] = (),
+    is_test: bool = False,
 ) -> dict[str, Any]:
     """Fas C: fyra skill-steg, sedan köar KODEN utkastet (INV-SEC-004 —
     modellen har inget sändverktyg och kan inte köa själv)."""
@@ -660,6 +667,7 @@ async def run_outreach_draft(
         tokens_in=trace.total_tokens_in,
         tokens_out=trace.total_tokens_out,
         latency_ms=latency_ms,
+        is_test=is_test,
     )
 
     return {

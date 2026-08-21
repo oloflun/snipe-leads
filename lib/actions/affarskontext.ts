@@ -1,8 +1,10 @@
 "use server";
 
 import { SNAJP_SUPPORT_URL } from "@/app/api/snajp-support/_lib";
+import { readJson } from "@/lib/http/json";
 import { sparaBusinessContext } from "@/lib/data/business-context";
 import { requireSnajpTenant } from "@/lib/snajp/tenant";
+import { aktivVy } from "@/lib/vy";
 import { getBusinessContextForWorkspace, getWorkspaceContext } from "@/lib/workspace";
 
 /**
@@ -20,6 +22,15 @@ import { getBusinessContextForWorkspace, getWorkspaceContext } from "@/lib/works
  *
  * De kolumnerna läses därför in och skrivs tillbaka orörda. Fälten här är de
  * fyra ingen annan yta äger.
+ *
+ * ## Varför demovyn går en annan väg
+ *
+ * `business_contexts` är RLS-scopad mot ARBETSYTAN, inte mot tenanten. I
+ * demovyn är arbetsytan fortfarande adminens egen medan tenanten är
+ * demokontots — en skrivning hade alltså landat på Snajps rad medan agenten
+ * läser Nordlys, och formuläret hade visat Snajps svar i demokontots
+ * inställningar. Där är kontextdokumentet i backenden enda sanning, och det
+ * är ändå det enda agenten läser (se docstringen nedan).
  *
  * ## Varför kontextdokumentet skickas vidare
  *
@@ -45,7 +56,71 @@ export type AffarskontextResultat = {
   varning?: string;
 };
 
+//: Rubrikerna som skrivs till kontextdokumentet, och läses tillbaka ur det.
+//: EN karta, inte två listor: skrivningen och läsningen måste vara varandras
+//: inverser, och två separata listor glider isär vid första omformuleringen.
+const RUBRIKER: [keyof Affarskontextfalt, string][] = [
+  ["product", "Vad vi säljer"],
+  ["target_audience", "Vem vi säljer till"],
+  ["offer", "Erbjudande"],
+  ["cta", "Nästa steg vi vill ha"]
+];
+
+function tillDokument(input: Affarskontextfalt): string {
+  return RUBRIKER.map(([falt, rubrik]) => [rubrik, input[falt].trim()] as const)
+    .filter(([, varde]) => varde)
+    .map(([rubrik, varde]) => `${rubrik}: ${varde}`)
+    .join("\n\n");
+}
+
+function franDokument(content: string): Affarskontextfalt {
+  const falt: Affarskontextfalt = { product: "", target_audience: "", offer: "", cta: "" };
+  for (const stycke of content.split(/\n\n+/)) {
+    const traff = RUBRIKER.find(([, rubrik]) => stycke.startsWith(`${rubrik}: `));
+    if (traff) {
+      falt[traff[0]] = stycke.slice(traff[1].length + 2).trim();
+    }
+  }
+  return falt;
+}
+
+/** Senaste `product_marketing`-dokumentet från backenden, för demovyn. */
+async function hamtaFranAgenten(): Promise<Affarskontextfalt | null> {
+  try {
+    const tenant = await requireSnajpTenant();
+    const response = await fetch(
+      `${SNAJP_SUPPORT_URL}/api/leads/context-docs?kind=product_marketing`,
+      {
+        headers: { "X-API-Key": tenant.apiKey },
+        cache: "no-store",
+        signal: AbortSignal.timeout(60_000)
+      }
+    );
+    // readJson och inte response.json(): en sovande backend svarar med en
+    // HTML-sida medan den vaknar, och ett dött anrop svarar utan kropp alls.
+    // Båda ger "Unexpected end of JSON input" långt från orsaken (INV-API-001).
+    const data = await readJson<{ docs?: { content?: string; version?: number }[] }>(response);
+    if (!data) return { product: "", target_audience: "", offer: "", cta: "" };
+    // Högsta version, inte första eller sista i listan: Postgres sorterar
+    // `created_at desc` och MemoryStorage gör det inte, så en index-baserad
+    // gissning ger olika dokument i sviten och i drift. `version` räknas upp
+    // per (tenant, kind) av save_context_doc och är den ordning som gäller.
+    const senaste = [...(data.docs ?? [])].sort(
+      (a, b) => (b.version ?? 0) - (a.version ?? 0)
+    )[0]?.content;
+    return senaste
+      ? franDokument(senaste)
+      : { product: "", target_audience: "", offer: "", cta: "" };
+  } catch {
+    return null;
+  }
+}
+
 export async function hamtaAffarskontext(): Promise<Affarskontextfalt | null> {
+  if ((await aktivVy()) === "demo") {
+    return hamtaFranAgenten();
+  }
+
   const context = await getWorkspaceContext();
   if (!context) return null;
 
@@ -78,6 +153,13 @@ export async function sparaAffarskontext(
       success: false,
       error: "Skriv en rad om vad ni säljer. Det är det agenten ska sälja."
     };
+  }
+
+  // Demovyn: bara till agenten. Ett misslyckande är då ett riktigt fel — det
+  // finns ingen rad i arbetsytan som räddar texten om backenden inte svarar.
+  if ((await aktivVy()) === "demo") {
+    const varning = await skickaTillAgenten(input, produkt);
+    return varning ? { success: false, error: varning } : { success: true };
   }
 
   const befintlig = await getBusinessContextForWorkspace(context.workspace.id, context.user.id);
@@ -115,12 +197,7 @@ async function skickaTillAgenten(
   input: Affarskontextfalt,
   produkt: string
 ): Promise<string | undefined> {
-  const stycken = [
-    `Vad vi säljer: ${produkt}`,
-    input.target_audience.trim() ? `Vem vi säljer till: ${input.target_audience.trim()}` : null,
-    input.offer.trim() ? `Erbjudande: ${input.offer.trim()}` : null,
-    input.cta.trim() ? `Nästa steg vi vill ha: ${input.cta.trim()}` : null
-  ].filter(Boolean);
+  const dokument = tillDokument({ ...input, product: produkt });
 
   try {
     const tenant = await requireSnajpTenant();
@@ -129,7 +206,7 @@ async function skickaTillAgenten(
       headers: { "Content-Type": "application/json", "X-API-Key": tenant.apiKey },
       body: JSON.stringify({
         kind: "product_marketing",
-        content: stycken.join("\n\n"),
+        content: dokument,
         source: "settings/affarskontext"
       }),
       // Render och Railway kallstartar. En sparning som faller på en vaknande
