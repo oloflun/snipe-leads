@@ -58,12 +58,41 @@ export const shared = {
   //: köper av — och det står nu i stället. Efterlevnaden finns kvar, men i
   //: sidfoten där den hör hemma och med utrymme att förklaras.
   heroTrust: {
-    sv: "Svenskt grundat företag",
-    en: "Swedish founded company"
+    sv: "Utvecklat i Sverige",
+    en: "Built in Sweden"
   },
   demoLeads: { sv: "Prova leads-agenten", en: "Try the leads agent" },
   demoSupport: { sv: "Prova kundtjänstagenten", en: "Try the support agent" },
   footerKontakt: { sv: "Kontakt", en: "Contact" },
+  menyKontakt: { sv: "Kontakta oss", en: "Contact us" },
+  menyFragor: { sv: "Frågor och svar", en: "Questions and answers" },
+  menyVilka: { sv: "Vilka är vi", en: "Who we are" },
+  menyGdpr: { sv: "GDPR och data", en: "GDPR and data" },
+  menyEtikett: { sv: "Meny", en: "Menu" },
+  //: Avsnittet "Vilka är vi". Skrivet för den som undrar vem de skulle köpa av
+  //: — inte som en grundarberättelse. Svensk B2B väger vem som står bakom, och
+  //: den frågan besvaras inte av en produktbeskrivning.
+  vilkaRubrik: { sv: "Vilka är vi", en: "Who we are" },
+  vilkaRubrikStor: {
+    sv: "Ett litet svenskt bolag som bygger ett verktyg vi själva använder.",
+    en: "A small Swedish company building a tool we use ourselves."
+  },
+  vilkaText1: {
+    sv: "Snajp är byggt i Göteborg och Umeå av ett litet team. Vi säljer till svensk B2B, " +
+      "och vi använder båda agenterna i vår egen verksamhet — det är därför spärrarna finns " +
+      "där de finns: vi har själva stått med ett utkast som inte borde gå ut.",
+    en: "Snajp is built in Gothenburg and Umeå by a small team. We sell to Swedish B2B, and we " +
+      "run both agents in our own business — that is why the safeguards sit where they do: we " +
+      "have stood with a draft that should not go out."
+  },
+  vilkaText2: {
+    sv: "Vi tar hellre ett nej i tid än ett ja som inte håller. Därför säger agenten " +
+      "ifrån när den saknar underlag i stället för att gissa, och därför säljer vi hellre " +
+      "rätt paket än det dyraste.",
+    en: "We would rather have an early no than a yes that does not hold. That is why the agent " +
+      "says so when it lacks grounding instead of guessing, and why we would rather sell the " +
+      "right plan than the most expensive one."
+  },
   footerJuridik: { sv: "Dataskydd", en: "Data protection" },
   footerPlats: { sv: "Göteborg och Umeå · Sverige", en: "Gothenburg and Umeå · Sweden" },
   gdprRubrik: { sv: "Kunddata hanteras skilt, aldrig publikt", en: "Customer data is kept separate, never public" },
@@ -84,8 +113,8 @@ export const leadsCopy: ProductCopy = {
     en: "Sales email that sounds like *you*, not like a mailshot."
   },
   lede: {
-    sv: "Snajp läser nyöppningar, rekryteringar och ändrade tjänstesidor, och skriver utkastet medan tajmingen fortfarande gäller. Du läser igenom och godkänner innan det går ut.",
-    en: "Snajp reads new offices, hiring and changed service pages, then writes the draft while the timing still holds. You approve before anything is sent."
+    sv: "Vi räknar med att ta bort 50–70 % av det repetitiva jobbet i er kundtjänstinkorg. Mejl sorteras automatiskt i rätt fack och får färdiga, korrekta svar — ni behåller alltid sista ordet.",
+    en: "We expect to remove 50–70 % of the repetitive work in your support inbox. Emails are sorted into the right category and get complete, accurate drafts — you always have the final say."
   },
   cta: { sv: "Testa Email Studio", en: "Try Email Studio" },
   demoHeading: {

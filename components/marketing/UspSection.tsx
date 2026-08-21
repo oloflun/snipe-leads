@@ -35,8 +35,8 @@ const copy = {
     en: "AI that sorts and answers, while you stay in control"
   },
   lede: {
-    sv: "Vi räknar med att ta bort 50–70 % av det repetitiva jobbet i er kundtjänstinkorg. Mejl sorteras automatiskt i rätt fack och får färdiga, korrekta svar — ni behåller alltid sista ordet.",
-    en: "We expect to remove 50–70 % of the repetitive work in your support inbox. Emails are sorted into the right category and get complete, accurate drafts — you always have the final say."
+    sv: "Snajp läser nyöppningar, rekryteringar och ändrade tjänstesidor, och skriver utkastet medan tajmingen fortfarande gäller. Du läser igenom och godkänner innan det går ut.",
+    en: "Snajp reads new offices, hiring and changed service pages, then writes the draft while the timing still holds. You approve before anything is sent."
   },
   punkter: {
     sv: [

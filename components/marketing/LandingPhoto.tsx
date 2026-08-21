@@ -11,6 +11,7 @@ import { imagery, photo, sectionCopy } from "@/components/marketing/copy-section
 import { PricingSection } from "@/components/marketing/PricingSection";
 import { UspSection } from "@/components/marketing/UspSection";
 import { ProductSwitch } from "@/components/marketing/ProductSwitch";
+import { SidMeny } from "@/components/marketing/SidMeny";
 import { useReveal } from "@/components/marketing/useReveal";
 import { cn } from "@/lib/utils";
 
@@ -111,6 +112,10 @@ export function LandingPhoto({
             >
               {text(shared.secondaryCta)}
             </a>
+            {/* Menyn sist i raden, efter den primära uppmaningen. Det som ska
+                sticka ut är "Skriv till oss"; det här är sådant som är bra att
+                hitta men som ingen kom hit för att göra. */}
+            <SidMeny />
           </div>
         </div>
       </header>
@@ -376,8 +381,39 @@ export function LandingPhoto({
           />
         </section>
 
+        {/* VILKA ÄR VI. Ligger före invändningarna med flit: vem man köper av
+            är den fråga som avgör om man ens läser svaren på resten. Svensk B2B
+            är ett litet rum, och en leverantör utan ansikte är en leverantör
+            man skjuter upp beslutet om. */}
+        <section id="vilka-ar-vi" className="scroll-mt-24 border-t border-ink/12">
+          <div className="mx-auto max-w-[1480px] px-6 py-24 md:px-10 md:py-32">
+            <div className="grid grid-cols-12 gap-y-10 lg:gap-x-14">
+              <div className="col-span-12 lg:col-span-4">
+                <Label>{text(shared.vilkaRubrik)}</Label>
+                <h2 className="rise mt-5 max-w-[18ch] font-display text-[clamp(1.875rem,3.6vw,2.875rem)] font-semibold leading-[1.06] tracking-[-0.028em]">
+                  <Display text={text(shared.vilkaRubrikStor)} />
+                </h2>
+              </div>
+              <div className="col-span-12 lg:col-span-7 lg:col-start-6">
+                <p className="rise max-w-[62ch] text-[1.0625rem] leading-[1.7] text-ink/78">
+                  {text(shared.vilkaText1)}
+                </p>
+                <p className="rise mt-6 max-w-[62ch] text-[1.0625rem] leading-[1.7] text-ink/78">
+                  {text(shared.vilkaText2)}
+                </p>
+                <a
+                  href="mailto:hej@snajp.se"
+                  className="focus-ring mt-8 inline-flex min-h-12 items-center rounded-input border border-ink/20 px-6 text-[0.9375rem] font-semibold transition-colors hover:border-ink"
+                >
+                  {text(shared.secondaryCta)}
+                </a>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* OBJECTIONS. Real questions, answered plainly. */}
-        <section className="border-t border-ink/12 bg-paper2/40">
+        <section id="fragor" className="scroll-mt-24 border-t border-ink/12 bg-paper2/40">
           <div className="mx-auto max-w-[1480px] px-6 py-24 md:px-10 md:py-32">
             <div className="grid grid-cols-12 gap-y-12 lg:gap-x-14">
               <div className="col-span-12 lg:col-span-4">
@@ -472,7 +508,7 @@ export function LandingPhoto({
               <p className="mt-2 text-[0.875rem] text-ink/45">{text(shared.footerPlats)}</p>
             </div>
 
-            <div className="col-span-12 sm:col-span-5 lg:col-span-3">
+            <div id="kontakt" className="col-span-12 scroll-mt-24 sm:col-span-5 lg:col-span-3">
               <Label>{text(shared.footerKontakt)}</Label>
               <a
                 href="mailto:hej@snajp.se"
@@ -482,7 +518,7 @@ export function LandingPhoto({
               </a>
             </div>
 
-            <div id="dataskydd" className="col-span-12 sm:col-span-7 lg:col-span-5">
+            <div id="dataskydd" className="col-span-12 scroll-mt-24 sm:col-span-7 lg:col-span-5">
               <Label>{text(shared.footerJuridik)}</Label>
               <h2 className="mt-4 max-w-[28ch] text-[1.0625rem] font-semibold leading-snug tracking-[-0.01em]">
                 {text(shared.gdprRubrik)}
