@@ -58,3 +58,39 @@ def test_installningen_stammer_med_migrationen():
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
+
+
+# -- Hälsokontrollen måste kunna se en trasig embeddings-kedja ---------------
+
+
+def test_openai_modellnamn_mot_gemini_rapporteras():
+    """Den exakta konfigurationen som gav 404 på varje KB-skrivning.
+
+    `mode: live` sa allt grönt medan ingen artikel kunde få en vektor. Felet
+    hittades först när någon körde efterfyllnaden för hand.
+    """
+    # FÄLTNAMN, inte env-namn: pydantic-settings tar `embedding_model` i
+    # konstruktorn och EMBEDDING_MODEL ur miljön. Skickas env-namnet hamnar det
+    # i extra="ignore" och testet mäter defaultvärdet i stället för sitt eget.
+    from app.config import Settings
+
+    s = Settings(gemini_api_key="x" * 40, embedding_model="text-embedding-3-small")
+    fel = s.embedding_faults()
+
+    assert fel, "En OpenAI-modell mot Geminis endpoint rapporteras inte."
+    assert "404" in fel[0]
+
+
+def test_ratt_modell_ger_ingen_varning():
+    from app.config import Settings
+
+    s = Settings(gemini_api_key="x" * 40, embedding_model="gemini-embedding-001")
+    assert s.embedding_faults() == []
+
+
+def test_utan_nyckel_ar_inte_ett_fel():
+    """Fulltext-fallbacken är en giltig driftform, inte ett haveri."""
+    from app.config import Settings
+
+    s = Settings(gemini_api_key="", embedding_api_key="")
+    assert s.embedding_faults() == []
