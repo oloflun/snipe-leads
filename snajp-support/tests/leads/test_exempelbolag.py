@@ -36,6 +36,9 @@ def test_ger_ratt_antal_och_alla_falt():
         assert set(b) == {
             "company_name", "contact_name", "orgnr", "ort", "website",
             "anstallda", "bransch", "signal", "beskrivning", "motivering",
+            # Utkastet som öppnas i Email Studio. Ett exempelbolag utan pitch
+            # är ett bolag man inte kan göra något med.
+            "pitch_subject", "pitch_body", "pitch_varfor_nu",
         }
         assert all(str(v).strip() for v in b.values())
         assert b["company_name"].strip()
@@ -133,3 +136,55 @@ def test_webbplatsen_ligger_under_example():
 def test_storleken_haller_sig_inom_icp_spannet():
     for b in bygg_exempelbolag(VVS_ICP, antal=8):
         assert 10 <= b["anstallda"] <= 40
+
+
+# -- Pitchen ----------------------------------------------------------------
+
+
+def test_pitchen_binder_signalen_till_produkten():
+    """Signal → varför nu → produkt → en fråga. I den ordningen.
+
+    Ordningen är också ett skydd: ett mejl som börjar med produkten kan skickas
+    till vem som helst, och blir därför spam i praktisk mening även när det är
+    lagligt. Med signalen först går texten inte att skriva utan att någon läst
+    på om mottagaren.
+    """
+    b = bygg_exempelbolag(
+        {"industries": ["Bygg"], "geography": ["Umeå"], "roles": ["Platschef"]},
+        antal=1,
+        produkt="hjärtstartare och HLR-utbildning till arbetsplatser",
+        avsandare="Anna, Hjärtsäker AB",
+    )[0]
+
+    text = b["pitch_body"]
+    assert text.index(b["ort"]) < text.index("hjärtstartare"), (
+        "Produkten står före signalen. Då kan mejlet skickas till vem som helst."
+    )
+    assert "Anna, Hjärtsäker AB" in text
+    assert text.rstrip().endswith("Anna, Hjärtsäker AB")
+    assert b["pitch_subject"].strip()
+
+
+def test_pitchen_hittar_inte_pa_siffror_eller_referenser():
+    """INV-GROUND-001 i exempelform.
+
+    Ett påhittat resultat ("vi sparade 40 %") i ett EXEMPEL är värre än vanligt:
+    kunden skickar texten vidare i tron att den är kontrollerad.
+    """
+    for b in bygg_exempelbolag(VVS_ICP, antal=6, produkt="X", avsandare="Y"):
+        text = b["pitch_body"].lower()
+        for förbjudet in ("%", "kr ", "spara", "ökade", "kund hos oss", "referens"):
+            assert förbjudet not in text, f"pitchen påstår något omätt: {förbjudet!r}"
+
+
+def test_utan_affarskontext_lamnas_en_plats_att_fylla():
+    """En påhittad produkt är en text kunden måste skriva OM.
+
+    En tom plats är en text de fyller I. Det andra tar tio sekunder; det första
+    tar en irritation och ett omdöme om produkten.
+    """
+    from app.leads.exempelbolag import PRODUKTPLATSHALLARE
+
+    b = bygg_exempelbolag(VVS_ICP, antal=1)[0]
+    assert PRODUKTPLATSHALLARE in b["pitch_body"]
+    assert "[ert namn]" in b["pitch_body"]

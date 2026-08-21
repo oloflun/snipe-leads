@@ -49,6 +49,27 @@ from .schemas import (
 router = APIRouter()
 
 
+def _forsta_meningen(text: str, *, max_tecken: int = 180) -> str:
+    """Första meningen ur affärskontexten, till pitchens produktrad.
+
+    HELA dokumentet i ett kallmejl är inte en pitch utan en broschyr, och
+    kontexten är skriven för agenten — den innehåller rubriker, punktlistor och
+    interna noteringar. Första meningen är den enda del som är formulerad som
+    något man säger till en människa.
+
+    Tom sträng returneras oförändrad: anroparen har en tydlig platshållare, och
+    en tom rad är bättre än en halv rubrik mitt i ett mejl.
+    """
+    rent = " ".join((text or "").split())
+    if not rent:
+        return ""
+    # Kapa vid meningsslut om det kommer före taket, annars vid taket.
+    punkt = rent.find(". ")
+    if 0 < punkt <= max_tecken:
+        return rent[:punkt]
+    return rent[:max_tecken].rstrip(" ,;:-–—")
+
+
 def _require_live_llm() -> None:
     if get_settings().is_simulation():
         raise HTTPException(
@@ -169,8 +190,24 @@ async def create_example_prospects(
                 storlek["max"] = over["anstallda_max"]
             icp["company_size"] = storlek
 
+    # Pitchen ska handla om KUNDENS produkt, inte om en påhittad.
+    #
+    # Texten hämtas ur affärskontexten (`product_marketing`), som kunden själv
+    # skrivit. Saknas den lämnas en tydlig plats att fylla i stället för en
+    # uppfunnen produkt: en påhittad produkt i ett exempelmejl är en text kunden
+    # måste skriva OM, och den läser dessutom som att vi gissat vad de säljer.
+    produktdoc = await storage.get_latest_context_doc(
+        tenant["tenant_id"], kind="product_marketing"
+    )
+    produkt = _forsta_meningen((produktdoc or {}).get("content", ""))
+
     skapade = []
-    for bolag in bygg_exempelbolag(icp, antal=payload.limit):
+    for bolag in bygg_exempelbolag(
+        icp,
+        antal=payload.limit,
+        produkt=produkt,
+        avsandare=tenant.get("tenant_name") or None,
+    ):
         prospect = await storage.create_prospect(
             tenant["tenant_id"],
             company_name=bolag["company_name"],
@@ -198,6 +235,12 @@ async def create_example_prospects(
                 "signal": bolag["signal"],
                 "bransch": bolag["bransch"],
                 "motivering": bolag["motivering"],
+                # Utkastet som öppnas i Email Studio. Sparas INTE som ett
+                # outreach_message: ingenting här har passerat send_guard, och
+                # ett utkast i kön är ett utkast som kan godkännas av misstag.
+                "pitch_subject": bolag["pitch_subject"],
+                "pitch_body": bolag["pitch_body"],
+                "pitch_varfor_nu": bolag["pitch_varfor_nu"],
             }
         )
 

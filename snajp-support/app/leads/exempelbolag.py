@@ -78,13 +78,48 @@ def _forsta(varde: Any, fallback: tuple[str, ...], index: int) -> str:
 
 #: Signaler ett bolag kan bära. De är det agenten letar efter på riktigt —
 #: nyöppning, rekrytering, ändrad tjänstesida — och exemplen ska visa formen.
-_SIGNALER = (
-    "har utökat med en andra anläggning i år",
-    "rekryterar till produktionen — tre annonser ute",
-    "har lagt om sin tjänstesida och lyfter fram service",
-    "har bytt affärssystem och skriver om det på sin blogg",
-    "har flyttat till större lokal",
-    "söker en ny {roll} sedan i våras",
+#: (signal, varför den gör produkten aktuell NU, öppningsrad i mejlet)
+#:
+#: Tredelningen är hela poängen med en pitch. En signal utan "varför nu" är en
+#: observation, och ett mejl som bara observerar att mottagaren öppnat en lokal
+#: är ett mejl som börjar med skryt om att vi läst på. Kolumn två är skälet att
+#: höra av sig just den här veckan, och det är det enda som skiljer ett kallmejl
+#: från ett utskick.
+#:
+#: Formuleringarna är MEDVETET produktneutrala. Vad kunden säljer står i deras
+#: affärskontext, och en påhittad produkt i en exempelpitch blir en text de
+#: måste skriva om i stället för en de kan skicka.
+_SIGNALER: tuple[tuple[str, str, str], ...] = (
+    (
+        "har utökat med en andra anläggning i år",
+        "en ny anläggning ska utrustas och bemannas, och besluten tas medan den byggs",
+        "Jag såg att ni öppnat en andra anläggning",
+    ),
+    (
+        "rekryterar till produktionen — tre annonser ute",
+        "fler i produktionen betyder fler som ska introduceras, utrustas och hållas med",
+        "Jag såg att ni rekryterar till produktionen",
+    ),
+    (
+        "har lagt om sin tjänstesida och lyfter fram service",
+        "när servicelöftet skärps blir det som håller det uppe plötsligt en fråga för er",
+        "Jag läste er nya tjänstesida",
+    ),
+    (
+        "har bytt affärssystem och skriver om det på sin blogg",
+        "ett systembyte är det enda tillfället på flera år då rutiner faktiskt görs om",
+        "Jag såg att ni bytt affärssystem",
+    ),
+    (
+        "har flyttat till större lokal",
+        "en ny lokal ska utrustas från grunden, och den listan skrivs en gång",
+        "Grattis till den nya lokalen",
+    ),
+    (
+        "söker en ny {roll} sedan i våras",
+        "en vakant nyckelroll betyder att någon annan bär uppgiften under tiden",
+        "Jag såg att ni söker en ny {roll}",
+    ),
 )
 
 #: Ortsfallback när ICP:t inte säger något. Städer, inte "Sverige": ett kort
@@ -139,7 +174,13 @@ def _webbplats(namn: str) -> str:
     return f"{stam[:24]}.example"
 
 
-def bygg_exempelbolag(icp: dict[str, Any] | None, *, antal: int) -> list[dict[str, Any]]:
+def bygg_exempelbolag(
+    icp: dict[str, Any] | None,
+    *,
+    antal: int,
+    produkt: str | None = None,
+    avsandare: str | None = None,
+) -> list[dict[str, Any]]:
     """Bygger `antal` exempelbolag som ligger inom ICP:t.
 
     Varje bolag bär samma fält som ett RIKTIGT prospekt gör efter research —
@@ -153,6 +194,8 @@ def bygg_exempelbolag(icp: dict[str, Any] | None, *, antal: int) -> list[dict[st
     `.example`. Se `_falskt_orgnr` och `_webbplats`.
     """
     icp = icp or {}
+    produkt = (produkt or "").strip() or PRODUKTPLATSHALLARE
+    avsandare = (avsandare or "").strip() or "[ert namn]"
     branscher = icp.get("industries") or list(_DEFAULT_BRANSCHER)
     geografi = icp.get("geography") or []
     roller = icp.get("roles") or list(_DEFAULT_ROLLER)
@@ -184,11 +227,23 @@ def bygg_exempelbolag(icp: dict[str, Any] | None, *, antal: int) -> list[dict[st
             hi = lo
         anstallda = lo + _tal(fro + "n", max(hi - lo + 1, 1))
 
-        signal = _SIGNALER[_tal(fro + "s", len(_SIGNALER))].format(roll=roll.lower())
+        rå_signal, varfor_nu, oppning = _SIGNALER[_tal(fro + "s", len(_SIGNALER))]
+        signal = rå_signal.format(roll=roll.lower())
+        oppning = oppning.format(roll=roll.lower())
 
         storleksrad = ""
         if min_anst is not None or max_anst is not None:
             storleksrad = f", {min_anst or 1}–{max_anst or 49} anställda"
+
+        amne, brodtext = _bygg_pitch(
+            bolagsnamn=namn,
+            roll=roll,
+            ort=ort,
+            oppning=oppning,
+            varfor_nu=varfor_nu,
+            produkt=produkt,
+            avsandare=avsandare,
+        )
 
         bolag.append(
             {
@@ -208,6 +263,75 @@ def bygg_exempelbolag(icp: dict[str, Any] | None, *, antal: int) -> list[dict[st
                     f"Beslutsfattaren agenten skulle leta efter är {roll.lower()}. "
                     "Bolaget är påhittat och kan aldrig kontaktas."
                 ),
+                # Utkastet kunden faktiskt ska kunna öppna, skriva om och prova
+                # studioknapparna på. Se `_bygg_pitch`.
+                "pitch_subject": amne,
+                "pitch_body": brodtext,
+                "pitch_varfor_nu": varfor_nu,
             }
         )
     return bolag
+
+
+#: Vad kunden säljer, när vi inte vet det. Klamrarna är avsiktliga: en påhittad
+#: produkt i en exempelpitch är en text kunden måste skriva OM, medan en tom
+#: plats är en text de fyller I. Det andra tar tio sekunder, det första tar en
+#: irritation och ett omdöme om produkten.
+PRODUKTPLATSHALLARE = "[vad ni säljer — fylls i från er affärskontext]"
+
+
+def _bygg_pitch(
+    *,
+    bolagsnamn: str,
+    roll: str,
+    ort: str,
+    oppning: str,
+    varfor_nu: str,
+    produkt: str,
+    avsandare: str,
+) -> tuple[str, str]:
+    """Ett kallmejl som HÄNGER IHOP: signal → varför nu → erbjudande → fråga.
+
+    ## Formen, och varför den ser ut så
+
+    Fyra stycken, under 120 ord, en enda fråga på slutet. Det är inte en
+    stilpreferens utan det som skiljer ett mejl som besvaras från ett som
+    arkiveras: mottagaren är en {roll} som får dussinet i veckan, och det enda
+    som gör vårt annorlunda är att första raden bevisar att vi vet något
+    specifikt om just dem.
+
+    Ordningen är också ett skydd. Ett mejl som börjar med produkten kan skickas
+    till vem som helst — och blir därför spam i praktisk mening även när det är
+    lagligt. Genom att signalen står först kan mejlet inte skrivas utan att
+    någon läst på.
+
+    ## Vad den INTE gör
+
+    Den hittar inte på siffror. Ingen "vi sparade 40 % åt ett liknande bolag",
+    ingen kundreferens, ingen deadline. Sådant är exakt vad INV-GROUND-001
+    finns för att stoppa, och i ett EXEMPEL är det värre än vanligt: kunden
+    skickar texten vidare i tron att den är kontrollerad.
+
+    Avslutningen är en fråga om ett samtal, inte en bokad tid. Ett kallmejl som
+    föreslår "tisdag 14:00" antar ett ja som ingen gett.
+    """
+    amne = f"{oppning.split(',')[0].replace('Jag såg att ni ', '').capitalize()} — en fråga"
+    # Ämnesraden ska läsa som en människa skrivit den, inte som en etikett.
+    # "Grattis till den nya lokalen" fungerar rakt av; "Jag såg att ni bytt
+    # affärssystem" blir "Bytt affärssystem — en fråga".
+    if oppning.startswith("Grattis"):
+        amne = oppning
+
+    brodtext = "\n\n".join(
+        [
+            "Hej!",
+            f"{oppning} i {ort}. Anledningen att jag hör av mig just nu är att "
+            f"{varfor_nu}.",
+            f"Vi säljer {produkt}. I det läge {bolagsnamn} är i brukar det vara "
+            "relevant precis nu, innan rutinerna satt sig.",
+            "Är det något ni tittar på? I så fall svarar jag gärna på hur det "
+            "brukar se ut — annars säger du bara till, så hör jag inte av mig igen.",
+            f"Vänliga hälsningar,\n{avsandare}",
+        ]
+    )
+    return amne, brodtext

@@ -1,8 +1,11 @@
 "use client";
 
+import { Send } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { btnPrimary } from "@/components/ui";
+import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
+import type { EmailStudioData } from "@/lib/data/emails";
+import { btnPrimary, btnSecondary } from "@/components/ui";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
 
@@ -72,6 +75,10 @@ type Exempelbolag = {
   bransch?: string | null;
   signal?: string | null;
   beskrivning?: string | null;
+  /** Utkastet backenden skrev till just det här bolaget. Se exempelbolag.py. */
+  pitch_subject?: string | null;
+  pitch_body?: string | null;
+  pitch_varfor_nu?: string | null;
 };
 
 /**
@@ -424,6 +431,8 @@ export function LeadsRunForm({
  * göra — då mejlas fel mottagare.
  */
 export function Exempelbolagslista({ bolag }: Readonly<{ bolag: Exempelbolag[] }>) {
+  const [valt, setValt] = useState<string | null>(null);
+
   return (
     <section aria-labelledby="exempelbolag" className="rounded-card bg-paper2/40 p-5 md:p-6">
       <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
@@ -434,8 +443,17 @@ export function Exempelbolagslista({ bolag }: Readonly<{ bolag: Exempelbolag[] }
       </div>
 
       <ul className="mt-4 divide-y divide-ink/10">
-        {bolag.map((b, index) => (
-          <li key={b.id ?? `${b.company_name}-${index}`} className="py-4 first:pt-0">
+        {bolag.map((b, index) => {
+          const nyckel = b.id ?? `${b.company_name}-${index}`;
+          const öppen = valt === nyckel;
+          return (
+          <li key={nyckel} className="py-4 first:pt-0">
+            <button
+              type="button"
+              onClick={() => setValt(öppen ? null : nyckel)}
+              aria-expanded={öppen}
+              className="focus-ring block w-full rounded-input text-left"
+            >
             <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
               <div className="min-w-0">
                 <p className="text-[15px] font-semibold tracking-[-0.01em]">{b.company_name}</p>
@@ -461,8 +479,17 @@ export function Exempelbolagslista({ bolag }: Readonly<{ bolag: Exempelbolag[] }
                 .filter(Boolean)
                 .join(" · ")}
             </p>
+
+            <p className="mt-2 inline-flex items-center gap-1.5 text-[13px] font-medium text-ochre">
+              {öppen ? "Dölj utkastet" : "Öppna utkastet"}
+              <span aria-hidden>{öppen ? "↑" : "→"}</span>
+            </p>
+            </button>
+
+            {öppen ? <Pitchutkast bolag={b} /> : null}
           </li>
-        ))}
+          );
+        })}
       </ul>
 
       <p className="mt-4 border-t border-ink/10 pt-4 text-[13px] leading-6 text-ink/50">
@@ -471,5 +498,75 @@ export function Exempelbolagslista({ bolag }: Readonly<{ bolag: Exempelbolag[] }
         registreras. Ett påhittat bolag med giltiga uppgifter hade kunnat vara någon annans.
       </p>
     </section>
+  );
+}
+
+/**
+ * Utkastet till ETT bolag, öppnat i Email Studio.
+ *
+ * ## Varför samma editor som Email Studio och inte en egen
+ *
+ * `EmailStudioEditor` bär redan alla åtta åtgärder — Kortare, Skriv om,
+ * Förbättra, Personalisera, Översätt, A/B-varianter, Uppföljning, Analysera —
+ * och anropar `/api/email-studio`. En egen liten editor här hade betytt två
+ * ställen där knapparna kan glida isär, och den som testar pitchen hade testat
+ * något annat än det kunden sedan använder.
+ *
+ * Kontexten (bolag, signal, erbjudande) skickas med i varje åtgärd. Det är den
+ * som gör "Personalisera" till något annat än "skriv om texten": modellen ser
+ * vilket bolag och vilken signal utkastet gäller.
+ *
+ * ## Varför "Skicka test" inte skickar
+ *
+ * Bolaget är påhittat och saknar adress. Men det är inte skälet — skälet är att
+ * INGET utkast här har passerat send_guard, och att en knapp som ibland skickar
+ * och ibland inte är den farligaste sorten. Den bekräftar i stället vad som
+ * skulle ha hänt, och säger rakt ut att ingenting lämnade huset.
+ */
+function Pitchutkast({ bolag }: Readonly<{ bolag: Exempelbolag }>) {
+  const [skickat, setSkickat] = useState(false);
+
+  const data: EmailStudioData = {
+    source: "mock",
+    businessContext: null,
+    email: {
+      id: bolag.id ?? bolag.company_name,
+      subject: bolag.pitch_subject ?? `Till ${bolag.company_name}`,
+      body: bolag.pitch_body ?? "",
+      variantLength: "medium",
+      variantType: "cold_outreach",
+      status: "draft",
+      companyId: bolag.id ?? null,
+      contactId: null,
+      companyName: bolag.company_name,
+      signal: bolag.signal ?? null,
+      // "Varför nu" är det som gör signalen till ett skäl att höra av sig, och
+      // det är precis vad Personalisera behöver för att inte bli en omskrivning.
+      offer: bolag.pitch_varfor_nu ?? null,
+      cta: null,
+      contactName: bolag.contact_name ?? null
+    }
+  };
+
+  return (
+    <div className="mt-4 rounded-card border border-ink/10 bg-paper p-4 md:p-5">
+      <EmailStudioEditor data={data} compact />
+
+      <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-ink/10 pt-4">
+        <button
+          type="button"
+          onClick={() => setSkickat(true)}
+          className={cn(btnSecondary)}
+        >
+          <Send className="h-4 w-4" aria-hidden />
+          Skicka test
+        </button>
+        <p className="text-[13px] leading-6 text-ink/55">
+          {skickat
+            ? "Ingenting skickades. Utkastet finns kvar här och bolaget är påhittat — så här skulle utskicket ha sett ut."
+            : "Provar hela vägen fram utan att något lämnar huset."}
+        </p>
+      </div>
+    </div>
   );
 }

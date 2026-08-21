@@ -29,6 +29,16 @@ const BOLAG = [
   {
     id: "1",
     company_name: "Lundsund Bygg & Partner AB",
+    pitch_subject: "Grattis till den nya lokalen",
+    pitch_varfor_nu: "en ny lokal ska utrustas från grunden, och den listan skrivs en gång",
+    pitch_body: [
+      "Hej!",
+      "Grattis till den nya lokalen i Umeå. Anledningen att jag hör av mig just nu är att en ny lokal ska utrustas från grunden, och den listan skrivs en gång.",
+      "Vi säljer hjärtstartare och HLR-utbildning till arbetsplatser. I det läge Lundsund Bygg & Partner AB är i brukar det vara relevant precis nu, innan rutinerna satt sig.",
+      "Är det något ni tittar på? I så fall svarar jag gärna på hur det brukar se ut — annars säger du bara till, så hör jag inte av mig igen.",
+      "Vänliga hälsningar,\nAnna, Hjärtsäker AB"
+    ].join("\n\n"),
+
     contact_name: "Inköpschef",
     orgnr: "556438-7011",
     ort: "Umeå",
@@ -40,6 +50,16 @@ const BOLAG = [
   {
     id: "2",
     company_name: "Viksund Bygg Gruppen AB",
+    pitch_subject: "Grattis till den nya lokalen",
+    pitch_varfor_nu: "en ny lokal ska utrustas från grunden, och den listan skrivs en gång",
+    pitch_body: [
+      "Hej!",
+      "Grattis till den nya lokalen i Umeå. Anledningen att jag hör av mig just nu är att en ny lokal ska utrustas från grunden, och den listan skrivs en gång.",
+      "Vi säljer hjärtstartare och HLR-utbildning till arbetsplatser. I det läge Viksund Bygg Gruppen AB är i brukar det vara relevant precis nu, innan rutinerna satt sig.",
+      "Är det något ni tittar på? I så fall svarar jag gärna på hur det brukar se ut — annars säger du bara till, så hör jag inte av mig igen.",
+      "Vänliga hälsningar,\nAnna, Hjärtsäker AB"
+    ].join("\n\n"),
+
     contact_name: "Inköpschef",
     orgnr: "556859-7318",
     ort: "Umeå",
@@ -52,6 +72,16 @@ const BOLAG = [
   {
     id: "3",
     company_name: "Hammarnäs Bygg Sverige AB",
+    pitch_subject: "Grattis till den nya lokalen",
+    pitch_varfor_nu: "en ny lokal ska utrustas från grunden, och den listan skrivs en gång",
+    pitch_body: [
+      "Hej!",
+      "Grattis till den nya lokalen i Umeå. Anledningen att jag hör av mig just nu är att en ny lokal ska utrustas från grunden, och den listan skrivs en gång.",
+      "Vi säljer hjärtstartare och HLR-utbildning till arbetsplatser. I det läge Hammarnäs Bygg Sverige AB är i brukar det vara relevant precis nu, innan rutinerna satt sig.",
+      "Är det något ni tittar på? I så fall svarar jag gärna på hur det brukar se ut — annars säger du bara till, så hör jag inte av mig igen.",
+      "Vänliga hälsningar,\nAnna, Hjärtsäker AB"
+    ].join("\n\n"),
+
     contact_name: "Inköpschef",
     orgnr: "556201-4453",
     ort: "Umeå",
@@ -82,6 +112,12 @@ export default function Page() {
           <p className="mt-2 max-w-[68ch] text-[0.9375rem] leading-[1.6] text-ink/65">
             Samma komponenter som kundens leads-vy renderar efter en körning. Alla bolag här är
             påhittade — sidan startar ingen körning och skriver ingenting.
+          </p>
+          <p className="mt-3 max-w-[68ch] rounded-card bg-paper2/60 p-4 text-[0.9375rem] leading-[1.6] text-ink/70">
+            <strong className="font-semibold">Klicka på ett bolag</strong> för att öppna utkastet.
+            Där finns Email Studios alla åtgärder — Kortare, Skriv om, Förbättra, Personalisera,
+            Översätt, A/B-varianter, Uppföljning och Analysera — och du kan skriva om texten själv
+            innan du provar dem. <em>Skicka test</em> skickar ingenting.
           </p>
         </header>
 
