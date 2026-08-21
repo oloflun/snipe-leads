@@ -944,7 +944,15 @@ class PostgresStorage:
                     tenant_id,
                     limit,
                 )
-        return [_row(r) for r in records]
+        # Samma avkodning som list_agent_runs_all och get_agent_run redan gör.
+        # Saknades här, och det syntes inte på ett halvår av EN anledning: den
+        # enda konsumenten — översiktens körningsräknare — frågade efter
+        # `agent_type=leads`, en sträng ingen kodväg skriver, och fick alltid
+        # noll rader. Så fort filtret rättades kom raderna fram, och adminytans
+        # arbetsyta föll på `step_log.filter is not a function`.
+        #
+        # Två fel som gömde varandra: det ena gjorde det andra osynligt.
+        return [_avkoda_jsonb(_row(r), "step_log", "grounding") for r in records]
 
     async def list_skill_files(self, *, manifest_hash: str) -> list[dict[str, Any]]:
         # AVSIKTLIGT ingen _scoped(tenant_id): agent_skill_files har ingen

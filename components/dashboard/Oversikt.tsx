@@ -493,7 +493,32 @@ type Prospekt = {
 };
 
 type Steg = { skill?: string; escalated?: boolean; latency_ms?: number };
-type Korning = { id: string; agent_type?: string; created_at?: string; step_log?: Steg[] | null };
+type Korning = {
+  id: string;
+  agent_type?: string;
+  created_at?: string;
+  /** Kan vara en STRÄNG. Se `stegAv` nedan. */
+  step_log?: Steg[] | string | null;
+};
+
+/**
+ * `step_log` är jsonb, och jsonb kommer tillbaka som text från asyncpg om
+ * ingen typkodare avkodar den. Backenden avkodar numera i `list_agent_runs`,
+ * men vakten står kvar här av samma skäl som `lib/data/admin.ts` har sin:
+ * det här är tredje gången samma kolumn nått en vy som en sträng, och
+ * skillnaden mellan en tom lista och en vit sida är fem rader.
+ */
+function stegAv(korning: Korning): Steg[] {
+  const rå = korning.step_log;
+  if (Array.isArray(rå)) return rå;
+  if (typeof rå !== "string") return [];
+  try {
+    const tolkat: unknown = JSON.parse(rå);
+    return Array.isArray(tolkat) ? (tolkat as Steg[]) : [];
+  } catch {
+    return [];
+  }
+}
 type Koartikel = {
   id: string;
   company_name?: string | null;
@@ -583,7 +608,7 @@ export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
     (k) => k.created_at && new Date(k.created_at).getTime() >= veckan
   );
   const eskaleradeSteg = veckansKorningar.reduce(
-    (summa, k) => summa + (k.step_log ?? []).filter((steg) => steg.escalated).length,
+    (summa, k) => summa + stegAv(k).filter((steg) => steg.escalated).length,
     0
   );
 
@@ -739,7 +764,7 @@ export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
       >
         <Ledger
           rader={veckansKorningar.slice(0, 6).map((k) => {
-            const steg = k.step_log ?? [];
+            const steg = stegAv(k);
             const eskalerade = steg.filter((s) => s.escalated).length;
             const skills = steg.map((s) => s.skill).filter(Boolean).join(", ");
             return {
