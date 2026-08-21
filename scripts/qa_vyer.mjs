@@ -176,6 +176,31 @@ const browser = await chromium.launch({ executablePath: EXEC, proxy: PROXY });
   if (landade === "/login") { console.log("  ! inloggningen misslyckades"); avvikelser++; }
   await svep(page, "KUND — arbetsytan", ARBETSYTA, "ok");
   await svep(page, "KUND — adminytan (ska vara 404)", ADMINYTA.slice(0, 6), "404");
+
+  // INV-SEC-011. Vyväxeln Admin / Demo styrs av cookien `snajp.vy`, och en
+  // cookie är något klienten skickar. Grinden är getPlatformAdmin(), alltså ett
+  // uppslag i platform_admins — för en kund ska raden inte betyda något alls.
+  // Mäts som EFFEKT och inte som frånvaron av en knapp: en manipulerad cookie
+  // som gav demokontots data hade inte ändrat en enda sak i menyn.
+  await page.context().addCookies([{ name: "snajp.vy", value: "demo", url: BASE }]);
+  await page.goto(BASE + "/dashboard", { waitUntil: "domcontentloaded", timeout: 45000 });
+  await page.waitForTimeout(800);
+  const efter = await page.evaluate(() => ({
+    hamnade: location.pathname,
+    text: document.body.innerText.slice(0, 600)
+  }));
+  console.log(`
+KUND med snajp.vy=demo → ${efter.hamnade}`);
+  if (/Nordlys Handel/.test(efter.text)) {
+    console.log("  ! LÄCKA: kunden ser demokontot. INV-SEC-011 är bruten.");
+    avvikelser++;
+  } else if (efter.hamnade !== "/dashboard") {
+    console.log(`  ! kunden hamnade på ${efter.hamnade} i stället för /dashboard`);
+    avvikelser++;
+  } else {
+    console.log("  ok — cookien betyder ingenting för en kund");
+  }
+
   await page.context().close();
 }
 
