@@ -168,10 +168,35 @@ export function LandingPhoto({
                 <div className="font-display text-[1.5rem] leading-[1.15] tracking-[-0.02em] text-paper">
                   <ProductSwitch value={product} onChange={setProduct} tone="paper" />
                 </div>
-                <div className="mt-4 border-t border-paper/25 pt-3">
-                  {/* Jurisdiction, not address. The two offices are named in the
-                      place section; four items would wrap in this column. */}
-                  <Label tone="paper">Sverige · GDPR · RLS</Label>
+                {/* Två vägar rakt in i produkten, en per agent.
+                    Växeln ovanför byter vad SIDAN beskriver; de här tar
+                    besökaren till agenten som gör det. Att bara kunna läsa om
+                    en agent på en sida som har en fungerande demo är att gömma
+                    det enda som övertygar. */}
+                <div className="mt-5 flex flex-col gap-2 border-t border-paper/25 pt-4">
+                  <Link
+                    href="/demo/leads"
+                    className="focus-ring group inline-flex items-center gap-2 text-[0.9375rem] font-medium text-paper/85 transition-colors hover:text-paper"
+                  >
+                    {text(shared.demoLeads)}
+                    <span aria-hidden className="transition-transform group-hover:translate-x-0.5">→</span>
+                  </Link>
+                  <Link
+                    href="/demo/support"
+                    className="focus-ring group inline-flex items-center gap-2 text-[0.9375rem] font-medium text-paper/85 transition-colors hover:text-paper"
+                  >
+                    {text(shared.demoSupport)}
+                    <span aria-hidden className="transition-transform group-hover:translate-x-0.5">→</span>
+                  </Link>
+                </div>
+
+                <div className="mt-4">
+                  {/* "Sverige · GDPR · RLS" stod här. Två av tre var interna
+                      förkortningar — RLS är en databasmekanism — och en
+                      besökare som inte bygger programvara läser raden som brus.
+                      Efterlevnaden finns kvar, i sidfoten, med plats att
+                      förklaras. */}
+                  <Label tone="paper">{text(shared.heroTrust)}</Label>
                 </div>
               </div>
             </div>
@@ -431,10 +456,45 @@ export function LandingPhoto({
         </section>
       </main>
 
+      {/* Sidfoten bär numera det som stod i hjältebilden — och mer, eftersom
+          det finns plats att förklara här. Tre kolumner: vilka vi är, hur man
+          når oss, och vad som gäller kunddata. Den sista är inte en
+          artighetsrad: den är den vanligaste invändningen i svensk B2B, och ett
+          svar på tre förkortningar duger inte som svar. */}
       <footer className="border-t border-ink/12">
-        <div className="mx-auto flex max-w-[1480px] flex-wrap items-center justify-between gap-4 px-6 py-8 md:px-10">
-          <Logo compact />
-          <Label>{text(shared.footerNote)}</Label>
+        <div className="mx-auto max-w-[1480px] px-6 py-12 md:px-10 md:py-16">
+          <div className="grid grid-cols-12 gap-y-10 lg:gap-x-12">
+            <div className="col-span-12 lg:col-span-4">
+              <Logo compact />
+              <p className="mt-4 max-w-[34ch] text-[0.9375rem] leading-[1.6] text-ink/65">
+                {text(shared.footerNote)}
+              </p>
+              <p className="mt-2 text-[0.875rem] text-ink/45">{text(shared.footerPlats)}</p>
+            </div>
+
+            <div className="col-span-12 sm:col-span-5 lg:col-span-3">
+              <Label>{text(shared.footerKontakt)}</Label>
+              <a
+                href="mailto:hej@snajp.se"
+                className="focus-ring mt-4 inline-block text-[1.0625rem] font-medium underline underline-offset-4 hover:text-ochre"
+              >
+                hej@snajp.se
+              </a>
+            </div>
+
+            <div id="dataskydd" className="col-span-12 sm:col-span-7 lg:col-span-5">
+              <Label>{text(shared.footerJuridik)}</Label>
+              <h2 className="mt-4 max-w-[28ch] text-[1.0625rem] font-semibold leading-snug tracking-[-0.01em]">
+                {text(shared.gdprRubrik)}
+              </h2>
+              <p className="mt-3 max-w-[52ch] text-[0.9375rem] leading-[1.6] text-ink/70">
+                {text(shared.gdprText)}
+              </p>
+              <p className="mt-4 font-mono text-[12px] uppercase tracking-[0.08em] text-ink/40">
+                Sverige · GDPR · RLS
+              </p>
+            </div>
+          </div>
         </div>
       </footer>
     </div>

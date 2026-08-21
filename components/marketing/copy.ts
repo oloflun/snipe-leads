@@ -49,6 +49,31 @@ export const shared = {
   footerNote: {
     sv: "Snajp, Göteborg och Umeå. Byggt för svensk B2B.",
     en: "Snajp, Gothenburg and Umeå. Built for Swedish B2B."
+  },
+  //: Ersätter "Sverige · GDPR · RLS" i hjältebilden.
+  //:
+  //: Den raden var tre förkortningar där två är interna: RLS är en
+  //: databasmekanism, och en besökare som inte bygger programvara läser den som
+  //: brus. Det som faktiskt betyder något för en svensk B2B-köpare är vem de
+  //: köper av — och det står nu i stället. Efterlevnaden finns kvar, men i
+  //: sidfoten där den hör hemma och med utrymme att förklaras.
+  heroTrust: {
+    sv: "Svenskt grundat företag",
+    en: "Swedish founded company"
+  },
+  demoLeads: { sv: "Prova leads-agenten", en: "Try the leads agent" },
+  demoSupport: { sv: "Prova kundtjänstagenten", en: "Try the support agent" },
+  footerKontakt: { sv: "Kontakt", en: "Contact" },
+  footerJuridik: { sv: "Dataskydd", en: "Data protection" },
+  footerPlats: { sv: "Göteborg och Umeå · Sverige", en: "Gothenburg and Umeå · Sweden" },
+  gdprRubrik: { sv: "Kunddata hanteras skilt, aldrig publikt", en: "Customer data is kept separate, never public" },
+  gdprText: {
+    sv: "Varje kunds data ligger i en egen avgränsning och kan bara läsas av den kunden — " +
+      "det är en spärr i databasen, inte en inställning i koden. Ingenting publiceras, " +
+      "ingenting delas mellan kunder, och inget mejl går ut utan att en människa godkänt det.",
+    en: "Every customer's data sits in its own boundary and can only be read by that customer — " +
+      "enforced in the database, not by a setting in the code. Nothing is published, nothing is " +
+      "shared between customers, and no email goes out without a person approving it."
   }
 } satisfies Record<string, Localized>;
 
