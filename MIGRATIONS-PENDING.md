@@ -121,6 +121,26 @@ kända öppna trådar snarare än fel:
 * **IMAP saknas** — inga inkommande mail hämtas i någon Railway-miljö.
 * **Ingen riktig sändväg** — godkända svar loggas men skickas aldrig till kund.
 
+## 041_delete_grants — körd i BÅDA Railway-miljöerna 2026-08-21
+
+`snajp_app` hade `select, insert, update` på arton tabeller sedan migration
+009, och `alter default privileges` upprepade samma tre för allt som skapats
+sedan dess. Aldrig `delete`.
+
+Det märktes först 2026-08-21: `POST /api/inbox/mock` svarade 500 med
+`permission denied for table ss_emails`. Det gick alltså inte att generera ett
+enda testmejl i någon miljö som kör med den roll INV-SEC-001 kräver. Två skäl
+till att det låg dolt — bara två kodvägar i hela backenden gör DELETE, och
+sviten kör mot MemoryStorage, som inte har några rättigheter att sakna.
+
+Kört och verifierat i `development` och `main` (`= 041_delete_grants` i
+liggaren, och `/api/inbox/mock` svarar 201 med sex mejl).
+
+**Supabase-produktionen har SAMMA lucka och den är INTE åtgärdad.** Den är
+ofarlig där just nu eftersom `DATABASE_URL` fortfarande pekar på en roll med
+BYPASSRLS — men den blir akut i samma sekund som `snajp_app`-övergången görs,
+och den övergången är redan blockerad av 028. Kör 041 tillsammans med 028.
+
 ## Fortfarande öppet — inte migrationer
 
 1. **`SNAJP_MASTER_API_KEY` på Vercel.** Utan den svarar `/api/admin/*` med
