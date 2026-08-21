@@ -107,8 +107,20 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   // Entitlement decides what exists; the scope switch decides what is on screen
   // right now. A nav listing eight Leads sections while the scope reads "Support"
   // contradicts the control the user just used.
+  //
+  // MEN: lägesflikarna själva undantas från det filtret.
+  //
+  // Flikarna ÄR växeln (FLIKENS_LAGE). Filtrerades de på `shows()` göms den
+  // kontroll man skulle ha tryckt på: står man i Leads försvinner
+  // Kundtjänst-fliken, och enda vägen till kundtjänst blir att först gå via
+  // Översikt — vilket inte står någonstans. Uppmätt i skärmdump från demovyn,
+  // där menyn saknade Kundtjänst helt.
+  //
+  // Regeln: en kontroll får aldrig gömma sig själv. Entitlement styr att
+  // fliken finns; läget styr vad innehållet visar.
   const navRoutes = routesForProducts(products).filter(
-    (route) => route.product === "shared" || shows(route.product)
+    (route) =>
+      route.product === "shared" || route.href in FLIKENS_LAGE || shows(route.product)
   );
 
   // Narrowing the scope while standing on a section it excludes would strand the
@@ -166,19 +178,45 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   return (
     <div className="min-h-screen bg-paper text-ink">
       <header className="sticky top-0 z-30 bg-paper/85 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3 md:px-6">
+        {/* Tre kolumner: logotyp, flikar, kontroller.
+
+            Ordningen sätts EXPLICIT från md och uppåt (order-1/2/3). I DOM
+            ligger kontrollerna före flikraden — det är rätt på mobil, där
+            flikarna ska hamna på egen rad UNDER allt annat (`order-last`). Utan
+            den explicita ordningen ärvde flikraden sin DOM-plats på desktop och
+            hamnade till HÖGER om kontrollerna. Uppmätt: 773 px luft till
+            vänster, 28 till höger.
+
+            Flikraden låg tidigare på en EGEN rad under logotypen (`order-last`
+            + `w-full`), vänsterställd. Nu ligger den i mitten av samma rad, och
+            `flex-1` på nav-elementet ger lika mycket luft åt båda hållen oavsett
+            hur breda grannkolumnerna är — uppmätt 61 px åt vardera hållet i
+            förhandsvisningen.
+
+            `flex-wrap` är kvar: under ~900px lägger sig flikraden på egen rad
+            igen i stället för att klämmas ihop, vilket är rätt beteende på en
+            telefon. */}
+        <div className="mx-auto flex max-w-[1400px] flex-wrap items-stretch gap-x-6 gap-y-3 px-4 py-3 md:px-6">
+          {/* `flex-1 basis-0` på BÅDA sidokolumnerna. Utan det centreras
+              flikraden bara inom sin egen box, och den boxen ligger inte mitt i
+              headern — logotypen är smalare än kontrollerna, så raden hamnar
+              till höger. Uppmätt före: 561 px luft till vänster, 240 till höger.
+
+              Med lika flex får kolumnerna samma bredd oavsett innehåll, och
+              mitten blir headerns mitt. `min-w-0` låter dem krympa i stället
+              för att tvinga fram horisontell scroll. */}
           <Link
             href={demoAnpassa("/dashboard", pathname)}
-            className="focus-ring inline-flex min-h-11 items-center rounded-input"
+            className="focus-ring inline-flex min-w-0 flex-1 basis-0 shrink-0 items-center rounded-input md:order-1"
           >
-            <Logo />
+            {/* Större märke, och arbetsytans namn UNDER ordmärket i stället för
+                bredvid. Logotypen fyller därmed höjden av båda de gamla raderna
+                och sitter i vänsterkanten, i stället för att vara en liten rad
+                ovanför flikarna. */}
+            <Logo stor undertext={workspaceName} />
           </Link>
 
-          {workspaceName ? (
-            <span className="hidden text-sm text-ink/45 sm:inline">{workspaceName}</span>
-          ) : null}
-
-          <div className="ml-auto flex items-center gap-1.5">
+          <div className="order-last ml-auto flex min-w-0 flex-1 basis-0 items-center justify-end gap-1.5 md:order-3">
             {/* Admin / Demo. Ersätter både den gamla /admin-länken längst ut i
                 flikraden och läges­växlaren: läget styrs numera av Leads- och
                 Support-flikarna själva, se nedan. */}
@@ -220,7 +258,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
 
           <nav
             aria-label={t("nav.dashboard")}
-            className="thin-scrollbar order-last -mx-1 flex w-full min-w-0 gap-1 overflow-x-auto px-1 pb-1"
+            className="thin-scrollbar order-last flex w-full min-w-0 shrink-0 items-center justify-center gap-1 overflow-x-auto px-1 md:order-2 md:w-auto"
           >
             {navRoutes.map((route) => {
               const active =

@@ -78,7 +78,8 @@ def _forsta(varde: Any, fallback: tuple[str, ...], index: int) -> str:
 
 #: Signaler ett bolag kan bära. De är det agenten letar efter på riktigt —
 #: nyöppning, rekrytering, ändrad tjänstesida — och exemplen ska visa formen.
-#: (signal, varför den gör produkten aktuell NU, öppningsrad i mejlet)
+#: (signal, varför den gör produkten aktuell NU, öppningsrad, slutkläm i
+#: produktmeningen)
 #:
 #: Tredelningen är hela poängen med en pitch. En signal utan "varför nu" är en
 #: observation, och ett mejl som bara observerar att mottagaren öppnat en lokal
@@ -89,36 +90,51 @@ def _forsta(varde: Any, fallback: tuple[str, ...], index: int) -> str:
 #: Formuleringarna är MEDVETET produktneutrala. Vad kunden säljer står i deras
 #: affärskontext, och en påhittad produkt i en exempelpitch blir en text de
 #: måste skriva om i stället för en de kan skicka.
-_SIGNALER: tuple[tuple[str, str, str], ...] = (
+_SIGNALER: tuple[tuple[str, str, str, str], ...] = (
     (
         "har utökat med en andra anläggning i år",
         "en ny anläggning ska utrustas och bemannas, och besluten tas medan den byggs",
         "Jag såg att ni öppnat en andra anläggning",
+        "brukar det vara enklast att ta med från början än att lägga till efteråt",
     ),
     (
         "rekryterar till produktionen — tre annonser ute",
         "fler i produktionen betyder fler som ska introduceras, utrustas och hållas med",
         "Jag såg att ni rekryterar till produktionen",
+        "brukar frågan komma upp i samma veva som introduktionen planeras",
     ),
     (
         "har lagt om sin tjänstesida och lyfter fram service",
         "när servicelöftet skärps blir det som håller det uppe plötsligt en fråga för er",
         "Jag läste er nya tjänstesida",
+        "brukar det vara värt att se över innan löftet ska hållas i praktiken",
     ),
     (
         "har bytt affärssystem och skriver om det på sin blogg",
         "ett systembyte är det enda tillfället på flera år då rutiner faktiskt görs om",
         "Jag såg att ni bytt affärssystem",
+        "brukar det vara läge att ta det i samma svep som resten görs om",
     ),
     (
         "har flyttat till större lokal",
         "en ny lokal ska utrustas från grunden, och den listan skrivs en gång",
         "Grattis till den nya lokalen",
+        "brukar det vara relevant precis nu, innan rutinerna satt sig",
     ),
+    # Den STARKASTE signalen av de sex: bolaget har redan bestämt sig för att
+    # byta, och frågan är bara till vem. De övriga fem är lägen där ett behov
+    # KAN uppstå; det här är ett uttalat missnöje med det de har.
+    #
+    # Ersatte "söker en ny {roll}". En vakans är en signal om bemanning, inte om
+    # inköp — mejlet blev därför en gissning om att den som är borta råkade äga
+    # vår fråga. Ett bolag som säger att de ser över en leverans är däremot i
+    # marknaden, och det är hela skälet leads-agenten finns.
     (
-        "söker en ny {roll} sedan i våras",
-        "en vakant nyckelroll betyder att någon annan bär uppgiften under tiden",
-        "Jag såg att ni söker en ny {roll}",
+        "har gått ut med en förfrågan om nya leverantörer inför nästa avtalsperiod",
+        "en avtalsperiod som löper ut är det enda tillfället då ett byte faktiskt "
+        "går att göra utan att bryta något",
+        "Jag såg att ni ser över era leverantörer inför nästa avtalsperiod",
+        "vill jag gärna finnas med bland de alternativ ni jämför",
     ),
 )
 
@@ -236,7 +252,7 @@ def bygg_exempelbolag(
             hi = lo
         anstallda = lo + _tal(fro + "n", max(hi - lo + 1, 1))
 
-        rå_signal, varfor_nu, oppning = _SIGNALER[_tal(fro + "s", len(_SIGNALER))]
+        rå_signal, varfor_nu, oppning, passning = _SIGNALER[_tal(fro + "s", len(_SIGNALER))]
         signal = rå_signal.format(roll=roll.lower())
         oppning = oppning.format(roll=roll.lower())
 
@@ -250,6 +266,7 @@ def bygg_exempelbolag(
             ort=ort,
             oppning=oppning,
             varfor_nu=varfor_nu,
+            passning=passning,
             produkt=produkt,
             avsandare=avsandare,
         )
@@ -296,6 +313,7 @@ def _bygg_pitch(
     ort: str,
     oppning: str,
     varfor_nu: str,
+    passning: str,
     produkt: str,
     avsandare: str,
 ) -> tuple[str, str]:
@@ -336,8 +354,7 @@ def _bygg_pitch(
             "Hej!",
             f"{oppning} i {ort}. Anledningen att jag hör av mig just nu är att "
             f"{varfor_nu}.",
-            f"Vi säljer {produkt}. I det läge {bolagsnamn} är i brukar det vara "
-            "relevant precis nu, innan rutinerna satt sig.",
+            f"Vi säljer {produkt}. I det läge {bolagsnamn} är i {passning}.",
             "Är det något ni tittar på? I så fall svarar jag gärna på hur det "
             "brukar se ut — annars säger du bara till, så hör jag inte av mig igen.",
             f"Vänliga hälsningar,\n{avsandare}",

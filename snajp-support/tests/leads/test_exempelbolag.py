@@ -188,3 +188,35 @@ def test_utan_affarskontext_lamnas_en_plats_att_fylla():
     b = bygg_exempelbolag(VVS_ICP, antal=1)[0]
     assert PRODUKTPLATSHALLARE in b["pitch_body"]
     assert "[ert namn]" in b["pitch_body"]
+
+
+def test_varje_signal_har_en_egen_slutklam():
+    """Produktmeningen måste passa signalen den följer på.
+
+    Slutklämmen var först en enda text — "innan rutinerna satt sig". Den passar
+    en ny lokal och ett systembyte, men blev obegriplig efter en signal om att
+    bolaget ser över sina leverantörer: där har inga rutiner börjat sätta sig,
+    de ska bytas. Ett mejl vars sista led inte hänger ihop med sitt första läses
+    som mallat, vilket är exakt vad ett kallmejl inte får göra.
+    """
+    from app.leads.exempelbolag import _SIGNALER
+
+    slutklammar = {rad[3] for rad in _SIGNALER}
+    assert len(slutklammar) == len(_SIGNALER), "två signaler delar slutkläm"
+    for rad in _SIGNALER:
+        assert len(rad) == 4, "signalen saknar sin slutkläm"
+        assert rad[3] and not rad[3].endswith("."), "slutklämmen sätter punkt själv"
+
+
+def test_leverantorssignalen_finns_och_ar_koparbar():
+    """Den starkaste signalen: bolaget har redan bestämt sig för att byta.
+
+    Ersatte "söker en ny {roll}". En vakans är en signal om BEMANNING, inte om
+    inköp — mejlet blev därför en gissning om att den som slutat råkade äga vår
+    fråga.
+    """
+    from app.leads.exempelbolag import _SIGNALER
+
+    texter = " ".join(rad[0] for rad in _SIGNALER)
+    assert "leverantör" in texter
+    assert "söker en ny {roll}" not in texter
