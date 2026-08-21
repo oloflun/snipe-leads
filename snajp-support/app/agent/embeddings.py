@@ -43,7 +43,11 @@ async def embed_text(text: str) -> list[float] | None:
     settings = get_settings()
     try:
         response = await client.embeddings.create(
-            model=settings.embedding_model, input=text[:8000]
+            model=settings.embedding_model,
+            input=text[:8000],
+            # Måste begäras. Utan `dimensions` ger gemini-embedding-001 3072
+            # värden, och kolumnen är vector(1536) — se config.py.
+            dimensions=settings.embedding_dimensions,
         )
     except Exception as fel:  # noqa: BLE001 — se docstringen
         if not _har_klagat:

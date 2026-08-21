@@ -87,6 +87,20 @@ class Settings(BaseSettings):
     embedding_api_key: str = ""  # tom => faller tillbaka på gemini_api_key
     model: str = "gpt-4o-mini"
     embedding_model: str = "gemini-embedding-001"
+    #: MÅSTE stämma med kolumnen `ss_knowledge_base.embedding`, som är
+    #: `vector(1536)` sedan migration 002.
+    #:
+    #: `gemini-embedding-001` returnerar 3072 värden om man inte ber om något
+    #: annat, och en 3072-vektor går inte att skriva i en 1536-kolumn. Det hade
+    #: inte upptäckts förrän nu: embeddings har ALDRIG lyckats i den här
+    #: kodbasen (Gemini-API:t var inte aktiverat på Google-projektet), så noll
+    #: av 159 artiklar bär en vektor och krocken har aldrig prövats.
+    #:
+    #: Följden om värdet tas bort: `POST /api/kb` börjar svara 500 i stället
+    #: för att spara artikeln utan vektor. Alltså byts en fungerande
+    #: försämring mot ett avbrott — precis det `embed_text` finns för att
+    #: undvika.
+    embedding_dimensions: int = 1536
     # G9: vision-sidovagn. deepseek-v4-flash saknar dokumenterat bildstöd, så
     # bilder beskrivs separat (Gemini, gratisnivå) och matas in som text i
     # DeepSeek-loopen. Bilden lagras aldrig efter beskrivningen.

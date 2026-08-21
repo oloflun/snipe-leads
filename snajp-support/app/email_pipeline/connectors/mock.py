@@ -175,9 +175,16 @@ ESKALERANDE = [
         fran="sara.nystrom@mail.se",
         namn="Sara Nyström",
         amne="Dubbeldragning på kortet",
+        # Kravet på pengarna tillbaka är det som gör ärendet eskalerande, och
+        # det måste stå i texten. Utan raden var mailet en vanlig betalfråga
+        # som hamnade i ESKALERANDE — den eskalerade bara så länge
+        # kunskapsbasen saknade täckning för betalningar, alltså av fel skäl.
+        # När demons KB fick betalartiklar blev poolens löfte osant, och testet
+        # som vaktar blandningen började falla ungefär var fjärde körning.
         text=(
             "Jag ser två dragningar på exakt samma belopp för min beställning. "
-            "Har ni debiterat mig dubbelt? Vill gärna få det utrett."
+            "Har ni debiterat mig dubbelt? Jag vill ha den felaktiga dragningen "
+            "återbetald omgående."
         ),
     ),
     _mail(
