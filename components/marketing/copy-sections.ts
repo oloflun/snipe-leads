@@ -94,7 +94,7 @@ const leads: SectionCopy = {
       }
     },
     {
-      q: { sv: "Vad händer med kunddatan?", en: "What happens to customer data?" },
+      q: { sv: "Vad händer med kunduppgifterna?", en: "What happens to customer data?" },
       a: {
         sv: "Den ligger kvar hos er, med radnivåbehörighet och loggar på vem som läst vad. Vi tränar inga modeller på ert innehåll.",
         en: "It stays with you, with row level access rules and logs of who read what. We train no models on your content."

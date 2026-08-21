@@ -42,11 +42,11 @@ export const PAKET: Paket[] = [
     namn: "Snajp Support",
     prisPerManad: 2990,
     beskrivning: {
-      sv: "Kundservice-agenten som svarar utifrån er egen kunskapsbas.",
+      sv: "Kundtjänstagenten som svarar utifrån er egen kunskapsbas.",
       en: "The customer service agent that answers from your own knowledge base."
     },
     ingar: [
-      { sv: "Kundservice-agent", en: "Customer service agent" },
+      { sv: "Kundtjänstagent", en: "Customer service agent" },
       { sv: "Egen kunskapsbas", en: "Your own knowledge base" },
       { sv: "Obegränsade chattar", en: "Unlimited chats" },
       { sv: "E-posttriage", en: "Email triage" }
@@ -83,7 +83,7 @@ export const PAKET: Paket[] = [
       { sv: "Delad kunddata", en: "Shared customer data" }
     ],
     notis: {
-      sv: "Spar 990 kr/mån mot att köpa dem var för sig.",
+      sv: "Sparar 990 kr/mån jämfört med att köpa dem var för sig.",
       en: "Saves 990 kr/month compared to buying them separately."
     }
   }

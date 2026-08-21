@@ -35,7 +35,7 @@ const copy = {
     en: "AI that sorts and answers, while you stay in control"
   },
   lede: {
-    sv: "Vi räknar med att ta bort 50–70 % av det repetitiva jobbet i er kundservice-inkorg. Mejl sorteras automatiskt i rätt fack och får färdiga, korrekta svar — ni behåller alltid sista ordet.",
+    sv: "Vi räknar med att ta bort 50–70 % av det repetitiva jobbet i er kundtjänstinkorg. Mejl sorteras automatiskt i rätt fack och får färdiga, korrekta svar — ni behåller alltid sista ordet.",
     en: "We expect to remove 50–70 % of the repetitive work in your support inbox. Emails are sorted into the right category and get complete, accurate drafts — you always have the final say."
   },
   punkter: {
