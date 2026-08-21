@@ -1,6 +1,6 @@
 "use client";
 
-import { Send } from "lucide-react";
+import { RefreshCw, Send } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
@@ -191,6 +191,51 @@ export function LeadsRunForm({
     return kropp;
   }
 
+  /**
+   * Hämtar ett urval exempelbolag med färdiga utkast.
+   *
+   * Bruten ur körningen för att "Uppdatera" ska gå samma väg. Två anropsplatser
+   * med var sin kopia av taket och överskrivningarna hade glidit isär, och
+   * symptomet blir att knappen ger en annan målgrupp än formuläret ovanför den.
+   */
+  async function hamtaExempelbolag(
+    antal: number,
+    overrides: ReturnType<typeof byggÖverskrivningar>
+  ): Promise<Exempelbolag[]> {
+    const svar = await anropa<{ created?: Exempelbolag[] }>("/leads/prospects/exempel", {
+      method: "POST",
+      body: JSON.stringify({
+        // Taket i ExempelbolagRequest är 10: exempelbolag är en väg IN i
+        // produkten, inte en lista att arbeta ur. Klamras här så att ett stort
+        // `antal` ger tio exempel i stället för 422.
+        limit: Math.min(Math.max(antal, 1), 10),
+        ...(overrides ? { overrides } : {})
+      })
+    });
+    return svar.created ?? [];
+  }
+
+  /**
+   * "Uppdatera" — nytt urval, nya utkast, samma målgrupp.
+   *
+   * Startar INGEN körning. Den som vill se agenten formulera sig om ett annat
+   * läge ska inte behöva betala för åtta LLM-anrop per bolag för att göra det,
+   * och ska inte heller behöva fylla i formuläret igen.
+   */
+  async function uppdateraBolag() {
+    setBusy(true);
+    setFel(null);
+    setStatus("Hämtar nya exempelbolag…");
+    try {
+      setBolag(await hamtaExempelbolag(Number(limit) || 3, byggÖverskrivningar()));
+    } catch (cause) {
+      setFel(felmeddelande(cause));
+    } finally {
+      setStatus(null);
+      setBusy(false);
+    }
+  }
+
   async function kör() {
     setBusy(true);
     setFel(null);
@@ -221,17 +266,7 @@ export function LeadsRunForm({
         const saknas = (befintliga.prospects?.length ?? 0) === 0;
         if (exempelbolag || saknas) {
           setStatus("Tar fram exempelbolag som passar er produkt…");
-          const skapade = await anropa<{ created?: Exempelbolag[] }>("/leads/prospects/exempel", {
-            method: "POST",
-            body: JSON.stringify({
-              // Taket i ExempelbolagRequest är 10: exempelbolag är en väg IN i
-              // produkten, inte en lista att arbeta ur. Klamras här så att ett
-              // stort `antal` ger en körning på tio exempel i stället för 422.
-              limit: Math.min(Math.max(antal - egna.length, 1), 10),
-              ...(overrides ? { overrides } : {})
-            })
-          });
-          setBolag(skapade.created ?? []);
+          setBolag(await hamtaExempelbolag(Math.max(antal - egna.length, 1), overrides));
         }
       }
 
@@ -404,7 +439,9 @@ export function LeadsRunForm({
             )}
           </div>
 
-          {bolag.length > 0 ? <Exempelbolagslista bolag={bolag} /> : null}
+          {bolag.length > 0 ? (
+            <Exempelbolagslista bolag={bolag} onUppdatera={uppdateraBolag} uppdaterar={busy} />
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -430,16 +467,37 @@ export function LeadsRunForm({
  * bolag som läses som ett riktigt är den dyraste förväxlingen produkten kan
  * göra — då mejlas fel mottagare.
  */
-export function Exempelbolagslista({ bolag }: Readonly<{ bolag: Exempelbolag[] }>) {
+export function Exempelbolagslista({
+  bolag,
+  onUppdatera,
+  uppdaterar = false
+}: Readonly<{ bolag: Exempelbolag[]; onUppdatera?: () => void; uppdaterar?: boolean }>) {
   const [valt, setValt] = useState<string | null>(null);
 
   return (
     <section aria-labelledby="exempelbolag" className="rounded-card bg-paper2/40 p-5 md:p-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-        <h3 id="exempelbolag" className="text-[1.0625rem] font-semibold tracking-[-0.01em]">
-          {bolag.length} exempelbolag inlagda
-        </h3>
-        <p className="text-[13px] text-ink/45">Påhittade — kan aldrig mejlas</p>
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+        <div>
+          <h3 id="exempelbolag" className="text-[1.0625rem] font-semibold tracking-[-0.01em]">
+            {bolag.length} exempelbolag inlagda
+          </h3>
+          <p className="mt-0.5 text-[13px] text-ink/45">Påhittade — kan aldrig mejlas</p>
+        </div>
+
+        {/* Uppdatera startar INGEN körning. Den som vill se agenten formulera
+            sig om ett annat läge ska inte behöva betala för åtta LLM-anrop per
+            bolag — och inte fylla i formuläret igen heller. */}
+        {onUppdatera ? (
+          <button
+            type="button"
+            onClick={onUppdatera}
+            disabled={uppdaterar}
+            className={cn(btnSecondary)}
+          >
+            <RefreshCw className={cn("h-4 w-4", uppdaterar && "animate-spin")} aria-hidden />
+            {uppdaterar ? "Hämtar…" : "Uppdatera"}
+          </button>
+        ) : null}
       </div>
 
       <ul className="mt-4 divide-y divide-ink/10">

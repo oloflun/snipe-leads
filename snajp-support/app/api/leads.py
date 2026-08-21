@@ -8,6 +8,7 @@ så att Fas B/C kan köra på det som finns i stället för att dödlåsa sig.
 """
 
 import asyncio
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -49,25 +50,78 @@ from .schemas import (
 router = APIRouter()
 
 
-def _forsta_meningen(text: str, *, max_tecken: int = 180) -> str:
-    """Första meningen ur affärskontexten, till pitchens produktrad.
+#: Etiketter affärskontexten är skriven med. Onboardingen bygger `product` som
+#: en fältlista ("Organisationsnummer: … / Webbplats: … / Vad vi säljer: …"),
+#: och den formen är gjord för att LÄSAS av agenten, inte för att stoppas in i
+#: en mening.
+_KONTEXTETIKETTER = (
+    "vad vi säljer",
+    "vi säljer",
+    "produkt",
+    "produkten",
+    "erbjudande",
+    "erbjudandet",
+)
 
-    HELA dokumentet i ett kallmejl är inte en pitch utan en broschyr, och
-    kontexten är skriven för agenten — den innehåller rubriker, punktlistor och
-    interna noteringar. Första meningen är den enda del som är formulerad som
-    något man säger till en människa.
+#: Rader som aldrig hör hemma i en pitch, hur tidigt de än står i dokumentet.
+_HOPPA_OVER = ("organisationsnummer", "webbplats", "hemsida", "org.nr", "särskilt fokus")
 
-    Tom sträng returneras oförändrad: anroparen har en tydlig platshållare, och
-    en tom rad är bättre än en halv rubrik mitt i ett mejl.
+
+def _produktrad(text: str, *, max_tecken: int = 180) -> str:
+    """Vad kunden säljer, formulerat så att det kan följa efter "Vi säljer ".
+
+    ## Vad som gick fel utan den här
+
+    Uppmätt mot dev-deployen: pitchen sa
+
+        "Vi säljer Vad vi säljer: Inredning och utemiljö för företag …"
+
+    Affärskontexten är en FÄLTLISTA — onboardingen skriver den så — och att ta
+    dess första mening rakt av tar med etiketten. Läsaren ser inte ett mejl med
+    ett skarvfel; hen ser ett bolag som inte läst sitt eget utskick.
+
+    ## Ordningen
+
+    1. Leta efter fältet som faktiskt beskriver produkten och ta det som står
+       EFTER kolonet.
+    2. Annars första meningen som inte är org.nr, webbplats eller fokus.
+    3. Första bokstaven gemeniseras: raden fortsätter en mening som redan
+       börjat, och versalen mitt i den läser som ett citat.
+
+    Tom sträng returneras oförändrad — anroparen har en tydlig platshållare, och
+    en tom plats är bättre än en halv rubrik mitt i ett mejl.
     """
-    rent = " ".join((text or "").split())
+    rader = [rad.strip(" -•\t") for rad in (text or "").splitlines() if rad.strip()]
+    if not rader:
+        return ""
+
+    kandidat = ""
+    for rad in rader:
+        etikett, _, resten = rad.partition(":")
+        nyckel = etikett.strip().lower()
+        if resten.strip() and nyckel in _KONTEXTETIKETTER:
+            kandidat = resten.strip()
+            break
+        if resten.strip() and nyckel in _HOPPA_OVER:
+            continue
+        if not kandidat:
+            # Ingen etikett vi känner igen — men raden kan ändå vara texten.
+            kandidat = rad if not resten.strip() else resten.strip()
+
+    rent = " ".join(kandidat.split())
     if not rent:
         return ""
-    # Kapa vid meningsslut om det kommer före taket, annars vid taket.
+
     punkt = rent.find(". ")
     if 0 < punkt <= max_tecken:
-        return rent[:punkt]
-    return rent[:max_tecken].rstrip(" ,;:-–—")
+        rent = rent[:punkt]
+    else:
+        rent = rent[:max_tecken]
+    rent = rent.rstrip(" .,;:-–—")
+
+    # "Inredning och utemiljö" -> "inredning och utemiljö". Bara första
+    # tecknet: ett egennamn längre in i raden ska behålla sin versal.
+    return rent[:1].lower() + rent[1:] if rent else rent
 
 
 def _require_live_llm() -> None:
@@ -199,7 +253,7 @@ async def create_example_prospects(
     produktdoc = await storage.get_latest_context_doc(
         tenant["tenant_id"], kind="product_marketing"
     )
-    produkt = _forsta_meningen((produktdoc or {}).get("content", ""))
+    produkt = _produktrad((produktdoc or {}).get("content", ""))
 
     skapade = []
     for bolag in bygg_exempelbolag(
@@ -207,6 +261,10 @@ async def create_example_prospects(
         antal=payload.limit,
         produkt=produkt,
         avsandare=tenant.get("tenant_name") or None,
+        # Ett nytt frö per anrop. Knappen "Uppdatera" ska ge NYA bolag och nya
+        # utkast — samma tre varje gång hade sett trasigt ut, och poängen med
+        # att uppdatera är att se agenten formulera sig om ett annat läge.
+        fro=payload.fro or uuid.uuid4().hex[:8],
     ):
         prospect = await storage.create_prospect(
             tenant["tenant_id"],

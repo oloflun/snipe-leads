@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Exempelbolagslista } from "@/components/leads/LeadsRunForm";
 
 /**
@@ -24,6 +25,18 @@ import { Exempelbolagslista } from "@/components/leads/LeadsRunForm";
  * `LeadsRunForm` ändras den här sidan med, eftersom den renderar samma
  * komponent — en kopia hade slutat spegla produkten inom en vecka.
  */
+
+
+/** Samma form som backendens pitch. Se app/leads/exempelbolag.py. */
+function PITCH(namn: string, ort: string, oppning: string, varforNu: string): string {
+  return [
+    "Hej!",
+    `${oppning} i ${ort}. Anledningen att jag hör av mig just nu är att ${varforNu}.`,
+    `Vi säljer hjärtstartare och HLR-utbildning till arbetsplatser. I det läge ${namn} är i brukar det vara relevant precis nu, innan rutinerna satt sig.`,
+    "Är det något ni tittar på? I så fall svarar jag gärna på hur det brukar se ut — annars säger du bara till, så hör jag inte av mig igen.",
+    "Vänliga hälsningar,\nAnna, Hjärtsäker AB"
+  ].join("\n\n");
+}
 
 const BOLAG = [
   {
@@ -92,6 +105,53 @@ const BOLAG = [
   }
 ];
 
+
+/** Ett andra urval, så att "Uppdatera" går att prova här också. */
+const ANDRA_OMGANGEN = [
+  {
+    id: "4",
+    company_name: "Granstrand Tillverkning AB",
+    contact_name: "Inköpschef",
+    orgnr: "556744-1288",
+    ort: "Jönköping",
+    website: "granstrandtillverkningab.example",
+    anstallda: 37,
+    bransch: "Tillverkning",
+    beskrivning: "Tillverkning i Jönköping med 37 anställda. Rekryterar till produktionen — tre annonser ute.",
+    pitch_subject: "Rekryterar till produktionen — en fråga",
+    pitch_varfor_nu: "fler i produktionen betyder fler som ska introduceras, utrustas och hållas med",
+    pitch_body: PITCH("Granstrand Tillverkning AB", "Jönköping", "Jag såg att ni rekryterar till produktionen", "fler i produktionen betyder fler som ska introduceras, utrustas och hållas med")
+  },
+  {
+    id: "5",
+    company_name: "Sjöhaga Logistik Gruppen AB",
+    contact_name: "Platschef",
+    orgnr: "556019-5473",
+    ort: "Örebro",
+    website: "sjohagalogistikgruppenab.example",
+    anstallda: 22,
+    bransch: "Logistik",
+    beskrivning: "Logistik i Örebro med 22 anställda. Har bytt affärssystem och skriver om det på sin blogg.",
+    pitch_subject: "Bytt affärssystem — en fråga",
+    pitch_varfor_nu: "ett systembyte är det enda tillfället på flera år då rutiner faktiskt görs om",
+    pitch_body: PITCH("Sjöhaga Logistik Gruppen AB", "Örebro", "Jag såg att ni bytt affärssystem", "ett systembyte är det enda tillfället på flera år då rutiner faktiskt görs om")
+  },
+  {
+    id: "6",
+    company_name: "Almnäs Fastighet AB",
+    contact_name: "VD",
+    orgnr: "556352-9061",
+    ort: "Västerås",
+    website: "almnasfastighetab.example",
+    anstallda: 14,
+    bransch: "Fastighet",
+    beskrivning: "Fastighet i Västerås med 14 anställda. Har lagt om sin tjänstesida och lyfter fram service.",
+    pitch_subject: "Er nya tjänstesida — en fråga",
+    pitch_varfor_nu: "när servicelöftet skärps blir det som håller det uppe plötsligt en fråga för er",
+    pitch_body: PITCH("Almnäs Fastighet AB", "Västerås", "Jag läste er nya tjänstesida", "när servicelöftet skärps blir det som håller det uppe plötsligt en fråga för er")
+  }
+];
+
 /** Samma etiketter som formuläret använder — se ÖVERSKRIVNINGSETIKETTER. */
 const ÖVERSKRIVNINGAR: [string, string][] = [
   ["Branscher", "Bygg"],
@@ -101,6 +161,22 @@ const ÖVERSKRIVNINGAR: [string, string][] = [
 ];
 
 export default function Page() {
+  const [omgang, setOmgang] = useState(0);
+  const [hamtar, setHamtar] = useState(false);
+  const bolag = omgang % 2 === 0 ? BOLAG : ANDRA_OMGANGEN;
+
+  // Här är urvalet två fasta listor. I produkten hämtar knappen ett nytt urval
+  // från backenden, som slumpar ett frö per anrop — se `fro` i
+  // ExempelbolagRequest. Fördröjningen finns för att knappens läge ska gå att
+  // se; den motsvarar anropet.
+  function uppdatera() {
+    setHamtar(true);
+    window.setTimeout(() => {
+      setOmgang((n) => n + 1);
+      setHamtar(false);
+    }, 450);
+  }
+
   return (
     <main className="min-h-screen bg-paper py-10 text-ink">
       <div className="mx-auto max-w-[900px] space-y-6 px-4 md:px-6">
@@ -138,7 +214,7 @@ export default function Page() {
           </dl>
         </div>
 
-        <Exempelbolagslista bolag={BOLAG} />
+        <Exempelbolagslista bolag={bolag} onUppdatera={uppdatera} uppdaterar={hamtar} />
       </div>
     </main>
   );

@@ -127,6 +127,10 @@ class ExempelbolagRequest(BaseModel):
     #: Samma överskrivningar som körningen. Ett formulär som beskriver en
     #: målgrupp och skapar bolag ur en annan är värre än inga bolag alls.
     overrides: LeadsRunOverrides | None = None
+    #: Frö för urvalet. Tomt = nytt slumpat per anrop, vilket är vad knappen
+    #: "Uppdatera" behöver. Ett angivet frö ger samma lista igen och finns för
+    #: att ett utfall ska gå att återskapa när någon undrar över det.
+    fro: str | None = Field(default=None, max_length=64)
 
 
 class LeadsBatchRequest(BaseModel):

@@ -180,6 +180,7 @@ def bygg_exempelbolag(
     antal: int,
     produkt: str | None = None,
     avsandare: str | None = None,
+    fro: str = "",
 ) -> list[dict[str, Any]]:
     """Bygger `antal` exempelbolag som ligger inom ICP:t.
 
@@ -194,6 +195,7 @@ def bygg_exempelbolag(
     `.example`. Se `_falskt_orgnr` och `_webbplats`.
     """
     icp = icp or {}
+    fro_utifran = fro
     produkt = (produkt or "").strip() or PRODUKTPLATSHALLARE
     avsandare = (avsandare or "").strip() or "[ert namn]"
     branscher = icp.get("industries") or list(_DEFAULT_BRANSCHER)
@@ -211,7 +213,14 @@ def bygg_exempelbolag(
         # stad — "Sverige" i en ortskolumn läser sig som ett tomt fält.
         ort = _forsta(geografi, _DEFAULT_ORTER, i)
 
-        fro = f"{bransch}|{ort}|{i}"
+        # `fro` (utifrån) gör att "Uppdatera" ger ETT NYTT urval. Utan den är
+        # funktionen deterministisk på ICP:t allena, och knappen hade gett
+        # samma tre bolag varje gång — alltså sett trasig ut.
+        #
+        # Defaulten är tom, så anrop UTAN fro är fortfarande deterministiska.
+        # Det är vad testerna vilar på, och det är rätt: samma ICP och samma
+        # frö ska ge samma lista, annars går ingenting att jämföra.
+        fro = f"{bransch}|{ort}|{i}|{fro_utifran}"
         namn = (
             f"{_LED[_tal(fro + 'a', len(_LED))]}"
             f"{_EFTERLED[_tal(fro + 'b', len(_EFTERLED))]} "
