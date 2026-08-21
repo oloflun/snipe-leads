@@ -37,6 +37,59 @@ avsiktligt — utan nyckel svarar vi hellre inte alls än som ett annat bolag.
 
 Ersatt av `032`, som gör samma sak utan ordningsberoende. Kan tas bort.
 
+## railway-main: databasen är i kapp, KODEN är inte (2026-08-21 kväll)
+
+Cutovern av `snajp.vercel.app` till Railway är förberedd men **blockerad**, och
+blockeringen är en grendivergens — inte något som går att lösa med en flagga.
+
+### Vad som ÄR gjort
+
+| Steg | Läge |
+|---|---|
+| API-nycklar i railway-main | `RAILWAY_MAIN_KEY_SNAJP`, `RAILWAY_MAIN_KEY_LIVRUSTNING` utfärdade |
+| Livrustnings agentprofil | **Migrerad**: 22 KB-artiklar, 8 fackregler, ICP och autonomi |
+| Vektorer i railway-main | 41 skrivna, 0 misslyckade — livrustning 22/22, nordlys 16/16, public-demo 3/3, alla 1536 dim |
+| Migrationskedjan i railway-main | 82 av 82 |
+
+Migreringen gjordes med `scripts/migrera_till_railway.py` via API:t, inte via
+SQL: båda ändarna scopar varje läsning på tenanten nyckeln pekar ut, så två
+kunder kan per konstruktion inte blandas ihop.
+
+### Blockeringen
+
+`railway-main` står på `0329452` från **16 augusti**. `development` är 158
+commits före — och `railway-main` har samtidigt **22 egna commits** som
+development saknar. Grenarna har alltså divergerat, och 61 filer skiljer.
+
+Följden är mätbar, i två riktningar:
+
+* **Gammal kod mot nytt schema.** En agentkörning mot railway-main faller med
+  `KeyError: 'conversation_id'`. Databasen bär hela kedjan (jag körde den i
+  morse), koden gör det inte.
+* **Dimensionskrocken.** `POST /api/kb` svarade 500 tills jag tillfälligt tömde
+  `GEMINI_API_KEY`: koden saknar `dimensions=1536` och skickade en 3072-vektor
+  mot en `vector(1536)`-kolumn. Nyckeln är återställd, och vektorerna räknades i
+  stället LOKALT med den rättade koden (`scripts/fyll_embeddings.py --env main`).
+
+### Vad som måste bestämmas
+
+Migrationsnumren har förgrenat sig: `030` heter `suppressions_tenant_scope` i
+development och `snajp_web_role` i railway-main. Innehållet finns sannolikt i
+båda grenarna, men under olika filnamn — och båda kedjorna är redan APPLICERADE
+i var sin databas.
+
+Det går alltså inte att merga mekaniskt. Två vägar:
+
+1. **Force-push** `development` → `railway-main`. Snabbast, men kastar 22
+   commits ur den grenens historik. Kräver ett uttryckligt ja — det står i
+   CLAUDE.md att force-push som skriver över annans arbete alltid gör det.
+2. **Merge** och stäm av migrationsfilerna mot liggaren i båda databaserna, så
+   att inget körs två gånger under ett annat namn.
+
+Förrän en av dem är gjord ska `SNAJP_SUPPORT_URL` på Vercel **inte** peka om.
+Kunskapsbasen finns nu i Railway, men agenten som ska svara ur den kan inte
+köra.
+
 ## Railway: BÅDA miljöerna är i kapp (2026-08-20 kväll)
 
 Migrationskedjan är körd hela vägen i både `railway-development` och
