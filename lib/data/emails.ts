@@ -1,4 +1,3 @@
-import { emailVariants, findCompany, businessContext as mockBusinessContext } from "@/lib/mock-data";
 import type { BusinessContext } from "@/lib/database.types";
 
 export type GeneratedEmailRecord = {
@@ -75,30 +74,6 @@ const PUBLIKT_EXEMPELMEJL = {
   }
 } as const;
 
-function mockStudioData(locale: "sv" | "en" = "sv"): EmailStudioData {
-  const variant = emailVariants[0];
-  const company = findCompany(variant.companyId);
-
-  return {
-    source: "mock",
-    businessContext: null,
-    email: {
-      id: variant.id,
-      subject: variant.subject[locale],
-      body: variant.body[locale],
-      variantLength: variant.length,
-      variantType: variant.type,
-      status: "draft",
-      companyId: variant.companyId,
-      contactId: variant.contactId,
-      companyName: company?.name ?? null,
-      signal: company?.latestSignal[locale] ?? null,
-      offer: mockBusinessContext.offer[locale],
-      cta: mockBusinessContext.cta[locale],
-      contactName: company?.contacts.find((c) => c.id === variant.contactId)?.fullName ?? null
-    }
-  };
-}
 
 /**
  * Public marketing surfaces always render example data, never a workspace's real
@@ -136,7 +111,10 @@ export async function loadEmailStudioData(): Promise<EmailStudioData> {
   const context = await getWorkspaceContext();
 
   if (!context) {
-    return mockStudioData();
+    // Ingen session: samma exempel som marknadssidan, av samma skäl som
+    // nedan. Två olika exempelmejl i samma produkt är två saker att hålla
+    // uppdaterade, och det ena hann bli inaktuellt.
+    return loadPublicEmailStudioData();
   }
 
   const { sqlAsUser } = await import("@/lib/db");
@@ -161,17 +139,23 @@ export async function loadEmailStudioData(): Promise<EmailStudioData> {
   }
 
   if (!emails.length) {
-    const mock = mockStudioData(context.workspace.locale === "en" ? "en" : "sv");
+    // Arbetsytan har inga utkast ännu.
+    //
+    // Här låg `mockStudioData()`, alltså mejlet om Byggkompaniet Syd och Elin
+    // Nordin — ett annat, påhittat bolags säljmejl, omärkt, i kundens egen
+    // Email Studio. En ny kund som öppnade fliken fick intrycket att agenterna
+    // redan skrivit till någon.
+    //
+    // Nu samma exempel som webbplatsen visar, och `source: "mock"` bärs vidare
+    // så att editorn kan SÄGA att det är ett exempel (se EmailStudioEditor).
+    // Kundens affärskontext följer med när den finns, för då blir åtgärderna i
+    // studion körda mot deras eget erbjudande och inte mot exemplets.
+    const exempel = loadPublicEmailStudioData(context.workspace.locale === "en" ? "en" : "sv");
 
-    if (context.businessContext) {
-      return {
-        ...mock,
-        source: "mock",
-        businessContext: context.businessContext
-      };
-    }
-
-    return mock;
+    return {
+      ...exempel,
+      businessContext: context.businessContext ?? null
+    };
   }
 
   const row = emails[0] as {

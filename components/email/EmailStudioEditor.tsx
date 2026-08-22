@@ -41,7 +41,11 @@ const ui = {
   company: { sv: "Företag", en: "Company" },
   signal: { sv: "Signal", en: "Signal" },
   offer: { sv: "Erbjudande", en: "Offer" },
-  cta: { sv: "CTA", en: "CTA" }
+  cta: { sv: "CTA", en: "CTA" },
+  exempel: {
+    sv: "Exempelmejl. Ni har inga utkast ännu — starta en körning under Leads, så ligger era egna här.",
+    en: "Example email. You have no drafts yet — start a run under Leads and your own will appear here."
+  }
 } satisfies Record<string, Localized>;
 
 type RichResult = {
@@ -181,6 +185,18 @@ export function EmailStudioEditor({
       ) : null}
 
       <section className={cn(!compact && inputRows.length > 0 ? "lg:col-span-8" : "")}>
+        {/* Bara i arbetsytan (`compact` är marknadssidan, som redan säger i
+            sin egen text att mejlet är ett exempel).
+
+            Utan raden fick en ny kund ett färdigskrivet säljmejl till ett bolag
+            de aldrig hört talas om, omärkt, i sin egen Email Studio — och
+            ingenting sa att agenterna inte redan hade skrivit det åt dem. */}
+        {!compact && data.source === "mock" ? (
+          <p className="mb-5 rounded-input bg-paper2/70 px-4 py-3 text-[0.875rem] leading-6 text-ink/65">
+            {text(ui.exempel)}
+          </p>
+        ) : null}
+
         <label htmlFor="studio-subject" className="block text-[0.8125rem] font-medium text-ink/45">
           {text(ui.subjectLabel)}
         </label>
