@@ -112,8 +112,8 @@ export function Testkorningar() {
       <section className="border-t border-ink/15 pt-8">
         <h2 className="font-display text-2xl tracking-[-0.02em]">Kundtjänstagenten</h2>
         <p className="mt-2 max-w-[65ch] text-[15px] text-mineral">
-          Ställ en fråga och se det grundade svaret. Går agenten inte att grunda i kunskapsbasen ska
-          den eskalera i stället för att gissa — det är också ett giltigt testresultat.
+          Ställ en fråga och se det grundade svaret. Går svaret inte att grunda i kunskapsbasen ska
+          agenten eskalera i stället för att gissa — det är också ett giltigt testresultat.
         </p>
 
         <div className="mt-6 max-w-[760px]">

@@ -53,12 +53,12 @@ const copy = {
     en: "Where both agents stand, and what is waiting for you. Change what is shown at the top right."
   },
   descLeads: {
-    sv: "Vad agenten hittat, vad den grundade urvalet i, och vad som väntar på ditt godkännande.",
-    en: "What the agent found, what it based the selection on, and what is waiting for your approval."
+    sv: "Vad agenterna hittat, vad de grundade urvalet i, och vad som väntar på ditt godkännande.",
+    en: "What the agents found, what they based the selection on, and what is waiting for your approval."
   },
   descSupport: {
-    sv: "Vad som kommit in, hur mycket agenten klarade själv, och vad som ligger hos dig.",
-    en: "What came in, how much the agent handled on its own, and what is waiting for you."
+    sv: "Vad som kommit in, hur mycket agenterna klarade själva, och vad som ligger hos dig.",
+    en: "What came in, how much the agents handled on their own, and what is waiting for you."
   },
   freshBody: {
     sv: "Arbetsytan är tom. Beskriv vad ni säljer och vem ni säljer till, så kan Snajp börja föreslå bolag och skriva utkast.",

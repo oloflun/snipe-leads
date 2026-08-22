@@ -151,7 +151,7 @@ export async function sparaAffarskontext(
   if (!produkt) {
     return {
       success: false,
-      error: "Skriv en rad om vad ni säljer. Det är det agenten ska sälja."
+      error: "Skriv en rad om vad ni säljer. Det är det agenterna ska sälja."
     };
   }
 
@@ -214,10 +214,10 @@ async function skickaTillAgenten(
       signal: AbortSignal.timeout(60_000)
     });
     if (!response.ok) {
-      return `Sparat. Agenten hämtar texten först när backenden svarar igen (${response.status}).`;
+      return `Sparat. Agenterna hämtar texten först när backenden svarar igen (${response.status}).`;
     }
     return undefined;
   } catch {
-    return "Sparat i arbetsytan. Agenten kunde inte nås just nu och läser texten vid nästa försök.";
+    return "Sparat i arbetsytan. Agenterna kunde inte nås just nu och läser texten vid nästa försök.";
   }
 }

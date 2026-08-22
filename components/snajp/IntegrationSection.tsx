@@ -36,8 +36,8 @@ export function IntegrationSection() {
           </div>
           <p className="mt-3 text-sm leading-6 text-ink/65">
             {text({
-              sv: "Agenten är helt headless: samma backend som driver demon ovan exponeras som ett REST-API. Koppla ert affärssystem, e-postflöde eller webbformulär direkt mot endpointsen — varje kund får en egen API-nyckel och all historik lagras som ett komplett CRM i PostgreSQL.",
-              en: "The agent is fully headless: the same backend that powers the demo above is exposed as a REST API. Wire your business system, email flow or web form straight to the endpoints — each customer gets their own API key and all history is stored as a complete CRM in PostgreSQL."
+              sv: "Agenterna är helt headless: samma backend som driver demon ovan exponeras som ett REST-API. Koppla ert affärssystem, e-postflöde eller webbformulär direkt mot endpointsen — varje kund får en egen API-nyckel och all historik lagras som ett komplett CRM i PostgreSQL.",
+              en: "The agents are fully headless: the same backend that powers the demo above is exposed as a REST API. Wire your business system, email flow or web form straight to the endpoints — each customer gets their own API key and all history is stored as a complete CRM in PostgreSQL."
             })}
           </p>
           <div className="mt-4 overflow-x-auto">

@@ -48,12 +48,12 @@ const leads: ProduktCopy = {
   },
   punkter: {
     sv: [
-      ["Hittar rätt bolag", "Agenten letar prospekt utifrån er produkt och gör en behovsanalys innan en enda rad skrivs."],
+      ["Hittar rätt bolag", "Agenterna letar prospekt utifrån er produkt och gör en behovsanalys innan en enda rad skrivs."],
       ["Personliga, professionella mail", "Behovsanalysen och ert erbjudande går in i mejlet. Ni får ett utkast att ändra i, inte en mall att fylla i."],
       ["Ni har sista ordet", "Inget går ut utan att ni bestämt det. Mailen granskas alltid av en människa innan de skickas."]
     ],
     en: [
-      ["Finds the right companies", "The agent looks for prospects based on your product and works out the need before a single line is written."],
+      ["Finds the right companies", "The agents look for prospects based on your product and work out the need before a single line is written."],
       ["Personal, professional emails", "The analysis and your offer go into the email. You get a draft to edit, not a template to fill in."],
       ["You have the final say", "Nothing goes out unless you decide it does. Every email is reviewed by a person before it is sent."]
     ]
@@ -72,12 +72,12 @@ const support: ProduktCopy = {
   punkter: {
     sv: [
       ["Sorteras automatiskt", "Varje mejl hamnar i rätt fack: garanti, leverans, betalning, teknisk support. Ni slutar sortera för hand."],
-      ["Färdiga, korrekta svar", "Agenten svarar utifrån ER kunskapsbas, inte ur en allmän modell. Saknas svaret säger den det i stället för att gissa. Om den mot förmodan inte kan ge ett svar, så eskalerar den och skickar vidare."],
+      ["Färdiga, korrekta svar", "Agenterna svarar utifrån ER kunskapsbas, inte ur en allmän modell. Saknas svaret säger de det i stället för att gissa. Om de mot förmodan inte kan ge ett svar, så eskalerar de och skickar vidare."],
       ["Ni har sista ordet", "Inget går ut utan att ni bestämt det. Mailen granskas alltid av en människa innan de skickas."]
     ],
     en: [
       ["Sorted automatically", "Every email lands in the right category: warranty, delivery, payment, technical support. No more manual triage."],
-      ["Complete, accurate replies", "The agent answers from YOUR knowledge base, not from a general model. If the answer is missing it says so instead of guessing. Should it still be unable to answer, it escalates and hands the case on."],
+      ["Complete, accurate replies", "The agents answer from YOUR knowledge base, not from a general model. If the answer is missing they say so instead of guessing. Should they still be unable to answer, they escalate and hand the case on."],
       ["You have the final say", "Nothing goes out unless you decide it does. Every email is reviewed by a person before it is sent."]
     ]
   }

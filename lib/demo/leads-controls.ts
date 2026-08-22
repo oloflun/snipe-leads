@@ -20,17 +20,17 @@ const AUTONOMY_LEVELS: { value: Autonomy; description: string }[] = [
   {
     value: "draft",
     description:
-      "Agenten researchar och skriver utkast. Ingenting lämnar systemet utan att du tryckt skicka."
+      "Agenterna researchar och skriver utkast. Ingenting lämnar systemet utan att du tryckt skicka."
   },
   {
     value: "first_contact",
     description:
-      "Agenten får skicka det första mejlet själv. Uppföljningar och allt därefter kräver ditt godkännande."
+      "Agenterna får skicka det första mejlet själva. Uppföljningar och allt därefter kräver ditt godkännande."
   },
   {
     value: "meeting",
     description:
-      "Agenten får föra dialogen fram till ett bokat möte. Den bokar aldrig utan att du bekräftat tiden."
+      "Agenterna får föra dialogen fram till ett bokat möte. De bokar aldrig utan att du bekräftat tiden."
   }
 ];
 

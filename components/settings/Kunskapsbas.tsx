@@ -244,8 +244,8 @@ export function KunskapsbasPanel() {
         }
         setMeddelande(
           nya.length === 1
-            ? "Sparat. Agenten kan svara ur texten från nästa ärende."
-            : `${nya.length} dokument sparade. Agenten kan svara ur dem från nästa ärende.`
+            ? "Sparat. Agenterna kan svara ur texten från nästa ärende."
+            : `${nya.length} dokument sparade. Agenterna kan svara ur dem från nästa ärende.`
         );
         setRubrik("");
         setText("");
@@ -330,7 +330,7 @@ export function KunskapsbasPanel() {
             value={text}
             onChange={(e) => setText(e.target.value)}
             rows={8}
-            placeholder="Texten agenten ska svara ur. Skriv som ni skulle svarat en kund."
+            placeholder="Texten agenterna ska svara ur. Skriv som ni skulle svarat en kund."
             className="w-full resize-y rounded-input border border-ink/15 bg-paper px-3 py-2 text-[15px] leading-6 focus-ring"
           />
           <div>
@@ -361,7 +361,7 @@ export function KunskapsbasPanel() {
           <p className="mt-4 text-[15px] text-ink/50">Hämtar…</p>
         ) : artiklar.length === 0 ? (
           <p className="mt-4 max-w-[65ch] text-[15px] leading-7 text-ink/60">
-            Tom. Agenten eskalerar varje ärende den inte kan grunda — det är rätt beteende, men
+            Tom. Agenterna eskalerar varje ärende de inte kan grunda — det är rätt beteende, men
             det betyder också att den inte kan svara på något förrän det ligger något här.
           </p>
         ) : (

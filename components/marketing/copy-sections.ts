@@ -87,8 +87,8 @@ const leads: SectionCopy = {
     {
       q: { sv: "Blir det inte bara mer AI-spam?", en: "Is this not just more AI spam?" },
       a: {
-        sv: "Agenten skickar personliga och professionella mail till noggrant utvalda kunder. Du är alltid den som trycker godkänn och skicka.",
-        en: "The agent writes personal, professional emails to carefully chosen companies. You are always the one who presses approve and send."
+        sv: "Agenterna skickar personliga och professionella mail till noggrant utvalda kunder. Du är alltid den som trycker godkänn och skicka.",
+        en: "The agents write personal, professional emails to carefully chosen companies. You are always the one who presses approve and send."
       }
     },
     {
@@ -143,8 +143,8 @@ const support: SectionCopy = {
     en: "Answers in Swedish, in *your* words."
   },
   placeBody: {
-    sv: "Agenten hämtar formuleringarna ur er kunskapsbas, så tonen blir er egen och inte en översättning. Kunden märker att svaret kommer från er, inte från en generisk assistent.",
-    en: "The agent takes its phrasing from your knowledge base, so the tone is yours rather than a translation. The customer can tell the reply came from you and not from a generic assistant."
+    sv: "Agenterna hämtar formuleringarna ur er kunskapsbas, så tonen blir er egen och inte en översättning. Kunden märker att svaret kommer från er, inte från en generisk assistent.",
+    en: "The agents take their phrasing from your knowledge base, so the tone is yours rather than a translation. The customer can tell the reply came from you and not from a generic assistant."
   },
   objectionsHeading: {
     sv: "Frågor och *Svar*.",

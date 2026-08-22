@@ -125,7 +125,7 @@ function vanligast(varden: (string | null | undefined)[], antal: number): [strin
 
 // -- Delade byggstenar -----------------------------------------------------
 
-type Tillstand = { etikett: string; varde: string; larm?: boolean };
+type Tillstand = { etikett: string; varde: string; larm?: boolean; drift?: boolean };
 
 /**
  * Raden överst: vad agenten vet och vad den får göra, på en rad.
@@ -156,6 +156,18 @@ function Tillstandsrad({ poster }: Readonly<{ poster: Tillstand[] }>) {
               <span className="h-2 w-2 shrink-0 rounded-full bg-ochre" aria-hidden />
             ) : null}
             {post.varde}
+            {/* Grön prick EFTER värdet, inte före: den säger "det här är i
+                drift" om raden den står på, och en markör som föregår sitt
+                värde läses som en punktlista. Färgen bär ingen text, så den
+                har inget kontrastkrav — men den behöver ett tillgängligt namn,
+                annars är "Jobbar" med en osynlig prick allt en skärmläsare
+                får. */}
+            {post.drift ? (
+              <span className="ml-1.5 inline-flex shrink-0 items-center">
+                <span className="h-2 w-2 rounded-full bg-moss" aria-hidden />
+                <span className="sr-only">i drift</span>
+              </span>
+            ) : null}
           </dd>
         </div>
       ))}
@@ -364,7 +376,7 @@ function Komigang({ rader }: Readonly<{ rader: { text: string; href: string; kna
         className="flex items-center gap-2.5 text-[1.0625rem] font-semibold tracking-[-0.01em]"
       >
         <span className="h-2 w-2 shrink-0 rounded-full bg-ochre" aria-hidden />
-        Innan agenten kan börja
+        Innan agenterna kan börja
       </h2>
       <ul className="mt-4 grid gap-4">
         {rader.map((rad) => (
@@ -538,13 +550,6 @@ type Onboarding = { complete?: boolean; missing?: string[] };
 const PROSPEKTTAK = 100;
 const KORNINGSTAK = 200;
 
-const AUTONOMI_KORT: Record<string, string> = {
-  draft: "Skriver utkast",
-  first_contact: "Skickar första mejlet",
-  meeting: "Driver mot möte",
-  auto_send: "Skickar självt"
-};
-
 export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
   const hamta = useHamtare(demo);
   const vag = useArbetsvag();
@@ -639,8 +644,14 @@ export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
         poster={[
           { etikett: "Arbetsyta", varde: workspaceName ?? "—" },
           {
-            etikett: "Agenten får",
-            varde: config?.autonomy ? (AUTONOMI_KORT[config.autonomy] ?? config.autonomy) : "—"
+            // Stod "Agenten får" med autonomiläget som värde ("Skriver
+            // utkast"). Etikett och värde lästes ihop till "Agenten får
+            // skriver utkast", vilket inte är en mening. Raden säger nu att
+            // agenten är i drift; autonomiläget styrs och visas under
+            // Målgrupp och autonomi, där det hör hemma.
+            etikett: "Agenten",
+            varde: "Jobbar",
+            drift: true
           },
           {
             etikett: "Kunskapsbas",
@@ -659,7 +670,7 @@ export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
           onboarding?.missing?.includes("product_marketing")
             ? [
                 {
-                  text: "Agenten vet inte vad ni säljer. Utan den texten kan den varken välja bolag eller skriva ett utkast som håller.",
+                  text: "Agenterna vet inte vad ni säljer. Utan den texten kan de varken välja bolag eller skriva ett utkast som håller.",
                   href: vag("/settings/affarskontext"),
                   knapp: "Fyll i affärskontexten"
                 }
@@ -710,11 +721,10 @@ export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
         />
       </Talrad>
 
-      {config?.autonomy_description ? (
-        <Pastaende markerat={AUTONOMI_KORT[config.autonomy ?? ""]}>
-          {config.autonomy_description}
-        </Pastaende>
-      ) : null}
+      {/* Autonomibeskrivningen ("Skriver utkast — Agenten researchar och
+          skriver ...") stod här. Den upprepade tillståndsraden ovanför och
+          inställningen under Målgrupp och autonomi, alltså samma uppgift på
+          tre ställen. */}
 
       <Sektion rubrik="Att göra">
         <AttGora
@@ -726,18 +736,18 @@ export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
           }))}
           href={vag("/dashboard/leads")}
           knapp="Öppna granskningskön"
-          tomtext="Ingenting väntar på ditt godkännande. Utkast agenten skriver hamnar här."
+          tomtext="Inget mail ligger och väntar på ditt godkännande. Mailen agenterna skriver hamnar här."
         />
       </Sektion>
 
       <div className="grid gap-10 lg:grid-cols-12">
         <div className="min-w-0 lg:col-span-4">
-          <Sektion rubrik="Var agenten letar">
+          <Sektion rubrik="Var agenterna letar">
             <Stapellista rader={orter} tomtext="Ingen ort utläst ur prospekten ännu." />
           </Sektion>
         </div>
         <div className="min-w-0 lg:col-span-4">
-          <Sektion rubrik="Vad den hittar">
+          <Sektion rubrik="Vad de hittar">
             <Stapellista rader={branscher} tomtext="Ingen bransch utläst ur prospekten ännu." />
           </Sektion>
         </div>
@@ -745,7 +755,7 @@ export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
           <Sektion rubrik="Varför bolag valdes bort">
             <Stapellista
               rader={bortvalda}
-              tomtext="Inget prospekt har valts bort med angiven orsak ännu. Orsakerna sparas när agenten researchat."
+              tomtext="Inget prospekt har valts bort med angiven orsak ännu. Orsakerna sparas när agenterna researchat."
             />
           </Sektion>
         </div>
@@ -934,7 +944,7 @@ export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) 
           kbAntal === 0
             ? [
                 {
-                  text: "Kunskapsbasen är tom. Agenten gissar aldrig — den eskalerar varje ärende den inte kan grunda, så inkorgen blir en lista med röda rader tills det ligger något här.",
+                  text: "Kunskapsbasen är tom. Agenterna gissar aldrig — de eskalerar varje ärende de inte kan grunda, så inkorgen blir en lista med röda rader tills det ligger något här.",
                   href: vag("/settings/kunskapsbas"),
                   knapp: "Fyll kunskapsbasen"
                 }
@@ -988,8 +998,8 @@ export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) 
           }
         >
           {auto.length === 0
-            ? "skickas utan att du sett det. Varje svar ligger som utkast tills du godkänt det. Pengar, juridik, GDPR och arga kunder går alltid till en människa."
-            : `besvaras av agenten självt: ${auto.map((r) => r.label.toLowerCase()).join(", ")}. Pengar, juridik, GDPR och arga kunder går alltid till en människa, oavsett regel.`}
+            ? "skickas utan att du sett det. Varje svar ligger som utkast tills du godkänt det."
+            : `besvaras av agenterna själva: ${auto.map((r) => r.label.toLowerCase()).join(", ")}.`}
         </Pastaende>
       )}
 
@@ -1005,7 +1015,7 @@ export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) 
           }))}
           href={vag("/dashboard/support")}
           knapp="Granska utkasten"
-          tomtext="Inget utkast väntar på ditt godkännande. Svar agenten skriver hamnar här först."
+          tomtext="Inget mail ligger och väntar på ditt godkännande. Svaren agenterna skriver hamnar här först."
         />
       </Sektion>
 
@@ -1021,7 +1031,7 @@ export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) 
           </Sektion>
         </div>
         <div className="min-w-0 lg:col-span-5">
-          <Sektion rubrik="Hur väl agenten kan grunda svaren">
+          <Sektion rubrik="Hur väl agenterna kan grunda svaren">
             <Faktalista
               rader={[
                 {
@@ -1041,7 +1051,7 @@ export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) 
             />
             {eskaleratUtanKalla > 0 ? (
               <p className="mt-4 max-w-[52ch] text-[0.875rem] leading-6 text-ink/60">
-                De ärendena lämnades över för att agenten inte hittade något att svara ur, inte för
+                De ärendena lämnades över för att agenterna inte hittade något att svara ur, inte för
                 att frågan var svår.{" "}
                 <Link
                   href={vag("/settings/kunskapsbas")}

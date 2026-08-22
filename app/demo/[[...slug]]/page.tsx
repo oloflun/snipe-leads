@@ -175,7 +175,7 @@ function ReglerDemo() {
     <PageShell
       kicker="Kundtjänst"
       title="Fack och autosvar"
-      description="Vilka ärenden agenten får besvara självt, och vilka som alltid går till en människa. Ändringarna sparas inte i demon."
+      description="Vilka ärenden agenterna får besvara själva, och vilka som alltid går till en människa. Ändringarna sparas inte i demon."
     >
       <SupportRegler demo />
     </PageShell>

@@ -78,11 +78,11 @@ export function OnboardingForm() {
       return;
     }
     if (!produkt.trim()) {
-      setError("Skriv en rad om vad ni säljer. Det är det agenten ska sälja.");
+      setError("Skriv en rad om vad ni säljer. Det är det agenterna ska sälja.");
       return;
     }
     if (!webbplats.trim()) {
-      setError("Fyll i webbplatsen. Det är den agenten läser för att förstå er.");
+      setError("Fyll i webbplatsen. Det är den agenterna läser för att förstå er.");
       return;
     }
 
@@ -103,7 +103,7 @@ export function OnboardingForm() {
   return (
     <form onSubmit={handleSubmit}>
       <p className="mt-4 max-w-[62ch] text-[15px] leading-[1.65] text-ink/70">
-        Fyll i fyra rader. Agenten läser er webbplats och tar reda på resten
+        Fyll i fyra rader. Agenterna läser er webbplats och tar reda på resten
         själv — bransch, tonläge och hur ni beskriver er.
       </p>
 
@@ -126,7 +126,7 @@ export function OnboardingForm() {
             Utan den här rutan finns bara två vägar för att skapa en testkund:
             hitta på ett organisationsnummer som råkar klara Luhn, eller
             klistra in ett riktigt bolags. Det andra är sämre än det ser ut —
-            numret hamnar i affärskontexten som agenten sedan säljer utifrån.
+            numret hamnar i affärskontexten som agenterna sedan säljer utifrån.
 
             Markeringen skrivs in i affärskontexten, inte bara som ett flaggfält,
             så att den syns för den som läser kunden i adminvyn. En testkund som
@@ -151,7 +151,7 @@ export function OnboardingForm() {
 
         <Falt
           label="Webbplats"
-          hint="Den här läser agenten. Utan den vet den bara ert nummer."
+          hint="Den här läser agenterna. Utan den vet de bara ert nummer."
           span="md:col-span-6"
           value={webbplats}
           onChange={setWebbplats}
@@ -162,7 +162,7 @@ export function OnboardingForm() {
 
         <Falt
           label="Vad ni säljer"
-          hint="En rad räcker. Agenten fyller på från sajten."
+          hint="En rad räcker. Agenterna fyller på från sajten."
           span="md:col-span-12"
           value={produkt}
           onChange={setProdukt}
@@ -171,7 +171,7 @@ export function OnboardingForm() {
 
         <Falt
           label="Något extra att fokusera på (valfritt)"
-          hint="Till exempel en nisch, ett segment ni vill åt, eller något ni vill att agenten undviker."
+          hint="Till exempel en nisch, ett segment ni vill åt, eller något ni vill att agenterna undviker."
           span="md:col-span-12"
           value={fokus}
           onChange={setFokus}
@@ -194,7 +194,7 @@ export function OnboardingForm() {
       </button>
 
       <p className="mt-4 max-w-[62ch] text-[13px] leading-[1.55] text-mineral">
-        Inget skickas till någon mottagare av det här. Agenten läser er sajt och
+        Inget skickas till någon mottagare av det här. Agenterna läser er sajt och
         förbereder underlag — utskick kräver att ni själva slår på det, och de
         tre första granskas alltid av en människa.
       </p>

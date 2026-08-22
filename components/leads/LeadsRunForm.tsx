@@ -90,7 +90,7 @@ type Exempelbolag = {
 const ÖVERSKRIVNINGSETIKETTER: [string, string][] = [
   ["industries", "Branscher"],
   ["exclude_industries", "Undviker"],
-  ["geography", "Geografi"],
+  ["geography", "Stad, län, region"],
   ["roles", "Beslutsfattarroller"],
   ["must_have", "Signaler som krävs"],
   ["deal_breakers", "Diskvalificerar"],
@@ -322,10 +322,10 @@ export function LeadsRunForm({
         <Rad etikett="Undvik branscher">
           <input value={undvik} onChange={(e) => setUndvik(e.target.value)} placeholder="Bemanning" className={fältklass} />
         </Rad>
-        <Rad etikett="Geografi">
+        <Rad etikett="Stad, län, region">
           <input value={geografi} onChange={(e) => setGeografi(e.target.value)} placeholder="Västra Götaland" className={fältklass} />
         </Rad>
-        <Rad etikett="Beslutsfattarroller" hint="vem agenten ska leta efter">
+        <Rad etikett="Beslutsfattarroller" hint="vem agenterna ska leta efter">
           <input value={roller} onChange={(e) => setRoller(e.target.value)} placeholder="VD, inköpschef" className={fältklass} />
         </Rad>
         <Rad etikett="Signaler som krävs" hint="nischen">
@@ -362,7 +362,7 @@ export function LeadsRunForm({
         />
         <span className="text-[14px] leading-6 text-ink/70">
           Fyll på med <strong>exempelbolag</strong> som passar er produkt. Påhittade bolag som
-          visar hur agenten arbetar innan ni har en egen lista — de kan aldrig mejlas.
+          visar hur agenterna arbetar innan ni har en egen lista — de kan aldrig mejlas.
         </span>
       </label>
 

@@ -20,7 +20,7 @@ import { companies } from "@/lib/mock-data";
  */
 
 /** Samma text som backendens `autonomy.describe("draft")`. Inte en parafras. */
-const AUTONOMI_DRAFT = "Agenten researchar och skriver. Ingenting skickas förrän du tryckt skicka.";
+const AUTONOMI_DRAFT = "Agenterna researchar och skriver. Ingenting skickas förrän du tryckt skicka.";
 
 function timmarSedan(timmar: number): string {
   return new Date(Date.now() - timmar * 3_600_000).toISOString();

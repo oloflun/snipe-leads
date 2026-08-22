@@ -147,10 +147,10 @@ function HeaderForslag({
 function Innehall({ flik }: Readonly<{ flik: string }>) {
   const text: Record<string, string> = {
     Översikt: "Läget i båda agenterna, och vad som väntar på dig.",
-    Leads: "Bolag agenten hittat, vad den grundade urvalet i, och vad som väntar på dig.",
-    Kundtjänst: "Inkommande ärenden, agentens klassificering och svaren som väntar på godkännande.",
+    Leads: "Bolag agenterna hittat, vad de grundade urvalet i, och vad som väntar på dig.",
+    Kundtjänst: "Inkommande ärenden, agenternas klassificering och svaren som väntar på godkännande.",
     "Email studio": "Ämnesrad, brödtext och uppföljning. Varje åtgärd visar vad den ändrade.",
-    Inställningar: "Vad agenten vet, vad den får göra, och kontot."
+    Inställningar: "Vad agenterna vet, vad de får göra, och kontot."
   };
   return (
     <div className="mx-auto max-w-[1400px] border-t border-ink/10 px-4 py-8 md:px-6">

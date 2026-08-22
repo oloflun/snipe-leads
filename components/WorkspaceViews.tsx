@@ -64,7 +64,10 @@ function CompanyLedger({ rows = companies }: Readonly<{ rows?: Company[] }>) {
   return (
     <div className="overflow-x-auto border-y border-ink/15">
       <div className="hidden min-w-[1120px] grid-cols-12 gap-x-6 border-b border-ink/15 py-4 md:grid">
-        {["Bolag", "Segment", "Kontakt", "Signal", "Score", "Status"].map((head, index) => (
+        {/* Utan kolumnen "Status". Den visade det råa statusordet
+            ("recommended", "queued") i en kundvänd tabell — våra interna
+            värden, oöversatta, i en vy där resten är skriven på svenska. */}
+        {["Bolag", "Segment", "Kontakt", "Signal", "Score"].map((head, index) => (
           <div key={head} className={cn("kicker text-mineral", index === 0 ? "col-span-3" : index === 3 ? "col-span-3" : "col-span-2", index > 3 ? "text-right" : "")}>
             {head}
           </div>
@@ -85,8 +88,7 @@ function CompanyLedger({ rows = companies }: Readonly<{ rows?: Company[] }>) {
                 <p className="mt-1 text-sm text-ink/55">{contact.role}</p>
               </div>
               <div className="col-span-3 text-[15px] leading-6 text-ink/72">{text(company.latestSignal)}</div>
-              <div className="num col-span-1 text-right text-[1.0625rem] font-semibold tabular-nums">{company.score}</div>
-              <div className="col-span-1 text-right"><StatusWord value={company.status} /></div>
+              <div className="num col-span-2 text-right text-[1.0625rem] font-semibold tabular-nums">{company.score}</div>
             </Link>
           );
         })}
@@ -171,9 +173,8 @@ export function LeadsBody({ demo = false }: Readonly<{ demo?: boolean }>) {
 export function LeadsView({ demo = false }: Readonly<{ demo?: boolean }>) {
   return (
     <PageShell
-      kicker="Lead discovery"
-      title="Svenska bolag sorterade efter tajming, inte efter mall."
-      description="Beskriv vem ni vill träffa och starta en körning. Agenten letar upp bolagen, grundar urvalet i källor och visar vad den byggde bedömningen på."
+      title="Bolag sorterade efter din produkt och ton, inte efter en mall."
+      description="Specificera vilka typer av kunder ni söker. Agenterna letar upp potentiella bolag baserat på dina ord."
     >
       <LeadsBody demo={demo} />
     </PageShell>
@@ -427,14 +428,14 @@ export function SettingsView({ section = "foretaget" }: Readonly<{ section?: Set
     team: "Vilka som har tillgång till arbetsytan, och vad de får göra.",
     billing: "Vad ni har förbrukat den här månaden, och vad nästa faktura blir.",
     affarskontext: "Vad ni säljer och till vem. Båda agenterna läser härifrån.",
-    kunskapsbas: "Dokumenten agenten svarar ur. Ligger inget här gissar den aldrig — den eskalerar.",
-    leads: "Vilka bolag agenten ska leta efter, och hur långt den får gå på egen hand.",
-    regler: "Vilka ärenden agenten får besvara självt, och vilka som alltid går till en människa.",
-    soul: "Beskriv hur ni låter. Agenten skriver så i både utskick och svar — dokumentet är delat mellan agenterna.",
-    addons: "Det agenten kan göra utöver det som ingår i er plan."
+    kunskapsbas: "Dokumenten agenterna svarar ur. Ligger inget här gissar de aldrig — de eskalerar.",
+    leads: "Vilka bolag agenterna ska leta efter, och hur långt de får gå på egen hand.",
+    regler: "Vilka ärenden agenterna får besvara själva, och vilka som alltid går till en människa.",
+    soul: "Beskriv hur ni låter. Agenterna skriver så i både utskick och svar — dokumentet är delat mellan dem.",
+    addons: "Det agenterna kan göra utöver det som ingår i er plan."
   };
   return (
-    <PageShell kicker="Settings" title={titles[section]} description={descriptions[section]}>
+    <PageShell title={titles[section]} description={descriptions[section]}>
       {/* gap-x först från md. grid-cols-12 med gap-x-8 kräver 11 x 32px = 352px
           BARA till mellanrum: vid 320px-vyn (288px container) klampades alla
           tolv kolumner till 0px, och rutnätet blev 352px brett oavsett

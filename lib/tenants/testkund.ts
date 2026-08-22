@@ -57,7 +57,7 @@ export const testkund: Tenant = {
     "Det här är en testarbetsyta. Svaren kommer från Snajps egen kunskapsbas och ska inte visas för en riktig kund.",
   supportPrompts: [
     "Vad kostar Snajp och vad ingår i paketen?",
-    "Hur lång tid tar en uppstart innan agenten kan svara?",
-    "Var hämtar agenten sina svar ifrån?"
+    "Hur lång tid tar en uppstart innan agenterna kan svara?",
+    "Var hämtar agenterna sina svar ifrån?"
   ]
 };

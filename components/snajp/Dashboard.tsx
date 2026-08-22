@@ -235,7 +235,7 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
       setSelected(null);
       setSyncInfo(
         svar?.kb_tom
-          ? "Testmailen är inlästa. Kunskapsbasen är tom, så agenten eskalerar allt tills ni lagt in något — det är avsiktligt, den gissar aldrig."
+          ? "Testmailen är inlästa. Kunskapsbasen är tom, så agenterna eskalerar allt tills ni lagt in något — det är avsiktligt, de gissar aldrig."
           : null
       );
     });

@@ -301,11 +301,14 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
           <div className="border-b border-ochre/30 bg-ochre/10">
             <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 md:px-6">
               <span className="kicker text-ochre">Demo</span>
-              <span className="text-[13px] text-ink/70">
-                {vy === "demo"
-                  ? "Demokontot Nordlys Handel. Allt du gör här skrivs till demokontot, aldrig till en kund."
-                  : "Du testar Snajp med ett begränsat antal körningar."}
-              </span>
+              {/* Demovyn bär ingen förklarande rad längre. Märkningen "Demo"
+                  räcker där; texten om demokontot namngav dessutom
+                  exempelbutiken i en yta som visas för kunder. */}
+              {vy === "demo" ? null : (
+                <span className="text-[13px] text-ink/70">
+                  Du testar Snajp med ett begränsat antal körningar.
+                </span>
+              )}
               {vy === "demo" ? null : (
                 <a
                   href="mailto:Snajpsupport@gmail.com"
@@ -337,9 +340,11 @@ export function PageShell({
   children,
   action
 }: Readonly<{
-  kicker: string;
+  /** Överraden. Utelämnas när sidan inte ska ha någon — se nedan. */
+  kicker?: string;
   title: string;
-  description: string;
+  /** Ingressen. Samma sak: en vy utan ingress renderar ingen tom rad. */
+  description?: string;
   children: React.ReactNode;
   action?: React.ReactNode;
 }>) {
@@ -354,9 +359,17 @@ export function PageShell({
       <section className={iAdmin ? "" : "mx-auto max-w-[1400px] px-4 py-8 md:px-6 md:py-10"}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-[0.8125rem] font-medium text-ink/45">{kicker}</p>
-            <h1 className="mt-1 text-[1.5rem] font-semibold leading-tight tracking-[-0.02em]">{title}</h1>
-            <p className="mt-2 max-w-[68ch] text-[0.9375rem] leading-[1.6] text-ink/65">{description}</p>
+            {/* Tomma rader renderas inte alls. Flera vyer har fått sin
+                överrad eller ingress borttagen, och ett tomt <p> lämnar kvar
+                sin marginal — rubriken hade legat och flutit en rad för lågt
+                utan något som förklarar varför. */}
+            {kicker ? <p className="text-[0.8125rem] font-medium text-ink/45">{kicker}</p> : null}
+            <h1 className={cn("text-[1.5rem] font-semibold leading-tight tracking-[-0.02em]", kicker && "mt-1")}>
+              {title}
+            </h1>
+            {description ? (
+              <p className="mt-2 max-w-[68ch] text-[0.9375rem] leading-[1.6] text-ink/65">{description}</p>
+            ) : null}
           </div>
           {action ? <div className="shrink-0">{action}</div> : null}
         </div>

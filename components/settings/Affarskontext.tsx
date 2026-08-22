@@ -1,9 +1,7 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useArbetsvag } from "@/components/AppShell";
 import { btnPrimary } from "@/components/ui";
 import {
   hamtaAffarskontext,
@@ -28,7 +26,7 @@ const FALT: { nyckel: keyof Affarskontextfalt; etikett: string; hjalp: string; r
   {
     nyckel: "product",
     etikett: "Vad ni säljer",
-    hjalp: "En eller två meningar. Det här är det agenten ska sälja.",
+    hjalp: "En eller två meningar. Det här är det agenterna ska sälja.",
     rader: 3
   },
   {
@@ -54,7 +52,6 @@ const FALT: { nyckel: keyof Affarskontextfalt; etikett: string; hjalp: string; r
 const TOMT: Affarskontextfalt = { product: "", target_audience: "", offer: "", cta: "" };
 
 export function Affarskontext() {
-  const vag = useArbetsvag();
   const [falt, setFalt] = useState<Affarskontextfalt | null>(null);
   const [busy, setBusy] = useState(false);
   const [fel, setFel] = useState<string | null>(null);
@@ -133,24 +130,6 @@ export function Affarskontext() {
         ) : null}
       </div>
 
-      <p className="max-w-[62ch] text-[0.875rem] leading-6 text-ink/55">
-        Tonläget skrivs under{" "}
-        <Link
-          href={vag("/settings/soul")}
-          className="focus-ring rounded-input underline underline-offset-4 hover:text-ochre"
-        >
-          Röst och tonläge
-        </Link>
-        , och vilka bolag agenten ska leta efter under{" "}
-        <Link
-          href={vag("/settings/leads")}
-          className="focus-ring rounded-input underline underline-offset-4 hover:text-ochre"
-        >
-          Målgrupp och autonomi
-        </Link>
-        . De ligger inte här för att samma uppgift på två ställen betyder att den som skriver i fel
-        ruta inte hörs.
-      </p>
     </div>
   );
 }

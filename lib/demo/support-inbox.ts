@@ -178,7 +178,7 @@ function grundmejl(): DemoEmail[] {
         confidence: 0.72,
         escalate: true,
         escalation_reason:
-          "Ärendet rör en faktisk dubbeldebitering. Agenten får inte bekräfta eller neka en återbetalning utan att en människa kontrollerat transaktionerna.",
+          "Ärendet rör en faktisk dubbeldebitering. Agenterna får inte bekräfta eller neka en återbetalning utan att en människa kontrollerat transaktionerna.",
         reasoning: "Ekonomisk avvikelse som kräver manuell kontroll mot betalleverantören.",
         kb_sources: [{ title: "Dubbeldragning och reserverade belopp", similarity: 0.68 }]
       },

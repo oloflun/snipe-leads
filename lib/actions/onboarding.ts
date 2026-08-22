@@ -93,7 +93,7 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
   if (!webbplats) {
     return {
       success: false,
-      error: "Fyll i webbplatsen. Det är den agenten läser för att förstå er."
+      error: "Fyll i webbplatsen. Det är den agenterna läser för att förstå er."
     };
   }
 
@@ -101,7 +101,7 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
   if (!produkt) {
     return {
       success: false,
-      error: "Skriv en rad om vad ni säljer. Det är det agenten ska sälja."
+      error: "Skriv en rad om vad ni säljer. Det är det agenterna ska sälja."
     };
   }
 

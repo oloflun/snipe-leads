@@ -104,8 +104,8 @@ export const shared = {
       "have stood with a draft that should not go out."
   },
   vilkaText2: {
-    sv: "Vi tar hellre ett nej i tid än ett ja som inte håller. Därför säger agenten " +
-      "ifrån när den saknar underlag i stället för att gissa, och därför säljer vi hellre " +
+    sv: "Vi tar hellre ett nej i tid än ett ja som inte håller. Därför säger agenterna " +
+      "ifrån när de saknar underlag i stället för att gissa, och därför säljer vi hellre " +
       "rätt paket än det dyraste.",
     en: "We would rather have an early no than a yes that does not hold. That is why the agent " +
       "says so when it lacks grounding instead of guessing, and why we would rather sell the " +
@@ -151,7 +151,7 @@ export const leadsCopy: ProductCopy = {
     {
       title: { sv: "Hittar nya leads", en: "Finds new leads" },
       body: {
-        sv: "Ett bolag som just investerat i en ny lokal. Ett bolag som behöver höja effektiviteten. Agenten letar nya kunder baserat på er produkt.",
+        sv: "Ett bolag som just investerat i en ny lokal. Ett bolag som behöver höja effektiviteten. Agenterna letar nya kunder baserat på er produkt.",
         en: "A company that just invested in new premises. A company that needs to raise its efficiency. The agent finds new customers based on your product."
       }
     },
@@ -210,8 +210,8 @@ export const supportCopy: ProductCopy = {
     en: "Write as a customer and follow the case *all the way*."
   },
   demoLede: {
-    sv: "Ställ frågan i egna ord. Du ser vilket fack ärendet hamnar i, hur säker agenten är och vilket svar den föreslår. Ingen inloggning.",
-    en: "Ask in your own words. You see which queue the case lands in, how confident the agent is and the reply it proposes. No login."
+    sv: "Ställ frågan i egna ord. Du ser vilket fack ärendet hamnar i, hur säkra agenterna är och vilket svar de föreslår. Ingen inloggning.",
+    en: "Ask in your own words. You see which queue the case lands in, how confident the agents are and the reply they propose. No login."
   },
   exampleNote: {
     sv: "Kunskapsbasen och inkorgen i demon är exempeldata.",

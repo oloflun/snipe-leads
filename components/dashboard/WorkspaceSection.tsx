@@ -110,8 +110,8 @@ function LeadsControlSection() {
   return (
     <PageShell
       kicker="Leads · kontroll"
-      title="Vad agenten får göra"
-      description="Hur långt den får gå, vilka bolag den ska leta efter, och vad som väntar på ditt godkännande."
+      title="Vad agenterna får göra"
+      description="Hur långt de får gå, vilka bolag de ska leta efter, och vad som väntar på ditt godkännande."
     >
       <LeadsControls />
     </PageShell>
@@ -120,11 +120,7 @@ function LeadsControlSection() {
 
 function SupportSection() {
   return (
-    <PageShell
-      kicker="Kundtjänst"
-      title="Inkorg och utkast"
-      description="Inkommande ärenden, agentens klassificering och de svar som väntar på godkännande."
-    >
+    <PageShell title="Inkorg och utkast">
       <SupportDashboard />
     </PageShell>
   );

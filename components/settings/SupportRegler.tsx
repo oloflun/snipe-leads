@@ -26,12 +26,12 @@ const LAGEN: { varde: Regel["mode"]; etikett: string; forklaring: string }[] = [
   {
     varde: "draft",
     etikett: "Utkast",
-    forklaring: "Agenten skriver svaret, du godkänner det. Standard."
+    forklaring: "Agenterna hanterar mailet, du klickar godkänn och skicka."
   },
   {
     varde: "auto",
     etikett: "Auto",
-    forklaring: "Skickas direkt när konfidensen är hög och tonen inte är negativ."
+    forklaring: "Väljer automatiskt det bästa valet för svaret på frågan."
   },
   { varde: "escalate", etikett: "Eskalera", forklaring: "Går alltid till en människa." }
 ];
@@ -83,7 +83,9 @@ export function SupportRegler({ demo = false }: Readonly<{ demo?: boolean }>) {
     try {
       await api("/rules", { method: "PUT", body: JSON.stringify({ category: kategori, mode: lage }) });
       await ladda();
-      setKlart("Sparat. Regeln gäller från nästa ärende.");
+      // Ingen kvittotext. Valet står kvar i rutan och spinnern visar att
+      // det sparades; en rad som säger samma sak igen är brus.
+      setKlart(null);
     } catch (orsak) {
       setFel(orsak instanceof Error ? orsak.message : "Kunde inte spara regeln.");
     } finally {
@@ -111,13 +113,6 @@ export function SupportRegler({ demo = false }: Readonly<{ demo?: boolean }>) {
           </div>
         ))}
       </dl>
-
-      {/* Spärren står här och inte bara i koden: en kund som sätter allt på
-          Auto ska veta vad som ändå aldrig går den vägen. */}
-      <p className="max-w-[68ch] rounded-card bg-paper2/50 px-5 py-4 text-[0.875rem] leading-6 text-ink/70">
-        Pengar, juridik, GDPR och arga kunder eskaleras alltid till en människa, oavsett vad som
-        står här.
-      </p>
 
       <div className="divide-y divide-ink/10 border-y border-ink/15">
         {regler.map((regel) => (

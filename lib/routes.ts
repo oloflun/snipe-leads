@@ -164,7 +164,7 @@ export const settingsGroups: SettingsGroup[] = [
   {
     // Underlaget, inte agenten. Det är också därför dokumentuppladdningen hör
     // hemma här och inte per agent.
-    label: { sv: "Vad agenten vet", en: "What the agent knows" },
+    label: { sv: "Vad agenterna vet", en: "What the agents know" },
     routes: [
       { href: "/settings/affarskontext", label: { sv: "Affärskontext", en: "Business context" } },
       { href: "/settings/kunskapsbas", label: { sv: "Kunskapsbas", en: "Knowledge base" } },
@@ -174,7 +174,7 @@ export const settingsGroups: SettingsGroup[] = [
     ]
   },
   {
-    label: { sv: "Vad agenten får göra", en: "What the agent may do" },
+    label: { sv: "Vad agenterna får göra", en: "What the agents may do" },
     routes: [
       {
         href: "/settings/leads",
