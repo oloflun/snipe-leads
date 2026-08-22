@@ -308,4 +308,75 @@ KB_ARTICLES += [
             "referens eller kostnadsställe i kassan så att det följer med på fakturan."
         ),
     },
+    # --- Påfyllnad 2026-08-22: garanti, utbildning och orderstatus hade EN
+    # artikel var. Följden var mätbar i dev: ett garantiärende hamnade i
+    # teknisk_support och en utbildningsfråga i ovrigt, eftersom
+    # grundningsregeln (processor.py steg 2) styr klassificeringen mot det fack
+    # där det finns täckning. Facken fanns alltså i menyn men fylldes aldrig,
+    # och en kund som klickade dit såg en tom inkorg.
+    {
+        "title": "Garanti efter reparation eller utbyte",
+        "category": "garanti",
+        "content": (
+            "Vid en garantireparation löper den ursprungliga garantitiden vidare från "
+            "köpdatumet — den börjar alltså inte om. Får du en helt ny vara i utbyte "
+            "startar en ny garantitid från leveransdagen på den nya varan. Reparerade "
+            "delar har alltid minst tre månaders garanti från reparationsdatumet, även "
+            "om den ursprungliga garantin skulle löpa ut dessförinnan."
+        ),
+    },
+    {
+        "title": "Garanti vid köp hos återförsäljare",
+        "category": "garanti",
+        "content": (
+            "Garantin följer varan och gäller även om du köpt hos en av våra "
+            "återförsäljare. Reklamationen gör du i första hand hos butiken du köpte "
+            "av, eftersom det är de som har ditt köpavtal. Får du inte hjälp där tar "
+            "vi över ärendet — skicka kvitto eller ordernummer från butiken så löser "
+            "vi det direkt med dem."
+        ),
+    },
+    {
+        "title": "Utbildningens upplägg: på plats eller digitalt",
+        "category": "utbildning",
+        "content": (
+            "Introduktionen hålls antingen digitalt (90 minuter, upp till 15 deltagare) "
+            "eller på plats hos er (en halvdag, upp till 8 deltagare för att alla ska "
+            "hinna prova själva). Digitalt går att boka med två veckors varsel, på plats "
+            "brukar kräva fyra. Vi spelar in den digitala varianten om ni vill kunna "
+            "visa den för nyanställda senare."
+        ),
+    },
+    {
+        "title": "Förberedelser inför en utbildning",
+        "category": "utbildning",
+        "content": (
+            "Vi skickar ett kort underlag en vecka innan: en översikt på två sidor och "
+            "tre korta filmer. Deltagare som hunnit titta får ut mer av tiden, eftersom "
+            "vi då kan ägna passet åt era egna fall i stället för åt grunderna. Har ni "
+            "specifika frågor ni vill ha med, mejla dem i förväg så bygger vi in dem."
+        ),
+    },
+    {
+        "title": "Ändra eller komplettera en lagd order",
+        "category": "orderstatus",
+        "content": (
+            "En order går att komplettera fram tills den plockas i lagret, oftast inom "
+            "1–2 timmar på vardagar. Hör av dig med ordernumret och vad du vill lägga "
+            "till, så slår vi ihop det till en leverans och du betalar bara en frakt. "
+            "Har ordern redan packats lägger du en ny beställning — kontakta oss så "
+            "krediterar vi frakten på den andra ordern."
+        ),
+    },
+    {
+        "title": "Vad orderstatusen betyder",
+        "category": "orderstatus",
+        "content": (
+            "Mottagen: ordern ligger hos oss men är inte plockad. Behandlas: den plockas "
+            "i lagret just nu. Skickad: paketet är hos transportören och spårningsnumret "
+            "är på väg till din mejl. Delvis skickad: en vara var restnoterad och skickas "
+            "separat utan extra fraktkostnad. Står ordern kvar som Behandlas mer än två "
+            "vardagar hör av dig, då har något fastnat."
+        ),
+    },
 ]

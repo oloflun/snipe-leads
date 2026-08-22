@@ -390,16 +390,22 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
       {/* Åtgärdsrad */}
       <div className="flex flex-wrap items-center gap-3">
         {/* Alltid alla fack: knappen ska visa hur en hel inkorg ser ut. Det
-            fackvisa läget hör till "Uppdatera" bredvid. */}
-        <button
-          type="button"
-          onClick={() => void seedMock(null)}
-          disabled={busy !== null}
-          className={btnPrimary}
-        >
-          {busy === "seed" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Inbox className="h-4 w-4" />}
-          Hämta testmail
-        </button>
+            fackvisa läget hör till "Uppdatera" bredvid.
+
+            Göms när en riktig inkorg är kopplad. Testmail bland en kunds
+            verkliga ärenden är inte en demo, det är skräp i deras inkorg —
+            och de har redan sett hur produkten fungerar. */}
+        {inkorgKopplad ? null : (
+          <button
+            type="button"
+            onClick={() => void seedMock(null)}
+            disabled={busy !== null}
+            className={btnPrimary}
+          >
+            {busy === "seed" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Inbox className="h-4 w-4" />}
+            Hämta testmail
+          </button>
+        )}
         {/* Knappen finns bara när det finns en inkorg att synka. Den satt
             förut alltid framme och svarade "IMAP är inte konfigurerat
             (IMAP_HOST/USER/PASSWORD)" för varje kund — en felutskrift om
@@ -416,22 +422,28 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
             Synka inkorg
           </button>
         ) : null}
-        {/* "Uppdatera" hämtar NYA mail, inte bara samma lista igen. Står
-            kunden i ett fack fylls det facket på; står de i "Alla" byts hela
-            testinkorgen ut. Det var beställningen, och det är också det enda
-            som gör knappen värd att trycka på i en demo. */}
+        {/* "Uppdatera" hämtar NYA testmail när inkorgen är en sandlåda: står
+            kunden i ett fack fylls det facket på, står de i "Alla" byts hela
+            testinkorgen ut.
+
+            MEN bara då. Är en riktig inkorg kopplad betyder "Uppdatera" läs om
+            listan, ingenting annat — att skriva in påhittade kundmail bland en
+            kunds verkliga ärenden vore att förstöra deras inkorg med en knapp
+            som ser ut att bara ladda om. */}
         <button
           type="button"
-          onClick={() => void seedMock(categoryFilter)}
+          onClick={() => (inkorgKopplad ? void refresh() : void seedMock(categoryFilter))}
           disabled={busy !== null}
           title={
-            categoryFilter
-              ? "Hämtar nya mail till det här facket"
-              : "Hämtar nya mail till alla fack"
+            inkorgKopplad
+              ? "Läser om inkorgen"
+              : categoryFilter
+                ? "Hämtar nya testmail till det här facket"
+                : "Hämtar nya testmail till alla fack"
           }
           className={btnSecondary}
         >
-          {busy === "seed" ? (
+          {busy === "seed" && !inkorgKopplad ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
             <RefreshCw className="h-4 w-4" />

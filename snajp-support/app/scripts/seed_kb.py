@@ -91,12 +91,29 @@ async def ensure_tenant_kb(storage, tenant_id: str) -> int:
     träffar, och följden är att agenten eskalerar allt. Det ser ut som en
     trasig produkt och är i själva verket en tom hylla.
 
-    Idempotent: en tenant som redan har artiklar lämnas orörd. Returnerar
-    antalet nya artiklar.
+    Idempotent, men per ARTIKEL och inte per bas. Villkoret var tidigare "har
+    tenanten några artiklar alls, gör ingenting", och följden syntes när basen
+    fylldes på: testarbetsytor som seedats en gång fick aldrig de nya
+    artiklarna. Facken garanti, utbildning och orderstatus hade en artikel var,
+    grundningsregeln (`processor.py` steg 2) styrde därför ärendena till fack
+    med täckning, och två inkorgar stod tomma i demon medan koden såg rätt ut.
+
+    Jämförelsen görs på rubrik. Det är rätt nivå här: artiklarna är VÅRA för en
+    testarbetsyta, och en rubrik som saknas är en artikel som aldrig lagts in.
+    För en riktig kund körs den här funktionen aldrig (se ovan), så en kund som
+    medvetet raderat en artikel får den inte tillbaka av oss.
+
+    Returnerar antalet nya artiklar.
     """
-    if await storage.list_kb(tenant_id):
-        return 0
+    befintliga = {
+        (artikel.get("title") or "").strip().lower()
+        for artikel in await storage.list_kb(tenant_id)
+    }
+
+    tillagda = 0
     for article in KB_ARTICLES:
+        if article["title"].strip().lower() in befintliga:
+            continue
         await storage.add_kb_article(
             tenant_id,
             title=article["title"],
@@ -104,7 +121,8 @@ async def ensure_tenant_kb(storage, tenant_id: str) -> int:
             category=article["category"],
             embedding=None,
         )
-    return len(KB_ARTICLES)
+        tillagda += 1
+    return tillagda
 
 
 async def seed_tenant(storage, tenant_slug: str, *, embeddings=None) -> int:
