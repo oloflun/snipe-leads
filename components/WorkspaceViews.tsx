@@ -16,6 +16,8 @@ import { SupportRegler } from "@/components/settings/SupportRegler";
 import { SettingsNav } from "@/components/settings/SettingsNav";
 import { TeamSettings } from "@/components/settings/TeamSettings";
 import { AddonSettings } from "@/components/settings/AddonSettings";
+import { Inkorgar } from "@/components/settings/Inkorgar";
+import { PlanSettings } from "@/components/settings/PlanSettings";
 import { OnboardingForm } from "@/components/auth/OnboardingForm";
 import { signOut } from "@/lib/actions/auth";
 import {
@@ -406,9 +408,9 @@ export function InboxView() {
 export function SettingsView({ section = "foretaget" }: Readonly<{ section?: SettingsSectionKey }>) {
   const titles: Record<SettingsSectionKey, string> = {
     foretaget: "Företaget",
-    mailboxes: "Mailboxar och skickhälsa i svensk takt.",
+    mailboxes: "Inkorgar",
     team: "Teamroller och audit-logik.",
-    billing: "Plan, fakturering och användning.",
+    billing: "Plan och fakturering",
     affarskontext: "Affärskontext",
     kunskapsbas: "Kunskapsbas",
     leads: "Målgrupp och autonomi",
@@ -424,9 +426,9 @@ export function SettingsView({ section = "foretaget" }: Readonly<{ section?: Set
   // ut infrastruktur i en kundvänd yta.
   const descriptions: Record<SettingsSectionKey, string> = {
     foretaget: "Bolaget bakom arbetsytan — namn, organisationsnummer och webbplats.",
-    mailboxes: "Avsändaradresser och hur mycket som får skickas per dag.",
+    mailboxes: "Vilka mejladresser agenterna läser och svarar från.",
     team: "Vilka som har tillgång till arbetsytan, och vad de får göra.",
-    billing: "Vad ni har förbrukat den här månaden, och vad nästa faktura blir.",
+    billing: "Vilket paket arbetsytan har, och vad som ingår i det.",
     affarskontext: "Vad ni säljer och till vem. Båda agenterna läser härifrån.",
     kunskapsbas: "Dokumenten agenterna svarar ur. Ligger inget här gissar de aldrig — de eskalerar.",
     leads: "Vilka bolag agenterna ska leta efter, och hur långt de får gå på egen hand.",
@@ -479,10 +481,10 @@ export function SettingsView({ section = "foretaget" }: Readonly<{ section?: Set
           {section === "regler" ? <SupportRegler /> : null}
           {section === "leads" ? <LeadsControls /> : null}
           {section === "soul" ? <SoulEditor /> : null}
-          {section === "mailboxes" ? <MailboxSettings /> : null}
+          {section === "mailboxes" ? <Inkorgar /> : null}
           {section === "team" ? <TeamSettings /> : null}
           {section === "addons" ? <AddonSettings /> : null}
-          {section === "billing" ? <BillingSettings /> : null}
+          {section === "billing" ? <PlanSettings /> : null}
         </div>
       </div>
     </PageShell>
@@ -529,18 +531,15 @@ function CompanySettings() {
   );
 }
 
-function MailboxSettings() {
-  return <TextList title="Mailbox health" items={["sales@snajp-demo.se · healthy · 96 skick per dag", "elin@kundbolag.se · warming · 34 skick per dag"]} />;
-}
+// Inkorgar och Plan bor numera i components/settings/. Båda var hårdkodade
+// påhitt i en betalande kunds egna inställningar: två mailadresser som inte
+// fanns, och ett pris (14 900 kr/mån) vi aldrig har tagit. Se docstringarna i
+// respektive fil.
 
 // TeamSettings bor numera i components/settings/TeamSettings.tsx och läser
 // den faktiska arbetsytan. Den gamla versionen här var fyra hårdkodade
 // strängar om roller som aldrig funnits i schemat ('Sales lead', 'Researcher',
 // 'Viewer') — profiles.role har två värden: owner och member.
-
-function BillingSettings() {
-  return <TextList title="Billing" items={["Plan · Team · 14 900 kr/mån", "Leads · 312 av 1000 denna månad", "Seats · 4 av 8 aktiva användare"]} />;
-}
 
 export function LoginView() {
   return (

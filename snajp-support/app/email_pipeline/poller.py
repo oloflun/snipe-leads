@@ -33,8 +33,18 @@ def password_env_name(tenant_slug: str) -> str:
     return f"IMAP_PASSWORD_{tenant_slug.upper().replace('-', '_')}"
 
 
-def _host_for(mailbox: dict) -> str | None:
+def host_for_mailbox(mailbox: dict) -> str | None:
+    """IMAP-värden för en inkorgsrad, eller None när den inte går att härleda.
+
+    Publik sedan inkorgs-API:t behöver samma svar som pollern: en rad utan
+    värd går inte att synka, och UI:t ska kunna säga det innan kunden trycker
+    i stället för efter.
+    """
     return mailbox.get("imap_host") or PROVIDER_HOSTS.get(mailbox.get("provider") or "")
+
+
+#: Kvar under det gamla namnet — modulen anropar sig själv på flera ställen.
+_host_for = host_for_mailbox
 
 
 async def sync_mailbox(storage: Storage, tenant_id: str, tenant_slug: str, mailbox: dict) -> dict:

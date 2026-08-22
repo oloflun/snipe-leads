@@ -139,6 +139,7 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
 
+
   // En instans per monterad vy, så att demons tillstånd inte delas mellan
   // flikar eller återställs vid varje omrendering.
   const demoApi = useRef<ReturnType<typeof createDemoSupportApi> | null>(null);
@@ -194,6 +195,34 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
     void refresh();
   }, [refresh]);
 
+  /**
+   * Är en riktig inkorg kopplad?
+   *
+   * `null` betyder "vet inte än" och renderar ingen knapp alls. Att gissa
+   * `true` hade gett samma fel som fanns förut: en knapp som ser tryckbar ut
+   * och alltid svarar med ett konfigurationsfel. Att gissa `false` hade dolt
+   * knappen ett ögonblick för kunder som HAR en inkorg, vilket blinkar.
+   */
+  const [inkorgKopplad, setInkorgKopplad] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let avbruten = false;
+    void (async () => {
+      try {
+        const svar = await api<{ kan_synka?: boolean }>("/inbox/mailboxes");
+        if (!avbruten) setInkorgKopplad(Boolean(svar?.kan_synka));
+      } catch {
+        // Ett fel här är inte kundens problem och ska inte visas som ett.
+        // Utan svar vet vi inte, och då är rätt beteende att inte lova något:
+        // knappen uteblir och texten under säger hur man kopplar en inkorg.
+        if (!avbruten) setInkorgKopplad(false);
+      }
+    })();
+    return () => {
+      avbruten = true;
+    };
+  }, [api]);
+
   const openEmail = useCallback(
     async (id: string) => {
       try {
@@ -243,7 +272,18 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
   const syncInbox = () =>
     act("sync", async () => {
       setSyncInfo(null);
-      const result = await api("/inbox/sync", { method: "POST" });
+      const result = await api<{ fetched: number; processed: number; connected?: boolean; error?: string }>(
+        "/inbox/sync",
+        { method: "POST" }
+      );
+      // `connected: false` är inte ett fel — det är ett svar. Att kasta här
+      // gav en röd felruta för ett läge som bara betyder "vi har inte kopplat
+      // er inkorg ännu", och den rutan såg ut som en krasch.
+      if (result.connected === false) {
+        setInkorgKopplad(false);
+        setSyncInfo(result.error ?? "Ingen inkorg är kopplad ännu.");
+        return;
+      }
       if (result.error) {
         throw new Error(result.error);
       }
@@ -297,16 +337,22 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
           {busy === "seed" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Inbox className="h-4 w-4" />}
           Hämta testmail
         </button>
-        <button
-          type="button"
-          onClick={syncInbox}
-          disabled={busy !== null}
-          title="Hämtar olästa mail från kopplad Gmail/Outlook-inkorg (IMAP)"
-          className={btnSecondary}
-        >
-          {busy === "sync" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
-          Synka inkorg
-        </button>
+        {/* Knappen finns bara när det finns en inkorg att synka. Den satt
+            förut alltid framme och svarade "IMAP är inte konfigurerat
+            (IMAP_HOST/USER/PASSWORD)" för varje kund — en felutskrift om
+            miljövariabler kunden varken kan se eller sätta. */}
+        {inkorgKopplad ? (
+          <button
+            type="button"
+            onClick={syncInbox}
+            disabled={busy !== null}
+            title="Hämtar olästa mail från er kopplade Gmail- eller Outlook-inkorg"
+            className={btnSecondary}
+          >
+            {busy === "sync" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+            Synka inkorg
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={() => void refresh()}
@@ -395,10 +441,26 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
             <div className="rounded-card border border-dashed border-ink/15 bg-paper/45 p-10 text-center">
               <Inbox className="mx-auto h-6 w-6 text-mineral" />
               <h3 className="mt-4 font-semibold">Inkorgen är tom</h3>
+              {/* Stod: "koppla en riktig inkorg (Gmail/Outlook via IMAP) i
+                  backendens miljövariabler". En instruktion till oss, tryckt i
+                  kundens vy — kunden har varken tillgång till backenden eller
+                  anledning att veta vad IMAP är. */}
               <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-ink/60">
-                Klicka på <strong>Hämta testmail</strong> för att seeda sex svenska kundmail, eller koppla en riktig
-                inkorg (Gmail/Outlook via IMAP) i backendens miljövariabler.
+                Klicka på <strong>Hämta testmail</strong> för att fylla den med sex svenska
+                exempelärenden och se hur agenterna sorterar och svarar.
               </p>
+              {inkorgKopplad ? null : (
+                <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-ink/55">
+                  Vill ni koppla er riktiga inkorg?{" "}
+                  <a
+                    href="mailto:Snajpsupport@gmail.com?subject=Koppla%20v%C3%A5r%20inkorg"
+                    className="focus-ring rounded-input underline underline-offset-4 hover:text-ochre"
+                  >
+                    Hör av er
+                  </a>{" "}
+                  så kopplar vi Gmail eller Outlook åt er.
+                </p>
+              )}
             </div>
           ) : (
             <div className="divide-y divide-ink/10 overflow-hidden rounded-card bg-paper">

@@ -1,5 +1,6 @@
 """Inkorgs-API: seedning/synk/ingest, lista, detalj och ta över — tenant-skopat."""
 
+import os
 import uuid
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
@@ -7,8 +8,14 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from ..email_pipeline.connectors.mock import build_mock_emails
 from ..email_pipeline.ingest import ingest_email
 from ..email_pipeline.models import InboundAttachment, InboundEmail
-from ..email_pipeline.poller import sync_imap_once
+from ..email_pipeline.poller import (
+    host_for_mailbox,
+    password_env_name,
+    sync_imap_once,
+    sync_mailbox,
+)
 from ..email_pipeline.processor import process_email
+from ..config import get_settings
 from ..scripts.seed_kb import ensure_tenant_kb
 from .deps import require_tenant
 from .schemas import IngestEmailRequest
@@ -78,10 +85,129 @@ async def seed_mock_inbox(
     }
 
 
+async def _tenant_slug(storage, tenant_id: str) -> str:
+    """Slugen för lösenordsnyckeln IMAP_PASSWORD_<SLUG>.
+
+    Står inte i `require_tenant`, som bara bär id och namn. Att härleda slugen
+    ur namnet vore en gissning ("Livrustnings AB" -> ?), och fel gissning ger
+    fel miljövariabel och en synk som tyst hittar noll mail.
+    """
+    tenant = await storage.get_tenant(tenant_id)
+    return (tenant or {}).get("slug") or ""
+
+
+@router.get("/api/inbox/mailboxes")
+async def list_inbox_mailboxes(request: Request, tenant: dict = Depends(require_tenant)) -> dict:
+    """Vilka inkorgar den här kunden har kopplade, och om de går att synka.
+
+    Finns för att UI:t inte ska behöva GISSA. "Synka inkorg" satt förut som en
+    alltid synlig knapp som för varje kund utan kopplad inkorg svarade "IMAP är
+    inte konfigurerat (IMAP_HOST/USER/PASSWORD)" — en felutskrift som namnger
+    miljövariabler kunden varken kan se eller sätta. En knapp som alltid
+    misslyckas är värre än ingen knapp: den lär kunden att produkten är trasig.
+
+    Svaret bär ALDRIG ett lösenord. Adressen och värden räcker för att svara på
+    frågan "är något kopplat", och lösenordet bor i env under
+    IMAP_PASSWORD_<SLUG> just för att en läsbehörighet på ss_mailboxes inte ska
+    räcka för att läsa kundens mail (se poller.py).
+    """
+    storage = request.app.state.storage
+    settings = get_settings()
+
+    inkorgar = [
+        m
+        for m in await storage.list_mailboxes(tenant["tenant_id"])
+        if m.get("provider") != "mock"
+    ]
+
+    slug = await _tenant_slug(storage, tenant["tenant_id"])
+    har_losenord = bool(slug and os.environ.get(password_env_name(slug)))
+
+    # Den globala envvägen räknas som en kopplad inkorg. Den finns kvar för
+    # enkelinstallationer och för testerna.
+    global_konfigurerad = bool(
+        settings.imap_host and settings.imap_user and settings.imap_password
+    )
+
+    rader = [
+        {
+            "address": m.get("address"),
+            "provider": m.get("provider"),
+            "status": m.get("status"),
+            "host": host_for_mailbox(m),
+            "last_sync_at": m.get("last_sync_at"),
+            "last_error": m.get("last_error"),
+            # Utan lösenord kan raden inte synkas. Det sägs rakt ut, så att
+            # UI:t kan skilja "ingen inkorg" från "inkorg utan nyckel".
+            "kan_synka": bool(host_for_mailbox(m)) and har_losenord,
+        }
+        for m in inkorgar
+    ]
+
+    return {
+        "mailboxes": rader,
+        "global_konfigurerad": global_konfigurerad,
+        "kan_synka": global_konfigurerad or any(r["kan_synka"] for r in rader),
+    }
+
+
 @router.post("/api/inbox/sync")
 async def sync_inbox(request: Request, tenant: dict = Depends(require_tenant)) -> dict:
-    """Hämtar nya mail från konfigurerad IMAP-inkorg (Gmail/Outlook) nu."""
-    return await sync_imap_once(request.app.state.storage, tenant["tenant_id"])
+    """Hämtar nya mail från KUNDENS egna inkorgar nu.
+
+    Routen synkade förut alltid mot de GLOBALA IMAP-inställningarna
+    (IMAP_HOST/USER/PASSWORD) oavsett vilken tenant som frågade. Två fel i ett:
+
+    1. **Fel inkorg.** I en flerkundsinstallation pekar de globala värdena på
+       en enda brevlåda. Var den satt hade varje kunds synk hämtat samma mail —
+       alltså en annan kunds post in i den här kundens ärenden. Att den inte var
+       satt är hela skälet till att det aldrig hände.
+    2. **Fel besked.** Var den inte satt svarade routen med namnen på tre
+       miljövariabler. Kunden läser ett konfigurationsfel i sitt eget UI, för
+       något bara vi kan åtgärda.
+
+    Nu: kundens rader i `ss_mailboxes` synkas, en i taget, med samma väg som
+    den periodiska pollern använder. Den globala envvägen är kvar som fallback
+    för enkelinstallationer och för testerna, och används bara när kunden inte
+    har någon egen inkorgsrad.
+    """
+    storage = request.app.state.storage
+    tenant_id = tenant["tenant_id"]
+
+    inkorgar = [
+        m
+        for m in await storage.list_mailboxes(tenant_id)
+        if m.get("status") == "active" and m.get("provider") != "mock"
+    ]
+
+    if not inkorgar:
+        settings = get_settings()
+        if settings.imap_host and settings.imap_user and settings.imap_password:
+            return {"connected": True, **await sync_imap_once(storage, tenant_id)}
+        return {
+            "fetched": 0,
+            "processed": 0,
+            "connected": False,
+            "error": "Ingen inkorg är kopplad ännu. Vi kopplar er Gmail eller Outlook åt er.",
+        }
+
+    slug = await _tenant_slug(storage, tenant_id)
+    hamtade = 0
+    processade = 0
+    fel: list[str] = []
+    for mailbox in inkorgar:
+        summering = await sync_mailbox(storage, tenant_id, slug, mailbox)
+        hamtade += summering.get("fetched", 0)
+        processade += summering.get("processed", 0)
+        if summering.get("error"):
+            fel.append(str(summering["error"]))
+
+    return {
+        "fetched": hamtade,
+        "processed": processade,
+        "connected": True,
+        "error": " ".join(fel) or None,
+    }
 
 
 @router.post("/api/inbox/ingest", status_code=201)

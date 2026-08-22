@@ -37,6 +37,15 @@ def _force_simulation_mode(monkeypatch):
         "SCRAPEGRAPHAI_API_KEY",
         "DATABASE_URL",
         "REDIS_URL",
+        # IMAP hörde inte till listan, och samma sak hände en tredje gång: med
+        # riktiga värden i .env öppnade ett test av /api/inbox/sync en SKARP
+        # IMAP-anslutning mot en riktig brevlåda. Loggen visade
+        # "[AUTHENTICATIONFAILED] Invalid credentials" — alltså ett verkligt
+        # inloggningsförsök mot en extern server, från en testsvit som ska vara
+        # hermetisk. Ett test som vill pröva IMAP sätter värdena själv.
+        "IMAP_HOST",
+        "IMAP_USER",
+        "IMAP_PASSWORD",
     ):
         monkeypatch.setenv(name, "")
     get_settings.cache_clear()
