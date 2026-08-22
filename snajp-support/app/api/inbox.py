@@ -1,9 +1,10 @@
 """Inkorgs-API: seedning/synk/ingest, lista, detalj och ta över — tenant-skopat."""
 
+import logging
 import os
 import uuid
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request
 
 from ..email_pipeline.connectors.mock import build_mock_emails
 from ..email_pipeline.ingest import ingest_email
@@ -15,10 +16,12 @@ from ..email_pipeline.poller import (
     sync_mailbox,
 )
 from ..email_pipeline.processor import process_email
-from ..config import get_settings
+from ..config import CATEGORIES, get_settings
 from ..scripts.seed_kb import ensure_tenant_kb
 from .deps import require_tenant
-from .schemas import IngestEmailRequest
+from .schemas import IngestEmailRequest, SeedMockRequest
+
+logger = logging.getLogger("snajp-support.inbox")
 
 router = APIRouter()
 
@@ -26,36 +29,47 @@ router = APIRouter()
 @router.post("/api/inbox/mock", status_code=201)
 async def seed_mock_inbox(
     request: Request,
+    bakgrund: BackgroundTasks,
+    payload: SeedMockRequest | None = None,
     tenant: dict = Depends(require_tenant),
     x_snajp_demo: str | None = Header(default=None),
 ) -> dict:
-    """Byter UT testmailen mot ett nytt urval och processar dem direkt.
+    """Lägger nya testmail i inkorgen och svarar DIREKT.
 
-    Tre saker skiljer sig från den första versionen, alla tre uppmätta mot
-    dev-deployen 2026-08-19:
+    ## Varför den inte längre väntar på agenten
 
-    1. **Tidigare testmail rensas.** Endpointen lade förut till samma sex mail
-       igen, med nya id:n. Knappen heter "Hämta testmail" och gav en längre
-       lista med samma innehåll — inte en ny.
+    Endpointen processade förut alla sex mailen genom hela pipelinen innan den
+    svarade. Uppmätt mot dev-deployen 2026-08-22: **60,3 sekunder**. Proxyn i
+    webbappen har `maxDuration = 60`, så anropet hann dödas innan svaret kom —
+    knappen "Hämta testmail" snurrade för alltid, och kunden såg en produkt som
+    hängt sig. Det var felrapporten.
 
-    2. **Urvalet roterar.** `build_mock_emails()` väljer ur en pool och blandar
-       besvarbara ärenden med sådana som ska eskalera. Se den modulen.
+    Nu: mailen skrivs in och svaret går tillbaka på en gång. Klassificering och
+    utkast görs i en bakgrundsuppgift, och inkorgen visar ärendena med en gång
+    medan de fylls på. Att se agenten arbeta är dessutom en bättre demo än att
+    se en spinner i en minut.
 
-    3. **Kunskapsbasen säkerställs först — men BARA för en testarbetsyta.**
-       Utan artiklar tvingar grundningsregeln eskalering av VARJE ärende
-       (`processor.py` steg 2), och skärmen blir sex röda rader.
+    ## Vad `category` gör
 
-       Seedningen var först ogrindad, och det var ett fel av samma slag som
-       delade tenants: `KB_ARTICLES` är Nordlys Handels e-handelsartiklar. En
-       RIKTIG kund som tryckte på knappen fick alltså ett annat bolags
-       returpolicy inlagd i sin egen grundningskälla, och grundningsgrinden ser
-       en träff — den kan inte se att artikeln kom från fel företag.
+    Utan fack byts HELA testinkorgen ut. Med fack byts bara det facket —
+    det är vad "Uppdatera" gör när kunden står i ett filtrerat läge. Utan den
+    möjligheten fyllde varje klick hela inkorgen igen och det fack man tittade
+    på råkade få noll nya mail.
 
-       Grinden är `X-Snajp-Demo`, som proxyn sätter ur `workspaces.is_demo`
-       (se `proxyWithApiKey` i app/api/snajp-support/_lib.ts) och som en klient
-       inte kan sätta själv. En riktig kund får testmailen och behåller sin egen
-       bas; att den är tom svarar endpointen om i `kb_tom`, så att UI:t kan säga
-       det i stället för att kunden läser sex röda rader som ett produktfel.
+    ## Kunskapsbasen säkerställs först — men BARA för en testarbetsyta
+
+    Utan artiklar tvingar grundningsregeln eskalering av VARJE ärende
+    (`processor.py` steg 2), och skärmen blir sex röda rader.
+
+    Seedningen var först ogrindad, och det var ett fel av samma slag som delade
+    tenants: `KB_ARTICLES` är Nordlys Handels e-handelsartiklar. En RIKTIG kund
+    som tryckte på knappen fick alltså ett annat bolags returpolicy inlagd i sin
+    egen grundningskälla, och grundningsgrinden ser en träff — den kan inte se
+    att artikeln kom från fel företag.
+
+    Grinden är `X-Snajp-Demo`, som proxyn sätter ur `workspaces.is_demo` (se
+    `proxyWithApiKey` i app/api/snajp-support/_lib.ts) och som en klient inte kan
+    sätta själv.
 
     Ärendena (`ss_tickets`) och beslutsloggen rensas INTE. Inkorgen är en vy,
     loggen är spåret — ett ärende som fanns har funnits, och att radera spåret
@@ -64,25 +78,53 @@ async def seed_mock_inbox(
     storage = request.app.state.storage
     tenant_id = tenant["tenant_id"]
 
-    borttagna = await storage.delete_emails_by_provider(tenant_id, "mock")
+    kategori = (payload.category if payload else None) or None
+    if kategori and kategori not in CATEGORIES:
+        raise HTTPException(status_code=400, detail=f"Okänt fack: {kategori}")
+    antal = max(1, min((payload.antal if payload else None) or 6, 10))
+
+    borttagna = await storage.delete_mock_emails(tenant_id, category=kategori)
 
     ar_testarbetsyta = (x_snajp_demo or "").lower() == "true"
     seedade_artiklar = await ensure_tenant_kb(storage, tenant_id) if ar_testarbetsyta else 0
     kb_tom = not await storage.list_kb(tenant_id)
 
-    results = []
-    for inbound in build_mock_emails():
+    inlasta = []
+    for inbound in build_mock_emails(antal=antal, kategori=kategori):
         email = await ingest_email(storage, tenant_id, inbound)
         if email:
-            outcome = await process_email(storage, tenant_id, email)
-            results.append({"email_id": email["id"], **outcome})
+            inlasta.append(email)
+
+    # Processningen sker EFTER svaret. Se docstringen: det är hela skillnaden
+    # mellan en knapp som svarar och en som ser ut att ha hängt sig.
+    bakgrund.add_task(_processa_i_bakgrunden, storage, tenant_id, inlasta)
+
     return {
-        "ingested": len(results),
+        "ingested": len(inlasta),
         "removed": borttagna,
         "kb_seeded": seedade_artiklar,
         "kb_tom": kb_tom,
-        "results": results,
+        "category": kategori,
+        # Ärendena finns i inkorgen redan nu, men utan klassificering och
+        # utkast. UI:t använder flaggan för att fortsätta läsa om listan tills
+        # agenten är klar i stället för att visa en tom kolumn som ett fel.
+        "processing": bool(inlasta),
+        "email_ids": [e["id"] for e in inlasta],
     }
+
+
+async def _processa_i_bakgrunden(storage, tenant_id: str, mail: list[dict]) -> None:
+    """Klassificerar och skriver utkast för nyss inlästa mail.
+
+    Fångar per mail: ett fel på ett ärende (LLM-timeout, en bild som inte går
+    att läsa) ska inte lämna de fem andra oprocessade. Ingen returväg finns —
+    resultatet syns i inkorgen, och det som misslyckades ligger kvar som `new`.
+    """
+    for email in mail:
+        try:
+            await process_email(storage, tenant_id, email)
+        except Exception:  # noqa: BLE001 — ett trasigt ärende stoppar inte de andra
+            logger.exception("Bakgrundsprocessning misslyckades för mail %s", email.get("id"))
 
 
 async def _tenant_slug(storage, tenant_id: str) -> str:

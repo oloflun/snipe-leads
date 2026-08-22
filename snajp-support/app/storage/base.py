@@ -341,6 +341,21 @@ class Storage(Protocol):
         """
         ...
 
+    async def delete_mock_emails(self, tenant_id: str, *, category: str | None = None) -> int:
+        """Tar bort testmail, valfritt bara ur ETT fack.
+
+        Provider är hårdkodad till "mock" och inte en parameter: det är samma
+        spärr som i `delete_emails_by_provider`, fast omöjlig att kringgå av en
+        anropare som skickar fel sträng. Ett anrop kan aldrig träffa riktiga
+        mail från IMAP eller API-ingesten.
+
+        `category` läses ur den SENASTE klassificeringen. Ett mail som ännu
+        inte hunnit klassificeras hör inte till något fack och rensas därför
+        bara av det ofiltrerade anropet — annars hade "Uppdatera" i ett fack
+        kunnat radera ärenden som just höll på att processas i ett annat.
+        """
+        ...
+
     async def list_emails(
         self,
         tenant_id: str,

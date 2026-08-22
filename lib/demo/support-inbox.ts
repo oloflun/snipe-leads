@@ -410,9 +410,21 @@ export function createDemoSupportApi() {
     }
 
     if (rutt === "/inbox/mock" && metod === "POST") {
-      mejl = grundmejl();
+      // Samma kontrakt som backenden: med `category` byts BARA det facket,
+      // utan byts allt. Demon måste bete sig likadant, annars beter sig
+      // knapparna olika på /demo och i en riktig arbetsyta.
+      const { category } = JSON.parse((init?.body as string) ?? "{}");
+      const nya = grundmejl();
+      if (category) {
+        const behall = mejl.filter((m) => m.classification?.category !== category);
+        const tillskott = nya.filter((m) => m.classification?.category === category);
+        mejl = [...tillskott, ...behall];
+        seedad = true;
+        return { ingested: tillskott.length, processing: false, category } as T;
+      }
+      mejl = nya;
       seedad = true;
-      return { fetched: mejl.length, processed: mejl.length } as T;
+      return { ingested: mejl.length, processing: false, category: null } as T;
     }
 
     if (rutt === "/inbox/sync" && metod === "POST") {

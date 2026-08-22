@@ -136,12 +136,37 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
   const [error, setError] = useState<string | null>(null);
   const [syncInfo, setSyncInfo] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  /**
+   * Söktexten som faktiskt ligger till grund för en fråga till backenden.
+   *
+   * `search` uppdateras vid varje tangenttryck, och `refresh` hänger på den.
+   * Utan den här fördröjningen blev "paket" fem anrop genom proxyn till
+   * backenden, var och en med en fullständig omrendering av listan medan man
+   * skrev — det är den hackighet som märks efter en stunds klickande, och
+   * inget som syns i ett enskilt klick.
+   */
+  const [sokning, setSokning] = useState("");
+
+  useEffect(() => {
+    const id = window.setTimeout(() => setSokning(search), 300);
+    return () => window.clearTimeout(id);
+  }, [search]);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
 
 
   // En instans per monterad vy, så att demons tillstånd inte delas mellan
   // flikar eller återställs vid varje omrendering.
+  // Sätts när komponenten avmonteras. Utan den fortsätter pollningen efter
+  // att kunden bytt flik, och varje varv sätter state på en borttagen vy.
+  const avbrutet = useRef(false);
+  useEffect(() => {
+    avbrutet.current = false;
+    return () => {
+      avbrutet.current = true;
+    };
+  }, []);
+
   const demoApi = useRef<ReturnType<typeof createDemoSupportApi> | null>(null);
   if (demo && !demoApi.current) {
     demoApi.current = createDemoSupportApi();
@@ -180,7 +205,7 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
     try {
       setError(null);
       const params = new URLSearchParams();
-      if (search) params.set("q", search);
+      if (sokning) params.set("q", sokning);
       if (statusFilter) params.set("status", statusFilter);
       if (categoryFilter) params.set("category", categoryFilter);
       const data = await api(`/inbox?${params.toString()}`);
@@ -189,7 +214,7 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Kunde inte hämta inkorgen.");
     }
-  }, [api, search, statusFilter, categoryFilter]);
+  }, [api, sokning, statusFilter, categoryFilter]);
 
   useEffect(() => {
     void refresh();
@@ -255,18 +280,54 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
     [refresh, openEmail, selected]
   );
 
-  const seedMock = () =>
+  /**
+   * Hämtar nya testmail och läser om listan medan agenten arbetar.
+   *
+   * ## Varför den pollar
+   *
+   * Backenden svarar numera så fort mailen är inlästa och klassificerar dem i
+   * en bakgrundsuppgift — den ändringen gjordes för att knappen annars
+   * snurrade i över en minut och dödades av proxyns 60-sekundersgräns. Följden
+   * här: ärendena syns direkt men utan fack och utkast, och listan måste läsas
+   * om några gånger för att fyllas i.
+   *
+   * Pollningen är BEGRÄNSAD med flit — åtta försök, växande mellanrum, sedan
+   * slut. En obegränsad `setInterval` mot ett API är hur en flik som legat
+   * öppen över natten blir en lastgenerator, och den sortens bakgrundsarbete
+   * är också vad som får en sida att hacka efter tio minuters klickande.
+   */
+  const pollaTills = useCallback(
+    async (forsok = 8) => {
+      for (let i = 0; i < forsok; i += 1) {
+        await new Promise((r) => setTimeout(r, 1500 + i * 1000));
+        if (avbrutet.current) return;
+        await refresh();
+      }
+    },
+    [refresh]
+  );
+
+  /**
+   * `category` skickas med: står kunden i ett fack ska nya mail hamna DÄR.
+   * Utan den bytte varje klick ut hela testinkorgen, och det fack man tittade
+   * på kunde få noll nya mail medan de andra fylldes på.
+   */
+  const seedMock = (kategori: string | null = categoryFilter) =>
     act("seed", async () => {
-      // `kb_tom` sägs ut. Utan den läser kunden sex eskalerade rader som ett
-      // produktfel, när agenten i själva verket vägrade gissa ur en tom bas —
-      // vilket är rätt beteende och fel intryck.
-      const svar = await api<{ kb_tom?: boolean }>("/inbox/mock", { method: "POST" });
+      const svar = await api<{ kb_tom?: boolean; ingested?: number; processing?: boolean }>(
+        "/inbox/mock",
+        { method: "POST", body: JSON.stringify(kategori ? { category: kategori } : {}) }
+      );
       setSelected(null);
+      // `kb_tom` sägs ut. Utan den läser kunden sex eskalerade rader som ett
+      // produktfel, när agenterna i själva verket vägrade gissa ur en tom bas —
+      // vilket är rätt beteende och fel intryck.
       setSyncInfo(
         svar?.kb_tom
           ? "Testmailen är inlästa. Kunskapsbasen är tom, så agenterna eskalerar allt tills ni lagt in något — det är avsiktligt, de gissar aldrig."
-          : null
+          : `${svar?.ingested ?? 0} nya mail i inkorgen. Agenterna sorterar och skriver utkast nu.`
       );
+      if (svar?.processing) void pollaTills();
     });
 
   const syncInbox = () =>
@@ -328,9 +389,11 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
     <div className="space-y-6">
       {/* Åtgärdsrad */}
       <div className="flex flex-wrap items-center gap-3">
+        {/* Alltid alla fack: knappen ska visa hur en hel inkorg ser ut. Det
+            fackvisa läget hör till "Uppdatera" bredvid. */}
         <button
           type="button"
-          onClick={seedMock}
+          onClick={() => void seedMock(null)}
           disabled={busy !== null}
           className={btnPrimary}
         >
@@ -353,12 +416,26 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
             Synka inkorg
           </button>
         ) : null}
+        {/* "Uppdatera" hämtar NYA mail, inte bara samma lista igen. Står
+            kunden i ett fack fylls det facket på; står de i "Alla" byts hela
+            testinkorgen ut. Det var beställningen, och det är också det enda
+            som gör knappen värd att trycka på i en demo. */}
         <button
           type="button"
-          onClick={() => void refresh()}
+          onClick={() => void seedMock(categoryFilter)}
+          disabled={busy !== null}
+          title={
+            categoryFilter
+              ? "Hämtar nya mail till det här facket"
+              : "Hämtar nya mail till alla fack"
+          }
           className={btnSecondary}
         >
-          <RefreshCw className="h-4 w-4" />
+          {busy === "seed" ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4" />
+          )}
           Uppdatera
         </button>
         <div className="relative min-w-[220px] flex-1">

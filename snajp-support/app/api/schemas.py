@@ -200,6 +200,18 @@ class IngestAttachment(BaseModel):
     data_url: str | None = None
 
 
+class SeedMockRequest(BaseModel):
+    """Kroppen till "Hämta testmail" och "Uppdatera".
+
+    Båda fälten är frivilliga: utan kropp byts hela testinkorgen ut, precis som
+    innan facken fanns. `category` begränsar till ett fack — det är vad
+    "Uppdatera" skickar när kunden står i ett filtrerat läge.
+    """
+
+    category: str | None = None
+    antal: int | None = None
+
+
 class IngestEmailRequest(BaseModel):
     """API-first-ingest: externa system (Zendesk, CRM, webhook) postar mail hit."""
 

@@ -841,6 +841,27 @@ class MemoryStorage:
                 self.drafts.pop(draft_id, None)
         return len(träffar)
 
+    async def delete_mock_emails(self, tenant_id: str, *, category: str | None = None) -> int:
+        """Se Storage.delete_mock_emails."""
+        träffar = [
+            email
+            for email in self.emails.values()
+            if email["tenant_id"] == tenant_id
+            and email["provider"] == "mock"
+            and (
+                category is None
+                or (self.classifications.get(email["id"]) or {}).get("category") == category
+            )
+        ]
+        for email in träffar:
+            self.emails.pop(email["id"], None)
+            self.email_dedupe.discard((tenant_id, email["provider_message_id"]))
+            self.classifications.pop(email["id"], None)
+            draft_id = self.drafts_by_email.pop(email["id"], None)
+            if draft_id:
+                self.drafts.pop(draft_id, None)
+        return len(träffar)
+
     def _email_summary(self, email: dict[str, Any]) -> dict[str, Any]:
         classification = self.classifications.get(email["id"])
         draft_id = self.drafts_by_email.get(email["id"])

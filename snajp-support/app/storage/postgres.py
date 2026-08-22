@@ -1074,6 +1074,32 @@ class PostgresStorage:
             )
         return _row(record)
 
+    async def delete_mock_emails(self, tenant_id: str, *, category: str | None = None) -> int:
+        """Se Storage.delete_mock_emails.
+
+        Bilagor, klassificeringar, utkast och beslutsloggens mailrader följer
+        med via `on delete cascade` (migration 004). Ärendena (`ss_tickets`)
+        gör det INTE — de refereras av mailet, inte tvärtom, och spåret av att
+        ett ärende funnits ska inte försvinna för att en demoinkorg städas.
+        """
+        async with self._scoped(tenant_id) as conn:
+            resultat = await conn.execute(
+                """
+                delete from ss_emails e
+                 where e.tenant_id = $1
+                   and e.provider = 'mock'
+                   and ($2::text is null or exists(
+                         select 1 from ss_classifications c
+                          where c.email_id = e.id and c.category = $2))
+                """,
+                tenant_id,
+                category,
+            )
+        try:
+            return int(str(resultat).rsplit(" ", 1)[-1])
+        except ValueError:
+            return 0
+
     async def list_emails(
         self,
         tenant_id: str,
