@@ -7,6 +7,7 @@ import { useArbetsvag } from "@/components/AppShell";
 import { EmptyState, SkeletonRows } from "@/components/ui";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { readJsonBody } from "@/lib/http/json";
+import { cn } from "@/lib/utils";
 
 /**
  * Bolagsregistret — kundens EGNA prospekt.
@@ -184,11 +185,20 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
         <table className="w-full min-w-[900px] border-collapse text-[15px]">
           <thead>
             <tr className="border-b border-ink/15 text-left">
-              {["Bolag", "Segment", "Kontakt", "Signal", "Score", "Status"].map((rubrik, i) => (
+              {/* Bara SISTA kolumnen saknar högerpadding. Villkoret var `i >= 4`,
+                  vilket tog bort luften även från Score — och eftersom både
+                  Score och Status är högerställda skrevs de ihop till
+                  "84RESEARCH PÅGÅR". Syns i en skärmbild, inte i ett test som
+                  läser textinnehåll. */}
+              {["Bolag", "Segment", "Kontakt", "Signal", "Score", "Status"].map((rubrik, i, alla) => (
                 <th
                   key={rubrik}
                   scope="col"
-                  className={`kicker py-4 font-medium text-mineral ${i >= 4 ? "text-right" : "pr-6"}`}
+                  className={cn(
+                    "kicker py-4 font-medium text-mineral",
+                    i >= 4 ? "text-right" : "",
+                    i < alla.length - 1 ? "pr-6" : ""
+                  )}
                 >
                   {rubrik}
                 </th>
@@ -224,10 +234,10 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
                   ) : null}
                 </td>
                 <td className="py-5 pr-6 text-[15px] leading-6 text-ink/72">{signal(p)}</td>
-                <td className="num py-5 text-right text-[1.0625rem] font-semibold tabular-nums">
+                <td className="num py-5 pr-6 text-right text-[1.0625rem] font-semibold tabular-nums">
                   {poang(p)}
                 </td>
-                <td className="py-5 text-right">
+                <td className="py-5 text-right whitespace-nowrap">
                   <StatusOrd status={p.status} />
                 </td>
               </tr>

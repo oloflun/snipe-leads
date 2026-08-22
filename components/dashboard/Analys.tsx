@@ -346,15 +346,30 @@ function Trend({
   return (
     <div className="border-y border-ink/15 py-4">
       <p className="kicker mb-3 text-mineral">{etikett}</p>
-      <div className="flex h-24 items-end gap-1.5" role="img" aria-label={etikett}>
+      {/* `items-stretch` (default) och INTE `items-end`: kolumnerna måste ärva
+          den bestämda höjden från h-24. Med items-end blev varje kolumn så hög
+          som sitt innehåll, spåret under fick ingen bestämd höjd, och
+          stapelns `height: X%` löste ut till NOLL. Diagrammet ritade då bara
+          veckoetiketterna — synligt i en skärmbild, osynligt för ett test som
+          bara räknar rader.
+
+          Stapeln är absolut positionerad mot ett `relative` spår i stället för
+          att vara en flexbox-unge med procenthöjd, eftersom det är den enda
+          varianten där procenten alltid har något bestämt att räkna på. */}
+      <div className="flex h-32 gap-1.5" role="img" aria-label={etikett}>
         {veckor.map((v, i) => {
           const höjd = Math.round((tal[i] / tak) * 100);
           return (
-            <div key={v.week} className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
-              <div className="flex w-full flex-1 items-end">
+            <div key={v.week} className="flex min-w-0 flex-1 flex-col gap-1.5">
+              <div className="relative min-h-0 flex-1">
                 <div
                   className={cn(
-                    "w-full rounded-t-sm",
+                    // Bredden är kapad och stapeln centrerad. Full bredd gav
+                    // sex block à ~300px på en desktopskärm, och då läser
+                    // skillnaden mellan 188 och 318 som ingen skillnad alls —
+                    // formen försvinner i ytan. Talen står exakt i tabellen
+                    // under; diagrammets uppgift är kurvan, inte precisionen.
+                    "absolute bottom-0 left-1/2 w-full max-w-[64px] -translate-x-1/2 rounded-t-sm",
                     tal[i] ? "bg-ochre" : "bg-ink/10"
                   )}
                   // Noll ska synas som en synlig grundlinje och inte som
@@ -363,7 +378,9 @@ function Trend({
                   style={{ height: `${Math.max(höjd, 2)}%` }}
                 />
               </div>
-              <span className="kicker truncate text-[11px] text-ink/50">{v.week}</span>
+              <span className="kicker truncate text-center text-[11px] text-ink/50">
+                {v.week}
+              </span>
             </div>
           );
         })}
