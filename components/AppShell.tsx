@@ -199,7 +199,21 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
 
             `flex-wrap` är kvar: under ~900px lägger sig flikraden på egen rad
             igen i stället för att klämmas ihop, vilket är rätt beteende på en
-            telefon. */}
+            telefon.
+
+            KRYMPNINGEN, och varför den ligger som den ligger. Flikraden bar
+            både `min-w-0` och `shrink-0` — motstridigt, och `shrink-0` vann.
+            Följden syntes bara för plattformsadmin, som har en Admin/Demo-växel
+            extra i kontrollkolumnen: när raden blev trång var flikraden den
+            enda som vägrade ge med sig, så kontrollkolumnen klämdes ihop under
+            sitt eget innehåll. Med `justify-end` spiller ett sådant innehåll
+            åt VÄNSTER — rakt in i flikarna. Uppmätt vid 820px: kontrollboxen
+            126px bred med 261px innehåll, 111px överlappning, och ordet "Leads"
+            läsbart bakom Demo-knappen.
+
+            Nu är det tvärtom: kontrollkolumnen är `shrink-0` och behåller alltid
+            sin innehållsbredd, och flikraden krymper och scrollar internt
+            (`min-w-0` + `overflow-x-auto`, som alltid var avsikten). */}
         <div className="mx-auto flex max-w-[1400px] flex-wrap items-stretch gap-x-6 gap-y-3 px-4 py-3 md:px-6">
           {/* `flex-1 basis-0` på BÅDA sidokolumnerna. Utan det centreras
               flikraden bara inom sin egen box, och den boxen ligger inte mitt i
@@ -220,7 +234,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
             <Logo stor undertext={workspaceName} />
           </Link>
 
-          <div className="order-last ml-auto flex min-w-0 flex-1 basis-0 items-center justify-end gap-1.5 md:order-3">
+          <div className="order-last ml-auto flex shrink-0 flex-1 basis-0 items-center justify-end gap-1.5 md:order-3">
             {/* Admin / Demo. Ersätter både den gamla /admin-länken längst ut i
                 flikraden och läges­växlaren: läget styrs numera av Leads- och
                 Support-flikarna själva, se nedan. */}
@@ -262,7 +276,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
 
           <nav
             aria-label={t("nav.dashboard")}
-            className="thin-scrollbar order-last flex w-full min-w-0 shrink-0 items-center justify-center gap-1 overflow-x-auto px-1 md:order-2 md:w-auto"
+            className="thin-scrollbar order-last flex w-full min-w-0 items-center justify-center gap-1 overflow-x-auto px-1 md:order-2 md:w-auto"
           >
             {navRoutes.map((route) => {
               const active =
