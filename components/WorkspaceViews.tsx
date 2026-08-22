@@ -33,13 +33,32 @@ import { signOut } from "@/lib/actions/auth";
 import { workflowSteps } from "@/lib/mock-data";
 import type { SettingsSectionKey } from "@/lib/routes";
 
+/**
+ * Assistenten — MÄRKT som exempel, eftersom den inte är kopplad än.
+ *
+ * Samtalet nedan är skrivet, inte kört: det finns ingen assistent-endpoint i
+ * backenden att hämta det ur. Så länge det är så måste sidan SÄGA det.
+ *
+ * Utan märkningen är den här vyn samma fel som bolagslistan och analysvyn
+ * hade — ett påhittat utfall ("37 bolag hittade") i en betald arbetsyta, som
+ * ser ut som något agenten faktiskt gjort. Skillnaden mot de andra är bara att
+ * det här är ett samtal och inte en tabell, och den skillnaden märker ingen
+ * som skummar.
+ *
+ * Ta bort rutan samma dag samtalet kommer ur en körning. Inte innan.
+ */
 export function AssistantView() {
   return (
     <PageShell
-      kicker="Assistant · embedded"
+      kicker="Assistant"
       title="Assistenten är ett reglage i arbetsflödet, inte ett chattfönster."
       description="Varje kommando landar i discovery, research, sekvens, email eller analys. Det går att följa exakt vilken signal som styrde texten."
     >
+      <p className="mb-8 border-y border-ochre/40 bg-ochre/10 px-4 py-3 text-[15px] text-ink/80">
+        <strong className="font-semibold">Exempel.</strong> Samtalet nedan visar hur assistenten
+        är tänkt att fungera. Den är inte kopplad till din arbetsyta ännu, så ingenting här är
+        körningar hos dig.
+      </p>
       <div className="grid grid-cols-12 gap-x-8 gap-y-10">
         <div className="col-span-12 border-y border-ink/15 md:col-span-7">
           {[
