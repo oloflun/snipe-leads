@@ -20,6 +20,28 @@ const workspaceSlugs = [
 ];
 
 const nextConfig: NextConfig = {
+  async headers() {
+    return [
+      {
+        /**
+         * Service workern får ALDRIG cachas länge.
+         *
+         * Webbläsaren hämtar `/sw.js` för att upptäcka en ny version. Ligger
+         * den i HTTP-cachen kan en gammal worker sitta kvar i upp till 24
+         * timmar efter en deploy — och en gammal worker serverar en gammal
+         * offline-sida och ett gammalt cachenamn. `no-cache` betyder inte
+         * "cacha inte", utan "fråga servern varje gång", vilket är exakt det
+         * som behövs.
+         */
+        source: "/sw.js",
+        headers: [
+          { key: "Cache-Control", value: "no-cache, must-revalidate" },
+          { key: "Service-Worker-Allowed", value: "/" }
+        ]
+      }
+    ];
+  },
+
   async redirects() {
     return [
       // The public demo URL that has already been shared.

@@ -4,6 +4,7 @@ import { fontVariables } from "@/lib/fonts";
 import { LocaleProvider } from "@/lib/i18n";
 import { paletteToCss } from "@/lib/tenants";
 import { getCurrentTenant } from "@/lib/tenants/server";
+import { InstalleraApp } from "@/components/InstalleraApp";
 
 export async function generateMetadata(): Promise<Metadata> {
   const tenant = await getCurrentTenant();
@@ -88,6 +89,9 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       </head>
       <body>
         <LocaleProvider>{children}</LocaleProvider>
+        {/* Inte på kundens domän. Där är vi supportchatten på deras sajt, och
+            en ruta som ber besökaren installera VÅR app hör inte hemma. */}
+        {tenant ? null : <InstalleraApp />}
       </body>
     </html>
   );
