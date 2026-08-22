@@ -37,7 +37,42 @@ avsiktligt — utan nyckel svarar vi hellre inte alls än som ett annat bolag.
 
 Ersatt av `032`, som gör samma sak utan ordningsberoende. Kan tas bort.
 
-## railway-main: databasen är i kapp, KODEN är inte (2026-08-21 kväll)
+## railway-main: cutovern är GJORD (2026-08-22)
+
+`railway-main` bär sedan 2026-08-22 samma kod som `development` (`b5277d1`).
+Vägen dit blev alternativ 1 nedan — force-push — efter ett uttryckligt ja.
+
+De 22 commits som bara fanns i den grenens historik ligger kvar på
+`railway-main-fore-cutover-2026-08-22` (`0329452`). Den grenen är inte kopplad
+till någon miljö och deployar ingenting; den finns för att en force-push aldrig
+ska vara det enda som stod mellan oss och en historik.
+
+Verifierat mot produktionen efter deployen, inte antaget:
+
+| Kontroll | Utfall |
+|---|---|
+| `web` och `api`, miljö `main` | SUCCESS, båda |
+| `web/`, `/leads`, `/api/health` | 200 |
+| `api/health/ready` | `ok`, `mode: live`, storage postgres |
+| `POST /api/triage` | 200 med riktig klassificering (leverans, konfidens 0.7) |
+| `POST /api/chat` + jobbpollning | `completed`, svaret grundat i kunskapsbasen |
+| `POST /api/inbox/mock` | 6 ärenden inlästa och processade |
+| `POST /api/inbox/sync` | `connected: false` med kundvänlig text |
+
+Det som fällde den gamla koden — `KeyError: 'conversation_id'` vid en
+agentkörning — är alltså borta: körningen ovan gick hela vägen.
+
+`health/ready` rapporterar fortfarande `degraded: true` med två varningar, och
+båda är sanna och sedan tidigare kända: ingen IMAP-inkorg är kopplad, och det
+finns ingen riktig sändväg (godkända svar loggas, de skickas inte till kund).
+Ingen av dem är en följd av cutovern.
+
+### Det som INTE är gjort
+
+`SNAJP_SUPPORT_URL` på Vercel pekar fortfarande på den gamla backenden. Nu när
+koden i railway-main faktiskt kan köra är det ett beslut, inte en blockering.
+
+### Historik: så såg blockeringen ut (2026-08-21 kväll)
 
 Cutovern av `snajp.vercel.app` till Railway är förberedd men **blockerad**, och
 blockeringen är en grendivergens — inte något som går att lösa med en flagga.
