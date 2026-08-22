@@ -151,7 +151,7 @@ function renderSektion(sektion: string | undefined): React.ReactNode | null {
     case "emails":
       return <EmailStudioDemo />;
     case "companies":
-      return <CompaniesView />;
+      return <CompaniesView demo />;
     case "contacts":
       return <ContactsView />;
     case "inbox":

@@ -23,6 +23,21 @@ import { analyticsSeries, companies } from "@/lib/mock-data";
 /** Samma text som backendens `autonomy.describe("draft")`. Inte en parafras. */
 const AUTONOMI_DRAFT = "Agenterna researchar och skriver. Ingenting skickas förrän du tryckt skicka.";
 
+/**
+ * Exempeldatans statusord → backendens värdemängd (migration 010).
+ *
+ * `recommended` och `queued` finns inte i produkten; de är kvar från
+ * mock-erans vokabulär. Kartan hålls här och inte i komponenten, så att
+ * översättningen sker en gång, på demons väg in.
+ */
+const DEMOSTATUS: Record<string, string> = {
+  recommended: "ready",
+  researching: "researching",
+  queued: "ready",
+  contacted: "contacted",
+  replied: "replied"
+};
+
 function timmarSedan(timmar: number): string {
   return new Date(Date.now() - timmar * 3_600_000).toISOString();
 }
@@ -37,7 +52,26 @@ export function demoOversiktSvar(path: string): unknown | undefined {
         id: bolag.id,
         company_name: bolag.name,
         contact_name: bolag.contacts[0]?.fullName ?? null,
-        status: bolag.status,
+        contact_email: bolag.contacts[0]?.email ?? null,
+        website: bolag.website ?? null,
+        score_total: bolag.score,
+        // Exempeldatans egna statusord ("recommended", "queued") är INTE
+        // backendens värdemängd. Att låta dem gå ut orenderade var precis
+        // varför statuskolumnen en gång togs bort ur den kundvända tabellen —
+        // och en demo som visar tillstånd produkten inte kan producera lovar
+        // något den inte har. Därför översätts de hit, till migration 010:s
+        // faktiska värden.
+        status: DEMOSTATUS[bolag.status] ?? "new",
+        // Signalen som motiverade poängen. Riktiga prospekt bär den i
+        // `score_breakdown` (migration 031); exempelbolagen har den som text.
+        score_breakdown: [
+          {
+            etikett: "Signal",
+            utfall: "träff",
+            motivering: bolag.latestSignal.sv,
+            hart: false
+          }
+        ],
         origin: index % 3 === 0 ? "example" : "manual",
         ort: bolag.location,
         sni: bolag.industry,

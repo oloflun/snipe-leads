@@ -311,6 +311,33 @@ async def list_prospects(request: Request, tenant: dict = Depends(require_tenant
     return {"prospects": prospects}
 
 
+@router.get("/api/leads/prospects/{prospect_id}")
+async def get_prospect(
+    request: Request, prospect_id: str, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Ett prospekt plus dess källor — underlaget till bolagssidan i arbetsytan.
+
+    Fanns inte förut, och det syntes: `/dashboard/companies/<id>` renderade
+    `findCompany()` ur Next-appens mock-data, som faller tillbaka på FÖRSTA
+    exempelbolaget när id:t inte hittas. Varje klick på ett riktigt prospekt
+    visade alltså Byggkompaniet Syds påhittade researchpromemoria under det
+    riktiga bolagets namn — värre än en 404, eftersom sidan såg komplett ut.
+
+    404 här är med flit ett riktigt 404: ett prospekt som inte finns i den här
+    tenanten ska inte kunna skiljas från ett som aldrig funnits.
+    """
+    prospect = await request.app.state.storage.get_prospect(tenant["tenant_id"], prospect_id)
+    if not prospect:
+        raise HTTPException(status_code=404, detail="Prospektet finns inte.")
+
+    urls = await request.app.state.storage.list_prospect_source_urls(
+        tenant["tenant_id"], prospect_id
+    )
+    # Sorterad lista och inte set: JSON har ingen mängdtyp, och en ordning som
+    # varierar mellan anrop ger en sida som hoppar utan att något ändrats.
+    return {"prospect": prospect, "sources": sorted(urls)}
+
+
 @router.post("/api/leads/prospects/{prospect_id}/sources", status_code=201)
 async def add_prospect_source(
     request: Request,

@@ -9,6 +9,8 @@ import { LoginForm } from "@/components/auth/LoginForm";
 import { SignOutButton } from "@/components/auth/SignOutButton";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { Analys } from "@/components/dashboard/Analys";
+import { Bolagsregister } from "@/components/leads/Bolagsregister";
+import { Bolagssida } from "@/components/leads/Bolagssida";
 import { Discovery } from "@/components/leads/Discovery";
 import { LeadsControls } from "@/components/leads/LeadsControls";
 import { Affarskontext } from "@/components/settings/Affarskontext";
@@ -58,45 +60,6 @@ function LedgerMetric({ label, value, detail }: Readonly<{ label: string; value:
 function StatusWord({ value }: Readonly<{ value: string }>) {
   const accent = ["recommended", "active", "replied", "queued"].includes(value);
   return <span className={`kicker ${accent ? "text-ochre" : "text-mineral"}`}>{value}</span>;
-}
-
-function CompanyLedger({ rows = companies }: Readonly<{ rows?: Company[] }>) {
-  const { text } = useLocale();
-  const vag = useArbetsvag();
-  return (
-    <div className="overflow-x-auto border-y border-ink/15">
-      <div className="hidden min-w-[1120px] grid-cols-12 gap-x-6 border-b border-ink/15 py-4 md:grid">
-        {/* Utan kolumnen "Status". Den visade det råa statusordet
-            ("recommended", "queued") i en kundvänd tabell — våra interna
-            värden, oöversatta, i en vy där resten är skriven på svenska. */}
-        {["Bolag", "Segment", "Kontakt", "Signal", "Score"].map((head, index) => (
-          <div key={head} className={cn("kicker text-mineral", index === 0 ? "col-span-3" : index === 3 ? "col-span-3" : "col-span-2", index > 3 ? "text-right" : "")}>
-            {head}
-          </div>
-        ))}
-      </div>
-      <div className="min-w-[1120px] divide-y divide-ink/15">
-        {rows.map((company) => {
-          const contact = company.contacts[0];
-          return (
-            <Link key={company.id} href={vag(`/dashboard/companies/${company.id}`)} className="row grid grid-cols-12 gap-x-6 py-5 transition hover:bg-paper2/60">
-              <div className="ticker col-span-3">
-                <p className="text-[1.0625rem] font-semibold tracking-[-0.01em]">{company.name}</p>
-                <p className="mt-1 text-sm text-ink/55">{company.website}</p>
-              </div>
-              <div className="kicker col-span-2 mt-2 text-mineral">{company.industry} · {company.location}</div>
-              <div className="col-span-2 mt-1">
-                <p className="text-[15px]">{contact.fullName}</p>
-                <p className="mt-1 text-sm text-ink/55">{contact.role}</p>
-              </div>
-              <div className="col-span-3 text-[15px] leading-6 text-ink/72">{text(company.latestSignal)}</div>
-              <div className="num col-span-2 text-right text-[1.0625rem] font-semibold tabular-nums">{company.score}</div>
-            </Link>
-          );
-        })}
-      </div>
-    </div>
-  );
 }
 
 function SignalTimeline({ company }: Readonly<{ company: Company }>) {
@@ -166,7 +129,7 @@ export function LeadsBody({ demo = false }: Readonly<{ demo?: boolean }>) {
     <>
       <Discovery demo={demo} />
       <div className="mt-12">
-        <CompanyLedger />
+        <Bolagsregister demo={demo} />
       </div>
     </>
   );
@@ -183,55 +146,24 @@ export function LeadsView({ demo = false }: Readonly<{ demo?: boolean }>) {
   );
 }
 
-export function CompaniesView() {
+export function CompaniesView({ demo = false }: Readonly<{ demo?: boolean }>) {
   return (
     <PageShell
-      kicker="Companies"
+      kicker="Företag"
       title="Företagsintelligens, källor och säljvinklar i samma vy."
-      description="Ingen bolagssida får vara en kortsamling. Den ska läsa som en researchpromemoria."
+      description="Bolagen agenten hittat åt dig, med signalen som motiverade poängen."
     >
-      <CompanyLedger />
+      <Bolagsregister demo={demo} />
     </PageShell>
   );
 }
 
-export function CompanyDetailView({ id }: Readonly<{ id: string }>) {
-  const { text } = useLocale();
-  const company = findCompany(id);
-  const vag = useArbetsvag();
-  return (
-    <PageShell
-      kicker={`${company.industry} · ${company.location}`}
-      title={company.name}
-      description={text(company.summary)}
-      action={<EditorialButton href={vag("/dashboard/emails")}>Generera email</EditorialButton>}
-    >
-      <div className="grid grid-cols-12 gap-x-8 gap-y-12">
-        <dl className="col-span-12 grid grid-cols-12 gap-x-8 gap-y-8">
-          <div className="col-span-6 md:col-span-3"><LedgerMetric label="Lead score" value={`${company.score}/100`} detail={text(company.latestSignal)} /></div>
-          <div className="col-span-6 md:col-span-3"><LedgerMetric label="Storlek" value={company.size.replace(" anställda", "")} detail="anställda" /></div>
-          <div className="col-span-6 md:col-span-3"><LedgerMetric label="Källor" value={String(company.sources.length)} detail="provenance-poster" /></div>
-          <div className="col-span-6 md:col-span-3"><LedgerMetric label="Status" value={company.status} detail="nuvarande leadläge" /></div>
-        </dl>
-        <section className="col-span-12 md:col-span-7">
-          <h2 className="kicker text-mineral">Signal timeline</h2>
-          <div className="mt-6"><SignalTimeline company={company} /></div>
-        </section>
-        <aside className="col-span-12 border-y border-ink/15 py-6 md:col-span-5">
-          <h2 className="text-[1.25rem] font-semibold tracking-[-0.02em]">Rekommenderad säljvinkel</h2>
-          <p className="mt-4 text-[16px] leading-7 text-ink/75">{text(company.angle)}</p>
-          <div className="rule my-6 text-ink" />
-          <p className="kicker text-mineral">Recommended CTA</p>
-          <p className="mt-3 text-[17px] leading-7">{text(company.recommendedCta)}</p>
-        </aside>
-        <section className="col-span-12 grid grid-cols-12 gap-x-8 gap-y-8">
-          <TextList title="Pain points" items={company.painPoints.map(text)} />
-          <TextList title="Möjligheter" items={company.opportunities.map(text)} />
-          <TextList title="Källor" items={company.sources.map((source) => `${source.label} · ${source.observedAt}`)} />
-        </section>
-      </div>
-    </PageShell>
-  );
+export function CompanyDetailView({ id, demo = false }: Readonly<{ id: string; demo?: boolean }>) {
+  // Innehållet bor i components/leads/Bolagssida.tsx. Här låg tidigare
+  // `findCompany(id)` ur mock-data, som faller tillbaka på FÖRSTA exempelbolaget
+  // när id:t inte finns — varje klick på ett riktigt prospekt visade alltså
+  // Byggkompaniet Syds påhittade promemoria under det riktiga bolagets namn.
+  return <Bolagssida id={id} demo={demo} />;
 }
 
 function TextList({ title, items }: Readonly<{ title: string; items: string[] }>) {
