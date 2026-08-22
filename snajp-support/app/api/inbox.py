@@ -81,7 +81,7 @@ async def seed_mock_inbox(
     kategori = (payload.category if payload else None) or None
     if kategori and kategori not in CATEGORIES:
         raise HTTPException(status_code=400, detail=f"Okänt fack: {kategori}")
-    antal = max(1, min((payload.antal if payload else None) or 6, 10))
+    antal = max(1, min((payload.antal if payload else None) or 8, 10))
 
     borttagna = await storage.delete_mock_emails(tenant_id, category=kategori)
 

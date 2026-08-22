@@ -3,7 +3,7 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.config import get_settings
+from app.config import CATEGORIES, get_settings
 from app.main import app
 
 settings = get_settings()
@@ -28,15 +28,21 @@ async def test_mock_seed_triages_and_creates_drafts():
     bara att skriva så länge "Hämta testmail" gav exakt samma sex mail varje
     gång — vilket var precis felet: kunden fick ingen ny lista när de tryckte
     igen. Kontraktet är numera blandningen, och det är den som testas.
+
+    Antalet är inte heller en siffra i testet längre. Seedningen ger ETT ärende
+    per fack, för att en kund som klickar sig runt bland facken annars hittar
+    tomma flikar och drar slutsatsen att sorteringen inte fungerar. Ändras
+    antalet fack ändras antalet mail, och ett test som pinnat 6 hade fallit av
+    fel skäl.
     """
     async with app.router.lifespan_context(app):
         async with _client() as client:
             seeded = await client.post("/api/inbox/mock", headers=DEMO)
             assert seeded.status_code == 201
-            assert seeded.json()["ingested"] == 6
+            assert seeded.json()["ingested"] == len(CATEGORIES)
 
             emails = (await client.get("/api/inbox", headers=DEMO)).json()["emails"]
-            assert len(emails) == 6
+            assert len(emails) == len(CATEGORIES)
 
             # Blandat utfall: minst ett ärende som når en människa, och minst
             # ett där agenten faktiskt skrivit ett svar. En inkorg där allt är
@@ -68,10 +74,10 @@ async def test_mock_seed_replaces_previous_batch():
             forsta = (await client.get("/api/inbox", headers=DEMO)).json()["emails"]
 
             andra_svar = await client.post("/api/inbox/mock", headers=DEMO)
-            assert andra_svar.json()["removed"] == 6
+            assert andra_svar.json()["removed"] == len(forsta)
 
             andra = (await client.get("/api/inbox", headers=DEMO)).json()["emails"]
-            assert len(andra) == 6
+            assert len(andra) == len(CATEGORIES)
             assert {e["id"] for e in forsta}.isdisjoint({e["id"] for e in andra})
 
 
@@ -226,7 +232,7 @@ async def test_inbox_is_tenant_isolated():
             await client.post("/api/inbox/mock", headers=DEMO)
             inbox_a = (await client.get("/api/inbox", headers=DEMO)).json()["emails"]
             inbox_b = (await client.get("/api/inbox", headers=key_b)).json()["emails"]
-            assert len(inbox_a) == 6
+            assert len(inbox_a) == len(CATEGORIES)
             assert inbox_b == []
 
             # Tenant B kan inte läsa eller ta över A:s mail.

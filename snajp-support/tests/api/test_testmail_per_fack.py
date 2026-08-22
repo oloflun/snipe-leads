@@ -81,9 +81,11 @@ async def test_seedning_svarar_med_mailen_inlasta():
 
     assert svar.status_code == 201
     kropp = svar.json()
-    assert kropp["ingested"] == 6
+    # Ett ärende per fack: en kund som klickar sig runt ska inte hitta en tom
+    # inkorg och tro att sorteringen är trasig.
+    assert kropp["ingested"] == len(CATEGORIES)
     assert kropp["processing"] is True
-    assert len(kropp["email_ids"]) == 6
+    assert len(kropp["email_ids"]) == len(CATEGORIES)
 
 
 @pytest.mark.anyio

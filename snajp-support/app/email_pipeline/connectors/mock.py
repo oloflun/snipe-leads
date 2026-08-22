@@ -354,7 +354,7 @@ def kategorier_med_mail() -> list[str]:
 
 def build_mock_emails(
     *,
-    antal: int = 6,
+    antal: int = 8,
     kategori: str | None = None,
     slump: random.Random | None = None,
 ) -> list[InboundEmail]:
@@ -379,10 +379,34 @@ def build_mock_emails(
         pool = _pool_for(kategori)
         valda = rng.sample(pool, min(antal, len(pool))) if pool else []
     else:
-        antal_eskalerande = min(ESKALERANDE_ANDEL, antal, len(ESKALERANDE))
-        valda = rng.sample(ESKALERANDE, antal_eskalerande)
-        valda += rng.sample(BESVARBARA, min(antal - antal_eskalerande, len(BESVARBARA)))
+        # Ett ärende ur VARJE fack, inte sex slumpade ur högen.
+        #
+        # Sex slumpade lämnade regelmässigt två eller tre inkorgar tomma, och
+        # en kund som klickar sig runt bland facken hittar då tomma flikar och
+        # drar slutsatsen att sorteringen inte fungerar. Ett per fack visar det
+        # knappen finns för: att posten hamnar rätt.
+        #
+        # Blandningen besvarbart/eskalerande sköter sig själv — facken
+        # betalning och retur_reklamation bär de eskalerande ärendena — men
+        # kvoten garanteras nedan, för en demo utan en enda eskalering visar en
+        # agent som svarar på allt.
+        valda = []
+        for fack in sorted({m["kategori"] for m in BESVARBARA + ESKALERANDE}):
+            pool = _pool_for(fack)
+            if pool:
+                valda.append(rng.choice(pool))
+
+        if not any(m in ESKALERANDE for m in valda):
+            ersatt = rng.choice(ESKALERANDE)
+            for index, m in enumerate(valda):
+                if m["kategori"] == ersatt["kategori"]:
+                    valda[index] = ersatt
+                    break
+            else:
+                valda.append(ersatt)
+
         rng.shuffle(valda)
+        valda = valda[:antal] if antal < len(valda) else valda
 
     mail = []
     for index, scenario in enumerate(valda, start=1):
