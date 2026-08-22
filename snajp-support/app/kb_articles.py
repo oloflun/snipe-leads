@@ -218,3 +218,165 @@ KB_ARTICLES: list[dict] = [
         ),
     },
 ]
+
+# Sex artiklar tillagda 2026-08-21, valda ur DEMONS EGNA MEJL och inte ur en
+# föreställning om vad en kunskapsbas brukar innehålla. Sex av de tolv
+# besvarbara i email_pipeline/connectors/mock.py saknade underlag här —
+# öppettider, garanti, utbildning, ombud/hemleverans och kvitto — och utan
+# träff i basen tvingar grundningsregeln (processor.py steg 2) fram en
+# eskalering. Alltså blev hälften av demons inkorg röd av en lucka i texten,
+# inte av något agenten gjorde.
+#
+# Facken måste ligga i config.CATEGORIES, annars faller
+# ss_knowledge_base_category_check vid insert. `garanti` och `utbildning`
+# fanns i listan men hade noll artiklar.
+KB_ARTICLES += [
+    {
+        "title": "Om Nordlys Handel",
+        "category": "ovrigt",
+        "content": (
+            "Nordlys Handel är en svensk e-handel för hem och utemiljö: förvaring, "
+            "belysning, textil, krukor och trädgårdsredskap. Vi har lager i Jönköping "
+            "och en butik i Göteborg. Vi säljer både till privatpersoner och till "
+            "företag — företagskunder kan handla mot faktura efter kreditprövning. "
+            "Sortimentet är cirka 4 000 artiklar och vi lagerhåller allt själva, "
+            "vilket är varför leveranstiden är densamma oavsett årstid."
+        ),
+    },
+    {
+        "title": "Öppettider och kontaktvägar",
+        "category": "ovrigt",
+        "content": (
+            "Kundtjänst har öppet vardagar 09–16 och nås på hej@nordlyshandel.se eller "
+            "031-123 45 67. Butiken i Göteborg har öppet vardagar 10–18 och lördagar "
+            "11–15. Butiken är STÄNGD på söndagar och på röda dagar, samt på "
+            "midsommarafton, julafton och nyårsafton. Dagen före röd dag stänger både "
+            "butik och kundtjänst kl 13. Webbutiken tar emot beställningar dygnet runt, "
+            "men order lagda efter kl 14 packas nästa vardag."
+        ),
+    },
+    {
+        "title": "Garanti: hur länge den gäller och vad den täcker",
+        "category": "garanti",
+        "content": (
+            "Du har tre års reklamationsrätt enligt konsumentköplagen på allt vi säljer. "
+            "Utöver det lämnar vi två års produktgaranti på belysning och elektriska "
+            "produkter, räknat från leveransdatum. Garantin täcker fel som fanns vid "
+            "leveransen eller uppstår vid normal användning: trasig elektronik, "
+            "sprickor i material, ytbehandling som släpper. Den täcker INTE normalt "
+            "slitage, frostskador på utomhuskrukor som stått ute över vintern, eller "
+            "skada efter felaktig montering. Vid garantiärende behöver vi ordernummer "
+            "och en bild på felet — då skickar vi ny vara eller återbetalar."
+        ),
+    },
+    {
+        "title": "Utbildning och introduktion för företagskunder",
+        "category": "utbildning",
+        "content": (
+            "Företagskunder får en kostnadsfri genomgång av beställningsportalen: 45 "
+            "minuter på plats eller digitalt, upp till tio deltagare per tillfälle. Den "
+            "täcker inköpsflödet, kostnadsställen, återkommande order och hur man "
+            "hämtar underlag till bokföringen. Boka via hej@nordlyshandel.se med "
+            "önskat datum och antal deltagare — vi återkommer inom två vardagar. Har "
+            "ni fler än tio deltagare delar vi upp det på flera tillfällen, eftersom "
+            "genomgången bygger på att alla hinner logga in och prova själva."
+        ),
+    },
+    {
+        "title": "Ombud eller hemleverans",
+        "category": "leverans",
+        "content": (
+            "Du väljer själv i kassan. Ombud är standard och ingår i fraktpriset: "
+            "PostNord eller Instabox, och du får en avisering när paketet finns att "
+            "hämta. Hemleverans till dörren kostar 79 kr extra och bokas med tidsfönster "
+            "kvällstid 17–21 — transportören sms:ar dagen innan. Skrymmande varor över "
+            "20 kg, till exempel större krukor och möbler, skickas ALLTID som "
+            "hemleverans och då utan extra avgift. Paket hos ombud ligger kvar i 14 "
+            "dagar innan de returneras."
+        ),
+    },
+    {
+        "title": "Kvitto och faktura för bokföringen",
+        "category": "betalning",
+        "content": (
+            "Kvittot ligger som PDF under Mina sidor → Beställningar → Ladda ner kvitto, "
+            "och går att hämta hur många gånger som helst. Det är ett fullständigt "
+            "underlag: organisationsnummer, momssats och momsbelopp specificerat per "
+            "rad. Handlade du utan konto skickar vi kvittot på nytt om du mejlar "
+            "ordernummer till hej@nordlyshandel.se. Företagskunder som handlar mot "
+            "faktura får underlaget som e-faktura eller PDF, och kan lägga till "
+            "referens eller kostnadsställe i kassan så att det följer med på fakturan."
+        ),
+    },
+    # --- Påfyllnad 2026-08-22: garanti, utbildning och orderstatus hade EN
+    # artikel var. Följden var mätbar i dev: ett garantiärende hamnade i
+    # teknisk_support och en utbildningsfråga i ovrigt, eftersom
+    # grundningsregeln (processor.py steg 2) styr klassificeringen mot det fack
+    # där det finns täckning. Facken fanns alltså i menyn men fylldes aldrig,
+    # och en kund som klickade dit såg en tom inkorg.
+    {
+        "title": "Garanti efter reparation eller utbyte",
+        "category": "garanti",
+        "content": (
+            "Vid en garantireparation löper den ursprungliga garantitiden vidare från "
+            "köpdatumet — den börjar alltså inte om. Får du en helt ny vara i utbyte "
+            "startar en ny garantitid från leveransdagen på den nya varan. Reparerade "
+            "delar har alltid minst tre månaders garanti från reparationsdatumet, även "
+            "om den ursprungliga garantin skulle löpa ut dessförinnan."
+        ),
+    },
+    {
+        "title": "Garanti vid köp hos återförsäljare",
+        "category": "garanti",
+        "content": (
+            "Garantin följer varan och gäller även om du köpt hos en av våra "
+            "återförsäljare. Reklamationen gör du i första hand hos butiken du köpte "
+            "av, eftersom det är de som har ditt köpavtal. Får du inte hjälp där tar "
+            "vi över ärendet — skicka kvitto eller ordernummer från butiken så löser "
+            "vi det direkt med dem."
+        ),
+    },
+    {
+        "title": "Utbildningens upplägg: på plats eller digitalt",
+        "category": "utbildning",
+        "content": (
+            "Introduktionen hålls antingen digitalt (90 minuter, upp till 15 deltagare) "
+            "eller på plats hos er (en halvdag, upp till 8 deltagare för att alla ska "
+            "hinna prova själva). Digitalt går att boka med två veckors varsel, på plats "
+            "brukar kräva fyra. Vi spelar in den digitala varianten om ni vill kunna "
+            "visa den för nyanställda senare."
+        ),
+    },
+    {
+        "title": "Förberedelser inför en utbildning",
+        "category": "utbildning",
+        "content": (
+            "Vi skickar ett kort underlag en vecka innan: en översikt på två sidor och "
+            "tre korta filmer. Deltagare som hunnit titta får ut mer av tiden, eftersom "
+            "vi då kan ägna passet åt era egna fall i stället för åt grunderna. Har ni "
+            "specifika frågor ni vill ha med, mejla dem i förväg så bygger vi in dem."
+        ),
+    },
+    {
+        "title": "Ändra eller komplettera en lagd order",
+        "category": "orderstatus",
+        "content": (
+            "En order går att komplettera fram tills den plockas i lagret, oftast inom "
+            "1–2 timmar på vardagar. Hör av dig med ordernumret och vad du vill lägga "
+            "till, så slår vi ihop det till en leverans och du betalar bara en frakt. "
+            "Har ordern redan packats lägger du en ny beställning — kontakta oss så "
+            "krediterar vi frakten på den andra ordern."
+        ),
+    },
+    {
+        "title": "Vad orderstatusen betyder",
+        "category": "orderstatus",
+        "content": (
+            "Mottagen: ordern ligger hos oss men är inte plockad. Behandlas: den plockas "
+            "i lagret just nu. Skickad: paketet är hos transportören och spårningsnumret "
+            "är på väg till din mejl. Delvis skickad: en vara var restnoterad och skickas "
+            "separat utan extra fraktkostnad. Står ordern kvar som Behandlas mer än två "
+            "vardagar hör av dig, då har något fastnat."
+        ),
+    },
+]

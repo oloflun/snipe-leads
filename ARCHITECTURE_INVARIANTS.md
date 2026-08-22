@@ -250,6 +250,24 @@ systemposition, är exakt den här gränsen.
 Test: tests/invariants/test_inv_sec_009.py
 Införd: 2026-08-14 · Upphävs endast genom waiver
 
+### INV-SEC-011 — Vybytet till demokontot kräver plattformsadmin
+`lib/vy.aktivVy()` läser cookien `snajp.vy` men returnerar `demo` först efter
+att `getPlatformAdmin()` svarat ja, och `lib/actions/vy.bytVy` upprepar samma
+kontroll före skrivningen. `lib/snajp/tenant.requireSnajpTenant()` frågar
+`aktivVy()` och läser aldrig cookien själv. Modulen är `import "server-only"`,
+så villkoret kan inte hamna i klientbundeln. Demogrenen når exakt EN tenant,
+`DEMO_TENANT_SLUG`, hårdkodad i `lib/vy.ts`.
+Varför: en cookie är något klienten skickar, och tenanten härleds annars ur
+sessionen med flit (INV-SEC-002). Utan grinden vore raden `snajp.vy=demo` ett
+tenant-byte via devtools — vilket är exakt det fel `requireSnajpTenant`
+docstring beskriver: catch-all-proxyn föll en gång tillbaka på demonyckeln, och
+varje inloggad kunds inkorg, kunskapsbas och röstdokument pekade på Nordlys
+Handel. Två kunder hade skrivit i samma SOUL. Uppslaget failar dessutom stängt
+(`lib/auth/admin.isPlatformAdmin`), så ett databasavbrott ger `admin` och inte
+`demo` — motsatt val hade gjort ett avbrott till en behörighetshöjning.
+Test: tests/invariants/test_inv_sec_011.py
+Införd: 2026-08-21 · Upphävs endast genom waiver
+
 ### INV-GROUND-001 — Ett utkast med ostödda påståenden köas aldrig
 `app/leads/grounding_gate.check_grounding` körs på den EXAKTA text som ska
 köas (efter `strip_markdown` och `sign_off`), mot en tillåten faktamängd byggd

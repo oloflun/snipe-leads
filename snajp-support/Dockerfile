@@ -29,6 +29,22 @@ COPY agent-core ./agent-core
 
 WORKDIR /srv/snajp-support
 
+# UTF-8 oavsett vilken lokal basimagen råkar ha.
+#
+# ÄRLIGHET OM VARFÖR RADERNA STÅR HÄR: de lades till som fix för
+# `'ascii' codec can't encode character 'à' in position 7`, och de var INTE
+# fixen. Traceback:en (som blev läsbar först när except-blocket i chat.py
+# började logga stacken) visade att felet satt i ett HTTP-huvud: httpx kodar
+# huvudvärden som ASCII oavsett lokal, och API-nyckeln innehöll ett tecken över
+# 127. Position 7 är första tecknet efter "Bearer ".
+#
+# Raderna får ändå stå kvar, men på egna meriter: python:3.12-slim sätter ingen
+# LANG, kodbasen är genomgående svensk, och en tjänst vars textbehandling beror
+# på basimagens lokal är en tidsinställd bugg. De löser bara inte den bugg de
+# skrevs för.
+ENV PYTHONUTF8=1
+ENV LANG=C.UTF-8
+
 EXPOSE 8000
 # Render (och liknande) injicerar $PORT; lokalt defaultar den till 8000.
 ENV PORT=8000

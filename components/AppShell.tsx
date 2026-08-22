@@ -1,6 +1,6 @@
 "use client";
 
-import { LogOut, ShieldCheck } from "lucide-react";
+import { LogOut } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -8,9 +8,10 @@ import { Logo } from "@/components/Logo";
 import { AgentMenu } from "@/components/snajp/AgentMenu";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { signOut } from "@/lib/actions/auth";
-import { ScopeSwitch } from "@/components/dashboard/ScopeSwitch";
+import { VyVaxel } from "@/components/VyVaxel";
 import { useLocale } from "@/lib/i18n";
-import { routesForProducts } from "@/lib/routes";
+import { produktForInstallningsvag, routesForProducts, tillAdminvag } from "@/lib/routes";
+import type { Scope } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
 /**
@@ -34,7 +35,6 @@ const DEMO_VAGAR: Record<string, string> = {
   "/dashboard": "/demo",
   "/dashboard/leads": "/demo/leads",
   "/dashboard/leads/kontroll": "/demo/kontroll",
-  "/dashboard/campaigns": "/demo/campaigns",
   "/dashboard/companies": "/demo/companies",
   "/dashboard/contacts": "/demo/contacts",
   "/dashboard/emails": "/demo/emails",
@@ -44,57 +44,183 @@ const DEMO_VAGAR: Record<string, string> = {
   "/dashboard/support": "/demo/support"
 };
 
+/**
+ * Flikarna ÄR lägesväxeln.
+ *
+ * Tidigare fanns en separat kontroll (ScopeSwitch) bredvid flikraden, och den
+ * gjorde en annan sak än flikarna: "Leads" tog dig till leads-sidan men lämnade
+ * resten av appen i Duo, så inställningarna bakom fliken visade fortfarande
+ * båda agenterna. Två kontroller för en sak, där den ena bara gjorde halva
+ * jobbet.
+ *
+ * Nu smalnar Leads och Support av hela vyn, och Översikt tar tillbaka Duo.
+ * Kartan är explicit: en route utan post här rör inte läget.
+ */
+export const FLIKENS_LAGE: Record<string, Scope> = {
+  "/dashboard": "both",
+  "/dashboard/leads": "leads",
+  "/dashboard/support": "support"
+};
+
 function iDemolage(pathname: string): boolean {
   return pathname === "/demo" || pathname.startsWith("/demo/");
+}
+
+function iAdminlage(pathname: string): boolean {
+  return pathname === "/admin" || pathname.startsWith("/admin/");
 }
 
 function demoAnpassa(href: string, pathname: string): string {
   return iDemolage(pathname) ? (DEMO_VAGAR[href] ?? href) : href;
 }
 
+/**
+ * Arbetsytans länkar, anpassade till ytan de renderas på.
+ *
+ * Samma vyer renderas på tre ytor: /dashboard (kunden), /admin (plattforms-
+ * admin) och /demo (utan session). En hårdkodad `/dashboard/...` i en vy är
+ * därför rätt på en av tre. På /admin studsade den dessutom tillbaka till
+ * /admin (app/dashboard/layout.tsx skickar plattformsadmin dit), så varje
+ * innehållslänk tog admin ur den vy de stod i — samma fel som flikraden hade,
+ * fast i brödtexten.
+ *
+ * `/dashboard` mappas till `/admin/arbetsyta`; se AdminShell för varför.
+ * Kartan bor i lib/routes.ts, delad med AdminShell — se `tillAdminvag`.
+ */
+export function useArbetsvag(): (href: string) => string {
+  const pathname = usePathname();
+  return (href: string) => {
+    if (iAdminlage(pathname)) {
+      return tillAdminvag(href);
+    }
+    return demoAnpassa(href, pathname);
+  };
+}
+
 export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) {
   const pathname = usePathname();
   const router = useRouter();
   const { t, locale, toggleLocale } = useLocale();
-  const { products, workspaceName, availableScopes, shows, isPlatformAdmin, signedIn } =
+  const { products, workspaceName, shows, isDemo, signedIn, vy, availableScopes, setScope } =
     useDashboard();
 
   // Entitlement decides what exists; the scope switch decides what is on screen
   // right now. A nav listing eight Leads sections while the scope reads "Support"
   // contradicts the control the user just used.
+  //
+  // MEN: lägesflikarna själva undantas från det filtret.
+  //
+  // Flikarna ÄR växeln (FLIKENS_LAGE). Filtrerades de på `shows()` göms den
+  // kontroll man skulle ha tryckt på: står man i Leads försvinner
+  // Kundtjänst-fliken, och enda vägen till kundtjänst blir att först gå via
+  // Översikt — vilket inte står någonstans. Uppmätt i skärmdump från demovyn,
+  // där menyn saknade Kundtjänst helt.
+  //
+  // Regeln: en kontroll får aldrig gömma sig själv. Entitlement styr att
+  // fliken finns; läget styr vad innehållet visar.
   const navRoutes = routesForProducts(products).filter(
-    (route) => route.product === "shared" || shows(route.product)
+    (route) =>
+      route.product === "shared" || route.href in FLIKENS_LAGE || shows(route.product)
   );
 
   // Narrowing the scope while standing on a section it excludes would strand the
   // user on a page they can no longer navigate back to.
-  const stranded = navRoutes.every(
+  //
+  // Räknas mot ALLA routes arbetsytan äger, inte bara de som står i menyn.
+  // Skillnaden är `preview`-routerna: `lib/routes.ts` säger att de "nås
+  // fortfarande direkt" och att flaggan bara styr vad som VISAS i menyn — men
+  // eftersom de saknades här studsade varje sådan adress tillbaka till
+  // /dashboard. Alltså gick /dashboard/companies, /contacts, /inbox,
+  // /analytics och /assistant inte att öppna alls som kund, och koden på båda
+  // ställena såg rätt ut var för sig.
+  //
+  // Scope-skyddet står kvar orört: filtret på `shows()` gäller fortfarande, så
+  // den som smalnar av vyn till Support medan de står på en leads-sida
+  // dirigeras som förut.
+  const natbaraRoutes = routesForProducts(products, { includePreview: true }).filter(
+    (route) => route.product === "shared" || shows(route.product)
+  );
+
+  const stranded = natbaraRoutes.every(
     (route) => route.href === "/dashboard" || !pathname.startsWith(route.href)
   );
+
+  // Samma resonemang för inställningarna, som skyddet aldrig täckte: filtret
+  // där grindade på `products` (rättighet) och aldrig på läget, så den som
+  // smalnade av till Support stod kvar på /settings/leads med en sidokolumn
+  // som inte längre listade sidan de befann sig på. Gäller båda ytorna —
+  // hjälparen känner igen /admin/installningar också.
+  const installningsProdukt = produktForInstallningsvag(pathname);
+  const strandadIInstallningar = installningsProdukt !== null && !shows(installningsProdukt);
 
   useEffect(() => {
     if (pathname.startsWith("/dashboard/") && stranded) {
       router.replace("/dashboard");
+    } else if (strandadIInstallningar) {
+      router.replace(pathname.startsWith("/admin/") ? "/admin/installningar" : "/settings");
     }
-  }, [pathname, stranded, router]);
+  }, [pathname, stranded, strandadIInstallningar, router]);
+
+  // Inuti adminytan äger AdminShell skalet, och det här ska bara vara innehåll.
+  //
+  // Varje arbetsytesvy renderar sitt eget AppShell via PageShell. Under /admin
+  // gav det TVÅ staplade headers, och den inre navigationen pekade på
+  // /dashboard/* — vilket för en plattformsadmin studsar tillbaka till /admin
+  // (app/dashboard/layout.tsx). Alltså: varje flik i den inre raden tog
+  // användaren ur den flik de stod i. Uppmätt i skärmdump, inte antaget.
+  //
+  // Villkoret läser pathname och inte en prop, för att PageShell anropas från
+  // ~20 vyer som inte vet vilken yta de renderas i — och inte ska behöva veta.
+  if (pathname === "/admin" || pathname.startsWith("/admin/")) {
+    return <>{children}</>;
+  }
 
   return (
     <div className="min-h-screen bg-paper text-ink">
       <header className="sticky top-0 z-30 bg-paper/85 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3 md:px-6">
+        {/* Tre kolumner: logotyp, flikar, kontroller.
+
+            Ordningen sätts EXPLICIT från md och uppåt (order-1/2/3). I DOM
+            ligger kontrollerna före flikraden — det är rätt på mobil, där
+            flikarna ska hamna på egen rad UNDER allt annat (`order-last`). Utan
+            den explicita ordningen ärvde flikraden sin DOM-plats på desktop och
+            hamnade till HÖGER om kontrollerna. Uppmätt: 773 px luft till
+            vänster, 28 till höger.
+
+            Flikraden låg tidigare på en EGEN rad under logotypen (`order-last`
+            + `w-full`), vänsterställd. Nu ligger den i mitten av samma rad, och
+            `flex-1` på nav-elementet ger lika mycket luft åt båda hållen oavsett
+            hur breda grannkolumnerna är — uppmätt 61 px åt vardera hållet i
+            förhandsvisningen.
+
+            `flex-wrap` är kvar: under ~900px lägger sig flikraden på egen rad
+            igen i stället för att klämmas ihop, vilket är rätt beteende på en
+            telefon. */}
+        <div className="mx-auto flex max-w-[1400px] flex-wrap items-stretch gap-x-6 gap-y-3 px-4 py-3 md:px-6">
+          {/* `flex-1 basis-0` på BÅDA sidokolumnerna. Utan det centreras
+              flikraden bara inom sin egen box, och den boxen ligger inte mitt i
+              headern — logotypen är smalare än kontrollerna, så raden hamnar
+              till höger. Uppmätt före: 561 px luft till vänster, 240 till höger.
+
+              Med lika flex får kolumnerna samma bredd oavsett innehåll, och
+              mitten blir headerns mitt. `min-w-0` låter dem krympa i stället
+              för att tvinga fram horisontell scroll. */}
           <Link
             href={demoAnpassa("/dashboard", pathname)}
-            className="focus-ring inline-flex min-h-11 items-center rounded-input"
+            className="focus-ring inline-flex min-w-0 flex-1 basis-0 shrink-0 items-center rounded-input md:order-1"
           >
-            <Logo />
+            {/* Större märke, och arbetsytans namn UNDER ordmärket i stället för
+                bredvid. Logotypen fyller därmed höjden av båda de gamla raderna
+                och sitter i vänsterkanten, i stället för att vara en liten rad
+                ovanför flikarna. */}
+            <Logo stor undertext={workspaceName} />
           </Link>
 
-          {workspaceName ? (
-            <span className="hidden text-sm text-ink/45 sm:inline">{workspaceName}</span>
-          ) : null}
-
-          <div className="ml-auto flex items-center gap-1.5">
-            {availableScopes.length > 1 ? <ScopeSwitch /> : null}
+          <div className="order-last ml-auto flex min-w-0 flex-1 basis-0 items-center justify-end gap-1.5 md:order-3">
+            {/* Admin / Demo. Ersätter både den gamla /admin-länken längst ut i
+                flikraden och läges­växlaren: läget styrs numera av Leads- och
+                Support-flikarna själva, se nedan. */}
+            <VyVaxel />
             <button
               type="button"
               onClick={toggleLocale}
@@ -132,7 +258,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
 
           <nav
             aria-label={t("nav.dashboard")}
-            className="thin-scrollbar order-last -mx-1 flex w-full min-w-0 gap-1 overflow-x-auto px-1 pb-1"
+            className="thin-scrollbar order-last flex w-full min-w-0 shrink-0 items-center justify-center gap-1 overflow-x-auto px-1 md:order-2 md:w-auto"
           >
             {navRoutes.map((route) => {
               const active =
@@ -143,6 +269,15 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                 <Link
                   key={route.href}
                   href={demoAnpassa(route.href, pathname)}
+                  // Läget sätts vid klicket, inte i en effekt på den nya sidan:
+                  // en effekt hade hunnit rendera målsidan i det gamla läget
+                  // först, och bytet hade synts som ett hopp.
+                  onClick={() => {
+                    const lage = FLIKENS_LAGE[route.href];
+                    if (lage && availableScopes.includes(lage)) {
+                      setScope(lage);
+                    }
+                  }}
                   aria-current={active ? "page" : undefined}
                   className={cn(
                     "focus-ring inline-flex min-h-11 shrink-0 items-center rounded-input px-3 text-sm font-medium transition-colors",
@@ -154,37 +289,39 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
               );
             })}
 
-            {/* Plattformsadmin. Sist och visuellt skild från produktnavigationen:
-                den leder ut ur den egna arbetsytan och in i ALLA kunders siffror,
-                och ska inte se ut som ännu en flik bland de andra.
-
-                Villkoret är en ledtråd, inte en grind. Grinden är
-                requirePlatformAdmin() i app/admin/layout.tsx, som svarar 404 —
-                en manipulerad flagga ger alltså en länk till en 404, ingenting mer.
-
-                Utan den här länken fanns ingen väg alls till /admin i UI:t. Vakten
-                släppte igenom rätt person, men adressen gick bara att nå genom att
-                skriva den för hand. */}
-            {isPlatformAdmin ? (
-              <Link
-                href="/admin"
-                aria-current={pathname.startsWith("/admin") ? "page" : undefined}
-                className={cn(
-                  "focus-ring ml-auto inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-input px-3 text-sm font-medium transition-colors",
-                  pathname.startsWith("/admin")
-                    ? "bg-ochre/15 text-ink"
-                    : "text-ochre hover:bg-ochre/10"
-                )}
-              >
-                <ShieldCheck className="h-4 w-4" aria-hidden />
-                Admin
-              </Link>
-            ) : null}
           </nav>
         </div>
       </header>
 
-      <main>{children}</main>
+      <main>
+        {/* Demo-banner: en demo-workspace ska veta vad den är och vad som
+            begränsar den. Uppgraderingen till fullt konto (med planval) är
+            uppskjuten — vägen ut är kontakt just nu. */}
+        {isDemo || vy === "demo" ? (
+          <div className="border-b border-ochre/30 bg-ochre/10">
+            <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 md:px-6">
+              <span className="kicker text-ochre">Demo</span>
+              {/* Demovyn bär ingen förklarande rad längre. Märkningen "Demo"
+                  räcker där; texten om demokontot namngav dessutom
+                  exempelbutiken i en yta som visas för kunder. */}
+              {vy === "demo" ? null : (
+                <span className="text-[13px] text-ink/70">
+                  Du testar Snajp med ett begränsat antal körningar.
+                </span>
+              )}
+              {vy === "demo" ? null : (
+                <a
+                  href="mailto:Snajpsupport@gmail.com"
+                  className="kicker ml-auto text-ochre underline underline-offset-4 hover:text-ink"
+                >
+                  Kontakta oss
+                </a>
+              )}
+            </div>
+          </div>
+        ) : null}
+        {children}
+      </main>
     </div>
   );
 }
@@ -203,20 +340,36 @@ export function PageShell({
   children,
   action
 }: Readonly<{
-  kicker: string;
+  /** Överraden. Utelämnas när sidan inte ska ha någon — se nedan. */
+  kicker?: string;
   title: string;
-  description: string;
+  /** Ingressen. Samma sak: en vy utan ingress renderar ingen tom rad. */
+  description?: string;
   children: React.ReactNode;
   action?: React.ReactNode;
 }>) {
+  const pathname = usePathname();
+  // Under /admin bär `app/admin/layout.tsx` redan containern. Två containers
+  // gav dubbel padding och en innerbredd 48px smalare än resten av ytan —
+  // syns direkt när man växlar mellan en plattformsflik och en arbetsytesflik.
+  const iAdmin = pathname === "/admin" || pathname.startsWith("/admin/");
+
   return (
     <AppShell>
-      <section className="mx-auto max-w-[1400px] px-4 py-8 md:px-6 md:py-10">
+      <section className={iAdmin ? "" : "mx-auto max-w-[1400px] px-4 py-8 md:px-6 md:py-10"}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-[0.8125rem] font-medium text-ink/45">{kicker}</p>
-            <h1 className="mt-1 text-[1.5rem] font-semibold leading-tight tracking-[-0.02em]">{title}</h1>
-            <p className="mt-2 max-w-[68ch] text-[0.9375rem] leading-[1.6] text-ink/65">{description}</p>
+            {/* Tomma rader renderas inte alls. Flera vyer har fått sin
+                överrad eller ingress borttagen, och ett tomt <p> lämnar kvar
+                sin marginal — rubriken hade legat och flutit en rad för lågt
+                utan något som förklarar varför. */}
+            {kicker ? <p className="text-[0.8125rem] font-medium text-ink/45">{kicker}</p> : null}
+            <h1 className={cn("text-[1.5rem] font-semibold leading-tight tracking-[-0.02em]", kicker && "mt-1")}>
+              {title}
+            </h1>
+            {description ? (
+              <p className="mt-2 max-w-[68ch] text-[0.9375rem] leading-[1.6] text-ink/65">{description}</p>
+            ) : null}
           </div>
           {action ? <div className="shrink-0">{action}</div> : null}
         </div>

@@ -171,7 +171,13 @@ async def health_ready(response: Response) -> dict:
     settings = get_settings()
     warnings: list[str] = []
 
-    if settings.is_simulation():
+    # En TRASIG nyckel får sitt eget besked. "Ingen giltig LLM-nyckel" är sant
+    # men oanvändbart när nyckeln är satt: den som läser det letar efter en
+    # saknad variabel, inte efter ett felaktigt tecken i den som redan finns.
+    key_fault = settings.llm_key_fault()
+    if key_fault:
+        warnings.append(key_fault)
+    elif settings.is_simulation():
         warnings.append(
             "Ingen giltig LLM-nyckel — svaren genereras av den deterministiska "
             "regelmotorn, inte av AI."
@@ -182,6 +188,24 @@ async def health_ready(response: Response) -> dict:
         )
     if not (settings.imap_host and settings.imap_user and settings.imap_password):
         warnings.append("IMAP saknas — inga inkommande mail hämtas.")
+
+    # Embeddings har sin egen hälsa, och den var OSYNLIG här.
+    #
+    # `mode: live` mäter LLM-nyckeln. Embeddings går mot en ANNAN leverantör
+    # med en annan nyckel och en annan modell, och den kedjan kan vara helt
+    # trasig medan raden ovan säger att allt är bra. Två gånger nu:
+    #
+    #  1. Gemini-API:t var aldrig aktiverat på Google-projektet → 403 på varje
+    #     anrop. Noll av 159 artiklar fick en vektor, och sökningen föll tyst
+    #     tillbaka på fulltext.
+    #  2. EMBEDDING_MODEL stod på `text-embedding-3-small` — ett OPENAI-namn —
+    #     mot Geminis endpoint → 404. Samma klass av fel som produktionens
+    #     MODEL-krock, och lika osynlig.
+    #
+    # Kontrollen är på NAMN och nyckel, inte ett riktigt anrop: en hälsokontroll
+    # som kostar pengar per pollning blir avstängd, och då mäter den ingenting.
+    for embedding_fel in settings.embedding_faults():
+        warnings.append(embedding_fel)
 
     # Sändvägen rapporteras från providern i stället för från en SMTP-config,
     # eftersom det är LoggingSendProvider som är sanningen i dag: den loggar

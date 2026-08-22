@@ -1,5 +1,5 @@
 import { DashboardProvider } from "@/components/dashboard/DashboardContext";
-import { Overview } from "@/components/dashboard/Overview";
+import { StartView } from "@/components/dashboard/StartView";
 import { notFoundOnTenant } from "@/lib/tenants/server";
 
 /**
@@ -35,10 +35,12 @@ export const metadata = {
 const DEMO_STATE = {
   // Demon är aldrig plattformsadmin: den ytan visar ALLA kunders siffror.
   isPlatformAdmin: false,
+  vy: "admin" as const,
+  initialScope: "both" as const,
+  isDemo: false,
   // BÅDA produkterna. Det är hela poängen med ytan.
   products: ["leads", "support"] as const,
   addons: [],
-  variant: "demo" as const,
   workspaceName: "Duo Demo AB",
   // false, och det är inte kosmetik: signedIn styr om vyerna erbjuder
   // åtgärder som kräver en session. En demo som låtsas vara inloggad hade
@@ -57,7 +59,7 @@ export default async function Page() {
         </p>
       </div>
       <DashboardProvider state={{ ...DEMO_STATE, products: [...DEMO_STATE.products] }}>
-        <Overview />
+        <StartView />
       </DashboardProvider>
     </div>
   );

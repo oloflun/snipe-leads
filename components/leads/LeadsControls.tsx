@@ -50,7 +50,7 @@ const AUTONOMY_LABEL: Record<Autonomy, string> = {
 const ICP_FIELDS: { key: keyof Config["icp"]; label: string; hint: string }[] = [
   { key: "industries", label: "Branscher", hint: "Bygg, tillverkning, logistik" },
   { key: "exclude_industries", label: "Undvik branscher", hint: "Bemanning, spel" },
-  { key: "geography", label: "Geografi", hint: "Skåne, Västra Götaland" },
+  { key: "geography", label: "Stad, län, region", hint: "Göteborg, Skåne, Västra Götaland" },
   { key: "roles", label: "Roller", hint: "VD, inköpschef, platschef" },
   { key: "must_have", label: "Krävs", hint: "Egen produktion, växer" },
   { key: "deal_breakers", label: "Diskvalificerar", hint: "Under 10 anställda" }
@@ -156,16 +156,22 @@ export function LeadsControls({ demo = false }: Readonly<{ demo?: boolean }>) {
   }
 
   if (!config) {
+    // Ett fel är INTE ett laddningstillstånd. Skelettet låg kvar och pulserade
+    // under felmeddelandet, så ytan såg samtidigt ut att ladda och ha
+    // misslyckats — och skelettet lovar dessutom innehåll som aldrig kommer.
+    // Sett i pixlar vid 375px.
+    if (error) {
+      return (
+        <p role="alert" className="break-words border-t border-ink/15 pt-6 text-[14px] text-danger">
+          {error}
+        </p>
+      );
+    }
     return (
       <div className="grid gap-px">
         {[0, 1, 2, 3].map((row) => (
           <div key={row} className="h-16 animate-pulse border-t border-ink/15 bg-ink/[0.03]" />
         ))}
-        {error ? (
-          <p role="alert" className="mt-6 break-words text-[14px] text-danger">
-            {error}
-          </p>
-        ) : null}
       </div>
     );
   }
@@ -173,7 +179,7 @@ export function LeadsControls({ demo = false }: Readonly<{ demo?: boolean }>) {
   return (
     <div className="grid gap-12">
       <section>
-        <h3 className="kicker text-mineral">Hur långt agenten får gå</h3>
+        <h3 className="kicker text-mineral">Hur långt agenterna får gå</h3>
 
         <div className="mt-5 flex min-w-0 flex-wrap gap-3">
           {config.autonomy_levels.map((level) => (
@@ -203,7 +209,7 @@ export function LeadsControls({ demo = false }: Readonly<{ demo?: boolean }>) {
         <h3 className="kicker text-mineral">Målgrupp</h3>
         <p className="mt-3 max-w-[64ch] text-[15px] leading-7 text-mineral">
           <strong className="font-semibold text-ink">Er röst styr tonen, målgruppen styr urvalet.</strong>{" "}
-          Det här avgör vilka bolag agenten bearbetar — inte hur den låter. Skriv
+          Det här avgör vilka bolag agenterna bearbetar — inte hur de låter. Skriv
           med komma emellan.
         </p>
 

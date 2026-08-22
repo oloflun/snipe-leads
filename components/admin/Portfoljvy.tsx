@@ -36,7 +36,11 @@ import {
 
 function harledProdukter(rad: TenantRow): string[] {
   const produkter: string[] = [];
-  if (rad.runs > 0) produkter.push("leads");
+  // Provkörningar räknas MED här, till skillnad från i volymkolumnen. Frågan
+  // är vilken produkt tenanten använder, och en testkörning är leads-agenten
+  // som kört — annars tappade demokontot sin leads-halva i samma sekund som
+  // is_test började fyllas i.
+  if (rad.runs + (rad.test_runs ?? 0) > 0) produkter.push("leads");
   if (rad.tickets > 0) produkter.push("support");
   return produkter;
 }
@@ -76,7 +80,10 @@ export function Portfoljvy({ tenants }: Readonly<{ tenants: TenantRow[] }>) {
 
   return (
     <div>
-      <h1 className="font-display text-4xl tracking-[-0.03em]">Kunder</h1>
+      {/* "Översikt" och inte "Kunder": fliken heter Översikt, och NÄSTA flik
+          heter Kunder och leder till en annan sida. Två flikar vars sidor båda
+          rubricerades "Kunder" läste som samma vy renderad två gånger. */}
+      <h1 className="font-display text-4xl tracking-[-0.03em]">Översikt</h1>
 
       <div className="mt-8 grid gap-px overflow-hidden rounded-input border border-ink/15 bg-ink/15 sm:grid-cols-2 lg:grid-cols-4">
         <Nyckeltal
@@ -143,7 +150,17 @@ export function Portfoljvy({ tenants }: Readonly<{ tenants: TenantRow[] }>) {
                   ) : null}
                 </div>
                 <Tal>{rad.tickets}</Tal>
-                <Tal>{rad.runs}</Tal>
+                <Tal>
+                  {rad.runs}
+                  {/* Testkörningar göms inte, de räknas bara inte som kundvolym.
+                      En siffra som tyst blivit mindre är svårare att lita på än
+                      en siffra som säger vad den utelämnat. */}
+                  {rad.test_runs ? (
+                    <span className="block text-[0.8125rem] text-ink/40">
+                      +{rad.test_runs} test
+                    </span>
+                  ) : null}
+                </Tal>
                 <Tal>{((rad.tokens_in ?? 0) + (rad.tokens_out ?? 0)).toLocaleString("sv-SE")}</Tal>
                 <Tal>{formateraPris(Math.round(ekonomi.kostnad))}</Tal>
                 <Tal>

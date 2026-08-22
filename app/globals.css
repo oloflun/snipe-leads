@@ -299,18 +299,24 @@ button {
    image renders at its natural size and clips, which is what a missing
    definition looked like on the statement band and the grid-break photo.
 
-   `fixed` attachment only on a real pointer. Touch browsers either ignore it or
-   jitter, and iOS repaints the whole band on every scroll frame. */
+   Två fullbreddsband bär en fotografi-bakgrund: uttalandet och fasaddelaren.
+
+   `background-attachment: fixed` stod här för hela desktopklassen. Det är den
+   ena kända orsaken till att en sida "fryser några sekunder" under scroll:
+   en fäst bakgrund kan inte scrollas av kompositorn, så webbläsaren målar om
+   bandet — en cover-skalad WebP i fullbredd — på varje enskild bildruta. På en
+   maskin utan marginal blir det tappade rutor, och de kommer i skurar när man
+   passerar just de sektionerna.
+
+   Bakgrunden ligger nu still i sitt eget lager. `translateZ(0)` lyfter den
+   till kompositorn så att scrollen aldrig rör pixlarna igen, och `will-change`
+   säger det i förväg i stället för att webbläsaren ska gissa. */
 .parallax {
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .parallax {
-    background-attachment: fixed;
-  }
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 .marquee {

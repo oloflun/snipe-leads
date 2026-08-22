@@ -1,6 +1,6 @@
 """Pydantic-scheman för API:t."""
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class Attachment(BaseModel):
@@ -72,11 +72,80 @@ class LeadsConfigRequest(BaseModel):
     icp: dict | None = None
 
 
+class LeadsRunOverrides(BaseModel):
+    """Styrning som gäller EN körning, aldrig arbetsytans sparade ICP.
+
+    Skälet till att detta inte är inställningar: den som ska köra en gång mot
+    en särskild nisch vill inte ändra sin målgrupp, köra, och sedan komma ihåg
+    att ändra tillbaka. Glöms återställningen bearbetas nästa körning fel
+    målgrupp utan att någon ser det — och felet upptäcks först i utskicken.
+
+    Tomma fält betyder "använd den globala inställningen". Ett tomt värde är
+    alltså inte samma sak som "inga branscher".
+    """
+
+    # Speglar `LIST_FIELDS` i app/leads/icp.py, ALLA sex. Fyra av dem saknades
+    # tidigare, och följden var att en provkörning mot en särskild nisch inte
+    # gick att styra: rollerna, signalerna som krävs och de diskvalificerande
+    # kom alltid från arbetsytans sparade ICP. Just de tre ÄR nischen — geografi
+    # och bransch är bara var man letar.
+    industries: list[str] | None = None
+    exclude_industries: list[str] | None = None
+    geography: list[str] | None = None
+    roles: list[str] | None = None
+    must_have: list[str] | None = None
+    deal_breakers: list[str] | None = None
+    anstallda_min: int | None = Field(default=None, ge=0)
+    anstallda_max: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def _spannet_maste_ga_ihop(self) -> "LeadsRunOverrides":
+        lo, hi = self.anstallda_min, self.anstallda_max
+        if lo is not None and hi is not None and lo > hi:
+            raise ValueError(
+                f"Minsta antal anställda ({lo}) är större än största ({hi}). "
+                "Ett spann som utesluter allt ger noll prospekt utan att säga varför."
+            )
+        return self
+
+    def har_nagot(self) -> bool:
+        # model_fields_set och inte en handskriven lista: listan glömdes bort
+        # när fälten utökades, och en override som inte räknas här skickas
+        # aldrig vidare — den försvinner tyst i stället för att styra körningen.
+        return any(getattr(self, namn) is not None for namn in type(self).model_fields)
+
+
+class ExempelbolagRequest(BaseModel):
+    """Påhittade bolag som passar ICP:t, för en arbetsyta utan prospekt.
+
+    Taket är lågt med flit: exempelbolag är en väg in i produkten, inte en
+    lista att arbeta ur. Vill kunden ha femtio bolag ska de komma från en
+    körning mot riktiga källor.
+    """
+
+    limit: int = Field(default=3, ge=1, le=10)
+    #: Samma överskrivningar som körningen. Ett formulär som beskriver en
+    #: målgrupp och skapar bolag ur en annan är värre än inga bolag alls.
+    overrides: LeadsRunOverrides | None = None
+    #: Frö för urvalet. Tomt = nytt slumpat per anrop, vilket är vad knappen
+    #: "Uppdatera" behöver. Ett angivet frö ger samma lista igen och finns för
+    #: att ett utfall ska gå att återskapa när någon undrar över det.
+    fro: str | None = Field(default=None, max_length=64)
+
+
 class LeadsBatchRequest(BaseModel):
     scope: str = Field(default="research", pattern=r"^(research|research_and_draft)$")
     # Taket på 50 är ekonomiskt, inte tekniskt: varje prospekt är åtta
     # LLM-anrop, så en batch på 50 är 400 — exakt tenant-timtaket.
     limit: int = Field(default=10, ge=1, le=50)
+
+    #: Överskrivningar för just den här körningen. Se LeadsRunOverrides.
+    overrides: LeadsRunOverrides | None = None
+
+    #: Testkörning: räknas som körning men märks så att den går att skilja från
+    #: kundtrafik i portföljvyn. Utan flaggan blir en provkörning omöjlig att
+    #: skilja från riktig volym, och hälsobedömningen ljuger.
+    is_test: bool = False
 
 
 class ProspectPatchRequest(BaseModel):
@@ -129,6 +198,18 @@ class IngestAttachment(BaseModel):
     filename: str = "bilaga"
     content_type: str = "application/octet-stream"
     data_url: str | None = None
+
+
+class SeedMockRequest(BaseModel):
+    """Kroppen till "Hämta testmail" och "Uppdatera".
+
+    Båda fälten är frivilliga: utan kropp byts hela testinkorgen ut, precis som
+    innan facken fanns. `category` begränsar till ett fack — det är vad
+    "Uppdatera" skickar när kunden står i ett filtrerat läge.
+    """
+
+    category: str | None = None
+    antal: int | None = None
 
 
 class IngestEmailRequest(BaseModel):

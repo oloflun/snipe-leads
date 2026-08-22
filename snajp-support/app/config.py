@@ -87,6 +87,20 @@ class Settings(BaseSettings):
     embedding_api_key: str = ""  # tom => faller tillbaka på gemini_api_key
     model: str = "gpt-4o-mini"
     embedding_model: str = "gemini-embedding-001"
+    #: MÅSTE stämma med kolumnen `ss_knowledge_base.embedding`, som är
+    #: `vector(1536)` sedan migration 002.
+    #:
+    #: `gemini-embedding-001` returnerar 3072 värden om man inte ber om något
+    #: annat, och en 3072-vektor går inte att skriva i en 1536-kolumn. Det hade
+    #: inte upptäckts förrän nu: embeddings har ALDRIG lyckats i den här
+    #: kodbasen (Gemini-API:t var inte aktiverat på Google-projektet), så noll
+    #: av 159 artiklar bär en vektor och krocken har aldrig prövats.
+    #:
+    #: Följden om värdet tas bort: `POST /api/kb` börjar svara 500 i stället
+    #: för att spara artikeln utan vektor. Alltså byts en fungerande
+    #: försämring mot ett avbrott — precis det `embed_text` finns för att
+    #: undvika.
+    embedding_dimensions: int = 1536
     # G9: vision-sidovagn. deepseek-v4-flash saknar dokumenterat bildstöd, så
     # bilder beskrivs separat (Gemini, gratisnivå) och matas in som text i
     # DeepSeek-loopen. Bilden lagras aldrig efter beskrivningen.
@@ -167,9 +181,84 @@ class Settings(BaseSettings):
             return self.deepseek_api_key
         return self.openai_api_key
 
+    def llm_key_fault(self) -> str | None:
+        """Varför nyckeln inte går att använda, eller None.
+
+        Ett API-nyckelvärde går i HTTP-huvudet `Authorization: Bearer <nyckel>`,
+        och huvudvärden är per definition ASCII. En nyckel med ett tecken över
+        127 kraschar därför inte hos leverantören utan INNE i http-klienten,
+        långt efter att tjänsten rapporterat sig frisk.
+
+        Det hände skarpt: /health/ready svarade "LLM-nyckel hittad — riktig
+        agent aktiv", och första riktiga körningen föll på
+        `'ascii' codec can't encode character 'à' in position 7` — position 7
+        är första tecknet efter "Bearer ". Trovärdigt men fel, alltså samma
+        klass av fel som migration 029 fick städa upp.
+        """
+        key = self.active_llm_key() or ""
+        if not key:
+            return None  # ingen nyckel alls är simuleringsläge, inte ett fel
+        bad = next((i for i, ch in enumerate(key) if ord(ch) > 127), None)
+        if bad is not None:
+            return (
+                f"LLM-nyckeln innehåller ett tecken utanför ASCII (position {bad}). "
+                f"Den kan inte skickas i ett Authorization-huvud och varje "
+                f"agentanrop kommer att falla. Sätt om nyckeln."
+            )
+        return None
+
+    def embedding_faults(self) -> list[str]:
+        """Vad som gör embeddings oanvändbara just nu. Tom lista = inget känt fel.
+
+        Embeddings är en EGEN kedja: annan leverantör, annan nyckel, annan
+        modell. `mode: live` mäter LLM-nyckeln och säger ingenting om den här —
+        och två gånger nu har kedjan varit helt trasig medan hälsokontrollen
+        rapporterat allt grönt:
+
+          * Gemini-API:t var inte aktiverat på Google-projektet → 403, och noll
+            av 159 KB-artiklar fick en vektor.
+          * `EMBEDDING_MODEL` stod på `text-embedding-3-small` — ett OpenAI-namn
+            — mot Geminis endpoint → 404.
+
+        Kontrollen läser NAMN och nyckel, den ringer aldrig leverantören. En
+        hälsokontroll som kostar pengar per pollning blir avstängd, och då mäter
+        den ingenting alls.
+
+        Att sakna nyckel är INTE ett fel här: fulltext-fallbacken är en giltig
+        driftform. Det som rapporteras är konfiguration som ser rätt ut men inte
+        kan fungera.
+        """
+        fel: list[str] = []
+        key = self.embedding_api_key or self.gemini_api_key
+        if not key:
+            return fel  # medveten fulltext-drift, inte ett fel
+
+        # Modellnamnet måste höra till leverantören nyckeln pekar på. Gemini
+        # svarar 404 på ett OpenAI-namn, och felet syns först när någon skriver
+        # en KB-artikel.
+        if self.embedding_model.startswith("text-embedding-"):
+            fel.append(
+                f"EMBEDDING_MODEL={self.embedding_model} är ett OpenAI-namn, men "
+                "embeddings går mot Gemini. Varje anrop svarar 404 och "
+                "kunskapsbasen sparas utan vektorer."
+            )
+
+        bad = next((i for i, ch in enumerate(key) if ord(ch) > 127), None)
+        if bad is not None:
+            fel.append(
+                f"Embeddings-nyckeln innehåller ett tecken utanför ASCII "
+                f"(position {bad}) och kan inte skickas i ett huvud."
+            )
+        return fel
+
     def is_simulation(self) -> bool:
         # Samma platshållar-heuristik som app/api/email-studio/route.ts i Next-appen.
         key = self.active_llm_key() or ""
+        # En trasig nyckel räknas som ingen nyckel. Alternativet är att tjänsten
+        # påstår sig vara live och faller på första riktiga anropet — ett läge
+        # som ser friskt ut i varje kontroll utom den som kostar en kund.
+        if self.llm_key_fault():
+            return True
         return len(key) < 20 or "..." in key or "din-" in key
 
 

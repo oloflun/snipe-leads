@@ -6,11 +6,12 @@ import { Logo } from "@/components/Logo";
 import { useLocale } from "@/lib/i18n";
 import type { ProductKey } from "@/lib/routes";
 import { productKeys } from "@/lib/routes";
-import { productCopy, shared } from "@/components/marketing/copy";
+import { KONTAKT_MEJL, mejlaOss, productCopy, shared } from "@/components/marketing/copy";
 import { imagery, photo, sectionCopy } from "@/components/marketing/copy-sections";
 import { PricingSection } from "@/components/marketing/PricingSection";
 import { UspSection } from "@/components/marketing/UspSection";
 import { ProductSwitch } from "@/components/marketing/ProductSwitch";
+import { SidMeny } from "@/components/marketing/SidMeny";
 import { useReveal } from "@/components/marketing/useReveal";
 import { cn } from "@/lib/utils";
 
@@ -45,7 +46,14 @@ function Display({ text: value, accentClass = "italic-disp text-ochre" }: Readon
   );
 }
 
+/**
+ * En etikett över en rubrik. Renderar INGENTING när texten är tom: etiketterna
+ * "Problemet" och "Var det kommer ifrån" togs bort ur copyn, och utan den här
+ * spärren hade en tom <p> lämnat kvar sin marginal ovanför rubriken.
+ */
 function Label({ children, tone = "ink" }: Readonly<{ children: React.ReactNode; tone?: "ink" | "paper" }>) {
+  if (typeof children === "string" && children.trim() === "") return null;
+
   return (
     <p className={cn("text-[0.8125rem] font-medium tracking-[0.02em]", tone === "ink" ? "text-ink/45" : "text-paper/60")}>
       {children}
@@ -106,11 +114,15 @@ export function LandingPhoto({
               {text(shared.navLogin)}
             </Link>
             <a
-              href="mailto:hej@snajp.se"
+              href={mejlaOss()}
               className="focus-ring hidden min-h-11 items-center rounded-input border border-paper/35 px-5 text-sm font-semibold text-paper transition-colors hover:bg-paper hover:text-ink sm:inline-flex"
             >
               {text(shared.secondaryCta)}
             </a>
+            {/* Menyn sist i raden, efter den primära uppmaningen. Det som ska
+                sticka ut är "Skriv till oss"; det här är sådant som är bra att
+                hitta men som ingen kom hit för att göra. */}
+            <SidMeny />
           </div>
         </div>
       </header>
@@ -156,7 +168,7 @@ export function LandingPhoto({
                     {text(copy.cta)}
                   </button>
                   <a
-                    href="mailto:hej@snajp.se"
+                    href={mejlaOss()}
                     className="focus-ring inline-flex min-h-12 items-center rounded-input border border-paper/40 px-6 text-[0.9375rem] font-semibold text-paper transition-colors hover:border-paper"
                   >
                     {text(shared.secondaryCta)}
@@ -168,10 +180,35 @@ export function LandingPhoto({
                 <div className="font-display text-[1.5rem] leading-[1.15] tracking-[-0.02em] text-paper">
                   <ProductSwitch value={product} onChange={setProduct} tone="paper" />
                 </div>
-                <div className="mt-4 border-t border-paper/25 pt-3">
-                  {/* Jurisdiction, not address. The two offices are named in the
-                      place section; four items would wrap in this column. */}
-                  <Label tone="paper">Sverige · GDPR · RLS</Label>
+                {/* Två vägar rakt in i produkten, en per agent.
+                    Växeln ovanför byter vad SIDAN beskriver; de här tar
+                    besökaren till agenten som gör det. Att bara kunna läsa om
+                    en agent på en sida som har en fungerande demo är att gömma
+                    det enda som övertygar. */}
+                <div className="mt-5 flex flex-col gap-2 border-t border-paper/25 pt-4">
+                  <Link
+                    href="/demo/leads"
+                    className="focus-ring group inline-flex items-center gap-2 text-[0.9375rem] font-medium text-paper/85 transition-colors hover:text-paper"
+                  >
+                    {text(shared.demoLeads)}
+                    <span aria-hidden className="transition-transform group-hover:translate-x-0.5">→</span>
+                  </Link>
+                  <Link
+                    href="/demo/support"
+                    className="focus-ring group inline-flex items-center gap-2 text-[0.9375rem] font-medium text-paper/85 transition-colors hover:text-paper"
+                  >
+                    {text(shared.demoSupport)}
+                    <span aria-hidden className="transition-transform group-hover:translate-x-0.5">→</span>
+                  </Link>
+                </div>
+
+                <div className="mt-4">
+                  {/* "Sverige · GDPR · RLS" stod här. Två av tre var interna
+                      förkortningar — RLS är en databasmekanism — och en
+                      besökare som inte bygger programvara läser raden som brus.
+                      Efterlevnaden finns kvar, i sidfoten, med plats att
+                      förklaras. */}
+                  <Label tone="paper">{text(shared.heroTrust)}</Label>
                 </div>
               </div>
             </div>
@@ -181,7 +218,7 @@ export function LandingPhoto({
         {/* LÖFTET, direkt efter hjältebilden. Det här är det första en
             besökare läser efter rubriken, och det ska svara på "vad får jag"
             innan sidan hinner beskriva problemet. */}
-        <UspSection />
+        <UspSection product={product} />
 
         {/* PROBLEM. Named before the solution is offered. */}
         <section className="border-b border-ink/12">
@@ -253,12 +290,9 @@ export function LandingPhoto({
                 <span className="text-[0.8125rem] font-medium tracking-[0.02em] text-ink/55">
                   {product === "leads" ? "Email Studio" : "Snajp Support"}
                 </span>
-                {/* No status claim here: the support chat reports its own mode,
-                    and the backend may be in simulation. Two sources of truth on
-                    one panel is one too many. */}
-                <span className="text-[0.8125rem] text-ink/40">
-                  {text({ sv: "Interaktiv demo", en: "Interactive demo" })}
-                </span>
+                {/* Ingen statusuppgift här: supportchatten rapporterar sitt
+                    eget läge, och backenden kan gå i simulering. Två sanningar
+                    på samma panel är en för mycket. */}
               </div>
               <div className="p-4 sm:p-6 md:p-8">
               {productKeys.map((key) => (
@@ -277,6 +311,10 @@ export function LandingPhoto({
             {/* Label renders its own <p>, so the wrapper is a div. It was a <p>
                 and nested paragraphs are invalid HTML: React bailed out of
                 hydration and re-rendered the whole page on the client. */}
+            {/* Label renderar sin egen <p>, så omslaget är en div. Det var en
+                <p>, och nästlade stycken är ogiltig HTML: React avbröt
+                hydreringen och renderade om hela sidan på klienten.
+                Leads-demon har ingen finstilt rad; Label returnerar null då. */}
             <div className="mt-4"><Label>{text(copy.exampleNote)}</Label></div>
           </div>
         </section>
@@ -312,20 +350,17 @@ export function LandingPhoto({
             <h2 className="rise max-w-[20ch] font-display text-[clamp(1.875rem,3.6vw,2.875rem)] font-semibold leading-[1.06] tracking-[-0.028em]">
               <Display text={text(copy.stepsHeading)} />
             </h2>
+            {/* Utan de gula ordningstalen. De satt i egen kolumn framför
+                varje steg, så rutnätet [auto_1fr] föll bort med dem — annars
+                hade rubriken blivit kvar i högerkolumnen med ett tomt spår
+                bredvid sig. */}
             <div className="mt-12 grid grid-cols-1 gap-x-12 md:grid-cols-3">
-              {copy.steps.map((step, index) => (
+              {copy.steps.map((step) => (
                 <div key={step.title.sv} className="rise hrule py-8 md:py-10">
-                  <div className="grid grid-cols-[auto_1fr] gap-x-5">
-                    <span className="numeral text-[clamp(2.5rem,4vw,3.5rem)]">
-                      {String(index + 1).padStart(2, "0")}
-                    </span>
-                    <div className="min-w-0">
-                      <h3 className="font-display text-[1.3125rem] font-semibold leading-tight tracking-[-0.015em]">
-                        {text(step.title)}
-                      </h3>
-                      <p className="mt-2.5 text-[0.9375rem] leading-[1.6] text-ink/70">{text(step.body)}</p>
-                    </div>
-                  </div>
+                  <h3 className="font-display text-[1.3125rem] font-semibold leading-tight tracking-[-0.015em]">
+                    {text(step.title)}
+                  </h3>
+                  <p className="mt-2.5 text-[0.9375rem] leading-[1.6] text-ink/70">{text(step.body)}</p>
                 </div>
               ))}
             </div>
@@ -351,8 +386,39 @@ export function LandingPhoto({
           />
         </section>
 
+        {/* VILKA ÄR VI. Ligger före invändningarna med flit: vem man köper av
+            är den fråga som avgör om man ens läser svaren på resten. Svensk B2B
+            är ett litet rum, och en leverantör utan ansikte är en leverantör
+            man skjuter upp beslutet om. */}
+        <section id="vilka-ar-vi" className="scroll-mt-24 border-t border-ink/12">
+          <div className="mx-auto max-w-[1480px] px-6 py-24 md:px-10 md:py-32">
+            <div className="grid grid-cols-12 gap-y-10 lg:gap-x-14">
+              <div className="col-span-12 lg:col-span-4">
+                <Label>{text(shared.vilkaRubrik)}</Label>
+                <h2 className="rise mt-5 max-w-[18ch] font-display text-[clamp(1.875rem,3.6vw,2.875rem)] font-semibold leading-[1.06] tracking-[-0.028em]">
+                  <Display text={text(shared.vilkaRubrikStor)} />
+                </h2>
+              </div>
+              <div className="col-span-12 lg:col-span-7 lg:col-start-6">
+                <p className="rise max-w-[62ch] text-[1.0625rem] leading-[1.7] text-ink/78">
+                  {text(shared.vilkaText1)}
+                </p>
+                <p className="rise mt-6 max-w-[62ch] text-[1.0625rem] leading-[1.7] text-ink/78">
+                  {text(shared.vilkaText2)}
+                </p>
+                <a
+                  href={mejlaOss()}
+                  className="focus-ring mt-8 inline-flex min-h-12 items-center rounded-input border border-ink/20 px-6 text-[0.9375rem] font-semibold transition-colors hover:border-ink"
+                >
+                  {text(shared.secondaryCta)}
+                </a>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* OBJECTIONS. Real questions, answered plainly. */}
-        <section className="border-t border-ink/12 bg-paper2/40">
+        <section id="fragor" className="scroll-mt-24 border-t border-ink/12 bg-paper2/40">
           <div className="mx-auto max-w-[1480px] px-6 py-24 md:px-10 md:py-32">
             <div className="grid grid-cols-12 gap-y-12 lg:gap-x-14">
               <div className="col-span-12 lg:col-span-4">
@@ -383,11 +449,12 @@ export function LandingPhoto({
               {text(copy.limitsHeading)}
             </h2>
             <ul className="mt-10 grid grid-cols-1 gap-x-14 md:grid-cols-2">
-              {copy.limits.map((limit, index) => (
-                <li key={limit.sv} className="flex gap-5 border-t border-paper/15 py-5">
-                  <span className="numeral shrink-0 text-[1.5rem]">
-                    {String(index + 1).padStart(2, "0")}
-                  </span>
+              {copy.limits.map((limit) => (
+                <li key={limit.sv} className="flex items-start gap-5 border-t border-paper/15 py-5">
+                  {/* Punkt, inte siffra. Numreringen läste som en rangordning
+                      av spärrar som gäller lika mycket allihop. Punkten är vit
+                      medan texten behåller sin dämpade ton. */}
+                  <span aria-hidden="true" className="mt-[0.6em] h-1.5 w-1.5 shrink-0 rounded-full bg-paper" />
                   <span className="text-[1rem] leading-[1.6] text-paper/75">{text(limit)}</span>
                 </li>
               ))}
@@ -421,7 +488,7 @@ export function LandingPhoto({
                 {text(shared.closingBody)}
               </p>
               <a
-                href="mailto:hej@snajp.se"
+                href={mejlaOss()}
                 className="focus-ring mt-9 inline-flex min-h-12 items-center rounded-input bg-ink px-7 text-[1rem] font-semibold text-paper transition-colors hover:bg-ink2"
               >
                 {text(shared.closingCta)}
@@ -431,10 +498,44 @@ export function LandingPhoto({
         </section>
       </main>
 
+      {/* Sidfoten bär numera det som stod i hjältebilden — och mer, eftersom
+          det finns plats att förklara här. Tre kolumner: vilka vi är, hur man
+          når oss, och vad som gäller kunddata. Den sista är inte en
+          artighetsrad: den är den vanligaste invändningen i svensk B2B, och ett
+          svar på tre förkortningar duger inte som svar. */}
       <footer className="border-t border-ink/12">
-        <div className="mx-auto flex max-w-[1480px] flex-wrap items-center justify-between gap-4 px-6 py-8 md:px-10">
-          <Logo compact />
-          <Label>{text(shared.footerNote)}</Label>
+        <div className="mx-auto max-w-[1480px] px-6 py-12 md:px-10 md:py-16">
+          <div className="grid grid-cols-12 gap-y-10 lg:gap-x-12">
+            <div className="col-span-12 lg:col-span-4">
+              <Logo compact />
+              <p className="mt-4 text-[0.875rem] text-ink/45">{text(shared.footerPlats)}</p>
+            </div>
+
+            <div id="kontakt" className="col-span-12 scroll-mt-24 sm:col-span-5 lg:col-span-3">
+              <Label>{text(shared.footerKontakt)}</Label>
+              <a
+                href={mejlaOss()}
+                className="focus-ring mt-4 inline-block text-[1.0625rem] font-medium underline underline-offset-4 hover:text-ochre"
+              >
+                {KONTAKT_MEJL}
+              </a>
+            </div>
+
+            <div id="dataskydd" className="col-span-12 scroll-mt-24 sm:col-span-7 lg:col-span-5">
+              {/* Etiketten "Dataskydd" är borttagen; rubriken under säger redan
+                  vad stycket handlar om. Ankaret #dataskydd finns kvar, menyn
+                  pekar på det. */}
+              <h2 className="max-w-[28ch] text-[1.0625rem] font-semibold leading-snug tracking-[-0.01em]">
+                {text(shared.gdprRubrik)}
+              </h2>
+              <p className="mt-3 max-w-[52ch] text-[0.9375rem] leading-[1.6] text-ink/70">
+                {text(shared.gdprText)}
+              </p>
+              <p className="mt-4 font-mono text-[12px] uppercase tracking-[0.08em] text-ink/40">
+                Sverige · GDPR · RLS
+              </p>
+            </div>
+          </div>
         </div>
       </footer>
     </div>

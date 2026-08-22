@@ -22,7 +22,12 @@ export function Badge({ children, tone = "neutral" }: Readonly<{ children: React
     neutral: "border-ink/10 bg-ink/[0.035] text-ink/70",
     good: "border-moss/20 bg-moss/10 text-moss",
     warn: "border-copper/25 bg-copper/10 text-ink",
-    danger: "border-danger/20 bg-danger/10 text-danger"
+    // text-ink, inte text-danger. Uppmätt på den KOMPOSITERADE ytan (badgens
+    // egen 10-procentiga platta över pappret, inte token-värdet rakt av):
+    // danger på den grunden ger 3,82:1 mot golvet 4,5:1 för brödtextgrad.
+    // Allvaret bärs av kanten och plattan i stället, precis som tone="warn"
+    // redan gör. Att mäta mot pappret ensamt hade sagt att den klarade sig.
+    danger: "border-danger/40 bg-danger/10 text-ink"
   };
   return (
     <span className={cn("inline-flex items-center gap-1 rounded-[6px] border px-2.5 py-1 text-xs font-medium", tones[tone])}>

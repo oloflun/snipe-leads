@@ -3,21 +3,30 @@
 import { useState, useTransition } from "react";
 import { useSearchParams } from "next/navigation";
 import {
+  requestDemoAccess,
   requestPasswordReset,
-  signInWithMagicLink,
   signInWithOAuth,
   signInWithPassword,
   signUpWithPassword
 } from "@/lib/actions/auth";
 import { cn } from "@/lib/utils";
 
-type AuthMode = "login" | "signup" | "magic" | "reset";
+type AuthMode = "login" | "signup" | "demo" | "reset";
 
 export function LoginForm() {
   const searchParams = useSearchParams();
-  // /emails finns inte — routen heter /dashboard/emails (lib/routes.ts). Den
-  // gamla defaulten skickade varje lyckad inloggning utan ?next= till en 404.
-  const nextPath = searchParams.get("next") ?? "/dashboard/emails";
+  // `/dashboard` och inte `/dashboard/emails`: arbetsytans rot, inte en av dess
+  // flikar. Två skäl.
+  //
+  // 1. Email studio är EN produkt av två. En kund som bara äger Support möttes
+  //    av en 404-liknande entitlement-grind som första sida efter inloggning.
+  // 2. Plattformsadmin dirigeras vidare till /admin av app/dashboard/layout.tsx.
+  //    Den dirigeringen sitter på arbetsytans ROT; med en flik som mål blev
+  //    inloggningen en extra studs genom en vy admin ändå inte skulle se.
+  //
+  // Den gamla defaulten var `/emails`, som inte finns alls (lib/routes.ts) —
+  // fixen då var att peka på en route som fanns, inte att välja rätt route.
+  const nextPath = searchParams.get("next") ?? "/dashboard";
   const [mode, setMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -48,10 +57,10 @@ export function LoginForm() {
         return;
       }
 
-      if (mode === "magic") {
-        const result = await signInWithMagicLink(email, nextPath);
+      if (mode === "demo") {
+        const result = await requestDemoAccess(email, nextPath);
         if (result.success) {
-          setMessage(result.message ?? "Magic link skickad.");
+          setMessage(result.message ?? "Åtkomstlänk skickad.");
         } else {
           setError(result.error ?? "Något gick fel.");
         }
@@ -141,7 +150,7 @@ export function LoginForm() {
         {([
           ["login", "Logga in"],
           ["signup", "Skapa konto"],
-          ["magic", "Magic link"]
+          ["demo", "Prova demo"]
         ] as const).map(([value, label]) => (
           <button
             key={value}
@@ -252,8 +261,8 @@ export function LoginForm() {
             ? "Bearbetar..."
             : mode === "signup"
               ? "Skapa konto"
-              : mode === "magic"
-                ? "Skicka magic link"
+              : mode === "demo"
+                ? "Skicka åtkomstlänk"
                 : mode === "reset"
                   ? "Skicka återställningslänk"
                   : "Logga in"}
@@ -275,7 +284,7 @@ export function LoginForm() {
         </button>
       ) : (
         <p className="mt-4 text-[12px] text-mineral">
-          Magic link = snabbast väg till Email Studio (endast email, omedelbar tillgång efter inloggning). Använd "Magic link" ovan för att testa Kortare, Skriv om, Förbättra m.fl. direkt.
+          Prova demo: fyll i din mejl så skickar vi en åtkomstlänk. Ingen auto-inloggning — du behåller kontrollen.
         </p>
       )}
     </form>

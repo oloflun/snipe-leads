@@ -71,12 +71,12 @@ export const snajp: Tenant = {
   },
 
   supportIntro:
-    "Fråga om agenten, vad den kan svara på, vad den kostar eller hur en uppstart går till.",
+    "Fråga om agenterna, vad de kan svara på, vad de kostar eller hur en uppstart går till.",
   supportPrompts: [
     "Vad kostar Snajp och vad ingår i paketen?",
-    "Hur lång tid tar en uppstart innan agenten kan svara?",
-    "Var hämtar agenten sina svar ifrån?",
-    "Vad händer om agenten inte vet svaret på en fråga?",
+    "Hur lång tid tar en uppstart innan agenterna kan svara?",
+    "Var hämtar agenterna sina svar ifrån?",
+    "Vad händer om agenterna inte vet svaret på en fråga?",
     "Kan vi testa innan vi bestämmer oss?"
   ]
 };

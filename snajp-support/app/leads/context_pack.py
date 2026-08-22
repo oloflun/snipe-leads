@@ -68,7 +68,50 @@ def render_context_pack(
     return "\n\n".join(parts)
 
 
-async def build_context_pack(storage, tenant_id: str) -> tuple[str, tuple[str, ...]]:
+def _med_overrides(icp: dict | None, overrides: dict | None) -> dict | None:
+    """Lägger körningens överskrivningar OVANPÅ arbetsytans sparade ICP.
+
+    Ett lager, inte en andra sanning: den sparade ICP:n rörs aldrig, och
+    överskrivningarna lever bara så länge körningen gör det. Den som kör en
+    gång mot en särskild nisch ska inte behöva ändra sin målgrupp och komma
+    ihåg att ändra tillbaka — glöms det bearbetas nästa körning fel målgrupp
+    utan att någon ser det.
+
+    None betyder "använd det sparade". Det är INTE samma sak som en tom lista,
+    som betyder "inga branscher alls" — den skillnaden är hela poängen med att
+    fälten är valfria.
+    """
+    if not overrides:
+        return icp
+
+    # Lokal import av samma skäl som render_icp nedan: icp.py importerar
+    # härifrån, och en toppnivåimport ger en cirkel.
+    from .icp import LIST_FIELDS
+
+    sammanslagen = dict(icp or {})
+
+    # LIST_FIELDS och inte en egen lista: två listor över samma fält glider
+    # isär, och den som glider blir en override som tyst inte gör något.
+    for nyckel in LIST_FIELDS:
+        varde = overrides.get(nyckel)
+        if varde is not None:
+            sammanslagen[nyckel] = varde
+
+    lo, hi = overrides.get("anstallda_min"), overrides.get("anstallda_max")
+    if lo is not None or hi is not None:
+        storlek = dict(sammanslagen.get("company_size") or {})
+        if lo is not None:
+            storlek["min"] = lo
+        if hi is not None:
+            storlek["max"] = hi
+        sammanslagen["company_size"] = storlek
+
+    return sammanslagen
+
+
+async def build_context_pack(
+    storage, tenant_id: str, *, overrides: dict | None = None
+) -> tuple[str, tuple[str, ...]]:
     """Den enda vägen Fas B/C ska bygga kontextpaketet på. Returnerar
     (renderat paket, saknade onboarding-delar) — paketet är ALLTID
     användbart, så förvillkoret context_pack kan alltid uppfyllas och
@@ -87,6 +130,6 @@ async def build_context_pack(storage, tenant_id: str) -> tuple[str, tuple[str, .
         customer_research=docs["customer_research"]["content"] if docs["customer_research"] else None,
         retention_playbook=docs["retention_playbook"]["content"] if docs["retention_playbook"] else None,
         gap_notice=render_gap_notice(state),
-        icp=render_icp(settings.get("icp")),
+        icp=render_icp(_med_overrides(settings.get("icp"), overrides)),
     )
     return rendered, state.missing

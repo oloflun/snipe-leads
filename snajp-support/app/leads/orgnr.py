@@ -79,23 +79,24 @@ def _luhn_stammer(siffror: str) -> bool:
     return summa % 10 == 0
 
 
-_PERSONNUMMER_SVAR = (
-    "Det där ser ut som ett personnummer, inte ett organisationsnummer. "
-    "Skriv inte in ditt personnummer här — vi behöver bolagets nummer, det som "
-    "står på fakturor och registreringsbeviset."
-)
+def _strip_sekel(siffror: str) -> str:
+    """Tolv siffror med sekelprefix → tio siffror.
 
+    ENSKILD FIRMA HAR PERSONNUMMER SOM ORGANISATIONSNUMMER. Det är inte ett
+    undantag utan huvudregeln för den bolagsformen, och den tidigare kontrollen
+    nekade därför en hel juridisk form: tio siffror med tredje siffran < 2
+    avvisades som "det där är ett personnummer".
 
-def _neka_personnummer(siffror: str) -> None:
-    """Två former att fånga.
-
-    TOLV siffror som börjar på 19 eller 20 är ett personnummer med sekel. Tio
-    siffror vars TREDJE siffra är under 2 är ett personnummer utan sekel — hos
-    en fysisk person är den siffran en månad (01–12), och juridiska personer
-    har därför alltid ≥ 2 där.
+    Vad som gick förlorat, så att det står skrivet: kontrollen fanns av ett
+    INTEGRITETSskäl, inte ett formellt. Den hindrade en privatperson från att
+    av misstag klistra in sitt personnummer i ett fält vi behandlar som
+    företagsdata. Det skyddet finns inte längre — beslutet är taget medvetet
+    (2026-08-18), och konsekvensen är att fältet kan innehålla en känslig
+    personuppgift. Behandla kolumnen därefter.
     """
     if len(siffror) == 12 and siffror[:2] in ("19", "20"):
-        raise OgiltigtOrgnrError(_PERSONNUMMER_SVAR)
+        return siffror[2:]
+    return siffror
     if len(siffror) == 10 and int(siffror[2]) < 2:
         raise OgiltigtOrgnrError(_PERSONNUMMER_SVAR)
 
@@ -111,12 +112,10 @@ def validera_format(rå: object) -> str:
     if not siffror:
         raise OgiltigtOrgnrError("Fyll i organisationsnumret.")
 
-    # Personnummerkontrollen ligger FÖRE längdkontrollen. Ett tolvsiffrigt
-    # personnummer (19850312-1234) hade annars fällts som "fel längd", och
-    # användaren hade rättat längden i stället för att förstå att fältet inte
-    # ska innehålla ett personnummer alls. Rätt fel är viktigare än att fel
-    # över huvud taget ges.
-    _neka_personnummer(siffror)
+    # Sekelprefixet bort FÖRE längdkontrollen: ett tolvsiffrigt personnummer
+    # (19850312-1234) hade annars fällts som "fel längd", och användaren hade
+    # rättat längden i stället för att få numret accepterat.
+    siffror = _strip_sekel(siffror)
 
     if len(siffror) != 10:
         raise OgiltigtOrgnrError(

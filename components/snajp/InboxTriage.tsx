@@ -117,8 +117,8 @@ export function InboxTriage() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <p className="max-w-[58ch] text-[0.9375rem] leading-6 text-ink/65">
           {text({
-            sv: "Sex osorterade kundmejl ligger i inkorgen. Ett klick, och agenten läser dem, lägger dem i rätt fack, bedömer ton och prioritet och skriver färdiga svarsutkast.",
-            en: "Six unsorted customer emails sit in the inbox. One click, and the agent reads them, files them into the right queue, scores tone and priority and drafts ready replies."
+            sv: "Sex osorterade kundmejl ligger i inkorgen. Ett klick, och agenterna läser dem, lägger dem i rätt fack, bedömer ton och prioritet och skriver färdiga svarsutkast.",
+            en: "Six unsorted customer emails sit in the inbox. One click, and the agents read them, file them into the right queue, score tone and priority and draft ready replies."
           })}
         </p>
         <button

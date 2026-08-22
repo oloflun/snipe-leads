@@ -25,6 +25,18 @@ const nextConfig: NextConfig = {
       // The public demo URL that has already been shared.
       { source: "/snajp-support", destination: "/support", permanent: true },
 
+      // Inställningar som flyttat in i inställningarna.
+      //
+      // "Målgrupp och autonomi" låg på en /dashboard-väg trots att den är en
+      // inställning. Det gjorde att inställningsmenyns länk lämnade
+      // inställningarna — och för en plattformsadmin skickar
+      // app/dashboard/layout.tsx den vägen rakt till /admin, alltså till
+      // Översikt. Den var därför omöjlig att öppna från menyn.
+      { source: "/dashboard/leads/kontroll", destination: "/settings/leads", permanent: true },
+      // Gamla namn på sidor som bytt adress i omstruktureringen. En inställning
+      // som flyttas men försvinner är värre än en som ligger fel.
+      { source: "/settings/general", destination: "/settings/affarskontext", permanent: true },
+
       // Legacy top-level workspace routes now live under /dashboard.
       ...workspaceSlugs.map((slug) => ({
         source: `/${slug}`,

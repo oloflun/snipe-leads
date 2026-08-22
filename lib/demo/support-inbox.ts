@@ -178,7 +178,7 @@ function grundmejl(): DemoEmail[] {
         confidence: 0.72,
         escalate: true,
         escalation_reason:
-          "Ärendet rör en faktisk dubbeldebitering. Agenten får inte bekräfta eller neka en återbetalning utan att en människa kontrollerat transaktionerna.",
+          "Ärendet rör en faktisk dubbeldebitering. Agenterna får inte bekräfta eller neka en återbetalning utan att en människa kontrollerat transaktionerna.",
         reasoning: "Ekonomisk avvikelse som kräver manuell kontroll mot betalleverantören.",
         kb_sources: [{ title: "Dubbeldragning och reserverade belopp", similarity: 0.68 }]
       },
@@ -402,19 +402,38 @@ export function createDemoSupportApi() {
       return { ok: true } as T;
     }
 
+    // Demon har ingen riktig inkorg kopplad, och säger det. Utan den här
+    // grenen föll anropet igenom till "okänd väg" och Dashboard visade
+    // "Synka inkorg" på en yta där det inte finns något att synka.
+    if (rutt === "/inbox/mailboxes" && metod === "GET") {
+      return { mailboxes: [], global_konfigurerad: false, kan_synka: false } as T;
+    }
+
     if (rutt === "/inbox/mock" && metod === "POST") {
-      mejl = grundmejl();
+      // Samma kontrakt som backenden: med `category` byts BARA det facket,
+      // utan byts allt. Demon måste bete sig likadant, annars beter sig
+      // knapparna olika på /demo och i en riktig arbetsyta.
+      const { category } = JSON.parse((init?.body as string) ?? "{}");
+      const nya = grundmejl();
+      if (category) {
+        const behall = mejl.filter((m) => m.classification?.category !== category);
+        const tillskott = nya.filter((m) => m.classification?.category === category);
+        mejl = [...tillskott, ...behall];
+        seedad = true;
+        return { ingested: tillskott.length, processing: false, category } as T;
+      }
+      mejl = nya;
       seedad = true;
-      return { fetched: mejl.length, processed: mejl.length } as T;
+      return { ingested: mejl.length, processing: false, category: null } as T;
     }
 
     if (rutt === "/inbox/sync" && metod === "POST") {
-      if (!seedad) {
-        mejl = grundmejl();
-        seedad = true;
-        return { fetched: mejl.length, processed: mejl.length } as T;
-      }
-      return { fetched: 0, processed: 0 } as T;
+      return {
+        fetched: 0,
+        processed: 0,
+        connected: false,
+        error: "Ingen inkorg är kopplad i demon."
+      } as T;
     }
 
     const godkann = rutt.match(/^\/drafts\/(.+)\/approve$/);

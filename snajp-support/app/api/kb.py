@@ -26,12 +26,15 @@ async def add_kb_articles(
     settings = get_settings()
     storage = request.app.state.storage
     created = []
+    vektorer = 0
     for article in payload.articles:
         embedding = None
         if not settings.is_simulation():
             from ..agent.embeddings import embed_text
 
             embedding = await embed_text(f"{article.title}\n{article.content}")
+        if embedding is not None:
+            vektorer += 1
         created.append(
             await storage.add_kb_article(
                 tenant["tenant_id"],
@@ -41,4 +44,7 @@ async def add_kb_articles(
                 embedding=embedding,
             )
         )
-    return {"created": created}
+    # `embeddings` sägs ut, den antas inte. Artiklarna sparas även när vektorn
+    # inte gick att räkna ut (se agent/embeddings.py), och skillnaden syns
+    # annars först som att sökningen blivit sämre utan att något felat.
+    return {"created": created, "embeddings": vektorer, "utan_vektor": len(created) - vektorer}

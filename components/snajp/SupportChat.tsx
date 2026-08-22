@@ -315,8 +315,8 @@ export function SupportChat({ tenant, session }: SupportChatProps = {}) {
             <p className="max-w-md text-[0.9375rem] leading-6 text-ink/60">
               {intro ??
                 text({
-                  sv: "Skriv som en kund till den påhittade butiken Nordlys Handel. Du kan också ladda upp en skärmdump eller en bild på en skadad vara.",
-                  en: "Write as a customer of the invented store Nordlys Handel. You can also upload a screenshot or a photo of a damaged item."
+                  sv: "Du kan också ladda upp en skärmdump eller en bild på en skadad vara.",
+                  en: "You can also upload a screenshot or a photo of a damaged item."
                 })}
             </p>
             <div className="flex max-w-lg flex-wrap justify-center gap-2">

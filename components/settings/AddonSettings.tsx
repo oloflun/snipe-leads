@@ -19,13 +19,10 @@ export function AddonSettings() {
 
   return (
     <div className="grid gap-8">
-      <div>
-        <h3 className="kicker text-mineral">Tillägg</h3>
-        <p className="mt-3 max-w-[60ch] text-[15px] leading-7 text-mineral">
-          Det här kan agenten göra utöver det som ingår. Hör av dig så sätter vi
-          på det du behöver.
-        </p>
-      </div>
+      {/* Ingen egen ingress här. Sidrubriken ovanför säger redan "Det agenten kan
+          göra utöver det som ingår i er plan", och den här upprepade det med
+          andra ord — två meningar om samma sak, synligt bredvid varandra i
+          samma vy. Sett i pixlar. */}
 
       <ul className="grid gap-px">
         {addonCatalog.map((addon) => {
@@ -56,7 +53,7 @@ export function AddonSettings() {
                     {addon.why}
                   </p>
                   <a
-                    href={`mailto:hej@snajp.se?subject=${encodeURIComponent(`Tillägg: ${addon.name}`)}`}
+                    href={`mailto:Snajpsupport@gmail.com?subject=${encodeURIComponent(`Tillägg: ${addon.name}`)}`}
                     className="mt-4 inline-block text-[13px] underline underline-offset-4 transition hover:text-ochre"
                   >
                     Hör av dig om {addon.name.toLowerCase()}

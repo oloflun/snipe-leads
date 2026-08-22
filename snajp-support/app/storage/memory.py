@@ -585,6 +585,8 @@ class MemoryStorage:
         company_name: str,
         contact_name: str | None = None,
         contact_email: str | None = None,
+        origin: str = "manual",
+        profil: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         prospect = {
             "id": str(uuid.uuid4()),
@@ -594,6 +596,17 @@ class MemoryStorage:
             "contact_email": contact_email,
             "language_state": "sv",
             "status": "new",
+            "origin": origin,
+            # Samma allowlist som Postgres-lagringen. Att spegla den här är inte
+            # dubbelarbete: sviten kör mot minnet, och ett fält som tyst faller
+            # bort i den ena lagringen hade gett gröna tester mot en vy som är
+            # tom i drift.
+            **{
+                namn: värde
+                for namn, värde in (profil or {}).items()
+                if namn in ("orgnr", "ort", "postnr", "sni", "website", "anstallda", "omsattning")
+                and värde is not None
+            },
             "created_at": _now(),
         }
         self.prospects.setdefault(tenant_id, []).append(prospect)
@@ -673,6 +686,7 @@ class MemoryStorage:
         tokens_in: int,
         tokens_out: int,
         latency_ms: int,
+        is_test: bool = False,
     ) -> dict[str, Any]:
         # Samma värdemängd som check-villkoret i migration 025. Utan den här
         # raden tar minnet emot vad som helst medan Postgres kastar — och det
@@ -687,6 +701,7 @@ class MemoryStorage:
             "id": str(uuid.uuid4()),
             "tenant_id": tenant_id,
             "agent_type": agent_type,
+            "is_test": is_test,
             "pack_version": pack_version,
             "skills_used": skills_used,
             "input": input_text,
@@ -804,6 +819,48 @@ class MemoryStorage:
         }
         self.emails[email["id"]] = email
         return email
+
+    async def delete_emails_by_provider(self, tenant_id: str, provider: str) -> int:
+        """Se Storage.delete_emails_by_provider.
+
+        Dedupe-nyckeln tas bort med mailet. Utan det hade samma
+        provider_message_id räknats som dublett i all framtid, och ett nytt
+        urval testmail hade tyst blivit noll mail.
+        """
+        träffar = [
+            email
+            for email in self.emails.values()
+            if email["tenant_id"] == tenant_id and email["provider"] == provider
+        ]
+        for email in träffar:
+            self.emails.pop(email["id"], None)
+            self.email_dedupe.discard((tenant_id, email["provider_message_id"]))
+            self.classifications.pop(email["id"], None)
+            draft_id = self.drafts_by_email.pop(email["id"], None)
+            if draft_id:
+                self.drafts.pop(draft_id, None)
+        return len(träffar)
+
+    async def delete_mock_emails(self, tenant_id: str, *, category: str | None = None) -> int:
+        """Se Storage.delete_mock_emails."""
+        träffar = [
+            email
+            for email in self.emails.values()
+            if email["tenant_id"] == tenant_id
+            and email["provider"] == "mock"
+            and (
+                category is None
+                or (self.classifications.get(email["id"]) or {}).get("category") == category
+            )
+        ]
+        for email in träffar:
+            self.emails.pop(email["id"], None)
+            self.email_dedupe.discard((tenant_id, email["provider_message_id"]))
+            self.classifications.pop(email["id"], None)
+            draft_id = self.drafts_by_email.pop(email["id"], None)
+            if draft_id:
+                self.drafts.pop(draft_id, None)
+        return len(träffar)
 
     def _email_summary(self, email: dict[str, Any]) -> dict[str, Any]:
         classification = self.classifications.get(email["id"])
@@ -1127,7 +1184,11 @@ class MemoryStorage:
                 {
                     **tenant,
                     "tickets": sum(1 for t in self.tickets.values() if t["tenant_id"] == tid),
-                    "runs": len(runs),
+                    # Speglar Postgres exakt. Att räkna alla här och filtrera
+                    # där hade gett en grön svit mot en vy som visar fel tal i
+                    # drift — se doktrinen i storage/base.py.
+                    "runs": sum(1 for r in runs if not r.get("is_test")),
+                    "test_runs": sum(1 for r in runs if r.get("is_test")),
                     "tokens_in": sum(r.get("tokens_in") or 0 for r in runs),
                     "tokens_out": sum(r.get("tokens_out") or 0 for r in runs),
                     "errors": sum(

@@ -38,13 +38,13 @@ export const addonCatalog: readonly AddonSpec[] = [
   {
     key: "inbox",
     name: "Kopplad inkorg",
-    what: "Din riktiga IMAP-inkorg kopplas in och agenten svarar på mejl, inte bara i chatten.",
+    what: "Din riktiga IMAP-inkorg kopplas in och agenterna svarar på mejl, inte bara i chatten.",
     why: "Kräver att vi hanterar era inloggningsuppgifter och sätter upp en inkorgsrutin per kund."
   },
   {
     key: "vision",
     name: "Bildanalys",
-    what: "Kunder kan bifoga foton — en skadad vara, en felkod på en display — och agenten läser bilden.",
+    what: "Kunder kan bifoga foton — en skadad vara, en felkod på en display — och agenterna läser bilden.",
     why: "Egen modellkostnad per bild, och den körs som en separat tjänst vid sidan av samtalet."
   },
   {
@@ -68,7 +68,7 @@ export const addonCatalog: readonly AddonSpec[] = [
   {
     key: "reports",
     name: "Månadsrapport",
-    what: "Ärendevolym, vad frågorna handlade om, och hur ofta agenten lämnade över till en människa.",
+    what: "Ärendevolym, vad frågorna handlade om, och hur ofta agenterna lämnade över till en människa.",
     why: "Egen datavy som räknas fram separat — den ingår inte i den löpande driften."
   }
 ];

@@ -11,12 +11,22 @@ precis som referensarkitekturen. Saknas embeddings används
 
 import hashlib
 import json
+import logging
 from contextlib import asynccontextmanager
 from typing import Any
 
 import asyncpg
 
 from .base import status_transition_allowed
+
+logger = logging.getLogger("snajp-support.storage")
+
+#: Prospektets profilfält (migration 031). ALLOWLIST, inte en genomsläpp:
+#: kolumnnamnen sätts in i SQL-satsen som text, och det enda som gör det säkert
+#: är att de aldrig kan komma från anroparen. Värdena går som parametrar.
+_PROSPEKT_PROFILFALT = frozenset(
+    {"orgnr", "ort", "postnr", "sni", "website", "anstallda", "omsattning"}
+)
 
 
 async def _init_connection(conn: asyncpg.Connection) -> None:
@@ -41,6 +51,32 @@ def _row(record: asyncpg.Record | None) -> dict[str, Any] | None:
             data[key] = str(value) if value is not None else None
         elif key == "sentiment" and value is not None:
             data[key] = float(value)
+    return data
+
+
+def _avkoda_jsonb(data: dict[str, Any] | None, *nycklar: str) -> dict[str, Any] | None:
+    """jsonb-kolumner kommer tillbaka som TEXT från asyncpg.
+
+    Utan en typkodare avkodar asyncpg varken json eller jsonb — värdet blir en
+    sträng som SER rätt ut i en logg och i ett JSON-svar, och först konsumenten
+    märker något. `step_log` nådde adminytans spårvy som en sträng, och sidan
+    föll på `steps.map is not a function`; det syntes aldrig i sviten, eftersom
+    MemoryStorage lämnar riktiga listor.
+
+    Kodaren sätts INTE globalt i `_init_connection`: fyra anropsställen i den
+    här filen avkodar redan för hand (`json.loads` med isinstance-vakt), och en
+    global kodare hade gett dem en dict att köra json.loads på. Avkodningen bor
+    därför där kolumnen läses, som redan är mönstret här.
+    """
+    if data is None:
+        return None
+    for nyckel in nycklar:
+        if isinstance(data.get(nyckel), str):
+            try:
+                data[nyckel] = json.loads(data[nyckel])
+            except (ValueError, TypeError):
+                # Ett ovärderbart fält är bättre än en 500 i ett driftverktyg.
+                pass
     return data
 
 
@@ -698,18 +734,71 @@ class PostgresStorage:
         company_name: str,
         contact_name: str | None = None,
         contact_email: str | None = None,
+        origin: str = "manual",
+        profil: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        # Profilfälten (migration 031) sätts i SAMMA insert och inte med en
+        # efterföljande update. En prospektrad som existerar utan sin ort och
+        # sitt org.nr, om än bara i en millisekund, är en rad granskningsvyn kan
+        # hinna läsa — och `update_prospect` tar med flit bara bedömningsfälten.
+        extra = {
+            namn: värde
+            for namn, värde in (profil or {}).items()
+            if namn in _PROSPEKT_PROFILFALT and värde is not None
+        }
+        kolumner = ", ".join(extra)
+        platshallare = ", ".join(f"${i}" for i in range(6, 6 + len(extra)))
+
         async with self._scoped(tenant_id) as conn:
-            record = await conn.fetchrow(
-                """
-                insert into prospects (tenant_id, company_name, contact_name, contact_email)
-                values ($1, $2, $3, $4) returning *
-                """,
-                tenant_id,
-                company_name,
-                contact_name,
-                contact_email,
-            )
+            try:
+                record = await conn.fetchrow(
+                    f"""
+                    insert into prospects
+                      (tenant_id, company_name, contact_name, contact_email, origin
+                       {", " + kolumner if extra else ""})
+                    values ($1, $2, $3, $4, $5{", " + platshallare if extra else ""})
+                    returning *
+                    """,
+                    tenant_id,
+                    company_name,
+                    contact_name,
+                    contact_email,
+                    origin,
+                    *extra.values(),
+                )
+            except asyncpg.UndefinedColumnError:
+                # Migration 039 är inte körd i den här databasen ännu.
+                #
+                # Koden deployas från grenen, migrationerna körs av en människa
+                # med databaslösenordet — de två landar alltså inte samtidigt.
+                # Utan den här grenen slutar VARJE prospekt att gå att skapa
+                # under mellantiden, inklusive de som inte har med exempelbolag
+                # att göra: en ny kolumn hade tagit ner den befintliga
+                # pipelinen.
+                #
+                # Exempelbolag kan däremot inte skapas säkert utan kolumnen —
+                # utan `origin` finns ingen markering, och utan markering kan
+                # send-guarden inte skilja dem från riktiga prospekt.
+                if origin != "manual":
+                    raise RuntimeError(
+                        "Kolumnen prospects.origin saknas (migration 039 är inte körd). "
+                        "Exempelbolag kan inte skapas utan den — de skulle inte gå att "
+                        "skilja från riktiga prospekt i utskicksspärren."
+                    ) from None
+                logger.warning(
+                    "prospects.origin saknas — migration 039 är inte körd. "
+                    "Skapar prospektet utan ursprungsmarkering."
+                )
+                record = await conn.fetchrow(
+                    """
+                    insert into prospects (tenant_id, company_name, contact_name, contact_email)
+                    values ($1, $2, $3, $4) returning *
+                    """,
+                    tenant_id,
+                    company_name,
+                    contact_name,
+                    contact_email,
+                )
         return _row(record)
 
     async def get_prospect(self, tenant_id: str, prospect_id: str) -> dict[str, Any] | None:
@@ -810,14 +899,17 @@ class PostgresStorage:
         tokens_in: int,
         tokens_out: int,
         latency_ms: int,
+        # Default false och inte None: "vet inte" ska inte vara ett möjligt
+        # tillstånd för om en körning räknas som kundvolym. Se migration 036.
+        is_test: bool = False,
     ) -> dict[str, Any]:
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
                 """
                 insert into agent_runs
                   (tenant_id, agent_type, pack_version, skills_used, input, output,
-                   step_log, tokens_in, tokens_out, latency_ms)
-                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                   step_log, tokens_in, tokens_out, latency_ms, is_test)
+                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                 returning *
                 """,
                 tenant_id,
@@ -830,6 +922,7 @@ class PostgresStorage:
                 tokens_in,
                 tokens_out,
                 latency_ms,
+                is_test,
             )
         return _row(record)
 
@@ -851,7 +944,15 @@ class PostgresStorage:
                     tenant_id,
                     limit,
                 )
-        return [_row(r) for r in records]
+        # Samma avkodning som list_agent_runs_all och get_agent_run redan gör.
+        # Saknades här, och det syntes inte på ett halvår av EN anledning: den
+        # enda konsumenten — översiktens körningsräknare — frågade efter
+        # `agent_type=leads`, en sträng ingen kodväg skriver, och fick alltid
+        # noll rader. Så fort filtret rättades kom raderna fram, och adminytans
+        # arbetsyta föll på `step_log.filter is not a function`.
+        #
+        # Två fel som gömde varandra: det ena gjorde det andra osynligt.
+        return [_avkoda_jsonb(_row(r), "step_log", "grounding") for r in records]
 
     async def list_skill_files(self, *, manifest_hash: str) -> list[dict[str, Any]]:
         # AVSIKTLIGT ingen _scoped(tenant_id): agent_skill_files har ingen
@@ -920,6 +1021,26 @@ class PostgresStorage:
 
     # -- Email-pipeline -------------------------------------------------------
 
+    async def delete_emails_by_provider(self, tenant_id: str, provider: str) -> int:
+        """Se Storage.delete_emails_by_provider.
+
+        Bilagor, klassificeringar, utkast och beslutsloggens mailrader följer
+        med via `on delete cascade` (migration 004). Ärendena (`ss_tickets`)
+        gör det INTE — de refereras av mailet, inte tvärtom, och spåret av att
+        ett ärende funnits ska inte försvinna för att en demoinkorg städas.
+        """
+        async with self._scoped(tenant_id) as conn:
+            resultat = await conn.execute(
+                "delete from ss_emails where tenant_id = $1 and provider = $2",
+                tenant_id,
+                provider,
+            )
+        # asyncpg returnerar kommandotaggen, t.ex. "DELETE 6".
+        try:
+            return int(str(resultat).rsplit(" ", 1)[-1])
+        except ValueError:
+            return 0
+
     async def save_email(
         self,
         tenant_id: str,
@@ -952,6 +1073,32 @@ class PostgresStorage:
                 received_at,
             )
         return _row(record)
+
+    async def delete_mock_emails(self, tenant_id: str, *, category: str | None = None) -> int:
+        """Se Storage.delete_mock_emails.
+
+        Bilagor, klassificeringar, utkast och beslutsloggens mailrader följer
+        med via `on delete cascade` (migration 004). Ärendena (`ss_tickets`)
+        gör det INTE — de refereras av mailet, inte tvärtom, och spåret av att
+        ett ärende funnits ska inte försvinna för att en demoinkorg städas.
+        """
+        async with self._scoped(tenant_id) as conn:
+            resultat = await conn.execute(
+                """
+                delete from ss_emails e
+                 where e.tenant_id = $1
+                   and e.provider = 'mock'
+                   and ($2::text is null or exists(
+                         select 1 from ss_classifications c
+                          where c.email_id = e.id and c.category = $2))
+                """,
+                tenant_id,
+                category,
+            )
+        try:
+            return int(str(resultat).rsplit(" ", 1)[-1])
+        except ValueError:
+            return 0
 
     async def list_emails(
         self,
@@ -1423,6 +1570,7 @@ class PostgresStorage:
                 select t.id, t.slug, t.name, t.active, t.created_at,
                        coalesce(k.tickets, 0)      as tickets,
                        coalesce(r.runs, 0)         as runs,
+                       coalesce(r.test_runs, 0)    as test_runs,
                        coalesce(r.tokens_in, 0)    as tokens_in,
                        coalesce(r.tokens_out, 0)   as tokens_out,
                        coalesce(e.errors, 0)       as errors,
@@ -1432,7 +1580,17 @@ class PostgresStorage:
                   select count(*) as tickets from ss_tickets where tenant_id = t.id
                 ) k on true
                 left join lateral (
-                  select count(*) as runs,
+                  -- `runs` är KUNDVOLYM och räknar inte våra egna provkörningar.
+                  -- Kolumnen finns sedan migration 036 men var alltid false
+                  -- eftersom ingen anropsplats satte den; nu när den fylls i
+                  -- kan siffran betyda det den påstår.
+                  --
+                  -- Tokens räknar däremot ALLA körningar. En provkörning kostar
+                  -- lika mycket som en riktig, och en kostnadssiffra som döljer
+                  -- vår egen förbrukning är en kostnadssiffra man planerar fel
+                  -- efter.
+                  select count(*) filter (where not is_test) as runs,
+                         count(*) filter (where is_test) as test_runs,
                          sum(tokens_in) as tokens_in,
                          sum(tokens_out) as tokens_out,
                          max(created_at) as last_activity
@@ -1469,7 +1627,7 @@ class PostgresStorage:
                 agent_type,
                 limit,
             )
-        return [_row(r) for r in records]
+        return [_avkoda_jsonb(_row(r), "step_log", "grounding") for r in records]
 
     async def get_agent_run(self, run_id: str) -> dict[str, Any] | None:
         async with self.pool.acquire() as conn:
@@ -1481,7 +1639,7 @@ class PostgresStorage:
                 """,
                 run_id,
             )
-        return _row(record)
+        return _avkoda_jsonb(_row(record), "step_log", "grounding")
 
     async def list_platform_events(
         self,
@@ -1505,7 +1663,7 @@ class PostgresStorage:
                 tenant_id,
                 limit,
             )
-        return [_row(r) for r in records]
+        return [_avkoda_jsonb(_row(r), "detail") for r in records]
 
     async def log_platform_event(
         self,

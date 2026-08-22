@@ -8,6 +8,7 @@ så att Fas B/C kan köra på det som finns i stället för att dödlåsa sig.
 """
 
 import asyncio
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -17,6 +18,7 @@ from ..leads.autonomy import describe as describe_autonomy
 from ..leads.autonomy import kan_aktivera_auto_send
 from ..leads.autonomy import normalize as normalize_autonomy
 from ..leads.business_context import ar_ifyllt as business_context_ar_ifyllt
+from ..leads.exempelbolag import bygg_exempelbolag
 from ..leads.context_pack import build_context_pack, materialize_product_marketing
 from ..leads.geo import beskriv_region, kanda_regioner
 from ..leads.icp import (
@@ -33,6 +35,7 @@ from .deps import require_tenant
 from ..leads.soul import SOUL_KIND, SOUL_MAX_CHARS
 from .schemas import (
     ContextDocRequest,
+    ExempelbolagRequest,
     LeadsBatchRequest,
     LeadsConfigRequest,
     ProspectPatchRequest,
@@ -45,6 +48,80 @@ from .schemas import (
 )
 
 router = APIRouter()
+
+
+#: Etiketter affärskontexten är skriven med. Onboardingen bygger `product` som
+#: en fältlista ("Organisationsnummer: … / Webbplats: … / Vad vi säljer: …"),
+#: och den formen är gjord för att LÄSAS av agenten, inte för att stoppas in i
+#: en mening.
+_KONTEXTETIKETTER = (
+    "vad vi säljer",
+    "vi säljer",
+    "produkt",
+    "produkten",
+    "erbjudande",
+    "erbjudandet",
+)
+
+#: Rader som aldrig hör hemma i en pitch, hur tidigt de än står i dokumentet.
+_HOPPA_OVER = ("organisationsnummer", "webbplats", "hemsida", "org.nr", "särskilt fokus")
+
+
+def _produktrad(text: str, *, max_tecken: int = 180) -> str:
+    """Vad kunden säljer, formulerat så att det kan följa efter "Vi säljer ".
+
+    ## Vad som gick fel utan den här
+
+    Uppmätt mot dev-deployen: pitchen sa
+
+        "Vi säljer Vad vi säljer: Inredning och utemiljö för företag …"
+
+    Affärskontexten är en FÄLTLISTA — onboardingen skriver den så — och att ta
+    dess första mening rakt av tar med etiketten. Läsaren ser inte ett mejl med
+    ett skarvfel; hen ser ett bolag som inte läst sitt eget utskick.
+
+    ## Ordningen
+
+    1. Leta efter fältet som faktiskt beskriver produkten och ta det som står
+       EFTER kolonet.
+    2. Annars första meningen som inte är org.nr, webbplats eller fokus.
+    3. Första bokstaven gemeniseras: raden fortsätter en mening som redan
+       börjat, och versalen mitt i den läser som ett citat.
+
+    Tom sträng returneras oförändrad — anroparen har en tydlig platshållare, och
+    en tom plats är bättre än en halv rubrik mitt i ett mejl.
+    """
+    rader = [rad.strip(" -•\t") for rad in (text or "").splitlines() if rad.strip()]
+    if not rader:
+        return ""
+
+    kandidat = ""
+    for rad in rader:
+        etikett, _, resten = rad.partition(":")
+        nyckel = etikett.strip().lower()
+        if resten.strip() and nyckel in _KONTEXTETIKETTER:
+            kandidat = resten.strip()
+            break
+        if resten.strip() and nyckel in _HOPPA_OVER:
+            continue
+        if not kandidat:
+            # Ingen etikett vi känner igen — men raden kan ändå vara texten.
+            kandidat = rad if not resten.strip() else resten.strip()
+
+    rent = " ".join(kandidat.split())
+    if not rent:
+        return ""
+
+    punkt = rent.find(". ")
+    if 0 < punkt <= max_tecken:
+        rent = rent[:punkt]
+    else:
+        rent = rent[:max_tecken]
+    rent = rent.rstrip(" .,;:-–—")
+
+    # "Inredning och utemiljö" -> "inredning och utemiljö". Bara första
+    # tecknet: ett egennamn längre in i raden ska behålla sin versal.
+    return rent[:1].lower() + rent[1:] if rent else rent
 
 
 def _require_live_llm() -> None:
@@ -132,6 +209,102 @@ async def create_prospect(
     return {"prospect": prospect}
 
 
+@router.post("/api/leads/prospects/exempel", status_code=201)
+async def create_example_prospects(
+    request: Request, payload: ExempelbolagRequest, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Exempelbolag som ligger inom ICP:t — vägen in för en tom arbetsyta.
+
+    KRÄVER INTE en riktig LLM-nyckel, till skillnad från körningen den leder
+    till. Generatorn är deterministisk (`leads/exempelbolag.py`), och en
+    demonstrationsfunktion som bara fungerar när allt annat redan fungerar
+    demonstrerar ingenting.
+
+    Bolagen märks `origin='example'` och kan aldrig mejlas: scheduler-
+    guarden slår upp kolumnen innan `provider.send()`.
+    """
+    storage = request.app.state.storage
+    settings_rad = await storage.get_agent_settings(tenant["tenant_id"], agent_type="leads")
+    icp = dict(normalize_icp(settings_rad.get("icp")))
+
+    # Överskrivningarna gäller den här genereringen, precis som de gäller
+    # körningen de leder till — annars beskriver formulärets fält en målgrupp
+    # och de skapade bolagen en annan.
+    if payload.overrides is not None and payload.overrides.har_nagot():
+        over = payload.overrides.model_dump(exclude_none=True)
+        for nyckel in ("industries", "exclude_industries", "geography", "roles",
+                       "must_have", "deal_breakers"):
+            if nyckel in over:
+                icp[nyckel] = over[nyckel]
+        if "anstallda_min" in over or "anstallda_max" in over:
+            storlek = dict(icp.get("company_size") or {})
+            if "anstallda_min" in over:
+                storlek["min"] = over["anstallda_min"]
+            if "anstallda_max" in over:
+                storlek["max"] = over["anstallda_max"]
+            icp["company_size"] = storlek
+
+    # Pitchen ska handla om KUNDENS produkt, inte om en påhittad.
+    #
+    # Texten hämtas ur affärskontexten (`product_marketing`), som kunden själv
+    # skrivit. Saknas den lämnas en tydlig plats att fylla i stället för en
+    # uppfunnen produkt: en påhittad produkt i ett exempelmejl är en text kunden
+    # måste skriva OM, och den läser dessutom som att vi gissat vad de säljer.
+    produktdoc = await storage.get_latest_context_doc(
+        tenant["tenant_id"], kind="product_marketing"
+    )
+    produkt = _produktrad((produktdoc or {}).get("content", ""))
+
+    skapade = []
+    for bolag in bygg_exempelbolag(
+        icp,
+        antal=payload.limit,
+        produkt=produkt,
+        avsandare=tenant.get("tenant_name") or None,
+        # Ett nytt frö per anrop. Knappen "Uppdatera" ska ge NYA bolag och nya
+        # utkast — samma tre varje gång hade sett trasigt ut, och poängen med
+        # att uppdatera är att se agenten formulera sig om ett annat läge.
+        fro=payload.fro or uuid.uuid4().hex[:8],
+    ):
+        prospect = await storage.create_prospect(
+            tenant["tenant_id"],
+            company_name=bolag["company_name"],
+            contact_name=bolag["contact_name"],
+            origin="example",
+            # Org.nr, ort, webbplats och storlek SPARAS, de skickas inte bara
+            # tillbaka. Vyn som listar exempelbolagen är samma vy som listar
+            # riktiga prospekt, och ett bolag som bara har ett namn ser ut som
+            # ett prospekt vars research misslyckats.
+            profil={
+                "orgnr": bolag["orgnr"],
+                "ort": bolag["ort"],
+                "website": bolag["website"],
+                "anstallda": bolag["anstallda"],
+            },
+        )
+        skapade.append(
+            {
+                **prospect,
+                # Beskrivningen och motiveringen härleds ur ICP:t och hör inte
+                # hemma i en kolumn — de beror på vilket ICP som gällde vid
+                # genereringen, och sparade hade de blivit osanna nästa gång
+                # kunden ändrar sin målgrupp.
+                "beskrivning": bolag["beskrivning"],
+                "signal": bolag["signal"],
+                "bransch": bolag["bransch"],
+                "motivering": bolag["motivering"],
+                # Utkastet som öppnas i Email Studio. Sparas INTE som ett
+                # outreach_message: ingenting här har passerat send_guard, och
+                # ett utkast i kön är ett utkast som kan godkännas av misstag.
+                "pitch_subject": bolag["pitch_subject"],
+                "pitch_body": bolag["pitch_body"],
+                "pitch_varfor_nu": bolag["pitch_varfor_nu"],
+            }
+        )
+
+    return {"created": skapade, "count": len(skapade)}
+
+
 @router.get("/api/leads/prospects")
 async def list_prospects(request: Request, tenant: dict = Depends(require_tenant)) -> dict:
     prospects = await request.app.state.storage.list_prospects(tenant["tenant_id"])
@@ -216,6 +389,11 @@ async def research_step(
     if not await storage.get_prospect(tenant["tenant_id"], payload.prospect_id):
         raise HTTPException(status_code=404, detail="Prospektet finns inte.")
 
+    # Ingen overrides-parameter: ResearchStepRequest har bara prospect_id och
+    # brief. Raden stod tidigare med `overrides=overrides` — en variabel som
+    # aldrig bands i funktionen, alltså NameError och 500 på VARJE anrop med
+    # skarp nyckel. Ingen test nådde routen, och simuleringsläget svarar 503
+    # innan den raden, så sviten var grön.
     context_pack, missing = await build_context_pack(storage, tenant["tenant_id"])
     result = await run_research_step(
         storage,
@@ -459,6 +637,14 @@ async def start_batch_run(
             detail="Inga prospekt att köra på. Lägg till prospekt först.",
         )
 
+    # Överskrivningarna löses ut EN gång, inte per prospekt: alla jobb i
+    # batchen ska köra mot samma målgrupp, annars går utfallet inte att jämföra.
+    overrides = (
+        payload.overrides.model_dump(exclude_none=True)
+        if payload.overrides and payload.overrides.har_nagot()
+        else None
+    )
+
     jobs = []
     for prospect in prospects[: payload.limit]:
         job_id = await request.app.state.jobs.create(tenant_id=tenant["tenant_id"])
@@ -469,19 +655,40 @@ async def start_batch_run(
                 tenant,
                 prospect_id=prospect["id"],
                 scope=payload.scope,
+                overrides=overrides,
+                is_test=payload.is_test,
             )
         )
         jobs.append({"job_id": job_id, "prospect_id": prospect["id"]})
 
-    return {"jobs": jobs, "scope": payload.scope, "count": len(jobs)}
+    return {
+        "jobs": jobs,
+        "scope": payload.scope,
+        "count": len(jobs),
+        # Ekas tillbaka så att den som startade körningen ser vad den FAKTISKT
+        # kördes med — inte vad formuläret råkade innehålla.
+        "overrides": overrides,
+        "is_test": payload.is_test,
+    }
 
 
-async def _run_batch_prospect(app_state, job_id: str, tenant: dict, *, prospect_id: str, scope: str) -> None:
+async def _run_batch_prospect(
+    app_state, job_id: str, tenant: dict, *, prospect_id: str, scope: str,
+    overrides: dict | None = None,
+    is_test: bool = False,
+) -> None:
     from ..agent.leads_agent import run_research_step
 
     storage = app_state.storage
     try:
-        context_pack, missing = await build_context_pack(storage, tenant["tenant_id"])
+        # `overrides` togs emot av funktionen men skickades aldrig vidare, så
+        # varje jobb i batchen kördes mot den SPARADE ICP:n oavsett vad
+        # formuläret angav — och svaret ekade ändå tillbaka överskrivningarna
+        # som om de gällt. Ett tyst fel: utfallet såg rimligt ut, det svarade
+        # bara på fel fråga.
+        context_pack, missing = await build_context_pack(
+            storage, tenant["tenant_id"], overrides=overrides
+        )
         result = await run_research_step(
             storage,
             tenant["tenant_id"],
@@ -489,6 +696,7 @@ async def _run_batch_prospect(app_state, job_id: str, tenant: dict, *, prospect_
             tenant_name=tenant["tenant_name"],
             context_pack=context_pack,
             brief="",
+            is_test=is_test,
         )
         result["onboarding_missing"] = list(missing)
         result["prospect_id"] = prospect_id

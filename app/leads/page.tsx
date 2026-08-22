@@ -3,9 +3,9 @@ import { ProductPage } from "@/components/marketing/ProductPage";
 import { notFoundOnTenant } from "@/lib/tenants/server";
 
 export const metadata: Metadata = {
-  title: "Snajp Leads, säljmejl som låter som du",
+  title: "Snajp Leads, en säljare som aldrig sover",
   description:
-    "Snajp Leads läser publika signaler om svenska bolag och skriver utkastet till säljmejlet. Inget skickas utan att du godkänt det.",
+    "Leads-agenten letar prospekt utifrån er produkt, gör en behovsanalys och skriver det utgående mejlet. Inget skickas utan att du godkänt det.",
   alternates: { canonical: "/leads" }
 };
 

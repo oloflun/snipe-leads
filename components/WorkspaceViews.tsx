@@ -3,28 +3,38 @@
 import Link from "next/link";
 
 import { SoulEditor } from "@/components/SoulEditor";
-import { PageShell } from "@/components/AppShell";
+import { PageShell, useArbetsvag } from "@/components/AppShell";
 import { btnPrimary, btnSecondary } from "@/components/ui";
 import { LoginForm } from "@/components/auth/LoginForm";
+import { SignOutButton } from "@/components/auth/SignOutButton";
+import { useDashboard } from "@/components/dashboard/DashboardContext";
+import { Discovery } from "@/components/leads/Discovery";
+import { LeadsControls } from "@/components/leads/LeadsControls";
+import { Affarskontext } from "@/components/settings/Affarskontext";
+import { KunskapsbasPanel } from "@/components/settings/Kunskapsbas";
+import { SupportRegler } from "@/components/settings/SupportRegler";
+import { SettingsNav } from "@/components/settings/SettingsNav";
 import { TeamSettings } from "@/components/settings/TeamSettings";
 import { AddonSettings } from "@/components/settings/AddonSettings";
+import { Inkorgar } from "@/components/settings/Inkorgar";
+import { PlanSettings } from "@/components/settings/PlanSettings";
 import { OnboardingForm } from "@/components/auth/OnboardingForm";
+import { signOut } from "@/lib/actions/auth";
 import {
   analyticsSeries,
   businessContext,
-  campaigns,
   companies,
   contacts,
   emailVariants,
-  findCampaign,
   findCompany,
   findContact,
   signals,
   workflowSteps
 } from "@/lib/mock-data";
-import type { Campaign, Company, Contact } from "@/lib/mock-data";
+import type { Company, Contact } from "@/lib/mock-data";
+import type { SettingsSectionKey } from "@/lib/routes";
 import { useLocale } from "@/lib/i18n";
-import { cn, formatCurrency, formatDate, formatPercent } from "@/lib/utils";
+import { cn, formatDate, formatPercent } from "@/lib/utils";
 
 function EditorialButton({ href, children, dark = false }: Readonly<{ href: string; children: React.ReactNode; dark?: boolean }>) {
   return (
@@ -52,10 +62,14 @@ function StatusWord({ value }: Readonly<{ value: string }>) {
 
 function CompanyLedger({ rows = companies }: Readonly<{ rows?: Company[] }>) {
   const { text } = useLocale();
+  const vag = useArbetsvag();
   return (
     <div className="overflow-x-auto border-y border-ink/15">
       <div className="hidden min-w-[1120px] grid-cols-12 gap-x-6 border-b border-ink/15 py-4 md:grid">
-        {["Bolag", "Segment", "Kontakt", "Signal", "Score", "Status"].map((head, index) => (
+        {/* Utan kolumnen "Status". Den visade det råa statusordet
+            ("recommended", "queued") i en kundvänd tabell — våra interna
+            värden, oöversatta, i en vy där resten är skriven på svenska. */}
+        {["Bolag", "Segment", "Kontakt", "Signal", "Score"].map((head, index) => (
           <div key={head} className={cn("kicker text-mineral", index === 0 ? "col-span-3" : index === 3 ? "col-span-3" : "col-span-2", index > 3 ? "text-right" : "")}>
             {head}
           </div>
@@ -65,7 +79,7 @@ function CompanyLedger({ rows = companies }: Readonly<{ rows?: Company[] }>) {
         {rows.map((company) => {
           const contact = company.contacts[0];
           return (
-            <Link key={company.id} href={`/dashboard/companies/${company.id}`} className="row grid grid-cols-12 gap-x-6 py-5 transition hover:bg-paper2/60">
+            <Link key={company.id} href={vag(`/dashboard/companies/${company.id}`)} className="row grid grid-cols-12 gap-x-6 py-5 transition hover:bg-paper2/60">
               <div className="ticker col-span-3">
                 <p className="text-[1.0625rem] font-semibold tracking-[-0.01em]">{company.name}</p>
                 <p className="mt-1 text-sm text-ink/55">{company.website}</p>
@@ -76,32 +90,11 @@ function CompanyLedger({ rows = companies }: Readonly<{ rows?: Company[] }>) {
                 <p className="mt-1 text-sm text-ink/55">{contact.role}</p>
               </div>
               <div className="col-span-3 text-[15px] leading-6 text-ink/72">{text(company.latestSignal)}</div>
-              <div className="num col-span-1 text-right text-[1.0625rem] font-semibold tabular-nums">{company.score}</div>
-              <div className="col-span-1 text-right"><StatusWord value={company.status} /></div>
+              <div className="num col-span-2 text-right text-[1.0625rem] font-semibold tabular-nums">{company.score}</div>
             </Link>
           );
         })}
       </div>
-    </div>
-  );
-}
-
-function CampaignLedger({ rows = campaigns }: Readonly<{ rows?: Campaign[] }>) {
-  const { text } = useLocale();
-  return (
-    <div className="divide-y divide-ink/15 border-y border-ink/15">
-      {rows.map((campaign) => (
-        <Link key={campaign.id} href={`/dashboard/campaigns/${campaign.id}`} className="row grid grid-cols-12 gap-x-6 py-6 transition hover:bg-paper2/60">
-          <div className="ticker col-span-12 md:col-span-4">
-            <h2 className="text-[1.25rem] font-semibold tracking-[-0.02em]">{text(campaign.name)}</h2>
-            <p className="mt-2 max-w-[44ch] text-[15px] leading-6 text-ink/65">{text(campaign.segment)}</p>
-          </div>
-          <div className="kicker col-span-6 mt-4 text-mineral md:col-span-2 md:mt-0">{campaign.geography}</div>
-          <div className="num col-span-2 mt-4 text-[1.0625rem] font-semibold tabular-nums md:mt-0">{campaign.volume}</div>
-          <div className="num col-span-2 mt-4 text-[1.0625rem] font-semibold tabular-nums md:mt-0">{formatPercent(campaign.replyRate)}</div>
-          <div className="num col-span-2 mt-4 text-right text-[1.0625rem] font-semibold tabular-nums md:mt-0">{campaign.meetings}</div>
-        </Link>
-      ))}
     </div>
   );
 }
@@ -121,43 +114,6 @@ function SignalTimeline({ company }: Readonly<{ company: Company }>) {
         </div>
       ))}
     </div>
-  );
-}
-
-/**
- * Body only, no PageShell. The combined overview mounts this next to the support
- * dashboard, and nesting two shells would nest two headers.
- */
-export function DashboardBody() {
-  const latest = analyticsSeries.at(-1);
-  const sent = latest?.sent ?? 0;
-  const replies = latest?.replies ?? 0;
-  return (
-    <>
-      <dl className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <LedgerMetric label="Skickade" value={String(sent)} detail="denna vecka" />
-        <LedgerMetric label="Svar" value={formatPercent(replies / sent)} detail="efter suppression-filter" />
-        <LedgerMetric label="Möten" value="18" detail="sex med expansionssignal" />
-        <LedgerMetric label="Pipeline" value={formatCurrency(842000)} detail="exempeldata" />
-      </dl>
-      <section className="mt-10">
-        <h3 className="mb-4 text-[0.8125rem] font-medium text-ink/45">AI rekommenderar</h3>
-        <CompanyLedger rows={companies.slice(0, 4)} />
-      </section>
-    </>
-  );
-}
-
-export function DashboardView() {
-  return (
-    <PageShell
-      kicker="Arbetsyta"
-      title="Veckans läge"
-      description="Prioriterade bolag, svar och nästa handling."
-      action={<EditorialButton href="/dashboard/assistant">Öppna assistent</EditorialButton>}
-    >
-      <DashboardBody />
-    </PageShell>
   );
 }
 
@@ -198,23 +154,31 @@ export function AssistantView() {
   );
 }
 
-export function LeadsView() {
+/**
+ * Leads-vyns innehåll utan skal, så att startsidan kan montera den bredvid
+ * kundtjänstvyn utan att nästla två PageShell (alltså två headers).
+ *
+ * Discovery-formuläret är det som FAKTISKT startar en körning; bolagsregistret
+ * under är exempeldata tills körningen skrivit riktiga prospekt.
+ */
+export function LeadsBody({ demo = false }: Readonly<{ demo?: boolean }>) {
+  return (
+    <>
+      <Discovery demo={demo} />
+      <div className="mt-12">
+        <CompanyLedger />
+      </div>
+    </>
+  );
+}
+
+export function LeadsView({ demo = false }: Readonly<{ demo?: boolean }>) {
   return (
     <PageShell
-      kicker="Lead discovery"
-      title="Svenska bolag sorterade efter tajming, inte efter mall."
-      description="Filter, sparade sökningar och AI-rekommendationer visas som ett fältblad där varje rad går att revidera."
-      action={<EditorialButton href="/dashboard/assistant">Kör discovery</EditorialButton>}
+      title="Bolag sorterade efter din produkt och ton, inte efter en mall."
+      description="Specificera vilka typer av kunder ni söker. Agenterna letar upp potentiella bolag baserat på dina ord."
     >
-      <div className="mb-12 grid grid-cols-12 gap-x-6 gap-y-4">
-        {["Bygg i Malmö", "Gym i Stockholm", "Fastighet Uppsala", "SaaS med rekrytering"].map((item, index) => (
-          <button key={item} type="button" className="row col-span-12 border-t border-ink/15 pt-4 text-left transition hover:text-ochre md:col-span-3">
-            <span className="kicker text-mineral">Sparad sökning 0{index + 1}</span>
-            <span className="ticker mt-3 block text-[1.0625rem] font-semibold tracking-[-0.01em]">{item}</span>
-          </button>
-        ))}
-      </div>
-      <CompanyLedger />
+      <LeadsBody demo={demo} />
     </PageShell>
   );
 }
@@ -234,12 +198,13 @@ export function CompaniesView() {
 export function CompanyDetailView({ id }: Readonly<{ id: string }>) {
   const { text } = useLocale();
   const company = findCompany(id);
+  const vag = useArbetsvag();
   return (
     <PageShell
       kicker={`${company.industry} · ${company.location}`}
       title={company.name}
       description={text(company.summary)}
-      action={<EditorialButton href="/dashboard/emails">Generera email</EditorialButton>}
+      action={<EditorialButton href={vag("/dashboard/emails")}>Generera email</EditorialButton>}
     >
       <div className="grid grid-cols-12 gap-x-8 gap-y-12">
         <dl className="col-span-12 grid grid-cols-12 gap-x-8 gap-y-8">
@@ -294,8 +259,9 @@ export function ContactsView() {
 
 function ContactRow({ contact }: Readonly<{ contact: Contact }>) {
   const company = findCompany(contact.companyId);
+  const vag = useArbetsvag();
   return (
-    <Link href={`/dashboard/contacts/${contact.id}`} className="row grid grid-cols-12 gap-x-6 py-5 transition hover:bg-paper2/60">
+    <Link href={vag(`/dashboard/contacts/${contact.id}`)} className="row grid grid-cols-12 gap-x-6 py-5 transition hover:bg-paper2/60">
       <div className="ticker col-span-12 md:col-span-4">
         <p className="text-[1.0625rem] font-semibold tracking-[-0.01em]">{contact.fullName}</p>
         <p className="mt-1 text-sm text-ink/55">{contact.email}</p>
@@ -329,48 +295,6 @@ export function ContactDetailView({ id }: Readonly<{ id: string }>) {
           ))}
         </dl>
         <div className="col-span-12 md:col-span-7"><EmailManuscript compact /></div>
-      </div>
-    </PageShell>
-  );
-}
-
-export function CampaignsView() {
-  return (
-    <PageShell kicker="Campaigns" title="Sekvenser som stannar vid svar och lär av signalen." description="Kampanjerna visas som operativa utgåvor: segment, volym, reply rate och mötesutfall.">
-      <CampaignLedger />
-    </PageShell>
-  );
-}
-
-export function CampaignDetailView({ id }: Readonly<{ id: string }>) {
-  const { text } = useLocale();
-  const campaign = findCampaign(id);
-  return (
-    <PageShell kicker={campaign.geography} title={text(campaign.name)} description={text(campaign.segment)} action={<EditorialButton href="/dashboard/emails">Öppna email studio</EditorialButton>}>
-      <div className="grid grid-cols-12 gap-x-8 gap-y-10">
-        <section className="col-span-12 md:col-span-7">
-          <h2 className="kicker text-mineral">Sequence steps</h2>
-          <div className="mt-5 divide-y divide-ink/15 border-y border-ink/15">
-            {campaign.sequence.map((step) => (
-              <div key={`${step.day}-${text(step.label)}`} className="grid grid-cols-12 gap-x-6 py-5">
-                <div className="num col-span-2 text-[1.25rem] font-semibold tabular-nums text-ink/55">D{step.day}</div>
-                <div className="col-span-10">
-                  <p className="text-[1.0625rem] font-semibold tracking-[-0.01em]">{text(step.label)}</p>
-                  <p className="mt-2 text-[15px] leading-6 text-ink/68">{text(step.goal)}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-        <aside className="col-span-12 border-y border-ink/15 py-6 md:col-span-5">
-          <h2 className="kicker text-mineral">Guardrails</h2>
-          <div className="mt-5 space-y-4 text-[16px] leading-7 text-ink/75">
-            <p>Stop on reply är aktiverat.</p>
-            <p>Skickfönster: tisdag till torsdag, 08:30 till 15:20.</p>
-            <p>Suppression kontrolleras före varje queue.</p>
-            <p>Ton: {text(businessContext.tone)}</p>
-          </div>
-        </aside>
       </div>
     </PageShell>
   );
@@ -481,29 +405,39 @@ export function InboxView() {
   );
 }
 
-export function SettingsView({ section = "general" }: Readonly<{ section?: "general" | "mailboxes" | "team" | "billing" | "soul" | "addons" }>) {
-  const titles = {
-    general: "Business context som alla agentmoduler använder.",
-    mailboxes: "Mailboxar och skickhälsa i svensk takt.",
+export function SettingsView({ section = "foretaget" }: Readonly<{ section?: SettingsSectionKey }>) {
+  const titles: Record<SettingsSectionKey, string> = {
+    foretaget: "Företaget",
+    mailboxes: "Inkorgar",
     team: "Teamroller och audit-logik.",
-    billing: "Plan, fakturering och användning.",
+    billing: "Plan och fakturering",
+    affarskontext: "Affärskontext",
+    kunskapsbas: "Kunskapsbas",
+    leads: "Målgrupp och autonomi",
+    regler: "Fack och autosvar",
     soul: "Er röst",
     addons: "Tillägg"
   };
   // Beskrivningen var tidigare EN generisk sträng för alla sektioner. På
   // röstsidan blev den både felaktig (den beskriver inte sektionen) och
-  // olämplig: den räknar upp Supabase Auth och RLS för en KUND, som varken
-  // känner igen orden eller behöver veta vår stack.
-  const descriptions: Record<typeof section, string> = {
-    general: "Inställningarna är ett arbetsblad för Supabase Auth, RLS, teamroller, mailboxes och billing.",
-    mailboxes: "Inställningarna är ett arbetsblad för Supabase Auth, RLS, teamroller, mailboxes och billing.",
-    team: "Inställningarna är ett arbetsblad för Supabase Auth, RLS, teamroller, mailboxes och billing.",
-    billing: "Inställningarna är ett arbetsblad för Supabase Auth, RLS, teamroller, mailboxes och billing.",
-    soul: "Beskriv hur ni låter. Agenten skriver så i era mejl och svar.",
-    addons: "Det agenten kan göra utöver det som ingår i er plan."
+  // olämplig: den räknade upp "Supabase Auth och RLS" för en KUND, som varken
+  // känner igen orden eller behöver veta vår stack. Att stacken sedan byttes
+  // gjorde texten dessutom osann — vilket är själva argumentet mot att skriva
+  // ut infrastruktur i en kundvänd yta.
+  const descriptions: Record<SettingsSectionKey, string> = {
+    foretaget: "Bolaget bakom arbetsytan — namn, organisationsnummer och webbplats.",
+    mailboxes: "Vilka mejladresser agenterna läser och svarar från.",
+    team: "Vilka som har tillgång till arbetsytan, och vad de får göra.",
+    billing: "Vilket paket arbetsytan har, och vad som ingår i det.",
+    affarskontext: "Vad ni säljer och till vem. Båda agenterna läser härifrån.",
+    kunskapsbas: "Dokumenten agenterna svarar ur. Ligger inget här gissar de aldrig — de eskalerar.",
+    leads: "Vilka bolag agenterna ska leta efter, och hur långt de får gå på egen hand.",
+    regler: "Vilka ärenden agenterna får besvara själva, och vilka som alltid går till en människa.",
+    soul: "Beskriv hur ni låter. Agenterna skriver så i både utskick och svar — dokumentet är delat mellan dem.",
+    addons: "Det agenterna kan göra utöver det som ingår i er plan."
   };
   return (
-    <PageShell kicker="Settings" title={titles[section]} description={descriptions[section]}>
+    <PageShell title={titles[section]} description={descriptions[section]}>
       {/* gap-x först från md. grid-cols-12 med gap-x-8 kräver 11 x 32px = 352px
           BARA till mellanrum: vid 320px-vyn (288px container) klampades alla
           tolv kolumner till 0px, och rutnätet blev 352px brett oavsett
@@ -520,61 +454,92 @@ export function SettingsView({ section = "general" }: Readonly<{ section?: "gene
             femte ("Röst") tog den till 334px mot 288px tillgängligt vid
             320px-vyn, och "BILLING" klipptes av body{overflow-x:hidden}
             i stället för att radbrytas. Uppmätt, inte gissat. */}
-        <nav className="kicker col-span-12 flex min-w-0 flex-wrap gap-5 text-mineral md:col-span-3 md:block md:space-y-4">
-          {[
-            ["/settings", "General"],
-            ["/settings/soul", "Röst"],
-            ["/settings/mailboxes", "Mailboxes"],
-            ["/settings/team", "Team"],
-            ["/settings/addons", "Tillägg"],
-            ["/settings/billing", "Billing"]
-          ].map(([href, label]) => <Link key={href} href={href} className="block hover:text-ochre">{label}</Link>)}
-        </nav>
+        {/* SettingsNav och inte en egen lista.
+
+            Här låg tidigare sex hårdkodade Link:ar — oöversatta ("General",
+            "Mailboxes", "Billing"), ogrupperade och utan aktiv-markering — och
+            SAMTIDIGT renderade app/settings/layout.tsx den grupperade
+            SettingsNav i en aside. Två navigationer till samma sex sidor,
+            staplade i samma vy. Uppmätt i skärmdump, inte antaget.
+
+            Grupperingen per agent är hela poängen: "Röst och tonläge" hör till
+            leads-agenten och "Inkorgar" till kundtjänstagenten, och en platt
+            lista tvingar läsaren att veta det innan hen klickar. */}
+        <div className="col-span-12 md:col-span-3">
+          <SettingsNav />
+          {/* Utloggningen bor här och inte i navigationsraden: den hör till
+              kontot, inte till arbetsytan, och /settings är den enda ytan som
+              alltid kräver en session. */}
+          <div className="mt-8 border-t border-ink/15 pt-6">
+            <SignOutButton />
+          </div>
+        </div>
         <div className="col-span-12 md:col-span-9">
-          {section === "general" ? <BusinessContextSettings /> : null}
+          {section === "foretaget" ? <CompanySettings /> : null}
+          {section === "affarskontext" ? <Affarskontext /> : null}
+          {section === "kunskapsbas" ? <KunskapsbasPanel /> : null}
+          {section === "regler" ? <SupportRegler /> : null}
+          {section === "leads" ? <LeadsControls /> : null}
           {section === "soul" ? <SoulEditor /> : null}
-          {section === "mailboxes" ? <MailboxSettings /> : null}
+          {section === "mailboxes" ? <Inkorgar /> : null}
           {section === "team" ? <TeamSettings /> : null}
           {section === "addons" ? <AddonSettings /> : null}
-          {section === "billing" ? <BillingSettings /> : null}
+          {section === "billing" ? <PlanSettings /> : null}
         </div>
       </div>
     </PageShell>
   );
 }
 
-function BusinessContextSettings() {
-  const { text } = useLocale();
+
+/**
+ * Företaget bakom arbetsytan. Uppgifterna kommer från onboardingen och ändras
+ * där — den här sidan visar dem, den äger dem inte. Ett andra formulär mot
+ * samma rad blir två sanningar den dag bara det ena sparas.
+ */
+function CompanySettings() {
+  const { workspaceName, products, isDemo } = useDashboard();
   return (
     <div className="grid gap-5">
-      {[
-        ["Produkt", text(businessContext.product)],
-        ["ICP", text(businessContext.icp)],
-        ["Tonalitet", text(businessContext.tone)],
-        ["Erbjudande", text(businessContext.offer)],
-        ["CTA", text(businessContext.cta)]
-      ].map(([label, value]) => (
-        <label key={label} className="grid grid-cols-12 gap-x-6 border-t border-ink/15 pt-5">
-          <span className="kicker col-span-12 text-mineral md:col-span-3">{label}</span>
-          <textarea className="col-span-12 mt-3 min-h-24 border border-ink/15 bg-paper2/70 p-4 text-[15px] leading-6 outline-none focus:border-ochre md:col-span-9 md:mt-0" defaultValue={value} />
-        </label>
-      ))}
+      <div className="grid grid-cols-12 gap-x-6 border-t border-ink/15 pt-5">
+        <span className="kicker col-span-12 text-mineral md:col-span-3">Arbetsyta</span>
+        <span className="col-span-12 mt-2 text-[15px] md:col-span-9 md:mt-0">
+          {workspaceName ?? "—"}
+          {isDemo ? <span className="ml-2 text-[13px] text-ochre">testarbetsyta</span> : null}
+        </span>
+      </div>
+      <div className="grid grid-cols-12 gap-x-6 border-t border-ink/15 pt-5">
+        <span className="kicker col-span-12 text-mineral md:col-span-3">Paket</span>
+        <span className="col-span-12 mt-2 text-[15px] md:col-span-9 md:mt-0">
+          {products.length === 0
+            ? "—"
+            : products.map((p) => (p === "leads" ? "Leads" : "Kundtjänst")).join(" och ")}
+        </span>
+      </div>
+      <div className="grid grid-cols-12 gap-x-6 border-t border-ink/15 pt-5">
+        <span className="kicker col-span-12 text-mineral md:col-span-3">Bolagsuppgifter</span>
+        <p className="col-span-12 mt-2 max-w-[60ch] text-[15px] leading-7 text-ink/65 md:col-span-9 md:mt-0">
+          Organisationsnummer och webbplats fylldes i vid uppstarten och används av båda
+          agenterna.{" "}
+          <Link href="/onboarding" className="underline underline-offset-4 hover:text-ochre">
+            Ändra dem i uppstartsformuläret
+          </Link>
+          .
+        </p>
+      </div>
     </div>
   );
 }
 
-function MailboxSettings() {
-  return <TextList title="Mailbox health" items={["sales@snajp-demo.se · healthy · 96 skick per dag", "elin@kundbolag.se · warming · 34 skick per dag"]} />;
-}
+// Inkorgar och Plan bor numera i components/settings/. Båda var hårdkodade
+// påhitt i en betalande kunds egna inställningar: två mailadresser som inte
+// fanns, och ett pris (14 900 kr/mån) vi aldrig har tagit. Se docstringarna i
+// respektive fil.
 
 // TeamSettings bor numera i components/settings/TeamSettings.tsx och läser
 // den faktiska arbetsytan. Den gamla versionen här var fyra hårdkodade
 // strängar om roller som aldrig funnits i schemat ('Sales lead', 'Researcher',
 // 'Viewer') — profiles.role har två värden: owner och member.
-
-function BillingSettings() {
-  return <TextList title="Billing" items={["Plan · Team · 14 900 kr/mån", "Leads · 312 av 1000 denna månad", "Seats · 4 av 8 aktiva användare"]} />;
-}
 
 export function LoginView() {
   return (
@@ -605,6 +570,9 @@ export function OnboardingView() {
           <div className="col-span-12 md:col-span-3">
             <Link href="/" className="kicker text-mineral hover:text-ochre">Till startsidan</Link>
             <div className="rule mt-3 text-ink" />
+            <form action={signOut} className="mt-3">
+              <button type="submit" className="kicker text-mineral hover:text-ochre">Logga ut</button>
+            </form>
             <p className="kicker mt-4 text-ink/45">Steg 1 av 4</p>
           </div>
           <div className="col-span-12 mt-8 md:col-span-9 md:mt-0">

@@ -57,3 +57,15 @@ screenshots/cookies-dump.json
 # — runtime state derived from agent_context_docs, regenerated every run.
 snajp-support/var/
 .env*
+
+# Besiktningsbilder från qa_vyer.mjs (BILDER=). Sessionsbevis, inte källkod —
+# ~50 MB per körning och regenereras av ett kommando.
+screenshots/railway-dev/
+
+# Adminytans skärmdumpar. Portföljvyn visar riktiga kundnamn, månadsintäkt och
+# adminens mejladress — CLAUDE.md: inga skärmdumpar med kunddata. Demovyns
+# bilder är däremot påhittad Nordlys-data och får ligga kvar som bevis.
+screenshots/**/*admin*.png
+
+# Käll-hemligheter för scripts/migrera_till_railway.py — aldrig i repot.
+scripts/.kalla.env

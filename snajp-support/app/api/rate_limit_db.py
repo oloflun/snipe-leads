@@ -48,6 +48,8 @@ LLM_CALL = "llm_call"
 #: en flitig människa ska aldrig träffa det.
 TENANT_HOURLY_LLM_CALLS = 400
 USER_HOURLY_LLM_CALLS = 120
+#: Demo-workspace: ett lägre tak så provperioden inte kostar som ett fullt konto.
+DEMO_USER_HOURLY_LLM_CALLS = 20
 
 #: Demons IP-tak. Räknas i SVAR, inte i LLM-anrop — det är ett rent
 #: kostnadstak och värdet (30/h) är oförändrat från den processlokala
@@ -77,14 +79,15 @@ class Scope:
     event_kind: str = LLM_CALL
 
 
-def scopes_for(tenant_id: str | None, user_id: str | None) -> list[Scope]:
+def scopes_for(tenant_id: str | None, user_id: str | None, *, is_demo: bool = False) -> list[Scope]:
     """De tak som gäller för ett inloggat anrop. En saknad användare är inte
     ett fel — den anonyma demon har ingen, och den har sitt eget IP-tak."""
     scopes: list[Scope] = []
     if tenant_id:
         scopes.append(Scope("tenant", tenant_id, TENANT_HOURLY_LLM_CALLS))
     if user_id:
-        scopes.append(Scope("user", user_id, USER_HOURLY_LLM_CALLS))
+        cap = DEMO_USER_HOURLY_LLM_CALLS if is_demo else USER_HOURLY_LLM_CALLS
+        scopes.append(Scope("user", user_id, cap))
     return scopes
 
 

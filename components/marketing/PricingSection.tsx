@@ -8,9 +8,12 @@ import {
   EXTRA_PROSPEKT_PRIS,
   PAKET,
   PRISER_AR_PRELIMINARA,
+  PRIS_PREFIX,
   UPPSTARTSAVGIFT,
+  duoBesparingPerManad,
   formateraPris
 } from "@/lib/pricing";
+import { mejlaOss } from "@/components/marketing/copy";
 import { cn } from "@/lib/utils";
 
 /**
@@ -27,8 +30,8 @@ import { cn } from "@/lib/utils";
 const copy = {
   kicker: { sv: "Priser", en: "Pricing" },
   rubrik: {
-    sv: "Tre paket. Inga dolda avgifter.",
-    en: "Three packages. No hidden fees."
+    sv: "Tre paket.",
+    en: "Three packages."
   },
   lede: {
     sv: "Månadsavgift per arbetsyta. Uppstarten är engångs och täcker kunskapsbas och konfiguration.",
@@ -56,8 +59,8 @@ const copy = {
     en: "Not sure which package fits?"
   },
   ctaBody: {
-    sv: "Beskriv verksamheten så säger vi vad som är rimligt. Vi säljer hellre rätt paket än det dyraste.",
-    en: "Tell us about your business and we will say what makes sense. We would rather sell the right package than the most expensive one."
+    sv: "Beskriv er verksamhet så hjälper vi er med ett skräddarsytt paket.",
+    en: "Tell us about your business and we will put together a package that fits."
   },
   ctaKnapp: { sv: "Hör av dig", en: "Get in touch" }
 } satisfies Record<string, Localized>;
@@ -105,15 +108,21 @@ export function PricingSection() {
                 {text(paket.beskrivning)}
               </p>
 
+              {/* "från" före beloppet: paketpriserna är ingångspriser och
+                  sätts efter volym. Ordet kommer ur pricing.ts, så prislistans
+                  tre kort och raden under dem säger samma sak. */}
               <p className="mt-6 flex items-baseline gap-1.5">
+                <span className="text-[0.9375rem] text-mineral">{text(PRIS_PREFIX)}</span>
                 <span className="font-display text-[2.5rem] font-semibold leading-none tracking-[-0.03em]">
                   {formateraPris(paket.prisPerManad)}
                 </span>
                 <span className="text-[0.9375rem] text-mineral">{text(copy.perManad)}</span>
               </p>
 
-              {paket.notis ? (
-                <p className="mt-2 text-[0.875rem] font-medium text-moss">{text(paket.notis)}</p>
+              {paket.notisMall ? (
+                <p className="mt-2 text-[0.875rem] font-medium text-moss">
+                  {text(paket.notisMall).replace("{belopp}", formateraPris(duoBesparingPerManad()))}
+                </p>
               ) : (
                 <p className="mt-2 text-[0.875rem] text-transparent" aria-hidden="true">
                   &nbsp;
@@ -141,9 +150,9 @@ export function PricingSection() {
             glömma uppdatera. */}
         <dl className="mt-8 grid gap-px overflow-hidden rounded-input border border-ink/12 bg-ink/12 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            { term: formateraPris(UPPSTARTSAVGIFT), desc: text(copy.uppstart) },
-            { term: formateraPris(EXTRA_PROSPEKT_PRIS), desc: text(copy.extraProspekt) },
-            { term: formateraPris(EXTRA_MEJL_PRIS), desc: text(copy.extraMejl) },
+            { term: `${text(PRIS_PREFIX)} ${formateraPris(UPPSTARTSAVGIFT)}`, desc: text(copy.uppstart) },
+            { term: `${text(PRIS_PREFIX)} ${formateraPris(EXTRA_PROSPEKT_PRIS)}`, desc: text(copy.extraProspekt) },
+            { term: `${text(PRIS_PREFIX)} ${formateraPris(EXTRA_MEJL_PRIS)}`, desc: text(copy.extraMejl) },
             { term: `${BINDNINGSTID_MANADER} mån`, desc: text(copy.bindning) }
           ].map((rad) => (
             <div key={rad.desc} className="bg-paper px-5 py-4">
@@ -171,7 +180,7 @@ export function PricingSection() {
             </p>
           </div>
           <a
-            href="mailto:hej@snajp.se?subject=Fr%C3%A5ga%20om%20priser"
+            href={mejlaOss("Fråga om priser")}
             className="focus-ring inline-flex min-h-12 shrink-0 items-center justify-center rounded-input bg-ink px-7 text-[0.9375rem] font-semibold text-paper transition-colors hover:bg-ink2"
           >
             {text(copy.ctaKnapp)}

@@ -1,6 +1,7 @@
 import "server-only";
 
-import { createClient } from "@/lib/supabase/server";
+import { cache } from "react";
+import { sqlAsUser } from "@/lib/db";
 import { getWorkspaceContext } from "@/lib/workspace";
 
 /**
@@ -17,26 +18,24 @@ import { getWorkspaceContext } from "@/lib/workspace";
  */
 
 export async function isPlatformAdmin(userId: string): Promise<boolean> {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("platform_admins")
-    .select("user_id")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (error) {
+  try {
+    const rows = await sqlAsUser<{ user_id: string }>(
+      userId,
+      "select user_id from public.platform_admins where user_id = $1",
+      [userId]
+    );
+    return rows.length > 0;
+  } catch (error) {
     // Fail-closed. Ett uppslag som inte gick att göra betyder INTE admin —
     // motsatt val hade gjort ett databasavbrott till en behörighetshöjning.
-    console.error("isPlatformAdmin:", error.message);
+    console.error("isPlatformAdmin:", (error as Error).message);
     return false;
   }
-
-  return Boolean(data);
 }
 
 export type PlatformAdmin = {
   userId: string;
-  email: string | undefined;
+  email: string | null;
 };
 
 /**
@@ -44,7 +43,7 @@ export type PlatformAdmin = {
  * betyder — `/admin/layout.tsx` svarar 404, inte 403, eftersom ett 403 bekräftar
  * att ytan finns.
  */
-export async function getPlatformAdmin(): Promise<PlatformAdmin | null> {
+export const getPlatformAdmin = cache(async function getPlatformAdmin(): Promise<PlatformAdmin | null> {
   const context = await getWorkspaceContext();
   if (!context) {
     return null;
@@ -53,4 +52,4 @@ export async function getPlatformAdmin(): Promise<PlatformAdmin | null> {
     return null;
   }
   return { userId: context.user.id, email: context.user.email };
-}
+});

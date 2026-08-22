@@ -199,9 +199,17 @@ class Storage(Protocol):
         tokens_in: int,
         tokens_out: int,
         latency_ms: int,
+        is_test: bool = False,
     ) -> dict[str, Any]:
         """Skrivs för VARJE körning. Krävs för DSAR och för att kunna felsöka
-        ett dåligt svar i efterhand (plan G10)."""
+        ett dåligt svar i efterhand (plan G10).
+
+        `is_test` märker körningar startade från adminytans testyta. De skrivs
+        som alla andra men får aldrig räknas som kundvolym — se migration 036.
+        Parametern står i PROTOKOLLET och inte bara i Postgres-implementationen,
+        eftersom en signatur som skiljer sig mellan lagren är exakt hur
+        agent_runs kunde avvisa varje leads-körning i ett halvår med grön
+        testsvit."""
         ...
 
     async def list_agent_runs(
@@ -260,6 +268,8 @@ class Storage(Protocol):
         company_name: str,
         contact_name: str | None = None,
         contact_email: str | None = None,
+        origin: str = "manual",
+        profil: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Ingången till hela leads-pipelinen. Utan den här fanns inget sätt
         att skapa ett prospekt alls — research/outreach kunde aldrig köras."""
@@ -320,6 +330,30 @@ class Storage(Protocol):
         received_at: str | None = None,
     ) -> dict[str, Any] | None:
         """Sparar ett inkommande mail. Returnerar None vid dublett (dedupe)."""
+        ...
+
+    async def delete_emails_by_provider(self, tenant_id: str, provider: str) -> int:
+        """Tar bort tenantens mail från EN provider. Returnerar antalet.
+
+        Finns för "Hämta testmail", som ska BYTA UT demoinkorgen och inte fylla
+        på den. Avgränsningen till provider är spärren: ett anrop kan aldrig
+        träffa riktiga mail från IMAP eller API-ingesten, hur det än anropas.
+        """
+        ...
+
+    async def delete_mock_emails(self, tenant_id: str, *, category: str | None = None) -> int:
+        """Tar bort testmail, valfritt bara ur ETT fack.
+
+        Provider är hårdkodad till "mock" och inte en parameter: det är samma
+        spärr som i `delete_emails_by_provider`, fast omöjlig att kringgå av en
+        anropare som skickar fel sträng. Ett anrop kan aldrig träffa riktiga
+        mail från IMAP eller API-ingesten.
+
+        `category` läses ur den SENASTE klassificeringen. Ett mail som ännu
+        inte hunnit klassificeras hör inte till något fack och rensas därför
+        bara av det ofiltrerade anropet — annars hade "Uppdatera" i ett fack
+        kunnat radera ärenden som just höll på att processas i ett annat.
+        """
         ...
 
     async def list_emails(
@@ -467,7 +501,13 @@ class Storage(Protocol):
 
     async def list_tenants_with_stats(self) -> list[dict[str, Any]]:
         """Alla tenants med nyckeltal: ärenden, körningar, tokens, senaste
-        aktivitet."""
+        aktivitet.
+
+        `runs` räknar KUNDVOLYM, alltså inte rader med `is_test`. `test_runs`
+        redovisar våra egna provkörningar separat — de göms inte, de räknas bara
+        inte som något kunden gjort. Tokens räknar båda: en provkörning kostar
+        lika mycket som en riktig.
+        """
         ...
 
     async def list_agent_runs_all(

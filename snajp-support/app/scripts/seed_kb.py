@@ -68,6 +68,63 @@ async def ensure_public_demo_kb(storage, *, embeddings: list[list[float] | None]
     return len(DEMO_KB_ARTICLES)
 
 
+async def ensure_tenant_kb(storage, tenant_id: str) -> int:
+    """Seedar EN TESTTENANTS kunskapsbas med grundartiklarna om den är tom.
+
+    Skillnaden mot `seed_tenant` är att den här utgår från ett tenant-ID i
+    stället för en slug ur configregistret. Den finns för tenants som skapas i
+    DRIFT och därför inte har någon configfil — testarbetsytorna är det
+    första fallet, och tills vidare det enda.
+
+    **Anropas bara för testarbetsytor**, från `POST /api/keys` när sluggen
+    börjar på `testkund-` och från `POST /api/inbox/mock` bakom
+    `X-Snajp-Demo`. Artiklarna är Nordlys Handels, alltså ett annat bolags
+    villkor; i en riktig kunds bas är de fel svar presenterade som kundens egna.
+    Riktiga kunder seedas ur sin egen modul i `app/tenants/` via `seed_tenant`.
+
+    En leads-only-kund behöver ingen kunskapsbas alls: leads-agentens grundning
+    läser `agent_context_docs` (SOUL och `product_marketing`), inte
+    `ss_knowledge_base`. En tom bas där är alltså inte ett fel att laga.
+
+    Utan den möter varje ny arbetsyta samma sak: grundningsregeln
+    (`processor.py` steg 2) kräver minst en KB-träff, en tom bas ger noll
+    träffar, och följden är att agenten eskalerar allt. Det ser ut som en
+    trasig produkt och är i själva verket en tom hylla.
+
+    Idempotent, men per ARTIKEL och inte per bas. Villkoret var tidigare "har
+    tenanten några artiklar alls, gör ingenting", och följden syntes när basen
+    fylldes på: testarbetsytor som seedats en gång fick aldrig de nya
+    artiklarna. Facken garanti, utbildning och orderstatus hade en artikel var,
+    grundningsregeln (`processor.py` steg 2) styrde därför ärendena till fack
+    med täckning, och två inkorgar stod tomma i demon medan koden såg rätt ut.
+
+    Jämförelsen görs på rubrik. Det är rätt nivå här: artiklarna är VÅRA för en
+    testarbetsyta, och en rubrik som saknas är en artikel som aldrig lagts in.
+    För en riktig kund körs den här funktionen aldrig (se ovan), så en kund som
+    medvetet raderat en artikel får den inte tillbaka av oss.
+
+    Returnerar antalet nya artiklar.
+    """
+    befintliga = {
+        (artikel.get("title") or "").strip().lower()
+        for artikel in await storage.list_kb(tenant_id)
+    }
+
+    tillagda = 0
+    for article in KB_ARTICLES:
+        if article["title"].strip().lower() in befintliga:
+            continue
+        await storage.add_kb_article(
+            tenant_id,
+            title=article["title"],
+            content=article["content"],
+            category=article["category"],
+            embedding=None,
+        )
+        tillagda += 1
+    return tillagda
+
+
 async def seed_tenant(storage, tenant_slug: str, *, embeddings=None) -> int:
     """Seedar en kunds kunskapsbas. Returnerar antal nya artiklar.
 

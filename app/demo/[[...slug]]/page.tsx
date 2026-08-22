@@ -2,14 +2,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageShell } from "@/components/AppShell";
 import { DashboardProvider } from "@/components/dashboard/DashboardContext";
-import { Overview } from "@/components/dashboard/Overview";
+import { StartView } from "@/components/dashboard/StartView";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { Dashboard as SupportDashboard } from "@/components/snajp/Dashboard";
 import { LeadsControls } from "@/components/leads/LeadsControls";
+import { SupportRegler } from "@/components/settings/SupportRegler";
 import {
   AnalyticsView,
   AssistantView,
-  CampaignsView,
   CompaniesView,
   ContactsView,
   InboxView,
@@ -57,9 +57,11 @@ export const metadata = {
 const DEMO_STATE = {
   // Demon är aldrig plattformsadmin: den ytan visar ALLA kunders siffror.
   isPlatformAdmin: false,
+  vy: "admin" as const,
+  initialScope: "both" as const,
+  isDemo: false,
   products: ["leads", "support"] as const,
   addons: [],
-  variant: "demo" as const,
   workspaceName: "Demo AB",
   // Styr om vyerna erbjuder åtgärder som kräver session. En demo som låtsas
   // vara inloggad visar knappar som inte kan göra något.
@@ -70,13 +72,13 @@ const SEKTIONER = [
   ["", "Översikt"],
   ["leads", "Leads"],
   ["emails", "Email studio"],
-  ["campaigns", "Kampanjer"],
   ["companies", "Företag"],
   ["contacts", "Kontakter"],
   ["inbox", "Svar"],
   ["analytics", "Analys"],
   ["assistant", "Assistant"],
   ["kontroll", "Leads-kontroll"],
+  ["regler", "Regler"],
   ["support", "Kundtjänst"]
 ] as const;
 
@@ -142,13 +144,11 @@ export default async function Page({
 function renderSektion(sektion: string | undefined): React.ReactNode | null {
   switch (sektion) {
     case undefined:
-      return <Overview />;
+      return <StartView demo />;
     case "leads":
-      return <LeadsView />;
+      return <LeadsView demo />;
     case "emails":
       return <EmailStudioDemo />;
-    case "campaigns":
-      return <CampaignsView />;
     case "companies":
       return <CompaniesView />;
     case "contacts":
@@ -161,11 +161,25 @@ function renderSektion(sektion: string | undefined): React.ReactNode | null {
       return <AssistantView />;
     case "kontroll":
       return <LeadsControls demo />;
+    case "regler":
+      return <ReglerDemo />;
     case "support":
       return <SupportDashboard demo />;
     default:
       return null;
   }
+}
+
+function ReglerDemo() {
+  return (
+    <PageShell
+      kicker="Kundtjänst"
+      title="Fack och autosvar"
+      description="Vilka ärenden agenterna får besvara själva, och vilka som alltid går till en människa. Ändringarna sparas inte i demon."
+    >
+      <SupportRegler demo />
+    </PageShell>
+  );
 }
 
 function EmailStudioDemo() {

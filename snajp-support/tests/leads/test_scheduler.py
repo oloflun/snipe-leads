@@ -323,3 +323,63 @@ async def test_avregistrering_ar_idempotent():
     await storage.add_suppression(TENANT, email="a@b.se", reason="första")
     await storage.add_suppression(TENANT, email="A@B.se", reason="andra")
     assert await storage.list_suppressions(TENANT) == {"a@b.se"}
+
+
+@pytest.mark.anyio
+async def test_exempelbolag_kan_aldrig_mejlas_sparr_noll():
+    """Spärr noll: ett påhittat bolag lämnar aldrig huset.
+
+    Kontrollen sitter i sändningsvägen och inte i UI:t, av samma skäl som de
+    sex reglerna gör det — det här är den enda punkt varje utskick måste
+    passera. Ett påhittat bolagsnamn kan råka vara ett RIKTIGT bolag; då är
+    mejlet inte ofarligt, det är fel mottagare.
+
+    Allt annat i den här körningen är godkänt: rätt fönster, godkänd brödtext,
+    autonominivå som tillåter utskick. Det är avsiktligt — faller det ändå är
+    det ursprungsmarkeringen som fällde det, ingenting annat.
+    """
+    storage = MemoryStorage()
+    item_id, thread_id, message_id = _seed(storage, scheduled_at=WITHIN_WINDOW_UTC)
+    provider = _FakeSendProvider()
+
+    exempel = await storage.create_prospect(
+        TENANT, company_name="Nordvik Bygg AB", origin="example"
+    )
+    storage.outreach_threads[TENANT][thread_id]["prospect_id"] = exempel["id"]
+
+    outcome = await process_due_item(
+        storage, TENANT, {"id": item_id, "thread_id": thread_id}, provider, now=WITHIN_WINDOW_UTC
+    )
+
+    assert outcome == "blocked"
+    assert provider.sent == []
+    queue_item = next(i for i in storage.send_queue[TENANT] if i["id"] == item_id)
+    assert queue_item["status"] == "blocked"
+    assert "exempelbolag" in str(queue_item["gate_checks"]).lower()
+    # Meddelandet får inte heller märkas som skickat — en 'sent_at' på ett
+    # blockerat utskick hade fått historiken att räkna det som levererat.
+    message = next(m for m in storage.outreach_messages[TENANT] if m["id"] == message_id)
+    assert message["sent_at"] is None
+
+
+@pytest.mark.anyio
+async def test_riktigt_prospekt_pa_samma_trad_skickas():
+    """Kontrollen ovan får inte vara en spärr som stoppar allt.
+
+    Samma tråd, samma text, samma klocka — enda skillnaden är att prospektet
+    är `origin='manual'`. Utan det här testet hade en spärr som blockerar
+    varenda utskick sett lika grön ut som en som blockerar rätt.
+    """
+    storage = MemoryStorage()
+    item_id, thread_id, _ = _seed(storage, scheduled_at=WITHIN_WINDOW_UTC)
+    provider = _FakeSendProvider()
+
+    riktigt = await storage.create_prospect(TENANT, company_name="Riktiga Bolaget AB")
+    storage.outreach_threads[TENANT][thread_id]["prospect_id"] = riktigt["id"]
+
+    outcome = await process_due_item(
+        storage, TENANT, {"id": item_id, "thread_id": thread_id}, provider, now=WITHIN_WINDOW_UTC
+    )
+
+    assert outcome == "sent"
+    assert len(provider.sent) == 1

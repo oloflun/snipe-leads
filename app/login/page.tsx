@@ -10,7 +10,7 @@ export default function Page() {
 }
 
 /**
- * Per Snajp Prompt: Användare kan skapa konto enbart med email (magic link recommended).
- * Omedelbar tillgång till Email Studio efter registrering utan tung verifikation i första steget.
- * Magic link defaultar till /emails för direkt test av Kortare / Skriv om m.fl.
+ * Inloggning med lösenord eller SSO, kontoskapande, och demo-åtkomst där
+ * besökaren lämnar sin mejl och får en åtkomstlänk. Ingen auto-inloggning
+ * och ingen magic link.
  */

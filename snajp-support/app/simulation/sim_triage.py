@@ -79,8 +79,28 @@ _CATEGORY_PATTERNS: list[tuple[str, re.Pattern]] = [
     # landar hos en människa oavsett fack.
 ]
 
+# Två av de ursprungliga orden saknade ordgräns och matchade därför inuti andra
+# ord. Uppmätt 2026-08-21 på ett vanligt leveransmejl:
+#
+#   "Levererar ni till ombud? Jag är sällan hemma på dagarna."
+#
+# eskalerades som juridiskt hot, eftersom "dag-ARN-a" innehåller bokstäverna
+# i ARN. Samma fälla: barn, garn, varning, Arnholm, hamnarna, dagarna.
+#
+# "stäm" var värre än så: det matchar "stämmer", och "det stämmer inte" är en
+# av de vanligaste formuleringarna i ett supportärende — alltså MOTSATSEN till
+# att stämma någon. Ett kundmejl som påpekar ett fel i en faktura lämnades
+# därför till en människa som ett hot om rättsprocess.
+#
+# Riktningen på felet döljer det: en falsk eskalering ser ut som försiktighet,
+# och ingen felanmäler att agenten var för artig. Följden syns bara som att
+# demoinkorgen är röd och att kundtjänsten får ärenden agenten kunde svarat på.
+#
+# `\b` runt ARN, och "stäm" ersatt av de former som faktiskt betyder rättsprocess.
 _ESCALATION_PATTERN = re.compile(
-    r"återbetal|pengarna tillbaka|pengar tillbaka|kompensation|ersättning|jurist|advokat|arn|konsumentverket|anmäl|stäm|juridisk|radera (mitt )?konto|gdpr",
+    r"återbetal|pengarna tillbaka|pengar tillbaka|kompensation|ersättning|jurist|advokat"
+    r"|\barn\b|konsumentverket|anmäl|stämning|stämma er|stämmer er"
+    r"|juridisk|radera (mitt )?konto|gdpr",
     re.IGNORECASE,
 )
 
