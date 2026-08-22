@@ -426,3 +426,35 @@ button {
     max-width: 100%;
   }
 }
+
+/* -- Säkerhetszoner på iOS (notch och home indicator) ----------------------
+ *
+ * Aktiveras av `viewportFit: "cover"` i app/layout.tsx. Utan den exporten är
+ * varje `env(safe-area-inset-*)` noll, och reglerna nedan är tysta no-ops —
+ * vilket är exakt hur de här marginalerna brukar sluta se ut som att de
+ * "inte gör något". De två hör ihop; tas den ena bort ska den andra också bort.
+ *
+ * `max()` och inte bara insetet: på en enhet UTAN notch är insetet 0, och en
+ * ren `padding-top: env(...)` hade tagit bort sidhuvudets vanliga luft.
+ */
+
+.safe-top {
+  padding-top: max(env(safe-area-inset-top), 0px);
+}
+
+.safe-bottom {
+  padding-bottom: max(env(safe-area-inset-bottom), 0px);
+}
+
+/* Sidled gäller i liggande läge, där notchen äter en av kanterna. Ligger på
+   body och inte på varje container: alternativet är att komma ihåg det i tjugo
+   vyer, och den vy som glöms är den som ser trasig ut. */
+body {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* Flytande element vid nederkanten hamnar annars under home-indikatorn. */
+.fixed.bottom-5 {
+  bottom: max(1.25rem, env(safe-area-inset-bottom));
+}
