@@ -1,6 +1,6 @@
 import { getPlatformAdmin } from "@/lib/auth/admin";
 import { getWorkspaceContext } from "@/lib/workspace";
-import { hasDatabase } from "@/lib/db";
+import { hasDatabase, sqlAsUser } from "@/lib/db";
 import { SCOPE_COOKIE, isProductKey, type ProductKey, type Scope } from "@/lib/routes";
 import { isAddonKey, type AddonKey } from "@/lib/addons";
 import { DEMO_ARBETSYTA, aktivVy, type Vy } from "@/lib/vy";
@@ -45,6 +45,14 @@ export type DashboardState = {
    */
   vy: Vy;
   /**
+   * Vilken kund plattformsadminen tittar som, när `vy` är "kund".
+   *
+   * Bärs som eget fält och inte bara som `workspaceName`, eftersom bannern
+   * måste kunna skilja "det här ÄR min arbetsyta" från "det här är någon
+   * annans". Null i alla andra lägen.
+   */
+  impersonation: { slug: string; namn: string } | null;
+  /**
    * Läget vid första renderingen — Duo, bara Leads eller bara Support.
    *
    * Avgörs på servern ur cookien så att `/settings/*` kan grinda på det, och
@@ -69,6 +77,7 @@ const ANONYMOUS: DashboardState = {
   isDemo: false,
   isPlatformAdmin: false,
   vy: "admin",
+  impersonation: null,
   initialScope: "both"
 };
 
@@ -107,13 +116,43 @@ export async function resolveDashboardState(): Promise<DashboardState> {
   // ANONYMOUS ovan behåller sin öppna lista: den är marknadsföringsdemon och
   // innehåller ingen kunddata alls.
   const products = (context.workspace.products ?? []).filter(isProductKey);
-  const vy = await aktivVy();
+  const lage = await aktivVy();
+  const vy = lage.vy;
+
+  /**
+   * Kundbesök: adminen tittar i en NAMNGIVEN kunds arbetsyta.
+   *
+   * Namnet hämtas ur kundens egen rad, inte ur adminens, av samma skäl som
+   * demogrenen nedan — och dessutom för att bannern ska kunna säga vems data
+   * som visas. Kan namnet inte slås upp faller vi tillbaka på sluggen i
+   * stället för att visa adminens eget bolagsnamn: fel namn i en gul banner
+   * är värre än ett tekniskt.
+   */
+  if (lage.vy === "kund") {
+    const rader = await sqlAsUser<{ name: string | null; products: string[] | null }>(
+      context.user.id,
+      "select name, products from public.workspaces where slug = $1",
+      [lage.slug]
+    ).catch(() => []);
+
+    return {
+      products: (rader[0]?.products ?? ALL_PRODUCTS).filter(isProductKey),
+      addons: [],
+      workspaceName: rader[0]?.name ?? lage.slug,
+      signedIn: true,
+      isDemo: false,
+      isPlatformAdmin: true,
+      vy,
+      impersonation: { slug: lage.slug, namn: rader[0]?.name ?? lage.slug },
+      initialScope: await scopeFranCookie(ALL_PRODUCTS)
+    };
+  }
 
   // Demovyn ska se ut som demokontots egen inloggning, inte som adminens
   // arbetsyta med annan data i. Namnet i huvudet och produktlistan kommer
   // därför från demokontot — arbetsytans egna värden vore fel bolag och,
   // om arbetsytan bara hade en produkt, fel meny.
-  if (vy === "demo") {
+  if (lage.vy === "demo") {
     return {
       products: ALL_PRODUCTS,
       addons: [],
@@ -125,6 +164,8 @@ export async function resolveDashboardState(): Promise<DashboardState> {
       isDemo: false,
       isPlatformAdmin: true,
       vy,
+      // Demokontot är inte en kund. Ingen gul banner — se lib/vy.ts.
+      impersonation: null,
       initialScope: await scopeFranCookie(ALL_PRODUCTS)
     };
   }
@@ -137,6 +178,7 @@ export async function resolveDashboardState(): Promise<DashboardState> {
     isDemo: context.workspace.is_demo,
     isPlatformAdmin: Boolean(await getPlatformAdmin()),
     vy,
+    impersonation: null,
     initialScope: await scopeFranCookie(products)
   };
 }

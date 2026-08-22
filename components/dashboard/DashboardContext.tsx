@@ -24,6 +24,7 @@ const FALLBACK: DashboardState = {
   isDemo: false,
   isPlatformAdmin: false,
   vy: "admin" as const,
+  impersonation: null,
   initialScope: "both" as const
 };
 

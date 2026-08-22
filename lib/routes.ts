@@ -148,9 +148,9 @@ export type SettingsRoute = {
   /** Saknas = delad. Annars renderas posten bara för den produkten. */
   product?: ProductKey;
   /**
-   * Döljs i demovyn. Gäller idag bara Team, och skälet är konkret: sidan listar
-   * arbetsytans riktiga medlemsadresser, alltså Snajps egna, och demovyn visas
-   * för utomstående.
+   * Döljs i demovyn OCH i kundläge. Gäller idag bara Team, och skälet är
+   * konkret: sidan listar arbetsytans riktiga medlemsadresser, alltså Snajps
+   * egna, och demovyn visas för utomstående.
    */
   doldIDemo?: boolean;
 };
@@ -221,7 +221,7 @@ export function settingsGroupsForProducts(
   products: readonly ProductKey[],
   options: {
     visar?: (product: ProductKey) => boolean;
-    vy?: "admin" | "demo";
+    vy?: "admin" | "demo" | "kund";
   } = {}
 ): SettingsGroup[] {
   const { visar, vy } = options;
@@ -229,7 +229,11 @@ export function settingsGroupsForProducts(
     .map((group) => ({
       ...group,
       routes: group.routes.filter((route) => {
-        if (route.doldIDemo && vy === "demo") return false;
+        // Även i kundläge. Posten döljs för att den listar VÅR arbetsytas
+        // medlemsadresser, och en admin som tittar hos en kund tittar just då
+        // inte på sin egen arbetsyta — raden hade alltså visat fel bolags
+        // adresser i fel sammanhang.
+        if (route.doldIDemo && vy !== "admin") return false;
         if (!route.product) return true;
         if (!products.includes(route.product)) return false;
         return visar ? visar(route.product) : true;

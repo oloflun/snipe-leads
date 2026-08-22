@@ -58,6 +58,7 @@ const DEMO_STATE = {
   // Demon är aldrig plattformsadmin: den ytan visar ALLA kunders siffror.
   isPlatformAdmin: false,
   vy: "admin" as const,
+  impersonation: null,
   initialScope: "both" as const,
   isDemo: false,
   products: ["leads", "support"] as const,

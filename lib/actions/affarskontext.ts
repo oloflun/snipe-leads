@@ -117,7 +117,7 @@ async function hamtaFranAgenten(): Promise<Affarskontextfalt | null> {
 }
 
 export async function hamtaAffarskontext(): Promise<Affarskontextfalt | null> {
-  if ((await aktivVy()) === "demo") {
+  if ((await aktivVy()).vy === "demo") {
     return hamtaFranAgenten();
   }
 
@@ -157,7 +157,7 @@ export async function sparaAffarskontext(
 
   // Demovyn: bara till agenten. Ett misslyckande är då ett riktigt fel — det
   // finns ingen rad i arbetsytan som räddar texten om backenden inte svarar.
-  if ((await aktivVy()) === "demo") {
+  if ((await aktivVy()).vy === "demo") {
     const varning = await skickaTillAgenten(input, produkt);
     return varning ? { success: false, error: varning } : { success: true };
   }

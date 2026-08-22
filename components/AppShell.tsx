@@ -8,6 +8,7 @@ import { Logo } from "@/components/Logo";
 import { AgentMenu } from "@/components/snajp/AgentMenu";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { signOut } from "@/lib/actions/auth";
+import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 import { VyVaxel } from "@/components/VyVaxel";
 import { useLocale } from "@/lib/i18n";
 import { produktForInstallningsvag, routesForProducts, tillAdminvag } from "@/lib/routes";
@@ -177,7 +178,10 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
 
   return (
     <div className="min-h-screen bg-paper text-ink">
-      <header className="sticky top-0 z-30 bg-paper/85 backdrop-blur-xl">
+      {/* Före headern i DOM och med högre z-index: bannern ska ligga ÖVER det
+          klistrade sidhuvudet, inte försvinna bakom det vid scroll. */}
+      <ImpersonationBanner />
+      <header className="safe-top sticky top-0 z-30 bg-paper/85 backdrop-blur-xl">
         {/* Tre kolumner: logotyp, flikar, kontroller.
 
             Ordningen sätts EXPLICIT från md och uppåt (order-1/2/3). I DOM

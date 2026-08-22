@@ -84,7 +84,63 @@ export async function requireSnajpTenant(): Promise<SnajpTenant> {
    * miljön (se app/api/snajp-support/_lib.ts) och står kvar som reserv för att
    * en saknad variabel annars gör demovyn oöppningsbar utan att säga varför.
    */
-  if ((await aktivVy()) === "demo") {
+  const lage = await aktivVy();
+
+  /**
+   * Kundbesök — plattformsadmin i en NAMNGIVEN kunds arbetsyta.
+   *
+   * Ligger före demogrenen och före arbetsytans egen slug, av samma skäl som
+   * demogrenen låg först: i ett besök ska ingen del av adminens EGEN tenant
+   * kunna nås, inte heller om något är felkonfigurerat.
+   *
+   * Tre lås, och inget av dem räcker ensamt:
+   *
+   *  1. `aktivVy()` slår upp `platform_admins` och failar stängt. En cookie
+   *     från någon som inte är admin betyder ingenting.
+   *  2. Nyckeln hämtas genom `tenant_api_key_for_admin()` (migration 042), som
+   *     gör OM samma kontroll i databasen. Funktionen tar en parameter och vore
+   *     annars en uppslagsbok över alla kunders nycklar — därför sitter
+   *     villkoret i funktionskroppen, inte hos anroparen.
+   *  3. Kunder med configfil har sin nyckel i en miljövariabel och ingen rad i
+   *     `workspace_tenant_keys`. Den vägen tas nedan, och den kan bara nå en
+   *     slug som faktiskt finns i registret.
+   *
+   * Vad som INTE görs här: ingen skrivrättighet dras in. Läsläget är i dag en
+   * överenskommelse i UI:t (bannern) och inte en teknisk spärr — se HANDOFF.
+   */
+  if (lage.vy === "kund") {
+    const tenant = getTenant(lage.slug);
+
+    const apiKey = tenant?.perWorkspaceKey === false && tenant?.supportKeyEnv
+      ? process.env[tenant.supportKeyEnv]
+      : ((
+          await sqlAsUser<{ nyckel: string | null }>(
+            user.id,
+            "select public.tenant_api_key_for_admin($1) as nyckel",
+            [lage.slug]
+          )
+        )[0]?.nyckel ?? (tenant?.supportKeyEnv ? process.env[tenant.supportKeyEnv] : undefined));
+
+    if (!apiKey) {
+      throw new SnajpTenantError(
+        409,
+        `Ingen backend-nyckel för "${lage.slug}". Kunden har varken en rad i ` +
+          "workspace_tenant_keys eller en satt miljövariabel — se TENANTS.md steg 4."
+      );
+    }
+
+    return {
+      workspaceId: workspace.id,
+      slug: lage.slug,
+      apiKey,
+      userId: user.id,
+      // Ett kundbesök ska inte köra med sänkt löptak: det är kundens riktiga
+      // trafik som granskas, och en strypt körning svarar på fel fråga.
+      isDemo: false
+    };
+  }
+
+  if (lage.vy === "demo") {
     const apiKey = process.env.SNAJP_DEMO_API_KEY || process.env.SNAJP_INTERNAL_API_KEY;
     if (!apiKey) {
       throw new SnajpTenantError(

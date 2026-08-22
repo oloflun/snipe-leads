@@ -1,3 +1,4 @@
+import { OppnaArbetsyta } from "@/components/admin/OppnaArbetsyta";
 import { listTenants, unwrap } from "@/lib/data/admin";
 
 export const dynamic = "force-dynamic";
@@ -62,7 +63,10 @@ export default async function Page() {
                 <th className="py-3 pr-6 text-right font-medium text-mineral">Ärenden</th>
                 <th className="py-3 pr-6 text-right font-medium text-mineral">Körningar</th>
                 <th className="py-3 pr-6 text-right font-medium text-mineral">Fel</th>
-                <th className="py-3 text-right font-medium text-mineral">Senast aktiv</th>
+                <th className="py-3 pr-6 text-right font-medium text-mineral">Senast aktiv</th>
+                <th className="py-3 text-right font-medium text-mineral">
+                  <span className="sr-only">Öppna arbetsytan</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -77,8 +81,11 @@ export default async function Page() {
                   <td className="py-3 pr-6 text-right tabular-nums">
                     {kund.errors > 0 ? <span className="text-danger">{kund.errors}</span> : "0"}
                   </td>
-                  <td className="py-3 text-right tabular-nums text-ink/70">
+                  <td className="py-3 pr-6 text-right tabular-nums text-ink/70">
                     {datum(kund.last_activity)}
+                  </td>
+                  <td className="py-3 text-right">
+                    {kund.slug ? <OppnaArbetsyta slug={kund.slug} namn={kund.name} /> : null}
                   </td>
                 </tr>
               ))}
