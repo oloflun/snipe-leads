@@ -83,7 +83,13 @@ const KATEGORI_ETIKETTER: Record<string, string> = {
   ovrigt: "Övrigt"
 };
 
-function grundmejl(): DemoEmail[] {
+/**
+ * Exempelinkorgen. Exporterad för att demons analysvy ska kunna RÄKNA ur
+ * samma rader som kundtjänstvyn visar — se lib/demo/oversikt.ts. Två
+ * uppsättningar exempeldata för samma demo hade glidit isär, och den som
+ * upptäcker det gör det mitt i en visning.
+ */
+export function grundmejl(): DemoEmail[] {
   return [
     {
       id: "demo-1",

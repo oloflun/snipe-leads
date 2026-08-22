@@ -8,6 +8,7 @@ import { btnPrimary, btnSecondary } from "@/components/ui";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { SignOutButton } from "@/components/auth/SignOutButton";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
+import { Analys } from "@/components/dashboard/Analys";
 import { Discovery } from "@/components/leads/Discovery";
 import { LeadsControls } from "@/components/leads/LeadsControls";
 import { Affarskontext } from "@/components/settings/Affarskontext";
@@ -21,7 +22,6 @@ import { PlanSettings } from "@/components/settings/PlanSettings";
 import { OnboardingForm } from "@/components/auth/OnboardingForm";
 import { signOut } from "@/lib/actions/auth";
 import {
-  analyticsSeries,
   businessContext,
   companies,
   contacts,
@@ -34,7 +34,7 @@ import {
 import type { Company, Contact } from "@/lib/mock-data";
 import type { SettingsSectionKey } from "@/lib/routes";
 import { useLocale } from "@/lib/i18n";
-import { cn, formatDate, formatPercent } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 
 function EditorialButton({ href, children, dark = false }: Readonly<{ href: string; children: React.ReactNode; dark?: boolean }>) {
   return (
@@ -353,22 +353,23 @@ function EmailManuscript({ compact = false }: Readonly<{ compact?: boolean }>) {
   );
 }
 
-export function AnalyticsView() {
+/**
+ * Analysvyn. Innehållet bor i components/dashboard/Analys.tsx.
+ *
+ * Här låg tidigare `analyticsSeries` ur lib/mock-data.ts, alltså v16-v21 och
+ * "6 möten", renderat likadant för varje INLOGGAD kund. Talen var påhittade,
+ * ingenting sa det, och tabellen såg komplett ut — vilket är precis varför
+ * ingen ifrågasatte den. Se docstringen i Analys.tsx för reglerna som ersatte
+ * den, och för varför möteskolumnen är borta i stället för nollställd.
+ */
+export function AnalyticsView({ demo = false }: Readonly<{ demo?: boolean }>) {
   return (
-    <PageShell kicker="Analytics" title="Analys som läser som en resultattabell, inte en chart-demo." description="Svar, möten och utskick kopplas till vecka, segment och signaltyp.">
-      <div className="divide-y divide-ink/15 border-y border-ink/15">
-        {analyticsSeries.map((point) => (
-          <div key={point.week} className="grid grid-cols-12 gap-x-6 py-5">
-            <div className="kicker col-span-3 text-mineral">{point.week}</div>
-            <div className="num col-span-3 text-[1.0625rem] font-semibold tabular-nums">{point.sent} skick</div>
-            <div className="num col-span-3 text-[1.0625rem] font-semibold tabular-nums">{formatPercent(point.replies / point.sent)} svar</div>
-            <div className="num col-span-3 text-right text-[1.0625rem] font-semibold tabular-nums">{point.meetings} möten</div>
-            <div className="col-span-12 mt-4 h-2 bg-ink/10">
-              <div className="h-2 bg-ochre" style={{ width: `${Math.min(92, (point.replies / point.sent) * 420)}%` }} />
-            </div>
-          </div>
-        ))}
-      </div>
+    <PageShell
+      kicker="Analys"
+      title="Analys som läser som en resultattabell, inte en chart-demo."
+      description="Skick, svar och ärenden per vecka — räknat ur din egen arbetsyta."
+    >
+      <Analys demo={demo} />
     </PageShell>
   );
 }

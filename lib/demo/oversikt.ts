@@ -1,4 +1,5 @@
-import { companies } from "@/lib/mock-data";
+import { grundmejl } from "@/lib/demo/support-inbox";
+import { analyticsSeries, companies } from "@/lib/mock-data";
 
 /**
  * Översiktens svar på /demo — exempeldata, ingen session, ingen databas.
@@ -100,6 +101,56 @@ export function demoOversiktSvar(path: string): unknown | undefined {
         { title: "Garanti på maskiner" },
         { title: "Fakturafrågor" }
       ]
+    };
+  }
+
+  if (rutt === "/analytics/weekly") {
+    /**
+     * Samma FORM som backendens svar, inklusive `coverage`.
+     *
+     * Möteskolumnen är borta här, och det är avsiktligt: `analyticsSeries` har
+     * ett `meetings`-fält, men ingenting i drift skriver bokade möten (se
+     * ANALYTICS_COVERAGE i storage/base.py). En demo som visar en kolumn
+     * produkten inte kan fylla säljer in en funktion som inte finns — och den
+     * frågan kommer efter köpet, inte före.
+     */
+    // Kundtjänstsiffrorna räknas ur exempelinkorgen — samma rader som
+    // /demo/support visar — och skalas per vecka med leads-seriens form. Att
+    // härleda dem i stället för att skriva konstanter är samma regel som
+    // filens docstring: ett tal som räknas ur synliga rader kan motsägas av
+    // dem, ett hårdkodat kan det inte.
+    const mejl = grundmejl();
+    const eskaleradeAndel = mejl.filter((m) => m.status === "escalated").length / mejl.length;
+    const avslutadeAndel = mejl.filter((m) => m.status === "auto_sent").length / mejl.length;
+    const toppSkick = Math.max(...analyticsSeries.map((p) => p.sent), 1);
+
+    return {
+      weeks: analyticsSeries.map((punkt) => {
+        const arenden = Math.round(mejl.length * (punkt.sent / toppSkick) * 3);
+        return {
+          week: punkt.week,
+          start: null,
+          sent: punkt.sent,
+          replies: punkt.replies,
+          leads_runs: Math.round(punkt.sent / 4),
+          support_runs: arenden,
+          tickets: arenden,
+          escalated: Math.round(arenden * eskaleradeAndel),
+          resolved: Math.round(arenden * avslutadeAndel)
+        };
+      }),
+      coverage: {
+        sent: true,
+        replies: true,
+        leads_runs: true,
+        support_runs: true,
+        tickets: true,
+        escalated: true,
+        resolved: true,
+        // Även i demon. Möten mäts inte i drift, och en demo som visar en
+        // möteskolumn säljer in en funktion som inte finns.
+        meetings: false
+      }
     };
   }
 

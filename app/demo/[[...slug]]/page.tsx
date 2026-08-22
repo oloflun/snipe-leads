@@ -156,7 +156,7 @@ function renderSektion(sektion: string | undefined): React.ReactNode | null {
     case "inbox":
       return <InboxView />;
     case "analytics":
-      return <AnalyticsView />;
+      return <AnalyticsView demo />;
     case "assistant":
       return <AssistantView />;
     case "kontroll":

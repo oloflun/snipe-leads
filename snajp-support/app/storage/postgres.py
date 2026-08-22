@@ -17,7 +17,7 @@ from typing import Any
 
 import asyncpg
 
-from .base import status_transition_allowed
+from .base import ANALYTICS_COVERAGE, status_transition_allowed
 
 logger = logging.getLogger("snajp-support.storage")
 
@@ -953,6 +953,91 @@ class PostgresStorage:
         #
         # Två fel som gömde varandra: det ena gjorde det andra osynligt.
         return [_avkoda_jsonb(_row(r), "step_log", "grounding") for r in records]
+
+    async def weekly_analytics(self, tenant_id: str, *, weeks: int = 8) -> dict[str, Any]:
+        # Se protokollet i base.py för varför `coverage` finns.
+        #
+        # Veckorna genereras ur en serie och inte ur raderna. Skillnaden är inte
+        # kosmetisk: grupperar man bara det som finns FÖRSVINNER en tyst vecka
+        # ur tabellen, och en kurva utan hål ser ut som att inget hände fastän
+        # den i själva verket saknar sin sämsta vecka. Här blir en vecka utan
+        # trafik en rad med nollor, vilket är ett mätvärde — till skillnad från
+        # ett mätvärde vi inte samlar in alls, som blir `coverage: false`.
+        #
+        # `is_test` räknas bort: adminytans provkörningar är våra, inte kundens
+        # (migration 036).
+        weeks = max(1, min(weeks, 52))
+
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                with veckor as (
+                  select generate_series(
+                    date_trunc('week', now()) - make_interval(weeks => $2::int - 1),
+                    date_trunc('week', now()),
+                    interval '1 week'
+                  ) as vecka
+                ),
+                utskick as (
+                  select date_trunc('week', m.sent_at) as vecka,
+                         count(*) filter (where m.direction = 'outbound') as skick,
+                         count(*) filter (where m.direction = 'inbound')  as svar
+                    from outreach_messages m
+                   where m.tenant_id = $1 and m.sent_at is not null
+                   group by 1
+                ),
+                korningar as (
+                  select date_trunc('week', r.created_at) as vecka,
+                         count(*) filter (where r.agent_type like 'leads%')     as leads_runs,
+                         count(*) filter (where r.agent_type = 'support')       as support_runs
+                    from agent_runs r
+                   where r.tenant_id = $1 and not r.is_test
+                   group by 1
+                ),
+                arenden as (
+                  select date_trunc('week', t.created_at) as vecka,
+                         count(*)                                              as arenden,
+                         count(*) filter (where t.status = 'escalated')         as eskalerade,
+                         count(*) filter (where t.status in ('resolved','closed')) as avslutade
+                    from ss_tickets t
+                   where t.tenant_id = $1
+                   group by 1
+                )
+                select v.vecka,
+                       coalesce(u.skick, 0)         as skick,
+                       coalesce(u.svar, 0)          as svar,
+                       coalesce(k.leads_runs, 0)    as leads_runs,
+                       coalesce(k.support_runs, 0)  as support_runs,
+                       coalesce(a.arenden, 0)       as arenden,
+                       coalesce(a.eskalerade, 0)    as eskalerade,
+                       coalesce(a.avslutade, 0)     as avslutade
+                  from veckor v
+                  left join utskick   u on u.vecka = v.vecka
+                  left join korningar k on k.vecka = v.vecka
+                  left join arenden   a on a.vecka = v.vecka
+                 order by v.vecka
+                """,
+                tenant_id,
+                weeks,
+            )
+
+        return {
+            "weeks": [
+                {
+                    "week": f"v{r['vecka'].isocalendar().week}",
+                    "start": r["vecka"].isoformat(),
+                    "sent": r["skick"],
+                    "replies": r["svar"],
+                    "leads_runs": r["leads_runs"],
+                    "support_runs": r["support_runs"],
+                    "tickets": r["arenden"],
+                    "escalated": r["eskalerade"],
+                    "resolved": r["avslutade"],
+                }
+                for r in records
+            ],
+            "coverage": ANALYTICS_COVERAGE,
+        }
 
     async def list_skill_files(self, *, manifest_hash: str) -> list[dict[str, Any]]:
         # AVSIKTLIGT ingen _scoped(tenant_id): agent_skill_files har ingen

@@ -10,7 +10,7 @@ import hashlib
 import re
 import unicodedata
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from ..config import (
@@ -22,7 +22,7 @@ from ..config import (
     PUBLIC_DEMO_TENANT_SLUG,
 )
 from ..kb_articles import DEMO_KB_ARTICLES, KB_ARTICLES
-from .base import AGENT_RUN_TYPES, status_transition_allowed
+from .base import AGENT_RUN_TYPES, ANALYTICS_COVERAGE, status_transition_allowed
 
 _STOPWORDS = {
     "och", "att", "det", "som", "en", "ett", "jag", "har", "min", "mitt", "mina",
@@ -722,6 +722,69 @@ class MemoryStorage:
         if agent_type:
             runs = [r for r in runs if r["agent_type"] == agent_type]
         return sorted(runs, key=lambda r: r["created_at"], reverse=True)[:limit]
+
+    async def weekly_analytics(self, tenant_id: str, *, weeks: int = 8) -> dict[str, Any]:
+        # Speglar SQL-varianten i postgres.py, inklusive de tomma veckorna:
+        # serien byggs ur kalendern, inte ur raderna. Skulle den här räkna på
+        # ett annat sätt vore testsviten grön mot en aggregering produktionen
+        # aldrig kör — samma klass av fel som AGENT_RUN_TYPES finns för.
+        weeks = max(1, min(weeks, 52))
+
+        nu = datetime.now(timezone.utc)
+        start_denna = (nu - timedelta(days=nu.weekday())).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        veckostarter = [start_denna - timedelta(weeks=i) for i in range(weeks - 1, -1, -1)]
+
+        def vecka_for(iso: str | None) -> datetime | None:
+            if not iso:
+                return None
+            try:
+                stämpel = datetime.fromisoformat(iso)
+            except ValueError:
+                return None
+            if stämpel.tzinfo is None:
+                stämpel = stämpel.replace(tzinfo=timezone.utc)
+            return (stämpel - timedelta(days=stämpel.weekday())).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+
+        meddelanden = self.outreach_messages.get(tenant_id, [])
+        körningar = self.agent_runs.get(tenant_id, [])
+        ärenden = [t for t in self.tickets.values() if t["tenant_id"] == tenant_id]
+
+        rader = []
+        for start in veckostarter:
+            i_veckan = lambda rows, nyckel: [  # noqa: E731
+                r for r in rows if vecka_for(r.get(nyckel)) == start
+            ]
+            skickade = i_veckan(meddelanden, "sent_at")
+            veckans_körningar = [
+                r for r in i_veckan(körningar, "created_at") if not r.get("is_test")
+            ]
+            veckans_ärenden = i_veckan(ärenden, "created_at")
+
+            rader.append(
+                {
+                    "week": f"v{start.isocalendar().week}",
+                    "start": start.isoformat(),
+                    "sent": sum(1 for m in skickade if m["direction"] == "outbound"),
+                    "replies": sum(1 for m in skickade if m["direction"] == "inbound"),
+                    "leads_runs": sum(
+                        1 for r in veckans_körningar if r["agent_type"].startswith("leads")
+                    ),
+                    "support_runs": sum(
+                        1 for r in veckans_körningar if r["agent_type"] == "support"
+                    ),
+                    "tickets": len(veckans_ärenden),
+                    "escalated": sum(1 for t in veckans_ärenden if t["status"] == "escalated"),
+                    "resolved": sum(
+                        1 for t in veckans_ärenden if t["status"] in ("resolved", "closed")
+                    ),
+                }
+            )
+
+        return {"weeks": rader, "coverage": ANALYTICS_COVERAGE}
 
     async def list_skill_files(self, *, manifest_hash: str) -> list[dict[str, Any]]:
         return list(self.skill_files.get(manifest_hash, []))

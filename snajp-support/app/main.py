@@ -14,7 +14,20 @@ from fastapi.middleware.cors import CORSMiddleware
 
 import asyncio
 
-from .api import admin, chat, demo, drafts, inbox, kb, keys, leads, rules, tickets, triage
+from .api import (
+    admin,
+    analytics,
+    chat,
+    demo,
+    drafts,
+    inbox,
+    kb,
+    keys,
+    leads,
+    rules,
+    tickets,
+    triage,
+)
 from .api.events import install_exception_handler
 from .config import DEFAULT_TENANT_ID, get_settings
 from .jobs.store import MemoryJobStore, RedisJobStore
@@ -130,6 +143,7 @@ app.include_router(inbox.router)
 app.include_router(drafts.router)
 app.include_router(rules.router)
 app.include_router(admin.router)
+app.include_router(analytics.router)
 
 # Ohanterade fel hamnar i platform_events i stället för att rulla förbi i
 # Renders stdout och försvinna vid nästa spin-down (migration 026).

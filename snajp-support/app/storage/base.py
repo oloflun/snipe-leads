@@ -216,6 +216,32 @@ class Storage(Protocol):
         self, tenant_id: str, *, agent_type: str | None = None, limit: int = 50
     ) -> list[dict[str, Any]]: ...
 
+    async def weekly_analytics(self, tenant_id: str, *, weeks: int = 8) -> dict[str, Any]:
+        """Veckovis utfall för kundens analysvy — EN tenant, aldrig aggregerat.
+
+        Returnerar `{"weeks": [...], "coverage": {...}}` där varje vecka bär
+        ISO-veckan och de tal som faktiskt går att räkna ur databasen.
+
+        ## Varför `coverage` finns, och varför den inte får tas bort
+
+        Kundens analysvy visade fram till nu `analyticsSeries` ur
+        `lib/mock-data.ts` — v16–v21, 188 skick, 21 svar — för VARJE inloggad
+        kund. Talen var påhittade och såg kompletta ut, vilket är den värsta
+        kombinationen: ingen ifrågasätter en tabell som är fylld.
+
+        `coverage` säger per mätvärde om det finns en källa alls. `meetings` är
+        `false` här och kommer att vara det tills någon skriver bokade möten
+        till databasen — autonominivån `meeting` i leads/autonomy.py har ingen
+        produktionsanropare, så det finns ingenting att räkna. En nolla hade
+        betytt "noll möten den här veckan"; `false` betyder "vi mäter det inte
+        ännu". Frontenden visar det ena som en siffra och det andra som ett
+        streck, och skillnaden är hela poängen med vyn.
+
+        Metoden står i PROTOKOLLET och inte bara i Postgres-implementationen,
+        av samma skäl som `record_agent_run` gör det ovan.
+        """
+        ...
+
     # -- Skill-spegeln (INV-SKILL-007) --------------------------------------
     #
     # Ingen tenant_id: delad baselinekatalog, samma avsiktliga undantag som
@@ -548,6 +574,30 @@ class Storage(Protocol):
 # emot vad som helst, testerna körde mot minnet och var gröna — samtidigt som
 # ingen enda leads-körning sparades i produktion.
 AGENT_RUN_TYPES = ("support", "leads", "leads_research", "leads_outreach", "demo")
+
+
+#: Vilka mätvärden i `weekly_analytics` som har en källa i databasen.
+#:
+#: Bor här och inte i respektive lagring av exakt samma skäl som
+#: AGENT_RUN_TYPES ovan: två kopior blir förr eller senare två svar, och det
+#: ena hade sagt att vi mäter något vi inte mäter.
+#:
+#: `meetings` är false eftersom ingenting skriver bokade möten. Autonominivån
+#: `meeting` i leads/autonomy.py saknar produktionsanropare, och `public.meetings`
+#: är workspace-skopad i Next-appens schema — inte något backenden når per tenant.
+#: Demons analysvy har visat en möteskolumn sedan start; den kolumnen har aldrig
+#: haft en motsvarighet i drift. Sätt det här till true samma dag en rad skrivs,
+#: inte innan.
+ANALYTICS_COVERAGE: dict[str, bool] = {
+    "sent": True,
+    "replies": True,
+    "leads_runs": True,
+    "support_runs": True,
+    "tickets": True,
+    "escalated": True,
+    "resolved": True,
+    "meetings": False,
+}
 
 
 # Framåtriktade statusövergångar, som i referensrepot (forward-only).
