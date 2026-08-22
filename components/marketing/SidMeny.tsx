@@ -59,6 +59,7 @@ export function SidMeny({ tone = "paper" }: Readonly<{ tone?: "paper" | "ink" }>
 
   const poster: Post[] = [
     { etikett: text(shared.menyKontakt), href: "#kontakt" },
+    { etikett: text(shared.menyPriser), href: "#priser" },
     { etikett: text(shared.menyFragor), href: "#fragor" },
     { etikett: text(shared.menyVilka), href: "#vilka-ar-vi" },
     { etikett: text(shared.menyGdpr), href: "#dataskydd" }

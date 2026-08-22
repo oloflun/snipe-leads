@@ -9,10 +9,14 @@ import type { ProductKey } from "@/lib/routes";
  * So What and Specificity), then finished with humanizer on the English and
  * humanizer-svenska on the Swedish.
  *
- * The humanizer passes removed, among others: "i en alltmer digitaliserad
- * vardag" (landskapsuppramning), "det är viktigt att notera att" (passive
- * false formality), "utgör" twice (copula avoidance), and a rule-of-three
- * that had no third real item.
+ * ## Etiketter som är tomma
+ *
+ * `problemLabel` och `placeLabel` är tomma strängar. De bar tidigare orden
+ * "Problemet" och "Var det kommer ifrån" över respektive rubrik, och båda är
+ * borttagna på begäran. De ligger kvar som fält i stället för att tas bort ur
+ * typen: renderingen hoppar över en tom etikett, och en framtida rubrik kan
+ * återfå sin överrad utan att markup ändras. Se `Label`-anropen i
+ * LandingPhoto.
  *
  * Binding rules unchanged: no fabricated proof, no em-dashes in either language.
  */
@@ -33,20 +37,22 @@ export type SectionCopy = {
   objections: Objection[];
 };
 
+const TOM: Localized = { sv: "", en: "" };
+
 const leads: SectionCopy = {
   statementLabel: { sv: "Så tänker vi", en: "How we see it" },
   statement: {
-    sv: "Ett utskick är inte ett samtal.",
-    en: "A mailshot is not a conversation."
+    sv: "Effektiv kundhantering kommer alltid vara en prioritering.",
+    en: "Handling customers efficiently will always be a priority."
   },
-  problemLabel: { sv: "Problemet", en: "The problem" },
+  problemLabel: TOM,
   problemHeading: {
-    sv: "Det tar en timme att skriva ett mejl som *förtjänar* ett svar.",
-    en: "It takes an hour to write an email that *deserves* a reply."
+    sv: "En agent som hanterar *allt*.",
+    en: "One agent that handles *all of it*."
   },
   problemBody: {
-    sv: "Så du skickar mallen i stället. Den går ut till fyrtio bolag, tre svarar undrande, och nästa vecka gör du om det. Problemet är inte att du skriver dåligt. Problemet är att researchen tar tid du inte har.",
-    en: "So you send the template instead. It goes out to forty companies, three reply confused, and next week you do it again. You are not a bad writer. The research just costs time you do not have."
+    sv: "Slipp samma mailutskick till fyrtio bolag, tre svarar, samma sak veckan efter. Problemet är inte vad du skriver. Problemet är att researchen efter bra leads tar tiden du inte har.",
+    en: "No more sending the same mailshot to forty companies, three replying, and the same thing again the week after. The problem is not what you write. The problem is that researching good leads takes the time you do not have."
   },
   problemPoints: [
     {
@@ -58,46 +64,45 @@ const leads: SectionCopy = {
       en: "By the time the email is written, the moment has often passed."
     },
     {
-      sv: "Mallen som sparar tid är också den som gör att ingen svarar.",
-      en: "The template that saves the time is the same one that stops the replies."
+      sv: "Mallen, som ofta förblir densamma, ändras hos oss på ett knapptryck.",
+      en: "The template, which usually stays the same, changes here at the press of a button."
     }
   ],
-  placeLabel: { sv: "Var det kommer ifrån", en: "Where it comes from" },
-  /* The accent word carries the section: "här" means this market, not this city.
-     That is why the two offices sit in the body and the heading stays short
-     enough to hold at 15ch. */
+  placeLabel: TOM,
+  /* The accent word carries the section. The two offices sit in the body and
+     the heading stays short enough to hold at 15ch. */
   placeHeading: {
-    sv: "Byggt i Göteborg, för bolag som säljer *här*.",
-    en: "Built in Gothenburg, for companies selling *here*."
+    sv: "Byggt i Göteborg, för bolag som vill *effektivisera arbetet*.",
+    en: "Built in Gothenburg, for companies that want to *work more efficiently*."
   },
   placeBody: {
-    sv: "Svensk B2B är ett litet rum. Tonen är lågmäld, namnen känns igen och ett utskick som luktar mall syns direkt. Snajp är byggt för det rummet, inte översatt till det. Vi sitter i Göteborg och Umeå och jobbar med bolag i hela landet.",
-    en: "Swedish B2B is a small room. The register is understated, the names recur, and a mass mailing is spotted on sight. Snajp is built for that room rather than translated into it. We work from Gothenburg and Umeå, with companies across the country."
+    sv: "Vi sitter i Göteborg och Umeå och jobbar med bolag i hela landet.",
+    en: "We work from Gothenburg and Umeå, with companies across the country."
   },
   objectionsHeading: {
-    sv: "Det du undrar *innan* du testar.",
-    en: "What you are wondering *before* you try it."
+    sv: "Frågor och *Svar*.",
+    en: "Questions and *answers*."
   },
   objections: [
     {
       q: { sv: "Blir det inte bara mer AI-spam?", en: "Is this not just more AI spam?" },
       a: {
-        sv: "Verktyget skickar ingenting. Det skriver ett utkast, du läser det, och du trycker skicka. Går ett mejl ut som du inte står för är det för att du godkände det.",
-        en: "The tool sends nothing. It writes a draft, you read it, you press send. If an email goes out that you would not stand behind, it is because you approved it."
+        sv: "Agenten skickar personliga och professionella mail till noggrant utvalda kunder. Du är alltid den som trycker godkänn och skicka.",
+        en: "The agent writes personal, professional emails to carefully chosen companies. You are always the one who presses approve and send."
       }
     },
     {
       q: { sv: "Var kommer uppgifterna ifrån?", en: "Where does the data come from?" },
       a: {
-        sv: "Öppna källor: bolagets egen webbplats, platsannonser, pressmeddelanden. Ingen LinkedIn-skrapning och inga köpta listor. Du kan se vilken källa varje formulering vilar på.",
-        en: "Public sources: the company's own site, job ads, press releases. No LinkedIn scraping and no bought lists. You can see which source every claim rests on."
+        sv: "Öppna källor: bolagets egen webbplats, platsannonser, pressmeddelanden.",
+        en: "Public sources: the company's own site, job ads, press releases."
       }
     },
     {
       q: { sv: "Vad händer med kunduppgifterna?", en: "What happens to customer data?" },
       a: {
-        sv: "Den ligger kvar hos er, med radnivåbehörighet och loggar på vem som läst vad. Vi tränar inga modeller på ert innehåll.",
-        en: "It stays with you, with row level access rules and logs of who read what. We train no models on your content."
+        sv: "Det är aldrig publikt utan det är bara ni och vi som samlar in kunddata för att förbättra och träna agenterna utifrån ert bolag.",
+        en: "It is never public. Only you and we collect customer data, and it is used to improve and train the agents around your business."
       }
     }
   ]
@@ -109,10 +114,10 @@ const support: SectionCopy = {
     sv: "Ett svar som gissar är sämre än inget svar.",
     en: "An answer that guesses is worse than no answer."
   },
-  problemLabel: { sv: "Problemet", en: "The problem" },
+  problemLabel: TOM,
   problemHeading: {
-    sv: "Inkorgen är full av frågor ni *redan* har svarat på.",
-    en: "The inbox is full of questions you have *already* answered."
+    sv: "En agent som hanterar *allt*.",
+    en: "One agent that handles *all of it*."
   },
   problemBody: {
     sv: "Samma fyra ärenden, om och om igen. Någon måste ändå läsa varje mejl för att veta vilket som är brådskande, och den någon hinner sällan med det som faktiskt kräver en människa.",
@@ -132,7 +137,7 @@ const support: SectionCopy = {
       en: "The answers are already written, just in the wrong document."
     }
   ],
-  placeLabel: { sv: "Var det kommer ifrån", en: "Where it comes from" },
+  placeLabel: TOM,
   placeHeading: {
     sv: "Svarar på svenska, med *era* ord.",
     en: "Answers in Swedish, in *your* words."
@@ -142,8 +147,8 @@ const support: SectionCopy = {
     en: "The agent takes its phrasing from your knowledge base, so the tone is yours rather than a translation. The customer can tell the reply came from you and not from a generic assistant."
   },
   objectionsHeading: {
-    sv: "Det du undrar *innan* du testar.",
-    en: "What you are wondering *before* you try it."
+    sv: "Frågor och *Svar*.",
+    en: "Questions and *answers*."
   },
   objections: [
     {

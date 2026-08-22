@@ -13,13 +13,15 @@ import type { Localized } from "@/lib/i18n";
  */
 
 /**
- * Priserna är EXEMPEL under pilotperioden.
+ * Styr om förbehållet om preliminära priser renderas.
  *
- * Flaggan är inte dekoration: den styr om förbehållet renderas. Sätts den till
- * false utan att någon faktiskt bestämt priserna, försvinner den enda text som
- * säger att de kan ändras — och då är de i praktiken utlovade.
+ * Satt till false 2026-08-22 på begäran: priserna nedan är beslutade och
+ * pilotförbehållet skulle inte längre stå kvar. Notera vad det innebär —
+ * utan den texten finns ingen skrivning på sidan som säger att priserna kan
+ * ändras, alltså läses de som utlovade. Sätt tillbaka den till true samma dag
+ * som ett pris ska kunna röra sig.
  */
-export const PRISER_AR_PRELIMINARA = true;
+export const PRISER_AR_PRELIMINARA = false;
 
 export type Paket = {
   id: "support" | "leads" | "duo";
@@ -29,8 +31,8 @@ export type Paket = {
   ingar: Localized[];
   /** Duo markeras. Det är paketet vi vill sälja. */
   populärast?: boolean;
-  /** Renderas som en rad under priset. */
-  notis?: Localized;
+  /** Renderas som en rad under priset. `{belopp}` byts mot besparingen. */
+  notisMall?: Localized;
 };
 
 export const VALUTA = "SEK";
@@ -40,7 +42,7 @@ export const PAKET: Paket[] = [
   {
     id: "support",
     namn: "Snajp Support",
-    prisPerManad: 2990,
+    prisPerManad: 3990,
     beskrivning: {
       sv: "Kundtjänstagenten som svarar utifrån er egen kunskapsbas.",
       en: "The customer service agent that answers from your own knowledge base."
@@ -71,7 +73,7 @@ export const PAKET: Paket[] = [
   {
     id: "duo",
     namn: "Snajp Duo",
-    prisPerManad: 6490,
+    prisPerManad: 6990,
     populärast: true,
     beskrivning: {
       sv: "Båda agenterna i samma dashboard, med delad kunddata.",
@@ -82,9 +84,16 @@ export const PAKET: Paket[] = [
       { sv: "Gemensam dashboard", en: "One shared dashboard" },
       { sv: "Delad kunddata", en: "Shared customer data" }
     ],
-    notis: {
-      sv: "Sparar 990 kr/mån jämfört med att köpa dem var för sig.",
-      en: "Saves 990 kr/month compared to buying them separately."
+    /**
+     * Besparingen räknas fram vid rendering (`duoBesparingPerManad`) i stället
+     * för att stå som en siffra i texten. Den stod som "990 kr" när paketen
+     * kostade 2 990 och 4 490 mot 6 490; efter prisändringen till 3 990,
+     * 4 490 och 6 990 är den 1 490, och en handskriven siffra hade blivit fel
+     * i samma sekund utan att något sagt ifrån.
+     */
+    notisMall: {
+      sv: "Sparar {belopp}/mån jämfört med att köpa dem var för sig.",
+      en: "Saves {belopp}/month compared to buying them separately."
     }
   }
 ];
@@ -95,6 +104,13 @@ export const UPPSTARTSAVGIFT = 4900;
 /** Rörliga priser utöver paketets ingående volym. */
 export const EXTRA_PROSPEKT_PRIS = 9;
 export const EXTRA_MEJL_PRIS = 3;
+
+/**
+ * Alla priser i prislistan renderas med ordet "från" framför sig: paketen är
+ * ingångspriser och sätts efter volym och omfattning. Prefixet ligger här och
+ * inte i komponenten, av samma skäl som beloppen gör det.
+ */
+export const PRIS_PREFIX: Localized = { sv: "från", en: "from" };
 
 /** Bindningstid i månader. */
 export const BINDNINGSTID_MANADER = 3;

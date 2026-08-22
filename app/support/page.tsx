@@ -3,7 +3,7 @@ import { ProductPage } from "@/components/marketing/ProductPage";
 import { notFoundOnTenant } from "@/lib/tenants/server";
 
 export const metadata: Metadata = {
-  title: "Snajp Support, svar hämtade ur era egna texter",
+  title: "Snajp Support, support dygnet runt",
   description:
     "Snajp Support läser inkommande kundmejl, sorterar dem i rätt fack och svarar utifrån er kunskapsbas. Saknas underlag går ärendet till en människa.",
   alternates: { canonical: "/support" }

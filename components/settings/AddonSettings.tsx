@@ -53,7 +53,7 @@ export function AddonSettings() {
                     {addon.why}
                   </p>
                   <a
-                    href={`mailto:hej@snajp.se?subject=${encodeURIComponent(`Tillägg: ${addon.name}`)}`}
+                    href={`mailto:Snajpsupport@gmail.com?subject=${encodeURIComponent(`Tillägg: ${addon.name}`)}`}
                     className="mt-4 inline-block text-[13px] underline underline-offset-4 transition hover:text-ochre"
                   >
                     Hör av dig om {addon.name.toLowerCase()}

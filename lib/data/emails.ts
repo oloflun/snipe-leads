@@ -23,6 +23,58 @@ export type EmailStudioData = {
   source: "database" | "mock";
 };
 
+/**
+ * Exempelmejlet på marknadssidan.
+ *
+ * Står HÄR och inte i `emailVariants`: den listan matar också dashboardens
+ * demoytor, och marknadssidans första intryck ska gå att byta utan att röra
+ * demodatan i produkten. Fälten under `email` är samtidigt den kontext
+ * Email Studio skickar med till varje åtgärdsknapp (kortare, skriv om,
+ * personalisera ...) — tomma fält där ger en omskrivning som tappar bolaget,
+ * signalen och erbjudandet, så de fylls i för hand i stället för att hämtas
+ * ur en företagslista mejlet inte finns i.
+ *
+ * Avsändaren i exemplet är ett påhittat kundbolag (Safe-alarm), inte Snajp:
+ * sidan visar vad agenten skriver ÅT en kund.
+ */
+const PUBLIKT_EXEMPELMEJL = {
+  id: "email-etech-cold",
+  subject: {
+    sv: "Ny lokal i Göteborg och brandsäkerheten",
+    en: "New premises in Gothenburg and fire safety"
+  },
+  body: {
+    sv:
+      "Hej David,\n\n" +
+      "Jag såg att techbolaget E-Tech växlar upp med en ny lokal i Göteborg. " +
+      "Det brukar vara ett läge där säkerheten blir en prioritering. Då vi på " +
+      "Safe-alarm garanterar en säkerhet inom brandutrustning så vill vi gärna " +
+      "höras vidare.\n\n" +
+      "Vi skickar gärna en skräddarsydd offert.",
+    en:
+      "Hi David,\n\n" +
+      "I saw that the tech company E-Tech is stepping up with new premises in " +
+      "Gothenburg. That is usually the point where safety becomes a priority. " +
+      "Since we at Safe-alarm guarantee safety in fire equipment, we would very " +
+      "much like to talk further.\n\n" +
+      "We would be glad to send a tailored quote."
+  },
+  companyName: "E-Tech",
+  contactName: "David",
+  signal: {
+    sv: "Ny lokal i Göteborg och pågående expansion",
+    en: "New premises in Gothenburg and an ongoing expansion"
+  },
+  offer: {
+    sv: "Brandutrustning och säkerhetslösningar anpassade efter den nya lokalen",
+    en: "Fire equipment and safety solutions fitted to the new premises"
+  },
+  cta: {
+    sv: "Vill ni att vi skickar en skräddarsydd offert?",
+    en: "Would you like us to send a tailored quote?"
+  }
+} as const;
+
 function mockStudioData(locale: "sv" | "en" = "sv"): EmailStudioData {
   const variant = emailVariants[0];
   const company = findCompany(variant.companyId);
@@ -52,9 +104,31 @@ function mockStudioData(locale: "sv" | "en" = "sv"): EmailStudioData {
  * Public marketing surfaces always render example data, never a workspace's real
  * email. Deliberately synchronous and Supabase-free so /, /leads and /support stay
  * renderable with no session and no database.
+ *
+ * Mejlet är ALLTID `PUBLIKT_EXEMPELMEJL`, så det står som första exempel varje
+ * gång sidan laddas — knapparna skriver sedan om det utan att ändra vad nästa
+ * besökare möts av.
  */
 export function loadPublicEmailStudioData(locale: "sv" | "en" = "sv"): EmailStudioData {
-  return mockStudioData(locale);
+  return {
+    source: "mock",
+    businessContext: null,
+    email: {
+      id: PUBLIKT_EXEMPELMEJL.id,
+      subject: PUBLIKT_EXEMPELMEJL.subject[locale],
+      body: PUBLIKT_EXEMPELMEJL.body[locale],
+      variantLength: "kort",
+      variantType: "cold",
+      status: "draft",
+      companyId: null,
+      contactId: null,
+      companyName: PUBLIKT_EXEMPELMEJL.companyName,
+      signal: PUBLIKT_EXEMPELMEJL.signal[locale],
+      offer: PUBLIKT_EXEMPELMEJL.offer[locale],
+      cta: PUBLIKT_EXEMPELMEJL.cta[locale],
+      contactName: PUBLIKT_EXEMPELMEJL.contactName
+    }
+  };
 }
 
 export async function loadEmailStudioData(): Promise<EmailStudioData> {

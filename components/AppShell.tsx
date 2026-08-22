@@ -308,7 +308,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
               </span>
               {vy === "demo" ? null : (
                 <a
-                  href="mailto:hej@snajp.se"
+                  href="mailto:Snajpsupport@gmail.com"
                   className="kicker ml-auto text-ochre underline underline-offset-4 hover:text-ink"
                 >
                   Kontakta oss

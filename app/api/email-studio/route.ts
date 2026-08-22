@@ -93,78 +93,105 @@ function parseRichRefine(content: string) {
   };
 }
 
+/**
+ * Demoläget: en deterministisk omskrivning utan LLM.
+ *
+ * ## Varför den inte får innehålla ett bolagsnamn
+ *
+ * Varenda gren här var tidigare skriven kring exempelmejlet om Byggkompaniet
+ * Syd och Hyllie: "Såg att X växlar upp i Hyllie", "Uppföljning:
+ * Hyllie-renoveringar". När exempelmejlet på marknadssidan byttes svarade
+ * knapparna alltså om en stadsdel som inte stod någonstans i mejlet man just
+ * läst. Allt konkret kommer nu ur `context` — bolag, signal, erbjudande,
+ * uppmaning och mottagare — och ingen ort eller bransch står skriven i koden.
+ */
 function simulateAction(action: string, emailContent: string, subject: string, context: any = {}) {
   const orig = emailContent || "Hej,\n\n...";
-  const company = context?.companyName || "Byggkompaniet Syd";
-  const signal = context?.signal || "Hyllie-expansionen och rekrytering av arbetsledare";
-  const offer = context?.offer || "AI-driven outbound";
-  const ctaBase = context?.cta || "Vill du att jag skickar två exempel";
+  const company = context?.companyName || "bolaget";
+  const signal = context?.signal || "det som händer hos er just nu";
+  const offer = context?.offer || "vårt erbjudande";
+  const cta = String(context?.cta || "Vill ni att vi hör av oss med ett konkret förslag?").replace(/\?+$/, "");
+  const namn = context?.contactName ? `Hej ${context.contactName},` : "Hej,";
+
+  /**
+   * Gemen begynnelsebokstav, inte gemen mening. `toLowerCase()` på hela
+   * signalen gjorde "Ny lokal i Göteborg" till "ny lokal i göteborg" mitt i
+   * ett mejl — ett egennamn med litet g är precis den sortens detalj som
+   * avslöjar en maskin.
+   */
+  const inled = (v: string) => (v ? v.charAt(0).toLowerCase() + v.slice(1) : v);
 
   let new_version = orig;
   let explanation = "Demo: ändring baserad på marketingskills (cold-email, copywriting).";
   let subject_suggestions: string[] = [subject || "Intressant tajming"];
 
   if (action === "shorter") {
-    // Ruthlessly short: hook + signal + 1 proof + soft CTA. ~40-60% length
-    new_version = `Hej,\n\nSåg att ${company} växlar upp i Hyllie och söker arbetsledare. Rätt lokala fastighetsägare är värda mer än generiska leads.\n\nVi har hjälpt liknande team korta ledtiderna rejält med signalstyrda, personliga mejl.\n\n${ctaBase}?`;
-    explanation = "Ruthlessly short enligt cold-email/SKILL.md. Tog bort utfyllnad, behöll kärnsignal + låg-friktion CTA. Aktiv, peer-ton.";
+    new_version = `${namn}\n\nJag såg ${inled(signal)} hos ${company}. Det brukar vara läget då ${inled(offer)} är som mest värt att titta på.\n\n${cta}?`;
+    explanation = "Ruthlessly short enligt cold-email/SKILL.md: kärnsignalen, en mening om värdet och en låg-friktions-CTA. Utfyllnaden är borta.";
     subject_suggestions = [
-      subject ? subject.substring(0, 38) + (subject.length > 38 ? "..." : "") : "Hyllie – lokala partners?",
-      "Expansionen i Hyllie – relevanta leads?"
+      subject ? subject.substring(0, 38) + (subject.length > 38 ? "..." : "") : `${company} — kort fråga`,
+      `${company}: rätt läge nu?`
     ];
   } else if (action === "rewrite") {
-    // New angle, same facts, better structure: observation → relevance → value → ask
-    new_version = `Hej,\n\n${signal} hos ${company} är klassisk köpsignal för er typ av tjänst. Många B2B-bolag i Malmö-området har samma utmaning just nu: att snabbt få tag i pålitliga lokala aktörer utan att tappa fart.\n\n${offer} har hjälpt team i exakt den situationen att gå från breda listor till 3–5 högintressanta kontakter per vecka.\n\nSkulle det vara värt att titta på hur det skulle se ut för just er?`;
-    explanation = "Skriv om med ny vinkel (Observation → Problem/Proof → Ask) per copywriting + cold-email. Mänsklig ton, ingen vendor-speak.";
+    new_version = `${namn}\n\n${signal} hos ${company} är en tydlig köpsignal för det vi gör. Bolag i samma läge brukar ha samma fråga: hur mycket som behöver vara på plats direkt, och vad som kan vänta.\n\n${offer} är byggt för precis det steget.\n\n${cta}?`;
+    explanation = "Omskriven med ny struktur (Observation, problem, värde, fråga) per copywriting och cold-email. Samma fakta, mänsklig ton.";
     subject_suggestions = [
-      `${company.split(" ")[0]}-expansionen – lokala leverantörer?`,
-      "Signalbaserad prospektering för Hyllie",
-      subject || "Hyllie-expansionen och fler lokala byggdialoger"
+      `${company.split(" ")[0]} — tajmingen just nu`,
+      "En fråga om nästa steg",
+      subject || `${company} och nästa steg`
     ];
   } else if (action === "improve") {
-    new_version = `Hej,\n\n${signal}. Det är ofta då kvaliteten på lokala partners avgör om man håller tidplanen eller inte.\n\nVi har sett hur ${offer.toLowerCase()} kan ge 2–4 kvalificerade dialoger per vecka baserat på just sådana signaler – utan cold spam.\n\nVill du se två exempel från liknande expansioner i regionen?`;
-    explanation = "Förbättrad: tydligare värdeprop, aktiv röst, specifik proof, låg-friktion CTA. Enligt copywriting/SKILL.md + cold-email.";
-    subject_suggestions = [subject ? "Bättre: " + subject : "Hyllie + relevanta leads", "2 exempel från er expansion?"];
+    new_version = `${namn}\n\n${signal}. Det är ofta då den här frågan går från "senare" till "nu".\n\n${offer} — anpassat efter hur ni faktiskt jobbar, inte en standardlösning.\n\n${cta}?`;
+    explanation = "Förbättrad: tydligare värde, aktiv röst, konkret uppmaning. Enligt copywriting/SKILL.md och cold-email.";
+    subject_suggestions = [subject ? "Bättre: " + subject : `${company} — rätt läge`, `${company}: två konkreta förslag?`];
   } else if (action === "personalize") {
-    new_version = `Hej,\n\nSåg att ${company} precis öppnat i Hyllie och stärker teamet med fler arbetsledare. Flera av våra kunder i bygg/fastighet har haft exakt samma tajmingutmaning: att få lokala partners på plats snabbt utan att sänka kvalitetskraven.\n\nVi har hjälpt dem korta ledtiderna med 30–45 % genom signalstyrd prospektering.\n\nSkulle två konkreta exempel från Malmö-bolag i liknande läge vara intressant?`;
-    explanation = "Personalisering vävd in från signal (Hyllie + rekrytering). Specifik, icke-uppenbar, per cold-email och marketing-psychology.";
-    subject_suggestions = ["Hyllie-expansionen – lokala partners på plats?", subject || "Hyllie-expansionen och fler lokala byggdialoger"];
+    new_version = `${namn}\n\nJag såg ${inled(signal)} hos ${company}. Flera bolag vi jobbar med har haft exakt samma tajmingfråga i det läget: vad som måste vara på plats direkt och vad som kan vänta.\n\nVi löser det med ${inled(offer)}.\n\n${cta}?`;
+    explanation = "Personaliserad utifrån signalen om bolaget. Specifik och icke-uppenbar, per cold-email och marketing-psychology.";
+    subject_suggestions = [`${company} — sett er senaste nyhet`, subject || `${company} och tajmingen`];
   } else if (action === "translate") {
-    // Simple toggle sv/en for demo
-    const isSv = /hej|ni |såg att/i.test(orig);
+    /**
+     * Skriver hela mejlet på målspråket.
+     *
+     * Två fällor, båda sedda i drift på marknadssidan:
+     *
+     * 1. Den gamla varianten körde fyra `replace` över svenskan och lämnade
+     *    resten kvar: "I noticed that techbolaget E-Tech växlar upp med en ny
+     *    lokal". En halv översättning ser ut som ett fel i produkten.
+     * 2. Nästa försök vävde in `signal` och `offer` i en engelsk mening — men
+     *    de fälten kommer från sidans svenska exempeldata, så resultatet blev
+     *    engelska med svenska satser mitt i.
+     *
+     * Därför bär den här grenen bara det som är språkneutralt: bolagsnamnet
+     * och mottagaren. Riktig översättning av innehållet kräver modellen, och
+     * den vägen är öppen så fort man är inloggad.
+     */
+    const isSv = /[åäö]|hej|såg att/i.test(orig);
     if (isSv) {
-      new_version = orig
-        .replace(/Hej /gi, "Hi ")
-        .replace(/ni /gi, "you ")
-        .replace(/Såg att /gi, "Noticed that ")
-        .replace(/Vill du att jag skickar två exempel/g, "Would you like me to send two examples");
+      const enNamn = context?.contactName ? `Hi ${context.contactName},` : "Hi there,";
+      new_version = `${enNamn}\n\nI saw the recent news at ${company}. That is usually the point where this question moves from "later" to "now".\n\nWe would be glad to put together a proposal built around how you actually work.\n\nWould you like us to send it over?`;
     } else {
-      new_version = orig
-        .replace(/Hi /gi, "Hej ")
-        .replace(/you /gi, "ni ")
-        .replace(/Noticed that /gi, "Såg att ")
-        .replace(/Would you like me to send two examples/g, "Vill du att jag skickar två exempel");
+      new_version = `${namn}\n\nJag såg det senaste som hänt hos ${company}. Det brukar vara läget då den här frågan går från "senare" till "nu".\n\nVi tar gärna fram ett förslag som utgår från hur ni faktiskt jobbar.\n\nVill ni att vi skickar över det?`;
     }
-    explanation = "Översättning demo (sv ↔ en). Behåller ton och fakta.";
+    explanation = "Översättning i demoläge: hela mejlet skrivs på målspråket. Innehållet hålls generellt eftersom demon inte kör någon modell — logga in för en översättning av just den här texten.";
     subject_suggestions = [subject || "Translated subject"];
   } else if (action === "ab_variants") {
-    new_version = `Variant A (pain):\n${orig.replace(/Vill du att jag/, "Skulle det lösa ert problem om jag")}\n\nVariant B (opportunity):\nHej,\n\n${signal} hos ${company} öppnar ett fönster. Vi har sett hur ${offer.toLowerCase()} gett team exakt den typen av kvalificerade kontakter de behöver under expansion. Två exempel?`;
-    explanation = "A/B-varianter med olika vinklar (pain vs opportunity) enligt ab-testing/SKILL.md.";
-    subject_suggestions = [subject + " (A)", subject + " (B)", "Alternativ vinkel för expansionen"];
+    new_version = `Variant A (problem):\n${namn}\n\n${signal} hos ${company} brukar betyda att en sak plötsligt blir brådskande. ${offer} finns för det steget.\n\n${cta}?\n\nVariant B (möjlighet):\n${namn}\n\n${signal} hos ${company} öppnar ett fönster. Vi har sett hur ${inled(offer)} ger mest effekt just när något nytt precis kommit på plats.\n\n${cta}?`;
+    explanation = "A/B-varianter med olika vinklar (problem mot möjlighet) enligt ab-testing/SKILL.md.";
+    subject_suggestions = [`${subject} (A)`, `${subject} (B)`, "Alternativ vinkel"];
   } else if (action === "followup") {
-    new_version = `${orig}\n\n--- Uppföljning ---\nHej igen,\n\nFörra veckan nämnde jag signalerna kring Hyllie. Vi har nu sett två specifika fastighetsägare i närheten som precis annonserat renoveringar. Skulle det vara relevant att titta på dem?`;
-    explanation = "Uppföljning som adderar nytt värde (ny specifik info) – inte bara 'kollar in'. Per emails/SKILL.md.";
-    subject_suggestions = ["Uppföljning: Hyllie-renoveringar", "Två nya signaler nära er expansion"];
+    new_version = `${orig}\n\n--- Uppföljning ---\n${namn}\n\nJag hörde av mig förra veckan om ${inled(signal)}. Sedan dess har vi tagit fram ett konkret underlag för bolag i exakt det läget.\n\n${cta}?`;
+    explanation = "Uppföljning som tillför något nytt i stället för att bara stämma av. Per emails/SKILL.md.";
+    subject_suggestions = ["Uppföljning: nästa steg", `${company} — ett konkret underlag`];
   } else if (action === "analyze") {
-    new_version = orig; // keep original for analyze
-    explanation = "Analys: 7.5/10. Bra signalanvändning och peer-ton. Kan göras ruthlessly kortare (ta bort 'Det brukar vara ett läge...'). Stark potential enligt cold-email + copy-editing. Förväntad reply-rate: 8-15%.";
+    new_version = orig;
+    explanation = `Analys: 7,5/10. Signalen om ${company} bär mejlet och tonen är jämbördig. Kan kortas ytterligare, och uppmaningen tjänar på att vara en enda fråga. Förväntad svarsfrekvens: 8 till 15 %.`;
     subject_suggestions = [subject || "Analyserad version"];
   } else if (action === "longer" || action === "expand") {
-    new_version = orig + `\n\nExtra kontext: Hos liknande bolag som integrerat ${offer.toLowerCase()} under expansion har man sett 40 % kortare tid till första möte. Vi kan anpassa exakt efter era kriterier för fastighetsägare. Låt mig veta om du vill ha en kort översikt över 3–4 aktuella leads.`;
-    explanation = "Utökad version: la till proof + erbjudande om mer värde. Balanserad längd per copywriting.";
-    subject_suggestions = [subject, "Mer om expansionen i Hyllie"];
+    new_version = `${orig}\n\nExtra kontext: hos bolag i samma läge som ${company} brukar det här steget gå snabbare när underlaget finns färdigt från början. Vi anpassar efter era krav och återkommer med ett förslag ni kan säga ja eller nej till.`;
+    explanation = "Utökad version: la till kontext och ett tydligt nästa steg. Balanserad längd per copywriting.";
+    subject_suggestions = [subject, `Mer om ${company}`];
   } else {
-    new_version = orig + `\n\n[${action} tillämpad – se marketingskills för principer]`;
+    new_version = orig + `\n\n[${action} tillämpad, se marketingskills för principer]`;
     explanation = `Åtgärd: ${action}`;
   }
 
@@ -173,7 +200,7 @@ function simulateAction(action: string, emailContent: string, subject: string, c
     new_version: new_version.trim(),
     explanation,
     subject_suggestions,
-    confidence_tips: "Demo-läge (marketingskills). Ersätt OPENAI_API_KEY med giltig nyckel för riktig LLM."
+    confidence_tips: "Demoläge: svaret är förskrivet och kostar inget modellanrop. Logga in för att köra åtgärden mot modellen."
   };
 }
 
@@ -252,24 +279,37 @@ Du har tillgång till tidigare konversationer och användardata via Supabase fö
 `;
 
 /**
- * Sessionsgrind. Routen anropar generateText mot OpenAI och var anonymt
- * nåbar — samma hålklass som catch-all-proxyn, men med en direkt kostnad:
- * vem som helst kunde bränna OPENAI_API_KEY genom att posta hit i en loop.
+ * Sessionsgrind — men inte en stängd dörr.
  *
- * Den togs inte upp i plattformsplanens Fas 1, som handlade om
- * snajp-support-proxyn. Den fanns ändå, och INV-SEC-010 hittar den.
+ * Routen anropar generateText mot OpenAI och var först anonymt nåbar: vem som
+ * helst kunde bränna OPENAI_API_KEY genom att posta hit i en loop. Grinden
+ * stängde hålet och stängde samtidigt demon på marknadssidan — knapparna i
+ * Email Studio svarade "Du måste vara inloggad" för varje besökare, på en
+ * sida vars egen text ber dem trycka på knapparna.
+ *
+ * Därför två lägen i stället för ett:
+ *
+ *   inloggad  -> åtgärden körs mot modellen, som förut
+ *   anonym    -> `simulateAction` svarar, deterministiskt och utan modellanrop
+ *
+ * Det som INV-SEC-010 skyddar är kostnaden och nyckeln, och den anonyma vägen
+ * rör ingendera: den når aldrig `generateText`. Se `useSimulation` i POST —
+ * flaggan är sann så fort sessionen saknas, och den kontrollen får inte tas
+ * bort utan att det här resonemanget görs om.
+ *
+ * `getWorkspaceContext` står kvar och är fortfarande det enda som avgör vem
+ * anroparen är. Ingenting härleds ur request-kroppen.
  */
-async function requireSession() {
+async function requireSession(): Promise<{ userId: string | null; publikDemo: boolean }> {
   const context = await getWorkspaceContext();
   if (!context) {
-    return { denied: NextResponse.json({ error: "Du måste vara inloggad." }, { status: 401 }) };
+    return { userId: null, publikDemo: true };
   }
-  return { userId: context.user.id };
+  return { userId: context.user.id, publikDemo: false };
 }
 
 export async function POST(request: NextRequest) {
   const session = await requireSession();
-  if (session.denied) return session.denied;
 
   try {
     const body = await request.json();
@@ -282,7 +322,10 @@ export async function POST(request: NextRequest) {
 
     // Simulation for demo (real LLM needs valid OPENAI_API_KEY)
     const key = process.env.OPENAI_API_KEY || '';
-    const useSimulation = !key || key.length < 20 || key.includes('...') || key.includes('din-');
+    // Anonym besökare -> alltid simulering. Det är den raden som gör att
+    // marknadssidans knappar fungerar utan att en oinloggad kan nå modellen.
+    const useSimulation =
+      session.publikDemo || !key || key.length < 20 || key.includes('...') || key.includes('din-');
     if (useSimulation) {
       const sim = simulateAction(action, emailContent, subject, context);
 
@@ -331,8 +374,13 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET() {
+  // GET beskriver routen och avslöjar bara promptens LÄNGD. Den är ändå
+  // grindad: en oinloggad har inget ärende till en API-beskrivning, och
+  // simuleringsundantaget gäller POST och demon, inte den här.
   const session = await requireSession();
-  if (session.denied) return session.denied;
+  if (session.publikDemo) {
+    return NextResponse.json({ error: "Du måste vara inloggad." }, { status: 401 });
+  }
 
   return NextResponse.json({
     message: 'Email Studio API route. POST with { action, subject, body, context? } to get the system prompt + request data.',
