@@ -138,6 +138,42 @@ export function demoOversiktSvar(path: string): unknown | undefined {
     };
   }
 
+  if (rutt === "/leads/svar") {
+    /**
+     * Exempelsvaren. Skrivna som riktiga svenska mejlsvar — korta,
+     * ofullständiga meningar, ingen artighetsfras — av samma skäl som stod i
+     * den gamla vyn: ett påhittat svar som låter som en broschyr avslöjar att
+     * datan är påhittad mitt i en visning.
+     *
+     * Klassificeringsordet är borta. Det fanns aldrig i databasen, och en demo
+     * som visar ett agentbeslut produkten inte fattar lovar något den inte har.
+     */
+    const svar: [string, string, number][] = [
+      ["Låter relevant. Skicka gärna exempel på IT-chefer i regionen.", "replied", 3],
+      ["Vi kan ta ett kort möte. Tisdag 14 eller torsdag 10 funkar.", "meeting", 9],
+      ["Kan du förtydliga vad ni menar med signaler? Vi har testat liknande förut.", "replied", 26],
+      ["Inte rätt läge just nu, men återkom efter sommaren.", "lost", 48],
+      ["Jag är föräldraledig till mars. Kontakta Petra Lund i stället.", "replied", 71],
+      ["Ta bort mig från utskicken tack.", "suppressed", 95]
+    ];
+
+    return {
+      replies: svar.map(([text, status, timmar], index) => {
+        const bolag = companies[index % companies.length];
+        return {
+          id: `demo-svar-${index}`,
+          body: text,
+          sent_at: timmarSedan(timmar),
+          thread_id: `demo-trad-${index}`,
+          company_name: bolag.name,
+          contact_name: bolag.contacts[0]?.fullName ?? null,
+          contact_email: bolag.contacts[0]?.email ?? null,
+          status
+        };
+      })
+    };
+  }
+
   if (rutt === "/analytics/weekly") {
     /**
      * Samma FORM som backendens svar, inklusive `coverage`.

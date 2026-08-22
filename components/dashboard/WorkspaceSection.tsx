@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { PageShell } from "@/components/AppShell";
 import { StartView } from "@/components/dashboard/StartView";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
@@ -8,7 +8,6 @@ import {
   AssistantView,
   CompaniesView,
   CompanyDetailView,
-  ContactDetailView,
   ContactsView,
   InboxView,
   LeadsView
@@ -76,7 +75,23 @@ export async function WorkspaceSection({ slug = [] }: Readonly<{ slug?: string[]
     case "companies":
       return id ? <CompanyDetailView id={id} /> : <CompaniesView />;
     case "contacts":
-      return id ? <ContactDetailView id={id} /> : <ContactsView />;
+      /**
+       * Kontaktens egen sida finns inte, och det är ett medvetet borttagande.
+       *
+       * Den renderade `findContact(id)` ur mock-data, som — precis som
+       * findCompany — faller tillbaka på FÖRSTA exempelkontakten när id:t inte
+       * hittas. Varje riktig kontakt visade alltså en påhittad persons
+       * historik under rätt namn.
+       *
+       * Produkten har ingen kontaktentitet att visa: kontakten ÄR två fält på
+       * prospektet, och de står redan på bolagssidan. Vi skickar dit i stället
+       * för att bygga en sida vars innehåll måste hittas på. Id:t ÄR
+       * prospektets — se components/leads/Kontakter.tsx, som länkar hit.
+       */
+      if (id) {
+        redirect(`/dashboard/companies/${id}`);
+      }
+      return <ContactsView />;
     case "emails":
       return <EmailStudioSection />;
     case "inbox":

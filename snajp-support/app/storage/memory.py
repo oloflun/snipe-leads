@@ -1189,6 +1189,39 @@ class MemoryStorage:
         self.api_keys[key_hash] = record
         return record
 
+    async def list_replies(self, tenant_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        # Speglar SQL-varianten: inbound över alla trådar, senast först, med
+        # prospektets namn hopslaget. En avvikelse här hade gett en grön svit
+        # mot en aggregering produktionen aldrig kör.
+        limit = max(1, min(limit, 200))
+
+        trådar = self.outreach_threads.get(tenant_id, {})
+        prospekt = {p["id"]: p for p in self.prospects.get(tenant_id, [])}
+
+        svar = []
+        for m in self.outreach_messages.get(tenant_id, []):
+            if m["direction"] != "inbound":
+                continue
+            tråd = trådar.get(m["thread_id"]) or {}
+            p = prospekt.get(tråd.get("prospect_id")) or {}
+            svar.append(
+                {
+                    "id": m["id"],
+                    "body": m["body"],
+                    "sent_at": m.get("sent_at"),
+                    "thread_id": m["thread_id"],
+                    "company_name": p.get("company_name"),
+                    "contact_name": p.get("contact_name"),
+                    "contact_email": p.get("contact_email"),
+                    "status": p.get("status"),
+                }
+            )
+
+        # `order by sent_at desc nulls last`. Med reverse=True hamnar rader SOM
+        # HAR sent_at först (True > False), och inom dem den senaste först.
+        svar.sort(key=lambda r: (r["sent_at"] is not None, r["sent_at"] or ""), reverse=True)
+        return svar[:limit]
+
     async def list_outreach_messages(
         self, tenant_id: str, thread_id: str
     ) -> list[dict[str, Any]]:

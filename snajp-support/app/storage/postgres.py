@@ -1521,6 +1521,26 @@ class PostgresStorage:
             )
         return _row(record)
 
+    async def list_replies(self, tenant_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        limit = max(1, min(limit, 200))
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select m.id, m.body, m.sent_at, m.thread_id,
+                       p.company_name, p.contact_name, p.contact_email, p.status
+                  from outreach_messages m
+                  join outreach_threads t on t.id = m.thread_id and t.tenant_id = m.tenant_id
+                  join prospects p on p.id = t.prospect_id and p.tenant_id = m.tenant_id
+                 where m.tenant_id = $1
+                   and m.direction = 'inbound'
+                 order by m.sent_at desc nulls last
+                 limit $2
+                """,
+                tenant_id,
+                limit,
+            )
+        return [_row(r) for r in records]
+
     async def list_outreach_messages(
         self, tenant_id: str, thread_id: str
     ) -> list[dict[str, Any]]:

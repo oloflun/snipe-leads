@@ -11,6 +11,8 @@ import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { Analys } from "@/components/dashboard/Analys";
 import { Bolagsregister } from "@/components/leads/Bolagsregister";
 import { Bolagssida } from "@/components/leads/Bolagssida";
+import { Kontakter } from "@/components/leads/Kontakter";
+import { Svar } from "@/components/leads/Svar";
 import { Discovery } from "@/components/leads/Discovery";
 import { LeadsControls } from "@/components/leads/LeadsControls";
 import { Affarskontext } from "@/components/settings/Affarskontext";
@@ -23,62 +25,13 @@ import { Inkorgar } from "@/components/settings/Inkorgar";
 import { PlanSettings } from "@/components/settings/PlanSettings";
 import { OnboardingForm } from "@/components/auth/OnboardingForm";
 import { signOut } from "@/lib/actions/auth";
-import {
-  businessContext,
-  companies,
-  contacts,
-  emailVariants,
-  findCompany,
-  findContact,
-  signals,
-  workflowSteps
-} from "@/lib/mock-data";
-import type { Company, Contact } from "@/lib/mock-data";
+// Kvar ur mock-data: BARA `workflowSteps`, som är AssistantViews stegkedja —
+// en beskrivning av hur agenten arbetar, inte kunddata som utger sig för att
+// vara kundens. Allt annat härifrån (companies, contacts, emailVariants,
+// signals, findCompany, findContact) är borta: det renderades som kundens egna
+// bolag, kontakter, mejl och svar i en betald arbetsyta.
+import { workflowSteps } from "@/lib/mock-data";
 import type { SettingsSectionKey } from "@/lib/routes";
-import { useLocale } from "@/lib/i18n";
-import { cn, formatDate } from "@/lib/utils";
-
-function EditorialButton({ href, children, dark = false }: Readonly<{ href: string; children: React.ReactNode; dark?: boolean }>) {
-  return (
-    <Link href={href} className={cn(dark ? btnSecondary : btnPrimary)}>
-      {children}
-      <span aria-hidden>↗</span>
-    </Link>
-  );
-}
-
-function LedgerMetric({ label, value, detail }: Readonly<{ label: string; value: string; detail: string }>) {
-  return (
-    <div className="border-t border-ink/15 pt-4">
-      <dt className="kicker text-mineral">{label}</dt>
-      <dd className="num mt-3 text-[1.75rem] font-semibold tabular-nums tracking-[-0.02em]">{value}</dd>
-      <p className="mt-2 text-[14px] leading-6 text-ink/65">{detail}</p>
-    </div>
-  );
-}
-
-function StatusWord({ value }: Readonly<{ value: string }>) {
-  const accent = ["recommended", "active", "replied", "queued"].includes(value);
-  return <span className={`kicker ${accent ? "text-ochre" : "text-mineral"}`}>{value}</span>;
-}
-
-function SignalTimeline({ company }: Readonly<{ company: Company }>) {
-  const { text } = useLocale();
-  return (
-    <div className="space-y-6">
-      {company.signals.map((signal) => (
-        <div key={signal.id} className="grid grid-cols-12 gap-x-6 border-t border-ink/15 pt-5">
-          <div className="kicker col-span-12 text-mineral md:col-span-3">{formatDate(signal.detectedAt)}</div>
-          <div className="col-span-12 mt-3 md:col-span-9 md:mt-0">
-            <h3 className="text-[1.0625rem] font-semibold tracking-[-0.01em]">{text(signal.title)}</h3>
-            <p className="mt-2 max-w-[65ch] text-[15px] leading-6 text-ink/70">{text(signal.summary)}</p>
-            <p className="kicker mt-4 text-ink/45">{signal.source} · {Math.round(signal.confidence * 100)} % confidence</p>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 export function AssistantView() {
   return (
@@ -179,109 +132,15 @@ function TextList({ title, items }: Readonly<{ title: string; items: string[] }>
   );
 }
 
-export function ContactsView() {
+export function ContactsView({ demo = false }: Readonly<{ demo?: boolean }>) {
   return (
-    <PageShell kicker="Contacts" title="Kontaktpersoner med roll, källa och suppression-status." description="Kontaktlagret är tydligt med vad som är känt, vad som är adapterbaserat och vad som kräver manuell enrichment.">
-      <div className="divide-y divide-ink/15 border-y border-ink/15">
-        {contacts.map((contact) => <ContactRow key={contact.id} contact={contact} />)}
-      </div>
+    <PageShell
+      kicker="Kontakter"
+      title="Personerna bakom bolagen."
+      description="Kontaktpersonen agenten hittat per bolag, och var prospektet står."
+    >
+      <Kontakter demo={demo} />
     </PageShell>
-  );
-}
-
-function ContactRow({ contact }: Readonly<{ contact: Contact }>) {
-  const company = findCompany(contact.companyId);
-  const vag = useArbetsvag();
-  return (
-    <Link href={vag(`/dashboard/contacts/${contact.id}`)} className="row grid grid-cols-12 gap-x-6 py-5 transition hover:bg-paper2/60">
-      <div className="ticker col-span-12 md:col-span-4">
-        <p className="text-[1.0625rem] font-semibold tracking-[-0.01em]">{contact.fullName}</p>
-        <p className="mt-1 text-sm text-ink/55">{contact.email}</p>
-      </div>
-      <div className="kicker col-span-6 mt-3 text-mineral md:col-span-2 md:mt-0">{contact.role}</div>
-      <div className="col-span-6 mt-3 text-[15px] md:col-span-3 md:mt-0">{company.name}</div>
-      <div className="col-span-8 mt-3 text-sm text-ink/65 md:col-span-2 md:mt-0">{contact.linkedin}</div>
-      <div className="col-span-4 mt-3 text-right md:col-span-1 md:mt-0"><StatusWord value={contact.status} /></div>
-    </Link>
-  );
-}
-
-export function ContactDetailView({ id }: Readonly<{ id: string }>) {
-  const contact = findContact(id);
-  const company = findCompany(contact.companyId);
-  return (
-    <PageShell kicker={company.name} title={contact.fullName} description={`${contact.role}. Senaste aktivitet ${formatDate(contact.lastTouch)}. LinkedIn-lagret använder ${contact.linkedin}.`}>
-      <div className="grid grid-cols-12 gap-x-8 gap-y-10">
-        <dl className="col-span-12 divide-y divide-ink/15 border-y border-ink/15 md:col-span-5">
-          {[
-            ["Email", contact.email],
-            ["Roll", contact.role],
-            ["Bolag", company.name],
-            ["Status", contact.status],
-            ["LinkedIn provider", contact.linkedin]
-          ].map(([label, value]) => (
-            <div key={label} className="grid grid-cols-12 py-4">
-              <dt className="kicker col-span-5 text-mineral">{label}</dt>
-              <dd className="col-span-7 text-[15px]">{value}</dd>
-            </div>
-          ))}
-        </dl>
-        <div className="col-span-12 md:col-span-7"><EmailManuscript compact /></div>
-      </div>
-    </PageShell>
-  );
-}
-
-export function EmailsView() {
-  return (
-    <PageShell kicker="Email studio" title="Personaliseringens manusbord." description="Ämnesrad, öppningsrad, cold email och uppföljningar visas tillsammans med signal, källa och CTA.">
-      <EmailManuscript />
-    </PageShell>
-  );
-}
-
-function EmailManuscript({ compact = false }: Readonly<{ compact?: boolean }>) {
-  const { text } = useLocale();
-  const selected = emailVariants[0];
-  const company = findCompany(selected.companyId);
-  return (
-    <div className={cn("grid grid-cols-12 gap-x-8 gap-y-10", compact ? "" : "")}>
-      {!compact ? (
-        <aside className="col-span-12 md:col-span-4">
-          <h2 className="kicker text-mineral">Inputs</h2>
-          <div className="mt-5 divide-y divide-ink/15 border-y border-ink/15">
-            {[
-              ["Företag", company.name],
-              ["Signal", text(company.latestSignal)],
-              ["Erbjudande", text(businessContext.offer)],
-              ["CTA", text(businessContext.cta)]
-            ].map(([label, value]) => (
-              <div key={label} className="py-4">
-                <p className="kicker text-mineral">{label}</p>
-                <p className="mt-2 text-[15px] leading-6 text-ink/72">{value}</p>
-              </div>
-            ))}
-          </div>
-        </aside>
-      ) : null}
-      <section className={cn("col-span-12", compact ? "" : "md:col-span-8")}>
-        <div className="border-y border-ink/15 py-5">
-          <p className="kicker text-ink/45">{selected.length} · {selected.type}</p>
-          <h2 className="mt-4 text-[1.75rem] font-semibold tabular-nums tracking-[-0.02em]">{text(selected.subject)}</h2>
-        </div>
-        <textarea
-          className="mt-6 min-h-[420px] w-full resize-y border border-ink/15 bg-paper2/70 p-6 text-[16px] leading-8 text-ink outline-none transition focus:border-ochre"
-          defaultValue={text(selected.body)}
-        />
-        <div className="mt-5 flex flex-wrap gap-3">
-          {["Kortare", "Skriv om", "Förbättra", "Personalisera", "Översätt", "A/B-varianter", "Uppföljning", "Analysera"].map((action) => (
-            <button key={action} type="button" className={btnSecondary}>
-              {action}
-            </button>
-          ))}
-        </div>
-      </section>
-    </div>
   );
 }
 
@@ -306,34 +165,14 @@ export function AnalyticsView({ demo = false }: Readonly<{ demo?: boolean }>) {
   );
 }
 
-export function InboxView() {
+export function InboxView({ demo = false }: Readonly<{ demo?: boolean }>) {
   return (
-    <PageShell kicker="Inbox" title="Svar klassificeras innan nästa steg." description="Reply classifier skiljer på positivt svar, invändning, frånvaro, fel person, unsubscribe och bokningsintresse.">
-      <div className="divide-y divide-ink/15 border-y border-ink/15">
-        {/* Alla SEX klasser beskrivningen ovan lovar. Tidigare fanns tre, och
-            en demo som utlovar sex kategorier men visar tre ser ut som att
-            hälften av klassificeraren är trasig — vilket är precis den frågan
-            man inte vill få mitt i en pitch.
-
-            Svaren är skrivna som riktiga svenska mejlsvar: korta, ofullständiga
-            meningar, ingen artighetsfras. Ett påhittat svar som låter som en
-            broschyr avslöjar att datan är påhittad. */}
-        {[
-          ["Amal Hassan", "Låter relevant. Skicka gärna exempel på IT-chefer i regionen.", "positive"],
-          ["Elin Norberg", "Vi kan ta ett kort möte. Tisdag 14 eller torsdag 10 funkar.", "booking"],
-          ["Mikael Berg", "Kan du förtydliga vad ni menar med signaler? Vi har testat liknande förut.", "objection"],
-          ["Jonas Åkerström", "Inte rätt läge just nu, men återkom efter sommaren.", "later"],
-          ["Karin Wikström", "Jag är föräldraledig till mars. Kontakta Petra Lund i stället.", "wrong_person"],
-          ["Automatiskt svar · Sofia Ek", "Jag är på semester till den 12 augusti och läser mejl sporadiskt.", "away"],
-          ["Tobias Lindqvist", "Ta bort mig från utskicken tack.", "unsubscribe"]
-        ].map(([name, body, status]) => (
-          <div key={name} className="grid grid-cols-12 gap-x-6 py-5">
-            <div className="col-span-12 text-[1.0625rem] font-semibold tracking-[-0.01em] md:col-span-3">{name}</div>
-            <p className="col-span-12 mt-3 text-[16px] leading-7 text-ink/72 md:col-span-7 md:mt-0">{body}</p>
-            <div className="col-span-12 mt-3 text-right md:col-span-2 md:mt-0"><StatusWord value={status} /></div>
-          </div>
-        ))}
-      </div>
+    <PageShell
+      kicker="Svar"
+      title="Svaren från bolagen agenten kontaktat."
+      description="Vem som svarat, vad de skrev och var prospektet står nu."
+    >
+      <Svar demo={demo} />
     </PageShell>
   );
 }

@@ -486,6 +486,20 @@ async def list_runs(
 # deployar något.
 
 
+@router.get("/api/leads/svar")
+async def list_replies(
+    request: Request, limit: int = 50, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Inkomna svar — arbetsytans Svar-flik.
+
+    Fanns inte förut, och fliken visade därför sju PÅHITTADE svar ur Next-appens
+    mock-data ("Låter relevant. Skicka gärna exempel...") för varje inloggad
+    kund. Samma fel som bolagslistan och analysvyn hade.
+    """
+    svar = await request.app.state.storage.list_replies(tenant["tenant_id"], limit=limit)
+    return {"replies": svar}
+
+
 @router.get("/api/leads/config")
 async def get_leads_config(request: Request, tenant: dict = Depends(require_tenant)) -> dict:
     settings = await request.app.state.storage.get_agent_settings(

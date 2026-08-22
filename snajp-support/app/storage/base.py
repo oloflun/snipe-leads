@@ -137,6 +137,19 @@ class Storage(Protocol):
 
     async def mark_outreach_message_sent(self, tenant_id: str, message_id: str, sent_at: Any) -> None: ...
 
+    async def list_replies(self, tenant_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        """Inkomna svar över ALLA trådar, senast först — arbetsytans Svar-flik.
+
+        `list_outreach_messages` kräver ett thread_id och svarar därför på en
+        annan fråga: "vad har sagts i den här tråden". Den här svarar på "vad
+        har kommit in", vilket är det en människa öppnar fliken för att se.
+
+        Prospektets namn följer med. Utan det blir listan en rad brödtexter utan
+        avsändare, och den som läser måste slå upp varje tråd för hand för att
+        veta vem som svarat.
+        """
+        ...
+
     async def list_outreach_messages(
         self, tenant_id: str, thread_id: str
     ) -> list[dict[str, Any]]:
