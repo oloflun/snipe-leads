@@ -189,6 +189,54 @@ arbete.
 raden som gör att marknadssidans knappar fungerar utan att en oinloggad kan
 bränna nyckeln (INV-SEC-010). Den kontrollen får inte tas bort.
 
+## DNS hos Loopia — automatiserat, utom API-användaren
+
+`www.snajp.se` är tillagd i Railway och väntar på en CNAME. Posten sätts med
+
+```bash
+python scripts/loopia_dns.py            # visa nuvarande poster
+python scripts/loopia_dns.py --apply    # sätt CNAME mot Railway
+```
+
+Skriptet talar XML-RPC mot `https://api.loopia.se/RPCSERV`, städar bort poster
+som krockar med en CNAME på samma namn, och skriver ut zonen före och efter.
+
+**Det enda som kräver en människa** är en LoopiaAPI-användare. Den skapas i
+kundzonen under **Kontoinställningar → LoopiaAPI** och är en egen inloggning,
+skild från kontolösenordet. Lägg den i `.env.deploy`:
+
+```
+LOOPIA_API_USER=nagot@loopiaapi
+LOOPIA_API_PASSWORD=...
+```
+
+Det är ett kontolösenord, alltså ett av undantagen i CLAUDE.md som alltid
+kräver dig. Allt efter den punkten är ett kommando.
+
+### Apex går inte att peka på Railway
+
+Och det är inte en begränsning i skriptet:
+
+* En CNAME får enligt DNS-standarden inte samexistera med andra poster på
+  samma namn, och apex MÅSTE ha NS och SOA. Det kräver ALIAS/ANAME, som är en
+  leverantörsspecifik utökning — Loopia har den inte.
+* Railways plan tillåter dessutom bara **en** egen domän per tjänst, och den är
+  använd av `www`. Apex avvisades med *"You have reached the limit for custom
+  domains per service on your plan."*
+
+Lös det med Loopias egen **webbvidarebefordran**, `snajp.se` →
+`https://www.snajp.se`. Den funktionen finns inte i LoopiaAPI, så den punkten
+förblir manuell. Skriptet upptäcker att apex pekar på Loopias parkering
+(194.9.94.85/86) och påminner om det.
+
+Verifiera kopplingen från Railways sida när DNS spridit sig:
+
+```bash
+python scripts/railway_doman.py --env main
+```
+
+Den skriver `OK` i stället för `VÄNTAR` när posten pekar rätt.
+
 ## Ny kund
 
 ```bash
