@@ -4,6 +4,7 @@ import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useArbetsvag } from "@/components/AppShell";
+import { kriterier } from "@/lib/prospekt";
 import { EmptyState, SkeletonRows } from "@/components/ui";
 import { EjAktiverad, arEjAktiverad } from "@/components/EjAktiverad";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
@@ -49,10 +50,9 @@ type Prospekt = {
   icp_fit: number | null;
   qualified: boolean | null;
   disqualifiers: string[] | null;
-  score_breakdown: Kriterium[] | null;
+  // Avsiktligt otypad: fältet HAR nått hit som en sträng. Se lib/prospekt.ts.
+  score_breakdown: unknown;
 };
-
-type Kriterium = { etikett: string; utfall: string; motivering: string; hart?: boolean };
 
 type Lage =
   | { fas: "laddar" }
@@ -92,7 +92,9 @@ function signal(p: Prospekt): string {
   if (p.disqualifiers?.length) {
     return p.disqualifiers[0];
   }
-  const träff = p.score_breakdown?.find((k) => k.motivering && k.utfall !== "saknas");
+  const träff = kriterier(p.score_breakdown).find(
+    (k) => k.motivering && k.utfall !== "saknas"
+  );
   return träff?.motivering ?? "—";
 }
 

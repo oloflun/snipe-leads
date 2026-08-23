@@ -8,6 +8,7 @@ import { PageShell } from "@/components/AppShell";
 import { EmptyState, SkeletonRows, btnPrimary } from "@/components/ui";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { readJsonBody } from "@/lib/http/json";
+import { kriterier } from "@/lib/prospekt";
 import { cn } from "@/lib/utils";
 
 /**
@@ -30,15 +31,6 @@ import { cn } from "@/lib/utils";
  * sedan körningen. Därför listas kriterierna som de såg ut DÅ.
  */
 
-type Kriterium = {
-  nyckel?: string;
-  etikett: string;
-  vikt?: number;
-  utfall: string;
-  motivering: string;
-  hart?: boolean;
-};
-
 type Prospekt = {
   id: string;
   company_name: string;
@@ -54,7 +46,8 @@ type Prospekt = {
   icp_fit: number | null;
   qualified: boolean | null;
   disqualifiers: string[] | null;
-  score_breakdown: Kriterium[] | null;
+  // Avsiktligt otypad: fältet HAR nått hit som en sträng. Se lib/prospekt.ts.
+  score_breakdown: unknown;
   created_at: string | null;
 };
 
@@ -209,9 +202,9 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
 
         <section className="col-span-12 md:col-span-7">
           <h2 className="kicker text-mineral">Så räknades poängen</h2>
-          {p.score_breakdown?.length ? (
+          {kriterier(p.score_breakdown).length ? (
             <ul className="mt-5 divide-y divide-ink/15 border-y border-ink/15">
-              {p.score_breakdown.map((k, i) => (
+              {kriterier(p.score_breakdown).map((k, i) => (
                 <li key={`${k.nyckel ?? k.etikett}-${i}`} className="py-4">
                   <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                     <p className="text-[15px] font-medium">{k.etikett}</p>

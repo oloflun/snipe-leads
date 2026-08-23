@@ -80,6 +80,31 @@ def _avkoda_jsonb(data: dict[str, Any] | None, *nycklar: str) -> dict[str, Any] 
     return data
 
 
+def _avkoda_prospekt(data: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Prospektets enda jsonb-kolumn, avkodad EN gång för alla fyra läsvägar.
+
+    `score_breakdown` är den enda jsonb-kolumnen på `prospects` (migration 031),
+    och den nådde frontenden som en sträng. Följden var att /dashboard/leads,
+    /admin/leads och /admin/contacts kraschade i webbläsaren med
+
+        e.score_breakdown?.find is not a function
+
+    och sidan ersattes av webbläsarens egen felruta — alltså inget serverfel,
+    ingenting i loggen, och statuskoden 200 hela vägen.
+
+    Det är SAMMA fel som docstringen ovanför redan beskriver för `step_log`,
+    och det uppstod igen av samma två skäl: avkodningen bor per anropsställe,
+    och sviten kör mot MemoryStorage, som lämnar riktiga listor. En kolumn som
+    läggs till senare (031 kom långt efter de här funktionerna) ärver alltså
+    ingenting och testas inte.
+
+    Egen funktion och inte fyra `_avkoda_jsonb(...)`-anrop: nästa jsonb-kolumn
+    på prospects ska behöva läggas till på ETT ställe, inte fyra. Fyra platser
+    som måste ändras tillsammans är hur den här buggen såg ut från början.
+    """
+    return _avkoda_jsonb(data, "score_breakdown")
+
+
 class PostgresStorage:
     name = "postgres"
 
@@ -799,14 +824,14 @@ class PostgresStorage:
                     contact_name,
                     contact_email,
                 )
-        return _row(record)
+        return _avkoda_prospekt(_row(record))
 
     async def get_prospect(self, tenant_id: str, prospect_id: str) -> dict[str, Any] | None:
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
                 "select * from prospects where tenant_id = $1 and id = $2", tenant_id, prospect_id
             )
-        return _row(record)
+        return _avkoda_prospekt(_row(record))
 
     async def list_prospects(self, tenant_id: str, *, limit: int = 100) -> list[dict[str, Any]]:
         async with self._scoped(tenant_id) as conn:
@@ -815,7 +840,7 @@ class PostgresStorage:
                 tenant_id,
                 limit,
             )
-        return [_row(r) for r in records]
+        return [_avkoda_prospekt(_row(r)) for r in records]
 
     async def update_prospect(
         self,
@@ -852,7 +877,7 @@ class PostgresStorage:
                 prospect_id,
                 *fields.values(),
             )
-        return _row(record)
+        return _avkoda_prospekt(_row(record))
 
     async def create_prospect_source(
         self,
