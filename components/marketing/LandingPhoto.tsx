@@ -185,12 +185,19 @@ export function LandingPhoto({
                 </div>
               </div>
 
-              {/* Bredare sedan nedladdningsknappen tillkom. Kolumnen var
-                  lg:col-span-3 (≈290px), och "Leads / Support" plus knappen
-                  mäter 338px — knappen bröt alltså till egen rad, vilket är
-                  precis vad den inte skulle göra. Kolumnerna 6-9 stod tomma:
-                  vänsterblocket slutar vid 5, så bredden tas från ingen. */}
-              <div className="col-span-12 self-end lg:col-span-5 lg:col-start-8">
+              {/* Bredare än ursprungliga lg:col-span-3 (≈290px), men fortfarande
+                  ANKRAD I HÖGERKANTEN: col-start-9 + col-span-4 slutar på kolumn
+                  12, precis som förut.
+
+                  Första försöket satte col-start-8 och sköt hela blocket —
+                  växeln, demolänkarna och knappen — synligt vänsterut. Bredden
+                  var rätt, ankaret fel: det är slutkolumnen som håller blocket
+                  vid kanten, inte bredden.
+
+                  Fyra kolumner behövs för att "Leads / Support" plus knappen
+                  ska rymmas på en rad. Vänsterblocket slutar vid kolumn 5, så
+                  bredden tas fortfarande från ingen. */}
+              <div className="col-span-12 self-end lg:col-span-4 lg:col-start-9">
                 {/* Växeln och nedladdningen på samma rad.
                     `flex-wrap` och inte en fast tvåkolumnare: växeln är
                     display-typ på 24px och knappen bär en ikon plus fyra ord.

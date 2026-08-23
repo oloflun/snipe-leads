@@ -109,16 +109,16 @@ export function LaddaNerAppen({ tone = "ink" }: Readonly<{ tone?: "ink" | "paper
         onClick={() => void klick()}
         aria-expanded={instruktion ? öppen : undefined}
         className={cn(
-          "focus-ring group inline-flex min-h-11 items-center gap-2 rounded-input border px-3.5 text-[0.9375rem] font-medium transition-colors",
+          "focus-ring group inline-flex min-h-9 items-center gap-1.5 rounded-input border px-3 text-[0.8125rem] font-medium transition-colors",
           tone === "paper"
             ? "border-paper/30 text-paper/85 hover:border-paper/60 hover:text-paper"
             : "border-ink/20 text-ink/75 hover:border-ink/45 hover:text-ink"
         )}
       >
         {klar ? (
-          <Check className="h-4 w-4 shrink-0" aria-hidden />
+          <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
         ) : (
-          <Download className="h-4 w-4 shrink-0 transition-transform group-hover:translate-y-0.5" aria-hidden />
+          <Download className="h-3.5 w-3.5 shrink-0 transition-transform group-hover:translate-y-0.5" aria-hidden />
         )}
         {klar ? "Appen är installerad" : "Ladda ner appen"}
       </button>
