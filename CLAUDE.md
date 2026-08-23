@@ -14,18 +14,32 @@ For architecture questions, also read `10_SYSTEM_OVERVIEW.md`. For test/deploy q
 
 ## Projektregler — drift
 
-**Allt arbete går till `development`, aldrig direkt till `main`.** Push till
-`development` deployar frontenden till Vercel Preview och backenden till
-Render-tjänsten `snajp-support-dev`. `main` rörs först när något är verifierat
-i previewen.
+**Allt arbete går till `development`, aldrig direkt till `main`.**
 
-**Preview-databasen är en SPEGEL av produktionen.** Supabase-grenen
-`development` skapas alltid med `--with-data`, så att en ändring går att
-utvärdera med allt annat lika. En tom databas testar bara att koden startar.
+**Men `development` DEPLOYAR INGENTING.** Produkten kör på Railway, och Railways
+deployment trigger pekar på en annan gren. Två pushar krävs:
 
-**Följden:** previewen innehåller riktiga kunders ärenden och mejladresser och
-ska behandlas med samma sekretess som produktionen — inga länkar till
-utomstående, inga skärmdumpar med kunddata.
+```bash
+git push origin development
+git push origin development:railway-development
+```
+
+Utan den andra syns ändringen ingenstans — och GitHub Actions går ändå grönt,
+för den kedjan deployar en Vercel-preview som ligger på den gamla, döda stacken
+(Vercel + Render + Supabase-grenar). Inloggning där ger `CallbackRouteError`,
+eftersom Supabase-grenen står i `MIGRATIONS_FAILED`. Det är inte ett kodfel.
+
+Levande dev-miljö: `https://web-development-6c85.up.railway.app`
+Migrationer: `python scripts/railway_migrate.py --env development --apply`
+
+**Development-databasen är en SPEGEL av produktionen** — Railway-miljön
+`development` bär en spegelmarkör, så att en ändring går att utvärdera med allt
+annat lika. En tom databas testar bara att koden startar.
+
+**Följden:** den innehåller riktiga kunders ärenden och mejladresser och ska
+behandlas med samma sekretess som produktionen — inga länkar till utomstående,
+inga skärmdumpar med kunddata, och peka aldrig en lokal utvecklingsserver dit.
+Kör `python scripts/lokal_stack.py --apply` i stället.
 
 Fullständig beskrivning av miljöer, variabler och fällor: [`DEPLOY.md`](DEPLOY.md).
 

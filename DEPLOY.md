@@ -1,52 +1,109 @@
 # Miljöer och driftsättning
 
-Två miljöer, två grenar. Inget deployas genom att någon klickar i en dashboard.
+Inget deployas genom att någon klickar i en dashboard.
 
-| | Produktion | Preview |
+> **LÄS DET HÄR FÖRST.** Repot har **två deploy-kedjor, och bara den ena är
+> levande.** Den döda kedjan går fortfarande grön i GitHub Actions. Det är
+> därför den kostar tid: ingenting säger ifrån, den bygger bara en miljö ingen
+> använder. Uppmätt 2026-08-23, efter att en push till `development` inte syntes
+> någonstans.
+
+## Den levande kedjan: Railway
+
+| | Produktion | Development |
 |---|---|---|
-| Gren | `main` | `development` |
-| Frontend | Vercel-projekt `snajp` | samma projekt, Preview-scope |
-| Backend | Render `snajp-support` (`main`) | Render `snajp-support-dev` (`development`) |
-| Databas | Supabase `spsmblyvasagpekjmgmf` | Supabase-gren `development` (`eppgmjswfnrfwnqvtrge`) |
-| Utlöses av | push till `main` | push till `development` |
+| **Gren som deployar** | `railway-main` | **`railway-development`** |
+| Tjänster | Railway `web` + `api` | samma, i miljön `development` |
+| Databas | Railway Postgres (`main`) | Railway Postgres (`development`) |
+| Webb-URL | `web-production-1fe2c.up.railway.app` | `web-development-6c85.up.railway.app` |
+| API-URL | `api-production-d7695.up.railway.app` | `api-development-5cc3.up.railway.app` |
 
-**Allt arbete går till `development`.** `main` rörs bara när något är verifierat
-i previewen.
+URL:erna står i `.env.deploy` som `RAILWAY_{MAIN,DEVELOPMENT}_{WEB,API}_URL`.
+Railway-projektet är `b4ec4f98-2d00-4410-bfae-12fb69652d0b`.
+
+### Grenen är INTE `development`
+
+Railways deployment trigger för `web` pekar på `railway-development`. En push
+till `development` utlöser därför **ingen** Railway-deploy. Arbetet går
+fortfarande till `development` — men det är den andra pushen som gör att någon
+kan se resultatet:
+
+```bash
+git push origin development
+git push origin development:railway-development
+```
+
+Samma sak mot produktion: `main` för arbetet, `railway-main` för deployen.
+
+Kontrollera grenen innan du felsöker "min ändring syns inte". Det är andra
+gången samma fälla slår till — `verify_railway.py` bär en kommentar om att `web`
+byggde fel gren i tre deployer i rad medan felsökningen letade i byggkontexten.
+Byggmeddelandet var sant hela tiden; det beskrev en annan commit.
+
+```bash
+python scripts/verify_railway.py     # kontrollerar bland annat trigger-grenen
+```
+
+### Migrationer körs mot Railway
+
+```bash
+python scripts/railway_migrate.py --env development --apply
+python scripts/railway_migrate.py --env main --apply
+```
+
+**Inte** genom Supabase Management-API:t. Det registrerar sin egen 14-siffriga
+version utan motsvarande fil i katalogen, vilket är den dubbla bokföring som
+fällt liggaren två gånger. Se `MIGRATIONS-PENDING.md`.
+
+Verifiera alltid som `snajp_web` med `app.user_id` satt — aldrig som `postgres`.
+Tabellägaren kringgår RLS utan att något syns i en diff.
 
 ---
 
-## PROJEKTREGEL: preview-databasen är en spegel av produktionen
+## Den döda kedjan: Vercel + Render + Supabase
 
-Preview-grenen skapas **alltid med `--with-data`**:
+Beskrivs längre ner i den här filen och i avsnitten om Render, Vercel och
+Supabase-grenar. **Den driver ingenting längre.** Avsnitten står kvar för att de
+förklarar varför saker ser ut som de gör, inte för att de beskriver hur något
+deployas i dag.
 
-```bash
-npx supabase branches create development \
-  --project-ref spsmblyvasagpekjmgmf --region eu-west-1 \
-  --persistent --with-data --git-branch development
-```
+Två konkreta konsekvenser som annars ser ut som buggar:
 
-**Varför:** en ändring ska gå att utvärdera med allt annat lika. En tom
-preview-databas testar bara att koden startar — inte att den fungerar mot
-verklig datamängd, riktiga tenants och de kanttillfällen som bara finns i
-verklig data. Skiljer sig underlaget går skillnaden i utfall inte att tillskriva
-ändringen.
+* `.github/workflows/deploy-development.yml` deployar till **Vercel** vid push
+  till `development`. Den går grönt. Den når inte produkten.
+* Vercel-previewen läser Supabase-grenen `development`, som står i
+  `MIGRATIONS_FAILED` sedan 2026-08-15. Inloggning där ger
+  `CallbackRouteError` — `authorize` i `lib/auth.ts` kastar mot en databas som
+  saknar halva schemat. Det är inte ett kodfel och ska inte felsökas som ett.
 
-**Konsekvensen, som måste stå skriven:** previewen innehåller därmed **riktiga
+Städa inte bort kedjan utan att först flytta det som fortfarande används:
+Vercel-scopet håller variabler som `scripts/onboard_tenant.py` skriver till.
+
+---
+
+## PROJEKTREGEL: development-databasen är en spegel av produktionen
+
+Gäller **Railway-miljön `development`**, som bär en spegelmarkör (`mirror_meta`)
+och kontrolleras av `verify_railway.py`. Regeln följde med från Supabase-grenen
+och gäller oförändrad — bara databasen under den har bytts.
+
+**Varför:** en ändring ska gå att utvärdera med allt annat lika. En tom databas
+testar bara att koden startar — inte att den fungerar mot verklig datamängd,
+riktiga tenants och de kanttillfällen som bara finns i verklig data. Skiljer sig
+underlaget går skillnaden i utfall inte att tillskriva ändringen.
+
+**Konsekvensen, som måste stå skriven:** miljön innehåller därmed **riktiga
 kunders ärenden, mejladresser och kunskapsbaser**. Den ska behandlas med samma
 sekretess som produktionen:
 
-- Inga preview-länkar till utomstående.
+- Inga länkar till `web-development-6c85.up.railway.app` för utomstående.
 - Inga skärmdumpar med kunddata i chattar, ärenden eller dokument.
 - Samma personkrets som har åtkomst till produktionen, ingen bredare.
+- Peka inte en lokal utvecklingsserver mot den. Kör `scripts/lokal_stack.py`
+  i stället — den reser hela kedjan från noll mot en tom lokal databas.
 
-**Har grenen drivit för långt från `main`:** radera och skapa om, lappa inte.
-Persistenta grenar måste göras ephemeral först, annars vägrar API:t:
-
-```bash
-npx supabase branches update development --persistent=false
-npx supabase branches delete development
-# skapa sedan om enligt kommandot ovan
-```
+`main` får ALDRIG en spegelmarkör. Den är målets kännetecken; dyker den upp där
+har riktningen vänts.
 
 ---
 
@@ -69,6 +126,10 @@ tabellerna.
 ---
 
 ## Render
+
+> **LEGACY — driver ingenting i dag.** Produkten deployas från Railway; se
+> "Den levande kedjan" högst upp. Avsnittet står kvar för att det förklarar
+> varför saker ser ut som de gör, inte för att beskriva hur något deployas nu.
 
 Blueprinten är `snajp-support/render.yaml` och innehåller **båda** tjänsterna.
 
@@ -97,6 +158,10 @@ tjänst till Starter (~7 USD/mån), vilket också tar bort SMTP-blockeringen.
 ---
 
 ## Vercel
+
+> **LEGACY — driver ingenting i dag.** Produkten deployas från Railway; se
+> "Den levande kedjan" högst upp. Avsnittet står kvar för att det förklarar
+> varför saker ser ut som de gör, inte för att beskriva hur något deployas nu.
 
 Variabler sätts **per scope**. `vercel env add <namn> preview`.
 
@@ -147,6 +212,10 @@ variablerna saknas. Alla tre Supabase-variablerna måste sättas i preview.
 ---
 
 ## Känd begränsning: kundytor går inte att testa på `.vercel.app`
+
+> **LEGACY — driver ingenting i dag.** Produkten deployas från Railway; se
+> "Den levande kedjan" högst upp. Avsnittet står kvar för att det förklarar
+> varför saker ser ut som de gör, inte för att beskriva hur något deployas nu.
 
 `tenantSlugFromHost()` (`lib/tenants/index.ts`) returnerar medvetet `null` för
 allt som slutar på `.vercel.app`, eftersom preview-URL:er har formen
@@ -250,7 +319,22 @@ logotyp och besiktning kräver ögon och skrivs ut som checklista. Se `TENANTS.m
 
 ---
 
-## Faktiska identiteter (2026-08-15)
+## Faktiska identiteter
+
+### Railway — det som gäller
+
+| | Värde |
+|---|---|
+| Projekt | `b4ec4f98-2d00-4410-bfae-12fb69652d0b` |
+| Miljöer | `main`, `development` |
+| Tjänster | `web`, `api`, `Postgres` (en uppsättning per miljö) |
+| Deploy-gren, main | `railway-main` |
+| Deploy-gren, development | `railway-development` |
+
+Verifierat mot Railways API 2026-08-23 — grenarna är lästa ur
+`deploymentTriggers`, inte antagna.
+
+### Vercel, Render och Supabase (2026-08-15) — LEGACY
 
 | | Värde |
 |---|---|
@@ -372,6 +456,10 @@ att ta Neon-spåret.
 ---
 
 ## Varför Supabase-workflowen visade MIGRATIONS: FAILED
+
+> **LEGACY.** Supabase-grenen används inte längre. Felet är dokumenterat
+> i `MIGRATIONS-PENDING.md`, där beslutet att lämna grenen som den är
+> också står. Migrationer körs mot Railway.
 
 Två numreringssystem som aldrig möttes.
 
