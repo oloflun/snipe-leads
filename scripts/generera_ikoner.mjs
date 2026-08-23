@@ -44,14 +44,32 @@ const STORLEKAR = [
   { fil: "icon-maskable-512.png", px: 512, marginal: 0.2 }
 ];
 
+/**
+ * Rasteriseringstäthet, härledd ur SVG:ns egen bredd och den storlek vi vill ha.
+ *
+ * Låg fast `density: 600` här. Det fungerade så länge märket var 1206 enheter
+ * brett, men en logotyp med en större viewBox rasteras då till tiotusentals
+ * pixlar och sharp svarar "Input image exceeds pixel limit". Täckningen ska
+ * bero på MÅLET, inte på hur källan råkar vara numrerad.
+ *
+ * Faktor 2 mot målstorleken ger kantutjämning att arbeta med utan att bygga en
+ * bitmapp ingen ser.
+ */
+function tathet(svgText, malPx) {
+  const vb = /viewBox="[\d.]+ [\d.]+ ([\d.]+) /.exec(svgText);
+  const bredd = vb ? Number(vb[1]) : 1024;
+  return Math.max(24, Math.min(2400, Math.round((malPx * 2 * 72) / bredd)));
+}
+
 async function main() {
   await mkdir(UT, { recursive: true });
   const svg = readFileSync(LOGGA);
+  const svgText = svg.toString("utf8");
 
   for (const { fil, px, marginal } of STORLEKAR) {
     const inre = Math.round(px * (1 - marginal * 2));
 
-    const märke = await sharp(svg, { density: 600 })
+    const märke = await sharp(svg, { density: tathet(svgText, px) })
       .resize(inre, inre, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
       .png()
       .toBuffer();
