@@ -19,6 +19,65 @@ uid, inte som `postgres`. Frågan `isPlatformAdmin()` ställer ger nu exakt en
 rad. Som `postgres` med BYPASSRLS hade den sett rätt ut hela tiden — det är
 precis den blindheten som lät rekursionen ligga oupptäckt.
 
+## Supabase-grenen `development`: MIGRATIONS_FAILED, och det är INTE SQL:en (2026-08-23)
+
+Grenen har stått i `MIGRATIONS_FAILED` sedan 15 augusti. Två separata orsaker,
+varav den ena är åtgärdad.
+
+### Åtgärdat: fjärrversioner utan lokal fil
+
+Fem ändringar applicerades genom Management-API:t den 18 och 21 augusti. API:t
+registrerar sin EGEN 14-siffriga tidsstämpel, medan repot bär dem som `034`,
+`035`, `036`, `037` och `039`. Branching-checken föll på
+
+    Remote migration versions not found in local migrations directory.
+
+Fem tomma historiska versionsposter stänger det, samma mönster som
+`20260815230625` en gång införde. Grenens liggare har numera INGA föräldralösa
+fjärrversioner — verifierat direkt mot `PREVIEW_POSTGRES_URL`.
+
+### Kvarstår: felet ligger hos Supabase, inte hos oss
+
+Fjorton migrationer väntar på grenen (`0000`, `034`–`042` plus de fyra tomma).
+De kördes **allihop i en enda transaktion mot grenens databas och rullades
+tillbaka** — varenda en gick igenom utan fel. SQL:en är alltså inte problemet.
+
+En `rebase_branch` kördes 2026-08-23. Statusen gick till `CREATING_PROJECT` och
+tillbaka till `MIGRATIONS_FAILED`. `updated_at` på grenposten står kvar på 15
+augusti trots det, så fältet verkar inte underhållas — lita inte på det vid
+felsökning.
+
+BESLUT: grenen lämnas som den är. Den tillhör den gamla Vercel/Render-stacken;
+produkten kör på Railway, där båda miljöerna har alla migrationer och verifieras
+gröna av `scripts/verify_railway.py`. Nästa steg vore `reset_branch`, som
+raderar otrackad data — och grenen är skapad `--with-data`, alltså en spegel av
+riktig kunddata. Det är inte värt en röd statusflagga på en miljö ingen använder.
+
+### Två fynd på vägen, båda kvar
+
+**`workspace_tenant_keys` saknas helt i grenens databas.** Tabellen kommer ur
+`040_testkund_egen_tenant.sql`, som aldrig körts där. Testarbetsytor kan alltså
+inte fungera mot Supabase-grenen.
+
+**Fyra versionsnummer är dubblerade i katalogen**, och det har en tyst följd:
+
+| Version | Bokförd som | Har ALDRIG körts mot Supabase |
+|---|---|---|
+| `030` | `suppressions_tenant_scope` | `030_snajp_web_role.sql` |
+| `031` | `prospect_nischfalt` | `031_business_context_unique.sql` |
+| `032` | `platform_admin_bootstrap` | `032_invite_write_policies.sql` |
+| `033` | `platform_admins_recursion` | `033_platform_admins_self_read_fix.sql` |
+
+Supabases liggare nycklar på VERSION, så bara en fil per par kan bokföras — den
+andra hoppas tyst över vid varje försök. Filerna är INTE omdöpta: ett nytt
+filnamn är en ny version, och Railway (som nycklar på hela filnamnet och har kört
+båda) hade då kört om dem mot produktion i onödan.
+
+Rollerna `snajp_app` och `snajp_web` finns ändå på grenen, så `030` har
+uppenbarligen applicerats utanför liggaren någon gång. Det är precis den sortens
+dubbla bokföring som gör att liggaren inte går att lita på ensam — kontrollera
+objektet, inte raden.
+
 ## Återstår
 
 ### `SNAJP_KEY_SNAJP`
