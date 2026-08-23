@@ -3,6 +3,7 @@
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { EmptyState, SkeletonRows } from "@/components/ui";
+import { EjAktiverad, arEjAktiverad } from "@/components/EjAktiverad";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
@@ -54,6 +55,7 @@ type Svar = { weeks?: Vecka[]; coverage?: Tackning };
 
 type Lage =
   | { fas: "laddar" }
+  | { fas: "ejAktiverad" }
   | { fas: "fel"; meddelande: string }
   | { fas: "klar"; veckor: Vecka[]; tackning: Tackning };
 
@@ -91,6 +93,15 @@ export function Analys({ demo = false }: Readonly<{ demo?: boolean }>) {
       });
       // response.ok FÖRE tolkningen: en sovande backend svarar med en
       // HTML-sida, och `.json()` på den ger kunden webbläsarens råa felmeddelande.
+      if (response.status === 409) {
+        // Kroppen måste läsas ÄVEN vid felstatus här: koden bor i den, och
+        // 409 betyder två olika saker (se arEjAktiverad).
+        const kropp = await readJsonBody<unknown>(response).catch(() => null);
+        if (arEjAktiverad(response.status, kropp)) {
+          setLage({ fas: "ejAktiverad" });
+          return;
+        }
+      }
       if (!response.ok) {
         setLage({
           fas: "fel",
@@ -125,6 +136,10 @@ export function Analys({ demo = false }: Readonly<{ demo?: boolean }>) {
 
   if (lage.fas === "laddar") {
     return <SkeletonRows />;
+  }
+
+  if (lage.fas === "ejAktiverad") {
+    return <EjAktiverad yta="Analys" />;
   }
 
   if (lage.fas === "fel") {

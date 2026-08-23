@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useArbetsvag } from "@/components/AppShell";
 import { EmptyState, SkeletonRows } from "@/components/ui";
+import { EjAktiverad, arEjAktiverad } from "@/components/EjAktiverad";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
@@ -55,6 +56,7 @@ type Kriterium = { etikett: string; utfall: string; motivering: string; hart?: b
 
 type Lage =
   | { fas: "laddar" }
+  | { fas: "ejAktiverad" }
   | { fas: "fel"; meddelande: string }
   | { fas: "klar"; prospekt: Prospekt[] };
 
@@ -117,6 +119,15 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
       const response = await fetch("/api/snajp-support/leads/prospects", { cache: "no-store" });
       // response.ok före tolkningen: en sovande backend svarar med HTML, och
       // `.json()` på den ger kunden webbläsarens råa felmeddelande.
+      if (response.status === 409) {
+        // Kroppen måste läsas ÄVEN vid felstatus här: koden bor i den, och
+        // 409 betyder två olika saker (se arEjAktiverad).
+        const kropp = await readJsonBody<unknown>(response).catch(() => null);
+        if (arEjAktiverad(response.status, kropp)) {
+          setLage({ fas: "ejAktiverad" });
+          return;
+        }
+      }
       if (!response.ok) {
         setLage({
           fas: "fel",
@@ -147,6 +158,10 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
 
   if (lage.fas === "laddar") {
     return <SkeletonRows />;
+  }
+
+  if (lage.fas === "ejAktiverad") {
+    return <EjAktiverad yta="Företag" />;
   }
 
   if (lage.fas === "fel") {

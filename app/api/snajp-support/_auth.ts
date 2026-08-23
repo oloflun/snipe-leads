@@ -22,7 +22,12 @@ export async function proxyAsTenant(path: string, init: RequestInit) {
     return await proxyWithApiKey(path, init, tenant.apiKey, tenant.userId, tenant.isDemo);
   } catch (error) {
     if (error instanceof SnajpTenantError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
+      // `kod` går med, så att gränssnittet kan skilja "inte aktiverad ännu"
+      // från "något gick sönder" utan att tolka svensk text.
+      return NextResponse.json(
+        { error: error.message, kod: error.kod },
+        { status: error.status }
+      );
     }
     throw error;
   }

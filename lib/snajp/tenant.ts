@@ -34,10 +34,31 @@ async function tenantApiKeyForWorkspace(userId: string): Promise<string | undefi
  * inte av inloggning.
  */
 
+/**
+ * Varför felet bär en KOD och inte bara en text.
+ *
+ * Meddelandena här är skrivna för den som ska laga något: "Sätt workspaces.slug
+ * och ss_tenant_id" är rätt sak att säga till oss och fel sak att visa en kund.
+ * Fram till nu gick de rakt igenom proxyn och ut i gränssnittet, så en ny kund
+ * som klickade på Kundtjänst möttes av en instruktion om databaskolumner.
+ *
+ * Koden låter UI:t skilja "din arbetsyta är inte klar än" från "något gick
+ * sönder" utan att tolka svensk text. Texten kan skrivas om; koden är
+ * kontraktet.
+ */
+export type SnajpTenantKod =
+  /** Arbetsytan finns men är inte kopplad till någon kund ännu. Väntar på oss. */
+  | "ej_aktiverad"
+  /** Kopplad, men nyckeln saknas i miljön. Ett driftfel, inte ett kundläge. */
+  | "nyckel_saknas"
+  /** Ingen session. */
+  | "ej_inloggad";
+
 export class SnajpTenantError extends Error {
   constructor(
     readonly status: number,
-    message: string
+    message: string,
+    readonly kod: SnajpTenantKod = "nyckel_saknas"
   ) {
     super(message);
     this.name = "SnajpTenantError";
@@ -63,7 +84,7 @@ export type SnajpTenant = {
 export async function requireSnajpTenant(): Promise<SnajpTenant> {
   const context = await getWorkspaceContext();
   if (!context) {
-    throw new SnajpTenantError(401, "Du måste vara inloggad.");
+    throw new SnajpTenantError(401, "Du måste vara inloggad.", "ej_inloggad");
   }
 
   const { workspace, user } = context;
@@ -164,7 +185,8 @@ export async function requireSnajpTenant(): Promise<SnajpTenant> {
   if (!workspace.slug) {
     throw new SnajpTenantError(
       409,
-      "Arbetsytan är inte kopplad till någon kund ännu. Sätt workspaces.slug och ss_tenant_id."
+      "Arbetsytan är inte kopplad till någon kund ännu. Sätt workspaces.slug och ss_tenant_id.",
+      "ej_aktiverad"
     );
   }
 
@@ -172,7 +194,8 @@ export async function requireSnajpTenant(): Promise<SnajpTenant> {
   if (!tenant) {
     throw new SnajpTenantError(
       409,
-      `Ingen configfil för "${workspace.slug}" i lib/tenants. Se TENANTS.md steg 4.`
+      `Ingen configfil för "${workspace.slug}" i lib/tenants. Se TENANTS.md steg 4.`,
+      "ej_aktiverad"
     );
   }
 

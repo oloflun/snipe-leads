@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useArbetsvag } from "@/components/AppShell";
 import { EmptyState, SkeletonRows } from "@/components/ui";
+import { EjAktiverad, arEjAktiverad } from "@/components/EjAktiverad";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { readJsonBody } from "@/lib/http/json";
 
@@ -41,6 +42,7 @@ type Prospekt = {
 
 type Lage =
   | { fas: "laddar" }
+  | { fas: "ejAktiverad" }
   | { fas: "fel"; meddelande: string }
   | { fas: "klar"; prospekt: Prospekt[] };
 
@@ -71,6 +73,15 @@ export function Kontakter({ demo = false }: Readonly<{ demo?: boolean }>) {
 
     try {
       const response = await fetch("/api/snajp-support/leads/prospects", { cache: "no-store" });
+      if (response.status === 409) {
+        // Kroppen måste läsas ÄVEN vid felstatus här: koden bor i den, och
+        // 409 betyder två olika saker (se arEjAktiverad).
+        const kropp = await readJsonBody<unknown>(response).catch(() => null);
+        if (arEjAktiverad(response.status, kropp)) {
+          setLage({ fas: "ejAktiverad" });
+          return;
+        }
+      }
       if (!response.ok) {
         setLage({
           fas: "fel",
@@ -100,6 +111,10 @@ export function Kontakter({ demo = false }: Readonly<{ demo?: boolean }>) {
   }, [hamta]);
 
   if (lage.fas === "laddar") return <SkeletonRows />;
+
+  if (lage.fas === "ejAktiverad") {
+    return <EjAktiverad yta="Kontakter" />;
+  }
 
   if (lage.fas === "fel") {
     return (
