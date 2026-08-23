@@ -274,6 +274,26 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
             ) : null}
           </div>
 
+          {/* Flikraden renderas INTE i demon.
+
+              Demon har sin egen sektionsrad, ritad av app/demo/[[...slug]]/page.tsx
+              med elva poster. Den här raden lade en ANDRA meny under den, med
+              fem poster som pekade på en delmängd av samma sidor — två
+              navigationer över samma vyer, staplade, där den undre var den
+              mindre kompletta. Exakt samma fel som inställningarna hade före
+              SettingsNav, och samma fel som /admin hade före villkoret ovan.
+
+              Den undre raden var dessutom trasig på en punkt som inte gick att
+              se: fyra av fem länkar mappas till /demo/* av `demoAnpassa`, men
+              "Inställningar" har ingen demomotsvarighet och pekade därför på
+              /settings — den riktiga appen, bakom inloggning. En besökare utan
+              konto möttes alltså av inloggningssidan från en yta vars hela
+              löfte är "ingen inloggning".
+
+              Villkoret läser pathname och inte en prop, av samma skäl som
+              admin-villkoret: PageShell anropas från ett tjugotal vyer som inte
+              vet vilken yta de renderas i, och inte ska behöva veta. */}
+          {iDemolage(pathname) ? null : (
           <nav
             aria-label={t("nav.dashboard")}
             className="thin-scrollbar order-last flex w-full min-w-0 items-center justify-center gap-1 overflow-x-auto px-1 md:order-2 md:w-auto"
@@ -308,6 +328,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
             })}
 
           </nav>
+          )}
         </div>
       </header>
 
