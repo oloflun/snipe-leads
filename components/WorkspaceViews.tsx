@@ -22,6 +22,8 @@ import { SettingsNav } from "@/components/settings/SettingsNav";
 import { TeamSettings } from "@/components/settings/TeamSettings";
 import { AddonSettings } from "@/components/settings/AddonSettings";
 import { Inkorgar } from "@/components/settings/Inkorgar";
+import { NotisSettings } from "@/components/settings/NotisSettings";
+import { TemaSettings } from "@/components/settings/TemaSettings";
 import { PlanSettings } from "@/components/settings/PlanSettings";
 import { OnboardingForm } from "@/components/auth/OnboardingForm";
 import { signOut } from "@/lib/actions/auth";
@@ -207,6 +209,8 @@ export function SettingsView({ section = "foretaget" }: Readonly<{ section?: Set
     leads: "Målgrupp och autonomi",
     regler: "Fack och autosvar",
     soul: "Er röst",
+    notiser: "Notiser",
+    tema: "Tema",
     addons: "Tillägg"
   };
   // Beskrivningen var tidigare EN generisk sträng för alla sektioner. På
@@ -225,6 +229,9 @@ export function SettingsView({ section = "foretaget" }: Readonly<{ section?: Set
     leads: "Vilka bolag agenterna ska leta efter, och hur långt de får gå på egen hand.",
     regler: "Vilka ärenden agenterna får besvara själva, och vilka som alltid går till en människa.",
     soul: "Beskriv hur ni låter. Agenterna skriver så i både utskick och svar — dokumentet är delat mellan dem.",
+    notiser:
+      "När vi ska mejla dig, och om vad. Gäller dig personligen — inte dina kollegor i samma arbetsyta.",
+    tema: "Ljus eller mörk arbetsyta. Valet gäller den här webbläsaren och slår igenom direkt.",
     addons: "Det agenterna kan göra utöver det som ingår i er plan."
   };
   return (
@@ -272,6 +279,8 @@ export function SettingsView({ section = "foretaget" }: Readonly<{ section?: Set
           {section === "regler" ? <SupportRegler /> : null}
           {section === "leads" ? <LeadsControls /> : null}
           {section === "soul" ? <SoulEditor /> : null}
+          {section === "notiser" ? <NotisSettings /> : null}
+          {section === "tema" ? <TemaSettings /> : null}
           {section === "mailboxes" ? <Inkorgar /> : null}
           {section === "team" ? <TeamSettings /> : null}
           {section === "addons" ? <AddonSettings /> : null}

@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
+import { cookies } from "next/headers";
 import "./globals.css";
 import { fontVariables } from "@/lib/fonts";
+import { colorScheme, dataTheme, parseTema, TEMA_COOKIE } from "@/lib/tema";
 import { LocaleProvider } from "@/lib/i18n";
 import { paletteToCss } from "@/lib/tenants";
 import { getCurrentTenant } from "@/lib/tenants/server";
@@ -66,8 +68,27 @@ export const viewport: Viewport = {
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const tenant = await getCurrentTenant();
 
+  /**
+   * Temat läses PÅ SERVERN och stämplas på <html> innan svaret lämnar oss.
+   *
+   * Alternativet — ett skript som läser localStorage och sätter attributet i
+   * webbläsaren — hade gett en vit blink vid varje sidladdning för den som valt
+   * mörkt, eftersom sidan redan målats när skriptet hinner köra. Se lib/tema.ts.
+   *
+   * Kundens egen domän är UNDANTAGEN. `paletteToCss` nedan skriver tenantens
+   * palett, och den är vald av kunden för deras besökare — vår
+   * inställningscookie hör inte hemma där. En besökare på kundens sajt har
+   * dessutom aldrig varit inne i /settings och kan inte ha satt den.
+   */
+  const tema = tenant ? "ljust" : parseTema((await cookies()).get(TEMA_COOKIE)?.value);
+
   return (
-    <html lang="sv" className={fontVariables}>
+    <html
+      lang="sv"
+      className={fontVariables}
+      data-theme={dataTheme(tema)}
+      style={{ colorScheme: colorScheme(tema) }}
+    >
       <head>
         {/* Next 16 skriver `mobile-web-app-capable` — den moderna taggen, som
             iOS läser från 16.4. Den apple-prefixade är den ENDA som äldre iOS

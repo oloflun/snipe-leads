@@ -49,6 +49,19 @@ export function OnboardingForm() {
 
   const [orgnrVarning, setOrgnrVarning] = useState<string | null>(null);
   const [testkund, setTestkund] = useState(false);
+  /**
+   * Notisfrågan, ställd EN gång — här, när kontot skapas.
+   *
+   * Förvalt JA, och det är ett medvetet val som är värt att kunna försvara:
+   * agenterna arbetar när ingen tittar, och ett nytt lead eller en eskalering
+   * som ingen får veta om ligger obesvarad tills någon råkar logga in. Ett
+   * förvalt nej hade gjort produkten tyst på ett sätt kunden inte bad om.
+   *
+   * Därför är det också en RUTA och inte finstilt text: rutan går att kryssa
+   * ur på vägen in, med samma klick som det tar att svara ja. Ångrar man sig
+   * senare ligger samma val under /settings/notiser, per händelsetyp.
+   */
+  const [notiser, setNotiser] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -92,7 +105,8 @@ export function OnboardingForm() {
         webbplats,
         produkt,
         fokus,
-        testkund
+        testkund,
+        notiser
       });
       if (!result.success) {
         setError(result.error ?? "Kunde inte spara affärskontexten.");
@@ -177,6 +191,40 @@ export function OnboardingForm() {
           onChange={setFokus}
           placeholder={PLACEHOLDER.fokus}
         />
+
+        {/* Notisfrågan.
+
+            INRAMAD och inte en rad bland fälten ovanför. De fyra fälten
+            beskriver bolaget; det här är den enda punkten i formuläret där vi
+            ber om lov att kontakta en människa, och en samtyckesfråga som ser
+            ut som ett inmatningsfält är en fråga folk klickar förbi.
+
+            Den ställs här och ingen annanstans i flödet, av samma skäl som
+            gör den värd att ställa alls: den som just skapat ett konto vet
+            ännu inte att agenterna arbetar utan att man tittar, och en fråga
+            som kommer senare kommer efter det första omejlade leadet. */}
+        <div className="col-span-12 rounded-panel border border-ink/15 bg-paper2/50 p-5">
+          <p className="kicker text-mineral">Notiser</p>
+          <label className="mt-3 flex items-start gap-3">
+            <input
+              type="checkbox"
+              checked={notiser}
+              onChange={(e) => setNotiser(e.target.checked)}
+              className="focus-ring mt-1 h-4 w-4 shrink-0"
+            />
+            <span className="text-[14px] leading-6 text-ink/70">
+              <span className="font-medium text-ink">Ja, mejla mig</span> när ett
+              nytt lead landar eller när kundtjänstagenten lämnar över ett ärende
+              till en människa. Inget annat — vi mejlar aldrig om annat än ert
+              eget arbete.
+            </span>
+          </label>
+          <p className="mt-3 text-[13px] leading-[1.55] text-mineral">
+            Går att ändra när som helst under Inställningar → Notiser, per
+            händelsetyp. Kryssar du ur den här syns allt fortfarande i
+            arbetsytan — det är bara påminnelsen som uteblir.
+          </p>
+        </div>
       </div>
 
       {error ? (

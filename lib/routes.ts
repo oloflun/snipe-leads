@@ -127,13 +127,15 @@ export function tillAdminvag(href: string): string {
  *     fack — låg inte här alls, utan i en utfällbar panel inuti inkorgen.
  *     Samma fråga, två helt olika ställen.
  *
- * ## Tre grupper, ordnade efter hur ofta de rörs
+ * ## Fyra grupper, ordnade efter hur ofta de rörs
  *
  *  1. **Vad agenten vet** — underlaget. Fylls i en gång och läses av båda
  *     agenterna. En duo-kund gör det inte två gånger.
- *  2. **Vad agenten får göra** — befogenheterna, en rad per agent, i samma
+ *  2. **Dina inställningar** — notiser och tema. Den enda gruppen som är
+ *     PERSONLIG: svaren gäller den inloggade, inte arbetsytan.
+ *  3. **Vad agenten får göra** — befogenheterna, en rad per agent, i samma
  *     grupp så att symmetrin syns.
- *  3. **Kontot** — bolaget och pengarna. Inget av det handlar om agenten.
+ *  4. **Kontot** — bolaget och pengarna. Inget av det handlar om agenten.
  *
  * ## Varför `product` sitter på POSTEN och inte på gruppen
  *
@@ -171,6 +173,26 @@ export const settingsGroups: SettingsGroup[] = [
       // SOUL styr TON, ICP styr URVAL. Gränsen står utskriven i LeadsControls.
       // Rösten är delad: samma dokument formar både utskick och svar.
       { href: "/settings/soul", label: { sv: "Röst och tonläge", en: "Voice and tone" } }
+    ]
+  },
+  {
+    /**
+     * En EGEN grupp, direkt under röstdokumentet.
+     *
+     * Notiser och tema hör inte till "Vad agenterna vet" — de är inget agenten
+     * läser — och inte heller till "Kontot", som handlar om bolaget och
+     * pengarna. Båda handlar om DIG: när du vill bli störd, och vad du vill
+     * titta på medan du jobbar.
+     *
+     * Det är också den enda grupp vars innehåll är personligt och inte delat.
+     * Notisraden ligger per användare (migration 043) och temat i en cookie i
+     * den här webbläsaren — två kollegor i samma arbetsyta ser alltså olika
+     * svar här, vilket är rätt och värt att veta innan man ändrar något.
+     */
+    label: { sv: "Dina inställningar", en: "Your preferences" },
+    routes: [
+      { href: "/settings/notiser", label: { sv: "Notiser", en: "Notifications" } },
+      { href: "/settings/tema", label: { sv: "Tema", en: "Theme" } }
     ]
   },
   {
@@ -271,7 +293,9 @@ export type SettingsSectionKey =
   | "soul"
   | "leads"
   | "regler"
-  | "mailboxes";
+  | "mailboxes"
+  | "notiser"
+  | "tema";
 
 const settingsSections: Record<string, SettingsSectionKey> = {
   "": "foretaget",
@@ -283,7 +307,9 @@ const settingsSections: Record<string, SettingsSectionKey> = {
   soul: "soul",
   leads: "leads",
   regler: "regler",
-  mailboxes: "mailboxes"
+  mailboxes: "mailboxes",
+  notiser: "notiser",
+  tema: "tema"
 };
 
 /**

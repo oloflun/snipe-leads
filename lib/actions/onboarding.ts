@@ -27,6 +27,15 @@ export type OnboardingInput = {
    * beslut åt en.
    */
   testkund?: boolean;
+  /**
+   * Svaret på notisrutan i formuläret.
+   *
+   * Valfri med flit: den som saknas betyder "ingen fråga ställdes", och då
+   * gäller standarden i migration 043 — notiser PÅ. Ett `false` här är alltså
+   * ett aktivt NEJ och inget annat, vilket är precis den skillnad ett samtycke
+   * måste kunna bära.
+   */
+  notiser?: boolean;
 };
 
 export type OnboardingActionResult = {
@@ -147,6 +156,30 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
     await sparaBusinessContext(user.id, payload);
   } catch (error) {
     return { success: false, error: (error as Error).message };
+  }
+
+  /**
+   * Notissvaret skrivs EFTER affärskontexten och fäller aldrig onboardingen.
+   *
+   * Samma regel som kontextdokumentet i actions/affarskontext.ts: ett
+   * misslyckat sidospår får inte kasta bort ett lyckat huvudspår. Kunden har
+   * fyllt i sitt bolag; att skicka tillbaka dem till formuläret för att en
+   * notisrad inte gick att skriva vore att straffa dem för fel sak.
+   *
+   * Att ett JA kan falla bort är ofarligt — utan rad gäller standarden, som är
+   * på. Ett NEJ som faller bort betyder däremot mejl till någon som sagt nej,
+   * och därför loggas felet uttryckligen i stället för att sväljas tyst.
+   */
+  if (typeof input.notiser === "boolean") {
+    try {
+      const { sparaNotissvarViaOnboarding } = await import("@/lib/actions/notiser");
+      const svar = await sparaNotissvarViaOnboarding(input.notiser);
+      if (!svar.success) {
+        console.error("[onboarding] kunde inte spara notissvaret:", svar.error);
+      }
+    } catch (error) {
+      console.error("[onboarding] kunde inte spara notissvaret:", error);
+    }
   }
 
   /**
