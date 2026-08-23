@@ -1,6 +1,8 @@
 "use client";
 
 import { useDashboard } from "@/components/dashboard/DashboardContext";
+import { Betalsatt } from "@/components/settings/Betalsatt";
+import { Planvaljare } from "@/components/settings/Planvaljare";
 import { KONTAKT_MEJL, mejlaOss } from "@/components/marketing/copy";
 import { PAKET, PRIS_PREFIX, formateraPris } from "@/lib/pricing";
 import { useLocale } from "@/lib/i18n";
@@ -46,26 +48,41 @@ export function PlanSettings() {
     <div className="grid gap-8">
       <div>
         <h2 className="kicker text-mineral">Er plan</h2>
-        <div className="mt-4 border-y border-ink/15 py-5">
-          {paket ? (
-            <>
-              <p className="flex items-baseline gap-2">
-                <span className="text-[1.0625rem] font-semibold">{paket.namn}</span>
-                <span className="text-[0.9375rem] text-mineral">
-                  {text(PRIS_PREFIX)} {formateraPris(paket.prisPerManad)}/mån
-                </span>
+        {/* Två kolumner: vad ni HAR till vänster, vad ni kan byta till höger.
+            Väljaren låg först under texten, och då hamnade den under "Det här
+            ingår" — alltså efter en lista som beskriver det paket man just
+            funderar på att lämna. Sida vid sida läses de mot varandra, vilket
+            är precis vad ett paketbyte är.
+
+            Staplat under md: två kolumner à sex på en telefon ger ett prisfält
+            på halva bredden, och det är samma fälla som gap-x-8 vid 320px
+            (se WorkspaceViews). */}
+        <div className="mt-4 grid grid-cols-12 gap-x-0 gap-y-8 border-y border-ink/15 py-5 md:gap-x-10">
+          <div className="col-span-12 md:col-span-6">
+            {paket ? (
+              <>
+                <p className="flex items-baseline gap-2">
+                  <span className="text-[1.0625rem] font-semibold">{paket.namn}</span>
+                  <span className="text-[0.9375rem] text-mineral">
+                    {text(PRIS_PREFIX)} {formateraPris(paket.prisPerManad)}/mån
+                  </span>
+                </p>
+                <p className="mt-2 max-w-[58ch] text-[0.9375rem] leading-6 text-ink/65">
+                  {text(paket.beskrivning)}
+                </p>
+              </>
+            ) : (
+              <p className="max-w-[58ch] text-[0.9375rem] leading-6 text-ink/65">
+                {products.length === 0
+                  ? "Arbetsytan har ingen aktiv produkt. Välj ett paket här bredvid."
+                  : "Er plan är satt manuellt och matchar inget standardpaket. Väljer ni ett paket här bredvid ersätts den."}
               </p>
-              <p className="mt-2 max-w-[58ch] text-[0.9375rem] leading-6 text-ink/65">
-                {text(paket.beskrivning)}
-              </p>
-            </>
-          ) : (
-            <p className="max-w-[58ch] text-[0.9375rem] leading-6 text-ink/65">
-              {products.length === 0
-                ? "Arbetsytan har ingen aktiv produkt. Hör av er så reder vi ut det."
-                : "Er plan är satt manuellt och matchar inget standardpaket. Hör av er om ni vill se villkoren."}
-            </p>
-          )}
+            )}
+          </div>
+
+          <div className="col-span-12 md:col-span-6">
+            <Planvaljare aktivtPaket={paketId} />
+          </div>
         </div>
       </div>
 
@@ -91,6 +108,10 @@ export function PlanSettings() {
         </ul>
       </div>
 
+      <div className="border-t border-ink/15 pt-7">
+        <Betalsatt />
+      </div>
+
       <div>
         {/* Ingen förbrukningssiffra. Se docstringen: vi mäter den inte per
             arbetsyta ännu, och kunden är den enda som kan falsifiera en
@@ -98,7 +119,8 @@ export function PlanSettings() {
         <p className="max-w-[62ch] text-[0.9375rem] leading-6 text-ink/65">
           Fakturan går till{" "}
           {workspaceName ? <strong className="font-semibold">{workspaceName}</strong> : "er arbetsyta"}.
-          Vill ni byta paket, lägga till en produkt eller se er förbrukning, skriv till{" "}
+          Paketbytet ovan träder i kraft direkt; faktureringen justeras vid nästa
+          period. Vill ni se er förbrukning eller diskutera villkoren, skriv till{" "}
           <a
             href={mejlaOss("Plan och fakturering")}
             className="focus-ring rounded-input underline underline-offset-4 hover:text-ochre"
