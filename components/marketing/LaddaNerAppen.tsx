@@ -109,11 +109,20 @@ export function LaddaNerAppen({ tone = "ink" }: Readonly<{ tone?: "ink" | "paper
         onClick={() => void klick()}
         aria-expanded={instruktion ? öppen : undefined}
         className={cn(
-          // min-h-11 på touch, min-h-9 från md. 36px är en musstorlek; med finger är
-        // 44px minimum (WCAG 2.5.8 och Apples HIG säger samma sak), och en knapp
-        // man missar är en knapp som inte finns. Uppmätt på iPhone 13, Pixel 5 och
-        // iPad Mini innan ändringen: 148x36 på alla tre.
-          "focus-ring group inline-flex min-h-11 items-center gap-1.5 rounded-input border px-3 text-[0.8125rem] font-medium transition-colors md:min-h-9",
+          // 36px som grund, 44px när enheten styrs med FINGER.
+        //
+        // Villkoret är `pointer: coarse`, inte en breddbrytpunkt. Första
+        // försöket använde `md:min-h-9`, och det missade iPad Mini: den är
+        // 768px bred, alltså över md, och fick därmed musstorleken trots att
+        // den bara går att peta på. Uppmätt live: 148x36 på iPaden medan
+        // iPhone och Pixel fick sina 44.
+        //
+        // Skärmbredd säger ingenting om vad man pekar med. En stor surfplatta
+        // och en liten bärbar har samma bredd och helt olika krav.
+        //
+        // 44px är minimum enligt både WCAG 2.5.8 och Apples HIG, och en knapp
+        // man missar är en knapp som inte finns.
+          "focus-ring group inline-flex min-h-9 items-center gap-1.5 rounded-input border px-3 text-[0.8125rem] font-medium transition-colors [@media(pointer:coarse)]:min-h-11",
           tone === "paper"
             ? "border-paper/30 text-paper/85 hover:border-paper/60 hover:text-paper"
             : "border-ink/20 text-ink/75 hover:border-ink/45 hover:text-ink"
