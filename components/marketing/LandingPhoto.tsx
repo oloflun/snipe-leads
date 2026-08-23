@@ -10,6 +10,7 @@ import { KONTAKT_MEJL, mejlaOss, productCopy, shared } from "@/components/market
 import { imagery, photo, sectionCopy } from "@/components/marketing/copy-sections";
 import { PricingSection } from "@/components/marketing/PricingSection";
 import { UspSection } from "@/components/marketing/UspSection";
+import { LaddaNerAppen } from "@/components/marketing/LaddaNerAppen";
 import { ProductSwitch } from "@/components/marketing/ProductSwitch";
 import { SidMeny } from "@/components/marketing/SidMeny";
 import { useReveal } from "@/components/marketing/useReveal";
@@ -184,9 +185,24 @@ export function LandingPhoto({
                 </div>
               </div>
 
-              <div className="col-span-12 self-end lg:col-span-3 lg:col-start-10">
-                <div className="font-display text-[1.5rem] leading-[1.15] tracking-[-0.02em] text-paper">
-                  <ProductSwitch value={product} onChange={setProduct} tone="paper" />
+              {/* Bredare sedan nedladdningsknappen tillkom. Kolumnen var
+                  lg:col-span-3 (≈290px), och "Leads / Support" plus knappen
+                  mäter 338px — knappen bröt alltså till egen rad, vilket är
+                  precis vad den inte skulle göra. Kolumnerna 6-9 stod tomma:
+                  vänsterblocket slutar vid 5, så bredden tas från ingen. */}
+              <div className="col-span-12 self-end lg:col-span-5 lg:col-start-8">
+                {/* Växeln och nedladdningen på samma rad.
+                    `flex-wrap` och inte en fast tvåkolumnare: växeln är
+                    display-typ på 24px och knappen bär en ikon plus fyra ord.
+                    Vid 320px ryms de inte bredvid varandra, och en klippt
+                    knapp syns inte alls — body har overflow-x: clip.
+                    `items-baseline` under md hade ställt knappens ikon på
+                    typsnittets baslinje; items-center är rätt när raden bryts. */}
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+                  <div className="font-display text-[1.5rem] leading-[1.15] tracking-[-0.02em] text-paper">
+                    <ProductSwitch value={product} onChange={setProduct} tone="paper" />
+                  </div>
+                  <LaddaNerAppen tone="paper" />
                 </div>
                 {/* Två vägar rakt in i produkten, en per agent.
                     Växeln ovanför byter vad SIDAN beskriver; de här tar

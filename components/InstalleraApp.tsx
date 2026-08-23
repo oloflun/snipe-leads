@@ -2,9 +2,21 @@
 
 import { Download, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useInstallation } from "@/lib/pwa";
 
 /**
  * Registrerar service workern och erbjuder installation.
+ *
+ * ## Detektionen bor i lib/pwa.ts, inte här
+ *
+ * Filen hade en egen `beforeinstallprompt`-lyssnare. Sedan knappen i
+ * hjältebilden tillkom (LaddaNerAppen) fanns TVÅ, och det är inte en
+ * dubblering utan en bugg: händelsen får `prompt()`:as en gång, så den som
+ * klickade båda knapparna fick ett kast på den andra. Dessutom missar en
+ * komponent som monterar sent en händelse som redan skjutits.
+ *
+ * `lib/pwa.ts` fångar den på modulnivå och låter båda prenumerera. Lägg aldrig
+ * tillbaka en lyssnare här.
  *
  * ## Två plattformar, två beteenden — och därför två lägen här
  *
@@ -27,34 +39,11 @@ import { useEffect, useState } from "react";
  * en annons, inte en funktion.
  */
 
-type InstallPrompt = Event & {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-};
-
 const AVVISAD = "snajp.installation.avvisad";
 
-function arStandalone(): boolean {
-  if (typeof window === "undefined") return false;
-  return (
-    window.matchMedia("(display-mode: standalone)").matches ||
-    // iOS använder en egen, icke-standardiserad flagga.
-    (window.navigator as Navigator & { standalone?: boolean }).standalone === true
-  );
-}
-
-function arIOS(): boolean {
-  if (typeof navigator === "undefined") return false;
-  return (
-    /iphone|ipad|ipod/i.test(navigator.userAgent) ||
-    // iPadOS 13+ utger sig för att vara macOS; pekpunkterna avslöjar den.
-    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
-  );
-}
-
 export function InstalleraApp() {
-  const [prompt, setPrompt] = useState<InstallPrompt | null>(null);
-  const [visaIOS, setVisaIOS] = useState(false);
+  const { plattform, installera: kor } = useInstallation();
+  const [avvisad, setAvvisad] = useState(true);
 
   useEffect(() => {
     // Registreringen sker oavsett om rutan visas: service workern behövs för
@@ -65,43 +54,30 @@ export function InstalleraApp() {
         console.error("service worker:", error);
       });
     }
-
-    if (arStandalone() || localStorage.getItem(AVVISAD) === "1") {
-      return;
-    }
-
-    if (arIOS()) {
-      setVisaIOS(true);
-      return;
-    }
-
-    const vidPrompt = (event: Event) => {
-      event.preventDefault();
-      setPrompt(event as InstallPrompt);
-    };
-
-    window.addEventListener("beforeinstallprompt", vidPrompt);
-    return () => window.removeEventListener("beforeinstallprompt", vidPrompt);
+    // Startar som avvisad och öppnas först efter kontrollen. Motsatt ordning
+    // hade blinkat fram rutan för den som redan tryckt bort den.
+    setAvvisad(localStorage.getItem(AVVISAD) === "1");
   }, []);
 
   function avvisa() {
     localStorage.setItem(AVVISAD, "1");
-    setPrompt(null);
-    setVisaIOS(false);
+    setAvvisad(true);
   }
 
   async function installera() {
-    if (!prompt) return;
-    await prompt.prompt();
-    const { outcome } = await prompt.userChoice;
-    // Händelsen går bara att använda EN gång. Oavsett utfall är den förbrukad.
-    setPrompt(null);
-    if (outcome === "accepted") {
+    if (await kor()) {
       localStorage.setItem(AVVISAD, "1");
+      setAvvisad(true);
     }
   }
 
-  if (!prompt && !visaIOS) {
+  // Rutan visas bara där den kan leda någonstans: ett klick (kan-installera)
+  // eller en instruktion som faktiskt gäller (iOS). macOS Safari och Firefox
+  // får den inte — där bär knappen i hjältebilden instruktionen, och en
+  // fastklistrad rad i sidfoten som säger "byt webbläsare" är en annons.
+  const visaIOS = plattform === "ios";
+  const kanInstallera = plattform === "kan-installera";
+  if (avvisad || (!kanInstallera && !visaIOS)) {
     return null;
   }
 
@@ -121,7 +97,7 @@ export function InstalleraApp() {
           </p>
         </div>
 
-        {prompt ? (
+        {kanInstallera ? (
           <button
             type="button"
             onClick={() => void installera()}
