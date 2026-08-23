@@ -348,6 +348,56 @@ Render, som svarar med en HTML-sida medan den vaknar ur viloläge — också det
 Test: tests/invariants/test_inv_api_001.py
 Införd: 2026-08-17 · Upphävs endast genom waiver
 
+### INV-BOOK-001 — Pengar räknas av kod i Decimal, aldrig av modellen
+`app/bookkeeping/math.till_decimal` KASTAR på `float` — den avvisar inte bara
+konventionsvidrigt bruk, den gör det omöjligt. Momsberäkning, summering och
+balans går genom modulen; modellen väljer vilken beräkning som ska göras och
+vilken KATEGORI ett kvitto har, medan `kontoplan.bygg_*verifikat` gör kontovalet
+och bygger raderna så att de balanserar av konstruktion. Det finns ingen kodväg
+där modellen skriver ett belopp på en debetrad.
+Undantaget är namngivet och testat: `underlag._fran_json_tal` bygger en bro för
+JSON-tal, eftersom `json.loads` ger en Python-float innan vår kod ser värdet.
+Bron går via `str()`, som round-trippar exakt, och gäller BARA vid
+modellgränsen — aritmetiken sker aldrig på den sidan.
+Varför: en språkmodell räknar rätt på tre rader och fel på trettio, och felet
+ser ut som ett belopp. `ROUND_HALF_UP` (halva bort från noll) är dessutom det
+som gör kreditfakturan rätt: −0,50 kr blir −1 kr, inte 0 kr som Pythons default
+ROUND_HALF_EVEN hade gett.
+Test: snajp-support/tests/bookkeeping/test_math.py
+Införd: 2026-08-23 · Upphävs endast genom waiver
+
+### INV-BOOK-002 — En periodrapport visas aldrig som klar när den inte går ihop
+`app/bookkeeping/verifieringsgrind.check_period` fäller på exakt två villkor:
+debet ≠ kredit i något verifikat, eller ett underlag som saknar ett fält
+beräkningen behöver. Fällning ger `status='granska_manuellt'`, och
+`app/api/bookkeeping._period` räknar ALDRIG summorna före grinden körts.
+Ett fällt underlag bidrar inte med ett gissat belopp — det står i brist-listan.
+SIE4-exporten vägrar på samma villkor (409), och `sie4.skriv_sie4` kontrollerar
+balansen en gång till före skrivning.
+Varför: trovärdiga men felaktiga tal är värre än tomma. Det är samma klass av
+fel som lät adminvyn visa fyra kunder med nollställda siffror (STATUS.md
+2026-08-16) — och här skriver en människa under resultatet.
+Test: snajp-support/tests/bookkeeping/test_verifieringsgrind.py
+Införd: 2026-08-23 · Upphävs endast genom waiver
+
+### INV-STORE-001 — MemoryStorage och PostgresStorage har identiska signaturer
+`tests/invariants/test_inv_store_001.py` jämför varje publik metod i
+`Storage`-protokollet mot BÅDA implementationerna: att metoden finns, att
+parameternamnen och ordningen är desamma, och att default-värdena är desamma.
+Värdemängderna (`AGENT_RUN_TYPES`, `BK_STATUSAR`, `BK_RIKTNINGAR`) och
+valideringarna (`kontrollera_bk_*`, `bk_belopp`, `bk_datum`) bor i `base.py` och
+anropas av båda lagringarna, så de kan inte glida isär i BETEENDE heller.
+Verifierat att grinden fäller: den hittade en befintlig divergens första gången
+den kördes — `search_kb` hade `limit=3` i protokollet och Postgres men `limit=5`
+i minnet, och alla åtta anropare använder default-värdet. Produktionen matade
+alltså agenten med tre KB-artiklar där varje test matade den med fem.
+Varför: `agent_runs` avvisade varje leads-körning i ett halvår med grön
+testsvit, eftersom sviten kör mot minnet och minnet saknade Postgres villkor.
+En metod som bara finns i en av lagringarna ger inte ett fel — den ger ett
+falskt godkänt.
+Test: snajp-support/tests/invariants/test_inv_store_001.py
+Införd: 2026-08-23 · Upphävs endast genom waiver
+
 ## Roadmap
 
 Ids this plan will introduce, in the order `Genomförandeordning` builds them. Not yet enforced by CI.

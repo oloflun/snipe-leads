@@ -13,11 +13,21 @@ import hashlib
 import json
 import logging
 from contextlib import asynccontextmanager
+from datetime import date
+from decimal import Decimal
 from typing import Any
 
 import asyncpg
 
-from .base import ANALYTICS_COVERAGE, status_transition_allowed
+from .base import (
+    ANALYTICS_COVERAGE,
+    bk_belopp,
+    bk_datum,
+    kontrollera_bk_balans,
+    kontrollera_bk_riktning,
+    kontrollera_bk_status,
+    status_transition_allowed,
+)
 
 logger = logging.getLogger("snajp-support.storage")
 
@@ -1818,6 +1828,234 @@ class PostgresStorage:
                 json.dumps(detail or {}, ensure_ascii=False),
                 run_id,
             )
+
+    # -- Bokföring (migration 045) ------------------------------------------
+    #
+    # Samma validering som MemoryStorage, via de DELADE hjälparna i base.py.
+    # Två kopior av ett check-villkor blir förr eller senare två olika
+    # villkor — se AGENT_RUN_TYPES.
+
+    async def create_bk_underlag(
+        self,
+        tenant_id: str,
+        *,
+        sha256: str,
+        filnamn: str,
+        mimetyp: str,
+        status: str,
+        datum: date | None = None,
+        motpart: str | None = None,
+        brutto: Decimal | None = None,
+        momssats: Decimal | None = None,
+        riktning: str | None = None,
+        kategori: str | None = None,
+        anmarkning: str = "",
+    ) -> dict[str, Any]:
+        kontrollera_bk_status(status)
+        kontrollera_bk_riktning(riktning)
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                insert into bk_underlag
+                  (tenant_id, sha256, filnamn, mimetyp, status, datum, motpart,
+                   brutto, momssats, riktning, kategori, anmarkning)
+                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                returning *
+                """,
+                tenant_id,
+                sha256,
+                filnamn,
+                mimetyp,
+                status,
+                bk_datum(datum),
+                motpart,
+                bk_belopp(brutto, "brutto"),
+                bk_belopp(momssats, "momssats"),
+                riktning,
+                kategori,
+                anmarkning,
+            )
+        return _row(record)
+
+    async def get_bk_underlag(self, tenant_id: str, underlag_id: str) -> dict[str, Any] | None:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow("select * from bk_underlag where id = $1", underlag_id)
+        return _row(record)
+
+    async def list_bk_underlag(
+        self,
+        tenant_id: str,
+        *,
+        fran: date | None = None,
+        till: date | None = None,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select * from bk_underlag
+                where (datum is null or $1::date is null or datum >= $1)
+                  and (datum is null or $2::date is null or datum <= $2)
+                order by datum nulls last, created_at
+                limit $3
+                """,
+                bk_datum(fran),
+                bk_datum(till),
+                limit,
+            )
+        return [_row(r) for r in records]
+
+    async def update_bk_underlag(
+        self,
+        tenant_id: str,
+        underlag_id: str,
+        *,
+        status: str | None = None,
+        datum: date | None = None,
+        motpart: str | None = None,
+        brutto: Decimal | None = None,
+        momssats: Decimal | None = None,
+        riktning: str | None = None,
+        kategori: str | None = None,
+        anmarkning: str | None = None,
+    ) -> dict[str, Any] | None:
+        if status is not None:
+            kontrollera_bk_status(status)
+        if riktning is not None:
+            kontrollera_bk_riktning(riktning)
+
+        # Dynamisk SET-lista: bara satta fält skrivs. Samma mönster som
+        # update_prospect — en fast lista hade nollställt det anroparen
+        # utelämnade, vilket för ett underlag betyder att en människas
+        # rättelse raderar de fält hen inte rörde.
+        satta: list[tuple[str, Any]] = []
+        for kolumn, varde in (
+            ("status", status),
+            ("datum", bk_datum(datum)),
+            ("motpart", motpart),
+            ("brutto", bk_belopp(brutto, "brutto")),
+            ("momssats", bk_belopp(momssats, "momssats")),
+            ("riktning", riktning),
+            ("kategori", kategori),
+            ("anmarkning", anmarkning),
+        ):
+            if varde is not None:
+                satta.append((kolumn, varde))
+
+        if not satta:
+            return await self.get_bk_underlag(tenant_id, underlag_id)
+
+        set_sql = ", ".join(f"{kolumn} = ${i + 2}" for i, (kolumn, _) in enumerate(satta))
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                f"update bk_underlag set {set_sql} where id = $1 returning *",
+                underlag_id,
+                *[varde for _, varde in satta],
+            )
+        return _row(record)
+
+    async def create_bk_verifikat(
+        self,
+        tenant_id: str,
+        *,
+        underlag_id: str,
+        serie: str,
+        nummer: str,
+        datum: date,
+        text: str,
+        rader: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        kontrollera_bk_balans(rader)
+        # EN transaktion för huvud och rader. _scoped öppnar redan en, så ett
+        # fel på någon rad rullar tillbaka hela verifikatet — ett halvskrivet
+        # verifikat balanserar inte och gör varje senare periodrapport fel.
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                insert into bk_verifikat (tenant_id, underlag_id, serie, nummer, datum, text)
+                values ($1, $2, $3, $4, $5, $6)
+                returning *
+                """,
+                tenant_id,
+                underlag_id,
+                serie,
+                nummer,
+                bk_datum(datum),
+                text,
+            )
+            verifikat_id = record["id"]
+            await conn.executemany(
+                """
+                insert into bk_verifikat_rad (tenant_id, verifikat_id, konto, debet, kredit, text)
+                values ($1, $2, $3, $4, $5, $6)
+                """,
+                [
+                    (
+                        tenant_id,
+                        verifikat_id,
+                        str(rad["konto"]),
+                        bk_belopp(rad.get("debet"), "debet") or Decimal(0),
+                        bk_belopp(rad.get("kredit"), "kredit") or Decimal(0),
+                        rad.get("text", ""),
+                    )
+                    for rad in rader
+                ],
+            )
+            radposter = await conn.fetch(
+                """
+                select konto, debet, kredit, text from bk_verifikat_rad
+                where verifikat_id = $1 order by id
+                """,
+                verifikat_id,
+            )
+        post = _row(record)
+        post["rader"] = [dict(r) for r in radposter]
+        return post
+
+    async def list_bk_verifikat(
+        self,
+        tenant_id: str,
+        *,
+        fran: date | None = None,
+        till: date | None = None,
+    ) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select * from bk_verifikat
+                where ($1::date is null or datum >= $1)
+                  and ($2::date is null or datum <= $2)
+                order by datum, nummer
+                """,
+                bk_datum(fran),
+                bk_datum(till),
+            )
+            # EN fråga för raderna, inte en per verifikat: en period med 200
+            # verifikat hade annars blivit 201 rundturer.
+            radposter = await conn.fetch(
+                """
+                select r.verifikat_id, r.konto, r.debet, r.kredit, r.text
+                from bk_verifikat_rad r
+                join bk_verifikat v on v.id = r.verifikat_id
+                where ($1::date is null or v.datum >= $1)
+                  and ($2::date is null or v.datum <= $2)
+                order by r.id
+                """,
+                bk_datum(fran),
+                bk_datum(till),
+            )
+
+        per_verifikat: dict[str, list[dict[str, Any]]] = {}
+        for rad in radposter:
+            data = dict(rad)
+            per_verifikat.setdefault(str(data.pop("verifikat_id")), []).append(data)
+
+        poster = []
+        for record in records:
+            post = _row(record)
+            post["rader"] = per_verifikat.get(post["id"], [])
+            poster.append(post)
+        return poster
 
     async def close(self) -> None:
         await self.pool.close()

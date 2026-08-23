@@ -17,6 +17,7 @@ import asyncio
 from .api import (
     admin,
     analytics,
+    bookkeeping,
     chat,
     demo,
     drafts,
@@ -144,6 +145,7 @@ app.include_router(drafts.router)
 app.include_router(rules.router)
 app.include_router(admin.router)
 app.include_router(analytics.router)
+app.include_router(bookkeeping.router)
 
 # Ohanterade fel hamnar i platform_events i stället för att rulla förbi i
 # Renders stdout och försvinna vid nästa spin-down (migration 026).

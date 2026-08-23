@@ -40,6 +40,24 @@ export type AppRoute = {
   product: ProductKey | "shared";
   /** Mock-driven surface: routen finns, men den står inte i kundens meny. */
   preview?: boolean;
+  /**
+   * Bara för plattformsadmin. Skilt från `product` med flit.
+   *
+   * Bokföringen är inte såld ännu: den har inget pris, ingen marknadssida och
+   * ingen kund som köpt den. Att ge den en `ProductKey` nu hade tvingat fram
+   * poster i TRE uttömmande kartor — `copy-sections.ts`, `LandingPhoto.tsx`
+   * och `UspSection.tsx`, alla `Record<ProductKey, …>` — alltså
+   * marknadsföringstext och en publik URL för något som ska vara dolt.
+   * Dessutom en migration mot CHECK-villkoret på `workspaces.products`
+   * (005_workspace_products.sql) för ett värde ingen arbetsyta ska ha.
+   *
+   * Den dagen den säljs byts det här mot en ProductKey, och ändringen är
+   * liten och kompilatorledd: navfiltret nedan och `WorkspaceSection`.
+   *
+   * Flaggan döljer bara MENYPOSTEN. Grinden som räknar sitter i
+   * `WorkspaceSection`, på servern — se `products`-kontrollen där.
+   */
+  adminOnly?: boolean;
 };
 
 /**
@@ -76,16 +94,26 @@ export const appRoutes: AppRoute[] = [
   { href: "/dashboard/inbox", labelKey: "nav.inbox", product: "leads", preview: true },
   { href: "/dashboard/analytics", labelKey: "nav.analytics", product: "leads", preview: true },
   { href: "/dashboard/assistant", labelKey: "nav.assistant", product: "leads", preview: true },
+  // Bokföringsagenten. `shared` + `adminOnly` och inte en ProductKey — se
+  // AppRoute.adminOnly för varför, och för vad som ändras när den säljs.
+  { href: "/dashboard/bokforing", labelKey: "nav.bokforing", product: "shared", adminOnly: true },
   { href: "/settings", labelKey: "nav.settings", product: "shared" }
 ];
 
 export function routesForProducts(
   products: readonly ProductKey[],
-  { includePreview = false }: { includePreview?: boolean } = {}
+  {
+    includePreview = false,
+    isAdmin = false
+  }: { includePreview?: boolean; isAdmin?: boolean } = {}
 ): AppRoute[] {
   return appRoutes.filter(
     (route) =>
       (includePreview || !route.preview) &&
+      // Fail-closed: default är `false`, så en anropare som glömmer flaggan
+      // visar FÄRRE poster, inte fler. Motsatt default hade gjort varje ny
+      // anropsplats till en potentiell läcka.
+      (!route.adminOnly || isAdmin) &&
       (route.product === "shared" || products.includes(route.product))
   );
 }

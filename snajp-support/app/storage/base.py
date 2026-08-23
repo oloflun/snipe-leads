@@ -7,8 +7,13 @@ som första parameter, så att varje kundföretag är helt isolerat. Två implem
 - PostgresStorage: Supabase Postgres + pgvector; sätter dessutom app.tenant_id per
   transaktion så RLS-policyerna i 003_snajp_multitenant.sql verkställs.
 - MemoryStorage: in-memory med samma gränssnitt (graceful degradation utan databas).
+
+Bokföringsdelen (`bk_*`) följer i stället dubbel bokföring som referens­arkitektur
+— se lambdadevelopment/lambda-erp. Läst och härmad, inte vendorad.
 """
 
+from datetime import date, datetime
+from decimal import Decimal
 from typing import Any, Protocol
 
 
@@ -578,6 +583,98 @@ class Storage(Protocol):
         detail: dict[str, Any] | None = None,
     ) -> None: ...
 
+    # -- Bokföring (migration 045) ------------------------------------------
+    #
+    # Belopp är `Decimal` genom hela kedjan, aldrig float — kolumnerna är
+    # `numeric(14,2)` och asyncpg ger tillbaka Decimal. Se
+    # app/bookkeeping/math.py för varför float avvisas.
+    #
+    # Filen sparas ALDRIG. `sha256` är allt som blir kvar av originalet, och
+    # det räcker för att svara på "har vi sett det här kvittot förut?".
+
+    async def create_bk_underlag(
+        self,
+        tenant_id: str,
+        *,
+        sha256: str,
+        filnamn: str,
+        mimetyp: str,
+        status: str,
+        datum: date | None = None,
+        motpart: str | None = None,
+        brutto: Decimal | None = None,
+        momssats: Decimal | None = None,
+        riktning: str | None = None,
+        kategori: str | None = None,
+        anmarkning: str = "",
+    ) -> dict[str, Any]:
+        """Ett underlag, med de fält avläsningen faktiskt hittade.
+
+        Fälten är `None`-bara med flit: ett underlag där grinden fällt SKA gå
+        att spara med hål i, annars finns ingen granskningskö att fylla.
+        Grinden, inte databasen, avgör om det får bli en periodrapport.
+        """
+        ...
+
+    async def get_bk_underlag(
+        self, tenant_id: str, underlag_id: str
+    ) -> dict[str, Any] | None: ...
+
+    async def list_bk_underlag(
+        self,
+        tenant_id: str,
+        *,
+        fran: date | None = None,
+        till: date | None = None,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]: ...
+
+    async def update_bk_underlag(
+        self,
+        tenant_id: str,
+        underlag_id: str,
+        *,
+        status: str | None = None,
+        datum: date | None = None,
+        motpart: str | None = None,
+        brutto: Decimal | None = None,
+        momssats: Decimal | None = None,
+        riktning: str | None = None,
+        kategori: str | None = None,
+        anmarkning: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Människans rättelse av ett fällt underlag. Bara satta fält skrivs."""
+        ...
+
+    async def create_bk_verifikat(
+        self,
+        tenant_id: str,
+        *,
+        underlag_id: str,
+        serie: str,
+        nummer: str,
+        datum: date,
+        text: str,
+        rader: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Verifikatet med sina konteringsrader, i EN transaktion.
+
+        Rader och huvud i samma skrivning: ett verifikat utan rader balanserar
+        inte, och ett halvskrivet verifikat är precis den sortens post som får
+        en periodrapport att se rimlig ut och vara fel.
+        """
+        ...
+
+    async def list_bk_verifikat(
+        self,
+        tenant_id: str,
+        *,
+        fran: date | None = None,
+        till: date | None = None,
+    ) -> list[dict[str, Any]]:
+        """Verifikat med `rader` ifyllda. Sorterade på datum, sedan nummer."""
+        ...
+
     async def close(self) -> None: ...
 
 
@@ -586,7 +683,120 @@ class Storage(Protocol):
 # ett halvår att lära sig: villkoret fanns bara i Postgres, MemoryStorage tog
 # emot vad som helst, testerna körde mot minnet och var gröna — samtidigt som
 # ingen enda leads-körning sparades i produktion.
-AGENT_RUN_TYPES = ("support", "leads", "leads_research", "leads_outreach", "demo")
+AGENT_RUN_TYPES = (
+    "support",
+    "leads",
+    "leads_research",
+    "leads_outreach",
+    "demo",
+    # Bokföringsagenten (migration 045). Lades till HÄR och i migrationen i
+    # samma ändring — det är hela läxan ovan.
+    "bookkeeping",
+)
+
+
+# Värdemängden för bk_underlag.status, spegel av check-villkoret i migration
+# 045. Bor här av exakt samma skäl som AGENT_RUN_TYPES ovan — och `klar`/
+# `granska_manuellt` är dessutom verifieringsgrindens två utgångar, så
+# tests/bookkeeping/test_status_domain.py kontrollerar att de två listorna
+# inte glidit isär.
+BK_STATUSAR = ("granska_manuellt", "klar", "godkand")
+
+BK_RIKTNINGAR = ("intakt", "kostnad")
+
+
+class BkValideringsfel(ValueError):
+    """Ett värde Postgres hade avvisat med check-violation.
+
+    Kastas av BÅDA lagringarna via hjälparna nedan. Att minnet tar emot mer än
+    databasen är hela mekanismen bakom "ingen leads-körning har någonsin
+    sparats" — se AGENT_RUN_TYPES.
+    """
+
+
+def kontrollera_bk_status(status: str) -> None:
+    if status not in BK_STATUSAR:
+        raise BkValideringsfel(
+            f"status={status!r} finns inte i bk_underlag check-villkoret {BK_STATUSAR}."
+        )
+
+
+def kontrollera_bk_riktning(riktning: str | None) -> None:
+    if riktning is not None and riktning not in BK_RIKTNINGAR:
+        raise BkValideringsfel(
+            f"riktning={riktning!r} finns inte i bk_underlag check-villkoret {BK_RIKTNINGAR}."
+        )
+
+
+#: Kolumnernas skala i migration 045. `momssats` är numeric(5,4), resten
+#: numeric(14,2).
+BK_SKALA: dict[str, Decimal] = {"momssats": Decimal("0.0001")}
+BK_SKALA_STANDARD = Decimal("0.01")
+
+
+def bk_belopp(varde: object, falt: str) -> Decimal | None:
+    """None förblir None; allt annat måste vara Decimal — kvantiserat till
+    kolumnens skala.
+
+    Float avvisas HÄR också och inte bara i math.py: kolumnen är
+    numeric(14,2), och asyncpg skickar en float som en approximation utan att
+    säga till. Ett öre som försvinner i lagringen är osynligt tills en
+    periodrapport inte går ihop.
+
+    KVANTISERINGEN är inte kosmetik. Postgres lagrar `numeric(5,4)` och ger
+    tillbaka `Decimal("0.2500")`; MemoryStorage gav `Decimal("0.25")` — samma
+    värde, olika STRÄNG. API:t serialiserar belopp som strängar (se `_kr` i
+    app/api/bookkeeping.py), så vyn fick "0.06" i varje test och "0.0600" i
+    drift. Den skillnaden hann bli en bugg: momsetiketten räknade ut 60 %
+    i stället för 6 %, och bara mot Postgres.
+    """
+    if varde is None:
+        return None
+    if isinstance(varde, Decimal):
+        return varde.quantize(BK_SKALA.get(falt, BK_SKALA_STANDARD))
+    raise BkValideringsfel(
+        f"{falt}: {type(varde).__name__} går inte att lagra som numeric — skicka Decimal."
+    )
+
+
+def bk_datum(varde: object) -> date | None:
+    """Normaliserar inmatat datum till `date`. Accepterar även ISO-sträng.
+
+    Finns för att BÅDA lagringarna ska ta emot samma sak. Utgången är däremot
+    alltid en ISO-STRÄNG i båda — Postgres via `_row`, som isoformatar allt med
+    `.isoformat()`, och minnet genom att lagra strängen direkt. Utan den
+    symmetrin hade en vy som fungerade mot minnet fått ett `date`-objekt där
+    produktionen ger en sträng, och felet hade dykt upp först i drift.
+    """
+    if varde is None:
+        return None
+    if isinstance(varde, datetime):
+        return varde.date()
+    if isinstance(varde, date):
+        return varde
+    if isinstance(varde, str):
+        try:
+            return date.fromisoformat(varde)
+        except ValueError as orsak:
+            raise BkValideringsfel(f"datum: {varde!r} är inte ISO-format") from orsak
+    raise BkValideringsfel(f"datum: {type(varde).__name__} är inte ett datum")
+
+
+def kontrollera_bk_balans(rader: list[dict[str, Any]]) -> None:
+    """Debet minus kredit måste vara noll.
+
+    Villkoret finns i BÅDA lagringarna och inte bara i grinden: ett obalanserat
+    verifikat som ändå hamnar i databasen gör varje senare periodrapport fel,
+    och då är felet en rad i en tabell i stället för ett verdikt i en kö.
+    """
+    if not rader:
+        raise BkValideringsfel("verifikat utan rader kan inte balansera")
+    debet = sum((bk_belopp(r.get("debet"), "debet") or Decimal(0) for r in rader), Decimal(0))
+    kredit = sum((bk_belopp(r.get("kredit"), "kredit") or Decimal(0) for r in rader), Decimal(0))
+    if debet != kredit:
+        raise BkValideringsfel(
+            f"verifikatet balanserar inte: debet {debet} mot kredit {kredit}"
+        )
 
 
 #: Vilka mätvärden i `weekly_analytics` som har en källa i databasen.

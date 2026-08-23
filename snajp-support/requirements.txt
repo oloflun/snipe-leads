@@ -7,6 +7,7 @@ pydantic>=2.8
 pydantic-settings>=2.4
 python-dotenv>=1.0
 scrapegraph-py>=2.1.0  # Fas B research (G4) — se app/agent/research_tools.py
+pypdf>=5.1.0  # Bokföring: textlagret ur en PDF — se app/bookkeeping/underlag.py
 # Windows saknar IANA-tidszonsdatabasen, så ZoneInfo("Europe/Stockholm") i
 # sändningsfönstret kastar ZoneInfoNotFoundError och HELA testsviten faller vid
 # collection. Linux (Docker/Render) har den via OS:et — därav lätt att missa.

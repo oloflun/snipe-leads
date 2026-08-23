@@ -102,8 +102,17 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   const pathname = usePathname();
   const router = useRouter();
   const { t, locale, toggleLocale } = useLocale();
-  const { products, workspaceName, shows, isDemo, signedIn, vy, availableScopes, setScope } =
-    useDashboard();
+  const {
+    products,
+    workspaceName,
+    shows,
+    isDemo,
+    signedIn,
+    vy,
+    availableScopes,
+    setScope,
+    isPlatformAdmin
+  } = useDashboard();
 
   // Entitlement decides what exists; the scope switch decides what is on screen
   // right now. A nav listing eight Leads sections while the scope reads "Support"
@@ -119,7 +128,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   //
   // Regeln: en kontroll får aldrig gömma sig själv. Entitlement styr att
   // fliken finns; läget styr vad innehållet visar.
-  const navRoutes = routesForProducts(products).filter(
+  const navRoutes = routesForProducts(products, { isAdmin: isPlatformAdmin }).filter(
     (route) =>
       route.product === "shared" || route.href in FLIKENS_LAGE || shows(route.product)
   );
@@ -138,7 +147,10 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   // Scope-skyddet står kvar orört: filtret på `shows()` gäller fortfarande, så
   // den som smalnar av vyn till Support medan de står på en leads-sida
   // dirigeras som förut.
-  const natbaraRoutes = routesForProducts(products, { includePreview: true }).filter(
+  const natbaraRoutes = routesForProducts(products, {
+    includePreview: true,
+    isAdmin: isPlatformAdmin
+  }).filter(
     (route) => route.product === "shared" || shows(route.product)
   );
 

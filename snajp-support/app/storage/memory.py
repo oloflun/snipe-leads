@@ -10,7 +10,8 @@ import hashlib
 import re
 import unicodedata
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Any
 
 from ..config import (
@@ -22,7 +23,16 @@ from ..config import (
     PUBLIC_DEMO_TENANT_SLUG,
 )
 from ..kb_articles import DEMO_KB_ARTICLES, KB_ARTICLES
-from .base import AGENT_RUN_TYPES, ANALYTICS_COVERAGE, status_transition_allowed
+from .base import (
+    AGENT_RUN_TYPES,
+    ANALYTICS_COVERAGE,
+    bk_belopp,
+    bk_datum,
+    kontrollera_bk_balans,
+    kontrollera_bk_riktning,
+    kontrollera_bk_status,
+    status_transition_allowed,
+)
 
 _STOPWORDS = {
     "och", "att", "det", "som", "en", "ett", "jag", "har", "min", "mitt", "mina",
@@ -93,6 +103,10 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _iso(d: date | None) -> str | None:
+    return d.isoformat() if d is not None else None
+
+
 def _kb_row(tenant_id: str, article: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": str(uuid.uuid4()),
@@ -143,6 +157,9 @@ class MemoryStorage:
         self.prospects: dict[str, list[dict[str, Any]]] = {}
         self.prospect_sources: dict[str, list[dict[str, Any]]] = {}
         self.agent_runs: dict[str, list[dict[str, Any]]] = {}
+        # Bokföring (migration 045). Filen sparas aldrig — bara sha256:n.
+        self.bk_underlag: dict[str, list[dict[str, Any]]] = {}
+        self.bk_verifikat: dict[str, list[dict[str, Any]]] = {}
         # (scope_kind, scope_id, kind) -> tidsstämplar. Inte tenant-nycklad,
         # eftersom demons IP-scope inte har någon tenant (migration 019).
         self.rate_events: dict[tuple[str, str, str], list[datetime]] = {}
@@ -370,7 +387,12 @@ class MemoryStorage:
         tenant_id: str,
         query: str,
         embedding: list[float] | None = None,
-        limit: int = 5,
+        # 3, inte 5. Protokollet och PostgresStorage sa 3; bara minnet sa 5,
+        # och alla åtta anropare använder default-värdet. Följden var att varje
+        # test matade agenten med FEM artiklar där produktionen ger TRE — en
+        # skillnad i vad modellen faktiskt läser, osynlig i båda filerna var
+        # för sig. Hittad av tests/invariants/test_inv_store_001.py.
+        limit: int = 3,
     ) -> list[dict[str, Any]]:
         # OBS: `embedding` ignoreras helt här — ren tokenöverlappning, aldrig
         # semantisk. Missar synonymer/ordformer ("betalsätt" mot
@@ -1359,6 +1381,171 @@ class MemoryStorage:
                 "created_at": _now(),
             }
         )
+
+    # -- Bokföring (migration 045) ------------------------------------------
+    #
+    # Samma validering som Postgres-sidan, inte bara samma signatur. En lagring
+    # som TAR EMOT mer än den andra är hur agent_type-buggen kunde leva i ett
+    # halvår med grön testsvit — se log_agent_run ovan.
+
+    async def create_bk_underlag(
+        self,
+        tenant_id: str,
+        *,
+        sha256: str,
+        filnamn: str,
+        mimetyp: str,
+        status: str,
+        datum: date | None = None,
+        motpart: str | None = None,
+        brutto: Decimal | None = None,
+        momssats: Decimal | None = None,
+        riktning: str | None = None,
+        kategori: str | None = None,
+        anmarkning: str = "",
+    ) -> dict[str, Any]:
+        kontrollera_bk_status(status)
+        kontrollera_bk_riktning(riktning)
+        rad = {
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "sha256": sha256,
+            "filnamn": filnamn,
+            "mimetyp": mimetyp,
+            "status": status,
+            # ISO-sträng, inte date: _row i postgres.py isoformatar allt med
+            # .isoformat(), så ett date-objekt här hade gjort minnet och
+            # produktionen olika för samma anrop. Se base.bk_datum.
+            "datum": _iso(bk_datum(datum)),
+            "motpart": motpart,
+            "brutto": bk_belopp(brutto, "brutto"),
+            "momssats": bk_belopp(momssats, "momssats"),
+            "riktning": riktning,
+            "kategori": kategori,
+            "anmarkning": anmarkning,
+            "created_at": _now(),
+        }
+        self.bk_underlag.setdefault(tenant_id, []).append(rad)
+        return dict(rad)
+
+    async def get_bk_underlag(self, tenant_id: str, underlag_id: str) -> dict[str, Any] | None:
+        for rad in self.bk_underlag.get(tenant_id, []):
+            if rad["id"] == underlag_id:
+                return dict(rad)
+        return None
+
+    async def list_bk_underlag(
+        self,
+        tenant_id: str,
+        *,
+        fran: date | None = None,
+        till: date | None = None,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        träffar = []
+        for rad in self.bk_underlag.get(tenant_id, []):
+            datum = rad.get("datum")
+            # Ett underlag UTAN datum tas med: det är just ett sådant grinden
+            # fällt, och en granskningskö som gömmer dem är ingen kö.
+            #
+            # Jämförelsen sker på ISO-strängar. Det är korrekt och inte en
+            # genväg: ÅÅÅÅ-MM-DD sorterar lexikografiskt i samma ordning som
+            # kronologiskt, vilket är hela skälet till att formatet ser ut så.
+            if datum is not None:
+                if fran and datum < _iso(bk_datum(fran)):
+                    continue
+                if till and datum > _iso(bk_datum(till)):
+                    continue
+            träffar.append(dict(rad))
+        träffar.sort(key=lambda r: (r["datum"] is None, r["datum"] or "", r["created_at"]))
+        return träffar[:limit]
+
+    async def update_bk_underlag(
+        self,
+        tenant_id: str,
+        underlag_id: str,
+        *,
+        status: str | None = None,
+        datum: date | None = None,
+        motpart: str | None = None,
+        brutto: Decimal | None = None,
+        momssats: Decimal | None = None,
+        riktning: str | None = None,
+        kategori: str | None = None,
+        anmarkning: str | None = None,
+    ) -> dict[str, Any] | None:
+        if status is not None:
+            kontrollera_bk_status(status)
+        if riktning is not None:
+            kontrollera_bk_riktning(riktning)
+        for rad in self.bk_underlag.get(tenant_id, []):
+            if rad["id"] != underlag_id:
+                continue
+            for nyckel, värde in (
+                ("status", status),
+                ("datum", _iso(bk_datum(datum))),
+                ("motpart", motpart),
+                ("brutto", bk_belopp(brutto, "brutto")),
+                ("momssats", bk_belopp(momssats, "momssats")),
+                ("riktning", riktning),
+                ("kategori", kategori),
+                ("anmarkning", anmarkning),
+            ):
+                if värde is not None:
+                    rad[nyckel] = värde
+            return dict(rad)
+        return None
+
+    async def create_bk_verifikat(
+        self,
+        tenant_id: str,
+        *,
+        underlag_id: str,
+        serie: str,
+        nummer: str,
+        datum: date,
+        text: str,
+        rader: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        kontrollera_bk_balans(rader)
+        post = {
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "underlag_id": underlag_id,
+            "serie": serie,
+            "nummer": nummer,
+            "datum": _iso(bk_datum(datum)),
+            "text": text,
+            "rader": [
+                {
+                    "konto": str(r["konto"]),
+                    "debet": bk_belopp(r.get("debet"), "debet") or Decimal(0),
+                    "kredit": bk_belopp(r.get("kredit"), "kredit") or Decimal(0),
+                    "text": r.get("text", ""),
+                }
+                for r in rader
+            ],
+            "created_at": _now(),
+        }
+        self.bk_verifikat.setdefault(tenant_id, []).append(post)
+        return dict(post)
+
+    async def list_bk_verifikat(
+        self,
+        tenant_id: str,
+        *,
+        fran: date | None = None,
+        till: date | None = None,
+    ) -> list[dict[str, Any]]:
+        träffar = []
+        for post in self.bk_verifikat.get(tenant_id, []):
+            if fran and post["datum"] < _iso(bk_datum(fran)):
+                continue
+            if till and post["datum"] > _iso(bk_datum(till)):
+                continue
+            träffar.append(dict(post))
+        träffar.sort(key=lambda p: (p["datum"], p["nummer"]))
+        return träffar
 
     async def close(self) -> None:
         return None

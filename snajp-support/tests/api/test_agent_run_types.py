@@ -62,10 +62,21 @@ async def test_otillaten_typ_kastar_aven_i_minnet():
 
 def test_koden_skriver_bara_typer_som_finns_i_villkoret():
     """Läser de faktiska anropen i agentkoden i stället för att lita på att
-    någon uppdaterar listan när ett nytt agent_type införs."""
+    någon uppdaterar listan när ett nytt agent_type införs.
+
+    Två mönster, inte ett. `agent_type="..."` fångar det direkta anropet, men
+    bokföringsagenten skickar `agent_type=AGENT_TYPE` med värdet i en
+    modulkonstant — och då hade det första mönstret inte sett någonting alls.
+    Vaktposten hade slutat vakta för just den agenten, tyst, medan testet
+    fortsatte vara grönt. Samma klass av fel som den bugg testet finns för.
+    """
     written: set[str] = set()
     for source in (BACKEND / "app" / "agent").glob("*.py"):
-        written.update(re.findall(r'agent_type=["\']([a-z_]+)["\']', source.read_text(encoding="utf-8")))
+        text = source.read_text(encoding="utf-8")
+        written.update(re.findall(r'agent_type=["\']([a-z_]+)["\']', text))
+        written.update(
+            re.findall(r'^AGENT_TYPE(?:\s*:\s*str)?\s*=\s*["\']([a-z_]+)["\']', text, re.MULTILINE)
+        )
 
     assert written, "Hittade inga agent_type-skrivningar — testet mäter ingenting."
     okant = written - set(AGENT_RUN_TYPES)
