@@ -15,8 +15,18 @@ import { notFoundOnTenant } from "@/lib/tenants/server";
  * ## Varför den är ofarlig
  *
  * Den rör ALDRIG en session och ALDRIG databasen. `state` nedan är en
- * hårdkodad konstant, och `variant: "demo"` gör att de underliggande vyerna
- * renderar sitt inbyggda exempeldataset i stället för att hämta något.
+ * hårdkodad konstant, och `demo`-flaggan på StartView gör att vyerna svarar ur
+ * lib/demo i webbläsaren i stället för att hämta något.
+ *
+ * Flaggan SAKNADES här fram till 2026-08-23, medan docstringen påstod att den
+ * fanns — den hette `variant: "demo"` en gång och döptes om utan att den här
+ * anropsplatsen följde med. Följden var tio 401-svar per sidladdning: översikten
+ * anropade /api/snajp-support/{leads,inbox,kb,rules} utan session, och varje
+ * ruta blev ett em-streck. Sidan såg trasig ut och var det.
+ *
+ * Regeln bröts alltså aldrig — ingen kunddata läckte, eftersom proxyn kräver
+ * session — men den efterlevdes inte heller. En kommentar som beskriver ett
+ * beteende koden inte har är värre än ingen kommentar.
  *
  * Det är samma regel som `components/marketing/ProductPage.tsx` följer och
  * skriver ut: en publik sida får aldrig sträcka sig efter en session eller en
@@ -60,7 +70,7 @@ export default async function Page() {
         </p>
       </div>
       <DashboardProvider state={{ ...DEMO_STATE, products: [...DEMO_STATE.products] }}>
-        <StartView />
+        <StartView demo />
       </DashboardProvider>
     </div>
   );

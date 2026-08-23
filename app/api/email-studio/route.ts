@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateText } from 'ai';
-import { openai } from '@ai-sdk/openai';
+import { createOpenAI } from '@ai-sdk/openai';
 import { getWorkspaceContext } from '@/lib/workspace';
 
 /**
@@ -14,6 +14,50 @@ import { getWorkspaceContext } from '@/lib/workspace';
  * varje ny route som väntar på en modell.
  */
 export const maxDuration = 60;
+
+/**
+ * Vilken modell åtgärderna körs mot.
+ *
+ * BAKGRUNDEN, uppmätt 2026-08-23: routen krävde `OPENAI_API_KEY`, och den var
+ * inte satt på webbtjänsten i NÅGON miljö. `useSimulation` var alltså sann
+ * även för en inloggad, betalande kund — alla åtta åtgärder svarade med
+ * mallgenererad text som inte gick att skilja från en modellskriven
+ * omskrivning. Funktionen såg ut att fungera och gjorde det inte.
+ *
+ * Samtidigt betalar projektet redan för DeepSeek: agenterna kör mot den, och
+ * nyckeln finns på API-tjänsten. DeepSeek talar OpenAI-protokollet, så samma
+ * klient når båda — bara base_url och modellnamn skiljer.
+ *
+ * Ordningen är avsiktlig. OPENAI_API_KEY vinner när den finns, så att ett
+ * senare byte tillbaka inte kräver en kodändring. Saknas den används DeepSeek.
+ * Saknas båda simulerar routen, som förut, och SÄGER det i svaret.
+ */
+function valjModell() {
+  const openaiKey = process.env.OPENAI_API_KEY || "";
+  if (dugerSomNyckel(openaiKey)) {
+    return {
+      klient: createOpenAI({ apiKey: openaiKey }),
+      namn: process.env.EMAIL_STUDIO_MODEL || "gpt-4o-mini"
+    };
+  }
+
+  const deepseekKey = process.env.DEEPSEEK_API_KEY || "";
+  if (dugerSomNyckel(deepseekKey)) {
+    return {
+      // Samma base_url som snajp-support/app/agent/llm.py använder. Håll dem
+      // lika — två adresser till samma leverantör är två saker att byta.
+      klient: createOpenAI({ apiKey: deepseekKey, baseURL: "https://api.deepseek.com" }),
+      namn: process.env.EMAIL_STUDIO_MODEL || "deepseek-chat"
+    };
+  }
+
+  return null;
+}
+
+/** En platshållare är inte en nyckel. Samma villkor som backendens `_looks_real`. */
+function dugerSomNyckel(key: string): boolean {
+  return Boolean(key) && key.length >= 20 && !key.includes("...") && !key.includes("din-");
+}
 
 function parseRichRefine(content: string) {
   const trimmed = content.trim();
@@ -320,12 +364,11 @@ export async function POST(request: NextRequest) {
     const userId = session.userId;
     const emailContent = draft || emailBody;
 
-    // Simulation for demo (real LLM needs valid OPENAI_API_KEY)
-    const key = process.env.OPENAI_API_KEY || '';
-    // Anonym besökare -> alltid simulering. Det är den raden som gör att
-    // marknadssidans knappar fungerar utan att en oinloggad kan nå modellen.
-    const useSimulation =
-      session.publikDemo || !key || key.length < 20 || key.includes('...') || key.includes('din-');
+    // Anonym besökare -> ALLTID simulering, oavsett vilka nycklar som finns.
+    // Det är den raden som gör att marknadssidans knappar fungerar utan att en
+    // oinloggad kan nå modellen. Se docstringen ovan om INV-SEC-010.
+    const modell = session.publikDemo ? null : valjModell();
+    const useSimulation = modell === null;
     if (useSimulation) {
       const sim = simulateAction(action, emailContent, subject, context);
 
@@ -334,6 +377,19 @@ export async function POST(request: NextRequest) {
         data: {
           ...sim,
           action,
+          /**
+           * SÄG att det är simulerat. Fältet fanns inte, och följden var inte
+           * kosmetisk: OPENAI_API_KEY är inte satt på webbtjänsten i någon
+           * miljö (uppmätt 2026-08-23), så `useSimulation` är sann även för en
+           * INLOGGAD, betalande kund. Alla åtta åtgärder svarade alltså med
+           * mallgenererad text, `success: true`, och ingenting som skilde den
+           * från en modellskriven omskrivning.
+           *
+           * Anonymt är simulering rätt svar — den skyddar nyckeln, se
+           * docstringen ovan. Det som saknades var att svaret sa det.
+           */
+          simulated: true,
+          simulated_reason: session.publikDemo ? "anonym" : "ingen modellnyckel"
         }
       });
     }
@@ -349,7 +405,7 @@ export async function POST(request: NextRequest) {
     ].filter(Boolean).join('\n\n');
 
     const { text } = await generateText({
-      model: openai('gpt-4o-mini'),
+      model: modell.klient(modell.namn),
       system: EMAIL_STUDIO_SYSTEM_PROMPT,
       prompt: userPrompt,
       temperature: 0.4,

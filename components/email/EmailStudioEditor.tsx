@@ -51,6 +51,8 @@ const ui = {
 type RichResult = {
   original_version?: string | null;
   new_version: string;
+  simulated?: boolean;
+  simulated_reason?: string;
   explanation: string;
   subject_suggestions: string[];
   confidence_tips?: string;
@@ -64,6 +66,9 @@ type RichResult = {
 type RichApiPayload = {
   original_version?: string | null;
   new_version?: string;
+  /** Sant när svaret INTE kom från en modell — se app/api/email-studio/route.ts. */
+  simulated?: boolean;
+  simulated_reason?: string;
   body?: string;
   explanation?: string;
   subject?: string;
@@ -130,6 +135,8 @@ export function EmailStudioEditor({
         const rich: RichResult = {
           original_version: d.original_version ?? null,
           new_version: d.new_version || d.body || body,
+          simulated: d.simulated === true,
+          simulated_reason: d.simulated_reason,
           explanation: d.explanation || "",
           subject_suggestions: d.subject_suggestions || (d.subject ? [d.subject] : []),
           confidence_tips: d.confidence_tips,
@@ -293,6 +300,19 @@ export function EmailStudioEditor({
                   {lastResult.original_version}
                 </p>
               </>
+            ) : null}
+
+            {/* Ett simulerat svar ska aldrig gå att förväxla med ett
+                modellskrivet. Utan raden fick kunden mallgenererad text
+                presenterad som agentens arbete — samma fel som analysvyn och
+                bolagslistan hade, fast i den flik man faktiskt skriver i. */}
+            {lastResult.simulated ? (
+              <p className="mt-5 rounded-input border border-ochre/40 bg-ochre/10 px-4 py-3 text-[0.875rem] leading-6 text-ink/75">
+                <strong className="font-semibold">Exempelsvar.</strong>{" "}
+                {lastResult.simulated_reason === "anonym"
+                  ? "Du är inte inloggad, så åtgärden kördes inte mot någon modell."
+                  : "Ingen modellnyckel är kopplad i den här miljön, så åtgärden kördes inte mot någon modell."}
+              </p>
             ) : null}
 
             <p className="mt-5 text-[0.8125rem] font-medium text-ink/45">{text(ui.updated)}</p>

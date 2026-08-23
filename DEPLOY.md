@@ -157,6 +157,38 @@ preview. Dokumenterat i stället för kringgått.
 
 ---
 
+## Email Studio behöver en modellnyckel på WEBB-tjänsten
+
+Åtgärderna i Email Studio (Kortare, Skriv om, Förbättra, Personalisera,
+Översätt, Uppföljning, Analysera, A/B) körs av `app/api/email-studio/route.ts`,
+alltså i Next-appen — **inte** av agent-backenden. Nyckeln måste därför ligga på
+`web`, inte bara på `api`.
+
+Så var det inte. Uppmätt 2026-08-23 saknades `OPENAI_API_KEY` på `web` i båda
+miljöerna, och routen föll då till sitt simuleringsläge. Följden var att varje
+**inloggad, betalande** kund fick mallgenererad text med `success: true` och
+ingenting som sa att den inte kom från en modell. Åtgärderna tog noll sekunder,
+vilket var det enda som avslöjade det.
+
+| Variabel | Tjänst | Betydelse |
+|---|---|---|
+| `OPENAI_API_KEY` | `web` | Används först när den finns |
+| `DEEPSEEK_API_KEY` | `web` | Används annars, mot `https://api.deepseek.com` |
+| `EMAIL_STUDIO_MODEL` | `web` | Valfri. Default `gpt-4o-mini` / `deepseek-chat` |
+
+DeepSeek talar OpenAI-protokollet och är vad agenterna redan kör mot, så
+projektet betalar inte för en ny leverantör. Nyckeln är kopierad från `api` till
+`web` i båda miljöerna.
+
+**Saknas båda simulerar routen fortfarande** — men svaret bär nu `simulated:
+true` och editorn skriver "Exempelsvar" ovanför resultatet. Ta inte bort den
+markeringen: utan den går ett simulerat svar inte att skilja från agentens
+arbete.
+
+**Anonyma anrop simuleras ALLTID**, oavsett vilka nycklar som finns. Det är den
+raden som gör att marknadssidans knappar fungerar utan att en oinloggad kan
+bränna nyckeln (INV-SEC-010). Den kontrollen får inte tas bort.
+
 ## Ny kund
 
 ```bash

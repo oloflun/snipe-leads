@@ -31,7 +31,7 @@ from ..leads.icp import (
 from ..leads.icp import is_empty as icp_ar_tomt
 from ..leads.sni import SNI_NAMN, beskriv_kod
 from ..leads.onboarding_state import REQUIRED_KINDS, get_onboarding_state
-from .deps import require_tenant
+from .deps import kraev_uuid, require_tenant
 from ..leads.soul import SOUL_KIND, SOUL_MAX_CHARS
 from .schemas import (
     ContextDocRequest,
@@ -326,6 +326,7 @@ async def get_prospect(
     404 här är med flit ett riktigt 404: ett prospekt som inte finns i den här
     tenanten ska inte kunna skiljas från ett som aldrig funnits.
     """
+    kraev_uuid(prospect_id, "Prospektet")
     prospect = await request.app.state.storage.get_prospect(tenant["tenant_id"], prospect_id)
     if not prospect:
         raise HTTPException(status_code=404, detail="Prospektet finns inte.")
