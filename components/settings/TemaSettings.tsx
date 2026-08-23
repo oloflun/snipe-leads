@@ -25,23 +25,28 @@ import { colorScheme, dataTheme, TEMA_COOKIE, type Tema } from "@/lib/tema";
  * Ingen serveråtgärd, ingen omladdning. En `router.refresh()` här hade kastat
  * bort hela klientträdet för att byta ett attribut som redan är bytt.
  *
- * ## Varför komponenten läser sitt startvärde ur DOM:en
+ * ## Varför startvärdet kommer som en PROP och inte ur DOM:en
  *
- * Alternativet vore att skicka in det från servern. Det hade fungerat, men
- * `data-theme` på <html> är redan sanningen — den sattes av layouten ur samma
- * cookie — och att låta en prop bära om den skapar ett andra värde som kan
- * hamna ur fas med det som faktiskt ritas.
+ * Första versionen läste `document.documentElement.dataset.theme`, med
+ * motiveringen att attributet redan ÄR sanningen och att en prop skulle skapa
+ * ett andra värde som kan hamna ur fas. Argumentet var fel, och felet var
+ * mätbart.
+ *
+ * Den här komponenten renderas nämligen på servern också — "use client"
+ * betyder "hydreras i webbläsaren", inte "körs bara där". På servern finns
+ * inget `document`, så växeln renderades i läge AV medan resten av sidan var
+ * mörk. Klienten rättade den vid hydrering, och React svarade med #418.
+ *
+ * Det syntes BARA med cookien satt till `morkt` — alltså i exakt det läge en
+ * användare som valt mörkt möter varje gång, och aldrig i det läge man råkar
+ * testa i först. Uppmätt med Playwright mot dev-miljön, per sida och per tema.
+ *
+ * Servern läser cookien i SettingsSection och skickar ner den. Det är inte en
+ * andra sanning: det är samma cookie som app/layout.tsx redan läser för att
+ * stämpla <html>, läst i samma request.
  */
-function nuvarandeTema(): Tema {
-  if (typeof document === "undefined") return "ljust";
-  return document.documentElement.dataset.theme === "dark" ? "morkt" : "ljust";
-}
-
-export function TemaSettings() {
-  // Lazy initial state: funktionen körs vid första renderingen, alltså i
-  // webbläsaren där document finns. Ett direktanrop hade körts även under
-  // serverrenderingen av den här klientkomponenten.
-  const [tema, setTema] = useState<Tema>(nuvarandeTema);
+export function TemaSettings({ initial }: Readonly<{ initial: Tema }>) {
+  const [tema, setTema] = useState<Tema>(initial);
 
   function valj(nytt: Tema) {
     setTema(nytt);

@@ -54,10 +54,20 @@ const PUBLIKA = ["/", "/leads", "/support", "/login", "/duo-demo", "/auth/reset"
   "/chat/livrustning", "/chat/snajp",
   "/design-drafts/editorial-clean", "/design-drafts/editorial-clean/portal"];
 
+// Inställningarna listas KOMPLETT — varje sektion i `settingsSections`
+// (lib/routes.ts) ska stå här. Sex av tolv saknades, och luckan var inte
+// slumpmässig: de som lades till efter att listan skrevs ärvde ingen
+// bevakning. `notiser` och `tema` är de färskaste exemplen, men
+// `affarskontext`, `kunskapsbas`, `leads` och `regler` hade också stått
+// otestade sedan de tillkom.
+//
+// Lägger du till en sektion i settingsSections: lägg till den här samtidigt.
 const ARBETSYTA = ["/dashboard", "/dashboard/leads", "/dashboard/leads/kontroll",
   "/dashboard/emails", "/dashboard/support",
-  "/settings", "/settings/team", "/settings/billing", "/settings/addons",
-  "/settings/mailboxes", "/settings/soul"];
+  "/settings", "/settings/affarskontext", "/settings/kunskapsbas", "/settings/soul",
+  "/settings/notiser", "/settings/tema",
+  "/settings/leads", "/settings/regler", "/settings/mailboxes",
+  "/settings/team", "/settings/billing", "/settings/addons"];
 
 const ADMINYTA = ["/admin", "/admin/kunder", "/admin/korningar", "/admin/testkorningar",
   "/admin/handelser", "/admin/arbetsyta", "/admin/leads", "/admin/leads/kontroll",

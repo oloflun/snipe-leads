@@ -1,7 +1,9 @@
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { SettingsView } from "@/components/WorkspaceViews";
 import { resolveDashboardState } from "@/lib/data/dashboard";
 import { productForSettingsSection, sektionDoldIDemo, settingsSectionForSlug } from "@/lib/routes";
+import { parseTema, TEMA_COOKIE } from "@/lib/tema";
 
 /**
  * Inställningarnas dispatcher — EN sida, två ytor.
@@ -43,5 +45,19 @@ export async function SettingsSection({ slug = [] }: Readonly<{ slug?: string[] 
     notFound();
   }
 
-  return <SettingsView section={section} />;
+  // Temat läses HÄR och skickas ner som en prop.
+  //
+  // TemaSettings läste det först ur `document.documentElement.dataset.theme`,
+  // med motiveringen att attributet redan ÄR sanningen. Det stämmer i
+  // webbläsaren och är osant på servern, där `document` inte finns: sidan
+  // renderades med växeln i läge AV medan resten av sidan var mörk, och
+  // klienten rättade den vid hydrering. React kallar det #418, och det syntes
+  // bara med cookien satt till `morkt` — alltså i exakt det läge en användare
+  // som VALT mörkt möter varje gång.
+  //
+  // Servern läser samma cookie som app/layout.tsx redan gör för att stämpla
+  // <html>. Det är inte en andra sanning; det är samma sanning, en gång.
+  const tema = parseTema((await cookies()).get(TEMA_COOKIE)?.value);
+
+  return <SettingsView section={section} tema={tema} />;
 }

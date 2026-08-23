@@ -34,6 +34,7 @@ import { signOut } from "@/lib/actions/auth";
 // bolag, kontakter, mejl och svar i en betald arbetsyta.
 import { workflowSteps } from "@/lib/mock-data";
 import type { SettingsSectionKey } from "@/lib/routes";
+import type { Tema } from "@/lib/tema";
 
 /**
  * Assistenten — MÄRKT som exempel, eftersom den inte är kopplad än.
@@ -198,7 +199,10 @@ export function InboxView({ demo = false }: Readonly<{ demo?: boolean }>) {
   );
 }
 
-export function SettingsView({ section = "foretaget" }: Readonly<{ section?: SettingsSectionKey }>) {
+export function SettingsView({
+  section = "foretaget",
+  tema = "ljust"
+}: Readonly<{ section?: SettingsSectionKey; tema?: Tema }>) {
   const titles: Record<SettingsSectionKey, string> = {
     foretaget: "Företaget",
     mailboxes: "Inkorgar",
@@ -280,7 +284,7 @@ export function SettingsView({ section = "foretaget" }: Readonly<{ section?: Set
           {section === "leads" ? <LeadsControls /> : null}
           {section === "soul" ? <SoulEditor /> : null}
           {section === "notiser" ? <NotisSettings /> : null}
-          {section === "tema" ? <TemaSettings /> : null}
+          {section === "tema" ? <TemaSettings initial={tema} /> : null}
           {section === "mailboxes" ? <Inkorgar /> : null}
           {section === "team" ? <TeamSettings /> : null}
           {section === "addons" ? <AddonSettings /> : null}
