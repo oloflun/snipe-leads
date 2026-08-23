@@ -95,11 +95,19 @@ export function LandingPhoto({
 
       {/* Header sits over the photograph, so it carries no ground of its own. */}
       <header className="absolute inset-x-0 top-0 z-30">
-        <div className="mx-auto flex max-w-[1480px] items-center justify-between gap-4 px-6 py-5 md:px-10">
-          <Link href="/" className="focus-ring inline-flex min-h-11 items-center rounded-input text-paper">
-            <Logo tone="paper" />
+        {/* `items-start`, inte `items-center`. Märket är nu flera gånger högre
+            än kontrollerna, och centrerat hade raden hamnat mitt på logotypen i
+            stället för i överkant — se utkastet: båda börjar på samma höjd och
+            märket växer nedåt. */}
+        <div className="mx-auto flex max-w-[1480px] items-start justify-between gap-4 px-6 pb-6 pt-[clamp(18px,3.4vw,52px)] md:px-10">
+          <Link href="/" className="focus-ring inline-flex items-center rounded-input text-paper">
+            <Logo tone="paper" hjalte />
           </Link>
-          <div className="flex items-center gap-1 sm:gap-2">
+          {/* `whitespace-nowrap`: kontrollerna får krympa i mellanrum, aldrig
+              brytas mitt i ett ord. "Logga in" blev "Logga / in" på 390px när
+              logotypen växte, och en tvåradig länk i en enradig rad ser ut som
+              ett fel även när den är läsbar. */}
+          <div className="flex items-center gap-1 whitespace-nowrap sm:gap-2">
             <button
               type="button"
               onClick={toggleLocale}
