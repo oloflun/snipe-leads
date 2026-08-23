@@ -109,7 +109,11 @@ export function LaddaNerAppen({ tone = "ink" }: Readonly<{ tone?: "ink" | "paper
         onClick={() => void klick()}
         aria-expanded={instruktion ? öppen : undefined}
         className={cn(
-          "focus-ring group inline-flex min-h-9 items-center gap-1.5 rounded-input border px-3 text-[0.8125rem] font-medium transition-colors",
+          // min-h-11 på touch, min-h-9 från md. 36px är en musstorlek; med finger är
+        // 44px minimum (WCAG 2.5.8 och Apples HIG säger samma sak), och en knapp
+        // man missar är en knapp som inte finns. Uppmätt på iPhone 13, Pixel 5 och
+        // iPad Mini innan ändringen: 148x36 på alla tre.
+          "focus-ring group inline-flex min-h-11 items-center gap-1.5 rounded-input border px-3 text-[0.8125rem] font-medium transition-colors md:min-h-9",
           tone === "paper"
             ? "border-paper/30 text-paper/85 hover:border-paper/60 hover:text-paper"
             : "border-ink/20 text-ink/75 hover:border-ink/45 hover:text-ink"

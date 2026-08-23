@@ -185,13 +185,21 @@ export function LandingPhoto({
                 </div>
               </div>
 
-              {/* Tre kolumner, längst ut till höger — det ursprungliga måttet.
-                  Kolumnen breddades tillfälligt för att rymma växeln och
-                  nedladdningsknappen på SAMMA rad, och den bredden kostade
-                  position: en vänsterjusterad kolumn drar sitt innehåll vänsterut
-                  när den växer. Sedan knappen står under växeln behövs bredden
-                  inte, och blocket kan hänga längst ut igen. */}
-              <div className="col-span-12 self-end lg:col-span-3 lg:col-start-10">
+              {/* Blocket ankras mot sidhuvudet, inte mot kolumnen.
+                  `w-[219px]` plus `ml-auto` gör att innehållet börjar exakt
+                  219px från kolumnens högerkant — och det är mittlinjen mellan
+                  "Logga in" och "Skriv till oss" i sidhuvudet ovanför.
+                  Uppmätt vid tre bredder, och avståndet är DETSAMMA i alla tre
+                  (1280, 1440, 1600) eftersom både sidhuvudets poster och den här
+                  kolumnen är högerankrade. Därför håller linjen utan media
+                  queries.
+                  219px räcker: bredaste innehållet är "Prova kundtjänstagenten →"
+                  på 200px. Krymper man det måttet bryter den länken till två
+                  rader.
+                  Beroendet är värt att känna till: byter sidhuvudets etiketter
+                  längd — till exempel i engelsk lokalisering — flyttar mittlinjen
+                  och siffran här stämmer inte längre. */}
+              <div className="col-span-12 self-end lg:col-span-3 lg:col-start-10 lg:ml-auto lg:w-[219px]">
                 <div className="font-display text-[1.5rem] leading-[1.15] tracking-[-0.02em] text-paper">
                   <ProductSwitch value={product} onChange={setProduct} tone="paper" />
                 </div>
