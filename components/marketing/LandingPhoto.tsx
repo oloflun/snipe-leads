@@ -185,30 +185,22 @@ export function LandingPhoto({
                 </div>
               </div>
 
-              {/* Bredare än ursprungliga lg:col-span-3 (≈290px), men fortfarande
-                  ANKRAD I HÖGERKANTEN: col-start-9 + col-span-4 slutar på kolumn
-                  12, precis som förut.
-
-                  Första försöket satte col-start-8 och sköt hela blocket —
-                  växeln, demolänkarna och knappen — synligt vänsterut. Bredden
-                  var rätt, ankaret fel: det är slutkolumnen som håller blocket
-                  vid kanten, inte bredden.
-
-                  Fyra kolumner behövs för att "Leads / Support" plus knappen
-                  ska rymmas på en rad. Vänsterblocket slutar vid kolumn 5, så
-                  bredden tas fortfarande från ingen. */}
-              <div className="col-span-12 self-end lg:col-span-4 lg:col-start-9">
-                {/* Växeln och nedladdningen på samma rad.
-                    `flex-wrap` och inte en fast tvåkolumnare: växeln är
-                    display-typ på 24px och knappen bär en ikon plus fyra ord.
-                    Vid 320px ryms de inte bredvid varandra, och en klippt
-                    knapp syns inte alls — body har overflow-x: clip.
-                    `items-baseline` under md hade ställt knappens ikon på
-                    typsnittets baslinje; items-center är rätt när raden bryts. */}
-                <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
-                  <div className="font-display text-[1.5rem] leading-[1.15] tracking-[-0.02em] text-paper">
-                    <ProductSwitch value={product} onChange={setProduct} tone="paper" />
-                  </div>
+              {/* Tre kolumner, längst ut till höger — det ursprungliga måttet.
+                  Kolumnen breddades tillfälligt för att rymma växeln och
+                  nedladdningsknappen på SAMMA rad, och den bredden kostade
+                  position: en vänsterjusterad kolumn drar sitt innehåll vänsterut
+                  när den växer. Sedan knappen står under växeln behövs bredden
+                  inte, och blocket kan hänga längst ut igen. */}
+              <div className="col-span-12 self-end lg:col-span-3 lg:col-start-10">
+                <div className="font-display text-[1.5rem] leading-[1.15] tracking-[-0.02em] text-paper">
+                  <ProductSwitch value={product} onChange={setProduct} tone="paper" />
+                </div>
+                {/* Under växeln, inte bredvid.
+                    Bredvid krävde en fjärde kolumn, och den bredden drog hela
+                    blocket ur högerkanten — växeln började 92px längre in.
+                    Staplat får båda: knappen ryms i tre kolumner (148px av
+                    ~290px) och blocket hänger kvar längst ut. */}
+                <div className="mt-4">
                   <LaddaNerAppen tone="paper" />
                 </div>
                 {/* Två vägar rakt in i produkten, en per agent.
