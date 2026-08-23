@@ -81,17 +81,39 @@ def test_filtret_faktiskt_grindar_pa_flaggan():
 # -- 2. Skalet skickar in admin-status ------------------------------------
 
 
-def test_bada_routesForProducts_anropen_skickar_admin():
-    """Menyn OCH stranded-underlaget.
+def test_varje_anropsplats_i_repot_skickar_admin():
+    """VARJE `routesForProducts`-anrop, inte ett känt antal i en känd fil.
 
-    Skickas admin bara till det ena blir följden en av två: fliken syns inte
-    för admin, eller så studsar adressen tillbaka till /dashboard för admin.
-    Precis den asymmetri som fällde preview-routerna.
+    Den första versionen av det här testet letade i AppShell och hävdade att
+    anropen var exakt två. Det fanns tre. Den tredje låg i
+    `components/admin/AdminShell.tsx`, som bygger ADMINYTANS flikrad — och
+    eftersom filtret är fail-closed försvann bokföringsfliken där.
+
+    Följden var att fliken inte fanns någonstans för den enda publik den är
+    byggd för: en plattformsadmin som öppnar /dashboard skickas till /admin
+    (app/dashboard/layout.tsx), och /admin är precis den yta AppShell inte
+    ritar (den kortsluter på pathname). Sidan gick att nå på /admin/bokforing
+    men ingenting länkade dit.
+
+    Testet räknar därför inte anrop längre — det letar upp dem och kräver att
+    var och en tar ställning. En ny anropsplats fälls automatiskt.
     """
-    anrop = re.findall(r"routesForProducts\((.*?)\)\.filter", APPSHELL, re.DOTALL)
-    assert len(anrop) == 2, f"Väntade två anrop i AppShell, hittade {len(anrop)}."
-    for i, block in enumerate(anrop):
-        assert "isAdmin" in block, f"Anrop {i + 1} skickar inte isAdmin: {block.strip()}"
+    anropsplatser: list[tuple[str, str]] = []
+    for fil in sorted((ROT / "components").rglob("*.tsx")) + sorted((ROT / "app").rglob("*.tsx")):
+        kalla = _utan_kommentarer(fil.read_text(encoding="utf-8"))
+        for block in re.findall(r"routesForProducts\((.*?)\)", kalla, re.DOTALL):
+            anropsplatser.append((str(fil.relative_to(ROT)), block))
+
+    assert anropsplatser, "Hittade inga anrop — testet mäter ingenting."
+
+    utan_admin = [
+        (fil, block.strip()) for fil, block in anropsplatser if "isAdmin" not in block
+    ]
+    assert not utan_admin, (
+        "Dessa anrop tar inte ställning till adminOnly-routerna. Filtret är "
+        "fail-closed, så de FÖRSVINNER tyst i just den menyn:\n"
+        + "\n".join(f"  {fil}: routesForProducts({block})" for fil, block in utan_admin)
+    )
 
 
 # -- 3. Grinden på servern ------------------------------------------------

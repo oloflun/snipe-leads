@@ -76,7 +76,18 @@ export function AdminShell({
 
   // Samma entitlement- och scope-filter som kundens nav. Adminytan är en
   // superset av arbetsytan, inte en genväg förbi dess regler.
-  const arbetsyta = routesForProducts(products)
+  //
+  // `isAdmin: true` som literal, och det är inte en genväg förbi grinden:
+  // AdminShell renderas BARA inifrån app/admin/layout.tsx, som svarar
+  // notFound() för den som inte är plattformsadmin. Kommer man hit ÄR man
+  // admin — att fråga en gång till hade varit ett andra svar på en fråga som
+  // redan är avgjord, och två svar blir förr eller senare olika.
+  //
+  // Utan raden försvinner adminOnly-routerna helt: filtret är fail-closed, och
+  // en plattformsadmin skickas dessutom hit från /dashboard
+  // (app/dashboard/layout.tsx). Bokföringsfliken fanns alltså ingenstans för
+  // just den publik den är byggd för.
+  const arbetsyta = routesForProducts(products, { isAdmin: true })
     .filter((route) => route.product === "shared" || shows(route.product))
     .map((route) => ({
       href: tillAdminvag(route.href),
