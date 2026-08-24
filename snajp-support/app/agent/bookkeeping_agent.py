@@ -424,6 +424,7 @@ async def run_bookkeeping_chat_turn(
     *,
     message: str,
     historik: list[dict[str, Any]] | None = None,
+    forhamtat: list[str] | None = None,
 ) -> dict[str, Any]:
     """En tur i bokföringssamtalet.
 
@@ -433,6 +434,15 @@ async def run_bookkeeping_chat_turn(
     """
     agent = build_bookkeeping_chat_agent()
     context = BokforingChattContext(storage=storage, tenant_id=tenant_id)
+
+    # `forhamtat` är material som hämtades FÖRE modellen kördes — i praktiken ett
+    # underlag som lästes ur en bifogad fil i samma anrop.
+    #
+    # Det räknas som hämtat av INV-BOOK-003, och det är korrekt: skillnaden mot
+    # ett verktygsanrop är NÄR i turen läsningen skedde, inte OM den skedde.
+    # Utan det här fälls varje svar som citerar ett belopp från kvittot kunden
+    # precis bifogat, och bilagan blir oanvändbar.
+    context.resultat.extend(forhamtat or [])
 
     # Historiken skickas in som tidigare turer. Den bär BARA text: verktygssvar
     # från en tidigare tur får inte grunda ett belopp i den här, eftersom

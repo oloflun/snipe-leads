@@ -18,6 +18,7 @@ avrunda bort dem.
 
 from __future__ import annotations
 
+import json as _json
 from datetime import date
 from decimal import Decimal
 from typing import Any
@@ -147,6 +148,14 @@ async def ta_emot_underlag(
         "underlag": _underlag_ut(underlag),
         "status": avlasning.status,
         "brister": avlasning.verdikt.as_report(),
+        # Ett utdrag ur den AVLÄSTA texten, inte ur filen. Chatten använder det
+        # så att assistenten kan svara på vad som STOD på underlaget och inte
+        # bara på de sex fält avläsningen plockar ut.
+        #
+        # Taket är inte kosmetik: hela texten från en flersidig faktura äter
+        # kontextfönstret, och den gör dessutom INV-BOOK-003 mer generös än den
+        # ska vara — varje tal i utdraget blir ett grundat tal.
+        "text": text[:2000],
     }
 
 
@@ -168,7 +177,10 @@ async def ladda_upp_underlag(
     except UnderlagsfelError as fel:
         raise HTTPException(status_code=422, detail=str(fel)) from fel
 
-    return {**resultat, "forbehall": FORBEHALL}
+    # Texten går INTE vidare till uppladdningspanelen. Den behövs bara av
+    # chatten, och ett svar som bär hela kvittots innehåll till en vy som visar
+    # fält är innehåll som skickas utan att användas.
+    return {**{k: v for k, v in resultat.items() if k != "text"}, "forbehall": FORBEHALL}
 
 
 @router.get("/api/bookkeeping/underlag")
@@ -303,8 +315,6 @@ async def chatt(
         meddelande = str(form.get("meddelande") or "").strip()
         rå_historik = form.get("historik")
         if isinstance(rå_historik, str) and rå_historik:
-            import json as _json
-
             try:
                 historik = _json.loads(rå_historik)
             except ValueError:
@@ -333,6 +343,7 @@ async def chatt(
     # Bilagan blir en del av FRÅGAN, inte ett separat svar. Kunden som släpper
     # ett kvitto utan att skriva något frågar i praktiken "vad blev det här?",
     # och assistenten ska svara på det utan att kunden behöver formulera det.
+    forhamtat: list[str] = []
     if bilaga is not None:
         avläst = bilaga["underlag"]
         sammanfattning = (
@@ -343,10 +354,40 @@ async def chatt(
             + (f" Brister: {'; '.join(bilaga['brister'])}." if bilaga["brister"] else "")
             + "]"
         )
-        meddelande = f"{sammanfattning}\n\n{meddelande}".strip()
+        # TEXTEN från underlaget följer med, inte bara de sex avlästa fälten.
+        #
+        # Avläsningen plockar ut datum, motpart, belopp, momssats, riktning och
+        # kategori. Allt annat som stod på kvittot — vad som köptes, antal
+        # liter, ett fakturanummer — finns bara i texten. Utan den kan
+        # assistenten inte svara på "vad köpte jag?", och en assistent som just
+        # läst ett kvitto men inte kan säga vad som stod på det är svårare att
+        # lita på än en som säger att den inte vet.
+        meddelande = (
+            f"{sammanfattning}\n\nText från underlaget:\n{bilaga.get('text', '')}"
+            f"\n\n{meddelande}"
+        ).strip()
+
+        # Och materialet räknas som HÄMTAT under INV-BOOK-003.
+        #
+        # Utan den här raden fälls varje svar som citerar ett belopp från
+        # kvittot kunden precis laddat upp: talet stod i FRÅGAN, inte i ett
+        # verktygsresultat, och grinden känner bara till det senare. Det ÄR
+        # hämtad data — den lästes ur filen i det här anropet — och att låtsas
+        # annat hade gjort bilagan oanvändbar.
+        forhamtat.append(
+            _json.dumps(
+                {"underlag": avläst, "text": bilaga.get("text", "")},
+                ensure_ascii=False,
+                default=str,
+            )
+        )
 
     svar = await run_bookkeeping_chat_turn(
-        storage, tenant["tenant_id"], message=meddelande, historik=historik
+        storage,
+        tenant["tenant_id"],
+        message=meddelande,
+        historik=historik,
+        forhamtat=forhamtat,
     )
 
     await storage.log_agent_run(

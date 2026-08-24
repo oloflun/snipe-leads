@@ -354,3 +354,72 @@ async def test_assistenten_ser_ett_uppladdat_underlag_utan_att_bli_tillsagd():
         "Du har ett underlag från Nordvik Drivmedel AB på 1 000,00 kr exklusive moms.",
         ctx.resultat,
     ).ok
+
+
+# -- 6. Bifogad fil: assistenten kan läsa och svara utifrån den ------------
+
+
+def test_mottagningen_lamnar_tillbaka_texten_till_chatten():
+    """Utan texten kan assistenten bara svara på de sex avlästa fälten.
+
+    Avläsningen plockar ut datum, motpart, belopp, momssats, riktning och
+    kategori. Vad som KÖPTES, antal liter, ett fakturanummer — allt sådant finns
+    bara i texten. En assistent som just läst ett kvitto men inte kan säga vad
+    som stod på det är svårare att lita på än en som säger att den inte vet.
+    """
+    from pathlib import Path
+
+    kalla = (Path(__file__).resolve().parents[2] / "app" / "api" / "bookkeeping.py").read_text(
+        encoding="utf-8"
+    )
+    mottagning = kalla.split("async def ta_emot_underlag")[1].split("@router.post")[0]
+    assert '"text": text[' in mottagning, (
+        "ta_emot_underlag lämnar inte tillbaka texten — chatten kan då inte "
+        "svara på vad som stod på underlaget."
+    )
+    # ...men uppladdningspanelen ska INTE få den. Den visar fält.
+    panel = kalla.split("async def ladda_upp_underlag")[1].split("@router.get")[0]
+    assert '!= "text"' in panel, (
+        "Panelen får kvittots hela text i svaret utan att använda den."
+    )
+
+
+def test_bifogat_underlag_gor_dess_belopp_grundade():
+    """Kärnan i "ladda upp en fil och få svar".
+
+    Beloppet från kvittot står i FRÅGAN, inte i ett verktygsresultat. Utan att
+    materialet räknas som hämtat fäller INV-BOOK-003 varje svar som citerar
+    det, och bilagan blir oanvändbar — assistenten läser kvittot och får sedan
+    inte säga vad som stod på det.
+    """
+    forhamtat = [
+        json.dumps(
+            {
+                "underlag": {"motpart": "Nordvik Drivmedel AB", "brutto": "1250.00"},
+                "text": "Att betala 1 250,00  Moms 25% 250,00  Diesel 62,3 l",
+            },
+            ensure_ascii=False,
+        )
+    ]
+    assert check_belopp("Kvittot är på 1 250,00 kr, varav 250,00 kr moms.", forhamtat).ok
+    # Ett tal som INTE stod på kvittot fälls fortfarande.
+    assert not check_belopp("Kvittot är på 1 300,00 kr.", forhamtat).ok
+
+
+def test_agenten_tar_emot_forhamtat_och_lagger_det_i_kontexten():
+    """Signaturen och kopplingen, lästa ur källan.
+
+    Ett anrop som tappar `forhamtat` på vägen ger exakt det fel testet ovanför
+    beskriver, och det syns inte i något annat test — svaret blir bara tomt.
+    """
+    from pathlib import Path
+
+    rot = Path(__file__).resolve().parents[2] / "app"
+    agent = (rot / "agent" / "bookkeeping_agent.py").read_text(encoding="utf-8")
+    api = (rot / "api" / "bookkeeping.py").read_text(encoding="utf-8")
+
+    assert "forhamtat: list[str] | None = None" in agent, "Agenten tar inte emot forhamtat."
+    assert "context.resultat.extend(forhamtat or [])" in agent, (
+        "Agenten lägger inte forhamtat i kontexten — då ser grinden det inte."
+    )
+    assert "forhamtat=forhamtat" in api, "Endpointen skickar inte vidare bilagan."
