@@ -52,13 +52,26 @@ export type KundEkonomi = {
   paketNamn: string | null;
 };
 
-/** Vilket paket produkterna motsvarar. Båda = Duo. */
+/**
+ * Vilket paket produkterna motsvarar. Alla tre = Trio, leads + kundtjänst = Duo.
+ *
+ * Ordningen är inte godtycklig: Trio måste prövas FÖRE Duo. Gjorde den inte
+ * det matchade en trio-kund på `harLeads && harSupport` och räknades som Duo,
+ * alltså 6 990 kr i stället för 9 990 — och felet syns bara som en marginal
+ * som är för dålig, aldrig som ett fel.
+ *
+ * Bokföringen ensam gav tidigare null, vilket blev noll i intäkt för en
+ * arbetsyta som betalar. Den har ett paket nu och matchas som ett.
+ */
 export function paketForProdukter(produkter: readonly string[]): (typeof PAKET)[number] | null {
   const harLeads = produkter.includes("leads");
   const harSupport = produkter.includes("support");
+  const harBokforing = produkter.includes("bookkeeping");
+  if (harLeads && harSupport && harBokforing) return PAKET.find((p) => p.id === "trio") ?? null;
   if (harLeads && harSupport) return PAKET.find((p) => p.id === "duo") ?? null;
   if (harLeads) return PAKET.find((p) => p.id === "leads") ?? null;
   if (harSupport) return PAKET.find((p) => p.id === "support") ?? null;
+  if (harBokforing) return PAKET.find((p) => p.id === "bookkeeping") ?? null;
   return null;
 }
 

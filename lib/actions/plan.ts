@@ -37,7 +37,8 @@ const PRODUKTER_FOR_PAKET: Record<string, ProductKey[]> = {
   leads: ["leads"],
   support: ["support"],
   bookkeeping: ["bookkeeping"],
-  duo: ["leads", "support"]
+  duo: ["leads", "support"],
+  trio: ["leads", "support", "bookkeeping"]
 };
 
 export async function bytPlan(paketId: string): Promise<Planbyte> {

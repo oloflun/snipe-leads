@@ -214,17 +214,34 @@ blueprinten deklarerar nu ingen provider alls: utan providernyckel startar
 tjänsten i simuleringsläge, vilket är det enda säkra viloläget för en stack
 ingen använder.
 
+**DEEPSEEK-FLÖDET ÄR STOPPAT** (2026-08-24 23:29). `DEEPSEEK_API_KEY` är
+blankad på båda tjänsterna, och båda rapporterar nu `mode: simulation`.
+Bekräftat i uppstartsloggen, inte bara i hälsokontrollen:
+
+```
+snajp-support      LLM-nyckel saknas/platshållare — SIMULERINGSLÄGE aktivt.
+snajp-support-dev  LLM-nyckel saknas/platshållare — SIMULERINGSLÄGE aktivt.
+```
+
+Dev-tjänsten fällde dessförinnan på uppstartsspärren, som namngav orsaken:
+`DATABASE_URL pekar på en databas som inte kör på den här maskinen
+(aws-1-eu-west-1.pooler.supabase.com)`.
+
+**Det svaret krymper incidenten.** Render-stacken pratade med den GAMLA
+Supabase-databasen, inte med Railway-databasen där dagens kunder ligger. Hur
+mycket riktig persondata den bär är fortfarande en fråga för bedömningen —
+Supabase-grenen står enligt `CLAUDE.md` i `MIGRATIONS_FAILED` — men det är en
+annan och mindre fråga än "produktionens kunddata gick till Kina".
+
 **Vad jag INTE kunde göra:**
 
 *Stänga av tjänsterna.* Render-verktyget har varken suspend eller delete —
-det finns bara i dashboarden.
+det finns bara i dashboarden. Tjänsterna lever alltså vidare, men i
+simuleringsläge.
 
-*Blanka `DEEPSEEK_API_KEY` på de körande tjänsterna.* Jag försökte, och
-skrivningen stoppades av behörighetskontrollen i den här sessionen. Jag gick
-inte runt den. Gör det i dashboarden — det är den snabbaste åtgärden som inte
-kräver att något stängs av: utan nyckel går tjänsten till simuleringsläge vid
-nästa omstart, och gratisnivån spinner ner efter en kvarts inaktivitet, så
-omstarten kommer av sig själv.
+*Städa `LLM_PROVIDER` på produktionstjänsten.* Skrivningen stoppades av
+behörighetskontrollen. Den är kosmetisk: med tom nyckel går tjänsten till
+simulering oavsett vad providern heter.
 
 **Åtgärd, i tur och ordning:**
 

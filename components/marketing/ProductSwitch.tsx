@@ -18,22 +18,8 @@ import { cn } from "@/lib/utils";
 export function ProductSwitch({
   value,
   onChange,
-  tone = "ink",
-  brytEfter
-}: Readonly<{
-  value: ProductKey;
-  onChange: (next: ProductKey) => void;
-  tone?: "ink" | "paper";
-  /**
-   * Tvinga en radbrytning EFTER den här produkten.
-   *
-   * Med tre produkter ryms inte raden i hjältebildens 219px-kolumn, och den
-   * naturliga brytningen lade "Bokföring" ensamt på rad två — alltså under
-   * "Leads" i stället för bredvid "Support". Här styrs brytpunkten i stället:
-   * "Leads /" på första raden, "Support / Bokföring" på den andra.
-   */
-  brytEfter?: ProductKey;
-}>) {
+  tone = "ink"
+}: Readonly<{ value: ProductKey; onChange: (next: ProductKey) => void; tone?: "ink" | "paper" }>) {
   const { text } = useLocale();
   const refs = useRef<Record<string, HTMLButtonElement | null>>({});
 
@@ -59,16 +45,21 @@ export function ProductSwitch({
   }
 
   return (
-    // `flex flex-wrap` i stället för `inline`: brytpunkten ska vara vald, inte
-    // upphittad av radbrytningen. Se `brytEfter`.
-    <span role="tablist" aria-label={text(shared.switchLabel)} className="flex flex-wrap items-baseline">
+    // EN rad, aldrig två. Med tre produkter bröt raden sig själv i
+    // hjältebildens smala kolumn och lade "Bokföring" ensamt under "Leads" —
+    // alltså till vänster om "Support", vilket läste som en egen rubrik.
+    // `whitespace-nowrap` tar bort brytningen; att raden RYMS är anroparens
+    // ansvar, och hjältebilden löser det med typgraden. Se LandingPhoto.
+    <span
+      role="tablist"
+      aria-label={text(shared.switchLabel)}
+      className="flex items-baseline whitespace-nowrap"
+    >
       {productKeys.map((key, index) => {
         const selected = key === value;
         return (
           <Fragment key={key}>
-            {/* Snedstrecket följer sitt eget ord i stället för att inleda
-                nästa. Annars hade en bruten rad börjat med "/ Support". */}
-            <span className="inline-flex items-baseline whitespace-nowrap">
+            <span className="inline-flex items-baseline">
             <button
               ref={(node) => {
                 refs.current[key] = node;
@@ -94,16 +85,15 @@ export function ProductSwitch({
             >
               {text(productCopy[key].word)}
             </button>
+            {/* Snedstrecket följer sitt eget ord. `mx-1` och inte `mx-2`:
+                fyra marginaler à 8px är 32px, och de 16px som sparas är
+                skillnaden mellan att raden ryms och inte i 219px-kolumnen. */}
             {index < productKeys.length - 1 ? (
-              <span aria-hidden="true" className={cn("mx-1 md:mx-2", tone === "paper" ? "text-paper/30" : "text-ink/20")}>
+              <span aria-hidden="true" className={cn("mx-1", tone === "paper" ? "text-paper/30" : "text-ink/20")}>
                 /
               </span>
             ) : null}
             </span>
-            {/* Radbrytningen i en flex-rad: ett tomt element med hela radens
-                bredd och ingen höjd. Raden det hamnar på blir noll hög, så
-                det syns ingen lucka. */}
-            {brytEfter === key ? <span aria-hidden="true" className="h-0 basis-full" /> : null}
           </Fragment>
         );
       })}

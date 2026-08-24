@@ -10,8 +10,8 @@ prissiffror ska ALDRIG ändras här först. De bor i `lib/pricing.ts`; den här
 filen speglar dem.
 
 VAD SOM MEDVETET SAKNAS, och därför är kodat som eskalering nedan:
-supporttider, svarslöften/SLA, faktureringsintervall, uppsägningstid utöver
-bindningstiden, och vad som gäller vid fel i tjänsten. De uppgifterna finns
+supporttider, svarslöften/SLA, faktureringsintervall, uppsägningstid (bindningstiden
+är noll, vilket inte är samma sak), och vad som gäller vid fel i tjänsten. De uppgifterna finns
 inte skrivna någonstans i repot. En agent som gissar dem åt kundens räkning är
 värre än en som lämnar över till en människa — se TENANTS.md.
 """
@@ -22,10 +22,11 @@ KB_ARTICLES: list[dict] = [
         "title": "Om Snajp",
         "category": "ovrigt",
         "content": (
-            "Snajp bygger AI-agenter för svenska B2B-bolag. Vi levererar två agenter: en "
+            "Snajp bygger AI-agenter för svenska B2B-bolag. Vi levererar tre agenter: en "
             "kundservice-agent som svarar på inkommande ärenden utifrån kundens egen "
-            "kunskapsbas, och en leads-agent som hittar företag med konkreta signaler och "
-            "skriver utkast till mejl. Verksamheten drivs från Göteborg och Umeå och "
+            "kunskapsbas, en leads-agent som hittar företag med konkreta signaler och "
+            "skriver utkast till mejl, och en bokföringsagent som läser kvitton och "
+            "fakturor och föreslår kontering. Verksamheten drivs från Göteborg och Umeå och "
             "arbetar med bolag i hela landet. Vi bygger inte om kundens hemsida — kunden "
             "behåller sin egen sajt, och det vi levererar är agenterna."
         ),
@@ -61,27 +62,34 @@ KB_ARTICLES: list[dict] = [
         "title": "Priser och paket",
         "category": "betalning",
         "content": (
-            "Vi har tre paket, priser per månad exklusive moms:\n"
-            "• Snajp Support — 2 990 kr/mån. Kundservice-agenten som svarar utifrån er "
+            "Vi har fem paket, priser per månad exklusive moms:\n"
+            "• Snajp Support — 3 990 kr/mån. Kundservice-agenten som svarar utifrån er "
             "egen kunskapsbas.\n"
             "• Snajp Leads — 4 490 kr/mån. Leads-agenten som hittar och skriver till rätt "
             "företag.\n"
-            "• Snajp Duo — 6 490 kr/mån. Båda agenterna i samma dashboard, med delad "
-            "kunddata.\n"
-            "Duo kostar 990 kr mindre per månad än att köpa Support och Leads var för sig "
-            "(2 990 + 4 490 = 7 480 kr)."
+            "• Snajp Bokföring — 2 690 kr/mån. Bokföringsagenten som läser kvitton och "
+            "föreslår kontering.\n"
+            "• Snajp Duo — 6 990 kr/mån. Leads- och kundservice-agenten i samma dashboard, "
+            "med delad kunddata.\n"
+            "• Snajp Trio — 9 990 kr/mån. Alla tre agenterna: leads, kundtjänst och "
+            "bokföring.\n"
+            "Duo kostar 1 490 kr mindre per månad än att köpa Support och Leads var för "
+            "sig (3 990 + 4 490 = 8 480 kr). Trio kostar 1 180 kr mindre än alla tre var "
+            "för sig (3 990 + 4 490 + 2 690 = 11 170 kr)."
         ),
     },
     {
         "title": "Uppstartsavgift och bindningstid",
         "category": "betalning",
         "content": (
-            "Vid start tillkommer en engångsavgift på 4 900 kr. Den täcker uppsättning av "
+            "Vid start tillkommer en engångsavgift på 1 590 kr. Den täcker uppsättning av "
             "kunskapsbasen och konfigurationen av agenten för verksamheten — alltså det "
             "arbete som gör att agenten svarar om ert bolag och inte i allmänhet.\n\n"
-            "Bindningstiden är 3 månader.\n\n"
-            "Frågar kunden om uppsägningstid EFTER bindningstiden, om faktureringsintervall "
-            "eller om återbetalning: svara inte på egen hand. Lämna över till en människa."
+            "Det finns ingen bindningstid: 0 månader.\n\n"
+            "Frågar kunden om uppsägningstid, faktureringsintervall eller återbetalning: "
+            "svara inte på egen hand. Att bindningstiden är noll säger INTE vilken "
+            "uppsägningstid som gäller, och de två blandas lätt ihop. Lämna över till en "
+            "människa."
         ),
     },
     {
@@ -93,6 +101,10 @@ KB_ARTICLES: list[dict] = [
             "3 kr.\n\n"
             "Snajp Support har obegränsade chattar — där finns alltså inget volymtak att "
             "räkna på.\n\n"
+            "Snajp Bokföring säljs med en kampanj: en extra bokföringsagent kostar 999 kr. "
+            "Frågar kunden hur länge kampanjen gäller, eller vad en extra agent innebär i "
+            "praktiken: det är inte fastställt i vårt underlag. Lämna över till en "
+            "människa.\n\n"
             "Frågar kunden hur överskjutande volym faktureras eller när i månaden den "
             "räknas av: det är inte fastställt i vårt underlag. Lämna över till en "
             "människa."
@@ -155,7 +167,8 @@ KB_ARTICLES: list[dict] = [
             "hand, ens ungefärligt, utan säg att du kopplar in en kollega:\n"
             "• Supporttider och när kunden kan förvänta sig svar\n"
             "• Svarslöften eller SLA\n"
-            "• Uppsägningstid utöver bindningstiden på 3 månader\n"
+            "• Uppsägningstid — bindningstiden är noll, men uppsägningstiden är inte "
+            "fastställd\n"
             "• Faktureringsintervall, betalningsvillkor och återbetalning\n"
             "• Vad som gäller vid fel eller avbrott i tjänsten\n"
             "• Avtalstext, personuppgiftsbiträdesavtal och andra juridiska handlingar\n"

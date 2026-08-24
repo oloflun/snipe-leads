@@ -29,11 +29,11 @@ import { cn } from "@/lib/utils";
  *
  * ## Varför inte en <select>
  *
- * Fyra alternativ med pris och en rad förklaring vardera. En rullgardin döljer
- * tre av dem bakom ett klick, och just de tre är det man jämför med.
+ * Fem alternativ med pris och en rad förklaring vardera. En rullgardin döljer
+ * fyra av dem bakom ett klick, och just de fyra är det man jämför med.
  */
 
-const ORDNING = ["leads", "support", "bookkeeping", "duo"] as const;
+const ORDNING = ["leads", "support", "bookkeeping", "duo", "trio"] as const;
 
 /**
  * Hur många produkter ett paket ger. Används för att avgöra vad som är en
@@ -50,7 +50,8 @@ const PRODUKTER_I_PAKET: Record<string, number> = {
   leads: 1,
   support: 1,
   bookkeeping: 1,
-  duo: 2
+  duo: 2,
+  trio: 3
 };
 
 export function Planvaljare({

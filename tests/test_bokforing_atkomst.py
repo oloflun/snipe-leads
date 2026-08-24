@@ -250,7 +250,7 @@ def test_marknadssidan_och_paketet_finns():
 
 
 def test_paketet_har_det_beslutade_priset():
-    """1 990 kr/mån, beslutat 2026-08-24.
+    """2 690 kr/mån, beslutat 2026-08-25 (tidigare 1 990, 2026-08-24).
 
     Testet finns för att priset ska gå att ändra AVSIKTLIGT. En prislapp som
     tyst byts är en prislapp en kund upptäcker på fakturan.
@@ -261,8 +261,8 @@ def test_paketet_har_det_beslutade_priset():
     """
     pricing = (ROT / "lib" / "pricing.ts").read_text(encoding="utf-8")
     block = pricing.split('id: "bookkeeping"')[1].split("}")[0]
-    assert "prisPerManad: 1990" in block, (
-        "Bokföringspaketets pris är inte 1990. Ändras det ska både raden här och "
+    assert "prisPerManad: 2690" in block, (
+        "Bokföringspaketets pris är inte 2690. Ändras det ska både raden här och "
         "beslutsdatumet i pricing.ts uppdateras."
     )
 

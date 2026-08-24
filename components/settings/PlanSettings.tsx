@@ -34,7 +34,7 @@ import { useLocale } from "@/lib/i18n";
  * Produktuppsättning → paketnamn.
  *
  * Kartan är AVSIKTLIGT gles. Med tre produkter finns sju kombinationer, och
- * bara fyra av dem är paket vi säljer. Resten faller igenom till "er plan är
+ * bara fem av dem är paket vi säljer. Resten faller igenom till "er plan är
  * satt manuellt", vilket är sant: en arbetsyta med leads och bokföring men
  * inte support har fått den uppsättningen av en människa, inte av prislistan.
  *
@@ -45,7 +45,9 @@ const PAKET_FOR_PRODUKTER: Record<string, string> = {
   "leads": "leads",
   "support": "support",
   "bookkeeping": "bookkeeping",
-  "leads+support": "duo"
+  "leads+support": "duo",
+  // Nyckeln är produkterna SORTERADE och hopfogade — se `nyckel` nedan.
+  "bookkeeping+leads+support": "trio"
 };
 
 export function PlanSettings() {

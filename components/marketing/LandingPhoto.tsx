@@ -205,8 +205,17 @@ export function LandingPhoto({
                   längd — till exempel i engelsk lokalisering — flyttar mittlinjen
                   och siffran här stämmer inte längre. */}
               <div className="col-span-12 self-end lg:col-span-3 lg:col-start-10 lg:ml-auto lg:w-[219px]">
-                <div className="font-display text-[1.5rem] leading-[1.15] tracking-[-0.02em] text-paper">
-                  <ProductSwitch value={product} onChange={setProduct} tone="paper" brytEfter="leads" />
+                {/* 1.1875rem och inte 1.5rem. Tre produkter på EN rad mäter
+                    257px vid 24px, och kolumnen är 219 — den gamla graden
+                    tvingade fram en radbrytning som lade "Bokföring" under
+                    "Leads", alltså till vänster om "Support".
+                    Graden är uppmätt vid båda språken och det är ENGELSKAN som
+                    sätter den: "Bookkeeping" är 25px bredare än "Bokföring",
+                    och vid 21px låg dess högerkant 20px utanför kolumnen. Byts
+                    ett produktnamn mot ett längre ord måste måttet mätas om —
+                    raden kan inte längre brytas, den skulle sticka ut i stället. */}
+                <div className="font-display text-[1.1875rem] leading-[1.15] tracking-[-0.02em] text-paper">
+                  <ProductSwitch value={product} onChange={setProduct} tone="paper" />
                 </div>
                 {/* Under växeln, inte bredvid.
                     Bredvid krävde en fjärde kolumn, och den bredden drog hela

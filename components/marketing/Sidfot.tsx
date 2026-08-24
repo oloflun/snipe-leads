@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BOLAG, bolagsuppgifterna_klara, DATASKYDD_MEJL } from "@/lib/bolag";
+import { BOLAG, DATASKYDD_MEJL } from "@/lib/bolag";
 import { KONTAKT_MEJL } from "@/components/marketing/copy";
 
 /**
@@ -19,24 +19,19 @@ import { KONTAKT_MEJL } from "@/components/marketing/copy";
  * kundens domän är vi supportchatten på deras sajt (TENANTS.md) — vårt
  * organisationsnummer i deras sidfot är fel bolag på fel sajt.
  *
- * ## Varningsrutan
+ * ## Varningsrutan är borttagen (2026-08-25, på begäran)
  *
- * Så länge bolagsuppgifterna är platshållare visas en synlig ruta. Den är
- * ful med flit: en gul ruta på säljsidan blir åtgärdad, en `TODO` i en
- * kommentar blir det inte.
+ * Den gula rutan sade att bolagsuppgifterna nedan är platshållare. Den är
+ * borta — men uppgifterna är det fortfarande: `orgnr`, `postadress` och
+ * `DATASKYDD_MEJL` i lib/bolag.ts står kvar som `[...]` och renderas i klartext
+ * i raden under. Det finns alltså inte längre något på sidan som säger att de
+ * inte är riktiga. `bolagsuppgifterna_klara` finns kvar i lib/bolag.ts och är
+ * fortfarande false; ingenting läser den längre.
  */
 export function Sidfot() {
   return (
     <div className="border-t border-ink/12">
       <div className="mx-auto max-w-[1480px] px-6 py-8 md:px-10">
-        {bolagsuppgifterna_klara ? null : (
-          <p className="mb-6 rounded-card border border-ochre/40 bg-ochre/10 px-4 py-3 text-[0.875rem] leading-[1.6] text-ink/80">
-            <strong className="font-semibold">Ej klart för lansering.</strong> Bolagsuppgifterna
-            nedan är platshållare, och de juridiska sidorna är ett förstautkast som inte granskats
-            av jurist. Se <code className="font-mono text-[0.8125rem]">docs/JURIDIK_ATGARDER.md</code>.
-          </p>
-        )}
-
         <div className="flex flex-col gap-4 text-[0.875rem] leading-[1.6] text-ink/50 md:flex-row md:items-baseline md:justify-between">
           <p>
             {BOLAG.namn} · org.nr {BOLAG.orgnr} · {BOLAG.postadress}
