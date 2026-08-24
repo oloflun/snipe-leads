@@ -181,6 +181,16 @@ class Storage(Protocol):
         """Skrivs av avregistreringslänken. Ska gälla omedelbart."""
         ...
 
+    async def avregistreringstoken(self, tenant_id: str, *, email: str) -> str:
+        """Den ogenomskinliga token som gör avregistreringslänken klickbar.
+
+        Idempotent per (tenant, adress): samma mottagare ska ha SAMMA länk i
+        alla utskick. En ny token per mejl hade gjort den gamla länken i ett
+        tidigare mejl till en död länk, och det är precis den länk någon
+        letar upp när hen tröttnat.
+        """
+        ...
+
     async def count_sent_outreach(self, tenant_id: str, *, since: Any = None) -> int:
         """Antal FAKTISKT skickade utgående meddelanden. Räknas ur sent_at och
         inte ur send_queue-status, eftersom det är sent_at som betyder att ett

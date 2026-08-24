@@ -43,6 +43,31 @@ Kör `python scripts/lokal_stack.py --apply` i stället.
 
 Fullständig beskrivning av miljöer, variabler och fällor: [`DEPLOY.md`](DEPLOY.md).
 
+## Dataskydd: DeepSeek får inte se kunddata
+
+**Beslut 2026-08-24. Vänd inte tillbaka det utan att läsa varför.**
+
+DeepSeek behandlar prompten i Kina. Allt som går genom support-agenten är
+kundens kundmejl — namn, adresser, ärendetext — och en sådan
+tredjelandsöverföring kräver SCC, en överföringskonsekvensbedömning och ett
+uttryckligt villkor i PUB-avtalet. Inget av det finns.
+
+`LLM_PROVIDER=deepseek` fäller därför uppstarten i varje miljö som bär eller
+speglar riktig kunddata (`main`, `development` — kom ihåg att development är en
+spegel av produktionen). Spärren sitter i `Settings.llm_provider_fault()` och
+körs från `app/main.py` innan databasen ens öppnas. En felaktig deploy ska dö
+högljutt, inte tyst skicka kunddata utomlands.
+
+DeepSeek får köras lokalt och i testsviten, mot MemoryStorage och syntetiska
+fixtures. Det är där den hör hemma.
+
+Vill vi ta tillbaka den i drift av kostnadsskäl är det ett **avtalsbeslut**,
+inte ett kodbeslut: SCC, TIA, PUB-villkor och information till kunden vid
+tecknandet. Flagga till Anton — bygg inte tyst in det igen.
+
+Status för resten av dataskyddsarbetet: [`docs/JURIDIK_ATGARDER.md`](docs/JURIDIK_ATGARDER.md).
+Incidenter: [`INCIDENT_RESPONSE.md`](INCIDENT_RESPONSE.md).
+
 ## Arbetssätt: automatisera först, fråga sist
 
 **Sträva alltid efter minsta möjliga friktion för användaren.** Varje fråga du

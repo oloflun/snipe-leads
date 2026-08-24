@@ -148,6 +148,8 @@ class MemoryStorage:
         # Avregistreringar, tenant-skopade. Motsvarar public.suppressions med
         # tenant_id från migration 030.
         self.suppressions: dict[str, list[dict[str, Any]]] = {}
+        # tenant -> adress -> token. Speglar ss_avregistreringslankar.
+        self.avregistreringslankar: dict[str, dict[str, str]] = {}
         self.outreach_threads: dict[str, dict[str, dict[str, Any]]] = {}
         self.outreach_messages: dict[str, list[dict[str, Any]]] = {}
         # G11: (tenant_id, segment, lever) -> {sent, replies, positive}. Seedas
@@ -512,6 +514,17 @@ class MemoryStorage:
             str(rad["email"]).strip().casefold()
             for rad in self.suppressions.get(tenant_id, [])
         }
+
+    async def avregistreringstoken(self, tenant_id: str, *, email: str) -> str:
+        adress = str(email or "").strip().casefold()
+        if not adress:
+            raise ValueError("avregistreringstoken kräver en e-postadress.")
+        from ..leads.utskicksfot import ny_token
+
+        lankar = self.avregistreringslankar.setdefault(tenant_id, {})
+        if adress not in lankar:
+            lankar[adress] = ny_token()
+        return lankar[adress]
 
     async def add_suppression(self, tenant_id: str, *, email: str, reason: str) -> None:
         adress = str(email or "").strip().casefold()

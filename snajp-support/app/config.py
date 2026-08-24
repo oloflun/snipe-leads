@@ -60,6 +60,15 @@ CATEGORY_LABELS = {
     "ovrigt": "Övrigt",
 }
 
+# Miljöer som bär eller speglar riktig kunddata. `development` står med MED
+# FLIT: Railway-miljön development är en spegel av produktionen (se CLAUDE.md),
+# alltså riktiga kunders mejladresser och ärenden. En "det är bara dev"-
+# invändning gäller inte här.
+#
+# Modulnivå och inte klassattribut: pydantic-settings tolkar varje oannoterat
+# klassattribut som ett fält och vägrar bygga modellen.
+MILJOER_MED_KUNDDATA = ("main", "production", "prod", "development", "dev")
+
 # Regler per fack: auto = skicka direkt, draft = kräver godkännande, escalate = alltid människa.
 DEFAULT_CATEGORY_RULES = {category: "draft" for category in CATEGORIES}
 
@@ -76,7 +85,18 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # Vilken driftmiljö processen kör i. Sätts av Railway (RAILWAY_ENVIRONMENT_NAME
+    # sätts automatiskt av plattformen); ENVIRONMENT finns för lokal körning och
+    # för den dag vi inte kör på Railway. Tom = okänd miljö, vilket behandlas som
+    # UTVECKLING — se `har_riktig_kunddata` för varför det är rätt håll att falla.
+    environment: str = ""
+    railway_environment_name: str = ""
+
     # LLM-provider: "openai" eller "deepseek" (OpenAI-kompatibel endpoint).
+    #
+    # SE `llm_provider_fault` NEDAN INNAN DU ÄNDRAR DEFAULTEN. DeepSeek är
+    # tillåten bara mot syntetisk data; i main och development vägrar tjänsten
+    # starta med den. Beslutet är dokumenterat i CLAUDE.md.
     llm_provider: str = "openai"
     llm_base_url: str = ""  # tom => härleds från provider (se agent/llm.py)
     openai_api_key: str = ""
@@ -145,6 +165,15 @@ class Settings(BaseSettings):
     imap_password: str = ""  # Gmail: app-lösenord; Outlook: app-lösenord/IMAP-auth
     imap_folder: str = "INBOX"
 
+    # Publik bas-URL för länkar som hamnar i utgående mejl (idag bara
+    # avregistreringslänken). MÅSTE peka på Next-appen, inte på det här API:t —
+    # det är Next som renderar /avregistrera/<token>.
+    #
+    # Tom => `app/leads/utskicksfot.py` kan inte bygga en fungerande länk, och
+    # då blockerar send_guard regel 2 utskicket. Det är rätt utfall: ett
+    # kallmejl med en trasig avregistreringslänk är värre än inget kallmejl.
+    publik_bas_url: str = ""
+
     # CORS: kommaseparerade origins som får anropa API:t direkt från en
     # webbläsare. Tom = av, vilket räcker för vår egen frontend — Next-proxyn
     # anropar backenden server-side, så webbläsaren träffar aldrig den här
@@ -180,6 +209,59 @@ class Settings(BaseSettings):
         if self.llm_provider == "deepseek":
             return self.deepseek_api_key
         return self.openai_api_key
+
+    def aktiv_miljo(self) -> str:
+        """Miljönamnet, normaliserat. Tom sträng = okänd."""
+        return (self.environment or self.railway_environment_name or "").strip().lower()
+
+    def har_riktig_kunddata(self) -> bool:
+        """Om den här processen kan nå riktiga personuppgifter.
+
+        En OKÄND miljö räknas som utveckling och inte som produktion. Det ser
+        ut som fel håll att falla, men är det inte: den enda konsekvensen av
+        ett falskt negativt är att en lokal körning tillåter DeepSeek mot en
+        databas som ändå är tom (`scripts/lokal_stack.py`). Ett falskt positivt
+        hade i stället stoppat varje lokal utvecklingskörning, och en spärr som
+        står i vägen dagligen är en spärr någon kommenterar bort.
+
+        Det som faktiskt skyddar produktionen är att Railway ALLTID sätter
+        RAILWAY_ENVIRONMENT_NAME. Miljönamnet är alltså aldrig okänt där.
+        """
+        return self.aktiv_miljo() in MILJOER_MED_KUNDDATA
+
+    def llm_provider_fault(self) -> str | None:
+        """Varför den valda LLM-providern inte får användas här, eller None.
+
+        VARFÖR SPÄRREN FINNS: DeepSeek behandlar det som skickas till modellen
+        i Kina. Allt som går genom agenten är kundens kundmejl — namn,
+        adresser, ärendetext — och en tredjelandsöverföring dit kräver SCC,
+        en överföringskonsekvensbedömning och ett uttryckligt villkor i
+        PUB-avtalet. Inget av det finns 2026-08-24.
+
+        VARFÖR DEN KRASCHAR I STÄLLET FÖR ATT VARNA: en varning i en logg som
+        ingen läser är ingen spärr. Det fel den här spärren finns för att
+        fånga — en felaktig `LLM_PROVIDER` i en Railway-miljö — ger annars en
+        tjänst som ser fullt frisk ut medan varje ärende skickas utomlands.
+        Ett dött bygge upptäcks inom minuter; en tyst överföring upptäcks vid
+        en tillsyn.
+
+        DeepSeek får fortfarande köras lokalt och i testsviten, mot
+        MemoryStorage och syntetiska fixtures. Det är där den hör hemma.
+
+        Vill vi ta tillbaka DeepSeek i drift är det ett AVTALSBESLUT, inte ett
+        kodbeslut: SCC, TIA, PUB-villkor och information till kunden. Ändra
+        inte den här funktionen för att komma runt det.
+        """
+        if self.llm_provider == "deepseek" and self.har_riktig_kunddata():
+            return (
+                f"LLM_PROVIDER=deepseek är inte tillåtet i miljön "
+                f"'{self.aktiv_miljo()}'. Den miljön bär eller speglar riktig "
+                f"kunddata, och DeepSeek behandlar prompten i Kina utan att vi "
+                f"har SCC, överföringsbedömning eller PUB-villkor på plats. "
+                f"Sätt LLM_PROVIDER=openai och se till att OPENAI_API_KEY är "
+                f"satt på BÅDA tjänsterna (web och api)."
+            )
+        return None
 
     def llm_key_fault(self) -> str | None:
         """Varför nyckeln inte går att använda, eller None.

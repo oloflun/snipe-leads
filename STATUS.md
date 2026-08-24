@@ -1,5 +1,41 @@
 # Snipra Status
 
+## 2026-08-24 — Claude — GDPR: DeepSeek utspärrad, juridiska sidor, gallring och rättighetsflöde
+
+**DeepSeek får inte längre se kunddata.** `LLM_PROVIDER=deepseek` fäller uppstarten i `main`
+och `development` (spegelmiljön räknas — den bär riktiga kunders ärenden). Spärren ligger i
+`Settings.llm_provider_fault()`, körs från `app/main.py` före databasen och från
+`agent/llm.py` vid klientbygget. Motivet står i CLAUDE.md så att nästa session inte vänder
+tillbaka det av kostnadsskäl. **Variablerna i Railway är INTE satta av mig** — se
+`docs/JURIDIK_ATGARDER.md`, P0.1b.
+
+**Tre juridiska sidor finns**: `/integritetspolicy`, `/villkor`, `/cookies`, med en delad
+sidfot som bär bolagsidentifikation. Alla texter är förstautkast och bär en synlig
+"Förstautkast"-ruta tills en jurist läst dem. Bolagsuppgifterna i `lib/bolag.ts` är
+platshållare med flit — ett gissat organisationsnummer kan tillhöra ett annat bolag.
+
+**Marknadstexten sa inte hela sanningen.** Dataskyddsstycket lovade att ingenting delas mellan
+kunder men nämnde inte att mejltexten skickas till en AI-leverantör. Den säger det nu, och är
+mer specifik i stället för mer försiktig.
+
+**Art. 14-sidfoten byggs numera i KOD, inte av modellen.** `send_guard` har blockerat utskick
+utan avsändaridentifikation och avregistreringslänk sedan Del 2.3 — men ingenting LADE DIT
+dem. Det gör `app/leads/utskicksfot.py` nu, vid köning, så att texten en människa granskar är
+texten som skickas. Avregistreringslänken fungerar hela vägen: ogenomskinlig token i
+`ss_avregistreringslankar`, inlöst via en security definer-funktion på
+`/avregistrera/[token]`.
+
+**Gallring och rättighetsflöde finns som skript, inte som instruktioner**: `scripts/gallra.py`
+(torrkörning som default) och `scripts/gdpr_radera.py` (sök, registerutdrag, radering).
+Retentionsperioden är MEDVETET inte satt — det är ett affärsbeslut, och ingen policy betyder
+ingen gallring.
+
+**Migration 046 och 048 är skrivna men inte körda.** Avregistreringssidan och gallringen gör
+ingenting förrän de är applicerade.
+
+Öppen post i incidentloggen: den läckta Render-nyckeln. Se `INCIDENT_RESPONSE.md`.
+
+
 ## 2026-08-16 — Claude — Plattformen färdig, preview-miljö byggd, riktningsbyte mot enad stack
 
 **Alla sju faser i plattformsplanen är byggda och committade.** Fas 1.3–1.5 (RPC-härdning,

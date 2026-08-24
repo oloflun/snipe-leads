@@ -12,6 +12,7 @@ import { PricingSection } from "@/components/marketing/PricingSection";
 import { UspSection } from "@/components/marketing/UspSection";
 import { LaddaNerAppen } from "@/components/marketing/LaddaNerAppen";
 import { ProductSwitch } from "@/components/marketing/ProductSwitch";
+import { Sidfot } from "@/components/marketing/Sidfot";
 import { SidMeny } from "@/components/marketing/SidMeny";
 import { useReveal } from "@/components/marketing/useReveal";
 import { cn } from "@/lib/utils";
@@ -566,12 +567,24 @@ export function LandingPhoto({
               <p className="mt-3 max-w-[52ch] text-[0.9375rem] leading-[1.6] text-ink/70">
                 {text(shared.gdprText)}
               </p>
-              <p className="mt-4 font-mono text-[12px] uppercase tracking-[0.08em] text-ink/40">
-                Sverige · GDPR · RLS
-              </p>
+              {/* Ersätter raden "Sverige · GDPR · RLS". Tre förkortningar var
+                  ett påstående utan täckning; en länk till dokumentet är ett
+                  påstående som går att kontrollera — och det är den enda
+                  sortens trygghetssignal som håller för en inköpares jurist. */}
+              <Link
+                href="/integritetspolicy"
+                className="focus-ring mt-4 inline-block text-[0.9375rem] font-medium underline underline-offset-4 hover:text-ochre"
+              >
+                {text(shared.gdprLank)}
+              </Link>
             </div>
           </div>
         </div>
+
+        {/* Bolagsidentifikationen och de juridiska länkarna. Egen komponent
+            därför att de måste finnas på VARJE publik sida, inte bara här —
+            se components/marketing/Sidfot.tsx. */}
+        <Sidfot />
       </footer>
     </div>
   );

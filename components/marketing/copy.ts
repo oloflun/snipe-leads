@@ -113,13 +113,31 @@ export const shared = {
   },
   footerPlats: { sv: "Göteborg och Umeå · Sverige", en: "Gothenburg and Umeå · Sweden" },
   gdprRubrik: { sv: "Kunddata hanteras skilt, aldrig publikt", en: "Customer data is kept separate, never public" },
+  //: Texten säger numera OCKSÅ att mejltexten skickas till en AI-leverantör.
+  //:
+  //: Den gjorde inte det förut, och det var den sortens utelämnande som inte
+  //: syns förrän en inköpares jurist läser stycket och undrar vad mer som
+  //: inte står där. Produkten ÄR en språkmodell; att inte nämna att texten
+  //: bearbetas av en var att sälja på en halv beskrivning.
+  //:
+  //: Formuleringen är gjord mer specifik, inte mer försiktig. "Vi säger vad
+  //: vi faktiskt gör" väger tyngre hos en svensk B2B-köpare än trygghetsord,
+  //: och isoleringen mellan kunder är fortfarande det första som står.
   gdprText: {
     sv: "Varje kunds data ligger i en egen avgränsning och kan bara läsas av den kunden — " +
-      "det är en spärr i databasen, inte en inställning i koden. Ingenting publiceras, " +
-      "ingenting delas mellan kunder, och inget mejl går ut utan att en människa godkänt det.",
+      "det är en spärr i databasen, inte en inställning i koden. Ingenting publiceras, och " +
+      "ingenting delas mellan kunder. För att skriva svaret skickas mejltexten till vår " +
+      "AI-leverantör, som behandlar den åt oss och inte tränar på den. Inget mejl går ut " +
+      "utan att en människa godkänt det.",
     en: "Every customer's data sits in its own boundary and can only be read by that customer — " +
-      "enforced in the database, not by a setting in the code. Nothing is published, nothing is " +
-      "shared between customers, and no email goes out without a person approving it."
+      "enforced in the database, not by a setting in the code. Nothing is published, and nothing " +
+      "is shared between customers. To write the reply, the email text is sent to our AI " +
+      "provider, which processes it on our behalf and does not train on it. No email goes out " +
+      "without a person approving it."
+  },
+  gdprLank: {
+    sv: "Läs hela integritetspolicyn",
+    en: "Read the full privacy policy"
   }
 } satisfies Record<string, Localized>;
 

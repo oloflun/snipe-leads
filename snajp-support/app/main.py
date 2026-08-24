@@ -42,6 +42,22 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname
 async def lifespan(app: FastAPI):
     settings = get_settings()
 
+    # DATASKYDDSSPÄRR — körs FÖRST, före databas, Redis och allt annat.
+    #
+    # Den fäller uppstarten om LLM_PROVIDER pekar på en leverantör som inte
+    # får ta emot personuppgifter i den här miljön (idag: DeepSeek i main och
+    # development). Se Settings.llm_provider_fault för hela motiveringen.
+    #
+    # ATT DEN LIGGER I lifespan OCH INTE VID FÖRSTA ANROPET är hela poängen:
+    # ett fel som slår vid första kundmejlet har redan hunnit skicka ett
+    # kundmejl. Railway markerar en deploy som misslyckad när processen dör
+    # här, och den föregående versionen ligger kvar — alltså rätt utfall också
+    # driftmässigt.
+    provider_fel = settings.llm_provider_fault()
+    if provider_fel:
+        logger.critical("Startvägran: %s", provider_fel)
+        raise RuntimeError(provider_fel)
+
     storage = None
     if settings.database_url:
         try:

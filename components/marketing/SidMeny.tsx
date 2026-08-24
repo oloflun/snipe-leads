@@ -23,6 +23,10 @@ import { cn } from "@/lib/utils";
  * upprepar det man just skrollat förbi, och en besökare som klickar tillbaka
  * tappar sin plats. Ankaret behåller sammanhanget.
  *
+ * UNDANTAGET är GDPR-posten. Integritetspolicyn är ett dokument och inte ett
+ * avsnitt: den ska gå att länka till, bokmärka och skicka till en inköpares
+ * jurist, och inget av det fungerar med ett ankare mitt i en säljsida.
+ *
  * ## Tangentbord och fokus
  *
  * Escape stänger, klick utanför stänger. Utan det första sitter en tangentbords-
@@ -62,7 +66,11 @@ export function SidMeny({ tone = "paper" }: Readonly<{ tone?: "paper" | "ink" }>
     { etikett: text(shared.menyPriser), href: "#priser" },
     { etikett: text(shared.menyFragor), href: "#fragor" },
     { etikett: text(shared.menyVilka), href: "#vilka-ar-vi" },
-    { etikett: text(shared.menyGdpr), href: "#dataskydd" }
+    // Den enda posten som lämnar sidan. #dataskydd-avsnittet i sidfoten är
+    // en sammanfattning på fyra rader; den som klickar "GDPR och data" vill
+    // läsa hela behandlingen, och ett ankare till en sammanfattning svarar
+    // inte på den frågan. Sammanfattningen har i stället en egen länk hit.
+    { etikett: text(shared.menyGdpr), href: "/integritetspolicy" }
   ];
 
   const ljus = tone === "paper";

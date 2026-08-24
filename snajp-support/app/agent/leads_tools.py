@@ -21,6 +21,7 @@ from ..leads.autonomy import allowed_action
 from ..leads.language_gate import LanguageGateError, check_send_gate
 from ..leads.outreach_playbook import finalize_outreach_body
 from ..leads.timing_gate import check_cold_outreach_gate
+from ..leads.utskicksfot import avregistreringslank, bygg_fot, med_fot
 from .leads_context import OnboardingContext, OutreachContext
 
 
@@ -43,10 +44,51 @@ async def _mark_onboarding_done_impl(onboarding: OnboardingContext) -> str:
     return json.dumps({"done": True})
 
 
+async def _med_lagstadgad_fot(outreach: OutreachContext, brodtext: str) -> str:
+    """Lägger på avsändaridentifikation, ändamål, källa och avregistreringslänk.
+
+    KODEN skriver den, inte modellen — se app/leads/utskicksfot.py för varför.
+    Det här är den enda anropsplatsen, och den ligger vid köningen så att den
+    text en människa granskar i dashboarden är exakt den text som skickas.
+
+    SAKNAS UNDERLAGET LÄGGS INGEN FOT PÅ, och det är avsiktligt. En halv
+    sidfot hade passerat regel 2 (länken finns) och fallit på regel 1 med ett
+    diffust "sidfoten saknar postadress" — medan den verkliga orsaken är att
+    tenanten aldrig fyllt i sina bolagsuppgifter. Utan fot fälls utskicket av
+    regel 1 med hela listan över vad som saknas, vilket är det besked som går
+    att åtgärda.
+    """
+    from ..config import get_settings  # lokalt: undviker cirkulär import vid modulladdning
+
+    bas_url = get_settings().publik_bas_url
+    tenant = await outreach.storage.get_tenant(outreach.tenant_id) or {}
+    foretagsnamn = str(tenant.get("company_name") or tenant.get("name") or "").strip()
+    orgnr = str(tenant.get("orgnr") or "").strip()
+    postadress = str(tenant.get("postal_address") or "").strip()
+
+    if not (bas_url and foretagsnamn and orgnr and postadress and outreach.prospect_email):
+        return brodtext
+
+    token = await outreach.storage.avregistreringstoken(
+        outreach.tenant_id, email=outreach.prospect_email
+    )
+    return med_fot(
+        brodtext,
+        fot=bygg_fot(
+            foretagsnamn=foretagsnamn,
+            orgnr=orgnr,
+            postadress=postadress,
+            lank=avregistreringslank(bas_url, token),
+            kontakt_epost=str(tenant.get("contact_email") or "").strip(),
+        ),
+    )
+
+
 async def _queue_outreach_draft_impl(
     outreach: OutreachContext, *, subject: str, body: str, language_state: str, humanizer_variant: str
 ) -> str:
     finalized_body = finalize_outreach_body(body)
+    finalized_body = await _med_lagstadgad_fot(outreach, finalized_body)
 
     try:
         check_send_gate(language_state=language_state, humanizer_variant=humanizer_variant)

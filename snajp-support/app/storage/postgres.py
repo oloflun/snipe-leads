@@ -664,6 +664,30 @@ class PostgresStorage:
                 reason,
             )
 
+    async def avregistreringstoken(self, tenant_id: str, *, email: str) -> str:
+        adress = str(email or "").strip().casefold()
+        if not adress:
+            raise ValueError("avregistreringstoken kräver en e-postadress.")
+        from ..leads.utskicksfot import ny_token
+
+        async with self._scoped(tenant_id) as conn:
+            # `do update` och inte `do nothing`: en `do nothing`-konflikt
+            # returnerar INGEN rad, och då hade anroparen fått None för en
+            # adress som redan har en giltig länk. Uppdateringen är en no-op
+            # på värdet men tvingar fram returraden.
+            return await conn.fetchval(
+                """
+                insert into ss_avregistreringslankar (token, tenant_id, email)
+                values ($1, $2, $3)
+                on conflict (tenant_id, lower(email))
+                do update set email = excluded.email
+                returning token
+                """,
+                ny_token(),
+                tenant_id,
+                adress,
+            )
+
     async def count_sent_outreach(self, tenant_id: str, *, since=None) -> int:
         async with self._scoped(tenant_id) as conn:
             return await conn.fetchval(
