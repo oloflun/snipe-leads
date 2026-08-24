@@ -29,7 +29,7 @@ export async function generateMetadata(): Promise<Metadata> {
     manifest: "/manifest.webmanifest",
     icons: {
       icon: [
-        { url: "/snipe_logo.svg", type: "image/svg+xml" },
+        { url: "/snajp-symbol-black.svg", type: "image/svg+xml" },
         { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }
       ],
       apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180" }]

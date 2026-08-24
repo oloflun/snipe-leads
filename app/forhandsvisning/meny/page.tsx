@@ -72,7 +72,7 @@ function HeaderNu({ aktiv }: Readonly<{ aktiv: string }>) {
     <header className="bg-paper">
       <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3 md:px-6">
         <span className="inline-flex items-center gap-2.5">
-          <Image src="/snipe_logo.svg" alt="" width={30} height={19} className="h-[18px] w-auto" />
+          <Image src="/snajp-symbol-black.svg" alt="" width={200} height={158} className="h-[18px] w-auto" />
           <span className="text-[19px] font-semibold leading-none tracking-[-0.02em]">Snajp</span>
         </span>
         <span className="hidden text-sm text-ink/45 sm:inline">Nordlys Handel</span>
@@ -110,7 +110,7 @@ function HeaderForslag({
         {/* Logotypen får egen kolumn och fyller båda radernas höjd. Den ligger
             därmed i vänsterkanten i stället för på en rad ovanför flikarna. */}
         <span className="flex shrink-0 items-center gap-3">
-          <Image src="/snipe_logo.svg" alt="" width={30} height={19} className="h-[34px] w-auto" />
+          <Image src="/snajp-symbol-black.svg" alt="" width={200} height={158} className="h-[34px] w-auto" />
           <span className="flex flex-col justify-center">
             <span className="text-[26px] font-semibold leading-none tracking-[-0.02em]">Snajp</span>
             <span className="mt-1 text-[13px] leading-none text-ink/45">Nordlys Handel</span>

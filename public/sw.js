@@ -37,15 +37,17 @@
  * kvar för alltid eftersom namnet aldrig ändrades. Varje webbläsare som besökt
  * appen bar alltså en växande hög av chunks från gamla byggen. `activate`
  * raderar v1 i sin helhet vid nästa sidladdning, utan att användaren gör något.
+ *
+ * Höjd till v3 2026-08-25: `snipe_logo.svg` bytt mot den nya varumärkesfilen.
  */
 
-const CACHE = "snajp-v2";
+const CACHE = "snajp-v3";
 
 const SKAL = [
   "/offline.html",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
-  "/snipe_logo.svg"
+  "/snajp-symbol-black.svg"
 ];
 
 self.addEventListener("install", (event) => {

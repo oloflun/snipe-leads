@@ -220,12 +220,12 @@ function DraftLogo({ compact = false, light = false }: Readonly<{ compact?: bool
     <span className="relative inline-flex items-center">
       <span className="relative z-10 -mr-2 block h-12 w-[78px] md:h-14 md:w-[92px]">
         <Image
-          src="/snipe_logo.svg"
+          src={light ? "/snajp-symbol-white.svg" : "/snajp-symbol-black.svg"}
           alt=""
           fill
           priority
           sizes="92px"
-          className={cn("object-contain object-left", light ? "invert" : "")}
+          className="object-contain object-left"
         />
       </span>
       {!compact ? (
@@ -284,7 +284,7 @@ function EditorialLandingHeader({ variant, asMain = false }: Readonly<{ variant:
       <div className="mx-auto flex max-w-[1480px] items-center justify-between px-6 py-5 md:px-8 md:py-6">
         <Link href={homeHref} className="focus-ring flex items-center gap-2.5">
           <span className="relative block h-11 w-[72px] shrink-0">
-            <Image src="/snipe_logo.svg" alt="" fill sizes="72px" className="object-contain object-left" />
+            <Image src="/snajp-symbol-black.svg" alt="" fill sizes="72px" className="object-contain object-left" />
           </span>
           <span className="font-display italic-disp text-[30px] leading-none tighten md:text-[34px]">Snajp</span>
         </Link>
@@ -760,7 +760,7 @@ function EditorialIterationPortal({ slug }: Readonly<{ slug: string[] }>) {
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[243px] border-r border-ink/10 bg-paper/88 px-4 py-5 backdrop-blur-xl lg:flex lg:flex-col">
         <Link href="/" className="flex items-center gap-3">
           <span className="relative block h-11 w-[72px] shrink-0">
-            <Image src="/snipe_logo.svg" alt="" fill sizes="72px" className="object-contain object-left" priority />
+            <Image src="/snajp-symbol-black.svg" alt="" fill sizes="72px" className="object-contain object-left" priority />
           </span>
           <span className="font-display italic-disp text-[28px] leading-none tighten">Snajp</span>
         </Link>

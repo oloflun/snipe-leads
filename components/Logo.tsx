@@ -24,8 +24,7 @@ import { cn } from "@/lib/utils";
  *
  * Måtten är `clamp()` och inte fasta pixlar: hjälten spänner över hela
  * skärmbredden, och ett märke som är rätt på 1600px är ett märke som täcker
- * halva mobilskärmen. Nedre gränsen (56px) är fortfarande större än `stor`,
- * övre (120px) är måttet ur utkastet.
+ * halva mobilskärmen.
  *
  * Ordmärket följer märkets höjd med faktor ~0,84. Högre än så och ordet tar
  * över märket; lägre och de två läser som en bild bredvid ett ord i stället för
@@ -35,10 +34,11 @@ import { cn } from "@/lib/utils";
  * brantare faktor slog clamp:en i taket redan vid ~1400px, och en 1280-skärm
  * fick nästan samma märke som en 1900 — mellanbredderna såg trängda ut.
  *
- * Undre gränsen är satt av MOBILEN och inget annat: lockupen delar rad med
- * EN, Logga in och Meny. Med 38px märke tog den så mycket bredd på 390px att
- * "Logga in" bröts till två rader. 28px är den största storlek där raden
- * fortfarande håller ihop.
+ * Undre gränsen var satt av MOBILEN: lockupen delar rad med EN, Logga in och
+ * Meny, och 38px märke bröt "Logga in" till två rader på 390px. 28px höll
+ * ihop raden — och 2026-08-25 skalades hela `hjalte`-lockupen ned 30 % (28→20,
+ * 88→62, gap och textstorlek i samma proportion), vilket bara gör
+ * mobilmarginalen större.
  */
 export function Logo({
   compact = false,
@@ -57,20 +57,19 @@ export function Logo({
     <span
       className={cn(
         "inline-flex items-center",
-        hjalte ? "gap-[clamp(8px,1.2vw,20px)]" : stor ? "gap-3" : "gap-2.5"
+        hjalte ? "gap-[clamp(6px,0.84vw,14px)]" : stor ? "gap-3" : "gap-2.5"
       )}
     >
       <Image
-        src="/snipe_logo.svg"
+        src={tone === "paper" ? "/snajp-symbol-white.svg" : "/snajp-symbol-black.svg"}
         alt=""
-        width={30}
-        height={19}
+        width={200}
+        height={158}
         className={cn(
           "w-auto object-contain",
-          hjalte ? "h-[clamp(28px,5.2vw,88px)]" : stor ? "h-[34px]" : "h-[18px]",
-          // Märket är mörkt. På ett mörkt underlag försvinner det helt utan
-          // inverteringen — se DESIGN.md om tenant-logotypernas background.
-          tone === "paper" && "invert"
+          // 30% mindre än tidigare (var clamp(28px,5.2vw,88px)) — hjälten är
+          // det enda stället `hjalte` används (startsidans header).
+          hjalte ? "h-[clamp(20px,3.6vw,62px)]" : stor ? "h-[34px]" : "h-[18px]"
         )}
         priority
       />
@@ -80,7 +79,7 @@ export function Logo({
             className={cn(
               "font-semibold leading-none tracking-[-0.02em]",
               hjalte
-                ? "text-[clamp(20px,4.4vw,74px)]"
+                ? "text-[clamp(14px,3.1vw,52px)]"
                 : stor
                   ? "text-[26px]"
                   : "text-[19px]"
