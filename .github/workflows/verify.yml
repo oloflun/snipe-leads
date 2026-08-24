@@ -4,8 +4,30 @@ on:
   pull_request:
   push:
     branches:
+      # Arbetsgrenarna.
       - development
       - main
+      # DEPLOYGRENARNA, och de är hela poängen med den här listan.
+      #
+      # Railways deployment trigger pekar på railway-development respektive
+      # railway-main (se DEPLOY.md) — inte på development och main. Fram till
+      # nu kördes Verify aldrig på de två grenar som faktiskt blir till en
+      # tjänst. Följden syntes 2026-08-24: fyra commits i rad deployade medan
+      # Verify var rött, eftersom rödheten satt på en gren som ingen deploy
+      # läste. Bokföringschattens tur två var trasig i drift med grön
+      # dev-maskin.
+      #
+      # LÄS DET HÄR INNAN DU LITAR PÅ DEN: det här är DETEKTION, inte en
+      # grind. Railway bygger på push och väntar inte på GitHub Actions, så en
+      # röd Verify stoppar fortfarande ingenting — den gör bara att felet syns
+      # på den gren där det spelar roll, i stället för att gömma sig på
+      # grannen. En riktig grind kräver att deployen görs beroende av jobbet,
+      # och det är ett annat beslut än det här.
+      #
+      # Kostnaden är att varje ändring kör Verify två gånger, eftersom samma
+      # commit pushas till båda grenarna. Det är avsiktligt betalt.
+      - railway-development
+      - railway-main
 
 jobs:
   python-tests:
