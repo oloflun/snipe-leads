@@ -648,15 +648,26 @@ class PostgresStorage:
         if not adress:
             raise ValueError("add_suppression kräver en e-postadress.")
         async with self._scoped(tenant_id) as conn:
-            # workspace_id hämtas ur kopplingen; kolumnen är not null sedan 000.
-            # Finns ingen workspace för tenanten är det ett riktigt fel — en
-            # avregistrering som tyst inte sparas är det värsta utfallet här.
+            # workspace_id hämtas ur kopplingen NÄR DEN FINNS, annars NULL.
+            #
+            # Här stod tidigare en `insert ... select ... from workspaces
+            # where ss_tenant_id = $1`, och kommentaren påstod att en saknad
+            # workspace vore "ett riktigt fel". Det var värre än så: en select
+            # utan träffar infogar noll rader. Ingen krasch, inget
+            # felmeddelande, ingen avregistrering — exakt det utfall
+            # kommentaren sa att den ville undvika.
+            #
+            # Upptäckt 2026-08-24 när avregistreringskedjan provkördes skarpt:
+            # två tenants i development saknar arbetsyta. Kolumnen är nullbar
+            # sedan migration 049, och `send_guard` regel 3 läser ändå via
+            # tenant_id — skyddet gäller alltså oavsett workspace_id.
             await conn.execute(
                 """
                 insert into suppressions (workspace_id, tenant_id, email, reason)
-                select w.id, $1, $2, $3
-                  from workspaces w
-                 where w.ss_tenant_id = $1
+                values (
+                    (select w.id from workspaces w where w.ss_tenant_id = $1 limit 1),
+                    $1, $2, $3
+                )
                 on conflict do nothing
                 """,
                 tenant_id,

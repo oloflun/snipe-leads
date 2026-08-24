@@ -7,264 +7,231 @@ Uppdaterad 2026-08-24.
 
 ---
 
-## Klart i kod
+## Klart i kod, och verifierat
 
-| Punkt | Vad som byggdes |
-|---|---|
-| **P0.1** | Startspärr mot DeepSeek i miljöer med riktig kunddata. `Settings.llm_provider_fault()` i `snajp-support/app/config.py`, enforcad i `app/main.py` (uppstart) och `app/agent/llm.py` (klientbygge). Test: `snajp-support/tests/test_dataskydd_provider.py` |
-| **P0.3** | `/integritetspolicy`, `/villkor`, `/cookies` under `app/`. Delat skal: `components/marketing/JuridiskSida.tsx` |
-| **P0.4** | `components/marketing/Sidfot.tsx` — bolagsidentifikation och juridiska länkar, renderad i marknadssidans sidfot och på varje juridisk sida |
-| **P0.5** | `components/marketing/copy.ts` — dataskyddstexten säger nu att mejltexten bearbetas av en AI-leverantör, med länk till policyn |
-| **P1.1** | Gallringsmekanismen: `supabase/migrations/048_gallring.sql` + `scripts/gallra.py`. **Perioden är inte satt** — se nedan |
-| **P1.2** | `scripts/gdpr_radera.py` — sök, registerutdrag och radering per e-postadress |
-| **P1.3** | Art. 14-sidfoten byggs i kod och kan inte väljas bort av modellen: `snajp-support/app/leads/utskicksfot.py`, påsatt i `app/agent/leads_tools.py` vid köning. Avregistreringslänken fungerar: `supabase/migrations/046_avregistreringslankar.sql` + `app/avregistrera/[token]/page.tsx` |
-| **P1.5** | `INCIDENT_RESPONSE.md` |
-| **P2** | `docs/registerforteckning.md` |
+Verifierat betyder **prövat mot en körande miljö**, inte "testerna är gröna".
+Den här sessionen har tre gånger sett en grön hälsokontroll ovanpå ett trasigt
+system, så skillnaden står här med flit.
+
+| Punkt | Vad som byggdes | Hur det bevisades |
+|---|---|---|
+| **P0.1** | Startspärr: DeepSeek får inte köras i miljöer med kunddata. `Settings.llm_provider_fault()`, enforcad i `app/main.py` och `agent/llm.py` | Deployen till development föll med `CRITICAL Startvägran:` i loggen |
+| **P0.1 (2)** | Okända providernamn fäller uppstarten i stället för att tyst degradera till simuleringsläge | Regressionstest + felet reproducerat skarpt |
+| **P0.1 (3)** | Ett modellnamn från fel provider fäller uppstarten | Felet reproducerat skarpt: `404 models/deepseek-v4-flash is not found` medan hälsokontrollen sa `live` |
+| **P0.3** | `/integritetspolicy`, `/villkor`, `/cookies` med delat skal | Lästa i webbläsaren, lokalt och på development |
+| **P0.4** | `components/marketing/Sidfot.tsx` — bolagsidentifikation och juridiska länkar | Renderad, länkarna verifierade |
+| **P0.5** | Dataskyddstexten säger nu att mejltexten bearbetas av en AI-leverantör | Läst i webbläsaren |
+| **P1.1** | Gallringsmekanism: [`048_gallring.sql`](../supabase/migrations/048_gallring.sql) + [`gallra.py`](../scripts/gallra.py) | Migrationen körd i development, tabell och funktion verifierade i katalogen |
+| **P1.2** | [`gdpr_radera.py`](../scripts/gdpr_radera.py) — sök, registerutdrag, radering per adress | Skriptet finns; ej kört skarpt (raderar data) |
+| **P1.3** | Art. 14-sidfoten byggs i **kod**, inte av modellen: [`utskicksfot.py`](../snajp-support/app/leads/utskicksfot.py) | Test kör `send_guard` på det foten producerar |
+| **P1.3 (2)** | Avregistreringslänken fungerar hela vägen | **Klickad skarpt på development:** token → sida → server action → `avregistrerad`, och `redan_avregistrerad` vid andra klicket. Testraderna städade |
+| **P1.4** | Åtkomstskyddet mätt, och indexeringsluckan stängd | Se nedan |
+| **P1.5** | [`INCIDENT_RESPONSE.md`](../INCIDENT_RESPONSE.md) | — |
+| **P2** | [Registerförteckning](registerforteckning.md), [DPIA](dpia_supportagenten.md), [intresseavvägning](intresseavvagning_kallmejl.md) | Utkast, ska läsas av jurist |
+
+### P1.4 i detalj — mätt, inte antaget
+
+Oinloggad mot `web-development-6c85.up.railway.app`:
+
+```
+/                           200   (marknadssidan — ska vara publik)
+/dashboard                  307 -> /login
+/settings                   307 -> /login
+/admin/kunder               404   (fail-closed)
+/api/snajp-support/tickets  401
+```
+
+**Kunddata är alltså inte nåbar utan inloggning.** Appens egen grind håller,
+och det är den substantiella frågan.
+
+Men Vercels SSO skyddade en sak till, och den ersättningen saknades: dev-miljön
+hade **ingen robots.txt alls och ingen `X-Robots-Tag`**. En fullständig spegel
+av säljsajten — med en inloggning som leder till riktig kunddata — låg fritt
+indexerbar. Åtgärdat med [`app/robots.ts`](../app/robots.ts) och en
+`noindex`-tagg i [`app/layout.tsx`](../app/layout.tsx), båda styrda av
+[`lib/miljo.ts`](../lib/miljo.ts). De hör ihop: robots.txt hindrar ny
+indexering, `noindex` tar bort det som redan hunnit in.
+
+Båda riktningarna är provade: okänd miljö ger `Disallow: /` och
+`noindex, nofollow`; `RAILWAY_ENVIRONMENT_NAME=main` ger `Allow: /` och ingen
+noindex-tagg. Den andra riktningen är den farliga — en spärr som råkar
+av-indexera produktionen vore värre än den lucka den lagar.
+
+### Buggar som hittades genom att köra skarpt
+
+Två fel som inget test fångade, eftersom båda krävde riktig data:
+
+1. **`avregistrera_via_token` reste ett undantag** för en tenant utan
+   arbetsyta. Mottagaren hade fått "Något gick fel" och stått kvar i
+   utskickslistan.
+2. **`add_suppression` skrev tyst noll rader** i samma läge — en
+   `insert ... select` utan träffar. Ingen krasch, ingen avregistrering.
+   Kommentaren på plats påstod att en saknad arbetsyta vore "ett riktigt fel";
+   den var värre än så, den var ingenting alls.
+
+Båda rättade i [`049`](../supabase/migrations/049_avregistrering_utan_arbetsyta.sql).
+`suppressions.workspace_id` är nullbar sedan dess — skyddet läses via
+`tenant_id`, så en NULL döljer raden i dashboarden men inte för spärren.
 
 ---
 
-## Kvar — kräver en människa
+## Kvar — kräver dig
 
-### P0.1b · Skaffa en OpenAI-nyckel och byt provider  ▸ Anton  🔴 BRÅDSKANDE
+### P0.1c · Kontrollera Geminis avtalsnivå  🔴 BLOCKERANDE
 
-**Läst ur Railway 2026-08-24, inte antaget:**
+**Den viktigaste öppna punkten.** Överföringen till Kina är stoppad, men
+bytet är inte klart förrän den här frågan är besvarad.
 
-```
-main         api:  LLM_PROVIDER='deepseek'   DEEPSEEK_API_KEY=<satt>   OPENAI_API_KEY SAKNAS
-development  api:  LLM_PROVIDER='deepseek'   DEEPSEEK_API_KEY=<satt>   OPENAI_API_KEY SAKNAS
-```
+Nyckeln som används är den kodbasen själv beskriver som vald för
+**gratisnivån** (se kommentaren vid `gemini_api_key` i `config.py`, och
+`scripts/keys.py`). Gratisnivåer tillåter typiskt leverantören att använda det
+som skickas in för produktförbättring — alltså mänsklig granskning och
+träning.
 
-Kör `python scripts/llm_provider.py` för att se det aktuella läget själv —
-skriptet skriver aldrig ut ett nyckelvärde.
+Går det på kunddata är det **värre än DeepSeek var**: DeepSeek var en
+överföring utan rätt avtal, det här vore en överföring där vi aktivt lämnat
+bort innehållet.
 
-**Två saker följer av det.**
-
-För det första: produktionen skickar riktiga kunders mejl till DeepSeek just
-nu. Det är inte något koden orsakar och inte något koden kan laga — spärren
-kan bara vägra starta. Det här är den skarpa posten i hela dokumentet.
-
-För det andra: `OPENAI_API_KEY` finns inte i någon miljö, så providern går
-inte att bara vända. En tjänst som startar med `openai` men utan nyckel går
-ner i simuleringsläge — den ser frisk ut och slutar producera riktiga svar,
-vilket är ett sämre fel än ett som larmar.
-
-**Ordning:**
-
-1. Skaffa en OpenAI-nyckel (konto + betalkort — därför din hand och inte min).
-2. Lägg `OPENAI_API_KEY` på `api` i **både** `main` och `development`.
-   Kontrollera att den ligger där; anta det inte — samma fälla som Email
-   Studio-nyckeln i `DEPLOY.md`.
-3. Byt providern:
-
-   ```bash
-   python scripts/llm_provider.py --apply
-   ```
-
-   Skriptet vägrar byta på en tjänst som saknar nyckeln, så steg 2 går inte
-   att hoppa över av misstag.
-4. Deploya om `api` och kontrollera att den startar.
-
-Sätt samtidigt på `api` i båda miljöerna:
-
-```
-PUBLIC_BASE_URL=https://snajp.se
-```
-
-Utan den kan avregistreringslänken inte byggas, och då blockerar
-`send_guard` regel 2 varje utskick.
-
-**Tills detta är gjort startar inte `api` på ny kod.** Deployen av
-`64aba04` till `development` föll som avsett, med
-`CRITICAL Startvägran: LLM_PROVIDER=deepseek är inte tillåtet i miljön
-'development'` i loggen. Railway låter den föregående versionen ligga kvar, så
-dev-backenden svarar fortfarande — på gammal kod. Nästa merge till `main`
-kommer att falla likadant.
-
-### P0.1d · Produktionen svarar kunder med regelmotorn  ▸ Anton  🔴 AKUT
-
-Inte en dataskyddsfråga, men upptäckt i samma andetag och allvarligare för
-driften: **`api` i `main` kör `mode: simulation` just nu.**
-
-```
-curl https://api-production-d7695.up.railway.app/health/ready
-{"mode":"simulation","warnings":["Ingen giltig LLM-nyckel — svaren genereras
- av den deterministiska regelmotorn, inte av AI.", ...]}
-```
-
-Orsaken: `LLM_PROVIDER` sattes till `gemini`, men produktionen ligger på kod
-från 2026-08-23 som inte känner till det värdet. Den gamla `active_llm_key`
-föll tillbaka på den tomma OpenAI-nyckeln, och en tom nyckel är
-simuleringsläge. Riktiga kunder får alltså regelmotorns svar, inte agentens,
-sedan variabeln ändrades.
-
-Dessutom stod `MODEL=deepseek-v4-flash` kvar i båda miljöerna — en kvarleva
-från DeepSeek. Med den nya koden ger den 404 på varje anrop medan
-hälsokontrollen rapporterar `live`.
-
-**Åtgärd, i den ordningen:**
-
-1. Rätta variablerna i produktionen:
-
-   ```bash
-   python scripts/llm_provider.py --env main --satt gemini --apply
-   ```
-
-   (Development är redan åtgärdad.)
-
-2. Deploya `main` med koden som stödjer Gemini. Utan steg 2 fortsätter
-   produktionen i simuleringsläge oavsett vad variablerna säger.
-
-3. Verifiera att det verkligen fungerar — `mode: live` räcker INTE som bevis,
-   det var precis det som lurade oss här. Gör ett riktigt anrop:
-
-   ```bash
-   curl -X POST https://api-production-d7695.up.railway.app/api/demo/chat \
-     -H "Content-Type: application/json" -d '{"message":"Testfraga"}'
-   ```
-
-Notera P0.1c innan produktionen körs skarpt mot Gemini.
-
-### P0.1c · Kontrollera Geminis avtalsnivå  ▸ Anton  🔴 BRÅDSKANDE
-
-`LLM_PROVIDER=gemini` är satt i både `main` och `development` sedan
-2026-08-24, och koden stödjer det nu. Överföringen till Kina är därmed
-stoppad — men bytet är inte klart förrän en fråga är besvarad.
-
-**Nyckeln som används är den som kodbasen själv beskriver som vald för
-gratisnivån** (se kommentaren vid `gemini_api_key` i
-`snajp-support/app/config.py`, och `scripts/keys.py`). Gratisnivåer hos
-modelleverantörer tillåter typiskt leverantören att använda det som skickas in
-för att förbättra sina produkter — alltså mänsklig granskning och träning.
-
-Går det här på kunddata är det ett större problem än DeepSeek var, inte ett
-mindre: DeepSeek var en överföring utan rätt avtal, det här vore en
-överföring där vi aktivt lämnat bort innehållet.
-
-**Att kontrollera, i den ordningen:**
+Att kontrollera, i ordning:
 
 1. Vilken nivå ligger `GEMINI_API_KEY` på — AI Studio gratis, AI Studio betald,
    eller Vertex AI? Bara de två senare ger normalt ett åtagande om att
    innehållet inte används för produktförbättring.
-2. Finns ett DPA (personuppgiftsbiträdesavtal) med Google för den nivån?
-3. Vilken dataregion behandlas prompten i, och vilken överföringsmekanism
-   gäller (Googles DPF-certifiering eller SCC)?
+2. Finns ett DPA med Google för den nivån?
+3. Vilken dataregion, och vilken överföringsmekanism (Googles
+   DPF-certifiering eller SCC)?
 
-Ligger nyckeln på gratisnivån: **byt till en betald nivå eller till OpenAI
-innan fler kundmejl passerar.** Växlingen är ett kommando när nyckeln finns:
+Ligger nyckeln på gratisnivån: byt nivå, eller byt provider. Växlingen är ett
+kommando när nyckeln finns:
 
 ```bash
 python scripts/llm_provider.py --satt openai --apply
 ```
 
-Tills svaret finns säger `/integritetspolicy` inte längre att leverantören
-"inte tränar på texten" — det påståendet togs bort, eftersom ett löfte i en
+Jag kan inte kontrollera det här — det kräver inloggning i ert Google-konto.
+
+Tills svaret finns säger `/integritetspolicy` **inte** att leverantören "inte
+tränar på texten". Det påståendet är borttaget, eftersom ett löfte i en
 integritetspolicy är bindande. Skriv inte tillbaka det utan att ha läst
 avtalet.
 
-Fyll samtidigt i `region` för Google i `lib/bolag.ts` och i
-`docs/registerforteckning.md`.
+Fyll samtidigt i `region` för Google i [`lib/bolag.ts`](../lib/bolag.ts) och i
+[registerförteckningen](registerforteckning.md).
 
-### P0.2 · Rotera den läckta Render-nyckeln  ▸ Anton
+### P0.1d · Produktionen svarar kunder med regelmotorn  🔴 AKUT
+
+```
+api-production-d7695: "mode":"simulation"
+"Ingen giltig LLM-nyckel — svaren genereras av den deterministiska
+ regelmotorn, inte av AI."
+```
+
+`main` ligger på kod från 2026-08-23 som inte känner till `gemini`, faller
+till den tomma OpenAI-nyckeln, och svarar riktiga kunder med regelmotorn.
+Dessutom står `MODEL=deepseek-v4-flash` kvar där.
+
+**Det här kräver en deploy av `main`, och den är inte liten:** 185 commits och
+53 000 rader skiljer `main` från `development`, varav merparten är annat
+arbete än det här. Se frågan i slutet av mitt svar — det är ditt beslut, inte
+mitt.
+
+Variablerna rättas med:
+
+```bash
+python scripts/llm_provider.py --env main --satt gemini --apply
+```
+
+Men de gör ingen nytta förrän koden är deployad. Verifiera efteråt med ett
+**riktigt anrop**, inte med hälsokontrollen:
+
+```bash
+curl -X POST https://api-production-d7695.up.railway.app/api/demo/chat \
+  -H "Content-Type: application/json" -d '{"message":"Testfraga"}'
+```
+
+Notera att P0.1c bör vara besvarad innan produktionen kör skarpt mot Gemini.
+
+### P0.2 · Rotera den läckta Render-nyckeln
 
 Nycklar och lösenord är undantaget i `CLAUDE.md` — jag rör dem inte.
 
 1. Rotera nyckeln i Render.
 2. Uppdatera `.env.deploy`.
 3. **Bedöm om nyckeln gav åtkomst till persondata.** Om ja: kör
-   `INCIDENT_RESPONSE.md` punkt 2–6. Posten ligger redan i incidentloggen där.
+   [`INCIDENT_RESPONSE.md`](../INCIDENT_RESPONSE.md) punkt 2–6. Posten ligger
+   redan i incidentloggen där.
 
-### P0.3b · Fyll i bolagsuppgifterna  ▸ Anton
+### P0.3b · Fyll i bolagsuppgifterna
 
-`lib/bolag.ts` bär platshållare — jag gissar inte ett organisationsnummer, för
-ett påhittat org.nr kan tillhöra ett annat bolag.
+[`lib/bolag.ts`](../lib/bolag.ts) bär platshållare. Jag gissar inte ett
+organisationsnummer — ett påhittat org.nr kan tillhöra ett annat bolag, och
+jag känner inte ens till den registrerade firman.
 
-Fyll i: `namn` (registrerat bolagsnamn), `orgnr`, `postadress`,
-`policyUppdaterad`, `DATASKYDD_MEJL`, och `region` för OpenAI och Railway i
-`UNDERLEVERANTORER`.
+Fyll i: `namn`, `orgnr`, `postadress`, `policyUppdaterad`, `DATASKYDD_MEJL`,
+och `region` för Google och Railway i `UNDERLEVERANTORER`.
 
 Så länge de är platshållare visar sidfoten en gul varningsruta på varje publik
 sida. Den försvinner av sig själv när fälten är ifyllda.
 
-### P0.3c · Låt en jurist läsa de tre sidorna  ▸ Anton
+### P0.3c · Låt en jurist läsa texterna
 
-Texterna är ett förstautkast. Varje juridisk sida visar en gul "Förstautkast"-ruta
-tills någon tar bort den i `components/marketing/JuridiskSida.tsx`. Ta inte bort
-den innan en jurist läst — särskilt inte ansvarsbegränsningen i `/villkor`, som
-står tom med flit.
+Gäller de tre sidorna plus [DPIA:n](dpia_supportagenten.md) och
+[intresseavvägningen](intresseavvagning_kallmejl.md). Varje juridisk sida
+visar en gul "Förstautkast"-ruta tills någon tar bort den i
+`JuridiskSida.tsx`. Ta inte bort den innan — särskilt inte
+ansvarsbegränsningen i `/villkor`, som står tom med flit.
 
-### P0.3d · Skaffa en riktig kontaktadress  ▸ Anton
+### P0.3d · Skaffa en riktig kontaktadress
 
 `Snajpsupport@gmail.com` duger som svarsadress men inte som ett företags enda
 officiella kontaktväg på en B2B-säljsida, och inte alls som adressen dit en
 registrerad skickar sin begäran. Sätt upp `integritet@snajp.se` och lägg den i
 `DATASKYDD_MEJL`.
 
-### P1.1b · Besluta retentionsperioden  ▸ Anton + kund
+DNS går att automatisera med [`scripts/loopia_dns.py`](../scripts/loopia_dns.py),
+men själva brevlådan kräver ett konto hos en mejlleverantör.
+
+### P1.1b · Besluta retentionsperioden
 
 Mekanismen finns, talet gör det inte — och ska inte gissas. Vanligt: 24–36
-månader efter senaste aktivitet på ärendet.
-
-När beslutet är taget:
+månader efter senaste aktivitet på ärendet. Ingen kund har någon policy satt
+i dag, alltså gallras ingenting.
 
 ```bash
 python scripts/gallra.py --env railway-main --tenant <slug> --satt-policy 730 --beslutad-av "Anton"
+python scripts/gallra.py --env railway-main          # torrkörning, granska siffrorna
+python scripts/gallra.py --env railway-main --apply  # först när de stämmer
 ```
 
-Kör sedan en **torrkörning** och granska siffrorna innan `--apply`:
+Fyll därefter i perioden i `/integritetspolicy` (bär en platshållare), i
+[registerförteckningen](registerforteckning.md) och i PUB-avtalet.
 
-```bash
-python scripts/gallra.py --env railway-main
-```
+### P2 · Löpande
 
-Fyll därefter i perioden i `/integritetspolicy` (avsnittet "Hur länge vi sparar
-uppgifter" bär en platshållare), i `docs/registerforteckning.md` och i
-PUB-avtalet. Schemalägg `scripts/gallra.py --apply` som Railway-cron först när
-en torrkörning granskats mot produktionen.
-
-### P1.4 · Åtkomstskydda Railway-miljön `development`  ▸ Anton
-
-`web-development-6c85.up.railway.app` speglar produktionen och innehåller
-riktiga kunders ärenden och mejladresser. Verifiera att den inte är öppet
-nåbar utan inloggning, motsvarande det SSO-skydd Vercel gav (se `DEPLOY.md`).
-Saknar Railway motsvarighet: lägg minst ett lösenords- eller IP-skydd i
-middleware innan fler kunder speglas dit.
-
-Jag har inte Railway-åtkomst och kan inte verifiera det själv.
-
-### P1.3b · Migrationerna måste köras  ▸ Anton
-
-046 och 048 är skrivna men inte applicerade någonstans:
-
-```bash
-python scripts/railway_migrate.py --env development --apply
-```
-
-Verifiera i `development` först. Avregistreringssidan fungerar inte förrän 046
-är körd, och `gallra.py` gör ingenting förrän 048 är körd.
-
-### P2 · Kvar att göra löpande
-
-- **DPIA för supportagenten** — mall finns hos IMY. Gäller den automatiska
-  klassificeringen och eskaleringslogiken.
-- **Intresseavvägning för kallmejlen** dokumenterad (art. 6.1 f).
-- **Utloggningsknapp** — känd lucka i `STATUS.md`, hör till kontokontroll.
+- **DPIA och intresseavvägning** — utkast finns, ska granskas och beslutas.
+  DPIA:ns R1 är blockerad av P0.1c.
+- **Kundens ansvar för autonominivån** in i villkoren (DPIA R4).
+- **Textmall till kunden** för deras egen artikel 13-information (DPIA R5).
+- **Maskering av personnummermönster** före modellanropet — utred (DPIA R1).
 - **NextAuth/Supabase Auth-hybriden** — färre parallella auth-vägar.
-- **Cookiebanner-beredskap** — ingen banner behövs idag. Bygg den inte i
-  förväg för en cookie som inte kräver den.
+- **Cookiebanner** — behövs inte i dag. Bygg den inte i förväg för en cookie
+  som inte kräver den.
+
+**Utloggningsknappen är klar** — finns i både `AppShell` och `AdminShell`.
 
 ---
 
 ## Inte gjort, och varför
 
-- **PUB-avtalet** (`PUB-avtal-mall-Snajp.md`) — den filen finns inte i repot,
-  så jag har inte kunnat skriva mot den. Villkorssidan och
-  registerförteckningen refererar till avtalet; texten i det måste skrivas
-  separat.
+- **PUB-avtalet** (`PUB-avtal-mall-Snajp.md`) — filen finns inte i repot, så
+  jag har inte kunnat skriva mot den. Villkorssidan, registerförteckningen och
+  DPIA:n refererar till avtalet; texten måste skrivas separat.
 - **Engelska versioner av de juridiska sidorna** — medvetet utelämnade. Två
   språkversioner av ett avtal är två lydelser, och den dag de säger olika
-  saker är frågan vilken som gäller. Se kommentaren i `JuridiskSida.tsx`.
+  saker är frågan vilken som gäller.
 - **`supabase/functions/generate-outreach`** — planen pekade ut den för
-  art. 14-sidfoten. Den funktionen returnerar konserverad exempeltext och
-  ligger på den döda Supabase-stacken; att lägga en juridisk sidfot i en
-  attrapp hade sett ut som en åtgärd utan att vara en. Den riktiga vägen är
-  `snajp-support/app/leads/`, och det är där den ligger nu.
+  art. 14-sidfoten. Den returnerar konserverad exempeltext på den döda
+  Supabase-stacken; en juridisk sidfot i en attrapp hade sett ut som en åtgärd
+  utan att vara en. Den riktiga vägen är `snajp-support/app/leads/`.
+- **`gdpr_radera.py` körd skarpt** — skriptet raderar data, och det finns
+  ingen begäran att uppfylla. Sökläget är ofarligt och kan köras när som helst.

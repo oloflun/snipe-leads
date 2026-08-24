@@ -5,11 +5,26 @@ import { fontVariables } from "@/lib/fonts";
 import { colorScheme, dataTheme, parseTema, TEMA_COOKIE } from "@/lib/tema";
 import { LocaleProvider } from "@/lib/i18n";
 import { paletteToCss } from "@/lib/tenants";
+import { arProduktion } from "@/lib/miljo";
 import { getCurrentTenant } from "@/lib/tenants/server";
 import { InstalleraApp } from "@/components/InstalleraApp";
 
 export async function generateMetadata(): Promise<Metadata> {
   const tenant = await getCurrentTenant();
+
+  /**
+   * Allt utom den skarpa produktionen är noindex.
+   *
+   * `development` är en SPEGEL av produktionen — samma sajt, riktiga kunders
+   * ärenden bakom inloggningen — och den låg fritt indexerbar fram till
+   * 2026-08-24: ingen robots.txt, ingen X-Robots-Tag. Vercels SSO täckte det
+   * förut, och ingen ersättning lades in vid flytten till Railway.
+   *
+   * Den här taggen och app/robots.ts hör ihop och gör olika saker: robots.txt
+   * hindrar NY indexering, `noindex` tar bort det som redan hunnit in. Ta inte
+   * bort den ena för att den andra finns.
+   */
+  const robots = arProduktion() ? undefined : { index: false, follow: false };
 
   if (tenant) {
     // INGET manifest och inga appikoner på kundens domän. Enligt TENANTS.md ska
@@ -17,7 +32,8 @@ export async function generateMetadata(): Promise<Metadata> {
     // hade erbjudit kundens besökare att installera VÅR app från kundens sajt.
     return {
       title: `${tenant.name} — ${tenant.tagline}`,
-      description: tenant.tagline
+      description: tenant.tagline,
+      robots
     };
   }
 
@@ -26,6 +42,7 @@ export async function generateMetadata(): Promise<Metadata> {
     description:
       "Snajp skriver säljmejlen och svarar på kundmejlen. Två verktyg, en arbetsyta. Testa båda direkt i webbläsaren.",
     metadataBase: new URL("https://snajp.se"),
+    robots,
     manifest: "/manifest.webmanifest",
     icons: {
       icon: [
