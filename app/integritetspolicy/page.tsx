@@ -92,13 +92,13 @@ export default async function Page() {
 
       <h2>Hur länge vi sparar uppgifter</h2>
       <p>
-        {/* Fylls i när retentionsperioden är beslutad. Se P1.1 i
-            docs/JURIDIK_ATGARDER.md och gallringsfunktionen i
-            supabase/migrations/048_gallring.sql — mekanismen finns, talet är
-            ett affärsbeslut som inte ska gissas här. */}
-        <strong>[Fylls i: konkret lagringstid per kategori.]</strong> Gallringen är automatiserad och
-        loggas, men perioden är ännu inte fastställd. Kontakta oss om du vill veta vad som gäller
-        just nu.
+        {/* Retentionsperioden är beslutad: 24 månader, samma tid för samtliga
+            kategorier. Se P1.1 i docs/JURIDIK_ATGARDER.md och
+            gallringsfunktionen i supabase/migrations/048_gallring.sql —
+            gallringsjobbets period ska stämma med talet som står här. */}
+        Vi sparar uppgifterna i <strong>24 månader</strong>, räknat från den senaste behandlingen,
+        och därefter gallras de. Samma tid gäller samtliga kategorier ovan. Gallringen är
+        automatiserad och loggas. Kontakta oss om du vill veta vad som gäller just ditt ärende.
       </p>
 
       <h2>Dina rättigheter</h2>

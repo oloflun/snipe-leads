@@ -8,10 +8,12 @@ import { BOLAG } from "@/lib/bolag";
  *
  * ## Varför en egen komponent i stället för tre nästan lika sidor
  *
- * Sidhuvudet, typografin, utkastnotisen och sidfoten är identiska på alla
- * tre. Tre kopior hade betytt att en rättelse i utkastnotisen görs på ett
- * ställe och glöms på två — och det stället är just den text som säger att
- * innehållet inte är juridiskt granskat.
+ * Sidhuvudet, typografin och sidfoten är identiska på alla tre. Tre kopior
+ * hade betytt att en rättelse görs på ett ställe och glöms på två.
+ *
+ * Utkastnotisen — den gula rutan som sade att texten inte var granskad av
+ * jurist — är borttagen på begäran (2026-08-25). Sidfotens ruta om
+ * platshållare i bolagsuppgifterna står kvar; se components/marketing/Sidfot.tsx.
  *
  * ## Varför sidorna är enspråkigt svenska
  *
@@ -50,16 +52,6 @@ export function JuridiskSida({
         {ingress ? (
           <p className="mt-6 text-[1.125rem] leading-[1.7] text-ink/75">{ingress}</p>
         ) : null}
-
-        {/* Utkastnotisen. Den står FÖRE texten och inte som en fotnot: en
-            läsare som ska bedöma om dokumentet binder oss ska veta det innan
-            hen läser, inte efter. Tas bort samma dag en jurist godkänt
-            texten — och inte tidigare, hur bra den än låter. */}
-        <p className="mt-8 rounded-card border border-ochre/40 bg-ochre/10 px-5 py-4 text-[0.9375rem] leading-[1.6] text-ink/80">
-          <strong className="font-semibold">Förstautkast.</strong> Texten nedan är skriven internt
-          och har ännu inte granskats av jurist. Den beskriver vår avsikt och våra rutiner, men ska
-          inte läsas som en färdig juridisk handling förrän den här rutan är borta.
-        </p>
 
         {/* Typografin sätts här i stället för per sida. `prose`-liknande
             regler skrivna för hand: kodbasen har ingen typography-plugin, och

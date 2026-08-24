@@ -24,7 +24,7 @@
 
 export const BOLAG = {
   /** Registrerat namn, inte varumärket. Varumärket är "Snajp". */
-  namn: "[Bolagsnamn AB]",
+  namn: "Snajp AB",
   orgnr: "[XXXXXX-XXXX]",
   postadress: "[Gatuadress, postnummer, ort]",
   /** Sätts när integritetspolicyn granskats av jurist och publicerats skarpt. */

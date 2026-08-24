@@ -206,7 +206,7 @@ export function LandingPhoto({
                   och siffran här stämmer inte längre. */}
               <div className="col-span-12 self-end lg:col-span-3 lg:col-start-10 lg:ml-auto lg:w-[219px]">
                 <div className="font-display text-[1.5rem] leading-[1.15] tracking-[-0.02em] text-paper">
-                  <ProductSwitch value={product} onChange={setProduct} tone="paper" />
+                  <ProductSwitch value={product} onChange={setProduct} tone="paper" brytEfter="leads" />
                 </div>
                 {/* Under växeln, inte bredvid.
                     Bredvid krävde en fjärde kolumn, och den bredden drog hela
@@ -216,11 +216,13 @@ export function LandingPhoto({
                 <div className="mt-4">
                   <LaddaNerAppen tone="paper" />
                 </div>
-                {/* Två vägar rakt in i produkten, en per agent.
+                {/* Tre vägar rakt in i produkten, en per agent.
                     Växeln ovanför byter vad SIDAN beskriver; de här tar
                     besökaren till agenten som gör det. Att bara kunna läsa om
                     en agent på en sida som har en fungerande demo är att gömma
-                    det enda som övertygar. */}
+                    det enda som övertygar.
+                    Bokföringen saknades här medan de andra två fanns, fast
+                    /demo/bokforing funnits sedan den blev en egen produkt. */}
                 <div className="mt-5 flex flex-col gap-2 border-t border-paper/25 pt-4">
                   <Link
                     href="/demo/leads"
@@ -234,6 +236,13 @@ export function LandingPhoto({
                     className="focus-ring group inline-flex items-center gap-2 text-[0.9375rem] font-medium text-paper/85 transition-colors hover:text-paper"
                   >
                     {text(shared.demoSupport)}
+                    <span aria-hidden className="transition-transform group-hover:translate-x-0.5">→</span>
+                  </Link>
+                  <Link
+                    href="/demo/bokforing"
+                    className="focus-ring group inline-flex items-center gap-2 text-[0.9375rem] font-medium text-paper/85 transition-colors hover:text-paper"
+                  >
+                    {text(shared.demoBokforing)}
                     <span aria-hidden className="transition-transform group-hover:translate-x-0.5">→</span>
                   </Link>
                 </div>

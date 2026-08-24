@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { Fragment, useRef } from "react";
 import type { ProductKey } from "@/lib/routes";
 import { productKeys } from "@/lib/routes";
 import { useLocale } from "@/lib/i18n";
@@ -18,8 +18,22 @@ import { cn } from "@/lib/utils";
 export function ProductSwitch({
   value,
   onChange,
-  tone = "ink"
-}: Readonly<{ value: ProductKey; onChange: (next: ProductKey) => void; tone?: "ink" | "paper" }>) {
+  tone = "ink",
+  brytEfter
+}: Readonly<{
+  value: ProductKey;
+  onChange: (next: ProductKey) => void;
+  tone?: "ink" | "paper";
+  /**
+   * Tvinga en radbrytning EFTER den här produkten.
+   *
+   * Med tre produkter ryms inte raden i hjältebildens 219px-kolumn, och den
+   * naturliga brytningen lade "Bokföring" ensamt på rad två — alltså under
+   * "Leads" i stället för bredvid "Support". Här styrs brytpunkten i stället:
+   * "Leads /" på första raden, "Support / Bokföring" på den andra.
+   */
+  brytEfter?: ProductKey;
+}>) {
   const { text } = useLocale();
   const refs = useRef<Record<string, HTMLButtonElement | null>>({});
 
@@ -45,16 +59,16 @@ export function ProductSwitch({
   }
 
   return (
-    <span role="tablist" aria-label={text(shared.switchLabel)} className="inline">
+    // `flex flex-wrap` i stället för `inline`: brytpunkten ska vara vald, inte
+    // upphittad av radbrytningen. Se `brytEfter`.
+    <span role="tablist" aria-label={text(shared.switchLabel)} className="flex flex-wrap items-baseline">
       {productKeys.map((key, index) => {
         const selected = key === value;
         return (
-          <span key={key} className="inline">
-            {index > 0 ? (
-              <span aria-hidden="true" className={cn("mx-1 md:mx-2", tone === "paper" ? "text-paper/30" : "text-ink/20")}>
-                /
-              </span>
-            ) : null}
+          <Fragment key={key}>
+            {/* Snedstrecket följer sitt eget ord i stället för att inleda
+                nästa. Annars hade en bruten rad börjat med "/ Support". */}
+            <span className="inline-flex items-baseline whitespace-nowrap">
             <button
               ref={(node) => {
                 refs.current[key] = node;
@@ -80,7 +94,17 @@ export function ProductSwitch({
             >
               {text(productCopy[key].word)}
             </button>
-          </span>
+            {index < productKeys.length - 1 ? (
+              <span aria-hidden="true" className={cn("mx-1 md:mx-2", tone === "paper" ? "text-paper/30" : "text-ink/20")}>
+                /
+              </span>
+            ) : null}
+            </span>
+            {/* Radbrytningen i en flex-rad: ett tomt element med hela radens
+                bredd och ingen höjd. Raden det hamnar på blir noll hög, så
+                det syns ingen lucka. */}
+            {brytEfter === key ? <span aria-hidden="true" className="h-0 basis-full" /> : null}
+          </Fragment>
         );
       })}
     </span>

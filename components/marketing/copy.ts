@@ -80,6 +80,7 @@ export const shared = {
   },
   demoLeads: { sv: "Prova leads-agenten", en: "Try the leads agent" },
   demoSupport: { sv: "Prova kundtjänstagenten", en: "Try the support agent" },
+  demoBokforing: { sv: "Prova bokföringsagenten", en: "Try the bookkeeping agent" },
   footerKontakt: { sv: "Kontakt", en: "Contact" },
   menyKontakt: { sv: "Kontakta oss", en: "Contact us" },
   menyPriser: { sv: "Prislista", en: "Pricing" },
@@ -92,15 +93,15 @@ export const shared = {
   //: den frågan besvaras inte av en produktbeskrivning.
   vilkaRubrik: { sv: "Vilka är vi", en: "Who we are" },
   vilkaRubrikStor: {
-    sv: "Ett nystartat svenskt bolag som utvecklar ett effektivare verktyg för vardagen.",
-    en: "A new Swedish company building a tool that makes the working day more efficient."
+    sv: "Ett nystartat svenskt bolag som utvecklar ett effektivare verktyg för ditt företag.",
+    en: "A new Swedish company building a tool that makes your company more efficient."
   },
   vilkaText1: {
     sv: "Snajp är byggt i Göteborg och Umeå av ett litet team. Vi säljer till svensk B2B, " +
-      "och vi använder båda agenterna i vår egen verksamhet — det är därför spärrarna finns " +
+      "och vi använder alla tre agenterna i vår egen verksamhet — det är därför spärrarna finns " +
       "där de finns: vi har själva stått med ett utkast som inte borde gå ut.",
     en: "Snajp is built in Gothenburg and Umeå by a small team. We sell to Swedish B2B, and we " +
-      "run both agents in our own business — that is why the safeguards sit where they do: we " +
+      "run all three agents in our own business — that is why the safeguards sit where they do: we " +
       "have stood with a draft that should not go out."
   },
   vilkaText2: {
@@ -144,8 +145,8 @@ export const shared = {
 export const leadsCopy: ProductCopy = {
   word: { sv: "Leads", en: "Leads" },
   headline: {
-    sv: "En säljare som aldrig *sover*.",
-    en: "A sales rep that never *sleeps*."
+    sv: "Din säljare som aldrig *sover*.",
+    en: "Your sales rep that never *sleeps*."
   },
   lede: {
     sv: "Leads-agenten letar prospekt utifrån er produkt, gör en behovsanalys och skriver mejlet medan tajmingen fortfarande gäller. Ni läser igenom och godkänner innan något går ut.",
