@@ -153,11 +153,19 @@ async def test_escalates_in_code_even_when_model_says_no_escalation():
 
 
 @pytest.mark.anyio
-async def test_escalates_when_knowledge_base_has_no_match():
+async def test_escalates_when_knowledge_base_has_no_match_on_a_full_library():
+    """Tom träfflista på ett FULLT bibliotek betyder fortfarande "vi kan inte
+    svara" — där är tomheten ett besked, inte ett sökfel.
+
+    `_kb_ar_tunn` är falsk här (KB:n är seedad med demoartiklarna), så
+    följdfrågevägen är stängd och den gamla regeln gäller oförändrad.
+    """
     storage = MemoryStorage()
-    storage.kb[TENANT] = []  # tom KB => grundningsregeln tvingar eskalering
-    llm = _FakeLLM()
-    result = await _run(storage, llm)
+    llm = _FakeLLM(overrides={"cs:customer-research": {"kb_supports_answer": False}})
+    with patch(
+        "app.agent.support_agent._sok_kb", new=AsyncMock(return_value=[])
+    ):
+        result = await _run(storage, llm)
 
     assert result["escalated"] is True
     assert result["kb_sources"] == []
@@ -221,3 +229,279 @@ async def test_broken_contract_retries_once_then_escalates_that_step():
     draft_entries = [e for e in result["step_log"] if e["skill"] == "cs:draft-response"]
     assert draft_entries[0]["attempts"] == 2
     assert draft_entries[0]["escalated"] is True
+
+
+# -- Mindre lätt att ge upp (DEL 3) ---------------------------------------
+#
+# Hälften av testerna nedan prövar att agenten INTE eskalerar. Den andra
+# hälften prövar att de säkerhetskritiska vägarna eskalerar precis som förut.
+# Båda hälfterna behövs: en ändring som gör agenten mindre benägen att lämna
+# över är bara bra så länge den inte också gjorde den mindre benägen att göra
+# det när den ska.
+
+
+async def _tunn_kb(storage):
+    """En tenant med färre artiklar än TUNN_KB_GRANS."""
+    storage.kb[TENANT] = []
+    await storage.add_kb_article(
+        TENANT, title="Öppettider", content="Vi har öppet 9-17.", category="ovrigt"
+    )
+
+
+@pytest.mark.anyio
+async def test_tunn_kb_och_ofarlig_fraga_ger_en_foljdfraga_i_stallet_for_eskalering():
+    """Kärnan i DEL 3.3.
+
+    En tenant med ett par artiklar hade förut eskalerat nästan varje fråga som
+    inte råkade formuleras som en artikelrubrik. Nu ställs en följdfråga.
+    """
+    storage = MemoryStorage()
+    await _tunn_kb(storage)
+    llm = _FakeLLM(overrides={"cs:customer-research": {"kb_supports_answer": False}})
+    result = await _run(storage, llm, message="Fungerar den med min telefon?")
+
+    assert result["escalated"] is False, (
+        "En ofarlig fråga mot ett tunt bibliotek eskalerade — följdfrågevägen är stängd."
+    )
+
+
+@pytest.mark.anyio
+async def test_foljdfragan_instrueras_i_utkaststeget_inte_efterat():
+    """Beslutet ska ändra VAD utkastet är, inte redigera en färdig text."""
+    storage = MemoryStorage()
+    await _tunn_kb(storage)
+    llm = _FakeLLM(overrides={"cs:customer-research": {"kb_supports_answer": False}})
+
+    prompts: list[str] = []
+    original = llm.create
+
+    async def spionera(**kwargs):
+        prompts.append(str(kwargs["messages"]))
+        return await original(**kwargs)
+
+    llm.create = spionera
+    await _run(storage, llm, message="Fungerar den med min telefon?")
+
+    utkast = [p for p in prompts if "cs:draft-response" in p]
+    assert utkast, "Utkaststeget kördes inte."
+    assert "EN kort, öppen följdfråga" in utkast[0]
+    assert "Lämna INTE över till en människa" in utkast[0]
+
+
+@pytest.mark.anyio
+async def test_en_andra_tur_far_ingen_ny_foljdfraga():
+    """Loopspärren. Har kunden redan svarat en gång och vi fortfarande inte kan
+    svara, är en andra motfråga inte omsorg utan en loop."""
+    storage = MemoryStorage()
+    await _tunn_kb(storage)
+    llm = _FakeLLM(overrides={"cs:customer-research": {"kb_supports_answer": False}})
+
+    forsta = await _run(storage, llm, message="Fungerar den med min telefon?")
+    assert forsta["escalated"] is False
+
+    # Andra turen från SAMMA kund: nu finns tidigare repliker, och då gäller
+    # den gamla regeln igen.
+    andra = await _run(storage, llm, message="Ja, en Android.")
+    assert andra["escalated"] is True
+
+
+@pytest.mark.anyio
+async def test_ett_andra_sokforsok_gors_nar_det_forsta_gar_tomt():
+    """DEL 3.1. Den första frågan är hela meddelandet; går den tom prövas en
+    förenklad innan tomheten får betyda något."""
+    storage, llm = MemoryStorage(), _FakeLLM()
+
+    fragor: list[str] = []
+
+    async def tom_sokning(storage_, tenant_, fraga):
+        fragor.append(fraga)
+        return []
+
+    with patch("app.agent.support_agent._sok_kb", new=tom_sokning):
+        await _run(
+            storage,
+            llm,
+            message="Hej! Jag undrar en sak om delbetalning av min order, tack",
+            subject="Delbetalning",
+        )
+
+    assert len(fragor) >= 2, f"Bara ett sökförsök gjordes: {fragor}"
+    assert fragor[1] == "Delbetalning", "Andra försöket använde inte ämnesraden."
+
+
+@pytest.mark.anyio
+async def test_ett_tredje_forsok_gors_pa_det_researchsteget_sager_saknas():
+    storage = MemoryStorage()
+    llm = _FakeLLM(
+        overrides={
+            "cs:customer-research": {
+                "kb_supports_answer": False,
+                "missing_info": "leveranstid utomlands",
+            }
+        }
+    )
+    fragor: list[str] = []
+
+    async def tom_sokning(storage_, tenant_, fraga):
+        fragor.append(fraga)
+        return []
+
+    with patch("app.agent.support_agent._sok_kb", new=tom_sokning):
+        await _run(storage, llm, message="Hur lång tid tar det?", subject="Leverans")
+
+    assert "leveranstid utomlands" in fragor, f"missing_info prövades aldrig: {fragor}"
+
+
+@pytest.mark.anyio
+async def test_kb_supports_answer_false_vager_in_aven_med_traffar():
+    """DEL 3.2. Förut stod flaggan bara som kontext åt nästa steg. Nu avgör
+    den i kod: träffar som inte bär svaret är inte ett svar."""
+    storage = MemoryStorage()
+    llm = _FakeLLM(overrides={"cs:customer-research": {"kb_supports_answer": False}})
+    result = await _run(storage, llm, message="Vilka betalsätt accepterar ni?")
+
+    # Full KB => inte tunn => ingen följdfråga => eskalering.
+    assert result["escalated"] is True
+    assert result["kb_sources"], "Testet mäter fel sak: sökningen gav inga träffar."
+
+
+# -- Inga regressioner på det som SKA eskalera ----------------------------
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "meddelande",
+    [
+        "Jag anmäler er till ARN.",
+        "Jag vill att ni raderar alla mina uppgifter enligt GDPR.",
+        "Det här är en fråga om dataskydd och personuppgifter.",
+        "Jag kräver återbetalning.",
+        "Min advokat hör av sig.",
+        "Jag vill ha kompensation för det här.",
+    ],
+)
+async def test_kansliga_arenden_far_aldrig_en_foljdfraga(meddelande):
+    """Gränsen som INTE flyttades.
+
+    Även med ett tunt bibliotek och en modell som säger should_escalate=False
+    ska de här lämnas över. Kontrollen ligger i KOD (`_ar_kansligt`) eftersom
+    steget som bär juridiken kommer EFTER utkastet.
+    """
+    storage = MemoryStorage()
+    await _tunn_kb(storage)
+    llm = _FakeLLM(overrides={"cs:customer-research": {"kb_supports_answer": False}})
+    result = await _run(storage, llm, message=meddelande)
+
+    assert result["escalated"] is True, f"{meddelande!r} eskalerade inte."
+
+
+@pytest.mark.anyio
+async def test_hot_eskalerar_fortfarande_pa_ett_tunt_bibliotek():
+    storage = MemoryStorage()
+    await _tunn_kb(storage)
+    llm = _FakeLLM(overrides={"cs:customer-research": {"kb_supports_answer": False}})
+    result = await _run(storage, llm, message="jag ska döda dig")
+
+    assert result["escalated"] is True
+    assert result["escalation_reason"] == "Avbrutet samtal: allvarlig"
+
+
+@pytest.mark.anyio
+async def test_lagt_sentiment_eskalerar_fortfarande_pa_ett_tunt_bibliotek():
+    storage = MemoryStorage()
+    await _tunn_kb(storage)
+    llm = _FakeLLM(
+        overrides={
+            "cs:ticket-triage": {"sentiment": 0.1},
+            "cs:customer-research": {"kb_supports_answer": False},
+        }
+    )
+    result = await _run(storage, llm, message="Fungerar den med min telefon?")
+
+    assert result["escalated"] is True
+
+
+@pytest.mark.anyio
+async def test_uppsagningsrisk_eskalerar_fortfarande_pa_ett_tunt_bibliotek():
+    storage = MemoryStorage()
+    await _tunn_kb(storage)
+    llm = _FakeLLM(overrides={"cs:customer-research": {"kb_supports_answer": False}})
+    result = await _run(storage, llm, message="Jag funderar på att sluta.", risk=(0.9, 0.8))
+
+    assert result["escalated"] is True
+    assert result["escalation_reason"] == "retention_risk"
+
+
+@pytest.mark.anyio
+async def test_modellens_egen_eskalering_vager_fortfarande():
+    storage = MemoryStorage()
+    await _tunn_kb(storage)
+    llm = _FakeLLM(
+        overrides={
+            "cs:customer-research": {"kb_supports_answer": False},
+            "cs:customer-escalation": {
+                "should_escalate": True,
+                "reason": "Kräver manuell prövning.",
+            },
+        }
+    )
+    result = await _run(storage, llm, message="Fungerar den med min telefon?")
+
+    assert result["escalated"] is True
+    assert result["escalation_reason"] == "Kräver manuell prövning."
+
+
+@pytest.mark.anyio
+async def test_triageflaggan_eskalerar_fortfarande():
+    storage = MemoryStorage()
+    await _tunn_kb(storage)
+    llm = _FakeLLM(
+        overrides={
+            "cs:ticket-triage": {"escalate": True},
+            "cs:customer-research": {"kb_supports_answer": False},
+        }
+    )
+    result = await _run(storage, llm, message="Fungerar den med min telefon?")
+
+    assert result["escalated"] is True
+
+
+# -- Den forenklade fragan, som ren funktion ------------------------------
+
+
+def test_forenklad_fraga_foredrar_amnesraden():
+    from app.agent.support_agent import _forenklad_fraga
+
+    assert _forenklad_fraga("Delbetalning", "Hej! Jag undrar en sak.") == "Delbetalning"
+
+
+def test_forenklad_fraga_plockar_betydelsebarande_ord_utan_amnesrad():
+    from app.agent.support_agent import _forenklad_fraga
+
+    fraga = _forenklad_fraga("", "Hej! Jag undrar hur lång leveranstid ni har på delbetalning, tack")
+    assert "leveranstid" in fraga
+    assert "delbetalning" in fraga
+    assert "tack" not in fraga, "Ett stoppord kom med."
+
+
+def test_forenklad_fraga_ger_tomt_nar_det_inte_gar_att_forenkla():
+    """Tom sträng => inget andra sökförsök alls. Ett andra anrop med samma
+    fråga är bara latens."""
+    from app.agent.support_agent import _forenklad_fraga
+
+    # Ingen ämnesrad och för få betydelsebärande ord att plocka.
+    assert _forenklad_fraga("", "hej") == ""
+    assert _forenklad_fraga("", "Hej! Tack.") == ""
+    # Ämnesrad men ingen brödtext: första sökningen VAR ämnesraden.
+    assert _forenklad_fraga("Delbetalning", "") == ""
+
+
+def test_forenklad_fraga_anvander_amnet_aven_nar_ordet_star_i_brodtexten():
+    """Första sökningen var "ämne + meddelande". Ämnet ensamt är därför en
+    annan och bredare fråga även när ordet står i båda — vilket det oftast
+    gör, eftersom kunden skriver om det de satte som ämne."""
+    from app.agent.support_agent import _forenklad_fraga
+
+    assert (
+        _forenklad_fraga("Delbetalning", "Hur funkar delbetalning?") == "Delbetalning"
+    )

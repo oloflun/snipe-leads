@@ -87,6 +87,137 @@ def _steps_by_skill() -> dict[str, Any]:
     return {step.skill: step for step in SUPPORT_V1.steps}
 
 
+#: Hur många artiklar en tenant ska ha innan "ingen träff" får betyda "vi kan
+#: inte svara" i stället för "sökningen hittade inget den här gången".
+#:
+#: FÖRSLAG, INTE FACIT — talet är valt och inte mätt, och det ska prövas mot
+#: riktig data innan det stelnar. Resonemanget bakom fem: en tenant med färre
+#: artiklar än så har inte ett bibliotek utan ett par anteckningar, och att
+#: eskalera varje fråga som inte träffar dem är att lämna över hela
+#: supportflödet till en människa under de första veckorna — alltså precis den
+#: period då kunden bedömer om produkten fungerar.
+#:
+#: Alternativet vore en konfidenströskel (`research.confidence`) i stället för
+#: ett artikelantal. Den är i teorin bättre och i praktiken svårare: den är
+#: modellens självskattning, alltså samma sorts tal som `should_escalate`
+#: redan bär, och att bygga en andra grind på samma osäkra signal ger inte två
+#: oberoende villkor. Artikelantalet är åtminstone ett faktum.
+TUNN_KB_GRANS = 5
+
+#: Ämnen där en följdfråga är fel svar, oavsett hur tunt biblioteket är.
+#:
+#: Kontrollen görs i KOD och inte bara av `cs:customer-escalation`, av samma
+#: skäl som påhoppsbedömningen: beslutet om vad som är för känsligt för att
+#: agenten ska hantera det självt ska inte kunna pratas bort av innehållet i
+#: meddelandet. Steget som bär juridiken kommer dessutom EFTER utkastet
+#: (`requires=("skill:cs:draft-response",)`), så dess svar finns inte att
+#: läsa när frågan "ska vi fråga eller lämna över?" ska avgöras.
+#:
+#: Listan får hellre fälla för mycket än för lite: ett fällt fall blir en
+#: eskalering, alltså exakt det som hände före den här ändringen.
+_KANSLIGT = re.compile(
+    r"\b(arn|allmänna\s+reklamationsnämnden|konsumentverket|konsumentombudsman|"
+    r"gdpr|dataskydd|personuppgift\w*|radera\s+(mina|all[at]?)\s+(uppgift\w*|data)|"
+    r"advokat|jurist|stämning|stämma\s+er|rättslig\w*|anmäl\w*|polisanmäl\w*|"
+    r"skadestånd|återbetal\w*|kompensation|ersättning|kronofogden|inkasso|"
+    r"häv(a|er|ning)\s+köpet|ångerrätt\w*|reklamation\w*)\b",
+    re.IGNORECASE,
+)
+
+#: Ord som inte bär betydelse i en sökfråga. Kort lista med flit — samma
+#: resonemang som abuse_gate: en lång lista fäller fel, och här kostar ett
+#: felaktigt bortfilterat ord en sämre sökning.
+_SOKSTOPPORD = {
+    "hej", "hejsan", "tack", "mvh", "hälsningar", "jag", "min", "mitt", "mina",
+    "och", "att", "det", "den", "som", "har", "för", "inte", "med", "till",
+    "kan", "vad", "hur", "när", "var", "vill", "ni", "er", "från", "om", "på",
+    "är", "en", "ett", "av", "men", "här", "nu", "så", "skulle", "vara", "får",
+}
+
+
+def _kb_block(articles: list[dict[str, Any]]) -> str:
+    return "\n\n".join(f"### {a['title']}\n{a['content']}" for a in articles) or "(inga träffar)"
+
+
+async def _sok_kb(storage: Storage, tenant_id: str, fraga: str) -> list[dict[str, Any]]:
+    """En KB-sökning, med embedding när det går och fulltext annars.
+
+    Embeddingen räknas per FRÅGA och inte en gång per ärende: en bredare fråga
+    ska sökas som den bredare frågan den är. Misslyckas embeddingen faller
+    sökningen tillbaka på fulltext, precis som förut — i den här kodbasen har
+    embeddings dessutom aldrig lyckats i praktiken (se `embedding_dimensions`
+    i config.py), så fulltextvägen är den som faktiskt körs.
+    """
+    fraga = (fraga or "").strip()
+    if not fraga:
+        return []
+    embedding = None
+    try:
+        from .embeddings import embed_text
+
+        embedding = await embed_text(fraga)
+    except Exception:  # noqa: BLE001 — utan embeddings används fulltext-fallback
+        embedding = None
+    return await storage.search_kb(tenant_id, fraga, embedding=embedding)
+
+
+def _forenklad_fraga(subject: str, message: str) -> str:
+    """En bredare andra sökfråga, byggd i kod.
+
+    Ämnesraden först när den finns: den är kundens egen sammanfattning och
+    nästan alltid närmare en artikelrubrik än brödtexten. Saknas den plockas
+    de längsta betydelsebärande orden ur meddelandet — långa ord är i svenskan
+    oftare sammansatta substantiv ("leveranstid", "delbetalning") än
+    funktionsord, och det är substantiven artiklarna handlar om.
+
+    Returnerar tom sträng när frågan inte går att förenkla meningsfullt, och då
+    görs inget andra försök alls. Ett andra anrop mot databasen med samma fråga
+    är bara latens.
+    """
+    amne = (subject or "").strip()
+    text = (message or "").strip()
+    # Ämnesraden duger så fort den finns OCH det fanns en brödtext att skala
+    # bort. Att kräva att ämnet inte förekommer i brödtexten vore fel test:
+    # första sökningen var "ämne + meddelande", så "ämne" ensamt är en annan
+    # och bredare fråga även när ordet står i båda — vilket det oftast gör.
+    if amne and text:
+        return amne
+
+    ord_ = [
+        o
+        for o in re.findall(r"[\wåäöÅÄÖ]{4,}", message or "", flags=re.UNICODE)
+        if o.lower() not in _SOKSTOPPORD
+    ]
+    if len(ord_) < 2:
+        return ""
+    # De fem längsta, i den ordning de stod — ordningen spelar roll för
+    # fulltextrankningen i Postgres.
+    valda = sorted(sorted(set(ord_), key=ord_.index), key=len, reverse=True)[:5]
+    kandidat = " ".join(sorted(valda, key=ord_.index))
+    return "" if kandidat.lower() == (message or "").strip().lower() else kandidat
+
+
+async def _kb_ar_tunn(storage: Storage, tenant_id: str) -> bool:
+    """Om tenantens bibliotek är för litet för att tomhet ska betyda något.
+
+    Anropas BARA när sökningen redan gått tom eller researchsteget sagt att
+    biblioteket inte bär svaret — alltså sällan, och just när svaret spelar
+    roll. En räkning på varje ärende hade varit en databasfråga till för att
+    besvara något vi oftast inte behöver veta.
+    """
+    try:
+        return len(await storage.list_kb(tenant_id)) < TUNN_KB_GRANS
+    except Exception:  # noqa: BLE001 — en trasig räkning får inte fälla ärendet
+        # Faller åt eskaleringshållet: kan vi inte se biblioteket vet vi inte
+        # att det är tunt, och då gäller den gamla regeln.
+        return False
+
+
+def _ar_kansligt(text: str) -> bool:
+    """Om ärendet rör juridik, GDPR, pengar tillbaka eller myndighet."""
+    return bool(_KANSLIGT.search(text or ""))
+
+
 async def run_support_agent(
     storage: Storage,
     tenant_id: str,
@@ -200,15 +331,20 @@ async def run_support_agent(
     )
 
     # --- Kod: KB-sökning (underlaget cs:customer-research resonerar kring) --
-    embedding = None
-    try:
-        from .embeddings import embed_text
-
-        embedding = await embed_text(f"{subject} {message}".strip())
-    except Exception:  # noqa: BLE001 — utan embeddings används fulltext-fallback
-        embedding = None
-    articles = await storage.search_kb(tenant_id, f"{subject} {message}".strip(), embedding=embedding)
-    kb_block = "\n\n".join(f"### {a['title']}\n{a['content']}" for a in articles) or "(inga träffar)"
+    #
+    # TVÅ försök, inte ett. Den första frågan är hela meddelandet, vilket är
+    # rätt när det är kort och illa när det är långt: en kund som skriver fem
+    # meningar ger en fråga där de betydelsebärande orden dränks. Går den tomt
+    # provas en förenklad fråga innan tomheten får betyda något. Se
+    # `_forenklad_fraga`.
+    articles = await _sok_kb(storage, tenant_id, f"{subject} {message}".strip())
+    kb_forsok = ["hela meddelandet"]
+    if not articles:
+        bredare = _forenklad_fraga(subject, message)
+        if bredare:
+            articles = await _sok_kb(storage, tenant_id, bredare)
+            kb_forsok.append(f"förenklad fråga ({bredare!r})")
+    kb_block = _kb_block(articles)
 
     # --- Steg 2: research --------------------------------------------------
     research = await run_step(
@@ -226,13 +362,58 @@ async def run_support_agent(
         ),
     )
 
+    # TREDJE försöket, på det researchsteget själv säger saknas. Modellen har
+    # nu läst frågan OCH sett vad biblioteket innehöll, så `missing_info` är en
+    # bättre sökfråga än något vi kan konstruera i kod — den är formulerad i
+    # bibliotekets språk, inte i kundens.
+    saknas = str(research.get("missing_info") or "").strip()
+    if not articles and saknas:
+        articles = await _sok_kb(storage, tenant_id, saknas)
+        if articles:
+            kb_forsok.append(f"missing_info ({saknas[:60]!r})")
+            kb_block = _kb_block(articles)
+
+    # --- Kod: ska agenten fråga i stället för att lämna över? --------------
+    #
+    # Se `_ar_kansligt` och TUNN_KB_GRANS. Beslutet fattas HÄR, före utkastet,
+    # eftersom det ändrar vad utkastet ska vara — inte efteråt, som en
+    # efterhandsredigering av en text som redan skrivits.
+    kb_stodjer_svar = bool(research.get("kb_supports_answer"))
+    kb_saknar_svar = not articles or not kb_stodjer_svar
+
+    sakerhetskritiskt = bool(
+        abuse.ska_eskalera
+        or cancellation_risk
+        or triage.get("escalate")
+        or sentiment < SENTIMENT_ESCALATION_THRESHOLD
+        or _ar_kansligt(f"{subject} {message}")
+    )
+
+    fragar_uppfoljning = (
+        kb_saknar_svar
+        and not sakerhetskritiskt
+        # BARA i första turen. Har kunden redan svarat en gång och vi
+        # fortfarande inte kan svara, är en andra motfråga inte omsorg utan en
+        # loop — och den loopen är värre än en överlämning.
+        and turn_count == 0
+        and await _kb_ar_tunn(storage, tenant_id)
+    )
+
     # --- Steg 3: utkast ----------------------------------------------------
     draft = await run_step(
         steps["cs:draft-response"],
         ledger,
         trace,
         task=(
-            "Skriv ett svar till kunden, grundat ENBART i kunskapsbasen ovan. "
+            "Kunskapsbasen räcker inte för att svara på frågan, men ärendet är "
+            "varken juridiskt, säkerhetskritiskt eller en uppsägningsrisk. "
+            "Lämna INTE över till en människa. Ställ i stället EN kort, öppen "
+            "följdfråga som skulle göra frågan besvarbar — den mest användbara "
+            "du kan komma på. Påstå ingenting om produkten eller villkoren som "
+            "inte står i kunskapsbasen, och lova inte att någon återkommer. "
+            "Ren text, ingen markdown. Returnera JSON: draft (svenska)."
+            if fragar_uppfoljning
+            else "Skriv ett svar till kunden, grundat ENBART i kunskapsbasen ovan. "
             "Ren text, ingen markdown. Returnera JSON: draft (svenska)."
         ),
         case_context=f"{case_context}\n\n## Kunskapsbas\n{kb_block}\n\n## Research\n{research.get('findings', '')}",
@@ -255,14 +436,33 @@ async def run_support_agent(
         ),
     )
 
-    # Eskalering avgörs i KOD av tre oberoende villkor — inte av modellen ensam.
+    # Eskalering avgörs i KOD av oberoende villkor — inte av modellen ensam.
+    #
+    # ## Vad som ändrades 2026-08-24, och vad som INTE gjorde det
+    #
+    # Före: `or not articles` fällde ensamt. En tenant med sex artiklar
+    # eskalerade därför nästan varje fråga som inte råkade formuleras som en
+    # artikelrubrik — inte för att ärendet behövde en människa, utan för att
+    # sökningen gick tom på första försöket.
+    #
+    # Nu: `kb_saknar_svar` väger in `kb_supports_answer` från researchsteget,
+    # som tidigare bara stod som KONTEXT åt eskaleringssteget och aldrig
+    # avgjorde något i kod. Den är det bättre måttet — noll träffar på ett tunt
+    # bibliotek betyder något annat än noll träffar på ett fullt. Och när
+    # ärendet varken är känsligt eller en fortsättning ställs en följdfråga i
+    # stället för att lämna över (`fragar_uppfoljning`).
+    #
+    # OFÖRÄNDRADE, och avsiktligt lika lätta att utlösa som förut:
+    # `abuse.ska_eskalera`, uppsägningsrisk, triageflaggan, lågt sentiment och
+    # modellens egen `should_escalate` (som bär juridik/ARN/GDPR). De är rätt
+    # beslut varje gång, inte agenten som ger upp.
     escalated = bool(
         escalation.get("should_escalate")
         or triage.get("escalate")
         or sentiment < SENTIMENT_ESCALATION_THRESHOLD
-        or not articles
         or cancellation_risk
         or abuse.ska_eskalera
+        or (kb_saknar_svar and not fragar_uppfoljning)
     )
     escalation_reason = (
         # Påhoppet vinner över modellens egen motivering: en människa som tar
@@ -274,7 +474,10 @@ async def run_support_agent(
     )
     if escalated and not escalation_reason:
         escalation_reason = (
-            "Ingen träff i kunskapsbasen" if not articles else "Lågt sentiment eller triageflagga"
+            f"Kunskapsbasen räckte inte ({', '.join(kb_forsok)} prövades, "
+            f"kb_supports_answer={kb_stodjer_svar})"
+            if kb_saknar_svar
+            else "Lågt sentiment eller triageflagga"
         )
 
     # --- Steg 5: KB-artikel (fångar ny kunskap tillbaka) -------------------
