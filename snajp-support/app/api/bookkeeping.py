@@ -32,6 +32,7 @@ from ..agent.bookkeeping_agent import (
     run_bookkeeping_chat_turn,
 )
 from ..agentcore.overlays import pack_version
+from ..bookkeeping.kontoutdrag import KontoutdragsfelError, las_kontoutdrag, stam_av
 from ..bookkeeping.math import Konteringsrad
 from ..bookkeeping.period import berakna_period, kr
 from ..bookkeeping.sie4 import SieExportError, Verifikat, skriv_sie4
@@ -369,3 +370,56 @@ async def chatt(
     )
 
     return {**svar, "underlag": bilaga}
+
+
+@router.post("/api/bookkeeping/avstamning")
+async def avstamning(
+    request: Request,
+    fran: date,
+    till: date,
+    fil: UploadFile = FastAPIFile(...),
+    tenant: dict = Depends(require_tenant),
+) -> dict:
+    """Stäm av ett kontoutdrag mot periodens underlag.
+
+    ## Varför den INTE går genom `ta_emot_underlag`
+
+    Ett kontoutdrag är inte ett underlag. Det bär inga momssatser och inga
+    motparter att kontera — det bär betalningar som redan skett. Skickades det
+    genom avläsningen hade varje rad blivit ett nonsensverifikat, och en fil med
+    hundra rader hade producerat hundra av dem.
+
+    Se `app/bookkeeping/kontoutdrag.py` för hela resonemanget.
+
+    ## Den skriver ingenting
+
+    Avstämningen är en LÄSNING: filen läses i minnet, jämförs mot underlagen och
+    kastas. Ingen tabell, inget verifikat, ingen status som ändras. Därför är den
+    ofarlig att köra om, och därför krävdes ingen migration för den.
+
+    Den loggas inte heller till `agent_runs`: ingen modell körs, så det finns
+    ingen körning att revidera. `agent_runs` är agentens logg, inte en
+    åtkomstlogg.
+    """
+    data = await fil.read()
+    try:
+        transaktioner = las_kontoutdrag(data)
+    except KontoutdragsfelError as felet:
+        raise HTTPException(status_code=422, detail=str(felet)) from felet
+
+    underlag = await request.app.state.storage.list_bk_underlag(
+        tenant["tenant_id"], fran=fran, till=till
+    )
+    resultat = stam_av(transaktioner, underlag)
+
+    return {
+        "fran": fran.isoformat(),
+        "till": till.isoformat(),
+        "antal_transaktioner": len(transaktioner),
+        "antal_underlag": len(underlag),
+        "matchade": resultat.matchade,
+        "saknar_underlag": resultat.saknar_underlag,
+        "saknar_banktransaktion": resultat.saknar_banktransaktion,
+        "sammanfattning": resultat.as_report(),
+        "forbehall": FORBEHALL,
+    }

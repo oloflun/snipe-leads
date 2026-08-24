@@ -77,17 +77,20 @@ def test_periodsummorna_foljer_av_det_enda_underlaget():
     assert _summa("moms_att_betala") == _summa("utgaende_moms") - _summa("ingaende_moms")
 
 
-def test_chattsvaret_bar_bara_belopp_som_star_i_periodrapporten():
+def test_chattsvaren_bar_bara_belopp_som_star_i_periodrapporten():
     """Demons svar måste klara INV-BOOK-003, annars visar sidan något
     produkten vägrar göra.
 
-    Talen i svaret jämförs mot summorna ovanför. Ett fjärde belopp i texten
-    hade fällts av den riktiga grinden.
+    Grinden i produkten körs vid SVARSTILLFÄLLET. Här finns inget svarstillfälle
+    — svaren är konstanter — så kontrollen flyttar till bygget. Ett påhittat tal
+    fäller alltså testet i stället för besökaren.
+
+    Hela FRAGOR-blocket läses som text, både frågor och svar. Att skilja dem åt
+    hade krävt att testet parsar TypeScript; ett belopp i en FRÅGA måste ändå
+    finnas i rapporten, annars ställer demon en fråga produkten inte kan svara på.
     """
-    samtal = DEMO.split("export const SAMTAL")[1]
-    assistentsvar = " ".join(
-        block for block in re.findall(r'text:\s*\n?\s*"(.*?)"\s*\n?\s*\}', samtal, re.DOTALL)
-    )
+    samtal = DEMO.split("export const FRAGOR")[1]
+    assistentsvar = " ".join(re.findall(r'"([^"]*)"', samtal))
 
     tillatna = {
         _summa(namn)

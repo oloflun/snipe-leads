@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Download, Loader2, Upload } from "lucide-react";
+import { AlertTriangle, Download, Loader2, Scale, Upload } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge, EmptyState, SkeletonRows, btnPrimary, btnSecondary } from "@/components/ui";
 import { felmeddelande, readJson } from "@/lib/http/json";
@@ -108,6 +108,15 @@ function procent(varde: string | null): string {
   return MOMSETIKETT[normaliserad] ?? "—";
 }
 
+type Avstamning = {
+  antal_transaktioner: number;
+  antal_underlag: number;
+  matchade: { datum: string; text: string; belopp: string; motpart: string | null }[];
+  saknar_underlag: { datum: string; text: string; belopp: string }[];
+  saknar_banktransaktion: { datum: string; motpart: string | null; brutto: string }[];
+  sammanfattning: string[];
+};
+
 export function BokforingPanel() {
   const [underlag, setUnderlag] = useState<Underlag[] | null>(null);
   const [rapport, setRapport] = useState<Rapport | null>(null);
@@ -115,6 +124,12 @@ export function BokforingPanel() {
   const [laddarUpp, setLaddarUpp] = useState(false);
   const [fel, setFel] = useState<string | null>(null);
   const filväljare = useRef<HTMLInputElement>(null);
+  // Avstämningen har en EGEN väljare. Delad med underlagsväljaren hade betytt
+  // ett accept-attribut som släpper igenom både kvitton och CSV, och då hamnar
+  // kontoutdraget i avläsningen — vilket ger ett nonsensverifikat per rad.
+  const utdragsväljare = useRef<HTMLInputElement>(null);
+  const [avstamning, setAvstamning] = useState<Avstamning | null>(null);
+  const [stammerAv, setStammerAv] = useState(false);
 
   const hamta = useCallback(async () => {
     setFel(null);
@@ -138,6 +153,26 @@ export function BokforingPanel() {
   useEffect(() => {
     void hamta();
   }, [hamta]);
+
+  async function stamAv(fil: File | null) {
+    if (!fil) return;
+    setStammerAv(true);
+    setFel(null);
+    setAvstamning(null);
+    try {
+      const kropp = new FormData();
+      kropp.append("fil", fil);
+      const svar = await fetch(
+        `${BAS}/avstamning?fran=${period.fran}&till=${period.till}`,
+        { method: "POST", body: kropp }
+      );
+      setAvstamning(await readJson<Avstamning>(svar));
+    } catch (orsak) {
+      setFel(felmeddelande(orsak));
+    } finally {
+      setStammerAv(false);
+    }
+  }
 
   async function laddaUpp(filer: FileList | null) {
     if (!filer?.length) return;
@@ -229,6 +264,32 @@ export function BokforingPanel() {
           <Download className="h-4 w-4" aria-hidden />
           Exportera SIE4
         </a>
+
+        {/* Kontoutdraget har en EGEN väljare och ett eget accept — se
+            utdragsväljare ovan. */}
+        <input
+          ref={utdragsväljare}
+          type="file"
+          accept=".csv,text/csv"
+          onChange={(e) => {
+            void stamAv(e.target.files?.[0] ?? null);
+            e.target.value = "";
+          }}
+          className="sr-only"
+        />
+        <button
+          type="button"
+          disabled={stammerAv}
+          onClick={() => utdragsväljare.current?.click()}
+          className={btnSecondary}
+        >
+          {stammerAv ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          ) : (
+            <Scale className="h-4 w-4" aria-hidden />
+          )}
+          Stäm av kontoutdrag
+        </button>
       </div>
 
       {fel ? (
@@ -280,6 +341,78 @@ export function BokforingPanel() {
               </ul>
             </div>
           ) : null}
+        </section>
+      ) : null}
+
+      {/* Avstämningen mot kontoutdraget.
+
+          Ligger FÖRE underlagslistan med flit: den svarar på frågan "har jag
+          fått med allt?", och svaret bestämmer om man behöver läsa listan alls. */}
+      {avstamning ? (
+        <section>
+          <div className="flex flex-wrap items-baseline justify-between gap-3">
+            <h2 className="font-display text-[1.25rem]">Avstämning</h2>
+            <Badge
+              tone={
+                avstamning.saknar_underlag.length || avstamning.saknar_banktransaktion.length
+                  ? "warn"
+                  : "good"
+              }
+            >
+              {avstamning.matchade.length} av {avstamning.antal_transaktioner} matchade
+            </Badge>
+          </div>
+
+          <ul className="mt-3 space-y-1 text-[0.9375rem] text-ink/70">
+            {avstamning.sammanfattning.map((rad) => (
+              <li key={rad}>{rad}</li>
+            ))}
+          </ul>
+
+          {avstamning.saknar_underlag.length ? (
+            <div className="mt-4">
+              <p className="kicker text-mineral">Banktransaktioner utan underlag</p>
+              <div className="mt-2 divide-y divide-ink/15 border-y border-ink/15">
+                {avstamning.saknar_underlag.map((rad, i) => (
+                  <div key={i} className="flex flex-wrap items-baseline gap-x-4 py-2">
+                    <span className="w-[6.5rem] shrink-0 text-[0.875rem] tabular-nums text-ink/62">
+                      {rad.datum}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-[0.875rem]">{rad.text || "—"}</span>
+                    <span className="w-[7.5rem] text-right text-[0.875rem] font-medium tabular-nums">
+                      {kronor(rad.belopp)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {avstamning.saknar_banktransaktion.length ? (
+            <div className="mt-4">
+              <p className="kicker text-mineral">Underlag utan banktransaktion</p>
+              <div className="mt-2 divide-y divide-ink/15 border-y border-ink/15">
+                {avstamning.saknar_banktransaktion.map((rad, i) => (
+                  <div key={i} className="flex flex-wrap items-baseline gap-x-4 py-2">
+                    <span className="w-[6.5rem] shrink-0 text-[0.875rem] tabular-nums text-ink/62">
+                      {rad.datum}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-[0.875rem]">
+                      {rad.motpart || "—"}
+                    </span>
+                    <span className="w-[7.5rem] text-right text-[0.875rem] font-medium tabular-nums">
+                      {kronor(rad.brutto)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          <p className="mt-3 max-w-[70ch] text-[0.8125rem] leading-6 text-ink/50">
+            Matchat på belopp och datum inom tre dagar. Kontoutdraget sparas
+            inte — det läses, jämförs och kastas.
+          </p>
         </section>
       ) : null}
 

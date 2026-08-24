@@ -1,11 +1,12 @@
 "use client";
 
 import { ArrowRight, FileText, ShieldAlert } from "lucide-react";
+import { useState } from "react";
 import {
   AVLASNING,
   EXEMPELKVITTO,
+  FRAGOR,
   PERIOD,
-  SAMTAL,
   VERIFIKAT
 } from "@/lib/demo/bokforing";
 
@@ -18,9 +19,14 @@ import {
  * levande körning per besökare kostar pengar utan att visa mer — samma
  * avvägning som gjorde Email Studios demoläge `simulated: true`.
  *
- * Chattsamtalet längst ned är därför FÖRINSPELAT och inte en chattruta. Det står
- * utskrivet på sidan; en ruta som ser ut att gå att skriva i men inte gör det är
- * sämre än en som inte låtsas.
+ * Chatten längst ned SVARAR ändå. Besökaren klickar på en fråga och får svaret
+ * — samtalet drivs alltså av den som läser, inte av en inspelning som rullar.
+ * Svaren är konstanter, och ett test kontrollerar att varje krontal i dem finns
+ * i periodrapporten ovanför. Det är samma krav som INV-BOOK-003 ställer på det
+ * riktiga svaret, kontrollerat vid bygget i stället för vid körningen.
+ *
+ * Ett fritextfält vore nästa steg och kräver en modell. Det står utskrivet på
+ * sidan i stället för att antydas med en ruta som inte går att skriva i.
  *
  * ## Siffrorna
  *
@@ -68,6 +74,60 @@ function Steg({
       </div>
       <div className="col-span-12 md:col-span-9">{children}</div>
     </section>
+  );
+}
+
+/**
+ * Demons chatt. Besökaren väljer fråga, svaret fälls ut.
+ *
+ * Ingen modell, ingen backend, ingen kostnad per besökare — se filens
+ * docstring. Ställda frågor försvinner ur listan så att det syns vad som är
+ * kvar att prova.
+ */
+function DemoChatt() {
+  const [stallda, setStallda] = useState<number[]>([]);
+  const kvar = FRAGOR.map((_, i) => i).filter((i) => !stallda.includes(i));
+
+  return (
+    <div>
+      <div className="grid gap-3">
+        {stallda.map((i) => (
+          <div key={i} className="grid gap-3">
+            <p className="ml-auto max-w-[62ch] rounded-card bg-paper2 px-4 py-3 text-[0.9375rem] leading-6 text-ink">
+              {FRAGOR[i].fraga}
+            </p>
+            <p className="max-w-[62ch] whitespace-pre-wrap rounded-card border border-ink/15 px-4 py-3 text-[0.9375rem] leading-6 text-ink/85">
+              {FRAGOR[i].svar}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {kvar.length ? (
+        <div className={stallda.length ? "mt-5" : ""}>
+          <p className="text-[0.8125rem] text-mineral">
+            {stallda.length ? "Fråga något mer:" : "Klicka på en fråga:"}
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {kvar.map((i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setStallda((f) => [...f, i])}
+                className="focus-ring rounded-input border border-ink/15 px-3 py-2 text-left text-[0.8125rem] text-ink/70 hover:border-ochre hover:text-ink"
+              >
+                {FRAGOR[i].fraga}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <p className="mt-5 text-[0.8125rem] text-mineral">
+          Det var frågorna i exemplet. I produkten skriver du dina egna, och
+          assistenten hämtar siffrorna ur din bokföring.
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -175,21 +235,8 @@ export function BokforingDemo() {
         </p>
       </Steg>
 
-      <Steg nummer={5} rubrik="Frågan efteråt">
-        <div className="grid gap-3">
-          {SAMTAL.map((rad, i) => (
-            <div
-              key={i}
-              className={
-                rad.roll === "kund"
-                  ? "ml-auto max-w-[62ch] rounded-card bg-paper2 px-4 py-3 text-[0.9375rem] leading-6 text-ink"
-                  : "max-w-[62ch] rounded-card border border-ink/15 px-4 py-3 text-[0.9375rem] leading-6 text-ink/85"
-              }
-            >
-              <p className="whitespace-pre-wrap">{rad.text}</p>
-            </div>
-          ))}
-        </div>
+      <Steg nummer={5} rubrik="Fråga assistenten">
+        <DemoChatt />
         <p className="mt-4 flex items-start gap-2 max-w-[62ch] text-[0.8125rem] leading-6 text-ink/55">
           <ArrowRight className="mt-1 h-3.5 w-3.5 shrink-0 text-ochre" aria-hidden />
           <span>

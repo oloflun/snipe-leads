@@ -19,13 +19,16 @@
  * `tests/test_demo_bokforing.py` räknar om dem. Går de isär fälls testet, inte
  * besökaren.
  *
- * ## Varför chattsamtalet är förinspelat
+ * ## Varför chatten svarar utan att köra en modell
  *
- * En levande chatt för en anonym besökare kostar per besök och kan svara olika
- * varje gång. Samma avvägning som gjorde Email Studios demoläge
- * `simulated: true`. Samtalet nedan är alltså skrivet, och svaret är grundat i
- * exakt de siffror som står ovanför det — vilket är precis vad INV-BOOK-003
- * kräver av det riktiga svaret.
+ * Besökaren väljer fråga och får svar — samtalet drivs alltså av den som läser.
+ * Men inget LLM-anrop görs: sidan är publik och anonym, och en körning per
+ * besökare kostar pengar och kan svara olika varje gång. Samma avvägning som
+ * gjorde Email Studios demoläge `simulated: true`.
+ *
+ * Svaren är grundade i exakt de siffror som står ovanför dem, vilket är precis
+ * vad INV-BOOK-003 kräver av det riktiga svaret. Skillnaden är att grinden här
+ * är ett TEST och inte en körning — se FRAGOR längre ned.
  */
 
 export type Avlast = { falt: string; varde: string; kalla: string };
@@ -99,33 +102,45 @@ export const PERIOD = {
 } as const;
 
 /**
- * Det förinspelade samtalet.
+ * Frågorna besökaren kan ställa, och svaren.
  *
- * Svaret bär BARA belopp som står i PERIOD ovan — 250,00 och 1 000,00. Det är
- * inte en stilistisk detalj: hade svaret innehållit ett fjärde tal hade det
- * riktiga svaret fällts av INV-BOOK-003, och demon hade visat något produkten
- * vägrar göra.
+ * ## Varför de är KONSTANTER och ändå ett riktigt samtal
+ *
+ * Besökaren väljer fråga och svaret kommer fram — samtalet drivs alltså av den
+ * som läser, inte av en inspelning som rullar. Men ingen modell körs, av skälet
+ * som står i filens docstring.
+ *
+ * ## Varför det inte är fusk
+ *
+ * Varje svar bär BARA belopp som står i PERIOD ovan. Det är inte en stilistisk
+ * regel utan samma krav som INV-BOOK-003 ställer på det riktiga svaret: ett tal
+ * som inte hämtats fälls innan kunden ser det.
+ *
+ * Skillnaden mot produkten är att grinden här är ett TEST i stället för en
+ * körning — `tests/test_demo_bokforing.py` läser svaren och jämför varje
+ * kronbelopp mot periodrapporten. Ett påhittat tal fäller bygget, inte
+ * besökaren.
+ *
+ * ## Varför den sista frågan finns
+ *
+ * "Ska jag dra av den här middagen?" ligger på fel sida gränsen, och svaret
+ * visar var gränsen går. Att bara demonstrera det agenten KAN hade gett en demo
+ * som lovar mer än produkten håller.
  */
-export const SAMTAL: { roll: "kund" | "assistent"; text: string }[] = [
+export type Demofraga = { fraga: string; svar: string };
+
+export const FRAGOR: Demofraga[] = [
   {
-    roll: "kund",
-    text: "Hur mycket har jag i utgående moms hittills i augusti?"
-  },
-  {
-    roll: "assistent",
-    text:
+    fraga: "Hur mycket har jag i utgående moms hittills i augusti?",
+    svar:
       "Ingen alls — utgående moms är 0,00 kr för 2026-08-01 till 2026-08-31. " +
       "Du har ingen registrerad försäljning i perioden, bara ett kostnadsunderlag.\n\n" +
       "Däremot har du 250,00 kr i INGÅENDE moms från drivmedelsfakturan, alltså " +
       "moms du får tillbaka. Kostnaden exklusive moms är 1 000,00 kr."
   },
   {
-    roll: "kund",
-    text: "Vad är skillnaden på ingående och utgående moms?"
-  },
-  {
-    roll: "assistent",
-    text:
+    fraga: "Vad är skillnaden på ingående och utgående moms?",
+    svar:
       "Utgående moms är den du lägger på när du SÄLJER — den är en skuld till " +
       "Skatteverket. Ingående moms är den du betalar när du KÖPER, och den får " +
       "du dra av.\n\n" +
@@ -133,5 +148,32 @@ export const SAMTAL: { roll: "kund" | "assistent"; text: string }[] = [
       "tillbaka mellanskillnaden, vilket är läget i din period just nu.\n\n" +
       "Hur just din deklaration ska fyllas i bör du stämma av med en " +
       "redovisningskonsult — jag förklarar begreppen, jag ger inte skatteråd."
+  },
+  {
+    fraga: "Vilket konto hamnar drivmedlet på?",
+    svar:
+      "5611, Drivmedel för personbilar. Momsen bokas separat på 2641, ingående " +
+      "moms, och skulden till leverantören på 2440.\n\n" +
+      "Jag valde kategorin utifrån vad som stod på underlaget. Kontot valde " +
+      "koden ur BAS-kontoplanen, vilket är varför verifikatet balanserar av " +
+      "konstruktion."
+  },
+  {
+    fraga: "Går perioden ihop?",
+    svar:
+      "Ja. Ett underlag, ett verifikat, och debet är lika med kredit. " +
+      "Resultatet före skatt är -1 000,00 kr, och du har 250,00 kr att få " +
+      "tillbaka i moms.\n\n" +
+      "Hade den inte gått ihop hade jag visat bristerna i stället för summorna. " +
+      "Trovärdiga tal för en period som inte stämmer är värre än inga tal alls."
+  },
+  {
+    fraga: "Ska jag dra av den här middagen?",
+    svar:
+      "Det svarar jag inte på. Om en viss kostnad är avdragsgill i just din " +
+      "verksamhet är en bedömning som binder dig mot Skatteverket, och den ska " +
+      "en auktoriserad redovisningskonsult göra.\n\n" +
+      "Jag kan däremot förklara vad representation är för något, och visa vilket " +
+      "konto en representationskostnad brukar hamna på."
   }
 ];

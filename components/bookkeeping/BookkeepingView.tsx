@@ -2,6 +2,7 @@ import { PageShell } from "@/components/AppShell";
 import { BokforingChatt } from "@/components/bookkeeping/BokforingChatt";
 import { BokforingPanel } from "@/components/bookkeeping/BokforingPanel";
 import { Felanmalan } from "@/components/bookkeeping/Felanmalan";
+import { Forbehall } from "@/components/bookkeeping/Forbehall";
 
 /**
  * Bokföringsvyn. Serverskal, klientpanel — samma delning som resten av
@@ -23,6 +24,13 @@ import { Felanmalan } from "@/components/bookkeeping/Felanmalan";
  * Assistenten är klistrad (`lg:sticky`) så att den följer med när man rullar
  * genom underlagen. Under lg staplas de, med panelen först: på en telefon är
  * uppladdningen det man kommit för.
+ *
+ * ## Förbehållet, hopfällt
+ *
+ * Det stod som fyra rader juridik ÖVERST och togs bort 2026-08-24. Det var rätt
+ * beslut om placeringen och fel utfall: kunden mötte då villkoret ingenstans i
+ * gränssnittet. `Forbehall` är kompromissen — en rad längst ned, hela texten ett
+ * klick bort, på varje sidvisning.
  */
 export function BookkeepingView() {
   return (
@@ -45,6 +53,7 @@ export function BookkeepingView() {
         </aside>
       </div>
 
+      <Forbehall />
       <Felanmalan />
     </PageShell>
   );
