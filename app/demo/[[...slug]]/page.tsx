@@ -4,6 +4,7 @@ import { PageShell } from "@/components/AppShell";
 import { DashboardProvider } from "@/components/dashboard/DashboardContext";
 import { StartView } from "@/components/dashboard/StartView";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
+import { BokforingDemo } from "@/components/bookkeeping/BokforingDemo";
 import { Dashboard as SupportDashboard } from "@/components/snajp/Dashboard";
 import { LeadsControls } from "@/components/leads/LeadsControls";
 import { SupportRegler } from "@/components/settings/SupportRegler";
@@ -61,7 +62,7 @@ const DEMO_STATE = {
   impersonation: null,
   initialScope: "both" as const,
   isDemo: false,
-  products: ["leads", "support"] as const,
+  products: ["leads", "support", "bookkeeping"] as const,
   addons: [],
   workspaceName: "Demo AB",
   // Styr om vyerna erbjuder åtgärder som kräver session. En demo som låtsas
@@ -80,6 +81,7 @@ const SEKTIONER = [
   ["assistant", "Assistant"],
   ["kontroll", "Leads-kontroll"],
   ["regler", "Regler"],
+  ["bokforing", "Bokföring"],
   ["support", "Kundtjänst"]
 ] as const;
 
@@ -162,6 +164,20 @@ function renderSektion(sektion: string | undefined): React.ReactNode | null {
       return <AssistantView />;
     case "kontroll":
       return <LeadsControls demo />;
+    case "bokforing":
+      // Egen demokomponent och inte `BookkeepingView`. Den vyn anropar
+      // backenden för underlag och period, och regeln för den här routen är att
+      // INGENTING här får sträcka sig efter en session eller databasen — se
+      // filens docstring. BokforingDemo renderar handräknade konstanter.
+      return (
+        <PageShell
+          kicker="Bokföring"
+          title="Ett kvitto, hela vägen till periodrapport"
+          description="Avläsningen, verifikatet och summorna för ett påhittat underlag. Ingen modell körs på den här sidan."
+        >
+          <BokforingDemo />
+        </PageShell>
+      );
     case "regler":
       return <ReglerDemo />;
     case "support":

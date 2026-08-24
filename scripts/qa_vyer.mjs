@@ -51,6 +51,7 @@ const KUND = [process.env.QA_KUND_EPOST ?? "kund@example.com",
 const PUBLIKA = ["/", "/leads", "/support", "/login", "/duo-demo", "/auth/reset",
   "/demo", "/demo/leads", "/demo/emails", "/demo/support", "/demo/kontroll",
   "/demo/companies", "/demo/contacts", "/demo/inbox", "/demo/analytics", "/demo/assistant",
+  "/demo/bokforing",
   "/chat/livrustning", "/chat/snajp",
   "/design-drafts/editorial-clean", "/design-drafts/editorial-clean/portal"];
 
@@ -63,16 +64,16 @@ const PUBLIKA = ["/", "/leads", "/support", "/login", "/duo-demo", "/auth/reset"
 //
 // Lägger du till en sektion i settingsSections: lägg till den här samtidigt.
 const ARBETSYTA = ["/dashboard", "/dashboard/leads", "/dashboard/leads/kontroll",
-  "/dashboard/emails", "/dashboard/support",
+  "/dashboard/emails", "/dashboard/support", "/dashboard/bokforing",
   "/settings", "/settings/affarskontext", "/settings/kunskapsbas", "/settings/soul",
   "/settings/notiser", "/settings/tema",
   "/settings/leads", "/settings/regler", "/settings/mailboxes",
   "/settings/team", "/settings/billing", "/settings/addons"];
 
 const ADMINYTA = ["/admin", "/admin/kunder", "/admin/korningar", "/admin/testkorningar",
-  "/admin/handelser", "/admin/arbetsyta", "/admin/leads", "/admin/leads/kontroll",
+  "/admin/handelser", "/admin/bokforingsanvandning", "/admin/arbetsyta", "/admin/leads", "/admin/leads/kontroll",
   "/admin/emails", "/admin/support", "/admin/companies", "/admin/contacts",
-  "/admin/inbox", "/admin/analytics", "/admin/assistant"];
+  "/admin/inbox", "/admin/analytics", "/admin/assistant", "/admin/bokforing"];
 
 /**
  * Fel som ÄR det önskade beteendet.

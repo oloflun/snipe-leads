@@ -29,11 +29,29 @@ import { cn } from "@/lib/utils";
  *
  * ## Varför inte en <select>
  *
- * Tre alternativ med pris och en rad förklaring vardera. En rullgardin döljer
- * två av dem bakom ett klick, och just de två är det man jämför med.
+ * Fyra alternativ med pris och en rad förklaring vardera. En rullgardin döljer
+ * tre av dem bakom ett klick, och just de tre är det man jämför med.
  */
 
-const ORDNING = ["leads", "support", "duo"] as const;
+const ORDNING = ["leads", "support", "bookkeeping", "duo"] as const;
+
+/**
+ * Hur många produkter ett paket ger. Används för att avgöra vad som är en
+ * NEDGRADERING, och därmed vad som kräver bekräftelse.
+ *
+ * Räknas och gissas inte: den första versionen skrev `valt === "duo" && nytt
+ * !== "duo"`, vilket stämde så länge Duo var det enda paketet med två
+ * produkter. Med bokföringen inne är det inte längre sant — ett byte från Duo
+ * till Bokföring är fortfarande en nedgradering, men ett byte från Bokföring
+ * till Duo är inte det, och en hårdkodad jämförelse mot "duo" hade fått båda
+ * fel åt olika håll.
+ */
+const PRODUKTER_I_PAKET: Record<string, number> = {
+  leads: 1,
+  support: 1,
+  bookkeeping: 1,
+  duo: 2
+};
 
 export function Planvaljare({
   aktivtPaket
@@ -51,9 +69,22 @@ export function Planvaljare({
     (p): p is (typeof PAKET)[number] => Boolean(p)
   );
 
-  /** Nedgradering = det nya paketet ger färre produkter än det nuvarande. */
+  /**
+   * Nedgradering = det nya paketet ger färre produkter än det nuvarande, ELLER
+   * lika många men andra.
+   *
+   * Det andra ledet är inte överdrift: ett byte från Leads till Bokföring tar
+   * bort leads-agenten lika verkligt som ett byte från Duo gör, fast antalet
+   * är oförändrat. Bekräftelserutan säger att inget raderas, och det är just
+   * den frågan kunden har i båda fallen.
+   */
   function arNedgradering(nyttId: string): boolean {
-    return valt === "duo" && nyttId !== "duo";
+    if (!valt || nyttId === valt) return false;
+    const fore = PRODUKTER_I_PAKET[valt] ?? 0;
+    const efter = PRODUKTER_I_PAKET[nyttId] ?? 0;
+    if (efter < fore) return true;
+    // Samma antal men annat paket: något försvinner, även om något tillkommer.
+    return efter === fore;
   }
 
   function valj(nyttId: string) {
@@ -146,7 +177,7 @@ export function Planvaljare({
             <strong className="font-semibold">
               {PAKET.find((p) => p.id === bekraftar)?.namn}
             </strong>
-            . Den andra agentens vyer försvinner ur menyn direkt.{" "}
+            . Vyerna för det ni lämnar försvinner ur menyn direkt.{" "}
             <strong className="font-semibold">Ingenting raderas</strong> — kunskapsbas,
             ärenden och prospekt ligger kvar och kommer tillbaka om ni uppgraderar igen.
           </p>

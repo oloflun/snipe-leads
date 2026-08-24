@@ -42,6 +42,7 @@ const PLATTFORM = [
   { href: "/admin/kunder", label: "Kunder" },
   { href: "/admin/korningar", label: "Körningar" },
   { href: "/admin/testkorningar", label: "Testkörningar" },
+  { href: "/admin/bokforingsanvandning", label: "Bokföringsanvändning" },
   { href: "/admin/handelser", label: "Händelser" }
 ];
 

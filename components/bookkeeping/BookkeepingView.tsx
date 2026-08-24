@@ -1,25 +1,51 @@
 import { PageShell } from "@/components/AppShell";
+import { BokforingChatt } from "@/components/bookkeeping/BokforingChatt";
 import { BokforingPanel } from "@/components/bookkeeping/BokforingPanel";
+import { Felanmalan } from "@/components/bookkeeping/Felanmalan";
 
 /**
  * Bokföringsvyn. Serverskal, klientpanel — samma delning som resten av
  * arbetsytan.
  *
  * Grinden sitter INTE här utan i `WorkspaceSection`, som avgör på servern om
- * den som frågar är plattformsadmin. En kontroll i den här komponenten hade
- * körts efter att routen redan bestämt sig, alltså för sent för att svara 404.
+ * arbetsytan har `bookkeeping` bland sina produkter. En kontroll i den här
+ * komponenten hade körts efter att routen redan bestämt sig, alltså för sent
+ * för att svara 404.
  *
- * App-familjen enligt DESIGN.md: dense rows, fast typskala, ingen hero, inga
- * reveals, ingen bildyta.
+ * ## Två kolumner, inte en stapel
+ *
+ * Arbetet och frågan är olika saker och görs samtidigt. Panelen är en
+ * ARBETSYTA — ladda upp, se perioden, exportera — och assistenten är en
+ * FRÅGA om det som ligger där. Låg de under varandra hamnade assistenten
+ * utanför skärmen så fort kunden hade fler än en handfull underlag, alltså
+ * precis när den börjar vara användbar.
+ *
+ * Assistenten är klistrad (`lg:sticky`) så att den följer med när man rullar
+ * genom underlagen. Under lg staplas de, med panelen först: på en telefon är
+ * uppladdningen det man kommit för.
  */
 export function BookkeepingView() {
   return (
     <PageShell
-      kicker="Bokföring"
-      title="Kvitton, kontering och period"
-      description="Ladda upp ett kvitto eller en faktura. Agenten läser av det och föreslår kontering — den bokför ingenting själv."
+      title="Kvitton, fakturor och underlag"
+      description="Ladda upp dina kvitton, fakturor och andra underlag. Agenten läser av, organiserar och föreslår kontering och periodisering – så att pappersarbetet blir klart för granskning och bokföring."
     >
-      <BokforingPanel />
+      {/* gap-x först från lg. Under lg ligger allt i col-span-12, och elva
+          kolumnmellanrum à 40px hade då bara ätit bredd — samma fälla som
+          WorkspaceViews dokumenterar för 320px-vyn. */}
+      <div className="grid grid-cols-12 gap-x-0 gap-y-12 lg:gap-x-10">
+        <div className="col-span-12 lg:col-span-7">
+          <BokforingPanel />
+        </div>
+
+        <aside className="col-span-12 lg:col-span-5">
+          <div className="lg:sticky lg:top-24">
+            <BokforingChatt />
+          </div>
+        </aside>
+      </div>
+
+      <Felanmalan />
     </PageShell>
   );
 }

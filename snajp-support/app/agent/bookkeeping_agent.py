@@ -38,8 +38,11 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+from agents import Agent, Runner
+
 from ..agentcore.overlays import load_global_instructions
 from ..agentcore.packs import check_output_contract
+from ..bookkeeping.beloppsgrind import check_belopp
 from ..bookkeeping.kontoplan import (
     KOSTNADSKATEGORIER,
     OkantKontoError,
@@ -50,7 +53,8 @@ from ..bookkeeping.math import Konteringsrad
 from ..bookkeeping.underlag import normalisera_falt
 from ..bookkeeping.verifieringsgrind import STATUS_GRANSKA, Verdikt, check_underlag, check_verifikat
 from ..config import get_settings
-from .llm import get_llm_client
+from .bookkeeping_chat_tools import BOKFORING_CHATT_TOOLS, BokforingChattContext
+from .llm import get_agent_model, get_llm_client
 from .step_runner import RunTrace, StepResult, thinking_kwargs
 
 #: Skrivs till `agent_runs.agent_type`. Måste finnas i `storage.base.AGENT_RUN_TYPES`
@@ -60,6 +64,21 @@ AGENT_TYPE = "bookkeeping"
 
 #: Vad step_log kallar steget. Inte ett skill-namn: det finns inget i registret.
 STEG_AVLASNING = "snajp:bokforing-avlasning"
+
+#: Det juridiska förbehållet. Bodde i api/bookkeeping.py och flyttade hit när
+#: chatten tillkom: agenten får inte importera från sitt eget API-lager, och
+#: två kopior av samma text hade blivit två olika. API:t importerar den härifrån.
+#:
+#: TEXTEN ÄR INTE OMPRÖVAD SEDAN CHATTEN TILLKOM. Se handoffen — förbehållet i
+#: en CHATT läses annorlunda än ett förbehåll under en rapport, och det ska
+#: godkännas av en människa innan det möter en kund.
+FORBEHALL = (
+    "Förslag, inte bokföring. Snajp Bokföring föreslår kontering och räknar "
+    "perioden. Förslagen är inte granskade av en auktoriserad "
+    "redovisningskonsult och ersätter inte en. Du ansvarar för att uppgifterna "
+    "är riktiga innan de förs in i ert bokföringssystem eller lämnas till "
+    "Skatteverket."
+)
 
 _KATEGORIER = ", ".join(sorted(KOSTNADSKATEGORIER))
 
@@ -299,3 +318,163 @@ __all__ = [
     "bygg_verifikat",
     "las_underlag",
 ]
+
+
+# -- Chatten ---------------------------------------------------------------
+#
+# Allt ovanför är EN körning: läs av ett underlag, svara, avsluta. Chatten är
+# något annat — ett samtal, med verktyg, över flera turer — och den byggs
+# därför på Agents SDK (`Agent`/`Runner.run`) som `build_onboarding_agent`
+# redan gör, inte på `step_runner`.
+#
+# Skillnaden är inte stilistisk. `step_runner.run_step` kör ETT anrop mot ett
+# utdatakontrakt och eskalerar om kontraktet inte hålls. Ett samtal har inget
+# utdatakontrakt: svaret är prosa, och antalet modellanrop per tur beror på hur
+# många verktyg modellen väljer att slå upp.
+
+CHATT_STEG = "snajp:bokforing-chatt"
+
+#: Förbehållet chatten alltid bär, ord för ord detsamma som API:t skickar med
+#: varje svar (`FORBEHALL` i api/bookkeeping.py). Det står på TVÅ ställen med
+#: flit — backenden äger texten, och gränssnittet renderar den permanent, inte
+#: som en engångsruta.
+#:
+#: FÖRBEHÅLLSTEXTEN ÄR INTE GODKÄND ÄNNU. Se handoffen: den ska läsas av en
+#: människa innan den visas för en kund, samma ordning som gällde för
+#: konteringsförbehållet.
+
+CHATT_SYSTEMPROMPT = f"""Du är Snajps bokföringsassistent. Du svarar på svenska, kort och konkret.
+
+## Din grundregel, före allt annat
+DU RÄKNAR ALDRIG. Varje siffra du skriver måste komma från ett verktygsanrop i
+den HÄR turen. Du får inte addera, dra ifrån, räkna om moms eller uppskatta.
+Behöver du ett tal: hämta det. Finns det inte: säg att det inte finns.
+
+Skriv belopp med "kr" efter siffran, till exempel "1 250 kr". Ett svar som bär
+ett belopp du inte hämtat fälls av en kontroll innan kunden ser det, och då får
+kunden ingenting.
+
+## Dina verktyg
+- hamta_periodrapport(fran, till) — summor för en period.
+- lista_underlag(fran, till, status) — underlagen, med status och anmärkning.
+- sla_upp_konto(nummer_eller_kategori) — ett konto ur BAS-kontoplanen.
+
+Du väljer själv vilket verktyg och vilken period frågan gäller. Säger kunden
+"i augusti" och året är underförstått: använd innevarande år, och skriv ut
+vilken period du hämtat så att kunden kan rätta dig.
+
+Går perioden inte ihop svarar verktyget med brister i stället för summor. Säg
+det rakt ut, och säg vilka bristerna är. Avrunda aldrig bort ett problem.
+
+## Vad du får förklara, och vad du inte får råda om
+Du FÅR förklara vad ett begrepp betyder: skillnaden mellan ingående och
+utgående moms, vad ett verifikat är, varför debet och kredit ska balansera,
+vad ett konto i BAS används till. Det är kunskap, och den hjälper.
+
+Du får INTE tala om vad kunden ska göra i sin egen deklaration, hur de ska
+klassificera en specifik affärshändelse för att sänka skatten, om något är
+avdragsgillt i deras fall, eller hur de ska hantera en fråga från
+Skatteverket. Det är rådgivning som binder dem, och den får bara en
+auktoriserad redovisningskonsult ge. Hänvisa dit i stället, vänligt och utan
+omsvep.
+
+Gränsen går mellan "förklara ett begrepp" och "tala om vad JAG ska göra".
+Frågan "vad är utgående moms?" är den första. Frågan "ska jag dra av den här
+middagen?" är den andra.
+
+## Ton
+Du är inte redovisningskonsult och ska inte låta som en. Säg "jag vet inte"
+när du inte vet. Säg "det där bör du fråga en redovisningskonsult om" när
+frågan går över gränsen ovan. Hitta aldrig på ett kontonummer.
+
+{FORBEHALL}
+"""
+
+
+def build_bookkeeping_chat_agent() -> Agent:
+    """Chattagenten. Samma SDK-mönster som `build_onboarding_agent`.
+
+    Ingen overlay och ingen playbook: bokföringsmodulen kör inte skill-
+    registret (se modulens docstring), och chatten ärver det valet.
+    """
+    return Agent[BokforingChattContext](
+        name="Snajp-Bokforing-Chatt",
+        instructions=CHATT_SYSTEMPROMPT,
+        model=get_agent_model(),
+        tools=BOKFORING_CHATT_TOOLS,
+    )
+
+
+#: Vad kunden får när INV-BOOK-003 fäller svaret.
+#:
+#: Ett tomt svar hade sett ut som ett tekniskt fel, och ett omskrivet svar hade
+#: krävt att vi räknar åt modellen. Det här säger vad som hände och lämnar
+#: frågan öppen — samma hållning som `granska_manuellt` har mot ett underlag
+#: som inte gick att läsa.
+FALLT_SVAR = (
+    "Jag höll på att svara med ett belopp jag inte kunde härleda till en "
+    "hämtad siffra, och då svarar jag hellre inte alls. Fråga gärna om en "
+    "bestämd period, så hämtar jag summorna och visar var de kommer ifrån."
+)
+
+
+async def run_bookkeeping_chat_turn(
+    storage,
+    tenant_id: str,
+    *,
+    message: str,
+    historik: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """En tur i bokföringssamtalet.
+
+    Returnerar svaret, vilka verktyg som användes och beloppsgrindens verdikt.
+    Anroparen loggar till `agent_runs` — samma delning som resten av modulen
+    gör mellan agentlogik och observabilitet.
+    """
+    agent = build_bookkeeping_chat_agent()
+    context = BokforingChattContext(storage=storage, tenant_id=tenant_id)
+
+    # Historiken skickas in som tidigare turer. Den bär BARA text: verktygssvar
+    # från en tidigare tur får inte grunda ett belopp i den här, eftersom
+    # siffrorna kan ha ändrats sedan dess (ett nytt underlag, en rättad
+    # avläsning). INV-BOOK-003 gäller per tur, och det är avsiktligt strängt.
+    meddelanden: list[dict[str, Any]] = []
+    for tidigare in historik or []:
+        roll = tidigare.get("roll")
+        text = str(tidigare.get("text") or "").strip()
+        if not text or roll not in ("kund", "assistent"):
+            continue
+        meddelanden.append(
+            {
+                "role": "user" if roll == "kund" else "assistant",
+                "content": [
+                    {
+                        "type": "input_text" if roll == "kund" else "output_text",
+                        "text": text,
+                    }
+                ],
+            }
+        )
+    meddelanden.append(
+        {"role": "user", "content": [{"type": "input_text", "text": message}]}
+    )
+
+    start = time.monotonic()
+    result = await Runner.run(agent, meddelanden, context=context, max_turns=8)
+    latens_ms = int((time.monotonic() - start) * 1000)
+
+    svar = str(result.final_output or "").strip()
+
+    # INV-BOOK-003. Grinden körs på den EXAKTA text kunden skulle ha sett.
+    verdikt = check_belopp(svar, context.resultat)
+    if not verdikt.ok:
+        svar = FALLT_SVAR
+
+    return {
+        "reply": svar,
+        "grundad": verdikt.ok,
+        "brister": verdikt.as_report(),
+        "verktygsanrop": len(context.resultat),
+        "latency_ms": latens_ms,
+        "forbehall": FORBEHALL,
+    }

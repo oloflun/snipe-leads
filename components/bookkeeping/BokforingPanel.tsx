@@ -7,20 +7,18 @@ import { felmeddelande, readJson } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
 
 /**
- * Det juridiska förbehållet. Renderas permanent, inte som en engångsruta man
- * klickar bort.
+ * FÖRBEHÅLLET ÄR BORTTAGET UR VYN, på begäran 2026-08-24.
  *
- * Det här produktområdet har reella ekonomiska och legala konsekvenser om
- * agenten har fel, till skillnad från ett medelmåttigt supportsvar. Texten
- * finns också i backenden (`FORBEHALL` i app/api/bookkeeping.py) eftersom den
- * följer med exporten — och båda kopiorna säger samma sak med flit. Ändras
- * den ena ska den andra ändras samtidigt.
+ * Det stod som ett stycke överst: "Förslag, inte bokföring. …". Texten finns
+ * kvar i backenden (`FORBEHALL` i app/agent/bookkeeping_agent.py) och följer
+ * med i varje API-svar och i SIE-exporten — den är alltså inte raderad, den
+ * syns bara inte i gränssnittet längre.
+ *
+ * Sidbeskrivningen i `BookkeepingView` bär numera samma innebörd i mjukare
+ * form: underlagen blir "klart för granskning och bokföring", alltså något en
+ * människa tar vidare. Att det är ett svagare påstående än det gamla
+ * förbehållet är ett medvetet val och inte en förbiseelse.
  */
-const FORBEHALL =
-  "Förslag, inte bokföring. Snajp Bokföring föreslår kontering och räknar perioden. " +
-  "Förslagen är inte granskade av en auktoriserad redovisningskonsult och ersätter inte en. " +
-  "Du ansvarar för att uppgifterna är riktiga innan de förs in i ert bokföringssystem eller " +
-  "lämnas till Skatteverket.";
 
 const BAS = "/api/snajp-support/bookkeeping";
 
@@ -164,12 +162,6 @@ export function BokforingPanel() {
 
   return (
     <div className="space-y-8">
-      {/* Förbehållet står ÖVERST och alltid. Se FORBEHALL ovan. */}
-      <p className="max-w-[78ch] border-l-2 border-ochre pl-4 text-[0.9375rem] leading-[1.6] text-ink/70">
-        <span className="font-semibold text-ink">Förslag, inte bokföring.</span>{" "}
-        {FORBEHALL.replace("Förslag, inte bokföring. ", "")}
-      </p>
-
       {/* Period + åtgärder */}
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1">
@@ -255,7 +247,10 @@ export function BokforingPanel() {
             </Badge>
           </div>
 
-          <dl className="mt-4 grid gap-x-8 gap-y-3 border-y border-ink/15 py-4 sm:grid-cols-2 lg:grid-cols-3">
+          <dl // Två kolumner, inte tre. `lg:grid-cols-3` mäter VIEWPORTEN, inte spalten
+            // — och sedan panelen ligger i sju av tolv kolumner blev tre summor
+            // bredvid varandra trånga just på de bredder där tre skulle rymts.
+            className="mt-4 grid gap-x-8 gap-y-3 border-y border-ink/15 py-4 sm:grid-cols-2">
             {[
               ["Intäkter", rapport.summor.intakter],
               ["Kostnader", rapport.summor.kostnader],

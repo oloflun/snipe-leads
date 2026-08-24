@@ -25,15 +25,15 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile
 from fastapi import File as FastAPIFile
 
-from ..agent.bookkeeping_agent import AGENT_TYPE, las_underlag
-from ..agentcore.overlays import pack_version
-from ..bookkeeping.math import (
-    Konteringsrad,
-    Post,
-    moms_fran_brutto,
-    netto_fran_brutto,
-    summera_period,
+from ..agent.bookkeeping_agent import (
+    AGENT_TYPE,
+    FORBEHALL,
+    las_underlag,
+    run_bookkeeping_chat_turn,
 )
+from ..agentcore.overlays import pack_version
+from ..bookkeeping.math import Konteringsrad
+from ..bookkeeping.period import berakna_period, kr
 from ..bookkeeping.sie4 import SieExportError, Verifikat, skriv_sie4
 from ..bookkeeping.underlag import (
     UnderlagsfelError,
@@ -42,86 +42,65 @@ from ..bookkeeping.underlag import (
     las_pdf_text,
     sha256_av,
 )
-from ..bookkeeping.verifieringsgrind import STATUS_GRANSKA, STATUS_KLAR, check_period
+from ..bookkeeping.verifieringsgrind import STATUS_GRANSKA, STATUS_KLAR
 from .deps import require_tenant
 
 router = APIRouter()
 
-#: Det juridiska förbehållet. Bor i backenden och inte bara i vyn: det följer
-#: med i exporten också, och två kopior av samma text hade blivit två olika.
-FORBEHALL = (
-    "Förslag, inte bokföring. Snajp Bokföring föreslår kontering och räknar "
-    "perioden. Förslagen är inte granskade av en auktoriserad "
-    "redovisningskonsult och ersätter inte en. Du ansvarar för att uppgifterna "
-    "är riktiga innan de förs in i ert bokföringssystem eller lämnas till "
-    "Skatteverket."
-)
-
-
-def _kr(varde: Decimal | None) -> str | None:
-    """Belopp som STRÄNG i JSON-svaret.
-
-    Ett JSON-tal blir en float hos varje mottagare — webbläsaren räknar
-    `0.1 + 0.2` till `0.30000000000000004` precis som Python gör. Hela
-    modulens premiss är att belopp inte får bli float, och den premissen slutar
-    inte gälla för att värdet passerat ett nätverk.
-    """
-    return None if varde is None else f"{varde:f}"
-
-
 def _underlag_ut(rad: dict[str, Any]) -> dict[str, Any]:
     return {
         **{k: v for k, v in rad.items() if k not in ("brutto", "momssats", "tenant_id")},
-        "brutto": _kr(rad.get("brutto")),
-        "momssats": _kr(rad.get("momssats")),
+        "brutto": kr(rad.get("brutto")),
+        "momssats": kr(rad.get("momssats")),
     }
 
 
-@router.post("/api/bookkeeping/underlag")
-async def ladda_upp_underlag(
-    request: Request,
-    fil: UploadFile = FastAPIFile(...),
-    tenant: dict = Depends(require_tenant),
-) -> dict:
-    """Ta emot ett kvitto, läs av det, spara fälten — och kasta filen.
+async def ta_emot_underlag(
+    storage: Any, tenant_id: str, data: bytes, mimetyp: str, filnamn: str
+) -> dict[str, Any]:
+    """Kvittot in: kontrollera, läs av, spara fälten — och kasta filen.
 
-    Ordningen är hela poängen: filen finns bara i minnet under anropet, och
-    det som skrivs till databasen är fälten plus en sha256. Se
+    ## Varför den är en egen funktion och inte en endpoint-kropp
+
+    Underlag kommer in på TVÅ vägar: uppladdningspanelen (`POST
+    /api/bookkeeping/underlag`) och ett kvitto som droppas i chatten (`POST
+    /api/bookkeeping/chat`). Bägge måste gå exakt samma väg — samma
+    filkontroll, samma textutvinning, samma `las_underlag`, samma verifikat.
+
+    En andra läsväg hade sett identisk ut den dag den skrevs och glidit isär vid
+    första ändringen: ett höjt filtak på ena stället, en ny mimetyp på andra,
+    och plötsligt beror avläsningens kvalitet på VAR kunden råkade släppa
+    filen. `tests/test_bokforing_chatt.py` fäller om chatten slutar gå genom
+    den här funktionen.
+
+    Ordningen är hela poängen: filen finns bara i minnet under anropet, och det
+    som skrivs till databasen är fälten plus en sha256. Se
     `app/bookkeeping/underlag.py`.
     """
-    data = await fil.read()
-    mimetyp = fil.content_type or ""
-    try:
-        kontrollera_fil(data, mimetyp)
-    except UnderlagsfelError as fel:
-        raise HTTPException(status_code=422, detail=str(fel)) from fel
+    kontrollera_fil(data, mimetyp)
 
-    try:
-        if mimetyp == "application/pdf":
-            text = las_pdf_text(data)
-            if not text:
-                # En skannad PDF saknar textlager. Det är ett svar, inte ett
-                # fel — och att säga vad kunden ska göra i stället är billigare
-                # än att låta grinden fälla på "allt saknas".
-                raise UnderlagsfelError(
-                    "PDF:en saknar textlager (troligen en skanning). Ladda upp "
-                    "den som bild i stället, så läses den av bildvägen."
-                )
-        else:
-            import base64
+    if mimetyp == "application/pdf":
+        text = las_pdf_text(data)
+        if not text:
+            # En skannad PDF saknar textlager. Det är ett svar, inte ett fel —
+            # och att säga vad kunden ska göra i stället är billigare än att
+            # låta grinden fälla på "allt saknas".
+            raise UnderlagsfelError(
+                "PDF:en saknar textlager (troligen en skanning). Ladda upp "
+                "den som bild i stället, så läses den av bildvägen."
+            )
+    else:
+        import base64
 
-            data_url = f"data:{mimetyp};base64,{base64.b64encode(data).decode()}"
-            text = await las_bild_text(data_url)
-    except UnderlagsfelError as fel:
-        raise HTTPException(status_code=422, detail=str(fel)) from fel
+        data_url = f"data:{mimetyp};base64,{base64.b64encode(data).decode()}"
+        text = await las_bild_text(data_url)
 
     avlasning = await las_underlag(text)
-    storage = request.app.state.storage
 
     underlag = await storage.create_bk_underlag(
-        tenant["tenant_id"],
+        tenant_id,
         sha256=sha256_av(data),
-        filnamn=fil.filename or "underlag",
+        filnamn=filnamn or "underlag",
         mimetyp=mimetyp,
         status=avlasning.status,
         anmarkning=avlasning.anmarkning or "; ".join(avlasning.verdikt.as_report()),
@@ -136,9 +115,9 @@ async def ladda_upp_underlag(
         # Verifikatnumret räknas ur antalet befintliga verifikat, inte ur en
         # räknarkolumn: en räknare kan glida isär med verkligheten, och ett
         # hoppat verifikatnummer är en anmärkning vid revision.
-        befintliga = await storage.list_bk_verifikat(tenant["tenant_id"])
+        befintliga = await storage.list_bk_verifikat(tenant_id)
         await storage.create_bk_verifikat(
-            tenant["tenant_id"],
+            tenant_id,
             underlag_id=underlag["id"],
             serie="A",
             nummer=str(len(befintliga) + 1),
@@ -151,7 +130,7 @@ async def ladda_upp_underlag(
         )
 
     await storage.log_agent_run(
-        tenant["tenant_id"],
+        tenant_id,
         agent_type=AGENT_TYPE,
         pack_version=pack_version("bokforing/v1"),
         skills_used=avlasning.trace.skills_used,
@@ -167,8 +146,28 @@ async def ladda_upp_underlag(
         "underlag": _underlag_ut(underlag),
         "status": avlasning.status,
         "brister": avlasning.verdikt.as_report(),
-        "forbehall": FORBEHALL,
     }
+
+
+@router.post("/api/bookkeeping/underlag")
+async def ladda_upp_underlag(
+    request: Request,
+    fil: UploadFile = FastAPIFile(...),
+    tenant: dict = Depends(require_tenant),
+) -> dict:
+    """Uppladdningspanelens väg in. Arbetet görs av `ta_emot_underlag`."""
+    try:
+        resultat = await ta_emot_underlag(
+            request.app.state.storage,
+            tenant["tenant_id"],
+            await fil.read(),
+            fil.content_type or "",
+            fil.filename or "underlag",
+        )
+    except UnderlagsfelError as fel:
+        raise HTTPException(status_code=422, detail=str(fel)) from fel
+
+    return {**resultat, "forbehall": FORBEHALL}
 
 
 @router.get("/api/bookkeeping/underlag")
@@ -184,80 +183,6 @@ async def lista_underlag(
     return {"underlag": [_underlag_ut(r) for r in rader], "forbehall": FORBEHALL}
 
 
-async def _period(storage: Any, tenant_id: str, fran: date, till: date) -> dict[str, Any]:
-    """Underlag, verifikat, grind och summor — i den ordningen.
-
-    Summorna räknas ALDRIG före grinden. Att visa trovärdiga tal för en period
-    som inte går ihop är värre än att visa inga alls — se STATUS.md 2026-08-16,
-    där adminvyn gav fyra kunder med nollställda men rimliga siffror.
-    """
-    underlag = await storage.list_bk_underlag(tenant_id, fran=fran, till=till)
-    verifikat = await storage.list_bk_verifikat(tenant_id, fran=fran, till=till)
-
-    rader_per_verifikat = [
-        [
-            Konteringsrad(
-                konto=r["konto"],
-                debet=r["debet"],
-                kredit=r["kredit"],
-                text=r.get("text", ""),
-            )
-            for r in v["rader"]
-        ]
-        for v in verifikat
-    ]
-    verdikt = check_period(underlag=underlag, verifikat=rader_per_verifikat)
-
-    # Summorna räknas bara på underlag som faktiskt har fälten. Ett fällt
-    # underlag bidrar inte med ett gissat belopp — det står i brist-listan.
-    #
-    # Momsen räknas av `moms_fran_brutto`, inte här. En andra uträkning på den
-    # här sidan hade varit en kopia som glider isär från den grinden och
-    # verifikaten använder — och avrundningen hade dessutom saknats, så
-    # periodsumman kunde avvika från verifikatens med några ören utan att
-    # någonting sa ifrån.
-    poster = []
-    for u in underlag:
-        if not (
-            u.get("datum")
-            and u.get("riktning")
-            and u.get("brutto") is not None
-            and u.get("momssats") is not None
-        ):
-            continue
-        poster.append(
-            Post(
-                datum=date.fromisoformat(u["datum"]),
-                riktning=u["riktning"],
-                netto=netto_fran_brutto(u["brutto"], u["momssats"]),
-                moms=moms_fran_brutto(u["brutto"], u["momssats"]),
-                motpart=u.get("motpart") or "",
-                underlag_id=u["id"],
-            )
-        )
-    summor = summera_period(poster)
-
-    return {
-        "fran": fran.isoformat(),
-        "till": till.isoformat(),
-        "status": verdikt.status,
-        "brister": verdikt.as_report(),
-        "summor": {
-            "intakter": _kr(summor.intakter),
-            "kostnader": _kr(summor.kostnader),
-            "utgaende_moms": _kr(summor.utgaende_moms),
-            "ingaende_moms": _kr(summor.ingaende_moms),
-            "resultat_fore_skatt": _kr(summor.resultat_fore_skatt),
-            "moms_att_betala": _kr(summor.moms_att_betala),
-            "antal_poster": summor.antal_poster,
-        },
-        "antal_underlag": len(underlag),
-        "antal_verifikat": len(verifikat),
-        "forbehall": FORBEHALL,
-        "_verifikat": verifikat,
-    }
-
-
 @router.get("/api/bookkeeping/period")
 async def periodrapport(
     request: Request,
@@ -265,7 +190,7 @@ async def periodrapport(
     till: date,
     tenant: dict = Depends(require_tenant),
 ) -> dict:
-    rapport = await _period(request.app.state.storage, tenant["tenant_id"], fran, till)
+    rapport = await berakna_period(request.app.state.storage, tenant["tenant_id"], fran, till)
     rapport.pop("_verifikat", None)
     return rapport
 
@@ -284,7 +209,7 @@ async def exportera_sie4(
     En FÄLLD period exporteras inte. Mottagarsystemet hade avvisat filen ändå,
     men då på kundens skärm i deras program — och det är för sent.
     """
-    rapport = await _period(request.app.state.storage, tenant["tenant_id"], fran, till)
+    rapport = await berakna_period(request.app.state.storage, tenant["tenant_id"], fran, till)
     if rapport["status"] != STATUS_KLAR:
         raise HTTPException(
             status_code=409,
@@ -335,3 +260,112 @@ async def exportera_sie4(
             )
         },
     )
+
+
+@router.post("/api/bookkeeping/chat")
+async def chatt(
+    request: Request,
+    tenant: dict = Depends(require_tenant),
+) -> dict:
+    """Bokföringsassistenten. Ett meddelande in, ett svar ut.
+
+    ## Varför den tar BÅDE JSON och multipart
+
+    Ett kvitto som droppas i chatten ska bokföras som ett kvitto, inte som en
+    bild i en chattlogg. Kroppen är därför multipart när en fil följer med och
+    JSON annars, och filvägen är `ta_emot_underlag` — exakt samma funktion som
+    uppladdningspanelen anropar. Se dess docstring om varför det inte får bli
+    två läsvägar.
+
+    ## Vad som INTE loggas
+
+    `input_text` bär kundens fråga, `output_text` svaret. Filens innehåll når
+    aldrig loggen: den läses i minnet av `ta_emot_underlag`, som skriver fälten
+    och kastar bytesen.
+
+    ## Vad som händer när beloppsgrinden fäller
+
+    Svaret byts mot `FALLT_SVAR` innan det lämnar `run_bookkeeping_chat_turn`,
+    och `grundad: false` följer med i JSON:en. Anropet är alltså inte ett fel —
+    kunden får ett ärligt svar om att assistenten inte kunde härleda en siffra,
+    och gränssnittet kan visa det som vad det är.
+    """
+    storage = request.app.state.storage
+    typ = request.headers.get("content-type") or ""
+
+    meddelande = ""
+    historik: list[dict[str, Any]] = []
+    bilaga: dict[str, Any] | None = None
+
+    if typ.startswith("multipart/form-data"):
+        form = await request.form()
+        meddelande = str(form.get("meddelande") or "").strip()
+        rå_historik = form.get("historik")
+        if isinstance(rå_historik, str) and rå_historik:
+            import json as _json
+
+            try:
+                historik = _json.loads(rå_historik)
+            except ValueError:
+                historik = []
+
+        fil = form.get("fil")
+        if fil is not None and hasattr(fil, "read"):
+            try:
+                bilaga = await ta_emot_underlag(
+                    storage,
+                    tenant["tenant_id"],
+                    await fil.read(),
+                    getattr(fil, "content_type", "") or "",
+                    getattr(fil, "filename", "") or "underlag",
+                )
+            except UnderlagsfelError as fel:
+                raise HTTPException(status_code=422, detail=str(fel)) from fel
+    else:
+        kropp = await request.json()
+        meddelande = str(kropp.get("meddelande") or "").strip()
+        historik = kropp.get("historik") or []
+
+    if not meddelande and bilaga is None:
+        raise HTTPException(status_code=422, detail="Skriv en fråga eller bifoga ett underlag.")
+
+    # Bilagan blir en del av FRÅGAN, inte ett separat svar. Kunden som släpper
+    # ett kvitto utan att skriva något frågar i praktiken "vad blev det här?",
+    # och assistenten ska svara på det utan att kunden behöver formulera det.
+    if bilaga is not None:
+        avläst = bilaga["underlag"]
+        sammanfattning = (
+            f"[Underlag mottaget: {avläst.get('filnamn')}. "
+            f"Avläst datum {avläst.get('datum')}, motpart {avläst.get('motpart')}, "
+            f"belopp {avläst.get('brutto')}, momssats {avläst.get('momssats')}, "
+            f"kategori {avläst.get('kategori')}, status {bilaga['status']}."
+            + (f" Brister: {'; '.join(bilaga['brister'])}." if bilaga["brister"] else "")
+            + "]"
+        )
+        meddelande = f"{sammanfattning}\n\n{meddelande}".strip()
+
+    svar = await run_bookkeeping_chat_turn(
+        storage, tenant["tenant_id"], message=meddelande, historik=historik
+    )
+
+    await storage.log_agent_run(
+        tenant["tenant_id"],
+        agent_type=AGENT_TYPE,
+        pack_version=pack_version("bokforing/v1"),
+        skills_used=[],
+        input_text=meddelande[:4000],
+        output_text=svar["reply"][:4000],
+        step_log=[
+            {
+                "steg": "snajp:bokforing-chatt",
+                "verktygsanrop": svar["verktygsanrop"],
+                "grundad": svar["grundad"],
+                "brister": svar["brister"],
+            }
+        ],
+        tokens_in=0,
+        tokens_out=0,
+        latency_ms=svar["latency_ms"],
+    )
+
+    return {**svar, "underlag": bilaga}

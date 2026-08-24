@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import type { DashboardState } from "@/lib/data/dashboard";
 import type { ProductKey, Scope } from "@/lib/routes";
-import { SCOPE_COOKIE } from "@/lib/routes";
+import { SCOPE_COOKIE, productKeys } from "@/lib/routes";
 
 export type { Scope };
 
@@ -17,7 +17,12 @@ type DashboardContextValue = DashboardState & {
 };
 
 const FALLBACK: DashboardState = {
-  products: ["leads", "support"],
+  // Härledd, inte uppräknad. Stod som ["leads", "support"] och blev fel i samma
+  // sekund som bokföringen blev en produkt — samma glidning som ALL_PRODUCTS i
+  // lib/data/dashboard.ts hade. Fallbacken är permissiv med flit (den finns för
+  // marknadsföringsytorna), och en permissiv lista som glömmer en produkt är
+  // permissiv på fel sätt: den döljer något i stället för att visa allt.
+  products: [...productKeys],
   addons: [],
   workspaceName: null,
   signedIn: false,
@@ -85,7 +90,7 @@ export function useDashboard(): DashboardContextValue {
     ...FALLBACK,
     scope: "both",
     setScope: () => {},
-    availableScopes: ["both", "leads", "support"],
+    availableScopes: ["both", ...productKeys],
     shows: () => true
   };
 }

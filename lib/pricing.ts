@@ -110,8 +110,7 @@ export const PAKET: Paket[] = [
   },
   {
     /**
-     * Bokföringen. Priset är INTE satt, och det är därför `prisPerManad` är
-     * null i stället för en platshållarsiffra.
+     * Bokföringen. 1 990 kr/mån, beslutat 2026-08-24.
      *
      * Fristående paket, inte en del av Duo. Duo är "båda agenterna i samma
      * dashboard, med delad kunddata", och bokföringen delar ingen kunddata med
@@ -120,7 +119,7 @@ export const PAKET: Paket[] = [
      */
     id: "bookkeeping",
     namn: "Snajp Bokföring",
-    prisPerManad: null,
+    prisPerManad: 1990,
     beskrivning: {
       sv: "Bokföringsagenten som läser kvitton och föreslår kontering.",
       en: "The bookkeeping agent that reads receipts and proposes entries."

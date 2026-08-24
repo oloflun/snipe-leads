@@ -230,16 +230,27 @@ def test_marknadssidan_och_paketet_finns():
     assert '"bookkeeping"' in pricing, "Bokföringen saknas i prissättningen."
 
 
-def test_paketet_har_inget_pahittat_pris():
-    """Priset är INTE bestämt, och en platshållarsiffra är värre än inget.
+def test_paketet_har_det_beslutade_priset():
+    """1 990 kr/mån, beslutat 2026-08-24.
 
-    `prisPerManad: 0` renderas som "0 kr" bredvid tre riktiga priser. Typen är
-    `number | null` just för att tvinga varje läsare att skilja på "gratis" och
-    "inte satt än".
+    Testet finns för att priset ska gå att ändra AVSIKTLIGT. En prislapp som
+    tyst byts är en prislapp en kund upptäcker på fakturan.
+
+    `prisPerManad` är fortfarande `number | null` i typen, och det ska den vara:
+    null är ett giltigt tillstånd för en produkt vars pris inte satts, och
+    nästa produkt börjar där. Se PRIS_SAKNAS i lib/pricing.ts.
     """
     pricing = (ROT / "lib" / "pricing.ts").read_text(encoding="utf-8")
     block = pricing.split('id: "bookkeeping"')[1].split("}")[0]
-    assert "prisPerManad: null" in block, (
-        "Bokföringspaketet har fått ett pris. Är det beslutat ska det bytas här "
-        "OCH i test-namnet — annars är det en platshållare som ser ut som ett löfte."
+    assert "prisPerManad: 1990" in block, (
+        "Bokföringspaketets pris är inte 1990. Ändras det ska både raden här och "
+        "beslutsdatumet i pricing.ts uppdateras."
     )
+
+
+def test_typen_tillater_fortfarande_ett_osatt_pris():
+    """Null-vägen får inte tas bort bara för att just det här paketet fick ett
+    pris — nästa produkt börjar utan ett, och `PRIS_SAKNAS` är vad den visar."""
+    pricing = (ROT / "lib" / "pricing.ts").read_text(encoding="utf-8")
+    assert "prisPerManad: number | null" in pricing
+    assert "PRIS_SAKNAS" in pricing

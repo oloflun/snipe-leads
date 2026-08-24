@@ -36,6 +36,7 @@ export type Planbyte = { success: boolean; error?: string; products?: ProductKey
 const PRODUKTER_FOR_PAKET: Record<string, ProductKey[]> = {
   leads: ["leads"],
   support: ["support"],
+  bookkeeping: ["bookkeeping"],
   duo: ["leads", "support"]
 };
 

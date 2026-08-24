@@ -7,7 +7,10 @@ export const dynamic = "force-dynamic";
 // Utan detta dödar Vercel renderingen mitt i uppvakningen. Se app/admin/page.tsx.
 export const maxDuration = 60;
 
-const TYPES = ["", "support", "leads_research", "leads_outreach", "demo"];
+// "bookkeeping" saknades ända tills agenten fick en adminvy. Filtret är en
+// uppräkning, alltså en lista som glider: en ny agenttyp syns i tabellen men
+// går inte att filtrera på förrän någon lägger till den här.
+const TYPES = ["", "support", "leads_research", "leads_outreach", "bookkeeping", "demo"];
 
 export default async function Page({
   searchParams
