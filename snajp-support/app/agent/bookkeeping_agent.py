@@ -33,6 +33,7 @@ balanserar av konstruktion. Se `bookkeeping/math.py` för varför.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 from dataclasses import dataclass
@@ -41,7 +42,7 @@ from typing import Any
 from agents import Agent, Runner
 
 from ..agentcore.overlays import load_global_instructions
-from ..agentcore.packs import check_output_contract
+from ..agentcore.packs import PlaybookStep, RunLedger, check_output_contract
 from ..bookkeeping.beloppsgrind import check_belopp
 from ..bookkeeping.kontoplan import (
     KOSTNADSKATEGORIER,
@@ -53,9 +54,11 @@ from ..bookkeeping.math import Konteringsrad
 from ..bookkeeping.underlag import normalisera_falt
 from ..bookkeeping.verifieringsgrind import STATUS_GRANSKA, Verdikt, check_underlag, check_verifikat
 from ..config import get_settings
+from ..moderation.abuse_gate import check_abuse, ton_instruktion
+from ..notifications.internlarm import larma
 from .bookkeeping_chat_tools import BOKFORING_CHATT_TOOLS, BokforingChattContext
 from .llm import get_agent_model, get_llm_client
-from .step_runner import RunTrace, StepResult, thinking_kwargs
+from .step_runner import RunTrace, StepResult, run_step, thinking_kwargs
 
 #: Skrivs till `agent_runs.agent_type`. Måste finnas i `storage.base.AGENT_RUN_TYPES`
 #: OCH i check-villkoret i migrationen — se test_agent_run_types.py, som läser
@@ -475,6 +478,88 @@ def bygg_turhistorik(
     return meddelanden
 
 
+#: Vad modellen får höra när beloppsgrinden fällt dess första svar.
+#:
+#: Det här är INTE en uppmjukning av INV-BOOK-003. Grinden är oförändrad: ett
+#: tal som fortfarande inte går att härleda till ett verktygssvar fälls
+#: fortfarande, och kunden får fortfarande `FALLT_SVAR`. Skillnaden är att
+#: modellen får veta VAD som gick fel och en chans att hämta talet i stället
+#: för att gissa igen — vilket är precis vad den hade kunnat göra från början.
+#:
+#: Det vanligaste fallet grinden fäller är inte en modell som ljuger, utan en
+#: modell som svarat ur historiken utan att slå upp något. Den behöver inte en
+#: mildare grind, den behöver en tillsägelse.
+_OMFORSOK_INSTRUKTION = (
+    "STOPP. Ditt förra svar innehöll minst ett belopp som inte fanns i något "
+    "verktygsresultat i den här turen, och det svaret kastades därför.\n\n"
+    "Brister: {brister}\n\n"
+    "Du MÅSTE anropa ett verktyg för att få siffran. Gissa inte, räkna inte, "
+    "och hämta den inte ur samtalet ovan — siffror från en tidigare tur kan ha "
+    "ändrats sedan dess. Anropa hamta_periodrapport eller lista_underlag för "
+    "den period frågan gäller, och svara sedan med de tal verktyget gav dig.\n\n"
+    "Finns talet inte att hämta: säg det rakt ut i stället för att skriva ett "
+    "tal. Ett svar utan siffra är ett giltigt svar."
+)
+
+#: Poleringssteget. Se `_polera` för varför det ligger där det ligger.
+#:
+#: Steget använder en REDAN VENDORAD skill. Modulens docstring förklarar varför
+#: bokföringen inte kör playbooks — resonemanget gällde att ett `snajp:bokforing`
+#: hade krävt en NY skill bakom `SNAJP_SKILL_UNLOCK_KEY`. Att återanvända en
+#: skill som redan finns i registret kostar ingenting av det. Det är fortfarande
+#: en egen implementation: eget steg, egen uppgift, egen plats i ordningen — och
+#: ingen import från support_agent eller leads_agent.
+_CHATT_POLERING = PlaybookStep(
+    skill="snajp:humanizer-svenska",
+    requires=("bokforing_svar_grundat",),
+)
+
+
+async def _polera(svar: str, trace: RunTrace) -> str:
+    """Sista handen på ett svar som REDAN passerat beloppsgrinden.
+
+    ## Ordningen, och varför den inte får kastas om
+
+    Grinden först, poleringen sedan — samma ordning som `abuse.ska_eskalera`-
+    repliken har i support_agent: ett kontrollerat svar ska inte skrivas om av
+    ett steg som kommer efter. Kördes poleringen FÖRE grinden hade grinden i
+    stället fällt på humaniserarens formulering, och blivit omöjlig att
+    felsöka. `FALLT_SVAR` passerar aldrig här alls.
+
+    ## Men grinden körs igen efteråt, och det är inte överdrift
+
+    Humaniseraren skriver om text. Skriver den om "1 250 kr" till "cirka
+    1 200 kr" är svaret inte längre grundat, och hade poleringen varit sista
+    ordet vore INV-BOOK-003 kringgången av vårt eget sista steg. Faller det
+    polerade svaret på grinden behålls därför det opolerade — det är
+    fortfarande sant, bara stelare. Ett sant och stelt svar slår ett ledigt och
+    fel.
+
+    Fallerar steget på något annat sätt returneras texten oförändrad. En
+    stilnyans är inte värd ett trasigt svar — samma avvägning som
+    `SegmentShapeError` i leads_agent.
+    """
+    if not svar:
+        return svar
+    try:
+        polerat = await run_step(
+            _CHATT_POLERING,
+            RunLedger(satisfied={"bokforing_svar_grundat"}),
+            trace,
+            task=(
+                "Gör texten naturlig svenska enligt skillen. Behåll ALL "
+                "sakinformation och ÄNDRA INTE ETT ENDA BELOPP — inte "
+                "avrundning, inte 'cirka', inte omskrivning till ord. Ren "
+                "text, ingen markdown. Returnera JSON: final_reply (svenska)."
+            ),
+            case_context=f"## Text att polera\n{svar}",
+            playbook_role="en svensk bokföringsassistent",
+        )
+    except Exception:  # noqa: BLE001 — polering är kvalitet, inte korrekthet
+        return svar
+    return str(polerat.get("final_reply") or "").strip() or svar
+
+
 async def run_bookkeeping_chat_turn(
     storage,
     tenant_id: str,
@@ -506,17 +591,76 @@ async def run_bookkeeping_chat_turn(
     # underlag, en rättad avläsning). INV-BOOK-003 gäller per tur, avsiktligt strängt.
     meddelanden = bygg_turhistorik(historik, message)
 
-    start = time.monotonic()
-    result = await Runner.run(agent, meddelanden, context=context, max_turns=8)
-    latens_ms = int((time.monotonic() - start) * 1000)
+    # Tonläget bedöms i KOD, av samma skäl som i support_agent: det ska inte
+    # kunna pratas bort av innehållet i meddelandet. Bokföringschatten möter
+    # oftare `oro` än `riktad` — en kund med en momsdeklaration på fredag är
+    # stressad, inte otrevlig — och det är den nivån som tillkom när grinden
+    # flyttade till app/moderation/.
+    #
+    # Läggs i USERposition, sist i turen, som kördata om det här meddelandet.
+    # Aldrig i systemprompten: den bär reglerna, inte läget.
+    abuse = check_abuse(message)
+    ton = ton_instruktion(abuse)
+    if ton:
+        meddelanden.append({"role": "user", "content": [{"type": "input_text", "text": ton}]})
 
+    start = time.monotonic()
+    trace = RunTrace()
+    result = await Runner.run(agent, meddelanden, context=context, max_turns=8)
     svar = str(result.final_output or "").strip()
 
     # INV-BOOK-003. Grinden körs på den EXAKTA text kunden skulle ha sett.
     verdikt = check_belopp(svar, context.resultat)
-    if not verdikt.ok:
-        svar = FALLT_SVAR
 
+    if not verdikt.ok:
+        # ETT försök till innan vi ger upp. Se `_OMFORSOK_INSTRUKTION`: grinden
+        # är oförändrad, modellen får bara veta vad som gick fel och en
+        # uttrycklig tillsägelse om att HÄMTA talet.
+        #
+        # Omförsöket körs på samma kontext, så verktygssvar från första
+        # försöket räknas fortfarande som hämtade — de gjordes i den här turen.
+        meddelanden.append(
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": _OMFORSOK_INSTRUKTION.format(
+                            brister="; ".join(verdikt.as_report()) or "(inga angivna)"
+                        ),
+                    }
+                ],
+            }
+        )
+        result = await Runner.run(agent, meddelanden, context=context, max_turns=8)
+        svar = str(result.final_output or "").strip()
+        verdikt = check_belopp(svar, context.resultat)
+
+    if verdikt.ok:
+        # Poleringen kommer EFTER grinden och grindas om. Se `_polera`.
+        polerat = await _polera(svar, trace)
+        if polerat != svar and check_belopp(polerat, context.resultat).ok:
+            svar = polerat
+    else:
+        svar = FALLT_SVAR
+        # Ett fällt svar är en människofråga, inte bara en loggrad: kunden
+        # frågade något chatten inte kunde svara på med hämtade siffror, och
+        # VAD de frågade om är det enda som säger varför.
+        #
+        # Nyckeln bär meddelandet, inte bara tenanten. Två olika frågor som
+        # båda fälls är två saker att titta på; samma fråga ställd igen är en.
+        await larma(
+            "Bokföringschatten kunde inte svara med hämtade siffror",
+            tenant_id=tenant_id,
+            vad="Ett svar fälldes av beloppsgrinden (INV-BOOK-003), även efter omförsök.",
+            varfor="; ".join(verdikt.as_report()) or "(inga brister angivna)",
+            nyckel=(
+                "bokforing-chatt:"
+                f"{tenant_id}:{hashlib.sha256(message.encode()).hexdigest()[:16]}"
+            ),
+        )
+
+    latens_ms = int((time.monotonic() - start) * 1000)
     return {
         "reply": svar,
         "grundad": verdikt.ok,
@@ -524,4 +668,6 @@ async def run_bookkeeping_chat_turn(
         "verktygsanrop": len(context.resultat),
         "latency_ms": latens_ms,
         "forbehall": FORBEHALL,
+        "tonlage": abuse.niva,
+        "step_log": trace.as_log(),
     }
