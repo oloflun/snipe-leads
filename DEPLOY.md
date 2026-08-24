@@ -258,19 +258,20 @@ arbete.
 raden som gör att marknadssidans knappar fungerar utan att en oinloggad kan
 bränna nyckeln (INV-SEC-010). Den kontrollen får inte tas bort.
 
-## Internlarm vid eskalering — kräver ett app-lösenord ▸ Anton
+## Prioriterat mejl vid eskalering — kräver ett app-lösenord ▸ Anton
 
 När support, bokföring eller leads lämnar över ett ärende till en människa går
 ett mejl till `snajpsupport@gmail.com` med `[PRIORITERAT]` i ämnesraden och en
-direktlänk in i adminvyn. Sändvägen är `app/notifications/internlarm.py` — ETT
+direktlänk in i adminvyn. Sändvägen är `app/notifications/prioriterat_mejl.py` — ETT
 konto för hela plattformen, inte per kund, och ingenting med kundutskick att
-göra.
+göra. Det är ett mejl, inte ett larmsystem: ingen sida övervakas och ingen jour
+väcks.
 
 | Variabel | Tjänst | Betydelse |
 |---|---|---|
 | `INTERNLARM_SMTP_ANVANDARE` | `api` | `snajpsupport@gmail.com` |
 | `INTERNLARM_SMTP_LOSENORD` | `api` | **App-lösenord**, 16 tecken — inte kontolösenordet |
-| `PUBLIC_BASE_URL` | `api` | Utan den bygger larmet ingen länk in i adminvyn |
+| `PUBLIC_BASE_URL` | `api` | Utan den bygger mejlet ingen länk in i adminvyn |
 
 **Lösenordet är inte kontolösenordet.** Ett Gmail med tvåstegsverifiering kan
 inte logga in på SMTP med det. Ett app-specifikt lösenord skapas under
@@ -278,26 +279,30 @@ Google-kontots säkerhetsinställningar → *Appspecifika lösenord*, och kräve
 tvåstegsverifiering redan är påslagen. Nycklar och lösenord är undantaget i
 `CLAUDE.md` — det här är din hand, inte agentens.
 
+Variabelnamnen bär fortfarande `INTERNLARM_`. De behålls med flit: de står i
+Railway och här, och att döpa om dem är en driftändring — inte en omdöpning i
+koden.
+
 `PUBLIC_BASE_URL` står redan som en post i
 [`docs/JURIDIK_ATGARDER.md`](docs/JURIDIK_ATGARDER.md) (avregistreringslänken
-behöver den). Larmet är alltså ett andra skäl att sätta samma variabel, inte ett
+behöver den). Mejlet är alltså ett andra skäl att sätta samma variabel, inte ett
 nytt.
 
-**Saknas variablerna är larmvägen AV och tyst.** Det är rätt utfall lokalt och i
+**Saknas variablerna skickas ingenting, tyst.** Det är rätt utfall lokalt och i
 testsviten — men det betyder också att ett bortglömt steg inte märks förrän
-någon undrar var notiserna tog vägen. `internlarm.har_konfiguration()` svarar på
+någon undrar var mejlen tog vägen. `prioriterat_mejl.har_konfiguration()` svarar på
 om steget är gjort, utan att skicka ett provmejl och utan att något värde kan
 hamna i en logg.
 
-**Larmet kan aldrig fälla det det larmar om.** Varje undantag fångas, SMTP körs
-i en tråd med tio sekunders tak, och `larma()` returnerar `False` i stället för
-att kasta. Ett ärende som eskalerar har redan gått fel för kunden; att svaret
+**Mejlet kan aldrig fälla det det handlar om.** Varje undantag fångas, SMTP körs
+i en tråd med tio sekunders tak, och `skicka_prioriterat()` returnerar `False` i
+stället för att kasta. Ett ärende som eskalerar har redan gått fel för kunden; att svaret
 också uteblev för att Gmail hade en dålig dag vore att göra ett problem till
 två.
 
-**En notis per eskaleringshändelse.** För support går dedupen på om KUNDEN redan
+**Ett mejl per eskaleringshändelse.** För support går dedupen på om KUNDEN redan
 har ett eskalerat ärende — varje meddelande i chatten öppnar ett eget ärende, så
-utan det hade en pågående, redan överlämnad tråd larmat en gång per replik. För
+utan det hade en pågående, redan överlämnad tråd mejlat en gång per replik. För
 bokföringsperioden bär nyckeln periodens brister, eftersom rapporten hämtas varje
 gång någon öppnar vyn.
 

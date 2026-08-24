@@ -1,10 +1,10 @@
-"""Internlarmet: en notis per händelse, och aldrig ett fel som når kunden.
+"""Det prioriterade mejlet: ett per händelse, och aldrig ett fel som når kunden.
 
-De två frågorna som avgör om larmvägen är byggd rätt:
+De två frågorna som avgör om sändvägen är byggd rätt:
 
-  1. Kan den spamma? (en notis per efterföljande meddelande i ett redan
-     eskalerat ärende är hur man lär folk att filtrera bort larmet)
-  2. Kan den fälla det den larmar om? (ett ärende som redan gått fel för
+  1. Kan den spamma? (ett mejl per efterföljande meddelande i ett redan
+     eskalerat ärende är hur man lär folk att filtrera bort avsändaren)
+  2. Kan den fälla det den mejlar om? (ett ärende som redan gått fel för
      kunden ska inte också bli ett uteblivet svar för att Gmail hade en
      dålig dag)
 
@@ -20,14 +20,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.config import get_settings
-from app.notifications import internlarm
-from app.notifications.internlarm import (
+from app.notifications import prioriterat_mejl
+from app.notifications.prioriterat_mejl import (
     MOTTAGARE,
     PRIORITETSMARKOR,
     arendelank,
     har_konfiguration,
-    larma,
     nollstall_dubblettminne,
+    skicka_prioriterat,
 )
 
 
@@ -47,7 +47,7 @@ def _rent_dubblettminne():
 
 @pytest.fixture
 def konfigurerad(monkeypatch):
-    """Sätter larmvägens uppgifter OCH tömmer settings-cachen.
+    """Sätter sändvägens uppgifter OCH tömmer settings-cachen.
 
     `Settings` är lru_cachead, och modulen läser uppgifterna därifrån och inte
     med `os.getenv` (se `_konfiguration`). Utan cache_clear hade en tidigare
@@ -80,7 +80,7 @@ def _skickade(server) -> list:
 @pytest.mark.anyio
 async def test_amnesraden_bar_prioritetsmarkoren(konfigurerad, smtp):
     _, server = smtp
-    assert await larma(
+    assert await skicka_prioriterat(
         "Supportärende eskalerat",
         tenant_id="t-1",
         vad="Ärende 42 lämnades över.",
@@ -96,7 +96,7 @@ async def test_amnesraden_bar_prioritetsmarkoren(konfigurerad, smtp):
 @pytest.mark.anyio
 async def test_brodtexten_bar_tenant_vad_varfor_och_lank(konfigurerad, smtp):
     _, server = smtp
-    await larma(
+    await skicka_prioriterat(
         "Rubrik",
         tenant_id="t-1",
         vad="Ärende 42 lämnades över.",
@@ -128,9 +128,9 @@ async def test_samma_nyckel_skickar_bara_en_gang(konfigurerad, smtp):
     _, server = smtp
     argument = dict(tenant_id="t-1", vad="v", varfor="v", nyckel="support:t-1:arende-42")
 
-    assert await larma("Första", **argument) is True
-    assert await larma("Andra", **argument) is False
-    assert await larma("Tredje", **argument) is False
+    assert await skicka_prioriterat("Första", **argument) is True
+    assert await skicka_prioriterat("Andra", **argument) is False
+    assert await skicka_prioriterat("Tredje", **argument) is False
 
     assert server.send_message.call_count == 1
 
@@ -138,14 +138,14 @@ async def test_samma_nyckel_skickar_bara_en_gang(konfigurerad, smtp):
 @pytest.mark.anyio
 async def test_olika_nycklar_skickar_var_sitt(konfigurerad, smtp):
     _, server = smtp
-    await larma("A", tenant_id="t-1", vad="v", varfor="v", nyckel="a")
-    await larma("B", tenant_id="t-1", vad="v", varfor="v", nyckel="b")
+    await skicka_prioriterat("A", tenant_id="t-1", vad="v", varfor="v", nyckel="a")
+    await skicka_prioriterat("B", tenant_id="t-1", vad="v", varfor="v", nyckel="b")
 
     assert server.send_message.call_count == 2
 
 
 @pytest.mark.anyio
-async def test_ett_misslyckat_larm_sparrar_inte_nasta_forsok(konfigurerad, smtp):
+async def test_ett_misslyckat_mejl_sparrar_inte_nasta_forsok(konfigurerad, smtp):
     """Dubblettspärren får inte göra ett tillfälligt fel permanent.
 
     Går sändningen inte fram har ingen blivit tillsagd, och då ska nästa
@@ -154,13 +154,13 @@ async def test_ett_misslyckat_larm_sparrar_inte_nasta_forsok(konfigurerad, smtp)
     fabrik, server = smtp
     server.send_message.side_effect = smtplib.SMTPServerDisconnected("nätet dog")
 
-    assert await larma("R", tenant_id="t-1", vad="v", varfor="v", nyckel="k") is False
+    assert await skicka_prioriterat("R", tenant_id="t-1", vad="v", varfor="v", nyckel="k") is False
 
     server.send_message.side_effect = None
-    assert await larma("R", tenant_id="t-1", vad="v", varfor="v", nyckel="k") is True
+    assert await skicka_prioriterat("R", tenant_id="t-1", vad="v", varfor="v", nyckel="k") is True
 
 
-# -- 3. Larmet får aldrig fälla det det larmar om -------------------------
+# -- 3. Mejlet får aldrig fälla det det handlar om ------------------------
 
 
 @pytest.mark.anyio
@@ -179,13 +179,13 @@ async def test_ett_smtp_fel_kastar_aldrig(konfigurerad, smtp, fel):
     _, server = smtp
     server.send_message.side_effect = fel
 
-    assert await larma("R", tenant_id="t-1", vad="v", varfor="v", nyckel="k") is False
+    assert await skicka_prioriterat("R", tenant_id="t-1", vad="v", varfor="v", nyckel="k") is False
 
 
 @pytest.mark.anyio
 async def test_ett_fel_redan_vid_anslutningen_kastar_aldrig(konfigurerad):
     with patch("smtplib.SMTP", side_effect=OSError("kunde inte ansluta")):
-        assert await larma("R", tenant_id="t-1", vad="v", varfor="v", nyckel="k") is False
+        assert await skicka_prioriterat("R", tenant_id="t-1", vad="v", varfor="v", nyckel="k") is False
 
 
 @pytest.mark.anyio
@@ -196,7 +196,7 @@ async def test_osatt_konfiguration_ar_tyst_och_ofarlig(monkeypatch):
 
     assert har_konfiguration() is False
     with patch("smtplib.SMTP") as fabrik:
-        assert await larma("R", tenant_id="t-1", vad="v", varfor="v", nyckel="k") is False
+        assert await skicka_prioriterat("R", tenant_id="t-1", vad="v", varfor="v", nyckel="k") is False
         fabrik.assert_not_called()
 
 
@@ -210,25 +210,25 @@ async def test_halvsatt_konfiguration_skickar_inte(monkeypatch):
     get_settings.cache_clear()
 
     assert har_konfiguration() is False
-    assert await larma("R", tenant_id="t-1", vad="v", varfor="v", nyckel="k") is False
+    assert await skicka_prioriterat("R", tenant_id="t-1", vad="v", varfor="v", nyckel="k") is False
 
 
 @pytest.mark.anyio
 async def test_ett_hangande_smtp_slapper_efter_tidstaket(konfigurerad, monkeypatch):
-    """Taket är hela skälet till att larmet inte kan sakta ner en eskalering.
+    """Taket är hela skälet till att mejlet inte kan sakta ner en eskalering.
 
     Tiden kortas ned i testet — poängen är att `asyncio.wait_for` faktiskt
     omsluter sändningen, inte hur många sekunder den väntar.
     """
     import asyncio
 
-    monkeypatch.setattr(internlarm, "_TIDSTAK_SEKUNDER", 0.05)
+    monkeypatch.setattr(prioriterat_mejl, "_TIDSTAK_SEKUNDER", 0.05)
 
     async def aldrig_klar(*a, **kw):
         await asyncio.sleep(5)
 
-    with patch.object(internlarm.asyncio, "to_thread", new=AsyncMock(side_effect=aldrig_klar)):
-        assert await larma("R", tenant_id="t-1", vad="v", varfor="v", nyckel="k") is False
+    with patch.object(prioriterat_mejl.asyncio, "to_thread", new=AsyncMock(side_effect=aldrig_klar)):
+        assert await skicka_prioriterat("R", tenant_id="t-1", vad="v", varfor="v", nyckel="k") is False
 
 
 # -- 4. SMTP-sessionen ser ut som Gmail kräver ----------------------------
@@ -237,18 +237,20 @@ async def test_ett_hangande_smtp_slapper_efter_tidstaket(konfigurerad, monkeypat
 @pytest.mark.anyio
 async def test_sessionen_kor_starttls_och_loggar_in(konfigurerad, smtp):
     fabrik, server = smtp
-    await larma("R", tenant_id="t-1", vad="v", varfor="v", nyckel="k")
+    await skicka_prioriterat("R", tenant_id="t-1", vad="v", varfor="v", nyckel="k")
 
     fabrik.assert_called_once_with(
-        internlarm.SMTP_VARD, internlarm.SMTP_PORT, timeout=internlarm._TIDSTAK_SEKUNDER
+        prioriterat_mejl.SMTP_VARD,
+        prioriterat_mejl.SMTP_PORT,
+        timeout=prioriterat_mejl._TIDSTAK_SEKUNDER,
     )
     server.starttls.assert_called_once()
     server.login.assert_called_once_with("snajpsupport@gmail.com", "app-losenord-16-tecken")
 
 
-# -- Larmet, inkopplat i de riktiga agenterna -----------------------------
+# -- Mejlet, inkopplat i de riktiga agenterna -----------------------------
 #
-# Testerna ovanför prövar modulen. De här prövar KOPPLINGEN: att larmet går
+# Testerna ovanför prövar modulen. De här prövar KOPPLINGEN: att mejlet går
 # en gång per eskaleringshändelse i det faktiska supportflödet, och att ett
 # SMTP-fel aldrig får en kundvänd förfrågan att kasta.
 
@@ -265,13 +267,13 @@ def _fake_key(monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_ett_supportarende_larmar_en_gang_inte_en_gang_per_meddelande(
+async def test_ett_supportarende_mejlar_en_gang_inte_en_gang_per_meddelande(
     konfigurerad, smtp, _fake_key
 ):
     """Kravet, i det riktiga flödet.
 
     Varje meddelande i chatten öppnar ett EGET ärende, så utan dedupen hade en
-    pågående, redan överlämnad tråd larmat en gång per replik. Kunden skriver
+    pågående, redan överlämnad tråd mejlat en gång per replik. Kunden skriver
     tre gånger, alla tre eskalerar — en notis.
     """
     from tests.agent.test_support_agent_wiring import _FakeLLM, _run
@@ -291,7 +293,7 @@ async def test_ett_supportarende_larmar_en_gang_inte_en_gang_per_meddelande(
 
 
 @pytest.mark.anyio
-async def test_tva_olika_kunder_larmar_var_sin_gang(konfigurerad, smtp, _fake_key):
+async def test_tva_olika_kunder_mejlar_var_sin_gang(konfigurerad, smtp, _fake_key):
     """Dedupen får inte bli så bred att den tystar en annan kunds ärende."""
     from unittest.mock import AsyncMock as _AsyncMock
 
@@ -340,7 +342,7 @@ async def test_ett_smtp_fel_far_inte_supportsvaret_att_kasta(konfigurerad, smtp,
     llm = _FakeLLM(overrides={"cs:ticket-triage": {"sentiment": 0.05}})
     resultat = await _run(storage, llm, message="Det här är oacceptabelt!")
 
-    assert resultat["reply"], "Kunden fick inget svar när larmet föll."
+    assert resultat["reply"], "Kunden fick inget svar när mejlet föll."
     assert resultat["escalated"] is True
 
     # Och ärendet har rätt status i databasen, oavsett vad mejlet gjorde.
@@ -367,7 +369,7 @@ async def test_ett_smtp_fel_far_inte_en_leads_overlamning_att_kasta(konfigurerad
 
 
 @pytest.mark.anyio
-async def test_en_leads_trad_larmar_en_gang_aven_med_flera_overlamningar(konfigurerad, smtp):
+async def test_en_leads_trad_mejlar_en_gang_aven_med_flera_overlamningar(konfigurerad, smtp):
     """Modellen kan anropa verktyget flera gånger, och kodvägarna i
     run_outreach_draft kan följa på varandra. Det är EN överlämning."""
     from app.agent.leads_context import OutreachContext
@@ -385,7 +387,7 @@ async def test_en_leads_trad_larmar_en_gang_aven_med_flera_overlamningar(konfigu
 
 
 @pytest.mark.anyio
-async def test_larmet_bar_inte_prospektets_mejladress(konfigurerad, smtp):
+async def test_mejlet_bar_inte_prospektets_mejladress(konfigurerad, smtp):
     """Adressen är personuppgift om en utomstående. Tråd-id:t pekar ut samma
     sak för den som ska agera."""
     from app.agent.leads_context import OutreachContext
@@ -407,7 +409,7 @@ async def test_larmet_bar_inte_prospektets_mejladress(konfigurerad, smtp):
 
 
 @pytest.mark.anyio
-async def test_en_oforandrad_trasig_period_larmar_bara_en_gang(konfigurerad, smtp):
+async def test_en_oforandrad_trasig_period_mejlar_bara_en_gang(konfigurerad, smtp):
     """Periodrapporten hämtas varje gång någon öppnar vyn eller frågar
     chatten. Utan bristerna i nyckeln hade det blivit ett mejl per sidladdning."""
     from datetime import date

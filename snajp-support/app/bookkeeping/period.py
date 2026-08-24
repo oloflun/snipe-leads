@@ -24,7 +24,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from ..notifications.internlarm import larma
+from ..notifications.prioriterat_mejl import skicka_prioriterat
 from .math import (
     Konteringsrad,
     Post,
@@ -95,21 +95,21 @@ async def berakna_period(
         )
     summor = summera_period(poster)
 
-    # Larmet ligger HÄR och inte i `verifieringsgrind.check_period`. Grinden är
+    # Mejlet skickas HÄR och inte i `verifieringsgrind.check_period`. Grinden är
     # en ren funktion — den tar dictar och rader och returnerar ett verdikt, gör
     # ingen I/O och vet inte vilken tenant den räknar på. Att lägga ett
     # mejlutskick där hade gjort den omöjlig att anropa från ett test utan att
     # tänka på nätverk, och den anropas från fyra ställen.
     #
     # `berakna_period` är dessutom den ENDA anroparen av check_period, så det
-    # här är inte en av flera vägar förbi larmet — det är vägen.
+    # här är inte en av flera vägar förbi mejlet — det är vägen.
     if verdikt.status == STATUS_GRANSKA:
         # Nyckeln bär periodens brister, inte bara perioden. Rapporten hämtas
         # varje gång någon öppnar vyn eller frågar chatten, och utan bristerna
-        # i nyckeln hade EN oförändrad trasig period larmat om och om igen.
+        # i nyckeln hade EN oförändrad trasig period mejlat om och om igen.
         # Ändras bristerna är det däremot en NY sak att titta på.
         brister = verdikt.as_report()
-        await larma(
+        await skicka_prioriterat(
             f"Bokföringsperiod kräver granskning ({fran.isoformat()}–{till.isoformat()})",
             tenant_id=tenant_id,
             vad=(

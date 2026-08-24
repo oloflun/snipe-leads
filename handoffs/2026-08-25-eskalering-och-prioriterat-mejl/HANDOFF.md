@@ -1,4 +1,4 @@
-# Bokföringschatten, larmvägen och tre agenter som ger upp senare
+# Bokföringschatten, det prioriterade mejlet och tre agenter som ger upp senare
 
 2026-08-25. Allt nedan ligger på `development`. **Ingenting är deployat** — se
 projektregeln i `CLAUDE.md`: `git push origin development:railway-development`
@@ -40,11 +40,15 @@ mockar bort just den — ett sådant test hade varit grönt genom hela incidente
 
 ## 2. Två saker som kräver din hand
 
-### 2a. App-lösenordet till internlarmet ▸ Anton
+### 2a. App-lösenordet till det prioriterade mejlet ▸ Anton
 
-Larmvägen är byggd och testad men **av** tills två variabler finns på `api` i
+Sändvägen är byggd och testad men **av** tills två variabler finns på `api` i
 Railway. Fullständig beskrivning i [`DEPLOY.md`](../../DEPLOY.md) under
-"Internlarm vid eskalering".
+"Prioriterat mejl vid eskalering".
+
+Det är ett MEJL, inte ett larmsystem: ingen sida övervakas, inget tröskelvärde
+bevakas, ingen jour väcks. Ämnesraden bär `[PRIORITERAT]` så att den går att
+sortera på, och där slutar mekaniken.
 
 ```
 INTERNLARM_SMTP_ANVANDARE=snajpsupport@gmail.com
@@ -56,10 +60,16 @@ inte logga in på SMTP med det. Skapas under Google-kontots
 säkerhetsinställningar → *Appspecifika lösenord*.
 
 Sätt samtidigt `PUBLIC_BASE_URL`, som ändå redan står som en post i
-`docs/JURIDIK_ATGARDER.md`. Utan den bygger larmet ingen länk in i adminvyn.
+`docs/JURIDIK_ATGARDER.md`. Utan den bygger mejlet ingen länk in i adminvyn.
 
-Saknas variablerna är larmvägen tyst och ofarlig. `har_konfiguration()` svarar på
-om steget är gjort, utan att skicka ett provmejl.
+Variabelnamnen bär fortfarande `INTERNLARM_` trots att modulen heter
+`prioriterat_mejl.py`. De behålls med flit: de står i Railway och i DEPLOY.md,
+så att döpa om dem är en driftändring och inte en omdöpning i koden. Säg till om
+du vill ha dem bytta också — det är gjort på två minuter så länge ingen hunnit
+sätta dem.
+
+Saknas variablerna skickas ingenting, tyst. `har_konfiguration()` svarar på om
+steget är gjort, utan att skicka ett provmejl.
 
 ### 2b. Två beslut jag inte tog åt dig
 
@@ -113,7 +123,7 @@ emot ett skrivet meddelande i dag — `run_onboarding_turn`, samtalet med vår k
 under onboarding. Repliken sätts EFTER körningen, samma ordning som i support, så
 att modellen inte kan skriva om ett kontrollerat säkerhetssvar.
 
-**Larmet kopplades till `leads_tools._request_human_handoff_impl`, inte till
+**Mejlet kopplades till `leads_tools._request_human_handoff_impl`, inte till
 `handoff.py`.** Filen bär namnet men funktionen är död. `_request_human_handoff_impl`
 är den som faktiskt körs: både modellens verktyg och fyra kodvägar i
 `run_outreach_draft` går genom den.
@@ -189,5 +199,20 @@ checkout samtidigt.
 ## Testläge
 
 `1243 passed, 4 skipped`. Nya filer:
-`tests/notifications/test_internlarm.py`, `tests/bookkeeping/test_chatt_flertur.py`,
+`tests/notifications/test_prioriterat_mejl.py`, `tests/bookkeeping/test_chatt_flertur.py`,
 `tests/moderation/` (flyttad från `tests/leads/`).
+
+---
+
+## 7. Tillagt efter granskning: det heter inte "larm"
+
+Modulen hette `internlarm.py` och funktionen `larma()`. Det var fel ord — det
+här är ett mejl, inte ett larmsystem, och vokabulären antydde en apparat som
+inte finns. Omdöpt till `app/notifications/prioriterat_mejl.py` och
+`skicka_prioriterat()`.
+
+**Beteendet är oförändrat.** Samma dubblettspärr, samma tidstak, samma
+tystnad vid osatt konfiguration, samma `[PRIORITERAT]` i ämnesraden. Bara namn
+och prosa.
+
+Miljövariablerna behåller sina namn (`INTERNLARM_SMTP_*`) — se 2a.

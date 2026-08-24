@@ -208,9 +208,14 @@ class Settings(BaseSettings):
     # kallmejl med en trasig avregistreringslänk är värre än inget kallmejl.
     publik_bas_url: str = ""
 
-    # Internlarm: SMTP-uppgifterna för snajpsupport@gmail.com. ETT konto för
-    # HELA plattformen — det här är larm till OSS, inte kundutskick, och har
-    # ingenting med per-tenant-avsändare att göra (se app/notifications/).
+    # SMTP-uppgifterna för snajpsupport@gmail.com. ETT konto för HELA
+    # plattformen — det här är prioriterade mejl till OSS, inte kundutskick,
+    # och har ingenting med per-tenant-avsändare att göra (se
+    # app/notifications/prioriterat_mejl.py).
+    #
+    # Variabelnamnen behålls trots att modulen bytt namn: de sitter i Railway
+    # och i DEPLOY.md, och att döpa om dem är en driftändring — inte en
+    # omdöpning i koden.
     #
     # Lösenordet är INTE kontolösenordet. Ett Gmail med tvåstegsverifiering kan
     # inte logga in på SMTP med det; det kräver ett app-specifikt lösenord.
@@ -220,7 +225,7 @@ class Settings(BaseSettings):
     # Ligger HÄR och inte i en `os.getenv` inne i modulen, och det är inte
     # kosmetika: pydantic-settings läser snajp-support/.env utan att exportera
     # något till os.environ, så en direktläsning hade sett värdena i Railway
-    # men aldrig lokalt. Tomt => larmvägen är av, och modulen loggar i stället.
+    # men aldrig lokalt. Tomt => inga mejl skickas, och modulen loggar i stället.
     internlarm_smtp_anvandare: str = ""
     internlarm_smtp_losenord: str = ""
 

@@ -55,7 +55,7 @@ from ..bookkeeping.underlag import normalisera_falt
 from ..bookkeeping.verifieringsgrind import STATUS_GRANSKA, Verdikt, check_underlag, check_verifikat
 from ..config import get_settings
 from ..moderation.abuse_gate import check_abuse, ton_instruktion
-from ..notifications.internlarm import larma
+from ..notifications.prioriterat_mejl import skicka_prioriterat
 from .bookkeeping_chat_tools import BOKFORING_CHATT_TOOLS, BokforingChattContext
 from .llm import get_agent_model, get_llm_client
 from .step_runner import RunTrace, StepResult, run_step, thinking_kwargs
@@ -726,7 +726,7 @@ async def run_bookkeeping_chat_turn(
             svar = polerat
     else:
         svar = FALLT_SVAR
-        # Kunskapsfångsten körs FÖRE larmet, så att larmets "varför" kan bli
+        # Kunskapsfångsten körs FÖRE mejlet, så att mejlets "varför" kan bli
         # bättre än beloppsgrindens brist-lista den dagen vi vill lägga den där.
         # Den kastar aldrig — kunden har redan fått sitt svar.
         kunskap = await _fanga_kunskap(message, svar, context.resultat, trace)
@@ -736,7 +736,7 @@ async def run_bookkeeping_chat_turn(
         #
         # Nyckeln bär meddelandet, inte bara tenanten. Två olika frågor som
         # båda fälls är två saker att titta på; samma fråga ställd igen är en.
-        await larma(
+        await skicka_prioriterat(
             "Bokföringschatten kunde inte svara med hämtade siffror",
             tenant_id=tenant_id,
             vad="Ett svar fälldes av beloppsgrinden (INV-BOOK-003), även efter omförsök.",
