@@ -114,10 +114,22 @@ export function BokforingChatt() {
 
       const data = await svar.json().catch(() => null);
       if (!svar.ok) {
+        // `error` FÖRE `detail`, och båda före den generiska texten.
+        //
+        // Proxyn svarar {"error": "..."} — bland annat med den begripliga
+        // texten om att AI-leverantörens kvot är slut (se 505fa4c: "kvoten är
+        // inte en krasch och ska inte se ut som en"). Backendens egna 422:or
+        // svarar {"detail": "..."}.
+        //
+        // Utan `error` visade chatten "Assistenten svarade inte (429)" medan
+        // servern precis förklarat exakt vad som hänt och vad kunden kan göra.
+        // Uppmätt live 2026-08-24, med kvoten faktiskt slut.
         setFel(
-          typeof data?.detail === "string"
-            ? data.detail
-            : `Assistenten svarade inte (${svar.status}).`
+          typeof data?.error === "string"
+            ? data.error
+            : typeof data?.detail === "string"
+              ? data.detail
+              : `Assistenten svarade inte (${svar.status}).`
         );
         return;
       }
