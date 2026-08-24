@@ -19,6 +19,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.config import get_settings
 from app.notifications import internlarm
 from app.notifications.internlarm import (
     MOTTAGARE,
@@ -46,8 +47,18 @@ def _rent_dubblettminne():
 
 @pytest.fixture
 def konfigurerad(monkeypatch):
+    """Sätter larmvägens uppgifter OCH tömmer settings-cachen.
+
+    `Settings` är lru_cachead, och modulen läser uppgifterna därifrån och inte
+    med `os.getenv` (se `_konfiguration`). Utan cache_clear hade en tidigare
+    `get_settings()` i samma process gjort setenv verkningslös — testet hade
+    då blivit grönt eller rött beroende på anropsordningen.
+    """
     monkeypatch.setenv("INTERNLARM_SMTP_ANVANDARE", "snajpsupport@gmail.com")
     monkeypatch.setenv("INTERNLARM_SMTP_LOSENORD", "app-losenord-16-tecken")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 @pytest.fixture
@@ -181,6 +192,7 @@ async def test_ett_fel_redan_vid_anslutningen_kastar_aldrig(konfigurerad):
 async def test_osatt_konfiguration_ar_tyst_och_ofarlig(monkeypatch):
     monkeypatch.setenv("INTERNLARM_SMTP_ANVANDARE", "")
     monkeypatch.setenv("INTERNLARM_SMTP_LOSENORD", "")
+    get_settings.cache_clear()
 
     assert har_konfiguration() is False
     with patch("smtplib.SMTP") as fabrik:
@@ -195,6 +207,7 @@ async def test_halvsatt_konfiguration_skickar_inte(monkeypatch):
     misslyckad autentisering mot Google."""
     monkeypatch.setenv("INTERNLARM_SMTP_ANVANDARE", "snajpsupport@gmail.com")
     monkeypatch.setenv("INTERNLARM_SMTP_LOSENORD", "")
+    get_settings.cache_clear()
 
     assert har_konfiguration() is False
     assert await larma("R", tenant_id="t-1", vad="v", varfor="v", nyckel="k") is False

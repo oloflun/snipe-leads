@@ -69,6 +69,11 @@ CATEGORY_LABELS = {
 # klassattribut som ett fält och vägrar bygga modellen.
 MILJOER_MED_KUNDDATA = ("main", "production", "prod", "development", "dev")
 
+# De providernamn koden faktiskt kan hantera. Varje post här MÅSTE ha en
+# nyckel i `active_llm_key` och en bas-URL i `agent/llm._resolve_base_url` —
+# annars är den inte stödd, den ser bara stödd ut.
+KANDA_PROVIDERS = ("openai", "deepseek", "gemini")
+
 # Regler per fack: auto = skicka direkt, draft = kräver godkännande, escalate = alltid människa.
 DEFAULT_CATEGORY_RULES = {category: "draft" for category in CATEGORIES}
 
@@ -174,6 +179,22 @@ class Settings(BaseSettings):
     # kallmejl med en trasig avregistreringslänk är värre än inget kallmejl.
     publik_bas_url: str = ""
 
+    # Internlarm: SMTP-uppgifterna för snajpsupport@gmail.com. ETT konto för
+    # HELA plattformen — det här är larm till OSS, inte kundutskick, och har
+    # ingenting med per-tenant-avsändare att göra (se app/notifications/).
+    #
+    # Lösenordet är INTE kontolösenordet. Ett Gmail med tvåstegsverifiering kan
+    # inte logga in på SMTP med det; det kräver ett app-specifikt lösenord.
+    # Sätts i Railway av en människa, samma sorts post som OPENAI_API_KEY i
+    # docs/JURIDIK_ATGARDER.md.
+    #
+    # Ligger HÄR och inte i en `os.getenv` inne i modulen, och det är inte
+    # kosmetika: pydantic-settings läser snajp-support/.env utan att exportera
+    # något till os.environ, så en direktläsning hade sett värdena i Railway
+    # men aldrig lokalt. Tomt => larmvägen är av, och modulen loggar i stället.
+    internlarm_smtp_anvandare: str = ""
+    internlarm_smtp_losenord: str = ""
+
     # CORS: kommaseparerade origins som får anropa API:t direkt från en
     # webbläsare. Tom = av, vilket räcker för vår egen frontend — Next-proxyn
     # anropar backenden server-side, så webbläsaren träffar aldrig den här
@@ -199,16 +220,47 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _default_model_for_provider(self) -> "Settings":
-        # Undvik footgun: gpt-default mot DeepSeek => byt till deepseek-v4-flash
-        # (1M kontext, 384K output, $0.14/$0.28 per 1M token — se plan-dokumentet).
-        if self.llm_provider == "deepseek" and self.model.startswith("gpt-"):
-            self.model = "deepseek-v4-flash"
+        """Undvik footgun: ett gpt-modellnamn mot en icke-OpenAI-endpoint.
+
+        DeepSeek och Gemini svarar båda 404 på "gpt-4o-mini" — ett fel som
+        syns först vid första riktiga anropet, alltså hos en kund. `MODEL`
+        får fortfarande sätta något annat; det här gäller bara när defaulten
+        lämnats orörd.
+        """
+        if self.model.startswith("gpt-"):
+            # 1M kontext, 384K output, $0.14/$0.28 per 1M token — se plan-dokumentet.
+            if self.llm_provider == "deepseek":
+                self.model = "deepseek-v4-flash"
+            # Samma modellnamn som vision-sidovagnen redan använder mot samma
+            # endpoint (se vision_model ovan) — alltså ett namn som är prövat
+            # i den här kodbasen, inte ett gissat.
+            elif self.llm_provider == "gemini":
+                self.model = self.vision_model
         return self
 
     def active_llm_key(self) -> str:
-        if self.llm_provider == "deepseek":
-            return self.deepseek_api_key
-        return self.openai_api_key
+        """Nyckeln som hör till den valda providern.
+
+        VARFÖR EN KARTA OCH INTE EN IF-KEDJA MED FALLBACK: den tidigare
+        versionen slutade med `return self.openai_api_key`, alltså returnerade
+        den OpenAI-nyckeln för VARJE värde som inte var "deepseek". Ett
+        felstavat eller okänt providernamn gav då en tom nyckel, och en tom
+        nyckel är simuleringsläge — tjänsten startade, rapporterade sig frisk
+        och slutade tyst använda AI.
+
+        Det hände skarpt 2026-08-24: LLM_PROVIDER sattes till "gemini", ett
+        värde koden inte kände till, och development svarade
+        `mode: simulation` med regelmotorn i stället för agenten. Ingen
+        deploy föll, ingenting larmade.
+
+        Nu är okända värden ett FEL (se llm_provider_fault), och den här
+        funktionen svarar tomt bara för en provider som saknar sin nyckel.
+        """
+        return {
+            "openai": self.openai_api_key,
+            "deepseek": self.deepseek_api_key,
+            "gemini": self.gemini_api_key,
+        }.get(self.llm_provider, "")
 
     def aktiv_miljo(self) -> str:
         """Miljönamnet, normaliserat. Tom sträng = okänd."""
@@ -252,6 +304,16 @@ class Settings(BaseSettings):
         kodbeslut: SCC, TIA, PUB-villkor och information till kunden. Ändra
         inte den här funktionen för att komma runt det.
         """
+        if self.llm_provider not in KANDA_PROVIDERS:
+            return (
+                f"LLM_PROVIDER={self.llm_provider!r} är inte ett providernamn "
+                f"koden känner till. Välj ett av: {', '.join(KANDA_PROVIDERS)}. "
+                f"Utan den här kontrollen hade tjänsten startat med en tom "
+                f"nyckel och tyst gått ner i simuleringsläge — den hade svarat "
+                f"kunder med regelmotorn i stället för med agenten, och "
+                f"ingenting hade larmat."
+            )
+
         if self.llm_provider == "deepseek" and self.har_riktig_kunddata():
             return (
                 f"LLM_PROVIDER=deepseek är inte tillåtet i miljön "

@@ -54,11 +54,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import smtplib
 import time
 from dataclasses import dataclass
 from email.message import EmailMessage
+
+from ..config import get_settings
 
 logger = logging.getLogger("snajp-support.internlarm")
 
@@ -127,8 +128,20 @@ class Larm:
 
 
 def _konfiguration() -> tuple[str, str] | None:
-    anvandare = (os.getenv("INTERNLARM_SMTP_ANVANDARE") or "").strip()
-    losenord = (os.getenv("INTERNLARM_SMTP_LOSENORD") or "").strip()
+    """Användarnamn och lösenord, eller None om larmvägen inte är uppsatt.
+
+    Läses via `Settings` och inte med `os.getenv`. Skillnaden är inte
+    kosmetisk: pydantic-settings läser `snajp-support/.env` utan att exportera
+    något till `os.environ`, så en direktläsning hade sett värdena i Railway
+    men aldrig lokalt — och den sortens skillnad upptäcks först när någon
+    undrar varför larmet är tyst på den ena maskinen.
+
+    Halvsatt räknas som osatt. En användare utan lösenord är inte halvt
+    konfigurerad, den är ett inloggningsförsök som Google avvisar.
+    """
+    settings = get_settings()
+    anvandare = (settings.internlarm_smtp_anvandare or "").strip()
+    losenord = (settings.internlarm_smtp_losenord or "").strip()
     if not anvandare or not losenord:
         return None
     return anvandare, losenord
