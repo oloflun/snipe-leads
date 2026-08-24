@@ -45,7 +45,11 @@ const sectionProduct: Record<string, ProductKey> = {
   inbox: "leads",
   analytics: "leads",
   assistant: "leads",
-  support: "support"
+  support: "support",
+  // Bokföringen grindas på entitlement sedan den blev en riktig produkt.
+  // Låg tidigare i en egen gren ovanför, kontrollerad mot isPlatformAdmin —
+  // se lib/routes.ts, AppRoute.adminOnly, för vad den grenen fanns till.
+  bokforing: "bookkeeping"
 };
 
 export async function WorkspaceSection({ slug = [] }: Readonly<{ slug?: string[] }>) {
@@ -53,24 +57,6 @@ export async function WorkspaceSection({ slug = [] }: Readonly<{ slug?: string[]
 
   if (!section) {
     return <StartView />;
-  }
-
-  // Bokföringen grindas på PLATTFORMSADMIN, inte på entitlement.
-  //
-  // Den är inte såld ännu — inget pris, ingen marknadssida, ingen kund som
-  // köpt den. Se AppRoute.adminOnly i lib/routes.ts för varför den därför
-  // inte har någon ProductKey, och vad som ändras den dagen den får en.
-  //
-  // Grinden sitter HÄR och inte bara i navfiltret, av exakt samma skäl som
-  // står om entitlement nedan: att en menypost inte renderas hindrar ingen
-  // från att skriva adressen. `notFound()` och inte 403 — ett 403 bekräftar
-  // att ytan finns, samma val som app/admin/layout.tsx gör.
-  if (section === "bokforing") {
-    const { isPlatformAdmin } = await resolveDashboardState();
-    if (!isPlatformAdmin) {
-      notFound();
-    }
-    return <BookkeepingView />;
   }
 
   const product = sectionProduct[section];
@@ -86,6 +72,8 @@ export async function WorkspaceSection({ slug = [] }: Readonly<{ slug?: string[]
   }
 
   switch (section) {
+    case "bokforing":
+      return <BookkeepingView />;
     case "leads":
       // /dashboard/leads/kontroll. Egen sektion i sectionProduct hade betytt
       // /dashboard/kontroll, vilket inte är där kontrollerna hör hemma —

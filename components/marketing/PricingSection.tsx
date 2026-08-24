@@ -9,6 +9,7 @@ import {
   PAKET,
   PRISER_AR_PRELIMINARA,
   PRIS_PREFIX,
+  PRIS_SAKNAS,
   UPPSTARTSAVGIFT,
   duoBesparingPerManad,
   formateraPris
@@ -111,13 +112,24 @@ export function PricingSection() {
               {/* "från" före beloppet: paketpriserna är ingångspriser och
                   sätts efter volym. Ordet kommer ur pricing.ts, så prislistans
                   tre kort och raden under dem säger samma sak. */}
-              <p className="mt-6 flex items-baseline gap-1.5">
-                <span className="text-[0.9375rem] text-mineral">{text(PRIS_PREFIX)}</span>
-                <span className="font-display text-[2.5rem] font-semibold leading-none tracking-[-0.03em]">
-                  {formateraPris(paket.prisPerManad)}
-                </span>
-                <span className="text-[0.9375rem] text-mineral">{text(copy.perManad)}</span>
-              </p>
+              {/* Ett paket utan pris säger det, i stället för att visa "0 kr".
+                  Se `prisPerManad: number | null` i lib/pricing.ts — noll är
+                  ett pris, och det står då bredvid tre riktiga. */}
+              {paket.prisPerManad === null ? (
+                <p className="mt-6">
+                  <span className="font-display text-[2rem] font-semibold leading-none tracking-[-0.03em]">
+                    {text(PRIS_SAKNAS)}
+                  </span>
+                </p>
+              ) : (
+                <p className="mt-6 flex items-baseline gap-1.5">
+                  <span className="text-[0.9375rem] text-mineral">{text(PRIS_PREFIX)}</span>
+                  <span className="font-display text-[2.5rem] font-semibold leading-none tracking-[-0.03em]">
+                    {formateraPris(paket.prisPerManad)}
+                  </span>
+                  <span className="text-[0.9375rem] text-mineral">{text(copy.perManad)}</span>
+                </p>
+              )}
 
               {paket.notisMall ? (
                 <p className="mt-2 text-[0.875rem] font-medium text-moss">

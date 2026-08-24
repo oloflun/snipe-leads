@@ -139,7 +139,10 @@ export function fragaRadgivaren(fraga: string, rader: Rad[]): Svar {
     const snitt = p.antalBetalande > 0 ? p.mrr / p.antalBetalande : 0;
     const paketrader = PAKET.map((paket) => {
       const antal = rader.filter((r) => r.ekonomi.paketNamn === paket.namn).length;
-      return `${paket.namn}: ${antal} st à ${formateraPris(paket.prisPerManad)}`;
+      // Ett paket utan satt pris räknas inte in i en intäktsfördelning.
+      // Att visa "0 kr" hade dragit ner snittet med ett tal som inte finns.
+      const pris = paket.prisPerManad === null ? "pris ej satt" : formateraPris(paket.prisPerManad);
+      return `${paket.namn}: ${antal} st à ${pris}`;
     }).join("\n");
     return {
       text:

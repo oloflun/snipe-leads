@@ -24,9 +24,21 @@ import type { Localized } from "@/lib/i18n";
 export const PRISER_AR_PRELIMINARA = false;
 
 export type Paket = {
-  id: "support" | "leads" | "duo";
+  id: "support" | "leads" | "duo" | "bookkeeping";
   namn: string;
-  prisPerManad: number;
+  /**
+   * `null` betyder att priset inte är satt ännu, och det är ETT tillstånd, inte
+   * ett saknat värde.
+   *
+   * Alternativet vore `0`, och det vore en osanning: `formateraPris(0)` ger
+   * "0 kr", vilket är ett pris — och det står då på prislistan bredvid tre
+   * riktiga. Ett paket utan pris ska säga att det saknas och hänvisa vidare,
+   * inte påstå att det är gratis.
+   *
+   * Varje läsare tvingas av typen att ta ställning. Se PricingSection och
+   * PlanSettings, som båda renderar en egen text för det här fallet.
+   */
+  prisPerManad: number | null;
   beskrivning: Localized;
   ingar: Localized[];
   /** Duo markeras. Det är paketet vi vill sälja. */
@@ -95,6 +107,31 @@ export const PAKET: Paket[] = [
       sv: "Sparar {belopp}/mån jämfört med att köpa dem var för sig.",
       en: "Saves {belopp}/month compared to buying them separately."
     }
+  },
+  {
+    /**
+     * Bokföringen. Priset är INTE satt, och det är därför `prisPerManad` är
+     * null i stället för en platshållarsiffra.
+     *
+     * Fristående paket, inte en del av Duo. Duo är "båda agenterna i samma
+     * dashboard, med delad kunddata", och bokföringen delar ingen kunddata med
+     * någon av dem — den läser kvitton, inte prospekt eller ärenden. Att lägga
+     * den i Duo hade dessutom höjt priset på ett paket kunder redan köpt.
+     */
+    id: "bookkeeping",
+    namn: "Snajp Bokföring",
+    prisPerManad: null,
+    beskrivning: {
+      sv: "Bokföringsagenten som läser kvitton och föreslår kontering.",
+      en: "The bookkeeping agent that reads receipts and proposes entries."
+    },
+    ingar: [
+      { sv: "Avläsning av kvitton och fakturor", en: "Reading of receipts and invoices" },
+      { sv: "Konteringsförslag ur BAS-kontoplanen", en: "Proposed entries from the Swedish BAS chart" },
+      { sv: "Periodrapport med momssummor", en: "Period report with VAT totals" },
+      { sv: "SIE4-export till ert bokföringsprogram", en: "SIE4 export to your accounting software" },
+      { sv: "Bokföringsassistent i chatt", en: "Bookkeeping assistant in chat" }
+    ]
   }
 ];
 
@@ -112,6 +149,14 @@ export const EXTRA_MEJL_PRIS = 3;
  */
 export const PRIS_PREFIX: Localized = { sv: "från", en: "from" };
 
+/**
+ * Vad som står där priset skulle stått när `prisPerManad` är null.
+ *
+ * Här och inte i komponenterna, av samma skäl som beloppen: fyra läsare som
+ * var för sig hittar på en formulering blir fyra olika löften om samma paket.
+ */
+export const PRIS_SAKNAS: Localized = { sv: "Pris på förfrågan", en: "Price on request" };
+
 /** Bindningstid i månader. */
 export const BINDNINGSTID_MANADER = 3;
 
@@ -122,11 +167,14 @@ export const BINDNINGSTID_MANADER = 3;
  */
 export function duoBesparingPerManad(): number {
   const separat = PAKET.filter((p) => p.id === "support" || p.id === "leads").reduce(
-    (summa, paket) => summa + paket.prisPerManad,
+    (summa, paket) => summa + (paket.prisPerManad ?? 0),
     0
   );
   const duo = PAKET.find((p) => p.id === "duo");
-  return duo ? separat - duo.prisPerManad : 0;
+  // Saknar duo pris finns ingen besparing att räkna, och 0 är rätt svar —
+  // renderingen döljer raden på noll. Bokföringen deltar inte: den ingår inte
+  // i Duo, så dess pris hör inte hemma i den här jämförelsen.
+  return duo && duo.prisPerManad !== null ? separat - duo.prisPerManad : 0;
 }
 
 /** "2 990 kr". Ett ställe, så att tusenavgränsaren är densamma överallt. */

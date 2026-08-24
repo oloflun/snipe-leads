@@ -268,4 +268,95 @@ export const supportCopy: ProductCopy = {
   ]
 };
 
-export const productCopy = { leads: leadsCopy, support: supportCopy } as const;
+/**
+ * Bokföringen. Tredje produkten, och den som lovar MINST med flit.
+ *
+ * De två andra beskriver vad agenten gör åt kunden. Den här beskriver lika
+ * tydligt vad den INTE gör: den bokför inte, den lämnar ingenting till
+ * Skatteverket och den ersätter ingen redovisningskonsult. Samma förbehåll
+ * som `FORBEHALL` i api/bookkeeping.py, formulerat för en besökare i stället
+ * för för ett JSON-svar.
+ *
+ * Det är inte försiktighet för sakens skull. En produkt som antyder att den
+ * sköter bokföringen tar på sig ett ansvar den varken har eller kan bära, och
+ * kunden upptäcker skillnaden vid en revision.
+ */
+export const bokforingCopy: ProductCopy = {
+  word: { sv: "Bokföring", en: "Bookkeeping" },
+  headline: {
+    sv: "Kvittohögen blir ett *underlag*.",
+    en: "The pile of receipts becomes a *record*."
+  },
+  lede: {
+    sv: "Fotografera kvittot. Agenten läser av datum, belopp och moms, föreslår kontering och räknar perioden. Du godkänner innan något förs in i er bokföring.",
+    en: "Photograph the receipt. The agent reads off date, amount and VAT, proposes the entries and totals the period. You approve before anything enters your books."
+  },
+  cta: { sv: "Se hur det fungerar", en: "See how it works" },
+  demoHeading: {
+    sv: "Ett kvitto, *avläst* och konterat.",
+    en: "One receipt, *read* and posted."
+  },
+  demoLede: {
+    sv: "Exemplet nedan visar hela vägen: avläsningen, verifikatet och periodsumman.",
+    en: "The example below shows the whole path: the reading, the entry and the period total."
+  },
+  exampleNote: {
+    sv: "Exempel. Påhittat underlag, inte en riktig körning hos en kund.",
+    en: "Example. A made-up document, not a real run for a customer."
+  },
+  stepsHeading: {
+    sv: "Tre steg, och koden räknar *varenda* siffra.",
+    en: "Three steps, and the code does *every* calculation."
+  },
+  steps: [
+    {
+      title: { sv: "Läser av underlaget", en: "Reads the document" },
+      body: {
+        sv: "Datum, motpart, totalbelopp och momssats. Står ett fält inte på kvittot gissas det inte, utan går till granskning.",
+        en: "Date, counterparty, total and VAT rate. If a field is not on the receipt it is not guessed, it goes to review."
+      }
+    },
+    {
+      title: { sv: "Föreslår konteringen", en: "Proposes the entries" },
+      body: {
+        sv: "Modellen väljer kategori, koden väljer konto ur BAS och bygger raderna. Verifikatet balanserar därför av konstruktion.",
+        en: "The model picks a category, the code picks the account from the Swedish BAS chart and builds the rows. The entry balances by construction."
+      }
+    },
+    {
+      title: { sv: "Du godkänner", en: "You approve" },
+      body: {
+        sv: "Perioden summeras först när den går ihop. Går den inte ihop får du bristerna i stället för trovärdiga siffror.",
+        en: "The period is totalled only when it balances. If it does not, you get the gaps instead of plausible numbers."
+      }
+    }
+  ],
+  limitsHeading: {
+    sv: "Vad den inte gör",
+    en: "What it does not do"
+  },
+  limits: [
+    {
+      sv: "Bokför ingenting. Den föreslår, du godkänner och för in.",
+      en: "Books nothing. It proposes, you approve and enter."
+    },
+    {
+      sv: "Lämnar ingenting till Skatteverket eller Bolagsverket.",
+      en: "Files nothing with the Swedish Tax Agency or Companies Registration Office."
+    },
+    {
+      sv: "Ersätter ingen auktoriserad redovisningskonsult.",
+      en: "Replaces no authorised accounting consultant."
+    },
+    {
+      sv: "Räknar aldrig ett belopp i modellen. Momsen räknas i kod.",
+      en: "Never has the model calculate an amount. VAT is calculated in code."
+    }
+  ]
+};
+
+export const productCopy = {
+  leads: leadsCopy,
+  support: supportCopy,
+  bookkeeping: bokforingCopy
+} as const;

@@ -4,7 +4,7 @@ import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { Betalsatt } from "@/components/settings/Betalsatt";
 import { Planvaljare } from "@/components/settings/Planvaljare";
 import { KONTAKT_MEJL, mejlaOss } from "@/components/marketing/copy";
-import { PAKET, PRIS_PREFIX, formateraPris } from "@/lib/pricing";
+import { PAKET, PRIS_PREFIX, PRIS_SAKNAS, formateraPris } from "@/lib/pricing";
 import { useLocale } from "@/lib/i18n";
 
 /**
@@ -30,9 +30,21 @@ import { useLocale } from "@/lib/i18n";
  * kunden, och de gör det på fakturan.
  */
 
+/**
+ * Produktuppsättning → paketnamn.
+ *
+ * Kartan är AVSIKTLIGT gles. Med tre produkter finns sju kombinationer, och
+ * bara fyra av dem är paket vi säljer. Resten faller igenom till "er plan är
+ * satt manuellt", vilket är sant: en arbetsyta med leads och bokföring men
+ * inte support har fått den uppsättningen av en människa, inte av prislistan.
+ *
+ * Att hitta på ett paketnamn för varje kombination hade betytt fyra namn som
+ * ingen prislista känner igen, och ett pris kunden inte kan slå upp.
+ */
 const PAKET_FOR_PRODUKTER: Record<string, string> = {
   "leads": "leads",
   "support": "support",
+  "bookkeeping": "bookkeeping",
   "leads+support": "duo"
 };
 
@@ -64,7 +76,9 @@ export function PlanSettings() {
                 <p className="flex items-baseline gap-2">
                   <span className="text-[1.0625rem] font-semibold">{paket.namn}</span>
                   <span className="text-[0.9375rem] text-mineral">
-                    {text(PRIS_PREFIX)} {formateraPris(paket.prisPerManad)}/mån
+                    {paket.prisPerManad === null
+                      ? text(PRIS_SAKNAS)
+                      : `${text(PRIS_PREFIX)} ${formateraPris(paket.prisPerManad)}/mån`}
                   </span>
                 </p>
                 <p className="mt-2 max-w-[58ch] text-[0.9375rem] leading-6 text-ink/65">

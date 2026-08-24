@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getPlatformAdmin } from "@/lib/auth/admin";
+import { resolveDashboardState } from "@/lib/data/dashboard";
 import { requireSnajpTenant, SnajpTenantError } from "@/lib/snajp/tenant";
 import { SNAJP_SUPPORT_URL } from "../../_lib";
 
 /**
  * Bokföringens egen proxy. Två skäl till att den inte går via catch-allen.
  *
- * 1. **Den är admin-grindad.** Bokföringsagenten är inte såld: ingen kund har
- *    produkten, och ytan ska inte vara nåbar för någon annan än
- *    plattformsadmin. `notFound()`-motsvarigheten här är 404 och inte 403,
- *    samma val som app/admin/layout.tsx — ett 403 bekräftar att ytan finns.
+ * 1. **Den är entitlement-grindad.** Bokföringen är en produkt som en
+ *    arbetsyta antingen har köpt eller inte, och grinden är `products` precis
+ *    som för leads och support. Ytan var admin-grindad fram till att den blev
+ *    säljbar; kontrollen byttes samtidigt som routen fick sin ProductKey, och
+ *    de två måste bytas TILLSAMMANS — en meny som visar fliken mot en proxy
+ *    som svarar 404 är en produkt som ser trasig ut för den som köpt den.
+ *    Svaret är 404 och inte 403, samma val som app/admin/layout.tsx: ett 403
+ *    bekräftar att ytan finns.
  *
  * 2. **Trafiken är BINÄR i båda riktningarna.** Catch-allen läser kroppen med
  *    `request.text()` och `proxyWithApiKey` läser svaret med `response.text()`
@@ -36,9 +40,10 @@ function backendPath(path: string[], search: string): string {
 
 async function vidarebefordra(request: NextRequest, path: string[], metod: "GET" | "POST") {
   // Grinden FÖRST, före allt annat. En tenant-uppslagning innan
-  // adminkontrollen hade lämnat en tidsskillnad som avslöjar om kontot finns.
-  const admin = await getPlatformAdmin();
-  if (!admin) {
+  // entitlement-kontrollen hade lämnat en tidsskillnad som avslöjar om kontot
+  // finns, och gjort ett databasanrop åt någon som inte får vara här.
+  const { products } = await resolveDashboardState();
+  if (!products.includes("bookkeeping")) {
     return NextResponse.json({ error: "Hittades inte." }, { status: 404 });
   }
 

@@ -83,7 +83,36 @@ const support: ProduktCopy = {
   }
 };
 
-const perProdukt: Record<ProductKey, ProduktCopy> = { leads, support };
+const bokforing: ProduktCopy = {
+  rubrik: {
+    sv: "Kvitton in, ordnat underlag ut – du godkänner varje rad.",
+    en: "Receipts in, an organised record out, and you approve every line."
+  },
+  lede: {
+    sv: "Bokföringsagenten läser av kvitton och fakturor, föreslår kontering ur BAS-kontoplanen och summerar perioden. Den bokför ingenting själv.",
+    en: "The bookkeeping agent reads receipts and invoices, proposes entries from the Swedish BAS chart and totals the period. It does no bookkeeping itself."
+  },
+  punkter: {
+    sv: [
+      ["Avläsning utan gissningar", "Står ett fält inte på underlaget hittas det inte på. Underlaget går till granskning i stället, vilket är rätt utgång."],
+      ["Koden räknar, inte modellen", "Moms och summor räknas i kod med exakta decimaltal. En språkmodell som räknar själv är en språkmodell som ibland räknar fel."],
+      ["Perioden går ihop, eller visas inte", "Balanserar inte verifikaten får du bristerna i stället för trovärdiga siffror."],
+      ["Du för in det, inte vi", "Förslag, inte bokföring. Ingenting lämnas till Skatteverket, och ingen konsult ersätts."]
+    ],
+    en: [
+      ["Reading without guessing", "If a field is not on the document it is not invented. The document goes to review instead, which is the right outcome."],
+      ["The code calculates, not the model", "VAT and totals are computed in code with exact decimals. A language model that does its own arithmetic is one that sometimes gets it wrong."],
+      ["The period balances, or it is not shown", "If the entries do not balance you get the gaps instead of plausible numbers."],
+      ["You enter it, not us", "Proposals, not bookkeeping. Nothing is filed with the tax agency, and no accountant is replaced."]
+    ]
+  }
+};
+
+const perProdukt: Record<ProductKey, ProduktCopy> = {
+  leads,
+  support,
+  bookkeeping: bokforing
+};
 
 export function UspSection({ product }: Readonly<{ product: ProductKey }>) {
   const { locale, text } = useLocale();

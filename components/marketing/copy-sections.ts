@@ -175,7 +175,103 @@ const support: SectionCopy = {
   ]
 };
 
-export const sectionCopy: Record<ProductKey, SectionCopy> = { leads, support };
+/**
+ * Bokföringen. Invändningarna är hårdare ställda än för de två andra, och det
+ * är avsiktligt: en läsare som funderar på att låta en maskin röra sin
+ * bokföring har rätt att få de obekväma frågorna besvarade på sidan, inte
+ * efter köpet.
+ */
+const bokforing: SectionCopy = {
+  statementLabel: { sv: "Så tänker vi", en: "How we see it" },
+  statement: {
+    sv: "Bokföring är inte svårt. Det är segt, och det är därför det blir liggande.",
+    en: "Bookkeeping is not hard. It is slow, and that is why it piles up."
+  },
+  problemLabel: TOM,
+  problemHeading: {
+    sv: "Kvittona ligger kvar tills det är *för sent*.",
+    en: "Receipts sit there until it is *too late*."
+  },
+  problemBody: {
+    sv: "Kvitton i plånboken, fakturor i mejlen, ett kontoutdrag som ska stämma. Ingen enskild sak tar lång tid. Att göra dem alla, i tid, varje månad, är det som inte blir gjort.",
+    en: "Receipts in your wallet, invoices in your inbox, a bank statement that has to add up. No single task takes long. Doing all of them, on time, every month, is what does not get done."
+  },
+  problemPoints: [
+    {
+      sv: "Ett kvitto i taget tar två minuter. Gånger hundra kvitton per kvartal.",
+      en: "One receipt takes two minutes. Times a hundred receipts a quarter."
+    },
+    {
+      sv: "Ett tappat kvitto blir en kostnad du inte får dra av.",
+      en: "A lost receipt becomes a cost you cannot deduct."
+    },
+    {
+      sv: "Momsen ska stämma på öret, och det gör den sällan i huvudräkning.",
+      en: "The VAT has to be right to the öre, and mental arithmetic rarely is."
+    }
+  ],
+  placeLabel: TOM,
+  placeHeading: {
+    sv: "Byggt mot BAS-kontoplanen, med *dubbel bokföring* i koden.",
+    en: "Built on the Swedish BAS chart, with *double entry* in the code."
+  },
+  placeBody: {
+    sv: "Vi sitter i Göteborg och Umeå. Konteringen följer BAS, och verifikaten balanserar av konstruktion.",
+    en: "We work from Gothenburg and Umeå. The entries follow BAS, and every voucher balances by construction."
+  },
+  objectionsHeading: {
+    sv: "Det ni undrar",
+    en: "What you are wondering"
+  },
+  objections: [
+    {
+      q: {
+        sv: "Bokför den åt mig?",
+        en: "Does it do my bookkeeping for me?"
+      },
+      a: {
+        sv: "Nej. Den föreslår kontering och räknar perioden. Du godkänner och för in det i ert bokföringssystem, eller exporterar en SIE-fil dit.",
+        en: "No. It proposes entries and totals the period. You approve and enter it in your accounting system, or export a SIE file to it."
+      }
+    },
+    {
+      q: {
+        sv: "Kan jag lita på siffrorna?",
+        en: "Can I trust the numbers?"
+      },
+      a: {
+        sv: "Modellen räknar aldrig. Den läser av vad som står på kvittot, och all aritmetik görs i kod med exakta decimaltal. Går perioden inte ihop visas bristerna i stället för summorna.",
+        en: "The model never calculates. It reads what the receipt says, and all arithmetic runs in code with exact decimals. If the period does not balance you get the gaps instead of the totals."
+      }
+    },
+    {
+      q: {
+        sv: "Ersätter den min redovisningskonsult?",
+        en: "Does it replace my accountant?"
+      },
+      a: {
+        sv: "Nej, och den ska inte göra det. Den gör förarbetet så att konsulten får ett ordnat underlag i stället för en påse kvitton.",
+        en: "No, and it should not. It does the preparation so your accountant gets an organised set of records instead of a bag of receipts."
+      }
+    },
+    {
+      q: {
+        sv: "Vad händer med mina kvitton?",
+        en: "What happens to my receipts?"
+      },
+      a: {
+        sv: "Filen läses i minnet och kastas. Det som sparas är fälten som lästes av, plus en kontrollsumma av filen.",
+        en: "The file is read in memory and discarded. What is stored are the fields that were read, plus a checksum of the file."
+      }
+    }
+  ]
+};
+
+export const sectionCopy: Record<ProductKey, SectionCopy> = {
+  leads,
+  support,
+  bookkeeping: bokforing
+};
 
 export const imagery = {
   /**

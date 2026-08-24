@@ -25,9 +25,9 @@ export type Scope = ProductKey | "both";
  */
 export const SCOPE_COOKIE = "snajp.scope";
 
-export type ProductKey = "leads" | "support";
+export type ProductKey = "leads" | "support" | "bookkeeping";
 
-export const productKeys = ["leads", "support"] as const;
+export const productKeys = ["leads", "support", "bookkeeping"] as const;
 
 export function isProductKey(value: string): value is ProductKey {
   return (productKeys as readonly string[]).includes(value);
@@ -43,19 +43,22 @@ export type AppRoute = {
   /**
    * Bara för plattformsadmin. Skilt från `product` med flit.
    *
-   * Bokföringen är inte såld ännu: den har inget pris, ingen marknadssida och
-   * ingen kund som köpt den. Att ge den en `ProductKey` nu hade tvingat fram
-   * poster i TRE uttömmande kartor — `copy-sections.ts`, `LandingPhoto.tsx`
-   * och `UspSection.tsx`, alla `Record<ProductKey, …>` — alltså
-   * marknadsföringstext och en publik URL för något som ska vara dolt.
-   * Dessutom en migration mot CHECK-villkoret på `workspaces.products`
-   * (005_workspace_products.sql) för ett värde ingen arbetsyta ska ha.
+   * INGEN ROUTE ANVÄNDER DEN I DAG, och det är värt att veta innan du läser
+   * vidare. Bokföringen var dess enda användare fram till att den blev en
+   * riktig produkt med `product: "bookkeeping"` — precis den ändring den här
+   * kommentaren en gång förutsade skulle bli liten och kompilatorledd. Den
+   * blev det: fyra `Record<ProductKey, …>` föll ut som typfel och pekade
+   * själva ut vad som saknades.
    *
-   * Den dagen den säljs byts det här mot en ProductKey, och ändringen är
-   * liten och kompilatorledd: navfiltret nedan och `WorkspaceSection`.
+   * Mekanismen står kvar, tom, av två skäl. Den är fail-closed (se
+   * `routesForProducts` nedan: default `false`, alltså visar en anropare som
+   * glömmer flaggan FÄRRE poster), och nästa yta som ska vara admin-endast
+   * ska inte behöva uppfinna grinden igen. Testerna i
+   * tests/test_bokforing_atkomst.py vaktar fortfarande MEKANISMEN — de
+   * slutade vakta bokföringen.
    *
    * Flaggan döljer bara MENYPOSTEN. Grinden som räknar sitter i
-   * `WorkspaceSection`, på servern — se `products`-kontrollen där.
+   * `WorkspaceSection`, på servern.
    */
   adminOnly?: boolean;
 };
@@ -94,9 +97,10 @@ export const appRoutes: AppRoute[] = [
   { href: "/dashboard/inbox", labelKey: "nav.inbox", product: "leads", preview: true },
   { href: "/dashboard/analytics", labelKey: "nav.analytics", product: "leads", preview: true },
   { href: "/dashboard/assistant", labelKey: "nav.assistant", product: "leads", preview: true },
-  // Bokföringsagenten. `shared` + `adminOnly` och inte en ProductKey — se
-  // AppRoute.adminOnly för varför, och för vad som ändras när den säljs.
-  { href: "/dashboard/bokforing", labelKey: "nav.bokforing", product: "shared", adminOnly: true },
+  // Bokföringsagenten. En riktig produkt sedan den fick pris, marknadssida
+  // och ett eget värde i `workspaces.products` (migration 047) — grindas
+  // därför på entitlement som leads och support, inte på adminstatus.
+  { href: "/dashboard/bokforing", labelKey: "nav.bokforing", product: "bookkeeping" },
   { href: "/settings", labelKey: "nav.settings", product: "shared" }
 ];
 
@@ -390,11 +394,11 @@ export function productForSettingsSection(section: SettingsSectionKey): ProductK
  * Public marketing surfaces. `/leads` and `/support` render the same shell with a
  * different product selected, so both are linkable and crawlable.
  */
-export const publicProductRoutes = ["/", "/leads", "/support"] as const;
+export const publicProductRoutes = ["/", "/leads", "/support", "/bokforing"] as const;
 
 // Auth route guards (pure, no server dependencies — safe for middleware).
-// /leads and /support are NOT listed: they are public product pages, and guarding
-// them would bounce every visitor to /login.
+// /leads, /support och /bokforing är INTE listade: de är publika produktsidor,
+// och en grind där hade studsat varje besökare till /login.
 export const protectedRoutePrefixes = ["/dashboard", "/settings", "/onboarding"] as const;
 
 // /auth/callback är BORTA sedan Auth.js ersatte Supabase Auth (e376e71).

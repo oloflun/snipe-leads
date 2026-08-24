@@ -1,7 +1,7 @@
 import { getPlatformAdmin } from "@/lib/auth/admin";
 import { getWorkspaceContext } from "@/lib/workspace";
 import { hasDatabase, sqlAsUser } from "@/lib/db";
-import { SCOPE_COOKIE, isProductKey, type ProductKey, type Scope } from "@/lib/routes";
+import { SCOPE_COOKIE, isProductKey, productKeys, type ProductKey, type Scope } from "@/lib/routes";
 import { isAddonKey, type AddonKey } from "@/lib/addons";
 import { DEMO_ARBETSYTA, aktivVy, type Vy } from "@/lib/vy";
 import { cookies } from "next/headers";
@@ -63,7 +63,15 @@ export type DashboardState = {
   initialScope: Scope;
 };
 
-const ALL_PRODUCTS: ProductKey[] = ["leads", "support"];
+/**
+ * Alla produkter, HÄRLEDDA och inte uppräknade.
+ *
+ * Listan stod tidigare som `["leads", "support"]`, och den blev fel i samma
+ * sekund som bokföringen blev en produkt: demovyn och impersonationens
+ * fallback hade fortsatt visa två av tre utan att något sa ifrån. En andra
+ * uppräkning av samma sanning är en uppräkning som glider.
+ */
+const ALL_PRODUCTS: ProductKey[] = [...productKeys];
 
 /**
  * Anonymous and unconfigured environments both land here: the demo dataset with

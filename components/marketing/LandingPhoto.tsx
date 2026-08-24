@@ -29,7 +29,11 @@ import { cn } from "@/lib/utils";
  * was chosen. See copy-sections.ts.
  */
 
-const pathForProduct: Record<ProductKey, string> = { leads: "/leads", support: "/support" };
+const pathForProduct: Record<ProductKey, string> = {
+  leads: "/leads",
+  support: "/support",
+  bookkeeping: "/bokforing"
+};
 
 function Display({ text: value, accentClass = "italic-disp text-ochre" }: Readonly<{ text: string; accentClass?: string }>) {
   return (

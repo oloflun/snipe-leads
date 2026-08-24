@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useLocale } from "@/lib/i18n";
 import { bytPlan } from "@/lib/actions/plan";
-import { PAKET, PRIS_PREFIX, formateraPris } from "@/lib/pricing";
+import { PAKET, PRIS_PREFIX, PRIS_SAKNAS, formateraPris } from "@/lib/pricing";
 import { cn } from "@/lib/utils";
 
 /**
@@ -116,7 +116,9 @@ export function Planvaljare({
               <span className="flex items-baseline gap-2">
                 <span className="text-[0.9375rem] font-semibold text-ink">{p.namn}</span>
                 <span className="text-[0.8125rem] text-mineral">
-                  {text(PRIS_PREFIX)} {formateraPris(p.prisPerManad)}/mån
+                  {p.prisPerManad === null
+                    ? text(PRIS_SAKNAS)
+                    : `${text(PRIS_PREFIX)} ${formateraPris(p.prisPerManad)}/mån`}
                 </span>
                 {laddar ? (
                   <Loader2 className="ml-auto h-4 w-4 shrink-0 animate-spin text-mineral" aria-hidden />
