@@ -77,7 +77,75 @@ Båda rättade i [`049`](../supabase/migrations/049_avregistrering_utan_arbetsyt
 
 ## Kvar — kräver dig
 
-### P0.1c · Kontrollera Geminis avtalsnivå  🔴 BLOCKERANDE
+### P0.1c · Gemini-nyckeln ligger på gratisnivån  🔴 BLOCKERANDE
+
+**Uppdaterat 2026-08-24 kväll: frågan är i praktiken besvarad, och svaret är
+det sämsta av de möjliga.**
+
+Ett demo-anrop mot development föll med:
+
+```
+openai.RateLimitError: Error code: 429
+"You exceeded your current quota, please check your plan and billing details."
+```
+
+Fem sådana i loggen. Det är gratisnivåns signatur — ett Gemini-projekt med
+fakturering slår inte i kvoten på en handfull anrop en kväll. Det stämmer med
+vad kodbasen själv säger om nyckeln ("vald för gratisnivån", se `config.py`
+och `scripts/keys.py`).
+
+Det är indicier, inte ett kontoutdrag. Bekräfta i Google Cloud-konsolen. Men
+planera inte som om det vore något annat.
+
+**Två följder, båda allvarliga.**
+
+*Juridiskt:* gratisnivån tillåter Google att använda det som skickas in för att
+förbättra sina produkter, inklusive mänsklig granskning. Riktiga kundmejl går
+dit sedan produktionen lagades i kväll. Det är en behandling vi varken har
+avtalat om eller informerat kunden om — och till skillnad från DeepSeek-läget,
+där grunden saknades för en överföring, har vi här aktivt lämnat bort
+innehållet.
+
+*Operativt:* produktionen kommer att svara 429 under all verklig belastning.
+En agent som slår i kvoten mitt i en arbetsdag är ingen produkt.
+
+**Dessutom: `GEMINI_API_KEY` är SAMMA nyckel i main och development.** Alltså
+samma kvot. Dev-trafik bränner produktionens tak, och en provkörning i dev kan
+ta ner produktionen. Repot varnar redan för precis det här mönstret — se
+`PER_ENV_SECRETS` i `scripts/railway_provision.py`, där kommentaren kallar en
+delad hemlighet "tyst korskoppling". `GEMINI_API_KEY` står inte med i den
+listan och borde göra det.
+
+**Åtgärd, i ordning:**
+
+1. Bekräfta nivån i Google Cloud-konsolen.
+2. Aktivera fakturering på Google-projektet, eller byt provider. Betald nivå
+   respektive Vertex AI ger normalt ett åtagande om att innehållet inte
+   används för produktförbättring — gratisnivån gör det inte.
+3. Skaffa en EGEN nyckel per miljö. Samma nyckel i två miljöer är en
+   korskoppling oavsett vad den kostar.
+4. Teckna DPA med Google för den nivån, och fastställ dataregion och
+   överföringsmekanism (DPF eller SCC).
+
+Växlingen till en annan provider är ett kommando när nyckeln finns:
+
+```bash
+python scripts/llm_provider.py --satt openai --apply
+```
+
+Tills detta är löst säger `/integritetspolicy` **inte** att leverantören "inte
+tränar på texten". Det påståendet togs bort, och det ska inte skrivas tillbaka
+förrän avtalet säger det.
+
+**Överväg att pausa den skarpa trafiken** tills nivån är bytt. Produktionen
+körde simuleringsläge fram till i kväll — den har alltså klarat sig utan
+agenten hittills, och ett par dagar till är billigare än en behandling vi inte
+kan förklara.
+
+Fyll i `region` för Google i [`lib/bolag.ts`](../lib/bolag.ts) och i
+[registerförteckningen](registerforteckning.md) när svaret finns.
+
+### P0.1c (bakgrund) · Varför frågan ställdes
 
 **Den viktigaste öppna punkten.** Överföringen till Kina är stoppad, men
 bytet är inte klart förrän den här frågan är besvarad.

@@ -82,8 +82,11 @@ produktförbättring, har uppgiften lämnat vår kontroll.
 
 **Konsekvens:** hög, om avtalet inte håller. Låg om det gör det.
 
-**Åtgärd:** *Delvis. Grundfrågan är öppen och brådskande.* Avtalsnivån hos
-Google är inte fastställd — se P0.1c i [`JURIDIK_ATGARDER.md`](JURIDIK_ATGARDER.md).
+**Åtgärd:** *Delvis. Grundfrågan är öppen och brådskande — och indicierna
+pekar åt fel håll.* Ett 429 med "check your plan and billing details" från
+Gemini 2026-08-24 tyder starkt på att nyckeln ligger på GRATISNIVÅN, vars
+villkor tillåter leverantören att använda innehållet för produktförbättring.
+Se P0.1c i [`JURIDIK_ATGARDER.md`](JURIDIK_ATGARDER.md).
 **Grundrisken kan inte stängas i kod, bara i avtal**, och tills den är stängd
 är den här DPIA:n inte färdig.
 
@@ -201,7 +204,8 @@ av personuppgiftsansvarig.
 
 ## 6. Öppna punkter
 
-- [ ] **R1: Googles avtalsnivå fastställd** (P0.1c) — blockerande
+- [ ] **R1: Googles avtalsnivå fastställd** (P0.1c) — blockerande. Indicier
+      (429 med hänvisning till plan och fakturering) pekar på gratisnivån
 - [ ] R6: retentionsperiod beslutad
 - [x] R4: kundens ansvar för autonominivån inskrivet i villkoren
 - [x] R5: textmall till kunden för deras egen informationstext

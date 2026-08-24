@@ -1,5 +1,29 @@
 # Snipra Status
 
+## 2026-08-24 — Claude — Gemini-nyckeln är på gratisnivån, och båda miljöerna delar den
+
+Sista verifieringen av maskeringen föll — men på något annat än maskeringen:
+
+    openai.RateLimitError: 429 "You exceeded your current quota, please check
+    your plan and billing details."
+
+Det är gratisnivåns signatur. Ett fakturerat Gemini-projekt slår inte i kvoten på en handfull
+anrop en kväll, och det stämmer med vad kodbasen själv säger om nyckeln ("vald för
+gratisnivån"). Indicier, inte ett kontoutdrag — men planera inte som om det vore något annat.
+
+**Juridiskt** tillåter gratisnivån Google att använda innehållet för produktförbättring, och
+riktiga kundmejl går dit sedan produktionen lagades i kväll. Till skillnad från DeepSeek-läget,
+där grunden saknades för en överföring, har vi här aktivt lämnat bort innehållet.
+
+**Operativt** kommer produktionen att svara 429 under all verklig belastning.
+
+**Och nyckeln är SAMMA i main och development**, alltså samma kvot: en provkörning i dev kan ta
+ner produktionen. Repot varnar redan för mönstret — `PER_ENV_SECRETS` i railway_provision.py
+kallar en delad hemlighet "tyst korskoppling". GEMINI_API_KEY står inte i den listan och borde.
+
+Övervägande värt att ta: pausa den skarpa trafiken tills nivån är bytt. Produktionen körde
+simuleringsläge fram till i kväll och har klarat sig utan agenten hittills.
+
 ## 2026-08-24 — Claude — Render-stacken var inte död, och min spärr missade den
 
 **Två Render-tjänster låg kvar levande och startade med `provider=deepseek` mot en riktig
