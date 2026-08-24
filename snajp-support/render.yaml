@@ -1,9 +1,27 @@
-# Render Blueprint — auto-deploy av Snajp-Support-backenden från GitHub.
-# Peka Render på denna fil (Blueprint). sync:false = värdet sätts utifrån.
+# Render Blueprint — VILANDE. Stacken kör på Railway (se RAILWAY.md).
 #
-# Deployen fungerar UTAN att något hemligt sätts: saknas DEEPSEEK_API_KEY kör
-# tjänsten i simuleringsläge (deterministiska svenska svar, inga API-kostnader).
-# Lägg till nyckeln när demon ska drivas av riktig AI.
+# ## Läs det här innan du väcker filen
+#
+# Den här blueprinten deklarerade `LLM_PROVIDER: deepseek` för båda tjänsterna.
+# Tjänsterna var aldrig avstängda när flytten till Railway gjordes, och de
+# fortsatte auto-deploya från `main` och `development`. 2026-08-24 upptäcktes
+# att de körde `provider=deepseek` mot `storage: postgres` — alltså en riktig
+# databas — vid en tidpunkt då hela dataskyddsarbetet utgick från att DeepSeek
+# var utfasat. Se docs/JURIDIK_ATGARDER.md, P0.2b.
+#
+# DeepSeek är därför borttagen härifrån. Utan providernyckel startar tjänsten i
+# SIMULERINGSLÄGE: deterministiska svenska svar, inga API-anrop, ingen
+# överföring någonstans. Det är rätt viloläge för en stack ingen använder.
+#
+# Ska Render tas i bruk igen: välj provider MEDVETET, och läs
+# `Settings.llm_provider_fault()` först — den vägrar starta med DeepSeek så
+# fort DATABASE_URL pekar på något annat än loopback, oavsett vilken värd som
+# kör processen.
+#
+# Ska Render inte tas i bruk igen: radera tjänsterna i dashboarden och den här
+# filen. En blueprint som ligger kvar är en tjänst som kan återuppstå.
+#
+# sync:false = värdet sätts utifrån.
 #
 # TVÅ TJÄNSTER, TVÅ GRENAR:
 #   snajp-support      ← main         (produktion)
@@ -34,13 +52,9 @@ services:
     healthCheckPath: /health/live
     plan: free
     envVars:
-      - key: LLM_PROVIDER
-        value: deepseek
-      - key: MODEL
-        value: deepseek-v4-flash
-      # Utan värde => simuleringsläge. Sätt för riktig AI.
-      - key: DEEPSEEK_API_KEY
-        sync: false
+      # INGEN LLM_PROVIDER och ingen providernyckel. Utan dem kör tjänsten i
+      # simuleringsläge, vilket är det enda säkra viloläget — se filhuvudet.
+      # Att sätta en provider här är ett beslut, inte en default.
       # Administrativ nyckel (skapa tenants/nycklar). Slumpas av Render så den
       # aldrig faller tillbaka på den publika platshållaren i config.py.
       - key: SNAJP_MASTER_API_KEY
@@ -94,12 +108,9 @@ services:
     healthCheckPath: /health/live
     plan: free
     envVars:
-      - key: LLM_PROVIDER
-        value: deepseek
-      - key: MODEL
-        value: deepseek-v4-flash
-      - key: DEEPSEEK_API_KEY
-        sync: false
+      # INGEN LLM_PROVIDER och ingen providernyckel. Utan dem kör tjänsten i
+      # simuleringsläge, vilket är det enda säkra viloläget — se filhuvudet.
+      # Att sätta en provider här är ett beslut, inte en default.
       # Egen masternyckel. Delad hade gjort produktionens /api/admin nåbar med
       # previewens nyckel.
       - key: SNAJP_MASTER_API_KEY

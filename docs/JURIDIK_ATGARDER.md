@@ -145,47 +145,6 @@ kan förklara.
 Fyll i `region` för Google i [`lib/bolag.ts`](../lib/bolag.ts) och i
 [registerförteckningen](registerforteckning.md) när svaret finns.
 
-### P0.1c (bakgrund) · Varför frågan ställdes
-
-**Den viktigaste öppna punkten.** Överföringen till Kina är stoppad, men
-bytet är inte klart förrän den här frågan är besvarad.
-
-Nyckeln som används är den kodbasen själv beskriver som vald för
-**gratisnivån** (se kommentaren vid `gemini_api_key` i `config.py`, och
-`scripts/keys.py`). Gratisnivåer tillåter typiskt leverantören att använda det
-som skickas in för produktförbättring — alltså mänsklig granskning och
-träning.
-
-Går det på kunddata är det **värre än DeepSeek var**: DeepSeek var en
-överföring utan rätt avtal, det här vore en överföring där vi aktivt lämnat
-bort innehållet.
-
-Att kontrollera, i ordning:
-
-1. Vilken nivå ligger `GEMINI_API_KEY` på — AI Studio gratis, AI Studio betald,
-   eller Vertex AI? Bara de två senare ger normalt ett åtagande om att
-   innehållet inte används för produktförbättring.
-2. Finns ett DPA med Google för den nivån?
-3. Vilken dataregion, och vilken överföringsmekanism (Googles
-   DPF-certifiering eller SCC)?
-
-Ligger nyckeln på gratisnivån: byt nivå, eller byt provider. Växlingen är ett
-kommando när nyckeln finns:
-
-```bash
-python scripts/llm_provider.py --satt openai --apply
-```
-
-Jag kan inte kontrollera det här — det kräver inloggning i ert Google-konto.
-
-Tills svaret finns säger `/integritetspolicy` **inte** att leverantören "inte
-tränar på texten". Det påståendet är borttaget, eftersom ett löfte i en
-integritetspolicy är bindande. Skriv inte tillbaka det utan att ha läst
-avtalet.
-
-Fyll samtidigt i `region` för Google i [`lib/bolag.ts`](../lib/bolag.ts) och i
-[registerförteckningen](registerforteckning.md).
-
 ### P0.1d · Produktionen svarade kunder med regelmotorn  ✅ ÅTGÄRDAD
 
 Produktionen körde `mode: simulation` — riktiga kunder fick den deterministiska
@@ -246,17 +205,41 @@ Notera: `snajp-support` (main) varnar **inte** för att IMAP saknas, vilket
 Railway i dag var aldrig stoppad överallt. Den här ytan fanns inte i någon
 dokumentation, i registerförteckningen eller i min egen bedömning.
 
-**Åtgärd — kräver dig, eftersom det är att stänga av tjänster:**
+**Vad jag har gjort:**
 
-1. Suspendera eller radera båda tjänsterna i Render. Suspendering är
-   reversibel och räcker.
-2. Är de suspenderade ska de bort ur `snajp-support/render.yaml` också, annars
-   återuppstår de.
-3. Bedöm enligt [`INCIDENT_RESPONSE.md`](../INCIDENT_RESPONSE.md) om någon
+`snajp-support/render.yaml` deklarerade `LLM_PROVIDER: deepseek` för BÅDA
+tjänsterna. Det var källan — en blueprint-synk hade återställt providern även
+om någon ändrat den i dashboarden. DeepSeek är borttagen därifrån, och
+blueprinten deklarerar nu ingen provider alls: utan providernyckel startar
+tjänsten i simuleringsläge, vilket är det enda säkra viloläget för en stack
+ingen använder.
+
+**Vad jag INTE kunde göra:**
+
+*Stänga av tjänsterna.* Render-verktyget har varken suspend eller delete —
+det finns bara i dashboarden.
+
+*Blanka `DEEPSEEK_API_KEY` på de körande tjänsterna.* Jag försökte, och
+skrivningen stoppades av behörighetskontrollen i den här sessionen. Jag gick
+inte runt den. Gör det i dashboarden — det är den snabbaste åtgärden som inte
+kräver att något stängs av: utan nyckel går tjänsten till simuleringsläge vid
+nästa omstart, och gratisnivån spinner ner efter en kvarts inaktivitet, så
+omstarten kommer av sig själv.
+
+**Åtgärd, i tur och ordning:**
+
+1. Blanka `DEEPSEEK_API_KEY` på båda tjänsterna. Stoppar flödet snabbast.
+2. Suspendera eller radera tjänsterna. Suspendering är reversibel och räcker.
+3. Raderas de ska `snajp-support/render.yaml` bort också — en blueprint som
+   ligger kvar är en tjänst som kan återuppstå.
+4. Bedöm enligt [`INCIDENT_RESPONSE.md`](../INCIDENT_RESPONSE.md) om någon
    kunddata faktiskt passerade. Frågan att besvara först: vilken databas pekar
    deras `DATABASE_URL` på?
 
-Jag har inte stängt av dem — det är utåtriktat och ditt beslut.
+**Notera att koden redan hindrar en ÅTERKOMST.** `snajp-support-dev` deployar
+från `development` och vägrar numera starta — bekräftat i loggen 23:01. Men
+Render låter, precis som Railway, den gamla deployen ligga kvar när den nya
+faller. Det som snurrar just nu snurrar vidare tills någon rör det.
 
 **Spärren i koden är däremot lagad.** `har_riktig_kunddata()` grindade på
 miljönamnet, med motiveringen att Railway alltid sätter
