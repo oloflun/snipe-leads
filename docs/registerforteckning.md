@@ -40,7 +40,7 @@ Det vi behandlar för vår egen räkning.
 | **Informationsplikt** | Art. 14 — uppgifterna kommer inte från personen själv. Lämnas i varje utskick, se `snajp-support/app/leads/utskicksfot.py` |
 | **Mottagare** | Google/Gemini (textgenerering), Railway, Supabase |
 | **Lagringstid** | **[fylls i]**. Undantag: raden i `suppressions` behålls tills vidare — den finns för att personen inte ska kontaktas igen |
-| **Var i systemet** | `contacts`, `companies`, `outreach_threads`, `outreach_messages`, `suppressions` |
+| **Var i systemet** | `contacts`, `prospects`, `companies`, `outreach_threads`, `outreach_messages`, `suppressions`, `workspace_invites`. Adressen kan dessutom stå i löptext i `generated_emails` och `agent_runs` |
 
 ### A3. Support till våra egna kunder
 
@@ -71,7 +71,7 @@ biträde. Förteckningen ska ändå finnas — art. 30.2 gäller biträden ocks�
 | **Tredjelandsöverföring** | **[fylls i — kräver besked om Googles dataregion och avtalsnivå, se P0.1c]** |
 | **Lagringstid** | Enligt `ss_gallringspolicy`. **Perioden är ännu inte beslutad** — se `scripts/gallra.py` |
 | **Var i systemet** | `ss_emails`, `ss_email_attachments`, `ss_classifications`, `ss_drafts`, `ss_human_reviews`, `ss_tickets` |
-| **Säkerhetsåtgärder** | Radnivåsäkerhet per tenant i databasen; ingen delning mellan kunder; utgående mejl kräver mänskligt godkännande |
+| **Säkerhetsåtgärder** | Radnivåsäkerhet per tenant i databasen; ingen delning mellan kunder; utgående mejl kräver mänskligt godkännande; personnummer maskeras innan texten går till modelleverantören |
 
 ### B2. Leadsagenten
 

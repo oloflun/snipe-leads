@@ -65,9 +65,9 @@ behandlas **automatiskt och samlat**, och det är skillnaden som ska bedömas.
   inte en inställning i koden.
 
 **Det som INTE minimeras, och som är den ärliga svagheten:** hela mejltexten
-skickas till modelleverantören. Det finns ingen maskering av personnummer
-eller andra identifierare före anropet, och innehållet är okontrollerat. Se
-risk R1.
+skickas till modelleverantören. Personnummer och samordningsnummer maskeras
+sedan 2026-08-24 (se R1), men allt annat går som det står — och innehållet är
+okontrollerat. En hälsouppgift i löptext passerar. Se risk R1.
 
 ## 3. Riskerna
 
@@ -82,14 +82,22 @@ produktförbättring, har uppgiften lämnat vår kontroll.
 
 **Konsekvens:** hög, om avtalet inte håller. Låg om det gör det.
 
-**Åtgärd:** *Öppen och brådskande.* Avtalsnivån hos Google är inte fastställd —
-se P0.1c i [`JURIDIK_ATGARDER.md`](JURIDIK_ATGARDER.md). **Den här risken kan
-inte stängas i kod, bara i avtal**, och tills den är stängd är den här DPIA:n
-inte färdig.
+**Åtgärd:** *Delvis. Grundfrågan är öppen och brådskande.* Avtalsnivån hos
+Google är inte fastställd — se P0.1c i [`JURIDIK_ATGARDER.md`](JURIDIK_ATGARDER.md).
+**Grundrisken kan inte stängas i kod, bara i avtal**, och tills den är stängd
+är den här DPIA:n inte färdig.
 
-Möjlig kompletterande åtgärd att utreda: maskering av personnummermönster före
-modellanropet. Det tar inte bort risken, men det tar bort den vanligaste och
-mest identifierande formen av den.
+**Mitigering byggd 2026-08-24:** personnummer och samordningsnummer maskeras
+innan texten går till modellen, i både triagen och svarsgenereringen. Se
+[`app/moderation/maskering.py`](../snajp-support/app/moderation/maskering.py).
+Maskeringen kräver att numret passerar BÅDE en datumkontroll och Luhn, vilket
+gör falska utslag sällsynta nog att den kan stå på i drift — ett grovt mönster
+som fällde ordernummer hade blivit avstängt. Originalet ligger kvar i
+databasen; det är bara prompten som bär en maskerad kopia.
+
+Vad mitigeringen INTE gör: den tar bort den vanligaste och mest identifierande
+formen av känslig uppgift, inte alla. En hälsouppgift i löptext går fortfarande
+igenom. Läs inte R1 som löst.
 
 ### R2 — Ett felaktigt svar går ut i kundens namn
 
@@ -127,9 +135,11 @@ det att granska i efterhand vad agenten trodde och varför.
 **Åtgärd:** defaulten är `draft` för varje kategori, alltså mänsklig
 granskning. Kunden kan ändra det.
 
-**Kvarstående risk:** medel, och den ligger hos kunden. Bör framgå av
-[`/villkor`](../app/villkor/page.tsx) att ansvaret för den inställningen är
-kundens. **Öppen punkt.**
+**Kvarstående risk:** medel, och den ligger hos kunden. **Åtgärdat
+2026-08-24:** [`/villkor`](../app/villkor/page.tsx) säger nu uttryckligen att
+autonominivån är Kundens val och Kundens ansvar, och att en omställning till
+automatiskt svar upphäver den mänskliga inblandningen — med hänvisning till
+artikel 22.
 
 ### R5 — Den registrerade vet inte att en AI läser mejlet
 
@@ -142,8 +152,11 @@ ansvar. Chattwidgeten bär dessutom en dataskyddsflik
 ([`AgentMenu.tsx`](../components/snajp/AgentMenu.tsx)).
 
 **Kvarstående risk:** medel, och den är kundens. Vi kan inte kontrollera vad
-kunden skriver på sin sajt — men vi kan sluta anta att de gjort det. **Öppen
-punkt: ge kunden en färdig textmall vid onboarding.**
+kunden skriver på sin sajt — men vi kan sluta anta att de gjort det.
+**Åtgärdat 2026-08-24:** [textmall](kundmall_informationstext.md) att ge vid
+onboarding, plus ett uttryckligt krav i [`/villkor`](../app/villkor/page.tsx).
+En färdig text som går att klistra in blir inklistrad; ett krav i ett avtal
+blir det inte.
 
 ### R6 — Överlagring: data ligger kvar för alltid
 
@@ -190,8 +203,8 @@ av personuppgiftsansvarig.
 
 - [ ] **R1: Googles avtalsnivå fastställd** (P0.1c) — blockerande
 - [ ] R6: retentionsperiod beslutad
-- [ ] R4: kundens ansvar för autonominivån inskrivet i villkoren
-- [ ] R5: textmall till kunden för deras egen informationstext
-- [ ] Utred maskering av personnummermönster före modellanropet
+- [x] R4: kundens ansvar för autonominivån inskrivet i villkoren
+- [x] R5: textmall till kunden för deras egen informationstext
+- [x] Maskering av personnummer före modellanropet — byggd och testad
 - [ ] Läst av jurist
 - [ ] Beslutad av kunden som personuppgiftsansvarig

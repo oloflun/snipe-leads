@@ -52,6 +52,19 @@ export default async function Page() {
         inte Kundens egen arkiveringsskyldighet.
       </p>
       <p>
+        Kunden ansvarar för att informera sina egna kunder om att inkommande ärenden behandlas
+        med hjälp av AI, i enlighet med artikel 13 i dataskyddsförordningen. Snajp tillhandahåller
+        en textmall för detta, men ansvaret för att texten finns på Kundens webbplats och stämmer
+        med Kundens verksamhet är Kundens.
+      </p>
+      <p>
+        <strong>Autonominivån är Kundens val och Kundens ansvar.</strong> Snajps supportagent
+        levereras med mänsklig granskning påslagen för samtliga ärendekategorier. Kunden kan
+        ställa om enskilda kategorier till automatiskt svar. Gör Kunden det upphör den mänskliga
+        inblandningen för de kategorierna, och Kunden ansvarar för att bedöma vad det innebär
+        enligt artikel 22 i dataskyddsförordningen.
+      </p>
+      <p>
         Utgående mejl från leadsagenten skickas i Kundens namn. Snajp kontrollerar i kod att varje
         utskick bär Kundens fullständiga företagsnamn, organisationsnummer, postadress och en
         fungerande avregistreringslänk, och blockerar utskick som saknar något av det. Kunden

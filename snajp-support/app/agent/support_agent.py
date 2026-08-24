@@ -21,6 +21,7 @@ from typing import Any
 from ..agentcore.overlays import pack_version
 from ..agentcore.packs import RunLedger
 from ..moderation.abuse_gate import check_abuse, ton_instruktion
+from ..moderation.maskering import maskera_personnummer
 from ..leads.soul import load_soul
 from ..notifications.prioriterat_mejl import arendelank, skicka_prioriterat
 from ..config import CATEGORY_LABELS, get_settings
@@ -262,8 +263,11 @@ async def run_support_agent(
     case_context = (
         f"## Ärendet\nKanal: {channel} (ton: {config['tone']}, max {config['max_length']} tecken)\n"
         f"Kund: {customer_name or 'okänd'} <{customer_email or 'okänd'}>\n"
-        f"Ämne: {subject or '(inget)'}\n\n"
-        f"Kundens meddelande:\n{message}{vision_note}\n\n"
+        f"Ämne: {maskera_personnummer(subject) or '(inget)'}\n\n"
+        # Maskerat innan det går till modellen. Se DPIA:ns R1 och
+        # app/moderation/maskering.py — originalet ligger kvar i databasen,
+        # det är bara prompten som bär en maskerad kopia.
+        f"Kundens meddelande:\n{maskera_personnummer(message)}{vision_note}\n\n"
         f"Giltiga kategorier för den här kunden: {', '.join(taxonomy)}"
         + (f"\n\n{soul_block}" if soul_block else "")
     )

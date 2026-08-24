@@ -82,6 +82,17 @@ KANDA_PROVIDERS = ("openai", "deepseek", "gemini")
 _LOOPBACK = ("localhost", "127.0.0.1", "::1", "[::1]", "host.docker.internal")
 
 
+def _vard_ur_dsn(database_url: str) -> str:
+    """Värddelen ur en DSN, för felmeddelanden.
+
+    ALDRIG hela DSN:en. Ett felmeddelande hamnar i en deploy-logg, och en
+    logg är inte en hemlig plats — se läckagespärren i CLAUDE.md.
+    """
+    utan_schema = str(database_url or "").split("://", 1)[-1]
+    myndighet = utan_schema.split("/", 1)[0]
+    return myndighet.rsplit("@", 1)[-1].rsplit(":", 1)[0].strip() or "okänd värd"
+
+
 def _ar_loopback(database_url: str) -> bool:
     """Om DSN:en pekar på den egna maskinen.
 
@@ -408,13 +419,28 @@ class Settings(BaseSettings):
             )
 
         if self.llm_provider == "deepseek" and self.har_riktig_kunddata():
+            # Skälet formuleras efter VAD som fällde, inte som en generisk
+            # rad. Meddelandet är det enda någon läser när en deploy dör
+            # 23:01, och "miljön ''" besvarar inte frågan varför.
+            if self.aktiv_miljo() in MILJOER_MED_KUNDDATA:
+                varfor = (
+                    f"Miljön '{self.aktiv_miljo()}' bär eller speglar riktig kunddata."
+                )
+            else:
+                varfor = (
+                    f"Miljönamnet är okänt, men DATABASE_URL pekar på en databas "
+                    f"som inte kör på den här maskinen ({_vard_ur_dsn(self.database_url)}). "
+                    f"En process som kan öppna en fjärrdatabas kan nå riktiga "
+                    f"personuppgifter, oavsett vilken värd den kör på — det var "
+                    f"precis så den bortglömda Render-stacken kunde köra DeepSeek "
+                    f"mot skarp data utan att någon spärr sa ifrån."
+                )
             return (
-                f"LLM_PROVIDER=deepseek är inte tillåtet i miljön "
-                f"'{self.aktiv_miljo()}'. Den miljön bär eller speglar riktig "
-                f"kunddata, och DeepSeek behandlar prompten i Kina utan att vi "
-                f"har SCC, överföringsbedömning eller PUB-villkor på plats. "
-                f"Sätt LLM_PROVIDER=openai och se till att OPENAI_API_KEY är "
-                f"satt på BÅDA tjänsterna (web och api)."
+                f"LLM_PROVIDER=deepseek är inte tillåtet här. {varfor} DeepSeek "
+                f"behandlar prompten i Kina, och vi har varken SCC, "
+                f"överföringsbedömning eller PUB-villkor på plats. "
+                f"Sätt en tillåten provider (openai eller gemini) med rätt nyckel, "
+                f"eller stäng av tjänsten om den inte ska köra alls."
             )
         return None
 
