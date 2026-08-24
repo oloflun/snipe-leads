@@ -4,6 +4,7 @@
     python scripts/llm_provider.py                        # visa läget, ändra ingenting
     python scripts/llm_provider.py --env development      # bara en miljö
     python scripts/llm_provider.py --satt gemini --apply  # byt provider OCH modell
+    python scripts/llm_provider.py --env main --pausa --apply  # till simuleringsläge
 
 ## Varför skriptet finns
 
@@ -78,6 +79,19 @@ NYCKEL_FOR = {
 #: Providers som inte får ta emot kunddata. Speglar spärren i config.py.
 FORBJUDNA_MOT_KUNDDATA = ("deepseek",)
 
+#: Vad `--pausa` sätter. En KÄND provider utan nyckel ger simuleringsläge:
+#: agenten svarar med den deterministiska regelmotorn i stället för med AI,
+#: och ingenting skickas till någon leverantör.
+#:
+#: `openai` och `gpt-4o-mini` är valda för att de hör ihop — uppstartsspärren
+#: fäller ett modellnamn som tillhör en annan provider än den konfigurerade,
+#: så det räcker inte att byta det ena.
+#:
+#: GEMINI_API_KEY LÄMNAS ORÖRD med flit: den driver även embeddings och
+#: bildbeskrivning, som inte är chattanrop och inte omfattas av samma
+#: dygnskvot. Att blanka den hade tagit ner KB-sökningen på köpet.
+PAUSLAGE = {"LLM_PROVIDER": "openai", "MODEL": "gpt-4o-mini"}
+
 #: Provider -> modellen vi kör som standard. Speglar `_default_model_for_provider`
 #: i config.py. Gemini-namnet är detsamma som vision-sidovagnen redan använder
 #: mot samma endpoint, alltså ett namn som är prövat i den här kodbasen.
@@ -119,11 +133,23 @@ def main() -> int:
         help="Providern att växla till. Sätter även MODEL. Utan den bara diagnos.",
     )
     parser.add_argument(
+        "--pausa",
+        action="store_true",
+        help=(
+            "Sätt miljön i SIMULERINGSLÄGE: agenten svarar med regelmotorn och "
+            "ingenting skickas till någon leverantör. Används när providern inte "
+            "får eller inte kan ta emot trafik."
+        ),
+    )
+    parser.add_argument(
         "--apply",
         action="store_true",
         help="Genomför bytet. Utan flaggan visas bara vad som skulle hända.",
     )
     args = parser.parse_args()
+
+    if args.pausa and args.satt:
+        sys.exit("AVBRYTER: --pausa och --satt gör olika saker. Välj en.")
 
     if args.satt in FORBJUDNA_MOT_KUNDDATA:
         sys.exit(
@@ -197,6 +223,23 @@ def main() -> int:
             # Modellen räknas som en del av bytet: en provider utan en modell
             # den känner till är inte ett halvfärdigt byte, det är ett trasigt.
             behover_modell = bool(modell) and provider_for_model(modell) != args.satt
+            if args.pausa:
+                if not args.apply:
+                    print(
+                        "    -> skulle sätta "
+                        + ", ".join(f"{k}={v2}" for k, v2 in PAUSLAGE.items())
+                        + " => SIMULERINGSLÄGE (kör med --apply)"
+                    )
+                    att_atgarda.append(f"{miljo}/{tjanst}")
+                    continue
+                set_vars(service["id"], env_id, dict(PAUSLAGE))
+                print(
+                    f"    OK: {miljo}/{tjanst} pausad. Agenten svarar med regelmotorn,\n"
+                    f"      ingenting går till någon leverantör. Ångra med\n"
+                    f"      --satt <provider> --apply när nyckeln är på plats."
+                )
+                continue
+
             if not args.satt or (provider == args.satt and not behover_modell):
                 continue
 
