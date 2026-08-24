@@ -36,9 +36,13 @@ import { cn } from "@/lib/utils";
  *
  * Undre gränsen var satt av MOBILEN: lockupen delar rad med EN, Logga in och
  * Meny, och 38px märke bröt "Logga in" till två rader på 390px. 28px höll
- * ihop raden — och 2026-08-25 skalades hela `hjalte`-lockupen ned 30 % (28→20,
- * 88→62, gap och textstorlek i samma proportion), vilket bara gör
- * mobilmarginalen större.
+ * ihop raden — och 2026-08-25 skalades hela `hjalte`-lockupen ned 50 % mot
+ * originalet (28→14, 88→44, gap och ordmärke i samma proportion), vilket
+ * bara gör mobilmarginalen större.
+ *
+ * Ordmärket är sedan samma datum den riktiga varumärkesfilen
+ * (`snajp-wordmark-v1-*.svg`), inte längre livrenderad text — samma svart/
+ * vit-par som märket, faktor ~0,84 mot märkets höjd oförändrad.
  */
 export function Logo({
   compact = false,
@@ -57,7 +61,9 @@ export function Logo({
     <span
       className={cn(
         "inline-flex items-center",
-        hjalte ? "gap-[clamp(6px,0.84vw,14px)]" : stor ? "gap-3" : "gap-2.5"
+        // 50% mindre än originalet (var clamp(8px,1.2vw,20px)) — hjälten är
+        // det enda stället `hjalte` används (startsidans header).
+        hjalte ? "gap-[clamp(4px,0.6vw,10px)]" : stor ? "gap-3" : "gap-2.5"
       )}
     >
       <Image
@@ -67,26 +73,26 @@ export function Logo({
         height={158}
         className={cn(
           "w-auto object-contain",
-          // 30% mindre än tidigare (var clamp(28px,5.2vw,88px)) — hjälten är
-          // det enda stället `hjalte` används (startsidans header).
-          hjalte ? "h-[clamp(20px,3.6vw,62px)]" : stor ? "h-[34px]" : "h-[18px]"
+          // 50% mindre än originalet (var clamp(28px,5.2vw,88px)).
+          hjalte ? "h-[clamp(14px,2.6vw,44px)]" : stor ? "h-[34px]" : "h-[18px]"
         )}
         priority
       />
       {!compact ? (
         <span className="flex flex-col justify-center">
-          <span
+          {/* Ordmärket, inte livrenderad text — se filhuvudets kommentar. */}
+          <Image
+            src={tone === "paper" ? "/snajp-wordmark-v1-white.svg" : "/snajp-wordmark-v1-black.svg"}
+            alt="Snajp"
+            width={325}
+            height={122}
             className={cn(
-              "font-semibold leading-none tracking-[-0.02em]",
-              hjalte
-                ? "text-[clamp(14px,3.1vw,52px)]"
-                : stor
-                  ? "text-[26px]"
-                  : "text-[19px]"
+              "w-auto object-contain",
+              // Faktor ~0,84 mot märkets höjd (se filhuvudet).
+              hjalte ? "h-[clamp(12px,2.2vw,37px)]" : stor ? "h-[29px]" : "h-[15px]"
             )}
-          >
-            Snajp
-          </span>
+            priority
+          />
           {/* Undertexten renderas bara i stort läge. I kompakt läge finns ingen
               höjd att lägga den på, och en rad som ibland finns och ibland inte
               flyttar allt annat i headern när den dyker upp. */}
