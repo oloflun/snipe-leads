@@ -22,6 +22,7 @@ from ..leads.language_gate import LanguageGateError, check_send_gate
 from ..leads.outreach_playbook import finalize_outreach_body
 from ..leads.timing_gate import check_cold_outreach_gate
 from ..leads.utskicksfot import avregistreringslank, bygg_fot, med_fot
+from ..notifications.internlarm import larma
 from .leads_context import OnboardingContext, OutreachContext
 
 
@@ -133,8 +134,41 @@ async def _queue_outreach_draft_impl(
 
 
 async def _request_human_handoff_impl(outreach: OutreachContext, reason: str) -> str:
+    """Den faktiska överlämningspunkten i leads.
+
+    ## Varför larmet sitter här och inte i `app/leads/handoff.py`
+
+    `handoff.py` bär namnet, men `route_handoff()` där har INGEN
+    produktionsanropare — `app/leads/autonomy.py` säger det rakt ut på två
+    ställen ("handoff.py saknar produktionsanropare", och autonominivån
+    `meeting` är avstängd just därför). Att koppla larmet dit hade gett en
+    larmväg som aldrig går.
+
+    Det här är i stället choke pointen som faktiskt körs: den anropas dels av
+    verktyget `request_human_handoff` (modellens väg), dels av fyra kodvägar i
+    `leads_agent.run_outreach_draft` — brutet utdatakontrakt, tom brödtext,
+    kvarstående ostött påstående efter reparation, och brutet kontrakt i
+    reparationsstegen. Alla fyra slutar med att utkastet INTE köas och att en
+    människa måste ta över.
+    """
     outreach.escalated = True
     outreach.escalation_reason = reason
+
+    # Nyckeln är TRÅDEN, inte anropet. Modellen kan anropa verktyget flera
+    # gånger i samma körning, och kodvägarna i run_outreach_draft kan följa på
+    # varandra (en reparationsrunda som själv bryter kontraktet). Det är en
+    # överlämning, alltså ett mejl.
+    await larma(
+        "Leads-tråd lämnad till människa",
+        tenant_id=outreach.tenant_id,
+        # Tråd-id, inte prospektets mejladress. Adressen är personuppgift om en
+        # utomstående, och tråd-id:t pekar ut samma sak för den som ska agera —
+        # samma hållning som internlarmets docstring beskriver för kundens
+        # ärendetext.
+        vad=f"Utkastet i tråd {outreach.thread_id} köades inte.",
+        varfor=reason,
+        nyckel=f"leads-handoff:{outreach.tenant_id}:{outreach.thread_id}",
+    )
     return json.dumps({"escalated": True, "reason": reason}, ensure_ascii=False)
 
 

@@ -20,8 +20,9 @@ from typing import Any
 
 from ..agentcore.overlays import pack_version
 from ..agentcore.packs import RunLedger
-from ..leads.abuse_gate import check_abuse, ton_instruktion
+from ..moderation.abuse_gate import check_abuse, ton_instruktion
 from ..leads.soul import load_soul
+from ..notifications.internlarm import arendelank, larma
 from ..config import CATEGORY_LABELS, get_settings
 from ..storage.base import Storage
 from .retention_classifier import classify_cancellation_risk, is_cancellation_risk
@@ -119,7 +120,7 @@ async def run_support_agent(
     # Påhoppsbedömningen görs i KOD, av samma skäl som klassificeraren ovanför:
     # den avgör om samtalet ska avbrytas, och det beslutet ska inte kunna
     # pratas bort av innehållet i meddelandet. Gränsen går vid vad uttrycket
-    # RIKTAS mot, inte vid hur hårt det är — se app/leads/abuse_gate.py.
+    # RIKTAS mot, inte vid hur hårt det är — se app/moderation/abuse_gate.py.
     abuse = check_abuse(message)
 
     # Kundens röstdokument. Ligger i case_context, alltså i USERposition —
@@ -367,6 +368,29 @@ async def run_support_agent(
             priority="high",
             escalation_reason=escalation_reason,
         )
+        # Internlarmet ligger EFTER statusuppdateringen, med flit: databasen är
+        # sanningen om att ärendet eskalerat, mejlet är bara en knuff. Faller
+        # mejlet har ärendet ändå rätt status i adminvyn.
+        #
+        # EN notis per eskaleringshändelse. Varje meddelande i chatten öppnar
+        # ett EGET ärende (se _render_conversation), så "samma ärende" i
+        # kundens mening är en KUND med ett redan eskalerat ärende — inte ett
+        # ticket-id. `history` hämtades före det här ärendet skapades och bär
+        # alltså bara de tidigare. Har något av dem redan eskalerat är det här
+        # en fortsättning på en sak en människa redan blivit tillsagd om, och
+        # då ska den människan inte få ett mejl till.
+        #
+        # Dubblettnyckeln i internlarm är andra linjen: den fångar ett omtag av
+        # SAMMA ärende (en retry), inte ett nytt meddelande.
+        if not any(t.get("status") == "escalated" for t in history):
+            await larma(
+                f"Supportärende eskalerat — {CATEGORY_LABELS.get(category, 'Övrigt')}",
+                tenant_id=tenant_id,
+                vad=f"Ärende {ticket['id']} ({channel}) lämnades över till människa.",
+                varfor=escalation_reason or "okänd",
+                lank=arendelank(settings.publik_bas_url, ticket["id"]),
+                nyckel=f"support:{tenant_id}:{ticket['id']}",
+            )
     await storage.save_message(
         tenant_id,
         conversation_id=ticket["conversation_id"],
