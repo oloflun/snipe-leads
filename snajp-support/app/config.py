@@ -74,6 +74,27 @@ MILJOER_MED_KUNDDATA = ("main", "production", "prod", "development", "dev")
 # annars är den inte stödd, den ser bara stödd ut.
 KANDA_PROVIDERS = ("openai", "deepseek", "gemini")
 
+
+#: Värdnamn som betyder "databasen kör på den här maskinen". Bara de här räknas
+#: som syntetisk data — se `Settings.har_riktig_kunddata`. Listan är kort med
+#: flit: varje post är en adress som per definition inte kan vara en delad
+#: produktionsdatabas.
+_LOOPBACK = ("localhost", "127.0.0.1", "::1", "[::1]", "host.docker.internal")
+
+
+def _ar_loopback(database_url: str) -> bool:
+    """Om DSN:en pekar på den egna maskinen.
+
+    Läser värddelen och inget annat. En DSN kan bära lösenord med `@` i, så
+    värden tas efter SISTA `@` — annars hade ett lösenord med snabel-a kunnat
+    få en produktionsdatabas att se ut som localhost, vilket är exakt fel
+    riktning för en dataskyddsspärr att gissa åt.
+    """
+    utan_schema = str(database_url or "").split("://", 1)[-1]
+    myndighet = utan_schema.split("/", 1)[0]
+    vard = myndighet.rsplit("@", 1)[-1].rsplit(":", 1)[0].strip().lower()
+    return vard in _LOOPBACK
+
 # Modellnamn -> vilken provider namnet HÖR TILL. Bara entydiga prefix står här;
 # ett namn som inte matchar något av dem släpps igenom, eftersom leverantörerna
 # döper nya modeller utan att fråga oss och en för snäv lista hade blockerat
@@ -303,17 +324,43 @@ class Settings(BaseSettings):
     def har_riktig_kunddata(self) -> bool:
         """Om den här processen kan nå riktiga personuppgifter.
 
-        En OKÄND miljö räknas som utveckling och inte som produktion. Det ser
-        ut som fel håll att falla, men är det inte: den enda konsekvensen av
-        ett falskt negativt är att en lokal körning tillåter DeepSeek mot en
-        databas som ändå är tom (`scripts/lokal_stack.py`). Ett falskt positivt
-        hade i stället stoppat varje lokal utvecklingskörning, och en spärr som
-        står i vägen dagligen är en spärr någon kommenterar bort.
+        ## Varför den inte längre bara läser miljönamnet
 
-        Det som faktiskt skyddar produktionen är att Railway ALLTID sätter
-        RAILWAY_ENVIRONMENT_NAME. Miljönamnet är alltså aldrig okänt där.
+        Den gjorde det fram till 2026-08-24, och motiveringen var att "Railway
+        sätter ALLTID RAILWAY_ENVIRONMENT_NAME, så miljönamnet är aldrig okänt
+        där". Det var sant och ändå fel, för det antog att Railway är den enda
+        värden.
+
+        Det är den inte. Två Render-tjänster från den gamla stacken låg kvar
+        levande, deployade automatiskt vid varje push till `main` och
+        `development`, och startade med `provider=deepseek` mot en riktig
+        Postgres. På Render finns ingen RAILWAY_ENVIRONMENT_NAME, så
+        miljönamnet var tomt, så spärren tolkade det som utveckling och släppte
+        igenom. Den gren av villkoret som var tänkt att skydda en lokal körning
+        skyddade i stället en bortglömd produktionsyta från att bli upptäckt.
+
+        ## Regeln nu: databasen avgör, inte värdnamnet
+
+        En riktig databas är det som gör data riktig. En process som kan öppna
+        en REMOTE databas kan nå riktiga personuppgifter, oavsett vem som kör
+        den och vad miljön råkar heta.
+
+        Undantaget är en databas på loopback — `scripts/lokal_stack.py` kör mot
+        127.0.0.1, och den stacken är tom och syntetisk. Det undantaget är
+        smalt med flit: det gäller adressen, inte en flagga någon kan sätta.
+
+        Tre utfall:
+
+          * Känt miljönamn ur MILJOER_MED_KUNDDATA  -> riktig data
+          * Databas som INTE är loopback            -> riktig data
+          * Ingen databas, eller loopback           -> syntetisk
+
+        Testsviten sätter tom DATABASE_URL (tests/conftest.py) och faller
+        därför i tredje fallet, som förut.
         """
-        return self.aktiv_miljo() in MILJOER_MED_KUNDDATA
+        if self.aktiv_miljo() in MILJOER_MED_KUNDDATA:
+            return True
+        return bool(self.database_url) and not _ar_loopback(self.database_url)
 
     def llm_provider_fault(self) -> str | None:
         """Varför den valda LLM-providern inte får användas här, eller None.

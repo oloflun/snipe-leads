@@ -82,7 +82,8 @@ eller i rutinen kommer tillbaka.
 
 | Datum | Händelse | Bedömning | Anmäld | Åtgärd |
 |---|---|---|---|---|
-| 2026-08-24 | Render-API-nyckel exponerad (upptäckt i GDPR-genomgång) | **Öppen** — nyckeln ska roteras och det ska bedömas om den gav åtkomst till persondata | Nej, ej bedömd | Se `docs/JURIDIK_ATGARDER.md`, P0.2 |
+| 2026-08-24 | Render-API-nyckel exponerad | **Öppen.** Bedömningen är delvis gjord: nyckeln gav åtkomst till två levande Render-tjänsters miljövariabler, som bär `DATABASE_URL` och LLM-nycklar. Alltså inte direkt åtkomst till persondata, men till de uppgifter som når dem | Nej, ej bedömd | Rotera. Se `docs/JURIDIK_ATGARDER.md`, P0.2 |
+| 2026-08-24 | **Bortglömd Render-stack körde DeepSeek mot riktig databas** | **Öppen.** Två tjänster (`snajp-support`, `snajp-support-dev`) var aldrig avstängda, deployade automatiskt vid varje push till `main`/`development`, och startade med `provider=deepseek` och `storage: postgres`. Ingen trafik syns i loggarna de senaste tre dygnen, men tjänsterna levde | Nej, ej bedömd | Se P0.2b |
 
 **Den öppna posten är det första skarpa testet av den här rutinen.** Kör den
 genom punkterna 2–6 ovan, i ordning. Går rutinen inte att följa på ett

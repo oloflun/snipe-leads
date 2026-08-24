@@ -1,5 +1,29 @@
 # Snipra Status
 
+## 2026-08-24 — Claude — Render-stacken var inte död, och min spärr missade den
+
+**Två Render-tjänster låg kvar levande och startade med `provider=deepseek` mot en riktig
+Postgres.** `snajp-support` (gren `main`) och `snajp-support-dev` (gren `development`), båda med
+autoDeploy — varje push till våra grenar deployade dit, inklusive dagens. DeepSeek-överföringen
+som stoppades på Railway i dag var alltså aldrig stoppad överallt.
+
+Ytan fanns inte i någon dokumentation, inte i registerförteckningen, och inte i min egen
+bedömning. Den hittades genom att incidentposten om den läckta Render-nyckeln skulle bedömas —
+frågan "vad nådde nyckeln?" ledde rakt till den.
+
+**Min spärr fångade den inte, och det var ett designfel.** `har_riktig_kunddata()` grindade på
+miljönamnet med motiveringen att "Railway sätter alltid RAILWAY_ENVIRONMENT_NAME". Sant, och
+ändå fel: det antog att Railway är den enda värden. På Render var namnet tomt, så spärren läste
+det som utveckling och släppte igenom. Grenen som skulle skydda en lokal körning skyddade i
+stället en bortglömd produktionsyta från att bli upptäckt.
+
+Regeln keyar nu på DATABASEN: en fjärrdatabas betyder riktig data oavsett värd. Loopback är
+undantaget, eftersom `lokal_stack.py` kör där och den stacken är tom. Undantaget gäller
+adressen, inte en flagga någon kan sätta — en flagga hade blivit satt.
+
+Tjänsterna är INTE avstängda av mig; det är utåtriktat och Antons beslut. Se
+`docs/JURIDIK_ATGARDER.md`, P0.2b, och två nya poster i incidentloggen.
+
 ## 2026-08-24 — Claude — produktionen lagad med en hotfix, dev-spegeln av-indexerad
 
 **Produktionen svarade riktiga kunder med regelmotorn.** `LLM_PROVIDER=gemini` mot kod som

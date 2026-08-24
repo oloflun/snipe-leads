@@ -149,6 +149,59 @@ rättningen men inte skydden.
 
 Rullas tillbaka med `git revert 78c900e` på `railway-main`.
 
+### P0.2b · Den gamla Render-stacken lever och kör DeepSeek  🔴 AKUT
+
+**Uppmätt 2026-08-24, inte antaget.** `CLAUDE.md` beskriver Vercel + Render +
+Supabase som den gamla, döda stacken. Render-delen är inte död:
+
+| Tjänst | Gren | Status | Startlogg |
+|---|---|---|---|
+| `snajp-support` | `main` | Live, ej suspenderad | `provider=deepseek, modell=deepseek-v4-flash` |
+| `snajp-support-dev` | `development` | Live, ej suspenderad | `provider=deepseek, modell=deepseek-v4-flash` |
+
+Båda svarar `{"storage":"postgres","mode":"live"}`, alltså kopplade till en
+riktig databas med en fungerande DeepSeek-nyckel. Båda har `autoDeploy: yes`
+— **varje push till `main` eller `development` deployar dit**, inklusive
+dagens.
+
+Ingen Postgres finns i Render-kontot, så databasen är någon annanstans. Vilken
+går inte att läsa ur API:t, och jag gissar inte.
+
+Ingen trafik och ingen inkorgspollning syns i loggarna de senaste tre dygnen.
+Det är svagt bevis — request-loggar kan saknas på gratisplanen — så läs det som
+"ingen aktivitet upptäckt", inte "ingen aktivitet skedde".
+
+Notera: `snajp-support` (main) varnar **inte** för att IMAP saknas, vilket
+`snajp-support-dev` gör. IMAP-uppgifter är alltså konfigurerade där.
+
+**Följden för dataskyddsarbetet:** DeepSeek-överföringen som stoppades på
+Railway i dag var aldrig stoppad överallt. Den här ytan fanns inte i någon
+dokumentation, i registerförteckningen eller i min egen bedömning.
+
+**Åtgärd — kräver dig, eftersom det är att stänga av tjänster:**
+
+1. Suspendera eller radera båda tjänsterna i Render. Suspendering är
+   reversibel och räcker.
+2. Är de suspenderade ska de bort ur `snajp-support/render.yaml` också, annars
+   återuppstår de.
+3. Bedöm enligt [`INCIDENT_RESPONSE.md`](../INCIDENT_RESPONSE.md) om någon
+   kunddata faktiskt passerade. Frågan att besvara först: vilken databas pekar
+   deras `DATABASE_URL` på?
+
+Jag har inte stängt av dem — det är utåtriktat och ditt beslut.
+
+**Spärren i koden är däremot lagad.** `har_riktig_kunddata()` grindade på
+miljönamnet, med motiveringen att Railway alltid sätter
+`RAILWAY_ENVIRONMENT_NAME`. Sant, och ändå fel: det antog att Railway är den
+enda värden. På Render var miljönamnet tomt, alltså läste spärren det som
+utveckling och släppte igenom.
+
+Regeln keyar nu på **databasen** i stället: en fjärrdatabas betyder riktig
+data, oavsett vem som kör processen. Loopback (`127.0.0.1`, `localhost`) är
+undantaget, eftersom `scripts/lokal_stack.py` kör där och den stacken är tom.
+Sju regressionstester, och `snajp-support-dev` kommer att vägra starta nästa
+gång den deployar från `development`.
+
 ### P0.2 · Rotera den läckta Render-nyckeln
 
 Nycklar och lösenord är undantaget i `CLAUDE.md` — jag rör dem inte.
