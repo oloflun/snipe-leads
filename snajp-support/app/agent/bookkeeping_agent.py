@@ -418,6 +418,63 @@ FALLT_SVAR = (
 )
 
 
+#: Rollnamnen i den lagrade historiken, och vad de heter i SDK:ns indata.
+_ROLLER = {"kund": "user", "assistent": "assistant"}
+
+
+def bygg_turhistorik(
+    historik: list[dict[str, Any]] | None, message: str
+) -> list[dict[str, Any]]:
+    """Tidigare turer + det nya meddelandet, i den form Agents SDK:t självt
+    producerar.
+
+    ## Varför det här inte är en lista handskrivna dictar längre
+
+    Den första versionen byggde assistentraderna som
+    `{"role": "assistant", "content": [{"type": "output_text", ...}]}` — alltså
+    Responses-API:ts UTDATA-typ, skickad in som indata. Den formen har bara två
+    nycklar (`role`, `content`), så `Converter.maybe_easy_input_message` fångar
+    den som ett EasyInputMessage och skickar innehållet till
+    `extract_all_content`, som bara känner `input_text`/`input_image`/
+    `input_audio`/`input_file`. Resultatet blev
+
+        agents.exceptions.UserError: Unknown content: {'type': 'output_text', ...}
+
+    Felet syntes ALDRIG på första turen — då finns ingen assistentrad — utan
+    slog till på tur två och gav 500 på en betalande yta. `run_onboarding_turn`
+    undgick det bara genom att aldrig skicka någon historik alls.
+
+    En assistentrad måste bära `"type": "message"`, för då plockas den av
+    `maybe_response_output_message` i stället, som är den gren som faktiskt
+    kan `output_text`. Det är också exakt vad `RunResult.to_input_list()`
+    genererar — vi kan inte anropa den (historiken kommer ur databasen mellan
+    två HTTP-anrop, inte ur ett levande RunResult), så vi speglar dess form.
+
+    Userraderna är oförändrade och identiska med `run_onboarding_turn`s.
+    """
+    meddelanden: list[dict[str, Any]] = []
+    for tidigare in historik or []:
+        roll = _ROLLER.get(str(tidigare.get("roll") or ""))
+        text = str(tidigare.get("text") or "").strip()
+        if not text or roll is None:
+            continue
+        if roll == "user":
+            meddelanden.append(
+                {"role": "user", "content": [{"type": "input_text", "text": text}]}
+            )
+        else:
+            meddelanden.append(
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "status": "completed",
+                    "content": [{"type": "output_text", "text": text, "annotations": []}],
+                }
+            )
+    meddelanden.append({"role": "user", "content": [{"type": "input_text", "text": message}]})
+    return meddelanden
+
+
 async def run_bookkeeping_chat_turn(
     storage,
     tenant_id: str,
@@ -444,30 +501,10 @@ async def run_bookkeeping_chat_turn(
     # precis bifogat, och bilagan blir oanvändbar.
     context.resultat.extend(forhamtat or [])
 
-    # Historiken skickas in som tidigare turer. Den bär BARA text: verktygssvar
-    # från en tidigare tur får inte grunda ett belopp i den här, eftersom
-    # siffrorna kan ha ändrats sedan dess (ett nytt underlag, en rättad
-    # avläsning). INV-BOOK-003 gäller per tur, och det är avsiktligt strängt.
-    meddelanden: list[dict[str, Any]] = []
-    for tidigare in historik or []:
-        roll = tidigare.get("roll")
-        text = str(tidigare.get("text") or "").strip()
-        if not text or roll not in ("kund", "assistent"):
-            continue
-        meddelanden.append(
-            {
-                "role": "user" if roll == "kund" else "assistant",
-                "content": [
-                    {
-                        "type": "input_text" if roll == "kund" else "output_text",
-                        "text": text,
-                    }
-                ],
-            }
-        )
-    meddelanden.append(
-        {"role": "user", "content": [{"type": "input_text", "text": message}]}
-    )
+    # Historiken bär BARA text: verktygssvar från en tidigare tur får inte grunda
+    # ett belopp i den här, eftersom siffrorna kan ha ändrats sedan dess (ett nytt
+    # underlag, en rättad avläsning). INV-BOOK-003 gäller per tur, avsiktligt strängt.
+    meddelanden = bygg_turhistorik(historik, message)
 
     start = time.monotonic()
     result = await Runner.run(agent, meddelanden, context=context, max_turns=8)
