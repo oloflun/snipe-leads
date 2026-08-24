@@ -685,6 +685,29 @@ class Storage(Protocol):
         """Verifikat med `rader` ifyllda. Sorterade på datum, sedan nummer."""
         ...
 
+    async def rensa_bk_period(
+        self,
+        tenant_id: str,
+        *,
+        fran: date | None = None,
+        till: date | None = None,
+    ) -> int:
+        """Raderar underlagen i perioden och verifikaten som hänger på dem.
+
+        URVALET ÄR SAMMA SOM `list_bk_underlag`, inte ett snävare. Ett underlag
+        utan datum tas alltså MED, precis som listan tar med det — det är just
+        de posterna grinden fällt, och en rensning som lämnar kvar det man ser
+        i vyn är en knapp som ljuger om vad den gjorde.
+
+        Verifikaten följer med. I Postgres via `on delete cascade` (migration
+        045), i minnet för hand — och det är därför returvärdet räknar
+        UNDERLAG och inget annat: talet ska betyda samma sak i båda
+        lagringarna.
+
+        Originalfilerna finns inte att radera; bara `sha256` sparades någonsin.
+        """
+        ...
+
     async def close(self) -> None: ...
 
 

@@ -38,7 +38,11 @@ function backendPath(path: string[], search: string): string {
   return `/api/bookkeeping/${path.map(encodeURIComponent).join("/")}${search}`;
 }
 
-async function vidarebefordra(request: NextRequest, path: string[], metod: "GET" | "POST") {
+async function vidarebefordra(
+  request: NextRequest,
+  path: string[],
+  metod: "GET" | "POST" | "DELETE"
+) {
   // Grinden FÖRST, före allt annat. En tenant-uppslagning innan
   // entitlement-kontrollen hade lämnat en tidsskillnad som avslöjar om kontot
   // finns, och gjort ett databasanrop åt någon som inte får vara här.
@@ -82,6 +86,9 @@ async function vidarebefordra(request: NextRequest, path: string[], metod: "GET"
       // utelämnas, kan mottagaren inte dela upp kroppen alls.
       ...(inkommandeTyp ? { "Content-Type": inkommandeTyp } : {})
     },
+    // DELETE bär inga bytes. Att läsa kroppen ändå hade varit ofarligt, men
+    // `fetch` avvisar en DELETE med kropp i vissa runtimes — och det finns
+    // ingenting att skicka: urvalet står i frågesträngen.
     body: metod === "POST" ? await request.arrayBuffer() : undefined,
     cache: "no-store"
   });
@@ -108,4 +115,13 @@ export async function GET(request: NextRequest, { params }: Params) {
 export async function POST(request: NextRequest, { params }: Params) {
   const { path } = await params;
   return vidarebefordra(request, path, "POST");
+}
+
+// Rensningen av en period. Går genom SAMMA grind som resten — entitlement
+// först, tenant sedan — vilket är hela skälet till att den ligger här och inte
+// får en egen route: en raderingsväg utanför `vidarebefordra` hade varit en
+// väg utan de två kontrollerna.
+export async function DELETE(request: NextRequest, { params }: Params) {
+  const { path } = await params;
+  return vidarebefordra(request, path, "DELETE");
 }

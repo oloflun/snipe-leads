@@ -2081,5 +2081,37 @@ class PostgresStorage:
             poster.append(post)
         return poster
 
+    async def rensa_bk_period(
+        self,
+        tenant_id: str,
+        *,
+        fran: date | None = None,
+        till: date | None = None,
+    ) -> int:
+        # Villkoret är ORDAGRANT `list_bk_underlag`:s, `datum is null`
+        # inräknat. Skrivs det snävare här raderar knappen ett annat urval än
+        # vyn visade, och kvar blir just de odaterade underlagen — de som
+        # grinden fällt och som listan lyfter fram.
+        #
+        # bk_verifikat och bk_verifikat_rad följer med via `on delete cascade`
+        # (migration 045). Ingen egen delete behövs, och en sådan hade dessutom
+        # kunnat lämna rader efter sig om ordningen blev fel.
+        #
+        # `delete`-rättigheten finns sedan migration 045 — den skrevs in från
+        # rad ett just för att en kodväg som behöver den annars svarar 500 i
+        # drift medan sviten är grön mot minnet.
+        async with self._scoped(tenant_id) as conn:
+            status = await conn.execute(
+                """
+                delete from bk_underlag
+                where (datum is null or $1::date is null or datum >= $1)
+                  and (datum is null or $2::date is null or datum <= $2)
+                """,
+                bk_datum(fran),
+                bk_datum(till),
+            )
+        # asyncpg ger tillbaka kommandotaggen, "DELETE <n>".
+        return int(status.rsplit(" ", 1)[-1])
+
     async def close(self) -> None:
         await self.pool.close()

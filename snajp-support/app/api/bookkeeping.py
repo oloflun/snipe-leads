@@ -208,6 +208,33 @@ async def periodrapport(
     return rapport
 
 
+@router.delete("/api/bookkeeping/period")
+async def rensa_period(
+    request: Request,
+    fran: date,
+    till: date,
+    tenant: dict = Depends(require_tenant),
+) -> dict:
+    """Tömmer perioden: underlagen och verifikaten som räknats ur dem.
+
+    Det är den enda vägen tillbaka från ett felläst underlag. Rättelsevägen
+    (`update_bk_underlag`) förutsätter att man vet vad som skulle stått; den
+    här förutsätter bara att man vill börja om.
+
+    RADERINGEN ÄR ÄKTA, inte en flagga. Originalfilerna finns inte att radera
+    — bara `sha256` sparades någonsin — så det som försvinner är de utlästa
+    fälten och konteringsförslagen. Att det INTE går att ångra är hela skälet
+    till att vyn frågar först.
+
+    Urvalet är samma som `lista_underlag` visar, `datum is null` inräknat. Se
+    `rensa_bk_period` i app/storage/base.py för varför.
+    """
+    antal = await request.app.state.storage.rensa_bk_period(
+        tenant["tenant_id"], fran=fran, till=till
+    )
+    return {"raderade": antal}
+
+
 @router.get("/api/bookkeeping/period.sie")
 async def exportera_sie4(
     request: Request,

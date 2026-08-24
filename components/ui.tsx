@@ -17,6 +17,26 @@ export const btnPrimary = `${btnBase} bg-ink text-paper hover:bg-ink2`;
 
 export const btnSecondary = `${btnBase} bg-paper2 text-ink hover:bg-paper2/70`;
 
+/**
+ * STORLEK, inte en sjunde variant. Läggs ovanpå btnPrimary/btnSecondary med
+ * `cn()` och rör bara höjd, luft och grad — färg, vikt och fokusring är
+ * fortfarande vokabulärets.
+ *
+ * Finns för att bokföringens knappar står i rubrikrader vid sidan av
+ * datumfälten och ska ha samma höjd som dem. Skrivet en gång här i stället för
+ * som lösa klasser på anropsstället, av exakt det skäl som står ovan: sex
+ * varianter hade redan glidit isär, och en storlek som bor på fyra ställen
+ * glider isär på samma sätt.
+ *
+ * VARJE KLASS BÄR `!`, och det är inte slarv. `cn()` här i huset är ett rent
+ * `join(" ")` utan tailwind-merge, så ordningen i class-attributet betyder
+ * ingenting — det är ordningen i den GENERERADE css-filen som avgör, och där
+ * kommer `min-h-11` efter `min-h-0`. Uppmätt i webbläsaren: utan `!` blev
+ * knapparna 44 px medan datumfälten var 36, alltså precis den skillnad
+ * modifieraren finns för att ta bort.
+ */
+export const btnLiten = "!min-h-0 !h-9 !gap-1.5 !px-3 !text-[0.875rem]";
+
 export function Badge({ children, tone = "neutral" }: Readonly<{ children: React.ReactNode; tone?: "neutral" | "good" | "warn" | "danger" }>) {
   const tones = {
     neutral: "border-ink/10 bg-ink/[0.035] text-ink/70",
