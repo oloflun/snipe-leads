@@ -1,5 +1,25 @@
 # Snipra Status
 
+## 2026-08-24 — Claude — modellnamnet följde inte med providerbytet
+
+Fortsättning på posten nedan, och en påminnelse om att `mode: live` inte är ett bevis.
+
+`MODEL` stod kvar på `deepseek-v4-flash` när LLM_PROVIDER byttes till `gemini`. Omskrivningen
+i `_default_model_for_provider` utlöses bara när MODEL lämnats på gpt-defaulten, så ett namn
+satt för hand gick rakt igenom. Development startade, hälsokontrollen sa `mode: live`, och
+varje anrop svarade `404 models/deepseek-v4-flash is not found`. Hälsokontrollen mäter att en
+NYCKEL finns — aldrig att modellen existerar hos den provider nyckeln pekar på.
+
+Nu fäller ett modellnamn från fel familj uppstarten, med 404-orsaken utskriven i
+felmeddelandet. Okända namn släpps fortfarande igenom: leverantörerna döper nya modeller utan
+att fråga oss, och en för snäv lista blir bortkommenterad.
+
+**Produktionen kör simuleringsläge.** `main` ligger på kod från 23 augusti som inte känner
+till `gemini`, faller till den tomma OpenAI-nyckeln, och svarar riktiga kunder med regelmotorn
+i stället för med agenten. Det kräver både rättade variabler och en deploy av main — se
+`docs/JURIDIK_ATGARDER.md`, P0.1d. Development är åtgärdad och verifierad med ett riktigt
+anrop, inte bara med hälsokontrollen.
+
 ## 2026-08-24 — Claude — Gemini kopplad som chattprovider, och tystnaden stängd
 
 `LLM_PROVIDER=gemini` sattes för hand i båda Railway-miljöerna. DeepSeek är därmed borta —

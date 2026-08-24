@@ -92,3 +92,51 @@ def test_klientbygget_kastar_i_stallet_for_att_bygga(monkeypatch):
             krav_tillaten_provider()
     finally:
         get_settings.cache_clear()
+
+
+def test_modell_fran_fel_provider_faller_uppstarten():
+    """Regressionen från 2026-08-24, andra halvan.
+
+    `MODEL` stod kvar på "deepseek-v4-flash" när LLM_PROVIDER byttes till
+    "gemini". Tjänsten startade, hälsokontrollen sa `mode: live` — och varje
+    anrop svarade 404: "models/deepseek-v4-flash is not found".
+
+    Hälsokontrollen mäter att en NYCKEL finns, aldrig att MODELLEN existerar
+    hos den provider nyckeln pekar på. Den skillnaden går inte att mäta utan
+    att ringa leverantören, och en hälsokontroll som kostar pengar per
+    pollning blir avstängd. Alltså kontrolleras namnet i stället.
+    """
+    s = _settings(
+        llm_provider="gemini",
+        environment="main",
+        gemini_api_key="g" * 40,
+        model="deepseek-v4-flash",
+    )
+    fel = s.llm_provider_fault()
+    assert fel is not None
+    assert "deepseek-v4-flash" in fel
+    assert "404" in fel
+
+
+def test_ratt_modell_for_providern_gar_igenom():
+    for provider, nyckel, modell in (
+        ("gemini", "gemini_api_key", "gemini-3.6-flash"),
+        ("openai", "openai_api_key", "gpt-4o-mini"),
+    ):
+        s = _settings(
+            llm_provider=provider, environment="main", model=modell, **{nyckel: "k" * 40}
+        )
+        assert s.llm_provider_fault() is None, f"{provider}/{modell}"
+
+
+def test_okant_modellnamn_blockeras_inte():
+    """Leverantörerna döper nya modeller utan att fråga oss. En för snäv lista
+    hade blockerat giltig konfiguration, vilket är hur en spärr blir
+    bortkommenterad."""
+    s = _settings(
+        llm_provider="gemini",
+        environment="main",
+        gemini_api_key="g" * 40,
+        model="nagot-nytt-2027",
+    )
+    assert s.llm_provider_fault() is None

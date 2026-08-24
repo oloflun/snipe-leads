@@ -74,6 +74,35 @@ MILJOER_MED_KUNDDATA = ("main", "production", "prod", "development", "dev")
 # annars är den inte stödd, den ser bara stödd ut.
 KANDA_PROVIDERS = ("openai", "deepseek", "gemini")
 
+# Modellnamn -> vilken provider namnet HÖR TILL. Bara entydiga prefix står här;
+# ett namn som inte matchar något av dem släpps igenom, eftersom leverantörerna
+# döper nya modeller utan att fråga oss och en för snäv lista hade blockerat
+# giltig konfiguration.
+#
+# VARFÖR KONTROLLEN FINNS: `MODEL` stod kvar på "deepseek-v4-flash" när
+# LLM_PROVIDER byttes till "gemini" 2026-08-24. Tjänsten startade, rapporterade
+# `mode: live`, och svarade 404 på VARJE anrop — "models/deepseek-v4-flash is
+# not found". Hälsokontrollen mäter att en nyckel finns, inte att modellen
+# existerar hos den provider nyckeln pekar på, och den skillnaden kostade en
+# hel eftermiddag första gången.
+MODELLFAMILJER = {
+    "gpt-": "openai",
+    "o1-": "openai",
+    "o3-": "openai",
+    "o4-": "openai",
+    "deepseek": "deepseek",
+    "gemini": "gemini",
+}
+
+
+def provider_for_model(model: str) -> str | None:
+    """Vilken provider ett modellnamn hör till, eller None om det inte går att säga."""
+    namn = (model or "").strip().lower()
+    for prefix, provider in MODELLFAMILJER.items():
+        if namn.startswith(prefix):
+            return provider
+    return None
+
 # Regler per fack: auto = skicka direkt, draft = kräver godkännande, escalate = alltid människa.
 DEFAULT_CATEGORY_RULES = {category: "draft" for category in CATEGORIES}
 
@@ -312,6 +341,18 @@ class Settings(BaseSettings):
                 f"nyckel och tyst gått ner i simuleringsläge — den hade svarat "
                 f"kunder med regelmotorn i stället för med agenten, och "
                 f"ingenting hade larmat."
+            )
+
+        modellens_provider = provider_for_model(self.model)
+        if modellens_provider is not None and modellens_provider != self.llm_provider:
+            return (
+                f"MODEL={self.model!r} är en {modellens_provider}-modell, men "
+                f"LLM_PROVIDER={self.llm_provider!r}. Anropet går till "
+                f"{self.llm_provider}s endpoint med ett modellnamn som inte finns "
+                f"där, och svaret blir 404 på VARJE förfrågan — medan "
+                f"hälsokontrollen rapporterar 'live', eftersom en nyckel finns. "
+                f"Sätt MODEL till en {self.llm_provider}-modell, eller ta bort "
+                f"variabeln och låt koden välja default."
             )
 
         if self.llm_provider == "deepseek" and self.har_riktig_kunddata():

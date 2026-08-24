@@ -80,6 +80,50 @@ Utan den kan avregistreringslänken inte byggas, och då blockerar
 dev-backenden svarar fortfarande — på gammal kod. Nästa merge till `main`
 kommer att falla likadant.
 
+### P0.1d · Produktionen svarar kunder med regelmotorn  ▸ Anton  🔴 AKUT
+
+Inte en dataskyddsfråga, men upptäckt i samma andetag och allvarligare för
+driften: **`api` i `main` kör `mode: simulation` just nu.**
+
+```
+curl https://api-production-d7695.up.railway.app/health/ready
+{"mode":"simulation","warnings":["Ingen giltig LLM-nyckel — svaren genereras
+ av den deterministiska regelmotorn, inte av AI.", ...]}
+```
+
+Orsaken: `LLM_PROVIDER` sattes till `gemini`, men produktionen ligger på kod
+från 2026-08-23 som inte känner till det värdet. Den gamla `active_llm_key`
+föll tillbaka på den tomma OpenAI-nyckeln, och en tom nyckel är
+simuleringsläge. Riktiga kunder får alltså regelmotorns svar, inte agentens,
+sedan variabeln ändrades.
+
+Dessutom stod `MODEL=deepseek-v4-flash` kvar i båda miljöerna — en kvarleva
+från DeepSeek. Med den nya koden ger den 404 på varje anrop medan
+hälsokontrollen rapporterar `live`.
+
+**Åtgärd, i den ordningen:**
+
+1. Rätta variablerna i produktionen:
+
+   ```bash
+   python scripts/llm_provider.py --env main --satt gemini --apply
+   ```
+
+   (Development är redan åtgärdad.)
+
+2. Deploya `main` med koden som stödjer Gemini. Utan steg 2 fortsätter
+   produktionen i simuleringsläge oavsett vad variablerna säger.
+
+3. Verifiera att det verkligen fungerar — `mode: live` räcker INTE som bevis,
+   det var precis det som lurade oss här. Gör ett riktigt anrop:
+
+   ```bash
+   curl -X POST https://api-production-d7695.up.railway.app/api/demo/chat \
+     -H "Content-Type: application/json" -d '{"message":"Testfraga"}'
+   ```
+
+Notera P0.1c innan produktionen körs skarpt mot Gemini.
+
 ### P0.1c · Kontrollera Geminis avtalsnivå  ▸ Anton  🔴 BRÅDSKANDE
 
 `LLM_PROVIDER=gemini` är satt i både `main` och `development` sedan

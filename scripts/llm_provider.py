@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 """Vilken LLM-provider varje Railway-miljö faktiskt kör — och bytet till OpenAI.
 
-    python scripts/llm_provider.py                       # visa läget, ändra ingenting
-    python scripts/llm_provider.py --satt gemini --apply  # byt provider
+    python scripts/llm_provider.py                        # visa läget, ändra ingenting
+    python scripts/llm_provider.py --env development      # bara en miljö
+    python scripts/llm_provider.py --satt gemini --apply  # byt provider OCH modell
 
 ## Varför skriptet finns
 
@@ -77,13 +78,45 @@ NYCKEL_FOR = {
 #: Providers som inte får ta emot kunddata. Speglar spärren i config.py.
 FORBJUDNA_MOT_KUNDDATA = ("deepseek",)
 
+#: Provider -> modellen vi kör som standard. Speglar `_default_model_for_provider`
+#: i config.py. Gemini-namnet är detsamma som vision-sidovagnen redan använder
+#: mot samma endpoint, alltså ett namn som är prövat i den här kodbasen.
+STANDARDMODELL = {
+    "openai": "gpt-4o-mini",
+    "deepseek": "deepseek-v4-flash",
+    "gemini": "gemini-3.6-flash",
+}
+
+#: Entydiga modellprefix -> provider. Speglar MODELLFAMILJER i config.py.
+MODELLFAMILJER = {
+    "gpt-": "openai",
+    "o1-": "openai",
+    "o3-": "openai",
+    "o4-": "openai",
+    "deepseek": "deepseek",
+    "gemini": "gemini",
+}
+
+
+def provider_for_model(model: str) -> str | None:
+    namn = (model or "").strip().lower()
+    for prefix, provider in MODELLFAMILJER.items():
+        if namn.startswith(prefix):
+            return provider
+    return None
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
+        "--env",
+        choices=sorted(ENVIRONMENTS),
+        help="Bara den här miljön. Utan flaggan gås alla igenom.",
+    )
+    parser.add_argument(
         "--satt",
         choices=sorted(NYCKEL_FOR),
-        help="Providern att växla till. Utan den bara diagnos.",
+        help="Providern att växla till. Sätter även MODEL. Utan den bara diagnos.",
     )
     parser.add_argument(
         "--apply",
@@ -105,6 +138,8 @@ def main() -> int:
     att_atgarda: list[str] = []
 
     for miljo in ENVIRONMENTS:
+        if args.env and miljo != args.env:
+            continue
         env_id = envs.get(miljo)
         if not env_id:
             print(f"\n{miljo}: miljön finns inte i projektet.")
@@ -146,7 +181,23 @@ def main() -> int:
                 print(f"    FEL: {provider} får inte behandla kunddata. Uppstartsspärren fäller.")
                 att_atgarda.append(f"{miljo}/{tjanst}")
 
-            if not args.satt or provider == args.satt:
+            # Diagnos 3: hör modellnamnet till providern? Det här är felet som
+            # gav 404 på VARJE anrop medan hälsokontrollen sa "live" — en
+            # nyckel fanns, men modellen fanns inte hos den leverantören.
+            modell = v.get("MODEL", "")
+            modellens = provider_for_model(modell)
+            if modell and modellens and modellens != provider:
+                print(
+                    f"    FEL: MODEL={modell!r} är en {modellens}-modell men providern "
+                    f"är {provider}.\n"
+                    f"      Varje anrop svarar 404 medan hälsokontrollen rapporterar 'live'."
+                )
+                att_atgarda.append(f"{miljo}/{tjanst}")
+
+            # Modellen räknas som en del av bytet: en provider utan en modell
+            # den känner till är inte ett halvfärdigt byte, det är ett trasigt.
+            behover_modell = bool(modell) and provider_for_model(modell) != args.satt
+            if not args.satt or (provider == args.satt and not behover_modell):
                 continue
 
             # Bytet. Nyckeln för MÅLprovidern måste redan finnas — annars byter
@@ -159,13 +210,19 @@ def main() -> int:
                 att_atgarda.append(f"{miljo}/{tjanst}")
                 continue
 
+            nya = {"LLM_PROVIDER": args.satt, "MODEL": STANDARDMODELL[args.satt]}
+
             if not args.apply:
-                print(f"    -> skulle sätta LLM_PROVIDER={args.satt} (kör med --apply)")
+                print(
+                    "    -> skulle sätta "
+                    + ", ".join(f"{k}={v2}" for k, v2 in nya.items())
+                    + " (kör med --apply)"
+                )
                 att_atgarda.append(f"{miljo}/{tjanst}")
                 continue
 
-            set_vars(service["id"], env_id, {"LLM_PROVIDER": args.satt})
-            print(f"    OK: LLM_PROVIDER={args.satt} satt. Deploya om tjänsten.")
+            set_vars(service["id"], env_id, nya)
+            print(f"    OK: {miljo}/{tjanst} satt till {args.satt}. Deploya om tjänsten.")
 
     if att_atgarda:
         print("\nKvar att åtgärda: " + ", ".join(sorted(set(att_atgarda))))
