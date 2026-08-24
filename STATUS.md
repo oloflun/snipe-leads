@@ -6,8 +6,13 @@
 och `development` (spegelmiljön räknas — den bär riktiga kunders ärenden). Spärren ligger i
 `Settings.llm_provider_fault()`, körs från `app/main.py` före databasen och från
 `agent/llm.py` vid klientbygget. Motivet står i CLAUDE.md så att nästa session inte vänder
-tillbaka det av kostnadsskäl. **Variablerna i Railway är INTE satta av mig** — se
-`docs/JURIDIK_ATGARDER.md`, P0.1b.
+tillbaka det av kostnadsskäl. **Läst ur Railway efteråt: BÅDE main och development kör `LLM_PROVIDER=deepseek`, och
+ingen miljö har en `OPENAI_API_KEY`.** Produktionen skickar alltså riktiga kundmejl till
+DeepSeek i skrivande stund, och providern går inte att vända förrän en nyckel finns —
+utan nyckel startar tjänsten i simuleringsläge, vilket är ett fel som inte larmar.
+Deployen av den här commiten till development föll som avsett på spärren; Railway lät
+den gamla versionen ligga kvar. `python scripts/llm_provider.py` visar läget, `--apply`
+byter provider men vägrar göra det utan nyckel. Se `docs/JURIDIK_ATGARDER.md`, P0.1b.
 
 **Tre juridiska sidor finns**: `/integritetspolicy`, `/villkor`, `/cookies`, med en delad
 sidfot som bär bolagsidentifikation. Alla texter är förstautkast och bär en synlig

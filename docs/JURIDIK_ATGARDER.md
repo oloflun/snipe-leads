@@ -25,27 +25,46 @@ Uppdaterad 2026-08-24.
 
 ## Kvar — kräver en människa
 
-### P0.1b · Sätt LLM_PROVIDER i Railway  ▸ Anton
+### P0.1b · Skaffa en OpenAI-nyckel och byt provider  ▸ Anton  🔴 BRÅDSKANDE
 
-Spärren i koden vägrar starta med DeepSeek i `main` och `development`. Men
-**variablerna är inte satta av mig** — jag har inte åtkomst till Railways
-miljöer.
-
-Gör detta i Railway, för **både** `main` och `development`, och för **båda**
-tjänsterna (`web` och `api` — samma fälla som Email Studio-nyckeln i
-`DEPLOY.md`):
+**Läst ur Railway 2026-08-24, inte antaget:**
 
 ```
-LLM_PROVIDER=openai
-OPENAI_API_KEY=<nyckeln>
+main         api:  LLM_PROVIDER='deepseek'   DEEPSEEK_API_KEY=<satt>   OPENAI_API_KEY SAKNAS
+development  api:  LLM_PROVIDER='deepseek'   DEEPSEEK_API_KEY=<satt>   OPENAI_API_KEY SAKNAS
 ```
 
-Kontrollera att `OPENAI_API_KEY` verkligen ligger på båda tjänsterna. Anta det
-inte. Efter deploy: en tjänst som startar betyder att spärren är nöjd; en
-tjänst som dör med `Startvägran:` i loggen betyder att `LLM_PROVIDER` fortfarande
-står på deepseek någonstans.
+Kör `python scripts/llm_provider.py` för att se det aktuella läget själv —
+skriptet skriver aldrig ut ett nyckelvärde.
 
-Sätt samtidigt:
+**Två saker följer av det.**
+
+För det första: produktionen skickar riktiga kunders mejl till DeepSeek just
+nu. Det är inte något koden orsakar och inte något koden kan laga — spärren
+kan bara vägra starta. Det här är den skarpa posten i hela dokumentet.
+
+För det andra: `OPENAI_API_KEY` finns inte i någon miljö, så providern går
+inte att bara vända. En tjänst som startar med `openai` men utan nyckel går
+ner i simuleringsläge — den ser frisk ut och slutar producera riktiga svar,
+vilket är ett sämre fel än ett som larmar.
+
+**Ordning:**
+
+1. Skaffa en OpenAI-nyckel (konto + betalkort — därför din hand och inte min).
+2. Lägg `OPENAI_API_KEY` på `api` i **både** `main` och `development`.
+   Kontrollera att den ligger där; anta det inte — samma fälla som Email
+   Studio-nyckeln i `DEPLOY.md`.
+3. Byt providern:
+
+   ```bash
+   python scripts/llm_provider.py --apply
+   ```
+
+   Skriptet vägrar byta på en tjänst som saknar nyckeln, så steg 2 går inte
+   att hoppa över av misstag.
+4. Deploya om `api` och kontrollera att den startar.
+
+Sätt samtidigt på `api` i båda miljöerna:
 
 ```
 PUBLIC_BASE_URL=https://snajp.se
@@ -53,6 +72,13 @@ PUBLIC_BASE_URL=https://snajp.se
 
 Utan den kan avregistreringslänken inte byggas, och då blockerar
 `send_guard` regel 2 varje utskick.
+
+**Tills detta är gjort startar inte `api` på ny kod.** Deployen av
+`64aba04` till `development` föll som avsett, med
+`CRITICAL Startvägran: LLM_PROVIDER=deepseek är inte tillåtet i miljön
+'development'` i loggen. Railway låter den föregående versionen ligga kvar, så
+dev-backenden svarar fortfarande — på gammal kod. Nästa merge till `main`
+kommer att falla likadant.
 
 ### P0.2 · Rotera den läckta Render-nyckeln  ▸ Anton
 
