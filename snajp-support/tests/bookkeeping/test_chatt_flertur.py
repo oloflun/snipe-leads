@@ -247,6 +247,36 @@ def test_historiken_gar_genom_sdk_konverteraren_utan_att_kasta():
     assert meddelanden[1]["content"] == "svar ett"
 
 
+def test_assistentraden_bar_id_och_type_som_grinden_kraver():
+    """De två nycklar SDK:ns konverterare grindar på, var för sig.
+
+    Testet ovan går genom konverteraren och säger "det funkar". Det här säger
+    VARFÖR, och det är skillnaden mellan ett skydd som överlever en refaktor
+    och ett som tyst blir tomt: `maybe_response_output_message` kräver
+    `type == "message"`, `role == "assistant"` OCH — sedan openai-agents
+    0.22.0 — att både `id` och `content` finns i posten.
+
+    Faller just det här testet har någon plockat bort ett fält som ser
+    onödigt ut. Det är det inte: utan `id` faller raden igenom hela
+    konverteraren och ger `UserError: Unhandled item type or structure` på tur
+    två, alltså i drift och inte här.
+    """
+    poster = bygg_turhistorik([{"roll": "assistent", "text": "svar"}], "ny fråga")
+    assistentrader = [p for p in poster if p.get("role") == "assistant"]
+    assert len(assistentrader) == 1
+    rad = assistentrader[0]
+
+    assert rad["type"] == "message"
+    saknas = {"id", "content"} - set(rad)
+    assert not saknas, (
+        "openai-agents >=0.22 grindar på att både id och content finns i "
+        f"posten. Saknas: {sorted(saknas)}"
+    )
+    # Påhittat, och ska SE påhittat ut. Ett `msg_...` hade inbjudit någon att
+    # tro att det kom från API:t och går att slå upp.
+    assert not str(rad["id"]).startswith("msg_")
+
+
 def test_gamla_formen_kastar_fortfarande():
     """Bevisar att testet ovan mäter något.
 

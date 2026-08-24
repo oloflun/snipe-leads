@@ -453,6 +453,29 @@ def bygg_turhistorik(
     genererar — vi kan inte anropa den (historiken kommer ur databasen mellan
     två HTTP-anrop, inte ur ett levande RunResult), så vi speglar dess form.
 
+    ## Varför `id` står med fastän vi inte har något riktigt
+
+    `maybe_response_output_message` skärptes i openai-agents 0.22.0:
+
+        and {"id", "content"} <= set(item)
+
+    0.18.3 nöjde sig med `type` + `role`. Utan `id` faller raden alltså igenom
+    HELA konverteraren i 0.22 och landar i
+
+        agents.exceptions.UserError: Unhandled item type or structure: {...}
+
+    — samma fel som ovan, en tur senare, av ett nytt skäl. Det upptäcktes i CI
+    medan den lokala sviten var grön: `requirements.txt` sa
+    `openai-agents>=0.2.0` utan tak, så utvecklarmaskinen körde 0.18.3 och både
+    CI och Docker-bygget 0.22.0. Det är därför taket numera står i
+    requirements.txt.
+
+    Värdet är påhittat och lämnar aldrig processen. `get_agent_model()` tvingar
+    SDK:t till Chat Completions (DeepSeek stödjer inte Responses-API:t), och den
+    grenen läser bara `content` ur posten — `id` finns till för grinden ovan och
+    ingenting annat. Det får därför INTE se ut som ett riktigt `msg_...` från
+    API:t, eftersom det inte är ett.
+
     Userraderna är oförändrade och identiska med `run_onboarding_turn`s.
     """
     meddelanden: list[dict[str, Any]] = []
@@ -468,6 +491,7 @@ def bygg_turhistorik(
         else:
             meddelanden.append(
                 {
+                    "id": f"historik-{len(meddelanden)}",
                     "type": "message",
                     "role": "assistant",
                     "status": "completed",
