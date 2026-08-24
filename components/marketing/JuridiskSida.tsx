@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Logo } from "@/components/Logo";
 import { Sidfot } from "@/components/marketing/Sidfot";
-import { BOLAG } from "@/lib/bolag";
+import { utanPlatshallare, BOLAG } from "@/lib/bolag";
 
 /**
  * Skalet runt de tre juridiska sidorna: integritetspolicy, villkor, cookies.
@@ -46,9 +46,16 @@ export function JuridiskSida({
         <h1 className="font-display text-[clamp(2rem,5vw,3rem)] font-semibold leading-[1.05] tracking-[-0.03em]">
           {rubrik}
         </h1>
-        <p className="mt-4 text-[0.875rem] text-ink/45">
-          Senast uppdaterad: {BOLAG.policyUppdaterad}
-        </p>
+        {/* Renderas bara med ett riktigt datum. Stod som "Senast uppdaterad:
+            [DATUM]" på alla tre sidorna, vilket är sämre än ingen rad alls:
+            en läsare som ska bedöma om dokumentet är aktuellt får då veta att
+            vi inte vet. Sätts `policyUppdaterad` i lib/bolag.ts kommer raden
+            tillbaka av sig själv. */}
+        {utanPlatshallare(BOLAG.policyUppdaterad) ? (
+          <p className="mt-4 text-[0.875rem] text-ink/45">
+            Senast uppdaterad: {BOLAG.policyUppdaterad}
+          </p>
+        ) : null}
         {ingress ? (
           <p className="mt-6 text-[1.125rem] leading-[1.7] text-ink/75">{ingress}</p>
         ) : null}

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { JuridiskSida } from "@/components/marketing/JuridiskSida";
-import { BOLAG, DATASKYDD_MEJL, UNDERLEVERANTORER } from "@/lib/bolag";
+import { bolagsraden, dataskyddKontakt, utanPlatshallare, UNDERLEVERANTORER } from "@/lib/bolag";
+import { KONTAKT_MEJL } from "@/components/marketing/copy";
 import { notFoundOnTenant } from "@/lib/tenants/server";
 
 export const metadata: Metadata = {
@@ -25,13 +26,18 @@ export default async function Page() {
       ingress="Den här sidan beskriver hur vi behandlar personuppgifter när du besöker snajp.se, skapar ett konto eller på annat sätt är i kontakt med oss."
     >
       <h2>Vem är personuppgiftsansvarig</h2>
+      {/* Raden byggs av det som är ifyllt. Org.nr och postadress är ännu
+          platshållare och utelämnas därför helt — de stod tidigare som
+          "[XXXXXX-XXXX]" mitt i meningen om vem som bär ansvaret, vilket är
+          den sämsta tänkbara platsen för en text som ser påhittad ut. */}
       <p>
-        {BOLAG.namn}, org.nr {BOLAG.orgnr}, {BOLAG.postadress}, är personuppgiftsansvarig för
-        behandlingen av personuppgifter som sker när du besöker snajp.se, registrerar ett konto
-        eller på annat sätt är i kontakt med oss.
+        {bolagsraden(", ")} är personuppgiftsansvarig för behandlingen av personuppgifter som
+        sker när du besöker snajp.se, registrerar ett konto eller på annat sätt är i kontakt
+        med oss.
       </p>
       <p>
-        Kontakt i dataskyddsfrågor: <a href={`mailto:${DATASKYDD_MEJL}`}>{DATASKYDD_MEJL}</a>
+        Kontakt i dataskyddsfrågor:{" "}
+        <a href={`mailto:${dataskyddKontakt(KONTAKT_MEJL)}`}>{dataskyddKontakt(KONTAKT_MEJL)}</a>
       </p>
 
       <h2>Vilka uppgifter vi behandlar och varför</h2>
@@ -79,9 +85,15 @@ export default async function Page() {
       <h2>Vilka vi delar uppgifter med</h2>
       <p>Vi använder följande underleverantörer för att driva tjänsten:</p>
       <ul>
+        {/* `region` utelämnas när den är en platshållare. Fälten innehåller
+            interna anvisningar — "Ange dataregion OCH avtalsnivå … se
+            docs/JURIDIK_ATGARDER.md, P0.1c" — och de stod ordagrant i en
+            publik juridisk handling. Att inte ange region är en lucka; att
+            publicera vår egen att-göra-lista är något annat. */}
         {UNDERLEVERANTORER.map((leverantor) => (
           <li key={leverantor.namn}>
-            <strong>{leverantor.namn}</strong> — {leverantor.andamal} {leverantor.region}
+            <strong>{leverantor.namn}</strong> — {leverantor.andamal}
+            {utanPlatshallare(leverantor.region) ? ` ${leverantor.region}` : null}
           </li>
         ))}
       </ul>
@@ -105,7 +117,8 @@ export default async function Page() {
       <p>
         Du har rätt att begära tillgång till, rättelse av och radering av dina uppgifter, samt att
         invända mot behandling som sker med stöd av berättigat intresse. Kontakta oss på{" "}
-        <a href={`mailto:${DATASKYDD_MEJL}`}>{DATASKYDD_MEJL}</a>. Du har också rätt att klaga till
+        <a href={`mailto:${dataskyddKontakt(KONTAKT_MEJL)}`}>{dataskyddKontakt(KONTAKT_MEJL)}</a>. Du
+        har också rätt att klaga till
         Integritetsskyddsmyndigheten, <a href="https://imy.se">imy.se</a>.
       </p>
 
