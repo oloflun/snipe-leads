@@ -79,23 +79,24 @@ Båda rättade i [`049`](../supabase/migrations/049_avregistrering_utan_arbetsyt
 
 ### P0.1c · Gemini-nyckeln ligger på gratisnivån  🔴 BLOCKERANDE
 
-**Uppdaterat 2026-08-24 kväll: frågan är i praktiken besvarad, och svaret är
-det sämsta av de möjliga.**
+**AVGJORD 2026-08-24 kväll. Inga indicier kvar — Google svarar rakt ut.**
 
-Ett demo-anrop mot development föll med:
+Hela felet ur produktionsloggen:
 
 ```
-openai.RateLimitError: Error code: 429
-"You exceeded your current quota, please check your plan and billing details."
+quotaId:     GenerateRequestsPerDayPerProjectPerModel-FreeTier
+quotaMetric: generativelanguage.googleapis.com/generate_content_free_tier_requests
+quotaValue:  20
+model:       gemini-3.6-flash
+status:      RESOURCE_EXHAUSTED
 ```
 
-Fem sådana i loggen. Det är gratisnivåns signatur — ett Gemini-projekt med
-fakturering slår inte i kvoten på en handfull anrop en kväll. Det stämmer med
-vad kodbasen själv säger om nyckeln ("vald för gratisnivån", se `config.py`
-och `scripts/keys.py`).
+`FreeTier` i kvot-id:t, och **tjugo anrop per dygn** per projekt och modell.
+Det stämmer med vad kodbasen själv säger om nyckeln ("vald för gratisnivån",
+se `config.py` och `scripts/keys.py`).
 
-Det är indicier, inte ett kontoutdrag. Bekräfta i Google Cloud-konsolen. Men
-planera inte som om det vore något annat.
+Dagens handfull demo-anrop åt upp hela dygnsransonen för BÅDA miljöerna,
+eftersom de delar nyckel.
 
 **Två följder, båda allvarliga.**
 
@@ -137,10 +138,25 @@ Tills detta är löst säger `/integritetspolicy` **inte** att leverantören "in
 tränar på texten". Det påståendet togs bort, och det ska inte skrivas tillbaka
 förrän avtalet säger det.
 
-**Överväg att pausa den skarpa trafiken** tills nivån är bytt. Produktionen
-körde simuleringsläge fram till i kväll — den har alltså klarat sig utan
-agenten hittills, och ett par dagar till är billigare än en behandling vi inte
-kan förklara.
+**PRODUKTIONEN ÄR PAUSAD** (2026-08-24 23:5x). Efter hotfixen svarade den 429
+på varje anrop OCH skickade kunddata till gratisnivån — sämre på båda axlarna
+samtidigt än simuleringsläget den låg i innan. Den är därför satt tillbaka:
+
+```bash
+python scripts/llm_provider.py --env main --pausa --apply
+```
+
+Nuläge, verifierat med ett riktigt anrop: `mode: simulation`, agenten svarar
+med den deterministiska regelmotorn, och ingenting går till någon leverantör.
+
+Ångra när en riktig nyckel finns:
+
+```bash
+python scripts/llm_provider.py --env main --satt gemini --apply
+```
+
+`GEMINI_API_KEY` är orörd — den driver även embeddings och bildbeskrivning,
+som inte är chattanrop och inte omfattas av dygnskvoten.
 
 Fyll i `region` för Google i [`lib/bolag.ts`](../lib/bolag.ts) och i
 [registerförteckningen](registerforteckning.md) när svaret finns.

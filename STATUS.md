@@ -1,5 +1,26 @@
 # Snipra Status
 
+## 2026-08-24 — Claude — produktionen pausad, Render tystad, Gemini-frågan avgjord
+
+**Gemini-nyckeln ÄR gratisnivån.** Inga indicier kvar — Googles eget kvotfel namnger den:
+`GenerateRequestsPerDayPerProjectPerModel-FreeTier`, 20 anrop per dygn per projekt och modell.
+Dagens demo-anrop åt upp hela ransonen för båda miljöerna, som delar nyckel.
+
+**Produktionen är pausad till simuleringsläge.** Efter hotfixen svarade den 429 på VARJE anrop
+och skickade kunddata till en nivå vars villkor tillåter träning — sämre på båda axlarna än
+läget innan. Nu: `mode: simulation`, regelmotorn svarar, ingenting går till någon leverantör.
+Verifierat med ett riktigt anrop. Ångras med `llm_provider.py --env main --satt gemini --apply`.
+
+`--pausa` är byggt som en flagga och inte ett engångskommando, eftersom det är något man vill
+kunna göra om och backa.
+
+**Render-tjänsterna är tystade men inte avstängda.** DEEPSEEK_API_KEY blankad på båda; båda
+rapporterar SIMULERINGSLÄGE i uppstartsloggen. Render-verktyget saknar suspend och Chrome-
+tillägget är inte anslutet, så själva avstängningen är ett handgrepp i dashboarden.
+
+**Kvotfel ser inte längre ut som en krasch** — 429 med begriplig text i stället för
+"Något gick fel på vår sida", som är samma svar som ett nullpointerfel gav.
+
 ## 2026-08-24 — Claude — Gemini-nyckeln är på gratisnivån, och båda miljöerna delar den
 
 Sista verifieringen av maskeringen föll — men på något annat än maskeringen:
