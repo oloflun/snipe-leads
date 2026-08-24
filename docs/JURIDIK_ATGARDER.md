@@ -118,38 +118,36 @@ avtalet.
 Fyll samtidigt i `region` för Google i [`lib/bolag.ts`](../lib/bolag.ts) och i
 [registerförteckningen](registerforteckning.md).
 
-### P0.1d · Produktionen svarar kunder med regelmotorn  🔴 AKUT
+### P0.1d · Produktionen svarade kunder med regelmotorn  ✅ ÅTGÄRDAD
 
-```
-api-production-d7695: "mode":"simulation"
-"Ingen giltig LLM-nyckel — svaren genereras av den deterministiska
- regelmotorn, inte av AI."
-```
+Produktionen körde `mode: simulation` — riktiga kunder fick den deterministiska
+regelmotorns svar i stället för agentens, medan `/health/ready` rapporterade
+`status: ok`.
 
-`main` ligger på kod från 2026-08-23 som inte känner till `gemini`, faller
-till den tomma OpenAI-nyckeln, och svarar riktiga kunder med regelmotorn.
-Dessutom står `MODEL=deepseek-v4-flash` kvar där.
+**Rättat med en kirurgisk hotfix**, inte med en full merge. Produktionen
+deployar från grenen `railway-main` (inte `main`, som är den döda
+Vercel-grenen — se [`RAILWAY.md`](../RAILWAY.md)), och den låg 37 commits efter
+`development`. Att skicka alla 37 för att laga en tom nyckel hade varit fel
+växling.
 
-**Det här kräver en deploy av `main`, och den är inte liten:** 185 commits och
-53 000 rader skiljer `main` från `development`, varav merparten är annat
-arbete än det här. Se frågan i slutet av mitt svar — det är ditt beslut, inte
-mitt.
+Hotfixen är `78c900e` på `railway-main`, 39 rader i två filer:
 
-Variablerna rättas med:
+- `active_llm_key` blir en uppslagskarta med `gemini` i. Fallbacken till en tom
+  sträng är **behållen med flit** — den gör att en felkonfiguration syns som
+  simuleringsläge i stället för att tyst gå till fel leverantör.
+- `_resolve_base_url` pekar `gemini` på Geminis endpoint.
+- `gpt`-defaulten skrivs om till vision-sidovagnens modellnamn när providern är
+  gemini.
 
-```bash
-python scripts/llm_provider.py --env main --satt gemini --apply
-```
+745 tester gröna på produktionsgrenen med patchen. Railway-variablerna står på
+`LLM_PROVIDER=gemini`, `MODEL=gemini-3.6-flash`.
 
-Men de gör ingen nytta förrän koden är deployad. Verifiera efteråt med ett
-**riktigt anrop**, inte med hälsokontrollen:
+**Det som INTE följde med** och som kommer med nästa riktiga deploy:
+uppstartsspärrarna mot okänd provider och fel modellfamilj, de juridiska
+sidorna, avregistreringskedjan, gallringen. Produktionen bär alltså i dag
+rättningen men inte skydden.
 
-```bash
-curl -X POST https://api-production-d7695.up.railway.app/api/demo/chat \
-  -H "Content-Type: application/json" -d '{"message":"Testfraga"}'
-```
-
-Notera att P0.1c bör vara besvarad innan produktionen kör skarpt mot Gemini.
+Rullas tillbaka med `git revert 78c900e` på `railway-main`.
 
 ### P0.2 · Rotera den läckta Render-nyckeln
 

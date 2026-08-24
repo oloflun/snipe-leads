@@ -1,5 +1,31 @@
 # Snipra Status
 
+## 2026-08-24 — Claude — produktionen lagad med en hotfix, dev-spegeln av-indexerad
+
+**Produktionen svarade riktiga kunder med regelmotorn.** `LLM_PROVIDER=gemini` mot kod som
+inte kände till värdet gav en tom nyckel, och en tom nyckel är simuleringsläge. Hälsokontrollen
+sa `status: ok` hela tiden — ordet som avslöjade det var "simulation" i ett fält ingen larmar på.
+
+Rättat med en KIRURGISK hotfix på `railway-main` (78c900e, 39 rader), inte en full merge.
+Produktionen deployar från `railway-main`, inte från `main` — den senare är den döda
+Vercel-grenen och ligger 151 commits efter. Skillnaden till development var 37 commits, och att
+skicka alla för att laga en tom nyckel hade varit fel växling. Produktionen bär nu rättningen
+men INTE spärrarna, de juridiska sidorna eller avregistreringen.
+
+**Dev-spegeln låg fritt indexerbar.** Ingen robots.txt, ingen X-Robots-Tag — en fullständig
+kopia av säljsajten med en inloggning till riktig kunddata. Vercels SSO täckte det förut.
+Stängt med `app/robots.ts` och en noindex-tagg, båda styrda av `lib/miljo.ts`, som läser
+RAILWAY_ENVIRONMENT_NAME och inte NODE_ENV — den senare är "production" i BÅDA miljöerna.
+Appens egen grind mättes samtidigt och håller.
+
+**Två buggar hittades genom att köra skarpt**, inga tester fångade dem: avregistreringen reste
+ett undantag för en tenant utan arbetsyta, och `add_suppression` skrev tyst noll rader i samma
+läge. Migration 049. Kedjan är nu klickad hela vägen på development.
+
+DPIA och intresseavvägning skrivna som utkast. DPIA:ns R1 — okontrollerat kundinnehåll till
+modelleverantören — är blockerad av att Geminis avtalsnivå inte är fastställd, och kan inte
+stängas i kod.
+
 ## 2026-08-24 — Claude — modellnamnet följde inte med providerbytet
 
 Fortsättning på posten nedan, och en påminnelse om att `mode: live` inte är ett bevis.
