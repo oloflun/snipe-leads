@@ -64,9 +64,16 @@ export default async function Page() {
         Vi säger det rakt ut därför att det är det som gör produkten till en produkt, och därför att
         en kund som upptäcker det senare har hittat något vi valde att inte nämna.
       </p>
+      {/* HÄR STOD TIDIGARE att leverantören "inte tränar på texten". Det togs
+          bort 2026-08-24 och ska inte skrivas tillbaka utan att någon läst
+          det faktiska avtalet: påståendet beror helt på vilken nivå hos
+          leverantören vi kör på, och gratisnivåer tillåter typiskt just det
+          vi lovade bort. Ett löfte i en integritetspolicy är bindande — det
+          är den ena texten på hela sajten som inte får vara optimistisk.
+          Se docs/JURIDIK_ATGARDER.md, P0.1c. */}
       <p>
-        Leverantören behandlar texten för vår räkning, enligt avtal, och använder den inte för att
-        träna sina modeller. Vilka leverantörer det gäller står nedan.
+        Leverantören behandlar texten för vår räkning och enligt avtal. Vilka leverantörer det
+        gäller, och vad respektive avtal säger om hur uppgifterna får användas, står nedan.
       </p>
 
       <h2>Vilka vi delar uppgifter med</h2>

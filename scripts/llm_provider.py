@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 """Vilken LLM-provider varje Railway-miljö faktiskt kör — och bytet till OpenAI.
 
-    python scripts/llm_provider.py                 # visa läget, ändra ingenting
-    python scripts/llm_provider.py --apply         # byt till openai där det går
+    python scripts/llm_provider.py                       # visa läget, ändra ingenting
+    python scripts/llm_provider.py --satt gemini --apply  # byt provider
 
 ## Varför skriptet finns
 
@@ -24,12 +24,20 @@ scripts/railway_env_bootstrap.py.
 
 ## Varför --apply inte kan sätta nyckeln åt dig
 
-En OpenAI-nyckel kräver ett konto och ett betalkort. Det är ett av undantagen
+En API-nyckel kräver ett konto och ofta ett betalkort. Det är ett av undantagen
 i CLAUDE.md som alltid kräver en människa. Skriptet kan bara VÄXLA providern,
-och det vägrar göra det på en tjänst som inte redan har en `OPENAI_API_KEY` —
+och det vägrar göra det på en tjänst som inte redan har providerns nyckel —
 annars hade bytet startat tjänsten utan nyckel, och den hade gått ner i
-simuleringsläge i stället för att larma. Ett tyst simuleringsläge i produktion
-är värre än en tjänst som vägrar starta.
+simuleringsläge i stället för att larma.
+
+## Varför nyckelkontrollen är per PROVIDER och inte bara "finns någon nyckel"
+
+Skriptet skrevs först med `openai` inbakat, och missade därför exakt det fel
+det fanns för att fånga: 2026-08-24 sattes LLM_PROVIDER till "gemini" för hand,
+ett värde koden då inte kände till, och development gick ner i simuleringsläge
+utan att något larmade. Kartan nedan binder ihop provider och nyckelnamn så att
+frågan "har den här tjänsten rätt nyckel för det den ska köra?" går att ställa
+maskinellt.
 """
 
 from __future__ import annotations
@@ -57,15 +65,38 @@ BACKEND = ("api",)
 OPPNA = ("LLM_PROVIDER", "PUBLIC_BASE_URL", "ENVIRONMENT", "RAILWAY_ENVIRONMENT_NAME")
 HEMLIGA = ("OPENAI_API_KEY", "DEEPSEEK_API_KEY", "GEMINI_API_KEY")
 
+#: Provider -> vilken nyckel den kräver. MÅSTE spegla `Settings.active_llm_key`
+#: och `KANDA_PROVIDERS` i snajp-support/app/config.py. Glider de isär börjar
+#: skriptet godkänna en konfiguration som tjänsten sedan vägrar starta med.
+NYCKEL_FOR = {
+    "openai": "OPENAI_API_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+    "gemini": "GEMINI_API_KEY",
+}
+
+#: Providers som inte får ta emot kunddata. Speglar spärren i config.py.
+FORBJUDNA_MOT_KUNDDATA = ("deepseek",)
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
+        "--satt",
+        choices=sorted(NYCKEL_FOR),
+        help="Providern att växla till. Utan den bara diagnos.",
+    )
+    parser.add_argument(
         "--apply",
         action="store_true",
-        help="Sätt LLM_PROVIDER=openai där en OPENAI_API_KEY redan finns.",
+        help="Genomför bytet. Utan flaggan visas bara vad som skulle hända.",
     )
     args = parser.parse_args()
+
+    if args.satt in FORBJUDNA_MOT_KUNDDATA:
+        sys.exit(
+            f"AVBRYTER: {args.satt} får inte behandla kunddata. Se CLAUDE.md, "
+            f"avsnittet om dataskydd — det är ett avtalsbeslut, inte ett kodbeslut."
+        )
 
     projekt = state()
     envs = envs_by_name(projekt)
@@ -87,38 +118,59 @@ def main() -> int:
                 continue
 
             v = service_vars(service["id"], env_id)
-            provider = v.get("LLM_PROVIDER", "(osatt — defaultar till openai)")
-            har_openai = bool(v.get("OPENAI_API_KEY"))
+            provider = v.get("LLM_PROVIDER") or "openai"  # osatt => kodens default
 
             delar = [f"{k}={v[k]!r}" for k in OPPNA if k in v]
             delar += [f"{k}=<satt, {len(v[k])} tecken>" for k in HEMLIGA if v.get(k)]
             print(f"  {tjanst}: " + "; ".join(delar))
 
-            if provider != "deepseek":
+            # Diagnos 1: är providern över huvud taget känd av koden?
+            if provider not in NYCKEL_FOR:
+                print(
+                    f"    FEL: LLM_PROVIDER={provider!r} är inget koden känner till.\n"
+                    f"      Tjänsten vägrar starta. Välj: {', '.join(sorted(NYCKEL_FOR))}."
+                )
+                att_atgarda.append(f"{miljo}/{tjanst}")
+
+            # Diagnos 2: har den nyckeln för det den påstår sig köra? Det här är
+            # frågan som inte ställdes 2026-08-24, och svaret var nej.
+            elif not v.get(NYCKEL_FOR[provider]):
+                print(
+                    f"    FEL: kör {provider} men {NYCKEL_FOR[provider]} saknas.\n"
+                    f"      Tjänsten startar i SIMULERINGSLÄGE — den svarar kunder med\n"
+                    f"      regelmotorn i stället för med agenten, och ingenting larmar."
+                )
+                att_atgarda.append(f"{miljo}/{tjanst}")
+
+            elif provider in FORBJUDNA_MOT_KUNDDATA:
+                print(f"    FEL: {provider} får inte behandla kunddata. Uppstartsspärren fäller.")
+                att_atgarda.append(f"{miljo}/{tjanst}")
+
+            if not args.satt or provider == args.satt:
                 continue
 
-            if not har_openai:
+            # Bytet. Nyckeln för MÅLprovidern måste redan finnas — annars byter
+            # vi bara ett fel mot ett tystare.
+            if not v.get(NYCKEL_FOR[args.satt]):
                 print(
-                    f"    FEL: {miljo}/{tjanst} kör deepseek UTAN att ha en OPENAI_API_KEY.\n"
-                    f"      Uppstartsspärren fäller varje deploy här tills nyckeln finns.\n"
-                    f"      Lägg nyckeln i Railway först — skriptet byter inte provider\n"
-                    f"      till en nyckel som inte finns."
+                    f"    VÄGRAR byta till {args.satt}: {NYCKEL_FOR[args.satt]} saknas på\n"
+                    f"      {miljo}/{tjanst}. Lägg nyckeln i Railway först."
                 )
                 att_atgarda.append(f"{miljo}/{tjanst}")
                 continue
 
             if not args.apply:
-                print(f"    -> skulle sätta LLM_PROVIDER=openai (kör med --apply)")
+                print(f"    -> skulle sätta LLM_PROVIDER={args.satt} (kör med --apply)")
                 att_atgarda.append(f"{miljo}/{tjanst}")
                 continue
 
-            set_vars(service["id"], env_id, {"LLM_PROVIDER": "openai"})
-            print(f"    OK: LLM_PROVIDER=openai satt. Deploya om tjänsten för att den ska gälla.")
+            set_vars(service["id"], env_id, {"LLM_PROVIDER": args.satt})
+            print(f"    OK: LLM_PROVIDER={args.satt} satt. Deploya om tjänsten.")
 
-    if att_atgarda and not args.apply:
-        print("\nKvar att åtgärda: " + ", ".join(att_atgarda))
-    elif not att_atgarda:
-        print("\nInget kör deepseek. Uppstartsspärren är nöjd.")
+    if att_atgarda:
+        print("\nKvar att åtgärda: " + ", ".join(sorted(set(att_atgarda))))
+    else:
+        print("\nVarje tjänst kör en känd provider med rätt nyckel.")
     return 0
 
 

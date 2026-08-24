@@ -67,8 +67,19 @@ export type Underleverantor = {
 
 export const UNDERLEVERANTORER: readonly Underleverantor[] = [
   {
+    // Aktiv chattprovider sedan 2026-08-24 (LLM_PROVIDER=gemini). Driver
+    // dessutom bildbeskrivning och embeddings sedan tidigare.
+    namn: "Google (Gemini)",
+    andamal: "Språkmodell som genererar och klassificerar text, beskriver bilder och bygger sökvektorer.",
+    region:
+      "[Ange dataregion OCH avtalsnivå. Avgörande: en gratisnivå tillåter " +
+      "typiskt leverantören att använda innehållet för produktförbättring. " +
+      "Se docs/JURIDIK_ATGARDER.md, P0.1c.]"
+  },
+  {
+    // Konfigurerad i koden men ingen nyckel satt i någon miljö 2026-08-24.
     namn: "OpenAI",
-    andamal: "Språkmodell som genererar och klassificerar text.",
+    andamal: "Alternativ språkmodell. Inte i drift just nu.",
     region: "[Ange dataregion och avtalsform — DPA + SCC]"
   },
   {

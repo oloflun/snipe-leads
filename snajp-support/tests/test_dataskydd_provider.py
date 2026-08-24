@@ -42,6 +42,38 @@ def test_openai_ar_alltid_tillaten():
         assert _settings(llm_provider="openai", environment=miljo).llm_provider_fault() is None
 
 
+def test_gemini_ar_tillaten_och_far_ratt_nyckel_och_endpoint():
+    """Gemini drev vision och embeddings långt innan den blev chattprovider.
+    Att den var okänd HÄR var det som gjorde bytet tyst — se nästa test."""
+    from app.agent.llm import _GEMINI_BASE_URL, _resolve_base_url
+
+    s = _settings(llm_provider="gemini", environment="main", gemini_api_key="g" * 40)
+    assert s.llm_provider_fault() is None
+    assert s.active_llm_key() == "g" * 40
+    assert _resolve_base_url(s) == _GEMINI_BASE_URL
+    # gpt-defaulten mot Geminis endpoint är ett 404 som syns först hos en kund.
+    assert not s.model.startswith("gpt-")
+
+
+@pytest.mark.parametrize("provider", ["gemeni", "GEMINI", "openai ", "claude", ""])
+def test_okant_providernamn_ar_ett_fel_inte_simuleringslage(provider):
+    """Regressionen från 2026-08-24.
+
+    `active_llm_key` slutade tidigare med `return self.openai_api_key`, så
+    VARJE okänt värde gav en tom nyckel. LLM_PROVIDER=gemini startade därför
+    tjänsten i simuleringsläge: den svarade kunder med regelmotorn i stället
+    för med agenten, deployen gick igenom och ingenting larmade.
+
+    Ett okänt värde ska fälla uppstarten. Ett tyst fel som ser friskt ut är
+    dyrare än ett högljutt som inte gör det.
+    """
+    s = _settings(llm_provider=provider, environment="main", openai_api_key="o" * 40)
+    fel = s.llm_provider_fault()
+    assert fel is not None
+    assert "känner till" in fel
+    assert s.active_llm_key() == ""
+
+
 def test_deepseek_tillaten_mot_syntetisk_data():
     """Okänd/lokal miljö = utveckling mot MemoryStorage. Se `har_riktig_kunddata`
     för varför det är rätt håll att falla."""

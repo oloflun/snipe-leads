@@ -1,5 +1,25 @@
 # Snipra Status
 
+## 2026-08-24 — Claude — Gemini kopplad som chattprovider, och tystnaden stängd
+
+`LLM_PROVIDER=gemini` sattes för hand i båda Railway-miljöerna. DeepSeek är därmed borta —
+men `gemini` var inget värde koden kände till. `active_llm_key` slutade med
+`return self.openai_api_key`, så VARJE okänt providernamn gav en tom nyckel, och en tom
+nyckel är simuleringsläge. Development svarade `mode: simulation` med regelmotorn i stället
+för agenten. Deployen gick igenom. Ingenting larmade.
+
+Tre ändringar: Gemini är nu en riktig chattprovider (nyckel, endpoint, modellnamn — samma
+som vision-sidovagnen redan använder mot samma endpoint). Okända providernamn fäller
+uppstarten i stället för att degradera tyst. Och `scripts/llm_provider.py` frågar numera
+"har den här tjänsten rätt nyckel för det den påstår sig köra?" i stället för att leta efter
+just OpenAI — det var den frågan som inte ställdes.
+
+**Kvar och brådskande (P0.1c):** nyckeln är den kodbasen själv beskriver som vald för
+GRATISNIVÅN. Gratisnivåer tillåter typiskt leverantören att använda innehållet för
+produktförbättring, och går det på kunddata är det värre än DeepSeek var. Påståendet i
+integritetspolicyn om att leverantören "inte tränar på texten" är borttaget tills någon
+läst avtalet — ett löfte i en integritetspolicy är bindande.
+
 ## 2026-08-24 — Claude — GDPR: DeepSeek utspärrad, juridiska sidor, gallring och rättighetsflöde
 
 **DeepSeek får inte längre se kunddata.** `LLM_PROVIDER=deepseek` fäller uppstarten i `main`

@@ -80,6 +80,46 @@ Utan den kan avregistreringslänken inte byggas, och då blockerar
 dev-backenden svarar fortfarande — på gammal kod. Nästa merge till `main`
 kommer att falla likadant.
 
+### P0.1c · Kontrollera Geminis avtalsnivå  ▸ Anton  🔴 BRÅDSKANDE
+
+`LLM_PROVIDER=gemini` är satt i både `main` och `development` sedan
+2026-08-24, och koden stödjer det nu. Överföringen till Kina är därmed
+stoppad — men bytet är inte klart förrän en fråga är besvarad.
+
+**Nyckeln som används är den som kodbasen själv beskriver som vald för
+gratisnivån** (se kommentaren vid `gemini_api_key` i
+`snajp-support/app/config.py`, och `scripts/keys.py`). Gratisnivåer hos
+modelleverantörer tillåter typiskt leverantören att använda det som skickas in
+för att förbättra sina produkter — alltså mänsklig granskning och träning.
+
+Går det här på kunddata är det ett större problem än DeepSeek var, inte ett
+mindre: DeepSeek var en överföring utan rätt avtal, det här vore en
+överföring där vi aktivt lämnat bort innehållet.
+
+**Att kontrollera, i den ordningen:**
+
+1. Vilken nivå ligger `GEMINI_API_KEY` på — AI Studio gratis, AI Studio betald,
+   eller Vertex AI? Bara de två senare ger normalt ett åtagande om att
+   innehållet inte används för produktförbättring.
+2. Finns ett DPA (personuppgiftsbiträdesavtal) med Google för den nivån?
+3. Vilken dataregion behandlas prompten i, och vilken överföringsmekanism
+   gäller (Googles DPF-certifiering eller SCC)?
+
+Ligger nyckeln på gratisnivån: **byt till en betald nivå eller till OpenAI
+innan fler kundmejl passerar.** Växlingen är ett kommando när nyckeln finns:
+
+```bash
+python scripts/llm_provider.py --satt openai --apply
+```
+
+Tills svaret finns säger `/integritetspolicy` inte längre att leverantören
+"inte tränar på texten" — det påståendet togs bort, eftersom ett löfte i en
+integritetspolicy är bindande. Skriv inte tillbaka det utan att ha läst
+avtalet.
+
+Fyll samtidigt i `region` för Google i `lib/bolag.ts` och i
+`docs/registerforteckning.md`.
+
 ### P0.2 · Rotera den läckta Render-nyckeln  ▸ Anton
 
 Nycklar och lösenord är undantaget i `CLAUDE.md` — jag rör dem inte.
