@@ -178,15 +178,25 @@ def _chatt(fake: _FakeDeepSeek, *, polerat: str | None = None):
 
     `polerat=None` => poleringen lämnar tillbaka tomt, och `_polera` behåller
     då originaltexten.
+
+    Kunskapsfångsten patchas SEPARAT, trots att den också går genom
+    `run_step`. Delade de mock hade `polering.assert_not_awaited()` i
+    testet "poleringen rör aldrig ett fällt svar" blivit sant av fel skäl:
+    kunskapssteget körs just på den vägen, och en gemensam räknare hade inte
+    kunnat skilja de två stegen åt.
     """
     with patch("app.agent.bookkeeping_agent.get_agent_model", return_value=_modell(fake)):
         with patch(
-            "app.agent.bookkeeping_agent.run_step",
-            new=AsyncMock(
-                return_value={"final_reply": polerat if polerat is not None else ""}
-            ),
-        ) as polering:
-            yield polering
+            "app.agent.bookkeeping_agent._fanga_kunskap",
+            new=AsyncMock(return_value={"reveals_gap": False}),
+        ):
+            with patch(
+                "app.agent.bookkeeping_agent.run_step",
+                new=AsyncMock(
+                    return_value={"final_reply": polerat if polerat is not None else ""}
+                ),
+            ) as polering:
+                yield polering
 
 
 def _text(meddelande: dict) -> str:
@@ -539,3 +549,62 @@ async def test_ett_hot_eskalerar_inte_chatten_men_syns_i_tonlaget():
 
     assert check_abuse("momsen ska in på fredag").ska_eskalera is False
     assert check_abuse("jag ska döda dig").ska_eskalera is True
+
+
+# -- 6. Kunskapsfangst (DEL 5) --------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_kunskapsfangsten_kor_bara_nar_svaret_fallde():
+    """Support kor sitt steg pa varje arende. Har hade det blivit ett extra
+    LLM-anrop pa varje "vad ar utgaende moms?" — en fraga som inte avslojar
+    nagon lucka. Chatten svarar dessutom en manniska som vantar."""
+    storage = MemoryStorage()
+    fake = _FakeDeepSeek(["Momssatsen ar 25 % pa kopet."])
+
+    with patch("app.agent.bookkeeping_agent.get_agent_model", return_value=_modell(fake)):
+        with patch("app.agent.bookkeeping_agent.run_step", new=AsyncMock(return_value={})):
+            with patch(
+                "app.agent.bookkeeping_agent._fanga_kunskap",
+                new=AsyncMock(return_value={"reveals_gap": False}),
+            ) as kunskap:
+                await run_bookkeeping_chat_turn(storage, TENANT, message="vilken momssats?")
+
+    kunskap.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_kunskapsfangsten_kor_nar_svaret_fallde():
+    storage = MemoryStorage()
+    fake = _FakeDeepSeek(["Cirka 12 000 kr.", "Fortfarande cirka 12 000 kr."])
+
+    with patch("app.agent.bookkeeping_agent.get_agent_model", return_value=_modell(fake)):
+        with patch("app.agent.bookkeeping_agent.run_step", new=AsyncMock(return_value={})):
+            with patch(
+                "app.agent.bookkeeping_agent._fanga_kunskap",
+                new=AsyncMock(return_value={"reveals_gap": True, "gap_kind": "verktyg"}),
+            ) as kunskap:
+                svar = await run_bookkeeping_chat_turn(
+                    storage, TENANT, message="hur mycket drog jag av pa bilen?"
+                )
+
+    kunskap.assert_awaited_once()
+    assert svar["kunskapslucka"]["reveals_gap"] is True
+
+
+@pytest.mark.anyio
+async def test_ett_trasigt_kunskapssteg_faller_inte_turen():
+    """Kunden har redan fatt sitt svar nar steget kors."""
+    storage = MemoryStorage()
+    fake = _FakeDeepSeek(["Cirka 12 000 kr.", "Fortfarande cirka 12 000 kr."])
+
+    with patch("app.agent.bookkeeping_agent.get_agent_model", return_value=_modell(fake)):
+        with patch(
+            "app.agent.bookkeeping_agent.run_step",
+            new=AsyncMock(side_effect=RuntimeError("steget dog")),
+        ):
+            svar = await run_bookkeeping_chat_turn(storage, TENANT, message="hur mycket?")
+
+    assert svar["reply"] == FALLT_SVAR
+    assert svar["kunskapslucka"]["reveals_gap"] is False
+    assert "RuntimeError" in svar["kunskapslucka"]["fel"]

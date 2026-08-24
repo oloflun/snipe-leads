@@ -515,6 +515,64 @@ _CHATT_POLERING = PlaybookStep(
 )
 
 
+#: Kunskapsfångsten efter en tur som avslöjade en lucka.
+#:
+#: Motsvarar supportens steg 5 i IDÉ, inte i implementation. Support frågar om
+#: ärendet avslöjade en lucka i KUNSKAPSBASEN; det här frågar om frågan
+#: avslöjade något KONTOPLANEN eller kunskapsbasen inte täcker — en kategori
+#: som saknas, ett konto ingen kunde slå upp, en periodfråga verktygen inte
+#: kan besvara. Det är två olika luckor i två olika dokument.
+_CHATT_KUNSKAPSSTEG = PlaybookStep(
+    skill="cs:kb-article",
+    requires=("bokforing_svar_grundat",),
+)
+
+
+async def _fanga_kunskap(fraga: str, svar: str, verktygssvar: list[str], trace: RunTrace) -> dict:
+    """Vad den här turen visade att vi inte kan svara på.
+
+    ## När den körs, och varför just då
+
+    Bara när turen INTE kunde besvaras med hämtade siffror — alltså när
+    beloppsgrinden fällt även efter omförsöket. Support kör sitt steg på varje
+    ärende, eskalerat eller inte; här hade det blivit ett extra LLM-anrop på
+    varje "vad är utgående moms?", och den frågan avslöjar ingen lucka.
+    Kostnaden är verklig: chatten svarar en människa som väntar.
+
+    ## Den skriver ingenting
+
+    Bedömningen går till step_log och till svaret. Att låta agenten själv fylla
+    på kontoplanen eller kunskapsbasen är ett annat beslut, med en annan
+    riskprofil — och en kontoplan som en modell fyllt på är inte längre BAS.
+
+    Kastar aldrig: kunden har redan fått sitt svar när det här körs.
+    """
+    try:
+        return await run_step(
+            _CHATT_KUNSKAPSSTEG,
+            RunLedger(satisfied={"bokforing_svar_grundat"}),
+            trace,
+            task=(
+                "Chatten kunde inte besvara kundens fråga med hämtade siffror. "
+                "Avgör vad som saknades: en kategori i kontoplanen, ett konto, "
+                "ett verktyg som inte kan svara på den här sortens fråga, eller "
+                "inget alls (kunden frågade något utanför tjänsten). Returnera "
+                "JSON: reveals_gap (bool), gap_kind (kontoplan/verktyg/kunskap/"
+                "utanfor_tjansten eller null), gap (svenska eller null), "
+                "suggestion (svenska eller null). Hitta inte på en lucka för att "
+                "ha något att säga."
+            ),
+            case_context=(
+                f"## Kundens fråga\n{fraga}\n\n## Vad chatten svarade\n{svar}\n\n"
+                f"## Vad verktygen gav ({len(verktygssvar)} anrop)\n"
+                + ("\n".join(verktygssvar[:3]) or "(inga verktygsanrop gjordes)")
+            ),
+            playbook_role="en genomgång av vad en obesvarad bokföringsfråga avslöjade",
+        )
+    except Exception as error:  # noqa: BLE001 — kunden har redan fått sitt svar
+        return {"reveals_gap": False, "fel": f"{type(error).__name__}: {error}"}
+
+
 async def _polera(svar: str, trace: RunTrace) -> str:
     """Sista handen på ett svar som REDAN passerat beloppsgrinden.
 
@@ -636,6 +694,7 @@ async def run_bookkeeping_chat_turn(
         svar = str(result.final_output or "").strip()
         verdikt = check_belopp(svar, context.resultat)
 
+    kunskap: dict[str, Any] = {"reveals_gap": False}
     if verdikt.ok:
         # Poleringen kommer EFTER grinden och grindas om. Se `_polera`.
         polerat = await _polera(svar, trace)
@@ -643,6 +702,10 @@ async def run_bookkeeping_chat_turn(
             svar = polerat
     else:
         svar = FALLT_SVAR
+        # Kunskapsfångsten körs FÖRE larmet, så att larmets "varför" kan bli
+        # bättre än beloppsgrindens brist-lista den dagen vi vill lägga den där.
+        # Den kastar aldrig — kunden har redan fått sitt svar.
+        kunskap = await _fanga_kunskap(message, svar, context.resultat, trace)
         # Ett fällt svar är en människofråga, inte bara en loggrad: kunden
         # frågade något chatten inte kunde svara på med hämtade siffror, och
         # VAD de frågade om är det enda som säger varför.
@@ -669,5 +732,6 @@ async def run_bookkeeping_chat_turn(
         "latency_ms": latens_ms,
         "forbehall": FORBEHALL,
         "tonlage": abuse.niva,
+        "kunskapslucka": kunskap,
         "step_log": trace.as_log(),
     }

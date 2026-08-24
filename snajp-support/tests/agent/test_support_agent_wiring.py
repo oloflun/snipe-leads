@@ -79,6 +79,17 @@ class _FakeLLM:
         return type("R", (), {"choices": [type("C", (), {"message": message})()], "usage": usage})()
 
 
+
+def _skill_i(messages) -> str:
+    """Vilken skill anropet gällde, läst ur step_runner:s exakta markör.
+
+    Samma metod som `_FakeLLM.create` använder, och av samma skäl: flera
+    skills nämner varandra i sin text, så `"cs:draft-response" in prompt` är
+    sant för fler steg än utkaststeget.
+    """
+    träff = re.search(r"styrs av skillen (\S+?),", messages[0]["content"])
+    return träff.group(1) if träff else ""
+
 async def _run(storage, llm, message="Vilka betalsätt accepterar ni?", risk=(0.0, 0.0), **kwargs):
     with patch("app.agent.step_runner.get_llm_client", return_value=llm), patch(
         "app.agent.support_agent.classify_cancellation_risk", new=AsyncMock(return_value=risk)
@@ -276,16 +287,16 @@ async def test_foljdfragan_instrueras_i_utkaststeget_inte_efterat():
     original = llm.create
 
     async def spionera(**kwargs):
-        prompts.append(str(kwargs["messages"]))
+        if _skill_i(kwargs["messages"]) == "cs:draft-response":
+            prompts.append(str(kwargs["messages"]))
         return await original(**kwargs)
 
     llm.create = spionera
     await _run(storage, llm, message="Fungerar den med min telefon?")
 
-    utkast = [p for p in prompts if "cs:draft-response" in p]
-    assert utkast, "Utkaststeget kördes inte."
-    assert "EN kort, öppen följdfråga" in utkast[0]
-    assert "Lämna INTE över till en människa" in utkast[0]
+    assert len(prompts) == 1, f"Utkaststeget kördes {len(prompts)} gånger."
+    assert "EN kort, öppen följdfråga" in prompts[0]
+    assert "Lämna INTE över till en människa" in prompts[0]
 
 
 @pytest.mark.anyio
