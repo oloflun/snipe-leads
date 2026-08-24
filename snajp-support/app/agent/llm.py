@@ -18,10 +18,18 @@ _GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
 
 def _resolve_base_url(settings: Settings) -> str | None:
+    """Endpointen för den valda providern. None => OpenAI SDK-default.
+
+    HOTFIX 2026-08-24: Gemini drev redan vision och embeddings mot den här
+    endpointen, men var aldrig kopplad som CHATT-provider. LLM_PROVIDER=gemini
+    pekade därför mot OpenAI:s endpoint — se `Settings.active_llm_key`.
+    """
     if settings.llm_base_url:
         return settings.llm_base_url
     if settings.llm_provider == "deepseek":
         return _DEEPSEEK_BASE_URL
+    if settings.llm_provider == "gemini":
+        return _GEMINI_BASE_URL
     return None  # OpenAI SDK-default
 
 

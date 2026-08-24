@@ -172,14 +172,40 @@ class Settings(BaseSettings):
     def _default_model_for_provider(self) -> "Settings":
         # Undvik footgun: gpt-default mot DeepSeek => byt till deepseek-v4-flash
         # (1M kontext, 384K output, $0.14/$0.28 per 1M token — se plan-dokumentet).
-        if self.llm_provider == "deepseek" and self.model.startswith("gpt-"):
-            self.model = "deepseek-v4-flash"
+        if self.model.startswith("gpt-"):
+            if self.llm_provider == "deepseek":
+                self.model = "deepseek-v4-flash"
+            elif self.llm_provider == "gemini":
+                # Samma modellnamn som vision-sidovagnen redan använder mot
+                # samma endpoint — alltså ett namn som är prövat här, inte
+                # gissat.
+                self.model = self.vision_model
         return self
 
     def active_llm_key(self) -> str:
-        if self.llm_provider == "deepseek":
-            return self.deepseek_api_key
-        return self.openai_api_key
+        """Nyckeln som hör till den valda providern.
+
+        HOTFIX 2026-08-24. Den här funktionen slutade tidigare med
+        `return self.openai_api_key`, alltså returnerade den OpenAI-nyckeln för
+        VARJE värde som inte var "deepseek". När LLM_PROVIDER sattes till
+        "gemini" gav den därför en tom nyckel — och en tom nyckel är
+        simuleringsläge. Produktionen svarade riktiga kunder med den
+        deterministiska regelmotorn i stället för med agenten, medan
+        /health/ready rapporterade `status: ok`.
+
+        Kartan nedan är minsta möjliga rättning. Den fullständiga versionen på
+        `development` fäller dessutom uppstarten vid ett okänt providernamn och
+        vid ett modellnamn som hör till fel provider — båda de spärrarna kommer
+        hit med nästa riktiga deploy. Ta INTE bort fallbacken nedan i tron att
+        du förenklar: en tom sträng här är avsikten, det är den som gör att en
+        felkonfiguration syns som simuleringsläge i stället för att tyst
+        skicka anropet till fel leverantör.
+        """
+        return {
+            "openai": self.openai_api_key,
+            "deepseek": self.deepseek_api_key,
+            "gemini": self.gemini_api_key,
+        }.get(self.llm_provider, "")
 
     def llm_key_fault(self) -> str | None:
         """Varför nyckeln inte går att använda, eller None.
