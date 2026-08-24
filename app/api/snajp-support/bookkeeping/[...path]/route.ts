@@ -42,8 +42,20 @@ async function vidarebefordra(request: NextRequest, path: string[], metod: "GET"
   // Grinden FÖRST, före allt annat. En tenant-uppslagning innan
   // entitlement-kontrollen hade lämnat en tidsskillnad som avslöjar om kontot
   // finns, och gjort ett databasanrop åt någon som inte får vara här.
-  const { products } = await resolveDashboardState();
-  if (!products.includes("bookkeeping")) {
+  //
+  // `signedIn` måste stå med, och det är inte bältesspänne på hängslen.
+  // `resolveDashboardState()` returnerar ANONYMOUS utan session, och den listan
+  // är PERMISSIV med flit — den finns för marknadsföringsytorna, där
+  // demodashboarden ska visa allt. Utan raden nedan passerade alltså en
+  // oinloggad förfrågan entitlement-kontrollen och föll först på
+  // `requireSnajpTenant` med 401.
+  //
+  // Uppmätt mot dev 2026-08-24: POST /api/snajp-support/bookkeeping/chat utan
+  // session gav 401, inte 404. Ingen data läckte — men ytan bekräftades, vilket
+  // är precis vad 404:an ovan finns för att undvika, och databasanropet gjordes
+  // åt någon som inte skulle ha kommit så långt.
+  const { products, signedIn } = await resolveDashboardState();
+  if (!signedIn || !products.includes("bookkeeping")) {
     return NextResponse.json({ error: "Hittades inte." }, { status: 404 });
   }
 

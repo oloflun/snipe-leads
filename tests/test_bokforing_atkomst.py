@@ -194,6 +194,25 @@ def test_proxyn_grindar_pa_entitlement_fore_tenant_uppslaget():
     )
 
 
+def test_proxyn_kraver_ocksa_en_session():
+    """`signedIn` är inte bältesspänne på hängslen.
+
+    `resolveDashboardState()` returnerar ANONYMOUS utan session, och den listan
+    är PERMISSIV med flit — den finns för marknadsföringsytorna. Utan
+    session-kontrollen passerar en oinloggad förfrågan entitlement-grinden och
+    faller först på tenant-uppslaget med 401.
+
+    Uppmätt mot dev 2026-08-24: POST utan session gav 401, inte 404. Ingen data
+    läckte, men ytan bekräftades — vilket är precis vad 404:an finns för att
+    undvika.
+    """
+    assert "signedIn" in PROXY, "Proxyn kontrollerar inte att någon är inloggad."
+    assert re.search(r"!signedIn\s*\|\|\s*!products\.includes", PROXY), (
+        "Session- och entitlement-kontrollen sitter inte i samma grind, alltså "
+        "inte före tenant-uppslaget."
+    )
+
+
 def test_proxyn_svarar_404_och_inte_403():
     """403 bekräftar att ytan finns. Samma val som app/admin/layout.tsx."""
     gren = PROXY.split('products.includes("bookkeeping")')[1].split("return")[1].split(";")[0]
