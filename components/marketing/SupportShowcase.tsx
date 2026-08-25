@@ -14,7 +14,14 @@ const copy = {
   }
 } satisfies Record<string, Localized>;
 
-export function SupportShowcase() {
+/**
+ * `tenant` väljs av servern (ProductPage): "snajp" när vår egen supportnyckel
+ * finns i miljön, annars ingen — då svarar demot ur Nordlys-butikens KB som
+ * förut. Med snajp-tenanten svarar chatten i stället ur Snajps egen
+ * kunskapsbas (priser, dataskydd, uppstart), vilket är vad en besökare på
+ * produktsidan faktiskt frågar om.
+ */
+export function SupportShowcase({ tenant }: Readonly<{ tenant?: string }> = {}) {
   const { text } = useLocale();
 
   return (
@@ -22,7 +29,7 @@ export function SupportShowcase() {
       <div>
         <h3 className="text-[1.125rem] font-semibold tracking-[-0.01em]">{text(copy.chat)}</h3>
         <div className="mt-4">
-          <SupportChat />
+          <SupportChat tenant={tenant} />
         </div>
         <p className="mt-3 text-[0.8125rem] text-ink/45">{text(copy.wake)}</p>
       </div>

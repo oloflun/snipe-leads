@@ -35,11 +35,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import random
 import time
 from dataclasses import dataclass
 from typing import Any
 
-from agents import Agent, Runner
+from agents import Agent, ModelSettings, Runner
 
 from ..agentcore.overlays import load_global_instructions
 from ..agentcore.packs import PlaybookStep, RunLedger, check_output_contract
@@ -364,7 +365,10 @@ kunden ingenting.
 - sla_upp_kunskap(amne) — Snajps egen förklaring av ett begrepp: moms,
   periodisering, representation, avdrag, fakturakrav, bokföringslagen,
   EU-handel, K-regelverk. Förklarar du ett sådant begrepp: slå upp det och
-  svara ur texten, inte ur minnet. Finns ämnet inte: säg det.
+  svara ur texten, inte ur minnet. Finns ämnet inte returnerar verktyget en
+  lista över ämnen som FINNS (kanda_amnen): säg då att du saknar just det
+  ämnet och nämn de två-tre närmast liggande ur listan, så att kunden kan
+  välja i stället för att mötas av en återvändsgränd.
 
 Du väljer själv vilket verktyg och vilken period frågan gäller. Säger kunden
 "i augusti" och året är underförstått: använd innevarande år, och skriv ut
@@ -394,6 +398,23 @@ Du är inte redovisningskonsult och ska inte låta som en. Säg "jag vet inte"
 när du inte vet. Säg "det där bör du fråga en redovisningskonsult om" när
 frågan går över gränsen ovan. Hitta aldrig på ett kontonummer.
 
+Variera ditt språk mellan svaren: upprepa inte samma meningsöppningar eller
+fraser tur efter tur, och undvik robotaktiga standardinledningar som "Jag
+förstår att..." eller "Tack för din fråga!". Skriv som en kunnig kollega i
+svensk affärsmiljö — siffrorna är exakta, språket är levande. Variationen
+gäller ORDEN, aldrig talen: ett belopp skrivs alltid precis som verktyget
+gav det.
+
+Exempel på form (härma stilen, aldrig orden eller siffrorna ordagrant):
+DÅLIGT: "Jag förstår att du undrar över perioden. Periodens intäkter är X kr.
+Periodens kostnader är Y kr. Periodens resultat är Z kr."
+BRA: "Augusti ser ut så här: intäkterna landade på X kr och kostnaderna på
+Y kr, så resultatet före skatt blev Z kr. Två underlag väntar fortfarande på
+granskning — vill du se dem?"
+DÅLIGT: "Det ämnet finns inte i min kunskapsbas. Jag kan inte svara."
+BRA: "Just det ämnet har jag ingen text om — däremot kan jag förklara
+periodisering eller representation, om något av dem var det du var ute efter."
+
 {FORBEHALL}
 """
 
@@ -404,11 +425,17 @@ def build_bookkeeping_chat_agent() -> Agent:
     Ingen overlay och ingen playbook: bokföringsmodulen kör inte skill-
     registret (se modulens docstring), och chatten ärver det valet.
     """
+    # temperature 0.5, EXPLICIT: chatten körde tidigare på providerns default
+    # — den enda LLM-ytan i modulen utan ett medvetet val (avläsningen kör 0,
+    # humaniseraren 0.3). 0.5 ger levande formuleringar; siffrorna påverkas
+    # inte av temperaturen eftersom de kommer ur verktygssvar och grindas av
+    # beloppskontrollen efteråt.
     return Agent[BokforingChattContext](
         name="Snajp-Bokforing-Chatt",
         instructions=CHATT_SYSTEMPROMPT,
         model=get_agent_model(),
         tools=BOKFORING_CHATT_TOOLS,
+        model_settings=ModelSettings(temperature=0.5),
     )
 
 
@@ -418,11 +445,26 @@ def build_bookkeeping_chat_agent() -> Agent:
 #: krävt att vi räknar åt modellen. Det här säger vad som hände och lämnar
 #: frågan öppen — samma hållning som `granska_manuellt` har mot ett underlag
 #: som inte gick att läsa.
-FALLT_SVAR = (
+#: Varianter i stället för EN konstant: kunden som träffade grinden tre
+#: gånger läste tidigare exakt samma stycke tre gånger, vilket får ett
+#: medvetet säkerhetsbeteende att se ut som en hängd maskin. Innebörden är
+#: densamma i alla tre — vad som hände, och vad kunden kan göra i stället.
+FALLT_SVAR_VARIANTER = (
     "Jag höll på att svara med ett belopp jag inte kunde härleda till en "
     "hämtad siffra, och då svarar jag hellre inte alls. Fråga gärna om en "
-    "bestämd period, så hämtar jag summorna och visar var de kommer ifrån."
+    "bestämd period, så hämtar jag summorna och visar var de kommer ifrån.",
+    "Där var jag på väg att skriva en siffra jag inte kunde belägga med en "
+    "hämtning, så jag stoppade mig själv. Säg vilken period det gäller, så "
+    "tar jag fram talen ur bokföringen i stället för ur luften.",
+    "Det svaret innehöll ett belopp jag inte kunde spåra till ett underlag, "
+    "och en trovärdig gissning är värre än ett ärligt nej. Prova att fråga "
+    "om en avgränsad period eller ett bestämt konto, så hämtar jag siffrorna.",
 )
+
+
+def fallt_svar() -> str:
+    """Slumpar en av varianterna ovan. En funktion så att valet görs per TUR."""
+    return random.choice(FALLT_SVAR_VARIANTER)
 
 
 #: Rollnamnen i den lagrade historiken, och vad de heter i SDK:ns indata.
@@ -729,7 +771,7 @@ async def run_bookkeeping_chat_turn(
         if polerat != svar and check_belopp(polerat, context.resultat).ok:
             svar = polerat
     else:
-        svar = FALLT_SVAR
+        svar = fallt_svar()
         # Kunskapsfångsten körs FÖRE mejlet, så att mejlets "varför" kan bli
         # bättre än beloppsgrindens brist-lista den dagen vi vill lägga den där.
         # Den kastar aldrig — kunden har redan fått sitt svar.

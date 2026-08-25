@@ -144,8 +144,31 @@ async def seed_tenant(storage, tenant_slug: str, *, embeddings=None) -> int:
         slug=tenant_slug, name=name_for_tenant(tenant_slug) or tenant_slug
     )
 
+    # Snajp är VÅR EGEN tenant: artiklarna ägs av snajp_kb.py, inte av en kund
+    # som kan ha raderat medvetet. Därför fylls den på per ARTIKEL (samma skäl
+    # och samma rubrikjämförelse som testtenant-seedningen ovan) — annars når
+    # nya artiklar i filen aldrig en databas som seedats en gång. En riktig
+    # kunds bas lämnas orörd så fort den har innehåll, precis som förut.
     if await storage.list_kb(tenant["id"]):
-        return 0
+        if tenant_slug != "snajp":
+            return 0
+        befintliga = {
+            (artikel.get("title") or "").strip().lower()
+            for artikel in await storage.list_kb(tenant["id"])
+        }
+        tillagda = 0
+        for article in articles:
+            if article["title"].strip().lower() in befintliga:
+                continue
+            await storage.add_kb_article(
+                tenant["id"],
+                title=article["title"],
+                content=article["content"],
+                category=article["category"],
+                embedding=None,
+            )
+            tillagda += 1
+        return tillagda
 
     vectors = embeddings or [None] * len(articles)
     for article, embedding in zip(articles, vectors):

@@ -79,7 +79,16 @@ def get_llm_client() -> AsyncOpenAI:
     """
     krav_tillaten_provider()
     settings = get_settings()
-    return AsyncOpenAI(api_key=settings.active_llm_key(), base_url=_resolve_base_url(settings))
+    # max_retries=3 EXPLICIT: klienten gör om transienta fel (timeout, 429,
+    # 5xx) med exponentiell backoff innan undantaget når agentkoden. Biblio-
+    # teksdefaulten är 2 och står här utskriven som 3 så att beteendet är ett
+    # beslut, inte en följd av en biblioteksuppgradering. Ett fel som når
+    # anroparen efter fyra försök är på riktigt — då gäller fallbacktexterna.
+    return AsyncOpenAI(
+        api_key=settings.active_llm_key(),
+        base_url=_resolve_base_url(settings),
+        max_retries=3,
+    )
 
 
 @lru_cache

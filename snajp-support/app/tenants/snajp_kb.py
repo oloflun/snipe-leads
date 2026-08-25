@@ -158,6 +158,65 @@ KB_ARTICLES: list[dict] = [
             "verkan och en lagstadgad svarsfrist — lämna alltid över till en människa."
         ),
     },
+    # -- Speglar sajtens FAQ (lib/faq.ts, 2026-08-25). Samma regel som för
+    # priserna: sakuppgifterna ägs av FAQ-filen och Next-sidorna; den här
+    # filen speglar dem så att chatten och sajten säger samma sak. FAQ-poster
+    # med "TODO: bekräfta med Sebbe" (provperiodens längd, uppsägningstid)
+    # speglas INTE — de är kodade som eskalering i artikeln nedan. ----------
+    {
+        "title": "Hur man kommer igång, och hur lång tid det tar",
+        "category": "ovrigt",
+        "content": (
+            "Första steget är en demo på 15–20 minuter, bokas på /boka-demo. Vi går "
+            "igenom kundens egna ärenden eller kunder live, kunden ser vad agenten "
+            "föreslår, och vi säger rakt ut om vi tror att det passar. Inga "
+            "förpliktelser.\n\n"
+            "Att koppla en inkorg och fylla kunskapsbasen är dagens arbete, inte "
+            "månadens. Det som tar tid är att komma överens om tonen i svaren, och det "
+            "görs bäst genom att köra agenten i utkastläge ett par dagar och rätta det "
+            "som blir fel.\n\n"
+            "Alla tre agenterna går dessutom att prova direkt i webbläsaren utan "
+            "konto, med exempeldata — på produktsidorna för leads, support och "
+            "bokföring."
+        ),
+    },
+    {
+        "title": "Fungerar agenterna på svenska?",
+        "category": "teknisk_support",
+        "content": (
+            "Ja. Agenterna hämtar sina formuleringar ur kundens egen kunskapsbas, så "
+            "tonen blir kundens egen och inte en översättning. Produkten är byggd för "
+            "svensk B2B från början, inte lokaliserad i efterhand."
+        ),
+    },
+    {
+        "title": "Sparas kvittona som laddas upp till bokföringsagenten?",
+        "category": "teknisk_support",
+        "content": (
+            "Nej. Filen finns i minnet under själva avläsningen och kastas sedan. Kvar "
+            "blir de avlästa fälten och ett kontrollsummevärde som gör att samma "
+            "kvitto känns igen om det laddas upp två gånger. Originalet ska arkiveras "
+            "i kundens eget system — bokföringslagen lägger det ansvaret på den som "
+            "för bokföringen."
+        ),
+    },
+    {
+        "title": "Vad händer med kundens egen kunddata",
+        "category": "ovrigt",
+        "content": (
+            "Kundens data är kundens. Varje arbetsyta är avskild i databasen med "
+            "radsäkerhet — en spärr i databasen själv, inte bara i koden ovanpå. "
+            "Kunddata blir aldrig publik och delas aldrig med andra kunder.\n\n"
+            "Innehållet i ett kundmejl skickas till den AI-leverantör som driver "
+            "modellen, för att svaret ska kunna skrivas. Vilken leverantör det är och "
+            "var behandlingen sker står i integritetspolicyn på /integritetspolicy — "
+            "underleverantörerna räknas upp med namn. För kontouppgifter är Snajp "
+            "personuppgiftsansvarig; för kunddatan i produkten är kunden ansvarig och "
+            "Snajp biträde under ett personuppgiftsbiträdesavtal. Den rättsliga "
+            "grunden för B2B-prospektering är berättigat intresse, och varje utskick "
+            "bär en avregistreringslänk som fungerar med ett klick."
+        ),
+    },
     # -- Den uttryckliga eskaleringsartikeln -------------------------------
     {
         "title": "Frågor som alltid går till en människa",

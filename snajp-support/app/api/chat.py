@@ -75,7 +75,7 @@ async def _process(
         # räknat i meddelanden hade mätt fel storhet (migration 019).
         await rate_limit_db.record(storage, scopes or [], len(result.get("step_log") or []))
         await app_state.jobs.complete(job_id, result)
-    except Exception as error:  # noqa: BLE001 — jobbet får aldrig fastna i processing
+    except Exception:  # noqa: BLE001 — jobbet får aldrig fastna i processing
         # Loggen får HELA stacken, jobbet får en mening.
         #
         # Utan raden nedan blev varje agentfel en enrads-gåta: en skarp körning
@@ -84,7 +84,14 @@ async def _process(
         # ett stringifierat undantag är att gissa. Jobbet ska däremot inte bära
         # en stack — den går till kunden.
         logger.exception("Agentkörningen misslyckades (job %s, tenant %s)", job_id, tenant_id)
-        await app_state.jobs.fail(job_id, f"Agentkörningen misslyckades: {error}")
+        # En FAST mening, inte str(error): undantagstexten visades tidigare
+        # ordagrant i den publika chattbubblan ("'ascii' codec can't encode
+        # character 'à' in position 7"). Diagnosen finns redan i loggen ovan.
+        await app_state.jobs.fail(
+            job_id,
+            "Svaret gick inte att ta fram den här gången. "
+            "Prova gärna igen om en liten stund.",
+        )
 
 
 @router.post("/api/chat", status_code=202)

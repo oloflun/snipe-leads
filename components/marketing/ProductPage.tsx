@@ -18,11 +18,17 @@ import type { ProductKey } from "@/lib/routes";
 export function ProductPage({ initial }: Readonly<{ initial: ProductKey }>) {
   const emailData = loadPublicEmailStudioData();
 
+  // Publika chatten svarar ur Snajps EGEN kunskapsbas (priser, dataskydd,
+  // uppstart) när vår supportnyckel finns — det är de frågorna en besökare
+  // ställer. Saknas nyckeln faller demot tillbaka på Nordlys-butiken som
+  // förut, i stället för att brytas av en miljö som inte hunnit få nyckeln.
+  const supportTenant = process.env.SNAJP_KEY_SNAJP ? "snajp" : undefined;
+
   return (
     <LandingPhoto
       initial={initial}
       leadsDemo={<EmailStudioEditor data={emailData} compact />}
-      supportDemo={<SupportShowcase />}
+      supportDemo={<SupportShowcase tenant={supportTenant} />}
       bookkeepingDemo={<BokforingDemo />}
     />
   );

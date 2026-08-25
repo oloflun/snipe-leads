@@ -48,6 +48,11 @@ class PlaybookStep:
     # där lämnas utan override tills den fullständiga jämförelsen är klar,
     # se docs/THINKING_MODE_COMPARISON.md.
     thinking: str | None = None  # "enabled" | "disabled" | None
+    # Per-steg temperatur. None = step_runners default (0.3). Sätts högre bara
+    # på steg vars uppgift ÄR formulering (humaniseraren, utkastet) — analys-
+    # och bedömningssteg ska förbli kalla. Beslut 2026-08-25: 0.3 för allt gav
+    # svar som återanvände samma fraser ordagrant mellan ärenden.
+    temperature: float | None = None
     # Den sanktionerade finjusteringsytan (INV-SKILL-005: "justera med
     # tilläggsinstruktioner ovanpå skillen, aldrig i skillen"). Namn på en fil
     # i agent-core/overlays/, injicerad i SYSTEMposition efter skill-texten.

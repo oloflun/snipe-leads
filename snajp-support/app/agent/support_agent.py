@@ -14,6 +14,7 @@ modellen via verktyg. Modellen resonerar, koden agerar. Det gör att
 
 from __future__ import annotations
 
+import random
 import re
 import time
 from functools import partial
@@ -91,23 +92,6 @@ def _steps_by_skill() -> dict[str, Any]:
     return {step.skill: step for step in SUPPORT_V1.steps}
 
 
-#: Hur många artiklar en tenant ska ha innan "ingen träff" får betyda "vi kan
-#: inte svara" i stället för "sökningen hittade inget den här gången".
-#:
-#: FÖRSLAG, INTE FACIT — talet är valt och inte mätt, och det ska prövas mot
-#: riktig data innan det stelnar. Resonemanget bakom fem: en tenant med färre
-#: artiklar än så har inte ett bibliotek utan ett par anteckningar, och att
-#: eskalera varje fråga som inte träffar dem är att lämna över hela
-#: supportflödet till en människa under de första veckorna — alltså precis den
-#: period då kunden bedömer om produkten fungerar.
-#:
-#: Alternativet vore en konfidenströskel (`research.confidence`) i stället för
-#: ett artikelantal. Den är i teorin bättre och i praktiken svårare: den är
-#: modellens självskattning, alltså samma sorts tal som `should_escalate`
-#: redan bär, och att bygga en andra grind på samma osäkra signal ger inte två
-#: oberoende villkor. Artikelantalet är åtminstone ett faktum.
-TUNN_KB_GRANS = 5
-
 #: Ämnen där en följdfråga är fel svar, oavsett hur tunt biblioteket är.
 #:
 #: Kontrollen görs i KOD och inte bara av `cs:customer-escalation`, av samma
@@ -119,9 +103,17 @@ TUNN_KB_GRANS = 5
 #:
 #: Listan får hellre fälla för mycket än för lite: ett fällt fall blir en
 #: eskalering, alltså exakt det som hände före den här ändringen.
+#: 2026-08-25: `gdpr`, `dataskydd` och `personuppgift*` togs BORT ur listan.
+#: De fällde varje fråga som NÄMNDE orden — och "hur hanterar ni GDPR?" är en
+#: informationsfråga vars svar står i kunskapsbasen (och på /faq och
+#: /integritetspolicy). Att lämna över den till en människa är att eskalera
+#: sin egen dokumentation. Det som SKA eskalera är utövandet av en rättighet —
+#: radering, registerutdrag — och de mönstren står kvar nedan, breddade så att
+#: de fångar "raderar alla mina uppgifter" och inte bara "radera mina data".
 _KANSLIGT = re.compile(
     r"\b(arn|allmänna\s+reklamationsnämnden|konsumentverket|konsumentombudsman|"
-    r"gdpr|dataskydd|personuppgift\w*|radera\s+(mina|all[at]?)\s+(uppgift\w*|data)|"
+    r"rader(?:a|ar|at|as)\s+(?:\w+\s+){0,3}?(?:uppgift\w*|data|konto\w*)|"
+    r"registerutdrag|rätt(?:en)?\s+att\s+bli\s+glömd|"
     r"advokat|jurist|stämning|stämma\s+er|rättslig\w*|anmäl\w*|polisanmäl\w*|"
     r"skadestånd|återbetal\w*|kompensation|ersättning|kronofogden|inkasso|"
     r"häv(a|er|ning)\s+köpet|ångerrätt\w*|reklamation\w*)\b",
@@ -199,22 +191,6 @@ def _forenklad_fraga(subject: str, message: str) -> str:
     valda = sorted(sorted(set(ord_), key=ord_.index), key=len, reverse=True)[:5]
     kandidat = " ".join(sorted(valda, key=ord_.index))
     return "" if kandidat.lower() == (message or "").strip().lower() else kandidat
-
-
-async def _kb_ar_tunn(storage: Storage, tenant_id: str) -> bool:
-    """Om tenantens bibliotek är för litet för att tomhet ska betyda något.
-
-    Anropas BARA när sökningen redan gått tom eller researchsteget sagt att
-    biblioteket inte bär svaret — alltså sällan, och just när svaret spelar
-    roll. En räkning på varje ärende hade varit en databasfråga till för att
-    besvara något vi oftast inte behöver veta.
-    """
-    try:
-        return len(await storage.list_kb(tenant_id)) < TUNN_KB_GRANS
-    except Exception:  # noqa: BLE001 — en trasig räkning får inte fälla ärendet
-        # Faller åt eskaleringshållet: kan vi inte se biblioteket vet vi inte
-        # att det är tunt, och då gäller den gamla regeln.
-        return False
 
 
 def _ar_kansligt(text: str) -> bool:
@@ -416,7 +392,7 @@ async def run_support_agent(
 
     # --- Kod: ska agenten fråga i stället för att lämna över? --------------
     #
-    # Se `_ar_kansligt` och TUNN_KB_GRANS. Beslutet fattas HÄR, före utkastet,
+    # Se `_ar_kansligt`. Beslutet fattas HÄR, före utkastet,
     # eftersom det ändrar vad utkastet ska vara — inte efteråt, som en
     # efterhandsredigering av en text som redan skrivits.
     kb_stodjer_svar = bool(research.get("kb_supports_answer"))
@@ -436,8 +412,16 @@ async def run_support_agent(
         # BARA i första turen. Har kunden redan svarat en gång och vi
         # fortfarande inte kan svara, är en andra motfråga inte omsorg utan en
         # loop — och den loopen är värre än en överlämning.
+        #
+        # 2026-08-25: `_kb_ar_tunn`-villkoret togs bort. Det stängde
+        # följdfrågevägen så fort biblioteket hade fem artiklar — på den
+        # publika demon (31 artiklar) blev varje miss en överlämning, aldrig
+        # en fråga. Men en första miss på ett FULLT bibliotek betyder oftare
+        # "frågan var för vag för att sökas" än "svaret finns inte": en
+        # förtydligad fråga får ett andra sökvarv, och först när även det går
+        # tomt (turn_count > 0) är tomheten ett besked. Loopspärren ovan är
+        # den gräns som bär den skillnaden nu.
         and turn_count == 0
-        and await _kb_ar_tunn(storage, tenant_id)
     )
 
     # --- Steg 3: utkast ----------------------------------------------------
@@ -466,10 +450,23 @@ async def run_support_agent(
         ledger,
         trace,
         task=(
+            # Två varianter, för att modellens svar OR:as in i kodbeslutet:
+            # står "eskalera om kunskapsbasen saknar svar" kvar i prompten
+            # medan koden just valt följdfrågevägen, röstar modellen alltid
+            # emot och följdfrågan eskalerar ändå.
             "Avgör om ärendet måste till en människa. Eskalera ALLTID vid: "
-            "återbetalning/kompensation, juridik/ARN/Konsumentverket, GDPR-radering, "
-            "eller om kunskapsbasen saknar svar. Returnera JSON: "
-            "should_escalate (bool), reason (svenska eller null)."
+            "återbetalning/kompensation, juridik/ARN/Konsumentverket, "
+            "GDPR-radering, avtal eller fakturering på kontonivå — eller om "
+            "kunden uttryckligen ber att få prata med en människa. "
+            + (
+                "Kunskapsbasen saknar svar, men svaret till kunden ställer en "
+                "förtydligande följdfråga — det är INTE ett skäl att eskalera "
+                "i den här turen. "
+                if fragar_uppfoljning
+                else "Eskalera också om kunskapsbasen saknar svar och ingen "
+                "följdfråga kan göra frågan besvarbar. "
+            )
+            + "Returnera JSON: should_escalate (bool), reason (svenska eller null)."
         ),
         case_context=(
             f"{case_context}\n\n## Research\n{research.get('findings', '')}\n"
@@ -602,10 +599,32 @@ async def run_support_agent(
         # för den. Kunden ska fortfarande få svar på sin fråga.
         reply = f"{abuse.replik}\n\n{reply}".strip()
     if not reply:
-        reply = (
-            "Tack för ditt meddelande! Jag har öppnat ett ärende och en kollega "
-            "återkommer så snart som möjligt."
-        )
+        # Två saker med den här grenen: den lovar bara en kollega när ärendet
+        # FAKTISKT eskalerats (annars är löftet en lögn — ingen människa ser
+        # ett oeskalerat ärende), och den varieras så att en kund som träffar
+        # den två gånger inte läser exakt samma mening två gånger.
+        if escalated:
+            reply = random.choice(
+                [
+                    "Tack för ditt meddelande! Jag har öppnat ett ärende och en "
+                    "kollega återkommer så snart som möjligt.",
+                    "Jag har lagt upp ett ärende av det här, så tar en kollega "
+                    "det vidare och hör av sig till dig.",
+                    "Det här behöver en människa titta på — jag har öppnat ett "
+                    "ärende och någon av oss återkommer så snart det går.",
+                ]
+            )
+        else:
+            reply = random.choice(
+                [
+                    "Där fick jag inte ihop ett bra svar. Kan du beskriva vad "
+                    "du är ute efter på ett annat sätt, så gör jag ett nytt försök?",
+                    "Jag vill inte gissa mig till ett svar här. Berätta gärna "
+                    "lite mer om vad du behöver, så tittar jag igen.",
+                    "Den frågan kunde jag inte besvara ordentligt på första "
+                    "försöket. Formulera den gärna på ett annat sätt så löser vi det.",
+                ]
+            )
     if len(reply) > config["max_length"]:
         reply = reply[: config["max_length"] - 1].rstrip() + "…"
 

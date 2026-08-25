@@ -66,6 +66,25 @@ const FORSLAG = [
   "Vilket konto hamnar drivmedel på?"
 ];
 
+/**
+ * Felen formuleras för kunden och varieras lätt — `orsak.message` visades
+ * tidigare ordagrant, så en tappad uppkoppling skrev "Failed to fetch" i
+ * panelen. Detaljen hör hemma i konsolen, inte i chatten.
+ */
+const NATFEL = [
+  "Jag når inte assistenten just nu. Kontrollera uppkopplingen och prova igen — det du skrev står kvar.",
+  "Anropet kom inte fram. Vänta en liten stund och tryck på skicka igen, så gör vi ett nytt försök."
+];
+
+const SVARSFEL = [
+  "Assistenten fick inte fram ett svar den här gången. Prova gärna igen om en liten stund — frågan står kvar.",
+  "Något hakade upp sig när svaret skulle tas fram. Skicka frågan igen, eller formulera den på ett annat sätt."
+];
+
+function slumpad(texter: string[]): string {
+  return texter[Math.floor(Math.random() * texter.length)];
+}
+
 export function BokforingChatt() {
   const [rader, setRader] = useState<Rad[]>([]);
   const [text, setText] = useState("");
@@ -96,6 +115,16 @@ export function BokforingChatt() {
     setRader((f) => [...f, min]);
     setText("");
 
+    // Vid fel plockas kundens rad bort igen och frågan + filen läggs tillbaka,
+    // så att ett nytt tryck på skicka gör om exakt samma tur. Tidigare
+    // kastades filen även när anropet föll — kunden fick leta rätt på kvittot
+    // en gång till för ett fel som inte var kundens.
+    const aterstall = (feltext: string) => {
+      setRader((f) => f.slice(0, -1));
+      setText(meddelande);
+      setFel(feltext);
+    };
+
     try {
       let svar: Response;
       if (fil) {
@@ -124,13 +153,24 @@ export function BokforingChatt() {
         // Utan `error` visade chatten "Assistenten svarade inte (429)" medan
         // servern precis förklarat exakt vad som hänt och vad kunden kan göra.
         // Uppmätt live 2026-08-24, med kvoten faktiskt slut.
-        setFel(
+        //
+        // En STATUSKOD är däremot ingenting kunden kan agera på — den sista
+        // reserven är en mening, inte "(500)".
+        aterstall(
           typeof data?.error === "string"
             ? data.error
             : typeof data?.detail === "string"
               ? data.detail
-              : `Assistenten svarade inte (${svar.status}).`
+              : slumpad(SVARSFEL)
         );
+        return;
+      }
+
+      // En 200:a utan läsbart svar (dödad funktion, tom kropp, bytt fältnamn)
+      // fick tidigare "undefined" att renderas som assistentens svar.
+      if (typeof data?.reply !== "string" || !data.reply.trim()) {
+        console.error("BokforingChatt: 200-svar utan reply-fält:", data);
+        aterstall(slumpad(SVARSFEL));
         return;
       }
 
@@ -138,11 +178,13 @@ export function BokforingChatt() {
         ...f,
         { roll: "assistent", text: data.reply, grundad: data.grundad !== false }
       ]);
-    } catch (orsak) {
-      setFel(orsak instanceof Error ? orsak.message : "Kunde inte nå assistenten.");
-    } finally {
+      // Filen förbrukas först när turen LYCKATS.
       setFil(null);
       if (filRef.current) filRef.current.value = "";
+    } catch (orsak) {
+      console.error("BokforingChatt:", orsak);
+      aterstall(slumpad(NATFEL));
+    } finally {
       setBusy(false);
     }
   }
