@@ -75,3 +75,4 @@ scripts/.kalla.env
 *.db
 .beads-credential-key
 .beads/proxieddb/
+.beads/interactions.jsonl
