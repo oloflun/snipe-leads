@@ -23,7 +23,19 @@ jobs:
       contents: write
 
     steps:
+      # fetch-depth: 0, inte checkout-defaultens grunda klon.
+      #
+      # Med djup 1 har runnern en enda commit och kan inte bevisa att pushen är
+      # en fast-forward. Git avvisar den då med "! [rejected] (fetch first)" —
+      # även när den FAKTISKT är en fast-forward. Uppmätt: första körningen föll
+      # på exakt det, 8 sekunder in, medan railway-development låg på en
+      # förfader till commiten som pushades.
+      #
+      # Hela historiken alltså, inte `--force`: en riktig divergens SKA stoppa
+      # jobbet i stället för att skrivas över.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Push development -> railway-development
         run: git push origin HEAD:railway-development
