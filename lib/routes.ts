@@ -187,6 +187,15 @@ export type SettingsRoute = {
    * egna, och demovyn visas för utomstående.
    */
   doldIDemo?: boolean;
+  /**
+   * Bara plattformsadmin. Fail-closed som `AppRoute.adminOnly`: default är
+   * `false`, så en anropare som glömmer flaggan visar FÄRRE poster.
+   *
+   * Flaggan döljer bara MENYPOSTEN. Grinden som räknar sitter i
+   * `SettingsSection`, på servern — att posten inte renderas hindrar ingen
+   * från att skriva adressen i fältet.
+   */
+  adminOnly?: boolean;
 };
 
 export type SettingsGroup = {
@@ -247,6 +256,23 @@ export const settingsGroups: SettingsGroup[] = [
     ]
   },
   {
+    /**
+     * Plattformens egna reglage. Inte kundens — därför `adminOnly`.
+     *
+     * Gruppen ligger sist, efter Kontot, med flit: den som är admin ser den
+     * varje gång hen öppnar inställningarna, och en post som inte angår
+     * arbetsytan ska inte ligga överst i en vy som annars handlar om den.
+     */
+    label: { sv: "Plattformen", en: "Platform" },
+    routes: [
+      {
+        href: "/admin/installningar/agentinstruktioner",
+        label: { sv: "Globala agentinstruktioner", en: "Global agent instructions" },
+        adminOnly: true
+      }
+    ]
+  },
+  {
     label: { sv: "Kontot", en: "Account" },
     routes: [
       { href: "/settings", label: { sv: "Företaget", en: "Company" } },
@@ -283,6 +309,8 @@ export function settingsGroupsForProducts(
     .map((group) => ({
       ...group,
       routes: group.routes.filter((route) => {
+        // Fail-closed, som routesForProducts: default `false`.
+        if (route.adminOnly && vy !== "admin") return false;
         // Även i kundläge. Posten döljs för att den listar VÅR arbetsytas
         // medlemsadresser, och en admin som tittar hos en kund tittar just då
         // inte på sin egen arbetsyta — raden hade alltså visat fel bolags
@@ -298,6 +326,21 @@ export function settingsGroupsForProducts(
 
 /** Sektioner demovyn inte visar. Speglar `doldIDemo` ovan — grinden sitter i SettingsSection. */
 const demoDoldaSektioner = new Set(["team"]);
+
+/**
+ * Sektioner bara plattformsadmin får öppna. Speglar `adminOnly` ovan.
+ *
+ * En egen mängd och inte en uppslagning i settingsGroups: grinden i
+ * SettingsSection utgår från SEKTIONSNYCKELN, inte från href:en, och en
+ * omväg via gruppträdet hade betytt att en post som råkar sakna sin route
+ * tyst blir oskyddad. Två rader att hålla i synk är billigare än en grind
+ * som kan misslyckas tyst.
+ */
+const adminSektioner = new Set<string>(["agentinstruktioner"]);
+
+export function sektionKraverAdmin(section: string): boolean {
+  return adminSektioner.has(section);
+}
 
 export function sektionDoldIDemo(section: string): boolean {
   return demoDoldaSektioner.has(section);
@@ -327,7 +370,8 @@ export type SettingsSectionKey =
   | "regler"
   | "mailboxes"
   | "notiser"
-  | "tema";
+  | "tema"
+  | "agentinstruktioner";
 
 const settingsSections: Record<string, SettingsSectionKey> = {
   "": "foretaget",
@@ -341,7 +385,8 @@ const settingsSections: Record<string, SettingsSectionKey> = {
   regler: "regler",
   mailboxes: "mailboxes",
   notiser: "notiser",
-  tema: "tema"
+  tema: "tema",
+  agentinstruktioner: "agentinstruktioner"
 };
 
 /**

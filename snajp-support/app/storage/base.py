@@ -537,6 +537,59 @@ class Storage(Protocol):
         self, tenant_id: str, *, agent_type: str, settings: dict[str, Any]
     ) -> dict[str, Any]: ...
 
+    # -- Instruktionslagret (migration 049) ---------------------------------
+    #
+    # VÅR text, inte kundens. Går i SYSTEMposition. Kundskriven text (SOUL,
+    # affärskontext, KB) ligger kvar i USERposition — se app/leads/soul.py för
+    # varför den skillnaden är mekanismen och inte en försiktighetsåtgärd.
+
+    async def get_global_instructions(self) -> dict[str, Any] | None:
+        """Den aktiva globala instruktionen, eller None.
+
+        None betyder "ingen har skrivit någon ännu" och är inte ett fel:
+        app/agentcore/instruktioner.py faller då tillbaka på den incheckade
+        agent-core/AGENTS.md, som är det beteende som gällde före 049.
+        """
+        ...
+
+    async def save_global_instructions(
+        self,
+        *,
+        ravtext: str,
+        strukturerad_md: str,
+        kalla: str = "ai",
+        uppdaterad_av: str | None = None,
+    ) -> dict[str, Any]:
+        """Ny version. Avaktiverar den föregående i SAMMA transaktion — det
+        partiella unika indexet tillåter bara en aktiv rad, så två steg utan
+        transaktion hade kunnat lämna noll aktiva efter ett avbrott."""
+        ...
+
+    async def list_global_instructions(self, *, limit: int = 20) -> list[dict[str, Any]]:
+        """Historiken, nyast först. Driftverktyg: svarar på 'vad stod det när
+        den där körningen gjordes?'."""
+        ...
+
+    async def get_agent_config(self, tenant_id: str, *, agent_type: str) -> dict[str, Any]:
+        """Hela raden ur agent_configs, eller defaultvärden om den saknas.
+
+        Skild från get_agent_settings, som bara ger jsonb-kolumnen. De två
+        hade kunnat vara en, men settings läses av varje leads-körning medan
+        det här bara läses av admin och av prompten — och en bredare läsning i
+        den heta vägen är inte gratis.
+        """
+        ...
+
+    async def set_agent_instructions(
+        self,
+        tenant_id: str,
+        *,
+        agent_type: str,
+        instructions_md: str,
+        instructions_rav: str = "",
+        tone: str | None = None,
+    ) -> dict[str, Any]: ...
+
     async def list_review_queue(self, tenant_id: str, *, limit: int = 100) -> list[dict[str, Any]]:
         """Utkast som väntar på granskning (send_queue.status='awaiting_review')."""
         ...

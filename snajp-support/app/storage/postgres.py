@@ -404,6 +404,11 @@ class PostgresStorage:
 
     # -- Kunskapsbas --------------------------------------------------------
 
+    #: Under den här likheten räknas en vektorträff som brus. Tröskeln är
+    #: konservativ med flit — en artikel som inte handlar om frågan är sämre
+    #: underlag än ingen artikel alls, eftersom modellen grundar sig i den.
+    VEKTOR_MIN_LIKHET = 0.25
+
     async def search_kb(
         self,
         tenant_id: str,
@@ -411,61 +416,89 @@ class PostgresStorage:
         embedding: list[float] | None = None,
         limit: int = 3,
     ) -> list[dict[str, Any]]:
+        """Vektorsökning när det finns en vektor, ANNARS OCH DESSUTOM fulltext.
+
+        Fallbacken är inte kosmetik. Vektorvägen filtrerar på
+        `embedding is not null`, och noll av kundernas artiklar bar en vektor
+        under hela den period Gemini-API:t svarade 403 (se agent/embeddings.py).
+        En kund som seedat sin bas EFTER att embeddings började fungera har
+        alltså vektorer på de nya artiklarna och inga på de gamla — och den
+        gamla koden returnerade då tom lista så fort de nyaste tre låg under
+        likhetströskeln, trots att svaret stod i en äldre artikel.
+
+        Tom träfflista är dessutom ett HÅRT eskaleringsvillkor i
+        agent/support_agent.py. En retrievalmiss blir därför inte ett sämre
+        svar utan ett ärende hos en människa, vilket är exakt det fel som
+        rapporterades som "eskalerar trots att underlag finns".
+        """
         async with self._scoped(tenant_id) as conn:
+            traffar: list[dict[str, Any]] = []
             if embedding is not None:
-                # Standardinställningen skannar bara ett kluster och missar artiklar.
-                await conn.execute("set local ivfflat.probes = 10")
-                records = await conn.fetch(
-                    """
-                    select id, title, content, category,
-                           1 - (embedding <=> $2::vector) as similarity
-                    from ss_knowledge_base
-                    where tenant_id = $1 and embedding is not null
-                    order by embedding <=> $2::vector
-                    limit $3
-                    """,
-                    tenant_id,
-                    embedding,
-                    limit,
-                )
-                return [
-                    {**_row(r), "similarity": round(float(r["similarity"]), 2)}
-                    for r in records
-                    if float(r["similarity"]) >= 0.25
-                ]
-            # websearch_to_tsquery ANDar alla ord. En riktig kundfråga innehåller
-            # alltid "vad", "hur", "kommer" och liknande, så villkoret att SAMMA
-            # artikel ska innehålla varje ord uppfylls i praktiken aldrig:
-            # "frakt" gav 1 träff, men "Vad kostar frakten och hur snabbt kommer
-            # varan?" gav 0. Fallbacken var alltså i praktiken död, och varje
-            # fråga eskalerades så fort embeddings saknades.
-            #
-            # plainto_tsquery ANDar också, medan `|` mellan orden ger OR: minst
-            # ett ord ska finnas, och ts_rank rangordnar efter hur många och hur
-            # ovanliga de är. Ord som saknas i det svenska ordförrådet faller
-            # bort av to_tsquery själv.
-            records = await conn.fetch(
-                """
-                with q as (
-                  select array_to_string(
-                    array(
-                      select lexeme from unnest(to_tsvector('swedish', $2))
-                    ), ' | '
-                  ) as expr
-                )
-                select k.id, k.title, k.content, k.category,
-                       ts_rank(k.search_tsv, to_tsquery('swedish', q.expr)) as rank
-                from ss_knowledge_base k, q
-                where k.tenant_id = $1
-                  and q.expr <> ''
-                  and k.search_tsv @@ to_tsquery('swedish', q.expr)
-                order by rank desc
-                limit $3
-                """,
-                tenant_id,
-                query,
-                limit,
+                traffar = await self._sok_vektor(conn, tenant_id, embedding, limit)
+            if not traffar:
+                traffar = await self._sok_fulltext(conn, tenant_id, query, limit)
+        return traffar
+
+    async def _sok_vektor(
+        self, conn, tenant_id: str, embedding: list[float], limit: int
+    ) -> list[dict[str, Any]]:
+        # Standardinställningen skannar bara ett kluster och missar artiklar.
+        await conn.execute("set local ivfflat.probes = 10")
+        records = await conn.fetch(
+            """
+            select id, title, content, category,
+                   1 - (embedding <=> $2::vector) as similarity
+            from ss_knowledge_base
+            where tenant_id = $1 and embedding is not null
+            order by embedding <=> $2::vector
+            limit $3
+            """,
+            tenant_id,
+            embedding,
+            limit,
+        )
+        return [
+            {**_row(r), "similarity": round(float(r["similarity"]), 2)}
+            for r in records
+            if float(r["similarity"]) >= self.VEKTOR_MIN_LIKHET
+        ]
+
+    async def _sok_fulltext(
+        self, conn, tenant_id: str, query: str, limit: int
+    ) -> list[dict[str, Any]]:
+        # websearch_to_tsquery ANDar alla ord. En riktig kundfråga innehåller
+        # alltid "vad", "hur", "kommer" och liknande, så villkoret att SAMMA
+        # artikel ska innehålla varje ord uppfylls i praktiken aldrig:
+        # "frakt" gav 1 träff, men "Vad kostar frakten och hur snabbt kommer
+        # varan?" gav 0. Fallbacken var alltså i praktiken död, och varje
+        # fråga eskalerades så fort embeddings saknades.
+        #
+        # plainto_tsquery ANDar också, medan `|` mellan orden ger OR: minst
+        # ett ord ska finnas, och ts_rank rangordnar efter hur många och hur
+        # ovanliga de är. Ord som saknas i det svenska ordförrådet faller
+        # bort av to_tsquery själv.
+        records = await conn.fetch(
+            """
+            with q as (
+              select array_to_string(
+                array(
+                  select lexeme from unnest(to_tsvector('swedish', $2))
+                ), ' | '
+              ) as expr
             )
+            select k.id, k.title, k.content, k.category,
+                   ts_rank(k.search_tsv, to_tsquery('swedish', q.expr)) as rank
+            from ss_knowledge_base k, q
+            where k.tenant_id = $1
+              and q.expr <> ''
+              and k.search_tsv @@ to_tsquery('swedish', q.expr)
+            order by rank desc
+            limit $3
+            """,
+            tenant_id,
+            query,
+            limit,
+        )
         return [
             {"id": str(r["id"]), "title": r["title"], "content": r["content"],
              "category": r["category"], "similarity": round(float(r["rank"]), 2)}
@@ -1659,6 +1692,123 @@ class PostgresStorage:
                 json.dumps(settings, ensure_ascii=False),
             )
         return json.loads(value) if isinstance(value, str) else dict(value)
+
+    # -- Instruktionslagret (migration 049) ---------------------------------
+
+    async def get_global_instructions(self) -> dict[str, Any] | None:
+        # Ingen tenant-scoping: tabellen är plattformens och har ingen
+        # tenant_id. Vägen hit går bara via master-nyckeln (api/deps.py).
+        async with self.pool.acquire() as conn:
+            record = await conn.fetchrow(
+                "select * from agent_global_instructions where aktiv"
+            )
+        return _row(record)
+
+    async def save_global_instructions(
+        self,
+        *,
+        ravtext: str,
+        strukturerad_md: str,
+        kalla: str = "ai",
+        uppdaterad_av: str | None = None,
+    ) -> dict[str, Any]:
+        async with self.pool.acquire() as conn:
+            # EN transaktion. Det partiella unika indexet tillåter exakt en
+            # aktiv rad, så avaktivering och insert måste lyckas ihop — annars
+            # kan ett avbrott mellan dem lämna noll aktiva rader, och agenten
+            # faller tyst tillbaka på filen som om ingen instruktion fanns.
+            async with conn.transaction():
+                await conn.execute(
+                    "update agent_global_instructions set aktiv = false where aktiv"
+                )
+                record = await conn.fetchrow(
+                    """
+                    insert into agent_global_instructions
+                        (ravtext, strukturerad_md, kalla, uppdaterad_av, aktiv)
+                    values ($1, $2, $3, $4, true)
+                    returning *
+                    """,
+                    ravtext,
+                    strukturerad_md,
+                    kalla,
+                    uppdaterad_av,
+                )
+        return _row(record)
+
+    async def list_global_instructions(self, *, limit: int = 20) -> list[dict[str, Any]]:
+        limit = max(1, min(limit, 200))
+        async with self.pool.acquire() as conn:
+            records = await conn.fetch(
+                """
+                select id, kalla, aktiv, uppdaterad_av, created_at,
+                       length(ravtext) as ravtext_tecken,
+                       length(strukturerad_md) as strukturerad_tecken
+                from agent_global_instructions
+                order by created_at desc
+                limit $1
+                """,
+                limit,
+            )
+        return [_row(r) for r in records]
+
+    async def get_agent_config(self, tenant_id: str, *, agent_type: str) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                select instructions_md, instructions_rav, tone, taxonomy,
+                       language_policy, status, pinned_pack_version
+                from agent_configs where tenant_id = $1 and agent_type = $2
+                """,
+                tenant_id,
+                agent_type,
+            )
+        # En saknad rad är inte ett fel: agent_configs skapas först när någon
+        # konfigurerar agenten. Tomma strängar betyder "inget lager", vilket är
+        # exakt vad läsvägen ska göra av det.
+        return _row(record) or {
+            "instructions_md": "",
+            "instructions_rav": "",
+            "tone": "",
+            "taxonomy": [],
+            "language_policy": "sv_default",
+            "status": "draft",
+            "pinned_pack_version": None,
+        }
+
+    async def set_agent_instructions(
+        self,
+        tenant_id: str,
+        *,
+        agent_type: str,
+        instructions_md: str,
+        instructions_rav: str = "",
+        tone: str | None = None,
+    ) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                insert into agent_configs
+                    (tenant_id, agent_type, instructions_md, instructions_rav, tone)
+                values ($1, $2, $3, $4, coalesce($5, ''))
+                on conflict (tenant_id, agent_type) do update set
+                    instructions_md = excluded.instructions_md,
+                    instructions_rav = excluded.instructions_rav,
+                    -- coalesce på $5 och inte på excluded.tone: null betyder
+                    -- "rör inte tonen", tom sträng betyder "nollställ den".
+                    -- Utan skillnaden kan ett sparande av instruktioner inte
+                    -- undvika att också skriva över tonen.
+                    tone = coalesce($5, agent_configs.tone),
+                    updated_at = now()
+                returning instructions_md, instructions_rav, tone, taxonomy,
+                          language_policy, status, pinned_pack_version
+                """,
+                tenant_id,
+                agent_type,
+                instructions_md,
+                instructions_rav,
+                tone,
+            )
+        return _row(record)
 
     async def list_review_queue(self, tenant_id: str, *, limit: int = 100) -> list[dict[str, Any]]:
         async with self._scoped(tenant_id) as conn:

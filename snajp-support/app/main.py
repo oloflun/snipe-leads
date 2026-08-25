@@ -16,6 +16,7 @@ import asyncio
 
 from .api import (
     admin,
+    admin_profil,
     analytics,
     bookkeeping,
     chat,
@@ -160,6 +161,9 @@ app.include_router(inbox.router)
 app.include_router(drafts.router)
 app.include_router(rules.router)
 app.include_router(admin.router)
+# Skrivytan mot agentprofilen. Egen modul, samma prefix och samma master-nyckel —
+# se docstringen i api/admin_profil.py för varför läsning och skrivning är skilda åt.
+app.include_router(admin_profil.router)
 app.include_router(analytics.router)
 app.include_router(bookkeeping.router)
 

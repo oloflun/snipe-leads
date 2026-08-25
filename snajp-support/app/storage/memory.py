@@ -167,6 +167,14 @@ class MemoryStorage:
         self.rate_events: dict[tuple[str, str, str], list[datetime]] = {}
         # (tenant_id, agent_type) -> agent_configs.settings (migration 023)
         self.agent_settings: dict[tuple[str, str], dict[str, Any]] = {}
+        # (tenant_id, agent_type) -> instructions_md/instructions_rav/tone
+        # (migration 049). Skild från agent_settings av samma skäl som i
+        # PostgresStorage: settings läses av varje leads-körning, det här
+        # läses bara av admin och av promptbygget.
+        self.agent_instructions: dict[tuple[str, str], dict[str, Any]] = {}
+        # Plattformsövergripande instruktioner, nyast först. Lista och inte en
+        # rad: historiken är hela poängen med att versionera dem.
+        self.global_instructions: list[dict[str, Any]] = []
         # Plattformsnivå, inte tenant-nycklad: ett fel i proxyn eller i
         # schemaläggaren innan den vet vilken kund det gäller hör hemma här
         # också (migration 026, tenant_id nullable).
@@ -1274,6 +1282,78 @@ class MemoryStorage:
     ) -> dict[str, Any]:
         self.agent_settings[(tenant_id, agent_type)] = dict(settings)
         return dict(settings)
+
+    # -- Instruktionslagret (migration 049) ---------------------------------
+
+    async def get_global_instructions(self) -> dict[str, Any] | None:
+        return next((dict(rad) for rad in self.global_instructions if rad["aktiv"]), None)
+
+    async def save_global_instructions(
+        self,
+        *,
+        ravtext: str,
+        strukturerad_md: str,
+        kalla: str = "ai",
+        uppdaterad_av: str | None = None,
+    ) -> dict[str, Any]:
+        for rad in self.global_instructions:
+            rad["aktiv"] = False
+        rad = {
+            "id": str(uuid.uuid4()),
+            "ravtext": ravtext,
+            "strukturerad_md": strukturerad_md,
+            "kalla": kalla,
+            "aktiv": True,
+            "uppdaterad_av": uppdaterad_av,
+            "created_at": datetime.now(timezone.utc),
+        }
+        self.global_instructions.insert(0, rad)
+        return dict(rad)
+
+    async def list_global_instructions(self, *, limit: int = 20) -> list[dict[str, Any]]:
+        return [
+            {
+                "id": rad["id"],
+                "kalla": rad["kalla"],
+                "aktiv": rad["aktiv"],
+                "uppdaterad_av": rad["uppdaterad_av"],
+                "created_at": rad["created_at"],
+                "ravtext_tecken": len(rad["ravtext"]),
+                "strukturerad_tecken": len(rad["strukturerad_md"]),
+            }
+            for rad in self.global_instructions[:limit]
+        ]
+
+    async def get_agent_config(self, tenant_id: str, *, agent_type: str) -> dict[str, Any]:
+        rad = self.agent_instructions.get((tenant_id, agent_type))
+        return dict(rad) if rad else {
+            "instructions_md": "",
+            "instructions_rav": "",
+            "tone": "",
+            "taxonomy": [],
+            "language_policy": "sv_default",
+            "status": "draft",
+            "pinned_pack_version": None,
+        }
+
+    async def set_agent_instructions(
+        self,
+        tenant_id: str,
+        *,
+        agent_type: str,
+        instructions_md: str,
+        instructions_rav: str = "",
+        tone: str | None = None,
+    ) -> dict[str, Any]:
+        rad = await self.get_agent_config(tenant_id, agent_type=agent_type)
+        rad["instructions_md"] = instructions_md
+        rad["instructions_rav"] = instructions_rav
+        # None = rör inte tonen, "" = nollställ den. Samma semantik som
+        # PostgresStorage — MemoryStorage får aldrig sacka efter protokollet.
+        if tone is not None:
+            rad["tone"] = tone
+        self.agent_instructions[(tenant_id, agent_type)] = rad
+        return dict(rad)
 
     async def list_review_queue(self, tenant_id: str, *, limit: int = 100) -> list[dict[str, Any]]:
         items = [

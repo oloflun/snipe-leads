@@ -1,3 +1,6 @@
+import Link from "next/link";
+import { SlidersHorizontal } from "lucide-react";
+
 import { OppnaArbetsyta } from "@/components/admin/OppnaArbetsyta";
 import { listTenants, unwrap } from "@/lib/data/admin";
 
@@ -65,7 +68,7 @@ export default async function Page() {
                 <th className="py-3 pr-6 text-right font-medium text-mineral">Fel</th>
                 <th className="py-3 pr-6 text-right font-medium text-mineral">Senast aktiv</th>
                 <th className="py-3 text-right font-medium text-mineral">
-                  <span className="sr-only">Öppna arbetsytan</span>
+                  <span className="sr-only">Profil och arbetsyta</span>
                 </th>
               </tr>
             </thead>
@@ -84,8 +87,22 @@ export default async function Page() {
                   <td className="py-3 pr-6 text-right tabular-nums text-ink/70">
                     {datum(kund.last_activity)}
                   </td>
+                  {/* Två vägar in, och de gör olika saker: "Profil" ändrar hur
+                      agenten beter sig, "Öppna" visar kundens vy som den ser ut
+                      för kunden. Att bara ha den senare var vad som saknades —
+                      det gick att TITTA på varje kund men inte att styra någon. */}
                   <td className="py-3 text-right">
-                    {kund.slug ? <OppnaArbetsyta slug={kund.slug} namn={kund.name} /> : null}
+                    <div className="inline-flex items-center gap-2">
+                      <Link
+                        href={`/admin/kunder/${kund.id}`}
+                        aria-label={`Öppna agentprofilen för ${kund.name}`}
+                        className="focus-ring inline-flex min-h-9 items-center gap-1.5 rounded-input bg-paper2 px-3 text-[13px] font-medium text-ink hover:bg-paper2/70"
+                      >
+                        <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
+                        Profil
+                      </Link>
+                      {kund.slug ? <OppnaArbetsyta slug={kund.slug} namn={kund.name} /> : null}
+                    </div>
                   </td>
                 </tr>
               ))}

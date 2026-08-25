@@ -6,8 +6,13 @@ kunna smyga in som en kund — men det betyder att överblicken behöver en egen
 väg. **Allt här ligger bakom `require_master_key`.**
 
 Ingen endpoint här skriver. En admin-vy som kan ändra kunddata är en vy som
-förr eller senare gör det av misstag, och den enda ändring vi faktiskt
-behöver (autonominivå, ICP) gör kunden själv i sin egen vy.
+förr eller senare gör det av misstag.
+
+Regeln gäller den här FILEN, inte adminytan som helhet. Agentprofilen —
+instruktioner, ton, röstdokument, affärskontext — går att skriva från
+`api/admin_profil.py`, bakom samma master-nyckel och med en rad i
+platform_events per ändring. Den delningen är hela poängen: en fil vars namn
+säger att den skriver, och en som inte gör det. Lägg aldrig en skrivning här.
 """
 
 from __future__ import annotations

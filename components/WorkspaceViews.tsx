@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { SoulEditor } from "@/components/SoulEditor";
+import { Agentinstruktioner } from "@/components/admin/Agentinstruktioner";
 import { PageShell, useArbetsvag } from "@/components/AppShell";
 import { btnPrimary, btnSecondary } from "@/components/ui";
 import { LoginForm } from "@/components/auth/LoginForm";
@@ -215,7 +216,8 @@ export function SettingsView({
     soul: "Er röst",
     notiser: "Notiser",
     tema: "Tema",
-    addons: "Tillägg"
+    addons: "Tillägg",
+    agentinstruktioner: "Globala agentinstruktioner"
   };
   // Beskrivningen var tidigare EN generisk sträng för alla sektioner. På
   // röstsidan blev den både felaktig (den beskriver inte sektionen) och
@@ -236,7 +238,9 @@ export function SettingsView({
     notiser:
       "När vi ska mejla dig, och om vad. Gäller dig personligen — inte dina kollegor i samma arbetsyta.",
     tema: "Ljus eller mörk arbetsyta. Valet gäller den här webbläsaren och slår igenom direkt.",
-    addons: "Det agenterna kan göra utöver det som ingår i er plan."
+    addons: "Det agenterna kan göra utöver det som ingår i er plan.",
+    agentinstruktioner:
+      "Reglerna varje agent läser först, för varje kund. Policy och säkerhet — ton och röst hör hemma hos kunden."
   };
   return (
     <PageShell title={titles[section]} description={descriptions[section]}>
@@ -289,6 +293,9 @@ export function SettingsView({
           {section === "team" ? <TeamSettings /> : null}
           {section === "addons" ? <AddonSettings /> : null}
           {section === "billing" ? <PlanSettings /> : null}
+          {/* Plattformens egen sida. Grinden står i SettingsSection, på servern —
+              att posten inte renderas i menyn är inte en grind. */}
+          {section === "agentinstruktioner" ? <Agentinstruktioner /> : null}
         </div>
       </div>
     </PageShell>

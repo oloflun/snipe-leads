@@ -38,6 +38,7 @@ from typing import Any
 
 from agents import Agent, Runner
 
+from ..agentcore.instruktioner import Instruktionslager, las_instruktioner
 from ..agentcore.overlays import pack_version
 from ..agentcore.packs import PlaybookStep, RunLedger
 from ..leads.business_context import require_business_context
@@ -144,6 +145,7 @@ async def _run_grounding_cycle(
     base: str,
     tenant_name: str,
     facts: PermittedFacts,
+    instruktioner: Instruktionslager | None = None,
 ) -> tuple[str, str, dict[str, Any]]:
     """Grinda -> (vid fällning) reparera -> delta-humanisera -> grinda igen.
 
@@ -185,6 +187,7 @@ async def _run_grounding_cycle(
         ),
         case_context=f"{base}\n\n## Mejl att reparera\nÄmne: {subject}\n\n{body}",
         playbook_role=_GROUNDING_ROLE,
+        instruktioner=instruktioner,
     )
     subject = strip_markdown(repaired.get("repaired_subject") or subject).strip()
     body = strip_markdown(repaired.get("repaired_body") or body)
@@ -208,6 +211,7 @@ async def _run_grounding_cycle(
             ),
             case_context=f"{base}\n\n## Hela mejlet (kontext — skriv INTE om det)\n{body}",
             playbook_role=_GROUNDING_ROLE,
+            instruktioner=instruktioner,
         )
         try:
             replacements = parse_humanized_segments(humanized, changed)
@@ -400,6 +404,9 @@ async def run_research_step(
     sources_block = material or "(inget källmaterial kunde hämtas — se scrape_errors)"
 
     soul_block = await load_soul(storage, tenant_id)
+    lager = await las_instruktioner(
+        storage, tenant_id, agent_type="leads", tenant_namn=tenant_name
+    )
 
     base = (
         f"## Uppdrag\nDu researchar ett prospekt åt {tenant_name}.\n\n"
@@ -421,6 +428,7 @@ async def run_research_step(
             task=task,
             case_context=base + extra_context,
             playbook_role=_RESEARCH_ROLE,
+            instruktioner=lager,
         )
 
     # 1. mk:customer-research — vilka är de, vilka problem har de
@@ -541,7 +549,7 @@ async def run_research_step(
     await storage.log_agent_run(
         tenant_id,
         agent_type="leads_research",
-        pack_version=pack_version(RESEARCH_V1.name),
+        pack_version=pack_version(RESEARCH_V1.name, lager.hash),
         skills_used=trace.skills_used,
         input_text=brief,
         output_text=final_output,
@@ -586,7 +594,7 @@ async def run_research_step(
         "tokens_out": trace.total_tokens_out,
         "reasoning_tokens": trace.total_reasoning_tokens,
         "latency_ms": latency_ms,
-        "pack_version": pack_version(RESEARCH_V1.name),
+        "pack_version": pack_version(RESEARCH_V1.name, lager.hash),
     }
 
 
@@ -629,6 +637,9 @@ async def run_outreach_draft(
     thread = await storage.get_outreach_thread(tenant_id, thread_id) or {}
     language_state = thread.get("language_state") or "sv"
     soul_block = await load_soul(storage, tenant_id)
+    lager = await las_instruktioner(
+        storage, tenant_id, agent_type="leads", tenant_namn=tenant_name
+    )
 
     # De hårda reglerna (G4: LinkedIn-förbudet, ren text, språkregeln) låg
     # tidigare här som en f-sträng. De bor nu i overlayen leads-hard-rules,
@@ -658,6 +669,7 @@ async def run_outreach_draft(
             task=task,
             case_context=base + extra_context,
             playbook_role=_OUTREACH_ROLE,
+            instruktioner=lager,
         )
 
     # 1. sa:draft-outreach — själva utkastet
@@ -750,6 +762,7 @@ async def run_outreach_draft(
             body=body,
             base=base,
             tenant_name=tenant_name,
+            instruktioner=lager,
             facts=build_permitted_facts(
                 context_pack=context_pack,
                 research_evidence=research_evidence,
@@ -794,7 +807,7 @@ async def run_outreach_draft(
     await storage.log_agent_run(
         tenant_id,
         agent_type="leads_outreach",
-        pack_version=pack_version(OUTREACH_V1.name),
+        pack_version=pack_version(OUTREACH_V1.name, lager.hash),
         skills_used=trace.skills_used,
         input_text=brief,
         output_text=f"{subject}\n\n{final_body}",
@@ -823,5 +836,5 @@ async def run_outreach_draft(
         "tokens_out": trace.total_tokens_out,
         "reasoning_tokens": trace.total_reasoning_tokens,
         "latency_ms": latency_ms,
-        "pack_version": pack_version(OUTREACH_V1.name),
+        "pack_version": pack_version(OUTREACH_V1.name, lager.hash),
     }

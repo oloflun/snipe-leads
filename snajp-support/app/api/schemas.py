@@ -190,6 +190,43 @@ class SoulRequest(BaseModel):
     content: str = Field(default="", max_length=4000)
 
 
+class InstruktionRequest(BaseModel):
+    """Globala eller kundspecifika agentinstruktioner, skrivna av admin.
+
+    `ravtext` är vad admin skrev. `strukturera=False` sparar den ostrukturerad
+    (kalla='manuell') — det är vägen för den som redigerat modellens utkast för
+    hand och inte vill få det omskrivet igen.
+
+    Taket speglar agentcore.instruktioner.MAX_TECKEN. Det verkställs på TVÅ
+    ställen av samma skäl som SoulRequest: en rad som stoppats direkt i
+    databasen ska inte gå förbi för att den aldrig passerade den här modellen.
+    """
+
+    ravtext: str = Field(default="", max_length=12_000)
+    #: Sätts av den som redigerat modellens utkast direkt. Tom => struktureras
+    #: ur ravtext.
+    strukturerad_md: str | None = Field(default=None, max_length=12_000)
+    strukturera: bool = True
+
+
+class TenantProfilRequest(BaseModel):
+    """Adminens skrivning mot EN kunds agentprofil.
+
+    Varje fält är valfritt, och None betyder "rör inte". Det är inte
+    bekvämlighet: formuläret sparar en sektion i taget, och ett utelämnat fält
+    som tolkats som tom sträng hade nollställt kundens SOUL varje gång någon
+    ändrade tonen.
+    """
+
+    agent_type: str = Field(default="support", pattern="^(support|leads)$")
+    instruktioner_rav: str | None = Field(default=None, max_length=12_000)
+    instruktioner_md: str | None = Field(default=None, max_length=12_000)
+    strukturera: bool = True
+    tone: str | None = Field(default=None, max_length=500)
+    soul: str | None = Field(default=None, max_length=4000)
+    affarskontext: str | None = Field(default=None, max_length=20_000)
+
+
 class KbArticleRequest(BaseModel):
     articles: list[KbArticle] = Field(..., min_length=1, max_length=50)
 

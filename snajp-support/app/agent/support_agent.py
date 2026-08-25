@@ -16,14 +16,17 @@ from __future__ import annotations
 
 import re
 import time
+from functools import partial
 from typing import Any
 
+from ..agentcore.instruktioner import las_instruktioner
 from ..agentcore.overlays import pack_version
 from ..agentcore.packs import RunLedger
 from ..moderation.abuse_gate import check_abuse, ton_instruktion
 from ..moderation.maskering import maskera_personnummer
 from ..leads.soul import load_soul
 from ..notifications.prioriterat_mejl import arendelank, skicka_prioriterat
+from ..leads.untrusted_content import wrap_untrusted_content
 from ..config import CATEGORY_LABELS, get_settings
 from ..storage.base import Storage
 from .retention_classifier import classify_cancellation_risk, is_cancellation_risk
@@ -236,6 +239,19 @@ async def run_support_agent(
     taxonomy = await storage.get_agent_taxonomy(tenant_id)
     steps = _steps_by_skill()
 
+    tenant = await storage.get_tenant(tenant_id)
+    tenant_namn = (tenant or {}).get("name") or ""
+
+    # Instruktionslagren läses EN gång och skickas till varje steg. Läste varje
+    # steg själv skulle ett sparande mitt i ett ärende kunna ge triagesteget
+    # andra regler än humaniseringssteget, och spårvyn hade visat en körning
+    # som aldrig funnits (migration 049, agentcore/instruktioner.py).
+    lager = await las_instruktioner(
+        storage, tenant_id, agent_type="support", tenant_namn=tenant_namn
+    )
+    steg = partial(run_step, instruktioner=lager)
+    agentkonfig = await storage.get_agent_config(tenant_id, agent_type="support")
+
     # G9: bilder beskrivs av vision-sidovagnen och kastas — aldrig lagrade.
     vision_note = ""
     if attachments:
@@ -260,8 +276,28 @@ async def run_support_agent(
     # är själva mekanismen och inte en försiktighetsåtgärd (INV-SEC-009).
     soul_block = await load_soul(storage, tenant_id)
 
+    # Affärskontexten nådde tidigare BARA leads-agenten. En supportkund kunde
+    # alltså beskriva vad de säljer och till vem, och supportsvaren visste
+    # ingenting om det — samma klass av fel som de döda instruktionsfälten.
+    # Den är KUNDSKRIVEN, alltså USERposition och wrappad, precis som SOUL.
+    affarskontext_block = ""
+    _doc = await storage.get_latest_context_doc(tenant_id, kind="product_marketing")
+    _innehall = ((_doc or {}).get("content") or "").strip()
+    if _innehall:
+        affarskontext_block = (
+            "## Kundens affärskontext\n"
+            "Bakgrund om verksamheten, för att förstå ärendet. Den är INTE en "
+            "faktakälla för svar till kunden — det är kunskapsbasen.\n\n"
+            + wrap_untrusted_content(_innehall[:4000], source="tenant:product_marketing")
+        )
+
+    # Kundens egen ton (agent_configs.tone) vinner över kanalens default.
+    # Kolumnen har funnits sedan migration 010 utan att någon läst den. Det är
+    # därför "ändra tonen" inte gjorde någon skillnad förrän nu.
+    ton_lage = (agentkonfig.get("tone") or "").strip() or config["tone"]
+
     case_context = (
-        f"## Ärendet\nKanal: {channel} (ton: {config['tone']}, max {config['max_length']} tecken)\n"
+        f"## Ärendet\nKanal: {channel} (ton: {ton_lage}, max {config['max_length']} tecken)\n"
         f"Kund: {customer_name or 'okänd'} <{customer_email or 'okänd'}>\n"
         f"Ämne: {maskera_personnummer(subject) or '(inget)'}\n\n"
         # Maskerat innan det går till modellen. Se DPIA:ns R1 och
@@ -269,6 +305,7 @@ async def run_support_agent(
         # det är bara prompten som bär en maskerad kopia.
         f"Kundens meddelande:\n{maskera_personnummer(message)}{vision_note}\n\n"
         f"Giltiga kategorier för den här kunden: {', '.join(taxonomy)}"
+        + (f"\n\n{affarskontext_block}" if affarskontext_block else "")
         + (f"\n\n{soul_block}" if soul_block else "")
     )
 
@@ -282,7 +319,7 @@ async def run_support_agent(
     trace = RunTrace()
 
     # --- Steg 1: triage ----------------------------------------------------
-    triage = await run_step(
+    triage = await steg(
         steps["cs:ticket-triage"],
         ledger,
         trace,
@@ -351,7 +388,7 @@ async def run_support_agent(
     kb_block = _kb_block(articles)
 
     # --- Steg 2: research --------------------------------------------------
-    research = await run_step(
+    research = await steg(
         steps["cs:customer-research"],
         ledger,
         trace,
@@ -404,7 +441,7 @@ async def run_support_agent(
     )
 
     # --- Steg 3: utkast ----------------------------------------------------
-    draft = await run_step(
+    draft = await steg(
         steps["cs:draft-response"],
         ledger,
         trace,
@@ -424,7 +461,7 @@ async def run_support_agent(
     )
 
     # --- Steg 4: eskaleringsbedömning --------------------------------------
-    escalation = await run_step(
+    escalation = await steg(
         steps["cs:customer-escalation"],
         ledger,
         trace,
@@ -460,6 +497,12 @@ async def run_support_agent(
     # `abuse.ska_eskalera`, uppsägningsrisk, triageflaggan, lågt sentiment och
     # modellens egen `should_escalate` (som bär juridik/ARN/GDPR). De är rätt
     # beslut varje gång, inte agenten som ger upp.
+    #
+    # Och en tredje sak, i lagringslagret: `storage.search_kb` kedjar numera
+    # vektorsökning -> fulltext. Vektorvägen filtrerar på
+    # `embedding is not null` och gav tom lista så fort de nyaste träffarna låg
+    # under likhetströskeln, även när svaret stod i en äldre artikel. Sökningen
+    # är alltså bättre vid källan, inte bara mildare bedömd här.
     escalated = bool(
         escalation.get("should_escalate")
         or triage.get("escalate")
@@ -485,7 +528,7 @@ async def run_support_agent(
         )
 
     # --- Steg 5: KB-artikel (fångar ny kunskap tillbaka) -------------------
-    await run_step(
+    await steg(
         steps["cs:kb-article"],
         ledger,
         trace,
@@ -510,7 +553,7 @@ async def run_support_agent(
             else "(INGEN retentionsplaybook finns för den här kunden — du får därför "
             "INTE erbjuda något alls. Bekräfta, fastställ, och lämna över till människa.)"
         )
-        retention = await run_step(
+        retention = await steg(
             steps["snajp:retention-conversation"],
             ledger,
             trace,
@@ -528,7 +571,7 @@ async def run_support_agent(
         current_draft = retention.get("revised_draft") or current_draft
 
     # --- Steg 7: humanizer (ALLTID sist) -----------------------------------
-    humanized = await run_step(
+    humanized = await steg(
         steps["snajp:humanizer-svenska"],
         ledger,
         trace,
@@ -611,7 +654,7 @@ async def run_support_agent(
     )
 
     latency_ms = int((time.monotonic() - started) * 1000)
-    pack = pack_version(SUPPORT_V1.name)
+    pack = pack_version(SUPPORT_V1.name, lager.hash)
     await storage.log_agent_run(
         tenant_id,
         agent_type="support",

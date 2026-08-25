@@ -2,7 +2,13 @@ import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { SettingsView } from "@/components/WorkspaceViews";
 import { resolveDashboardState } from "@/lib/data/dashboard";
-import { productForSettingsSection, sektionDoldIDemo, settingsSectionForSlug } from "@/lib/routes";
+import { getPlatformAdmin } from "@/lib/auth/admin";
+import {
+  productForSettingsSection,
+  sektionDoldIDemo,
+  sektionKraverAdmin,
+  settingsSectionForSlug
+} from "@/lib/routes";
 import { parseTema, TEMA_COOKIE } from "@/lib/tema";
 
 /**
@@ -33,6 +39,14 @@ export async function SettingsSection({ slug = [] }: Readonly<{ slug?: string[] 
   // ingen från att skriva /settings/soul i adressfältet — det här är det lager
   // som faktiskt säger nej, och det körs på servern.
   const state = await resolveDashboardState();
+
+  // Plattformens egna sidor. Grinden står FÖRE entitlement-kontrollen med
+  // flit: en admin-sida har ingen produkt, så entitlement säger ingenting om
+  // den, och en kund som gissar adressen ska mötas av 404 och inte av en sida
+  // som råkar rendera för att inget villkor träffade.
+  if (sektionKraverAdmin(section) && !(await getPlatformAdmin())) {
+    notFound();
+  }
 
   const product = productForSettingsSection(section);
   if (product && !state.products.includes(product)) {

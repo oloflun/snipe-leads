@@ -23,15 +23,12 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..agentcore.overlays import load_global_instructions, load_overlay
+from ..agentcore.instruktioner import Instruktionslager, las_instruktioner  # noqa: F401
+from ..agentcore.overlays import load_global_instructions as load_global_instructions_fil
+from ..agentcore.overlays import load_overlay
 from ..agentcore.packs import PlaybookStep, RunLedger, check_output_contract, check_preconditions
 from ..config import get_settings
 from .llm import get_llm_client
-
-_GLOBAL_OPEN = """## GLOBALA REGLER (Snajp — gäller varje steg, varje kund)
-Dessa gäller ÖVER skillen nedan där de krockar. De är policy, inte stil.
-"""
-_GLOBAL_CLOSE = "## SLUT GLOBALA REGLER"
 
 _OVERLAY_OPEN = """## TILLÄGGSINSTRUKTIONER (Snajp-overlay: {name})
 Dessa kommer FRÅN OSS, inte från skillen ovan, och gäller ÖVER den där de
@@ -86,6 +83,12 @@ class StepResult:
     overlay: str | None = None
     overlay_chars: int = 0
     global_chars: int = 0
+    # Kundlagret (agent_configs.instructions_md, migration 049). Utan de
+    # här två går det inte att skilja "kunden har inga instruktioner" från
+    # "kundens instruktioner nådde inte prompten" — och det var precis den
+    # skillnaden som inte gick att se när fältet var dött.
+    kund_chars: int = 0
+    instruktionshash: str = ""
     # Vad modellen faktiskt FICK. Utan de här kan spårvyn visa skillnamn,
     # tokens och latens men inte svara på "varför skrev den så här?" — och
     # skill-texten är fritt redigerbar, så namnet ensamt räcker inte
@@ -151,6 +154,8 @@ class RunTrace:
                 "overlay": s.overlay,
                 "overlay_chars": s.overlay_chars,
                 "global_chars": s.global_chars,
+                "kund_chars": s.kund_chars,
+                "instruktionshash": s.instruktionshash[:12],
                 "sources_used": s.output.get("sources_used", []),
                 "context_refs": s.output.get("context_refs", []),
                 **(
@@ -192,11 +197,19 @@ async def run_step(
     case_context: str,
     required_context_refs: tuple[str, ...] = (),
     playbook_role: str = "en svensk kundtjänst-playbook",
+    instruktioner: Instruktionslager | None = None,
 ) -> dict[str, Any]:
     """Kör ETT skill-steg som ett eget LLM-anrop.
 
     Förvillkorsgrinden körs FÖRE anropet (kastar MissingRequirementError om
     ett requires[] saknas i ledgern) — inget anrop görs då alls.
+
+    `instruktioner` hämtas EN gång per körning av anroparen (se
+    agentcore/instruktioner.las_instruktioner) och skickas hit. Att varje steg
+    läser databasen själv hade betytt ett dussin läsningar per ärende och —
+    värre — att ett sparande mitt i en körning kan ge steg 1 och steg 8 olika
+    regler. Utelämnas den faller den tillbaka på agent-core/AGENTS.md, vilket
+    är beteendet före migration 049.
     """
     check_preconditions(step, ledger)
 
@@ -205,21 +218,27 @@ async def run_step(
     skill_text = step.render()
 
     # Systempromptens ordning är inte godtycklig:
-    #   1. AGENTS.md   — mest generell policy, så skill/overlay kan specialisera
+    #   1. GLOBALT     — mest generell policy, så skill/overlay kan specialisera
     #   2. skill_text  — den vendorade metodiken
-    #   3. overlay     — vår specialisering; "senare vinner vid konflikt", och
-    #                    delimitertexten säger det explicit
-    #   4. kontraktet  — SIST och ovillkorligt. Läggs på av kod som varken en
-    #                    overlay eller en SOUL kan nå, så utdatakontraktet inte
-    #                    kan försvagas av något av tuninglagren.
-    # ALLT här är VÅR text. Kundskriven text (SOUL) går i user-position, aldrig
-    # här — den skillnaden ÄR säkerhetsgränsen, se app/leads/soul.py.
-    global_text = load_global_instructions()
+    #   3. overlay     — vår specialisering per STEG; "senare vinner vid
+    #                    konflikt", och delimitertexten säger det explicit
+    #   4. KUND        — vår specialisering per KUND, alltså den mest specifika
+    #                    av våra nivåer och därför sist av instruktionerna
+    #   5. kontraktet  — SIST och ovillkorligt. Läggs på av kod som varken en
+    #                    overlay, en kundinstruktion eller en SOUL kan nå, så
+    #                    utdatakontraktet inte kan försvagas av tuninglagren.
+    # ALLT här är VÅR text — inklusive kundlagret, som är admin-only. KUNDSKRIVEN
+    # text (SOUL, affärskontext, kunskapsbas) går i user-position, aldrig här.
+    # Den skillnaden ÄR säkerhetsgränsen; se app/leads/soul.py och
+    # app/agentcore/instruktioner.py.
+    lager = instruktioner or Instruktionslager(
+        global_md=load_global_instructions_fil(), kund_md=""
+    )
     overlay_text = load_overlay(step.overlay) if step.overlay else ""
 
     system_parts: list[str] = []
-    if global_text:
-        system_parts.append(f"{_GLOBAL_OPEN}\n{global_text}\n{_GLOBAL_CLOSE}")
+    if lager.global_block:
+        system_parts.append(lager.global_block)
     system_parts.append(
         f"Du utför ETT steg i {playbook_role}. Steget styrs av "
         f"skillen {step.skill}, vars fullständiga innehåll följer nedan. Följ "
@@ -229,6 +248,8 @@ async def run_step(
         system_parts.append(
             f"{_OVERLAY_OPEN.format(name=step.overlay)}\n{overlay_text}\n{_OVERLAY_CLOSE}"
         )
+    if lager.kund_block:
+        system_parts.append(lager.kund_block)
     system_parts.append(_CONTRACT_INSTRUCTION)
 
     messages = [
@@ -314,7 +335,9 @@ async def run_step(
             thinking_mode=effective_mode,
             overlay=step.overlay,
             overlay_chars=len(overlay_text),
-            global_chars=len(global_text),
+            global_chars=len(lager.global_md),
+            kund_chars=len(lager.kund_md),
+            instruktionshash=lager.hash,
             # messages[0]/[1] är systemprompten och användarmeddelandet SOM DE
             # SÅG UT VID FÖRSTA ANROPET. Eventuella omförsök lägger till fler
             # meddelanden i listan, men det är den första uppsättningen som
