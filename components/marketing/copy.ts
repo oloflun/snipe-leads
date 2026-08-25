@@ -342,29 +342,29 @@ export const bokforingCopy: ProductCopy = {
   },
   exampleNote: { sv: "", en: "" },
   stepsHeading: {
-    sv: "Tre steg, och koden räknar *varenda* siffra.",
-    en: "Three steps, and the code does *every* calculation."
+    sv: "Tre steg, och systemet räknar *varenda* siffra.",
+    en: "Three steps, and the system does *every* calculation."
   },
   steps: [
     {
       title: { sv: "Läser av underlaget", en: "Reads the document" },
       body: {
-        sv: "Datum, motpart, totalbelopp och momssats. Står ett fält inte på kvittot gissas det inte, utan går till granskning.",
-        en: "Date, counterparty, total and VAT rate. If a field is not on the receipt it is not guessed, it goes to review."
+        sv: "Datum, motpart, totalbelopp och momssats. Saknas ett fält på kvittot gissar vi aldrig fram det – det går till granskning i stället.",
+        en: "Date, counterparty, total and VAT rate. If a field is missing from the receipt we never invent it – it goes to review instead."
       }
     },
     {
       title: { sv: "Föreslår konteringen", en: "Proposes the entries" },
       body: {
-        sv: "Modellen väljer kategori, koden väljer konto ur BAS och bygger raderna. Verifikatet balanserar därför av konstruktion.",
-        en: "The model picks a category, the code picks the account from the Swedish BAS chart and builds the rows. The entry balances by construction."
+        sv: "Modellen väljer kategori, systemet väljer konto ur kontoplanen och bygger raderna. Verifikatet balanserar därför redan från start – inte som en kontroll i efterhand.",
+        en: "The model picks a category, the system picks the account from the chart and builds the rows. The entry therefore balances from the start – not as an afterthought check."
       }
     },
     {
       title: { sv: "Du godkänner", en: "You approve" },
       body: {
-        sv: "Perioden summeras först när den går ihop. Går den inte ihop får du bristerna i stället för trovärdiga siffror.",
-        en: "The period is totalled only when it balances. If it does not, you get the gaps instead of plausible numbers."
+        sv: "Perioden summeras bara när den går ihop. Gör den inte det, ser du bristerna direkt – aldrig en siffra som bara verkar stämma.",
+        en: "The period is totalled only when it balances. If it does not, you see the gaps at once – never a number that merely seems right."
       }
     }
   ],
@@ -382,12 +382,8 @@ export const bokforingCopy: ProductCopy = {
       en: "Files nothing with the Swedish Tax Agency or Companies Registration Office."
     },
     {
-      sv: "Ersätter ingen auktoriserad redovisningskonsult.",
-      en: "Replaces no authorised accounting consultant."
-    },
-    {
-      sv: "Räknar aldrig ett belopp i modellen. Momsen räknas i kod.",
-      en: "Never has the model calculate an amount. VAT is calculated in code."
+      sv: "Ingen data är publik. Er data hanteras enbart för att driva agenterna, ingenting annat.",
+      en: "No data is public. Your data is handled solely to run the agents, nothing else."
     }
   ]
 };

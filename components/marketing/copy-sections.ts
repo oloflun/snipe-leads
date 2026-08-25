@@ -250,8 +250,8 @@ const bokforing: SectionCopy = {
         en: "Does it replace my accountant?"
       },
       a: {
-        sv: "Nej, och den ska inte göra det. Den gör förarbetet så att konsulten får ett ordnat underlag i stället för en påse kvitton.",
-        en: "No, and it should not. It does the preparation so your accountant gets an organised set of records instead of a bag of receipts."
+        sv: "Nej. Den sköter förarbetet så att ni har koll själva, med eller utan konsult.",
+        en: "No. It handles the preparation so you stay on top of things yourselves, with or without a consultant."
       }
     },
     {
