@@ -44,16 +44,16 @@ export default async function Page() {
         ingress="Snajp byggs i Göteborg och Umeå av ett litet team. Vi säljer till svensk B2B, och vi använder produkten själva varje dag."
       />
 
-      {/* Notisen syns bara så länge något fält är en platshållare, och den
-          försvinner av sig själv när lib/team.ts fylls i. En sida som säger
-          "[Namn Efternamn]" utan att förklara varför läser som ett trasigt
-          bygge; med notisen läser den som ett utkast, vilket den är. */}
+      {/* Notisen mäter NAMN och ROLL, inget annat — se teametArIfyllt.
+          Foton och bios är valfria, och hade de räknats in vore notisen
+          permanent: en varning ingen kan släcka är en varning ingen läser.
+          Sedan namnen fylldes i 2026-08-25 renderas den inte, men den står
+          kvar för nästa gång någon lägger till en tom post. */}
       {!ifyllt ? (
         <p className="mt-8 rounded-card border border-copper/30 bg-copper/10 px-5 py-4 text-[0.9375rem] leading-[1.6] text-ink">
-          <strong className="font-semibold">Utkast.</strong> Namn, roller och foton är
-          platshållare. Fyll i <code className="text-[0.875rem]">lib/team.ts</code> och lägg
-          fotona i <code className="text-[0.875rem]">public/images/team/</code> innan sidan
-          publiceras — rutan försvinner då automatiskt.
+          <strong className="font-semibold">Utkast.</strong> Någon post saknar namn eller roll.
+          Fyll i <code className="text-[0.875rem]">lib/team.ts</code> innan sidan publiceras —
+          rutan försvinner då automatiskt.
         </p>
       ) : null}
 
@@ -80,7 +80,10 @@ export default async function Page() {
         <h2 className="font-display text-[1.75rem] font-semibold leading-snug tracking-[-0.025em]">
           Vilka vi är
         </h2>
-        <ul className="mt-8 grid gap-x-10 gap-y-12 sm:grid-cols-2 lg:grid-cols-3">
+        {/* Två kolumner, inte tre. TEAM har två poster, och lg:grid-cols-3
+            hade lämnat en tom tredjedel som läser som en person vi glömt.
+            Rutnätet ska följa innehållet, inte tvärtom. */}
+        <ul className="mt-8 grid max-w-[760px] gap-x-10 gap-y-12 sm:grid-cols-2">
           {TEAM.map((medlem) => (
             <li key={medlem.id}>
               {/* Bilden renderas bara när det FINNS en. Ett <img> mot en
@@ -108,7 +111,11 @@ export default async function Page() {
                 {medlem.namn}
               </h3>
               <p className="mt-1 text-[0.9375rem] font-medium text-mineral">{medlem.roll}</p>
-              <p className="mt-3 text-[0.9375rem] leading-[1.65] text-ink/70">{medlem.bio}</p>
+              {/* Tom bio UTELÄMNAS. Ett tomt <p> hade lämnat ett glapp under
+                  rollen som ser ut som en text som inte laddat. */}
+              {medlem.bio ? (
+                <p className="mt-3 text-[0.9375rem] leading-[1.65] text-ink/70">{medlem.bio}</p>
+              ) : null}
             </li>
           ))}
         </ul>
