@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageShell } from "@/components/AppShell";
 import { DashboardProvider } from "@/components/dashboard/DashboardContext";
@@ -70,21 +69,6 @@ const DEMO_STATE = {
   signedIn: false
 };
 
-const SEKTIONER = [
-  ["", "Översikt"],
-  ["leads", "Leads"],
-  ["emails", "Email studio"],
-  ["companies", "Företag"],
-  ["contacts", "Kontakter"],
-  ["inbox", "Svar"],
-  ["analytics", "Analys"],
-  ["assistant", "Assistant"],
-  ["kontroll", "Leads-kontroll"],
-  ["regler", "Regler"],
-  ["bokforing", "Bokföring"],
-  ["support", "Kundtjänst"]
-] as const;
-
 export default async function Page({
   params
 }: Readonly<{ params: Promise<{ slug?: string[] }> }>) {
@@ -99,43 +83,9 @@ export default async function Page({
 
   return (
     <div className="min-h-screen bg-paper text-ink">
-      <div className="border-b border-ink/15 bg-paper2/50">
-        <div className="mx-auto max-w-[1480px] px-4 py-4 md:px-6">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <span className="kicker rounded-input border border-ochre/40 bg-ochre/10 px-3 py-1.5 text-ochre">
-              Demo · exempeldata, ingen inloggning
-            </span>
-            <Link href="/" className="kicker text-mineral hover:text-ochre">
-              Till startsidan
-            </Link>
-            <Link href="/login" className="kicker ml-auto text-mineral hover:text-ochre">
-              Logga in på din arbetsyta
-            </Link>
-          </div>
-
-          <nav
-            aria-label="Demo-sektioner"
-            className="thin-scrollbar -mx-1 mt-3 flex gap-1 overflow-x-auto px-1 pb-1"
-          >
-            {SEKTIONER.map(([väg, etikett]) => {
-              const aktiv = (sektion ?? "") === väg;
-              return (
-                <Link
-                  key={väg || "oversikt"}
-                  href={`/demo${väg ? `/${väg}` : ""}`}
-                  aria-current={aktiv ? "page" : undefined}
-                  className={`focus-ring min-h-10 shrink-0 rounded-input px-3 text-sm font-medium transition-colors ${
-                    aktiv ? "bg-ink text-paper" : "text-ink/65 hover:bg-paper2"
-                  }`}
-                >
-                  {etikett}
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
-      </div>
-
+      {/* Ingen egen chrome här. Sektionsraden, demomarkören och de två
+          utvägarna ritas av AppShell, i samma header som arbetsytan har —
+          se lib/demo/sektioner.ts. Sidan bidrar bara med innehållet. */}
       <DashboardProvider state={{ ...DEMO_STATE, products: [...DEMO_STATE.products] }}>
         {innehall}
       </DashboardProvider>

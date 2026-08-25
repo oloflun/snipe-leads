@@ -2,48 +2,59 @@ import Image from "next/image";
 import { cn } from "@/lib/utils";
 
 /**
- * Wordmark is set in Geist, not Fraunces: DESIGN.md limits the display serif to a
- * single hero per page, and a serif wordmark would compete with it.
- * The bordered tile and the "sales os" kicker were editorial cues and are gone.
+ * Husets märke. Sedan 2026-08-25 ritas ingenting av komponenten — varken
+ * symbolen eller ordet. Båda kommer ur varumärkesfilerna i `public/`.
  *
- * ## `stor` och `undertext`
+ * ## En fil, inte tre mått
  *
- * Headern hade tidigare två rader: logotypen på den ena, flikarna på den andra.
- * Logotypen blev då en liten detalj ovanför navigationen i stället för husets
- * märke. `stor` ger den höjden av båda raderna, och `undertext` lägger
- * arbetsytans namn UNDER ordmärket i stället för bredvid — så att kolumnen blir
- * lika hög som flikraden bredvid.
+ * `compact` ger symbolen ensam (`snajp-symbol-*.svg`). Allt annat ger den
+ * färdiga lockupen (`snajp-logo-v1-*.svg`), där symbol, mellanrum och ordmärke
+ * redan står i rätt förhållande:
  *
- * Måtten är inte godtyckliga: 34px märke + 26px ordmärke + 13px undertext möter
- * flikradens 44px minsta träffyta utan att headern växer.
+ *     ordmärkets höjd  = 0,775 × symbolens
+ *     mellanrummet     = 0,165 × symbolens
+ *     lockupens höjd   = 0,991 × symbolens
  *
- * ## `hjalte`
+ * Komponenten satte tidigare de tre måtten var för sig, med en handskriven
+ * faktor ärvd från när ordet var livrenderad text. Den gissningen behövs inte
+ * när filen bär förhållandet: ETT h-värde räcker, och delarna kan inte glida
+ * isär.
  *
- * Marknadssidornas hjältebild. Där är logotypen inte en navigationsdetalj utan
- * husets märke över en helskärmsbild, och 34px försvinner i den ytan.
+ * Ett försök att skala ordmärket separat (två bilder, `items-end`) prövades
+ * och förkastades samma dag — förhållandet i filen är designerns, och att
+ * dra isär det gjorde lockupen sämre även när den lodräta relationen räknades
+ * fram exakt. Rör inte delarna var för sig; ändra höjden nedan i stället.
  *
- * Måtten är `clamp()` och inte fasta pixlar: hjälten spänner över hela
- * skärmbredden, och ett märke som är rätt på 1600px är ett märke som täcker
- * halva mobilskärmen.
+ * ## Svart och vitt är två FILER
  *
- * Ordmärket följer märkets höjd med faktor ~0,84. Högre än så och ordet tar
- * över märket; lägre och de två läser som en bild bredvid ett ord i stället för
- * som en enhet.
+ * Inte ett `invert`-filter. Ett inverterat mörkt märke är inte samma sak som
+ * det vita originalet.
  *
- * vw-faktorn är medvetet lägre än vad ytterlägena ensamma skulle kräva. Med en
- * brantare faktor slog clamp:en i taket redan vid ~1400px, och en 1280-skärm
- * fick nästan samma märke som en 1900 — mellanbredderna såg trängda ut.
+ * ## Lägena och måtten
  *
- * Undre gränsen var satt av MOBILEN: lockupen delar rad med EN, Logga in och
- * Meny, och 38px märke bröt "Logga in" till två rader på 390px. 28px höll
- * ihop raden — och 2026-08-25 skalades hela `hjalte`-lockupen ned 50 % mot
- * originalet (28→14, 88→44, gap och ordmärke i samma proportion), vilket
- * bara gör mobilmarginalen större.
+ * `hjalte` — marknadssidornas hjältebild, där logotypen inte är en
+ * navigationsdetalj utan husets märke över en helskärmsbild. `clamp()` och
+ * inte fasta pixlar: hjälten spänner över hela skärmbredden, och ett märke som
+ * är rätt på 1600px täcker halva mobilskärmen. vw-faktorn är medvetet lägre än
+ * ytterlägena ensamma skulle kräva — med en brantare faktor slog clamp:en i
+ * taket redan vid ~1400px och mellanbredderna såg trängda ut.
  *
- * Ordmärket är sedan samma datum den riktiga varumärkesfilen
- * (`snajp-wordmark-v1-*.svg`), inte längre livrenderad text — samma svart/
- * vit-par som märket, faktor ~0,84 mot märkets höjd oförändrad.
+ * `stor` — arbetsytans header, med `undertext` för arbetsytans namn under
+ * lockupen. `compact` — symbolen ensam, för ytor utan bredd att ge.
+ *
+ * Höjderna hänger ihop och ska ändras tillsammans: 55 och 29 ligger nära
+ * hjältens 58 på vanliga skärmbredder. De stod på 34 och 18 medan logotypen
+ * var symbol + livrenderad text, och en 34px lockup bredvid hjältens läste som
+ * ett annat, blekare märke. EN logotyp, samma tyngd överallt.
+ *
+ * Måttkedjan för `hjalte`, för den som undrar var talen kommer ifrån:
+ * originalet 28/5,2vw/88 → halverat → +30 % → +20 % = 21,8/4,06vw/68,6.
  */
+function hojd(hjalte: boolean, stor: boolean): string {
+  if (hjalte) return "h-[clamp(21.84px,4.06vw,68.64px)]";
+  return stor ? "h-[55px]" : "h-[29px]";
+}
+
 export function Logo({
   compact = false,
   tone = "ink",
@@ -57,52 +68,40 @@ export function Logo({
   hjalte?: boolean;
   undertext?: string | null;
 }>) {
+  const kulor = tone === "paper" ? "white" : "black";
+
+  const bild = compact ? (
+    <Image
+      src={`/snajp-symbol-${kulor}.svg`}
+      alt="Snajp"
+      width={200}
+      height={158}
+      className={cn("w-auto object-contain", hojd(hjalte, stor))}
+      priority
+    />
+  ) : (
+    <Image
+      src={`/snajp-logo-v1-${kulor}.svg`}
+      alt="Snajp"
+      width={552}
+      height={159}
+      className={cn("w-auto object-contain", hojd(hjalte, stor))}
+      priority
+    />
+  );
+
+  // Utan undertext är lockupen hela logotypen — ingen wrapper behövs.
+  if (!stor || !undertext) return bild;
+
   return (
-    <span
-      className={cn(
-        "inline-flex items-center",
-        // 50% mindre än originalet (var clamp(8px,1.2vw,20px)) — hjälten är
-        // det enda stället `hjalte` används (startsidans header).
-        hjalte ? "gap-[clamp(4px,0.6vw,10px)]" : stor ? "gap-3" : "gap-2.5"
-      )}
-    >
-      <Image
-        src={tone === "paper" ? "/snajp-symbol-white.svg" : "/snajp-symbol-black.svg"}
-        alt=""
-        width={200}
-        height={158}
-        className={cn(
-          "w-auto object-contain",
-          // 50% mindre än originalet (var clamp(28px,5.2vw,88px)).
-          hjalte ? "h-[clamp(14px,2.6vw,44px)]" : stor ? "h-[34px]" : "h-[18px]"
-        )}
-        priority
-      />
-      {!compact ? (
-        <span className="flex flex-col justify-center">
-          {/* Ordmärket, inte livrenderad text — se filhuvudets kommentar. */}
-          <Image
-            src={tone === "paper" ? "/snajp-wordmark-v1-white.svg" : "/snajp-wordmark-v1-black.svg"}
-            alt="Snajp"
-            width={325}
-            height={122}
-            className={cn(
-              "w-auto object-contain",
-              // Faktor ~0,84 mot märkets höjd (se filhuvudet).
-              hjalte ? "h-[clamp(12px,2.2vw,37px)]" : stor ? "h-[29px]" : "h-[15px]"
-            )}
-            priority
-          />
-          {/* Undertexten renderas bara i stort läge. I kompakt läge finns ingen
-              höjd att lägga den på, och en rad som ibland finns och ibland inte
-              flyttar allt annat i headern när den dyker upp. */}
-          {stor && undertext ? (
-            <span className="mt-1 hidden text-[13px] leading-none text-ink/45 sm:block">
-              {undertext}
-            </span>
-          ) : null}
-        </span>
-      ) : null}
+    <span className="inline-flex flex-col justify-center">
+      {bild}
+      {/* Undertexten renderas bara i stort läge. I kompakt läge finns ingen
+          höjd att lägga den på, och en rad som ibland finns och ibland inte
+          flyttar allt annat i headern när den dyker upp. */}
+      <span className="mt-1 hidden text-[13px] leading-none text-ink/45 sm:block">
+        {undertext}
+      </span>
     </span>
   );
 }

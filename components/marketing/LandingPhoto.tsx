@@ -545,7 +545,7 @@ export function LandingPhoto({
         <div className="mx-auto max-w-[1480px] px-6 py-12 md:px-10 md:py-16">
           <div className="grid grid-cols-12 gap-y-10 lg:gap-x-12">
             <div className="col-span-12 lg:col-span-4">
-              <Logo compact />
+              <Logo />
               <p className="mt-4 text-[0.875rem] text-ink/45">{text(shared.footerPlats)}</p>
             </div>
 
