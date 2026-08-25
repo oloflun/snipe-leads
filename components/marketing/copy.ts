@@ -82,11 +82,21 @@ export const shared = {
   demoSupport: { sv: "Prova kundtjänstagenten", en: "Try the support agent" },
   demoBokforing: { sv: "Prova bokföringsagenten", en: "Try the bookkeeping agent" },
   footerKontakt: { sv: "Kontakt", en: "Contact" },
-  menyKontakt: { sv: "Kontakta oss", en: "Contact us" },
-  menyPriser: { sv: "Prislista", en: "Pricing" },
-  menyFragor: { sv: "Frågor och svar", en: "Questions and answers" },
-  menyVilka: { sv: "Vilka är vi", en: "Who we are" },
-  menyGdpr: { sv: "GDPR och data", en: "GDPR and data" },
+  //: MENYN. Etiketterna bytte namn 2026-08-25, och nycklarna bytte med dem —
+  //: en nyckel som heter `menyKontakt` men renderar "Boka demo" är en lögn för
+  //: nästa läsare, och de fem hade bara ETT anropsställe var att rätta.
+  //:
+  //: Tre av dem pekar numera på egna sidor i stället för på ankare. Det är ett
+  //: avsteg från motiveringen i SidMeny.tsx ("allt innehåll finns redan på
+  //: sidan"), och avsteget är motiverat: en bokning, en sökbar FAQ och en
+  //: teampresentation är inte avsnitt man skrollar förbi, utan sidor man länkar
+  //: till, bokmärker och skickar vidare. Priser är kvar som ankare av precis
+  //: det gamla skälet — prissektionen är en del av säljargumentet där den står.
+  menyBokaDemo: { sv: "Boka demo", en: "Book a demo" },
+  menyPriser: { sv: "Priser & planer", en: "Pricing & plans" },
+  menyFaq: { sv: "FAQ", en: "FAQ" },
+  menyTeam: { sv: "Vårt team", en: "Our team" },
+  menyDataskydd: { sv: "Dataskydd", en: "Data protection" },
   menyEtikett: { sv: "Meny", en: "Menu" },
   //: Avsnittet "Vilka är vi". Skrivet för den som undrar vem de skulle köpa av
   //: — inte som en grundarberättelse. Svensk B2B väger vem som står bakom, och

@@ -17,6 +17,20 @@ export const metadata: Metadata = {
  * domän hade den beskrivit fel personuppgiftsansvarig för fel behandling.
  * Samma grind som app/support/page.tsx använder.
  */
+/* TODO: juridiskt granskad text krävs innan publicering.
+    Sidan har rättslig betydelse och är skriven av en agent, inte av en
+    jurist. Kontrollera särskilt tre saker, i den ordningen:
+      1. Underleverantörernas dataregion och avtalsnivå (lib/bolag.ts —
+         fälten är platshållare och UTELÄMNAS i vyn tills de fylls i).
+      2. Påståendet om modelleverantörens träning: det STÅR INTE här, och
+         får inte skrivas tillbaka utan att någon läst avtalet.
+         Se docs/JURIDIK_ATGARDER.md, P0.1c.
+      3. Gallringstiden 24 månader mot det gallringsjobbet faktiskt kör
+         (supabase/migrations/048_gallring.sql). Två tal som glidit isär är
+         värre än inget tal alls.
+    Den gula utkastrutan är BORTTAGEN UR VYN på begäran 2026-08-25 och ska
+    inte skrivas tillbaka. Den här markeringen är för utvecklaren, inte för
+    besökaren. */
 export default async function Page() {
   await notFoundOnTenant();
 
@@ -25,7 +39,27 @@ export default async function Page() {
       rubrik="Integritetspolicy"
       ingress="Den här sidan beskriver hur vi behandlar personuppgifter när du besöker snajp.se, skapar ett konto eller på annat sätt är i kontakt med oss."
     >
-      <h2>Vem är personuppgiftsansvarig</h2>
+      {/* Innehållsförteckning. Inline och inte i marginalen: JuridiskSida
+          sätter 68 tecken och delas med villkors- och cookiesidan, så en
+          sidokolumn hade byggts om för tre sidor för att tjäna en. Länkarna
+          gör samma nytta — de gör dokumentet navigerbart och varje avsnitt
+          adresserbart, så `/integritetspolicy#lagring` går att klistra in i
+          ett svar till en inköpares jurist. */}
+      <nav aria-label="Innehåll" className="not-prose">
+        <h2 id="innehall">Innehåll</h2>
+        <ul>
+          <li><a href="#ansvarig">Vem är personuppgiftsansvarig</a></li>
+          <li><a href="#uppgifter">Vilka uppgifter vi behandlar och varför</a></li>
+          <li><a href="#kallor">Varifrån uppgifterna kommer</a></li>
+          <li><a href="#sprakmodell">Att texten bearbetas av en språkmodell</a></li>
+          <li><a href="#underleverantorer">Vilka vi delar uppgifter med</a></li>
+          <li><a href="#lagring">Hur länge vi sparar uppgifter</a></li>
+          <li><a href="#rattigheter">Dina rättigheter</a></li>
+          <li><a href="#cookies">Cookies</a></li>
+        </ul>
+      </nav>
+
+      <h2 id="ansvarig">Vem är personuppgiftsansvarig</h2>
       {/* Raden byggs av det som är ifyllt. Org.nr och postadress är ännu
           platshållare och utelämnas därför helt — de stod tidigare som
           "[XXXXXX-XXXX]" mitt i meningen om vem som bär ansvaret, vilket är
@@ -40,7 +74,7 @@ export default async function Page() {
         <a href={`mailto:${dataskyddKontakt(KONTAKT_MEJL)}`}>{dataskyddKontakt(KONTAKT_MEJL)}</a>
       </p>
 
-      <h2>Vilka uppgifter vi behandlar och varför</h2>
+      <h2 id="uppgifter">Vilka uppgifter vi behandlar och varför</h2>
 
       <h3>Kontouppgifter</h3>
       <p>
@@ -63,7 +97,32 @@ export default async function Page() {
         avregistreringen gäller omedelbart och för alla framtida utskick.
       </p>
 
-      <h2>Att texten bearbetas av en språkmodell</h2>
+      <h2 id="kallor">Varifrån uppgifterna kommer</h2>
+      <p>
+        <strong>Företagsuppgifter</strong> — bolagsnamn, bransch, storlek, adress och offentliga
+        kontaktvägar — hämtas från bolagets egen webbplats, deras platsannonser och
+        pressmeddelanden, samt från offentliga register. Sådana uppgifter är inte personuppgifter
+        så länge de rör organisationen och inte en enskild person.
+      </p>
+      <p>
+        <strong>Personuppgifter i yrkesroll</strong> — namn, titel och en företagsadress till en
+        kontaktperson — förekommer när en sådan uppgift är publicerad av bolaget självt, till
+        exempel på en kontaktsida. Rättslig grund är berättigat intresse för B2B-kontakt, och
+        intresseavvägningen bygger på att uppgiften rör personen i egenskap av yrkesutövare, att
+        den redan är publicerad av arbetsgivaren, och att varje utskick bär en avregistreringslänk
+        som fungerar med ett klick.
+      </p>
+      <p>
+        Vi hämtar inte uppgifter från sociala medier, och vi köper inte listor med privata
+        profiler. Hittar agenten inte tillräckligt om ett bolag lämnar den fältet tomt i stället
+        för att fylla det med en gissning.
+      </p>
+      <p>
+        En avregistrering gäller omedelbart och för alla framtida utskick, och den registreras
+        oavsett om avsändaren är knuten till en arbetsyta hos oss eller inte.
+      </p>
+
+      <h2 id="sprakmodell">Att texten bearbetas av en språkmodell</h2>
       <p>
         Snajp bygger på en språkmodell. Det betyder att den text agenten arbetar med — kundmejlet
         som kommer in, och det svar som föreslås — skickas till vår modelleverantör för bearbetning.
@@ -82,7 +141,7 @@ export default async function Page() {
         gäller, och vad respektive avtal säger om hur uppgifterna får användas, står nedan.
       </p>
 
-      <h2>Vilka vi delar uppgifter med</h2>
+      <h2 id="underleverantorer">Vilka vi delar uppgifter med</h2>
       <p>Vi använder följande underleverantörer för att driva tjänsten:</p>
       <ul>
         {/* `region` utelämnas när den är en platshållare. Fälten innehåller
@@ -102,7 +161,7 @@ export default async function Page() {
         databasen, och avgränsningen är en spärr i databasen — inte en inställning i koden.
       </p>
 
-      <h2>Hur länge vi sparar uppgifter</h2>
+      <h2 id="lagring">Hur länge vi sparar uppgifter</h2>
       <p>
         {/* Retentionsperioden är beslutad: 24 månader, samma tid för samtliga
             kategorier. Se P1.1 i docs/JURIDIK_ATGARDER.md och
@@ -113,7 +172,7 @@ export default async function Page() {
         automatiserad och loggas. Kontakta oss om du vill veta vad som gäller just ditt ärende.
       </p>
 
-      <h2>Dina rättigheter</h2>
+      <h2 id="rattigheter">Dina rättigheter</h2>
       <p>
         Du har rätt att begära tillgång till, rättelse av och radering av dina uppgifter, samt att
         invända mot behandling som sker med stöd av berättigat intresse. Kontakta oss på{" "}
@@ -122,7 +181,7 @@ export default async function Page() {
         Integritetsskyddsmyndigheten, <a href="https://imy.se">imy.se</a>.
       </p>
 
-      <h2>Cookies</h2>
+      <h2 id="cookies">Cookies</h2>
       <p>
         Snajp.se sätter en enda cookie, och den är strikt nödvändig. Läs mer på{" "}
         <Link href="/cookies">cookiesidan</Link>.
