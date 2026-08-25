@@ -244,6 +244,7 @@ async def _fanga_kunskap(
     base: str,
     sammanfattning: str,
     pains: str,
+    instruktioner: Instruktionslager | None = None,
 ) -> dict[str, Any]:
     """Steg 9: vad lärde varvet oss som kundens kontextpaket inte bar?
 
@@ -271,6 +272,7 @@ async def _fanga_kunskap(
                 f"{base}\n\n## Kvalificeringen\n{sammanfattning}\n\n## Vad vi såg\n{pains}"
             ),
             playbook_role=_KUNSKAPSROLL,
+            instruktioner=instruktioner,
         )
     except Exception as error:  # noqa: BLE001 — se docstringen
         return {"reveals_gap": False, "fel": f"{type(error).__name__}: {error}"}
@@ -526,6 +528,7 @@ async def run_research_step(
             prospecting, "qualified", "icp_fit", "disqualifiers", "missing_information"
         ),
         pains=_digest(customer, "likely_pains", "business_model"),
+        instruktioner=lager,
     )
 
     offer_obj = offer.get("offer") or {}
