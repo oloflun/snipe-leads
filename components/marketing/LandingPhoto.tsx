@@ -341,7 +341,7 @@ export function LandingPhoto({
         {/* DEMO. */}
         <section id="demo" ref={demoRef} className="scroll-mt-16 bg-paper2/45">
           <div className="mx-auto max-w-[1480px] px-6 py-24 md:px-10 md:py-28">
-            <div className="max-w-[46ch]">
+            <div className="max-w-[50ch]">
               <h2 className="font-display text-[clamp(1.875rem,3.6vw,2.875rem)] font-semibold leading-[1.06] tracking-[-0.028em]">
                 <Display text={text(copy.demoHeading)} />
               </h2>

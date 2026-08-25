@@ -85,8 +85,8 @@ const support: ProduktCopy = {
 
 const bokforing: ProduktCopy = {
   rubrik: {
-    sv: "Kvitton in, ordnat underlag ut – du godkänner varje rad.",
-    en: "Receipts in, an organised record out, and you approve every line."
+    sv: "Du skickar in. Agenten ordnar. Du godkänner.",
+    en: "You send it in. The agent organises. You approve."
   },
   lede: {
     sv: "Bokföringsagenten läser av kvitton och fakturor, föreslår kontering ur BAS-kontoplanen och summerar perioden. Den bokför ingenting själv.",
@@ -94,16 +94,16 @@ const bokforing: ProduktCopy = {
   },
   punkter: {
     sv: [
-      ["Avläsning utan gissningar", "Står ett fält inte på underlaget hittas det inte på. Underlaget går till granskning i stället, vilket är rätt utgång."],
-      ["Koden räknar, inte modellen", "Moms och summor räknas i kod med exakta decimaltal. En språkmodell som räknar själv är en språkmodell som ibland räknar fel."],
-      ["Perioden går ihop, eller visas inte", "Balanserar inte verifikaten får du bristerna i stället för trovärdiga siffror."],
-      ["Du för in det, inte vi", "Förslag, inte bokföring. Ingenting lämnas till Skatteverket, och ingen konsult ersätts."]
+      ["Avläsning utan gissningar", "Saknas ett fält på underlaget gissar agenten aldrig fram det. Kvittot går till granskning i stället – rätt hellre än snabbt."],
+      ["Koden räknar, inte modellen", "Moms och summor beräknas i kod, med exakta decimaler varje gång. En språkmodell som räknar själv kan missa – det har vi byggt bort."],
+      ["Perioden går ihop, eller visas inte", "Balanserar inte verifikationen ser ni det direkt – aldrig en siffra som bara ser rätt ut. Så vet ni att underlaget går att lita på."],
+      ["Du för in det, inte vi", "Agenten föreslår, ni bokför. Inget skickas till Skatteverket och ingen konsult blir överflödig – bara mindre manuellt arbete för er."]
     ],
     en: [
-      ["Reading without guessing", "If a field is not on the document it is not invented. The document goes to review instead, which is the right outcome."],
-      ["The code calculates, not the model", "VAT and totals are computed in code with exact decimals. A language model that does its own arithmetic is one that sometimes gets it wrong."],
-      ["The period balances, or it is not shown", "If the entries do not balance you get the gaps instead of plausible numbers."],
-      ["You enter it, not us", "Proposals, not bookkeeping. Nothing is filed with the tax agency, and no accountant is replaced."]
+      ["Reading without guessing", "If a field is missing from the document the agent never invents it. The receipt goes to review instead – right rather than fast."],
+      ["The code calculates, not the model", "VAT and totals are computed in code, with exact decimals every time. A language model doing its own arithmetic can slip – we built that out."],
+      ["The period balances, or it is not shown", "If the entry does not balance you see it at once – never a number that merely looks right. So you know the records can be trusted."],
+      ["You enter it, not us", "The agent proposes, you book. Nothing is filed with the tax agency and no accountant is made redundant – just less manual work for you."]
     ]
   }
 };

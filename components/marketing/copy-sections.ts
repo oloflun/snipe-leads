@@ -184,8 +184,8 @@ const support: SectionCopy = {
 const bokforing: SectionCopy = {
   statementLabel: { sv: "Så tänker vi", en: "How we see it" },
   statement: {
-    sv: "Bokföring är inte svårt. Det är segt, och det är därför det blir liggande.",
-    en: "Bookkeeping is not hard. It is slow, and that is why it piles up."
+    sv: "Bokföring är inte svårt. Det är segt – och segt är det som blir liggande.",
+    en: "Bookkeeping is not hard. It is slow – and slow is what gets left lying."
   },
   problemLabel: TOM,
   problemHeading: {
@@ -193,31 +193,31 @@ const bokforing: SectionCopy = {
     en: "Receipts sit there until it is *too late*."
   },
   problemBody: {
-    sv: "Kvitton i plånboken, fakturor i mejlen, ett kontoutdrag som ska stämma. Ingen enskild sak tar lång tid. Att göra dem alla, i tid, varje månad, är det som inte blir gjort.",
-    en: "Receipts in your wallet, invoices in your inbox, a bank statement that has to add up. No single task takes long. Doing all of them, on time, every month, is what does not get done."
+    sv: "Kvitton i plånboken, fakturor i mejlen, ett kontoutdrag som ska stämma – ingen enskild sak tar lång tid. Men allt på en gång, varje månad, i tid, är det som sällan blir av.",
+    en: "Receipts in your wallet, invoices in your inbox, a bank statement that has to add up – no single task takes long. But all of it at once, every month, on time, is what rarely happens."
   },
   problemPoints: [
     {
-      sv: "Ett kvitto i taget tar två minuter. Gånger hundra kvitton per kvartal.",
-      en: "One receipt takes two minutes. Times a hundred receipts a quarter."
+      sv: "Ett kvitto tar två minuter att hantera. Gånger hundra kvitton per kvartal blir det snabbt en hel arbetsdag.",
+      en: "One receipt takes two minutes to handle. Times a hundred receipts a quarter, that quickly becomes a full working day."
     },
     {
-      sv: "Ett tappat kvitto blir en kostnad du inte får dra av.",
-      en: "A lost receipt becomes a cost you cannot deduct."
+      sv: "Ett borttappat kvitto är ett avdrag ni går miste om.",
+      en: "A lost receipt is a deduction you miss out on."
     },
     {
-      sv: "Momsen ska stämma på öret, och det gör den sällan i huvudräkning.",
-      en: "The VAT has to be right to the öre, and mental arithmetic rarely is."
+      sv: "Momsen ska stämma på öret – något som sällan lyckas för hand.",
+      en: "The VAT has to be right to the öre – something that rarely works out by hand."
     }
   ],
   placeLabel: TOM,
   placeHeading: {
-    sv: "Byggt mot BAS-kontoplanen, med *dubbel bokföring* i koden.",
-    en: "Built on the Swedish BAS chart, with *double entry* in the code."
+    sv: "Lokalt *team* / *support*",
+    en: "Local *team* / *support*"
   },
   placeBody: {
-    sv: "Vi sitter i Göteborg och Umeå. Konteringen följer BAS, och verifikaten balanserar av konstruktion.",
-    en: "We work from Gothenburg and Umeå. The entries follow BAS, and every voucher balances by construction."
+    sv: "Vi sitter i Göteborg och Umeå – inte någonstans. Frågor besvaras av dem som bygger produkten, inte en supportkö.",
+    en: "We work from Gothenburg and Umeå – not just anywhere. Questions are answered by the people building the product, not a support queue."
   },
   objectionsHeading: {
     sv: "Det ni undrar",

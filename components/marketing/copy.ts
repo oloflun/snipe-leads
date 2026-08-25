@@ -322,26 +322,25 @@ export const supportCopy: ProductCopy = {
 export const bokforingCopy: ProductCopy = {
   word: { sv: "Bokföring", en: "Bookkeeping" },
   headline: {
-    sv: "Kvittohögen blir ett *underlag*.",
-    en: "The pile of receipts becomes a *record*."
+    sv: "Från kvitto till bokfört – på *sekunder*.",
+    en: "From receipt to booked – in *seconds*."
   },
   lede: {
-    sv: "Fotografera kvittot. Agenten läser av datum, belopp och moms, föreslår kontering och räknar perioden. Du godkänner innan något förs in i er bokföring.",
-    en: "Photograph the receipt. The agent reads off date, amount and VAT, proposes the entries and totals the period. You approve before anything enters your books."
+    sv: "Slipp manuell hantering. Ta en bild på kvittot, så plockar agenten fram datum, belopp och moms och lägger fram ett konteringsförslag, klart att godkänna.",
+    en: "Skip the manual handling. Snap a photo of the receipt and the agent pulls out date, amount and VAT and lays out a posting proposal, ready to approve."
   },
   cta: { sv: "Se hur det fungerar", en: "See how it works" },
   demoHeading: {
-    sv: "Ett kvitto, *avläst* och konterat.",
-    en: "One receipt, *read* and posted."
+    // No-break spaces (U+00A0) efter "avläst": rubriken bröt raden före
+    // "och konterat", och den ska stå på en rad.
+    sv: "Ett kvitto, *avläst* och konterat.",
+    en: "One receipt, *read* and posted."
   },
   demoLede: {
-    sv: "Exemplet nedan visar hela vägen: avläsningen, verifikatet och periodsumman.",
-    en: "The example below shows the whole path: the reading, the entry and the period total."
+    sv: "Nedan visas ett exempel steg för steg. Du kan också chatta med bokföringsassistenten och ställa egna frågor om siffrorna.",
+    en: "Below is an example, step by step. You can also chat with the bookkeeping assistant and ask your own questions about the numbers."
   },
-  exampleNote: {
-    sv: "Exempel. Påhittat underlag, inte en riktig körning hos en kund.",
-    en: "Example. A made-up document, not a real run for a customer."
-  },
+  exampleNote: { sv: "", en: "" },
   stepsHeading: {
     sv: "Tre steg, och koden räknar *varenda* siffra.",
     en: "Three steps, and the code does *every* calculation."

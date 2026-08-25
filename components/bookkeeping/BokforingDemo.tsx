@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, FileText, ShieldAlert } from "lucide-react";
+import { ArrowRight, FileText } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
   AVLASNING,
@@ -182,22 +182,7 @@ function DemoChatt() {
 export function BokforingDemo() {
   return (
     <div className="mx-auto max-w-[1120px]">
-      {/* Märkningen står FÖRST och kan inte klickas bort. Samma regel som
-          leads-agentens exempelbolag: en siffra som ser ut att komma ur en
-          körning måste säga att den inte gör det.
-          Den ligger utanför båda rutorna: den gäller siffrorna i vänstra OCH
-          samtalet i högra, och en kopia i varje ruta hade sagt samma sak två
-          gånger. */}
-      <p className="flex items-start gap-2 rounded-card border border-ochre/40 bg-ochre/10 px-4 py-2.5 text-[0.8125rem] leading-6 text-ink/80">
-        <ShieldAlert className="mt-1 h-3.5 w-3.5 shrink-0 text-warning" aria-hidden />
-        <span>
-          <strong className="font-semibold">Exempel.</strong> Underlaget, bolaget och
-          siffrorna är påhittade, och svaren till höger är skrivna i förväg. Ingen
-          modell körs på den här sidan och ingen kunddata visas.
-        </span>
-      </p>
-
-      <div className="mt-5 grid gap-5 lg:grid-cols-12 lg:gap-6">
+      <div className="grid gap-5 lg:grid-cols-12 lg:gap-6">
         {/* VÄNSTER: vägen från kvitto till periodrapport. */}
         <div className="lg:col-span-7">
           <div className="rounded-card border border-ink/12 bg-paper2/30 p-5">
@@ -233,10 +218,6 @@ export function BokforingDemo() {
             </div>
           ))}
         </dl>
-        <p className="mt-3 text-[0.8125rem] leading-6 text-ink/55">
-          Varje fält har en källa i texten. Ett fält som inte står på underlaget
-          gissas inte — underlaget går till granskning i stället.
-        </p>
       </Steg>
 
       <Steg nummer={3} rubrik="Verifikatet">
@@ -269,10 +250,6 @@ export function BokforingDemo() {
             </tr>
           </tfoot>
         </table>
-        <p className="mt-3 text-[0.8125rem] leading-6 text-ink/55">
-          Modellen valde kategori. Koden valde konto ur BAS och byggde raderna, så
-          debet och kredit är lika av konstruktion.
-        </p>
       </Steg>
 
       <Steg nummer={4} rubrik="Perioden">
@@ -291,10 +268,6 @@ export function BokforingDemo() {
             </div>
           ))}
         </dl>
-        <p className="mt-4 text-[0.8125rem] leading-6 text-ink/55">
-          {PERIOD.fran} till {PERIOD.till}. Perioden går ihop, alltså visas summorna.
-          Gjorde den inte det hade du fått bristerna i stället.
-        </p>
       </Steg>
 
             </div>
@@ -318,8 +291,7 @@ export function BokforingDemo() {
               <ArrowRight className="mt-0.5 h-3 w-3 shrink-0 text-ochre" aria-hidden />
               <span>
                 Varje belopp i svaret kommer från siffrorna till vänster. I produkten
-                kontrolleras det maskinellt: ett svar som bär ett tal assistenten inte
-                hämtat stoppas innan du ser det.
+                kontrolleras det maskinellt.
               </span>
             </p>
           </div>
