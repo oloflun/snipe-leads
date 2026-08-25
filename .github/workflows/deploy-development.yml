@@ -1,46 +1,29 @@
 name: Deploy — Development
 
+# Railways deployment trigger för development-miljön lyssnar på grenen
+# `railway-development`, INTE `development` (se DEPLOY.md). Den här workflowen
+# gör den andra, manuella pushen automatiskt — mirror:ar development till
+# railway-development på varje push, vilket utlöser Railways riktiga deploy.
+#
+# Tidigare deployade den här filen till Vercel (den döda kedjan — se DEPLOY.md
+# "Den döda kedjan": Vercel-previewen läser en Supabase-gren i
+# MIGRATIONS_FAILED och når aldrig produkten). Bytt 2026-08-25 på uttrycklig
+# begäran: push till development ska trigga Railway development, inte Vercel.
+
 on:
   push:
     branches:
       - development
 
 jobs:
-  deploy:
-    name: Deploy to Vercel (preview)
+  mirror-to-railway:
+    name: Mirror to railway-development
     runs-on: ubuntu-latest
-    environment:
-      name: development
-      url: ${{ steps.deploy.outputs.url }}
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install Vercel CLI
-        run: npm install -g vercel@latest
-
-      - name: Pull Vercel environment
-        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
-        env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-
-      - name: Build
-        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
-        env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-
-      - name: Deploy
-        id: deploy
-        run: |
-          URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
-          echo "url=$URL" >> $GITHUB_OUTPUT
-        env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      - name: Push development -> railway-development
+        run: git push origin HEAD:railway-development
