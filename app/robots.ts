@@ -37,9 +37,14 @@ export default function robots(): MetadataRoute.Robots {
         // är städning, inte skydd.
         disallow: ["/dashboard", "/settings", "/admin", "/onboarding", "/avregistrera", "/api"]
       }
-    ]
-    // Ingen `sitemap:`-rad: app/sitemap.ts finns inte. En robots.txt som
-    // pekar på en sitemap som svarar 404 är sämre än ingen rad alls — den
-    // säger åt sökmotorn att hämta något som inte finns, varje gång.
+    ],
+    // Raden tillkom 2026-08-25, när app/sitemap.ts faktiskt skapades. Här
+    // stod tidigare att den INTE fick finnas, och det var rätt så länge
+    // sitemapen inte gjorde det: en robots.txt som pekar på en 404 säger åt
+    // sökmotorn att hämta något som inte finns, varje gång.
+    //
+    // Villkoret gäller fortfarande — flyttas eller tas sitemapen bort ska den
+    // här raden bort i SAMMA ändring.
+    sitemap: "https://snajp.se/sitemap.xml"
   };
 }

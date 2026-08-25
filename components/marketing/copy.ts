@@ -98,6 +98,15 @@ export const shared = {
   menyTeam: { sv: "Vårt team", en: "Our team" },
   menyDataskydd: { sv: "Dataskydd", en: "Data protection" },
   menyEtikett: { sv: "Meny", en: "Menu" },
+  //: Länkar från startsidans avsnitt till de sidor som fördjupar dem.
+  //:
+  //: TILLAGDA vid sidan av avsnittens befintliga CTA, inte i stället för den.
+  //: Att byta ut "Skriv till oss" mot en sidlänk hade varit ett beslut om
+  //: konverteringsvägen, och det är inte en följd av att sidorna finns. Utan
+  //: de här två nås /faq och /vart-team bara via en hopfälld meny, vilket är
+  //: samma sak som att inte nås.
+  vilkaLank: { sv: "Läs mer om oss", en: "More about us" },
+  fragorLank: { sv: "Fler frågor och svar", en: "More questions and answers" },
   //: Avsnittet "Vilka är vi". Skrivet för den som undrar vem de skulle köpa av
   //: — inte som en grundarberättelse. Svensk B2B väger vem som står bakom, och
   //: den frågan besvaras inte av en produktbeskrivning.

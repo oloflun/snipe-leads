@@ -480,12 +480,25 @@ export function LandingPhoto({
                 <p className="rise mt-6 max-w-[62ch] text-[1.0625rem] leading-[1.7] text-ink/78">
                   {text(shared.vilkaText2)}
                 </p>
-                <a
-                  href={mejlaOss()}
-                  className="focus-ring mt-8 inline-flex min-h-12 items-center rounded-input border border-ink/20 px-6 text-[0.9375rem] font-semibold transition-colors hover:border-ink"
-                >
-                  {text(shared.secondaryCta)}
-                </a>
+                {/* Två vägar vidare, inte en utbytt. Avsnittet reser frågan
+                    "vilka är ni" och slutade tidigare med "skriv till oss" —
+                    ett svar på en fråga ingen ställde. Teamsidan svarar på den
+                    som faktiskt ställdes. Mejlvägen står kvar för den som
+                    hellre frågar än läser. */}
+                <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3">
+                  <a
+                    href={mejlaOss()}
+                    className="focus-ring inline-flex min-h-12 items-center rounded-input border border-ink/20 px-6 text-[0.9375rem] font-semibold transition-colors hover:border-ink"
+                  >
+                    {text(shared.secondaryCta)}
+                  </a>
+                  <Link
+                    href="/vart-team"
+                    className="focus-ring text-[0.9375rem] font-medium underline underline-offset-4 hover:text-ochre"
+                  >
+                    {text(shared.vilkaLank)}
+                  </Link>
+                </div>
               </div>
             </div>
           </div>
@@ -511,6 +524,17 @@ export function LandingPhoto({
                     </dd>
                   </div>
                 ))}
+                {/* De tre ovan är produktens invändningar, valda för att de
+                    kommer FÖRST. Resten — pris, uppsägning, var datan kommer
+                    ifrån, hur GDPR hanteras — bor på /faq, eftersom de ställs
+                    av någon som redan bestämt sig för att titta närmare och
+                    inte hör hemma mitt i argumentet. */}
+                <Link
+                  href="/faq"
+                  className="focus-ring mt-8 inline-block text-[0.9375rem] font-medium underline underline-offset-4 hover:text-ochre"
+                >
+                  {text(shared.fragorLank)}
+                </Link>
               </dl>
             </div>
           </div>
