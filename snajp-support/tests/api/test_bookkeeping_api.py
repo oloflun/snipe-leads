@@ -369,3 +369,62 @@ async def test_okant_filformat_avvisas_med_namnet_pa_det_som_gar():
             )
             assert svar.status_code == 422
             assert "application/pdf" in svar.json()["detail"]
+
+
+# -- Dubblettspärren -------------------------------------------------------
+#
+# Sätts FÖRE textutvinningen i `ta_emot_underlag`, så testet behöver ingen
+# LLM-mock: en fil vars sha256 redan finns avvisas innan modellen kommer in.
+
+
+@pytest.mark.anyio
+async def test_samma_fil_tva_ganger_avvisas_med_422():
+    """Ett dubblerat underlag blir en dubblerad kostnad i periodrapporten —
+    trovärdiga men felaktiga tal, samma felfamilj som INV-BOOK-002 stoppar."""
+    from app.bookkeeping.underlag import sha256_av
+
+    data = b"%PDF-1.4 samma kvitto tva ganger"
+    async with app.router.lifespan_context(app):
+        await app.state.storage.create_bk_underlag(
+            DEFAULT_TENANT_ID,
+            sha256=sha256_av(data),
+            filnamn="kvitto.pdf",
+            mimetyp="application/pdf",
+            status="klar",
+            datum=date(2026, 3, 5),
+        )
+        async with _client() as client:
+            svar = await client.post(
+                "/api/bookkeeping/underlag",
+                headers=DEMO,
+                files={"fil": ("kvitto-igen.pdf", data, "application/pdf")},
+            )
+            assert svar.status_code == 422
+            assert "redan uppladdad" in svar.json()["detail"]
+            assert "kvitto.pdf" in svar.json()["detail"]
+
+        # Ingen ny rad skrevs — spärren avvisar, den flaggar inte.
+        assert len(await app.state.storage.list_bk_underlag(DEFAULT_TENANT_ID)) == 1
+
+
+@pytest.mark.anyio
+async def test_dubblettsparren_ser_inte_ett_annat_bolags_fil():
+    """Spärren är per tenant. Slog den över tenantgränsen hade den dels
+    blockerat legitima uppladdningar, dels LÄCKT: ett 422 med den andra
+    tenantens filnamn hade bekräftat vad ett annat bolag laddat upp.
+
+    Prövas på lagringsnivå — det är `get_bk_underlag_by_sha256` som bär
+    gränsen, och API-vägen ovanför den kräver en LLM-mock som inte skulle
+    bevisa mer om just isoleringen."""
+    async with app.router.lifespan_context(app):
+        storage = app.state.storage
+        await storage.create_bk_underlag(
+            "en-annan-tenant",
+            sha256="f" * 64,
+            filnamn="hemlig.pdf",
+            mimetyp="application/pdf",
+            status="klar",
+        )
+        assert await storage.get_bk_underlag_by_sha256(DEFAULT_TENANT_ID, "f" * 64) is None
+        traff = await storage.get_bk_underlag_by_sha256("en-annan-tenant", "f" * 64)
+        assert traff is not None and traff["filnamn"] == "hemlig.pdf"

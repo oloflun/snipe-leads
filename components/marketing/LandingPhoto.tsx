@@ -70,8 +70,14 @@ function Label({ children, tone = "ink" }: Readonly<{ children: React.ReactNode;
 export function LandingPhoto({
   initial,
   leadsDemo,
-  supportDemo
-}: Readonly<{ initial: ProductKey; leadsDemo: React.ReactNode; supportDemo: React.ReactNode }>) {
+  supportDemo,
+  bookkeepingDemo
+}: Readonly<{
+  initial: ProductKey;
+  leadsDemo: React.ReactNode;
+  supportDemo: React.ReactNode;
+  bookkeepingDemo: React.ReactNode;
+}>) {
   const { text, locale, toggleLocale } = useLocale();
   const [product, setProduct] = useState<ProductKey>(initial);
   const demoRef = useRef<HTMLDivElement | null>(null);
@@ -343,8 +349,16 @@ export function LandingPhoto({
             </div>
             <div className="mt-10 overflow-hidden rounded-panel border border-ink/12 bg-paper">
               <div className="flex items-center justify-between gap-4 border-b border-ink/10 bg-paper2/60 px-5 py-3.5">
+                {/* Etiketten per produkt, inte "allt som inte är leads är
+                    support": den grenen visade "Snajp Support" ovanför
+                    bokföringsdemon — fel produktnamn på en sida som säljer en
+                    annan produkt. */}
                 <span className="text-[0.8125rem] font-medium tracking-[0.02em] text-ink/55">
-                  {product === "leads" ? "Email Studio" : "Snajp Support"}
+                  {product === "leads"
+                    ? "Email Studio"
+                    : product === "support"
+                      ? "Snajp Support"
+                      : "Snajp Bokföring"}
                 </span>
                 {/* Ingen statusuppgift här: supportchatten rapporterar sitt
                     eget läge, och backenden kan gå i simulering. Två sanningar
@@ -359,7 +373,11 @@ export function LandingPhoto({
                   aria-labelledby={`product-tab-${key}`}
                   hidden={key !== product}
                 >
-                  {key === "leads" ? leadsDemo : supportDemo}
+                  {/* En gren per produkt. Tvågrenaren `leads ? … : supportDemo`
+                      lät bokföringsfliken rendera supportchatten — fel agent,
+                      fel varumärkesetikett ("Nordlys Handel") och fel
+                      förslagsfrågor på /bokforing. */}
+                  {key === "leads" ? leadsDemo : key === "support" ? supportDemo : bookkeepingDemo}
                 </div>
               ))}
               </div>

@@ -13,11 +13,12 @@ serversidan. Deras formulering är "semantic datasets, not free SQL". Det är
 samma avvägning vi redan gjort i `leads_tools.py` med andra ord: modellen väljer
 VAD, koden gör.
 
-Tre dataset räcker för de frågor chatten faktiskt får:
+Fyra dataset räcker för de frågor chatten faktiskt får:
 
     hamta_periodrapport   "hur mycket moms har jag i augusti?"
     lista_underlag        "vilka kvitton saknar belopp?"
     sla_upp_konto         "vilket konto hamnar drivmedel på?"
+    sla_upp_kunskap       "vad gäller för representation?"
 
 ## Tenanten kommer ALDRIG från ett argument
 
@@ -51,6 +52,7 @@ from typing import Any
 from agents import RunContextWrapper, function_tool
 
 from ..bookkeeping.kontoplan import KONTOPLAN, KOSTNADSKATEGORIER, foresla_konto
+from ..bookkeeping.kunskap import KUNSKAP, sok_amne
 from ..bookkeeping.period import berakna_period
 from ..bookkeeping.verifieringsgrind import STATUS_GRANSKA, STATUS_KLAR
 from ..storage.base import Storage
@@ -231,6 +233,44 @@ async def sla_upp_konto(
     return await _sla_upp_konto_impl(ctx.context, nummer_eller_kategori)
 
 
+# -- Dataset 4: kunskapsbasen ----------------------------------------------
+
+
+async def _sla_upp_kunskap_impl(ctx: BokforingChattContext, amne: str) -> str:
+    """Texten ur `bookkeeping/kunskap.py`, aldrig modellens minne.
+
+    Läser ingen kunddata alls — kontexten tas emot bara för att svaret ska
+    sparas i `ctx.resultat`, så att talen i texten (300 kr-taket och liknande)
+    räknas som hämtade under INV-BOOK-003.
+    """
+    träff = sok_amne(amne)
+    if träff is None:
+        return ctx.spara(
+            {
+                "hittades": False,
+                "fraga": (amne or "").strip(),
+                "kanda_amnen": sorted(KUNSKAP),
+            }
+        )
+    return ctx.spara({"amne": träff.id, "rubrik": träff.rubrik, "text": träff.text})
+
+
+@function_tool
+async def sla_upp_kunskap(ctx: RunContextWrapper[BokforingChattContext], amne: str) -> str:
+    """Slå upp en förklaring i Snajps bokföringskunskap: moms, periodisering,
+    representation, avdrag, fakturakrav, bokföringslagen, EU-handel, K-regelverk
+    med mera.
+
+    Svara ur texten du får tillbaka, inte ur minnet. Hittas inget ämne svarar
+    verktyget med de kända ämnena — säg då att ämnet inte finns i kunskapen.
+
+    Args:
+        amne: Ämnet eller frågan, till exempel "representation" eller
+            "vad gäller vid import".
+    """
+    return await _sla_upp_kunskap_impl(ctx.context, amne)
+
+
 #: Verktygsuppsättningen. Ingen av dem skriver, ingen av dem räknar, och ingen
 #: av dem tar emot en tenant.
-BOKFORING_CHATT_TOOLS = [hamta_periodrapport, lista_underlag, sla_upp_konto]
+BOKFORING_CHATT_TOOLS = [hamta_periodrapport, lista_underlag, sla_upp_konto, sla_upp_kunskap]
