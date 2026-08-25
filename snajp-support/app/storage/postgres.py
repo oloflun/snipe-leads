@@ -648,15 +648,26 @@ class PostgresStorage:
         if not adress:
             raise ValueError("add_suppression kräver en e-postadress.")
         async with self._scoped(tenant_id) as conn:
-            # workspace_id hämtas ur kopplingen; kolumnen är not null sedan 000.
-            # Finns ingen workspace för tenanten är det ett riktigt fel — en
-            # avregistrering som tyst inte sparas är det värsta utfallet här.
+            # workspace_id hämtas ur kopplingen NÄR DEN FINNS, annars NULL.
+            #
+            # Här stod tidigare en `insert ... select ... from workspaces
+            # where ss_tenant_id = $1`, och kommentaren påstod att en saknad
+            # workspace vore "ett riktigt fel". Det var värre än så: en select
+            # utan träffar infogar noll rader. Ingen krasch, inget
+            # felmeddelande, ingen avregistrering — exakt det utfall
+            # kommentaren sa att den ville undvika.
+            #
+            # Upptäckt 2026-08-24 när avregistreringskedjan provkördes skarpt:
+            # två tenants i development saknar arbetsyta. Kolumnen är nullbar
+            # sedan migration 049, och `send_guard` regel 3 läser ändå via
+            # tenant_id — skyddet gäller alltså oavsett workspace_id.
             await conn.execute(
                 """
                 insert into suppressions (workspace_id, tenant_id, email, reason)
-                select w.id, $1, $2, $3
-                  from workspaces w
-                 where w.ss_tenant_id = $1
+                values (
+                    (select w.id from workspaces w where w.ss_tenant_id = $1 limit 1),
+                    $1, $2, $3
+                )
                 on conflict do nothing
                 """,
                 tenant_id,
@@ -2080,6 +2091,38 @@ class PostgresStorage:
             post["rader"] = per_verifikat.get(post["id"], [])
             poster.append(post)
         return poster
+
+    async def rensa_bk_period(
+        self,
+        tenant_id: str,
+        *,
+        fran: date | None = None,
+        till: date | None = None,
+    ) -> int:
+        # Villkoret är ORDAGRANT `list_bk_underlag`:s, `datum is null`
+        # inräknat. Skrivs det snävare här raderar knappen ett annat urval än
+        # vyn visade, och kvar blir just de odaterade underlagen — de som
+        # grinden fällt och som listan lyfter fram.
+        #
+        # bk_verifikat och bk_verifikat_rad följer med via `on delete cascade`
+        # (migration 045). Ingen egen delete behövs, och en sådan hade dessutom
+        # kunnat lämna rader efter sig om ordningen blev fel.
+        #
+        # `delete`-rättigheten finns sedan migration 045 — den skrevs in från
+        # rad ett just för att en kodväg som behöver den annars svarar 500 i
+        # drift medan sviten är grön mot minnet.
+        async with self._scoped(tenant_id) as conn:
+            status = await conn.execute(
+                """
+                delete from bk_underlag
+                where (datum is null or $1::date is null or datum >= $1)
+                  and (datum is null or $2::date is null or datum <= $2)
+                """,
+                bk_datum(fran),
+                bk_datum(till),
+            )
+        # asyncpg ger tillbaka kommandotaggen, "DELETE <n>".
+        return int(status.rsplit(" ", 1)[-1])
 
     async def close(self) -> None:
         await self.pool.close()

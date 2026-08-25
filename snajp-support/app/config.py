@@ -69,6 +69,72 @@ CATEGORY_LABELS = {
 # klassattribut som ett fält och vägrar bygga modellen.
 MILJOER_MED_KUNDDATA = ("main", "production", "prod", "development", "dev")
 
+# De providernamn koden faktiskt kan hantera. Varje post här MÅSTE ha en
+# nyckel i `active_llm_key` och en bas-URL i `agent/llm._resolve_base_url` —
+# annars är den inte stödd, den ser bara stödd ut.
+KANDA_PROVIDERS = ("openai", "deepseek", "gemini")
+
+
+#: Värdnamn som betyder "databasen kör på den här maskinen". Bara de här räknas
+#: som syntetisk data — se `Settings.har_riktig_kunddata`. Listan är kort med
+#: flit: varje post är en adress som per definition inte kan vara en delad
+#: produktionsdatabas.
+_LOOPBACK = ("localhost", "127.0.0.1", "::1", "[::1]", "host.docker.internal")
+
+
+def _vard_ur_dsn(database_url: str) -> str:
+    """Värddelen ur en DSN, för felmeddelanden.
+
+    ALDRIG hela DSN:en. Ett felmeddelande hamnar i en deploy-logg, och en
+    logg är inte en hemlig plats — se läckagespärren i CLAUDE.md.
+    """
+    utan_schema = str(database_url or "").split("://", 1)[-1]
+    myndighet = utan_schema.split("/", 1)[0]
+    return myndighet.rsplit("@", 1)[-1].rsplit(":", 1)[0].strip() or "okänd värd"
+
+
+def _ar_loopback(database_url: str) -> bool:
+    """Om DSN:en pekar på den egna maskinen.
+
+    Läser värddelen och inget annat. En DSN kan bära lösenord med `@` i, så
+    värden tas efter SISTA `@` — annars hade ett lösenord med snabel-a kunnat
+    få en produktionsdatabas att se ut som localhost, vilket är exakt fel
+    riktning för en dataskyddsspärr att gissa åt.
+    """
+    utan_schema = str(database_url or "").split("://", 1)[-1]
+    myndighet = utan_schema.split("/", 1)[0]
+    vard = myndighet.rsplit("@", 1)[-1].rsplit(":", 1)[0].strip().lower()
+    return vard in _LOOPBACK
+
+# Modellnamn -> vilken provider namnet HÖR TILL. Bara entydiga prefix står här;
+# ett namn som inte matchar något av dem släpps igenom, eftersom leverantörerna
+# döper nya modeller utan att fråga oss och en för snäv lista hade blockerat
+# giltig konfiguration.
+#
+# VARFÖR KONTROLLEN FINNS: `MODEL` stod kvar på "deepseek-v4-flash" när
+# LLM_PROVIDER byttes till "gemini" 2026-08-24. Tjänsten startade, rapporterade
+# `mode: live`, och svarade 404 på VARJE anrop — "models/deepseek-v4-flash is
+# not found". Hälsokontrollen mäter att en nyckel finns, inte att modellen
+# existerar hos den provider nyckeln pekar på, och den skillnaden kostade en
+# hel eftermiddag första gången.
+MODELLFAMILJER = {
+    "gpt-": "openai",
+    "o1-": "openai",
+    "o3-": "openai",
+    "o4-": "openai",
+    "deepseek": "deepseek",
+    "gemini": "gemini",
+}
+
+
+def provider_for_model(model: str) -> str | None:
+    """Vilken provider ett modellnamn hör till, eller None om det inte går att säga."""
+    namn = (model or "").strip().lower()
+    for prefix, provider in MODELLFAMILJER.items():
+        if namn.startswith(prefix):
+            return provider
+    return None
+
 # Regler per fack: auto = skicka direkt, draft = kräver godkännande, escalate = alltid människa.
 DEFAULT_CATEGORY_RULES = {category: "draft" for category in CATEGORIES}
 
@@ -174,6 +240,27 @@ class Settings(BaseSettings):
     # kallmejl med en trasig avregistreringslänk är värre än inget kallmejl.
     publik_bas_url: str = ""
 
+    # SMTP-uppgifterna för snajpsupport@gmail.com. ETT konto för HELA
+    # plattformen — det här är prioriterade mejl till OSS, inte kundutskick,
+    # och har ingenting med per-tenant-avsändare att göra (se
+    # app/notifications/prioriterat_mejl.py).
+    #
+    # Variabelnamnen behålls trots att modulen bytt namn: de sitter i Railway
+    # och i DEPLOY.md, och att döpa om dem är en driftändring — inte en
+    # omdöpning i koden.
+    #
+    # Lösenordet är INTE kontolösenordet. Ett Gmail med tvåstegsverifiering kan
+    # inte logga in på SMTP med det; det kräver ett app-specifikt lösenord.
+    # Sätts i Railway av en människa, samma sorts post som OPENAI_API_KEY i
+    # docs/JURIDIK_ATGARDER.md.
+    #
+    # Ligger HÄR och inte i en `os.getenv` inne i modulen, och det är inte
+    # kosmetika: pydantic-settings läser snajp-support/.env utan att exportera
+    # något till os.environ, så en direktläsning hade sett värdena i Railway
+    # men aldrig lokalt. Tomt => inga mejl skickas, och modulen loggar i stället.
+    internlarm_smtp_anvandare: str = ""
+    internlarm_smtp_losenord: str = ""
+
     # CORS: kommaseparerade origins som får anropa API:t direkt från en
     # webbläsare. Tom = av, vilket räcker för vår egen frontend — Next-proxyn
     # anropar backenden server-side, så webbläsaren träffar aldrig den här
@@ -199,16 +286,47 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _default_model_for_provider(self) -> "Settings":
-        # Undvik footgun: gpt-default mot DeepSeek => byt till deepseek-v4-flash
-        # (1M kontext, 384K output, $0.14/$0.28 per 1M token — se plan-dokumentet).
-        if self.llm_provider == "deepseek" and self.model.startswith("gpt-"):
-            self.model = "deepseek-v4-flash"
+        """Undvik footgun: ett gpt-modellnamn mot en icke-OpenAI-endpoint.
+
+        DeepSeek och Gemini svarar båda 404 på "gpt-4o-mini" — ett fel som
+        syns först vid första riktiga anropet, alltså hos en kund. `MODEL`
+        får fortfarande sätta något annat; det här gäller bara när defaulten
+        lämnats orörd.
+        """
+        if self.model.startswith("gpt-"):
+            # 1M kontext, 384K output, $0.14/$0.28 per 1M token — se plan-dokumentet.
+            if self.llm_provider == "deepseek":
+                self.model = "deepseek-v4-flash"
+            # Samma modellnamn som vision-sidovagnen redan använder mot samma
+            # endpoint (se vision_model ovan) — alltså ett namn som är prövat
+            # i den här kodbasen, inte ett gissat.
+            elif self.llm_provider == "gemini":
+                self.model = self.vision_model
         return self
 
     def active_llm_key(self) -> str:
-        if self.llm_provider == "deepseek":
-            return self.deepseek_api_key
-        return self.openai_api_key
+        """Nyckeln som hör till den valda providern.
+
+        VARFÖR EN KARTA OCH INTE EN IF-KEDJA MED FALLBACK: den tidigare
+        versionen slutade med `return self.openai_api_key`, alltså returnerade
+        den OpenAI-nyckeln för VARJE värde som inte var "deepseek". Ett
+        felstavat eller okänt providernamn gav då en tom nyckel, och en tom
+        nyckel är simuleringsläge — tjänsten startade, rapporterade sig frisk
+        och slutade tyst använda AI.
+
+        Det hände skarpt 2026-08-24: LLM_PROVIDER sattes till "gemini", ett
+        värde koden inte kände till, och development svarade
+        `mode: simulation` med regelmotorn i stället för agenten. Ingen
+        deploy föll, ingenting larmade.
+
+        Nu är okända värden ett FEL (se llm_provider_fault), och den här
+        funktionen svarar tomt bara för en provider som saknar sin nyckel.
+        """
+        return {
+            "openai": self.openai_api_key,
+            "deepseek": self.deepseek_api_key,
+            "gemini": self.gemini_api_key,
+        }.get(self.llm_provider, "")
 
     def aktiv_miljo(self) -> str:
         """Miljönamnet, normaliserat. Tom sträng = okänd."""
@@ -217,17 +335,43 @@ class Settings(BaseSettings):
     def har_riktig_kunddata(self) -> bool:
         """Om den här processen kan nå riktiga personuppgifter.
 
-        En OKÄND miljö räknas som utveckling och inte som produktion. Det ser
-        ut som fel håll att falla, men är det inte: den enda konsekvensen av
-        ett falskt negativt är att en lokal körning tillåter DeepSeek mot en
-        databas som ändå är tom (`scripts/lokal_stack.py`). Ett falskt positivt
-        hade i stället stoppat varje lokal utvecklingskörning, och en spärr som
-        står i vägen dagligen är en spärr någon kommenterar bort.
+        ## Varför den inte längre bara läser miljönamnet
 
-        Det som faktiskt skyddar produktionen är att Railway ALLTID sätter
-        RAILWAY_ENVIRONMENT_NAME. Miljönamnet är alltså aldrig okänt där.
+        Den gjorde det fram till 2026-08-24, och motiveringen var att "Railway
+        sätter ALLTID RAILWAY_ENVIRONMENT_NAME, så miljönamnet är aldrig okänt
+        där". Det var sant och ändå fel, för det antog att Railway är den enda
+        värden.
+
+        Det är den inte. Två Render-tjänster från den gamla stacken låg kvar
+        levande, deployade automatiskt vid varje push till `main` och
+        `development`, och startade med `provider=deepseek` mot en riktig
+        Postgres. På Render finns ingen RAILWAY_ENVIRONMENT_NAME, så
+        miljönamnet var tomt, så spärren tolkade det som utveckling och släppte
+        igenom. Den gren av villkoret som var tänkt att skydda en lokal körning
+        skyddade i stället en bortglömd produktionsyta från att bli upptäckt.
+
+        ## Regeln nu: databasen avgör, inte värdnamnet
+
+        En riktig databas är det som gör data riktig. En process som kan öppna
+        en REMOTE databas kan nå riktiga personuppgifter, oavsett vem som kör
+        den och vad miljön råkar heta.
+
+        Undantaget är en databas på loopback — `scripts/lokal_stack.py` kör mot
+        127.0.0.1, och den stacken är tom och syntetisk. Det undantaget är
+        smalt med flit: det gäller adressen, inte en flagga någon kan sätta.
+
+        Tre utfall:
+
+          * Känt miljönamn ur MILJOER_MED_KUNDDATA  -> riktig data
+          * Databas som INTE är loopback            -> riktig data
+          * Ingen databas, eller loopback           -> syntetisk
+
+        Testsviten sätter tom DATABASE_URL (tests/conftest.py) och faller
+        därför i tredje fallet, som förut.
         """
-        return self.aktiv_miljo() in MILJOER_MED_KUNDDATA
+        if self.aktiv_miljo() in MILJOER_MED_KUNDDATA:
+            return True
+        return bool(self.database_url) and not _ar_loopback(self.database_url)
 
     def llm_provider_fault(self) -> str | None:
         """Varför den valda LLM-providern inte får användas här, eller None.
@@ -252,14 +396,51 @@ class Settings(BaseSettings):
         kodbeslut: SCC, TIA, PUB-villkor och information till kunden. Ändra
         inte den här funktionen för att komma runt det.
         """
-        if self.llm_provider == "deepseek" and self.har_riktig_kunddata():
+        if self.llm_provider not in KANDA_PROVIDERS:
             return (
-                f"LLM_PROVIDER=deepseek är inte tillåtet i miljön "
-                f"'{self.aktiv_miljo()}'. Den miljön bär eller speglar riktig "
-                f"kunddata, och DeepSeek behandlar prompten i Kina utan att vi "
-                f"har SCC, överföringsbedömning eller PUB-villkor på plats. "
-                f"Sätt LLM_PROVIDER=openai och se till att OPENAI_API_KEY är "
-                f"satt på BÅDA tjänsterna (web och api)."
+                f"LLM_PROVIDER={self.llm_provider!r} är inte ett providernamn "
+                f"koden känner till. Välj ett av: {', '.join(KANDA_PROVIDERS)}. "
+                f"Utan den här kontrollen hade tjänsten startat med en tom "
+                f"nyckel och tyst gått ner i simuleringsläge — den hade svarat "
+                f"kunder med regelmotorn i stället för med agenten, och "
+                f"ingenting hade larmat."
+            )
+
+        modellens_provider = provider_for_model(self.model)
+        if modellens_provider is not None and modellens_provider != self.llm_provider:
+            return (
+                f"MODEL={self.model!r} är en {modellens_provider}-modell, men "
+                f"LLM_PROVIDER={self.llm_provider!r}. Anropet går till "
+                f"{self.llm_provider}s endpoint med ett modellnamn som inte finns "
+                f"där, och svaret blir 404 på VARJE förfrågan — medan "
+                f"hälsokontrollen rapporterar 'live', eftersom en nyckel finns. "
+                f"Sätt MODEL till en {self.llm_provider}-modell, eller ta bort "
+                f"variabeln och låt koden välja default."
+            )
+
+        if self.llm_provider == "deepseek" and self.har_riktig_kunddata():
+            # Skälet formuleras efter VAD som fällde, inte som en generisk
+            # rad. Meddelandet är det enda någon läser när en deploy dör
+            # 23:01, och "miljön ''" besvarar inte frågan varför.
+            if self.aktiv_miljo() in MILJOER_MED_KUNDDATA:
+                varfor = (
+                    f"Miljön '{self.aktiv_miljo()}' bär eller speglar riktig kunddata."
+                )
+            else:
+                varfor = (
+                    f"Miljönamnet är okänt, men DATABASE_URL pekar på en databas "
+                    f"som inte kör på den här maskinen ({_vard_ur_dsn(self.database_url)}). "
+                    f"En process som kan öppna en fjärrdatabas kan nå riktiga "
+                    f"personuppgifter, oavsett vilken värd den kör på — det var "
+                    f"precis så den bortglömda Render-stacken kunde köra DeepSeek "
+                    f"mot skarp data utan att någon spärr sa ifrån."
+                )
+            return (
+                f"LLM_PROVIDER=deepseek är inte tillåtet här. {varfor} DeepSeek "
+                f"behandlar prompten i Kina, och vi har varken SCC, "
+                f"överföringsbedömning eller PUB-villkor på plats. "
+                f"Sätt en tillåten provider (openai eller gemini) med rätt nyckel, "
+                f"eller stäng av tjänsten om den inte ska köra alls."
             )
         return None
 

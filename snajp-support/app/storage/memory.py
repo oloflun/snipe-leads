@@ -1560,5 +1560,38 @@ class MemoryStorage:
         träffar.sort(key=lambda p: (p["datum"], p["nummer"]))
         return träffar
 
+    async def rensa_bk_period(
+        self,
+        tenant_id: str,
+        *,
+        fran: date | None = None,
+        till: date | None = None,
+    ) -> int:
+        # Urvalet läses ur `list_bk_underlag` i stället för att skrivas om här.
+        # En andra filtrering som ser likadan ut hade glidit isär från listans
+        # första gången någon rörde datumlogiken — och då raderar knappen ett
+        # annat urval än det vyn visade. `limit` sätts högt av samma skäl:
+        # listan visar 200 åt gången, medan rensningen gäller hela perioden.
+        att_radera = await self.list_bk_underlag(
+            tenant_id, fran=fran, till=till, limit=1_000_000
+        )
+        ider = {rad["id"] for rad in att_radera}
+        if not ider:
+            return 0
+
+        self.bk_underlag[tenant_id] = [
+            rad for rad in self.bk_underlag.get(tenant_id, []) if rad["id"] not in ider
+        ]
+        # Postgres gör det här med `on delete cascade`. Minnet har ingen
+        # främmande nyckel, så kaskaden skrivs för hand — utan den blir
+        # verifikaten kvar, och perioden fortsätter räknas ur poster vars
+        # underlag inte längre finns.
+        self.bk_verifikat[tenant_id] = [
+            post
+            for post in self.bk_verifikat.get(tenant_id, [])
+            if post["underlag_id"] not in ider
+        ]
+        return len(ider)
+
     async def close(self) -> None:
         return None

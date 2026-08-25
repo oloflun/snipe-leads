@@ -39,7 +39,7 @@ from typing import Any
 from agents import Agent, Runner
 
 from ..agentcore.overlays import pack_version
-from ..agentcore.packs import RunLedger
+from ..agentcore.packs import PlaybookStep, RunLedger
 from ..leads.business_context import require_business_context
 from ..leads.grounding_gate import PermittedFacts, build_permitted_facts, check_grounding
 from ..leads.grounding_playbook import GROUNDING_V1
@@ -48,6 +48,7 @@ from ..leads.onboarding_playbook import render_onboarding_instructions
 from ..leads.outreach_playbook import OUTREACH_V1
 from ..leads.research_playbook import RESEARCH_V1
 from ..leads.soul import load_soul
+from ..moderation.abuse_gate import check_abuse, ton_instruktion
 from ..leads.text_delta import (
     SegmentShapeError,
     changed_segments,
@@ -74,6 +75,40 @@ MAX_SOURCE_CHARS = 14_000
 _RESEARCH_ROLE = "en svensk B2B-researchplaybook för ett enskilt prospekt"
 _OUTREACH_ROLE = "en svensk playbook för ett kallt, lågmält första mejl"
 _GROUNDING_ROLE = "en faktagranskning av ett färdigt svenskt mejlutkast"
+_KUNSKAPSROLL = "en genomgång av vad ett avslutat researchvarv lärde oss"
+
+#: Utkastuppgiften står som konstant för att omförsöket ska kunna skicka
+#: EXAKT samma uppgift plus en tillsägelse. Två nästan lika strängar hade
+#: glidit isär vid första ändringen.
+_UTKASTSUPPGIFT = (
+    "Skriv utkastet. Returnera JSON: subject (svenska, ren text), "
+    "body (svenska, ren text, inga punktlistor), personalization_notes "
+    "(vad i researchen mejlet faktiskt bygger på), draft_reasoning (svenska)."
+)
+
+#: Kunskapsfångsten efter ett avslutat researchvarv.
+#:
+#: Motsvarar supportens steg 5 (`cs:kb-article`) i IDÉ, inte i implementation:
+#: support frågar om ETT ärende avslöjade en lucka i kunskapsbasen, det här
+#: frågar om ett RESEARCHVARV avslöjade något om marknaden som kundens
+#: kontextpaket och ICP inte bär. Det är två olika frågor mot två olika
+#: dokument, och därför två steg och inte ett delat.
+#:
+#: `sa:call-summary` och inte `cs:kb-article`: skillen är skriven för att
+#: destillera "vad lärde vi oss, vad gör vi med det" ur ett säljmoment, vilket
+#: är precis formen här. cs:kb-article är skriven för att formulera en
+#: supportartikel åt en slutkund.
+#: `thinking="disabled"` sätts EXPLICIT, precis som varje steg i
+#: research_playbook.py gör. Beslutet där är "thinking AV i hela leadsflödet"
+#: (docs/THINKING_MODE_COMPARISON.md §8), och det gäller ett steg i flödet även
+#: när steget deklareras här i stället för i playbooken. Att ärva
+#: `settings.thinking_mode` hade gjort det här steget till det enda i leads vars
+#: läge beror på en global default.
+_RESEARCH_KUNSKAPSSTEG = PlaybookStep(
+    skill="sa:call-summary",
+    requires=("context_pack",),
+    thinking="disabled",
+)
 
 
 # En avslutningsfras som slutar på komma och sedan inget mer. Uppstår när
@@ -198,6 +233,45 @@ async def _run_grounding_cycle(
     return subject, body, report
 
 
+async def _fanga_kunskap(
+    ledger: RunLedger,
+    trace: RunTrace,
+    *,
+    base: str,
+    sammanfattning: str,
+    pains: str,
+) -> dict[str, Any]:
+    """Steg 9: vad lärde varvet oss som kundens kontextpaket inte bar?
+
+    Kastar aldrig. Ett trasigt kunskapssteg ska inte fälla en färdig research
+    — hela researchresultatet finns redan, och det som går förlorat är en
+    anteckning om nästa varv. Samma avvägning som `SegmentShapeError` i
+    grundningscykeln: en kvalitetsregression, inte ett korrekthetsfel.
+    """
+    try:
+        return await run_step(
+            _RESEARCH_KUNSKAPSSTEG,
+            ledger,
+            trace,
+            task=(
+                "Varvet är klart. Avgör vad DET HÄR prospektet lärde oss om "
+                "marknaden som köparens kontextpaket och ICP inte redan bär. "
+                "Returnera JSON: reveals_gap (bool), gap (svenska eller null), "
+                "icp_adjustment (svenska eller null — vad i ICP:n som borde "
+                "skärpas eller breddas), evidence (lista med korta citat eller "
+                "observationer ur varvet som stöder det). "
+                "Hitta inte på en lucka för att ha något att säga: reveals_gap "
+                "false med gap null är ett fullgott svar."
+            ),
+            case_context=(
+                f"{base}\n\n## Kvalificeringen\n{sammanfattning}\n\n## Vad vi såg\n{pains}"
+            ),
+            playbook_role=_KUNSKAPSROLL,
+        )
+    except Exception as error:  # noqa: BLE001 — se docstringen
+        return {"reveals_gap": False, "fel": f"{type(error).__name__}: {error}"}
+
+
 def _digest(output: dict[str, Any], *keys: str) -> str:
     """Kompakt vidarebefordran mellan steg. Utan den växer varje steg med
     föregående stegs fulla JSON och körningen blir kvadratisk i tokens."""
@@ -230,19 +304,41 @@ async def run_onboarding_turn(storage, tenant_id: str, *, message: str) -> dict[
     )
     context = OnboardingContext(storage=storage, tenant_id=tenant_id)
 
-    result = await Runner.run(
-        agent,
-        [{"role": "user", "content": [{"type": "input_text", "text": message}]}],
-        context=context,
-        max_turns=10,
-    )
+    # Tonläget bedöms i KOD, som i support_agent och bokföringschatten.
+    #
+    # OBS vilken yta det här ÄR: Fas A är samtalet med VÅR KUND under
+    # onboarding, inte ett svar från ett prospekt. Prospektsvar har ingen
+    # hanteringsväg alls i kodbasen än — ingenting skriver ett inkommande
+    # `outreach_messages`-radslag, `list_replies` läser en tabell inget fyller,
+    # och `handoff.route_handoff` saknar produktionsanropare. Grinden kopplas
+    # därför in där leads faktiskt tar emot ett skrivet meddelande i dag.
+    #
+    # Nivån som betyder något här är `oro`: en kund mitt i onboarding är
+    # sällan otrevlig och ofta stressad över att komma igång.
+    meddelanden: list[dict[str, Any]] = [
+        {"role": "user", "content": [{"type": "input_text", "text": message}]}
+    ]
+    abuse = check_abuse(message)
+    ton = ton_instruktion(abuse)
+    if ton:
+        meddelanden.append({"role": "user", "content": [{"type": "input_text", "text": ton}]})
+
+    result = await Runner.run(agent, meddelanden, context=context, max_turns=10)
 
     reply = str(result.final_output or "").strip()
+    # Samma ordning som i support: ett kontrollerat säkerhetssvar ska inte
+    # kunna skrivas om av modellen, så repliken sätts EFTER körningen.
+    if abuse.ska_eskalera and abuse.replik:
+        reply = abuse.replik
+    elif abuse.replik:
+        reply = f"{abuse.replik}\n\n{reply}".strip()
+
     return {
         "reply": reply,
         "done": context.done,
         "saved_docs": [d["kind"] for d in context.saved_docs],
         "skills_used": executed_skills,
+        "tonlage": abuse.niva,
     }
 
 
@@ -403,6 +499,27 @@ async def run_research_step(
         f"\n\n## Steg 7 (mk:offers)\n{_digest(offer, 'offer', 'weakest_lever')}",
     )
 
+    # 9. Kunskapsfångst — vad varvet lärde oss som kontextpaketet inte bar.
+    #
+    # Motsvarar supportens steg 5: körs efter VARJE varv, kvalificerat eller
+    # inte. Ett diskvalificerat prospekt är ofta det som lär mest om var ICP:n
+    # går fel, och att bara fånga kunskap ur lyckade varv är att lära sig av
+    # halva materialet.
+    #
+    # Steget SKRIVER INGENTING. Det lägger sin bedömning i step_log och i
+    # returvärdet, precis som supportens gör — att låta en agent uppdatera
+    # kundens kontextpaket av sig själv är ett annat beslut, med en annan
+    # riskprofil, och det är inte taget.
+    kunskap = await _fanga_kunskap(
+        ledger,
+        trace,
+        base=base,
+        sammanfattning=_digest(
+            prospecting, "qualified", "icp_fit", "disqualifiers", "missing_information"
+        ),
+        pains=_digest(customer, "likely_pains", "business_model"),
+    )
+
     offer_obj = offer.get("offer") or {}
     offer_summary = " · ".join(
         str(offer_obj.get(k)) for k in ("name", "promise", "cta") if offer_obj.get(k)
@@ -460,6 +577,7 @@ async def run_research_step(
         "step_log": trace.as_log(),
         "step_outputs": trace.as_full(),
         "escalated_steps": escalated_steps,
+        "kunskap": kunskap,
         "qualified": bool(prospecting.get("qualified")),
         "icp_fit": prospecting.get("icp_fit"),
         "offer_summary": offer_summary,
@@ -543,12 +661,29 @@ async def run_outreach_draft(
         )
 
     # 1. sa:draft-outreach — själva utkastet
-    draft = await step(
-        0,
-        "Skriv utkastet. Returnera JSON: subject (svenska, ren text), "
-        "body (svenska, ren text, inga punktlistor), personalization_notes "
-        "(vad i researchen mejlet faktiskt bygger på), draft_reasoning (svenska).",
-    )
+    draft = await step(0, _UTKASTSUPPGIFT)
+
+    # ETT FÖRSÖK TILL innan tomheten får bli en överlämning.
+    #
+    # `body` längre ned faller tillbaka genom personalisering och granskning
+    # hela vägen till det här steget, så en tom brödtext HÄR blir en tom
+    # brödtext DÄR — och där finns bara `_request_human_handoff_impl` kvar.
+    # Att lämna över på "Playbooken producerade ingen brödtext" är agenten som
+    # ger upp, inte ett ärende som behöver en människa.
+    #
+    # Omförsöket ligger här och inte i slutet av kedjan med flit: gör man det
+    # sist måste personalisering, granskning och humanisering göras om, alltså
+    # tre extra anrop för att laga ett fel som uppstod i det första.
+    if not str(draft.get("body") or "").strip():
+        draft = await step(
+            0,
+            _UTKASTSUPPGIFT
+            + "\n\nDITT FÖRRA SVAR SAKNADE BRÖDTEXT. Fältet `body` var tomt "
+            "eller saknades. Svara igen med en FAKTISK brödtext — några korta "
+            "meningar räcker. Har du för lite att gå på: skriv det kortaste "
+            "ärliga mejl underlaget bär, och håll dig till det du faktiskt vet. "
+            "Ett kort mejl går att granska; ett tomt går inte att skicka.",
+        )
 
     # 2. mk:cold-email SKOPAD (personalisering) — skärper utkastet
     personalized = await step(

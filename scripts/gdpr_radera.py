@@ -26,7 +26,13 @@ samma princip som redan gäller i CLAUDE.md.
 
 En rad i `suppressions` är kvar. Den innehåller adressen, men den finns just
 för att adressen ALDRIG ska kontaktas igen — raderar man den försvinner
-skyddet, och nästa körning kallmejlar samma person. Det är den ena
+skyddet, och nästa körning kallmejlar samma person.
+
+Att behålla den kräver ETT AKTIVT STEG, inte bara att man låter bli att
+radera: `suppressions.contact_id` kaskaderar från `contacts`, så en radering
+av kontakten hade tagit med sig avregistreringen på vägen. Skriptet nollar
+kopplingen först. Upptäckt 2026-08-24 genom att läsa främmande nycklar i
+databasen, inte genom att läsa koden — kaskaden syns inte på anropsstället. Det är den ena
 undantagssituation där ett berättigat intresse väger tyngre än radering, och
 den ska kunna förklaras för den som frågar. Skriptet säger det uttryckligen i
 utskriften i stället för att tiga om det.
@@ -50,14 +56,28 @@ from gdpr_verktyg import dsn_for
 #: och rapporterar ändå "klart". Se docs/registerforteckning.md, som ska hållas
 #: i synk med den här listan.
 TABELLER = [
-    ("ss_emails", "from_email", "Inkommande kundmejl (bilagor, klassificeringar och utkast följer med i kaskaden)."),
+    ("ss_emails", "from_email", "Inkommande kundmejl (bilagor, klassificeringar, utkast och beslutslogg följer med i kaskaden)."),
     ("contacts", "email", "Kontaktperson i leads-databasen."),
-    ("outreach_threads", "prospect_email", "Utgående mejltråd."),
+    ("prospects", "contact_email", "Prospekt. Utgående mejltrådar och källor kaskaderar härifrån."),
     ("ss_avregistreringslankar", "email", "Avregistreringslänk."),
+    ("workspace_invites", "email", "Inbjudan till en arbetsyta som aldrig accepterades."),
 ]
 
 #: Raderas ALDRIG. Se docstringen.
 BEHALLS = [("suppressions", "email", "Spärrlistan — raderas den kontaktas personen igen.")]
+
+#: Tabeller som KAN bära adressen i löptext utan att ha en egen adresskolumn.
+#: De söks inte igenom automatiskt — en fritextsökning över hela kolumnen är
+#: dyr och ger falska träffar — men de ska nämnas i svaret till den
+#: registrerade, för att ett registerutdrag som utelämnar dem är ofullständigt.
+NAMNS_MANUELLT = [
+    ("generated_emails", "Genererade säljmejl. `contact_id` sätts till NULL när kontakten "
+                         "raderas, men adressen kan stå i själva mejltexten."),
+    ("agent_runs", "Körningsloggar. `prospect_id` sätts till NULL; in- och utdata kan "
+                   "bära adressen i text."),
+    ("auth.users", "Konto hos oss. Radering av ett KONTO är ett eget flöde och görs inte "
+                   "härifrån — se scripts/admin_cleanup.py."),
+]
 
 
 def _sok(cur, epost: str) -> dict[str, int]:
@@ -68,12 +88,22 @@ def _sok(cur, epost: str) -> dict[str, int]:
                 f"select count(*) from {tabell} where lower({kolumn}) = lower(%s)", (epost,)
             )
             fynd[tabell] = cur.fetchone()[0]
-        except psycopg2.Error:
-            # En tabell som inte finns i den här miljön är inte ett fel — men
-            # den ska synas som okänd och inte som noll. Skillnaden mellan
-            # "inget hittat" och "kunde inte titta" är hela svaret.
+        except psycopg2.errors.UndefinedTable:
+            # Tabellen finns inte i den här miljön. Inte ett fel, men den ska
+            # synas som OKÄND och inte som noll — skillnaden mellan "inget
+            # hittat" och "kunde inte titta" är hela svaret.
             cur.connection.rollback()
             fynd[tabell] = -1
+        except psycopg2.errors.UndefinedColumn:
+            # Kolumnen finns inte. Det ÄR ett fel: kartan ovan har glidit isär
+            # från schemat, och då raderar skriptet mindre än det påstår.
+            #
+            # Det hände: `outreach_threads` stod med kolumnen `prospect_email`,
+            # som aldrig funnits — tråden länkar via `prospect_id`. Den gamla
+            # felhanteringen fångade båda felen i samma gren och rapporterade
+            # "okänd tabell", vilket dolde att kartan var fel.
+            cur.connection.rollback()
+            fynd[tabell] = -2
     return fynd
 
 
@@ -117,8 +147,24 @@ def main() -> int:
         print(f"\n{args.epost} i miljön {args.env}:\n")
         for tabell, _, beskrivning in TABELLER + BEHALLS:
             antal = fynd.get(tabell, -1)
-            markering = "okänd tabell" if antal < 0 else f"{antal} rader"
+            if antal == -2:
+                markering = "FEL: kolumn"
+            elif antal < 0:
+                markering = "okänd tabell"
+            else:
+                markering = f"{antal} rader"
             print(f"  {tabell:<28} {markering:<16} {beskrivning}")
+
+        if any(v == -2 for v in fynd.values()):
+            print(
+                "\n  FEL ovan betyder att tabellkartan i det här skriptet inte "
+                "stämmer med schemat.\n  Radera INTE förrän den är rättad — "
+                "skriptet raderar då mindre än det rapporterar."
+            )
+
+        print("\n  Söks inte automatiskt, men hör till svaret:")
+        for tabell, beskrivning in NAMNS_MANUELLT:
+            print(f"    {tabell:<26} {beskrivning}")
 
         if args.export:
             print("\n--- REGISTERUTDRAG (JSON) ---")
@@ -129,6 +175,29 @@ def main() -> int:
             return 0
 
         _bekrafta(args.epost)
+
+        if any(v == -2 for v in fynd.values()):
+            sys.exit(
+                "AVBRYTER: tabellkartan stämmer inte med schemat (FEL ovan). "
+                "Rätta den först — annars raderas mindre än vad som rapporteras."
+            )
+
+        # SPÄRRLISTAN FÖRST. `suppressions.contact_id` kaskaderar från
+        # `contacts`, så en radering av kontakten hade tyst tagit med sig
+        # avregistreringen — alltså precis det skydd det här skriptet lovar
+        # att behålla, borttaget av den åtgärd som skulle skydda personen.
+        #
+        # Kopplingen nollas i stället. Raden blir kvar med adressen och sin
+        # tenant, vilket är allt `send_guard` regel 3 behöver.
+        cur.execute(
+            """
+            update suppressions set contact_id = null
+             where contact_id in (select id from contacts where lower(email) = lower(%s))
+            """,
+            (args.epost,),
+        )
+        if cur.rowcount:
+            print(f"  suppressions: kopplade loss {cur.rowcount} rader så de överlever")
 
         totalt = 0
         for tabell, kolumn, _ in TABELLER:

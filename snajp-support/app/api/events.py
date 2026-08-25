@@ -78,6 +78,22 @@ async def log_exception(
     )
 
 
+def _ar_kvotfel(error: Exception) -> bool:
+    """Om felet är leverantörens kvottak snarare än vårt fel.
+
+    Läser typnamn och text i stället för att importera openai.RateLimitError.
+    Två skäl: felhanteraren ska inte dra in en LLM-klient bara för att
+    klassificera ett undantag, och leverantörerna byter både undantagsklass
+    och formulering över tid — men statuskoden 429 gör de inte.
+    """
+    if getattr(error, "status_code", None) == 429:
+        return True
+    if type(error).__name__ in ("RateLimitError", "ResourceExhausted"):
+        return True
+    text = str(error)
+    return "429" in text and ("quota" in text.lower() or "rate limit" in text.lower())
+
+
 def install_exception_handler(app) -> None:
     """Fångar allt som ingen route hanterade.
 
@@ -90,6 +106,39 @@ def install_exception_handler(app) -> None:
 
     @app.exception_handler(Exception)
     async def _unhandled(request: Request, error: Exception):  # noqa: ANN202
+        # LEVERANTÖRENS KVOT ÄR INTE EN KRASCH.
+        #
+        # Ett 429 från modelleverantören renderades som "Något gick fel på vår
+        # sida. Felet är loggat" — samma svar som ett nullpointerfel. Det är
+        # samma klass av vilseledning som resten av den här kodbasen redan
+        # jagat: ett tillstånd som HAR en begriplig orsak presenterat som ett
+        # okänt haveri.
+        #
+        # Kostnaden är konkret. Den som felsöker läser "felet är loggat", går
+        # till loggen, och ser en stack som slutar i http-klienten. Att frågan
+        # egentligen är "kvoten är slut, kolla planen" tar en halvtimme att
+        # komma fram till. Det hände 2026-08-24.
+        #
+        # 429 vidare till klienten, inte 500: statuskoden är den enda delen av
+        # svaret som en maskin läser, och en klient som gör om anropet direkt
+        # gör kvotproblemet värre.
+        if _ar_kvotfel(error):
+            logger.warning(
+                "Modelleverantören avvisade anropet på grund av kvot (%s %s).",
+                request.method,
+                request.url.path,
+            )
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "error": (
+                        "AI-leverantörens kvot är slut just nu. Det är inte ett fel "
+                        "i ditt ärende — försök igen om en stund, eller kontrollera "
+                        "planen hos leverantören."
+                    )
+                },
+            )
+
         storage = getattr(request.app.state, "storage", None)
         if storage is not None:
             await log_exception(

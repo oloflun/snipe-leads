@@ -131,6 +131,114 @@ async def test_periodrapport_med_handraknat_facit():
             assert rapport["summor"]["resultat_fore_skatt"] == "-1000.00"
 
 
+# -- Rensningen -----------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_rensning_nollar_perioden_och_tar_verifikaten_med_sig():
+    """Vyns Rensa-knapp. Summorna ÄR underlagen, så bägge ska vara borta.
+
+    Verifikatet kontrolleras särskilt: i Postgres följer det med via
+    `on delete cascade`, i minnet skrivs kaskaden för hand. Blir den kvar
+    fortsätter perioden räknas ur poster vars underlag inte längre finns —
+    och den divergensen syns bara om testet frågar efter verifikaten.
+    """
+    async with app.router.lifespan_context(app):
+        storage = app.state.storage
+        await _seed_kvitto(storage, DEFAULT_TENANT_ID)
+        async with _client() as client:
+            svar = await client.delete(
+                "/api/bookkeeping/period?fran=2026-03-01&till=2026-03-31", headers=DEMO
+            )
+            assert svar.status_code == 200
+            assert svar.json() == {"raderade": 1}
+
+            rapport = await client.get(
+                "/api/bookkeeping/period?fran=2026-03-01&till=2026-03-31", headers=DEMO
+            )
+            assert rapport.json()["summor"]["kostnader"] == "0.00"
+            assert rapport.json()["antal_underlag"] == 0
+            assert rapport.json()["antal_verifikat"] == 0
+
+            lista = await client.get("/api/bookkeeping/underlag", headers=DEMO)
+            assert lista.json()["underlag"] == []
+
+        assert await storage.list_bk_verifikat(DEFAULT_TENANT_ID) == []
+
+
+@pytest.mark.anyio
+async def test_rensningen_lamnar_en_annan_period_ifred():
+    """Urvalet är intervallets, inte tenantens allt."""
+    async with app.router.lifespan_context(app):
+        storage = app.state.storage
+        await _seed_kvitto(storage, DEFAULT_TENANT_ID, datum=date(2026, 3, 5))
+        await _seed_kvitto(
+            storage, DEFAULT_TENANT_ID, brutto="500.00", datum=date(2026, 4, 5)
+        )
+        async with _client() as client:
+            svar = await client.delete(
+                "/api/bookkeeping/period?fran=2026-03-01&till=2026-03-31", headers=DEMO
+            )
+            assert svar.json() == {"raderade": 1}
+
+            kvar = await client.get(
+                "/api/bookkeeping/underlag?fran=2026-04-01&till=2026-04-30", headers=DEMO
+            )
+            assert [r["datum"] for r in kvar.json()["underlag"]] == ["2026-04-05"]
+
+
+@pytest.mark.anyio
+async def test_rensningen_nar_inte_ett_annat_bolag():
+    """Tenant-isolering på raderingsvägen, mätt och inte antagen. Ett fel här
+    är värre än ett fel på läsvägen: det syns inte, det försvinner."""
+    async with app.router.lifespan_context(app):
+        storage = app.state.storage
+        await _seed_kvitto(storage, "en-annan-tenant")
+        async with _client() as client:
+            svar = await client.delete(
+                "/api/bookkeeping/period?fran=2026-03-01&till=2026-03-31", headers=DEMO
+            )
+            assert svar.status_code == 200
+            assert svar.json() == {"raderade": 0}
+
+        assert len(await storage.list_bk_underlag("en-annan-tenant")) == 1
+
+
+@pytest.mark.anyio
+async def test_rensningen_tar_med_underlag_utan_datum():
+    """Ett fällt underlag saknar datum och visas ändå i listan. Rensar knappen
+    ett snävare urval än vyn visade blir just granskningskön kvar."""
+    async with app.router.lifespan_context(app):
+        storage = app.state.storage
+        await storage.create_bk_underlag(
+            DEFAULT_TENANT_ID,
+            sha256="1" * 64,
+            filnamn="suddigt.jpg",
+            mimetyp="image/jpeg",
+            status="granska_manuellt",
+            anmarkning="Datum gick inte att läsa.",
+        )
+        async with _client() as client:
+            svar = await client.delete(
+                "/api/bookkeeping/period?fran=2026-03-01&till=2026-03-31", headers=DEMO
+            )
+            assert svar.json() == {"raderade": 1}
+
+            lista = await client.get("/api/bookkeeping/underlag", headers=DEMO)
+            assert lista.json()["underlag"] == []
+
+
+@pytest.mark.anyio
+async def test_rensning_utan_nyckel_svarar_401():
+    """Raderingsvägen står bakom samma grind som läsvägarna."""
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            svar = await client.delete(
+                "/api/bookkeeping/period?fran=2026-03-01&till=2026-03-31"
+            )
+            assert svar.status_code == 401
+
+
 @pytest.mark.anyio
 async def test_belopp_ar_strangar_i_json_aldrig_tal():
     """Ett JSON-tal blir en float hos mottagaren, och webbläsaren räknar

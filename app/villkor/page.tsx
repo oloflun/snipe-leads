@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { JuridiskSida } from "@/components/marketing/JuridiskSida";
 import { BOLAG } from "@/lib/bolag";
+import { KONTAKT_MEJL } from "@/components/marketing/copy";
 import { notFoundOnTenant } from "@/lib/tenants/server";
 
 export const metadata: Metadata = {
@@ -16,10 +17,19 @@ export const metadata: Metadata = {
  * konsumentvillkor kunden har mot sina egna slutkunder — de skriver de själva,
  * på sin egen sajt, och vi tar inte ansvar för dem.
  *
- * Avsnitten "Pris och betalning" och "Ansvarsbegränsning" står tomma med
- * flit. Ansvarsbegränsning är den klausul som avgör vad ett fel kostar oss,
- * och den ska skrivas av en jurist — inte formuleras av den som byggde
- * produkten och vill tro att den fungerar.
+ * ## Hålen i avtalet är utskrivna, inte gömda (2026-08-25)
+ *
+ * "Pris och betalning" och "Ansvarsbegränsning" är fortfarande oskrivna.
+ * Tidigare stod det `[Fylls i: …]` i dem, vilket läste som ett trasigt bygge
+ * sedan utkastrutan togs bort; nu står en mening riktad till LÄSAREN i stället.
+ *
+ * Avsnitten är INTE dolda, och det är ett val. Utan avtalad ansvarsbegränsning
+ * gäller svensk rätts utgångspunkt — alltså oreglerat ansvar för oss — och en
+ * dold rubrik hade fått dokumentet att se färdigt ut medan risken var
+ * oförändrad. Rubriken är det enda som påminner om att klausulen saknas.
+ *
+ * Ansvarsbegränsningen ska skrivas av jurist, inte av den som byggde produkten
+ * och vill tro att den fungerar. Formulera den inte här.
  */
 export default async function Page() {
   await notFoundOnTenant();
@@ -35,10 +45,6 @@ export default async function Page() {
         och besvarar inkommande kundmejl; leadsagenten, som tar fram prospekt och skriver utgående
         mejl; och, i förekommande fall, bokföringsagenten.
       </p>
-      <p>
-        <strong>[Fylls i: vad som ingår i respektive nivå, tillgänglighetsåtagande och vad som
-        uttryckligen inte ingår.]</strong>
-      </p>
 
       <h2>Kundens ansvar</h2>
       <p>
@@ -50,6 +56,19 @@ export default async function Page() {
         Kunden ansvarar även för att arkivera räkenskapsinformation i enlighet med bokföringslagen.
         Snajps bokföringsagent lagrar inte originalunderlag som kvitton och fakturor, och ersätter
         inte Kundens egen arkiveringsskyldighet.
+      </p>
+      <p>
+        Kunden ansvarar för att informera sina egna kunder om att inkommande ärenden behandlas
+        med hjälp av AI, i enlighet med artikel 13 i dataskyddsförordningen. Snajp tillhandahåller
+        en textmall för detta, men ansvaret för att texten finns på Kundens webbplats och stämmer
+        med Kundens verksamhet är Kundens.
+      </p>
+      <p>
+        <strong>Autonominivån är Kundens val och Kundens ansvar.</strong> Snajps supportagent
+        levereras med mänsklig granskning påslagen för samtliga ärendekategorier. Kunden kan
+        ställa om enskilda kategorier till automatiskt svar. Gör Kunden det upphör den mänskliga
+        inblandningen för de kategorierna, och Kunden ansvarar för att bedöma vad det innebär
+        enligt artikel 22 i dataskyddsförordningen.
       </p>
       <p>
         Utgående mejl från leadsagenten skickas i Kundens namn. Snajp kontrollerar i kod att varje
@@ -68,28 +87,35 @@ export default async function Page() {
 
       <h2>Pris och betalning</h2>
       <p>
-        <strong>[Fylls i: prismodell, betalningsvillkor, indexering och vad som händer vid utebliven
-        betalning.]</strong>
+        Det här avsnittet är inte fastställt. Priserna framgår av{" "}
+        <Link href="/#priser">prislistan</Link>, men betalningsvillkor, indexering och vad som
+        gäller vid utebliven betalning är inte reglerat här. Skriv till oss på{" "}
+        <a href={`mailto:${KONTAKT_MEJL}`}>{KONTAKT_MEJL}</a> innan avtal tecknas.
       </p>
 
       <h2>Ansvarsbegränsning</h2>
       <p>
-        <strong>[Fylls i av jurist. Skriv inte den här klausulen själv.]</strong>
+        Det här avsnittet är inte fastställt. Klausulen avgör vad ett fel kostar, och vi skriver
+        den inte själva — den ska formuleras av jurist. Tills dess finns ingen avtalad
+        ansvarsbegränsning. Skriv till oss på{" "}
+        <a href={`mailto:${KONTAKT_MEJL}`}>{KONTAKT_MEJL}</a> innan avtal tecknas.
       </p>
 
       <h2>Uppsägning och vad som händer med data</h2>
       <p>
-        <strong>[Fylls i: uppsägningstid.]</strong> Vid avtalets upphörande raderas eller återlämnas
-        Kundens personuppgifter enligt personuppgiftsbiträdesavtalets klausul om radering och
-        återlämning, inom den tid som anges där. Se även avsnittet om lagringstider i{" "}
+        Uppsägningstiden är inte fastställd i de här villkoren. Bindningstiden är noll månader,
+        vilket inte är samma sak — skriv till oss på{" "}
+        <a href={`mailto:${KONTAKT_MEJL}`}>{KONTAKT_MEJL}</a> innan avtal tecknas.
+      </p>
+      <p>
+        Vid avtalets upphörande raderas eller återlämnas Kundens personuppgifter enligt
+        personuppgiftsbiträdesavtalets klausul om radering och återlämning, inom den tid som
+        anges där. Se även avsnittet om lagringstider i{" "}
         <Link href="/integritetspolicy">integritetspolicyn</Link>.
       </p>
 
       <h2>Tillämplig lag</h2>
-      <p>
-        Svensk rätt gäller. <strong>[Fylls i: tvistlösning — allmän domstol eller skiljeförfarande,
-        och på vilken ort.]</strong>
-      </p>
+      <p>Svensk rätt gäller.</p>
     </JuridiskSida>
   );
 }

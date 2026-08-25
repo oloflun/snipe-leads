@@ -1,5 +1,140 @@
 # Snipra Status
 
+## 2026-08-24 — Claude — produktionen pausad, Render tystad, Gemini-frågan avgjord
+
+**Gemini-nyckeln ÄR gratisnivån.** Inga indicier kvar — Googles eget kvotfel namnger den:
+`GenerateRequestsPerDayPerProjectPerModel-FreeTier`, 20 anrop per dygn per projekt och modell.
+Dagens demo-anrop åt upp hela ransonen för båda miljöerna, som delar nyckel.
+
+**Produktionen är pausad till simuleringsläge.** Efter hotfixen svarade den 429 på VARJE anrop
+och skickade kunddata till en nivå vars villkor tillåter träning — sämre på båda axlarna än
+läget innan. Nu: `mode: simulation`, regelmotorn svarar, ingenting går till någon leverantör.
+Verifierat med ett riktigt anrop. Ångras med `llm_provider.py --env main --satt gemini --apply`.
+
+`--pausa` är byggt som en flagga och inte ett engångskommando, eftersom det är något man vill
+kunna göra om och backa.
+
+**Render-tjänsterna är tystade men inte avstängda.** DEEPSEEK_API_KEY blankad på båda; båda
+rapporterar SIMULERINGSLÄGE i uppstartsloggen. Render-verktyget saknar suspend och Chrome-
+tillägget är inte anslutet, så själva avstängningen är ett handgrepp i dashboarden.
+
+**Kvotfel ser inte längre ut som en krasch** — 429 med begriplig text i stället för
+"Något gick fel på vår sida", som är samma svar som ett nullpointerfel gav.
+
+## 2026-08-24 — Claude — Gemini-nyckeln är på gratisnivån, och båda miljöerna delar den
+
+Sista verifieringen av maskeringen föll — men på något annat än maskeringen:
+
+    openai.RateLimitError: 429 "You exceeded your current quota, please check
+    your plan and billing details."
+
+Det är gratisnivåns signatur. Ett fakturerat Gemini-projekt slår inte i kvoten på en handfull
+anrop en kväll, och det stämmer med vad kodbasen själv säger om nyckeln ("vald för
+gratisnivån"). Indicier, inte ett kontoutdrag — men planera inte som om det vore något annat.
+
+**Juridiskt** tillåter gratisnivån Google att använda innehållet för produktförbättring, och
+riktiga kundmejl går dit sedan produktionen lagades i kväll. Till skillnad från DeepSeek-läget,
+där grunden saknades för en överföring, har vi här aktivt lämnat bort innehållet.
+
+**Operativt** kommer produktionen att svara 429 under all verklig belastning.
+
+**Och nyckeln är SAMMA i main och development**, alltså samma kvot: en provkörning i dev kan ta
+ner produktionen. Repot varnar redan för mönstret — `PER_ENV_SECRETS` i railway_provision.py
+kallar en delad hemlighet "tyst korskoppling". GEMINI_API_KEY står inte i den listan och borde.
+
+Övervägande värt att ta: pausa den skarpa trafiken tills nivån är bytt. Produktionen körde
+simuleringsläge fram till i kväll och har klarat sig utan agenten hittills.
+
+## 2026-08-24 — Claude — Render-stacken var inte död, och min spärr missade den
+
+**Två Render-tjänster låg kvar levande och startade med `provider=deepseek` mot en riktig
+Postgres.** `snajp-support` (gren `main`) och `snajp-support-dev` (gren `development`), båda med
+autoDeploy — varje push till våra grenar deployade dit, inklusive dagens. DeepSeek-överföringen
+som stoppades på Railway i dag var alltså aldrig stoppad överallt.
+
+Ytan fanns inte i någon dokumentation, inte i registerförteckningen, och inte i min egen
+bedömning. Den hittades genom att incidentposten om den läckta Render-nyckeln skulle bedömas —
+frågan "vad nådde nyckeln?" ledde rakt till den.
+
+**Min spärr fångade den inte, och det var ett designfel.** `har_riktig_kunddata()` grindade på
+miljönamnet med motiveringen att "Railway sätter alltid RAILWAY_ENVIRONMENT_NAME". Sant, och
+ändå fel: det antog att Railway är den enda värden. På Render var namnet tomt, så spärren läste
+det som utveckling och släppte igenom. Grenen som skulle skydda en lokal körning skyddade i
+stället en bortglömd produktionsyta från att bli upptäckt.
+
+Regeln keyar nu på DATABASEN: en fjärrdatabas betyder riktig data oavsett värd. Loopback är
+undantaget, eftersom `lokal_stack.py` kör där och den stacken är tom. Undantaget gäller
+adressen, inte en flagga någon kan sätta — en flagga hade blivit satt.
+
+Tjänsterna är INTE avstängda av mig; det är utåtriktat och Antons beslut. Se
+`docs/JURIDIK_ATGARDER.md`, P0.2b, och två nya poster i incidentloggen.
+
+## 2026-08-24 — Claude — produktionen lagad med en hotfix, dev-spegeln av-indexerad
+
+**Produktionen svarade riktiga kunder med regelmotorn.** `LLM_PROVIDER=gemini` mot kod som
+inte kände till värdet gav en tom nyckel, och en tom nyckel är simuleringsläge. Hälsokontrollen
+sa `status: ok` hela tiden — ordet som avslöjade det var "simulation" i ett fält ingen larmar på.
+
+Rättat med en KIRURGISK hotfix på `railway-main` (78c900e, 39 rader), inte en full merge.
+Produktionen deployar från `railway-main`, inte från `main` — den senare är den döda
+Vercel-grenen och ligger 151 commits efter. Skillnaden till development var 37 commits, och att
+skicka alla för att laga en tom nyckel hade varit fel växling. Produktionen bär nu rättningen
+men INTE spärrarna, de juridiska sidorna eller avregistreringen.
+
+**Dev-spegeln låg fritt indexerbar.** Ingen robots.txt, ingen X-Robots-Tag — en fullständig
+kopia av säljsajten med en inloggning till riktig kunddata. Vercels SSO täckte det förut.
+Stängt med `app/robots.ts` och en noindex-tagg, båda styrda av `lib/miljo.ts`, som läser
+RAILWAY_ENVIRONMENT_NAME och inte NODE_ENV — den senare är "production" i BÅDA miljöerna.
+Appens egen grind mättes samtidigt och håller.
+
+**Två buggar hittades genom att köra skarpt**, inga tester fångade dem: avregistreringen reste
+ett undantag för en tenant utan arbetsyta, och `add_suppression` skrev tyst noll rader i samma
+läge. Migration 049. Kedjan är nu klickad hela vägen på development.
+
+DPIA och intresseavvägning skrivna som utkast. DPIA:ns R1 — okontrollerat kundinnehåll till
+modelleverantören — är blockerad av att Geminis avtalsnivå inte är fastställd, och kan inte
+stängas i kod.
+
+## 2026-08-24 — Claude — modellnamnet följde inte med providerbytet
+
+Fortsättning på posten nedan, och en påminnelse om att `mode: live` inte är ett bevis.
+
+`MODEL` stod kvar på `deepseek-v4-flash` när LLM_PROVIDER byttes till `gemini`. Omskrivningen
+i `_default_model_for_provider` utlöses bara när MODEL lämnats på gpt-defaulten, så ett namn
+satt för hand gick rakt igenom. Development startade, hälsokontrollen sa `mode: live`, och
+varje anrop svarade `404 models/deepseek-v4-flash is not found`. Hälsokontrollen mäter att en
+NYCKEL finns — aldrig att modellen existerar hos den provider nyckeln pekar på.
+
+Nu fäller ett modellnamn från fel familj uppstarten, med 404-orsaken utskriven i
+felmeddelandet. Okända namn släpps fortfarande igenom: leverantörerna döper nya modeller utan
+att fråga oss, och en för snäv lista blir bortkommenterad.
+
+**Produktionen kör simuleringsläge.** `main` ligger på kod från 23 augusti som inte känner
+till `gemini`, faller till den tomma OpenAI-nyckeln, och svarar riktiga kunder med regelmotorn
+i stället för med agenten. Det kräver både rättade variabler och en deploy av main — se
+`docs/JURIDIK_ATGARDER.md`, P0.1d. Development är åtgärdad och verifierad med ett riktigt
+anrop, inte bara med hälsokontrollen.
+
+## 2026-08-24 — Claude — Gemini kopplad som chattprovider, och tystnaden stängd
+
+`LLM_PROVIDER=gemini` sattes för hand i båda Railway-miljöerna. DeepSeek är därmed borta —
+men `gemini` var inget värde koden kände till. `active_llm_key` slutade med
+`return self.openai_api_key`, så VARJE okänt providernamn gav en tom nyckel, och en tom
+nyckel är simuleringsläge. Development svarade `mode: simulation` med regelmotorn i stället
+för agenten. Deployen gick igenom. Ingenting larmade.
+
+Tre ändringar: Gemini är nu en riktig chattprovider (nyckel, endpoint, modellnamn — samma
+som vision-sidovagnen redan använder mot samma endpoint). Okända providernamn fäller
+uppstarten i stället för att degradera tyst. Och `scripts/llm_provider.py` frågar numera
+"har den här tjänsten rätt nyckel för det den påstår sig köra?" i stället för att leta efter
+just OpenAI — det var den frågan som inte ställdes.
+
+**Kvar och brådskande (P0.1c):** nyckeln är den kodbasen själv beskriver som vald för
+GRATISNIVÅN. Gratisnivåer tillåter typiskt leverantören att använda innehållet för
+produktförbättring, och går det på kunddata är det värre än DeepSeek var. Påståendet i
+integritetspolicyn om att leverantören "inte tränar på texten" är borttaget tills någon
+läst avtalet — ett löfte i en integritetspolicy är bindande.
+
 ## 2026-08-24 — Claude — GDPR: DeepSeek utspärrad, juridiska sidor, gallring och rättighetsflöde
 
 **DeepSeek får inte längre se kunddata.** `LLM_PROVIDER=deepseek` fäller uppstarten i `main`

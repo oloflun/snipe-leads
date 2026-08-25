@@ -4,6 +4,7 @@ import { useLocale } from "@/lib/i18n";
 import type { Localized } from "@/lib/i18n";
 import {
   BINDNINGSTID_MANADER,
+  EXTRA_BOKFORINGSAGENT_PRIS,
   EXTRA_MEJL_PRIS,
   EXTRA_PROSPEKT_PRIS,
   PAKET,
@@ -11,7 +12,7 @@ import {
   PRIS_PREFIX,
   PRIS_SAKNAS,
   UPPSTARTSAVGIFT,
-  duoBesparingPerManad,
+  besparingPerManad,
   formateraPris
 } from "@/lib/pricing";
 import { mejlaOss } from "@/components/marketing/copy";
@@ -28,11 +29,34 @@ import { cn } from "@/lib/utils";
  * men leder till ett mejlformulär är sämre än en tydlig kontaktuppmaning.
  */
 
+/**
+ * Räkneord, inte siffra. Rubriken är display-typografi och "5 paket." läser
+ * som ett formulärfält — men en handskriven rubrik är precis det som gick
+ * fel förut, så ordet slås upp ur antalet i stället för att skrivas.
+ * Utanför tabellen faller den tillbaka på siffran, vilket är fult men sant.
+ */
+const RAKNEORD: Record<number, Localized> = {
+  1: { sv: "Ett", en: "One" },
+  2: { sv: "Två", en: "Two" },
+  3: { sv: "Tre", en: "Three" },
+  4: { sv: "Fyra", en: "Four" },
+  5: { sv: "Fem", en: "Five" },
+  6: { sv: "Sex", en: "Six" }
+};
+
+const antalPaket = RAKNEORD[PAKET.length] ?? {
+  sv: String(PAKET.length),
+  en: String(PAKET.length)
+};
+
 const copy = {
   kicker: { sv: "Priser", en: "Pricing" },
+  //: Antalet räknas ur PAKET och skrivs inte. Rubriken sade "Tre paket."
+  //: medan listan renderade fyra kort — bokföringen kom till utan att
+  //: rubriken följde med, och ingen såg det. Nu kan de inte gå isär.
   rubrik: {
-    sv: "Tre paket.",
-    en: "Three packages."
+    sv: `${antalPaket.sv} paket.`,
+    en: `${antalPaket.en} packages.`
   },
   lede: {
     sv: "Månadsavgift per arbetsyta. Uppstarten är engångs och täcker kunskapsbas och konfiguration.",
@@ -47,10 +71,15 @@ const copy = {
   },
   extraProspekt: { sv: "per extra prospekt", en: "per extra prospect" },
   extraMejl: { sv: "per extra mejl", en: "per extra email" },
-  bindning: {
-    sv: `${BINDNINGSTID_MANADER} månaders bindningstid`,
-    en: `${BINDNINGSTID_MANADER} months minimum term`
-  },
+  //: Noll har en egen lydelse. "0 månaders bindningstid" är formellt rätt och
+  //: läses ändå som ett fel; mallen gäller från en månad och uppåt.
+  bindning:
+    BINDNINGSTID_MANADER === 0
+      ? { sv: "0 månader bindningstid", en: "No minimum term" }
+      : {
+          sv: `${BINDNINGSTID_MANADER} månaders bindningstid`,
+          en: `${BINDNINGSTID_MANADER} months minimum term`
+        },
   preliminart: {
     sv: "Priserna är preliminära under pilotperioden och kan komma att ändras. Vi hör av oss innan något ändras för dig som redan är kund.",
     en: "Prices are provisional during the pilot period and may change. We will contact you before anything changes for existing customers."
@@ -115,14 +144,20 @@ export function PricingSection() {
               {/* Ett paket utan pris säger det, i stället för att visa "0 kr".
                   Se `prisPerManad: number | null` i lib/pricing.ts — noll är
                   ett pris, och det står då bredvid tre riktiga. */}
+              {/* Priset till vänster, kampanjen litet till höger om det.
+                  `items-end` och inte `items-baseline`: kampanjtexten går på
+                  två rader i kortets bredd, och en baslinjejustering hade
+                  hängt upp dess FÖRSTA rad i höjd med prisets baslinje — alltså
+                  en rad text som sticker upp ovanför siffran. */}
+              <div className="mt-6 flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
               {paket.prisPerManad === null ? (
-                <p className="mt-6">
+                <p>
                   <span className="font-display text-[2rem] font-semibold leading-none tracking-[-0.03em]">
                     {text(PRIS_SAKNAS)}
                   </span>
                 </p>
               ) : (
-                <p className="mt-6 flex items-baseline gap-1.5">
+                <p className="flex items-baseline gap-1.5">
                   <span className="text-[0.9375rem] text-mineral">{text(PRIS_PREFIX)}</span>
                   <span className="font-display text-[2.5rem] font-semibold leading-none tracking-[-0.03em]">
                     {formateraPris(paket.prisPerManad)}
@@ -130,10 +165,27 @@ export function PricingSection() {
                   <span className="text-[0.9375rem] text-mineral">{text(copy.perManad)}</span>
                 </p>
               )}
+              {/* Fast bredd, uppmätt. Kortets innehållsbredd är 374px och
+                  priset 208; med gapet på 16 blir 144 det bredaste som ryms
+                  bredvid utan att raden bryts. Måttet är inte hämtat ur
+                  luften och tål inte att priset blir mycket bredare.
+                  `max-w-[24ch]` stod här först och gav 175px — 399 totalt, och
+                  texten föll ned under priset. `flex-1 basis-[7rem]` gav i sin
+                  tur `flex: 0 1 0%` och en ruta på noll pixlar med texten
+                  staplad på höjden. Den här varianten är trist och mätbar. */}
+              {paket.kampanj ? (
+                <p className="w-36 shrink-0 text-right text-[0.6875rem] leading-[1.4] text-moss">
+                  {text(paket.kampanj).replace(
+                    "{belopp}",
+                    formateraPris(EXTRA_BOKFORINGSAGENT_PRIS)
+                  )}
+                </p>
+              ) : null}
+              </div>
 
               {paket.notisMall ? (
                 <p className="mt-2 text-[0.875rem] font-medium text-moss">
-                  {text(paket.notisMall).replace("{belopp}", formateraPris(duoBesparingPerManad()))}
+                  {text(paket.notisMall).replace("{belopp}", formateraPris(besparingPerManad(paket.id)))}
                 </p>
               ) : (
                 <p className="mt-2 text-[0.875rem] text-transparent" aria-hidden="true">
@@ -158,7 +210,7 @@ export function PricingSection() {
         </div>
 
         {/* Rörliga priser och engångsavgift. Egen rad, inte i korten: de gäller
-            alla tre paket, och tre kopior av samma rad är tre ställen att
+            samtliga paket, och en kopia per kort är lika många ställen att
             glömma uppdatera. */}
         <dl className="mt-8 grid gap-px overflow-hidden rounded-input border border-ink/12 bg-ink/12 sm:grid-cols-2 lg:grid-cols-4">
           {[

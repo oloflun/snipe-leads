@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { Fragment, useRef } from "react";
 import type { ProductKey } from "@/lib/routes";
 import { productKeys } from "@/lib/routes";
 import { useLocale } from "@/lib/i18n";
@@ -45,16 +45,21 @@ export function ProductSwitch({
   }
 
   return (
-    <span role="tablist" aria-label={text(shared.switchLabel)} className="inline">
+    // EN rad, aldrig två. Med tre produkter bröt raden sig själv i
+    // hjältebildens smala kolumn och lade "Bokföring" ensamt under "Leads" —
+    // alltså till vänster om "Support", vilket läste som en egen rubrik.
+    // `whitespace-nowrap` tar bort brytningen; att raden RYMS är anroparens
+    // ansvar, och hjältebilden löser det med typgraden. Se LandingPhoto.
+    <span
+      role="tablist"
+      aria-label={text(shared.switchLabel)}
+      className="flex items-baseline whitespace-nowrap"
+    >
       {productKeys.map((key, index) => {
         const selected = key === value;
         return (
-          <span key={key} className="inline">
-            {index > 0 ? (
-              <span aria-hidden="true" className={cn("mx-1 md:mx-2", tone === "paper" ? "text-paper/30" : "text-ink/20")}>
-                /
-              </span>
-            ) : null}
+          <Fragment key={key}>
+            <span className="inline-flex items-baseline">
             <button
               ref={(node) => {
                 refs.current[key] = node;
@@ -80,7 +85,16 @@ export function ProductSwitch({
             >
               {text(productCopy[key].word)}
             </button>
-          </span>
+            {/* Snedstrecket följer sitt eget ord. `mx-1` och inte `mx-2`:
+                fyra marginaler à 8px är 32px, och de 16px som sparas är
+                skillnaden mellan att raden ryms och inte i 219px-kolumnen. */}
+            {index < productKeys.length - 1 ? (
+              <span aria-hidden="true" className={cn("mx-1", tone === "paper" ? "text-paper/30" : "text-ink/20")}>
+                /
+              </span>
+            ) : null}
+            </span>
+          </Fragment>
         );
       })}
     </span>

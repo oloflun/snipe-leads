@@ -33,6 +33,11 @@ from app.storage.memory import MemoryStorage
 TENANT = "tenant-a"
 
 RESEARCH_ORDER = [s.skill for s in RESEARCH_V1.steps]
+
+# Kunskapsfangsten ar steg 9 och star INTE i RESEARCH_V1: den deklareras i
+# leads_agent, av samma skal som bokforingschattens polering gor det — den ar
+# ett steg i KORNINGEN, inte i den vendorade playbooken.
+RESEARCH_ORDER_MED_KUNSKAP = RESEARCH_ORDER + ["sa:call-summary"]
 OUTREACH_ORDER = [s.skill for s in OUTREACH_V1.steps]
 
 
@@ -146,6 +151,17 @@ class _FakeLLM:
         return type("R", (), {"choices": [type("C", (), {"message": message})()], "usage": usage})()
 
 
+
+def _skill_i(messages) -> str:
+    """Vilken skill anropet gällde, läst ur step_runner:s exakta markör.
+
+    Samma metod som `_FakeLLM.create` använder, och av samma skäl: flera
+    skills nämner varandra i sin text, så `"sa:draft-outreach" in system`
+    är sant för i stort sett varje steg i kedjan.
+    """
+    träff = re.search(r"styrs av skillen (\S+?),", messages[0]["content"])
+    return träff.group(1) if träff else ""
+
 def _fake_scrape(content: str = "# Exempelbolaget\nFri retur inom 30 dagar."):
     async def _impl(context, url):
         context.scraped_sources.append({"url": url, "length": len(content)})
@@ -254,9 +270,12 @@ async def test_research_makes_one_llm_call_per_skill_step_in_declared_order():
     storage, llm = MemoryStorage(), _FakeLLM()
     result = await _run_research(storage, llm)
 
-    assert llm.calls == RESEARCH_ORDER
-    assert result["skills_used"] == RESEARCH_ORDER
-    assert len(result["step_log"]) == len(RESEARCH_ORDER)
+    assert llm.calls == RESEARCH_ORDER_MED_KUNSKAP
+    assert result["skills_used"] == RESEARCH_ORDER_MED_KUNSKAP
+    assert len(result["step_log"]) == len(RESEARCH_ORDER_MED_KUNSKAP)
+    # Playbookens egna steg kommer forst, i deklarerad ordning. Kunskapsfangsten
+    # ligger sist och kan aldrig tranga sig in mellan dem.
+    assert llm.calls[: len(RESEARCH_ORDER)] == RESEARCH_ORDER
 
 
 @pytest.mark.anyio
@@ -279,8 +298,8 @@ async def test_research_logs_agent_run_with_step_log_g10():
 
     runs = await storage.list_agent_runs(TENANT, agent_type="leads_research")
     assert len(runs) == 1
-    assert runs[0]["skills_used"] == RESEARCH_ORDER
-    assert len(runs[0]["step_log"]) == len(RESEARCH_ORDER)
+    assert runs[0]["skills_used"] == RESEARCH_ORDER_MED_KUNSKAP
+    assert len(runs[0]["step_log"]) == len(RESEARCH_ORDER_MED_KUNSKAP)
     assert runs[0]["tokens_in"] > 0
     assert ":leads/research-v1" in runs[0]["pack_version"]
 
@@ -502,3 +521,283 @@ async def test_language_gate_refuses_when_thread_is_english_confirmed():
     assert result["escalated"] is True
     assert "humanizer_variant" in (result["escalation_reason"] or "")
     assert storage.send_queue.get(TENANT, []) == []
+
+
+# -- Mindre lätt att ge upp i leads (DEL 3.5) -----------------------------
+
+
+@pytest.mark.anyio
+async def test_ett_tomt_utkast_ger_ett_omforsok_innan_overlamning():
+    """Kärnan i DEL 3.5.
+
+    `body` faller tillbaka genom personalisering och granskning hela vägen
+    till utkaststeget, så en tom brödtext DÄR blir en tom brödtext i slutet —
+    och där finns bara `_request_human_handoff_impl` kvar. "Playbooken
+    producerade ingen brödtext" är agenten som ger upp.
+    """
+    storage = MemoryStorage()
+    llm = _FakeLLM(overrides={"sa:draft-outreach": {"subject": "Hej", "body": ""}})
+
+    # Andra anropet till utkaststeget får en brödtext.
+    original = llm.create
+    anrop = {"n": 0}
+
+    async def med_omforsok(**kwargs):
+        if _skill_i(kwargs["messages"]) == "sa:draft-outreach":
+            anrop["n"] += 1
+            if anrop["n"] == 2:
+                llm.overrides["sa:draft-outreach"] = {
+                    "subject": "Hej",
+                    "body": "En kort men faktisk brödtext.",
+                }
+        return await original(**kwargs)
+
+    llm.create = med_omforsok
+    result = await _run_outreach(storage, llm)
+
+    assert anrop["n"] == 2, "Utkaststeget kördes inte om."
+    assert result["escalated"] is False, "Överlämnade trots att omförsöket gav en brödtext."
+    # Brödtexten i resultatet kommer från humaniseraren, som är sist i kedjan —
+    # poängen är att kedjan fick något att arbeta på alls, inte att utkastets
+    # ordalydelse överlever fyra steg.
+    assert result["body"].strip()
+    assert result["queued"] is True
+
+
+@pytest.mark.anyio
+async def test_omforsoket_sager_vad_som_saknades():
+    storage = MemoryStorage()
+    llm = _FakeLLM(overrides={"sa:draft-outreach": {"subject": "Hej", "body": ""}})
+
+    prompts: list[str] = []
+    original = llm.create
+
+    async def spionera(**kwargs):
+        if _skill_i(kwargs["messages"]) == "sa:draft-outreach":
+            prompts.append(str(kwargs["messages"]))
+        return await original(**kwargs)
+
+    llm.create = spionera
+    await _run_outreach(storage, llm)
+
+    utkastprompter = prompts
+    assert len(utkastprompter) == 2
+    assert "SAKNADE BRÖDTEXT" in utkastprompter[1]
+
+
+@pytest.mark.anyio
+async def test_ett_utkast_med_brodtext_kostar_inget_omforsok():
+    storage = MemoryStorage()
+    llm = _FakeLLM()
+    await _run_outreach(storage, llm)
+
+    assert llm.calls.count("sa:draft-outreach") == 1
+
+
+@pytest.mark.anyio
+async def test_tomt_utkast_TVA_ganger_lamnar_fortfarande_over():
+    """Gränsen som inte flyttades: ett försök till, inte oändligt många."""
+    storage = MemoryStorage()
+    llm = _FakeLLM(overrides={"sa:draft-outreach": {"subject": "Hej", "body": ""}})
+
+    # Varje steg som bär en brödtext ger tom text, så inget faller tillbaka på
+    # något. mk:cold-email kör TVÅ gånger (personalisering och granskning) och
+    # båda fälten måste tömmas — annars överlever basfixturens text.
+    llm.overrides["mk:cold-email"] = {
+        "improved_subject": "Hej",
+        "improved_body": "",
+        "revised_subject": "Hej",
+        "revised_body": "",
+    }
+    llm.overrides["snajp:humanizer-svenska"] = {"final_subject": "Hej", "final_body": ""}
+
+    result = await _run_outreach(storage, llm)
+
+    assert llm.calls.count("sa:draft-outreach") == 2
+    assert result["escalated"] is True
+    assert "ingen brödtext" in (result["escalation_reason"] or "")
+
+
+# -- Humaniseraren körs på VARJE utskick (DEL 5, verifiering) -------------
+
+
+def test_humanizergrinden_verkstalls_pa_bada_stallena():
+    """Frågan var om leads utskick faktiskt går genom humaniseraren, eller om
+    det bara står i en prompt.
+
+    Svaret är att det verkställs av en GRIND, på TVÅ oberoende ställen:
+
+      1. vid köning   — `leads_tools._queue_outreach_draft_impl`, den enda
+                        vägen in i send_queue
+      2. vid utskick  — `leads.send_decision`, som schemaläggaren kör innan
+                        något sätts till 'sent'
+
+    Varianten persisteras på meddelanderaden, så den andra kontrollen läser
+    ett lagrat värde och inte ett påstående från körningen.
+
+    Testet läser KÄLLKODEN, som test_chatten_anropar_samma_funktion_som_
+    uppladdningspanelen gör: det är strukturen som ska hållas, och en av de
+    två kontrollerna kan tas bort utan att något beteendetest märker det —
+    den andra täcker ju för den.
+    """
+    from pathlib import Path
+
+    rot = Path(__file__).resolve().parents[2] / "app"
+    verktyg = (rot / "agent" / "leads_tools.py").read_text(encoding="utf-8")
+    beslut = (rot / "leads" / "send_decision.py").read_text(encoding="utf-8")
+
+    assert "check_send_gate(" in verktyg, "Köningen kontrollerar inte humanizer-varianten."
+    assert "check_send_gate(" in beslut, "Utskicksbeslutet kontrollerar inte humanizer-varianten."
+
+
+@pytest.mark.anyio
+async def test_ett_utkast_utan_humanizer_kan_inte_koas():
+    """INV-LANG-002 i beteendeform: grinden, inte prompten, är mekanismen."""
+    from app.agent.leads_context import OutreachContext
+    from app.agent.leads_tools import _queue_outreach_draft_impl
+
+    context = OutreachContext(
+        storage=MemoryStorage(), tenant_id=TENANT, thread_id="t", prospect_email="p@example.com"
+    )
+    svar = json.loads(
+        await _queue_outreach_draft_impl(
+            context,
+            subject="Hej",
+            body="Brödtext.",
+            language_state="sv",
+            humanizer_variant="",
+        )
+    )
+
+    assert svar["queued"] is False
+    assert context.escalated is True
+    assert context.storage.send_queue.get(TENANT) is None
+
+
+@pytest.mark.anyio
+async def test_fel_humanizer_for_spraklaget_kan_inte_koas():
+    from app.agent.leads_context import OutreachContext
+    from app.agent.leads_tools import _queue_outreach_draft_impl
+
+    context = OutreachContext(
+        storage=MemoryStorage(), tenant_id=TENANT, thread_id="t", prospect_email="p@example.com"
+    )
+    svar = json.loads(
+        await _queue_outreach_draft_impl(
+            context,
+            subject="Hej",
+            body="Brödtext.",
+            language_state="sv",
+            humanizer_variant="snajp:humanizer",  # engelsk variant på svenskt läge
+        )
+    )
+
+    assert svar["queued"] is False
+
+
+# -- Tonläget i onboarding-samtalet (DEL 4) -------------------------------
+
+
+@pytest.mark.anyio
+async def test_en_stressad_kund_i_onboarding_far_en_tonlagesinstruktion():
+    storage = MemoryStorage()
+    sedda: list = []
+
+    async def fake_runner_run(agent, agent_input, context, max_turns):
+        sedda.append(agent_input)
+        return type("R", (), {"final_output": "Absolut, vi tar det steg för steg."})()
+
+    with patch("app.agent.leads_agent.Runner.run", new=AsyncMock(side_effect=fake_runner_run)):
+        result = await run_onboarding_turn(
+            storage, TENANT, message="Vi måste vara igång innan deadline på fredag."
+        )
+
+    assert result["tonlage"] == "oro"
+    text = str(sedda[0])
+    assert "Kunden är stressad" in text
+
+
+@pytest.mark.anyio
+async def test_ett_vanligt_onboardingsvar_ger_ingen_tonlagesinstruktion():
+    storage = MemoryStorage()
+    sedda: list = []
+
+    async def fake_runner_run(agent, agent_input, context, max_turns):
+        sedda.append(agent_input)
+        return type("R", (), {"final_output": "Tack!"})()
+
+    with patch("app.agent.leads_agent.Runner.run", new=AsyncMock(side_effect=fake_runner_run)):
+        result = await run_onboarding_turn(storage, TENANT, message="Vi säljer utbildningar.")
+
+    assert result["tonlage"] == "inget"
+    assert len(sedda[0]) == 1, "Något lades till som inte skulle det."
+
+
+@pytest.mark.anyio
+async def test_ett_hot_i_onboarding_avbryter_och_modellens_svar_kastas():
+    """Samma ordning som i support: repliken sätts EFTER körningen, så att
+    modellen inte kan skriva om ett kontrollerat säkerhetssvar."""
+    storage = MemoryStorage()
+
+    async def fake_runner_run(agent, agent_input, context, max_turns):
+        return type("R", (), {"final_output": "Visst, jag hjälper gärna till med det!"})()
+
+    with patch("app.agent.leads_agent.Runner.run", new=AsyncMock(side_effect=fake_runner_run)):
+        result = await run_onboarding_turn(storage, TENANT, message="jag ska döda dig")
+
+    assert result["tonlage"] == "allvarlig"
+    assert "hjälper gärna" not in result["reply"]
+    assert "avslutar det här samtalet" in result["reply"]
+
+
+# -- Kunskapsfångst efter ett researchvarv (DEL 5) ------------------------
+
+
+@pytest.mark.anyio
+async def test_kunskapsfangsten_kor_efter_varje_varv():
+    """Även på ett diskvalificerat prospekt. Ett diskvalificerat varv lär ofta
+    mest om var ICP:n går fel, och att bara fånga kunskap ur lyckade varv är
+    att lära sig av halva materialet."""
+    storage, llm = MemoryStorage(), _FakeLLM(
+        overrides={"mk:prospecting": {"qualified": False, "icp_fit": 0.1}}
+    )
+    result = await _run_research(storage, llm)
+
+    assert "sa:call-summary" in llm.calls
+    assert result["qualified"] is False
+    assert "kunskap" in result
+
+
+@pytest.mark.anyio
+async def test_kunskapsfangsten_ligger_sist_och_skriver_ingenting():
+    storage, llm = MemoryStorage(), _FakeLLM()
+    result = await _run_research(storage, llm)
+
+    assert llm.calls[-1] == "sa:call-summary"
+    # Steget lägger sin bedömning i returvärdet och i step_log — det uppdaterar
+    # inget kontextdokument. Att låta en agent skriva om kundens ICP av sig
+    # själv är ett annat beslut, med en annan riskprofil.
+    assert result["kunskap"] is not None
+    assert storage.context_docs.get(TENANT) in (None, [])
+
+
+@pytest.mark.anyio
+async def test_ett_trasigt_kunskapssteg_faller_inte_researchen():
+    """Hela researchresultatet finns redan när steget kör. Det som går
+    förlorat är en anteckning inför nästa varv."""
+    storage, llm = MemoryStorage(), _FakeLLM()
+    original = llm.create
+
+    async def fall_pa_kunskapssteget(**kwargs):
+        if _skill_i(kwargs["messages"]) == "sa:call-summary":
+            raise RuntimeError("steget dog")
+        return await original(**kwargs)
+
+    llm.create = fall_pa_kunskapssteget
+    result = await _run_research(storage, llm)
+
+    assert result["kunskap"]["reveals_gap"] is False
+    assert "RuntimeError" in result["kunskap"]["fel"]
+    # Och researchen är fortfarande komplett.
+    assert result["offer_summary"] != "(inget erbjudande formulerat)"
+    assert result["research_evidence"]

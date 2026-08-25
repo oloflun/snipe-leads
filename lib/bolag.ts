@@ -9,8 +9,19 @@
  * bolag. Fyll i dem från registreringsbeviset, inte från minnet.
  *
  * `bolagsuppgifterna_klara` nedan är sanningen om huruvida det är gjort.
- * Sidfoten och de juridiska sidorna renderar en synlig ruta så länge den är
- * falsk — en osynlig platshållare hade legat kvar i produktion i ett halvår.
+ *
+ * ## Platshållare får ALDRIG renderas
+ *
+ * Den gula rutan som förr sade "de här uppgifterna är platshållare" är
+ * borttagen (2026-08-25, på begäran). Utan den läste "org.nr [XXXXXX-XXXX]"
+ * i sidfoten som ett trasigt bygge i stället för som en känd lucka — och
+ * `mailto:[integritet@snajp.se]` var en länk ingen kunde använda, på just den
+ * rad där en registrerad ska utöva sina rättigheter.
+ *
+ * Regeln är därför: ingen renderingsplats skriver ut ett värde utan att först
+ * köra det genom `utanPlatshallare`. Det som saknas UTELÄMNAS. En sida som
+ * bara säger "Snajp AB" är ofullständig; en som säger "[Gatuadress]" är
+ * felaktig, och bara det ena går att missta för att vara sant.
  *
  * ## Kontaktadressen
  *
@@ -24,7 +35,7 @@
 
 export const BOLAG = {
   /** Registrerat namn, inte varumärket. Varumärket är "Snajp". */
-  namn: "[Bolagsnamn AB]",
+  namn: "Snajp AB",
   orgnr: "[XXXXXX-XXXX]",
   postadress: "[Gatuadress, postnummer, ort]",
   /** Sätts när integritetspolicyn granskats av jurist och publicerats skarpt. */
@@ -37,6 +48,51 @@ export const DATASKYDD_MEJL = "[integritet@snajp.se]";
 /** En platshållare är en text som fortfarande bär hakparenteser. */
 export function arPlatshallare(varde: string): boolean {
   return varde.includes("[");
+}
+
+/**
+ * Värdet om det är riktigt, annars null. Grinden mellan lib/bolag.ts och allt
+ * som renderas för en besökare.
+ *
+ * Returnerar null och inte tom sträng med flit: null tvingar anroparen att
+ * skriva vad som händer när uppgiften saknas, medan "" tyst hade blivit ett
+ * kommatecken utan text framför sig.
+ */
+export function utanPlatshallare(varde: string): string | null {
+  return arPlatshallare(varde) ? null : varde;
+}
+
+/**
+ * Adressen för dataskyddsärenden, med en fungerande reserv.
+ *
+ * `DATASKYDD_MEJL` ska ligga på egen domän och gör det inte ännu. Tills dess
+ * pekar länken på adressen supporten faktiskt läser. Det är ETT STEG SÄMRE än
+ * en egen domän — och flera steg bättre än en adress som inte finns, vilket är
+ * vad som stod här tidigare. Byt inte reserven mot ingenting: en registrerad
+ * som inte kan nå oss har inte fått sina rättigheter tillgodosedda.
+ *
+ * Reserven skickas in av anroparen i stället för att importeras hit, för att
+ * lib/ inte ska bero på components/. Adressen bor i components/marketing/copy.ts.
+ */
+export function dataskyddKontakt(reservadress: string): string {
+  return utanPlatshallare(DATASKYDD_MEJL) ?? reservadress;
+}
+
+/**
+ * Bolagsidentifikationen som en färdig rad: "Snajp AB · org.nr … · adress".
+ *
+ * Bygger raden av det som FINNS. Med bara namnet ifyllt blir det "Snajp AB",
+ * utan efterhängande avdelare — vilket är precis vad som gick fel när raden
+ * skrevs som en mall med hål i.
+ */
+export function bolagsraden(avdelare: string = " · "): string {
+  return [
+    utanPlatshallare(BOLAG.namn),
+    utanPlatshallare(BOLAG.orgnr) ? `org.nr ${BOLAG.orgnr}` : null,
+    utanPlatshallare(BOLAG.postadress)
+  ]
+    .filter((del): del is string => del !== null)
+    .join(avdelare);
 }
 
 /**
@@ -67,8 +123,19 @@ export type Underleverantor = {
 
 export const UNDERLEVERANTORER: readonly Underleverantor[] = [
   {
+    // Aktiv chattprovider sedan 2026-08-24 (LLM_PROVIDER=gemini). Driver
+    // dessutom bildbeskrivning och embeddings sedan tidigare.
+    namn: "Google (Gemini)",
+    andamal: "Språkmodell som genererar och klassificerar text, beskriver bilder och bygger sökvektorer.",
+    region:
+      "[Ange dataregion OCH avtalsnivå. Avgörande: en gratisnivå tillåter " +
+      "typiskt leverantören att använda innehållet för produktförbättring. " +
+      "Se docs/JURIDIK_ATGARDER.md, P0.1c.]"
+  },
+  {
+    // Konfigurerad i koden men ingen nyckel satt i någon miljö 2026-08-24.
     namn: "OpenAI",
-    andamal: "Språkmodell som genererar och klassificerar text.",
+    andamal: "Alternativ språkmodell. Inte i drift just nu.",
     region: "[Ange dataregion och avtalsform — DPA + SCC]"
   },
   {

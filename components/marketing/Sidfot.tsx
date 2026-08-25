@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BOLAG, bolagsuppgifterna_klara, DATASKYDD_MEJL } from "@/lib/bolag";
+import { bolagsraden, dataskyddKontakt } from "@/lib/bolag";
 import { KONTAKT_MEJL } from "@/components/marketing/copy";
 
 /**
@@ -19,28 +19,23 @@ import { KONTAKT_MEJL } from "@/components/marketing/copy";
  * kundens domän är vi supportchatten på deras sajt (TENANTS.md) — vårt
  * organisationsnummer i deras sidfot är fel bolag på fel sajt.
  *
- * ## Varningsrutan
+ * ## Varningsrutan är borttagen (2026-08-25, på begäran)
  *
- * Så länge bolagsuppgifterna är platshållare visas en synlig ruta. Den är
- * ful med flit: en gul ruta på säljsidan blir åtgärdad, en `TODO` i en
- * kommentar blir det inte.
+ * Den gula rutan sade att uppgifterna nedan är platshållare. Med den borta får
+ * ingen platshållare renderas: raden byggs av `bolagsraden()`, som utelämnar
+ * det som inte är ifyllt. I dag finns bara bolagsnamnet, så raden är kort —
+ * det är rätt. "org.nr [XXXXXX-XXXX]" var det inte.
+ *
+ * `bolagsuppgifterna_klara` finns kvar i lib/bolag.ts och är fortfarande false.
+ * Ingenting läser den längre, och det är värt att veta: det finns inte längre
+ * något i gränssnittet som påminner om att uppgifterna saknas.
  */
 export function Sidfot() {
   return (
     <div className="border-t border-ink/12">
       <div className="mx-auto max-w-[1480px] px-6 py-8 md:px-10">
-        {bolagsuppgifterna_klara ? null : (
-          <p className="mb-6 rounded-card border border-ochre/40 bg-ochre/10 px-4 py-3 text-[0.875rem] leading-[1.6] text-ink/80">
-            <strong className="font-semibold">Ej klart för lansering.</strong> Bolagsuppgifterna
-            nedan är platshållare, och de juridiska sidorna är ett förstautkast som inte granskats
-            av jurist. Se <code className="font-mono text-[0.8125rem]">docs/JURIDIK_ATGARDER.md</code>.
-          </p>
-        )}
-
         <div className="flex flex-col gap-4 text-[0.875rem] leading-[1.6] text-ink/50 md:flex-row md:items-baseline md:justify-between">
-          <p>
-            {BOLAG.namn} · org.nr {BOLAG.orgnr} · {BOLAG.postadress}
-          </p>
+          <p>{bolagsraden()}</p>
 
           <nav className="flex flex-wrap gap-x-6 gap-y-2">
             <Link href="/integritetspolicy" className="focus-ring hover:text-ink">
@@ -52,8 +47,15 @@ export function Sidfot() {
             <Link href="/cookies" className="focus-ring hover:text-ink">
               Cookies
             </Link>
-            <a href={`mailto:${DATASKYDD_MEJL}`} className="focus-ring hover:text-ink">
-              {DATASKYDD_MEJL}
+            {/* Dataskyddsadressen, med KONTAKT_MEJL som fungerande reserv tills
+                den ligger på egen domän. Stod förut som `[integritet@snajp.se]`
+                och länkade dit — alltså en död mailto på den rad där en
+                registrerad ska höra av sig. */}
+            <a
+              href={`mailto:${dataskyddKontakt(KONTAKT_MEJL)}`}
+              className="focus-ring hover:text-ink"
+            >
+              {dataskyddKontakt(KONTAKT_MEJL)}
             </a>
           </nav>
         </div>

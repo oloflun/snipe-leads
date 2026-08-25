@@ -1,8 +1,15 @@
 "use client";
 
-import { AlertTriangle, Download, Loader2, Scale, Upload } from "lucide-react";
+import { AlertTriangle, Download, Forward, Loader2, Scale, Trash2, Upload } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Badge, EmptyState, SkeletonRows, btnPrimary, btnSecondary } from "@/components/ui";
+import {
+  Badge,
+  EmptyState,
+  SkeletonRows,
+  btnLiten,
+  btnPrimary,
+  btnSecondary
+} from "@/components/ui";
 import { felmeddelande, readJson } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
 
@@ -130,6 +137,7 @@ export function BokforingPanel() {
   const utdragsväljare = useRef<HTMLInputElement>(null);
   const [avstamning, setAvstamning] = useState<Avstamning | null>(null);
   const [stammerAv, setStammerAv] = useState(false);
+  const [rensar, setRensar] = useState(false);
 
   const hamta = useCallback(async () => {
     setFel(null);
@@ -174,6 +182,48 @@ export function BokforingPanel() {
     }
   }
 
+  /**
+   * Tömmer perioden — underlagen och verifikaten som räknats ur dem.
+   *
+   * EN funktion bakom BÅDA Rensa-knapparna, med flit. Summorna i
+   * periodavsnittet ÄR underlagen: `berakna_period` läser inget annat, så en
+   * knapp som bara nollade siffrorna hade nollat en vy och inte ett underlag,
+   * och nästa hämtning hade satt tillbaka dem. Två knappar som gjorde olika
+   * saker åt samma data hade dessutom lämnat frågan om vilken som gällde.
+   *
+   * Frågan innan är inte en formalitet. Raderingen är äkta, och originalfilerna
+   * finns inte kvar att ladda upp igen — bara sha256:n sparades någonsin — så
+   * det som försvinner går bara att få tillbaka genom att läsa av kvittona på
+   * nytt.
+   */
+  async function rensa() {
+    if (!harUnderlag) return;
+    const bekraftat = window.confirm(
+      `Rensa ${period.fran} till ${period.till}?\n\n` +
+        `${underlag?.length ?? 0} underlag och deras konteringar raderas. ` +
+        "Det går inte att ångra."
+    );
+    if (!bekraftat) return;
+
+    setRensar(true);
+    setFel(null);
+    try {
+      const svar = await fetch(`${BAS}/period?fran=${period.fran}&till=${period.till}`, {
+        method: "DELETE"
+      });
+      await readJson(svar);
+      // Avstämningen jämförde mot underlag som inte finns längre. Att låta den
+      // ligga kvar hade gett en lista över "saknar underlag" som stämmer av
+      // ren slump.
+      setAvstamning(null);
+      await hamta();
+    } catch (orsak) {
+      setFel(felmeddelande(orsak));
+    } finally {
+      setRensar(false);
+    }
+  }
+
   async function laddaUpp(filer: FileList | null) {
     if (!filer?.length) return;
     setLaddarUpp(true);
@@ -194,155 +244,180 @@ export function BokforingPanel() {
   }
 
   const klar = rapport?.status === "klar";
+  const harUnderlag = (underlag?.length ?? 0) > 0;
+
+  /**
+   * Vidarebefordran: ett `mailto:`-utkast med periodens dokument som text.
+   *
+   * DOKUMENTET SJÄLVT KAN INTE BIFOGAS, och det är inte en förenkling utan en
+   * följd av två saker som båda står fast. `mailto:` har ingen
+   * bilage-parameter i någon webbläsare — det är en RFC 6068-begränsning, inte
+   * en lucka — och originalfilen finns dessutom inte kvar att bifoga: `sha256`
+   * är allt som sparas av ett kvitto (migration 045). Det som går att skicka
+   * vidare är alltså de AVLÄSTA fälten, och utkastet säger det rakt ut i
+   * stället för att låta mottagaren undra var filen tog vägen.
+   *
+   * Det bär kunddata till kundens EGEN e-postklient och ingen annanstans:
+   * `mailto:` går till operativsystemet, inte över nätet, och adressraden
+   * lämnas tom så att avsändaren fyller i mottagaren själv.
+   */
+  const vidarebefordran = (() => {
+    const rader = (underlag ?? []).map(
+      (rad) =>
+        `${rad.datum ?? "utan datum"}  ${rad.motpart || rad.filnamn}  ` +
+        `${kronor(rad.brutto)}  moms ${procent(rad.momssats)}` +
+        `${rad.status === "granska_manuellt" ? "  (granskas manuellt)" : ""}`
+    );
+    const brodtext = [
+      `Bokföringsunderlag ${period.fran} till ${period.till}.`,
+      "",
+      ...rader,
+      "",
+      `${rader.length} dokument. Beloppen är avlästa ur kvittona och är förslag `
+        + "— originalfilerna sparas inte och kan därför inte bifogas här.",
+      ""
+    ].join("\n");
+    // encodeURIComponent, inte URLSearchParams: den senare kodar mellanslag
+    // som "+", och ett plustecken i en mailto-kropp blir ett plustecken i
+    // utkastet — inte ett mellanslag.
+    return (
+      `mailto:?subject=${encodeURIComponent(`Bokföringsunderlag ${period.fran}–${period.till}`)}` +
+      `&body=${encodeURIComponent(brodtext)}`
+    );
+  })();
+
+  // SAMMA element på två ställen: sist i periodavsnittets rubrikrad, sist i
+  // dokumentavsnittets. Skrivet en gång så att de två inte kan glida isär i
+  // utseende — att de ser lika ut är hela poängen med dem.
+  const rensaKnapp = (
+    <button
+      type="button"
+      disabled={rensar || !harUnderlag}
+      onClick={() => void rensa()}
+      title={harUnderlag ? undefined : "Det finns inget att rensa i perioden."}
+      className={cn(btnSecondary, btnLiten)}
+    >
+      {rensar ? (
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+      ) : (
+        <Trash2 className="h-4 w-4" aria-hidden />
+      )}
+      Rensa
+    </button>
+  );
+
+  // Datumfälten. Bor i periodavsnittets rubrikrad och ERSÄTTER rubriken
+  // "Perioden" som stod där — intervallet säger vilken period det är, vilket
+  // ordet aldrig gjorde.
+  const datumfalt = (
+    <div className="flex flex-wrap items-end gap-2">
+      <label className="flex flex-col gap-1">
+        <span className="text-[0.75rem] font-medium text-ink/55">Från</span>
+        {/* type="date" och inte en datumväljare: webbläsarens egen är
+            tillgänglig, lokaliserad och kostar noll kilobyte. */}
+        <input
+          type="date"
+          value={period.fran}
+          onChange={(e) => setPeriod((p) => ({ ...p, fran: e.target.value }))}
+          className="focus-ring h-9 rounded-input bg-paper2 px-2.5 text-[0.875rem]"
+        />
+      </label>
+      <label className="flex flex-col gap-1">
+        <span className="text-[0.75rem] font-medium text-ink/55">Till</span>
+        <input
+          type="date"
+          value={period.till}
+          onChange={(e) => setPeriod((p) => ({ ...p, till: e.target.value }))}
+          className="focus-ring h-9 rounded-input bg-paper2 px-2.5 text-[0.875rem]"
+        />
+      </label>
+    </div>
+  );
 
   return (
     <div className="space-y-8">
-      {/* Period + åtgärder */}
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1">
-          <span className="text-[0.8125rem] font-medium text-ink/55">Från</span>
-          {/* type="date" och inte en datumväljare: webbläsarens egen är
-              tillgänglig, lokaliserad och kostar noll kilobyte. */}
-          <input
-            type="date"
-            value={period.fran}
-            onChange={(e) => setPeriod((p) => ({ ...p, fran: e.target.value }))}
-            className="focus-ring min-h-11 rounded-input bg-paper2 px-3 text-base"
-          />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-[0.8125rem] font-medium text-ink/55">Till</span>
-          <input
-            type="date"
-            value={period.till}
-            onChange={(e) => setPeriod((p) => ({ ...p, till: e.target.value }))}
-            className="focus-ring min-h-11 rounded-input bg-paper2 px-3 text-base"
-          />
-        </label>
-
-        <input
-          ref={filväljare}
-          type="file"
-          multiple
-          accept={LASBARA}
-          onChange={(e) => {
-            void laddaUpp(e.target.files);
-            e.target.value = "";
-          }}
-          className="sr-only"
-        />
-        <button
-          type="button"
-          disabled={laddarUpp}
-          onClick={() => filväljare.current?.click()}
-          className={btnPrimary}
-        >
-          {laddarUpp ? (
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-          ) : (
-            <Upload className="h-4 w-4" aria-hidden />
-          )}
-          Ladda upp underlag
-        </button>
-
-        {/* Vanlig länk och inte fetch: filen ska sparas, inte visas, och
-            webbläsaren gör nedladdningen bättre än vi gör den. Avstängd när
-            perioden inte går ihop — servern svarar 409 ändå (se
-            exportera_sie4), men en knapp som ser klickbar ut och ger ett fel
-            är sämre än en som säger varför den inte är det. */}
-        <a
-          href={
-            klar
-              ? `${BAS}/period.sie?fran=${period.fran}&till=${period.till}` +
-                `&foretagsnamn=${encodeURIComponent("Snajp")}&orgnr=`
-              : undefined
-          }
-          aria-disabled={!klar}
-          title={klar ? undefined : "Perioden går inte ihop och kan inte exporteras."}
-          className={cn(btnSecondary, !klar && "pointer-events-none opacity-40")}
-        >
-          <Download className="h-4 w-4" aria-hidden />
-          Exportera SIE4
-        </a>
-
-        {/* Kontoutdraget har en EGEN väljare och ett eget accept — se
-            utdragsväljare ovan. */}
-        <input
-          ref={utdragsväljare}
-          type="file"
-          accept=".csv,text/csv"
-          onChange={(e) => {
-            void stamAv(e.target.files?.[0] ?? null);
-            e.target.value = "";
-          }}
-          className="sr-only"
-        />
-        <button
-          type="button"
-          disabled={stammerAv}
-          onClick={() => utdragsväljare.current?.click()}
-          className={btnSecondary}
-        >
-          {stammerAv ? (
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-          ) : (
-            <Scale className="h-4 w-4" aria-hidden />
-          )}
-          Stäm av kontoutdrag
-        </button>
-      </div>
-
       {fel ? (
         <p role="alert" className="max-w-[70ch] text-[14px] text-danger">
           {fel}
         </p>
       ) : null}
 
-      {/* Periodsummorna */}
-      {rapport ? (
-        <section>
-          <div className="flex flex-wrap items-baseline justify-between gap-3">
-            <h2 className="font-display text-[1.25rem]">Perioden</h2>
-            <Badge tone={klar ? "good" : "warn"}>
-              {klar ? "Går ihop" : "Granska manuellt"}
-            </Badge>
+      {/* Periodsummorna.
+
+          Avsnittet renderas ALLTID, inte bara när `rapport` finns. Datumfälten
+          bor numera i rubrikraden, och ett villkorat avsnitt hade tagit bort
+          dem i exakt det läge de behövs mest: när hämtningen misslyckats och
+          perioden ska bytas för att komma vidare. */}
+      <section>
+        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+          {datumfalt}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Bara den fällda perioden får en märkning. "Går ihop" är
+                borttaget på begäran 2026-08-24: siffrorna VISAS bara när
+                perioden går ihop — `berakna_period` lämnar brister i stället —
+                så märket sa samma sak som summorna redan sa. Går den inte ihop
+                står det däremot ingen annanstans i rubrikraden, och det märket
+                står kvar. */}
+            {rapport && !klar ? <Badge tone="warn">Granska manuellt</Badge> : null}
+            {/* Avstämningen hör till perioden, inte till dokumenten: den
+                svarar på om periodens underlag täcker kontoutdragets rader. Den
+                flyttade hit när uppladdning och export flyttade ner, hellre än
+                att bli ensam kvar i en åtgärdsrad utan avsnitt. */}
+            <button
+              type="button"
+              disabled={stammerAv}
+              onClick={() => utdragsväljare.current?.click()}
+              className={cn(btnSecondary, btnLiten)}
+            >
+              {stammerAv ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                <Scale className="h-4 w-4" aria-hidden />
+              )}
+              Stäm av kontoutdrag
+            </button>
+            {rensaKnapp}
           </div>
+        </div>
 
-          <dl // Två kolumner, inte tre. `lg:grid-cols-3` mäter VIEWPORTEN, inte spalten
-            // — och sedan panelen ligger i sju av tolv kolumner blev tre summor
-            // bredvid varandra trånga just på de bredder där tre skulle rymts.
-            className="mt-4 grid gap-x-8 gap-y-3 border-y border-ink/15 py-4 sm:grid-cols-2">
-            {[
-              ["Intäkter", rapport.summor.intakter],
-              ["Kostnader", rapport.summor.kostnader],
-              ["Utgående moms", rapport.summor.utgaende_moms],
-              ["Ingående moms", rapport.summor.ingaende_moms],
-              ["Moms att betala", rapport.summor.moms_att_betala],
-              ["Resultat före skatt", rapport.summor.resultat_fore_skatt]
-            ].map(([etikett, varde]) => (
-              <div key={etikett} className="flex items-baseline justify-between gap-4">
-                <dt className="text-[0.9375rem] text-ink/62">{etikett}</dt>
-                <dd className="font-display text-[1.125rem] tabular-nums">{kronor(varde)}</dd>
+        {rapport ? (
+          <>
+            <dl // Två kolumner, inte tre. `lg:grid-cols-3` mäter VIEWPORTEN, inte spalten
+              // — och sedan panelen ligger i sju av tolv kolumner blev tre summor
+              // bredvid varandra trånga just på de bredder där tre skulle rymts.
+              className="mt-4 grid gap-x-8 gap-y-3 border-y border-ink/15 py-4 sm:grid-cols-2">
+              {[
+                ["Intäkter", rapport.summor.intakter],
+                ["Kostnader", rapport.summor.kostnader],
+                ["Utgående moms", rapport.summor.utgaende_moms],
+                ["Ingående moms", rapport.summor.ingaende_moms],
+                ["Moms att betala", rapport.summor.moms_att_betala],
+                ["Resultat före skatt", rapport.summor.resultat_fore_skatt]
+              ].map(([etikett, varde]) => (
+                <div key={etikett} className="flex items-baseline justify-between gap-4">
+                  <dt className="text-[0.9375rem] text-ink/62">{etikett}</dt>
+                  <dd className="font-display text-[1.125rem] tabular-nums">{kronor(varde)}</dd>
+                </div>
+              ))}
+            </dl>
+
+            {rapport.brister.length ? (
+              <div className="mt-4">
+                <p className="flex items-center gap-2 text-[0.9375rem] font-semibold text-ink">
+                  <AlertTriangle className="h-4 w-4 text-ochre" aria-hidden />
+                  {rapport.brister.length} sak
+                  {rapport.brister.length === 1 ? "" : "er"} att titta på
+                </p>
+                <ul className="mt-2 max-w-[78ch] space-y-1 text-[0.9375rem] text-ink/70">
+                  {rapport.brister.map((brist) => (
+                    <li key={brist}>{brist}</li>
+                  ))}
+                </ul>
               </div>
-            ))}
-          </dl>
-
-          {rapport.brister.length ? (
-            <div className="mt-4">
-              <p className="flex items-center gap-2 text-[0.9375rem] font-semibold text-ink">
-                <AlertTriangle className="h-4 w-4 text-ochre" aria-hidden />
-                {rapport.brister.length} sak
-                {rapport.brister.length === 1 ? "" : "er"} att titta på
-              </p>
-              <ul className="mt-2 max-w-[78ch] space-y-1 text-[0.9375rem] text-ink/70">
-                {rapport.brister.map((brist) => (
-                  <li key={brist}>{brist}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </section>
-      ) : null}
+            ) : null}
+          </>
+        ) : null}
+      </section>
 
       {/* Avstämningen mot kontoutdraget.
 
@@ -418,7 +493,68 @@ export function BokforingPanel() {
 
       {/* Underlagen */}
       <section>
-        <h2 className="font-display text-[1.25rem]">Underlag</h2>
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+          <h2 className="font-display text-[1.25rem]">Infoga dokument</h2>
+          {/* Knapparna står i rubrikraden av samma skäl som datumen står i
+              periodens: åtgärden hör till avsnittet den verkar på. Alla har
+              btnLiten och därmed samma höjd som datumfälten. */}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={laddarUpp}
+              onClick={() => filväljare.current?.click()}
+              className={cn(btnPrimary, btnLiten)}
+            >
+              {laddarUpp ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                <Upload className="h-4 w-4" aria-hidden />
+              )}
+              Ladda upp
+            </button>
+
+            {/* Vanlig länk och inte fetch: filen ska sparas, inte visas, och
+                webbläsaren gör nedladdningen bättre än vi gör den. Avstängd när
+                perioden inte går ihop — servern svarar 409 ändå (se
+                exportera_sie4), men en knapp som ser klickbar ut och ger ett fel
+                är sämre än en som säger varför den inte är det. */}
+            <a
+              href={
+                klar
+                  ? `${BAS}/period.sie?fran=${period.fran}&till=${period.till}` +
+                    `&foretagsnamn=${encodeURIComponent("Snajp")}&orgnr=`
+                  : undefined
+              }
+              aria-disabled={!klar}
+              title={klar ? undefined : "Perioden går inte ihop och kan inte exporteras."}
+              className={cn(btnSecondary, btnLiten, !klar && "pointer-events-none opacity-40")}
+            >
+              <Download className="h-4 w-4" aria-hidden />
+              Exportera
+            </a>
+
+            {/* `mailto:` och inte en egen utskicksväg. Se `vidarebefordran`. */}
+            <a
+              href={harUnderlag ? vidarebefordran : undefined}
+              aria-disabled={!harUnderlag}
+              title={
+                harUnderlag
+                  ? "Öppnar ett utkast i din e-post med periodens dokument som text."
+                  : "Det finns inga dokument att vidarebefordra."
+              }
+              className={cn(
+                btnSecondary,
+                btnLiten,
+                !harUnderlag && "pointer-events-none opacity-40"
+              )}
+            >
+              <Forward className="h-4 w-4" aria-hidden />
+              Vidarebefordra
+            </a>
+
+            {rensaKnapp}
+          </div>
+        </div>
         {underlag === null ? (
           <div className="mt-4">
             <SkeletonRows />
@@ -426,7 +562,7 @@ export function BokforingPanel() {
         ) : underlag.length === 0 ? (
           <div className="mt-4">
             <EmptyState
-              title="Inga underlag i perioden"
+              title="Inga dokument i perioden"
               body="Ladda upp ett kvitto eller en faktura, så läser agenten av det och föreslår kontering."
             />
           </div>
@@ -455,6 +591,35 @@ export function BokforingPanel() {
           </div>
         )}
       </section>
+
+      {/* Filväljarna. Knapparna som öppnar dem bor i sina avsnitt; själva
+          inputarna är `sr-only` och renderar ingenting, så de ligger sist —
+          `ref`:en bryr sig inte om var i DOM:en de står, men `space-y-8` gör
+          det: en absolut positionerad input tar ingen plats men räknas som
+          syskon, och två av dem överst gav panelen ett tomt glapp på toppen.
+
+          TVÅ väljare, inte en. Se `utdragsväljare` ovan. */}
+      <input
+        ref={filväljare}
+        type="file"
+        multiple
+        accept={LASBARA}
+        onChange={(e) => {
+          void laddaUpp(e.target.files);
+          e.target.value = "";
+        }}
+        className="sr-only"
+      />
+      <input
+        ref={utdragsväljare}
+        type="file"
+        accept=".csv,text/csv"
+        onChange={(e) => {
+          void stamAv(e.target.files?.[0] ?? null);
+          e.target.value = "";
+        }}
+        className="sr-only"
+      />
     </div>
   );
 }

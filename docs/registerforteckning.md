@@ -38,9 +38,9 @@ Det vi behandlar för vår egen räkning.
 | **Kategorier av uppgifter** | Namn, tjänstemejladress, roll, bolagsuppgifter |
 | **Rättslig grund** | Berättigat intresse (art. 6.1 f). Intresseavvägningen ska dokumenteras **[fylls i]** |
 | **Informationsplikt** | Art. 14 — uppgifterna kommer inte från personen själv. Lämnas i varje utskick, se `snajp-support/app/leads/utskicksfot.py` |
-| **Mottagare** | OpenAI (textgenerering), Railway, Supabase |
+| **Mottagare** | Google/Gemini (textgenerering), Railway, Supabase |
 | **Lagringstid** | **[fylls i]**. Undantag: raden i `suppressions` behålls tills vidare — den finns för att personen inte ska kontaktas igen |
-| **Var i systemet** | `contacts`, `companies`, `outreach_threads`, `outreach_messages`, `suppressions` |
+| **Var i systemet** | `contacts`, `prospects`, `companies`, `outreach_threads`, `outreach_messages`, `suppressions`, `workspace_invites`. Adressen kan dessutom stå i löptext i `generated_emails` och `agent_runs` |
 
 ### A3. Support till våra egna kunder
 
@@ -67,11 +67,11 @@ biträde. Förteckningen ska ändå finnas — art. 30.2 gäller biträden ocks�
 | **Ändamål** | Klassificera inkommande kundmejl och föreslå svar |
 | **Kategorier av registrerade** | Kundens kunder — alltså konsumenter, inte bara företagskontakter |
 | **Kategorier av uppgifter** | Avsändarens namn och e-postadress, meddelandeinnehåll, bilagor. Innehållet är **okontrollerat**: en kund kan skriva vad som helst i ett supportmejl, inklusive personnummer och hälsouppgifter |
-| **Mottagare (underbiträden)** | OpenAI, Supabase, Railway |
-| **Tredjelandsöverföring** | **[fylls i — kräver besked om OpenAI:s dataregion]** |
+| **Mottagare (underbiträden)** | Google/Gemini, Supabase, Railway |
+| **Tredjelandsöverföring** | **[fylls i — kräver besked om Googles dataregion och avtalsnivå, se P0.1c]** |
 | **Lagringstid** | Enligt `ss_gallringspolicy`. **Perioden är ännu inte beslutad** — se `scripts/gallra.py` |
 | **Var i systemet** | `ss_emails`, `ss_email_attachments`, `ss_classifications`, `ss_drafts`, `ss_human_reviews`, `ss_tickets` |
-| **Säkerhetsåtgärder** | Radnivåsäkerhet per tenant i databasen; ingen delning mellan kunder; utgående mejl kräver mänskligt godkännande |
+| **Säkerhetsåtgärder** | Radnivåsäkerhet per tenant i databasen; ingen delning mellan kunder; utgående mejl kräver mänskligt godkännande; personnummer maskeras innan texten går till modelleverantören |
 
 ### B2. Leadsagenten
 
@@ -96,6 +96,8 @@ Skrivs av så snart det är gjort, inte innan:
 
 - [ ] Intresseavvägning för A2 dokumenterad
 - [ ] Lagringstider beslutade och ifyllda ovan
-- [ ] OpenAI:s dataregion och avtalsform bekräftad
+- [ ] Geminis avtalsnivå bekräftad — gratisnivå eller ej (P0.1c, BRÅDSKANDE)
+- [ ] Googles dataregion och överföringsmekanism (DPF eller SCC) bekräftad
+- [ ] OpenAI:s dataregion och avtalsform bekräftad (om den tas i drift)
 - [ ] Railways datacenterregion bekräftad
 - [ ] DPIA för supportagentens automatiska klassificering och eskalering

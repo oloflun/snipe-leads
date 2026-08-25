@@ -19,10 +19,12 @@ nollställda men rimliga siffror.
 
 from __future__ import annotations
 
+import hashlib
 from datetime import date
 from decimal import Decimal
 from typing import Any
 
+from ..notifications.prioriterat_mejl import skicka_prioriterat
 from .math import (
     Konteringsrad,
     Post,
@@ -30,7 +32,7 @@ from .math import (
     netto_fran_brutto,
     summera_period,
 )
-from .verifieringsgrind import check_period
+from .verifieringsgrind import STATUS_GRANSKA, check_period
 
 
 def kr(varde: Decimal | None) -> str | None:
@@ -92,6 +94,38 @@ async def berakna_period(
             )
         )
     summor = summera_period(poster)
+
+    # Mejlet skickas HÄR och inte i `verifieringsgrind.check_period`. Grinden är
+    # en ren funktion — den tar dictar och rader och returnerar ett verdikt, gör
+    # ingen I/O och vet inte vilken tenant den räknar på. Att lägga ett
+    # mejlutskick där hade gjort den omöjlig att anropa från ett test utan att
+    # tänka på nätverk, och den anropas från fyra ställen.
+    #
+    # `berakna_period` är dessutom den ENDA anroparen av check_period, så det
+    # här är inte en av flera vägar förbi mejlet — det är vägen.
+    if verdikt.status == STATUS_GRANSKA:
+        # Nyckeln bär periodens brister, inte bara perioden. Rapporten hämtas
+        # varje gång någon öppnar vyn eller frågar chatten, och utan bristerna
+        # i nyckeln hade EN oförändrad trasig period mejlat om och om igen.
+        # Ändras bristerna är det däremot en NY sak att titta på.
+        brister = verdikt.as_report()
+        await skicka_prioriterat(
+            f"Bokföringsperiod kräver granskning ({fran.isoformat()}–{till.isoformat()})",
+            tenant_id=tenant_id,
+            vad=(
+                f"Perioden {fran.isoformat()}–{till.isoformat()} går inte ihop: "
+                f"{len(brister)} brist(er) över {len(underlag)} underlag."
+            ),
+            varfor="; ".join(brister[:5]) + (" …" if len(brister) > 5 else ""),
+            # sha256 och inte hash(): den inbyggda hashen saltas per process
+            # (PYTHONHASHSEED), så nyckeln hade sett olika ut i varje replik
+            # och i varje omstart — och en dubblettspärr med en instabil nyckel
+            # är ingen dubblettspärr.
+            nyckel=(
+                f"bokforing-period:{tenant_id}:{fran}:{till}:"
+                + hashlib.sha256("\n".join(brister).encode()).hexdigest()[:16]
+            ),
+        )
 
     return {
         "fran": fran.isoformat(),

@@ -39,8 +39,14 @@ ENVIRONMENTS: dict[str, str] = {
 #: korskoppling: samma AUTH_SECRET betyder att en sessionscookie utfärdad i dev
 #: är giltig i main, och samma demo-nyckel betyder att en dev-frontend kan tala
 #: med main-backenden utan att någon märker det.
+#:
+#: LLM-nycklarna står med sedan 2026-08-24. De var delade mellan main och
+#: development, och delade därför KVOT: ett demo-anrop i dev slog i taket och
+#: nästa anrop i produktionen hade fått samma 429. En hemlighet som är gemensam
+#: är en felkälla som är gemensam, även när den inte är en behörighetsfråga.
 PER_ENV_SECRETS = ("PG_PASSWORD", "APP_PASSWORD", "WEB_PASSWORD",
-                   "MASTER_API_KEY", "DEMO_API_KEY", "AUTH_SECRET")
+                   "MASTER_API_KEY", "DEMO_API_KEY", "AUTH_SECRET",
+                   "GEMINI_API_KEY", "OPENAI_API_KEY", "DEEPSEEK_API_KEY")
 
 #: Gamla, omiljöade namn i .env.deploy. De tillhör main, som redan kör med dem —
 #: att rotera hade tagit ner den tjänst skriptet ska provisionera.

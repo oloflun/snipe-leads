@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.leads.abuse_gate import (
+from app.moderation.abuse_gate import (
     ALLVARLIG,
     FRUSTRATION,
     INGET,

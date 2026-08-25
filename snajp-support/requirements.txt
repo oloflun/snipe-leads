@@ -1,7 +1,27 @@
 fastapi>=0.115
 uvicorn[standard]>=0.30
-openai-agents>=0.2.0
-openai>=1.60
+# TAK, inte bara golv. `>=0.2.0` utan tak lät utvecklarmaskinen köra 0.18.3
+# medan CI och Docker-bygget drog senaste 0.22.0 — och 0.22 skärpte
+# `Converter.maybe_response_output_message` till att kräva `id` i posten.
+# Följden: bokföringschattens tur två kastade UserError i drift medan den
+# lokala sviten var grön. Se `bygg_turhistorik` i app/agent/bookkeeping_agent.py.
+#
+# Konverterarens form är alltså LASTBÄRANDE här, inte en implementationsdetalj
+# vi råkar röra vid. En minorbump ska därför vara ett beslut någon fattar och
+# kör sviten på, inte något nästa docker build väljer åt oss.
+openai-agents>=0.22.0,<0.23
+# Samma sak en rad ned, och golvet var dessutom FALSKT. `>=1.60` sa att 1.x
+# dög; openai-agents 0.22 kräver i själva verket `openai<4,>=3.0.0`, så 1.x
+# har aldrig kunnat installeras tillsammans med den. Raden beskrev alltså inte
+# vad tjänsten kör — den lät bara pip lösa det tyst.
+#
+# Uppmätt: en `pip install -r` 2026-08-25 drog 2.46.0 -> 3.3.1, en MAJORbump,
+# utan att någon bad om det. Sviten var grön efteråt (1278), men det är tur och
+# inte en garanti — och det var precis så SDK-buggen ovan tog sig till drift.
+#
+# Golvet är nu det vi FAKTISKT kört sviten på. Taket följer SDK:ns eget: 4.0
+# är där openai själv säger att saker går sönder.
+openai>=3.3,<4
 asyncpg>=0.29
 pydantic>=2.8
 pydantic-settings>=2.4

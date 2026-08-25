@@ -207,7 +207,16 @@ export function LandingPhoto({
                   längd — till exempel i engelsk lokalisering — flyttar mittlinjen
                   och siffran här stämmer inte längre. */}
               <div className="col-span-12 self-end lg:col-span-3 lg:col-start-10 lg:ml-auto lg:w-[219px]">
-                <div className="font-display text-[1.5rem] leading-[1.15] tracking-[-0.02em] text-paper">
+                {/* 1.1875rem och inte 1.5rem. Tre produkter på EN rad mäter
+                    257px vid 24px, och kolumnen är 219 — den gamla graden
+                    tvingade fram en radbrytning som lade "Bokföring" under
+                    "Leads", alltså till vänster om "Support".
+                    Graden är uppmätt vid båda språken och det är ENGELSKAN som
+                    sätter den: "Bookkeeping" är 25px bredare än "Bokföring",
+                    och vid 21px låg dess högerkant 20px utanför kolumnen. Byts
+                    ett produktnamn mot ett längre ord måste måttet mätas om —
+                    raden kan inte längre brytas, den skulle sticka ut i stället. */}
+                <div className="font-display text-[1.1875rem] leading-[1.15] tracking-[-0.02em] text-paper">
                   <ProductSwitch value={product} onChange={setProduct} tone="paper" />
                 </div>
                 {/* Under växeln, inte bredvid.
@@ -218,11 +227,13 @@ export function LandingPhoto({
                 <div className="mt-4">
                   <LaddaNerAppen tone="paper" />
                 </div>
-                {/* Två vägar rakt in i produkten, en per agent.
+                {/* Tre vägar rakt in i produkten, en per agent.
                     Växeln ovanför byter vad SIDAN beskriver; de här tar
                     besökaren till agenten som gör det. Att bara kunna läsa om
                     en agent på en sida som har en fungerande demo är att gömma
-                    det enda som övertygar. */}
+                    det enda som övertygar.
+                    Bokföringen saknades här medan de andra två fanns, fast
+                    /demo/bokforing funnits sedan den blev en egen produkt. */}
                 <div className="mt-5 flex flex-col gap-2 border-t border-paper/25 pt-4">
                   <Link
                     href="/demo/leads"
@@ -236,6 +247,13 @@ export function LandingPhoto({
                     className="focus-ring group inline-flex items-center gap-2 text-[0.9375rem] font-medium text-paper/85 transition-colors hover:text-paper"
                   >
                     {text(shared.demoSupport)}
+                    <span aria-hidden className="transition-transform group-hover:translate-x-0.5">→</span>
+                  </Link>
+                  <Link
+                    href="/demo/bokforing"
+                    className="focus-ring group inline-flex items-center gap-2 text-[0.9375rem] font-medium text-paper/85 transition-colors hover:text-paper"
+                  >
+                    {text(shared.demoBokforing)}
                     <span aria-hidden className="transition-transform group-hover:translate-x-0.5">→</span>
                   </Link>
                 </div>
