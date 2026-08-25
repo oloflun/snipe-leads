@@ -17,13 +17,24 @@
  * kontrollerar. Två grundare i ett litet bolag som gör allting tillsammans
  * är dessutom sant, vilket är den bättre egenskapen hos en titel.
  *
- * ## `bio` är TOM, inte en platshållare
+ * ## Bioraderna beskriver ARBETE, inte bakgrund
  *
- * Skillnaden är viktig. En platshållare (`[Kort bio]`) betyder "det här
- * saknas och sidan är inte klar"; en tom sträng betyder "det här utelämnas".
- * Ingen kan skriva någon annans bakgrund åt dem, så fältet lämnas öppet och
- * kortet renderar utan biorad tills någon fyller i sin egen. Sidan är
- * publicerbar som den är.
+ * Ingen kan skriva någon annans livshistoria åt dem, så meningarna nedan
+ * påstår inget om utbildning, tidigare jobb eller varför bolaget startade.
+ * De säger vad var och en faktiskt har byggt, och det går att kontrollera i
+ * git-loggen: Anton står för 423 av 424 filändringar i `agent-core`, alltså
+ * färdighetsregistret som styr vad agenterna kan; Sebastian har tyngdpunkten
+ * i `snajp-support/app`, `components`, `lib` och `supabase`, alltså backend,
+ * gränssnitt och schema.
+ *
+ * FORMULERINGEN UNDVIKER "ansvarar för" med flit. Titlarna är neutrala just
+ * för att ingen funktionsuppdelning är bestämd, och en biorad som delar upp
+ * ansvaret hade återinfört uppdelningen genom bakdörren. "Har byggt" är ett
+ * påstående om vad som gjorts; "ansvarar för" är ett påstående om en
+ * organisation som inte finns.
+ *
+ * Tom sträng är fortfarande giltig och betyder "utelämnas" — kortet renderar
+ * då utan biorad, och utkastnotisen bryr sig inte om fältet.
  *
  * ## Mejladresserna står INTE här
  *
@@ -52,14 +63,18 @@ export const TEAM: Teammedlem[] = [
     id: "sebastian-bergman",
     namn: "Sebastian Bergman",
     roll: "Grundare",
-    bio: "",
+    bio:
+      "Har byggt det mesta av plattformen: agenternas backend, databasen och " +
+      "gränssnittet kunderna arbetar i.",
     foto: null
   },
   {
     id: "anton-lundin",
     namn: "Anton Lundin",
     roll: "Grundare",
-    bio: "",
+    bio:
+      "Har byggt agenternas färdighetsregister — spelböckerna som avgör vad de " +
+      "kan och hur de resonerar.",
     foto: null
   }
 ];
