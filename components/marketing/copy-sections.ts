@@ -216,8 +216,8 @@ const bokforing: SectionCopy = {
     en: "Local *team* / *support*"
   },
   placeBody: {
-    sv: "Vi sitter i Göteborg och Umeå – inte någonstans. Frågor besvaras av dem som bygger produkten, inte en supportkö.",
-    en: "We work from Gothenburg and Umeå – not just anywhere. Questions are answered by the people building the product, not a support queue."
+    sv: "Vi sitter i Göteborg och Umeå – inte någon annanstans. Frågor besvaras av dem som bygger produkten, inte en supportkö.",
+    en: "We work from Gothenburg and Umeå – nowhere else. Questions are answered by the people building the product, not a support queue."
   },
   objectionsHeading: {
     sv: "Det ni undrar",
