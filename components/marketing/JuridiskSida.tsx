@@ -34,7 +34,7 @@ export function JuridiskSida({
       <header className="border-b border-ink/10">
         <div className="mx-auto flex max-w-[1480px] items-center justify-between px-6 py-5 md:px-10">
           <Link href="/" className="focus-ring" aria-label="Till startsidan">
-            <Logo compact />
+            <Logo />
           </Link>
           <Link href="/" className="focus-ring text-sm text-ink/60 hover:text-ink">
             Till startsidan

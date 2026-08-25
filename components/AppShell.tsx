@@ -8,6 +8,7 @@ import { Logo } from "@/components/Logo";
 import { AgentMenu } from "@/components/snajp/AgentMenu";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { signOut } from "@/lib/actions/auth";
+import { DEMO_NAV, demoSektionsVag } from "@/lib/demo/sektioner";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 import { VyVaxel } from "@/components/VyVaxel";
 import { useLocale } from "@/lib/i18n";
@@ -247,6 +248,14 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
             <Logo stor undertext={workspaceName} />
           </Link>
 
+          {/* Demomarkören sitter bredvid logotypen och inte i ett eget band.
+              Den säger vad ytan ÄR, alltså hör den ihop med märket. */}
+          {iDemolage(pathname) ? (
+            <span className="order-1 hidden shrink-0 items-center self-center rounded-input border border-ochre/40 bg-ochre/10 px-2.5 py-1 text-[13px] font-medium text-ochre lg:inline-flex">
+              Demo · exempeldata
+            </span>
+          ) : null}
+
           <div className="order-last ml-auto flex shrink-0 flex-1 basis-0 items-center justify-end gap-1.5 md:order-3">
             {/* Admin / Demo. Ersätter både den gamla /admin-länken längst ut i
                 flikraden och läges­växlaren: läget styrs numera av Leads- och
@@ -285,63 +294,102 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                 </button>
               </form>
             ) : null}
+
+            {/* Demons två utvägar. De låg förut i sidans eget band, i versal
+                mono — ett redaktionellt grepp från marknadssidorna som inte
+                liknade något annat i appens chrome. Här står de där varje
+                annan kontroll står, i samma register. */}
+            {iDemolage(pathname) ? (
+              <>
+                <Link
+                  href="/"
+                  className="focus-ring hidden min-h-11 items-center rounded-input px-3 text-sm font-medium text-ink/55 transition-colors hover:text-ink sm:inline-flex"
+                >
+                  Till startsidan
+                </Link>
+                <Link
+                  href="/login"
+                  className="focus-ring inline-flex min-h-11 items-center rounded-input px-3 text-sm font-medium text-ink/55 transition-colors hover:text-ink"
+                >
+                  Logga in
+                </Link>
+              </>
+            ) : null}
           </div>
 
-          {/* Flikraden renderas INTE i demon.
+          {/* Flikraden. EN rad, samma plats på arbetsytan som i demon.
 
-              Demon har sin egen sektionsrad, ritad av app/demo/[[...slug]]/page.tsx
-              med elva poster. Den här raden lade en ANDRA meny under den, med
-              fem poster som pekade på en delmängd av samma sidor — två
-              navigationer över samma vyer, staplade, där den undre var den
-              mindre kompletta. Exakt samma fel som inställningarna hade före
-              SettingsNav, och samma fel som /admin hade före villkoret ovan.
+              Demon ritade tidigare sina tolv sektioner själv, i ett eget band
+              OVANFÖR den här headern, och raden nedan undertrycktes för att de
+              annars staplades på varandra. Följden var att /demo hade en helt
+              annan chrome än /dashboard — tre rader mot arbetsytans en.
 
-              Den undre raden var dessutom trasig på en punkt som inte gick att
-              se: fyra av fem länkar mappas till /demo/* av `demoAnpassa`, men
-              "Inställningar" har ingen demomotsvarighet och pekade därför på
-              /settings — den riktiga appen, bakom inloggning. En besökare utan
-              konto möttes alltså av inloggningssidan från en yta vars hela
-              löfte är "ingen inloggning".
+              Nu matas samma <nav> med demons sektioner i stället (se
+              lib/demo/sektioner.ts). Demon får därmed arbetsytans layout:
+              logotyp till vänster, flikar i mitten, kontroller till höger.
+
+              Det löser också den gamla buggen som motiverade undertryckandet:
+              fyra av arbetsytans fem länkar mappas till /demo/* av
+              `demoAnpassa`, men "Inställningar" har ingen demomotsvarighet och
+              pekade därför på /settings — den riktiga appen, bakom inloggning.
+              Demons egen lista innehåller ingen sådan post, så en besökare utan
+              konto kan inte längre klicka sig till inloggningssidan från en yta
+              vars hela löfte är "ingen inloggning".
 
               Villkoret läser pathname och inte en prop, av samma skäl som
               admin-villkoret: PageShell anropas från ett tjugotal vyer som inte
               vet vilken yta de renderas i, och inte ska behöva veta. */}
-          {iDemolage(pathname) ? null : (
           <nav
             aria-label={t("nav.dashboard")}
             className="thin-scrollbar order-last flex w-full min-w-0 items-center justify-center gap-1 overflow-x-auto px-1 md:order-2 md:w-auto"
           >
-            {navRoutes.map((route) => {
-              const active =
-                route.href === "/dashboard"
-                  ? pathname === "/dashboard"
-                  : pathname === route.href || pathname.startsWith(`${route.href}/`);
-              return (
-                <Link
-                  key={route.href}
-                  href={demoAnpassa(route.href, pathname)}
-                  // Läget sätts vid klicket, inte i en effekt på den nya sidan:
-                  // en effekt hade hunnit rendera målsidan i det gamla läget
-                  // först, och bytet hade synts som ett hopp.
-                  onClick={() => {
-                    const lage = FLIKENS_LAGE[route.href];
-                    if (lage && availableScopes.includes(lage)) {
-                      setScope(lage);
-                    }
-                  }}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "focus-ring inline-flex min-h-11 shrink-0 items-center rounded-input px-3 text-sm font-medium transition-colors",
-                    active ? "bg-paper2 text-ink" : "text-ink/55 hover:bg-paper2/60 hover:text-ink"
-                  )}
-                >
-                  {t(route.labelKey)}
-                </Link>
-              );
-            })}
-
+            {iDemolage(pathname)
+              ? DEMO_NAV.map(([vag, etikett]) => {
+                  const href = demoSektionsVag(vag);
+                  const active = pathname === href;
+                  return (
+                    <Link
+                      key={href}
+                      href={href}
+                      aria-current={active ? "page" : undefined}
+                      className={cn(
+                        "focus-ring inline-flex min-h-11 shrink-0 items-center rounded-input px-3 text-sm font-medium transition-colors",
+                        active ? "bg-paper2 text-ink" : "text-ink/55 hover:bg-paper2/60 hover:text-ink"
+                      )}
+                    >
+                      {etikett}
+                    </Link>
+                  );
+                })
+              : navRoutes.map((route) => {
+                  const active =
+                    route.href === "/dashboard"
+                      ? pathname === "/dashboard"
+                      : pathname === route.href || pathname.startsWith(`${route.href}/`);
+                  return (
+                    <Link
+                      key={route.href}
+                      href={demoAnpassa(route.href, pathname)}
+                      // Läget sätts vid klicket, inte i en effekt på den nya sidan:
+                      // en effekt hade hunnit rendera målsidan i det gamla läget
+                      // först, och bytet hade synts som ett hopp.
+                      onClick={() => {
+                        const lage = FLIKENS_LAGE[route.href];
+                        if (lage && availableScopes.includes(lage)) {
+                          setScope(lage);
+                        }
+                      }}
+                      aria-current={active ? "page" : undefined}
+                      className={cn(
+                        "focus-ring inline-flex min-h-11 shrink-0 items-center rounded-input px-3 text-sm font-medium transition-colors",
+                        active ? "bg-paper2 text-ink" : "text-ink/55 hover:bg-paper2/60 hover:text-ink"
+                      )}
+                    >
+                      {t(route.labelKey)}
+                    </Link>
+                  );
+                })}
           </nav>
-          )}
         </div>
       </header>
 

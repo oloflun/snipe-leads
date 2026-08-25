@@ -1,10 +1,10 @@
 /**
- * Appikonerna, genererade ur `snipe_logo.svg`.
+ * Appikonerna, genererade ur `snajp-symbol-black.svg`.
  *
  * ## Varför loggan CENTRERAS och inte beskärs
  *
- * `snipe_logo.svg` är 1206×728, alltså ett liggande märke med förhållandet
- * 1,66:1. En kvadratisk beskärning hade kapat märket på bredden — inte tagit
+ * `snajp-symbol-black.svg` är ~200×158, ett liggande märke med förhållandet
+ * ~1,27:1. En kvadratisk beskärning hade kapat märket på bredden — inte tagit
  * bort luft, utan skurit av själva logotypen. Därför skalas den in i en
  * kvadrat med marginal och läggs på varumärkets pappersfärg.
  *
@@ -28,7 +28,7 @@ import path from "node:path";
 import sharp from "sharp";
 
 const ROT = path.resolve(import.meta.dirname, "..");
-const LOGGA = path.join(ROT, "public", "snipe_logo.svg");
+const LOGGA = path.join(ROT, "public", "snajp-symbol-black.svg");
 const UT = path.join(ROT, "public", "icons");
 
 /** Ur app/globals.css, konverterade från OKLCH. Se DESIGN.md. */

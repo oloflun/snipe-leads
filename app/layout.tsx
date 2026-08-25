@@ -45,10 +45,12 @@ export async function generateMetadata(): Promise<Metadata> {
     robots,
     manifest: "/manifest.webmanifest",
     icons: {
-      icon: [
-        { url: "/snipe_logo.svg", type: "image/svg+xml" },
-        { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }
-      ],
+      // Bara SVG:n här. icon-192.png har med flit en ogenomskinlig
+      // pappersbakgrund (se scripts/generera_ikoner.mjs) — rätt för ett
+      // installerat app-ikon, men en flikfavicon ska vara transparent.
+      // `apple` nedan är det enda stället app-ikonens beiga bakgrund hör
+      // hemma, tillsammans med manifest.webmanifest.
+      icon: [{ url: "/snajp-symbol-black.svg", type: "image/svg+xml" }],
       apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180" }]
     },
     appleWebApp: {

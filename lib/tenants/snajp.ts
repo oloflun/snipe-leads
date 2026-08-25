@@ -34,9 +34,9 @@ export const snajp: Tenant = {
   supportKeyEnv: "SNAJP_KEY_SNAJP",
 
   logo: {
-    src: "/snipe_logo.svg",
-    width: 132,
-    height: 36,
+    src: "/snajp-logo-v1-black.svg",
+    width: 552,
+    height: 159,
     alt: "Snajp",
     // Ljust fält. Logotypen är mörk ordbild och syns mot papper — motsatsen
     // till Livrustnings, som är vit och försvinner. Kontrollerat mot båda

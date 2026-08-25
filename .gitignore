@@ -69,3 +69,9 @@ screenshots/**/*admin*.png
 
 # Käll-hemligheter för scripts/migrera_till_railway.py — aldrig i repot.
 scripts/.kalla.env
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.beads/proxieddb/

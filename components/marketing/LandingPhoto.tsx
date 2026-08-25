@@ -105,7 +105,9 @@ export function LandingPhoto({
             än kontrollerna, och centrerat hade raden hamnat mitt på logotypen i
             stället för i överkant — se utkastet: båda börjar på samma höjd och
             märket växer nedåt. */}
-        <div className="mx-auto flex max-w-[1480px] items-start justify-between gap-4 px-6 pb-6 pt-[clamp(18px,3.4vw,52px)] md:px-10">
+        {/* 2026-08-25: padding halverad i takt med att märket krympte 50% —
+            annars stod den gamla luften kvar runt en mycket mindre logotyp. */}
+        <div className="mx-auto flex max-w-[1480px] items-start justify-between gap-4 px-6 pb-3 pt-[clamp(9px,1.7vw,26px)] md:px-10">
           <Link href="/" className="focus-ring inline-flex items-center rounded-input text-paper">
             <Logo tone="paper" hjalte />
           </Link>
@@ -561,7 +563,7 @@ export function LandingPhoto({
         <div className="mx-auto max-w-[1480px] px-6 py-12 md:px-10 md:py-16">
           <div className="grid grid-cols-12 gap-y-10 lg:gap-x-12">
             <div className="col-span-12 lg:col-span-4">
-              <Logo compact />
+              <Logo />
               <p className="mt-4 text-[0.875rem] text-ink/45">{text(shared.footerPlats)}</p>
             </div>
 
