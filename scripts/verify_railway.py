@@ -38,6 +38,15 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 failures: list[str] = []
 notes: list[str] = []
 
+#: Tjänster som säger om SIG SJÄLVA att de är degraderade. Avsiktligt inte en
+#: kontroll: tillståndet är känt och accepterat, och en permanent röd rad för
+#: något ingen tänker åtgärda lär läsaren att sluta läsa raden — samma skada
+#: som migrationsräkningen gjorde. Men slutraden får inte säga blankt "alla
+#: gröna" när tjänsten säger motsatsen om sig själv. Den motsägelsen var vad
+#: som lät produktionen sakna både in- och utgående mail utan att
+#: driftkontrollen antydde det med ett ord.
+degraded: list[str] = []
+
 
 #: Sätts av main() så att en fallen kontroll säger VILKEN miljö den gäller.
 #: Utan det blev listan "api: senaste deploy" fyra gånger, vilket är exakt lika
@@ -136,6 +145,8 @@ def verify_http(env_name: str, store: dict) -> None:
               str(payload.get("storage")))
         for w in payload.get("warnings", []):
             notes.append(f"{env_name}/api: {w}")
+        if payload.get("degraded"):
+            degraded.append(f"{env_name}/api")
 
     status, body = http(f"{web}/api/health")
     check(status == 200, "web /api/health svarar", str(status))
@@ -398,8 +409,17 @@ def main() -> int:
         print(f"{len(failures)} kontroll(er) föll:")
         for f in failures:
             print(f"  - {f}")
+        if degraded:
+            print(f"Dessutom {len(degraded)} degraderad(e) tjänst(er): {', '.join(degraded)}")
         return 1
-    print("Alla kontroller gröna, båda miljöerna.")
+    if degraded:
+        # Returkoden är fortfarande 0. Degraderat är inte fällt — men den som
+        # läser sista raden och inget annat ska inte gå därifrån med tron att
+        # allt är i drift.
+        print(f"Alla kontroller gröna, båda miljöerna — men {len(degraded)} "
+              f"degraderad(e) tjänst(er): {', '.join(degraded)}. Se noteringarna.")
+    else:
+        print("Alla kontroller gröna, båda miljöerna.")
     return 0
 
 
