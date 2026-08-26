@@ -183,10 +183,20 @@ export function LeadsRunForm({
       headers: { "Content-Type": "application/json" },
       ...init
     });
-    const kropp = (await readJsonBody<T & { error?: string; detail?: string }>(response)) ?? ({} as T);
+    const kropp = (await readJsonBody<T & { error?: string; detail?: unknown }>(response)) ?? ({} as T);
     if (!response.ok) {
-      const k = kropp as { error?: string; detail?: string };
-      throw new Error(k.detail ?? k.error ?? `Anropet avvisades (${response.status}).`);
+      const k = kropp as { error?: string; detail?: unknown };
+      // Pydantics 422 lägger en LISTA av valideringsfel i `detail`. Ett rakt
+      // `new Error(detail)` renderade "[object Object]" — plocka ut `msg`-
+      // fälten i stället, så att "Antal bolag: högst 50" faktiskt står där.
+      const detaljtext = Array.isArray(k.detail)
+        ? k.detail
+            .map((d) => (d && typeof d === "object" && "msg" in d ? String((d as { msg: unknown }).msg) : String(d)))
+            .join("; ")
+        : typeof k.detail === "string"
+          ? k.detail
+          : undefined;
+      throw new Error(detaljtext ?? k.error ?? `Anropet avvisades (${response.status}).`);
     }
     return kropp;
   }

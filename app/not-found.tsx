@@ -38,7 +38,7 @@ export default async function NotFound() {
   return (
     <main className="grid min-h-screen place-items-center bg-paper p-6">
       <div className="max-w-lg">
-        <EmptyState title="Sidan finns inte" body="Route-strukturen är skapad, men den här adressen matchar ingen vy i Snajp." />
+        <EmptyState title="Sidan finns inte" body="Adressen kan ha ändrats eller skrivits fel. Länkarna i menyn leder alltid rätt." />
         <div className="mt-5 flex justify-center">
           <ButtonLink href="/dashboard">Till dashboard</ButtonLink>
         </div>

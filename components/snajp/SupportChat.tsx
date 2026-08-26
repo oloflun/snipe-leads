@@ -196,6 +196,10 @@ export function SupportChat({ tenant, session }: SupportChatProps = {}) {
             (await readJsonBody<{
               offline?: boolean;
               error?: string;
+              /** FastAPI:s HTTPException lägger texten i `detail`, inte `error`.
+               *  Rate limit-429:an (chat.py) går den vägen; LLM-kvotens 429 går
+               *  via `error`. Båda ska nå användaren — se throw nedan. */
+              detail?: string;
               job_id?: string;
             }>(response)) ?? {};
           return { response, payload };
@@ -232,8 +236,12 @@ export function SupportChat({ tenant, session }: SupportChatProps = {}) {
         if (!response.ok || !payload.job_id) {
           // 429 bär backendens egen, väl formulerade text. Allt annat får en
           // kuraterad mening — payload.error kan i värsta fall vara teknisk.
+          // Uppmätt i drift 2026-08-27: rate limit-429:an kommer som `detail`
+          // (FastAPI HTTPException), LLM-kvotens som `error` — utan båda
+          // fälten visades "Okänt fel" i stället för kvottexten.
+          const kvottext = payload.error ?? payload.detail;
           throw new VisbartFel(
-            response.status === 429 && payload.error ? payload.error : slumpad(FELTEXTER)
+            response.status === 429 && kvottext ? kvottext : slumpad(FELTEXTER)
           );
         }
 

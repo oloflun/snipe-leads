@@ -125,18 +125,24 @@ export function LeadsControls({ demo = false }: Readonly<{ demo?: boolean }>) {
     setError(null);
     setMessage(null);
     startTransition(async () => {
-      const response = await call("/api/snajp-support/leads/config", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch)
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        setError(body.error ?? `Sparningen misslyckades (${response.status}).`);
-        return;
+      // call() är fetch och kastar vid nätverksfel. Utan fångsten dog
+      // transitionen tyst — knappen kom tillbaka och ingenting sa varför.
+      try {
+        const response = await call("/api/snajp-support/leads/config", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patch)
+        });
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          setError(body.error ?? `Sparningen misslyckades (${response.status}).`);
+          return;
+        }
+        setMessage("Sparat.");
+        await load();
+      } catch (cause) {
+        setError(felmeddelande(cause));
       }
-      setMessage("Sparat.");
-      await load();
     });
   }
 
@@ -144,14 +150,18 @@ export function LeadsControls({ demo = false }: Readonly<{ demo?: boolean }>) {
     setError(null);
     setMessage(null);
     startTransition(async () => {
-      const response = await call(`/api/snajp-support/leads/queue/${itemId}/${action}`, {
-        method: "POST"
-      });
-      if (!response.ok) {
-        setError(`Åtgärden misslyckades (${response.status}).`);
-        return;
+      try {
+        const response = await call(`/api/snajp-support/leads/queue/${itemId}/${action}`, {
+          method: "POST"
+        });
+        if (!response.ok) {
+          setError(`Åtgärden misslyckades (${response.status}).`);
+          return;
+        }
+        await load();
+      } catch (cause) {
+        setError(felmeddelande(cause));
       }
-      await load();
     });
   }
 

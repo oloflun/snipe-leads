@@ -59,9 +59,18 @@ export function Affarskontext() {
 
   useEffect(() => {
     let avbruten = false;
-    void hamtaAffarskontext().then((rad) => {
-      if (!avbruten) setFalt(rad ?? TOMT);
-    });
+    hamtaAffarskontext()
+      .then((rad) => {
+        if (!avbruten) setFalt(rad ?? TOMT);
+      })
+      // Utan catch fastnade vyn i skelettet för alltid vid nätverksfel —
+      // falt förblev null och ingenting sa varför. Tomma fält + felraden är
+      // ett läge användaren kan agera på; ett evigt skelett är det inte.
+      .catch((orsak) => {
+        if (avbruten) return;
+        setFalt(TOMT);
+        setFel(orsak instanceof Error ? orsak.message : "Kunde inte hämta affärskontexten.");
+      });
     return () => {
       avbruten = true;
     };

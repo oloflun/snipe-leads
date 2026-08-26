@@ -17,6 +17,7 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useArbetsvag } from "@/components/AppShell";
+import { EjAktiverad, arEjAktiverad } from "@/components/EjAktiverad";
 import { Badge, btnPrimary, btnSecondary } from "@/components/ui";
 import { createDemoSupportApi } from "@/lib/demo/support-inbox";
 import { readJsonBody } from "@/lib/http/json";
@@ -99,6 +100,14 @@ const EVENT_LABELS: Record<string, string> = {
   rule_changed: "Regel ändrad"
 };
 
+/** Markör så refresh() kan skilja väntläget från riktiga fel utan texttolkning. */
+class EjAktiveradFel extends Error {
+  constructor() {
+    super("Arbetsytan är inte aktiverad ännu.");
+    this.name = "EjAktiveradFel";
+  }
+}
+
 function ConfidenceBar({ value }: Readonly<{ value: number }>) {
   const percent = Math.round(value * 100);
   return (
@@ -134,6 +143,7 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
   const [draftText, setDraftText] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [ejAktiverad, setEjAktiverad] = useState(false);
   const [syncInfo, setSyncInfo] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   /**
@@ -196,6 +206,13 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
       );
     }
     if (!response.ok) {
+      // Ej aktiverad är ett VÄNTLÄGE, inte ett fel — samma gräns som i
+      // Svar/Bolagsregister/Kontakter. Utan den här grenen visades
+      // driftinstruktionen ur requireSnajpTenant() i en röd banner för en
+      // nyregistrerad kund, i den vy som är supportkundens huvudvy.
+      if (arEjAktiverad(response.status, payload)) {
+        throw new EjAktiveradFel();
+      }
       throw new Error(payload.detail ?? payload.error ?? "Okänt fel");
     }
     return payload;
@@ -212,6 +229,10 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
       setEmails(data.emails);
       setCategoryCounts(data.category_counts);
     } catch (caught) {
+      if (caught instanceof EjAktiveradFel) {
+        setEjAktiverad(true);
+        return;
+      }
       setError(caught instanceof Error ? caught.message : "Kunde inte hämta inkorgen.");
     }
   }, [api, sokning, statusFilter, categoryFilter]);
@@ -384,6 +405,10 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
   );
 
   const canReview = selected?.draft?.status === "pending";
+
+  if (ejAktiverad) {
+    return <EjAktiverad yta="Kundtjänst" />;
+  }
 
   return (
     <div className="space-y-6">

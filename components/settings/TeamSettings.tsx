@@ -23,7 +23,14 @@ export function TeamSettings() {
   const [isPending, startTransition] = useTransition();
 
   async function reload() {
-    setMembers(await listTeam());
+    // listTeam kan kasta (nätverk, session). Utan fångsten förblev members
+    // null och sidan stod i skelettet för alltid, utan ett ord om varför.
+    try {
+      setMembers(await listTeam());
+    } catch (orsak) {
+      setMembers([]);
+      setError(orsak instanceof Error ? orsak.message : "Kunde inte hämta teamet.");
+    }
   }
 
   useEffect(() => {

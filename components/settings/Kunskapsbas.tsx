@@ -67,9 +67,17 @@ export function KunskapsbasKort() {
 
   useEffect(() => {
     let avbruten = false;
-    void hamtaAffarskontext().then((rad) => {
-      if (!avbruten) setKontextIfylld(Boolean(rad?.product.trim()));
-    });
+    hamtaAffarskontext()
+      .then((rad) => {
+        if (!avbruten) setKontextIfylld(Boolean(rad?.product.trim()));
+      })
+      // Samma filosofi som kb-hämtningen nedan: kortet är en genväg och ska
+      // inte visa felbanners. Men utan catch stod "hämtar…" kvar för evigt
+      // vid nätverksfel. Falskt "inte ifylld ännu" kostar bara att länken
+      // säger "Fyll i" i stället för "Ändra" — den leder rätt oavsett.
+      .catch(() => {
+        if (!avbruten) setKontextIfylld(false);
+      });
     fetch("/api/snajp-support/kb", { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
       .then((data: { articles?: Artikel[] } | null) => {
