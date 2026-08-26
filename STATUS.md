@@ -1,5 +1,23 @@
 # Snipra Status
 
+## 2026-08-27 (senare samma natt) — Claude/Sebbe — go/no-go-granskning, tre av Antons trådar stängda, fem fixar live i development
+
+Full lanseringsgranskning av hela ytan + live-verifiering; rapport i
+`HANDOFF-2026-08-27-GRANSKNING.md`, sessionslogg i
+`session-logs/2026-08-27-session-log.md`. **Isolering GODKÄND mot körande DB**
+(snajp_web/snajp_app utan BYPASSRLS, RLS 64/64 tabeller). Antons agentbackend-
+handoff genomgången: RRF-fusionen skarpverifierad mot Postgres, chat-E2E grön
+hela HTTP-vägen (KB-grundat svar), larande-vyerna verifierade inloggat.
+Svar-E2E blockerad av Gemini-429 (chatten gick igenom — troligen annan
+kvotpott per modell). Antons enda röda test lagat (agent_feedback-sortering)
+→ 1450 gröna. Nytt i koden: timtak på /api/triage (var enda LLM-vägen utan
+enforce), startvakt mot dev-masternyckeln, error.tsx/global-error.tsx,
+429-texter, EjAktiverad i supportinkorgen, fyra catch-lösa hämtvägar.
+Pushat till `development` (nya deploy-kedjan), deployad commit f081e11
+verifierad med verify_railway.py — allt grönt. `main` orörd; kvarstående
+main-blockerare i handoffens §4 (SMTP-attrappen, fakturering, orgnr-
+platshållaren, kvoterna 150/300, Redis, Gemini-kvoten).
+
 ## 2026-08-27 (natt) — Claude — varv 2–3: mätningen bevisad, grindarna skärpta, och två arkitekturmönster hämtade utifrån
 
 Fortsättning på kvällens audit, på Antons uttryckliga "fortsätt tills jag säger
