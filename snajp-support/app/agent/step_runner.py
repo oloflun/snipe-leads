@@ -266,11 +266,17 @@ async def run_step(
     effective_mode = step.thinking if step.thinking is not None else settings.thinking_mode
     extra = thinking_kwargs(effective_mode) if settings.llm_provider == "deepseek" else {}
 
+    # Formuleringssteg (humanizer, utkast) får deklarera en varmare temperatur
+    # i playbooken; analys- och bedömningssteg ärver den kalla defaulten.
+    # Transportfel (timeout, 429, 5xx) hanteras av AsyncOpenAI-klientens egna
+    # omtag med exponentiell backoff — se get_llm_client i agent/llm.py.
+    effective_temperature = step.temperature if step.temperature is not None else 0.3
+
     for attempt in (1, 2):
         response = await client.chat.completions.create(
             model=settings.model,
             response_format={"type": "json_object"},
-            temperature=0.3,
+            temperature=effective_temperature,
             messages=messages,
             **extra,
         )

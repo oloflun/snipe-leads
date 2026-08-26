@@ -164,22 +164,26 @@ async def test_escalates_in_code_even_when_model_says_no_escalation():
 
 
 @pytest.mark.anyio
-async def test_escalates_when_knowledge_base_has_no_match_on_a_full_library():
-    """Tom träfflista på ett FULLT bibliotek betyder fortfarande "vi kan inte
-    svara" — där är tomheten ett besked, inte ett sökfel.
+async def test_full_library_miss_asks_first_then_escalates_on_the_second_turn():
+    """2026-08-25: en första miss får en följdfråga ÄVEN på ett fullt bibliotek.
 
-    `_kb_ar_tunn` är falsk här (KB:n är seedad med demoartiklarna), så
-    följdfrågevägen är stängd och den gamla regeln gäller oförändrad.
+    Tidigare gällde "tomhet på fullt bibliotek är ett besked" redan i första
+    turen. Men en första miss betyder oftare "frågan var för vag för att
+    sökas" än "svaret finns inte" — en förtydligad fråga får ett andra
+    sökvarv. Först när även den andra turen går tom är tomheten ett besked,
+    och DÅ eskalerar ärendet precis som förut.
     """
     storage = MemoryStorage()
     llm = _FakeLLM(overrides={"cs:customer-research": {"kb_supports_answer": False}})
     with patch(
         "app.agent.support_agent._sok_kb", new=AsyncMock(return_value=[])
     ):
-        result = await _run(storage, llm)
+        forsta = await _run(storage, llm)
+        andra = await _run(storage, llm, message="Jag menar för företagskonton.")
 
-    assert result["escalated"] is True
-    assert result["kb_sources"] == []
+    assert forsta["escalated"] is False, "Första missen ska ge en följdfråga, inte en överlämning."
+    assert forsta["kb_sources"] == []
+    assert andra["escalated"] is True, "Andra turen utan svar ska fortfarande eskalera."
 
 
 @pytest.mark.anyio
@@ -252,7 +256,7 @@ async def test_broken_contract_retries_once_then_escalates_that_step():
 
 
 async def _tunn_kb(storage):
-    """En tenant med färre artiklar än TUNN_KB_GRANS."""
+    """En tenant med ett nästan tomt bibliotek (en enda artikel)."""
     storage.kb[TENANT] = []
     await storage.add_kb_article(
         TENANT, title="Öppettider", content="Vi har öppet 9-17.", category="ovrigt"
@@ -366,12 +370,16 @@ async def test_ett_tredje_forsok_gors_pa_det_researchsteget_sager_saknas():
 @pytest.mark.anyio
 async def test_kb_supports_answer_false_vager_in_aven_med_traffar():
     """DEL 3.2. Förut stod flaggan bara som kontext åt nästa steg. Nu avgör
-    den i kod: träffar som inte bär svaret är inte ett svar."""
+    den i kod: träffar som inte bär svaret är inte ett svar.
+
+    Sedan 2026-08-25 ger första turen en följdfråga, så flaggans verkan
+    mäts i ANDRA turen: träffar utan svar ska då eskalera."""
     storage = MemoryStorage()
     llm = _FakeLLM(overrides={"cs:customer-research": {"kb_supports_answer": False}})
-    result = await _run(storage, llm, message="Vilka betalsätt accepterar ni?")
+    forsta = await _run(storage, llm, message="Vilka betalsätt accepterar ni?")
+    result = await _run(storage, llm, message="Jag menar för delbetalning.")
 
-    # Full KB => inte tunn => ingen följdfråga => eskalering.
+    assert forsta["escalated"] is False
     assert result["escalated"] is True
     assert result["kb_sources"], "Testet mäter fel sak: sökningen gav inga träffar."
 
@@ -385,7 +393,8 @@ async def test_kb_supports_answer_false_vager_in_aven_med_traffar():
     [
         "Jag anmäler er till ARN.",
         "Jag vill att ni raderar alla mina uppgifter enligt GDPR.",
-        "Det här är en fråga om dataskydd och personuppgifter.",
+        "Radera mitt konto, tack.",
+        "Jag begär ett registerutdrag över allt ni har om mig.",
         "Jag kräver återbetalning.",
         "Min advokat hör av sig.",
         "Jag vill ha kompensation för det här.",

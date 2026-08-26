@@ -683,6 +683,13 @@ class Storage(Protocol):
         self, tenant_id: str, underlag_id: str
     ) -> dict[str, Any] | None: ...
 
+    async def get_bk_underlag_by_sha256(
+        self, tenant_id: str, sha256: str
+    ) -> dict[str, Any] | None:
+        """Svaret på "har vi sett det här kvittot förut?" — hela skälet till
+        att sha256 sparas, se noten ovan. Äldsta träffen om flera finns."""
+        ...
+
     async def list_bk_underlag(
         self,
         tenant_id: str,

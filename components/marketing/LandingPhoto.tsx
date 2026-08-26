@@ -70,8 +70,14 @@ function Label({ children, tone = "ink" }: Readonly<{ children: React.ReactNode;
 export function LandingPhoto({
   initial,
   leadsDemo,
-  supportDemo
-}: Readonly<{ initial: ProductKey; leadsDemo: React.ReactNode; supportDemo: React.ReactNode }>) {
+  supportDemo,
+  bookkeepingDemo
+}: Readonly<{
+  initial: ProductKey;
+  leadsDemo: React.ReactNode;
+  supportDemo: React.ReactNode;
+  bookkeepingDemo: React.ReactNode;
+}>) {
   const { text, locale, toggleLocale } = useLocale();
   const [product, setProduct] = useState<ProductKey>(initial);
   const demoRef = useRef<HTMLDivElement | null>(null);
@@ -335,7 +341,7 @@ export function LandingPhoto({
         {/* DEMO. */}
         <section id="demo" ref={demoRef} className="scroll-mt-16 bg-paper2/45">
           <div className="mx-auto max-w-[1480px] px-6 py-24 md:px-10 md:py-28">
-            <div className="max-w-[46ch]">
+            <div className="max-w-[50ch]">
               <h2 className="font-display text-[clamp(1.875rem,3.6vw,2.875rem)] font-semibold leading-[1.06] tracking-[-0.028em]">
                 <Display text={text(copy.demoHeading)} />
               </h2>
@@ -343,8 +349,16 @@ export function LandingPhoto({
             </div>
             <div className="mt-10 overflow-hidden rounded-panel border border-ink/12 bg-paper">
               <div className="flex items-center justify-between gap-4 border-b border-ink/10 bg-paper2/60 px-5 py-3.5">
+                {/* Etiketten per produkt, inte "allt som inte är leads är
+                    support": den grenen visade "Snajp Support" ovanför
+                    bokföringsdemon — fel produktnamn på en sida som säljer en
+                    annan produkt. */}
                 <span className="text-[0.8125rem] font-medium tracking-[0.02em] text-ink/55">
-                  {product === "leads" ? "Email Studio" : "Snajp Support"}
+                  {product === "leads"
+                    ? "Email Studio"
+                    : product === "support"
+                      ? "Snajp Support"
+                      : "Snajp Bokföring"}
                 </span>
                 {/* Ingen statusuppgift här: supportchatten rapporterar sitt
                     eget läge, och backenden kan gå i simulering. Två sanningar
@@ -359,7 +373,11 @@ export function LandingPhoto({
                   aria-labelledby={`product-tab-${key}`}
                   hidden={key !== product}
                 >
-                  {key === "leads" ? leadsDemo : supportDemo}
+                  {/* En gren per produkt. Tvågrenaren `leads ? … : supportDemo`
+                      lät bokföringsfliken rendera supportchatten — fel agent,
+                      fel varumärkesetikett ("Nordlys Handel") och fel
+                      förslagsfrågor på /bokforing. */}
+                  {key === "leads" ? leadsDemo : key === "support" ? supportDemo : bookkeepingDemo}
                 </div>
               ))}
               </div>
@@ -462,12 +480,25 @@ export function LandingPhoto({
                 <p className="rise mt-6 max-w-[62ch] text-[1.0625rem] leading-[1.7] text-ink/78">
                   {text(shared.vilkaText2)}
                 </p>
-                <a
-                  href={mejlaOss()}
-                  className="focus-ring mt-8 inline-flex min-h-12 items-center rounded-input border border-ink/20 px-6 text-[0.9375rem] font-semibold transition-colors hover:border-ink"
-                >
-                  {text(shared.secondaryCta)}
-                </a>
+                {/* Två vägar vidare, inte en utbytt. Avsnittet reser frågan
+                    "vilka är ni" och slutade tidigare med "skriv till oss" —
+                    ett svar på en fråga ingen ställde. Teamsidan svarar på den
+                    som faktiskt ställdes. Mejlvägen står kvar för den som
+                    hellre frågar än läser. */}
+                <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3">
+                  <a
+                    href={mejlaOss()}
+                    className="focus-ring inline-flex min-h-12 items-center rounded-input border border-ink/20 px-6 text-[0.9375rem] font-semibold transition-colors hover:border-ink"
+                  >
+                    {text(shared.secondaryCta)}
+                  </a>
+                  <Link
+                    href="/vart-team"
+                    className="focus-ring text-[0.9375rem] font-medium underline underline-offset-4 hover:text-ochre"
+                  >
+                    {text(shared.vilkaLank)}
+                  </Link>
+                </div>
               </div>
             </div>
           </div>
@@ -493,6 +524,17 @@ export function LandingPhoto({
                     </dd>
                   </div>
                 ))}
+                {/* De tre ovan är produktens invändningar, valda för att de
+                    kommer FÖRST. Resten — pris, uppsägning, var datan kommer
+                    ifrån, hur GDPR hanteras — bor på /faq, eftersom de ställs
+                    av någon som redan bestämt sig för att titta närmare och
+                    inte hör hemma mitt i argumentet. */}
+                <Link
+                  href="/faq"
+                  className="focus-ring mt-8 inline-block text-[0.9375rem] font-medium underline underline-offset-4 hover:text-ochre"
+                >
+                  {text(shared.fragorLank)}
+                </Link>
               </dl>
             </div>
           </div>

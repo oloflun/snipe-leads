@@ -2067,6 +2067,16 @@ class PostgresStorage:
             record = await conn.fetchrow("select * from bk_underlag where id = $1", underlag_id)
         return _row(record)
 
+    async def get_bk_underlag_by_sha256(
+        self, tenant_id: str, sha256: str
+    ) -> dict[str, Any] | None:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                "select * from bk_underlag where sha256 = $1 order by created_at limit 1",
+                sha256,
+            )
+        return _row(record)
+
     async def list_bk_underlag(
         self,
         tenant_id: str,

@@ -18,6 +18,7 @@ Kräver RAILWAY_TOKEN och per-miljö-uppgifterna i .env.deploy.
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -32,8 +33,19 @@ from railway_migrate import dsn  # noqa: E402
 from railway_provision import (ENVIRONMENTS, PROJECT_ID, env_read,  # noqa: E402
                                envs_by_name, instance, services_by_name, state)
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
 failures: list[str] = []
 notes: list[str] = []
+
+#: Tjänster som säger om SIG SJÄLVA att de är degraderade. Avsiktligt inte en
+#: kontroll: tillståndet är känt och accepterat, och en permanent röd rad för
+#: något ingen tänker åtgärda lär läsaren att sluta läsa raden — samma skada
+#: som migrationsräkningen gjorde. Men slutraden får inte säga blankt "alla
+#: gröna" när tjänsten säger motsatsen om sig själv. Den motsägelsen var vad
+#: som lät produktionen sakna både in- och utgående mail utan att
+#: driftkontrollen antydde det med ett ord.
+degraded: list[str] = []
 
 
 #: Sätts av main() så att en fallen kontroll säger VILKEN miljö den gäller.
@@ -133,6 +145,8 @@ def verify_http(env_name: str, store: dict) -> None:
               str(payload.get("storage")))
         for w in payload.get("warnings", []):
             notes.append(f"{env_name}/api: {w}")
+        if payload.get("degraded"):
+            degraded.append(f"{env_name}/api")
 
     status, body = http(f"{web}/api/health")
     check(status == 200, "web /api/health svarar", str(status))
@@ -189,7 +203,82 @@ def scrub(text: str, store: dict) -> str:
     return text
 
 
-def verify_database(env_name: str, store: dict) -> None:
+def _git(*args: str) -> tuple[int, str]:
+    """Kör git i repo-roten. Returnerar (returkod, utdata eller felrad)."""
+    try:
+        proc = subprocess.run(
+            ["git", *args], cwd=REPO_ROOT, capture_output=True,
+            text=True, encoding="utf-8", errors="replace", timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:  # noqa: BLE001
+        return 1, str(exc)
+    return proc.returncode, (proc.stdout if proc.returncode == 0 else proc.stderr).strip()
+
+
+def deployed_migrations(project: dict, env_id: str, branch: str) -> tuple[set[str] | None, str]:
+    """Migrationerna som den DEPLOYADE koden bär — inte arbetskopians.
+
+    ## Varför inte arbetskopian
+
+    Kontrollen räknade förut filerna i `supabase/migrations/` och jämförde
+    antalet med liggarens. Det gör svaret beroende av vilken gren den som kör
+    råkar stå på. Från en development-checkout föll den alltid på main med
+    "89 av 98" — och de nio fanns inte i main-koden heller, alltså var
+    produktionen konsistent med sig själv. En kontroll som faller av godartade
+    skäl lär läsaren att hoppa över raden, och då är den värre än ingen
+    kontroll: den döljer den dag glappet är på riktigt.
+
+    Rätt referens är den commit Railway faktiskt kör. Ett glapp mot DEN betyder
+    att koden i drift förutsätter ett schema som inte finns, vilket är det enda
+    tillstånd som gör något sönder.
+
+    ## Fallbacken, och varför den inte är tyst
+
+    Commiten kan saknas lokalt (ingen har hämtat grenen). Vi hämtar den då, och
+    faller i sista hand tillbaka på `origin/<gren>`. Vilken referens som
+    användes returneras med, så att en grön rad går att lita på — en fallback
+    som inte syns är ett antagande som utger sig för att vara ett mätvärde.
+    Går ingendera att läsa returneras None, och anroparen fäller kontrollen: en
+    kontroll som inte kunde köras får aldrig räknas som grön.
+    """
+    sha = None
+    services = services_by_name(project)
+    for name in ("web", "api"):
+        svc = services.get(name)
+        inst = instance(svc, env_id) if svc else None
+        meta = ((inst or {}).get("latestDeployment") or {}).get("meta") or {}
+        if meta.get("commitHash"):
+            sha = meta["commitHash"]
+            break
+
+    kandidater = []
+    if sha:
+        kandidater.append((sha, f"deployad commit {sha[:8]}"))
+    kandidater.append((f"origin/{branch}", f"origin/{branch}"))
+
+    for ref, label in kandidater:
+        kod, ut = _git("ls-tree", "-r", "--name-only", ref, "--", "supabase/migrations")
+        if kod != 0 and ref == sha:
+            _git("fetch", "--quiet", "origin", ref)
+            kod, ut = _git("ls-tree", "-r", "--name-only", ref, "--", "supabase/migrations")
+        if kod == 0 and ut:
+            stems = {Path(rad).stem for rad in ut.splitlines() if rad.endswith(".sql")}
+            # railway_migrate.py kör railway/000_auth_compat.sql först och
+            # registrerar den under sitt filnamn. Den ligger utanför
+            # supabase/migrations/ men är en rad i samma liggare.
+            return stems | {"000_auth_compat"}, label
+    return None, (f"deployad commit {sha[:8]}" if sha else f"origin/{branch}")
+
+
+def _lista(namn: list[str], tak: int = 6) -> str:
+    """Namnen, inte antalet. "nio saknas" går inte att åtgärda; namnen gör det."""
+    if len(namn) <= tak:
+        return ", ".join(namn)
+    return ", ".join(namn[:tak]) + f" … (+{len(namn) - tak})"
+
+
+def verify_database(env_name: str, store: dict,
+                    expected: set[str] | None, ref_label: str) -> None:
     global scope
     scope = env_name
     print(f"\n[{env_name}] databas")
@@ -211,10 +300,39 @@ def verify_database(env_name: str, store: dict) -> None:
         return
     cur = conn.cursor()
 
-    cur.execute("select count(*) from supabase_migrations.schema_migrations")
-    applied = cur.fetchone()[0]
-    on_disk = len(list((Path(__file__).resolve().parents[1] / "supabase" / "migrations").glob("*.sql"))) + 1
-    check(applied == on_disk, "alla migrationer körda", f"{applied} av {on_disk}")
+    # Identiteter, inte antal. Två lika stora mängder kan vara olika mängder,
+    # och "89 av 98" säger inte VILKA nio — alltså inte vad man ska göra.
+    cur.execute("select version from supabase_migrations.schema_migrations")
+    applied = {r[0] for r in cur.fetchall()}
+
+    if expected is None:
+        check(False, "migrationerna i den deployade koden går att lista",
+              f"{ref_label} kunde inte läsas ur git")
+    else:
+        saknas = sorted(expected - applied)
+        check(not saknas, f"schemat bär den deployade koden ({ref_label})",
+              f"{len(saknas)} okörd(a): {_lista(saknas)}")
+
+        # Framförhållning är inte ett fel. Arbetskopian står ofta på
+        # development medan main kör en äldre commit; de migrationerna hör
+        # till kod som ännu inte befordrats och ska INTE köras här.
+        i_arbetskopian = {p.stem for p in (REPO_ROOT / "supabase" / "migrations").glob("*.sql")}
+        vantar = sorted(i_arbetskopian - expected - applied)
+        if vantar:
+            notes.append(
+                f"[{env_name}] {len(vantar)} migration(er) finns i arbetskopian men inte i "
+                f"{ref_label} — de hör till kod som inte befordrats hit: {_lista(vantar)}"
+            )
+
+        # Schemat före koden. Ofarligt i sig (en körd migration som rullats
+        # tillbaka i git), men det är också hur en körning mot fel miljö ser
+        # ut, så det får inte passera osagt.
+        overskott = sorted(applied - expected)
+        if overskott:
+            notes.append(
+                f"[{env_name}] {len(overskott)} körd(a) migration(er) finns inte i {ref_label} "
+                f"— schemat ligger före koden: {_lista(overskott)}"
+            )
 
     # RLS på ALLA tabeller. I produktionen kommer den från event-triggern
     # `ensure_rls`, inte från något `alter table` — en miljö utan triggern får
@@ -273,9 +391,11 @@ def main() -> int:
         if env_name not in environments:
             check(False, f"miljön {env_name} finns")
             continue
-        verify_services(project, env_name, environments[env_name], branch)
+        env_id = environments[env_name]
+        verify_services(project, env_name, env_id, branch)
         verify_http(env_name, store)
-        verify_database(env_name, store)
+        expected, ref_label = deployed_migrations(project, env_id, branch)
+        verify_database(env_name, store, expected, ref_label)
 
     verify_isolation(store)
 
@@ -289,8 +409,17 @@ def main() -> int:
         print(f"{len(failures)} kontroll(er) föll:")
         for f in failures:
             print(f"  - {f}")
+        if degraded:
+            print(f"Dessutom {len(degraded)} degraderad(e) tjänst(er): {', '.join(degraded)}")
         return 1
-    print("Alla kontroller gröna, båda miljöerna.")
+    if degraded:
+        # Returkoden är fortfarande 0. Degraderat är inte fällt — men den som
+        # läser sista raden och inget annat ska inte gå därifrån med tron att
+        # allt är i drift.
+        print(f"Alla kontroller gröna, båda miljöerna — men {len(degraded)} "
+              f"degraderad(e) tjänst(er): {', '.join(degraded)}. Se noteringarna.")
+    else:
+        print("Alla kontroller gröna, båda miljöerna.")
     return 0
 
 

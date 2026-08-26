@@ -4,7 +4,7 @@ import { ImagePlus, Loader2, Send, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { btnPrimary } from "@/components/ui";
 import { AgentMenu } from "@/components/snajp/AgentMenu";
-import { readJsonBody } from "@/lib/http/json";
+import { HttpJsonError, felmeddelande, readJsonBody } from "@/lib/http/json";
 import { useLocale } from "@/lib/i18n";
 import { getTenant } from "@/lib/tenants";
 import { cn } from "@/lib/utils";
@@ -83,6 +83,31 @@ export type SupportChatProps = {
  * Läses vid utskick och inte i en effekt, så att det aldrig finns ett fönster
  * där identiteten är null och adressen blir "null@session.snajp.se".
  */
+/**
+ * Fel visas som en mening en människa kan agera på — aldrig `error.message`
+ * från ett kastat undantag. Den vägen visade tidigare stringifierade
+ * Python-undantag ("'ascii' codec can't encode character…") och webbläsarens
+ * "Failed to fetch" i den publika chattens röda bubbla. Små pooler i stället
+ * för en konstant, så att tre fel i rad inte läser som en papegoja.
+ */
+const FELTEXTER = [
+  "Jag fick inte fram ett svar den här gången. Prova gärna att skicka frågan igen om en liten stund.",
+  "Något hakade upp sig på vägen — frågan kom aldrig hela vägen fram. Skicka den gärna en gång till.",
+  "Där tappade jag tråden. Ställ gärna frågan igen, eller formulera den på ett annat sätt så gör jag ett nytt försök."
+];
+
+const TIMEOUT_TEXTER = [
+  "Det här svaret tog längre tid än det borde. Skicka gärna frågan igen — andra försöket brukar gå fortare.",
+  "Svaret hann inte bli klart. Prova igen om en liten stund, så tar jag det därifrån."
+];
+
+function slumpad(texter: string[]): string {
+  return texter[Math.floor(Math.random() * texter.length)];
+}
+
+/** Ett fel vars text är skriven för kunden och därför FÅR visas ordagrant. */
+class VisbartFel extends Error {}
+
 function demoSessionId(): string {
   const KEY = "snajp.demo.session";
   let id = window.sessionStorage.getItem(KEY);
@@ -111,6 +136,9 @@ export function SupportChat({ tenant, session }: SupportChatProps = {}) {
   const [input, setInput] = useState("");
   const [attachment, setAttachment] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Sant medan vi ger backenden en andra chans att vakna ur viloläge — då
+  // byter arbetsindikatorn text så att väntan har en förklaring.
+  const [vaknar, setVaknar] = useState(false);
   const [mode, setMode] = useState<"unknown" | "simulation" | "live" | "offline">("unknown");
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -145,30 +173,50 @@ export function SupportChat({ tenant, session }: SupportChatProps = {}) {
       setBusy(true);
 
       try {
-        const response = await fetch("/api/snajp-support/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            message: trimmed,
-            channel: "web",
-            // En besökare identifieras av sitt session-id tills hen uppger något
-            // mer. Demon får ett eget id per flik (demoSession) i stället för en
-            // delad identitet, så att ingen ser spår av föregående besökare.
-            customer_email: `${session ?? demoSessionId()}@session.snajp.se`,
-            customer_name: session ? "Webbesökare" : "Demo Kund",
-            session_key: session ?? demoSessionId(),
-            tenant,
-            attachments
-          })
-        });
-        // readJsonBody behåller offline-läget (503 med `offline: true`) som ett
-        // läge i UI:t, men kastar läsbart om kroppen är tom eller inte JSON.
-        const payload =
-          (await readJsonBody<{
-            offline?: boolean;
-            error?: string;
-            job_id?: string;
-          }>(response)) ?? {};
+        const posta = async () => {
+          const response = await fetch("/api/snajp-support/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              message: trimmed,
+              channel: "web",
+              // En besökare identifieras av sitt session-id tills hen uppger något
+              // mer. Demon får ett eget id per flik (demoSession) i stället för en
+              // delad identitet, så att ingen ser spår av föregående besökare.
+              customer_email: `${session ?? demoSessionId()}@session.snajp.se`,
+              customer_name: session ? "Webbesökare" : "Demo Kund",
+              session_key: session ?? demoSessionId(),
+              tenant,
+              attachments
+            })
+          });
+          // readJsonBody behåller offline-läget (503 med `offline: true`) som ett
+          // läge i UI:t, men kastar läsbart om kroppen är tom eller inte JSON.
+          const payload =
+            (await readJsonBody<{
+              offline?: boolean;
+              error?: string;
+              job_id?: string;
+            }>(response)) ?? {};
+          return { response, payload };
+        };
+
+        let { response, payload } = await posta();
+
+        // Offline betyder oftast kallstart, och den läker av sig själv inom en
+        // minut. En andra chans i det tysta — med en förklarande arbetstext —
+        // är bättre än att direkt be besökaren försöka själv.
+        if (payload.offline) {
+          setVaknar(true);
+          try {
+            await new Promise((resolve) => setTimeout(resolve, 5000));
+            if (!alive.current) return;
+            ({ response, payload } = await posta());
+          } finally {
+            setVaknar(false);
+          }
+        }
+
         if (payload.offline) {
           setMode("offline");
           setMessages((current) => [
@@ -176,13 +224,17 @@ export function SupportChat({ tenant, session }: SupportChatProps = {}) {
             {
               id: crypto.randomUUID(),
               role: "system",
-              content: payload.error ?? "Supporten är inte tillgänglig just nu. Försök igen om en stund."
+              content: payload.error ?? "Assistenten är inte tillgänglig just nu. Försök gärna igen om en liten stund."
             }
           ]);
           return;
         }
         if (!response.ok || !payload.job_id) {
-          throw new Error(payload.error ?? "Okänt fel");
+          // 429 bär backendens egen, väl formulerade text. Allt annat får en
+          // kuraterad mening — payload.error kan i värsta fall vara teknisk.
+          throw new VisbartFel(
+            response.status === 429 && payload.error ? payload.error : slumpad(FELTEXTER)
+          );
         }
 
         for (let attempt = 0; attempt < 90; attempt += 1) {
@@ -230,18 +282,30 @@ export function SupportChat({ tenant, session }: SupportChatProps = {}) {
             return;
           }
           if (job.status === "failed") {
-            throw new Error(job.error ?? "Agentkörningen misslyckades");
+            // job.error var tidigare det stringifierade Python-undantaget och
+            // visades ordagrant. Diagnosen finns i backend-loggen; besökaren
+            // får en mening som pekar framåt.
+            throw new VisbartFel(slumpad(FELTEXTER));
           }
         }
-        throw new Error("Svaret tog för lång tid. Försök igen.");
+        throw new VisbartFel(slumpad(TIMEOUT_TEXTER));
       } catch (error) {
+        // VisbartFel är skrivet för kunden. HttpJsonError/AbortError/TypeError
+        // får sina svenska texter via felmeddelande. Allt annat — okända
+        // undantag med tekniska meddelanden — blir en kuraterad mening, och
+        // detaljen går till konsolen i stället för till chattbubblan.
+        if (!(error instanceof VisbartFel)) {
+          console.error("SupportChat:", error);
+        }
+        const content =
+          error instanceof VisbartFel
+            ? error.message
+            : error instanceof HttpJsonError || (error instanceof DOMException && error.name === "AbortError") || error instanceof TypeError
+              ? felmeddelande(error, slumpad(FELTEXTER))
+              : slumpad(FELTEXTER);
         setMessages((current) => [
           ...current,
-          {
-            id: crypto.randomUUID(),
-            role: "system",
-            content: error instanceof Error ? error.message : "Något gick fel. Försök igen."
-          }
+          { id: crypto.randomUUID(), role: "system", content }
         ]);
       } finally {
         setBusy(false);
@@ -373,7 +437,12 @@ export function SupportChat({ tenant, session }: SupportChatProps = {}) {
           <div className="flex justify-start">
             <div className="inline-flex items-center gap-2 rounded-card bg-paper2/80 px-4 py-3 text-[0.9375rem] text-ink/60">
               <Loader2 className="h-4 w-4 animate-spin" />
-              {text({ sv: "Agenten arbetar", en: "The agent is working" })}
+              {vaknar
+                ? text({
+                    sv: "Assistenten vaknar — det kan ta upp till en minut",
+                    en: "The assistant is waking up — this can take up to a minute"
+                  })
+                : text({ sv: "Agenten arbetar", en: "The agent is working" })}
             </div>
           </div>
         ) : null}

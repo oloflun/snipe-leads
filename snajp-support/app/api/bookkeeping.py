@@ -78,8 +78,33 @@ async def ta_emot_underlag(
     Ordningen är hela poängen: filen finns bara i minnet under anropet, och det
     som skrivs till databasen är fälten plus en sha256. Se
     `app/bookkeeping/underlag.py`.
+
+    ## Dubblettspärren
+
+    Samma fil två gånger är nästan alltid ett misstag — en dubbelklick, ett
+    kvitto någon glömt att de redan laddat upp — och ett dubblerat underlag
+    blir en dubblerad kostnad i periodrapporten, vilket är precis den sortens
+    trovärdiga men felaktiga tal INV-BOOK-002 finns för att stoppa. Spärren
+    jämför sha256 mot tenantens befintliga underlag (det är hela skälet till
+    att hashen sparas, se storage/base.py) och avvisar med 422 i stället för
+    att tyst spara en flaggad rad: ett tydligt nej vid uppladdningen är
+    billigare än en granskningspost, och kostar dessutom inget LLM-anrop —
+    därför ligger den FÖRE textutvinningen. Två identiska köp ger aldrig två
+    byteidentiska filer (foton skiljer sig alltid), så falsklarmsrisken som
+    fällde dubblettdetektering i verifieringsgrinden finns inte här.
     """
     kontrollera_fil(data, mimetyp)
+
+    sha256 = sha256_av(data)
+    dubblett = await storage.get_bk_underlag_by_sha256(tenant_id, sha256)
+    if dubblett is not None:
+        beskrivning = dubblett.get("filnamn") or "ett underlag"
+        datum = dubblett.get("datum")
+        raise UnderlagsfelError(
+            f"Samma fil är redan uppladdad ({beskrivning}"
+            + (f", {datum}" if datum else "")
+            + "). Dubbletten sparades inte — radera den gamla först om den är fel."
+        )
 
     if mimetyp == "application/pdf":
         text = las_pdf_text(data)
@@ -101,7 +126,7 @@ async def ta_emot_underlag(
 
     underlag = await storage.create_bk_underlag(
         tenant_id,
-        sha256=sha256_av(data),
+        sha256=sha256,
         filnamn=filnamn or "underlag",
         mimetyp=mimetyp,
         status=avlasning.status,

@@ -77,32 +77,87 @@ async function vidarebefordra(
   }
 
   const inkommandeTyp = request.headers.get("content-type");
-  const svar = await fetch(`${SNAJP_SUPPORT_URL}${backendPath(path, request.nextUrl.search)}`, {
-    method: metod,
-    headers: {
-      "X-API-Key": tenant.apiKey,
-      "X-Snajp-User": tenant.userId,
-      // Multipart bär en boundary i sin content-type. Sätts den om, eller
-      // utelämnas, kan mottagaren inte dela upp kroppen alls.
-      ...(inkommandeTyp ? { "Content-Type": inkommandeTyp } : {})
-    },
-    // DELETE bär inga bytes. Att läsa kroppen ändå hade varit ofarligt, men
-    // `fetch` avvisar en DELETE med kropp i vissa runtimes — och det finns
-    // ingenting att skicka: urvalet står i frågesträngen.
-    body: metod === "POST" ? await request.arrayBuffer() : undefined,
-    cache: "no-store"
-  });
+  // Kroppen läses EN gång, före omtagsloopen — en förbrukad request-ström går
+  // inte att läsa om, men buffern går att skicka hur många gånger som helst.
+  const utgaendeKropp = metod === "POST" ? await request.arrayBuffer() : undefined;
 
-  const kropp = await svar.arrayBuffer();
-  return new NextResponse(kropp, {
-    status: svar.status,
-    headers: {
-      "Content-Type": svar.headers.get("content-type") ?? "application/octet-stream",
-      ...(svar.headers.get("content-disposition")
-        ? { "Content-Disposition": svar.headers.get("content-disposition") as string }
-        : {})
+  /**
+   * Omtag med deadline i stället för fast antal: den här routen var den enda
+   * backend-proxyn HELT utan retry (den delades av från catch-allen för
+   * binärtrafikens skull och tappade resiliensen på köpet), fast kallstarten
+   * på ~1 min är precis lika verklig här. Ett chatt-anrop kan samtidigt ta
+   * 30–40 s på riktigt (flera LLM-varv), så per-försökstiden är resten av
+   * budgeten, inte en kort fast tid. Budgeten 52 s lämnar marginal till
+   * maxDuration = 60 så att routen alltid hinner skriva en egen svarskropp.
+   */
+  const DEADLINE_MS = 52_000;
+  const start = Date.now();
+  let sistaOrsak: unknown;
+
+  for (let forsok = 0; forsok < 3; forsok += 1) {
+    const kvar = DEADLINE_MS - (Date.now() - start);
+    if (kvar < 2_000) break;
+
+    let svar: Response;
+    try {
+      svar = await fetch(`${SNAJP_SUPPORT_URL}${backendPath(path, request.nextUrl.search)}`, {
+        method: metod,
+        headers: {
+          "X-API-Key": tenant.apiKey,
+          "X-Snajp-User": tenant.userId,
+          // Multipart bär en boundary i sin content-type. Sätts den om, eller
+          // utelämnas, kan mottagaren inte dela upp kroppen alls.
+          ...(inkommandeTyp ? { "Content-Type": inkommandeTyp } : {})
+        },
+        // DELETE bär inga bytes. Att läsa kroppen ändå hade varit ofarligt, men
+        // `fetch` avvisar en DELETE med kropp i vissa runtimes — och det finns
+        // ingenting att skicka: urvalet står i frågesträngen.
+        body: utgaendeKropp,
+        cache: "no-store",
+        signal: AbortSignal.timeout(kvar)
+      });
+    } catch (orsak) {
+      // Nätverksfel eller timeout — backenden nåddes aldrig. Paus och nytt
+      // försök så länge budgeten räcker.
+      sistaOrsak = orsak;
+      await new Promise((klar) => setTimeout(klar, 1000 * (forsok + 1)));
+      continue;
     }
-  });
+
+    const kropp = await svar.arrayBuffer();
+
+    // 502/503/504 med tom kropp är plattformens egen sida under uppvakning,
+    // inte ett svar från vår backend — värt ett omtag, inte en vidarebefordran.
+    const arGatewayFel = svar.status === 502 || svar.status === 503 || svar.status === 504;
+    if (arGatewayFel && kropp.byteLength === 0 && forsok < 2) {
+      sistaOrsak = new Error(`uppströms ${svar.status} utan kropp`);
+      await new Promise((klar) => setTimeout(klar, 1000 * (forsok + 1)));
+      continue;
+    }
+
+    return new NextResponse(kropp, {
+      status: svar.status,
+      headers: {
+        "Content-Type": svar.headers.get("content-type") ?? "application/octet-stream",
+        ...(svar.headers.get("content-disposition")
+          ? { "Content-Disposition": svar.headers.get("content-disposition") as string }
+          : {})
+      }
+    });
+  }
+
+  // Diagnosen till loggen; kunden får en mening som säger vad hen kan göra.
+  console.error("bokföringsproxyn: backenden svarade inte efter omtag:", sistaOrsak);
+  return NextResponse.json(
+    {
+      offline: true,
+      error:
+        "Assistenten har svårt att nå sin motor just nu — den brukar vara tillbaka " +
+        "inom en minut. Vänta en liten stund och prova igen; din fråga och din fil " +
+        "finns kvar."
+    },
+    { status: 503 }
+  );
 }
 
 type Params = { params: Promise<{ path: string[] }> };

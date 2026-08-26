@@ -79,7 +79,30 @@ def get_llm_client() -> AsyncOpenAI:
     """
     krav_tillaten_provider()
     settings = get_settings()
-    return AsyncOpenAI(api_key=settings.active_llm_key(), base_url=_resolve_base_url(settings))
+    # max_retries=1 EXPLICIT — ett omtag, inte tre. Talet står utskrivet så att
+    # beteendet är ett beslut och inte en följd av en biblioteksuppgradering
+    # (SDK:ns egen default är 2).
+    #
+    # VARFÖR SÅ LÅGT, uppmätt 2026-08-25: SDK:n gör om ÄVEN 429, och ett 429
+    # från en förbrukad DYGNSKVOT är inte transient — det går inte över på
+    # någon sekund. Playbooken kör sju steg per ärende, så tre omtag betyder
+    # upp till 28 anrop för ett ärende som ändå inte kan lyckas. Mot Geminis
+    # gratisnivå (~20 anrop per dygn för hela plattformen) bränner det hela
+    # dagsbudgeten på ett enda ärende, och det syns i loggen som fyra 429 på
+    # rad per steg inom fyra sekunder.
+    #
+    # SDK:ns backoff ligger dessutom under sekunden och klarar ändå inte en
+    # minutgräns, så de extra försöken köper ingenting mot just den heller.
+    # Ett omtag räcker för det de faktiskt hjälper mot: en tappad uppkoppling
+    # eller ett enstaka 5xx. Resten fångas av fallbacktexterna, som säger
+    # ärligt att svaret inte gick att ta fram.
+    #
+    # Flyttar vi till en betald plan utan dygnstak går talet att höja igen.
+    return AsyncOpenAI(
+        api_key=settings.active_llm_key(),
+        base_url=_resolve_base_url(settings),
+        max_retries=1,
+    )
 
 
 @lru_cache

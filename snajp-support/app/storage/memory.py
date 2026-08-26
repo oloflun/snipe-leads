@@ -1527,6 +1527,16 @@ class MemoryStorage:
                 return dict(rad)
         return None
 
+    async def get_bk_underlag_by_sha256(
+        self, tenant_id: str, sha256: str
+    ) -> dict[str, Any] | None:
+        # Listan är append-ordnad, så första träffen ÄR den äldsta — samma
+        # rad Postgres-sidan väljer med `order by created_at`.
+        for rad in self.bk_underlag.get(tenant_id, []):
+            if rad["sha256"] == sha256:
+                return dict(rad)
+        return None
+
     async def list_bk_underlag(
         self,
         tenant_id: str,

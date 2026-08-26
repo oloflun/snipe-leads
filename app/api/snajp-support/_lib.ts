@@ -70,22 +70,44 @@ export function apiKeyForTenant(tenantSlug?: string | null): string {
 
 export function offlineResponse(cause?: unknown) {
   const reason = cause instanceof Error ? cause.message : undefined;
-  const error = URL_IS_CONFIGURED
-    ? `Snajp-Support-backenden på ${SNAJP_SUPPORT_URL} svarar inte${reason ? ` (${reason})` : ""}. Gratisplanen på Render somnar efter 15 minuters inaktivitet och tar ungefär en minut att vakna — vänta och försök igen.`
-    : "SNAJP_SUPPORT_URL är inte satt i denna miljö — proxyn föll tillbaka på localhost, som inte finns i deploy. Sätt env-varen till Render-URL:en och deploya om.";
+  // Diagnosen — hostnamn, env-varnamn, orsaken — hör hemma i serverloggen.
+  // Den stod tidigare i svarskroppen och renderades som en röd bubbla i den
+  // PUBLIKA chatten: en besökare fick läsa vår interna URL, vår hostingplan
+  // och vilka variabler som saknades. Kunden får en mänsklig mening; vi får
+  // hela bilden i loggen.
+  console.error(
+    URL_IS_CONFIGURED
+      ? `snajp-support: backenden på ${SNAJP_SUPPORT_URL} svarar inte${reason ? ` (${reason})` : ""}.`
+      : "snajp-support: SNAJP_SUPPORT_URL är inte satt i denna miljö — proxyn föll tillbaka på localhost, som inte finns i deploy. Sätt env-varen och deploya om."
+  );
 
   return NextResponse.json(
-    { offline: true, configured: URL_IS_CONFIGURED, target: SNAJP_SUPPORT_URL, error },
+    {
+      offline: true,
+      error:
+        "Assistenten har svårt att nå sin motor just nu — den brukar vara tillbaka inom en minut. " +
+        "Vänta en liten stund och skicka gärna frågan igen."
+    },
     { status: 503 }
   );
 }
 
 // Render free-tier somnar efter 15 min och tar ~1 min att vakna. Ett enskilt
-// försök kan alltså inte lyckas — men hela budgeten nedan (5 × 10 s) täcker
-// uppvakningen, förutsatt att route-filerna sätter `maxDuration = 60` så att
-// Vercel inte dödar funktionen på vägen.
-const ATTEMPT_TIMEOUT_MS = 10_000;
+// försök kan alltså inte lyckas — men hela budgeten nedan täcker det mesta av
+// uppvakningen, förutsatt att route-filerna sätter `maxDuration = 60`.
+//
+// Budgeten är räknad mot det taket: 5 × 9 s försök + ~5,5 s pauser ≈ 51 s.
+// Den gamla varianten (5 × 10 s + 4 × 1 s = 54 s) låg så nära 60 att sista
+// försöket kunde dödas mitt i och ge klienten en TOM kropp — precis felet
+// som lib/http/json.ts dokumenterar.
+const ATTEMPT_TIMEOUT_MS = 9_000;
 const MAX_ATTEMPTS = 5;
+
+/** Exponentiell paus med lite jitter, så fem klienter inte väcker backenden i takt. */
+function paus(attempt: number): Promise<void> {
+  const bas = Math.min(500 * 2 ** attempt, 2000);
+  return new Promise((resolve) => setTimeout(resolve, bas + Math.floor(Math.random() * 250)));
+}
 
 /**
  * Vidarebefordran med en REDAN upplöst nyckel. Inloggade routes går hit via
@@ -136,10 +158,22 @@ export async function proxyWithApiKey(
         return new NextResponse(null, { status: response.status });
       }
 
+      // 502/503/504 utan JSON-kropp är uppvakningsfasen: Renders/Railways egen
+      // HTML- eller tomsida, inte ett svar från vår backend. Det är EXAKT det
+      // läge retry-slingan finns för, så det behandlas som ett transient fel
+      // i stället för att skickas vidare som ett trasigt svar.
+      const arGatewayStatus = response.status === 502 || response.status === 503 || response.status === 504;
+
       if (!rawBody) {
+        if (arGatewayStatus && attempt < MAX_ATTEMPTS - 1) {
+          lastCause = new Error(`uppströms ${response.status} utan innehåll`);
+          await paus(attempt);
+          continue;
+        }
+        console.error(`snajp-support: backenden svarade ${response.status} utan innehåll (${path}).`);
         return NextResponse.json(
           {
-            error: `Backenden svarade ${response.status} utan innehåll.`,
+            error: "Svaret kom aldrig fram helt. Vänta en liten stund och prova igen.",
             upstreamStatus: response.status
           },
           { status: response.status >= 400 ? response.status : 502 }
@@ -147,11 +181,28 @@ export async function proxyWithApiKey(
       }
 
       try {
-        return NextResponse.json(JSON.parse(rawBody), { status: response.status });
+        const parsed = JSON.parse(rawBody);
+        // FastAPI:s HTTPException serialiseras som {"detail": ...} men varje
+        // klientkomponent läser `error`. Utan raden blev backendens omsorgsfullt
+        // skrivna 429-text "Okänt fel" i chatten.
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          if (typeof parsed.detail === "string" && typeof parsed.error !== "string") {
+            parsed.error = parsed.detail;
+          }
+        }
+        return NextResponse.json(parsed, { status: response.status });
       } catch {
+        if (arGatewayStatus && attempt < MAX_ATTEMPTS - 1) {
+          lastCause = new Error(`uppströms ${response.status} med icke-JSON-kropp`);
+          await paus(attempt);
+          continue;
+        }
+        console.error(
+          `snajp-support: backenden svarade ${response.status} med icke-JSON-kropp (${path}): ${rawBody.slice(0, 200)}`
+        );
         return NextResponse.json(
           {
-            error: `Backenden svarade ${response.status} med ett innehåll som inte är JSON.`,
+            error: "Svaret gick inte att tolka. Vänta en liten stund och prova igen.",
             upstreamStatus: response.status
           },
           { status: response.status >= 400 ? response.status : 502 }
@@ -162,7 +213,7 @@ export async function proxyWithApiKey(
       // Bara timeout/nätverksfel är värt att göra om — ett riktigt HTTP-svar
       // har redan returnerats ovan.
       if (attempt < MAX_ATTEMPTS - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await paus(attempt);
       }
     } finally {
       clearTimeout(timer);
@@ -180,10 +231,19 @@ export async function proxyToBackend(path: string, init: RequestInit, tenantSlug
   } catch (error) {
     if (error instanceof MissingTenantKeyError) {
       // 503, inte 500: tjänsten är riktigt konfigurerad men saknar en nyckel i
-      // just den här miljön. Meddelandet namnger variabeln så felet går att
-      // åtgärda utan att läsa koden.
+      // just den här miljön. Loggen namnger variabeln så felet går att åtgärda
+      // utan att läsa koden — men KLIENTEN får inte env-varnamnet: den texten
+      // renderades tidigare ordagrant i den publika chattens felbubbla.
       console.error(`snajp-support: ${error.message}`);
-      return NextResponse.json({ error: error.message, configured: false }, { status: 503 });
+      return NextResponse.json(
+        {
+          error:
+            "Supporten är inte färdigaktiverad för det här kontot ännu. " +
+            "Hör av dig till oss så sätter vi den i drift.",
+          configured: false
+        },
+        { status: 503 }
+      );
     }
     throw error;
   }

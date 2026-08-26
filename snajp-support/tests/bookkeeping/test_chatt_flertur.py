@@ -42,7 +42,7 @@ from openai.types.chat.chat_completion_message_tool_call import (
 )
 
 from app.agent.bookkeeping_agent import (
-    FALLT_SVAR,
+    FALLT_SVAR_VARIANTER,
     bygg_turhistorik,
     run_bookkeeping_chat_turn,
 )
@@ -395,7 +395,7 @@ async def test_beloppsgrinden_galler_fortfarande_i_en_andra_tur():
         )
 
     assert svar["grundad"] is False
-    assert svar["reply"] == FALLT_SVAR
+    assert svar["reply"] in FALLT_SVAR_VARIANTER
 
 
 # -- 3. Ett försök till innan chatten ger upp (DEL 3.4) --------------------
@@ -483,7 +483,7 @@ async def test_omforsoket_ar_inte_en_uppmjukning_av_inv_book_003():
 
     assert svar["verktygsanrop"] == 1, "Verktyget kördes inte — testet mäter fel sak."
     assert svar["grundad"] is False
-    assert svar["reply"] == FALLT_SVAR
+    assert svar["reply"] in FALLT_SVAR_VARIANTER
 
 
 # -- 4. Poleringen ligger EFTER grinden (DEL 5) ---------------------------
@@ -511,7 +511,7 @@ async def test_poleringen_ror_aldrig_ett_fallt_svar():
     with _chatt(fake, polerat="EN OMSKRIVEN TEXT") as polering:
         svar = await run_bookkeeping_chat_turn(storage, TENANT, message="hur mycket?")
 
-    assert svar["reply"] == FALLT_SVAR
+    assert svar["reply"] in FALLT_SVAR_VARIANTER
     polering.assert_not_awaited()
 
 
@@ -635,6 +635,6 @@ async def test_ett_trasigt_kunskapssteg_faller_inte_turen():
         ):
             svar = await run_bookkeeping_chat_turn(storage, TENANT, message="hur mycket?")
 
-    assert svar["reply"] == FALLT_SVAR
+    assert svar["reply"] in FALLT_SVAR_VARIANTER
     assert svar["kunskapslucka"]["reveals_gap"] is False
     assert "RuntimeError" in svar["kunskapslucka"]["fel"]

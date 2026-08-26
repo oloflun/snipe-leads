@@ -82,12 +82,31 @@ export const shared = {
   demoSupport: { sv: "Prova kundtjänstagenten", en: "Try the support agent" },
   demoBokforing: { sv: "Prova bokföringsagenten", en: "Try the bookkeeping agent" },
   footerKontakt: { sv: "Kontakt", en: "Contact" },
-  menyKontakt: { sv: "Kontakta oss", en: "Contact us" },
-  menyPriser: { sv: "Prislista", en: "Pricing" },
-  menyFragor: { sv: "Frågor och svar", en: "Questions and answers" },
-  menyVilka: { sv: "Vilka är vi", en: "Who we are" },
-  menyGdpr: { sv: "GDPR och data", en: "GDPR and data" },
+  //: MENYN. Etiketterna bytte namn 2026-08-25, och nycklarna bytte med dem —
+  //: en nyckel som heter `menyKontakt` men renderar "Boka demo" är en lögn för
+  //: nästa läsare, och de fem hade bara ETT anropsställe var att rätta.
+  //:
+  //: Tre av dem pekar numera på egna sidor i stället för på ankare. Det är ett
+  //: avsteg från motiveringen i SidMeny.tsx ("allt innehåll finns redan på
+  //: sidan"), och avsteget är motiverat: en bokning, en sökbar FAQ och en
+  //: teampresentation är inte avsnitt man skrollar förbi, utan sidor man länkar
+  //: till, bokmärker och skickar vidare. Priser är kvar som ankare av precis
+  //: det gamla skälet — prissektionen är en del av säljargumentet där den står.
+  menyBokaDemo: { sv: "Boka demo", en: "Book a demo" },
+  menyPriser: { sv: "Priser & planer", en: "Pricing & plans" },
+  menyFaq: { sv: "FAQ", en: "FAQ" },
+  menyTeam: { sv: "Vårt team", en: "Our team" },
+  menyDataskydd: { sv: "Dataskydd", en: "Data protection" },
   menyEtikett: { sv: "Meny", en: "Menu" },
+  //: Länkar från startsidans avsnitt till de sidor som fördjupar dem.
+  //:
+  //: TILLAGDA vid sidan av avsnittens befintliga CTA, inte i stället för den.
+  //: Att byta ut "Skriv till oss" mot en sidlänk hade varit ett beslut om
+  //: konverteringsvägen, och det är inte en följd av att sidorna finns. Utan
+  //: de här två nås /faq och /vart-team bara via en hopfälld meny, vilket är
+  //: samma sak som att inte nås.
+  vilkaLank: { sv: "Läs mer om oss", en: "More about us" },
+  fragorLank: { sv: "Fler frågor och svar", en: "More questions and answers" },
   //: Avsnittet "Vilka är vi". Skrivet för den som undrar vem de skulle köpa av
   //: — inte som en grundarberättelse. Svensk B2B väger vem som står bakom, och
   //: den frågan besvaras inte av en produktbeskrivning.
@@ -303,50 +322,49 @@ export const supportCopy: ProductCopy = {
 export const bokforingCopy: ProductCopy = {
   word: { sv: "Bokföring", en: "Bookkeeping" },
   headline: {
-    sv: "Kvittohögen blir ett *underlag*.",
-    en: "The pile of receipts becomes a *record*."
+    sv: "Från kvitto till bokfört – på *sekunder*.",
+    en: "From receipt to booked – in *seconds*."
   },
   lede: {
-    sv: "Fotografera kvittot. Agenten läser av datum, belopp och moms, föreslår kontering och räknar perioden. Du godkänner innan något förs in i er bokföring.",
-    en: "Photograph the receipt. The agent reads off date, amount and VAT, proposes the entries and totals the period. You approve before anything enters your books."
+    sv: "Slipp manuell hantering. Ta en bild på kvittot, så plockar agenten fram datum, belopp och moms och lägger fram ett konteringsförslag, klart att godkänna.",
+    en: "Skip the manual handling. Snap a photo of the receipt and the agent pulls out date, amount and VAT and lays out a posting proposal, ready to approve."
   },
   cta: { sv: "Se hur det fungerar", en: "See how it works" },
   demoHeading: {
-    sv: "Ett kvitto, *avläst* och konterat.",
-    en: "One receipt, *read* and posted."
+    // No-break spaces (U+00A0) efter "avläst": rubriken bröt raden före
+    // "och konterat", och den ska stå på en rad.
+    sv: "Ett kvitto, *avläst* och konterat.",
+    en: "One receipt, *read* and posted."
   },
   demoLede: {
-    sv: "Exemplet nedan visar hela vägen: avläsningen, verifikatet och periodsumman.",
-    en: "The example below shows the whole path: the reading, the entry and the period total."
+    sv: "Nedan visas ett exempel steg för steg. Du kan också chatta med bokföringsassistenten och ställa egna frågor om siffrorna.",
+    en: "Below is an example, step by step. You can also chat with the bookkeeping assistant and ask your own questions about the numbers."
   },
-  exampleNote: {
-    sv: "Exempel. Påhittat underlag, inte en riktig körning hos en kund.",
-    en: "Example. A made-up document, not a real run for a customer."
-  },
+  exampleNote: { sv: "", en: "" },
   stepsHeading: {
-    sv: "Tre steg, och koden räknar *varenda* siffra.",
-    en: "Three steps, and the code does *every* calculation."
+    sv: "Tre steg, och systemet räknar *varenda* siffra.",
+    en: "Three steps, and the system does *every* calculation."
   },
   steps: [
     {
       title: { sv: "Läser av underlaget", en: "Reads the document" },
       body: {
-        sv: "Datum, motpart, totalbelopp och momssats. Står ett fält inte på kvittot gissas det inte, utan går till granskning.",
-        en: "Date, counterparty, total and VAT rate. If a field is not on the receipt it is not guessed, it goes to review."
+        sv: "Datum, motpart, totalbelopp och momssats. Saknas ett fält på kvittot gissar vi aldrig fram det – det går till granskning i stället.",
+        en: "Date, counterparty, total and VAT rate. If a field is missing from the receipt we never invent it – it goes to review instead."
       }
     },
     {
       title: { sv: "Föreslår konteringen", en: "Proposes the entries" },
       body: {
-        sv: "Modellen väljer kategori, koden väljer konto ur BAS och bygger raderna. Verifikatet balanserar därför av konstruktion.",
-        en: "The model picks a category, the code picks the account from the Swedish BAS chart and builds the rows. The entry balances by construction."
+        sv: "Modellen väljer kategori, systemet väljer konto ur kontoplanen och bygger raderna. Verifikatet balanserar därför redan från start – inte som en kontroll i efterhand.",
+        en: "The model picks a category, the system picks the account from the chart and builds the rows. The entry therefore balances from the start – not as an afterthought check."
       }
     },
     {
       title: { sv: "Du godkänner", en: "You approve" },
       body: {
-        sv: "Perioden summeras först när den går ihop. Går den inte ihop får du bristerna i stället för trovärdiga siffror.",
-        en: "The period is totalled only when it balances. If it does not, you get the gaps instead of plausible numbers."
+        sv: "Perioden summeras bara när den går ihop. Gör den inte det, ser du bristerna direkt – aldrig en siffra som bara verkar stämma.",
+        en: "The period is totalled only when it balances. If it does not, you see the gaps at once – never a number that merely seems right."
       }
     }
   ],
@@ -364,12 +382,8 @@ export const bokforingCopy: ProductCopy = {
       en: "Files nothing with the Swedish Tax Agency or Companies Registration Office."
     },
     {
-      sv: "Ersätter ingen auktoriserad redovisningskonsult.",
-      en: "Replaces no authorised accounting consultant."
-    },
-    {
-      sv: "Räknar aldrig ett belopp i modellen. Momsen räknas i kod.",
-      en: "Never has the model calculate an amount. VAT is calculated in code."
+      sv: "Ingen data är publik. Er data hanteras enbart för att driva agenterna, ingenting annat.",
+      en: "No data is public. Your data is handled solely to run the agents, nothing else."
     }
   ]
 };

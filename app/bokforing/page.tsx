@@ -12,7 +12,7 @@ import { notFoundOnTenant } from "@/lib/tenants/server";
  * samma sak sagd för ett JSON-svar.
  */
 export const metadata: Metadata = {
-  title: "Snajp Bokföring, kvittohögen blir ett underlag",
+  title: "Snajp Bokföring, från kvitto till bokfört på sekunder",
   description:
     "Bokföringsagenten läser av kvitton och fakturor, föreslår kontering ur BAS-kontoplanen och räknar perioden. Den bokför ingenting själv — du godkänner innan något förs in.",
   alternates: { canonical: "/bokforing" }

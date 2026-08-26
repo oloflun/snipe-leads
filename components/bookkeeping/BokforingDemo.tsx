@@ -1,7 +1,7 @@
 "use client";
 
-import { ArrowRight, FileText, ShieldAlert } from "lucide-react";
-import { useState } from "react";
+import { ArrowRight, FileText } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import {
   AVLASNING,
   EXEMPELKVITTO,
@@ -57,22 +57,28 @@ function kr(varde: string): string {
   }).format(tal)} kr`;
 }
 
+/**
+ * Etiketten ligger OVANFÖR innehållet, inte i en egen kolumn bredvid.
+ *
+ * Den satt i ett 3/9-rutnät när demon var sidbred. I den smalare vänsterrutan
+ * blev de tre kolumnerna omkring 140px, alltså en etikettspalt som åt en
+ * fjärdedel av bredden för fem ord — och tvingade tabellen i steg 3 att
+ * trängas på resten.
+ */
 function Steg({
   nummer,
   rubrik,
   children
 }: Readonly<{ nummer: number; rubrik: string; children: React.ReactNode }>) {
   return (
-    <section className="grid grid-cols-12 gap-x-6 gap-y-3 border-t border-ink/15 py-7">
-      <div className="col-span-12 md:col-span-3">
-        <p className="flex items-baseline gap-2">
-          <span className="font-mono text-[0.6875rem] text-ochre">
-            {String(nummer).padStart(2, "0")}
-          </span>
-          <span className="kicker text-mineral">{rubrik}</span>
-        </p>
-      </div>
-      <div className="col-span-12 md:col-span-9">{children}</div>
+    <section className="border-t border-ink/12 py-5 first:border-t-0 first:pt-0">
+      <p className="flex items-baseline gap-2">
+        <span className="font-mono text-[0.6875rem] text-ochre">
+          {String(nummer).padStart(2, "0")}
+        </span>
+        <span className="kicker text-mineral">{rubrik}</span>
+      </p>
+      <div className="mt-3">{children}</div>
     </section>
   );
 }
@@ -87,16 +93,36 @@ function Steg({
 function DemoChatt() {
   const [stallda, setStallda] = useState<number[]>([]);
   const kvar = FRAGOR.map((_, i) => i).filter((i) => !stallda.includes(i));
+  const sista = useRef<HTMLDivElement | null>(null);
+
+  /**
+   * Rulla fram det nya svaret i rutan.
+   *
+   * Utan det här ser ett klick ut som att ingenting händer: svaret läggs till
+   * längst ned i en ruta med tak, alltså utanför det synliga, och besökaren
+   * sitter kvar med samma vy och drar slutsatsen att knappen är trasig. Det
+   * var demons enda interaktion, så felet hade kostat hela poängen med den.
+   *
+   * Rullar RUTAN och inte sidan: `scrollIntoView` hade flyttat hela
+   * dokumentet när sidan också kan rullas.
+   */
+  useEffect(() => {
+    const svar = sista.current;
+    if (!svar || stallda.length === 0) return;
+    const ruta = svar.closest<HTMLElement>("[data-rullyta]");
+    if (!ruta) return;
+    ruta.scrollTop += svar.getBoundingClientRect().top - ruta.getBoundingClientRect().top;
+  }, [stallda.length]);
 
   return (
     <div>
       <div className="grid gap-3">
-        {stallda.map((i) => (
-          <div key={i} className="grid gap-3">
-            <p className="ml-auto max-w-[62ch] rounded-card bg-paper2 px-4 py-3 text-[0.9375rem] leading-6 text-ink">
+        {stallda.map((i, index) => (
+          <div key={i} ref={index === stallda.length - 1 ? sista : null} className="grid gap-3">
+            <p className="ml-auto max-w-[92%] rounded-card bg-paper2 px-3.5 py-2.5 text-[0.875rem] leading-6 text-ink">
               {FRAGOR[i].fraga}
             </p>
-            <p className="max-w-[62ch] whitespace-pre-wrap rounded-card border border-ink/15 px-4 py-3 text-[0.9375rem] leading-6 text-ink/85">
+            <p className="max-w-[92%] whitespace-pre-wrap rounded-card border border-ink/15 px-3.5 py-2.5 text-[0.875rem] leading-6 text-ink/85">
               {FRAGOR[i].svar}
             </p>
           </div>
@@ -131,50 +157,67 @@ function DemoChatt() {
   );
 }
 
+/**
+ * Två rutor sida vid sida: genomgången till vänster, assistenten till höger.
+ *
+ * ## Varför inte en spalt rakt ned
+ *
+ * Fem sidbreda steg staplade på varandra gjorde demon till sidans längsta
+ * sektion — omkring 1 300px bred och över tvåtusen hög — för innehåll som är
+ * fyra korta tabeller och en chatt. Bredden var det värsta av det: en
+ * avläsningsrad med tre fält drogs ut över hela fönstret, så ögat fick vandra
+ * en decimeter mellan etikett och värde.
+ *
+ * Nu är genomgången en smal ruta som växer NEDÅT, med tak och egen rullning så
+ * att den inte kan bli hur lång som helst, och assistenten en egen ruta
+ * bredvid. Att de ligger sida vid sida är inte bara en yteffekt: chatten
+ * svarar med siffror ur periodrapporten, och nu går de att läsa samtidigt.
+ *
+ * ## Taket och rullningen
+ *
+ * `max-h` + `overflow-y-auto` gäller bara från lg och uppåt. På en telefon är
+ * spalterna staplade ändå, och en rullyta inuti en sida som redan rullar är
+ * ett känt sätt att göra innehåll oåtkomligt med tummen.
+ */
 export function BokforingDemo() {
   return (
-    <div>
-      {/* Märkningen står FÖRST och kan inte klickas bort. Samma regel som
-          leads-agentens exempelbolag: en siffra som ser ut att komma ur en
-          körning måste säga att den inte gör det. */}
-      <p className="flex items-start gap-2 rounded-card border border-ochre/40 bg-ochre/10 px-4 py-3 text-[0.875rem] leading-6 text-ink/80">
-        <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
-        <span>
-          <strong className="font-semibold">Exempel.</strong> Underlaget, bolaget och
-          siffrorna är påhittade, och samtalet längst ned är skrivet i förväg. Ingen
-          modell körs på den här sidan och ingen kunddata visas.
-        </span>
-      </p>
+    <div className="mx-auto max-w-[1120px]">
+      <div className="grid gap-5 lg:grid-cols-12 lg:gap-6">
+        {/* VÄNSTER: vägen från kvitto till periodrapport. */}
+        <div className="lg:col-span-7">
+          <div className="rounded-card border border-ink/12 bg-paper2/30 p-5">
+            <p className="kicker text-mineral">Från kvitto till underlag</p>
+            <div className="mt-4 lg:max-h-[30rem] lg:overflow-y-auto lg:pr-4">
 
       <Steg nummer={1} rubrik="Underlaget">
         <p className="flex items-center gap-2 text-[0.9375rem] text-ink">
           <FileText className="h-4 w-4 shrink-0 text-mineral" aria-hidden />
           {EXEMPELKVITTO.filnamn}
         </p>
-        <p className="mt-2 max-w-[60ch] text-[0.875rem] leading-6 text-ink/60">
+        <p className="mt-2 text-[0.875rem] leading-6 text-ink/60">
           En drivmedelsfaktura från {EXEMPELKVITTO.motpart}. I produkten läses filen i
           minnet och kastas — det som sparas är fälten nedan plus en kontrollsumma.
         </p>
       </Steg>
 
       <Steg nummer={2} rubrik="Avläsningen">
+        {/* Två spalter, inte tre. Källcitatet låg i en egen tredje spalt när
+            demon var sidbred; i den smalare rutan blev den omkring 230px och
+            bröt monotexten mitt i fakturaraden. Nu står citatet under värdet,
+            där det ändå hör hemma: det är belägget FÖR värdet. */}
         <dl className="divide-y divide-ink/10 border-y border-ink/10">
           {AVLASNING.map((rad) => (
-            <div key={rad.falt} className="grid grid-cols-12 gap-x-4 py-2.5">
-              <dt className="col-span-4 text-[0.8125rem] text-mineral md:col-span-3">
-                {rad.falt}
-              </dt>
-              <dd className="col-span-8 text-[0.9375rem] text-ink md:col-span-4">{rad.varde}</dd>
-              <dd className="col-span-12 mt-1 font-mono text-[0.75rem] text-ink/45 md:col-span-5 md:mt-0">
+            <div key={rad.falt} className="py-2.5">
+              <div className="flex items-baseline justify-between gap-4">
+                <dt className="text-[0.8125rem] text-mineral">{rad.falt}</dt>
+                <dd className="text-right text-[0.9375rem] text-ink">{rad.varde}</dd>
+              </div>
+              <dd className="mt-1 truncate font-mono text-[0.75rem] text-ink/45" title={rad.kalla}>
                 “{rad.kalla}”
               </dd>
             </div>
           ))}
         </dl>
-        <p className="mt-3 max-w-[60ch] text-[0.8125rem] leading-6 text-ink/55">
-          Varje fält har en källa i texten. Ett fält som inte står på underlaget
-          gissas inte — underlaget går till granskning i stället.
-        </p>
       </Steg>
 
       <Steg nummer={3} rubrik="Verifikatet">
@@ -207,10 +250,6 @@ export function BokforingDemo() {
             </tr>
           </tfoot>
         </table>
-        <p className="mt-3 max-w-[60ch] text-[0.8125rem] leading-6 text-ink/55">
-          Modellen valde kategori. Koden valde konto ur BAS och byggde raderna, så
-          debet och kredit är lika av konstruktion.
-        </p>
       </Steg>
 
       <Steg nummer={4} rubrik="Perioden">
@@ -229,23 +268,35 @@ export function BokforingDemo() {
             </div>
           ))}
         </dl>
-        <p className="mt-4 max-w-[60ch] text-[0.8125rem] leading-6 text-ink/55">
-          {PERIOD.fran} till {PERIOD.till}. Perioden går ihop, alltså visas summorna.
-          Gjorde den inte det hade du fått bristerna i stället.
-        </p>
       </Steg>
 
-      <Steg nummer={5} rubrik="Fråga assistenten">
-        <DemoChatt />
-        <p className="mt-4 flex items-start gap-2 max-w-[62ch] text-[0.8125rem] leading-6 text-ink/55">
-          <ArrowRight className="mt-1 h-3.5 w-3.5 shrink-0 text-ochre" aria-hidden />
-          <span>
-            Varje belopp i svaret kommer från siffrorna ovanför. I produkten kontrolleras
-            det maskinellt: ett svar som bär ett tal assistenten inte hämtat stoppas
-            innan du ser det.
-          </span>
-        </p>
-      </Steg>
+            </div>
+          </div>
+        </div>
+
+        {/* HÖGER: assistenten, i en ruta man kan prova.
+            `lg:sticky` gör att den följer med när vänsterrutans innehåll
+            rullas — annars hade svaret glidit ur bild precis när besökaren
+            letade upp siffran det bygger på. */}
+        <div className="lg:col-span-5">
+          <div className="rounded-card border border-ink/12 bg-paper p-5 lg:sticky lg:top-6">
+            <p className="kicker text-mineral">Fråga assistenten</p>
+            <p className="mt-2 text-[0.8125rem] leading-6 text-ink/60">
+              Klicka på en fråga så svarar den utifrån siffrorna till vänster.
+            </p>
+            <div data-rullyta className="mt-4 lg:max-h-[22rem] lg:overflow-y-auto lg:pr-3">
+              <DemoChatt />
+            </div>
+            <p className="mt-4 flex items-start gap-2 border-t border-ink/12 pt-4 text-[0.75rem] leading-5 text-ink/55">
+              <ArrowRight className="mt-0.5 h-3 w-3 shrink-0 text-ochre" aria-hidden />
+              <span>
+                Varje belopp i svaret kommer från siffrorna till vänster. I produkten
+                kontrolleras det maskinellt.
+              </span>
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

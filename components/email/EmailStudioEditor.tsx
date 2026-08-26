@@ -311,7 +311,9 @@ export function EmailStudioEditor({
                 <strong className="font-semibold">Exempelsvar.</strong>{" "}
                 {lastResult.simulated_reason === "anonym"
                   ? "Du är inte inloggad, så åtgärden kördes inte mot någon modell."
-                  : "Ingen modellnyckel är kopplad i den här miljön, så åtgärden kördes inte mot någon modell."}
+                  : lastResult.simulated_reason === "tillfälligt fel"
+                    ? "Modellen svarade inte just nu, så du fick ett förskrivet förslag under tiden. Prova åtgärden igen om en liten stund."
+                    : "Ingen modellnyckel är kopplad i den här miljön, så åtgärden kördes inte mot någon modell."}
               </p>
             ) : null}
 

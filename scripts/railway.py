@@ -20,6 +20,16 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+# Windows-konsolen kör cp1252. Svaren härifrån är RAILWAYS text, inte vår:
+# byggloggar, commit-meddelanden, felkroppar. Next.js skriver "▲" i sin
+# byggrubrik och "✓" per steg, och ingetdera finns i cp1252 — en `buildLogs`
+# dog därför med UnicodeEncodeError efter att ha hämtat loggen, alltså precis
+# när den skulle visa svaret. Felet ser ut som ett trasigt skript och skickar
+# felsökningen till dashboarden, vilket är vad skriptet finns för att slippa.
+# Samma rad som i set_railway_token.py, av samma skäl.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 ENDPOINT = "https://backboard.railway.com/graphql/v2"
 
 #: Railway sitter bakom Cloudflare, som svarar 403 (error 1010) på Python-urllibs
