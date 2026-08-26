@@ -249,11 +249,54 @@ async def process_all_due(storage: Storage, provider: SendProvider) -> list[dict
     return results
 
 
+#: Uppföljningssvepet körs högst så här ofta. Send-loopen tickar var ~30:e
+#: sekund; att LLM-generera i den takten vore fel växel — förfallodagarna
+#: räknas i dygn (FOLLOW_UP_DELAYS), så en timme är gott och väl tätt nog.
+FOLLOW_UP_SWEEP_SECONDS = 3600
+
+
+async def sweep_follow_ups(storage: Storage) -> list[dict]:
+    """Ett uppföljningssvep över alla tenants. Del av schemaläggarloopen.
+
+    Hoppar över simulering (inga LLM-anrop utan modell) och tenants utan
+    affärskontext (utan den finns inget att grunda ett mejl i — och inget
+    initialt mejl kan ha gått ut den vägen heller). Ett trasigt tenantsvep
+    fäller inte de andras, samma princip som process_all_due.
+    """
+    from datetime import datetime, timezone as _tz
+
+    from .context_pack import build_context_pack
+    from .follow_up_generator import generate_due_follow_ups
+
+    if get_settings().is_simulation():
+        return []
+
+    now = datetime.now(_tz.utc)
+    resultat: list[dict] = []
+    for tenant in await storage.list_tenants():
+        try:
+            context_pack, missing = await build_context_pack(storage, tenant["id"])
+            if "product_marketing" in missing:
+                continue
+            for rad in await generate_due_follow_ups(
+                storage,
+                tenant["id"],
+                now=now,
+                tenant_name=tenant.get("name") or tenant.get("slug") or "",
+                context_pack=context_pack,
+            ):
+                resultat.append({"tenant": tenant.get("slug"), **rad})
+        except Exception:  # noqa: BLE001 — en tenant fäller inte svepet
+            logger.exception("Uppföljningssvepet för %s misslyckades.", tenant.get("slug"))
+    return resultat
+
+
 async def run_send_scheduler(app_state) -> None:
     settings = get_settings()
     interval = max(settings.send_queue_poll_seconds, 30)
     provider = get_send_provider()
     logger.info("send_queue-schemaläggare aktiv: var %s sekund.", interval)
+    senaste_svep = 0.0
     while True:
         try:
             for result in await process_all_due(app_state.storage, provider):
@@ -266,4 +309,13 @@ async def run_send_scheduler(app_state) -> None:
                     )
         except Exception:  # noqa: BLE001 — schemaläggaren får aldrig dö
             logger.exception("Oväntat fel i send_queue-schemaläggaren — fortsätter nästa varv.")
+        try:
+            import time as _time
+
+            if _time.monotonic() - senaste_svep >= FOLLOW_UP_SWEEP_SECONDS:
+                senaste_svep = _time.monotonic()
+                for rad in await sweep_follow_ups(app_state.storage):
+                    logger.info("uppföljning (%s): %s", rad.get("tenant"), rad)
+        except Exception:  # noqa: BLE001 — svepet får inte döda send-loopen
+            logger.exception("Oväntat fel i uppföljningssvepet — fortsätter nästa varv.")
         await asyncio.sleep(interval)

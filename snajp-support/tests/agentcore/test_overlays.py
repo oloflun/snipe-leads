@@ -223,3 +223,50 @@ def test_hard_rules_overlay_is_bound_to_every_outreach_step():
 
     missing = [s.skill for s in OUTREACH_V1.steps if s.overlay != "leads-hard-rules"]
     assert not missing, f"Steg utan hårda regler: {missing}"
+
+
+# -- Overlay-komposition (2026-08-26) --------------------------------------
+
+
+def test_overlay_names_normaliserar_str_tuple_och_none():
+    from app.agentcore.packs import PlaybookStep
+
+    ett = PlaybookStep(skill="cs:ticket-triage", requires=("context_pack",), overlay="leads-hard-rules")
+    två = PlaybookStep(
+        skill="cs:ticket-triage",
+        requires=("context_pack",),
+        overlay=("leads-hard-rules", "leads-reply"),
+    )
+    inget = PlaybookStep(skill="cs:ticket-triage", requires=("context_pack",))
+
+    assert ett.overlay_names == ("leads-hard-rules",)
+    assert två.overlay_names == ("leads-hard-rules", "leads-reply")
+    assert inget.overlay_names == ()
+
+
+def test_okant_namn_i_kompositionen_faller_vid_konstruktion():
+    import pytest as _pytest
+
+    from app.agentcore.overlays import UnknownOverlayError
+    from app.agentcore.packs import PlaybookStep
+
+    with _pytest.raises(UnknownOverlayError):
+        PlaybookStep(
+            skill="cs:ticket-triage",
+            requires=("context_pack",),
+            overlay=("leads-hard-rules", "finns-inte"),
+        )
+
+
+def test_reply_och_followup_stegen_bar_bade_hardregler_och_syftesoverlay():
+    """Kompositionen är poängen: syftesoverlayn får ALDRIG ersätta
+    hårdreglerna — då försvinner LinkedIn-förbudet och tonförbuden från
+    exakt de steg som skriver text till en mottagare."""
+    from app.leads.follow_up_generator import FOLLOWUP_V1
+    from app.leads.svar import REPLY_V1
+
+    svarssteg = [s for s in REPLY_V1.steps if s.skill in ("mk:sales-enablement", "snajp:humanizer-svenska")]
+    for steg in svarssteg:
+        assert steg.overlay_names == ("leads-hard-rules", "leads-reply"), steg.skill
+    for steg in FOLLOWUP_V1.steps:
+        assert steg.overlay_names == ("leads-hard-rules", "leads-followup"), steg.skill

@@ -1,0 +1,65 @@
+{
+  "results": {
+    "S1-neutral-fraga::disabled": {
+      "_ok": false,
+      "_error": "ForbjudenProviderIMiljon: LLM_PROVIDER=deepseek är inte tillåtet här. Miljönamnet är okänt, men DATABASE_URL pekar på en databas som inte kör på den här maskinen (db.eppgmjswfnrfwnqvtrge.supabase.co). En process som kan öppna en fjärrdatabas kan nå riktiga personuppgifter, oavsett vilken värd den kör på — det var precis så den bortglömda Render-stacken kunde köra DeepSeek mot skarp data utan att någon spärr sa ifrån. DeepSeek behandlar prompten i Kina, och vi har varken SCC, överföringsbedömning eller PUB-villkor på plats. Sätt en tillåten provider (openai eller gemini) med rätt nyckel, eller stäng av tjänsten om den inte ska köra alls.",
+      "_wall_ms": 3,
+      "_scenario": {
+        "id": "S1-neutral-fraga",
+        "beskrivning": "Neutral faktafråga som KB täcker — ska INTE eskalera",
+        "message": "Hej! Vilka betalsätt kan jag använda när jag handlar hos er?",
+        "subject": "Fråga om betalsätt"
+      },
+      "_thinking_mode": "disabled"
+    },
+    "S2-irriterad-leverans::disabled": {
+      "_ok": false,
+      "_error": "ForbjudenProviderIMiljon: LLM_PROVIDER=deepseek är inte tillåtet här. Miljönamnet är okänt, men DATABASE_URL pekar på en databas som inte kör på den här maskinen (db.eppgmjswfnrfwnqvtrge.supabase.co). En process som kan öppna en fjärrdatabas kan nå riktiga personuppgifter, oavsett vilken värd den kör på — det var precis så den bortglömda Render-stacken kunde köra DeepSeek mot skarp data utan att någon spärr sa ifrån. DeepSeek behandlar prompten i Kina, och vi har varken SCC, överföringsbedömning eller PUB-villkor på plats. Sätt en tillåten provider (openai eller gemini) med rätt nyckel, eller stäng av tjänsten om den inte ska köra alls.",
+      "_wall_ms": 2,
+      "_scenario": {
+        "id": "S2-irriterad-leverans",
+        "beskrivning": "Irriterad men saklig — leveransfråga",
+        "message": "Mitt paket skulle kommit för tre dagar sedan och ingen har hört av sig. Var är det?",
+        "subject": "Försenad leverans"
+      },
+      "_thinking_mode": "disabled"
+    },
+    "S3-arg-aterbetalning::disabled": {
+      "_ok": false,
+      "_error": "ForbjudenProviderIMiljon: LLM_PROVIDER=deepseek är inte tillåtet här. Miljönamnet är okänt, men DATABASE_URL pekar på en databas som inte kör på den här maskinen (db.eppgmjswfnrfwnqvtrge.supabase.co). En process som kan öppna en fjärrdatabas kan nå riktiga personuppgifter, oavsett vilken värd den kör på — det var precis så den bortglömda Render-stacken kunde köra DeepSeek mot skarp data utan att någon spärr sa ifrån. DeepSeek behandlar prompten i Kina, och vi har varken SCC, överföringsbedömning eller PUB-villkor på plats. Sätt en tillåten provider (openai eller gemini) med rätt nyckel, eller stäng av tjänsten om den inte ska köra alls.",
+      "_wall_ms": 3,
+      "_scenario": {
+        "id": "S3-arg-aterbetalning",
+        "beskrivning": "Arg + återbetalningskrav — MÅSTE eskalera",
+        "message": "Det här är helt oacceptabelt!! Produkten gick sönder efter två dagar och jag KRÄVER pengarna tillbaka omedelbart.",
+        "subject": "Kräver återbetalning"
+      },
+      "_thinking_mode": "disabled"
+    },
+    "S4-uppsagning-ultimatum::disabled": {
+      "_ok": false,
+      "_error": "ForbjudenProviderIMiljon: LLM_PROVIDER=deepseek är inte tillåtet här. Miljönamnet är okänt, men DATABASE_URL pekar på en databas som inte kör på den här maskinen (db.eppgmjswfnrfwnqvtrge.supabase.co). En process som kan öppna en fjärrdatabas kan nå riktiga personuppgifter, oavsett vilken värd den kör på — det var precis så den bortglömda Render-stacken kunde köra DeepSeek mot skarp data utan att någon spärr sa ifrån. DeepSeek behandlar prompten i Kina, och vi har varken SCC, överföringsbedömning eller PUB-villkor på plats. Sätt en tillåten provider (openai eller gemini) med rätt nyckel, eller stäng av tjänsten om den inte ska köra alls.",
+      "_wall_ms": 3,
+      "_scenario": {
+        "id": "S4-uppsagning-ultimatum",
+        "beskrivning": "Uppsägningshot/ultimatum — ska trigga retention-skillen OCH eskalera",
+        "message": "Om ni inte löser det här idag så säger jag upp allt och byter leverantör. Tredje gången samma fel.",
+        "subject": "Sista varningen"
+      },
+      "_thinking_mode": "disabled"
+    },
+    "S5-gdpr::disabled": {
+      "_ok": false,
+      "_error": "ForbjudenProviderIMiljon: LLM_PROVIDER=deepseek är inte tillåtet här. Miljönamnet är okänt, men DATABASE_URL pekar på en databas som inte kör på den här maskinen (db.eppgmjswfnrfwnqvtrge.supabase.co). En process som kan öppna en fjärrdatabas kan nå riktiga personuppgifter, oavsett vilken värd den kör på — det var precis så den bortglömda Render-stacken kunde köra DeepSeek mot skarp data utan att någon spärr sa ifrån. DeepSeek behandlar prompten i Kina, och vi har varken SCC, överföringsbedömning eller PUB-villkor på plats. Sätt en tillåten provider (openai eller gemini) med rätt nyckel, eller stäng av tjänsten om den inte ska köra alls.",
+      "_wall_ms": 3,
+      "_scenario": {
+        "id": "S5-gdpr",
+        "beskrivning": "GDPR-radering — MÅSTE eskalera oavsett ton",
+        "message": "Hej, jag skulle vilja att ni raderar all min persondata enligt GDPR. Tack på förhand!",
+        "subject": "Radering av persondata"
+      },
+      "_thinking_mode": "disabled"
+    }
+  },
+  "skill_integrity": {}
+}

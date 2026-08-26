@@ -55,19 +55,34 @@ class PlaybookStep:
     temperature: float | None = None
     # Den sanktionerade finjusteringsytan (INV-SKILL-005: "justera med
     # tilläggsinstruktioner ovanpå skillen, aldrig i skillen"). Namn på en fil
-    # i agent-core/overlays/, injicerad i SYSTEMposition efter skill-texten.
-    # Fritt redigerbar, versionerad via overlays.overlay_hash() i pack_version.
+    # i agent-core/overlays/ — eller en TUPLE av namn, injicerade i ordning —
+    # i SYSTEMposition efter skill-texten. Fritt redigerbar, versionerad via
+    # overlays.overlay_hash() i pack_version.
     # Behöver du ändra vad ett steg säger: gör det här, inte i skillen.
-    overlay: str | None = None
+    #
+    # Komposition (2026-08-26): ett steg som behöver BÅDE de hårda reglerna
+    # och en syftesoverlay (svar, uppföljning) anger båda. Alternativet var
+    # att duplicera hårdreglerna in i varje syftesoverlay — och duplicerad
+    # tuning divergerar, vilket är exakt det overlays finns för att undvika.
+    overlay: str | tuple[str, ...] | None = None
+
+    @property
+    def overlay_names(self) -> tuple[str, ...]:
+        """Overlayerna som tuple, oavsett hur fältet deklarerades."""
+        if not self.overlay:
+            return ()
+        if isinstance(self.overlay, str):
+            return (self.overlay,)
+        return self.overlay
 
     def __post_init__(self):
         parse_skill_name(self.skill)  # kastar direkt om oprefixerat/okänt (INV-SKILL-001)
-        if self.overlay:
+        for namn in self.overlay_names:
             # Samma fail-fast som skill-namnet: ett felstavat overlay-namn
             # fäller modulimporten, alltså CI, aldrig först i produktion.
             from .overlays import parse_overlay_name
 
-            parse_overlay_name(self.overlay)
+            parse_overlay_name(namn)
         if self.scope and not self.rationale:
             raise ScopeWithoutRationaleError(
                 f"{self.skill}: en skopa kräver en rationale i playbooken (INV-SKILL-003). "

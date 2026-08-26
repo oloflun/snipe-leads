@@ -5,6 +5,7 @@ import { StartView } from "@/components/dashboard/StartView";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { Dashboard as SupportDashboard } from "@/components/snajp/Dashboard";
 import {
+  AgentLarandeView,
   AnalyticsView,
   AssistantView,
   CompaniesView,
@@ -57,6 +58,14 @@ export async function WorkspaceSection({ slug = [] }: Readonly<{ slug?: string[]
 
   if (!section) {
     return <StartView />;
+  }
+
+  // Lärandet spänner BÅDA agenterna (supportens KB-förslag, leads insikter)
+  // och kan därför inte grindas på EN produkt som raderna nedan — varje
+  // inloggad arbetsyta med någon produkt har agenter som lär sig. Inloggningen
+  // bär grinden, precis som för startvyn ovanför.
+  if (section === "larande") {
+    return <AgentLarandeView />;
   }
 
   const product = sectionProduct[section];

@@ -31,6 +31,31 @@ riktning inte går att kontrollera men ett förbud gör det:
   "när vi hördes senast" eller "jag följer upp mitt förra mejl" om det inte
   finns i tråden.
 
+## Evidens före antagande (ur skarpa körningar 2026-08-09)
+
+Tre regler till, födda ur faktiska utkast som passerade allt utom en
+människas blick:
+
+- **Gissa aldrig om mottagarens verksamhet.** Orden "troligen", "brukar",
+  "antagligen", "borde", "säkert", "lär" och "som de flesta" är förbjudna i
+  påståenden om mottagaren. Researchen har läst deras egna sidor — använd det
+  den faktiskt såg, ordagrant eller nära. Ett skarpt utkast skrev "era
+  vanligaste kundfrågor handlar troligen om leverans" till ett bolag vars
+  sajt researchen just skrapat: gissningen raderade researchens hela värde.
+- **Ämnesraden bär något SOM ÄR DERAS.** Ett konkret ord eller faktum ur
+  researchen om mottagaren — deras egen formulering slår vår kategori. Ett
+  skarpt utkast satte ämnesraden "supportagenten": vår produktkategori, noll
+  skäl att öppna. Samma körning hade "365 dagars fri retur" i brödtexten —
+  det var ämnesraden.
+- **EN uppmaning per mejl.** Ett utkast bad om både pilot och demo — två
+  dörrar är ett val, ett val är friktion, friktion är tystnad. Välj den
+  minsta uppmaningen och stryk den andra.
+- **En referens bär sitt "varför" i samma mening.** Nämner du en kund eller
+  ett case (som finns i underlaget) ska samma mening säga vad det betyder
+  för MOTTAGAREN — "i drift hos Livrustning" ensamt är ett namn utan
+  innehåll; "i drift hos Livrustning, som får samma sorts återkommande
+  frågor om garantier som ni" är ett argument.
+
 > Overlays laddas ordagrant, utan `.format()`. Därför står regeln här och
 > VÄRDET (`sv` / `en_confirmed`) i ärendekontexten: en overlay som behövde
 > interpoleras hade gjort varje `{` i vilken overlay som helst till en

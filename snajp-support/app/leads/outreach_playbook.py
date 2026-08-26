@@ -27,6 +27,14 @@ from .research_playbook import THINKING  # noqa: E402
 # starkare placering, och versionerad via overlay_hash i pack_version.
 _HARD_RULES = "leads-hard-rules"
 
+# Temperaturerna speglar supportbeslutet 2026-08-25: 0.3 på allt gav svar som
+# återanvände samma fraser ordagrant mellan ärenden, så FORMULERINGSSTEG fick
+# 0.5 (utkast) och 0.7 (humanizer) medan analys- och bedömningssteg behöll den
+# kalla defaulten. Leads-kedjan fick aldrig samma justering — utkastet och
+# humaniseraren var de kallaste stegen i just den kedja vars hela uppgift är
+# formulering, och 2026-08-09-utkastens likformighet ("supportagenten",
+# "returfrågor" som ämnesrader) är precis det symptomet. Granskningssteget
+# (mk:cold-email hel) förblir kallt: det BEDÖMER, det formulerar inte.
 OUTREACH_V1 = Playbook(
     name="leads/outreach-v1",
     steps=(
@@ -35,6 +43,7 @@ OUTREACH_V1 = Playbook(
             requires=("offer_selected",),
             overlay=_HARD_RULES,
             thinking=THINKING,
+            temperature=0.5,
         ),
         PlaybookStep(
             skill="mk:cold-email",
@@ -43,8 +52,9 @@ OUTREACH_V1 = Playbook(
             rationale="Skapandesteget behöver personaliseringssignaler, inte hela mk:cold-email-metodiken än.",
             overlay=_HARD_RULES,
             thinking=THINKING,
+            temperature=0.5,
         ),
-        # granska: hel skill
+        # granska: hel skill — bedömning, inte formulering; kall default.
         PlaybookStep(
             skill="mk:cold-email",
             requires=("skill:mk:cold-email",),
@@ -56,6 +66,7 @@ OUTREACH_V1 = Playbook(
             requires=("skill:mk:cold-email",),
             overlay=_HARD_RULES,
             thinking=THINKING,
+            temperature=0.7,
         ),
     ),
 )

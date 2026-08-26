@@ -95,6 +95,9 @@ export const appRoutes: AppRoute[] = [
   { href: "/dashboard/companies", labelKey: "nav.companies", product: "leads", preview: true },
   { href: "/dashboard/contacts", labelKey: "nav.contacts", product: "leads", preview: true },
   { href: "/dashboard/inbox", labelKey: "nav.inbox", product: "leads", preview: true },
+  // Delad mellan agenterna: supportens KB-förslag och leads marknadsinsikter
+  // godkänns i samma vy (INV-LEARN-001 — människan i lärloopen).
+  { href: "/dashboard/larande", labelKey: "nav.larande", product: "shared", preview: true },
   { href: "/dashboard/analytics", labelKey: "nav.analytics", product: "leads", preview: true },
   { href: "/dashboard/assistant", labelKey: "nav.assistant", product: "leads", preview: true },
   // Bokföringsagenten. En riktig produkt sedan den fick pris, marknadssida

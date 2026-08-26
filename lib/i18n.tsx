@@ -33,6 +33,7 @@ const commonCopy = {
   "nav.analytics": { sv: "Analys", en: "Analytics" },
   "nav.bokforing": { sv: "Bokföring", en: "Bookkeeping" },
   "nav.inbox": { sv: "Svar", en: "Replies" },
+  "nav.larande": { sv: "Lärande", en: "Learning" },
   "nav.settings": { sv: "Inställningar", en: "Settings" },
   "state.loading": { sv: "Laddar arbetsyta", en: "Loading workspace" },
   "state.empty": { sv: "Inga poster ännu", en: "No records yet" },

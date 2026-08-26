@@ -182,6 +182,16 @@ function DemoChatt() {
 export function BokforingDemo() {
   return (
     <div className="mx-auto max-w-[1120px]">
+      {/* Märkningen är EN lågmäld rad, inte den gamla varningsrutan — copyn
+          skärptes 2026-08-25 (647dd12) och rutan åkte, men rotens vaktpost
+          (tests/test_demo_bokforing.py) kräver med rätta att siffror som ser
+          ut att komma ur en körning säger att de inte gör det. Samma regel
+          som leads-agentens exempelbolag. Ta inte bort raden utan waiver. */}
+      <p className="mb-4 text-[0.8125rem] leading-6 text-ink/55">
+        <strong className="font-semibold text-ink/70">Exempel.</strong> Underlaget,
+        bolaget och siffrorna är påhittade och svaren skrivna i förväg — ingen modell
+        körs på den här sidan.
+      </p>
       <div className="grid gap-5 lg:grid-cols-12 lg:gap-6">
         {/* VÄNSTER: vägen från kvitto till periodrapport. */}
         <div className="lg:col-span-7">

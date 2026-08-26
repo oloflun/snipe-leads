@@ -17,7 +17,19 @@ from app.storage.memory import MemoryStorage
 
 TENANT = "00000000-0000-4000-a000-000000000001"
 
+# Lyckligt flöde: KB bar svaret, inget eskalerade — då finns ingen lucka att
+# skriva en artikel om, och cs:kb-article hoppas över (villkorat 2026-08-26).
 EXPECTED_ORDER_NORMAL = [
+    "cs:ticket-triage",
+    "cs:customer-research",
+    "cs:draft-response",
+    "cs:customer-escalation",
+    "snajp:humanizer-svenska",
+]
+
+# Med kunskapslucka (eller säkerhetskritiskt ärende) körs kunskapssteget,
+# på sin deklarerade plats före humaniseraren.
+EXPECTED_ORDER_KB_GAP = [
     "cs:ticket-triage",
     "cs:customer-research",
     "cs:draft-response",
@@ -117,6 +129,69 @@ async def test_one_llm_call_per_skill_step_in_declared_order():
 
 
 @pytest.mark.anyio
+async def test_kb_article_runs_on_kb_gap_and_suggestion_is_persisted():
+    """Kunskapssteget körs när KB saknade svaret — och förslaget SPARAS som
+    agent_suggestion i stället för att kastas (2026-08-26). Agenten skriver
+    aldrig själv i kunskapsbasen: raden har status 'ny' tills en människa
+    godkänner (INV-LEARN-001)."""
+    storage = MemoryStorage()
+    llm = _FakeLLM(
+        overrides={
+            "cs:customer-research": {"kb_supports_answer": False},
+            "cs:kb-article": {
+                "should_create": True,
+                "title": "Leveranstid till Norge",
+                "content": "Vi levererar till Norge inom 5-7 arbetsdagar.",
+            },
+        }
+    )
+    result = await _run(storage, llm)
+
+    assert llm.calls == EXPECTED_ORDER_KB_GAP
+    forslag = await storage.list_agent_suggestions(TENANT, status="ny")
+    assert len(forslag) == 1
+    assert forslag[0]["kind"] == "kb_article"
+    assert forslag[0]["agent_type"] == "support"
+    assert forslag[0]["content"]["title"] == "Leveranstid till Norge"
+    # Kunskapsbasen är ORÖRD — förslaget är inte en artikel.
+    titlar = [a["title"] for a in await storage.list_kb(TENANT)]
+    assert "Leveranstid till Norge" not in titlar
+    assert result["ticket_id"]
+
+
+@pytest.mark.anyio
+async def test_samma_kunskapslucka_ger_en_rad_inte_tio():
+    """Dedupe: tio ärenden om samma lucka ska ge EN rad att granska."""
+    storage = MemoryStorage()
+    llm = _FakeLLM(
+        overrides={
+            "cs:customer-research": {"kb_supports_answer": False},
+            "cs:kb-article": {
+                "should_create": True,
+                "title": "Leveranstid till Norge",
+                "content": "Vi levererar till Norge inom 5-7 arbetsdagar.",
+            },
+        }
+    )
+    await _run(storage, llm)
+    await _run(storage, llm, message="Hur lång är leveranstiden till Norge egentligen?")
+
+    forslag = await storage.list_agent_suggestions(TENANT, status="ny")
+    assert len(forslag) == 1
+
+
+@pytest.mark.anyio
+async def test_kb_article_skips_when_kb_bar_svaret():
+    """Inget kunskapssteg på ett ärende där KB bar svaret och inget flaggade
+    — steget var där ren kostnad utan utbyte."""
+    storage, llm = MemoryStorage(), _FakeLLM()
+    await _run(storage, llm)
+
+    assert "cs:kb-article" not in llm.calls
+    assert await storage.list_agent_suggestions(TENANT) == []
+
+
+@pytest.mark.anyio
 async def test_step_log_records_contract_fields_per_step():
     storage, llm = MemoryStorage(), _FakeLLM()
     result = await _run(storage, llm)
@@ -137,6 +212,7 @@ async def test_agent_run_is_logged_with_step_log_g10():
     assert len(runs) == 1
     assert runs[0]["skills_used"] == EXPECTED_ORDER_NORMAL
     assert len(runs[0]["step_log"]) == len(EXPECTED_ORDER_NORMAL)
+    assert "cs:kb-article" not in runs[0]["skills_used"]
     assert runs[0]["tokens_in"] > 0
     assert ":support/v1" in runs[0]["pack_version"]
 
@@ -487,6 +563,51 @@ async def test_triageflaggan_eskalerar_fortfarande():
 
 
 # -- Den forenklade fragan, som ren funktion ------------------------------
+
+
+@pytest.mark.anyio
+async def test_kort_uppfoljningsreplik_soker_med_forra_repliken():
+    """Flerturssökningen (2026-08-26). "Ja, en Android." bär inte ämnet —
+    kundens FÖRRA replik gör det, och den ska ingå i sökfrågan."""
+    storage, llm = MemoryStorage(), _FakeLLM()
+    await _run(storage, llm, message="Fungerar betalningen med min telefon?")
+
+    fragor: list[str] = []
+
+    async def spionerande_sokning(storage_, tenant_, fraga):
+        fragor.append(fraga)
+        return []
+
+    with patch("app.agent.support_agent._sok_kb", new=spionerande_sokning):
+        await _run(storage, llm, message="Ja, en Android.")
+
+    assert fragor, "Ingen sökning gjordes."
+    assert "telefon" in fragor[0].lower(), (
+        f"Förra replikens ämnesord saknas i sökfrågan: {fragor[0]!r}"
+    )
+
+
+@pytest.mark.anyio
+async def test_langt_meddelande_soks_utan_historikpaslag():
+    """Ett långt nytt meddelande bär sitt eget ämne — historiken ska inte
+    späda rankningen då."""
+    storage, llm = MemoryStorage(), _FakeLLM()
+    await _run(storage, llm, message="Fungerar betalningen med min telefon?")
+
+    fragor: list[str] = []
+
+    async def spionerande_sokning(storage_, tenant_, fraga):
+        fragor.append(fraga)
+        return []
+
+    langt = (
+        "Jag har nu provat igen med ett annat kort och det gick inte heller, "
+        "kan ni kolla om det är något fel på min faktura eller mitt konto?"
+    )
+    with patch("app.agent.support_agent._sok_kb", new=spionerande_sokning):
+        await _run(storage, llm, message=langt)
+
+    assert fragor[0].strip() == langt, f"Historik lades på ett långt meddelande: {fragor[0]!r}"
 
 
 def test_forenklad_fraga_foredrar_amnesraden():

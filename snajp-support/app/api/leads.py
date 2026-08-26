@@ -34,6 +34,7 @@ from ..leads.onboarding_state import REQUIRED_KINDS, get_onboarding_state
 from .deps import kraev_uuid, require_tenant
 from ..leads.soul import SOUL_KIND, SOUL_MAX_CHARS
 from .schemas import (
+    AgentFeedbackRequest,
     ContextDocRequest,
     ExempelbolagRequest,
     LeadsBatchRequest,
@@ -43,6 +44,7 @@ from .schemas import (
     OutreachDraftRequest,
     ProspectRequest,
     ProspectSourceRequest,
+    ProspektsvarRequest,
     ResearchStepRequest,
     SoulRequest,
 )
@@ -443,11 +445,12 @@ async def outreach_draft(
     from ..agent.leads_agent import run_outreach_draft as _run_outreach_draft
 
     storage = request.app.state.storage
+    thread_id = await _los_trad(storage, tenant["tenant_id"], payload.thread_id, payload.prospect_id)
     context_pack, missing = await build_context_pack(storage, tenant["tenant_id"])
     result = await _run_outreach_draft(
         storage,
         tenant["tenant_id"],
-        thread_id=payload.thread_id,
+        thread_id=thread_id,
         prospect_email=payload.prospect_email,
         tenant_name=tenant["tenant_name"],
         company_name=payload.company_name,
@@ -485,6 +488,211 @@ async def list_runs(
 # Autonominivå, målgrupp (ICP) och granskningskö. Det är kunden som bestämmer
 # hur långt agenten får gå, och det beslutet ska gå att ändra utan att vi
 # deployar något.
+
+
+async def _los_trad(
+    storage, tenant_id: str, thread_id: str | None, prospect_id: str | None
+) -> str:
+    """Tråden ett anrop gäller: befintlig via id, annars skapad/återanvänd via
+    prospektet. 404/422 med namnet på det som saknas — inte en död FK längre
+    ned."""
+    if thread_id:
+        if not await storage.get_outreach_thread(tenant_id, thread_id):
+            raise HTTPException(status_code=404, detail="Tråden finns inte.")
+        return thread_id
+    if prospect_id:
+        if not await storage.get_prospect(tenant_id, prospect_id):
+            raise HTTPException(status_code=404, detail="Prospektet finns inte.")
+        thread = await storage.ensure_outreach_thread(tenant_id, prospect_id=prospect_id)
+        return str(thread["id"])
+    raise HTTPException(status_code=422, detail="Ange thread_id eller prospect_id.")
+
+
+@router.post("/api/leads/svar")
+async def ta_emot_prospektsvar(
+    request: Request, payload: ProspektsvarRequest, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Ett inkommande prospektsvar: klassificera och agera.
+
+    Det här är produktionsanroparen som saknades — svaret sparas i
+    outreach_messages (fliken Svar slutar vara tom), köade utskick ställs in
+    eller skjuts, positiva svar blir handoff med sa:call-prep-underlag, och
+    invändningar/frågor får ett svarsutkast som ALLTID hamnar i
+    granskningskön. Se app/leads/svar.py.
+    """
+    _require_live_llm()
+    from ..leads.svar import hantera_prospektsvar
+
+    storage = request.app.state.storage
+    thread_id = await _los_trad(storage, tenant["tenant_id"], payload.thread_id, payload.prospect_id)
+    context_pack, _missing = await build_context_pack(storage, tenant["tenant_id"])
+    return await hantera_prospektsvar(
+        storage,
+        tenant["tenant_id"],
+        thread_id=thread_id,
+        body=payload.body,
+        tenant_name=tenant["tenant_name"],
+        context_pack=context_pack,
+        publik_bas_url=get_settings().publik_bas_url,
+    )
+
+
+@router.post("/api/leads/uppfoljning/svep")
+async def kor_uppfoljningssvep(
+    request: Request, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Kör uppföljningssvepet för DEN HÄR tenanten, nu.
+
+    Schemaläggaren kör samma svep varje timme (scheduler.sweep_follow_ups);
+    endpointen finns för dashboarden och för verifiering — "generera det som
+    är förfallet, visa vad som hände" utan att vänta på nästa tick.
+    """
+    _require_live_llm()
+    from datetime import datetime, timezone
+
+    from ..leads.follow_up_generator import generate_due_follow_ups
+
+    storage = request.app.state.storage
+    context_pack, missing = await build_context_pack(storage, tenant["tenant_id"])
+    if "product_marketing" in missing:
+        raise HTTPException(
+            status_code=422,
+            detail="Affärskontexten saknas — uppföljningar kan inte grundas.",
+        )
+    rader = await generate_due_follow_ups(
+        storage,
+        tenant["tenant_id"],
+        now=datetime.now(timezone.utc),
+        tenant_name=tenant["tenant_name"],
+        context_pack=context_pack,
+    )
+    return {"generated": rader, "count": len(rader)}
+
+
+# -- Agentens föreslagna lärdomar (självlärning, migration 051) ------------
+
+
+@router.get("/api/agent/forslag")
+async def list_forslag(
+    request: Request,
+    status: str | None = None,
+    limit: int = 50,
+    tenant: dict = Depends(require_tenant),
+) -> dict:
+    """Förslagen agenterna samlat: KB-artiklar ur supportärenden,
+    marknadsinsikter ur researchvarv. Agenten skriver aldrig själv in dem —
+    listan finns för att en människa ska godkänna eller avfärda
+    (INV-LEARN-001)."""
+    rader = await request.app.state.storage.list_agent_suggestions(
+        tenant["tenant_id"], status=status, limit=limit
+    )
+    return {"suggestions": rader}
+
+
+@router.post("/api/agent/forslag/{suggestion_id}/godkann")
+async def godkann_forslag(
+    request: Request, suggestion_id: str, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Godkänn ett förslag. kb_article: artikeln SKAPAS här, i kod, av
+    endpointen — det är människans klick som skriver, aldrig agenten.
+    marknadsinsikt: markeras godkänd; själva ICP-/kontextändringen görs av
+    människan i sina egna ytor, med insiktens text som underlag."""
+    kraev_uuid(suggestion_id, "suggestion_id")
+    storage = request.app.state.storage
+    rad = await storage.update_agent_suggestion_status(
+        tenant["tenant_id"], suggestion_id, status="godkand"
+    )
+    if rad is None:
+        raise HTTPException(status_code=404, detail="Förslaget finns inte.")
+
+    created = None
+    if rad.get("kind") == "kb_article":
+        innehall = rad.get("content") or {}
+        if isinstance(innehall, str):
+            import json as _json
+
+            innehall = _json.loads(innehall)
+        embedding = None
+        if not get_settings().is_simulation():
+            from ..agent.embeddings import embed_text
+
+            embedding = await embed_text(f"{innehall.get('title')}\n{innehall.get('content')}")
+        created = await storage.add_kb_article(
+            tenant["tenant_id"],
+            title=str(innehall.get("title") or rad["title"]),
+            content=str(innehall.get("content") or ""),
+            category=str(innehall.get("category") or "ovrigt"),
+            embedding=embedding,
+        )
+    return {"suggestion": rad, "created_article": created}
+
+
+@router.post("/api/agent/feedback", status_code=201)
+async def lamna_agent_feedback(
+    request: Request, payload: AgentFeedbackRequest, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Kundens dom över en körning — första kodvägen till agent_feedback,
+    som funnits i schemat sedan migration 010 utan att någon skrev till den.
+    Samma felklass som instructions_md: tabellen sa att signalen samlades in,
+    och ingenting gjorde det. En nedtummad körning med corrected_output är
+    det starkaste underlaget lärandeflödet kan få."""
+    kraev_uuid(payload.run_id, "run_id")
+    storage = request.app.state.storage
+    try:
+        rad = await storage.save_agent_feedback(
+            tenant["tenant_id"],
+            run_id=payload.run_id,
+            verdict=payload.verdict,
+            comment=payload.comment,
+            corrected_output=payload.corrected_output,
+        )
+    except ValueError as fel:
+        raise HTTPException(status_code=404, detail=str(fel)) from fel
+
+    # Langfuse/promptfoo-mönstret: golden-setet växer ur VERKLIGA fel. En
+    # nedtummad körning med rättad text är per definition ett produktionsfel
+    # med facit — den blir automatiskt ett eval-case (agent_evals), så nästa
+    # eval-körning mäter att just det felet inte kommer tillbaka. Mekaniskt,
+    # ingen modell: input är körningens input, facit är människans text.
+    eval_case = None
+    if payload.verdict == "bad" and payload.corrected_output:
+        runs = await storage.list_agent_runs(tenant["tenant_id"], limit=200)
+        run = next((r for r in runs if str(r.get("id")) == payload.run_id), None)
+        if run and str(run.get("input") or "").strip():
+            eval_case = await storage.save_eval_case(
+                tenant["tenant_id"],
+                agent_type="support" if run.get("agent_type") == "support" else "leads",
+                input_text=str(run["input"]),
+                expected_traits={"kalla": "feedback", "kommentar": payload.comment or ""},
+                approved_output=payload.corrected_output,
+            )
+    return {"feedback": rad, "eval_case": eval_case}
+
+
+@router.get("/api/agent/feedback")
+async def list_agent_feedback(
+    request: Request,
+    verdict: str | None = None,
+    limit: int = 50,
+    tenant: dict = Depends(require_tenant),
+) -> dict:
+    rader = await request.app.state.storage.list_agent_feedback(
+        tenant["tenant_id"], verdict=verdict, limit=limit
+    )
+    return {"feedback": rader}
+
+
+@router.post("/api/agent/forslag/{suggestion_id}/avfard")
+async def avfard_forslag(
+    request: Request, suggestion_id: str, tenant: dict = Depends(require_tenant)
+) -> dict:
+    kraev_uuid(suggestion_id, "suggestion_id")
+    rad = await request.app.state.storage.update_agent_suggestion_status(
+        tenant["tenant_id"], suggestion_id, status="avfard"
+    )
+    if rad is None:
+        raise HTTPException(status_code=404, detail="Förslaget finns inte.")
+    return {"suggestion": rad}
 
 
 @router.get("/api/leads/svar")

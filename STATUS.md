@@ -1,5 +1,176 @@
 # Snipra Status
 
+## 2026-08-27 (natt) — Claude — varv 2–3: mätningen bevisad, grindarna skärpta, och två arkitekturmönster hämtade utifrån
+
+Fortsättning på kvällens audit, på Antons uttryckliga "fortsätt tills jag säger
+stopp". Milstolperapport med all mätdata:
+https://claude.ai/code/artifact/862c4b3b-e058-4959-86b8-caa84591b127
+
+**Mätningen gjord på riktigt (4 skarpa körningar + jämförelseskript).**
+Support: S1-vändningen (7 aug eskalerade mot seedad KB → svarar nu),
+S2-vändningen (falsk retention_risk → svarar själv med KB-grundad plan;
+klassarvillkoret lagat: missnöje ensamt bär aldrig retention-etiketten).
+Leads: evidensreglerna bet direkt (ämnesrader bär mottagarens fakta, EN
+uppmaning, "troligen" borta); referensregeln träffade 3/3 i EFTER-körningen;
+grundningscykeln fällde+reparerade+köade skarpt. `--skarp`-verifiering:
+modellen följde injicerad kundinstruktion ordagrant.
+
+**Gissningsordsgrinden i kod** (`app/leads/gissnings_gate.py`): overlay-regeln
+visade sig vara en riktning ("lär"/"brukar" slank igenom) — nu kodgrind,
+testad mot exakt de meningarna, inkopplad i alla tre utkastvägarna med samma
+reparationscykel som grundningen.
+
+**Adminytan Lärande** (`/dashboard/larande`, `components/leads/AgentLarande.tsx`):
+förslagen godkänns/avfärdas (godkänd KB-artikel skapas av backend-endpointen,
+aldrig av klienten), teamets domar listas read-only därunder. Wirad i
+routes/i18n/WorkspaceViews; rotvaktpost tillagd (333 gröna). *(En
+processomstart tappade kontexten om att ytan byggts — en mellanversion av den
+här posten kallade den felaktigt obyggd; verifierad på disk och i tsc/vaktposter
+2026-08-27.)*
+
+**Varv 3 — arkitektur utifrån, husanpassad:**
+- **Eval-harness** (Langfuse/promptfoo/Ragas-mönstret): `app/agent/evals.py`,
+  7 golden cases ur VERKLIGA incidenter, faithfulness mätt med
+  grundningsextraktorn i stället för LLM-domare, `scripts/kor_evals.py`
+  (exit 1 vid fall). Döda `agent_evals` fick sin första kodväg, och nedtummad
+  feedback med rättad text blir AUTOMATISKT ett eval-case — fältets
+  "live trafik in i golden-setet", mekaniskt.
+- **Kundminne** (mem0 ADD-only): migration 052 `customer_memory`, extraktion
+  inbakad i triagesteget (noll extra anrop), ny invariant **INV-MEM-001**
+  (bara kundens egna utsagor, aldrig agentens slutsatser, alltid
+  untrusted-wrappat — injektionsattack-testat). `agent_feedback` fick också
+  sin första kodväg (verdict + corrected_output, POST /api/agent/feedback).
+- Avvisade med motivering: Zep-graf, LLM-domare, A/B-bandit (blockerad av att
+  offers-rader aldrig skrivs — samma rot som weakest_lever, snipe-3dx).
+
+**1445 backendtester gröna** (1338 vid sessionens start), 333 rotvaktposter.
+**Eval-harnessen skarpkörd: 7/7 golden cases godkända mot riktig modell**
+(docs/live-tests/evals-20260826-222210.json) — inklusive faithfulness-mätningen.
+Migration 051+052 parsas som pending. Allt okommittat — commit/push/migration
+väntar på Antons ord.
+
+## 2026-08-26 (kväll) — Claude — djupaudit av agentbackenden: tre döda kedjor hittade, självlärningen persisterad, svar och uppföljningar byggda
+
+**Tre saker som såg färdiga ut var aldrig inkopplade, och en av dem kunde inte
+ens köras i produktion.** (1) Ingen kodväg skapade någonsin en
+`outreach_threads`-rad — `queue_outreach_message` skrev mot ett thread_id som
+bara hand-SQL kunde ha skapat. MemoryStorage saknar FK-kontrollen, så sviten
+var grön medan Postgres hade fällt första riktiga köningen. Nu:
+`ensure_outreach_thread` (get-or-create per prospekt) i alla tre lagringarna,
+och API:t tar `prospect_id` som alternativ till `thread_id`. (2) Prospektsvar
+hade ingen hanteringsväg alls — `list_replies` läste en tabell inget fyllde,
+`route_handoff` saknade anropare. (3) `follow_up.py`:s hela sekvenslogik
+anropades bara från tester (snipe-3dx).
+
+**Svarshanteringen byggd** (`app/leads/svar.py`, `POST /api/leads/svar`):
+klassificering (positivt/invandning/fraga/negativt/avregistrering/autosvar,
+okänt faller till fraga), påhoppsgrind i kod före allt. Positivt → kön ställs
+in, `route_handoff` + `sa:call-prep`-underlag + prioriterat mejl, prospekt →
+`meeting`. Invändning/fråga → svarsutkast (skopad mk:sales-enablement →
+humanizer → grundningsgrind) som ALLTID köas `awaiting_review`, oavsett
+autonominivå — autonomin styr utgående sekvens, inte svar i levande samtal.
+Avregistrering → suppression (samma spärr som länken). Autosvar → kön skjuts
+en vecka. Grundlöst påstående → människa, ingen reparationsrunda.
+
+**Uppföljningsgeneratorn byggd** (`app/leads/follow_up_generator.py`):
+ren due-policy (`trad_som_ar_forfallna`) skild från I/O; stigande delays
+(4/6/8/10 dagar), spakvinklar + breakup, grundningsgrind, köning genom SAMMA
+väg som första mejlet (fot, språkgrind, autonomi — `draft` ⇒ granskning).
+Självbegränsande: ogodkänt utkast gör tråden icke-förfallen; inkommet svar
+tar den ur svepet. Schemaläggaren sveper varje timme; manuell trigger
+`POST /api/leads/uppfoljning/svep`.
+
+**Självlärningen persisteras** (migration 051, `agent_suggestions`, ny
+invariant INV-LEARN-001): supportens `cs:kb-article` och leads
+`_fanga_kunskap` räknade ut lärdomar på varje körning och KASTADE dem —
+utdatan fanns bara i step_log. Nu sparas de som förslag med dedupe (tio
+ärenden om samma lucka = EN rad), och agenten skriver ALDRIG själv i
+underlaget: `POST /api/agent/forslag/{id}/godkann` (människans klick) skapar
+KB-artikeln. `cs:kb-article` är dessutom VILLKORAT — körs bara vid
+kunskapslucka eller säkerhetskritiskt ärende (~1 anrop av 6 sparat på
+lyckliga flödet, som per definition saknar lucka att skriva om).
+
+**Retrieval förbättrad på två punkter.** Postgres `search_kb` kör nu UNION av
+vektor + fulltext i stället för antingen/eller — en enda svag vektorträff
+över tröskeln stängde förut fulltexten helt, även när svaret stod där.
+Flerturssökningen: ett kort svar i en fortsättning ("Ja, en Android.") söker
+nu med kundens FÖRRA replik inlagd i frågan — den bär ämnet.
+
+**Paritetsluckor som systemet självt fångade under bygget:** `agent_type`-
+värdena `leads_svar`/`leads_followup` fälldes av AGENT_RUN_TYPES-spegeln i
+test (exakt den mekanism som byggdes efter halvårsbuggen), och memorys
+`get_outreach_thread` speglade inte SQL-joinens `prospect_email` — lagat.
+
+**Verifierat:** 1338 → **1390 tester gröna** (52 nya, 0 regressioner).
+`verifiera_instruktioner.py`: 6/6 fält i rätt position, global regel i alla
+steg. Skill-audit: 22 steg i 4 playbooks renderar komplett, inga trasiga
+referenser. Migration 051 parsas och listas som pending av railway_migrate
+(appliceras efter deploy, samma ordning som handoffen).
+
+**Kvar:** live före/efter-körningen (`run_live_tests.py --support/--leads`)
+blockerades av auto-mode-klassificeraren efter harness-fixen (den blankar nu
+DATABASE_URL i egen process — spärren själv är orörd och gjorde rätt) —
+snipe-kea. Adminyta för förslagen: snipe-lu4. Mejlpipeline-routing av
+prospektsvar: snipe-xl9 (blockeras reellt av snipe-ork). pg_trgm-kandidaten:
+snipe-a6i.
+
+## 2026-08-26 — Claude — instruktionslagren byggda och deployade, och pausen från 24:e har hävts utan att åtgärdslistan gjordes
+
+**Migration 049: `agent_configs.instructions_md`/`.tone` fick sin läsväg.** Fälten hade
+funnits sedan migration 010 utan att någon kodväg läste dem — en kund kunde spara nya
+instruktioner och få identiskt oförändrade svar. Byggt: en global instruktionstabell
+(admin-redigerad, fallback till `agent-core/AGENTS.md`), per-kund-instruktioner i
+systemposition, en struktureringsgrind (fri text → imperativa regler under fasta
+rubriker, kodstädad efteråt), och en adminkundprofil (`/admin/kunder/<id>`) som visar
+varje fälts promptposition explicit. Affärskontexten nådde tidigare bara leads-agenten,
+aldrig supporten — samma klass av fel, nu åtgärdad. Verifierat med
+`scripts/verifiera_instruktioner.py`: sex av sex fält i rätt position, global regel i
+alla sex steg, och med `--skarp` följde en riktig modell den injicerade instruktionen
+ordagrant. Se `HANDOFF-2026-08-25-INSTRUKTIONER.md` och `docs/FALTKARTA.md`.
+
+**KB-sökningen kedjar nu vektor → fulltext.** Vektorvägen gav tom träfflista så fort
+den kom tom, utan fallback; tom träfflista är ett hårt eskaleringsvillkor, så en
+retrievalmiss blev ett onödigt människoärende i stället för ett sämre svar.
+
+**Rebasen mot en parallell session (Sebbe/PR #10) hittade en bugg innan den nådde
+production.** Ett nytt kunskapssteg (`sa:call-summary`, `_fanga_kunskap`) anropade
+`run_step` utan instruktionslagren — det hade läst filens `AGENTS.md` medan de åtta
+stegen omkring läste kundens, tyst, utan att något felade. Lagat: varje `run_step`-
+anrop i `leads_agent.py` bär nu `instruktioner=`.
+
+**En Supabase-import sänkte tyst Nordlys Handels affärskontext (2026-08-24, upptäckt och
+rättat 2026-08-25/26).** Ett tidigt skript skrev importerade kontextdokument som
+`max(version)+1`, alltså senaste — ett 726-teckens dokument ersattes av en 43-teckens
+Supabase-stubbe utan att något felade. Återställt (ingen historik raderad).
+`far_importeras()` vägrar nu skriva in i ett fack som redan har innehåll; regeln testad
+mot exakt den import som orsakade skadan.
+
+**Windows/git-fälla värd att komma ihåg:** Python-skript utan explicit `newline='\n'`
+skrev CRLF i tio filer i det här LF-repot, vilket fick en 3200-radersdiff att se ut
+som 7000+ rader omskrivna och hade gett konflikt på varenda rad i en rebase. Normaliserat
+före commit; se global `MEMORY.md`.
+
+### Det som INTE är löst, och som blev tydligare i kväll
+
+**Pausen från 2026-08-24 kväll är hävd, utan att åtgärdslistan i `docs/JURIDIK_ATGARDER.md`
+P0.1c genomfördes.** Den kvällen pausades `main` uttryckligen till simuleringsläge:
+gratisnivåns Gemini-avtal tillåter Google att använda kunddata för produktförbättring,
+och riktiga kundmejl gick dit. Fyra åtgärder listades innan pausen skulle hävas:
+bekräfta nivån, aktivera fakturering eller byt provider, skaffa en EGEN nyckel per miljö,
+teckna DPA.
+
+Mätt i kväll: **både `main` och `development` svarar `mode: live`.** Samma
+`GEMINI_API_KEY` delas fortfarande mellan miljöerna. Kvoten är fortfarande FreeTier
+(`GenerateRequestsPerMinutePerProjectPerModel-FreeTier` triggas efter 6 anrop/minut —
+en betald nivå har inte den kvotklassen). Ingen av de fyra åtgärderna är genomförd.
+Ingen av `JURIDIK_ATGARDER.md`, det här dokumentet, eller integritetspolicyn uppdaterades
+när pausen hävdes. Riktiga kundmejl går just nu till gratisnivån igen — precis det
+pausen fanns för att förhindra. Spårat som `snipe-a1c` (P0). Flaggat till Anton direkt,
+inte bara här.
+
+**`main` ligger ~80 commits efter `development`** och saknar migration 043–049.
+`snipe-zfc`.
+
 ## 2026-08-24 — Claude — produktionen pausad, Render tystad, Gemini-frågan avgjord
 
 **Gemini-nyckeln ÄR gratisnivån.** Inga indicier kvar — Googles eget kvotfel namnger den:

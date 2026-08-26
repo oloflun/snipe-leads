@@ -10,6 +10,7 @@ import { LoginForm } from "@/components/auth/LoginForm";
 import { SignOutButton } from "@/components/auth/SignOutButton";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { Analys } from "@/components/dashboard/Analys";
+import { AgentLarande } from "@/components/leads/AgentLarande";
 import { Bolagsregister } from "@/components/leads/Bolagsregister";
 import { Bolagssida } from "@/components/leads/Bolagssida";
 import { Kontakter } from "@/components/leads/Kontakter";
@@ -196,6 +197,18 @@ export function InboxView({ demo = false }: Readonly<{ demo?: boolean }>) {
       description="Vem som svarat, vad de skrev och var prospektet står nu."
     >
       <Svar demo={demo} />
+    </PageShell>
+  );
+}
+
+export function AgentLarandeView() {
+  return (
+    <PageShell
+      kicker="Lärande"
+      title="Det agenterna lärt sig — och väntar på ditt ok för."
+      description="Kunskapsluckor ur supportärenden och marknadsinsikter ur research. Inget skrivs in i ditt underlag utan att du godkänner det här."
+    >
+      <AgentLarande />
     </PageShell>
   );
 }

@@ -234,7 +234,12 @@ async def run_step(
     lager = instruktioner or Instruktionslager(
         global_md=load_global_instructions_fil(), kund_md=""
     )
-    overlay_text = load_overlay(step.overlay) if step.overlay else ""
+    # Flera overlays renderas i deklarationsordning, var och en med sin egen
+    # avgränsare — "senare vinner vid konflikt" gäller alltså även MELLAN
+    # overlays, så ett stegs syftesoverlay kan specialisera de hårda reglerna.
+    overlay_texts = [(namn, load_overlay(namn)) for namn in step.overlay_names]
+    overlay_chars_total = sum(len(text) for _, text in overlay_texts)
+    overlay_label = "+".join(namn for namn, _ in overlay_texts) or None
 
     system_parts: list[str] = []
     if lager.global_block:
@@ -244,9 +249,9 @@ async def run_step(
         f"skillen {step.skill}, vars fullständiga innehåll följer nedan. Följ "
         f"den. Uppfinn aldrig fakta.\n\n{skill_text}"
     )
-    if overlay_text:
+    for namn, overlay_text in overlay_texts:
         system_parts.append(
-            f"{_OVERLAY_OPEN.format(name=step.overlay)}\n{overlay_text}\n{_OVERLAY_CLOSE}"
+            f"{_OVERLAY_OPEN.format(name=namn)}\n{overlay_text}\n{_OVERLAY_CLOSE}"
         )
     if lager.kund_block:
         system_parts.append(lager.kund_block)
@@ -339,8 +344,8 @@ async def run_step(
             reasoning_content=reasoning_content,
             injected_chars=len(skill_text),
             thinking_mode=effective_mode,
-            overlay=step.overlay,
-            overlay_chars=len(overlay_text),
+            overlay=overlay_label,
+            overlay_chars=overlay_chars_total,
             global_chars=len(lager.global_md),
             kund_chars=len(lager.kund_md),
             instruktionshash=lager.hash,

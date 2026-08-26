@@ -26,6 +26,7 @@ from ..kb_articles import DEMO_KB_ARTICLES, KB_ARTICLES
 from .base import (
     AGENT_RUN_TYPES,
     ANALYTICS_COVERAGE,
+    FEEDBACK_VERDICTS,
     bk_belopp,
     bk_datum,
     kontrollera_bk_balans,
@@ -152,6 +153,17 @@ class MemoryStorage:
         self.avregistreringslankar: dict[str, dict[str, str]] = {}
         self.outreach_threads: dict[str, dict[str, dict[str, Any]]] = {}
         self.outreach_messages: dict[str, list[dict[str, Any]]] = {}
+        # Agentens föreslagna lärdomar (migration 051). Skrivs av support-
+        # och leads-körningarna, godkänns av en människa (INV-LEARN-001).
+        self.agent_suggestions: dict[str, list[dict[str, Any]]] = {}
+        # Kundens dom över körningar (agent_feedback, migration 010 — första
+        # kodvägen 2026-08-26).
+        self.agent_feedback: dict[str, list[dict[str, Any]]] = {}
+        # Kundminne (migration 052): (tenant_id, customer_id) -> faktarader.
+        self.customer_memory: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        # Golden eval-cases (agent_evals, migration 010 — första kodvägen
+        # 2026-08-27).
+        self.eval_cases: dict[str, list[dict[str, Any]]] = {}
         # G11: (tenant_id, segment, lever) -> {sent, replies, positive}. Seedas
         # direkt i tester — ingen API-yta skriver hit än (samma status som
         # send_queue/outreach_* ovan).
@@ -511,7 +523,29 @@ class MemoryStorage:
                 return
 
     async def get_outreach_thread(self, tenant_id: str, thread_id: str) -> dict[str, Any] | None:
-        return self.outreach_threads.get(tenant_id, {}).get(thread_id)
+        thread = self.outreach_threads.get(tenant_id, {}).get(thread_id)
+        if thread is None:
+            return None
+        # Speglar SQL-joinens prospect_email/company_name. Utan dem var
+        # minnesvarianten en lögn om vad produktionen returnerar — och
+        # svarshanteringens suppressions-väg blev tyst tom i test medan den
+        # fungerade mot Postgres (upptäckt 2026-08-26, exakt den divergens
+        # kommentaren nedan varnar för).
+        prospekt = next(
+            (p for p in self.prospects.get(tenant_id, []) if p["id"] == thread.get("prospect_id")),
+            None,
+        )
+        # Prospektets värden när prospektet finns (joinens semantik); annars
+        # behålls det tråden själv bär — fixturer seedar fälten direkt på
+        # tråddicten, och en LEFT JOIN skriver inte över med NULL.
+        berikad = dict(thread)
+        if prospekt:
+            berikad["prospect_email"] = prospekt.get("contact_email")
+            berikad["company_name"] = prospekt.get("company_name")
+        else:
+            berikad.setdefault("prospect_email", None)
+            berikad.setdefault("company_name", None)
+        return berikad
 
     # -- Underlaget send_guard dömer på (DEL 2.3) ---------------------------
     # Samma signaturer och samma normalisering som PostgresStorage. Skiljer de
@@ -620,6 +654,259 @@ class MemoryStorage:
         self.outreach_messages.setdefault(tenant_id, []).append(message)
         self.send_queue.setdefault(tenant_id, []).append(queue_item)
         return {"message": message, "queue_item": queue_item}
+
+    async def ensure_outreach_thread(
+        self, tenant_id: str, *, prospect_id: str
+    ) -> dict[str, Any]:
+        trådar = self.outreach_threads.setdefault(tenant_id, {})
+        for thread in trådar.values():
+            if thread.get("prospect_id") == prospect_id:
+                return thread
+        thread = {
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "prospect_id": prospect_id,
+            "offer_id": None,
+            "language_state": "sv",
+            "last_inbound_at": None,
+            "created_at": _now(),
+        }
+        trådar[thread["id"]] = thread
+        return thread
+
+    async def record_inbound_reply(
+        self, tenant_id: str, *, thread_id: str, body: str
+    ) -> dict[str, Any]:
+        thread = self.outreach_threads.get(tenant_id, {}).get(thread_id)
+        if thread is None:
+            raise ValueError(f"Tråden {thread_id} finns inte hos tenanten.")
+        message = {
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "thread_id": thread_id,
+            "direction": "inbound",
+            "body": body,
+            "subject": None,
+            "humanizer_variant": None,
+            # Speglar SQL-varianten: inbound-radens sent_at är mottagandetiden.
+            # list_replies sorterar på den, och en NULL hade sorterat svaret sist.
+            "sent_at": _now(),
+        }
+        self.outreach_messages.setdefault(tenant_id, []).append(message)
+        thread["last_inbound_at"] = message["sent_at"]
+        return message
+
+    async def list_outreach_threads(self, tenant_id: str) -> list[dict[str, Any]]:
+        prospekt = {p["id"]: p for p in self.prospects.get(tenant_id, [])}
+        meddelanden = self.outreach_messages.get(tenant_id, [])
+        kö = self.send_queue.get(tenant_id, [])
+
+        resultat = []
+        for thread in self.outreach_threads.get(tenant_id, {}).values():
+            tid = thread["id"]
+            utgående = [
+                m for m in meddelanden if m["thread_id"] == tid and m["direction"] == "outbound"
+            ]
+            skickade = [m for m in utgående if m.get("sent_at")]
+            p = prospekt.get(thread.get("prospect_id")) or {}
+            resultat.append(
+                {
+                    **thread,
+                    "company_name": p.get("company_name"),
+                    "contact_email": p.get("contact_email"),
+                    "outbound_sent_count": len(skickade),
+                    "last_outbound_sent_at": max((m["sent_at"] for m in skickade), default=None),
+                    # Osänt utkast ELLER aktiv köpost räknas — båda betyder att
+                    # tråden redan har ett nästa steg och inte ska få ett till.
+                    "has_pending_item": bool(
+                        [m for m in utgående if not m.get("sent_at")]
+                        or [
+                            q
+                            for q in kö
+                            if q["thread_id"] == tid
+                            and q["status"] in ("queued", "awaiting_review")
+                        ]
+                    ),
+                }
+            )
+        return resultat
+
+    async def cancel_pending_sends(self, tenant_id: str, thread_id: str) -> int:
+        antal = 0
+        for item in self.send_queue.get(tenant_id, []):
+            if item["thread_id"] == thread_id and item["status"] in ("queued", "awaiting_review"):
+                item["status"] = "cancelled"
+                antal += 1
+        return antal
+
+    async def reschedule_pending_sends(
+        self, tenant_id: str, thread_id: str, *, until: Any
+    ) -> int:
+        antal = 0
+        for item in self.send_queue.get(tenant_id, []):
+            if item["thread_id"] == thread_id and item["status"] == "queued":
+                item["scheduled_at"] = until
+                antal += 1
+        return antal
+
+    # -- Agentens föreslagna lärdomar (migration 051) -----------------------
+
+    async def save_agent_suggestion(
+        self,
+        tenant_id: str,
+        *,
+        agent_type: str,
+        kind: str,
+        title: str,
+        content: dict[str, Any],
+        dedupe_key: str,
+    ) -> dict[str, Any] | None:
+        rader = self.agent_suggestions.setdefault(tenant_id, [])
+        if any(r["dedupe_key"] == dedupe_key and r["status"] == "ny" for r in rader):
+            return None
+        rad = {
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "agent_type": agent_type,
+            "kind": kind,
+            "title": title,
+            "content": content,
+            "dedupe_key": dedupe_key,
+            "status": "ny",
+            "created_at": _now(),
+        }
+        rader.append(rad)
+        return rad
+
+    async def list_agent_suggestions(
+        self, tenant_id: str, *, status: str | None = None, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        limit = max(1, min(limit, 200))
+        rader = [
+            r
+            for r in self.agent_suggestions.get(tenant_id, [])
+            if status is None or r["status"] == status
+        ]
+        rader.sort(key=lambda r: r["created_at"], reverse=True)
+        return rader[:limit]
+
+    async def update_agent_suggestion_status(
+        self, tenant_id: str, suggestion_id: str, *, status: str
+    ) -> dict[str, Any] | None:
+        for rad in self.agent_suggestions.get(tenant_id, []):
+            if rad["id"] == suggestion_id:
+                rad["status"] = status
+                return rad
+        return None
+
+    # -- Kundens dom över en körning (agent_feedback, migration 010) --------
+
+    async def save_agent_feedback(
+        self,
+        tenant_id: str,
+        *,
+        run_id: str,
+        verdict: str,
+        comment: str | None = None,
+        corrected_output: str | None = None,
+    ) -> dict[str, Any]:
+        if verdict not in FEEDBACK_VERDICTS:
+            raise ValueError(
+                f"verdict={verdict!r} finns inte i agent_feedback-checken "
+                f"{FEEDBACK_VERDICTS}. Mot Postgres hade det kastat check-violation."
+            )
+        # Speglar FK:n mot agent_runs. Utan raden tar minnet emot ett run_id
+        # som inte finns medan Postgres kastar — dagens läxa, igen.
+        if not any(r["id"] == run_id for r in self.agent_runs.get(tenant_id, [])):
+            raise ValueError(f"run_id={run_id!r} finns inte i agent_runs hos tenanten.")
+        rad = {
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "run_id": run_id,
+            "verdict": verdict,
+            "comment": comment,
+            "corrected_output": corrected_output,
+            "created_at": _now(),
+        }
+        self.agent_feedback.setdefault(tenant_id, []).append(rad)
+        return rad
+
+    async def list_agent_feedback(
+        self, tenant_id: str, *, verdict: str | None = None, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        limit = max(1, min(limit, 200))
+        rader = [
+            r
+            for r in self.agent_feedback.get(tenant_id, [])
+            if verdict is None or r["verdict"] == verdict
+        ]
+        rader.sort(key=lambda r: r["created_at"], reverse=True)
+        return rader[:limit]
+
+    # -- Kundminne (migration 052) ------------------------------------------
+
+    async def add_customer_facts(
+        self, tenant_id: str, customer_id: str, *, fakta: list[str]
+    ) -> int:
+        rader = self.customer_memory.setdefault((tenant_id, customer_id), [])
+        kanda = {r["fakta"].strip().casefold() for r in rader}
+        antal = 0
+        for rad in fakta:
+            text = str(rad or "").strip()
+            if not text or text.casefold() in kanda:
+                continue
+            rader.append({"fakta": text, "created_at": _now()})
+            kanda.add(text.casefold())
+            antal += 1
+        return antal
+
+    async def get_customer_facts(
+        self, tenant_id: str, customer_id: str, *, limit: int = 12
+    ) -> list[str]:
+        rader = self.customer_memory.get((tenant_id, customer_id), [])
+        # Senaste `limit`, men i kronologisk läsordning för prompten.
+        return [r["fakta"] for r in rader[-max(1, limit):]]
+
+    # -- Golden eval-cases (agent_evals) ------------------------------------
+
+    async def save_eval_case(
+        self,
+        tenant_id: str,
+        *,
+        agent_type: str,
+        input_text: str,
+        expected_traits: dict[str, Any],
+        approved_output: str | None = None,
+    ) -> dict[str, Any]:
+        if agent_type not in ("support", "leads"):
+            raise ValueError(
+                f"agent_type={agent_type!r} finns inte i agent_evals-checken. "
+                "Mot Postgres hade det kastat check-violation."
+            )
+        rad = {
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "agent_type": agent_type,
+            "input": input_text,
+            # Kolumnen är text (migration 010) — JSON serialiseras vid
+            # skrivning i BÅDA lagringarna så läsaren alltid får en dict.
+            "expected_traits": json.dumps(expected_traits, ensure_ascii=False),
+            "approved_output": approved_output,
+            "created_at": _now(),
+        }
+        self.eval_cases.setdefault(tenant_id, []).append(rad)
+        return {**rad, "expected_traits": expected_traits}
+
+    async def list_eval_cases(
+        self, tenant_id: str, *, agent_type: str | None = None, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        limit = max(1, min(limit, 500))
+        rader = [
+            {**r, "expected_traits": json.loads(r["expected_traits"])}
+            for r in self.eval_cases.get(tenant_id, [])
+            if agent_type is None or r["agent_type"] == agent_type
+        ]
+        return rader[:limit]
 
     async def create_prospect(
         self,

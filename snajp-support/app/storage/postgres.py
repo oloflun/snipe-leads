@@ -64,6 +64,36 @@ def _row(record: asyncpg.Record | None) -> dict[str, Any] | None:
     return data
 
 
+#: RRF-konstanten. 60 är standarden (Elasticsearch, OpenSearch, Qdrant) och
+#: fungerar utan korpus-specifik tuning — poängen 1/(k+rang) gör att en
+#: förstaplats väger tungt utan att ensam dominera en artikel som rankar
+#: hyggligt i BÅDA listorna.
+_RRF_K = 60
+
+
+def _rrf_fusion(
+    vektor: list[dict[str, Any]], fulltext: list[dict[str, Any]], *, limit: int
+) -> list[dict[str, Any]]:
+    """Reciprocal Rank Fusion över två rankade träfflistor.
+
+    Ren funktion med flit — sammanslagningen är det enda i hybridssökningen
+    som går att falsifiera utan databas, och då ska den ligga där ett test
+    når den. Poäng per dokument: summan av 1/(k + rang) i varje lista där
+    det förekommer. Dokumentets FÄLT tas från den lista som rankade det
+    först (vektorns similarity är den mer informativa siffran när båda
+    hittade samma artikel).
+    """
+    poang: dict[str, float] = {}
+    rader: dict[str, dict[str, Any]] = {}
+    for lista in (vektor, fulltext):
+        for rang, rad in enumerate(lista):
+            nyckel = str(rad["id"])
+            poang[nyckel] = poang.get(nyckel, 0.0) + 1.0 / (_RRF_K + rang + 1)
+            rader.setdefault(nyckel, rad)
+    ordnade = sorted(poang, key=lambda n: poang[n], reverse=True)
+    return [rader[n] for n in ordnade[:limit]]
+
+
 def _avkoda_jsonb(data: dict[str, Any] | None, *nycklar: str) -> dict[str, Any] | None:
     """jsonb-kolumner kommer tillbaka som TEXT från asyncpg.
 
@@ -432,12 +462,27 @@ class PostgresStorage:
         rapporterades som "eskalerar trots att underlag finns".
         """
         async with self._scoped(tenant_id) as conn:
-            traffar: list[dict[str, Any]] = []
+            # HYBRID, inte antingen/eller (2026-08-26). Kedjan föll förut
+            # bara tillbaka när vektorlistan var HELT tom — en enda svag
+            # vektorträff över tröskeln räckte för att fulltexten aldrig
+            # tillfrågades, även när svaret stod i en artikel fulltexten
+            # hade hittat direkt.
+            #
+            # Sammanslagningen är Reciprocal Rank Fusion (k=60) — standarden i
+            # Elasticsearch/OpenSearch/Qdrant, vald för att den viktar RANG i
+            # stället för poäng: cosinuslikhet och ts_rank lever på olika
+            # skalor och går inte att jämföra direkt, men "artikeln båda
+            # vägarna rankar högt" är en robust signal oavsett skala.
+            # Referensmätningar (digitalapplied 2026, ParadeDB) visar
+            # recall@10 65-78 % för en väg ensam mot ~91 % för RRF-hybrid.
+            vektor: list[dict[str, Any]] = []
             if embedding is not None:
-                traffar = await self._sok_vektor(conn, tenant_id, embedding, limit)
-            if not traffar:
-                traffar = await self._sok_fulltext(conn, tenant_id, query, limit)
-        return traffar
+                # Fler kandidater än limit in i fusionen: RRF:s poäng bygger
+                # på rang i BÅDA listorna, och en lista kapad till limit har
+                # redan kastat de dokument fusionen skulle ha lyft.
+                vektor = await self._sok_vektor(conn, tenant_id, embedding, limit * 3)
+            fulltext = await self._sok_fulltext(conn, tenant_id, query, limit * 3)
+        return _rrf_fusion(vektor, fulltext, limit=limit)
 
     async def _sok_vektor(
         self, conn, tenant_id: str, embedding: list[float], limit: int
@@ -829,6 +874,349 @@ class PostgresStorage:
                 status,
             )
         return {"message": _row(message), "queue_item": _row(queue_item)}
+
+    async def ensure_outreach_thread(
+        self, tenant_id: str, *, prospect_id: str
+    ) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                select * from outreach_threads
+                where tenant_id = $1 and prospect_id = $2
+                order by created_at limit 1
+                """,
+                tenant_id,
+                prospect_id,
+            )
+            if record is None:
+                record = await conn.fetchrow(
+                    """
+                    insert into outreach_threads (tenant_id, prospect_id)
+                    values ($1, $2)
+                    returning *
+                    """,
+                    tenant_id,
+                    prospect_id,
+                )
+        return _row(record)
+
+    async def record_inbound_reply(
+        self, tenant_id: str, *, thread_id: str, body: str
+    ) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            message = await conn.fetchrow(
+                """
+                insert into outreach_messages
+                  (tenant_id, thread_id, direction, body, sent_at)
+                values ($1, $2, 'inbound', $3, now())
+                returning *
+                """,
+                tenant_id,
+                thread_id,
+                body,
+            )
+            await conn.execute(
+                "update outreach_threads set last_inbound_at = now() where tenant_id = $1 and id = $2",
+                tenant_id,
+                thread_id,
+            )
+        return _row(message)
+
+    async def list_outreach_threads(self, tenant_id: str) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select t.*,
+                       p.company_name,
+                       p.contact_email,
+                       count(m.id) filter (
+                         where m.direction = 'outbound' and m.sent_at is not null
+                       ) as outbound_sent_count,
+                       max(m.sent_at) filter (
+                         where m.direction = 'outbound'
+                       ) as last_outbound_sent_at,
+                       (count(m.id) filter (
+                          where m.direction = 'outbound' and m.sent_at is null
+                        ) > 0
+                        or count(q.id) filter (
+                          where q.status in ('queued', 'awaiting_review')
+                        ) > 0) as has_pending_item
+                from outreach_threads t
+                left join prospects p on p.id = t.prospect_id
+                left join outreach_messages m on m.thread_id = t.id
+                left join send_queue q on q.thread_id = t.id
+                where t.tenant_id = $1
+                group by t.id, p.company_name, p.contact_email
+                """,
+                tenant_id,
+            )
+        return [_row(r) for r in records]
+
+    async def cancel_pending_sends(self, tenant_id: str, thread_id: str) -> int:
+        async with self._scoped(tenant_id) as conn:
+            resultat = await conn.execute(
+                """
+                update send_queue set status = 'cancelled'
+                where tenant_id = $1 and thread_id = $2
+                  and status in ('queued', 'awaiting_review')
+                """,
+                tenant_id,
+                thread_id,
+            )
+        return int(resultat.split()[-1])
+
+    async def reschedule_pending_sends(
+        self, tenant_id: str, thread_id: str, *, until
+    ) -> int:
+        async with self._scoped(tenant_id) as conn:
+            resultat = await conn.execute(
+                """
+                update send_queue set scheduled_at = $3
+                where tenant_id = $1 and thread_id = $2 and status = 'queued'
+                """,
+                tenant_id,
+                thread_id,
+                until,
+            )
+        return int(resultat.split()[-1])
+
+    # -- Agentens föreslagna lärdomar (migration 051) -----------------------
+
+    async def save_agent_suggestion(
+        self,
+        tenant_id: str,
+        *,
+        agent_type: str,
+        kind: str,
+        title: str,
+        content: dict[str, Any],
+        dedupe_key: str,
+    ) -> dict[str, Any] | None:
+        async with self._scoped(tenant_id) as conn:
+            # `on conflict do nothing` mot det partiella unika indexet — en
+            # dubblett ger None till anroparen i stället för en ny rad, samma
+            # kontrakt som MemoryStorage.
+            record = await conn.fetchrow(
+                """
+                insert into agent_suggestions
+                  (tenant_id, agent_type, kind, title, content, dedupe_key)
+                values ($1, $2, $3, $4, $5, $6)
+                on conflict (tenant_id, dedupe_key) where status = 'ny'
+                do nothing
+                returning *
+                """,
+                tenant_id,
+                agent_type,
+                kind,
+                title,
+                json.dumps(content, ensure_ascii=False),
+                dedupe_key,
+            )
+        return _row(record)
+
+    async def list_agent_suggestions(
+        self, tenant_id: str, *, status: str | None = None, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        limit = max(1, min(limit, 200))
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select * from agent_suggestions
+                where tenant_id = $1 and ($2::text is null or status = $2)
+                order by created_at desc
+                limit $3
+                """,
+                tenant_id,
+                status,
+                limit,
+            )
+        return [_row(r) for r in records]
+
+    async def update_agent_suggestion_status(
+        self, tenant_id: str, suggestion_id: str, *, status: str
+    ) -> dict[str, Any] | None:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                update agent_suggestions set status = $3
+                where tenant_id = $1 and id = $2
+                returning *
+                """,
+                tenant_id,
+                suggestion_id,
+                status,
+            )
+        return _row(record)
+
+    # -- Kundens dom över en körning (agent_feedback, migration 010) --------
+
+    async def save_agent_feedback(
+        self,
+        tenant_id: str,
+        *,
+        run_id: str,
+        verdict: str,
+        comment: str | None = None,
+        corrected_output: str | None = None,
+    ) -> dict[str, Any]:
+        # Kolumncheck och FK kastar i Postgres av sig själva; run-ägarskapet
+        # kontrolleras explicit så att ett run_id från EN ANNAN tenant ger
+        # samma fel som ett som inte finns — FK:n ensam skiljer inte på dem.
+        async with self._scoped(tenant_id) as conn:
+            ags = await conn.fetchval(
+                "select 1 from agent_runs where tenant_id = $1 and id = $2",
+                tenant_id,
+                run_id,
+            )
+            if not ags:
+                raise ValueError(f"run_id={run_id!r} finns inte i agent_runs hos tenanten.")
+            record = await conn.fetchrow(
+                """
+                insert into agent_feedback
+                  (tenant_id, run_id, verdict, comment, corrected_output)
+                values ($1, $2, $3, $4, $5)
+                returning *
+                """,
+                tenant_id,
+                run_id,
+                verdict,
+                comment,
+                corrected_output,
+            )
+        return _row(record)
+
+    async def list_agent_feedback(
+        self, tenant_id: str, *, verdict: str | None = None, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        limit = max(1, min(limit, 200))
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select * from agent_feedback
+                where tenant_id = $1 and ($2::text is null or verdict = $2)
+                order by created_at desc
+                limit $3
+                """,
+                tenant_id,
+                verdict,
+                limit,
+            )
+        return [_row(r) for r in records]
+
+    # -- Kundminne (migration 052) ------------------------------------------
+
+    async def add_customer_facts(
+        self, tenant_id: str, customer_id: str, *, fakta: list[str]
+    ) -> int:
+        rensade = [str(r or "").strip() for r in fakta]
+        rensade = [r for r in rensade if r]
+        if not rensade:
+            return 0
+        antal = 0
+        async with self._scoped(tenant_id) as conn:
+            for text in rensade:
+                # Dubblettspärr per (kund, fakta) — exakt samma rad två gånger
+                # är ett dubbelklick, inte ny kunskap. Ingen unik constraint i
+                # schemat (fakta är fritext utan normaliserad form), så
+                # kontrollen görs här, i samma transaktionsscope.
+                finns = await conn.fetchval(
+                    """
+                    select 1 from customer_memory
+                    where tenant_id = $1 and customer_id = $2
+                      and lower(fakta) = lower($3)
+                    """,
+                    tenant_id,
+                    customer_id,
+                    text,
+                )
+                if finns:
+                    continue
+                await conn.execute(
+                    """
+                    insert into customer_memory (tenant_id, customer_id, fakta)
+                    values ($1, $2, $3)
+                    """,
+                    tenant_id,
+                    customer_id,
+                    text,
+                )
+                antal += 1
+        return antal
+
+    async def get_customer_facts(
+        self, tenant_id: str, customer_id: str, *, limit: int = 12
+    ) -> list[str]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select fakta from (
+                  select fakta, created_at from customer_memory
+                  where tenant_id = $1 and customer_id = $2
+                  order by created_at desc
+                  limit $3
+                ) senaste
+                order by created_at asc
+                """,
+                tenant_id,
+                customer_id,
+                max(1, limit),
+            )
+        return [str(r["fakta"]) for r in records]
+
+    # -- Golden eval-cases (agent_evals) ------------------------------------
+
+    async def save_eval_case(
+        self,
+        tenant_id: str,
+        *,
+        agent_type: str,
+        input_text: str,
+        expected_traits: dict[str, Any],
+        approved_output: str | None = None,
+    ) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                insert into agent_evals
+                  (tenant_id, agent_type, input, expected_traits, approved_output)
+                values ($1, $2, $3, $4, $5)
+                returning *
+                """,
+                tenant_id,
+                agent_type,
+                input_text,
+                json.dumps(expected_traits, ensure_ascii=False),
+                approved_output,
+            )
+        rad = _row(record)
+        rad["expected_traits"] = expected_traits
+        return rad
+
+    async def list_eval_cases(
+        self, tenant_id: str, *, agent_type: str | None = None, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        limit = max(1, min(limit, 500))
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select * from agent_evals
+                where tenant_id = $1 and ($2::text is null or agent_type = $2)
+                order by created_at
+                limit $3
+                """,
+                tenant_id,
+                agent_type,
+                limit,
+            )
+        rader = []
+        for r in records:
+            rad = _row(r)
+            try:
+                rad["expected_traits"] = json.loads(rad.get("expected_traits") or "{}")
+            except (TypeError, ValueError):
+                rad["expected_traits"] = {}
+            rader.append(rad)
+        return rader
 
     async def create_prospect(
         self,

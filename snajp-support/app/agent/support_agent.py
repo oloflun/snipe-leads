@@ -14,6 +14,8 @@ modellen via verktyg. Modellen resonerar, koden agerar. Det gör att
 
 from __future__ import annotations
 
+import hashlib
+import logging
 import random
 import re
 import time
@@ -35,6 +37,8 @@ from .step_runner import RunTrace, run_step
 from .support_playbook import SUPPORT_V1
 from .tools import strip_markdown
 from .vision import describe_image
+
+logger = logging.getLogger("snajp-support.support-agent")
 
 # Sentiment under denna tröskel eskalerar oavsett vad modellen tycker
 # (samma regel som tidigare låg i den handskrivna prompten).
@@ -67,25 +71,37 @@ def strip_dangling_sign_off(text: str) -> str:
     return _DANGLING_SIGN_OFF.sub("", text.rstrip()).rstrip()
 
 
-async def _render_conversation(storage, tenant_id: str, history: list) -> tuple[str, int]:
-    """Tidigare turer som en läsbar utskrift, plus antalet turer.
+async def _render_conversation(storage, tenant_id: str, history: list) -> tuple[str, int, str]:
+    """Tidigare turer som en läsbar utskrift, antalet turer, och kundens
+    SENASTE tidigare replik.
 
-    Utan detta fick utkaststeget bara ANTALET tidigare kontakter — en siffra,
-    aldrig samtalet. Modellen kunde därför inte veta att den var mitt i ett
-    samtal, och varje svar blev formellt sett ett första meddelande: "Hej" på
-    varje replik och "Vänliga hälsningar," under varje.
+    Utan utskriften fick utkaststeget bara ANTALET tidigare kontakter — en
+    siffra, aldrig samtalet. Modellen kunde därför inte veta att den var mitt
+    i ett samtal, och varje svar blev formellt sett ett första meddelande:
+    "Hej" på varje replik och "Vänliga hälsningar," under varje.
+
+    Den senaste kundrepliken returneras separat för KB-sökningen: i en
+    fortsättning är det nya meddelandet ofta bara ett svar på vår motfråga
+    ("Ja, en Android") och bär inte ämnet — det gör den förra repliken.
     """
     turns: list[str] = []
+    senaste_kundreplik = ""
     for ticket in reversed(history[:MAX_HISTORY_TICKETS]):  # äldst först
         for msg in await storage.get_messages(tenant_id, ticket["conversation_id"]):
             who = "Kunden" if msg["direction"] == "inbound" else "Du"
             content = (msg.get("content") or "").strip()
             if content:
                 turns.append(f"{who}: {content}")
+                if msg["direction"] == "inbound":
+                    senaste_kundreplik = content
 
     if not turns:
-        return "", 0
-    return "## Tidigare i samtalet\n" + "\n".join(turns[-MAX_HISTORY_TURNS:]), len(turns)
+        return "", 0, ""
+    return (
+        "## Tidigare i samtalet\n" + "\n".join(turns[-MAX_HISTORY_TURNS:]),
+        len(turns),
+        senaste_kundreplik,
+    )
 
 
 def _steps_by_skill() -> dict[str, Any]:
@@ -272,6 +288,33 @@ async def run_support_agent(
     # därför "ändra tonen" inte gjorde någon skillnad förrän nu.
     ton_lage = (agentkonfig.get("tone") or "").strip() or config["tone"]
 
+    # Kunden slås upp FÖRE triagen (flyttad 2026-08-27, låg efter): kundminnet
+    # ska in i case_context, och case_context byggs före första steget.
+    # find_or_create har skapandet som sidoeffekt, men det skedde ändå
+    # ovillkorligen — bara senare i samma funktion.
+    customer = await storage.find_or_create_customer(
+        tenant_id, email=customer_email, phone=None, name=customer_name
+    )
+    history = await storage.get_customer_history(tenant_id, customer["id"])
+
+    # Kundminnet (migration 052) — mem0:s ADD-only-mönster. Bär ENBART vad
+    # kunden själv uppgett i tidigare ärenden; agentens slutsatser lagras
+    # aldrig (kontamineringsspärren, se migrationens rubrik). Kundhärledd
+    # text är kundskriven text: USER-position, opålitligt-wrappad, kapad.
+    minnesblock = ""
+    try:
+        fakta = await storage.get_customer_facts(tenant_id, customer["id"])
+    except Exception:  # noqa: BLE001 — ett trasigt minne får inte fälla ärendet
+        fakta = []
+    if fakta:
+        minnesblock = (
+            "## Vad kunden uppgett i tidigare ärenden\n"
+            "Kundens egna uppgifter, återgivna — inte verifierade fakta. Fråga "
+            "hellre igen än att bygga ett svar på en gammal uppgift som kan ha "
+            "ändrats.\n\n"
+            + wrap_untrusted_content("\n".join(f"- {f}" for f in fakta)[:1500], source="customer:memory")
+        )
+
     case_context = (
         f"## Ärendet\nKanal: {channel} (ton: {ton_lage}, max {config['max_length']} tecken)\n"
         f"Kund: {customer_name or 'okänd'} <{customer_email or 'okänd'}>\n"
@@ -283,6 +326,7 @@ async def run_support_agent(
         f"Giltiga kategorier för den här kunden: {', '.join(taxonomy)}"
         + (f"\n\n{affarskontext_block}" if affarskontext_block else "")
         + (f"\n\n{soul_block}" if soul_block else "")
+        + (f"\n\n{minnesblock}" if minnesblock else "")
     )
 
     # Tonläget läggs på case_context och inte på systemprompten: det är kördata
@@ -295,6 +339,11 @@ async def run_support_agent(
     trace = RunTrace()
 
     # --- Steg 1: triage ----------------------------------------------------
+    #
+    # Kundfakta-fältet (2026-08-27): mem0-mönstrets extraktionssteg, inbakat i
+    # triagen i stället för ett eget LLM-anrop — triagen läser ändå hela
+    # meddelandet. BARA vad kunden själv uppgett; modellens egna slutsatser
+    # (sentiment, kategori) lagras aldrig som fakta.
     triage = await steg(
         steps["cs:ticket-triage"],
         ledger,
@@ -302,23 +351,35 @@ async def run_support_agent(
         task=(
             "Klassificera ärendet. Returnera JSON med: category (exakt ett av de "
             "giltiga), priority (P1-P4), sentiment (0.0-1.0), escalate (bool), "
-            "reasoning (svenska)."
+            "reasoning (svenska), "
+            "kundfakta (lista med korta, stabila fakta kunden SJÄLV uppger i "
+            "meddelandet — produkt, enhet, ordernummer, preferens. Bara det som "
+            "sannolikt gäller nästa gång kunden hör av sig; tom lista annars. "
+            "Aldrig dina egna bedömningar)."
         ),
         case_context=case_context,
     )
     category = triage.get("category") if triage.get("category") in taxonomy else "ovrigt"
     sentiment = max(0.0, min(1.0, float(triage.get("sentiment") or 0.5)))
 
-    # --- Kod: kund, ärende, inkommande meddelande --------------------------
-    customer = await storage.find_or_create_customer(
-        tenant_id, email=customer_email, phone=None, name=customer_name
-    )
-    history = await storage.get_customer_history(tenant_id, customer["id"])
+    # --- Kod: kundminne, ärende, inkommande meddelande ---------------------
+    nya_fakta = [str(f).strip() for f in (triage.get("kundfakta") or []) if str(f).strip()]
+    if nya_fakta:
+        try:
+            # Kapade: en modell som en dag returnerar en uppsats ska inte
+            # kunna fylla minnet med den. ADD-only med dubblettspärr i lagret.
+            await storage.add_customer_facts(
+                tenant_id, customer["id"], fakta=[f[:200] for f in nya_fakta[:6]]
+            )
+        except Exception:  # noqa: BLE001 — minnet är en bonus, svaret är jobbet
+            logger.exception("Kunde inte spara kundfakta.")
 
     # Samtalsläget är ett VÄRDE i ärendekontexten, inte i overlayen. Overlays
     # laddas ordagrant utan .format() (se agentcore/overlays.py), så kördata hör
     # hemma här och regeln som läser den står i support-conversation.md.
-    conversation_block, turn_count = await _render_conversation(storage, tenant_id, history)
+    conversation_block, turn_count, senaste_kundreplik = await _render_conversation(
+        storage, tenant_id, history
+    )
     conversation_state = (
         "## Samtalsläge\n"
         + (
@@ -354,7 +415,14 @@ async def run_support_agent(
     # meningar ger en fråga där de betydelsebärande orden dränks. Går den tomt
     # provas en förenklad fråga innan tomheten får betyda något. Se
     # `_forenklad_fraga`.
-    articles = await _sok_kb(storage, tenant_id, f"{subject} {message}".strip())
+    sokfraga = f"{subject} {message}".strip()
+    # I en FORTSÄTTNING är det nya meddelandet ofta ett svar på vår motfråga
+    # ("Ja, en Android.") — ensamt söker det på fel sak. Kundens förra replik
+    # bär ämnet och läggs till frågan. Bara vid korta meddelanden: ett långt
+    # nytt meddelande bär sitt eget ämne, och mer text späder rankningen.
+    if turn_count and senaste_kundreplik and len(message) < 80:
+        sokfraga = f"{sokfraga} {senaste_kundreplik}".strip()
+    articles = await _sok_kb(storage, tenant_id, sokfraga)
     kb_forsok = ["hela meddelandet"]
     if not articles:
         bredare = _forenklad_fraga(subject, message)
@@ -524,18 +592,47 @@ async def run_support_agent(
             else "Lågt sentiment eller triageflagga"
         )
 
-    # --- Steg 5: KB-artikel (fångar ny kunskap tillbaka) -------------------
-    await steg(
-        steps["cs:kb-article"],
-        ledger,
-        trace,
-        task=(
-            "Bedöm om det här ärendet avslöjar en kunskapslucka värd en KB-artikel. "
-            "Returnera JSON: should_create (bool), title (svenska eller null), "
-            "content (svenska eller null)."
-        ),
-        case_context=f"{case_context}\n\n## Kunskapsbas\n{kb_block}",
-    )
+    # --- Steg 5: KB-artikel (villkorat — fångar ny kunskap tillbaka) -------
+    #
+    # Körs BARA när det finns något att lära: kunskapsbasen saknade svaret,
+    # eller ärendet är säkerhetskritiskt. Ett ärende där KB bar svaret och
+    # inget flaggade har ingen lucka att skriva om — steget kördes förut på
+    # VARJE ärende och kostade ett anrop av sex för noll utbyte.
+    #
+    # Utdatan KASTADES dessutom förut: den fanns i step_log och ingenstans
+    # annars, så samma lucka återupptäcktes från noll i varje ärende. Nu
+    # sparas den som ett FÖRSLAG (agent_suggestions) som en människa
+    # godkänner i admin — agenten skriver aldrig själv i kunskapsbasen
+    # (INV-LEARN-001).
+    if kb_saknar_svar or sakerhetskritiskt:
+        kb_forslag = await steg(
+            steps["cs:kb-article"],
+            ledger,
+            trace,
+            task=(
+                "Bedöm om det här ärendet avslöjar en kunskapslucka värd en KB-artikel. "
+                "Returnera JSON: should_create (bool), title (svenska eller null), "
+                "content (svenska eller null)."
+            ),
+            case_context=f"{case_context}\n\n## Kunskapsbas\n{kb_block}",
+        )
+        titel = str(kb_forslag.get("title") or "").strip()
+        innehall = str(kb_forslag.get("content") or "").strip()
+        if kb_forslag.get("should_create") and titel and innehall:
+            # Kastar aldrig: ett trasigt förslagsskrivande får inte fälla ett
+            # färdigt svar. Dedupe-nyckeln är titelns normaliserade hash — tio
+            # ärenden om samma lucka ska ge EN rad att granska.
+            try:
+                await storage.save_agent_suggestion(
+                    tenant_id,
+                    agent_type="support",
+                    kind="kb_article",
+                    title=titel[:200],
+                    content={"title": titel, "content": innehall, "category": category},
+                    dedupe_key=hashlib.sha256(titel.casefold().encode("utf-8")).hexdigest()[:32],
+                )
+            except Exception:  # noqa: BLE001 — förslaget är en bonus, svaret är jobbet
+                logger.exception("Kunde inte spara KB-förslaget för ärendet.")
 
     # --- Steg 6: retention (villkorat) -------------------------------------
     current_draft = draft.get("draft", "")

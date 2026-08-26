@@ -18,9 +18,12 @@ def test_playbook_declares_seven_steps_in_del_e_order():
     assert [s.skill for s in SUPPORT_V1.steps] == FULL_ORDER_WITH_RETENTION
 
 
-def test_only_retention_is_conditional():
+def test_conditional_steps_are_kb_article_and_retention():
+    """kb-article villkorades 2026-08-26: körs bara när kunskapsbasen saknade
+    svaret eller ärendet är säkerhetskritiskt — ett ärende där KB bar svaret
+    har ingen lucka att skriva om, och steget var där ren kostnad."""
     conditional = [s.skill for s in SUPPORT_V1.steps if s.condition]
-    assert conditional == ["snajp:retention-conversation"]
+    assert conditional == ["cs:kb-article", "snajp:retention-conversation"]
 
 
 def test_every_step_declares_requires_inv_skill_002():

@@ -31,7 +31,9 @@ thinking-kontroll och step_log. Se docs/THINKING_MODE_COMPARISON.md §6.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import logging
 import re
 import time
 from typing import Any
@@ -66,6 +68,8 @@ from .llm import get_agent_model
 from .research_tools import _scrape_registered_source_impl
 from .step_runner import RunTrace, run_step
 from .tools import strip_markdown
+
+logger = logging.getLogger("snajp-support.leads-agent")
 
 # Skrapat material kapas här. Ett steg som får 60 000 tecken råmarkdown
 # lägger hela sin uppmärksamhet på sidfotslänkar; åtta steg som får det
@@ -153,27 +157,43 @@ async def _run_grounding_cycle(
     ska kosta 4 anrop, inte 6) och måste köra EFTER humanizern, som enligt
     INV-LANG-002 är sist i den deklarerade kedjan. Se grounding_playbook.
 
+    Sedan 2026-08-26 fäller cykeln även GISSNINGAR om mottagaren ("lär ni
+    få", "brukar er kundtjänst") — overlay-regeln fanns men EFTER-körningen
+    visade att den är en riktning, inte en garanti. Samma reparationsväg:
+    skriv om med researchens belägg eller stryk. Se app/leads/gissnings_gate.
+
     Returnerar (subject, body, rapport). Rapporten går till API-svaret och
     till agent_runs, så frekvensen går att mäta i efterhand.
     """
+    from ..leads.gissnings_gate import check_gissningar
+
     verdict = check_grounding(f"{subject}\n\n{body}", facts)
+    gissningar = check_gissningar(f"{subject}\n\n{body}")
     report: dict[str, Any] = {
-        "ok": verdict.ok,
-        "fired": not verdict.ok,
+        "ok": verdict.ok and not gissningar,
+        "fired": not verdict.ok or bool(gissningar),
         "unsupported_before": verdict.as_report(),
+        "gissningar_before": list(gissningar),
         "unsupported_after": [],
+        "gissningar_after": [],
         "repaired": False,
         "delta_humanized": False,
         "segments_changed": 0,
         "sources": list(facts.source_labels),
     }
-    if verdict.ok:
+    if verdict.ok and not gissningar:
         return subject, body, report
 
     steps = GROUNDING_V1.steps
     body_before = body
 
     # 1. Reparation — kirurgi på de fällda påståendena, inte omskrivning.
+    gissningsblock = (
+        "\n\n## Gissningar om mottagaren (skriv om med belägg ur underlaget, "
+        "eller stryk meningen)\n" + "\n".join(f"- {m}" for m in gissningar)
+        if gissningar
+        else ""
+    )
     repaired = await run_step(
         steps[0],
         ledger,
@@ -184,6 +204,7 @@ async def _run_grounding_cycle(
             "repaired_subject (svenska), repaired_body (svenska, ren text), "
             "removed_claims (lista med vad du tog bort eller skrev om).\n\n"
             f"## Ostödda påståenden\n{verdict.as_report()}"
+            f"{gissningsblock}"
         ),
         case_context=f"{base}\n\n## Mejl att reparera\nÄmne: {subject}\n\n{body}",
         playbook_role=_GROUNDING_ROLE,
@@ -232,8 +253,10 @@ async def _run_grounding_cycle(
     # 3. Grinda om på det faktiska resultatet. Reparationen kan ha infört nya
     #    påståenden, och humanizern kan ha infört drift medan den naturaliserade.
     verdict_after = check_grounding(f"{subject}\n\n{body}", facts)
-    report["ok"] = verdict_after.ok
+    gissningar_after = check_gissningar(f"{subject}\n\n{body}")
+    report["ok"] = verdict_after.ok and not gissningar_after
     report["unsupported_after"] = verdict_after.as_report()
+    report["gissningar_after"] = list(gissningar_after)
     return subject, body, report
 
 
@@ -434,12 +457,23 @@ async def run_research_step(
         )
 
     # 1. mk:customer-research — vilka är de, vilka problem har de
+    #
+    # Supportkanalfälten är kontrakt sedan 2026-08-26: i 2026-08-09-körningen
+    # var researchens BÄSTA fynd (Antons genomläsning, THINKING_MODE §8.5) att
+    # den självmant kollade om bolagen redan hade en chattlösning och var
+    # deras kunder faktiskt finns. Det som var modellens goda infall är nu ett
+    # fält som alltid fylls i — en befintlig chatbot är både en disqualifier
+    # och en vinkel, och den skiljer ett riktat mejl från ett gissat.
     customer = await step(
         0,
         "Analysera prospektet UTIFRÅN KÄLLMATERIALET. Returnera JSON: "
         "company_summary (svenska), business_model (svenska), "
         "likely_pains (lista med svenska strängar), "
-        "evidence (lista med korta ordagranna citat ur källmaterialet som stöder pains).",
+        "evidence (lista med korta ordagranna citat ur källmaterialet som stöder pains), "
+        "existing_support_channels (lista — de kanaler källmaterialet visar att "
+        "de erbjuder kundservice i: mejl, telefon, chatt, sociala medier), "
+        "has_chatbot (bool eller null — null när källmaterialet inte räcker "
+        "för att avgöra; gissa aldrig).",
     )
 
     # 2. mk:prospecting — kvalificering mot ICP
@@ -448,7 +482,7 @@ async def run_research_step(
         "Kvalificera prospektet mot köparens ICP i kontextpaketet. Returnera JSON: "
         "icp_fit (0.0-1.0), qualified (bool), disqualifiers (lista), "
         "qualification_reasoning (svenska), missing_information (lista).",
-        f"\n\n## Steg 1 (mk:customer-research)\n{_digest(customer, 'company_summary', 'business_model', 'likely_pains')}",
+        f"\n\n## Steg 1 (mk:customer-research)\n{_digest(customer, 'company_summary', 'business_model', 'likely_pains', 'existing_support_channels', 'has_chatbot')}",
     )
 
     # 3. sa:account-research — kontostruktur, beslutsvägar, triggers
@@ -530,6 +564,29 @@ async def run_research_step(
         pains=_digest(customer, "likely_pains", "business_model"),
         instruktioner=lager,
     )
+
+    # Insikten persisteras som FÖRSLAG (agent_suggestions, migration 051) i
+    # stället för att kastas — förut fanns den bara i step_log och samma
+    # ICP-lucka återupptäcktes från noll i varje varv. Beslutet ovan står
+    # kvar: steget skriver ALDRIG självt i kontextpaketet eller ICP:n; en
+    # människa godkänner i admin (INV-LEARN-001).
+    insikt = str(kunskap.get("gap") or kunskap.get("icp_adjustment") or "").strip()
+    if kunskap.get("reveals_gap") and insikt:
+        try:
+            await storage.save_agent_suggestion(
+                tenant_id,
+                agent_type="leads",
+                kind="marknadsinsikt",
+                title=insikt[:200],
+                content={
+                    "gap": kunskap.get("gap"),
+                    "icp_adjustment": kunskap.get("icp_adjustment"),
+                    "evidence": kunskap.get("evidence") or [],
+                },
+                dedupe_key=hashlib.sha256(insikt.casefold().encode("utf-8")).hexdigest()[:32],
+            )
+        except Exception:  # noqa: BLE001 — förslaget är en bonus, researchen är jobbet
+            logger.exception("Kunde inte spara marknadsinsikten för varvet.")
 
     offer_obj = offer.get("offer") or {}
     offer_summary = " · ".join(

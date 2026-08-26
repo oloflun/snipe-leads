@@ -86,7 +86,13 @@ async def _med_lagstadgad_fot(outreach: OutreachContext, brodtext: str) -> str:
 
 
 async def _queue_outreach_draft_impl(
-    outreach: OutreachContext, *, subject: str, body: str, language_state: str, humanizer_variant: str
+    outreach: OutreachContext,
+    *,
+    subject: str,
+    body: str,
+    language_state: str,
+    humanizer_variant: str,
+    force_review: bool = False,
 ) -> str:
     finalized_body = finalize_outreach_body(body)
     finalized_body = await _med_lagstadgad_fot(outreach, finalized_body)
@@ -108,9 +114,17 @@ async def _queue_outreach_draft_impl(
     # Kundens autonominivå avgör om utkastet får gå till schemaläggaren eller
     # måste granskas av en människa först. Regeln bor i app/leads/autonomy.py
     # och anropas från exakt två ställen — här och i scheduler.process_due_item.
-    settings = await outreach.storage.get_agent_settings(outreach.tenant_id, agent_type="leads")
-    action = allowed_action(settings.get("autonomy"), outreach.sequence_index)
-    queue_status = "queued" if action == "send" else "awaiting_review"
+    #
+    # `force_review` åsidosätter autonomin ÅT DET FÖRSIKTIGA HÅLLET, aldrig
+    # tvärtom: ett svar i ett levande samtal (app/leads/svar.py) granskas
+    # alltid av en människa, oavsett vilken nivå kunden valt för den utgående
+    # sekvensen.
+    if force_review:
+        queue_status = "awaiting_review"
+    else:
+        settings = await outreach.storage.get_agent_settings(outreach.tenant_id, agent_type="leads")
+        action = allowed_action(settings.get("autonomy"), outreach.sequence_index)
+        queue_status = "queued" if action == "send" else "awaiting_review"
 
     result = await outreach.storage.queue_outreach_message(
         outreach.tenant_id,

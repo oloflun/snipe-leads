@@ -101,6 +101,104 @@ class Storage(Protocol):
         embedding: list[float] | None = None,
     ) -> dict[str, Any]: ...
 
+    # -- Agentens föreslagna lärdomar (självlärning, 2026-08-26) -------------
+    #
+    # Supportens cs:kb-article och leads _fanga_kunskap RÄKNADE UT lärdomar på
+    # varje körning och kastade dem — utdatan fanns i step_log och ingenstans
+    # annars. Förslagen persisteras nu, men skrivs ALDRIG in i kundens
+    # underlag av agenten själv: en människa godkänner (INV-LEARN-001). Det är
+    # samma beslut som _fanga_kunskaps docstring pekar på — riskprofilen i att
+    # agenten uppdaterar sitt eget facit är en annan, och den är inte tagen.
+
+    async def save_agent_suggestion(
+        self,
+        tenant_id: str,
+        *,
+        agent_type: str,
+        kind: str,
+        title: str,
+        content: dict[str, Any],
+        dedupe_key: str,
+    ) -> dict[str, Any] | None:
+        """Sparar ett förslag. Returnerar None vid dubblett (samma dedupe_key
+        med status 'ny' hos tenanten) — agenten som ser samma lucka i tio
+        ärenden ska ge EN rad att granska, inte tio."""
+        ...
+
+    async def list_agent_suggestions(
+        self, tenant_id: str, *, status: str | None = None, limit: int = 50
+    ) -> list[dict[str, Any]]: ...
+
+    async def update_agent_suggestion_status(
+        self, tenant_id: str, suggestion_id: str, *, status: str
+    ) -> dict[str, Any] | None:
+        """Sätter 'godkand'/'avfard'. Returnerar raden, eller None om den inte
+        finns — anroparen ska kunna svara 404 i stället för att låtsas."""
+        ...
+
+    async def save_agent_feedback(
+        self,
+        tenant_id: str,
+        *,
+        run_id: str,
+        verdict: str,
+        comment: str | None = None,
+        corrected_output: str | None = None,
+    ) -> dict[str, Any]:
+        """Kundens dom över en körning (agent_feedback, migration 010).
+
+        Tabellen har funnits sedan migration 010 utan en enda kodväg — samma
+        felklass som instructions_md: schemat sa att signalen fanns, och
+        ingenting samlade in den. Ett run_id som inte finns hos tenanten ska
+        kasta (Postgres FK gör det; minnet speglar det uttryckligen), och
+        verdict valideras mot check-villkoret i BÅDA lagringarna."""
+        ...
+
+    async def list_agent_feedback(
+        self, tenant_id: str, *, verdict: str | None = None, limit: int = 50
+    ) -> list[dict[str, Any]]: ...
+
+    # -- Kundminne (customer_memory, migration 052) -------------------------
+    #
+    # mem0:s ADD-only-mönster: fakta läggs till, skrivs aldrig om av
+    # pipelinen. Bär ENBART vad kunden själv uppgett (kontamineringsspärren —
+    # se migrationens rubrik); injiceras alltid opålitligt-wrappad i
+    # user-position.
+
+    async def add_customer_facts(
+        self, tenant_id: str, customer_id: str, *, fakta: list[str]
+    ) -> int:
+        """Sparar en lista korta faktarader. Returnerar antalet sparade.
+        Tomma/blanka rader hoppas; dubbletter (exakt samma fakta för samma
+        kund) hoppas — tio ärenden om samma telefon ska ge EN rad."""
+        ...
+
+    async def get_customer_facts(
+        self, tenant_id: str, customer_id: str, *, limit: int = 12
+    ) -> list[str]:
+        """De senaste faktaraderna, äldst först i returen (läsordning för
+        prompten). Limit är injektionstaket, inte lagringstaket."""
+        ...
+
+    # -- Golden eval-cases (agent_evals, migration 010 — första kodvägen
+    #    2026-08-27). Langfuse/promptfoo-mönstret: golden-setet byggs ur
+    #    VERKLIGA produktionsfel, och nedtummad feedback med rättad text blir
+    #    automatiskt ett case (se api/leads.lamna_agent_feedback).
+
+    async def save_eval_case(
+        self,
+        tenant_id: str,
+        *,
+        agent_type: str,
+        input_text: str,
+        expected_traits: dict[str, Any],
+        approved_output: str | None = None,
+    ) -> dict[str, Any]: ...
+
+    async def list_eval_cases(
+        self, tenant_id: str, *, agent_type: str | None = None, limit: int = 100
+    ) -> list[dict[str, Any]]: ...
+
     async def get_channel_config(self, tenant_id: str, channel: str) -> dict[str, Any]: ...
 
     async def get_agent_taxonomy(self, tenant_id: str) -> tuple[str, ...]:
@@ -162,6 +260,53 @@ class Storage(Protocol):
         sekvensindex ur den här i stället för ur en räknarkolumn — en räknare
         kan glida isär med verkligheten, och det här avgör om ett mejl går ut
         utan mänsklig granskning."""
+        ...
+
+    async def ensure_outreach_thread(
+        self, tenant_id: str, *, prospect_id: str
+    ) -> dict[str, Any]:
+        """Tråden för ett prospekt — befintlig om en finns, annars skapad.
+
+        Get-or-create och inte create: en tråd per prospekt är modellen
+        (uppföljningar och svar hör till SAMMA samtal), och en andra tråd för
+        samma prospekt hade delat historiken i två så att sekvensräkningen —
+        den som avgör om ett mejl går ut utan granskning — börjar om från noll.
+
+        Metoden fanns inte förrän 2026-08-26: `queue_outreach_message` skrev
+        mot ett thread_id som INGEN kodväg någonsin skapade. MemoryStorage
+        saknar FK-kontroll och släppte igenom det, så sviten var grön medan
+        Postgres hade fällt första riktiga köningen på foreign key-villkoret.
+        """
+        ...
+
+    async def record_inbound_reply(
+        self, tenant_id: str, *, thread_id: str, body: str
+    ) -> dict[str, Any]:
+        """Ett inkommande prospektsvar: raden i outreach_messages plus
+        last_inbound_at på tråden. De två skrivs ihop — ett svar som syns i
+        listan men inte stoppar uppföljningsgeneratorn (som läser
+        last_inbound_at) hade gett en uppföljning till någon som redan svarat."""
+        ...
+
+    async def list_outreach_threads(self, tenant_id: str) -> list[dict[str, Any]]:
+        """Alla trådar med de aggregat uppföljningssvepet dömer på:
+        outbound_sent_count, last_outbound_sent_at, last_inbound_at och
+        has_pending_item (köad/väntande post eller osänt utkast). Aggregaten
+        räknas i lagringen — policyn (NÄR en uppföljning är förfallen) bor i
+        app/leads/follow_up_generator.py och är testbar utan databas."""
+        ...
+
+    async def cancel_pending_sends(self, tenant_id: str, thread_id: str) -> int:
+        """Ställer in trådens köade/väntande send_queue-poster. Körs när ett
+        svar kommit in: det som låg i kön skrevs till någon som inte hade
+        svarat, och den premissen gäller inte längre. Returnerar antalet."""
+        ...
+
+    async def reschedule_pending_sends(
+        self, tenant_id: str, thread_id: str, *, until: Any
+    ) -> int:
+        """Skjuter trådens köade poster till `until` (autosvar/semester).
+        Returnerar antalet flyttade."""
         ...
 
     # -- Leads: underlaget send_guard dömer på (DEL 2.3) --------------------
@@ -776,6 +921,10 @@ class Storage(Protocol):
 # ett halvår att lära sig: villkoret fanns bara i Postgres, MemoryStorage tog
 # emot vad som helst, testerna körde mot minnet och var gröna — samtidigt som
 # ingen enda leads-körning sparades i produktion.
+# Värdemängden för agent_feedback.verdict, spegel av check-villkoret i
+# migration 010. Samma regel som AGENT_RUN_TYPES nedan.
+FEEDBACK_VERDICTS = ("good", "bad", "needs_review")
+
 AGENT_RUN_TYPES = (
     "support",
     "leads",
@@ -785,6 +934,10 @@ AGENT_RUN_TYPES = (
     # Bokföringsagenten (migration 045). Lades till HÄR och i migrationen i
     # samma ändring — det är hela läxan ovan.
     "bookkeeping",
+    # Svarshanteringen och uppföljningsgeneratorn (migration 051). Samma
+    # regel: konstanten och migrationen i SAMMA ändring.
+    "leads_svar",
+    "leads_followup",
 )
 
 

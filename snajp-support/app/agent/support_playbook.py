@@ -42,7 +42,17 @@ SUPPORT_V1 = Playbook(
             requires=("skill:cs:draft-response",),
             thinking="enabled",
         ),
-        PlaybookStep(skill="cs:kb-article", requires=("skill:cs:customer-escalation",)),
+        # VILLKORAT sedan 2026-08-26: körs bara när kunskapsbasen saknade
+        # svaret eller ärendet är säkerhetskritiskt. Ett ärende där KB bar
+        # svaret och inget eskalerade har per definition ingen lucka att
+        # skriva en artikel om — steget var där ren kostnad (~1 anrop av 6)
+        # med noll utbyte. Utdatan persisteras numera som förslag
+        # (agent_suggestions, migration 051) i stället för att kastas.
+        PlaybookStep(
+            skill="cs:kb-article",
+            requires=("skill:cs:customer-escalation",),
+            condition="kb_gap_or_escalation",
+        ),
         # ÖPPEN FRÅGA: thinking-läge inte beslutat här. Triggas bara när
         # uppsägningsrisk redan är sann (dvs. ärendet eskalerar oavsett) —
         # kan höra ihop med cs:customer-escalation-beslutet ovan, men
@@ -62,7 +72,12 @@ SUPPORT_V1 = Playbook(
         # formuleringstunga delen av kedjan var alltså den kallaste.
         PlaybookStep(
             skill="snajp:humanizer-svenska",
-            requires=("skill:cs:kb-article",),
+            # cs:draft-response och inte cs:kb-article: humaniseraren
+            # bearbetar UTKASTET, och kb-artikelstegets utdata når aldrig
+            # svaret. Det gamla kravet band humaniseraren till ett steg som
+            # numera är villkorat — och hade fällt varje ärende där
+            # kunskapssteget hoppats över, på ett beroende som aldrig fanns.
+            requires=("skill:cs:draft-response",),
             overlay="support-conversation",
             temperature=0.7,
         ),

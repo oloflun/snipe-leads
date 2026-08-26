@@ -170,7 +170,13 @@ class ResearchStepRequest(BaseModel):
 
 
 class OutreachDraftRequest(BaseModel):
-    thread_id: str
+    # Endera: en befintlig tråd, eller ett prospekt att skapa/återanvända
+    # tråden för. Före 2026-08-26 KRÄVDES thread_id — men ingen kodväg skapade
+    # någonsin en tråd, så fältet gick inte att fylla i utan hand-SQL:
+    # utkastvägen var obrytbar i produktion och ingen märkte det, eftersom
+    # MemoryStorage saknar FK-kontrollen som hade avslöjat den döda referensen.
+    thread_id: str | None = None
+    prospect_id: str | None = None
     prospect_email: str
     company_name: str = Field(..., min_length=1, max_length=200)
     offer_summary: str = Field(..., min_length=1, max_length=2000)
@@ -181,6 +187,27 @@ class OutreachDraftRequest(BaseModel):
     # (fältet research_summary fanns i signaturen men skickades aldrig).
     research_summary: str = Field(default="", max_length=8000)
     research_evidence: list[str] = Field(default_factory=list, max_length=60)
+
+
+class AgentFeedbackRequest(BaseModel):
+    """Kundens dom över en agentkörning. corrected_output är människans egen
+    formulering av vad svaret BORDE ha varit — den starkaste signalen in i
+    lärandeflödet."""
+
+    run_id: str
+    verdict: str = Field(..., pattern="^(good|bad|needs_review)$")
+    comment: str | None = Field(default=None, max_length=4000)
+    corrected_output: str | None = Field(default=None, max_length=20_000)
+
+
+class ProspektsvarRequest(BaseModel):
+    """Ett inkommande prospektsvar. Endera tråden eller prospektet pekas ut —
+    prospekt utan tråd får en (svar på ett mejl skickat utanför systemet ska
+    också kunna hanteras)."""
+
+    thread_id: str | None = None
+    prospect_id: str | None = None
+    body: str = Field(..., min_length=1, max_length=20_000)
 
 
 class SoulRequest(BaseModel):

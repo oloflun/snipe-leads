@@ -138,22 +138,22 @@ Tills detta är löst säger `/integritetspolicy` **inte** att leverantören "in
 tränar på texten". Det påståendet togs bort, och det ska inte skrivas tillbaka
 förrän avtalet säger det.
 
-**PRODUKTIONEN ÄR PAUSAD** (2026-08-24 23:5x). Efter hotfixen svarade den 429
-på varje anrop OCH skickade kunddata till gratisnivån — sämre på båda axlarna
-samtidigt än simuleringsläget den låg i innan. Den är därför satt tillbaka:
+**PAUSEN HÄVDES, UTAN ATT ÅTGÄRDSLISTAN NEDAN GENOMFÖRDES (upptäckt 2026-08-26).**
+`main` sattes till simuleringsläge 2026-08-24 23:5x av just det skälet som står
+ovan. Mätt igen 2026-08-26: **både `main` och `development` svarar `mode: live`.**
+`GEMINI_API_KEY` delas fortfarande mellan miljöerna. Kvoten är fortfarande
+FreeTier (`GenerateRequestsPerMinutePerProjectPerModel-FreeTier`, 6 anrop/minut
+— en betald nivå har inte den kvotklassen). Ingen av de fyra åtgärderna nedan
+(bekräfta nivå, aktivera fakturering/byt provider, egen nyckel per miljö, DPA)
+är genomförd. Vem som körde om `--satt gemini` och när är inte känt — bara att
+det skedde mellan 24:e kvällen och 26:e. Riktiga kundmejl går just nu till
+gratisnivån igen. Spårat som `snipe-a1c`, flaggat till Anton direkt.
 
 ```bash
 python scripts/llm_provider.py --env main --pausa --apply
 ```
 
-Nuläge, verifierat med ett riktigt anrop: `mode: simulation`, agenten svarar
-med den deterministiska regelmotorn, och ingenting går till någon leverantör.
-
-Ångra när en riktig nyckel finns:
-
-```bash
-python scripts/llm_provider.py --env main --satt gemini --apply
-```
+pausar igen, om det beslutet tas innan åtgärdslistan är klar.
 
 `GEMINI_API_KEY` är orörd — den driver även embeddings och bildbeskrivning,
 som inte är chattanrop och inte omfattas av dygnskvoten.

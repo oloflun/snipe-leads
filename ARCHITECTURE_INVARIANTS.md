@@ -398,6 +398,42 @@ falskt godkänt.
 Test: snajp-support/tests/invariants/test_inv_store_001.py
 Införd: 2026-08-23 · Upphävs endast genom waiver
 
+### INV-LEARN-001 — Agenten skriver aldrig själv in sina lärdomar i underlaget
+Supportens `cs:kb-article` och leads `_fanga_kunskap` sparar sina fynd som
+FÖRSLAG i `agent_suggestions` (migration 051), med status `ny`. Den enda
+kodväg som skapar en KB-artikel ur ett förslag är endpointen
+`POST /api/agent/forslag/{id}/godkann` — en människas klick. En
+`marknadsinsikt` blir aldrig en automatisk ICP- eller kontextpaketändring;
+godkännandet markerar den som läst, ändringen gör människan i sina egna ytor.
+Varför: en agent som uppdaterar sitt eget facit kan cementera en felläsning —
+en hallucinerad "kunskapslucka" som blev artikel blir nästa körnings sanna
+källa, och felet är sedan omöjligt att skilja från kunskap. Förslagsledet gör
+lärandet ackumulerande utan att göra det självförstärkande. Dedupe-nyckeln
+(partiellt unikt index på status='ny') gör tio ärenden om samma lucka till EN
+granskningsrad, inte tio.
+Test: snajp-support/tests/agent/test_support_agent_wiring.py
+(test_kb_article_runs_on_kb_gap_and_suggestion_is_persisted — asserterar att
+kunskapsbasen är orörd efter förslaget)
+Införd: 2026-08-26 · Upphävs endast genom waiver
+
+### INV-MEM-001 — Kundminnet bär bara kundens egna utsagor, opålitligt-wrappade
+`customer_memory` (migration 052) skrivs ENBART med fakta kunden själv uppgett
+(triage-kontraktets `kundfakta`-fält instruerar det uttryckligen; agentens
+bedömningar — sentiment, kategori, slutsatser — lagras aldrig som fakta).
+Injektionen går ALLTID genom `wrap_untrusted_content(source="customer:memory")`
+i USER-position, kapad, med en läsanvisning om att uppgifterna är återgivna och
+inte verifierade. ADD-only (mem0-mönstret): pipelinen skriver aldrig om eller
+raderar rader.
+Varför: ett minne som lagrar modellens egna tolkningar och matar tillbaka dem
+blir självförstärkande — en felläsning i ärende 1 blir "fakta" i ärende 2 och
+går inte längre att skilja från kunskap (MemGuard-klassens kontamineringsrisk).
+Och kundhärledd text är kundskriven text: hamnar den oinkapslad i prompten är
+minnet en injektionsväg som överlever mellan ärenden (INV-SEC-009-gränsen).
+Test: snajp-support/tests/agent/test_kundminne.py
+(test_minnesblocket_ar_opalitligt_wrappat — sparar en instruktionsattack som
+fakta och asserterar att den bara når prompten inuti sin wrap)
+Införd: 2026-08-27 · Upphävs endast genom waiver
+
 ## Roadmap
 
 Ids this plan will introduce, in the order `Genomförandeordning` builds them. Not yet enforced by CI.

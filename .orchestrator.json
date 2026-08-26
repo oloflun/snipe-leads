@@ -1,5 +1,4 @@
 {
-  "money_weight": 3,
   "auto_safe_labels": ["auto:chore"],
   "max_concurrent": 1,
   "cadence": "pulse",
