@@ -59,6 +59,14 @@ async def lifespan(app: FastAPI):
         logger.critical("Startvägran: %s", provider_fel)
         raise RuntimeError(provider_fel)
 
+    # Samma princip för masternyckeln: en databas-miljö som kör med den
+    # incheckade dev-defaulten har en öppen adminyta, och det ska synas som
+    # en död deploy inom minuter — inte som en tyst yta tills någon provar.
+    master_fel = settings.master_key_fault()
+    if master_fel:
+        logger.critical("Startvägran: %s", master_fel)
+        raise RuntimeError(master_fel)
+
     storage = None
     if settings.database_url:
         try:

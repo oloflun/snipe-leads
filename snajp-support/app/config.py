@@ -444,6 +444,30 @@ class Settings(BaseSettings):
             )
         return None
 
+    def master_key_fault(self) -> str | None:
+        """Varför masternyckeln inte duger här, eller None.
+
+        Fältets default (`snajp_master_dev_key_change_me`) är incheckad i
+        repot och accepteras rakt av i `deps.require_master_key` — och bakom
+        just den nyckeln ligger HELA `/api/admin/*`, alltså cross-tenant-
+        läsning av varje kunds data. En miljö som glömt sätta
+        `SNAJP_MASTER_API_KEY` hade alltså stått med en publikt nåbar
+        admin-yta vars lösenord står på GitHub.
+
+        Samma gräns som `har_riktig_kunddata`: en process utan databas kan
+        inte läcka kunddata och får behålla dev-defaulten (lokal körning,
+        testsviten, MemoryStorage). En process MED databas vägrar starta —
+        av samma skäl som dataskyddsspärren kraschar i stället för att varna.
+        """
+        if self.database_url and self.snajp_master_api_key == "snajp_master_dev_key_change_me":
+            return (
+                "SNAJP_MASTER_API_KEY är inte satt — masternyckeln står kvar på "
+                "den incheckade dev-defaulten, och den låser upp hela "
+                "/api/admin/* mot en databas med riktig kunddata. Sätt en egen "
+                "nyckel i miljön (python scripts/keys.py) och deploya om."
+            )
+        return None
+
     def llm_key_fault(self) -> str | None:
         """Varför nyckeln inte går att använda, eller None.
 
