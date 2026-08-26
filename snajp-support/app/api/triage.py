@@ -1,9 +1,10 @@
 """Triage-endpointen: sortera en batch mail i fack + skapa svarsutkast (synkron)."""
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ..config import CATEGORY_LABELS, get_settings
 from ..simulation.sim_triage import classify
+from . import rate_limit_db
 from .deps import require_tenant
 from .schemas import TriageRequest
 
@@ -57,6 +58,23 @@ async def triage(
     settings = get_settings()
     storage = request.app.state.storage
     tenant_id = tenant["tenant_id"]
+
+    # Samma tak som chatten (migration 019). Routen var den ENDA LLM-vägen
+    # utan enforce(): anonymt nåbar via Next-proxyn, upp till 20 mejl per
+    # anrop, en embedding + ett LLM-anrop per mejl i skarpt läge — alltså
+    # den billigaste vägen att bränna nyckeln för den som skriptar. Taket
+    # gäller även simuleringsläget: kontrollen kostar en indexerad räkning,
+    # och en demo som svälter ut riktiga kunders kvot är fel åt andra hållet.
+    scopes = rate_limit_db.scopes_for(
+        tenant_id,
+        request.headers.get("x-snajp-user"),
+        is_demo=request.headers.get("x-snajp-demo") == "true",
+    )
+    try:
+        await rate_limit_db.enforce(storage, scopes)
+    except rate_limit_db.RateLimitDbExceededError as error:
+        raise HTTPException(status_code=429, detail=str(error)) from error
+
     results = []
 
     for email in payload.emails:
@@ -79,5 +97,11 @@ async def triage(
             ]
             result["simulation"] = False
         results.append({"from": email.sender, "subject": email.subject, **result})
+
+    # Bokför efteråt, som chatten: ett LLM-anrop per mejl i skarpt läge.
+    # Simuleringen kostar inga anrop och bokförs därför inte — taket ovan
+    # skyddar den ändå, eftersom räkningen delas med de skarpa vägarna.
+    if not settings.is_simulation():
+        await rate_limit_db.record(storage, scopes, len(payload.emails))
 
     return {"results": results}
