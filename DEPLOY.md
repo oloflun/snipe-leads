@@ -323,7 +323,15 @@ python scripts/loopia_dns.py --apply    # sätt CNAME mot Railway
 Skriptet talar XML-RPC mot `https://api.loopia.se/RPCSERV`, städar bort poster
 som krockar med en CNAME på samma namn, och skriver ut zonen före och efter.
 
-**Det enda som kräver en människa** är en LoopiaAPI-användare. Den skapas i
+**API-användaren är VALFRI.** Utan `LOOPIA_API_USER` och
+`LOOPIA_API_PASSWORD` i `.env.deploy` kör skriptet i kontrolläge: det slår upp
+`www` live, säger om posten är satt, och skriver ut exakt vad som ska fyllas i
+om den inte är det. Posten går att sätta för hand i kundzonen på två minuter —
+målet är en DNS-post, inte ett API.
+
+Skapa API-användaren om du vill kunna ändra DNS **härifrån** i framtiden.
+
+API-användaren Den skapas i
 kundzonen under **Kontoinställningar → LoopiaAPI** och är en egen inloggning,
 skild från kontolösenordet. Lägg den i `.env.deploy`:
 
