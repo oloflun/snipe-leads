@@ -1,8 +1,18 @@
 # Handoff: agentbackenden — tre döda kedjor, självlärande, eval-harness, kundminne
 
-Skriven 2026-08-27 till Sebbe. Läs § "Det du behöver göra" först om du har bråttom.
-Pushat till `development` (71fb992), **inte** till `railway-development` — den
-pushen och migrationskörningen gör du (eller jag, på Antons ord).
+Skriven 2026-08-27 till Sebbe, uppdaterad samma dag. Läs § "Det du behöver
+göra" först om du har bråttom — den är kortare nu än den var.
+
+**Status: live i development.** Tre commits pushade (`71fb992`, `81f05dd`,
+`b910c54`), migration 051+052 applicerade, och en riktig deploy kördes och
+blev `SUCCESS` på både `web` och `api` (hälsokontroll grön: `storage:
+postgres`, `mode: live`). `verify_railway.py` går helt grönt.
+
+**Och en driftändring utöver koden, på Antons uttryckliga instruktion:**
+Railways deployment trigger för development pekar nu på grenen `development`
+direkt — inte längre på spegelgrenen `railway-development`. Vercel är
+avvecklat helt. Se § "Deploy-kedjan är omlagd" längst ned — läs den innan du
+pushar nästa gång, annars letar du efter en ändring som redan är live.
 
 Bakgrund: Anton bad om en full genomgång av agentbackenden — hitta brister,
 optimera retrieval och responser, verifiera instruktionslager och skillkedja,
@@ -20,28 +30,25 @@ och jag redan använder för tuning.
 
 ## Det du behöver göra
 
-### 1. Migration 051 och 052 är inte körda i development
+### 1. ~~Migration 051 och 052~~ — klart, applicerat
 
-```bash
-python scripts/railway_migrate.py --env development --apply
-```
+Kördes mot Railway development: `python scripts/railway_migrate.py --env
+development --apply`. Båda tabellerna (`agent_suggestions`, `customer_memory`)
+finns. Ny kolumnkonstant i `app/storage/base.py`: `AGENT_RUN_TYPES` fick
+`leads_svar` och `leads_followup` — check-villkoret i migration 051 matchar
+(samma felklass som `agent_type`-buggen från i somras, se
+`tests/invariants/test_inv_store_001.py`, som är exakt mekaniken som skulle
+ha fångat det om det inte matchat).
 
-Två nya tabeller: `agent_suggestions` (självlärandet, se §3 nedan) och
-`customer_memory` (kundminnet, §6). Ny kolumnkonstant i
-`app/storage/base.py`: `AGENT_RUN_TYPES` fick `leads_svar` och
-`leads_followup` — check-villkoret i migration 051 måste matcha, annars
-kastar Postgres på första riktiga svarskörningen (samma felklass som
-`agent_type`-buggen från i somras, se `tests/invariants/test_inv_store_001.py`).
+### 2. ~~Push till railway-development~~ — inte längre relevant
 
-### 2. Push till railway-development när du vill se det live
+`development` deployar sig själv nu, se § "Deploy-kedjan är omlagd" längst
+ned. En riktig deploy av allt ovan kördes och är live.
 
-```bash
-git push origin development:railway-development
-```
-
-Gör INTE detta blint — läs §7 (öppna trådar) först. Prospektsvar-vägen och
-uppföljningsgeneratorn är nya kodvägar som aldrig körts mot en riktig
-Postgres, bara mot MemoryStorage och `--skarp`-verifiering.
+**Läs ändå detta innan du litar på det skarpt**: prospektsvar-vägen
+(`app/leads/svar.py`) och uppföljningsgeneratorn är nya kodvägar som bara
+körts mot MemoryStorage och `--skarp`-verifiering — inte mot ett riktigt
+prospektsvar genom hela HTTP-vägen mot Postgres. Se §7 (öppna trådar).
 
 ### 3. Adminytan `/dashboard/larande` är byggd men inte pixelverifierad inloggad
 
@@ -291,6 +298,56 @@ skill-steg verifierat kompletta.
    riktig SMTP → inga riktiga svar att routa än.
 5. **`snipe-a6i`**: pg_trgm-kandidat för sammansatta ord och stavfel i
    svensk fulltext — inte påbörjad, bara scoped.
+
+---
+
+## Deploy-kedjan är omlagd — läs innan du pushar mot development igen
+
+Antons instruktion samma dag: "development ska ALLTID trigga en deployment
+till Railway, vi har släppt Vercel." Genomfört, inte bara sagt:
+
+**Vad som ändrades.** Railways `deploymentTrigger` för `web` och `api` i
+miljön `development` pekade på grenen `railway-development` — en spegelgren
+som fanns bara för att Railway skulle ha något att lyssna på, och som krävde
+den där andra pushen `CLAUDE.md` alltid nämnde. Den branchen läses inte
+längre av något. Ändringen gjordes live via Railways GraphQL-API
+(`deploymentTriggerUpdate`), inte i dashboarden — samma verktygsprincip som
+resten av `scripts/railway_*.py`.
+
+```bash
+# Så här ser det ut nu:
+git push origin development                         # deployar web+api automatiskt
+
+# Så här var det (funkar fortfarande, men grenen är övergiven):
+git push origin development
+git push origin development:railway-development      # <- den här raden är död
+```
+
+**`main` är INTE omlagd.** Anton var uttrycklig: main tar han senare, som ett
+eget steg där `main` ska ersätta `railway-main` och trigga produktionsdeployen
+direkt. Tills dess gäller fortfarande tvåstegspushen mot produktion:
+
+```bash
+git push origin main
+git push origin main:railway-main
+```
+
+**Var källan till sanning står.** `scripts/railway_provision.py`s
+`ENVIRONMENTS`-dict är det som en `railway_provision.py --apply` läser för
+att (åter)skapa deployment-triggers. Den är uppdaterad
+(`"development": "development"`, `"main": "railway-main"` oförändrat) —
+**utan den ändringen hade en framtida reprovisionering tyst flippat triggern
+tillbaka**, och ingen hade förstått varför en push plötsligt slutade synas
+igen. `tests/invariants/test_inv_deploy_002.py` vaktar att koden och
+verkligheten inte glider isär, uppdaterad i samma commit.
+
+`DEPLOY.md` och `CLAUDE.md` är uppdaterade med den nya branchen och en
+motivering. `verify_railway.py` går grönt om — kör den om något känns
+konstigt:
+
+```bash
+python scripts/verify_railway.py
+```
 
 ## Snabbkontroll när du har tid
 
