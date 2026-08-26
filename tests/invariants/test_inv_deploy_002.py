@@ -41,12 +41,17 @@ def test_grenen_ar_utskriven(source: str):
     Uppgraderad från en enda BRANCH-konstant till ENVIRONMENTS-mappen när
     upplägget blev två miljöer: gren-per-miljö är själva mekanismen som gör
     main och development åtskiljbara, och den bärs av deployment-triggern.
+
+    2026-08-27: development bytte till att deploya direkt från `development`
+    (Vercel avvecklat, spegelgrenen `railway-development` inte längre
+    nödvändig). main är MEDVETET oförändrad — se kommentaren i
+    railway_provision.py om vad som ska ändras när main läggs om likadant.
     """
     match = re.search(r"ENVIRONMENTS\s*:\s*dict\[str,\s*str\]\s*=\s*\{([^}]+)\}", source)
     assert match, "ENVIRONMENTS-mappen saknas — grenen per miljö blir då odefinierad."
     body = match.group(1)
-    assert '"railway-main"' in body and '"railway-development"' in body, (
-        "ENVIRONMENTS måste binda main och development till sina grenar."
+    assert '"railway-main"' in body and '"development"' in body, (
+        "ENVIRONMENTS måste binda main till railway-main och development till development."
     )
 
 

@@ -30,9 +30,16 @@ ENV_DEPLOY = REPO_ROOT / ".env.deploy"
 #: Miljö → gren. Grenen står HÄR och inte i en dashboard, av samma skäl som
 #: render.yaml fick `branch:` efter två produktionsincidenter: fältet styr vad
 #: som körs och syns annars inte i någon diff. INV-DEPLOY-002 vaktar det.
+#:
+#: `development` deployar sig SJÄLV sedan 2026-08-27 (Vercel är avvecklat, en
+#: spegelgren för att trigga Railway är inte längre nödvändig). `main` pekar
+#: fortfarande på `railway-main` med flit — samma omläggning för produktion är
+#: ett separat, medvetet beslut som inte är taget än. Ändras `main` till att
+#: deploya direkt: ta bort den raden i `DEPLOY.md`/`CLAUDE.md` som beskriver
+#: den gamla tvåstegspushen dit, i SAMMA ändring som den här raden.
 ENVIRONMENTS: dict[str, str] = {
     "main": "railway-main",
-    "development": "railway-development",
+    "development": "development",
 }
 
 #: Hemligheter som MÅSTE skilja sig mellan miljöerna. En delad post här är tyst

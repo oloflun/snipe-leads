@@ -16,18 +16,32 @@ For architecture questions, also read `10_SYSTEM_OVERVIEW.md`. For test/deploy q
 
 **Allt arbete går till `development`, aldrig direkt till `main`.**
 
-**Men `development` DEPLOYAR INGENTING.** Produkten kör på Railway, och Railways
-deployment trigger pekar på en annan gren. Två pushar krävs:
+**`development` deployar sig själv sedan 2026-08-27.** Railways deployment
+trigger för `web` och `api` i miljön `development` pekar på grenen
+`development` direkt (omlagt via GraphQL, `deploymentTriggerUpdate` — se
+`DEPLOY.md`). En enda push räcker:
 
 ```bash
 git push origin development
-git push origin development:railway-development
 ```
 
-Utan den andra syns ändringen ingenstans — och GitHub Actions går ändå grönt,
-för den kedjan deployar en Vercel-preview som ligger på den gamla, döda stacken
-(Vercel + Render + Supabase-grenar). Inloggning där ger `CallbackRouteError`,
-eftersom Supabase-grenen står i `MIGRATIONS_FAILED`. Det är inte ett kodfel.
+Vercel är avvecklat helt. `railway-development` som gren är överflödig för
+development men rörs inte — inget läser den längre.
+
+**`main` har fortfarande den gamla tvåstegsfällan** — det är medvetet inte
+åtgärdat än (Antons beslut 2026-08-27: main ska läggas om på samma sätt
+senare, som ett separat steg):
+
+```bash
+git push origin main
+git push origin main:railway-main
+```
+
+Utan den andra pushen syns en ändring mot produktion ingenstans — och GitHub
+Actions går ändå grönt, för den kedjan deployar en Vercel-preview som ligger
+på den gamla, döda stacken (Vercel + Render + Supabase-grenar). Inloggning
+där ger `CallbackRouteError`, eftersom Supabase-grenen står i
+`MIGRATIONS_FAILED`. Det är inte ett kodfel.
 
 Levande dev-miljö: `https://web-development-6c85.up.railway.app`
 Migrationer: `python scripts/railway_migrate.py --env development --apply`

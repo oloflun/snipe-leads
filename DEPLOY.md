@@ -12,7 +12,7 @@ Inget deployas genom att någon klickar i en dashboard.
 
 | | Produktion | Development |
 |---|---|---|
-| **Gren som deployar** | `railway-main` | **`railway-development`** |
+| **Gren som deployar** | `railway-main` (tills vidare, se nedan) | **`development`** |
 | Tjänster | Railway `web` + `api` | samma, i miljön `development` |
 | Databas | Railway Postgres (`main`) | Railway Postgres (`development`) |
 | Webb-URL | `web-production-1fe2c.up.railway.app` | `web-development-6c85.up.railway.app` |
@@ -21,28 +21,57 @@ Inget deployas genom att någon klickar i en dashboard.
 URL:erna står i `.env.deploy` som `RAILWAY_{MAIN,DEVELOPMENT}_{WEB,API}_URL`.
 Railway-projektet är `b4ec4f98-2d00-4410-bfae-12fb69652d0b`.
 
-### Grenen är INTE `development`
+### `development` deployar sig själv sedan 2026-08-27
 
-Railways deployment trigger för `web` pekar på `railway-development`. En push
-till `development` utlöser därför **ingen** Railway-deploy. Arbetet går
-fortfarande till `development` — men det är den andra pushen som gör att någon
-kan se resultatet:
+Vi har släppt Vercel helt (se legacy-avsnittet nedan). Railways `deploymentTrigger`
+för `web` och `api` i miljön `development` pekade tidigare på grenen
+`railway-development` — en spegelgren som fanns bara för att trigga Railway,
+och som krävde en andra push varje gång:
 
 ```bash
 git push origin development
-git push origin development:railway-development
+git push origin development:railway-development   # den här raden fanns förut
 ```
 
-Samma sak mot produktion: `main` för arbetet, `railway-main` för deployen.
+**Det behövs inte längre.** Triggerns `branch`-fält ändrades via Railways
+GraphQL-API (`deploymentTriggerUpdate`) från `railway-development` till
+`development` direkt. En push till `development` startar nu byggen av `web`
+och `api` i Railway-miljön `development` utan mellansteg. `railway-development`
+som gren är därmed överflödig för development — den kan lämnas orörd eller
+tas bort, inget läser den längre.
 
-Kontrollera grenen innan du felsöker "min ändring syns inte". Det är andra
-gången samma fälla slår till — `verify_railway.py` bär en kommentar om att `web`
-byggde fel gren i tre deployer i rad medan felsökningen letade i byggkontexten.
-Byggmeddelandet var sant hela tiden; det beskrev en annan commit.
+**Produktionen (`main`) är INTE omlagd än.** `railway-main` är fortfarande
+den gren som triggar produktionsdeployen — det är ett separat, medvetet beslut
+som väntar på att göras (main ska ersätta railway-main på samma sätt). Fram
+tills dess gäller fortfarande, för produktion:
+
+```bash
+git push origin main
+git push origin main:railway-main
+```
+
+Kontrollera grenen innan du felsöker "min ändring syns inte" — särskilt för
+`main`, som fortfarande har den gamla tvåstegs-fällan. Det är andra gången
+samma fälla slog till för development innan den lagades — `verify_railway.py`
+bär en kommentar om att `web` byggde fel gren i tre deployer i rad medan
+felsökningen letade i byggkontexten. Byggmeddelandet var sant hela tiden; det
+beskrev en annan commit.
 
 ```bash
 python scripts/verify_railway.py     # kontrollerar bland annat trigger-grenen
 ```
+
+Trigger-configen läses och ändras med `scripts/railway.py` (rå GraphQL-klient,
+token ur `.env.deploy`). Exempel — lista aktuell branch för en trigger:
+
+```bash
+python scripts/railway.py q \
+  'query($p:String!,$e:String!,$s:String!){ deploymentTriggers(projectId:$p,environmentId:$e,serviceId:$s){ edges{ node{ id branch } } } }' \
+  '{"p":"b4ec4f98-2d00-4410-bfae-12fb69652d0b","e":"<environmentId>","s":"<serviceId>"}'
+```
+
+`environmentId`/`serviceId` för respektive miljö och tjänst står i "Faktiska
+identiteter" längst ned i den här filen.
 
 ### Migrationer körs mot Railway
 
@@ -387,13 +416,13 @@ logotyp och besiktning kräver ögon och skrivs ut som checklista. Se `TENANTS.m
 | | Värde |
 |---|---|
 | Projekt | `b4ec4f98-2d00-4410-bfae-12fb69652d0b` |
-| Miljöer | `main`, `development` |
-| Tjänster | `web`, `api`, `Postgres` (en uppsättning per miljö) |
-| Deploy-gren, main | `railway-main` |
-| Deploy-gren, development | `railway-development` |
+| Miljöer | `main` (`47bc7047-a458-404b-a1de-ccec612cb96e`), `development` (`02c39616-1b8e-47b7-beea-d8c6cfba1acd`) |
+| Tjänster | `web` (`0261f633-1247-4d92-b5ab-40c2a1828b90`), `api` (`5828c279-ad8f-429b-b5e1-969372db8a0a`), `Postgres` (en uppsättning per miljö) |
+| Deploy-gren, main | `railway-main` (oförändrat — main ska läggas om senare) |
+| Deploy-gren, development | **`development`** (omlagd 2026-08-27, var `railway-development`) |
 
-Verifierat mot Railways API 2026-08-23 — grenarna är lästa ur
-`deploymentTriggers`, inte antagna.
+Verifierat mot Railways API — grenarna är lästa ur `deploymentTriggers`, inte
+antagna. Senast omkontrollerat 2026-08-27 efter omläggningen av development.
 
 ### Vercel, Render och Supabase (2026-08-15) — LEGACY
 
