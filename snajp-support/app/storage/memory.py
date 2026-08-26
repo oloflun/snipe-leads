@@ -835,9 +835,14 @@ class MemoryStorage:
         self, tenant_id: str, *, verdict: str | None = None, limit: int = 50
     ) -> list[dict[str, Any]]:
         limit = max(1, min(limit, 200))
+        # Baklänges FÖRE sorteringen: två domar inom samma klocktick får
+        # identisk created_at (Windows-klockan tickar grovt), och en stabil
+        # sort behåller då ordningen den fick — alltså äldst först. Med listan
+        # reverserad blir det bevarade läget i stället senast insatt först,
+        # vilket är vad "senast först" faktiskt lovar.
         rader = [
             r
-            for r in self.agent_feedback.get(tenant_id, [])
+            for r in reversed(self.agent_feedback.get(tenant_id, []))
             if verdict is None or r["verdict"] == verdict
         ]
         rader.sort(key=lambda r: r["created_at"], reverse=True)
