@@ -333,6 +333,25 @@ ETT konto för hela plattformen i v1 — per-tenant-avsändare är Del F.
 | `SMTP_FROM` | `api` | Avsändaradress i From:. Tom => `SMTP_USER` |
 | `SMTP_FROM_NAME` | `api` | Visningsnamn, valfritt |
 
+**Sätt dem med skriptet, inte för hand:**
+
+```bash
+python scripts/smtp_konfig.py --env development            # visa läget
+python scripts/smtp_konfig.py --env development --apply    # testa inloggning + sätt
+```
+
+Skriptet loggar in på SMTP-servern INNAN det rör Railway. Ett fel lösenord
+ger annars inget felmeddelande vid deploy — bara mejl som tyst inte går fram.
+Lösenordet läses med `getpass` och skrivs aldrig ut.
+
+**Kontot måste ligga hos Loopia.** `snajp.se` har SPF-posten
+`v=spf1 include:spf.loopia.se -all`, och `-all` är ett HÅRT avslag: bara
+Loopias servrar får skicka som @snajp.se. Ett Gmail-konto med
+`From: hej@snajp.se` skulle inte hamna i skräpposten — det skulle avvisas.
+Brevlådan skapas i Loopias kundzon under E-post (LoopiaAPI-uppgifterna i
+`.env.deploy` är tomma, och ett kontolösenord kräver en människa ändå).
+Utgående server: `mailcluster.loopia.se` port **587** — 465 svarar inte där.
+
 Skild från `INTERNLARM_SMTP_*` med flit — de två vägarna får aldrig dela
 konto eller egenskaper (`app/notifications/prioriterat_mejl.py` skriver ut
 varför). Tre saker som INTE ändras av att variablerna sätts: send_guard-
