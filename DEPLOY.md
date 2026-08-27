@@ -317,6 +317,30 @@ koden.
 behöver den). Mejlet är alltså ett andra skäl att sätta samma variabel, inte ett
 nytt.
 
+## Kundvänd utgående SMTP (leads-utskick + godkända supportsvar)
+
+Sändvägen är opt-in: utan alla tre variablerna nedan väljer backenden
+`LoggingSendProvider`, ingenting skickas, och `/health/ready` visar
+"Ingen riktig sändväg". Halvsatt räknas som osatt (loggas som varning).
+ETT konto för hela plattformen i v1 — per-tenant-avsändare är Del F.
+
+| Variabel | Tjänst | Betydelse |
+|---|---|---|
+| `SMTP_HOST` | `api` | t.ex. `smtp.gmail.com` |
+| `SMTP_PORT` | `api` | 587 (STARTTLS, default) eller 465 (implicit TLS) |
+| `SMTP_USER` | `api` | Kontot som loggar in |
+| `SMTP_PASSWORD` | `api` | **App-lösenord** — samma regel som internlarmet |
+| `SMTP_FROM` | `api` | Avsändaradress i From:. Tom => `SMTP_USER` |
+| `SMTP_FROM_NAME` | `api` | Visningsnamn, valfritt |
+
+Skild från `INTERNLARM_SMTP_*` med flit — de två vägarna får aldrig dela
+konto eller egenskaper (`app/notifications/prioriterat_mejl.py` skriver ut
+varför). Tre saker som INTE ändras av att variablerna sätts: send_guard-
+spärrarna gäller varje leads-utskick som förut, testmejl (`provider='mock'`)
+skickas aldrig oavsett konfiguration, och `SNAJP_OUTBOX_DIR` (torrkörning)
+vinner över SMTP om båda är satta — den kollisionen ska kosta en .eml-fil,
+aldrig ett riktigt mejl.
+
 **Saknas variablerna skickas ingenting, tyst.** Det är rätt utfall lokalt och i
 testsviten — men det betyder också att ett bortglömt steg inte märks förrän
 någon undrar var mejlen tog vägen. `prioriterat_mejl.har_konfiguration()` svarar på

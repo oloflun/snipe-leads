@@ -225,6 +225,22 @@ async def process_email(
             and (sentiment is None or sentiment >= 0.4)
         )
         if auto_ok:
+            # Sändningen sker FÖRE varje statusskrivning, samma kontrakt som
+            # godkännandevägen (api/drafts.py). Misslyckas den degraderar
+            # ärendet till ett vanligt utkast i granskningskön — fail mot
+            # människa, aldrig mot en 'auto_sent'-rad utan mejl bakom sig.
+            from .sender import SandningsFel, skicka_supportsvar
+
+            try:
+                sandnotering = await skicka_supportsvar(email, content=content)
+            except SandningsFel as fel:
+                await storage.log_decision(
+                    tenant_id, email_id=email_id, event="auto_send_failed",
+                    detail={"rule": rule, "note": str(fel)},
+                )
+                auto_ok = False
+
+        if auto_ok:
             draft = await storage.create_draft(
                 tenant_id, email_id=email_id, ticket_id=ticket["id"],
                 content=content, status="auto_sent", auto=True, confidence=confidence,
@@ -239,7 +255,9 @@ async def process_email(
                 tenant_id, email_id=email_id, event="auto_sent",
                 detail={
                     "rule": rule, "confidence": confidence,
-                    "note": "Utskick simulerat — riktig SMTP/Graph-sändning är nästa steg.",
+                    # Sanningen för just det här mejlet: SMTP, simulerat
+                    # eller testmejl — se email_pipeline/sender.py.
+                    "note": sandnotering,
                 },
             )
             return {"action": "auto_sent", "draft_id": draft["id"], "ticket_id": ticket["id"]}

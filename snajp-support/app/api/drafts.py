@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from ..email_pipeline.sender import SandningsFel, skicka_supportsvar
 from .deps import require_tenant
 from .schemas import ApproveDraftRequest, RejectDraftRequest
 
@@ -25,6 +26,17 @@ async def approve_draft(
 
     edited = payload.edited_content is not None and payload.edited_content != draft["content"]
     content = payload.edited_content if edited else draft["content"]
+
+    # Sändningen sker FÖRE varje statusskrivning. Ordningen är kontraktet:
+    # misslyckas den riktiga sändningen (SandningsFel) står utkastet kvar som
+    # pending och kunden ser ett 502 — aldrig ett "skickat" på ett mejl som
+    # inte gick ut. Fram till 2026-08-28 fanns ingen sändning alls här, och
+    # statusen sattes ändå; se email_pipeline/sender.py för hela resonemanget.
+    email = await storage.get_email(tenant_id, draft["email_id"])
+    try:
+        sandnotering = await skicka_supportsvar(email, content=content)
+    except SandningsFel as fel:
+        raise HTTPException(status_code=502, detail=str(fel)) from fel
 
     await storage.update_draft(tenant_id, draft_id, status="approved", content=content)
     await storage.add_review(
@@ -51,7 +63,9 @@ async def approve_draft(
         event="approved_and_sent",
         detail={
             "edited": edited,
-            "note": "Utskick simulerat — riktig SMTP/Graph-sändning är nästa steg.",
+            # Noteringen kommer från sender.py och säger SANNINGEN för just
+            # det här mejlet: skickat via SMTP, simulerat, eller testmejl.
+            "note": sandnotering,
         },
     )
     return {"status": "sent", "edited": edited, "content": content}

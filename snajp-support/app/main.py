@@ -255,9 +255,15 @@ async def health_ready(response: Response) -> dict:
     # eftersom det är LoggingSendProvider som är sanningen i dag: den loggar
     # och skickar ingenting. Att läsa av typen är ärligare än att gissa på
     # frånvaron av env-variabler som inte finns modellerade än.
-    from .leads.send_provider import LoggingSendProvider, get_send_provider
+    from .leads.send_provider import DryRunMailer, LoggingSendProvider, get_send_provider
 
-    if isinstance(get_send_provider(), LoggingSendProvider):
+    sandvag = get_send_provider()
+    if isinstance(sandvag, DryRunMailer):
+        warnings.append(
+            "Torrkörningsläge (SNAJP_OUTBOX_DIR) — mejl skrivs till fil, "
+            "ingenting skickas. Ska aldrig vara satt i en deployad miljö."
+        )
+    elif isinstance(sandvag, LoggingSendProvider):
         warnings.append(
             "Ingen riktig sändväg — godkända svar loggas men skickas aldrig till kund."
         )

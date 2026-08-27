@@ -261,6 +261,27 @@ class Settings(BaseSettings):
     internlarm_smtp_anvandare: str = ""
     internlarm_smtp_losenord: str = ""
 
+    # KUNDVÄND utgående SMTP — sändvägen för leads-utskick och godkända
+    # supportsvar (app/leads/send_provider.py, app/email_pipeline/sender.py).
+    # Skild från internlarmet ovan av samma skäl som prioriterat_mejl.py
+    # skriver ut: de två vägarna får aldrig dela konto eller egenskaper.
+    #
+    # ETT konto för hela plattformen i v1 ("utskick från kundens egen domän"
+    # är Del F och kräver per-tenant-credentials som inte är modellerade).
+    # Alla tre första måste vara satta för att SmtpMailer ska väljas —
+    # halvsatt räknas som osatt, precis som för internlarmet.
+    #
+    # Port 465 betyder implicit TLS (SMTP_SSL), allt annat STARTTLS.
+    # Lösenordet är ett app-lösenord, inte kontolösenordet. Sätts i Railway
+    # av en människa (CLAUDE.md-undantaget), aldrig i en fil som deployas.
+    smtp_host: str = ""  # t.ex. smtp.gmail.com
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    # Avsändaradress i From:. Tom => smtp_user. Visningsnamnet är valfritt.
+    smtp_from: str = ""
+    smtp_from_name: str = ""
+
     # CORS: kommaseparerade origins som får anropa API:t direkt från en
     # webbläsare. Tom = av, vilket räcker för vår egen frontend — Next-proxyn
     # anropar backenden server-side, så webbläsaren träffar aldrig den här
