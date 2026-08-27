@@ -102,11 +102,19 @@ commits: triage-taket, masternyckelvakten, felsidorna, 409 i supportinkorgen.
 
 **Kvarstår, i prioritetsordning:**
 
-1. **SMTP-providern är fortfarande en attrapp** (`send_provider.py`,
-   snipe-ork). "Godkänn & skicka" i supporten sätter `sent` utan att skicka
-   (`drafts.py:47` — "Utskick simulerat"). Produkten kan inte leverera sin
-   kärnfunktion, och UI:t säger att den gjorde det. Drar med sig: glömt
-   lösenord, demo-åtkomstlänk, snipe-xl9.
+1. ~~SMTP-providern är en attrapp~~ **BYGGD senare samma natt** (commit
+   `cec72ad`): `SmtpMailer` (opt-in via SMTP_HOST/USER/PASSWORD, se
+   DEPLOY.md), supportsvarens sändväg `email_pipeline/sender.py` med
+   sändning-före-status (502 vid fel, utkast kvar som pending; autosvar
+   degraderar till granskningskön), testmejl (`provider='mock'`) skickas
+   aldrig. **Kvar är MÄNNISKOSTEGET:** välj avsändardomän/konto, skapa
+   app-lösenord och sätt variablerna i Railway (CLAUDE.md-undantaget — inte
+   agentens hand). Tills dess loggas utskick precis som förut, och
+   /health/ready säger "Ingen riktig sändväg". Kvar är också per-tenant-
+   avsändare (Del F) — supportsvar från globala kontot bryter trådningen i
+   kundens mejlklient — samt glömt-lösenord/demo-länk i Next-appen
+   (lib/actions/auth.ts), som har en EGEN sändvägslucka: Next når inte
+   backendens SMTP-provider.
 2. **Fakturering finns inte i kod**: inga fakturafält i strukturerad form
    (kundens orgnr ligger som fritext i `business_context.product`), ingen
    nummerserie, ingen moms, ingen betalleverantör. Manuell rutin krävs —

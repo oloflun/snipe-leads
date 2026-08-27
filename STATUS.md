@@ -1,5 +1,16 @@
 # Snipra Status
 
+## 2026-08-28 (efter midnatt) — Claude/Sebbe — SMTP-sändvägen byggd (snipe-ork stängd i kod)
+
+`SmtpMailer` + `email_pipeline/sender.py` + kopplingen i approve/autosvar,
+commit `cec72ad`, live i development. Kontraktet: 'sent' kan aldrig ljuga —
+sändning sker före status, fel ger 502/granskningskö, testmejl skickas aldrig,
+torrkörning vinner över SMTP. 17 nya tester, 1467 gröna. **Aktivering är ett
+människosteg:** sätt SMTP_HOST/USER/PASSWORD (+ ev. FROM) i Railway, se
+DEPLOY.md § "Kundvänd utgående SMTP". Tills dess loggas utskick som förut.
+Kvar: per-tenant-avsändare (Del F), Next-appens egna mejlvägar (glömt
+lösenord/demo-länk), snipe-xl9 väntar på riktiga inkommande svar.
+
 ## 2026-08-27 (senare samma natt) — Claude/Sebbe — go/no-go-granskning, tre av Antons trådar stängda, fem fixar live i development
 
 Full lanseringsgranskning av hela ytan + live-verifiering; rapport i
