@@ -103,11 +103,23 @@ def testa_inloggning(vard: str, port: int, anvandare: str, losenord: str) -> str
             server.login(anvandare, losenord)
         return None
     except smtplib.SMTPAuthenticationError as fel:
-        return (
-            f"Servern avvisade inloggningen ({fel.smtp_code}). Kontrollera att "
-            f"brevlådan {anvandare} finns och att lösenordet är brevlådans — "
-            f"inte kundzonens inloggning."
-        )
+        # Felet betyder olika saker hos olika leverantörer, och ett generiskt
+        # "fel lösenord" skickar folk att leta på fel ställe. Gmail avvisar
+        # ALLTID kontolösenordet — det som krävs är ett app-lösenord, och det
+        # alternativet finns inte ens i menyn förrän tvåstegsverifiering är på.
+        if "gmail" in vard.lower() or "google" in vard.lower():
+            rad = (
+                "Gmail accepterar aldrig kontolösenordet över SMTP. Du behöver ett "
+                "APP-LÖSENORD (16 tecken): myaccount.google.com -> Säkerhet -> "
+                "App-lösenord. Alternativet visas bara om tvåstegsverifiering "
+                "redan är påslagen på kontot."
+            )
+        else:
+            rad = (
+                f"Kontrollera att brevlådan {anvandare} finns och att lösenordet "
+                f"är brevlådans eget — inte kundzonens inloggning."
+            )
+        return f"Servern avvisade inloggningen ({fel.smtp_code}). {rad}"
     except Exception as fel:  # noqa: BLE001
         return f"{type(fel).__name__}: {str(fel)[:160]}"
 
@@ -166,10 +178,17 @@ def main() -> int:
     if not anvandare or "@" not in anvandare:
         print("  Ogiltig adress — inget gjort.")
         return 1
-    losenord = getpass.getpass(f"Lösenord för {anvandare} (syns inte): ").strip()
+    rått = getpass.getpass(f"Lösenord för {anvandare} (syns inte): ")
+    # ALLA mellanslag bort, inte bara i kanterna. Google visar app-lösenord som
+    # fyra grupper om fyra ("abcd efgh ijkl mnop"), och en kopiering tar med
+    # mellanslagen — som ger 535 fast lösenordet är rätt. Inget riktigt
+    # SMTP-lösenord bärs av sina mellanslag, så det här kan inte förstöra ett.
+    losenord = "".join(rått.split())
     if not losenord:
         print("  Tomt lösenord — inget gjort.")
         return 1
+    if losenord != rått.strip():
+        print("  (Tog bort mellanslag ur lösenordet — Google visar app-lösenord grupperat.)")
     avsandare = (args.avsandare or anvandare).strip()
 
     print(f"\n  Loggar in på {args.vard}:{args.port} som {anvandare} …")
