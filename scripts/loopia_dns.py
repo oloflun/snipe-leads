@@ -13,17 +13,24 @@ omöjlig att köra om och omöjlig att peka på i en handoff. Samma resonemang s
 scripts/railway_doman.py: ett kommando som går att falsifiera slår en
 punktlista varje gång.
 
-## Det enda som inte går att automatisera
+## Två lägen
 
-En LoopiaAPI-användare. Den skapas i kundzonen under
-**Kontoinställningar -> LoopiaAPI** och är en egen inloggning, skild från
-kontolösenordet. Lägg den i `.env.deploy` (gitignorerad):
+**Utan LoopiaAPI-nycklar** kör skriptet i kontrolläge: det slår upp `www` live,
+säger om posten är satt, och skriver ut exakt vad som ska fyllas i om den inte
+är det. Posten går att sätta för hand i kundzonen på två minuter — målet är en
+DNS-post, inte ett API.
+
+**Med nycklar** sätter det posten själv. Skapa en API-användare i kundzonen
+under **Kontoinställningar -> LoopiaAPI** (en egen inloggning, skild från
+kontolösenordet) och lägg den i `.env.deploy`, som är gitignorerad:
 
     LOOPIA_API_USER=nagot@loopiaapi
     LOOPIA_API_PASSWORD=...
 
-Det är ett kontolösenord och därför den enda delen som kräver dig. Allt efter
-det sköter skriptet.
+Värt besväret om DNS ska ändras mer än en gång. Inte en förutsättning för att
+bli klar — den första versionen av det här skriptet dog utan nycklar och gjorde
+sig därmed till blockeraren i stället för till hjälpen.
+
 
 ## Apex (snajp.se utan www)
 
