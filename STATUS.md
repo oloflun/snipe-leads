@@ -1,5 +1,41 @@
 # Snipra Status
 
+## 2026-08-29 (natt) — Claude/Sebbe — adminfliken Kunder & Data: kundregister, statistik, felöversikt
+
+**Live i development, migration 053 körd.** Handoff till Anton:
+[HANDOFF-2026-08-29-KUNDER-DATA.md](HANDOFF-2026-08-29-KUNDER-DATA.md).
+
+Befintliga fliken Kunder utbyggd (inte kopierad) till "Kunder & Data",
+sidtitel `Snajp - Kunder&Data`. **Migration 053**: `ss_customer_details`
+(orgnr, fakturerings- och adressfält, kund_sedan, avtal_signerat) +
+`ss_customer_contacts`, båda admin-only via 029-mönstret (åtkomliga bara på
+OSKOPAD anslutning). Backend: `api/admin_kunddata.py` bakom
+`require_master_key`, fältlistan delad i `storage/base.py`. Skrivningen går via
+server actions, eftersom adminproxyn är GET-only med flit och den regeln inte
+luckrades upp.
+
+**Bärande beslut: varje fält bär sin källa** (`manuell`/`onboarding`/`system`/
+saknas). Bara orgnr och kund-sedan går att härleda i dag; resten finns inte i
+någon datakälla. Ett härlett värde som ser handbekräftat ut i ett
+faktureringsunderlag är felet som kostar pengar hos någon annan. Följdregel:
+klienten skickar bara ÄNDRADE fält, annars blir varje härlett värde manuellt
+vid första sparning.
+
+Statistik: avtal per dag/vecka/månad/år + veckograf (nya kunder, signerade
+avtal) + försäljningstakt. Demo- och testytor räknas aldrig som kunder, men
+göms inte. Fel & eskaleringar sammanfattar `platform_events` +
+`ss_tickets.status='escalated'` — inget nytt felsystem, länk till Händelser.
+
+**Intäkter/utgifter byggdes MEDVETET inte.** Det finns ingen riktig
+betalkälla: migration 044:s betalsätt är Stripes testkort mot simulerad
+provider, fakturor/nummerserie/moms saknas i kod. Sidan säger det rakt ut i
+stället för att visa påhittade siffror. Datakälla är Antons beslut.
+
+**1505 tester gröna** (14 nya), tsc rent, `qa_vyer.mjs` GRÖNT mot körande dev,
+nya detaljvyn besiktigad inloggad (noll JS-fel, noll 4xx). Lokal fullstack gick
+inte att resa — pgvector saknas i lokala PostgreSQL 17 — så UI:t granskades via
+en okommittad preview-route + Playwright på 1440/375 i båda lägena.
+
 ## 2026-08-28 — Claude/Sebbe — MÄTT: Railway blockerar SMTP. HTTPS-vägen byggd.
 
 `/api/admin/sandvag` kördes mot den körande dev-containern: portarna 587, 465
