@@ -16,6 +16,53 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Protocol
 
+#: Kundregistrets skrivbara fält (migration 053). Listan bor HÄR och läses av
+#: båda lagringarna och av API-schemat — tre kopior av en fältlista blir förr
+#: eller senare tre olika listor, och det är exakt så agent_type-buggen
+#: överlevde ett halvår.
+KUNDDATA_FALT = (
+    "orgnr",
+    "faktureringsadress",
+    "faktureringsmejl",
+    "telefon",
+    "foretagsadress",
+    "kund_sedan",
+    "avtal_signerat",
+)
+
+_KUNDDATA_DATUMFALT = ("kund_sedan", "avtal_signerat")
+
+
+def normalisera_kunddata(falt: dict[str, Any]) -> dict[str, Any]:
+    """Delad validering för kundregistret, körd av BÅDA lagringarna.
+
+    Semantiken speglar agentprofilen: ett utelämnat fält rörs inte, en tom
+    sträng nollställer. Datumfält parsas till `date` — en sträng som inte är
+    ett ISO-datum ska falla HÄR, med fältnamnet i felet, inte som ett
+    asyncpg-undantag halvvägs ner i en upsert.
+    """
+    resultat: dict[str, Any] = {}
+    for namn, varde in falt.items():
+        if namn not in KUNDDATA_FALT:
+            raise ValueError(f"Okänt kunddatafält: {namn}")
+        if varde is None:
+            continue
+        if namn in _KUNDDATA_DATUMFALT:
+            text = str(varde).strip()
+            if not text:
+                resultat[namn] = None
+                continue
+            try:
+                resultat[namn] = date.fromisoformat(text)
+            except ValueError as fel:
+                raise ValueError(
+                    f"{namn} måste vara ett datum på formen ÅÅÅÅ-MM-DD."
+                ) from fel
+        else:
+            text = str(varde).strip()
+            resultat[namn] = text or None
+    return resultat
+
 
 class Storage(Protocol):
     name: str
@@ -790,6 +837,52 @@ class Storage(Protocol):
         run_id: str | None = None,
         detail: dict[str, Any] | None = None,
     ) -> None: ...
+
+    # -- Kundregister (migration 053, kräver master-nyckel) -----------------
+    #
+    # Samma åtkomstmodell som admin-läsningarna ovan: metoderna anropas
+    # enbart från app/api/admin_kunddata.py bakom require_master_key, och
+    # RLS-policyn i 053 släpper bara fram dem på en OSKOPAD anslutning.
+    # Skrivsemantiken delas via normalisera_kunddata(): utelämnat fält rörs
+    # inte, tom sträng nollställer.
+
+    async def get_customer_details(self, tenant_id: str) -> dict[str, Any] | None:
+        """Kundens registerrad, eller None när ingen skrivits ännu."""
+        ...
+
+    async def upsert_customer_details(
+        self, tenant_id: str, falt: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Skriver de fält som skickats med och returnerar hela raden."""
+        ...
+
+    async def list_customer_contacts(self, tenant_id: str) -> list[dict[str, Any]]: ...
+
+    async def create_customer_contact(
+        self,
+        tenant_id: str,
+        *,
+        namn: str,
+        roll: str | None = None,
+        mejl: str | None = None,
+        telefon: str | None = None,
+    ) -> dict[str, Any]: ...
+
+    async def update_customer_contact(
+        self,
+        tenant_id: str,
+        contact_id: str,
+        *,
+        namn: str | None = None,
+        roll: str | None = None,
+        mejl: str | None = None,
+        telefon: str | None = None,
+    ) -> dict[str, Any] | None:
+        """None när kontakten inte finns HOS DEN TENANTEN — ett id ur en annan
+        kunds lista ska svara 404, inte uppdateras."""
+        ...
+
+    async def delete_customer_contact(self, tenant_id: str, contact_id: str) -> bool: ...
 
     # -- Bokföring (migration 045) ------------------------------------------
     #

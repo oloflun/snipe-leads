@@ -254,6 +254,34 @@ class TenantProfilRequest(BaseModel):
     affarskontext: str | None = Field(default=None, max_length=20_000)
 
 
+class KunddataRequest(BaseModel):
+    """Adminens skrivning mot kundregistret (migration 053).
+
+    Samma semantik som TenantProfilRequest: None betyder "rör inte", tom
+    sträng nollställer. Datumfälten tas emot som text och valideras i
+    lagringslagrets delade normalisera_kunddata — ett datum som inte parsar
+    ska ge ett 422 med fältnamnet, inte ett databas-undantag.
+    """
+
+    orgnr: str | None = Field(default=None, max_length=20)
+    faktureringsadress: str | None = Field(default=None, max_length=500)
+    faktureringsmejl: str | None = Field(default=None, max_length=320)
+    telefon: str | None = Field(default=None, max_length=40)
+    foretagsadress: str | None = Field(default=None, max_length=500)
+    kund_sedan: str | None = Field(default=None, max_length=10)
+    avtal_signerat: str | None = Field(default=None, max_length=10)
+
+
+class KontaktRequest(BaseModel):
+    """En kontaktperson i kundregistret. `namn` krävs vid skapande;
+    uppdateringen låter utelämnade fält vara (None) och nollställer tomma."""
+
+    namn: str | None = Field(default=None, max_length=200)
+    roll: str | None = Field(default=None, max_length=200)
+    mejl: str | None = Field(default=None, max_length=320)
+    telefon: str | None = Field(default=None, max_length=40)
+
+
 class KbArticleRequest(BaseModel):
     articles: list[KbArticle] = Field(..., min_length=1, max_length=50)
 

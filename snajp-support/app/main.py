@@ -16,6 +16,7 @@ import asyncio
 
 from .api import (
     admin,
+    admin_kunddata,
     admin_profil,
     analytics,
     bookkeeping,
@@ -172,6 +173,9 @@ app.include_router(admin.router)
 # Skrivytan mot agentprofilen. Egen modul, samma prefix och samma master-nyckel —
 # se docstringen i api/admin_profil.py för varför läsning och skrivning är skilda åt.
 app.include_router(admin_profil.router)
+# Kundregistret — fliken Kunder & Data. Egen modul av samma skäl som profilen,
+# se docstringen i api/admin_kunddata.py.
+app.include_router(admin_kunddata.router)
 app.include_router(analytics.router)
 app.include_router(bookkeeping.router)
 

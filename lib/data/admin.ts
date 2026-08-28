@@ -69,6 +69,10 @@ export type TenantRow = {
   tokens_out: number;
   errors: number;
   last_activity: string | null;
+  /** Registrets datum om ett finns, annars tenantens skapelsedatum (053). */
+  kund_sedan?: string | null;
+  /** Null = inget avtal registrerat. Ett datum = avtal finns, signerat då. */
+  avtal_signerat?: string | null;
 };
 
 export type RunRow = {

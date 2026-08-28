@@ -21,11 +21,13 @@ import asyncpg
 
 from .base import (
     ANALYTICS_COVERAGE,
+    KUNDDATA_FALT,
     bk_belopp,
     bk_datum,
     kontrollera_bk_balans,
     kontrollera_bk_riktning,
     kontrollera_bk_status,
+    normalisera_kunddata,
     status_transition_allowed,
 )
 
@@ -2287,8 +2289,14 @@ class PostgresStorage:
                        coalesce(r.tokens_in, 0)    as tokens_in,
                        coalesce(r.tokens_out, 0)   as tokens_out,
                        coalesce(e.errors, 0)       as errors,
-                       r.last_activity
+                       r.last_activity,
+                       -- Kundregistret (053): registrets datum vinner, annars
+                       -- tenantens skapelsedatum. Avtalet är null tills någon
+                       -- registrerat ett — null ÄR "inget avtal".
+                       coalesce(d.kund_sedan, t.created_at::date) as kund_sedan,
+                       d.avtal_signerat
                 from ss_tenants t
+                left join ss_customer_details d on d.tenant_id = t.id
                 left join lateral (
                   select count(*) as tickets from ss_tickets where tenant_id = t.id
                 ) k on true
@@ -2401,6 +2409,133 @@ class PostgresStorage:
                 json.dumps(detail or {}, ensure_ascii=False),
                 run_id,
             )
+
+    # -- Kundregister (migration 053) ---------------------------------------
+    #
+    # Oskopade anslutningar av samma skäl som adminläsningarna ovan: RLS-
+    # policyn i 053 släpper bara fram snajp_app när INGEN tenant-kontext är
+    # satt, och den enda anropsplatsen är admin_kunddata.py bakom
+    # require_master_key.
+
+    async def get_customer_details(self, tenant_id: str) -> dict[str, Any] | None:
+        async with self.pool.acquire() as conn:
+            record = await conn.fetchrow(
+                "select * from ss_customer_details where tenant_id = $1", tenant_id
+            )
+        return _row(record) if record else None
+
+    async def upsert_customer_details(
+        self, tenant_id: str, falt: dict[str, Any]
+    ) -> dict[str, Any]:
+        andringar = normalisera_kunddata(falt)
+        # Kolumnnamnen kommer ur KUNDDATA_FALT (allowlist i base.py), aldrig
+        # ur anroparens nycklar — normalisera_kunddata har redan fällt allt
+        # okänt, men SQL:en byggs ändå bara av namn vi själva skrivit.
+        kolumner = [namn for namn in KUNDDATA_FALT if namn in andringar]
+        if not kolumner:
+            befintlig = await self.get_customer_details(tenant_id)
+            if befintlig:
+                return befintlig
+            kolumner = []
+        satta = ", ".join(
+            f"{namn} = ${i + 2}" for i, namn in enumerate(kolumner)
+        )
+        varden = [andringar[namn] for namn in kolumner]
+        async with self.pool.acquire() as conn:
+            record = await conn.fetchrow(
+                f"""
+                insert into ss_customer_details (tenant_id{"".join("," + n for n in kolumner)})
+                values ($1{"".join(f", ${i + 2}" for i in range(len(kolumner)))})
+                on conflict (tenant_id) do update
+                set {satta + ", " if satta else ""}updated_at = now()
+                returning *
+                """,
+                tenant_id,
+                *varden,
+            )
+        return _row(record)
+
+    async def list_customer_contacts(self, tenant_id: str) -> list[dict[str, Any]]:
+        async with self.pool.acquire() as conn:
+            records = await conn.fetch(
+                """
+                select * from ss_customer_contacts
+                where tenant_id = $1
+                order by created_at
+                """,
+                tenant_id,
+            )
+        return [_row(r) for r in records]
+
+    async def create_customer_contact(
+        self,
+        tenant_id: str,
+        *,
+        namn: str,
+        roll: str | None = None,
+        mejl: str | None = None,
+        telefon: str | None = None,
+    ) -> dict[str, Any]:
+        async with self.pool.acquire() as conn:
+            record = await conn.fetchrow(
+                """
+                insert into ss_customer_contacts (tenant_id, namn, roll, mejl, telefon)
+                values ($1, $2, $3, $4, $5)
+                returning *
+                """,
+                tenant_id,
+                namn.strip(),
+                (roll or "").strip() or None,
+                (mejl or "").strip() or None,
+                (telefon or "").strip() or None,
+            )
+        return _row(record)
+
+    async def update_customer_contact(
+        self,
+        tenant_id: str,
+        contact_id: str,
+        *,
+        namn: str | None = None,
+        roll: str | None = None,
+        mejl: str | None = None,
+        telefon: str | None = None,
+    ) -> dict[str, Any] | None:
+        async with self.pool.acquire() as conn:
+            record = await conn.fetchrow(
+                """
+                update ss_customer_contacts
+                   set namn    = case when $3::text is not null and btrim($3) <> ''
+                                      then btrim($3) else namn end,
+                       roll    = case when $4::text is not null
+                                      then nullif(btrim($4), '') else roll end,
+                       mejl    = case when $5::text is not null
+                                      then nullif(btrim($5), '') else mejl end,
+                       telefon = case when $6::text is not null
+                                      then nullif(btrim($6), '') else telefon end,
+                       updated_at = now()
+                 -- Båda villkoren: ett kontakt-id ur en annan kunds lista ska
+                 -- ge 404, inte en uppdatering över tenant-gränsen.
+                 where id = $2 and tenant_id = $1
+                returning *
+                """,
+                tenant_id,
+                contact_id,
+                namn,
+                roll,
+                mejl,
+                telefon,
+            )
+        return _row(record) if record else None
+
+    async def delete_customer_contact(self, tenant_id: str, contact_id: str) -> bool:
+        async with self.pool.acquire() as conn:
+            resultat = await conn.execute(
+                "delete from ss_customer_contacts where id = $1 and tenant_id = $2",
+                contact_id,
+                tenant_id,
+            )
+        return resultat.endswith("1")
 
     # -- Bokföring (migration 045) ------------------------------------------
     #

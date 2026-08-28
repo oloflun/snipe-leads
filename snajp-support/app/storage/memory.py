@@ -30,6 +30,7 @@ from .base import (
     bk_belopp,
     bk_datum,
     kontrollera_bk_balans,
+    normalisera_kunddata,
     kontrollera_bk_riktning,
     kontrollera_bk_status,
     status_transition_allowed,
@@ -191,6 +192,10 @@ class MemoryStorage:
         # schemaläggaren innan den vet vilken kund det gäller hör hemma här
         # också (migration 026, tenant_id nullable).
         self.platform_events: list[dict[str, Any]] = []
+        # Kundregistret (migration 053): en detaljrad per tenant_id, och
+        # kontaktpersoner som platt lista — samma form som Postgres-tabellerna.
+        self.customer_details: dict[str, dict[str, Any]] = {}
+        self.customer_contacts: list[dict[str, Any]] = []
         # Nycklad på manifest_hash, inte tenant_id — delad baselinekatalog
         # (migration 016). Samma undantag som segmentaggregatet.
         self.skill_files: dict[str, list[dict[str, Any]]] = {}
@@ -1683,9 +1688,20 @@ class MemoryStorage:
         for tenant in self.tenants.values():
             tid = tenant["id"]
             runs = self.agent_runs.get(tid, [])
+            detaljer = self.customer_details.get(tid, {})
             rows.append(
                 {
                     **tenant,
+                    # Samma coalesce som Postgres-frågan: registrets datum
+                    # vinner, annars tenantens skapelsedatum. Avtalet är null
+                    # tills någon registrerat ett — null ÄR "inget avtal".
+                    "kund_sedan": detaljer.get("kund_sedan")
+                    or (
+                        tenant["created_at"].date()
+                        if isinstance(tenant.get("created_at"), datetime)
+                        else tenant.get("created_at")
+                    ),
+                    "avtal_signerat": detaljer.get("avtal_signerat"),
                     "tickets": sum(1 for t in self.tickets.values() if t["tenant_id"] == tid),
                     # Speglar Postgres exakt. Att räkna alla här och filtrera
                     # där hade gett en grön svit mot en vy som visar fel tal i
@@ -1766,6 +1782,88 @@ class MemoryStorage:
                 "created_at": _now(),
             }
         )
+
+    # -- Kundregister (migration 053) ---------------------------------------
+    #
+    # Samma normalisering som Postgres-sidan, via normalisera_kunddata i
+    # base.py. En lagring som tar emot mer än den andra är hur
+    # agent_type-buggen levde ett halvår med grön svit.
+
+    async def get_customer_details(self, tenant_id: str) -> dict[str, Any] | None:
+        rad = self.customer_details.get(tenant_id)
+        return dict(rad) if rad else None
+
+    async def upsert_customer_details(
+        self, tenant_id: str, falt: dict[str, Any]
+    ) -> dict[str, Any]:
+        andringar = normalisera_kunddata(falt)
+        rad = self.customer_details.setdefault(
+            tenant_id, {"tenant_id": tenant_id}
+        )
+        rad.update(andringar)
+        rad["updated_at"] = _now()
+        return dict(rad)
+
+    async def list_customer_contacts(self, tenant_id: str) -> list[dict[str, Any]]:
+        kontakter = [
+            dict(k) for k in self.customer_contacts if k["tenant_id"] == tenant_id
+        ]
+        kontakter.sort(key=lambda k: k["created_at"])
+        return kontakter
+
+    async def create_customer_contact(
+        self,
+        tenant_id: str,
+        *,
+        namn: str,
+        roll: str | None = None,
+        mejl: str | None = None,
+        telefon: str | None = None,
+    ) -> dict[str, Any]:
+        kontakt = {
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "namn": namn.strip(),
+            "roll": (roll or "").strip() or None,
+            "mejl": (mejl or "").strip() or None,
+            "telefon": (telefon or "").strip() or None,
+            "created_at": _now(),
+            "updated_at": _now(),
+        }
+        self.customer_contacts.append(kontakt)
+        return dict(kontakt)
+
+    async def update_customer_contact(
+        self,
+        tenant_id: str,
+        contact_id: str,
+        *,
+        namn: str | None = None,
+        roll: str | None = None,
+        mejl: str | None = None,
+        telefon: str | None = None,
+    ) -> dict[str, Any] | None:
+        for kontakt in self.customer_contacts:
+            # Båda villkoren: ett kontakt-id ur en annan kunds lista ska ge
+            # None (404), inte en uppdatering över tenant-gränsen.
+            if kontakt["id"] == contact_id and kontakt["tenant_id"] == tenant_id:
+                if namn is not None and namn.strip():
+                    kontakt["namn"] = namn.strip()
+                for falt, varde in (("roll", roll), ("mejl", mejl), ("telefon", telefon)):
+                    if varde is not None:
+                        kontakt[falt] = varde.strip() or None
+                kontakt["updated_at"] = _now()
+                return dict(kontakt)
+        return None
+
+    async def delete_customer_contact(self, tenant_id: str, contact_id: str) -> bool:
+        fore = len(self.customer_contacts)
+        self.customer_contacts = [
+            k
+            for k in self.customer_contacts
+            if not (k["id"] == contact_id and k["tenant_id"] == tenant_id)
+        ]
+        return len(self.customer_contacts) < fore
 
     # -- Bokföring (migration 045) ------------------------------------------
     #
