@@ -333,6 +333,32 @@ ETT konto för hela plattformen i v1 — per-tenant-avsändare är Del F.
 | `SMTP_FROM` | `api` | Avsändaradress i From:. Tom => `SMTP_USER` |
 | `SMTP_FROM_NAME` | `api` | Visningsnamn, valfritt |
 
+### Railway blockerar SMTP — läs det här först
+
+Railway släpper igenom utgående SMTP (portarna 25/465/587/2525) **bara på Pro
+och uppåt**. Projektet `brave-passion` ligger på `trial`, så SMTP-vägen kan
+inte fungera i drift oavsett hur rätt uppgifterna är — containern får
+`Network is unreachable`. Samma blockering fanns på Render och löstes
+2026-07-30 (commit `0d3ac1d`).
+
+**Vägen som fungerar på nuvarande plan är Resend över HTTPS:**
+
+| Variabel | Tjänst | Betydelse |
+|---|---|---|
+| `RESEND_API_KEY` | `api` | Nyckeln från resend.com. Ensam räcker den — kanalen väljs automatiskt |
+| `SMTP_FROM` | `api` | Avsändaradress, t.ex. `hej@snajp.se`. Måste ligga på en domän som är **verifierad hos Resend** |
+| `SMTP_FROM_NAME` | `api` | Visningsnamn, t.ex. `Snajp` |
+| `EMAIL_PROVIDER` | `api` | Valfri. Tom = auto. `smtp` tvingar SMTP-vägen för mätning |
+
+Tre steg: skapa konto på resend.com, lägg till `snajp.se` och för in de tre
+DNS-posterna Resend visar hos Loopia (DKIM + SPF + return-path), och sätt
+`RESEND_API_KEY` i Railway. Domänverifieringen ger DKIM-signering, alltså
+bättre leveransbarhet än både Gmail och en delad SMTP-brevlåda — och den löser
+samtidigt att `hej@snajp.se` måste vara en riktig avsändare.
+
+Gratisnivån är 3 000 mejl/månad och 100/dag, vilket rymmer paketens 300
+mejl/månad med marginal.
+
 **Sätt dem med skriptet, inte för hand:**
 
 ```bash

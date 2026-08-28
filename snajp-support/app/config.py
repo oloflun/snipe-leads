@@ -282,6 +282,25 @@ class Settings(BaseSettings):
     smtp_from: str = ""
     smtp_from_name: str = ""
 
+    # Vilken KANAL utskicken går genom: "smtp" eller "resend".
+    #
+    # VARFÖR VALET FINNS: hostingplattformarna blockerar utgående SMTP på sina
+    # billiga planer. Render gjorde det 2026-07-30 (commit 0d3ac1d, felet syntes
+    # som "[Errno 101] Network is unreachable" först i det skarpa testet), och
+    # Railway blockerar portarna 25/465/587/2525 på Free, Trial och Hobby —
+    # bara Pro och uppåt släpper igenom. Projektet ligger på trial.
+    #
+    # Resend skickar över vanlig HTTPS och berörs därför inte alls. Det är inte
+    # ett kringgående av en spärr: spärren finns för att skydda plattformens
+    # IP-rykte mot skräppost, och en avsändare med verifierad domän och DKIM är
+    # precis vad den vill se i stället.
+    #
+    # Tomt värde => härleds: finns RESEND_API_KEY väljs resend, annars smtp.
+    # Att inte tvinga fram en explicit inställning gör att en satt nyckel
+    # räcker för att sändvägen ska börja fungera.
+    email_provider: str = ""
+    resend_api_key: str = ""
+
     # CORS: kommaseparerade origins som får anropa API:t direkt från en
     # webbläsare. Tom = av, vilket räcker för vår egen frontend — Next-proxyn
     # anropar backenden server-side, så webbläsaren träffar aldrig den här

@@ -15,8 +15,10 @@ import pytest
 from app.config import Settings
 from app.leads import send_provider as modul
 from app.leads.send_provider import (
+    BlockeradSmtpPort,
     DryRunMailer,
     LoggingSendProvider,
+    ResendMailer,
     SmtpMailer,
     get_send_provider,
 )
@@ -168,3 +170,82 @@ async def test_smtpfel_kastas_vidare(monkeypatch):
     monkeypatch.setattr(smtplib, "SMTP", spricker)
     with pytest.raises(smtplib.SMTPServerDisconnected):
         await _mailer().send(to="kund@example.com", subject="x", body="y")
+
+
+# -- Resend (HTTPS) ---------------------------------------------------------
+
+
+def test_resend_nyckel_vinner_over_smtp(monkeypatch):
+    """Den som satt en Resend-nyckel har gjort det för att SMTP är blockerat.
+    En kvarglömd SMTP-konfiguration får inte skicka oss tillbaka i väggen."""
+    monkeypatch.delenv("SNAJP_OUTBOX_DIR", raising=False)
+    provider = get_send_provider(_settings(**SMTP_KOMPLETT, resend_api_key="re_x"))
+    assert isinstance(provider, ResendMailer)
+    assert provider.levererar is True
+
+
+def test_email_provider_smtp_tvingar_smtp(monkeypatch):
+    monkeypatch.delenv("SNAJP_OUTBOX_DIR", raising=False)
+    provider = get_send_provider(
+        _settings(**SMTP_KOMPLETT, resend_api_key="re_x", email_provider="smtp")
+    )
+    assert isinstance(provider, SmtpMailer)
+
+
+def test_resend_utan_nyckel_skickar_inget(monkeypatch):
+    monkeypatch.delenv("SNAJP_OUTBOX_DIR", raising=False)
+    provider = get_send_provider(_settings(email_provider="resend"))
+    assert isinstance(provider, LoggingSendProvider)
+
+
+def test_torrkorningen_vinner_over_resend(monkeypatch, tmp_path):
+    monkeypatch.setenv("SNAJP_OUTBOX_DIR", str(tmp_path))
+    assert isinstance(get_send_provider(_settings(resend_api_key="re_x")), DryRunMailer)
+
+
+async def test_blockerad_port_ger_egen_typ(monkeypatch):
+    """Errno 101 är plattformens portspärr, inte ett fel i uppgifterna —
+    och åtgärden är att byta kanal, inte att byta lösenord."""
+
+    def blockerad(*args, **kwargs):
+        raise OSError(101, "Network is unreachable")
+
+    monkeypatch.setattr(smtplib, "SMTP", blockerad)
+    with pytest.raises(BlockeradSmtpPort) as fangad:
+        await _mailer().send(to="kund@example.com", subject="x", body="y")
+    assert "RESEND_API_KEY" in str(fangad.value)
+
+
+async def test_resend_skickar_och_kastar_vid_fel(monkeypatch):
+    skickat = {}
+
+    class _Svar:
+        def __init__(self, kod): self.status_code, self.text = kod, "{}"
+
+    class _Klient:
+        def __init__(self, **kw): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        async def post(self, url, headers=None, json=None):
+            skickat.update({"url": url, "headers": headers, "json": json})
+            return _Svar(skickat.get("_kod", 200))
+
+    import httpx
+    monkeypatch.setattr(httpx, "AsyncClient", _Klient)
+
+    m = ResendMailer(api_key="re_hemlig", avsandare="hej@snajp.se", avsandarnamn="Snajp")
+    await m.send(to="kund@example.com", subject="Hej", body="Text")
+    assert skickat["json"]["to"] == ["kund@example.com"]
+    assert skickat["json"]["from"] == "Snajp <hej@snajp.se>"
+    assert skickat["headers"]["Authorization"].startswith("Bearer ")
+
+    skickat["_kod"] = 422
+    with pytest.raises(RuntimeError):
+        await m.send(to="kund@example.com", subject="Hej", body="Text")
+
+
+async def test_resend_avvisar_ogiltig_mottagare():
+    with pytest.raises(ValueError):
+        await ResendMailer(api_key="re_x", avsandare="hej@snajp.se").send(
+            to="okänd", subject="x", body="y"
+        )
