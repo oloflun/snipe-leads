@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from ..config import get_settings
 from .deps import require_master_key
 
 router = APIRouter(prefix="/api/admin", dependencies=[Depends(require_master_key)])
@@ -107,4 +108,71 @@ async def usage(request: Request) -> dict:
             }
             for t in tenants
         ]
+    }
+
+
+@router.get("/sandvag")
+async def sandvagsdiagnos(request: Request, vard: str = "", port: int = 0) -> dict:
+    """Kan den här containern över huvud taget skicka mejl — och hur?
+
+    Läser vilken provider som är vald OCH provar en TCP-anslutning ut mot
+    SMTP-porten. Ingen inloggning, inget mejl, inga uppgifter behövs.
+
+    ## Varför den finns
+
+    Hostingplattformarna blockerar utgående SMTP på sina billiga planer, och
+    felet syns först vid det första riktiga utskicket — som ett
+    "Network is unreachable" långt inne i en agentkörning. Det har kostat oss
+    en kväll två gånger: Render 2026-07-30 (commit 0d3ac1d) och Railway
+    2026-08-27. Frågan "släpper plattformen igenom porten?" ska gå att ställa
+    på en sekund, inifrån containern, innan någon felsöker ett lösenord som
+    inte är fel.
+
+    Att den ligger bakom master-nyckeln är avsiktligt: svaret avslöjar
+    plattformens nätverkspolicy och vilken sändväg vi kör, vilket ingen kund
+    har ett ärende till.
+    """
+    import asyncio
+
+    from ..leads.send_provider import get_send_provider
+
+    settings = get_settings()
+    provider = get_send_provider()
+    målvärd = (vard or settings.smtp_host or "smtp.gmail.com").strip()
+    målport = port or settings.smtp_port or 587
+
+    async def prova(p: int) -> dict:
+        try:
+            anslutning = asyncio.open_connection(målvärd, p)
+            läsare, skrivare = await asyncio.wait_for(anslutning, timeout=8)
+            hälsning = ""
+            try:
+                data = await asyncio.wait_for(läsare.read(120), timeout=5)
+                hälsning = data.decode(errors="replace").strip()[:80]
+            except Exception:  # noqa: BLE001 — banner är en bonus, inte svaret
+                pass
+            skrivare.close()
+            return {"port": p, "oppen": True, "banner": hälsning}
+        except Exception as fel:  # noqa: BLE001
+            return {
+                "port": p,
+                "oppen": False,
+                "fel": type(fel).__name__,
+                "errno": getattr(fel, "errno", None),
+            }
+
+    resultat = [await prova(p) for p in dict.fromkeys([målport, 587, 465, 2525])]
+    nagon_oppen = any(r["oppen"] for r in resultat)
+
+    return {
+        "provider": type(provider).__name__,
+        "levererar": getattr(provider, "levererar", False),
+        "vard": målvärd,
+        "portar": resultat,
+        "smtp_mojligt": nagon_oppen,
+        "slutsats": (
+            "SMTP går ut härifrån."
+            if nagon_oppen
+            else "Plattformen blockerar utgående SMTP — använd RESEND_API_KEY (HTTPS)."
+        ),
     }
