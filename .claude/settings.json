@@ -27,9 +27,16 @@
         "source": "github",
         "repo": "oloflun/super-intelligence-public"
       }
+    },
+    "foreman-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "fatihguner/foreman"
+      }
     }
   },
   "enabledPlugins": {
-    "super-intelligence@super-intelligence": true
+    "super-intelligence@super-intelligence": true,
+    "foreman@foreman-marketplace": true
   }
 }
