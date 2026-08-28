@@ -11,5 +11,16 @@
         "matcher": ""
       }
     ]
+  },
+  "extraKnownMarketplaces": {
+    "super-intelligence": {
+      "source": {
+        "source": "github",
+        "repo": "oloflun/super-intelligence-public"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "super-intelligence@super-intelligence": true
   }
 }
