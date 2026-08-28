@@ -64,7 +64,16 @@ STANDARD_VARD = "mailcluster.loopia.se"
 STANDARD_PORT = 587
 
 #: Variablerna sändvägen läser (DEPLOY.md § Kundvänd utgående SMTP).
-NYCKLAR = ("SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM", "SMTP_FROM_NAME")
+NYCKLAR = (
+    "RESEND_API_KEY",
+    "EMAIL_PROVIDER",
+    "SMTP_HOST",
+    "SMTP_PORT",
+    "SMTP_USER",
+    "SMTP_PASSWORD",
+    "SMTP_FROM",
+    "SMTP_FROM_NAME",
+)
 
 TIDSTAK = 20
 
@@ -88,6 +97,9 @@ def visa_lage(miljo: str, varden: dict) -> None:
         print(f"    {nyckel:16} {'satt' if satt else '—'}")
         if not satt and nyckel in ("SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD"):
             saknas.append(nyckel)
+    if str(varden.get("RESEND_API_KEY", "")).strip():
+        print("\n  Sändvägen är PÅ via Resend (HTTPS) — SMTP-fälten spelar ingen roll.")
+        return
     if saknas:
         print(f"\n  Sändvägen är AV. Saknas: {', '.join(saknas)}")
         print("  Backenden väljer LoggingSendProvider — ingenting skickas.")
@@ -146,6 +158,41 @@ def skicka_testmejl(
         return f"{type(fel).__name__}: {str(fel)[:160]}"
 
 
+def satt_resend(args, env_id: str, service_id: str) -> int:
+    """HTTPS-vägen. Ingen inloggning att testa — nyckeln prövas av första
+    utskicket, och Resend svarar då med vad som är fel (overifierad domän,
+    ogiltig nyckel, kvot slut). Ett provmejl härifrån hade krävt en verifierad
+    domän ändå, så kontrollen görs bäst genom appen."""
+    avsandare = (args.avsandare_resend or args.avsandare or "").strip()
+    if not avsandare:
+        avsandare = input("\n  Avsändaradress (måste vara verifierad hos Resend): ").strip()
+    if "@" not in avsandare:
+        print("  Ogiltig avsändaradress — inget gjort.")
+        return 1
+
+    nyckel = "".join(getpass.getpass("Resend API-nyckel (syns inte): ").split())
+    if not nyckel.startswith("re_"):
+        print("  Resend-nycklar börjar med 're_'. Kontrollera att du klistrade rätt sträng.")
+        return 1
+
+    set_vars(
+        service_id,
+        env_id,
+        {
+            "RESEND_API_KEY": nyckel,
+            "SMTP_FROM": avsandare,
+            "SMTP_FROM_NAME": args.namn,
+            "EMAIL_PROVIDER": "resend",
+        },
+    )
+    print(f"\n  Satt i {args.env}/api. Railway deployar om tjänsten automatiskt.")
+    print("  Verifiera när den är uppe — varningen om sändväg ska vara borta:")
+    print("    curl -s https://api-development-5cc3.up.railway.app/health/ready")
+    print("  Skicka sedan ett riktigt svar från kundtjänstvyn och kontrollera att")
+    print("  det kommer fram. Resend loggar varje försök i sin dashboard.")
+    return 0
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--env", default="development", choices=["development", "main"])
@@ -155,6 +202,13 @@ def main() -> int:
     p.add_argument("--port", type=int, default=STANDARD_PORT)
     p.add_argument("--avsandare", help="From-adress. Standard: samma som --anvandare.")
     p.add_argument("--namn", default="Snajp", help="Visningsnamn i From. Standard: Snajp.")
+    p.add_argument(
+        "--resend",
+        action="store_true",
+        help="Sätt HTTPS-vägen (Resend) i stället för SMTP. Frågar efter API-nyckeln. "
+             "Det här är vägen som fungerar på Railways nuvarande plan.",
+    )
+    p.add_argument("--avsandare-resend", help="From-adress för Resend, t.ex. hej@snajp.se.")
     p.add_argument("--testmejl", help="Skicka ett provmejl hit efter att inloggningen gått.")
     args = p.parse_args()
 
@@ -173,6 +227,9 @@ def main() -> int:
     if not args.apply and not args.testmejl:
         print("\n  Kör med --apply för att sätta dem (inloggningen testas först).")
         return 0
+
+    if args.resend:
+        return satt_resend(args, env_id, api["id"])
 
     anvandare = args.anvandare or input("\nBrevlåda (t.ex. hej@snajp.se): ").strip()
     if not anvandare or "@" not in anvandare:

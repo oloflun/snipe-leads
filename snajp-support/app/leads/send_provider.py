@@ -126,10 +126,25 @@ class SmtpMailer:
             # saknar prospect_email, och det värdet ska stoppas HÄR — synligt
             # — inte bli ett kryptiskt 501 från servern.
             raise ValueError(f"Ogiltig mottagaradress: {to!r} — inget skickat.")
-        await asyncio.wait_for(
-            asyncio.to_thread(self._blockerande, to=adress, subject=subject, body=body),
-            timeout=SMTP_TIDSTAK_SEKUNDER + 5,
-        )
+        try:
+            await asyncio.wait_for(
+                asyncio.to_thread(self._blockerande, to=adress, subject=subject, body=body),
+                timeout=SMTP_TIDSTAK_SEKUNDER + 5,
+            )
+        except OSError as fel:
+            # Hostingplattformen blockerar porten — inte ett fel i uppgifterna.
+            # Render gjorde det 2026-07-30 och Railway gör det på Free/Trial/
+            # Hobby. Utan den här grenen läser man "Network is unreachable" som
+            # ett nätverksstrul och felsöker lösenordet i timmar. Errno 101/111/
+            # 110 = unreachable/refused/timeout, de tre formerna blockeringen tar.
+            if getattr(fel, "errno", None) in (101, 110, 111):
+                raise BlockeradSmtpPort(
+                    f"Plattformen blockerar utgående SMTP till {self.host}:{self.port} "
+                    f"({fel}). Railway släpper bara igenom SMTP på Pro och uppåt, "
+                    f"och Render inte alls på gratisplanen. Sätt RESEND_API_KEY och "
+                    f"skicka över HTTPS i stället — se DEPLOY.md."
+                ) from fel
+            raise
         logger.info("SMTP-UTSKICK till %s: %r (%d tecken)", adress, subject, len(body))
 
 
@@ -180,6 +195,65 @@ def _filnamnssaker(text: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]", "_", text)[:80] or "okand"
 
 
+class BlockeradSmtpPort(OSError):
+    """Porten är stängd av hostingplattformen, inte av mottagaren.
+
+    Egen typ för att felet ska gå att skilja från ett riktigt SMTP-fel i
+    loggen och i felmeddelandet — åtgärden är en annan (byt kanal, inte
+    byt lösenord)."""
+
+
+class ResendMailer:
+    """Utskick över Resends HTTPS-API i stället för SMTP.
+
+    Finns för att hostingplattformarna blockerar SMTP-portarna på sina
+    billiga planer (se config.email_provider). HTTPS berörs inte, och
+    Resend signerar dessutom med DKIM för den verifierade domänen — vilket
+    ger bättre leveransbarhet än både Gmail och en delad SMTP-brevlåda.
+
+    Kastar vid fel, av exakt samma skäl som SmtpMailer: anroparen sätter
+    'sent' EFTER ett lyckat anrop, och den ordningen håller bara om ett
+    misslyckande når fram.
+    """
+
+    levererar = True
+
+    #: Resends endpoint. Konstant för att testerna ska kunna peka om den.
+    ENDPOINT = "https://api.resend.com/emails"
+
+    def __init__(self, *, api_key: str, avsandare: str, avsandarnamn: str = "") -> None:
+        self.api_key = api_key
+        self.avsandare = avsandare
+        self.avsandarnamn = avsandarnamn
+
+    def _from(self) -> str:
+        return f"{self.avsandarnamn} <{self.avsandare}>" if self.avsandarnamn else self.avsandare
+
+    async def send(self, *, to: str, subject: str, body: str) -> None:
+        adress = (to or "").strip()
+        if not adress or "@" not in adress:
+            # Samma spärr som SmtpMailer: scheduler.py:s fallback-adress
+            # "okänd" ska stoppas här, synligt.
+            raise ValueError(f"Ogiltig mottagaradress: {to!r} — inget skickat.")
+
+        import httpx
+
+        async with httpx.AsyncClient(timeout=SMTP_TIDSTAK_SEKUNDER) as klient:
+            svar = await klient.post(
+                self.ENDPOINT,
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                json={"from": self._from(), "to": [adress], "subject": subject, "text": body},
+            )
+        if svar.status_code >= 400:
+            # Kroppen bär Resends egen förklaring (overifierad domän, ogiltig
+            # nyckel, kvot slut) och är det som gör felet åtgärdbart. Klipps
+            # för att inte fylla en logg med HTML vid ett gateway-fel.
+            raise RuntimeError(
+                f"Resend avvisade sändningen ({svar.status_code}): {svar.text[:300]}"
+            )
+        logger.info("RESEND-UTSKICK till %s: %r (%d tecken)", adress, subject, len(body))
+
+
 def get_send_provider(settings: Settings | None = None) -> SendProvider:
     """Väljer provider. Ordningen är en säkerhetsordning, inte en smaksak.
 
@@ -187,10 +261,15 @@ def get_send_provider(settings: Settings | None = None) -> SendProvider:
        SMTP-konfiguration. Den sätts i `.env.local` för lokal verifiering, och
        om båda råkar vara satta ska felet vara en .eml-fil för mycket — aldrig
        ett riktigt mejl för mycket. Kollisionen loggas så den syns.
-    2. Komplett SMTP-konfiguration (host + user + password) ger `SmtpMailer` —
-       den enda vägen till internet, opt-in via tre variabler som bara en
-       människa sätter i Railway.
-    3. Allt annat ger `LoggingSendProvider`, som skickar ingenting. En HALVSATT
+    2. `RESEND_API_KEY` ger `ResendMailer` (HTTPS) och går FÖRE SMTP. Ordningen
+       är avsiktlig: den som satt en Resend-nyckel har gjort det för att SMTP
+       inte fungerar på plattformen, och då ska en kvarglömd SMTP-konfiguration
+       inte vinna och skicka oss tillbaka i väggen. `EMAIL_PROVIDER=smtp`
+       tvingar ändå SMTP-vägen, för den som vill mäta just den.
+    3. Komplett SMTP-konfiguration (host + user + password) ger `SmtpMailer`.
+       Fungerar bara där plattformen släpper igenom portarna — Railway kräver
+       Pro, se config.email_provider.
+    4. Allt annat ger `LoggingSendProvider`, som skickar ingenting. En HALVSATT
        SMTP-konfiguration hamnar också här, med en varning: den som satt en av
        tre variabler tror sig ha en sändväg och har det inte, och /health-radens
        "Ingen riktig sändväg" är då ledtråden.
@@ -209,6 +288,20 @@ def get_send_provider(settings: Settings | None = None) -> SendProvider:
                 "riktig sändning är avsikten."
             )
         return DryRunMailer(outbox)
+
+    kanal = (settings.email_provider or "").strip().lower()
+    resend_nyckel = (settings.resend_api_key or "").strip()
+    if resend_nyckel and kanal != "smtp":
+        return ResendMailer(
+            api_key=resend_nyckel,
+            avsandare=(settings.smtp_from or "").strip() or (settings.smtp_user or "").strip(),
+            avsandarnamn=(settings.smtp_from_name or "").strip(),
+        )
+    if kanal == "resend" and not resend_nyckel:
+        logger.warning(
+            "EMAIL_PROVIDER=resend men RESEND_API_KEY saknas — ingenting skickas."
+        )
+        return LoggingSendProvider()
 
     host = (settings.smtp_host or "").strip()
     user = (settings.smtp_user or "").strip()

@@ -255,9 +255,16 @@ async def health_ready(response: Response) -> dict:
     # eftersom det är LoggingSendProvider som är sanningen i dag: den loggar
     # och skickar ingenting. Att läsa av typen är ärligare än att gissa på
     # frånvaron av env-variabler som inte finns modellerade än.
-    from .leads.send_provider import DryRunMailer, LoggingSendProvider, get_send_provider
+    from .leads.send_provider import (
+        DryRunMailer,
+        LoggingSendProvider,
+        ResendMailer,
+        get_send_provider,
+    )
 
     sandvag = get_send_provider()
+    if isinstance(sandvag, ResendMailer):
+        logger.info("Sändväg: Resend (HTTPS) — SMTP-blockeringen berör oss inte.")
     if isinstance(sandvag, DryRunMailer):
         warnings.append(
             "Torrkörningsläge (SNAJP_OUTBOX_DIR) — mejl skrivs till fil, "
@@ -265,7 +272,9 @@ async def health_ready(response: Response) -> dict:
         )
     elif isinstance(sandvag, LoggingSendProvider):
         warnings.append(
-            "Ingen riktig sändväg — godkända svar loggas men skickas aldrig till kund."
+            "Ingen riktig sändväg — godkända svar loggas men skickas aldrig till kund. "
+            "Railway blockerar SMTP på Free/Trial/Hobby; sätt RESEND_API_KEY för "
+            "utskick över HTTPS (DEPLOY.md)."
         )
 
     storage_ok = True
