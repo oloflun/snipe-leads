@@ -197,7 +197,16 @@ def main() -> int:
         print(f"  MISSLYCKADES: {fel}")
         print("  Ingenting har satts i Railway.")
         return 1
-    print("  Inloggningen gick igenom.")
+    print("  Inloggningen gick igenom — FRÅN DEN HÄR MASKINEN.")
+    print()
+    print("  VARNING: det beviset gäller inte automatiskt i drift.")
+    print("  Railway blockerar utgående SMTP (portarna 25/465/587/2525) på")
+    print("  planerna Free, Trial och Hobby — bara Pro och uppåt släpper igenom.")
+    print("  Projektet brave-passion ligger på TRIAL (kontrollerat 2026-08-28), så")
+    print("  containern får 'Network is unreachable' även med rätt lösenord.")
+    print("  Samma sak hände på Render 2026-07-30, se commit 0d3ac1d.")
+    print("  Vägen som fungerar på trial är HTTPS-utskick (Resend) — inte SMTP.")
+    print()
 
     if args.testmejl:
         print(f"  Skickar provmejl till {args.testmejl} …")
