@@ -7,6 +7,13 @@ pydantic>=2.8
 pydantic-settings>=2.4
 python-dotenv>=1.0
 scrapegraph-py>=2.1.0  # Fas B research (G4) — se app/agent/research_tools.py
+# Jobbkön (202 + polling). RedisJobStore importerar `redis.asyncio` LATE, och
+# app/main.py fångar varje Exception från connect() — inklusive ImportError.
+# Utan raden här startar alltså containern grönt, loggar en enda rad
+# "Redis otillgänglig ... faller tillbaka till in-memory" och tappar varje
+# pågående chattjobb vid nästa deploy. Att sätta REDIS_URL utan det här
+# paketet gör INGENTING. Se app/jobs/store.py.
+redis>=5.0,<7
 # Windows saknar IANA-tidszonsdatabasen, så ZoneInfo("Europe/Stockholm") i
 # sändningsfönstret kastar ZoneInfoNotFoundError och HELA testsviten faller vid
 # collection. Linux (Docker/Render) har den via OS:et — därav lätt att missa.
