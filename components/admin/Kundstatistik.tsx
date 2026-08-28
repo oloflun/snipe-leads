@@ -29,22 +29,22 @@ export function Kundstatistik({ stat }: Readonly<{ stat: Statistik }>) {
   const taktText = `${stat.takt.senaste.kunder} nya kunder och ${stat.takt.senaste.avtal} signerade avtal de senaste fyra veckorna, mot ${stat.takt.foregaende.kunder} respektive ${stat.takt.foregaende.avtal} de fyra veckorna före.`;
 
   return (
-    <section className="mt-14 border-t border-ink/15 pt-5">
+    <section className="mt-10 border-t border-ink/15 pt-4">
       <h2 className="kicker text-mineral">Statistik</h2>
-      <p className="mt-2 max-w-[70ch] text-[15px] leading-7 text-mineral">
+      <p className="mt-1.5 max-w-[70ch] text-[0.875rem] leading-6 text-mineral">
         Signerade avtal och nya kunder över tid. Försäljningstakten nedan är
         definierad som nya kunder och signerade avtal per vecka — säg till om den
         ska mäta något annat.
       </p>
 
-      <div className="mt-6 grid gap-px overflow-hidden rounded-input border border-ink/15 bg-ink/15 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-4 grid gap-px overflow-hidden rounded-input border border-ink/15 bg-ink/15 sm:grid-cols-2 lg:grid-cols-4">
         <Nyckeltal etikett="Avtal i dag" varde={stat.avtal.idag} />
         <Nyckeltal etikett="Avtal denna vecka" varde={stat.avtal.veckan} />
         <Nyckeltal etikett="Avtal denna månad" varde={stat.avtal.manaden} />
         <Nyckeltal etikett="Avtal i år" varde={stat.avtal.aret} rad={`${stat.avtal.totalt} totalt`} />
       </div>
 
-      <p className="mt-4 max-w-[70ch] text-[15px] leading-7 text-ink/70">
+      <p className="mt-3 max-w-[70ch] text-[0.875rem] leading-6 text-ink/70">
         {taktText}{" "}
         <span className="text-mineral">
           {stat.nyaKunder.totalt} kunder och {stat.avtal.totalt} registrerade avtal totalt.
@@ -54,7 +54,7 @@ export function Kundstatistik({ stat }: Readonly<{ stat: Statistik }>) {
       {/* Grafen: grupperade staplar per vecka, 12 veckor. Direktetiketter på
           allt som inte är noll — talen är ensiffriga och etiketten är
           snabbare än en axel. Rutnätet är avsiktligt glest och hårfint. */}
-      <figure className="mt-8">
+      <figure className="mt-6">
         <figcaption className="flex flex-wrap items-center gap-x-6 gap-y-2 text-[0.8125rem] text-ink/70">
           <span className="inline-flex items-center gap-2">
             <span aria-hidden className="h-2.5 w-2.5 rounded-[2px] bg-ink" />
@@ -143,8 +143,9 @@ export function Kundstatistik({ stat }: Readonly<{ stat: Statistik }>) {
 
       {stat.bortfiltrerade > 0 ? (
         <p className="mt-4 max-w-[70ch] text-[0.8125rem] leading-6 text-mineral">
-          {stat.bortfiltrerade} demo- och testarbetsytor ingår inte i talen ovan.
-          De räknas inte som kunder, men de göms inte heller.
+          {stat.bortfiltrerade === 1
+            ? "En demo- eller testarbetsyta ingår inte i talen ovan. Den räknas inte som kund, men den göms inte heller."
+            : `${stat.bortfiltrerade} demo- och testarbetsytor ingår inte i talen ovan. De räknas inte som kunder, men de göms inte heller.`}
         </p>
       ) : null}
     </section>
@@ -193,10 +194,10 @@ function Nyckeltal({
   rad
 }: Readonly<{ etikett: string; varde: number; rad?: string }>) {
   return (
-    <div className="bg-paper px-5 py-4">
+    <div className="bg-paper px-4 py-3">
       <p className="kicker text-mineral">{etikett}</p>
-      <p className="mt-1.5 font-display text-[1.75rem] tabular-nums tracking-[-0.02em]">{varde}</p>
-      {rad ? <p className="mt-1 text-[0.8125rem] leading-[1.45] text-ink/60">{rad}</p> : null}
+      <p className="mt-1 font-display text-[1.375rem] tabular-nums tracking-[-0.02em]">{varde}</p>
+      {rad ? <p className="mt-0.5 text-[0.8125rem] leading-[1.45] text-ink/60">{rad}</p> : null}
     </div>
   );
 }
