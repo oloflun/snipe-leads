@@ -358,3 +358,8 @@ Railway-topologin.
 Senaste sessionsloggar: `session-logs/2026-08-24-session-log.md`,
 `session-logs/2026-08-25-session-log.md` (om skriven), se även
 `HANDOFF-2026-08-25-INSTRUKTIONER.md`.
+
+## Kopplingar (Drömmen 2026-08-28)
+
+Se [[wiki/projects/_index/connections|connections]] för nattens kopplingar och
+`strategies.md` i samma mapp för projektets heuristiker.
