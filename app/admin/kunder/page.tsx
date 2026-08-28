@@ -3,6 +3,8 @@ import Link from "next/link";
 import { SlidersHorizontal } from "lucide-react";
 
 import { OppnaArbetsyta } from "@/components/admin/OppnaArbetsyta";
+import { Kundstatistik } from "@/components/admin/Kundstatistik";
+import { beraknaKundstatistik } from "@/lib/admin/statistik";
 import { listTenants, unwrap } from "@/lib/data/admin";
 
 export const dynamic = "force-dynamic";
@@ -139,6 +141,14 @@ export default async function Page() {
           </table>
         </div>
       )}
+
+      {/* Statistiken räknas på SAMMA rader som tabellen ovan, inte en egen
+          hämtning — två uträkningar av samma tal blir förr eller senare två
+          olika tal. `new Date()` är okej i en force-dynamic server component:
+          sidan renderas per anrop. */}
+      {kunder.length > 0 ? (
+        <Kundstatistik stat={beraknaKundstatistik(kunder, new Date())} />
+      ) : null}
     </div>
   );
 }
