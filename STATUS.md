@@ -31,7 +31,7 @@ betalkälla: migration 044:s betalsätt är Stripes testkort mot simulerad
 provider, fakturor/nummerserie/moms saknas i kod. Sidan säger det rakt ut i
 stället för att visa påhittade siffror. Datakälla är Antons beslut.
 
-**1505 tester gröna** (14 nya), tsc rent, `qa_vyer.mjs` GRÖNT mot körande dev,
+**1505 tester gröna** (13 nya), tsc rent, `qa_vyer.mjs` GRÖNT mot körande dev,
 nya detaljvyn besiktigad inloggad (noll JS-fel, noll 4xx). Lokal fullstack gick
 inte att resa — pgvector saknas i lokala PostgreSQL 17 — så UI:t granskades via
 en okommittad preview-route + Playwright på 1440/375 i båda lägena.

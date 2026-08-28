@@ -119,7 +119,7 @@ halvår med grön svit.
 
 ## 3. Verifierat, och hur
 
-- **1 505 backendtester gröna** (1 498 före mergen med din Resend-gren, 14 nya
+- **1 505 backendtester gröna** (1 498 före mergen med din Resend-gren, 13 nya
   för registret: nyckelgrind, härledda källor, delvis sparning som inte
   nollställer, felformat datum → 422 med fältnamn, och ett kontakt-id ur EN
   kunds lista som INTE får mutera en annans).
