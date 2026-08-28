@@ -9,6 +9,15 @@
           }
         ],
         "matcher": ""
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '[ \"$CLAUDE_CODE_REMOTE\" = \"true\" ] && { claude plugin marketplace add oloflun/super-intelligence-public >/dev/null 2>&1; claude plugin install super-intelligence@super-intelligence --yes >/dev/null 2>&1; echo \"{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"<plugin-bootstrap>super-intelligence-pluginet installerades. Kor /reload-plugins --force forst.</plugin-bootstrap>\"}}\"; } || true'",
+            "timeout": 60
+          }
+        ]
       }
     ]
   },
