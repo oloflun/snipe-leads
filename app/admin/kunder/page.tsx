@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { SlidersHorizontal } from "lucide-react";
 
+import { FelOchEskaleringar } from "@/components/admin/FelOchEskaleringar";
 import { OppnaArbetsyta } from "@/components/admin/OppnaArbetsyta";
 import { Kundstatistik } from "@/components/admin/Kundstatistik";
 import { beraknaKundstatistik } from "@/lib/admin/statistik";
-import { listTenants, unwrap } from "@/lib/data/admin";
+import { listEvents, listTenants, unwrap } from "@/lib/data/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -40,8 +41,18 @@ function datum(värde: string | null): string {
   return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("sv-SE");
 }
 
+/** Händelsetaket. Fullt svar => talen i felsektionen prefixas "minst". */
+const HANDELSETAK = 300;
+
 export default async function Page() {
-  const { data, error } = unwrap(await listTenants());
+  // Parallellt: två oberoende backendanrop, och sidan är redan den
+  // långsammaste i adminytan när backenden vaknar.
+  const [tenantsSvar, eventsSvar] = await Promise.all([
+    listTenants(),
+    listEvents(`?limit=${HANDELSETAK}`)
+  ]);
+  const { data, error } = unwrap(tenantsSvar);
+  const { data: events } = unwrap(eventsSvar);
 
   if (error) {
     return (
@@ -149,6 +160,30 @@ export default async function Page() {
       {kunder.length > 0 ? (
         <Kundstatistik stat={beraknaKundstatistik(kunder, new Date())} />
       ) : null}
+
+      {/* Fel & eskaleringar: sammanfattar det som redan loggas. Renderas även
+          när händelselistan inte gick att hämta — då med tom lista, eftersom
+          eskaleringstalet kommer ur tenantraderna och står på egna ben. */}
+      {kunder.length > 0 ? (
+        <FelOchEskaleringar
+          tenants={kunder}
+          events={events ?? []}
+          taketNaddes={(events?.length ?? 0) >= HANDELSETAK}
+        />
+      ) : null}
+
+      {/* Intäkter och utgifter har MEDVETET ingen sektion här: det finns
+          ingen riktig betal- eller bokföringskälla i systemet ännu
+          (betalsätten är simulerade testkort, fakturor finns inte i kod).
+          Uppskattad månadsintäkt och tokenkostnad — tydligt märkta som
+          uppskattningar — ligger under Översikt. Bygg inte in siffror här
+          förrän en riktig datakälla är vald. */}
+      <p className="mt-14 max-w-[70ch] border-t border-ink/15 pt-5 text-[0.8125rem] leading-6 text-mineral">
+        Intäkter och utgifter visas inte här ännu: det finns ingen riktig betal-
+        eller bokföringskälla i systemet, och påhittade siffror är värre än inga.
+        Uppskattad månadsintäkt och tokenkostnad finns under Översikt, märkta som
+        uppskattningar.
+      </p>
     </div>
   );
 }

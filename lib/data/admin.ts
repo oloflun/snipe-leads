@@ -61,6 +61,8 @@ export type TenantRow = {
   slug: string | null;
   name: string;
   tickets: number;
+  /** Ärenden med status 'escalated' — samma villkor som veckoanalysen. */
+  escalated?: number;
   /** KUNDVOLYM. Räknar inte rader med `is_test` — se list_tenants_with_stats. */
   runs: number;
   /** Våra egna provkörningar. Redovisas separat, göms inte. */

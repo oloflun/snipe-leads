@@ -124,6 +124,9 @@ async def test_avtalet_syns_i_tenantlistan(client: TestClient):
     rad = next(r for r in rader if str(r["id"]) == DEFAULT_TENANT_ID)
     assert rad["avtal_signerat"] == "2026-08-15"
     assert rad["kund_sedan"] is not None
+    # Fel & eskaleringar-sektionen läser fältet; saknas det visar vyn noll
+    # eskalerade oavsett verklighet.
+    assert "escalated" in rad
 
 
 async def test_kontakter_skapas_uppdateras_och_tas_bort(client: TestClient):

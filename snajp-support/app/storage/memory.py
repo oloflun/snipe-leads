@@ -1703,6 +1703,11 @@ class MemoryStorage:
                     ),
                     "avtal_signerat": detaljer.get("avtal_signerat"),
                     "tickets": sum(1 for t in self.tickets.values() if t["tenant_id"] == tid),
+                    "escalated": sum(
+                        1
+                        for t in self.tickets.values()
+                        if t["tenant_id"] == tid and t.get("status") == "escalated"
+                    ),
                     # Speglar Postgres exakt. Att räkna alla här och filtrera
                     # där hade gett en grön svit mot en vy som visar fel tal i
                     # drift — se doktrinen i storage/base.py.

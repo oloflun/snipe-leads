@@ -2284,6 +2284,7 @@ class PostgresStorage:
                 """
                 select t.id, t.slug, t.name, t.active, t.created_at,
                        coalesce(k.tickets, 0)      as tickets,
+                       coalesce(k.escalated, 0)    as escalated,
                        coalesce(r.runs, 0)         as runs,
                        coalesce(r.test_runs, 0)    as test_runs,
                        coalesce(r.tokens_in, 0)    as tokens_in,
@@ -2298,7 +2299,11 @@ class PostgresStorage:
                 from ss_tenants t
                 left join ss_customer_details d on d.tenant_id = t.id
                 left join lateral (
-                  select count(*) as tickets from ss_tickets where tenant_id = t.id
+                  -- `escalated` bär fliken Fel & eskaleringar. Samma
+                  -- statusvillkor som veckoanalysen (get_weekly_analytics).
+                  select count(*) as tickets,
+                         count(*) filter (where status = 'escalated') as escalated
+                  from ss_tickets where tenant_id = t.id
                 ) k on true
                 left join lateral (
                   -- `runs` är KUNDVOLYM och räknar inte våra egna provkörningar.
