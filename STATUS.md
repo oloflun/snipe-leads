@@ -1,5 +1,23 @@
 # Snipra Status
 
+## 2026-08-28 — Claude/Sebbe — MÄTT: Railway blockerar SMTP. HTTPS-vägen byggd.
+
+`/api/admin/sandvag` kördes mot den körande dev-containern: portarna 587, 465
+och 2525 ger alla TimeoutError ut mot smtp.gmail.com. Railway släpper igenom
+utgående SMTP först på Pro; projektet ligger på `trial`. **Gmail-kontot med
+app-lösenord kan alltså aldrig fungera här** — det är inte ett fel i
+uppgifterna, och ingen ska felsöka lösenordet igen.
+
+Samma vägg som Render gav 2026-07-30 (commit 0d3ac1d). Byggt i stället:
+`ResendMailer` (HTTPS, väljs av RESEND_API_KEY och går före SMTP),
+`BlockeradSmtpPort` som översätter errno 101/110/111 till "byt kanal", och
+`/api/admin/sandvag` så frågan går att ställa på en sekund nästa gång.
+
+**Kvar — och bara en människa kan göra det:** konto på resend.com, verifiera
+snajp.se med tre DNS-poster hos Loopia (ger DKIM), sedan
+`python scripts/smtp_konfig.py --env development --apply --resend
+--avsandare-resend hej@snajp.se`. Gratisnivån (3 000/mån) rymmer paketens 300.
+
 ## 2026-08-28 (efter midnatt) — Claude/Sebbe — SMTP-sändvägen byggd (snipe-ork stängd i kod)
 
 `SmtpMailer` + `email_pipeline/sender.py` + kopplingen i approve/autosvar,

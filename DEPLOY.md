@@ -333,7 +333,11 @@ ETT konto för hela plattformen i v1 — per-tenant-avsändare är Del F.
 | `SMTP_FROM` | `api` | Avsändaradress i From:. Tom => `SMTP_USER` |
 | `SMTP_FROM_NAME` | `api` | Visningsnamn, valfritt |
 
-### Railway blockerar SMTP — läs det här först
+### Railway blockerar SMTP — MÄTT 2026-08-28, läs det här först
+
+Verifierat inifrån den körande containern med `GET /api/admin/sandvag`
+(master-nyckel): portarna 587, 465 och 2525 ger alla timeout ut mot
+smtp.gmail.com. Kör den endpointen innan någon felsöker ett SMTP-lösenord.
 
 Railway släpper igenom utgående SMTP (portarna 25/465/587/2525) **bara på Pro
 och uppåt**. Projektet `brave-passion` ligger på `trial`, så SMTP-vägen kan
