@@ -1,3 +1,4 @@
+import type { Localized } from "@/lib/i18n";
 import { PAKET, formateraPris } from "@/lib/pricing";
 
 /**
@@ -46,8 +47,14 @@ export type KundEkonomi = {
   /** (intäkt − kostnad) / intäkt. Null när intäkten är noll. */
   marginal: number | null;
   halsa: Halsa;
-  /** Kort mening som förklarar utfallet. Visas bredvid symbolen. */
-  motivering: string;
+  /**
+   * Kort mening som förklarar utfallet. Visas bredvid symbolen.
+   *
+   * Tvåspråkig och inte en färdig sträng: motiveringen är den enda texten i
+   * tabellen som räknas fram ur data, och hade den varit svensk hade EN/SV-
+   * knappen bytt språk på allt utom just den mening som förklarar raden.
+   */
+  motivering: Localized;
   symbol: string;
   paketNamn: string | null;
 };
@@ -79,11 +86,20 @@ export function tokenkostnad(tokensIn: number, tokensUt: number): number {
   return ((tokensIn + tokensUt) / 1_000_000) * TOKENKOSTNAD_PER_MILJON_SEK;
 }
 
-function dagarSedan(iso: string | null): number | null {
+/**
+ * `nu` skickas IN och läses inte här.
+ *
+ * Portfoljvy är en klientkomponent, och en klientkomponent renderas två gånger
+ * — på servern och i webbläsaren. Ett `Date.now()` här hade gett två olika
+ * svar, och därmed "Ingen aktivitet på 37 dagar" i den serverrenderade HTML:en
+ * mot "38 dagar" efter hydreringen. Klockan läses en gång, på servern, och
+ * skickas ned som ett tal.
+ */
+function dagarSedan(iso: string | null, nu: number): number | null {
   if (!iso) return null;
   const då = new Date(iso).getTime();
   if (Number.isNaN(då)) return null;
-  return Math.floor((Date.now() - då) / 86_400_000);
+  return Math.floor((nu - då) / 86_400_000);
 }
 
 export function bedomKund(input: {
@@ -93,13 +109,15 @@ export function bedomKund(input: {
   korningar: number;
   arenden: number;
   senasteAktivitet: string | null;
+  /** Millisekunder sedan epok, läst EN gång på servern. Se `dagarSedan`. */
+  nu: number;
 }): KundEkonomi {
   const paket = paketForProdukter(input.produkter);
   const intakt = paket?.prisPerManad ?? 0;
   const kostnad = tokenkostnad(input.tokensIn, input.tokensUt);
   const marginal = intakt > 0 ? (intakt - kostnad) / intakt : null;
 
-  const dagar = dagarSedan(input.senasteAktivitet);
+  const dagar = dagarSedan(input.senasteAktivitet, input.nu);
   const anvander = input.korningar > 0 || input.arenden > 0;
 
   // TYST GÅR FÖRE MARGINAL, och det är hela poängen med två frågor. En kund
@@ -114,8 +132,14 @@ export function bedomKund(input: {
       symbol: "😴",
       paketNamn: paket?.namn ?? null,
       motivering: anvander
-        ? `Ingen aktivitet på ${dagar} dagar. Hör av er innan de gör det.`
-        : "Har inte börjat använda tjänsten. Uppstarten är inte klar."
+        ? {
+            sv: `Ingen aktivitet på ${dagar} dagar. Hör av er innan de gör det.`,
+            en: `No activity for ${dagar} days. Reach out before they do.`
+          }
+        : {
+            sv: "Har inte börjat använda tjänsten. Uppstarten är inte klar.",
+            en: "Has not started using the service. Onboarding is unfinished."
+          }
     };
   }
 
@@ -127,8 +151,10 @@ export function bedomKund(input: {
       halsa: "okand",
       symbol: "❔",
       paketNamn: null,
-      motivering:
-        "Ingen produkt kopplad till arbetsytan, så det finns ingen intäkt att räkna marginal på."
+      motivering: {
+        sv: "Ingen produkt kopplad till arbetsytan, så det finns ingen intäkt att räkna marginal på.",
+        en: "No product linked to this workspace, so there is no revenue to measure margin against."
+      }
     };
   }
 
@@ -140,7 +166,10 @@ export function bedomKund(input: {
       halsa: "bra",
       symbol: "🙂",
       paketNamn: paket?.namn ?? null,
-      motivering: `Använder tjänsten och kostar ${formateraPris(Math.round(kostnad))} av ${formateraPris(intakt)}.`
+      motivering: {
+        sv: `Använder tjänsten och kostar ${formateraPris(Math.round(kostnad))} av ${formateraPris(intakt)}.`,
+        en: `Actively using the service, costing ${formateraPris(Math.round(kostnad))} of ${formateraPris(intakt)}.`
+      }
     };
   }
 
@@ -152,7 +181,10 @@ export function bedomKund(input: {
       halsa: "ok",
       symbol: "😐",
       paketNamn: paket?.namn ?? null,
-      motivering: `Hög användning: ${formateraPris(Math.round(kostnad))} av ${formateraPris(intakt)} går åt. Håll ett öga.`
+      motivering: {
+        sv: `Hög användning: ${formateraPris(Math.round(kostnad))} av ${formateraPris(intakt)} går åt. Håll ett öga.`,
+        en: `Heavy usage: ${formateraPris(Math.round(kostnad))} of ${formateraPris(intakt)} consumed. Worth watching.`
+      }
     };
   }
 
@@ -163,7 +195,10 @@ export function bedomKund(input: {
     halsa: "dalig",
     symbol: "🙁",
     paketNamn: paket?.namn ?? null,
-    motivering: `Kostnaden äter upp intäkten (${formateraPris(Math.round(kostnad))} av ${formateraPris(intakt)}). Se över paket eller volym.`
+    motivering: {
+      sv: `Kostnaden äter upp intäkten (${formateraPris(Math.round(kostnad))} av ${formateraPris(intakt)}). Se över paket eller volym.`,
+      en: `Cost is eating the revenue (${formateraPris(Math.round(kostnad))} of ${formateraPris(intakt)}). Review the plan or the volume.`
+    }
   };
 }
 

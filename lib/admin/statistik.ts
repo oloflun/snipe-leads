@@ -48,7 +48,7 @@ function veckostart(dag: Date): Date {
   return d;
 }
 
-/** ISO-veckonummer, för etiketterna ("v.35"). */
+/** ISO-veckonummer. Etiketten formateras i vyn — se `VeckoPunkt.vecka`. */
 export function isoVecka(dag: Date): number {
   const d = new Date(Date.UTC(dag.getUTCFullYear(), dag.getUTCMonth(), dag.getUTCDate()));
   d.setUTCDate(d.getUTCDate() + 4 - ((d.getUTCDay() + 6) % 7) - 1 + 1);
@@ -84,8 +84,14 @@ export function raknaPerioder(datumlista: (string | null)[], nu: Date): Perioder
 }
 
 export type VeckoPunkt = {
-  /** "v.35" */
-  etikett: string;
+  /**
+   * ISO-veckonumret som TAL, inte en färdig etikett.
+   *
+   * Det stod `"v.35"` här, byggt på servern. Prefixet är svenskt, och i
+   * engelskt läge blev axeln därför en rad "v.24 v.25 …" under en i övrigt
+   * engelsk graf. Vyn vet vilket språk som gäller; beräkningen gör det inte.
+   */
+  vecka: number;
   nyaKunder: number;
   avtal: number;
 };
@@ -116,7 +122,7 @@ export function beraknaKundstatistik(
   const index = new Map<number, VeckoPunkt>();
   for (let i = antalVeckor - 1; i >= 0; i -= 1) {
     const start = new Date(dennaVecka.getTime() - i * 7 * 86_400_000);
-    const punkt = { etikett: `v.${isoVecka(start)}`, nyaKunder: 0, avtal: 0 };
+    const punkt = { vecka: isoVecka(start), nyaKunder: 0, avtal: 0 };
     veckor.push(punkt);
     index.set(start.getTime(), punkt);
   }

@@ -1,6 +1,10 @@
+"use client";
+
 import Link from "next/link";
 import { Radgivare } from "@/components/admin/Radgivare";
-import type { TenantRow } from "@/lib/data/admin";
+import type { BerikadTenant } from "@/lib/admin/exempeldata";
+import { a, antal } from "@/lib/admin/sprak";
+import { useLocale } from "@/lib/i18n";
 import { formateraPris } from "@/lib/pricing";
 import {
   MARGINAL_GRON,
@@ -19,6 +23,14 @@ import {
  * enda som får färg; hade varje kolumn haft en accent hade ingen av dem varit
  * en.
  *
+ * ## Varför den är en klientkomponent
+ *
+ * Språkväxlaren i AdminShell är klientstate, och den här vyn är den textrikaste
+ * i adminytan. Som server-komponent bytte allt runtomkring språk medan tabellen
+ * stod kvar på svenska — en halvöversatt sida läser som en trasig sida. Datan
+ * hämtas fortfarande på servern (`app/admin/page.tsx`) och skickas ned som
+ * props; det är BARA renderingen som flyttat.
+ *
  * ## Två saker som INTE är mätvärden, och som därför står utskrivna
  *
  * 1. **Paketet härleds ur aktivitet.** `listTenants()` returnerar inte vilka
@@ -32,9 +44,13 @@ import {
  *    `TOKENKOSTNAD_PER_MILJON_SEK`. Fotnoten under tabellen säger det till
  *    läsaren, eftersom en marginal som presenteras utan förbehåll blir ett
  *    beslutsunderlag den inte är.
+ *
+ * 3. **Exempelrader är märkta.** Rader vars tal kommer ur
+ *    `lib/admin/exempeldata.ts` bär en synlig etikett och räknas i fotnoten.
+ *    Se den filen för varför de finns.
  */
 
-function harledProdukter(rad: TenantRow): string[] {
+function harledProdukter(rad: BerikadTenant): string[] {
   const produkter: string[] = [];
   // Provkörningar räknas MED här, till skillnad från i volymkolumnen. Frågan
   // är vilken produkt tenanten använder, och en testkörning är leads-agenten
@@ -45,15 +61,20 @@ function harledProdukter(rad: TenantRow): string[] {
   return produkter;
 }
 
-const HALSOETIKETT: Record<string, string> = {
-  bra: "Bra",
-  ok: "Håll koll",
-  dalig: "Åtgärda",
-  tyst: "Tyst",
-  okand: "Okänd"
-};
+const HALSOETIKETT = {
+  bra: "halsaBra",
+  ok: "halsaOk",
+  dalig: "halsaDalig",
+  tyst: "halsaTyst",
+  okand: "halsaOkand"
+} as const;
 
-export function Portfoljvy({ tenants }: Readonly<{ tenants: TenantRow[] }>) {
+export function Portfoljvy({
+  tenants,
+  nu
+}: Readonly<{ tenants: BerikadTenant[]; nu: number }>) {
+  const { locale, text } = useLocale();
+
   const rader = tenants.map((rad) => ({
     rad,
     ekonomi: bedomKund({
@@ -62,7 +83,9 @@ export function Portfoljvy({ tenants }: Readonly<{ tenants: TenantRow[] }>) {
       tokensUt: rad.tokens_out ?? 0,
       korningar: rad.runs ?? 0,
       arenden: rad.tickets ?? 0,
-      senasteAktivitet: rad.last_activity
+      senasteAktivitet: rad.last_activity,
+      // Serverns klocka, inte besökarens — se `dagarSedan` i halsa.ts.
+      nu
     })
   }));
 
@@ -70,41 +93,51 @@ export function Portfoljvy({ tenants }: Readonly<{ tenants: TenantRow[] }>) {
   // att det mesta är bra — en lista sorterad på namn hade begravt den enda rad
   // som krävde en åtgärd.
   const ordning = { dalig: 0, tyst: 1, ok: 2, okand: 3, bra: 4 } as const;
+  // `x`/`y` och inte `a`/`b`: `a()` är språkuppslagningen i den här filen, och
+  // en sorteringsparameter som skuggar den läser som ett anrop till fel sak.
   rader.sort(
-    (a, b) =>
-      ordning[a.ekonomi.halsa] - ordning[b.ekonomi.halsa] ||
-      b.ekonomi.intakt - a.ekonomi.intakt
+    (x, y) =>
+      ordning[x.ekonomi.halsa] - ordning[y.ekonomi.halsa] || y.ekonomi.intakt - x.ekonomi.intakt
   );
 
   const p = sammanfattaPortfolj(rader.map((r) => r.ekonomi));
+  const exempelrader = rader.filter(({ rad }) => rad.ar_exempel).length;
 
   return (
     <div>
       {/* "Översikt" och inte "Kunder": fliken heter Översikt, och NÄSTA flik
           heter Kunder och leder till en annan sida. Två flikar vars sidor båda
           rubricerades "Kunder" läste som samma vy renderad två gånger. */}
-      <h1 className="font-display text-4xl tracking-[-0.03em]">Översikt</h1>
+      <h1 className="font-display text-4xl tracking-[-0.03em]">{a("oversiktRubrik", locale)}</h1>
 
       <div className="mt-8 grid gap-px overflow-hidden rounded-input border border-ink/15 bg-ink/15 sm:grid-cols-2 lg:grid-cols-4">
         <Nyckeltal
-          etikett="Månadsintäkt"
+          etikett={a("manadsintakt", locale)}
           varde={formateraPris(p.mrr)}
-          rad={`${p.antalBetalande} av ${p.antalKunder} kunder betalar`}
+          rad={text({
+            sv: `${p.antalBetalande} av ${p.antalKunder} kunder betalar`,
+            en: `${p.antalBetalande} of ${p.antalKunder} customers pay`
+          })}
         />
         <Nyckeltal
-          etikett="Uppskattad kostnad"
+          etikett={a("uppskattadKostnad", locale)}
           varde={formateraPris(Math.round(p.kostnad))}
-          rad="Tokens, alla kunder"
+          rad={a("tokensAllaKunder", locale)}
         />
         <Nyckeltal
-          etikett="Marginal"
+          etikett={a("marginal", locale)}
           varde={p.marginal === null ? "—" : `${Math.round(p.marginal * 100)} %`}
-          rad={p.marginal === null ? "Ingen intäkt att räkna på" : "Intäkt minus tokenkostnad"}
+          rad={
+            p.marginal === null ? a("ingenIntakt", locale) : a("intaktMinusToken", locale)
+          }
         />
         <Nyckeltal
-          etikett="Kräver åtgärd"
+          etikett={a("kraverAtgard", locale)}
           varde={String(p.fordelning.dalig + p.fordelning.tyst)}
-          rad={`${p.fordelning.dalig} med låg marginal, ${p.fordelning.tyst} tysta`}
+          rad={text({
+            sv: `${p.fordelning.dalig} med låg marginal, ${p.fordelning.tyst} tysta`,
+            en: `${p.fordelning.dalig} on thin margin, ${p.fordelning.tyst} dormant`
+          })}
         />
       </div>
 
@@ -113,14 +146,14 @@ export function Portfoljvy({ tenants }: Readonly<{ tenants: TenantRow[] }>) {
           <div className="grid grid-cols-12 gap-x-4 border-b border-ink/15 pb-3">
             {[
               ["", "col-span-1"],
-              ["Kund", "col-span-3"],
-              ["Paket", "col-span-2"],
-              ["Ärenden", "col-span-1 text-right"],
-              ["Körningar", "col-span-1 text-right"],
-              ["Tokens", "col-span-1 text-right"],
-              ["Kostnad", "col-span-1 text-right"],
-              ["Marginal", "col-span-1 text-right"],
-              ["Fel", "col-span-1 text-right"]
+              [a("kolKund", locale), "col-span-3"],
+              [a("kolPaket", locale), "col-span-2"],
+              [a("kolArenden", locale), "col-span-1 text-right"],
+              [a("kolKorningar", locale), "col-span-1 text-right"],
+              [a("kolTokens", locale), "col-span-1 text-right"],
+              [a("kolKostnad", locale), "col-span-1 text-right"],
+              [a("kolMarginal", locale), "col-span-1 text-right"],
+              [a("kolFel", locale), "col-span-1 text-right"]
             ].map(([rubrik, kl]) => (
               <div key={String(rubrik) || "symbol"} className={`kicker text-mineral ${kl}`}>
                 {rubrik}
@@ -131,37 +164,44 @@ export function Portfoljvy({ tenants }: Readonly<{ tenants: TenantRow[] }>) {
           <div className="divide-y divide-ink/15">
             {rader.map(({ rad, ekonomi }) => (
               <div key={rad.id} className="grid grid-cols-12 items-baseline gap-x-4 py-4">
-                <div className="col-span-1 text-[1.25rem]" title={HALSOETIKETT[ekonomi.halsa]}>
+                <div
+                  className="col-span-1 text-[1.25rem]"
+                  title={a(HALSOETIKETT[ekonomi.halsa], locale)}
+                >
                   <span aria-hidden="true">{ekonomi.symbol}</span>
-                  <span className="sr-only">{HALSOETIKETT[ekonomi.halsa]}</span>
+                  <span className="sr-only">{a(HALSOETIKETT[ekonomi.halsa], locale)}</span>
                 </div>
                 <div className="col-span-3 min-w-0">
-                  <p className="truncate text-[1rem] font-semibold">{rad.name}</p>
+                  <p className="flex min-w-0 items-baseline gap-2 text-[1rem] font-semibold">
+                    <span className="truncate">{rad.name}</span>
+                    {rad.ar_exempel ? <Exempelmarke /> : null}
+                  </p>
                   <p className="mt-0.5 truncate text-[0.8125rem] text-ink/60">
-                    {ekonomi.motivering}
+                    {text(ekonomi.motivering)}
                   </p>
                 </div>
                 <div className="col-span-2 text-[0.875rem] text-ink/70">
                   {ekonomi.paketNamn ?? "—"}
                   {ekonomi.intakt > 0 ? (
                     <span className="block text-[0.8125rem] text-mineral">
-                      {formateraPris(ekonomi.intakt)}/mån
+                      {formateraPris(ekonomi.intakt)}
+                      {a("perManad", locale)}
                     </span>
                   ) : null}
                 </div>
-                <Tal>{rad.tickets}</Tal>
+                <Tal>{antal(rad.tickets, locale)}</Tal>
                 <Tal>
-                  {rad.runs}
+                  {antal(rad.runs, locale)}
                   {/* Testkörningar göms inte, de räknas bara inte som kundvolym.
                       En siffra som tyst blivit mindre är svårare att lita på än
                       en siffra som säger vad den utelämnat. */}
                   {rad.test_runs ? (
                     <span className="block text-[0.8125rem] text-ink/40">
-                      +{rad.test_runs} test
+                      +{rad.test_runs} {a("test", locale)}
                     </span>
                   ) : null}
                 </Tal>
-                <Tal>{((rad.tokens_in ?? 0) + (rad.tokens_out ?? 0)).toLocaleString("sv-SE")}</Tal>
+                <Tal>{antal((rad.tokens_in ?? 0) + (rad.tokens_out ?? 0), locale)}</Tal>
                 <Tal>{formateraPris(Math.round(ekonomi.kostnad))}</Tal>
                 <Tal>
                   {ekonomi.marginal === null ? "—" : `${Math.round(ekonomi.marginal * 100)} %`}
@@ -181,28 +221,70 @@ export function Portfoljvy({ tenants }: Readonly<{ tenants: TenantRow[] }>) {
       </div>
 
       {rader.length === 0 ? (
-        <p className="mt-8 text-[15px] text-ink/60">
-          Inga kunder ännu. Tom lista är ett giltigt svar, inte ett fel.
-        </p>
+        <p className="mt-8 text-[15px] text-ink/60">{a("ingaKunder", locale)}</p>
       ) : null}
 
       <div className="mt-10 max-w-[80ch] space-y-2 border-t border-ink/15 pt-5 text-[0.8125rem] leading-[1.6] text-mineral">
+        {/* Exempelfotnoten står FÖRST av fotnoterna när den finns. Läsaren ska
+            veta att en del av tabellen är påhittad innan hen läser hur
+            marginalen räknas, inte efter. */}
+        {exempelrader > 0 ? (
+          <p>
+            <strong className="text-ink/70">
+              {text({
+                sv: `${exempelrader} av ${rader.length} rader visar exempeldata`,
+                en: `${exempelrader} of ${rader.length} rows show example data`
+              })}
+            </strong>{" "}
+            {text({
+              sv: "och är märkta med Exempel. De arbetsytorna har ingen egen aktivitet — talen finns för att vyn ska gå att bedöma, och de räknas med i nyckeltalen ovan. Stäng av dem med NEXT_PUBLIC_ADMIN_EXEMPELDATA=av.",
+              en: "and carry an Example tag. Those workspaces have no activity of their own — the figures exist so the view can be evaluated, and they are included in the key figures above. Turn them off with NEXT_PUBLIC_ADMIN_EXEMPELDATA=av."
+            })}
+          </p>
+        ) : null}
         <p>
-          <strong className="text-ink/70">Kostnaden är en uppskattning</strong>, inte en faktura:{" "}
-          {formateraPris(TOKENKOSTNAD_PER_MILJON_SEK)} per miljon tokens. Ändra talet i{" "}
-          <code>lib/admin/halsa.ts</code> när ni vet utfallet från leverantören.
+          <strong className="text-ink/70">
+            {text({
+              sv: "Kostnaden är en uppskattning",
+              en: "The cost is an estimate"
+            })}
+          </strong>
+          {text({
+            sv: ", inte en faktura: ",
+            en: ", not an invoice: "
+          })}
+          {formateraPris(TOKENKOSTNAD_PER_MILJON_SEK)}
+          {text({
+            sv: " per miljon tokens. Ändra talet i ",
+            en: " per million tokens. Change the number in "
+          })}
+          <code>lib/admin/halsa.ts</code>
+          {text({
+            sv: " när ni vet utfallet från leverantören.",
+            en: " once the provider's actual figure is known."
+          })}
         </p>
         <p>
-          Grönt över {Math.round(MARGINAL_GRON * 100)} % marginal, gult över{" "}
-          {Math.round(MARGINAL_ROD * 100)} %. En kund utan aktivitet på{" "}
-          {TYST_EFTER_DAGAR} dagar visas som tyst <span aria-hidden="true">😴</span> oavsett
-          marginal — den som inte använder tjänsten har låg kostnad och ser lönsam ut precis
-          innan den säger upp sig.
+          {text({
+            sv: `Grönt över ${Math.round(MARGINAL_GRON * 100)} % marginal, gult över ${Math.round(MARGINAL_ROD * 100)} %. En kund utan aktivitet på ${TYST_EFTER_DAGAR} dagar visas som tyst`,
+            en: `Green above ${Math.round(MARGINAL_GRON * 100)} % margin, amber above ${Math.round(MARGINAL_ROD * 100)} %. A customer with no activity for ${TYST_EFTER_DAGAR} days shows as dormant`
+          })}{" "}
+          <span aria-hidden="true">😴</span>{" "}
+          {text({
+            sv: "oavsett marginal — den som inte använder tjänsten har låg kostnad och ser lönsam ut precis innan den säger upp sig.",
+            en: "regardless of margin — a customer who has stopped using the service has low costs and looks profitable right up until they cancel."
+          })}
         </p>
         <p>
-          Paketet härleds ur aktivitet, eftersom admin-API:t ännu inte returnerar{" "}
-          <code>workspaces.products</code>. En kund som betalar utan att använda får därför fel
-          paket i tabellen — och är samtidigt precis den kund raden ska varna för.
+          {text({
+            sv: "Paketet härleds ur aktivitet, eftersom admin-API:t ännu inte returnerar ",
+            en: "The plan is inferred from activity, because the admin API does not yet return "
+          })}
+          <code>workspaces.products</code>
+          {text({
+            sv: ". En kund som betalar utan att använda får därför fel paket i tabellen — och är samtidigt precis den kund raden ska varna för.",
+            en: ". A customer who pays without using therefore gets the wrong plan in the table — and is exactly the customer the row exists to flag."
+          })}
         </p>
       </div>
 
@@ -213,11 +295,33 @@ export function Portfoljvy({ tenants }: Readonly<{ tenants: TenantRow[] }>) {
       <Radgivare rader={rader.map(({ rad, ekonomi }) => ({ namn: rad.name, ekonomi }))} />
 
       <p className="mt-8">
-        <Link href="/admin/korningar" className="focus-ring text-[15px] text-ochre underline underline-offset-4">
-          Se alla körningar
+        <Link
+          href="/admin/korningar"
+          className="focus-ring text-[15px] text-ochre underline underline-offset-4"
+        >
+          {a("seAllaKorningar", locale)}
         </Link>
       </p>
     </div>
+  );
+}
+
+/**
+ * Märket som skiljer en påhittad rad från en mätt.
+ *
+ * Hairline och mineral, inte ochre: accenten i den här vyn är reserverad för
+ * avvikelser man ska agera på, och en exempelrad är inte en avvikelse — den är
+ * ett förbehåll. Syns tydligt, ropar inte.
+ */
+function Exempelmarke() {
+  const { locale } = useLocale();
+  return (
+    <span
+      title={a("exempeldataMarkning", locale)}
+      className="shrink-0 rounded-[3px] border border-ink/20 px-1.5 py-px font-mono text-[10px] uppercase tracking-[0.14em] text-mineral"
+    >
+      {a("exempel", locale)}
+    </span>
   );
 }
 

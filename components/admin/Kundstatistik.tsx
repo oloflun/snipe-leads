@@ -1,12 +1,17 @@
+"use client";
+
+import { a } from "@/lib/admin/sprak";
 import type { Kundstatistik as Statistik } from "@/lib/admin/statistik";
+import { useLocale } from "@/lib/i18n";
 
 /**
  * Statistiksektionen i Kunder & Data: avtalstakt och kundtillväxt.
  *
- * Server-renderad med flit — talen är räknade ur kundlistan som sidan redan
- * hämtat, och en graf över ett dussin veckor behöver ingen klientkod. Hovern
- * är SVG:ns egna <title>-element: rätt nivå för en intern vy med ensiffriga
- * tal som dessutom står direktetiketterade ovanför staplarna.
+ * Talen är räknade ur kundlistan som sidan redan hämtat — ingen egen hämtning.
+ * Klientkomponent enbart för språkväxlarens skull; grafen har fortfarande ingen
+ * interaktiv logik. Hovern är SVG:ns egna <title>-element: rätt nivå för en
+ * intern vy med ensiffriga tal som dessutom står direktetiketterade ovanför
+ * staplarna.
  *
  * ## Färgerna
  *
@@ -20,34 +25,48 @@ const STAPEL = { bredd: 14, gap: 2, grupp: 18 };
 const HOJD = 150;
 const MARG = { topp: 18, botten: 24, vanster: 8 };
 
+/** "v.35" på svenska, "w.35" på engelska. */
+function veckoetikett(vecka: number, locale: "sv" | "en"): string {
+  return locale === "sv" ? `v.${vecka}` : `w.${vecka}`;
+}
+
 export function Kundstatistik({ stat }: Readonly<{ stat: Statistik }>) {
+  const { locale, text } = useLocale();
   const max = Math.max(3, ...stat.veckor.map((v) => Math.max(v.nyaKunder, v.avtal)));
   const grupbredd = STAPEL.bredd * 2 + STAPEL.gap + STAPEL.grupp;
   const bredd = MARG.vanster + stat.veckor.length * grupbredd;
   const skala = (varde: number) => (varde / max) * (HOJD - MARG.topp);
 
-  const taktText = `${stat.takt.senaste.kunder} nya kunder och ${stat.takt.senaste.avtal} signerade avtal de senaste fyra veckorna, mot ${stat.takt.foregaende.kunder} respektive ${stat.takt.foregaende.avtal} de fyra veckorna före.`;
+  const taktText = text({
+    sv: `${stat.takt.senaste.kunder} nya kunder och ${stat.takt.senaste.avtal} signerade avtal de senaste fyra veckorna, mot ${stat.takt.foregaende.kunder} respektive ${stat.takt.foregaende.avtal} de fyra veckorna före.`,
+    en: `${stat.takt.senaste.kunder} new customers and ${stat.takt.senaste.avtal} signed contracts in the last four weeks, against ${stat.takt.foregaende.kunder} and ${stat.takt.foregaende.avtal} in the four weeks before.`
+  });
 
   return (
     <section className="mt-10 border-t border-ink/15 pt-4">
-      <h2 className="kicker text-mineral">Statistik</h2>
+      <h2 className="kicker text-mineral">{a("statistik", locale)}</h2>
       <p className="mt-1.5 max-w-[70ch] text-[0.875rem] leading-6 text-mineral">
-        Signerade avtal och nya kunder över tid. Försäljningstakten nedan är
-        definierad som nya kunder och signerade avtal per vecka — säg till om den
-        ska mäta något annat.
+        {a("statistikIngress", locale)}
       </p>
 
       <div className="mt-4 grid gap-px overflow-hidden rounded-input border border-ink/15 bg-ink/15 sm:grid-cols-2 lg:grid-cols-4">
-        <Nyckeltal etikett="Avtal i dag" varde={stat.avtal.idag} />
-        <Nyckeltal etikett="Avtal denna vecka" varde={stat.avtal.veckan} />
-        <Nyckeltal etikett="Avtal denna månad" varde={stat.avtal.manaden} />
-        <Nyckeltal etikett="Avtal i år" varde={stat.avtal.aret} rad={`${stat.avtal.totalt} totalt`} />
+        <Nyckeltal etikett={a("avtalIdag", locale)} varde={stat.avtal.idag} />
+        <Nyckeltal etikett={a("avtalVeckan", locale)} varde={stat.avtal.veckan} />
+        <Nyckeltal etikett={a("avtalManaden", locale)} varde={stat.avtal.manaden} />
+        <Nyckeltal
+          etikett={a("avtalAret", locale)}
+          varde={stat.avtal.aret}
+          rad={text({ sv: `${stat.avtal.totalt} totalt`, en: `${stat.avtal.totalt} in total` })}
+        />
       </div>
 
       <p className="mt-3 max-w-[70ch] text-[0.875rem] leading-6 text-ink/70">
         {taktText}{" "}
         <span className="text-mineral">
-          {stat.nyaKunder.totalt} kunder och {stat.avtal.totalt} registrerade avtal totalt.
+          {text({
+            sv: `${stat.nyaKunder.totalt} kunder och ${stat.avtal.totalt} registrerade avtal totalt.`,
+            en: `${stat.nyaKunder.totalt} customers and ${stat.avtal.totalt} registered contracts in total.`
+          })}
         </span>
       </p>
 
@@ -58,13 +77,13 @@ export function Kundstatistik({ stat }: Readonly<{ stat: Statistik }>) {
         <figcaption className="flex flex-wrap items-center gap-x-6 gap-y-2 text-[0.8125rem] text-ink/70">
           <span className="inline-flex items-center gap-2">
             <span aria-hidden className="h-2.5 w-2.5 rounded-[2px] bg-ink" />
-            Nya kunder
+            {a("nyaKunder", locale)}
           </span>
           <span className="inline-flex items-center gap-2">
             <span aria-hidden className="h-2.5 w-2.5 rounded-[2px] bg-ochre" />
-            Signerade avtal
+            {a("signeradeAvtal", locale)}
           </span>
-          <span className="text-mineral">per vecka, senaste 12 veckorna</span>
+          <span className="text-mineral">{a("perVecka12", locale)}</span>
         </figcaption>
 
         <div className="mt-3 overflow-x-auto">
@@ -73,7 +92,7 @@ export function Kundstatistik({ stat }: Readonly<{ stat: Statistik }>) {
             width={bredd}
             height={HOJD + MARG.botten}
             role="img"
-            aria-label={`Nya kunder och signerade avtal per vecka. ${taktText}`}
+            aria-label={`${a("nyaKunder", locale)} ${text({ sv: "och", en: "and" })} ${a("signeradeAvtal", locale)} ${a("perVecka12", locale)}. ${taktText}`}
             className="max-w-full"
           >
             {/* Baslinje + ett mellansteg. Fler linjer än talen förtjänar är
@@ -91,8 +110,13 @@ export function Kundstatistik({ stat }: Readonly<{ stat: Statistik }>) {
             {stat.veckor.map((vecka, i) => {
               const x = MARG.vanster + i * grupbredd + STAPEL.grupp / 2;
               return (
-                <g key={`${vecka.etikett}-${i}`}>
-                  <title>{`${vecka.etikett}: ${vecka.nyaKunder} nya kunder, ${vecka.avtal} signerade avtal`}</title>
+                <g key={`${vecka.vecka}-${i}`}>
+                  <title>
+                    {text({
+                      sv: `${veckoetikett(vecka.vecka, "sv")}: ${vecka.nyaKunder} nya kunder, ${vecka.avtal} signerade avtal`,
+                      en: `${veckoetikett(vecka.vecka, "en")}: ${vecka.nyaKunder} new customers, ${vecka.avtal} signed contracts`
+                    })}
+                  </title>
                   <Stapel x={x} varde={vecka.nyaKunder} skala={skala} klass="fill-ink" />
                   <Stapel
                     x={x + STAPEL.bredd + STAPEL.gap}
@@ -106,7 +130,7 @@ export function Kundstatistik({ stat }: Readonly<{ stat: Statistik }>) {
                     textAnchor="middle"
                     className="fill-mineral text-[11px]"
                   >
-                    {vecka.etikett}
+                    {veckoetikett(vecka.vecka, locale)}
                   </text>
                 </g>
               );
@@ -118,20 +142,24 @@ export function Kundstatistik({ stat }: Readonly<{ stat: Statistik }>) {
             hellre läser siffror än staplar. */}
         <details className="mt-2 text-[0.8125rem] text-ink/70">
           <summary className="focus-ring inline-flex min-h-11 cursor-pointer items-center rounded-input text-mineral hover:text-ink">
-            Visa som tabell
+            {a("visaSomTabell", locale)}
           </summary>
           <table className="mt-2 border-collapse tabular-nums">
             <thead>
               <tr className="border-b border-ink/15 text-left">
-                <th className="py-1.5 pr-6 font-medium text-mineral">Vecka</th>
-                <th className="py-1.5 pr-6 text-right font-medium text-mineral">Nya kunder</th>
-                <th className="py-1.5 text-right font-medium text-mineral">Signerade avtal</th>
+                <th className="py-1.5 pr-6 font-medium text-mineral">{a("vecka", locale)}</th>
+                <th className="py-1.5 pr-6 text-right font-medium text-mineral">
+                  {a("nyaKunder", locale)}
+                </th>
+                <th className="py-1.5 text-right font-medium text-mineral">
+                  {a("signeradeAvtal", locale)}
+                </th>
               </tr>
             </thead>
             <tbody>
               {stat.veckor.map((vecka, i) => (
-                <tr key={`tab-${vecka.etikett}-${i}`} className="border-b border-ink/8">
-                  <td className="py-1.5 pr-6">{vecka.etikett}</td>
+                <tr key={`tab-${vecka.vecka}-${i}`} className="border-b border-ink/8">
+                  <td className="py-1.5 pr-6">{veckoetikett(vecka.vecka, locale)}</td>
                   <td className="py-1.5 pr-6 text-right">{vecka.nyaKunder}</td>
                   <td className="py-1.5 text-right">{vecka.avtal}</td>
                 </tr>
@@ -144,8 +172,14 @@ export function Kundstatistik({ stat }: Readonly<{ stat: Statistik }>) {
       {stat.bortfiltrerade > 0 ? (
         <p className="mt-4 max-w-[70ch] text-[0.8125rem] leading-6 text-mineral">
           {stat.bortfiltrerade === 1
-            ? "En demo- eller testarbetsyta ingår inte i talen ovan. Den räknas inte som kund, men den göms inte heller."
-            : `${stat.bortfiltrerade} demo- och testarbetsytor ingår inte i talen ovan. De räknas inte som kunder, men de göms inte heller.`}
+            ? text({
+                sv: "En demo- eller testarbetsyta ingår inte i talen ovan. Den räknas inte som kund, men den göms inte heller.",
+                en: "One demo or test workspace is excluded from the figures above. It does not count as a customer, but it is not hidden either."
+              })
+            : text({
+                sv: `${stat.bortfiltrerade} demo- och testarbetsytor ingår inte i talen ovan. De räknas inte som kunder, men de göms inte heller.`,
+                en: `${stat.bortfiltrerade} demo and test workspaces are excluded from the figures above. They do not count as customers, but they are not hidden either.`
+              })}
         </p>
       ) : null}
     </section>
