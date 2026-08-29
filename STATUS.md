@@ -1,5 +1,49 @@
 # Snipra Status
 
+## 2026-08-29 (kväll) — Claude/Sebbe — main och development delade Redis-nyckelrymd: jobbströmmen korsade miljögränsen
+
+**Hittat genom att svara på varför `redis-cli` inte fanns på Windows.** Mätt
+mot Railways API och den körande instansen: `main` och `development` har
+IDENTISK `REDIS_URL`, båda svarade `jobs: redis`, och ingen nyckel bar miljö.
+Redis Cloud-gratisnivån ger EN logisk databas (`SELECT 1` → "DB index is out
+of range"), så miljöerna låg i samma nyckelrymd.
+
+**Aktivt exponerat, inte teoretiskt:**
+- **Jobbströmmen.** En enda consumer group `agenter` på `crm:jobb:chatt`, med
+  konsumenter från NIO containrar. En grupp delar ut varje post till exakt EN
+  konsument — ett chattjobb från en riktig kund kunde alltså köras av en
+  development-container mot spegeldatabasen, och tvärtom. Att en specifik
+  körning korsade går inte att bevisa i efterhand (pending var 0, ingen
+  per-post-logg); exponeringen var det.
+- **Arbetsminnet** (`minne:{tenant}:{kund}`). Kopplas in så fort `REDIS_URL`
+  finns, alltså i båda miljöerna, och development speglar produktionen med
+  IDENTISKA tenant- och kund-id:n.
+
+**Latent, inte aktivt:** svarscachen delade `svarscache_idx` (filtrerar på
+`tenant`), men `SEMANTIC_CACHE` är osatt i main och defaulten är `off` — den
+hade blivit aktiv i samma sekund någon slog på den. Embeddingcachen delas
+också, vilket är ofarligt (ren funktion av texten).
+
+**Åtgärdat i kod:** nio ytor går nu genom `app/redisnycklar.nyckel()` —
+jobbposter, chatt- och leadsströmmarna, embeddingcachen, KB- och
+konfigversionerna, arbetsminnet, samt svarscachens nycklar OCH dess FT-index.
+Fröet är HELA DSN:en plus miljönamnet, och det är ett mätresultat: första
+utkastet hashade värd + databasnamn och hade varit VERKNINGSLÖST, eftersom
+båda miljöerna kör mot `postgres.railway.internal:5432/railway` som
+`snajp_app` — bara lösenordet skiljer. `INV-REDIS-001` prövar exakt det
+fallet, och är verifierad genom att brytas med flit.
+
+**Verifierat mot körande Redis efter deploy:** `nsb340e34a:crm:jobb:chatt`
+och `...:leads` finns nu med egna konsumenter. Development har lämnat den
+delade rymden, alltså är korskopplingen stängd framåt. 1998 tester gröna.
+
+**KVAR — Antons hand:** `main` kör fortfarande på de onamnrymdade nycklarna
+tills den deployas (tvåstegspushen + NO-GO-listan). Den är ensam där nu, så
+exponeringen är borta, men produktionen får sin namnrymd först vid deploy.
+Egen Redis-instans åt `main` (plan R5) kräver betald nivå och är fortfarande
+rätt slutläge. Redis-lösenordet klistrades in i klartext i en chatt — rotera
+det i Redis Cloud när tillfälle ges.
+
 ## 2026-08-29 (morgon) — Claude — sjufasplanen + Redis-arkitekturen byggd, verifierad och PUSHAD till development
 
 **Hela beställningen från 2026-08-28 är implementerad** (Fas 1–6 + Fas 7:s
