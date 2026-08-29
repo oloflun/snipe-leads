@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Logo } from "@/components/Logo";
+import { mejlaOss } from "@/components/marketing/copy";
 import { AgentMenu } from "@/components/snajp/AgentMenu";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { signOut } from "@/lib/actions/auth";
@@ -410,8 +411,10 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                 </span>
               )}
               {vy === "demo" ? null : (
+                /* Samma adress som marknadssidan, via samma konstant. Hårdkodad
+                   här stod den utanför bytet i copy.ts. */
                 <a
-                  href="mailto:Snajpsupport@gmail.com"
+                  href={mejlaOss()}
                   className="kicker ml-auto text-ochre underline underline-offset-4 hover:text-ink"
                 >
                   Kontakta oss

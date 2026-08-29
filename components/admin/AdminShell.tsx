@@ -36,14 +36,24 @@ import { cn } from "@/lib/utils";
  * det inte blir två staplade headers. Uppmätt: det var det innan.
  */
 
-/** Plattformsflikarna — det som skiljer adminytan från kundens arbetsyta. */
+/**
+ * Plattformsflikarna — det som skiljer adminytan från kundens arbetsyta.
+ *
+ * Etiketterna är Localized och inte svenska strängar: arbetsytans rad under
+ * översätts redan av `t()`, och en plattformsrad som stod kvar på svenska
+ * gjorde EN-läget till ett halvöversatt gränssnitt — det syntes tydligast
+ * här, eftersom de två raderna ligger ovanpå varandra.
+ */
 const PLATTFORM = [
-  { href: "/admin", label: "Översikt" },
-  { href: "/admin/kunder", label: "Kunder" },
-  { href: "/admin/korningar", label: "Körningar" },
-  { href: "/admin/testkorningar", label: "Testkörningar" },
-  { href: "/admin/bokforingsanvandning", label: "Bokföringsanvändning" },
-  { href: "/admin/handelser", label: "Händelser" }
+  { href: "/admin", label: { sv: "Översikt", en: "Overview" } },
+  { href: "/admin/kunder", label: { sv: "Kunder", en: "Customers" } },
+  { href: "/admin/korningar", label: { sv: "Körningar", en: "Runs" } },
+  { href: "/admin/testkorningar", label: { sv: "Testkörningar", en: "Test runs" } },
+  {
+    href: "/admin/bokforingsanvandning",
+    label: { sv: "Bokföringsanvändning", en: "Bookkeeping usage" }
+  },
+  { href: "/admin/handelser", label: { sv: "Händelser", en: "Events" } }
 ];
 
 function matchar(pathname: string, href: string): boolean {
@@ -159,7 +169,9 @@ export function AdminShell({
                 className="focus-ring inline-flex min-h-11 items-center gap-1.5 rounded-input px-3 text-sm font-medium text-ink/55 transition-colors hover:text-ink"
               >
                 <LogOut className="h-4 w-4" aria-hidden />
-                <span className="hidden sm:inline">Logga ut</span>
+                <span className="hidden sm:inline">
+                  {text({ sv: "Logga ut", en: "Sign out" })}
+                </span>
               </button>
             </form>
           </div>
@@ -167,7 +179,7 @@ export function AdminShell({
           {/* Plattformsraden först: det är den som skiljer ytan från kundens,
               och den ska inte behöva letas upp bland arbetsytans flikar. */}
           <nav
-            aria-label="Plattform"
+            aria-label={text({ sv: "Plattform", en: "Platform" })}
             className="thin-scrollbar order-last -mx-1 flex w-full min-w-0 gap-1 overflow-x-auto px-1 pb-1"
           >
             {PLATTFORM.map((flik) => {
@@ -182,7 +194,7 @@ export function AdminShell({
                     på ? "bg-ochre/15 text-ink" : "text-ochre hover:bg-ochre/10"
                   )}
                 >
-                  {flik.label}
+                  {text(flik.label)}
                 </Link>
               );
             })}
@@ -192,7 +204,7 @@ export function AdminShell({
         {arbetsyta.length > 0 ? (
           <div className="mx-auto max-w-[1400px] px-4 pb-2 md:px-6">
             <nav
-              aria-label="Min arbetsyta"
+              aria-label={text({ sv: "Min arbetsyta", en: "My workspace" })}
               className="thin-scrollbar -mx-1 flex min-w-0 gap-1 overflow-x-auto px-1"
             >
               {arbetsyta.map((flik) => {

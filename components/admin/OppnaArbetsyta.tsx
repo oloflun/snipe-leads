@@ -2,6 +2,7 @@
 
 import { Eye } from "lucide-react";
 import { bytVy } from "@/lib/actions/vy";
+import { useLocale } from "@/lib/i18n";
 
 /**
  * "Öppna arbetsytan" — går in i en kunds vy i admin-läge.
@@ -19,6 +20,7 @@ import { bytVy } from "@/lib/actions/vy";
  * Knappen fungerar utan JavaScript, precis som VyVaxel och utloggningen.
  */
 export function OppnaArbetsyta({ slug, namn }: Readonly<{ slug: string; namn: string }>) {
+  const { text } = useLocale();
   return (
     <form action={bytVy}>
       <button
@@ -27,10 +29,13 @@ export function OppnaArbetsyta({ slug, namn }: Readonly<{ slug: string; namn: st
         value={`kund:${slug}`}
         className="focus-ring inline-flex min-h-9 items-center gap-1.5 rounded-input bg-paper2 px-3 text-[13px] font-medium text-ink hover:bg-paper2/70"
         // Skärmläsare får hela meningen; seende ser knapptexten i sin rad.
-        aria-label={`Öppna arbetsytan för ${namn} i admin-läge`}
+        aria-label={text({
+          sv: `Öppna arbetsytan för ${namn} i admin-läge`,
+          en: `Open the workspace for ${namn} in admin mode`
+        })}
       >
         <Eye className="h-3.5 w-3.5" aria-hidden />
-        Öppna
+        {text({ sv: "Öppna", en: "Open" })}
       </button>
     </form>
   );

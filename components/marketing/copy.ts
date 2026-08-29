@@ -28,7 +28,11 @@ import type { Localized } from "@/lib/i18n";
  * Kontaktadressen på ETT ställe. Den stod tidigare inskriven i tolv `mailto:`
  * i fyra filer, och ett byte av adress betydde tolv chanser att missa en.
  */
-export const KONTAKT_MEJL = "Snajpsupport@gmail.com";
+// Egen domän, inte gmail. Brevlådan finns hos Loopia och verifierades ta emot
+// post 2026-08-29 (SMTP RCPT -> 250). En gmail-adress som publik kontaktväg för
+// en tjänst som faktureras i tusenlappar per månad kostar trovärdighet i just
+// det ögonblick en köpare bestämmer sig.
+export const KONTAKT_MEJL = "kontakt@snajp.se";
 
 /** `mailto:` med adressen förifylld i mottagarfältet. */
 export function mejlaOss(amne?: string): string {

@@ -17,6 +17,7 @@ from ..leads.autonomy import LEVELS as AUTONOMY_LEVELS
 from ..leads.autonomy import describe as describe_autonomy
 from ..leads.autonomy import kan_aktivera_auto_send
 from ..leads.autonomy import normalize as normalize_autonomy
+from ..leads.befordran import saknade_falt
 from ..leads.business_context import ar_ifyllt as business_context_ar_ifyllt
 from ..leads.exempelbolag import bygg_exempelbolag
 from ..leads.context_pack import build_context_pack, materialize_product_marketing
@@ -33,6 +34,7 @@ from ..leads.sni import SNI_NAMN, beskriv_kod
 from ..leads.onboarding_state import REQUIRED_KINDS, get_onboarding_state
 from .deps import kraev_uuid, require_tenant
 from ..leads.soul import SOUL_KIND, SOUL_MAX_CHARS
+from ..leads.skatteverket import atkomst_for_tenant
 from .schemas import (
     AgentFeedbackRequest,
     ContextDocRequest,
@@ -187,8 +189,17 @@ async def onboarding_chat(
     _require_live_llm()
     from ..agent.leads_agent import run_onboarding_turn
 
+    # Tokenen sätts av Next-proxyn ur en httpOnly-kaka. Saknas den har kunden
+    # inte legitimerat sig med BankID, och uppslaget är inte tillgängligt.
+    skatteverket = await atkomst_for_tenant(
+        storage, tenant["tenant_id"], request.headers.get("X-Skatteverket-Token")
+    )
+
     result = await run_onboarding_turn(
-        request.app.state.storage, tenant["tenant_id"], message=payload.message
+        request.app.state.storage,
+        tenant["tenant_id"],
+        message=payload.message,
+        skatteverket=skatteverket,
     )
     state = await get_onboarding_state(request.app.state.storage, tenant["tenant_id"])
     result["onboarding_missing"] = list(state.missing)
@@ -200,13 +211,28 @@ async def onboarding_chat(
 
 @router.post("/api/leads/prospects", status_code=201)
 async def create_prospect(
-    request: Request, payload: ProspectRequest, tenant: dict = Depends(require_tenant)
+    request: Request,
+    payload: ProspectRequest,
+    tenant: dict = Depends(require_tenant),
+    # Query-parameter, inte ett fält i ProspectRequest: kroppen som skickas i
+    # dag är EXAKT ProspectRequest-fälten (LeadsRunForm.tsx postar bara
+    # {company_name}), och ett andra body-objekt i signaturen hade fått
+    # FastAPI att kräva en nästlad kropp i stället — och tyst brutit varje
+    # befintlig anropare.
+    #
+    # "Egna bolag" i en testkörning (LeadsRunForm.tsx, samma isTest-flagga som
+    # skickas till /leads/runs/batch) skapar sina prospekt HÄR, samma väg som
+    # en riktig kund. Utan flaggan landade de som origin='manual' — omöjliga
+    # att skilja från kundens riktiga lista och oskyddade av send-guardens
+    # spärr noll (migration 054). is_test=false (default) är oförändrat.
+    is_test: bool = False,
 ) -> dict:
     prospect = await request.app.state.storage.create_prospect(
         tenant["tenant_id"],
         company_name=payload.company_name,
         contact_name=payload.contact_name,
         contact_email=payload.contact_email,
+        origin="test" if is_test else "manual",
     )
     return {"prospect": prospect}
 
@@ -372,6 +398,92 @@ async def add_prospect_source(
     return {"source": source}
 
 
+@router.get("/api/leads/prospects/{prospect_id}/utkast")
+async def senaste_utkast(
+    request: Request, prospect_id: str, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Senaste mejlutkastet för ETT prospekt (Fas 5.5).
+
+    Bolagssidan renderar Email-studion inline och ska kunna återfinna ett
+    redan skapat utkast efter en omladdning. Kön (GET /api/leads/queue)
+    duger inte som läsväg: den listar bara status='awaiting_review' och bär
+    inget prospect_id — ett godkänt eller avvisat utkast försvann ur den och
+    gick inte att hitta alls. Läsningen är strikt läsande:
+    find_outreach_thread skapar ALDRIG en tråd (se storage/base.py).
+
+    Kö-id:t (send_queue-raden, det POST /api/leads/queue/{id}/approve tar)
+    är INTE meddelande-id:t — de är två tabeller länkade via thread_id.
+    Svarets `queue_item_id` är därför uppslaget ur granskningskön när tråden
+    har en post som väntar, annars None (redan godkänt/avvisat utkast går
+    att LÄSA men inte godkänna igen — det är rätt, inte en lucka).
+    """
+    kraev_uuid(prospect_id, "Prospektet")
+    storage = request.app.state.storage
+    prospect = await storage.get_prospect(tenant["tenant_id"], prospect_id)
+    if not prospect:
+        raise HTTPException(status_code=404, detail="Prospektet finns inte.")
+    thread = await storage.find_outreach_thread(
+        tenant["tenant_id"], prospect_id=prospect_id
+    )
+    if not thread:
+        return {"utkast": None, "thread_id": None, "queue_item_id": None}
+    messages = await storage.list_outreach_messages(tenant["tenant_id"], thread["id"])
+    senaste = messages[-1] if messages else None
+    ko_id = None
+    if senaste:
+        vantande = await storage.list_review_queue(tenant["tenant_id"], limit=200)
+        ko_id = next(
+            (item["id"] for item in vantande if item.get("thread_id") == thread["id"]),
+            None,
+        )
+    return {"utkast": senaste, "thread_id": thread["id"], "queue_item_id": ko_id}
+
+
+@router.post("/api/leads/prospects/{prospect_id}/befordra")
+async def befordra_prospekt(
+    request: Request, prospect_id: str, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Flyttar ett prospekt från testkörning/exempel till kundens riktiga lista.
+
+    `origin='manual'` är precis det send-guarden (scheduler.py, spärr noll)
+    kollar innan `provider.send()`: 'test' och 'example' blockeras, 'manual'
+    och 'import' gör det inte. Befordran är alltså den enda vägen ett prospekt
+    som skapades under en provkörning kan bli skickbart — och därför krävs det
+    att bolaget faktiskt ÄR riktigt (Fas 3): ett exempelbolags Luhn-ogiltiga
+    org.nr och `.example`-domän får inte glida igenom bara för att en människa
+    klickade en knapp.
+    """
+    kraev_uuid(prospect_id, "Prospektet")
+    storage = request.app.state.storage
+    prospect = await storage.get_prospect(tenant["tenant_id"], prospect_id)
+    if not prospect:
+        raise HTTPException(status_code=404, detail="Prospektet finns inte.")
+
+    origin = prospect.get("origin") or "manual"
+    if origin not in ("test", "example"):
+        # Redan i kundens riktiga lista (eller en import) — inget att göra.
+        # 200 och inte 409: knappen "Flytta över valda" ska kunna köras om över
+        # en blandad markering utan att fråga vilka rader som redan gått igenom.
+        return {"prospect": prospect, "andrad": False}
+
+    brister = saknade_falt(
+        orgnr=prospect.get("orgnr"),
+        website=prospect.get("website"),
+        contact_email=prospect.get("contact_email"),
+    )
+    if brister:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Prospektet saknar det som krävs för att flyttas över.",
+                "saknas": brister,
+            },
+        )
+
+    updated = await storage.update_prospect(tenant["tenant_id"], prospect_id, origin="manual")
+    return {"prospect": updated, "andrad": True}
+
+
 # -- SOUL: kundens röstdokument -------------------------------------------
 
 
@@ -425,6 +537,12 @@ async def research_step(
     # skarp nyckel. Ingen test nådde routen, och simuleringsläget svarar 503
     # innan den raden, så sviten var grön.
     context_pack, missing = await build_context_pack(storage, tenant["tenant_id"])
+    # Tokenen sätts av Next-proxyn ur en httpOnly-kaka. Saknas den har kunden
+    # inte legitimerat sig med BankID, och uppslaget är inte tillgängligt.
+    skatteverket = await atkomst_for_tenant(
+        storage, tenant["tenant_id"], request.headers.get("X-Skatteverket-Token")
+    )
+
     result = await run_research_step(
         storage,
         tenant["tenant_id"],
@@ -432,6 +550,7 @@ async def research_step(
         tenant_name=tenant["tenant_name"],
         context_pack=context_pack,
         brief=payload.brief,
+        skatteverket=skatteverket,
     )
     result["onboarding_missing"] = list(missing)
     return result
@@ -447,6 +566,12 @@ async def outreach_draft(
     storage = request.app.state.storage
     thread_id = await _los_trad(storage, tenant["tenant_id"], payload.thread_id, payload.prospect_id)
     context_pack, missing = await build_context_pack(storage, tenant["tenant_id"])
+    # Tokenen sätts av Next-proxyn ur en httpOnly-kaka. Saknas den har kunden
+    # inte legitimerat sig med BankID, och uppslaget är inte tillgängligt.
+    skatteverket = await atkomst_for_tenant(
+        storage, tenant["tenant_id"], request.headers.get("X-Skatteverket-Token")
+    )
+
     result = await _run_outreach_draft(
         storage,
         tenant["tenant_id"],
@@ -459,6 +584,7 @@ async def outreach_draft(
         brief=payload.brief,
         research_summary=payload.research_summary,
         research_evidence=tuple(payload.research_evidence),
+        skatteverket=skatteverket,
     )
     result["onboarding_missing"] = list(missing)
     return result
@@ -895,20 +1021,46 @@ async def start_batch_run(
         else None
     )
 
+    # Fas R4 (bd snipe-2xj): finns leadsströmmen XADD:as varje prospektjobb i
+    # stället för att köras som asyncio.create_task i DEN HÄR processen — en
+    # halvkörd batch (10-50 prospekt, minuter av körtid) ska överleva en
+    # deploy mitt i, precis som chattkörningen (Fas R1, app/api/chat.py).
+    # Utan Redis är leadsstrom None och create_task-vägen nedan är EXAKT
+    # dagens beteende, oförändrad.
+    leadsstrom = getattr(request.app.state, "leadsstrom", None)
+
     jobs = []
     for prospect in prospects[: payload.limit]:
         job_id = await request.app.state.jobs.create(tenant_id=tenant["tenant_id"])
-        asyncio.create_task(
-            _run_batch_prospect(
-                request.app.state,
-                job_id,
-                tenant,
-                prospect_id=prospect["id"],
-                scope=payload.scope,
-                overrides=overrides,
-                is_test=payload.is_test,
+        if leadsstrom is not None:
+            # tenant_id/tenant_name som RÅA primitiver, inte hela tenant-
+            # dicten: samma mönster som chat.py:s rate_limit_user/
+            # rate_limit_is_demo — bara det hanteraren (hantera_leads_jobb)
+            # faktiskt behöver för att bygga om tenant-argumentet, inget
+            # internt datakontrakt (t.ex. "master") bakat in i nyttolasten.
+            await leadsstrom.enqueue(
+                {
+                    "job_id": job_id,
+                    "tenant_id": tenant["tenant_id"],
+                    "tenant_name": tenant["tenant_name"],
+                    "prospect_id": prospect["id"],
+                    "scope": payload.scope,
+                    "overrides": overrides,
+                    "is_test": payload.is_test,
+                }
             )
-        )
+        else:
+            asyncio.create_task(
+                _run_batch_prospect(
+                    request.app.state,
+                    job_id,
+                    tenant,
+                    prospect_id=prospect["id"],
+                    scope=payload.scope,
+                    overrides=overrides,
+                    is_test=payload.is_test,
+                )
+            )
         jobs.append({"job_id": job_id, "prospect_id": prospect["id"]})
 
     return {
@@ -963,3 +1115,51 @@ async def _run_batch_prospect(
         await app_state.jobs.complete(job_id, result)
     except Exception as error:  # noqa: BLE001 — ett trasigt prospekt fäller inte batchen
         await app_state.jobs.fail(job_id, f"Prospekt {prospect_id}: {error}")
+
+
+async def hantera_leads_jobb(app_state, payload: dict) -> None:
+    """Kör ETT jobb ur leads-strömmen (Fas R4, bd snipe-2xj, `crm:jobb:leads`).
+
+    Speglar app.api.chat.hantera_strom_jobb: det här är hanteraren som
+    skickas till ChattStrom.worker_loop/atertag (app/jobs/stream.py), samma
+    funktion oavsett om posten läses för första gången eller är en ÅTERTAGEN
+    post efter att en tidigare process dött mitt i batchen.
+
+    Jobbposten läses FÖRST. Dör processen i fönstret mellan
+    app_state.jobs.complete() och XACK ligger posten kvar okvitterad fast
+    resultatet redan är levererat — utan den här vakten hade ett återtag
+    kört HELA research-steget en gång till (åtta LLM-anrop). Ett redan
+    färdigt jobb kvitteras bara, precis som chattens vakt (se
+    app/api/chat.py:hantera_strom_jobb för samma fönsterresonemang).
+
+    Leads-jobbet har ingen aterta-motsvarighet — research skapar inget
+    ärende (till skillnad från chatten), så det finns inget ticket_id/
+    conversation_id att återanvända vid en omtagning. Missar vakten någon
+    gång ändå (t.ex. en process som dör EFTER complete() men FÖRE XACK, det
+    fönster vakten normalt stänger) kan en omkörning i värsta fall dubblera
+    en agent_runs-rad och några prospect_sources-rader för samma prospekt.
+    Det är acceptabelt: slutläget på PROSPEKTRADEN är konvergent (samma
+    ICP-bedömning skrivs över, den adderas inte, och research läser om
+    samma källor snarare än att skapa nya), och alternativet — en halvkörd
+    batch som tyst försvinner vid nästa deploy och lämnar tio-tjugo prospekt
+    utan research — är sämre.
+    """
+    job_id = payload["job_id"]
+    jobs = app_state.jobs
+
+    befintligt = await jobs.get(job_id) or {}
+    if befintligt.get("status") == "completed":
+        return
+
+    # tenant byggs om ur de RÅA primitiverna i nyttolasten — exakt samma
+    # nycklar som _run_batch_prospect faktiskt läser (tenant_id, tenant_name;
+    # "master" används aldrig i den funktionen och skickas därför inte med).
+    await _run_batch_prospect(
+        app_state,
+        job_id,
+        {"tenant_id": payload["tenant_id"], "tenant_name": payload["tenant_name"]},
+        prospect_id=payload["prospect_id"],
+        scope=payload["scope"],
+        overrides=payload.get("overrides"),
+        is_test=bool(payload.get("is_test")),
+    )

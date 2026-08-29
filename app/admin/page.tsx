@@ -1,4 +1,5 @@
 import { Portfoljvy } from "@/components/admin/Portfoljvy";
+import { berikaAlla } from "@/lib/admin/exempeldata";
 import { listTenants, unwrap } from "@/lib/data/admin";
 
 export const dynamic = "force-dynamic";
@@ -38,5 +39,11 @@ export default async function Page() {
     );
   }
 
-  return <Portfoljvy tenants={data ?? []} />;
+  // Klockan läses HÄR, en gång, och skickas ned. `new Date()` i en
+  // klientkomponent ger besökarens klocka vid hydreringen och serverns vid
+  // SSR — två olika svar på samma fråga, alltså en hydreringskrock i varje rad
+  // vars dagräkning råkar ligga på en dygnsgräns. En force-dynamic server
+  // component får läsa klockan; klientkomponenten får talet.
+  const nu = new Date();
+  return <Portfoljvy tenants={berikaAlla(data ?? [], nu)} nu={nu.getTime()} />;
 }

@@ -134,6 +134,13 @@ async def spara_instruktioner(request: Request, payload: InstruktionRequest) -> 
         message="Globala agentinstruktioner uppdaterade.",
         detail={"kalla": kalla, "tecken": len(dokument)},
     )
+    # Fas R2 (INV-CACHE-001): globala instruktioner gäller för ALLA tenants
+    # på en gång (se app/agentcore/instruktioner.py) — bumpa den GLOBALA
+    # konfigräknaren, inte en enskild tenants, så varenda cachad svarspost
+    # hos varenda tenant blir omatchbar. Se app/cache/versioner.py.
+    from ..cache import versioner
+
+    await versioner.bumpa_config_global()
     return {
         "instruktioner": {
             "id": rad["id"],
@@ -265,5 +272,16 @@ async def spara_profil(request: Request, tenant_id: str, payload: TenantProfilRe
             tenant_id=tenant_id,
             detail={"agent_type": payload.agent_type, "falt": andrade},
         )
+        # Fas R2 (INV-CACHE-001): bara instruktioner/ton/SOUL påverkar en
+        # cachad repliks GRUND (de går i system-/kontextposition för varje
+        # körning) — bumpa bara då. `affarskontext` ändrar case_context för
+        # de FULLA körningarna men rörs medvetet inte här: uppdraget som
+        # införde bumpen skopade den till instruktioner/ton/SOUL, och en
+        # svarscache-post existerar ändå bara för förstakontaktsfrågor utan
+        # kundspecifik kontext (se svarscache.lookup_behorig).
+        if {"instruktioner", "tone", "soul"} & set(andrade):
+            from ..cache import versioner
+
+            await versioner.bumpa_config(tenant_id)
 
     return {"sparat": andrade, "anmarkning": anmarkning}

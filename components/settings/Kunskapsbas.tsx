@@ -37,9 +37,15 @@ type Artikel = {
   created_at?: string;
 };
 
-const LÄSBARA = [".txt", ".md", ".markdown", ".csv", ".json", ".html", ".htm"];
+/**
+ * Exporterade: Testchatt-fliken (components/snajp/SupportChat.tsx, Fas 5.4)
+ * återanvänder EXAKT samma lista och samma test i stället för att kopiera
+ * den — två kopior av "vilka filer läser vi klientsidan" glider isär första
+ * gången någon utökar den ena.
+ */
+export const LÄSBARA = [".txt", ".md", ".markdown", ".csv", ".json", ".html", ".htm"];
 
-function läsbar(namn: string): boolean {
+export function läsbar(namn: string): boolean {
   const lägre = namn.toLowerCase();
   return LÄSBARA.some((ändelse) => lägre.endsWith(ändelse));
 }

@@ -28,6 +28,12 @@ sys.path.insert(0, str(ROOT / "snajp-support"))
 # fjärr-DATABASE_URL ur .env fäller annars DeepSeek-spärren i onödan.
 os.environ["DATABASE_URL"] = ""
 
+# Fas R2 (bd snipe-cku): evals mäter MODELLENS svar, inte cachens. En
+# cacheträff hade gett samma text som förra körningen oavsett om playbooken
+# faktiskt förbättrats sedan dess — cachen ska alltid vara av här, precis som
+# plans/2026-08-29-redis-agentarkitektur.md §7 punkt 4 kräver.
+os.environ["SEMANTIC_CACHE"] = "off"
+
 OUT_DIR = ROOT / "docs" / "live-tests"
 
 

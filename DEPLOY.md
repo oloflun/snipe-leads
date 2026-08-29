@@ -3,10 +3,13 @@
 Inget deployas genom att någon klickar i en dashboard.
 
 > **LÄS DET HÄR FÖRST.** Repot har **två deploy-kedjor, och bara den ena är
-> levande.** Den döda kedjan går fortfarande grön i GitHub Actions. Det är
-> därför den kostar tid: ingenting säger ifrån, den bygger bara en miljö ingen
+> levande.** Fram till 2026-08-29 gick den döda kedjan fortfarande grön i
+> GitHub Actions utan att säga ifrån — den byggde bara en miljö ingen
 > använder. Uppmätt 2026-08-23, efter att en push till `development` inte syntes
-> någonstans.
+> någonstans. De två arbetsflödena som gav den falska signalen
+> (`deploy-production.yml`, `deploy-development.yml`) är sedan 2026-08-29
+> borttagna (§8.3) — kvar är dokumentationen av den döda kedjan nedan, för att
+> förklara varför saker fortfarande ser ut som de gör.
 
 ## Den levande kedjan: Railway
 
@@ -42,20 +45,54 @@ tas bort, inget läser den längre.
 
 **Produktionen (`main`) är INTE omlagd än.** `railway-main` är fortfarande
 den gren som triggar produktionsdeployen — det är ett separat, medvetet beslut
-som väntar på att göras (main ska ersätta railway-main på samma sätt). Fram
-tills dess gäller fortfarande, för produktion:
+som väntar på att göras (main ska ersätta railway-main på samma sätt).
 
-```bash
-git push origin main
-git push origin main:railway-main
-```
+> ## ⛔ Kör INTE den gamla kedjan
+>
+> ```bash
+> git push origin main
+> git push origin main:railway-main
+> ```
+>
+> **Den här kedjan är i dag uppmätt FARLIG, inte bara föråldrad.**
+> `git rev-list` mot `origin`-referenser (inte den lokala kopian) visar att
+> `origin/main` ligger **152 commits efter** `origin/railway-main` och **noll
+> före**. `git push origin main:railway-main` avvisas därför i dag som
+> non-fast-forward — och tvingas den igenom (`--force`) rullar den tillbaka
+> produktionen 152 commits, inklusive omläggningen 22 aug och hotfixen 25 aug.
+> `main` är inte längre produktionens källa; `railway-main` är. Se
+> `plans/2026-08-28-skarpa-korningar-och-produktion.md` §8.1 för hela
+> verifieringen.
+
+**Den verifierade ordningen, när den dagen kommer** (planens §8.1):
+
+1. `git checkout development && git merge origin/railway-main` — tar in den
+   enda commit produktionen har som `development` saknar (`78c900e`).
+   Konflikt i `llm.py`/`config.py` väntas; lösningen är
+   `development`-versionen — `development` innehåller redan hela
+   `railway-main`s innehåll i utökad form.
+2. Testsviterna gröna (`snajp-support` + `tests/`, se `plans/…§7`).
+3. `python scripts/railway_migrate.py --env main --apply` — **torrkörning
+   först** (utan `--apply`).
+4. `git push origin development:railway-main` — nu fast-forward, ingen
+   `--force` behövs eller ska användas.
+5. Lägg om `main`s deployment trigger på samma sätt som `development` gjordes
+   2026-08-27 (`deploymentTriggerUpdate` mot grenen `main` direkt) och släck
+   tvåstegsfällan för gott — samma steg som ändrade `ENVIRONMENTS["main"]` i
+   `scripts/railway_provision.py`.
+
+**Varje steg i den listan mot produktion kräver Antons uttryckliga ord
+innan det körs** (`plans/2026-08-28-skarpa-korningar-och-produktion.md` §8.1a)
+— inklusive steg 1–2, som inte rör `main`/`railway-main` direkt men förbereder
+den push som gör. Läsning (`git log`, `git rev-list`, torrkörningar utan
+`--apply`, `/health`-anrop) är fri och ändrar ingenting.
 
 Kontrollera grenen innan du felsöker "min ändring syns inte" — särskilt för
-`main`, som fortfarande har den gamla tvåstegs-fällan. Det är andra gången
-samma fälla slog till för development innan den lagades — `verify_railway.py`
-bär en kommentar om att `web` byggde fel gren i tre deployer i rad medan
-felsökningen letade i byggkontexten. Byggmeddelandet var sant hela tiden; det
-beskrev en annan commit.
+`main`, som fortfarande har den gamla tvåstegs-fällan tills ordningen ovan är
+körd. Det är andra gången samma fälla slog till för development innan den
+lagades — `verify_railway.py` bär en kommentar om att `web` byggde fel gren i
+tre deployer i rad medan felsökningen letade i byggkontexten. Byggmeddelandet
+var sant hela tiden; det beskrev en annan commit.
 
 ```bash
 python scripts/verify_railway.py     # kontrollerar bland annat trigger-grenen
@@ -98,8 +135,16 @@ deployas i dag.
 
 Två konkreta konsekvenser som annars ser ut som buggar:
 
-* `.github/workflows/deploy-development.yml` deployar till **Vercel** vid push
-  till `development`. Den går grönt. Den når inte produkten.
+* `.github/workflows/deploy-production.yml` deployade en Vercel-förhandsvisning
+  mot den döda stacken på varje push till `main` och gick **grönt** — en falsk
+  hälsosignal, eftersom den aldrig nådde produkten. Borttagen 2026-08-29 (§8.3
+  i `plans/2026-08-28-skarpa-korningar-och-produktion.md`).
+* `.github/workflows/deploy-development.yml` gjorde samma sak för
+  `development` fram till 2026-08-25, då den byttes till att i stället spegla
+  `development` → `railway-development` (se ovan). Den speglingen blev själv
+  överflödig 2026-08-27 när `development`s trigger lades om till att lyssna på
+  `development` direkt — och filen, vars enda uppgift var speglingssteget, är
+  därför också borttagen 2026-08-29.
 * Vercel-previewen läser Supabase-grenen `development`, som står i
   `MIGRATIONS_FAILED` sedan 2026-08-15. Inloggning där ger
   `CallbackRouteError` — `authorize` i `lib/auth.ts` kastar mot en databas som
@@ -499,6 +544,48 @@ tecknat avtal enligt API:ets allmänna villkor. Det är ett avtalsbeslut av
 samma slag som DeepSeek-frågan i `CLAUDE.md`, inte något ett skript ordnar.
 ▸ Anton
 
+### BankID-flödet i Next-appen — BYGGT, väntar på nycklar
+
+Endpointerna är lästa ur Skatteverkets ACG-dokumentation, inte gissade:
+
+```
+authorize  GET  https://peroauth2[.test].skatteverket.se/oauth2/v1/per/authorize
+token      POST https://peroauth2[.test].skatteverket.se/oauth2/v1/per/token
+```
+
+`per` är e-legitimationsvarianten (BankID). `org`-varianten kräver ett
+organisationscertifikat från Expisoft och en egen ombudsansökan — inte byggd.
+
+| Variabel | Tjänst | Betydelse |
+|---|---|---|
+| `SKATTEVERKET_CLIENT_ID` | `web` + `api` | OAuth2-klientens id. `api` behöver den som HTTP-huvud på själva uppslaget |
+| `SKATTEVERKET_CLIENT_SECRET` | `web` + `api` | Samma |
+| `SKATTEVERKET_SCOPE` | `web` | **Ingen default.** API-specifikt, står inte publikt — kommer med nycklarna |
+| `SKATTEVERKET_REDIRECT_URI` | `web` | Måste vara EXAKT den som registrerats hos Skatteverket, t.ex. `https://www.snajp.se/api/skatteverket/callback` |
+| `SKATTEVERKET_MILJO` | `web` | Valfri. Tom = test. `produktion` byter auktorisationsserver |
+
+Saknas någon av dem renderas knappen inte alls (`arKonfigurerad()`) och
+`/api/skatteverket/start` svarar 503 med `kod: "ej_konfigurerad"` — inte 500.
+Tjänsten är inte trasig, den är inte påslagen.
+
+**Redirect-URI:n härleds ALDRIG ur inkommande request.** Den läses ur
+env-varen, eftersom en angripare som styr `Host`-huvudet annars hade kunnat få
+auktorisationskoden skickad till sin egen domän.
+
+**Vägen tokenen tar:** `/api/skatteverket/start` (state i httpOnly-kaka) →
+Skatteverkets BankID → `/api/skatteverket/callback` (state jämförs, koden växlas)
+→ access token i en httpOnly-kaka med tokenens egen livslängd → `proxyAsTenant`
+skickar den som `X-Skatteverket-Token` → `atkomst_for_tenant()` i backenden
+parar ihop den med tenantens orgnr **ur vår egen databas**.
+
+Organisationsnumret skickas medvetet inte med från webben: ett orgnr utifrån är
+ett fält någon kan byta ut, och det som byts ut då är vems beskattningsuppgifter
+vi frågar efter.
+
+**Refresh token sparas inte.** Skatteverket utfärdar en (65 min), men att lagra
+den vore att förlänga en fullmakt kunden gav för ett uppslag. Går tokenen ut
+(en timme) legitimerar kunden sig igen.
+
 **2. API:t kräver BankID — det finns ingen server-till-server-väg.**
 Auktorisation sker med OAuth2 Authorization Code Grant där den externa
 användaren legitimerar sig med e-legitimation (tjänstebeskrivning
@@ -513,6 +600,30 @@ inte** — `skatteverket.paborja_inloggning()` är en stub som kastar med hela
 skälet utskrivet. Authorize- och token-URI:erna publiceras under "Säkerhet och
 API:er" och kommer med nycklarna; att gissa dem hade gett en implementation
 som ser färdig ut och faller vid första riktiga inloggningen.
+
+### Alla agenter har verktyget — men anropar det bara när det behövs
+
+Uppslaget är ett **verktyg** (`app/agent/skatteverket_tools.py`), inte ett
+anrop i varje körning. Modellen kallar på det när frågan gäller bolagets egen
+registrering, och annars inte alls. En fråga om vad ingående moms *är* besvaras
+ur `kunskap.py` och ska inte kosta ett myndighetsanrop, en nätverksväntan och
+en rad i Skatteverkets auditlogg som sparas i fem år.
+
+Inkopplat i alla fem verktygslistorna — `BOKFORING_CHATT_TOOLS` (prioriteten),
+`ALL_TOOLS`, `ONBOARDING_TOOLS`, `OUTREACH_TOOLS`, `RESEARCH_TOOLS`. **Ett
+medvetet undantag:** `DEMO_TOOLS` får det inte. Den publika demon har ingen
+inloggad tenant och ingen BankID-session, så verktyget kunde ändå bara svara
+"inte tillgängligt" — och ett verktyg som alltid misslyckas är en sämre demo
+än inget verktyg alls (INV-SEC-008).
+
+**Modellen väljer uppgift, aldrig identitet.** Det finns ingen orgnr-parameter.
+Orgnr och token kommer ur `SkatteverketAtkomst` i kontexten, satt av servern
+(INV-SEC-002). Två oberoende skäl: tokenen gäller ändå bara den inloggades eget
+bolag — Skatteverket svarar 403 på någon annans identitet — och villkorens §7.1
+tillåter bara uppslag "av, eller för" mottagaren själv. Det betyder att
+**outreach-agenten inte kan slå upp ett prospekt**, trots att den annars
+arbetar med prospektets uppgifter. Ta inte bort den ena spärren för att den
+andra finns.
 
 ### Fällan i svaret: 200 betyder inte "godkänd"
 

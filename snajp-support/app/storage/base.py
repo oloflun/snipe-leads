@@ -87,7 +87,20 @@ class Storage(Protocol):
 
     async def get_customer_history(
         self, tenant_id: str, customer_id: str
-    ) -> list[dict[str, Any]]: ...
+    ) -> list[dict[str, Any]]:
+        """Kundens ärenden, nyast först.
+
+        VARJE post bär `conversation_id` — samtalet som hör till ärendet, eller
+        None för ett ärende utan samtal. Fältet finns INTE i ss_tickets; det
+        kommer ur en join i PostgresStorage och sätts explicit i MemoryStorage.
+
+        Kravet står här för att det en gång bara stod i den ena lagringen:
+        MemoryStorage satte fältet, Postgres gjorde det inte, och
+        arbetsminne.alla_samtalsrader kastade KeyError i drift medan sviten var
+        grön. INV-STORE-001 jämför signaturer, inte returformer — den fångar
+        alltså inte den här sortens glidning. Läsare måste tåla None.
+        """
+        ...
 
     async def create_ticket(
         self,
@@ -309,6 +322,15 @@ class Storage(Protocol):
         utan mänsklig granskning."""
         ...
 
+    async def find_outreach_thread(
+        self, tenant_id: str, *, prospect_id: str
+    ) -> dict[str, Any] | None:
+        """LÄSDELEN av ensure_outreach_thread — för GET-vägar som inte får
+        skapa. En sidladdning som letar efter ett befintligt utkast (Fas 5.5,
+        GET /api/leads/prospects/{id}/utkast) ska inte lämna en tom tråd
+        efter sig bara för att den tittade."""
+        ...
+
     async def ensure_outreach_thread(
         self, tenant_id: str, *, prospect_id: str
     ) -> dict[str, Any]:
@@ -420,6 +442,11 @@ class Storage(Protocol):
         tokens_out: int,
         latency_ms: int,
         is_test: bool = False,
+        # Migration 055. "<provider>:<modell>" (settings.llm_provider +
+        # settings.model), eller "svarscache" för en cacheträff som inte
+        # körde någon modell alls. None för anropare som (ännu) inte skickar
+        # det — kolumnen är nullable av samma skäl.
+        model: str | None = None,
     ) -> dict[str, Any]:
         """Skrivs för VARJE körning. Krävs för DSAR och för att kunna felsöka
         ett dåligt svar i efterhand (plan G10).
@@ -534,11 +561,16 @@ class Storage(Protocol):
         icp_fit: float | None = None,
         qualified: bool | None = None,
         disqualifiers: list[str] | None = None,
+        origin: str | None = None,
     ) -> dict[str, Any] | None:
         """Fas B:s bedömning (icp_fit, qualified, disqualifiers) landar här,
         migration 024. Innan den fanns räknades icp_fit ut av modellen och
         kastades bort — den gick inte att sortera, mäta eller motivera i
-        efterhand."""
+        efterhand.
+
+        `origin` (Fas 3, §4) är den enda vägen `POST .../befordra` skriver:
+        'test'/'example' → 'manual', efter att valideringen i
+        `leads/befordran.py` godkänt bolaget."""
         ...
 
     async def create_prospect_source(
@@ -848,6 +880,20 @@ class Storage(Protocol):
 
     async def get_customer_details(self, tenant_id: str) -> dict[str, Any] | None:
         """Kundens registerrad, eller None när ingen skrivits ännu."""
+        ...
+
+    async def orgnr_for_tenant(self, tenant_id: str) -> str | None:
+        """Tenantens EGET organisationsnummer, läsbart från en tenant-skopad körning.
+
+        Skild från `get_customer_details` med flit: den läser hela
+        kundregisterraden och skyddas av en RLS-policy som BARA släpper igenom
+        en oskopad admin-anslutning (migration 053). En agentkörning har
+        `app.tenant_id` satt och får därför noll rader därifrån — tyst.
+
+        Den här metoden går via `orgnr_for_current_tenant()` (migration 056),
+        som returnerar exakt ett fält för exakt den tenant som redan är
+        inloggad. Se migrationens kommentar för varför den saknar parameter.
+        """
         ...
 
     async def upsert_customer_details(

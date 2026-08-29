@@ -147,5 +147,24 @@ export const UNDERLEVERANTORER: readonly Underleverantor[] = [
     namn: "Railway",
     andamal: "Drift av applikationen och databasen.",
     region: "[Ange datacenterregion]"
+  },
+  {
+    // Jobbkö sedan 2026-08-29: pågående chatt- och leadsjobb (inklusive
+    // agentens svar till kunden) ligger här med kort TTL tills de hämtats.
+    namn: "Redis Cloud (Redis Ltd)",
+    andamal:
+      "Jobbkö och cache: pågående ärenden och svar under behandling, med automatisk radering (TTL).",
+    region:
+      "[Verifiera EU-region och TLS med scripts/redis_kontroll.py, teckna " +
+      "Redis DPA i kontot. Se docs/JURIDIK_ATGARDER.md, P1.2.]"
+  },
+  {
+    // Sändväg sedan 2026-08-29 (EMAIL_PROVIDER=resend): utgående svar till
+    // kunder går via Resends API.
+    namn: "Resend",
+    andamal: "Utskick av mejlsvar till kunder (HTTPS-sändväg).",
+    region:
+      "[Ange dataregion och avtalsform — DPA + SCC. Resend är ett " +
+      "US-bolag; region och DPF-status ska bekräftas. Se P1.2.]"
   }
 ] as const;

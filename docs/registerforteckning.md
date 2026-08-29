@@ -67,7 +67,7 @@ biträde. Förteckningen ska ändå finnas — art. 30.2 gäller biträden ocks�
 | **Ändamål** | Klassificera inkommande kundmejl och föreslå svar |
 | **Kategorier av registrerade** | Kundens kunder — alltså konsumenter, inte bara företagskontakter |
 | **Kategorier av uppgifter** | Avsändarens namn och e-postadress, meddelandeinnehåll, bilagor. Innehållet är **okontrollerat**: en kund kan skriva vad som helst i ett supportmejl, inklusive personnummer och hälsouppgifter |
-| **Mottagare (underbiträden)** | Google/Gemini, Supabase, Railway |
+| **Mottagare (underbiträden)** | Google/Gemini, Supabase, Railway, Redis Cloud (jobbkö/cache med TTL — pågående ärenden och svar under behandling), Resend (utgående mejlsvar) |
 | **Tredjelandsöverföring** | **[fylls i — kräver besked om Googles dataregion och avtalsnivå, se P0.1c]** |
 | **Lagringstid** | Enligt `ss_gallringspolicy`. **Perioden är ännu inte beslutad** — se `scripts/gallra.py` |
 | **Var i systemet** | `ss_emails`, `ss_email_attachments`, `ss_classifications`, `ss_drafts`, `ss_human_reviews`, `ss_tickets` |
@@ -100,4 +100,6 @@ Skrivs av så snart det är gjort, inte innan:
 - [ ] Googles dataregion och överföringsmekanism (DPF eller SCC) bekräftad
 - [ ] OpenAI:s dataregion och avtalsform bekräftad (om den tas i drift)
 - [ ] Railways datacenterregion bekräftad
+- [ ] Redis Clouds region och TLS bekräftade (`scripts/redis_kontroll.py`) och Redis DPA tecknad — se P1.2
+- [ ] Resends dataregion, DPA och DPF/SCC-status bekräftade — se P1.2
 - [ ] DPIA för supportagentens automatiska klassificering och eskalering

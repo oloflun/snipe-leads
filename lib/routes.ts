@@ -91,7 +91,12 @@ export const appRoutes: AppRoute[] = [
   { href: "/dashboard", labelKey: "nav.dashboard", product: "shared" },
   { href: "/dashboard/leads", labelKey: "nav.leads", product: "leads" },
   { href: "/dashboard/support", labelKey: "nav.support", product: "support" },
-  { href: "/dashboard/emails", labelKey: "nav.emails", product: "leads" },
+  // Fas 4 (2026-08-29): Email-studion flyttade in i Bolagssidan — se
+  // components/leads/Bolagssida.tsx. Menyposten är borta, men routen är
+  // MEDVETET kvar och nåbar direkt: `preview: true` döljer bara
+  // menyposten (routesForProducts filtrerar på den), grinden i dispatchern
+  // rörs inte. Ingen fil raderas, ingen länk pekar hit längre.
+  { href: "/dashboard/emails", labelKey: "nav.emails", product: "leads", preview: true },
   { href: "/dashboard/companies", labelKey: "nav.companies", product: "leads", preview: true },
   { href: "/dashboard/contacts", labelKey: "nav.contacts", product: "leads", preview: true },
   { href: "/dashboard/inbox", labelKey: "nav.inbox", product: "leads", preview: true },

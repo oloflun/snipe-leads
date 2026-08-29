@@ -12,7 +12,7 @@ milestone_blockers:
   - "main ligger ~80 commits efter development och kor gammal kod (snipe-zfc)"
   - "IMAP_PASSWORD_LIVRUSTNING saknas pa Railway api (bade main och development)"
   - "Vantar pa kundens bekraftelse av garantiperioden"
-updated: 2026-08-26
+updated: 2026-08-29
 ---
 
 # Snipra / Snajp
@@ -98,6 +98,10 @@ separate thing entirely — user-message position only, never system. See
 | [ARCHITECTURE_INVARIANTS.md](ARCHITECTURE_INVARIANTS.md) | Machine-enforced rules (CI-checked). `INV-SKILL-*`, `INV-SEC-*`, etc. |
 | [plans/2026-08-07-agent-backend-deepseek.md](plans/2026-08-07-agent-backend-deepseek.md) | Plan-level scope/progress tracker for the agent-backend work; points to the full design doc. |
 | [DEPLOY_KEYS.md](DEPLOY_KEYS.md) | How to set API keys locally and at deploy; `scripts/keys.py`. |
+| [lib/admin/halsa.ts](lib/admin/halsa.ts) | Kundhälsa och tokenekonomi. Bär **tokenpriserna** (in 7,14 / ut 35,71 kr per miljon — Googles listpris för `gemini-3.6-flash`, dubblas 2027-01-01) och marginalgränserna. Ändra priset HÄR när en riktig faktura finns. |
+| [lib/admin/exempeldata.ts](lib/admin/exempeldata.ts) | Exempeltal för arbetsytor helt utan aktivitet. Deterministiskt ur tenantens id, sex profiler, jämnt utspritt över statistikens tolvveckorsfönster. Varje berikad rad bär `ar_exempel` och märks i vyn. Av med `NEXT_PUBLIC_ADMIN_EXEMPELDATA=av`. |
+| [lib/admin/handelsetext.ts](lib/admin/handelsetext.ts) | Tolkar leverantörernas undantagstext till rubrik + förklaring för notiscentret. Tio mönster; råtexten kastas aldrig. |
+| [lib/admin/sprak.ts](lib/admin/sprak.ts) | Adminytans sv/en-ordbok plus datum-, tid- och antalsformatering. **Tidszonen är spikad** till `Europe/Stockholm` — vyerna är klientkomponenter och en ospikad zon ger hydreringskrock. |
 | [docs/THINKING_MODE_COMPARISON.md](docs/THINKING_MODE_COMPARISON.md) | DeepSeek thinking-mode on/off comparison, real API calls, per flow. **§7** = the leads per-step migration, **§8** = the valid leads comparison and the decision (incl. why the first recommendation was wrong). |
 | [docs/LEADS_THINKING_COMPARISON.md](docs/LEADS_THINKING_COMPARISON.md) | **Generated raw data** (811 KB) — every one of the 72 LLM calls with its complete output. Overwritten by the next run; conclusions live in the file above, deliberately kept separate. |
 | `scripts/render_leads_report.py` | Renders the report above from a run's JSON, so it can be rebuilt without re-running 72 paid calls. |
@@ -116,6 +120,15 @@ separate thing entirely — user-message position only, never system. See
 | `scripts/llm_provider.py` | Reads which LLM provider each Railway environment actually runs (never prints key values) and can `--apply` a switch to `openai`/`gemini` — refuses if the target service has no working key. |
 | `scripts/flytta_fran_supabase.py` | Moves what's left in the now-dead Supabase project (KB articles, context docs) into Railway Postgres. `far_importeras()` refuses to overwrite a non-empty slot — see the gotcha below about why. |
 | `scripts/verifiera_instruktioner.py` | Fills every instruction-bearing field with a unique marker, runs a real agent turn, and reports which prompt position each marker landed in. `--skarp` adds one real model call to confirm the model actually obeyed. |
+| `scripts/smtp_konfig.py` | Sets the real send path on Railway — SMTP or, since Railway blocks outbound SMTP on the trial plan, Resend over HTTPS (`--resend`). Tests the connection/key before writing anything. |
+| `scripts/redis_konfig.py` | Sets `REDIS_URL` on Railway's `api` service for the async job queue (chat/leads jobs) — PINGs the Redis Cloud database first, never shares one instance across environments. |
+| `scripts/redis_cloud_nycklar.py` | Saves Redis Cloud's ACCOUNT-level API keys (not a database connection string) to `.env.deploy` — the prerequisite for provisioning additional Redis databases via API instead of the dashboard. |
+| `scripts/redis_kontroll.py` | Lists every Redis Cloud database with region and TLS status via the account API — exits non-zero if anything sits outside the EU. The GDPR gate for the Redis layer. |
+| `scripts/redis_tls_pa.py` | Enables TLS on the dev Redis database AND rewrites `REDIS_URL` to `rediss://` in one sweep (the two steps are one change). Run by Anton — the auto-mode classifier blocks agents from cloud-infra writes. |
+| `scripts/redis_provisionera.py` | Prepares `main`'s own Redis database (EU, TLS, first paid tier with persistence+replication). `--planer` lists prices read-only; `--skapa` is gated behind §8.1a and an explicit flag. |
+| `scripts/gemini_web_konfig.py` | Copies `GEMINI_API_KEY` from the local env file onto Railway's `web` service (Fas 1.2) so Email-studio stops simulating for logged-in customers. Anton runs it — same classifier gate. |
+| `plans/2026-08-29-redis-agentarkitektur.md` | The Redis architecture: deploy-surviving runs (Streams), tenant-scoped semantic answer cache, rolling conversation memory — plus the verdicts on Redis Iris (Agent Memory, LangCache, Context Retriever). |
+| `docs/REDIS_IRIS_EVAL.md` | The adoption gates and sandbox protocol for the managed Iris services — synthetic data only, eight gates before any production use. |
 
 ## Invariants and gotchas
 
@@ -284,15 +297,15 @@ git push origin development
 git push origin development:railway-development   # nu automatisk, se nedan
 ```
 
-Ett GitHub Actions-jobb (`.github/workflows/deploy-development.yml`, ändrat
-2026-08-25) speglar `development` -> `railway-development` på varje push,
-vilket är den gren Railways deployment trigger faktiskt lyssnar på. Innan
-dess deployade samma workflow till en Vercel-preview av den döda kedjan —
-grönt i GitHub Actions, ingenting hände i Railway.
+Sedan 2026-08-27 lyssnar Railways deployment trigger för `development`
+direkt på grenen `development` — spegel-workflowen
+(`deploy-development.yml`) och den döda Vercel-workflowen
+(`deploy-production.yml`) togs bort 2026-08-29, eftersom de bara producerade
+falska gröna signaler mot grenar och stackar som ingenting längre läser.
 
 | | main (produktion) | development (mirror av produktion) |
 |---|---|---|
-| Gren som Railway lyssnar på | `railway-main` | `railway-development` |
+| Gren som Railway lyssnar på | `railway-main` | `development` (direkt, sedan 2026-08-27) |
 | Web | `https://www.snajp.se` | `https://web-development-6c85.up.railway.app` |
 | API | `api-production-d7695.up.railway.app` | `api-development-5cc3.up.railway.app` |
 | LLM-provider | `gemini` (Gemini free tier) | `gemini` |
@@ -324,7 +337,39 @@ mot den döda kedjan; en riktig onboarding just nu kräver manuella steg mot
 Railway tills skriptet är omskrivet. Se `TENANTS.md` för den nuvarande
 processen och flagga skriptet innan du litar på det.
 
-## Current status (2026-08-26)
+## Current status (2026-08-28)
+
+**Sjufasplan för skarpa körningar skriven** —
+[`plans/2026-08-28-skarpa-korningar-och-produktion.md`](plans/2026-08-28-skarpa-korningar-och-produktion.md),
+17 `bd`-ärenden. Fyra oberoende orsaker till att körningarna sett
+autogenererade ut kartlagda: Email-studions modellväljare kände aldrig till
+Gemini (alltid mallgenererad text); exempelbolagen är deterministiska med
+flit men oskiljbara i UI:t; ingen sändväg finns i någon miljö; och Gemini —
+se rättelsen nedan.
+
+**Rättelse av tidigare status:** raden nedan om `snipe-zfn` sa att
+minuttaket (6/min) var den faktiska begränsningen och dygnstaket (20)
+mindre allvarligt. Ommätt 2026-08-28 i ett riktigt 60-sekundersfönster:
+dygnstaket är det bindande — `quotaId:
+GenerateRequestsPerDayPerProjectPerModel-FreeTier`, `quotaValue: 20`, fyra
+dagar EFTER att faktureringskontot uppgraderades. Orsaken var att
+API-nyckelns Google-PROJEKT inte var kopplat till faktureringskontot —
+Vertex AI Express Mode har en egen gratisnivå, skild från Cloud-krediterna.
+Ingen ny betalning krävs, bara kopplingen. Anton har sedan kopplat ett nytt
+projekt och bytt nyckel — **inte verifierat live** vid sessionens slut, se
+`plans/2026-08-28-…md` Open Threads.
+
+**Produktionsdeployen är farligare än dokumenterat.** Uppmätt med
+`git rev-list` mot `origin`-referenser: `origin/main` ligger 152 commits
+**efter** `origin/railway-main` och noll före — den dokumenterade
+`git push origin main:railway-main` skulle i dag avvisas som
+non-fast-forward, och tvingad igenom rulla tillbaka produktionen (22
+aug-omläggningen + 25 aug-hotfixen). `development` innehåller redan hela
+hotfixens innehåll i utökad form (verifierat med diff), så säkra vägen är
+merge, inte push. Spårat som `snipe-jvj`. **Produktionen rörs inte utan
+Antons uttryckliga ord** (instruktion 2026-08-28).
+
+## Current status (2026-08-26) [historisk — main-avståndet nedan är omätt sedan 26 aug, se ovan]
 
 **Instruktionslagren når nu agenten** (migration 049, 2026-08-24/25).
 `agent_configs.instructions_md`/`.tone` hade funnits sedan migration 010 utan
@@ -358,3 +403,12 @@ Railway-topologin.
 Senaste sessionsloggar: `session-logs/2026-08-24-session-log.md`,
 `session-logs/2026-08-25-session-log.md` (om skriven), se även
 `HANDOFF-2026-08-25-INSTRUKTIONER.md`.
+
+## Kopplingar (Drömmen 2026-08-28)
+
+Se [[wiki/projects/_index/connections|connections]] för nattens kopplingar och
+`strategies.md` i samma mapp för projektets heuristiker.
+
+## Kunskapsbas-källor
+
+- [[wiki/sources/2026-08-25-konvertera-till-svg-vektorer-snajp]] — Snajp S-symbol + ordmärke vektoriserat till SVG (potrace), inkl. bokstavskerning-justering (2026-08-29)

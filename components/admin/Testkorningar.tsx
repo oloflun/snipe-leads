@@ -51,7 +51,11 @@ export function Testkorningar() {
           channel: "web",
           customer_email: "admin-test@session.snajp.se",
           customer_name: "Admin testkörning",
-          session_key: `admin-test-${Date.now()}`
+          session_key: `admin-test-${Date.now()}`,
+          // Fas 2.5 (snipe-vxq): löftet i beskrivningen nedanför var tomt —
+          // fältet fanns inte i ChatRequest förrän nu, så admintester
+          // räknades som kundvolym.
+          is_test: true
         })
       });
       const startSvar = (await readJsonBody<{ job_id?: string; error?: string }>(start)) ?? {};

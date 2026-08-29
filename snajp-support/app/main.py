@@ -8,6 +8,7 @@ degraderar tjänsten gracefully till in-memory + simuleringsläge.
 
 import logging
 from contextlib import asynccontextmanager
+from functools import partial
 
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -108,6 +109,134 @@ async def lifespan(app: FastAPI):
         logger.info("Jobbkö: in-memory")
     app.state.jobs = jobs
 
+    # Fas R2 (bd snipe-cku): embeddingcache + semantisk svarscache mot
+    # Redis. EGEN klient, INTE jobs.client: den senare har
+    # decode_responses=True (jobbposter är JSON-text), medan cachen lagrar
+    # binärpackade float32-vektorer (struct, se app/cache/embeddingcache.py)
+    # och FT.*-kommandon som vill ha råa bytes — att dela klienten hade gjort
+    # den binära vägen tyst trasig varje gång jobbkön också var aktiv.
+    # Samma gracefulla nedgradering som jobbkön ovan: går anslutningen inte
+    # kör processen ändå vidare med MinnesEmbeddingCache/MinnesSvarscache,
+    # som redan är den väg hela testsviten kör.
+    if settings.redis_url:
+        try:
+            import redis.asyncio as redis_asyncio
+
+            cache_redis = redis_asyncio.from_url(settings.redis_url, decode_responses=False)
+            await cache_redis.ping()
+            from .cache import embeddingcache, svarscache
+            from .cache import versioner as cache_versioner
+            from .minne import arbetsminne
+
+            embeddingcache.konfigurera(cache_redis)
+            svarscache.konfigurera(cache_redis)
+            cache_versioner.konfigurera(cache_redis)
+            # Fas R3 (bd snipe-7mk): SAMMA klient som svarscachen ovan — en
+            # tredje HASH-yta i samma Redis, inget nytt anslutningsbehov.
+            arbetsminne.konfigurera(cache_redis)
+            logger.info(
+                "Semantisk svarscache: Redis (embeddingcache + svarscache + "
+                "versioner + arbetsminne)."
+            )
+        except Exception as error:  # noqa: BLE001 — samma gracefulla nedgradering som Redis-anslutningen ovan
+            logger.warning(
+                "Cache-Redis otillgänglig (%s) — embeddingcache/svarscache/versioner kör in-memory.",
+                error,
+            )
+
+    # Fas R1 (bd snipe-lr7): chattkörningar ska ÖVERLEVA en deploy. Utan det
+    # här körde POST /api/chat agentkedjan som asyncio.create_task i SAMMA
+    # process — en deploy dödar den processen mitt i körningen, jobbposten
+    # blir kvar som "processing" och auto-failas efter 300 s (JOB_TIMEOUT_
+    # SECONDS i app/jobs/store.py). Kunden fick fel i stället för sitt svar.
+    #
+    # Bara meningsfullt med en RIKTIG Redis (jobs är RedisJobStore) — utan
+    # Redis finns ingen ström att dela mellan processer, och paritetsvägen
+    # (create_task i chat.py) är redan den befintliga, testade vägen.
+    chattstrom = None
+    chat_worker_tasks: list[asyncio.Task] = []
+    if isinstance(jobs, RedisJobStore):
+        try:
+            from .api.chat import hantera_strom_jobb
+            from .jobs.stream import ChattStrom, consumer_name
+
+            # SAMMA klient som RedisJobStore redan öppnat — en anslutning
+            # mindre att hantera i drift, se app/jobs/stream.py.
+            chattstrom = ChattStrom(jobs.client)
+            hanterare = partial(hantera_strom_jobb, app.state)
+            # Engångssvep INNAN några worker-tasks startar: poster som en
+            # process som dog FÖRE den här deployen lämnade okvitterade ska
+            # plockas upp direkt, inte vänta på att en worker råkar hinna dit.
+            atertagna = await chattstrom.atertag(hanterare)
+            logger.info(
+                "Chattström: Redis-baserad jobbkö aktiv (%d poster återtagna vid "
+                "uppstart, %d workers).",
+                atertagna,
+                settings.chat_workers,
+            )
+            for i in range(max(settings.chat_workers, 1)):
+                chat_worker_tasks.append(
+                    asyncio.create_task(chattstrom.worker_loop(consumer_name(i), hanterare))
+                )
+        except Exception as error:  # noqa: BLE001 — samma gracefulla nedgradering som Redis-anslutningen ovan
+            logger.warning(
+                "Chattström kunde inte startas (%s) — /api/chat faller tillbaka på "
+                "create_task i den här processen (samma beteende som utan Redis).",
+                error,
+            )
+            for task in chat_worker_tasks:
+                task.cancel()
+            chattstrom = None
+            chat_worker_tasks = []
+    app.state.chattstrom = chattstrom
+
+    # Fas R4 (bd snipe-2xj): leads-batchens per-prospekt-jobb ska ÖVERLEVA en
+    # deploy på SAMMA strömmönster som chatten ovan — en batch på upp till 50
+    # prospekt (LeadsBatchRequest.limit) tar minuter, och en deploy mitt i
+    # lämnade tidigare resten av köade prospekt permanent okörda (asyncio.
+    # create_task dör med processen). Egen ström (crm:jobb:leads) och egen
+    # consumer-grupp, SAMMA ChattStrom-klass (app/jobs/stream.py generaliserad
+    # minimalt för Fas R4) och SAMMA Redis-klient som RedisJobStore — ingen ny
+    # anslutning. Bara meningsfullt när jobs faktiskt är RedisJobStore, av
+    # samma skäl som chattströmmen.
+    leadsstrom = None
+    leads_worker_tasks: list[asyncio.Task] = []
+    if isinstance(jobs, RedisJobStore):
+        try:
+            from .api.leads import hantera_leads_jobb
+            from .jobs.stream import ChattStrom, consumer_name
+
+            leadsstrom = ChattStrom(jobs.client, stream_key="crm:jobb:leads", group="agenter")
+            leads_hanterare = partial(hantera_leads_jobb, app.state)
+            # Engångssvep INNAN några leads-worker-tasks startar — samma skäl
+            # som chattströmmens engångssvep ovan: en batch som stod mitt i
+            # när en tidigare process dog ska plockas upp direkt vid uppstart.
+            leads_atertagna = await leadsstrom.atertag(leads_hanterare)
+            logger.info(
+                "Leadsström: Redis-baserad jobbkö aktiv (%d poster återtagna vid "
+                "uppstart, %d workers).",
+                leads_atertagna,
+                settings.leads_workers,
+            )
+            for i in range(max(settings.leads_workers, 1)):
+                leads_worker_tasks.append(
+                    asyncio.create_task(
+                        leadsstrom.worker_loop(consumer_name(f"leads-{i}"), leads_hanterare)
+                    )
+                )
+        except Exception as error:  # noqa: BLE001 — samma gracefulla nedgradering som chattströmmen
+            logger.warning(
+                "Leadsström kunde inte startas (%s) — /api/leads/runs/batch faller "
+                "tillbaka på create_task i den här processen (samma beteende som "
+                "utan Redis).",
+                error,
+            )
+            for task in leads_worker_tasks:
+                task.cancel()
+            leadsstrom = None
+            leads_worker_tasks = []
+    app.state.leadsstrom = leadsstrom
+
     if settings.is_simulation():
         logger.info("LLM-nyckel saknas/platshållare — SIMULERINGSLÄGE aktivt.")
     else:
@@ -138,6 +267,10 @@ async def lifespan(app: FastAPI):
         poller_task.cancel()
     if send_scheduler_task:
         send_scheduler_task.cancel()
+    for task in chat_worker_tasks:
+        task.cancel()
+    for task in leads_worker_tasks:
+        task.cancel()
     await storage.close()
 
 

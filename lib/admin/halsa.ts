@@ -1,3 +1,4 @@
+import type { Localized } from "@/lib/i18n";
 import { PAKET, formateraPris } from "@/lib/pricing";
 
 /**
@@ -19,14 +20,55 @@ import { PAKET, formateraPris } from "@/lib/pricing";
  */
 
 /**
- * Kostnad per miljon tokens, SEK. Grov uppskattning för en billig modell
- * (DeepSeek-klassen), in- och utgående sammanslaget.
+ * Kostnad per miljon tokens, SEK — leverantörens LISTPRIS för den modell som
+ * faktiskt är konfigurerad, inte längre en gissning.
  *
- * ÄNDRA DEN HÄR när ni vet det faktiska utfallet från leverantörsfakturan.
- * Tills dess är varje marginal nedan en kvalificerad gissning, och UI:t säger
- * det rakt ut i stället för att presentera den som ett mätvärde.
+ * ## Varför två tal och inte ett
+ *
+ * Det stod `TOKENKOSTNAD_PER_MILJON_SEK = 12` här, ett blandat tal för "en
+ * billig modell (DeepSeek-klassen)". Två fel i det:
+ *
+ *  1. **DeepSeek körs inte.** Både `main` och `development` står på
+ *     `LLM_PROVIDER=gemini`, `MODEL=gemini-3.6-flash` (avläst i Railway
+ *     2026-08-29). DeepSeek är dessutom spärrad i varje miljö som bär
+ *     kunddata — se CLAUDE.md. Talet beskrev en leverantör vi inte använder.
+ *  2. **Utgående tokens kostar FEM gånger mer än ingående.** Ett blandat tal
+ *     är därför fel åt olika håll beroende på hur svaren ser ut: en agent som
+ *     läser mycket och skriver kort underskattas, en som skriver långa svar
+ *     överskattas. `agent_runs` har `tokens_in` och `tokens_out` var för sig,
+ *     så det finns ingen anledning att slå ihop dem.
+ *
+ * ## Var talen kommer ifrån
+ *
+ * Google, listpris för `gemini-3.6-flash`, betald nivå (hämtat 2026-08-29 från
+ * ai.google.dev/gemini-api/docs/pricing): $0,75 per miljon ingående och $3,75
+ * per miljon utgående. Växelkurs 9,5237 SEK/USD (ECB via frankfurter.dev,
+ * 2026-08-28).
+ *
+ * ## VAD DE INTE ÄR: en faktura
+ *
+ * Det finns ingen. Båda miljöerna kör på Geminis GRATISNIVÅ — felloggen är
+ * full av `generate_content_free_tier_requests, limit: 20`, och
+ * `docs/JURIDIK_ATGARDER.md` har mätt samma sak
+ * (`GenerateRequestsPerMinutePerProjectPerModel-FreeTier`). Fakturering är
+ * inte påslagen på Google-projektet, så det verkliga utfallet i kronor är noll
+ * — betalt i genomströmning (20 anrop/dygn) i stället för i pengar.
+ *
+ * Talen nedan är alltså vad det KOMMER att kosta den dag faktureringen slås på,
+ * vilket juridikspåret säger att den måste. Att sätta 0 här hade gömt en
+ * kostnad som är på väg, och att behålla 12 hade beskrivit fel leverantör.
+ *
+ * ## Fällan i januari
+ *
+ * Introduktionspriset gäller till och med 2026-12-31. Från 2027-01-01 DUBBLAS
+ * båda talen (14,29 respektive 71,43 SEK). Sätt om dem då — marginalen faller
+ * inte för att något gått sönder utan för att priset ändrades.
  */
-export const TOKENKOSTNAD_PER_MILJON_SEK = 12;
+export const TOKENKOSTNAD_IN_PER_MILJON_SEK = 7.14;
+export const TOKENKOSTNAD_UT_PER_MILJON_SEK = 35.71;
+
+/** Modellen talen gäller. Visas i fotnoten, så påståendet går att falsifiera. */
+export const TOKENKOSTNAD_MODELL = "gemini-3.6-flash";
 
 /** Marginal under detta är rött — kunden kostar nästan lika mycket som den ger. */
 export const MARGINAL_ROD = 0.5;
@@ -46,8 +88,14 @@ export type KundEkonomi = {
   /** (intäkt − kostnad) / intäkt. Null när intäkten är noll. */
   marginal: number | null;
   halsa: Halsa;
-  /** Kort mening som förklarar utfallet. Visas bredvid symbolen. */
-  motivering: string;
+  /**
+   * Kort mening som förklarar utfallet. Visas bredvid symbolen.
+   *
+   * Tvåspråkig och inte en färdig sträng: motiveringen är den enda texten i
+   * tabellen som räknas fram ur data, och hade den varit svensk hade EN/SV-
+   * knappen bytt språk på allt utom just den mening som förklarar raden.
+   */
+  motivering: Localized;
   symbol: string;
   paketNamn: string | null;
 };
@@ -76,14 +124,26 @@ export function paketForProdukter(produkter: readonly string[]): (typeof PAKET)[
 }
 
 export function tokenkostnad(tokensIn: number, tokensUt: number): number {
-  return ((tokensIn + tokensUt) / 1_000_000) * TOKENKOSTNAD_PER_MILJON_SEK;
+  return (
+    (tokensIn / 1_000_000) * TOKENKOSTNAD_IN_PER_MILJON_SEK +
+    (tokensUt / 1_000_000) * TOKENKOSTNAD_UT_PER_MILJON_SEK
+  );
 }
 
-function dagarSedan(iso: string | null): number | null {
+/**
+ * `nu` skickas IN och läses inte här.
+ *
+ * Portfoljvy är en klientkomponent, och en klientkomponent renderas två gånger
+ * — på servern och i webbläsaren. Ett `Date.now()` här hade gett två olika
+ * svar, och därmed "Ingen aktivitet på 37 dagar" i den serverrenderade HTML:en
+ * mot "38 dagar" efter hydreringen. Klockan läses en gång, på servern, och
+ * skickas ned som ett tal.
+ */
+function dagarSedan(iso: string | null, nu: number): number | null {
   if (!iso) return null;
   const då = new Date(iso).getTime();
   if (Number.isNaN(då)) return null;
-  return Math.floor((Date.now() - då) / 86_400_000);
+  return Math.floor((nu - då) / 86_400_000);
 }
 
 export function bedomKund(input: {
@@ -93,13 +153,15 @@ export function bedomKund(input: {
   korningar: number;
   arenden: number;
   senasteAktivitet: string | null;
+  /** Millisekunder sedan epok, läst EN gång på servern. Se `dagarSedan`. */
+  nu: number;
 }): KundEkonomi {
   const paket = paketForProdukter(input.produkter);
   const intakt = paket?.prisPerManad ?? 0;
   const kostnad = tokenkostnad(input.tokensIn, input.tokensUt);
   const marginal = intakt > 0 ? (intakt - kostnad) / intakt : null;
 
-  const dagar = dagarSedan(input.senasteAktivitet);
+  const dagar = dagarSedan(input.senasteAktivitet, input.nu);
   const anvander = input.korningar > 0 || input.arenden > 0;
 
   // TYST GÅR FÖRE MARGINAL, och det är hela poängen med två frågor. En kund
@@ -114,8 +176,14 @@ export function bedomKund(input: {
       symbol: "😴",
       paketNamn: paket?.namn ?? null,
       motivering: anvander
-        ? `Ingen aktivitet på ${dagar} dagar. Hör av er innan de gör det.`
-        : "Har inte börjat använda tjänsten. Uppstarten är inte klar."
+        ? {
+            sv: `Ingen aktivitet på ${dagar} dagar. Hör av er innan de gör det.`,
+            en: `No activity for ${dagar} days. Reach out before they do.`
+          }
+        : {
+            sv: "Har inte börjat använda tjänsten. Uppstarten är inte klar.",
+            en: "Has not started using the service. Onboarding is unfinished."
+          }
     };
   }
 
@@ -127,8 +195,10 @@ export function bedomKund(input: {
       halsa: "okand",
       symbol: "❔",
       paketNamn: null,
-      motivering:
-        "Ingen produkt kopplad till arbetsytan, så det finns ingen intäkt att räkna marginal på."
+      motivering: {
+        sv: "Ingen produkt kopplad till arbetsytan, så det finns ingen intäkt att räkna marginal på.",
+        en: "No product linked to this workspace, so there is no revenue to measure margin against."
+      }
     };
   }
 
@@ -140,7 +210,10 @@ export function bedomKund(input: {
       halsa: "bra",
       symbol: "🙂",
       paketNamn: paket?.namn ?? null,
-      motivering: `Använder tjänsten och kostar ${formateraPris(Math.round(kostnad))} av ${formateraPris(intakt)}.`
+      motivering: {
+        sv: `Använder tjänsten och kostar ${formateraPris(Math.round(kostnad))} av ${formateraPris(intakt)}.`,
+        en: `Actively using the service, costing ${formateraPris(Math.round(kostnad))} of ${formateraPris(intakt)}.`
+      }
     };
   }
 
@@ -152,7 +225,10 @@ export function bedomKund(input: {
       halsa: "ok",
       symbol: "😐",
       paketNamn: paket?.namn ?? null,
-      motivering: `Hög användning: ${formateraPris(Math.round(kostnad))} av ${formateraPris(intakt)} går åt. Håll ett öga.`
+      motivering: {
+        sv: `Hög användning: ${formateraPris(Math.round(kostnad))} av ${formateraPris(intakt)} går åt. Håll ett öga.`,
+        en: `Heavy usage: ${formateraPris(Math.round(kostnad))} of ${formateraPris(intakt)} consumed. Worth watching.`
+      }
     };
   }
 
@@ -163,7 +239,10 @@ export function bedomKund(input: {
     halsa: "dalig",
     symbol: "🙁",
     paketNamn: paket?.namn ?? null,
-    motivering: `Kostnaden äter upp intäkten (${formateraPris(Math.round(kostnad))} av ${formateraPris(intakt)}). Se över paket eller volym.`
+    motivering: {
+      sv: `Kostnaden äter upp intäkten (${formateraPris(Math.round(kostnad))} av ${formateraPris(intakt)}). Se över paket eller volym.`,
+      en: `Cost is eating the revenue (${formateraPris(Math.round(kostnad))} of ${formateraPris(intakt)}). Review the plan or the volume.`
+    }
   };
 }
 

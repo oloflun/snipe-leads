@@ -14,17 +14,21 @@ modellen via verktyg. Modellen resonerar, koden agerar. Det gör att
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import random
 import re
 import time
+from collections.abc import Awaitable, Callable
 from functools import partial
 from typing import Any
 
 from ..agentcore.instruktioner import las_instruktioner
 from ..agentcore.overlays import pack_version
 from ..agentcore.packs import RunLedger
+from ..cache import svarscache, versioner
+from ..minne import arbetsminne
 from ..moderation.abuse_gate import check_abuse, ton_instruktion
 from ..moderation.maskering import maskera_personnummer
 from ..leads.soul import load_soul
@@ -71,7 +75,9 @@ def strip_dangling_sign_off(text: str) -> str:
     return _DANGLING_SIGN_OFF.sub("", text.rstrip()).rstrip()
 
 
-async def _render_conversation(storage, tenant_id: str, history: list) -> tuple[str, int, str]:
+async def _render_conversation(
+    storage, tenant_id: str, customer_id: str, history: list
+) -> tuple[str, int, str]:
     """Tidigare turer som en läsbar utskrift, antalet turer, och kundens
     SENASTE tidigare replik.
 
@@ -97,6 +103,26 @@ async def _render_conversation(storage, tenant_id: str, history: list) -> tuple[
 
     if not turns:
         return "", 0, ""
+
+    # Fas R3 (bd snipe-7mk, arbetsminne — app/minne/arbetsminne.py): taket
+    # ovan (MAX_HISTORY_TICKETS/MAX_HISTORY_TURNS) rörs INTE — det är
+    # fortfarande vad som visas när samtalet är kort ELLER inget arbetsminne
+    # finns. `turns` ovan räknar bara de tre senaste ärendena, så samtalets
+    # FAKTISKA totala längd räknas separat (alla_samtalsrader, hela
+    # historiken) — annars kunde ett samtal på 30 ärenden aldrig passera
+    # tröskeln bara för att taket redan klippt bort resten innan vi hann
+    # räkna.
+    alla_rader = await arbetsminne.alla_samtalsrader(storage, tenant_id, history)
+    if len(alla_rader) > arbetsminne.TROSKEL_TOTALA_TURER:
+        post = await arbetsminne.hamta().las(tenant_id, customer_id)
+        if post and post.summering:
+            block = arbetsminne.bygg_summerat_block(
+                post.summering, alla_rader[-MAX_HISTORY_TURNS:]
+            )
+            return block, len(alla_rader), senaste_kundreplik
+        # Inget arbetsminne (eller Redis nere, vilket `las` redan gjort
+        # ekvivalent med "inget arbetsminne") — exakt dagens beteende nedan.
+
     return (
         "## Tidigare i samtalet\n" + "\n".join(turns[-MAX_HISTORY_TURNS:]),
         len(turns),
@@ -148,7 +174,17 @@ _SOKSTOPPORD = {
 
 
 def _kb_block(articles: list[dict[str, Any]]) -> str:
-    return "\n\n".join(f"### {a['title']}\n{a['content']}" for a in articles) or "(inga träffar)"
+    """KB-artiklar är kundskriven text, inte våra instruktioner — sedan Fas 5
+    dessutom uppladdad textfil eller extraherad PDF, som kan ha vidarebefordrats
+    utan att kunden läst varje rad. Wrappas därför som SOUL och affärskontexten
+    redan är (INV-SEC-012, INV-SEC-003). Positionsgarantin (case_context är
+    alltid användarposition) höll redan — det här är ramen ovanpå den."""
+    if not articles:
+        return "(inga träffar)"
+    return wrap_untrusted_content(
+        "\n\n".join(f"### {a['title']}\n{a['content']}" for a in articles),
+        source="tenant:kb_article",
+    )
 
 
 async def _sok_kb(storage: Storage, tenant_id: str, fraga: str) -> list[dict[str, Any]]:
@@ -224,6 +260,24 @@ async def run_support_agent(
     customer_email: str | None,
     customer_name: str | None,
     attachments: list[str],
+    # --- Återupptagning efter en avbruten körning (INV-JOB-001) -----------
+    # Båda None som default: OFÖRÄNDRAT beteende för varje befintlig anropare
+    # (chat.py:s create_task-väg, sim-vägen, alla tester). Se
+    # app/jobs/stream.py och app/api/chat.py för hela mekanismen.
+    #
+    # `aterta`: satt av hanteraren i chat.py när jobbposten redan bär ett
+    # ticket_id/conversation_id från ett tidigare, avbrutet försök — hoppar
+    # över create_ticket/save_message för det inkommande meddelandet och
+    # återanvänder de givna id:na, så en omkörning inte dubblettskapar ärendet.
+    #
+    # `vid_arende`: anropas med (ticket_id, conversation_id) precis EFTER att
+    # ärendet (eller återanvändningen av det) är klart — det ENDA stället en
+    # efterföljande krasch kan återupptas ifrån.
+    aterta: dict[str, str] | None = None,
+    vid_arende: Callable[[str, str], Awaitable[None]] | None = None,
+    # Fas 2.5 (snipe-vxq): admintester ska märkas i agent_runs, inte räknas
+    # som kundvolym. Samma flagga som leads-vägen redan trådar (rad ~419).
+    is_test: bool = False,
 ) -> dict[str, Any]:
     started = time.monotonic()
     settings = get_settings()
@@ -250,14 +304,7 @@ async def run_support_agent(
         descriptions = [await describe_image(url) for url in attachments]
         vision_note = "\n\n[Bildbeskrivning]:\n" + "\n".join(descriptions)
 
-    # Del E steg 6: klassificeraren körs i KOD före playbooken.
-    try:
-        intent, dissatisfaction = await classify_cancellation_risk(message)
-    except Exception:  # noqa: BLE001 — en trasig klassificerare får inte fälla ärendet
-        intent, dissatisfaction = 0.0, 0.0
-    cancellation_risk = is_cancellation_risk(intent, dissatisfaction)
-
-    # Påhoppsbedömningen görs i KOD, av samma skäl som klassificeraren ovanför:
+    # Påhoppsbedömningen görs i KOD, av samma skäl som klassificeraren nedan:
     # den avgör om samtalet ska avbrytas, och det beslutet ska inte kunna
     # pratas bort av innehållet i meddelandet. Gränsen går vid vad uttrycket
     # RIKTAS mot, inte vid hur hårt det är — se app/moderation/abuse_gate.py.
@@ -314,6 +361,67 @@ async def run_support_agent(
             "ändrats.\n\n"
             + wrap_untrusted_content("\n".join(f"- {f}" for f in fakta)[:1500], source="customer:memory")
         )
+
+    # --- Fas R2: semantisk svarscache (INV-CACHE-001) ----------------------
+    #
+    # Grinden och lookupen bor i cache-modulen (app/cache/svarscache.py) —
+    # anropas HÄR, EFTER kundminnesuppslaget (allt underlag för
+    # behörigheten — historik, bilagor, minnesfakta, PII-maskering — finns
+    # nu) och FÖRE klassificeraren nedan. Ordningen är inte kosmetisk: en
+    # TRÄFF i läge "on" ska kosta NOLL LLM-anrop, och klassificeraren
+    # (Del E steg 6, flyttad hit 2026-08-29) är själv ett LLM-anrop — den
+    # måste alltså vänta tills vi vet att den faktiskt behövs.
+    kbv = await versioner.kb_version(tenant_id)
+    cfgv = await versioner.config_version(tenant_id)
+    cache_kontext = svarscache.CacheKontext(behorig=False)
+    # `not abuse.ska_eskalera`: ett meddelande påhoppsbedömningen redan
+    # flaggat ska aldrig ens titta i cachen — eskaleringsvägen är beslutad i
+    # kod och en cachad FAQ-replik vore fel svar oavsett cosinuslikhet.
+    if settings.semantic_cache != "off" and not abuse.ska_eskalera:
+        cache_kontext = await svarscache.forbered(
+            tenant_id,
+            history=history,
+            attachments=attachments,
+            fakta=fakta,
+            message=message,
+            kbv=kbv,
+            cfgv=cfgv,
+        )
+        if cache_kontext.traff and settings.semantic_cache == "on":
+            # TRÄFF, servera: hela LLM-kedjan (triage/research/utkast/
+            # eskalering/kb-förslag/retention/humanizer) hoppas över, men
+            # ärendet+inbound+outbound bokförs precis som en vanlig körning
+            # — se svara_fran_cache för varför.
+            pack = pack_version(SUPPORT_V1.name, lager.hash)
+            return await svarscache.svara_fran_cache(
+                storage,
+                tenant_id,
+                traff=cache_kontext.traff,
+                message=message,
+                subject=subject,
+                channel=channel,
+                customer=customer,
+                max_length=config["max_length"],
+                pack=pack,
+                started=started,
+                aterta=aterta,
+                vid_arende=vid_arende,
+                is_test=is_test,
+            )
+        if cache_kontext.traff and settings.semantic_cache == "shadow":
+            # TRÄFF, mät men ändra ingenting — kedjan fortsätter oförändrad
+            # nedanför precis som vid en miss.
+            await svarscache.logga_skuggtraff(storage, tenant_id, kontext=cache_kontext)
+
+    # Del E steg 6: klassificeraren körs i KOD före playbooken. Flyttad hit
+    # (2026-08-29, Fas R2) — låg tidigare direkt efter bildbeskrivningen,
+    # men det är precis den positionen en cache-TRÄFF måste undvika för att
+    # "noll LLM-anrop" ska vara sant och inte bara nästan sant.
+    try:
+        intent, dissatisfaction = await classify_cancellation_risk(message)
+    except Exception:  # noqa: BLE001 — en trasig klassificerare får inte fälla ärendet
+        intent, dissatisfaction = 0.0, 0.0
+    cancellation_risk = is_cancellation_risk(intent, dissatisfaction)
 
     case_context = (
         f"## Ärendet\nKanal: {channel} (ton: {ton_lage}, max {config['max_length']} tecken)\n"
@@ -378,7 +486,7 @@ async def run_support_agent(
     # laddas ordagrant utan .format() (se agentcore/overlays.py), så kördata hör
     # hemma här och regeln som läser den står i support-conversation.md.
     conversation_block, turn_count, senaste_kundreplik = await _render_conversation(
-        storage, tenant_id, history
+        storage, tenant_id, customer["id"], history
     )
     conversation_state = (
         "## Samtalsläge\n"
@@ -391,22 +499,31 @@ async def run_support_agent(
     )
     case_context = f"{case_context}\n\n{conversation_state}"
 
-    ticket = await storage.create_ticket(
-        tenant_id,
-        customer_id=customer["id"],
-        subject=subject or message[:80],
-        category=category,
-        channel=channel,
-        priority="high" if triage.get("priority") in ("P1", "P2") else "normal",
-    )
-    await storage.save_message(
-        tenant_id,
-        conversation_id=ticket["conversation_id"],
-        direction="inbound",
-        content=message,
-        sentiment=sentiment,
-        has_image=bool(attachments),
-    )
+    if aterta:
+        # Återupptagen körning (INV-JOB-001): ärendet och det inkommande
+        # meddelandet skapades redan i det avbrutna försöket — skapa dem
+        # inte igen, annars fick kunden två ärenden och två inbound-rader av
+        # EN chatt.
+        ticket = {"id": aterta["ticket_id"], "conversation_id": aterta["conversation_id"]}
+    else:
+        ticket = await storage.create_ticket(
+            tenant_id,
+            customer_id=customer["id"],
+            subject=subject or message[:80],
+            category=category,
+            channel=channel,
+            priority="high" if triage.get("priority") in ("P1", "P2") else "normal",
+        )
+        await storage.save_message(
+            tenant_id,
+            conversation_id=ticket["conversation_id"],
+            direction="inbound",
+            content=message,
+            sentiment=sentiment,
+            has_image=bool(attachments),
+        )
+    if vid_arende:
+        await vid_arende(ticket["id"], ticket["conversation_id"])
 
     # --- Kod: KB-sökning (underlaget cs:customer-research resonerar kring) --
     #
@@ -769,9 +886,66 @@ async def run_support_agent(
         tenant_id, ticket_id=ticket["id"], metric_name="sentiment", value=sentiment
     )
 
+    # --- Fas R2: cache-STORE (INV-CACHE-001) --------------------------------
+    #
+    # Bara när lookup-villkoren höll (cache_kontext.behorig — samma fråga
+    # som slogs upp ovan, alltså tom historik/inga bilagor/tomt
+    # kundminne/ingen PII) OCH svaret inte eskalerade OCH kategorin är en av
+    # de rena faktafrågorna (svarscache.CACHEBARA_KATEGORIER). En "on"-TRÄFF
+    # når aldrig hit — den grenen returnerade redan högre upp — så det här
+    # är bara miss/off/shadow-vägen.
+    if (
+        settings.semantic_cache in ("on", "shadow")
+        and cache_kontext.behorig
+        and not escalated
+        and category in svarscache.CACHEBARA_KATEGORIER
+    ):
+        await svarscache.spara(
+            tenant_id,
+            kbv=kbv,
+            cfgv=cfgv,
+            vektor=cache_kontext.vektor,
+            fraga_norm=cache_kontext.fraga_norm,
+            svar=reply,
+            kategori=category,
+        )
+
+    # --- Fas R3: arbetsminnet uppdateras ASYNKRONT, fire-and-forget --------
+    #
+    # Görs sist, EFTER att svaret redan är sparat ovan och INNAN funktionen
+    # returnerar — men startas som en egen task i stället för att `await`:as.
+    # Det är MEDVETET: kunden har redan fått sitt svar, och att låta hen
+    # vänta på ännu ett LLM-anrop bara för att uppdatera en bakgrundssummering
+    # vore att sälja latens för ingenting kunden ser. Och tappas
+    # uppdateringen (processen dör innan tasken hinner köra klart) är det
+    # ofarligt: hela samtalet ligger redan kvar i Postgres och sammanfattas
+    # på nytt så fort nästa tur passerar tröskeln igen — samma
+    # "rekonstruerbart ur Postgres, ingen kunddata bor bara i Redis"-princip
+    # som resten av Redis-lagret (plan §3). En förlorad uppdatering är alltså
+    # en sämre prompt NÄSTA gång, aldrig en förlorad sanning.
+    #
+    # Historiken hämtas FÄRSK här (inte samma `history`-variabel som ovan,
+    # som lästes FÖRE det här ärendet skapades) — det just sparade
+    # inbound/outbound-paret måste räknas med för att turantalet ska stämma.
+    historik_efter_svaret = await storage.get_customer_history(tenant_id, customer["id"])
+    alla_rader_nu = await arbetsminne.alla_samtalsrader(storage, tenant_id, historik_efter_svaret)
+    turantal_nu = len(alla_rader_nu)
+    if turantal_nu >= arbetsminne.UPPDATERA_MIN_TOTALA_TURER:
+        tidigare_post = await arbetsminne.hamta().las(tenant_id, customer["id"])
+        tackta_turer = tidigare_post.tackta_turer if tidigare_post else 0
+        if (turantal_nu - tackta_turer) >= arbetsminne.UPPDATERA_MIN_NYA_TURER:
+            asyncio.create_task(
+                arbetsminne.uppdatera_arbetsminne(
+                    tenant_id,
+                    customer["id"],
+                    alla_rader=alla_rader_nu,
+                    turantal=turantal_nu,
+                )
+            )
+
     latency_ms = int((time.monotonic() - started) * 1000)
     pack = pack_version(SUPPORT_V1.name, lager.hash)
-    await storage.log_agent_run(
+    run = await storage.log_agent_run(
         tenant_id,
         agent_type="support",
         pack_version=pack,
@@ -782,10 +956,18 @@ async def run_support_agent(
         tokens_in=trace.total_tokens_in,
         tokens_out=trace.total_tokens_out,
         latency_ms=latency_ms,
+        is_test=is_test,
+        # Migration 055 — samma provider+modell som get_agent_model() faktiskt
+        # skickade anropen till.
+        model=f"{settings.llm_provider}:{settings.model}",
     )
 
     return {
         "reply": reply,
+        # Fas 6.2 (Testchatt): utan körnings-id:t går feedback inte att koppla
+        # — POST /api/agent/feedback tar run_id, och jobbsvaret var den enda
+        # plats som inte bar det.
+        "run_id": (run or {}).get("id"),
         "ticket_id": ticket["id"],
         "customer_id": customer["id"],
         "category": category,

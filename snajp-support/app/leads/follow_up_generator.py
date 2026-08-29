@@ -51,6 +51,7 @@ from ..agent.tools import strip_markdown
 from ..agentcore.instruktioner import las_instruktioner
 from ..agentcore.overlays import pack_version
 from ..agentcore.packs import Playbook, PlaybookStep, RunLedger
+from ..config import get_settings
 from .follow_up import LEVERS
 from .gissnings_gate import check_gissningar
 from .grounding_gate import build_permitted_facts, check_grounding
@@ -199,6 +200,7 @@ async def _en_uppfoljning(
     lager,
 ) -> dict[str, Any]:
     started = time.monotonic()
+    settings = get_settings()
     thread_id = str(thread["id"])
     company_name = thread.get("company_name") or "prospektet"
     prospect_email = thread.get("prospect_email") or thread.get("contact_email") or ""
@@ -318,5 +320,6 @@ async def _en_uppfoljning(
         tokens_in=trace.total_tokens_in,
         tokens_out=trace.total_tokens_out,
         latency_ms=int((time.monotonic() - started) * 1000),
+        model=f"{settings.llm_provider}:{settings.model}",
     )
     return utfall

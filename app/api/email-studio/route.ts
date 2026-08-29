@@ -29,8 +29,10 @@ export const maxDuration = 60;
  * klient når båda — bara base_url och modellnamn skiljer.
  *
  * Ordningen är avsiktlig. OPENAI_API_KEY vinner när den finns, så att ett
- * senare byte tillbaka inte kräver en kodändring. Saknas den används DeepSeek.
- * Saknas båda simulerar routen, som förut, och SÄGER det i svaret.
+ * senare byte tillbaka inte kräver en kodändring. Saknas den provas Gemini —
+ * samma leverantör backenden redan kör live mot, se plans/2026-08-28. Saknas
+ * även den används DeepSeek (bara lokalt). Saknas alla tre simulerar routen,
+ * som förut, och SÄGER det i svaret.
  */
 function valjModell() {
   const openaiKey = process.env.OPENAI_API_KEY || "";
@@ -38,6 +40,21 @@ function valjModell() {
     return {
       klient: createOpenAI({ apiKey: openaiKey }),
       namn: process.env.EMAIL_STUDIO_MODEL || "gpt-4o-mini"
+    };
+  }
+
+  const geminiKey = process.env.GEMINI_API_KEY || "";
+  if (dugerSomNyckel(geminiKey)) {
+    return {
+      // Samma OpenAI-kompatibla endpoint som backenden använder
+      // (snajp-support/app/agent/llm.py) — håll adressen synkad med den.
+      klient: createOpenAI({
+        apiKey: geminiKey,
+        baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/"
+      }),
+      // MODEL, inte EMAIL_STUDIO_MODEL: samma variabelnamn som backenden, så
+      // att en delad Railway-variabel styr modellvalet på båda ställena.
+      namn: process.env.MODEL || "gemini-3.6-flash"
     };
   }
 
@@ -560,6 +577,10 @@ export async function POST(request: NextRequest) {
     data: {
       ...rich,
       action: kandAction,
+      // Explicit false, inte frånvaro: kontrollen i Fas 1 ("svaret returnerar
+      // simulated: false") ska gå att läsa rakt ur JSON, och en klient ska
+      // aldrig behöva veta att frånvaro råkar betyda samma sak.
+      simulated: false,
     }
   });
 }

@@ -46,7 +46,14 @@ KEYS = [
     Key(
         "DEEPSEEK_API_KEY",
         [BACKEND_ENV],
-        "DeepSeek — driver ALLA agentkörningar. Utan denna kan ingenting testas.",
+        # Texten sa "driver ALLA agentkörningar" fram till 2026-08-28. Det var
+        # sant före 24 augusti och direkt vilseledande efteråt: DeepSeek är
+        # sedan dess spärrad mot allt som bär kunddata (CLAUDE.md), och Gemini
+        # driver chatten. En prompt som påstår motsatsen får någon att sätta
+        # fel provider och sedan undra varför tjänsten vägrar starta.
+        "DeepSeek — BARA för lokala körningar mot syntetisk data. Spärrad i "
+        "main och development (tredjelandsöverföring, se CLAUDE.md). Krävs "
+        "för att jämföra providers lokalt i Fas 6; annars valfri.",
         required=True,
         where="https://platform.deepseek.com/api_keys",
     ),
@@ -59,11 +66,18 @@ KEYS = [
     ),
     Key(
         "GEMINI_API_KEY",
-        [BACKEND_ENV],
-        "Gemini (gratisnivå) — bildbeskrivning i supportärenden + KB-embeddings. "
-        "UTAN denna föll KB-sökningen tillbaka på svensk fulltext i skarpa "
-        "tester 2026-08-07 och missade uppenbara träffar (se HANDOFF.md Steg 0) "
-        "— sätt den innan nästa testomgång.",
+        # BÅDA filerna sedan 2026-08-28. Backenden har alltid läst den; webben
+        # behöver den för Email-studion, vars modellväljare annars faller
+        # tillbaka på mallgenererad text. Att skriva båda i samma inklistring
+        # är skillnaden mot att bli ombedd att klistra in samma nyckel två
+        # gånger med en veckas mellanrum.
+        [BACKEND_ENV, FRONTEND_ENV],
+        "Gemini — driver numera CHATTEN (agentkörningarna), plus "
+        "bildbeskrivning i supportärenden och KB-embeddings. UTAN denna föll "
+        "KB-sökningen tillbaka på svensk fulltext i skarpa tester 2026-08-07 "
+        "och missade uppenbara träffar (se HANDOFF.md Steg 0). Nyckelns "
+        "PROJEKT måste vara kopplat till ett faktureringskonto, annars gäller "
+        "gratisnivåns 20 anrop/dygn oavsett hur nyckeln ser ut (snipe-zfn).",
         required=False,
         where="https://aistudio.google.com/apikey",
     ),
@@ -100,6 +114,17 @@ KEYS = [
     ),
 ]
 
+# Startvärden för en TOM uppsättning — de skrivs bara när fältet saknas eller
+# står på en platshållare. De ÖVERSKRIVER aldrig ett värde någon valt.
+#
+# Varför villkoret finns (2026-08-28): blocket tillämpades tidigare
+# ovillkorligt i slutet av `cmd_set`, så den som klistrade in en Gemini-nyckel
+# fick `LLM_PROVIDER=deepseek` på köpet och skriptet skrev ut att det gjort
+# det. Med en fjärr-DATABASE_URL i samma fil vägrar backenden sedan starta
+# (`Settings.llm_provider_fault`), och felet pekar på providern i stället för
+# på skriptet som satte den. Samma klass som scripts/railway_provision.py:319
+# (snipe-u70): ett verktyg man når efter för att LAGA en konfiguration ska
+# inte ändra en annan del av den i tysthet.
 FIXED = {BACKEND_ENV: {"LLM_PROVIDER": "deepseek", "MODEL": "deepseek-v4-flash"}}
 
 
@@ -218,7 +243,7 @@ def cmd_set(bara: str | None = None) -> None:
     guard_gitignored()
     print(f"Repo: {ROOT}")
     print("Lämna tomt för att hoppa över (befintligt värde behålls).")
-    print("Du behöver BARA DeepSeek för att komma igång — de andra kan vänta.\n")
+    print("GEMINI_API_KEY är den som driver agenten i drift — börja där.\n")
 
     for key in KEYS:
         if bara is not None and key.name != bara:
@@ -240,10 +265,23 @@ def cmd_set(bara: str | None = None) -> None:
             upsert(path, key.name, value)
         print(f"  -> sparad i {', '.join(p.name for p in key.files)}\n")
 
+    satta = []
     for path, pairs in FIXED.items():
+        befintliga = read_env(path)
         for name, value in pairs.items():
+            # OBS: `looks_placeholder` duger INTE här. Den mäter nyckellängd
+            # (<20 tecken = platshållare), och ett providernamn är kort per
+            # definition — "gemini" är sex tecken. Ett första försök använde
+            # den och skrev över `LLM_PROVIDER=gemini` ändå. För de här
+            # fälten finns bara två lägen: satt eller osatt.
+            if befintliga.get(name, "").strip():
+                continue  # någon har valt ett värde — rör det inte
             upsert(path, name, value)
-    print("Satte LLM_PROVIDER=deepseek, MODEL=deepseek-v4-flash\n")
+            satta.append(f"{name}={value}")
+    if satta:
+        print("Satte startvärden: " + ", ".join(satta) + "\n")
+    else:
+        print("Provider och modell var redan satta — lämnade dem orörda.\n")
     cmd_check()
 
 

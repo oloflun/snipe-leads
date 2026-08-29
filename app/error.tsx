@@ -2,6 +2,8 @@
 
 import { useEffect } from "react";
 
+import { btnPrimary } from "@/components/ui";
+
 /**
  * Felgräns för hela den routade ytan. Fanns inte förrän 2026-08-27, och
  * följden var mätbar: ett okastat serverfel i en server-komponent gav Nexts
@@ -17,10 +19,10 @@ import { useEffect } from "react";
 export default function Error({
   error,
   reset
-}: {
+}: Readonly<{
   error: Error & { digest?: string };
   reset: () => void;
-}) {
+}>) {
   useEffect(() => {
     console.error("app/error.tsx fångade:", error);
   }, [error]);
@@ -33,18 +35,24 @@ export default function Error({
         </h1>
         <p className="mt-4 text-[17px] leading-8 text-ink2">
           Felet är loggat på vår sida. Prova igen — hjälper inte det, mejla{" "}
-          <a href="mailto:hej@snajp.se" className="text-ochre">
-            hej@snajp.se
+          <a href="mailto:kontakt@snajp.se" className="text-ochre">
+            kontakt@snajp.se
           </a>
-          {error.digest ? ` och ange felkoden ${error.digest}` : ""}.
+          .
         </p>
-        <button
-          type="button"
-          onClick={reset}
-          className="mt-8 inline-flex min-h-11 items-center rounded-full bg-ink px-6 text-[15px] font-medium text-paper"
-        >
-          Försök igen
-        </button>
+        {/* Felkoden på egen rad. Inbakad i meningen läste den som brus mitt i
+            en text man ändå skummar — sedd i skärmdump. Fristående blir den
+            det den är: en referens att citera för supporten. */}
+        {error.digest ? (
+          <p className="mt-3 text-[13px] tracking-[0.04em] text-mineral">
+            FELKOD {error.digest}
+          </p>
+        ) : null}
+        <div className="mt-8 flex justify-center">
+          <button type="button" onClick={reset} className={btnPrimary}>
+            Försök igen
+          </button>
+        </div>
       </div>
     </main>
   );

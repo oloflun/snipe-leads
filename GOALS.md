@@ -1,7 +1,7 @@
 ---
 type: goals
 project_slug: snipe-leads
-updated: 2026-08-26
+updated: 2026-08-29
 updated_by: claude
 ---
 
@@ -77,12 +77,32 @@ tydligt inte nått i dag, och de två sakerna som saknas är konkreta:
   åtgärder listades innan pausen fick hävas. Pausen är hävd — men ingen av de
   fyra är gjord. Riktiga kundmejl går just nu dit igen. Spårat som `snipe-a1c`,
   och det kräver ett beslut av Anton, inte kod.
+  **Skärpt 2026-08-28:** den tekniska pusselbiten (varför gratisnivån
+  fortfarande gäller trots ett betalt faktureringskonto) är löst — nyckelns
+  Google-PROJEKT var inte kopplat till kontot, en ren konsolinställning, inte
+  ett nytt köp. Det gör åtgärdslistans andra punkt ("aktivera
+  fakturering/byt provider") billig att göra klar, men de tre juridiska
+  punkterna (DPA, dataregion, PUB-villkor) kvarstår olösta och är fortfarande
+  Antons beslut. Anton har kopplat ett nytt projekt och bytt nyckel samma
+  kväll — inte verifierat live vid sessionens slut.
 - [ ] 10. Uppdatera produktionen till samma kod som utvecklingsmiljön. `main`
   ligger ungefär 80 commits efter och saknar sju databasmigreringar. Spårat som
   `snipe-zfc`. Bör inte göras före punkt 9 — annars flyttas problemet bara.
-- [ ] 11. Koppla in riktig mejlsändning (`snipe-ork`). Kräver att varje kunds
-  egna avsändaruppgifter modelleras, och att den kopplas ihop med
-  autonomigrinden som avgör vad agenten får skicka själv.
+  **Skärpt 2026-08-28:** den dokumenterade deploy-vägen (`git push origin
+  main:railway-main`) är dessutom farlig som den står — `main` ligger 152
+  commits EFTER `railway-main`, så den kommandot skulle rulla tillbaka
+  produktionen, inte flytta den framåt. Se `plans/2026-08-28-skarpa-korningar-och-produktion.md`
+  §8.1 för den verifierade ordningen (merge, inte push). Spårat som
+  `snipe-jvj`.
+- [ ] 11. Koppla in riktig mejlsändning (`snipe-ork`). **Byggd och konfigurerad
+  i `development` 2026-08-27–29:** en HTTPS-sändväg (Resend, väljs eftersom
+  Railway blockerar utgående SMTP på nuvarande plan) med `kontakt@snajp.se`
+  som avsändare, satt och bekräftad i Railways variabellager. **Bekräftad
+  live 2026-08-29:** varningen "Ingen riktig sändväg" är borta ur
+  `/health/ready` — bara IMAP-varningen kvarstår. Inget riktigt mejl är
+  ännu skickat och verifierat i Resends dashboard. Kvar: varje kunds egna avsändaruppgifter (i dag ett globalt
+  konto) och kopplingen till autonomigrinden. `main` saknar fortfarande
+  sändväg helt.
 - [ ] 12. Koppla ihop uppföljningskedjan (`snipe-3dx`). Funktionen som bygger
   uppföljningsmejl 2–N finns färdig men anropas bara från testerna — inget
   produktionsflöde använder den. Löftet "planerar uppföljningar" i
@@ -131,6 +151,14 @@ tydligt inte nått i dag, och de två sakerna som saknas är konkreta:
 
 ### Föreslaget — ej beslutat
 
+- **Agentplattformens minnes- och hastighetslager (Redis).** Beställt av Anton
+  2026-08-29 och BYGGT samma dag (pushat till development, se
+  `HANDOFF-2026-08-29-REDIS-OCH-FASERNA.md`): chattkörningar som överlever deployments
+  (hållbar kö med återtag), tenant-skopad semantisk svarscache (svar på
+  återkommande frågor på under en sekund utan modellanrop — direkt lindring av
+  Gemini-kvoten), och rullande samtalssummering så långa samtal inte tappar
+  kontext. Postgres förblir systemets minne; Redis bär bara det som tål att
+  försvinna. Plan: `plans/2026-08-29-redis-agentarkitektur.md`.
 - **Riktig mejlsändning från kundens egen domän.** Finns som en tydlig lucka i
   koden med en namngiven plats där det ska in. Förslaget finns för att produkten
   annars inte gör det den säljs som att göra.
@@ -204,5 +232,24 @@ rebase. Ändringar behöver samordnas, inte bara pushas.
 
 ## Ändringslogg
 
+- 2026-08-29 — claude — sjufasplanen + Redis-arkitekturen byggd och pushad
+  till development (Fas 1–6 + R0–R4; Fas 7-deploydelen och R5 spärrade per
+  §8.1a). Fyra nya invarianter. B1 skärpt med mätdata: nya Gemini-nyckeln
+  ~170 s/anrop och Railway kör fortfarande den gamla — Antons konsolsteg
+  kvarstår. Redis Cloud + Resend införda som underbiträden i juridikkedjan.
+- 2026-08-29 — claude — punkt 11 (mejlsändning) uppdaterad: Sebbe byggde
+  Resend-sändvägen 27–28 aug efter att ha mätt att Railway blockerar SMTP;
+  den här sessionen konfigurerade den i `development` (`kontakt@snajp.se`),
+  inte ännu bekräftad live. Se `session-logs/2026-08-29-session-log.md`.
+- 2026-08-28 — claude — punkt 9 skärpt: Gemini-gratisnivån berodde på ett
+  okopplat Google-projekt, inte utebliven betalning; punkt 10 skärpt: den
+  dokumenterade `main`-deployen skulle ha rullat tillbaka produktionen
+  (`snipe-jvj`) — se `plans/2026-08-28-skarpa-korningar-och-produktion.md`
 - 2026-08-26 — claude — skapad, ur kod, statusjournal, sessionsloggar, öppna
   arbetsposter och hubbfilen
+- 2026-08-29 (kväll) — claude — punkt 9 (Gemini-nivån) mätt igen och kvantifierad:
+  både `main` och `development` ligger kvar på gratisnivån, och adminytan visar nu
+  vad drift på betald nivå kostar (7,14 kr in / 35,71 kr ut per miljon tokens för
+  `gemini-3.6-flash`, dubblas 2027-01-01). Målbilden i övrigt orörd — sessionen
+  var gränssnittsarbete i adminytan, se
+  `plans/2026-08-29-adminytan-exempeldata-och-sprak.md`.

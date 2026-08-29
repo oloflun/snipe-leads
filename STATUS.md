@@ -1,5 +1,171 @@
 # Snipra Status
 
+## 2026-08-29 (sen kväll) — Claude/Sebbe — adminytan fylld, tvåspråkig och läsbar; tokenkostnaden satt till leverantörens riktiga pris
+
+**Utgångspunkt: tre skärmbilder.** Kolumner fulla av nollor i Översikt och
+Kunder & Data, engelska flikar över svenska tabellrubriker, och ett notiscenter
+som visade leverantörernas råa JSON-fel som brödtext.
+
+**Byggt och deployat (sex commits, alla `SUCCESS` på development):**
+- **Exempeldata** (`lib/admin/exempeldata.ts`) på arbetsytor HELT utan
+  aktivitet. Deterministiskt härlett ur tenantens id, sex profiler, varje rad
+  märkt `Exempel` och räknad i en fotnot. Rader med riktig aktivitet — Nordlys
+  Handel, Snajp — rörs aldrig. Av med `NEXT_PUBLIC_ADMIN_EXEMPELDATA=av`.
+- **Tvåspråkig adminyta** (`lib/admin/sprak.ts`). Kolumnrubriker, hälsotexter,
+  statistik, rådgivarens frågor och svar, fotnoter, plattformsflikar. Språkvalet
+  sparas i `localStorage` — det snäppte förut tillbaka vid varje omladdning.
+- **Läsbara händelsetexter** (`lib/admin/handelsetext.ts`). Tio tolkare gör om
+  undantagstext till rubrik och förklaring; råtexten ligger kvar bakom
+  "Tekniska detaljer". `RateLimitError: Error code: 429 - [{'error'...` blev
+  "Kvoten hos Google Gemini (gemini-3.6-flash) är slut".
+- **Statistikgrafen** fylls av exempelraderna, utspridda över hela
+  tolvveckorsfönstret. Demoytorna (`nordlys-handel`, `public-demo`) räknas
+  aldrig som kunder, oavsett märke.
+
+**Hydreringsbugg hittad och rättad i samma andetag.** Konverteringen till
+klientkomponenter tog med `Date.now()` och tidszonsberoende datumformatering
+över server/klient-gränsen: servern kör UTC, webbläsaren Europe/Stockholm, och
+en tidsstämpel strax före midnatt UTC blev olika datum i de två renderingarna.
+Klockan läses nu en gång på servern och skickas ned som `nu: number`; tidszonen
+är spikad i `sprak.ts`. Verifierat med Playwright mot tre webbläsartidszoner,
+med och utan fixen — ett hydreringstest som inte kan falla bevisar ingenting.
+
+**Tokenkostnaden var fel om fel leverantör.** `TOKENKOSTNAD_PER_MILJON_SEK = 12`
+beskrev "DeepSeek-klassen". Railway säger `LLM_PROVIDER=gemini`,
+`MODEL=gemini-3.6-flash` i BÅDA miljöerna, och DeepSeek är dessutom spärrad där
+kunddata finns. Konstanten är nu två, eftersom utgående tokens kostar fem gånger
+mer än ingående: **7,14 kr in / 35,71 kr ut per miljon**, Googles listpris
+omräknat till 9,5237 SEK/USD.
+
+**MÄTT: faktureringen hos Google är fortfarande inte påslagen.** Felloggen visar
+`generate_content_free_tier_requests, limit: 20`, samma sak som
+`docs/JURIDIK_ATGARDER.md` mätte. Det verkliga utfallet i kronor är alltså noll
+— betalat i genomströmning i stället för i pengar — och talen ovan visar vad det
+kostar den dag faktureringen slås på. **Listpriset dubblas 2027-01-01**
+(14,29 / 71,43); står i docstringen så att marginalfallet inte läses som en bugg.
+
+**Kvarstår:** marginalkolumnen är i praktiken konstant 100 % vid realistiska
+volymer — ett paket på 6 990 kr tål ~39 miljoner utgående tokens innan
+marginalen ens blir gul. Det är en egenskap hos affären, inte hos koden, och
+kräver ett beslut när en riktig faktura finns.
+
+Session: `session-logs/2026-08-29-session-log-4.md` ·
+Plan: `plans/2026-08-29-adminytan-exempeldata-och-sprak.md`
+
+## 2026-08-29 (kväll) — Claude/Sebbe — main och development delade Redis-nyckelrymd: jobbströmmen korsade miljögränsen
+
+**Hittat genom att svara på varför `redis-cli` inte fanns på Windows.** Mätt
+mot Railways API och den körande instansen: `main` och `development` har
+IDENTISK `REDIS_URL`, båda svarade `jobs: redis`, och ingen nyckel bar miljö.
+Redis Cloud-gratisnivån ger EN logisk databas (`SELECT 1` → "DB index is out
+of range"), så miljöerna låg i samma nyckelrymd.
+
+**Aktivt exponerat, inte teoretiskt:**
+- **Jobbströmmen.** En enda consumer group `agenter` på `crm:jobb:chatt`, med
+  konsumenter från NIO containrar. En grupp delar ut varje post till exakt EN
+  konsument — ett chattjobb från en riktig kund kunde alltså köras av en
+  development-container mot spegeldatabasen, och tvärtom. Att en specifik
+  körning korsade går inte att bevisa i efterhand (pending var 0, ingen
+  per-post-logg); exponeringen var det.
+- **Arbetsminnet** (`minne:{tenant}:{kund}`). Kopplas in så fort `REDIS_URL`
+  finns, alltså i båda miljöerna, och development speglar produktionen med
+  IDENTISKA tenant- och kund-id:n.
+
+**Latent, inte aktivt:** svarscachen delade `svarscache_idx` (filtrerar på
+`tenant`), men `SEMANTIC_CACHE` är osatt i main och defaulten är `off` — den
+hade blivit aktiv i samma sekund någon slog på den. Embeddingcachen delas
+också, vilket är ofarligt (ren funktion av texten).
+
+**Åtgärdat i kod:** nio ytor går nu genom `app/redisnycklar.nyckel()` —
+jobbposter, chatt- och leadsströmmarna, embeddingcachen, KB- och
+konfigversionerna, arbetsminnet, samt svarscachens nycklar OCH dess FT-index.
+Fröet är HELA DSN:en plus miljönamnet, och det är ett mätresultat: första
+utkastet hashade värd + databasnamn och hade varit VERKNINGSLÖST, eftersom
+båda miljöerna kör mot `postgres.railway.internal:5432/railway` som
+`snajp_app` — bara lösenordet skiljer. `INV-REDIS-001` prövar exakt det
+fallet, och är verifierad genom att brytas med flit.
+
+**Verifierat mot körande Redis efter deploy:** `nsb340e34a:crm:jobb:chatt`
+och `...:leads` finns nu med egna konsumenter. Development har lämnat den
+delade rymden, alltså är korskopplingen stängd framåt. 1998 tester gröna.
+
+**KVAR — Antons hand:** `main` kör fortfarande på de onamnrymdade nycklarna
+tills den deployas (tvåstegspushen + NO-GO-listan). Den är ensam där nu, så
+exponeringen är borta, men produktionen får sin namnrymd först vid deploy.
+Egen Redis-instans åt `main` (plan R5) kräver betald nivå och är fortfarande
+rätt slutläge. Redis-lösenordet klistrades in i klartext i en chatt — rotera
+det i Redis Cloud när tillfälle ges.
+
+## 2026-08-29 (morgon) — Claude — sjufasplanen + Redis-arkitekturen byggd, verifierad och PUSHAD till development
+
+**Hela beställningen från 2026-08-28 är implementerad** (Fas 1–6 + Fas 7:s
+förberedelse) plus den nya Redis-arkitekturen (Fas R0–R4), tre commits
+(`cb05da0`, `f25e91b`, `0512ab3`). Arbetet dirigerades till nio
+Sonnet-delagenter med egen granskning av varje leverans — viktigaste
+egenfyndet var RediSearch TAG-escapningsbuggen (UUID-bindestreck), som
+BARA liveverifieringen mot dev-databasens riktiga Query Engine kunde se.
+
+**Chattkörningar överlever nu en deploy** (Redis Streams + XAUTOCLAIM +
+idempotent återupptagning, INV-JOB-001), **semantisk svarscache** i
+mörkstartsläge (`SEMANTIC_CACHE=shadow` satt i dev — träffkvot läses i
+Händelser; INV-CACHE-001 med PII-/minnes-/påhopps-/kategorigrindar),
+**rullande samtalsminne** (INV-MEM-002), Testchatt-flik mot inloggad tenant,
+befordran test→riktigt konto med Luhn-validering, `agent_runs.model`,
+`origin='test'` hela vägen. Migration 054+055 applicerade FÖRE pushen.
+**1586+362 tester gröna** (101 nya), tsc rent, `qa_vyer` GRÖNT mot live dev,
+uppstartsloggen visar ström-workers + cachelager aktiva.
+
+**B1 skärpt med mätdata:** nya Gemini-nyckeln svarar ~170 s/anrop (strypt
+kö) och Railway kör fortfarande GAMLA nyckeln i båda miljöerna —
+chatt-E2E:t på dev gick hela strömkedjan och föll exakt på 429-dygnskvoten.
+**Antons kommandolista** (allt förberett, klassificeraren krävde
+människohand): `redis_tls_pa.py --apply` (TLS är AV — trafiken okrypterad,
+regionen EU-verifierad), `gemini_web_konfig.py --apply`, Redis DPA,
+B1-konsolsteget. Redis Cloud + Resend står nu som underbiträden i
+juridikkedjan; Resend-sändvägen bekräftad live (varningen borta).
+
+Fullständig karta: [HANDOFF-2026-08-29-REDIS-OCH-FASERNA.md](HANDOFF-2026-08-29-REDIS-OCH-FASERNA.md)
+· [plans/2026-08-29-redis-agentarkitektur.md](plans/2026-08-29-redis-agentarkitektur.md)
+· [session-logs/2026-08-29-session-log-3.md](session-logs/2026-08-29-session-log-3.md)
+
+## 2026-08-29 — Claude — Sebbes 24 commits genomgångna, Resend + Redis konfigurerade i development
+
+**Läste in och redogjorde för allt Sebbe (med Claude) byggt sedan Antons
+senaste commit (`090a0ba` → `9d15d73`, 24 commits, tre nätter):**
+lanseringsgranskningen (triage-timtak, dev-masternyckelvakt,
+`agent_feedback`-sortering, fyra frontend-fixar), mejlsändningen i tre steg
+(SMTP byggd → uppmätt att Railway blockerar utgående SMTP på trial-planen →
+byggd om till Resend/HTTPS), och adminfliken "Kunder & Data" (kundregister
+med käll-märkning per fält, statistik, felöversikt — intäkter/utgifter
+medvetet INTE byggt som siffror, väntar på Antons beslut om datakälla). Full
+detalj i `HANDOFF-2026-08-27-GRANSKNING.md` och
+`HANDOFF-2026-08-29-KUNDER-DATA.md`.
+
+**Resend satt i `development`:** `RESEND_API_KEY`, `EMAIL_PROVIDER=resend`,
+`SMTP_FROM=kontakt@snajp.se` — bekräftat i Railways variabellager, men
+deployen stod kvar som `BUILDING` vid sessionens slut och `/health/ready`
+visade fortfarande varningen om saknad sändväg i sista kontrollen. Inget
+fel, bara inte utrullad än — nästa session kollar `curl .../health/ready`
+igen innan den litar på att den är live.
+
+**Redis Cloud kopplad som jobbkö.** Ny databas ("Snajp-Chat-Data") satt som
+`REDIS_URL` på `development/api` (`scripts/redis_konfig.py`, nytt).
+**Bekräftat live:** `/health` svarar `"jobs":"redis"` — en omstart av
+`api`-tjänsten tappar inte längre pågående chatt-/leads-jobb. Redis Clouds
+konto-nivå-API sparat i `.env.deploy` (`scripts/redis_cloud_nycklar.py`,
+nytt) efter en felsökning som visade att Cloudflare (framför Redis Clouds
+API) blockerade Pythons standard-`User-Agent` — inget fel i nyckelparet, som
+det först såg ut som. Förkravet för att provisionera fler Redis-databaser är
+nu på plats; vad de ska användas till är en öppen fråga till Anton.
+
+Redis-databasen delas INTE med `main` — samma tysta-korskoppling-resonemang
+som redan gäller `GEMINI_API_KEY`. `main` har fortfarande varken Resend,
+Redis eller Kunder & Data; produktionsspärren från
+`plans/2026-08-28-skarpa-korningar-och-produktion.md` §8.1a gäller
+oförändrat, allt arbete gick mot `development`.
+
+Fullständig sessionslogg: [session-logs/2026-08-29-session-log.md](session-logs/2026-08-29-session-log.md)
+
 ## 2026-08-29 (natt) — Claude/Sebbe — adminfliken Kunder & Data: kundregister, statistik, felöversikt
 
 **Live i development, migration 053 körd.** Handoff till Anton:
@@ -35,6 +201,51 @@ stället för att visa påhittade siffror. Datakälla är Antons beslut.
 nya detaljvyn besiktigad inloggad (noll JS-fel, noll 4xx). Lokal fullstack gick
 inte att resa — pgvector saknas i lokala PostgreSQL 17 — så UI:t granskades via
 en okommittad preview-route + Playwright på 1440/375 i båda lägena.
+
+## 2026-08-28 — Claude — sjufasplan för skarpa körningar, produktionsspärren hittad, Loopia satt
+
+Anton bad om sju saker på en gång: gör alla körningar skarpa, skilj
+testkörningar från kundens riktiga konto, prospektbefordran, Email-studion
+in i leaden, en Testchatt-flik, minst 10 riktiga rundor DeepSeek/Gemini, och
+förberedd produktion på `main`. Fem parallella delagenter kartlade ytan;
+varje bärande fynd verifierades själv innan det gick in i planen —
+[plans/2026-08-28-skarpa-korningar-och-produktion.md](plans/2026-08-28-skarpa-korningar-och-produktion.md),
+17 `bd`-ärenden med beroenden, publicerat sammanfattningsdokument.
+
+**Varför körningarna ser autogenererade ut — fyra oberoende orsaker.**
+Email-studions modellväljare kände aldrig till Gemini (bara OpenAI/DeepSeek),
+föll alltid till mallgenererad text; exempelbolagen är deterministiska med
+flit men oskiljbara från en AI-körning i UI:t; Gemini kör gratisnivå (20
+anrop/dygn) trots betalt faktureringskonto — nyckelns PROJEKT var inte
+kopplat till kontot; ingen sändväg finns (varken IMAP in eller SMTP ut).
+Simuleringsläget i backenden var **inte** aktivt — båda miljöer `mode: live`.
+
+**Produktionsdeployen är farligare än dokumenterat.** `git rev-list` mot
+`origin` visade `main` som strikt förfader till `railway-main` (152 commits
+efter, noll före) — den dokumenterade `git push origin main:railway-main`
+skulle i dag avvisas eller, tvingad igenom, rulla tillbaka 22 aug-omläggningen
+och 25 aug-hotfixen. Verifierat att `development` redan innehåller hotfixens
+fulla innehåll, så säkra vägen är merge, inte force. **Produktionen rörs inte
+förrän Anton säger till** — skrivet in i planen på tre ställen.
+
+**Loopia satt och verifierat live.** `scripts/loopia_nycklar.py` (nytt,
+säker inklistring via getpass) → `python scripts/loopia_dns.py` returnerade
+riktiga MX/NS/TXT-poster från Loopias servrar, alltså bekräftat fungerande.
+`www.snajp.se`-CNAME väntar bara på `--apply`; apex-vidarebefordran förblir
+manuell (finns inte i LoopiaAPI).
+
+**Gemini — pågående, inte stängt.** Nyckeln var en Vertex AI Express
+Mode-nyckel vars PROJEKT (`snajp-506221`) inte var kopplat till
+faktureringskontot — därför gratisnivå trots betalt konto. Anton har sedan
+kopplat ett nytt projekt och bytt nyckel via `scripts/keys.py`, men det är
+INTE verifierat live än (nästa session: `python scripts/kor_evals.py`, ingen
+429 = bekräftat).
+
+`scripts/keys.py` säkrad: ett `FIXED`-block skrev tidigare ovillkorligt över
+`LLM_PROVIDER`/`MODEL` vid varje inklistring — samma felklass som
+`snipe-u70`. Skriver nu bara på ett tomt fält.
+
+Fullständig sessionslogg: [session-logs/2026-08-28-session-log.md](session-logs/2026-08-28-session-log.md)
 
 ## 2026-08-28 — Claude/Sebbe — MÄTT: Railway blockerar SMTP. HTTPS-vägen byggd.
 
@@ -82,6 +293,7 @@ Pushat till `development` (nya deploy-kedjan), deployad commit f081e11
 verifierad med verify_railway.py — allt grönt. `main` orörd; kvarstående
 main-blockerare i handoffens §4 (SMTP-attrappen, fakturering, orgnr-
 platshållaren, kvoterna 150/300, Redis, Gemini-kvoten).
+
 
 ## 2026-08-27 (natt) — Claude — varv 2–3: mätningen bevisad, grindarna skärpta, och två arkitekturmönster hämtade utifrån
 

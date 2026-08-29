@@ -176,3 +176,61 @@ async def sandvagsdiagnos(request: Request, vard: str = "", port: int = 0) -> di
             else "Plattformen blockerar utgående SMTP — använd RESEND_API_KEY (HTTPS)."
         ),
     }
+
+
+@router.post("/sandvag/prov")
+async def sandvagsprov(request: Request, till: str) -> dict:
+    """Skicka ETT provmejl genom den konfigurerade sändvägen.
+
+    Finns för att svara på frågan som `/sandvag` inte kan svara på: att porten
+    är öppen (eller att vi kör HTTPS) betyder inte att ett mejl faktiskt
+    kommer FRAM. Nyckeln kan vara ogiltig, domänen overifierad hos Resend,
+    kvoten slut — och alla tre visar sig först vid ett riktigt utskick.
+
+    Utan den här endpointen är enda sättet att pröva sändvägen i en ny miljö
+    att godkänna ett riktigt kundsvar och hoppas. Det är fel ordning: vägen
+    ska vara bevisad innan en kunds mejl är insatsen.
+
+    ## Varför brödtexten är låst
+
+    Anroparen väljer bara MOTTAGARE, aldrig innehåll. En master-nyckel som kan
+    skicka fritt formulerad text till valfri adress är en öppen relä om
+    nyckeln någonsin läcker; en som bara kan skicka den här fasta lappen är
+    det inte. Begränsningen kostar ingenting — ett provmejl behöver inte säga
+    något annat än att det kom fram.
+    """
+    from ..leads.send_provider import get_send_provider
+
+    provider = get_send_provider()
+    if not getattr(provider, "levererar", False):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Sändvägen är {type(provider).__name__} — den skickar ingenting. "
+                "Sätt RESEND_API_KEY (eller SMTP_*) först."
+            ),
+        )
+
+    adress = (till or "").strip()
+    if "@" not in adress:
+        raise HTTPException(status_code=422, detail="Ogiltig mottagaradress.")
+
+    try:
+        await provider.send(
+            to=adress,
+            subject="Snajp: sändvägen fungerar",
+            body=(
+                "Det här är ett provmejl från Snajps backend.\n\n"
+                "Kommer det fram är sändvägen bevisad hela vägen: nyckeln är "
+                "giltig, avsändardomänen är verifierad och leverantören "
+                "accepterade utskicket.\n\n"
+                f"Skickat via {type(provider).__name__}.\n"
+            ),
+        )
+    except Exception as fel:  # noqa: BLE001 — felet ÄR svaret här
+        raise HTTPException(
+            status_code=502,
+            detail=f"{type(fel).__name__}: {str(fel)[:400]}",
+        ) from fel
+
+    return {"skickat": True, "till": adress, "provider": type(provider).__name__}

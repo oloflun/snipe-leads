@@ -24,6 +24,7 @@ from ..leads.timing_gate import check_cold_outreach_gate
 from ..leads.utskicksfot import avregistreringslank, bygg_fot, med_fot
 from ..notifications.prioriterat_mejl import skicka_prioriterat
 from .leads_context import OnboardingContext, OutreachContext
+from .skatteverket_tools import SKATTEVERKET_TOOLS
 
 
 async def _save_context_doc_impl(onboarding: OnboardingContext, kind: str, content: str) -> str:
@@ -246,5 +247,7 @@ async def request_human_handoff(ctx: RunContextWrapper[OutreachContext], reason:
     return await _request_human_handoff_impl(ctx.context, reason)
 
 
-ONBOARDING_TOOLS = [save_context_doc, mark_onboarding_done]
-OUTREACH_TOOLS = [queue_outreach_draft, request_human_handoff]
+# SKATTEVERKET_TOOLS slår ALLTID upp tenantens EGET bolag, aldrig
+# prospektets — se app/agent/skatteverket_tools.py och villkorens §7.1.
+ONBOARDING_TOOLS = [save_context_doc, mark_onboarding_done, *SKATTEVERKET_TOOLS]
+OUTREACH_TOOLS = [queue_outreach_draft, request_human_handoff, *SKATTEVERKET_TOOLS]

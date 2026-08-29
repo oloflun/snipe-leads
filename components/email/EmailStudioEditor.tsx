@@ -305,15 +305,18 @@ export function EmailStudioEditor({
             {/* Ett simulerat svar ska aldrig gå att förväxla med ett
                 modellskrivet. Utan raden fick kunden mallgenererad text
                 presenterad som agentens arbete — samma fel som analysvyn och
-                bolagslistan hade, fast i den flik man faktiskt skriver i. */}
+                bolagslistan hade, fast i den flik man faktiskt skriver i.
+                Diskret rad, mineral — samma mönster som "Räknar lokalt · ingen
+                modell" i Rådgivaren (components/admin/Radgivare.tsx), inte en
+                egen ruta. */}
             {lastResult.simulated ? (
-              <p className="mt-5 rounded-input border border-ochre/40 bg-ochre/10 px-4 py-3 text-[0.875rem] leading-6 text-ink/75">
-                <strong className="font-semibold">Exempelsvar.</strong>{" "}
+              <p className="mt-5 text-[0.875rem] leading-6 text-mineral">
+                Exempeltext, ingen modell kördes.{" "}
                 {lastResult.simulated_reason === "anonym"
-                  ? "Du är inte inloggad, så åtgärden kördes inte mot någon modell."
+                  ? "Du är inte inloggad."
                   : lastResult.simulated_reason === "tillfälligt fel"
-                    ? "Modellen svarade inte just nu, så du fick ett förskrivet förslag under tiden. Prova åtgärden igen om en liten stund."
-                    : "Ingen modellnyckel är kopplad i den här miljön, så åtgärden kördes inte mot någon modell."}
+                    ? "Modellen svarade inte just nu. Prova igen om en liten stund."
+                    : "Ingen modellnyckel är kopplad i den här miljön."}
               </p>
             ) : null}
 

@@ -72,7 +72,10 @@ POST /api/email-studio
 
 ## Konto
 - E-post: Bergman.sebastian2002@gmail.com
-- Lösenord: Kapsyl21!
+- Lösenord: se lösenordshanteraren / miljövariabeln för testkontot — stod
+  tidigare i klartext på den här raden. **Det exponerade värdet är komprometterat
+  och ska roteras** (Antons hand, inte agentens — se CLAUDE.md: lösenord är
+  alltid ett av undantagen som kräver användaren själv). `snipe-8wy`.
 - Kontot finns redan i Supabase.
 - Logga in via /login (redirectas från /emails om du inte är inloggad)
 - Signup via UI ger "User already registered" men fetch fungerar nu (ingen "fetch failed")

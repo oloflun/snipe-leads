@@ -7,6 +7,7 @@ import { LocaleProvider } from "@/lib/i18n";
 import { paletteToCss } from "@/lib/tenants";
 import { arProduktion } from "@/lib/miljo";
 import { getCurrentTenant } from "@/lib/tenants/server";
+import { KANONISK_ORIGIN } from "@/lib/kanonisk";
 import { InstalleraApp } from "@/components/InstalleraApp";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -41,7 +42,7 @@ export async function generateMetadata(): Promise<Metadata> {
     title: "Snajp, AI för leads och kundtjänst",
     description:
       "Snajp skriver säljmejlen och svarar på kundmejlen. Två verktyg, en arbetsyta. Testa båda direkt i webbläsaren.",
-    metadataBase: new URL("https://snajp.se"),
+    metadataBase: new URL(KANONISK_ORIGIN),
     robots,
     manifest: "/manifest.webmanifest",
     icons: {

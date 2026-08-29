@@ -16,7 +16,7 @@ import { felmeddelande, readJsonBody } from "@/lib/http/json";
  * styr urval. Utan den raden hamnar urvalskriterier i röstdokumentet.
  */
 
-type Autonomy = "draft" | "first_contact" | "meeting";
+type Autonomy = "draft" | "first_contact" | "meeting" | "auto_send";
 
 type Config = {
   autonomy: Autonomy;
@@ -44,7 +44,14 @@ type QueueItem = {
 const AUTONOMY_LABEL: Record<Autonomy, string> = {
   draft: "Bara utkast",
   first_contact: "Första kontakten",
-  meeting: "Till bokat möte"
+  meeting: "Till bokat möte",
+  // Backenden returnerar redan nivån i autonomy_levels (se app/leads/autonomy.py
+  // LEVELS), fjärde knappen renderade "undefined" som etikett innan den här
+  // raden fanns. Grinden (kan_aktivera_auto_send) sitter i backendens PUT och
+  // rörs inte här: knappen går fortfarande att trycka, men sparningen avvisas
+  // med ett läsbart 422-fel om målgrupp, produktbeskrivning eller
+  // avsändardomän saknas.
+  auto_send: "Skickar automatiskt"
 };
 
 const ICP_FIELDS: { key: keyof Config["icp"]; label: string; hint: string }[] = [

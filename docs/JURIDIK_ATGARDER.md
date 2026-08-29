@@ -341,6 +341,31 @@ python scripts/gallra.py --env railway-main --apply  # först när de stämmer
 Fyll därefter i perioden i `/integritetspolicy` (bär en platshållare), i
 [registerförteckningen](registerforteckning.md) och i PUB-avtalet.
 
+### P1.2 · Redis Cloud och Resend är underbiträden sedan 2026-08-29
+
+Två nya tjänster behandlar kunddata och ska in i hela kedjan (bolag.ts har
+redan raderna, med platshållarregioner som håller varningsrutan uppe):
+
+**Redis Cloud** (databasen "Snajp-Chat-Data", jobbkö/cache i `development`):
+pågående chatt- och leadsjobb, inklusive agentens svar till kunden, ligger där
+med TTL 1 h. Kommande cache/arbetsminne (Redis-planen,
+`plans/2026-08-29-redis-agentarkitektur.md`) bär TTL 14–30 d respektive 72 h.
+
+1. Kör `python scripts/redis_kontroll.py` — den skriver region och TLS-status
+   och FALLER om databasen inte ligger i EU. Grönt här = region bekräftad.
+2. Kör `python scripts/redis_tls_pa.py --apply` — den slår på TLS via
+   kontonivå-API:t OCH byter `REDIS_URL` till `rediss://` i samma svep
+   (de två stegen hör ihop: TLS på utan URL-byte tappar anslutningen).
+   I dag går trafiken okrypterad. Verifierat 2026-08-29: region
+   `europe-west1` (EU, grönt), TLS AV. Agentens eget försök stoppades av
+   auto-läge-klassificeraren — kommandot är därför ditt.
+3. Teckna Redis standard-DPA i kontot (Account → Legal/Privacy) — kräver dig.
+4. Fyll i regionen i `lib/bolag.ts` och i registerförteckningens rader.
+
+**Resend** (sändvägen, `EMAIL_PROVIDER=resend` sedan 2026-08-29): utgående
+kundmejl passerar deras API. US-bolag — DPA, region och DPF/SCC-status ska
+bekräftas och in i `lib/bolag.ts` + registerförteckningen. Kräver dig.
+
 ### P2 · Löpande
 
 - **DPIA och intresseavvägning** — utkast finns, ska granskas och beslutas.

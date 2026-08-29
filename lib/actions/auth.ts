@@ -265,7 +265,7 @@ export async function requestDemoAccess(
 ): Promise<AuthActionResult> {
   return {
     success: false,
-    error: "Åtkomstlänken kan inte skickas än — den utgående mailvägen är inte kopplad. Mejla Snajpsupport@gmail.com så ordnar vi en demo direkt."
+    error: "Åtkomstlänken kan inte skickas än — den utgående mailvägen är inte kopplad. Mejla kontakt@snajp.se så ordnar vi en demo direkt."
   };
 }
 

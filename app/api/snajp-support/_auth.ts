@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { requireSnajpTenant, SnajpTenantError } from "@/lib/snajp/tenant";
+import { SKV_TOKEN_COOKIE } from "@/lib/skatteverket/oauth";
 import { proxyWithApiKey } from "./_lib";
 
 /**
@@ -19,7 +21,21 @@ import { proxyWithApiKey } from "./_lib";
 export async function proxyAsTenant(path: string, init: RequestInit) {
   try {
     const tenant = await requireSnajpTenant();
-    return await proxyWithApiKey(path, init, tenant.apiKey, tenant.userId, tenant.isDemo);
+
+    // Skatteverket-tokenen följer med NÄR den finns, och bara på den inloggade
+    // vägen. Den bärs av en httpOnly-kaka (se app/api/skatteverket/callback),
+    // så klientens JavaScript kan varken läsa eller sätta den — headern kan
+    // alltså inte förfalskas av en sida i webbläsaren.
+    //
+    // Organisationsnumret skickas MEDVETET INTE: backenden läser det ur sin
+    // egen tenantrad. Ett orgnr som kommer utifrån är ett fält någon kan byta
+    // ut, och det är exakt vad INV-SEC-002 finns för att förhindra.
+    const skvToken = (await cookies()).get(SKV_TOKEN_COOKIE)?.value;
+    const medToken: RequestInit = skvToken
+      ? { ...init, headers: { ...(init.headers ?? {}), "X-Skatteverket-Token": skvToken } }
+      : init;
+
+    return await proxyWithApiKey(path, medToken, tenant.apiKey, tenant.userId, tenant.isDemo);
   } catch (error) {
     if (error instanceof SnajpTenantError) {
       // `kod` går med, så att gränssnittet kan skilja "inte aktiverad ännu"

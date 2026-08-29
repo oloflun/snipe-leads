@@ -26,6 +26,18 @@ import type { TenantRow } from "@/lib/data/admin";
 
 const DEMO_SLUGS = new Set(["nordlys-handel", "public-demo"]);
 
+/**
+ * Är arbetsytan en av VÅRA demoytor?
+ *
+ * Smalare än `arRiktigKund()`, som avvisar både demoytor och testytor. De två
+ * behöver skiljas åt sedan exempeldatan började räknas med: en testyta med
+ * exempelmärke SKA synas i kurvan, en demoyta ska aldrig göra det — den är vår
+ * egen skyltdocka, inte en kund vi kan sälja till en gång till.
+ */
+export function arDemoyta(slug: string | null): boolean {
+  return slug !== null && DEMO_SLUGS.has(slug);
+}
+
 export function arRiktigKund(slug: string | null): boolean {
   if (!slug) return true;
   if (DEMO_SLUGS.has(slug)) return false;
@@ -48,7 +60,7 @@ function veckostart(dag: Date): Date {
   return d;
 }
 
-/** ISO-veckonummer, för etiketterna ("v.35"). */
+/** ISO-veckonummer. Etiketten formateras i vyn — se `VeckoPunkt.vecka`. */
 export function isoVecka(dag: Date): number {
   const d = new Date(Date.UTC(dag.getUTCFullYear(), dag.getUTCMonth(), dag.getUTCDate()));
   d.setUTCDate(d.getUTCDate() + 4 - ((d.getUTCDay() + 6) % 7) - 1 + 1);
@@ -84,8 +96,14 @@ export function raknaPerioder(datumlista: (string | null)[], nu: Date): Perioder
 }
 
 export type VeckoPunkt = {
-  /** "v.35" */
-  etikett: string;
+  /**
+   * ISO-veckonumret som TAL, inte en färdig etikett.
+   *
+   * Det stod `"v.35"` här, byggt på servern. Prefixet är svenskt, och i
+   * engelskt läge blev axeln därför en rad "v.24 v.25 …" under en i övrigt
+   * engelsk graf. Vyn vet vilket språk som gäller; beräkningen gör det inte.
+   */
+  vecka: number;
   nyaKunder: number;
   avtal: number;
 };
@@ -101,14 +119,43 @@ export type Kundstatistik = {
   };
   /** Demo- och testytor som INTE ingår i något av talen ovan. */
   bortfiltrerade: number;
+  /** Hur många av de MEDRÄKNADE raderna som bär exempeldata. */
+  exempel: number;
 };
 
+/** Raden som statistiken räknar på: tenanten plus exempelmärket, om det finns. */
+export type Statistikrad = TenantRow & { ar_exempel?: boolean };
+
+/**
+ * Räknas raden som kund i statistiken?
+ *
+ * `arRiktigKund()` ensam var villkoret förut, och den regeln står kvar orörd:
+ * en test- eller demoyta ska inte smyga in i en försäljningskurva. Det som
+ * tillkommit är att en rad som bär EXEMPELMÄRKET räknas ändå.
+ *
+ * Skillnaden mellan de två fallen är att exempelraden är MÄRKT. Vyn skriver ut
+ * hur många av talen som kommer därifrån, så den som läser kurvan vet vad hen
+ * ser. En omärkt testyta hade sett ut som en kund, och det är det
+ * `arRiktigKund()` finns för att förhindra.
+ *
+ * DEMOYTORNA ar undantagna oavsett marke, och det ar inte en detalj: forsta
+ * versionen slapp in `public-demo` men inte `nordlys-handel`, av det godtyckliga
+ * skalet att den forra saknade aktivitet och darfor blev berikad medan den
+ * senare hade riktig trafik och inte blev det. Tva demoytor, olika behandling,
+ * avgjort av nagot som inte har med saken att gora. `arDemoyta()` avgor det nu
+ * i stallet.
+ */
+export function raknasSomKund(rad: Statistikrad): boolean {
+  if (arDemoyta(rad.slug)) return false;
+  return arRiktigKund(rad.slug) || rad.ar_exempel === true;
+}
+
 export function beraknaKundstatistik(
-  tenants: TenantRow[],
+  tenants: readonly Statistikrad[],
   nu: Date,
   antalVeckor = 12
 ): Kundstatistik {
-  const riktiga = tenants.filter((t) => arRiktigKund(t.slug));
+  const riktiga = tenants.filter(raknasSomKund);
   const idagUtc = new Date(Date.UTC(nu.getFullYear(), nu.getMonth(), nu.getDate()));
   const dennaVecka = veckostart(idagUtc);
 
@@ -116,7 +163,7 @@ export function beraknaKundstatistik(
   const index = new Map<number, VeckoPunkt>();
   for (let i = antalVeckor - 1; i >= 0; i -= 1) {
     const start = new Date(dennaVecka.getTime() - i * 7 * 86_400_000);
-    const punkt = { etikett: `v.${isoVecka(start)}`, nyaKunder: 0, avtal: 0 };
+    const punkt = { vecka: isoVecka(start), nyaKunder: 0, avtal: 0 };
     veckor.push(punkt);
     index.set(start.getTime(), punkt);
   }
@@ -153,6 +200,7 @@ export function beraknaKundstatistik(
     nyaKunder: raknaPerioder(riktiga.map((t) => t.kund_sedan ?? null), nu),
     veckor,
     takt,
-    bortfiltrerade: tenants.length - riktiga.length
+    bortfiltrerade: tenants.length - riktiga.length,
+    exempel: riktiga.filter((t) => t.ar_exempel === true).length
   };
 }

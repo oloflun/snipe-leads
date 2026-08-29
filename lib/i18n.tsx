@@ -47,8 +47,43 @@ export type CopyKey = keyof typeof commonCopy;
 
 const LocaleContext = createContext<LocaleContextValue | null>(null);
 
+/**
+ * Var valet sparas. `localStorage` och inte bara React-state: providern sitter
+ * i rot-layouten, så klientnavigering behåller språket — men en omladdning,
+ * en ny flik eller en server action som svarar med en redirect monterar om
+ * trädet, och då snäppte valet tillbaka till svenska. Uppmätt: byt till EN i
+ * adminytan, ladda om, och halva sidan var svensk igen.
+ */
+const LAGRINGSNYCKEL = "snajp.locale";
+
+function giltigt(värde: string | null): Locale | null {
+  return värde === "sv" || värde === "en" ? värde : null;
+}
+
 export function LocaleProvider({ children }: Readonly<{ children: React.ReactNode }>) {
-  const [locale, setLocale] = useState<Locale>("sv");
+  // Alltid "sv" i första renderingen, aldrig ett läst värde: servern renderade
+  // svenska, och ett annat startvärde här ger en hydreringskrock i stället för
+  // ett språkbyte. Det lagrade värdet läses in efter monteringen.
+  const [locale, setLocaleState] = useState<Locale>("sv");
+
+  useEffect(() => {
+    try {
+      const sparat = giltigt(window.localStorage.getItem(LAGRINGSNYCKEL));
+      if (sparat) setLocaleState(sparat);
+    } catch {
+      // Privat läge, blockerade kakor, inbäddad vy — språkvalet är inte värt
+      // att fälla sidan för. Svenska gäller då, precis som förut.
+    }
+  }, []);
+
+  const setLocale = useCallback((nästa: Locale) => {
+    setLocaleState(nästa);
+    try {
+      window.localStorage.setItem(LAGRINGSNYCKEL, nästa);
+    } catch {
+      // Se ovan: valet gäller för den här sessionen även om det inte kan sparas.
+    }
+  }, []);
 
   // The document was rendered with lang="sv". Without this the attribute keeps
   // claiming Swedish after the user switches, so a screen reader reads English
@@ -59,11 +94,14 @@ export function LocaleProvider({ children }: Readonly<{ children: React.ReactNod
 
   const text = useCallback((value: Localized) => value[locale], [locale]);
   const t = useCallback((key: CopyKey) => commonCopy[key][locale], [locale]);
-  const toggleLocale = useCallback(() => setLocale((current) => (current === "sv" ? "en" : "sv")), []);
+  const toggleLocale = useCallback(
+    () => setLocale(locale === "sv" ? "en" : "sv"),
+    [locale, setLocale]
+  );
 
   const value = useMemo(
     () => ({ locale, setLocale, toggleLocale, text, t }),
-    [locale, text, t, toggleLocale]
+    [locale, setLocale, text, t, toggleLocale]
   );
 
   return <LocaleContext.Provider value={value}>{children}</LocaleContext.Provider>;

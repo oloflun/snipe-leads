@@ -10,8 +10,16 @@ import time
 import uuid
 from typing import Any
 
+from ..redisnycklar import nyckel
+
 JOB_TIMEOUT_SECONDS = 300
 JOB_TTL_SECONDS = 3600
+
+#: Fält som `get()` alltid skriver ut explicit (och som därför inte ska
+#: dubbleras av den generiska extra-fält-spridningen nedan). "created" är
+#: INTE med — det är den interna timeout-klockan och ska aldrig läcka ut i
+#: ett API-svar, bara läsas av lagringslagret självt.
+_BASFALT = {"status", "result", "error", "tenant_id", "created"}
 
 
 class MemoryJobStore:
@@ -49,6 +57,15 @@ class MemoryJobStore:
         if job_id in self.jobs:
             self.jobs[job_id].update(status="failed", error=error)
 
+    async def annotate(self, job_id: str, **falt: Any) -> None:
+        """Lägger till/uppdaterar godtyckliga fält på en jobbpost UTAN att
+        röra status/result/error — t.ex. ticket_id/conversation_id (så en
+        återupptagen körning vet vilket ärende den ska fortsätta på) eller
+        created (så återtagsvägen kan flytta 300-sekundersklockan, se
+        INV-JOB-001 i ARCHITECTURE_INVARIANTS.md)."""
+        if job_id in self.jobs:
+            self.jobs[job_id].update(falt)
+
     async def get(self, job_id: str) -> dict[str, Any] | None:
         self._sweep()
         job = self.jobs.get(job_id)
@@ -59,6 +76,10 @@ class MemoryJobStore:
             "result": job.get("result"),
             "error": job.get("error"),
             "tenant_id": job.get("tenant_id"),
+            # Extra fält (ticket_id, conversation_id, ...) satta via annotate()
+            # följer med rakt av — se INV-JOB-001. "created" är internt
+            # (timeout-klockan) och läcker medvetet inte ut här.
+            **{k: v for k, v in job.items() if k not in _BASFALT},
         }
 
 
@@ -70,14 +91,14 @@ class RedisJobStore:
 
     @classmethod
     async def connect(cls, redis_url: str) -> "RedisJobStore":
-        import redis.asyncio as redis  # valfritt beroende
+        import redis.asyncio as redis
 
         client = redis.from_url(redis_url, decode_responses=True)
         await client.ping()
         return cls(client)
 
     def _key(self, job_id: str) -> str:
-        return f"crm:job:{job_id}"
+        return nyckel(f"crm:job:{job_id}")
 
     async def create(self, *, tenant_id: str | None = None) -> str:
         job_id = str(uuid.uuid4())
@@ -100,6 +121,11 @@ class RedisJobStore:
     async def fail(self, job_id: str, error: str) -> None:
         await self._merge(job_id, {"status": "failed", "error": error})
 
+    async def annotate(self, job_id: str, **falt: Any) -> None:
+        """Se MemoryJobStore.annotate — samma kontrakt, via _merge (rör
+        aldrig status/result/error)."""
+        await self._merge(job_id, falt)
+
     async def get(self, job_id: str) -> dict[str, Any] | None:
         raw = await self.client.get(self._key(job_id))
         if not raw:
@@ -113,4 +139,7 @@ class RedisJobStore:
             "result": job.get("result"),
             "error": job.get("error"),
             "tenant_id": job.get("tenant_id"),
+            # Se MemoryJobStore.get — extra fält (ticket_id, conversation_id,
+            # ...) följer med, "created" görs det uttryckligen inte.
+            **{k: v for k, v in job.items() if k not in _BASFALT},
         }

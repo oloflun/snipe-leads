@@ -277,9 +277,27 @@ class PostgresStorage:
                 -- ärende skapas i sin egen request. Ordningen mellan två
                 -- sådana är godtycklig men stabil, vilket är tillräckligt —
                 -- de är samtidiga och har ingen sann inbördes ordning.
-                select * from ss_tickets
-                where tenant_id = $1 and customer_id = $2
-                order by created_at desc, id desc limit 20
+                -- conversation_id kommer ur joinen, INTE ur ss_tickets:
+                -- kolumnen finns inte där (se 002_snajp_support.sql), den
+                -- sitter på ss_conversations.ticket_id, som är unique — ett
+                -- ärende har högst ett samtal.
+                --
+                -- Utan joinen saknade ticket-dicten fältet helt, medan
+                -- MemoryStorage sätter det (memory.py). Följden var att
+                -- arbetsminne.alla_samtalsrader kastade KeyError mot Postgres
+                -- men aldrig i sviten, och kraschen kom EFTER att svaret
+                -- redan tagits fram — LLM-anropet betalt, svaret bortkastat,
+                -- kunden fick "Svaret gick inte att ta fram".
+                --
+                -- LEFT join, inte inner: ett ärende utan samtal ska ligga kvar
+                -- i historiken med conversation_id = NULL, inte försvinna ur
+                -- den. Läsaren måste tåla NULL.
+                select t.*, c.id as conversation_id
+                from ss_tickets t
+                left join ss_conversations c
+                  on c.ticket_id = t.id and c.tenant_id = t.tenant_id
+                where t.tenant_id = $1 and t.customer_id = $2
+                order by t.created_at desc, t.id desc limit 20
                 """,
                 tenant_id,
                 customer_id,
@@ -877,6 +895,23 @@ class PostgresStorage:
             )
         return {"message": _row(message), "queue_item": _row(queue_item)}
 
+    async def find_outreach_thread(
+        self, tenant_id: str, *, prospect_id: str
+    ) -> dict[str, Any] | None:
+        # Samma fråga som läsdelen i ensure_outreach_thread nedan — men utan
+        # skapandet. Se base.py för varför en GET aldrig får lämna spår.
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                select * from outreach_threads
+                where tenant_id = $1 and prospect_id = $2
+                order by created_at limit 1
+                """,
+                tenant_id,
+                prospect_id,
+            )
+        return _row(record) if record else None
+
     async def ensure_outreach_thread(
         self, tenant_id: str, *, prospect_id: str
     ) -> dict[str, Any]:
@@ -1319,6 +1354,7 @@ class PostgresStorage:
         icp_fit: float | None = None,
         qualified: bool | None = None,
         disqualifiers: list[str] | None = None,
+        origin: str | None = None,
     ) -> dict[str, Any] | None:
         # Dynamisk SET-lista: en PATCH ska kunna sätta ETT fält utan att nolla
         # de andra, och en fast update-sats hade krävt att anroparen skickar
@@ -1328,6 +1364,7 @@ class PostgresStorage:
             "icp_fit": icp_fit,
             "qualified": qualified,
             "disqualifiers": disqualifiers,
+            "origin": origin,
         }
         fields = {name: value for name, value in updates.items() if value is not None}
         if not fields:
@@ -1395,14 +1432,16 @@ class PostgresStorage:
         # Default false och inte None: "vet inte" ska inte vara ett möjligt
         # tillstånd för om en körning räknas som kundvolym. Se migration 036.
         is_test: bool = False,
+        # Migration 055. Se base.py:s docstring för värdemängden.
+        model: str | None = None,
     ) -> dict[str, Any]:
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
                 """
                 insert into agent_runs
                   (tenant_id, agent_type, pack_version, skills_used, input, output,
-                   step_log, tokens_in, tokens_out, latency_ms, is_test)
-                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                   step_log, tokens_in, tokens_out, latency_ms, is_test, model)
+                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
                 returning *
                 """,
                 tenant_id,
@@ -1416,6 +1455,7 @@ class PostgresStorage:
                 tokens_out,
                 latency_ms,
                 is_test,
+                model,
             )
         return _row(record)
 
@@ -2428,6 +2468,12 @@ class PostgresStorage:
                 "select * from ss_customer_details where tenant_id = $1", tenant_id
             )
         return _row(record) if record else None
+
+    async def orgnr_for_tenant(self, tenant_id: str) -> str | None:
+        """Se base.Storage.orgnr_for_tenant — går via security definer-funktionen
+        eftersom ss_customer_details RLS stänger ute tenant-skopade anrop."""
+        async with self.pool.acquire() as conn:
+            return await conn.fetchval("select public.orgnr_for_current_tenant()")
 
     async def upsert_customer_details(
         self, tenant_id: str, falt: dict[str, Any]

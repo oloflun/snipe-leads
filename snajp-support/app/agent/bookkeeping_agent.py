@@ -57,6 +57,7 @@ from ..bookkeeping.verifieringsgrind import STATUS_GRANSKA, Verdikt, check_under
 from ..config import get_settings
 from ..moderation.abuse_gate import check_abuse, ton_instruktion
 from ..notifications.prioriterat_mejl import skicka_prioriterat
+from ..leads.skatteverket import SkatteverketAtkomst
 from .bookkeeping_chat_tools import BOKFORING_CHATT_TOOLS, BokforingChattContext
 from .llm import get_agent_model, get_llm_client
 from .step_runner import RunTrace, StepResult, run_step, thinking_kwargs
@@ -695,6 +696,7 @@ async def run_bookkeeping_chat_turn(
     message: str,
     historik: list[dict[str, Any]] | None = None,
     forhamtat: list[str] | None = None,
+    skatteverket: "SkatteverketAtkomst | None" = None,
 ) -> dict[str, Any]:
     """En tur i bokföringssamtalet.
 
@@ -703,7 +705,12 @@ async def run_bookkeeping_chat_turn(
     gör mellan agentlogik och observabilitet.
     """
     agent = build_bookkeeping_chat_agent()
-    context = BokforingChattContext(storage=storage, tenant_id=tenant_id)
+    # Skatteverket-åtkomsten kommer FRÅN SERVERN (X-Skatteverket-Token via
+    # Next-proxyn), aldrig från modellen. None = kunden har inte legitimerat
+    # sig, och verktyget svarar då att uppgiften inte gick att hämta.
+    context = BokforingChattContext(
+        storage=storage, tenant_id=tenant_id, skatteverket=skatteverket
+    )
 
     # `forhamtat` är material som hämtades FÖRE modellen kördes — i praktiken ett
     # underlag som lästes ur en bifogad fil i samma anrop.
