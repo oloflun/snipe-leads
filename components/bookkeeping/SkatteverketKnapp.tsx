@@ -22,7 +22,13 @@ import { arKonfigurerad } from "@/lib/skatteverket/oauth";
  * knapp — men bakgrunden och rubriken kom från tokens och förblev ljusa. En
  * halvvänd komponent, alltså. `bg-ink`/`text-paper` vänder sig själva.
  */
-export function SkatteverketKnapp({ retur = "/bokforing" }: { retur?: string }) {
+export type SkatteverketKnappProps = Readonly<{
+  /** Dit användaren skickas efter inloggningen. Spärrad mot öppen
+   *  omdirigering i `sakerReturvag` — bara relativa sökvägar släpps igenom. */
+  retur?: string;
+}>;
+
+export function SkatteverketKnapp({ retur = "/bokforing" }: SkatteverketKnappProps = {}) {
   if (!arKonfigurerad()) return null;
 
   return (
