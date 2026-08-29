@@ -1,7 +1,7 @@
 ---
 type: goals
 project_slug: snipe-leads
-updated: 2026-08-26
+updated: 2026-08-29
 updated_by: claude
 ---
 
@@ -97,10 +97,10 @@ tydligt inte nått i dag, och de två sakerna som saknas är konkreta:
 - [ ] 11. Koppla in riktig mejlsändning (`snipe-ork`). **Byggd och konfigurerad
   i `development` 2026-08-27–29:** en HTTPS-sändväg (Resend, väljs eftersom
   Railway blockerar utgående SMTP på nuvarande plan) med `kontakt@snajp.se`
-  som avsändare, satt och bekräftad i Railways variabellager. Inte ännu
-  bekräftat live via `/health/ready` (deployen stod som `BUILDING` vid
-  sessionens slut 2026-08-29) och inget riktigt mejl är ännu skickat och
-  verifierat. Kvar: varje kunds egna avsändaruppgifter (i dag ett globalt
+  som avsändare, satt och bekräftad i Railways variabellager. **Bekräftad
+  live 2026-08-29:** varningen "Ingen riktig sändväg" är borta ur
+  `/health/ready` — bara IMAP-varningen kvarstår. Inget riktigt mejl är
+  ännu skickat och verifierat i Resends dashboard. Kvar: varje kunds egna avsändaruppgifter (i dag ett globalt
   konto) och kopplingen till autonomigrinden. `main` saknar fortfarande
   sändväg helt.
 - [ ] 12. Koppla ihop uppföljningskedjan (`snipe-3dx`). Funktionen som bygger
@@ -152,7 +152,8 @@ tydligt inte nått i dag, och de två sakerna som saknas är konkreta:
 ### Föreslaget — ej beslutat
 
 - **Agentplattformens minnes- och hastighetslager (Redis).** Beställt av Anton
-  2026-08-29 och under byggnad: chattkörningar som överlever deployments
+  2026-08-29 och BYGGT samma dag (pushat till development, se
+  `HANDOFF-2026-08-29-REDIS-OCH-FASERNA.md`): chattkörningar som överlever deployments
   (hållbar kö med återtag), tenant-skopad semantisk svarscache (svar på
   återkommande frågor på under en sekund utan modellanrop — direkt lindring av
   Gemini-kvoten), och rullande samtalssummering så långa samtal inte tappar
@@ -231,6 +232,11 @@ rebase. Ändringar behöver samordnas, inte bara pushas.
 
 ## Ändringslogg
 
+- 2026-08-29 — claude — sjufasplanen + Redis-arkitekturen byggd och pushad
+  till development (Fas 1–6 + R0–R4; Fas 7-deploydelen och R5 spärrade per
+  §8.1a). Fyra nya invarianter. B1 skärpt med mätdata: nya Gemini-nyckeln
+  ~170 s/anrop och Railway kör fortfarande den gamla — Antons konsolsteg
+  kvarstår. Redis Cloud + Resend införda som underbiträden i juridikkedjan.
 - 2026-08-29 — claude — punkt 11 (mejlsändning) uppdaterad: Sebbe byggde
   Resend-sändvägen 27–28 aug efter att ha mätt att Railway blockerar SMTP;
   den här sessionen konfigurerade den i `development` (`kontakt@snajp.se`),

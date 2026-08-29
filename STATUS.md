@@ -1,5 +1,37 @@
 # Snipra Status
 
+## 2026-08-29 (morgon) — Claude — sjufasplanen + Redis-arkitekturen byggd, verifierad och PUSHAD till development
+
+**Hela beställningen från 2026-08-28 är implementerad** (Fas 1–6 + Fas 7:s
+förberedelse) plus den nya Redis-arkitekturen (Fas R0–R4), tre commits
+(`cb05da0`, `f25e91b`, `0512ab3`). Arbetet dirigerades till nio
+Sonnet-delagenter med egen granskning av varje leverans — viktigaste
+egenfyndet var RediSearch TAG-escapningsbuggen (UUID-bindestreck), som
+BARA liveverifieringen mot dev-databasens riktiga Query Engine kunde se.
+
+**Chattkörningar överlever nu en deploy** (Redis Streams + XAUTOCLAIM +
+idempotent återupptagning, INV-JOB-001), **semantisk svarscache** i
+mörkstartsläge (`SEMANTIC_CACHE=shadow` satt i dev — träffkvot läses i
+Händelser; INV-CACHE-001 med PII-/minnes-/påhopps-/kategorigrindar),
+**rullande samtalsminne** (INV-MEM-002), Testchatt-flik mot inloggad tenant,
+befordran test→riktigt konto med Luhn-validering, `agent_runs.model`,
+`origin='test'` hela vägen. Migration 054+055 applicerade FÖRE pushen.
+**1586+362 tester gröna** (101 nya), tsc rent, `qa_vyer` GRÖNT mot live dev,
+uppstartsloggen visar ström-workers + cachelager aktiva.
+
+**B1 skärpt med mätdata:** nya Gemini-nyckeln svarar ~170 s/anrop (strypt
+kö) och Railway kör fortfarande GAMLA nyckeln i båda miljöerna —
+chatt-E2E:t på dev gick hela strömkedjan och föll exakt på 429-dygnskvoten.
+**Antons kommandolista** (allt förberett, klassificeraren krävde
+människohand): `redis_tls_pa.py --apply` (TLS är AV — trafiken okrypterad,
+regionen EU-verifierad), `gemini_web_konfig.py --apply`, Redis DPA,
+B1-konsolsteget. Redis Cloud + Resend står nu som underbiträden i
+juridikkedjan; Resend-sändvägen bekräftad live (varningen borta).
+
+Fullständig karta: [HANDOFF-2026-08-29-REDIS-OCH-FASERNA.md](HANDOFF-2026-08-29-REDIS-OCH-FASERNA.md)
+· [plans/2026-08-29-redis-agentarkitektur.md](plans/2026-08-29-redis-agentarkitektur.md)
+· [session-logs/2026-08-29-session-log-3.md](session-logs/2026-08-29-session-log-3.md)
+
 ## 2026-08-29 — Claude — Sebbes 24 commits genomgångna, Resend + Redis konfigurerade i development
 
 **Läste in och redogjorde för allt Sebbe (med Claude) byggt sedan Antons

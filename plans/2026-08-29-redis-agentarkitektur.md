@@ -1,6 +1,6 @@
 # Redis-arkitekturen: överlevande körningar, semantisk cache, arbetsminne
 
-**Datum:** 2026-08-29 · **Gren:** `development` · **Status:** godkänd av Anton, implementeras
+**Datum:** 2026-08-29 · **Gren:** `development` · **Status:** IMPLEMENTERAD och pushad 2026-08-29 (R0–R4; R5 spärrad §8.1a, R6-sandbox väntar på kontosteg) — utfall i `../HANDOFF-2026-08-29-REDIS-OCH-FASERNA.md`
 **Strategival:** A — självbyggt på egen EU-Redis nu; managed Iris-tjänster utvärderas i sandbox
 med syntetisk data och adopteras först bakom juridik-gates (§5.1).
 **Spårning:** `snipe-wo0` (R0) · `snipe-lr7` (R1) · `snipe-cku` (R2) · `snipe-7mk` (R3) ·

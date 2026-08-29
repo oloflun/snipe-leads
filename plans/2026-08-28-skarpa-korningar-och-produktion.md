@@ -1,6 +1,6 @@
 # Skarpa körningar, testytor och produktion på main
 
-**Datum:** 2026-08-28 · **Gren:** `development` · **Status:** planering klar, Fas 1 ej påbörjad
+**Datum:** 2026-08-28 · **Gren:** `development` · **Status:** BYGGD 2026-08-29 — Fas 1–6 + Fas 7-förberedelsen implementerade och pushade (`0512ab3`); deploydelen av Fas 7 fortsatt SPÄRRAD (§8.1a). Fas 6:s Gemini-rundor blockerade av B1 (mätdata i `HANDOFF-2026-08-29-REDIS-OCH-FASERNA.md` §4); DeepSeek-rundorna körda gröna. Fas R: se `2026-08-29-redis-agentarkitektur.md`.
 
 ## Läge vid sessionens slut (2026-08-28 kväll)
 

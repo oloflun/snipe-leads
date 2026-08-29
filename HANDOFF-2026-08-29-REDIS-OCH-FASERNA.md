@@ -281,9 +281,36 @@ förberedelse — applicera den inte ensam.
    variabelbytet — klassificeraren kräver Antons hand för själva
    Railway-skrivningen).
 
-## 5. Live-läget i development efter deployen
+## 5. Live-läget i development efter deployen (verifierat, inte antaget)
 
-*(fylls i nedan — sektionen skrevs efter push + verifiering)*
+Uppstartsloggen för deployen (05:52 UTC, `0512ab3`):
+
+```
+Lagring: Postgres (Supabase)
+Jobbkö: Redis
+Semantisk svarscache: Redis (embeddingcache + svarscache + versioner + arbetsminne).
+Chattström: Redis-baserad jobbkö aktiv (0 poster återtagna vid uppstart, 2 workers).
+Leadsström: Redis-baserad jobbkö aktiv (0 poster återtagna vid uppstart, 1 workers).
+```
+
+* **`qa_vyer.mjs` mot live dev: GRÖNT, inga avvikelser** — anonym får 404 på
+  adminytan, kund ser inte admin, admin når alla 17 vyer. Skärmbilderna
+  granskade för hand: Testchatt-fliken ligger bredvid Kundtjänst med korrekt
+  ochre-markering, Email-studioposten är borta ur kundmenyn (nås direkt via
+  URL), Bolagsregistret bär Exempel-märken + kryssrutor, dina två "E2E
+  Verifiering AB"-rader är korrekt omärkta (origin='manual' — och numera
+  städbara via befordra/filter).
+* **Migrationsliggaren:** 054+055 står som `=` i development.
+* **Chatt-E2E genom strömmen:** ett riktigt meddelande via publika demon
+  gick 202 → ström → worker → körning. Körningen FÖLL — på
+  `openai.RateLimitError: 429 exceeded your current quota` i triagesteget,
+  dvs. GEMINIS DYGNSKVOT på den gamla nyckeln (snipe-a1c/B1), inte på någon
+  ny kodväg. Kunden fick det avsedda, vänliga felmeddelandet. Kedjans
+  mekanik är alltså bevisad hela vägen; själva SVARET är kvotgrindat tills
+  B1 är löst — samma vägg som stoppade Fas 6:s Gemini-rundor.
+* `SEMANTIC_CACHE=shadow` är satt på development/api (icke-hemlig variabel —
+  klassificeraren släppte den) — mörkstartens mätning börjar rulla med
+  nästa deploy; träffkvoten läses i Händelser (source `cache:svarscache`).
 
 ## 6. Antons kommandolista (allt förberett, klassificeraren kräver din hand)
 
