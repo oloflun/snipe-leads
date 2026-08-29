@@ -32,6 +32,7 @@ den töms vid omstart precis som räknaren — de två degraderar tillsammans.
 """
 
 from __future__ import annotations
+from ..redisnycklar import nyckel
 
 import logging
 from collections import defaultdict
@@ -39,8 +40,8 @@ from typing import Any
 
 logger = logging.getLogger("snajp-support.cache.versioner")
 
-_KB_PREFIX = "cachev:kb:"
-_CFG_PREFIX = "cachev:cfg:"
+_KB_PREFIX = nyckel("cachev:kb:")
+_CFG_PREFIX = nyckel("cachev:cfg:")
 _CFG_GLOBAL_NYCKEL = "cachev:cfg:global"
 
 _redis: Any = None

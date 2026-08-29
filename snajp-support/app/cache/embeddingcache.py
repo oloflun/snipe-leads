@@ -20,6 +20,7 @@ import hashlib
 import logging
 import struct
 import time
+from ..redisnycklar import nyckel
 from typing import Any, Protocol
 
 logger = logging.getLogger("snajp-support.cache.embedding")
@@ -37,7 +38,7 @@ class EmbeddingCache(Protocol):
 
 
 def _nyckel(text: str) -> str:
-    return "embcache:" + hashlib.sha256((text or "").encode("utf-8")).hexdigest()
+    return nyckel("embcache:" + hashlib.sha256((text or "").encode("utf-8")).hexdigest())
 
 
 class MinnesEmbeddingCache:

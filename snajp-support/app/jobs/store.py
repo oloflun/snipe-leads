@@ -10,6 +10,8 @@ import time
 import uuid
 from typing import Any
 
+from ..redisnycklar import nyckel
+
 JOB_TIMEOUT_SECONDS = 300
 JOB_TTL_SECONDS = 3600
 
@@ -89,14 +91,14 @@ class RedisJobStore:
 
     @classmethod
     async def connect(cls, redis_url: str) -> "RedisJobStore":
-        import redis.asyncio as redis  # valfritt beroende
+        import redis.asyncio as redis
 
         client = redis.from_url(redis_url, decode_responses=True)
         await client.ping()
         return cls(client)
 
     def _key(self, job_id: str) -> str:
-        return f"crm:job:{job_id}"
+        return nyckel(f"crm:job:{job_id}")
 
     async def create(self, *, tenant_id: str | None = None) -> str:
         job_id = str(uuid.uuid4())

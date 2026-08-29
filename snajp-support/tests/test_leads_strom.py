@@ -30,6 +30,8 @@ from app.jobs.store import MemoryJobStore
 
 pytestmark = pytest.mark.anyio
 
+from app.redisnycklar import nyckel
+
 LEADS_STREAM_KEY = "crm:jobb:leads"
 FEJKAD_LIVE_NYCKEL = "sk-" + "a" * 37
 
@@ -288,7 +290,7 @@ async def test_med_redis_url_skapas_leadsstrom_och_workers_startar(monkeypatch):
             assert app.state.leadsstrom is not None
             # Två separata strömmar på SAMMA klient, inte samma ström två
             # gånger — annars hade chatt- och leadsjobb blandats i samma kö.
-            assert app.state.leadsstrom.stream_key == LEADS_STREAM_KEY
+            assert app.state.leadsstrom.stream_key == nyckel(LEADS_STREAM_KEY)
             assert app.state.leadsstrom.stream_key != app.state.chattstrom.stream_key
     finally:
         get_settings.cache_clear()

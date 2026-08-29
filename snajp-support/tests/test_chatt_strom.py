@@ -49,7 +49,7 @@ def strom(redis_client):
 async def test_enqueue_lagger_en_post_i_strommen(strom, redis_client):
     job_id = str(uuid.uuid4())
     await strom.enqueue({"job_id": job_id, "tenant_id": "t1", "message": "hej"})
-    assert await redis_client.xlen(stream_mod.STREAM_KEY) == 1
+    assert await redis_client.xlen(strom.stream_key) == 1
 
 
 async def test_enqueue_skapar_gruppen_idempotent(strom):
@@ -110,7 +110,7 @@ async def test_hanterat_fel_kvitteras_anda(strom, redis_client):
     await strom.kor_ett_varv("konsument-1", hanterare_som_fangar_sitt_eget_fel)
 
     assert kord == [job_id]
-    pending = await redis_client.xpending(stream_mod.STREAM_KEY, stream_mod.GROUP_NAME)
+    pending = await redis_client.xpending(strom.stream_key, stream_mod.GROUP_NAME)
     assert pending["pending"] == 0
 
 
@@ -127,7 +127,7 @@ async def test_hanterare_som_kastar_lamnar_posten_okvitterad(strom, redis_client
     with pytest.raises(RuntimeError):
         await strom.kor_ett_varv("konsument-1", trasig_hanterare)
 
-    pending = await redis_client.xpending(stream_mod.STREAM_KEY, stream_mod.GROUP_NAME)
+    pending = await redis_client.xpending(strom.stream_key, stream_mod.GROUP_NAME)
     assert pending["pending"] == 1
 
 
@@ -143,7 +143,7 @@ async def test_atertag_plockar_upp_dod_konsuments_okvitterade_post(strom, redis_
 
     # "Död" konsument: läser posten men kvitterar aldrig.
     lasta = await redis_client.xreadgroup(
-        stream_mod.GROUP_NAME, "dod-konsument", {stream_mod.STREAM_KEY: ">"}, count=10
+        stream_mod.GROUP_NAME, "dod-konsument", {strom.stream_key: ">"}, count=10
     )
     assert lasta, "posten borde ha lästs av den döda konsumenten"
 
@@ -160,7 +160,7 @@ async def test_atertag_plockar_upp_dod_konsuments_okvitterade_post(strom, redis_
 
     assert antal == 1
     assert korda == [job_id]
-    pending = await redis_client.xpending(stream_mod.STREAM_KEY, stream_mod.GROUP_NAME)
+    pending = await redis_client.xpending(strom.stream_key, stream_mod.GROUP_NAME)
     assert pending["pending"] == 0
 
 

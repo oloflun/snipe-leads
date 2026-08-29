@@ -64,6 +64,8 @@ eskalerade. Samma skydd, en annan mekanism.
 
 from __future__ import annotations
 
+from ..redisnycklar import nyckel
+
 import hashlib
 import logging
 import math
@@ -206,6 +208,13 @@ class RedisSvarscache:
     PREFIX = "svarscache:"
 
     def __init__(self, client: Any) -> None:
+        # Namnrymden sätts per INSTANS och inte på klassen: klassattributen
+        # ovan är den råa formen, och ett importtidsberoende till settings
+        # hade gjort modulen omöjlig att importera innan miljön är läst.
+        # BÅDA måste namnrymdas — ett delat FT-index gör posterna sökbara
+        # över miljögränsen även när nyckelnamnen skiljer sig.
+        self.INDEX = nyckel(self.INDEX)
+        self.PREFIX = nyckel(self.PREFIX)
         self._redis = client
         self._loggat_fel = False
         self._index_sakerstalld = False

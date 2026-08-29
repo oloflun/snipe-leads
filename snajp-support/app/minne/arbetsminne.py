@@ -52,6 +52,7 @@ lägger blocket i `case_context`, som alltid är user-position
 """
 
 from __future__ import annotations
+from ..redisnycklar import nyckel
 
 import json
 import logging
@@ -128,7 +129,7 @@ class Arbetsminne(Protocol):
 
 
 def _nyckel(tenant_id: str, kund_id: str) -> str:
-    return f"minne:{tenant_id}:{kund_id}"
+    return nyckel(f"minne:{tenant_id}:{kund_id}")
 
 
 class MinnesArbetsminne:

@@ -472,6 +472,34 @@ som flera separata ärenden hos kunden.
 Test: snajp-support/tests/invariants/test_inv_job_001.py
 Införd: 2026-08-29 · Upphävs endast genom waiver
 
+### INV-REDIS-001 — Varje Redis-nyckel bär driftsättningens namnrymd
+Alla Redis-nycklar byggs med `app/redisnycklar.nyckel()`, som sätter
+`ns<8 hex>:` före den råa nyckeln. Namnrymden är sha256 av HELA
+`DATABASE_URL` plus miljönamnet, kapad till åtta tecken. Nio ytor omfattas
+och testas i `tests/invariants/test_inv_redis_001.py`: jobbposter
+(`crm:job:`), chatt- och leadsströmmarna (`crm:jobb:*`), embeddingcachen,
+KB- och konfigversionerna, arbetsminnet, samt svarscachens nycklar OCH dess
+FT-index — ett delat index gör posterna sökbara över miljögränsen även med
+skilda nyckelnamn.
+Varför: uppmätt 2026-08-29 delade `main` och `development` en Redis-instans
+(identisk `REDIS_URL`, verifierat mot Railways API) medan ingen nyckel bar
+miljö. En enda consumer group `agenter` på `crm:jobb:chatt` hade konsumenter
+från nio containrar, och en grupp delar ut varje post till exakt EN konsument
+— ett chattjobb från en riktig kund kunde alltså köras av en
+development-container mot spegeldatabasen. Svarscachen filtrerar på `tenant`,
+och development är en SPEGEL med identiska tenant-id:n, så ett svar från en
+testkörning kunde serveras till en riktig kund; posten som låg där hade 21
+dagars TTL kvar. Arbetsminnet (`minne:{tenant}:{kund}`) delades av samma skäl.
+Fröet är HELA DSN:en och inte värd + databasnamn, och det är ett mätresultat:
+inne i Railway kör båda miljöerna mot
+`postgres.railway.internal:5432/railway` med användaren `snajp_app`, så bara
+lösenordet skiljer. En namnrymd på värd + databas hade varit IDENTISK i
+produktion och spegel och sett korrekt ut medan den inte skyddade något.
+Egen Redis-instans åt `main` (plans/2026-08-29-redis-agentarkitektur.md, R5)
+är fortfarande rätt slutläge — det här är försvaret som håller även när en
+instans delas.
+Test: snajp-support/tests/invariants/test_inv_redis_001.py
+
 ### INV-CACHE-001 — En cachad chattreplik är en ren funktion av (tenant, fråga, KB-version, konfigversion)
 `app/cache/svarscache.forbered` (kallad av `run_support_agent` direkt efter
 kundminnesuppslaget, före klassificeraren/triagen) beviljar en LOOKUP bara

@@ -43,6 +43,8 @@ import socket
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from ..redisnycklar import nyckel
+
 logger = logging.getLogger("snajp-support.jobs.stream")
 
 STREAM_KEY = "crm:jobb:chatt"
@@ -106,7 +108,11 @@ class ChattStrom:
         self, client: Any, *, stream_key: str = STREAM_KEY, group: str = GROUP_NAME
     ) -> None:
         self.client = client
-        self.stream_key = stream_key
+        # Namnrymd per driftsättning. UTAN den stod produktionens och
+        # spegelns containrar i SAMMA consumer group, och en grupp delar ut
+        # varje post till exakt en konsument — ett kundjobb kunde alltså köras
+        # av fel miljö, mot fel databas. Se app/redisnycklar.py.
+        self.stream_key = nyckel(stream_key)
         self.group = group
         self._grupp_klar = False
 
