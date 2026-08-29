@@ -1813,6 +1813,17 @@ class MemoryStorage:
         rad = self.customer_details.get(tenant_id)
         return dict(rad) if rad else None
 
+    async def orgnr_for_tenant(self, tenant_id: str) -> str | None:
+        """Se base.Storage.orgnr_for_tenant.
+
+        Ingen RLS här, så läsningen går direkt i samma dict. Skillnaden mot
+        Postgres är avsiktlig och ofarlig: MemoryStorage har ingen
+        åtkomstmodell att spegla, och en kopia av policyn hade bara kunnat
+        avvika från den riktiga.
+        """
+        rad = self.customer_details.get(tenant_id) or {}
+        return (rad.get("orgnr") or None) or None
+
     async def upsert_customer_details(
         self, tenant_id: str, falt: dict[str, Any]
     ) -> dict[str, Any]:

@@ -458,20 +458,29 @@ def test_snajps_platshallare_passerar_luhn():
 
 
 class _FejkadStorage:
-    def __init__(self, tenant: dict | None):
-        self._tenant = tenant
+    """Speglar Storage.orgnr_for_tenant, INTE get_tenant.
+
+    Regressionsskydd: den forsta versionen av atkomst_for_tenant last
+    get_tenant()["orgnr"], och ss_tenants har ingen sadan kolumn — numret bor i
+    ss_customer_details (migration 053). Attrappen har svarar bara pa den metod
+    koden faktiskt far anvanda, sa ett aterfall till get_tenant failar direkt i
+    stallet for att tyst ge None.
+    """
+
+    def __init__(self, orgnr: str | None):
+        self._orgnr = orgnr
         self.efterfragad: str | None = None
 
-    async def get_tenant(self, tenant_id: str):
+    async def orgnr_for_tenant(self, tenant_id: str):
         self.efterfragad = tenant_id
-        return self._tenant
+        return self._orgnr
 
 
 async def test_atkomsten_laser_orgnr_ur_var_egen_tenantrad():
     """Next-proxyn skickar BARA tokenen. Orgnr hämtas här — ett orgnr som kommer
     utifrån är ett fält någon kan byta ut, och det som byts ut då är vems
     beskattningsuppgifter vi frågar efter (INV-SEC-002)."""
-    storage = _FejkadStorage({"orgnr": "556824-9022"})
+    storage = _FejkadStorage("556824-9022")
     atkomst = await atkomst_for_tenant(storage, "tenant-1", "token-abc")
 
     assert atkomst is not None
@@ -482,19 +491,19 @@ async def test_atkomsten_laser_orgnr_ur_var_egen_tenantrad():
 
 async def test_utan_token_finns_ingen_atkomst_och_ingen_dbfraga():
     """Kunden har inte legitimerat sig. Då ska vi inte ens slå i databasen."""
-    storage = _FejkadStorage({"orgnr": "556824-9022"})
+    storage = _FejkadStorage("556824-9022")
     assert await atkomst_for_tenant(storage, "tenant-1", None) is None
     assert await atkomst_for_tenant(storage, "tenant-1", "") is None
     assert storage.efterfragad is None
 
 
 async def test_tenant_utan_orgnr_ger_ingen_atkomst():
-    """Snajps egen platshållare är tom i lib/tenants — och en tenant utan orgnr
-    ska ge 'inte tillgängligt', inte ett uppslag på tomma strängen."""
-    assert await atkomst_for_tenant(_FejkadStorage({}), "t", "token") is None
-    assert await atkomst_for_tenant(_FejkadStorage({"orgnr": "  "}), "t", "token") is None
+    """En tenant utan registrerat orgnr ska ge 'inte tillgängligt', inte ett
+    uppslag på tomma strängen."""
+    assert await atkomst_for_tenant(_FejkadStorage(None), "t", "token") is None
+    assert await atkomst_for_tenant(_FejkadStorage("  "), "t", "token") is None
 
 
 async def test_okand_tenant_ger_ingen_atkomst():
-    """get_tenant returnerar None för en tenant som inte finns."""
+    """Funktionen returnerar None för en tenant utan registrerat orgnr."""
     assert await atkomst_for_tenant(_FejkadStorage(None), "finns-inte", "token") is None

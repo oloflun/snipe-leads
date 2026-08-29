@@ -2469,6 +2469,12 @@ class PostgresStorage:
             )
         return _row(record) if record else None
 
+    async def orgnr_for_tenant(self, tenant_id: str) -> str | None:
+        """Se base.Storage.orgnr_for_tenant — går via security definer-funktionen
+        eftersom ss_customer_details RLS stänger ute tenant-skopade anrop."""
+        async with self.pool.acquire() as conn:
+            return await conn.fetchval("select public.orgnr_for_current_tenant()")
+
     async def upsert_customer_details(
         self, tenant_id: str, falt: dict[str, Any]
     ) -> dict[str, Any]:

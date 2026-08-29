@@ -882,6 +882,20 @@ class Storage(Protocol):
         """Kundens registerrad, eller None när ingen skrivits ännu."""
         ...
 
+    async def orgnr_for_tenant(self, tenant_id: str) -> str | None:
+        """Tenantens EGET organisationsnummer, läsbart från en tenant-skopad körning.
+
+        Skild från `get_customer_details` med flit: den läser hela
+        kundregisterraden och skyddas av en RLS-policy som BARA släpper igenom
+        en oskopad admin-anslutning (migration 053). En agentkörning har
+        `app.tenant_id` satt och får därför noll rader därifrån — tyst.
+
+        Den här metoden går via `orgnr_for_current_tenant()` (migration 056),
+        som returnerar exakt ett fält för exakt den tenant som redan är
+        inloggad. Se migrationens kommentar för varför den saknar parameter.
+        """
+        ...
+
     async def upsert_customer_details(
         self, tenant_id: str, falt: dict[str, Any]
     ) -> dict[str, Any]:

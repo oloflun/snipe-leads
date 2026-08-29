@@ -359,7 +359,7 @@ async def atkomst_for_tenant(
     ## Varför orgnr läses här och inte skickas med anropet
 
     Next-proxyn vidarebefordrar BARA tokenen. Organisationsnumret hämtas ur vår
-    egen tenantrad, eftersom ett orgnr som kommer utifrån är ett fält någon kan
+    egen databas, eftersom ett orgnr som kommer utifrån är ett fält någon kan
     byta ut — och det som byts ut då är vems beskattningsuppgifter vi frågar
     efter. Samma regel som INV-SEC-002 drar för tenant.
 
@@ -367,15 +367,30 @@ async def atkomst_for_tenant(
     täcker. Men en spärr som förlitar sig på att motparten säger ifrån är ingen
     spärr — den är en förhoppning med bra uppförande.)
 
+    ## Varför `orgnr_for_tenant` och inte `get_tenant`
+
+    FÖRSTA VERSIONEN LÄSTE `get_tenant()["orgnr"]` OCH KUNDE ALDRIG FUNGERA.
+    `ss_tenants` har ingen orgnr-kolumn — numret bor i `ss_customer_details`
+    (migration 053). Funktionen returnerade därför alltid None, och hela
+    Skatteverket-uppslaget var dött utan att något larmade: verktyget svarade
+    "inte tillgängligt", vilket är exakt vad det också säger när kunden inte
+    loggat in. Ett riktigt fel som gömde sig bakom ett giltigt svar.
+
+    Att bara byta till `get_customer_details` hade gett samma tystnad av ett
+    ANNAT skäl: den tabellens RLS-policy släpper bara igenom anrop där
+    `app.tenant_id` är osatt, och en agentkörning är alltid tenant-skopad.
+    `orgnr_for_tenant` går därför via `orgnr_for_current_tenant()`
+    (migration 056), som lämnar ut exakt ett fält för exakt den inloggade
+    tenanten.
+
     None när något saknas: ingen token (kunden har inte legitimerat sig), eller
-    inget orgnr på tenanten. Verktyget svarar då att uppgiften inte gick att
+    inget orgnr registrerat. Verktyget svarar då att uppgiften inte gick att
     hämta, vilket är rätt utfall och inte ett fel.
     """
     if not access_token:
         return None
 
-    tenant = await storage.get_tenant(tenant_id) or {}
-    orgnr = str(tenant.get("orgnr") or "").strip()
+    orgnr = str(await storage.orgnr_for_tenant(tenant_id) or "").strip()
     if not orgnr:
         return None
 
