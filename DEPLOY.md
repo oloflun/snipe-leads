@@ -469,6 +469,64 @@ python scripts/railway_doman.py --env main
 
 Den skriver `OK` i stället för `VÄNTAR` när posten pekar rätt.
 
+## Skatteverket: Beskattningsengagemang (orgnr-verifiering vid onboarding)
+
+Verifierar tenantens EGET organisationsnummer — F-skatt, momsregistrering och
+arbetsgivarregistrering. I dag kontrollerar onboardingen bara Luhn-siffran
+(`app/leads/orgnr.py`), alltså att numret är rätt SKRIVET, inte att bolaget
+finns. Klienten ligger i `app/leads/skatteverket.py`.
+
+**Ingenting av detta är påkopplat, och det är inte en glömska.** Utan båda
+nycklarna returnerar `get_skatteverket_klient()` `None`, onboardingen fortsätter
+på Luhn-kontrollen precis som idag och deployen påverkas inte. Halvsatt räknas
+som osatt och loggas som varning — samma regel som SMTP.
+
+| Variabel | Tjänst | Betydelse |
+|---|---|---|
+| `SKATTEVERKET_CLIENT_ID` | `api` | Delas ut av Skatteverket efter ansökan |
+| `SKATTEVERKET_CLIENT_SECRET` | `api` | Samma utdelning. Sätts av en människa, aldrig i en fil som deployas |
+| `SKATTEVERKET_API_BAS_URL` | `api` | Valfri. Default `https://api.test.skatteverket.se`. Produktion är `https://api.skatteverket.se` |
+
+Bas-URL:en pekar på TESTMILJÖN som default med flit: en testnyckel mot
+produktion hade slagit mot riktiga beskattningsuppgifter, och det är fel håll
+att falla åt.
+
+### Två spärrar som INTE går att koda bort
+
+**1. Nycklarna kräver ett avtal.** Skatteverket delar ut dem via formulär på
+skatteverket.se — testnycklar mot sandboxen, produktionsnycklar först efter
+tecknat avtal enligt API:ets allmänna villkor. Det är ett avtalsbeslut av
+samma slag som DeepSeek-frågan i `CLAUDE.md`, inte något ett skript ordnar.
+▸ Anton
+
+**2. API:t kräver BankID — det finns ingen server-till-server-väg.**
+Auktorisation sker med OAuth2 Authorization Code Grant där den externa
+användaren legitimerar sig med e-legitimation (tjänstebeskrivning
+`beskattningsengagemang-v1`, avsnitt 2.6 och 5.4). Backenden kan alltså inte
+slå upp ett godtyckligt orgnr på egen hand: uppslaget görs för en inloggad
+firmatecknare, eller för ett registrerat ombud med organisationscertifikat
+(en egen ansökan, inte en kodändring).
+
+Följden: `access_token` är ett argument in i klienten, aldrig något den
+skaffar själv. Redirect-flödet hör hemma i Next-appens onboarding och **finns
+inte** — `skatteverket.paborja_inloggning()` är en stub som kastar med hela
+skälet utskrivet. Authorize- och token-URI:erna publiceras under "Säkerhet och
+API:er" och kommer med nycklarna; att gissa dem hade gett en implementation
+som ser färdig ut och faller vid första riktiga inloggningen.
+
+### Fällan i svaret: 200 betyder inte "godkänd"
+
+Tjänsten returnerar personens SENASTE registrering, och den kan vara avslutad
+eller ha ett startdatum i framtiden (tjänstebeskrivningen 4.2.2). Ett bolag
+vars F-skatt drogs in för konkurs 2019 svarar alltså `200` med hela posten
+kvar. Använd `Engagemang.ar_aktiv()` — ett `is not None`-test läser
+"avregistrerad för konkurs" som ett godkänt bolag. `404` betyder att bolaget
+aldrig haft engagemanget och är ett giltigt svar, inte ett fel.
+
+Svaren är beskattningsuppgifter för en identifierad näringsidkare, och för en
+enskild firma ÄR identiteten ett personnummer. Modulen loggar därför aldrig
+svarskroppen — bara korrelations-id:t, som Skatteverket auditloggar i fem år.
+
 ## Ny kund
 
 ```bash
