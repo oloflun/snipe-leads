@@ -1,7 +1,25 @@
 fastapi>=0.115
 uvicorn[standard]>=0.30
-openai-agents>=0.2.0
-openai>=1.60
+# TAK, inte bara golv. Utan tak väljer varje `docker build` sina egna
+# versioner, och en majorbump kan komma in i produktionen utan att någon
+# bett om den eller kört sviten på den.
+#
+# UPPMÄTT, inte gissat: byggloggen för deployen av 5d782da löste dessa rader
+# till openai-agents 0.22.0 och openai 3.6.0. Pinnarna nedan låser alltså
+# fast det produktionen REDAN kör — de ändrar ingenting i drift, de gör bara
+# nästa bygge förutsägbart.
+#
+# Golvet `openai>=1.60` var dessutom FALSKT och beskrev aldrig något som gick
+# att installera: openai-agents 0.22 kräver `openai<4,>=3.0.0`, så 1.x har
+# aldrig kunnat lösas tillsammans med den. Raden såg ut som ett krav men var
+# en tom formulering.
+#
+# Taket 0.23 är inte godtyckligt: 0.22 skärpte
+# `Converter.maybe_response_output_message` till att kräva `id` i posten, och
+# nästa minorbump kan göra samma sak igen. En sådan ska vara ett beslut någon
+# fattar och kör sviten på, inte något nästa docker build väljer åt oss.
+openai-agents>=0.22.0,<0.23
+openai>=3.3,<4
 asyncpg>=0.29
 pydantic>=2.8
 pydantic-settings>=2.4
