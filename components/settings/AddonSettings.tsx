@@ -2,6 +2,7 @@
 
 import { addonCatalog } from "@/lib/addons";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
+import { mejlaOss } from "@/components/marketing/copy";
 
 /**
  * Tilläggstjänsterna, aktiva och låsta i samma lista.
@@ -53,7 +54,7 @@ export function AddonSettings() {
                     {addon.why}
                   </p>
                   <a
-                    href={`mailto:Snajpsupport@gmail.com?subject=${encodeURIComponent(`Tillägg: ${addon.name}`)}`}
+                    href={mejlaOss(`Tillägg: ${addon.name}`)}
                     className="mt-4 inline-block text-[13px] underline underline-offset-4 transition hover:text-ochre"
                   >
                     Hör av dig om {addon.name.toLowerCase()}

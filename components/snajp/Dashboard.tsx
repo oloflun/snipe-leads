@@ -19,6 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useArbetsvag } from "@/components/AppShell";
 import { EjAktiverad, arEjAktiverad } from "@/components/EjAktiverad";
 import { Badge, btnPrimary, btnSecondary } from "@/components/ui";
+import { mejlaOss } from "@/components/marketing/copy";
 import { createDemoSupportApi } from "@/lib/demo/support-inbox";
 import { readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
@@ -567,7 +568,7 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
                 <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-ink/55">
                   Vill ni koppla er riktiga inkorg?{" "}
                   <a
-                    href="mailto:Snajpsupport@gmail.com?subject=Koppla%20v%C3%A5r%20inkorg"
+                    href={mejlaOss("Koppla vår inkorg")}
                     className="focus-ring rounded-input underline underline-offset-4 hover:text-ochre"
                   >
                     Hör av er
