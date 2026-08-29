@@ -326,6 +326,24 @@ class Settings(BaseSettings):
     email_provider: str = ""
     resend_api_key: str = ""
 
+    # Skatteverkets Beskattningsengagemang-API — verifierar tenantens EGET
+    # orgnr vid onboarding (F-skatt, moms, arbetsgivarregistrering).
+    # Tomma => app/leads/skatteverket.py returnerar ingen klient och
+    # onboardingen fortsätter på enbart Luhn-kontrollen, precis som idag.
+    #
+    # NYCKLARNA FINNS INTE ÄNNU och kan inte skaffas härifrån: Skatteverket
+    # delar ut dem efter ansökan via formulär (testnycklar mot sandboxen,
+    # produktionsnycklar först efter tecknat avtal). Det är ett avtalsbeslut
+    # av samma slag som DeepSeek-frågan, inte ett kodbeslut.
+    #
+    # Bas-URL:en pekar på TESTMILJÖN som default, med flit. En felaktigt
+    # satt produktionsnyckel mot testmiljön svarar 401; en testnyckel mot
+    # produktion hade slagit mot riktiga beskattningsuppgifter. Fel håll att
+    # falla åt är det senare.
+    skatteverket_client_id: str = ""
+    skatteverket_client_secret: str = ""
+    skatteverket_api_bas_url: str = "https://api.test.skatteverket.se"
+
     # CORS: kommaseparerade origins som får anropa API:t direkt från en
     # webbläsare. Tom = av, vilket räcker för vår egen frontend — Next-proxyn
     # anropar backenden server-side, så webbläsaren träffar aldrig den här
