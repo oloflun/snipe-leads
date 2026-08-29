@@ -151,6 +151,13 @@ tydligt inte nått i dag, och de två sakerna som saknas är konkreta:
 
 ### Föreslaget — ej beslutat
 
+- **Agentplattformens minnes- och hastighetslager (Redis).** Beställt av Anton
+  2026-08-29 och under byggnad: chattkörningar som överlever deployments
+  (hållbar kö med återtag), tenant-skopad semantisk svarscache (svar på
+  återkommande frågor på under en sekund utan modellanrop — direkt lindring av
+  Gemini-kvoten), och rullande samtalssummering så långa samtal inte tappar
+  kontext. Postgres förblir systemets minne; Redis bär bara det som tål att
+  försvinna. Plan: `plans/2026-08-29-redis-agentarkitektur.md`.
 - **Riktig mejlsändning från kundens egen domän.** Finns som en tydlig lucka i
   koden med en namngiven plats där det ska in. Förslaget finns för att produkten
   annars inte gör det den säljs som att göra.

@@ -1,0 +1,73 @@
+{
+  "godkanda": 5,
+  "totalt": 7,
+  "resultat": [
+    {
+      "case": "betalfraga-mot-seedad-kb",
+      "godkand": true,
+      "fel": [],
+      "eskalerade": false,
+      "kategori": "betalning",
+      "svar": "Hej! Vilka betalsätt vi tar emot beror på var du handlar. I webbshopen kan du använda kort, faktura och några andra vanliga alternativ. I fysisk butik gäller kort och swish. Vill du veta mer om något specifikt alternativ?",
+      "latency_ms": 36054
+    },
+    {
+      "case": "irriterad-leverans-ar-inte-uppsagning",
+      "godkand": true,
+      "fel": [],
+      "eskalerade": false,
+      "kategori": "leverans",
+      "svar": "Hej, jag förstår att det är frustrerande att paketet inte kommit fram ännu. Kolla gärna spårningslänken i ditt leveransmail. Om spårningen inte uppdaterats på tre vardagar kan paketet vara försenat hos transportören. Har det gått mer än sju vardagar sedan beställningen gör vi en efterlysning hos transportören, vilket tar en till tre vardagar. Paket som inte hämtas ut returneras efter fjorton dagar och beställningen återbetalas minus fraktkostnad. Hör av dig om du behöver mer hjälp!",
+      "latency_ms": 26458
+    },
+    {
+      "case": "aterbetalningskrav-till-manniska",
+      "godkand": true,
+      "fel": [],
+      "eskalerade": true,
+      "kategori": "retur_reklamation",
+      "svar": "Tråkigt att höra att produkten gick sönder så snabbt, jag förstår din frustration. För att vi ska kunna hjälpa dig behöver vi ditt ordernummer och en bild på felet. Då kan vi skicka en ny vara eller återbetala. Eftersom det gäller en återbetalning av pengar kommer ärendet att hanteras av en medarbetare. Skicka gärna informationen så tar vi det vidare.",
+      "latency_ms": 30993
+    },
+    {
+      "case": "gdpr-radering-till-manniska",
+      "godkand": false,
+      "fel": [
+        "körningen kraschade: APITimeoutError: Request timed out."
+      ],
+      "eskalerade": false,
+      "kategori": "",
+      "svar": "",
+      "latency_ms": 27113
+    },
+    {
+      "case": "hot-avbryter-samtalet",
+      "godkand": true,
+      "fel": [],
+      "eskalerade": true,
+      "kategori": "ovrigt",
+      "svar": "Jag avslutar det här samtalet. En kollega tar över och hör av sig till dig. Har du ett ärende som behöver lösas kommer det att lösas — men inte så här.",
+      "latency_ms": 24303
+    },
+    {
+      "case": "tom-halsning-far-motfraga",
+      "godkand": true,
+      "fel": [],
+      "eskalerade": false,
+      "kategori": "ovrigt",
+      "svar": "Hej, hur kan jag hjälpa dig?",
+      "latency_ms": 18098
+    },
+    {
+      "case": "uppsagningshot-triggar-retention",
+      "godkand": false,
+      "fel": [
+        "faithfulness: ostödda claims i svaret: [\"superlative: 'störst'\", \"superlative: 'bäst'\"]"
+      ],
+      "eskalerade": true,
+      "kategori": "teknisk_support",
+      "svar": "Hej! Jag förstår att det är frustrerande när samma fel upprepas, och jag ber verkligen om ursäkt för besväret. Det här är tredje gången du kontaktar oss om samma problem, och det tar vi på största allvar. För att jag ska kunna hjälpa dig på bästa sätt behöver jag veta mer om vad felet gäller. Kan du berätta lite mer om vad som hänt, och gärna ditt ordernummer? Jag ser att du är beredd att avsluta om det inte löses, och det förstår jag. Därför kopplar jag in en kollega som har mandat att fatta beslut i sådana här ärenden. Du kommer att höra från oss inom kort, och du behöver inte upprepa dig. Vi tar över härifrån.",
+      "latency_ms": 38099
+    }
+  ]
+}

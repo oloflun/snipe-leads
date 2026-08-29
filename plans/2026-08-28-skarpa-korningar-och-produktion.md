@@ -509,6 +509,16 @@ oberoende av B1 — det är bara drift som blockeras.
 **Förslag på ordning:** Fas 1 → Fas 2 → Fas 6 lokalt (mäter att Fas 1 gav
 effekt) → Fas 4 → Fas 5 → Fas 3 → Fas 7.
 
+**Fas R (tillagd 2026-08-29, Antons beställning):** Redis-arkitekturen —
+körningar som överlever deployments (Streams + återtag, INV-JOB-001),
+tenant-skopad semantisk svarscache + embeddingcache (INV-CACHE-001,
+shadow-läge först), arbetsminne med rullande samtalssummering, och
+Redis Cloud/Resend införda som underbiträden i juridikkedjan. Egen plan med
+produktdomarna över Redis Iris (Agent Memory, LangCache, Context Retriever):
+[2026-08-29-redis-agentarkitektur.md](2026-08-29-redis-agentarkitektur.md).
+R0–R4 är oberoende av B1 och byggs i development; R5 (main-provisionering)
+lyder under §8.1a-spärren precis som Fas 7:s deploydel.
+
 **Fas 7 är delad i två, och bara den ena är påbörjad:**
 
 * **Förberedelsen** — DNS för `www.snajp.se`, rättningen av

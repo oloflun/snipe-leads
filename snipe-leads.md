@@ -119,6 +119,12 @@ separate thing entirely — user-message position only, never system. See
 | `scripts/smtp_konfig.py` | Sets the real send path on Railway — SMTP or, since Railway blocks outbound SMTP on the trial plan, Resend over HTTPS (`--resend`). Tests the connection/key before writing anything. |
 | `scripts/redis_konfig.py` | Sets `REDIS_URL` on Railway's `api` service for the async job queue (chat/leads jobs) — PINGs the Redis Cloud database first, never shares one instance across environments. |
 | `scripts/redis_cloud_nycklar.py` | Saves Redis Cloud's ACCOUNT-level API keys (not a database connection string) to `.env.deploy` — the prerequisite for provisioning additional Redis databases via API instead of the dashboard. |
+| `scripts/redis_kontroll.py` | Lists every Redis Cloud database with region and TLS status via the account API — exits non-zero if anything sits outside the EU. The GDPR gate for the Redis layer. |
+| `scripts/redis_tls_pa.py` | Enables TLS on the dev Redis database AND rewrites `REDIS_URL` to `rediss://` in one sweep (the two steps are one change). Run by Anton — the auto-mode classifier blocks agents from cloud-infra writes. |
+| `scripts/redis_provisionera.py` | Prepares `main`'s own Redis database (EU, TLS, first paid tier with persistence+replication). `--planer` lists prices read-only; `--skapa` is gated behind §8.1a and an explicit flag. |
+| `scripts/gemini_web_konfig.py` | Copies `GEMINI_API_KEY` from the local env file onto Railway's `web` service (Fas 1.2) so Email-studio stops simulating for logged-in customers. Anton runs it — same classifier gate. |
+| `plans/2026-08-29-redis-agentarkitektur.md` | The Redis architecture: deploy-surviving runs (Streams), tenant-scoped semantic answer cache, rolling conversation memory — plus the verdicts on Redis Iris (Agent Memory, LangCache, Context Retriever). |
+| `docs/REDIS_IRIS_EVAL.md` | The adoption gates and sandbox protocol for the managed Iris services — synthetic data only, eight gates before any production use. |
 
 ## Invariants and gotchas
 
@@ -287,15 +293,15 @@ git push origin development
 git push origin development:railway-development   # nu automatisk, se nedan
 ```
 
-Ett GitHub Actions-jobb (`.github/workflows/deploy-development.yml`, ändrat
-2026-08-25) speglar `development` -> `railway-development` på varje push,
-vilket är den gren Railways deployment trigger faktiskt lyssnar på. Innan
-dess deployade samma workflow till en Vercel-preview av den döda kedjan —
-grönt i GitHub Actions, ingenting hände i Railway.
+Sedan 2026-08-27 lyssnar Railways deployment trigger för `development`
+direkt på grenen `development` — spegel-workflowen
+(`deploy-development.yml`) och den döda Vercel-workflowen
+(`deploy-production.yml`) togs bort 2026-08-29, eftersom de bara producerade
+falska gröna signaler mot grenar och stackar som ingenting längre läser.
 
 | | main (produktion) | development (mirror av produktion) |
 |---|---|---|
-| Gren som Railway lyssnar på | `railway-main` | `railway-development` |
+| Gren som Railway lyssnar på | `railway-main` | `development` (direkt, sedan 2026-08-27) |
 | Web | `https://www.snajp.se` | `https://web-development-6c85.up.railway.app` |
 | API | `api-production-d7695.up.railway.app` | `api-development-5cc3.up.railway.app` |
 | LLM-provider | `gemini` (Gemini free tier) | `gemini` |
