@@ -193,6 +193,47 @@ function isoDagarSedan(dagar: number, nu: Date): string {
 }
 
 /**
+ * Hur många veckor bakåt kurvan i Kundstatistik täcker. Måste vara samma tal
+ * som `beraknaKundstatistik(..., antalVeckor)` — spreds exempelraderna över
+ * ett bredare fönster än grafen ritar hamnar de äldsta utanför bilden och
+ * kurvan ser gles ut igen, fast av motsatt skäl.
+ */
+export const SPRIDNING_VECKOR = 12;
+
+/**
+ * Registreringsdatum för en exempelrad — påhittat, och det är en ändring värd
+ * att förstå.
+ *
+ * ## Varför det INTE var påhittat förut
+ *
+ * `kund_sedan` är riktig data: registrets datum om det finns, annars
+ * arbetsytans skapelsedatum. Berikningen lämnade det därför orört, och bara
+ * avtalsdatumet hittades på. Följden var att kurvan klumpade ihop sig i tre
+ * veckor — testarbetsytorna skapades allihop mellan 16 och 23 augusti, så det
+ * var när de "blev kunder".
+ *
+ * ## Varför det är påhittat nu
+ *
+ * En kurva som visar tre staplar och nio tomma veckor säger ingenting om hur
+ * vyn ser ut när den används. Spridningen är alltså medveten, och priset är
+ * att kolumnen "Kund sedan" för en exempelrad inte längre är arbetsytans
+ * verkliga skapelsedatum. Raden bär `Exempel`, och fotnoten under grafen säger
+ * numera rakt ut att BÅDA datumen är påhittade — den sade tidigare att
+ * registreringsdatumen var verkliga, vilket de inte längre är.
+ *
+ * `plats` är radens plats i den jämna spridningen, inte en hash: nio rader
+ * fördelade med hashning lämnar hål och dubbletter, och "sprid över tolv
+ * veckor" blev då sju veckor med tur. Se `berikaAlla`.
+ */
+function registreringsdatum(id: string, plats: number, nu: Date): string {
+  // Måndag i den tilldelade veckan, plus 0-4 dagar: en kund registreras på en
+  // vardag. Utan det landade varje stapel på exakt samma veckodag, vilket syns
+  // i tabellen som en kolumn av måndagar.
+  const dagar = plats * 7 + tal(id, 11, 0, 4);
+  return isoDagarSedan(Math.max(0, dagar), nu);
+}
+
+/**
  * Avtalsdatum, härlett ur när arbetsytan blev kund.
  *
  * FÖRSTA VERSIONEN DROG ETT FRITT DATUM 30–260 DAGAR TILLBAKA, och resultatet
@@ -229,7 +270,7 @@ function avtalsdatum(id: string, kundSedan: string | null | undefined, nu: Date)
  * Berikar en tenantrad med exempeltal om — och bara om — den är helt tom.
  * `nu` skickas in i stället för att läsas här, så att funktionen går att testa.
  */
-export function berika(rad: TenantRow, nu: Date): BerikadTenant {
+export function berika(rad: TenantRow, nu: Date, plats = 0): BerikadTenant {
   if (!arTom(rad)) return { ...rad, ar_exempel: false };
 
   const id = rad.id;
@@ -239,7 +280,19 @@ export function berika(rad: TenantRow, nu: Date): BerikadTenant {
   const korningar = tal(id, 2, profil.korSpann[0], profil.korSpann[1]);
   const provkorningar = korningar > 0 ? tal(id, 3, 0, 6) : 0;
   const fel = tal(id, 4, profil.felSpann[0], profil.felSpann[1]);
-  const dagar = tal(id, 5, profil.dagarSedan[0], profil.dagarSedan[1]);
+  const kundSedan = registreringsdatum(id, plats, nu);
+  const dagarSomKund = Math.floor(
+    (nu.getTime() - new Date(kundSedan).getTime()) / 86_400_000
+  );
+
+  // Senaste aktivitet kan aldrig ligga FÖRE registreringen. Utan taket fick en
+  // kund som registrerades i veckan en profil med 44 dagars tystnad, alltså
+  // aktivitet en månad innan arbetsytan fanns — ett tal som motsäger raden
+  // bredvid sig.
+  const dagar = Math.min(
+    tal(id, 5, profil.dagarSedan[0], profil.dagarSedan[1]),
+    Math.max(0, dagarSomKund)
+  );
 
   // Tokens skalar med volymen, med en spridning på ±20 %. Ett fast tal per
   // ärende hade gett en marginal som var exakt densamma för varje kund i
@@ -265,9 +318,13 @@ export function berika(rad: TenantRow, nu: Date): BerikadTenant {
     tokens_out: tokens - tokensIn,
     errors: fel,
     last_activity: isoDagarSedan(dagar, nu),
-    // Avtalsdatum bara om raden saknar ett. Finns ett registrerat datum är det
-    // riktig data ur kundregistret och skrivs inte över.
-    avtal_signerat: rad.avtal_signerat ?? avtalsdatum(id, rad.kund_sedan, nu),
+    // Registreringsdatumet SKRIVS ÖVER för exempelrader — se
+    // `registreringsdatum` för varför, och vad det kostar.
+    kund_sedan: kundSedan,
+    // Avtalet räknas ur det påhittade registreringsdatumet, inte ur radens
+    // ursprungliga. Annars hade ordningen brutits igen: ett avtal från augusti
+    // på en kund som enligt kurvan blev kund i juni.
+    avtal_signerat: avtalsdatum(id, kundSedan, nu),
     ar_exempel: true
   };
 }
@@ -278,7 +335,27 @@ export function berika(rad: TenantRow, nu: Date): BerikadTenant {
  */
 export function berikaAlla(rader: readonly TenantRow[], nu: Date): BerikadTenant[] {
   if (!exempeldataPa()) return rader.map((rad) => ({ ...rad, ar_exempel: false }));
-  return rader.map((rad) => berika(rad, nu));
+
+  // Platserna delas ut JÄMNT över fönstret, inte hashat. Nio rader som var för
+  // sig drar ett veckonummer ur sitt id ger hål och dubbletter — med tur sju
+  // veckor av tolv, vilket är precis det glesa utfall spridningen finns för att
+  // undvika. Här får rad i plats round(i * (V-1) / (n-1)), alltså både första
+  // och sista veckan besatta.
+  //
+  // Sorteringen sker på id-hashen och inte på listans ordning: backendens
+  // ordning är inte garanterad, och en rad som byter plats i svaret skulle
+  // annars byta registreringsdatum mellan två laddningar.
+  const tomma = rader.filter(arTom).sort((a, b) => fro(a.id) - fro(b.id));
+  const platser = new Map<string, number>();
+  tomma.forEach((rad, i) => {
+    const plats =
+      tomma.length === 1
+        ? 0
+        : Math.round((i * (SPRIDNING_VECKOR - 1)) / (tomma.length - 1));
+    platser.set(rad.id, plats);
+  });
+
+  return rader.map((rad) => berika(rad, nu, platser.get(rad.id) ?? 0));
 }
 
 /** Hur många rader i listan som visar exempeltal. Vyerna fotnotar på det här. */

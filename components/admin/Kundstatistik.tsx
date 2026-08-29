@@ -175,8 +175,8 @@ export function Kundstatistik({ stat }: Readonly<{ stat: Statistik }>) {
       {stat.exempel > 0 ? (
         <p className="mt-4 max-w-[70ch] text-[0.8125rem] leading-6 text-mineral">
           {text({
-            sv: `${stat.exempel} av raderna i talen och kurvan ovan är exempeldata — arbetsytor utan egen aktivitet, märkta med Exempel i tabellen. Nya kunder räknas ur deras verkliga registreringsdatum; avtalsdatumen är påhittade. Stäng av dem med NEXT_PUBLIC_ADMIN_EXEMPELDATA=av.`,
-            en: `${stat.exempel} of the rows behind the figures and the chart above are example data — workspaces with no activity of their own, tagged Example in the table. New customers are counted from their real registration dates; the contract dates are fabricated. Turn them off with NEXT_PUBLIC_ADMIN_EXEMPELDATA=av.`
+            sv: `${stat.exempel} av raderna i talen och kurvan ovan är exempeldata — arbetsytor utan egen aktivitet, märkta med Exempel i tabellen. Både registrerings- och avtalsdatumen är påhittade och utspridda över fönstret, så kurvans FORM säger ingenting om verklig försäljningstakt. Stäng av dem med NEXT_PUBLIC_ADMIN_EXEMPELDATA=av.`,
+            en: `${stat.exempel} of the rows behind the figures and the chart above are example data — workspaces with no activity of their own, tagged Example in the table. Both the registration and contract dates are fabricated and spread across the window, so the SHAPE of the curve says nothing about real sales velocity. Turn them off with NEXT_PUBLIC_ADMIN_EXEMPELDATA=av.`
           })}
         </p>
       ) : null}
