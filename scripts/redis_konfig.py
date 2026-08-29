@@ -3,14 +3,23 @@
 
     python scripts/redis_konfig.py --env development --endpoint industry-pan-coppery-23072.db.redis.io:19335
     python scripts/redis_konfig.py --env development --endpoint <host>:<port> --apply
+    python scripts/redis_konfig.py --env development --endpoint <host>:<port> --no-tls --apply
 
 Samma princip som scripts/smtp_konfig.py: sätt ingenting i Railway förrän
 uppgifterna är bevisade att fungera, inte bara inklistrade.
 
 Lösenordet (Redis Clouds "Default user password") läses med getpass — det
 syns aldrig på skärmen, hamnar aldrig i shell-historiken och skrivs aldrig ut.
-Skriptet bygger REDIS_URL = redis://<användare>:<lösenord>@<host>:<port> och
-testar ett riktigt PING mot databasen innan något sätts.
+Skriptet bygger REDIS_URL = rediss://<användare>:<lösenord>@<host>:<port>
+(TLS är DEFAULT — se scripts/redis_kontroll.py för varför: Redis Cloud är ett
+underbiträde, och ett Redis-lösenord i klartext över nätet är samma
+sekretessproblem som kunddata i klartext) och testar ett riktigt PING mot
+databasen innan något sätts.
+
+TLS kräver att databasen faktiskt har TLS aktiverat i Redis Cloud-konsolen
+(databasen -> Security -> TLS) — annars misslyckas PING-testet med ett
+anslutningsfel, inte ett tydligt "TLS är av". Är databasen en äldre eller
+medvetet okrypterad databas: kör med --no-tls, som bygger redis:// i stället.
 
 Paketet `redis` är valfritt HÄR (i den venv som kör scripts/) — testet hoppas
 över med en varning om det saknas, det är inte samma venv som
@@ -58,6 +67,20 @@ def main() -> int:
         help="host:port från Redis Cloud, t.ex. industry-pan-coppery-23072.db.redis.io:19335",
     )
     p.add_argument("--anvandare", default="default", help="Redis Cloud-användaren. Standard: default.")
+    p.add_argument(
+        "--tls",
+        dest="tls",
+        action="store_true",
+        default=True,
+        help="Bygg rediss:// (TLS). Standard — kräver att databasen har TLS aktiverat "
+             "i Redis Cloud-konsolen (Security -> TLS).",
+    )
+    p.add_argument(
+        "--no-tls",
+        dest="tls",
+        action="store_false",
+        help="Bygg redis:// (ingen TLS) i stället — reservväg för en databas utan TLS aktiverat.",
+    )
     p.add_argument("--apply", action="store_true", help="Testa anslutningen och sätt REDIS_URL i Railway.")
     args = p.parse_args()
 
@@ -77,9 +100,10 @@ def main() -> int:
     if losenord != rått.strip():
         print("  (Tog bort mellanslag ur lösenordet.)")
 
-    url = f"redis://{args.anvandare}:{losenord}@{host}:{port}"
+    schema = "rediss" if args.tls else "redis"
+    url = f"{schema}://{args.anvandare}:{losenord}@{host}:{port}"
 
-    print(f"\n  Testar PING mot {host}:{port} …")
+    print(f"\n  Testar PING mot {host}:{port} ({'TLS, rediss://' if args.tls else 'utan TLS, redis://'}) …")
     fel = testa_anslutning(url)
     if fel == "___SAKNAS___":
         print("  Paketet 'redis' finns inte i den här venv:n — hoppar över live-testet.")
@@ -90,6 +114,11 @@ def main() -> int:
         print("  dashboarden (Databases -> din databas -> Configuration -> Connect), och om")
         print("  databasen har en IP-allowlist under Security — Railway saknar en fast utgående")
         print("  IP som standard, så en allowlist där stänger ute Railway även med rätt lösenord.")
+        if args.tls:
+            print("  Kör med rediss:// (TLS, standard här) — misslyckas anslutningen med något i stil")
+            print("  med ett handskakningsfel eller timeout, kontrollera att TLS faktiskt är aktiverat")
+            print("  för databasen i Redis Cloud-konsolen (Security -> TLS). Är TLS medvetet avstängt")
+            print("  där: kör om med --no-tls.")
         return 1
     else:
         print("  PING -> PONG. Anslutningen fungerar från den här maskinen.")

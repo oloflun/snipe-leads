@@ -3,7 +3,7 @@ import { PageShell } from "@/components/AppShell";
 import { BookkeepingView } from "@/components/bookkeeping/BookkeepingView";
 import { StartView } from "@/components/dashboard/StartView";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
-import { Dashboard as SupportDashboard } from "@/components/snajp/Dashboard";
+import { SupportWorkspaceTabs } from "@/components/snajp/SupportWorkspaceTabs";
 import {
   AgentLarandeView,
   AnalyticsView,
@@ -75,7 +75,7 @@ export async function WorkspaceSection({ slug = [] }: Readonly<{ slug?: string[]
 
   // Entitlement is enforced here, on the server. Hiding a nav item is a courtesy;
   // this is the actual gate.
-  const { products } = await resolveDashboardState();
+  const { products, workspaceName } = await resolveDashboardState();
   if (!products.includes(product)) {
     notFound();
   }
@@ -117,7 +117,7 @@ export async function WorkspaceSection({ slug = [] }: Readonly<{ slug?: string[]
     case "assistant":
       return <AssistantView />;
     case "support":
-      return <SupportSection />;
+      return <SupportSection workspaceName={workspaceName} />;
     default:
       notFound();
   }
@@ -149,10 +149,15 @@ function LeadsControlSection() {
   );
 }
 
-function SupportSection() {
+function SupportSection({ workspaceName }: Readonly<{ workspaceName: string | null }>) {
+  // Fas 5 (Testchatt, plan 2026-08-28 §6.1, bd snipe-0r9): "Kundtjänst" (den
+  // interna inkorgen/utkasten) och "Testchatt" (riktig AI mot den inloggade
+  // tenantens egen kunskapsbas, märkt is_test i agent_runs) bredvid varandra
+  // — mönstret i components/snajp/SnajpSupportDemo.tsx, i dag oanvänd i
+  // produkten men färdigt.
   return (
     <PageShell title="Inkorg och utkast">
-      <SupportDashboard />
+      <SupportWorkspaceTabs workspaceName={workspaceName} />
     </PageShell>
   );
 }

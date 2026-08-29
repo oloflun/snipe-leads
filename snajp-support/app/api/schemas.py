@@ -14,6 +14,11 @@ class ChatRequest(BaseModel):
     customer_email: str | None = None
     customer_name: str | None = None
     attachments: list[Attachment] = []
+    #: Fas 2.5 (snipe-vxq): supportkörningar kunde inte märkas som test alls —
+    #: adminytans Testkörningar-flik LOVADE märkningen i sin egen beskrivning
+    #: medan fältet saknades här, så varje admintest räknades som kundvolym.
+    #: Samma fält och samma innebörd som LeadsBatchRequest.is_test.
+    is_test: bool = False
 
 
 class TriageEmail(BaseModel):
@@ -284,6 +289,18 @@ class KontaktRequest(BaseModel):
 
 class KbArticleRequest(BaseModel):
     articles: list[KbArticle] = Field(..., min_length=1, max_length=50)
+
+
+class KbExtraheraRequest(BaseModel):
+    """Fas 5.5 (Testchatt, snipe-0r9): PDF in, textlager ut. Filen sparas
+    aldrig, se app/api/kb.py. Taket här är medvetet GROVARE än det riktiga
+    (~8 MB, kb.MAX_PDF_BYTES): 14 000 000 tecken täcker en base64-kodad fil
+    en bra bit förbi 8 MB, så den exakta, begripliga gränsen sätts av
+    endpointens egen kontroll på de AVKODADE bytesen — inte av pydantic,
+    vars valideringsfel inte är skrivet för en kund att läsa."""
+
+    filename: str = Field(default="dokument.pdf", min_length=1, max_length=255)
+    data_url: str = Field(..., min_length=10, max_length=14_000_000)
 
 
 class IngestAttachment(BaseModel):

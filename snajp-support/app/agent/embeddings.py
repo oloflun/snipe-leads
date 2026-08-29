@@ -26,6 +26,7 @@ seedning av tjugotvå artiklar, och det är samma fel varje gång.
 
 import logging
 
+from ..cache.embeddingcache import hamta_cache
 from ..config import get_settings
 from .llm import get_embedding_client
 
@@ -35,7 +36,17 @@ _har_klagat = False
 
 
 async def embed_text(text: str) -> list[float] | None:
+    """Embeddar `text`, via embeddingcachen (Fas R2, `app/cache/
+    embeddingcache.py`) om samma text redan embeddats. Kroken gäller VARJE
+    anropare — KB-sökningen (`_sok_kb` i support_agent.py) OCH den
+    semantiska svarscachen (`app/cache/svarscache.forbered`) delar alltså
+    samma cache, utan att någon av dem behöver veta om den."""
     global _har_klagat
+
+    cache = hamta_cache()
+    cachad = await cache.get(text)
+    if cachad is not None:
+        return cachad
 
     client = get_embedding_client()
     if client is None:
@@ -59,7 +70,9 @@ async def embed_text(text: str) -> list[float] | None:
                 str(fel)[:300],
             )
         return None
-    return response.data[0].embedding
+    vektor = response.data[0].embedding
+    await cache.set(text, vektor)
+    return vektor
 
 
 def embeddings_tillgangliga() -> bool:

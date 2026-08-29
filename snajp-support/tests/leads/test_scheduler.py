@@ -363,6 +363,37 @@ async def test_exempelbolag_kan_aldrig_mejlas_sparr_noll():
 
 
 @pytest.mark.anyio
+async def test_test_ursprung_kan_aldrig_mejlas_sparr_noll():
+    """Samma spärr noll som exempelbolag, för migration 054:s 'test'-origin.
+
+    Ett prospekt skapat av en egen provkörning (t.ex. "Egna bolag" i
+    LeadsRunForm.tsx med testkörningsflaggan på) ska aldrig kunna leda till
+    ett utskick — även om någon glömmer växla tillbaka testläget innan
+    körningen når sändvägen.
+    """
+    storage = MemoryStorage()
+    item_id, thread_id, message_id = _seed(storage, scheduled_at=WITHIN_WINDOW_UTC)
+    provider = _FakeSendProvider()
+
+    provkorning = await storage.create_prospect(
+        TENANT, company_name="Nordvik Bygg AB", origin="test"
+    )
+    storage.outreach_threads[TENANT][thread_id]["prospect_id"] = provkorning["id"]
+
+    outcome = await process_due_item(
+        storage, TENANT, {"id": item_id, "thread_id": thread_id}, provider, now=WITHIN_WINDOW_UTC
+    )
+
+    assert outcome == "blocked"
+    assert provider.sent == []
+    queue_item = next(i for i in storage.send_queue[TENANT] if i["id"] == item_id)
+    assert queue_item["status"] == "blocked"
+    assert queue_item["gate_checks"]["send_guard_regel"] == "testkorning"
+    message = next(m for m in storage.outreach_messages[TENANT] if m["id"] == message_id)
+    assert message["sent_at"] is None
+
+
+@pytest.mark.anyio
 async def test_riktigt_prospekt_pa_samma_trad_skickas():
     """Kontrollen ovan får inte vara en spärr som stoppar allt.
 

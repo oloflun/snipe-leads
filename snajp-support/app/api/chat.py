@@ -6,6 +6,8 @@ skopade till den tenanten.
 
 import asyncio
 import logging
+import time
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -40,6 +42,13 @@ async def _process(
     request: ChatRequest,
     attachments: list[str],
     scopes: list[rate_limit_db.Scope] | None = None,
+    *,
+    # Trådas vidare till run_support_agent för återupptagningsvägen
+    # (INV-JOB-001, se app/agent/support_agent.py och app/jobs/stream.py).
+    # Båda None som default: paritetsvägen (create_task, ingen ChattStrom)
+    # kallar _process utan dem och beteendet är OFÖRÄNDRAT.
+    aterta: dict[str, str] | None = None,
+    vid_arende: Any = None,
 ) -> None:
     settings = get_settings()
     storage = app_state.storage
@@ -69,11 +78,23 @@ async def _process(
                 customer_email=request.customer_email,
                 customer_name=request.customer_name,
                 attachments=attachments,
+                aterta=aterta,
+                vid_arende=vid_arende,
+                is_test=request.is_test,
             )
         # Bokför de LLM-anrop körningen FAKTISKT gjorde — ett steg är ett
         # anrop, och antalet varierar med eskalering och omkörning. Ett tak
         # räknat i meddelanden hade mätt fel storhet (migration 019).
-        await rate_limit_db.record(storage, scopes or [], len(result.get("step_log") or []))
+        #
+        # Fas R2: en cacheträff (SEMANTIC_CACHE=on) lägger ett PSEUDO-steg i
+        # step_log för spårbarhet (nyckeln "step", se
+        # app/cache/svarscache.svara_fran_cache) men gjorde noll LLM-anrop.
+        # Räkna bara posterna som FAKTISKT är ett LLM-steg (nyckeln "skill",
+        # satt av app/agent/step_runner.RunTrace.as_log) — annars hade en
+        # cachad replik bokförts som om den kostat lika mycket kvot som en
+        # full körning, trots att den inte gjorde ett enda anrop.
+        llm_steg = [steg for steg in (result.get("step_log") or []) if "skill" in steg]
+        await rate_limit_db.record(storage, scopes or [], len(llm_steg))
         await app_state.jobs.complete(job_id, result)
     except Exception:  # noqa: BLE001 — jobbet får aldrig fastna i processing
         # Loggen får HELA stacken, jobbet får en mening.
@@ -94,6 +115,76 @@ async def _process(
         )
 
 
+async def hantera_strom_jobb(app_state, payload: dict[str, Any]) -> None:
+    """Kör ETT jobb ur chattströmmen.
+
+    Det här är hanteraren som skickas till ChattStrom.worker_loop/atertag
+    (app/jobs/stream.py) — samma funktion oavsett om posten läses för första
+    gången eller är en ÅTERTAGEN post efter att en tidigare process dött.
+
+    Jobbposten läses FÖRST. Bär den redan ett ticket_id/conversation_id (satt
+    av vid_arende nedan i ett tidigare, avbrutet försök) är det här en
+    återupptagning — run_support_agent får då `aterta` och hoppar över
+    create_ticket/save_message för det inkommande meddelandet i stället för
+    att skapa ett andra ärende av samma chattmeddelande (INV-JOB-001).
+    Klockan för 300-sekundersgränsen (app/jobs/store.py JOB_TIMEOUT_SECONDS)
+    flyttas BARA i det fallet — annars hade tid som redan gått åt i det
+    avbrutna första försöket ätit upp återupptagningens egen tidsbudget.
+    """
+    job_id = payload["job_id"]
+    tenant_id = payload["tenant_id"]
+    jobs = app_state.jobs
+
+    befintligt = await jobs.get(job_id) or {}
+    # Dör processen i fönstret mellan jobs.complete() och XACK ligger posten
+    # kvar okvitterad fast svaret redan är levererat. Utan den här vakten
+    # hade återtaget kört HELA agentkedjan en gång till — sex-sju LLM-anrop,
+    # ett dubblerat utgående svar och en andra agent_runs-rad för samma
+    # chattmeddelande. Ett redan färdigt jobb kvitteras bara. ("failed" tas
+    # däremot om med flit: en körning som hann märkas failed av ett hanterat
+    # fel och SEDAN kraschade får en andra chans, och aterta-vägen gör
+    # omtaget dubblettsäkert.)
+    if befintligt.get("status") == "completed":
+        return
+    aterta = None
+    if befintligt.get("ticket_id") and befintligt.get("conversation_id"):
+        aterta = {
+            "ticket_id": befintligt["ticket_id"],
+            "conversation_id": befintligt["conversation_id"],
+        }
+        await jobs.annotate(job_id, created=time.time())
+
+    async def vid_arende(ticket_id: str, conversation_id: str) -> None:
+        await jobs.annotate(job_id, ticket_id=ticket_id, conversation_id=conversation_id)
+
+    request = ChatRequest(
+        message=payload["message"],
+        subject=payload.get("subject") or "",
+        channel=payload.get("channel") or "web",
+        customer_email=payload.get("customer_email"),
+        customer_name=payload.get("customer_name"),
+        is_test=bool(payload.get("is_test")),
+    )
+    # x-snajp-user/is_demo gick igenom strömmen som RÅA primitiver (aldrig
+    # ett Scope-objekt, se chat() nedan) — scopes byggs om här, exakt som de
+    # byggdes vid enqueue.
+    scopes = rate_limit_db.scopes_for(
+        tenant_id,
+        payload.get("rate_limit_user"),
+        is_demo=bool(payload.get("rate_limit_is_demo")),
+    )
+    await _process(
+        app_state,
+        job_id,
+        tenant_id,
+        request,
+        payload.get("attachments") or [],
+        scopes,
+        aterta=aterta,
+        vid_arende=vid_arende,
+    )
+
+
 @router.post("/api/chat", status_code=202)
 async def chat(
     request: Request, payload: ChatRequest, tenant: dict = Depends(require_tenant)
@@ -103,11 +194,9 @@ async def chat(
     # X-Snajp-User sätts av Next-proxyn efter sessionen. Den är frivillig:
     # saknas den gäller bara tenant-taket, och en förfalskad rubrik kan bara
     # ge en snävare kvot åt den som förfalskar den.
-    scopes = rate_limit_db.scopes_for(
-        tenant["tenant_id"],
-        request.headers.get("x-snajp-user"),
-        is_demo=request.headers.get("x-snajp-demo") == "true",
-    )
+    x_snajp_user = request.headers.get("x-snajp-user")
+    is_demo = request.headers.get("x-snajp-demo") == "true"
+    scopes = rate_limit_db.scopes_for(tenant["tenant_id"], x_snajp_user, is_demo=is_demo)
     try:
         await rate_limit_db.enforce(request.app.state.storage, scopes)
     except rate_limit_db.RateLimitDbExceededError as error:
@@ -116,9 +205,39 @@ async def chat(
         raise HTTPException(status_code=429, detail=str(error)) from error
 
     job_id = await request.app.state.jobs.create(tenant_id=tenant["tenant_id"])
-    asyncio.create_task(
-        _process(request.app.state, job_id, tenant["tenant_id"], payload, attachments, scopes)
-    )
+
+    chattstrom = getattr(request.app.state, "chattstrom", None)
+    if chattstrom is not None:
+        # Strömvägen (Fas R1): jobbet körs av en worker-process — kanske en
+        # annan än den som svarar på det här anropet — och överlever en
+        # deploy av DEN HÄR processen. Se app/jobs/stream.py och INV-JOB-001.
+        #
+        # x-snajp-user och is_demo skickas som RÅA primitiver, ALDRIG som
+        # Scope-objekt: ett Scope är inte JSON-serialiserbart som sig
+        # självt, och att pickla/serialisera dataklassen hade bakat in ett
+        # internt datakontrakt i Redis-nyttolasten. hantera_strom_jobb
+        # rekonstruerar scopes med samma rate_limit_db.scopes_for.
+        await chattstrom.enqueue(
+            {
+                "job_id": job_id,
+                "tenant_id": tenant["tenant_id"],
+                "message": payload.message,
+                "subject": payload.subject,
+                "channel": payload.channel,
+                "customer_email": payload.customer_email,
+                "customer_name": payload.customer_name,
+                "attachments": attachments,
+                "rate_limit_user": x_snajp_user,
+                "rate_limit_is_demo": is_demo,
+                "is_test": payload.is_test,
+            }
+        )
+    else:
+        # Paritetsvägen — OFÖRÄNDRAD i minsta detalj, det är den hela
+        # testsviten redan bevisar (t.ex. tests/test_api.py).
+        asyncio.create_task(
+            _process(request.app.state, job_id, tenant["tenant_id"], payload, attachments, scopes)
+        )
     return {"job_id": job_id, "status": "processing"}
 
 

@@ -45,6 +45,7 @@ from ..bookkeeping.underlag import (
     sha256_av,
 )
 from ..bookkeeping.verifieringsgrind import STATUS_GRANSKA, STATUS_KLAR
+from ..config import get_settings
 from .deps import require_tenant
 
 router = APIRouter()
@@ -96,6 +97,7 @@ async def ta_emot_underlag(
     kontrollera_fil(data, mimetyp)
 
     sha256 = sha256_av(data)
+    settings = get_settings()
     dubblett = await storage.get_bk_underlag_by_sha256(tenant_id, sha256)
     if dubblett is not None:
         beskrivning = dubblett.get("filnamn") or "ett underlag"
@@ -167,6 +169,7 @@ async def ta_emot_underlag(
         tokens_in=avlasning.trace.total_tokens_in,
         tokens_out=avlasning.trace.total_tokens_out,
         latency_ms=sum(s.latency_ms for s in avlasning.trace.steps),
+        model=f"{settings.llm_provider}:{settings.model}",
     )
 
     return {
@@ -356,6 +359,7 @@ async def chatt(
     och gränssnittet kan visa det som vad det är.
     """
     storage = request.app.state.storage
+    settings = get_settings()
     typ = request.headers.get("content-type") or ""
 
     meddelande = ""
@@ -460,6 +464,7 @@ async def chatt(
         tokens_in=0,
         tokens_out=0,
         latency_ms=svar["latency_ms"],
+        model=f"{settings.llm_provider}:{settings.model}",
     )
 
     return {**svar, "underlag": bilaga}

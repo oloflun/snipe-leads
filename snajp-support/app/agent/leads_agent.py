@@ -43,6 +43,7 @@ from agents import Agent, Runner
 from ..agentcore.instruktioner import Instruktionslager, las_instruktioner
 from ..agentcore.overlays import pack_version
 from ..agentcore.packs import PlaybookStep, RunLedger
+from ..config import get_settings
 from ..leads.business_context import require_business_context
 from ..leads.grounding_gate import PermittedFacts, build_permitted_facts, check_grounding
 from ..leads.grounding_playbook import GROUNDING_V1
@@ -421,6 +422,7 @@ async def run_research_step(
 ) -> dict[str, Any]:
     """Fas B för ETT prospekt: åtta skill-steg, ett LLM-anrop vardera."""
     started = time.monotonic()
+    settings = get_settings()
     steps = RESEARCH_V1.steps  # indexerat, inte per namn — ordningen ÄR playbooken
 
     material, scraped_sources, scrape_errors = await _gather_registered_sources(
@@ -618,6 +620,7 @@ async def run_research_step(
         tokens_out=trace.total_tokens_out,
         latency_ms=latency_ms,
         is_test=is_test,
+        model=f"{settings.llm_provider}:{settings.model}",
     )
 
     # Underlaget grundningsgrinden (W5) mäter utkastets påståenden mot.
@@ -692,6 +695,7 @@ async def run_outreach_draft(
     await require_business_context(storage, tenant_id)
 
     started = time.monotonic()
+    settings = get_settings()
     steps = OUTREACH_V1.steps
 
     thread = await storage.get_outreach_thread(tenant_id, thread_id) or {}
@@ -876,6 +880,7 @@ async def run_outreach_draft(
         tokens_out=trace.total_tokens_out,
         latency_ms=latency_ms,
         is_test=is_test,
+        model=f"{settings.llm_provider}:{settings.model}",
     )
 
     return {

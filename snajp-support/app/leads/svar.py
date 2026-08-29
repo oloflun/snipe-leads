@@ -55,6 +55,7 @@ from ..agent.tools import strip_markdown
 from ..agentcore.instruktioner import las_instruktioner
 from ..agentcore.overlays import pack_version
 from ..agentcore.packs import Playbook, PlaybookStep, RunLedger
+from ..config import get_settings
 from ..moderation.abuse_gate import check_abuse
 from ..notifications.prioriterat_mejl import skicka_prioriterat
 from .gissnings_gate import check_gissningar
@@ -409,6 +410,7 @@ async def _notifiera(tenant_id: str, *, rubrik: str, vad: str, varfor: str, nyck
 
 async def _avsluta(storage, tenant_id, trace, lager, body, utfall, started) -> dict[str, Any]:
     """Gemensam avslutning: agent_runs-loggen (G10) och svaret."""
+    settings = get_settings()
     await storage.log_agent_run(
         tenant_id,
         agent_type="leads_svar",
@@ -420,6 +422,7 @@ async def _avsluta(storage, tenant_id, trace, lager, body, utfall, started) -> d
         tokens_in=trace.total_tokens_in,
         tokens_out=trace.total_tokens_out,
         latency_ms=int((time.monotonic() - started) * 1000),
+        model=f"{settings.llm_provider}:{settings.model}",
     )
     utfall["skills_used"] = trace.skills_used
     utfall["step_log"] = trace.as_log()

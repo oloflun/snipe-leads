@@ -660,6 +660,16 @@ class MemoryStorage:
         self.send_queue.setdefault(tenant_id, []).append(queue_item)
         return {"message": message, "queue_item": queue_item}
 
+    async def find_outreach_thread(
+        self, tenant_id: str, *, prospect_id: str
+    ) -> dict[str, Any] | None:
+        # Läsdelen av ensure_outreach_thread — se base.py: en GET får inte
+        # lämna en tom tråd efter sig.
+        for thread in self.outreach_threads.get(tenant_id, {}).values():
+            if thread.get("prospect_id") == prospect_id:
+                return thread
+        return None
+
     async def ensure_outreach_thread(
         self, tenant_id: str, *, prospect_id: str
     ) -> dict[str, Any]:
@@ -971,6 +981,7 @@ class MemoryStorage:
         icp_fit: float | None = None,
         qualified: bool | None = None,
         disqualifiers: list[str] | None = None,
+        origin: str | None = None,
     ) -> dict[str, Any] | None:
         prospect = await self.get_prospect(tenant_id, prospect_id)
         if not prospect:
@@ -980,6 +991,7 @@ class MemoryStorage:
             ("icp_fit", icp_fit),
             ("qualified", qualified),
             ("disqualifiers", disqualifiers),
+            ("origin", origin),
         ):
             if value is not None:
                 prospect[field] = value
@@ -1027,6 +1039,8 @@ class MemoryStorage:
         tokens_out: int,
         latency_ms: int,
         is_test: bool = False,
+        # Migration 055. Se base.py:s docstring för värdemängden.
+        model: str | None = None,
     ) -> dict[str, Any]:
         # Samma värdemängd som check-villkoret i migration 025. Utan den här
         # raden tar minnet emot vad som helst medan Postgres kastar — och det
@@ -1042,6 +1056,7 @@ class MemoryStorage:
             "tenant_id": tenant_id,
             "agent_type": agent_type,
             "is_test": is_test,
+            "model": model,
             "pack_version": pack_version,
             "skills_used": skills_used,
             "input": input_text,

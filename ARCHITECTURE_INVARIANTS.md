@@ -268,6 +268,23 @@ Handel. Två kunder hade skrivit i samma SOUL. Uppslaget failar dessutom stängt
 Test: tests/invariants/test_inv_sec_011.py
 Införd: 2026-08-21 · Upphävs endast genom waiver
 
+### INV-SEC-012 — Kunskapsbasens artikeltext hamnar aldrig i systemposition
+`app/agent/support_agent._kb_block` läggs i `case_context`, som
+`app/agent/step_runner.run_step` alltid placerar som `messages[1]` (använd-
+arposition) — aldrig sammanfogat i systempromptens `messages[0]`. Gäller
+oavsett hur artikeln kom in: skriven i textrutan, en textfil (Fas 5.4) eller
+en PDF-extraktion (Fas 5.5), eftersom alla tre går genom samma skrivväg
+(`POST /api/kb` → `storage.add_kb_article`).
+Varför: Fas 5 (Testchatt) gör kunskapsbasen lättare att fylla på med
+uppladdat material, som är mindre kontrollerat än text en människa skrivit
+för hand — en vidarebefordrad PDF kan bära en instruktionsattack utan att
+kunden läst varje rad. Svagare släkting till INV-SEC-009: KB-texten saknar
+SOUL-textens explicita `wrap_untrusted_content`-inkapsling, men den
+strukturella positionsgarantin (case_context är alltid användarposition)
+håller ändå, och det är den som testas.
+Test: tests/invariants/test_inv_sec_012.py
+Införd: 2026-08-29 · Upphävs endast genom waiver
+
 ### INV-GROUND-001 — Ett utkast med ostödda påståenden köas aldrig
 `app/leads/grounding_gate.check_grounding` körs på den EXAKTA text som ska
 köas (efter `strip_markdown` och `sign_off`), mot en tillåten faktamängd byggd
@@ -433,6 +450,94 @@ Test: snajp-support/tests/agent/test_kundminne.py
 (test_minnesblocket_ar_opalitligt_wrappat — sparar en instruktionsattack som
 fakta och asserterar att den bara når prompten inuti sin wrap)
 Införd: 2026-08-27 · Upphävs endast genom waiver
+
+### INV-JOB-001 — En avbruten chattkörning fullföljs idempotent, aldrig dubblerat
+`app/jobs/stream.ChattStrom` lägger `POST /api/chat`-jobb i ett Redis-stream
+(`crm:jobb:chatt`, consumer group `agenter`) i stället för att köra dem som
+`asyncio.create_task` i samma process. Dör processen mitt i en körning ligger
+posten kvar okvitterad i gruppens pending-lista tills `atertag` (XAUTOCLAIM,
+min-idle 60 s) tar över den. `app/api/chat.hantera_strom_jobb` läser
+jobbposten FÖRST: bär den redan `ticket_id`/`conversation_id` (satt av
+`vid_arende` i det avbrutna försöket, via `app/jobs/store.py`s nya
+`annotate`) skickas de in som `run_support_agent(..., aterta=...)`, som då
+hoppar över `create_ticket`/`save_message` för det inkommande meddelandet i
+stället för att skapa ett andra ärende av samma chattmeddelande.
+Varför: `POST /api/chat` körde tidigare agentkedjan i SAMMA process som tog
+emot HTTP-anropet. En deploy dödar den processen mitt i körningen — jobbposten
+blev kvar som "processing" och auto-failades efter 300 s (`JOB_TIMEOUT_
+SECONDS`), och kunden fick ett fel i stället för sitt svar även när ärendet
+redan hunnit skapas. Utan idempotensen hade ett återtag löst tillgängligheten
+men skapat ett NYTT ärende varje gång — samma chattmeddelande hade dykt upp
+som flera separata ärenden hos kunden.
+Test: snajp-support/tests/invariants/test_inv_job_001.py
+Införd: 2026-08-29 · Upphävs endast genom waiver
+
+### INV-CACHE-001 — En cachad chattreplik är en ren funktion av (tenant, fråga, KB-version, konfigversion)
+`app/cache/svarscache.forbered` (kallad av `run_support_agent` direkt efter
+kundminnesuppslaget, före klassificeraren/triagen) beviljar en LOOKUP bara
+när ALLA fyra håller samtidigt: `history` är tom (första kontakten),
+`attachments` är tom, `fakta` (kundminnet) är tom, och
+`maskera_personnummer(message) == message` (ingen PII-träff). En STORE efter
+ett färdigt svar kräver DESSUTOM att svaret inte eskalerade och att
+kategorin finns i `svarscache.CACHEBARA_KATEGORIER` — en delmängd av
+`config.CATEGORIES` som uttryckligen utesluter `betalning` och
+`retur_reklamation`. En TRÄFF i läge `on` (`Settings.semantic_cache`)
+returnerar det cachade svaret UTAN att köra triage/research/utkast/
+eskaleringsbedömning/kb-förslag/retention/humanizer — noll LLM-anrop — men
+skapar fortfarande ärendet och sparar inbound/outbound precis som en vanlig
+körning (`svarscache.svara_fran_cache`). Läge `shadow` loggar bara en
+`platform_events`-rad vid en träff och ändrar annars ingenting. Versionerna
+(`app/cache/versioner.py`) är räknare per tenant (plus en global för
+`PUT /api/admin/instruktioner`) som bumpas från KB-skrivvägen
+(`app/api/kb.py`) och tenantprofilens instruktioner/ton/SOUL-skrivväg
+(`app/api/admin_profil.py`) — en bump gör varenda äldre post omatchbar.
+`scripts/kor_evals.py` sätter `SEMANTIC_CACHE=off` explicit.
+Varför: en cache som kunde återanvända ett svar format kring EN kunds
+historik, minnesfakta eller personnummer på en ANNAN kund vore en läcka, inte
+en optimering — och en cachad reklamation eller betalningsfråga kan aldrig
+vara kundoberoende. Grinden ligger före triagen med flit: en TRÄFF i läge
+`on` ska kosta noll LLM-anrop, inklusive uppsägningsklassificeraren (Del E
+steg 6) som annars körde ovillkorligt tidigare i funktionen.
+Test: snajp-support/tests/invariants/test_inv_cache_001.py
+(scenario a–g: träff i läge "on" ger identiskt svar utan LLM-anrop och full
+bokföring; personnummer/kundminne/befintlig historik/eskalering/
+KB-versionsbump/icke-cachebar kategori blockerar var för sig; plus ett
+shadow-test som visar att en träff där aldrig ändrar svaret, bara loggar.)
+Se även: snajp-support/tests/test_svarscache.py (embeddingcache-paritet,
+MinnesSvarscache-tröskel/isolering, RedisSvarscache graceful mot `FT.*`-fel).
+Införd: 2026-08-29 · Upphävs endast genom waiver
+
+### INV-MEM-002 — Samtalssummeringen återger bara kundens egna uppgifter och löften till kunden, wrappas alltid som opålitlig och når aldrig instruktionsposition
+`app/minne/arbetsminne.py` (Fas R3) ersätter dagens 3-ärenden/8-turer-tak i
+`support_agent._render_conversation` med "summering + de 8 senaste raderna"
+BARA när samtalets faktiska totala turantal (hela historiken, inte det kapade
+taket) passerar `TROSKEL_TOTALA_TURER` (12) OCH en sparad summering finns för
+kunden — annars körs dagens beteende oförändrat. Summeringen byggs av
+`uppdatera_arbetsminne`, ETT direkt LLM-anrop utanför step_runnern (samma
+klientmönster som `retention_classifier.classify_cancellation_risk`),
+schemalagt fire-and-forget (`asyncio.create_task`) EFTER att svaret redan är
+sparat. Prompten bär `KONTAMINERINGSSPARR` ordagrant nära migration 052:s
+"## Kontamineringsspärren"-formulering: återge ENBART vad kunden själv
+uppgett och vad som utlovats kunden — aldrig sentiment, aldrig bedömningar,
+aldrig agentens egna slutsatser. Renderingen (`bygg_summerat_block`) wrappar
+summeringen ALLTID med `wrap_untrusted_content(source="customer:samtalssummering")`
+och lägger den i `case_context` — user-position, aldrig systemprompten
+(INV-SEC-009-gränsen, oförändrad).
+Varför: samma MemGuard-klassens kontamineringsrisk som INV-MEM-001, i en
+annan form — ett helt samtal i stället för enskilda fakta. En summering som
+bär agentens egna tolkningar (sentiment, bedömningar, slutsatser) blir
+självförstärkande: en felläsning i tur 5 blir "sanning" i tur 15 och går inte
+längre att skilja från vad kunden faktiskt sa. Och kundhärledd text är
+kundskriven text — oinkapslad i prompten vore en sparad summering en
+injektionsväg som överlever mellan ärenden, precis som ett owrappat
+kundminne hade varit.
+Test: snajp-support/tests/test_arbetsminne.py
+(test_summering_med_injektion_nar_aldrig_systemprompten — sparar en
+instruktionsattack som summering och asserterar att den aldrig når
+messages[0], bara den opålitligt-wrappade user-positionen;
+test_uppdateringsprompten_bar_kontamineringssparren — regressionstest på
+KONTAMINERINGSSPARR:s exakta formulering)
+Införd: 2026-08-29 · Upphävs endast genom waiver
 
 ## Roadmap
 

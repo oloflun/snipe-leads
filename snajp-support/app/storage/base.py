@@ -309,6 +309,15 @@ class Storage(Protocol):
         utan mänsklig granskning."""
         ...
 
+    async def find_outreach_thread(
+        self, tenant_id: str, *, prospect_id: str
+    ) -> dict[str, Any] | None:
+        """LÄSDELEN av ensure_outreach_thread — för GET-vägar som inte får
+        skapa. En sidladdning som letar efter ett befintligt utkast (Fas 5.5,
+        GET /api/leads/prospects/{id}/utkast) ska inte lämna en tom tråd
+        efter sig bara för att den tittade."""
+        ...
+
     async def ensure_outreach_thread(
         self, tenant_id: str, *, prospect_id: str
     ) -> dict[str, Any]:
@@ -420,6 +429,11 @@ class Storage(Protocol):
         tokens_out: int,
         latency_ms: int,
         is_test: bool = False,
+        # Migration 055. "<provider>:<modell>" (settings.llm_provider +
+        # settings.model), eller "svarscache" för en cacheträff som inte
+        # körde någon modell alls. None för anropare som (ännu) inte skickar
+        # det — kolumnen är nullable av samma skäl.
+        model: str | None = None,
     ) -> dict[str, Any]:
         """Skrivs för VARJE körning. Krävs för DSAR och för att kunna felsöka
         ett dåligt svar i efterhand (plan G10).
@@ -534,11 +548,16 @@ class Storage(Protocol):
         icp_fit: float | None = None,
         qualified: bool | None = None,
         disqualifiers: list[str] | None = None,
+        origin: str | None = None,
     ) -> dict[str, Any] | None:
         """Fas B:s bedömning (icp_fit, qualified, disqualifiers) landar här,
         migration 024. Innan den fanns räknades icp_fit ut av modellen och
         kastades bort — den gick inte att sortera, mäta eller motivera i
-        efterhand."""
+        efterhand.
+
+        `origin` (Fas 3, §4) är den enda vägen `POST .../befordra` skriver:
+        'test'/'example' → 'manual', efter att valideringen i
+        `leads/befordran.py` godkänt bolaget."""
         ...
 
     async def create_prospect_source(

@@ -45,3 +45,8 @@ pytest>=8.0
 anyio>=4.4
 httpx>=0.27
 pyyaml>=6.0  # tests/invariants/ parses ARCHITECTURE_INVARIANTS.md + waivers.yml
+# Fas R1 (bd snipe-lr7): app/jobs/stream.py:s XADD/XREADGROUP/XAUTOCLAIM/XACK
+# måste testas utan ett nätverk — fakeredis emulerar streams-API:t (inklusive
+# consumer groups) i minnet. Verifierat att XAUTOCLAIM stöds direkt i
+# fakeredis>=2.23, se tests/test_chatt_strom.py.
+fakeredis>=2.23

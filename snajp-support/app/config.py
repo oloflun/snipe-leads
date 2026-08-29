@@ -215,6 +215,31 @@ class Settings(BaseSettings):
     scrapegraphai_api_key: str = ""
     database_url: str = ""
     redis_url: str = ""
+    # Fas R1 (bd snipe-lr7): antal worker-tasks som läser crm:jobb:chatt
+    # (app/jobs/stream.py) PER PROCESS. Bara relevant när redis_url är satt
+    # — utan Redis finns ingen ström att läsa, och app.state.chattstrom är
+    # None (se app/main.py). Fler än 1 så en enskild långsam agentkörning
+    # inte blockerar nästa chattmeddelande i kön.
+    chat_workers: int = 2
+    # Fas R4 (bd snipe-2xj): antal worker-tasks som läser crm:jobb:leads
+    # (samma ChattStrom-klass som chatten, andra stream_key/group — se
+    # app/jobs/stream.py) PER PROCESS. Default 1, inte 2 som chatten: ett
+    # leads-jobb är ÅTTA LLM-anrop (research-steget, app/agent/leads_agent.py)
+    # mot chattens sex-sju, och en batch kan innehålla upp till 50 prospekt
+    # (LeadsBatchRequest.limit) — flera parallella workers hade kunnat
+    # brännsprinta genom hela tenant-timkvoten på sekunder i stället för att
+    # köa disciplinerat. Höjs bara efter att kvotmarginalen mätts i drift.
+    leads_workers: int = 1
+    # Fas R2 (bd snipe-cku): semantisk svarscache. "off" (default): cachen
+    # rörs aldrig — varken lookup eller store, inte ens ett embedding-anrop.
+    # "shadow": lookup+store körs, men en TRÄFF ändrar inget i svaret, bara
+    # en platform_events-rad för att mäta träffkvalitet innan man litar på
+    # den. "on": en TRÄFF returneras till kunden och kostar noll LLM-anrop.
+    # Se app/cache/svarscache.py och INV-CACHE-001. DEFAULT off i KOD med
+    # flit — shadow/on slås på per miljö via env-variabeln SEMANTIC_CACHE,
+    # aldrig som en kodändring. scripts/kor_evals.py sätter den explicit
+    # till "off" — evals mäter modellen, inte cachen.
+    semantic_cache: str = "off"
     snajp_master_api_key: str = "snajp_master_dev_key_change_me"
     snajp_demo_api_key: str = "snajp_demo_2f8c1a9e4b7d"
 

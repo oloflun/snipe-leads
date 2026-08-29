@@ -877,6 +877,23 @@ class PostgresStorage:
             )
         return {"message": _row(message), "queue_item": _row(queue_item)}
 
+    async def find_outreach_thread(
+        self, tenant_id: str, *, prospect_id: str
+    ) -> dict[str, Any] | None:
+        # Samma fråga som läsdelen i ensure_outreach_thread nedan — men utan
+        # skapandet. Se base.py för varför en GET aldrig får lämna spår.
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                select * from outreach_threads
+                where tenant_id = $1 and prospect_id = $2
+                order by created_at limit 1
+                """,
+                tenant_id,
+                prospect_id,
+            )
+        return _row(record) if record else None
+
     async def ensure_outreach_thread(
         self, tenant_id: str, *, prospect_id: str
     ) -> dict[str, Any]:
@@ -1319,6 +1336,7 @@ class PostgresStorage:
         icp_fit: float | None = None,
         qualified: bool | None = None,
         disqualifiers: list[str] | None = None,
+        origin: str | None = None,
     ) -> dict[str, Any] | None:
         # Dynamisk SET-lista: en PATCH ska kunna sätta ETT fält utan att nolla
         # de andra, och en fast update-sats hade krävt att anroparen skickar
@@ -1328,6 +1346,7 @@ class PostgresStorage:
             "icp_fit": icp_fit,
             "qualified": qualified,
             "disqualifiers": disqualifiers,
+            "origin": origin,
         }
         fields = {name: value for name, value in updates.items() if value is not None}
         if not fields:
@@ -1395,14 +1414,16 @@ class PostgresStorage:
         # Default false och inte None: "vet inte" ska inte vara ett möjligt
         # tillstånd för om en körning räknas som kundvolym. Se migration 036.
         is_test: bool = False,
+        # Migration 055. Se base.py:s docstring för värdemängden.
+        model: str | None = None,
     ) -> dict[str, Any]:
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
                 """
                 insert into agent_runs
                   (tenant_id, agent_type, pack_version, skills_used, input, output,
-                   step_log, tokens_in, tokens_out, latency_ms, is_test)
-                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                   step_log, tokens_in, tokens_out, latency_ms, is_test, model)
+                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
                 returning *
                 """,
                 tenant_id,
@@ -1416,6 +1437,7 @@ class PostgresStorage:
                 tokens_out,
                 latency_ms,
                 is_test,
+                model,
             )
         return _row(record)
 

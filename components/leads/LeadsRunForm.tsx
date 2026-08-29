@@ -257,10 +257,17 @@ export function LeadsRunForm({
       const antal = Number(limit) || 1;
 
       // 1. Egna bolag blir prospekt först — de är det kunden helst vill se.
+      //    is_test följer med som query-parameter (Fas 2.2, migration 054):
+      //    utan den landade en testkörnings egna bolag som origin='manual',
+      //    omöjliga att skilja från kundens riktiga lista och oskyddade av
+      //    send-guardens spärr noll.
       const egna = rader(egnaBolag);
       for (const namn of egna) {
         setStatus(`Lägger till ${namn}…`);
-        await anropa("/leads/prospects", {
+        // Ruttdelen hålls som en REN literal (inte template) — rotvakten
+        // tests/test_leads_ui_endpoints.py läser vägarna med regex och ska
+        // kunna matcha den mot backendens routelista.
+        await anropa("/leads/prospects" + (isTest ? "?is_test=true" : ""), {
           method: "POST",
           body: JSON.stringify({ company_name: namn })
         });
