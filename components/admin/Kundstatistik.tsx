@@ -169,6 +169,18 @@ export function Kundstatistik({ stat }: Readonly<{ stat: Statistik }>) {
         </details>
       </figure>
 
+      {/* Exempelfotnoten står FÖRE bortfiltrerings-fotnoten: läsaren ska veta
+          att kurvan innehåller påhittade tal innan hen läser vad som utelämnats.
+          Utan den här raden ser 12 avtal ut som 12 sålda avtal. */}
+      {stat.exempel > 0 ? (
+        <p className="mt-4 max-w-[70ch] text-[0.8125rem] leading-6 text-mineral">
+          {text({
+            sv: `${stat.exempel} av raderna i talen och kurvan ovan är exempeldata — arbetsytor utan egen aktivitet, märkta med Exempel i tabellen. Nya kunder räknas ur deras verkliga registreringsdatum; avtalsdatumen är påhittade. Stäng av dem med NEXT_PUBLIC_ADMIN_EXEMPELDATA=av.`,
+            en: `${stat.exempel} of the rows behind the figures and the chart above are example data — workspaces with no activity of their own, tagged Example in the table. New customers are counted from their real registration dates; the contract dates are fabricated. Turn them off with NEXT_PUBLIC_ADMIN_EXEMPELDATA=av.`
+          })}
+        </p>
+      ) : null}
+
       {stat.bortfiltrerade > 0 ? (
         <p className="mt-4 max-w-[70ch] text-[0.8125rem] leading-6 text-mineral">
           {stat.bortfiltrerade === 1
