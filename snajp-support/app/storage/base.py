@@ -87,7 +87,20 @@ class Storage(Protocol):
 
     async def get_customer_history(
         self, tenant_id: str, customer_id: str
-    ) -> list[dict[str, Any]]: ...
+    ) -> list[dict[str, Any]]:
+        """Kundens ärenden, nyast först.
+
+        VARJE post bär `conversation_id` — samtalet som hör till ärendet, eller
+        None för ett ärende utan samtal. Fältet finns INTE i ss_tickets; det
+        kommer ur en join i PostgresStorage och sätts explicit i MemoryStorage.
+
+        Kravet står här för att det en gång bara stod i den ena lagringen:
+        MemoryStorage satte fältet, Postgres gjorde det inte, och
+        arbetsminne.alla_samtalsrader kastade KeyError i drift medan sviten var
+        grön. INV-STORE-001 jämför signaturer, inte returformer — den fångar
+        alltså inte den här sortens glidning. Läsare måste tåla None.
+        """
+        ...
 
     async def create_ticket(
         self,

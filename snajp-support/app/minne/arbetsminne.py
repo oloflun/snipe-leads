@@ -278,7 +278,16 @@ async def alla_samtalsrader(storage: Storage, tenant_id: str, history: list[dict
     """
     rader: list[str] = []
     for ticket in reversed(history):  # history är nyast-först (get_customer_history); vi vill äldst-först
-        for msg in await storage.get_messages(tenant_id, ticket["conversation_id"]):
+        # .get, inte []: ett ärende utan samtal ger conversation_id = NULL ur
+        # LEFT-joinen i PostgresStorage.get_customer_history. Att kasta här är
+        # oproportionerligt — funktionen anropas EFTER att svaret tagits fram
+        # (support_agent.run_support_agent), så ett KeyError slänger ett redan
+        # betalt LLM-svar och ger kunden ett fel. Ett ärende utan samtal har
+        # inga rader att bidra med; hoppa över det och rendera resten.
+        conversation_id = ticket.get("conversation_id")
+        if not conversation_id:
+            continue
+        for msg in await storage.get_messages(tenant_id, conversation_id):
             who = "Kunden" if msg["direction"] == "inbound" else "Du"
             content = (msg.get("content") or "").strip()
             if content:

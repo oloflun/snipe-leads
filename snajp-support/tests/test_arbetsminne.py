@@ -425,3 +425,50 @@ async def test_kort_svar_schemalagger_ingen_uppdatering(monkeypatch):
     await asyncio.sleep(0)
 
     assert not anrop
+
+
+class _HistorikStorage:
+    """Minimal storage-stubbe: alla_samtalsrader rör bara get_messages."""
+
+    def __init__(self, rader: dict[str, list[dict[str, str]]]) -> None:
+        self.rader = rader
+        self.efterfragade: list[str] = []
+
+    async def get_messages(self, tenant_id: str, conversation_id: str):
+        self.efterfragade.append(conversation_id)
+        return self.rader.get(conversation_id, [])
+
+
+@pytest.mark.anyio
+async def test_alla_samtalsrader_hoppar_over_arende_utan_samtal():
+    """Ett ärende utan conversation_id får inte fälla renderingen.
+
+    Buggen den stänger: `ticket["conversation_id"]` kastade KeyError mot
+    PostgresStorage, vars get_customer_history inte bar fältet (ss_tickets har
+    ingen sådan kolumn). Sviten var grön eftersom MemoryStorage sätter det.
+
+    Det gör mer skada än en saknad rad: alla_samtalsrader anropas EFTER att
+    svaret tagits fram, så kraschen slängde ett redan betalt LLM-svar och gav
+    kunden "Svaret gick inte att ta fram den här gången."
+
+    Joinen i postgres.py är LEFT, så NULL är fortfarande ett giltigt värde för
+    ett ärende utan samtal — läsaren måste tåla det, inte bara nyckeln.
+    """
+    storage = _HistorikStorage(
+        {
+            "samtal-gammalt": [{"direction": "inbound", "content": "Var är mitt paket?"}],
+            "samtal-nytt": [{"direction": "outbound", "content": "Det kommer på fredag."}],
+        }
+    )
+    # history är nyast-först, som get_customer_history returnerar den.
+    history = [
+        {"id": "t3", "conversation_id": "samtal-nytt"},
+        {"id": "t2", "conversation_id": None},  # LEFT join utan träff
+        {"id": "t1"},  # fältet saknas helt — äldre poster, MemoryStorage-glidning
+        {"id": "t0", "conversation_id": "samtal-gammalt"},
+    ]
+
+    rader = await arbetsminne.alla_samtalsrader(storage, TENANT, history)
+
+    assert rader == ["Kunden: Var är mitt paket?", "Du: Det kommer på fredag."]
+    assert storage.efterfragade == ["samtal-gammalt", "samtal-nytt"]

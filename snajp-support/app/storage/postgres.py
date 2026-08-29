@@ -277,9 +277,27 @@ class PostgresStorage:
                 -- ärende skapas i sin egen request. Ordningen mellan två
                 -- sådana är godtycklig men stabil, vilket är tillräckligt —
                 -- de är samtidiga och har ingen sann inbördes ordning.
-                select * from ss_tickets
-                where tenant_id = $1 and customer_id = $2
-                order by created_at desc, id desc limit 20
+                -- conversation_id kommer ur joinen, INTE ur ss_tickets:
+                -- kolumnen finns inte där (se 002_snajp_support.sql), den
+                -- sitter på ss_conversations.ticket_id, som är unique — ett
+                -- ärende har högst ett samtal.
+                --
+                -- Utan joinen saknade ticket-dicten fältet helt, medan
+                -- MemoryStorage sätter det (memory.py). Följden var att
+                -- arbetsminne.alla_samtalsrader kastade KeyError mot Postgres
+                -- men aldrig i sviten, och kraschen kom EFTER att svaret
+                -- redan tagits fram — LLM-anropet betalt, svaret bortkastat,
+                -- kunden fick "Svaret gick inte att ta fram".
+                --
+                -- LEFT join, inte inner: ett ärende utan samtal ska ligga kvar
+                -- i historiken med conversation_id = NULL, inte försvinna ur
+                -- den. Läsaren måste tåla NULL.
+                select t.*, c.id as conversation_id
+                from ss_tickets t
+                left join ss_conversations c
+                  on c.ticket_id = t.id and c.tenant_id = t.tenant_id
+                where t.tenant_id = $1 and t.customer_id = $2
+                order by t.created_at desc, t.id desc limit 20
                 """,
                 tenant_id,
                 customer_id,
