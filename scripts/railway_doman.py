@@ -74,7 +74,7 @@ def lista(projekt_id: str, env_id: str, tjanst_id: str) -> dict:
         """
         query($p:String!,$e:String!,$s:String!) {
           domains(projectId:$p, environmentId:$e, serviceId:$s) {
-            customDomains { id domain status { dnsRecords { hostlabel recordType requiredValue currentValue status } } }
+            customDomains { id domain status { verified verificationDnsHost verificationToken certificateStatus dnsRecords { hostlabel recordType requiredValue currentValue status } } }
             serviceDomains { domain }
           }
         }
@@ -139,8 +139,20 @@ def main() -> int:
 
     for cd in egna:
         print(f"\n  egen domän       {cd['domain']}")
+        st = cd.get("status") or {}
+        print(f"    verifierad     {st.get('verified')}")
+        cert = str(st.get("certificateStatus") or "").replace("CERTIFICATE_STATUS_TYPE_", "")
+        print(f"    certifikat     {cert or '(okand)'}")
+        # Agarskapsposten syns INTE i dnsRecords. Utan den utfardas
+        # inget certifikat, hur ratt CNAME:n an pekar.
+        if st.get("verificationDnsHost") and not st.get("verified"):
+            print(f"    KRAVS  TXT    {st['verificationDnsHost']:22} -> {st.get('verificationToken')}")
         for post in (cd.get("status") or {}).get("dnsRecords") or []:
-            klar = "OK " if post.get("status") == "PROPAGATED" else "VÄNTAR"
+            # Railway svarar med hela enum-namnet, t.ex.
+            # DNS_RECORD_STATUS_PROPAGATED. Jamforelsen mot bara "PROPAGATED"
+            # matchade aldrig, sa en post som var klar rapporterades som
+            # VANTAR - i dagar. endswith i stallet for likhet.
+            klar = "OK " if str(post.get("status", "")).endswith("PROPAGATED") else "VÄNTAR"
             vard = post.get("hostlabel") or "@"
             print(f"    {klar}  {post['recordType']:6} {vard:20} -> {post['requiredValue']}")
             nuvarande = post.get("currentValue")
