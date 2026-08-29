@@ -1,5 +1,43 @@
 # Snipra Status
 
+## 2026-08-29 — Claude — Sebbes 24 commits genomgångna, Resend + Redis konfigurerade i development
+
+**Läste in och redogjorde för allt Sebbe (med Claude) byggt sedan Antons
+senaste commit (`090a0ba` → `9d15d73`, 24 commits, tre nätter):**
+lanseringsgranskningen (triage-timtak, dev-masternyckelvakt,
+`agent_feedback`-sortering, fyra frontend-fixar), mejlsändningen i tre steg
+(SMTP byggd → uppmätt att Railway blockerar utgående SMTP på trial-planen →
+byggd om till Resend/HTTPS), och adminfliken "Kunder & Data" (kundregister
+med käll-märkning per fält, statistik, felöversikt — intäkter/utgifter
+medvetet INTE byggt som siffror, väntar på Antons beslut om datakälla). Full
+detalj i `HANDOFF-2026-08-27-GRANSKNING.md` och
+`HANDOFF-2026-08-29-KUNDER-DATA.md`.
+
+**Resend satt i `development`:** `RESEND_API_KEY`, `EMAIL_PROVIDER=resend`,
+`SMTP_FROM=kontakt@snajp.se` — bekräftat i Railways variabellager, men
+deployen stod kvar som `BUILDING` vid sessionens slut och `/health/ready`
+visade fortfarande varningen om saknad sändväg i sista kontrollen. Inget
+fel, bara inte utrullad än — nästa session kollar `curl .../health/ready`
+igen innan den litar på att den är live.
+
+**Redis Cloud kopplad som jobbkö.** Ny databas ("Snajp-Chat-Data") satt som
+`REDIS_URL` på `development/api` (`scripts/redis_konfig.py`, nytt).
+**Bekräftat live:** `/health` svarar `"jobs":"redis"` — en omstart av
+`api`-tjänsten tappar inte längre pågående chatt-/leads-jobb. Redis Clouds
+konto-nivå-API sparat i `.env.deploy` (`scripts/redis_cloud_nycklar.py`,
+nytt) efter en felsökning som visade att Cloudflare (framför Redis Clouds
+API) blockerade Pythons standard-`User-Agent` — inget fel i nyckelparet, som
+det först såg ut som. Förkravet för att provisionera fler Redis-databaser är
+nu på plats; vad de ska användas till är en öppen fråga till Anton.
+
+Redis-databasen delas INTE med `main` — samma tysta-korskoppling-resonemang
+som redan gäller `GEMINI_API_KEY`. `main` har fortfarande varken Resend,
+Redis eller Kunder & Data; produktionsspärren från
+`plans/2026-08-28-skarpa-korningar-och-produktion.md` §8.1a gäller
+oförändrat, allt arbete gick mot `development`.
+
+Fullständig sessionslogg: [session-logs/2026-08-29-session-log.md](session-logs/2026-08-29-session-log.md)
+
 ## 2026-08-29 (natt) — Claude/Sebbe — adminfliken Kunder & Data: kundregister, statistik, felöversikt
 
 **Live i development, migration 053 körd.** Handoff till Anton:
@@ -35,6 +73,51 @@ stället för att visa påhittade siffror. Datakälla är Antons beslut.
 nya detaljvyn besiktigad inloggad (noll JS-fel, noll 4xx). Lokal fullstack gick
 inte att resa — pgvector saknas i lokala PostgreSQL 17 — så UI:t granskades via
 en okommittad preview-route + Playwright på 1440/375 i båda lägena.
+
+## 2026-08-28 — Claude — sjufasplan för skarpa körningar, produktionsspärren hittad, Loopia satt
+
+Anton bad om sju saker på en gång: gör alla körningar skarpa, skilj
+testkörningar från kundens riktiga konto, prospektbefordran, Email-studion
+in i leaden, en Testchatt-flik, minst 10 riktiga rundor DeepSeek/Gemini, och
+förberedd produktion på `main`. Fem parallella delagenter kartlade ytan;
+varje bärande fynd verifierades själv innan det gick in i planen —
+[plans/2026-08-28-skarpa-korningar-och-produktion.md](plans/2026-08-28-skarpa-korningar-och-produktion.md),
+17 `bd`-ärenden med beroenden, publicerat sammanfattningsdokument.
+
+**Varför körningarna ser autogenererade ut — fyra oberoende orsaker.**
+Email-studions modellväljare kände aldrig till Gemini (bara OpenAI/DeepSeek),
+föll alltid till mallgenererad text; exempelbolagen är deterministiska med
+flit men oskiljbara från en AI-körning i UI:t; Gemini kör gratisnivå (20
+anrop/dygn) trots betalt faktureringskonto — nyckelns PROJEKT var inte
+kopplat till kontot; ingen sändväg finns (varken IMAP in eller SMTP ut).
+Simuleringsläget i backenden var **inte** aktivt — båda miljöer `mode: live`.
+
+**Produktionsdeployen är farligare än dokumenterat.** `git rev-list` mot
+`origin` visade `main` som strikt förfader till `railway-main` (152 commits
+efter, noll före) — den dokumenterade `git push origin main:railway-main`
+skulle i dag avvisas eller, tvingad igenom, rulla tillbaka 22 aug-omläggningen
+och 25 aug-hotfixen. Verifierat att `development` redan innehåller hotfixens
+fulla innehåll, så säkra vägen är merge, inte force. **Produktionen rörs inte
+förrän Anton säger till** — skrivet in i planen på tre ställen.
+
+**Loopia satt och verifierat live.** `scripts/loopia_nycklar.py` (nytt,
+säker inklistring via getpass) → `python scripts/loopia_dns.py` returnerade
+riktiga MX/NS/TXT-poster från Loopias servrar, alltså bekräftat fungerande.
+`www.snajp.se`-CNAME väntar bara på `--apply`; apex-vidarebefordran förblir
+manuell (finns inte i LoopiaAPI).
+
+**Gemini — pågående, inte stängt.** Nyckeln var en Vertex AI Express
+Mode-nyckel vars PROJEKT (`snajp-506221`) inte var kopplat till
+faktureringskontot — därför gratisnivå trots betalt konto. Anton har sedan
+kopplat ett nytt projekt och bytt nyckel via `scripts/keys.py`, men det är
+INTE verifierat live än (nästa session: `python scripts/kor_evals.py`, ingen
+429 = bekräftat).
+
+`scripts/keys.py` säkrad: ett `FIXED`-block skrev tidigare ovillkorligt över
+`LLM_PROVIDER`/`MODEL` vid varje inklistring — samma felklass som
+`snipe-u70`. Skriver nu bara på ett tomt fält.
+
+Fullständig sessionslogg: [session-logs/2026-08-28-session-log.md](session-logs/2026-08-28-session-log.md)
 
 ## 2026-08-28 — Claude/Sebbe — MÄTT: Railway blockerar SMTP. HTTPS-vägen byggd.
 
@@ -82,6 +165,7 @@ Pushat till `development` (nya deploy-kedjan), deployad commit f081e11
 verifierad med verify_railway.py — allt grönt. `main` orörd; kvarstående
 main-blockerare i handoffens §4 (SMTP-attrappen, fakturering, orgnr-
 platshållaren, kvoterna 150/300, Redis, Gemini-kvoten).
+
 
 ## 2026-08-27 (natt) — Claude — varv 2–3: mätningen bevisad, grindarna skärpta, och två arkitekturmönster hämtade utifrån
 

@@ -12,7 +12,7 @@ milestone_blockers:
   - "main ligger ~80 commits efter development och kor gammal kod (snipe-zfc)"
   - "IMAP_PASSWORD_LIVRUSTNING saknas pa Railway api (bade main och development)"
   - "Vantar pa kundens bekraftelse av garantiperioden"
-updated: 2026-08-26
+updated: 2026-08-29
 ---
 
 # Snipra / Snajp
@@ -116,6 +116,9 @@ separate thing entirely — user-message position only, never system. See
 | `scripts/llm_provider.py` | Reads which LLM provider each Railway environment actually runs (never prints key values) and can `--apply` a switch to `openai`/`gemini` — refuses if the target service has no working key. |
 | `scripts/flytta_fran_supabase.py` | Moves what's left in the now-dead Supabase project (KB articles, context docs) into Railway Postgres. `far_importeras()` refuses to overwrite a non-empty slot — see the gotcha below about why. |
 | `scripts/verifiera_instruktioner.py` | Fills every instruction-bearing field with a unique marker, runs a real agent turn, and reports which prompt position each marker landed in. `--skarp` adds one real model call to confirm the model actually obeyed. |
+| `scripts/smtp_konfig.py` | Sets the real send path on Railway — SMTP or, since Railway blocks outbound SMTP on the trial plan, Resend over HTTPS (`--resend`). Tests the connection/key before writing anything. |
+| `scripts/redis_konfig.py` | Sets `REDIS_URL` on Railway's `api` service for the async job queue (chat/leads jobs) — PINGs the Redis Cloud database first, never shares one instance across environments. |
+| `scripts/redis_cloud_nycklar.py` | Saves Redis Cloud's ACCOUNT-level API keys (not a database connection string) to `.env.deploy` — the prerequisite for provisioning additional Redis databases via API instead of the dashboard. |
 
 ## Invariants and gotchas
 
@@ -324,7 +327,39 @@ mot den döda kedjan; en riktig onboarding just nu kräver manuella steg mot
 Railway tills skriptet är omskrivet. Se `TENANTS.md` för den nuvarande
 processen och flagga skriptet innan du litar på det.
 
-## Current status (2026-08-26)
+## Current status (2026-08-28)
+
+**Sjufasplan för skarpa körningar skriven** —
+[`plans/2026-08-28-skarpa-korningar-och-produktion.md`](plans/2026-08-28-skarpa-korningar-och-produktion.md),
+17 `bd`-ärenden. Fyra oberoende orsaker till att körningarna sett
+autogenererade ut kartlagda: Email-studions modellväljare kände aldrig till
+Gemini (alltid mallgenererad text); exempelbolagen är deterministiska med
+flit men oskiljbara i UI:t; ingen sändväg finns i någon miljö; och Gemini —
+se rättelsen nedan.
+
+**Rättelse av tidigare status:** raden nedan om `snipe-zfn` sa att
+minuttaket (6/min) var den faktiska begränsningen och dygnstaket (20)
+mindre allvarligt. Ommätt 2026-08-28 i ett riktigt 60-sekundersfönster:
+dygnstaket är det bindande — `quotaId:
+GenerateRequestsPerDayPerProjectPerModel-FreeTier`, `quotaValue: 20`, fyra
+dagar EFTER att faktureringskontot uppgraderades. Orsaken var att
+API-nyckelns Google-PROJEKT inte var kopplat till faktureringskontot —
+Vertex AI Express Mode har en egen gratisnivå, skild från Cloud-krediterna.
+Ingen ny betalning krävs, bara kopplingen. Anton har sedan kopplat ett nytt
+projekt och bytt nyckel — **inte verifierat live** vid sessionens slut, se
+`plans/2026-08-28-…md` Open Threads.
+
+**Produktionsdeployen är farligare än dokumenterat.** Uppmätt med
+`git rev-list` mot `origin`-referenser: `origin/main` ligger 152 commits
+**efter** `origin/railway-main` och noll före — den dokumenterade
+`git push origin main:railway-main` skulle i dag avvisas som
+non-fast-forward, och tvingad igenom rulla tillbaka produktionen (22
+aug-omläggningen + 25 aug-hotfixen). `development` innehåller redan hela
+hotfixens innehåll i utökad form (verifierat med diff), så säkra vägen är
+merge, inte push. Spårat som `snipe-jvj`. **Produktionen rörs inte utan
+Antons uttryckliga ord** (instruktion 2026-08-28).
+
+## Current status (2026-08-26) [historisk — main-avståndet nedan är omätt sedan 26 aug, se ovan]
 
 **Instruktionslagren når nu agenten** (migration 049, 2026-08-24/25).
 `agent_configs.instructions_md`/`.tone` hade funnits sedan migration 010 utan

@@ -76,3 +76,4 @@ scripts/.kalla.env
 .beads-credential-key
 .beads/proxieddb/
 .beads/interactions.jsonl
+.marketing/

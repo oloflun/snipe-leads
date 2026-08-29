@@ -77,12 +77,32 @@ tydligt inte nått i dag, och de två sakerna som saknas är konkreta:
   åtgärder listades innan pausen fick hävas. Pausen är hävd — men ingen av de
   fyra är gjord. Riktiga kundmejl går just nu dit igen. Spårat som `snipe-a1c`,
   och det kräver ett beslut av Anton, inte kod.
+  **Skärpt 2026-08-28:** den tekniska pusselbiten (varför gratisnivån
+  fortfarande gäller trots ett betalt faktureringskonto) är löst — nyckelns
+  Google-PROJEKT var inte kopplat till kontot, en ren konsolinställning, inte
+  ett nytt köp. Det gör åtgärdslistans andra punkt ("aktivera
+  fakturering/byt provider") billig att göra klar, men de tre juridiska
+  punkterna (DPA, dataregion, PUB-villkor) kvarstår olösta och är fortfarande
+  Antons beslut. Anton har kopplat ett nytt projekt och bytt nyckel samma
+  kväll — inte verifierat live vid sessionens slut.
 - [ ] 10. Uppdatera produktionen till samma kod som utvecklingsmiljön. `main`
   ligger ungefär 80 commits efter och saknar sju databasmigreringar. Spårat som
   `snipe-zfc`. Bör inte göras före punkt 9 — annars flyttas problemet bara.
-- [ ] 11. Koppla in riktig mejlsändning (`snipe-ork`). Kräver att varje kunds
-  egna avsändaruppgifter modelleras, och att den kopplas ihop med
-  autonomigrinden som avgör vad agenten får skicka själv.
+  **Skärpt 2026-08-28:** den dokumenterade deploy-vägen (`git push origin
+  main:railway-main`) är dessutom farlig som den står — `main` ligger 152
+  commits EFTER `railway-main`, så den kommandot skulle rulla tillbaka
+  produktionen, inte flytta den framåt. Se `plans/2026-08-28-skarpa-korningar-och-produktion.md`
+  §8.1 för den verifierade ordningen (merge, inte push). Spårat som
+  `snipe-jvj`.
+- [ ] 11. Koppla in riktig mejlsändning (`snipe-ork`). **Byggd och konfigurerad
+  i `development` 2026-08-27–29:** en HTTPS-sändväg (Resend, väljs eftersom
+  Railway blockerar utgående SMTP på nuvarande plan) med `kontakt@snajp.se`
+  som avsändare, satt och bekräftad i Railways variabellager. Inte ännu
+  bekräftat live via `/health/ready` (deployen stod som `BUILDING` vid
+  sessionens slut 2026-08-29) och inget riktigt mejl är ännu skickat och
+  verifierat. Kvar: varje kunds egna avsändaruppgifter (i dag ett globalt
+  konto) och kopplingen till autonomigrinden. `main` saknar fortfarande
+  sändväg helt.
 - [ ] 12. Koppla ihop uppföljningskedjan (`snipe-3dx`). Funktionen som bygger
   uppföljningsmejl 2–N finns färdig men anropas bara från testerna — inget
   produktionsflöde använder den. Löftet "planerar uppföljningar" i
@@ -204,5 +224,13 @@ rebase. Ändringar behöver samordnas, inte bara pushas.
 
 ## Ändringslogg
 
+- 2026-08-29 — claude — punkt 11 (mejlsändning) uppdaterad: Sebbe byggde
+  Resend-sändvägen 27–28 aug efter att ha mätt att Railway blockerar SMTP;
+  den här sessionen konfigurerade den i `development` (`kontakt@snajp.se`),
+  inte ännu bekräftad live. Se `session-logs/2026-08-29-session-log.md`.
+- 2026-08-28 — claude — punkt 9 skärpt: Gemini-gratisnivån berodde på ett
+  okopplat Google-projekt, inte utebliven betalning; punkt 10 skärpt: den
+  dokumenterade `main`-deployen skulle ha rullat tillbaka produktionen
+  (`snipe-jvj`) — se `plans/2026-08-28-skarpa-korningar-och-produktion.md`
 - 2026-08-26 — claude — skapad, ur kod, statusjournal, sessionsloggar, öppna
   arbetsposter och hubbfilen
