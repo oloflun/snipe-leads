@@ -28,20 +28,16 @@ git push origin development
 Vercel är avvecklat helt. `railway-development` som gren är överflödig för
 development men rörs inte — inget läser den längre.
 
-**`main` har fortfarande den gamla tvåstegsfällan** — det är medvetet inte
-åtgärdat än (Antons beslut 2026-08-27: main ska läggas om på samma sätt
-senare, som ett separat steg):
-
-```bash
-git push origin main
-git push origin main:railway-main
-```
-
-Utan den andra pushen syns en ändring mot produktion ingenstans — och GitHub
-Actions går ändå grönt, för den kedjan deployar en Vercel-preview som ligger
-på den gamla, döda stacken (Vercel + Render + Supabase-grenar). Inloggning
-där ger `CallbackRouteError`, eftersom Supabase-grenen står i
-`MIGRATIONS_FAILED`. Det är inte ett kodfel.
+**⛔ `main`-kedjan: kör INTE den gamla tvåstegspushen.** Uppmätt 2026-08-28:
+`origin/main` är en strikt förfader till `origin/railway-main` (152 commits
+efter, 0 före), så `git push origin main:railway-main` avvisas som
+non-fast-forward — och tvingad igenom rullar den tillbaka produktionen 152
+commits. Den verifierade vägen (merge, inte push) står i `DEPLOY.md`s
+main-avsnitt och i `plans/2026-08-28-skarpa-korningar-och-produktion.md` §8.1.
+Varje steg mot produktion kräver Antons uttryckliga ord (§8.1a). De döda
+GitHub Actions-kedjorna (`deploy-production.yml`, `deploy-development.yml`)
+är borttagna 2026-08-29 — de gav bara falska gröna signaler mot den gamla
+stacken.
 
 Levande dev-miljö: `https://web-development-6c85.up.railway.app`
 Migrationer: `python scripts/railway_migrate.py --env development --apply`

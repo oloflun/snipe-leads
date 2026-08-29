@@ -188,6 +188,19 @@ def ensure_domain(service_id: str, env_id: str, service: dict) -> str:
     return res["serviceDomainCreate"]["domain"]
 
 
+def read_vars(service_id: str, env_id: str) -> dict[str, str]:
+    """Läser ALLA satta variabler för en tjänst i en miljö.
+
+    Samma GraphQL-fråga `private_domain()` redan använde för Postgres — bruten
+    ut hit så `provision()` kan läsa `api`s variabler INNAN den skriver i
+    stället för att anta att fältet är tomt (snipe-u70).
+    """
+    return gql(
+        "query($p:String!,$e:String!,$s:String!){ variables(projectId:$p, environmentId:$e, serviceId:$s) }",
+        {"p": PROJECT_ID, "e": env_id, "s": service_id},
+    )["variables"]
+
+
 def private_domain(service_id: str, env_id: str) -> str:
     """Postgres privata värdnamn i EN miljö.
 
@@ -195,11 +208,7 @@ def private_domain(service_id: str, env_id: str) -> str:
     `${{Postgres.RAILWAY_PRIVATE_DOMAIN}}` löses inte ut i en klonad miljö —
     uppmätt: api startade med `storage: memory`, och omdeploy hjälpte inte.
     """
-    v = gql(
-        "query($p:String!,$e:String!,$s:String!){ variables(projectId:$p, environmentId:$e, serviceId:$s) }",
-        {"p": PROJECT_ID, "e": env_id, "s": service_id},
-    )["variables"]
-    host = v.get("RAILWAY_PRIVATE_DOMAIN")
+    host = read_vars(service_id, env_id).get("RAILWAY_PRIVATE_DOMAIN")
     if not host:
         sys.exit("Postgres saknar RAILWAY_PRIVATE_DOMAIN — miljön är inte färdigprovisionerad.")
     return host
@@ -316,17 +325,30 @@ def provision(env_name: str, branch: str, apply: bool) -> None:
     api_domain = ensure_domain(api["id"], env_id, services["api"])
     app_password = secret(env_name, "APP_PASSWORD")
     pg_host = private_domain(pg["id"], env_id)
-    set_vars(api["id"], env_id, {
+    api_vars = {
         "DATABASE_URL": f"postgresql://snajp_app:{app_password}@{pg_host}:5432/railway",
-        "LLM_PROVIDER": "deepseek",
-        "MODEL": "deepseek-v4-flash",
         "SNAJP_MASTER_API_KEY": secret(env_name, "MASTER_API_KEY",
                                        lambda: "snajp_master_" + secrets.token_urlsafe(24)),
         "SNAJP_DEMO_API_KEY": secret(env_name, "DEMO_API_KEY",
                                      lambda: "snajp_demo_" + secrets.token_urlsafe(16)),
         "INBOX_POLL_SECONDS": "0",
         "AUTO_SEND_MIN_CONFIDENCE": "0.75",
-    })
+    }
+    # snipe-u70: LLM_PROVIDER/MODEL skrevs tidigare OVILLKORLIGT här, VARJE
+    # körning — även mot en redan provisionerad miljö. Mot main eller
+    # development sätter "deepseek" den förbjudna providern (se CLAUDE.md,
+    # Settings.llm_provider_fault) och tjänsten vägrar starta. Samma felklass
+    # som scripts/keys.py:FIXED (kommentaren där pekar hit): predikatet är
+    # satt/osatt, INTE looks_placeholder — ett providernamn är kort per
+    # definition ("gemini" är sex tecken), så en längdheuristik hade skrivit
+    # över ett redan valt värde också. De två raderna är bara ett startvärde
+    # för en NY miljö som saknar provider helt; en befintlig miljös val rörs
+    # aldrig.
+    befintliga = read_vars(api["id"], env_id)
+    for namn, startvarde in (("LLM_PROVIDER", "deepseek"), ("MODEL", "deepseek-v4-flash")):
+        if not befintliga.get(namn, "").strip():
+            api_vars[namn] = startvarde
+    set_vars(api["id"], env_id, api_vars)
 
     # --- web
     print("  web")
