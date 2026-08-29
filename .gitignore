@@ -9,6 +9,8 @@ tsconfig.tsbuildinfo
 __pycache__/
 .pytest_cache/
 .claude/settings.local.json
+# Parallella agenters arbetskopior — egna checkouts, inte källkod.
+.claude/worktrees/
 .mcp.json
 
 # Stale backup copy of snajp-support (from Downloads, 2026-07-22) — not source
