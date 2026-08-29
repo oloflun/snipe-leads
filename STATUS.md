@@ -1,5 +1,57 @@
 # Snipra Status
 
+## 2026-08-29 (sen kväll) — Claude/Sebbe — adminytan fylld, tvåspråkig och läsbar; tokenkostnaden satt till leverantörens riktiga pris
+
+**Utgångspunkt: tre skärmbilder.** Kolumner fulla av nollor i Översikt och
+Kunder & Data, engelska flikar över svenska tabellrubriker, och ett notiscenter
+som visade leverantörernas råa JSON-fel som brödtext.
+
+**Byggt och deployat (sex commits, alla `SUCCESS` på development):**
+- **Exempeldata** (`lib/admin/exempeldata.ts`) på arbetsytor HELT utan
+  aktivitet. Deterministiskt härlett ur tenantens id, sex profiler, varje rad
+  märkt `Exempel` och räknad i en fotnot. Rader med riktig aktivitet — Nordlys
+  Handel, Snajp — rörs aldrig. Av med `NEXT_PUBLIC_ADMIN_EXEMPELDATA=av`.
+- **Tvåspråkig adminyta** (`lib/admin/sprak.ts`). Kolumnrubriker, hälsotexter,
+  statistik, rådgivarens frågor och svar, fotnoter, plattformsflikar. Språkvalet
+  sparas i `localStorage` — det snäppte förut tillbaka vid varje omladdning.
+- **Läsbara händelsetexter** (`lib/admin/handelsetext.ts`). Tio tolkare gör om
+  undantagstext till rubrik och förklaring; råtexten ligger kvar bakom
+  "Tekniska detaljer". `RateLimitError: Error code: 429 - [{'error'...` blev
+  "Kvoten hos Google Gemini (gemini-3.6-flash) är slut".
+- **Statistikgrafen** fylls av exempelraderna, utspridda över hela
+  tolvveckorsfönstret. Demoytorna (`nordlys-handel`, `public-demo`) räknas
+  aldrig som kunder, oavsett märke.
+
+**Hydreringsbugg hittad och rättad i samma andetag.** Konverteringen till
+klientkomponenter tog med `Date.now()` och tidszonsberoende datumformatering
+över server/klient-gränsen: servern kör UTC, webbläsaren Europe/Stockholm, och
+en tidsstämpel strax före midnatt UTC blev olika datum i de två renderingarna.
+Klockan läses nu en gång på servern och skickas ned som `nu: number`; tidszonen
+är spikad i `sprak.ts`. Verifierat med Playwright mot tre webbläsartidszoner,
+med och utan fixen — ett hydreringstest som inte kan falla bevisar ingenting.
+
+**Tokenkostnaden var fel om fel leverantör.** `TOKENKOSTNAD_PER_MILJON_SEK = 12`
+beskrev "DeepSeek-klassen". Railway säger `LLM_PROVIDER=gemini`,
+`MODEL=gemini-3.6-flash` i BÅDA miljöerna, och DeepSeek är dessutom spärrad där
+kunddata finns. Konstanten är nu två, eftersom utgående tokens kostar fem gånger
+mer än ingående: **7,14 kr in / 35,71 kr ut per miljon**, Googles listpris
+omräknat till 9,5237 SEK/USD.
+
+**MÄTT: faktureringen hos Google är fortfarande inte påslagen.** Felloggen visar
+`generate_content_free_tier_requests, limit: 20`, samma sak som
+`docs/JURIDIK_ATGARDER.md` mätte. Det verkliga utfallet i kronor är alltså noll
+— betalat i genomströmning i stället för i pengar — och talen ovan visar vad det
+kostar den dag faktureringen slås på. **Listpriset dubblas 2027-01-01**
+(14,29 / 71,43); står i docstringen så att marginalfallet inte läses som en bugg.
+
+**Kvarstår:** marginalkolumnen är i praktiken konstant 100 % vid realistiska
+volymer — ett paket på 6 990 kr tål ~39 miljoner utgående tokens innan
+marginalen ens blir gul. Det är en egenskap hos affären, inte hos koden, och
+kräver ett beslut när en riktig faktura finns.
+
+Session: `session-logs/2026-08-29-session-log-4.md` ·
+Plan: `plans/2026-08-29-adminytan-exempeldata-och-sprak.md`
+
 ## 2026-08-29 (kväll) — Claude/Sebbe — main och development delade Redis-nyckelrymd: jobbströmmen korsade miljögränsen
 
 **Hittat genom att svara på varför `redis-cli` inte fanns på Windows.** Mätt

@@ -98,6 +98,10 @@ separate thing entirely — user-message position only, never system. See
 | [ARCHITECTURE_INVARIANTS.md](ARCHITECTURE_INVARIANTS.md) | Machine-enforced rules (CI-checked). `INV-SKILL-*`, `INV-SEC-*`, etc. |
 | [plans/2026-08-07-agent-backend-deepseek.md](plans/2026-08-07-agent-backend-deepseek.md) | Plan-level scope/progress tracker for the agent-backend work; points to the full design doc. |
 | [DEPLOY_KEYS.md](DEPLOY_KEYS.md) | How to set API keys locally and at deploy; `scripts/keys.py`. |
+| [lib/admin/halsa.ts](lib/admin/halsa.ts) | Kundhälsa och tokenekonomi. Bär **tokenpriserna** (in 7,14 / ut 35,71 kr per miljon — Googles listpris för `gemini-3.6-flash`, dubblas 2027-01-01) och marginalgränserna. Ändra priset HÄR när en riktig faktura finns. |
+| [lib/admin/exempeldata.ts](lib/admin/exempeldata.ts) | Exempeltal för arbetsytor helt utan aktivitet. Deterministiskt ur tenantens id, sex profiler, jämnt utspritt över statistikens tolvveckorsfönster. Varje berikad rad bär `ar_exempel` och märks i vyn. Av med `NEXT_PUBLIC_ADMIN_EXEMPELDATA=av`. |
+| [lib/admin/handelsetext.ts](lib/admin/handelsetext.ts) | Tolkar leverantörernas undantagstext till rubrik + förklaring för notiscentret. Tio mönster; råtexten kastas aldrig. |
+| [lib/admin/sprak.ts](lib/admin/sprak.ts) | Adminytans sv/en-ordbok plus datum-, tid- och antalsformatering. **Tidszonen är spikad** till `Europe/Stockholm` — vyerna är klientkomponenter och en ospikad zon ger hydreringskrock. |
 | [docs/THINKING_MODE_COMPARISON.md](docs/THINKING_MODE_COMPARISON.md) | DeepSeek thinking-mode on/off comparison, real API calls, per flow. **§7** = the leads per-step migration, **§8** = the valid leads comparison and the decision (incl. why the first recommendation was wrong). |
 | [docs/LEADS_THINKING_COMPARISON.md](docs/LEADS_THINKING_COMPARISON.md) | **Generated raw data** (811 KB) — every one of the 72 LLM calls with its complete output. Overwritten by the next run; conclusions live in the file above, deliberately kept separate. |
 | `scripts/render_leads_report.py` | Renders the report above from a run's JSON, so it can be rebuilt without re-running 72 paid calls. |

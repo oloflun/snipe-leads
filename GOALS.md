@@ -247,3 +247,9 @@ rebase. Ändringar behöver samordnas, inte bara pushas.
   (`snipe-jvj`) — se `plans/2026-08-28-skarpa-korningar-och-produktion.md`
 - 2026-08-26 — claude — skapad, ur kod, statusjournal, sessionsloggar, öppna
   arbetsposter och hubbfilen
+- 2026-08-29 (kväll) — claude — punkt 9 (Gemini-nivån) mätt igen och kvantifierad:
+  både `main` och `development` ligger kvar på gratisnivån, och adminytan visar nu
+  vad drift på betald nivå kostar (7,14 kr in / 35,71 kr ut per miljon tokens för
+  `gemini-3.6-flash`, dubblas 2027-01-01). Målbilden i övrigt orörd — sessionen
+  var gränssnittsarbete i adminytan, se
+  `plans/2026-08-29-adminytan-exempeldata-och-sprak.md`.
