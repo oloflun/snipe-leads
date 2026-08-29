@@ -544,6 +544,48 @@ tecknat avtal enligt API:ets allmänna villkor. Det är ett avtalsbeslut av
 samma slag som DeepSeek-frågan i `CLAUDE.md`, inte något ett skript ordnar.
 ▸ Anton
 
+### BankID-flödet i Next-appen — BYGGT, väntar på nycklar
+
+Endpointerna är lästa ur Skatteverkets ACG-dokumentation, inte gissade:
+
+```
+authorize  GET  https://peroauth2[.test].skatteverket.se/oauth2/v1/per/authorize
+token      POST https://peroauth2[.test].skatteverket.se/oauth2/v1/per/token
+```
+
+`per` är e-legitimationsvarianten (BankID). `org`-varianten kräver ett
+organisationscertifikat från Expisoft och en egen ombudsansökan — inte byggd.
+
+| Variabel | Tjänst | Betydelse |
+|---|---|---|
+| `SKATTEVERKET_CLIENT_ID` | `web` + `api` | OAuth2-klientens id. `api` behöver den som HTTP-huvud på själva uppslaget |
+| `SKATTEVERKET_CLIENT_SECRET` | `web` + `api` | Samma |
+| `SKATTEVERKET_SCOPE` | `web` | **Ingen default.** API-specifikt, står inte publikt — kommer med nycklarna |
+| `SKATTEVERKET_REDIRECT_URI` | `web` | Måste vara EXAKT den som registrerats hos Skatteverket, t.ex. `https://www.snajp.se/api/skatteverket/callback` |
+| `SKATTEVERKET_MILJO` | `web` | Valfri. Tom = test. `produktion` byter auktorisationsserver |
+
+Saknas någon av dem renderas knappen inte alls (`arKonfigurerad()`) och
+`/api/skatteverket/start` svarar 503 med `kod: "ej_konfigurerad"` — inte 500.
+Tjänsten är inte trasig, den är inte påslagen.
+
+**Redirect-URI:n härleds ALDRIG ur inkommande request.** Den läses ur
+env-varen, eftersom en angripare som styr `Host`-huvudet annars hade kunnat få
+auktorisationskoden skickad till sin egen domän.
+
+**Vägen tokenen tar:** `/api/skatteverket/start` (state i httpOnly-kaka) →
+Skatteverkets BankID → `/api/skatteverket/callback` (state jämförs, koden växlas)
+→ access token i en httpOnly-kaka med tokenens egen livslängd → `proxyAsTenant`
+skickar den som `X-Skatteverket-Token` → `atkomst_for_tenant()` i backenden
+parar ihop den med tenantens orgnr **ur vår egen databas**.
+
+Organisationsnumret skickas medvetet inte med från webben: ett orgnr utifrån är
+ett fält någon kan byta ut, och det som byts ut då är vems beskattningsuppgifter
+vi frågar efter.
+
+**Refresh token sparas inte.** Skatteverket utfärdar en (65 min), men att lagra
+den vore att förlänga en fullmakt kunden gav för ett uppslag. Går tokenen ut
+(en timme) legitimerar kunden sig igen.
+
 **2. API:t kräver BankID — det finns ingen server-till-server-väg.**
 Auktorisation sker med OAuth2 Authorization Code Grant där den externa
 användaren legitimerar sig med e-legitimation (tjänstebeskrivning

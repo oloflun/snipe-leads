@@ -31,6 +31,7 @@ from app.leads.skatteverket import (
     SkatteverketEngagemang,
     SkatteverketFel,
     SkatteverketTillfalligtFel,
+    atkomst_for_tenant,
     get_skatteverket_klient,
     sla_upp,
     paborja_inloggning,
@@ -451,3 +452,49 @@ def test_snajps_platshallare_passerar_luhn():
     Det är precis vad orgnr.py:s modul-docstring säger: validera_format
     validerar FORMATET, inte att bolaget finns."""
     assert till_identitet("000000-0000") == "160000000000"
+
+
+# -- atkomst_for_tenant: skarven mot Next-proxyn ----------------------------
+
+
+class _FejkadStorage:
+    def __init__(self, tenant: dict | None):
+        self._tenant = tenant
+        self.efterfragad: str | None = None
+
+    async def get_tenant(self, tenant_id: str):
+        self.efterfragad = tenant_id
+        return self._tenant
+
+
+async def test_atkomsten_laser_orgnr_ur_var_egen_tenantrad():
+    """Next-proxyn skickar BARA tokenen. Orgnr hämtas här — ett orgnr som kommer
+    utifrån är ett fält någon kan byta ut, och det som byts ut då är vems
+    beskattningsuppgifter vi frågar efter (INV-SEC-002)."""
+    storage = _FejkadStorage({"orgnr": "556824-9022"})
+    atkomst = await atkomst_for_tenant(storage, "tenant-1", "token-abc")
+
+    assert atkomst is not None
+    assert atkomst.orgnr == "556824-9022"
+    assert atkomst.access_token == "token-abc"
+    assert storage.efterfragad == "tenant-1"
+
+
+async def test_utan_token_finns_ingen_atkomst_och_ingen_dbfraga():
+    """Kunden har inte legitimerat sig. Då ska vi inte ens slå i databasen."""
+    storage = _FejkadStorage({"orgnr": "556824-9022"})
+    assert await atkomst_for_tenant(storage, "tenant-1", None) is None
+    assert await atkomst_for_tenant(storage, "tenant-1", "") is None
+    assert storage.efterfragad is None
+
+
+async def test_tenant_utan_orgnr_ger_ingen_atkomst():
+    """Snajps egen platshållare är tom i lib/tenants — och en tenant utan orgnr
+    ska ge 'inte tillgängligt', inte ett uppslag på tomma strängen."""
+    assert await atkomst_for_tenant(_FejkadStorage({}), "t", "token") is None
+    assert await atkomst_for_tenant(_FejkadStorage({"orgnr": "  "}), "t", "token") is None
+
+
+async def test_okand_tenant_ger_ingen_atkomst():
+    """get_tenant returnerar None för en tenant som inte finns."""
+    assert await atkomst_for_tenant(_FejkadStorage(None), "finns-inte", "token") is None

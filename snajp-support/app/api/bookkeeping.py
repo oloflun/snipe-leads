@@ -35,6 +35,7 @@ from ..agent.bookkeeping_agent import (
 from ..agentcore.overlays import pack_version
 from ..bookkeeping.kontoutdrag import KontoutdragsfelError, las_kontoutdrag, stam_av
 from ..bookkeeping.math import Konteringsrad
+from ..leads.skatteverket import atkomst_for_tenant
 from ..bookkeeping.period import berakna_period, kr
 from ..bookkeeping.sie4 import SieExportError, Verifikat, skriv_sie4
 from ..bookkeeping.underlag import (
@@ -438,12 +439,21 @@ async def chatt(
             )
         )
 
+    # Tokenen sätts av Next-proxyn ur en httpOnly-kaka (se
+    # app/api/skatteverket/callback i Next-appen). Saknas den har kunden inte
+    # legitimerat sig med BankID, och uppslaget är helt enkelt inte
+    # tillgängligt den här turen.
+    skatteverket = await atkomst_for_tenant(
+        storage, tenant["tenant_id"], request.headers.get("X-Skatteverket-Token")
+    )
+
     svar = await run_bookkeeping_chat_turn(
         storage,
         tenant["tenant_id"],
         message=meddelande,
         historik=historik,
         forhamtat=forhamtat,
+        skatteverket=skatteverket,
     )
 
     await storage.log_agent_run(

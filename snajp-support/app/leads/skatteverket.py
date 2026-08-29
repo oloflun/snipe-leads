@@ -351,6 +351,37 @@ class SkatteverketAtkomst:
 TILLATNA_UPPGIFTER = (FSKATT, MOMS, ARBETSGIVARE)
 
 
+async def atkomst_for_tenant(
+    storage: Any, tenant_id: str, access_token: str | None
+) -> SkatteverketAtkomst | None:
+    """Bygger åtkomsten ur tokenen från Next-appen och tenantens EGET orgnr.
+
+    ## Varför orgnr läses här och inte skickas med anropet
+
+    Next-proxyn vidarebefordrar BARA tokenen. Organisationsnumret hämtas ur vår
+    egen tenantrad, eftersom ett orgnr som kommer utifrån är ett fält någon kan
+    byta ut — och det som byts ut då är vems beskattningsuppgifter vi frågar
+    efter. Samma regel som INV-SEC-002 drar för tenant.
+
+    (Skatteverket hade visserligen svarat 403 på en identitet tokenen inte
+    täcker. Men en spärr som förlitar sig på att motparten säger ifrån är ingen
+    spärr — den är en förhoppning med bra uppförande.)
+
+    None när något saknas: ingen token (kunden har inte legitimerat sig), eller
+    inget orgnr på tenanten. Verktyget svarar då att uppgiften inte gick att
+    hämta, vilket är rätt utfall och inte ett fel.
+    """
+    if not access_token:
+        return None
+
+    tenant = await storage.get_tenant(tenant_id) or {}
+    orgnr = str(tenant.get("orgnr") or "").strip()
+    if not orgnr:
+        return None
+
+    return SkatteverketAtkomst(orgnr=orgnr, access_token=access_token)
+
+
 async def sla_upp(
     atkomst: SkatteverketAtkomst | None,
     uppgift: str,
