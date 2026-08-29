@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ButtonLink, EmptyState } from "@/components/ui";
+import { ButtonLink } from "@/components/ui";
 import { getCurrentTenant } from "@/lib/tenants/server";
 
 export default async function NotFound() {
@@ -35,11 +35,21 @@ export default async function NotFound() {
     );
   }
 
+  // Typografi, inget kort. DESIGN.md ställer /not-found i gruppen "Content —
+  // single column, typography only", och tenant-grenen ovan följer det redan.
+  // Snajp-grenen låg i en EmptyState, vars ikon är en grön BOCK: en
+  // bekräftelsesymbol på ett felmeddelande. Sett i skärmdump bredvid
+  // app/error.tsx såg de två sidorna ut att komma från olika produkter.
   return (
     <main className="grid min-h-screen place-items-center bg-paper p-6">
-      <div className="max-w-lg">
-        <EmptyState title="Sidan finns inte" body="Adressen kan ha ändrats eller skrivits fel. Länkarna i menyn leder alltid rätt." />
-        <div className="mt-5 flex justify-center">
+      <div className="max-w-lg text-center">
+        <h1 className="font-display text-[2.5rem] leading-tight tracking-[-0.02em]">
+          Sidan finns inte
+        </h1>
+        <p className="mt-4 text-[17px] leading-8 text-ink2">
+          Adressen kan ha ändrats eller skrivits fel. Länkarna i menyn leder alltid rätt.
+        </p>
+        <div className="mt-8 flex justify-center">
           <ButtonLink href="/dashboard">Till dashboard</ButtonLink>
         </div>
       </div>
