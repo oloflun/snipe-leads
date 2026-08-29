@@ -408,3 +408,7 @@ Senaste sessionsloggar: `session-logs/2026-08-24-session-log.md`,
 
 Se [[wiki/projects/_index/connections|connections]] för nattens kopplingar och
 `strategies.md` i samma mapp för projektets heuristiker.
+
+## Kunskapsbas-källor
+
+- [[wiki/sources/2026-08-25-konvertera-till-svg-vektorer-snajp]] — Snajp S-symbol + ordmärke vektoriserat till SVG (potrace), inkl. bokstavskerning-justering (2026-08-29)
