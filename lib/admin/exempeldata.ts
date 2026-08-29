@@ -58,9 +58,11 @@ function tal(id: string, steg: number, min: number, max: number): number {
  * ## Varför ingen profil är röd, och varför det INTE är en lucka
  *
  * Första utkastet hade en "ansträngd" profil som skulle ge låg marginal. Den
- * gick inte att fylla: med `TOKENKOSTNAD_PER_MILJON_SEK = 12` och ett paket på
- * 6 990 kr krävs över hundra miljoner tokens för att ens nå gul marginal —
- * ungefär 290 000 tokens per ärende. Det talet finns inte i verkligheten.
+ * gick inte att fylla, och den gick inte att fylla ens efter att kostnaden
+ * höjts till Googles riktiga listpris (7,14 kr in / 35,71 kr ut per miljon,
+ * se `halsa.ts`): ett paket på 6 990 kr tål ungefär 39 miljoner utgående
+ * tokens innan marginalen ens blir gul. Det talet finns inte i verkligheten
+ * för en supportagent med några hundra ärenden.
  *
  * Slutsatsen är ett påstående om affären, inte om koden: vid realistiska
  * volymer är marginalen strukturellt ~99 % för varje kund, och den signal som

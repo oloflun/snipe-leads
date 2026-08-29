@@ -9,7 +9,9 @@ import { formateraPris } from "@/lib/pricing";
 import {
   MARGINAL_GRON,
   MARGINAL_ROD,
-  TOKENKOSTNAD_PER_MILJON_SEK,
+  TOKENKOSTNAD_IN_PER_MILJON_SEK,
+  TOKENKOSTNAD_MODELL,
+  TOKENKOSTNAD_UT_PER_MILJON_SEK,
   TYST_EFTER_DAGAR,
   bedomKund,
   sammanfattaPortfolj
@@ -101,6 +103,14 @@ export function Portfoljvy({
   );
 
   const p = sammanfattaPortfolj(rader.map((r) => r.ekonomi));
+
+  // Decimaltecknet foljer spraket: 7,14 kr pa svenska, 7.14 kr pa engelska.
+  // Rakt interpolerade JS-tal ger alltid punkt, och en svensk driftvy som
+  // skriver "7.14 kr" ser ut att ha rott ihop tusental med decimaler.
+  const kr = (v: number) => v.toLocaleString(locale === "sv" ? "sv-SE" : "en-GB", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
   const exempelrader = rader.filter(({ rad }) => rad.ar_exempel).length;
 
   return (
@@ -242,27 +252,22 @@ export function Portfoljvy({
             })}
           </p>
         ) : null}
+{/* Fotnoten namnger MODELLEN och nivån. "En uppskattning" utan att säga
+            av vad är ett förbehåll man inte kan kontrollera; med modellnamnet
+            och gratisnivån utskriven går påståendet att falsifiera på en
+            minut. */}
         <p>
           <strong className="text-ink/70">
             {text({
-              sv: "Kostnaden är en uppskattning",
-              en: "The cost is an estimate"
+              sv: "Kostnaden är leverantörens listpris",
+              en: "The cost is the provider's list price"
             })}
           </strong>
           {text({
-            sv: ", inte en faktura: ",
-            en: ", not an invoice: "
+            sv: `, inte en faktura: ${kr(TOKENKOSTNAD_IN_PER_MILJON_SEK)} kr per miljon ingående och ${kr(TOKENKOSTNAD_UT_PER_MILJON_SEK)} kr per miljon utgående tokens för ${TOKENKOSTNAD_MODELL}. Någon faktura finns inte — miljön kör på Geminis gratisnivå, så det verkliga utfallet i kronor är noll tills faktureringen slås på. Talen visar vad det kostar då. Priset dubblas 2027-01-01; ändra i `,
+            en: `, not an invoice: ${kr(TOKENKOSTNAD_IN_PER_MILJON_SEK)} kr per million input and ${kr(TOKENKOSTNAD_UT_PER_MILJON_SEK)} kr per million output tokens for ${TOKENKOSTNAD_MODELL}. There is no invoice — this environment runs on Gemini's free tier, so the real outcome in kronor is zero until billing is switched on. These figures show what it costs then. The price doubles on 2027-01-01; change it in `
           })}
-          {formateraPris(TOKENKOSTNAD_PER_MILJON_SEK)}
-          {text({
-            sv: " per miljon tokens. Ändra talet i ",
-            en: " per million tokens. Change the number in "
-          })}
-          <code>lib/admin/halsa.ts</code>
-          {text({
-            sv: " när ni vet utfallet från leverantören.",
-            en: " once the provider's actual figure is known."
-          })}
+          <code>lib/admin/halsa.ts</code>.
         </p>
         <p>
           {text({

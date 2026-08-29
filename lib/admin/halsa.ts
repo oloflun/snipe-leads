@@ -20,14 +20,55 @@ import { PAKET, formateraPris } from "@/lib/pricing";
  */
 
 /**
- * Kostnad per miljon tokens, SEK. Grov uppskattning för en billig modell
- * (DeepSeek-klassen), in- och utgående sammanslaget.
+ * Kostnad per miljon tokens, SEK — leverantörens LISTPRIS för den modell som
+ * faktiskt är konfigurerad, inte längre en gissning.
  *
- * ÄNDRA DEN HÄR när ni vet det faktiska utfallet från leverantörsfakturan.
- * Tills dess är varje marginal nedan en kvalificerad gissning, och UI:t säger
- * det rakt ut i stället för att presentera den som ett mätvärde.
+ * ## Varför två tal och inte ett
+ *
+ * Det stod `TOKENKOSTNAD_PER_MILJON_SEK = 12` här, ett blandat tal för "en
+ * billig modell (DeepSeek-klassen)". Två fel i det:
+ *
+ *  1. **DeepSeek körs inte.** Både `main` och `development` står på
+ *     `LLM_PROVIDER=gemini`, `MODEL=gemini-3.6-flash` (avläst i Railway
+ *     2026-08-29). DeepSeek är dessutom spärrad i varje miljö som bär
+ *     kunddata — se CLAUDE.md. Talet beskrev en leverantör vi inte använder.
+ *  2. **Utgående tokens kostar FEM gånger mer än ingående.** Ett blandat tal
+ *     är därför fel åt olika håll beroende på hur svaren ser ut: en agent som
+ *     läser mycket och skriver kort underskattas, en som skriver långa svar
+ *     överskattas. `agent_runs` har `tokens_in` och `tokens_out` var för sig,
+ *     så det finns ingen anledning att slå ihop dem.
+ *
+ * ## Var talen kommer ifrån
+ *
+ * Google, listpris för `gemini-3.6-flash`, betald nivå (hämtat 2026-08-29 från
+ * ai.google.dev/gemini-api/docs/pricing): $0,75 per miljon ingående och $3,75
+ * per miljon utgående. Växelkurs 9,5237 SEK/USD (ECB via frankfurter.dev,
+ * 2026-08-28).
+ *
+ * ## VAD DE INTE ÄR: en faktura
+ *
+ * Det finns ingen. Båda miljöerna kör på Geminis GRATISNIVÅ — felloggen är
+ * full av `generate_content_free_tier_requests, limit: 20`, och
+ * `docs/JURIDIK_ATGARDER.md` har mätt samma sak
+ * (`GenerateRequestsPerMinutePerProjectPerModel-FreeTier`). Fakturering är
+ * inte påslagen på Google-projektet, så det verkliga utfallet i kronor är noll
+ * — betalt i genomströmning (20 anrop/dygn) i stället för i pengar.
+ *
+ * Talen nedan är alltså vad det KOMMER att kosta den dag faktureringen slås på,
+ * vilket juridikspåret säger att den måste. Att sätta 0 här hade gömt en
+ * kostnad som är på väg, och att behålla 12 hade beskrivit fel leverantör.
+ *
+ * ## Fällan i januari
+ *
+ * Introduktionspriset gäller till och med 2026-12-31. Från 2027-01-01 DUBBLAS
+ * båda talen (14,29 respektive 71,43 SEK). Sätt om dem då — marginalen faller
+ * inte för att något gått sönder utan för att priset ändrades.
  */
-export const TOKENKOSTNAD_PER_MILJON_SEK = 12;
+export const TOKENKOSTNAD_IN_PER_MILJON_SEK = 7.14;
+export const TOKENKOSTNAD_UT_PER_MILJON_SEK = 35.71;
+
+/** Modellen talen gäller. Visas i fotnoten, så påståendet går att falsifiera. */
+export const TOKENKOSTNAD_MODELL = "gemini-3.6-flash";
 
 /** Marginal under detta är rött — kunden kostar nästan lika mycket som den ger. */
 export const MARGINAL_ROD = 0.5;
@@ -83,7 +124,10 @@ export function paketForProdukter(produkter: readonly string[]): (typeof PAKET)[
 }
 
 export function tokenkostnad(tokensIn: number, tokensUt: number): number {
-  return ((tokensIn + tokensUt) / 1_000_000) * TOKENKOSTNAD_PER_MILJON_SEK;
+  return (
+    (tokensIn / 1_000_000) * TOKENKOSTNAD_IN_PER_MILJON_SEK +
+    (tokensUt / 1_000_000) * TOKENKOSTNAD_UT_PER_MILJON_SEK
+  );
 }
 
 /**
