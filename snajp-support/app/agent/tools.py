@@ -12,6 +12,7 @@ from agents import RunContextWrapper, function_tool
 
 from ..config import CATEGORIES
 from .context import SupportContext
+from .skatteverket_tools import SKATTEVERKET_TOOLS
 
 # cs:draft-response kräver "plain text, ingen markdown" (plan Del E) — en
 # regel som inte står i den vendorade skillens eget innehåll (kontrollerat:
@@ -242,12 +243,17 @@ ALL_TOOLS = [
     escalate_to_human,
     send_response,
     log_metric,
+    # Delat verktyg, egen modul — se app/agent/skatteverket_tools.py.
+    *SKATTEVERKET_TOOLS,
 ]
 
 # G8: den publika demon får en STRIKT delmängd — inga verktyg som skapar
 # eller skriver kunddata (find_or_create_customer, create_ticket,
 # save_inbound_message, log_metric) och inget sändverktyg mot en riktig
 # mottagare (escalate_to_human rör ett riktigt ärende som inte finns i
-# demoläge). send_response är kvar — den svarar bara i den pågående
+# demoläge). SKATTEVERKET_TOOLS hör inte heller hit: demon har ingen
+# inloggad tenant och ingen BankID-session, så uppslaget kunde ändå bara
+# svara "inte tillgängligt" — och ett verktyg som alltid misslyckas är
+# en sämre demo än inget verktyg alls. send_response är kvar — den svarar bara i den pågående
 # webbläsarsessionen, den skickar ingenting externt. INV-SEC-008.
 DEMO_TOOLS = [search_knowledge_base, send_response]

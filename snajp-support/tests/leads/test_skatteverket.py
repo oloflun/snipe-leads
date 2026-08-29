@@ -26,11 +26,13 @@ from app.config import Settings
 from app.leads.orgnr import OgiltigtOrgnrError
 from app.leads.skatteverket import (
     Engagemang,
+    SkatteverketAtkomst,
     SkatteverketAuktoriseringsfel,
     SkatteverketEngagemang,
     SkatteverketFel,
     SkatteverketTillfalligtFel,
     get_skatteverket_klient,
+    sla_upp,
     paborja_inloggning,
     till_identitet,
 )
@@ -336,3 +338,116 @@ def test_inloggningen_ar_en_arlig_stub():
     with pytest.raises(NotImplementedError) as fel:
         paborja_inloggning()
     assert "e-legitimation" in str(fel.value) or "Authorization Code Grant" in str(fel.value)
+
+
+# -- sla_upp: formen agenterna faktiskt möter --------------------------------
+
+
+def _atkomst() -> "SkatteverketAtkomst":
+    return SkatteverketAtkomst(orgnr="556824-9022", access_token="token-abc")
+
+
+def _med_nycklar():
+    return _settings(skatteverket_client_id="id", skatteverket_client_secret="hemlis")
+
+
+async def test_okand_uppgift_avvisas_utan_natverksanrop(monkeypatch):
+    """Vitlistning, samma som lista_underlags statusfilter. Ingen HTTP-mock
+    behövs — går anropet ut har vitlistningen inte hållit."""
+    resultat = await sla_upp(_atkomst(), "inkomstdeklaration", settings=_med_nycklar())
+    assert "Okänd uppgift" in resultat["fel"]
+
+
+async def test_utan_nycklar_svarar_verktyget_i_stallet_for_att_kasta():
+    """Ett kast här hade avbrutit hela chattsvaret. Modellen ska i stället få
+    veta att uppgiften inte gick att hämta och svara utifrån det."""
+    resultat = await sla_upp(_atkomst(), "moms", settings=_settings())
+    assert resultat["tillgangligt"] is False
+    assert "inte påslaget" in resultat["fel"]
+
+
+async def test_utan_inloggning_ber_agenten_inte_om_orgnummer():
+    """Fällan: en modell som får 'uppgiften saknas' ber kunden om numret.
+    Uppslaget kräver BankID-inloggningen, inte numret — så felmeddelandet
+    säger det uttryckligen."""
+    resultat = await sla_upp(None, "moms", settings=_med_nycklar())
+    assert resultat["tillgangligt"] is False
+    assert "Be inte om" in resultat["fel"]
+
+
+async def test_avslutat_engagemang_ger_galler_nu_false(monkeypatch):
+    """DEN VIKTIGASTE RADEN I HELA MODULEN.
+
+    Skatteverket svarar 200 med posten kvar för en F-skatt som drogs in vid
+    konkurs. Koden avgör frågan innan modellen ser svaret — annars svarar
+    agenten förr eller senare att bolaget har F-skatt.
+    """
+    _fejka(
+        monkeypatch,
+        _Svar(200, {"startdatum": "2013-05-07", "slutdatum": "2019-03-01",
+                    "avslutsorsak": "Konkurs", "avslutsorsakKod": 503, "skatteform": "F"}),
+    )
+    resultat = await sla_upp(_atkomst(), "fskatt", settings=_med_nycklar())
+
+    assert resultat["finns"] is True
+    assert resultat["galler_nu"] is False
+    assert resultat["avslutsorsak"] == "Konkurs"
+
+
+async def test_lopande_moms_ger_metoden_agenten_behover(monkeypatch):
+    """redovisningsmetod avgör NÄR en affärshändelse bokförs. Utan den gissar
+    konteringsförslagen på tidpunkten."""
+    _fejka(
+        monkeypatch,
+        _Svar(200, {"startdatum": "1997-01-01", "momstyp": "Kvartal den 12:e",
+                    "redovisningsmetod": "Faktureringsmetod", "redovisningsmetodKod": 301}),
+    )
+    resultat = await sla_upp(_atkomst(), "moms", settings=_med_nycklar())
+
+    assert resultat["galler_nu"] is True
+    assert resultat["redovisningsmetod"] == "Faktureringsmetod"
+    assert resultat["momstyp"] == "Kvartal den 12:e"
+
+
+async def test_aldrig_registrerad_ar_ett_svar_inte_ett_fel(monkeypatch):
+    _fejka(monkeypatch, _Svar(404))
+    resultat = await sla_upp(_atkomst(), "arbetsgivarregistrerad", settings=_med_nycklar())
+    assert resultat["tillgangligt"] is True
+    assert resultat["finns"] is False
+    assert resultat["galler_nu"] is False
+
+
+async def test_utgangen_token_blir_ett_svar_inte_ett_kast(monkeypatch):
+    _fejka(monkeypatch, _Svar(401))
+    resultat = await sla_upp(_atkomst(), "moms", settings=_med_nycklar())
+    assert resultat["tillgangligt"] is False
+    assert "göras om" in resultat["fel"]
+
+
+async def test_driftfel_hos_skatteverket_blir_ett_svar_inte_ett_kast(monkeypatch):
+    _fejka(monkeypatch, _Svar(503))
+    resultat = await sla_upp(_atkomst(), "moms", settings=_med_nycklar())
+    assert resultat["tillgangligt"] is False
+    assert "svarade inte" in resultat["fel"]
+
+
+async def test_trasigt_orgnr_i_kontexten_blir_ett_svar_inte_ett_kast():
+    """Orgnr kommer från servern, men servern kan bära skräp. Det får inte
+    fälla hela chattsvaret — och kontrollen sker FÖRE nätverksanropet, så
+    testet behöver ingen HTTP-mock."""
+    trasig = SkatteverketAtkomst(orgnr="inte-ett-nummer", access_token="t")
+    resultat = await sla_upp(trasig, "moms", settings=_med_nycklar())
+    assert resultat["tillgangligt"] is False
+    assert "går inte att använda" in resultat["fel"]
+
+
+def test_snajps_platshallare_passerar_luhn():
+    """UPPTÄCKT NÄR TESTET OVAN SKREVS, och värt att veta innan någon litar
+    på formatkontrollen som en existenskontroll: `000000-0000` har
+    kontrollsiffra 0 och en siffersumma på 0, alltså giltig Luhn. Snajps egen
+    platshållare (lib/tenants/snajp.ts) skulle därför gå hela vägen ut till
+    Skatteverket och avvisas DÄR, inte här.
+
+    Det är precis vad orgnr.py:s modul-docstring säger: validera_format
+    validerar FORMATET, inte att bolaget finns."""
+    assert till_identitet("000000-0000") == "160000000000"

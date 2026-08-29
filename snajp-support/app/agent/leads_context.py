@@ -5,6 +5,7 @@ fälten är olika (ingen ticket/kategori, en offer/tråd i stället)."""
 from dataclasses import dataclass, field
 from typing import Any
 
+from ..leads.skatteverket import SkatteverketAtkomst
 from ..storage.base import Storage
 
 
@@ -14,6 +15,9 @@ class OnboardingContext:
     tenant_id: str
     saved_docs: list[dict[str, Any]] = field(default_factory=list)
     done: bool = False
+    #: Sätts av SERVERN efter BankID-inloggning mot Skatteverket, aldrig av
+    #: modellen (INV-SEC-002). None = uppslaget är inte tillgängligt.
+    skatteverket: SkatteverketAtkomst | None = None
 
 
 @dataclass
@@ -26,6 +30,9 @@ class ResearchContext:
     tenant_id: str
     prospect_id: str
     scraped_sources: list[dict[str, Any]] = field(default_factory=list)
+    #: Sätts av SERVERN efter BankID-inloggning mot Skatteverket, aldrig av
+    #: modellen (INV-SEC-002). None = uppslaget är inte tillgängligt.
+    skatteverket: SkatteverketAtkomst | None = None
 
 
 @dataclass
@@ -41,3 +48,11 @@ class OutreachContext:
     queued: bool = False
     escalated: bool = False
     escalation_reason: str | None = None
+    #: Sätts av SERVERN efter BankID-inloggning mot Skatteverket, aldrig av
+    #: modellen (INV-SEC-002). None = uppslaget är inte tillgängligt.
+    #:
+    #: OBS: gäller TENANTENS eget bolag, aldrig prospektets — trots att den
+    #: här kontexten annars handlar om prospektet. Tokenen är utfärdad för den
+    #: inloggade kunden och Skatteverket svarar 403 på någon annans identitet;
+    #: villkorens §7.1 förbjuder dessutom uppslag på tredje part.
+    skatteverket: SkatteverketAtkomst | None = None

@@ -70,6 +70,7 @@ from datetime import date
 from typing import Any
 
 from ..config import Settings, get_settings
+from .orgnr import OgiltigtOrgnrError, validera_format
 
 logger = logging.getLogger("snajp-support.skatteverket")
 
@@ -151,8 +152,6 @@ def till_identitet(orgnr: str) -> str:
     `validera_format` är enda vägen ut härifrån, så ett felskrivet
     personnummer fastnar här och inte som en 400:a hos Skatteverket.
     """
-    from .orgnr import validera_format
-
     siffror = _bara_siffror(orgnr)
     sekel = siffror[:2] if len(siffror) == 12 and siffror[:2] in ("19", "20") else "16"
     return sekel + validera_format(siffror)
@@ -313,6 +312,131 @@ class SkatteverketEngagemang:
             ombud=ombud,
         )
         return _till_engagemang(ARBETSGIVARE, kropp) if kropp is not None else None
+
+
+@dataclass(frozen=True)
+class SkatteverketAtkomst:
+    """Vad ett uppslag kräver, satt av SERVERN — aldrig av modellen.
+
+    ## Varför orgnr ligger här och inte i ett verktygsargument
+
+    INV-SEC-002, samma regel som `leads_tools.py` och `bookkeeping_chat_tools.py`
+    följer för tenant: ett fält modellen kan fylla i är en fråga en kund kan
+    ställa om någon annan. Här är insatsen högre än vanligt, för svaret är en
+    identifierad näringsidkares beskattningsuppgifter.
+
+    ## Varför det inte ens vore möjligt att slå upp någon annan
+
+    Tokenen är utfärdad genom BankID för EN inloggad person och gäller det
+    bolag hen är huvudman för eller företräder. Skatteverket svarar 403 på en
+    identitet tokenen inte täcker. Ett prospekt går alltså inte att slå upp
+    ens med ett orgnr-argument — och de allmänna villkoren (§7.1) förbjuder
+    det dessutom uttryckligen: API:t får bara användas "av, eller för,
+    Mottagare av uppgift" för bokföring, redovisning och uppföljning.
+
+    Läs det som två oberoende spärrar åt samma håll, och ta inte bort den ena
+    för att den andra finns.
+    """
+
+    #: Tenantens EGET organisationsnummer. Aldrig ett prospekts.
+    orgnr: str
+    #: OAuth2-token från BankID-inloggningen. Se `paborja_inloggning`.
+    access_token: str
+    #: Ombudets identitet (tolv siffror). Tom vid inloggning med BankID.
+    ombud: str = ""
+
+
+#: De uppslag ett verktyg får be om. Modellen väljer bland dessa och inget
+#: annat — samma vitlistning som `bookkeeping_chat_tools.TILLATNA_STATUS`.
+TILLATNA_UPPGIFTER = (FSKATT, MOMS, ARBETSGIVARE)
+
+
+async def sla_upp(
+    atkomst: SkatteverketAtkomst | None,
+    uppgift: str,
+    *,
+    settings: Settings | None = None,
+) -> dict[str, Any]:
+    """Ett uppslag, i en form en agent kan svara utifrån.
+
+    Returnerar ALLTID en dict och kastar aldrig. Varje sätt att misslyckas
+    blir ett `fel`-fält modellen kan agera på — samma hållning som
+    `lista_underlag` har för ett ogiltigt statusfilter. Ett kast här hade
+    avbrutit hela chattsvaret för något som oftast betyder "inte inloggad än".
+
+    ## `galler_nu` är hela poängen
+
+    Fältet räknas ut i KODEN, inte av modellen. Skatteverket returnerar
+    senaste registreringen, som kan vara avslutad eller börja i framtiden —
+    ett bolag vars F-skatt drogs in för konkurs 2019 svarar 200 med posten
+    kvar. En modell som får rådata och ombeds "titta på datumen" kommer förr
+    eller senare att svara att bolaget har F-skatt. Därför är svaret redan
+    avgjort när det når modellen.
+    """
+    if uppgift not in TILLATNA_UPPGIFTER:
+        return {
+            "fel": f"Okänd uppgift: {uppgift!r}. Välj en av: "
+            f"{', '.join(TILLATNA_UPPGIFTER)}."
+        }
+
+    klient = get_skatteverket_klient(settings)
+    if klient is None:
+        return {
+            "tillgangligt": False,
+            "fel": "Uppslag mot Skatteverket är inte påslaget i den här miljön "
+            "(API-nycklar saknas). Svara utifrån det du vet i övrigt, och säg "
+            "att den bolagsspecifika uppgiften inte gick att hämta.",
+        }
+
+    if atkomst is None or not atkomst.access_token or not atkomst.orgnr:
+        return {
+            "tillgangligt": False,
+            "fel": "Kunden är inte inloggad med BankID mot Skatteverket, så "
+            "uppgiften går inte att hämta för just det här bolaget. Be inte om "
+            "organisationsnumret — uppslaget kräver inloggningen, inte numret.",
+        }
+
+    metod = {
+        FSKATT: klient.fskatt,
+        MOMS: klient.moms,
+        ARBETSGIVARE: klient.arbetsgivare,
+    }[uppgift]
+
+    try:
+        engagemang = await metod(
+            atkomst.orgnr, access_token=atkomst.access_token, ombud=atkomst.ombud
+        )
+    except SkatteverketAuktoriseringsfel as fel:
+        return {"tillgangligt": False, "fel": f"Inloggningen behöver göras om: {fel}"}
+    except SkatteverketFel as fel:
+        # Täcker även SkatteverketTillfalligtFel — för modellen är skillnaden
+        # inte handlingsbar mitt i ett svar. Den ska säga att uppgiften inte
+        # gick att hämta, inte försöka tolka en HTTP-kod.
+        return {"tillgangligt": False, "fel": f"Skatteverket svarade inte: {fel}"}
+    except OgiltigtOrgnrError as fel:
+        return {"tillgangligt": False, "fel": f"Organisationsnumret går inte att använda: {fel}"}
+
+    if engagemang is None:
+        return {
+            "tillgangligt": True,
+            "uppgift": uppgift,
+            "finns": False,
+            "galler_nu": False,
+            "beskrivning": f"Bolaget har aldrig varit registrerat för {uppgift}.",
+        }
+
+    return {
+        "tillgangligt": True,
+        "uppgift": uppgift,
+        "finns": True,
+        # Uträknad i koden. Se docstringen — modellen ska aldrig behöva
+        # jämföra datum för att avgöra det här.
+        "galler_nu": engagemang.ar_aktiv(),
+        "startdatum": engagemang.startdatum.isoformat() if engagemang.startdatum else None,
+        "slutdatum": engagemang.slutdatum.isoformat() if engagemang.slutdatum else None,
+        "avslutsorsak": engagemang.avslutsorsak,
+        **engagemang.extra,
+    }
 
 
 def get_skatteverket_klient(settings: Settings | None = None) -> SkatteverketEngagemang | None:

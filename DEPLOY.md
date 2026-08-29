@@ -559,6 +559,30 @@ skälet utskrivet. Authorize- och token-URI:erna publiceras under "Säkerhet och
 API:er" och kommer med nycklarna; att gissa dem hade gett en implementation
 som ser färdig ut och faller vid första riktiga inloggningen.
 
+### Alla agenter har verktyget — men anropar det bara när det behövs
+
+Uppslaget är ett **verktyg** (`app/agent/skatteverket_tools.py`), inte ett
+anrop i varje körning. Modellen kallar på det när frågan gäller bolagets egen
+registrering, och annars inte alls. En fråga om vad ingående moms *är* besvaras
+ur `kunskap.py` och ska inte kosta ett myndighetsanrop, en nätverksväntan och
+en rad i Skatteverkets auditlogg som sparas i fem år.
+
+Inkopplat i alla fem verktygslistorna — `BOKFORING_CHATT_TOOLS` (prioriteten),
+`ALL_TOOLS`, `ONBOARDING_TOOLS`, `OUTREACH_TOOLS`, `RESEARCH_TOOLS`. **Ett
+medvetet undantag:** `DEMO_TOOLS` får det inte. Den publika demon har ingen
+inloggad tenant och ingen BankID-session, så verktyget kunde ändå bara svara
+"inte tillgängligt" — och ett verktyg som alltid misslyckas är en sämre demo
+än inget verktyg alls (INV-SEC-008).
+
+**Modellen väljer uppgift, aldrig identitet.** Det finns ingen orgnr-parameter.
+Orgnr och token kommer ur `SkatteverketAtkomst` i kontexten, satt av servern
+(INV-SEC-002). Två oberoende skäl: tokenen gäller ändå bara den inloggades eget
+bolag — Skatteverket svarar 403 på någon annans identitet — och villkorens §7.1
+tillåter bara uppslag "av, eller för" mottagaren själv. Det betyder att
+**outreach-agenten inte kan slå upp ett prospekt**, trots att den annars
+arbetar med prospektets uppgifter. Ta inte bort den ena spärren för att den
+andra finns.
+
 ### Fällan i svaret: 200 betyder inte "godkänd"
 
 Tjänsten returnerar personens SENASTE registrering, och den kan vara avslutad
