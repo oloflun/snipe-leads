@@ -19,10 +19,10 @@ import { btnPrimary } from "@/components/ui";
 export default function Error({
   error,
   reset
-}: {
+}: Readonly<{
   error: Error & { digest?: string };
   reset: () => void;
-}) {
+}>) {
   useEffect(() => {
     console.error("app/error.tsx fångade:", error);
   }, [error]);

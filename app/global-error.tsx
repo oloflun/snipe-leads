@@ -28,10 +28,10 @@ const MINERAL = "oklch(0.55 0.015 252)";
 export default function GlobalError({
   error,
   reset
-}: {
+}: Readonly<{
   error: Error & { digest?: string };
   reset: () => void;
-}) {
+}>) {
   return (
     <html lang="sv">
       <body
