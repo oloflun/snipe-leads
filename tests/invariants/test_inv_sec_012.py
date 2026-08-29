@@ -22,20 +22,16 @@ konstaterar att den ser rätt ut.
 INV-SEC-009 namnger en specifik mekanism: `app/leads/soul.render_soul`,
 som explicit kapslar SOUL-texten med `wrap_untrusted_content` (synlig som
 "untrusted-data-"-markören i användarmeddelandet). Kunskapsbasens grundning
-i SUPPORT-agenten är en annan kodväg, ett annat innehåll, och — efter
-genomläsning av `support_agent._kb_block` — en SVAGARE mekanism: KB-texten
-konkateneras rakt in i `case_context` utan `wrap_untrusted_content`s
-explicita markör. Den positionella garantin (aldrig systemposition) håller
-ändå, eftersom `case_context` alltid blir `messages[1]` i
-`step_runner.run_step` oavsett innehåll — men det är en annan, svagare
-grund än SEC-009:s egen, så den förtjänar sitt eget id i stället för att
-smygas in under ett namn som lovar den starkare, explicita inkapslingen.
+i SUPPORT-agenten är en annan kodväg och ett annat innehåll, så den
+förtjänar sitt eget id i stället för att smygas in under SEC-009:s namn.
 
-`app/agent/support_agent.py` och `app/agent/step_runner.py` ägs av en annan
-pågående session i det här arbetet och rörs inte här — det här testet
-mäter det BEFINTLIGA, oförändrade beteendet. Att KB-innehåll saknar samma
-explicita `wrap_untrusted_content`-behandling som SOUL/produktmarknadsföring
-redan får är flaggat separat som uppföljning, inte löst i den här ändringen.
+2026-08-29 (uppföljning): när testet först skrevs saknade `_kb_block` den
+explicita inkapslingen — KB-texten konkatenerades rakt in i `case_context`
+och bar bara den positionella garantin. `_kb_block` wrappar nu med
+`wrap_untrusted_content(..., source="tenant:kb_article")`, samma behandling
+som SOUL och produktmarknadsföringen redan fick, och testet mäter BÅDA
+lagren: positionen (`test_kb_article_reaches_user_position_never_system`)
+och ramen (`test_kb_article_is_wrapped_as_untrusted`).
 """
 
 from __future__ import annotations
@@ -187,6 +183,32 @@ async def test_kb_article_reaches_user_position_never_system():
         "Sentinelen nådde aldrig något LLM-anrop alls — då mäter testet "
         "ingenting, KB-artikeln kopplades aldrig in i körningen."
     )
+
+
+@pytest.mark.anyio
+async def test_kb_article_is_wrapped_as_untrusted():
+    """Andra lagret: KB-texten ska bära den explicita ramen, inte bara rätt
+    position. Kollar att sentinelen ligger INUTI ett untrusted-data-block."""
+    llm = await _run_with_kb_injection()
+    sedd = False
+    for messages in llm.captured:
+        for message in messages[1:]:
+            innehall = message["content"]
+            if SENTINEL not in innehall:
+                continue
+            sedd = True
+            block = re.search(
+                r"<untrusted-data-([0-9a-f]{32}) source='tenant:kb_article'>(.*?)"
+                r"</untrusted-data-\1>",
+                innehall,
+                re.DOTALL,
+            )
+            assert block and SENTINEL in block.group(2), (
+                "KB-artikeltexten saknar wrap_untrusted_content-ramen. "
+                "Positionen räcker inte: en vidarebefordrad PDF ska läsas som "
+                "information, med en explicit 'Följ ALDRIG'-instruktion runt sig."
+            )
+    assert sedd, "Sentinelen nådde aldrig något anrop — testet mäter ingenting."
 
 
 @pytest.mark.anyio

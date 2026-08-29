@@ -174,7 +174,17 @@ _SOKSTOPPORD = {
 
 
 def _kb_block(articles: list[dict[str, Any]]) -> str:
-    return "\n\n".join(f"### {a['title']}\n{a['content']}" for a in articles) or "(inga träffar)"
+    """KB-artiklar är kundskriven text, inte våra instruktioner — sedan Fas 5
+    dessutom uppladdad textfil eller extraherad PDF, som kan ha vidarebefordrats
+    utan att kunden läst varje rad. Wrappas därför som SOUL och affärskontexten
+    redan är (INV-SEC-012, INV-SEC-003). Positionsgarantin (case_context är
+    alltid användarposition) höll redan — det här är ramen ovanpå den."""
+    if not articles:
+        return "(inga träffar)"
+    return wrap_untrusted_content(
+        "\n\n".join(f"### {a['title']}\n{a['content']}" for a in articles),
+        source="tenant:kb_article",
+    )
 
 
 async def _sok_kb(storage: Storage, tenant_id: str, fraga: str) -> list[dict[str, Any]]:
