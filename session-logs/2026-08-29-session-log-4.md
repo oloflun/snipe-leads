@@ -19,6 +19,7 @@ varvid det mättes att båda miljöerna fortfarande ligger på Geminis gratisniv
 - `components/admin/Handelselista.tsx` — notiscentrets lista, filter och rubrik som klientkomponenter
 - `components/admin/Kundtabell.tsx` — kundtabellen som klientkomponent
 - `components/admin/Kundrubrik.tsx` — rubrik, ingress och fotnot för Kunder & Data
+- `vault/.agents/skills/hydreringsverifiering/SKILL.md` — proceduren for att bevisa franvaro av hydreringskrock, fangad som skill pa Sebbes ja
 
 ### Files Modified
 - `lib/i18n.tsx` — språkvalet sparas i `localStorage`; snäppte förut tillbaka till svenska vid varje omladdning
@@ -60,6 +61,14 @@ Inga. En tillfällig granskningsvy (`app/forhandsvisning/adminvyer/`) skapades o
   gick igenom: sessions.db-rad (med FTS-träff verifierad), minnesspegel, global
   STATUS.md via sitt ägande skript med hardlänken intakt, qmd-reindex och
   chorus-handoffs till codex, gemini och hermes.
+- **Skillregistret versionshanteras inte pa den har maskinen.** Bade `/skill`
+  och `/conclude` foreskriver `git add + commit` i valvroten efter att en skill
+  skrivits, men valvet ar inget git-repo -- och inte heller `vault/.agents`.
+  Skillen `hydreringsverifiering` ar skriven och synlig genom junctionen, men
+  den ligger oversionerad.
+- **Super-intelligence-paketet finns inte pa maskinen.** Steg 3c sager att
+  infrastrukturandringar alltid ska na installeraren; katalogen existerar inte
+  har, sa den nya skillen kunde inte speglas dit.
 - **En parallell session arbetade i samma katalog** hela tiden — först i `snajp-support/`, sedan i felsidorna (`app/error.tsx`, `app/global-error.tsx`). Deras oincheckade filer lämnades orörda; rebasen kördes med `--autostash` först efter kontroll att inkommande commits inte rörde samma filer.
 
 ## Open Threads
@@ -69,6 +78,11 @@ Inga. En tillfällig granskningsvy (`app/forhandsvisning/adminvyer/`) skapades o
 - **Marginalkolumnen är i praktiken konstant 100 %** vid realistiska volymer. Nästa steg är ett beslut från Sebbe: antingen är kostnadskonstanten fortfarande för låg när verkliga fakturor finns, eller så ska kolumnen bytas mot något som faktiskt varierar.
 - **De tre designskillsen börjar gälla först vid nästa sessionsstart.** Nästa steg är att starta om och bekräfta att `ROUTE GAP` blir 0 i nästa design-rapport.
 - **`conclude-finalize.py` saknas** i `~\.agents\scripts\`. Nästa steg är att ta reda på om skriptet ska installeras från super-intelligence-paketet eller om protokollet ska peka på de enskilda skripten i stället.
+- **Skillregistret ar oversionerat.** Nasta steg ar att avgora om valvet ska
+  bli ett git-repo (som `/skill` forutsatter) eller om protokollets
+  commit-steg ska tas bort. Just nu gar en tappad skill inte att aterstalla.
+- **Super-intelligence-paketet saknas lokalt.** Nasta steg ar att klona det
+  om infrastrukturandringar ska na andra installationer harifran.
 - **Valv-backupens mål saknas.** Nästa steg är att avgöra om `backup-vault.ps1` ska peka någon annanstans än `~\OneDrive\Dokument\Backup`, eller om OneDrive-katalogen ska återskapas.
 
 ## Cross-Project Handoffs
@@ -111,7 +125,7 @@ files_modified:
   - app/admin/kunder/page.tsx
   - app/admin/handelser/page.tsx
 decisions_made: 8
-open_threads: 5
+open_threads: 8
 handoffs_pending: []
 priority_changes: false
 status_updated: true
