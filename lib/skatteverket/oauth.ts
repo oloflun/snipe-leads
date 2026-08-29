@@ -170,7 +170,7 @@ export async function vaxlaKodMotToken(code: string): Promise<TokenSvar> {
  * legitimerad användare vidare till en angripares sida. `//` fångas separat —
  * `//example.com` är en protokollrelativ ABSOLUT url som annars ser relativ ut.
  */
-export function sakerReturvag(rat: string | null | undefined, standard = "/bokforing"): string {
+export function sakerReturvag(rat: string | null | undefined, standard = "/dashboard/bokforing"): string {
   const varde = (rat ?? "").trim();
   if (!varde.startsWith("/") || varde.startsWith("//")) return standard;
   return varde;

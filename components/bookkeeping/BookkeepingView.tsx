@@ -3,6 +3,7 @@ import { BokforingChatt } from "@/components/bookkeeping/BokforingChatt";
 import { BokforingPanel } from "@/components/bookkeeping/BokforingPanel";
 import { Felanmalan } from "@/components/bookkeeping/Felanmalan";
 import { Forbehall } from "@/components/bookkeeping/Forbehall";
+import { SkatteverketKnapp } from "@/components/bookkeeping/SkatteverketKnapp";
 
 /**
  * Bokföringsvyn. Serverskal, klientpanel — samma delning som resten av
@@ -47,7 +48,11 @@ export function BookkeepingView() {
         </div>
 
         <aside className="col-span-12 lg:col-span-5">
-          <div className="lg:sticky lg:top-24">
+          <div className="lg:sticky lg:top-24 space-y-6">
+            {/* Ovanfor assistenten med flit: den har rutan avgor om
+                assistenten kan svara bolagsspecifikt eller bara allmant, och
+                renderas till ingenting nar flodet inte ar pakopplat. */}
+            <SkatteverketKnapp />
             <BokforingChatt />
           </div>
         </aside>

@@ -34,6 +34,7 @@ from ..leads.sni import SNI_NAMN, beskriv_kod
 from ..leads.onboarding_state import REQUIRED_KINDS, get_onboarding_state
 from .deps import kraev_uuid, require_tenant
 from ..leads.soul import SOUL_KIND, SOUL_MAX_CHARS
+from ..leads.skatteverket import atkomst_for_tenant
 from .schemas import (
     AgentFeedbackRequest,
     ContextDocRequest,
@@ -188,8 +189,17 @@ async def onboarding_chat(
     _require_live_llm()
     from ..agent.leads_agent import run_onboarding_turn
 
+    # Tokenen sätts av Next-proxyn ur en httpOnly-kaka. Saknas den har kunden
+    # inte legitimerat sig med BankID, och uppslaget är inte tillgängligt.
+    skatteverket = await atkomst_for_tenant(
+        storage, tenant["tenant_id"], request.headers.get("X-Skatteverket-Token")
+    )
+
     result = await run_onboarding_turn(
-        request.app.state.storage, tenant["tenant_id"], message=payload.message
+        request.app.state.storage,
+        tenant["tenant_id"],
+        message=payload.message,
+        skatteverket=skatteverket,
     )
     state = await get_onboarding_state(request.app.state.storage, tenant["tenant_id"])
     result["onboarding_missing"] = list(state.missing)
@@ -527,6 +537,12 @@ async def research_step(
     # skarp nyckel. Ingen test nådde routen, och simuleringsläget svarar 503
     # innan den raden, så sviten var grön.
     context_pack, missing = await build_context_pack(storage, tenant["tenant_id"])
+    # Tokenen sätts av Next-proxyn ur en httpOnly-kaka. Saknas den har kunden
+    # inte legitimerat sig med BankID, och uppslaget är inte tillgängligt.
+    skatteverket = await atkomst_for_tenant(
+        storage, tenant["tenant_id"], request.headers.get("X-Skatteverket-Token")
+    )
+
     result = await run_research_step(
         storage,
         tenant["tenant_id"],
@@ -534,6 +550,7 @@ async def research_step(
         tenant_name=tenant["tenant_name"],
         context_pack=context_pack,
         brief=payload.brief,
+        skatteverket=skatteverket,
     )
     result["onboarding_missing"] = list(missing)
     return result
@@ -549,6 +566,12 @@ async def outreach_draft(
     storage = request.app.state.storage
     thread_id = await _los_trad(storage, tenant["tenant_id"], payload.thread_id, payload.prospect_id)
     context_pack, missing = await build_context_pack(storage, tenant["tenant_id"])
+    # Tokenen sätts av Next-proxyn ur en httpOnly-kaka. Saknas den har kunden
+    # inte legitimerat sig med BankID, och uppslaget är inte tillgängligt.
+    skatteverket = await atkomst_for_tenant(
+        storage, tenant["tenant_id"], request.headers.get("X-Skatteverket-Token")
+    )
+
     result = await _run_outreach_draft(
         storage,
         tenant["tenant_id"],
@@ -561,6 +584,7 @@ async def outreach_draft(
         brief=payload.brief,
         research_summary=payload.research_summary,
         research_evidence=tuple(payload.research_evidence),
+        skatteverket=skatteverket,
     )
     result["onboarding_missing"] = list(missing)
     return result

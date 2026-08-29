@@ -59,6 +59,7 @@ from ..leads.text_delta import (
     parse_humanized_segments,
     splice,
 )
+from ..leads.skatteverket import SkatteverketAtkomst
 from .leads_context import OnboardingContext, OutreachContext, ResearchContext
 from .leads_tools import (
     ONBOARDING_TOOLS,
@@ -324,7 +325,13 @@ def build_onboarding_agent(*, existing_product_marketing: str | None) -> tuple[A
     return agent, ledger.executed_order
 
 
-async def run_onboarding_turn(storage, tenant_id: str, *, message: str) -> dict[str, Any]:
+async def run_onboarding_turn(
+    storage,
+    tenant_id: str,
+    *,
+    message: str,
+    skatteverket: SkatteverketAtkomst | None = None,
+) -> dict[str, Any]:
     """En tur i onboarding-samtalet (Fas A). Flerturssamtal — anropas en
     gång per kundmeddelande, precis som mk:product-marketing kräver
     ('frågor ställs sektion för sektion, aldrig alla på en gång')."""
@@ -332,7 +339,12 @@ async def run_onboarding_turn(storage, tenant_id: str, *, message: str) -> dict[
     agent, executed_skills = build_onboarding_agent(
         existing_product_marketing=existing["content"] if existing else None
     )
-    context = OnboardingContext(storage=storage, tenant_id=tenant_id)
+    # Skatteverket-atkomsten kommer FRAN SERVERN (X-Skatteverket-Token via
+    # Next-proxyn), aldrig fran modellen. None = kunden har inte legitimerat
+    # sig, och verktyget svarar da att uppgiften inte gick att hamta.
+    context = OnboardingContext(
+        storage=storage, tenant_id=tenant_id, skatteverket=skatteverket
+    )
 
     # Tonläget bedöms i KOD, som i support_agent och bokföringschatten.
     #
@@ -385,7 +397,15 @@ async def _gather_registered_sources(
     hämtningen nu alltid sker, i stället för att bero på att modellen kom
     ihåg att anropa verktyget.
     """
-    context = ResearchContext(storage=storage, tenant_id=tenant_id, prospect_id=prospect_id)
+    # Skatteverket-atkomsten kommer FRAN SERVERN (X-Skatteverket-Token via
+    # Next-proxyn), aldrig fran modellen. None = kunden har inte legitimerat
+    # sig, och verktyget svarar da att uppgiften inte gick att hamta.
+    context = ResearchContext(
+        storage=storage,
+        tenant_id=tenant_id,
+        prospect_id=prospect_id,
+        skatteverket=skatteverket,
+    )
     urls = sorted(await storage.list_prospect_source_urls(tenant_id, prospect_id))
 
     blocks: list[str] = []
@@ -419,6 +439,7 @@ async def run_research_step(
     # med default false, och portföljvyn räknade alltså in vårt eget provande
     # som kundvolym. Se `is_test` i LeadsBatchRequest.
     is_test: bool = False,
+    skatteverket: SkatteverketAtkomst | None = None,
 ) -> dict[str, Any]:
     """Fas B för ETT prospekt: åtta skill-steg, ett LLM-anrop vardera."""
     started = time.monotonic()
@@ -684,6 +705,7 @@ async def run_outreach_draft(
     # rätt form. Ingen har uttryckt det behovet 2026-08-14.
     research_evidence: tuple[str, ...] = (),
     is_test: bool = False,
+    skatteverket: SkatteverketAtkomst | None = None,
 ) -> dict[str, Any]:
     """Fas C: fyra skill-steg, sedan köar KODEN utkastet (INV-SEC-004 —
     modellen har inget sändverktyg och kan inte köa själv)."""
@@ -801,8 +823,14 @@ async def run_outreach_draft(
     body = sign_off(strip_markdown(humanized.get("final_body") or body_after_review or ""), tenant_name)
 
     # --- Kod: sidoeffekter ------------------------------------------------
+    # Skatteverket-atkomsten galler TENANTENS eget bolag, aldrig prospektets —
+    # se leads_context.OutreachContext.skatteverket och villkorens §7.1.
     context = OutreachContext(
-        storage=storage, tenant_id=tenant_id, thread_id=thread_id, prospect_email=prospect_email
+        storage=storage,
+        tenant_id=tenant_id,
+        thread_id=thread_id,
+        prospect_email=prospect_email,
+        skatteverket=skatteverket,
     )
     escalated_steps = [s.skill for s in trace.steps if s.escalated]
     queue_result: dict[str, Any] = {}
