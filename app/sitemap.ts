@@ -1,3 +1,4 @@
+import { KANONISK_ORIGIN } from "@/lib/kanonisk";
 import type { MetadataRoute } from "next";
 import { arProduktion } from "@/lib/miljo";
 
@@ -34,7 +35,10 @@ import { arProduktion } from "@/lib/miljo";
  */
 export const dynamic = "force-dynamic";
 
-const BAS = "https://snajp.se";
+// Kanonisk adress ur EN källa. Tre hårdkodade kopior av ett värdnamn
+// (layout, robots, sitemap) glider isär, och en sitemap som pekar på fel
+// värd ber sökmotorn indexera en omdirigering.
+const BAS = KANONISK_ORIGIN;
 
 /** De publika sidorna. Inloggade ytor hör inte hemma här — se robots.ts. */
 const SIDOR: { vag: string; prioritet: number; frekvens: MetadataRoute.Sitemap[number]["changeFrequency"] }[] = [

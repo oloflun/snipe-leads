@@ -1,3 +1,4 @@
+import { kanoniskUrl } from "@/lib/kanonisk";
 import type { MetadataRoute } from "next";
 import { arProduktion } from "@/lib/miljo";
 
@@ -45,6 +46,6 @@ export default function robots(): MetadataRoute.Robots {
     //
     // Villkoret gäller fortfarande — flyttas eller tas sitemapen bort ska den
     // här raden bort i SAMMA ändring.
-    sitemap: "https://snajp.se/sitemap.xml"
+    sitemap: kanoniskUrl("/sitemap.xml")
   };
 }
