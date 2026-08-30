@@ -388,7 +388,10 @@ async def run_onboarding_turn(
 
 
 async def _gather_registered_sources(
-    storage, tenant_id: str, prospect_id: str
+    storage,
+    tenant_id: str,
+    prospect_id: str,
+    skatteverket: SkatteverketAtkomst | None = None,
 ) -> tuple[str, list[dict[str, Any]], list[str]]:
     """Hämtar ALLA redan registrerade källor för prospektet, i kod.
 
@@ -447,7 +450,7 @@ async def run_research_step(
     steps = RESEARCH_V1.steps  # indexerat, inte per namn — ordningen ÄR playbooken
 
     material, scraped_sources, scrape_errors = await _gather_registered_sources(
-        storage, tenant_id, prospect_id
+        storage, tenant_id, prospect_id, skatteverket
     )
     sources_block = material or "(inget källmaterial kunde hämtas — se scrape_errors)"
 

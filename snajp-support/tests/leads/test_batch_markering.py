@@ -160,3 +160,28 @@ async def test_research_step_har_ingen_obunden_variabel(live_llm, spion, monkeyp
             )
 
     assert svar.status_code == 200, svar.text
+
+
+@pytest.mark.anyio
+async def test_gather_registered_sources_har_ingen_obunden_variabel():
+    """Fel 4, samma klass som fel 1 men ett lager ner: `_gather_registered_sources`
+    byggde `ResearchContext(..., skatteverket=skatteverket)` utan att ta emot
+    `skatteverket` som parameter. NameError på VARJE riktig leads-körning —
+    batchjobben failade med "name 'skatteverket' is not defined" i live dev
+    2026-08-30, medan sviten var grön eftersom alla scenarier monkeypatchar
+    `run_research_step` (se spion-fixturen) och aldrig når hit.
+
+    Anropas OMOCKAT, mot MemoryStorage utan källor: före fixen kraschar den
+    på radbindningen, efter returnerar den tomt material.
+    """
+    from app.agent.leads_agent import _gather_registered_sources
+    from app.storage.memory import MemoryStorage
+
+    storage = MemoryStorage()
+    tenant = "00000000-0000-4000-a000-00000000b4c8"
+    prospect = await storage.create_prospect(tenant, company_name="Provbolaget AB")
+
+    material, sources, errors = await _gather_registered_sources(
+        storage, tenant, prospect["id"]
+    )
+    assert material == "" and sources == [] and errors == []
