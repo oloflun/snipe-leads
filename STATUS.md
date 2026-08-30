@@ -1,5 +1,28 @@
 # Snipra Status
 
+## 2026-08-30 — Claude — leads-batchens NameError lagad; UI:t visar ändå bara exempelbolag
+
+Anton rapporterade att leadskörningar "fortfarande genererar färdiga exempel
+direkt" trots gårdagens Redis-fasleverans. Grävning visade två separata fel:
+
+- **Backend, lagad:** `_gather_registered_sources` i `leads_agent.py` kraschade
+  med `NameError: name 'skatteverket' is not defined` på VARJE riktig
+  batchkörning, före första LLM-anropet. Sviten var grön eftersom alla
+  batchtester monkeypatchar `run_research_step`. Fixad, omockat test
+  verifierat rött→grönt, deployad och verifierad med en riktig körning mot
+  live dev (`status: completed`).
+- **Frontend, INTE lagad — dokumenterad handoff:** `LeadsRunForm.tsx` visar
+  aldrig den riktiga körningens resultat. Exempelbolagens pitch-text är
+  hundraprocentigt färdigskriven i kod och renderas direkt (default-checkbox
+  påslagen); den riktiga batchens `job_id` pollas aldrig. Se
+  `HANDOFF-2026-08-30-LEADS-KORNING.md`.
+
+Samtidigt: KB-artikeltext wrappas nu som opålitlig text (INV-SEC-012 skärkt
+till två lager), och Railways deploytrigger för `development` visade sig ha
+slutat fira sedan 2026-08-29 22:42Z — omgången med manuell deploy, orsaken
+inte undersökt. Se `HANDOFF-2026-08-30-KB-WRAP.md` och
+`session-logs/2026-08-30-session-log.md`.
+
 ## 2026-08-29 (sen kväll) — Claude/Sebbe — adminytan fylld, tvåspråkig och läsbar; tokenkostnaden satt till leverantörens riktiga pris
 
 **Utgångspunkt: tre skärmbilder.** Kolumner fulla av nollor i Översikt och
