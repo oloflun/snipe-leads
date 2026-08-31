@@ -221,3 +221,37 @@ async function skickaTillAgenten(
     return "Sparat i arbetsytan. Agenterna kunde inte nås just nu och läser texten vid nästa försök.";
   }
 }
+
+/**
+ * Erbjudandetexten utkastet kräver — SAMMA källa som inställningssidan visar.
+ *
+ * Leads-UI:t läste tidigare bara `agent_context_docs` (product_marketing) och
+ * behandlade HTTP 5xx som "inte ifylld". Settings skriver `business_contexts`
+ * och skickar vidare best-effort. Ett fyllt formulär såg därför tomt ut för
+ * utkastknappen.
+ *
+ * Om arbetsytan har produkttext: använd den och backfilla kontextdokumentet.
+ * 5xx från agenten är inte "inte ifylld".
+ */
+export async function lasOffertForUtkast(): Promise<string> {
+  const workspace = await hamtaAffarskontext();
+  if (!workspace) {
+    throw new Error("Du måste vara inloggad för att skapa utkast.");
+  }
+  const franWorkspace = workspace.product.trim() ? tillDokument(workspace) : "";
+  if (franWorkspace) {
+    await skickaTillAgenten(workspace, workspace.product.trim());
+    return franWorkspace.slice(0, 2000);
+  }
+
+  const franAgent = await hamtaFranAgenten();
+  const dokument = franAgent && franAgent.product.trim() ? tillDokument(franAgent) : "";
+  if (dokument) {
+    return dokument.slice(0, 2000);
+  }
+
+  throw new Error(
+    "Affärskontexten (Vad ni säljer) är inte ifylld ännu. Fyll i den under Inställningar, " +
+      "Vad agenterna vet, Affärskontext innan utkast kan skapas."
+  );
+}
