@@ -326,6 +326,66 @@ async def test_befordra_okant_prospekt_ger_404():
             assert response.status_code == 404
 
 
+# -- Motsatt riktning: degradera ett riktigt prospekt till 'test' ----------
+#
+# Bolagsregistrets "Flytta"-knapp går åt andra hållet i skarpt läge (se
+# components/leads/Bolagsregister.tsx) — och send-guardens spärr noll
+# (scheduler.py) måste blockera det degraderade prospektet precis som den
+# blockerar ett som föddes som 'test'. Se test_scheduler.py för själva
+# spärren; testerna här gäller bara att endpointen sätter rätt origin.
+
+
+@pytest.mark.anyio
+async def test_degradera_manuellt_prospekt_blir_test():
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            skapat = await client.post(
+                "/api/leads/prospects",
+                headers=DEMO,
+                json={"company_name": "Flyttas Till Test AB"},
+            )
+            prospect = skapat.json()["prospect"]
+            assert prospect["origin"] == "manual"
+
+            response = await client.post(
+                f"/api/leads/prospects/{prospect['id']}/degradera", headers=DEMO
+            )
+            assert response.status_code == 200
+            body = response.json()
+            assert body["andrad"] is True
+            assert body["prospect"]["origin"] == "test"
+
+
+@pytest.mark.anyio
+async def test_degradera_ar_idempotent_for_test():
+    """Ett prospekt som redan är 'test' (eller 'example') ska inte falla —
+    samma resonemang som test_befordra_ar_idempotent_for_manual."""
+    async with app.router.lifespan_context(app):
+        storage = app.state.storage
+        prospekt = await storage.create_prospect(
+            DEFAULT_TENANT_ID, company_name="Redan Test AB", origin="test"
+        )
+        async with _client() as client:
+            response = await client.post(
+                f"/api/leads/prospects/{prospekt['id']}/degradera", headers=DEMO
+            )
+            assert response.status_code == 200
+            body = response.json()
+            assert body["andrad"] is False
+            assert body["prospect"]["origin"] == "test"
+
+
+@pytest.mark.anyio
+async def test_degradera_okant_prospekt_ger_404():
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            response = await client.post(
+                "/api/leads/prospects/00000000-0000-0000-0000-000000000000/degradera",
+                headers=DEMO,
+            )
+            assert response.status_code == 404
+
+
 @pytest.mark.anyio
 async def test_senaste_utkast_lasvag_utan_sidoeffekter():
     """Fas 5.5: Bolagssidan ska kunna återfinna ett utkast efter omladdning

@@ -309,6 +309,70 @@ def _digest(output: dict[str, Any], *keys: str) -> str:
     return json.dumps({k: output.get(k) for k in keys if k in output}, ensure_ascii=False, indent=1)
 
 
+#: Kontaktfältets fallback-trappa (app/leads/discovery.py:KONTAKTNIVAER),
+#: här i rangordning för att avgöra om Fas B:s fynd ska SKRIVA ÖVER det
+#: hitta_bolag() redan satte. Lägst först — en tom sträng/None rankas 0.
+_KONTAKTNIVA_RANK = ("contact_form", "role_address", "named_other", "named_role_match")
+
+
+def _kontaktniva_rank(niva: str | None) -> int:
+    return _KONTAKTNIVA_RANK.index(niva) + 1 if niva in _KONTAKTNIVA_RANK else 0
+
+
+async def _uppgradera_kontakt(
+    storage,
+    tenant_id: str,
+    prospect_id: str,
+    *,
+    prospect: dict[str, Any],
+    fynd: dict[str, Any],
+    material: str,
+) -> None:
+    """Uppgraderar prospektets kontakt om Fas B:s researchsteg (mk:customer-
+    research) hittade en namngiven person i det redan SKRAPADE källmaterialet
+    — nåt den breda `hitta_bolag()`-sökningen aldrig fick se.
+
+    VARFÖR HÄR OCH INTE BARA I discovery.py: `hitta_bolag()` kör en BRED
+    Google-sökning över många bolag samtidigt via Gemini och ser bara vad
+    sökindexet sammanfattar — den skrapar aldrig själva sidan. Det här steget
+    körs EFTER att `_gather_registered_sources` redan hämtat bolagets egna
+    sidor (om-oss, ledning, kontakt), så en namngiven kontakt härifrån är
+    grundad i den RIKTIGA sidtexten, inte en sökmotorsammanfattning — precis
+    den skillnad grundningsgrinden (app/leads/grounding_gate.py) finns för
+    att skydda om ett namn någonsin används som fakta i ett utkast.
+
+    Samma väg gynnar ÄVEN prospekt kunden namngav själv
+    (`company_names`-listan i `_samla_korningens_prospekt`), som aldrig går
+    igenom `hitta_bolag()` och annars aldrig fick någon kontakt
+    överhuvudtaget — de har bara en webbplats tills det här steget kör.
+
+    Skriver ALDRIG över en HÖGRE eller LIKA nivå, och hittar inte på en
+    e-postadress: en föreslagen adress accepteras bara om den bokstavligen
+    står i `material` (samma "hitta aldrig på"-krav som prompten i
+    discovery.py). Kastar aldrig — en misslyckad uppgradering ska inte fälla
+    en annars klar research, se samma avvägning i `_fanga_kunskap`.
+    """
+    namn = str(fynd.get("contact_name") or "").strip()
+    if not namn:
+        return
+    if _kontaktniva_rank("named_other") <= _kontaktniva_rank(prospect.get("contact_level")):
+        return
+
+    roll = str(fynd.get("contact_role") or "").strip() or None
+    epost = str(fynd.get("contact_email") or "").strip() or None
+    if epost and (not material or epost.lower() not in material.lower()):
+        epost = None  # inte verifierbar i underlaget — hitta aldrig på en adress
+
+    falt: dict[str, Any] = {"contact_name": namn, "contact_role": roll, "contact_level": "named_other"}
+    if epost and not prospect.get("contact_email"):
+        falt["contact_email"] = epost
+
+    try:
+        await storage.update_prospect(tenant_id, prospect_id, **falt)
+    except Exception:  # noqa: BLE001 — uppgraderingen är en bonus, researchen är jobbet
+        logger.exception("Kunde inte uppgradera kontaktnivån för prospekt %s", prospect_id)
+
+
 # -- Fas A: onboarding (oförändrad, se modulens docstring) -----------------
 
 
@@ -454,6 +518,11 @@ async def run_research_step(
     )
     sources_block = material or "(inget källmaterial kunde hämtas — se scrape_errors)"
 
+    # Läst EN gång, före steg 1: `_uppgradera_kontakt` behöver veta vilken
+    # kontaktnivå prospektet redan har INNAN steget kör, för att kunna avgöra
+    # om fyndet är en uppgradering eller en nedgradering.
+    prospect_row = await storage.get_prospect(tenant_id, prospect_id) or {}
+
     soul_block = await load_soul(storage, tenant_id)
     lager = await las_instruktioner(
         storage, tenant_id, agent_type="leads", tenant_namn=tenant_name
@@ -499,7 +568,23 @@ async def run_research_step(
         "existing_support_channels (lista — de kanaler källmaterialet visar att "
         "de erbjuder kundservice i: mejl, telefon, chatt, sociala medier), "
         "has_chatbot (bool eller null — null när källmaterialet inte räcker "
-        "för att avgöra; gissa aldrig).",
+        "för att avgöra; gissa aldrig), "
+        "contact_name (en namngiven person källmaterialet visar, t.ex. på en "
+        "om-oss/ledningssida, eller null — hitta ALDRIG på ett namn), "
+        "contact_role (personens roll/titel enligt källmaterialet, eller "
+        "null), contact_email (personens e-postadress ENBART om den "
+        "bokstavligen står i källmaterialet, annars null — gissa aldrig ihop "
+        "en adress av ett namnmönster som förnamn@domän).",
+    )
+    # Kontaktfältets fallback-trappa (INV-CONTACT-001, kundkrav): det här
+    # steget läser redan bolagets EGNA skrapade sidor (se
+    # _gather_registered_sources ovan), så en namngiven kontakt härifrån är
+    # grundad i riktig sidtext — till skillnad från `hitta_bolag()`s breda
+    # sökindexträff. Uppgraderar bara, skriver aldrig över en bättre nivå,
+    # och hittar aldrig på en adress. Se _uppgradera_kontakt för resonemanget
+    # i sin helhet.
+    await _uppgradera_kontakt(
+        storage, tenant_id, prospect_id, prospect=prospect_row, fynd=customer, material=material
     )
 
     # 2. mk:prospecting — kvalificering mot ICP

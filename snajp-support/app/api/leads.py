@@ -507,6 +507,8 @@ async def befordra_prospekt(
     att bolaget faktiskt ÄR riktigt (Fas 3): ett exempelbolags Luhn-ogiltiga
     org.nr och `.example`-domän får inte glida igenom bara för att en människa
     klickade en knapp.
+
+    Motsatt riktning: `degradera` nedan.
     """
     kraev_uuid(prospect_id, "Prospektet")
     storage = request.app.state.storage
@@ -555,6 +557,42 @@ async def befordra_prospekt(
         )
 
     updated = await storage.update_prospect(tenant["tenant_id"], prospect_id, origin="manual")
+    return {"prospect": updated, "andrad": True}
+
+
+@router.post("/api/leads/prospects/{prospect_id}/degradera")
+async def degradera_prospekt(
+    request: Request, prospect_id: str, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Flyttar ett prospekt från kundens riktiga lista till en egen provkörning.
+
+    Motsatsen till `befordra` ovan, och lika viktig av samma skäl: send-guarden
+    (scheduler.py, `_kor_send_guard`, "spärr noll") blockerar VARJE utskick där
+    prospektets `origin` är 'test' eller 'example' — okontrollerat, innan något
+    av de sex reglerna ens hinner köras (se scheduler.py rad ~69). Att sätta
+    `origin='test'` här är alltså inte bara en etikett, det är knappen som gör
+    prospektet OSKICKBART. Det är hela poängen med "Flytta till testytan" i
+    Bolagsregistret: ett prospekt som hamnat fel — eller som en människa
+    medvetet vill experimentera vidare på utan risk — ska aldrig kunna mejlas
+    av misstag.
+
+    Ingen ifyllnad krävs, till skillnad från `befordra`: att bli oskickbar har
+    inga förutsättningar att uppfylla, bara att bli skickbar har det.
+    """
+    kraev_uuid(prospect_id, "Prospektet")
+    storage = request.app.state.storage
+    prospect = await storage.get_prospect(tenant["tenant_id"], prospect_id)
+    if not prospect:
+        raise HTTPException(status_code=404, detail="Prospektet finns inte.")
+
+    origin = prospect.get("origin") or "manual"
+    if origin in ("test", "example"):
+        # Redan oskickbar — inget att göra. 200 och inte 409, av samma skäl
+        # som befordra ovan: knappen ska kunna köras om över en blandad
+        # markering utan att fråga vilka rader som redan gått igenom.
+        return {"prospect": prospect, "andrad": False}
+
+    updated = await storage.update_prospect(tenant["tenant_id"], prospect_id, origin="test")
     return {"prospect": updated, "andrad": True}
 
 
@@ -1219,11 +1257,29 @@ async def _samla_korningens_prospekt(
                 prospect = await storage.create_prospect(
                     tenant_id,
                     company_name=bolag["company_name"],
+                    # `contact_name` glömdes tidigare helt här — hitta_bolag()
+                    # kunde hitta en namngiven person men prospektraden fick
+                    # ändå bara e-postadressen, aldrig namnet. En del av
+                    # varför "hittar nästan aldrig en kontaktperson" var sant
+                    # även de gånger sökningen faktiskt fann en.
+                    contact_name=bolag.get("contact_name"),
                     contact_email=bolag.get("contact_email"),
                     origin=origin_fynd,
                     profil={
                         k: bolag[k]
-                        for k in ("orgnr", "website", "ort", "anstallda")
+                        for k in (
+                            "orgnr",
+                            "website",
+                            "ort",
+                            "anstallda",
+                            # Fallback-trappans nivå (migration 058) — se
+                            # app/leads/discovery.py:KONTAKTNIVAER. Utan den
+                            # kan varken UI:t eller utkastnoten nedan skilja
+                            # en verifierad rollpost från en namngiven träff.
+                            "contact_role",
+                            "contact_level",
+                            "contact_form_url",
+                        )
                         if bolag.get(k) is not None
                     },
                 )
@@ -1423,11 +1479,32 @@ async def _run_batch_prospect(
         if scope == "research_and_draft":
             prospect = await storage.get_prospect(tenant["tenant_id"], prospect_id) or {}
             email = prospect.get("contact_email")
+            # Kontaktnivån (fallback-trappan, app/leads/discovery.py) följer
+            # med i svaret oavsett utfall — UI:t och draft_note nedan ska
+            # kunna säga ÄRLIGT vad kontakten faktiskt bygger på, inte bara
+            # om ett utkast blev av eller inte.
+            result["contact_name"] = prospect.get("contact_name")
+            result["contact_role"] = prospect.get("contact_role")
+            result["contact_level"] = prospect.get("contact_level")
+            result["contact_form_url"] = prospect.get("contact_form_url")
             if not email:
-                result["draft_note"] = (
-                    "Research klar. Inget utkast: ingen e-postadress hittades "
-                    "på bolagets sajt."
-                )
+                # Trappans sista steg (contact_level="contact_form") ger
+                # ALDRIG en e-postadress — det är hela poängen med steget.
+                # Ett prospekt kan alltså sakna e-post och ändå ha en
+                # verifierad kontaktväg; noten ska visa den i stället för
+                # att låta som att sökningen inte hittade någonting alls.
+                kontaktformular = prospect.get("contact_form_url")
+                if kontaktformular:
+                    result["draft_note"] = (
+                        "Research klar. Inget utkast: ingen e-postadress "
+                        f"hittades på bolagets sajt, bara ett kontaktformulär "
+                        f"({kontaktformular}) — skicka via det manuellt i stället."
+                    )
+                else:
+                    result["draft_note"] = (
+                        "Research klar. Inget utkast: ingen e-postadress eller "
+                        "kontaktväg hittades på bolagets sajt."
+                    )
             else:
                 try:
                     from ..agent.leads_agent import run_outreach_draft

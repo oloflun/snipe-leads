@@ -37,7 +37,21 @@ logger = logging.getLogger("snajp-support.storage")
 #: kolumnnamnen sätts in i SQL-satsen som text, och det enda som gör det säkert
 #: är att de aldrig kan komma från anroparen. Värdena går som parametrar.
 _PROSPEKT_PROFILFALT = frozenset(
-    {"orgnr", "ort", "postnr", "sni", "website", "anstallda", "omsattning"}
+    {
+        "orgnr",
+        "ort",
+        "postnr",
+        "sni",
+        "website",
+        "anstallda",
+        "omsattning",
+        # Kontaktfältets fallback-trappa (migration 058) — se
+        # app/leads/discovery.py:KONTAKTNIVAER. contact_name/contact_email
+        # är EGNA kolumner sedan migration 010 och går inte via allowlisten.
+        "contact_role",
+        "contact_level",
+        "contact_form_url",
+    }
 )
 
 
@@ -1363,6 +1377,10 @@ class PostgresStorage:
         orgnr: str | None = None,
         website: str | None = None,
         contact_email: str | None = None,
+        contact_name: str | None = None,
+        contact_role: str | None = None,
+        contact_level: str | None = None,
+        contact_form_url: str | None = None,
     ) -> dict[str, Any] | None:
         # Dynamisk SET-lista: en PATCH ska kunna sätta ETT fält utan att nolla
         # de andra, och en fast update-sats hade krävt att anroparen skickar
@@ -1376,6 +1394,10 @@ class PostgresStorage:
             "orgnr": orgnr,
             "website": website,
             "contact_email": contact_email,
+            "contact_name": contact_name,
+            "contact_role": contact_role,
+            "contact_level": contact_level,
+            "contact_form_url": contact_form_url,
         }
         fields = {name: value for name, value in updates.items() if value is not None}
         if not fields:

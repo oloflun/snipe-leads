@@ -567,6 +567,10 @@ class Storage(Protocol):
         orgnr: str | None = None,
         website: str | None = None,
         contact_email: str | None = None,
+        contact_name: str | None = None,
+        contact_role: str | None = None,
+        contact_level: str | None = None,
+        contact_form_url: str | None = None,
     ) -> dict[str, Any] | None:
         """Fas B:s bedömning (icp_fit, qualified, disqualifiers) landar här,
         migration 024. Innan den fanns räknades icp_fit ut av modellen och
@@ -575,7 +579,14 @@ class Storage(Protocol):
 
         `origin` (Fas 3, §4) är den enda vägen `POST .../befordra` skriver:
         'test'/'example' → 'manual', efter att valideringen i
-        `leads/befordran.py` godkänt bolaget."""
+        `leads/befordran.py` godkänt bolaget.
+
+        `contact_name`/`contact_role`/`contact_level`/`contact_form_url`
+        (migration 058) är UPPGRADERINGSVägen för kontaktfältets
+        fallback-trappa: Fas B:s per-prospekt research läser det redan
+        skrapade källmaterialet och kan hitta en namngiven person där den
+        breda `hitta_bolag()`-sökningen bara verifierade en rollbaserad
+        adress. Se `app/agent/leads_agent.py::_uppgradera_kontakt`."""
         ...
 
     async def create_prospect_source(

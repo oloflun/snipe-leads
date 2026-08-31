@@ -960,7 +960,19 @@ class MemoryStorage:
             **{
                 namn: värde
                 for namn, värde in (profil or {}).items()
-                if namn in ("orgnr", "ort", "postnr", "sni", "website", "anstallda", "omsattning")
+                if namn
+                in (
+                    "orgnr",
+                    "ort",
+                    "postnr",
+                    "sni",
+                    "website",
+                    "anstallda",
+                    "omsattning",
+                    "contact_role",
+                    "contact_level",
+                    "contact_form_url",
+                )
                 and värde is not None
             },
             "created_at": _now(),
@@ -991,6 +1003,10 @@ class MemoryStorage:
         orgnr: str | None = None,
         website: str | None = None,
         contact_email: str | None = None,
+        contact_name: str | None = None,
+        contact_role: str | None = None,
+        contact_level: str | None = None,
+        contact_form_url: str | None = None,
     ) -> dict[str, Any] | None:
         prospect = await self.get_prospect(tenant_id, prospect_id)
         if not prospect:
@@ -1004,6 +1020,10 @@ class MemoryStorage:
             ("orgnr", orgnr),
             ("website", website),
             ("contact_email", contact_email),
+            ("contact_name", contact_name),
+            ("contact_role", contact_role),
+            ("contact_level", contact_level),
+            ("contact_form_url", contact_form_url),
         ):
             if value is not None:
                 prospect[field] = value

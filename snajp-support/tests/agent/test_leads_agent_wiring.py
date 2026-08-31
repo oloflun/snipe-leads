@@ -781,6 +781,132 @@ async def test_kunskapsfangsten_ligger_sist_och_skriver_ingenting():
     assert storage.context_docs.get(TENANT) in (None, [])
 
 
+# -- Kontaktfältets fallback-trappa: Fas B uppgraderar från skrapat material --
+#
+# hitta_bolag() ser bara en Google-sammanfattning; det här steget ser den
+# FAKTISKA sidan (via _gather_registered_sources), så det ska kunna hitta en
+# namngiven kontakt som den breda sökningen missade. Se _uppgradera_kontakt.
+
+
+@pytest.mark.anyio
+async def test_research_uppgraderar_kontakt_fran_skrapat_material():
+    storage, llm = MemoryStorage(), _FakeLLM(
+        overrides={
+            "mk:customer-research": {
+                "company_summary": "Svensk e-handel inom kläder.",
+                "business_model": "D2C",
+                "likely_pains": ["Många returfrågor"],
+                "evidence": ["Fri retur inom 30 dagar"],
+                "contact_name": "Anna Andersson",
+                "contact_role": "Marknadschef",
+                "contact_email": "anna@exempelbolaget.se",
+            }
+        }
+    )
+    prospect_id = await _prepare_prospect(storage)
+    with patch("app.agent.step_runner.get_llm_client", return_value=llm), patch(
+        "app.agent.leads_agent._scrape_registered_source_impl",
+        new=_fake_scrape("# Exempelbolaget\nKontakta Anna Andersson, marknadschef, "
+                          "på anna@exempelbolaget.se."),
+    ):
+        await run_research_step(
+            storage,
+            TENANT,
+            prospect_id=prospect_id,
+            tenant_name="Snajp",
+            context_pack="### Kontextpaket\nSnajp säljer supportagenter.",
+            brief="Researcha Exempelbolaget.",
+        )
+
+    prospect = await storage.get_prospect(TENANT, prospect_id)
+    assert prospect["contact_name"] == "Anna Andersson"
+    assert prospect["contact_role"] == "Marknadschef"
+    assert prospect["contact_level"] == "named_other"
+    assert prospect["contact_email"] == "anna@exempelbolaget.se"
+
+
+@pytest.mark.anyio
+async def test_research_skriver_inte_over_en_redan_battre_kontaktniva():
+    """En namngiven träff i Fas B får aldrig degradera en träff som redan är
+    verifierad mot den ICP-sökta rollen (named_role_match, satt av
+    hitta_bolag())."""
+    storage, llm = MemoryStorage(), _FakeLLM(
+        overrides={
+            "mk:customer-research": {
+                "contact_name": "Nagon Annan",
+                "contact_role": "Ekonomichef",
+                "contact_email": "nagon@exempelbolaget.se",
+            }
+        }
+    )
+    prospect = await storage.create_prospect(
+        TENANT,
+        company_name="Exempelbolaget",
+        contact_name="Redan Verifierad",
+        contact_email="redan@exempelbolaget.se",
+        profil={"contact_level": "named_role_match", "contact_role": "VD"},
+    )
+    await storage.create_prospect_source(
+        TENANT,
+        prospect_id=prospect["id"],
+        source_url="https://exempelbolaget.se",
+        source_type="company_website",
+        lawful_basis="Berättigat intresse",
+    )
+    with patch("app.agent.step_runner.get_llm_client", return_value=llm), patch(
+        "app.agent.leads_agent._scrape_registered_source_impl",
+        new=_fake_scrape("# Exempelbolaget\nNagon Annan, ekonomichef, "
+                          "nagon@exempelbolaget.se."),
+    ):
+        await run_research_step(
+            storage,
+            TENANT,
+            prospect_id=prospect["id"],
+            tenant_name="Snajp",
+            context_pack="### Kontextpaket\n...",
+            brief="",
+        )
+
+    efter = await storage.get_prospect(TENANT, prospect["id"])
+    assert efter["contact_name"] == "Redan Verifierad"
+    assert efter["contact_level"] == "named_role_match"
+    assert efter["contact_email"] == "redan@exempelbolaget.se"
+
+
+@pytest.mark.anyio
+async def test_research_hittar_inte_pa_en_epostadress_utanfor_underlaget():
+    """Namnet får komma från steg-0-svaret, men en adress som INTE bokstavligen
+    står i det skrapade materialet ska aldrig skrivas till prospektet — det
+    vore precis den sortens gissning grundningsgrinden finns för att stoppa."""
+    storage, llm = MemoryStorage(), _FakeLLM(
+        overrides={
+            "mk:customer-research": {
+                "contact_name": "Anna Andersson",
+                "contact_role": "Marknadschef",
+                "contact_email": "gissad@ett-helt-annat-namnmonster.se",
+            }
+        }
+    )
+    prospect_id = await _prepare_prospect(storage)
+    with patch("app.agent.step_runner.get_llm_client", return_value=llm), patch(
+        "app.agent.leads_agent._scrape_registered_source_impl",
+        new=_fake_scrape("# Exempelbolaget\nAnna Andersson är marknadschef."),
+    ):
+        await run_research_step(
+            storage,
+            TENANT,
+            prospect_id=prospect_id,
+            tenant_name="Snajp",
+            context_pack="### Kontextpaket\n...",
+            brief="",
+        )
+
+    prospect = await storage.get_prospect(TENANT, prospect_id)
+    assert prospect["contact_name"] == "Anna Andersson"
+    assert prospect["contact_level"] == "named_other"
+    assert prospect["contact_email"] is None
+
+
 @pytest.mark.anyio
 async def test_ett_trasigt_kunskapssteg_faller_inte_researchen():
     """Hela researchresultatet finns redan när steget kör. Det som går

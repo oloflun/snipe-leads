@@ -63,18 +63,36 @@ type Lage =
   | { fas: "fel"; meddelande: string }
   | { fas: "klar"; prospekt: Prospekt[] };
 
-/** Utfallet av ETT befordran-försök — visas rad för rad efter "Flytta över valda". */
+/**
+ * Riktningen ett "Flytta"-klick betyder just nu — se docstringen på
+ * `flyttaOverValda` för var den kommer ifrån.
+ */
+type Riktning = "till_test" | "till_skarp";
+
+/** Utfallet av ETT flytta-försök — visas rad för rad efter "Flytta". */
 type Utfallsrad = {
   id: string;
   company_name: string;
   ok: boolean;
+  /** Avgör om resultatraden ska visa ifyllnadsformuläret (bara till_skarp
+   *  kan 422:a på saknade fält — till_test har inga förutsättningar). */
+  riktning: Riktning;
   /** Bara satt när ok=false. Backendens 422-lista, redan på svenska. */
   saknas?: string[];
 };
 
-/** Svaret /befordra ger, tolkat oavsett statuskod (se readJsonBody). */
+/** Svaret /befordra och /degradera ger, tolkat oavsett statuskod (se readJsonBody). */
 type BefordraSvar = {
   detail?: { message?: string; saknas?: string[] } | string;
+};
+
+/** Utfallet av ETT "Skapa utkast"-försök. Samma radmönster som Utfallsrad,
+ *  men utan ifyllnad — ett utkast som inte gick att skapa ska bara förklaras. */
+type UtkastRad = {
+  id: string;
+  company_name: string;
+  ok: boolean;
+  meddelande?: string;
 };
 
 /** Backendens statusvärden, på svenska. Speglar check-villkoret i migration 010. */
@@ -119,6 +137,60 @@ function poang(p: Prospekt): string {
   if (typeof p.score_total === "number") return String(p.score_total);
   if (typeof p.icp_fit === "number") return String(Math.round(p.icp_fit * 100));
   return "—";
+}
+
+/** Knapptexten SKA säga vilken riktning som gäller — se docstringen på
+ *  `flyttaOverValda`. Fel riktning tyst i en knapptext är precis den sortens
+ *  fel som gör att någon flyttar ett riktigt prospekt in i testytan, eller
+ *  tvärtom, utan att märka det. */
+function flyttaKnappText(riktning: Riktning, antal: number): string {
+  return riktning === "till_test"
+    ? `Flytta till testytan (${antal})`
+    : `Flytta till skarpa listan (${antal})`;
+}
+
+/**
+ * Erbjudandetexten `offer_summary` kräver — TENANTENS text, inte prospektets
+ * (registrets `Prospekt`-typ bär den inte). Speglar `hamtaOffertsammanfattning`
+ * i Bolagssida.tsx med flit i stället för att delas: samma resonemang som
+ * `snajpAnrop`-dubbleringen där, se den docstringen.
+ */
+async function hamtaOffertsammanfattning(): Promise<string> {
+  const response = await fetch("/api/snajp-support/leads/context-docs?kind=product_marketing", {
+    cache: "no-store"
+  });
+  const kropp = await readJsonBody<{ docs?: { content?: string }[] }>(response).catch(() => null);
+  const senaste = kropp?.docs?.[0]?.content?.trim();
+  if (!response.ok || !senaste) {
+    throw new Error(
+      "Affärskontexten (Vad ni säljer) är inte ifylld ännu. Fyll i den under Inställningar, " +
+        "Vad agenterna vet, Affärskontext innan utkast kan skapas."
+    );
+  }
+  // OutreachDraftRequest.offer_summary har max_length 2000 (se schemas.py).
+  return senaste.slice(0, 2000);
+}
+
+/** Poängmotiveringen som forskningsunderlag åt utkastet — samma källa som
+ *  "Signal"-kolumnen redan visar. Speglar Bolagssida.tsx:s variant. */
+function byggForskningssammanfattning(p: Prospekt): string {
+  return kriterier(p.score_breakdown)
+    .map((k) => `${k.etikett} (${k.utfall})${k.motivering ? `: ${k.motivering}` : ""}`)
+    .join("\n")
+    .slice(0, 8000);
+}
+
+/** Pydantics 422 lägger en LISTA i `detail`, en handskriven HTTPException en
+ *  STRÄNG — samma distinktion som `snajpAnrop` i Bolagssida.tsx gör. */
+function extraheraFelmeddelande(detail: unknown): string | undefined {
+  if (Array.isArray(detail)) {
+    return detail
+      .map((d) =>
+        d && typeof d === "object" && "msg" in d ? String((d as { msg: unknown }).msg) : String(d)
+      )
+      .join("; ");
+  }
+  return typeof detail === "string" ? detail : undefined;
 }
 
 export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
@@ -196,7 +268,16 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
 
   // Fas 2 §3, 2.4-UI: testkörningar döljs som default. Exempelbolag räknas
   // INTE hit — de är produktens tomläge och ska synas även med växeln av.
+  //
+  // `visaTest` bär ÄVEN läget "Flytta" ska tolka riktningen ur (se
+  // flyttaOverValda nedan). Ingen egen `läge`-flagga behövdes: den här är
+  // redan svaret på "vilken yta tittar kunden på just nu", och det är exakt
+  // frågan riktningen ska svara på. DashboardContext/lib/vy.ts äger ett HELT
+  // annat läge (adminens admin/demo/kund-yta — VEM som tittar, inte VILKEN
+  // datayta den här tabellen visar) och har inget att säga om riktningen.
   const [visaTest, setVisaTest] = useState(false);
+  const [genererarUtkast, setGenererarUtkast] = useState(false);
+  const [utkastResultat, setUtkastResultat] = useState<UtkastRad[] | null>(null);
 
   const vaxlaVal = useCallback((id: string) => {
     setValda((forra) => {
@@ -210,8 +291,26 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
     });
   }, []);
 
+  /**
+   * "Flytta"-knappens riktning följer var kunden STÅR i tabellen — den är
+   * inget eget reglage. `visaTest` säger redan vilken yta som är synlig
+   * (testkörningar dolda som default = skarpt läge, framplockade = testläge,
+   * se useState ovan), och det är precis den frågan riktningen ska svara på.
+   *
+   * Skarpt läge (visaTest=false, default): bara riktiga prospekt syns och går
+   * att markera, så "Flytta" för dem TILL testytan (`/degradera`). Det gör
+   * prospektet OSKICKBART — send-guardens spärr noll (scheduler.py) blockerar
+   * varje utskick där origin är 'test' eller 'example', och det är hela
+   * poängen: ett prospekt som hamnat fel ska aldrig kunna mejlas av misstag.
+   *
+   * Testläge (visaTest=true): test/exempel syns också, och "Flytta" gör vad
+   * den alltid gjort — flyttar DEM till den skarpa listan (`/befordra`), och
+   * blir därmed skickbara. Se den endpointens docstring för samma regel åt
+   * andra hållet.
+   */
   const flyttaOverValda = useCallback(async (ids?: Set<string>) => {
     if (lage.fas !== "klar") return;
+    const riktning: Riktning = visaTest ? "till_skarp" : "till_test";
     // Ett snapshot av VILKA som är markerade just nu — valda kan ändras under
     // await-kedjan om kunden hinner klicka mer, men resultatlistan ska svara
     // på det urval knappen faktiskt kördes med.
@@ -224,26 +323,34 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
     try {
       const resultat: Utfallsrad[] = [];
       for (const p of kandidater) {
-        if (p.origin !== "test" && p.origin !== "example") {
-          // Redan i kundens riktiga lista — hoppas över TYST, ingen rad i
-          // resultatlistan. En markerad-men-redan-manuell rad är inget fel.
+        const arTestEllerExempel = p.origin === "test" || p.origin === "example";
+        if (riktning === "till_skarp" ? !arTestEllerExempel : arTestEllerExempel) {
+          // till_skarp: redan i kundens riktiga lista. till_test: redan
+          // oskickbar. Båda hoppas över TYST, ingen rad i resultatlistan —
+          // en markerad-men-redan-rätt rad är inget fel.
           continue;
         }
         try {
-          const extra = ifyllnad[p.id];
-          const response = await fetch(`/api/snajp-support/leads/prospects/${p.id}/befordra`, {
-            method: "POST",
-            headers: extra ? { "Content-Type": "application/json" } : undefined,
-            body: extra
-              ? JSON.stringify({
-                  orgnr: extra.orgnr || undefined,
-                  website: extra.website || undefined,
-                  contact_email: extra.contact_email || undefined
-                })
-              : undefined
-          });
+          // Ifyllnaden gäller bara till_skarp: /degradera tar ingen kropp,
+          // och att bli oskickbar har inga fält att fylla i.
+          const extra = riktning === "till_skarp" ? ifyllnad[p.id] : undefined;
+          const vagsegment = riktning === "till_skarp" ? "befordra" : "degradera";
+          const response = await fetch(
+            `/api/snajp-support/leads/prospects/${p.id}/${vagsegment}`,
+            {
+              method: "POST",
+              headers: extra ? { "Content-Type": "application/json" } : undefined,
+              body: extra
+                ? JSON.stringify({
+                    orgnr: extra.orgnr || undefined,
+                    website: extra.website || undefined,
+                    contact_email: extra.contact_email || undefined
+                  })
+                : undefined
+            }
+          );
           if (response.ok) {
-            resultat.push({ id: p.id, company_name: p.company_name, ok: true });
+            resultat.push({ id: p.id, company_name: p.company_name, ok: true, riktning });
             continue;
           }
           const kropp = await readJsonBody<BefordraSvar>(response).catch(() => null);
@@ -256,12 +363,13 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
             id: p.id,
             company_name: p.company_name,
             ok: false,
+            riktning,
             saknas: saknas.length
               ? saknas
               : [
                   typeof detalj === "string"
                     ? detalj
-                    : `Kunde inte flytta över (status ${response.status}).`
+                    : `Kunde inte flytta (status ${response.status}).`
                 ]
           });
         } catch (error) {
@@ -269,6 +377,7 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
             id: p.id,
             company_name: p.company_name,
             ok: false,
+            riktning,
             saknas: [felmeddelande(error)]
           });
         }
@@ -279,7 +388,100 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
     } finally {
       setFlyttar(false);
     }
-  }, [lage, valda, hamta, ifyllnad]);
+  }, [lage, valda, hamta, ifyllnad, visaTest]);
+
+  /**
+   * "Skapa utkast för valda" — samma kedja som Bolagssidans "Skapa utkast"
+   * (POST /leads/outreach/draft), körd per markerat prospekt i tur och
+   * ordning. Oberoende av flytta-riktningen ovan: att skriva ett utkast
+   * ändrar ingen origin och rör inte send-guarden.
+   *
+   * En rad utan mottagaradress kan aldrig bli ett utkast — det stoppas HÄR,
+   * innan anropet görs, så att den raden syns som "saknar adress" i stället
+   * för att hela satsen misslyckas på fältet som saknades för just den raden.
+   */
+  const skapaUtkastForValda = useCallback(async () => {
+    if (lage.fas !== "klar") return;
+    const kandidater = lage.prospekt.filter((p) => valda.has(p.id));
+    if (!kandidater.length) return;
+
+    setGenererarUtkast(true);
+    setUtkastResultat(null);
+    try {
+      let offerSummary: string;
+      try {
+        offerSummary = await hamtaOffertsammanfattning();
+      } catch (fel) {
+        // Ett hinder som gäller HELA arbetsytan (ingen affärskontext ifylld)
+        // — alla markerade rader delar samma orsak, inte en per prospekt.
+        setUtkastResultat(
+          kandidater.map((p) => ({
+            id: p.id,
+            company_name: p.company_name,
+            ok: false,
+            meddelande: felmeddelande(fel)
+          }))
+        );
+        return;
+      }
+
+      const resultat: UtkastRad[] = [];
+      for (const p of kandidater) {
+        if (!p.contact_email) {
+          resultat.push({
+            id: p.id,
+            company_name: p.company_name,
+            ok: false,
+            meddelande: "Prospektet saknar en mottagaradress."
+          });
+          continue;
+        }
+        try {
+          const response = await fetch("/api/snajp-support/leads/outreach/draft", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              prospect_id: p.id,
+              prospect_email: p.contact_email,
+              company_name: p.company_name,
+              offer_summary: offerSummary,
+              brief:
+                `Skriv ett kort, personligt första mejl till kontaktpersonen på ${p.company_name}. ` +
+                "Utgå ifrån poängmotiveringen i researchunderlaget och håll dig till det som redan " +
+                "är känt. Ingen hype, inga superlativ, ren text. Utkastet ska köas för granskning, " +
+                "inte skickas.",
+              research_summary: byggForskningssammanfattning(p)
+            })
+          });
+          const kropp = await readJsonBody<{
+            escalated?: boolean;
+            escalation_reason?: string | null;
+            body?: string;
+            detail?: unknown;
+          }>(response).catch(() => null);
+          if (response.ok && kropp && !kropp.escalated && kropp.body) {
+            resultat.push({ id: p.id, company_name: p.company_name, ok: true });
+            continue;
+          }
+          const meddelande =
+            kropp?.escalation_reason ||
+            extraheraFelmeddelande(kropp?.detail) ||
+            `Kunde inte skapa utkast (status ${response.status}).`;
+          resultat.push({ id: p.id, company_name: p.company_name, ok: false, meddelande });
+        } catch (error) {
+          resultat.push({
+            id: p.id,
+            company_name: p.company_name,
+            ok: false,
+            meddelande: felmeddelande(error)
+          });
+        }
+      }
+      setUtkastResultat(resultat);
+    } finally {
+      setGenererarUtkast(false);
+    }
+  }, [lage, valda]);
 
   if (lage.fas === "laddar") {
     return <SkeletonRows />;
@@ -320,20 +522,32 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
   // Fas 2 §3, 2.4-UI: testkörningar döljs som default, exempelbolag aldrig.
   const antalTest = lage.prospekt.filter((p) => p.origin === "test").length;
   const synliga = lage.prospekt.filter((p) => visaTest || p.origin !== "test");
+  // Se docstringen på flyttaOverValda: visaTest ÄR läget knappen tolkar.
+  const riktning: Riktning = visaTest ? "till_skarp" : "till_test";
 
   return (
     <>
       {(antalTest > 0 || (!demo && valda.size > 0)) && (
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           {!demo && valda.size > 0 ? (
-            <button
-              type="button"
-              disabled={flyttar}
-              onClick={() => void flyttaOverValda()}
-              className="border border-ink px-4 py-2 font-mono text-[12px] uppercase tracking-[0.18em] transition hover:bg-ink hover:text-paper disabled:opacity-60"
-            >
-              {flyttar ? "Flyttar..." : `Flytta över valda (${valda.size})`}
-            </button>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                disabled={flyttar}
+                onClick={() => void flyttaOverValda()}
+                className="border border-ink px-4 py-2 font-mono text-[12px] uppercase tracking-[0.18em] transition hover:bg-ink hover:text-paper disabled:opacity-60"
+              >
+                {flyttar ? "Flyttar..." : flyttaKnappText(riktning, valda.size)}
+              </button>
+              <button
+                type="button"
+                disabled={genererarUtkast}
+                onClick={() => void skapaUtkastForValda()}
+                className="border border-ink/40 px-4 py-2 font-mono text-[12px] uppercase tracking-[0.18em] text-ink/70 transition hover:border-ink hover:text-ink disabled:opacity-60"
+              >
+                {genererarUtkast ? "Skapar utkast..." : `Skapa utkast för valda (${valda.size})`}
+              </button>
+            </div>
           ) : (
             <span />
           )}
@@ -359,13 +573,15 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
             <li key={rad.id} className="text-sm leading-6">
               <span className="font-medium text-ink">{rad.company_name}</span>{" "}
               {rad.ok ? (
-                <span className="text-moss">flyttades över till den riktiga listan.</span>
-              ) : (
-                <span className="text-danger">
-                  kunde inte flyttas över: {rad.saknas?.join(" ")}
+                <span className="text-moss">
+                  {rad.riktning === "till_skarp"
+                    ? "flyttades över till den riktiga listan."
+                    : "flyttades till testytan — kan inte längre skickas."}
                 </span>
+              ) : (
+                <span className="text-danger">kunde inte flyttas: {rad.saknas?.join(" ")}</span>
               )}
-              {!rad.ok ? (
+              {!rad.ok && rad.riktning === "till_skarp" ? (
                 <Ifyllnad
                   id={rad.id}
                   varden={ifyllnad[rad.id] ?? { orgnr: "", website: "", contact_email: "" }}
@@ -376,6 +592,21 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
                   onSubmit={() => void flyttaOverValda(new Set([rad.id]))}
                 />
               ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {utkastResultat && utkastResultat.length > 0 ? (
+        <ul className="mb-5 space-y-2 border-y border-ink/15 py-4">
+          {utkastResultat.map((rad) => (
+            <li key={rad.id} className="text-sm leading-6">
+              <span className="font-medium text-ink">{rad.company_name}</span>{" "}
+              {rad.ok ? (
+                <span className="text-moss">utkast skapat och köat för granskning.</span>
+              ) : (
+                <span className="text-danger">inget utkast: {rad.meddelande}</span>
+              )}
             </li>
           ))}
         </ul>
