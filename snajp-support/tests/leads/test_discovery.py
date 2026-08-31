@@ -9,7 +9,9 @@ from app.leads.discovery import (
     _gemini_med_sokning,
     _plocka_json,
     _rena_traffar,
+    ar_privat_epost,
     normalisera_webbplats,
+    plocka_arbetsmejl,
     webbplats_ar_bolagets,
 )
 
@@ -218,3 +220,31 @@ async def test_gemini_timeout_blir_discoveryerror_inte_ratt_httpx(monkeypatch):
 
 async def _noop():
     return None
+
+
+def test_plocka_arbetsmejl_hoppar_over_privat():
+    material = "Maila lisa@gmail.com eller info@acme.se."
+    assert plocka_arbetsmejl(material, "https://acme.se") == "info@acme.se"
+    assert ar_privat_epost("lisa@gmail.com")
+    assert not ar_privat_epost("info@acme.se")
+
+
+def test_plocka_arbetsmejl_foredrar_roll_narmast():
+    material = "info@acme.se chef@acme.se"
+    assert plocka_arbetsmejl(material, "https://acme.se", onskad_roll="Chef") == "chef@acme.se"
+
+
+def test_plocka_arbetsmejl_hittar_inte_pa_adress():
+    assert plocka_arbetsmejl("Ingen adress här.", "https://acme.se") is None
+
+
+def test_rena_traffar_kastar_privat_epost():
+    rader = [
+        {
+            "company_name": "Acme AB",
+            "website": "https://acme.se",
+            "contact_email": "lisa@gmail.com",
+        }
+    ]
+    [rad] = _rena_traffar(rader, uteslut=set(), tak=10)
+    assert rad["contact_email"] is None
