@@ -61,7 +61,7 @@ type ForslagKort = {
   kind: string;
   rubrik: string;
   brodtext: string;
-  status: "oppet" | "sparar" | "sparat" | "avfardar" | "avfardat" | "fel";
+  status: "oppet" | "sparar" | "sparat" | "avfardar" | "avfardat" | "arende" | "fel";
   fel?: string | null;
 };
 
@@ -709,16 +709,17 @@ export function SupportChat({
     }
   }, []);
 
-  const avgorForslag = useCallback(async (kortId: string, suggestionId: string, handling: "godkann" | "avfard") => {
+  const avgorForslag = useCallback(async (kortId: string, suggestionId: string, handling: "godkann" | "avfard" | "arende") => {
     setMessages((current) =>
       current.map((item) =>
         item.id === kortId && item.role === "forslag-kort"
-          ? { ...item, status: handling === "godkann" ? "sparar" : "avfardar", fel: null }
+          ? { ...item, status: handling === "avfard" ? "avfardar" : "sparar", fel: null }
           : item
       )
     );
     try {
-      const response = await fetch(`/api/snajp-support/agent/forslag/${suggestionId}/${handling}`, {
+      const slutt = handling === "arende" ? "arende" : handling;
+      const response = await fetch(`/api/snajp-support/agent/forslag/${suggestionId}/${slutt}`, {
         method: "POST"
       });
       if (!response.ok) {
@@ -727,7 +728,10 @@ export function SupportChat({
       setMessages((current) =>
         current.map((item) =>
           item.id === kortId && item.role === "forslag-kort"
-            ? { ...item, status: handling === "godkann" ? "sparat" : "avfardat" }
+            ? {
+                ...item,
+                status: handling === "godkann" ? "sparat" : handling === "arende" ? "arende" : "avfardat"
+              }
             : item
         )
       );
@@ -855,6 +859,7 @@ export function SupportChat({
               <ForslagKortVy
                 key={message.id}
                 kort={message}
+                onArende={() => void avgorForslag(message.id, message.suggestionId, "arende")}
                 onGodkann={() => void avgorForslag(message.id, message.suggestionId, "godkann")}
                 onAvfard={() => void avgorForslag(message.id, message.suggestionId, "avfard")}
               />
@@ -1102,38 +1107,48 @@ function KbForhandsvisningKortVy({
 }
 
 /**
- * Agentens föreslagna kunskapsartikel (6.6), i chattflödet i stället för
- * bara på lärande-sidan. Godkännandeklicket ligger HÄR, i chatten — det
- * känns live, och en människa är ändå kvar i loopen (INV-LEARN-001):
- * artikeln skapas av backendens egen endpoint, aldrig av agenten själv.
+ * Agentens undersökningsförslag i testchatten. Primärt öppnas ett ärende
+ * att återkomma till — inte en tyst skrivning i kunskapsbasen, som lät som
+ * att kunden just laddat upp affärskontext.
  */
 function ForslagKortVy({
   kort,
+  onArende,
   onGodkann,
   onAvfard
-}: Readonly<{ kort: ForslagKort; onGodkann: () => void; onAvfard: () => void }>) {
+}: Readonly<{ kort: ForslagKort; onArende: () => void; onGodkann: () => void; onAvfard: () => void }>) {
   return (
     <div className="flex justify-start">
       <div className="max-w-[90%] rounded-card border border-ochre/30 bg-ochre/5 px-4 py-3 text-[0.875rem] leading-6">
-        <p className="kicker text-mineral">Agenten föreslår en kunskapsartikel</p>
+        <p className="kicker text-mineral">Agenten behöver undersöka det här innan den svarar</p>
         <p className="mt-2 font-semibold text-ink">{kort.rubrik}</p>
         {kort.brodtext ? <p className="mt-1 whitespace-pre-wrap text-ink/75">{kort.brodtext}</p> : null}
-        {kort.status === "sparat" ? (
+        {kort.status === "arende" ? (
           <p className="mt-3 text-moss">
-            Tillagt i kunskapsbasen. Nästa meddelande använder den nya texten, instruktionerna läses om per körning.
+            Öppnat som ärende. Det ligger under Testkörningar tills ni har underlag att svara med.
           </p>
+        ) : kort.status === "sparat" ? (
+          <p className="mt-3 text-moss">Sparad som kunskapsartikel.</p>
         ) : kort.status === "avfardat" ? (
           <p className="mt-3 text-ink/50">Avfärdat.</p>
         ) : (
-          <div className="mt-3 flex items-center gap-2">
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={kort.status === "sparar" || kort.status === "avfardar"}
+              onClick={onArende}
+              className="focus-ring inline-flex min-h-9 items-center gap-1.5 rounded-input bg-ink px-3 text-[0.8125rem] font-medium text-paper disabled:opacity-50"
+            >
+              <Check className="h-3.5 w-3.5" aria-hidden />
+              {kort.status === "sparar" ? "Öppnar…" : "Öppna som ärende"}
+            </button>
             <button
               type="button"
               disabled={kort.status === "sparar" || kort.status === "avfardar"}
               onClick={onGodkann}
-              className="focus-ring inline-flex min-h-9 items-center gap-1.5 rounded-input bg-ink px-3 text-[0.8125rem] font-medium text-paper disabled:opacity-50"
+              className="focus-ring inline-flex min-h-9 items-center gap-1.5 rounded-input bg-paper2 px-3 text-[0.8125rem] font-medium disabled:opacity-50"
             >
-              <Check className="h-3.5 w-3.5" aria-hidden />
-              {kort.status === "sparar" ? "Lägger till…" : "Lägg till"}
+              Spara som kunskapsartikel
             </button>
             <button
               type="button"
@@ -1182,7 +1197,7 @@ function FeedbackRad({
   if (lage.fas === "skickad") {
     return (
       <p className="mt-1.5 text-[0.75rem] text-ink/45">
-        {lage.verdict === "good" ? "Tack för feedbacken." : "Tack, rättningen sparades."}
+        Feedbacken är kalibrerad in — nästa testsvar tar hänsyn till den.
       </p>
     );
   }

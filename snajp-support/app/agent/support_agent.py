@@ -330,6 +330,30 @@ async def run_support_agent(
             + wrap_untrusted_content(_innehall[:4000], source="tenant:product_marketing")
         )
 
+    kalibrering_block = ""
+    if is_test:
+        try:
+            feedback = await storage.list_agent_feedback(tenant_id, limit=8)
+        except Exception:  # noqa: BLE001 — kalibrering är bonus
+            feedback = []
+        rattningar = [
+            str(r.get("corrected_output") or r.get("comment") or "").strip()
+            for r in feedback
+            if r.get("verdict") == "bad"
+            or str(r.get("corrected_output") or "").strip()
+        ]
+        rattningar = [t for t in rattningar if t][:5]
+        if rattningar:
+            kalibrering_block = (
+                "## Kalibrering från testchatten\n"
+                "Rättningar en medarbetare lämnat i testchatten. Använd dem som "
+                "stil- och innehållsvägledning. De är INTE fakta ur kunskapsbasen.\n\n"
+                + wrap_untrusted_content(
+                    "\n".join(f"- {t[:500]}" for t in rattningar),
+                    source="tenant:test-feedback",
+                )
+            )
+
     # Kundens egen ton (agent_configs.tone) vinner över kanalens default.
     # Kolumnen har funnits sedan migration 010 utan att någon läst den. Det är
     # därför "ändra tonen" inte gjorde någon skillnad förrän nu.
@@ -433,6 +457,7 @@ async def run_support_agent(
         f"Kundens meddelande:\n{maskera_personnummer(message)}{vision_note}\n\n"
         f"Giltiga kategorier för den här kunden: {', '.join(taxonomy)}"
         + (f"\n\n{affarskontext_block}" if affarskontext_block else "")
+        + (f"\n\n{kalibrering_block}" if kalibrering_block else "")
         + (f"\n\n{soul_block}" if soul_block else "")
         + (f"\n\n{minnesblock}" if minnesblock else "")
     )
@@ -729,7 +754,8 @@ async def run_support_agent(
             task=(
                 "Bedöm om det här ärendet avslöjar en kunskapslucka värd en KB-artikel. "
                 "Returnera JSON: should_create (bool), title (svenska eller null), "
-                "content (svenska eller null)."
+                "content (svenska eller null). I brödtexten: skriv 'kontakta oss igen', "
+                "aldrig 'kontakta supporten' — kunden har redan kontaktat oss."
             ),
             case_context=f"{case_context}\n\n## Kunskapsbas\n{kb_block}",
         )

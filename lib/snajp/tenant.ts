@@ -79,6 +79,11 @@ export type SnajpTenant = {
   userId: string;
   /** Demo-workspace — går till backenden som X-Snajp-Demo för ett lägre löptak. */
   isDemo: boolean;
+  /**
+   * Plattformsadmin tittar som en namngiven kund. Alla skrivningar ska då
+   * märkas is_test så de inte dyker upp i kundens skarpa inkorg/lista.
+   */
+  impersonerar: boolean;
 };
 
 export async function requireSnajpTenant(): Promise<SnajpTenant> {
@@ -157,7 +162,8 @@ export async function requireSnajpTenant(): Promise<SnajpTenant> {
       userId: user.id,
       // Ett kundbesök ska inte köra med sänkt löptak: det är kundens riktiga
       // trafik som granskas, och en strypt körning svarar på fel fråga.
-      isDemo: false
+      isDemo: false,
+      impersonerar: true
     };
   }
 
@@ -175,7 +181,8 @@ export async function requireSnajpTenant(): Promise<SnajpTenant> {
       apiKey,
       userId: user.id,
       // Se lib/data/dashboard.ts: demovyn ska köra skarpt, inte med sänkt tak.
-      isDemo: false
+      isDemo: false,
+      impersonerar: false
     };
   }
 
@@ -234,6 +241,7 @@ export async function requireSnajpTenant(): Promise<SnajpTenant> {
     slug: workspace.slug,
     apiKey,
     userId: user.id,
-    isDemo: workspace.is_demo
+    isDemo: workspace.is_demo,
+    impersonerar: false
   };
 }

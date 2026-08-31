@@ -31,11 +31,30 @@ export async function proxyAsTenant(path: string, init: RequestInit) {
     // egen tenantrad. Ett orgnr som kommer utifrån är ett fält någon kan byta
     // ut, och det är exakt vad INV-SEC-002 finns för att förhindra.
     const skvToken = (await cookies()).get(SKV_TOKEN_COOKIE)?.value;
-    const medToken: RequestInit = skvToken
+    let medToken: RequestInit = skvToken
       ? { ...init, headers: { ...(init.headers ?? {}), "X-Skatteverket-Token": skvToken } }
       : init;
 
-    return await proxyWithApiKey(path, medToken, tenant.apiKey, tenant.userId, tenant.isDemo);
+    let backendPath = path;
+    if (tenant.impersonerar) {
+      // Admin som tittar som kund: allt som skrivs är test. Query-parametern
+      // täcker leads/prospects; JSON-kroppen täcker chat, batch och mock.
+      if (!backendPath.includes("is_test=")) {
+        backendPath += (backendPath.includes("?") ? "&" : "?") + "is_test=true";
+      }
+      if (typeof medToken.body === "string" && medToken.body.length > 0) {
+        try {
+          const parsed: unknown = JSON.parse(medToken.body);
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+            medToken = { ...medToken, body: JSON.stringify({ ...parsed, is_test: true }) };
+          }
+        } catch {
+          // Inte JSON — lämna kroppen orörd.
+        }
+      }
+    }
+
+    return await proxyWithApiKey(backendPath, medToken, tenant.apiKey, tenant.userId, tenant.isDemo);
   } catch (error) {
     if (error instanceof SnajpTenantError) {
       // `kod` går med, så att gränssnittet kan skilja "inte aktiverad ännu"

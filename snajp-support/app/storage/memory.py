@@ -7,6 +7,7 @@ Default-tenanten (Nordlys Handel) seedas med demo-kunskapsbasen.
 """
 
 import hashlib
+import json
 import re
 import unicodedata
 import uuid

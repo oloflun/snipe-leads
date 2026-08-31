@@ -213,54 +213,39 @@ export type SettingsGroup = {
 
 export const settingsGroups: SettingsGroup[] = [
   {
-    // Underlaget, inte agenten. Det är också därför dokumentuppladdningen hör
-    // hemma här och inte per agent.
-    label: { sv: "Vad agenterna vet", en: "What the agents know" },
+    // Underlaget, inte agenten. Kunskapsbasen först: det är den som släcker
+    // eskaleringsväggen. Affärskontexten är "vad ni säljer" på vanlig svenska.
+    label: { sv: "Underlag", en: "Source material" },
     routes: [
-      { href: "/settings/affarskontext", label: { sv: "Affärskontext", en: "Business context" } },
       { href: "/settings/kunskapsbas", label: { sv: "Kunskapsbas", en: "Knowledge base" } },
-      // SOUL styr TON, ICP styr URVAL. Gränsen står utskriven i LeadsControls.
-      // Rösten är delad: samma dokument formar både utskick och svar.
-      { href: "/settings/soul", label: { sv: "Röst och tonläge", en: "Voice and tone" } }
+      { href: "/settings/affarskontext", label: { sv: "Vad ni säljer", en: "What you sell" } },
+      { href: "/settings/soul", label: { sv: "Så ska agenten låta", en: "How the agent should sound" } }
     ]
   },
   {
-    /**
-     * En EGEN grupp, direkt under röstdokumentet.
-     *
-     * Notiser och tema hör inte till "Vad agenterna vet" — de är inget agenten
-     * läser — och inte heller till "Kontot", som handlar om bolaget och
-     * pengarna. Båda handlar om DIG: när du vill bli störd, och vad du vill
-     * titta på medan du jobbar.
-     *
-     * Det är också den enda grupp vars innehåll är personligt och inte delat.
-     * Notisraden ligger per användare (migration 043) och temat i en cookie i
-     * den här webbläsaren — två kollegor i samma arbetsyta ser alltså olika
-     * svar här, vilket är rätt och värt att veta innan man ändrar något.
-     */
-    label: { sv: "Dina inställningar", en: "Your preferences" },
-    routes: [
-      { href: "/settings/notiser", label: { sv: "Notiser", en: "Notifications" } },
-      { href: "/settings/tema", label: { sv: "Tema", en: "Theme" } }
-    ]
-  },
-  {
-    label: { sv: "Vad agenterna får göra", en: "What the agents may do" },
+    label: { sv: "Så får agenten göra", en: "What the agent may do" },
     routes: [
       {
         href: "/settings/leads",
-        label: { sv: "Leads: målgrupp och autonomi", en: "Leads: audience and autonomy" },
+        label: { sv: "Vilka bolag ni vill nå", en: "Companies you want to reach" },
         product: "leads"
       },
       {
         href: "/settings/regler",
         label: {
-          sv: "Kundtjänst: fack och autosvar",
-          en: "Support: categories and auto-replies"
+          sv: "När agenten får svara själv",
+          en: "When the agent may reply on its own"
         },
         product: "support"
       },
       { href: "/settings/mailboxes", label: { sv: "Inkorgar", en: "Mailboxes" }, product: "support" }
+    ]
+  },
+  {
+    label: { sv: "Dina inställningar", en: "Your preferences" },
+    routes: [
+      { href: "/settings/notiser", label: { sv: "Notiser", en: "Notifications" } },
+      { href: "/settings/tema", label: { sv: "Tema", en: "Theme" } }
     ]
   },
   {

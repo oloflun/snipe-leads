@@ -42,9 +42,11 @@ export function ImpersonationBanner() {
       <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2 md:px-6">
         <Eye className="h-4 w-4 shrink-0 text-ochre" aria-hidden />
         <p className="text-[13px] font-medium text-ink">
-          Du tittar som <strong className="font-semibold">{impersonation.namn}</strong> — admin-läge.
+          Du testar som <strong className="font-semibold">{impersonation.namn}</strong>.
         </p>
-        <p className="text-[13px] text-ink/60">Riktig kunddata. Inga skärmdumpar.</p>
+        <p className="text-[13px] text-ink/60">
+          Allt du kör här är test och syns inte på kundens riktiga profil. Inga skärmdumpar.
+        </p>
 
         <form action={bytVy} className="ml-auto">
           <button

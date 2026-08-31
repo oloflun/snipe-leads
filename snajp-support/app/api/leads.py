@@ -12,7 +12,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from ..config import DEFAULT_TENANT_ID, get_settings
+from ..config import CATEGORY_LABELS, DEFAULT_TENANT_ID, get_settings
 from ..leads.autonomy import LEVELS as AUTONOMY_LEVELS
 from ..leads.autonomy import describe as describe_autonomy
 from ..leads.autonomy import kan_aktivera_auto_send
@@ -766,6 +766,65 @@ async def godkann_forslag(
     return {"suggestion": rad, "created_article": created}
 
 
+@router.post("/api/agent/forslag/{suggestion_id}/arende", status_code=201)
+async def oppna_forslag_som_arende(
+    request: Request, suggestion_id: str, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Öppnar förslaget som ett undersökningsärende, utan att skriva i KB.
+
+    Testchatten ska kunna säga 'vi undersöker och återkommer' — inte
+    'vi lade till det i kunskapsbasen'. Artikeln kan fortfarande sparas
+    via /godkann om medarbetaren vill det.
+    """
+    kraev_uuid(suggestion_id, "suggestion_id")
+    storage = request.app.state.storage
+    forslag = next(
+        (
+            r
+            for r in await storage.list_agent_suggestions(tenant["tenant_id"], limit=100)
+            if str(r.get("id")) == suggestion_id
+        ),
+        None,
+    )
+    if forslag is None:
+        raise HTTPException(status_code=404, detail="Förslaget finns inte.")
+    innehall = forslag.get("content") or {}
+    if isinstance(innehall, str):
+        import json as _json
+
+        innehall = _json.loads(innehall)
+    titel = str(innehall.get("title") or forslag.get("title") or "Undersökning")
+    brod = str(innehall.get("content") or "")
+    kategori = str(innehall.get("category") or "ovrigt")
+    kund = await storage.find_or_create_customer(
+        tenant["tenant_id"],
+        email="undersokning@test.snajp.se",
+        phone=None,
+        name="Intern undersökning",
+    )
+    ticket = await storage.create_ticket(
+        tenant["tenant_id"],
+        customer_id=kund["id"],
+        subject=f"Undersökning: {titel[:180]}",
+        category=kategori if kategori in CATEGORY_LABELS else "ovrigt",
+        channel="web",
+        priority="high",
+    )
+    await storage.save_message(
+        tenant["tenant_id"],
+        conversation_id=ticket["conversation_id"],
+        direction="inbound",
+        content=brod or titel,
+    )
+    await storage.update_ticket(
+        tenant["tenant_id"],
+        ticket["id"],
+        status="open",
+        escalation_reason="Väntar på underlag — öppnat från testchatten.",
+    )
+    return {"ticket": ticket, "suggestion": forslag}
+
+
 @router.post("/api/agent/feedback", status_code=201)
 async def lamna_agent_feedback(
     request: Request, payload: AgentFeedbackRequest, tenant: dict = Depends(require_tenant)
@@ -777,6 +836,15 @@ async def lamna_agent_feedback(
     det starkaste underlaget lärandeflödet kan få."""
     kraev_uuid(payload.run_id, "run_id")
     storage = request.app.state.storage
+    korningar = await storage.list_agent_runs(tenant["tenant_id"], limit=200)
+    korning = next((r for r in korningar if str(r.get("id")) == payload.run_id), None)
+    if korning is None:
+        raise HTTPException(status_code=404, detail="Körningen finns inte.")
+    if not korning.get("is_test"):
+        raise HTTPException(
+            status_code=403,
+            detail="Feedback kan bara lämnas på testkörningar, inte på riktiga kundsamtal.",
+        )
     try:
         rad = await storage.save_agent_feedback(
             tenant["tenant_id"],
