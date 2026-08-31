@@ -427,3 +427,84 @@ async def test_senaste_utkast_lasvag_utan_sidoeffekter():
             assert data["utkast"]["subject"] == "Snabb fråga"
             # Kö-id:t är send_queue-radens id — det approve-endpointen tar.
             assert data["queue_item_id"] == skapat["queue_item"]["id"]
+
+
+
+@pytest.mark.anyio
+async def test_processa_om_degraderar_i_simulation():
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            created = await client.post(
+                "/api/leads/prospects",
+                headers=DEMO,
+                json={"company_name": "Omkörning AB", "contact_email": "info@omkorning.se"},
+            )
+            pid = created.json()["prospect"]["id"]
+            response = await client.post(
+                "/api/leads/prospects/processa-om",
+                headers=DEMO,
+                json={"prospect_ids": [pid], "scope": "research_and_draft"},
+            )
+            assert response.status_code == 503
+
+
+@pytest.mark.anyio
+async def test_processa_om_koar_befintliga_prospekt(monkeypatch):
+    monkeypatch.setattr("app.api.leads._require_live_llm", lambda: None)
+
+    async def _noop(*_a, **_k):
+        return None
+
+    monkeypatch.setattr("app.api.leads._run_batch_prospect", _noop)
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            created = await client.post(
+                "/api/leads/prospects",
+                headers=DEMO,
+                json={"company_name": "Omkörning AB", "contact_email": "info@omkorning.se"},
+            )
+            pid = created.json()["prospect"]["id"]
+            response = await client.post(
+                "/api/leads/prospects/processa-om",
+                headers=DEMO,
+                json={"prospect_ids": [pid], "scope": "research_and_draft"},
+            )
+            assert response.status_code == 202
+            body = response.json()
+            assert body["fase"] == "research"
+            assert body["count"] == 1
+            assert body["jobs"][0]["prospect_id"] == pid
+            assert body["jobs"][0]["job_id"]
+
+
+@pytest.mark.anyio
+async def test_outreach_draft_koas_som_jobb_nar_llm_finns(monkeypatch):
+    monkeypatch.setattr("app.api.leads._require_live_llm", lambda: None)
+
+    async def _noop(*_a, **_k):
+        return None
+
+    monkeypatch.setattr("app.api.leads._run_draft_job", _noop)
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            created = await client.post(
+                "/api/leads/prospects",
+                headers=DEMO,
+                json={"company_name": "Utkast AB", "contact_email": "info@utkast.se"},
+            )
+            pid = created.json()["prospect"]["id"]
+            response = await client.post(
+                "/api/leads/outreach/draft",
+                headers=DEMO,
+                json={
+                    "prospect_id": pid,
+                    "prospect_email": "info@utkast.se",
+                    "company_name": "Utkast AB",
+                    "offer_summary": "Snajp säljer en kundserviceagent till svenska småföretag " * 2,
+                    "brief": "Skriv ett kort mejl.",
+                },
+            )
+            assert response.status_code == 202
+            body = response.json()
+            assert body["fase"] == "skriver"
+            assert body["job_id"]
