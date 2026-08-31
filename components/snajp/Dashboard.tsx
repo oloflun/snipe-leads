@@ -164,6 +164,8 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
   }, [search]);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  /** True medan bakgrundsklassningen av nyss hämtade testmail pågår. */
+  const [bearbetas, setBearbetas] = useState(false);
 
 
   // En instans per monterad vy, så att demons tillstånd inte delas mellan
@@ -320,10 +322,15 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
    */
   const pollaTills = useCallback(
     async (forsok = 8) => {
-      for (let i = 0; i < forsok; i += 1) {
-        await new Promise((r) => setTimeout(r, 1500 + i * 1000));
-        if (avbrutet.current) return;
-        await refresh();
+      setBearbetas(true);
+      try {
+        for (let i = 0; i < forsok; i += 1) {
+          await new Promise((r) => setTimeout(r, 1500 + i * 1000));
+          if (avbrutet.current) return;
+          await refresh();
+        }
+      } finally {
+        if (!avbrutet.current) setBearbetas(false);
       }
     },
     [refresh]
@@ -511,7 +518,15 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
         <div className="rounded-[8px] border border-danger/25 bg-danger/5 px-4 py-3 text-sm text-ink/80">{error}</div>
       ) : null}
       {syncInfo ? (
-        <div className="rounded-[8px] border border-moss/25 bg-moss/5 px-4 py-3 text-sm text-ink/80">{syncInfo}</div>
+        <div
+          className={
+            syncInfo.includes("Kunskapsbasen är tom")
+              ? "rounded-[8px] border border-ochre/40 bg-ochre/10 px-4 py-3 text-sm text-ink/80"
+              : "rounded-[8px] border border-moss/25 bg-moss/5 px-4 py-3 text-sm text-ink/80"
+          }
+        >
+          {syncInfo}
+        </div>
       ) : null}
 
       {/* Fack-översikt */}
@@ -561,8 +576,8 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
                   kundens vy — kunden har varken tillgång till backenden eller
                   anledning att veta vad IMAP är. */}
               <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-ink/60">
-                Klicka på <strong>Hämta testmail</strong> för att fylla den med sex svenska
-                exempelärenden och se hur agenterna sorterar och svarar.
+                Klicka på <strong>Hämta testmail</strong> för att skicka testärenden mot
+                den här profilens kunskapsbas och se hur agenten svarar.
               </p>
               {inkorgKopplad ? null : (
                 <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-ink/55">
@@ -602,7 +617,9 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
                           {email.from_email}
                         </p>
                       </div>
-                      <Badge tone={meta.tone}>{meta.label}</Badge>
+                      <Badge tone={bearbetas && !email.classification ? "neutral" : meta.tone}>
+                        {bearbetas && !email.classification ? "Bearbetas" : meta.label}
+                      </Badge>
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       {email.classification ? (
@@ -614,7 +631,7 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
                           ) : null}
                         </>
                       ) : (
-                        <Badge tone="neutral">Obearbetat</Badge>
+                        <Badge tone="neutral">{bearbetas ? "Agenten läser…" : "Obearbetat"}</Badge>
                       )}
                     </div>
                   </button>
@@ -665,6 +682,10 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
                   </div>
                 ) : null}
               </div>
+
+              {!selected.classification && bearbetas ? (
+                <p className="text-sm leading-6 text-ink/55">Agenten läser mailet och skriver ett utkast…</p>
+              ) : null}
 
               {selected.classification ? (
                 <div className="rounded-input border border-ink/10 bg-paper2/50 p-4">

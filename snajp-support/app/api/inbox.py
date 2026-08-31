@@ -89,8 +89,9 @@ async def seed_mock_inbox(
     seedade_artiklar = await ensure_tenant_kb(storage, tenant_id) if ar_testarbetsyta else 0
     kb_tom = not await storage.list_kb(tenant_id)
 
+    kb = await storage.list_kb(tenant_id)
     inlasta = []
-    for inbound in build_mock_emails(antal=antal, kategori=kategori):
+    for inbound in build_mock_emails(antal=antal, kategori=kategori, kb=kb):
         email = await ingest_email(storage, tenant_id, inbound)
         if email:
             inlasta.append(email)

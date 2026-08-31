@@ -352,11 +352,47 @@ def kategorier_med_mail() -> list[str]:
     return sorted({m["kategori"] for m in BESVARBARA + ESKALERANDE})
 
 
+_PROFIL_AVSANDARE = [
+    ("lisa.berg@mail.se", "Lisa Berg"),
+    ("johan.nystrom@mail.se", "Johan Nyström"),
+    ("eva.holm@mail.se", "Eva Holm"),
+    ("anders.lind@mail.se", "Anders Lind"),
+    ("sara.ek@mail.se", "Sara Ek"),
+    ("peter.ahl@mail.se", "Peter Ahl"),
+]
+
+
+def _fraga_om_artikel(artikel: dict, index: int) -> dict:
+    """Ett testmail som frågar om tenantens egen kunskapsartikel.
+
+    Retail-poolen (order, frakt, garanti) eskalerar mot en SaaS-profil
+    eftersom grundningsregeln inte hittar träff — korrekt, men missvisande.
+    Frågan ska handla om det som FAKTISKT står i underlaget.
+    """
+    titel = str(artikel.get("title") or "er tjänst").strip()
+    kategori = str(artikel.get("category") or "ovrigt")
+    fran, namn = _PROFIL_AVSANDARE[index % len(_PROFIL_AVSANDARE)]
+    amne = titel if titel.endswith("?") else titel
+    if len(amne) > 90:
+        amne = amne[:87] + "…"
+    return _mail(
+        fran=fran,
+        namn=namn,
+        amne=amne,
+        text=(
+            f"Hej! Jag undrar över det här: {titel.rstrip('.')}.\n\n"
+            "Kan ni förklara hur det fungerar hos er, och vad jag ska göra?"
+        ),
+        kategori=kategori if kategori else "ovrigt",
+    )
+
+
 def build_mock_emails(
     *,
     antal: int = 8,
     kategori: str | None = None,
     slump: random.Random | None = None,
+    kb: list[dict] | None = None,
 ) -> list[InboundEmail]:
     """Ett NYTT urval testmail varje gång, med blandat utfall.
 
@@ -374,6 +410,20 @@ def build_mock_emails(
     """
     rng = slump or random.Random()
     batch = uuid.uuid4().hex[:8]  # unika message-ids per seedning
+
+    artiklar = [a for a in (kb or []) if str(a.get("title") or "").strip()]
+    if artiklar and not kategori:
+        # Profilens egna underlag först, plus minst ett ärende som SKA
+        # eskalera (pengar/GDPR/ilska) så spärrarna syns.
+        valda = [
+            _fraga_om_artikel(a, i)
+            for i, a in enumerate(artiklar[: max(antal - 1, 1)])
+        ]
+        if ESKALERANDE:
+            valda.append(rng.choice(ESKALERANDE))
+        rng.shuffle(valda)
+        valda = valda[:antal]
+        return _till_inbound(valda, batch)
 
     if kategori:
         pool = _pool_for(kategori)
@@ -408,6 +458,10 @@ def build_mock_emails(
         rng.shuffle(valda)
         valda = valda[:antal] if antal < len(valda) else valda
 
+    return _till_inbound(valda, batch)
+
+
+def _till_inbound(valda: list[dict], batch: str) -> list[InboundEmail]:
     mail = []
     for index, scenario in enumerate(valda, start=1):
         mail.append(
@@ -428,7 +482,7 @@ def build_mock_emails(
                             size_bytes=68,
                         )
                     ]
-                    if scenario["bild"]
+                    if scenario.get("bild")
                     else []
                 ),
             )
