@@ -210,6 +210,18 @@ class OutreachDraftRequest(BaseModel):
     research_evidence: list[str] = Field(default_factory=list, max_length=60)
 
 
+class ProcessaOmRequest(BaseModel):
+    """Kör om research (och ev. utkast) för REDAN SPARADE prospekt.
+
+    Skapar inga nya rader. Används när en körning hittade bolagen men dog
+    innan kontakt/utkast — 'Processa om' i registret.
+    """
+
+    prospect_ids: list[str] = Field(..., min_length=1, max_length=50)
+    scope: str = Field(default="research_and_draft", pattern=r"^(research|research_and_draft)$")
+    is_test: bool = False
+
+
 class AgentFeedbackRequest(BaseModel):
     """Kundens dom över en agentkörning. corrected_output är människans egen
     formulering av vad svaret BORDE ha varit — den starkaste signalen in i

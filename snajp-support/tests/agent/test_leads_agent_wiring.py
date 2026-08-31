@@ -927,3 +927,67 @@ async def test_ett_trasigt_kunskapssteg_faller_inte_researchen():
     # Och researchen är fortfarande komplett.
     assert result["offer_summary"] != "(inget erbjudande formulerat)"
     assert result["research_evidence"]
+
+
+@pytest.mark.anyio
+async def test_research_fyller_info_adress_utan_namn():
+    """Ett bolag utan namngiven person men med info@ på sajten ska få
+    role_address + arbetsmejlet — inte lämnas tomt för att namnet saknas."""
+    storage, llm = MemoryStorage(), _FakeLLM(
+        overrides={
+            "mk:customer-research": {
+                "company_summary": "Svensk e-handel.",
+                "business_model": "D2C",
+                "likely_pains": ["Returer"],
+                "evidence": ["Fri retur"],
+            }
+        }
+    )
+    prospect_id = await _prepare_prospect(storage)
+    with patch("app.agent.step_runner.get_llm_client", return_value=llm), patch(
+        "app.agent.leads_agent._scrape_registered_source_impl",
+        new=_fake_scrape("# Exempelbolaget\nKontakta oss på info@exempelbolaget.se."),
+    ):
+        await run_research_step(
+            storage,
+            TENANT,
+            prospect_id=prospect_id,
+            tenant_name="Snajp",
+            context_pack="### Kontextpaket\nSnajp säljer supportagenter.",
+            brief="Researcha Exempelbolaget.",
+        )
+
+    prospect = await storage.get_prospect(TENANT, prospect_id)
+    assert prospect["contact_email"] == "info@exempelbolaget.se"
+    assert prospect["contact_level"] == "role_address"
+
+
+@pytest.mark.anyio
+async def test_research_byter_ut_privat_epost_mot_arbetsmejl():
+    storage, llm = MemoryStorage(), _FakeLLM()
+    prospect = await storage.create_prospect(
+        TENANT,
+        company_name="Exempelbolaget",
+        contact_email="anna@gmail.com",
+    )
+    await storage.create_prospect_source(
+        TENANT,
+        prospect_id=prospect["id"],
+        source_url="https://exempelbolaget.se",
+        source_type="company_website",
+        lawful_basis="Berättigat intresse",
+    )
+    with patch("app.agent.step_runner.get_llm_client", return_value=llm), patch(
+        "app.agent.leads_agent._scrape_registered_source_impl",
+        new=_fake_scrape("# Exempelbolaget\nMejla info@exempelbolaget.se"),
+    ):
+        await run_research_step(
+            storage,
+            TENANT,
+            prospect_id=prospect["id"],
+            tenant_name="Snajp",
+            context_pack="### Kontextpaket\n...",
+            brief="",
+        )
+    efter = await storage.get_prospect(TENANT, prospect["id"])
+    assert efter["contact_email"] == "info@exempelbolaget.se"

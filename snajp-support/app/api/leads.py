@@ -62,6 +62,7 @@ from .schemas import (
     ProspectPatchRequest,
     OnboardingChatRequest,
     OutreachDraftRequest,
+    ProcessaOmRequest,
     ProspectRequest,
     ProspectSourceRequest,
     ProspektsvarRequest,
@@ -668,38 +669,72 @@ async def research_step(
     return result
 
 
-@router.post("/api/leads/outreach/draft")
+@router.post("/api/leads/outreach/draft", status_code=202)
 async def outreach_draft(
     request: Request, payload: OutreachDraftRequest, tenant: dict = Depends(require_tenant)
 ) -> dict:
+    """Köar utkastet. LLM-körningen får inte ligga i POST-svaret — Next-proxyn
+    avbryter efter 9 s och UI:t visade 'Kunde inte skapa utkast (status 503)'.
+    """
     _require_live_llm()
-    from ..agent.leads_agent import run_outreach_draft as _run_outreach_draft
-
     storage = request.app.state.storage
     thread_id = await _los_trad(storage, tenant["tenant_id"], payload.thread_id, payload.prospect_id)
-    context_pack, missing = await build_context_pack(storage, tenant["tenant_id"])
-    # Tokenen sätts av Next-proxyn ur en httpOnly-kaka. Saknas den har kunden
-    # inte legitimerat sig med BankID, och uppslaget är inte tillgängligt.
-    skatteverket = await atkomst_for_tenant(
-        storage, tenant["tenant_id"], request.headers.get("X-Skatteverket-Token")
-    )
+    job_id = await request.app.state.jobs.create(tenant_id=tenant["tenant_id"])
+    post = {
+        "kind": "draft",
+        "job_id": job_id,
+        "tenant_id": tenant["tenant_id"],
+        "tenant_name": tenant["tenant_name"],
+        "thread_id": thread_id,
+        "prospect_email": payload.prospect_email,
+        "company_name": payload.company_name,
+        "offer_summary": payload.offer_summary,
+        "brief": payload.brief,
+        "research_summary": payload.research_summary,
+        "research_evidence": list(payload.research_evidence),
+        "skatteverket_token": request.headers.get("X-Skatteverket-Token"),
+    }
+    leadsstrom = getattr(request.app.state, "leadsstrom", None)
+    if leadsstrom is not None:
+        await leadsstrom.enqueue(post)
+    else:
+        asyncio.create_task(_run_draft_job(request.app.state, post))
+    return {"job_id": job_id, "status": "processing", "fase": "skriver"}
 
-    result = await _run_outreach_draft(
-        storage,
-        tenant["tenant_id"],
-        thread_id=thread_id,
-        prospect_email=payload.prospect_email,
-        tenant_name=tenant["tenant_name"],
-        company_name=payload.company_name,
-        offer_summary=payload.offer_summary,
-        context_pack=context_pack,
-        brief=payload.brief,
-        research_summary=payload.research_summary,
-        research_evidence=tuple(payload.research_evidence),
-        skatteverket=skatteverket,
-    )
-    result["onboarding_missing"] = list(missing)
-    return result
+
+async def _run_draft_job(app_state, payload: dict) -> None:
+    from ..agent.leads_agent import run_outreach_draft as _run_outreach_draft
+
+    job_id = payload["job_id"]
+    storage = app_state.storage
+    try:
+        context_pack, missing = await build_context_pack(storage, payload["tenant_id"])
+        skatteverket = await atkomst_for_tenant(
+            storage, payload["tenant_id"], payload.get("skatteverket_token")
+        )
+        result = await _run_outreach_draft(
+            storage,
+            payload["tenant_id"],
+            thread_id=payload["thread_id"],
+            prospect_email=payload["prospect_email"],
+            tenant_name=payload["tenant_name"],
+            company_name=payload["company_name"],
+            offer_summary=payload["offer_summary"],
+            context_pack=context_pack,
+            brief=payload["brief"],
+            research_summary=payload.get("research_summary") or "",
+            research_evidence=tuple(payload.get("research_evidence") or ()),
+            skatteverket=skatteverket,
+        )
+        result["onboarding_missing"] = list(missing)
+        await app_state.jobs.complete(job_id, result)
+    except HTTPException as fel:
+        await app_state.jobs.fail(job_id, _http_feltext(fel))
+    except MissingBusinessContextError as fel:
+        await app_state.jobs.fail(job_id, str(fel))
+    except Exception as fel:  # noqa: BLE001 — jobbet ska bli failed, inte tyst dö
+        logger.exception("Utkastjobb misslyckades (%s)", job_id)
+        await app_state.jobs.fail(job_id, str(fel))
 
 
 # -- Granskning: hela processen synlig från dashboarden -------------------
@@ -1487,24 +1522,16 @@ async def _run_batch_prospect(
             result["contact_role"] = prospect.get("contact_role")
             result["contact_level"] = prospect.get("contact_level")
             result["contact_form_url"] = prospect.get("contact_form_url")
+            from ..leads.discovery import ar_arbetsmejl
+
+            if email and not ar_arbetsmejl(email, webb=prospect.get("website")):
+                email = None
             if not email:
-                # Trappans sista steg (contact_level="contact_form") ger
-                # ALDRIG en e-postadress — det är hela poängen med steget.
-                # Ett prospekt kan alltså sakna e-post och ändå ha en
-                # verifierad kontaktväg; noten ska visa den i stället för
-                # att låta som att sökningen inte hittade någonting alls.
-                kontaktformular = prospect.get("contact_form_url")
-                if kontaktformular:
-                    result["draft_note"] = (
-                        "Research klar. Inget utkast: ingen e-postadress "
-                        f"hittades på bolagets sajt, bara ett kontaktformulär "
-                        f"({kontaktformular}) — skicka via det manuellt i stället."
-                    )
-                else:
-                    result["draft_note"] = (
-                        "Research klar. Inget utkast: ingen e-postadress eller "
-                        "kontaktväg hittades på bolagets sajt."
-                    )
+                # Kontaktformulär är inte en mottagare. Hoppa till nästa bolag.
+                result["draft_note"] = (
+                    "Research klar. Hoppar över utkastet: inget arbetsmejl "
+                    "hittades på bolagets sajt. Går vidare till nästa bolag."
+                )
             else:
                 try:
                     from ..agent.leads_agent import run_outreach_draft
@@ -1549,6 +1576,41 @@ async def _run_batch_prospect(
         await app_state.jobs.fail(job_id, f"Prospekt {prospect_id}: {error}")
 
 
+@router.post("/api/leads/prospects/processa-om", status_code=202)
+async def processa_om(
+    request: Request, payload: ProcessaOmRequest, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Kör om research (och ev. utkast) för valda, REDAN SPARADE prospekt.
+
+    Skapar inga nya rader. Samma jobbkö som batch-research, så proxyns
+    9-sekundersgräns inte träffar LLM-körningen.
+    """
+    _require_live_llm()
+    storage = request.app.state.storage
+    hittade: list[dict] = []
+    for pid in payload.prospect_ids:
+        rad = await storage.get_prospect(tenant["tenant_id"], pid)
+        if rad:
+            hittade.append(rad)
+    if not hittade:
+        raise HTTPException(status_code=404, detail="Inga av de valda prospekten finns.")
+    jobs = await _lagg_prospektjobb(
+        request.app.state,
+        tenant,
+        hittade,
+        scope=payload.scope,
+        overrides=None,
+        is_test=payload.is_test,
+        limit=len(hittade),
+    )
+    return {
+        "jobs": jobs,
+        "scope": payload.scope,
+        "count": len(jobs),
+        "fase": "research",
+    }
+
+
 async def hantera_leads_jobb(app_state, payload: dict) -> None:
     """Kör ETT jobb ur leads-strömmen (Fas R4, bd snipe-2xj, `crm:jobb:leads`).
 
@@ -1585,6 +1647,10 @@ async def hantera_leads_jobb(app_state, payload: dict) -> None:
 
     if payload.get("kind") == "batch":
         await _run_batch(app_state, payload)
+        return
+
+    if payload.get("kind") == "draft":
+        await _run_draft_job(app_state, payload)
         return
 
     # tenant byggs om ur de RÅA primitiverna i nyttolasten — exakt samma

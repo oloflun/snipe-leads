@@ -45,6 +45,7 @@ from ..agentcore.overlays import pack_version
 from ..agentcore.packs import PlaybookStep, RunLedger
 from ..config import get_settings
 from ..leads.business_context import require_business_context
+from ..leads.discovery import ar_privat_epost, ar_arbetsmejl, plocka_arbetsmejl
 from ..leads.grounding_gate import PermittedFacts, build_permitted_facts, check_grounding
 from ..leads.grounding_playbook import GROUNDING_V1
 from ..leads.language_gate import last_humanizer_variant
@@ -319,6 +320,23 @@ def _kontaktniva_rank(niva: str | None) -> int:
     return _KONTAKTNIVA_RANK.index(niva) + 1 if niva in _KONTAKTNIVA_RANK else 0
 
 
+def _verifierad_epost(kandidat: str | None, material: str, webb: str | None) -> str | None:
+    """Accepterar bara en adress som står i skrapet och inte är privat."""
+    epost = (kandidat or "").strip() or None
+    if not epost:
+        return None
+    if epost.lower() not in (material or "").lower():
+        return None
+    if not ar_arbetsmejl(epost, webb=webb):
+        return None
+    return epost
+
+
+def _saknar_arbetsmejl(prospect: dict[str, Any], webb: str | None) -> bool:
+    nu = prospect.get("contact_email")
+    return not ar_arbetsmejl(nu, webb=webb)
+
+
 async def _uppgradera_kontakt(
     storage,
     tenant_id: str,
@@ -328,44 +346,52 @@ async def _uppgradera_kontakt(
     fynd: dict[str, Any],
     material: str,
 ) -> None:
-    """Uppgraderar prospektets kontakt om Fas B:s researchsteg (mk:customer-
-    research) hittade en namngiven person i det redan SKRAPADE källmaterialet
-    — nåt den breda `hitta_bolag()`-sökningen aldrig fick se.
+    """Uppgraderar prospektets kontakt ur det redan SKRAPADE källmaterialet.
+
+    Två saker händer här, i den ordningen:
+
+    1. En namngiven person från mk:customer-research, om namnet finns och
+       nivån är en uppgradering. E-post bara om den står i materialet och
+       inte är privat (gmail/hotmail).
+    2. Saknas fortfarande ett arbetsmejl: plocka info@/kontakt@/hej@ (eller
+       närmaste rolladress) som bokstavligen står på bolagets egen sajt.
+       Kontaktformulär räknas inte som mottagare.
 
     VARFÖR HÄR OCH INTE BARA I discovery.py: `hitta_bolag()` kör en BRED
-    Google-sökning över många bolag samtidigt via Gemini och ser bara vad
-    sökindexet sammanfattar — den skrapar aldrig själva sidan. Det här steget
-    körs EFTER att `_gather_registered_sources` redan hämtat bolagets egna
-    sidor (om-oss, ledning, kontakt), så en namngiven kontakt härifrån är
-    grundad i den RIKTIGA sidtexten, inte en sökmotorsammanfattning — precis
-    den skillnad grundningsgrinden (app/leads/grounding_gate.py) finns för
-    att skydda om ett namn någonsin används som fakta i ett utkast.
+    Google-sökning och ser bara sökindexet. Det här steget körs EFTER
+    `_gather_registered_sources` hämtat bolagets egna sidor.
 
-    Samma väg gynnar ÄVEN prospekt kunden namngav själv
-    (`company_names`-listan i `_samla_korningens_prospekt`), som aldrig går
-    igenom `hitta_bolag()` och annars aldrig fick någon kontakt
-    överhuvudtaget — de har bara en webbplats tills det här steget kör.
-
-    Skriver ALDRIG över en HÖGRE eller LIKA nivå, och hittar inte på en
-    e-postadress: en föreslagen adress accepteras bara om den bokstavligen
-    står i `material` (samma "hitta aldrig på"-krav som prompten i
-    discovery.py). Kastar aldrig — en misslyckad uppgradering ska inte fälla
-    en annars klar research, se samma avvägning i `_fanga_kunskap`.
+    Skriver ALDRIG över en HÖGRE eller LIKA namnnivå. Hittar inte på en
+    e-postadress. En privat adress som redan ligger på prospektet byts ut
+    mot arbetsmejlet från sajten. Kastar aldrig — se `_fanga_kunskap`.
     """
+    webb = prospect.get("website")
     namn = str(fynd.get("contact_name") or "").strip()
-    if not namn:
-        return
-    if _kontaktniva_rank("named_other") <= _kontaktniva_rank(prospect.get("contact_level")):
-        return
-
     roll = str(fynd.get("contact_role") or "").strip() or None
-    epost = str(fynd.get("contact_email") or "").strip() or None
-    if epost and (not material or epost.lower() not in material.lower()):
-        epost = None  # inte verifierbar i underlaget — hitta aldrig på en adress
+    fynd_epost = _verifierad_epost(str(fynd.get("contact_email") or "").strip() or None, material, webb)
+    scrape_epost = plocka_arbetsmejl(material, webb, onskad_roll=roll)
+    falt: dict[str, Any] = {}
 
-    falt: dict[str, Any] = {"contact_name": namn, "contact_role": roll, "contact_level": "named_other"}
-    if epost and not prospect.get("contact_email"):
-        falt["contact_email"] = epost
+    # Namngiven uppgradering — samma rangordning som tidigare. Kräver namn,
+    # och får inte degradera named_role_match.
+    if namn and _kontaktniva_rank("named_other") > _kontaktniva_rank(prospect.get("contact_level")):
+        falt["contact_name"] = namn
+        falt["contact_role"] = roll
+        falt["contact_level"] = "named_other"
+
+    # Arbetsmejl: byt ut privat/tom, fyll i från fynd eller skrap. En redan
+    # verifierad arbetsadress lämnas ifred (även när vi sätter ett namn).
+    if _saknar_arbetsmejl(prospect, webb):
+        vald = fynd_epost or scrape_epost
+        if vald:
+            falt["contact_email"] = vald
+            if "contact_level" not in falt:
+                nuvarande = prospect.get("contact_level")
+                if not nuvarande or nuvarande == "contact_form":
+                    falt["contact_level"] = "named_other" if namn else "role_address"
+
+    if not falt:
+        return
 
     try:
         await storage.update_prospect(tenant_id, prospect_id, **falt)
