@@ -457,7 +457,7 @@ async def hitta_bolag(
         "ett bolag utan contact_email om adressen star nagonstans pa den egna "
         "sajten. Privat gmail/hotmail/icloud ar FORBUDET.\n\n"
         "Returnera ENBART en JSON-lista:\n"
-        '[{{ "company_name":"...","website":"https://...","orgnr":null,"ort":"...",'
+        '[{{"company_name":"...","website":"https://...","orgnr":null,"ort":"...",'
         '"contact_name":null,"contact_role":null,"contact_email":null,'
         '"contact_level":null,"contact_form_url":null,"anstallda":null}}]\n'
         "website MÅSTE vara bolagets egen officiella sajt, inte allabolag/hitta/ratsit/"
