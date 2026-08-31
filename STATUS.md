@@ -1,5 +1,25 @@
 # Snipra Status
 
+## 2026-08-31 — Grok — exempelkörningar borta, testmail mot profilen, testchatt kalibrerar
+
+Anton visade fjorton skärmbilder: leads som spottade färdiga VVS-pitchar,
+flytta röd på `.example`, inkorg som först såg statisk ut, nästan allt
+eskalerat, testchattens kunskapsartikel som lät som uppladdad affärskontext.
+
+Byggt lokalt på `development` (inte pushat):
+
+- Exempelbolag skapas bara för Nordlys/demo. Formuläret pollar den riktiga
+  batchen. 403 utanför demon.
+- Testmail byggs ur tenantens kunskapsbas. Inkorgen visar Bearbetas medan
+  agenten läser.
+- Testchatten öppnar undersökningsärende i stället för att default-spara KB.
+  Feedback 403 på skarpa körningar; rättningar läses i nästa testchatt.
+- Admin som tittar som kund tvingar `is_test` i proxyn.
+- Inställningsmenyn: Underlag först, vanlig svenska.
+
+Live mot Railway och Redis-TLS är inte kört. Handoff:
+`HANDOFF-2026-08-31-TESTLAGER-OCH-UI.md`.
+
 ## 2026-08-30 — Claude — leads-batchens NameError lagad; UI:t visar ändå bara exempelbolag
 
 Anton rapporterade att leadskörningar "fortfarande genererar färdiga exempel

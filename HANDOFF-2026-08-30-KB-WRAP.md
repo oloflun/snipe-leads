@@ -1,5 +1,8 @@
 # Handoff till Sebbes agent — 2026-08-30
 
+**Uppföljning 2026-08-31:** se [HANDOFF-2026-08-31-TESTLAGER-OCH-UI.md](HANDOFF-2026-08-31-TESTLAGER-OCH-UI.md)
+(exempelkörningar, inkorg, testchatt, impersonation). `oauth.ts` orörd.
+
 Två saker: en ändring jag gjort i en fil du ägde igår, och ett rött
 invarianttest i din Skatteverket-kod som jag inte rört.
 
