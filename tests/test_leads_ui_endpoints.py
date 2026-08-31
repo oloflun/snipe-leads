@@ -63,6 +63,10 @@ def test_formularet_anropar_minst_de_tre_stegen():
     assert "/leads/prospects/exempel" not in vagar
     # Egna bolag skickas i batchkroppen (company_names), inte som egna POST:ar
     # före körningen — det plockade in gamla rader ur registret.
+    # Sökningen är ett jobb (fase=soker), inte POST-svaret. Utan den grenen
+    # visar knappen "Kunde inte nå servern" när Gemini tar mer än 9 sekunder.
+    text = FORMULAR.read_text(encoding="utf-8")
+    assert 'fase === "soker"' in text
 
 
 #: Next-routes som proxar till en annan FastAPI-väg än sin egen sökväg.

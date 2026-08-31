@@ -58,6 +58,7 @@ from .schemas import (
     ExempelbolagRequest,
     LeadsBatchRequest,
     LeadsConfigRequest,
+    LeadsRunOverrides,
     ProspectPatchRequest,
     OnboardingChatRequest,
     OutreachDraftRequest,
@@ -70,6 +71,29 @@ from .schemas import (
 
 router = APIRouter()
 logger = logging.getLogger("snajp-support.leads")
+
+_FEL_INGEN_MALGRUPP = (
+    "Beskriv vilka bolag ni söker (bransch eller region) så agenten "
+    "kan leta, eller fyll i bolag ni själva vill träffa."
+)
+_FEL_INGA_TRAFFAR = (
+    "Inga bolag hittades som matchar målgruppen. Prova en bredare "
+    "bransch eller region, eller fyll i bolag ni själva vill träffa."
+)
+_FEL_SOKNING = (
+    "Kunde inte söka efter bolag just nu. Försök igen, eller fyll i Egna bolag."
+)
+
+
+def _har_sokbar_malgrupp(icp: dict) -> bool:
+    return bool(
+        icp.get("industries") or icp.get("geography") or icp.get("must_have") or icp.get("sni_codes")
+    )
+
+
+def _http_feltext(fel: HTTPException) -> str:
+    detalj = fel.detail
+    return detalj if isinstance(detalj, str) else _FEL_INGA_TRAFFAR
 
 
 #: Etiketter affärskontexten är skriven med. Onboardingen bygger `product` som
@@ -1177,17 +1201,9 @@ async def _samla_korningens_prospekt(
         saknas = payload.limit - len(skapade)
 
     if saknas > 0:
-        har_malgrupp = bool(
-            icp.get("industries") or icp.get("geography") or icp.get("must_have") or icp.get("sni_codes")
-        )
+        har_malgrupp = _har_sokbar_malgrupp(icp)
         if not har_malgrupp and not skapade:
-            raise HTTPException(
-                status_code=422,
-                detail=(
-                    "Beskriv vilka bolag ni söker (bransch eller region) så agenten "
-                    "kan leta, eller fyll i bolag ni själva vill träffa."
-                ),
-            )
+            raise HTTPException(status_code=422, detail=_FEL_INGEN_MALGRUPP)
         if har_malgrupp:
             try:
                 fynd = await hitta_bolag(
@@ -1197,10 +1213,7 @@ async def _samla_korningens_prospekt(
                 )
             except DiscoveryError as fel:
                 if not skapade:
-                    raise HTTPException(
-                        status_code=503,
-                        detail="Kunde inte söka efter bolag just nu. Försök igen, eller fyll i Egna bolag.",
-                    ) from fel
+                    raise HTTPException(status_code=503, detail=_FEL_SOKNING) from fel
                 fynd = []
             for bolag in fynd:
                 prospect = await storage.create_prospect(
@@ -1219,14 +1232,118 @@ async def _samla_korningens_prospekt(
                 skapade.append(prospect)
 
     if not skapade:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                "Inga bolag hittades som matchar målgruppen. Prova en bredare "
-                "bransch eller region, eller fyll i bolag ni själva vill träffa."
-            ),
-        )
+        raise HTTPException(status_code=422, detail=_FEL_INGA_TRAFFAR)
     return skapade
+
+
+async def _validera_batch_kan_starta(storage, tenant: dict, payload: LeadsBatchRequest) -> None:
+    """Snabba avvisningar — inget Gemini. Det som tar tid hör hemma i jobbet."""
+    namn = [n.strip() for n in payload.company_names if n and n.strip()]
+    if namn:
+        return
+    settings = await storage.get_agent_settings(tenant["tenant_id"], agent_type="leads")
+    overrides = (
+        payload.overrides.model_dump(exclude_none=True)
+        if payload.overrides and payload.overrides.har_nagot()
+        else None
+    )
+    icp = normalize_icp(_med_overrides(settings.get("icp"), overrides) or {})
+    if _har_sokbar_malgrupp(icp):
+        return
+    if tenant["tenant_id"] == DEFAULT_TENANT_ID:
+        befintliga = await storage.list_prospects(tenant["tenant_id"], limit=payload.limit * 2)
+        if any(p.get("origin") == "example" for p in befintliga):
+            return
+    raise HTTPException(status_code=422, detail=_FEL_INGEN_MALGRUPP)
+
+
+def _payload_till_request(payload: dict) -> LeadsBatchRequest:
+    ov = payload.get("overrides")
+    return LeadsBatchRequest(
+        scope=payload.get("scope") or "research",
+        limit=int(payload.get("limit") or 10),
+        is_test=bool(payload.get("is_test")),
+        company_names=list(payload.get("company_names") or []),
+        overrides=LeadsRunOverrides(**ov) if ov else None,
+    )
+
+
+async def _lagg_prospektjobb(
+    app_state,
+    tenant: dict,
+    prospects: list[dict],
+    *,
+    scope: str,
+    overrides: dict | None,
+    is_test: bool,
+    limit: int,
+) -> list[dict]:
+    """En research-rad per prospekt. Sökningen är redan klar här."""
+    leadsstrom = getattr(app_state, "leadsstrom", None)
+    jobs: list[dict] = []
+    for prospect in prospects[:limit]:
+        job_id = await app_state.jobs.create(tenant_id=tenant["tenant_id"])
+        if leadsstrom is not None:
+            await leadsstrom.enqueue(
+                {
+                    "job_id": job_id,
+                    "tenant_id": tenant["tenant_id"],
+                    "tenant_name": tenant["tenant_name"],
+                    "prospect_id": prospect["id"],
+                    "scope": scope,
+                    "overrides": overrides,
+                    "is_test": is_test,
+                }
+            )
+        else:
+            asyncio.create_task(
+                _run_batch_prospect(
+                    app_state,
+                    job_id,
+                    tenant,
+                    prospect_id=prospect["id"],
+                    scope=scope,
+                    overrides=overrides,
+                    is_test=is_test,
+                )
+            )
+        jobs.append({"job_id": job_id, "prospect_id": prospect["id"]})
+    return jobs
+
+
+async def _run_batch(app_state, payload: dict) -> None:
+    """Sök bolag + köa research. Körs som jobb, inte i POST-svaret.
+
+    POST /leads/runs/batch hade Gemini+Google-sökningen i samma request som
+    knappen väntar på. Next-proxyn avbryter efter 9 s (kallstarts-budget),
+    Safari ser det som TypeError och visar 'Kunde inte nå servern'. Sökningen
+    fortsatte på servern och skapade spökprospekt utan job_id i UI:t.
+    """
+    job_id = payload["job_id"]
+    tenant = {"tenant_id": payload["tenant_id"], "tenant_name": payload["tenant_name"]}
+    try:
+        req = _payload_till_request(payload)
+        prospects = await _samla_korningens_prospekt(app_state.storage, tenant, req)
+        barn = await _lagg_prospektjobb(
+            app_state,
+            tenant,
+            prospects,
+            scope=req.scope,
+            overrides=payload.get("overrides"),
+            is_test=req.is_test,
+            limit=req.limit,
+        )
+        await app_state.jobs.complete(
+            job_id,
+            {"fase": "research", "jobs": barn, "count": len(barn)},
+        )
+    except HTTPException as fel:
+        await app_state.jobs.fail(job_id, _http_feltext(fel))
+    except DiscoveryError:
+        await app_state.jobs.fail(job_id, _FEL_SOKNING)
+    except Exception as fel:  # noqa: BLE001 — jobbet ska bli failed, inte tyst dö
+        logger.exception("Batchsökning misslyckades (%s)", job_id)
+        await app_state.jobs.fail(job_id, str(fel))
 
 
 @router.post("/api/leads/runs/batch", status_code=202)
@@ -1235,73 +1352,42 @@ async def start_batch_run(
 ) -> dict:
     """Startar en körning: hitta bolag (om inga namn gavs), researcha, ev. utkast.
 
-    En jobbrad PER PROSPEKT, inte en för hela batchen: ett prospekt med en död
-    skrapkälla ska inte fälla de andra nitton, och en enda jobbrad hade gjort
-    "fyra av tjugo gick fel" omöjligt att se — batchen hade bara varit röd.
+    Svaret kommer INNAN sökningen. `fase=soker` och ett jobb; när det är
+    completed ligger research-jobben i `result.jobs`. En jobbrad PER PROSPEKT
+    därefter, så ett dött prospekt inte fäller de andra.
     """
     _require_live_llm()
-    storage = request.app.state.storage
+    await _validera_batch_kan_starta(request.app.state.storage, tenant, payload)
 
-    prospects = await _samla_korningens_prospekt(storage, tenant, payload)
-
-    # Överskrivningarna löses ut EN gång, inte per prospekt: alla jobb i
-    # batchen ska köra mot samma målgrupp, annars går utfallet inte att jämföra.
     overrides = (
         payload.overrides.model_dump(exclude_none=True)
         if payload.overrides and payload.overrides.har_nagot()
         else None
     )
-
-    # Fas R4 (bd snipe-2xj): finns leadsströmmen XADD:as varje prospektjobb i
-    # stället för att köras som asyncio.create_task i DEN HÄR processen — en
-    # halvkörd batch (10-50 prospekt, minuter av körtid) ska överleva en
-    # deploy mitt i, precis som chattkörningen (Fas R1, app/api/chat.py).
-    # Utan Redis är leadsstrom None och create_task-vägen nedan är EXAKT
-    # dagens beteende, oförändrad.
-    leadsstrom = getattr(request.app.state, "leadsstrom", None)
-
-    jobs = []
-    for prospect in prospects[: payload.limit]:
-        job_id = await request.app.state.jobs.create(tenant_id=tenant["tenant_id"])
-        if leadsstrom is not None:
-            # tenant_id/tenant_name som RÅA primitiver, inte hela tenant-
-            # dicten: samma mönster som chat.py:s rate_limit_user/
-            # rate_limit_is_demo — bara det hanteraren (hantera_leads_jobb)
-            # faktiskt behöver för att bygga om tenant-argumentet, inget
-            # internt datakontrakt (t.ex. "master") bakat in i nyttolasten.
-            await leadsstrom.enqueue(
-                {
-                    "job_id": job_id,
-                    "tenant_id": tenant["tenant_id"],
-                    "tenant_name": tenant["tenant_name"],
-                    "prospect_id": prospect["id"],
-                    "scope": payload.scope,
-                    "overrides": overrides,
-                    "is_test": payload.is_test,
-                }
-            )
-        else:
-            asyncio.create_task(
-                _run_batch_prospect(
-                    request.app.state,
-                    job_id,
-                    tenant,
-                    prospect_id=prospect["id"],
-                    scope=payload.scope,
-                    overrides=overrides,
-                    is_test=payload.is_test,
-                )
-            )
-        jobs.append({"job_id": job_id, "prospect_id": prospect["id"]})
-
-    return {
-        "jobs": jobs,
+    job_id = await request.app.state.jobs.create(tenant_id=tenant["tenant_id"])
+    post = {
+        "kind": "batch",
+        "job_id": job_id,
+        "tenant_id": tenant["tenant_id"],
+        "tenant_name": tenant["tenant_name"],
         "scope": payload.scope,
-        "count": len(jobs),
-        # Ekas tillbaka så att den som startade körningen ser vad den FAKTISKT
-        # kördes med — inte vad formuläret råkade innehålla.
         "overrides": overrides,
         "is_test": payload.is_test,
+        "limit": payload.limit,
+        "company_names": [n.strip() for n in payload.company_names if n and n.strip()],
+    }
+    leadsstrom = getattr(request.app.state, "leadsstrom", None)
+    if leadsstrom is not None:
+        await leadsstrom.enqueue(post)
+    else:
+        asyncio.create_task(_run_batch(request.app.state, post))
+    return {
+        "jobs": [{"job_id": job_id}],
+        "scope": payload.scope,
+        "count": 0,
+        "overrides": overrides,
+        "is_test": payload.is_test,
+        "fase": "soker",
     }
 
 
@@ -1418,6 +1504,10 @@ async def hantera_leads_jobb(app_state, payload: dict) -> None:
 
     befintligt = await jobs.get(job_id) or {}
     if befintligt.get("status") == "completed":
+        return
+
+    if payload.get("kind") == "batch":
+        await _run_batch(app_state, payload)
         return
 
     # tenant byggs om ur de RÅA primitiverna i nyttolasten — exakt samma

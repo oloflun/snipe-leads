@@ -39,8 +39,10 @@ import { cn } from "@/lib/utils";
  * fält betyder att agenten söker. Påhittade exempelbolag med färdigskrivna
  * pitchar finns bara på `/demo`.
  *
- * Efter `runs/batch` pollas varje `job_id` mot `/leads/jobb/{id}` (sessionen
- * avgör tenanten). Utan den loopen visades bara jobblistan, aldrig researchen.
+ * Efter `runs/batch` (`fase: soker`) pollas sökjobbet mot `/leads/jobb/{id}`.
+ * När det är klart ligger research-jobben i `result.jobs` och pollas samma
+ * väg. Sökningen (Gemini + Google) får inte ligga i POST-svaret — proxyn
+ * avbryter efter 9 s och Safari visar "Kunde inte nå servern".
  */
 
 type Jobb = { job_id: string; prospect_id?: string };
@@ -50,6 +52,7 @@ type LeadsSvar = {
   count?: number;
   scope?: string;
   is_test?: boolean;
+  fase?: string;
   overrides?: Record<string, unknown> | null;
   error?: string;
   detail?: string;
@@ -201,18 +204,19 @@ export function LeadsRunForm({
     return kropp;
   }
 
-  async function pollaJobb(jobId: string): Promise<{ status: string; error?: string }> {
+  async function pollaJobb(jobId: string): Promise<{ status: string; error?: string; jobs?: Jobb[] }> {
     // Prefixet är en literal i anropet så rotvakten ser sökvägen.
     // `/leads/jobb/` är den inloggade proxyn — inte `/jobs/`, som är den
     // anonyma chattpollningen och slår upp under demonyckeln.
     for (let forsok = 0; forsok < 90; forsok += 1) {
       await new Promise((r) => setTimeout(r, forsok < 5 ? 800 : 2000));
-      const jobb = await anropa<{ status?: string; error?: string }>(
-        "/leads/jobb/" + jobId,
-        { method: "GET" }
-      );
+      const jobb = await anropa<{
+        status?: string;
+        error?: string;
+        result?: { jobs?: Jobb[] };
+      }>("/leads/jobb/" + jobId, { method: "GET" });
       if (jobb.status === "completed" || jobb.status === "failed") {
-        return { status: jobb.status, error: jobb.error };
+        return { status: jobb.status, error: jobb.error, jobs: jobb.result?.jobs };
       }
     }
     return { status: "timeout", error: "Körningen tog för lång tid." };
@@ -240,9 +244,28 @@ export function LeadsRunForm({
           ...(overrides ? { overrides } : {})
         })
       });
-      setSvar(resultat);
 
-      const jobb = resultat.jobs ?? [];
+      let jobb = resultat.jobs ?? [];
+      if (resultat.fase === "soker") {
+        const sokId = jobb[0]?.job_id;
+        if (!sokId) {
+          throw new Error("Körningen startade inte. Försök igen.");
+        }
+        const sok = await pollaJobb(sokId);
+        if (sok.status !== "completed") {
+          throw new Error(sok.error ?? "Sökningen hittade inga bolag.");
+        }
+        jobb = sok.jobs ?? [];
+      }
+
+      if (!jobb.length) {
+        throw new Error(
+          "Inga bolag hittades som matchar målgruppen. Prova en bredare bransch eller region, eller fyll i bolag ni själva vill träffa."
+        );
+      }
+
+      setSvar({ ...resultat, jobs: jobb, count: jobb.length, fase: "research" });
+
       let klara = 0;
       let misslyckade = 0;
       setJobbLage({ klara: 0, totalt: jobb.length, misslyckade: 0 });

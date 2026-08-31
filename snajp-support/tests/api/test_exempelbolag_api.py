@@ -17,6 +17,8 @@ Tre saker vaktas:
     funktionen, och det som 422:an blockerade innan den fanns.
 """
 
+import asyncio
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -197,7 +199,16 @@ async def test_testkorningen_startar_pa_de_inladdade_bolagen(live_llm, monkeypat
                 json={"limit": 3, "scope": "research_and_draft", "is_test": True},
             )
             assert korning.status_code == 202, korning.text
-            jobb = korning.json()["jobs"]
+            sok_id = korning.json()["jobs"][0]["job_id"]
+            klart = None
+            for _ in range(80):
+                data = (await client.get(f"/api/jobs/{sok_id}", headers=DEMO)).json()
+                if data["status"] in ("completed", "failed"):
+                    klart = data
+                    break
+                await asyncio.sleep(0.05)
+            assert klart is not None and klart["status"] == "completed", klart
+            jobb = klart["result"]["jobs"]
             assert len(jobb) == 3
             assert {j["prospect_id"] for j in jobb} == exempel_id
 

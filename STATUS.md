@@ -1,5 +1,13 @@
 # Snipra Status
 
+## 2026-08-31 (eftermiddag) — Grok — Starta körning dog på timeout
+
+Anton tryckte Starta körning (tomma Egna bolag) och fick "Kunde inte nå
+servern". Inte 422: Gemini+Google-sökningen låg i POST-svaret, Next-proxyn
+avbryter efter 9 s, Safari ser TypeError. Sökningen är nu ett jobb
+(`fase=soker`); knappen får 202 direkt. POST görs inte om (fem omförsök
+startade fem sökningar). Manuell Railway-deploy krävs.
+
 ## 2026-08-31 (sen kväll) — Grok — leads-kedjan hittar bolag
 
 Körningen krävde ifyllda namn i Egna bolag (422), behandlade "Inget, hitta

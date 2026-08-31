@@ -163,6 +163,34 @@ async def test_redan_fardigt_leadsjobb_kors_inte_om(app_state, spion):
     )
 
 
+async def test_batch_kind_kors_sokningen_inte_ett_prospekt(app_state, monkeypatch):
+    """Utan kind=batch-grenen anropar workern _run_batch_prospect utan
+    prospect_id och sökningen sker aldrig — POST:en svarade 202 och UI:t
+    pollar ett jobb som aldrig blir completed."""
+    kallad = {}
+
+    async def _spy(state, payload):
+        kallad["payload"] = payload
+
+    monkeypatch.setattr(leads_api, "_run_batch", _spy)
+    job_id = await app_state.jobs.create(tenant_id="t1")
+    await leads_api.hantera_leads_jobb(
+        app_state,
+        {
+            "kind": "batch",
+            "job_id": job_id,
+            "tenant_id": "t1",
+            "tenant_name": "Provbolaget",
+            "scope": "research",
+            "limit": 1,
+            "is_test": True,
+            "company_names": [],
+        },
+    )
+    assert kallad["payload"]["kind"] == "batch"
+    assert kallad["payload"]["job_id"] == job_id
+
+
 # --- (c) Paritet: utan REDIS_URL tar endpointen create_task-vägen -----------
 # gäller — assert på BETEENDET (jobbet blir faktiskt klart), inte bara
 # attributet. REDIS_URL är redan tom i hela sviten (tests/conftest.py).
@@ -186,11 +214,16 @@ def live_llm(monkeypatch):
     get_settings.cache_clear()
 
 
-async def test_utan_redis_tar_batchendpointen_create_task_vagen(live_llm, spion):
+async def test_utan_redis_tar_batchendpointen_create_task_vagen(live_llm, spion, monkeypatch):
     from httpx import ASGITransport, AsyncClient
 
     from app.config import DEFAULT_TENANT_ID, get_settings
     from app.main import app
+
+    async def _webb(namn, *, geografi=None):
+        return "https://testbolaget.se"
+
+    monkeypatch.setattr(leads_api, "sla_upp_webbplats", _webb)
 
     async with app.router.lifespan_context(app):
         assert app.state.leadsstrom is None
@@ -204,7 +237,11 @@ async def test_utan_redis_tar_batchendpointen_create_task_vagen(live_llm, spion)
             response = await client.post(
                 "/api/leads/runs/batch",
                 headers={"X-API-Key": demo_key},
-                json={"limit": 1},
+                json={
+                    "limit": 1,
+                    "company_names": ["Testbolaget AB"],
+                    "is_test": True,
+                },
             )
             assert response.status_code == 202, response.text
             job_id = response.json()["jobs"][0]["job_id"]
@@ -225,7 +262,14 @@ async def test_utan_redis_tar_batchendpointen_create_task_vagen(live_llm, spion)
                 assert job["status"] != "failed", job
                 await _asyncio.sleep(0.05)
             assert result is not None, "create_task-vägen slutförde aldrig leads-jobbet"
+            assert result.get("jobs"), result
 
+    # Sökjobbet är completed; research-jobbet har startats via create_task.
+    # Vänta in att spionen faktiskt körts (den är schemalagd, inte awaited).
+    for _ in range(50):
+        if spion["n"] >= 1:
+            break
+        await _asyncio.sleep(0.05)
     assert spion["n"] == 1
 
 
