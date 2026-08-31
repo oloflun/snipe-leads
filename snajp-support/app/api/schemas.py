@@ -158,6 +158,17 @@ class ProspectPatchRequest(BaseModel):
     icp_fit: float | None = Field(default=None, ge=0, le=1)
     qualified: bool | None = None
     disqualifiers: list[str] | None = None
+    orgnr: str | None = Field(default=None, max_length=20)
+    website: str | None = Field(default=None, max_length=500)
+    contact_email: str | None = Field(default=None, max_length=200)
+
+
+class BefordraRequest(BaseModel):
+    """Ifyllnad vid flytta-över. Tom kropp = validera det som redan ligger."""
+
+    orgnr: str | None = Field(default=None, max_length=20)
+    website: str | None = Field(default=None, max_length=500)
+    contact_email: str | None = Field(default=None, max_length=200)
 
 
 class ProspectSourceRequest(BaseModel):

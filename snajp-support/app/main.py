@@ -17,6 +17,7 @@ import asyncio
 
 from .api import (
     admin,
+    admin_konvertera,
     admin_kunddata,
     admin_profil,
     analytics,
@@ -309,6 +310,7 @@ app.include_router(admin_profil.router)
 # Kundregistret — fliken Kunder & Data. Egen modul av samma skäl som profilen,
 # se docstringen i api/admin_kunddata.py.
 app.include_router(admin_kunddata.router)
+app.include_router(admin_konvertera.router)
 app.include_router(analytics.router)
 app.include_router(bookkeeping.router)
 

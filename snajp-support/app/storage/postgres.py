@@ -313,12 +313,13 @@ class PostgresStorage:
         category: str,
         channel: str,
         priority: str = "normal",
+        is_test: bool = False,
     ) -> dict[str, Any]:
         async with self._scoped(tenant_id) as conn:
             ticket = await conn.fetchrow(
                 """
-                insert into ss_tickets (tenant_id, customer_id, subject, category, channel, priority)
-                values ($1, $2, $3, $4, $5, $6) returning *
+                insert into ss_tickets (tenant_id, customer_id, subject, category, channel, priority, is_test)
+                values ($1, $2, $3, $4, $5, $6, $7) returning *
                 """,
                 tenant_id,
                 customer_id,
@@ -326,6 +327,7 @@ class PostgresStorage:
                 category,
                 channel,
                 priority,
+                is_test,
             )
             conversation = await conn.fetchrow(
                 "insert into ss_conversations (tenant_id, ticket_id, channel) values ($1, $2, $3) returning *",
@@ -376,6 +378,7 @@ class PostgresStorage:
         category: str | None = None,
         priority: str | None = None,
         escalation_reason: str | None = None,
+        is_test: bool | None = None,
     ) -> dict[str, Any] | None:
         async with self._scoped(tenant_id) as conn:
             current = await conn.fetchrow(
@@ -395,6 +398,7 @@ class PostgresStorage:
                   category = coalesce($4, category),
                   priority = coalesce($5, priority),
                   escalation_reason = coalesce($6, escalation_reason),
+                  is_test = case when $7::boolean is null then is_test else $7 end,
                   updated_at = now()
                 where tenant_id = $1 and id = $2 returning *
                 """,
@@ -404,6 +408,7 @@ class PostgresStorage:
                 category,
                 priority,
                 escalation_reason,
+                is_test,
             )
         return _row(record)
 
@@ -1355,6 +1360,9 @@ class PostgresStorage:
         qualified: bool | None = None,
         disqualifiers: list[str] | None = None,
         origin: str | None = None,
+        orgnr: str | None = None,
+        website: str | None = None,
+        contact_email: str | None = None,
     ) -> dict[str, Any] | None:
         # Dynamisk SET-lista: en PATCH ska kunna sätta ETT fält utan att nolla
         # de andra, och en fast update-sats hade krävt att anroparen skickar
@@ -1365,6 +1373,9 @@ class PostgresStorage:
             "qualified": qualified,
             "disqualifiers": disqualifiers,
             "origin": origin,
+            "orgnr": orgnr,
+            "website": website,
+            "contact_email": contact_email,
         }
         fields = {name: value for name, value in updates.items() if value is not None}
         if not fields:
@@ -1670,14 +1681,15 @@ class PostgresStorage:
         subject: str,
         body_text: str,
         received_at: str | None = None,
+        is_test: bool = False,
     ) -> dict[str, Any] | None:
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
                 """
                 insert into ss_emails
                   (tenant_id, provider, provider_message_id, from_email, from_name,
-                   subject, body_text, received_at)
-                values ($1, $2, $3, $4, $5, $6, $7, coalesce($8::timestamptz, now()))
+                   subject, body_text, received_at, is_test)
+                values ($1, $2, $3, $4, $5, $6, $7, coalesce($8::timestamptz, now()), $9)
                 on conflict (tenant_id, provider_message_id) do nothing
                 returning *
                 """,
@@ -1689,6 +1701,7 @@ class PostgresStorage:
                 subject,
                 body_text,
                 received_at,
+                is_test,
             )
         return _row(record)
 
@@ -1726,6 +1739,7 @@ class PostgresStorage:
         category: str | None = None,
         search: str | None = None,
         limit: int = 50,
+        is_test: bool | None = False,
     ) -> list[dict[str, Any]]:
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(
@@ -1747,6 +1761,7 @@ class PostgresStorage:
                   and ($4::text is null or
                        e.subject ilike '%' || $4 || '%' or e.body_text ilike '%' || $4 || '%'
                        or e.from_email ilike '%' || $4 || '%')
+                  and ($6::boolean is null or e.is_test = $6)
                 order by e.received_at desc
                 limit $5
                 """,
@@ -1755,6 +1770,7 @@ class PostgresStorage:
                 category,
                 search,
                 limit,
+                is_test,
             )
         results = []
         for record in records:
@@ -1766,7 +1782,7 @@ class PostgresStorage:
         return results
 
     async def get_email(self, tenant_id: str, email_id: str) -> dict[str, Any] | None:
-        rows = await self.list_emails(tenant_id, limit=1000)
+        rows = await self.list_emails(tenant_id, limit=1000, is_test=None)
         email = next((e for e in rows if e["id"] == email_id), None)
         if not email:
             return None
@@ -1787,6 +1803,7 @@ class PostgresStorage:
         *,
         status: str | None = None,
         ticket_id: str | None = None,
+        is_test: bool | None = None,
     ) -> dict[str, Any] | None:
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
@@ -1794,6 +1811,7 @@ class PostgresStorage:
                 update ss_emails set
                   status = coalesce($3, status),
                   ticket_id = coalesce($4::uuid, ticket_id),
+                  is_test = case when $5::boolean is null then is_test else $5 end,
                   updated_at = now()
                 where tenant_id = $1 and id = $2 returning *
                 """,
@@ -1801,6 +1819,7 @@ class PostgresStorage:
                 email_id,
                 status,
                 ticket_id,
+                is_test,
             )
         return _row(record)
 

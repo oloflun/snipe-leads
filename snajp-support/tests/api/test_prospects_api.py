@@ -257,6 +257,65 @@ async def test_befordra_ar_idempotent_for_manual():
 
 
 @pytest.mark.anyio
+async def test_befordra_med_ifyllnad_i_kroppen_blir_manual():
+    """422-listan ska gå att åtgärda i samma anrop, inte bara som en vägg."""
+    async with app.router.lifespan_context(app):
+        storage = app.state.storage
+        prospekt = await storage.create_prospect(
+            DEFAULT_TENANT_ID,
+            company_name="Ofullständiga Bygg AB",
+            origin="test",
+            profil={"orgnr": "556000-0000", "website": "ofullstandiga.example"},
+        )
+        async with _client() as client:
+            avvisat = await client.post(
+                f"/api/leads/prospects/{prospekt['id']}/befordra", headers=DEMO
+            )
+            assert avvisat.status_code == 422
+
+            ifyllt = await client.post(
+                f"/api/leads/prospects/{prospekt['id']}/befordra",
+                headers=DEMO,
+                json={
+                    "orgnr": "556824-9022",
+                    "website": "https://ofullstandigabygg.se",
+                    "contact_email": "info@ofullstandigabygg.se",
+                },
+            )
+            assert ifyllt.status_code == 200
+            body = ifyllt.json()
+            assert body["andrad"] is True
+            assert body["prospect"]["origin"] == "manual"
+            assert body["prospect"]["orgnr"] == "556824-9022"
+
+
+@pytest.mark.anyio
+async def test_patch_prospect_skriver_orgnr_webb_och_epost():
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            skapat = await client.post(
+                "/api/leads/prospects",
+                headers=DEMO,
+                json={"company_name": "Patchbolaget AB"},
+            )
+            pid = skapat.json()["prospect"]["id"]
+            response = await client.patch(
+                f"/api/leads/prospects/{pid}",
+                headers=DEMO,
+                json={
+                    "orgnr": "556824-9022",
+                    "website": "https://patchbolaget.se",
+                    "contact_email": "hej@patchbolaget.se",
+                },
+            )
+            assert response.status_code == 200
+            p = response.json()["prospect"]
+            assert p["orgnr"] == "556824-9022"
+            assert p["website"] == "https://patchbolaget.se"
+            assert p["contact_email"] == "hej@patchbolaget.se"
+
+
+@pytest.mark.anyio
 async def test_befordra_okant_prospekt_ger_404():
     async with app.router.lifespan_context(app):
         async with _client() as client:

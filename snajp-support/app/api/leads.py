@@ -37,6 +37,7 @@ from ..leads.soul import SOUL_KIND, SOUL_MAX_CHARS
 from ..leads.skatteverket import atkomst_for_tenant
 from .schemas import (
     AgentFeedbackRequest,
+    BefordraRequest,
     ContextDocRequest,
     ExempelbolagRequest,
     LeadsBatchRequest,
@@ -479,6 +480,25 @@ async def befordra_prospekt(
         # en blandad markering utan att fråga vilka rader som redan gått igenom.
         return {"prospect": prospect, "andrad": False}
 
+    # Ifyllnad i samma anrop: PATCH sedan validera. Tom kropp är tillåten —
+    # befintliga tester POSTar utan JSON och ska fortsätta göra det.
+    raw = await request.body()
+    if raw:
+        try:
+            extra = BefordraRequest.model_validate_json(raw)
+        except Exception as fel:  # noqa: BLE001 — 422 med svensk text, inte pydantic-rått
+            raise HTTPException(
+                status_code=422,
+                detail="Ifyllnaden kunde inte läsas. Ange organisationsnummer, webbplats och e-post.",
+            ) from fel
+        fält = extra.model_dump(exclude_none=True)
+        if fält:
+            uppdaterad = await storage.update_prospect(
+                tenant["tenant_id"], prospect_id, **fält
+            )
+            if uppdaterad:
+                prospect = uppdaterad
+
     brister = saknade_falt(
         orgnr=prospect.get("orgnr"),
         website=prospect.get("website"),
@@ -809,6 +829,7 @@ async def oppna_forslag_som_arende(
         category=kategori if kategori in CATEGORY_LABELS else "ovrigt",
         channel="web",
         priority="high",
+        is_test=True,
     )
     await storage.save_message(
         tenant["tenant_id"],

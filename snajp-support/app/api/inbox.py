@@ -16,7 +16,12 @@ from ..email_pipeline.poller import (
     sync_mailbox,
 )
 from ..email_pipeline.processor import process_email
-from ..config import CATEGORIES, get_settings
+from ..config import (
+    CATEGORIES,
+    DEFAULT_TENANT_ID,
+    PUBLIC_DEMO_TENANT_ID,
+    get_settings,
+)
 from ..scripts.seed_kb import ensure_tenant_kb
 from .deps import require_tenant
 from .schemas import IngestEmailRequest, SeedMockRequest
@@ -92,7 +97,7 @@ async def seed_mock_inbox(
     kb = await storage.list_kb(tenant_id)
     inlasta = []
     for inbound in build_mock_emails(antal=antal, kategori=kategori, kb=kb):
-        email = await ingest_email(storage, tenant_id, inbound)
+        email = await ingest_email(storage, tenant_id, inbound, is_test=True)
         if email:
             inlasta.append(email)
 
@@ -285,6 +290,15 @@ async def ingest_external(
     return {"email_id": email["id"], **outcome}
 
 
+async def _visar_test_i_arenden(storage, tenant: dict) -> bool:
+    """Test-/demokonton visar testmail under Ärenden, inte i en dold flik."""
+    if tenant["tenant_id"] in (DEFAULT_TENANT_ID, PUBLIC_DEMO_TENANT_ID):
+        return True
+    rad = await storage.get_tenant(tenant["tenant_id"])
+    slug = (rad or {}).get("slug") or ""
+    return slug.startswith("testkund-")
+
+
 @router.get("/api/inbox")
 async def list_inbox(
     request: Request,
@@ -293,9 +307,20 @@ async def list_inbox(
     category: str | None = Query(default=None),
     q: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
+    is_test: bool | None = Query(default=None),
 ) -> dict:
-    emails = await request.app.state.storage.list_emails(
-        tenant["tenant_id"], status=status, category=category, search=q, limit=limit
+    storage = request.app.state.storage
+    visar = await _visar_test_i_arenden(storage, tenant)
+    lager = is_test
+    if lager is None and not visar:
+        lager = False
+    emails = await storage.list_emails(
+        tenant["tenant_id"],
+        status=status,
+        category=category,
+        search=q,
+        limit=limit,
+        is_test=lager,
     )
     counts: dict[str, int] = {}
     status_counts: dict[str, int] = {}
@@ -304,7 +329,12 @@ async def list_inbox(
             key = email["classification"]["category"]
             counts[key] = counts.get(key, 0) + 1
         status_counts[email["status"]] = status_counts.get(email["status"], 0) + 1
-    return {"emails": emails, "category_counts": counts, "status_counts": status_counts}
+    return {
+        "emails": emails,
+        "category_counts": counts,
+        "status_counts": status_counts,
+        "visar_test_i_arenden": visar,
+    }
 
 
 @router.get("/api/inbox/{email_id}")
@@ -337,3 +367,29 @@ async def takeover(
         detail={"by": "human", "note": "Manuellt övertaget i dashboarden."},
     )
     return {"status": "taken_over"}
+
+
+@router.post("/api/inbox/{email_id}/befordra")
+async def befordra_testmail(
+    request: Request, email_id: str, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Flyttar ett testmail till skarpa ärenden.
+
+    Sätter is_test=false på mailet och det länkade ärendet. Ingen kopia —
+    samma rad byter lager.
+    """
+    storage = request.app.state.storage
+    email = await storage.get_email(tenant["tenant_id"], email_id)
+    if not email:
+        raise HTTPException(status_code=404, detail="Mailet finns inte.")
+    updated = await storage.update_email(tenant["tenant_id"], email_id, is_test=False)
+    ticket_id = (updated or email).get("ticket_id")
+    if ticket_id:
+        await storage.update_ticket(tenant["tenant_id"], ticket_id, is_test=False)
+    await storage.log_decision(
+        tenant["tenant_id"],
+        email_id=email_id,
+        event="befordrad",
+        detail={"from": "test", "to": "skarpt"},
+    )
+    return {"email": updated or email, "andrad": True}

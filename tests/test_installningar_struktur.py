@@ -49,6 +49,14 @@ def test_min_arbetsyta_ar_borta_ur_installningarna():
     assert '"arbetsyta"' not in KALLA
 
 
+def test_menyn_anvander_vanlig_svenska():
+    """Sälj och support ska inte mötas av ICP, autonomi eller SOUL i menyn."""
+    block = KALLA.split("export const settingsGroups")[1].split("export function settingsGroups")[0]
+    etiketter = re.findall(r"sv:\s*\"([^\"]+)\"", block)
+    jargon = [e for e in etiketter if any(ord in e.lower() for ord in ("icp", "soul", "autonomi"))]
+    assert not jargon, f"Menyn ska tala vanlig svenska, inte {jargon}."
+
+
 def test_rosten_ar_delad_mellan_agenterna():
     """SOUL styr hur BÅDA agenterna låter. Låg den kvar bakom leads-grinden
     svarade /settings/soul 404 för en supportkund."""

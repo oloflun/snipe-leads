@@ -111,6 +111,7 @@ class Storage(Protocol):
         category: str,
         channel: str,
         priority: str = "normal",
+        is_test: bool = False,
     ) -> dict[str, Any]: ...
 
     async def get_ticket(self, tenant_id: str, ticket_id: str) -> dict[str, Any] | None: ...
@@ -124,6 +125,7 @@ class Storage(Protocol):
         category: str | None = None,
         priority: str | None = None,
         escalation_reason: str | None = None,
+        is_test: bool | None = None,
     ) -> dict[str, Any] | None: ...
 
     async def save_message(
@@ -562,6 +564,9 @@ class Storage(Protocol):
         qualified: bool | None = None,
         disqualifiers: list[str] | None = None,
         origin: str | None = None,
+        orgnr: str | None = None,
+        website: str | None = None,
+        contact_email: str | None = None,
     ) -> dict[str, Any] | None:
         """Fas B:s bedömning (icp_fit, qualified, disqualifiers) landar här,
         migration 024. Innan den fanns räknades icp_fit ut av modellen och
@@ -606,6 +611,7 @@ class Storage(Protocol):
         subject: str,
         body_text: str,
         received_at: str | None = None,
+        is_test: bool = False,
     ) -> dict[str, Any] | None:
         """Sparar ett inkommande mail. Returnerar None vid dublett (dedupe)."""
         ...
@@ -642,6 +648,7 @@ class Storage(Protocol):
         category: str | None = None,
         search: str | None = None,
         limit: int = 50,
+        is_test: bool | None = False,
     ) -> list[dict[str, Any]]: ...
 
     async def get_email(self, tenant_id: str, email_id: str) -> dict[str, Any] | None: ...
@@ -653,6 +660,7 @@ class Storage(Protocol):
         *,
         status: str | None = None,
         ticket_id: str | None = None,
+        is_test: bool | None = None,
     ) -> dict[str, Any] | None: ...
 
     async def add_attachment(

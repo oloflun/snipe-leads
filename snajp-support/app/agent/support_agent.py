@@ -538,6 +538,7 @@ async def run_support_agent(
             category=category,
             channel=channel,
             priority="high" if triage.get("priority") in ("P1", "P2") else "normal",
+            is_test=is_test,
         )
         await storage.save_message(
             tenant_id,

@@ -318,6 +318,7 @@ class MemoryStorage:
         category: str,
         channel: str,
         priority: str = "normal",
+        is_test: bool = False,
     ) -> dict[str, Any]:
         ticket = {
             "id": str(uuid.uuid4()),
@@ -329,6 +330,7 @@ class MemoryStorage:
             "priority": priority,
             "escalation_reason": None,
             "channel": channel,
+            "is_test": is_test,
             "created_at": _now(),
             "updated_at": _now(),
         }
@@ -359,6 +361,7 @@ class MemoryStorage:
         category: str | None = None,
         priority: str | None = None,
         escalation_reason: str | None = None,
+        is_test: bool | None = None,
     ) -> dict[str, Any] | None:
         ticket = self.tickets.get(ticket_id)
         if not ticket or ticket["tenant_id"] != tenant_id:
@@ -371,6 +374,8 @@ class MemoryStorage:
             ticket["priority"] = priority
         if escalation_reason:
             ticket["escalation_reason"] = escalation_reason
+        if is_test is not None:
+            ticket["is_test"] = is_test
         ticket["updated_at"] = _now()
         return ticket
 
@@ -983,6 +988,9 @@ class MemoryStorage:
         qualified: bool | None = None,
         disqualifiers: list[str] | None = None,
         origin: str | None = None,
+        orgnr: str | None = None,
+        website: str | None = None,
+        contact_email: str | None = None,
     ) -> dict[str, Any] | None:
         prospect = await self.get_prospect(tenant_id, prospect_id)
         if not prospect:
@@ -993,6 +1001,9 @@ class MemoryStorage:
             ("qualified", qualified),
             ("disqualifiers", disqualifiers),
             ("origin", origin),
+            ("orgnr", orgnr),
+            ("website", website),
+            ("contact_email", contact_email),
         ):
             if value is not None:
                 prospect[field] = value
@@ -1216,6 +1227,7 @@ class MemoryStorage:
         subject: str,
         body_text: str,
         received_at: str | None = None,
+        is_test: bool = False,
     ) -> dict[str, Any] | None:
         dedupe_key = (tenant_id, provider_message_id)
         if dedupe_key in self.email_dedupe:
@@ -1233,6 +1245,7 @@ class MemoryStorage:
             "received_at": received_at or _now(),
             "status": "new",
             "ticket_id": None,
+            "is_test": is_test,
             "created_at": _now(),
             "updated_at": _now(),
         }
@@ -1301,12 +1314,15 @@ class MemoryStorage:
         category: str | None = None,
         search: str | None = None,
         limit: int = 50,
+        is_test: bool | None = False,
     ) -> list[dict[str, Any]]:
         rows = [e for e in self.emails.values() if e["tenant_id"] == tenant_id]
         rows.sort(key=lambda e: e["received_at"], reverse=True)
         result = []
         needle = (search or "").lower()
         for email in rows:
+            if is_test is not None and bool(email.get("is_test")) != is_test:
+                continue
             summary = self._email_summary(email)
             if status and summary["status"] != status:
                 continue
@@ -1341,6 +1357,7 @@ class MemoryStorage:
         *,
         status: str | None = None,
         ticket_id: str | None = None,
+        is_test: bool | None = None,
     ) -> dict[str, Any] | None:
         email = self.emails.get(email_id)
         if not email or email["tenant_id"] != tenant_id:
@@ -1349,6 +1366,8 @@ class MemoryStorage:
             email["status"] = status
         if ticket_id:
             email["ticket_id"] = ticket_id
+        if is_test is not None:
+            email["is_test"] = is_test
         email["updated_at"] = _now()
         return email
 

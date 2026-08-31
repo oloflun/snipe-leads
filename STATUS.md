@@ -1,5 +1,17 @@
 # Snipra Status
 
+## 2026-08-31 (kväll) — Grok — testmail isolerade, flytta-formulär, byt kund, pushat
+
+Kvarvarande punkter från morgonens plan: is_test på inkorg/ärenden (migration
+057 körd mot development), Testmail-flik för riktiga kunder, ifyllnad vid
+Flytta över, sökbar kundväxel i headern, knapp för testkund → riktigt konto.
+21 exempelbolag raderade från Snajp-tenanten. Redis: EU, SEMANTIC_CACHE=shadow,
+TLS fortfarande av (kräver `python scripts/redis_tls_pa.py --apply` av Anton).
+
+Pushat till `origin/development`. Auto-deploytriggern är död sedan 29/8 —
+manuell Railway-deploy krävs. Handoff:
+`HANDOFF-2026-08-31-TESTISOLERING.md`.
+
 ## 2026-08-31 — Grok — exempelkörningar borta, testmail mot profilen, testchatt kalibrerar
 
 Anton visade fjorton skärmbilder: leads som spottade färdiga VVS-pitchar,

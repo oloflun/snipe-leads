@@ -7,9 +7,9 @@ Antons skärmbilder: exempelbolag med färdiga pitchar, flytta röd på `.exampl
 inkorg som först såg statisk ut, nästan allt eskalerat, testchattens
 kunskapsartikel som lät som uppladdad affärskontext.
 
-**Inte pushat.** `development` ligger lokalt fyra commits före `origin/development`
-(Claudes conclude + tre commits här). Pusha när du har kört live mot
-`web-development-6c85.up.railway.app` — development deployar sig själv.
+**Pushat.** Resten av de öppna punkterna (testmail-lager, flytta-ifyllnad,
+byt kund, konvertera) står i
+[HANDOFF-2026-08-31-TESTISOLERING.md](HANDOFF-2026-08-31-TESTISOLERING.md).
 
 ## Produktmodellen (tre lager)
 

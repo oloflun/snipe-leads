@@ -171,6 +171,7 @@ async def process_email(
             category=triage["category"],
             channel="email",
             priority=triage.get("priority", "normal"),
+            is_test=bool(email.get("is_test")),
         )
         await storage.save_message(
             tenant_id,

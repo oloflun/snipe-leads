@@ -36,9 +36,13 @@ export async function proxyAsTenant(path: string, init: RequestInit) {
       : init;
 
     let backendPath = path;
-    if (tenant.impersonerar) {
-      // Admin som tittar som kund: allt som skrivs är test. Query-parametern
-      // täcker leads/prospects; JSON-kroppen täcker chat, batch och mock.
+    const metod = String(medToken.method ?? "GET").toUpperCase();
+    const arSkrivning = metod !== "GET" && metod !== "HEAD";
+    if (tenant.impersonerar && arSkrivning) {
+      // Admin som tittar som kund: allt som SKRIVS är test. Läsning måste
+      // visa kundens riktiga inkorg — annars gömmer `?is_test=true` på GET
+      // de skarpa ärendena och admin tror att profilen är tom.
+      // Query-parametern täcker leads/prospects; JSON-kroppen chat, batch, mock.
       if (!backendPath.includes("is_test=")) {
         backendPath += (backendPath.includes("?") ? "&" : "?") + "is_test=true";
       }

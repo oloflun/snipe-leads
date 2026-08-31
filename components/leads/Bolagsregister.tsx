@@ -48,6 +48,7 @@ type Prospekt = {
   ort: string | null;
   sni: string | null;
   website: string | null;
+  orgnr: string | null;
   score_total: number | null;
   icp_fit: number | null;
   qualified: boolean | null;
@@ -189,6 +190,9 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
   const [valda, setValda] = useState<Set<string>>(new Set());
   const [flyttar, setFlyttar] = useState(false);
   const [utfall, setUtfall] = useState<Utfallsrad[] | null>(null);
+  const [ifyllnad, setIfyllnad] = useState<
+    Record<string, { orgnr: string; website: string; contact_email: string }>
+  >({});
 
   // Fas 2 §3, 2.4-UI: testkörningar döljs som default. Exempelbolag räknas
   // INTE hit — de är produktens tomläge och ska synas även med växeln av.
@@ -206,12 +210,13 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
     });
   }, []);
 
-  const flyttaOverValda = useCallback(async () => {
+  const flyttaOverValda = useCallback(async (ids?: Set<string>) => {
     if (lage.fas !== "klar") return;
     // Ett snapshot av VILKA som är markerade just nu — valda kan ändras under
     // await-kedjan om kunden hinner klicka mer, men resultatlistan ska svara
     // på det urval knappen faktiskt kördes med.
-    const kandidater = lage.prospekt.filter((p) => valda.has(p.id));
+    const markering = ids ?? valda;
+    const kandidater = lage.prospekt.filter((p) => markering.has(p.id));
     if (!kandidater.length) return;
 
     setFlyttar(true);
@@ -225,8 +230,17 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
           continue;
         }
         try {
+          const extra = ifyllnad[p.id];
           const response = await fetch(`/api/snajp-support/leads/prospects/${p.id}/befordra`, {
-            method: "POST"
+            method: "POST",
+            headers: extra ? { "Content-Type": "application/json" } : undefined,
+            body: extra
+              ? JSON.stringify({
+                  orgnr: extra.orgnr || undefined,
+                  website: extra.website || undefined,
+                  contact_email: extra.contact_email || undefined
+                })
+              : undefined
           });
           if (response.ok) {
             resultat.push({ id: p.id, company_name: p.company_name, ok: true });
@@ -265,7 +279,7 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
     } finally {
       setFlyttar(false);
     }
-  }, [lage, valda, hamta]);
+  }, [lage, valda, hamta, ifyllnad]);
 
   if (lage.fas === "laddar") {
     return <SkeletonRows />;
@@ -340,7 +354,7 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
       )}
 
       {utfall && utfall.length > 0 ? (
-        <ul className="mb-5 space-y-2 border-y border-ink/15 py-4">
+        <ul className="mb-5 space-y-3 border-y border-ink/15 py-4">
           {utfall.map((rad) => (
             <li key={rad.id} className="text-sm leading-6">
               <span className="font-medium text-ink">{rad.company_name}</span>{" "}
@@ -351,6 +365,17 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
                   kunde inte flyttas över: {rad.saknas?.join(" ")}
                 </span>
               )}
+              {!rad.ok ? (
+                <Ifyllnad
+                  id={rad.id}
+                  varden={ifyllnad[rad.id] ?? { orgnr: "", website: "", contact_email: "" }}
+                  disabled={flyttar}
+                  onChange={(varden) =>
+                    setIfyllnad((forra) => ({ ...forra, [rad.id]: varden }))
+                  }
+                  onSubmit={() => void flyttaOverValda(new Set([rad.id]))}
+                />
+              ) : null}
             </li>
           ))}
         </ul>
@@ -431,6 +456,7 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
                             egen badgestil. Ett påhittat bolag ska inte gå att ta för
                             en riktig AI-körning. */}
                         {p.origin === "example" ? <span className="kicker text-mineral">Exempel</span> : null}
+                        {p.origin === "test" ? <span className="kicker text-mineral">Test</span> : null}
                       </div>
                       {p.website ? <p className="mt-1 text-sm text-ink/55">{p.website}</p> : null}
                     </th>
@@ -496,6 +522,70 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
         </>
       )}
     </>
+  );
+}
+
+function Ifyllnad({
+  id,
+  varden,
+  disabled,
+  onChange,
+  onSubmit
+}: Readonly<{
+  id: string;
+  varden: { orgnr: string; website: string; contact_email: string };
+  disabled: boolean;
+  onChange: (varden: { orgnr: string; website: string; contact_email: string }) => void;
+  onSubmit: () => void;
+}>) {
+  return (
+    <form
+      className="mt-3 grid gap-2 sm:grid-cols-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmit();
+      }}
+    >
+      <label className="block text-[12px] text-ink/60">
+        Organisationsnummer
+        <input
+          name={`${id}-orgnr`}
+          value={varden.orgnr}
+          onChange={(event) => onChange({ ...varden, orgnr: event.target.value })}
+          placeholder="556824-9022"
+          className="focus-ring mt-1 block min-h-11 w-full rounded-input bg-paper2 px-3 text-sm text-ink"
+        />
+      </label>
+      <label className="block text-[12px] text-ink/60">
+        Webbplats
+        <input
+          name={`${id}-website`}
+          value={varden.website}
+          onChange={(event) => onChange({ ...varden, website: event.target.value })}
+          placeholder="https://bolaget.se"
+          className="focus-ring mt-1 block min-h-11 w-full rounded-input bg-paper2 px-3 text-sm text-ink"
+        />
+      </label>
+      <label className="block text-[12px] text-ink/60">
+        E-post
+        <input
+          name={`${id}-email`}
+          value={varden.contact_email}
+          onChange={(event) => onChange({ ...varden, contact_email: event.target.value })}
+          placeholder="info@bolaget.se"
+          className="focus-ring mt-1 block min-h-11 w-full rounded-input bg-paper2 px-3 text-sm text-ink"
+        />
+      </label>
+      <div className="sm:col-span-3">
+        <button
+          type="submit"
+          disabled={disabled}
+          className="border border-ink px-4 py-2 font-mono text-[12px] uppercase tracking-[0.18em] transition hover:bg-ink hover:text-paper disabled:opacity-60"
+        >
+          Spara och flytta
+        </button>
+      </div>
+    </form>
   );
 }
 
