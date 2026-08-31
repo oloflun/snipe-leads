@@ -10,6 +10,7 @@ import { EmptyState, SkeletonRows, btnPrimary } from "@/components/ui";
 import type { EmailStudioData } from "@/lib/data/emails";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
+import { lasOffertForUtkast } from "@/lib/actions/affarskontext";
 import { kriterier } from "@/lib/prospekt";
 import { cn } from "@/lib/utils";
 
@@ -178,18 +179,38 @@ function byggEmailStudioData(
  * sträng till outreach/draft — se rapportens avsnitt om saknat UI-data.
  */
 async function hamtaOffertsammanfattning(): Promise<string> {
-  const svar = await snajpAnrop<{ docs?: { content?: string }[] }>(
-    "/leads/context-docs?kind=product_marketing"
-  );
-  const senaste = svar.docs?.[0]?.content?.trim();
-  if (!senaste) {
-    throw new Error(
-      "Affärskontexten (Vad vi säljer) är inte ifylld ännu. Fyll i den under " +
-        "Inställningar, Vad agenterna vet, Affärskontext innan ett utkast kan skapas."
-    );
+  return lasOffertForUtkast();
+}
+
+async function pollaLeadsJobb(jobId: string): Promise<{
+  status?: string;
+  error?: string;
+  result?: {
+    body?: string;
+    subject?: string;
+    escalated?: boolean;
+    escalation_reason?: string | null;
+    queue_item_id?: string | null;
+  };
+}> {
+  for (let forsok = 0; forsok < 90; forsok += 1) {
+    await new Promise((r) => setTimeout(r, forsok < 5 ? 800 : 2000));
+    const jobb = await snajpAnrop<{
+      status?: string;
+      error?: string;
+      result?: {
+        body?: string;
+        subject?: string;
+        escalated?: boolean;
+        escalation_reason?: string | null;
+        queue_item_id?: string | null;
+      };
+    }>("/leads/jobb/" + encodeURIComponent(jobId), { method: "GET" });
+    if (jobb.status === "completed" || jobb.status === "failed") {
+      return jobb;
+    }
   }
-  // OutreachDraftRequest.offer_summary har max_length 2000.
-  return senaste.slice(0, 2000);
+  return { status: "timeout", error: "Utkastet tog för lång tid." };
 }
 
 const STATUS_ETIKETT: Record<string, string> = {
@@ -352,7 +373,9 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
     setUtkastLage({ fas: "skapar" });
     try {
       const offerSummary = await hamtaOffertsammanfattning();
-      const svar = await snajpAnrop<{
+      const koat = await snajpAnrop<{
+        job_id?: string;
+        fase?: string;
         escalated?: boolean;
         escalation_reason?: string | null;
         subject?: string;
@@ -374,6 +397,15 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
           research_evidence: lage.kallor.slice(0, 60)
         })
       });
+
+      let svar = koat;
+      if (koat.job_id && (koat.fase === "skriver" || !koat.body)) {
+        const klart = await pollaLeadsJobb(koat.job_id);
+        if (klart.status !== "completed" || !klart.result) {
+          throw new Error(klart.error || "Utkastet kunde inte skrivas.");
+        }
+        svar = klart.result;
+      }
 
       if (svar.escalated || !svar.body) {
         setUtkastLage({
