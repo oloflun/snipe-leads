@@ -9,6 +9,7 @@ import { EmptyState, SkeletonRows } from "@/components/ui";
 import { EjAktiverad, arEjAktiverad } from "@/components/EjAktiverad";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
+import { lasOffertForUtkast } from "@/lib/actions/affarskontext";
 import { cn } from "@/lib/utils";
 
 /**
@@ -156,19 +157,38 @@ function flyttaKnappText(riktning: Riktning, antal: number): string {
  * `snajpAnrop`-dubbleringen där, se den docstringen.
  */
 async function hamtaOffertsammanfattning(): Promise<string> {
-  const response = await fetch("/api/snajp-support/leads/context-docs?kind=product_marketing", {
-    cache: "no-store"
-  });
-  const kropp = await readJsonBody<{ docs?: { content?: string }[] }>(response).catch(() => null);
-  const senaste = kropp?.docs?.[0]?.content?.trim();
-  if (!response.ok || !senaste) {
-    throw new Error(
-      "Affärskontexten (Vad ni säljer) är inte ifylld ännu. Fyll i den under Inställningar, " +
-        "Vad agenterna vet, Affärskontext innan utkast kan skapas."
-    );
+  // Samma källa som Inställningar → Affärskontext, inte context-docs som
+  // kan vara tomma eller 503 medan formuläret är ifyllt.
+  return lasOffertForUtkast();
+}
+
+type LeadsJobbSvar = {
+  status?: string;
+  error?: string;
+  result?: {
+    body?: string;
+    escalated?: boolean;
+    escalation_reason?: string | null;
+    draft_note?: string;
+    prospect_id?: string;
+  };
+};
+
+async function pollaLeadsJobb(jobId: string): Promise<LeadsJobbSvar> {
+  for (let forsok = 0; forsok < 90; forsok += 1) {
+    await new Promise((r) => setTimeout(r, forsok < 5 ? 800 : 2000));
+    const response = await fetch("/api/snajp-support/leads/jobb/" + encodeURIComponent(jobId), {
+      cache: "no-store"
+    });
+    const kropp = await readJsonBody<LeadsJobbSvar>(response).catch(() => null);
+    if (!response.ok) {
+      return { status: "failed", error: extraheraFelmeddelande((kropp as { detail?: unknown } | null)?.detail) || `Jobbet svarade ${response.status}.` };
+    }
+    if (kropp?.status === "completed" || kropp?.status === "failed") {
+      return kropp;
+    }
   }
-  // OutreachDraftRequest.offer_summary har max_length 2000 (se schemas.py).
-  return senaste.slice(0, 2000);
+  return { status: "timeout", error: "Körningen tog för lång tid." };
 }
 
 /** Poängmotiveringen som forskningsunderlag åt utkastet — samma källa som
@@ -277,6 +297,7 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
   // datayta den här tabellen visar) och har inget att säga om riktningen.
   const [visaTest, setVisaTest] = useState(false);
   const [genererarUtkast, setGenererarUtkast] = useState(false);
+  const [processarOm, setProcessarOm] = useState(false);
   const [utkastResultat, setUtkastResultat] = useState<UtkastRad[] | null>(null);
 
   const vaxlaVal = useCallback((id: string) => {
@@ -454,11 +475,32 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
             })
           });
           const kropp = await readJsonBody<{
+            job_id?: string;
+            fase?: string;
             escalated?: boolean;
             escalation_reason?: string | null;
             body?: string;
             detail?: unknown;
           }>(response).catch(() => null);
+          if (response.status === 202 && kropp?.job_id) {
+            const klart = await pollaLeadsJobb(kropp.job_id);
+            const utkast = klart.result;
+            if (klart.status === "completed" && utkast && !utkast.escalated && utkast.body) {
+              resultat.push({ id: p.id, company_name: p.company_name, ok: true });
+              continue;
+            }
+            resultat.push({
+              id: p.id,
+              company_name: p.company_name,
+              ok: false,
+              meddelande:
+                klart.error ||
+                utkast?.escalation_reason ||
+                utkast?.draft_note ||
+                "Kunde inte skapa utkast."
+            });
+            continue;
+          }
           if (response.ok && kropp && !kropp.escalated && kropp.body) {
             resultat.push({ id: p.id, company_name: p.company_name, ok: true });
             continue;
@@ -482,6 +524,84 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
       setGenererarUtkast(false);
     }
   }, [lage, valda]);
+
+  const processaOmValda = useCallback(async () => {
+    if (lage.fas !== "klar") return;
+    const kandidater = lage.prospekt.filter((p) => valda.has(p.id));
+    if (!kandidater.length) return;
+
+    setProcessarOm(true);
+    setUtkastResultat(null);
+    try {
+      try {
+        await hamtaOffertsammanfattning();
+      } catch (fel) {
+        setUtkastResultat(
+          kandidater.map((p) => ({
+            id: p.id,
+            company_name: p.company_name,
+            ok: false,
+            meddelande: felmeddelande(fel)
+          }))
+        );
+        return;
+      }
+
+      const response = await fetch("/api/snajp-support/leads/prospects/processa-om", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prospect_ids: kandidater.map((p) => p.id),
+          scope: "research_and_draft"
+        })
+      });
+      const kropp = await readJsonBody<{
+        jobs?: { job_id: string; prospect_id?: string }[];
+        detail?: unknown;
+      }>(response).catch(() => null);
+      if (!response.ok || !kropp?.jobs?.length) {
+        throw new Error(
+          extraheraFelmeddelande(kropp?.detail) || `Kunde inte processa om (status ${response.status}).`
+        );
+      }
+      const namn = new Map(kandidater.map((p) => [p.id, p.company_name]));
+      const resultat: UtkastRad[] = [];
+      for (const jobb of kropp.jobs) {
+        const namnRad = namn.get(jobb.prospect_id ?? "") ?? jobb.prospect_id ?? "Bolag";
+        const klart = await pollaLeadsJobb(jobb.job_id);
+        const id = jobb.prospect_id ?? jobb.job_id;
+        if (klart.status === "completed") {
+          const note = klart.result?.draft_note;
+          resultat.push({
+            id,
+            company_name: namnRad,
+            ok: !note,
+            meddelande: note
+          });
+        } else {
+          resultat.push({
+            id,
+            company_name: namnRad,
+            ok: false,
+            meddelande: klart.error || "Processningen misslyckades."
+          });
+        }
+      }
+      setUtkastResultat(resultat);
+      await hamta(true);
+    } catch (error) {
+      setUtkastResultat(
+        kandidater.map((p) => ({
+          id: p.id,
+          company_name: p.company_name,
+          ok: false,
+          meddelande: felmeddelande(error)
+        }))
+      );
+    } finally {
+      setProcessarOm(false);
+    }
+  }, [lage, valda, hamta]);
 
   if (lage.fas === "laddar") {
     return <SkeletonRows />;
@@ -541,11 +661,19 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
               </button>
               <button
                 type="button"
-                disabled={genererarUtkast}
+                disabled={genererarUtkast || processarOm}
                 onClick={() => void skapaUtkastForValda()}
                 className="border border-ink/40 px-4 py-2 font-mono text-[12px] uppercase tracking-[0.18em] text-ink/70 transition hover:border-ink hover:text-ink disabled:opacity-60"
               >
                 {genererarUtkast ? "Skapar utkast..." : `Skapa utkast för valda (${valda.size})`}
+              </button>
+              <button
+                type="button"
+                disabled={genererarUtkast || processarOm}
+                onClick={() => void processaOmValda()}
+                className="border border-ink/40 px-4 py-2 font-mono text-[12px] uppercase tracking-[0.18em] text-ink/70 transition hover:border-ink hover:text-ink disabled:opacity-60"
+              >
+                {processarOm ? "Processar om..." : `Processa om (${valda.size})`}
               </button>
             </div>
           ) : (
