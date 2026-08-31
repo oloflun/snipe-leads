@@ -78,6 +78,112 @@ def _host(url: str) -> str:
     return host
 
 
+#: Publika konsumentdomäner. En adress här är ALDRIG ett arbetsmejl, oavsett
+#: vad bolagets sajt eller modellen påstår. Speglar prospect_quality_gate
+#: plus de vanliga nordiska/US-varianterna som densamma listan missat.
+_PRIVATA_DOMÄNER = frozenset(
+    {
+        "gmail.com",
+        "googlemail.com",
+        "yahoo.com",
+        "yahoo.se",
+        "hotmail.com",
+        "hotmail.se",
+        "outlook.com",
+        "outlook.se",
+        "icloud.com",
+        "me.com",
+        "mac.com",
+        "live.se",
+        "live.com",
+        "msn.com",
+        "aol.com",
+        "proton.me",
+        "protonmail.com",
+        "telia.com",
+        "bredband.net",
+        "spray.se",
+    }
+)
+
+_EMAIL_RE = re.compile(r"[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}", re.I)
+
+#: Lokaldelar som är officiell kontakt eller nära en beslutsroll. Ordningen
+#: är rank, inte filter — en namngiven chef@ slår info@.
+_ROLL_LOKALDELAR = (
+    "vd",
+    "ceo",
+    "chef",
+    "sales",
+    "salj",
+    "info",
+    "kontakt",
+    "hello",
+    "hej",
+    "mail",
+    "office",
+)
+
+
+def ar_privat_epost(epost: str | None) -> bool:
+    """True för gmail/hotmail/icloud och motsvarande — aldrig mottagare."""
+    if not epost or "@" not in epost:
+        return False
+    return epost.rsplit("@", 1)[-1].strip().lower().lstrip("www.") in _PRIVATA_DOMÄNER
+
+
+def ar_arbetsmejl(epost: str | None, *, webb: str | None = None) -> bool:
+    """Inte privat. Om webbplatsen är känd ska adressen ligga på samma domän."""
+    if not epost or "@" not in epost or ar_privat_epost(epost):
+        return False
+    if not webb:
+        return True
+    bolag = _host(webb) if "://" in webb or webb.startswith("www.") else _host("https://" + webb)
+    if not bolag:
+        return True
+    doman = epost.rsplit("@", 1)[-1].strip().lower().lstrip("www.")
+    return doman == bolag or doman.endswith("." + bolag) or bolag.endswith("." + doman)
+
+
+def plocka_arbetsmejl(
+    material: str,
+    webb: str | None,
+    *,
+    onskad_roll: str | None = None,
+) -> str | None:
+    """Första arbetsmejlen som FAKTISKT står i underlaget. Hitta aldrig på.
+
+    Prioritet: lokaldel som liknar den sökta rollen, sedan info/kontakt/hej,
+    sedan övriga adresser på bolagets egen domän. En privat adress hoppas
+    över även om den står först på sidan.
+    """
+    if not material:
+        return None
+    sedda: list[str] = []
+    for match in _EMAIL_RE.finditer(material):
+        epost = match.group(0).rstrip('.,;:)>"\'')
+        if not ar_arbetsmejl(epost, webb=webb):
+            continue
+        nyckel = epost.lower()
+        if nyckel not in sedda:
+            sedda.append(nyckel)
+    if not sedda:
+        return None
+    roll = (onskad_roll or "").casefold()
+
+    def rank(epost: str) -> tuple[int, int]:
+        lokal = epost.split("@", 1)[0].casefold()
+        if roll and roll[:4] in lokal:
+            return (0, 0)
+        for i, delnamn in enumerate(_ROLL_LOKALDELAR):
+            if delnamn in lokal:
+                return (1, i)
+        return (2, 0)
+
+    sedda.sort(key=rank)
+    return sedda[0]
+
+
 def webbplats_ar_bolagets(url: str | None) -> bool:
     """True om URL:en kan vara ett bolags egen sajt, inte ett register eller exempel."""
     if not url:
@@ -265,6 +371,10 @@ def _rena_traffar(rader: list[dict[str, Any]], *, uteslut: set[str], tak: int) -
         # den bristen som gjorde att en träff med bara e-post ändå försvann
         # om något annat fält saknades i en tidigare version.
         epost = str(rad["contact_email"]).strip() if rad.get("contact_email") else None
+        if epost and ar_privat_epost(epost):
+            # Privat gmail/hotmail är inte en mottagare. Hellre tomt — Fas B
+            # plockar arbetsmejlet ur skrapet — än att spara en olaglig kanal.
+            epost = None
         kontaktnamn = str(rad["contact_name"]).strip() if rad.get("contact_name") else None
         kontaktroll = str(rad["contact_role"]).strip() if rad.get("contact_role") else None
         kontaktformular = _rena_kontaktformular(rad.get("contact_form_url"), webb=webb)
@@ -340,11 +450,14 @@ async def hitta_bolag(
         "  3. Om ingen namngiven person gar att verifiera: en ROLLBASERAD "
         "adress pa bolagets EGEN doman — info@, kontakt@, hej@ eller sales@. "
         'contact_level="role_address", contact_name lamnas null.\n'
-        "  4. Om INGEN adress alls star pa sajten: URL:en till bolagets "
-        'kontaktformular. contact_level="contact_form", contact_email lamnas '
-        "null.\n\n"
+        "  4. Om INGEN namngiven person gaar att verifiera men en officiell "
+        "kontaktadress star pa sajten (info@, kontakt@, hej@ pa bolagets EGEN "
+        'doman): contact_level="role_address". En kontaktformular-URL far folja '
+        "med som metadata men ersatter ALDRIG en e-postadress. Returnera inte "
+        "ett bolag utan contact_email om adressen star nagonstans pa den egna "
+        "sajten. Privat gmail/hotmail/icloud ar FORBUDET.\n\n"
         "Returnera ENBART en JSON-lista:\n"
-        '[{{"company_name":"...","website":"https://...","orgnr":null,"ort":"...",'
+        '[{{ "company_name":"...","website":"https://...","orgnr":null,"ort":"...",'
         '"contact_name":null,"contact_role":null,"contact_email":null,'
         '"contact_level":null,"contact_form_url":null,"anstallda":null}}]\n'
         "website MÅSTE vara bolagets egen officiella sajt, inte allabolag/hitta/ratsit/"
