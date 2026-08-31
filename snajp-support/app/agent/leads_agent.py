@@ -1,1 +1,1 @@
-SEE_FROM_FILE
+LIVE_FROM_/workspace/snipe-leads/snajp-support/app/agent/leads_agent.py
