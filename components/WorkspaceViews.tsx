@@ -98,8 +98,8 @@ export function AssistantView() {
  * Leads-vyns innehåll utan skal, så att startsidan kan montera den bredvid
  * kundtjänstvyn utan att nästla två PageShell (alltså två headers).
  *
- * Discovery-formuläret är det som FAKTISKT startar en körning; bolagsregistret
- * under är exempeldata tills körningen skrivit riktiga prospekt.
+ * Discovery-formuläret startar körningen; bolagsregistret under hämtar
+ * tenantens prospekt. Exempelbolag hör bara hemma på /demo.
  */
 export function LeadsBody({ demo = false }: Readonly<{ demo?: boolean }>) {
   return (

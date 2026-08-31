@@ -14,7 +14,7 @@ import { LeadsRunForm } from "@/components/leads/LeadsRunForm";
  *
  * `is_test` följer arbetsytan: en testarbetsyta märker sina körningar så att de
  * aldrig räknas som kundvolym i portföljvyn. En riktig kunds körning är en
- * riktig körning.
+ * riktig körning. Exempelbolag skapas inte här.
  */
 export function Discovery({ demo = false }: Readonly<{ demo?: boolean }>) {
   const { isDemo, vy } = useDashboard();

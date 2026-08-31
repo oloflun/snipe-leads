@@ -85,6 +85,27 @@ async def test_exempelbolag_skapas_med_origin_example():
 
 
 @pytest.mark.anyio
+async def test_exempelbolag_vagras_utanfor_demo():
+    """Kund- och admin-tenanter ska inte kunna skapa färdigskrivna exempelbolag."""
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            skapad = await client.post(
+                "/api/keys",
+                headers={"X-API-Key": get_settings().snajp_master_api_key},
+                json={"tenant_name": "Inte Demo AB"},
+            )
+            assert skapad.status_code == 201, skapad.text
+            key = skapad.json()["api_key"]
+            svar = await client.post(
+                "/api/leads/prospects/exempel",
+                headers={"X-API-Key": key},
+                json={"limit": 1},
+            )
+            assert svar.status_code == 403, svar.text
+            assert "demon" in svar.json()["detail"].lower()
+
+
+@pytest.mark.anyio
 async def test_vagen_in_kraver_ingen_riktig_nyckel_men_korningen_gor_det():
     # Kontrasten ÄR testet. Står miljön i simuleringsläge — vilket dev ofta gör
     # — måste knappen som fyller arbetsytan ändå fungera.
@@ -165,7 +186,7 @@ async def test_testkorningen_startar_pa_de_inladdade_bolagen(live_llm, monkeypat
                 "/api/leads/runs/batch", headers=DEMO, json={"limit": 3, "is_test": True}
             )
             assert tom.status_code == 422
-            assert "Inga prospekt" in tom.json()["detail"]
+            assert "Inga bolag att köra på" in tom.json()["detail"]
 
             body = await _ladda_exempelbolag(client, limit=3)
             exempel_id = {p["id"] for p in body["created"]}

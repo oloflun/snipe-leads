@@ -124,8 +124,8 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
   const [lage, setLage] = useState<Lage>({ fas: "laddar" });
   const vag = useArbetsvag();
 
-  const hamta = useCallback(async () => {
-    setLage({ fas: "laddar" });
+  const hamta = useCallback(async (tyst = false) => {
+    if (!tyst) setLage({ fas: "laddar" });
 
     if (demo) {
       const svar = demoOversiktSvar("/leads/prospects") as { prospects?: Prospekt[] } | undefined;
@@ -172,6 +172,14 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
 
   useEffect(() => {
     void hamta();
+  }, [hamta]);
+
+  useEffect(() => {
+    const lyssna = () => {
+      void hamta(true);
+    };
+    window.addEventListener("snipra:leads-korning-klar", lyssna);
+    return () => window.removeEventListener("snipra:leads-korning-klar", lyssna);
   }, [hamta]);
 
   // Fas 3 §4: kryssrutor + "Flytta över valda". Bara i den riktiga vyn — demot

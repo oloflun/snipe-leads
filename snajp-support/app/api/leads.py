@@ -12,7 +12,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from ..config import get_settings
+from ..config import DEFAULT_TENANT_ID, get_settings
 from ..leads.autonomy import LEVELS as AUTONOMY_LEVELS
 from ..leads.autonomy import describe as describe_autonomy
 from ..leads.autonomy import kan_aktivera_auto_send
@@ -250,7 +250,16 @@ async def create_example_prospects(
 
     Bolagen märks `origin='example'` och kan aldrig mejlas: scheduler-
     guarden slår upp kolumnen innan `provider.send()`.
+
+    Bara demotenanten (Nordlys Handel) får skapa dem. Kundprofiler och
+    Snajp Admin ska köra på riktiga bolag — exempelvägen där visade
+    färdigskrivna pitchar och såg ut som en körning.
     """
+    if tenant["tenant_id"] != DEFAULT_TENANT_ID:
+        raise HTTPException(
+            status_code=403,
+            detail="Exempelbolag finns bara i demon. Lägg till bolag ni vill träffa, eller starta en körning mot befintliga prospekt.",
+        )
     storage = request.app.state.storage
     settings_rad = await storage.get_agent_settings(tenant["tenant_id"], agent_type="leads")
     icp = dict(normalize_icp(settings_rad.get("icp")))
@@ -336,6 +345,10 @@ async def create_example_prospects(
 @router.get("/api/leads/prospects")
 async def list_prospects(request: Request, tenant: dict = Depends(require_tenant)) -> dict:
     prospects = await request.app.state.storage.list_prospects(tenant["tenant_id"])
+    # Exempelbolag syns bara hos demotenanten. Kvarlämnade rader från den
+    # gamla default-checkboxen ska inte dyka upp som "fynd" hos en kund.
+    if tenant["tenant_id"] != DEFAULT_TENANT_ID:
+        prospects = [p for p in prospects if p.get("origin") != "example"]
     return {"prospects": prospects}
 
 
@@ -1006,11 +1019,14 @@ async def start_batch_run(
     _require_live_llm()
     storage = request.app.state.storage
 
-    prospects = await storage.list_prospects(tenant["tenant_id"], limit=payload.limit)
+    prospects = await storage.list_prospects(tenant["tenant_id"], limit=payload.limit * 2)
+    if tenant["tenant_id"] != DEFAULT_TENANT_ID:
+        prospects = [p for p in prospects if p.get("origin") != "example"]
+    prospects = prospects[: payload.limit]
     if not prospects:
         raise HTTPException(
             status_code=422,
-            detail="Inga prospekt att köra på. Lägg till prospekt först.",
+            detail="Inga bolag att köra på. Lägg till bolag ni vill träffa i fältet Egna bolag.",
         )
 
     # Överskrivningarna löses ut EN gång, inte per prospekt: alla jobb i
