@@ -34,10 +34,10 @@ import { cn } from "@/lib/utils";
  *
  * ## Vägen till prospekt
  *
- * `POST /leads/runs/batch` svarar 422 om tenanten saknar prospekt. Formuläret
- * tar därför emot **egna bolag** (ett per rad) som skapas före körningen.
- * Påhittade exempelbolag med färdigskrivna pitchar finns bara på `/demo` —
- * i en kund- eller adminyta såg de ut som att körningen redan var klar.
+ * Kedjan är ICP → hitta bolag → registrera sajt → research → ev. utkast.
+ * **Egna bolag** är opt-in: namn kunden redan vet att de vill träffa. Tomt
+ * fält betyder att agenten söker. Påhittade exempelbolag med färdigskrivna
+ * pitchar finns bara på `/demo`.
  *
  * Efter `runs/batch` pollas varje `job_id` mot `/leads/jobb/{id}` (sessionen
  * avgör tenanten). Utan den loopen visades bara jobblistan, aldrig researchen.
@@ -227,29 +227,16 @@ export function LeadsRunForm({
     try {
       const overrides = byggÖverskrivningar();
       const antal = Number(limit) || 1;
-
-      // Egna bolag blir prospekt först. is_test följer med som query-parameter
-      // (Fas 2.2, migration 054): utan den landade en testkörnings egna bolag
-      // som origin='manual', omöjliga att skilja från kundens riktiga lista.
       const egna = rader(egnaBolag);
-      for (const namn of egna) {
-        setStatus(`Lägger till ${namn}…`);
-        // Ruttdelen hålls som en REN literal (inte template) — rotvakten
-        // tests/test_leads_ui_endpoints.py läser vägarna med regex och ska
-        // kunna matcha den mot backendens routelista.
-        await anropa("/leads/prospects" + (isTest ? "?is_test=true" : ""), {
-          method: "POST",
-          body: JSON.stringify({ company_name: namn })
-        });
-      }
 
-      setStatus("Startar körningen…");
+      setStatus(egna.length ? "Startar körningen…" : "Letar bolag som matchar målgruppen…");
       const resultat = await anropa<LeadsSvar>("/leads/runs/batch", {
         method: "POST",
         body: JSON.stringify({
           limit: antal,
           scope,
           is_test: isTest,
+          company_names: egna,
           ...(overrides ? { overrides } : {})
         })
       });
@@ -334,12 +321,12 @@ export function LeadsRunForm({
             <input type="number" min={0} value={maxAnst} onChange={(e) => setMaxAnst(e.target.value)} className={fältklass} />
           </Rad>
         </div>
-        <Rad etikett="Egna bolag" hint="ett per rad — bolag ni själva vill träffa">
+        <Rad etikett="Egna bolag" hint="valfritt — ett per rad. Tomt = agenten letar">
           <textarea
             value={egnaBolag}
             onChange={(e) => setEgnaBolag(e.target.value)}
             rows={3}
-            placeholder={"Byggkompaniet Syd AB\nNordvik Fastigheter"}
+            placeholder="Lämna tomt så letar agenten upp bolag som matchar fälten ovan"
             className={cn(fältklass, "resize-y")}
           />
         </Rad>

@@ -58,10 +58,11 @@ def test_formularet_anropar_minst_de_tre_stegen():
     # det vanligaste sättet för ett statiskt test att sluta betyda något.
     vagar = _ui_vagar()
 
-    assert "/leads/prospects" in vagar
     assert "/leads/runs/batch" in vagar
     assert "/leads/jobb/" in "".join(vagar) or any(v.startswith("/leads/jobb/") for v in vagar)
     assert "/leads/prospects/exempel" not in vagar
+    # Egna bolag skickas i batchkroppen (company_names), inte som egna POST:ar
+    # före körningen — det plockade in gamla rader ur registret.
 
 
 #: Next-routes som proxar till en annan FastAPI-väg än sin egen sökväg.

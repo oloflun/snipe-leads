@@ -152,6 +152,11 @@ class LeadsBatchRequest(BaseModel):
     #: skilja från riktig volym, och hälsobedömningen ljuger.
     is_test: bool = False
 
+    #: Bolag kunden själv vill träffa — en funktion, inte kedjan. Tom lista
+    #: betyder att agenten ska HITTA bolag som matchar ICP:t. Namnen här blir
+    #: prospekt i DEN här körningen; gamla rader i registret blandas inte in.
+    company_names: list[str] = Field(default_factory=list, max_length=50)
+
 
 class ProspectPatchRequest(BaseModel):
     status: str | None = None

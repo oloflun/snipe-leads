@@ -1,5 +1,13 @@
 # Snipra Status
 
+## 2026-08-31 (sen kväll) — Grok — leads-kedjan hittar bolag
+
+Körningen krävde ifyllda namn i Egna bolag (422), behandlade "Inget, hitta
+själv" som bolagsnamn, plockade gamla rader ur registret och skrev inget
+utkast trots "Research och utkast". Nu: ICP → sök (Gemini + Google) →
+registrera bolagets egen sajt → research → utkast. Egna bolag är valfritt.
+Placeholder säger det.
+
 ## 2026-08-31 (kväll) — Grok — testmail isolerade, flytta-formulär, byt kund, pushat
 
 Kvarvarande punkter från morgonens plan: is_test på inkorg/ärenden (migration

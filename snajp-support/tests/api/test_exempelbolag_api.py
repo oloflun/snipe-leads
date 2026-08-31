@@ -186,7 +186,7 @@ async def test_testkorningen_startar_pa_de_inladdade_bolagen(live_llm, monkeypat
                 "/api/leads/runs/batch", headers=DEMO, json={"limit": 3, "is_test": True}
             )
             assert tom.status_code == 422
-            assert "Inga bolag att köra på" in tom.json()["detail"]
+            assert "söker" in tom.json()["detail"].lower() or "egna bolag" in tom.json()["detail"].lower()
 
             body = await _ladda_exempelbolag(client, limit=3)
             exempel_id = {p["id"] for p in body["created"]}

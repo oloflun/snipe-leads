@@ -8,6 +8,8 @@ så att Fas B/C kan köra på det som finns i stället för att dödlåsa sig.
 """
 
 import asyncio
+import json
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -18,9 +20,23 @@ from ..leads.autonomy import describe as describe_autonomy
 from ..leads.autonomy import kan_aktivera_auto_send
 from ..leads.autonomy import normalize as normalize_autonomy
 from ..leads.befordran import saknade_falt
-from ..leads.business_context import ar_ifyllt as business_context_ar_ifyllt
+from ..leads.business_context import (
+    MissingBusinessContextError,
+    ar_ifyllt as business_context_ar_ifyllt,
+)
 from ..leads.exempelbolag import bygg_exempelbolag
-from ..leads.context_pack import build_context_pack, materialize_product_marketing
+from ..leads.context_pack import (
+    _med_overrides,
+    build_context_pack,
+    materialize_product_marketing,
+)
+from ..leads.discovery import (
+    DiscoveryError,
+    LAGLIG_GRUND_EGEN_WEBB,
+    hitta_bolag,
+    sla_upp_webbplats,
+    webbplats_ar_bolagets,
+)
 from ..leads.geo import beskriv_region, kanda_regioner
 from ..leads.icp import (
     MAX_PROSPECTS_TAK,
@@ -53,6 +69,7 @@ from .schemas import (
 )
 
 router = APIRouter()
+logger = logging.getLogger("snajp-support.leads")
 
 
 #: Etiketter affärskontexten är skriven med. Onboardingen bygger `product` som
@@ -1095,11 +1112,128 @@ async def patch_prospect(
     return {"prospect": updated}
 
 
+async def _registrera_webb(storage, tenant_id: str, prospect_id: str, website: str) -> None:
+    if not webbplats_ar_bolagets(website):
+        return
+    try:
+        await storage.create_prospect_source(
+            tenant_id,
+            prospect_id=prospect_id,
+            source_url=website,
+            source_type="company_website",
+            lawful_basis=LAGLIG_GRUND_EGEN_WEBB,
+        )
+    except Exception:  # noqa: BLE001 — dublett eller grind får inte fälla körningen
+        logger.exception("Kunde inte registrera källa för %s", prospect_id)
+
+
+async def _samla_korningens_prospekt(
+    storage,
+    tenant: dict,
+    payload: LeadsBatchRequest,
+) -> list[dict]:
+    """Prospekten DEN HÄR körningen ska researcha — inte registret i stort.
+
+    Egna namn är opt-in. Resten hittas mot ICP:t. Gamla rader (E2E-fixturer,
+    förra testet) blandas inte in.
+    """
+    tenant_id = tenant["tenant_id"]
+    origin_namn = "test" if payload.is_test else "manual"
+    origin_fynd = "test" if payload.is_test else "import"
+    overrides = (
+        payload.overrides.model_dump(exclude_none=True)
+        if payload.overrides and payload.overrides.har_nagot()
+        else None
+    )
+    settings = await storage.get_agent_settings(tenant_id, agent_type="leads")
+    icp = normalize_icp(_med_overrides(settings.get("icp"), overrides) or {})
+
+    namn = [n.strip() for n in payload.company_names if n and n.strip()]
+    skapade: list[dict] = []
+    geo = (icp.get("geography") or [None])[0]
+
+    for bolagsnamn in namn[: payload.limit]:
+        prospect = await storage.create_prospect(
+            tenant_id,
+            company_name=bolagsnamn,
+            origin=origin_namn,
+        )
+        webb = await sla_upp_webbplats(bolagsnamn, geografi=geo)
+        if webb:
+            uppdaterad = await storage.update_prospect(
+                tenant_id, prospect["id"], website=webb
+            )
+            if uppdaterad:
+                prospect = uppdaterad
+            await _registrera_webb(storage, tenant_id, prospect["id"], webb)
+        skapade.append(prospect)
+
+    saknas = payload.limit - len(skapade)
+    if saknas > 0 and tenant_id == DEFAULT_TENANT_ID:
+        # /demo: exempelbolag som redan laddats. Inte en sökväg för riktiga konton.
+        befintliga = await storage.list_prospects(tenant_id, limit=payload.limit * 2)
+        exempel = [p for p in befintliga if p.get("origin") == "example"][:saknas]
+        skapade.extend(exempel)
+        saknas = payload.limit - len(skapade)
+
+    if saknas > 0:
+        har_malgrupp = bool(
+            icp.get("industries") or icp.get("geography") or icp.get("must_have") or icp.get("sni_codes")
+        )
+        if not har_malgrupp and not skapade:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Beskriv vilka bolag ni söker (bransch eller region) så agenten "
+                    "kan leta, eller fyll i bolag ni själva vill träffa."
+                ),
+            )
+        if har_malgrupp:
+            try:
+                fynd = await hitta_bolag(
+                    icp,
+                    saknas,
+                    uteslut_namn={p["company_name"] for p in skapade},
+                )
+            except DiscoveryError as fel:
+                if not skapade:
+                    raise HTTPException(
+                        status_code=503,
+                        detail="Kunde inte söka efter bolag just nu. Försök igen, eller fyll i Egna bolag.",
+                    ) from fel
+                fynd = []
+            for bolag in fynd:
+                prospect = await storage.create_prospect(
+                    tenant_id,
+                    company_name=bolag["company_name"],
+                    contact_email=bolag.get("contact_email"),
+                    origin=origin_fynd,
+                    profil={
+                        k: bolag[k]
+                        for k in ("orgnr", "website", "ort", "anstallda")
+                        if bolag.get(k) is not None
+                    },
+                )
+                if bolag.get("website"):
+                    await _registrera_webb(storage, tenant_id, prospect["id"], bolag["website"])
+                skapade.append(prospect)
+
+    if not skapade:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Inga bolag hittades som matchar målgruppen. Prova en bredare "
+                "bransch eller region, eller fyll i bolag ni själva vill träffa."
+            ),
+        )
+    return skapade
+
+
 @router.post("/api/leads/runs/batch", status_code=202)
 async def start_batch_run(
     request: Request, payload: LeadsBatchRequest, tenant: dict = Depends(require_tenant)
 ) -> dict:
-    """Startar en körning över N prospekt.
+    """Startar en körning: hitta bolag (om inga namn gavs), researcha, ev. utkast.
 
     En jobbrad PER PROSPEKT, inte en för hela batchen: ett prospekt med en död
     skrapkälla ska inte fälla de andra nitton, och en enda jobbrad hade gjort
@@ -1108,15 +1242,7 @@ async def start_batch_run(
     _require_live_llm()
     storage = request.app.state.storage
 
-    prospects = await storage.list_prospects(tenant["tenant_id"], limit=payload.limit * 2)
-    if tenant["tenant_id"] != DEFAULT_TENANT_ID:
-        prospects = [p for p in prospects if p.get("origin") != "example"]
-    prospects = prospects[: payload.limit]
-    if not prospects:
-        raise HTTPException(
-            status_code=422,
-            detail="Inga bolag att köra på. Lägg till bolag ni vill träffa i fältet Egna bolag.",
-        )
+    prospects = await _samla_korningens_prospekt(storage, tenant, payload)
 
     # Överskrivningarna löses ut EN gång, inte per prospekt: alla jobb i
     # batchen ska köra mot samma målgrupp, annars går utfallet inte att jämföra.
@@ -1209,13 +1335,51 @@ async def _run_batch_prospect(
         result["prospect_id"] = prospect_id
 
         if scope == "research_and_draft":
-            # Utkastet skrivs i samma jobb men KÖAS enligt autonominivån —
-            # batchen ger aldrig agenten mer befogenhet än den enskilda
-            # körningen gör.
-            result["draft_note"] = (
-                "Utkast skrivs av /api/leads/outreach/draft när tråden finns. "
-                "Batchen researchar; utkastet kräver ett thread_id."
-            )
+            prospect = await storage.get_prospect(tenant["tenant_id"], prospect_id) or {}
+            email = prospect.get("contact_email")
+            if not email:
+                result["draft_note"] = (
+                    "Research klar. Inget utkast: ingen e-postadress hittades "
+                    "på bolagets sajt."
+                )
+            else:
+                try:
+                    from ..agent.leads_agent import run_outreach_draft
+                    from ..leads.business_context import require_business_context
+
+                    offer = await require_business_context(storage, tenant["tenant_id"])
+                    thread = await storage.ensure_outreach_thread(
+                        tenant["tenant_id"], prospect_id=prospect_id
+                    )
+                    sammanfattning = json.dumps(
+                        {
+                            "company_summary": result.get("company_summary"),
+                            "qualified": result.get("qualified"),
+                            "likely_pains": result.get("likely_pains"),
+                        },
+                        ensure_ascii=False,
+                    )
+                    draft = await run_outreach_draft(
+                        storage,
+                        tenant["tenant_id"],
+                        thread_id=thread["id"],
+                        prospect_email=email,
+                        tenant_name=tenant["tenant_name"],
+                        company_name=prospect.get("company_name") or "",
+                        offer_summary=offer[:2000],
+                        context_pack=context_pack,
+                        brief="",
+                        research_summary=sammanfattning,
+                        is_test=is_test,
+                    )
+                    result["draft"] = {
+                        "subject": draft.get("subject"),
+                        "queued": True,
+                    }
+                except MissingBusinessContextError as fel:
+                    result["draft_note"] = str(fel)
+                except Exception as fel:  # noqa: BLE001 — researchen är klar, utkastet är bonus
+                    result["draft_note"] = f"Research klar, utkastet kunde inte skrivas: {fel}"
 
         await app_state.jobs.complete(job_id, result)
     except Exception as error:  # noqa: BLE001 — ett trasigt prospekt fäller inte batchen
