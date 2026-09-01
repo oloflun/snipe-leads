@@ -139,7 +139,10 @@ export function LeadsSnabbsok({ isTest = false }: { isTest?: boolean }) {
           onChange={(e) => setFråga(e.target.value)}
           placeholder="T.ex. byggbolag i Skåne som saknar chattsupport"
           aria-label="Vilka kunder behöver du, och till vilken produkt?"
-          className="min-w-0 flex-1 rounded-input border border-ink/15 bg-paper px-3 py-2 text-[15px] focus-ring"
+          // min-w-[180px] och inte min-w-0: med noll krymper fältet till en
+          // springa bredvid knappen på 320px-skärmar. Med ett golv radbryts
+          // knappen (flex-wrap på formen) och fältet förblir skrivbart.
+          className="min-w-[180px] flex-1 rounded-input border border-ink/15 bg-paper px-3 py-2 text-[15px] focus-ring"
         />
         <button type="submit" disabled={busy || !fråga.trim()} className={cn(btnPrimary)}>
           {busy ? "Söker…" : "Sök Leads"}
@@ -173,7 +176,7 @@ export function LeadsSnabbsok({ isTest = false }: { isTest?: boolean }) {
                 <span className="text-[15px] font-medium">{lead.company_name}</span>
                 {lead.ort ? <span className="text-[13px] text-ink/55">{lead.ort}</span> : null}
               </div>
-              <p className="mt-1 text-[13px] leading-5 text-mineral">
+              <p className="mt-1 break-words text-[13px] leading-5 text-mineral">
                 {lead.contact_name ? (
                   <>
                     {lead.contact_name}
