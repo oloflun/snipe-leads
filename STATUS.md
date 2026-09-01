@@ -1,5 +1,33 @@
 # Snipra Status
 
+## 2026-09-01 — Claude/Sebbe — UTSKICKEN FUNGERAR. Sista sändblockeraren avförd.
+
+Ett riktigt mejl gick från Railway-containern hela vägen till inkorgen:
+`Snajp <kontakt@snajp.se>` -> snajpsupport@gmail.com, status **delivered**
+i Resend. Egen domän, DKIM-signerat, via HTTPS.
+
+Vägen dit, för den som möter samma vägg igen:
+* Railway blockerar utgående SMTP på Free/Trial/Hobby (mätt inifrån
+  containern med `GET /api/admin/sandvag`: 587/465/2525 ger alla timeout).
+  Gmail-app-lösenord kan alltså aldrig fungera här. Samma vägg som Render
+  gav 2026-07-30.
+* Lösningen är HTTPS via Resend (`ResendMailer`, väljs av RESEND_API_KEY och
+  går före SMTP). snajp.se är verifierad i **eu-west-1** — EU-regionen valdes
+  medvetet, samma dataskyddsresonemang som fällde DeepSeek.
+* DNS hos Loopia: DKIM-TXT på `resend._domainkey`, CNAME `send` och `rsend`,
+  TXT `_dmarc`. Apex orörd — MX:en dit `kontakt@snajp.se` pekar.
+* Två falska spår kostade tid: negativ DNS-cache hos Google (jag slog upp
+  posterna innan de fanns), och en API-nyckel som var sändnings-begränsad
+  och därför inte kunde se att domänen var verifierad.
+
+**Verifiera själv:** `POST /api/admin/sandvag/prov?till=<adress>` (master-nyckel).
+
+**Kvar på sändsidan:** godkänt supportsvar genom hela flödet är ännu inte
+kört mot ett RIKTIGT inkommande mejl — testmejl (provider='mock') skickas
+aldrig med flit, och IMAP är inte kopplat, så det finns inga riktiga att
+godkänna än. Koden är enhetstestad; kedjan är bevisad till och med Resend.
+Produktionen (`main`) har INGA mejlvariabler satta — den är orörd.
+
 ## 2026-08-31 (eftermiddag) — Grok — Starta körning dog på timeout
 
 Anton tryckte Starta körning (tomma Egna bolag) och fick "Kunde inte nå
