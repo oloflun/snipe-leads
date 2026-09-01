@@ -404,6 +404,18 @@ async def health_ready(response: Response) -> dict:
     sandvag = get_send_provider()
     if isinstance(sandvag, ResendMailer):
         logger.info("Sändväg: Resend (HTTPS) — SMTP-blockeringen berör oss inte.")
+        # En Resend-nyckel UTAN avsändaradress är en sändväg som ser
+        # konfigurerad ut och 400:ar på varje utskick: ResendMailer faller
+        # tillbaka på tom sträng när varken SMTP_FROM eller SMTP_USER är
+        # satt (se get_send_provider). Uppmätt 2026-09-01: main/api hade
+        # ingen av dem, så att bara kopiera nyckeln dit hade gjort
+        # varningen tyst utan att göra sändvägen verklig.
+        if not sandvag.avsandare:
+            warnings.append(
+                "Resend-nyckel satt men ingen avsändaradress (SMTP_FROM) — "
+                "varje utskick avvisas. Sätt SMTP_FROM till en adress på en "
+                "domän som är verifierad hos Resend."
+            )
     if isinstance(sandvag, DryRunMailer):
         warnings.append(
             "Torrkörningsläge (SNAJP_OUTBOX_DIR) — mejl skrivs till fil, "
