@@ -22,6 +22,7 @@ import asyncpg
 from .base import (
     ANALYTICS_COVERAGE,
     KUNDDATA_FALT,
+    LEADS_BUDGET_AGENT_TYPES,
     bk_belopp,
     bk_datum,
     kontrollera_bk_balans,
@@ -1519,6 +1520,63 @@ class PostgresStorage:
         #
         # Två fel som gömde varandra: det ena gjorde det andra osynligt.
         return [_avkoda_jsonb(_row(r), "step_log", "grounding") for r in records]
+
+    # -- Leads-jobbens liggare (INV-JOB-002, migration 059) -----------------
+
+    async def set_leads_job_status(
+        self,
+        tenant_id: str,
+        *,
+        job_id: str,
+        status: str,
+        scope: str = "research",
+        prospect_id: str | None = None,
+    ) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                """
+                insert into leads_job_ledger (job_id, tenant_id, prospect_id, scope, status)
+                values ($1, $2, $3, $4, $5)
+                on conflict (job_id) do update set
+                  status = excluded.status,
+                  completed_at = case
+                    when excluded.status in ('completed', 'failed') then now()
+                    else leads_job_ledger.completed_at
+                  end
+                """,
+                job_id,
+                tenant_id,
+                prospect_id,
+                scope,
+                status,
+            )
+
+    async def get_leads_job_status(self, tenant_id: str, job_id: str) -> str | None:
+        async with self._scoped(tenant_id) as conn:
+            return await conn.fetchval(
+                "select status from leads_job_ledger where job_id = $1 and tenant_id = $2",
+                job_id,
+                tenant_id,
+            )
+
+    async def sum_leads_tokens(self, tenant_id: str, *, hours: int = 24) -> int:
+        async with self._scoped(tenant_id) as conn:
+            # is_test filtreras MEDVETET inte bort: testkörningar kostar
+            # samma pengar hos leverantören som skarpa. Indexet i migration
+            # 059 (tenant_id, agent_type, created_at) bär frågan.
+            summa = await conn.fetchval(
+                """
+                select coalesce(sum(tokens_in + tokens_out), 0)
+                from agent_runs
+                where tenant_id = $1
+                  and agent_type = any($2::text[])
+                  and created_at > now() - make_interval(hours => $3)
+                """,
+                tenant_id,
+                list(LEADS_BUDGET_AGENT_TYPES),
+                hours,
+            )
+        return int(summa or 0)
 
     async def weekly_analytics(self, tenant_id: str, *, weeks: int = 8) -> dict[str, Any]:
         # Se protokollet i base.py för varför `coverage` finns.

@@ -641,7 +641,17 @@ async def run_research_step(
     is_test: bool = False,
     skatteverket: SkatteverketAtkomst | None = None,
 ) -> dict[str, Any]:
-    """Fas B för ETT prospekt: åtta skill-steg, ett LLM-anrop vardera."""
+    """Fas B för ETT prospekt: upp till åtta skill-steg, ett LLM-anrop vardera.
+
+    "Upp till" sedan 2026-09-02: efter steg 2 (ICP-kvalificeringen) står en
+    grind. Ett prospekt som inte kvalificerar mot kundens ICP, eller som
+    saknar varje kontaktväg efter kontaktuppgraderingen, får INTE de sex
+    återstående stegen — konkurrensanalys och erbjudandekonstruktion för ett
+    bolag som aldrig ska kontaktas är rena kostnaden utan kvalitetsvinst.
+    Kunskapsfångsten körs ÄVEN för stoppade varv (ett diskvalificerat
+    prospekt lär mest om var ICP:n går fel), så ett stoppat varv kostar
+    3 anrop i stället för 9. Se `stopped_early` i returvärdet.
+    """
     started = time.monotonic()
     settings = get_settings()
     steps = RESEARCH_V1.steps  # indexerat, inte per namn — ordningen ÄR playbooken
@@ -730,63 +740,114 @@ async def run_research_step(
         f"\n\n## Steg 1 (mk:customer-research)\n{_digest(customer, 'company_summary', 'business_model', 'likely_pains', 'existing_support_channels', 'has_chatbot')}",
     )
 
-    # 3. sa:account-research — kontostruktur, beslutsvägar, triggers
-    account = await step(
-        2,
-        "Kartlägg kontot. Returnera JSON: account_structure (svenska), "
-        "likely_decision_makers (lista med roller, INTE namngivna privatpersoner), "
-        "trigger_events (lista, endast sådant källmaterialet faktiskt visar), "
-        "open_questions (lista).",
-        f"\n\n## Steg 2 (mk:prospecting)\n{_digest(prospecting, 'icp_fit', 'qualified', 'qualification_reasoning')}",
+    # GRINDEN (2026-09-02, kundkrav: nischning + kontaktperson). Två villkor,
+    # båda kod-härledda — `qualified` är visserligen modellens bedömning, men
+    # den mäts mot kundens EGEN ICP, och `slutlig_kontaktniva` kommer ur
+    # _uppgradera_kontakt som bara skriver vad som bokstavligen stod i
+    # skrapet. Faller något av dem hoppar varvet över steg 3–8: sex anrop
+    # för ett bolag som ändå aldrig kontaktas. Kunden kan komplettera
+    # kontakten i registret och köra "Processa om" — då passerar grinden.
+    kvalificerad = bool(prospecting.get("qualified"))
+    # Kontaktväg = nivå ELLER något konkret kontaktfält på raden. Nivåfältet
+    # ensamt räcker inte som mått: en rad där kunden själv fyllt i
+    # contact_email (PATCH/befordran sätter aldrig contact_level) hade annars
+    # räknats som kontaktlös och stoppats — trots att den har exakt det
+    # utkastfasen behöver. Läses EFTER _uppgradera_kontakt, så ett fynd ur
+    # skrapet räknas med.
+    rad_efter_uppgradering = await storage.get_prospect(tenant_id, prospect_id) or prospect_row
+    kontakt_saknas = not (
+        slutlig_kontaktniva
+        or rad_efter_uppgradering.get("contact_email")
+        or rad_efter_uppgradering.get("contact_name")
+        or rad_efter_uppgradering.get("contact_form_url")
     )
+    if not kvalificerad:
+        stopped_early: str | None = "ej_kvalificerad"
+    elif kontakt_saknas:
+        stopped_early = "kontakt_saknas"
+    else:
+        stopped_early = None
 
-    # 4. mk:competitor-profiling — dossiern (A1: FÖRE mk:competitors)
-    profiling = await step(
-        3,
-        "Profilera konkurrenslandskapet prospektet befinner sig i. Returnera JSON: "
-        "competitors (lista med objekt {name, positioning}), "
-        "prospect_positioning (svenska), differentiation_gaps (lista). "
-        "Markera tydligt vad som är slutsats och vad som står i källmaterialet.",
-        f"\n\n## Steg 3 (sa:account-research)\n{_digest(account, 'account_structure', 'trigger_events')}",
-    )
+    # Migration 024 skrevs för exakt det här: bedömningen SPARAS på raden i
+    # stället för att bara ligga i en logg. Utan den går prospekt inte att
+    # sortera på icp_fit, och en för snäv ICP ser ut som en tom pipeline.
+    try:
+        icp_fit_varde = prospecting.get("icp_fit")
+        await storage.update_prospect(
+            tenant_id,
+            prospect_id,
+            icp_fit=float(icp_fit_varde) if icp_fit_varde is not None else None,
+            qualified=kvalificerad,
+            disqualifiers=[str(d) for d in (prospecting.get("disqualifiers") or [])],
+        )
+    except Exception:  # noqa: BLE001 — persistensen är bokföring, researchen är jobbet
+        logger.exception("Kunde inte spara ICP-bedömningen för prospekt %s", prospect_id)
 
-    # 5. mk:competitors — jämförelsematerialet som dossiern formar
-    competitors = await step(
-        4,
-        "Forma jämförelsematerial för säljsamtalet. Returnera JSON: "
-        "comparison_angles (lista), where_we_win (svenska), where_we_lose (svenska), "
-        "honest_caveats (lista). Överdriv aldrig — en falsk fördel kostar affären senare.",
-        f"\n\n## Steg 4 (mk:competitor-profiling)\n{_digest(profiling, 'competitors', 'prospect_positioning', 'differentiation_gaps')}",
-    )
+    account: dict[str, Any] = {}
+    profiling: dict[str, Any] = {}
+    competitors: dict[str, Any] = {}
+    objections: dict[str, Any] = {}
+    offer: dict[str, Any] = {}
+    ab: dict[str, Any] = {}
 
-    # 6. mk:sales-enablement (SKOPAD: invändningar, Del I)
-    objections = await step(
-        5,
-        "Ta fram invändningshanteringen för ETT KALLT MEJL — inte pitchdeck, inte "
-        "demoskript. Returnera JSON: likely_objections (lista med objekt "
-        "{objection, response}), hardest_objection (svenska), "
-        "what_would_disqualify_us (svenska).",
-        f"\n\n## Steg 5 (mk:competitors)\n{_digest(competitors, 'comparison_angles', 'where_we_win', 'honest_caveats')}",
-    )
+    if stopped_early is None:
+        # 3. sa:account-research — kontostruktur, beslutsvägar, triggers
+        account = await step(
+            2,
+            "Kartlägg kontot. Returnera JSON: account_structure (svenska), "
+            "likely_decision_makers (lista med roller, INTE namngivna privatpersoner), "
+            "trigger_events (lista, endast sådant källmaterialet faktiskt visar), "
+            "open_questions (lista).",
+            f"\n\n## Steg 2 (mk:prospecting)\n{_digest(prospecting, 'icp_fit', 'qualified', 'qualification_reasoning')}",
+        )
 
-    # 7. mk:offers — erbjudandekonstruktionen (hel skill, Del H)
-    offer = await step(
-        6,
-        "Konstruera erbjudandet till det här prospektet. Returnera JSON: offer "
-        "(objekt {name, promise, proof, risk_reversal, cta}), weakest_lever "
-        "(vilken av spakarna som är svagast och varför, svenska), "
-        "offer_reasoning (svenska).",
-        f"\n\n## Steg 6 (mk:sales-enablement)\n{_digest(objections, 'likely_objections', 'hardest_objection')}",
-    )
+        # 4. mk:competitor-profiling — dossiern (A1: FÖRE mk:competitors)
+        profiling = await step(
+            3,
+            "Profilera konkurrenslandskapet prospektet befinner sig i. Returnera JSON: "
+            "competitors (lista med objekt {name, positioning}), "
+            "prospect_positioning (svenska), differentiation_gaps (lista). "
+            "Markera tydligt vad som är slutsats och vad som står i källmaterialet.",
+            f"\n\n## Steg 3 (sa:account-research)\n{_digest(account, 'account_structure', 'trigger_events')}",
+        )
 
-    # 8. mk:ab-testing — erbjudandenivå + explicit osäkerhet (A3)
-    ab = await step(
-        7,
-        "Bedöm hur säkert erbjudandet är och vad som borde testas. Returnera JSON: "
-        "offer_confidence (0.0-1.0), uncertainties (lista), test_recommendation "
-        "(svenska), recommended_variants (lista med korta beskrivningar).",
-        f"\n\n## Steg 7 (mk:offers)\n{_digest(offer, 'offer', 'weakest_lever')}",
-    )
+        # 5. mk:competitors — jämförelsematerialet som dossiern formar
+        competitors = await step(
+            4,
+            "Forma jämförelsematerial för säljsamtalet. Returnera JSON: "
+            "comparison_angles (lista), where_we_win (svenska), where_we_lose (svenska), "
+            "honest_caveats (lista). Överdriv aldrig — en falsk fördel kostar affären senare.",
+            f"\n\n## Steg 4 (mk:competitor-profiling)\n{_digest(profiling, 'competitors', 'prospect_positioning', 'differentiation_gaps')}",
+        )
+
+        # 6. mk:sales-enablement (SKOPAD: invändningar, Del I)
+        objections = await step(
+            5,
+            "Ta fram invändningshanteringen för ETT KALLT MEJL — inte pitchdeck, inte "
+            "demoskript. Returnera JSON: likely_objections (lista med objekt "
+            "{objection, response}), hardest_objection (svenska), "
+            "what_would_disqualify_us (svenska).",
+            f"\n\n## Steg 5 (mk:competitors)\n{_digest(competitors, 'comparison_angles', 'where_we_win', 'honest_caveats')}",
+        )
+
+        # 7. mk:offers — erbjudandekonstruktionen (hel skill, Del H)
+        offer = await step(
+            6,
+            "Konstruera erbjudandet till det här prospektet. Returnera JSON: offer "
+            "(objekt {name, promise, proof, risk_reversal, cta}), weakest_lever "
+            "(vilken av spakarna som är svagast och varför, svenska), "
+            "offer_reasoning (svenska).",
+            f"\n\n## Steg 6 (mk:sales-enablement)\n{_digest(objections, 'likely_objections', 'hardest_objection')}",
+        )
+
+        # 8. mk:ab-testing — erbjudandenivå + explicit osäkerhet (A3)
+        ab = await step(
+            7,
+            "Bedöm hur säkert erbjudandet är och vad som borde testas. Returnera JSON: "
+            "offer_confidence (0.0-1.0), uncertainties (lista), test_recommendation "
+            "(svenska), recommended_variants (lista med korta beskrivningar).",
+            f"\n\n## Steg 7 (mk:offers)\n{_digest(offer, 'offer', 'weakest_lever')}",
+        )
 
     # 9. Kunskapsfångst — vad varvet lärde oss som kontextpaketet inte bar.
     #
@@ -889,7 +950,7 @@ async def run_research_step(
     # stod i det skrapade materialet) — aldrig modelltext, så det här fältet
     # kan inte råka bära en gissning. contact_missing_reason förklarar VAR i
     # kedjan sökningen gav upp, helt utan att någon behöver läsa loggen.
-    contact_missing = not slutlig_kontaktniva
+    contact_missing = kontakt_saknas
     if not contact_missing:
         contact_missing_reason = None
     elif not kontakt_diagnostik["hemsidematerial_tillgangligt"]:
@@ -918,8 +979,9 @@ async def run_research_step(
         "step_outputs": trace.as_full(),
         "escalated_steps": escalated_steps,
         "kunskap": kunskap,
-        "qualified": bool(prospecting.get("qualified")),
+        "qualified": kvalificerad,
         "icp_fit": prospecting.get("icp_fit"),
+        "stopped_early": stopped_early,
         "offer_summary": offer_summary,
         "final_output": final_output,
         "contact_level": slutlig_kontaktniva,

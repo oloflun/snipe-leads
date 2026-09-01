@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { LeadsRunForm } from "@/components/leads/LeadsRunForm";
+import { LeadsSnabbsok } from "@/components/leads/LeadsSnabbsok";
 import { btnSecondary } from "@/components/ui";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
@@ -97,19 +98,25 @@ export function Testkorningar() {
       </p>
 
       {/* -------------------------------------------------- LEADS */}
+      {/* Två kolumner på bred skärm: körningsformuläret till vänster (capat
+          760px sedan tidigare), snabbsökpanelen i ytan till höger som förut
+          stod tom. På smalare skärmar staplas panelen under formuläret. */}
       <section className="border-t border-ink/15 pt-8">
-        <LeadsRunForm
-          isTest
-          rubrik={
-            <>
-              <h2 className="font-display text-2xl tracking-[-0.02em]">Leads-agenten</h2>
-              <p className="mt-2 max-w-[65ch] text-[15px] text-mineral">
-                Kör research över prospekten. Lämna ett fält tomt för att använda arbetsytans
-                sparade värde.
-              </p>
-            </>
-          }
-        />
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,760px)_minmax(320px,1fr)] lg:items-start">
+          <LeadsRunForm
+            isTest
+            rubrik={
+              <>
+                <h2 className="font-display text-2xl tracking-[-0.02em]">Leads-agenten</h2>
+                <p className="mt-2 max-w-[65ch] text-[15px] text-mineral">
+                  Kör research över prospekten. Lämna ett fält tomt för att använda arbetsytans
+                  sparade värde.
+                </p>
+              </>
+            }
+          />
+          <LeadsSnabbsok isTest />
+        </div>
       </section>
 
       {/* ------------------------------------------------ SUPPORT */}

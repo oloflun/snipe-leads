@@ -51,6 +51,11 @@ class _Jobb:
     def __init__(self):
         self.klart = {}
         self.fel = {}
+        self.startade = []
+
+    async def start(self, job_id):
+        # INV-JOB-002: arbetsstarten flyttar 300-sekundersklockan.
+        self.startade.append(job_id)
 
     async def complete(self, job_id, result):
         self.klart[job_id] = result
@@ -61,6 +66,13 @@ class _Jobb:
 
 class _Tillstand:
     def __init__(self, storage, jobs):
+        # storage=None ersätts med en riktig MemoryStorage: sedan INV-JOB-002
+        # skriver _run_batch_prospect leads_job_ledger via storage — liggaren
+        # är en del av kodvägen som testas, inte en detalj att stubba bort.
+        if storage is None:
+            from app.storage.memory import MemoryStorage
+
+            storage = MemoryStorage()
         self.storage = storage
         self.jobs = jobs
 

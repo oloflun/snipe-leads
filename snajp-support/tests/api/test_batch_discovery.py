@@ -184,3 +184,64 @@ async def test_egna_namn_blir_den_har_korningens_prospekt(live_llm, monkeypatch)
             assert p["company_name"] == "Acme Verktyg AB"
             assert p["website"] == "https://acme.se"
             assert p["origin"] == "test"
+
+@pytest.mark.anyio
+async def test_scope_sok_stannar_efter_sokningen_och_koar_ingen_research(live_llm, monkeypatch):
+    """Snabbsökningen (scope=sok, 2026-09-02): EN sökning, inga researchjobb.
+
+    Kundkravet "kontaktperson vid funnet lead" avgör listan: en träff utan
+    någon kontaktväg alls listas inte som färdigt lead utan räknas i
+    `utan_kontakt` — raden finns kvar i registret för komplettering."""
+    startade: list[str] = []
+
+    async def _spion(state, job_id, tenant, *, prospect_id, scope, overrides, is_test=False):
+        startade.append(prospect_id)
+
+    async def _fynd(icp, antal, *, uteslut_namn=None):
+        return [
+            {
+                "company_name": "Snabbfynd AB",
+                "website": "https://snabbfynd.se",
+                "ort": "Umeå",
+                "contact_name": "Eva Ek",
+                "contact_role": "VD",
+                "contact_email": "eva.ek@snabbfynd.se",
+                "contact_level": "named_role_match",
+            },
+            {
+                "company_name": "Kontaktlöst AB",
+                "website": "https://kontaktlost.se",
+                "ort": "Luleå",
+            },
+        ][:antal]
+
+    monkeypatch.setattr(leads_api, "_run_batch_prospect", _spion)
+    monkeypatch.setattr(leads_api, "hitta_bolag", _fynd)
+
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            svar = await client.post(
+                "/api/leads/runs/batch",
+                headers=DEMO,
+                json={
+                    "limit": 2,
+                    "is_test": True,
+                    "scope": "sok",
+                    "overrides": {"industries": ["Snabbfynd"], "geography": ["Norrland"]},
+                },
+            )
+            assert svar.status_code == 202, svar.text
+            assert svar.json()["fase"] == "soker"
+
+            klart = await _vanta_jobb(client, svar.json()["jobs"][0]["job_id"])
+            assert klart["status"] == "completed", klart
+            resultat = klart["result"]
+            assert resultat["fase"] == "klar"
+            assert resultat["count"] == 1
+            assert resultat["utan_kontakt"] == 1
+            assert "jobs" not in resultat
+            lead = resultat["prospects"][0]
+            assert lead["company_name"] == "Snabbfynd AB"
+            assert lead["contact_name"] == "Eva Ek"
+            assert lead["contact_level"] == "named_role_match"
+            assert startade == [], "scope=sok får aldrig köa research"

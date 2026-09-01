@@ -139,9 +139,14 @@ class ExempelbolagRequest(BaseModel):
 
 
 class LeadsBatchRequest(BaseModel):
-    scope: str = Field(default="research", pattern=r"^(research|research_and_draft)$")
-    # Taket på 50 är ekonomiskt, inte tekniskt: varje prospekt är åtta
-    # LLM-anrop, så en batch på 50 är 400 — exakt tenant-timtaket.
+    #: `sok` (2026-09-02) är snabbsökningens scope: EN Gemini-sökning som
+    #: hittar bolag med kontaktväg och stannar där — inga researchjobb, inga
+    #: utkast. Byggd för leads-panelen ("Sök Leads"), där hela poängen är att
+    #: få en lista på en minut till kostnaden av ett enda anrop.
+    scope: str = Field(default="research", pattern=r"^(sok|research|research_and_draft)$")
+    # Taket på 50 är ekonomiskt, inte tekniskt: varje prospekt är upp till nio
+    # LLM-anrop i research (tre om grinden efter ICP-kvalificeringen fäller),
+    # så en batch på 50 kan vara 450 — över tenant-timtaket.
     limit: int = Field(default=10, ge=1, le=50)
 
     #: Överskrivningar för just den här körningen. Se LeadsRunOverrides.

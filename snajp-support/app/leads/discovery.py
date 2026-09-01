@@ -348,6 +348,30 @@ def _icp_som_text(icp: dict[str, Any]) -> str:
         varde = icp.get(nyckel) or []
         if varde:
             rader.append(f"- {etikett}: {', '.join(str(v) for v in varde)}")
+    # De strukturerade fälten (DEL 1.1) saknades här fram till 2026-09-02:
+    # en kund som fyllt i ENBART SNI-koder eller regioner fick starta en
+    # körning (`_har_sokbar_malgrupp` godkänner sni_codes), men sökprompten
+    # sa "(ingen malgrupp ifylld)" — Gemini letade brett över hela webben i
+    # stället för i kundens nisch. Nischningen ÄR själva besparingen: en
+    # träff utanför målgruppen kostar hela researchvarvet innan grinden
+    # fäller den.
+    if icp.get("geo"):
+        rader.append(
+            "- Geografiskt omrade: " + "; ".join(beskriv_region(n) for n in icp["geo"])
+        )
+    if icp.get("sni_codes"):
+        rader.append(
+            "- Branschkoder (SNI): " + "; ".join(beskriv_kod(k) for k in icp["sni_codes"])
+        )
+    if icp.get("exclude_sni"):
+        rader.append(
+            "- Branschkoder att UNDANTA: "
+            + "; ".join(beskriv_kod(k) for k in icp["exclude_sni"])
+        )
+    if icp.get("exclude_domains"):
+        rader.append(
+            "- Domaner att aldrig foresla: " + ", ".join(str(d) for d in icp["exclude_domains"])
+        )
     storlek = icp.get("size") or {}
     amin = storlek.get("anstallda_min") if isinstance(storlek, dict) else icp.get("anstallda_min")
     amax = storlek.get("anstallda_max") if isinstance(storlek, dict) else icp.get("anstallda_max")

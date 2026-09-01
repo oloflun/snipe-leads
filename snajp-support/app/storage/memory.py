@@ -28,6 +28,7 @@ from .base import (
     AGENT_RUN_TYPES,
     ANALYTICS_COVERAGE,
     FEEDBACK_VERDICTS,
+    LEADS_BUDGET_AGENT_TYPES,
     bk_belopp,
     bk_datum,
     kontrollera_bk_balans,
@@ -173,6 +174,9 @@ class MemoryStorage:
         self.prospects: dict[str, list[dict[str, Any]]] = {}
         self.prospect_sources: dict[str, list[dict[str, Any]]] = {}
         self.agent_runs: dict[str, list[dict[str, Any]]] = {}
+        # Leads-jobbens liggare (INV-JOB-002, migration 059). Nycklad på
+        # job_id precis som Postgres-tabellens primärnyckel.
+        self.leads_job_ledger: dict[str, dict[str, Any]] = {}
         # Bokföring (migration 045). Filen sparas aldrig — bara sha256:n.
         self.bk_underlag: dict[str, list[dict[str, Any]]] = {}
         self.bk_verifikat: dict[str, list[dict[str, Any]]] = {}
@@ -1109,6 +1113,55 @@ class MemoryStorage:
         if agent_type:
             runs = [r for r in runs if r["agent_type"] == agent_type]
         return sorted(runs, key=lambda r: r["created_at"], reverse=True)[:limit]
+
+    # -- Leads-jobbens liggare (INV-JOB-002, migration 059) -----------------
+
+    async def set_leads_job_status(
+        self,
+        tenant_id: str,
+        *,
+        job_id: str,
+        status: str,
+        scope: str = "research",
+        prospect_id: str | None = None,
+    ) -> None:
+        # Samma värdemängd som check-villkoret i migration 059 — minnet ska
+        # kasta där Postgres kastar (samma regel som AGENT_RUN_TYPES ovan).
+        if status not in ("queued", "processing", "completed", "failed"):
+            raise ValueError(f"status={status!r} bryter mot leads_job_ledger-checken.")
+        rad = self.leads_job_ledger.setdefault(
+            job_id,
+            {
+                "job_id": job_id,
+                "tenant_id": tenant_id,
+                "prospect_id": prospect_id,
+                "scope": scope,
+                "created_at": _now(),
+                "completed_at": None,
+            },
+        )
+        rad["status"] = status
+        if status in ("completed", "failed"):
+            rad["completed_at"] = _now()
+
+    async def get_leads_job_status(self, tenant_id: str, job_id: str) -> str | None:
+        rad = self.leads_job_ledger.get(job_id)
+        if not rad or rad["tenant_id"] != tenant_id:
+            return None
+        return rad["status"]
+
+    async def sum_leads_tokens(self, tenant_id: str, *, hours: int = 24) -> int:
+        # Speglar SQL-frågan i postgres.py: leads-typerna, tidsfönster,
+        # tokens_in + tokens_out, testkörningar MEDräknade.
+        granser = datetime.now(timezone.utc) - timedelta(hours=hours)
+        total = 0
+        for r in self.agent_runs.get(tenant_id, []):
+            if r["agent_type"] not in LEADS_BUDGET_AGENT_TYPES:
+                continue
+            if datetime.fromisoformat(r["created_at"]) < granser:
+                continue
+            total += int(r.get("tokens_in") or 0) + int(r.get("tokens_out") or 0)
+        return total
 
     async def weekly_analytics(self, tenant_id: str, *, weeks: int = 8) -> dict[str, Any]:
         # Speglar SQL-varianten i postgres.py, inklusive de tomma veckorna:

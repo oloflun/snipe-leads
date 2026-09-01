@@ -42,6 +42,7 @@ from typing import Any
 
 from agents import Agent, ModelSettings, Runner
 
+from ..agentcore.instruktioner import las_instruktioner
 from ..agentcore.overlays import load_global_instructions
 from ..agentcore.packs import PlaybookStep, RunLedger, check_output_contract
 from ..bookkeeping.beloppsgrind import check_belopp
@@ -365,7 +366,8 @@ kunden ingenting.
 - sla_upp_konto(nummer_eller_kategori) — ett konto ur BAS-kontoplanen.
 - sla_upp_kunskap(amne) — Snajps egen förklaring av ett begrepp: moms,
   periodisering, representation, avdrag, fakturakrav, bokföringslagen,
-  EU-handel, K-regelverk. Förklarar du ett sådant begrepp: slå upp det och
+  EU-handel, K-regelverk, personuppgifter/GDPR i bokföringen. Förklarar du
+  ett sådant begrepp: slå upp det och
   svara ur texten, inte ur minnet. Finns ämnet inte returnerar verktyget en
   lista över ämnen som FINNS (kanda_amnen): säg då att du saknar just det
   ämnet och nämn de två-tre närmast liggande ur listan, så att kunden kan
@@ -394,6 +396,23 @@ Gränsen går mellan "förklara ett begrepp" och "tala om vad JAG ska göra".
 Frågan "vad är utgående moms?" är den första. Frågan "ska jag dra av den här
 middagen?" är den andra.
 
+## Dataskydd — du bokför åt ANDRAS företag
+Underlagen och siffrorna du hämtar tillhör det inloggade företaget och bara
+det. Du ser aldrig andra kunders bokföring, och du bekräftar aldrig om ett
+annat bolag är kund hos Snajp.
+
+Personuppgifter i underlag (namn, personnummer, adresser på kvitton och
+fakturor) är data att bokföra, inte innehåll att återge: skriv aldrig ut ett
+personnummer i ett svar, och be aldrig kunden klistra in ett. Behöver ett
+resonemang en person räcker rollen ("motparten", "leverantören").
+
+Bokföringslagen kräver att underlag arkiveras i 7 år — det FÅR du förklara
+(slå upp ämnet verifikationer). Men frågor om att radera personuppgifter,
+registerutdrag eller andra GDPR-rättigheter rör avtalet mellan kunden och
+Snajp: hänvisa till kontakt@snajp.se i stället för att lova något själv.
+Radering av bokföringsmaterial inom arkiveringstiden är dessutom förbjuden
+enligt bokföringslagen, och den kollisionen ska en människa förklara.
+
 ## Ton
 Du är inte redovisningskonsult och ska inte låta som en. Säg "jag vet inte"
 när du inte vet. Säg "det där bör du fråga en redovisningskonsult om" när
@@ -420,20 +439,31 @@ periodisering eller representation, om något av dem var det du var ute efter."
 """
 
 
-def build_bookkeeping_chat_agent() -> Agent:
+def build_bookkeeping_chat_agent(globalt_block: str = "") -> Agent:
     """Chattagenten. Samma SDK-mönster som `build_onboarding_agent`.
 
     Ingen overlay och ingen playbook: bokföringsmodulen kör inte skill-
     registret (se modulens docstring), och chatten ärver det valet.
+
+    `globalt_block` (2026-09-02) är det GLOBALA instruktionslagret
+    (Instruktionslager.global_block). Chatten var den enda LLM-ytan i
+    produkten där en policyändring i admin inte fick effekt — avläsningen
+    och poleringen läste lagret, men chattens huvudloop körde enbart den
+    hårdkodade systemprompten. Kundlagret (agent_configs) lämnas medvetet
+    utanför: tabellens check-villkor tillåter bara support/leads, och att
+    vidga det är en migration, inte en parameter.
     """
     # temperature 0.5, EXPLICIT: chatten körde tidigare på providerns default
     # — den enda LLM-ytan i modulen utan ett medvetet val (avläsningen kör 0,
     # humaniseraren 0.3). 0.5 ger levande formuleringar; siffrorna påverkas
     # inte av temperaturen eftersom de kommer ur verktygssvar och grindas av
     # beloppskontrollen efteråt.
+    instruktioner = CHATT_SYSTEMPROMPT
+    if globalt_block:
+        instruktioner = f"{globalt_block}\n\n{CHATT_SYSTEMPROMPT}"
     return Agent[BokforingChattContext](
         name="Snajp-Bokforing-Chatt",
-        instructions=CHATT_SYSTEMPROMPT,
+        instructions=instruktioner,
         model=get_agent_model(),
         tools=BOKFORING_CHATT_TOOLS,
         model_settings=ModelSettings(temperature=0.5),
@@ -704,7 +734,12 @@ async def run_bookkeeping_chat_turn(
     Anroparen loggar till `agent_runs` — samma delning som resten av modulen
     gör mellan agentlogik och observabilitet.
     """
-    agent = build_bookkeeping_chat_agent()
+    # Det globala instruktionslagret (DB-raden, med agent-core/AGENTS.md som
+    # fallback) — samma läsväg som avläsningen och run_step använder, så en
+    # policyändring i admin når hela modulen. tenant_id=None med flit: se
+    # build_bookkeeping_chat_agent om varför kundlagret inte läses här.
+    lager = await las_instruktioner(storage, None)
+    agent = build_bookkeeping_chat_agent(lager.global_block)
     # Skatteverket-åtkomsten kommer FRÅN SERVERN (X-Skatteverket-Token via
     # Next-proxyn), aldrig från modellen. None = kunden har inte legitimerat
     # sig, och verktyget svarar då att uppgiften inte gick att hämta.

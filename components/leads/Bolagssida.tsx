@@ -11,6 +11,7 @@ import type { EmailStudioData } from "@/lib/data/emails";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { lasOffertForUtkast } from "@/lib/actions/affarskontext";
+import { ICP_ETIKETTER } from "@/lib/leads/icpLabels";
 import { kriterier } from "@/lib/prospekt";
 import { cn } from "@/lib/utils";
 
@@ -587,7 +588,7 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
 
           {p.disqualifiers?.length ? (
             <div className="mt-8">
-              <h2 className="kicker text-mineral">Diskvalificerare</h2>
+              <h2 className="kicker text-mineral">{ICP_ETIKETTER.deal_breakers.label}</h2>
               <ul className="mt-4 space-y-2">
                 {p.disqualifiers.map((skäl) => (
                   <li key={skäl} className="border-l-2 border-danger pl-3 text-[15px] text-ink/75">

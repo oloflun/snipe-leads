@@ -19,11 +19,14 @@ TENANT = "00000000-0000-4000-a000-000000000001"
 
 # Lyckligt flöde: KB bar svaret, inget eskalerade — då finns ingen lucka att
 # skriva en artikel om, och cs:kb-article hoppas över (villkorat 2026-08-26).
+# Sedan 2026-09-02 hoppas ÄVEN cs:customer-escalation över här: utan
+# kunskapslucka, säkerhetssignal eller uttrycklig begäran om en människa
+# finns inget för steget att bedöma — kodbeslutet OR:ar redan de oberoende
+# villkoren, och steget (kedjans enda med thinking) röstade alltid "nej".
 EXPECTED_ORDER_NORMAL = [
     "cs:ticket-triage",
     "cs:customer-research",
     "cs:draft-response",
-    "cs:customer-escalation",
     "snajp:humanizer-svenska",
 ]
 
@@ -126,6 +129,23 @@ async def test_one_llm_call_per_skill_step_in_declared_order():
     assert llm.calls == EXPECTED_ORDER_NORMAL, "Ett anrop per steg, i playbook-ordning"
     assert result["skills_used"] == EXPECTED_ORDER_NORMAL
     assert len(result["step_log"]) == len(EXPECTED_ORDER_NORMAL)
+
+
+@pytest.mark.anyio
+async def test_begaran_om_manniska_kor_eskaleringssteget_aven_pa_lyckligt_flode():
+    """Villkoret 2026-09-02: eskaleringssteget hoppas över när inget finns att
+    bedöma — men "jag vill prata med en människa" är exakt det som ska
+    bedömas av modellen, även när KB bar svaret och inget annat flaggade.
+    Regexen _BER_OM_MANNISKA är stegets väckarklocka, inte dess ersättare."""
+    storage, llm = MemoryStorage(), _FakeLLM()
+    result = await _run(
+        storage, llm, message="Vilka betalsätt tar ni? Jag vill helst prata med en människa."
+    )
+
+    assert "cs:customer-escalation" in llm.calls
+    # Modellen (fejken) röstade nej och inget kodvillkor föll — beslutet är
+    # fortfarande modellens att fatta, inte regexens.
+    assert result["escalated"] is False
 
 
 @pytest.mark.anyio
@@ -240,14 +260,16 @@ async def test_escalates_in_code_even_when_model_says_no_escalation():
 
 
 @pytest.mark.anyio
-async def test_full_library_miss_asks_first_then_escalates_on_the_second_turn():
+async def test_full_library_miss_asks_twice_then_escalates_on_the_third_turn():
     """2026-08-25: en första miss får en följdfråga ÄVEN på ett fullt bibliotek.
+    2026-09-02: gränsen höjdes till TVÅ motfrågor (kundkrav: eskalera inte i
+    första taget).
 
-    Tidigare gällde "tomhet på fullt bibliotek är ett besked" redan i första
-    turen. Men en första miss betyder oftare "frågan var för vag för att
-    sökas" än "svaret finns inte" — en förtydligad fråga får ett andra
-    sökvarv. Först när även den andra turen går tom är tomheten ett besked,
-    och DÅ eskalerar ärendet precis som förut.
+    En första miss betyder oftare "frågan var för vag för att sökas" än
+    "svaret finns inte" — en förtydligad fråga får ett andra sökvarv, och
+    kundens svar på den första motfrågan bär ofta ämnet men inte detaljen.
+    Först när även det TREDJE varvet går tomt är tomheten ett besked, och DÅ
+    eskalerar ärendet precis som förut.
     """
     storage = MemoryStorage()
     llm = _FakeLLM(overrides={"cs:customer-research": {"kb_supports_answer": False}})
@@ -256,10 +278,12 @@ async def test_full_library_miss_asks_first_then_escalates_on_the_second_turn():
     ):
         forsta = await _run(storage, llm)
         andra = await _run(storage, llm, message="Jag menar för företagskonton.")
+        tredje = await _run(storage, llm, message="Ja, precis, företagskonton.")
 
     assert forsta["escalated"] is False, "Första missen ska ge en följdfråga, inte en överlämning."
     assert forsta["kb_sources"] == []
-    assert andra["escalated"] is True, "Andra turen utan svar ska fortfarande eskalera."
+    assert andra["escalated"] is False, "Andra varvet får ställa EN motfråga till."
+    assert tredje["escalated"] is True, "Tredje varvet utan svar ska fortfarande eskalera."
 
 
 @pytest.mark.anyio
@@ -380,9 +404,11 @@ async def test_foljdfragan_instrueras_i_utkaststeget_inte_efterat():
 
 
 @pytest.mark.anyio
-async def test_en_andra_tur_far_ingen_ny_foljdfraga():
-    """Loopspärren. Har kunden redan svarat en gång och vi fortfarande inte kan
-    svara, är en andra motfråga inte omsorg utan en loop."""
+async def test_en_tredje_tur_far_ingen_ny_foljdfraga():
+    """Loopspärren. Sedan 2026-09-02 får kunden TVÅ motfrågor (kundkrav:
+    eskalera inte i första taget) — men har kunden svarat två gånger och vi
+    fortfarande inte kan svara, är en tredje motfråga inte omsorg utan en
+    loop."""
     storage = MemoryStorage()
     await _tunn_kb(storage)
     llm = _FakeLLM(overrides={"cs:customer-research": {"kb_supports_answer": False}})
@@ -390,10 +416,13 @@ async def test_en_andra_tur_far_ingen_ny_foljdfraga():
     forsta = await _run(storage, llm, message="Fungerar den med min telefon?")
     assert forsta["escalated"] is False
 
-    # Andra turen från SAMMA kund: nu finns tidigare repliker, och då gäller
-    # den gamla regeln igen.
     andra = await _run(storage, llm, message="Ja, en Android.")
-    assert andra["escalated"] is True
+    assert andra["escalated"] is False
+
+    # Tredje turen från SAMMA kund: nu finns fyra tidigare repliker, och då
+    # gäller den gamla regeln igen.
+    tredje = await _run(storage, llm, message="En Samsung Galaxy S24.")
+    assert tredje["escalated"] is True
 
 
 @pytest.mark.anyio
@@ -448,14 +477,17 @@ async def test_kb_supports_answer_false_vager_in_aven_med_traffar():
     """DEL 3.2. Förut stod flaggan bara som kontext åt nästa steg. Nu avgör
     den i kod: träffar som inte bär svaret är inte ett svar.
 
-    Sedan 2026-08-25 ger första turen en följdfråga, så flaggans verkan
-    mäts i ANDRA turen: träffar utan svar ska då eskalera."""
+    Sedan 2026-08-25 ger första turen en följdfråga, och sedan 2026-09-02
+    även den andra — så flaggans verkan mäts i TREDJE turen: träffar utan
+    svar ska då eskalera."""
     storage = MemoryStorage()
     llm = _FakeLLM(overrides={"cs:customer-research": {"kb_supports_answer": False}})
     forsta = await _run(storage, llm, message="Vilka betalsätt accepterar ni?")
-    result = await _run(storage, llm, message="Jag menar för delbetalning.")
+    andra = await _run(storage, llm, message="Jag menar för delbetalning.")
+    result = await _run(storage, llm, message="Delbetalning av en större order.")
 
     assert forsta["escalated"] is False
+    assert andra["escalated"] is False
     assert result["escalated"] is True
     assert result["kb_sources"], "Testet mäter fel sak: sökningen gav inga träffar."
 

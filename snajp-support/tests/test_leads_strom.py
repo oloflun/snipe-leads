@@ -62,11 +62,15 @@ class _AppState:
 
 @pytest.fixture
 def app_state():
+    from app.storage.memory import MemoryStorage
+
     state = _AppState()
-    # storage=None är medvetet: build_context_pack är monkeypatchad (se
-    # `spion` nedan) och rör aldrig lagringen i de här testerna — precis som
-    # tests/leads/test_batch_markering.py:s _Tillstand(storage=None, ...).
-    state.storage = None
+    # En riktig MemoryStorage (inte None som förr): sedan INV-JOB-002 läser
+    # och skriver hanteraren leads_job_ledger via storage — liggaren ÄR
+    # vakten numera, så en storage-lös stubb hade testat en kodväg som inte
+    # finns i drift. build_context_pack/run_research_step är fortfarande
+    # monkeypatchade (se `spion`) — inga riktiga LLM-/skrapanrop görs.
+    state.storage = MemoryStorage()
     state.jobs = MemoryJobStore()
     return state
 

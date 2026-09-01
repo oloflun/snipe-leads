@@ -481,6 +481,29 @@ som flera separata ärenden hos kunden.
 Test: snajp-support/tests/invariants/test_inv_job_001.py
 Införd: 2026-08-29 · Upphävs endast genom waiver
 
+### INV-JOB-002 — Ett färdigt leads-jobb körs aldrig om: liggaren är sanningen, inte Redis-TTL
+Varje leads-jobb (batch, research per prospekt, utkast) skriver en rad i
+`leads_job_ledger` (migration 059) via `storage.set_leads_job_status`:
+`queued` vid köande, `processing` vid faktisk start, `completed`/`failed`
+vid slut. Vakten i `app/api/leads.hantera_leads_jobb` läser liggaren FÖRST —
+en `completed`-rad stoppar omkörningen oavsett vad Redis-jobbposten säger.
+Dessutom: leads-jobb skapas som `queued` (inte `processing`), och
+300-sekundersklockan i `app/jobs/store.py` räknar från `start()` — kötid är
+inte arbetstid och auto-failar aldrig ett jobb.
+Varför: Redis-posten auto-failar `processing` efter 300 s och TTL:ar efter
+3 600 s. Jobbraden skapades vid KÖANDET, och med `leads_workers=1` står jobb
+nr 5+ i en batch i kö längre än 300 s — vid ett XAUTOCLAIM-återtag (varje
+worker-varv, plus startsvepet vid varje deploy) såg vakten därför `failed`
+eller ingenting i stället för `completed`, och körde om HELA research+utkast-
+kedjan. Uppmätt 2026-09-01: en färdig batch om 18 leads kördes om i sin
+helhet efter en omstart — ~18 kr i LLM-kostnad utan någon användarhandling.
+Postgres-raden överlever både flippen och TTL:n; vid konflikt gäller
+Postgres. Budgetgrinden (`app/leads/budget.py`, `LEADS_DAILY_TOKEN_BUDGET`)
+är sista försvarslinjen ovanpå: hur ett framtida fel än ser ut kan en tenant
+inte bränna mer än dygnsbudgeten.
+Test: snajp-support/tests/invariants/test_inv_job_002.py
+Införd: 2026-09-02 · Upphävs endast genom waiver
+
 ### INV-REDIS-001 — Varje Redis-nyckel bär driftsättningens namnrymd
 Alla Redis-nycklar byggs med `app/redisnycklar.nyckel()`, som sätter
 `ns<8 hex>:` före den råa nyckeln. Namnrymden är sha256 av HELA

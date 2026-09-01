@@ -24,6 +24,7 @@ from ..leads.business_context import (
     MissingBusinessContextError,
     ar_ifyllt as business_context_ar_ifyllt,
 )
+from ..leads.budget import LeadsBudgetExceededError, kontrollera_leads_budget
 from ..leads.exempelbolag import bygg_exempelbolag
 from ..leads.context_pack import (
     _med_overrides,
@@ -178,6 +179,18 @@ def _require_live_llm() -> None:
             detail="Kräver en riktig LLM-nyckel (DEEPSEEK_API_KEY). Se DEPLOY_KEYS.md — "
             "ingen simuleringsersättning finns för leads-ytorna.",
         )
+
+
+async def _kraev_leads_budget(storage, tenant_id: str) -> None:
+    """Budgetgrinden (app/leads/budget.py) som HTTP-svar: 429 med det
+    svenska beskedet när dygnstaket är nått. Anropas av varje endpoint som
+    STARTAR nya LLM-jobb — batch, processa-om och direktutkastet — innan
+    något köas. En slut budget är inte ett fel i koden (samma resonemang
+    som chattens 429 i app/api/chat.py)."""
+    try:
+        await kontrollera_leads_budget(storage, tenant_id)
+    except LeadsBudgetExceededError as error:
+        raise HTTPException(status_code=429, detail=str(error)) from error
 
 
 # -- Fas A: kontextdokument och onboarding-status -------------------------
@@ -678,8 +691,12 @@ async def outreach_draft(
     """
     _require_live_llm()
     storage = request.app.state.storage
+    await _kraev_leads_budget(storage, tenant["tenant_id"])
     thread_id = await _los_trad(storage, tenant["tenant_id"], payload.thread_id, payload.prospect_id)
-    job_id = await request.app.state.jobs.create(tenant_id=tenant["tenant_id"])
+    job_id = await request.app.state.jobs.create(tenant_id=tenant["tenant_id"], status="queued")
+    await storage.set_leads_job_status(
+        tenant["tenant_id"], job_id=job_id, status="queued", scope="draft"
+    )
     post = {
         "kind": "draft",
         "job_id": job_id,
@@ -707,6 +724,10 @@ async def _run_draft_job(app_state, payload: dict) -> None:
 
     job_id = payload["job_id"]
     storage = app_state.storage
+    await app_state.jobs.start(job_id)
+    await storage.set_leads_job_status(
+        payload["tenant_id"], job_id=job_id, status="processing", scope="draft"
+    )
     try:
         context_pack, missing = await build_context_pack(storage, payload["tenant_id"])
         skatteverket = await atkomst_for_tenant(
@@ -728,13 +749,25 @@ async def _run_draft_job(app_state, payload: dict) -> None:
         )
         result["onboarding_missing"] = list(missing)
         await app_state.jobs.complete(job_id, result)
+        await storage.set_leads_job_status(
+            payload["tenant_id"], job_id=job_id, status="completed", scope="draft"
+        )
     except HTTPException as fel:
         await app_state.jobs.fail(job_id, _http_feltext(fel))
+        await storage.set_leads_job_status(
+            payload["tenant_id"], job_id=job_id, status="failed", scope="draft"
+        )
     except MissingBusinessContextError as fel:
         await app_state.jobs.fail(job_id, str(fel))
+        await storage.set_leads_job_status(
+            payload["tenant_id"], job_id=job_id, status="failed", scope="draft"
+        )
     except Exception as fel:  # noqa: BLE001 — jobbet ska bli failed, inte tyst dö
         logger.exception("Utkastjobb misslyckades (%s)", job_id)
         await app_state.jobs.fail(job_id, str(fel))
+        await storage.set_leads_job_status(
+            payload["tenant_id"], job_id=job_id, status="failed", scope="draft"
+        )
 
 
 # -- Granskning: hela processen synlig från dashboarden -------------------
@@ -1369,11 +1402,25 @@ async def _lagg_prospektjobb(
     is_test: bool,
     limit: int,
 ) -> list[dict]:
-    """En research-rad per prospekt. Sökningen är redan klar här."""
+    """En research-rad per prospekt. Sökningen är redan klar här.
+
+    Jobben skapas som "queued", inte "processing": med leads_workers=1 står
+    de sekventiellt i kö, och 300-sekundersklockan (app/jobs/store.py) ska
+    inte börja ticka förrän arbetet faktiskt börjar (INV-JOB-002). Liggaren
+    (leads_job_ledger) får sin queued-rad HÄR — den är vaktens sanning vid
+    ett återtag, oavsett vad Redis-posten hunnit flippa till.
+    """
     leadsstrom = getattr(app_state, "leadsstrom", None)
     jobs: list[dict] = []
     for prospect in prospects[:limit]:
-        job_id = await app_state.jobs.create(tenant_id=tenant["tenant_id"])
+        job_id = await app_state.jobs.create(tenant_id=tenant["tenant_id"], status="queued")
+        await app_state.storage.set_leads_job_status(
+            tenant["tenant_id"],
+            job_id=job_id,
+            status="queued",
+            scope=scope,
+            prospect_id=prospect["id"],
+        )
         if leadsstrom is not None:
             await leadsstrom.enqueue(
                 {
@@ -1412,9 +1459,49 @@ async def _run_batch(app_state, payload: dict) -> None:
     """
     job_id = payload["job_id"]
     tenant = {"tenant_id": payload["tenant_id"], "tenant_name": payload["tenant_name"]}
+    # Arbetet börjar HÄR: flytta 300-sekundersklockan från köandet till
+    # starten, och skriv liggaren (INV-JOB-002) så ett återtag efter deploy
+    # ser sanningen även när Redis-posten hunnit auto-failas eller TTL:at.
+    await app_state.jobs.start(job_id)
+    await app_state.storage.set_leads_job_status(
+        tenant["tenant_id"], job_id=job_id, status="processing", scope="batch"
+    )
     try:
         req = _payload_till_request(payload)
         prospects = await _samla_korningens_prospekt(app_state.storage, tenant, req)
+        if req.scope == "sok":
+            # Snabbsökningen stannar EFTER sökningen: bolagen är hittade och
+            # sparade i registret, men inga researchjobb köas. Kundkravet
+            # "kontaktperson vid funnet lead" avgör vad som listas — rader
+            # utan någon kontaktväg räknas separat i stället för att visas
+            # som färdiga leads.
+            med_kontakt = [p for p in prospects if p.get("contact_level")]
+            await app_state.jobs.complete(
+                job_id,
+                {
+                    "fase": "klar",
+                    "prospects": [
+                        {
+                            "prospect_id": p["id"],
+                            "company_name": p.get("company_name"),
+                            "website": p.get("website"),
+                            "ort": p.get("ort"),
+                            "contact_name": p.get("contact_name"),
+                            "contact_role": p.get("contact_role"),
+                            "contact_email": p.get("contact_email"),
+                            "contact_level": p.get("contact_level"),
+                            "contact_form_url": p.get("contact_form_url"),
+                        }
+                        for p in med_kontakt
+                    ],
+                    "count": len(med_kontakt),
+                    "utan_kontakt": len(prospects) - len(med_kontakt),
+                },
+            )
+            await app_state.storage.set_leads_job_status(
+                tenant["tenant_id"], job_id=job_id, status="completed", scope="batch"
+            )
+            return
         barn = await _lagg_prospektjobb(
             app_state,
             tenant,
@@ -1428,13 +1515,25 @@ async def _run_batch(app_state, payload: dict) -> None:
             job_id,
             {"fase": "research", "jobs": barn, "count": len(barn)},
         )
+        await app_state.storage.set_leads_job_status(
+            tenant["tenant_id"], job_id=job_id, status="completed", scope="batch"
+        )
     except HTTPException as fel:
         await app_state.jobs.fail(job_id, _http_feltext(fel))
+        await app_state.storage.set_leads_job_status(
+            tenant["tenant_id"], job_id=job_id, status="failed", scope="batch"
+        )
     except DiscoveryError:
         await app_state.jobs.fail(job_id, _FEL_SOKNING)
+        await app_state.storage.set_leads_job_status(
+            tenant["tenant_id"], job_id=job_id, status="failed", scope="batch"
+        )
     except Exception as fel:  # noqa: BLE001 — jobbet ska bli failed, inte tyst dö
         logger.exception("Batchsökning misslyckades (%s)", job_id)
         await app_state.jobs.fail(job_id, str(fel))
+        await app_state.storage.set_leads_job_status(
+            tenant["tenant_id"], job_id=job_id, status="failed", scope="batch"
+        )
 
 
 @router.post("/api/leads/runs/batch", status_code=202)
@@ -1448,6 +1547,7 @@ async def start_batch_run(
     därefter, så ett dött prospekt inte fäller de andra.
     """
     _require_live_llm()
+    await _kraev_leads_budget(request.app.state.storage, tenant["tenant_id"])
     await _validera_batch_kan_starta(request.app.state.storage, tenant, payload)
 
     overrides = (
@@ -1455,7 +1555,12 @@ async def start_batch_run(
         if payload.overrides and payload.overrides.har_nagot()
         else None
     )
-    job_id = await request.app.state.jobs.create(tenant_id=tenant["tenant_id"])
+    job_id = await request.app.state.jobs.create(
+        tenant_id=tenant["tenant_id"], status="queued"
+    )
+    await request.app.state.storage.set_leads_job_status(
+        tenant["tenant_id"], job_id=job_id, status="queued", scope="batch"
+    )
     post = {
         "kind": "batch",
         "job_id": job_id,
@@ -1490,6 +1595,10 @@ async def _run_batch_prospect(
     from ..agent.leads_agent import run_research_step
 
     storage = app_state.storage
+    await app_state.jobs.start(job_id)
+    await storage.set_leads_job_status(
+        tenant["tenant_id"], job_id=job_id, status="processing", scope=scope, prospect_id=prospect_id
+    )
     try:
         # `overrides` togs emot av funktionen men skickades aldrig vidare, så
         # varje jobb i batchen kördes mot den SPARADE ICP:n oavsett vad
@@ -1511,7 +1620,17 @@ async def _run_batch_prospect(
         result["onboarding_missing"] = list(missing)
         result["prospect_id"] = prospect_id
 
-        if scope == "research_and_draft":
+        if scope == "research_and_draft" and result.get("stopped_early"):
+            # Grinden i run_research_step föll — antingen kvalificerar bolaget
+            # inte mot ICP:n, eller så finns ingen kontaktväg. Ett utkast är
+            # 4–7 LLM-anrop till, för ett mejl som aldrig ska skickas.
+            result["draft_note"] = (
+                "Hoppar över utkastet: bolaget kvalificerar inte mot målgruppen."
+                if result["stopped_early"] == "ej_kvalificerad"
+                else "Hoppar över utkastet: ingen kontaktperson eller kontaktväg "
+                "hittades. Komplettera kontakten i registret och kör Processa om."
+            )
+        elif scope == "research_and_draft":
             prospect = await storage.get_prospect(tenant["tenant_id"], prospect_id) or {}
             email = prospect.get("contact_email")
             # Kontaktnivån (fallback-trappan, app/leads/discovery.py) följer
@@ -1572,8 +1691,14 @@ async def _run_batch_prospect(
                     result["draft_note"] = f"Research klar, utkastet kunde inte skrivas: {fel}"
 
         await app_state.jobs.complete(job_id, result)
+        await storage.set_leads_job_status(
+            tenant["tenant_id"], job_id=job_id, status="completed", scope=scope, prospect_id=prospect_id
+        )
     except Exception as error:  # noqa: BLE001 — ett trasigt prospekt fäller inte batchen
         await app_state.jobs.fail(job_id, f"Prospekt {prospect_id}: {error}")
+        await storage.set_leads_job_status(
+            tenant["tenant_id"], job_id=job_id, status="failed", scope=scope, prospect_id=prospect_id
+        )
 
 
 @router.post("/api/leads/prospects/processa-om", status_code=202)
@@ -1587,6 +1712,7 @@ async def processa_om(
     """
     _require_live_llm()
     storage = request.app.state.storage
+    await _kraev_leads_budget(storage, tenant["tenant_id"])
     hittade: list[dict] = []
     for pid in payload.prospect_ids:
         rad = await storage.get_prospect(tenant["tenant_id"], pid)
@@ -1640,6 +1766,22 @@ async def hantera_leads_jobb(app_state, payload: dict) -> None:
     """
     job_id = payload["job_id"]
     jobs = app_state.jobs
+
+    # LIGGAREN FÖRST (INV-JOB-002, migration 059): Redis-posten auto-failar
+    # efter 300 s och TTL:ar efter 3 600 s — för köade batchjobb såg vakten
+    # nedan därför aldrig "completed" vid ett återtag efter deploy, och körde
+    # om hela research+utkast-kedjan (uppmätt 2026-09-01: ~18 kr utan
+    # användarhandling). Postgres-raden överlever bådadera och är sanningen;
+    # Redis-vakten behålls som snabbväg för jobb från före migrationen.
+    tenant_id = payload.get("tenant_id")
+    if tenant_id:
+        try:
+            liggarstatus = await app_state.storage.get_leads_job_status(tenant_id, job_id)
+        except Exception:  # noqa: BLE001 — en trasig liggarläsning får inte stoppa kön
+            logger.exception("Kunde inte läsa leads_job_ledger för %s — kör på Redis-vakten.", job_id)
+            liggarstatus = None
+        if liggarstatus == "completed":
+            return
 
     befintligt = await jobs.get(job_id) or {}
     if befintligt.get("status") == "completed":

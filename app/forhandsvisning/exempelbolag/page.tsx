@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Exempelbolagslista } from "@/components/leads/LeadsRunForm";
+import { ICP_ETIKETTER } from "@/lib/leads/icpLabels";
 
 /**
  * Förhandsvisning av hur en avslutad leads-körning ser ut.
@@ -152,12 +153,12 @@ const ANDRA_OMGANGEN = [
   }
 ];
 
-/** Samma etiketter som formuläret använder — se ÖVERSKRIVNINGSETIKETTER. */
+/** Samma etiketter som formuläret använder — se ICP_ETIKETTER. */
 const ÖVERSKRIVNINGAR: [string, string][] = [
-  ["Branscher", "Bygg"],
-  ["Geografi", "Umeå"],
-  ["Beslutsfattarroller", "inköpschef"],
-  ["Diskvalificerar", "Under 10 anställda"]
+  [ICP_ETIKETTER.industries.label, "Bygg"],
+  [ICP_ETIKETTER.geography.label, "Umeå"],
+  [ICP_ETIKETTER.roles.label, "inköpschef"],
+  [ICP_ETIKETTER.deal_breakers.label, "Under 10 anställda"]
 ];
 
 export default function Page() {

@@ -162,6 +162,23 @@ _KANSLIGT = re.compile(
     re.IGNORECASE,
 )
 
+#: Kunden ber uttryckligen om en människa. Fram till 2026-09-02 bar BARA
+#: eskaleringssteget (cs:customer-escalation) den signalen — och det steget
+#: är numera villkorat och körs inte på lyckliga flödet. Regexen tar över
+#: exakt den delen av stegets uppdrag i kod: fälls den körs steget, och
+#: modellen får göra den fulla bedömningen precis som förut. Kort lista med
+#: flit — ett falskt utslag kostar bara ett extra modellanrop, ett missat
+#: kostar en kund som bad om en människa och fick en bot.
+_BER_OM_MANNISKA = re.compile(
+    r"\b(prata|tala|snacka)\s+med\s+(en\s+)?(människa|person|någon|"
+    r"handläggare|anställd|er\s+personal)|"
+    r"\b(riktig|levande)\s+(människa|person)\b|"
+    r"\bmänsklig\s+(hjälp|kontakt|support)\b|"
+    r"\bkoppla\s+(mig|vidare)\b|"
+    r"\bringa?\s+(upp\s+)?mig\b",
+    re.IGNORECASE,
+)
+
 #: Ord som inte bär betydelse i en sökfråga. Kort lista med flit — samma
 #: resonemang som abuse_gate: en lång lista fäller fel, och här kostar ett
 #: felaktigt bortfilterat ord en sämre sökning.
@@ -620,19 +637,26 @@ async def run_support_agent(
     fragar_uppfoljning = (
         kb_saknar_svar
         and not sakerhetskritiskt
-        # BARA i första turen. Har kunden redan svarat en gång och vi
-        # fortfarande inte kan svara, är en andra motfråga inte omsorg utan en
-        # loop — och den loopen är värre än en överlämning.
+        # Högst TVÅ motfrågor, sedan överlämning. `turn_count` räknar
+        # REPLIKER (in + ut), så kundens första meddelande ger 0, deras svar
+        # på första motfrågan ger 2, och svaret på den andra ger 4. Har
+        # kunden svarat två gånger och vi fortfarande inte kan svara, är en
+        # tredje motfråga inte omsorg utan en loop — och den loopen är värre
+        # än en överlämning.
+        #
+        # 2026-09-02: gränsen höjdes från `turn_count == 0` till `<= 2`
+        # (kundkrav: eskalera inte i första taget). Första motfrågan fångar
+        # en vag fråga; kundens svar bär ofta ämnet men inte detaljen, och
+        # flerturssökningen (som väver in förra repliken) förtjänar ett varv
+        # till innan tomheten är ett besked. Vid tredje varvet gäller det
+        # gamla resonemanget oförändrat.
         #
         # 2026-08-25: `_kb_ar_tunn`-villkoret togs bort. Det stängde
         # följdfrågevägen så fort biblioteket hade fem artiklar — på den
         # publika demon (31 artiklar) blev varje miss en överlämning, aldrig
         # en fråga. Men en första miss på ett FULLT bibliotek betyder oftare
-        # "frågan var för vag för att sökas" än "svaret finns inte": en
-        # förtydligad fråga får ett andra sökvarv, och först när även det går
-        # tomt (turn_count > 0) är tomheten ett besked. Loopspärren ovan är
-        # den gräns som bär den skillnaden nu.
-        and turn_count == 0
+        # "frågan var för vag för att sökas" än "svaret finns inte".
+        and turn_count <= 2
     )
 
     # --- Steg 3: utkast ----------------------------------------------------
@@ -655,35 +679,56 @@ async def run_support_agent(
         case_context=f"{case_context}\n\n## Kunskapsbas\n{kb_block}\n\n## Research\n{research.get('findings', '')}",
     )
 
-    # --- Steg 4: eskaleringsbedömning --------------------------------------
-    escalation = await steg(
-        steps["cs:customer-escalation"],
-        ledger,
-        trace,
-        task=(
-            # Två varianter, för att modellens svar OR:as in i kodbeslutet:
-            # står "eskalera om kunskapsbasen saknar svar" kvar i prompten
-            # medan koden just valt följdfrågevägen, röstar modellen alltid
-            # emot och följdfrågan eskalerar ändå.
-            "Avgör om ärendet måste till en människa. Eskalera ALLTID vid: "
-            "återbetalning/kompensation, juridik/ARN/Konsumentverket, "
-            "GDPR-radering, avtal eller fakturering på kontonivå — eller om "
-            "kunden uttryckligen ber att få prata med en människa. "
-            + (
-                "Kunskapsbasen saknar svar, men svaret till kunden ställer en "
-                "förtydligande följdfråga — det är INTE ett skäl att eskalera "
-                "i den här turen. "
-                if fragar_uppfoljning
-                else "Eskalera också om kunskapsbasen saknar svar och ingen "
-                "följdfråga kan göra frågan besvarbar. "
-            )
-            + "Returnera JSON: should_escalate (bool), reason (svenska eller null)."
-        ),
-        case_context=(
-            f"{case_context}\n\n## Research\n{research.get('findings', '')}\n"
-            f"kb_supports_answer: {research.get('kb_supports_answer')}"
-        ),
+    # --- Steg 4: eskaleringsbedömning (villkorat sedan 2026-09-02) ---------
+    #
+    # Steget kör med thinking påslaget och var det dyraste anropet i kedjan —
+    # och på lyckliga flödet (KB bar svaret, inget säkerhetskritiskt, kunden
+    # bad inte om en människa) röstade modellen i praktiken alltid "nej".
+    # Kodbeslutet nedan OR:ar ändå ihop de oberoende villkoren, så det enda
+    # steget ensamt tillförde där var juridik/människa-bedömningen — och
+    # juridiken fångas av `_ar_kansligt` (som ingår i `sakerhetskritiskt`),
+    # människo-önskan av `_BER_OM_MANNISKA`. Faller någon av signalerna körs
+    # steget precis som förut, med full modellbedömning.
+    # MEDVETET INTE med i villkoret: triagekategorin. "Vilka betalsätt tar
+    # ni?" är kategorin betalning och en ren FAQ — att köra bedömningssteget
+    # där är exakt kostnaden villkoret finns för att ta bort. Ett verkligt
+    # kontoärende i samma kategori fångas ändå: antingen saknar KB svaret
+    # (kb_saknar_svar) eller så träffar ordvalet _KANSLIGT (återbetalning,
+    # kompensation, häva köpet ...).
+    behover_eskaleringsbedomning = bool(
+        kb_saknar_svar or sakerhetskritiskt or _BER_OM_MANNISKA.search(f"{subject} {message}")
     )
+    if not behover_eskaleringsbedomning:
+        escalation: dict[str, Any] = {"should_escalate": False, "reason": None}
+    else:
+        escalation = await steg(
+            steps["cs:customer-escalation"],
+            ledger,
+            trace,
+            task=(
+                # Två varianter, för att modellens svar OR:as in i kodbeslutet:
+                # står "eskalera om kunskapsbasen saknar svar" kvar i prompten
+                # medan koden just valt följdfrågevägen, röstar modellen alltid
+                # emot och följdfrågan eskalerar ändå.
+                "Avgör om ärendet måste till en människa. Eskalera ALLTID vid: "
+                "återbetalning/kompensation, juridik/ARN/Konsumentverket, "
+                "GDPR-radering, avtal eller fakturering på kontonivå — eller om "
+                "kunden uttryckligen ber att få prata med en människa. "
+                + (
+                    "Kunskapsbasen saknar svar, men svaret till kunden ställer en "
+                    "förtydligande följdfråga — det är INTE ett skäl att eskalera "
+                    "i den här turen. "
+                    if fragar_uppfoljning
+                    else "Eskalera också om kunskapsbasen saknar svar och ingen "
+                    "följdfråga kan göra frågan besvarbar. "
+                )
+                + "Returnera JSON: should_escalate (bool), reason (svenska eller null)."
+            ),
+            case_context=(
+                f"{case_context}\n\n## Research\n{research.get('findings', '')}\n"
+                f"kb_supports_answer: {research.get('kb_supports_answer')}"
+            ),
+        )
 
     # Eskalering avgörs i KOD av oberoende villkor — inte av modellen ensam.
     #

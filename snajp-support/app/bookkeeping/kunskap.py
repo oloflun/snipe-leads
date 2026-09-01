@@ -51,6 +51,27 @@ class Amne:
 
 _AMNEN = (
     Amne(
+        "gdpr_och_bokforing",
+        "Personuppgifter i bokföringen: GDPR möter bokföringslagen",
+        "Bokföringsunderlag innehåller ofta personuppgifter — namn på "
+        "motparter, adresser, ibland personnummer på fakturor. GDPR kräver "
+        "att personuppgifter inte sparas längre än nödvändigt, men "
+        "bokföringslagen kräver samtidigt att räkenskapsinformation arkiveras "
+        "i 7 år efter räkenskapsårets slut, och den lagstadgade "
+        "arkiveringsplikten är en rättslig förpliktelse som går före en "
+        "begäran om radering: uppgifter i verifikationer får inte raderas "
+        "inom arkiveringstiden. Efter arkiveringstiden ska materialet "
+        "gallras. Grundprincipen i det dagliga arbetet är dataminimering: "
+        "bokför de uppgifter underlaget kräver, men sprid dem inte vidare — "
+        "ett personnummer hör hemma i verifikatet, inte i ett mejl eller en "
+        "chatt. Frågor om registerutdrag eller radering hos Snajp hanteras av "
+        "en människa, inte av assistenten.",
+        (
+            "gdpr", "dataskydd", "personuppgift", "personnummer", "radera",
+            "radering", "registerutdrag", "arkivering", "gallring", "integritet",
+        ),
+    ),
+    Amne(
         "momssatser",
         "Momssatserna 25, 12 och 6 procent",
         "Sverige har tre momssatser. 25 % är huvudregeln och gäller de flesta "

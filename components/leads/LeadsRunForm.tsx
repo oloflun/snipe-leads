@@ -7,6 +7,7 @@ import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import type { EmailStudioData } from "@/lib/data/emails";
 import { btnPrimary, btnSecondary } from "@/components/ui";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
+import { ICP_ETIKETTER } from "@/lib/leads/icpLabels";
 import { cn } from "@/lib/utils";
 
 /**
@@ -90,12 +91,12 @@ type Exempelbolag = {
  * fälten i en annan ordning än de fylldes i tvingar läsaren att leta.
  */
 const ÖVERSKRIVNINGSETIKETTER: [string, string][] = [
-  ["industries", "Branscher"],
-  ["exclude_industries", "Undviker"],
-  ["geography", "Stad, län, region"],
-  ["roles", "Beslutsfattarroller"],
-  ["must_have", "Signaler som krävs"],
-  ["deal_breakers", "Diskvalificerar"],
+  ["industries", ICP_ETIKETTER.industries.label],
+  ["exclude_industries", ICP_ETIKETTER.exclude_industries.label],
+  ["geography", ICP_ETIKETTER.geography.label],
+  ["roles", ICP_ETIKETTER.roles.label],
+  ["must_have", ICP_ETIKETTER.must_have.label],
+  ["deal_breakers", ICP_ETIKETTER.deal_breakers.label],
   ["anstallda_min", "Anställda, minst"],
   ["anstallda_max", "Anställda, högst"]
 ];
@@ -318,23 +319,23 @@ export function LeadsRunForm({
             <option value="research_and_draft">Research och utkast</option>
           </select>
         </Rad>
-        <Rad etikett="Branscher" hint="komma emellan">
-          <input value={branscher} onChange={(e) => setBranscher(e.target.value)} placeholder="Bygg, Tillverkning" className={fältklass} />
+        <Rad etikett={ICP_ETIKETTER.industries.label} hint="komma emellan">
+          <input value={branscher} onChange={(e) => setBranscher(e.target.value)} placeholder={ICP_ETIKETTER.industries.hint} className={fältklass} />
         </Rad>
-        <Rad etikett="Undvik branscher">
-          <input value={undvik} onChange={(e) => setUndvik(e.target.value)} placeholder="Bemanning" className={fältklass} />
+        <Rad etikett={ICP_ETIKETTER.exclude_industries.label}>
+          <input value={undvik} onChange={(e) => setUndvik(e.target.value)} placeholder={ICP_ETIKETTER.exclude_industries.hint} className={fältklass} />
         </Rad>
-        <Rad etikett="Stad, län, region">
-          <input value={geografi} onChange={(e) => setGeografi(e.target.value)} placeholder="Västra Götaland" className={fältklass} />
+        <Rad etikett={ICP_ETIKETTER.geography.label}>
+          <input value={geografi} onChange={(e) => setGeografi(e.target.value)} placeholder={ICP_ETIKETTER.geography.hint} className={fältklass} />
         </Rad>
-        <Rad etikett="Beslutsfattarroller" hint="vem agenterna ska leta efter">
-          <input value={roller} onChange={(e) => setRoller(e.target.value)} placeholder="VD, inköpschef" className={fältklass} />
+        <Rad etikett={ICP_ETIKETTER.roles.label} hint="vem agenterna ska leta efter">
+          <input value={roller} onChange={(e) => setRoller(e.target.value)} placeholder={ICP_ETIKETTER.roles.hint} className={fältklass} />
         </Rad>
-        <Rad etikett="Signaler som krävs" hint="nischen">
-          <input value={kravs} onChange={(e) => setKravs(e.target.value)} placeholder="Egen produktion, växer" className={fältklass} />
+        <Rad etikett={ICP_ETIKETTER.must_have.label} hint="nischen">
+          <input value={kravs} onChange={(e) => setKravs(e.target.value)} placeholder={ICP_ETIKETTER.must_have.hint} className={fältklass} />
         </Rad>
-        <Rad etikett="Diskvalificerar">
-          <input value={diskvalificerar} onChange={(e) => setDiskvalificerar(e.target.value)} placeholder="Under 10 anställda" className={fältklass} />
+        <Rad etikett={ICP_ETIKETTER.deal_breakers.label}>
+          <input value={diskvalificerar} onChange={(e) => setDiskvalificerar(e.target.value)} placeholder={ICP_ETIKETTER.deal_breakers.hint} className={fältklass} />
         </Rad>
         <div className="grid grid-cols-2 gap-3">
           <Rad etikett="Anställda, min">

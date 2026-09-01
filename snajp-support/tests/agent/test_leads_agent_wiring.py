@@ -162,7 +162,14 @@ def _skill_i(messages) -> str:
     träff = re.search(r"styrs av skillen (\S+?),", messages[0]["content"])
     return träff.group(1) if träff else ""
 
-def _fake_scrape(content: str = "# Exempelbolaget\nFri retur inom 30 dagar."):
+def _fake_scrape(
+    # Arbetsmejlet i defaultmaterialet är inte kosmetika: sedan grinden
+    # 2026-09-02 stoppar research utan kontaktväg efter ICP-steget, och
+    # standardfixturen ska vara det LYCKLIGA flödet — alla åtta steg. Tester
+    # som mäter kontaktlösa varv skriver sitt eget material utan adress.
+    content: str = "# Exempelbolaget\nFri retur inom 30 dagar.\n"
+    "Kontakta oss: kundservice@exempelbolaget.se",
+):
     async def _impl(context, url):
         context.scraped_sources.append({"url": url, "length": len(content)})
         return json.dumps({"content": content}, ensure_ascii=False)
@@ -293,6 +300,57 @@ async def test_research_makes_one_llm_call_per_skill_step_in_declared_order():
     # Playbookens egna steg kommer forst, i deklarerad ordning. Kunskapsfangsten
     # ligger sist och kan aldrig tranga sig in mellan dem.
     assert llm.calls[: len(RESEARCH_ORDER)] == RESEARCH_ORDER
+    assert result["stopped_early"] is None
+
+
+@pytest.mark.anyio
+async def test_okvalificerat_prospekt_stoppar_efter_icp_steget():
+    """Grinden 2026-09-02 (kundkrav: nischning ska spara anrop): faller
+    ICP-kvalificeringen körs varken konto-, konkurrent- eller
+    erbjudandestegen — tre anrop i stället för nio. Kunskapsfångsten körs
+    ÄVEN här: ett diskvalificerat prospekt lär mest om var ICP:n går fel."""
+    storage = MemoryStorage()
+    llm = _FakeLLM(
+        overrides={
+            "mk:prospecting": {
+                "icp_fit": 0.2,
+                "qualified": False,
+                "disqualifiers": ["Fel bransch"],
+                "qualification_reasoning": "Utanför målgruppen.",
+            }
+        }
+    )
+    result = await _run_research(storage, llm)
+
+    assert llm.calls == ["mk:customer-research", "mk:prospecting", "sa:call-summary"]
+    assert result["stopped_early"] == "ej_kvalificerad"
+    assert result["qualified"] is False
+    assert result["offer_summary"] == "(inget erbjudande formulerat)"
+
+
+@pytest.mark.anyio
+async def test_icp_bedomningen_persisteras_pa_prospektraden():
+    """Migration 024:s hela poäng: icp_fit/qualified/disqualifiers ska landa
+    på raden, inte bara i jobbresultatet. Fram till 2026-09-02 skrev ingen
+    kodväg dem — kolumnerna stod NULL efter varje riktig körning."""
+    storage, llm = MemoryStorage(), _FakeLLM()
+    prospect_id = await _prepare_prospect(storage)
+    with patch("app.agent.step_runner.get_llm_client", return_value=llm), patch(
+        "app.agent.leads_agent._scrape_registered_source_impl", new=_fake_scrape()
+    ):
+        await run_research_step(
+            storage,
+            TENANT,
+            prospect_id=prospect_id,
+            tenant_name="Snajp",
+            context_pack="### Kontextpaket\n...",
+            brief="",
+        )
+
+    rad = await storage.get_prospect(TENANT, prospect_id)
+    assert rad["qualified"] is True
+    assert float(rad["icp_fit"]) == 0.8
+    assert rad["disqualifiers"] == []
 
 
 @pytest.mark.anyio
@@ -1098,12 +1156,15 @@ async def test_kontaktsida_som_inte_svarar_faller_inte_researchen():
         )
 
     # Kontaktsidan registrerades ändå — det är HÄMTNINGEN som misslyckas,
-    # inte registreringen — men researchen fortsätter till slutet.
+    # inte registreringen — och varvet slutförs utan undantag. Sedan
+    # 2026-09-02 STOPPAR grinden dock efter ICP-steget när ingen kontaktväg
+    # alls nåddes: steg 3–8 för ett bolag utan mottagare är ren kostnad.
     kallor = await storage.list_prospect_source_urls(TENANT, prospect_id)
     assert "https://exempelbolaget.se/kontakt" in kallor
     assert any("kontakt" in fel for fel in result["scrape_errors"])
-    assert result["offer_summary"] != "(inget erbjudande formulerat)"
     assert result["contact_missing"] is True
+    assert result["stopped_early"] == "kontakt_saknas"
+    assert result["offer_summary"] == "(inget erbjudande formulerat)"
 
 
 @pytest.mark.anyio

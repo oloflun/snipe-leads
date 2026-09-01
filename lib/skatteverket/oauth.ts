@@ -155,8 +155,11 @@ export async function vaxlaKodMotToken(code: string): Promise<TokenSvar> {
     throw new Error(`Skatteverket avvisade kodväxlingen (${svar.status}): ${text}`);
   }
 
-  const data = (await svar.json()) as TokenSvar;
-  if (!data.access_token) {
+  // .catch: ett 200 med tom eller icke-JSON-kropp (gateway, dödad funktion)
+  // ska ge vårt begripliga fel nedan, inte "Unexpected end of JSON input"
+  // (INV-API-001).
+  const data = (await svar.json().catch(() => null)) as TokenSvar | null;
+  if (!data?.access_token) {
     throw new Error("Skatteverket svarade utan access_token.");
   }
   return data;

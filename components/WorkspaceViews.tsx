@@ -115,8 +115,8 @@ export function LeadsBody({ demo = false }: Readonly<{ demo?: boolean }>) {
 export function LeadsView({ demo = false }: Readonly<{ demo?: boolean }>) {
   return (
     <PageShell
-      title="Bolag sorterade efter din produkt och ton, inte efter en mall."
-      description="Specificera vilka typer av kunder ni söker. Agenterna letar upp potentiella bolag baserat på dina ord."
+      title="Skräddarsydda leads efter din målgrupp och produkt."
+      description="Beskriv er målgrupp och produkt — agenterna letar fram bolagen som matchar."
     >
       <LeadsBody demo={demo} />
     </PageShell>

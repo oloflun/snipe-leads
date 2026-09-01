@@ -71,6 +71,56 @@ OUTREACH_V1 = Playbook(
     ),
 )
 
+# V2 (2026-09-02, kostnadsarbetet): 4 anrop -> 2, med SAMMA skillinnehåll.
+#
+# Steg 1 slår ihop V1:s skapa+personalisera+granska till ETT anrop:
+# sa:draft-outreach (hel) + mk:cold-email via extra_skills i SAMMA steg —
+# personaliseringsreferensen och granskningschecklistan (§ Quality Check +
+# § What to Avoid, sektionerna som utgör själva granskningen i SKILL.md).
+# Skilltexterna är alltså DESAMMA som V1 injicerade, i ett anrop i stället
+# för tre — "ersätt workflowen, inte skillsen".
+#
+# Steg 2 är humanizern, oförändrat HEL och oförändrat SIST: INV-LANG-002
+# (humanizern måste vara den som rörde texten sist) bevaras strukturellt
+# utan invariantändring. Grundningscykeln (villkorad, max 1 runda) och
+# tomtext-omförsöket behålls exakt — se run_outreach_draft_v2 i
+# app/agent/leads_research_v2.py.
+OUTREACH_V2 = Playbook(
+    name="leads/outreach-v2",
+    steps=(
+        PlaybookStep(
+            skill="sa:draft-outreach",
+            requires=("offer_selected",),
+            overlay=_HARD_RULES,
+            thinking=THINKING,
+            temperature=0.5,
+            rationale=(
+                "V2-kostnadsarbetet: mk:cold-email skopas till personaliserings-"
+                "referensen + granskningssektionerna (Quality Check, What to "
+                "Avoid) — resten av skillen är metodik för kampanjer och "
+                "uppföljningssekvenser som det här steget inte utför."
+            ),
+            extra_skills=(
+                (
+                    "mk:cold-email",
+                    (
+                        "references/personalization.md",
+                        "§ Quality Check",
+                        "§ What to Avoid",
+                    ),
+                ),
+            ),
+        ),
+        PlaybookStep(
+            skill="snajp:humanizer-svenska",
+            requires=("skill:sa:draft-outreach",),
+            overlay=_HARD_RULES,
+            thinking=THINKING,
+            temperature=0.7,
+        ),
+    ),
+)
+
 _HEADER = """Du skriver ett kallt utskick till {company_name} åt {tenant_name}.
 Nedan följer, i bestämd ordning, de skills som styr arbetet.
 

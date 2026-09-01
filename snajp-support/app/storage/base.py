@@ -465,6 +465,44 @@ class Storage(Protocol):
         self, tenant_id: str, *, agent_type: str | None = None, limit: int = 50
     ) -> list[dict[str, Any]]: ...
 
+    # -- Leads-jobbens liggare (INV-JOB-002) --------------------------------
+
+    async def set_leads_job_status(
+        self,
+        tenant_id: str,
+        *,
+        job_id: str,
+        status: str,
+        scope: str = "research",
+        prospect_id: str | None = None,
+    ) -> None:
+        """Skriver/uppdaterar EN rad i leads_job_ledger (migration 059).
+
+        Liggaren är sanningen om huruvida ett leads-jobb redan är färdigt.
+        Redis-jobbposten (app/jobs/store.py) auto-failar efter 300 s och
+        TTL:ar efter 3 600 s — vid ett XAUTOCLAIM-återtag efter en deploy
+        såg vakten därför aldrig "completed" för köade batchjobb och körde
+        om hela research+utkast-kedjan (uppmätt 2026-09-01: ~18 kr utan
+        användarhandling). Vakten läser liggaren FÖRST; Postgres gäller vid
+        konflikt med Redis. Metoden står i PROTOKOLLET av samma skäl som
+        log_agent_run: en signatur som bara finns i ett lager är så
+        halvårsbuggar föds."""
+        ...
+
+    async def get_leads_job_status(self, tenant_id: str, job_id: str) -> str | None:
+        """Läser liggarens status för ETT jobb: 'queued' | 'processing' |
+        'completed' | 'failed' — eller None om raden saknas (jobb från före
+        migration 059, eller en annan miljös jobb)."""
+        ...
+
+    async def sum_leads_tokens(self, tenant_id: str, *, hours: int = 24) -> int:
+        """Summan tokens_in + tokens_out för leads-agenttyperna
+        ('leads_research', 'leads_outreach', 'leads_svar', 'leads_followup')
+        de senaste `hours` timmarna — budgetgrindens fråga
+        (app/leads/budget.py). Testkörningar räknas MED: de kostar samma
+        pengar hos leverantören som skarpa körningar."""
+        ...
+
     async def weekly_analytics(self, tenant_id: str, *, weeks: int = 8) -> dict[str, Any]:
         """Veckovis utfall för kundens analysvy — EN tenant, aldrig aggregerat.
 
@@ -1097,6 +1135,11 @@ AGENT_RUN_TYPES = (
     "leads_svar",
     "leads_followup",
 )
+
+#: Agenttyperna som räknas mot leads-budgeten (sum_leads_tokens /
+#: app/leads/budget.py). Delmängd av AGENT_RUN_TYPES — bor här av samma skäl
+#: som resten: EN lista, speglad av båda lagringarna, aldrig två svar.
+LEADS_BUDGET_AGENT_TYPES = ("leads_research", "leads_outreach", "leads_svar", "leads_followup")
 
 
 # Värdemängden för bk_underlag.status, spegel av check-villkoret i migration

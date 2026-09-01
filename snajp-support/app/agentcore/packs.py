@@ -65,6 +65,15 @@ class PlaybookStep:
     # att duplicera hårdreglerna in i varje syftesoverlay — och duplicerad
     # tuning divergerar, vilket är exakt det overlays finns för att undvika.
     overlay: str | tuple[str, ...] | None = None
+    # V2-kostnadsarbetet (2026-09-02): FLER skills i SAMMA steg/anrop. Varje
+    # post är (skillnamn, skopa) där tom skopa = hel skill och en icke-tom
+    # skopa följer samma "§ Rubrik"/references-form som `scope` ovan.
+    # Renderas EFTER huvudskillen, i deklarationsordning, var och en under
+    # sin egen rubrik. Opt-in med default () — inga befintliga playbooks
+    # påverkas. Injektionsgarantin är densamma: motorn renderar texten före
+    # anropet, modellen väljer aldrig. En skopad extra-skill kräver att
+    # STEGET bär en rationale (INV-SKILL-003 gäller även här).
+    extra_skills: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
     @property
     def overlay_names(self) -> tuple[str, ...]:
@@ -88,6 +97,13 @@ class PlaybookStep:
                 f"{self.skill}: en skopa kräver en rationale i playbooken (INV-SKILL-003). "
                 "Utelämnas den ska hela skillen laddas i stället."
             )
+        for extra_namn, extra_skopa in self.extra_skills:
+            parse_skill_name(extra_namn)  # samma fail-fast som huvudskillen
+            if extra_skopa and not self.rationale:
+                raise ScopeWithoutRationaleError(
+                    f"{self.skill}: extra-skillen {extra_namn} är skopad — steget "
+                    "måste bära en rationale (INV-SKILL-003)."
+                )
         if not self.requires:
             raise MissingRequirementError(
                 f"{self.skill}: steg saknar requires[] (INV-SKILL-002)."
@@ -97,21 +113,35 @@ class PlaybookStep:
                 f"{self.skill}: thinking måste vara None/'enabled'/'disabled', fick {self.thinking!r}."
             )
 
-    def render(self) -> str:
-        """Det playbooken injicerar för detta steg. Oskopad = hela SKILL.md.
-        Skopad = exakt de deklarerade referensfilerna, aldrig något modellen
-        väljer vid körning (Del C, 'Playbooken bestämmer, aldrig modellen')."""
-        if not self.scope:
-            return load_full_skill(self.skill)
-        parts = [f"### SKOPAD LADDNING av {self.skill}\nMotivering: {self.rationale}\n"]
-        for item in self.scope:
+    @staticmethod
+    def _render_scoped(skill: str, scope: tuple[str, ...], rationale: str | None) -> str:
+        parts = [f"### SKOPAD LADDNING av {skill}\nMotivering: {rationale}\n"]
+        for item in scope:
             # "§ Rubrik" = en sektion i SKILL.md (Del I: "mk:sales-enablement
             # § Objection Handling Docs"). Allt annat = en references/-fil.
             if item.startswith("§ "):
-                parts.append(load_section(self.skill, item[2:]))
+                parts.append(load_section(skill, item[2:]))
             else:
-                parts.append(f"#### {item}\n\n{load_reference(self.skill, item)}")
+                parts.append(f"#### {item}\n\n{load_reference(skill, item)}")
         return "\n\n".join(parts)
+
+    def render(self) -> str:
+        """Det playbooken injicerar för detta steg. Oskopad = hela SKILL.md.
+        Skopad = exakt de deklarerade referensfilerna, aldrig något modellen
+        väljer vid körning (Del C, 'Playbooken bestämmer, aldrig modellen').
+        Deklarerade extra_skills renderas EFTER huvudskillen, var och en
+        under sin egen rubrik — samma motor-injektionsgaranti."""
+        if not self.scope:
+            rendered = load_full_skill(self.skill)
+        else:
+            rendered = self._render_scoped(self.skill, self.scope, self.rationale)
+        for extra_namn, extra_skopa in self.extra_skills:
+            if extra_skopa:
+                extra_text = self._render_scoped(extra_namn, extra_skopa, self.rationale)
+            else:
+                extra_text = load_full_skill(extra_namn)
+            rendered += f"\n\n---\n### Skill (i samma steg): {extra_namn}\n{extra_text}"
+        return rendered
 
 
 @dataclass(frozen=True)

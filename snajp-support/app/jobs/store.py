@@ -18,8 +18,10 @@ JOB_TTL_SECONDS = 3600
 #: Fält som `get()` alltid skriver ut explicit (och som därför inte ska
 #: dubbleras av den generiska extra-fält-spridningen nedan). "created" är
 #: INTE med — det är den interna timeout-klockan och ska aldrig läcka ut i
-#: ett API-svar, bara läsas av lagringslagret självt.
-_BASFALT = {"status", "result", "error", "tenant_id", "created"}
+#: ett API-svar, bara läsas av lagringslagret självt. "started" är samma
+#: sorts intern klocka (satt av start(), se INV-JOB-002) och läcker inte
+#: heller.
+_BASFALT = {"status", "result", "error", "tenant_id", "created", "started"}
 
 
 class MemoryJobStore:
@@ -34,20 +36,36 @@ class MemoryJobStore:
             job = self.jobs[job_id]
             if now - job["created"] > JOB_TTL_SECONDS:
                 del self.jobs[job_id]
-            elif job["status"] == "processing" and now - job["created"] > JOB_TIMEOUT_SECONDS:
+            # Timeout-klockan räknar från "started" när den finns (satt av
+            # start() när arbetet FAKTISKT börjar), annars från "created" —
+            # chattjobb skapas som "processing" utan start() och behåller
+            # därmed exakt sitt gamla beteende. Ett "queued"-jobb (leads i
+            # kö bakom en sekventiell worker, se INV-JOB-002) auto-failas
+            # aldrig av att det VÄNTAR — kötid är inte arbetstid.
+            elif job["status"] == "processing" and now - job.get(
+                "started", job["created"]
+            ) > JOB_TIMEOUT_SECONDS:
                 job["status"] = "failed"
                 job["error"] = "Tidsgräns överskriden (5 min)."
 
-    async def create(self, *, tenant_id: str | None = None) -> str:
+    async def create(self, *, tenant_id: str | None = None, status: str = "processing") -> str:
         self._sweep()
         job_id = str(uuid.uuid4())
         self.jobs[job_id] = {
-            "status": "processing",
+            "status": status,
             "created": time.time(),
             "result": None,
             "tenant_id": tenant_id,
         }
         return job_id
+
+    async def start(self, job_id: str) -> None:
+        """Markerar att arbetet FAKTISKT börjar: status processing och en
+        egen startklocka för 300-sekundersgränsen. Utan den räknade gränsen
+        från köandet — och leads-jobb nr 5+ i en sekventiell batch hann
+        auto-failas innan sitt första LLM-anrop (se INV-JOB-002)."""
+        if job_id in self.jobs:
+            self.jobs[job_id].update(status="processing", started=time.time())
 
     async def complete(self, job_id: str, result: dict[str, Any]) -> None:
         if job_id in self.jobs:
@@ -100,14 +118,20 @@ class RedisJobStore:
     def _key(self, job_id: str) -> str:
         return nyckel(f"crm:job:{job_id}")
 
-    async def create(self, *, tenant_id: str | None = None) -> str:
+    async def create(self, *, tenant_id: str | None = None, status: str = "processing") -> str:
         job_id = str(uuid.uuid4())
         await self.client.set(
             self._key(job_id),
-            json.dumps({"status": "processing", "created": time.time(), "tenant_id": tenant_id}),
+            json.dumps({"status": status, "created": time.time(), "tenant_id": tenant_id}),
             ex=JOB_TTL_SECONDS,
         )
         return job_id
+
+    async def start(self, job_id: str) -> None:
+        """Se MemoryJobStore.start — samma kontrakt. _merge förnyar dessutom
+        TTL:n, så ett jobb som stått länge i kö inte hinner städas bort mitt
+        under sin faktiska körning."""
+        await self._merge(job_id, {"status": "processing", "started": time.time()})
 
     async def _merge(self, job_id: str, patch: dict[str, Any]) -> None:
         raw = await self.client.get(self._key(job_id))
@@ -131,7 +155,12 @@ class RedisJobStore:
         if not raw:
             return None
         job = json.loads(raw)
-        if job.get("status") == "processing" and time.time() - job.get("created", 0) > JOB_TIMEOUT_SECONDS:
+        # Samma klockregel som MemoryJobStore._sweep: "started" när den
+        # finns, annars "created" — och bara för "processing". Kötid
+        # ("queued") är inte arbetstid och auto-failas aldrig.
+        if job.get("status") == "processing" and time.time() - job.get(
+            "started", job.get("created", 0)
+        ) > JOB_TIMEOUT_SECONDS:
             await self.fail(job_id, "Tidsgräns överskriden (5 min).")
             job.update(status="failed", error="Tidsgräns överskriden (5 min).")
         return {

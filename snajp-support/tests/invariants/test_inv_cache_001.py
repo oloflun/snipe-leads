@@ -30,11 +30,13 @@ from app.storage.memory import MemoryStorage
 
 TENANT = "00000000-0000-4000-a000-000000000001"
 
+# Sedan 2026-09-02 ingår cs:customer-escalation inte i det lyckliga flödet:
+# steget är villkorat och körs bara vid kunskapslucka, säkerhetssignal eller
+# uttrycklig begäran om en människa (se support_playbook.py).
 EXPECTED_ORDER_NORMAL = [
     "cs:ticket-triage",
     "cs:customer-research",
     "cs:draft-response",
-    "cs:customer-escalation",
     "snajp:humanizer-svenska",
 ]
 
@@ -309,7 +311,12 @@ async def test_e_eskalerat_svar_lagras_aldrig(monkeypatch):
     _lage(monkeypatch, "on")
     storage = MemoryStorage()
 
-    llm = _FakeLLM(category="teknisk_support", should_escalate=True)
+    # `escalate=True` (triageflaggan) och inte `should_escalate`: sedan
+    # 2026-09-02 körs bedömningssteget inte alls på ett flöde utan signaler,
+    # så modellens ensamma röst kan inte längre eskalera ett i övrigt
+    # lyckligt ärende. Invarianten här mäter CACHEN: ett eskalerat svar får
+    # aldrig lagras, oavsett vilken signal som fällde det.
+    llm = _FakeLLM(category="teknisk_support", escalate=True)
     resultat = await _kor(
         storage, llm, message="Kan jag få hjälp med detta?", customer_email="eskalerad@example.com"
     )

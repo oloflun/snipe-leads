@@ -230,6 +230,21 @@ class Settings(BaseSettings):
     # brännsprinta genom hela tenant-timkvoten på sekunder i stället för att
     # köa disciplinerat. Höjs bara efter att kvotmarginalen mätts i drift.
     leads_workers: int = 1
+    # V2-kostnadsarbetet (2026-09-02): vilken leads-kedja som körs.
+    # "v1" = niostegsresearchen + fyrstegsutkastet (dagens beteende).
+    # "v2" = 1 research-anrop + 2 utkastanrop (RESEARCH_V2/OUTREACH_V2,
+    # app/agent/leads_research_v2.py) — ~10x billigare per lead.
+    # Default v1 tills scripts/benchmark_leads_kedja.py + 1–2 riktiga
+    # Gemini-körningar godkänt kvaliteten; flippas då per miljö via env
+    # LEADS_PIPELINE=v2, aldrig som kodändring före benchmarken.
+    leads_pipeline: str = "v1"
+    # Leads-budgeten (INV-JOB-002-arbetet, app/leads/budget.py): max summa
+    # tokens_in+tokens_out per tenant och rullande 24 timmar över leads-
+    # agenttyperna. Vid taket svarar körningsstarterna 429 i stället för att
+    # köa fler LLM-jobb. 2M tokens ≈ ~20 kr med Gemini flash-prissättningen
+    # (lib/admin/halsa.ts). 0 = grinden avstängd (test/dev utan databas har
+    # inget att skydda). Sätts per miljö via LEADS_DAILY_TOKEN_BUDGET.
+    leads_daily_token_budget: int = 2_000_000
     # Fas R2 (bd snipe-cku): semantisk svarscache. "off" (default): cachen
     # rörs aldrig — varken lookup eller store, inte ens ett embedding-anrop.
     # "shadow": lookup+store körs, men en TRÄFF ändrar inget i svaret, bara
