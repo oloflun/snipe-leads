@@ -96,7 +96,7 @@ async def _process(
         llm_steg = [steg for steg in (result.get("step_log") or []) if "skill" in steg]
         await rate_limit_db.record(storage, scopes or [], len(llm_steg))
         await app_state.jobs.complete(job_id, result)
-    except Exception:  # noqa: BLE001 — jobbet får aldrig fastna i processing
+    except Exception as fel:  # noqa: BLE001 — jobbet får aldrig fastna i processing
         # Loggen får HELA stacken, jobbet får en mening.
         #
         # Utan raden nedan blev varje agentfel en enrads-gåta: en skarp körning
@@ -105,14 +105,41 @@ async def _process(
         # ett stringifierat undantag är att gissa. Jobbet ska däremot inte bära
         # en stack — den går till kunden.
         logger.exception("Agentkörningen misslyckades (job %s, tenant %s)", job_id, tenant_id)
+        # Till platform_events OCKSÅ, inte bara stdout. Felsökningen 2026-09-01
+        # tog en omväg via Railways deploylogg för att /api/admin/events inte
+        # hade ett spår av chattkraschen — stdout roterar bort, events består.
+        try:
+            await storage.log_platform_event(
+                level="error",
+                source="chat",
+                message=f"{type(fel).__name__}: {str(fel)[:300]}",
+                tenant_id=tenant_id,
+                detail={"job_id": job_id},
+            )
+        except Exception:  # noqa: BLE001 — eventloggning får inte skugga grundfelet
+            logger.warning("kunde inte skriva chattfelet till platform_events")
         # En FAST mening, inte str(error): undantagstexten visades tidigare
         # ordagrant i den publika chattbubblan ("'ascii' codec can't encode
         # character 'à' in position 7"). Diagnosen finns redan i loggen ovan.
-        await app_state.jobs.fail(
-            job_id,
-            "Svaret gick inte att ta fram den här gången. "
-            "Prova gärna igen om en liten stund.",
-        )
+        # Kvotfel får en ÄRLIG mening. Den generiska ("prova igen om en liten
+        # stund") är direkt vilseledande vid slut kvot/kredit — att prova igen
+        # hjälper inte, och den som testar agenten drar slutsatsen att den är
+        # trasig på måfå. Uppmätt 2026-09-01: Geminis förbetalda krediter tog
+        # slut och varje chatt svarade med den generiska raden. Ingen
+        # leverantörstext läcker — meningen är vår egen; diagnosen står i
+        # loggen och i platform_events ovan.
+        felnamn = type(fel).__name__
+        if "RateLimit" in felnamn or "429" in str(fel)[:80]:
+            kundtext = (
+                "Svarskapaciteten är tillfälligt slut hos vår AI-leverantör. "
+                "Vi fyller på — försök gärna igen om en stund."
+            )
+        else:
+            kundtext = (
+                "Svaret gick inte att ta fram den här gången. "
+                "Prova gärna igen om en liten stund."
+            )
+        await app_state.jobs.fail(job_id, kundtext)
 
 
 async def hantera_strom_jobb(app_state, payload: dict[str, Any]) -> None:

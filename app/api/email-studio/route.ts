@@ -307,6 +307,25 @@ Specifikt:
 - **emails/SKILL.md**: För sekvenser och follow-ups.
 Använd alltid principerna: "The email should read like it came from someone who understands their world — not someone trying to sell them something." "Cold email is ruthlessly short." "Lead with their world, not yours."
 
+**HÅRDA UTDATAREGLER — bryts ALDRIG, oavsett åtgärd:**
+1. Mejlet får ALDRIG innehålla produktkataloger, paketnamn, priser, volymtak
+   eller uppräkningar av vad avsändaren säljer. HÖGST EN kort mening om vad
+   avsändaren gör — resten av mejlet handlar om MOTTAGARENS värld.
+   (Bakgrund: "Personalisera" klistrade in hela affärskontexten — tre agenter,
+   fem paket, priser per månad — i ett kallmejl. Det är motsatsen till
+   "ruthlessly short" och avslöjar dessutom intern prisinformation.)
+2. BAKGRUND-avsnittet i användarens meddelande är för din förståelse. Det får
+   aldrig citeras, sammanfattas eller klistras in i new_version. Det styr TON
+   och VINKEL, inte innehåll.
+3. Målet med varje mejl är ETT bokat möte. En enda låg-friktions-CTA.
+   Inga djupdykningar i erbjudandet — det hör hemma i mötet, inte i mejlet.
+4. Brödtexten är högst ~120 ord. Längre är fel även om innehållet är bra.
+5. Mottagarens namn: använd ENDAST namnet under "Mejl-kontext → Kontakt".
+   Står inget namn där: inled med "Hej," utan namn. Hitta ALDRIG på ett namn,
+   och behåll ALDRIG ett namn ur den gamla brödtexten om det motsäger
+   Mejl-kontext — den gamla texten kan gälla fel mottagare.
+6. Påstå aldrig något om mottagarens bolag som inte står i Signal-fältet.
+
 **Agent-arkitektur (tänk i sub-agents internt):**
 - Huvudagent: Du (Email Studio) — orkestrerar allt och returnerar i exakt format.
 - Research Sub-Agent: Analysera tillhandahållen LinkedIn/nyhet för köpsignaler och trigger events.
@@ -527,7 +546,24 @@ export async function POST(request: NextRequest) {
     emailContent
       ? `Current email body:\n${emailContent}`
       : `Utkastet är tomt. Skriv ett komplett förslag utifrån kontexten nedan, och säg i explanation vilka uppgifter som skulle göra nästa version vassare.`,
-    Object.keys(context).length > 0 && `Context: ${JSON.stringify(context)}`,
+    // Kontexten delas i två avsnitt med olika kontrakt, i stället för en rå
+    // JSON-klump. Med `Context: ${JSON.stringify(...)}` fanns ingen skillnad
+    // mellan fakta om mottagaren och avsändarens interna affärskontext — och
+    // "Personalisera" klistrade in hela erbjudandet, paketen och priserna i
+    // kallmejlet. Mejl-kontexten är det modellen FÅR använda i texten;
+    // bakgrunden styr bara ton och vinkel (hård regel 1-2 i systemprompten).
+    [
+      "Mejl-kontext (fakta om mottagaren — det enda som får synas i mejlet):",
+      context.companyName ? `- Företag: ${context.companyName}` : "- Företag: (okänt)",
+      context.contactName ? `- Kontakt: ${context.contactName}` : "- Kontakt: (inget namn — inled utan namn)",
+      context.signal ? `- Signal / trigger: ${context.signal}` : ""
+    ].filter(Boolean).join("\n"),
+    (context.offer || context.cta) &&
+      [
+        "BAKGRUND — avsändarens erbjudande. Får ALDRIG klistras in i mejlet (hård regel 1-2); högst EN kort mening får sammanfatta vad avsändaren gör:",
+        context.offer ? `- Erbjudande: ${String(context.offer).slice(0, 800)}` : "",
+        context.cta ? `- Önskat nästa steg: ${String(context.cta).slice(0, 200)}` : ""
+      ].filter(Boolean).join("\n"),
     `\n\nIMPORTANT: Answer with ONE valid JSON object only, exactly as specified in the system prompt. No prose before or after it.`
   ].filter(Boolean).join('\n\n');
 
