@@ -18,7 +18,7 @@ import json
 import logging
 import re
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import httpx
 
@@ -182,6 +182,110 @@ def plocka_arbetsmejl(
 
     sedda.sort(key=rank)
     return sedda[0]
+
+
+#: Rankning för kontaktlänksökning (kundkrav: agenten måste HITTA "om oss"
+#: eller "kontakt" av sig själv i stället för att bara läsa startsidan).
+#: Lägre tal = bättre — en riktig kontaktsida slår en om-oss-sida som i sin
+#: tur slår en ren personallista, samma princip som KONTAKTNIVAER ovan.
+#: Både svenska och engelska varianter, eftersom en del bolag bara har en
+#: engelsk sajt.
+_KONTAKTLANK_NYCKELORD: tuple[tuple[str, int], ...] = (
+    ("kontakta-oss", 0),
+    ("kontakta_oss", 0),
+    ("kontaktaoss", 0),
+    ("kontakt", 0),
+    ("contact-us", 0),
+    ("contactus", 0),
+    ("contact", 0),
+    ("om-oss", 1),
+    ("om_oss", 1),
+    ("omoss", 1),
+    ("about-us", 1),
+    ("aboutus", 1),
+    ("about", 1),
+    ("team", 2),
+    ("medarbetare", 2),
+    ("personal", 2),
+    ("ledning", 2),
+    ("styrelse", 2),
+)
+
+#: Markdown-länk `[text](url)` — ScrapeGraphAI-svaret är normalt markdown.
+_MD_LANK_RE = re.compile(r"\[([^\]]*)\]\(([^)\s]+)(?:\s+[\"'][^\"']*[\"'])?\)")
+#: Rå `<a href="...">text</a>` — en del sidor kommer tillbaka som HTML-
+#: fragment i markdownfältet i stället för konverterat markdown.
+_HTML_LANK_RE = re.compile(
+    r'<a\b[^>]*?href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', re.IGNORECASE | re.DOTALL
+)
+_TAGG_RE = re.compile(r"<[^>]+>")
+
+
+def _kontaktlank_rank(text: str, path: str) -> int | None:
+    """Lägsta (bästa) rank bland nyckelorden som träffar antingen länktexten
+    eller url-pathen, eller None om ingen träffar alls."""
+    mal = f"{path} {text}".casefold()
+    bast: int | None = None
+    for nyckelord, rank in _KONTAKTLANK_NYCKELORD:
+        if nyckelord in mal and (bast is None or rank < bast):
+            bast = rank
+    return bast
+
+
+def extrahera_kontaktlankar(material: str, webbplats: str, *, tak: int = 3) -> list[str]:
+    """Plockar ut de `tak` bästa länkarna på BOLAGETS EGEN domän som
+    sannolikt leder till en kontakt- eller om-oss-sida, ur redan skrapat
+    material (markdown- eller HTML-länkar).
+
+    Det här är svaret på kundens rotorsak: `_gather_registered_sources`
+    registrerade tidigare BARA startsidan (se `_registrera_webb` i
+    app/api/leads.py), och en kontaktperson under "om oss" eller "kontakt"
+    hämtades då aldrig — `_uppgradera_kontakt` hade inget att hitta i.
+
+    Samma-domän-kravet är inte kosmetiskt: en länk ut ur underlaget är precis
+    den okontrollerade skrapningen G4/allowlisten finns för att förhindra
+    (se `_rena_kontaktformular` ovan för samma resonemang på ett annat
+    fält). Länkar registreras ALDRIG härifrån — den här funktionen bara
+    FÖRESLÅR kandidater; anroparen registrerar dem i prospect_sources innan
+    de går genom den befintliga allowlist-skrapningen.
+    """
+    if not material or not webbplats:
+        return []
+    bas = webbplats if "://" in webbplats else "https://" + webbplats
+    doman = _host(bas)
+    if not doman:
+        return []
+
+    par: list[tuple[str, str]] = []
+    for text, url in _MD_LANK_RE.findall(material):
+        par.append((text, url))
+    for url, text in _HTML_LANK_RE.findall(material):
+        par.append((_TAGG_RE.sub(" ", text), url))
+
+    kandidater: list[tuple[int, int, str]] = []  # (rank, ordning, url)
+    sedda: set[str] = set()
+    for ordning, (text, ravurl) in enumerate(par):
+        ravurl = ravurl.strip()
+        if not ravurl or ravurl.lower().startswith(("mailto:", "tel:", "javascript:", "#")):
+            continue
+        try:
+            resolved = urljoin(bas, ravurl)
+            normaliserad = normalisera_webbplats(resolved)
+        except Exception:  # noqa: BLE001 — en trasig länk hoppas bara över
+            continue
+        if not normaliserad or normaliserad in sedda:
+            continue
+        host = _host(normaliserad)
+        if host != doman and not host.endswith("." + doman):
+            continue
+        rank = _kontaktlank_rank(_TAGG_RE.sub(" ", text), urlparse(normaliserad).path)
+        if rank is None:
+            continue
+        sedda.add(normaliserad)
+        kandidater.append((rank, ordning, normaliserad))
+
+    kandidater.sort(key=lambda k: (k[0], k[1]))
+    return [url for _, _, url in kandidater[:tak]]
 
 
 def webbplats_ar_bolagets(url: str | None) -> bool:

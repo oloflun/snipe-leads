@@ -10,6 +10,7 @@ from app.leads.discovery import (
     _plocka_json,
     _rena_traffar,
     ar_privat_epost,
+    extrahera_kontaktlankar,
     normalisera_webbplats,
     plocka_arbetsmejl,
     webbplats_ar_bolagets,
@@ -248,3 +249,89 @@ def test_rena_traffar_kastar_privat_epost():
     ]
     [rad] = _rena_traffar(rader, uteslut=set(), tak=10)
     assert rad["contact_email"] is None
+
+
+# -- extrahera_kontaktlankar: kundens rotorsak -----------------------------
+#
+# _gather_registered_sources (app/agent/leads_agent.py) registrerade tidigare
+# BARA startsidan i prospect_sources — en kontakt-/om-oss-sida hämtades
+# aldrig, oavsett vad som stod där. Den här funktionen är fixen: hitta
+# kandidatlänkarna i det redan skrapade startsidematerialet, så anroparen kan
+# registrera och skrapa dem via den befintliga allowlist-vägen.
+
+
+def test_extrahera_kontaktlankar_hittar_markdown_lankar():
+    material = (
+        "# Acme AB\n\nVi säljer prylar.\n\n"
+        "[Om oss](https://acme.se/om-oss) | [Kontakta oss](https://acme.se/kontakt) | "
+        "[Nyheter](https://acme.se/nyheter)\n"
+    )
+    lankar = extrahera_kontaktlankar(material, "https://acme.se")
+    assert "https://acme.se/kontakt" in lankar
+    assert "https://acme.se/om-oss" in lankar
+    assert "https://acme.se/nyheter" not in lankar
+
+
+def test_extrahera_kontaktlankar_hittar_lankar_ur_rå_html():
+    """En del skrapningar ger tillbaka HTML-fragment i markdownfältet i
+    stället för konverterat markdown — länkextraktionen får inte bero på
+    att ScrapeGraphAI alltid konverterar korrekt."""
+    material = (
+        '<nav><a href="/om-oss">Om oss</a> '
+        '<a href="/kontakt" class="btn">Kontakt</a> '
+        '<a href="/produkter">Produkter</a></nav>'
+    )
+    lankar = extrahera_kontaktlankar(material, "https://acme.se")
+    assert "https://acme.se/kontakt" in lankar
+    assert "https://acme.se/om-oss" in lankar
+    assert "https://acme.se/produkter" not in lankar
+
+
+def test_extrahera_kontaktlankar_kraver_samma_domän():
+    """En kontaktlänk till en ANNAN domän är inte trappans nästa steg — det
+    är en okontrollerad länk ut ur underlaget (samma resonemang som
+    _rena_kontaktformular)."""
+    material = (
+        "[Kontakta oss](https://ett-helt-annat-bolag.se/kontakt) "
+        "[Om oss](https://acme.se/om-oss)"
+    )
+    lankar = extrahera_kontaktlankar(material, "https://acme.se")
+    assert lankar == ["https://acme.se/om-oss"]
+
+
+def test_extrahera_kontaktlankar_tillater_subdomän():
+    # www. är samma bolag som acme.se (samma resonemang som ar_arbetsmejl) —
+    # men URL:en registreras SOM DEN STÅR, inte tvingad om till bar-domän.
+    material = "[Kontakt](https://www.acme.se/kontakt)"
+    lankar = extrahera_kontaktlankar(material, "https://acme.se")
+    assert lankar == ["https://www.acme.se/kontakt"]
+
+
+def test_extrahera_kontaktlankar_rankar_kontakt_over_om_oss_over_team():
+    material = (
+        "[Vårt team](https://acme.se/team) "
+        "[Om oss](https://acme.se/om-oss) "
+        "[Kontakt](https://acme.se/kontakt)"
+    )
+    lankar = extrahera_kontaktlankar(material, "https://acme.se", tak=3)
+    assert lankar[0] == "https://acme.se/kontakt"
+    assert lankar[1] == "https://acme.se/om-oss"
+    assert lankar[2] == "https://acme.se/team"
+
+
+def test_extrahera_kontaktlankar_begransar_till_tak():
+    material = (
+        "[Kontakt](https://acme.se/kontakt) [Om oss](https://acme.se/om-oss) "
+        "[Team](https://acme.se/team) [Ledning](https://acme.se/ledning)"
+    )
+    assert len(extrahera_kontaktlankar(material, "https://acme.se", tak=2)) == 2
+
+
+def test_extrahera_kontaktlankar_ignorerar_lankar_utan_kontaktmatchning():
+    material = "[Nyheter](https://acme.se/nyheter) [Priser](https://acme.se/priser)"
+    assert extrahera_kontaktlankar(material, "https://acme.se") == []
+
+
+def test_extrahera_kontaktlankar_utan_material_eller_webbplats():
+    assert extrahera_kontaktlankar("", "https://acme.se") == []
+    assert extrahera_kontaktlankar("[Kontakt](https://acme.se/kontakt)", "") == []

@@ -37,6 +37,7 @@ import logging
 import re
 import time
 from typing import Any
+from urllib.parse import urlparse
 
 from agents import Agent, Runner
 
@@ -45,7 +46,14 @@ from ..agentcore.overlays import pack_version
 from ..agentcore.packs import PlaybookStep, RunLedger
 from ..config import get_settings
 from ..leads.business_context import require_business_context
-from ..leads.discovery import ar_privat_epost, ar_arbetsmejl, plocka_arbetsmejl
+from ..leads.discovery import (
+    LAGLIG_GRUND_EGEN_WEBB,
+    ar_privat_epost,
+    ar_arbetsmejl,
+    extrahera_kontaktlankar,
+    normalisera_webbplats,
+    plocka_arbetsmejl,
+)
 from ..leads.grounding_gate import PermittedFacts, build_permitted_facts, check_grounding
 from ..leads.grounding_playbook import GROUNDING_V1
 from ..leads.language_gate import last_humanizer_variant
@@ -345,7 +353,7 @@ async def _uppgradera_kontakt(
     prospect: dict[str, Any],
     fynd: dict[str, Any],
     material: str,
-) -> None:
+) -> str | None:
     """Uppgraderar prospektets kontakt ur det redan SKRAPADE källmaterialet.
 
     Två saker händer här, i den ordningen:
@@ -364,6 +372,11 @@ async def _uppgradera_kontakt(
     Skriver ALDRIG över en HÖGRE eller LIKA namnnivå. Hittar inte på en
     e-postadress. En privat adress som redan ligger på prospektet byts ut
     mot arbetsmejlet från sajten. Kastar aldrig — se `_fanga_kunskap`.
+
+    Returnerar prospektets KONTAKTNIVÅ efter anropet — den nya om något
+    fält skrevs, annars den prospektet redan hade. Kundkravet "minst en
+    kontaktperson" behöver veta om NÅGON nivå någonsin nåtts, inte bara om
+    DET HÄR anropet råkade höja den.
     """
     webb = prospect.get("website")
     namn = str(fynd.get("contact_name") or "").strip()
@@ -391,12 +404,14 @@ async def _uppgradera_kontakt(
                     falt["contact_level"] = "named_other" if namn else "role_address"
 
     if not falt:
-        return
+        return prospect.get("contact_level")
 
     try:
         await storage.update_prospect(tenant_id, prospect_id, **falt)
     except Exception:  # noqa: BLE001 — uppgraderingen är en bonus, researchen är jobbet
         logger.exception("Kunde inte uppgradera kontaktnivån för prospekt %s", prospect_id)
+        return prospect.get("contact_level")
+    return falt.get("contact_level", prospect.get("contact_level"))
 
 
 # -- Fas A: onboarding (oförändrad, se modulens docstring) -----------------
@@ -477,18 +492,56 @@ async def run_onboarding_turn(
 # -- Fas B: research -------------------------------------------------------
 
 
+def _gissa_hemsida(urls: list[str], webbplats: str | None) -> str | None:
+    """Vilken av de registrerade URL:erna som är startsidan — den vi letar
+    kontaktlänkar I, inte en av dem vi redan hittat via den vägen.
+
+    `prospect.website` (normaliserad likadant som `_registrera_webb`
+    registrerar den) är den pålitliga signalen när den finns. Saknas den
+    (äldre rader, manuellt tillagda källor) gissar vi konservativt på den
+    URL:en med kortast path — startsidan är typiskt `/`, en kontakt- eller
+    om-oss-sida är typiskt djupare.
+    """
+    if webbplats:
+        try:
+            normaliserad = normalisera_webbplats(webbplats)
+        except Exception:  # noqa: BLE001 — ett trasigt website-fält, inte en krasch
+            normaliserad = None
+        if normaliserad in urls:
+            return normaliserad
+    if not urls:
+        return None
+    return min(urls, key=lambda u: (len(urlparse(u).path.strip("/")), u))
+
+
 async def _gather_registered_sources(
     storage,
     tenant_id: str,
     prospect_id: str,
     skatteverket: SkatteverketAtkomst | None = None,
-) -> tuple[str, list[dict[str, Any]], list[str]]:
-    """Hämtar ALLA redan registrerade källor för prospektet, i kod.
+    *,
+    webbplats: str | None = None,
+) -> tuple[str, list[dict[str, Any]], list[str], dict[str, Any]]:
+    """Hämtar ALLA redan registrerade källor för prospektet, i kod — och
+    upptäcker OCH registrerar kontakt-/om-oss-sidor på samma domän innan
+    skrapningen, i stället för att bara nöja sig med startsidan.
 
-    Allowlisten är oförändrad: _scrape_registered_source_impl vägrar
-    fortfarande en URL som inte ligger i prospect_sources. Skillnaden är att
-    hämtningen nu alltid sker, i stället för att bero på att modellen kom
-    ihåg att anropa verktyget.
+    Kundens rotorsak, ordagrant: `_registrera_webb` (app/api/leads.py)
+    registrerar bara bolagets STARTSIDA i prospect_sources. En
+    kontaktperson under "om oss" eller "kontakt" hämtades därför aldrig —
+    `_uppgradera_kontakt` läser redan skrapmaterialet rätt, men fick inget
+    att hitta i.
+
+    Allowlisten (G4) är OFÖRÄNDRAD och kringgås inte: kandidatlänkarna
+    registreras i prospect_sources INNAN de skrapas, via samma
+    `create_prospect_source` som _registrera_webb använder — precis som en
+    admin som lägger till en källa manuellt. `_scrape_registered_source_impl`
+    vägrar fortfarande en URL som inte står där.
+
+    Returnerar (material, scraped_sources, errors, kontakt_diagnostik).
+    Den sista är rent kod-härledd (aldrig modelltext) — vad researchen
+    FAKTISKT gjorde för att leta kontaktsidor, till grund för
+    `contact_missing_reason` i run_research_step.
     """
     # Skatteverket-atkomsten kommer FRAN SERVERN (X-Skatteverket-Token via
     # Next-proxyn), aldrig fran modellen. None = kunden har inte legitimerat
@@ -501,22 +554,76 @@ async def _gather_registered_sources(
     )
     urls = sorted(await storage.list_prospect_source_urls(tenant_id, prospect_id))
 
-    blocks: list[str] = []
+    scraped: dict[str, str] = {}
     errors: list[str] = []
-    for url in urls:
+
+    async def _hamta(url: str) -> str | None:
         try:
             payload = json.loads(await _scrape_registered_source_impl(context, url))
         except Exception as error:  # noqa: BLE001 — en död källa fäller inte researchen
             payload = {"error": f"{type(error).__name__}: {error}"}
         if payload.get("content"):
-            blocks.append(payload["content"])
-        else:
-            errors.append(f"{url}: {payload.get('error', 'okänt fel')}")
+            return payload["content"]
+        errors.append(f"{url}: {payload.get('error', 'okänt fel')}")
+        return None
 
-    material = "\n\n".join(blocks)
+    for url in urls:
+        innehall = await _hamta(url)
+        if innehall is not None:
+            scraped[url] = innehall
+
+    # Kontaktupptäckt: leta länkar i STARTSIDANS material, registrera de
+    # 2-3 bästa träffarna, skrapa dem via samma allowlist-väg som ovan.
+    hemsida = _gissa_hemsida(urls, webbplats)
+    hemsidematerial = scraped.get(hemsida) if hemsida else None
+    kontakt_kandidater: list[str] = []
+    kontakt_registrerade: list[str] = []
+    kontakt_blocks: list[str] = []
+    if hemsidematerial and hemsida:
+        kontakt_kandidater = extrahera_kontaktlankar(hemsidematerial, hemsida)
+        for kandidat in kontakt_kandidater:
+            if kandidat not in urls:
+                try:
+                    await storage.create_prospect_source(
+                        tenant_id,
+                        prospect_id=prospect_id,
+                        source_url=kandidat,
+                        source_type="company_website",
+                        lawful_basis=LAGLIG_GRUND_EGEN_WEBB,
+                    )
+                except Exception:  # noqa: BLE001 — dublett/grind får inte fälla körningen
+                    logger.exception(
+                        "Kunde inte registrera kontaktkälla %s för %s", kandidat, prospect_id
+                    )
+                    continue
+            elif kandidat in scraped:
+                # Redan registrerad OCH redan skrapad (tidigare varv) — den
+                # ligger redan i `scraped`, prioritera bara om den till
+                # kontaktblocken utan att skrapa på nytt.
+                kontakt_registrerade.append(kandidat)
+                kontakt_blocks.append(scraped[kandidat])
+                continue
+            kontakt_registrerade.append(kandidat)
+            innehall = await _hamta(kandidat)
+            if innehall is not None:
+                kontakt_blocks.append(innehall)
+
+    # Kontaktsidorna FÖRST: MAX_SOURCE_CHARS-avkortningen nedan tar bort
+    # SLUTET av materialet, och en lång startsida ska inte kunna kapa bort
+    # just den sida kundkravet handlar om.
+    ovriga_blocks = [scraped[u] for u in urls if u in scraped and u not in kontakt_registrerade]
+    material = "\n\n".join(kontakt_blocks + ovriga_blocks)
     if len(material) > MAX_SOURCE_CHARS:
         material = material[:MAX_SOURCE_CHARS] + "\n\n[... avkortat, se prospect_sources ...]"
-    return material, context.scraped_sources, errors
+
+    kontakt_diagnostik = {
+        "hemsida": hemsida,
+        "hemsidematerial_tillgangligt": bool(hemsidematerial),
+        "kandidater": kontakt_kandidater,
+        "registrerade": kontakt_registrerade,
+        "skrapade": len(kontakt_blocks),
+    }
+    return material, context.scraped_sources, errors, kontakt_diagnostik
 
 
 async def run_research_step(
@@ -539,15 +646,16 @@ async def run_research_step(
     settings = get_settings()
     steps = RESEARCH_V1.steps  # indexerat, inte per namn — ordningen ÄR playbooken
 
-    material, scraped_sources, scrape_errors = await _gather_registered_sources(
-        storage, tenant_id, prospect_id, skatteverket
+    # Läst FÖRE källinsamlingen (flyttat hit 2026-08-31): kontaktupptäckten i
+    # _gather_registered_sources behöver veta vilken URL som är STARTSIDAN
+    # för att kunna leta kontaktlänkar i rätt material, och samma rad
+    # behövs ändå av `_uppgradera_kontakt` för att avgöra uppgradering.
+    prospect_row = await storage.get_prospect(tenant_id, prospect_id) or {}
+
+    material, scraped_sources, scrape_errors, kontakt_diagnostik = await _gather_registered_sources(
+        storage, tenant_id, prospect_id, skatteverket, webbplats=prospect_row.get("website")
     )
     sources_block = material or "(inget källmaterial kunde hämtas — se scrape_errors)"
-
-    # Läst EN gång, före steg 1: `_uppgradera_kontakt` behöver veta vilken
-    # kontaktnivå prospektet redan har INNAN steget kör, för att kunna avgöra
-    # om fyndet är en uppgradering eller en nedgradering.
-    prospect_row = await storage.get_prospect(tenant_id, prospect_id) or {}
 
     soul_block = await load_soul(storage, tenant_id)
     lager = await las_instruktioner(
@@ -609,7 +717,7 @@ async def run_research_step(
     # sökindexträff. Uppgraderar bara, skriver aldrig över en bättre nivå,
     # och hittar aldrig på en adress. Se _uppgradera_kontakt för resonemanget
     # i sin helhet.
-    await _uppgradera_kontakt(
+    slutlig_kontaktniva = await _uppgradera_kontakt(
         storage, tenant_id, prospect_id, prospect=prospect_row, fynd=customer, material=material
     )
 
@@ -774,6 +882,32 @@ async def run_research_step(
     ]
 
     escalated_steps = [s.skill for s in trace.steps if s.escalated]
+
+    # Kundkrav, ordagrant: "leadsagenten måste vid körning kunna hitta MINST
+    # EN kontaktperson". `slutlig_kontaktniva` är kod-härledd (från
+    # _uppgradera_kontakt, som i sin tur bara skriver vad som BOKSTAVLIGEN
+    # stod i det skrapade materialet) — aldrig modelltext, så det här fältet
+    # kan inte råka bära en gissning. contact_missing_reason förklarar VAR i
+    # kedjan sökningen gav upp, helt utan att någon behöver läsa loggen.
+    contact_missing = not slutlig_kontaktniva
+    if not contact_missing:
+        contact_missing_reason = None
+    elif not kontakt_diagnostik["hemsidematerial_tillgangligt"]:
+        contact_missing_reason = (
+            "Startsidan gick inte att hämta — kontaktsökningen kunde inte köras."
+        )
+    elif not kontakt_diagnostik["kandidater"]:
+        contact_missing_reason = (
+            "Hittade ingen kontakt- eller om oss-länk på bolagets webbplats."
+        )
+    elif not kontakt_diagnostik["skrapade"]:
+        contact_missing_reason = "Kontaktsidan/-sidorna hittades men gick inte att hämta."
+    else:
+        contact_missing_reason = (
+            "Kontaktsidan hittades men innehöll ingen verifierbar kontaktperson "
+            "eller adress."
+        )
+
     return {
         "scraped_sources": scraped_sources,
         "scrape_errors": scrape_errors,
@@ -788,6 +922,10 @@ async def run_research_step(
         "icp_fit": prospecting.get("icp_fit"),
         "offer_summary": offer_summary,
         "final_output": final_output,
+        "contact_level": slutlig_kontaktniva,
+        "contact_missing": contact_missing,
+        "contact_missing_reason": contact_missing_reason,
+        "contact_discovery": kontakt_diagnostik,
         "tokens_in": trace.total_tokens_in,
         "tokens_out": trace.total_tokens_out,
         "reasoning_tokens": trace.total_reasoning_tokens,

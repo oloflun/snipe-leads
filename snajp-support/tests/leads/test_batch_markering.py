@@ -181,7 +181,12 @@ async def test_gather_registered_sources_har_ingen_obunden_variabel():
     tenant = "00000000-0000-4000-a000-00000000b4c8"
     prospect = await storage.create_prospect(tenant, company_name="Provbolaget AB")
 
-    material, sources, errors = await _gather_registered_sources(
+    material, sources, errors, kontakt_diagnostik = await _gather_registered_sources(
         storage, tenant, prospect["id"]
     )
     assert material == "" and sources == [] and errors == []
+    # Ingen registrerad källa alls -> ingen startsida att leta kontaktlänkar
+    # i. Diagnostiken ska säga det ärligt, inte tyst se ut som en sökning
+    # som kördes och inte hittade något.
+    assert kontakt_diagnostik["hemsida"] is None
+    assert kontakt_diagnostik["kandidater"] == []
