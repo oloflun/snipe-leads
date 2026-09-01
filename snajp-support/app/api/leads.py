@@ -1475,7 +1475,21 @@ async def _run_batch(app_state, payload: dict) -> None:
             # "kontaktperson vid funnet lead" avgör vad som listas — rader
             # utan någon kontaktväg räknas separat i stället för att visas
             # som färdiga leads.
-            med_kontakt = [p for p in prospects if p.get("contact_level")]
+            #
+            # Kontaktväg = nivå ELLER konkret kontaktfält, samma breddning
+            # som grinden i run_research_step och av samma skäl: rader som
+            # inte kommer ur discovery (exempelbolag, egna namn) bär aldrig
+            # contact_level ens när de har en fullt användbar e-postadress.
+            # Uppmätt live 2026-09-02: demo-tenantens sok gav count=0 med
+            # tre exempelbolag gömda i utan_kontakt.
+            med_kontakt = [
+                p
+                for p in prospects
+                if p.get("contact_level")
+                or p.get("contact_email")
+                or p.get("contact_name")
+                or p.get("contact_form_url")
+            ]
             await app_state.jobs.complete(
                 job_id,
                 {

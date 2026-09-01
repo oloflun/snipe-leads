@@ -1,5 +1,43 @@
 # Snipra Status
 
+## 2026-09-02 — Claude/Sebbe — agenterna drar färre anrop: grindar, snabbsök, GDPR-lager
+
+Beställningen var att sänka credits/anrop utan kvalitetstapp, och svaret är
+GRINDAR för utfall som ändå kasserades — inte tunnare prompts:
+
+* **Leads:** okvalificerat eller kontaktlöst prospekt stoppar efter
+  ICP-steget: 3 anrop i stället för 9, och utkastfasen (4–7 anrop till)
+  hoppas över. `icp_fit`/`qualified`/`disqualifiers` persisteras ÄNTLIGEN på
+  prospektraden (migration 024:s syfte — ingen kodväg skrev dem).
+  Sökprompten bär nu SNI-koder, regioner och exclude_domains — en kund med
+  enbart SNI-koder sökte tidigare "hela internet" med tom målgruppstext.
+  Kontaktkravet är kodgrind, inte bara prompttext.
+* **Leads-snabbsöket byggt** (`scope="sok"` + `LeadsSnabbsok.tsx` till höger
+  om formuläret på /admin/testkorningar): en rad, "Sök Leads", 12 leads med
+  kontaktväg för EN Gemini-sökning. Träffar utan kontakt räknas separat.
+* **Support:** eskaleringssteget (kedjans enda thinking-anrop) villkorat —
+  körs bara vid kb-lucka, säkerhetssignal eller när kunden ber om en
+  människa (ny kodregex tar över exakt den signalen). 6→5 anrop på lyckliga
+  flödet. Följdfrågegränsen höjd till TVÅ motfrågor innan kb-lucka
+  eskalerar. Påhoppsgrinden orörd och verifierad: svordomar eskalerar inte,
+  riktade allvarliga hot gör det.
+* **Bokföring:** chattagenten läser nu det globala instruktionslagret (var
+  enda LLM-ytan där adminredigerade regler inte nådde fram), dataskyddsblock
+  i systemprompten och nytt kunskapsämne `gdpr_och_bokforing`.
+* **Dataskydd:** ScrapeGraphAI stod INTE i underleverantörslistan trots att
+  den hämtat prospektsidor sedan skrapningen byggdes — tillagd i
+  `lib/bolag.ts`, DPA/region flaggade till Anton. Full kunddatalista i
+  handoffen. INV-API-001 föll på HEAD (`lib/skatteverket/oauth.ts`) — lagad.
+
+Parallellsessionen (snipe-leads-28) levererade i samma push: INV-JOB-002-
+liggaren (migration 059, körd mot dev före pushen), tokenbudget och
+V2-playbooks bakom env-flagga; körvägen `leads_research_v2.py` kommer i
+deras egen push.
+
+**1717 backendtester + 386 rotvakter gröna, tsc rent.** Deployad `ef9a1af`
+(auto-deployen fungerar igen). Handoff:
+`HANDOFF-2026-09-02-RESURSER-OCH-GRINDAR.md`.
+
 ## 2026-09-01 — Claude/Sebbe — UTSKICKEN FUNGERAR. Sista sändblockeraren avförd.
 
 Ett riktigt mejl gick från Railway-containern hela vägen till inkorgen:
