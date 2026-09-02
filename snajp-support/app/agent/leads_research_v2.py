@@ -75,15 +75,21 @@ _RESEARCH_V2_UPPGIFT = (
     "offer ({name, promise, proof, risk_reversal, cta}), weakest_lever, "
     "offer_confidence (0.0-1.0), uncertainties (lista), reveals_gap (bool), "
     "gap (eller null), icp_adjustment (eller null), kunskap_evidence (lista).\n\n"
-    # Svarslängden ÄR kostnaden: 2026-09-02 mättes researchsvaret till 1 482
-    # ut-tokens — 0,053 kr av 0,10-budgeten — och merparten var prosa ingen
-    # nedströmskonsument läser i sin helhet. Fälten behålls (resonemangs-
-    # ordningen bär erbjudandets kvalitet), längden stramas.
-    "SVARSLÄNGD — hård regel: varje fritextfält är EN mening (~15 ord). "
-    "Listor: max 3 poster, varje post kort; likely_objections max 2 objekt "
-    "med en menings response; evidence max 3 KORTA citat (under 12 ord "
-    "vardera). Upprepa aldrig källtext utanför evidence. Skriv telegram, "
-    "inte uppsats — informationstätheten avgör, inte ordmängden."
+    # Svarslängden är en kostnad, men beläggen är grundningens RÅVARA:
+    # evidence + likely_pains + trigger_events blir build_permitted_facts,
+    # och 5-fixturemätningen 2026-09-02 visade att en hård cap på evidence
+    # (max 3 korta citat) fällde 2/5 utkast i grundningsgrinden →
+    # reparationscykeln (+2 anrop, +15,7k tokens per fällt lead) kostade
+    # mer än hela bantningen sparade. Därför stramas BARA resonemangs-
+    # fälten — de tre beläggfälten är uttryckligen undantagna.
+    "SVARSLÄNGD: resonemangsfälten (company_summary, business_model, "
+    "qualification_reasoning, account_structure, prospect_positioning, "
+    "hardest_objection, weakest_lever) är EN mening vardera; open_questions, "
+    "comparison_angles, honest_caveats, uncertainties, missing_information "
+    "max 3 korta poster; likely_objections max 2 objekt med en menings "
+    "response. UNDANTAG — snåla ALDRIG på beläggen: evidence, likely_pains "
+    "och trigger_events får vara så många och så ordagranna som "
+    "källmaterialet bär; de är utkastets tillåtna faktabas."
 )
 
 #: Utkastuppgiften för det kombinerade steget: skapa + personalisera +

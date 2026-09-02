@@ -115,8 +115,9 @@ ETT JSON-objekt med EXAKT fälten ovan (plus kontraktsfälten sources_used
 och context_refs). Inga extra rubriker, ingen markdown, inga fält du inte
 ombetts om.
 
-**Svarslängd — hård regel.** Skriv telegram, inte uppsats: varje
-fritextfält är EN mening, listor max 3 korta poster, likely_objections max
-2, evidence max 3 citat under 12 ord vardera. Upprepa aldrig källtext
-utanför evidence. Ett kort, tätt svar är ett BÄTTRE svar — utfyllnad är
-kostnaden utan kvaliteten.
+**Svarslängd.** Resonemangsfälten skrivs som telegram: en mening per
+fritextfält, max 3 korta poster per lista, likely_objections max 2.
+**Undantag — beläggen:** evidence, likely_pains och trigger_events är
+utkastets tillåtna faktabas (grundningsgrinden mäter mejlet mot dem) och
+får vara så många och så ordagranna som källmaterialet bär. Snåla aldrig
+där — ett saknat belägg kostar en reparationsrunda, inte en rad.
