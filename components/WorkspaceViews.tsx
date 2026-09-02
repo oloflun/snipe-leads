@@ -98,8 +98,10 @@ export function AssistantView() {
  * Leads-vyns innehåll utan skal, så att startsidan kan montera den bredvid
  * kundtjänstvyn utan att nästla två PageShell (alltså två headers).
  *
- * Discovery-formuläret är det som FAKTISKT startar en körning; bolagsregistret
- * under är exempeldata tills körningen skrivit riktiga prospekt.
+ * Discovery-formuläret startar körningen; bolagsregistret under hämtar
+ * tenantens prospekt. Exempellistan i Discoverys högerkolumn är märkt
+ * "Exempel" per rad och kan aldrig mejlas (se ExempelbolagDemo) — omärkta
+ * exempelbolag hör fortfarande bara hemma på /demo.
  */
 export function LeadsBody({ demo = false }: Readonly<{ demo?: boolean }>) {
   return (
@@ -115,8 +117,8 @@ export function LeadsBody({ demo = false }: Readonly<{ demo?: boolean }>) {
 export function LeadsView({ demo = false }: Readonly<{ demo?: boolean }>) {
   return (
     <PageShell
-      title="Bolag sorterade efter din produkt och ton, inte efter en mall."
-      description="Specificera vilka typer av kunder ni söker. Agenterna letar upp potentiella bolag baserat på dina ord."
+      title="Skräddarsydda leads efter din målgrupp och produkt."
+      description="Beskriv er målgrupp och produkt — agenterna letar fram bolagen som matchar."
     >
       <LeadsBody demo={demo} />
     </PageShell>

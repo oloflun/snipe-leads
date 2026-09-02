@@ -23,14 +23,17 @@ import { getBusinessContextForWorkspace, getWorkspaceContext } from "@/lib/works
  * De kolumnerna läses därför in och skrivs tillbaka orörda. Fälten här är de
  * fyra ingen annan yta äger.
  *
- * ## Varför demovyn går en annan väg
+ * ## Varför demo OCH kundbesök går en annan väg
  *
  * `business_contexts` är RLS-scopad mot ARBETSYTAN, inte mot tenanten. I
- * demovyn är arbetsytan fortfarande adminens egen medan tenanten är
- * demokontots — en skrivning hade alltså landat på Snajps rad medan agenten
- * läser Nordlys, och formuläret hade visat Snajps svar i demokontots
- * inställningar. Där är kontextdokumentet i backenden enda sanning, och det
- * är ändå det enda agenten läser (se docstringen nedan).
+ * demovyn OCH i ett kundbesök (`aktivVy().vy === "kund"`, se lib/vy.ts) är
+ * arbetsytan fortfarande adminens egen medan tenanten är demokontots eller
+ * den namngivna kundens — en skrivning hade alltså landat på Snajps rad
+ * medan agenten läser en annan tenant, och formuläret hade visat Snajps svar
+ * i den besökta kundens inställningar (bekräftat i produktion 2026-09-02:
+ * två olika kundbesök visade identiskt Snajp-innehåll). Där är
+ * kontextdokumentet i backenden enda sanning, och det är ändå det enda
+ * agenten läser (se docstringen nedan).
  *
  * ## Varför kontextdokumentet skickas vidare
  *
@@ -117,7 +120,12 @@ async function hamtaFranAgenten(): Promise<Affarskontextfalt | null> {
 }
 
 export async function hamtaAffarskontext(): Promise<Affarskontextfalt | null> {
-  if ((await aktivVy()).vy === "demo") {
+  // Demo OCH kundbesök: samma väg, av samma skäl (se filens docstring).
+  // `business_contexts` är RLS-scopad mot arbetsytan, och vid ett kundbesök
+  // är arbetsytan fortfarande adminens EGEN — bara backend-nyckeln pekar på
+  // kunden. Ett kundbesök som lästes härifrån visade därför alltid Snajps
+  // egna rad, oavsett vilken namngiven kund bannern sa.
+  if ((await aktivVy()).vy !== "admin") {
     return hamtaFranAgenten();
   }
 
@@ -155,9 +163,12 @@ export async function sparaAffarskontext(
     };
   }
 
-  // Demovyn: bara till agenten. Ett misslyckande är då ett riktigt fel — det
-  // finns ingen rad i arbetsytan som räddar texten om backenden inte svarar.
-  if ((await aktivVy()).vy === "demo") {
+  // Demo OCH kundbesök: bara till agenten, aldrig till arbetsytans egen rad.
+  // Samma root cause som i hamtaAffarskontext — en sparning härifrån under
+  // ett kundbesök skrev annars över Snajps EGEN business_contexts-rad, inte
+  // den besökta kundens. Ett misslyckande är då ett riktigt fel — det finns
+  // ingen rad i arbetsytan som räddar texten om backenden inte svarar.
+  if ((await aktivVy()).vy !== "admin") {
     const varning = await skickaTillAgenten(input, produkt);
     return varning ? { success: false, error: varning } : { success: true };
   }
@@ -220,4 +231,38 @@ async function skickaTillAgenten(
   } catch {
     return "Sparat i arbetsytan. Agenterna kunde inte nås just nu och läser texten vid nästa försök.";
   }
+}
+
+/**
+ * Erbjudandetexten utkastet kräver — SAMMA källa som inställningssidan visar.
+ *
+ * Leads-UI:t läste tidigare bara `agent_context_docs` (product_marketing) och
+ * behandlade HTTP 5xx som "inte ifylld". Settings skriver `business_contexts`
+ * och skickar vidare best-effort. Ett fyllt formulär såg därför tomt ut för
+ * utkastknappen.
+ *
+ * Om arbetsytan har produkttext: använd den och backfilla kontextdokumentet.
+ * 5xx från agenten är inte "inte ifylld".
+ */
+export async function lasOffertForUtkast(): Promise<string> {
+  const workspace = await hamtaAffarskontext();
+  if (!workspace) {
+    throw new Error("Du måste vara inloggad för att skapa utkast.");
+  }
+  const franWorkspace = workspace.product.trim() ? tillDokument(workspace) : "";
+  if (franWorkspace) {
+    await skickaTillAgenten(workspace, workspace.product.trim());
+    return franWorkspace.slice(0, 2000);
+  }
+
+  const franAgent = await hamtaFranAgenten();
+  const dokument = franAgent && franAgent.product.trim() ? tillDokument(franAgent) : "";
+  if (dokument) {
+    return dokument.slice(0, 2000);
+  }
+
+  throw new Error(
+    "Affärskontexten (Vad ni säljer) är inte ifylld ännu. Fyll i den under Inställningar, " +
+      "Vad agenterna vet, Affärskontext innan utkast kan skapas."
+  );
 }

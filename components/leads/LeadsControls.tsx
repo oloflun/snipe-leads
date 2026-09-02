@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { createDemoLeadsFetch } from "@/lib/demo/leads-controls";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
+import { ICP_ETIKETTER } from "@/lib/leads/icpLabels";
 
 /**
  * Kundens kontroller över leads-agenten: hur långt den får gå, vem den ska
@@ -55,12 +56,12 @@ const AUTONOMY_LABEL: Record<Autonomy, string> = {
 };
 
 const ICP_FIELDS: { key: keyof Config["icp"]; label: string; hint: string }[] = [
-  { key: "industries", label: "Branscher", hint: "Bygg, tillverkning, logistik" },
-  { key: "exclude_industries", label: "Undvik branscher", hint: "Bemanning, spel" },
-  { key: "geography", label: "Stad, län, region", hint: "Göteborg, Skåne, Västra Götaland" },
-  { key: "roles", label: "Roller", hint: "VD, inköpschef, platschef" },
-  { key: "must_have", label: "Krävs", hint: "Egen produktion, växer" },
-  { key: "deal_breakers", label: "Diskvalificerar", hint: "Under 10 anställda" }
+  { key: "industries", ...ICP_ETIKETTER.industries },
+  { key: "exclude_industries", ...ICP_ETIKETTER.exclude_industries },
+  { key: "geography", ...ICP_ETIKETTER.geography },
+  { key: "roles", ...ICP_ETIKETTER.roles },
+  { key: "must_have", ...ICP_ETIKETTER.must_have },
+  { key: "deal_breakers", ...ICP_ETIKETTER.deal_breakers }
 ];
 
 function asList(value: string): string[] {

@@ -37,6 +37,7 @@ import logging
 import re
 import time
 from typing import Any
+from urllib.parse import urlparse
 
 from agents import Agent, Runner
 
@@ -45,6 +46,14 @@ from ..agentcore.overlays import pack_version
 from ..agentcore.packs import PlaybookStep, RunLedger
 from ..config import get_settings
 from ..leads.business_context import require_business_context
+from ..leads.discovery import (
+    LAGLIG_GRUND_EGEN_WEBB,
+    ar_privat_epost,
+    ar_arbetsmejl,
+    extrahera_kontaktlankar,
+    normalisera_webbplats,
+    plocka_arbetsmejl,
+)
 from ..leads.grounding_gate import PermittedFacts, build_permitted_facts, check_grounding
 from ..leads.grounding_playbook import GROUNDING_V1
 from ..leads.language_gate import last_humanizer_variant
@@ -309,6 +318,102 @@ def _digest(output: dict[str, Any], *keys: str) -> str:
     return json.dumps({k: output.get(k) for k in keys if k in output}, ensure_ascii=False, indent=1)
 
 
+#: Kontaktfältets fallback-trappa (app/leads/discovery.py:KONTAKTNIVAER),
+#: här i rangordning för att avgöra om Fas B:s fynd ska SKRIVA ÖVER det
+#: hitta_bolag() redan satte. Lägst först — en tom sträng/None rankas 0.
+_KONTAKTNIVA_RANK = ("contact_form", "role_address", "named_other", "named_role_match")
+
+
+def _kontaktniva_rank(niva: str | None) -> int:
+    return _KONTAKTNIVA_RANK.index(niva) + 1 if niva in _KONTAKTNIVA_RANK else 0
+
+
+def _verifierad_epost(kandidat: str | None, material: str, webb: str | None) -> str | None:
+    """Accepterar bara en adress som står i skrapet och inte är privat."""
+    epost = (kandidat or "").strip() or None
+    if not epost:
+        return None
+    if epost.lower() not in (material or "").lower():
+        return None
+    if not ar_arbetsmejl(epost, webb=webb):
+        return None
+    return epost
+
+
+def _saknar_arbetsmejl(prospect: dict[str, Any], webb: str | None) -> bool:
+    nu = prospect.get("contact_email")
+    return not ar_arbetsmejl(nu, webb=webb)
+
+
+async def _uppgradera_kontakt(
+    storage,
+    tenant_id: str,
+    prospect_id: str,
+    *,
+    prospect: dict[str, Any],
+    fynd: dict[str, Any],
+    material: str,
+) -> str | None:
+    """Uppgraderar prospektets kontakt ur det redan SKRAPADE källmaterialet.
+
+    Två saker händer här, i den ordningen:
+
+    1. En namngiven person från mk:customer-research, om namnet finns och
+       nivån är en uppgradering. E-post bara om den står i materialet och
+       inte är privat (gmail/hotmail).
+    2. Saknas fortfarande ett arbetsmejl: plocka info@/kontakt@/hej@ (eller
+       närmaste rolladress) som bokstavligen står på bolagets egen sajt.
+       Kontaktformulär räknas inte som mottagare.
+
+    VARFÖR HÄR OCH INTE BARA I discovery.py: `hitta_bolag()` kör en BRED
+    Google-sökning och ser bara sökindexet. Det här steget körs EFTER
+    `_gather_registered_sources` hämtat bolagets egna sidor.
+
+    Skriver ALDRIG över en HÖGRE eller LIKA namnnivå. Hittar inte på en
+    e-postadress. En privat adress som redan ligger på prospektet byts ut
+    mot arbetsmejlet från sajten. Kastar aldrig — se `_fanga_kunskap`.
+
+    Returnerar prospektets KONTAKTNIVÅ efter anropet — den nya om något
+    fält skrevs, annars den prospektet redan hade. Kundkravet "minst en
+    kontaktperson" behöver veta om NÅGON nivå någonsin nåtts, inte bara om
+    DET HÄR anropet råkade höja den.
+    """
+    webb = prospect.get("website")
+    namn = str(fynd.get("contact_name") or "").strip()
+    roll = str(fynd.get("contact_role") or "").strip() or None
+    fynd_epost = _verifierad_epost(str(fynd.get("contact_email") or "").strip() or None, material, webb)
+    scrape_epost = plocka_arbetsmejl(material, webb, onskad_roll=roll)
+    falt: dict[str, Any] = {}
+
+    # Namngiven uppgradering — samma rangordning som tidigare. Kräver namn,
+    # och får inte degradera named_role_match.
+    if namn and _kontaktniva_rank("named_other") > _kontaktniva_rank(prospect.get("contact_level")):
+        falt["contact_name"] = namn
+        falt["contact_role"] = roll
+        falt["contact_level"] = "named_other"
+
+    # Arbetsmejl: byt ut privat/tom, fyll i från fynd eller skrap. En redan
+    # verifierad arbetsadress lämnas ifred (även när vi sätter ett namn).
+    if _saknar_arbetsmejl(prospect, webb):
+        vald = fynd_epost or scrape_epost
+        if vald:
+            falt["contact_email"] = vald
+            if "contact_level" not in falt:
+                nuvarande = prospect.get("contact_level")
+                if not nuvarande or nuvarande == "contact_form":
+                    falt["contact_level"] = "named_other" if namn else "role_address"
+
+    if not falt:
+        return prospect.get("contact_level")
+
+    try:
+        await storage.update_prospect(tenant_id, prospect_id, **falt)
+    except Exception:  # noqa: BLE001 — uppgraderingen är en bonus, researchen är jobbet
+        logger.exception("Kunde inte uppgradera kontaktnivån för prospekt %s", prospect_id)
+        return prospect.get("contact_level")
+    return falt.get("contact_level", prospect.get("contact_level"))
+
+
 # -- Fas A: onboarding (oförändrad, se modulens docstring) -----------------
 
 
@@ -387,15 +492,56 @@ async def run_onboarding_turn(
 # -- Fas B: research -------------------------------------------------------
 
 
-async def _gather_registered_sources(
-    storage, tenant_id: str, prospect_id: str
-) -> tuple[str, list[dict[str, Any]], list[str]]:
-    """Hämtar ALLA redan registrerade källor för prospektet, i kod.
+def _gissa_hemsida(urls: list[str], webbplats: str | None) -> str | None:
+    """Vilken av de registrerade URL:erna som är startsidan — den vi letar
+    kontaktlänkar I, inte en av dem vi redan hittat via den vägen.
 
-    Allowlisten är oförändrad: _scrape_registered_source_impl vägrar
-    fortfarande en URL som inte ligger i prospect_sources. Skillnaden är att
-    hämtningen nu alltid sker, i stället för att bero på att modellen kom
-    ihåg att anropa verktyget.
+    `prospect.website` (normaliserad likadant som `_registrera_webb`
+    registrerar den) är den pålitliga signalen när den finns. Saknas den
+    (äldre rader, manuellt tillagda källor) gissar vi konservativt på den
+    URL:en med kortast path — startsidan är typiskt `/`, en kontakt- eller
+    om-oss-sida är typiskt djupare.
+    """
+    if webbplats:
+        try:
+            normaliserad = normalisera_webbplats(webbplats)
+        except Exception:  # noqa: BLE001 — ett trasigt website-fält, inte en krasch
+            normaliserad = None
+        if normaliserad in urls:
+            return normaliserad
+    if not urls:
+        return None
+    return min(urls, key=lambda u: (len(urlparse(u).path.strip("/")), u))
+
+
+async def _gather_registered_sources(
+    storage,
+    tenant_id: str,
+    prospect_id: str,
+    skatteverket: SkatteverketAtkomst | None = None,
+    *,
+    webbplats: str | None = None,
+) -> tuple[str, list[dict[str, Any]], list[str], dict[str, Any]]:
+    """Hämtar ALLA redan registrerade källor för prospektet, i kod — och
+    upptäcker OCH registrerar kontakt-/om-oss-sidor på samma domän innan
+    skrapningen, i stället för att bara nöja sig med startsidan.
+
+    Kundens rotorsak, ordagrant: `_registrera_webb` (app/api/leads.py)
+    registrerar bara bolagets STARTSIDA i prospect_sources. En
+    kontaktperson under "om oss" eller "kontakt" hämtades därför aldrig —
+    `_uppgradera_kontakt` läser redan skrapmaterialet rätt, men fick inget
+    att hitta i.
+
+    Allowlisten (G4) är OFÖRÄNDRAD och kringgås inte: kandidatlänkarna
+    registreras i prospect_sources INNAN de skrapas, via samma
+    `create_prospect_source` som _registrera_webb använder — precis som en
+    admin som lägger till en källa manuellt. `_scrape_registered_source_impl`
+    vägrar fortfarande en URL som inte står där.
+
+    Returnerar (material, scraped_sources, errors, kontakt_diagnostik).
+    Den sista är rent kod-härledd (aldrig modelltext) — vad researchen
+    FAKTISKT gjorde för att leta kontaktsidor, till grund för
+    `contact_missing_reason` i run_research_step.
     """
     # Skatteverket-atkomsten kommer FRAN SERVERN (X-Skatteverket-Token via
     # Next-proxyn), aldrig fran modellen. None = kunden har inte legitimerat
@@ -408,22 +554,76 @@ async def _gather_registered_sources(
     )
     urls = sorted(await storage.list_prospect_source_urls(tenant_id, prospect_id))
 
-    blocks: list[str] = []
+    scraped: dict[str, str] = {}
     errors: list[str] = []
-    for url in urls:
+
+    async def _hamta(url: str) -> str | None:
         try:
             payload = json.loads(await _scrape_registered_source_impl(context, url))
         except Exception as error:  # noqa: BLE001 — en död källa fäller inte researchen
             payload = {"error": f"{type(error).__name__}: {error}"}
         if payload.get("content"):
-            blocks.append(payload["content"])
-        else:
-            errors.append(f"{url}: {payload.get('error', 'okänt fel')}")
+            return payload["content"]
+        errors.append(f"{url}: {payload.get('error', 'okänt fel')}")
+        return None
 
-    material = "\n\n".join(blocks)
+    for url in urls:
+        innehall = await _hamta(url)
+        if innehall is not None:
+            scraped[url] = innehall
+
+    # Kontaktupptäckt: leta länkar i STARTSIDANS material, registrera de
+    # 2-3 bästa träffarna, skrapa dem via samma allowlist-väg som ovan.
+    hemsida = _gissa_hemsida(urls, webbplats)
+    hemsidematerial = scraped.get(hemsida) if hemsida else None
+    kontakt_kandidater: list[str] = []
+    kontakt_registrerade: list[str] = []
+    kontakt_blocks: list[str] = []
+    if hemsidematerial and hemsida:
+        kontakt_kandidater = extrahera_kontaktlankar(hemsidematerial, hemsida)
+        for kandidat in kontakt_kandidater:
+            if kandidat not in urls:
+                try:
+                    await storage.create_prospect_source(
+                        tenant_id,
+                        prospect_id=prospect_id,
+                        source_url=kandidat,
+                        source_type="company_website",
+                        lawful_basis=LAGLIG_GRUND_EGEN_WEBB,
+                    )
+                except Exception:  # noqa: BLE001 — dublett/grind får inte fälla körningen
+                    logger.exception(
+                        "Kunde inte registrera kontaktkälla %s för %s", kandidat, prospect_id
+                    )
+                    continue
+            elif kandidat in scraped:
+                # Redan registrerad OCH redan skrapad (tidigare varv) — den
+                # ligger redan i `scraped`, prioritera bara om den till
+                # kontaktblocken utan att skrapa på nytt.
+                kontakt_registrerade.append(kandidat)
+                kontakt_blocks.append(scraped[kandidat])
+                continue
+            kontakt_registrerade.append(kandidat)
+            innehall = await _hamta(kandidat)
+            if innehall is not None:
+                kontakt_blocks.append(innehall)
+
+    # Kontaktsidorna FÖRST: MAX_SOURCE_CHARS-avkortningen nedan tar bort
+    # SLUTET av materialet, och en lång startsida ska inte kunna kapa bort
+    # just den sida kundkravet handlar om.
+    ovriga_blocks = [scraped[u] for u in urls if u in scraped and u not in kontakt_registrerade]
+    material = "\n\n".join(kontakt_blocks + ovriga_blocks)
     if len(material) > MAX_SOURCE_CHARS:
         material = material[:MAX_SOURCE_CHARS] + "\n\n[... avkortat, se prospect_sources ...]"
-    return material, context.scraped_sources, errors
+
+    kontakt_diagnostik = {
+        "hemsida": hemsida,
+        "hemsidematerial_tillgangligt": bool(hemsidematerial),
+        "kandidater": kontakt_kandidater,
+        "registrerade": kontakt_registrerade,
+        "skrapade": len(kontakt_blocks),
+    }
+    return material, context.scraped_sources, errors, kontakt_diagnostik
 
 
 async def run_research_step(
@@ -441,13 +641,29 @@ async def run_research_step(
     is_test: bool = False,
     skatteverket: SkatteverketAtkomst | None = None,
 ) -> dict[str, Any]:
-    """Fas B för ETT prospekt: åtta skill-steg, ett LLM-anrop vardera."""
+    """Fas B för ETT prospekt: upp till åtta skill-steg, ett LLM-anrop vardera.
+
+    "Upp till" sedan 2026-09-02: efter steg 2 (ICP-kvalificeringen) står en
+    grind. Ett prospekt som inte kvalificerar mot kundens ICP, eller som
+    saknar varje kontaktväg efter kontaktuppgraderingen, får INTE de sex
+    återstående stegen — konkurrensanalys och erbjudandekonstruktion för ett
+    bolag som aldrig ska kontaktas är rena kostnaden utan kvalitetsvinst.
+    Kunskapsfångsten körs ÄVEN för stoppade varv (ett diskvalificerat
+    prospekt lär mest om var ICP:n går fel), så ett stoppat varv kostar
+    3 anrop i stället för 9. Se `stopped_early` i returvärdet.
+    """
     started = time.monotonic()
     settings = get_settings()
     steps = RESEARCH_V1.steps  # indexerat, inte per namn — ordningen ÄR playbooken
 
-    material, scraped_sources, scrape_errors = await _gather_registered_sources(
-        storage, tenant_id, prospect_id
+    # Läst FÖRE källinsamlingen (flyttat hit 2026-08-31): kontaktupptäckten i
+    # _gather_registered_sources behöver veta vilken URL som är STARTSIDAN
+    # för att kunna leta kontaktlänkar i rätt material, och samma rad
+    # behövs ändå av `_uppgradera_kontakt` för att avgöra uppgradering.
+    prospect_row = await storage.get_prospect(tenant_id, prospect_id) or {}
+
+    material, scraped_sources, scrape_errors, kontakt_diagnostik = await _gather_registered_sources(
+        storage, tenant_id, prospect_id, skatteverket, webbplats=prospect_row.get("website")
     )
     sources_block = material or "(inget källmaterial kunde hämtas — se scrape_errors)"
 
@@ -496,7 +712,23 @@ async def run_research_step(
         "existing_support_channels (lista — de kanaler källmaterialet visar att "
         "de erbjuder kundservice i: mejl, telefon, chatt, sociala medier), "
         "has_chatbot (bool eller null — null när källmaterialet inte räcker "
-        "för att avgöra; gissa aldrig).",
+        "för att avgöra; gissa aldrig), "
+        "contact_name (en namngiven person källmaterialet visar, t.ex. på en "
+        "om-oss/ledningssida, eller null — hitta ALDRIG på ett namn), "
+        "contact_role (personens roll/titel enligt källmaterialet, eller "
+        "null), contact_email (personens e-postadress ENBART om den "
+        "bokstavligen står i källmaterialet, annars null — gissa aldrig ihop "
+        "en adress av ett namnmönster som förnamn@domän).",
+    )
+    # Kontaktfältets fallback-trappa (INV-CONTACT-001, kundkrav): det här
+    # steget läser redan bolagets EGNA skrapade sidor (se
+    # _gather_registered_sources ovan), så en namngiven kontakt härifrån är
+    # grundad i riktig sidtext — till skillnad från `hitta_bolag()`s breda
+    # sökindexträff. Uppgraderar bara, skriver aldrig över en bättre nivå,
+    # och hittar aldrig på en adress. Se _uppgradera_kontakt för resonemanget
+    # i sin helhet.
+    slutlig_kontaktniva = await _uppgradera_kontakt(
+        storage, tenant_id, prospect_id, prospect=prospect_row, fynd=customer, material=material
     )
 
     # 2. mk:prospecting — kvalificering mot ICP
@@ -508,63 +740,114 @@ async def run_research_step(
         f"\n\n## Steg 1 (mk:customer-research)\n{_digest(customer, 'company_summary', 'business_model', 'likely_pains', 'existing_support_channels', 'has_chatbot')}",
     )
 
-    # 3. sa:account-research — kontostruktur, beslutsvägar, triggers
-    account = await step(
-        2,
-        "Kartlägg kontot. Returnera JSON: account_structure (svenska), "
-        "likely_decision_makers (lista med roller, INTE namngivna privatpersoner), "
-        "trigger_events (lista, endast sådant källmaterialet faktiskt visar), "
-        "open_questions (lista).",
-        f"\n\n## Steg 2 (mk:prospecting)\n{_digest(prospecting, 'icp_fit', 'qualified', 'qualification_reasoning')}",
+    # GRINDEN (2026-09-02, kundkrav: nischning + kontaktperson). Två villkor,
+    # båda kod-härledda — `qualified` är visserligen modellens bedömning, men
+    # den mäts mot kundens EGEN ICP, och `slutlig_kontaktniva` kommer ur
+    # _uppgradera_kontakt som bara skriver vad som bokstavligen stod i
+    # skrapet. Faller något av dem hoppar varvet över steg 3–8: sex anrop
+    # för ett bolag som ändå aldrig kontaktas. Kunden kan komplettera
+    # kontakten i registret och köra "Processa om" — då passerar grinden.
+    kvalificerad = bool(prospecting.get("qualified"))
+    # Kontaktväg = nivå ELLER något konkret kontaktfält på raden. Nivåfältet
+    # ensamt räcker inte som mått: en rad där kunden själv fyllt i
+    # contact_email (PATCH/befordran sätter aldrig contact_level) hade annars
+    # räknats som kontaktlös och stoppats — trots att den har exakt det
+    # utkastfasen behöver. Läses EFTER _uppgradera_kontakt, så ett fynd ur
+    # skrapet räknas med.
+    rad_efter_uppgradering = await storage.get_prospect(tenant_id, prospect_id) or prospect_row
+    kontakt_saknas = not (
+        slutlig_kontaktniva
+        or rad_efter_uppgradering.get("contact_email")
+        or rad_efter_uppgradering.get("contact_name")
+        or rad_efter_uppgradering.get("contact_form_url")
     )
+    if not kvalificerad:
+        stopped_early: str | None = "ej_kvalificerad"
+    elif kontakt_saknas:
+        stopped_early = "kontakt_saknas"
+    else:
+        stopped_early = None
 
-    # 4. mk:competitor-profiling — dossiern (A1: FÖRE mk:competitors)
-    profiling = await step(
-        3,
-        "Profilera konkurrenslandskapet prospektet befinner sig i. Returnera JSON: "
-        "competitors (lista med objekt {name, positioning}), "
-        "prospect_positioning (svenska), differentiation_gaps (lista). "
-        "Markera tydligt vad som är slutsats och vad som står i källmaterialet.",
-        f"\n\n## Steg 3 (sa:account-research)\n{_digest(account, 'account_structure', 'trigger_events')}",
-    )
+    # Migration 024 skrevs för exakt det här: bedömningen SPARAS på raden i
+    # stället för att bara ligga i en logg. Utan den går prospekt inte att
+    # sortera på icp_fit, och en för snäv ICP ser ut som en tom pipeline.
+    try:
+        icp_fit_varde = prospecting.get("icp_fit")
+        await storage.update_prospect(
+            tenant_id,
+            prospect_id,
+            icp_fit=float(icp_fit_varde) if icp_fit_varde is not None else None,
+            qualified=kvalificerad,
+            disqualifiers=[str(d) for d in (prospecting.get("disqualifiers") or [])],
+        )
+    except Exception:  # noqa: BLE001 — persistensen är bokföring, researchen är jobbet
+        logger.exception("Kunde inte spara ICP-bedömningen för prospekt %s", prospect_id)
 
-    # 5. mk:competitors — jämförelsematerialet som dossiern formar
-    competitors = await step(
-        4,
-        "Forma jämförelsematerial för säljsamtalet. Returnera JSON: "
-        "comparison_angles (lista), where_we_win (svenska), where_we_lose (svenska), "
-        "honest_caveats (lista). Överdriv aldrig — en falsk fördel kostar affären senare.",
-        f"\n\n## Steg 4 (mk:competitor-profiling)\n{_digest(profiling, 'competitors', 'prospect_positioning', 'differentiation_gaps')}",
-    )
+    account: dict[str, Any] = {}
+    profiling: dict[str, Any] = {}
+    competitors: dict[str, Any] = {}
+    objections: dict[str, Any] = {}
+    offer: dict[str, Any] = {}
+    ab: dict[str, Any] = {}
 
-    # 6. mk:sales-enablement (SKOPAD: invändningar, Del I)
-    objections = await step(
-        5,
-        "Ta fram invändningshanteringen för ETT KALLT MEJL — inte pitchdeck, inte "
-        "demoskript. Returnera JSON: likely_objections (lista med objekt "
-        "{objection, response}), hardest_objection (svenska), "
-        "what_would_disqualify_us (svenska).",
-        f"\n\n## Steg 5 (mk:competitors)\n{_digest(competitors, 'comparison_angles', 'where_we_win', 'honest_caveats')}",
-    )
+    if stopped_early is None:
+        # 3. sa:account-research — kontostruktur, beslutsvägar, triggers
+        account = await step(
+            2,
+            "Kartlägg kontot. Returnera JSON: account_structure (svenska), "
+            "likely_decision_makers (lista med roller, INTE namngivna privatpersoner), "
+            "trigger_events (lista, endast sådant källmaterialet faktiskt visar), "
+            "open_questions (lista).",
+            f"\n\n## Steg 2 (mk:prospecting)\n{_digest(prospecting, 'icp_fit', 'qualified', 'qualification_reasoning')}",
+        )
 
-    # 7. mk:offers — erbjudandekonstruktionen (hel skill, Del H)
-    offer = await step(
-        6,
-        "Konstruera erbjudandet till det här prospektet. Returnera JSON: offer "
-        "(objekt {name, promise, proof, risk_reversal, cta}), weakest_lever "
-        "(vilken av spakarna som är svagast och varför, svenska), "
-        "offer_reasoning (svenska).",
-        f"\n\n## Steg 6 (mk:sales-enablement)\n{_digest(objections, 'likely_objections', 'hardest_objection')}",
-    )
+        # 4. mk:competitor-profiling — dossiern (A1: FÖRE mk:competitors)
+        profiling = await step(
+            3,
+            "Profilera konkurrenslandskapet prospektet befinner sig i. Returnera JSON: "
+            "competitors (lista med objekt {name, positioning}), "
+            "prospect_positioning (svenska), differentiation_gaps (lista). "
+            "Markera tydligt vad som är slutsats och vad som står i källmaterialet.",
+            f"\n\n## Steg 3 (sa:account-research)\n{_digest(account, 'account_structure', 'trigger_events')}",
+        )
 
-    # 8. mk:ab-testing — erbjudandenivå + explicit osäkerhet (A3)
-    ab = await step(
-        7,
-        "Bedöm hur säkert erbjudandet är och vad som borde testas. Returnera JSON: "
-        "offer_confidence (0.0-1.0), uncertainties (lista), test_recommendation "
-        "(svenska), recommended_variants (lista med korta beskrivningar).",
-        f"\n\n## Steg 7 (mk:offers)\n{_digest(offer, 'offer', 'weakest_lever')}",
-    )
+        # 5. mk:competitors — jämförelsematerialet som dossiern formar
+        competitors = await step(
+            4,
+            "Forma jämförelsematerial för säljsamtalet. Returnera JSON: "
+            "comparison_angles (lista), where_we_win (svenska), where_we_lose (svenska), "
+            "honest_caveats (lista). Överdriv aldrig — en falsk fördel kostar affären senare.",
+            f"\n\n## Steg 4 (mk:competitor-profiling)\n{_digest(profiling, 'competitors', 'prospect_positioning', 'differentiation_gaps')}",
+        )
+
+        # 6. mk:sales-enablement (SKOPAD: invändningar, Del I)
+        objections = await step(
+            5,
+            "Ta fram invändningshanteringen för ETT KALLT MEJL — inte pitchdeck, inte "
+            "demoskript. Returnera JSON: likely_objections (lista med objekt "
+            "{objection, response}), hardest_objection (svenska), "
+            "what_would_disqualify_us (svenska).",
+            f"\n\n## Steg 5 (mk:competitors)\n{_digest(competitors, 'comparison_angles', 'where_we_win', 'honest_caveats')}",
+        )
+
+        # 7. mk:offers — erbjudandekonstruktionen (hel skill, Del H)
+        offer = await step(
+            6,
+            "Konstruera erbjudandet till det här prospektet. Returnera JSON: offer "
+            "(objekt {name, promise, proof, risk_reversal, cta}), weakest_lever "
+            "(vilken av spakarna som är svagast och varför, svenska), "
+            "offer_reasoning (svenska).",
+            f"\n\n## Steg 6 (mk:sales-enablement)\n{_digest(objections, 'likely_objections', 'hardest_objection')}",
+        )
+
+        # 8. mk:ab-testing — erbjudandenivå + explicit osäkerhet (A3)
+        ab = await step(
+            7,
+            "Bedöm hur säkert erbjudandet är och vad som borde testas. Returnera JSON: "
+            "offer_confidence (0.0-1.0), uncertainties (lista), test_recommendation "
+            "(svenska), recommended_variants (lista med korta beskrivningar).",
+            f"\n\n## Steg 7 (mk:offers)\n{_digest(offer, 'offer', 'weakest_lever')}",
+        )
 
     # 9. Kunskapsfångst — vad varvet lärde oss som kontextpaketet inte bar.
     #
@@ -660,6 +943,32 @@ async def run_research_step(
     ]
 
     escalated_steps = [s.skill for s in trace.steps if s.escalated]
+
+    # Kundkrav, ordagrant: "leadsagenten måste vid körning kunna hitta MINST
+    # EN kontaktperson". `slutlig_kontaktniva` är kod-härledd (från
+    # _uppgradera_kontakt, som i sin tur bara skriver vad som BOKSTAVLIGEN
+    # stod i det skrapade materialet) — aldrig modelltext, så det här fältet
+    # kan inte råka bära en gissning. contact_missing_reason förklarar VAR i
+    # kedjan sökningen gav upp, helt utan att någon behöver läsa loggen.
+    contact_missing = kontakt_saknas
+    if not contact_missing:
+        contact_missing_reason = None
+    elif not kontakt_diagnostik["hemsidematerial_tillgangligt"]:
+        contact_missing_reason = (
+            "Startsidan gick inte att hämta — kontaktsökningen kunde inte köras."
+        )
+    elif not kontakt_diagnostik["kandidater"]:
+        contact_missing_reason = (
+            "Hittade ingen kontakt- eller om oss-länk på bolagets webbplats."
+        )
+    elif not kontakt_diagnostik["skrapade"]:
+        contact_missing_reason = "Kontaktsidan/-sidorna hittades men gick inte att hämta."
+    else:
+        contact_missing_reason = (
+            "Kontaktsidan hittades men innehöll ingen verifierbar kontaktperson "
+            "eller adress."
+        )
+
     return {
         "scraped_sources": scraped_sources,
         "scrape_errors": scrape_errors,
@@ -670,10 +979,15 @@ async def run_research_step(
         "step_outputs": trace.as_full(),
         "escalated_steps": escalated_steps,
         "kunskap": kunskap,
-        "qualified": bool(prospecting.get("qualified")),
+        "qualified": kvalificerad,
         "icp_fit": prospecting.get("icp_fit"),
+        "stopped_early": stopped_early,
         "offer_summary": offer_summary,
         "final_output": final_output,
+        "contact_level": slutlig_kontaktniva,
+        "contact_missing": contact_missing,
+        "contact_missing_reason": contact_missing_reason,
+        "contact_discovery": kontakt_diagnostik,
         "tokens_in": trace.total_tokens_in,
         "tokens_out": trace.total_tokens_out,
         "reasoning_tokens": trace.total_reasoning_tokens,

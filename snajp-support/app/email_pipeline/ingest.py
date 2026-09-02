@@ -10,7 +10,7 @@ logger = logging.getLogger("snajp-support.ingest")
 
 
 async def ingest_email(
-    storage: Storage, tenant_id: str, inbound: InboundEmail
+    storage: Storage, tenant_id: str, inbound: InboundEmail, *, is_test: bool = False
 ) -> dict[str, Any] | None:
     """Sparar ett inkommande mail. Returnerar mailraden, eller None vid dublett."""
     email = await storage.save_email(
@@ -22,6 +22,7 @@ async def ingest_email(
         subject=inbound.subject,
         body_text=inbound.body_text,
         received_at=inbound.received_at,
+        is_test=is_test or inbound.provider == "mock",
     )
     if email is None:
         logger.info("Dublett hoppad: %s", inbound.provider_message_id)

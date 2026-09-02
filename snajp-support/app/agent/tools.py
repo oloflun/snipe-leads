@@ -112,6 +112,7 @@ async def create_ticket(
         category=category,
         channel=support.channel,
         priority=priority,
+        is_test=bool(support.is_test),
     )
     support.ticket_id = ticket["id"]
     support.conversation_id = ticket["conversation_id"]

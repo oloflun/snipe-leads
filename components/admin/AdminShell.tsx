@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Logo } from "@/components/Logo";
 import { FLIKENS_LAGE } from "@/components/AppShell";
+import { BytKund } from "@/components/admin/BytKund";
 import { VyVaxel } from "@/components/VyVaxel";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { AgentMenu } from "@/components/snajp/AgentMenu";
@@ -143,6 +144,7 @@ export function AdminShell({
             {/* Vägen till demovyn. Samma knapp som i kundskalet, för att det
                 ska vara samma knapp på båda ytorna — en växel som ser olika ut
                 beroende på var man står är en växel man letar efter. */}
+            <BytKund />
             <VyVaxel />
 
             <button

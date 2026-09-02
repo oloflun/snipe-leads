@@ -55,6 +55,7 @@ type EmailRow = {
   draft: Draft | null;
   has_image: boolean;
   attachment_count: number;
+  is_test?: boolean;
 };
 
 type EmailDetail = EmailRow & {
@@ -98,7 +99,8 @@ const EVENT_LABELS: Record<string, string> = {
   draft_rejected: "Utkast avvisat",
   taken_over: "Manuellt övertaget",
   failed: "Fel vid bearbetning",
-  rule_changed: "Regel ändrad"
+  rule_changed: "Regel ändrad",
+  befordrad: "Flyttad till ärenden"
 };
 
 /** Markör så refresh() kan skilja väntläget från riktiga fel utan texttolkning. */
@@ -136,7 +138,15 @@ function ConfidenceBar({ value }: Readonly<{ value: number }>) {
  * felmeddelande mitt i produktdemon. Grinden står kvar orörd; det är indatan
  * som byts, precis som app/demo/[[...slug]]/page.tsx föreskriver.
  */
-export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
+export function Dashboard({
+  demo = false,
+  lager = "arenden",
+  onMeta
+}: Readonly<{
+  demo?: boolean;
+  lager?: "arenden" | "testmail";
+  onMeta?: (meta: { visar_test_i_arenden: boolean }) => void;
+}>) {
   const vag = useArbetsvag();
   const [emails, setEmails] = useState<EmailRow[]>([]);
   const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({});
@@ -164,6 +174,12 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
   }, [search]);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  /** True medan bakgrundsklassningen av nyss hämtade testmail pågår. */
+  const [bearbetas, setBearbetas] = useState(false);
+  /** Demo-/testkonton visar testmail under Ärenden. null = inte hämtat än. */
+  const [visarTestIArenden, setVisarTestIArenden] = useState<boolean | null>(null);
+  const onMetaRef = useRef(onMeta);
+  onMetaRef.current = onMeta;
 
 
   // En instans per monterad vy, så att demons tillstånd inte delas mellan
@@ -226,9 +242,14 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
       if (sokning) params.set("q", sokning);
       if (statusFilter) params.set("status", statusFilter);
       if (categoryFilter) params.set("category", categoryFilter);
+      if (lager === "testmail") params.set("is_test", "true");
       const data = await api(`/inbox?${params.toString()}`);
       setEmails(data.emails);
       setCategoryCounts(data.category_counts);
+      if (typeof data.visar_test_i_arenden === "boolean") {
+        setVisarTestIArenden(data.visar_test_i_arenden);
+        onMetaRef.current?.({ visar_test_i_arenden: data.visar_test_i_arenden });
+      }
     } catch (caught) {
       if (caught instanceof EjAktiveradFel) {
         setEjAktiverad(true);
@@ -236,7 +257,7 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
       }
       setError(caught instanceof Error ? caught.message : "Kunde inte hämta inkorgen.");
     }
-  }, [api, sokning, statusFilter, categoryFilter]);
+  }, [api, sokning, statusFilter, categoryFilter, lager]);
 
   useEffect(() => {
     void refresh();
@@ -320,10 +341,15 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
    */
   const pollaTills = useCallback(
     async (forsok = 8) => {
-      for (let i = 0; i < forsok; i += 1) {
-        await new Promise((r) => setTimeout(r, 1500 + i * 1000));
-        if (avbrutet.current) return;
-        await refresh();
+      setBearbetas(true);
+      try {
+        for (let i = 0; i < forsok; i += 1) {
+          await new Promise((r) => setTimeout(r, 1500 + i * 1000));
+          if (avbrutet.current) return;
+          await refresh();
+        }
+      } finally {
+        if (!avbrutet.current) setBearbetas(false);
       }
     },
     [refresh]
@@ -396,6 +422,13 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
     selected &&
     act("takeover", () => api(`/inbox/${selected.id}/takeover`, { method: "POST" }));
 
+  const flyttaTillArenden = () =>
+    selected &&
+    act("befordra", async () => {
+      await api(`/inbox/${selected.id}/befordra`, { method: "POST" });
+      setSelected(null);
+    });
+
   const totalPending = useMemo(
     () => emails.filter((e) => e.status === "awaiting_approval").length,
     [emails]
@@ -421,7 +454,7 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
             Göms när en riktig inkorg är kopplad. Testmail bland en kunds
             verkliga ärenden är inte en demo, det är skräp i deras inkorg —
             och de har redan sett hur produkten fungerar. */}
-        {inkorgKopplad ? null : (
+        {inkorgKopplad || (lager === "arenden" && visarTestIArenden === false) ? null : (
           <button
             type="button"
             onClick={() => void seedMock(null)}
@@ -458,10 +491,14 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
             som ser ut att bara ladda om. */}
         <button
           type="button"
-          onClick={() => (inkorgKopplad ? void refresh() : void seedMock(categoryFilter))}
+          onClick={() =>
+            inkorgKopplad || (lager === "arenden" && visarTestIArenden === false)
+              ? void refresh()
+              : void seedMock(categoryFilter)
+          }
           disabled={busy !== null}
           title={
-            inkorgKopplad
+            inkorgKopplad || (lager === "arenden" && visarTestIArenden === false)
               ? "Läser om inkorgen"
               : categoryFilter
                 ? "Hämtar nya testmail till det här facket"
@@ -511,7 +548,15 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
         <div className="rounded-[8px] border border-danger/25 bg-danger/5 px-4 py-3 text-sm text-ink/80">{error}</div>
       ) : null}
       {syncInfo ? (
-        <div className="rounded-[8px] border border-moss/25 bg-moss/5 px-4 py-3 text-sm text-ink/80">{syncInfo}</div>
+        <div
+          className={
+            syncInfo.includes("Kunskapsbasen är tom")
+              ? "rounded-[8px] border border-ochre/40 bg-ochre/10 px-4 py-3 text-sm text-ink/80"
+              : "rounded-[8px] border border-moss/25 bg-moss/5 px-4 py-3 text-sm text-ink/80"
+          }
+        >
+          {syncInfo}
+        </div>
       ) : null}
 
       {/* Fack-översikt */}
@@ -561,8 +606,14 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
                   kundens vy — kunden har varken tillgång till backenden eller
                   anledning att veta vad IMAP är. */}
               <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-ink/60">
-                Klicka på <strong>Hämta testmail</strong> för att fylla den med sex svenska
-                exempelärenden och se hur agenterna sorterar och svarar.
+                {lager === "testmail" || visarTestIArenden !== false ? (
+                  <>
+                    Klicka på <strong>Hämta testmail</strong> för att skicka testärenden mot
+                    den här profilens kunskapsbas och se hur agenten svarar.
+                  </>
+                ) : (
+                  <>Inga ärenden ännu. När en inkorg är kopplad hamnar kundmailen här.</>
+                )}
               </p>
               {inkorgKopplad ? null : (
                 <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-ink/55">
@@ -596,13 +647,16 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
                         <p className="flex items-center gap-2 truncate text-sm font-semibold">
                           {email.subject || "(utan ämne)"}
                           {email.has_image ? <ImageIcon className="h-3.5 w-3.5 shrink-0 text-ink/40" /> : null}
+                          {email.is_test ? <span className="kicker shrink-0 text-mineral">Test</span> : null}
                         </p>
                         <p className="mt-0.5 truncate font-mono text-xs text-ink/45">
                           {email.from_name ? `${email.from_name} · ` : ""}
                           {email.from_email}
                         </p>
                       </div>
-                      <Badge tone={meta.tone}>{meta.label}</Badge>
+                      <Badge tone={bearbetas && !email.classification ? "neutral" : meta.tone}>
+                        {bearbetas && !email.classification ? "Bearbetas" : meta.label}
+                      </Badge>
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       {email.classification ? (
@@ -614,7 +668,7 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
                           ) : null}
                         </>
                       ) : (
-                        <Badge tone="neutral">Obearbetat</Badge>
+                        <Badge tone="neutral">{bearbetas ? "Agenten läser…" : "Obearbetat"}</Badge>
                       )}
                     </div>
                   </button>
@@ -665,6 +719,22 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
                   </div>
                 ) : null}
               </div>
+
+              {selected.is_test ? (
+                <button
+                  type="button"
+                  onClick={() => void flyttaTillArenden()}
+                  disabled={busy !== null}
+                  className={btnSecondary}
+                >
+                  {busy === "befordra" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  Flytta till ärenden
+                </button>
+              ) : null}
+
+              {!selected.classification && bearbetas ? (
+                <p className="text-sm leading-6 text-ink/55">Agenten läser mailet och skriver ett utkast…</p>
+              ) : null}
 
               {selected.classification ? (
                 <div className="rounded-input border border-ink/10 bg-paper2/50 p-4">

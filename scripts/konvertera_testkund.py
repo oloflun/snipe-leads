@@ -74,6 +74,7 @@ from railway_migrate import dsn  # noqa: E402
 # kontroll som POST /api/leads/prospects/{id}/befordra (app/api/leads.py) kör.
 # Se app/leads/befordran.py:s docstring för varför den bor på ETT ställe.
 from app.leads.befordran import saknade_falt  # noqa: E402
+from app.tenants.konvertera import kontrollera_riktning  # noqa: E402
 
 #: (tabell, kolumner) — allt som utgör kundens KONFIGURATION.
 #: Ordningen spelar ingen roll: inga främmande nycklar mellan dem.
@@ -291,10 +292,9 @@ def main() -> int:
     args = ap.parse_args()
 
     # Spärr 1 och 2: riktningen går inte att vända av misstag.
-    if not args.fran.startswith("testkund-"):
-        sys.exit(f"AVBRYT: källan {args.fran!r} är inte en testtenant. Riktningen är envägs.")
-    if args.till.startswith("testkund-"):
-        sys.exit(f"AVBRYT: målet {args.till!r} är en testtenant. Riktningen är envägs.")
+    riktning = kontrollera_riktning(args.fran, args.till)
+    if riktning:
+        sys.exit(f"AVBRYT: {riktning}")
 
     prospekt_ider = _parsa_id_lista(args.prospekt)
 

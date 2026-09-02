@@ -139,9 +139,14 @@ class ExempelbolagRequest(BaseModel):
 
 
 class LeadsBatchRequest(BaseModel):
-    scope: str = Field(default="research", pattern=r"^(research|research_and_draft)$")
-    # Taket på 50 är ekonomiskt, inte tekniskt: varje prospekt är åtta
-    # LLM-anrop, så en batch på 50 är 400 — exakt tenant-timtaket.
+    #: `sok` (2026-09-02) är snabbsökningens scope: EN Gemini-sökning som
+    #: hittar bolag med kontaktväg och stannar där — inga researchjobb, inga
+    #: utkast. Byggd för leads-panelen ("Sök Leads"), där hela poängen är att
+    #: få en lista på en minut till kostnaden av ett enda anrop.
+    scope: str = Field(default="research", pattern=r"^(sok|research|research_and_draft)$")
+    # Taket på 50 är ekonomiskt, inte tekniskt: varje prospekt är upp till nio
+    # LLM-anrop i research (tre om grinden efter ICP-kvalificeringen fäller),
+    # så en batch på 50 kan vara 450 — över tenant-timtaket.
     limit: int = Field(default=10, ge=1, le=50)
 
     #: Överskrivningar för just den här körningen. Se LeadsRunOverrides.
@@ -152,12 +157,28 @@ class LeadsBatchRequest(BaseModel):
     #: skilja från riktig volym, och hälsobedömningen ljuger.
     is_test: bool = False
 
+    #: Bolag kunden själv vill träffa — en funktion, inte kedjan. Tom lista
+    #: betyder att agenten ska HITTA bolag som matchar ICP:t. Namnen här blir
+    #: prospekt i DEN här körningen; gamla rader i registret blandas inte in.
+    company_names: list[str] = Field(default_factory=list, max_length=50)
+
 
 class ProspectPatchRequest(BaseModel):
     status: str | None = None
     icp_fit: float | None = Field(default=None, ge=0, le=1)
     qualified: bool | None = None
     disqualifiers: list[str] | None = None
+    orgnr: str | None = Field(default=None, max_length=20)
+    website: str | None = Field(default=None, max_length=500)
+    contact_email: str | None = Field(default=None, max_length=200)
+
+
+class BefordraRequest(BaseModel):
+    """Ifyllnad vid flytta-över. Tom kropp = validera det som redan ligger."""
+
+    orgnr: str | None = Field(default=None, max_length=20)
+    website: str | None = Field(default=None, max_length=500)
+    contact_email: str | None = Field(default=None, max_length=200)
 
 
 class ProspectSourceRequest(BaseModel):
@@ -192,6 +213,33 @@ class OutreachDraftRequest(BaseModel):
     # (fältet research_summary fanns i signaturen men skickades aldrig).
     research_summary: str = Field(default="", max_length=8000)
     research_evidence: list[str] = Field(default_factory=list, max_length=60)
+
+
+class ProcessaOmRequest(BaseModel):
+    """Kör om research (och ev. utkast) för REDAN SPARADE prospekt.
+
+    Skapar inga nya rader. Används när en körning hittade bolagen men dog
+    innan kontakt/utkast — 'Processa om' i registret.
+    """
+
+    prospect_ids: list[str] = Field(..., min_length=1, max_length=50)
+    scope: str = Field(default="research_and_draft", pattern=r"^(research|research_and_draft)$")
+    is_test: bool = False
+
+
+class LeadsListaRequest(BaseModel):
+    """Beställning av en leadslista (tillägget 'leadlists', migration 060).
+
+    Volymkörning utan utkast och utan sändning: discovery-federationen
+    (JobTech, nyhets-RSS, Gemini-utfyllnad) bygger en granskningsbar tabell.
+    Taket 200 speglar check-villkoret i migration 060; budgetgrinden
+    (app/leads/budget.py) står dessutom framför endpointen.
+    """
+
+    titel: str = Field(..., min_length=1, max_length=200)
+    antal: int = Field(default=25, ge=1, le=200)
+    is_test: bool = False
+    overrides: LeadsRunOverrides | None = None
 
 
 class AgentFeedbackRequest(BaseModel):

@@ -1,7 +1,9 @@
 import Link from "next/link";
 
+import { KonverteraTestkund } from "@/components/admin/KonverteraTestkund";
 import { Kundprofil } from "@/components/admin/Kundprofil";
 import { hamtaKundprofil } from "@/lib/actions/agentinstruktioner";
+import { listTenants, unwrap } from "@/lib/data/admin";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -85,6 +87,17 @@ export default async function Page({
       <div className="mt-10">
         <Kundprofil profil={profil} />
       </div>
+
+      {profil.tenant.slug?.startsWith("testkund-") ? (
+        <KonverteraTestkund
+          fran={profil.tenant.slug}
+          mal={
+            unwrap(await listTenants())
+              .data?.filter((t) => t.slug && !t.slug.startsWith("testkund-"))
+              .map((t) => ({ slug: t.slug as string, name: t.name })) ?? []
+          }
+        />
+      ) : null}
     </div>
   );
 }

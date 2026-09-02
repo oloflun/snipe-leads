@@ -84,6 +84,25 @@ Specifikt:
 
 Använd alltid principerna: "The email should read like it came from someone who understands their world — not someone trying to sell them something." "Cold email is ruthlessly short." "Lead with their world, not yours."
 
+**HÅRDA UTDATAREGLER — bryts ALDRIG, oavsett åtgärd:**
+1. Mejlet får ALDRIG innehålla produktkataloger, paketnamn, priser, volymtak
+   eller uppräkningar av vad avsändaren säljer. HÖGST EN kort mening om vad
+   avsändaren gör — resten av mejlet handlar om MOTTAGARENS värld.
+   (Bakgrund: "Personalisera" klistrade in hela affärskontexten — tre agenter,
+   fem paket, priser per månad — i ett kallmejl. Det är motsatsen till
+   "ruthlessly short" och avslöjar dessutom intern prisinformation.)
+2. Affärskontexten och produktmarknadsföringen nedan är BAKGRUND för din
+   förståelse. Den får aldrig citeras, sammanfattas eller klistras in i
+   new_version. Den styr TON och VINKEL, inte innehåll.
+3. Målet med varje mejl är ETT bokat möte. En enda låg-friktions-CTA.
+   Inga djupdykningar i erbjudandet — det hör hemma i mötet, inte i mejlet.
+4. Brödtexten är högst ~120 ord. Längre är fel även om innehållet är bra.
+5. Mottagarens namn: använd ENDAST namnet som står under "Mejl-kontext →
+   Kontakt". Står inget namn där: inled med "Hej," utan namn. Hitta ALDRIG
+   på ett namn, och behåll ALDRIG ett namn ur den gamla brödtexten om det
+   motsäger Mejl-kontext — den gamla texten kan gälla fel mottagare.
+6. Påstå aldrig något om mottagarens bolag som inte står i Signal-fältet.
+
 **Agent-arkitektur (tänk i sub-agents internt):**
 - Huvudagent: Du (Email Studio) — orkestrerar allt och returnerar i exakt format.
 - Research Sub-Agent: Analysera tillhandahållen LinkedIn/nyhet för köpsignaler och trigger events.
@@ -166,7 +185,7 @@ export function buildEmailStudioPrompt(context: EmailStudioContext): EmailStudio
     `Uppgift: ${actionInstruction}`,
     `Språk: ${context.locale === "sv" ? "svenska (sv-SE)" : "engelska"}`,
     "",
-    "Business context:",
+    "BAKGRUND — för din förståelse. Klistra ALDRIG in något av detta i mejlet (hård regel 1-2):",
     business
       ? [
           `- Produkt: ${business.product}`,

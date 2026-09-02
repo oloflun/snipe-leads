@@ -7,6 +7,7 @@ Default-tenanten (Nordlys Handel) seedas med demo-kunskapsbasen.
 """
 
 import hashlib
+import json
 import re
 import unicodedata
 import uuid
@@ -27,6 +28,7 @@ from .base import (
     AGENT_RUN_TYPES,
     ANALYTICS_COVERAGE,
     FEEDBACK_VERDICTS,
+    LEADS_BUDGET_AGENT_TYPES,
     bk_belopp,
     bk_datum,
     kontrollera_bk_balans,
@@ -172,6 +174,12 @@ class MemoryStorage:
         self.prospects: dict[str, list[dict[str, Any]]] = {}
         self.prospect_sources: dict[str, list[dict[str, Any]]] = {}
         self.agent_runs: dict[str, list[dict[str, Any]]] = {}
+        # Leads-jobbens liggare (INV-JOB-002, migration 059). Nycklad på
+        # job_id precis som Postgres-tabellens primärnyckel.
+        self.leads_job_ledger: dict[str, dict[str, Any]] = {}
+        # Leadslistor (tillägget 'leadlists', migration 060).
+        self.lead_lists: dict[str, list[dict[str, Any]]] = {}
+        self.lead_list_items: list[dict[str, Any]] = []
         # Bokföring (migration 045). Filen sparas aldrig — bara sha256:n.
         self.bk_underlag: dict[str, list[dict[str, Any]]] = {}
         self.bk_verifikat: dict[str, list[dict[str, Any]]] = {}
@@ -317,6 +325,7 @@ class MemoryStorage:
         category: str,
         channel: str,
         priority: str = "normal",
+        is_test: bool = False,
     ) -> dict[str, Any]:
         ticket = {
             "id": str(uuid.uuid4()),
@@ -328,6 +337,7 @@ class MemoryStorage:
             "priority": priority,
             "escalation_reason": None,
             "channel": channel,
+            "is_test": is_test,
             "created_at": _now(),
             "updated_at": _now(),
         }
@@ -358,6 +368,7 @@ class MemoryStorage:
         category: str | None = None,
         priority: str | None = None,
         escalation_reason: str | None = None,
+        is_test: bool | None = None,
     ) -> dict[str, Any] | None:
         ticket = self.tickets.get(ticket_id)
         if not ticket or ticket["tenant_id"] != tenant_id:
@@ -370,6 +381,8 @@ class MemoryStorage:
             ticket["priority"] = priority
         if escalation_reason:
             ticket["escalation_reason"] = escalation_reason
+        if is_test is not None:
+            ticket["is_test"] = is_test
         ticket["updated_at"] = _now()
         return ticket
 
@@ -954,7 +967,19 @@ class MemoryStorage:
             **{
                 namn: värde
                 for namn, värde in (profil or {}).items()
-                if namn in ("orgnr", "ort", "postnr", "sni", "website", "anstallda", "omsattning")
+                if namn
+                in (
+                    "orgnr",
+                    "ort",
+                    "postnr",
+                    "sni",
+                    "website",
+                    "anstallda",
+                    "omsattning",
+                    "contact_role",
+                    "contact_level",
+                    "contact_form_url",
+                )
                 and värde is not None
             },
             "created_at": _now(),
@@ -982,6 +1007,13 @@ class MemoryStorage:
         qualified: bool | None = None,
         disqualifiers: list[str] | None = None,
         origin: str | None = None,
+        orgnr: str | None = None,
+        website: str | None = None,
+        contact_email: str | None = None,
+        contact_name: str | None = None,
+        contact_role: str | None = None,
+        contact_level: str | None = None,
+        contact_form_url: str | None = None,
     ) -> dict[str, Any] | None:
         prospect = await self.get_prospect(tenant_id, prospect_id)
         if not prospect:
@@ -992,6 +1024,13 @@ class MemoryStorage:
             ("qualified", qualified),
             ("disqualifiers", disqualifiers),
             ("origin", origin),
+            ("orgnr", orgnr),
+            ("website", website),
+            ("contact_email", contact_email),
+            ("contact_name", contact_name),
+            ("contact_role", contact_role),
+            ("contact_level", contact_level),
+            ("contact_form_url", contact_form_url),
         ):
             if value is not None:
                 prospect[field] = value
@@ -1077,6 +1116,142 @@ class MemoryStorage:
         if agent_type:
             runs = [r for r in runs if r["agent_type"] == agent_type]
         return sorted(runs, key=lambda r: r["created_at"], reverse=True)[:limit]
+
+    # -- Leads-jobbens liggare (INV-JOB-002, migration 059) -----------------
+
+    async def set_leads_job_status(
+        self,
+        tenant_id: str,
+        *,
+        job_id: str,
+        status: str,
+        scope: str = "research",
+        prospect_id: str | None = None,
+    ) -> None:
+        # Samma värdemängd som check-villkoret i migration 059 — minnet ska
+        # kasta där Postgres kastar (samma regel som AGENT_RUN_TYPES ovan).
+        if status not in ("queued", "processing", "completed", "failed"):
+            raise ValueError(f"status={status!r} bryter mot leads_job_ledger-checken.")
+        rad = self.leads_job_ledger.setdefault(
+            job_id,
+            {
+                "job_id": job_id,
+                "tenant_id": tenant_id,
+                "prospect_id": prospect_id,
+                "scope": scope,
+                "created_at": _now(),
+                "completed_at": None,
+            },
+        )
+        rad["status"] = status
+        if status in ("completed", "failed"):
+            rad["completed_at"] = _now()
+
+    async def get_leads_job_status(self, tenant_id: str, job_id: str) -> str | None:
+        rad = self.leads_job_ledger.get(job_id)
+        if not rad or rad["tenant_id"] != tenant_id:
+            return None
+        return rad["status"]
+
+    # -- Leadslistor (tillägget 'leadlists', migration 060) -----------------
+
+    _LEAD_LIST_STATUSAR = ("bestalld", "byggs", "klar", "fel")
+    _LEAD_ITEM_TYPER = ("bolag", "privatperson")
+
+    async def create_lead_list(
+        self, tenant_id: str, *, titel: str, icp: dict[str, Any], antal: int, is_test: bool = False
+    ) -> dict[str, Any]:
+        if not 1 <= antal <= 200:
+            raise ValueError(f"antal={antal} bryter mot lead_lists-checken (1–200).")
+        rad = {
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "titel": titel,
+            "icp": icp,
+            "antal": antal,
+            "status": "bestalld",
+            "felorsak": None,
+            "is_test": is_test,
+            "created_at": _now(),
+            "completed_at": None,
+        }
+        self.lead_lists.setdefault(tenant_id, []).append(rad)
+        return dict(rad)
+
+    async def set_lead_list_status(
+        self, tenant_id: str, list_id: str, *, status: str, felorsak: str | None = None
+    ) -> None:
+        if status not in self._LEAD_LIST_STATUSAR:
+            raise ValueError(f"status={status!r} bryter mot lead_lists-checken.")
+        for rad in self.lead_lists.get(tenant_id, []):
+            if rad["id"] == list_id:
+                rad["status"] = status
+                rad["felorsak"] = felorsak
+                if status in ("klar", "fel"):
+                    rad["completed_at"] = _now()
+                return
+
+    async def list_lead_lists(self, tenant_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        rader = sorted(
+            self.lead_lists.get(tenant_id, []), key=lambda r: r["created_at"], reverse=True
+        )[:limit]
+        return [
+            {**r, "item_count": sum(1 for i in self.lead_list_items if i["list_id"] == r["id"])}
+            for r in rader
+        ]
+
+    async def get_lead_list(self, tenant_id: str, list_id: str) -> dict[str, Any] | None:
+        for rad in self.lead_lists.get(tenant_id, []):
+            if rad["id"] == list_id:
+                return dict(rad)
+        return None
+
+    async def add_lead_list_item(
+        self, tenant_id: str, *, list_id: str, **falt: Any
+    ) -> dict[str, Any]:
+        item_typ = falt.get("item_typ") or "bolag"
+        if item_typ not in self._LEAD_ITEM_TYPER:
+            raise ValueError(f"item_typ={item_typ!r} bryter mot lead_list_items-checken.")
+        rad = {
+            "id": str(uuid.uuid4()),
+            "list_id": list_id,
+            "tenant_id": tenant_id,
+            "item_typ": item_typ,
+            "company_name": falt.get("company_name") or "",
+            "website": falt.get("website"),
+            "ort": falt.get("ort"),
+            "contact_name": falt.get("contact_name"),
+            "contact_role": falt.get("contact_role"),
+            "contact_email": falt.get("contact_email"),
+            "contact_level": falt.get("contact_level"),
+            "source_name": falt.get("source_name"),
+            "source_url": falt.get("source_url"),
+            "signal": falt.get("signal"),
+            "signal_detalj": falt.get("signal_detalj"),
+            "created_at": _now(),
+        }
+        self.lead_list_items.append(rad)
+        return dict(rad)
+
+    async def list_lead_list_items(self, tenant_id: str, list_id: str) -> list[dict[str, Any]]:
+        return [
+            dict(i)
+            for i in self.lead_list_items
+            if i["list_id"] == list_id and i["tenant_id"] == tenant_id
+        ]
+
+    async def sum_leads_tokens(self, tenant_id: str, *, hours: int = 24) -> int:
+        # Speglar SQL-frågan i postgres.py: leads-typerna, tidsfönster,
+        # tokens_in + tokens_out, testkörningar MEDräknade.
+        granser = datetime.now(timezone.utc) - timedelta(hours=hours)
+        total = 0
+        for r in self.agent_runs.get(tenant_id, []):
+            if r["agent_type"] not in LEADS_BUDGET_AGENT_TYPES:
+                continue
+            if datetime.fromisoformat(r["created_at"]) < granser:
+                continue
+            total += int(r.get("tokens_in") or 0) + int(r.get("tokens_out") or 0)
+        return total
 
     async def weekly_analytics(self, tenant_id: str, *, weeks: int = 8) -> dict[str, Any]:
         # Speglar SQL-varianten i postgres.py, inklusive de tomma veckorna:
@@ -1215,6 +1390,7 @@ class MemoryStorage:
         subject: str,
         body_text: str,
         received_at: str | None = None,
+        is_test: bool = False,
     ) -> dict[str, Any] | None:
         dedupe_key = (tenant_id, provider_message_id)
         if dedupe_key in self.email_dedupe:
@@ -1232,6 +1408,7 @@ class MemoryStorage:
             "received_at": received_at or _now(),
             "status": "new",
             "ticket_id": None,
+            "is_test": is_test,
             "created_at": _now(),
             "updated_at": _now(),
         }
@@ -1300,12 +1477,15 @@ class MemoryStorage:
         category: str | None = None,
         search: str | None = None,
         limit: int = 50,
+        is_test: bool | None = False,
     ) -> list[dict[str, Any]]:
         rows = [e for e in self.emails.values() if e["tenant_id"] == tenant_id]
         rows.sort(key=lambda e: e["received_at"], reverse=True)
         result = []
         needle = (search or "").lower()
         for email in rows:
+            if is_test is not None and bool(email.get("is_test")) != is_test:
+                continue
             summary = self._email_summary(email)
             if status and summary["status"] != status:
                 continue
@@ -1340,6 +1520,7 @@ class MemoryStorage:
         *,
         status: str | None = None,
         ticket_id: str | None = None,
+        is_test: bool | None = None,
     ) -> dict[str, Any] | None:
         email = self.emails.get(email_id)
         if not email or email["tenant_id"] != tenant_id:
@@ -1348,6 +1529,8 @@ class MemoryStorage:
             email["status"] = status
         if ticket_id:
             email["ticket_id"] = ticket_id
+        if is_test is not None:
+            email["is_test"] = is_test
         email["updated_at"] = _now()
         return email
 

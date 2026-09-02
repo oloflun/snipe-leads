@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { sqlAsUser } from "@/lib/db";
+import { aktivVy } from "@/lib/vy";
 import { getWorkspaceContext } from "@/lib/workspace";
 
 export type TeamActionResult = {
@@ -53,6 +54,14 @@ export async function inviteMember(email: string, role: string): Promise<TeamAct
     return { success: false, error: "Du måste vara inloggad." };
   }
 
+  // Demo OCH kundbesök: arbetsytan bakom vyn är fortfarande adminens EGEN
+  // (samma fälla som affärskontexten/betalsätt/plan hade). Utan den här
+  // spärren bjuder "bjud in" under ett kundbesök in någon till SNAJPS eget
+  // team, inte kundens.
+  if ((await aktivVy()).vy !== "admin") {
+    return { success: false, error: "Går inte att bjuda in i demo- eller kundvy." };
+  }
+
   // Bara den som äger arbetsytan får bjuda in. Utan den här raden hade varje
   // medlem kunnat lägga till en ny medlem, och därmed kunnat ge sig själv en
   // andra ingång som överlever att det egna kontot stängs av.
@@ -101,6 +110,12 @@ export async function listTeam(): Promise<TeamMember[]> {
     return [];
   }
 
+  // Samma fälla: en lista härifrån under ett kundbesök vore SNAJPS eget team
+  // visat som om det tillhörde kunden.
+  if ((await aktivVy()).vy !== "admin") {
+    return [];
+  }
+
   // Två frågor blev en union: samma två tillstånd, ett tur och retur, och
   // ordningen (medlemmar först) blir databasens jobb i stället för en
   // konkatenering som råkar hamna rätt.
@@ -129,6 +144,9 @@ export async function revokeInvite(inviteId: string): Promise<TeamActionResult> 
   const context = await getWorkspaceContext();
   if (!context) {
     return { success: false, error: "Du måste vara inloggad." };
+  }
+  if ((await aktivVy()).vy !== "admin") {
+    return { success: false, error: "Går inte att ändra i demo- eller kundvy." };
   }
   if (context.profile.role !== "owner") {
     return { success: false, error: "Bara arbetsytans ägare kan ta bort inbjudningar." };

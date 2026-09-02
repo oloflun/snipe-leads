@@ -29,6 +29,19 @@ def _kategorier(mail) -> set[str]:
     return {per_amne[m.subject] for m in mail}
 
 
+def test_profilens_kb_styr_amnesraderna():
+    """En SaaS-profil ska inte få retail-frågor om paket och garanti."""
+    kb = [
+        {"title": "Varför syns inte mina leads i granskningskön", "category": "teknisk_support"},
+        {"title": "Hur många prospekt ingår per månad", "category": "ovrigt"},
+        {"title": "Så fungerar testchatten", "category": "utbildning"},
+    ]
+    mail = build_mock_emails(antal=4, slump=random.Random(1), kb=kb)
+    amnen = [m.subject for m in mail]
+    assert any("leads" in a.lower() for a in amnen)
+    assert not any("beställning gått igenom" in a.lower() for a in amnen)
+
+
 @pytest.mark.parametrize("fro", range(12))
 def test_varje_fack_far_ett_arende(fro: int):
     """Tolv olika slumpfrön, samma krav. Ett urval som ibland lämnar ett fack

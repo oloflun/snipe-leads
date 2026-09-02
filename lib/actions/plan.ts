@@ -22,12 +22,15 @@ import { getWorkspaceContext } from "@/lib/workspace";
  * En UPDATE-policy gäller raden, inte kolumnen, och hade öppnat `slug` — som
  * binder arbetsytan till en backend-tenant. Se migration 044.
  *
- * ## Varför demovyn nekas
+ * ## Varför demovyn OCH kundbesök nekas
  *
- * I demovyn är arbetsytan fortfarande ADMINENS egen medan tenanten är
- * demokontots. Ett paketbyte där hade alltså ändrat Snajps eget entitlement
- * från en yta som ser ut som en kunds. Samma fälla som affärskontexten hade,
- * och den upptäcktes den gången först i drift.
+ * I demovyn OCH i ett kundbesök (`aktivVy().vy === "kund"`) är arbetsytan
+ * fortfarande ADMINENS egen medan tenanten är demokontots eller den
+ * namngivna kunden. Ett paketbyte där hade alltså ändrat Snajps eget
+ * entitlement från en yta som ser ut som en kunds. Samma fälla som
+ * affärskontexten hade (lib/actions/affarskontext.ts) — och kundbesöks-
+ * grenen av just DEN fällan upptäcktes först i drift 2026-09-02. Den här
+ * funktionen blockerade redan demo men inte kund; samma missade gren.
  */
 
 export type Planbyte = { success: boolean; error?: string; products?: ProductKey[] };
@@ -47,11 +50,11 @@ export async function bytPlan(paketId: string): Promise<Planbyte> {
     return { success: false, error: "Du måste vara inloggad." };
   }
 
-  if ((await aktivVy()).vy === "demo") {
+  if ((await aktivVy()).vy !== "admin") {
     return {
       success: false,
       error:
-        "Paketbyte är avstängt i demovyn. Arbetsytan bakom demon är vår egen, och bytet hade ändrat den — inte demokontot."
+        "Paketbyte är avstängt i demo- och kundvy. Arbetsytan bakom vyn är vår egen, och bytet hade ändrat den — inte kundens."
     };
   }
 

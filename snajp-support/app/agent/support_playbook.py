@@ -37,10 +37,19 @@ SUPPORT_V1 = Playbook(
         # thinking PÅ, medvetet mot den globala AV-defaulten: det enda steget
         # där "ska detta till en människa?" avgörs. En felaktig eskalering
         # (åt endera hållet) är dyrare än den extra latensen. Beslut 2026-08-07.
+        #
+        # VILLKORAT sedan 2026-09-02: körs bara när det finns något att
+        # bedöma — kunskapsbasen saknade svaret, ärendet är säkerhetskritiskt
+        # (påhopp, uppsägningsrisk, triageflagga, lågt sentiment, känsligt
+        # mönster) eller kunden ber uttryckligen om en människa. På lyckliga
+        # flödet röstade modellen i praktiken alltid "nej" och kodbeslutet
+        # OR:ar ändå de oberoende villkoren — steget var kedjans dyraste
+        # anrop (thinking) för noll informationsvinst just där.
         PlaybookStep(
             skill="cs:customer-escalation",
             requires=("skill:cs:draft-response",),
             thinking="enabled",
+            condition="kb_gap_or_safety_or_human_request",
         ),
         # VILLKORAT sedan 2026-08-26: körs bara när kunskapsbasen saknade
         # svaret eller ärendet är säkerhetskritiskt. Ett ärende där KB bar

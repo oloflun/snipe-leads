@@ -10,6 +10,7 @@ import { AgentMenu } from "@/components/snajp/AgentMenu";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { signOut } from "@/lib/actions/auth";
 import { DEMO_NAV, demoSektionsVag } from "@/lib/demo/sektioner";
+import { BytKund } from "@/components/admin/BytKund";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 import { VyVaxel } from "@/components/VyVaxel";
 import { useLocale } from "@/lib/i18n";
@@ -261,6 +262,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
             {/* Admin / Demo. Ersätter både den gamla /admin-länken längst ut i
                 flikraden och läges­växlaren: läget styrs numera av Leads- och
                 Support-flikarna själva, se nedan. */}
+            <BytKund />
             <VyVaxel />
             <button
               type="button"

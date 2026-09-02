@@ -1,5 +1,191 @@
 # Snipra Status
 
+## 2026-09-02 (kväll) — Claude — kundbesök läckte in i Snajps egen arbetsyta; Livrustnings produktbeskrivning var tom
+
+Anton rapporterade att Affärskontext visade IDENTISKT innehåll (Snajps egen
+pitch) under två olika kundbesök ("Du testar som nordlys-handel" och "Du
+testar som livrustning"), och att leadskörningar sa sig blockerade trots
+betalt Gemini-konto med kvarvarande krediter.
+
+**Rotorsak, bekräftad genom kodspårning:** `aktivVy()` har tre lägen
+(admin/demo/kund), men `lib/actions/affarskontext.ts` särskiljde bara demo.
+`business_contexts` är RLS-scopad mot ARBETSYTAN, och under ett kundbesök
+(`vy === "kund"`) är arbetsytan fortfarande adminens EGEN — så både läsning
+och skrivning träffade Snajps rad, oavsett vilken kund bannern visade. Samma
+olagade fälla fanns i `betalsatt.ts`, `plan.ts` och `team.ts` (alla
+blockerade bara demo) — där hade ett kundbesök kunnat ändra SNAJPS EGNA
+plan/betalsätt eller skicka en riktig teaminbjudan från Snajps konto.
+`plan.ts`:s egen docstring förutspådde exakt den här klassen av fel utan att
+täcka kund-grenen. Alla fem funktioner behandlar nu demo och kund lika.
+
+**Sidofynd:** `snajp-support/app/tenants/livrustning_business_context.py` —
+en noggrant skriven produktbeskrivning för Livrustning — hade aldrig
+importerats någonstans (ingen `.pyc` i `__pycache__`, till skillnad från
+syskonfilerna). Livrustnings `product_marketing` var därför TOMT i
+development, vilket blockerar varje utkast (`MissingBusinessContextError`,
+minst 120 tecken krävs). `scripts/livrustning_produktkontext.py` (nytt,
+idempotent, samma mönster som `seed_demo.py`) materialiserade filens
+innehåll: 0 → 2737 tecken, version 1, körd mot development. nordlys-handel
+hade redan ett giltigt dokument (726 tecken) — den kundens problem var
+enbart UI-buggen ovan.
+
+**Dygnsbudgeten (LEADS_DAILY_TOKEN_BUDGET) är INTE en bugg.** Meddelandet i
+screenshoten ("5 485 872 av 2 000 000 tokens") är en egen kostnadsspärr
+(app/leads/budget.py, tillagd 2026-09-01 efter en återtagsbugg som
+dubblerade kostnaden), helt orelaterad till Gemini-kontots faktureringsnivå.
+Google AI Studio bekräftar Paid-nivå med SEK 53,84 kvar i kredit — just den
+låga summan är skälet att INTE höja taket utan Antons tal: en ny
+kostnadsincident skulle bränna resten på en dag. Kvar till Anton: säg ett
+tak (eller vänta ut 24-timmarsfönstret).
+
+**⚠️ En hemlighet exponerades under felsökningen:** en Railway-variabelfråga
+för att kontrollera om `LEADS_DAILY_TOKEN_BUDGET` var satt i development
+skrevs för brett och visade Gemini-nyckelns fulla värde i sessionsloggen
+(samma felklass som Redis-lösenordet tidigare, se global MEMORY.md).
+Rekommendation: rotera nyckeln i Google AI Studio.
+
+Verifierat: `tsc --noEmit` rent, stickprov av backendtester grönt (13/13).
+Pushat till `development` (`68e1b75`). Ingen ändring gjord mot `main` —
+Livrustning-materialiseringen kördes bara mot development; samma körning mot
+main kräver Antons uttryckliga go enligt produktionsspärren.
+
+## 2026-09-02 — Claude/Sebbe — agenterna drar färre anrop: grindar, snabbsök, GDPR-lager
+
+Beställningen var att sänka credits/anrop utan kvalitetstapp, och svaret är
+GRINDAR för utfall som ändå kasserades — inte tunnare prompts:
+
+* **Leads:** okvalificerat eller kontaktlöst prospekt stoppar efter
+  ICP-steget: 3 anrop i stället för 9, och utkastfasen (4–7 anrop till)
+  hoppas över. `icp_fit`/`qualified`/`disqualifiers` persisteras ÄNTLIGEN på
+  prospektraden (migration 024:s syfte — ingen kodväg skrev dem).
+  Sökprompten bär nu SNI-koder, regioner och exclude_domains — en kund med
+  enbart SNI-koder sökte tidigare "hela internet" med tom målgruppstext.
+  Kontaktkravet är kodgrind, inte bara prompttext.
+* **Leads-snabbsöket byggt** (`scope="sok"` + `LeadsSnabbsok.tsx` till höger
+  om formuläret på /admin/testkorningar): en rad, "Sök Leads", 12 leads med
+  kontaktväg för EN Gemini-sökning. Träffar utan kontakt räknas separat.
+* **Support:** eskaleringssteget (kedjans enda thinking-anrop) villkorat —
+  körs bara vid kb-lucka, säkerhetssignal eller när kunden ber om en
+  människa (ny kodregex tar över exakt den signalen). 6→5 anrop på lyckliga
+  flödet. Följdfrågegränsen höjd till TVÅ motfrågor innan kb-lucka
+  eskalerar. Påhoppsgrinden orörd och verifierad: svordomar eskalerar inte,
+  riktade allvarliga hot gör det.
+* **Bokföring:** chattagenten läser nu det globala instruktionslagret (var
+  enda LLM-ytan där adminredigerade regler inte nådde fram), dataskyddsblock
+  i systemprompten och nytt kunskapsämne `gdpr_och_bokforing`.
+* **Dataskydd:** ScrapeGraphAI stod INTE i underleverantörslistan trots att
+  den hämtat prospektsidor sedan skrapningen byggdes — tillagd i
+  `lib/bolag.ts`, DPA/region flaggade till Anton. Full kunddatalista i
+  handoffen. INV-API-001 föll på HEAD (`lib/skatteverket/oauth.ts`) — lagad.
+
+Parallellsessionen (snipe-leads-28) levererade i samma push: INV-JOB-002-
+liggaren (migration 059, körd mot dev före pushen), tokenbudget och
+V2-playbooks bakom env-flagga; körvägen `leads_research_v2.py` kommer i
+deras egen push.
+
+**1717 backendtester + 386 rotvakter gröna, tsc rent.** Deployad `ef9a1af`
+(auto-deployen fungerar igen). Handoff:
+`HANDOFF-2026-09-02-RESURSER-OCH-GRINDAR.md`.
+
+## 2026-09-01 — Claude/Sebbe — UTSKICKEN FUNGERAR. Sista sändblockeraren avförd.
+
+Ett riktigt mejl gick från Railway-containern hela vägen till inkorgen:
+`Snajp <kontakt@snajp.se>` -> snajpsupport@gmail.com, status **delivered**
+i Resend. Egen domän, DKIM-signerat, via HTTPS.
+
+Vägen dit, för den som möter samma vägg igen:
+* Railway blockerar utgående SMTP på Free/Trial/Hobby (mätt inifrån
+  containern med `GET /api/admin/sandvag`: 587/465/2525 ger alla timeout).
+  Gmail-app-lösenord kan alltså aldrig fungera här. Samma vägg som Render
+  gav 2026-07-30.
+* Lösningen är HTTPS via Resend (`ResendMailer`, väljs av RESEND_API_KEY och
+  går före SMTP). snajp.se är verifierad i **eu-west-1** — EU-regionen valdes
+  medvetet, samma dataskyddsresonemang som fällde DeepSeek.
+* DNS hos Loopia: DKIM-TXT på `resend._domainkey`, CNAME `send` och `rsend`,
+  TXT `_dmarc`. Apex orörd — MX:en dit `kontakt@snajp.se` pekar.
+* Två falska spår kostade tid: negativ DNS-cache hos Google (jag slog upp
+  posterna innan de fanns), och en API-nyckel som var sändnings-begränsad
+  och därför inte kunde se att domänen var verifierad.
+
+**Verifiera själv:** `POST /api/admin/sandvag/prov?till=<adress>` (master-nyckel).
+
+**Kvar på sändsidan:** godkänt supportsvar genom hela flödet är ännu inte
+kört mot ett RIKTIGT inkommande mejl — testmejl (provider='mock') skickas
+aldrig med flit, och IMAP är inte kopplat, så det finns inga riktiga att
+godkänna än. Koden är enhetstestad; kedjan är bevisad till och med Resend.
+Produktionen (`main`) har INGA mejlvariabler satta — den är orörd.
+
+## 2026-08-31 (eftermiddag) — Grok — Starta körning dog på timeout
+
+Anton tryckte Starta körning (tomma Egna bolag) och fick "Kunde inte nå
+servern". Inte 422: Gemini+Google-sökningen låg i POST-svaret, Next-proxyn
+avbryter efter 9 s, Safari ser TypeError. Sökningen är nu ett jobb
+(`fase=soker`); knappen får 202 direkt. POST görs inte om (fem omförsök
+startade fem sökningar). Manuell Railway-deploy krävs.
+
+## 2026-08-31 (sen kväll) — Grok — leads-kedjan hittar bolag
+
+Körningen krävde ifyllda namn i Egna bolag (422), behandlade "Inget, hitta
+själv" som bolagsnamn, plockade gamla rader ur registret och skrev inget
+utkast trots "Research och utkast". Nu: ICP → sök (Gemini + Google) →
+registrera bolagets egen sajt → research → utkast. Egna bolag är valfritt.
+Placeholder säger det.
+
+## 2026-08-31 (kväll) — Grok — testmail isolerade, flytta-formulär, byt kund, pushat
+
+Kvarvarande punkter från morgonens plan: is_test på inkorg/ärenden (migration
+057 körd mot development), Testmail-flik för riktiga kunder, ifyllnad vid
+Flytta över, sökbar kundväxel i headern, knapp för testkund → riktigt konto.
+21 exempelbolag raderade från Snajp-tenanten. Redis: EU, SEMANTIC_CACHE=shadow,
+TLS fortfarande av (kräver `python scripts/redis_tls_pa.py --apply` av Anton).
+
+Pushat till `origin/development`. Auto-deploytriggern är död sedan 29/8 —
+manuell Railway-deploy krävs. Handoff:
+`HANDOFF-2026-08-31-TESTISOLERING.md`.
+
+## 2026-08-31 — Grok — exempelkörningar borta, testmail mot profilen, testchatt kalibrerar
+
+Anton visade fjorton skärmbilder: leads som spottade färdiga VVS-pitchar,
+flytta röd på `.example`, inkorg som först såg statisk ut, nästan allt
+eskalerat, testchattens kunskapsartikel som lät som uppladdad affärskontext.
+
+Byggt lokalt på `development` (inte pushat):
+
+- Exempelbolag skapas bara för Nordlys/demo. Formuläret pollar den riktiga
+  batchen. 403 utanför demon.
+- Testmail byggs ur tenantens kunskapsbas. Inkorgen visar Bearbetas medan
+  agenten läser.
+- Testchatten öppnar undersökningsärende i stället för att default-spara KB.
+  Feedback 403 på skarpa körningar; rättningar läses i nästa testchatt.
+- Admin som tittar som kund tvingar `is_test` i proxyn.
+- Inställningsmenyn: Underlag först, vanlig svenska.
+
+Live mot Railway och Redis-TLS är inte kört. Handoff:
+`HANDOFF-2026-08-31-TESTLAGER-OCH-UI.md`.
+
+## 2026-08-30 — Claude — leads-batchens NameError lagad; UI:t visar ändå bara exempelbolag
+
+Anton rapporterade att leadskörningar "fortfarande genererar färdiga exempel
+direkt" trots gårdagens Redis-fasleverans. Grävning visade två separata fel:
+
+- **Backend, lagad:** `_gather_registered_sources` i `leads_agent.py` kraschade
+  med `NameError: name 'skatteverket' is not defined` på VARJE riktig
+  batchkörning, före första LLM-anropet. Sviten var grön eftersom alla
+  batchtester monkeypatchar `run_research_step`. Fixad, omockat test
+  verifierat rött→grönt, deployad och verifierad med en riktig körning mot
+  live dev (`status: completed`).
+- **Frontend, INTE lagad — dokumenterad handoff:** `LeadsRunForm.tsx` visar
+  aldrig den riktiga körningens resultat. Exempelbolagens pitch-text är
+  hundraprocentigt färdigskriven i kod och renderas direkt (default-checkbox
+  påslagen); den riktiga batchens `job_id` pollas aldrig. Se
+  `HANDOFF-2026-08-30-LEADS-KORNING.md`.
+
+Samtidigt: KB-artikeltext wrappas nu som opålitlig text (INV-SEC-012 skärkt
+till två lager), och Railways deploytrigger för `development` visade sig ha
+slutat fira sedan 2026-08-29 22:42Z — omgången med manuell deploy, orsaken
+inte undersökt. Se `HANDOFF-2026-08-30-KB-WRAP.md` och
+`session-logs/2026-08-30-session-log.md`.
+
 ## 2026-08-29 (sen kväll) — Claude/Sebbe — adminytan fylld, tvåspråkig och läsbar; tokenkostnaden satt till leverantörens riktiga pris
 
 **Utgångspunkt: tre skärmbilder.** Kolumner fulla av nollor i Översikt och

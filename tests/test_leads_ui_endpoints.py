@@ -5,8 +5,8 @@
     fetch(`/api/snajp-support${path}`)  ->  FastAPI  /api${path}
 
 Sökvägarna är strängar i båda ändar. Ingen typ, ingen import, ingenting som
-faller vid bygget — och tre av dem är hela vägen in i produkten för en ny kund:
-lägg till bolag, fyll på med exempelbolag, starta körningen.
+faller vid bygget — och de tre som räknas är: lägg till bolag, starta
+körningen, polla jobbet. Exempelbolag är borta ur formuläret (bara /demo).
 
 Döps en route om i backenden svarar knappen 404 med ett meddelande som handlar
 om något annat, och felet syns först när någon klickar. Det här testet läser
@@ -58,15 +58,32 @@ def test_formularet_anropar_minst_de_tre_stegen():
     # det vanligaste sättet för ett statiskt test att sluta betyda något.
     vagar = _ui_vagar()
 
-    assert "/leads/prospects" in vagar
-    assert "/leads/prospects/exempel" in vagar
     assert "/leads/runs/batch" in vagar
+    assert "/leads/jobb/" in "".join(vagar) or any(v.startswith("/leads/jobb/") for v in vagar)
+    assert "/leads/prospects/exempel" not in vagar
+    # Egna bolag skickas i batchkroppen (company_names), inte som egna POST:ar
+    # före körningen — det plockade in gamla rader ur registret.
+    # Sökningen är ett jobb (fase=soker), inte POST-svaret. Utan den grenen
+    # visar knappen "Kunde inte nå servern" när Gemini tar mer än 9 sekunder.
+    text = FORMULAR.read_text(encoding="utf-8")
+    assert 'fase === "soker"' in text
+
+
+#: Next-routes som proxar till en annan FastAPI-väg än sin egen sökväg.
+#: `/leads/jobb/{id}` → `/api/jobs/{id}` med sessionstenant (inte den anonyma
+#: `/jobs/{id}`-routen, som slår upp under demonyckeln).
+_NEXT_PROXIES = ("/leads/jobb/",)
 
 
 def test_varje_anrop_traffar_en_route_som_finns():
     registrerade = _registrerade_vagar()
 
-    saknade = sorted(v for v in _ui_vagar() if f"/api{v}" not in registrerade)
+    saknade = sorted(
+        v
+        for v in _ui_vagar()
+        if not any(v.startswith(p) for p in _NEXT_PROXIES)
+        and f"/api{v}" not in registrerade
+    )
 
     assert not saknade, (
         f"LeadsRunForm anropar {saknade}, som inte finns i backenden. "

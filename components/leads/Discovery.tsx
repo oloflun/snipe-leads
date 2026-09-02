@@ -1,6 +1,7 @@
 "use client";
 
 import { useDashboard } from "@/components/dashboard/DashboardContext";
+import { ExempelbolagDemo } from "@/components/leads/ExempelbolagDemo";
 import { LeadsRunForm } from "@/components/leads/LeadsRunForm";
 
 /**
@@ -14,25 +15,38 @@ import { LeadsRunForm } from "@/components/leads/LeadsRunForm";
  *
  * `is_test` följer arbetsytan: en testarbetsyta märker sina körningar så att de
  * aldrig räknas som kundvolym i portföljvyn. En riktig kunds körning är en
- * riktig körning.
+ * riktig körning. Exempelbolag skapas inte här.
  */
 export function Discovery({ demo = false }: Readonly<{ demo?: boolean }>) {
   const { isDemo, vy } = useDashboard();
 
   return (
     <section aria-labelledby="discovery">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-        <h2 id="discovery" className="text-[1.125rem] font-semibold tracking-[-0.01em]">
-          Hitta bolag
-        </h2>
-        <p className="text-[13px] text-ink/45">
-          Lämna ett fält tomt för att använda er sparade målgrupp
-        </p>
+      {/* Två kolumner på bred skärm: formuläret till vänster (fälten är capade
+          760px sedan tidigare, resten av bredden stod tom), exempellistan till
+          höger. Den visar hur ett färdigt resultat ser ut innan man bränt en
+          körning — varje rad är märkt "Exempel" och kan aldrig mejlas, se
+          ExempelbolagDemo. Under xl staplas listan under formuläret, så
+          mobilvyn är oförändrad. Rubrikraden (med hinten om sparad målgrupp)
+          bor i FORMULÄRETS kolumn — pixelgranskningen 2026-09-02 visade att
+          en fullbreddsrad fäster hinten vid exempelkortet i stället för
+          fälten den handlar om. */}
+      <div className="grid grid-cols-1 gap-8 xl:grid-cols-2 xl:items-start">
+        <div>
+          <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+            <h2 id="discovery" className="text-[1.125rem] font-semibold tracking-[-0.01em]">
+              Hitta bolag
+            </h2>
+            <p className="text-[13px] text-ink/45">
+              Lämna ett fält tomt för att använda er sparade målgrupp
+            </p>
+          </div>
+          {/* Demovyn räknas som testkörning: den är vår egen provkörning mot
+              demokontot och ska inte synas som kundvolym i portföljvyn. */}
+          <LeadsRunForm isTest={isDemo || vy === "demo"} demo={demo} />
+        </div>
+        <ExempelbolagDemo />
       </div>
-
-      {/* Demovyn räknas som testkörning: den är vår egen provkörning mot
-          demokontot och ska inte synas som kundvolym i portföljvyn. */}
-      <LeadsRunForm isTest={isDemo || vy === "demo"} demo={demo} />
     </section>
   );
 }

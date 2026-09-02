@@ -7,6 +7,7 @@ import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import type { EmailStudioData } from "@/lib/data/emails";
 import { btnPrimary, btnSecondary } from "@/components/ui";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
+import { ICP_ETIKETTER } from "@/lib/leads/icpLabels";
 import { cn } from "@/lib/utils";
 
 /**
@@ -32,16 +33,17 @@ import { cn } from "@/lib/utils";
  * tillbaka — går fel den gång man glömmer sista steget, och då bearbetas nästa
  * riktiga körning med fel målgrupp utan att någon ser det.
  *
- * ## Två vägar till prospekt
+ * ## Vägen till prospekt
  *
- * `POST /leads/runs/batch` svarar 422 om tenanten saknar prospekt, och "Inga
- * prospekt att köra på" är ett dåligt svar på en knapp som heter "Starta
- * körning". Formuläret erbjuder därför båda vägarna in, i samma knapptryck:
+ * Kedjan är ICP → hitta bolag → registrera sajt → research → ev. utkast.
+ * **Egna bolag** är opt-in: namn kunden redan vet att de vill träffa. Tomt
+ * fält betyder att agenten söker. Påhittade exempelbolag med färdigskrivna
+ * pitchar finns bara på `/demo`.
  *
- *  1. **Egna bolag** — bolag kunden själv äger eller vill träffa, ett per rad.
- *  2. **Exempelbolag** — påhittade bolag som passar ICP:t, för att se hur
- *     agenten arbetar innan man har en lista. De märks `origin='example'` i
- *     databasen och kan aldrig mejlas (INV-SEND: send_guard fäller dem).
+ * Efter `runs/batch` (`fase: soker`) pollas sökjobbet mot `/leads/jobb/{id}`.
+ * När det är klart ligger research-jobben i `result.jobs` och pollas samma
+ * väg. Sökningen (Gemini + Google) får inte ligga i POST-svaret — proxyn
+ * avbryter efter 9 s och Safari visar "Kunde inte nå servern".
  */
 
 type Jobb = { job_id: string; prospect_id?: string };
@@ -51,6 +53,7 @@ type LeadsSvar = {
   count?: number;
   scope?: string;
   is_test?: boolean;
+  fase?: string;
   overrides?: Record<string, unknown> | null;
   error?: string;
   detail?: string;
@@ -88,12 +91,12 @@ type Exempelbolag = {
  * fälten i en annan ordning än de fylldes i tvingar läsaren att leta.
  */
 const ÖVERSKRIVNINGSETIKETTER: [string, string][] = [
-  ["industries", "Branscher"],
-  ["exclude_industries", "Undviker"],
-  ["geography", "Stad, län, region"],
-  ["roles", "Beslutsfattarroller"],
-  ["must_have", "Signaler som krävs"],
-  ["deal_breakers", "Diskvalificerar"],
+  ["industries", ICP_ETIKETTER.industries.label],
+  ["exclude_industries", ICP_ETIKETTER.exclude_industries.label],
+  ["geography", ICP_ETIKETTER.geography.label],
+  ["roles", ICP_ETIKETTER.roles.label],
+  ["must_have", ICP_ETIKETTER.must_have.label],
+  ["deal_breakers", ICP_ETIKETTER.deal_breakers.label],
   ["anstallda_min", "Anställda, minst"],
   ["anstallda_max", "Anställda, högst"]
 ];
@@ -155,9 +158,10 @@ export function LeadsRunForm({
   const [minAnst, setMinAnst] = useState("");
   const [maxAnst, setMaxAnst] = useState("");
   const [egnaBolag, setEgnaBolag] = useState("");
-  const [exempelbolag, setExempelbolag] = useState(true);
   const [svar, setSvar] = useState<LeadsSvar | null>(null);
-  const [bolag, setBolag] = useState<Exempelbolag[]>([]);
+  const [jobbLage, setJobbLage] = useState<{ klara: number; totalt: number; misslyckade: number } | null>(
+    null
+  );
   const [status, setStatus] = useState<string | null>(null);
   const [fel, setFel] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -201,105 +205,87 @@ export function LeadsRunForm({
     return kropp;
   }
 
-  /**
-   * Hämtar ett urval exempelbolag med färdiga utkast.
-   *
-   * Bruten ur körningen för att "Uppdatera" ska gå samma väg. Två anropsplatser
-   * med var sin kopia av taket och överskrivningarna hade glidit isär, och
-   * symptomet blir att knappen ger en annan målgrupp än formuläret ovanför den.
-   */
-  async function hamtaExempelbolag(
-    antal: number,
-    overrides: ReturnType<typeof byggÖverskrivningar>
-  ): Promise<Exempelbolag[]> {
-    const svar = await anropa<{ created?: Exempelbolag[] }>("/leads/prospects/exempel", {
-      method: "POST",
-      body: JSON.stringify({
-        // Taket i ExempelbolagRequest är 10: exempelbolag är en väg IN i
-        // produkten, inte en lista att arbeta ur. Klamras här så att ett stort
-        // `antal` ger tio exempel i stället för 422.
-        limit: Math.min(Math.max(antal, 1), 10),
-        ...(overrides ? { overrides } : {})
-      })
-    });
-    return svar.created ?? [];
-  }
-
-  /**
-   * "Uppdatera" — nytt urval, nya utkast, samma målgrupp.
-   *
-   * Startar INGEN körning. Den som vill se agenten formulera sig om ett annat
-   * läge ska inte behöva betala för åtta LLM-anrop per bolag för att göra det,
-   * och ska inte heller behöva fylla i formuläret igen.
-   */
-  async function uppdateraBolag() {
-    setBusy(true);
-    setFel(null);
-    setStatus("Hämtar nya exempelbolag…");
-    try {
-      setBolag(await hamtaExempelbolag(Number(limit) || 3, byggÖverskrivningar()));
-    } catch (cause) {
-      setFel(felmeddelande(cause));
-    } finally {
-      setStatus(null);
-      setBusy(false);
+  async function pollaJobb(jobId: string): Promise<{ status: string; error?: string; jobs?: Jobb[] }> {
+    // Prefixet är en literal i anropet så rotvakten ser sökvägen.
+    // `/leads/jobb/` är den inloggade proxyn — inte `/jobs/`, som är den
+    // anonyma chattpollningen och slår upp under demonyckeln.
+    for (let forsok = 0; forsok < 90; forsok += 1) {
+      await new Promise((r) => setTimeout(r, forsok < 5 ? 800 : 2000));
+      const jobb = await anropa<{
+        status?: string;
+        error?: string;
+        result?: { jobs?: Jobb[] };
+      }>("/leads/jobb/" + jobId, { method: "GET" });
+      if (jobb.status === "completed" || jobb.status === "failed") {
+        return { status: jobb.status, error: jobb.error, jobs: jobb.result?.jobs };
+      }
     }
+    return { status: "timeout", error: "Körningen tog för lång tid." };
   }
 
   async function kör() {
     setBusy(true);
     setFel(null);
     setSvar(null);
-    setBolag([]);
+    setJobbLage(null);
     setStatus(null);
     try {
       const overrides = byggÖverskrivningar();
       const antal = Number(limit) || 1;
-
-      // 1. Egna bolag blir prospekt först — de är det kunden helst vill se.
-      //    is_test följer med som query-parameter (Fas 2.2, migration 054):
-      //    utan den landade en testkörnings egna bolag som origin='manual',
-      //    omöjliga att skilja från kundens riktiga lista och oskyddade av
-      //    send-guardens spärr noll.
       const egna = rader(egnaBolag);
-      for (const namn of egna) {
-        setStatus(`Lägger till ${namn}…`);
-        // Ruttdelen hålls som en REN literal (inte template) — rotvakten
-        // tests/test_leads_ui_endpoints.py läser vägarna med regex och ska
-        // kunna matcha den mot backendens routelista.
-        await anropa("/leads/prospects" + (isTest ? "?is_test=true" : ""), {
-          method: "POST",
-          body: JSON.stringify({ company_name: namn })
-        });
-      }
 
-      // 2. Exempelbolag, om kunden bad om det ELLER om det inte finns något
-      //    att köra på. Att svara "Inga prospekt att köra på" på en knapp som
-      //    heter Starta körning är att lämna tillbaka arbetet.
-      if (exempelbolag || egna.length === 0) {
-        const befintliga = await anropa<{ prospects?: unknown[] }>("/leads/prospects", {
-          method: "GET"
-        });
-        const saknas = (befintliga.prospects?.length ?? 0) === 0;
-        if (exempelbolag || saknas) {
-          setStatus("Tar fram exempelbolag som passar er produkt…");
-          setBolag(await hamtaExempelbolag(Math.max(antal - egna.length, 1), overrides));
-        }
-      }
-
-      // 3. Själva körningen.
-      setStatus("Startar körningen…");
+      setStatus(egna.length ? "Startar körningen…" : "Letar bolag som matchar målgruppen…");
       const resultat = await anropa<LeadsSvar>("/leads/runs/batch", {
         method: "POST",
         body: JSON.stringify({
           limit: antal,
           scope,
           is_test: isTest,
+          company_names: egna,
           ...(overrides ? { overrides } : {})
         })
       });
-      setSvar(resultat);
-      setStatus(null);
+
+      let jobb = resultat.jobs ?? [];
+      if (resultat.fase === "soker") {
+        const sokId = jobb[0]?.job_id;
+        if (!sokId) {
+          throw new Error("Körningen startade inte. Försök igen.");
+        }
+        const sok = await pollaJobb(sokId);
+        if (sok.status !== "completed") {
+          throw new Error(sok.error ?? "Sökningen hittade inga bolag.");
+        }
+        jobb = sok.jobs ?? [];
+      }
+
+      if (!jobb.length) {
+        throw new Error(
+          "Inga bolag hittades som matchar målgruppen. Prova en bredare bransch eller region, eller fyll i bolag ni själva vill träffa."
+        );
+      }
+
+      setSvar({ ...resultat, jobs: jobb, count: jobb.length, fase: "research" });
+
+      let klara = 0;
+      let misslyckade = 0;
+      setJobbLage({ klara: 0, totalt: jobb.length, misslyckade: 0 });
+      setStatus(jobb.length ? `Körningen pågår… (0/${jobb.length} klara)` : null);
+
+      for (const rad of jobb) {
+        const utfall = await pollaJobb(rad.job_id);
+        if (utfall.status === "completed") klara += 1;
+        else misslyckade += 1;
+        setJobbLage({ klara, totalt: jobb.length, misslyckade });
+        setStatus(`Körningen pågår… (${klara + misslyckade}/${jobb.length} klara)`);
+      }
+
+      setStatus(
+        misslyckade
+          ? `Klart: ${klara} bolag researchade, ${misslyckade} misslyckades. Se registret nedan.`
+          : `Klart: ${klara} bolag researchade. Se registret nedan.`
+      );
+      window.dispatchEvent(new Event("snipra:leads-korning-klar"));
     } catch (cause) {
       setFel(felmeddelande(cause));
       setStatus(null);
@@ -333,23 +319,23 @@ export function LeadsRunForm({
             <option value="research_and_draft">Research och utkast</option>
           </select>
         </Rad>
-        <Rad etikett="Branscher" hint="komma emellan">
-          <input value={branscher} onChange={(e) => setBranscher(e.target.value)} placeholder="Bygg, Tillverkning" className={fältklass} />
+        <Rad etikett={ICP_ETIKETTER.industries.label} hint="komma emellan">
+          <input value={branscher} onChange={(e) => setBranscher(e.target.value)} placeholder={ICP_ETIKETTER.industries.hint} className={fältklass} />
         </Rad>
-        <Rad etikett="Undvik branscher">
-          <input value={undvik} onChange={(e) => setUndvik(e.target.value)} placeholder="Bemanning" className={fältklass} />
+        <Rad etikett={ICP_ETIKETTER.exclude_industries.label}>
+          <input value={undvik} onChange={(e) => setUndvik(e.target.value)} placeholder={ICP_ETIKETTER.exclude_industries.hint} className={fältklass} />
         </Rad>
-        <Rad etikett="Stad, län, region">
-          <input value={geografi} onChange={(e) => setGeografi(e.target.value)} placeholder="Västra Götaland" className={fältklass} />
+        <Rad etikett={ICP_ETIKETTER.geography.label}>
+          <input value={geografi} onChange={(e) => setGeografi(e.target.value)} placeholder={ICP_ETIKETTER.geography.hint} className={fältklass} />
         </Rad>
-        <Rad etikett="Beslutsfattarroller" hint="vem agenterna ska leta efter">
-          <input value={roller} onChange={(e) => setRoller(e.target.value)} placeholder="VD, inköpschef" className={fältklass} />
+        <Rad etikett={ICP_ETIKETTER.roles.label} hint="vem agenterna ska leta efter">
+          <input value={roller} onChange={(e) => setRoller(e.target.value)} placeholder={ICP_ETIKETTER.roles.hint} className={fältklass} />
         </Rad>
-        <Rad etikett="Signaler som krävs" hint="nischen">
-          <input value={kravs} onChange={(e) => setKravs(e.target.value)} placeholder="Egen produktion, växer" className={fältklass} />
+        <Rad etikett={ICP_ETIKETTER.must_have.label} hint="nischen">
+          <input value={kravs} onChange={(e) => setKravs(e.target.value)} placeholder={ICP_ETIKETTER.must_have.hint} className={fältklass} />
         </Rad>
-        <Rad etikett="Diskvalificerar">
-          <input value={diskvalificerar} onChange={(e) => setDiskvalificerar(e.target.value)} placeholder="Under 10 anställda" className={fältklass} />
+        <Rad etikett={ICP_ETIKETTER.deal_breakers.label}>
+          <input value={diskvalificerar} onChange={(e) => setDiskvalificerar(e.target.value)} placeholder={ICP_ETIKETTER.deal_breakers.hint} className={fältklass} />
         </Rad>
         <div className="grid grid-cols-2 gap-3">
           <Rad etikett="Anställda, min">
@@ -359,29 +345,16 @@ export function LeadsRunForm({
             <input type="number" min={0} value={maxAnst} onChange={(e) => setMaxAnst(e.target.value)} className={fältklass} />
           </Rad>
         </div>
-        <Rad etikett="Egna bolag" hint="ett per rad — bolag ni själva vill träffa">
+        <Rad etikett="Egna bolag" hint="valfritt — ett per rad. Tomt = agenten letar">
           <textarea
             value={egnaBolag}
             onChange={(e) => setEgnaBolag(e.target.value)}
             rows={3}
-            placeholder={"Byggkompaniet Syd AB\nNordvik Fastigheter"}
+            placeholder="Lämna tomt så letar agenten upp bolag som matchar fälten ovan"
             className={cn(fältklass, "resize-y")}
           />
         </Rad>
       </div>
-
-      <label className="mt-5 flex max-w-[70ch] items-start gap-3">
-        <input
-          type="checkbox"
-          checked={exempelbolag}
-          onChange={(e) => setExempelbolag(e.target.checked)}
-          className="mt-1 h-4 w-4 accent-ochre"
-        />
-        <span className="text-[14px] leading-6 text-ink/70">
-          Fyll på med <strong>exempelbolag</strong> som passar er produkt. Påhittade bolag som
-          visar hur agenterna arbetar innan ni har en egen lista — de kan aldrig mejlas.
-        </span>
-      </label>
 
       {/* På demoytan finns ingen session, och /api/snajp-support/* svarar 401
           med flit (requireSnajpTenant härleder kunden ur sessionen). Att visa
@@ -456,8 +429,11 @@ export function LeadsRunForm({
             )}
           </div>
 
-          {bolag.length > 0 ? (
-            <Exempelbolagslista bolag={bolag} onUppdatera={uppdateraBolag} uppdaterar={busy} />
+          {jobbLage && jobbLage.totalt > 0 ? (
+            <p className="text-[14px] text-ink/70">
+              {jobbLage.klara + jobbLage.misslyckade}/{jobbLage.totalt} jobb avslutade
+              {jobbLage.misslyckade ? ` · ${jobbLage.misslyckade} misslyckades` : null}
+            </p>
           ) : null}
         </div>
       ) : null}

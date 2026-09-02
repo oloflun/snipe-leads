@@ -68,6 +68,14 @@ MIN_IDLE_MS = 60_000
 BLOCK_MS = 5_000
 READ_COUNT = 10
 
+#: Tak för hur många gånger EN post får levereras (första läsningen +
+#: återtag) innan atertag() ger upp och kvitterar den oprövad. Hängslen
+#: ovanpå INV-JOB-002-liggaren: skulle vakten i hanteraren någonsin missa
+#: blir en post som kraschar sin hanterare på varje försök inte en evig
+#: omkörningsmaskin — tre leveranser är två återtag mer än ett friskt jobb
+#: någonsin behöver.
+MAX_LEVERANSER = 3
+
 
 def consumer_name(suffix: str | int | None = None) -> str:
     """Ett consumentnamn som är stabilt så länge PROCESSEN lever.
@@ -225,6 +233,31 @@ class ChattStrom:
                 )
                 await asyncio.sleep(1)
 
+    async def _leveransantal(self) -> dict[str, int]:
+        """message_id -> times_delivered för gruppens pending-poster.
+
+        Läses via XPENDING (range-varianten) precis före ett återtagsvarv —
+        XAUTOCLAIM själv rapporterar inte leveransräknaren. Defensiv: kan
+        räknaren inte läsas (äldre fakeredis, Redis-hicka) returneras tomt
+        och taket appliceras helt enkelt inte det varvet — hängslen ska
+        aldrig fälla själva byxorna."""
+        try:
+            pending = await self.client.xpending_range(
+                self.stream_key, self.group, min="-", max="+", count=MAXLEN_APPROX
+            )
+        except Exception:  # noqa: BLE001 — se docstringen: taket är frivilligt, körningen inte
+            logger.exception("Ström %s: kunde inte läsa XPENDING — hoppar leveranstaket.", self.stream_key)
+            return {}
+        antal: dict[str, int] = {}
+        for post in pending:
+            # redis-py returnerar dictar; äldre varianter tuples (id, consumer,
+            # idle, deliveries). Båda formerna hanteras.
+            if isinstance(post, dict):
+                antal[str(post.get("message_id"))] = int(post.get("times_delivered") or 0)
+            else:
+                antal[str(post[0])] = int(post[3])
+        return antal
+
     async def atertag(
         self,
         hanterare: Callable[[dict[str, Any]], Awaitable[None]],
@@ -246,7 +279,19 @@ class ChattStrom:
             cursor, meddelanden, _borttagna = await self.client.xautoclaim(
                 self.stream_key, self.group, agent, min_idle_time=MIN_IDLE_MS, start_id=cursor
             )
+            leveranser = await self._leveransantal() if meddelanden else {}
             for msg_id, falt in meddelanden:
+                if leveranser.get(msg_id, 0) > MAX_LEVERANSER:
+                    logger.warning(
+                        "Ström %s: posten %s har levererats %s gånger — ger upp och "
+                        "kvitterar utan körning (tak %s).",
+                        self.stream_key,
+                        msg_id,
+                        leveranser[msg_id],
+                        MAX_LEVERANSER,
+                    )
+                    await self.client.xack(self.stream_key, self.group, msg_id)
+                    continue
                 await self._kor_och_kvittera(msg_id, falt, hanterare)
                 antal += 1
             # Slutvillkor, TVÅ ben med flit. "0-0" är riktig Redis egen

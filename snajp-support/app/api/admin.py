@@ -75,7 +75,11 @@ async def list_events(
 
 @router.get("/tenants/{tenant_id}/inbox")
 async def tenant_inbox(request: Request, tenant_id: str, limit: int = 50) -> dict:
-    return {"emails": await request.app.state.storage.list_emails(tenant_id, limit=min(limit, 200))}
+    return {
+        "emails": await request.app.state.storage.list_emails(
+            tenant_id, limit=min(limit, 200), is_test=None
+        )
+    }
 
 
 @router.get("/tenants/{tenant_id}/drafts")

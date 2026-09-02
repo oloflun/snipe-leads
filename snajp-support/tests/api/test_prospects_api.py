@@ -257,11 +257,130 @@ async def test_befordra_ar_idempotent_for_manual():
 
 
 @pytest.mark.anyio
+async def test_befordra_med_ifyllnad_i_kroppen_blir_manual():
+    """422-listan ska gå att åtgärda i samma anrop, inte bara som en vägg."""
+    async with app.router.lifespan_context(app):
+        storage = app.state.storage
+        prospekt = await storage.create_prospect(
+            DEFAULT_TENANT_ID,
+            company_name="Ofullständiga Bygg AB",
+            origin="test",
+            profil={"orgnr": "556000-0000", "website": "ofullstandiga.example"},
+        )
+        async with _client() as client:
+            avvisat = await client.post(
+                f"/api/leads/prospects/{prospekt['id']}/befordra", headers=DEMO
+            )
+            assert avvisat.status_code == 422
+
+            ifyllt = await client.post(
+                f"/api/leads/prospects/{prospekt['id']}/befordra",
+                headers=DEMO,
+                json={
+                    "orgnr": "556824-9022",
+                    "website": "https://ofullstandigabygg.se",
+                    "contact_email": "info@ofullstandigabygg.se",
+                },
+            )
+            assert ifyllt.status_code == 200
+            body = ifyllt.json()
+            assert body["andrad"] is True
+            assert body["prospect"]["origin"] == "manual"
+            assert body["prospect"]["orgnr"] == "556824-9022"
+
+
+@pytest.mark.anyio
+async def test_patch_prospect_skriver_orgnr_webb_och_epost():
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            skapat = await client.post(
+                "/api/leads/prospects",
+                headers=DEMO,
+                json={"company_name": "Patchbolaget AB"},
+            )
+            pid = skapat.json()["prospect"]["id"]
+            response = await client.patch(
+                f"/api/leads/prospects/{pid}",
+                headers=DEMO,
+                json={
+                    "orgnr": "556824-9022",
+                    "website": "https://patchbolaget.se",
+                    "contact_email": "hej@patchbolaget.se",
+                },
+            )
+            assert response.status_code == 200
+            p = response.json()["prospect"]
+            assert p["orgnr"] == "556824-9022"
+            assert p["website"] == "https://patchbolaget.se"
+            assert p["contact_email"] == "hej@patchbolaget.se"
+
+
+@pytest.mark.anyio
 async def test_befordra_okant_prospekt_ger_404():
     async with app.router.lifespan_context(app):
         async with _client() as client:
             response = await client.post(
                 "/api/leads/prospects/00000000-0000-0000-0000-000000000000/befordra",
+                headers=DEMO,
+            )
+            assert response.status_code == 404
+
+
+# -- Motsatt riktning: degradera ett riktigt prospekt till 'test' ----------
+#
+# Bolagsregistrets "Flytta"-knapp går åt andra hållet i skarpt läge (se
+# components/leads/Bolagsregister.tsx) — och send-guardens spärr noll
+# (scheduler.py) måste blockera det degraderade prospektet precis som den
+# blockerar ett som föddes som 'test'. Se test_scheduler.py för själva
+# spärren; testerna här gäller bara att endpointen sätter rätt origin.
+
+
+@pytest.mark.anyio
+async def test_degradera_manuellt_prospekt_blir_test():
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            skapat = await client.post(
+                "/api/leads/prospects",
+                headers=DEMO,
+                json={"company_name": "Flyttas Till Test AB"},
+            )
+            prospect = skapat.json()["prospect"]
+            assert prospect["origin"] == "manual"
+
+            response = await client.post(
+                f"/api/leads/prospects/{prospect['id']}/degradera", headers=DEMO
+            )
+            assert response.status_code == 200
+            body = response.json()
+            assert body["andrad"] is True
+            assert body["prospect"]["origin"] == "test"
+
+
+@pytest.mark.anyio
+async def test_degradera_ar_idempotent_for_test():
+    """Ett prospekt som redan är 'test' (eller 'example') ska inte falla —
+    samma resonemang som test_befordra_ar_idempotent_for_manual."""
+    async with app.router.lifespan_context(app):
+        storage = app.state.storage
+        prospekt = await storage.create_prospect(
+            DEFAULT_TENANT_ID, company_name="Redan Test AB", origin="test"
+        )
+        async with _client() as client:
+            response = await client.post(
+                f"/api/leads/prospects/{prospekt['id']}/degradera", headers=DEMO
+            )
+            assert response.status_code == 200
+            body = response.json()
+            assert body["andrad"] is False
+            assert body["prospect"]["origin"] == "test"
+
+
+@pytest.mark.anyio
+async def test_degradera_okant_prospekt_ger_404():
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            response = await client.post(
+                "/api/leads/prospects/00000000-0000-0000-0000-000000000000/degradera",
                 headers=DEMO,
             )
             assert response.status_code == 404
@@ -308,3 +427,84 @@ async def test_senaste_utkast_lasvag_utan_sidoeffekter():
             assert data["utkast"]["subject"] == "Snabb fråga"
             # Kö-id:t är send_queue-radens id — det approve-endpointen tar.
             assert data["queue_item_id"] == skapat["queue_item"]["id"]
+
+
+
+@pytest.mark.anyio
+async def test_processa_om_degraderar_i_simulation():
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            created = await client.post(
+                "/api/leads/prospects",
+                headers=DEMO,
+                json={"company_name": "Omkörning AB", "contact_email": "info@omkorning.se"},
+            )
+            pid = created.json()["prospect"]["id"]
+            response = await client.post(
+                "/api/leads/prospects/processa-om",
+                headers=DEMO,
+                json={"prospect_ids": [pid], "scope": "research_and_draft"},
+            )
+            assert response.status_code == 503
+
+
+@pytest.mark.anyio
+async def test_processa_om_koar_befintliga_prospekt(monkeypatch):
+    monkeypatch.setattr("app.api.leads._require_live_llm", lambda: None)
+
+    async def _noop(*_a, **_k):
+        return None
+
+    monkeypatch.setattr("app.api.leads._run_batch_prospect", _noop)
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            created = await client.post(
+                "/api/leads/prospects",
+                headers=DEMO,
+                json={"company_name": "Omkörning AB", "contact_email": "info@omkorning.se"},
+            )
+            pid = created.json()["prospect"]["id"]
+            response = await client.post(
+                "/api/leads/prospects/processa-om",
+                headers=DEMO,
+                json={"prospect_ids": [pid], "scope": "research_and_draft"},
+            )
+            assert response.status_code == 202
+            body = response.json()
+            assert body["fase"] == "research"
+            assert body["count"] == 1
+            assert body["jobs"][0]["prospect_id"] == pid
+            assert body["jobs"][0]["job_id"]
+
+
+@pytest.mark.anyio
+async def test_outreach_draft_koas_som_jobb_nar_llm_finns(monkeypatch):
+    monkeypatch.setattr("app.api.leads._require_live_llm", lambda: None)
+
+    async def _noop(*_a, **_k):
+        return None
+
+    monkeypatch.setattr("app.api.leads._run_draft_job", _noop)
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            created = await client.post(
+                "/api/leads/prospects",
+                headers=DEMO,
+                json={"company_name": "Utkast AB", "contact_email": "info@utkast.se"},
+            )
+            pid = created.json()["prospect"]["id"]
+            response = await client.post(
+                "/api/leads/outreach/draft",
+                headers=DEMO,
+                json={
+                    "prospect_id": pid,
+                    "prospect_email": "info@utkast.se",
+                    "company_name": "Utkast AB",
+                    "offer_summary": "Snajp säljer en kundserviceagent till svenska småföretag " * 2,
+                    "brief": "Skriv ett kort mejl.",
+                },
+            )
+            assert response.status_code == 202
+            body = response.json()
+            assert body["fase"] == "skriver"
+            assert body["job_id"]

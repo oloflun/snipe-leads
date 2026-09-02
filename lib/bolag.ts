@@ -166,5 +166,20 @@ export const UNDERLEVERANTORER: readonly Underleverantor[] = [
     region:
       "[Ange dataregion och avtalsform — DPA + SCC. Resend är ett " +
       "US-bolag; region och DPF-status ska bekräftas. Se P1.2.]"
+  },
+  {
+    // Upptäckt saknad 2026-09-02: tjänsten har använts av leads-researchen
+    // (app/agent/research_tools.py) sedan skrapningen byggdes, men stod
+    // aldrig här — exakt det "avtalsbrott, inte stavfel" som kommentaren
+    // ovanför listan varnar för. Den hämtar prospektens EGNA publika sidor
+    // (kontakt/om oss), och det som kommer tillbaka är namngivna personer,
+    // titlar och arbetsmejl — personuppgifter behandlade för vår räkning.
+    namn: "ScrapeGraphAI",
+    andamal:
+      "Hämtning av prospekts publika webbsidor (kontakt- och om oss-sidor) " +
+      "under leads-research.",
+    region:
+      "[Ange dataregion och avtalsform — DPA + ev. SCC. Varken region eller " +
+      "avtal är bekräftat; flaggat till Anton 2026-09-02.]"
   }
 ] as const;

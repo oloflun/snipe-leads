@@ -121,9 +121,15 @@ export async function proxyWithApiKey(
   userId?: string,
   isDemo?: boolean
 ) {
+  const metod = String(init.method ?? "GET").toUpperCase();
+  // GET får göras om: kallstart är idempotent. POST/PUT/PATCH är det inte —
+  // fem omförsök mot /leads/runs/batch startade fem Gemini-sökningar och
+  // lämnade spökprospekt när den första ändå blev klar efter aborten.
+  const farGorasOm = metod === "GET" || metod === "HEAD";
+  const forsok = farGorasOm ? MAX_ATTEMPTS : 1;
   let lastCause: unknown;
 
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+  for (let attempt = 0; attempt < forsok; attempt += 1) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), ATTEMPT_TIMEOUT_MS);
     try {
@@ -165,7 +171,7 @@ export async function proxyWithApiKey(
       const arGatewayStatus = response.status === 502 || response.status === 503 || response.status === 504;
 
       if (!rawBody) {
-        if (arGatewayStatus && attempt < MAX_ATTEMPTS - 1) {
+        if (arGatewayStatus && farGorasOm && attempt < forsok - 1) {
           lastCause = new Error(`uppströms ${response.status} utan innehåll`);
           await paus(attempt);
           continue;
@@ -192,7 +198,7 @@ export async function proxyWithApiKey(
         }
         return NextResponse.json(parsed, { status: response.status });
       } catch {
-        if (arGatewayStatus && attempt < MAX_ATTEMPTS - 1) {
+        if (arGatewayStatus && farGorasOm && attempt < forsok - 1) {
           lastCause = new Error(`uppströms ${response.status} med icke-JSON-kropp`);
           await paus(attempt);
           continue;
@@ -212,7 +218,7 @@ export async function proxyWithApiKey(
       lastCause = cause;
       // Bara timeout/nätverksfel är värt att göra om — ett riktigt HTTP-svar
       // har redan returnerats ovan.
-      if (attempt < MAX_ATTEMPTS - 1) {
+      if (farGorasOm && attempt < forsok - 1) {
         await paus(attempt);
       }
     } finally {

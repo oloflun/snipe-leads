@@ -101,7 +101,7 @@ KB_ARTICLES: list[dict] = [
         "content": (
             "Leveransadressen kan ändras fram tills paketet lämnat vårt lager — oftast inom "
             "2 timmar från beställning. Gå till Mina sidor → Beställningar → Ändra adress, "
-            "eller kontakta supporten med ditt ordernummer. Har paketet redan skickats kan "
+            "eller kontakta oss igen med ditt ordernummer. Har paketet redan skickats kan "
             "du i PostNords app styra om det till ett annat ombud."
         ),
     },

@@ -76,6 +76,11 @@ class StepResult:
     # bara en rubrik — se agentcore/registry.load_full_skill.
     injected_chars: int = 0
     thinking_mode: str = "disabled"
+    # Modellen JUST DET HÄR steget kördes mot. Sedan per-steg-modellvalet
+    # (model_setting) kan en körning blanda modeller, och agent_runs.model
+    # (en sträng per körning) räcker då inte för "vilken modell skrev det
+    # här?" — INV-AUDIT-001-frågan flyttar in i step_log.
+    model: str = ""
     # Vilken overlay som formade steget, och hur mycket text den bidrog med.
     # Utan detta i revisionsloggen går det inte att svara på "varför skrev den
     # så här?" — skill-namnet ensamt räcker inte när tuninglagret är fritt
@@ -151,6 +156,7 @@ class RunTrace:
                 "reasoning_tokens": s.reasoning_tokens,
                 "injected_chars": s.injected_chars,
                 "thinking_mode": s.thinking_mode,
+                "model": s.model,
                 "overlay": s.overlay,
                 "overlay_chars": s.overlay_chars,
                 "global_chars": s.global_chars,
@@ -277,9 +283,16 @@ async def run_step(
     # omtag med exponentiell backoff — se get_llm_client i agent/llm.py.
     effective_temperature = step.temperature if step.temperature is not None else 0.3
 
+    # Per-steg-modellval: steget kan peka ut ett Settings-fält (t.ex.
+    # leads_draft_model) vars värde ersätter huvudmodellen för just det här
+    # anropet. Tomt fält = ärv settings.model — beteendet före 2026-09-02.
+    effective_model = settings.model
+    if step.model_setting:
+        effective_model = getattr(settings, step.model_setting, "") or settings.model
+
     for attempt in (1, 2):
         response = await client.chat.completions.create(
-            model=settings.model,
+            model=effective_model,
             response_format={"type": "json_object"},
             temperature=effective_temperature,
             messages=messages,
@@ -344,6 +357,7 @@ async def run_step(
             reasoning_content=reasoning_content,
             injected_chars=len(skill_text),
             thinking_mode=effective_mode,
+            model=effective_model,
             overlay=overlay_label,
             overlay_chars=overlay_chars_total,
             global_chars=len(lager.global_md),

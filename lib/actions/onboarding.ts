@@ -241,6 +241,53 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
         console.error("[onboarding] kunde inte koppla testarbetsytan:", fallbackError);
       }
     }
+  } else {
+    /**
+     * RIKTIGA kunder får också sin tenant här, sedan migration 061.
+     *
+     * Tidigare gjorde de inte det: en vanlig registrering lämnade
+     * `workspaces.slug` som null, och `requireSnajpTenant()` svarade 409 på
+     * varje inloggad yta tills någon av oss körde `scripts/onboard_tenant.py`
+     * för hand. Produkten var alltså oanvändbar för varje ny kund fram till
+     * nästa gång vi tittade — översikten visade streck, röstdokumentet
+     * "Kunde inte hämta", och målgruppssidan ett meddelande om databaskolumner.
+     *
+     * Samtidigt blir det kunden just skrev till STANDARDINSTÄLLNINGAR i
+     * backenden: produktbeskrivningen är den agenten faktiskt läser
+     * (`context_docs` med kind `product_marketing`, inte `business_contexts`),
+     * och röstdokument och målgrupp får ett utkast att ändra i stället för ett
+     * tomt fält. Se lib/snajp/standard.ts för vad som fylls i och vad som med
+     * flit lämnas tomt.
+     *
+     * Fäller inte onboardingen. Affärskontexten är sparad, och
+     * `requireSnajpTenant()` gör om samma koppling vid första sidladdningen om
+     * backenden sov just nu.
+     */
+    try {
+      const { sakerstallKundtenant } = await import("@/lib/snajp/provisionering");
+      const { getWorkspaceForUser } = await import("@/lib/workspace");
+      const workspace = await getWorkspaceForUser(user.id);
+      if (workspace && !workspace.slug) {
+        // Samma fyra fält som `Kundunderlag` — payloaden ovan är redan den
+        // text kunden skrev, så en omläsning ur databasen hade bara varit en
+        // extra tur och retur för samma sak.
+        await sakerstallKundtenant(
+          user.id,
+          workspace,
+          {
+            product: payload.product,
+            target_audience: payload.target_audience,
+            offer: payload.offer,
+            cta: payload.cta
+          },
+          // Tålmodigt: uppstarten får vänta ut en kallstartande backend. Det är
+          // enda tillfället kunden faktiskt väntar på att bli upplagd.
+          true
+        );
+      }
+    } catch (error) {
+      console.error("[onboarding] kunde inte koppla arbetsytans tenant:", error);
+    }
   }
 
   redirect("/dashboard");

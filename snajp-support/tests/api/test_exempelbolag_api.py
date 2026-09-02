@@ -17,6 +17,8 @@ Tre saker vaktas:
     funktionen, och det som 422:an blockerade innan den fanns.
 """
 
+import asyncio
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -82,6 +84,27 @@ async def test_exempelbolag_skapas_med_origin_example():
             listade = (await client.get("/api/leads/prospects", headers=DEMO)).json()["prospects"]
             skapade_id = {p["id"] for p in body["created"]}
             assert skapade_id <= {p["id"] for p in listade}
+
+
+@pytest.mark.anyio
+async def test_exempelbolag_vagras_utanfor_demo():
+    """Kund- och admin-tenanter ska inte kunna skapa färdigskrivna exempelbolag."""
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            skapad = await client.post(
+                "/api/keys",
+                headers={"X-API-Key": get_settings().snajp_master_api_key},
+                json={"tenant_name": "Inte Demo AB"},
+            )
+            assert skapad.status_code == 201, skapad.text
+            key = skapad.json()["api_key"]
+            svar = await client.post(
+                "/api/leads/prospects/exempel",
+                headers={"X-API-Key": key},
+                json={"limit": 1},
+            )
+            assert svar.status_code == 403, svar.text
+            assert "demon" in svar.json()["detail"].lower()
 
 
 @pytest.mark.anyio
@@ -165,7 +188,7 @@ async def test_testkorningen_startar_pa_de_inladdade_bolagen(live_llm, monkeypat
                 "/api/leads/runs/batch", headers=DEMO, json={"limit": 3, "is_test": True}
             )
             assert tom.status_code == 422
-            assert "Inga prospekt" in tom.json()["detail"]
+            assert "söker" in tom.json()["detail"].lower() or "egna bolag" in tom.json()["detail"].lower()
 
             body = await _ladda_exempelbolag(client, limit=3)
             exempel_id = {p["id"] for p in body["created"]}
@@ -176,7 +199,16 @@ async def test_testkorningen_startar_pa_de_inladdade_bolagen(live_llm, monkeypat
                 json={"limit": 3, "scope": "research_and_draft", "is_test": True},
             )
             assert korning.status_code == 202, korning.text
-            jobb = korning.json()["jobs"]
+            sok_id = korning.json()["jobs"][0]["job_id"]
+            klart = None
+            for _ in range(80):
+                data = (await client.get(f"/api/jobs/{sok_id}", headers=DEMO)).json()
+                if data["status"] in ("completed", "failed"):
+                    klart = data
+                    break
+                await asyncio.sleep(0.05)
+            assert klart is not None and klart["status"] == "completed", klart
+            jobb = klart["result"]["jobs"]
             assert len(jobb) == 3
             assert {j["prospect_id"] for j in jobb} == exempel_id
 

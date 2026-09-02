@@ -66,6 +66,35 @@ RESEARCH_V1 = Playbook(
     ),
 )
 
+# V2 (2026-09-02, kostnadsarbetet): HELA researchvarvet i ETT anrop.
+#
+# V1:s nio steg injicerade ~250 kB skilltext + hela basen PÅ NYTT per steg —
+# ~100k input-tokens per lead, ungefär 1 kr styck på Gemini flash. V2 bär
+# destillatet av de nio skillsens kärnprinciper i overlayen
+# agent-core/overlays/leads-research-v2.md (den sanktionerade
+# finjusteringsytan — INV-SKILL-005 förbjuder att röra de vendorade
+# skillsen, och nya skills kräver upplåsningsnyckeln som medvetet inte
+# finns på utvecklingsmaskinerna). Basskillen är sa:account-research: den
+# minsta av de vendorade research-skillsen (~8 kB) och den vars grundmetodik
+# (kontokartläggning ur källmaterial) ligger närmast helhetsuppgiften.
+#
+# Vilken kedja som körs styrs av settings.leads_pipeline (env
+# LEADS_PIPELINE): "v1" är default tills V2 passerat benchmarken
+# (scripts/benchmark_leads_kedja.py) och 1–2 riktiga Gemini-körningar.
+# Artefaktkontraktet nedströms är IDENTISKT — run_research_step_v2
+# (app/agent/leads_research_v2.py) returnerar samma nycklar som V1.
+RESEARCH_V2 = Playbook(
+    name="leads/research-v2",
+    steps=(
+        PlaybookStep(
+            skill="sa:account-research",
+            requires=("context_pack",),
+            overlay="leads-research-v2",
+            thinking=THINKING,
+        ),
+    ),
+)
+
 _HEADER = """Du researchar ett enskilt prospekt åt {tenant_name}. Nedan följer,
 i bestämd ordning, de skills som styr researcharbetet. mk:prospecting §
 Quality Checks och compliance-regel 3 är HÅRDA GRINDAR i kod (se

@@ -44,9 +44,11 @@ export async function hamtaBetalsatt(): Promise<Betalsatt | null> {
   const context = await getWorkspaceContext();
   if (!context) return null;
 
-  // Demovyn läser arbetsytan bakom demon — alltså VÅR. Ett kort där hör inte
-  // hemma i en vy vi visar för utomstående. Samma skäl som Team döljs.
-  if ((await aktivVy()).vy === "demo") return null;
+  // Demo OCH kundbesök läser arbetsytan bakom vyn — alltså VÅR, inte den
+  // besökta kundens (`business_contexts` hade samma fälla, se lib/actions/
+  // affarskontext.ts, hittad i produktion 2026-09-02). Ett kort där hör inte
+  // hemma i en vy vi visar för utomstående eller i ett kundbesök.
+  if ((await aktivVy()).vy !== "admin") return null;
 
   const rader = await sqlAsUser<Rad>(
     context.user.id,
@@ -65,10 +67,11 @@ export async function sparaBetalsatt(input: Kortuppgifter): Promise<BetalsattRes
     return { success: false, error: "Du måste vara inloggad." };
   }
 
-  if ((await aktivVy()).vy === "demo") {
+  if ((await aktivVy()).vy !== "admin") {
     return {
       success: false,
-      error: "Betalsätt går inte att spara i demovyn — arbetsytan bakom den är vår egen."
+      error:
+        "Betalsätt går inte att spara i demo- eller kundvy — arbetsytan bakom vyn är vår egen, inte kundens."
     };
   }
 
@@ -146,8 +149,8 @@ export async function taBortBetalsatt(): Promise<BetalsattResultat> {
     return { success: false, error: "Du måste vara inloggad." };
   }
 
-  if ((await aktivVy()).vy === "demo") {
-    return { success: false, error: "Går inte att ändra i demovyn." };
+  if ((await aktivVy()).vy !== "admin") {
+    return { success: false, error: "Går inte att ändra i demo- eller kundvy." };
   }
 
   try {

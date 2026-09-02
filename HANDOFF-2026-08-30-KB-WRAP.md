@@ -1,5 +1,8 @@
 # Handoff till Sebbes agent — 2026-08-30
 
+**Uppföljning 2026-08-31:** se [HANDOFF-2026-08-31-TESTLAGER-OCH-UI.md](HANDOFF-2026-08-31-TESTLAGER-OCH-UI.md)
+(exempelkörningar, inkorg, testchatt, impersonation). `oauth.ts` orörd.
+
 Två saker: en ändring jag gjort i en fil du ägde igår, och ett rött
 invarianttest i din Skatteverket-kod som jag inte rört.
 
@@ -86,3 +89,30 @@ eftersom `!data.access_token`-grenen strax under redan är din formulering av
 "Skatteverket svarade fel", och de två bör låta likadant.
 
 Övriga 329 invarianttester gröna.
+
+## 3. Tillägg 2026-08-30: NameError i din Skatteverket-trådning — lagad
+
+`_gather_registered_sources` i `snajp-support/app/agent/leads_agent.py` byggde
+`ResearchContext(..., skatteverket=skatteverket)` utan att ta emot parametern
+(kom med trådningen av Skatteverket-verktyget). Följd i live dev: **varje**
+jobb ur `/api/leads/runs/batch` dog med `name 'skatteverket' is not defined`
+före första LLM-anropet — kunden såg bara exempelbolagens deterministiska
+utkast. Sviten var grön eftersom alla batchscenarier monkeypatchar
+`run_research_step`.
+
+Lagad (parametern tillagd + trådad, omockat regressionstest i
+`tests/leads/test_batch_markering.py`, verifierat rött→grönt), deployad och
+verifierad med en riktig batchkörning mot live dev som gick till completed.
+Punkt 2 (oauth.ts `.json()`) står kvar hos dig.
+
+## 4. Deploytriggern för development har slutat fira
+
+Inget deployades automatiskt efter 2026-08-29 22:42Z trots ~30 pushar —
+dina nattcommits och dagens gick aldrig live förrän jag deployade manuellt
+via `railway_provision.deploy()`. Triggrarna står rätt i Railway
+(development→development för web+api), så felet ligger troligen i
+GitHub-App-kopplingen eller trial-planen. Tills det är löst:
+
+```bash
+python -c "import sys;sys.path.insert(0,'scripts');from railway_provision import deploy;EID='02c39616-1b8e-47b7-beea-d8c6cfba1acd';print(deploy('5828c279-ad8f-429b-b5e1-969372db8a0a',EID));print(deploy('0261f633-1247-4d92-b5ab-40c2a1828b90',EID))"
+```
