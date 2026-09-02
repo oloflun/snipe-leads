@@ -313,6 +313,46 @@ async def run_research_step_v2(
     }
 
 
+def _utkastens_researchvy(research_summary: str) -> str:
+    """Skopar researchunderlaget till det utkaststeget faktiskt skriver ur.
+
+    Anroparna skickar olika mycket: API-vagen (app/api/leads.py) ett hand-
+    byggt 3-faltsutdrag, benchmarken hela final_output (6 falt, indent=2,
+    med HELA angle-objektet - vars name/promise/cta redan ligger i base som
+    "## Erbjudandet som styr vinkeln", alltsa dubblerat i samma prompt).
+    Den har vyn ar den enda sanningen for vad utkastet ser, oavsett
+    anropare:
+
+      - company_summary, likely_pains - utkastets kontext och krokravara.
+        (Grundningens belagg ar en ANNAN kanal: research_evidence ->
+        build_permitted_facts, orord av den har vyn.)
+      - offer_proof, offer_risk_reversal - de enda delarna av angle som
+        INTE redan star i offer_summary.
+      - BORT: qualified/icp_fit/offer_confidence (kedjan utkastar bara
+        kvalificerade leads; interna poang ger modellen inget att skriva),
+        angle.name/promise/cta (dubbletter mot base) och indraget.
+
+    Oparsebar input passerar orord - vyn far aldrig vara skalet till att
+    ett utkast saknar underlag."""
+    try:
+        fynd = json.loads(research_summary)
+    except (TypeError, ValueError):
+        return research_summary
+    if not isinstance(fynd, dict):
+        return research_summary
+    vy: dict[str, Any] = {
+        "company_summary": fynd.get("company_summary"),
+        "likely_pains": fynd.get("likely_pains"),
+    }
+    angle = fynd.get("angle")
+    if isinstance(angle, dict):
+        for nyckel in ("proof", "risk_reversal"):
+            if angle.get(nyckel):
+                vy["offer_" + nyckel] = angle[nyckel]
+    vy = {k: v for k, v in vy.items() if v}
+    return json.dumps(vy, ensure_ascii=False) if vy else research_summary
+
+
 async def run_outreach_draft_v2(
     storage,
     tenant_id: str,
@@ -351,7 +391,7 @@ async def run_outreach_draft_v2(
         f"## Språkläge\n{language_state}\n\n"
         f"{context_pack}"
         + (f"\n\n{soul_block}" if soul_block else "")
-        + (f"\n\n## Research om {company_name}\n{research_summary}" if research_summary else "")
+        + (f"\n\n## Research om {company_name}\n{_utkastens_researchvy(research_summary)}" if research_summary else "")
     )
 
     # Humanizern transformerar text — den behöver varken kontextpaketet
