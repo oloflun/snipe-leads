@@ -1,7 +1,7 @@
 ---
 type: goals
 project_slug: snipe-leads
-updated: 2026-08-29
+updated: 2026-09-02
 updated_by: claude
 ---
 
@@ -232,6 +232,14 @@ rebase. Ändringar behöver samordnas, inte bara pushas.
 
 ## Ändringslogg
 
+- 2026-09-02 — claude — kostnadsgrindar i alla tre agenter (leads: stopp efter
+  ICP-steget för okvalificerade/kontaktlösa prospekt, 3 anrop i st.f. 9;
+  support: eskaleringssteget villkorat, 6→5 anrop; bokföring: globala
+  instruktionslagret + GDPR-riktlinjer) plus nya snabbsöket "Sök Leads"
+  (scope=sok, ett anrop) — levererat, deployat och liveverifierat. Målbilden
+  (delmålslistan) orörd; ScrapeGraphAI tillagd som underbiträde i lib/bolag.ts
+  och flaggad till Anton (DPA/region saknas). Se
+  HANDOFF-2026-09-02-RESURSER-OCH-GRINDAR.md.
 - 2026-08-29 — claude — sjufasplanen + Redis-arkitekturen byggd och pushad
   till development (Fas 1–6 + R0–R4; Fas 7-deploydelen och R5 spärrade per
   §8.1a). Fyra nya invarianter. B1 skärpt med mätdata: nya Gemini-nyckeln

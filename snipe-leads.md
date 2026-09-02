@@ -12,7 +12,7 @@ milestone_blockers:
   - "main ligger ~80 commits efter development och kor gammal kod (snipe-zfc)"
   - "IMAP_PASSWORD_LIVRUSTNING saknas pa Railway api (bade main och development)"
   - "Vantar pa kundens bekraftelse av garantiperioden"
-updated: 2026-08-29
+updated: 2026-09-02
 ---
 
 # Snipra / Snajp
@@ -337,7 +337,25 @@ mot den döda kedjan; en riktig onboarding just nu kräver manuella steg mot
 Railway tills skriptet är omskrivet. Se `TENANTS.md` för den nuvarande
 processen och flagga skriptet innan du litar på det.
 
-## Current status (2026-08-28)
+## Current status (2026-09-02)
+
+**Kostnadsgrindar i alla tre agenter, deployade och liveverifierade**
+(`ef9a1af`..`e902821`): leads-research stoppar efter ICP-steget för
+okvalificerade eller kontaktlösa prospekt (3 LLM-anrop i stället för 9;
+`stopped_early` i jobbresultatet, bedömningen persisteras nu på prospektraden),
+utkastfasen grindas på samma villkor, supportens eskaleringssteg (kedjans enda
+thinking-anrop) körs bara vid kb-lucka/säkerhetssignal/människo-begäran (6→5
+anrop på lyckliga flödet, två motfrågor före överlämning), och bokföringschatten
+läser nu det globala instruktionslagret + GDPR-riktlinjer. Nytt snabbsök
+`scope="sok"` (EN Gemini-sökning) med panelen `LeadsSnabbsok` på
+`/admin/testkorningar`; granskningssida `/forhandsvisning/leads-snabbsok`.
+ScrapeGraphAI tillagd som underbiträde i `lib/bolag.ts` (saknades — DPA/region
+Antons bord). Parallellt: V2-kedjan (1+2-stegs pipeline bakom `LEADS_PIPELINE`,
+jobbliggare INV-JOB-002 med migration 059, dygnsbudget `LEADS_DAILY_TOKEN_BUDGET`)
+pushad av parallellsessionen samma dag. Se
+`HANDOFF-2026-09-02-RESURSER-OCH-GRINDAR.md`.
+
+## Current status (2026-08-28) [historisk]
 
 **Sjufasplan för skarpa körningar skriven** —
 [`plans/2026-08-28-skarpa-korningar-och-produktion.md`](plans/2026-08-28-skarpa-korningar-och-produktion.md),
