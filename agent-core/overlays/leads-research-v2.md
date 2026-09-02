@@ -114,3 +114,9 @@ ICP:n går fel.
 ETT JSON-objekt med EXAKT fälten ovan (plus kontraktsfälten sources_used
 och context_refs). Inga extra rubriker, ingen markdown, inga fält du inte
 ombetts om.
+
+**Svarslängd — hård regel.** Skriv telegram, inte uppsats: varje
+fritextfält är EN mening, listor max 3 korta poster, likely_objections max
+2, evidence max 3 citat under 12 ord vardera. Upprepa aldrig källtext
+utanför evidence. Ett kort, tätt svar är ett BÄTTRE svar — utfyllnad är
+kostnaden utan kvaliteten.

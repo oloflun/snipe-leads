@@ -248,11 +248,20 @@ async def _kor_fixture(
         tokens_in = int(research.get("tokens_in") or 0) + int(utkast.get("tokens_in") or 0)
         tokens_out = int(research.get("tokens_out") or 0) + int(utkast.get("tokens_out") or 0)
 
+    # Per-steg-tokens ur kedjornas egna spår — det är HÄR besluten om vad
+    # som ska bantas fattas, inte ur totalsummor.
+    steg = [
+        {"fas": fas, "skill": s.get("skill"), "in": s.get("tokens_in"), "ut": s.get("tokens_out")}
+        for fas, logg in (("research", research.get("step_log") or []), ("utkast", utkast.get("step_log") or []))
+        for s in logg
+    ]
+
     return {
         "fixture": fixture["company_name"],
         "anrop": anrop,
         "tokens_in": tokens_in,
         "tokens_out": tokens_out,
+        "steg": steg,
         "qualified": kval,
         "qualified_ratt": kval_ratt,
         "contact_email": rad.get("contact_email"),

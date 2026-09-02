@@ -74,7 +74,16 @@ _RESEARCH_V2_UPPGIFT = (
     "likely_objections (lista med {objection, response}), hardest_objection, "
     "offer ({name, promise, proof, risk_reversal, cta}), weakest_lever, "
     "offer_confidence (0.0-1.0), uncertainties (lista), reveals_gap (bool), "
-    "gap (eller null), icp_adjustment (eller null), kunskap_evidence (lista)."
+    "gap (eller null), icp_adjustment (eller null), kunskap_evidence (lista).\n\n"
+    # Svarslängden ÄR kostnaden: 2026-09-02 mättes researchsvaret till 1 482
+    # ut-tokens — 0,053 kr av 0,10-budgeten — och merparten var prosa ingen
+    # nedströmskonsument läser i sin helhet. Fälten behålls (resonemangs-
+    # ordningen bär erbjudandets kvalitet), längden stramas.
+    "SVARSLÄNGD — hård regel: varje fritextfält är EN mening (~15 ord). "
+    "Listor: max 3 poster, varje post kort; likely_objections max 2 objekt "
+    "med en menings response; evidence max 3 KORTA citat (under 12 ord "
+    "vardera). Upprepa aldrig källtext utanför evidence. Skriv telegram, "
+    "inte uppsats — informationstätheten avgör, inte ordmängden."
 )
 
 #: Utkastuppgiften för det kombinerade steget: skapa + personalisera +
