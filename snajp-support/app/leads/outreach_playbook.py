@@ -94,11 +94,56 @@ OUTREACH_V2 = Playbook(
             overlay=_HARD_RULES,
             thinking=THINKING,
             temperature=0.5,
+            # Per-steg-modellval (Sebbes beslut 2026-09-02): utkastfasens
+            # INPUT är 55 % av leadkostnaden, och stegets jobb — fem rader
+            # text efter ett regelverk som står i prompten — bär en lättare
+            # modell. LEADS_DRAFT_MODEL styr per miljö; tom = ärv MODEL.
+            # Flippas först efter domarbenchmarken.
+            model_setting="leads_draft_model",
+            # sa:draft-outreach skopas (2026-09-02). Steget bar 51 % av kedjans
+            # kr/lead på in-sidan, så skillen mättes sektionsvis. Kvar är varje
+            # REGEL och stegets process: Execution Flow (Steg 1-5), kallmejls-
+            # mallen, stilguiden, What NOT to Do — plus det arbetade Notion-
+            # exemplet, som är ett kallt mejl, alltså stegets EGEN texttyp.
+            # (Lärdomen från humanizerskopningen nedan: offra inte exemplet i
+            # måltexttypen. Här behövde det inte offras — "§ Example" och
+            # exempelrubriken balanserar varandras kodstaket och tas ihop.)
+            #
+            # Bortskopat, i storleksordning: "How It Works" (1 278) och
+            # "Connectors (Optional)" (355) + "Capability by Connector" (400)
+            # beskriver en connector-drivet Gmail-flöde som inte finns här;
+            # varm/re-engagement/post-event-mallarna (726) är fel scenario;
+            # "Channel Selection" (307) och "LinkedIn Message (if no email)"
+            # (178) avgör en kanalfråga som _HARD_RULES redan har avgjort.
+            #
+            # Och "Company Configuration [CUSTOMIZE]" (533): den är OIFYLLD i
+            # skillen — "[Your Name]", "[Customer 1]: [Result]", "My company:
+            # [Company Name]", default-CTA "Worth a 15-min call?". Den laddades
+            # hel fram till nu, så platshållarna gick in i varje svenskt
+            # kallmejl. Hur ofta de FÄRGADE utdatan är en annan fråga: över
+            # samtliga benchmarkkörningar slår CTA:n igenom i 1 av 18 utkast
+            # ("värt 15 minuter"), så modellen skriver oftast en egen. Att
+            # skopa bort blocket är alltså i första hand kostnad, i andra hand
+            # en undanröjd felkälla — inte en fix på ett pågående fel.
+            # Ska avsändaruppgifter in i prompten hör de hemma i tenant-
+            # konfigurationen, inte som skelett i en skilltext.
             rationale=(
-                "V2-kostnadsarbetet: mk:cold-email skopas till personaliserings-"
-                "referensen + granskningssektionerna (Quality Check, What to "
-                "Avoid) — resten av skillen är metodik för kampanjer och "
-                "uppföljningssekvenser som det här steget inte utför."
+                "V2-kostnadsarbetet. sa:draft-outreach skopas till processen "
+                "(Execution Flow), kallmejlsmallen, stilguiden, What NOT to Do "
+                "och det arbetade exemplet; bort går connector-flödet, fel "
+                "scenariomallar, kanalvalet (avgjort av hårda reglerna) och det "
+                "oifyllda [CUSTOMIZE]-blocket. mk:cold-email skopas till "
+                "personaliseringsreferensen + granskningssektionerna (Quality "
+                "Check, What to Avoid) — resten är metodik för kampanjer och "
+                "uppföljningssekvenser som steget inte utför."
+            ),
+            scope=(
+                "§ Execution Flow",
+                "§ Cold Outreach (No Prior Relationship)",
+                "§ Email Style Guidelines",
+                "§ What NOT to Do",
+                "§ Example",
+                "§ Outreach Draft: David Tibbitts @ Notion",
             ),
             extra_skills=(
                 (
@@ -117,6 +162,8 @@ OUTREACH_V2 = Playbook(
             overlay=_HARD_RULES,
             thinking=THINKING,
             temperature=0.7,
+            # Samma per-steg-modellval som utkaststeget — se kommentaren där.
+            model_setting="leads_draft_model",
             # Skopningen (2026-09-02, uppmätt): hela skillen är 27 081 tecken,
             # den skopade renderingen 18 655 — 31 % bort. Det som faller är
             # "FULLSTÄNDIGA EXEMPEL" (6 851 tecken) och de tre registren för
