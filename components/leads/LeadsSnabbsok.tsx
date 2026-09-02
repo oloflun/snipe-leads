@@ -137,6 +137,10 @@ export function LeadsSnabbsok({ isTest = false }: { isTest?: boolean }) {
           type="text"
           value={fråga}
           onChange={(e) => setFråga(e.target.value)}
+          // Samma tak som backendens normalize_icp (MAX_CHARS_PER_ITEM=200):
+          // utan det kapas en längre inklistring TYST på servern, och
+          // sökningen svarar på en annan rad än den kunden ser i fältet.
+          maxLength={200}
           placeholder="T.ex. byggbolag i Skåne som saknar chattsupport"
           aria-label="Vilka kunder behöver du, och till vilken produkt?"
           // min-w-[180px] och inte min-w-0: med noll krymper fältet till en
@@ -150,7 +154,7 @@ export function LeadsSnabbsok({ isTest = false }: { isTest?: boolean }) {
       </form>
 
       {busy ? (
-        <p className="mt-3 text-[13px] text-ink/55">
+        <p role="status" className="mt-3 text-[13px] text-ink/55">
           Söker bolag mot målgruppen — tar vanligen under en minut.
         </p>
       ) : null}
