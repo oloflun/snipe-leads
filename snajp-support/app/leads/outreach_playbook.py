@@ -162,8 +162,14 @@ OUTREACH_V2 = Playbook(
             overlay=_HARD_RULES,
             thinking=THINKING,
             temperature=0.7,
-            # Samma per-steg-modellval som utkaststeget — se kommentaren där.
-            model_setting="leads_draft_model",
+            # EGET fält, INTE utkastets. Distinktionen är hela poängen med
+            # per-steg-valet: domarbenchmarken 2026-09-02 underkände lite-
+            # modellen på humanizern separat (tappade å/ä/ö, 3/4 domar) —
+            # en miljö som sätter LEADS_DRAFT_MODEL för utkastet får ALDRIG
+            # tyst dra med sig sista handen på texten. Stod fel
+            # (leads_draft_model) efter en patchflytt 2026-09-02; låst av
+            # test_stegen_har_skilda_modellfalt i test_leads_v2_wiring.py.
+            model_setting="leads_humanizer_model",
             # Skopningen (2026-09-02, uppmätt i två steg). Hela skillen är
             # 27 081 tecken; den skopade renderingen 16 255 — 40 % bort.
             #

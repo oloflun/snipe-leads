@@ -165,6 +165,22 @@ def test_research_v2_ar_ett_steg_som_kraver_context_pack():
     assert RESEARCH_V2.steps[0].thinking == "disabled"
 
 
+def test_stegen_har_skilda_modellfalt():
+    """Per-steg-modellvalet: utkastet och humanizern läser OLIKA settings-
+    fält. Domarbenchmarken 2026-09-02 underkände lite-modellen på humanizern
+    (tappade å/ä/ö) separat från utkastet (svagare krokar) — besluten måste
+    kunna fattas var för sig, och en patchflytt har redan en gång råkat
+    peka humanizern på utkastets fält."""
+    utkast, humanizer = OUTREACH_V2.steps
+    assert utkast.model_setting == "leads_draft_model"
+    assert humanizer.model_setting == "leads_humanizer_model"
+    from app.config import get_settings
+
+    inst = get_settings()
+    for falt in ("leads_draft_model", "leads_humanizer_model"):
+        assert hasattr(inst, falt), f"config.py saknar {falt}"
+
+
 def test_outreach_v2_ar_tva_steg_med_humanizern_sist():
     """INV-LANG-002 strukturellt: humanizern är fysiskt sista deklarerade
     steget, precis som i V1 — ingen invariantändring behövs."""
