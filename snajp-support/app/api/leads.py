@@ -1883,8 +1883,20 @@ async def _run_list_job(app_state, payload: dict) -> None:
 
     await storage.set_lead_list_status(tenant_id, lista["id"], status="byggs")
     try:
+        from ..leads.discovery import hamta_kontaktvag
+
         traffar = await hitta_bolag(lista.get("icp") or {}, int(lista["antal"]))
         for traff in traffar:
+            # Kontaktskörden (LLM-fri, openleads ground-truth-mönster):
+            # källträffar från annonser/nyheter bär sällan kontaktväg, men
+            # ingressen lovar en per rad — hämta info@/kontakt@ ur bolagets
+            # egen sajt med regex, aldrig gissad, aldrig privat. Första
+            # skarpa listan (pixelgranskningen 2026-09-02) hade fem rader
+            # med "—" i kontaktkolumnen; det är det här strecket som stängs.
+            if not traff.get("contact_email") and traff.get("website"):
+                kontakt = await hamta_kontaktvag(traff["website"])
+                if kontakt["contact_email"]:
+                    traff = {**traff, **kontakt}
             await storage.add_lead_list_item(
                 tenant_id,
                 list_id=lista["id"],

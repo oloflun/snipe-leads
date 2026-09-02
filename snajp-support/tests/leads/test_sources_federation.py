@@ -141,6 +141,55 @@ async def test_gissa_webbplats_via_head_verifierar(monkeypatch):
     assert await gissa_webbplats_via_head("Bolag Som Inte Finns AB") is None
 
 
+# --- Karriärsubdomäner och kontaktskörden -----------------------------------
+
+
+def test_skala_karriarsubdoman():
+    from app.leads.discovery import skala_karriarsubdoman
+
+    assert skala_karriarsubdoman("https://jobb.thalamustech.se") == "https://thalamustech.se"
+    assert skala_karriarsubdoman("https://karriar.bigacom.se/ledigt") == "https://bigacom.se"
+    assert skala_karriarsubdoman("https://www.willys.se") is None
+
+
+async def test_hamta_kontaktvag_plockar_arbetsmejl(monkeypatch):
+    from app.leads.discovery import hamta_kontaktvag
+
+    sidor = {
+        "https://nordkapmoduler.se": '<a href="/kontakt">Kontakta oss</a>',
+        "https://nordkapmoduler.se/kontakt": "Mejla oss: kundservice@nordkapmoduler.se",
+    }
+
+    def handler(request):
+        return httpx.Response(200, text=sidor.get(str(request.url).rstrip("/"), ""))
+
+    def _fabrik(**kwargs):
+        return _RIKTIG_ASYNC_CLIENT(transport=httpx.MockTransport(handler))
+
+    monkeypatch.setattr("app.leads.discovery.httpx.AsyncClient", _fabrik)
+    kontakt = await hamta_kontaktvag("https://nordkapmoduler.se")
+    assert kontakt == {
+        "contact_email": "kundservice@nordkapmoduler.se",
+        "contact_level": "role_address",
+    }
+
+
+async def test_hamta_kontaktvag_tomt_ar_giltigt(monkeypatch):
+    from app.leads.discovery import hamta_kontaktvag
+
+    def handler(request):
+        return httpx.Response(200, text="Bara text, ingen adress, inga länkar.")
+
+    def _fabrik(**kwargs):
+        return _RIKTIG_ASYNC_CLIENT(transport=httpx.MockTransport(handler))
+
+    monkeypatch.setattr("app.leads.discovery.httpx.AsyncClient", _fabrik)
+    assert await hamta_kontaktvag("https://nordkapmoduler.se") == {
+        "contact_email": None,
+        "contact_level": None,
+    }
+
+
 # --- Federationen i hitta_bolag ---------------------------------------------
 
 

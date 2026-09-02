@@ -77,7 +77,18 @@ async def test_listjobbet_bygger_items_och_markerar_klar():
     lista = await _bestall(storage)
     job_id = await jobs.create(tenant_id=TENANT, status="queued")
 
-    with patch("app.api.leads.hitta_bolag", new=AsyncMock(return_value=_TRAFFAR)) as sok:
+    with (
+        patch("app.api.leads.hitta_bolag", new=AsyncMock(return_value=_TRAFFAR)) as sok,
+        patch(
+            "app.leads.discovery.hamta_kontaktvag",
+            new=AsyncMock(
+                return_value={
+                    "contact_email": "info@smalandsstalhallar.se",
+                    "contact_level": "role_address",
+                }
+            ),
+        ) as skord,
+    ):
         await hantera_leads_jobb(app_state, _payload(job_id, lista["id"]))
 
     sok.assert_awaited_once()
@@ -93,6 +104,10 @@ async def test_listjobbet_bygger_items_och_markerar_klar():
     ]
     assert items[0]["item_typ"] == "bolag"
     assert items[0]["source_url"] == "https://arbetsformedlingen.se/annons/1"
+    # Kontaktskörden körs BARA för raden utan adress — träff 1 hade redan en.
+    skord.assert_awaited_once_with("https://smalandsstalhallar.se")
+    assert items[1]["contact_email"] == "info@smalandsstalhallar.se"
+    assert items[1]["contact_level"] == "role_address"
     job = await jobs.get(job_id)
     assert job["status"] == "completed"
     assert (await storage.get_leads_job_status(TENANT, job_id)) == "completed"
@@ -109,7 +124,13 @@ async def test_atertag_av_klar_lista_dubblerar_inte_raderna():
     job_id = await jobs.create(tenant_id=TENANT, status="queued")
     payload = _payload(job_id, lista["id"])
 
-    with patch("app.api.leads.hitta_bolag", new=AsyncMock(return_value=_TRAFFAR)) as sok:
+    with (
+        patch("app.api.leads.hitta_bolag", new=AsyncMock(return_value=_TRAFFAR)) as sok,
+        patch(
+            "app.leads.discovery.hamta_kontaktvag",
+            new=AsyncMock(return_value={"contact_email": None, "contact_level": None}),
+        ),
+    ):
         await hantera_leads_jobb(app_state, payload)
         # "Återtaget": samma post igen — liggaren säger completed, ingen sökning.
         await hantera_leads_jobb(app_state, payload)
@@ -166,7 +187,13 @@ async def test_endpoints_over_http(monkeypatch):
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key-not-a-real-credential-000000")
     get_settings.cache_clear()
 
-    with patch("app.api.leads.hitta_bolag", new=AsyncMock(return_value=_TRAFFAR)):
+    with (
+        patch("app.api.leads.hitta_bolag", new=AsyncMock(return_value=_TRAFFAR)),
+        patch(
+            "app.leads.discovery.hamta_kontaktvag",
+            new=AsyncMock(return_value={"contact_email": None, "contact_level": None}),
+        ),
+    ):
         async with app.router.lifespan_context(app):
             demo_key = get_settings().snajp_demo_api_key
             transport = ASGITransport(app=app)

@@ -538,6 +538,73 @@ def _rena_traffar(rader: list[dict[str, Any]], *, uteslut: set[str], tak: int) -
     return rena
 
 
+#: Subdomäner som pekar på ANNONSEN, inte bolaget. Pixelgranskningen
+#: 2026-09-02 av första skarpa leadslistan visade att JobTechs employer.url
+#: ofta är jobb.bolaget.se/karriar.bolaget.se — kontaktskörden och skrapet
+#: behöver apexdomänen, där kontaktsidan bor.
+_KARRIARSUBDOMANER = (
+    "jobb.", "job.", "jobs.", "karriar.", "career.", "careers.",
+    "ledigajobb.", "rekrytering.", "recruit.",
+)
+
+
+def skala_karriarsubdoman(url: str) -> str | None:
+    """https://jobb.bolaget.se -> https://bolaget.se, eller None om URL:en
+    inte bär en karriärsubdomän. Ren strängoperation — anroparen
+    HEAD-verifierar apexen innan den används."""
+    host = urlparse(url).netloc.lower()
+    for prefix in _KARRIARSUBDOMANER:
+        if host.startswith(prefix):
+            return f"https://{host[len(prefix):]}"
+    return None
+
+
+async def _head_ok(url: str) -> bool:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(5.0), follow_redirects=False) as client:
+        try:
+            svar = await client.head(url)
+        except httpx.HTTPError:
+            return False
+        return svar.status_code in (200, 301, 302, 403)
+
+
+async def hamta_kontaktvag(website: str) -> dict[str, Any]:
+    """Kontaktväg ur bolagets EGEN webbplats, helt utan LLM (openleads
+    ground-truth-mönster, kostnadsarbetet 2026-09-02): hämta startsidan,
+    plocka arbetsmejl ur texten; annars följ upp till två kontakt-/om
+    oss-länkar på samma domän och plocka därifrån. Samma verifieringar som
+    research-vägen (`plocka_arbetsmejl` tar aldrig en privat adress, aldrig
+    en främmande domän). Kastar aldrig — {"contact_email": None,
+    "contact_level": None} är ett giltigt utfall."""
+    tomt = {"contact_email": None, "contact_level": None}
+    try:
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(8.0), follow_redirects=True,
+            headers={"user-agent": "snajp-leads/1.0 (+https://snajp.se)"},
+        ) as client:
+            svar = await client.get(website)
+            if svar.status_code >= 400:
+                return tomt
+            material = svar.text
+            epost = plocka_arbetsmejl(material, website)
+            if not epost:
+                for lank in extrahera_kontaktlankar(material, website, tak=2):
+                    try:
+                        undersida = await client.get(lank)
+                    except httpx.HTTPError:
+                        continue
+                    if undersida.status_code >= 400:
+                        continue
+                    epost = plocka_arbetsmejl(undersida.text, website)
+                    if epost:
+                        break
+    except httpx.HTTPError:
+        return tomt
+    if not epost:
+        return tomt
+    return {"contact_email": epost, "contact_level": "role_address"}
+
+
 def _slugga_bolagsnamn(namn: str) -> str:
     """'Nordkap Moduler AB' -> 'nordkapmoduler' — kandidatdomänens stam."""
     stam = namn.lower()
@@ -620,6 +687,12 @@ async def _sok_registrerade_kallor(
                     webb = None
                 if webb and not webbplats_ar_bolagets(webb):
                     webb = None
+                if webb:
+                    # Annonskällor pekar ofta på jobb./karriar.-subdomänen —
+                    # kontaktsidan bor på apexen. Byt bara om apexen svarar.
+                    apex = skala_karriarsubdoman(webb)
+                    if apex and await _head_ok(apex):
+                        webb = apex
             if not webb:
                 webb = await gissa_webbplats_via_head(p.company_name)
             if not webb:
