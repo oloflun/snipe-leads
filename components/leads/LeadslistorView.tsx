@@ -59,6 +59,21 @@ const STATUS_ETIKETT: Record<string, string> = {
 /** Status som betyder att agenten fortfarande arbetar — de pollas. */
 const PAGAENDE = new Set(["bestalld", "byggs"]);
 
+/** Kontakttrappans nivåer på svenska — speglar LeadsSnabbsok.KONTAKTETIKETT
+ *  (samma medvetna spegling som `anropa` och fältklassen ovan). Pixel-
+ *  granskningen 2026-09-02 visade råa `ROLE_ADDRESS`-värden i tabellen. */
+const KONTAKTNIVA_ETIKETT: Record<string, string> = {
+  named_role_match: "Namngiven beslutsfattare",
+  named_other: "Namngiven kontakt",
+  role_address: "Rolladress",
+  contact_form: "Kontaktformulär"
+};
+
+function kontaktniva(rad: ListRad): string | null {
+  if (!rad.contact_level) return null;
+  return KONTAKTNIVA_ETIKETT[rad.contact_level] ?? rad.contact_level;
+}
+
 // Samma fält- och radmönster som LeadsRunForm. Speglas med flit i stället för
 // att delas — samma resonemang som `anropa` nedan och som Bolagssida.tsx: en
 // delad hjälpare hade tvingat fram en export ur en fil vars docstring säger
@@ -134,7 +149,7 @@ function byggCsv(items: ListRad[]): string {
       rad.company_name,
       rad.ort ?? "",
       kontakt(rad),
-      rad.contact_level ?? "",
+      kontaktniva(rad) ?? "",
       signaltext(rad),
       rad.source_name ?? "",
       rad.source_url ?? "",
@@ -445,9 +460,7 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
   return (
     <div className="mt-4 rounded-card border border-ink/10 bg-paper p-4 md:p-5">
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
-        <p className="text-[13px] text-ink/50">
-          {items.length} {items.length === 1 ? "bolag" : "bolag"} i listan
-        </p>
+        <p className="text-[13px] text-ink/50">{items.length} bolag i listan</p>
         {/* CSV:n byggs helt på klientsidan av raderna som redan är hämtade —
             ingen ny endpoint, och det som laddas ner är exakt det som syns. */}
         <button
@@ -497,7 +510,7 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
                     <p className="mt-1 break-all text-sm text-ink/55">{rad.contact_email}</p>
                   ) : null}
                 </td>
-                <td className="kicker py-4 pr-6 text-mineral">{rad.contact_level ?? "—"}</td>
+                <td className="py-4 pr-6 text-[14px] text-ink/72">{kontaktniva(rad) ?? "—"}</td>
                 <td className="py-4 pr-6 text-[15px] leading-6 text-ink/72">{signaltext(rad)}</td>
                 <td className="py-4">
                   {rad.source_url ? (
@@ -529,8 +542,8 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
               <span className="min-w-0 text-[15px] font-semibold tracking-[-0.01em]">
                 {rad.company_name}
               </span>
-              {rad.contact_level ? (
-                <span className="kicker shrink-0 text-mineral">{rad.contact_level}</span>
+              {kontaktniva(rad) ? (
+                <span className="shrink-0 text-[12px] text-ink/55">{kontaktniva(rad)}</span>
               ) : null}
             </div>
             <p className="kicker mt-1 text-mineral">
