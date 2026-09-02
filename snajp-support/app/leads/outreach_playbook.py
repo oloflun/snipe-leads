@@ -164,38 +164,66 @@ OUTREACH_V2 = Playbook(
             temperature=0.7,
             # Samma per-steg-modellval som utkaststeget — se kommentaren där.
             model_setting="leads_draft_model",
-            # Skopningen (2026-09-02, uppmätt): hela skillen är 27 081 tecken,
-            # den skopade renderingen 18 655 — 31 % bort. Det som faller är
-            # "FULLSTÄNDIGA EXEMPEL" (6 851 tecken) och de tre registren för
-            # rapport/artikel/socialt (842 tecken). Kvar är HELA mönster-
-            # katalogen (alla 16 AI-mönstren), röstavsnittet, affärsregistret,
-            # processen, utdataformatet och snabbreferensen — dvs. varje REGEL
-            # som styr ett kallt mejl.
+            # Skopningen (2026-09-02, uppmätt i två steg). Hela skillen är
+            # 27 081 tecken; den skopade renderingen 16 255 — 40 % bort.
             #
-            # Medvetet avstående: exempelblocket innehåller även "Exempel 1:
-            # Affärsskrivande", ett arbetat före/efter i just den texttyp det
-            # här steget producerar. Det offras med de tre andra eftersom
-            # sektionen är odelbar i skopan (§-rubriken är FULLSTÄNDIGA
-            # EXEMPEL) och reglerna finns kvar i mönsterkatalogen. Går kvalitet
-            # förlorad är det den posten som ska in igen först.
+            # Steg 1 (1713ebf): exempelblocket (6 851) och registren för
+            # rapport/artikel/socialt (842) bort. Steg 2 (den här): tre mönster
+            # ur katalogen som inte kan uppstå i ett kallmejl — 10 (sociala
+            # medier: hashtags, inläggsavslut), 14 (kunskapsavgränsning: "inom
+            # ramen för mina kunskaper") och 16 (bullets/emoji; ren text krävs
+            # redan av _HARD_RULES och strip_markdown städar efteråt). Kvar är
+            # de 13 andra mönstren, rösten, affärsregistret, processen,
+            # utdataformatet och snabbreferensen — varje REGEL som styr ett
+            # kallt mejl. Mönstren listas därför var för sig i stället för
+            # under katalogrubriken.
+            #
+            # Prövat och förkastat: att ge tillbaka "§ Exempel 1: Affärs-
+            # skrivande" (h3-rubriken är valbar för sig — ett tidigare
+            # påstående här om att den var odelbar var fel). Uppmätt på 5
+            # fixtures blev exemplet dyrare (8 780 mot 8 254 in/anrop) och
+            # HOMOGENISERADE: tre av fyra mejl öppnade erbjudandet med samma
+            # "vi (på Snajp) har byggt/utvecklat en svensk AI-supportagent",
+            # plus två grammatikfel ("er egna", tilltalsbyte). Utan exemplet
+            # skrev modellen fyra olika öppningar. Ett arbetat exempel i
+            # måltexttypen är alltså en mall, inte en försäkring, i det här
+            # steget.
+            #
+            # Utfall per steg (in/anrop, gemini-3.6-flash, samma 5 fixtures):
+            #   research 5 963 -> 5 963, utkast 6 326 -> 6 298,
+            #   humanizer 9 054 -> 8 254; kr/lead 0,1927 -> 0,1888;
+            #   kontakt 3/5 -> 3/5, qualified 4/4 -> 4/4.
             #
             # V1-steget behåller hel skill; skopningen är V2:s och mäts av
             # scripts/benchmark_leads_kedja.py.
             scope=(
                 "§ Din uppgift",
                 "§ PERSONLIGHET OCH RÖST",
-                "§ MÖNSTER ATT IDENTIFIERA OCH ÅTGÄRDA",
+                "§ 1. Signifikansuppblåsning",
+                "§ 2. Landskap- och trenduppramning",
+                "§ 3. Participfraser som falsk analys",
+                "§ 4. Vaga attributioner och vagbeskrivningar",
+                "§ 5. Passiv röst som falsk formalitet",
+                "§ 6. Nominaliseringsöverdrift",
+                "§ 7. Anglifieringsimporter",
+                "§ 8. Strukturella AI-mönster",
+                "§ 9. Negativ parallellism (svensk variant)",
+                "§ 11. Sycofantiska öppningar och avslutningar",
+                "§ 12. Utfyllnadsfraser",
+                "§ 13. Överdriven osäkerhetssignalering",
+                "§ 15. Kopulaundvikande (utgör/representerar/utgör)",
                 "§ Affärsskrivande (mejl, offerter, presentationer, intern kommunikation)",
                 "§ PROCESS",
                 "§ Utdataformat",
                 "§ Snabbreferens: Vanliga byten",
             ),
             rationale=(
-                "Kalla mejl är affärsskrivande. Utelämnat är exempelblocket "
-                "och registren för rapport, artikel och sociala medier (31 % "
-                "av skillen) — demonstrationer, inte regler. Mönsterkatalogen "
-                "(alla 16 mönstren), rösten, affärsregistret, processen och "
-                "utdataformatet laddas i sin helhet."
+                "Kalla mejl är affärsskrivande. Utelämnat: exempelblocket, "
+                "registren för rapport/artikel/socialt, och tre mönster som "
+                "inte kan uppstå i ett kallmejl (sociala medier, kunskaps-"
+                "avgränsning, bullets/emoji) — 40 % av skillen. De 13 övriga "
+                "mönstren, rösten, affärsregistret, processen och utdata-"
+                "formatet laddas i sin helhet."
             ),
         ),
     ),
