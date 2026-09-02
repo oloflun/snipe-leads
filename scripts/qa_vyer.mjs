@@ -49,6 +49,7 @@ const KUND = [process.env.QA_KUND_EPOST ?? "kund@example.com",
               process.env.QA_KUND_LOSEN ?? "Kundtest123!"];
 
 const PUBLIKA = ["/", "/leads", "/support", "/login", "/duo-demo", "/auth/reset",
+  "/forhandsvisning/exempelbolag",
   "/demo", "/demo/leads", "/demo/emails", "/demo/support", "/demo/kontroll",
   "/demo/companies", "/demo/contacts", "/demo/inbox", "/demo/analytics", "/demo/assistant",
   "/demo/bokforing",
@@ -64,6 +65,7 @@ const PUBLIKA = ["/", "/leads", "/support", "/login", "/duo-demo", "/auth/reset"
 //
 // Lägger du till en sektion i settingsSections: lägg till den här samtidigt.
 const ARBETSYTA = ["/dashboard", "/dashboard/leads", "/dashboard/leads/kontroll",
+  "/dashboard/leads/listor",
   "/dashboard/emails", "/dashboard/support", "/dashboard/bokforing",
   "/settings", "/settings/affarskontext", "/settings/kunskapsbas", "/settings/soul",
   "/settings/notiser", "/settings/tema",
@@ -72,6 +74,7 @@ const ARBETSYTA = ["/dashboard", "/dashboard/leads", "/dashboard/leads/kontroll"
 
 const ADMINYTA = ["/admin", "/admin/kunder", "/admin/korningar", "/admin/testkorningar",
   "/admin/handelser", "/admin/bokforingsanvandning", "/admin/arbetsyta", "/admin/leads", "/admin/leads/kontroll",
+  "/admin/leads/listor",
   "/admin/emails", "/admin/support", "/admin/companies", "/admin/contacts",
   "/admin/inbox", "/admin/analytics", "/admin/assistant", "/admin/bokforing"];
 

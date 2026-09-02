@@ -1847,7 +1847,7 @@ async def lista_leadslistor(request: Request, tenant: dict = Depends(require_ten
 async def hamta_leadslista(
     request: Request, list_id: str, tenant: dict = Depends(require_tenant)
 ) -> dict:
-    kraev_uuid(list_id)
+    kraev_uuid(list_id, "listan")
     storage = request.app.state.storage
     lista = await storage.get_lead_list(tenant["tenant_id"], list_id)
     if not lista:
