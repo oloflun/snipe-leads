@@ -23,14 +23,17 @@ import { getBusinessContextForWorkspace, getWorkspaceContext } from "@/lib/works
  * De kolumnerna läses därför in och skrivs tillbaka orörda. Fälten här är de
  * fyra ingen annan yta äger.
  *
- * ## Varför demovyn går en annan väg
+ * ## Varför demo OCH kundbesök går en annan väg
  *
  * `business_contexts` är RLS-scopad mot ARBETSYTAN, inte mot tenanten. I
- * demovyn är arbetsytan fortfarande adminens egen medan tenanten är
- * demokontots — en skrivning hade alltså landat på Snajps rad medan agenten
- * läser Nordlys, och formuläret hade visat Snajps svar i demokontots
- * inställningar. Där är kontextdokumentet i backenden enda sanning, och det
- * är ändå det enda agenten läser (se docstringen nedan).
+ * demovyn OCH i ett kundbesök (`aktivVy().vy === "kund"`, se lib/vy.ts) är
+ * arbetsytan fortfarande adminens egen medan tenanten är demokontots eller
+ * den namngivna kundens — en skrivning hade alltså landat på Snajps rad
+ * medan agenten läser en annan tenant, och formuläret hade visat Snajps svar
+ * i den besökta kundens inställningar (bekräftat i produktion 2026-09-02:
+ * två olika kundbesök visade identiskt Snajp-innehåll). Där är
+ * kontextdokumentet i backenden enda sanning, och det är ändå det enda
+ * agenten läser (se docstringen nedan).
  *
  * ## Varför kontextdokumentet skickas vidare
  *
@@ -117,7 +120,12 @@ async function hamtaFranAgenten(): Promise<Affarskontextfalt | null> {
 }
 
 export async function hamtaAffarskontext(): Promise<Affarskontextfalt | null> {
-  if ((await aktivVy()).vy === "demo") {
+  // Demo OCH kundbesök: samma väg, av samma skäl (se filens docstring).
+  // `business_contexts` är RLS-scopad mot arbetsytan, och vid ett kundbesök
+  // är arbetsytan fortfarande adminens EGEN — bara backend-nyckeln pekar på
+  // kunden. Ett kundbesök som lästes härifrån visade därför alltid Snajps
+  // egna rad, oavsett vilken namngiven kund bannern sa.
+  if ((await aktivVy()).vy !== "admin") {
     return hamtaFranAgenten();
   }
 
@@ -155,9 +163,12 @@ export async function sparaAffarskontext(
     };
   }
 
-  // Demovyn: bara till agenten. Ett misslyckande är då ett riktigt fel — det
-  // finns ingen rad i arbetsytan som räddar texten om backenden inte svarar.
-  if ((await aktivVy()).vy === "demo") {
+  // Demo OCH kundbesök: bara till agenten, aldrig till arbetsytans egen rad.
+  // Samma root cause som i hamtaAffarskontext — en sparning härifrån under
+  // ett kundbesök skrev annars över Snajps EGEN business_contexts-rad, inte
+  // den besökta kundens. Ett misslyckande är då ett riktigt fel — det finns
+  // ingen rad i arbetsytan som räddar texten om backenden inte svarar.
+  if ((await aktivVy()).vy !== "admin") {
     const varning = await skickaTillAgenten(input, produkt);
     return varning ? { success: false, error: varning } : { success: true };
   }
