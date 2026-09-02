@@ -124,6 +124,60 @@ def test_standardkallor_styrs_av_env(monkeypatch):
     assert [k.name for k in standardkallor()] == ["jobtech", "nyheter"]
 
 
+# --- Namn↔domän-verifieringen -----------------------------------------------
+
+
+def test_webbplats_matchar_namn():
+    from app.leads.discovery import webbplats_matchar_namn
+
+    # Väg 1: hela slugen i domänstammen.
+    assert webbplats_matchar_namn("Smålands Stålhallar AB", "https://smalandsstalhallar.se")
+    assert webbplats_matchar_namn("Nordkap Moduler AB", "https://www.nordkapmoduler.se")
+    # Väg 2: kortform — domänstammen i slugen.
+    assert webbplats_matchar_namn("WiLLY:S AB", "https://willys.se")
+    # Väg 3: särskiljande namnled ≥5 tecken.
+    assert webbplats_matchar_namn("Thalamus it consulting AB", "https://thalamustech.se")
+    assert webbplats_matchar_namn("Bigacom Customer Management AB", "https://bigacom.se")
+
+    # Fallet som hittade buggen: annonsörens domän, inte arbetsgivarens.
+    assert not webbplats_matchar_namn(
+        "Mickes fönsterputs och städ AB", "https://optimaltrappstadning.se"
+    )
+    # "städ" (4 tecken) ligger som delsträng i "trappstädning" — golvet på
+    # 5 tecken finns för exakt den fällan.
+    assert not webbplats_matchar_namn("Städ AB", "https://optimaltrappstadning.se")
+    # Generiska led bevisar ingenting: "sverige" i domänen räcker inte.
+    assert not webbplats_matchar_namn("Bemanning Sverige AB", "https://sverigelotteriet.se")
+
+
+async def test_kalltraff_med_fel_domän_faller_tillbaka_pa_gissningen(monkeypatch):
+    """Annonsens arbetsgivar-URL matchar inte bolagsnamnet → URL:en förkastas
+    och namngissningen tar vid. Raden överlever med RÄTT domän."""
+    from app.leads.sources.base import Prospect
+
+    kalla = _FejkKalla(
+        [
+            Prospect(
+                company_name="Mickes fönsterputs och städ AB",
+                website="https://optimaltrappstadning.se",
+                source_name="jobtech",
+            )
+        ]
+    )
+    monkeypatch.setattr("app.leads.sources.standardkallor", lambda: [kalla])
+    with (
+        patch(
+            "app.leads.discovery.gissa_webbplats_via_head",
+            new=AsyncMock(return_value="https://mickesfonsterputs.se"),
+        ) as gissning,
+        patch("app.leads.discovery._gemini_med_sokning", new=AsyncMock(return_value="[]")),
+    ):
+        traffar = await hitta_bolag(ICP, 1)
+
+    gissning.assert_awaited_once_with("Mickes fönsterputs och städ AB")
+    assert traffar[0]["website"] == "https://mickesfonsterputs.se"
+
+
 # --- Webbplatsgissningen ----------------------------------------------------
 
 

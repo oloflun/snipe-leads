@@ -625,6 +625,62 @@ def _slugga_bolagsnamn(namn: str) -> str:
     return re.sub(r"[^a-z0-9]", "", stam)
 
 
+#: Namnled som inte särskiljer ett bolag — matchar de i domänen bevisar
+#: ingenting ("svenska" i svenskabyggab.se pekar inte ut NÅGOT bolag).
+_GENERISKA_NAMNLED = frozenset(
+    {
+        "aktiebolag", "gruppen", "group", "svenska", "sverige", "sweden",
+        "nordic", "norden", "holding", "invest", "konsult", "consulting",
+        "partner", "partners", "service", "services", "entreprenad",
+    }
+)
+
+
+def webbplats_matchar_namn(namn: str, url: str) -> bool:
+    """Hör domänen rimligen till bolagsnamnet? Deterministisk heuristik.
+
+    Bakgrund (pixelbesiktningen 2026-09-02): JobTech-annonsens arbetsgivar-URL
+    togs rakt av som bolagets webbplats, och "Mickes fönsterputs och städ AB"
+    fick optimaltrappstadning.se på sin rad. Annonsören och arbetsgivaren är
+    inte alltid samma part, och en rad vars webbplats inte hör till bolaget
+    förgiftar allt nedströms — kontaktskörden plockar då NÅGONS adress, bara
+    inte prospektets (värre än ingen adress alls).
+
+    Tre vägar till match, alla på asciifierade stammar utan skiljetecken:
+      1. hela namnslugen ⊂ domänstammen ("smalandsstalhallar" ⊂ dito),
+      2. domänstammen ⊂ namnslugen (kortformer: willys.se för "WiLLY:S AB"),
+      3. ett SÄRSKILJANDE namnled på ≥5 tecken ⊂ domänstammen
+         ("thalamus" ⊂ "thalamustech").
+    Golvet på 5 tecken i väg 3 är inte godtyckligt: "städ" (4) ligger som
+    delsträng i "trappstädning", och det var exakt den falska matchning
+    grinden ska fälla. Korta äkta varumärken (IKEA) räddas av väg 1/2.
+
+    Medvetet INTE använd på Gemini-utfyllnadens träffar: där har modellen
+    sökuppdraget "bolagets egen officiella sajt" och ett legitimt varumärke
+    kan heta något annat än bolaget (Fritidsfabriken ↔ annat AB-namn) —
+    grinden här gäller KÄLLDATA som aldrig gjort det anspråket.
+    """
+    stam = _host(url).split(".", 1)[0]
+    if not stam:
+        return False
+    slug = _slugga_bolagsnamn(namn)
+    # Exakt likhet räddar korta äkta varumärken (ikea.se för "IKEA AB");
+    # substrängsvägarna kräver ≥5 tecken av samma skäl som namnleden i väg 3
+    # — "stad" (slugen av "Städ AB") ligger mitt i "optimaltrappstadning".
+    if slug and slug == stam:
+        return True
+    if len(slug) >= 5 and slug in stam:
+        return True
+    if len(stam) >= 5 and stam in slug:
+        return True
+    ersatt = {"å": "a", "ä": "a", "ö": "o", "é": "e", "ü": "u"}
+    for led in re.split(r"[^a-zA-Zåäöéü0-9]+", namn.lower()):
+        led = "".join(ersatt.get(t, t) for t in led)
+        if len(led) >= 5 and led not in _GENERISKA_NAMNLED and led in stam:
+            return True
+    return False
+
+
 async def gissa_webbplats_via_head(namn: str) -> str | None:
     """Gissar https://<slug>.se och verifierar med en HEAD-request
     (opengtm-mönstret: acceptera 200/301/302/403, HTTPS först).
@@ -695,6 +751,19 @@ async def _sok_registrerade_kallor(
                 except Exception:  # noqa: BLE001 — trasig käll-URL, gissa i stället
                     webb = None
                 if webb and not webbplats_ar_bolagets(webb):
+                    webb = None
+                if webb and not webbplats_matchar_namn(p.company_name, webb):
+                    # Käll-URL:en (t.ex. annonsens arbetsgivarlänk) hör inte
+                    # ihop med bolagsnamnet — annonsören är inte alltid
+                    # arbetsgivaren. Släng den och låt namngissningen ta vid;
+                    # dess kandidat är namnhärledd och matchar per
+                    # konstruktion. Se webbplats_matchar_namn.
+                    logger.info(
+                        "Källan %s gav %s en webbplats som inte matchar namnet (%s) — förkastas.",
+                        p.source_name,
+                        p.company_name,
+                        webb,
+                    )
                     webb = None
                 if webb:
                     # Annonskällor pekar ofta på jobb./karriar.-subdomänen —
