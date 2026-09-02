@@ -174,6 +174,24 @@ async def test_hamta_kontaktvag_plockar_arbetsmejl(monkeypatch):
     }
 
 
+async def test_hamta_kontaktvag_avkodar_urlkodade_mailto(monkeypatch):
+    """Regression: mailto:%20info@... gav '%20info@bigacom.se' rakt in i
+    första skarpa listan (pixelgranskningen 2026-09-02)."""
+    from app.leads.discovery import hamta_kontaktvag
+
+    def handler(request):
+        return httpx.Response(
+            200, text='<a href="mailto:%20info@nordkapmoduler.se">Mejla</a>'
+        )
+
+    def _fabrik(**kwargs):
+        return _RIKTIG_ASYNC_CLIENT(transport=httpx.MockTransport(handler))
+
+    monkeypatch.setattr("app.leads.discovery.httpx.AsyncClient", _fabrik)
+    kontakt = await hamta_kontaktvag("https://nordkapmoduler.se")
+    assert kontakt["contact_email"] == "info@nordkapmoduler.se"
+
+
 async def test_hamta_kontaktvag_tomt_ar_giltigt(monkeypatch):
     from app.leads.discovery import hamta_kontaktvag
 

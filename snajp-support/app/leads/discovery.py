@@ -602,6 +602,15 @@ async def hamta_kontaktvag(website: str) -> dict[str, Any]:
         return tomt
     if not epost:
         return tomt
+    # mailto-länkar bär ibland URL-kodade blanksteg ("mailto:%20info@...") —
+    # första skarpa skörden levererade "%20info@bigacom.se" rakt in i
+    # tabellen. Avkoda och trimma, och släpp bara igenom adressen om den
+    # fortfarande är ett arbetsmejl på bolagets domän efteråt.
+    from urllib.parse import unquote
+
+    epost = unquote(epost).strip()
+    if not ar_arbetsmejl(epost, webb=website):
+        return tomt
     return {"contact_email": epost, "contact_level": "role_address"}
 
 
