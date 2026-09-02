@@ -48,10 +48,17 @@ from railway_provision import env_read  # noqa: E402
 #: Tabeller som pekar på ss_tenants med NO ACTION och som ett QA-konto faktiskt
 #: får rader i. De måste bort före tenanten. Övriga NO ACTION-tabeller fångas av
 #: kunddatakontrollen nedan — får de rader är kontot inte ett QA-konto.
-TENANTBEROENDEN = ("agent_context_docs", "agent_configs", "ss_api_keys")
+TENANTBEROENDEN = ("agent_context_docs", "agent_configs", "ss_api_keys", "ss_knowledge_base")
 
 #: Spår av riktig verksamhet. En rad här betyder att kontot INTE är ett tomt
 #: QA-konto, och då ska den här vägen inte användas.
+#:
+#: `ss_knowledge_base` står medvetet INTE här. Backendens `create_key` seedar
+#: automatiskt en kunskapsbas för varje tenant vars slug börjar på `testkund-`
+#: (se snajp-support/app/api/keys.py) — 16 artiklar utan att någon rört kontot.
+#: Med den i listan hade spärren fällt varje testarbetsyta och skriptet aldrig
+#: kunnat användas till det det finns för. Artiklarna raderas i stället som ett
+#: tenantberoende ovan.
 KUNDDATA = (
     "ss_tickets",
     "ss_emails",
@@ -62,8 +69,30 @@ KUNDDATA = (
     "prospects",
     "outreach_messages",
     "send_queue",
-    "ss_knowledge_base",
+    "agent_runs",
 )
+
+#: Tenants som är REGISTRERADE i koden och därför aldrig får raderas.
+#:
+#: Läses ur `lib/tenants/index.ts` i stället för att skrivas av här: en hårdkodad
+#: lista glider isär från registret vid första nya kunden, och den glidningen
+#: syns inte förrän någon raderat en tenant som en configfil pekar på.
+#:
+#: Vad som går sönder om en av dem försvinner: `lib/tenants/<slug>.ts` pekar på
+#: ett tomt id, `SNAJP_KEY_<SLUG>` blir en nyckel utan tenant, och för `testkund`
+#: dessutom `link_testkund_workspace()` — fallbacken varje testarbetsyta faller
+#: tillbaka på när den egna tenanten inte kunde skapas.
+#:
+#: ARBETSYTAN raderas ändå. Det är bara tenantraden som skyddas.
+def registrerade_tenants() -> set[str]:
+    index = Path(__file__).resolve().parents[1] / "lib" / "tenants" / "index.ts"
+    kalla = index.read_text(encoding="utf-8")
+    block = kalla.split("const tenants: Record<string, Tenant> = {")[1].split("};")[0]
+    return {
+        rad.strip().rstrip(",")
+        for rad in block.splitlines()
+        if rad.strip() and not rad.strip().startswith("//")
+    }
 
 
 def main() -> int:
@@ -134,11 +163,29 @@ def main() -> int:
             (user_id,),
         )
     )
-    if tenant_id:
+    # Spärr 4: en tenant som står i lib/tenants/index.ts raderas ALDRIG.
+    #
+    # `testkund` är fallet som gör spärren nödvändig. Arbetsytan
+    # "Testkund 68713860 workspace" pekar på den DELADE tenanten, inte på en egen
+    # — den skapades innan migration 040, eller när den egna tenanten inte gick
+    # att skapa. Att radera kontot hade då tagit `ss_tenants`-raden med sig, och
+    # med den `SNAJP_KEY_TESTKUND`, configfilen och `link_testkund_workspace()`.
+    # Nästa testarbetsyta som föll tillbaka hade mötts av ett 409 utan spår av
+    # varför.
+    cur.execute("select slug from public.ss_tenants where id = %s", (tenant_id,)) if tenant_id else None
+    tenant_slug = (cur.fetchone() or [None])[0] if tenant_id else None
+    skyddad = tenant_slug in registrerade_tenants() if tenant_slug else False
+
+    if tenant_id and not skyddad:
         # Före tenanten: de här hänger på den med NO ACTION.
         for tabell in TENANTBEROENDEN:
             plan.append((tabell, f"delete from public.{tabell} where tenant_id = %s", (tenant_id,)))
         plan.append(("ss_tenants", "delete from public.ss_tenants where id = %s", (tenant_id,)))
+    elif skyddad:
+        print(
+            f"\nTenanten {tenant_slug!r} står i lib/tenants/index.ts och SPARAS — "
+            "bara arbetsytan och kontot raderas."
+        )
 
     print()
     if not args.radera:
@@ -164,8 +211,12 @@ def main() -> int:
     kvar_konto = cur.fetchone()[0]
     cur.execute("select count(*) from public.workspaces where slug = %s", (slug,)) if slug else None
     kvar_ws = cur.fetchone()[0] if slug else 0
-    cur.execute("select count(*) from public.ss_tenants where id = %s", (tenant_id,)) if tenant_id else None
-    kvar_tenant = cur.fetchone()[0] if tenant_id else 0
+    # En skyddad tenant SKA finnas kvar — den räknas därför inte som rest.
+    if tenant_id and not skyddad:
+        cur.execute("select count(*) from public.ss_tenants where id = %s", (tenant_id,))
+        kvar_tenant = cur.fetchone()[0]
+    else:
+        kvar_tenant = 0
 
     print(f"\nKvar efteråt — konto: {kvar_konto}, arbetsyta: {kvar_ws}, tenant: {kvar_tenant}")
     return 0 if (kvar_konto or kvar_ws or kvar_tenant) == 0 else 1
