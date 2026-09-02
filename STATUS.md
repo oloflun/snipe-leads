@@ -1,5 +1,54 @@
 # Snipra Status
 
+## 2026-09-02 (kväll) — Claude — kundbesök läckte in i Snajps egen arbetsyta; Livrustnings produktbeskrivning var tom
+
+Anton rapporterade att Affärskontext visade IDENTISKT innehåll (Snajps egen
+pitch) under två olika kundbesök ("Du testar som nordlys-handel" och "Du
+testar som livrustning"), och att leadskörningar sa sig blockerade trots
+betalt Gemini-konto med kvarvarande krediter.
+
+**Rotorsak, bekräftad genom kodspårning:** `aktivVy()` har tre lägen
+(admin/demo/kund), men `lib/actions/affarskontext.ts` särskiljde bara demo.
+`business_contexts` är RLS-scopad mot ARBETSYTAN, och under ett kundbesök
+(`vy === "kund"`) är arbetsytan fortfarande adminens EGEN — så både läsning
+och skrivning träffade Snajps rad, oavsett vilken kund bannern visade. Samma
+olagade fälla fanns i `betalsatt.ts`, `plan.ts` och `team.ts` (alla
+blockerade bara demo) — där hade ett kundbesök kunnat ändra SNAJPS EGNA
+plan/betalsätt eller skicka en riktig teaminbjudan från Snajps konto.
+`plan.ts`:s egen docstring förutspådde exakt den här klassen av fel utan att
+täcka kund-grenen. Alla fem funktioner behandlar nu demo och kund lika.
+
+**Sidofynd:** `snajp-support/app/tenants/livrustning_business_context.py` —
+en noggrant skriven produktbeskrivning för Livrustning — hade aldrig
+importerats någonstans (ingen `.pyc` i `__pycache__`, till skillnad från
+syskonfilerna). Livrustnings `product_marketing` var därför TOMT i
+development, vilket blockerar varje utkast (`MissingBusinessContextError`,
+minst 120 tecken krävs). `scripts/livrustning_produktkontext.py` (nytt,
+idempotent, samma mönster som `seed_demo.py`) materialiserade filens
+innehåll: 0 → 2737 tecken, version 1, körd mot development. nordlys-handel
+hade redan ett giltigt dokument (726 tecken) — den kundens problem var
+enbart UI-buggen ovan.
+
+**Dygnsbudgeten (LEADS_DAILY_TOKEN_BUDGET) är INTE en bugg.** Meddelandet i
+screenshoten ("5 485 872 av 2 000 000 tokens") är en egen kostnadsspärr
+(app/leads/budget.py, tillagd 2026-09-01 efter en återtagsbugg som
+dubblerade kostnaden), helt orelaterad till Gemini-kontots faktureringsnivå.
+Google AI Studio bekräftar Paid-nivå med SEK 53,84 kvar i kredit — just den
+låga summan är skälet att INTE höja taket utan Antons tal: en ny
+kostnadsincident skulle bränna resten på en dag. Kvar till Anton: säg ett
+tak (eller vänta ut 24-timmarsfönstret).
+
+**⚠️ En hemlighet exponerades under felsökningen:** en Railway-variabelfråga
+för att kontrollera om `LEADS_DAILY_TOKEN_BUDGET` var satt i development
+skrevs för brett och visade Gemini-nyckelns fulla värde i sessionsloggen
+(samma felklass som Redis-lösenordet tidigare, se global MEMORY.md).
+Rekommendation: rotera nyckeln i Google AI Studio.
+
+Verifierat: `tsc --noEmit` rent, stickprov av backendtester grönt (13/13).
+Pushat till `development` (`68e1b75`). Ingen ändring gjord mot `main` —
+Livrustning-materialiseringen kördes bara mot development; samma körning mot
+main kräver Antons uttryckliga go enligt produktionsspärren.
+
 ## 2026-09-02 — Claude/Sebbe — agenterna drar färre anrop: grindar, snabbsök, GDPR-lager
 
 Beställningen var att sänka credits/anrop utan kvalitetstapp, och svaret är
