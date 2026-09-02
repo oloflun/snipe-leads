@@ -1,6 +1,7 @@
 "use client";
 
 import { useDashboard } from "@/components/dashboard/DashboardContext";
+import { ExempelbolagDemo } from "@/components/leads/ExempelbolagDemo";
 import { LeadsRunForm } from "@/components/leads/LeadsRunForm";
 
 /**
@@ -30,9 +31,18 @@ export function Discovery({ demo = false }: Readonly<{ demo?: boolean }>) {
         </p>
       </div>
 
-      {/* Demovyn räknas som testkörning: den är vår egen provkörning mot
-          demokontot och ska inte synas som kundvolym i portföljvyn. */}
-      <LeadsRunForm isTest={isDemo || vy === "demo"} demo={demo} />
+      {/* Två kolumner på bred skärm: formuläret till vänster (fälten är capade
+          760px sedan tidigare, resten av bredden stod tom), exempellistan till
+          höger. Den visar hur ett färdigt resultat ser ut innan man bränt en
+          körning — varje rad är märkt "Exempel" och kan aldrig mejlas, se
+          ExempelbolagDemo. Under xl staplas listan under formuläret, så
+          mobilvyn är oförändrad. */}
+      <div className="grid grid-cols-1 gap-8 xl:grid-cols-2 xl:items-start">
+        {/* Demovyn räknas som testkörning: den är vår egen provkörning mot
+            demokontot och ska inte synas som kundvolym i portföljvyn. */}
+        <LeadsRunForm isTest={isDemo || vy === "demo"} demo={demo} />
+        <ExempelbolagDemo />
+      </div>
     </section>
   );
 }

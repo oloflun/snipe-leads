@@ -59,6 +59,7 @@ from .schemas import (
     ExempelbolagRequest,
     LeadsBatchRequest,
     LeadsConfigRequest,
+    LeadsListaRequest,
     LeadsRunOverrides,
     ProspectPatchRequest,
     OnboardingChatRequest,
@@ -179,6 +180,22 @@ def _require_live_llm() -> None:
             detail="Kräver en riktig LLM-nyckel (DEEPSEEK_API_KEY). Se DEPLOY_KEYS.md — "
             "ingen simuleringsersättning finns för leads-ytorna.",
         )
+
+
+def _valj_leads_kedja():
+    """(research_fn, draft_fn) enligt settings.leads_pipeline.
+
+    V2 (1 research-anrop + 2 utkastanrop, app/agent/leads_research_v2.py)
+    är opt-in via env LEADS_PIPELINE=v2 tills benchmarken godkänt den —
+    se research_playbook.RESEARCH_V2 för hela resonemanget. Importerna är
+    uppskjutna av samma skäl som övriga agentimporter i den här filen."""
+    from ..agent.leads_agent import run_outreach_draft, run_research_step
+
+    if get_settings().leads_pipeline == "v2":
+        from ..agent.leads_research_v2 import run_outreach_draft_v2, run_research_step_v2
+
+        return run_research_step_v2, run_outreach_draft_v2
+    return run_research_step, run_outreach_draft
 
 
 async def _kraev_leads_budget(storage, tenant_id: str) -> None:
@@ -651,7 +668,7 @@ async def research_step(
     request: Request, payload: ResearchStepRequest, tenant: dict = Depends(require_tenant)
 ) -> dict:
     _require_live_llm()
-    from ..agent.leads_agent import run_research_step
+    run_research_step, _ = _valj_leads_kedja()
 
     storage = request.app.state.storage
     if not await storage.get_prospect(tenant["tenant_id"], payload.prospect_id):
@@ -720,7 +737,7 @@ async def outreach_draft(
 
 
 async def _run_draft_job(app_state, payload: dict) -> None:
-    from ..agent.leads_agent import run_outreach_draft as _run_outreach_draft
+    _, _run_outreach_draft = _valj_leads_kedja()
 
     job_id = payload["job_id"]
     storage = app_state.storage
@@ -1606,7 +1623,7 @@ async def _run_batch_prospect(
     overrides: dict | None = None,
     is_test: bool = False,
 ) -> None:
-    from ..agent.leads_agent import run_research_step
+    run_research_step, run_outreach_draft = _valj_leads_kedja()
 
     storage = app_state.storage
     await app_state.jobs.start(job_id)
@@ -1667,18 +1684,29 @@ async def _run_batch_prospect(
                 )
             else:
                 try:
-                    from ..agent.leads_agent import run_outreach_draft
                     from ..leads.business_context import require_business_context
 
                     offer = await require_business_context(storage, tenant["tenant_id"])
                     thread = await storage.ensure_outreach_thread(
                         tenant["tenant_id"], prospect_id=prospect_id
                     )
+                    # V1:s returdict bär inte company_summary/likely_pains på
+                    # toppnivå — bara inbakade i final_output-JSON:en. Raden
+                    # nedan serialiserade därför {null, null, null} i ett
+                    # halvår utan att någon såg det (utkastet blev bara lite
+                    # sämre, aldrig trasigt). final_output är fallbacken; V2
+                    # lägger fälten på toppnivå och träffar dem direkt.
+                    try:
+                        ur_final = json.loads(result.get("final_output") or "{}")
+                    except (TypeError, ValueError):
+                        ur_final = {}
                     sammanfattning = json.dumps(
                         {
-                            "company_summary": result.get("company_summary"),
+                            "company_summary": result.get("company_summary")
+                            or ur_final.get("company_summary"),
                             "qualified": result.get("qualified"),
-                            "likely_pains": result.get("likely_pains"),
+                            "likely_pains": result.get("likely_pains")
+                            or ur_final.get("likely_pains"),
                         },
                         ensure_ascii=False,
                     )
@@ -1693,6 +1721,10 @@ async def _run_batch_prospect(
                         context_pack=context_pack,
                         brief="",
                         research_summary=sammanfattning,
+                        # Grundningsgrindens belägg (INV-GROUND-001). Skickades
+                        # aldrig i batch-vägen — direktvägen gjorde det — så
+                        # build_permitted_facts saknade researchcitaten här.
+                        research_evidence=tuple(result.get("research_evidence") or ()),
                         is_test=is_test,
                     )
                     result["draft"] = {
@@ -1751,6 +1783,139 @@ async def processa_om(
     }
 
 
+# -- Leadslistor (tillägget 'leadlists', migration 060) ---------------------
+
+
+@router.post("/api/leads/listor", status_code=202)
+async def bestall_leadslista(
+    request: Request, payload: LeadsListaRequest, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Beställer en leadslista: volymkörning via discovery-federationen,
+    ingen research-kedja, inga utkast, ingen sändning (INV-SEC-004 — jobbet
+    har inget sändverktyg alls).
+
+    Addon-grinden ('leadlists' på workspace-raden) ligger i Next-appen som
+    för övriga tillägg; här grindar budgeten (samma som batch) och
+    require_tenant. ICP:t fryses på listraden vid beställningen så
+    resultatet alltid kan granskas mot det som faktiskt beställdes.
+    """
+    _require_live_llm()
+    storage = request.app.state.storage
+    await _kraev_leads_budget(storage, tenant["tenant_id"])
+
+    settings_rad = await storage.get_agent_settings(tenant["tenant_id"], agent_type="leads")
+    overrides = (
+        payload.overrides.model_dump(exclude_none=True)
+        if payload.overrides and payload.overrides.har_nagot()
+        else None
+    )
+    icp = normalize_icp(_med_overrides(settings_rad.get("icp"), overrides) or {})
+
+    lista = await storage.create_lead_list(
+        tenant["tenant_id"],
+        titel=payload.titel,
+        icp=icp,
+        antal=payload.antal,
+        is_test=payload.is_test,
+    )
+    job_id = await request.app.state.jobs.create(tenant_id=tenant["tenant_id"], status="queued")
+    await storage.set_leads_job_status(
+        tenant["tenant_id"], job_id=job_id, status="queued", scope="lista"
+    )
+    post = {
+        "kind": "lista",
+        "job_id": job_id,
+        "tenant_id": tenant["tenant_id"],
+        "tenant_name": tenant["tenant_name"],
+        "list_id": lista["id"],
+        "is_test": payload.is_test,
+    }
+    leadsstrom = getattr(request.app.state, "leadsstrom", None)
+    if leadsstrom is not None:
+        await leadsstrom.enqueue(post)
+    else:
+        asyncio.create_task(_run_list_job(request.app.state, post))
+    return {"list_id": lista["id"], "job_id": job_id, "status": "bestalld"}
+
+
+@router.get("/api/leads/listor")
+async def lista_leadslistor(request: Request, tenant: dict = Depends(require_tenant)) -> dict:
+    return {"lists": await request.app.state.storage.list_lead_lists(tenant["tenant_id"])}
+
+
+@router.get("/api/leads/listor/{list_id}")
+async def hamta_leadslista(
+    request: Request, list_id: str, tenant: dict = Depends(require_tenant)
+) -> dict:
+    kraev_uuid(list_id)
+    storage = request.app.state.storage
+    lista = await storage.get_lead_list(tenant["tenant_id"], list_id)
+    if not lista:
+        raise HTTPException(status_code=404, detail="Listan finns inte.")
+    return {"list": lista, "items": await storage.list_lead_list_items(tenant["tenant_id"], list_id)}
+
+
+async def _run_list_job(app_state, payload: dict) -> None:
+    """Bygger EN leadslista: discovery-federationen (JobTech + nyhets-RSS
+    först, max ett grounded Gemini-anrop som utfyllnad — se
+    discovery.hitta_bolag) skriver granskningsbara rader till
+    lead_list_items. Inga research-anrop per rad i MVP:n — kontaktvägen
+    kommer ur samma fallback-trappa som discoveryn redan verifierar, och en
+    per-rad-berikning (V2:s list-läge) är nästa iteration, inte den här.
+    """
+    job_id = payload["job_id"]
+    tenant_id = payload["tenant_id"]
+    storage = app_state.storage
+    await app_state.jobs.start(job_id)
+    await storage.set_leads_job_status(tenant_id, job_id=job_id, status="processing", scope="lista")
+
+    lista = await storage.get_lead_list(tenant_id, payload["list_id"])
+    if not lista:
+        await app_state.jobs.fail(job_id, "Listan finns inte längre.")
+        await storage.set_leads_job_status(tenant_id, job_id=job_id, status="failed", scope="lista")
+        return
+    if lista.get("status") == "klar":
+        # Idempotens utöver liggarvakten: ett återtag av ett redan byggt
+        # listjobb ska inte dubblera raderna.
+        await app_state.jobs.complete(job_id, {"list_id": lista["id"], "status": "klar"})
+        await storage.set_leads_job_status(tenant_id, job_id=job_id, status="completed", scope="lista")
+        return
+
+    await storage.set_lead_list_status(tenant_id, lista["id"], status="byggs")
+    try:
+        traffar = await hitta_bolag(lista.get("icp") or {}, int(lista["antal"]))
+        for traff in traffar:
+            await storage.add_lead_list_item(
+                tenant_id,
+                list_id=lista["id"],
+                company_name=traff.get("company_name"),
+                website=traff.get("website"),
+                ort=traff.get("ort"),
+                contact_name=traff.get("contact_name"),
+                contact_role=traff.get("contact_role"),
+                contact_email=traff.get("contact_email"),
+                contact_level=traff.get("contact_level"),
+                source_name=traff.get("source_name") or "gemini_sok",
+                source_url=traff.get("source_url"),
+                signal=traff.get("signal"),
+                signal_detalj=traff.get("signal_detalj"),
+            )
+        await storage.set_lead_list_status(tenant_id, lista["id"], status="klar")
+        await app_state.jobs.complete(
+            job_id, {"list_id": lista["id"], "count": len(traffar), "status": "klar"}
+        )
+        await storage.set_leads_job_status(tenant_id, job_id=job_id, status="completed", scope="lista")
+    except DiscoveryError:
+        await storage.set_lead_list_status(tenant_id, lista["id"], status="fel", felorsak=_FEL_SOKNING)
+        await app_state.jobs.fail(job_id, _FEL_SOKNING)
+        await storage.set_leads_job_status(tenant_id, job_id=job_id, status="failed", scope="lista")
+    except Exception as fel:  # noqa: BLE001 — listan ska bli 'fel', inte tyst dö
+        logger.exception("Listbygget misslyckades (%s)", job_id)
+        await storage.set_lead_list_status(tenant_id, lista["id"], status="fel", felorsak=str(fel))
+        await app_state.jobs.fail(job_id, str(fel))
+        await storage.set_leads_job_status(tenant_id, job_id=job_id, status="failed", scope="lista")
+
+
 async def hantera_leads_jobb(app_state, payload: dict) -> None:
     """Kör ETT jobb ur leads-strömmen (Fas R4, bd snipe-2xj, `crm:jobb:leads`).
 
@@ -1807,6 +1972,10 @@ async def hantera_leads_jobb(app_state, payload: dict) -> None:
 
     if payload.get("kind") == "draft":
         await _run_draft_job(app_state, payload)
+        return
+
+    if payload.get("kind") == "lista":
+        await _run_list_job(app_state, payload)
         return
 
     # tenant byggs om ur de RÅA primitiverna i nyttolasten — exakt samma

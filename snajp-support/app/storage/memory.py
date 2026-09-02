@@ -177,6 +177,9 @@ class MemoryStorage:
         # Leads-jobbens liggare (INV-JOB-002, migration 059). Nycklad på
         # job_id precis som Postgres-tabellens primärnyckel.
         self.leads_job_ledger: dict[str, dict[str, Any]] = {}
+        # Leadslistor (tillägget 'leadlists', migration 060).
+        self.lead_lists: dict[str, list[dict[str, Any]]] = {}
+        self.lead_list_items: list[dict[str, Any]] = []
         # Bokföring (migration 045). Filen sparas aldrig — bara sha256:n.
         self.bk_underlag: dict[str, list[dict[str, Any]]] = {}
         self.bk_verifikat: dict[str, list[dict[str, Any]]] = {}
@@ -1149,6 +1152,93 @@ class MemoryStorage:
         if not rad or rad["tenant_id"] != tenant_id:
             return None
         return rad["status"]
+
+    # -- Leadslistor (tillägget 'leadlists', migration 060) -----------------
+
+    _LEAD_LIST_STATUSAR = ("bestalld", "byggs", "klar", "fel")
+    _LEAD_ITEM_TYPER = ("bolag", "privatperson")
+
+    async def create_lead_list(
+        self, tenant_id: str, *, titel: str, icp: dict[str, Any], antal: int, is_test: bool = False
+    ) -> dict[str, Any]:
+        if not 1 <= antal <= 200:
+            raise ValueError(f"antal={antal} bryter mot lead_lists-checken (1–200).")
+        rad = {
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "titel": titel,
+            "icp": icp,
+            "antal": antal,
+            "status": "bestalld",
+            "felorsak": None,
+            "is_test": is_test,
+            "created_at": _now(),
+            "completed_at": None,
+        }
+        self.lead_lists.setdefault(tenant_id, []).append(rad)
+        return dict(rad)
+
+    async def set_lead_list_status(
+        self, tenant_id: str, list_id: str, *, status: str, felorsak: str | None = None
+    ) -> None:
+        if status not in self._LEAD_LIST_STATUSAR:
+            raise ValueError(f"status={status!r} bryter mot lead_lists-checken.")
+        for rad in self.lead_lists.get(tenant_id, []):
+            if rad["id"] == list_id:
+                rad["status"] = status
+                rad["felorsak"] = felorsak
+                if status in ("klar", "fel"):
+                    rad["completed_at"] = _now()
+                return
+
+    async def list_lead_lists(self, tenant_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        rader = sorted(
+            self.lead_lists.get(tenant_id, []), key=lambda r: r["created_at"], reverse=True
+        )[:limit]
+        return [
+            {**r, "item_count": sum(1 for i in self.lead_list_items if i["list_id"] == r["id"])}
+            for r in rader
+        ]
+
+    async def get_lead_list(self, tenant_id: str, list_id: str) -> dict[str, Any] | None:
+        for rad in self.lead_lists.get(tenant_id, []):
+            if rad["id"] == list_id:
+                return dict(rad)
+        return None
+
+    async def add_lead_list_item(
+        self, tenant_id: str, *, list_id: str, **falt: Any
+    ) -> dict[str, Any]:
+        item_typ = falt.get("item_typ") or "bolag"
+        if item_typ not in self._LEAD_ITEM_TYPER:
+            raise ValueError(f"item_typ={item_typ!r} bryter mot lead_list_items-checken.")
+        rad = {
+            "id": str(uuid.uuid4()),
+            "list_id": list_id,
+            "tenant_id": tenant_id,
+            "item_typ": item_typ,
+            "company_name": falt.get("company_name") or "",
+            "website": falt.get("website"),
+            "ort": falt.get("ort"),
+            "contact_name": falt.get("contact_name"),
+            "contact_role": falt.get("contact_role"),
+            "contact_email": falt.get("contact_email"),
+            "contact_level": falt.get("contact_level"),
+            "source_name": falt.get("source_name"),
+            "source_url": falt.get("source_url"),
+            "signal": falt.get("signal"),
+            "signal_detalj": falt.get("signal_detalj"),
+            "created_at": _now(),
+        }
+        self.lead_list_items.append(rad)
+        return dict(rad)
+
+    async def list_lead_list_items(self, tenant_id: str, list_id: str) -> list[dict[str, Any]]:
+        return [
+            dict(i)
+            for i in self.lead_list_items
+            if i["list_id"] == list_id and i["tenant_id"] == tenant_id
+        ]
 
     async def sum_leads_tokens(self, tenant_id: str, *, hours: int = 24) -> int:
         # Speglar SQL-frågan i postgres.py: leads-typerna, tidsfönster,

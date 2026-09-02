@@ -1559,6 +1559,110 @@ class PostgresStorage:
                 tenant_id,
             )
 
+    # -- Leadslistor (tillägget 'leadlists', migration 060) -----------------
+
+    async def create_lead_list(
+        self, tenant_id: str, *, titel: str, icp: dict[str, Any], antal: int, is_test: bool = False
+    ) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                insert into lead_lists (tenant_id, titel, icp, antal, is_test)
+                values ($1, $2, $3, $4, $5)
+                returning *
+                """,
+                tenant_id,
+                titel,
+                json.dumps(icp, ensure_ascii=False),
+                antal,
+                is_test,
+            )
+        return _avkoda_jsonb(_row(record), "icp")
+
+    async def set_lead_list_status(
+        self, tenant_id: str, list_id: str, *, status: str, felorsak: str | None = None
+    ) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                """
+                update lead_lists set
+                  status = $3,
+                  felorsak = $4,
+                  completed_at = case when $3 in ('klar', 'fel') then now() else completed_at end
+                where id = $2 and tenant_id = $1
+                """,
+                tenant_id,
+                list_id,
+                status,
+                felorsak,
+            )
+
+    async def list_lead_lists(self, tenant_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select l.*, count(i.id)::int as item_count
+                from lead_lists l
+                left join lead_list_items i on i.list_id = l.id
+                where l.tenant_id = $1
+                group by l.id
+                order by l.created_at desc
+                limit $2
+                """,
+                tenant_id,
+                limit,
+            )
+        return [_avkoda_jsonb(_row(r), "icp") for r in records]
+
+    async def get_lead_list(self, tenant_id: str, list_id: str) -> dict[str, Any] | None:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                "select * from lead_lists where id = $2 and tenant_id = $1",
+                tenant_id,
+                list_id,
+            )
+        return _avkoda_jsonb(_row(record), "icp") if record else None
+
+    async def add_lead_list_item(
+        self, tenant_id: str, *, list_id: str, **falt: Any
+    ) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                insert into lead_list_items
+                  (list_id, tenant_id, item_typ, company_name, website, ort,
+                   contact_name, contact_role, contact_email, contact_level,
+                   source_name, source_url, signal, signal_detalj)
+                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                returning *
+                """,
+                list_id,
+                tenant_id,
+                falt.get("item_typ") or "bolag",
+                falt.get("company_name") or "",
+                falt.get("website"),
+                falt.get("ort"),
+                falt.get("contact_name"),
+                falt.get("contact_role"),
+                falt.get("contact_email"),
+                falt.get("contact_level"),
+                falt.get("source_name"),
+                falt.get("source_url"),
+                falt.get("signal"),
+                falt.get("signal_detalj"),
+            )
+        return _row(record)
+
+    async def list_lead_list_items(self, tenant_id: str, list_id: str) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """select * from lead_list_items
+                   where list_id = $2 and tenant_id = $1 order by created_at""",
+                tenant_id,
+                list_id,
+            )
+        return [_row(r) for r in records]
+
     async def sum_leads_tokens(self, tenant_id: str, *, hours: int = 24) -> int:
         async with self._scoped(tenant_id) as conn:
             # is_test filtreras MEDVETET inte bort: testkörningar kostar

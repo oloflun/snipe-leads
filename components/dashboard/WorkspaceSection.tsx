@@ -15,8 +15,11 @@ import {
   LeadsView
 } from "@/components/WorkspaceViews";
 import { LeadsControls } from "@/components/leads/LeadsControls";
+import { LeadslistorView } from "@/components/leads/LeadslistorView";
+import { mejlaOss } from "@/components/marketing/copy";
 import { loadEmailStudioData } from "@/lib/data/emails";
 import { resolveDashboardState } from "@/lib/data/dashboard";
+import { addonSpec } from "@/lib/addons";
 import type { ProductKey } from "@/lib/routes";
 
 /**
@@ -75,7 +78,7 @@ export async function WorkspaceSection({ slug = [] }: Readonly<{ slug?: string[]
 
   // Entitlement is enforced here, on the server. Hiding a nav item is a courtesy;
   // this is the actual gate.
-  const { products, workspaceName } = await resolveDashboardState();
+  const { products, addons, workspaceName } = await resolveDashboardState();
   if (!products.includes(product)) {
     notFound();
   }
@@ -87,7 +90,17 @@ export async function WorkspaceSection({ slug = [] }: Readonly<{ slug?: string[]
       // /dashboard/leads/kontroll. Egen sektion i sectionProduct hade betytt
       // /dashboard/kontroll, vilket inte är där kontrollerna hör hemma —
       // de gäller leads och ska ligga under leads.
-      return id === "kontroll" ? <LeadsControlSection /> : <LeadsView />;
+      if (id === "kontroll") {
+        return <LeadsControlSection />;
+      }
+      // /dashboard/leads/listor — tillägget Leadslistor. Produktgrinden ovan
+      // räcker inte: vyn kräver även tillägget "leadlists", och det avgörs
+      // HÄR på servern. Utan tillägget renderas ett upsell-kort i stället —
+      // ett låst tillägg som bara är osynligt säljer ingenting (lib/addons.ts).
+      if (id === "listor") {
+        return <LeadslistorSection harTillagg={addons.includes("leadlists")} />;
+      }
+      return <LeadsView />;
     case "companies":
       return id ? <CompanyDetailView id={id} /> : <CompaniesView />;
     case "contacts":
@@ -133,6 +146,47 @@ async function EmailStudioSection() {
       description="Ämnesrad, brödtext och uppföljning. Varje åtgärd visar vad den ändrade och varför."
     >
       <EmailStudioEditor data={data} />
+    </PageShell>
+  );
+}
+
+/**
+ * Leadslistor — tilläggsgrindad, till skillnad från grannarna.
+ *
+ * `harTillagg` avgörs i dispatchern ovan ur samma serverlästa state som
+ * produktgrinden. Utan tillägget renderas INTE en 404: sidan finns och säljer
+ * sig själv med samma ruled kort som /settings/addons använder — vad kunden
+ * får, varför det inte ingår, och en "Hör av dig"-CTA.
+ */
+function LeadslistorSection({ harTillagg }: Readonly<{ harTillagg: boolean }>) {
+  const spec = addonSpec("leadlists");
+  return (
+    <PageShell
+      kicker="Leads · listor"
+      title="Färdiga leadslistor att granska och exportera"
+      description="Agenten bygger listan åt er — verifierade svenska B2B-bolag med kontaktväg, källa och signal per rad. Ingenting skickas."
+    >
+      {harTillagg ? (
+        <LeadslistorView />
+      ) : (
+        // Samma form som AddonSettings låsta kort: ruled rad, vad/varför,
+        // mejl-CTA. Ingen gråad yta och ingen fejkad vy — den som inte har
+        // tillägget ska se vad det ÄR, inte en avstängd version av det.
+        <div className="min-w-0 border-t border-ink/15 py-6">
+          <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+            <h4 className="min-w-0 break-words text-[17px]">{spec.name}</h4>
+            <span className="kicker shrink-0 text-mineral">Tillval</span>
+          </div>
+          <p className="mt-3 max-w-[64ch] text-[15px] leading-7">{spec.what}</p>
+          <p className="mt-2 max-w-[64ch] text-[14px] leading-6 text-mineral">{spec.why}</p>
+          <a
+            href={mejlaOss(`Tillägg: ${spec.name}`)}
+            className="mt-4 inline-block text-[13px] underline underline-offset-4 transition hover:text-ochre"
+          >
+            Hör av dig om {spec.name.toLowerCase()}
+          </a>
+        </div>
+      )}
     </PageShell>
   );
 }

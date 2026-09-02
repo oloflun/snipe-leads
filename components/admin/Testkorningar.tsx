@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ExempelbolagDemo } from "@/components/leads/ExempelbolagDemo";
 import { LeadsRunForm } from "@/components/leads/LeadsRunForm";
 import { LeadsSnabbsok } from "@/components/leads/LeadsSnabbsok";
 import { btnSecondary } from "@/components/ui";
@@ -99,10 +100,12 @@ export function Testkorningar() {
 
       {/* -------------------------------------------------- LEADS */}
       {/* Två kolumner på bred skärm: körningsformuläret till vänster (capat
-          760px sedan tidigare), snabbsökpanelen i ytan till höger som förut
-          stod tom. På smalare skärmar staplas panelen under formuläret. */}
+          760px sedan tidigare), snabbsökpanelen och exempellistan staplade i
+          högerkolumnen. Exempellistan visar hur ett färdigt resultat ser ut
+          utan att någon behöver bränna en körning. På smalare skärmar (under
+          xl) staplas allt i en kolumn under formuläret. */}
       <section className="border-t border-ink/15 pt-8">
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,760px)_minmax(320px,1fr)] lg:items-start">
+        <div className="grid grid-cols-1 gap-8 xl:grid-cols-2 xl:items-start">
           <LeadsRunForm
             isTest
             rubrik={
@@ -115,7 +118,10 @@ export function Testkorningar() {
               </>
             }
           />
-          <LeadsSnabbsok isTest />
+          <div className="grid gap-8">
+            <LeadsSnabbsok isTest />
+            <ExempelbolagDemo />
+          </div>
         </div>
       </section>
 

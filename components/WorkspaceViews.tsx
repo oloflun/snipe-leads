@@ -99,7 +99,9 @@ export function AssistantView() {
  * kundtjänstvyn utan att nästla två PageShell (alltså två headers).
  *
  * Discovery-formuläret startar körningen; bolagsregistret under hämtar
- * tenantens prospekt. Exempelbolag hör bara hemma på /demo.
+ * tenantens prospekt. Exempellistan i Discoverys högerkolumn är märkt
+ * "Exempel" per rad och kan aldrig mejlas (se ExempelbolagDemo) — omärkta
+ * exempelbolag hör fortfarande bara hemma på /demo.
  */
 export function LeadsBody({ demo = false }: Readonly<{ demo?: boolean }>) {
   return (

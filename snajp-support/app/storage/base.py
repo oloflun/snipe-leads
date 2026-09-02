@@ -503,6 +503,39 @@ class Storage(Protocol):
         pengar hos leverantören som skarpa körningar."""
         ...
 
+    # -- Leadslistor (tillägget 'leadlists', migration 060) -----------------
+    #
+    # Metoderna står i PROTOKOLLET av samma skäl som log_agent_run: en
+    # signatur som bara finns i ett lager är så halvårsbuggar föds.
+
+    async def create_lead_list(
+        self, tenant_id: str, *, titel: str, icp: dict[str, Any], antal: int, is_test: bool = False
+    ) -> dict[str, Any]: ...
+
+    async def set_lead_list_status(
+        self, tenant_id: str, list_id: str, *, status: str, felorsak: str | None = None
+    ) -> None:
+        """'bestalld' | 'byggs' | 'klar' | 'fel' — spegel av check-villkoret
+        i migration 060 (minnet ska kasta där Postgres kastar)."""
+        ...
+
+    async def list_lead_lists(self, tenant_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        """Nyaste först, med `item_count` per rad."""
+        ...
+
+    async def get_lead_list(self, tenant_id: str, list_id: str) -> dict[str, Any] | None: ...
+
+    async def add_lead_list_item(
+        self, tenant_id: str, *, list_id: str, **falt: Any
+    ) -> dict[str, Any]:
+        """En rad i listan. `item_typ` defaultar till 'bolag' — MVP:n skriver
+        aldrig 'privatperson' (juridiskt beslut, se migration 060)."""
+        ...
+
+    async def list_lead_list_items(
+        self, tenant_id: str, list_id: str
+    ) -> list[dict[str, Any]]: ...
+
     async def weekly_analytics(self, tenant_id: str, *, weeks: int = 8) -> dict[str, Any]:
         """Veckovis utfall för kundens analysvy — EN tenant, aldrig aggregerat.
 

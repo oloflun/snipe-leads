@@ -46,6 +46,12 @@ def _force_simulation_mode(monkeypatch):
         "IMAP_HOST",
         "IMAP_USER",
         "IMAP_PASSWORD",
+        # Discovery-federationens källor (JobTech, nyhets-RSS) gör riktiga
+        # HTTP-anrop. Tom sträng = standardkallor() returnerar inga källor
+        # alls (osatt = alla) — ett test som vill pröva federationen mockar
+        # källorna eller sätter variabeln själv, se
+        # tests/leads/test_sources_federation.py. Fjärde gången samma läxa.
+        "LEADS_KALLOR",
     ):
         monkeypatch.setenv(name, "")
     get_settings.cache_clear()

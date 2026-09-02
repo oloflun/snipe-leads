@@ -16,7 +16,11 @@ export const addonKeys = [
   "kb_autoingest",
   "multilang",
   "own_domain",
-  "reports"
+  "reports",
+  // Leadslistor: databasens check-villkor uppdateras i migration 060 —
+  // den migrationen är spegeln av den här raden. Glider de isär vägrar
+  // databasen nyckeln som UI:t erbjuder.
+  "leadlists"
 ] as const;
 
 export type AddonKey = (typeof addonKeys)[number];
@@ -70,6 +74,12 @@ export const addonCatalog: readonly AddonSpec[] = [
     name: "Månadsrapport",
     what: "Ärendevolym, vad frågorna handlade om, och hur ofta agenterna lämnade över till en människa.",
     why: "Egen datavy som räknas fram separat — den ingår inte i den löpande driften."
+  },
+  {
+    key: "leadlists",
+    name: "Leadslistor",
+    what: "Agenten bygger färdiga, granskningsbara leadslistor — verifierade svenska B2B-bolag med kontaktväg, källa och signal per rad, exporterbara som CSV.",
+    why: "Volymkörningar med egen kvot och egen granskning — det är ett eget arbetsflöde vid sidan av de riktade utskicken."
   }
 ];
 

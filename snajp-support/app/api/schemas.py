@@ -227,6 +227,21 @@ class ProcessaOmRequest(BaseModel):
     is_test: bool = False
 
 
+class LeadsListaRequest(BaseModel):
+    """Beställning av en leadslista (tillägget 'leadlists', migration 060).
+
+    Volymkörning utan utkast och utan sändning: discovery-federationen
+    (JobTech, nyhets-RSS, Gemini-utfyllnad) bygger en granskningsbar tabell.
+    Taket 200 speglar check-villkoret i migration 060; budgetgrinden
+    (app/leads/budget.py) står dessutom framför endpointen.
+    """
+
+    titel: str = Field(..., min_length=1, max_length=200)
+    antal: int = Field(default=25, ge=1, le=200)
+    is_test: bool = False
+    overrides: LeadsRunOverrides | None = None
+
+
 class AgentFeedbackRequest(BaseModel):
     """Kundens dom över en agentkörning. corrected_output är människans egen
     formulering av vad svaret BORDE ha varit — den starkaste signalen in i

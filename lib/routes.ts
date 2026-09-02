@@ -90,6 +90,11 @@ export type AppRoute = {
 export const appRoutes: AppRoute[] = [
   { href: "/dashboard", labelKey: "nav.dashboard", product: "shared" },
   { href: "/dashboard/leads", labelKey: "nav.leads", product: "leads" },
+  // Tillägget Leadslistor (migration 060). Menyposten grindas bara på
+  // PRODUKTEN — tillägget avgörs i WorkspaceSection, på servern: utan
+  // "leadlists" renderar sidan ett upsell-kort i stället för vyn. Låsta
+  // tillägg ska synas, inte gömmas — se lib/addons.ts.
+  { href: "/dashboard/leads/listor", labelKey: "nav.leadslistor", product: "leads" },
   { href: "/dashboard/support", labelKey: "nav.support", product: "support" },
   // Fas 4 (2026-08-29): Email-studion flyttade in i Bolagssidan — se
   // components/leads/Bolagssida.tsx. Menyposten är borta, men routen är

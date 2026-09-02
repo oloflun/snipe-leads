@@ -538,16 +538,144 @@ def _rena_traffar(rader: list[dict[str, Any]], *, uteslut: set[str], tak: int) -
     return rena
 
 
+def _slugga_bolagsnamn(namn: str) -> str:
+    """'Nordkap Moduler AB' -> 'nordkapmoduler' — kandidatdomänens stam."""
+    stam = namn.lower()
+    for suffix in (" aktiebolag", " ab", " hb", " kb", " i sverige"):
+        if stam.endswith(suffix):
+            stam = stam[: -len(suffix)]
+    ersatt = {"å": "a", "ä": "a", "ö": "o", "é": "e", "ü": "u"}
+    stam = "".join(ersatt.get(t, t) for t in stam)
+    return re.sub(r"[^a-z0-9]", "", stam)
+
+
+async def gissa_webbplats_via_head(namn: str) -> str | None:
+    """Gissar https://<slug>.se och verifierar med en HEAD-request
+    (opengtm-mönstret: acceptera 200/301/302/403, HTTPS först).
+
+    Poängen är att den GROUNDED sökningen (`sla_upp_webbplats`, ett
+    Gemini-anrop per namn) bara ska behöva köras när den här gratisvägen
+    inte träffar — kostnadsarbetet 2026-09-02. En felgissning fastnar i
+    verifieringen: svarar domänen inte finns ingen träff att råka spara.
+    """
+    slug = _slugga_bolagsnamn(namn)
+    if len(slug) < 3:
+        return None
+    kandidater = (f"https://{slug}.se", f"https://www.{slug}.se", f"http://{slug}.se")
+    async with httpx.AsyncClient(timeout=httpx.Timeout(5.0), follow_redirects=False) as client:
+        for url in kandidater:
+            try:
+                svar = await client.head(url)
+            except httpx.HTTPError:
+                continue
+            if svar.status_code in (200, 301, 302, 403):
+                slutlig = url
+                if svar.status_code in (301, 302):
+                    plats = svar.headers.get("location") or ""
+                    # Följ bara en redirect till SAMMA stam — en parkerad
+                    # domän som pekar mot en aggregator är ingen träff.
+                    if plats.startswith("http") and slug in plats:
+                        slutlig = plats
+                    elif not plats.startswith("/"):
+                        continue
+                try:
+                    return normalisera_webbplats(slutlig)
+                except Exception:  # noqa: BLE001 — en ogiltig URL är ingen träff
+                    continue
+    return None
+
+
+async def _sok_registrerade_kallor(
+    icp: dict[str, Any], antal: int, uteslut: set[str]
+) -> list[dict[str, Any]]:
+    """Federationen (kostnadsarbetet 2026-09-02): deterministiska källor
+    FÖRE den grounded Gemini-sökningen. openleads-mönstret — källor med tak,
+    dedup på namn, och LLM:en får bara fylla upp det som fattas.
+
+    Källfel fäller aldrig körningen: en källa som inte svarar hoppas över
+    (Gemini-utfyllnaden tar vid), och sökningen körs i en tråd eftersom
+    källprotokollet är synkront (se sources/base.py).
+    """
+    from .sources import standardkallor
+
+    traffar: list[dict[str, Any]] = []
+    sedda = set(uteslut)
+    for kalla in standardkallor():
+        if len(traffar) >= antal:
+            break
+        try:
+            kandidater = await asyncio.to_thread(kalla.search, icp)
+        except Exception as fel:  # noqa: BLE001 — en död källa fäller inte kedjan
+            logger.warning("Källan %s svarade inte: %s", kalla.name, fel)
+            continue
+        for p in kandidater:
+            nyckel = p.company_name.casefold()
+            if nyckel in sedda:
+                continue
+            webb = p.website
+            if webb:
+                try:
+                    webb = normalisera_webbplats(webb)
+                except Exception:  # noqa: BLE001 — trasig käll-URL, gissa i stället
+                    webb = None
+                if webb and not webbplats_ar_bolagets(webb):
+                    webb = None
+            if not webb:
+                webb = await gissa_webbplats_via_head(p.company_name)
+            if not webb:
+                # Utan verifierad egen webbplats finns ingen skrapyta och
+                # ingen kontaktväg — träffen är inte användbar som lead.
+                continue
+            sedda.add(nyckel)
+            traffar.append(
+                {
+                    "company_name": p.company_name,
+                    "website": webb,
+                    "orgnr": p.orgnr,
+                    "ort": p.ort,
+                    "contact_name": None,
+                    "contact_role": None,
+                    "contact_email": p.contact_email,
+                    "contact_level": "role_address" if p.contact_email else None,
+                    "contact_form_url": None,
+                    "anstallda": p.anstallda,
+                    # Signalen (rekryterar/bolagsnyhet) + annons-/nyhets-URL:en
+                    # följer med till research-steget som trigger-underlag och
+                    # till INV-DATA-001:s "varifrån kom uppgiften".
+                    "source_name": p.source_name,
+                    "source_url": p.source_url,
+                    "signal": p.extra.get("signal"),
+                    "signal_detalj": p.extra.get("annons_titel") or p.extra.get("nyhet_titel"),
+                }
+            )
+            if len(traffar) >= antal:
+                break
+    return traffar
+
+
 async def hitta_bolag(
     icp: dict[str, Any],
     antal: int,
     *,
     uteslut_namn: set[str] | None = None,
 ) -> list[dict[str, Any]]:
-    """Returnerar upp till `antal` riktiga bolag. Tom lista = inga verifierbara traffar."""
+    """Returnerar upp till `antal` riktiga bolag. Tom lista = inga verifierbara traffar.
+
+    Sedan 2026-09-02 är den grounded Gemini-sökningen UTFYLLNAD, inte
+    förstahandsval: de registrerade källorna (JobTech-annonser, nyhets-RSS —
+    gratis, deterministiska, signalrika) körs först, och Gemini söker bara
+    efter det som fattas upp till `antal`. Max ETT grounded sökanrop per
+    körning, som förr.
+    """
     if antal <= 0:
         return []
     uteslut = {n.casefold() for n in (uteslut_namn or set()) if n}
+
+    fran_kallor = await _sok_registrerade_kallor(icp, antal, uteslut)
+    if len(fran_kallor) >= antal:
+        return fran_kallor[:antal]
+    uteslut = uteslut | {t["company_name"].casefold() for t in fran_kallor}
+    antal_kvar = antal - len(fran_kallor)
     roller = [str(r).strip() for r in (icp.get("roles") or []) if str(r).strip()]
     roll_text = (
         ", ".join(roller)
@@ -593,13 +721,18 @@ async def hitta_bolag(
         "contact_form_url MASTE vara pa samma doman som website.\n\n"
         f"Malgrupp:\n{_icp_som_text(icp)}\n"
         f"Uteslut dessa namn: {', '.join(sorted(uteslut)) or '(inga)'}\n"
-    ).format(antal=antal)
+    ).format(antal=antal_kvar)
     try:
         text = await _gemini_med_sokning(prompt)
     except DiscoveryError:
+        if fran_kallor:
+            # Källträffarna är redan verifierade — en fallen utfyllnad ska
+            # inte kasta bort dem. Färre än beställt är ett giltigt utfall.
+            logger.warning("Discovery-utfyllnaden misslyckades — levererar källträffarna.")
+            return fran_kallor
         logger.warning("Discovery-sokningen misslyckades.")
         raise
-    return _rena_traffar(_plocka_json(text), uteslut=uteslut, tak=antal)
+    return fran_kallor + _rena_traffar(_plocka_json(text), uteslut=uteslut, tak=antal_kvar)
 
 
 async def sla_upp_webbplats(company_name: str, *, geografi: str | None = None) -> str | None:
