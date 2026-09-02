@@ -40,14 +40,23 @@ const YTOR = [
   ["översikt", "/api/snajp-support/leads/prospects?limit=1"]
 ];
 
+/**
+ * Samma inloggning som qa_vyer.mjs, inklusive pausen före klicket.
+ *
+ * Pausen är inte försiktighet: utan den träffar klicket en knapp som ännu inte
+ * hydrerats, formuläret skickas aldrig, och körningen rapporterar "inte
+ * inloggad" — alltså ett fel om QA-skriptet i stället för om produkten.
+ */
 async function loggaIn(sida) {
-  await sida.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
-  await sida.fill('input[type="email"]', ADMIN[0]);
-  await sida.fill('input[type="password"]', ADMIN[1]);
-  await Promise.all([
-    sida.waitForURL((url) => !url.pathname.startsWith("/login"), { timeout: 45_000 }),
-    sida.click('button[type="submit"]')
-  ]);
+  await sida.goto(`${BASE}/login`, { waitUntil: "networkidle" });
+  const losenfalt = sida.getByPlaceholder("•".repeat(8));
+  await losenfalt.waitFor({ state: "visible", timeout: 30_000 });
+  await sida.getByPlaceholder("du@bolag.se").fill(ADMIN[0]);
+  await losenfalt.fill(ADMIN[1]);
+  await sida.waitForTimeout(1500);
+  await sida.getByRole("button", { name: /Logga in/ }).last().click();
+  await sida.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 30_000 });
+  await sida.waitForLoadState("networkidle").catch(() => {});
 }
 
 /** Sätter vy-cookien genom samma server action som knappen använder. */
