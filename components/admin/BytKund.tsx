@@ -14,6 +14,14 @@ type Kund = { slug: string; name: string };
  *
  * Listan hämtas först när fältet öppnas, inte på varje sidladdning: adminytan
  * ska inte vänta på alla tenants för att visa en header.
+ *
+ * ## Varför /api/admin/kunder och inte /api/admin/tenants
+ *
+ * Den senare är backendens lista över ALLA tenants, och flera av dem har ingen
+ * arbetsyta i Next-appens databas — `public-demo`, gamla testtenants. Klickade
+ * man på en sådan svarade varje yta i kundens profil 409 "Ingen backend-nyckel
+ * för …". Växeln erbjöd alltså kunder som inte gick att öppna. Den nya routen
+ * listar arbetsytorna, alltså exakt de som har en tenant att gå in i.
  */
 export function BytKund() {
   const { isPlatformAdmin, impersonation } = useDashboard();
@@ -27,7 +35,7 @@ export function BytKund() {
     let avbruten = false;
     void (async () => {
       try {
-        const response = await fetch("/api/admin/tenants", { cache: "no-store" });
+        const response = await fetch("/api/admin/kunder", { cache: "no-store" });
         const kropp = await readJsonBody<{ tenants?: { slug?: string | null; name?: string }[] }>(
           response
         );

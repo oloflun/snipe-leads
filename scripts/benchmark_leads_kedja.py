@@ -62,6 +62,27 @@ HAIKU_MODELL = "claude-haiku-4-5"
 HAIKU_USD_IN, HAIKU_USD_UT = 1.00, 5.00
 # Spegel av lib/admin/halsa.ts:67 — kr per miljon tokens för gemini flash.
 GEMINI_KR_IN, GEMINI_KR_UT = 7.14, 35.71
+# Flash-lite, härlett ur Googles listprisRELATION för 2.5-generationen
+# (flash $0.30/$2.50, flash-lite $0.10/$0.40 → in 1/3, ut 1/6,25). ANTAGANDE
+# tills fakturan verifierat nivån — rapporten skriver ut det. Används bara
+# för utkast-/humanizerstegen när LEADS_DRAFT_MODEL är satt.
+GEMINI_LITE_KR_IN, GEMINI_LITE_KR_UT = GEMINI_KR_IN / 3, GEMINI_KR_UT / 6.25
+
+
+def _kr_ur_steg(steg: list[dict]) -> float | None:
+    """Kostnad per lead ur per-steg-loggen, prissatt per stegets FAKTISKA
+    modell (step_log bär den sedan per-steg-modellvalet): lite-pris för
+    -lite-varianter, flash-pris annars. None när steg-datat saknas (t.ex.
+    en kraschad körning) — då faller rapporten tillbaka på flash-pris."""
+    if not steg:
+        return None
+    summa = 0.0
+    for s in steg:
+        ar_lite = "lite" in str(s.get("model") or "")
+        kr_in = GEMINI_LITE_KR_IN if ar_lite else GEMINI_KR_IN
+        kr_ut = GEMINI_LITE_KR_UT if ar_lite else GEMINI_KR_UT
+        summa += (s.get("in") or 0) / 1e6 * kr_in + (s.get("ut") or 0) / 1e6 * kr_ut
+    return round(summa, 4)
 
 TENANT = "00000000-0000-4000-a000-00000000be9c"
 
@@ -251,7 +272,13 @@ async def _kor_fixture(
     # Per-steg-tokens ur kedjornas egna spår — det är HÄR besluten om vad
     # som ska bantas fattas, inte ur totalsummor.
     steg = [
-        {"fas": fas, "skill": s.get("skill"), "in": s.get("tokens_in"), "ut": s.get("tokens_out")}
+        {
+            "fas": fas,
+            "skill": s.get("skill"),
+            "in": s.get("tokens_in"),
+            "ut": s.get("tokens_out"),
+            "model": s.get("model"),
+        }
         for fas, logg in (("research", research.get("step_log") or []), ("utkast", utkast.get("step_log") or []))
         for s in logg
     ]
@@ -427,6 +454,12 @@ async def main() -> None:
     # -- Rapport ----------------------------------------------------------
     etikett = "Haiku-proxy" if args.modell == "haiku" else "gemini-3.6-flash (RIKTIG)"
     print(f"\n# Benchmark: leads-kedjan V1 mot V2 ({etikett})\n")
+    if os.environ.get("LEADS_DRAFT_MODEL"):
+        print(
+            f"OBS: utkast+humanizer kör {os.environ['LEADS_DRAFT_MODEL']} och prissätts "
+            f"med lite-ANTAGANDET {GEMINI_LITE_KR_IN:.2f}/{GEMINI_LITE_KR_UT:.2f} kr/Mtok "
+            "(listprisrelationen 1/3 resp 1/6,25 av flash) — verifiera mot fakturan.\n"
+        )
     print("| Kedja | Anrop/lead | Tokens in/lead | Tokens ut/lead | Haiku USD/lead | ~Gemini kr/lead |")
     print("|---|---|---|---|---|---|")
     sammanfattning: dict[str, Any] = {}
@@ -437,13 +470,19 @@ async def main() -> None:
         t_ut = sum(r["tokens_out"] for r in rader)
         anrop = sum(r["anrop"] for r in rader)
         kost = _kostnad(t_in, t_ut)
+        # Per-steg-prissatt kostnad (lite-pris på utkaststegen) när datat
+        # finns — annars flash-pris rakt av som förr.
+        steg_kr = [k for k in (_kr_ur_steg(r.get("steg") or []) for r in rader) if k is not None]
+        gemini_kr_per_lead = (
+            round(sum(steg_kr) / len(steg_kr), 4) if len(steg_kr) == n else round(kost["gemini_kr"] / n, 4)
+        )
         sammanfattning[kedja] = {
             "leads": n,
             "anrop_per_lead": round(anrop / n, 1),
             "tokens_in_per_lead": t_in // n,
             "tokens_out_per_lead": t_ut // n,
             "haiku_usd_per_lead": round(kost["haiku_usd"] / n, 4),
-            "gemini_kr_per_lead": round(kost["gemini_kr"] / n, 4),
+            "gemini_kr_per_lead": gemini_kr_per_lead,
             "kontakt_ratt": sum(1 for r in rader if r["contact_ratt"]),
             "qualified_ratt": sum(1 for r in rader if r["qualified_ratt"]),
             "qualified_bedombara": sum(1 for r in rader if r["qualified_ratt"] is not None),

@@ -238,6 +238,21 @@ class Settings(BaseSettings):
     # Gemini-körningar godkänt kvaliteten; flippas då per miljö via env
     # LEADS_PIPELINE=v2, aldrig som kodändring före benchmarken.
     leads_pipeline: str = "v1"
+    # Per-steg-modellval för V2-utkastet (beslut Sebbe 2026-09-02, vägen
+    # till 0,10 kr/lead): utkast- och humanizerstegen i OUTREACH_V2 kör den
+    # här modellen medan research behåller huvudmodellen. Uppmätt varför:
+    # utkastfasens INPUT (skilltexterna) är 55 % av leadkostnaden och
+    # okänslig för modellstyrka på ett annat sätt än research — texten som
+    # ska skrivas är fem rader, regelverket står i prompten. Tom sträng =
+    # ärv MODEL (ingen skillnad mot innan). Sätts per miljö via env
+    # LEADS_DRAFT_MODEL, flippas ALDRIG i kod före domarbenchmark
+    # (scripts/benchmark_leads_kedja.py, jämför utkastkvalitet V1 mot V2).
+    leads_draft_model: str = ""
+    # Humanizerns EGEN modell — skild från utkastets efter domarbenchmarken
+    # 2026-09-02: lite-modellen på humanizersteget tappade å/ä/ö och
+    # förlorade 3/4 blinda domar. Tom = ärv MODEL (huvudmodellen), vilket är
+    # rätt läge tills en NY domarkörning bevisar annat. Se outreach_playbook.
+    leads_humanizer_model: str = ""
     # Leads-budgeten (INV-JOB-002-arbetet, app/leads/budget.py): max summa
     # tokens_in+tokens_out per tenant och rullande 24 timmar över leads-
     # agenttyperna. Vid taket svarar körningsstarterna 429 i stället för att

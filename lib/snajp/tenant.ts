@@ -130,6 +130,10 @@ export async function requireSnajpTenant(): Promise<SnajpTenant> {
    *  3. Kunder med configfil har sin nyckel i en miljövariabel och ingen rad i
    *     `workspace_tenant_keys`. Den vägen tas nedan, och den kan bara nå en
    *     slug som faktiskt finns i registret.
+   *  4. Finns ingen av delarna utfärdas en nyckel på plats genom
+   *     `save_admin_tenant_key()` (migration 061), som gör om admin-kontrollen
+   *     en TREDJE gång och dessutom vägrar spara en nyckel som pekar på en
+   *     annan tenant än arbetsytans.
    *
    * Vad som INTE görs här: ingen skrivrättighet dras in. Läsläget är i dag en
    * överenskommelse i UI:t (bannern) och inte en teknisk spärr — se HANDOFF.
@@ -137,7 +141,29 @@ export async function requireSnajpTenant(): Promise<SnajpTenant> {
   if (lage.vy === "kund") {
     const tenant = getTenant(lage.slug);
 
-    const apiKey = tenant?.perWorkspaceKey === false && tenant?.supportKeyEnv
+    /**
+     * Demokontot först.
+     *
+     * `nordlys-handel` är en backend-tenant utan arbetsyta: den har varken en
+     * rad i `workspace_tenant_keys` eller en `SNAJP_KEY_*`-variabel, och dess
+     * nyckel ÄR demonyckeln. Utan den här grenen mötte "Byt kund" → Nordlys
+     * Handel ett 409 på varje yta, vilket är exakt vad felrapporten visade.
+     */
+    if (lage.slug === DEMO_TENANT_SLUG) {
+      const demoKey = process.env.SNAJP_DEMO_API_KEY || process.env.SNAJP_INTERNAL_API_KEY;
+      if (demoKey) {
+        return {
+          workspaceId: workspace.id,
+          slug: lage.slug,
+          apiKey: demoKey,
+          userId: user.id,
+          isDemo: false,
+          impersonerar: true
+        };
+      }
+    }
+
+    let apiKey = tenant?.perWorkspaceKey === false && tenant?.supportKeyEnv
       ? process.env[tenant.supportKeyEnv]
       : ((
           await sqlAsUser<{ nyckel: string | null }>(
@@ -147,11 +173,26 @@ export async function requireSnajpTenant(): Promise<SnajpTenant> {
           )
         )[0]?.nyckel ?? (tenant?.supportKeyEnv ? process.env[tenant.supportKeyEnv] : undefined));
 
+    /**
+     * Sista utvägen: utfärda en nyckel i stället för att svara 409.
+     *
+     * Kunder som lades upp före migration 040 har varken nyckelrad eller
+     * miljövariabel i den här miljön, och backenden lämnar aldrig tillbaka en
+     * redan utfärdad nyckel (bara sha256-hashen sparas). Alternativet till det
+     * här är att en människa kör `scripts/railway_tenantnyckel.py` en gång per
+     * kund och miljö — alltså att supportytan är trasig tills någon märker det.
+     */
+    if (!apiKey) {
+      const { sakerstallAdminnyckel } = await import("@/lib/snajp/provisionering");
+      apiKey = (await sakerstallAdminnyckel(user.id, lage.slug, tenant?.name ?? lage.slug)) ?? undefined;
+    }
+
     if (!apiKey) {
       throw new SnajpTenantError(
         409,
-        `Ingen backend-nyckel för "${lage.slug}". Kunden har varken en rad i ` +
-          "workspace_tenant_keys eller en satt miljövariabel — se TENANTS.md steg 4."
+        `Kunden "${lage.slug}" gick inte att öppna. Backenden kunde inte utfärda ` +
+          "en nyckel för den — kontrollera att kunden finns och att " +
+          "SNAJP_MASTER_API_KEY är satt i den här miljön."
       );
     }
 
@@ -186,40 +227,78 @@ export async function requireSnajpTenant(): Promise<SnajpTenant> {
     };
   }
 
-  // Ingen slug betyder att workspacet aldrig kopplats till en kund i
-  // ss_tenants. Att då tyst låna demo-tenantens data är precis felet vi
-  // stänger — ett begripligt fel är alltid bättre än fel kunds svar.
+  /**
+   * Ingen slug betyder att arbetsytan aldrig kopplats till en kund. Att då tyst
+   * låna demo-tenantens data är precis felet vi stänger — men att svara 409 och
+   * stanna där var inte heller rätt: uppstarten kopplade BARA testarbetsytor, så
+   * varje riktig kund som registrerade sig fick det felet på var enda yta tills
+   * någon av oss körde `scripts/onboard_tenant.py` för hand.
+   *
+   * Arbetsytan får därför sin tenant här, en gång, och kundens uppgifter ur
+   * uppstartsformuläret blir samtidigt standardinställningar (se
+   * lib/snajp/provisionering.ts). Går det inte står felet kvar som förut.
+   */
   if (!workspace.slug) {
-    throw new SnajpTenantError(
-      409,
-      "Arbetsytan är inte kopplad till någon kund ännu. Sätt workspaces.slug och ss_tenant_id.",
-      "ej_aktiverad"
-    );
-  }
+    const { sakerstallKundtenant } = await import("@/lib/snajp/provisionering");
+    const nykopplad = await sakerstallKundtenant(user.id, workspace, context.businessContext);
+    if (nykopplad) {
+      return {
+        workspaceId: workspace.id,
+        slug: nykopplad.slug,
+        apiKey: nykopplad.apiKey,
+        userId: user.id,
+        isDemo: workspace.is_demo,
+        impersonerar: false
+      };
+    }
 
-  const tenant = getTenant(workspace.slug);
-  if (!tenant) {
     throw new SnajpTenantError(
       409,
-      `Ingen configfil för "${workspace.slug}" i lib/tenants. Se TENANTS.md steg 4.`,
+      "Arbetsytan är inte kopplad till någon kund ännu, och kopplingen kunde inte " +
+        "göras automatiskt. Kontrollera att SNAJP_MASTER_API_KEY är satt och att " +
+        "backenden svarar.",
       "ej_aktiverad"
     );
   }
 
   /**
+   * Configfilen är INTE ett villkor för att arbetsytan ska fungera.
+   *
+   * Den styr den publika chatten på kundens egen domän (logotyp, palett,
+   * startfrågor) — se TENANTS.md steg 4. Att kräva den här betydde att en
+   * automatiskt kopplad kund möttes av "Ingen configfil för …" på sin egen
+   * inloggade yta, alltså ett fel om VÅR filstruktur i kundens gränssnitt.
+   *
+   * Nyckeln i `workspace_tenant_keys` är beviset som räknas: den skrevs av en
+   * security definer-funktion mot just den här arbetsytan.
+   */
+  const tenant = getTenant(workspace.slug);
+
+  /**
    * Två nyckelvägar, och ordningen mellan dem är inte utbytbar.
    *
-   * En kund med configfil har sin nyckel i en miljövariabel. En testarbetsyta
-   * har en EGEN tenant som skapades i drift (migration 040) och vars nyckel
-   * ligger i databasen — för den är miljövariabeln fel svar: `SNAJP_KEY_TESTKUND`
-   * pekar på den GAMLA delade tenanten, alltså en delad kunskapsbas. Att låta
-   * env vinna hade tyst återinfört precis det vi byggde bort.
+   * En kund med configfil har sin nyckel i en miljövariabel. En arbetsyta med
+   * EGEN tenant skapad i drift (migration 040/061) har sin i databasen — för den
+   * är miljövariabeln fel svar: `SNAJP_KEY_TESTKUND` pekar på den GAMLA delade
+   * tenanten, alltså en delad kunskapsbas. Att låta env vinna hade tyst
+   * återinfört precis det vi byggde bort.
    */
-  const apiKey = tenant.perWorkspaceKey
-    ? await tenantApiKeyForWorkspace(user.id)
-    : process.env[tenant.supportKeyEnv];
+  const apiKey =
+    tenant && !tenant.perWorkspaceKey
+      ? process.env[tenant.supportKeyEnv]
+      : await tenantApiKeyForWorkspace(user.id);
 
-  if (!apiKey && tenant.perWorkspaceKey) {
+  if (!apiKey && !tenant) {
+    throw new SnajpTenantError(
+      409,
+      `Arbetsytan pekar på "${workspace.slug}" men har ingen sparad backend-nyckel. ` +
+        "Kör scripts/railway_tenantnyckel.py --slug " +
+        `${workspace.slug} för den här miljön.`,
+      "ej_aktiverad"
+    );
+  }
+
+  if (!apiKey && tenant?.perWorkspaceKey) {
     throw new SnajpTenantError(
       409,
       "Testarbetsytan har ingen egen backend-nyckel sparad. Kör onboardingen igen " +
@@ -232,9 +311,15 @@ export async function requireSnajpTenant(): Promise<SnajpTenant> {
     // svarar vi inte som ett annat bolag.
     throw new SnajpTenantError(
       503,
-      `${tenant.supportKeyEnv} är inte satt i den här miljön. ${tenant.name} kan inte nå backenden förrän den finns.`
+      `${tenant?.supportKeyEnv} är inte satt i den här miljön. ${tenant?.name} kan inte nå backenden förrän den finns.`
     );
   }
+
+  // Kunder som kopplades före migration 061 har nyckel men tomma inställningar.
+  // Fylls en gång per tenant och processlivstid, utanför anropets väg — se
+  // lib/snajp/provisionering.ts för varför det är säkert att inte vänta in.
+  const { fyllStandardinstallningarEnGang } = await import("@/lib/snajp/provisionering");
+  fyllStandardinstallningarEnGang(workspace.slug, apiKey, workspace, context.businessContext);
 
   return {
     workspaceId: workspace.id,

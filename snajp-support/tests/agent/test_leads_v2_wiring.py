@@ -102,6 +102,8 @@ class _FakeLLM:
         skill = re.search(r"styrs av skillen (\S+?),", system).group(1)
         self.calls.append(skill)
         self.system_prompts.append(system)
+        self.models = getattr(self, "models", [])
+        self.models.append(model)
 
         payload = {"sources_used": ["company_website"], "context_refs": ["context_pack"]}
         payload.update(
@@ -404,6 +406,86 @@ async def test_outreach_v2_tom_body_ger_ett_omforsok():
         "snajp:humanizer-svenska",
     ]
     assert result["queued"] is True
+
+
+async def test_leads_draft_model_nar_api_anropet(monkeypatch):
+    """Per-steg-modellvalet (Sebbes beslut 2026-09-02): med LEADS_DRAFT_MODEL
+    satt ska utkast- och humanizeranropen bära den modellen medan research
+    behåller huvudmodellen. Testet tittar på vad som FAKTISKT skickades till
+    API:t — samma lärdom som thinking-testet i test_leads_agent_wiring: en
+    inställning som inte mäts vid anropsgränsen är en inställning som kan
+    vara död i ett halvår."""
+    monkeypatch.setenv("LEADS_DRAFT_MODEL", "billig-utkastmodell")
+    monkeypatch.setenv("MODEL", "huvudmodellen")
+    get_settings.cache_clear()
+
+    storage = MemoryStorage()
+    llm = _FakeLLM()
+    prospect_id = await _prepare_prospect(storage)
+    thread_id = await _prepare_outreach(storage)
+
+    with (
+        patch("app.agent.step_runner.get_llm_client", return_value=llm),
+        patch("app.agent.leads_agent._scrape_registered_source_impl", new=_fake_scrape()),
+    ):
+        await run_research_step_v2(
+            storage,
+            TENANT,
+            prospect_id=prospect_id,
+            tenant_name="Snajp",
+            context_pack="## Kontextpaket\nICP: svensk e-handel.",
+            brief="",
+        )
+        await run_outreach_draft_v2(
+            storage,
+            TENANT,
+            thread_id=thread_id,
+            prospect_email="kundservice@exempelbolaget.se",
+            tenant_name="Snajp",
+            company_name="Exempelbolaget",
+            offer_summary="Pilot på returfrågor",
+            context_pack="## Kontextpaket\nICP: svensk e-handel.",
+            brief="",
+            research_evidence=("Fri retur inom 30 dagar",),
+        )
+
+    get_settings.cache_clear()
+    per_anrop = dict(zip(llm.calls, llm.models))
+    assert per_anrop["sa:account-research"] == "huvudmodellen", (
+        "research ska INTE påverkas av LEADS_DRAFT_MODEL"
+    )
+    assert per_anrop["sa:draft-outreach"] == "billig-utkastmodell"
+    # Humanizern har ett EGET fält (LEADS_HUMANIZER_MODEL) efter domar-
+    # benchmarken som fällde lite-modellen där (tappade å/ä/ö) — med bara
+    # LEADS_DRAFT_MODEL satt ska den ärva huvudmodellen.
+    assert per_anrop["snajp:humanizer-svenska"] == "huvudmodellen"
+
+
+async def test_tom_leads_draft_model_arver_huvudmodellen(monkeypatch):
+    monkeypatch.setenv("MODEL", "huvudmodellen")
+    monkeypatch.delenv("LEADS_DRAFT_MODEL", raising=False)
+    get_settings.cache_clear()
+
+    storage = MemoryStorage()
+    llm = _FakeLLM()
+    thread_id = await _prepare_outreach(storage)
+
+    with patch("app.agent.step_runner.get_llm_client", return_value=llm):
+        await run_outreach_draft_v2(
+            storage,
+            TENANT,
+            thread_id=thread_id,
+            prospect_email="kundservice@exempelbolaget.se",
+            tenant_name="Snajp",
+            company_name="Exempelbolaget",
+            offer_summary="Pilot på returfrågor",
+            context_pack="## Kontextpaket\nICP: svensk e-handel.",
+            brief="",
+            research_evidence=("Fri retur inom 30 dagar",),
+        )
+
+    get_settings.cache_clear()
+    assert set(llm.models) == {"huvudmodellen"}
 
 
 # --- Kedjevalet -------------------------------------------------------------

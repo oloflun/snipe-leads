@@ -65,6 +65,14 @@ class PlaybookStep:
     # att duplicera hårdreglerna in i varje syftesoverlay — och duplicerad
     # tuning divergerar, vilket är exakt det overlays finns för att undvika.
     overlay: str | tuple[str, ...] | None = None
+    # Per-steg-modellval (2026-09-02, vägen till 0,10 kr/lead): namnet på
+    # ett Settings-FÄLT (t.ex. "leads_draft_model") vars värde, om satt,
+    # ersätter settings.model för just det här stegets anrop. Ett fältnamn
+    # och inte en modellsträng: modellvalet ska kunna flippas per miljö via
+    # env utan omdeploy av kod, och playbooks är frusna vid import. Tomt
+    # fältvärde vid körning = ärv settings.model. Opt-in med default None —
+    # inga befintliga playbooks påverkas.
+    model_setting: str | None = None
     # V2-kostnadsarbetet (2026-09-02): FLER skills i SAMMA steg/anrop. Varje
     # post är (skillnamn, skopa) där tom skopa = hel skill och en icke-tom
     # skopa följer samma "§ Rubrik"/references-form som `scope` ovan.
