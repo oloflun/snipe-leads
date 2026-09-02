@@ -117,6 +117,39 @@ OUTREACH_V2 = Playbook(
             overlay=_HARD_RULES,
             thinking=THINKING,
             temperature=0.7,
+            # Skopningen (2026-09-02, uppmätt): hela skillen är 27 081 tecken,
+            # den skopade renderingen 18 655 — 31 % bort. Det som faller är
+            # "FULLSTÄNDIGA EXEMPEL" (6 851 tecken) och de tre registren för
+            # rapport/artikel/socialt (842 tecken). Kvar är HELA mönster-
+            # katalogen (alla 16 AI-mönstren), röstavsnittet, affärsregistret,
+            # processen, utdataformatet och snabbreferensen — dvs. varje REGEL
+            # som styr ett kallt mejl.
+            #
+            # Medvetet avstående: exempelblocket innehåller även "Exempel 1:
+            # Affärsskrivande", ett arbetat före/efter i just den texttyp det
+            # här steget producerar. Det offras med de tre andra eftersom
+            # sektionen är odelbar i skopan (§-rubriken är FULLSTÄNDIGA
+            # EXEMPEL) och reglerna finns kvar i mönsterkatalogen. Går kvalitet
+            # förlorad är det den posten som ska in igen först.
+            #
+            # V1-steget behåller hel skill; skopningen är V2:s och mäts av
+            # scripts/benchmark_leads_kedja.py.
+            scope=(
+                "§ Din uppgift",
+                "§ PERSONLIGHET OCH RÖST",
+                "§ MÖNSTER ATT IDENTIFIERA OCH ÅTGÄRDA",
+                "§ Affärsskrivande (mejl, offerter, presentationer, intern kommunikation)",
+                "§ PROCESS",
+                "§ Utdataformat",
+                "§ Snabbreferens: Vanliga byten",
+            ),
+            rationale=(
+                "Kalla mejl är affärsskrivande. Utelämnat är exempelblocket "
+                "och registren för rapport, artikel och sociala medier (31 % "
+                "av skillen) — demonstrationer, inte regler. Mönsterkatalogen "
+                "(alla 16 mönstren), rösten, affärsregistret, processen och "
+                "utdataformatet laddas i sin helhet."
+            ),
         ),
     ),
 )

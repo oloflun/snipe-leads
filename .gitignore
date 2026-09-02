@@ -58,6 +58,8 @@ screenshots/cookies-dump.json
 # Materialized per-tenant context packs (snajp-support/app/leads/context_pack.py)
 # — runtime state derived from agent_context_docs, regenerated every run.
 snajp-support/var/
+# Benchmark-/mätutdata i repo-roten (scripts/benchmark_leads_kedja.py)
+var/
 .env*
 
 # Besiktningsbilder från qa_vyer.mjs (BILDER=). Sessionsbevis, inte källkod —
