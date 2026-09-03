@@ -30,6 +30,7 @@ from .api import (
     keys,
     leads,
     rules,
+    sending_domains_api,
     tickets,
     triage,
 )
@@ -303,6 +304,7 @@ app.include_router(demo.router)
 app.include_router(inbox.router)
 app.include_router(drafts.router)
 app.include_router(rules.router)
+app.include_router(sending_domains_api.router)
 app.include_router(admin.router)
 # Skrivytan mot agentprofilen. Egen modul, samma prefix och samma master-nyckel —
 # se docstringen i api/admin_profil.py för varför läsning och skrivning är skilda åt.
@@ -369,12 +371,7 @@ async def health_ready(response: Response) -> dict:
         warnings.append(
             "Ingen DATABASE_URL — data ligger i minnet och försvinner vid omstart."
         )
-    imap_oauth_ready = bool(
-        settings.imap_oauth_client_id
-        and settings.imap_oauth_client_secret
-        and settings.imap_oauth_refresh_token
-    )
-    if not (settings.imap_host and settings.imap_user and (settings.imap_password or imap_oauth_ready)):
+    if not (settings.imap_host and settings.imap_user and settings.imap_password):
         warnings.append("IMAP saknas — inga inkommande mail hämtas.")
 
     # Embeddings har sin egen hälsa, och den var OSYNLIG här.
