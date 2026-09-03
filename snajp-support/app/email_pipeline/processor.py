@@ -22,7 +22,26 @@ from ..storage.base import Storage
 logger = logging.getLogger("snajp-support.processor")
 
 _GREETING = "Hej{name}!\n\n"
-_SIGNATURE = "\n\nVänliga hälsningar,\nSnajp-Support"
+_SIGNATURE = "\n\nVänliga hälsningar,\nSnajp Support"
+
+
+def _wrap_reply(body: str, recipient_name: str | None) -> str:
+    """Lägg på exakt en hälsning och en Snajp-signatur."""
+    lines = body.strip().splitlines()
+    if lines and lines[0].strip().casefold().startswith("hej"):
+        lines.pop(0)
+        while lines and not lines[0].strip():
+            lines.pop(0)
+    while lines and not lines[-1].strip():
+        lines.pop()
+    if len(lines) >= 2 and lines[-2].strip().casefold() in {
+        "vänliga hälsningar,", "med vänliga hälsningar,"
+    } and lines[-1].strip().casefold() in {"snajp support", "snajp-support"}:
+        lines = lines[:-2]
+        while lines and not lines[-1].strip():
+            lines.pop()
+    clean_body = "\n".join(lines).strip()
+    return (_GREETING.format(name=_first_name(recipient_name)) + clean_body + _SIGNATURE).strip()
 
 _ESCALATION_BODY = (
     "Tack för ditt meddelande. Jag förstår att det här är viktigt, och den här typen "
@@ -201,7 +220,7 @@ async def process_email(
             body = _ESCALATION_BODY if must_escalate and articles else (
                 _NO_MATCH_BODY if not articles else _ESCALATION_BODY
             )
-            content = (greeting + body + _SIGNATURE).strip()
+            content = _wrap_reply(body, email["from_name"])
             await storage.update_ticket(
                 tenant_id, ticket["id"], status="escalated", priority="high",
                 escalation_reason=reason,
@@ -217,7 +236,7 @@ async def process_email(
             )
             return {"action": "escalated", "draft_id": draft["id"], "ticket_id": ticket["id"]}
 
-        content = (greeting + (triage.get("draft_body") or _NO_MATCH_BODY) + _SIGNATURE).strip()
+        content = _wrap_reply(triage.get("draft_body") or _NO_MATCH_BODY, email["from_name"])
 
         # 4: autosvar — bara om regeln säger auto OCH säkerhetsvillkoren håller.
         auto_ok = (
