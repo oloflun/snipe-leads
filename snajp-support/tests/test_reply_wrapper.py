@@ -18,3 +18,10 @@ def test_wrap_reply_keeps_plain_body():
         "Hej!\n\nTack för ditt meddelande.\n\n"
         "Vänliga hälsningar,\nSnajp Support"
     )
+
+
+def test_wrap_reply_removes_singular_signature_variant():
+    raw = "Hej Olof!\n\nTack!\n\nMed vänlig hälsning,\nSnajp-Support"
+    result = _wrap_reply(raw, "Olof Lundin")
+    assert result == "Hej Olof!\n\nTack!\n\nVänliga hälsningar,\nSnajp Support"
+    assert result.count("Snajp") == 1
