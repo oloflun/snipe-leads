@@ -34,7 +34,7 @@ async def approve_draft(
     # statusen sattes ändå; se email_pipeline/sender.py för hela resonemanget.
     email = await storage.get_email(tenant_id, draft["email_id"])
     try:
-        sandnotering = await skicka_supportsvar(email, content=content)
+        sandnotering = await skicka_supportsvar(email, content=content, tenant_id=tenant_id, storage=storage)
     except SandningsFel as fel:
         raise HTTPException(status_code=502, detail=str(fel)) from fel
 
