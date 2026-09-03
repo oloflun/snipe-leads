@@ -61,8 +61,7 @@ def _svarsamne(amne: str | None) -> str:
 
 async def skicka_supportsvar(
     email: dict[str, Any] | None,
-    *,
-    content: str,
+    *, content: str, tenant_id: str | None = None, storage: Any = None,
     provider: SendProvider | None = None,
 ) -> str:
     """Skicka ett supportsvar till mejlets avsändare, om det ska skickas.
@@ -87,8 +86,20 @@ async def skicka_supportsvar(
 
     mottagare = str(email["from_email"]).strip()
     amne = _svarsamne(email.get("subject"))
+    from_email = from_name = reply_to = None
+    fallback = ""
+    if tenant_id and storage:
+        from ..sending_domains import get_config
+        cfg = await get_config(storage, tenant_id)
+        if cfg and cfg.get("status") == "verified":
+            from_email = f"{cfg['from_local_part']}@{cfg['sending_domain']}"
+            from_name, reply_to = cfg.get("from_name") or "", cfg.get("reply_to")
+        elif cfg:
+            fallback = f" Tenant-domänen {cfg.get('sending_domain')} är {cfg.get('status')}; synlig fallback användes."
     try:
-        await provider.send(to=mottagare, subject=amne, body=content)
+        message_id = await provider.send(to=mottagare, subject=amne, body=content,
+            from_email=from_email, from_name=from_name, reply_to=reply_to,
+            tags=[{"name":"tenant_id","value":tenant_id}] if tenant_id else None)
     except Exception as fel:
         # Loggen får detaljerna; anroparen får ett svenskt besked utan
         # serverns interna feltext (den kan bära adresser och kontonamn).
@@ -98,7 +109,10 @@ async def skicka_supportsvar(
             "Försök igen om en stund."
         ) from fel
 
-    return f"Skickat till {mottagare} via SMTP."
+    kanal = "Resend" if provider.__class__.__name__ == "ResendMailer" else "SMTP"
+    identitet = from_email or "global avsändare"
+    id_del = f" Resend-id: {message_id}." if message_id else ""
+    return f"Skickat till {mottagare} via {kanal} från {identitet}.{id_del}{fallback}"
 
 
 __all__ = [
