@@ -59,17 +59,27 @@ async def sync_mailbox(storage: Storage, tenant_id: str, tenant_slug: str, mailb
             "error": f"Ingen IMAP-värd angiven för {mailbox['address']} (sätt imap_host).",
         }
 
-    password = os.environ.get(password_env_name(tenant_slug))
-    if not password:
-        # Inte ett fel: kunden har ännu inte lämnat sitt app-lösenord. Raden får
-        # ligga kvar och pollern tar den så fort nyckeln finns.
+    password = os.environ.get(password_env_name(tenant_slug), "")
+    oauth_ready = bool(
+        settings.imap_oauth_client_id
+        and settings.imap_oauth_client_secret
+        and settings.imap_oauth_refresh_token
+    )
+    if not password and not oauth_ready:
+        # Inte ett fel: kunden har ännu inte lämnat app-lösenord eller OAuth.
         return {
             "fetched": 0,
             "processed": 0,
-            "error": f"{password_env_name(tenant_slug)} saknas — hoppar över {mailbox['address']}.",
+            "error": f"{password_env_name(tenant_slug)} eller IMAP OAuth saknas — hoppar över {mailbox['address']}.",
         }
 
-    inbound, error = await imap.fetch_new(host, mailbox["address"], password, settings.imap_folder)
+    inbound, error = await imap.fetch_new(
+        host, mailbox["address"], password, settings.imap_folder,
+        oauth_client_id=settings.imap_oauth_client_id,
+        oauth_client_secret=settings.imap_oauth_client_secret,
+        oauth_refresh_token=settings.imap_oauth_refresh_token,
+        oauth_token_url=settings.imap_oauth_token_url,
+    )
 
     processed = 0
     for message in inbound:
@@ -87,11 +97,20 @@ async def sync_imap_once(storage: Storage, tenant_id: str = DEFAULT_TENANT_ID) -
     begäran. Den periodiska pollern använder sync_all_mailboxes.
     """
     settings = get_settings()
-    if not (settings.imap_host and settings.imap_user and settings.imap_password):
+    oauth_ready = bool(
+        settings.imap_oauth_client_id
+        and settings.imap_oauth_client_secret
+        and settings.imap_oauth_refresh_token
+    )
+    if not (settings.imap_host and settings.imap_user and (settings.imap_password or oauth_ready)):
         return {"fetched": 0, "processed": 0, "error": "IMAP är inte konfigurerat (IMAP_HOST/USER/PASSWORD)."}
 
     inbound, error = await imap.fetch_new(
-        settings.imap_host, settings.imap_user, settings.imap_password, settings.imap_folder
+        settings.imap_host, settings.imap_user, settings.imap_password, settings.imap_folder,
+        oauth_client_id=settings.imap_oauth_client_id,
+        oauth_client_secret=settings.imap_oauth_client_secret,
+        oauth_refresh_token=settings.imap_oauth_refresh_token,
+        oauth_token_url=settings.imap_oauth_token_url,
     )
     processed = 0
     for message in inbound:
