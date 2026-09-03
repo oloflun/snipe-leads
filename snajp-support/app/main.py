@@ -369,7 +369,12 @@ async def health_ready(response: Response) -> dict:
         warnings.append(
             "Ingen DATABASE_URL — data ligger i minnet och försvinner vid omstart."
         )
-    if not (settings.imap_host and settings.imap_user and settings.imap_password):
+    imap_oauth_ready = bool(
+        settings.imap_oauth_client_id
+        and settings.imap_oauth_client_secret
+        and settings.imap_oauth_refresh_token
+    )
+    if not (settings.imap_host and settings.imap_user and (settings.imap_password or imap_oauth_ready)):
         warnings.append("IMAP saknas — inga inkommande mail hämtas.")
 
     # Embeddings har sin egen hälsa, och den var OSYNLIG här.
