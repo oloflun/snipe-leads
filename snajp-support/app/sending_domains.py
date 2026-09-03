@@ -19,8 +19,13 @@ async def _request(method: str, path: str, **kwargs) -> dict[str, Any]:
 
 async def get_config(storage, tenant_id: str) -> dict[str, Any] | None:
     if hasattr(storage, "pool"):
-        async with storage._scoped(tenant_id) as conn:
-            row = await conn.fetchrow("select * from ss_sending_domains where tenant_id=$1", tenant_id)
+        try:
+            async with storage._scoped(tenant_id) as conn:
+                row = await conn.fetchrow("select * from ss_sending_domains where tenant_id=$1", tenant_id)
+        except Exception as error:
+            if getattr(error, "sqlstate", None) == "42P01":
+                return None
+            raise
         return dict(row) if row else None
     return getattr(storage, "_sending_domains", {}).get(tenant_id)
 
