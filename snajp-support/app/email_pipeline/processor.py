@@ -35,7 +35,8 @@ def _wrap_reply(body: str, recipient_name: str | None) -> str:
     while lines and not lines[-1].strip():
         lines.pop()
     if len(lines) >= 2 and lines[-2].strip().casefold() in {
-        "vänliga hälsningar,", "med vänliga hälsningar,"
+        "vänliga hälsningar,", "med vänliga hälsningar,",
+        "vänlig hälsning,", "med vänlig hälsning,"
     } and lines[-1].strip().casefold() in {"snajp support", "snajp-support"}:
         lines = lines[:-2]
         while lines and not lines[-1].strip():
