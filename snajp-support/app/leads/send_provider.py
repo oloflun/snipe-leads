@@ -249,7 +249,7 @@ class ResendMailer:
             raise RuntimeError(
                 f"Resend avvisade sändningen ({svar.status_code}): {svar.text[:300]}"
             )
-        data = svar.json()
+        data = svar.json() if hasattr(svar, "json") else {}
         logger.info("RESEND-UTSKICK till %s: %r (%d tecken)", adress, subject, len(body))
         return data.get("id")
 
