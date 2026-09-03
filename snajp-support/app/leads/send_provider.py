@@ -49,7 +49,7 @@ class SendProvider(Protocol):
     #: True bara för providers som faktiskt når internet.
     levererar: bool
 
-    async def send(self, *, to: str, subject: str, body: str) -> None: ...
+    async def send(self, *, to: str, subject: str, body: str, from_email: str | None = None, from_name: str | None = None, reply_to: str | None = None, tags: list[dict[str, str]] | None = None) -> str | None: ...
 
 
 class LoggingSendProvider:
@@ -229,21 +229,19 @@ class ResendMailer:
     def _from(self) -> str:
         return f"{self.avsandarnamn} <{self.avsandare}>" if self.avsandarnamn else self.avsandare
 
-    async def send(self, *, to: str, subject: str, body: str) -> None:
+    async def send(self, *, to: str, subject: str, body: str, from_email: str | None = None, from_name: str | None = None, reply_to: str | None = None, tags: list[dict[str, str]] | None = None) -> str | None:
         adress = (to or "").strip()
         if not adress or "@" not in adress:
-            # Samma spärr som SmtpMailer: scheduler.py:s fallback-adress
-            # "okänd" ska stoppas här, synligt.
             raise ValueError(f"Ogiltig mottagaradress: {to!r} — inget skickat.")
 
         import httpx
-
+        actual_from = from_email or self.avsandare
+        display = from_name if from_name is not None else self.avsandarnamn
+        payload = {"from": f"{display} <{actual_from}>" if display else actual_from, "to": [adress], "subject": subject, "text": body}
+        if reply_to: payload["reply_to"] = reply_to
+        if tags: payload["tags"] = tags
         async with httpx.AsyncClient(timeout=SMTP_TIDSTAK_SEKUNDER) as klient:
-            svar = await klient.post(
-                self.ENDPOINT,
-                headers={"Authorization": f"Bearer {self.api_key}"},
-                json={"from": self._from(), "to": [adress], "subject": subject, "text": body},
-            )
+            svar = await klient.post(self.ENDPOINT, headers={"Authorization": f"Bearer {self.api_key}"}, json=payload)
         if svar.status_code >= 400:
             # Kroppen bär Resends egen förklaring (overifierad domän, ogiltig
             # nyckel, kvot slut) och är det som gör felet åtgärdbart. Klipps
@@ -251,7 +249,9 @@ class ResendMailer:
             raise RuntimeError(
                 f"Resend avvisade sändningen ({svar.status_code}): {svar.text[:300]}"
             )
+        data = svar.json()
         logger.info("RESEND-UTSKICK till %s: %r (%d tecken)", adress, subject, len(body))
+        return data.get("id")
 
 
 def get_send_provider(settings: Settings | None = None) -> SendProvider:
