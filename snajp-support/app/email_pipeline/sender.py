@@ -97,9 +97,13 @@ async def skicka_supportsvar(
         elif cfg:
             fallback = f" Tenant-domänen {cfg.get('sending_domain')} är {cfg.get('status')}; synlig fallback användes."
     try:
-        message_id = await provider.send(to=mottagare, subject=amne, body=content,
-            from_email=from_email, from_name=from_name, reply_to=reply_to,
-            tags=[{"name":"tenant_id","value":tenant_id}] if tenant_id else None)
+        import inspect
+        if "from_email" in inspect.signature(provider.send).parameters:
+            message_id = await provider.send(to=mottagare, subject=amne, body=content,
+                from_email=from_email, from_name=from_name, reply_to=reply_to,
+                tags=[{"name":"tenant_id","value":tenant_id}] if tenant_id else None)
+        else:
+            message_id = await provider.send(to=mottagare, subject=amne, body=content)
     except Exception as fel:
         # Loggen får detaljerna; anroparen får ett svenskt besked utan
         # serverns interna feltext (den kan bära adresser och kontonamn).
