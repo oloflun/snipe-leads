@@ -361,6 +361,7 @@ class Settings(BaseSettings):
     # räcker för att sändvägen ska börja fungera.
     email_provider: str = ""
     resend_api_key: str = ""
+    resend_webhook_secret: str = ""
 
     # Skatteverkets Beskattningsengagemang-API — verifierar tenantens EGET
     # orgnr vid onboarding (F-skatt, moms, arbetsgivarregistrering).
