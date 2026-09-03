@@ -253,7 +253,7 @@ async def process_email(
             from .sender import SandningsFel, skicka_supportsvar
 
             try:
-                sandnotering = await skicka_supportsvar(email, content=content)
+                sandnotering = await skicka_supportsvar(email, content=content, tenant_id=tenant_id, storage=storage)
             except SandningsFel as fel:
                 await storage.log_decision(
                     tenant_id, email_id=email_id, event="auto_send_failed",
