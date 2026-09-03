@@ -285,6 +285,12 @@ class Settings(BaseSettings):
     imap_user: str = ""
     imap_password: str = ""  # Gmail: app-lösenord; Outlook: app-lösenord/IMAP-auth
     imap_folder: str = "INBOX"
+    # XOAUTH2 är förstahandsvalet för Gmail. Refresh-token ger nya kortlivade
+    # access-tokens; inga access-tokens sparas i env eller databas.
+    imap_oauth_client_id: str = ""
+    imap_oauth_client_secret: str = ""
+    imap_oauth_refresh_token: str = ""
+    imap_oauth_token_url: str = "https://oauth2.googleapis.com/token"
 
     # Publik bas-URL för länkar som hamnar i utgående mejl (idag bara
     # avregistreringslänken). MÅSTE peka på Next-appen, inte på det här API:t —
