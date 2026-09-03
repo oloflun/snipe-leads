@@ -98,7 +98,7 @@ async def skicka_supportsvar(
             fallback = f" Tenant-domänen {cfg.get('sending_domain')} är {cfg.get('status')}; synlig fallback användes."
     try:
         import inspect
-        if "from_email" in inspect.signature(provider.send).parameters:
+        if "from_email" in inspect.signature(provider.send).parameters or any(p.kind == inspect.Parameter.VAR_KEYWORD for p in inspect.signature(provider.send).parameters.values()):
             message_id = await provider.send(to=mottagare, subject=amne, body=content,
                 from_email=from_email, from_name=from_name, reply_to=reply_to,
                 tags=[{"name":"tenant_id","value":tenant_id}] if tenant_id else None)
