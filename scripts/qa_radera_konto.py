@@ -45,20 +45,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from railway_migrate import dsn  # noqa: E402
 from railway_provision import env_read  # noqa: E402
 
+#: Prefixet som avgör om en kunskapsbas är SEEDAD eller kundens egen.
+#:
+#: Samma villkor som backenden redan har på tre ställen: `POST /api/keys`
+#: (app/api/keys.py), `POST /api/inbox/mock` (app/api/inbox.py) och docstringen
+#: i app/scripts/seed_kb.py, som säger det rakt ut — artiklarna är Nordlys
+#: Handels, och "i en riktig kunds bas är de fel svar presenterade som kundens
+#: egna". Ändras villkoret där måste det ändras här.
+TESTKUND_PREFIX = "testkund-"
+
 #: Tabeller som pekar på ss_tenants med NO ACTION och som ett QA-konto faktiskt
 #: får rader i. De måste bort före tenanten. Övriga NO ACTION-tabeller fångas av
 #: kunddatakontrollen nedan — får de rader är kontot inte ett QA-konto.
-TENANTBEROENDEN = ("agent_context_docs", "agent_configs", "ss_api_keys", "ss_knowledge_base")
+TENANTBEROENDEN = ("agent_context_docs", "agent_configs", "ss_api_keys")
 
 #: Spår av riktig verksamhet. En rad här betyder att kontot INTE är ett tomt
 #: QA-konto, och då ska den här vägen inte användas.
-#:
-#: `ss_knowledge_base` står medvetet INTE här. Backendens `create_key` seedar
-#: automatiskt en kunskapsbas för varje tenant vars slug börjar på `testkund-`
-#: (se snajp-support/app/api/keys.py) — 16 artiklar utan att någon rört kontot.
-#: Med den i listan hade spärren fällt varje testarbetsyta och skriptet aldrig
-#: kunnat användas till det det finns för. Artiklarna raderas i stället som ett
-#: tenantberoende ovan.
 KUNDDATA = (
     "ss_tickets",
     "ss_emails",
@@ -70,7 +72,28 @@ KUNDDATA = (
     "outreach_messages",
     "send_queue",
     "agent_runs",
+    # Villkorad — se `kb_ar_seedad()`. Står i listan för att en RIKTIG kunds
+    # kunskapsbas är innehåll de själva lagt in.
+    "ss_knowledge_base",
 )
+
+
+def kb_ar_seedad(tenant_slug: str | None) -> bool:
+    """Är kunskapsbasen backendens seed, eller kundens eget innehåll?
+
+    Skillnaden är hela spärren, och den var fel i b19efeb: `ss_knowledge_base`
+    togs ur KUNDDATA GLOBALT därför att seedningen fällde varje testarbetsyta.
+    Botemedlet var bredare än sjukdomen. En riktig kund som är onboardad men
+    ännu inte igång — kunskapsbas uppladdad, noll ärenden, noll mejl, noll
+    prospekt, noll körningar — passerade då spärren, och deras bas hade
+    raderats som ett beroende. Det är exakt det tillstånd ett nytecknat konto
+    står i veckan före driftsättning, alltså det tillstånd spärren finns för.
+
+    Att i stället räkna rader (">16 artiklar = kundens egna") vore sämre: taket
+    ändras när seed-ämnena ändras, och då tystnar spärren utan att någon rört
+    den.
+    """
+    return bool(tenant_slug) and tenant_slug.startswith(TESTKUND_PREFIX)
 
 #: Tenants som är REGISTRERADE i koden och därför aldrig får raderas.
 #:
@@ -125,15 +148,30 @@ def main() -> int:
     ws = cur.fetchone()
     workspace_id, namn, slug, tenant_id = ws if ws else (None, None, None, None)
 
+    # Tenantens EGEN slug, inte arbetsytans. De är samma sak för en tenant som
+    # skapats i drift, men inte för en arbetsyta som pekar på en delad tenant —
+    # och det är tenantens slug som avgör både seedningen och registerspärren.
+    tenant_slug = None
+    if tenant_id:
+        cur.execute("select slug from public.ss_tenants where id = %s", (tenant_id,))
+        tenant_slug = (cur.fetchone() or [None])[0]
+
+    seedad_kb = kb_ar_seedad(tenant_slug)
+
     print(f"Konto:     {args.epost}  ({user_id})")
     print(f"Arbetsyta: {namn or '—'}  slug={slug or '—'}")
-    print(f"Tenant:    {tenant_id or '—'}")
+    print(f"Tenant:    {tenant_slug or '—'}  ({tenant_id or '—'})")
+    print(f"Kunskapsbas: {'seedad av backenden' if seedad_kb else 'kundens egen — spärrad'}")
 
     # Spärr 2. Körs FÖRE allt annat: fyndet ska stoppa körningen, inte
     # rapporteras efter att raderingen redan börjat.
     if tenant_id:
         fynd = []
         for tabell in KUNDDATA:
+            # Seedad kunskapsbas är inte kunddata — se kb_ar_seedad(). För en
+            # riktig kund fälls den däremot, även när allt annat är tomt.
+            if tabell == "ss_knowledge_base" and seedad_kb:
+                continue
             try:
                 cur.execute(f"select count(*) from public.{tabell} where tenant_id = %s", (tenant_id,))
                 antal = cur.fetchone()[0]
@@ -172,13 +210,18 @@ def main() -> int:
     # med den `SNAJP_KEY_TESTKUND`, configfilen och `link_testkund_workspace()`.
     # Nästa testarbetsyta som föll tillbaka hade mötts av ett 409 utan spår av
     # varför.
-    cur.execute("select slug from public.ss_tenants where id = %s", (tenant_id,)) if tenant_id else None
-    tenant_slug = (cur.fetchone() or [None])[0] if tenant_id else None
     skyddad = tenant_slug in registrerade_tenants() if tenant_slug else False
 
     if tenant_id and not skyddad:
         # Före tenanten: de här hänger på den med NO ACTION.
-        for tabell in TENANTBEROENDEN:
+        beroenden = list(TENANTBEROENDEN)
+        # Bara den SEEDADE basen raderas som ett beroende. Är den kundens egen
+        # har spärren ovan redan avbrutit, så den här grenen nås aldrig med en
+        # riktig kunds artiklar — raden står här för att ordningen ska vara
+        # läsbar på ETT ställe, inte utspridd på två.
+        if seedad_kb:
+            beroenden.append("ss_knowledge_base")
+        for tabell in beroenden:
             plan.append((tabell, f"delete from public.{tabell} where tenant_id = %s", (tenant_id,)))
         plan.append(("ss_tenants", "delete from public.ss_tenants where id = %s", (tenant_id,)))
     elif skyddad:
