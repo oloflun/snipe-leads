@@ -86,8 +86,9 @@ _RESEARCH_V2_UPPGIFT = (
     "qualification_reasoning, account_structure, prospect_positioning, "
     "hardest_objection, weakest_lever) är EN mening vardera; open_questions, "
     "comparison_angles, honest_caveats, uncertainties, missing_information "
-    "max 3 korta poster; likely_objections max 2 objekt med en menings "
-    "response. UNDANTAG — snåla ALDRIG på beläggen: evidence, likely_pains "
+    "max 2 korta poster; decision_makers och existing_support_channels max "
+    "3 poster; likely_objections max 1 objekt med en menings response. "
+    "UNDANTAG — snåla ALDRIG på beläggen: evidence, likely_pains "
     "och trigger_events får vara så många och så ordagranna som "
     "källmaterialet bär; de är utkastets tillåtna faktabas."
 )
@@ -103,9 +104,17 @@ _UTKAST_V2_UPPGIFT = (
     "Quality Check och What to Avoid och åtgärda det som fälls INNAN du "
     "svarar. Returnera JSON: subject (svenska, ren text), body (svenska, ren "
     "text, inga punktlistor), personalization_score (0.0-1.0), weak_lines "
-    "(lista med rader som kunde stått i vilket massutskick som helst — efter "
-    "din skärpning), passes_review (bool), violations (lista — tom om "
-    "granskningen passerar), draft_reasoning (svenska, kort)."
+    "(max 2 rader ordagrant, utan kommentar — rader som kunde stått i "
+    "vilket massutskick som helst efter din skärpning), passes_review "
+    "(bool), violations (max 2 korta poster — tom om granskningen "
+    "passerar), draft_reasoning (EN mening).\n\n"
+    # Granskningsmetan läses av ingen kod — den finns för att TVINGA
+    # granskningen (steg 2-3 i arbetsordningen), inte för att läsas.
+    # Mekanismen behålls, ordrikedomen capas: mätningen 2026-09-04 är
+    # att ut-tokens kostar 5x in och att metan var ~1/4 av utkastsvaret.
+    "META-LÄNGD: motiveringar hör inte hemma i weak_lines/violations — "
+    "bara raderna respektive punkterna själva. Brödtexten (body) berörs "
+    "INTE av någon längdregel här."
 )
 
 

@@ -116,7 +116,8 @@ och context_refs). Inga extra rubriker, ingen markdown, inga fält du inte
 ombetts om.
 
 **Svarslängd.** Resonemangsfälten skrivs som telegram: en mening per
-fritextfält, max 3 korta poster per lista, likely_objections max 2.
+fritextfält, max 2 korta poster per lista (decision_makers och
+existing_support_channels max 3), likely_objections max 1.
 **Undantag — beläggen:** evidence, likely_pains och trigger_events är
 utkastets tillåtna faktabas (grundningsgrinden mäter mejlet mot dem) och
 får vara så många och så ordagranna som källmaterialet bär. Snåla aldrig
