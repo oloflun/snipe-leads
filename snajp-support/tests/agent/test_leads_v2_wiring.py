@@ -93,6 +93,10 @@ class _FakeLLM:
     def __init__(self, overrides: dict | None = None):
         self.calls: list[str] = []
         self.system_prompts: list[str] = []
+        # Användarmeddelandet bär case_context — alltså researchvyn. Utan det
+        # går det inte att pröva om ett FÄLT nådde steget, bara om en skill
+        # gjorde det (se test_triggern_nar_hela_vagen_till_skrivsteget).
+        self.user_messages: list[str] = []
         self.overrides = overrides or {}
         self.chat = self
         self.completions = self
@@ -102,6 +106,9 @@ class _FakeLLM:
         skill = re.search(r"styrs av skillen (\S+?),", system).group(1)
         self.calls.append(skill)
         self.system_prompts.append(system)
+        self.user_messages.append(
+            next((m["content"] for m in messages if m["role"] == "user"), "")
+        )
         self.models = getattr(self, "models", [])
         self.models.append(model)
 
@@ -386,6 +393,70 @@ async def test_outreach_v2_ar_tva_anrop_och_koar():
     assert len(runs) == 1
     assert "leads/outreach-v2" in runs[0]["pack_version"]
     assert "mk:cold-email" in runs[0]["skills_used"]
+
+
+async def test_triggern_nar_hela_vagen_till_skrivsteget():
+    """trigger_events måste SYNAS för utkaststeget, inte bara vara tillåten.
+
+    Buggen (uppmätt 2026-09-04): fältet gick bara till research_evidence →
+    build_permitted_facts, alltså grundningsgrindens tillåtna-lista. Grinden
+    godkände alltså en trigger som skrivaren aldrig fick se, och domaren gav
+    V1 vinsten i BÅDA ordningarna på det fixture där V1 krokade på
+    "öppnar nytt platskontor i Hässleholm" och V2 återberättade bolagets
+    verksamhet. Ett fält kan inte användas av ett steg som inte får se det —
+    därför följer det här testet fältet hela vägen från research-svaret till
+    strängen som faktiskt hamnar i skrivstegets prompt."""
+    storage = MemoryStorage()
+    prospect_id = await _prepare_prospect(storage)
+    llm = _FakeLLM(
+        overrides={
+            "sa:account-research": {"trigger_events": ["Öppnar nytt platskontor i Hässleholm"]}
+        }
+    )
+
+    with (
+        patch("app.agent.step_runner.get_llm_client", return_value=llm),
+        patch("app.agent.leads_agent._scrape_registered_source_impl", new=_fake_scrape()),
+    ):
+        research = await run_research_step_v2(
+            storage,
+            TENANT,
+            prospect_id=prospect_id,
+            tenant_name="Snajp",
+            context_pack="## Kontextpaket\nICP: svensk e-handel.",
+            brief="",
+        )
+
+    # 1. Toppnivån (api/leads.py bygger sin sammanfattning härifrån).
+    assert research["trigger_events"] == ["Öppnar nytt platskontor i Hässleholm"]
+    # 2. final_output (benchmarkens och fallbackens väg).
+    assert "Hässleholm" in research["final_output"]
+    # 3. Den kanoniska vyn — det utkaststeget FAKTISKT ser.
+    from app.agent.leads_research_v2 import _utkastens_researchvy
+
+    vy = _utkastens_researchvy(research["final_output"])
+    assert "Hässleholm" in vy, "triggern nådde inte skrivstegets researchvy"
+
+    # 4. Hela vägen: strängen i skrivstegets prompt.
+    thread_id = await _prepare_outreach(storage)
+    llm2 = _FakeLLM()
+    with patch("app.agent.step_runner.get_llm_client", return_value=llm2):
+        await run_outreach_draft_v2(
+            storage,
+            TENANT,
+            thread_id=thread_id,
+            prospect_email="kundservice@exempelbolaget.se",
+            tenant_name="Snajp",
+            company_name="Exempelbolaget",
+            offer_summary="Pilot på returfrågor",
+            context_pack="## Kontextpaket\nICP: svensk e-handel.",
+            brief="",
+            research_summary=research["final_output"],
+            research_evidence=("Fri retur inom 30 dagar",),
+        )
+    assert "Hässleholm" in llm2.user_messages[0], (
+        "triggern nådde aldrig skrivstegets prompt — samma bugg som 2026-09-04"
+    )
 
 
 async def test_outreach_v2_tom_body_ger_ett_omforsok():

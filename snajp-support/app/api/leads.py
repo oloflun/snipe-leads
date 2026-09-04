@@ -1707,6 +1707,13 @@ async def _run_batch_prospect(
                             "qualified": result.get("qualified"),
                             "likely_pains": result.get("likely_pains")
                             or ur_final.get("likely_pains"),
+                            # Kallmejlets starkaste krok — vad som ändrats hos
+                            # dem just nu. Saknades här (och i researchvyn) till
+                            # 2026-09-04; se _utkastens_researchvy i
+                            # leads_research_v2.py för mätningen som visade vad
+                            # det kostade.
+                            "trigger_events": result.get("trigger_events")
+                            or ur_final.get("trigger_events"),
                         },
                         ensure_ascii=False,
                     )

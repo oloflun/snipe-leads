@@ -410,13 +410,18 @@ async def main() -> None:
             domare_tokens = {"in": domadapter.tokens_in, "ut": domadapter.tokens_out}
             await domadapter.stang()
     elif not args.utan_dom and len(kedjor) == 2:
-        # gemini-läget: samma dom via produktionens klient.
+        # gemini-läget: samma dom via produktionens klient, men BÅDA
+        # ordningarna per par. Fram till 2026-09-04 satt V1 alltid som "A",
+        # och en LLM-domare har känd positionsbias — en "vinst" som bara
+        # mätts i ett läge kan vara ordningen som vann, inte mejlet. Nu
+        # räknas en vinst BARA när domaren pekar på samma kedja i båda
+        # ordningarna; spretar den är utfallet "oavgjort (inkonsekvent)",
+        # vilket är ett ärligare svar än att slå mynt.
         from app.agent.llm import get_llm_client
 
         client = get_llm_client()
-        for a, b in zip(resultat["v1"], resultat["v2"]):
-            if not (a.get("utkast_body") and b.get("utkast_body")):
-                continue
+
+        async def _fraga(vanster: dict, hoger: dict, fixture: str) -> dict:
             svar = await client.chat.completions.create(
                 model=get_settings().model,
                 response_format={"type": "json_object"},
@@ -425,16 +430,24 @@ async def main() -> None:
                     {
                         "role": "system",
                         "content": (
-                            "Du bedömer två kalla B2B-mejl på svenska, blint. Returnera "
-                            "JSON: vinnare ('A'|'B'|'oavgjort'), motivering (kort)."
+                            "Du bedömer två kalla B2B-mejl på svenska, blint. Väg "
+                            "personalisering grundad i prospektets verklighet, "
+                            "konkret krok, trovärdig ton och EN tydlig lågtröskel-CTA. "
+                            "Returnera JSON: vinnare ('A'|'B'|'oavgjort'), motivering "
+                            "(kort), samt checklista_a och checklista_b som objekt med "
+                            "bool-fälten personaliserat_grundat, "
+                            "inga_ogrundade_pastaenden, ren_text, naturlig_svenska, "
+                            "en_tydlig_cta."
                         ),
                     },
                     {
                         "role": "user",
                         "content": (
-                            f"## Prospekt\n{a['fixture']}\n\n"
-                            f"## Mejl A\nÄmne: {a.get('utkast_subject')}\n\n{a.get('utkast_body')}\n\n"
-                            f"## Mejl B\nÄmne: {b.get('utkast_subject')}\n\n{b.get('utkast_body')}"
+                            f"## Prospekt\n{fixture}\n\n"
+                            f"## Mejl A\nÄmne: {vanster.get('utkast_subject')}\n\n"
+                            f"{vanster.get('utkast_body')}\n\n"
+                            f"## Mejl B\nÄmne: {hoger.get('utkast_subject')}\n\n"
+                            f"{hoger.get('utkast_body')}"
                         ),
                     },
                 ],
@@ -444,12 +457,33 @@ async def main() -> None:
                 domare_tokens["in"] += getattr(usage, "prompt_tokens", 0) or 0
                 domare_tokens["ut"] += getattr(usage, "completion_tokens", 0) or 0
             try:
-                dom = json.loads(svar.choices[0].message.content or "{}")
+                return json.loads(svar.choices[0].message.content or "{}")
             except (TypeError, ValueError):
-                dom = {"vinnare": "oavgjort", "motivering": "Domarsvaret gick inte att tolka."}
-            dom["fixture"] = a["fixture"]
-            dom["A"], dom["B"] = "v1", "v2"
-            domar.append(dom)
+                return {"vinnare": "oavgjort", "motivering": "Domarsvaret gick inte att tolka."}
+
+        for a, b in zip(resultat["v1"], resultat["v2"]):
+            if not (a.get("utkast_body") and b.get("utkast_body")):
+                continue
+            # Runda 1: A=v1, B=v2. Runda 2: kedjorna byter plats.
+            r1 = await _fraga(a, b, a["fixture"])
+            r2 = await _fraga(b, a, a["fixture"])
+            v1 = {"A": "v1", "B": "v2"}.get(str(r1.get("vinnare")), "oavgjort")
+            v2 = {"A": "v2", "B": "v1"}.get(str(r2.get("vinnare")), "oavgjort")
+            if v1 == v2:
+                vinnare, konsekvent = v1, True
+            else:
+                vinnare, konsekvent = "oavgjort", False
+            domar.append(
+                {
+                    "fixture": a["fixture"],
+                    "vinnare": vinnare,
+                    "konsekvent": konsekvent,
+                    "runda1": {"vinnare": v1, "motivering": r1.get("motivering")},
+                    "runda2": {"vinnare": v2, "motivering": r2.get("motivering")},
+                    "checklista_v1": r1.get("checklista_a"),
+                    "checklista_v2": r1.get("checklista_b"),
+                }
+            )
 
     # -- Rapport ----------------------------------------------------------
     etikett = "Haiku-proxy" if args.modell == "haiku" else "gemini-3.6-flash (RIKTIG)"
@@ -504,9 +538,26 @@ async def main() -> None:
         )
 
     if domar:
-        print("\n## Utkastdomar (blind parvis, A=v1, B=v2)\n")
-        for dom in domar:
-            print(f"- **{dom['fixture']}**: vinnare {dom.get('vinnare')} — {dom.get('motivering')}")
+        if all("konsekvent" in d for d in domar):
+            v1_v = sum(1 for d in domar if d["vinnare"] == "v1")
+            v2_v = sum(1 for d in domar if d["vinnare"] == "v2")
+            oavgjort = len(domar) - v1_v - v2_v
+            print("\n## Utkastdomar (blind, BÅDA ordningarna — vinst kräver samstämmighet)\n")
+            print(f"**V1 {v1_v} · V2 {v2_v} · oavgjort/inkonsekvent {oavgjort}** av {len(domar)}\n")
+            for dom in domar:
+                flagga = "" if dom["konsekvent"] else "  ⚠ ordningsberoende"
+                print(f"- **{dom['fixture']}**: {dom['vinnare']}{flagga}")
+                print(f"    r1 ({dom['runda1']['vinnare']}): {dom['runda1']['motivering']}")
+                print(f"    r2 ({dom['runda2']['vinnare']}): {dom['runda2']['motivering']}")
+                for kedja in ("v1", "v2"):
+                    lista = dom.get(f"checklista_{kedja}") or {}
+                    if lista:
+                        brister = [k for k, v in lista.items() if v is False]
+                        print(f"    {kedja} brister: {', '.join(brister) if brister else 'inga'}")
+        else:
+            print("\n## Utkastdomar (blind parvis, A=v1, B=v2)\n")
+            for dom in domar:
+                print(f"- **{dom['fixture']}**: vinnare {dom.get('vinnare')} — {dom.get('motivering')}")
         print(
             f"\nDomarens egna tokens (bokförs separat): "
             f"{domare_tokens['in']:,} in / {domare_tokens['ut']:,} ut"

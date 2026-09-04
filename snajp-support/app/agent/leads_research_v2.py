@@ -235,6 +235,17 @@ async def run_research_step_v2(
             "qualified": fynd.get("qualified"),
             "icp_fit": fynd.get("icp_fit"),
             "likely_pains": fynd.get("likely_pains"),
+            # trigger_events MÅSTE med (2026-09-04). Fältet fanns bara i
+            # research_evidence, alltså i grundningsgrindens TILLÅTNA-lista —
+            # grinden godkände en trigger som utkaststeget aldrig fick se.
+            # Domarmätningen visade följden ordagrant: V1 krokade på "öppnar
+            # nytt platskontor i Hässleholm", V2 öppnade med att återberätta
+            # vad bolaget gör, och förlorade i båda ordningarna. I V1 överlevde
+            # triggern indirekt via kedjeresonemanget (account-research ->
+            # ... -> offers); när kedjan blev ETT steg försvann den vägen och
+            # måste bäras explicit. Det här är den enskilt starkaste kroken i
+            # ett kallt mejl — vad som ändrats hos dem, just nu.
+            "trigger_events": fynd.get("trigger_events"),
             "angle": offer_obj,
             "offer_confidence": fynd.get("offer_confidence"),
         },
@@ -308,6 +319,9 @@ async def run_research_step_v2(
         # utkastet).
         "company_summary": fynd.get("company_summary"),
         "likely_pains": fynd.get("likely_pains"),
+        # Toppnivå av samma skäl som de två ovan: api/leads.py bygger sin
+        # sammanfattning till utkastet härifrån (final_output är fallback).
+        "trigger_events": fynd.get("trigger_events"),
         "offer_summary": offer_summary,
         "final_output": final_output,
         "contact_level": slutlig_kontaktniva,
@@ -332,6 +346,16 @@ def _utkastens_researchvy(research_summary: str) -> str:
     Den har vyn ar den enda sanningen for vad utkastet ser, oavsett
     anropare:
 
+      - trigger_events - den STARKASTE kroken: vad som ändrats hos dem just
+        nu (expansion, nyetablering, rekrytering). Saknades i vyn fram till
+        2026-09-04 och det kostade mätbar kvalitet: domaren (samstämmig i
+        BÅDA ordningarna) gav V1 vinsten på Smålands Stålhallar eftersom V1
+        krokade på "öppnar nytt platskontor i Hässleholm" medan V2 öppnade
+        med att återberätta vad bolaget gör. Triggern fanns i researchen
+        hela tiden — men bara i research_evidence, alltså i grundnings-
+        grindens TILLÅTNA-lista, som godkänner ett påstående utan att visa
+        det för den som skriver. Ett fält kan inte användas av ett steg som
+        inte får se det.
       - company_summary, likely_pains - utkastets kontext och krokravara.
         (Grundningens belagg ar en ANNAN kanal: research_evidence ->
         build_permitted_facts, orord av den har vyn.)
@@ -350,6 +374,9 @@ def _utkastens_researchvy(research_summary: str) -> str:
     if not isinstance(fynd, dict):
         return research_summary
     vy: dict[str, Any] = {
+        # Först i vyn med flit: det modellen läser tidigast väger tyngst när
+        # den väljer öppningsrad, och det här ÄR öppningsraden.
+        "trigger_events": fynd.get("trigger_events"),
         "company_summary": fynd.get("company_summary"),
         "likely_pains": fynd.get("likely_pains"),
     }
