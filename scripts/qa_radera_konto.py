@@ -89,9 +89,12 @@ def kb_ar_seedad(tenant_slug: str | None) -> bool:
     raderats som ett beroende. Det är exakt det tillstånd ett nytecknat konto
     står i veckan före driftsättning, alltså det tillstånd spärren finns för.
 
-    Att i stället räkna rader (">16 artiklar = kundens egna") vore sämre: taket
-    ändras när seed-ämnena ändras, och då tystnar spärren utan att någon rört
-    den.
+    Att i stället räkna rader ("fler än seedantalet = kundens egna") vore sämre,
+    och det är mätt och inte befarat: testarbetsytorna från 16-21 augusti bär 16
+    artiklar, den från 2 september bär 28, och `app/kb_articles.py` innehåller i
+    dag 28. Listan växte alltså med tolv artiklar under två veckor. Ett tak satt
+    till 16 hade tystnat i tysthet den dagen — spärren hade fortsatt svara, bara
+    fel.
     """
     return bool(tenant_slug) and tenant_slug.startswith(TESTKUND_PREFIX)
 
