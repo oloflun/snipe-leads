@@ -55,6 +55,37 @@ _AGGREGATORER = (
     "google.se",
 )
 
+#: Rekryteringsplattformar och jobbannonsvärdar. Skild lista från
+#: _AGGREGATORER av ett skäl som betyder något: de här ÄR inte register över
+#: bolag, de är tredjepartsplattformar som är bolagets ANNONS-yta — och
+#: värdnamnet bär ofta bolagets eget namn (`fibio.teamtailor.com`), så
+#: namn↔domän-grinden släpper igenom dem.
+#:
+#: Varför de ändå måste fällas: kundkravet är att kontaktpersonen alltid
+#: hämtas från prospektets EGEN sida, där rollerna är aktuella och
+#: kontaktvägarna är de bolaget själv vill bli nådd på. En ATS-sida bär
+#: rekryterarens formulär, inte bolagets kontaktuppgifter — kontaktskörden
+#: skulle skrapa fel yta och hitta ingenting (uppmätt i drift 2026-09-04:
+#: `Fibio Nordic AB` fick `fibio.teamtailor.com` och contact_email null).
+#:
+#: Konsekvensen av att fälla är RÄTT utfall: träffen faller vidare till den
+#: namnhärledda HEAD-gissningen, som letar bolagets riktiga domän.
+_ANNONSPLATTFORMAR = (
+    "teamtailor.com",
+    "varbi.com",
+    "reachmee.com",
+    "jobylon.com",
+    "workbuster.com",
+    "recman.se",
+    "myworkdayjobs.com",
+    "greenhouse.io",
+    "lever.co",
+    "indeed.com",
+    "monster.se",
+    "arbetsformedlingen.se",
+    "blocket.se",
+)
+
 _EXEMPEL_TLD = (".example", ".invalid", ".test")
 
 #: Grounded sökning (google_search-verktyget) läser flera sidor innan Gemini
@@ -300,6 +331,11 @@ def webbplats_ar_bolagets(url: str | None) -> bool:
         return False
     host = _host(raw)
     if any(host == a or host.endswith("." + a) for a in _AGGREGATORER):
+        return False
+    # Subdomänformen är hela poängen här: `fibio.teamtailor.com` matchar
+    # bolagsnamnet men är rekryterarens yta, inte bolagets. Se listans
+    # docstring.
+    if any(host == p or host.endswith("." + p) for p in _ANNONSPLATTFORMAR):
         return False
     if any(host.endswith(tld) for tld in _EXEMPEL_TLD):
         return False

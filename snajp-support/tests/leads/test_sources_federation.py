@@ -150,6 +150,22 @@ def test_webbplats_matchar_namn():
     assert not webbplats_matchar_namn("Bemanning Sverige AB", "https://sverigelotteriet.se")
 
 
+def test_annonsplattform_ar_inte_bolagets_sajt():
+    """ATS-subdomänen bär bolagets NAMN men är rekryterarens yta —
+    kontaktpersonen ska alltid komma från bolagets egen sida. Uppmätt i
+    drift 2026-09-04: Fibio Nordic AB fick fibio.teamtailor.com."""
+    from app.leads.discovery import webbplats_ar_bolagets, webbplats_matchar_namn
+
+    # Namngrinden släpper igenom den — därför behövs plattformslistan.
+    assert webbplats_matchar_namn("Fibio Nordic AB", "https://fibio.teamtailor.com")
+    assert not webbplats_ar_bolagets("https://fibio.teamtailor.com")
+    assert not webbplats_ar_bolagets("https://teamtailor.com")
+    assert not webbplats_ar_bolagets("https://karriar.varbi.com")
+    assert not webbplats_ar_bolagets("https://arbetsformedlingen.se/annons/1")
+    # Bolagets egen domän är fortfarande giltig.
+    assert webbplats_ar_bolagets("https://fibio.se")
+
+
 async def test_kalltraff_med_fel_domän_faller_tillbaka_pa_gissningen(monkeypatch):
     """Annonsens arbetsgivar-URL matchar inte bolagsnamnet → URL:en förkastas
     och namngissningen tar vid. Raden överlever med RÄTT domän."""
