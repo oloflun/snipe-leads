@@ -305,8 +305,23 @@ async def process_email(
 
     except Exception as error:  # noqa: BLE001 — ett trasigt mail får inte stoppa kön
         logger.exception("Processering av mail %s misslyckades", email_id)
+        # Beslutsloggen är KUNDENS yta. Ett 429 från leverantören bar tidigare
+        # hela råtexten — inklusive "Your prepayment credits are depleted" och
+        # en länk till VÅR fakturering — rakt in i kundens ärendevy. Kvotfel
+        # får samma svenska besked som chatten; rådatan finns redan i
+        # serverloggen via logger.exception ovan. Se test_kvotfel.py för
+        # varför detekteringen läser statuskod och typnamn, inte text.
+        from ..api.events import _ar_kvotfel
+
+        if _ar_kvotfel(error):
+            beskrivning = (
+                "AI-leverantörens kvot är slut just nu. Mejlet är sparat och "
+                "kan processas om när kvoten är åtgärdad — inget är förlorat."
+            )
+        else:
+            beskrivning = str(error)
         await storage.update_email(tenant_id, email_id, status="failed")
         await storage.log_decision(
-            tenant_id, email_id=email_id, event="failed", detail={"error": str(error)},
+            tenant_id, email_id=email_id, event="failed", detail={"error": beskrivning},
         )
-        return {"action": "failed", "error": str(error)}
+        return {"action": "failed", "error": beskrivning}

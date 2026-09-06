@@ -369,6 +369,49 @@ async def takeover(
     return {"status": "taken_over"}
 
 
+@router.post("/api/inbox/{email_id}/processa-om")
+async def processa_om_mail(
+    request: Request, email_id: str, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Kör om processeringen för ett mail som fastnat i `failed`.
+
+    ## Varför den finns
+
+    Ett mail som failar i processeringen är annars förlorat på riktigt:
+    IMAP-hämtningen markerade det läst i källinkorgen, så det kommer aldrig
+    igen den vägen, och ingen annan kodväg rör en failed-rad. Uppmätt
+    2026-09-05: Geminis kredit tog slut, tre riktiga mail fick status failed,
+    och den enda återvägen hade varit handskriven SQL. Leads-körningar har
+    haft sin `processa_om` sedan tidigare — det här är inkorgens motsvarighet.
+
+    ## Bara failed
+
+    Ett mail som redan processats klart har kund, ärende, konversation och
+    eventuellt utkast. En omkörning där hade skapat ett ANDRA ärende för
+    samma mail. Failed-raderna föll däremot i triagen — före CRM-stegen — så
+    en omkörning från det läget dubblerar ingenting. Därav 409 för allt som
+    inte är failed: begränsningen är vad som gör endpointen ofarlig.
+    """
+    storage = request.app.state.storage
+    email = await storage.get_email(tenant["tenant_id"], email_id)
+    if not email:
+        raise HTTPException(status_code=404, detail="Mailet finns inte.")
+    if email.get("status") != "failed":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Mailet är {email.get('status')!r} — bara failed kan processas om.",
+        )
+
+    await storage.log_decision(
+        tenant["tenant_id"],
+        email_id=email_id,
+        event="reprocessed",
+        detail={"note": "Manuell omkörning efter fel."},
+    )
+    resultat = await process_email(storage, tenant["tenant_id"], email)
+    return {"email_id": email_id, **resultat}
+
+
 @router.post("/api/inbox/{email_id}/befordra")
 async def befordra_testmail(
     request: Request, email_id: str, tenant: dict = Depends(require_tenant)
