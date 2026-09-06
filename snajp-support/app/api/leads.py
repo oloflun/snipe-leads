@@ -1328,11 +1328,21 @@ async def _samla_korningens_prospekt(
         if not har_malgrupp and not skapade:
             raise HTTPException(status_code=422, detail=_FEL_INGEN_MALGRUPP)
         if har_malgrupp:
+            # Uteslutningen omfattar även REGISTRETS befintliga bolag — inte
+            # bara den här körningens. Uppmätt i development 2026-09-06: två
+            # batchkörningar i rad gav Ur & Penn och Ohlssons Tyger EN GÅNG
+            # VAR PER KÖRNING; discovery visste inget om registret och
+            # skapade dubbletter. hitta_bolag casefoldar namnen själv.
+            befintliga_rader = await storage.list_prospects(tenant_id, limit=500)
             try:
                 fynd = await hitta_bolag(
                     icp,
                     saknas,
-                    uteslut_namn={p["company_name"] for p in skapade},
+                    uteslut_namn={p["company_name"] for p in skapade}
+                    | {
+                        str(rad.get("company_name") or "")
+                        for rad in befintliga_rader
+                    },
                 )
             except DiscoveryError as fel:
                 if not skapade:

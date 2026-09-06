@@ -53,7 +53,16 @@ class NyhetsSource(ProspectSource):
         from urllib.parse import quote
 
         branscher = [str(b).strip() for b in (icp.get("industries") or []) if str(b).strip()]
-        geografi = str(icp.get("geography") or "").strip()
+        # geography är en LISTA i ICP:n (se api/leads.py: icp["geography"][0],
+        # exempelbolag.py: or []). str() på listan gav "['Umeå']" rakt in i
+        # frågesträngen — uppmätt i development 2026-09-06: sökningen blev
+        # "Inköpschef ['Umeå']" och träffarna hade inget med branschen att
+        # göra. En sträng accepteras också, för anropare som redan joinat.
+        geo_ra = icp.get("geography") or ""
+        if isinstance(geo_ra, (list, tuple, set)):
+            geografi = " ".join(str(g).strip() for g in geo_ra if str(g).strip())
+        else:
+            geografi = str(geo_ra).strip()
         termer = [f"{b} {geografi}".strip() for b in branscher[:2]] or ([geografi] if geografi else [])
         if not termer:
             return []

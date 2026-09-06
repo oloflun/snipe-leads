@@ -53,7 +53,16 @@ class JobTechSource(ProspectSource):
         en kodtabell. Fel mot API:t blir SourceError (federation hoppar
         vidare); tomt svar är ett giltigt utfall och ger tom lista.
         """
-        geografi = str(icp.get("geography") or "").strip()
+        # geography är en LISTA i ICP:n (se api/leads.py: icp["geography"][0],
+        # exempelbolag.py: or []). str() på listan gav "['Umeå']" rakt in i
+        # frågesträngen — uppmätt i development 2026-09-06: sökningen blev
+        # "Inköpschef ['Umeå']" och träffarna hade inget med branschen att
+        # göra. En sträng accepteras också, för anropare som redan joinat.
+        geo_ra = icp.get("geography") or ""
+        if isinstance(geo_ra, (list, tuple, set)):
+            geografi = " ".join(str(g).strip() for g in geo_ra if str(g).strip())
+        else:
+            geografi = str(geo_ra).strip()
         roller = [str(r).strip() for r in (icp.get("roles") or []) if str(r).strip()]
         termer = list(dict.fromkeys([*_SIGNALROLLER[:3], *roller[:2]]))
 
