@@ -166,6 +166,7 @@ async def run_research_step_v2(
         case_context=base,
         playbook_role=_RESEARCH_ROLE,
         instruktioner=lager,
+        talamod_429=True,
     )
 
     # Kontakttrappan (INV-CONTACT-001) — samma kodväg som V1: uppgraderar
@@ -451,6 +452,7 @@ async def run_outreach_draft_v2(
         case_context=base,
         playbook_role=_OUTREACH_ROLE,
         instruktioner=lager,
+        talamod_429=True,
     )
     # extra_skills-texten injicerades av motorn i steget ovan — bokför det i
     # ledgern så nedströms requires och skills_used talar sanning.
@@ -472,6 +474,7 @@ async def run_outreach_draft_v2(
             case_context=base,
             playbook_role=_OUTREACH_ROLE,
             instruktioner=lager,
+            talamod_429=True,
         )
 
     # 2. snajp:humanizer-svenska — ALLTID sist (INV-LANG-002), minimal bas.
@@ -490,6 +493,7 @@ async def run_outreach_draft_v2(
         ),
         playbook_role=_OUTREACH_ROLE,
         instruktioner=lager,
+        talamod_429=True,
     )
 
     subject = strip_markdown(humanized.get("final_subject") or draft.get("subject") or "").strip()

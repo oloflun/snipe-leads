@@ -18,6 +18,7 @@ steg här — de görs i kod av anroparen. Modellen resonerar; koden agerar.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from dataclasses import dataclass, field
@@ -204,6 +205,7 @@ async def run_step(
     required_context_refs: tuple[str, ...] = (),
     playbook_role: str = "en svensk kundtjänst-playbook",
     instruktioner: Instruktionslager | None = None,
+    talamod_429: bool = False,
 ) -> dict[str, Any]:
     """Kör ETT skill-steg som ett eget LLM-anrop.
 
@@ -291,13 +293,38 @@ async def run_step(
         effective_model = getattr(settings, step.model_setting, "") or settings.model
 
     for attempt in (1, 2):
-        response = await client.chat.completions.create(
-            model=effective_model,
-            response_format={"type": "json_object"},
-            temperature=effective_temperature,
-            messages=messages,
-            **extra,
-        )
+        # talamod_429 (2026-09-06, uppmätt i development): ett 429 från
+        # Geminis MINUTKVOT är transient — men bara för anropare som får
+        # vänta. get_llm_client kör medvetet max_retries=1 med subsekund-
+        # backoff (rätt för chatten: dygnskvots-429 går inte över, och en
+        # människa väntar). Leadsjobben är bakgrund utan någon som väntar,
+        # så de får två tålmodiga omtag till (20 s, 40 s — honorerar
+        # Retry-After när Gemini skickar den). Fortfarande 429 efter ~60 s
+        # = dygnskvoten, och då ska jobbet bli failed, precis som förut.
+        # Uppmätt utan detta: batchkörning 16:06 fällde 2/2 researchjobb
+        # på fyra minut-429 i rad medan discovery-skrapningen var grön.
+        for vanta_forsok in (1, 2, 3):
+            try:
+                response = await client.chat.completions.create(
+                    model=effective_model,
+                    response_format={"type": "json_object"},
+                    temperature=effective_temperature,
+                    messages=messages,
+                    **extra,
+                )
+                break
+            except Exception as fel:  # noqa: BLE001 — bara 429 särbehandlas
+                ar_429 = getattr(fel, "status_code", None) == 429
+                if not (talamod_429 and ar_429 and vanta_forsok < 3):
+                    raise
+                paus = 20.0 * vanta_forsok
+                svar_huvud = getattr(getattr(fel, "response", None), "headers", None)
+                if svar_huvud is not None:
+                    try:
+                        paus = max(paus, float(svar_huvud.get("retry-after") or 0))
+                    except (TypeError, ValueError):
+                        pass
+                await asyncio.sleep(min(paus, 90.0))
         usage = getattr(response, "usage", None)
         if usage:
             tokens_in += getattr(usage, "prompt_tokens", 0) or 0
