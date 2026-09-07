@@ -79,6 +79,17 @@ class Storage(Protocol):
 
     async def list_mailboxes(self, tenant_id: str) -> list[dict[str, Any]]: ...
 
+    async def touch_mailbox_sync(
+        self, tenant_id: str, mailbox_id: str, *, last_error: str | None
+    ) -> None:
+        """Stämplar ett synkförsök: last_sync_at = nu, last_error = utfallet.
+
+        Kolumnerna fanns i fyra månader utan att någon kodväg skrev dem —
+        kundens 'senaste synk' stod tom för evigt och ett fel lösenord var
+        helt tyst (upptäckt 2026-09-07 när en bevakning läste null och drog
+        slutsatsen att pollern var död, fast den hade hämtat mail)."""
+        ...
+
     # -- Kunddata (alltid tenant-skopade) -----------------------------------
 
     async def find_or_create_customer(

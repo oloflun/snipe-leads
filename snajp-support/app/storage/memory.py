@@ -273,6 +273,14 @@ class MemoryStorage:
     async def list_mailboxes(self, tenant_id: str) -> list[dict[str, Any]]:
         return [m for m in self.mailboxes.values() if m["tenant_id"] == tenant_id]
 
+    async def touch_mailbox_sync(
+        self, tenant_id: str, mailbox_id: str, *, last_error: str | None
+    ) -> None:
+        rad = self.mailboxes.get(mailbox_id)
+        if rad and rad["tenant_id"] == tenant_id:
+            rad["last_sync_at"] = _now()
+            rad["last_error"] = last_error
+
     # -- Kunddata -----------------------------------------------------------
 
     async def find_or_create_customer(

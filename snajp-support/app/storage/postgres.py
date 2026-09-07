@@ -236,6 +236,16 @@ class PostgresStorage:
 
     # -- Kunddata -----------------------------------------------------------
 
+    async def touch_mailbox_sync(
+        self, tenant_id: str, mailbox_id: str, *, last_error: str | None
+    ) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                """update ss_mailboxes set last_sync_at = now(), last_error = $3
+                   where tenant_id = $1 and id = $2""",
+                tenant_id, mailbox_id, last_error,
+            )
+
     async def find_or_create_customer(
         self, tenant_id: str, *, email: str | None, phone: str | None, name: str | None
     ) -> dict[str, Any]:

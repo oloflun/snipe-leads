@@ -51,13 +51,27 @@ async def sync_mailbox(storage: Storage, tenant_id: str, tenant_slug: str, mailb
     """Hämtar och processar nya mail för EN inkorg."""
     settings = get_settings()
 
+    async def stampla(resultat: dict) -> dict:
+        """Varje synkFÖRSÖK stämplar raden: last_sync_at = nu, last_error =
+        utfallet. Kolumnerna stod oskrivna i fyra månader — kundens "senaste
+        synk" var tom för evigt och ett fel lösenord helt tyst. Stämpeln får
+        aldrig fälla synken: resultatet är redan framme, och en trasig
+        statistikskrivning är inte skäl att kasta bort det."""
+        try:
+            await storage.touch_mailbox_sync(
+                tenant_id, mailbox["id"], last_error=resultat.get("error")
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("Kunde inte stämpla synken för %s", mailbox.get("address"))
+        return resultat
+
     host = _host_for(mailbox)
     if not host:
-        return {
+        return await stampla({
             "fetched": 0,
             "processed": 0,
             "error": f"Ingen IMAP-värd angiven för {mailbox['address']} (sätt imap_host).",
-        }
+        })
 
     password = os.environ.get(password_env_name(tenant_slug), "")
     oauth_ready = bool(
@@ -67,11 +81,11 @@ async def sync_mailbox(storage: Storage, tenant_id: str, tenant_slug: str, mailb
     )
     if not password and not oauth_ready:
         # Inte ett fel: kunden har ännu inte lämnat app-lösenord eller OAuth.
-        return {
+        return await stampla({
             "fetched": 0,
             "processed": 0,
             "error": f"{password_env_name(tenant_slug)} eller IMAP OAuth saknas — hoppar över {mailbox['address']}.",
-        }
+        })
 
     inbound, error = await imap.fetch_new(
         host, mailbox["address"], password, settings.imap_folder,
@@ -87,7 +101,7 @@ async def sync_mailbox(storage: Storage, tenant_id: str, tenant_slug: str, mailb
         if email:
             await process_email(storage, tenant_id, email)
             processed += 1
-    return {"fetched": len(inbound), "processed": processed, "error": error}
+    return await stampla({"fetched": len(inbound), "processed": processed, "error": error})
 
 
 async def sync_imap_once(storage: Storage, tenant_id: str = DEFAULT_TENANT_ID) -> dict:
