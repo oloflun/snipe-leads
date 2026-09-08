@@ -1,5 +1,38 @@
 # Snipra Status
 
+## 2026-09-08 — Claude — designhookarnas spärrar: fyra falska larm bortmätta
+
+Den delade hookkedjan i `~/.claude/hooks/` behandlade backend-arbete som
+designarbete. Fyra spärrar sitter nu, var och en mätt eller testad mot det fall
+den påstår sig laga.
+
+**Skrivsidan:** `design-route.py` och `design-gate.py` frågade `is_ui_file(path)`
+UTAN innehåll, och den grenen svarar True för varje tvetydig `.ts`/`.js`.
+Följden var routes som ingen skill kan ladda — rapporten 2026-09-02 bar GAP = 2
+på `lib/snajp/standard.ts`, `testtenant.ts` och `provisionering.ts` — och en
+`gate-pass` kvitterad för varje backend-fil. Ny `is_ui_write()` löser ut
+innehållet ur hunken PLUS filen på disk; hunken ensam räcker inte, för en hunk
+ur en äkta komponent bär ofta ingen UI-signal.
+
+**Promptsidan:** `\b` behandlar `-` och `.` som ordgränser, så `design` inuti
+`design-gate.py` läste som det nakna ordet och fällde ut hela designproceduren i
+en ren Python-uppgift. `strip_code_tokens()` maskerar nu kod innan ordlistan får
+se prompten. Samtidigt lagades svensk böjning och sammansättning: "komponenten",
+"layouten" och "designarbetet" träffade inte alls tidigare.
+
+**Mätt, inte gissat:** `matt_bojning.py` kör tre stadier av ordlistan över
+12 056 rader av repots egen prosa. 301 → 321 → 336 träffar, noll bortfall, varje
+ny träff granskad för hand. Det var så engelskans "designed" hittades — inte
+designavsikt, och fyra av nitton nya träffar.
+
+**Tre fel som testerna hittade EFTER att spärren skrivits:** sammansättningens
+svans var `\w`, som innehåller `_`, och åt därmed upp `DESIGN_GATE_BLOCKING` och
+rev upp kod-token-spärren igen. Böjningsändelsen `isk` lät "heroisk" fyra som
+stark signal. Och två böjningar av samma ord räknades som två svaga signaler, så
+ett enda begrepp räckte för att fyra.
+
+Snipe-leads egen kod är orörd. Tester och mätverktyg: `~/.claude/hooks/tests/`.
+
 ## 2026-09-02 (kväll) — Claude — kundbesök läckte in i Snajps egen arbetsyta; Livrustnings produktbeskrivning var tom
 
 Anton rapporterade att Affärskontext visade IDENTISKT innehåll (Snajps egen
