@@ -23,7 +23,6 @@ from agents import RunContextWrapper, function_tool
 from ..config import get_settings
 from ..leads.untrusted_content import wrap_untrusted_content
 from .leads_context import ResearchContext
-from .skatteverket_tools import SKATTEVERKET_TOOLS
 
 
 def _as_markdown(data: object) -> str:
@@ -96,5 +95,4 @@ async def scrape_registered_source(ctx: RunContextWrapper[ResearchContext], url:
     return await _scrape_registered_source_impl(ctx.context, url)
 
 
-# Uppslaget gäller tenantens eget bolag, aldrig prospektet som researchas.
-RESEARCH_TOOLS = [scrape_registered_source, *SKATTEVERKET_TOOLS]
+RESEARCH_TOOLS = [scrape_registered_source]

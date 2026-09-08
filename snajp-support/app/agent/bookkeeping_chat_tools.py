@@ -55,9 +55,7 @@ from ..bookkeeping.kontoplan import KONTOPLAN, KOSTNADSKATEGORIER, foresla_konto
 from ..bookkeeping.kunskap import KUNSKAP, sok_amne
 from ..bookkeeping.period import berakna_period
 from ..bookkeeping.verifieringsgrind import STATUS_GRANSKA, STATUS_KLAR
-from ..leads.skatteverket import SkatteverketAtkomst
 from ..storage.base import Storage
-from .skatteverket_tools import SKATTEVERKET_TOOLS
 
 #: Vitlistade statusfilter för `lista_underlag`. Allt annat avvisas med ett
 #: svar modellen kan agera på, inte med ett kast.
@@ -80,10 +78,6 @@ class BokforingChattContext:
     storage: Storage
     tenant_id: str
     resultat: list[str] = field(default_factory=list)
-    #: Sätts av SERVERN efter kundens BankID-inloggning mot Skatteverket, och
-    #: aldrig av modellen (INV-SEC-002). None = uppslaget är inte tillgängligt
-    #: den här körningen. Läses av app/agent/skatteverket_tools.py.
-    skatteverket: SkatteverketAtkomst | None = None
 
     def spara(self, nyttolast: dict[str, Any]) -> str:
         text = json.dumps(nyttolast, ensure_ascii=False, default=str)
@@ -279,13 +273,4 @@ async def sla_upp_kunskap(ctx: RunContextWrapper[BokforingChattContext], amne: s
 
 #: Verktygsuppsättningen. Ingen av dem skriver, ingen av dem räknar, och ingen
 #: av dem tar emot en tenant.
-# Skatteverket-uppslaget läggs till sist och kommer från en EGEN modul —
-# det är inte ett bokföringsdataset utan ett verktyg alla agenter delar.
-# Se app/agent/skatteverket_tools.py.
-BOKFORING_CHATT_TOOLS = [
-    hamta_periodrapport,
-    lista_underlag,
-    sla_upp_konto,
-    sla_upp_kunskap,
-    *SKATTEVERKET_TOOLS,
-]
+BOKFORING_CHATT_TOOLS = [hamta_periodrapport, lista_underlag, sla_upp_konto, sla_upp_kunskap]

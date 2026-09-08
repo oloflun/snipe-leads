@@ -42,7 +42,6 @@ from ..leads.language_gate import last_humanizer_variant
 from ..leads.outreach_playbook import OUTREACH_V2
 from ..leads.research_playbook import RESEARCH_V2
 from ..leads.soul import load_soul
-from ..leads.skatteverket import SkatteverketAtkomst
 from .leads_context import OutreachContext
 from .leads_tools import _queue_outreach_draft_impl, _request_human_handoff_impl
 from .leads_agent import (
@@ -127,7 +126,6 @@ async def run_research_step_v2(
     context_pack: str,
     brief: str,
     is_test: bool = False,
-    skatteverket: SkatteverketAtkomst | None = None,
 ) -> dict[str, Any]:
     """Fas B för ETT prospekt i ETT LLM-anrop. Samma returnycklar som
     leads_agent.run_research_step — plus company_summary/likely_pains på
@@ -139,7 +137,7 @@ async def run_research_step_v2(
     prospect_row = await storage.get_prospect(tenant_id, prospect_id) or {}
 
     material, scraped_sources, scrape_errors, kontakt_diagnostik = await _gather_registered_sources(
-        storage, tenant_id, prospect_id, skatteverket, webbplats=prospect_row.get("website")
+        storage, tenant_id, prospect_id, webbplats=prospect_row.get("website")
     )
     sources_block = material or "(inget källmaterial kunde hämtas — se scrape_errors)"
 
@@ -404,7 +402,6 @@ async def run_outreach_draft_v2(
     research_summary: str = "",
     research_evidence: tuple[str, ...] = (),
     is_test: bool = False,
-    skatteverket: SkatteverketAtkomst | None = None,
 ) -> dict[str, Any]:
     """Fas C i TVÅ skill-steg (kombinerat skapa/skärp/granska + humanizer),
     sedan köar KODEN utkastet (INV-SEC-004). Samma returnycklar som
@@ -505,7 +502,6 @@ async def run_outreach_draft_v2(
         tenant_id=tenant_id,
         thread_id=thread_id,
         prospect_email=prospect_email,
-        skatteverket=skatteverket,
     )
     escalated_steps = [s.skill for s in trace.steps if s.escalated]
     queue_result: dict[str, Any] = {}

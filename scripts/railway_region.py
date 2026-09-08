@@ -7,19 +7,12 @@
 ## Varför det här skriptet finns
 
 Samma fråga som `redis_kontroll.py` ställer om jobbkön, fast om själva
-appservrarna: **ligger de i EU/EES?** Två skäl, och båda är juridiska snarare
-än tekniska:
+appservrarna: **ligger de i EU/EES?** Skälet är juridiskt snarare än tekniskt.
 
-1. **Kunddata i drift.** Railway-miljön `development` är en spegel av
-   produktionen (CLAUDE.md) — riktiga kunders ärenden och mejladresser ligger
-   i den databasen och passerar de containrarna. En tjänst i `us-west1` är en
-   tredjelandsöverföring, samma resonemang som stängde av DeepSeek.
-
-2. **Skatteverkets API.** De allmänna villkoren för Beskattningsengagemang
-   (§5) kräver uttryckligen att uppgifterna tas emot i "en teknisk miljö som
-   fysiskt befinner sig inom EU- eller EES-området". Kör `api` utanför EU går
-   den integrationen inte att teckna avtal för — oavsett hur färdig koden är.
-   Se `app/leads/skatteverket.py` och DEPLOY.md:s Skatteverket-avsnitt.
+Railway-miljön `development` är en spegel av produktionen (CLAUDE.md) —
+riktiga kunders ärenden och mejladresser ligger i den databasen och passerar
+de containrarna. En tjänst i `us-west1` är en tredjelandsöverföring, samma
+resonemang som stängde av DeepSeek för kunddata.
 
 ## Skriptet gissar aldrig
 
@@ -111,12 +104,8 @@ def main() -> None:
         for rad in avvikande:
             print(f"  - {rad}")
         print(
-            "\nTvå följder, båda juridiska:\n"
-            "  * development speglar produktionen — riktig kunddata utanför EU kräver\n"
-            "    samma SCC-bedömning som DeepSeek-spärren i CLAUDE.md.\n"
-            "  * Skatteverkets API (§5 i de allmänna villkoren) kräver att uppgifterna\n"
-            "    tas emot inom EU/EES. Integrationen går inte att teckna avtal för\n"
-            "    förrän tjänsten ligger rätt."
+            "\ndevelopment speglar produktionen — riktig kunddata utanför EU kräver\n"
+            "samma SCC-bedömning som DeepSeek-spärren i CLAUDE.md."
         )
         sys.exit(1)
 
