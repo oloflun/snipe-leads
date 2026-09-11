@@ -2,7 +2,9 @@ import Link from "next/link";
 
 import { KonverteraTestkund } from "@/components/admin/KonverteraTestkund";
 import { Kundprofil } from "@/components/admin/Kundprofil";
+import { Tillaggsvaljare } from "@/components/admin/Tillaggsvaljare";
 import { hamtaKundprofil } from "@/lib/actions/agentinstruktioner";
+import { hamtaTillagg } from "@/lib/actions/tillagg";
 import { listTenants, unwrap } from "@/lib/data/admin";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +34,7 @@ export default async function Page({
   const { agent } = await searchParams;
   const agentType = agent === "leads" ? "leads" : "support";
   const { profil, error } = await hamtaKundprofil(id, agentType);
+  const tillagg = await hamtaTillagg(id);
 
   if (error || !profil) {
     return (
@@ -86,6 +89,23 @@ export default async function Page({
 
       <div className="mt-10">
         <Kundprofil profil={profil} />
+      </div>
+
+      {/* Tilläggen står EFTER agentprofilen och före befordran: profilen är
+          det som formar agentens svar, tilläggen är vad agenten får göra —
+          och befordran flyttar hela kunden. Ordningen är från innehåll till
+          omfattning till flytt.
+
+          Läsfelet skickas ned i stället för att fälla sidan: en trasig
+          tilläggsläsning ska inte dölja instruktionerna ovanför, som är
+          sidans huvudsak. */}
+      <div className="mt-14">
+        <Tillaggsvaljare
+          tenantId={profil.tenant.id}
+          kundnamn={profil.tenant.name}
+          initialaAddons={tillagg.addons ?? []}
+          lasfel={tillagg.error}
+        />
       </div>
 
       {profil.tenant.slug?.startsWith("testkund-") ? (
