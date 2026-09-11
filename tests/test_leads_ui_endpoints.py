@@ -99,6 +99,37 @@ def test_proxyprefixet_i_formularet_ar_det_proxyn_lyssnar_pa():
     assert (ROOT / "app" / "api" / "snajp-support" / "[...path]" / "route.ts").exists()
 
 
+# -- Leadslistor -----------------------------------------------------------
+#
+# Samma korsning som formuläret ovan, för listvyn: "Skriv mejl"-bron POSTa:r
+# /leads/listor/{id}/items/{id}/prospekt, och en omdöpt backend-route hade
+# gjort knappen till en 404 som ser ut som ett serverfel. Template-parametrar
+# (`${encodeURIComponent(...)}`) normaliseras till {p} och jämförs mot
+# OpenAPI-schemats {param}-segment.
+
+LISTVY = ROOT / "components" / "leads" / "LeadslistorView.tsx"
+
+
+def test_listvyns_anrop_traffar_routes_som_finns():
+    vagar = set(_ANROP_RE.findall(LISTVY.read_text(encoding="utf-8")))
+    assert vagar, "LeadslistorView har slutat använda anropa() — testet mäter inget."
+    assert any("/prospekt" in v for v in vagar), "Skriv mejl-bron saknas i listvyn."
+
+    normaliserade = {re.sub(r"\$\{[^}]*\}", "{p}", v) for v in vagar}
+    mall = {re.sub(r"\{[^}]*\}", "{p}", p) for p in _registrerade_vagar()}
+    saknade = sorted(
+        v
+        for v in normaliserade
+        if not any(v.startswith(prefix) for prefix in _NEXT_PROXIES)
+        and f"/api{v}" not in mall
+    )
+
+    assert not saknade, (
+        f"LeadslistorView anropar {saknade}, som inte finns i backenden. "
+        "Proxyn lägger på /api — se app/api/snajp-support/[...path]/route.ts."
+    )
+
+
 # -- Översikten ------------------------------------------------------------
 #
 # Startsidan räknar sina siffror ur sju endpoints. Samma sorts strängar i båda

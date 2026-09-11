@@ -241,3 +241,219 @@ async def test_item_count_i_listvyn():
     await storage.add_lead_list_item(TENANT, list_id=lista["id"], company_name="B")
     rader = await storage.list_lead_lists(TENANT)
     assert rader[0]["item_count"] == 2
+
+
+# -- Listrad → prospekt (bron till Email studio) ----------------------------
+#
+# Endpointen är LLM-fri: den lyfter en rad in i prospektregistret där
+# utkastkedjan, granskningskön och sändvägen redan finns. Testerna vaktar
+# tre saker: origin följer listan (send-guardens spärr noll), dedupe mot
+# registret (Ur & Penn-dubbletterna, uppmätt 2026-09-06), och proveniensen
+# (art. 14: källänken följer med som prospect_source).
+
+
+class _FakeApp:
+    def __init__(self, storage):
+        self.state = _AppState()
+        self.state.storage = storage
+
+
+class _FakeRequest:
+    def __init__(self, storage):
+        self.app = _FakeApp(storage)
+
+
+async def _lista_med_rad(storage, *, is_test=False, **falt) -> tuple[dict, dict]:
+    lista = await storage.create_lead_list(
+        TENANT, titel="Bron", icp={}, antal=5, is_test=is_test
+    )
+    rad = await storage.add_lead_list_item(
+        TENANT,
+        list_id=lista["id"],
+        company_name=falt.pop("company_name", "Nordkap Moduler AB"),
+        **{
+            "website": "https://nordkapmoduler.se",
+            "ort": "Umeå",
+            "contact_email": "kundservice@nordkapmoduler.se",
+            "contact_level": "role_address",
+            "source_name": "jobtech",
+            "source_url": "https://arbetsformedlingen.se/annons/1",
+            **falt,
+        },
+    )
+    return lista, rad
+
+
+async def test_listrad_blir_prospekt_med_proveniens():
+    from app.api.leads import listrad_till_prospekt
+
+    storage = MemoryStorage()
+    lista, rad = await _lista_med_rad(storage)
+
+    svar = await listrad_till_prospekt(
+        _FakeRequest(storage), lista["id"], rad["id"], {"tenant_id": TENANT}
+    )
+
+    assert svar["skapad"] is True
+    p = svar["prospect"]
+    assert p["origin"] == "import", "en riktig listas rad ska vara skickbar"
+    assert p["contact_email"] == "kundservice@nordkapmoduler.se"
+    assert p["website"] == "https://nordkapmoduler.se"
+    assert p["ort"] == "Umeå"
+    assert p["contact_level"] == "role_address"
+    # Art. 14: källänken (annonsen) OCH bolagets egen webb registreras.
+    urls = await storage.list_prospect_source_urls(TENANT, p["id"])
+    assert "https://arbetsformedlingen.se/annons/1" in urls
+    assert "https://nordkapmoduler.se" in urls
+
+
+async def test_testlistas_rad_far_origin_test():
+    from app.api.leads import listrad_till_prospekt
+
+    storage = MemoryStorage()
+    lista, rad = await _lista_med_rad(storage, is_test=True)
+
+    svar = await listrad_till_prospekt(
+        _FakeRequest(storage), lista["id"], rad["id"], {"tenant_id": TENANT}
+    )
+    assert svar["prospect"]["origin"] == "test", "spärr noll ska täcka testlistans rader"
+
+
+async def test_dubbelklick_ateranvander_prospektet():
+    from app.api.leads import listrad_till_prospekt
+
+    storage = MemoryStorage()
+    lista, rad = await _lista_med_rad(storage)
+
+    första = await listrad_till_prospekt(
+        _FakeRequest(storage), lista["id"], rad["id"], {"tenant_id": TENANT}
+    )
+    andra = await listrad_till_prospekt(
+        _FakeRequest(storage), lista["id"], rad["id"], {"tenant_id": TENANT}
+    )
+
+    assert andra["skapad"] is False
+    assert andra["prospect"]["id"] == första["prospect"]["id"]
+    assert len(await storage.list_prospects(TENANT, limit=500)) == 1
+
+
+async def test_befintligt_prospekt_med_annat_skiftlage_ateranvands():
+    from app.api.leads import listrad_till_prospekt
+
+    storage = MemoryStorage()
+    befintligt = await storage.create_prospect(TENANT, company_name="NORDKAP MODULER AB")
+    lista, rad = await _lista_med_rad(storage)
+
+    svar = await listrad_till_prospekt(
+        _FakeRequest(storage), lista["id"], rad["id"], {"tenant_id": TENANT}
+    )
+    assert svar["skapad"] is False
+    assert svar["prospect"]["id"] == befintligt["id"]
+
+
+async def test_okand_rad_ger_404_inte_500():
+    from fastapi import HTTPException
+
+    from app.api.leads import listrad_till_prospekt
+
+    storage = MemoryStorage()
+    lista, _ = await _lista_med_rad(storage)
+
+    with pytest.raises(HTTPException) as fel:
+        await listrad_till_prospekt(
+            _FakeRequest(storage),
+            lista["id"],
+            "00000000-0000-4000-a000-00000000dead",
+            {"tenant_id": TENANT},
+        )
+    assert fel.value.status_code == 404
+
+    with pytest.raises(HTTPException) as fel:
+        await listrad_till_prospekt(
+            _FakeRequest(storage), lista["id"], "inte-ett-uuid", {"tenant_id": TENANT}
+        )
+    assert fel.value.status_code == 404
+
+
+async def test_rad_fran_annan_tenants_lista_ger_404():
+    """Tenantisolering: ett list-id ur en annan kunds arbetsyta ska svara
+    404, inte läcka raden. Samma kontrakt som update_customer_contact."""
+    from fastapi import HTTPException
+
+    from app.api.leads import listrad_till_prospekt
+
+    storage = MemoryStorage()
+    lista, rad = await _lista_med_rad(storage)
+
+    with pytest.raises(HTTPException) as fel:
+        await listrad_till_prospekt(
+            _FakeRequest(storage),
+            lista["id"],
+            rad["id"],
+            {"tenant_id": "00000000-0000-4000-a000-00000000beef"},
+        )
+    assert fel.value.status_code == 404
+
+
+async def test_rad_utan_sajt_far_sajten_uppslagen_och_adressen_skordad():
+    """Kundkravet: en kontaktväg per rad. En träff utan sajt ska få sajten
+    uppslagen (grounded, EN fråga — bara för rader utan adress) och sedan gå
+    genom samma regex-skörd som alla andra. Uppslaget får aldrig fälla
+    listan: ett None lämnar raden med streck, inte med fel."""
+    storage = MemoryStorage()
+    jobs = MemoryJobStore()
+    app_state = _AppState()
+    app_state.storage = storage
+    app_state.jobs = jobs
+
+    lista = await _bestall(storage)
+    job_id = await jobs.create(tenant_id=TENANT, status="queued")
+
+    utan_sajt = [{"company_name": "Fjälldata AB", "ort": "Kiruna"}]
+    with (
+        patch("app.api.leads.hitta_bolag", new=AsyncMock(return_value=utan_sajt)),
+        patch(
+            "app.leads.discovery.sla_upp_webbplats",
+            new=AsyncMock(return_value="https://fjalldata.se"),
+        ) as uppslag,
+        patch(
+            "app.leads.discovery.hamta_kontaktvag",
+            new=AsyncMock(
+                return_value={"contact_email": "info@fjalldata.se", "contact_level": "role_address"}
+            ),
+        ),
+    ):
+        await hantera_leads_jobb(app_state, _payload(job_id, lista["id"]))
+
+    uppslag.assert_awaited_once()
+    items = await storage.list_lead_list_items(TENANT, lista["id"])
+    assert items[0]["website"] == "https://fjalldata.se"
+    assert items[0]["contact_email"] == "info@fjalldata.se"
+
+
+async def test_misslyckat_sajtuppslag_lamnar_raden_utan_adress_inte_fel():
+    storage = MemoryStorage()
+    jobs = MemoryJobStore()
+    app_state = _AppState()
+    app_state.storage = storage
+    app_state.jobs = jobs
+
+    lista = await _bestall(storage)
+    job_id = await jobs.create(tenant_id=TENANT, status="queued")
+
+    with (
+        patch(
+            "app.api.leads.hitta_bolag",
+            new=AsyncMock(return_value=[{"company_name": "Okänd Industri AB"}]),
+        ),
+        patch(
+            "app.leads.discovery.sla_upp_webbplats",
+            new=AsyncMock(side_effect=RuntimeError("kvoten slut")),
+        ),
+    ):
+        await hantera_leads_jobb(app_state, _payload(job_id, lista["id"]))
+
+    rad = await storage.get_lead_list(TENANT, lista["id"])
+    assert rad["status"] == "klar", "uppslaget får aldrig fälla listan"
+    items = await storage.list_lead_list_items(TENANT, lista["id"])
+    assert items[0]["contact_email"] is None

@@ -1852,6 +1852,117 @@ async def hamta_leadslista(
     return {"list": lista, "items": await storage.list_lead_list_items(tenant["tenant_id"], list_id)}
 
 
+#: Art. 14-grunden för en listträff som blir prospekt: raden kom ur publika
+#: källor (platsannons, nyhet, bolagets egen sajt) och bär källänken vidare.
+_LAGLIG_GRUND_LISTKALLA = (
+    "Berättigat intresse för B2B-prospektering; uppgiften hämtad ur en "
+    "publik källa (GDPR art. 6.1 f), källänk bevarad."
+)
+
+#: source_name (discovery-federationens ursprung) → prospect_sources
+#: check-villkor (migration 010). Okänt ursprung faller till 'other' —
+#: aldrig till en mer specifik typ än belägget bär.
+_LISTKALLA_TILL_SOURCE_TYPE = {
+    "jobtech": "job_signal",
+    "nyheter": "public_news",
+    "rss": "public_news",
+}
+
+
+@router.post("/api/leads/listor/{list_id}/items/{item_id}/prospekt")
+async def listrad_till_prospekt(
+    request: Request,
+    list_id: str,
+    item_id: str,
+    tenant: dict = Depends(require_tenant),
+) -> dict:
+    """Lyfter EN listrad in i prospektregistret — vägen från leadslista till
+    Email studio.
+
+    Hela poängen är återbruk: ett prospekt har redan utkastkedjan
+    (`POST /leads/outreach/draft`), granskningskön, godkännandet och
+    sändvägen. Listan behöver därför ingen egen mejlpipeline — bara den här
+    bron. INV-SEC-004 består: list-JOBBET har fortfarande inget sändverktyg;
+    det som kan mejlas är prospektet, efter människans godkännande, precis
+    som alla andra prospekt.
+
+    LLM-fri med flit: befordran kostar ingenting och kan köras på hela
+    listan. Utkastet (som kostar) skapas först när kunden öppnar bolaget.
+
+    Dedupe mot registret på bolagsnamn (casefold) — samma jämförelse som
+    batchens uteslutningsmängd i `_samla_korningens_prospekt`. En rad som
+    redan finns återanvänds i stället för att dubbleras; svaret säger vilket
+    via `skapad`, så knappen kan köras om utan att fråga.
+
+    Origin följer listan: en testlistas rader blir `origin='test'` (skyddade
+    av send-guardens spärr noll), en riktig listas blir `'import'` — samma
+    värde som migration 039 reserverade för exakt den här klassen av inflöde.
+    """
+    kraev_uuid(list_id, "listan")
+    kraev_uuid(item_id, "raden")
+    tenant_id = tenant["tenant_id"]
+    storage = request.app.state.storage
+
+    lista = await storage.get_lead_list(tenant_id, list_id)
+    if not lista:
+        raise HTTPException(status_code=404, detail="Listan finns inte.")
+    rad = next(
+        (
+            r
+            for r in await storage.list_lead_list_items(tenant_id, list_id)
+            if str(r.get("id")) == item_id
+        ),
+        None,
+    )
+    if rad is None:
+        raise HTTPException(status_code=404, detail="Raden finns inte i listan.")
+
+    namn = (rad.get("company_name") or "").strip()
+    if not namn:
+        raise HTTPException(status_code=422, detail="Raden saknar bolagsnamn.")
+
+    befintliga = await storage.list_prospects(tenant_id, limit=500)
+    for p in befintliga:
+        if str(p.get("company_name") or "").casefold() == namn.casefold():
+            return {"prospect": p, "skapad": False}
+
+    prospect = await storage.create_prospect(
+        tenant_id,
+        company_name=namn,
+        contact_name=rad.get("contact_name"),
+        contact_email=rad.get("contact_email"),
+        origin="test" if lista.get("is_test") else "import",
+        profil={
+            k: rad[k]
+            for k in ("website", "ort", "contact_role", "contact_level")
+            if rad.get(k) is not None
+        },
+    )
+
+    website = rad.get("website")
+    if website:
+        await _registrera_webb(storage, tenant_id, prospect["id"], website)
+    source_url = rad.get("source_url")
+    if source_url:
+        källnamn = str(rad.get("source_name") or "").casefold()
+        source_type = next(
+            (typ for nyckel, typ in _LISTKALLA_TILL_SOURCE_TYPE.items() if nyckel in källnamn),
+            "other",
+        )
+        try:
+            await storage.create_prospect_source(
+                tenant_id,
+                prospect_id=prospect["id"],
+                source_url=source_url,
+                source_type=source_type,
+                lawful_basis=_LAGLIG_GRUND_LISTKALLA,
+            )
+        except Exception:  # noqa: BLE001 — proveniens får inte fälla befordran
+            logger.exception("Kunde inte registrera listkälla för %s", prospect["id"])
+
+    return {"prospect": prospect, "skapad": True}
+
+
 async def _run_list_job(app_state, payload: dict) -> None:
     """Bygger EN leadslista: discovery-federationen (JobTech + nyhets-RSS
     först, max ett grounded Gemini-anrop som utfyllnad — se
@@ -1880,9 +1991,11 @@ async def _run_list_job(app_state, payload: dict) -> None:
 
     await storage.set_lead_list_status(tenant_id, lista["id"], status="byggs")
     try:
-        from ..leads.discovery import hamta_kontaktvag
+        from ..leads.discovery import hamta_kontaktvag, sla_upp_webbplats
 
-        traffar = await hitta_bolag(lista.get("icp") or {}, int(lista["antal"]))
+        icp = lista.get("icp") or {}
+        traffar = await hitta_bolag(icp, int(lista["antal"]))
+        geografi = (icp.get("geography") or [None])[0] if isinstance(icp.get("geography"), list) else icp.get("geography")
         for traff in traffar:
             # Kontaktskörden (LLM-fri, openleads ground-truth-mönster):
             # källträffar från annonser/nyheter bär sällan kontaktväg, men
@@ -1890,6 +2003,20 @@ async def _run_list_job(app_state, payload: dict) -> None:
             # egen sajt med regex, aldrig gissad, aldrig privat. Första
             # skarpa listan (pixelgranskningen 2026-09-02) hade fem rader
             # med "—" i kontaktkolumnen; det är det här strecket som stängs.
+            #
+            # Saknas SAJTEN slås den upp först (grounded Gemini, EN fråga per
+            # rad utan adress) — kundkravet är en kontaktväg per rad, och en
+            # rad utan sajt hade annars aldrig ens nått regex-skörden. Bara
+            # för rader utan adress: raderna som redan bär en kostar inget.
+            if not traff.get("contact_email") and not traff.get("website"):
+                try:
+                    webb = await sla_upp_webbplats(
+                        traff.get("company_name") or "", geografi=geografi
+                    )
+                except Exception:  # noqa: BLE001 — uppslag får inte fälla listan
+                    webb = None
+                if webb:
+                    traff = {**traff, "website": webb}
             if not traff.get("contact_email") and traff.get("website"):
                 kontakt = await hamta_kontaktvag(traff["website"])
                 if kontakt["contact_email"]:

@@ -1,8 +1,12 @@
 "use client";
 
+import { Send } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
+import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { btnPrimary, btnSecondary, EmptyState, SkeletonRows } from "@/components/ui";
+import { lasOffertForUtkast } from "@/lib/actions/affarskontext";
+import type { EmailStudioData } from "@/lib/data/emails";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
 
@@ -35,6 +39,8 @@ type Lista = {
 };
 
 type ListRad = {
+  /** Radens id i lead_list_items — behövs för Skriv mejl-bron nedan. */
+  id: string;
   company_name: string;
   website?: string | null;
   ort?: string | null;
@@ -449,6 +455,56 @@ export function LeadslistorView() {
  * upp, kort under — sex kolumner krympta till 375px blir oläsliga.
  */
 function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] }>) {
+  // I demon finns ingen riktig utkastkedja att köra mot — mejlrutan döljs,
+  // CSV:n står kvar.
+  const { isDemo, vy } = useDashboard();
+  const mejlbro = !isDemo && vy !== "demo";
+
+  // Skriv mejl: rutan med Email studio öppnas UNDER raden. Raden lyfts först
+  // in i prospektregistret (LLM-fritt, POST .../items/{id}/prospekt), sedan
+  // skrivs utkastet av den riktiga kedjan (POST /leads/outreach/draft) och
+  // landar i granskningskön — samma väg som bolagssidans utkast, ingen egen
+  // mejlpipeline. Ett öppet rad-id i taget: två samtidiga utkastjobb från
+  // samma lista är dubbel kostnad för samma klick.
+  const [oppenRad, setOppenRad] = useState<string | null>(null);
+  const [laggerAlla, setLaggerAlla] = useState(false);
+  const [allaResultat, setAllaResultat] = useState<string | null>(null);
+  const [radFel, setRadFel] = useState<string | null>(null);
+
+  const laggAllaIRegistret = useCallback(async () => {
+    setLaggerAlla(true);
+    setRadFel(null);
+    setAllaResultat(null);
+    let nya = 0;
+    let fanns = 0;
+    let fel = 0;
+    // Sekventiellt med flit: befordran är billig, och en parallell skur mot
+    // dedupe-kontrollen hade kunnat skapa just de dubbletter den finns för
+    // att stoppa.
+    for (const rad of items) {
+      try {
+        const svar = await anropa<{ skapad?: boolean }>(
+          `/leads/listor/${encodeURIComponent(lista.id)}/items/${encodeURIComponent(rad.id)}/prospekt`,
+          { method: "POST" }
+        );
+        if (svar.skapad) nya += 1;
+        else fanns += 1;
+      } catch {
+        fel += 1;
+      }
+    }
+    setAllaResultat(
+      [
+        nya ? `${nya} nya i registret` : null,
+        fanns ? `${fanns} fanns redan` : null,
+        fel ? `${fel} gick inte att lägga in` : null
+      ]
+        .filter(Boolean)
+        .join(" · ") || "Inga rader att lägga in."
+    );
+    setLaggerAlla(false);
+  }, [items, lista.id]);
+
   if (!items.length) {
     return (
       <p className="mt-4 border-t border-ink/10 pt-4 text-[15px] text-ink/60">
@@ -461,22 +517,46 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
     <div className="mt-4 rounded-card border border-ink/10 bg-paper p-4 md:p-5">
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
         <p className="text-[13px] text-ink/50">{items.length} bolag i listan</p>
-        {/* CSV:n byggs helt på klientsidan av raderna som redan är hämtade —
-            ingen ny endpoint, och det som laddas ner är exakt det som syns. */}
-        <button
-          type="button"
-          onClick={() => laddaNerCsv(lista.titel, items)}
-          className={cn(btnSecondary)}
-        >
-          Ladda ner CSV
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Hela listan in i Leads-registret i ett svep — därifrån kan en
+              körning researcha och skriva utkast till flera på en gång. */}
+          {mejlbro ? (
+            <button
+              type="button"
+              onClick={() => void laggAllaIRegistret()}
+              disabled={laggerAlla}
+              className={cn(btnSecondary)}
+            >
+              {laggerAlla ? "Lägger in…" : "Lägg alla i registret"}
+            </button>
+          ) : null}
+          {/* CSV:n byggs helt på klientsidan av raderna som redan är hämtade —
+              ingen ny endpoint, och det som laddas ner är exakt det som syns. */}
+          <button
+            type="button"
+            onClick={() => laddaNerCsv(lista.titel, items)}
+            className={cn(btnSecondary)}
+          >
+            Ladda ner CSV
+          </button>
+        </div>
       </div>
+      {allaResultat ? (
+        <p className="mt-3 text-[13px] text-ink/55">
+          {allaResultat} — bolagen ligger under Leads och kan researchas och mejlas därifrån.
+        </p>
+      ) : null}
+      {radFel ? (
+        <p role="alert" className="mt-3 max-w-[70ch] break-words text-[14px] text-danger">
+          {radFel}
+        </p>
+      ) : null}
 
       <div className="mt-4 hidden overflow-x-auto border-y border-ink/15 md:block">
-        <table className="w-full min-w-[860px] border-collapse text-[15px]">
+        <table className="w-full min-w-[960px] border-collapse text-[15px]">
           <thead>
             <tr className="border-b border-ink/15 text-left">
-              {["Bolag", "Ort", "Kontakt", "Kontaktnivå", "Signal", "Källa"].map(
+              {[..."Bolag,Ort,Kontakt,Kontaktnivå,Signal,Källa".split(","), ...(mejlbro ? [""] : [])].map(
                 (rubrik, i, alla) => (
                   <th
                     key={rubrik}
@@ -493,7 +573,7 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
             </tr>
           </thead>
           <tbody className="divide-y divide-ink/15">
-            {items.map((rad, index) => (
+            {items.map((rad, index) => [
               <tr key={`${rad.company_name}-${index}`} className="transition hover:bg-paper2/60">
                 <th scope="row" className="py-4 pr-6 text-left font-normal">
                   <p className="text-[15px] font-semibold tracking-[-0.01em]">
@@ -512,7 +592,7 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
                 </td>
                 <td className="py-4 pr-6 text-[14px] text-ink/72">{kontaktniva(rad) ?? "—"}</td>
                 <td className="py-4 pr-6 text-[15px] leading-6 text-ink/72">{signaltext(rad)}</td>
-                <td className="py-4">
+                <td className="py-4 pr-6">
                   {rad.source_url ? (
                     <a
                       href={rad.source_url}
@@ -526,8 +606,33 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
                     <span className="text-[14px] text-ink/55">{rad.source_name ?? "—"}</span>
                   )}
                 </td>
-              </tr>
-            ))}
+                {mejlbro ? (
+                  <td className="py-4 text-right">
+                    {rad.contact_email ? (
+                      <button
+                        type="button"
+                        onClick={() => setOppenRad(oppenRad === rad.id ? null : rad.id)}
+                        aria-expanded={oppenRad === rad.id}
+                        className={cn(btnSecondary, "whitespace-nowrap")}
+                      >
+                        {oppenRad === rad.id ? "Stäng mejlet" : "Skriv mejl"}
+                      </button>
+                    ) : (
+                      // Ingen adress — inget mejl. Strecket säger det utan att
+                      // en död knapp behöver förklara sig.
+                      <span className="text-[14px] text-ink/40">—</span>
+                    )}
+                  </td>
+                ) : null}
+              </tr>,
+              oppenRad === rad.id ? (
+                <tr key={`${rad.id}-mejl`}>
+                  <td colSpan={7} className="pb-6 pt-1">
+                    <MejlRuta lista={lista} rad={rad} />
+                  </td>
+                </tr>
+              ) : null
+            ])}
           </tbody>
         </table>
       </div>
@@ -563,9 +668,271 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
                 </a>
               ) : null}
             </div>
+            {mejlbro && rad.contact_email ? (
+              <button
+                type="button"
+                onClick={() => setOppenRad(oppenRad === rad.id ? null : rad.id)}
+                aria-expanded={oppenRad === rad.id}
+                className={cn(btnSecondary, "mt-3 w-full")}
+              >
+                {oppenRad === rad.id ? "Stäng mejlet" : "Skriv mejl"}
+              </button>
+            ) : null}
+            {mejlbro && oppenRad === rad.id ? (
+              <div className="mt-3">
+                <MejlRuta lista={lista} rad={rad} />
+              </div>
+            ) : null}
           </li>
         ))}
       </ul>
     </div>
   );
+}
+
+/**
+ * Mejlrutan under en listrad: Email studio, på plats.
+ *
+ * Kedjan när rutan öppnas: (1) raden lyfts in i prospektregistret —
+ * LLM-fritt och idempotent, en befintlig rad återanvänds; (2) utkastet
+ * skrivs av samma kedja som bolagssidans ("/leads/outreach/draft"), med
+ * radens signal och källa som underlag; (3) utkastet landar i
+ * granskningskön och visas här i Email studio-editorn, med Förbättra/
+ * Personalisera-knapparna och "Godkänn och skicka".
+ *
+ * Ingenting skickas från den här rutan — godkännandet släpper utkastet till
+ * samma sändkö som alla andra prospekt (INV-SEC-004 består: listjobbet har
+ * inget sändverktyg, det har bara människan efter granskning).
+ */
+function MejlRuta({ lista, rad }: Readonly<{ lista: Lista; rad: ListRad }>) {
+  const [fas, setFas] = useState<"skapar" | "klar" | "fel">("skapar");
+  const [steg, setSteg] = useState("Lägger bolaget i registret…");
+  const [fel, setFel] = useState<string | null>(null);
+  const [data, setData] = useState<EmailStudioData | null>(null);
+  const [queueItemId, setQueueItemId] = useState<string | null>(null);
+  const [godkant, setGodkant] = useState(false);
+  const [godkannBusy, setGodkannBusy] = useState(false);
+  const [godkannFel, setGodkannFel] = useState<string | null>(null);
+
+  const skapa = useCallback(async () => {
+    setFas("skapar");
+    setFel(null);
+    try {
+      setSteg("Lägger bolaget i registret…");
+      const befordran = await anropa<{ prospect?: { id: string } }>(
+        `/leads/listor/${encodeURIComponent(lista.id)}/items/${encodeURIComponent(rad.id)}/prospekt`,
+        { method: "POST" }
+      );
+      const prospectId = befordran.prospect?.id;
+      if (!prospectId) throw new Error("Bolaget kunde inte läggas i registret.");
+
+      // Finns ett utkast redan (rutan öppnad förut, eller en körning har
+      // hunnit skriva ett)? Då visas det — ett andra utkastjobb för samma
+      // bolag är dubbel kostnad för samma fråga.
+      setSteg("Ser efter om ett utkast redan finns…");
+      try {
+        const befintligt = await anropa<{
+          utkast?: { subject?: string | null; body?: string | null } | null;
+          queue_item_id?: string | null;
+        }>(`/leads/prospects/${encodeURIComponent(prospectId)}/utkast`);
+        if (befintligt.utkast?.body) {
+          setData(
+            byggStudioData(rad, prospectId, befintligt.utkast.subject, befintligt.utkast.body, null)
+          );
+          setQueueItemId(befintligt.queue_item_id ?? null);
+          setFas("klar");
+          return;
+        }
+      } catch {
+        // Ett fel här ska inte hindra ett nytt utkast från att skrivas.
+      }
+
+      setSteg("Agenten skriver utkastet…");
+      let offert: string | null = null;
+      try {
+        offert = await lasOffertForUtkast();
+      } catch {
+        offert = null;
+      }
+      const koat = await anropa<{
+        job_id?: string;
+        fase?: string;
+        subject?: string;
+        body?: string;
+        escalated?: boolean;
+        escalation_reason?: string | null;
+        queue_item_id?: string | null;
+      }>("/leads/outreach/draft", {
+        method: "POST",
+        body: JSON.stringify({
+          prospect_id: prospectId,
+          prospect_email: rad.contact_email,
+          company_name: rad.company_name,
+          offer_summary: offert ?? undefined,
+          brief:
+            `Skriv ett kort, personligt första mejl till kontaktvägen på ${rad.company_name}. ` +
+            "Utgå från signalen i underlaget och håll dig till det som är känt. " +
+            "Ingen hype, inga superlativ, ren text. Utkastet ska köas för granskning, inte skickas.",
+          research_summary: [
+            rad.ort ? `Ort: ${rad.ort}` : null,
+            rad.signal ? `Signal: ${signaltext(rad)}` : null,
+            rad.source_name ? `Källa: ${rad.source_name}` : null,
+            rad.contact_name || rad.contact_role
+              ? `Kontakt: ${[rad.contact_name, rad.contact_role].filter(Boolean).join(", ")}`
+              : null
+          ]
+            .filter(Boolean)
+            .join("\n"),
+          research_evidence: rad.source_url ? [rad.source_url] : []
+        })
+      });
+
+      let svar = koat;
+      if (koat.job_id && (koat.fase === "skriver" || !koat.body)) {
+        for (let forsok = 0; forsok < 90; forsok += 1) {
+          await new Promise((r) => setTimeout(r, forsok < 5 ? 800 : 2000));
+          const jobb = await anropa<{
+            status?: string;
+            error?: string;
+            result?: typeof koat;
+          }>(`/leads/jobb/${encodeURIComponent(koat.job_id)}`);
+          if (jobb.status === "completed" && jobb.result) {
+            svar = jobb.result;
+            break;
+          }
+          if (jobb.status === "failed") {
+            throw new Error(jobb.error || "Utkastet kunde inte skrivas.");
+          }
+        }
+      }
+
+      if (svar.escalated || !svar.body) {
+        throw new Error(
+          svar.escalation_reason ||
+            "Agenten lämnade över till en människa i stället för att skriva klart utkastet."
+        );
+      }
+
+      setData(byggStudioData(rad, prospectId, svar.subject, svar.body, offert));
+      setQueueItemId(svar.queue_item_id ?? null);
+      setFas("klar");
+    } catch (orsak) {
+      setFel(felmeddelande(orsak));
+      setFas("fel");
+    }
+  }, [lista.id, rad]);
+
+  useEffect(() => {
+    void skapa();
+    // Kör en gång när rutan öppnas för raden — skapa() är stabil per rad.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rad.id]);
+
+  const godkann = useCallback(async () => {
+    if (!queueItemId) return;
+    setGodkannBusy(true);
+    setGodkannFel(null);
+    try {
+      await anropa(`/leads/queue/${encodeURIComponent(queueItemId)}/approve`, { method: "POST" });
+      setGodkant(true);
+    } catch (orsak) {
+      setGodkannFel(felmeddelande(orsak));
+    } finally {
+      setGodkannBusy(false);
+    }
+  }, [queueItemId]);
+
+  return (
+    <div className="rounded-card border border-ink/15 bg-paper2/50 p-4 md:p-5">
+      <p className="kicker text-mineral">Mejl till {rad.contact_email ?? rad.company_name}</p>
+
+      {fas === "skapar" ? (
+        <p className="mt-3 text-[14px] text-ink/55" role="status">
+          {steg}
+        </p>
+      ) : null}
+
+      {fas === "fel" ? (
+        <div className="mt-3">
+          <p role="alert" className="max-w-[70ch] text-[14px] leading-6 text-danger">
+            {fel}
+          </p>
+          <button type="button" onClick={() => void skapa()} className={cn(btnSecondary, "mt-3")}>
+            Försök igen
+          </button>
+        </div>
+      ) : null}
+
+      {fas === "klar" && data ? (
+        <div className="mt-4">
+          <EmailStudioEditor data={data} compact />
+          <p className="mt-4 max-w-[65ch] text-[13px] leading-6 text-ink/50">
+            Godkänn skickar utkastet som det sparades i granskningskön. Ändringar i fälten ovan
+            uppdaterar bara den här vyn tills en sparväg finns.
+          </p>
+          <div className="mt-4 border-t border-ink/15 pt-4">
+            {godkant ? (
+              <p role="status" className="text-[15px] text-moss">
+                Godkänt. Mejlet ligger nu i sändkön.
+              </p>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  disabled={godkannBusy || !queueItemId}
+                  onClick={() => void godkann()}
+                  className={cn(btnPrimary, "disabled:cursor-wait disabled:opacity-60")}
+                >
+                  <Send className="h-4 w-4" aria-hidden />
+                  {godkannBusy ? "Godkänner…" : "Godkänn och skicka"}
+                </button>
+                {!queueItemId ? (
+                  <p className="mt-3 max-w-[65ch] text-[13px] leading-6 text-ink/50">
+                    Utkastet saknar ett kö-id och kan inte godkännas härifrån. Se granskningskön
+                    under Leads.
+                  </p>
+                ) : null}
+                {godkannFel ? (
+                  <p role="alert" className="mt-3 max-w-[65ch] text-[14px] text-danger">
+                    {godkannFel}
+                  </p>
+                ) : null}
+              </>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Radens fält som Email studio-kontext: signalen och kontakten följer med
+ *  till Förbättra/Personalisera-knapparna, så omskrivningar behåller bolaget
+ *  och sammanhanget i stället för att bli generisk text. */
+function byggStudioData(
+  rad: ListRad,
+  prospectId: string,
+  subject: string | null | undefined,
+  body: string,
+  offert: string | null
+): EmailStudioData {
+  return {
+    source: "database",
+    businessContext: null,
+    email: {
+      id: prospectId,
+      subject: subject || `Till ${rad.company_name}`,
+      body,
+      variantLength: "medium",
+      variantType: "cold_outreach",
+      status: "draft",
+      companyId: prospectId,
+      contactId: null,
+      companyName: rad.company_name,
+      signal: signaltext(rad) === "—" ? null : signaltext(rad),
+      offer: offert,
+      cta: null,
+      contactName: rad.contact_name ?? null
+    }
+  };
 }
