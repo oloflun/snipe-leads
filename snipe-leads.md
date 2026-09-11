@@ -12,7 +12,7 @@ milestone_blockers:
   - "main ligger ~80 commits efter development och kor gammal kod (snipe-zfc)"
   - "IMAP_PASSWORD_LIVRUSTNING saknas pa Railway api (bade main och development)"
   - "Vantar pa kundens bekraftelse av garantiperioden"
-updated: 2026-09-11
+updated: 2026-09-12
 ---
 
 # Snipra / Snajp
