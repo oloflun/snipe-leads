@@ -442,8 +442,7 @@ Varför: uppmätt 2026-09-08 sa chatten "försök igen om en stund" om en tom
 förskottskredit, en leadskörning blev stående i processing, leverantörens
 råa engelska JSON nådde kundytan via jobbläsvägen — och ingen larmade oss.
 Kunden var den som upptäckte driftstoppet.
-Test: snajp-support/tests/test_kvotfel.py ·
-snajp-support/tests/notifications/test_prioriterat_mejl.py
+Test: snajp-support/tests/test_kvotfel.py
 Införd: 2026-09-12 · Upphävs endast genom waiver
 
 ### INV-STORE-001 — MemoryStorage och PostgresStorage har identiska signaturer
