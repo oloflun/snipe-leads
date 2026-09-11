@@ -29,12 +29,10 @@ import { sattTillagg } from "@/lib/actions/tillagg";
  */
 export function Tillaggsvaljare({
   tenantId,
-  kundnamn,
   initialaAddons,
   lasfel
 }: Readonly<{
   tenantId: string;
-  kundnamn: string;
   initialaAddons: AddonKey[];
   lasfel?: string;
 }>) {
@@ -74,8 +72,12 @@ export function Tillaggsvaljare({
       <h2 id="tillagg-rubrik" className="kicker text-mineral">
         Tillägg
       </h2>
+      {/* Kundnamnet står redan som sidans rubrik. Interpolerat i en mening
+          blev det dessutom oläsligt för arbetsytor vars NAMN är en URL —
+          uppmätt i pixlar: "Det Testarbetsyta https://www.snajp.se får
+          utöver sitt paket". */}
       <p className="mt-2 max-w-[70ch] text-[0.9375rem] leading-7 text-mineral">
-        Det {kundnamn} får utöver sitt paket. Slås på av oss, inte av kunden — ett tillägg
+        Vad kunden får utöver sitt paket. Slås på av oss, inte av kunden — ett tillägg
         kräver uppsättning på vår sida, och en vy som tänds innan den kan leverera är värre
         än ingen vy. Ändringen gäller direkt.
       </p>

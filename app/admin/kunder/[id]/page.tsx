@@ -102,7 +102,6 @@ export default async function Page({
       <div className="mt-14">
         <Tillaggsvaljare
           tenantId={profil.tenant.id}
-          kundnamn={profil.tenant.name}
           initialaAddons={tillagg.addons ?? []}
           lasfel={tillagg.error}
         />
