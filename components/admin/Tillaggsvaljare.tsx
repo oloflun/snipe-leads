@@ -26,6 +26,9 @@ import { sattTillagg } from "@/lib/actions/tillagg";
  * av det `sattTillagg` LÄSER TILLBAKA ur kolumnen. Misslyckas skrivningen
  * återställs läget och felet skrivs ut — en växel som står kvar i påslaget
  * läge efter ett misslyckat anrop är en lögn om kundens entitlement.
+ *
+ * Raden som skrivs bär "— sparar…" i etiketten under tiden. Det är statusen
+ * som redan fanns i `sparar` och aldrig renderades: spårad, men osynlig.
  */
 export function Tillaggsvaljare({
   tenantId,
@@ -42,6 +45,13 @@ export function Tillaggsvaljare({
   const [kvitto, setKvitto] = useState<string | null>(null);
 
   async function vaxla(nyckel: AddonKey, pa: boolean) {
+    // Grind i stället för `disabled` på knapparna. Att sätta `disabled` på
+    // den växel som just klickats BLURRAR den — webbläsaren tar fokus från
+    // ett inaktiverat element — så en tangentbordsanvändare tappar sin plats
+    // vid varje påslag och får tabba ned igen. Guarden stoppar samma kapplöp-
+    // ning utan att röra fokus.
+    if (sparar !== null) return;
+
     const fore = addons;
     const nasta = pa ? [...addons, nyckel] : addons.filter((a) => a !== nyckel);
     setAddons(nasta);
@@ -86,10 +96,9 @@ export function Tillaggsvaljare({
         {addonCatalog.map((spec) => (
           <div key={spec.key} className="py-5">
             <Vaxel
-              etikett={spec.name}
+              etikett={sparar === spec.key ? `${spec.name} — sparar…` : spec.name}
               beskrivning={spec.what}
               pa={addons.includes(spec.key)}
-              disabled={sparar !== null}
               onChange={(nytt) => void vaxla(spec.key, nytt)}
             />
             {/* `why` är vad tillägget KOSTAR oss att sätta upp — den texten

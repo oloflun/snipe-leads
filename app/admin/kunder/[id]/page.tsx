@@ -33,8 +33,14 @@ export default async function Page({
   const { id } = await params;
   const { agent } = await searchParams;
   const agentType = agent === "leads" ? "leads" : "support";
-  const { profil, error } = await hamtaKundprofil(id, agentType);
-  const tillagg = await hamtaTillagg(id);
+  // Parallellt, inte i följd: profilen är ett master-nyckelanrop över HTTP
+  // till snajp-support och tilläggen en databasrundtur, och de vet inget om
+  // varandra. Sekventiellt lade de sina latenser på varandra i en sida som
+  // redan bär maxDuration = 60.
+  const [{ profil, error }, tillagg] = await Promise.all([
+    hamtaKundprofil(id, agentType),
+    hamtaTillagg(id)
+  ]);
 
   if (error || !profil) {
     return (
