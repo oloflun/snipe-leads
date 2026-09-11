@@ -425,6 +425,27 @@ samtidigt talade om för kunden att 2440/1510 var rätt. Ett default-argument h�
 Test: snajp-support/tests/bookkeeping/test_betalstatus.py
 Införd: 2026-09-10 · Upphävs endast genom waiver
 
+### INV-QUOTA-001 — Kreditslut behandlas aldrig som en övergående kvot
+`app/kvotfel.py` skiljer 429-klassens två betydelser: minut-/dygnskvot
+(transient — tålamod och "försök igen" är rätt) och KREDITSLUT ("prepayment
+credits are depleted" — permanent tills en människa betalar). Tre svar hänger
+på klassningen: step_runnerns tålamodsloop väntar ALDRIG ut ett kreditslut
+(raise direkt), kundytorna visar `KUNDTEXT_KREDITSLUT` utan "försök igen"
+(jobbläsvägen GET /api/jobs översätter även redan lagrad råtext, och
+lead_lists.felorsak översätts vid skrivning), och `larma_kreditslut` larmar
+OSS — platform_event + prioriterat mejl, deduplicerat per dygn. Larmets
+mejlväg går via Resend (HTTPS) före SMTP, eftersom Railway blockerar utgående
+SMTP — ett internlarm som inte kan lämna containern är inget larm.
+Markörerna speglas i lib/admin/handelsetext.ts (`kreditslut`-tolken, prövad
+före `kvot`); ändra båda om du ändrar den ena.
+Varför: uppmätt 2026-09-08 sa chatten "försök igen om en stund" om en tom
+förskottskredit, en leadskörning blev stående i processing, leverantörens
+råa engelska JSON nådde kundytan via jobbläsvägen — och ingen larmade oss.
+Kunden var den som upptäckte driftstoppet.
+Test: snajp-support/tests/test_kvotfel.py ·
+snajp-support/tests/notifications/test_prioriterat_mejl.py
+Införd: 2026-09-12 · Upphävs endast genom waiver
+
 ### INV-STORE-001 — MemoryStorage och PostgresStorage har identiska signaturer
 `tests/invariants/test_inv_store_001.py` jämför varje publik metod i
 `Storage`-protokollet mot BÅDA implementationerna: att metoden finns, att

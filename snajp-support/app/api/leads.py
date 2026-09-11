@@ -93,6 +93,18 @@ def _har_sokbar_malgrupp(icp: dict) -> bool:
     )
 
 
+async def _larma_vid_kreditslut(app_state, tenant_id: str, fel: Exception) -> None:
+    """Kreditslut i ett bakgrundsjobb: larma oss (dygnsdeduplicerat).
+
+    Kundtexten hanteras redan av jobbläsvägen (GET /api/jobs — se
+    kvotfel.oversatt_felstext); det här är den andra halvan av samma beslut:
+    kunden ska aldrig vara den som upptäcker att krediterna är slut."""
+    from ..kvotfel import ar_kreditslut, larma_kreditslut
+
+    if ar_kreditslut(fel):
+        await larma_kreditslut(app_state.storage, tenant_id=tenant_id, kalla="leads")
+
+
 def _http_feltext(fel: HTTPException) -> str:
     detalj = fel.detail
     return detalj if isinstance(detalj, str) else _FEL_INGA_TRAFFAR
@@ -761,6 +773,7 @@ async def _run_draft_job(app_state, payload: dict) -> None:
         )
     except Exception as fel:  # noqa: BLE001 — jobbet ska bli failed, inte tyst dö
         logger.exception("Utkastjobb misslyckades (%s)", job_id)
+        await _larma_vid_kreditslut(app_state, payload["tenant_id"], fel)
         await app_state.jobs.fail(job_id, str(fel))
         await storage.set_leads_job_status(
             payload["tenant_id"], job_id=job_id, status="failed", scope="draft"
@@ -1551,6 +1564,7 @@ async def _run_batch(app_state, payload: dict) -> None:
         )
     except Exception as fel:  # noqa: BLE001 — jobbet ska bli failed, inte tyst dö
         logger.exception("Batchsökning misslyckades (%s)", job_id)
+        await _larma_vid_kreditslut(app_state, tenant["tenant_id"], fel)
         await app_state.jobs.fail(job_id, str(fel))
         await app_state.storage.set_leads_job_status(
             tenant["tenant_id"], job_id=job_id, status="failed", scope="batch"
@@ -1738,6 +1752,7 @@ async def _run_batch_prospect(
             tenant["tenant_id"], job_id=job_id, status="completed", scope=scope, prospect_id=prospect_id
         )
     except Exception as error:  # noqa: BLE001 — ett trasigt prospekt fäller inte batchen
+        await _larma_vid_kreditslut(app_state, tenant["tenant_id"], error)
         await app_state.jobs.fail(job_id, f"Prospekt {prospect_id}: {error}")
         await storage.set_leads_job_status(
             tenant["tenant_id"], job_id=job_id, status="failed", scope=scope, prospect_id=prospect_id
@@ -2047,7 +2062,14 @@ async def _run_list_job(app_state, payload: dict) -> None:
         await storage.set_leads_job_status(tenant_id, job_id=job_id, status="failed", scope="lista")
     except Exception as fel:  # noqa: BLE001 — listan ska bli 'fel', inte tyst dö
         logger.exception("Listbygget misslyckades (%s)", job_id)
-        await storage.set_lead_list_status(tenant_id, lista["id"], status="fel", felorsak=str(fel))
+        await _larma_vid_kreditslut(app_state, tenant_id, fel)
+        # felorsak läses direkt ur lead_lists av listvyn — jobbläsvägens
+        # översättning når den aldrig, så den översätts vid skrivningen.
+        from ..kvotfel import oversatt_felstext
+
+        await storage.set_lead_list_status(
+            tenant_id, lista["id"], status="fel", felorsak=oversatt_felstext(str(fel))
+        )
         await app_state.jobs.fail(job_id, str(fel))
         await storage.set_leads_job_status(tenant_id, job_id=job_id, status="failed", scope="lista")
 

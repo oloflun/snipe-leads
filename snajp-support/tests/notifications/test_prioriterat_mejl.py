@@ -440,3 +440,87 @@ async def test_en_oforandrad_trasig_period_mejlar_bara_en_gang(konfigurerad, smt
 
     assert rapport["status"] == "granska_manuellt", "Testet mäter fel sak: perioden gick ihop."
     assert server.send_message.call_count == 1
+
+
+# -- Resend-vägen (2026-09-12): larmet måste kunna lämna Railway ------------
+#
+# Railway blockerar utgående SMTP på trial/hobby (uppmätt 2026-08-28), så
+# Gmail-vägen kan aldrig leverera därifrån — internlarmet var i praktiken
+# avstängt i drift. Resend (HTTPS) är den bevisade sändvägen och väljs
+# därför FÖRE SMTP när nyckeln finns, samma ordning och samma skäl som
+# get_send_provider.
+
+
+@pytest.fixture
+def resend_konfigurerad(monkeypatch):
+    monkeypatch.delenv("INTERNLARM_SMTP_ANVANDARE", raising=False)
+    monkeypatch.delenv("INTERNLARM_SMTP_LOSENORD", raising=False)
+    monkeypatch.setenv("RESEND_API_KEY", "re_test_inte_en_riktig_nyckel_000")
+    monkeypatch.setenv("SMTP_FROM", "kontakt@snajp.se")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+@pytest.mark.anyio
+async def test_resend_racker_utan_smtp_konfiguration(resend_konfigurerad):
+    """INTERNLARM_SMTP_* osatt + Resend satt = mejlet går, via HTTPS."""
+    with patch.object(prioriterat_mejl, "_skicka_via_resend", new=AsyncMock()) as resend:
+        skickat = await skicka_prioriterat(
+            "Testlarm",
+            tenant_id="t-1",
+            vad="Något hände.",
+            varfor="Därför.",
+            nyckel="resend-test-1",
+        )
+    assert skickat is True
+    resend.assert_awaited_once()
+    _, nyckel_arg, avsandare_arg = resend.await_args.args
+    assert nyckel_arg == "re_test_inte_en_riktig_nyckel_000"
+    assert avsandare_arg == "kontakt@snajp.se"
+
+
+@pytest.mark.anyio
+async def test_resend_vinner_over_smtp_nar_bada_finns(resend_konfigurerad, monkeypatch):
+    """Den som satt en Resend-nyckel gjorde det för att SMTP inte fungerar
+    på plattformen — en kvarglömd SMTP-konfiguration får inte vinna."""
+    monkeypatch.setenv("INTERNLARM_SMTP_ANVANDARE", "snajpsupport@gmail.com")
+    monkeypatch.setenv("INTERNLARM_SMTP_LOSENORD", "app-losenord-16-tecken")
+    get_settings.cache_clear()
+
+    with (
+        patch.object(prioriterat_mejl, "_skicka_via_resend", new=AsyncMock()) as resend,
+        patch.object(prioriterat_mejl.smtplib, "SMTP") as smtp,
+    ):
+        skickat = await skicka_prioriterat(
+            "Testlarm",
+            tenant_id="t-1",
+            vad="Något hände.",
+            varfor="Därför.",
+            nyckel="resend-test-2",
+        )
+    assert skickat is True
+    resend.assert_awaited_once()
+    smtp.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_misslyckad_resend_slapper_dubblettnyckeln(resend_konfigurerad):
+    """Samma kontrakt som SMTP-vägen: ett tillfälligt sändfel får inte bli
+    permanent tystnad via dubblettspärren."""
+    with patch.object(
+        prioriterat_mejl,
+        "_skicka_via_resend",
+        new=AsyncMock(side_effect=RuntimeError("Resend avvisade sändningen (401)")),
+    ):
+        forsta = await skicka_prioriterat(
+            "Testlarm", tenant_id="t-1", vad="x", varfor="y", nyckel="resend-test-3"
+        )
+    assert forsta is False
+
+    with patch.object(prioriterat_mejl, "_skicka_via_resend", new=AsyncMock()) as resend:
+        andra = await skicka_prioriterat(
+            "Testlarm", tenant_id="t-1", vad="x", varfor="y", nyckel="resend-test-3"
+        )
+    assert andra is True
+    resend.assert_awaited_once()

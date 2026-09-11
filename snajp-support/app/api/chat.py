@@ -12,6 +12,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ..config import get_settings
+from ..kvotfel import KUNDTEXT_KREDITSLUT, ar_kreditslut, larma_kreditslut, oversatt_felstext
 from . import rate_limit_db
 from .deps import require_tenant
 from .schemas import ChatRequest
@@ -129,7 +130,13 @@ async def _process(
         # leverantörstext läcker — meningen är vår egen; diagnosen står i
         # loggen och i platform_events ovan.
         felnamn = type(fel).__name__
-        if "RateLimit" in felnamn or "429" in str(fel)[:80]:
+        if ar_kreditslut(fel):
+            # Permanent tills en människa fyllt på — "försök igen om en
+            # stund" vore vilseledande, och rätt mottagare av beskedet är
+            # vi. Larmet dedupliceras per dygn.
+            kundtext = KUNDTEXT_KREDITSLUT
+            await larma_kreditslut(app_state.storage, tenant_id=tenant_id, kalla="chat")
+        elif "RateLimit" in felnamn or "429" in str(fel)[:80]:
             kundtext = (
                 "Svarskapaciteten är tillfälligt slut hos vår AI-leverantör. "
                 "Vi fyller på — försök gärna igen om en stund."
@@ -275,4 +282,12 @@ async def get_job(
     job = await request.app.state.jobs.get(job_id)
     if not job or job.get("tenant_id") != tenant["tenant_id"]:
         raise HTTPException(status_code=404, detail="Jobbet finns inte eller har städats bort.")
-    return {"status": job["status"], "result": job.get("result"), "error": job.get("error")}
+    # Läsvägens skyddsnät: jobbfel skrivs på många ställen, och råtext från
+    # leverantören ("Error code: 429 - [{'error': ...}]") har nått kundytan
+    # den här vägen. Översättningen här täcker varje pollande yta på en
+    # gång — gamla redan-lagrade fel inräknade. Icke-kvotfel passerar orörda.
+    return {
+        "status": job["status"],
+        "result": job.get("result"),
+        "error": oversatt_felstext(job.get("error")),
+    }

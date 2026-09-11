@@ -29,6 +29,7 @@ from ..agentcore.overlays import load_global_instructions as load_global_instruc
 from ..agentcore.overlays import load_overlay
 from ..agentcore.packs import PlaybookStep, RunLedger, check_output_contract, check_preconditions
 from ..config import get_settings
+from ..kvotfel import ar_kreditslut
 from .llm import get_llm_client
 
 _OVERLAY_OPEN = """## TILLÄGGSINSTRUKTIONER (Snajp-overlay: {name})
@@ -315,6 +316,14 @@ async def run_step(
                 break
             except Exception as fel:  # noqa: BLE001 — bara 429 särbehandlas
                 ar_429 = getattr(fel, "status_code", None) == 429
+                # KREDITSLUT är inte transient: "prepayment credits are
+                # depleted" går inte över av 60 sekunders tålamod, det går
+                # över av att en människa betalar. Att vänta här hade bara
+                # skjutit upp samma fel — och hållit jobbet i processing
+                # medan kunden tittar på. Rakt upp direkt, så felvägen
+                # (jobb-fail, larm, ärlig kundtext) får det i stället.
+                if ar_429 and ar_kreditslut(fel):
+                    raise
                 if not (talamod_429 and ar_429 and vanta_forsok < 3):
                     raise
                 paus = 20.0 * vanta_forsok

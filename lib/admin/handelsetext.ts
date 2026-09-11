@@ -178,6 +178,39 @@ function svar(
 }
 
 /**
+ * Slut förskottskredit hos Google — kreditslut, inte kvottak. Skillnaden bär
+ * hela åtgärden: en kvot återställs av sig själv, en kredit återställs av att
+ * någon betalar. Speglar markörerna i snajp-support/app/kvotfel.py; ändra
+ * båda om du ändrar den ena. Prövas FÖRE `kvot` — kreditslutet bär också 429.
+ */
+const kreditslut: Tolkare = (text) => {
+  const t = text.toLowerCase();
+  const traff =
+    t.includes("prepayment credits") ||
+    t.includes("credits are depleted") ||
+    t.includes("billing#prepay") ||
+    t.includes("kreditslut") ||
+    t.includes("ai-krediterna är slut");
+  if (!traff) return null;
+
+  return svar(
+    "kvot",
+    { sv: "AI-krediterna är slut — alla agenter står", en: "AI credits depleted — all agents are down" },
+    {
+      sv:
+        "Googles förskottskredit är förbrukad, och varje modellanrop avvisas tills den fylls på. " +
+        "Det här går INTE över av sig självt — åtgärden är att fylla på krediterna i ai.studio/projects " +
+        "(och överväga auto-påfyllning). Alla agenter i alla arbetsytor är utan kapacitet under tiden.",
+      en:
+        "Google's prepaid credit is exhausted, and every model call is rejected until it is topped up. " +
+        "This does NOT resolve on its own — the fix is topping up the credits at ai.studio/projects " +
+        "(and considering auto top-up). Every agent in every workspace is without capacity meanwhile."
+    },
+    text
+  );
+};
+
+/**
  * Kvottak hos AI-leverantören. Den absolut vanligaste raden i loggen, och den
  * som gjorde mest skada som råtext: samma fel dök upp i fyra formuleringar och
  * såg ut som fyra problem.
@@ -455,6 +488,7 @@ const internt: Tolkare = (text) => {
  * smala. Smalast först, bredast sist.
  */
 const TOLKARE: Tolkare[] = [
+  kreditslut,
   kvot,
   modellSaknas,
   // Mail FÖRE behörighet: `SMTPAuthenticationError` innehåller ordet

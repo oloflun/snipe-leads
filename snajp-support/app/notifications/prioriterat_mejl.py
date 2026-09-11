@@ -190,6 +190,33 @@ def nollstall_dubblettminne() -> None:
     _SEDDA.clear()
 
 
+def _resend_konfiguration() -> tuple[str, str] | None:
+    """Resend-nyckel och avsändaradress, eller None.
+
+    Går FÖRE SMTP av samma skäl som `get_send_provider` (send_provider.py):
+    Railway blockerar utgående SMTP på trial/hobby — uppmätt 2026-08-28,
+    portarna 587/465/2525 ger alla timeout — så Gmail-vägen kan aldrig
+    leverera därifrån. Ett internlarm som inte kan lämna containern är
+    inget larm: kreditslutet 2026-09-08 hade mejlat ingenting alls, och
+    kunden hade fortsatt vara den som upptäckte driftstoppet.
+    """
+    settings = get_settings()
+    nyckel = (getattr(settings, "resend_api_key", "") or "").strip()
+    avsandare = (getattr(settings, "smtp_from", "") or "").strip()
+    if not nyckel or not avsandare:
+        return None
+    return nyckel, avsandare
+
+
+async def _skicka_via_resend(mejl: PrioriteratMejl, nyckel: str, avsandare: str) -> None:
+    """HTTPS-vägen. Återanvänder ResendMailer — en andra Resend-klient hade
+    varit en andra adress till samma leverantör att hålla i synk."""
+    from ..leads.send_provider import ResendMailer
+
+    mailer = ResendMailer(api_key=nyckel, avsandare=avsandare, avsandarnamn="Snajp internlarm")
+    await mailer.send(to=MOTTAGARE, subject=mejl.amne(), body=mejl.brodtext())
+
+
 def _skicka_blockerande(mejl: PrioriteratMejl, anvandare: str, losenord: str) -> None:
     """Den faktiska SMTP-sessionen. Körs i en tråd, aldrig på event-loopen."""
     meddelande = EmailMessage()
@@ -231,10 +258,14 @@ async def skicka_prioriterat(
         True om mejlet gick iväg. False vid osatt konfiguration, dubblett
         eller fel — alla tre är samma sak för anroparen: fortsätt.
     """
+    resend = _resend_konfiguration()
     konfiguration = _konfiguration()
-    if konfiguration is None:
+    if resend is None and konfiguration is None:
         logger.info(
-            "Prioriterat mejl hoppades över (INTERNLARM_SMTP_* inte satt): %s — %s", rubrik, vad
+            "Prioriterat mejl hoppades över (varken RESEND_API_KEY+SMTP_FROM "
+            "eller INTERNLARM_SMTP_* satt): %s — %s",
+            rubrik,
+            vad,
         )
         return False
 
@@ -245,12 +276,19 @@ async def skicka_prioriterat(
     mejl = PrioriteratMejl(
         rubrik=rubrik, tenant_id=tenant_id, vad=vad, varfor=varfor, lank=lank
     )
-    anvandare, losenord = konfiguration
     try:
-        await asyncio.wait_for(
-            asyncio.to_thread(_skicka_blockerande, mejl, anvandare, losenord),
-            timeout=_TIDSTAK_SEKUNDER,
-        )
+        if resend is not None:
+            resend_nyckel, avsandare = resend
+            await asyncio.wait_for(
+                _skicka_via_resend(mejl, resend_nyckel, avsandare),
+                timeout=_TIDSTAK_SEKUNDER,
+            )
+        else:
+            anvandare, losenord = konfiguration
+            await asyncio.wait_for(
+                asyncio.to_thread(_skicka_blockerande, mejl, anvandare, losenord),
+                timeout=_TIDSTAK_SEKUNDER,
+            )
     except Exception as fel:  # noqa: BLE001 — hela poängen: mejlet får inte fälla ärendet
         # Nyckeln plockas bort igen. Misslyckas sändningen ska nästa försök få
         # gå fram — annars gör dubblettspärren ett tillfälligt fel permanent.
