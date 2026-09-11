@@ -1,5 +1,14 @@
 # Snipra Status
 
+## 2026-09-12 — Claude — Vertex AI deployat och verifierat pa bada Railway-miljoerna
+
+Koden fran 2026-09-11 committad, pushad och deployad. Service account JSON
+satt lokalt och pa Railway (development + main). `gemini-3.6-flash` finns inte
+i Vertex AI — default andrad till `gemini-2.5-flash`. `MODEL` satt pa bada
+miljoerna. Bada verifierade: `mode=live`. Embeddings via Vertex AI:s OpenAI-
+compat endpoint ar trasig (Google-bugg, 500) — systemet faller tillbaka pa
+svensk full-text-sokning.
+
 ## 2026-09-11 — Claude — Vertex AI-stod implementerat (service account JSON + OAuth2)
 
 Google tog bort Cloud-krediter fran AI Studio. Hela Python-backenden stodjer

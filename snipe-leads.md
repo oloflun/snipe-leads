@@ -28,7 +28,7 @@ and Supabase are the dead chain — do not deploy there, do not write there.
 GitHub Actions job as of 2026-08-25; previously a second manual push). `main`
 mirrors to `railway-main`. The live dev URL is
 `https://web-development-6c85.up.railway.app`. The model provider is
-**Gemini** (`gemini-3.6-flash`, free tier — see the rate-limit gotcha below),
+**Gemini** (`gemini-2.5-flash` via Vertex AI — see the Vertex AI section below),
 not DeepSeek: `Settings.llm_provider_fault()` in `snajp-support/app/config.py`
 hard-fails startup if `LLM_PROVIDER=deepseek` in any environment that carries
 real customer data (`main`, `development` — development is a **mirror** of
