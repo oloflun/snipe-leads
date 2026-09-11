@@ -26,6 +26,7 @@ from .base import (
     bk_belopp,
     bk_datum,
     kontrollera_bk_balans,
+    kontrollera_bk_betalstatus,
     kontrollera_bk_riktning,
     kontrollera_bk_status,
     normalisera_kunddata,
@@ -2815,17 +2816,19 @@ class PostgresStorage:
         momssats: Decimal | None = None,
         riktning: str | None = None,
         kategori: str | None = None,
+        betalstatus: str | None = None,
         anmarkning: str = "",
     ) -> dict[str, Any]:
         kontrollera_bk_status(status)
         kontrollera_bk_riktning(riktning)
+        kontrollera_bk_betalstatus(betalstatus)
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
                 """
                 insert into bk_underlag
                   (tenant_id, sha256, filnamn, mimetyp, status, datum, motpart,
-                   brutto, momssats, riktning, kategori, anmarkning)
-                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                   brutto, momssats, riktning, kategori, betalstatus, anmarkning)
+                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                 returning *
                 """,
                 tenant_id,
@@ -2839,6 +2842,7 @@ class PostgresStorage:
                 bk_belopp(momssats, "momssats"),
                 riktning,
                 kategori,
+                betalstatus,
                 anmarkning,
             )
         return _row(record)
@@ -2893,12 +2897,15 @@ class PostgresStorage:
         momssats: Decimal | None = None,
         riktning: str | None = None,
         kategori: str | None = None,
+        betalstatus: str | None = None,
         anmarkning: str | None = None,
     ) -> dict[str, Any] | None:
         if status is not None:
             kontrollera_bk_status(status)
         if riktning is not None:
             kontrollera_bk_riktning(riktning)
+        if betalstatus is not None:
+            kontrollera_bk_betalstatus(betalstatus)
 
         # Dynamisk SET-lista: bara satta fält skrivs. Samma mönster som
         # update_prospect — en fast lista hade nollställt det anroparen
@@ -2913,6 +2920,7 @@ class PostgresStorage:
             ("momssats", bk_belopp(momssats, "momssats")),
             ("riktning", riktning),
             ("kategori", kategori),
+            ("betalstatus", betalstatus),
             ("anmarkning", anmarkning),
         ):
             if varde is not None:

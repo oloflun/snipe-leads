@@ -120,6 +120,26 @@ FORSALJNINGSKONTO: dict[Decimal, str] = {
 #: inte en förenkling från vår sida.
 INGAENDE_MOMSKONTO = "2641"
 
+#: Motkontot avgörs av BETALSTATUS, inte av dokumenttypen.
+#:
+#: Ett kvitto är betalt i kassan och ett kvitto och en betald faktura ska
+#: därför konteras likadant — mot 1930. En obetald faktura har däremot inte
+#: rört bankkontot: kostnaden och momsen finns, men motposten är en SKULD.
+#: Bokförs den mot 1930 ändå visar rapporten ett bankutflöde som inte har
+#: skett och döljer samtidigt skulden, vilket är två fel i samma verifikat.
+#:
+#: Nycklarna är `betalstatus` ordagrant. En okänd status når aldrig hit —
+#: verifieringsgrinden kräver fältet, se KRAVDA_FALT.
+BETALKONTO_INKOP: dict[str, str] = {
+    "betald": "1930",   # Företagskonto: pengarna har lämnat kontot
+    "obetald": "2440",  # Leverantörsskulder: fakturan är mottagen, inte betald
+}
+
+BETALKONTO_FORSALJNING: dict[str, str] = {
+    "betald": "1930",   # Företagskonto: pengarna har nått kontot
+    "obetald": "1510",  # Kundfordringar: fakturan är skickad, inte betald
+}
+
 
 class OkantKontoError(KeyError):
     """En kategori eller ett konto som inte finns i delmängden ovan.
@@ -145,15 +165,33 @@ def kontonamn(nummer: str) -> str:
     return konto.namn
 
 
+def betalkonto_for(betalstatus: str, *, forsaljning: bool = False) -> str:
+    """Motkontot för en betalstatus.
+
+    Kastar hellre än att falla tillbaka på 1930: en okänd status som tyst blev
+    "betald" är exakt det fel den här funktionen finns för att stänga.
+    """
+    tabell = BETALKONTO_FORSALJNING if forsaljning else BETALKONTO_INKOP
+    konto = tabell.get(betalstatus)
+    if konto is None:
+        raise OkantKontoError(
+            f"betalstatus {betalstatus!r} är varken 'betald' eller 'obetald'"
+        )
+    return konto
+
+
 def bygg_inkopsverifikat(
     *,
     brutto: object,
     momssats: object,
     kategori: str,
-    betalkonto: str = "1930",
+    betalstatus: str,
     text: str = "",
 ) -> list[Konteringsrad]:
-    """Ett kvitto: kostnad + ingående moms i debet, betalning i kredit.
+    """Ett inköp: kostnad + ingående moms i debet, motposten i kredit.
+
+    Motposten är 1930 när underlaget är betalt och 2440 när det inte är det —
+    se BETALKONTO_INKOP för varför den skillnaden inte får gissas bort.
 
     Balanserar av konstruktion — kreditsidan är bruttot, debetsidan är netto
     plus den moms som räknats UR samma brutto. Se `netto_fran_brutto` för
@@ -162,8 +200,7 @@ def bygg_inkopsverifikat(
     konto = foresla_konto(kategori)
     if konto is None:
         raise OkantKontoError(f"kategori {kategori!r} saknas i KOSTNADSKATEGORIER")
-    if betalkonto not in KONTOPLAN:
-        raise OkantKontoError(f"betalkonto {betalkonto} finns inte i kontoplanen")
+    betalkonto = betalkonto_for(betalstatus)
 
     b = till_decimal(brutto, falt="brutto")
     sats = till_momssats(momssats)
@@ -181,13 +218,16 @@ def bygg_forsaljningsverifikat(
     *,
     brutto: object,
     momssats: object,
-    mottagarkonto: str = "1930",
+    betalstatus: str,
     text: str = "",
 ) -> list[Konteringsrad]:
-    """En faktura eller ett kontantköp: betalning i debet, intäkt och
-    utgående moms i kredit."""
-    if mottagarkonto not in KONTOPLAN:
-        raise OkantKontoError(f"mottagarkonto {mottagarkonto} finns inte i kontoplanen")
+    """En försäljning: motposten i debet, intäkt och utgående moms i kredit.
+
+    Motposten är 1930 när kunden betalat och 1510 Kundfordringar när fakturan
+    är skickad men inte betald. En obetald faktura mot 1930 visar pengar på
+    kontot som inte finns där.
+    """
+    mottagarkonto = betalkonto_for(betalstatus, forsaljning=True)
 
     b = till_decimal(brutto, falt="brutto")
     sats = till_momssats(momssats)

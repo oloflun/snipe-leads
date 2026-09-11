@@ -31,7 +31,7 @@ def _mars_verifikat() -> list[Verifikat]:
             nummer="1",
             datum=date(2026, 3, 3),
             text="Faktura kund",
-            rader=tuple(bygg_forsaljningsverifikat(brutto="1250.00", momssats="0.25")),
+            rader=tuple(bygg_forsaljningsverifikat(brutto="1250.00", momssats="0.25", betalstatus="betald")),
         ),
         Verifikat(
             serie="A",
@@ -39,7 +39,10 @@ def _mars_verifikat() -> list[Verifikat]:
             datum=date(2026, 3, 5),
             text="Inköp material",
             rader=tuple(
-                bygg_inkopsverifikat(brutto="1250.00", momssats="0.25", kategori="varuinkop")
+                bygg_inkopsverifikat(
+                    brutto="1250.00", momssats="0.25", kategori="varuinkop",
+                    betalstatus="betald"
+                )
             ),
         ),
     ]
@@ -135,7 +138,7 @@ def test_citattecken_i_text_escapas():
             nummer="1",
             datum=date(2026, 3, 3),
             text='Faktura "brådskande"',
-            rader=tuple(bygg_forsaljningsverifikat(brutto="125.00", momssats="0.25")),
+            rader=tuple(bygg_forsaljningsverifikat(brutto="125.00", momssats="0.25", betalstatus="betald")),
         )
     ]
     text = _text(skriv_sie4(**FORETAG, verifikat=ver))
@@ -158,7 +161,10 @@ def test_tecken_utanfor_cp437_stoppar_inte_exporten():
             datum=date(2026, 3, 3),
             text="Inköp för 45 €",
             rader=tuple(
-                bygg_inkopsverifikat(brutto="125.00", momssats="0.25", kategori="varuinkop")
+                bygg_inkopsverifikat(
+                    brutto="125.00", momssats="0.25", kategori="varuinkop",
+                    betalstatus="betald"
+                )
             ),
         )
     ]
@@ -175,7 +181,7 @@ def test_typografiskt_streck_blir_bindestreck_inte_fragetecken():
             nummer="1",
             datum=date(2026, 3, 3),
             text="Mars–april",
-            rader=tuple(bygg_forsaljningsverifikat(brutto="125.00", momssats="0.25")),
+            rader=tuple(bygg_forsaljningsverifikat(brutto="125.00", momssats="0.25", betalstatus="betald")),
         )
     ]
     assert "Mars-april" in _text(skriv_sie4(**FORETAG, verifikat=ver))

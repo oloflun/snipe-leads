@@ -29,6 +29,7 @@ HELT_UNDERLAG = {
     "momssats": Decimal("0.25"),
     "riktning": "kostnad",
     "kategori": "varuinkop",
+    "betalstatus": "betald",
 }
 
 
@@ -82,6 +83,7 @@ def test_alla_saknade_falt_rapporteras_pa_en_gang():
         "brutto",
         "momssats",
         "riktning",
+        "betalstatus",
     }
 
 
@@ -99,6 +101,7 @@ def test_intakt_kraver_ingen_kategori():
         "brutto": Decimal("1250.00"),
         "momssats": Decimal("0.25"),
         "riktning": "intakt",
+        "betalstatus": "betald",
     }
     assert check_underlag(intakt).ok
 
@@ -117,10 +120,12 @@ def test_byggda_verifikat_balanserar_av_konstruktion():
     for sats in ("0.25", "0.12", "0.06", "0"):
         for brutto in ("1250.00", "10.00", "99.99", "1.00"):
             assert check_verifikat(
-                bygg_inkopsverifikat(brutto=brutto, momssats=sats, kategori="varuinkop")
+                bygg_inkopsverifikat(
+                    brutto=brutto, momssats=sats, kategori="varuinkop", betalstatus="betald"
+                )
             ).ok
             assert check_verifikat(
-                bygg_forsaljningsverifikat(brutto=brutto, momssats=sats)
+                bygg_forsaljningsverifikat(brutto=brutto, momssats=sats, betalstatus="betald")
             ).ok
 
 
@@ -145,7 +150,9 @@ def test_tomt_verifikat_fals():
 
 def test_hel_period_gar_igenom():
     underlag = [HELT_UNDERLAG]
-    verifikat = [bygg_inkopsverifikat(brutto="1250.00", momssats="0.25", kategori="varuinkop")]
+    verifikat = [bygg_inkopsverifikat(
+        brutto="1250.00", momssats="0.25", kategori="varuinkop", betalstatus="betald"
+    )]
     verdikt = check_period(underlag=underlag, verifikat=verifikat)
     assert verdikt.ok
     assert verdikt.status == STATUS_KLAR
@@ -156,8 +163,12 @@ def test_ett_trasigt_underlag_falsar_hela_perioden():
     verdikt = check_period(
         underlag=[HELT_UNDERLAG, trasigt],
         verifikat=[
-            bygg_inkopsverifikat(brutto="1250.00", momssats="0.25", kategori="varuinkop"),
-            bygg_inkopsverifikat(brutto="500.00", momssats="0.25", kategori="varuinkop"),
+            bygg_inkopsverifikat(
+        brutto="1250.00", momssats="0.25", kategori="varuinkop", betalstatus="betald"
+    ),
+            bygg_inkopsverifikat(
+                brutto="500.00", momssats="0.25", kategori="varuinkop", betalstatus="betald"
+            ),
         ],
     )
     assert verdikt.status == STATUS_GRANSKA
@@ -170,7 +181,9 @@ def test_underlag_utan_kontering_falsar_i_stallet_for_att_forsvinna():
     adminvyns nollställda siffror (STATUS.md 2026-08-16).
     """
     verdikt = check_period(underlag=[HELT_UNDERLAG, HELT_UNDERLAG], verifikat=[
-        bygg_inkopsverifikat(brutto="1250.00", momssats="0.25", kategori="varuinkop")
+        bygg_inkopsverifikat(
+        brutto="1250.00", momssats="0.25", kategori="varuinkop", betalstatus="betald"
+    )
     ])
     assert not verdikt.ok
     assert any(b.vad == "tackning" for b in verdikt.brister)

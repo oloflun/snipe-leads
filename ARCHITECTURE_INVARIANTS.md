@@ -406,11 +406,31 @@ fel som lät adminvyn visa fyra kunder med nollställda siffror (STATUS.md
 Test: snajp-support/tests/bookkeeping/test_verifieringsgrind.py
 Införd: 2026-08-23 · Upphävs endast genom waiver
 
+### INV-BOOK-004 — Ett verifikat byggs aldrig utan känd betalstatus
+`kontoplan.bygg_inkopsverifikat` och `bygg_forsaljningsverifikat` tar
+`betalstatus` som ett OBLIGATORISKT nyckelordsargument utan default, och
+`betalkonto_for` kastar `OkantKontoError` på allt som inte är `betald` eller
+`obetald`. Motkontot följer statusen: 1930 företagskonto när pengarna rört sig,
+annars 2440 leverantörsskuld respektive 1510 kundfordran. `betalstatus` står i
+`verifieringsgrind.KRAVDA_FALT`, så ett underlag utan status går till
+granskning i stället för att konteras, och `underlag.normalisera_falt`
+utelämnar varje värde utanför värdemängden i stället för att tolka det.
+Varför: fältet fanns inte alls fram till 2026-09-10, och defaulten var tyst
+`betalkonto="1930"`. Följden var att en leverantörsfaktura med 30 dagars
+betalningsvillkor bokfördes som om pengarna redan lämnat kontot — bankutflödet
+syntes som skett och skulden uppstod aldrig. 2440 och 1510 fanns i kontoplanen
+sedan migration 045 utan att någon kodväg nådde dem, medan `kunskap.py`
+samtidigt talade om för kunden att 2440/1510 var rätt. Ett default-argument här
+återinför exakt det felet, tyst.
+Test: snajp-support/tests/bookkeeping/test_betalstatus.py
+Införd: 2026-09-10 · Upphävs endast genom waiver
+
 ### INV-STORE-001 — MemoryStorage och PostgresStorage har identiska signaturer
 `tests/invariants/test_inv_store_001.py` jämför varje publik metod i
 `Storage`-protokollet mot BÅDA implementationerna: att metoden finns, att
 parameternamnen och ordningen är desamma, och att default-värdena är desamma.
-Värdemängderna (`AGENT_RUN_TYPES`, `BK_STATUSAR`, `BK_RIKTNINGAR`) och
+Värdemängderna (`AGENT_RUN_TYPES`, `BK_STATUSAR`, `BK_RIKTNINGAR`,
+`BK_BETALSTATUSAR`) och
 valideringarna (`kontrollera_bk_*`, `bk_belopp`, `bk_datum`) bor i `base.py` och
 anropas av båda lagringarna, så de kan inte glida isär i BETEENDE heller.
 Verifierat att grinden fäller: den hittade en befintlig divergens första gången

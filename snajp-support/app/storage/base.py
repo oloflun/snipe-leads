@@ -1040,6 +1040,7 @@ class Storage(Protocol):
         momssats: Decimal | None = None,
         riktning: str | None = None,
         kategori: str | None = None,
+        betalstatus: str | None = None,
         anmarkning: str = "",
     ) -> dict[str, Any]:
         """Ett underlag, med de fält avläsningen faktiskt hittade.
@@ -1082,6 +1083,7 @@ class Storage(Protocol):
         momssats: Decimal | None = None,
         riktning: str | None = None,
         kategori: str | None = None,
+        betalstatus: str | None = None,
         anmarkning: str | None = None,
     ) -> dict[str, Any] | None:
         """Människans rättelse av ett fällt underlag. Bara satta fält skrivs."""
@@ -1181,6 +1183,11 @@ BK_STATUSAR = ("granska_manuellt", "klar", "godkand")
 
 BK_RIKTNINGAR = ("intakt", "kostnad")
 
+#: Spegel av check-villkoret i migration 062. Samma mekanism som BK_RIKTNINGAR:
+#: minnet får aldrig ta emot mer än databasen, annars är sviten grön medan
+#: Postgres fäller på check-violation vid första riktiga skrivning.
+BK_BETALSTATUSAR = ("betald", "obetald")
+
 
 class BkValideringsfel(ValueError):
     """Ett värde Postgres hade avvisat med check-violation.
@@ -1202,6 +1209,14 @@ def kontrollera_bk_riktning(riktning: str | None) -> None:
     if riktning is not None and riktning not in BK_RIKTNINGAR:
         raise BkValideringsfel(
             f"riktning={riktning!r} finns inte i bk_underlag check-villkoret {BK_RIKTNINGAR}."
+        )
+
+
+def kontrollera_bk_betalstatus(betalstatus: str | None) -> None:
+    if betalstatus is not None and betalstatus not in BK_BETALSTATUSAR:
+        raise BkValideringsfel(
+            f"betalstatus={betalstatus!r} finns inte i bk_underlag "
+            f"check-villkoret {BK_BETALSTATUSAR}."
         )
 
 

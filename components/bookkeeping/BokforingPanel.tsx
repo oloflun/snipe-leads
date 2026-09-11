@@ -44,6 +44,12 @@ type Underlag = {
   brutto: string | null;
   momssats: string | null;
   kategori: string | null;
+  /**
+   * "betald" | "obetald" | null. Avgör MOTKONTOT: 1930 företagskonto mot 2440
+   * leverantörsskuld respektive 1510 kundfordran. null betyder att avläsningen
+   * inte kunde avgöra, och då ligger raden i granskningskön — se migration 062.
+   */
+  betalstatus: string | null;
   anmarkning: string;
 };
 
@@ -580,6 +586,10 @@ export function BokforingPanel() {
                 <span className="w-[7.5rem] text-right text-[0.9375rem] font-medium tabular-nums">
                   {kronor(rad.brutto)}
                 </span>
+                {/* Obetalt märks ut, betalt gör det inte: det obetalda är det
+                    som fortfarande kräver en handling av kunden, och en etikett
+                    på varje rad hade slutat betyda något. */}
+                {rad.betalstatus === "obetald" ? <Badge tone="warn">Obetald</Badge> : null}
                 <Badge tone={rad.status === "granska_manuellt" ? "warn" : "good"}>
                   {rad.status === "granska_manuellt" ? "Granska" : "Klar"}
                 </Badge>

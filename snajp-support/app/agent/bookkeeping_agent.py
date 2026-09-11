@@ -102,13 +102,26 @@ Läs texten från underlaget och svara med de fält du FAKTISKT ser.
    bruttot — svarar du med ett eget uträknat nettobelopp används det inte.
 3. Gissa inte momssatsen ur beloppet. Står den inte på underlaget: utelämna den.
 4. Skriv belopp som STRÄNGAR, med punkt som decimaltecken: "1250.00".
+5. Blanda inte ihop riktning med betalstatus. Riktning är om pengarna går FRÅN
+   oss eller TILL oss. Betalstatus är om de redan har rört sig. En obetald
+   leverantörsfaktura är en kostnad som ännu inte är betald — båda fälten
+   behövs, och de svarar på olika frågor.
 
 ## Fält
-- "datum": inköpsdatum, formatet ÅÅÅÅ-MM-DD
+- "datum": underlagets datum (inköps- eller fakturadatum), formatet ÅÅÅÅ-MM-DD
 - "motpart": vem underlaget är från (leverantör) eller till (kund)
 - "brutto": totalbeloppet inklusive moms, som sträng
 - "momssats": 25, 12, 6 eller 0 — bara om den står på underlaget
-- "riktning": "kostnad" om VI betalat, "intakt" om vi fått betalt
+- "riktning": "kostnad" om VI ska betala, "intakt" om vi ska få betalt
+- "betalstatus": "betald" eller "obetald" — har pengarna rört sig?
+  "betald" när underlaget visar att betalning skett: ett kassakvitto, "Betalt",
+  "Kortköp", "Swish", "Kontant", "Betald med kort ****1234".
+  "obetald" när underlaget begär betalning som ännu inte skett: en faktura med
+  "Förfallodatum", "Betalningsvillkor: 30 dagar", "Att betala", bankgiro att
+  betala till.
+  Står det både och — en faktura stämplad "BETALD" — gäller stämpeln: "betald".
+  Går det inte att avgöra: UTELÄMNA fältet. Gissa aldrig "betald", eftersom en
+  obetald faktura som bokförs som betald visar ett bankutflöde som inte skett.
 - "kategori": vid kostnad, EN av: {_KATEGORIER}
   Passar ingen: utelämna fältet. Välj inte närmaste.
 
@@ -263,6 +276,7 @@ def bygg_verifikat(falt: dict[str, Any]) -> tuple[Konteringsrad, ...]:
                 brutto=falt["brutto"],
                 momssats=falt["momssats"],
                 kategori=falt["kategori"],
+                betalstatus=falt["betalstatus"],
                 text=falt.get("motpart", ""),
             )
         )
@@ -270,6 +284,7 @@ def bygg_verifikat(falt: dict[str, Any]) -> tuple[Konteringsrad, ...]:
         bygg_forsaljningsverifikat(
             brutto=falt["brutto"],
             momssats=falt["momssats"],
+            betalstatus=falt["betalstatus"],
             text=falt.get("motpart", ""),
         )
     )

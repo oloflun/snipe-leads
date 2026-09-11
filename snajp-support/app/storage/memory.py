@@ -33,6 +33,7 @@ from .base import (
     bk_datum,
     kontrollera_bk_balans,
     normalisera_kunddata,
+    kontrollera_bk_betalstatus,
     kontrollera_bk_riktning,
     kontrollera_bk_status,
     status_transition_allowed,
@@ -2096,10 +2097,12 @@ class MemoryStorage:
         momssats: Decimal | None = None,
         riktning: str | None = None,
         kategori: str | None = None,
+        betalstatus: str | None = None,
         anmarkning: str = "",
     ) -> dict[str, Any]:
         kontrollera_bk_status(status)
         kontrollera_bk_riktning(riktning)
+        kontrollera_bk_betalstatus(betalstatus)
         rad = {
             "id": str(uuid.uuid4()),
             "tenant_id": tenant_id,
@@ -2116,6 +2119,7 @@ class MemoryStorage:
             "momssats": bk_belopp(momssats, "momssats"),
             "riktning": riktning,
             "kategori": kategori,
+            "betalstatus": betalstatus,
             "anmarkning": anmarkning,
             "created_at": _now(),
         }
@@ -2176,12 +2180,15 @@ class MemoryStorage:
         momssats: Decimal | None = None,
         riktning: str | None = None,
         kategori: str | None = None,
+        betalstatus: str | None = None,
         anmarkning: str | None = None,
     ) -> dict[str, Any] | None:
         if status is not None:
             kontrollera_bk_status(status)
         if riktning is not None:
             kontrollera_bk_riktning(riktning)
+        if betalstatus is not None:
+            kontrollera_bk_betalstatus(betalstatus)
         for rad in self.bk_underlag.get(tenant_id, []):
             if rad["id"] != underlag_id:
                 continue
@@ -2193,6 +2200,7 @@ class MemoryStorage:
                 ("momssats", bk_belopp(momssats, "momssats")),
                 ("riktning", riktning),
                 ("kategori", kategori),
+                ("betalstatus", betalstatus),
                 ("anmarkning", anmarkning),
             ):
                 if värde is not None:

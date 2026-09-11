@@ -19,7 +19,8 @@ den här körningen som kundvolym", utan att någon signatur såg fel ut.
 ## Varför det inte räcker med signaturer, och vad som täcker resten
 
 En identisk signatur säger ingenting om vad metoden GÖR. Därför bor
-värdemängderna (`AGENT_RUN_TYPES`, `BK_STATUSAR`, `BK_RIKTNINGAR`) och
+värdemängderna (`AGENT_RUN_TYPES`, `BK_STATUSAR`, `BK_RIKTNINGAR`,
+`BK_BETALSTATUSAR`) och
 valideringarna (`kontrollera_bk_*`, `bk_belopp`, `bk_datum`) i `base.py` och
 anropas av båda lagringarna — det är strukturellt omöjligt för dem att glida
 isär. Se `tests/api/test_agent_run_types.py` för samma resonemang på

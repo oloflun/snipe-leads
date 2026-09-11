@@ -43,10 +43,13 @@ async def _seed_kvitto(storage, tenant_id: str, *, brutto="1250.00", datum=date(
         momssats=Decimal("0.25"),
         riktning="kostnad",
         kategori="varuinkop",
+        betalstatus="betald",
     )
     from app.bookkeeping.kontoplan import bygg_inkopsverifikat
 
-    rader = bygg_inkopsverifikat(brutto=brutto, momssats="0.25", kategori="varuinkop")
+    rader = bygg_inkopsverifikat(
+        brutto=brutto, momssats="0.25", kategori="varuinkop", betalstatus="betald"
+    )
     await storage.create_bk_verifikat(
         tenant_id,
         underlag_id=underlag["id"],

@@ -136,7 +136,16 @@ async def ta_emot_underlag(
         **{
             k: v
             for k, v in avlasning.falt.items()
-            if k in ("datum", "motpart", "brutto", "momssats", "riktning", "kategori")
+            if k
+            in (
+                "datum",
+                "motpart",
+                "brutto",
+                "momssats",
+                "riktning",
+                "kategori",
+                "betalstatus",
+            )
         },
     )
 

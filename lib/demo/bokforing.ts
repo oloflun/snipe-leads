@@ -57,7 +57,12 @@ export const AVLASNING: Avlast[] = [
   { falt: "Motpart", varde: "Nordvik Drivmedel AB", kalla: "Nordvik Drivmedel AB, 556xxx-xxxx" },
   { falt: "Totalbelopp", varde: "1 250,00 kr", kalla: "Att betala 1 250,00" },
   { falt: "Momssats", varde: "25 %", kalla: "Moms 25 % 250,00" },
-  { falt: "Kategori", varde: "Drivmedel", kalla: "Diesel, 62,3 l" }
+  { falt: "Kategori", varde: "Drivmedel", kalla: "Diesel, 62,3 l" },
+  // Sjunde fältet (migration 062). Det står här för att det är fältet som
+  // FÖRKLARAR kreditraden nedan: 2440 och inte 1930. Utan raden ser besökaren
+  // en leverantörsskuld dyka upp ur ingenstans, och demon visade en kontering
+  // produkten inte kunde motivera.
+  { falt: "Betalstatus", varde: "Obetald", kalla: "Förfallodatum 2026-09-13" }
 ];
 
 /**

@@ -32,6 +32,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from .math import BeloppsfelError, MOMSSATSER, till_decimal
+from .verifieringsgrind import BETALSTATUSAR
 
 #: Format vi kan läsa. Allt annat avvisas vid API-gränsen med sitt namn, i
 #: stället för att tyst ge ett tomt underlag.
@@ -272,5 +273,12 @@ def normalisera_falt(rat: dict) -> dict:
     kategori = rat.get("kategori")
     if isinstance(kategori, str) and kategori.strip():
         normaliserat["kategori"] = kategori.strip()
+
+    # Betalstatus (migration 062). Bara de två giltiga värdena släpps igenom —
+    # allt annat UTELÄMNAS och fälls av grinden, i stället för att tolkas som
+    # "betald" och tyst kontera en obetald faktura mot bankkontot.
+    betalstatus = rat.get("betalstatus")
+    if isinstance(betalstatus, str) and betalstatus.strip().lower() in BETALSTATUSAR:
+        normaliserat["betalstatus"] = betalstatus.strip().lower()
 
     return normaliserat

@@ -48,7 +48,22 @@ STATUS_GRANSKA = "granska_manuellt"
 #: sats ger ett gissat momsbelopp, och det beloppet hamnar i en
 #: momsdeklaration. `motpart` behövs inte för matten men krävs för att
 #: verifikatet ska gå att spåra tillbaka till sitt underlag.
-KRAVDA_FALT: tuple[str, ...] = ("datum", "motpart", "brutto", "momssats", "riktning")
+#:
+#: `betalstatus` (migration 062) står med av samma skäl som momssatsen: den
+#: avgör MOTKONTOT, och ett fel där flyttar pengar mellan bankkontot och en
+#: skuld. Fältet gick tidigare inte att läsa alls, och defaulten var tyst
+#: "betalt" — se BETALKONTO_INKOP i kontoplan.py.
+KRAVDA_FALT: tuple[str, ...] = (
+    "datum",
+    "motpart",
+    "brutto",
+    "momssats",
+    "riktning",
+    "betalstatus",
+)
+
+#: Giltiga betalstatusar. Spegel av check-villkoret i migration 062.
+BETALSTATUSAR: tuple[str, ...] = ("betald", "obetald")
 
 
 @dataclass(frozen=True)
@@ -103,6 +118,16 @@ def check_underlag(underlag: dict, *, underlag_id: str = "") -> Verdikt:
     if not _saknas(riktning) and riktning not in ("intakt", "kostnad"):
         brister.append(
             Brist("riktning", f"{riktning!r} är varken intäkt eller kostnad", ident)
+        )
+
+    betalstatus = underlag.get("betalstatus")
+    if not _saknas(betalstatus) and betalstatus not in BETALSTATUSAR:
+        brister.append(
+            Brist(
+                "betalstatus",
+                f"{betalstatus!r} är varken 'betald' eller 'obetald'",
+                ident,
+            )
         )
 
     # En kostnad utan kategori går inte att kontera. Kravet gäller BARA
