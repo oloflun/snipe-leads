@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import getpass
 import hashlib
+import json
 import secrets
 import shutil
 import subprocess
@@ -82,6 +83,25 @@ KEYS = [
         where="https://aistudio.google.com/apikey",
     ),
     Key(
+        "GOOGLE_SERVICE_ACCOUNT_JSON",
+        [BACKEND_ENV],
+        "Vertex AI service account JSON — ersätter GEMINI_API_KEY sedan Google "
+        "tog bort Cloud-krediter från AI Studio. Klistra in HELA JSON-strängen "
+        "(börjar med { och slutar med }). Innehåller project_id, private_key, "
+        "client_email m.fl. — se DEPLOY_KEYS.md.",
+        required=False,
+        where="Google Cloud Console -> IAM -> Service Accounts -> Keys -> Add Key -> JSON",
+    ),
+    Key(
+        "GOOGLE_CLOUD_REGION",
+        [BACKEND_ENV],
+        "Vertex AI-region — var modellerna körs. Default: europe-west1 (EU). "
+        "Alternativ: us-central1, europe-west4. Sätts bara om du vill byta region.",
+        required=False,
+        where="https://cloud.google.com/vertex-ai/docs/general/locations",
+        generated=True,  # ponytail: frågas inte i interaktiv loop
+    ),
+    Key(
         "SNAJP_SKILL_UNLOCK_KEY",
         [BACKEND_ENV],
         "Avsiktlighetsgrind för agent-core/skills/ — INTE en säkerhetsmekanism. "
@@ -133,7 +153,7 @@ def looks_placeholder(value: str) -> bool:
     return len(value) < 20 or "..." in value or "din-" in value
 
 
-def key_fault(value: str) -> str | None:
+def key_fault(value: str, name: str = "") -> str | None:
     """Varför nyckeln inte GÅR ATT SKICKA, eller None.
 
     Samma kontroll som Settings.llm_key_fault() i snajp-support/app/config.py,
@@ -149,6 +169,15 @@ def key_fault(value: str) -> str | None:
     Positionen står med i beskedet med flit. Utan den söker den som läser efter
     ett osynligt tecken i en sträng som aldrig får skrivas ut.
     """
+    # Service account JSON skickas aldrig i ett HTTP-huvud — den parsas lokalt
+    # och OAuth2-tokens genereras vid runtime. ASCII-kontrollen gäller inte.
+    if name == "GOOGLE_SERVICE_ACCOUNT_JSON":
+        try:
+            json.loads(value)
+        except (json.JSONDecodeError, ValueError):
+            return "är inte giltig JSON"
+        return None
+
     bad = next((i for i, ch in enumerate(value) if ord(ch) > 127), None)
     if bad is not None:
         return (f"innehåller ett tecken utanför ASCII på position {bad} — "
@@ -203,11 +232,11 @@ def cmd_check() -> bool:
         if not value:
             status = "SAKNAS" if key.required else "tom (valfri)"
             ok = ok and not key.required
-        elif key_fault(value):
+        elif key_fault(value, key.name):
             # Egen rad, inte samma som PLATSHÅLLARE: den som läser "platshållare"
             # letar efter en saknad variabel, inte efter ett osynligt tecken i
             # den som redan finns.
-            status = f"TRASIG — {key_fault(value)}"
+            status = f"TRASIG — {key_fault(value, key.name)}"
             ok = False
         elif looks_placeholder(value):
             status = "PLATSHÅLLARE — tjänsten kör i SIMULERINGSLÄGE"
@@ -228,6 +257,26 @@ def cmd_check() -> bool:
         else "\nBLOCKERAT — minst DEEPSEEK_API_KEY behövs."
     )
     return ok
+
+
+def _read_service_account_json() -> str:
+    """Läs service account JSON från en fil. getpass kan bara en rad —
+    flerradig JSON spills som shell-kommandon."""
+    path_str = input("  Sökväg till JSON-filen (den du laddade ner): ").strip().strip('"').strip("'")
+    if not path_str:
+        return ""
+    p = Path(path_str).expanduser()
+    if not p.exists():
+        print(f"  -> filen finns inte: {p}")
+        return ""
+    raw = p.read_text(encoding="utf-8").strip()
+    try:
+        obj = json.loads(raw)
+    except (json.JSONDecodeError, ValueError) as e:
+        print(f"  -> inte giltig JSON: {e}")
+        return ""
+    # ponytail: compact single-line for .env storage
+    return json.dumps(obj, separators=(",", ":"))
 
 
 def cmd_set(bara: str | None = None) -> None:
@@ -255,7 +304,10 @@ def cmd_set(bara: str | None = None) -> None:
         print(f"{key.name}{marker}")
         print(f"  {key.blurb}")
         print(f"  Hämtas här: {key.where}")
-        value = getpass.getpass("  Klistra in (syns inte): ").strip()
+        if key.name == "GOOGLE_SERVICE_ACCOUNT_JSON":
+            value = _read_service_account_json()
+        else:
+            value = getpass.getpass("  Klistra in (syns inte): ").strip()
         if not value:
             print("  -> hoppar över\n")
             continue
@@ -466,6 +518,7 @@ def cmd_push() -> None:
 BACKEND_KEYS = (
     "DEEPSEEK_API_KEY",
     "GEMINI_API_KEY",
+    "GOOGLE_SERVICE_ACCOUNT_JSON",
     "SCRAPEGRAPHAI_API_KEY",
     "SNAJP_SKILL_UNLOCK_KEY",
 )
@@ -504,7 +557,7 @@ def cmd_push_railway() -> None:
         if not value:
             print(f"  {name}: saknas lokalt — hoppar över")
             continue
-        fault = key_fault(value)
+        fault = key_fault(value, name)
         if fault:
             sys.exit(f"AVBRYTER: {name} {fault}. Sätt om den med `python scripts/keys.py` först.")
         payload[name] = value
@@ -586,7 +639,7 @@ def cmd_push_render() -> None:
         if not value:
             print(f"  {name}: saknas lokalt — hoppar över")
             continue
-        fault = key_fault(value)
+        fault = key_fault(value, name)
         if fault:
             sys.exit(f"AVBRYTER: {name} {fault}. Sätt om den med `python scripts/keys.py` först.")
         payload[name] = value

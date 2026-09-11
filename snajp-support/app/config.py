@@ -171,6 +171,13 @@ class Settings(BaseSettings):
     # sidovagnen och embeddings — vald för gratisnivån, se scripts/keys.py.
     gemini_api_key: str = ""
     embedding_api_key: str = ""  # tom => faller tillbaka på gemini_api_key
+    # Vertex AI: service account JSON ersätter GEMINI_API_KEY när Google
+    # Cloud-krediter inte längre fungerar via AI Studio. JSON-strängen
+    # innehåller private_key, project_id m.fl. — se DEPLOY_KEYS.md.
+    # När denna är satt används Vertex AI-endpointen med OAuth2-tokens
+    # i stället för AI Studio med en enkel API-nyckel.
+    google_service_account_json: str = ""
+    google_cloud_region: str = "europe-west1"
     model: str = "gpt-4o-mini"
     embedding_model: str = "gemini-embedding-001"
     #: MÅSTE stämma med kolumnen `ss_knowledge_base.embedding`, som är
@@ -190,7 +197,7 @@ class Settings(BaseSettings):
     # G9: vision-sidovagn. deepseek-v4-flash saknar dokumenterat bildstöd, så
     # bilder beskrivs separat (Gemini, gratisnivå) och matas in som text i
     # DeepSeek-loopen. Bilden lagras aldrig efter beskrivningen.
-    vision_model: str = "gemini-3.6-flash"
+    vision_model: str = "gemini-2.5-flash"
 
     # DeepSeek v4 kör "thinking mode" som DEFAULT — modellen producerar
     # reasoning_content före sitt svar, vilket kostar output-tokens och latens.
@@ -584,6 +591,10 @@ class Settings(BaseSettings):
         är första tecknet efter "Bearer ". Trovärdigt men fel, alltså samma
         klass av fel som migration 029 fick städa upp.
         """
+        # Vertex AI använder OAuth2-tokens som genereras vid runtime — ingen
+        # statisk nyckel att kontrollera.
+        if self.llm_provider == "gemini" and self.google_service_account_json:
+            return None
         key = self.active_llm_key() or ""
         if not key:
             return None  # ingen nyckel alls är simuleringsläge, inte ett fel
@@ -641,6 +652,9 @@ class Settings(BaseSettings):
         return fel
 
     def is_simulation(self) -> bool:
+        # Vertex AI: service account JSON räcker — ingen separat API-nyckel krävs.
+        if self.llm_provider == "gemini" and self.google_service_account_json:
+            return False
         # Samma platshållar-heuristik som app/api/email-studio/route.ts i Next-appen.
         key = self.active_llm_key() or ""
         # En trasig nyckel räknas som ingen nyckel. Alternativet är att tjänsten

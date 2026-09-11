@@ -70,6 +70,9 @@ MILJOER = {
 NYCKLAR = {
     "GEMINI_API_KEY": ("https://generativelanguage.googleapis.com/v1beta/openai", "gemini-3.6-flash"),
     "OPENAI_API_KEY": ("https://api.openai.com/v1", "gpt-4o-mini"),
+    # ponytail: GOOGLE_SERVICE_ACCOUNT_JSON hanteras inte här — den är en
+    # JSON-sträng, inte en Bearer-nyckel, och kvotprovet fungerar inte mot
+    # Vertex AI (annan auth-mekanism). Använd keys.py --push-railway istället.
 }
 
 #: Värden som betyder "inte ifylld". En platshållare som tyst skrivs till

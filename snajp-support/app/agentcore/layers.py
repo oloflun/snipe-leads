@@ -24,7 +24,7 @@ class Baseline:
 
     manifest_hash: str
     model: str = "deepseek-v4-flash"
-    vision_model: str = "gemini-3.6-flash"  # G9 — sidovagn, tas bort när v4-flash får vision
+    vision_model: str = "gemini-2.5-flash"  # G9 — sidovagn, tas bort när v4-flash får vision
 
 
 @dataclass(frozen=True)

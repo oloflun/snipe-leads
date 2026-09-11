@@ -20,16 +20,86 @@ gränsen går, och `get_llm_client()` nedan vägrar bygga en klient som bryter
 mot den. Se även startkontrollen i app/main.py — den fäller BYGGET, inte det
 första anropet, så en felaktig deploy dör högljutt i stället för att tyst
 skicka kunddata utomlands.
+
+## Vertex AI (2026-09)
+
+Google AI Studio tog bort möjligheten att använda Cloud-krediter. Gemini-
+anropen kräver nu Vertex AI med service account JSON + OAuth2-tokens.
+Endpointen är OpenAI-kompatibel men URL och auth skiljer sig:
+
+  AI Studio:  generativelanguage.googleapis.com  + ?key=API_KEY
+  Vertex AI:  {region}-aiplatform.googleapis.com  + Bearer <oauth2-token>
+
+Tokens går ut efter ~1 timme. `_vertex_credentials()` cachar credentials-
+objektet, och `_vertex_token()` refreshar tokenen vid behov. Klienterna
+(chat, embeddings, vision) skapas en gång men uppdaterar sin `api_key`
+före varje hämtning via `_refresh_vertex_clients()`.
 """
 
+from __future__ import annotations
+
+import json
+import logging
+import threading
 from functools import lru_cache
 
 from openai import AsyncOpenAI
 
 from ..config import Settings, get_settings
 
+logger = logging.getLogger(__name__)
+
 _DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 _GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+_VERTEX_SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]
+
+# --- Vertex AI token-hantering ------------------------------------------------
+
+_vertex_lock = threading.Lock()
+_vertex_creds = None  # google.oauth2.service_account.Credentials | None
+
+
+def _vertex_credentials(sa_json: str):
+    """Bygger (eller returnerar cachade) Vertex AI-credentials ur JSON-strängen."""
+    global _vertex_creds
+    with _vertex_lock:
+        if _vertex_creds is not None:
+            return _vertex_creds
+        from google.oauth2 import service_account
+        info = json.loads(sa_json)
+        _vertex_creds = service_account.Credentials.from_service_account_info(
+            info, scopes=_VERTEX_SCOPES,
+        )
+        return _vertex_creds
+
+
+def _vertex_token(settings: Settings) -> str:
+    """Aktuell OAuth2-token, refreshad om den gått ut."""
+    from google.auth.transport.requests import Request
+    creds = _vertex_credentials(settings.google_service_account_json)
+    with _vertex_lock:
+        if not creds.token or creds.expired:
+            creds.refresh(Request())
+            logger.debug("Vertex AI-token refreshad")
+        return creds.token
+
+
+def _vertex_base_url(settings: Settings) -> str:
+    """OpenAI-kompatibla Vertex AI-endpointen."""
+    info = json.loads(settings.google_service_account_json)
+    project = info["project_id"]
+    region = settings.google_cloud_region
+    return (
+        f"https://{region}-aiplatform.googleapis.com/v1beta1/"
+        f"projects/{project}/locations/{region}/endpoints/openapi/"
+    )
+
+
+def _uses_vertex(settings: Settings) -> bool:
+    return settings.llm_provider == "gemini" and bool(settings.google_service_account_json)
+
+
+# --- URL-upplösning -----------------------------------------------------------
 
 
 def _resolve_base_url(settings: Settings) -> str | None:
@@ -45,8 +115,21 @@ def _resolve_base_url(settings: Settings) -> str | None:
     if settings.llm_provider == "deepseek":
         return _DEEPSEEK_BASE_URL
     if settings.llm_provider == "gemini":
+        if settings.google_service_account_json:
+            return _vertex_base_url(settings)
         return _GEMINI_BASE_URL
     return None  # OpenAI SDK-default
+
+
+def _gemini_key_and_url(settings: Settings) -> tuple[str, str]:
+    """Nyckel + bas-URL för Gemini-sidovagnarna (embeddings, vision).
+
+    Vertex AI om service account finns, annars AI Studio med gemini_api_key.
+    """
+    if settings.google_service_account_json:
+        return _vertex_token(settings), _vertex_base_url(settings)
+    key = settings.embedding_api_key or settings.gemini_api_key
+    return key, _GEMINI_BASE_URL
 
 
 def _looks_real(key: str) -> bool:
@@ -70,63 +153,119 @@ def krav_tillaten_provider() -> None:
         raise ForbjudenProviderIMiljon(fel)
 
 
-@lru_cache
-def get_llm_client() -> AsyncOpenAI:
-    """Chat-klienten för aktuell provider (openai/deepseek).
+# --- Klienterna ---------------------------------------------------------------
+#
+# Vertex AI-tokens går ut efter ~1 timme. Klienterna cachelagras i module-
+# globala variabler och deras api_key uppdateras före varje hämtning. Det
+# fungerar eftersom openai SDK:n läser self.api_key i _build_headers() vid
+# varje request, inte vid __init__.
 
-    OBS: `lru_cache` gör att kontrollen körs en gång per process. Det räcker —
-    varken miljönamnet eller LLM_PROVIDER ändras under en processlivstid.
+_llm_client: AsyncOpenAI | None = None
+_embedding_client: AsyncOpenAI | None = None
+_vision_client: AsyncOpenAI | None = None
+_clients_lock = threading.Lock()
+
+
+def _refresh_vertex_clients() -> None:
+    """Uppdatera api_key på alla cachade klienter med aktuell Vertex-token."""
+    settings = get_settings()
+    if not _uses_vertex(settings):
+        return
+    token = _vertex_token(settings)
+    with _clients_lock:
+        for client in (_llm_client, _embedding_client, _vision_client):
+            if client is not None:
+                client.api_key = token
+
+
+def get_llm_client() -> AsyncOpenAI:
+    """Chat-klienten för aktuell provider (openai/deepseek/gemini).
+
+    Vertex AI: tokenen refreshas vid varje anrop. Klienten skapas en gång
+    och api_key uppdateras — SDK:n läser den per request.
     """
+    global _llm_client
     krav_tillaten_provider()
     settings = get_settings()
-    # max_retries=1 EXPLICIT — ett omtag, inte tre. Talet står utskrivet så att
-    # beteendet är ett beslut och inte en följd av en biblioteksuppgradering
-    # (SDK:ns egen default är 2).
-    #
-    # VARFÖR SÅ LÅGT, uppmätt 2026-08-25: SDK:n gör om ÄVEN 429, och ett 429
-    # från en förbrukad DYGNSKVOT är inte transient — det går inte över på
-    # någon sekund. Playbooken kör sju steg per ärende, så tre omtag betyder
-    # upp till 28 anrop för ett ärende som ändå inte kan lyckas. Mot Geminis
-    # gratisnivå (~20 anrop per dygn för hela plattformen) bränner det hela
-    # dagsbudgeten på ett enda ärende, och det syns i loggen som fyra 429 på
-    # rad per steg inom fyra sekunder.
-    #
-    # SDK:ns backoff ligger dessutom under sekunden och klarar ändå inte en
-    # minutgräns, så de extra försöken köper ingenting mot just den heller.
-    # Ett omtag räcker för det de faktiskt hjälper mot: en tappad uppkoppling
-    # eller ett enstaka 5xx. Resten fångas av fallbacktexterna, som säger
-    # ärligt att svaret inte gick att ta fram.
-    #
-    # Flyttar vi till en betald plan utan dygnstak går talet att höja igen.
-    return AsyncOpenAI(
-        api_key=settings.active_llm_key(),
-        base_url=_resolve_base_url(settings),
-        max_retries=1,
-    )
+
+    with _clients_lock:
+        if _llm_client is not None:
+            if _uses_vertex(settings):
+                _llm_client.api_key = _vertex_token(settings)
+            return _llm_client
+
+        if _uses_vertex(settings):
+            api_key = _vertex_token(settings)
+        else:
+            api_key = settings.active_llm_key()
+
+        # max_retries=1 EXPLICIT — ett omtag, inte tre. Talet står utskrivet så
+        # att beteendet är ett beslut och inte en följd av en
+        # biblioteksuppgradering (SDK:ns egen default är 2).
+        _llm_client = AsyncOpenAI(
+            api_key=api_key,
+            base_url=_resolve_base_url(settings),
+            max_retries=1,
+        )
+        return _llm_client
 
 
-@lru_cache
 def get_embedding_client() -> AsyncOpenAI | None:
-    """Embeddings går mot Gemini (gratisnivå). None => ingen vektor-embedding
+    """Embeddings går mot Gemini. None => ingen vektor-embedding
     (full-text-fallback i KB-sökningen)."""
+    global _embedding_client
     settings = get_settings()
+
+    if settings.google_service_account_json:
+        with _clients_lock:
+            if _embedding_client is not None:
+                _embedding_client.api_key = _vertex_token(settings)
+                return _embedding_client
+            _embedding_client = AsyncOpenAI(
+                api_key=_vertex_token(settings),
+                base_url=_vertex_base_url(settings),
+            )
+            return _embedding_client
+
     key = settings.embedding_api_key or settings.gemini_api_key
     if not _looks_real(key):
         return None
-    return AsyncOpenAI(api_key=key, base_url=_GEMINI_BASE_URL)
+
+    with _clients_lock:
+        if _embedding_client is not None:
+            return _embedding_client
+        _embedding_client = AsyncOpenAI(api_key=key, base_url=_GEMINI_BASE_URL)
+        return _embedding_client
 
 
-@lru_cache
 def get_vision_client() -> AsyncOpenAI | None:
-    """G9: vision-sidovagnen går mot Gemini (gratisnivå), oavsett llm_provider
+    """G9: vision-sidovagnen går mot Gemini, oavsett llm_provider
     — deepseek-v4-flash saknar dokumenterat bildstöd. Samma nyckelupplösning
     som embeddings. None => ingen bildbeskrivning möjlig (se agent/vision.py
     för fallback-beteendet)."""
+    global _vision_client
     settings = get_settings()
+
+    if settings.google_service_account_json:
+        with _clients_lock:
+            if _vision_client is not None:
+                _vision_client.api_key = _vertex_token(settings)
+                return _vision_client
+            _vision_client = AsyncOpenAI(
+                api_key=_vertex_token(settings),
+                base_url=_vertex_base_url(settings),
+            )
+            return _vision_client
+
     key = settings.embedding_api_key or settings.gemini_api_key
     if not _looks_real(key):
         return None
-    return AsyncOpenAI(api_key=key, base_url=_GEMINI_BASE_URL)
+
+    with _clients_lock:
+        if _vision_client is not None:
+            return _vision_client
+        _vision_client = AsyncOpenAI(api_key=key, base_url=_GEMINI_BASE_URL)
+        return _vision_client
 
 
 def get_agent_model():

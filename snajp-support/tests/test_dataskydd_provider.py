@@ -205,3 +205,50 @@ def test_ingen_databas_ar_fortfarande_syntetisk():
     s = _settings(llm_provider="deepseek", deepseek_api_key="d" * 40, database_url="")
     assert not s.har_riktig_kunddata()
     assert s.llm_provider_fault() is None
+
+
+# -- Vertex AI (2026-09) -------------------------------------------------------
+
+
+_FAKE_SA_JSON = '{"type":"service_account","project_id":"test-proj","private_key_id":"abc","private_key":"-----BEGIN RSA PRIVATE KEY-----\\nfake\\n-----END RSA PRIVATE KEY-----\\n","client_email":"sa@test-proj.iam.gserviceaccount.com","client_id":"123","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://oauth2.googleapis.com/token","auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs","client_x509_cert_url":"https://www.googleapis.com/robot/v1/metadata/x509/sa%40test-proj.iam.gserviceaccount.com","universe_domain":"googleapis.com"}'
+
+
+def test_vertex_ai_inte_simulation():
+    """Med service account JSON ska tjänsten vara live, inte simulation."""
+    s = _settings(
+        llm_provider="gemini",
+        environment="main",
+        google_service_account_json=_FAKE_SA_JSON,
+    )
+    assert not s.is_simulation()
+
+
+def test_vertex_ai_ingen_llm_key_fault():
+    """Vertex AI använder OAuth2-tokens, inte en statisk nyckel."""
+    s = _settings(
+        llm_provider="gemini",
+        google_service_account_json=_FAKE_SA_JSON,
+    )
+    assert s.llm_key_fault() is None
+
+
+def test_vertex_ai_provider_ok():
+    s = _settings(
+        llm_provider="gemini",
+        environment="main",
+        google_service_account_json=_FAKE_SA_JSON,
+    )
+    assert s.llm_provider_fault() is None
+
+
+def test_vertex_ai_resolve_base_url():
+    from app.agent.llm import _resolve_base_url
+    s = _settings(
+        llm_provider="gemini",
+        google_service_account_json=_FAKE_SA_JSON,
+        google_cloud_region="europe-west1",
+    )
+    url = _resolve_base_url(s)
+    assert "europe-west1-aiplatform.googleapis.com" in url
+    assert "test-proj" in url
+    assert url.endswith("/endpoints/openapi/")

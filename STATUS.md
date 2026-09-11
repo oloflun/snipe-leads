@@ -1,5 +1,16 @@
 # Snipra Status
 
+## 2026-09-11 — Claude — Vertex AI-stod implementerat (service account JSON + OAuth2)
+
+Google tog bort Cloud-krediter fran AI Studio. Hela Python-backenden stodjer
+nu Vertex AI via service account JSON (`GOOGLE_SERVICE_ACCOUNT_JSON`): trad-
+saker credential-caching med token-refresh i `llm.py`, Bearer-token i
+`discovery.py`, nya falt i `config.py`, och `google-auth>=2.29` i
+requirements. Bakatkompatiblitet med enkel `GEMINI_API_KEY` behalls.
+
+4 nya tester, alla 1721 grona. Email Studio
+(`route.ts`) anvander fortfarande `GEMINI_API_KEY` (separat arbete).
+
 ## 2026-09-08 — Claude — designhookarnas spärrar: fyra falska larm bortmätta
 
 Den delade hookkedjan i `~/.claude/hooks/` behandlade backend-arbete som

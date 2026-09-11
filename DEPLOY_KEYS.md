@@ -46,7 +46,15 @@ och båda är valda specifikt för sina GRATISNIVÅER:
 | --- | --- | --- |
 | `DEEPSEEK_API_KEY` | **Ja** | Ingenting kan köras — allt faller till simuleringsläge |
 | `SCRAPEGRAPHAI_API_KEY` | Nej | Fas B-research kan inte skrapa prospektsajter |
-| `GEMINI_API_KEY` | Nej | Ingen bildbeskrivning i ärenden; KB använder fulltext i stället för vektorsökning |
+| `GEMINI_API_KEY` | Nej* | Ingen bildbeskrivning i ärenden; KB använder fulltext i stället för vektorsökning |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | Nej* | Vertex AI service account JSON — ersätter GEMINI_API_KEY |
+| `GOOGLE_CLOUD_REGION` | Nej | Default `europe-west1`. Bara om annan region behövs |
+
+\* Minst en av `GEMINI_API_KEY` eller `GOOGLE_SERVICE_ACCOUNT_JSON` krävs för
+Gemini. Sedan Google tog bort Cloud-krediter från AI Studio (2026-09) behövs
+`GOOGLE_SERVICE_ACCOUNT_JSON` — den innehåller hela JSON-filen från
+Google Cloud Console (service account key). Är den satt används Vertex AI
+med OAuth2-tokens i stället för AI Studio med enkel API-nyckel.
 
 Nycklarna skapas en gång i respektive tjänsts dashboard — det går inte att
 automatisera, och ska inte gå att automatisera:

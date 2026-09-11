@@ -418,11 +418,31 @@ def _icp_som_text(icp: dict[str, Any]) -> str:
 
 async def _gemini_med_sokning(prompt: str) -> str:
     settings = get_settings()
-    nyckel = settings.gemini_api_key or settings.active_llm_key()
-    if not nyckel or len(nyckel) < 20:
-        raise DiscoveryError("Ingen Gemini-nyckel — sokningen kan inte kora.")
     modell = settings.model if "gemini" in (settings.model or "").lower() else "gemini-2.5-flash"
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{modell}:generateContent"
+
+    # Vertex AI: bearer-token + annan endpoint; AI Studio: ?key= query-param.
+    if settings.google_service_account_json:
+        from ..agent.llm import _vertex_token, _vertex_base_url
+        import json as _json
+        token = _vertex_token(settings)
+        info = _json.loads(settings.google_service_account_json)
+        project = info["project_id"]
+        region = settings.google_cloud_region
+        url = (
+            f"https://{region}-aiplatform.googleapis.com/v1beta1/"
+            f"projects/{project}/locations/{region}/"
+            f"publishers/google/models/{modell}:generateContent"
+        )
+        headers: dict[str, str] = {"Authorization": f"Bearer {token}"}
+        params: dict[str, str] = {}
+    else:
+        nyckel = settings.gemini_api_key or settings.active_llm_key()
+        if not nyckel or len(nyckel) < 20:
+            raise DiscoveryError("Ingen Gemini-nyckel — sokningen kan inte kora.")
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{modell}:generateContent"
+        headers = {}
+        params = {"key": nyckel}
+
     kropp = {
         "contents": [{"parts": [{"text": prompt}]}],
         "tools": [{"google_search": {}}],
@@ -433,7 +453,7 @@ async def _gemini_med_sokning(prompt: str) -> str:
         sista_forsoket = forsok == _SOKNING_FORSOK
         try:
             async with httpx.AsyncClient(timeout=_SOKNING_TIMEOUT) as client:
-                svar = await client.post(url, params={"key": nyckel}, json=kropp)
+                svar = await client.post(url, params=params, headers=headers, json=kropp)
         except httpx.HTTPError as fel:
             # Basklassen för httpx transportfel — täcker ReadTimeout,
             # ConnectError m.fl. utan att räkna upp varje underklass.

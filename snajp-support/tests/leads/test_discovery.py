@@ -183,6 +183,8 @@ class _FakeSettings:
 
     gemini_api_key = "fejk-" + "a" * 20
     model = "gemini-2.5-flash"
+    google_service_account_json = ""
+    google_cloud_region = "europe-west1"
 
     def active_llm_key(self) -> str:
         return self.gemini_api_key

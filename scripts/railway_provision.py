@@ -53,7 +53,8 @@ ENVIRONMENTS: dict[str, str] = {
 #: är en felkälla som är gemensam, även när den inte är en behörighetsfråga.
 PER_ENV_SECRETS = ("PG_PASSWORD", "APP_PASSWORD", "WEB_PASSWORD",
                    "MASTER_API_KEY", "DEMO_API_KEY", "AUTH_SECRET",
-                   "GEMINI_API_KEY", "OPENAI_API_KEY", "DEEPSEEK_API_KEY")
+                   "GEMINI_API_KEY", "OPENAI_API_KEY", "DEEPSEEK_API_KEY",
+                   "GOOGLE_SERVICE_ACCOUNT_JSON")
 
 #: Gamla, omiljöade namn i .env.deploy. De tillhör main, som redan kör med dem —
 #: att rotera hade tagit ner den tjänst skriptet ska provisionera.
