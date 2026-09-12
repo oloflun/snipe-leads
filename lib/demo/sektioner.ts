@@ -34,6 +34,11 @@
 export const DEMO_NAV = [
   ["", "Översikt"],
   ["leads", "Leads"],
+  // Avsteg från spegelregeln ovan, med avsikt: CRM-listan är den omgjorda
+  // leadsagentens demoyta (kundens egen kundlista + en Email studio per kund)
+  // och finns ännu inte på /dashboard. Posten annonseras här för att den ska
+  // gå att hitta — flyttas in i lib/routes.ts den dag funktionen byggs skarpt.
+  ["crm", "CRM-lista"],
   ["support", "Kundtjänst"],
   ["emails", "Email studio"],
   ["bokforing", "Bokföring"]

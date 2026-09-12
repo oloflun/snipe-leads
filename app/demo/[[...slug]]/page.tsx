@@ -3,6 +3,7 @@ import { PageShell } from "@/components/AppShell";
 import { DashboardProvider } from "@/components/dashboard/DashboardContext";
 import { StartView } from "@/components/dashboard/StartView";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
+import { CrmDemo } from "@/components/crm/CrmDemo";
 import { BokforingDemo } from "@/components/bookkeeping/BokforingDemo";
 import { Dashboard as SupportDashboard } from "@/components/snajp/Dashboard";
 import { LeadsControls } from "@/components/leads/LeadsControls";
@@ -102,6 +103,19 @@ function renderSektion(sektion: string | undefined): React.ReactNode | null {
       return <LeadsView demo />;
     case "emails":
       return <EmailStudioDemo />;
+    case "crm":
+      // Den omgjorda leadsagenten i demoform: kundens egen CRM-lista in
+      // (CSV, parsas i webbläsaren), en isolerad Email studio per kund ut.
+      // Följer filens regel — CrmDemo når varken session eller databas.
+      return (
+        <PageShell
+          kicker="Leadsagenten"
+          title="Din CRM-lista, en studio per kund"
+          description="Ladda upp kundlistan ur ert CRM som CSV. Agenten bevakar kundernas signaler, och varje kund får en egen, isolerad Email studio som skriver utifrån signalerna och er produkt. Listan stannar i webbläsaren och inget skickas."
+        >
+          <CrmDemo />
+        </PageShell>
+      );
     case "companies":
       return <CompaniesView demo />;
     case "contacts":
