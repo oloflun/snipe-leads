@@ -72,26 +72,34 @@ vision/embeddings-sidovagn. Säg till om den också ska bytas till Gemini.
 
 ## Deploy
 
-### Backend (Render — `snajp-support`) — där alla tre nycklar hör hemma
+### Backend (Railway) — huvudsaklig deploy-plattform sedan 2026-08
 
-Render CLI:t kan inte skriva env-variabler utan en separat API-token, så det
-här steget görs i dashboarden: **snajp-support → Environment**.
+Nycklarna sätts via skript — ALDRIG genom att klistra in dem i Railway-
+dashboarden (de hamnar i shell-historiken):
+
+```bash
+# Sätt GOOGLE_SERVICE_ACCOUNT_JSON lokalt (frågar efter filsökväg):
+python scripts/keys.py --key GOOGLE_SERVICE_ACCOUNT_JSON
+
+# Pusha alla backend-nycklar till BÅDA Railway-miljöerna och verifiera:
+python scripts/keys.py --push-railway
+```
 
 | Variabel | Värde |
 | --- | --- |
-| `DEEPSEEK_API_KEY` | din nyckel |
-| `SCRAPEGRAPHAI_API_KEY` | din nyckel (om Fas B ska köra) |
-| `GEMINI_API_KEY` | din nyckel (om vision/embeddings ska köra) |
-| `LLM_PROVIDER` | `deepseek` |
-| `MODEL` | `deepseek-v4-flash` |
+| `LLM_PROVIDER` | `gemini` |
+| `MODEL` | `gemini-2.5-flash` |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | Hela JSON-filen som en rad (sätts av `keys.py`) |
+| `GEMINI_API_KEY` | AI Studio-nyckel (fallback, gratisnivå — 20 anrop/dygn) |
+| `DEEPSEEK_API_KEY` | Bara för lokal syntetisk data, SPÄRRAD i main/development |
 
-`render.yaml` deklarerar redan `DEEPSEEK_API_KEY` och `GEMINI_API_KEY` med
-`sync: false` — det betyder just "värdet sätts i dashboarden, inte i repot".
+**Obs:** `LLM_PROVIDER=deepseek` vägrar starta i miljöer med riktig kunddata
+(main, development). Det är en dataskyddsspärr, inte en bugg — se CLAUDE.md.
 
-### Frontend (Vercel)
+### Frontend (Vercel — avvecklat för backend)
 
-Inget i den här omläggningen behöver Vercel — se noten om Email Studios
-separata `OPENAI_API_KEY` ovan om den frontend-integrationen ska bytas också.
+Email Studio (`app/api/email-studio/route.ts`) har en separat `OPENAI_API_KEY`
+i `.env.local`. Den rörs inte av Vertex AI-omläggningen.
 
 ---
 
