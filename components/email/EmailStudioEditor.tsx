@@ -45,8 +45,52 @@ const ui = {
   exempel: {
     sv: "Exempelmejl. Ni har inga utkast ännu — starta en körning under Leads, så ligger era egna här.",
     en: "Example email. You have no drafts yet — start a run under Leads and your own will appear here."
-  }
+  },
+  forskrivet: { sv: "Förskrivet förslag, ingen modell kördes.", en: "Pre-written suggestion, no model ran." }
 } satisfies Record<string, Localized>;
+
+/**
+ * Varför svaret är förskrivet — en ärlig mening per orsak från
+ * app/api/email-studio/route.ts (`simulated_reason`).
+ *
+ * Förut fanns tre grenar, och allt som inte var "anonym" eller "tillfälligt
+ * fel" blev "Ingen modellnyckel är kopplad". När krediterna tog slut fick en
+ * INLOGGAD testare alltså höra om en saknad nyckel (och, via svarets tips, att
+ * logga in) medan orsaken var kvoten. Varje orsak har nu sin egen sanning:
+ *
+ *   anonym             -> logga in (bara här — servern har sett att sessionen saknas)
+ *   ingen modellnyckel -> operatörens konfiguration, inget kunden kan göra
+ *   kreditslut         -> vårt fel, permanent tills vi agerat: INGET "försök igen"
+ *   kvot / tillfälligt -> övergående: "försök igen" är sant
+ */
+const SIMULERINGSORSAKER: Record<string, Localized> = {
+  anonym: {
+    sv: "Logga in för att köra åtgärden mot modellen.",
+    en: "Sign in to run this action against the model."
+  },
+  "ingen modellnyckel": {
+    sv: "AI-hjälpen är inte påslagen i den här miljön.",
+    en: "AI assistance is not switched on in this environment."
+  },
+  kreditslut: {
+    sv: "AI-krediterna är slut hos oss. Det beror inte på dig, och din text är orörd — åtgärderna fungerar igen när vi har fyllt på.",
+    en: "Our AI credits have run out. This is not caused by you, and your text is untouched — the actions will work again once we have topped up."
+  },
+  kvot: {
+    sv: "AI-leverantörens kvot är slut just nu. Prova igen om en stund.",
+    en: "The AI provider's quota is used up right now. Try again in a moment."
+  },
+  "tillfälligt fel": {
+    sv: "Modellen svarade inte just nu. Prova igen om en liten stund.",
+    en: "The model did not respond just now. Try again in a moment."
+  }
+};
+
+function simuleringsorsak(orsak: string | undefined): Localized {
+  // En okänd orsak (nyare server, äldre klient) får den försiktigaste
+  // meningen — aldrig "logga in" och aldrig ett påstående om nycklar.
+  return (orsak && SIMULERINGSORSAKER[orsak]) || SIMULERINGSORSAKER["tillfälligt fel"];
+}
 
 type RichResult = {
   original_version?: string | null;
@@ -147,7 +191,15 @@ export function EmailStudioEditor({
 
         // Direct rewrites apply straight away; analyse/AB/follow-up keep the editor
         // untouched so the user decides.
-        const directApply = ["shorter", "rewrite", "improve", "personalize", "translate"].includes(action);
+        //
+        // Ett förskrivet svar skriver ALDRIG över kundens egen text, utom i den
+        // anonyma demon (där är texten vårt exempel och bytet är poängen).
+        // Förut ersattes en inloggad kunds utkast med mallen när krediterna tog
+        // slut — "din text är orörd" hade varit osant. Resultatet visas ändå,
+        // och "Använd ny version" finns kvar för den som vill ha det.
+        const forskrivet = rich.simulated && rich.simulated_reason !== "anonym";
+        const directApply =
+          !forskrivet && ["shorter", "rewrite", "improve", "personalize", "translate"].includes(action);
         if (directApply) {
           if (rich.subject_suggestions[0]) setSubject(rich.subject_suggestions[0]);
           setBody(rich.new_version);
@@ -309,14 +361,13 @@ export function EmailStudioEditor({
                 Diskret rad, mineral — samma mönster som "Räknar lokalt · ingen
                 modell" i Rådgivaren (components/admin/Radgivare.tsx), inte en
                 egen ruta. */}
+            {/* En text per orsak, och orsaken kommer från servern — som
+                avgör inloggning med getWorkspaceContext(). Klienten har ingen
+                egen sessionskunskap här och ska inte gissa: "logga in" till
+                en inloggad kund var precis felrapporten. */}
             {lastResult.simulated ? (
               <p className="mt-5 text-[0.875rem] leading-6 text-mineral">
-                Exempeltext, ingen modell kördes.{" "}
-                {lastResult.simulated_reason === "anonym"
-                  ? "Du är inte inloggad."
-                  : lastResult.simulated_reason === "tillfälligt fel"
-                    ? "Modellen svarade inte just nu. Prova igen om en liten stund."
-                    : "Ingen modellnyckel är kopplad i den här miljön."}
+                {text(ui.forskrivet)} {text(simuleringsorsak(lastResult.simulated_reason))}
               </p>
             ) : null}
 

@@ -63,10 +63,13 @@ automatisera, och ska inte gå att automatisera:
 - ScrapeGraphAI: <https://dashboard.scrapegraphai.com>
 - Gemini (gratisnivå): <https://aistudio.google.com/apikey>
 
-**Not om OpenAI:** Email Studio (`app/api/email-studio/route.ts`, Next.js-sidan)
-har en egen, separat `OPENAI_API_KEY` i `.env.local` — orört av den här
-omläggningen. Det är en annan integration (Vercel AI SDK) än backendens
-vision/embeddings-sidovagn. Säg till om den också ska bytas till Gemini.
+**Not om Email Studio:** `app/api/email-studio/route.ts` (Next.js-sidan, tjänsten
+`web`) väljer modell i ordningen `OPENAI_API_KEY` → `GOOGLE_SERVICE_ACCOUNT_JSON`
+(Vertex AI) → `GEMINI_API_KEY` → `DEEPSEEK_API_KEY` (bara lokalt), se
+`lib/llm/modellval.ts`. Sedan 2026-09-13 talar den Vertex AI på samma sätt som
+backenden, men **variablerna läses från `web`-tjänsten, inte `api`** — de måste
+alltså finnas på båda. Utan dem svarar varje åtgärd med förskriven text och
+editorn säger "AI-hjälpen är inte påslagen i den här miljön".
 
 ---
 
@@ -98,8 +101,10 @@ python scripts/keys.py --push-railway
 
 ### Frontend (Vercel — avvecklat för backend)
 
-Email Studio (`app/api/email-studio/route.ts`) har en separat `OPENAI_API_KEY`
-i `.env.local`. Den rörs inte av Vertex AI-omläggningen.
+Email Studio (`app/api/email-studio/route.ts`) kör på Railway-tjänsten `web` och
+behöver `GOOGLE_SERVICE_ACCOUNT_JSON` (och vid behov `GOOGLE_CLOUD_REGION`,
+`MODEL`) satta **på `web`** i båda miljöerna — samma värden som på `api`.
+`OPENAI_API_KEY` vinner fortfarande om den är satt.
 
 ---
 

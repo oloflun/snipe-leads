@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateText } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { getWorkspaceContext } from '@/lib/workspace';
+import { valjModell, type Modellval } from '@/lib/llm/modellval';
+import { hamtaVertexToken } from '@/lib/llm/vertex';
+import { kanForsokasOm, klassaModellfel, statuskod, type Modellfelklass } from '@/lib/llm/kvotfel';
 
 /**
  * Routen väntar på ett LLM-anrop och var den ENDA under app/api som saknade
@@ -16,69 +19,46 @@ import { getWorkspaceContext } from '@/lib/workspace';
 export const maxDuration = 60;
 
 /**
- * Vilken modell åtgärderna körs mot.
+ * Vilken modell åtgärderna körs mot: se lib/llm/modellval.ts för ordningen
+ * (OpenAI → Vertex AI → GEMINI_API_KEY → DeepSeek) och dataskyddsspärren.
  *
  * BAKGRUNDEN, uppmätt 2026-08-23: routen krävde `OPENAI_API_KEY`, och den var
- * inte satt på webbtjänsten i NÅGON miljö. `useSimulation` var alltså sann
- * även för en inloggad, betalande kund — alla åtta åtgärder svarade med
- * mallgenererad text som inte gick att skilja från en modellskriven
- * omskrivning. Funktionen såg ut att fungera och gjorde det inte.
+ * inte satt på webbtjänsten i NÅGON miljö — alla åtta åtgärder svarade med
+ * mallgenererad text även för en inloggad, betalande kund. 2026-09 hände
+ * samma sak igen från andra hållet: Google tog bort Cloud-krediterna från AI
+ * Studio, GEMINI_API_KEY blev gratisnivå (20 anrop/dygn), och backenden gick
+ * över till Vertex AI medan den här routen inte kände till Vertex.
  *
- * Samtidigt betalar projektet redan för DeepSeek: agenterna kör mot den, och
- * nyckeln finns på API-tjänsten. DeepSeek talar OpenAI-protokollet, så samma
- * klient når båda — bara base_url och modellnamn skiljer.
+ * ## Varför `.chat()` och inte `klient(namn)`
  *
- * Ordningen är avsiktlig. OPENAI_API_KEY vinner när den finns, så att ett
- * senare byte tillbaka inte kräver en kodändring. Saknas den provas Gemini —
- * samma leverantör backenden redan kör live mot, se plans/2026-08-28. Saknas
- * även den används DeepSeek (bara lokalt). Saknas alla tre simulerar routen,
- * som förut, och SÄGER det i svaret.
+ * I @ai-sdk/openai v4 går `klient(namn)` mot OpenAI:s RESPONSES-API
+ * (`POST {baseURL}/responses`). Varken Gemini, Vertex eller DeepSeek har den
+ * endpointen — de talar Chat Completions. Gemini-grenen här kunde alltså
+ * aldrig lyckas, och varje anrop blev ett "tillfälligt fel". OpenAI själv
+ * klarar båda och får behålla standardvägen.
  */
-function valjModell() {
-  const openaiKey = process.env.OPENAI_API_KEY || "";
-  if (dugerSomNyckel(openaiKey)) {
-    return {
-      klient: createOpenAI({ apiKey: openaiKey }),
-      namn: process.env.EMAIL_STUDIO_MODEL || "gpt-4o-mini"
-    };
+async function byggSprakmodell(val: Modellval) {
+  if (val.provider === "openai") {
+    return createOpenAI({ apiKey: val.apiKey })(val.namn);
   }
-
-  const geminiKey = process.env.GEMINI_API_KEY || "";
-  if (dugerSomNyckel(geminiKey)) {
-    return {
-      // Samma OpenAI-kompatibla endpoint som backenden använder
-      // (snajp-support/app/agent/llm.py) — håll adressen synkad med den.
-      klient: createOpenAI({
-        apiKey: geminiKey,
-        baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/"
-      }),
-      // MODEL, inte EMAIL_STUDIO_MODEL: samma variabelnamn som backenden, så
-      // att en delad Railway-variabel styr modellvalet på båda ställena.
-      namn: process.env.MODEL || "gemini-3.6-flash"
-    };
-  }
-
-  const deepseekKey = process.env.DEEPSEEK_API_KEY || "";
-  // DeepSeek behandlar prompten i Kina, och det som postas hit är kundens
-  // utkast med namn och bolagsuppgifter. Beslutet 2026-08-24 (CLAUDE.md,
-  // snajp-support/app/agent/llm.py) förbjuder det mot riktig kunddata.
-  // NODE_ENV=production täcker både prod och Railway-dev (som speglar prod);
-  // kvar blir lokal utveckling mot syntetiska exempel — där hör DeepSeek hemma.
-  if (dugerSomNyckel(deepseekKey) && process.env.NODE_ENV !== "production") {
-    return {
-      // Samma base_url som snajp-support/app/agent/llm.py använder. Håll dem
-      // lika — två adresser till samma leverantör är två saker att byta.
-      klient: createOpenAI({ apiKey: deepseekKey, baseURL: "https://api.deepseek.com" }),
-      namn: process.env.EMAIL_STUDIO_MODEL || "deepseek-chat"
-    };
-  }
-
-  return null;
+  // Vertex: kortlivad OAuth2-token i stället för nyckel. Cachen i
+  // lib/llm/vertex.ts gör att bara det första anropet i timmen växlar token.
+  const apiKey = val.provider === "vertex" ? await hamtaVertexToken(val.serviceAccount) : val.apiKey;
+  return createOpenAI({ apiKey, baseURL: val.baseURL }).chat(val.namn);
 }
 
-/** En platshållare är inte en nyckel. Samma villkor som backendens `_looks_real`. */
-function dugerSomNyckel(key: string): boolean {
-  return Boolean(key) && key.length >= 20 && !key.includes("...") && !key.includes("din-");
+/**
+ * GOOGLE_SERVICE_ACCOUNT_JSON satt men oanvändbar (trasig JSON, fält saknas)
+ * faller tyst vidare till nästa leverantör i modellval.ts. Tyst är fel för en
+ * operatör, så det sägs i loggen — utan innehållet, som bär privatnyckeln.
+ */
+function varnaOmTrasigServiceAccount(val: Modellval | null) {
+  if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON && val?.provider !== "vertex" && val?.provider !== "openai") {
+    console.error(
+      "[email-studio:vertex-konfig] GOOGLE_SERVICE_ACCOUNT_JSON är satt men går inte att läsa " +
+        "(JSON, client_email, private_key eller project_id saknas) — Vertex AI används inte."
+    );
+  }
 }
 
 function parseRichRefine(content: string) {
@@ -171,7 +151,31 @@ function parseRichRefine(content: string) {
  * läst. Allt konkret kommer nu ur `context` — bolag, signal, erbjudande,
  * uppmaning och mottagare — och ingen ort eller bransch står skriven i koden.
  */
-function simulateAction(action: string, emailContent: string, subject: string, context: any = {}) {
+type Simuleringsorsak = "anonym" | "ingen modellnyckel" | Modellfelklass;
+
+/**
+ * Tipsraden under ett förskrivet svar, per orsak. Den stod förut hårt som
+ * "Logga in för att köra åtgärden mot modellen" för VARJE simulering — också
+ * när en inloggad kund föll på kvoten. Samma orsaker som editorns
+ * SIMULERINGSORSAKER; den här raden är svarets egen, den där är notisen.
+ */
+const SIMULERINGSTIPS: Record<Simuleringsorsak, string> = {
+  anonym: "Demoläge: svaret är förskrivet och kostar inget modellanrop. Logga in för att köra åtgärden mot modellen.",
+  "ingen modellnyckel": "Förskrivet förslag utifrån din kontext: AI-hjälpen är inte påslagen i den här miljön.",
+  kreditslut:
+    "Förskrivet förslag utifrån din kontext: AI-krediterna är slut hos oss, så ingen modell kördes. Din text är orörd.",
+  kvot: "AI-leverantörens kvot är slut just nu, så det här är ett förskrivet förslag utifrån din kontext. Prova åtgärden igen om en stund.",
+  "tillfälligt fel":
+    "Modellen svarade inte just nu, så det här är ett förskrivet förslag utifrån din kontext. Prova åtgärden igen om en liten stund."
+};
+
+function simulateAction(
+  action: string,
+  emailContent: string,
+  subject: string,
+  context: any = {},
+  orsak: Simuleringsorsak = "anonym"
+) {
   const orig = emailContent || "Hej,\n\n...";
   const company = context?.companyName || "bolaget";
   const signal = context?.signal || "det som händer hos er just nu";
@@ -259,7 +263,12 @@ function simulateAction(action: string, emailContent: string, subject: string, c
     } else {
       new_version = `${namn}\n\nJag såg det senaste som hänt hos ${company}. ${lagesfras} den här frågan ${skiftesfras}.\n\nVi tar gärna fram ett förslag som utgår från hur ni faktiskt jobbar.\n\nVill ni att vi skickar över det?`;
     }
-    explanation = "Översättning i demoläge: hela mejlet skrivs på målspråket. Innehållet hålls generellt eftersom demon inte kör någon modell — logga in för en översättning av just den här texten.";
+    // "Logga in" bara när det är orsaken — en inloggad kund som föll på
+    // kvoten ska inte få höra det.
+    explanation =
+      orsak === "anonym"
+        ? "Översättning i demoläge: hela mejlet skrivs på målspråket. Innehållet hålls generellt eftersom demon inte kör någon modell — logga in för en översättning av just den här texten."
+        : "Förskriven översättning: hela mejlet skrivs på målspråket, men innehållet hålls generellt eftersom ingen modell kördes. En översättning av just den här texten kräver modellen.";
     subject_suggestions = [subject || "Translated subject"];
   } else if (action === "ab_variants") {
     new_version = `Variant A (problem):\n${namn}\n\n${signal} hos ${company} brukar betyda att en sak plötsligt blir brådskande. ${offer} finns för det steget.\n\n${cta}?\n\nVariant B (möjlighet):\n${namn}\n\n${signal} hos ${company} öppnar ett fönster. Vi har sett hur ${inled(offer)} ger mest effekt just när något nytt precis kommit på plats.\n\n${cta}?`;
@@ -287,7 +296,7 @@ function simulateAction(action: string, emailContent: string, subject: string, c
     new_version: new_version.trim(),
     explanation,
     subject_suggestions,
-    confidence_tips: "Demoläge: svaret är förskrivet och kostar inget modellanrop. Logga in för att köra åtgärden mot modellen."
+    confidence_tips: SIMULERINGSTIPS[orsak]
   };
 }
 
@@ -409,28 +418,17 @@ const ACTION_INSTRUCTIONS: Record<string, string> = {
 };
 
 /**
- * Transienta fel går att försöka om; resten inte. AI-SDK:ns APICallError bär
- * statusCode och isRetryable; nätverksfel och timeouts saknar status helt.
- */
-function arTransientFel(error: unknown): boolean {
-  const e = error as { statusCode?: number; isRetryable?: boolean; name?: string } | null;
-  if (!e) return false;
-  if (e.isRetryable === true) return true;
-  if (typeof e.statusCode === "number") {
-    return e.statusCode === 408 || e.statusCode === 429 || e.statusCode >= 500;
-  }
-  // Ingen statuskod = anropet nådde aldrig fram (nätverk, DNS, abort/timeout).
-  return true;
-}
-
-/**
  * Modellanrop med omtag: upp till tre försök med exponentiell paus (1 s, 2 s)
  * för transienta fel, varje försök med egen tidsgräns. Budgeten är medvetet
  * räknad mot maxDuration = 60: 3 × 15 s + 3 s paus = 48 s, så routen hinner
  * alltid skriva en egen svarskropp i stället för att dödas utan kropp.
+ *
+ * Vad som räknas som transient avgör `kanForsokasOm` (lib/llm/kvotfel.ts).
+ * Förut togs VARJE 429 om — också kreditslut, där tre anrop mot en tom kredit
+ * bara är tre avvisningar och tre sekunders väntan för kunden.
  */
 async function generateMedForsok(opts: {
-  model: ReturnType<ReturnType<typeof createOpenAI>>;
+  model: Parameters<typeof generateText>[0]["model"];
   system: string;
   prompt: string;
 }): Promise<string> {
@@ -450,7 +448,7 @@ async function generateMedForsok(opts: {
       return text;
     } catch (error) {
       sista = error;
-      if (!arTransientFel(error) || forsok === 2) throw error;
+      if (!kanForsokasOm(error) || forsok === 2) throw error;
       await new Promise((klar) => setTimeout(klar, 1000 * 2 ** forsok));
     }
   }
@@ -512,9 +510,11 @@ export async function POST(request: NextRequest) {
   // Anonym besökare -> ALLTID simulering, oavsett vilka nycklar som finns.
   // Det är den raden som gör att marknadssidans knappar fungerar utan att en
   // oinloggad kan nå modellen. Se docstringen ovan om INV-SEC-010.
-  const modell = session.publikDemo ? null : valjModell();
+  const modell = session.publikDemo ? null : valjModell(process.env);
+  if (!session.publikDemo) varnaOmTrasigServiceAccount(modell);
   if (modell === null) {
-    const sim = simulateAction(kandAction, emailContent, subject, context);
+    const orsak: Simuleringsorsak = session.publikDemo ? "anonym" : "ingen modellnyckel";
+    const sim = simulateAction(kandAction, emailContent, subject, context, orsak);
 
     return NextResponse.json({
       success: true,
@@ -533,7 +533,7 @@ export async function POST(request: NextRequest) {
          * docstringen ovan. Det som saknades var att svaret sa det.
          */
         simulated: true,
-        simulated_reason: session.publikDemo ? "anonym" : "ingen modellnyckel"
+        simulated_reason: orsak
       }
     });
   }
@@ -570,28 +570,52 @@ export async function POST(request: NextRequest) {
   let text: string;
   try {
     text = await generateMedForsok({
-      model: modell.klient(modell.namn),
+      // Tokenväxlingen för Vertex sker här, INNE i try: ett avvisat
+      // service account-konto ska klassas och besvaras som vilket modellfel
+      // som helst, inte bli en 500 utan kropp.
+      model: await byggSprakmodell(modell),
       system: EMAIL_STUDIO_SYSTEM_PROMPT,
       prompt: userPrompt
     });
   } catch (error: any) {
     /**
-     * Modellen svarade inte trots omtagen. Kunden får ALDRIG se det som ett
-     * fel: hela feltexten (som kan bära leverantörens payload, kvot-texter
-     * och request-id:n) loggas server-side, och svaret blir det deterministiska
-     * förslaget med en ärlig markering om varför. Knappen fortsätter fungera.
+     * Modellen svarade inte trots omtagen. Kunden får ALDRIG se leverantörens
+     * råtext: diagnosen loggas server-side, och svaret blir det deterministiska
+     * förslaget med en ärlig markering om VARFÖR — kreditslut, kvot eller
+     * tillfälligt fel är tre olika besked (lib/llm/kvotfel.ts).
+     *
+     * Loggraden bär status och meddelande, inte hela felobjektet. AI-SDK:ns
+     * APICallError har `requestBodyValues`, alltså hela prompten med kundens
+     * utkast och mottagarens namn — att logga objektet rakt av skrev
+     * kunddata till driftloggen vid varje fel.
+     *
+     * Taggarna `[email-studio:modellfel]` och `[email-studio:kreditslut]` är
+     * stabila med flit: de är det man söker efter i Railways logg.
      */
-    console.error("Email Studio: modellanropet föll efter omtag:", error);
-    const sim = simulateAction(kandAction, emailContent, subject, context);
+    const klass = klassaModellfel(error);
+    const status = statuskod(error);
+    const meddelande = String(error?.message ?? error).slice(0, 300);
+    console.error(
+      `[email-studio:modellfel] klass=${klass} provider=${modell.provider} modell=${modell.namn} status=${status ?? "-"}`,
+      meddelande
+    );
+    if (klass === "kreditslut") {
+      // Nyckeln per dygn speglar `larma_kreditslut` i snajp-support/app/kvotfel.py.
+      // Next-appen har ännu ingen väg att skriva platform_events eller skicka
+      // det prioriterade mejlet — raden här är larmet tills den finns.
+      console.error(
+        `[email-studio:kreditslut] larmnyckel=kreditslut:${new Date().toISOString().slice(0, 10)} provider=${modell.provider} — ` +
+          "leverantören avvisar anropen (kredit slut eller fakturering avstängd). Varje Email Studio-åtgärd svarar med förskriven text tills det är åtgärdat."
+      );
+    }
+    const sim = simulateAction(kandAction, emailContent, subject, context, klass);
     return NextResponse.json({
       success: true,
       data: {
         ...sim,
         action: kandAction,
         simulated: true,
-        simulated_reason: "tillfälligt fel",
-        confidence_tips:
-          "Modellen svarade inte just nu, så det här är ett förskrivet förslag utifrån din kontext. Prova åtgärden igen om en liten stund."
+        simulated_reason: klass
       }
     });
   }
@@ -600,8 +624,8 @@ export async function POST(request: NextRequest) {
   // Ett tomt modellsvar får inte se ut som en lyckad omskrivning — då står
   // kundens gamla text kvar under rubriken "Ny version" utan förklaring.
   if (!rich.new_version || !rich.new_version.trim()) {
-    console.error("Email Studio: modellen svarade tomt för åtgärden", kandAction);
-    const sim = simulateAction(kandAction, emailContent, subject, context);
+    console.error(`[email-studio:modellfel] klass=tomt-svar provider=${modell.provider} modell=${modell.namn} åtgärd=${kandAction}`);
+    const sim = simulateAction(kandAction, emailContent, subject, context, "tillfälligt fel");
     return NextResponse.json({
       success: true,
       data: { ...sim, action: kandAction, simulated: true, simulated_reason: "tillfälligt fel" }
