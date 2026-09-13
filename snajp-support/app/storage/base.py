@@ -547,6 +547,36 @@ class Storage(Protocol):
         self, tenant_id: str, list_id: str
     ) -> list[dict[str, Any]]: ...
 
+    async def rensa_lead_list_items(self, tenant_id: str, list_id: str) -> int:
+        """Tar bort EN listas rader. Returnerar antal borttagna.
+
+        För listor som inte blev klara: en misslyckad lista ska inte visa en
+        halv tabell (uppmätt 2026-09-13: tre skräprader under en lista som
+        stod i 'byggs' i dagar)."""
+        ...
+
+    async def stada_hangande_leadsjobb(
+        self, tenant_id: str, *, aldre_an_minuter: int, utom: list[str] | None = None
+    ) -> list[str]:
+        """Markerar liggarrader i queued/processing med created_at äldre än
+        `aldre_an_minuter` som failed. `utom` är job_id som körs i den här
+        processen och aldrig ska städas. Returnerar de städade job_id:na.
+        Se app/jobs/stadare.py."""
+        ...
+
+    async def stada_hangande_leadslistor(
+        self,
+        tenant_id: str,
+        *,
+        aldre_an_minuter: int,
+        felorsak: str,
+        utom: list[str] | None = None,
+    ) -> list[str]:
+        """Markerar listor i bestalld/byggs äldre än `aldre_an_minuter` som
+        'fel' med `felorsak`, och tar bort deras rader i samma svep.
+        Returnerar de städade list_id:na. Se app/jobs/stadare.py."""
+        ...
+
     async def weekly_analytics(self, tenant_id: str, *, weeks: int = 8) -> dict[str, Any]:
         """Veckovis utfall för kundens analysvy — EN tenant, aldrig aggregerat.
 

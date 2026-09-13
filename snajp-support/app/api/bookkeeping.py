@@ -19,12 +19,14 @@ avrunda bort dem.
 from __future__ import annotations
 
 import json as _json
+import logging
 from datetime import date
 from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile
 from fastapi import File as FastAPIFile
+from fastapi.responses import JSONResponse
 
 from ..agent.bookkeeping_agent import (
     AGENT_TYPE,
@@ -46,9 +48,65 @@ from ..bookkeeping.underlag import (
 )
 from ..bookkeeping.verifieringsgrind import STATUS_GRANSKA, STATUS_KLAR
 from ..config import get_settings
+from ..kvotfel import (
+    KUNDTEXT_KREDITSLUT,
+    KUNDTEXT_KREDITSLUT_DOKUMENT,
+    KUNDTEXT_KVOT,
+    KUNDTEXT_KVOT_DOKUMENT,
+    ar_kreditslut,
+    ar_kvotfel,
+    larma_kreditslut,
+)
 from .deps import require_tenant
 
 router = APIRouter()
+logger = logging.getLogger("snajp-support.bookkeeping")
+
+#: Tillägg när chattens bilaga HANN sparas men svaret föll på kvoten efteråt.
+_BILAGAN_ARSPARAD = " Underlaget du bifogade är sparat och behöver inte laddas upp igen."
+
+
+async def _kvotsvar(
+    storage: Any, tenant_id: str, fel: Exception, *, dokument: str
+) -> JSONResponse | None:
+    """Kvotklassens svar för bokföringens LLM-vägar, eller None ("inte ett kvotfel").
+
+    ## Varför routen svarar själv i stället för att lämna det åt den globala handlern
+
+    Den globala handlern (api/events.py) svarar 429 med en allmän kvottext —
+    men för ett kvitto är det allmänna beskedet fel besked. Filen läses bara i
+    minnet och kastas (se ta_emot_underlag), och avläsningen körs FÖRE
+    `create_bk_underlag`. Ett kvotfel betyder alltså att dokumentet INTE
+    sparades, och det enda som hjälper kunden är att få veta att det måste
+    laddas upp igen. Uppmätt av testaren 2026-09-13: kvitton "kastades" vid
+    kvotfel utan att någon sa det.
+
+    KREDITSLUT svarar 503 (tjänsten är nere tills vi agerat — att klienten
+    gör om anropet hjälper inte) och larmar oss; ÖVERGÅENDE kvot svarar 429.
+    `klass` följer med så att uppladdningspanelen kan stoppa en batch vid
+    kreditslut men låta kunden försöka igen vid kvot.
+
+    `dokument`: "ej_sparat" (uppladdning/bilaga föll), "sparat" (bilagan
+    sparades, chattsvaret föll), "inget" (chatt utan bilaga).
+    """
+    if ar_kreditslut(fel):
+        await larma_kreditslut(storage, tenant_id=tenant_id, kalla="bokforing", fel=fel)
+        status, klass = 503, "kreditslut"
+        text = KUNDTEXT_KREDITSLUT_DOKUMENT if dokument == "ej_sparat" else KUNDTEXT_KREDITSLUT
+    elif ar_kvotfel(fel):
+        status, klass = 429, "kvot"
+        text = KUNDTEXT_KVOT_DOKUMENT if dokument == "ej_sparat" else KUNDTEXT_KVOT
+    else:
+        return None
+    if dokument == "sparat":
+        text += _BILAGAN_ARSPARAD
+    logger.warning("Bokföringens modellanrop avvisades (%s, tenant %s): %s", klass, tenant_id, fel)
+    # Både `error` och `detail`: lib/http/json.ts:readJson läser `error`,
+    # bokföringschatten läser FastAPI-formen `detail`.
+    return JSONResponse(
+        status_code=status,
+        content={"error": text, "detail": text, "klass": klass, "sparat": dokument == "sparat"},
+    )
 
 def _underlag_ut(rad: dict[str, Any]) -> dict[str, Any]:
     return {
@@ -213,6 +271,13 @@ async def ladda_upp_underlag(
         )
     except UnderlagsfelError as fel:
         raise HTTPException(status_code=422, detail=str(fel)) from fel
+    except Exception as fel:
+        kvot = await _kvotsvar(
+            request.app.state.storage, tenant["tenant_id"], fel, dokument="ej_sparat"
+        )
+        if kvot is None:
+            raise
+        return kvot
 
     # Texten går INTE vidare till uppladdningspanelen. Den behövs bara av
     # chatten, och ett svar som bär hela kvittots innehåll till en vy som visar
@@ -397,6 +462,11 @@ async def chatt(
                 )
             except UnderlagsfelError as fel:
                 raise HTTPException(status_code=422, detail=str(fel)) from fel
+            except Exception as fel:
+                kvot = await _kvotsvar(storage, tenant["tenant_id"], fel, dokument="ej_sparat")
+                if kvot is None:
+                    raise
+                return kvot
     else:
         kropp = await request.json()
         meddelande = str(kropp.get("meddelande") or "").strip()
@@ -447,13 +517,26 @@ async def chatt(
             )
         )
 
-    svar = await run_bookkeeping_chat_turn(
-        storage,
-        tenant["tenant_id"],
-        message=meddelande,
-        historik=historik,
-        forhamtat=forhamtat,
-    )
+    try:
+        svar = await run_bookkeeping_chat_turn(
+            storage,
+            tenant["tenant_id"],
+            message=meddelande,
+            historik=historik,
+            forhamtat=forhamtat,
+        )
+    except Exception as fel:
+        # Bilagan (om någon) är redan sparad här — beskedet ska säga det, inte
+        # skicka kunden att ladda upp samma kvitto igen och få dubblettspärren.
+        kvot = await _kvotsvar(
+            storage,
+            tenant["tenant_id"],
+            fel,
+            dokument="sparat" if bilaga is not None else "inget",
+        )
+        if kvot is None:
+            raise
+        return kvot
 
     await storage.log_agent_run(
         tenant["tenant_id"],

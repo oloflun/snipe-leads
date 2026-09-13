@@ -12,7 +12,14 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ..config import get_settings
-from ..kvotfel import KUNDTEXT_KREDITSLUT, ar_kreditslut, larma_kreditslut, oversatt_felstext
+from ..kvotfel import (
+    KUNDTEXT_KREDITSLUT,
+    KUNDTEXT_KVOT,
+    ar_kreditslut,
+    ar_kvotfel,
+    larma_kreditslut,
+    oversatt_felstext,
+)
 from . import rate_limit_db
 from .deps import require_tenant
 from .schemas import ChatRequest
@@ -129,18 +136,19 @@ async def _process(
         # slut och varje chatt svarade med den generiska raden. Ingen
         # leverantörstext läcker — meningen är vår egen; diagnosen står i
         # loggen och i platform_events ovan.
-        felnamn = type(fel).__name__
         if ar_kreditslut(fel):
             # Permanent tills en människa fyllt på — "försök igen om en
             # stund" vore vilseledande, och rätt mottagare av beskedet är
-            # vi. Larmet dedupliceras per dygn.
+            # vi. Larmet dedupliceras per dygn. Klassningen täcker sedan
+            # 2026-09-13 även Vertex 403 BILLING_DISABLED/avstängt projekt,
+            # som tidigare föll hela vägen ned till den generiska meningen.
             kundtext = KUNDTEXT_KREDITSLUT
-            await larma_kreditslut(app_state.storage, tenant_id=tenant_id, kalla="chat")
-        elif "RateLimit" in felnamn or "429" in str(fel)[:80]:
-            kundtext = (
-                "Svarskapaciteten är tillfälligt slut hos vår AI-leverantör. "
-                "Vi fyller på — försök gärna igen om en stund."
-            )
+            await larma_kreditslut(app_state.storage, tenant_id=tenant_id, kalla="chat", fel=fel)
+        elif ar_kvotfel(fel):
+            # Samma klassare som resten av kodbasen, inte en egen strängsniff:
+            # den gamla ("429" bland de första 80 tecknen) missade ett
+            # omslaget kvotfel och kunde slå till på "429 kr" i en feltext.
+            kundtext = KUNDTEXT_KVOT
         else:
             kundtext = (
                 "Svaret gick inte att ta fram den här gången. "

@@ -10,7 +10,7 @@ import {
   btnPrimary,
   btnSecondary
 } from "@/components/ui";
-import { felmeddelande, readJson } from "@/lib/http/json";
+import { HttpJsonError, felmeddelande, readJson } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
 
 /**
@@ -121,6 +121,43 @@ function procent(varde: string | null): string {
   return MOMSETIKETT[normaliserad] ?? "—";
 }
 
+/**
+ * Utfallet för EN fil i en uppladdningsbatch som inte kom in.
+ *
+ * "fel" = filen skickades och avvisades (orsaken är backendens egen mening).
+ * "ej_behandlad" = filen skickades aldrig, eftersom batchen stoppades vid
+ * kreditslut — att skicka resten hade bara gett samma nej per fil.
+ */
+type Filutfall = { namn: string; utfall: "fel" | "ej_behandlad"; orsak: string };
+
+/**
+ * Backendens mening + klass ur ett misslyckat uppladdningsanrop.
+ *
+ * `readJson` läser bara `error`. Kvotsvaren (app/api/bookkeeping.py
+ * `_kvotsvar`) bär både `error` och `klass`, men 422-svaren (dubblett,
+ * PDF utan textlager, fel filtyp) är FastAPI-formen `{detail: "..."}` — utan
+ * den här läsningen blev de "Oväntat svar från servern (status 422)", och
+ * kunden fick aldrig veta att filen var en dubblett.
+ */
+function tolkaUppladdningsfel(orsak: unknown): { text: string; klass: string | null; status: number } {
+  if (orsak instanceof HttpJsonError) {
+    const kropp =
+      orsak.body && typeof orsak.body === "object" ? (orsak.body as Record<string, unknown>) : {};
+    const text =
+      (typeof kropp.error === "string" && kropp.error) ||
+      (typeof kropp.detail === "string" && kropp.detail) ||
+      orsak.message;
+    return { text, klass: typeof kropp.klass === "string" ? kropp.klass : null, status: orsak.status };
+  }
+  return { text: felmeddelande(orsak), klass: null, status: 0 };
+}
+
+/** Kvot (429), nätavbrott (0) och serverhicka (5xx) kan gå vägen vid nästa
+ *  försök. En dubblett eller en oläsbar fil (422) gör det aldrig. */
+function arOmforsokbart(status: number): boolean {
+  return status === 0 || status === 429 || status >= 500;
+}
+
 type Avstamning = {
   antal_transaktioner: number;
   antal_underlag: number;
@@ -135,6 +172,8 @@ export function BokforingPanel() {
   const [rapport, setRapport] = useState<Rapport | null>(null);
   const [period, setPeriod] = useState(innevarandeManad);
   const [laddarUpp, setLaddarUpp] = useState(false);
+  const [filutfall, setFilutfall] = useState<Filutfall[]>([]);
+  const [attForsokaIgen, setAttForsokaIgen] = useState<File[]>([]);
   const [fel, setFel] = useState<string | null>(null);
   const filväljare = useRef<HTMLInputElement>(null);
   // Avstämningen har en EGEN väljare. Delad med underlagsväljaren hade betytt
@@ -230,24 +269,63 @@ export function BokforingPanel() {
     }
   }
 
-  async function laddaUpp(filer: FileList | null) {
-    if (!filer?.length) return;
+  /**
+   * Laddar upp filerna EN I TAGET och håller reda på utfallet per fil.
+   *
+   * Tidigare låg hela loopen i ett enda try: första avvisade filen kastade,
+   * och resten av batchen skickades aldrig — utan att någon fil namngavs.
+   * Vid kvotfel var det dubbelt illa, eftersom backenden inte sparar bytesen:
+   * kunden trodde att tio kvitton var inne och hade tre.
+   *
+   * Nu: en fil som avvisas listas med backendens mening och batchen går
+   * vidare. Vid KREDITSLUT stoppas batchen (varje återstående fil hade fått
+   * samma nej) och de oskickade filerna namnges. Filer som föll på något som
+   * kan gå vägen senare (kvot, nätet, en serverhicka) samlas bakom en
+   * "Försök igen"-knapp — webbläsaren har kvar File-objekten, så kunden
+   * slipper välja dem igen.
+   */
+  async function laddaUpp(filer: File[]) {
+    if (!filer.length) return;
     setLaddarUpp(true);
     setFel(null);
+    setFilutfall([]);
+    setAttForsokaIgen([]);
+    const utfall: Filutfall[] = [];
+    const igen: File[] = [];
     try {
-      for (const fil of Array.from(filer)) {
-        const kropp = new FormData();
-        kropp.append("fil", fil);
-        const svar = await fetch(`${BAS}/underlag`, { method: "POST", body: kropp });
-        await readJson(svar);
+      for (let i = 0; i < filer.length; i += 1) {
+        const fil = filer[i];
+        try {
+          const kropp = new FormData();
+          kropp.append("fil", fil);
+          const svar = await fetch(`${BAS}/underlag`, { method: "POST", body: kropp });
+          await readJson(svar);
+        } catch (orsak) {
+          const { text, klass, status } = tolkaUppladdningsfel(orsak);
+          utfall.push({ namn: fil.name, utfall: "fel", orsak: text });
+          if (klass === "kreditslut") {
+            for (const rest of filer.slice(i + 1)) {
+              utfall.push({
+                namn: rest.name,
+                utfall: "ej_behandlad",
+                orsak: "Skickades inte — uppladdningen stoppades när AI-kapaciteten tog slut."
+              });
+            }
+            break;
+          }
+          if (arOmforsokbart(status)) igen.push(fil);
+        }
       }
+      setFilutfall(utfall);
+      setAttForsokaIgen(igen);
       await hamta();
-    } catch (orsak) {
-      setFel(felmeddelande(orsak));
     } finally {
       setLaddarUpp(false);
     }
   }
+
+  const antalEjInne = filutfall.length;
+  const stoppadVidKreditslut = filutfall.some((rad) => rad.utfall === "ej_behandlad");
 
   const klar = rapport?.status === "klar";
   const harUnderlag = (underlag?.length ?? 0) > 0;
@@ -561,6 +639,45 @@ export function BokforingPanel() {
             {rensaKnapp}
           </div>
         </div>
+        {/* Filerna som INTE kom in, med backendens egen mening per fil. Står
+            före listan: det kunden måste göra något åt går före det som redan
+            är klart. Se `laddaUpp`. */}
+        {antalEjInne ? (
+          <div role="status" className="mt-4 max-w-[78ch] border-y border-ink/15 py-3">
+            <p className="flex items-center gap-2 text-[0.9375rem] font-semibold text-ink">
+              <AlertTriangle className="h-4 w-4 text-ochre" aria-hidden />
+              {antalEjInne} {antalEjInne === 1 ? "fil kom" : "filer kom"} inte in
+              {stoppadVidKreditslut ? " — uppladdningen stoppades" : ""}
+            </p>
+            <ul className="mt-2 space-y-2">
+              {filutfall.map((rad, i) => (
+                <li key={`${rad.namn}-${i}`} className="text-[0.9375rem]">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <span className="min-w-0 truncate font-medium text-ink">{rad.namn}</span>
+                    {rad.utfall === "ej_behandlad" ? <Badge tone="warn">Inte skickad</Badge> : null}
+                  </span>
+                  <span className="block text-[0.875rem] text-ink/62">{rad.orsak}</span>
+                </li>
+              ))}
+            </ul>
+            {attForsokaIgen.length ? (
+              <button
+                type="button"
+                disabled={laddarUpp}
+                onClick={() => void laddaUpp(attForsokaIgen)}
+                className={cn(btnSecondary, btnLiten, "mt-3")}
+              >
+                {laddarUpp ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                ) : (
+                  <Upload className="h-4 w-4" aria-hidden />
+                )}
+                Försök igen med {attForsokaIgen.length}{" "}
+                {attForsokaIgen.length === 1 ? "fil" : "filer"}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
         {underlag === null ? (
           <div className="mt-4">
             <SkeletonRows />
@@ -615,7 +732,9 @@ export function BokforingPanel() {
         multiple
         accept={LASBARA}
         onChange={(e) => {
-          void laddaUpp(e.target.files);
+          // Kopieras till en array FÖRE nollställningen: FileList är levande
+          // i flera webbläsare, och `value = ""` tömmer den.
+          void laddaUpp(Array.from(e.target.files ?? []));
           e.target.value = "";
         }}
         className="sr-only"

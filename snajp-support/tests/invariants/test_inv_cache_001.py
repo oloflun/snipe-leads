@@ -50,6 +50,11 @@ def anyio_backend():
 def _miljo(monkeypatch):
     monkeypatch.setenv("LLM_PROVIDER", "deepseek")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key-not-a-real-credential-000000")
+    # Settings läser snajp-support/.env direkt från fil, och en lokal
+    # MODEL=gemini-… där gav "deepseek:gemini-3.6-flash" i test a. En satt
+    # miljövariabel vinner över filen; standardvärdet mappas sedan till
+    # providerns modell som i drift.
+    monkeypatch.setenv("MODEL", "gpt-4o-mini")
     get_settings.cache_clear()
     embeddingcache.konfigurera(None)
     svarscache.konfigurera(None)

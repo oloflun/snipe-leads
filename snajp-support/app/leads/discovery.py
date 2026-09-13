@@ -102,6 +102,20 @@ class DiscoveryError(RuntimeError):
     """Sökningen kunde inte genomföras. Skiljd från 'noll träffar'."""
 
 
+class _Leverantorssvar(RuntimeError):
+    """Leverantörens avvisning, kedjad som ORSAK till ett DiscoveryError.
+
+    Före 2026-09-13 kastades svarskroppen bort vid 4xx, så ett kreditslut i
+    sökningen gick inte att klassa: kunden fick "försök igen" och ingen larmades.
+    Texten ligger i orsaken och inte i DiscoveryError:s eget meddelande —
+    kvotfel.py följer kedjan, och ingen kundväg läser orsaken rakt av.
+    """
+
+    def __init__(self, status_code: int, text: str) -> None:
+        super().__init__(f"{status_code}: {text}")
+        self.status_code = status_code
+
+
 def _host(url: str) -> str:
     host = urlparse(url).netloc.lower()
     if host.startswith("www."):
@@ -472,7 +486,9 @@ async def _gemini_med_sokning(prompt: str) -> str:
         if svar.status_code >= 400:
             # 4xx är ett avvisat anrop (fel nyckel, ogiltig modell, kvot) — det
             # blir inte bättre av att upprepas, så inget nytt försök här.
-            raise DiscoveryError(f"Sokningen avvisades ({svar.status_code}).")
+            raise DiscoveryError(f"Sokningen avvisades ({svar.status_code}).") from _Leverantorssvar(
+                svar.status_code, svar.text[:500]
+            )
         break
     assert svar is not None  # loopen antingen `break`:ar med svar eller kastar
     data = svar.json()

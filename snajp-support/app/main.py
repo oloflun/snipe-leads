@@ -205,10 +205,17 @@ async def lifespan(app: FastAPI):
     leads_worker_tasks: list[asyncio.Task] = []
     if isinstance(jobs, RedisJobStore):
         try:
-            from .api.leads import hantera_leads_jobb
+            from .api.leads import ge_upp_leadsjobb, hantera_leads_jobb
             from .jobs.stream import ChattStrom, consumer_name
 
-            leadsstrom = ChattStrom(jobs.client, stream_key="crm:jobb:leads", group="agenter")
+            leadsstrom = ChattStrom(
+                jobs.client,
+                stream_key="crm:jobb:leads",
+                group="agenter",
+                # En post som strömmen ger upp ska faila liggaren och listan,
+                # inte kvitteras tyst — se ge_upp_leadsjobb.
+                vid_uppgivet=partial(ge_upp_leadsjobb, app.state),
+            )
             leads_hanterare = partial(hantera_leads_jobb, app.state)
             # Engångssvep INNAN några leads-worker-tasks startar — samma skäl
             # som chattströmmens engångssvep ovan: en batch som stod mitt i
@@ -263,12 +270,24 @@ async def lifespan(app: FastAPI):
 
         send_scheduler_task = asyncio.create_task(run_send_scheduler(app.state))
 
+    # Leads-städaren: hängande leads-jobb och leadslistor (en krasch, en
+    # uppgiven strömpost, en process som dog i en 429-sömn) får ett ärligt
+    # slut i stället för att stå i processing/byggs för evigt. Första varvet
+    # körs direkt = uppstartsstädningen. Se app/jobs/stadare.py.
+    stadare_task = None
+    if settings.leads_stadning_sekunder > 0:
+        from .jobs.stadare import run_leads_stadare
+
+        stadare_task = asyncio.create_task(run_leads_stadare(app.state))
+
     yield
 
     if poller_task:
         poller_task.cancel()
     if send_scheduler_task:
         send_scheduler_task.cancel()
+    if stadare_task:
+        stadare_task.cancel()
     for task in chat_worker_tasks:
         task.cancel()
     for task in leads_worker_tasks:

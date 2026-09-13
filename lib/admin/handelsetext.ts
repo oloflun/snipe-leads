@@ -189,6 +189,14 @@ const kreditslut: Tolkare = (text) => {
     t.includes("prepayment credits") ||
     t.includes("credits are depleted") ||
     t.includes("billing#prepay") ||
+    // Vertex AI (sedan 2026-09-12): fakturering avstängd, projekt avstängt
+    // eller utgiftstak — lika lite självläkande som ett tömt förskott.
+    t.includes("billing_disabled") ||
+    t.includes("billing to be enabled") ||
+    t.includes("billing account for the owning project") ||
+    t.includes("consumer_suspended") ||
+    t.includes("has been suspended") ||
+    t.includes("spending cap") ||
     t.includes("kreditslut") ||
     t.includes("ai-krediterna är slut");
   if (!traff) return null;

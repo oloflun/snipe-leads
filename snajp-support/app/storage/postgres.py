@@ -1674,6 +1674,79 @@ class PostgresStorage:
             )
         return [_row(r) for r in records]
 
+    async def rensa_lead_list_items(self, tenant_id: str, list_id: str) -> int:
+        async with self._scoped(tenant_id) as conn:
+            status = await conn.execute(
+                "delete from lead_list_items where list_id = $2 and tenant_id = $1",
+                tenant_id,
+                list_id,
+            )
+        # asyncpg returnerar kommandotaggen, t.ex. "DELETE 3".
+        try:
+            return int(str(status).rsplit(" ", 1)[-1])
+        except ValueError:
+            return 0
+
+    async def stada_hangande_leadsjobb(
+        self, tenant_id: str, *, aldre_an_minuter: int, utom: list[str] | None = None
+    ) -> list[str]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                update leads_job_ledger set
+                  status = 'failed',
+                  completed_at = now()
+                where tenant_id = $1
+                  and status in ('queued', 'processing')
+                  and created_at < now() - make_interval(mins => $2)
+                  and not (job_id = any($3::text[]))
+                returning job_id
+                """,
+                tenant_id,
+                int(aldre_an_minuter),
+                list(utom or ()),
+            )
+        return [str(r["job_id"]) for r in records]
+
+    async def stada_hangande_leadslistor(
+        self,
+        tenant_id: str,
+        *,
+        aldre_an_minuter: int,
+        felorsak: str,
+        utom: list[str] | None = None,
+    ) -> list[str]:
+        # EN transaktion (_scoped): statusen och raderingen av raderna syns
+        # samtidigt eller inte alls — en läsare ska aldrig se "fel" med
+        # skräprader kvar, eller tomma rader under "byggs".
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                update lead_lists set
+                  status = 'fel',
+                  felorsak = $3,
+                  completed_at = now()
+                where tenant_id = $1
+                  and status in ('bestalld', 'byggs')
+                  and created_at < now() - make_interval(mins => $2)
+                  and not (id::text = any($4::text[]))
+                returning id
+                """,
+                tenant_id,
+                int(aldre_an_minuter),
+                felorsak,
+                list(utom or ()),
+            )
+            stadade = [str(r["id"]) for r in records]
+            if stadade:
+                await conn.execute(
+                    """delete from lead_list_items
+                       where tenant_id = $1 and list_id::text = any($2::text[])""",
+                    tenant_id,
+                    stadade,
+                )
+        return stadade
+
     async def sum_leads_tokens(self, tenant_id: str, *, hours: int = 24) -> int:
         async with self._scoped(tenant_id) as conn:
             # is_test filtreras MEDVETET inte bort: testkörningar kostar
@@ -2583,7 +2656,40 @@ class PostgresStorage:
                 order by r.last_activity desc nulls last, t.created_at
                 """
             )
-        return [_row(r) for r in records]
+
+            # Paketet ur workspaces.products, i en EGEN fråga och inte en join.
+            #
+            # Adminvyn härledde tidigare paketet ur aktivitet, vilket gav fel
+            # paket för varje kund som betalar utan att använda — och aldrig
+            # Trio, eftersom bokföringen inte syns i agent_runs.
+            #
+            # Varför separat: `workspaces` har RLS vars enda läspolicy går via
+            # current_workspace_id(). Under `snajp_app` (nobypassrls) kan den
+            # ge noll rader, och saknas en grant kastar den. Som join hade
+            # det senare fällt HELA kundlistan för ett extra fält; här blir det
+            # `products: None` och vyn faller tillbaka på härledningen.
+            # Tidigast skapade arbetsytan vinner när flera delar tenant (den
+            # gamla delade `testkund`-tenanten, migration 038).
+            produkter: dict[str, list[str]] = {}
+            try:
+                for rad in await conn.fetch(
+                    """
+                    select distinct on (ss_tenant_id) ss_tenant_id, products
+                    from workspaces
+                    where ss_tenant_id is not null
+                    order by ss_tenant_id, created_at
+                    """
+                ):
+                    produkter[str(rad["ss_tenant_id"])] = list(rad["products"] or [])
+            except Exception:  # noqa: BLE001 — ett extra fält får inte fälla adminlistan
+                logger.warning(
+                    "list_tenants_with_stats: kunde inte läsa workspaces.products", exc_info=True
+                )
+
+        rader = [_row(r) for r in records]
+        for rad in rader:
+            rad["products"] = produkter.get(str(rad["id"]))
+        return rader
 
     async def list_agent_runs_all(
         self,

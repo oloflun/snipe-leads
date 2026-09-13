@@ -113,9 +113,20 @@ class ChattStrom:
     """
 
     def __init__(
-        self, client: Any, *, stream_key: str = STREAM_KEY, group: str = GROUP_NAME
+        self,
+        client: Any,
+        *,
+        stream_key: str = STREAM_KEY,
+        group: str = GROUP_NAME,
+        vid_uppgivet: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
     ) -> None:
         self.client = client
+        # Anropas med postens nyttolast när atertag() ger upp den efter
+        # MAX_LEVERANSER, FÖRE kvitteringen. Utan den kvitterades posten tyst
+        # och jobbet stod kvar i processing i alla lager som inte har en egen
+        # tidsgräns (leads_job_ledger, lead_lists) — för evigt. None = gamla
+        # beteendet (chattens jobbpost auto-failar ändå efter 300 s).
+        self.vid_uppgivet = vid_uppgivet
         # Namnrymd per driftsättning. UTAN den stod produktionens och
         # spegelns containrar i SAMMA consumer group, och en grupp delar ut
         # varje post till exakt en konsument — ett kundjobb kunde alltså köras
@@ -290,6 +301,15 @@ class ChattStrom:
                         leveranser[msg_id],
                         MAX_LEVERANSER,
                     )
+                    if self.vid_uppgivet is not None:
+                        try:
+                            await self.vid_uppgivet(self._packa_upp(falt))
+                        except Exception:  # noqa: BLE001 — kvitteringen ska ske ändå, annars snurrar posten
+                            logger.exception(
+                                "Ström %s: vid_uppgivet kastade för posten %s — kvitterar ändå.",
+                                self.stream_key,
+                                msg_id,
+                            )
                     await self.client.xack(self.stream_key, self.group, msg_id)
                     continue
                 await self._kor_och_kvittera(msg_id, falt, hanterare)

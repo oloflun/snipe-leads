@@ -15,6 +15,15 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ..config import CATEGORY_LABELS, DEFAULT_TENANT_ID, get_settings
+from ..jobs.stadare import (
+    UPPGIVET_JOBB,
+    UPPGIVET_LISTA,
+    avregistrera_aktiv,
+    faila_jobb_om_oppet,
+    registrera_aktiv,
+    stada_tenant,
+)
+from ..kvotfel import ar_kreditslut, kundtext_for, larma_kreditslut
 from ..leads.autonomy import LEVELS as AUTONOMY_LEVELS
 from ..leads.autonomy import describe as describe_autonomy
 from ..leads.autonomy import kan_aktivera_auto_send
@@ -96,13 +105,77 @@ def _har_sokbar_malgrupp(icp: dict) -> bool:
 async def _larma_vid_kreditslut(app_state, tenant_id: str, fel: Exception) -> None:
     """Kreditslut i ett bakgrundsjobb: larma oss (dygnsdeduplicerat).
 
-    Kundtexten hanteras redan av jobbläsvägen (GET /api/jobs — se
-    kvotfel.oversatt_felstext); det här är den andra halvan av samma beslut:
-    kunden ska aldrig vara den som upptäcker att krediterna är slut."""
-    from ..kvotfel import ar_kreditslut, larma_kreditslut
-
+    Kundtexten skrivs av felvägen själv (_jobbfeltext nedan); det här är den
+    andra halvan av samma beslut: kunden ska aldrig vara den som upptäcker
+    att krediterna är slut."""
     if ar_kreditslut(fel):
-        await larma_kreditslut(app_state.storage, tenant_id=tenant_id, kalla="leads")
+        await larma_kreditslut(app_state.storage, tenant_id=tenant_id, kalla="leads", fel=fel)
+
+
+#: Jobbfel som kommer från AI-leverantören eller transporten men inte är
+#: kvotklassen. Råtexten ("Error code: 403 - [{'error': ...}]") hör hemma i
+#: loggen, inte i kundens jobbruta.
+_FEL_INTERNT = (
+    "Körningen kunde inte slutföras på grund av ett fel hos oss. Felet är "
+    "loggat — kör om den, och hör av dig om det upprepas."
+)
+_FEL_UTKAST = (
+    "ett fel hos oss stoppade det. Felet är loggat — kör Processa om för ett "
+    "nytt försök."
+)
+_FEL_LISTBYGGE = (
+    "Listan kunde inte byggas på grund av ett fel hos oss. Felet är loggat och "
+    "inga halvfärdiga rader sparades — beställ listan igen."
+)
+_FEL_INGEN_MALGRUPP_LISTA = (
+    "Listan behöver något att söka efter. Ange en titel eller roll, en bransch "
+    "eller en region — eller spara en målgrupp i leadsinställningarna — och "
+    "beställ igen."
+)
+
+#: Moduler vars undantag bär leverantörens eller transportens råtext.
+_LEVERANTORSMODULER = ("openai", "httpx", "httpcore", "google", "agents")
+
+
+def _ar_leverantorsfel(fel: BaseException) -> bool:
+    led: BaseException | None = fel
+    for _ in range(5):
+        if led is None:
+            return False
+        if getattr(led, "status_code", None) is not None:
+            return True
+        if type(led).__module__.split(".", 1)[0] in _LEVERANTORSMODULER:
+            return True
+        led = led.__cause__ or led.__context__
+    return False
+
+
+def _jobbfeltext(fel: BaseException, *, reserv: str = _FEL_INTERNT) -> str:
+    """Den mening ett misslyckat leads-jobb bär ut till kunden.
+
+    Kvotklassen får sin ärliga text (KUNDTEXT_KREDITSLUT utan "försök igen",
+    eller KUNDTEXT_KVOT). Övriga leverantörsfel får en fast mening — aldrig
+    råtexten. Våra EGNA domänfel (ValueError("Prospektet saknar …") och
+    liknande) passerar som förut: de är skrivna för att läsas, och att gömma
+    dem bakom en generisk mening vore att gömma diagnosen. Fram till
+    2026-09-13 bar jobbet str(fel) för allt, och kreditslutet nådde kunden
+    bara tack vare läsvägens översättning — som inte ser draft_note eller
+    lead_lists.felorsak.
+    """
+    kundtext = kundtext_for(fel)
+    if kundtext:
+        return kundtext
+    if _ar_leverantorsfel(fel):
+        return reserv
+    return str(fel) or reserv
+
+
+async def _stada_lat(app_state, tenant_id: str) -> None:
+    """Lat städning vid läsning (app/jobs/stadare.py). Får aldrig fälla läsningen."""
+    try:
+        await stada_tenant(app_state, tenant_id)
+    except Exception:  # noqa: BLE001 — kunden ska se sina listor även om städningen hickar
+        logger.exception("Lat städning misslyckades för %s", tenant_id)
 
 
 def _http_feltext(fel: HTTPException) -> str:
@@ -741,6 +814,7 @@ async def _run_draft_job(app_state, payload: dict) -> None:
     await storage.set_leads_job_status(
         payload["tenant_id"], job_id=job_id, status="processing", scope="draft"
     )
+    registrera_aktiv(job_id)
     try:
         context_pack, missing = await build_context_pack(storage, payload["tenant_id"])
         result = await _run_outreach_draft(
@@ -774,10 +848,12 @@ async def _run_draft_job(app_state, payload: dict) -> None:
     except Exception as fel:  # noqa: BLE001 — jobbet ska bli failed, inte tyst dö
         logger.exception("Utkastjobb misslyckades (%s)", job_id)
         await _larma_vid_kreditslut(app_state, payload["tenant_id"], fel)
-        await app_state.jobs.fail(job_id, str(fel))
+        await app_state.jobs.fail(job_id, _jobbfeltext(fel))
         await storage.set_leads_job_status(
             payload["tenant_id"], job_id=job_id, status="failed", scope="draft"
         )
+    finally:
+        avregistrera_aktiv(job_id)
 
 
 # -- Granskning: hela processen synlig från dashboarden -------------------
@@ -1486,6 +1562,7 @@ async def _run_batch(app_state, payload: dict) -> None:
     await app_state.storage.set_leads_job_status(
         tenant["tenant_id"], job_id=job_id, status="processing", scope="batch"
     )
+    registrera_aktiv(job_id)
     try:
         req = _payload_till_request(payload)
         prospects = await _samla_korningens_prospekt(app_state.storage, tenant, req)
@@ -1557,18 +1634,24 @@ async def _run_batch(app_state, payload: dict) -> None:
         await app_state.storage.set_leads_job_status(
             tenant["tenant_id"], job_id=job_id, status="failed", scope="batch"
         )
-    except DiscoveryError:
-        await app_state.jobs.fail(job_id, _FEL_SOKNING)
+    except DiscoveryError as fel:
+        # En sökning som avvisades för att krediten är slut ska inte be kunden
+        # "försöka igen" — samma klassning som resten av jobbvägarna. (Bär
+        # DiscoveryError leverantörens svarstext, se app/leads/discovery.py.)
+        await _larma_vid_kreditslut(app_state, tenant["tenant_id"], fel)
+        await app_state.jobs.fail(job_id, kundtext_for(fel) or _FEL_SOKNING)
         await app_state.storage.set_leads_job_status(
             tenant["tenant_id"], job_id=job_id, status="failed", scope="batch"
         )
     except Exception as fel:  # noqa: BLE001 — jobbet ska bli failed, inte tyst dö
         logger.exception("Batchsökning misslyckades (%s)", job_id)
         await _larma_vid_kreditslut(app_state, tenant["tenant_id"], fel)
-        await app_state.jobs.fail(job_id, str(fel))
+        await app_state.jobs.fail(job_id, _jobbfeltext(fel))
         await app_state.storage.set_leads_job_status(
             tenant["tenant_id"], job_id=job_id, status="failed", scope="batch"
         )
+    finally:
+        avregistrera_aktiv(job_id)
 
 
 @router.post("/api/leads/runs/batch", status_code=202)
@@ -1634,6 +1717,7 @@ async def _run_batch_prospect(
     await storage.set_leads_job_status(
         tenant["tenant_id"], job_id=job_id, status="processing", scope=scope, prospect_id=prospect_id
     )
+    registrera_aktiv(job_id)
     try:
         # `overrides` togs emot av funktionen men skickades aldrig vidare, så
         # varje jobb i batchen kördes mot den SPARADE ICP:n oavsett vad
@@ -1745,18 +1829,37 @@ async def _run_batch_prospect(
                 except MissingBusinessContextError as fel:
                     result["draft_note"] = str(fel)
                 except Exception as fel:  # noqa: BLE001 — researchen är klar, utkastet är bonus
-                    result["draft_note"] = f"Research klar, utkastet kunde inte skrivas: {fel}"
+                    # Researchen är sparad, så jobbet blir completed — men
+                    # anteckningen bar tidigare f"...: {fel}", alltså
+                    # leverantörens råa engelska JSON rakt in i kundens
+                    # jobbruta, och ett kreditslut i utkaststeget larmade
+                    # ingen. Nu: ärlig kvottext + larm, annars en fast mening.
+                    logger.exception("Utkastet i leads-jobb %s kunde inte skrivas", job_id)
+                    await _larma_vid_kreditslut(app_state, tenant["tenant_id"], fel)
+                    result["draft_note"] = (
+                        "Research klar, men utkastet kunde inte skrivas: "
+                        + (kundtext_for(fel) or _FEL_UTKAST)
+                    )
 
         await app_state.jobs.complete(job_id, result)
         await storage.set_leads_job_status(
             tenant["tenant_id"], job_id=job_id, status="completed", scope=scope, prospect_id=prospect_id
         )
     except Exception as error:  # noqa: BLE001 — ett trasigt prospekt fäller inte batchen
+        logger.exception("Leads-jobb %s (prospekt %s) misslyckades", job_id, prospect_id)
         await _larma_vid_kreditslut(app_state, tenant["tenant_id"], error)
-        await app_state.jobs.fail(job_id, f"Prospekt {prospect_id}: {error}")
+        # Kvotklassens text står ensam: prospekt-id:t framför en mening om att
+        # AI-kapaciteten är slut säger kunden ingenting, och kreditslutet
+        # gäller alla prospekt lika.
+        kundtext = kundtext_for(error)
+        await app_state.jobs.fail(
+            job_id, kundtext or f"Prospekt {prospect_id}: {_jobbfeltext(error)}"
+        )
         await storage.set_leads_job_status(
             tenant["tenant_id"], job_id=job_id, status="failed", scope=scope, prospect_id=prospect_id
         )
+    finally:
+        avregistrera_aktiv(job_id)
 
 
 @router.post("/api/leads/prospects/processa-om", status_code=202)
@@ -1813,7 +1916,6 @@ async def bestall_leadslista(
     """
     _require_live_llm()
     storage = request.app.state.storage
-    await _kraev_leads_budget(storage, tenant["tenant_id"])
 
     settings_rad = await storage.get_agent_settings(tenant["tenant_id"], agent_type="leads")
     overrides = (
@@ -1822,6 +1924,14 @@ async def bestall_leadslista(
         else None
     )
     icp = normalize_icp(_med_overrides(settings_rad.get("icp"), overrides) or {})
+    # Grinden står EFTER sammanslagningen: formulärets överskrivningar (t.ex.
+    # must_have=[titeln]) räknas, inte bara den sparade ICP:n. Utan den
+    # beställdes en lista på en tom målgrupp, discovery sökte på ingenting
+    # och kunden fick en "fel"-lista minuter senare i stället för ett tydligt
+    # nej direkt — och en budget-dragning för en körning som inte kunde lyckas.
+    if not _har_sokbar_malgrupp(icp):
+        raise HTTPException(status_code=422, detail=_FEL_INGEN_MALGRUPP_LISTA)
+    await _kraev_leads_budget(storage, tenant["tenant_id"])
 
     lista = await storage.create_lead_list(
         tenant["tenant_id"],
@@ -1852,6 +1962,9 @@ async def bestall_leadslista(
 
 @router.get("/api/leads/listor")
 async def lista_leadslistor(request: Request, tenant: dict = Depends(require_tenant)) -> dict:
+    # Lat städning FÖRE läsningen: en lista som hängt sedan en krasch ska
+    # visas med sitt ärliga fel, inte som "byggs" med skräprader.
+    await _stada_lat(request.app.state, tenant["tenant_id"])
     return {"lists": await request.app.state.storage.list_lead_lists(tenant["tenant_id"])}
 
 
@@ -1861,6 +1974,7 @@ async def hamta_leadslista(
 ) -> dict:
     kraev_uuid(list_id, "listan")
     storage = request.app.state.storage
+    await _stada_lat(request.app.state, tenant["tenant_id"])
     lista = await storage.get_lead_list(tenant["tenant_id"], list_id)
     if not lista:
         raise HTTPException(status_code=404, detail="Listan finns inte.")
@@ -2004,12 +2118,14 @@ async def _run_list_job(app_state, payload: dict) -> None:
         await storage.set_leads_job_status(tenant_id, job_id=job_id, status="completed", scope="lista")
         return
 
+    registrera_aktiv(job_id, lista["id"])
     await storage.set_lead_list_status(tenant_id, lista["id"], status="byggs")
     try:
         from ..leads.discovery import hamta_kontaktvag, sla_upp_webbplats
 
         icp = lista.get("icp") or {}
         traffar = await hitta_bolag(icp, int(lista["antal"]))
+        rader: list[dict] = []
         geografi = (icp.get("geography") or [None])[0] if isinstance(icp.get("geography"), list) else icp.get("geography")
         for traff in traffar:
             # Kontaktskörden (LLM-fri, openleads ground-truth-mönster):
@@ -2028,7 +2144,13 @@ async def _run_list_job(app_state, payload: dict) -> None:
                     webb = await sla_upp_webbplats(
                         traff.get("company_name") or "", geografi=geografi
                     )
-                except Exception:  # noqa: BLE001 — uppslag får inte fälla listan
+                except Exception as fel:  # noqa: BLE001 — uppslag får inte fälla listan
+                    # ...utom när AI-leverantören säger nej för hela kontot:
+                    # då fäller varje återstående rad på samma sätt, och att
+                    # svälja det ger en lista som ser klar ut men saknar det
+                    # kunden betalade för. Fall fort, ärligt, med larm.
+                    if kundtext_for(fel):
+                        raise
                     webb = None
                 if webb:
                     traff = {**traff, "website": webb}
@@ -2036,6 +2158,15 @@ async def _run_list_job(app_state, payload: dict) -> None:
                 kontakt = await hamta_kontaktvag(traff["website"])
                 if kontakt["contact_email"]:
                     traff = {**traff, **kontakt}
+            rader.append(traff)
+
+        # Raderna skrivs FÖRST när hela bygget lyckats. Tidigare skrevs varje
+        # rad direkt i loopen, och ett fel på rad fyra lämnade tre skräprader
+        # under en lista som aldrig blev klar (testaren 2026-09-13). Nu når
+        # ett fel i sökningen eller skörden aldrig tabellen, och städaren
+        # (app/jobs/stadare.py) hittar inga rader att ta bort under ett
+        # pågående bygge.
+        for traff in rader:
             await storage.add_lead_list_item(
                 tenant_id,
                 list_id=lista["id"],
@@ -2056,22 +2187,28 @@ async def _run_list_job(app_state, payload: dict) -> None:
             job_id, {"list_id": lista["id"], "count": len(traffar), "status": "klar"}
         )
         await storage.set_leads_job_status(tenant_id, job_id=job_id, status="completed", scope="lista")
-    except DiscoveryError:
-        await storage.set_lead_list_status(tenant_id, lista["id"], status="fel", felorsak=_FEL_SOKNING)
-        await app_state.jobs.fail(job_id, _FEL_SOKNING)
-        await storage.set_leads_job_status(tenant_id, job_id=job_id, status="failed", scope="lista")
     except Exception as fel:  # noqa: BLE001 — listan ska bli 'fel', inte tyst dö
-        logger.exception("Listbygget misslyckades (%s)", job_id)
+        if not isinstance(fel, DiscoveryError):
+            logger.exception("Listbygget misslyckades (%s)", job_id)
         await _larma_vid_kreditslut(app_state, tenant_id, fel)
         # felorsak läses direkt ur lead_lists av listvyn — jobbläsvägens
-        # översättning når den aldrig, så den översätts vid skrivningen.
-        from ..kvotfel import oversatt_felstext
-
-        await storage.set_lead_list_status(
-            tenant_id, lista["id"], status="fel", felorsak=oversatt_felstext(str(fel))
+        # översättning når den aldrig, så den skrivs kundfärdig här. Aldrig
+        # str(fel): en Python-stack eller leverantörens JSON i listvyn är
+        # varken ärligt eller begripligt.
+        felorsak = kundtext_for(fel) or (
+            _FEL_SOKNING if isinstance(fel, DiscoveryError) else _FEL_LISTBYGGE
         )
-        await app_state.jobs.fail(job_id, str(fel))
+        # Rader från ett tidigare, avbrutet försök (före 2026-09-13 skrevs de
+        # en och en) tas bort — en misslyckad lista visar ingen halv tabell.
+        try:
+            await storage.rensa_lead_list_items(tenant_id, lista["id"])
+        except Exception:  # noqa: BLE001 — statusen ska skrivas även om rensningen hickar
+            logger.exception("Kunde inte rensa raderna för den misslyckade listan %s", lista["id"])
+        await storage.set_lead_list_status(tenant_id, lista["id"], status="fel", felorsak=felorsak)
+        await app_state.jobs.fail(job_id, felorsak)
         await storage.set_leads_job_status(tenant_id, job_id=job_id, status="failed", scope="lista")
+    finally:
+        avregistrera_aktiv(job_id, lista["id"])
 
 
 async def hantera_leads_jobb(app_state, payload: dict) -> None:
@@ -2148,3 +2285,53 @@ async def hantera_leads_jobb(app_state, payload: dict) -> None:
         overrides=payload.get("overrides"),
         is_test=bool(payload.get("is_test")),
     )
+
+
+#: nyttolastens `kind` -> liggarens scope (prospektjobb bär sitt eget `scope`).
+_KIND_TILL_SCOPE = {"batch": "batch", "draft": "draft", "lista": "lista"}
+
+
+async def ge_upp_leadsjobb(app_state, payload: dict) -> None:
+    """Strömmen har gett upp en post (MAX_LEVERANSER, app/jobs/stream.py).
+
+    Tidigare kvitterades posten tyst: Redis-jobbet, liggaren och listraden
+    stod kvar i processing/byggs för evigt, och kunden såg en snurra som
+    aldrig tog slut. En post som kraschat sin hanterare tre gånger ska i
+    stället sluta ÄRLIGT — failed överallt, med en mening som säger vad som
+    hänt, och en lista utan halvfärdiga rader.
+
+    Kastar aldrig: anroparen kvitterar posten efteråt oavsett.
+    """
+    job_id = payload.get("job_id")
+    tenant_id = payload.get("tenant_id")
+    if not job_id or not tenant_id:
+        return
+    storage = app_state.storage
+    try:
+        if await storage.get_leads_job_status(tenant_id, job_id) == "completed":
+            return
+        await faila_jobb_om_oppet(app_state.jobs, job_id, UPPGIVET_JOBB)
+        await storage.set_leads_job_status(
+            tenant_id,
+            job_id=job_id,
+            status="failed",
+            scope=payload.get("scope") or _KIND_TILL_SCOPE.get(payload.get("kind"), "research"),
+            prospect_id=payload.get("prospect_id"),
+        )
+        list_id = payload.get("list_id")
+        if payload.get("kind") == "lista" and list_id:
+            lista = await storage.get_lead_list(tenant_id, list_id)
+            if lista and lista.get("status") != "klar":
+                await storage.rensa_lead_list_items(tenant_id, list_id)
+                await storage.set_lead_list_status(
+                    tenant_id, list_id, status="fel", felorsak=UPPGIVET_LISTA
+                )
+        await storage.log_platform_event(
+            level="error",
+            source="leads",
+            message=f"Leadsströmmen gav upp jobbet {job_id} efter upprepade leveranser",
+            tenant_id=tenant_id,
+            detail={"job_id": job_id, "kind": payload.get("kind"), "list_id": list_id},
+        )
+    except Exception:  # noqa: BLE001 — se docstringen
+        logger.exception("Kunde inte markera det uppgivna leads-jobbet %s som misslyckat", job_id)

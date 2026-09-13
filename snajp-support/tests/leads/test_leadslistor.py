@@ -184,6 +184,9 @@ async def test_endpoints_over_http(monkeypatch):
     from app.main import app
 
     monkeypatch.setenv("LLM_PROVIDER", "deepseek")
+    # Satt här: Settings läser snajp-support/.env från fil, och en lokal
+    # MODEL=gemini-… fäller uppstartens modell/provider-kontroll.
+    monkeypatch.setenv("MODEL", "deepseek-v4-flash")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key-not-a-real-credential-000000")
     get_settings.cache_clear()
 
@@ -201,7 +204,15 @@ async def test_endpoints_over_http(monkeypatch):
                 svar = await client.post(
                     "/api/leads/listor",
                     headers={"X-API-Key": demo_key},
-                    json={"titel": "HTTP-testet", "antal": 5, "is_test": True},
+                    # overrides krävs sedan 2026-09-13: en beställning utan
+                    # sökbar målgrupp avvisas med 422 (demo-tenanten har
+                    # ingen sparad ICP).
+                    json={
+                        "titel": "HTTP-testet",
+                        "antal": 5,
+                        "is_test": True,
+                        "overrides": {"must_have": ["Inköpschef"]},
+                    },
                 )
                 assert svar.status_code == 202, svar.text
                 list_id = svar.json()["list_id"]

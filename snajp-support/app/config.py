@@ -267,6 +267,15 @@ class Settings(BaseSettings):
     # (lib/admin/halsa.ts). 0 = grinden avstängd (test/dev utan databas har
     # inget att skydda). Sätts per miljö via LEADS_DAILY_TOKEN_BUDGET.
     leads_daily_token_budget: int = 2_000_000
+    # Städaren (app/jobs/stadare.py): leads-jobb i queued/processing och
+    # leadslistor i bestalld/byggs som är äldre än så här markeras som
+    # misslyckade med ett ärligt besked. Räknat från KÖANDET (liggaren har
+    # ingen livssignal), därför generöst: en batch med leads_workers=1 kan
+    # legitimt stå i kö en god stund. 0 = städa aldrig.
+    leads_hangtid_minuter: int = 60
+    # Hur ofta bakgrundssvepet körs. 0 = ingen bakgrundsloop (den lata
+    # städningen vid listläsning gäller ändå).
+    leads_stadning_sekunder: int = 300
     # Fas R2 (bd snipe-cku): semantisk svarscache. "off" (default): cachen
     # rörs aldrig — varken lookup eller store, inte ens ett embedding-anrop.
     # "shadow": lookup+store körs, men en TRÄFF ändrar inget i svaret, bara

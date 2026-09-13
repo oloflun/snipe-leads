@@ -49,6 +49,9 @@ def anyio_backend():
 @pytest.fixture(autouse=True)
 def _fake_deepseek_key(monkeypatch):
     monkeypatch.setenv("LLM_PROVIDER", "deepseek")
+    # Som test_batch_markering: en lokal MODEL=gemini-… i .env fäller annars
+    # modell/provider-kontrollen.
+    monkeypatch.setenv("MODEL", "deepseek-v4-flash")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key-not-a-real-credential-000000")
     get_settings.cache_clear()
     yield

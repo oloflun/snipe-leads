@@ -1249,6 +1249,60 @@ class MemoryStorage:
             if i["list_id"] == list_id and i["tenant_id"] == tenant_id
         ]
 
+    async def rensa_lead_list_items(self, tenant_id: str, list_id: str) -> int:
+        fore = len(self.lead_list_items)
+        self.lead_list_items = [
+            i
+            for i in self.lead_list_items
+            if not (i["list_id"] == list_id and i["tenant_id"] == tenant_id)
+        ]
+        return fore - len(self.lead_list_items)
+
+    async def stada_hangande_leadsjobb(
+        self, tenant_id: str, *, aldre_an_minuter: int, utom: list[str] | None = None
+    ) -> list[str]:
+        # Speglar UPDATE ... RETURNING i postgres.py: samma statusar, samma
+        # klocka (created_at), completed_at sätts.
+        grans = datetime.now(timezone.utc) - timedelta(minutes=aldre_an_minuter)
+        undantag = set(utom or ())
+        stadade: list[str] = []
+        for rad in self.leads_job_ledger.values():
+            if (
+                rad["tenant_id"] == tenant_id
+                and rad["status"] in ("queued", "processing")
+                and rad["job_id"] not in undantag
+                and datetime.fromisoformat(rad["created_at"]) < grans
+            ):
+                rad["status"] = "failed"
+                rad["completed_at"] = _now()
+                stadade.append(rad["job_id"])
+        return stadade
+
+    async def stada_hangande_leadslistor(
+        self,
+        tenant_id: str,
+        *,
+        aldre_an_minuter: int,
+        felorsak: str,
+        utom: list[str] | None = None,
+    ) -> list[str]:
+        grans = datetime.now(timezone.utc) - timedelta(minutes=aldre_an_minuter)
+        undantag = set(utom or ())
+        stadade: list[str] = []
+        for rad in self.lead_lists.get(tenant_id, []):
+            if (
+                rad["status"] in ("bestalld", "byggs")
+                and rad["id"] not in undantag
+                and datetime.fromisoformat(rad["created_at"]) < grans
+            ):
+                rad["status"] = "fel"
+                rad["felorsak"] = felorsak
+                rad["completed_at"] = _now()
+                stadade.append(rad["id"])
+        for list_id in stadade:
+            await self.rensa_lead_list_items(tenant_id, list_id)
+        return stadade
+
     async def sum_leads_tokens(self, tenant_id: str, *, hours: int = 24) -> int:
         # Speglar SQL-frågan i postgres.py: leads-typerna, tidsfönster,
         # tokens_in + tokens_out, testkörningar MEDräknade.
@@ -1909,6 +1963,12 @@ class MemoryStorage:
                         else tenant.get("created_at")
                     ),
                     "avtal_signerat": detaljer.get("avtal_signerat"),
+                    # Speglar Postgres-frågans workspaces.products. Minnet har
+                    # inga arbetsytor, så nyckeln finns men är None om inte ett
+                    # test satt produkter på tenanten — samma "ingen kopplad
+                    # arbetsyta" som SQL:en ger.
+                    "active": tenant.get("active", True),
+                    "products": tenant.get("products"),
                     "tickets": sum(1 for t in self.tickets.values() if t["tenant_id"] == tid),
                     "escalated": sum(
                         1

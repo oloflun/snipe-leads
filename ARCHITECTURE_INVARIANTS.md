@@ -438,12 +438,36 @@ mejlväg går via Resend (HTTPS) före SMTP, eftersom Railway blockerar utgåend
 SMTP — ett internlarm som inte kan lämna containern är inget larm.
 Markörerna speglas i lib/admin/handelsetext.ts (`kreditslut`-tolken, prövad
 före `kvot`); ändra båda om du ändrar den ena.
+Utvidgad 2026-09-13 (Vertex AI). KREDITSLUT är klassen "modellanropet avvisas
+av BETALNINGSSKÄL", inte en statuskod: Vertex svarar 403 BILLING_DISABLED /
+"billing account … is disabled" / CONSUMER_SUSPENDED, AI Studio 429 prepayment
+eller "spending cap". Klassarna följer undantagskedjan (__cause__/__context__)
+och kvotklassen känner igen Vertex "Resource exhausted" utan ordet quota.
+Varje kundyta använder klassarna, aldrig egna strängsniffar: chattens felväg
+(`ar_kvotfel`, inte "429" i råtexten), och SupportChat.tsx visar backendens
+`job.error` vid status failed i stället för en slumpad "försök igen"-mening.
+Leads-jobben (utkast, batch, per-prospekt, lista) fäller DIREKT med
+kvotklassens text och larmar — ingen leverantörsråtext i jobbfel, draft_note
+eller lead_lists.felorsak — och ett misslyckat listbygge lämnar NOLL rader
+(raderna skrivs först när bygget lyckats). Inget leads-arbete står kvar i
+queued/processing/bestalld/byggs för evigt: `app/jobs/stadare.py` failar
+rader äldre än `leads_hangtid_minuter` vid uppstart, periodiskt och vid
+listläsning, och strömmens MAX_LEVERANSER-tak anropar `ge_upp_leadsjobb`
+före kvitteringen. Bokföringens uppladdning och chattbilaga svarar 503
+(kreditslut, larm) / 429 (kvot) med `klass` och en mening som säger att
+dokumentet INTE sparades; uppladdningspanelen stoppar batchen vid
+kreditslut, namnger oskickade filer och låter kunden försöka igen vid kvot.
 Varför: uppmätt 2026-09-08 sa chatten "försök igen om en stund" om en tom
 förskottskredit, en leadskörning blev stående i processing, leverantörens
 råa engelska JSON nådde kundytan via jobbläsvägen — och ingen larmade oss.
-Kunden var den som upptäckte driftstoppet.
+Kunden var den som upptäckte driftstoppet. 2026-09-13 (efter Vertex-flytten)
+såg testaren samma sak igen: "försök igen" i chatten, ett listjobb i
+processing med tre skräprader, och kvitton som försvann tyst vid kvotfel.
 Test: snajp-support/tests/test_kvotfel.py
-Införd: 2026-09-12 · Upphävs endast genom waiver
+Fler tester: snajp-support/tests/test_kreditslut_vertex.py,
+snajp-support/tests/leads/test_kreditslut_leadsjobb.py,
+snajp-support/tests/leads/test_stadare.py, snajp-support/tests/api/test_bookkeeping_kvotfel.py
+Införd: 2026-09-12 · Utvidgad: 2026-09-13 · Upphävs endast genom waiver
 
 ### INV-STORE-001 — MemoryStorage och PostgresStorage har identiska signaturer
 `tests/invariants/test_inv_store_001.py` jämför varje publik metod i

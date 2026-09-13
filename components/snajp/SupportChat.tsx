@@ -462,9 +462,17 @@ export function SupportChat({
           }
           if (job.status === "failed") {
             // job.error var tidigare det stringifierade Python-undantaget och
-            // visades ordagrant. Diagnosen finns i backend-loggen; besökaren
-            // får en mening som pekar framåt.
-            throw new VisbartFel(slumpad(FELTEXTER));
+            // visades ordagrant — därför kastades det bort och en slumpad
+            // "försök igen"-mening visades i stället. Det skyddet blev en
+            // lögn vid kreditslut: backenden skrev ärligt "vi har larmats och
+            // fyller på", och kunden läste "skicka frågan igen" (testaren
+            // 2026-09-13). Sedan dess sätter chattjobbets felväg
+            // (app/api/chat.py:_process) BARA kuraterade meningar, och
+            // GET /api/jobs översätter leverantörens råtext vid läsning
+            // (kvotfel.oversatt_felstext). Backendens text vinner alltså när
+            // den finns; poolen är reserven för ett jobb utan feltext.
+            const backendtext = typeof job.error === "string" ? job.error.trim() : "";
+            throw new VisbartFel(backendtext || slumpad(FELTEXTER));
           }
         }
         throw new VisbartFel(slumpad(TIMEOUT_TEXTER));
