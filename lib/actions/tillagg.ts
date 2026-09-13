@@ -31,11 +31,43 @@ import { sqlAsUser } from "@/lib/db";
  * security definer-funktioner som grindar själva — se migration 063.
  */
 
-export type Tillaggslage = { addons?: AddonKey[]; error?: string };
-export type Tillaggsbyte = { success: boolean; addons?: AddonKey[]; error?: string };
+export type Tillaggslage = {
+  addons?: AddonKey[];
+  error?: string;
+  /** Funktionerna ur migration 063 finns inte i databasen — växlarna kan inte skriva. */
+  migrationSaknas?: boolean;
+};
+export type Tillaggsbyte = {
+  success: boolean;
+  addons?: AddonKey[];
+  error?: string;
+  migrationSaknas?: boolean;
+};
+
+/**
+ * Saknas RPC:erna ur migration 063?
+ *
+ * 42883 är Postgres `undefined_function`. Utan den här kontrollen fick adminen
+ * "function public.set_workspace_addons(uuid, text[]) does not exist" — eller
+ * bara "Tilläggen kunde inte sparas." — och tolkningen blev att tillägg inte
+ * går att aktivera alls, när felet i själva verket är en migration som inte
+ * körts i miljön. Meddelandet jämförs också, eftersom en proxy eller ett
+ * omslag kan tappa `code`.
+ */
+function saknarMigration(error: unknown): boolean {
+  const fel = error as { code?: string; message?: string } | null;
+  if (fel?.code === "42883") return true;
+  return /(set_workspace_addons|admin_workspace_addons)\b.*does not exist/i.test(fel?.message ?? "");
+}
+
+const MIGRATION_SAKNAS_TEXT =
+  "Tilläggen kan inte läsas eller sparas: databasfunktionerna från migration 063 (supabase/migrations/063_workspace_addons_admin.sql) finns inte i den här miljön. Kör `python scripts/railway_migrate.py --env development --apply` (eller --env main) och ladda om sidan.";
 
 /** Svenskt besked för ett fel som annars är en rå Postgres-mening. */
 function felText(error: unknown): string {
+  if (saknarMigration(error)) {
+    return MIGRATION_SAKNAS_TEXT;
+  }
   const text = (error as Error)?.message ?? "";
   if (text.includes("arbetsytan finns inte")) {
     // Samma svar som funktionen ger på nekad behörighet, med flit: ett
@@ -65,7 +97,7 @@ export async function hamtaTillagg(tenantId: string): Promise<Tillaggslage> {
     // renderingen av de sex som är giltiga.
     return { addons: (rader[0]?.admin_workspace_addons ?? []).filter(isAddonKey) };
   } catch (error) {
-    return { error: felText(error) };
+    return { error: felText(error), migrationSaknas: saknarMigration(error) };
   }
 }
 
@@ -96,7 +128,7 @@ export async function sattTillagg(
       [tenantId, giltiga]
     );
   } catch (error) {
-    return { success: false, error: felText(error) };
+    return { success: false, error: felText(error), migrationSaknas: saknarMigration(error) };
   }
 
   // Läses tillbaka ur SVARET, inte ur `giltiga`. Funktionen returnerar det

@@ -2,11 +2,14 @@
 
 import Link from "next/link";
 import { Radgivare } from "@/components/admin/Radgivare";
+import { Radmarke } from "@/components/admin/Radmarke";
 import type { BerikadTenant } from "@/lib/admin/exempeldata";
 import { a, antal } from "@/lib/admin/sprak";
-import { useLocale } from "@/lib/i18n";
+import { arTestyta } from "@/lib/admin/statistik";
+import { useLocale, type Locale } from "@/lib/i18n";
 import { formateraPris } from "@/lib/pricing";
 import {
+  type Halsa,
   MARGINAL_GRON,
   MARGINAL_ROD,
   TOKENKOSTNAD_IN_PER_MILJON_SEK,
@@ -35,12 +38,12 @@ import {
  *
  * ## Två saker som INTE är mätvärden, och som därför står utskrivna
  *
- * 1. **Paketet härleds ur aktivitet.** `listTenants()` returnerar inte vilka
- *    produkter arbetsytan äger, så en kund med ärenden räknas som Support och
- *    en med körningar som Leads. Det stämmer för en kund som använder det den
- *    betalar för och blir fel för en som betalar utan att använda — vilket är
- *    precis den kund raden ska varna för. Kopplas `workspaces.products` in i
- *    admin-API:t ska härledningen bort.
+ * 1. **Paketet kommer ur `workspaces.products`** när admin-API:t kan läsa
+ *    det (sedan 2026-09-13). Saknas det — ingen kopplad arbetsyta, eller en
+ *    databas där backendens roll inte får läsa `workspaces` — härleds det ur
+ *    aktivitet som förut: ärenden = Support, körningar = Leads. Härledningen
+ *    blir fel för en kund som betalar utan att använda och ger aldrig Trio,
+ *    så fotnoten räknar hur många rader som fortfarande härleds.
  *
  * 2. **Tokenkostnaden är en uppskattning**, inte en faktura. Se
  *    `TOKENKOSTNAD_PER_MILJON_SEK`. Fotnoten under tabellen säger det till
@@ -52,7 +55,15 @@ import {
  *    Se den filen för varför de finns.
  */
 
+/** Lagrade produkter om de finns, annars härledda ur aktivitet. En tom lista
+ *  räknas som lagrad — en arbetsyta utan produkter ska inte få ett paket
+ *  påhittat ur sina körningar. */
+function harLagradeProdukter(rad: BerikadTenant): boolean {
+  return Array.isArray(rad.products);
+}
+
 function harledProdukter(rad: BerikadTenant): string[] {
+  if (Array.isArray(rad.products)) return rad.products;
   const produkter: string[] = [];
   // Provkörningar räknas MED här, till skillnad från i volymkolumnen. Frågan
   // är vilken produkt tenanten använder, och en testkörning är leads-agenten
@@ -71,6 +82,13 @@ const HALSOETIKETT = {
   okand: "halsaOkand"
 } as const;
 
+/** Etiketten för ett hälsoläge. `test` står inline: sprak.ts ägs av en annan
+ *  yta, och ett enda ord motiverar inte en nyckel där. */
+function halsoetikett(halsa: Halsa, locale: Locale): string {
+  if (halsa === "test") return locale === "sv" ? "Testarbetsyta" : "Test workspace";
+  return a(HALSOETIKETT[halsa], locale);
+}
+
 export function Portfoljvy({
   tenants,
   nu
@@ -84,8 +102,10 @@ export function Portfoljvy({
       tokensIn: rad.tokens_in ?? 0,
       tokensUt: rad.tokens_out ?? 0,
       korningar: rad.runs ?? 0,
+      testkorningar: rad.test_runs ?? 0,
       arenden: rad.tickets ?? 0,
       senasteAktivitet: rad.last_activity,
+      arTestyta: arTestyta(rad.slug),
       // Serverns klocka, inte besökarens — se `dagarSedan` i halsa.ts.
       nu
     })
@@ -94,7 +114,9 @@ export function Portfoljvy({
   // Sämst först. Adminvyn finns för att hitta problem, inte för att bekräfta
   // att det mesta är bra — en lista sorterad på namn hade begravt den enda rad
   // som krävde en åtgärd.
-  const ordning = { dalig: 0, tyst: 1, ok: 2, okand: 3, bra: 4 } as const;
+  // Testarbetsytorna sist: de är inte kunder och ska inte konkurrera med de
+  // rader som kräver en åtgärd.
+  const ordning = { dalig: 0, tyst: 1, ok: 2, okand: 3, bra: 4, test: 5 } as const;
   // `x`/`y` och inte `a`/`b`: `a()` är språkuppslagningen i den här filen, och
   // en sorteringsparameter som skuggar den läser som ett anrop till fel sak.
   rader.sort(
@@ -112,6 +134,7 @@ export function Portfoljvy({
     maximumFractionDigits: 2
   });
   const exempelrader = rader.filter(({ rad }) => rad.ar_exempel).length;
+  const harleddaRader = rader.filter(({ rad }) => !harLagradeProdukter(rad)).length;
 
   return (
     <div>
@@ -176,14 +199,29 @@ export function Portfoljvy({
               <div key={rad.id} className="grid grid-cols-12 items-baseline gap-x-4 py-4">
                 <div
                   className="col-span-1 text-[1.25rem]"
-                  title={a(HALSOETIKETT[ekonomi.halsa], locale)}
+                  title={halsoetikett(ekonomi.halsa, locale)}
                 >
                   <span aria-hidden="true">{ekonomi.symbol}</span>
-                  <span className="sr-only">{a(HALSOETIKETT[ekonomi.halsa], locale)}</span>
+                  <span className="sr-only">{halsoetikett(ekonomi.halsa, locale)}</span>
                 </div>
                 <div className="col-span-3 min-w-0">
                   <p className="flex min-w-0 items-baseline gap-2 text-[1rem] font-semibold">
-                    <span className="truncate">{rad.name}</span>
+                    {/* Namnet leder till kundprofilen — agentinstruktioner och
+                        tillägg. Förut var raden en återvändsgränd, och vägen
+                        till tilläggen gick bara via en ikonknapp på en ANNAN
+                        flik. */}
+                    <Link
+                      href={`/admin/kunder/${rad.id}`}
+                      className="focus-ring truncate rounded-input underline decoration-ink/25 underline-offset-4 hover:text-ochre"
+                    >
+                      {rad.name}
+                    </Link>
+                    {ekonomi.halsa === "test" ? (
+                      <Radmarke>{text({ sv: "Testarbetsyta", en: "Test workspace" })}</Radmarke>
+                    ) : null}
+                    {rad.active === false ? (
+                      <Radmarke>{text({ sv: "Inaktiv", en: "Inactive" })}</Radmarke>
+                    ) : null}
                     {rad.ar_exempel ? <Exempelmarke /> : null}
                   </p>
                   <p className="mt-0.5 truncate text-[0.8125rem] text-ink/60">
@@ -280,15 +318,29 @@ export function Portfoljvy({
             en: "regardless of margin — a customer who has stopped using the service has low costs and looks profitable right up until they cancel."
           })}
         </p>
+        {harleddaRader > 0 ? (
+          <p>
+            <strong className="text-ink/70">
+              {text({
+                sv: `${harleddaRader} av ${rader.length} rader har ett härlett paket`,
+                en: `${harleddaRader} of ${rader.length} rows have an inferred plan`
+              })}
+            </strong>
+            {text({
+              sv: ": deras ",
+              en: ": their "
+            })}
+            <code>workspaces.products</code>
+            {text({
+              sv: " gick inte att läsa, så paketet gissas ur aktivitet. En kund som betalar utan att använda får då fel paket — och är samtidigt precis den kund raden ska varna för.",
+              en: " could not be read, so the plan is guessed from activity. A customer who pays without using then gets the wrong plan — and is exactly the customer the row exists to flag."
+            })}
+          </p>
+        ) : null}
         <p>
           {text({
-            sv: "Paketet härleds ur aktivitet, eftersom admin-API:t ännu inte returnerar ",
-            en: "The plan is inferred from activity, because the admin API does not yet return "
-          })}
-          <code>workspaces.products</code>
-          {text({
-            sv: ". En kund som betalar utan att använda får därför fel paket i tabellen — och är samtidigt precis den kund raden ska varna för.",
-            en: ". A customer who pays without using therefore gets the wrong plan in the table — and is exactly the customer the row exists to flag."
+            sv: "Testarbetsytor (🧪) är våra egna. Deras testkörningar räknas som aktivitet, men de ger ingen intäkt och räknas inte in i Kräver åtgärd.",
+            en: "Test workspaces (🧪) are our own. Their test runs count as activity, but they bring no revenue and are not counted under Needs attention."
           })}
         </p>
       </div>

@@ -60,6 +60,14 @@ export type TenantRow = {
   id: string;
   slug: string | null;
   name: string;
+  /** `ss_tenants.active`. Saknas i äldre backendsvar — tolka frånvaro som aktiv. */
+  active?: boolean;
+  /**
+   * `workspaces.products` för arbetsytan som pekar på tenanten (ss_tenant_id).
+   * Null = ingen kopplad arbetsyta, eller att backenden inte fick läsa den —
+   * då härleds paketet ur aktivitet som förut. Se list_tenants_with_stats.
+   */
+  products?: string[] | null;
   tickets: number;
   /** Ärenden med status 'escalated' — samma villkor som veckoanalysen. */
   escalated?: number;

@@ -27,6 +27,11 @@ router = APIRouter(prefix="/api/admin", dependencies=[Depends(require_master_key
 
 @router.get("/tenants")
 async def list_tenants(request: Request) -> dict:
+    """Alla tenants med nyckeltal. Raden skickas vidare HEL: `active`,
+    `products` (workspaces.products, None om ingen arbetsyta kunde läsas) och
+    `test_runs` bär adminvyns paket- och hälsobedömning. Plocka inte ut fält
+    här — en vy som inte får `test_runs` visar en testyta i full användning
+    som tyst."""
     return {"tenants": await request.app.state.storage.list_tenants_with_stats()}
 
 

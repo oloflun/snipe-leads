@@ -38,10 +38,20 @@ export function arDemoyta(slug: string | null): boolean {
   return slug !== null && DEMO_SLUGS.has(slug);
 }
 
+/**
+ * Är arbetsytan en av VÅRA testarbetsytor (onboardingens "Testarbetsyta …")?
+ *
+ * Sluggen och inte namnet: namnet är fritext som går att byta, sluggen sätts
+ * av `link_test_tenant` och är det som resten av adminytan redan filtrerar på.
+ */
+export function arTestyta(slug: string | null | undefined): boolean {
+  return Boolean(slug) && (slug === "testkund" || (slug as string).startsWith("testkund-"));
+}
+
 export function arRiktigKund(slug: string | null): boolean {
   if (!slug) return true;
   if (DEMO_SLUGS.has(slug)) return false;
-  return slug !== "testkund" && !slug.startsWith("testkund-");
+  return !arTestyta(slug);
 }
 
 function tillDag(varde: string | null | undefined): Date | null {

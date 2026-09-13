@@ -78,7 +78,14 @@ export const MARGINAL_GRON = 0.8;
 /** Ingen aktivitet på så här många dagar räknas som tyst, oavsett marginal. */
 export const TYST_EFTER_DAGAR = 14;
 
-export type Halsa = "bra" | "ok" | "dalig" | "tyst" | "okand";
+/**
+ * `test` är VÅR egen testarbetsyta (slug `testkund`/`testkund-…`). Den är
+ * varken frisk eller tyst — den är inte en kund. Före 2026-09-13 bedömdes den
+ * som vilken kund som helst, och eftersom dess körningar bär `is_test` räknades
+ * de inte som aktivitet: en testyta i full användning visades som 😴 "har inte
+ * börjat använda tjänsten", och drog upp "Kräver åtgärd".
+ */
+export type Halsa = "bra" | "ok" | "dalig" | "tyst" | "okand" | "test";
 
 export type KundEkonomi = {
   /** Månadsintäkt enligt paketet kunden har. */
@@ -151,17 +158,47 @@ export function bedomKund(input: {
   tokensIn: number;
   tokensUt: number;
   korningar: number;
+  /** Körningar med `is_test`. Räknas bara som aktivitet för en testarbetsyta. */
+  testkorningar?: number;
   arenden: number;
   senasteAktivitet: string | null;
+  /** Vår egen testarbetsyta — se `Halsa`. Avgörs av anroparen ur sluggen. */
+  arTestyta?: boolean;
   /** Millisekunder sedan epok, läst EN gång på servern. Se `dagarSedan`. */
   nu: number;
 }): KundEkonomi {
   const paket = paketForProdukter(input.produkter);
-  const intakt = paket?.prisPerManad ?? 0;
   const kostnad = tokenkostnad(input.tokensIn, input.tokensUt);
-  const marginal = intakt > 0 ? (intakt - kostnad) / intakt : null;
-
   const dagar = dagarSedan(input.senasteAktivitet, input.nu);
+
+  // Testarbetsytan före allt annat. Den betalar inget, så paketpriset är inte
+  // en intäkt — att räkna in det gav MRR för våra egna provkörningar. Och dess
+  // körningar är per definition testkörningar, så de räknas som aktivitet HÄR
+  // men aldrig i kundvolymen.
+  if (input.arTestyta) {
+    const antal = input.korningar + (input.testkorningar ?? 0) + input.arenden;
+    return {
+      intakt: 0,
+      kostnad,
+      marginal: null,
+      halsa: "test",
+      symbol: "🧪",
+      paketNamn: paket?.namn ?? null,
+      motivering:
+        antal > 0
+          ? {
+              sv: `Testarbetsyta: ${antal} körningar och ärenden${dagar !== null ? `, senast för ${dagar} dagar sedan` : ""}. Räknas inte som intäkt.`,
+              en: `Test workspace: ${antal} runs and tickets${dagar !== null ? `, last ${dagar} days ago` : ""}. Not counted as revenue.`
+            }
+          : {
+              sv: "Testarbetsyta utan aktivitet ännu. Räknas inte som intäkt.",
+              en: "Test workspace with no activity yet. Not counted as revenue."
+            }
+    };
+  }
+
+  const intakt = paket?.prisPerManad ?? 0;
+  const marginal = intakt > 0 ? (intakt - kostnad) / intakt : null;
   const anvander = input.korningar > 0 || input.arenden > 0;
 
   // TYST GÅR FÖRE MARGINAL, och det är hela poängen med två frågor. En kund
@@ -256,7 +293,14 @@ export type Portfolj = {
 };
 
 export function sammanfattaPortfolj(kunder: KundEkonomi[]): Portfolj {
-  const fordelning: Record<Halsa, number> = { bra: 0, ok: 0, dalig: 0, tyst: 0, okand: 0 };
+  const fordelning: Record<Halsa, number> = {
+    bra: 0,
+    ok: 0,
+    dalig: 0,
+    tyst: 0,
+    okand: 0,
+    test: 0
+  };
   let mrr = 0;
   let kostnad = 0;
   let betalande = 0;

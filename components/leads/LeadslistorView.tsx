@@ -1,7 +1,7 @@
 "use client";
 
 import { Send } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { btnPrimary, btnSecondary, EmptyState, SkeletonRows } from "@/components/ui";
@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
  * när arbetsytan har tillägget "leadlists".
  *
  * Backendkontraktet (byggs i snajp-support, migration 060):
- *   POST /leads/listor            {titel, antal, is_test?} → 202 {list_id, job_id}
+ *   POST /leads/listor            {titel, antal, is_test?, overrides?} → 202 {list_id, job_id}
  *   GET  /leads/listor            → {lists: [...]}
  *   GET  /leads/listor/{id}       → {list: {...}, items: [...]}
  * 429 betyder budgettak — feltexten kommer i `detail` och visas som den är.
@@ -102,6 +102,20 @@ function Rad({
 }
 
 /**
+ * Felet bär statuskoden. Snabbmailens svep måste skilja "den här raden gick
+ * inte" från "budgeten/AI-kapaciteten är slut" — det senare ska stoppa hela
+ * svepet direkt, inte ge 24 likadana fel till.
+ */
+class AnropsFel extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message);
+  }
+}
+
+/**
  * Speglar `anropa()` i LeadsRunForm.tsx med flit i stället för att delas —
  * samma resonemang som Bolagssida.tsx: Pydantics 422 lägger en LISTA i
  * `detail`, en handskriven HTTPException (t.ex. 429-budgettaket) en STRÄNG,
@@ -126,7 +140,10 @@ async function anropa<T>(path: string, init?: RequestInit): Promise<T> {
       : typeof k.detail === "string"
         ? k.detail
         : undefined;
-    throw new Error(detaljtext ?? k.error ?? `Anropet avvisades (${response.status}).`);
+    throw new AnropsFel(
+      detaljtext ?? k.error ?? `Anropet avvisades (${response.status}).`,
+      response.status
+    );
   }
   return kropp;
 }
@@ -233,7 +250,9 @@ export function LeadslistorView() {
   async function bestall() {
     const antalTal = Number(antal);
     if (!titel.trim()) {
-      setBestallFel("Ge listan en titel — det är den ni hittar den på sedan.");
+      setBestallFel(
+        "Beskriv vilka bolag listan ska hitta — beskrivningen är både sökningen och listans namn."
+      );
       return;
     }
     if (!Number.isInteger(antalTal) || antalTal < 1 || antalTal > 200) {
@@ -245,13 +264,19 @@ export function LeadslistorView() {
     setBestallFel(null);
     setStatus(null);
     try {
-      // 429 = budgettak. `anropa` plockar redan ut feltexten ur `detail`,
-      // så den visas som den är i felraden nedan.
+      // 429 = budgettak, 422 = inget sökbart underlag (varken sparad målgrupp
+      // eller titel). `anropa` plockar redan ut feltexten ur `detail`, så den
+      // visas som den är i felraden nedan.
       await anropa<{ list_id?: string; job_id?: string }>("/leads/listor", {
         method: "POST",
         body: JSON.stringify({
           titel: titel.trim(),
           antal: antalTal,
+          // Titeln STYR sökningen. Utan overrides byggde listjobbet bara på
+          // den sparade målgruppen, och "Bygg i Norrland" gav samma bolag som
+          // "Tandläkare i Skåne" — testaren skrev en titel som såg ut som en
+          // sökning och fick något annat. Samma form som LeadsSnabbsok.
+          overrides: { must_have: [titel.trim()] },
           // Demovyn räknas som test, precis som i Discovery: den ska aldrig
           // synas som kundvolym.
           is_test: isDemo || vy === "demo"
@@ -300,11 +325,11 @@ export function LeadslistorView() {
         </p>
 
         <div className="mt-6 grid max-w-[760px] gap-5 sm:grid-cols-2">
-          <Rad etikett="Titel" hint="t.ex. Bygg i Norrland, 10–50 anställda">
+          <Rad etikett="Vilka bolag ska listan hitta?" hint="t.ex. Bygg i Norrland, 10–50 anställda">
             <input
               value={titel}
               onChange={(e) => setTitel(e.target.value)}
-              placeholder="Vad listan ska handla om"
+              placeholder="Bransch, ort, storlek"
               className={fältklass}
             />
           </Rad>
@@ -451,6 +476,210 @@ export function LeadslistorView() {
 }
 
 /**
+ * Hur många utkast ETT klick på "Skriv utkast till alla med mejladress" får
+ * starta. Varje utkast är ett riktigt LLM-jobb mot leadsbudgeten; en lista på
+ * 200 bolag ska inte kunna tömma budgeten i ett enda klick som ingen hann
+ * ångra. Nästa klick tar nästa omgång.
+ */
+const SVEP_TAK = 25;
+
+/**
+ * Leverantörens och backendens formuleringar för slut kapacitet. Speglar
+ * `_KREDITMARKORER` och kundtexterna i snajp-support/app/kvotfel.py — en
+ * misslyckad utkastjobbstext bär bara meningen, inte statuskoden, så svepet
+ * måste känna igen texten för att veta att det ska sluta.
+ */
+const KAPACITETSMARKORER = [
+  "prepayment credits",
+  "credits are depleted",
+  "billing#prepay",
+  "ai-kapaciteten är slut",
+  "kvot är slut",
+  "kvoten är slut"
+];
+
+/** Saknad erbjudandetext gäller varje rad lika — därför stoppar den svepet. */
+const OFFERT_SAKNAS =
+  "Affärskontexten (Vad ni säljer) behövs för utkastet. Fyll i den under Inställningar, " +
+  "Vad agenterna vet, Affärskontext — och kontrollera att du fortfarande är inloggad.";
+
+/** Ska svepet stanna helt? 429 = budgettak, 503 = ingen skarp LLM, eller en
+ *  kredit-/kvottext ur ett misslyckat jobb. Allt annat gäller bara raden. */
+function stopparSvepet(fel: unknown): boolean {
+  if (fel instanceof AnropsFel && (fel.status === 429 || fel.status === 503)) return true;
+  if (fel instanceof Error && fel.message === OFFERT_SAKNAS) return true;
+  const text = (fel instanceof Error ? fel.message : String(fel)).toLocaleLowerCase("sv");
+  return KAPACITETSMARKORER.some((markor) => text.includes(markor));
+}
+
+type Utkast = {
+  prospectId: string;
+  subject: string | null | undefined;
+  body: string;
+  queueItemId: string | null;
+  offert: string | null;
+  /** Ett utkast fanns redan för bolaget — inget nytt jobb startades. */
+  fanns: boolean;
+};
+
+/**
+ * Utkastkedjan för EN listrad. Delas av mejlrutan och snabbmailens svep, så
+ * att de två aldrig kan skriva utkast på olika sätt.
+ *
+ * (1) Raden lyfts in i prospektregistret — LLM-fritt och idempotent, en
+ * befintlig rad återanvänds. (2) Saknade raden adress sparas den som
+ * användaren angav på prospektet. (3) Finns ett utkast redan visas det i
+ * stället för att ett nytt skrivs. (4) Annars skrivs utkastet av samma kedja
+ * som bolagssidans (/leads/outreach/draft) och pollas tills jobbet är klart.
+ *
+ * `adress` krävs. Backenden bygger avregistreringsfoten som lagen kräver ur
+ * mottagaradressen NÄR UTKASTET KÖAS (leads_tools._med_lagstadgad_fot) — ett
+ * utkast utan adress hade legat i kön utan fot och blivit oskickbart på
+ * lagligt vis även sedan en adress lagts till.
+ */
+async function skrivUtkastForRad(
+  lista: Lista,
+  rad: ListRad,
+  adress: string,
+  steg: (text: string) => void = () => {}
+): Promise<Utkast> {
+  steg("Lägger bolaget i registret…");
+  const befordran = await anropa<{ prospect?: { id: string } }>(
+    `/leads/listor/${encodeURIComponent(lista.id)}/items/${encodeURIComponent(rad.id)}/prospekt`,
+    { method: "POST" }
+  );
+  const prospectId = befordran.prospect?.id;
+  if (!prospectId) throw new Error("Bolaget kunde inte läggas i registret.");
+
+  if (!rad.contact_email) {
+    // Adressen hör hemma på prospektet, inte bara i det här anropet: tråden
+    // och sändkön läser mottagaren ur prospects.contact_email.
+    steg("Sparar adressen på bolaget…");
+    await anropa(`/leads/prospects/${encodeURIComponent(prospectId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ contact_email: adress })
+    });
+  }
+
+  // Finns ett utkast redan (rutan öppnad förut, eller en körning har hunnit
+  // skriva ett)? Då används det — ett andra utkastjobb för samma bolag är
+  // dubbel kostnad för samma fråga.
+  steg("Ser efter om ett utkast redan finns…");
+  try {
+    const befintligt = await anropa<{
+      utkast?: { subject?: string | null; body?: string | null } | null;
+      queue_item_id?: string | null;
+    }>(`/leads/prospects/${encodeURIComponent(prospectId)}/utkast`);
+    if (befintligt.utkast?.body) {
+      return {
+        prospectId,
+        subject: befintligt.utkast.subject,
+        body: befintligt.utkast.body,
+        queueItemId: befintligt.queue_item_id ?? null,
+        offert: null,
+        fanns: true
+      };
+    }
+  } catch {
+    // Ett fel här ska inte hindra ett nytt utkast från att skrivas.
+  }
+
+  steg("Agenten skriver utkastet…");
+  // Utan erbjudandetext svarar /leads/outreach/draft 422 (offer_summary har
+  // min_length=1) — att skicka `undefined` gav bara ett obegripligare fel ett
+  // steg senare. Felet skrivs om här i stället för att föras vidare: en server
+  // action maskerar sitt meddelande i produktionsbygget, och de två sätt den
+  // kan kasta på (utloggad, tom affärskontext) har samma åtgärd för kunden.
+  let offert: string;
+  try {
+    offert = await lasOffertForUtkast();
+  } catch {
+    throw new Error(OFFERT_SAKNAS);
+  }
+
+  type Utkastsvar = {
+    job_id?: string;
+    fase?: string;
+    subject?: string;
+    body?: string;
+    escalated?: boolean;
+    escalation_reason?: string | null;
+    queue_item_id?: string | null;
+  };
+  const koat = await anropa<Utkastsvar>("/leads/outreach/draft", {
+    method: "POST",
+    body: JSON.stringify({
+      prospect_id: prospectId,
+      prospect_email: adress,
+      company_name: rad.company_name,
+      offer_summary: offert ?? undefined,
+      brief:
+        `Skriv ett kort, personligt första mejl till kontaktvägen på ${rad.company_name}. ` +
+        "Utgå från signalen i underlaget och håll dig till det som är känt. " +
+        "Ingen hype, inga superlativ, ren text. Utkastet ska köas för granskning, inte skickas.",
+      research_summary: [
+        rad.ort ? `Ort: ${rad.ort}` : null,
+        rad.signal ? `Signal: ${signaltext(rad)}` : null,
+        rad.source_name ? `Källa: ${rad.source_name}` : null,
+        rad.contact_name || rad.contact_role
+          ? `Kontakt: ${[rad.contact_name, rad.contact_role].filter(Boolean).join(", ")}`
+          : null
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      research_evidence: rad.source_url ? [rad.source_url] : []
+    })
+  });
+
+  let svar: Utkastsvar = koat;
+  if (koat.job_id && (koat.fase === "skriver" || !koat.body)) {
+    let klart = false;
+    for (let forsok = 0; forsok < 90; forsok += 1) {
+      await new Promise((r) => setTimeout(r, forsok < 5 ? 800 : 2000));
+      const jobb = await anropa<{ status?: string; error?: string; result?: Utkastsvar }>(
+        `/leads/jobb/${encodeURIComponent(koat.job_id)}`
+      );
+      if (jobb.status === "completed" && jobb.result) {
+        svar = jobb.result;
+        klart = true;
+        break;
+      }
+      if (jobb.status === "failed") {
+        throw new Error(jobb.error || "Utkastet kunde inte skrivas.");
+      }
+    }
+    // Utan den här raden föll en utgången väntan igenom till eskalerings-
+    // texten nedan, och "agenten lämnade över till en människa" är inte vad
+    // som hände — jobbet kan fortfarande bli klart.
+    if (!klart) {
+      throw new Error(
+        "Utkastet tog för lång tid att skriva. Det kan dyka upp i granskningskön ändå — titta där innan ni försöker igen."
+      );
+    }
+  }
+
+  if (svar.escalated || !svar.body) {
+    throw new Error(
+      svar.escalation_reason ||
+        "Agenten lämnade över till en människa i stället för att skriva klart utkastet."
+    );
+  }
+
+  return {
+    prospectId,
+    subject: svar.subject,
+    body: svar.body,
+    queueItemId: svar.queue_item_id ?? null,
+    offert,
+    fanns: false
+  };
+}
+
+type Svep =
+  | { fas: "bekraftar" }
+  | { fas: "kor"; klara: number; totalt: number; bolag: string };
+
+/**
  * Raderna i EN klar lista. Samma form som Bolagsregistret: tabell från md och
  * upp, kort under — sex kolumner krympta till 375px blir oläsliga.
  */
@@ -460,16 +689,37 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
   const { isDemo, vy } = useDashboard();
   const mejlbro = !isDemo && vy !== "demo";
 
-  // Skriv mejl: rutan med Email studio öppnas UNDER raden. Raden lyfts först
-  // in i prospektregistret (LLM-fritt, POST .../items/{id}/prospekt), sedan
-  // skrivs utkastet av den riktiga kedjan (POST /leads/outreach/draft) och
-  // landar i granskningskön — samma väg som bolagssidans utkast, ingen egen
-  // mejlpipeline. Ett öppet rad-id i taget: två samtidiga utkastjobb från
-  // samma lista är dubbel kostnad för samma klick.
+  // Skriv mejl: rutan med Email studio öppnas UNDER raden. Ett öppet rad-id i
+  // taget: två samtidiga utkastjobb från samma lista är dubbel kostnad för
+  // samma klick.
   const [oppenRad, setOppenRad] = useState<string | null>(null);
   const [laggerAlla, setLaggerAlla] = useState(false);
   const [allaResultat, setAllaResultat] = useState<string | null>(null);
   const [radFel, setRadFel] = useState<string | null>(null);
+
+  // Snabbmail: utkast till alla rader med adress, i omgångar om SVEP_TAK.
+  // `hanterade` minns vilka rader svepet redan tagit (lyckade som felade), så
+  // att nästa klick tar NÄSTA omgång i stället för att köra om de första 25.
+  const [svep, setSvep] = useState<Svep | null>(null);
+  const [svepResultat, setSvepResultat] = useState<string | null>(null);
+  const [svepStopp, setSvepStopp] = useState<string | null>(null);
+  const [hanterade, setHanterade] = useState<Set<string>>(new Set());
+  const avbryt = useRef(false);
+  const korRef = useRef(false);
+  const [stopparBegart, setStopparBegart] = useState(false);
+  // Stängs listan mitt i svepet ska loopen inte fortsätta beställa jobb åt en
+  // vy ingen längre tittar på — det pågående utkastet blir klart, inget mer.
+  useEffect(
+    () => () => {
+      avbryt.current = true;
+    },
+    []
+  );
+
+  const medAdress = items.filter((rad) => rad.contact_email);
+  const kandidater = medAdress.filter((rad) => !hanterade.has(rad.id));
+  const omgang = kandidater.slice(0, SVEP_TAK);
+  const svepKor = svep?.fas === "kor";
 
   const laggAllaIRegistret = useCallback(async () => {
     setLaggerAlla(true);
@@ -505,6 +755,67 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
     setLaggerAlla(false);
   }, [items, lista.id]);
 
+  const skrivAllaUtkast = useCallback(async () => {
+    const rader = omgang;
+    // Ref och inte state: ett dubbelklick på bekräftelsen hinner avfyras två
+    // gånger innan dialogen renderats bort, och två svep hade dubblat jobben.
+    if (!rader.length || korRef.current) return;
+    korRef.current = true;
+    setStopparBegart(false);
+    // Mejlrutan stängs: den och svepet hade annars kunnat starta två jobb för
+    // samma bolag samtidigt.
+    setOppenRad(null);
+    setSvepResultat(null);
+    setSvepStopp(null);
+    avbryt.current = false;
+
+    let nya = 0;
+    let fanns = 0;
+    let fel = 0;
+    let klara = 0;
+    const tagna = new Set(hanterade);
+
+    // Sekventiellt, inte parallellt: budgetgrinden räknar per jobb, och 25
+    // samtidiga jobb hade passerat grinden innan det första hunnit räknas.
+    for (const rad of rader) {
+      if (avbryt.current) break;
+      setSvep({ fas: "kor", klara, totalt: rader.length, bolag: rad.company_name });
+      try {
+        const utkast = await skrivUtkastForRad(lista, rad, rad.contact_email as string);
+        if (utkast.fanns) fanns += 1;
+        else nya += 1;
+        tagna.add(rad.id);
+      } catch (orsak) {
+        if (stopparSvepet(orsak)) {
+          // Backendens egen mening visas, inte en omskrivning: den säger om
+          // det är budgettaket eller kapaciteten, och vad som gäller härnäst.
+          // Raden räknas INTE som hanterad — den ska med i nästa försök.
+          setSvepStopp(felmeddelande(orsak));
+          break;
+        }
+        fel += 1;
+        tagna.add(rad.id);
+      }
+      klara += 1;
+      setHanterade(new Set(tagna));
+    }
+
+    korRef.current = false;
+    const stoppadAvDig = avbryt.current;
+    setStopparBegart(false);
+    setSvep(null);
+    setSvepResultat(
+      [
+        stoppadAvDig ? "Stoppat" : null,
+        nya ? `${nya} ${nya === 1 ? "nytt" : "nya"} utkast` : null,
+        fanns ? `${fanns} hade redan ett utkast` : null,
+        fel ? `${fel} gick inte att skriva — öppna raden för att se varför` : null
+      ]
+        .filter(Boolean)
+        .join(" · ") || "Inga utkast skrevs."
+    );
+  }, [hanterade, lista, omgang]);
+
   if (!items.length) {
     return (
       <p className="mt-4 border-t border-ink/10 pt-4 text-[15px] text-ink/60">
@@ -513,18 +824,52 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
     );
   }
 
+  function skrivMejlKnapp(rad: ListRad, extra?: string) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOppenRad(oppenRad === rad.id ? null : rad.id)}
+        aria-expanded={oppenRad === rad.id}
+        disabled={svepKor}
+        className={cn(btnSecondary, "whitespace-nowrap disabled:opacity-60", extra)}
+      >
+        {oppenRad === rad.id ? "Stäng mejlet" : "Skriv mejl"}
+      </button>
+    );
+  }
+
   return (
     <div className="mt-4 rounded-card border border-ink/10 bg-paper p-4 md:p-5">
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
-        <p className="text-[13px] text-ink/50">{items.length} bolag i listan</p>
+        <p className="text-[13px] text-ink/50">
+          {items.length} bolag i listan · {medAdress.length} med mejladress
+        </p>
         <div className="flex flex-wrap items-center gap-2">
+          {/* Snabbmail: ett utkast per rad med adress, rakt in i granskningskön.
+              Bekräftas först — det är upp till 25 LLM-jobb på ett klick. */}
+          {mejlbro && medAdress.length ? (
+            <button
+              type="button"
+              onClick={() => {
+                setSvepResultat(null);
+                setSvepStopp(null);
+                setSvep({ fas: "bekraftar" });
+              }}
+              disabled={svep !== null || kandidater.length === 0}
+              className={cn(btnSecondary, "disabled:opacity-60")}
+            >
+              {kandidater.length === 0
+                ? "Alla med adress är genomgångna"
+                : "Skriv utkast till alla med mejladress"}
+            </button>
+          ) : null}
           {/* Hela listan in i Leads-registret i ett svep — därifrån kan en
               körning researcha och skriva utkast till flera på en gång. */}
           {mejlbro ? (
             <button
               type="button"
               onClick={() => void laggAllaIRegistret()}
-              disabled={laggerAlla}
+              disabled={laggerAlla || svepKor}
               className={cn(btnSecondary)}
             >
               {laggerAlla ? "Lägger in…" : "Lägg alla i registret"}
@@ -541,6 +886,73 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
           </button>
         </div>
       </div>
+
+      {svep?.fas === "bekraftar" ? (
+        <div
+          role="alertdialog"
+          aria-label="Bekräfta utkast till hela listan"
+          className="mt-4 rounded-card border border-warning/40 bg-warning/10 p-4"
+        >
+          <p className="max-w-[70ch] text-[0.875rem] leading-6 text-ink">
+            Agenten skriver <strong className="font-semibold">{omgang.length} utkast</strong>
+            {kandidater.length > omgang.length
+              ? ` — de första ${omgang.length} av ${kandidater.length} med adress. Nästa klick tar resten.`
+              : ", ett per bolag med mejladress."}{" "}
+            Utkasten landar i granskningskön under Leads.{" "}
+            <strong className="font-semibold">Ingenting skickas</strong> förrän ni godkänner
+            varje mejl. Varje utkast räknas mot er leadsbudget.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void skrivAllaUtkast()}
+              // Bekräftelsen dyker upp på knapptryck; fokus följer med så att
+              // tangentbordet landar på beslutet i stället för bakom det.
+              autoFocus
+              className="focus-ring rounded-input bg-ink px-4 py-2 text-[0.8125rem] font-semibold text-paper hover:bg-ink2"
+            >
+              Skriv {omgang.length} utkast
+            </button>
+            <button
+              type="button"
+              onClick={() => setSvep(null)}
+              className="focus-ring rounded-input bg-paper2 px-4 py-2 text-[0.8125rem] text-ink hover:bg-paper2/70"
+            >
+              Avbryt
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {svep?.fas === "kor" ? (
+        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <p role="status" className="text-[13px] text-ink/60">
+            Skriver utkast {svep.klara + 1} av {svep.totalt} — {svep.bolag}
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              avbryt.current = true;
+              setStopparBegart(true);
+            }}
+            disabled={stopparBegart}
+            className="focus-ring text-[13px] underline underline-offset-4 hover:text-ochre disabled:text-ink/50 disabled:no-underline"
+          >
+            {stopparBegart ? "Stoppar efter det här utkastet…" : "Stoppa efter det här utkastet"}
+          </button>
+        </div>
+      ) : null}
+      {svepStopp ? (
+        <p role="alert" className="mt-3 max-w-[70ch] break-words text-[14px] text-danger">
+          Svepet stoppades: {svepStopp}
+        </p>
+      ) : null}
+      {svepResultat ? (
+        <p className="mt-3 text-[13px] text-ink/55">
+          {svepResultat} — utkasten ligger i granskningskön under Leads.
+        </p>
+      ) : null}
+
       {allaResultat ? (
         <p className="mt-3 text-[13px] text-ink/55">
           {allaResultat} — bolagen ligger under Leads och kan researchas och mejlas därifrån.
@@ -549,6 +961,17 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
       {radFel ? (
         <p role="alert" className="mt-3 max-w-[70ch] break-words text-[14px] text-danger">
           {radFel}
+        </p>
+      ) : null}
+
+      {/* Testaren hittade inte bron alls: knappen syntes bara på rader med
+          adress, och den listan hade inga. En rad om vad raderna gör kostar
+          ingenting och gör vägen till Email studio synlig även innan någon
+          klickat. */}
+      {mejlbro ? (
+        <p className="mt-4 max-w-[70ch] text-[13px] leading-6 text-ink/55">
+          Skriv mejl på en rad öppnar Email studio: agenten skriver ett utkast som ni kan
+          förbättra, personalisera och godkänna.
         </p>
       ) : null}
 
@@ -606,24 +1029,11 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
                     <span className="text-[14px] text-ink/55">{rad.source_name ?? "—"}</span>
                   )}
                 </td>
-                {mejlbro ? (
-                  <td className="py-4 text-right">
-                    {rad.contact_email ? (
-                      <button
-                        type="button"
-                        onClick={() => setOppenRad(oppenRad === rad.id ? null : rad.id)}
-                        aria-expanded={oppenRad === rad.id}
-                        className={cn(btnSecondary, "whitespace-nowrap")}
-                      >
-                        {oppenRad === rad.id ? "Stäng mejlet" : "Skriv mejl"}
-                      </button>
-                    ) : (
-                      // Ingen adress — inget mejl. Strecket säger det utan att
-                      // en död knapp behöver förklara sig.
-                      <span className="text-[14px] text-ink/40">—</span>
-                    )}
-                  </td>
-                ) : null}
+                {/* Knappen står på VARJE rad. Förut syntes den bara där en
+                    adress fanns, och i en lista utan adresser fanns ingen
+                    väg till Email studio alls. Saknas adressen frågar rutan
+                    efter den i stället. */}
+                {mejlbro ? <td className="py-4 text-right">{skrivMejlKnapp(rad)}</td> : null}
               </tr>,
               oppenRad === rad.id ? (
                 <tr key={`${rad.id}-mejl`}>
@@ -668,16 +1078,7 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
                 </a>
               ) : null}
             </div>
-            {mejlbro && rad.contact_email ? (
-              <button
-                type="button"
-                onClick={() => setOppenRad(oppenRad === rad.id ? null : rad.id)}
-                aria-expanded={oppenRad === rad.id}
-                className={cn(btnSecondary, "mt-3 w-full")}
-              >
-                {oppenRad === rad.id ? "Stäng mejlet" : "Skriv mejl"}
-              </button>
-            ) : null}
+            {mejlbro ? skrivMejlKnapp(rad, "mt-3 w-full") : null}
             {mejlbro && oppenRad === rad.id ? (
               <div className="mt-3">
                 <MejlRuta lista={lista} rad={rad} />
@@ -690,22 +1091,30 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
   );
 }
 
+/** Tillräckligt för att fånga ett felskrivet fält, inte en RFC 5322-validering —
+ *  backenden och sändvägen är domarna. */
+const ADRESS_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 /**
  * Mejlrutan under en listrad: Email studio, på plats.
  *
- * Kedjan när rutan öppnas: (1) raden lyfts in i prospektregistret —
- * LLM-fritt och idempotent, en befintlig rad återanvänds; (2) utkastet
- * skrivs av samma kedja som bolagssidans ("/leads/outreach/draft"), med
- * radens signal och källa som underlag; (3) utkastet landar i
- * granskningskön och visas här i Email studio-editorn, med Förbättra/
- * Personalisera-knapparna och "Godkänn och skicka".
+ * Kedjan är `skrivUtkastForRad` ovan. Utkastet landar i granskningskön och
+ * visas här i Email studio-editorn, med Förbättra/Personalisera-knapparna och
+ * "Godkänn och skicka".
+ *
+ * Saknar raden adress frågar rutan efter den FÖRST. Ett utkast utan mottagare
+ * går inte att skicka lagligt (avregistreringsfoten byggs på adressen när
+ * utkastet köas), så ett utkast före adressen hade varit ett löfte rutan inte
+ * kan hålla.
  *
  * Ingenting skickas från den här rutan — godkännandet släpper utkastet till
  * samma sändkö som alla andra prospekt (INV-SEC-004 består: listjobbet har
  * inget sändverktyg, det har bara människan efter granskning).
  */
 function MejlRuta({ lista, rad }: Readonly<{ lista: Lista; rad: ListRad }>) {
-  const [fas, setFas] = useState<"skapar" | "klar" | "fel">("skapar");
+  const [fas, setFas] = useState<"adress" | "skapar" | "klar" | "fel">(
+    rad.contact_email ? "skapar" : "adress"
+  );
   const [steg, setSteg] = useState("Lägger bolaget i registret…");
   const [fel, setFel] = useState<string | null>(null);
   const [data, setData] = useState<EmailStudioData | null>(null);
@@ -713,120 +1122,43 @@ function MejlRuta({ lista, rad }: Readonly<{ lista: Lista; rad: ListRad }>) {
   const [godkant, setGodkant] = useState(false);
   const [godkannBusy, setGodkannBusy] = useState(false);
   const [godkannFel, setGodkannFel] = useState<string | null>(null);
+  const [adressfalt, setAdressfalt] = useState("");
+  const [adressFel, setAdressFel] = useState<string | null>(null);
+  const [adress, setAdress] = useState<string | null>(rad.contact_email ?? null);
 
-  const skapa = useCallback(async () => {
-    setFas("skapar");
-    setFel(null);
-    try {
-      setSteg("Lägger bolaget i registret…");
-      const befordran = await anropa<{ prospect?: { id: string } }>(
-        `/leads/listor/${encodeURIComponent(lista.id)}/items/${encodeURIComponent(rad.id)}/prospekt`,
-        { method: "POST" }
-      );
-      const prospectId = befordran.prospect?.id;
-      if (!prospectId) throw new Error("Bolaget kunde inte läggas i registret.");
-
-      // Finns ett utkast redan (rutan öppnad förut, eller en körning har
-      // hunnit skriva ett)? Då visas det — ett andra utkastjobb för samma
-      // bolag är dubbel kostnad för samma fråga.
-      setSteg("Ser efter om ett utkast redan finns…");
+  const skapa = useCallback(
+    async (mottagare: string) => {
+      setFas("skapar");
+      setFel(null);
       try {
-        const befintligt = await anropa<{
-          utkast?: { subject?: string | null; body?: string | null } | null;
-          queue_item_id?: string | null;
-        }>(`/leads/prospects/${encodeURIComponent(prospectId)}/utkast`);
-        if (befintligt.utkast?.body) {
-          setData(
-            byggStudioData(rad, prospectId, befintligt.utkast.subject, befintligt.utkast.body, null)
-          );
-          setQueueItemId(befintligt.queue_item_id ?? null);
-          setFas("klar");
-          return;
-        }
-      } catch {
-        // Ett fel här ska inte hindra ett nytt utkast från att skrivas.
+        const utkast = await skrivUtkastForRad(lista, rad, mottagare, setSteg);
+        setData(byggStudioData(rad, utkast.prospectId, utkast.subject, utkast.body, utkast.offert));
+        setQueueItemId(utkast.queueItemId);
+        setFas("klar");
+      } catch (orsak) {
+        setFel(felmeddelande(orsak));
+        setFas("fel");
       }
-
-      setSteg("Agenten skriver utkastet…");
-      let offert: string | null = null;
-      try {
-        offert = await lasOffertForUtkast();
-      } catch {
-        offert = null;
-      }
-      const koat = await anropa<{
-        job_id?: string;
-        fase?: string;
-        subject?: string;
-        body?: string;
-        escalated?: boolean;
-        escalation_reason?: string | null;
-        queue_item_id?: string | null;
-      }>("/leads/outreach/draft", {
-        method: "POST",
-        body: JSON.stringify({
-          prospect_id: prospectId,
-          prospect_email: rad.contact_email,
-          company_name: rad.company_name,
-          offer_summary: offert ?? undefined,
-          brief:
-            `Skriv ett kort, personligt första mejl till kontaktvägen på ${rad.company_name}. ` +
-            "Utgå från signalen i underlaget och håll dig till det som är känt. " +
-            "Ingen hype, inga superlativ, ren text. Utkastet ska köas för granskning, inte skickas.",
-          research_summary: [
-            rad.ort ? `Ort: ${rad.ort}` : null,
-            rad.signal ? `Signal: ${signaltext(rad)}` : null,
-            rad.source_name ? `Källa: ${rad.source_name}` : null,
-            rad.contact_name || rad.contact_role
-              ? `Kontakt: ${[rad.contact_name, rad.contact_role].filter(Boolean).join(", ")}`
-              : null
-          ]
-            .filter(Boolean)
-            .join("\n"),
-          research_evidence: rad.source_url ? [rad.source_url] : []
-        })
-      });
-
-      let svar = koat;
-      if (koat.job_id && (koat.fase === "skriver" || !koat.body)) {
-        for (let forsok = 0; forsok < 90; forsok += 1) {
-          await new Promise((r) => setTimeout(r, forsok < 5 ? 800 : 2000));
-          const jobb = await anropa<{
-            status?: string;
-            error?: string;
-            result?: typeof koat;
-          }>(`/leads/jobb/${encodeURIComponent(koat.job_id)}`);
-          if (jobb.status === "completed" && jobb.result) {
-            svar = jobb.result;
-            break;
-          }
-          if (jobb.status === "failed") {
-            throw new Error(jobb.error || "Utkastet kunde inte skrivas.");
-          }
-        }
-      }
-
-      if (svar.escalated || !svar.body) {
-        throw new Error(
-          svar.escalation_reason ||
-            "Agenten lämnade över till en människa i stället för att skriva klart utkastet."
-        );
-      }
-
-      setData(byggStudioData(rad, prospectId, svar.subject, svar.body, offert));
-      setQueueItemId(svar.queue_item_id ?? null);
-      setFas("klar");
-    } catch (orsak) {
-      setFel(felmeddelande(orsak));
-      setFas("fel");
-    }
-  }, [lista.id, rad]);
+    },
+    [lista, rad]
+  );
 
   useEffect(() => {
-    void skapa();
+    if (rad.contact_email) void skapa(rad.contact_email);
     // Kör en gång när rutan öppnas för raden — skapa() är stabil per rad.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rad.id]);
+
+  function sparaAdress() {
+    const varde = adressfalt.trim();
+    if (!ADRESS_RE.test(varde)) {
+      setAdressFel("Skriv en hel mejladress, t.ex. namn@bolaget.se.");
+      return;
+    }
+    setAdressFel(null);
+    setAdress(varde);
+    void skapa(varde);
+  }
 
   const godkann = useCallback(async () => {
     if (!queueItemId) return;
@@ -844,7 +1176,45 @@ function MejlRuta({ lista, rad }: Readonly<{ lista: Lista; rad: ListRad }>) {
 
   return (
     <div className="rounded-card border border-ink/15 bg-paper2/50 p-4 md:p-5">
-      <p className="kicker text-mineral">Mejl till {rad.contact_email ?? rad.company_name}</p>
+      <p className="kicker text-mineral">Mejl till {adress ?? rad.company_name}</p>
+
+      {fas === "adress" ? (
+        <form
+          className="mt-3"
+          // Egen svensk validering nedan; webbläsarens bubbla hade hunnit före.
+          noValidate
+          onSubmit={(e) => {
+            e.preventDefault();
+            sparaAdress();
+          }}
+        >
+          <p className="max-w-[65ch] text-[14px] leading-6 text-ink/70">
+            Raden saknar mejladress. Lägg till mottagaren, så skriver agenten utkastet. Adressen
+            sparas på bolaget under Leads.
+          </p>
+          <label className="mt-3 block max-w-[420px]">
+            <span className="text-[13px] font-medium text-ink/70">Mejladress</span>
+            <input
+              type="email"
+              value={adressfalt}
+              onChange={(e) => setAdressfalt(e.target.value)}
+              placeholder="namn@bolaget.se"
+              autoComplete="off"
+              aria-invalid={adressFel ? true : undefined}
+              aria-describedby={adressFel ? `adressfel-${rad.id}` : undefined}
+              className={cn(fältklass, "mt-1.5")}
+            />
+          </label>
+          {adressFel ? (
+            <p id={`adressfel-${rad.id}`} role="alert" className="mt-2 text-[14px] text-danger">
+              {adressFel}
+            </p>
+          ) : null}
+          <button type="submit" className={cn(btnPrimary, "mt-3")}>
+            Spara adressen och skriv utkast
+          </button>
+        </form>
+      ) : null}
 
       {fas === "skapar" ? (
         <p className="mt-3 text-[14px] text-ink/55" role="status">
@@ -857,9 +1227,27 @@ function MejlRuta({ lista, rad }: Readonly<{ lista: Lista; rad: ListRad }>) {
           <p role="alert" className="max-w-[70ch] text-[14px] leading-6 text-danger">
             {fel}
           </p>
-          <button type="button" onClick={() => void skapa()} className={cn(btnSecondary, "mt-3")}>
-            Försök igen
-          </button>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => (adress ? void skapa(adress) : setFas("adress"))}
+              className={cn(btnSecondary)}
+            >
+              Försök igen
+            </button>
+            {!rad.contact_email ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setAdressfalt(adress ?? "");
+                  setFas("adress");
+                }}
+                className={cn(btnSecondary)}
+              >
+                Ändra adressen
+              </button>
+            ) : null}
+          </div>
         </div>
       ) : null}
 

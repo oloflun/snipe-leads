@@ -4,8 +4,10 @@ import Link from "next/link";
 import { SlidersHorizontal } from "lucide-react";
 
 import { OppnaArbetsyta } from "@/components/admin/OppnaArbetsyta";
+import { Radmarke } from "@/components/admin/Radmarke";
 import type { BerikadTenant } from "@/lib/admin/exempeldata";
 import { a, antal, datum } from "@/lib/admin/sprak";
+import { arTestyta } from "@/lib/admin/statistik";
 import { useLocale } from "@/lib/i18n";
 
 /**
@@ -81,6 +83,15 @@ export function Kundtabell({ kunder }: Readonly<{ kunder: BerikadTenant[] }>) {
                     >
                       {kund.name}
                     </Link>
+                    {/* Testarbetsytan får ett neutralt märke i stället för att
+                        se ut som en kund utan aktivitet: dess körningar bär
+                        is_test och syns därför inte i kolumnen Körningar. */}
+                    {arTestyta(kund.slug) ? (
+                      <Radmarke>{text({ sv: "Testarbetsyta", en: "Test workspace" })}</Radmarke>
+                    ) : null}
+                    {kund.active === false ? (
+                      <Radmarke>{text({ sv: "Inaktiv", en: "Inactive" })}</Radmarke>
+                    ) : null}
                     {kund.ar_exempel ? (
                       <span
                         title={a("exempeldataMarkning", locale)}
@@ -108,7 +119,16 @@ export function Kundtabell({ kunder }: Readonly<{ kunder: BerikadTenant[] }>) {
                   )}
                 </td>
                 <td className="py-3 pr-6 text-right tabular-nums">{antal(kund.tickets, locale)}</td>
-                <td className="py-3 pr-6 text-right tabular-nums">{antal(kund.runs, locale)}</td>
+                <td className="py-3 pr-6 text-right tabular-nums">
+                  {antal(kund.runs, locale)}
+                  {/* Samma redovisning som Översikten: testkörningar räknas
+                      inte som kundvolym men göms inte heller. */}
+                  {kund.test_runs ? (
+                    <span className="block text-[0.8125rem] text-ink/40">
+                      +{kund.test_runs} {a("test", locale)}
+                    </span>
+                  ) : null}
+                </td>
                 <td className="py-3 pr-6 text-right tabular-nums">
                   {kund.errors > 0 ? <span className="text-danger">{kund.errors}</span> : "0"}
                 </td>
@@ -121,13 +141,20 @@ export function Kundtabell({ kunder }: Readonly<{ kunder: BerikadTenant[] }>) {
                     det gick att TITTA på varje kund men inte att styra någon. */}
                 <td className="py-3 text-right">
                   <div className="inline-flex items-center gap-2">
+                    {/* "Profil och tillägg", inte bara "Profil": tilläggen
+                        (Leadslistor m.fl.) slås på på samma sida, och testaren
+                        letade efter dem utan att ana att de låg bakom en
+                        knapp som bara sa Profil. */}
                     <Link
                       href={`/admin/kunder/${kund.id}`}
-                      aria-label={`${a("oppnaProfilen", locale)} ${kund.name}`}
-                      className="focus-ring inline-flex min-h-9 items-center gap-1.5 rounded-input bg-paper2 px-3 text-[13px] font-medium text-ink hover:bg-paper2/70"
+                      aria-label={text({
+                        sv: `Öppna agentprofil och tillägg för ${kund.name}`,
+                        en: `Open agent profile and add-ons for ${kund.name}`
+                      })}
+                      className="focus-ring inline-flex min-h-9 items-center gap-1.5 whitespace-nowrap rounded-input bg-paper2 px-3 text-[13px] font-medium text-ink hover:bg-paper2/70"
                     >
                       <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
-                      {a("profil", locale)}
+                      {text({ sv: "Profil och tillägg", en: "Profile and add-ons" })}
                     </Link>
                     {kund.slug ? <OppnaArbetsyta slug={kund.slug} namn={kund.name} /> : null}
                   </div>

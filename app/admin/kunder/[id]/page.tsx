@@ -52,6 +52,19 @@ export default async function Page({
         <Link href="/admin/kunder" className="mt-6 inline-block text-[0.9375rem] underline underline-offset-4">
           Tillbaka till kundlistan
         </Link>
+
+        {/* Tilläggen står kvar även när agentprofilen inte gick att hämta.
+            De läses ur databasen, inte ur backenden, och adressen bär redan
+            tenant-id:t. Förut försvann hela Tillägg-sektionen med profilen —
+            en sovande backend gjorde alltså tilläggen omöjliga att slå på. */}
+        <div className="mt-14">
+          <Tillaggsvaljare
+            tenantId={id}
+            initialaAddons={tillagg.addons ?? []}
+            lasfel={tillagg.error}
+            migrationSaknas={tillagg.migrationSaknas}
+          />
+        </div>
       </div>
     );
   }
@@ -110,6 +123,7 @@ export default async function Page({
           tenantId={profil.tenant.id}
           initialaAddons={tillagg.addons ?? []}
           lasfel={tillagg.error}
+          migrationSaknas={tillagg.migrationSaknas}
         />
       </div>
 

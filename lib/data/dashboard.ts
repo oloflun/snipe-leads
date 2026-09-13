@@ -3,6 +3,8 @@ import { getWorkspaceContext } from "@/lib/workspace";
 import { hasDatabase, sqlAsUser } from "@/lib/db";
 import { SCOPE_COOKIE, isProductKey, productKeys, type ProductKey, type Scope } from "@/lib/routes";
 import { isAddonKey, type AddonKey } from "@/lib/addons";
+import { hamtaTillagg } from "@/lib/actions/tillagg";
+import { listTenants, unwrap } from "@/lib/data/admin";
 import { DEMO_ARBETSYTA, aktivVy, type Vy } from "@/lib/vy";
 import { cookies } from "next/headers";
 
@@ -105,6 +107,37 @@ async function scopeFranCookie(products: readonly ProductKey[]): Promise<Scope> 
   return "both";
 }
 
+/**
+ * Tilläggen hos kunden en plattformsadmin besöker.
+ *
+ * ## Varför omvägen via adminlistan och inte en rak SELECT
+ *
+ * `workspaces` är RLS-skyddad till den inloggades EGEN arbetsyta, och adminens
+ * arbetsyta är inte kundens. Läsningen går därför samma väg som adminytans
+ * tilläggsväljare: `hamtaTillagg` → `admin_workspace_addons()` (migration 063),
+ * som själv kontrollerar platform_admins. Den funktionen adresseras på
+ * tenant-id, och besöket bär bara sluggen — uppslaget slug → id görs mot
+ * adminlistan, som redan är grindad bakom `getPlatformAdmin()` och
+ * master-nyckeln. Ingen ny väg in över tenant-gränsen öppnas.
+ *
+ * Priset är en adminlistning per rendering i kundbesök. Det är ett
+ * supportläge som används sällan, och alternativet — en egen RPC — hör hemma
+ * i en migration, inte här.
+ *
+ * Varje fel ger `[]`: ett kundbesök ska rendera även när backenden sover
+ * eller 063 saknas, och tilläggsväljaren i /admin säger vad som är fel.
+ */
+async function tillaggForKundbesok(slug: string): Promise<AddonKey[]> {
+  try {
+    const { data } = unwrap(await listTenants());
+    const tenant = data?.find((rad) => rad.slug === slug);
+    if (!tenant) return [];
+    return (await hamtaTillagg(tenant.id)).addons ?? [];
+  } catch {
+    return [];
+  }
+}
+
 export async function resolveDashboardState(): Promise<DashboardState> {
   if (!hasDatabase()) {
     return ANONYMOUS;
@@ -137,15 +170,22 @@ export async function resolveDashboardState(): Promise<DashboardState> {
    * är värre än ett tekniskt.
    */
   if (lage.vy === "kund") {
-    const rader = await sqlAsUser<{ name: string | null; products: string[] | null }>(
-      context.user.id,
-      "select name, products from public.workspaces where slug = $1",
-      [lage.slug]
-    ).catch(() => []);
+    const [rader, addons] = await Promise.all([
+      sqlAsUser<{ name: string | null; products: string[] | null }>(
+        context.user.id,
+        "select name, products from public.workspaces where slug = $1",
+        [lage.slug]
+      ).catch(() => []),
+      tillaggForKundbesok(lage.slug)
+    ]);
 
     return {
       products: (rader[0]?.products ?? ALL_PRODUCTS).filter(isProductKey),
-      addons: [],
+      // Kundens RIKTIGA tillägg. Här stod `[]`, så en admin som slog på
+      // Leadslistor åt en kund och sedan öppnade kundens arbetsyta för att
+      // kontrollera såg ingen Leadslistor-vy — och drog slutsatsen att
+      // påslaget inte fungerade.
+      addons,
       workspaceName: rader[0]?.name ?? lage.slug,
       signedIn: true,
       isDemo: false,

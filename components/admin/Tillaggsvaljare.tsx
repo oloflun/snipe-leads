@@ -33,16 +33,20 @@ import { sattTillagg } from "@/lib/actions/tillagg";
 export function Tillaggsvaljare({
   tenantId,
   initialaAddons,
-  lasfel
+  lasfel,
+  migrationSaknas = false
 }: Readonly<{
   tenantId: string;
   initialaAddons: AddonKey[];
   lasfel?: string;
+  /** Migration 063 är inte körd. Växlarna visas men skriver inte — se tillagg.ts. */
+  migrationSaknas?: boolean;
 }>) {
   const [addons, setAddons] = useState<AddonKey[]>(initialaAddons);
   const [sparar, setSparar] = useState<AddonKey | null>(null);
   const [fel, setFel] = useState<string | null>(lasfel ?? null);
   const [kvitto, setKvitto] = useState<string | null>(null);
+  const [saknas, setSaknas] = useState(migrationSaknas);
 
   async function vaxla(nyckel: AddonKey, pa: boolean) {
     // Grind i stället för `disabled` på knapparna. Att sätta `disabled` på
@@ -51,6 +55,11 @@ export function Tillaggsvaljare({
     // vid varje påslag och får tabba ned igen. Guarden stoppar samma kapplöp-
     // ning utan att röra fokus.
     if (sparar !== null) return;
+
+    // Utan funktionerna ur 063 kan ingen växel spara. Beskedet står redan
+    // kvar under listan; ett nytt anrop hade bara gett samma fel igen och
+    // fått växeln att hoppa fram och tillbaka.
+    if (saknas) return;
 
     const fore = addons;
     const nasta = pa ? [...addons, nyckel] : addons.filter((a) => a !== nyckel);
@@ -65,6 +74,7 @@ export function Tillaggsvaljare({
     if (!svar.success) {
       setAddons(fore);
       setFel(svar.error ?? "Tillägget kunde inte sparas.");
+      if (svar.migrationSaknas) setSaknas(true);
       return;
     }
 

@@ -49,8 +49,9 @@ const copy = {
   titleSupport: { sv: "Kundtjänst", en: "Support" },
   titleBoth: { sv: "Arbetsytan", en: "Workspace" },
   descBoth: {
-    sv: "Läget i båda agenterna, och vad som väntar på dig. Byt vad som visas uppe till höger.",
-    en: "Where both agents stand, and what is waiting for you. Change what is shown at the top right."
+    // Inte "båda": en Trio-kund har tre agenter, och texten visas för dem också.
+    sv: "Läget i agenterna, och vad som väntar på dig. Byt vad som visas uppe till höger.",
+    en: "Where your agents stand, and what is waiting for you. Change what is shown at the top right."
   },
   descLeads: {
     sv: "Vad agenterna hittat, vad de grundade urvalet i, och vad som väntar på ditt godkännande.",

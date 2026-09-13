@@ -1,5 +1,17 @@
 # Migrationer — status
 
+## 063–064: EJ VERIFIERADE MOT RAILWAY (2026-09-13)
+
+Railway-projektet var nere när de skrevs (development-Postgres stängde
+anslutningen), så det går inte att säga om `063` redan är körd. Kör
+`python scripts/railway_migrate.py --env development` (visar vad som saknas)
+och sedan `--apply` när miljön är uppe igen.
+
+| Migration | Varför den behövs | Verifiera med |
+|---|---|---|
+| `063_workspace_addons_admin` | Tilläggsväljaren i adminens kundprofil skriver via `set_workspace_addons`. Saknas funktionen visar väljaren nu ett fel som namnger migrationen (testarfynd: "tillval går inte att aktivera"). | `select set_workspace_addons(...)` som platform admin |
+| `064_workspaces_admin_read` | Adminvyns paketkolumn läser `workspaces.products` oskopat under `snajp_app`; utan policyn blir paketet härlett ur aktivitet och Trio syns aldrig. | Som `snajp_app` utan tenant-kontext: `select count(*) from workspaces` = antalet `postgres` ser |
+
 ## 030–033: APPLICERADE MOT PRODUKTIONEN 2026-08-17
 
 Kördes med versioner som matchar filnamnen (`030`–`033`), inte med nya
