@@ -4,16 +4,35 @@ type: project
 status: active
 project_slug: snipe-leads
 repo: C:\Users\Anton L\snipe-leads
-updated: 2026-08-14
+stage: launch
+money_weight: 4
+goal: "AI outbound SaaS: Snipra (leads-dashboard) + Snajp (support-agent) i ett repo, multi-tenant Next.js/Supabase"
+next_milestone: "main uppdaterad till samma kod som development, och Livrustning-tenantens garantiperiod bekraftad av kund"
+milestone_blockers:
+  - "main ligger ~80 commits efter development och kor gammal kod (snipe-zfc)"
+  - "IMAP_PASSWORD_LIVRUSTNING saknas pa Railway api (bade main och development)"
+  - "Vantar pa kundens bekraftelse av garantiperioden"
+updated: 2026-09-12
 ---
 
 # Snipra / Snajp
 
 Two products, one repo. **Snipra** is the Next.js frontend (leads dashboard,
-Email Studio, onboarding, settings) on Vercel. **Snajp-Support**
-(`snajp-support/`) is a separate Python/FastAPI backend on Render, providing
-AI customer support and — as of 2026-08 — a real agent backend for both
-support and B2B leads generation, on `deepseek-v4-flash`.
+Email Studio, onboarding, settings). **Snajp-Support** (`snajp-support/`) is a
+separate Python/FastAPI backend, providing AI customer support and a real
+agent backend for both support and B2B leads generation.
+
+**The stack is Railway-only since 2026-08 (see `DEPLOY.md`).** Render, Vercel
+and Supabase are the dead chain — do not deploy there, do not write there.
+`development` branch mirrors to `railway-development` on push (an automated
+GitHub Actions job as of 2026-08-25; previously a second manual push). `main`
+mirrors to `railway-main`. The live dev URL is
+`https://web-development-6c85.up.railway.app`. The model provider is
+**Gemini** (`gemini-2.5-flash` via Vertex AI — see the Vertex AI section below),
+not DeepSeek: `Settings.llm_provider_fault()` in `snajp-support/app/config.py`
+hard-fails startup if `LLM_PROVIDER=deepseek` in any environment that carries
+real customer data (`main`, `development` — development is a **mirror** of
+production, not a sandbox).
 
 ## What it does, in one paragraph
 
@@ -35,11 +54,14 @@ stays theirs).
 | Agent core | Skill registry + read-guarantee mechanism (Del C) | `snajp-support/app/agentcore/` |
 | Agent execution | One LLM call per skill step, not a concatenated prompt. Support AND leads Fas B/C since 2026-08-09; Fas A (onboarding) still `Runner.run` | `snajp-support/app/agent/step_runner.py` |
 | Skill content | Vendored `mk:`/`cs:`/`sa:`/`snajp:` skills, sha256-manifested, filesystem-first with an opt-in verified DB mirror | `agent-core/skills/`, `snajp-support/app/agentcore/skill_mirror.py` |
-| Instruction layers | Global policy → skill → tuning overlay → output contract, all in system position | `agent-core/AGENTS.md`, `agent-core/overlays/`, `snajp-support/app/agentcore/overlays.py` |
+| Instruction layers | Global (DB, admin-edited, fallback to file) → skill → tuning overlay → **customer instructions (DB, admin-edited)** → output contract, all in system position | `snajp-support/app/agentcore/instruktioner.py`, `overlays.py`, migration 049 |
+| Instruction authoring | Free text → LLM-structured into fixed-heading AGENTS.md-shaped markdown, code-gated (strips fences/pleasantries, rejects unknown headings) | `snajp-support/app/agentcore/strukturera.py` |
+| Admin control | Global instructions + full per-tenant profile (instructions, tone, SOUL, business context), each field's system/user position stated in the API response | `/admin/installningar/agentinstruktioner`, `/admin/kunder/<id>`, `snajp-support/app/api/admin_profil.py` |
 | Grounding | Fabricated-claim gate + one bounded repair + delta-humanize, over the finished draft | `snajp-support/app/leads/grounding_gate.py`, `text_delta.py`, `grounding_playbook.py` |
 | Customer voice | SOUL — tenant-editable tone doc, user-message position only, never a system instruction | `snajp-support/app/leads/soul.py`, `/settings/soul` |
 | Playbooks | Which skills run, in what order, for which agent type | `snajp-support/app/agent/support_playbook.py`, `snajp-support/app/leads/*_playbook.py` |
-| DB | Multi-tenant Postgres via Supabase, migrations 001–017 | `supabase/migrations/` |
+| KB search | Vector search, chained to a Swedish full-text fallback when the vector path returns empty (2026-08-24 — see gotchas) | `snajp-support/app/storage/postgres.py:search_kb` |
+| DB | Multi-tenant Postgres on **Railway** (`railway/000_auth_compat.sql` + `supabase/migrations/*.sql` replayed in order — the directory name is historical, it is source consumed by `scripts/railway_migrate.py`, never run against Supabase) | `scripts/railway_migrate.py` |
 
 **Decision flow for a support ticket:** triage → customer-research →
 draft-response → escalation-check → kb-article → (retention-conversation, if
@@ -70,10 +92,16 @@ separate thing entirely — user-message position only, never system. See
 | File | Carries |
 | --- | --- |
 | [HANDOFF.md](HANDOFF.md) | **Current, authoritative technical status** — built vs. live-verified vs. dead code vs. missing, for the 2026-08 agent-backend work. Read this first for "what state is the code actually in." |
+| [HANDOFF-2026-08-25-INSTRUKTIONER.md](HANDOFF-2026-08-25-INSTRUKTIONER.md) | The instruction-layer system (migration 049): what was broken (two dead DB columns, no read path, no admin UI), what was built, how the rebase conflicts with concurrent work were resolved, and what main still lacks. |
+| [docs/FALTKARTA.md](docs/FALTKARTA.md) | Every fillable field in the product — where it's stored, who reads it, and its **exact prompt position** (system vs. user). The map that answers "I changed X, why did nothing happen." |
 | [STATUS.md](STATUS.md) | Chronological session-by-session status, newest first. Narrative history. |
 | [ARCHITECTURE_INVARIANTS.md](ARCHITECTURE_INVARIANTS.md) | Machine-enforced rules (CI-checked). `INV-SKILL-*`, `INV-SEC-*`, etc. |
 | [plans/2026-08-07-agent-backend-deepseek.md](plans/2026-08-07-agent-backend-deepseek.md) | Plan-level scope/progress tracker for the agent-backend work; points to the full design doc. |
 | [DEPLOY_KEYS.md](DEPLOY_KEYS.md) | How to set API keys locally and at deploy; `scripts/keys.py`. |
+| [lib/admin/halsa.ts](lib/admin/halsa.ts) | Kundhälsa och tokenekonomi. Bär **tokenpriserna** (in 7,14 / ut 35,71 kr per miljon — Googles listpris för `gemini-3.6-flash`, dubblas 2027-01-01) och marginalgränserna. Ändra priset HÄR när en riktig faktura finns. |
+| [lib/admin/exempeldata.ts](lib/admin/exempeldata.ts) | Exempeltal för arbetsytor helt utan aktivitet. Deterministiskt ur tenantens id, sex profiler, jämnt utspritt över statistikens tolvveckorsfönster. Varje berikad rad bär `ar_exempel` och märks i vyn. Av med `NEXT_PUBLIC_ADMIN_EXEMPELDATA=av`. |
+| [lib/admin/handelsetext.ts](lib/admin/handelsetext.ts) | Tolkar leverantörernas undantagstext till rubrik + förklaring för notiscentret. Tio mönster; råtexten kastas aldrig. |
+| [lib/admin/sprak.ts](lib/admin/sprak.ts) | Adminytans sv/en-ordbok plus datum-, tid- och antalsformatering. **Tidszonen är spikad** till `Europe/Stockholm` — vyerna är klientkomponenter och en ospikad zon ger hydreringskrock. |
 | [docs/THINKING_MODE_COMPARISON.md](docs/THINKING_MODE_COMPARISON.md) | DeepSeek thinking-mode on/off comparison, real API calls, per flow. **§7** = the leads per-step migration, **§8** = the valid leads comparison and the decision (incl. why the first recommendation was wrong). |
 | [docs/LEADS_THINKING_COMPARISON.md](docs/LEADS_THINKING_COMPARISON.md) | **Generated raw data** (811 KB) — every one of the 72 LLM calls with its complete output. Overwritten by the next run; conclusions live in the file above, deliberately kept separate. |
 | `scripts/render_leads_report.py` | Renders the report above from a run's JSON, so it can be rebuilt without re-running 72 paid calls. |
@@ -88,6 +116,19 @@ separate thing entirely — user-message position only, never system. See
 | `snajp-support/app/leads/soul.py` | Renders the customer's voice document — always via `wrap_untrusted_content`, always user-message position. Read this before touching anything near `case_context`. |
 | `snajp-support/app/agentcore/skill_mirror.py`, `scripts/publish_skills.py` | The opt-in DB mirror. Off by default everywhere — see the "DB mirror" gotcha below before turning it on. |
 | `scripts/unlock_skills.py`, `scripts/check_vendor_bump.py` | The only sanctioned way to touch `agent-core/manifest.json`, and the CI check that a skill diff carries a `VENDOR-BUMP:` trailer. |
+| `scripts/railway_migrate.py` | Runs the migration chain against Railway Postgres, `--env main\|development`, from `railway/000_auth_compat.sql` then `supabase/migrations/*.sql` in filename order. |
+| `scripts/llm_provider.py` | Reads which LLM provider each Railway environment actually runs (never prints key values) and can `--apply` a switch to `openai`/`gemini` — refuses if the target service has no working key. |
+| `scripts/flytta_fran_supabase.py` | Moves what's left in the now-dead Supabase project (KB articles, context docs) into Railway Postgres. `far_importeras()` refuses to overwrite a non-empty slot — see the gotcha below about why. |
+| `scripts/verifiera_instruktioner.py` | Fills every instruction-bearing field with a unique marker, runs a real agent turn, and reports which prompt position each marker landed in. `--skarp` adds one real model call to confirm the model actually obeyed. |
+| `scripts/smtp_konfig.py` | Sets the real send path on Railway — SMTP or, since Railway blocks outbound SMTP on the trial plan, Resend over HTTPS (`--resend`). Tests the connection/key before writing anything. |
+| `scripts/redis_konfig.py` | Sets `REDIS_URL` on Railway's `api` service for the async job queue (chat/leads jobs) — PINGs the Redis Cloud database first, never shares one instance across environments. |
+| `scripts/redis_cloud_nycklar.py` | Saves Redis Cloud's ACCOUNT-level API keys (not a database connection string) to `.env.deploy` — the prerequisite for provisioning additional Redis databases via API instead of the dashboard. |
+| `scripts/redis_kontroll.py` | Lists every Redis Cloud database with region and TLS status via the account API — exits non-zero if anything sits outside the EU. The GDPR gate for the Redis layer. |
+| `scripts/redis_tls_pa.py` | Enables TLS on the dev Redis database AND rewrites `REDIS_URL` to `rediss://` in one sweep (the two steps are one change). Run by Anton — the auto-mode classifier blocks agents from cloud-infra writes. |
+| `scripts/redis_provisionera.py` | Prepares `main`'s own Redis database (EU, TLS, first paid tier with persistence+replication). `--planer` lists prices read-only; `--skapa` is gated behind §8.1a and an explicit flag. |
+| `scripts/gemini_web_konfig.py` | Copies `GEMINI_API_KEY` from the local env file onto Railway's `web` service (Fas 1.2) so Email-studio stops simulating for logged-in customers. Anton runs it — same classifier gate. |
+| `plans/2026-08-29-redis-agentarkitektur.md` | The Redis architecture: deploy-surviving runs (Streams), tenant-scoped semantic answer cache, rolling conversation memory — plus the verdicts on Redis Iris (Agent Memory, LangCache, Context Retriever). |
+| `docs/REDIS_IRIS_EVAL.md` | The adoption gates and sandbox protocol for the managed Iris services — synthetic data only, eight gates before any production use. |
 
 ## Invariants and gotchas
 
@@ -195,6 +236,11 @@ separate thing entirely — user-message position only, never system. See
   outreach, and the test asserts the sentinel is absent from every
   `messages[0]` (system) and present in every `messages[1]` (user).
 
+- **`agent_configs.instructions_md`/`.tone` existed since migration 010 with zero read path** (found 2026-08-24). A customer could edit their instructions, save successfully, and get identical output forever — the text never left the database. Business context had the same shape of bug, half-fixed: it reached the leads agent only, never support. Both are wired now (`agentcore/instruktioner.py`); the lesson is that a field with a save button and a 200 response is not proof it's read anywhere. `scripts/verifiera_instruktioner.py` is the falsification test — run it after touching any prompt-assembly code.
+- **Customer-written text position is the security boundary, not a formatting choice** (INV-SEC-009, reaffirmed 2026-08-24). Moving an instruction-bearing field to the customer's own settings page and moving it to system-message position are **one decision, not two** — do both together or neither. The admin-only instruction fields added 2026-08-24 are system-position specifically *because* they're admin-only; if that ever changes, the position must change with it.
+- **A Supabase→Railway import can silently downgrade a live tenant's context doc** (incident 2026-08-24, in `nordlys-handel`): the first version of `flytta_fran_supabase.py` wrote imported docs as `max(version)+1`, i.e. newest, and `get_latest_context_doc` picks exactly that — a 726-character business-context doc was replaced by a 43-character Supabase stub with nothing erroring. Restored, and `far_importeras()` now refuses to write into any non-empty slot (`scripts/flytta_fran_supabase.py --demo` is the regression test). Supabase is the retired stack; anything still there is older than what's in Railway by construction, direction — never length or timestamp — is what the rule checks.
+- **Gemini free tier has a per-minute cap tighter than the daily one** (measured 2026-08-26): `GenerateRequestsPerMinutePerProjectPerModel-FreeTier` trips after 6 calls in the same minute, recovers in ~70s. A single support ticket makes 6–7 sequential LLM calls, so one ticket can trip it alone; concurrent tickets from different tenants will collide. This is the actual operational ceiling, not the 20/day figure that looked scarier on first read (`snipe-zfn`).
+
 ## How to verify the system
 
 ```bash
@@ -214,22 +260,12 @@ python scripts/run_live_tests.py --leads   --modes disabled,enabled
 
 ## Live
 
-- **https://snipra.vercel.app** — production frontend. Aliased 2026-08-14 to the `main` deploy
-  at commit `858b533`, after `main` sat frozen at `a10d919` (2026-05-24) for over two months by
-  deliberate 2026-07-28 decision. That freeze is now explicitly lifted — `main` was fast-forwarded
-  from `snajp-redesign` (45 commits, zero conflicts on the `main` side) on explicit user
-  instruction, twice given. See `HANDOFF-2026-08-14-SEBBE.md` for the full merge/deploy account.
-- **Render backend now tracks `main` too** (changed 2026-08-15). It had pointed at
-  `development`, a branch that forked at `32c58cd` and never saw the Livrustning tenant, the
-  category-grounding filter, or the grounding gate — which is why the frontend looked current
-  while the agent behaved like an older product. `render.yaml` carries no branch pin; the
-  branch lives in Render's own dashboard, so this is not visible in the repo. Root Directory
-  must stay **empty** (repo root): `snajp-support/Dockerfile` does `COPY agent-core`, and
-  `agent-core/` sits outside `snajp-support/`, so a Root Directory of `snajp-support` fails the
-  build with `"/agent-core": not found`.
-- The redundant Render service `snipe-leads` (a misconfigured Node build of the Next frontend,
-  duplicating Vercel) was deleted 2026-08-15. The leads agent has never had its own service —
-  it runs in the same FastAPI app as support (`main.py`, `app.include_router(leads.router)`).
+**SUPERSEDED 2026-08 — this described the Vercel/Render/Supabase stack.**
+Kept for history; do not deploy or write there. Render still answers
+`/health/ready` as an unclosed orphan (see the 2026-08-25 session log,
+`snipe-zfc`); Vercel's preview reads a Supabase branch stuck in
+`MIGRATIONS_FAILED` since 2026-08-15 and never reaches the real product.
+Current topology is under "Miljöer och drift" below.
 
 ## Auth topology (rewritten 2026-08-15)
 
@@ -251,36 +287,128 @@ API was anonymously readable and writable in production, and every signed-in cus
 KB and SOUL resolved to the demo tenant. Both halves are one bug: a missing argument with a
 silent fallback. Read `lib/snajp/tenant.ts` before adding any route under `app/api/`.
 
-## Current status (2026-08-15)
+## Miljöer och drift (uppdaterad 2026-08-26)
 
-Support and leads both run per-step with verifiable skill loading, per-call
-thinking control, and a reviewable `agent_runs.step_log`. The grounding gate,
-skill lock, three-layer instruction system, and SOUL are all built and unit-
-tested — 388 backend tests + invariants + `tsc --noEmit`, all green. The
-Docker deploy bug that would have crashed the first live agent call is fixed.
-Frontend and backend now deploy from the same branch, and the anonymous API
-surface is closed (see "Auth topology" above), verified against production.
+**Railway-only sedan 2026-08-16.** Två pushar krävs (eller en, sedan
+2026-08-25 — se nedan):
 
-**Blocking bug found 2026-08-15, not yet fixed:** `agent_runs.agent_type` has
-`check in ('support','leads')` while `leads_agent.py` writes `"leads_research"`
-and `"leads_outreach"`. Against Postgres both raise a check violation;
-`MemoryStorage` has no constraint, which is why the test suite never caught it.
-**No leads run has ever been persisted in production.** `GET /api/leads/runs`
-filters on the same impossible values. This blocks the entire admin trace view —
-it is a schema bug, not a UI one.
+```bash
+git push origin development
+git push origin development:railway-development   # nu automatisk, se nedan
+```
 
-Not yet done: **live-mode verification** — `scripts/run_live_tests.py --leads`
-against real DeepSeek keys, checking that `result["grounding"]["fired"]` is
-neither always-true (gate too strict) nor always-false (deliberately inject a
-fabricated claim and confirm it fires) on real model output, not just test
-fixtures. The DB-mirror scope decision (filesystem-default vs. the originally
-requested "readable anywhere") needs explicit user confirmation. Three other
-`grid-cols-12`/`gap-x-8` sites in `WorkspaceViews.tsx` share the narrow-
-viewport column-collapse bug fixed in `SettingsView` but weren't visually
-re-verified. Still open from before: Fas A onboarding runs `Runner.run`;
-`DATABASE_URL` unset locally so the real pgvector/RLS path for the new
-storage methods (`list_skill_files`, `save_context_doc(kind='soul')`) is
-untested against real Postgres; dead modules from the first pass;
-edge-function stubs. See [HANDOFF.md](HANDOFF.md) and
-[session-logs/2026-08-14-session-log.md](session-logs/2026-08-14-session-log.md)
-for the full breakdown.
+Sedan 2026-08-27 lyssnar Railways deployment trigger för `development`
+direkt på grenen `development` — spegel-workflowen
+(`deploy-development.yml`) och den döda Vercel-workflowen
+(`deploy-production.yml`) togs bort 2026-08-29, eftersom de bara producerade
+falska gröna signaler mot grenar och stackar som ingenting längre läser.
+
+| | main (produktion) | development (mirror av produktion) |
+|---|---|---|
+| Gren som Railway lyssnar på | `railway-main` | `development` (direkt, sedan 2026-08-27) |
+| Web | `https://www.snajp.se` | `https://web-development-6c85.up.railway.app` |
+| API | `api-production-d7695.up.railway.app` | `api-development-5cc3.up.railway.app` |
+| LLM-provider | `gemini` (Gemini free tier) | `gemini` |
+| Kod | ~80 commits efter `development` (`snipe-zfc`) | aktuell |
+| `/health/ready` | `mode: live` | `mode: live` |
+
+`development` ÄR en spegel av produktionen (Railway-miljön bär riktiga
+kunders ärenden och mejladresser) — inte en sandbox. Kör aldrig en lokal
+utvecklingsserver mot den; `python scripts/lokal_stack.py --apply` bygger en
+lokal stack i stället. Migrationer:
+`python scripts/railway_migrate.py --env <main|development> --apply`.
+
+**Skriv aldrig till Supabase.** Den grenen är död —
+`MIGRATIONS_FAILED` sedan 2026-08-15, ett fel på Supabases sida. En SQL-fil i
+`supabase/migrations/` är källkod som konsumeras av `railway_migrate.py`;
+katalognamnet är historiskt, inte en instruktion. Fullständig beskrivning:
+[`DEPLOY.md`](DEPLOY.md).
+
+## Ny kund
+
+```bash
+python scripts/onboard_tenant.py --slug bolaget --name "Bolaget AB" --env preview
+```
+
+**Detta skript är stale (Vercel-scopat, `ENVIRONMENTS` i filen har bara
+`production`/`preview` och skriver till `SNAJP_SUPPORT_URL_PREVIEW`) och har
+inte uppdaterats till Railway-topologin.** Det gör de fem maskinella stegen
+mot den döda kedjan; en riktig onboarding just nu kräver manuella steg mot
+Railway tills skriptet är omskrivet. Se `TENANTS.md` för den nuvarande
+processen och flagga skriptet innan du litar på det.
+
+## Current status (2026-08-28)
+
+**Sjufasplan för skarpa körningar skriven** —
+[`plans/2026-08-28-skarpa-korningar-och-produktion.md`](plans/2026-08-28-skarpa-korningar-och-produktion.md),
+17 `bd`-ärenden. Fyra oberoende orsaker till att körningarna sett
+autogenererade ut kartlagda: Email-studions modellväljare kände aldrig till
+Gemini (alltid mallgenererad text); exempelbolagen är deterministiska med
+flit men oskiljbara i UI:t; ingen sändväg finns i någon miljö; och Gemini —
+se rättelsen nedan.
+
+**Rättelse av tidigare status:** raden nedan om `snipe-zfn` sa att
+minuttaket (6/min) var den faktiska begränsningen och dygnstaket (20)
+mindre allvarligt. Ommätt 2026-08-28 i ett riktigt 60-sekundersfönster:
+dygnstaket är det bindande — `quotaId:
+GenerateRequestsPerDayPerProjectPerModel-FreeTier`, `quotaValue: 20`, fyra
+dagar EFTER att faktureringskontot uppgraderades. Orsaken var att
+API-nyckelns Google-PROJEKT inte var kopplat till faktureringskontot —
+Vertex AI Express Mode har en egen gratisnivå, skild från Cloud-krediterna.
+Ingen ny betalning krävs, bara kopplingen. Anton har sedan kopplat ett nytt
+projekt och bytt nyckel — **inte verifierat live** vid sessionens slut, se
+`plans/2026-08-28-…md` Open Threads.
+
+**Produktionsdeployen är farligare än dokumenterat.** Uppmätt med
+`git rev-list` mot `origin`-referenser: `origin/main` ligger 152 commits
+**efter** `origin/railway-main` och noll före — den dokumenterade
+`git push origin main:railway-main` skulle i dag avvisas som
+non-fast-forward, och tvingad igenom rulla tillbaka produktionen (22
+aug-omläggningen + 25 aug-hotfixen). `development` innehåller redan hela
+hotfixens innehåll i utökad form (verifierat med diff), så säkra vägen är
+merge, inte push. Spårat som `snipe-jvj`. **Produktionen rörs inte utan
+Antons uttryckliga ord** (instruktion 2026-08-28).
+
+## Current status (2026-08-26) [historisk — main-avståndet nedan är omätt sedan 26 aug, se ovan]
+
+**Instruktionslagren når nu agenten** (migration 049, 2026-08-24/25).
+`agent_configs.instructions_md`/`.tone` hade funnits sedan migration 010 utan
+någon läsväg — en kund kunde spara nya instruktioner och få identiskt
+oförändrade svar. Byggt: en global instruktionstabell (admin-redigerad,
+fallback till `agent-core/AGENTS.md`), per-kund-instruktioner i
+systemposition, en struktureringsgrind (fri text -> imperativa regler under
+fasta rubriker), och en adminkundprofil (`/admin/kunder/<id>`) som visar
+VARJE fälts promptposition explicit. Se
+[`HANDOFF-2026-08-25-INSTRUKTIONER.md`](HANDOFF-2026-08-25-INSTRUKTIONER.md)
+och [`docs/FALTKARTA.md`](docs/FALTKARTA.md).
+
+**KB-sökningen kedjar nu vektor -> fulltext** i stället för att ge tom
+träfflista när vektorvägen missar — tom träfflista är ett hårt
+eskaleringsvillkor, så en retrievalmiss blev tidigare ett onödigt
+människoärende.
+
+**main ligger ~80 commits efter development** och kör äldre kod (med
+`mode: live`, inte simulering — nycklarna är satta). Migration 043–049 är
+körda i development, inte i main. `snipe-zfc` spårar detta.
+
+**Öppna trådar:** `snipe-zfc` (main efter development) ·
+`snipe-zfn` (Gemini free tier, 6 anrop/minut — den faktiska driftbegränsningen,
+inte dygnstaket som först såg allvarligare ut) · `IMAP_PASSWORD_LIVRUSTNING`
+saknas på Railway api (båda miljöerna) · Render-orphanen svarar fortfarande
+200 och hålls vaken av en cron (`.github/workflows/keep-backend-awake.yml`) ·
+Supabase har fortfarande 5 användare/4 tenants/48 KB-artiklar kvar (delvis
+flyttat, se `scripts/flytta_fran_supabase.py`) · `onboard_tenant.py` stale mot
+Railway-topologin.
+
+Senaste sessionsloggar: `session-logs/2026-08-24-session-log.md`,
+`session-logs/2026-08-25-session-log.md` (om skriven), se även
+`HANDOFF-2026-08-25-INSTRUKTIONER.md`.
+
+## Kopplingar (Drömmen 2026-08-28)
+
+Se [[wiki/projects/_index/connections|connections]] för nattens kopplingar och
+`strategies.md` i samma mapp för projektets heuristiker.
+
+## Kunskapsbas-källor
+
+- [[wiki/sources/2026-08-25-konvertera-till-svg-vektorer-snajp]] — Snajp S-symbol + ordmärke vektoriserat till SVG (potrace), inkl. bokstavskerning-justering (2026-08-29)

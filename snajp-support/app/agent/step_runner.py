@@ -18,20 +18,19 @@ steg här — de görs i kod av anroparen. Modellen resonerar; koden agerar.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..agentcore.overlays import load_global_instructions, load_overlay
+from ..agentcore.instruktioner import Instruktionslager, las_instruktioner  # noqa: F401
+from ..agentcore.overlays import load_global_instructions as load_global_instructions_fil
+from ..agentcore.overlays import load_overlay
 from ..agentcore.packs import PlaybookStep, RunLedger, check_output_contract, check_preconditions
 from ..config import get_settings
+from ..kvotfel import ar_kreditslut
 from .llm import get_llm_client
-
-_GLOBAL_OPEN = """## GLOBALA REGLER (Snajp — gäller varje steg, varje kund)
-Dessa gäller ÖVER skillen nedan där de krockar. De är policy, inte stil.
-"""
-_GLOBAL_CLOSE = "## SLUT GLOBALA REGLER"
 
 _OVERLAY_OPEN = """## TILLÄGGSINSTRUKTIONER (Snajp-overlay: {name})
 Dessa kommer FRÅN OSS, inte från skillen ovan, och gäller ÖVER den där de
@@ -79,6 +78,11 @@ class StepResult:
     # bara en rubrik — se agentcore/registry.load_full_skill.
     injected_chars: int = 0
     thinking_mode: str = "disabled"
+    # Modellen JUST DET HÄR steget kördes mot. Sedan per-steg-modellvalet
+    # (model_setting) kan en körning blanda modeller, och agent_runs.model
+    # (en sträng per körning) räcker då inte för "vilken modell skrev det
+    # här?" — INV-AUDIT-001-frågan flyttar in i step_log.
+    model: str = ""
     # Vilken overlay som formade steget, och hur mycket text den bidrog med.
     # Utan detta i revisionsloggen går det inte att svara på "varför skrev den
     # så här?" — skill-namnet ensamt räcker inte när tuninglagret är fritt
@@ -86,6 +90,12 @@ class StepResult:
     overlay: str | None = None
     overlay_chars: int = 0
     global_chars: int = 0
+    # Kundlagret (agent_configs.instructions_md, migration 049). Utan de
+    # här två går det inte att skilja "kunden har inga instruktioner" från
+    # "kundens instruktioner nådde inte prompten" — och det var precis den
+    # skillnaden som inte gick att se när fältet var dött.
+    kund_chars: int = 0
+    instruktionshash: str = ""
     # Vad modellen faktiskt FICK. Utan de här kan spårvyn visa skillnamn,
     # tokens och latens men inte svara på "varför skrev den så här?" — och
     # skill-texten är fritt redigerbar, så namnet ensamt räcker inte
@@ -148,9 +158,12 @@ class RunTrace:
                 "reasoning_tokens": s.reasoning_tokens,
                 "injected_chars": s.injected_chars,
                 "thinking_mode": s.thinking_mode,
+                "model": s.model,
                 "overlay": s.overlay,
                 "overlay_chars": s.overlay_chars,
                 "global_chars": s.global_chars,
+                "kund_chars": s.kund_chars,
+                "instruktionshash": s.instruktionshash[:12],
                 "sources_used": s.output.get("sources_used", []),
                 "context_refs": s.output.get("context_refs", []),
                 **(
@@ -192,11 +205,20 @@ async def run_step(
     case_context: str,
     required_context_refs: tuple[str, ...] = (),
     playbook_role: str = "en svensk kundtjänst-playbook",
+    instruktioner: Instruktionslager | None = None,
+    talamod_429: bool = False,
 ) -> dict[str, Any]:
     """Kör ETT skill-steg som ett eget LLM-anrop.
 
     Förvillkorsgrinden körs FÖRE anropet (kastar MissingRequirementError om
     ett requires[] saknas i ledgern) — inget anrop görs då alls.
+
+    `instruktioner` hämtas EN gång per körning av anroparen (se
+    agentcore/instruktioner.las_instruktioner) och skickas hit. Att varje steg
+    läser databasen själv hade betytt ett dussin läsningar per ärende och —
+    värre — att ett sparande mitt i en körning kan ge steg 1 och steg 8 olika
+    regler. Utelämnas den faller den tillbaka på agent-core/AGENTS.md, vilket
+    är beteendet före migration 049.
     """
     check_preconditions(step, ledger)
 
@@ -205,30 +227,43 @@ async def run_step(
     skill_text = step.render()
 
     # Systempromptens ordning är inte godtycklig:
-    #   1. AGENTS.md   — mest generell policy, så skill/overlay kan specialisera
+    #   1. GLOBALT     — mest generell policy, så skill/overlay kan specialisera
     #   2. skill_text  — den vendorade metodiken
-    #   3. overlay     — vår specialisering; "senare vinner vid konflikt", och
-    #                    delimitertexten säger det explicit
-    #   4. kontraktet  — SIST och ovillkorligt. Läggs på av kod som varken en
-    #                    overlay eller en SOUL kan nå, så utdatakontraktet inte
-    #                    kan försvagas av något av tuninglagren.
-    # ALLT här är VÅR text. Kundskriven text (SOUL) går i user-position, aldrig
-    # här — den skillnaden ÄR säkerhetsgränsen, se app/leads/soul.py.
-    global_text = load_global_instructions()
-    overlay_text = load_overlay(step.overlay) if step.overlay else ""
+    #   3. overlay     — vår specialisering per STEG; "senare vinner vid
+    #                    konflikt", och delimitertexten säger det explicit
+    #   4. KUND        — vår specialisering per KUND, alltså den mest specifika
+    #                    av våra nivåer och därför sist av instruktionerna
+    #   5. kontraktet  — SIST och ovillkorligt. Läggs på av kod som varken en
+    #                    overlay, en kundinstruktion eller en SOUL kan nå, så
+    #                    utdatakontraktet inte kan försvagas av tuninglagren.
+    # ALLT här är VÅR text — inklusive kundlagret, som är admin-only. KUNDSKRIVEN
+    # text (SOUL, affärskontext, kunskapsbas) går i user-position, aldrig här.
+    # Den skillnaden ÄR säkerhetsgränsen; se app/leads/soul.py och
+    # app/agentcore/instruktioner.py.
+    lager = instruktioner or Instruktionslager(
+        global_md=load_global_instructions_fil(), kund_md=""
+    )
+    # Flera overlays renderas i deklarationsordning, var och en med sin egen
+    # avgränsare — "senare vinner vid konflikt" gäller alltså även MELLAN
+    # overlays, så ett stegs syftesoverlay kan specialisera de hårda reglerna.
+    overlay_texts = [(namn, load_overlay(namn)) for namn in step.overlay_names]
+    overlay_chars_total = sum(len(text) for _, text in overlay_texts)
+    overlay_label = "+".join(namn for namn, _ in overlay_texts) or None
 
     system_parts: list[str] = []
-    if global_text:
-        system_parts.append(f"{_GLOBAL_OPEN}\n{global_text}\n{_GLOBAL_CLOSE}")
+    if lager.global_block:
+        system_parts.append(lager.global_block)
     system_parts.append(
         f"Du utför ETT steg i {playbook_role}. Steget styrs av "
         f"skillen {step.skill}, vars fullständiga innehåll följer nedan. Följ "
         f"den. Uppfinn aldrig fakta.\n\n{skill_text}"
     )
-    if overlay_text:
+    for namn, overlay_text in overlay_texts:
         system_parts.append(
-            f"{_OVERLAY_OPEN.format(name=step.overlay)}\n{overlay_text}\n{_OVERLAY_CLOSE}"
+            f"{_OVERLAY_OPEN.format(name=namn)}\n{overlay_text}\n{_OVERLAY_CLOSE}"
         )
+    if lager.kund_block:
+        system_parts.append(lager.kund_block)
     system_parts.append(_CONTRACT_INSTRUCTION)
 
     messages = [
@@ -245,14 +280,60 @@ async def run_step(
     effective_mode = step.thinking if step.thinking is not None else settings.thinking_mode
     extra = thinking_kwargs(effective_mode) if settings.llm_provider == "deepseek" else {}
 
+    # Formuleringssteg (humanizer, utkast) får deklarera en varmare temperatur
+    # i playbooken; analys- och bedömningssteg ärver den kalla defaulten.
+    # Transportfel (timeout, 429, 5xx) hanteras av AsyncOpenAI-klientens egna
+    # omtag med exponentiell backoff — se get_llm_client i agent/llm.py.
+    effective_temperature = step.temperature if step.temperature is not None else 0.3
+
+    # Per-steg-modellval: steget kan peka ut ett Settings-fält (t.ex.
+    # leads_draft_model) vars värde ersätter huvudmodellen för just det här
+    # anropet. Tomt fält = ärv settings.model — beteendet före 2026-09-02.
+    effective_model = settings.model
+    if step.model_setting:
+        effective_model = getattr(settings, step.model_setting, "") or settings.model
+
     for attempt in (1, 2):
-        response = await client.chat.completions.create(
-            model=settings.model,
-            response_format={"type": "json_object"},
-            temperature=0.3,
-            messages=messages,
-            **extra,
-        )
+        # talamod_429 (2026-09-06, uppmätt i development): ett 429 från
+        # Geminis MINUTKVOT är transient — men bara för anropare som får
+        # vänta. get_llm_client kör medvetet max_retries=1 med subsekund-
+        # backoff (rätt för chatten: dygnskvots-429 går inte över, och en
+        # människa väntar). Leadsjobben är bakgrund utan någon som väntar,
+        # så de får två tålmodiga omtag till (20 s, 40 s — honorerar
+        # Retry-After när Gemini skickar den). Fortfarande 429 efter ~60 s
+        # = dygnskvoten, och då ska jobbet bli failed, precis som förut.
+        # Uppmätt utan detta: batchkörning 16:06 fällde 2/2 researchjobb
+        # på fyra minut-429 i rad medan discovery-skrapningen var grön.
+        for vanta_forsok in (1, 2, 3):
+            try:
+                response = await client.chat.completions.create(
+                    model=effective_model,
+                    response_format={"type": "json_object"},
+                    temperature=effective_temperature,
+                    messages=messages,
+                    **extra,
+                )
+                break
+            except Exception as fel:  # noqa: BLE001 — bara 429 särbehandlas
+                ar_429 = getattr(fel, "status_code", None) == 429
+                # KREDITSLUT är inte transient: "prepayment credits are
+                # depleted" går inte över av 60 sekunders tålamod, det går
+                # över av att en människa betalar. Att vänta här hade bara
+                # skjutit upp samma fel — och hållit jobbet i processing
+                # medan kunden tittar på. Rakt upp direkt, så felvägen
+                # (jobb-fail, larm, ärlig kundtext) får det i stället.
+                if ar_429 and ar_kreditslut(fel):
+                    raise
+                if not (talamod_429 and ar_429 and vanta_forsok < 3):
+                    raise
+                paus = 20.0 * vanta_forsok
+                svar_huvud = getattr(getattr(fel, "response", None), "headers", None)
+                if svar_huvud is not None:
+                    try:
+                        paus = max(paus, float(svar_huvud.get("retry-after") or 0))
+                    except (TypeError, ValueError):
+                        pass
+                await asyncio.sleep(min(paus, 90.0))
         usage = getattr(response, "usage", None)
         if usage:
             tokens_in += getattr(usage, "prompt_tokens", 0) or 0
@@ -312,9 +393,12 @@ async def run_step(
             reasoning_content=reasoning_content,
             injected_chars=len(skill_text),
             thinking_mode=effective_mode,
-            overlay=step.overlay,
-            overlay_chars=len(overlay_text),
-            global_chars=len(global_text),
+            model=effective_model,
+            overlay=overlay_label,
+            overlay_chars=overlay_chars_total,
+            global_chars=len(lager.global_md),
+            kund_chars=len(lager.kund_md),
+            instruktionshash=lager.hash,
             # messages[0]/[1] är systemprompten och användarmeddelandet SOM DE
             # SÅG UT VID FÖRSTA ANROPET. Eventuella omförsök lägger till fler
             # meddelanden i listan, men det är den första uppsättningen som

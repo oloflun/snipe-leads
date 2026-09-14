@@ -8,6 +8,7 @@ import json
 from typing import Any
 
 from ..config import CATEGORIES, CATEGORY_LABELS, get_settings
+from ..moderation.maskering import maskera_personnummer
 from .llm import get_llm_client
 
 _TRIAGE_PROMPT = """Du är Snajp-Supports triagemotor. Klassificera kundmailet och
@@ -49,7 +50,17 @@ async def triage_email_llm(
 ) -> dict[str, Any]:
     settings = get_settings()
     kb_text = "\n\n".join(f"### {a['title']}\n{a['content']}" for a in kb_articles) or "(tom)"
-    prompt = _TRIAGE_PROMPT.format(kb=kb_text, sender=sender, subject=subject, body=body)
+    # Personnummer maskeras INNAN texten lämnar huset. Innehållet i ett
+    # supportmejl är okontrollerat, och hela texten går till modelleverantören
+    # — se DPIA:ns R1. Maskeringen stänger inte risken, den gör den mindre.
+    # Originalet ligger kvar i databasen; det är bara modellen som får en
+    # maskerad kopia.
+    prompt = _TRIAGE_PROMPT.format(
+        kb=kb_text,
+        sender=sender,
+        subject=maskera_personnummer(subject),
+        body=maskera_personnummer(body),
+    )
     # Vision stöds bara av OpenAI-modellerna; DeepSeek (deepseek-chat) är textbaserad.
     content: str | list[dict[str, Any]] = prompt
     if image_urls and settings.llm_provider == "openai":

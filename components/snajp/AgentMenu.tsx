@@ -38,7 +38,7 @@ const copy = {
 
   kontaktRubrik: { sv: "Snajp", en: "Snajp" },
   kontaktBody: {
-    sv: "Vi bygger och driftar agenten. Gäller din fråga en beställning eller ett ärende hos företaget du chattar med, skriv det i chatten i stället — de svarar snabbare på sitt eget.",
+    sv: "Vi bygger och driftar agenterna. Gäller din fråga en beställning eller ett ärende hos företaget du chattar med, skriv det i chatten i stället — de svarar snabbare på sitt eget.",
     en: "We build and operate the agent. If your question concerns an order or a case with the company you are chatting with, write it in the chat instead. They answer faster on their own matters."
   },
 

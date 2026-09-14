@@ -14,6 +14,28 @@ export type OnboardingInput = {
   webbplats: string;
   produkt: string;
   fokus: string;
+  /**
+   * Testarbetsyta: organisationsnumret hoppas över.
+   *
+   * Det finns inget riktigt bolag bakom en testkund, och att kräva ett giltigt
+   * nummer betyder i praktiken att någon klistrar in NÅGON ANNANS — vilket är
+   * sämre än att markera arbetsytan för vad den är.
+   *
+   * Markeringen skrivs in i produkttexten, inte bara i ett flaggfält, så att
+   * den syns för den som läser affärskontexten i adminvyn. En testkund som ser
+   * ut som en riktig kund i portföljen är exakt den sortens siffra som fattar
+   * beslut åt en.
+   */
+  testkund?: boolean;
+  /**
+   * Svaret på notisrutan i formuläret.
+   *
+   * Valfri med flit: den som saknas betyder "ingen fråga ställdes", och då
+   * gäller standarden i migration 043 — notiser PÅ. Ett `false` här är alltså
+   * ett aktivt NEJ och inget annat, vilket är precis den skillnad ett samtycke
+   * måste kunna bära.
+   */
+  notiser?: boolean;
 };
 
 export type OnboardingActionResult = {
@@ -35,27 +57,28 @@ function normaliseraWebbplats(rå: string): string {
 }
 
 export async function saveBusinessContext(input: OnboardingInput): Promise<OnboardingActionResult> {
-  const { createClient } = await import("@/lib/supabase/server");
-  const supabase = await createClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const { auth } = await import("@/lib/auth");
+  const session = await auth();
+  const user = session?.user;
 
-  if (!user) {
+  if (!user?.id) {
     return { success: false, error: "Du måste vara inloggad." };
   }
 
   const { getProfileForUser } = await import("@/lib/workspace");
+  const { sqlAsUser } = await import("@/lib/db");
+  const { skapaTesttenant } = await import("@/lib/snajp/testtenant");
   let profile = await getProfileForUser(user.id);
 
   if (!profile) {
     // "Försök logga in igen" var en återvändsgränd: en ny inloggning gav aldrig
     // en profilrad, eftersom bara signup-triggern kunde skapa den. Läk istället.
-    const { error: repairError } = await supabase.rpc("ensure_workspace_for_current_user");
-    if (repairError) {
+    try {
+      await sqlAsUser(user.id, "select public.ensure_workspace_for_current_user()");
+    } catch (repairError) {
       return {
         success: false,
-        error: `Ditt konto saknar ett workspace och kunde inte repareras: ${repairError.message}`
+        error: `Ditt konto saknar ett workspace och kunde inte repareras: ${(repairError as Error).message}`
       };
     }
     profile = await getProfileForUser(user.id);
@@ -67,7 +90,10 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
 
   // Serversidan validerar OM. lib/orgnr.ts kör samma kontroll i webbläsaren,
   // men klientkod går att kringgå och det som skyddar är alltid den här sidan.
-  const orgnrProblem = orgnrFel(input.orgnr);
+  // Serversidan validerar OM — men inte för en testarbetsyta. Kontrollen
+  // hoppas över på BÅDA sidor, annars vore klientens kryssruta verkningslös och
+  // felet hade dykt upp först vid inskickning.
+  const orgnrProblem = input.testkund ? null : orgnrFel(input.orgnr);
   if (orgnrProblem) {
     return { success: false, error: orgnrProblem };
   }
@@ -76,7 +102,7 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
   if (!webbplats) {
     return {
       success: false,
-      error: "Fyll i webbplatsen. Det är den agenten läser för att förstå er."
+      error: "Fyll i webbplatsen. Det är den agenterna läser för att förstå er."
     };
   }
 
@@ -84,7 +110,7 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
   if (!produkt) {
     return {
       success: false,
-      error: "Skriv en rad om vad ni säljer. Det är det agenten ska sälja."
+      error: "Skriv en rad om vad ni säljer. Det är det agenterna ska sälja."
     };
   }
 
@@ -100,7 +126,9 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
   const payload: BusinessContextInsert = {
     workspace_id: profile.workspace_id,
     product: [
-      `Organisationsnummer: ${formateraOrgnr(input.orgnr)}`,
+      input.testkund
+        ? "Organisationsnummer: — (TESTARBETSYTA, inget riktigt bolag)"
+        : `Organisationsnummer: ${formateraOrgnr(input.orgnr)}`,
       `Webbplats: ${webbplats}`,
       `Vad vi säljer: ${produkt}`,
       fokus ? `Särskilt fokus: ${fokus}` : null
@@ -117,22 +145,149 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
     updated_at: new Date().toISOString()
   };
 
-  const { data: existing, error: lookupError } = await supabase
-    .from("business_contexts")
-    .select("id")
-    .eq("workspace_id", profile.workspace_id)
-    .maybeSingle<{ id: string }>();
-
-  if (lookupError) {
-    return { success: false, error: lookupError.message };
+  // En upsert i stället för läs-sen-skriv: unika index på workspace_id gör
+  // villkoret till databasens jobb, och två samtidiga sparningar kan inte
+  // längre skapa två rader.
+  try {
+    // EN skrivväg mot raden, delad med /settings/affarskontext. Innan den
+    // delades ägde den här filen satsen ensam och inställningssidan skrev
+    // inte alls — två vyer mot samma rad där bara den ena kunde spara.
+    const { sparaBusinessContext } = await import("@/lib/data/business-context");
+    await sparaBusinessContext(user.id, payload);
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
   }
 
-  const { error } = existing
-    ? await supabase.from("business_contexts").update(payload).eq("id", existing.id)
-    : await supabase.from("business_contexts").insert(payload);
+  /**
+   * Notissvaret skrivs EFTER affärskontexten och fäller aldrig onboardingen.
+   *
+   * Samma regel som kontextdokumentet i actions/affarskontext.ts: ett
+   * misslyckat sidospår får inte kasta bort ett lyckat huvudspår. Kunden har
+   * fyllt i sitt bolag; att skicka tillbaka dem till formuläret för att en
+   * notisrad inte gick att skriva vore att straffa dem för fel sak.
+   *
+   * Att ett JA kan falla bort är ofarligt — utan rad gäller standarden, som är
+   * på. Ett NEJ som faller bort betyder däremot mejl till någon som sagt nej,
+   * och därför loggas felet uttryckligen i stället för att sväljas tyst.
+   */
+  if (typeof input.notiser === "boolean") {
+    try {
+      const { sparaNotissvarViaOnboarding } = await import("@/lib/actions/notiser");
+      const svar = await sparaNotissvarViaOnboarding(input.notiser);
+      if (!svar.success) {
+        console.error("[onboarding] kunde inte spara notissvaret:", svar.error);
+      }
+    } catch (error) {
+      console.error("[onboarding] kunde inte spara notissvaret:", error);
+    }
+  }
 
-  if (error) {
-    return { success: false, error: error.message };
+  /**
+   * Testarbetsytan får en EGEN backend-tenant (migration 040).
+   *
+   * Den delade `testkund`-tenanten finns kvar som fallback och beskrivs nedan.
+   * Skälet att den inte längre är förstahandsvalet: delad tenant = delad
+   * kunskapsbas, och en testkunds villkor kunde grunda ett svar till en annan
+   * testkunds kund.
+   *
+   * Utan det här är bypassen halvfärdig. Uppmätt mot dev-deployen 2026-08-19:
+   * den nyskapade testkunden mötte 409 på Kontroll, Kundtjänst och Röst,
+   * eftersom `requireSnajpTenant()` härleder kunden ur `workspaces.slug` och
+   * den var null. En testkund som inte kan använda produkten testar ingenting.
+   *
+   * Bara för testarbetsytor. En RIKTIG kund kopplas av
+   * `scripts/onboard_tenant.py` till en EGEN tenant — en delad tenant betyder
+   * delad inkorg och delad kunskapsbas, vilket är rätt för ett test och
+   * oacceptabelt för en kund.
+   *
+   * Villkorad på att slug är tom: en workspace som redan pekar på en kund rörs
+   * aldrig härifrån, hur rutan än kryssas.
+   */
+  if (input.testkund) {
+    try {
+      // EGEN tenant per testarbetsyta, skapad i drift.
+      //
+      // Den delade `testkund`-tenanten (migration 038) betydde delad inkorg,
+      // delad kunskapsbas och delat röstdokument. Med flera testkunder växte
+      // basen med policys från olika bolag, och ett svar till kund A kunde
+      // grundas i kund B:s villkor — grundningsgrinden ser en träff, den kan
+      // inte se att artikeln kom från fel företag.
+      //
+      // Backenden skapar tenanten (`POST /api/keys`), och nyckeln sparas i
+      // `workspace_tenant_keys` genom en security definer-funktion. Migration
+      // 040 förklarar varför den inte får ligga i `workspaces`.
+      const tenant = await skapaTesttenant(payload.workspace_id, `Testarbetsyta ${webbplats}`);
+      const kopplad = await sqlAsUser<{ ok: boolean }>(
+        user.id,
+        "select public.link_test_tenant($1, $2, $3) as ok",
+        [tenant.slug, tenant.tenantId, tenant.apiKey]
+      );
+      if (!kopplad[0]?.ok) {
+        throw new Error("link_test_tenant nekade kopplingen (arbetsytan hade redan en kund?).");
+      }
+    } catch (error) {
+      // Kopplingen får inte fälla onboardingen. Affärskontexten är sparad, och
+      // en okopplad testyta ger ett ärligt 409 med instruktion — att slänga
+      // bort ett lyckat sparande för det vore sämre.
+      //
+      // Fallbacken är den GAMLA delade tenanten. Den är sämre (delad
+      // kunskapsbas) men fungerande, och alternativet — en arbetsyta som inte
+      // kan användas alls — är sämre än så. Att den användes syns på att
+      // workspacets slug är `testkund` utan suffix.
+      console.error("[onboarding] kunde inte skapa egen testtenant:", error);
+      try {
+        await sqlAsUser(user.id, "select public.link_testkund_workspace()");
+      } catch (fallbackError) {
+        console.error("[onboarding] kunde inte koppla testarbetsytan:", fallbackError);
+      }
+    }
+  } else {
+    /**
+     * RIKTIGA kunder får också sin tenant här, sedan migration 061.
+     *
+     * Tidigare gjorde de inte det: en vanlig registrering lämnade
+     * `workspaces.slug` som null, och `requireSnajpTenant()` svarade 409 på
+     * varje inloggad yta tills någon av oss körde `scripts/onboard_tenant.py`
+     * för hand. Produkten var alltså oanvändbar för varje ny kund fram till
+     * nästa gång vi tittade — översikten visade streck, röstdokumentet
+     * "Kunde inte hämta", och målgruppssidan ett meddelande om databaskolumner.
+     *
+     * Samtidigt blir det kunden just skrev till STANDARDINSTÄLLNINGAR i
+     * backenden: produktbeskrivningen är den agenten faktiskt läser
+     * (`context_docs` med kind `product_marketing`, inte `business_contexts`),
+     * och röstdokument och målgrupp får ett utkast att ändra i stället för ett
+     * tomt fält. Se lib/snajp/standard.ts för vad som fylls i och vad som med
+     * flit lämnas tomt.
+     *
+     * Fäller inte onboardingen. Affärskontexten är sparad, och
+     * `requireSnajpTenant()` gör om samma koppling vid första sidladdningen om
+     * backenden sov just nu.
+     */
+    try {
+      const { sakerstallKundtenant } = await import("@/lib/snajp/provisionering");
+      const { getWorkspaceForUser } = await import("@/lib/workspace");
+      const workspace = await getWorkspaceForUser(user.id);
+      if (workspace && !workspace.slug) {
+        // Samma fyra fält som `Kundunderlag` — payloaden ovan är redan den
+        // text kunden skrev, så en omläsning ur databasen hade bara varit en
+        // extra tur och retur för samma sak.
+        await sakerstallKundtenant(
+          user.id,
+          workspace,
+          {
+            product: payload.product,
+            target_audience: payload.target_audience,
+            offer: payload.offer,
+            cta: payload.cta
+          },
+          // Tålmodigt: uppstarten får vänta ut en kallstartande backend. Det är
+          // enda tillfället kunden faktiskt väntar på att bli upplagd.
+          true
+        );
+      }
+    } catch (error) {
+      console.error("[onboarding] kunde inte koppla arbetsytans tenant:", error);
+    }
   }
 
   redirect("/dashboard");

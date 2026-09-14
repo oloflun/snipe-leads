@@ -1,6 +1,7 @@
 """Ingest: spara råmail + bilagor med dedupe och beslutslogg."""
 
 import logging
+from datetime import datetime
 from typing import Any
 
 from ..storage.base import Storage
@@ -9,8 +10,14 @@ from .models import InboundEmail
 logger = logging.getLogger("snajp-support.ingest")
 
 
+def _received_at_for_storage(value: str | datetime | None) -> datetime | None:
+    if isinstance(value, str):
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return value
+
+
 async def ingest_email(
-    storage: Storage, tenant_id: str, inbound: InboundEmail
+    storage: Storage, tenant_id: str, inbound: InboundEmail, *, is_test: bool = False
 ) -> dict[str, Any] | None:
     """Sparar ett inkommande mail. Returnerar mailraden, eller None vid dublett."""
     email = await storage.save_email(
@@ -21,7 +28,8 @@ async def ingest_email(
         from_name=inbound.from_name,
         subject=inbound.subject,
         body_text=inbound.body_text,
-        received_at=inbound.received_at,
+        received_at=_received_at_for_storage(inbound.received_at),
+        is_test=is_test or inbound.provider == "mock",
     )
     if email is None:
         logger.info("Dublett hoppad: %s", inbound.provider_message_id)

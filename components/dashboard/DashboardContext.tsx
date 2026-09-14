@@ -1,12 +1,11 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import type { DashboardState } from "@/lib/data/dashboard";
-import type { ProductKey } from "@/lib/routes";
-import { isProductKey } from "@/lib/routes";
+import type { ProductKey, Scope } from "@/lib/routes";
+import { SCOPE_COOKIE, productKeys } from "@/lib/routes";
 
-/** What the user is currently looking at, within what they are entitled to. */
-export type Scope = ProductKey | "both";
+export type { Scope };
 
 type DashboardContextValue = DashboardState & {
   scope: Scope;
@@ -18,17 +17,23 @@ type DashboardContextValue = DashboardState & {
 };
 
 const FALLBACK: DashboardState = {
-  products: ["leads", "support"],
+  // Härledd, inte uppräknad. Stod som ["leads", "support"] och blev fel i samma
+  // sekund som bokföringen blev en produkt — samma glidning som ALL_PRODUCTS i
+  // lib/data/dashboard.ts hade. Fallbacken är permissiv med flit (den finns för
+  // marknadsföringsytorna), och en permissiv lista som glömmer en produkt är
+  // permissiv på fel sätt: den döljer något i stället för att visa allt.
+  products: [...productKeys],
   addons: [],
-  variant: "demo",
   workspaceName: null,
   signedIn: false,
-  isPlatformAdmin: false
+  isDemo: false,
+  isPlatformAdmin: false,
+  vy: "admin" as const,
+  impersonation: null,
+  initialScope: "both" as const
 };
 
 const DashboardContext = createContext<DashboardContextValue | null>(null);
-
-const STORAGE_KEY = "snajp.dashboard.scope";
 
 export function DashboardProvider({
   state,
@@ -37,27 +42,24 @@ export function DashboardProvider({
   const availableScopes: Scope[] =
     state.products.length > 1 ? ["both", ...state.products] : [...state.products];
 
-  // products kan vara TOM sedan entitlements blev fail-closed (Fas 3). Utan
-  // fallbacken här blir initialvärdet undefined, och shows() jämför mot det —
-  // vilket ser ut som ett renderingsfel långt från orsaken.
-  const [scope, setScopeState] = useState<Scope>(availableScopes[0] ?? "both");
-
-  // Restore after mount rather than during render: reading localStorage while
-  // rendering would desync the server and client markup.
-  useEffect(() => {
-    const stored = window.localStorage.getItem(STORAGE_KEY);
-    if (!stored) return;
-    const valid = stored === "both" || isProductKey(stored);
-    if (valid && availableScopes.includes(stored as Scope)) {
-      setScopeState(stored as Scope);
-    }
-    // availableScopes is derived from server state and stable for the session.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Startvärdet kommer FÄRDIGT från servern, som redan läst och validerat
+  // cookien (se lib/data/dashboard.ts). Tidigare hämtades det ur localStorage i
+  // en useEffect efter mount, vilket gav ett synligt hopp — sidan renderade
+  // först i "både" och bytte sedan — och gjorde värdet osynligt för varje
+  // server-komponent.
+  //
+  // products kan vara TOM sedan entitlements blev fail-closed (Fas 3), därav
+  // fallbacken: utan den jämför shows() mot undefined, vilket ser ut som ett
+  // renderingsfel långt från orsaken.
+  const [scope, setScopeState] = useState<Scope>(
+    availableScopes.includes(state.initialScope) ? state.initialScope : (availableScopes[0] ?? "both")
+  );
 
   const setScope = useCallback((next: Scope) => {
     setScopeState(next);
-    window.localStorage.setItem(STORAGE_KEY, next);
+    // Ett år: läget är ett arbetssätt, inte en session. Lax räcker — cookien
+    // styr ingenting utom vad som ritas, och grinden som räknar är `products`.
+    document.cookie = `${SCOPE_COOKIE}=${next}; path=/; max-age=31536000; samesite=lax`;
   }, []);
 
   const shows = useCallback(
@@ -88,7 +90,7 @@ export function useDashboard(): DashboardContextValue {
     ...FALLBACK,
     scope: "both",
     setScope: () => {},
-    availableScopes: ["both", "leads", "support"],
+    availableScopes: ["both", ...productKeys],
     shows: () => true
   };
 }

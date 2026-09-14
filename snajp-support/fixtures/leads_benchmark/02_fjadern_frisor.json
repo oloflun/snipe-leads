@@ -1,0 +1,12 @@
+{
+  "company_name": "Fjädern Frisör",
+  "website": "https://fjadernfrisor.se",
+  "context_pack": "## Kontextpaket\n\n### Köparen\nSnajp säljer en svensk AI-supportagent till små och medelstora B2B-bolag. Agenten svarar på kundfrågor grundat i kundens egen kunskapsbas, eskalerar till människa vid osäkerhet, och gissar aldrig.\n\n### ICP\n- Bransch: tillverkning, bygg, industri med återkommande kundfrågor\n- Storlek: 10–100 anställda\n- Geografi: Sverige\n- Signal: rekryterar kundtjänst/innesälj, eller växer snabbt\n- Egna kriterier (diskvalificerar): redan en chattlösning, under 10 anställda",
+  "material": "# Fjädern Frisör\nDin salong mitt i Sundsvall. Vi är tre frisörer med passion för hantverket.\n\n## Boka tid\nBoka enklast i vår bokningsapp eller ring 060-15 15 15.\n\n## Hitta hit\nStorgatan 12, Sundsvall. Följ oss på Instagram @fjadernfrisor.",
+  "facit": {
+    "qualified": false,
+    "contact_email": null,
+    "contact_name": null,
+    "motivering": "3 anställda (under 10), konsumenttjänst utanför ICP-branscherna, ingen köpsignal."
+  }
+}

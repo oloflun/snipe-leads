@@ -17,6 +17,7 @@ export type Database = {
           addons: string[];
           slug: string | null;
           ss_tenant_id: string | null;
+          is_demo: boolean;
           created_at: string;
         };
         Insert: {
@@ -28,6 +29,7 @@ export type Database = {
           addons?: string[];
           slug?: string | null;
           ss_tenant_id?: string | null;
+          is_demo?: boolean;
           created_at?: string;
         };
         Update: {
@@ -39,6 +41,7 @@ export type Database = {
           addons?: string[];
           slug?: string | null;
           ss_tenant_id?: string | null;
+          is_demo?: boolean;
           created_at?: string;
         };
         Relationships: [];

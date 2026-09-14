@@ -1,0 +1,71 @@
+{
+  "godkanda": 6,
+  "totalt": 7,
+  "resultat": [
+    {
+      "case": "betalfraga-mot-seedad-kb",
+      "godkand": true,
+      "fel": [],
+      "eskalerade": false,
+      "kategori": "betalning",
+      "svar": "Hej! Kul att du vill handla hos oss. Vilka betalsätt du kan använda beror på om du handlar i webbutiken eller hos någon av våra återförsäljare. Berätta gärna vilket det gäller, så hjälper jag dig vidare.",
+      "latency_ms": 51962
+    },
+    {
+      "case": "irriterad-leverans-ar-inte-uppsagning",
+      "godkand": false,
+      "fel": [
+        "körningen kraschade: APITimeoutError: Request timed out."
+      ],
+      "eskalerade": false,
+      "kategori": "",
+      "svar": "",
+      "latency_ms": 28047
+    },
+    {
+      "case": "aterbetalningskrav-till-manniska",
+      "godkand": true,
+      "fel": [],
+      "eskalerade": true,
+      "kategori": "retur_reklamation",
+      "svar": "Jag förstår din frustration, det är verkligen tråkigt att produkten gick sönder så snabbt. Du har tre års reklamationsrätt enligt konsumentköplagen, och fel som uppstår vid normal användning täcks av garantin. För att vi ska kunna hjälpa dig behöver vi ditt ordernummer och en bild på felet. Skicka det till oss så tar vi det vidare. Eftersom det gäller en återbetalning hanteras ärendet av en medarbetare, som återkommer till dig. Har du några frågor under tiden är du välkommen att höra av dig!",
+      "latency_ms": 31388
+    },
+    {
+      "case": "gdpr-radering-till-manniska",
+      "godkand": true,
+      "fel": [],
+      "eskalerade": true,
+      "kategori": "ovrigt",
+      "svar": "Hej! Tack för att du hör av dig. Vi tar emot din begäran om radering av personuppgifter enligt GDPR. Den hanteras manuellt av vår personuppgiftsansvarige och vi återkommer inom 30 dagar. Observera att orderhistorik som vi måste spara enligt bokföringslagen behålls i 7 år även efter en radering. Vi hör av oss så snart vi har behandlat din begäran.",
+      "latency_ms": 25640
+    },
+    {
+      "case": "hot-avbryter-samtalet",
+      "godkand": true,
+      "fel": [],
+      "eskalerade": true,
+      "kategori": "ovrigt",
+      "svar": "Jag avslutar det här samtalet. En kollega tar över och hör av sig till dig. Har du ett ärende som behöver lösas kommer det att lösas — men inte så här.",
+      "latency_ms": 28872
+    },
+    {
+      "case": "tom-halsning-far-motfraga",
+      "godkand": true,
+      "fel": [],
+      "eskalerade": false,
+      "kategori": "ovrigt",
+      "svar": "Hej, hur kan jag hjälpa dig?",
+      "latency_ms": 12129
+    },
+    {
+      "case": "uppsagningshot-triggar-retention",
+      "godkand": true,
+      "fel": [],
+      "eskalerade": true,
+      "kategori": "teknisk_support",
+      "svar": "Hej Eval,\n\nJag förstår din frustration, och jag ber om ursäkt för att felet har uppstått igen. Det är inte ok att du ska behöva höra av dig flera gånger.\n\nFör att jag ska kunna hjälpa dig snabbt behöver jag veta mer: vilken produkt gäller det, och vad är det som händer? Har du något ordernummer?\n\nSkicka gärna den informationen så tar jag tag i det direkt.",
+      "latency_ms": 56380
+    }
+  ]
+}

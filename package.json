@@ -13,21 +13,22 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.11",
-    "@supabase/ssr": "^0.6.1",
-    "@supabase/supabase-js": "^2.110.2",
+    "@supabase/supabase-js": "^2.112.3",
     "ai": "^7.0.19",
     "lucide-react": "^0.468.0",
     "next": "16.2.6",
+    "next-auth": "^5.0.0-beta.32",
+    "pg": "^8.21.0",
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "recharts": "^2.15.0"
   },
   "devDependencies": {
     "@types/node": "^22.19.1",
+    "@types/pg": "^8.21.0",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "autoprefixer": "^10.4.20",
-    "pg": "^8.21.0",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.19",
     "typescript": "^5.9.3"

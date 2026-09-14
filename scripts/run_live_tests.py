@@ -28,6 +28,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "snajp-support"))
 
+# Harnessen kör ENBART MemoryStorage — den öppnar aldrig databasen. En
+# DATABASE_URL ur .env pekar dock ofta på en fjärrdatabas, och då fäller
+# har_riktig_kunddata() DeepSeek-körningen trots att ingen kunddata kan nås
+# härifrån. Blankas därför i DEN HÄR processen, innan settings byggs. Spärren
+# själv rörs inte — den gör rätt; det är harnessens miljö som var fel.
+import os  # noqa: E402
+
+os.environ["DATABASE_URL"] = ""
+
 OUT_DIR = ROOT / "docs" / "live-tests"
 TENANT = "00000000-0000-4000-a000-000000000001"  # Nordlys Handel (seedad KB)
 

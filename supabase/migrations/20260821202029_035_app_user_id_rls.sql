@@ -1,0 +1,19 @@
+-- HISTORISK VERSIONSPOST — avsiktligt utan SQL.
+--
+-- Den 2026-08-21 applicerades 035_app_user_id_rls.sql mot Supabase genom Management-API:t.
+-- API:t registrerar sin EGEN 14-siffriga tidsstämpel som version, medan repots
+-- fil heter 035_app_user_id_rls. Databasen bokförde alltså ändringen under ett nummer som
+-- inte fanns i katalogen, och branching-checken föll med
+--
+--     Remote migration versions not found in local migrations directory.
+--
+-- Det är samma dubbla bokföring som 20260815230625 redan städat en gång, och
+-- den uppstod igen av samma anledning: Management-API:t väljer versionen, inte
+-- vi. Se MIGRATIONS-PENDING.md — rutinen är att applicera med versioner som
+-- MATCHAR filnamnen, just för att slippa den här filen.
+--
+-- SQL:en bor i 035_app_user_id_rls.sql och körs därifrån. Att upprepa den här hade betytt att
+-- varje ny databas kör samma ändring två gånger.
+--
+-- Radera inte filen för att den ser tom ut. Radera den den dag versionen
+-- 20260821202029 är borta ur supabase_migrations.schema_migrations — inte innan.

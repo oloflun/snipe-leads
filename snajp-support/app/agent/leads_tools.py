@@ -21,6 +21,8 @@ from ..leads.autonomy import allowed_action
 from ..leads.language_gate import LanguageGateError, check_send_gate
 from ..leads.outreach_playbook import finalize_outreach_body
 from ..leads.timing_gate import check_cold_outreach_gate
+from ..leads.utskicksfot import avregistreringslank, bygg_fot, med_fot
+from ..notifications.prioriterat_mejl import skicka_prioriterat
 from .leads_context import OnboardingContext, OutreachContext
 
 
@@ -43,10 +45,57 @@ async def _mark_onboarding_done_impl(onboarding: OnboardingContext) -> str:
     return json.dumps({"done": True})
 
 
+async def _med_lagstadgad_fot(outreach: OutreachContext, brodtext: str) -> str:
+    """Lägger på avsändaridentifikation, ändamål, källa och avregistreringslänk.
+
+    KODEN skriver den, inte modellen — se app/leads/utskicksfot.py för varför.
+    Det här är den enda anropsplatsen, och den ligger vid köningen så att den
+    text en människa granskar i dashboarden är exakt den text som skickas.
+
+    SAKNAS UNDERLAGET LÄGGS INGEN FOT PÅ, och det är avsiktligt. En halv
+    sidfot hade passerat regel 2 (länken finns) och fallit på regel 1 med ett
+    diffust "sidfoten saknar postadress" — medan den verkliga orsaken är att
+    tenanten aldrig fyllt i sina bolagsuppgifter. Utan fot fälls utskicket av
+    regel 1 med hela listan över vad som saknas, vilket är det besked som går
+    att åtgärda.
+    """
+    from ..config import get_settings  # lokalt: undviker cirkulär import vid modulladdning
+
+    bas_url = get_settings().publik_bas_url
+    tenant = await outreach.storage.get_tenant(outreach.tenant_id) or {}
+    foretagsnamn = str(tenant.get("company_name") or tenant.get("name") or "").strip()
+    orgnr = str(tenant.get("orgnr") or "").strip()
+    postadress = str(tenant.get("postal_address") or "").strip()
+
+    if not (bas_url and foretagsnamn and orgnr and postadress and outreach.prospect_email):
+        return brodtext
+
+    token = await outreach.storage.avregistreringstoken(
+        outreach.tenant_id, email=outreach.prospect_email
+    )
+    return med_fot(
+        brodtext,
+        fot=bygg_fot(
+            foretagsnamn=foretagsnamn,
+            orgnr=orgnr,
+            postadress=postadress,
+            lank=avregistreringslank(bas_url, token),
+            kontakt_epost=str(tenant.get("contact_email") or "").strip(),
+        ),
+    )
+
+
 async def _queue_outreach_draft_impl(
-    outreach: OutreachContext, *, subject: str, body: str, language_state: str, humanizer_variant: str
+    outreach: OutreachContext,
+    *,
+    subject: str,
+    body: str,
+    language_state: str,
+    humanizer_variant: str,
+    force_review: bool = False,
 ) -> str:
     finalized_body = finalize_outreach_body(body)
+    finalized_body = await _med_lagstadgad_fot(outreach, finalized_body)
 
     try:
         check_send_gate(language_state=language_state, humanizer_variant=humanizer_variant)
@@ -65,9 +114,17 @@ async def _queue_outreach_draft_impl(
     # Kundens autonominivå avgör om utkastet får gå till schemaläggaren eller
     # måste granskas av en människa först. Regeln bor i app/leads/autonomy.py
     # och anropas från exakt två ställen — här och i scheduler.process_due_item.
-    settings = await outreach.storage.get_agent_settings(outreach.tenant_id, agent_type="leads")
-    action = allowed_action(settings.get("autonomy"), outreach.sequence_index)
-    queue_status = "queued" if action == "send" else "awaiting_review"
+    #
+    # `force_review` åsidosätter autonomin ÅT DET FÖRSIKTIGA HÅLLET, aldrig
+    # tvärtom: ett svar i ett levande samtal (app/leads/svar.py) granskas
+    # alltid av en människa, oavsett vilken nivå kunden valt för den utgående
+    # sekvensen.
+    if force_review:
+        queue_status = "awaiting_review"
+    else:
+        settings = await outreach.storage.get_agent_settings(outreach.tenant_id, agent_type="leads")
+        action = allowed_action(settings.get("autonomy"), outreach.sequence_index)
+        queue_status = "queued" if action == "send" else "awaiting_review"
 
     result = await outreach.storage.queue_outreach_message(
         outreach.tenant_id,
@@ -91,8 +148,41 @@ async def _queue_outreach_draft_impl(
 
 
 async def _request_human_handoff_impl(outreach: OutreachContext, reason: str) -> str:
+    """Den faktiska överlämningspunkten i leads.
+
+    ## Varför mejlet skickas här och inte i `app/leads/handoff.py`
+
+    `handoff.py` bär namnet, men `route_handoff()` där har INGEN
+    produktionsanropare — `app/leads/autonomy.py` säger det rakt ut på två
+    ställen ("handoff.py saknar produktionsanropare", och autonominivån
+    `meeting` är avstängd just därför). Att koppla mejlet dit hade gett en
+    sändväg som aldrig går.
+
+    Det här är i stället choke pointen som faktiskt körs: den anropas dels av
+    verktyget `request_human_handoff` (modellens väg), dels av fyra kodvägar i
+    `leads_agent.run_outreach_draft` — brutet utdatakontrakt, tom brödtext,
+    kvarstående ostött påstående efter reparation, och brutet kontrakt i
+    reparationsstegen. Alla fyra slutar med att utkastet INTE köas och att en
+    människa måste ta över.
+    """
     outreach.escalated = True
     outreach.escalation_reason = reason
+
+    # Nyckeln är TRÅDEN, inte anropet. Modellen kan anropa verktyget flera
+    # gånger i samma körning, och kodvägarna i run_outreach_draft kan följa på
+    # varandra (en reparationsrunda som själv bryter kontraktet). Det är en
+    # överlämning, alltså ett mejl.
+    await skicka_prioriterat(
+        "Leads-tråd lämnad till människa",
+        tenant_id=outreach.tenant_id,
+        # Tråd-id, inte prospektets mejladress. Adressen är personuppgift om en
+        # utomstående, och tråd-id:t pekar ut samma sak för den som ska agera —
+        # samma hållning som prioriterat_mejl:s docstring beskriver för kundens
+        # ärendetext.
+        vad=f"Utkastet i tråd {outreach.thread_id} köades inte.",
+        varfor=reason,
+        nyckel=f"leads-handoff:{outreach.tenant_id}:{outreach.thread_id}",
+    )
     return json.dumps({"escalated": True, "reason": reason}, ensure_ascii=False)
 
 

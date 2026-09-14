@@ -11,6 +11,9 @@ class SupportContext:
     storage: Storage
     tenant_id: str = ""
     channel: str = "web"
+    #: Testchatt/admin-impersonation. Verktyget create_ticket läser den så
+    #: ett ärende öppnat under en testkörning inte landar i kundens skarpa lista.
+    is_test: bool = False
     customer_email: str | None = None
     customer_name: str | None = None
     subject: str = ""

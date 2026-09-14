@@ -46,7 +46,15 @@ och båda är valda specifikt för sina GRATISNIVÅER:
 | --- | --- | --- |
 | `DEEPSEEK_API_KEY` | **Ja** | Ingenting kan köras — allt faller till simuleringsläge |
 | `SCRAPEGRAPHAI_API_KEY` | Nej | Fas B-research kan inte skrapa prospektsajter |
-| `GEMINI_API_KEY` | Nej | Ingen bildbeskrivning i ärenden; KB använder fulltext i stället för vektorsökning |
+| `GEMINI_API_KEY` | Nej* | Ingen bildbeskrivning i ärenden; KB använder fulltext i stället för vektorsökning |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | Nej* | Vertex AI service account JSON — ersätter GEMINI_API_KEY |
+| `GOOGLE_CLOUD_REGION` | Nej | Default `europe-west1`. Bara om annan region behövs |
+
+\* Minst en av `GEMINI_API_KEY` eller `GOOGLE_SERVICE_ACCOUNT_JSON` krävs för
+Gemini. Sedan Google tog bort Cloud-krediter från AI Studio (2026-09) behövs
+`GOOGLE_SERVICE_ACCOUNT_JSON` — den innehåller hela JSON-filen från
+Google Cloud Console (service account key). Är den satt används Vertex AI
+med OAuth2-tokens i stället för AI Studio med enkel API-nyckel.
 
 Nycklarna skapas en gång i respektive tjänsts dashboard — det går inte att
 automatisera, och ska inte gå att automatisera:
@@ -55,35 +63,48 @@ automatisera, och ska inte gå att automatisera:
 - ScrapeGraphAI: <https://dashboard.scrapegraphai.com>
 - Gemini (gratisnivå): <https://aistudio.google.com/apikey>
 
-**Not om OpenAI:** Email Studio (`app/api/email-studio/route.ts`, Next.js-sidan)
-har en egen, separat `OPENAI_API_KEY` i `.env.local` — orört av den här
-omläggningen. Det är en annan integration (Vercel AI SDK) än backendens
-vision/embeddings-sidovagn. Säg till om den också ska bytas till Gemini.
+**Not om Email Studio:** `app/api/email-studio/route.ts` (Next.js-sidan, tjänsten
+`web`) väljer modell i ordningen `OPENAI_API_KEY` → `GOOGLE_SERVICE_ACCOUNT_JSON`
+(Vertex AI) → `GEMINI_API_KEY` → `DEEPSEEK_API_KEY` (bara lokalt), se
+`lib/llm/modellval.ts`. Sedan 2026-09-13 talar den Vertex AI på samma sätt som
+backenden, men **variablerna läses från `web`-tjänsten, inte `api`** — de måste
+alltså finnas på båda. Utan dem svarar varje åtgärd med förskriven text och
+editorn säger "AI-hjälpen är inte påslagen i den här miljön".
 
 ---
 
 ## Deploy
 
-### Backend (Render — `snajp-support`) — där alla tre nycklar hör hemma
+### Backend (Railway) — huvudsaklig deploy-plattform sedan 2026-08
 
-Render CLI:t kan inte skriva env-variabler utan en separat API-token, så det
-här steget görs i dashboarden: **snajp-support → Environment**.
+Nycklarna sätts via skript — ALDRIG genom att klistra in dem i Railway-
+dashboarden (de hamnar i shell-historiken):
+
+```bash
+# Sätt GOOGLE_SERVICE_ACCOUNT_JSON lokalt (frågar efter filsökväg):
+python scripts/keys.py --key GOOGLE_SERVICE_ACCOUNT_JSON
+
+# Pusha alla backend-nycklar till BÅDA Railway-miljöerna och verifiera:
+python scripts/keys.py --push-railway
+```
 
 | Variabel | Värde |
 | --- | --- |
-| `DEEPSEEK_API_KEY` | din nyckel |
-| `SCRAPEGRAPHAI_API_KEY` | din nyckel (om Fas B ska köra) |
-| `GEMINI_API_KEY` | din nyckel (om vision/embeddings ska köra) |
-| `LLM_PROVIDER` | `deepseek` |
-| `MODEL` | `deepseek-v4-flash` |
+| `LLM_PROVIDER` | `gemini` |
+| `MODEL` | `gemini-2.5-flash` |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | Hela JSON-filen som en rad (sätts av `keys.py`) |
+| `GEMINI_API_KEY` | AI Studio-nyckel (fallback, gratisnivå — 20 anrop/dygn) |
+| `DEEPSEEK_API_KEY` | Bara för lokal syntetisk data, SPÄRRAD i main/development |
 
-`render.yaml` deklarerar redan `DEEPSEEK_API_KEY` och `GEMINI_API_KEY` med
-`sync: false` — det betyder just "värdet sätts i dashboarden, inte i repot".
+**Obs:** `LLM_PROVIDER=deepseek` vägrar starta i miljöer med riktig kunddata
+(main, development). Det är en dataskyddsspärr, inte en bugg — se CLAUDE.md.
 
-### Frontend (Vercel)
+### Frontend (Vercel — avvecklat för backend)
 
-Inget i den här omläggningen behöver Vercel — se noten om Email Studios
-separata `OPENAI_API_KEY` ovan om den frontend-integrationen ska bytas också.
+Email Studio (`app/api/email-studio/route.ts`) kör på Railway-tjänsten `web` och
+behöver `GOOGLE_SERVICE_ACCOUNT_JSON` (och vid behov `GOOGLE_CLOUD_REGION`,
+`MODEL`) satta **på `web`** i båda miljöerna — samma värden som på `api`.
+`OPENAI_API_KEY` vinner fortfarande om den är satt.
 
 ---
 

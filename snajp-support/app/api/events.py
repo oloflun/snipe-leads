@@ -78,6 +78,19 @@ async def log_exception(
     )
 
 
+def _ar_kvotfel(error: Exception) -> bool:
+    """Om felet är leverantörens kvottak snarare än vårt fel.
+
+    Logiken bor i app/kvotfel.py sedan kreditslut-klassen byggdes — samma
+    klassificerare ska svara i felhanteraren, i step_runnerns tålamodsloop
+    och vid jobbläsningen, annars glider de isär. Namnet står kvar här för
+    anropare och tester som redan känner det.
+    """
+    from ..kvotfel import ar_kvotfel
+
+    return ar_kvotfel(error)
+
+
 def install_exception_handler(app) -> None:
     """Fångar allt som ingen route hanterade.
 
@@ -90,6 +103,46 @@ def install_exception_handler(app) -> None:
 
     @app.exception_handler(Exception)
     async def _unhandled(request: Request, error: Exception):  # noqa: ANN202
+        # LEVERANTÖRENS KVOT ÄR INTE EN KRASCH.
+        #
+        # Ett 429 från modelleverantören renderades som "Något gick fel på vår
+        # sida. Felet är loggat" — samma svar som ett nullpointerfel. Det är
+        # samma klass av vilseledning som resten av den här kodbasen redan
+        # jagat: ett tillstånd som HAR en begriplig orsak presenterat som ett
+        # okänt haveri.
+        #
+        # Kostnaden är konkret. Den som felsöker läser "felet är loggat", går
+        # till loggen, och ser en stack som slutar i http-klienten. Att frågan
+        # egentligen är "kvoten är slut, kolla planen" tar en halvtimme att
+        # komma fram till. Det hände 2026-08-24.
+        #
+        # 429 vidare till klienten, inte 500: statuskoden är den enda delen av
+        # svaret som en maskin läser, och en klient som gör om anropet direkt
+        # gör kvotproblemet värre.
+        if _ar_kvotfel(error):
+            from ..kvotfel import KUNDTEXT_KVOT, ar_kreditslut, larma_kreditslut
+
+            logger.warning(
+                "Modelleverantören avvisade anropet på grund av kvot (%s %s).",
+                request.method,
+                request.url.path,
+            )
+            # KREDITSLUT är inte övergående: att be kunden försöka igen är
+            # vilseledande, och rätt mottagare av beskedet är vi. Larmet
+            # dedupliceras per dygn i larma_kreditslut.
+            if ar_kreditslut(error):
+                storage = getattr(request.app.state, "storage", None)
+                if storage is not None:
+                    # Tenant är okänd här — handlern fångar allt som ingen
+                    # route hanterade, och att slå upp nyckeln igen vore en
+                    # andra autentisering i en felväg. Plattformsnivå räcker:
+                    # kreditslut träffar alla tenants samtidigt ändå.
+                    await larma_kreditslut(storage, tenant_id=None, kalla="api")
+                from ..kvotfel import KUNDTEXT_KREDITSLUT
+
+                return JSONResponse(status_code=429, content={"error": KUNDTEXT_KREDITSLUT})
+            return JSONResponse(status_code=429, content={"error": KUNDTEXT_KVOT})
+
         storage = getattr(request.app.state, "storage", None)
         if storage is not None:
             await log_exception(

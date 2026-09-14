@@ -1,0 +1,12 @@
+{
+  "company_name": "Nordkap Moduler AB",
+  "website": "https://nordkapmoduler.se",
+  "context_pack": "## Kontextpaket\n\n### Köparen\nSnajp säljer en svensk AI-supportagent till små och medelstora B2B-bolag. Agenten svarar på kundfrågor grundat i kundens egen kunskapsbas, eskalerar till människa vid osäkerhet, och gissar aldrig.\n\n### ICP\n- Bransch: tillverkning, bygg, industri med återkommande kundfrågor\n- Storlek: 10–100 anställda\n- Geografi: Sverige\n- Signal: rekryterar kundtjänst/innesälj, eller växer snabbt\n- Egna kriterier (diskvalificerar): redan en chattlösning, under 10 anställda",
+  "material": "# Nordkap Moduler AB\nVi bygger prefabricerade kontorsmoduler för byggarbetsplatser i hela Norrland. Grundat 2011, ca 45 anställda i Umeå och Skellefteå.\n\n## Nyheter\n2026-08-15: Vi söker två medarbetare till vår kundservice — antalet förfrågningar har fördubblats sedan i fjol.\n\n## Kontakta oss\nVäxel: 090-12 34 56\nOffertförfrågningar: offert@nordkapmoduler.se\nKundservice: kundservice@nordkapmoduler.se\nPlatschef Umeå: Karin Lindqvist\n\nVi svarar på mejl vardagar 8–17. Ingen chatt — vi tror på personlig kontakt.",
+  "facit": {
+    "qualified": true,
+    "contact_email": "kundservice@nordkapmoduler.se",
+    "contact_name": "Karin Lindqvist",
+    "motivering": "45 anställda, tillverkning, rekryterar kundservice (stark signal), ingen chattlösning."
+  }
+}

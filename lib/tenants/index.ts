@@ -1,6 +1,7 @@
 import type { Tenant, TenantPalette } from "./types";
 import { livrustning } from "./livrustning";
 import { snajp } from "./snajp";
+import { testkund } from "./testkund";
 
 export type { Tenant, TenantLogo, TenantPalette } from "./types";
 
@@ -12,17 +13,55 @@ const tenants: Record<string, Tenant> = {
   livrustning,
   // Vår egen arbetsyta. Vi använder produkten själva, och utan den här raden
   // svarar /chat/snajp med ett internt felmeddelande.
-  snajp
+  snajp,
+  // Delad tenant för konton skapade med "Testarbetsyta" ikryssad. Utan den
+  // möter en nyskapad testkund 409 på sina egna ytor — uppmätt, se filen.
+  testkund
 };
 
 /** Headern som proxy.ts sätter när värdnamnet pekar ut en kund. */
 export const TENANT_HEADER = "x-tenant";
 
+/**
+ * Testarbetsytornas slugmönster: `testkund-<8 tecken ur workspace-id>`.
+ *
+ * Måste stämma med regexen i `public.link_test_tenant` (migration 040). Den
+ * databasfunktionen är grinden — matchar sluggen inte, kopplas ingenting, och
+ * en manipulerad frontend kan därför inte peka en arbetsyta på en RIKTIG kunds
+ * tenant.
+ */
+const TESTKUND_SLUG = /^testkund-[a-z0-9]{4,32}$/;
+
+export function arTestkundSlug(slug: string): boolean {
+  return TESTKUND_SLUG.test(slug);
+}
+
 export function getTenant(slug: string | null | undefined): Tenant | null {
   if (!slug) {
     return null;
   }
-  return tenants[slug] ?? null;
+  const registrerad = tenants[slug];
+  if (registrerad) {
+    return registrerad;
+  }
+
+  /**
+   * Testarbetsytor har EGEN tenant men INGEN configfil.
+   *
+   * Det är hela poängen: en configfil per testkonto är en commit och en deploy
+   * per testkonto, alltså precis den friktion testarbetsytan finns för att ta
+   * bort. Configen härleds därför ur `testkund`-mallen — samma utseende, samma
+   * texter, men en egen slug och en nyckel som bor i databasen (migration 040).
+   *
+   * Utan det här delade alla testkunder inkorg, kunskapsbas och röstdokument.
+   * En kunds villkor kunde grunda ett svar till en annan kunds kund, och
+   * grundningsgrinden kan inte se skillnaden — den ser bara en träff.
+   */
+  if (arTestkundSlug(slug)) {
+    return { ...testkund, slug, perWorkspaceKey: true };
+  }
+
+  return null;
 }
 
 export function tenantSlugs(): string[] {

@@ -31,16 +31,29 @@ thinking-kontroll och step_log. Se docs/THINKING_MODE_COMPARISON.md §6.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import logging
 import re
 import time
 from typing import Any
+from urllib.parse import urlparse
 
 from agents import Agent, Runner
 
+from ..agentcore.instruktioner import Instruktionslager, las_instruktioner
 from ..agentcore.overlays import pack_version
-from ..agentcore.packs import RunLedger
+from ..agentcore.packs import PlaybookStep, RunLedger
+from ..config import get_settings
 from ..leads.business_context import require_business_context
+from ..leads.discovery import (
+    LAGLIG_GRUND_EGEN_WEBB,
+    ar_privat_epost,
+    ar_arbetsmejl,
+    extrahera_kontaktlankar,
+    normalisera_webbplats,
+    plocka_arbetsmejl,
+)
 from ..leads.grounding_gate import PermittedFacts, build_permitted_facts, check_grounding
 from ..leads.grounding_playbook import GROUNDING_V1
 from ..leads.language_gate import last_humanizer_variant
@@ -48,6 +61,7 @@ from ..leads.onboarding_playbook import render_onboarding_instructions
 from ..leads.outreach_playbook import OUTREACH_V1
 from ..leads.research_playbook import RESEARCH_V1
 from ..leads.soul import load_soul
+from ..moderation.abuse_gate import check_abuse, ton_instruktion
 from ..leads.text_delta import (
     SegmentShapeError,
     changed_segments,
@@ -65,6 +79,8 @@ from .research_tools import _scrape_registered_source_impl
 from .step_runner import RunTrace, run_step
 from .tools import strip_markdown
 
+logger = logging.getLogger("snajp-support.leads-agent")
+
 # Skrapat material kapas här. Ett steg som får 60 000 tecken råmarkdown
 # lägger hela sin uppmärksamhet på sidfotslänkar; åtta steg som får det
 # gör körningen dyr utan att bli bättre. Höj om researchen visar sig missa
@@ -74,6 +90,40 @@ MAX_SOURCE_CHARS = 14_000
 _RESEARCH_ROLE = "en svensk B2B-researchplaybook för ett enskilt prospekt"
 _OUTREACH_ROLE = "en svensk playbook för ett kallt, lågmält första mejl"
 _GROUNDING_ROLE = "en faktagranskning av ett färdigt svenskt mejlutkast"
+_KUNSKAPSROLL = "en genomgång av vad ett avslutat researchvarv lärde oss"
+
+#: Utkastuppgiften står som konstant för att omförsöket ska kunna skicka
+#: EXAKT samma uppgift plus en tillsägelse. Två nästan lika strängar hade
+#: glidit isär vid första ändringen.
+_UTKASTSUPPGIFT = (
+    "Skriv utkastet. Returnera JSON: subject (svenska, ren text), "
+    "body (svenska, ren text, inga punktlistor), personalization_notes "
+    "(vad i researchen mejlet faktiskt bygger på), draft_reasoning (svenska)."
+)
+
+#: Kunskapsfångsten efter ett avslutat researchvarv.
+#:
+#: Motsvarar supportens steg 5 (`cs:kb-article`) i IDÉ, inte i implementation:
+#: support frågar om ETT ärende avslöjade en lucka i kunskapsbasen, det här
+#: frågar om ett RESEARCHVARV avslöjade något om marknaden som kundens
+#: kontextpaket och ICP inte bär. Det är två olika frågor mot två olika
+#: dokument, och därför två steg och inte ett delat.
+#:
+#: `sa:call-summary` och inte `cs:kb-article`: skillen är skriven för att
+#: destillera "vad lärde vi oss, vad gör vi med det" ur ett säljmoment, vilket
+#: är precis formen här. cs:kb-article är skriven för att formulera en
+#: supportartikel åt en slutkund.
+#: `thinking="disabled"` sätts EXPLICIT, precis som varje steg i
+#: research_playbook.py gör. Beslutet där är "thinking AV i hela leadsflödet"
+#: (docs/THINKING_MODE_COMPARISON.md §8), och det gäller ett steg i flödet även
+#: när steget deklareras här i stället för i playbooken. Att ärva
+#: `settings.thinking_mode` hade gjort det här steget till det enda i leads vars
+#: läge beror på en global default.
+_RESEARCH_KUNSKAPSSTEG = PlaybookStep(
+    skill="sa:call-summary",
+    requires=("context_pack",),
+    thinking="disabled",
+)
 
 
 # En avslutningsfras som slutar på komma och sedan inget mer. Uppstår när
@@ -109,6 +159,7 @@ async def _run_grounding_cycle(
     base: str,
     tenant_name: str,
     facts: PermittedFacts,
+    instruktioner: Instruktionslager | None = None,
 ) -> tuple[str, str, dict[str, Any]]:
     """Grinda -> (vid fällning) reparera -> delta-humanisera -> grinda igen.
 
@@ -116,27 +167,43 @@ async def _run_grounding_cycle(
     ska kosta 4 anrop, inte 6) och måste köra EFTER humanizern, som enligt
     INV-LANG-002 är sist i den deklarerade kedjan. Se grounding_playbook.
 
+    Sedan 2026-08-26 fäller cykeln även GISSNINGAR om mottagaren ("lär ni
+    få", "brukar er kundtjänst") — overlay-regeln fanns men EFTER-körningen
+    visade att den är en riktning, inte en garanti. Samma reparationsväg:
+    skriv om med researchens belägg eller stryk. Se app/leads/gissnings_gate.
+
     Returnerar (subject, body, rapport). Rapporten går till API-svaret och
     till agent_runs, så frekvensen går att mäta i efterhand.
     """
+    from ..leads.gissnings_gate import check_gissningar
+
     verdict = check_grounding(f"{subject}\n\n{body}", facts)
+    gissningar = check_gissningar(f"{subject}\n\n{body}")
     report: dict[str, Any] = {
-        "ok": verdict.ok,
-        "fired": not verdict.ok,
+        "ok": verdict.ok and not gissningar,
+        "fired": not verdict.ok or bool(gissningar),
         "unsupported_before": verdict.as_report(),
+        "gissningar_before": list(gissningar),
         "unsupported_after": [],
+        "gissningar_after": [],
         "repaired": False,
         "delta_humanized": False,
         "segments_changed": 0,
         "sources": list(facts.source_labels),
     }
-    if verdict.ok:
+    if verdict.ok and not gissningar:
         return subject, body, report
 
     steps = GROUNDING_V1.steps
     body_before = body
 
     # 1. Reparation — kirurgi på de fällda påståendena, inte omskrivning.
+    gissningsblock = (
+        "\n\n## Gissningar om mottagaren (skriv om med belägg ur underlaget, "
+        "eller stryk meningen)\n" + "\n".join(f"- {m}" for m in gissningar)
+        if gissningar
+        else ""
+    )
     repaired = await run_step(
         steps[0],
         ledger,
@@ -147,9 +214,11 @@ async def _run_grounding_cycle(
             "repaired_subject (svenska), repaired_body (svenska, ren text), "
             "removed_claims (lista med vad du tog bort eller skrev om).\n\n"
             f"## Ostödda påståenden\n{verdict.as_report()}"
+            f"{gissningsblock}"
         ),
         case_context=f"{base}\n\n## Mejl att reparera\nÄmne: {subject}\n\n{body}",
         playbook_role=_GROUNDING_ROLE,
+        instruktioner=instruktioner,
     )
     subject = strip_markdown(repaired.get("repaired_subject") or subject).strip()
     body = strip_markdown(repaired.get("repaired_body") or body)
@@ -173,6 +242,7 @@ async def _run_grounding_cycle(
             ),
             case_context=f"{base}\n\n## Hela mejlet (kontext — skriv INTE om det)\n{body}",
             playbook_role=_GROUNDING_ROLE,
+            instruktioner=instruktioner,
         )
         try:
             replacements = parse_humanized_segments(humanized, changed)
@@ -193,15 +263,154 @@ async def _run_grounding_cycle(
     # 3. Grinda om på det faktiska resultatet. Reparationen kan ha infört nya
     #    påståenden, och humanizern kan ha infört drift medan den naturaliserade.
     verdict_after = check_grounding(f"{subject}\n\n{body}", facts)
-    report["ok"] = verdict_after.ok
+    gissningar_after = check_gissningar(f"{subject}\n\n{body}")
+    report["ok"] = verdict_after.ok and not gissningar_after
     report["unsupported_after"] = verdict_after.as_report()
+    report["gissningar_after"] = list(gissningar_after)
     return subject, body, report
+
+
+async def _fanga_kunskap(
+    ledger: RunLedger,
+    trace: RunTrace,
+    *,
+    base: str,
+    sammanfattning: str,
+    pains: str,
+    instruktioner: Instruktionslager | None = None,
+) -> dict[str, Any]:
+    """Steg 9: vad lärde varvet oss som kundens kontextpaket inte bar?
+
+    Kastar aldrig. Ett trasigt kunskapssteg ska inte fälla en färdig research
+    — hela researchresultatet finns redan, och det som går förlorat är en
+    anteckning om nästa varv. Samma avvägning som `SegmentShapeError` i
+    grundningscykeln: en kvalitetsregression, inte ett korrekthetsfel.
+    """
+    try:
+        return await run_step(
+            _RESEARCH_KUNSKAPSSTEG,
+            ledger,
+            trace,
+            task=(
+                "Varvet är klart. Avgör vad DET HÄR prospektet lärde oss om "
+                "marknaden som köparens kontextpaket och ICP inte redan bär. "
+                "Returnera JSON: reveals_gap (bool), gap (svenska eller null), "
+                "icp_adjustment (svenska eller null — vad i ICP:n som borde "
+                "skärpas eller breddas), evidence (lista med korta citat eller "
+                "observationer ur varvet som stöder det). "
+                "Hitta inte på en lucka för att ha något att säga: reveals_gap "
+                "false med gap null är ett fullgott svar."
+            ),
+            case_context=(
+                f"{base}\n\n## Kvalificeringen\n{sammanfattning}\n\n## Vad vi såg\n{pains}"
+            ),
+            playbook_role=_KUNSKAPSROLL,
+            instruktioner=instruktioner,
+        )
+    except Exception as error:  # noqa: BLE001 — se docstringen
+        return {"reveals_gap": False, "fel": f"{type(error).__name__}: {error}"}
 
 
 def _digest(output: dict[str, Any], *keys: str) -> str:
     """Kompakt vidarebefordran mellan steg. Utan den växer varje steg med
     föregående stegs fulla JSON och körningen blir kvadratisk i tokens."""
     return json.dumps({k: output.get(k) for k in keys if k in output}, ensure_ascii=False, indent=1)
+
+
+#: Kontaktfältets fallback-trappa (app/leads/discovery.py:KONTAKTNIVAER),
+#: här i rangordning för att avgöra om Fas B:s fynd ska SKRIVA ÖVER det
+#: hitta_bolag() redan satte. Lägst först — en tom sträng/None rankas 0.
+_KONTAKTNIVA_RANK = ("contact_form", "role_address", "named_other", "named_role_match")
+
+
+def _kontaktniva_rank(niva: str | None) -> int:
+    return _KONTAKTNIVA_RANK.index(niva) + 1 if niva in _KONTAKTNIVA_RANK else 0
+
+
+def _verifierad_epost(kandidat: str | None, material: str, webb: str | None) -> str | None:
+    """Accepterar bara en adress som står i skrapet och inte är privat."""
+    epost = (kandidat or "").strip() or None
+    if not epost:
+        return None
+    if epost.lower() not in (material or "").lower():
+        return None
+    if not ar_arbetsmejl(epost, webb=webb):
+        return None
+    return epost
+
+
+def _saknar_arbetsmejl(prospect: dict[str, Any], webb: str | None) -> bool:
+    nu = prospect.get("contact_email")
+    return not ar_arbetsmejl(nu, webb=webb)
+
+
+async def _uppgradera_kontakt(
+    storage,
+    tenant_id: str,
+    prospect_id: str,
+    *,
+    prospect: dict[str, Any],
+    fynd: dict[str, Any],
+    material: str,
+) -> str | None:
+    """Uppgraderar prospektets kontakt ur det redan SKRAPADE källmaterialet.
+
+    Två saker händer här, i den ordningen:
+
+    1. En namngiven person från mk:customer-research, om namnet finns och
+       nivån är en uppgradering. E-post bara om den står i materialet och
+       inte är privat (gmail/hotmail).
+    2. Saknas fortfarande ett arbetsmejl: plocka info@/kontakt@/hej@ (eller
+       närmaste rolladress) som bokstavligen står på bolagets egen sajt.
+       Kontaktformulär räknas inte som mottagare.
+
+    VARFÖR HÄR OCH INTE BARA I discovery.py: `hitta_bolag()` kör en BRED
+    Google-sökning och ser bara sökindexet. Det här steget körs EFTER
+    `_gather_registered_sources` hämtat bolagets egna sidor.
+
+    Skriver ALDRIG över en HÖGRE eller LIKA namnnivå. Hittar inte på en
+    e-postadress. En privat adress som redan ligger på prospektet byts ut
+    mot arbetsmejlet från sajten. Kastar aldrig — se `_fanga_kunskap`.
+
+    Returnerar prospektets KONTAKTNIVÅ efter anropet — den nya om något
+    fält skrevs, annars den prospektet redan hade. Kundkravet "minst en
+    kontaktperson" behöver veta om NÅGON nivå någonsin nåtts, inte bara om
+    DET HÄR anropet råkade höja den.
+    """
+    webb = prospect.get("website")
+    namn = str(fynd.get("contact_name") or "").strip()
+    roll = str(fynd.get("contact_role") or "").strip() or None
+    fynd_epost = _verifierad_epost(str(fynd.get("contact_email") or "").strip() or None, material, webb)
+    scrape_epost = plocka_arbetsmejl(material, webb, onskad_roll=roll)
+    falt: dict[str, Any] = {}
+
+    # Namngiven uppgradering — samma rangordning som tidigare. Kräver namn,
+    # och får inte degradera named_role_match.
+    if namn and _kontaktniva_rank("named_other") > _kontaktniva_rank(prospect.get("contact_level")):
+        falt["contact_name"] = namn
+        falt["contact_role"] = roll
+        falt["contact_level"] = "named_other"
+
+    # Arbetsmejl: byt ut privat/tom, fyll i från fynd eller skrap. En redan
+    # verifierad arbetsadress lämnas ifred (även när vi sätter ett namn).
+    if _saknar_arbetsmejl(prospect, webb):
+        vald = fynd_epost or scrape_epost
+        if vald:
+            falt["contact_email"] = vald
+            if "contact_level" not in falt:
+                nuvarande = prospect.get("contact_level")
+                if not nuvarande or nuvarande == "contact_form":
+                    falt["contact_level"] = "named_other" if namn else "role_address"
+
+    if not falt:
+        return prospect.get("contact_level")
+
+    try:
+        await storage.update_prospect(tenant_id, prospect_id, **falt)
+    except Exception:  # noqa: BLE001 — uppgraderingen är en bonus, researchen är jobbet
+        logger.exception("Kunde inte uppgradera kontaktnivån för prospekt %s", prospect_id)
+        return prospect.get("contact_level")
+    return falt.get("contact_level", prospect.get("contact_level"))
 
 
 # -- Fas A: onboarding (oförändrad, se modulens docstring) -----------------
@@ -220,7 +429,12 @@ def build_onboarding_agent(*, existing_product_marketing: str | None) -> tuple[A
     return agent, ledger.executed_order
 
 
-async def run_onboarding_turn(storage, tenant_id: str, *, message: str) -> dict[str, Any]:
+async def run_onboarding_turn(
+    storage,
+    tenant_id: str,
+    *,
+    message: str,
+) -> dict[str, Any]:
     """En tur i onboarding-samtalet (Fas A). Flerturssamtal — anropas en
     gång per kundmeddelande, precis som mk:product-marketing kräver
     ('frågor ställs sektion för sektion, aldrig alla på en gång')."""
@@ -228,56 +442,178 @@ async def run_onboarding_turn(storage, tenant_id: str, *, message: str) -> dict[
     agent, executed_skills = build_onboarding_agent(
         existing_product_marketing=existing["content"] if existing else None
     )
-    context = OnboardingContext(storage=storage, tenant_id=tenant_id)
-
-    result = await Runner.run(
-        agent,
-        [{"role": "user", "content": [{"type": "input_text", "text": message}]}],
-        context=context,
-        max_turns=10,
+    context = OnboardingContext(
+        storage=storage, tenant_id=tenant_id
     )
 
+    # Tonläget bedöms i KOD, som i support_agent och bokföringschatten.
+    #
+    # OBS vilken yta det här ÄR: Fas A är samtalet med VÅR KUND under
+    # onboarding, inte ett svar från ett prospekt. Prospektsvar har ingen
+    # hanteringsväg alls i kodbasen än — ingenting skriver ett inkommande
+    # `outreach_messages`-radslag, `list_replies` läser en tabell inget fyller,
+    # och `handoff.route_handoff` saknar produktionsanropare. Grinden kopplas
+    # därför in där leads faktiskt tar emot ett skrivet meddelande i dag.
+    #
+    # Nivån som betyder något här är `oro`: en kund mitt i onboarding är
+    # sällan otrevlig och ofta stressad över att komma igång.
+    meddelanden: list[dict[str, Any]] = [
+        {"role": "user", "content": [{"type": "input_text", "text": message}]}
+    ]
+    abuse = check_abuse(message)
+    ton = ton_instruktion(abuse)
+    if ton:
+        meddelanden.append({"role": "user", "content": [{"type": "input_text", "text": ton}]})
+
+    result = await Runner.run(agent, meddelanden, context=context, max_turns=10)
+
     reply = str(result.final_output or "").strip()
+    # Samma ordning som i support: ett kontrollerat säkerhetssvar ska inte
+    # kunna skrivas om av modellen, så repliken sätts EFTER körningen.
+    if abuse.ska_eskalera and abuse.replik:
+        reply = abuse.replik
+    elif abuse.replik:
+        reply = f"{abuse.replik}\n\n{reply}".strip()
+
     return {
         "reply": reply,
         "done": context.done,
         "saved_docs": [d["kind"] for d in context.saved_docs],
         "skills_used": executed_skills,
+        "tonlage": abuse.niva,
     }
 
 
 # -- Fas B: research -------------------------------------------------------
 
 
-async def _gather_registered_sources(
-    storage, tenant_id: str, prospect_id: str
-) -> tuple[str, list[dict[str, Any]], list[str]]:
-    """Hämtar ALLA redan registrerade källor för prospektet, i kod.
+def _gissa_hemsida(urls: list[str], webbplats: str | None) -> str | None:
+    """Vilken av de registrerade URL:erna som är startsidan — den vi letar
+    kontaktlänkar I, inte en av dem vi redan hittat via den vägen.
 
-    Allowlisten är oförändrad: _scrape_registered_source_impl vägrar
-    fortfarande en URL som inte ligger i prospect_sources. Skillnaden är att
-    hämtningen nu alltid sker, i stället för att bero på att modellen kom
-    ihåg att anropa verktyget.
+    `prospect.website` (normaliserad likadant som `_registrera_webb`
+    registrerar den) är den pålitliga signalen när den finns. Saknas den
+    (äldre rader, manuellt tillagda källor) gissar vi konservativt på den
+    URL:en med kortast path — startsidan är typiskt `/`, en kontakt- eller
+    om-oss-sida är typiskt djupare.
     """
-    context = ResearchContext(storage=storage, tenant_id=tenant_id, prospect_id=prospect_id)
+    if webbplats:
+        try:
+            normaliserad = normalisera_webbplats(webbplats)
+        except Exception:  # noqa: BLE001 — ett trasigt website-fält, inte en krasch
+            normaliserad = None
+        if normaliserad in urls:
+            return normaliserad
+    if not urls:
+        return None
+    return min(urls, key=lambda u: (len(urlparse(u).path.strip("/")), u))
+
+
+async def _gather_registered_sources(
+    storage,
+    tenant_id: str,
+    prospect_id: str,
+    *,
+    webbplats: str | None = None,
+) -> tuple[str, list[dict[str, Any]], list[str], dict[str, Any]]:
+    """Hämtar ALLA redan registrerade källor för prospektet, i kod — och
+    upptäcker OCH registrerar kontakt-/om-oss-sidor på samma domän innan
+    skrapningen, i stället för att bara nöja sig med startsidan.
+
+    Kundens rotorsak, ordagrant: `_registrera_webb` (app/api/leads.py)
+    registrerar bara bolagets STARTSIDA i prospect_sources. En
+    kontaktperson under "om oss" eller "kontakt" hämtades därför aldrig —
+    `_uppgradera_kontakt` läser redan skrapmaterialet rätt, men fick inget
+    att hitta i.
+
+    Allowlisten (G4) är OFÖRÄNDRAD och kringgås inte: kandidatlänkarna
+    registreras i prospect_sources INNAN de skrapas, via samma
+    `create_prospect_source` som _registrera_webb använder — precis som en
+    admin som lägger till en källa manuellt. `_scrape_registered_source_impl`
+    vägrar fortfarande en URL som inte står där.
+
+    Returnerar (material, scraped_sources, errors, kontakt_diagnostik).
+    Den sista är rent kod-härledd (aldrig modelltext) — vad researchen
+    FAKTISKT gjorde för att leta kontaktsidor, till grund för
+    `contact_missing_reason` i run_research_step.
+    """
+    context = ResearchContext(
+        storage=storage,
+        tenant_id=tenant_id,
+        prospect_id=prospect_id,
+    )
     urls = sorted(await storage.list_prospect_source_urls(tenant_id, prospect_id))
 
-    blocks: list[str] = []
+    scraped: dict[str, str] = {}
     errors: list[str] = []
-    for url in urls:
+
+    async def _hamta(url: str) -> str | None:
         try:
             payload = json.loads(await _scrape_registered_source_impl(context, url))
         except Exception as error:  # noqa: BLE001 — en död källa fäller inte researchen
             payload = {"error": f"{type(error).__name__}: {error}"}
         if payload.get("content"):
-            blocks.append(payload["content"])
-        else:
-            errors.append(f"{url}: {payload.get('error', 'okänt fel')}")
+            return payload["content"]
+        errors.append(f"{url}: {payload.get('error', 'okänt fel')}")
+        return None
 
-    material = "\n\n".join(blocks)
+    for url in urls:
+        innehall = await _hamta(url)
+        if innehall is not None:
+            scraped[url] = innehall
+
+    # Kontaktupptäckt: leta länkar i STARTSIDANS material, registrera de
+    # 2-3 bästa träffarna, skrapa dem via samma allowlist-väg som ovan.
+    hemsida = _gissa_hemsida(urls, webbplats)
+    hemsidematerial = scraped.get(hemsida) if hemsida else None
+    kontakt_kandidater: list[str] = []
+    kontakt_registrerade: list[str] = []
+    kontakt_blocks: list[str] = []
+    if hemsidematerial and hemsida:
+        kontakt_kandidater = extrahera_kontaktlankar(hemsidematerial, hemsida)
+        for kandidat in kontakt_kandidater:
+            if kandidat not in urls:
+                try:
+                    await storage.create_prospect_source(
+                        tenant_id,
+                        prospect_id=prospect_id,
+                        source_url=kandidat,
+                        source_type="company_website",
+                        lawful_basis=LAGLIG_GRUND_EGEN_WEBB,
+                    )
+                except Exception:  # noqa: BLE001 — dublett/grind får inte fälla körningen
+                    logger.exception(
+                        "Kunde inte registrera kontaktkälla %s för %s", kandidat, prospect_id
+                    )
+                    continue
+            elif kandidat in scraped:
+                # Redan registrerad OCH redan skrapad (tidigare varv) — den
+                # ligger redan i `scraped`, prioritera bara om den till
+                # kontaktblocken utan att skrapa på nytt.
+                kontakt_registrerade.append(kandidat)
+                kontakt_blocks.append(scraped[kandidat])
+                continue
+            kontakt_registrerade.append(kandidat)
+            innehall = await _hamta(kandidat)
+            if innehall is not None:
+                kontakt_blocks.append(innehall)
+
+    # Kontaktsidorna FÖRST: MAX_SOURCE_CHARS-avkortningen nedan tar bort
+    # SLUTET av materialet, och en lång startsida ska inte kunna kapa bort
+    # just den sida kundkravet handlar om.
+    ovriga_blocks = [scraped[u] for u in urls if u in scraped and u not in kontakt_registrerade]
+    material = "\n\n".join(kontakt_blocks + ovriga_blocks)
     if len(material) > MAX_SOURCE_CHARS:
         material = material[:MAX_SOURCE_CHARS] + "\n\n[... avkortat, se prospect_sources ...]"
-    return material, context.scraped_sources, errors
+
+    kontakt_diagnostik = {
+        "hemsida": hemsida,
+        "hemsidematerial_tillgangligt": bool(hemsidematerial),
+        "kandidater": kontakt_kandidater,
+        "registrerade": kontakt_registrerade,
+        "skrapade": len(kontakt_blocks),
+    }
+    return material, context.scraped_sources, errors, kontakt_diagnostik
 
 
 async def run_research_step(
@@ -288,17 +624,42 @@ async def run_research_step(
     tenant_name: str,
     context_pack: str,
     brief: str,
+    # Markerar raden i agent_runs som vår egen provkörning. Kolumnen finns
+    # sedan migration 036, men ingen kodväg satte den: varje körning skrevs
+    # med default false, och portföljvyn räknade alltså in vårt eget provande
+    # som kundvolym. Se `is_test` i LeadsBatchRequest.
+    is_test: bool = False,
 ) -> dict[str, Any]:
-    """Fas B för ETT prospekt: åtta skill-steg, ett LLM-anrop vardera."""
+    """Fas B för ETT prospekt: upp till åtta skill-steg, ett LLM-anrop vardera.
+
+    "Upp till" sedan 2026-09-02: efter steg 2 (ICP-kvalificeringen) står en
+    grind. Ett prospekt som inte kvalificerar mot kundens ICP, eller som
+    saknar varje kontaktväg efter kontaktuppgraderingen, får INTE de sex
+    återstående stegen — konkurrensanalys och erbjudandekonstruktion för ett
+    bolag som aldrig ska kontaktas är rena kostnaden utan kvalitetsvinst.
+    Kunskapsfångsten körs ÄVEN för stoppade varv (ett diskvalificerat
+    prospekt lär mest om var ICP:n går fel), så ett stoppat varv kostar
+    3 anrop i stället för 9. Se `stopped_early` i returvärdet.
+    """
     started = time.monotonic()
+    settings = get_settings()
     steps = RESEARCH_V1.steps  # indexerat, inte per namn — ordningen ÄR playbooken
 
-    material, scraped_sources, scrape_errors = await _gather_registered_sources(
-        storage, tenant_id, prospect_id
+    # Läst FÖRE källinsamlingen (flyttat hit 2026-08-31): kontaktupptäckten i
+    # _gather_registered_sources behöver veta vilken URL som är STARTSIDAN
+    # för att kunna leta kontaktlänkar i rätt material, och samma rad
+    # behövs ändå av `_uppgradera_kontakt` för att avgöra uppgradering.
+    prospect_row = await storage.get_prospect(tenant_id, prospect_id) or {}
+
+    material, scraped_sources, scrape_errors, kontakt_diagnostik = await _gather_registered_sources(
+        storage, tenant_id, prospect_id, webbplats=prospect_row.get("website")
     )
     sources_block = material or "(inget källmaterial kunde hämtas — se scrape_errors)"
 
     soul_block = await load_soul(storage, tenant_id)
+    lager = await las_instruktioner(
+        storage, tenant_id, agent_type="leads", tenant_namn=tenant_name
+    )
 
     base = (
         f"## Uppdrag\nDu researchar ett prospekt åt {tenant_name}.\n\n"
@@ -320,15 +681,43 @@ async def run_research_step(
             task=task,
             case_context=base + extra_context,
             playbook_role=_RESEARCH_ROLE,
+            instruktioner=lager,
         )
 
     # 1. mk:customer-research — vilka är de, vilka problem har de
+    #
+    # Supportkanalfälten är kontrakt sedan 2026-08-26: i 2026-08-09-körningen
+    # var researchens BÄSTA fynd (Antons genomläsning, THINKING_MODE §8.5) att
+    # den självmant kollade om bolagen redan hade en chattlösning och var
+    # deras kunder faktiskt finns. Det som var modellens goda infall är nu ett
+    # fält som alltid fylls i — en befintlig chatbot är både en disqualifier
+    # och en vinkel, och den skiljer ett riktat mejl från ett gissat.
     customer = await step(
         0,
         "Analysera prospektet UTIFRÅN KÄLLMATERIALET. Returnera JSON: "
         "company_summary (svenska), business_model (svenska), "
         "likely_pains (lista med svenska strängar), "
-        "evidence (lista med korta ordagranna citat ur källmaterialet som stöder pains).",
+        "evidence (lista med korta ordagranna citat ur källmaterialet som stöder pains), "
+        "existing_support_channels (lista — de kanaler källmaterialet visar att "
+        "de erbjuder kundservice i: mejl, telefon, chatt, sociala medier), "
+        "has_chatbot (bool eller null — null när källmaterialet inte räcker "
+        "för att avgöra; gissa aldrig), "
+        "contact_name (en namngiven person källmaterialet visar, t.ex. på en "
+        "om-oss/ledningssida, eller null — hitta ALDRIG på ett namn), "
+        "contact_role (personens roll/titel enligt källmaterialet, eller "
+        "null), contact_email (personens e-postadress ENBART om den "
+        "bokstavligen står i källmaterialet, annars null — gissa aldrig ihop "
+        "en adress av ett namnmönster som förnamn@domän).",
+    )
+    # Kontaktfältets fallback-trappa (INV-CONTACT-001, kundkrav): det här
+    # steget läser redan bolagets EGNA skrapade sidor (se
+    # _gather_registered_sources ovan), så en namngiven kontakt härifrån är
+    # grundad i riktig sidtext — till skillnad från `hitta_bolag()`s breda
+    # sökindexträff. Uppgraderar bara, skriver aldrig över en bättre nivå,
+    # och hittar aldrig på en adress. Se _uppgradera_kontakt för resonemanget
+    # i sin helhet.
+    slutlig_kontaktniva = await _uppgradera_kontakt(
+        storage, tenant_id, prospect_id, prospect=prospect_row, fynd=customer, material=material
     )
 
     # 2. mk:prospecting — kvalificering mot ICP
@@ -337,66 +726,162 @@ async def run_research_step(
         "Kvalificera prospektet mot köparens ICP i kontextpaketet. Returnera JSON: "
         "icp_fit (0.0-1.0), qualified (bool), disqualifiers (lista), "
         "qualification_reasoning (svenska), missing_information (lista).",
-        f"\n\n## Steg 1 (mk:customer-research)\n{_digest(customer, 'company_summary', 'business_model', 'likely_pains')}",
+        f"\n\n## Steg 1 (mk:customer-research)\n{_digest(customer, 'company_summary', 'business_model', 'likely_pains', 'existing_support_channels', 'has_chatbot')}",
     )
 
-    # 3. sa:account-research — kontostruktur, beslutsvägar, triggers
-    account = await step(
-        2,
-        "Kartlägg kontot. Returnera JSON: account_structure (svenska), "
-        "likely_decision_makers (lista med roller, INTE namngivna privatpersoner), "
-        "trigger_events (lista, endast sådant källmaterialet faktiskt visar), "
-        "open_questions (lista).",
-        f"\n\n## Steg 2 (mk:prospecting)\n{_digest(prospecting, 'icp_fit', 'qualified', 'qualification_reasoning')}",
+    # GRINDEN (2026-09-02, kundkrav: nischning + kontaktperson). Två villkor,
+    # båda kod-härledda — `qualified` är visserligen modellens bedömning, men
+    # den mäts mot kundens EGEN ICP, och `slutlig_kontaktniva` kommer ur
+    # _uppgradera_kontakt som bara skriver vad som bokstavligen stod i
+    # skrapet. Faller något av dem hoppar varvet över steg 3–8: sex anrop
+    # för ett bolag som ändå aldrig kontaktas. Kunden kan komplettera
+    # kontakten i registret och köra "Processa om" — då passerar grinden.
+    kvalificerad = bool(prospecting.get("qualified"))
+    # Kontaktväg = nivå ELLER något konkret kontaktfält på raden. Nivåfältet
+    # ensamt räcker inte som mått: en rad där kunden själv fyllt i
+    # contact_email (PATCH/befordran sätter aldrig contact_level) hade annars
+    # räknats som kontaktlös och stoppats — trots att den har exakt det
+    # utkastfasen behöver. Läses EFTER _uppgradera_kontakt, så ett fynd ur
+    # skrapet räknas med.
+    rad_efter_uppgradering = await storage.get_prospect(tenant_id, prospect_id) or prospect_row
+    kontakt_saknas = not (
+        slutlig_kontaktniva
+        or rad_efter_uppgradering.get("contact_email")
+        or rad_efter_uppgradering.get("contact_name")
+        or rad_efter_uppgradering.get("contact_form_url")
+    )
+    if not kvalificerad:
+        stopped_early: str | None = "ej_kvalificerad"
+    elif kontakt_saknas:
+        stopped_early = "kontakt_saknas"
+    else:
+        stopped_early = None
+
+    # Migration 024 skrevs för exakt det här: bedömningen SPARAS på raden i
+    # stället för att bara ligga i en logg. Utan den går prospekt inte att
+    # sortera på icp_fit, och en för snäv ICP ser ut som en tom pipeline.
+    try:
+        icp_fit_varde = prospecting.get("icp_fit")
+        await storage.update_prospect(
+            tenant_id,
+            prospect_id,
+            icp_fit=float(icp_fit_varde) if icp_fit_varde is not None else None,
+            qualified=kvalificerad,
+            disqualifiers=[str(d) for d in (prospecting.get("disqualifiers") or [])],
+        )
+    except Exception:  # noqa: BLE001 — persistensen är bokföring, researchen är jobbet
+        logger.exception("Kunde inte spara ICP-bedömningen för prospekt %s", prospect_id)
+
+    account: dict[str, Any] = {}
+    profiling: dict[str, Any] = {}
+    competitors: dict[str, Any] = {}
+    objections: dict[str, Any] = {}
+    offer: dict[str, Any] = {}
+    ab: dict[str, Any] = {}
+
+    if stopped_early is None:
+        # 3. sa:account-research — kontostruktur, beslutsvägar, triggers
+        account = await step(
+            2,
+            "Kartlägg kontot. Returnera JSON: account_structure (svenska), "
+            "likely_decision_makers (lista med roller, INTE namngivna privatpersoner), "
+            "trigger_events (lista, endast sådant källmaterialet faktiskt visar), "
+            "open_questions (lista).",
+            f"\n\n## Steg 2 (mk:prospecting)\n{_digest(prospecting, 'icp_fit', 'qualified', 'qualification_reasoning')}",
+        )
+
+        # 4. mk:competitor-profiling — dossiern (A1: FÖRE mk:competitors)
+        profiling = await step(
+            3,
+            "Profilera konkurrenslandskapet prospektet befinner sig i. Returnera JSON: "
+            "competitors (lista med objekt {name, positioning}), "
+            "prospect_positioning (svenska), differentiation_gaps (lista). "
+            "Markera tydligt vad som är slutsats och vad som står i källmaterialet.",
+            f"\n\n## Steg 3 (sa:account-research)\n{_digest(account, 'account_structure', 'trigger_events')}",
+        )
+
+        # 5. mk:competitors — jämförelsematerialet som dossiern formar
+        competitors = await step(
+            4,
+            "Forma jämförelsematerial för säljsamtalet. Returnera JSON: "
+            "comparison_angles (lista), where_we_win (svenska), where_we_lose (svenska), "
+            "honest_caveats (lista). Överdriv aldrig — en falsk fördel kostar affären senare.",
+            f"\n\n## Steg 4 (mk:competitor-profiling)\n{_digest(profiling, 'competitors', 'prospect_positioning', 'differentiation_gaps')}",
+        )
+
+        # 6. mk:sales-enablement (SKOPAD: invändningar, Del I)
+        objections = await step(
+            5,
+            "Ta fram invändningshanteringen för ETT KALLT MEJL — inte pitchdeck, inte "
+            "demoskript. Returnera JSON: likely_objections (lista med objekt "
+            "{objection, response}), hardest_objection (svenska), "
+            "what_would_disqualify_us (svenska).",
+            f"\n\n## Steg 5 (mk:competitors)\n{_digest(competitors, 'comparison_angles', 'where_we_win', 'honest_caveats')}",
+        )
+
+        # 7. mk:offers — erbjudandekonstruktionen (hel skill, Del H)
+        offer = await step(
+            6,
+            "Konstruera erbjudandet till det här prospektet. Returnera JSON: offer "
+            "(objekt {name, promise, proof, risk_reversal, cta}), weakest_lever "
+            "(vilken av spakarna som är svagast och varför, svenska), "
+            "offer_reasoning (svenska).",
+            f"\n\n## Steg 6 (mk:sales-enablement)\n{_digest(objections, 'likely_objections', 'hardest_objection')}",
+        )
+
+        # 8. mk:ab-testing — erbjudandenivå + explicit osäkerhet (A3)
+        ab = await step(
+            7,
+            "Bedöm hur säkert erbjudandet är och vad som borde testas. Returnera JSON: "
+            "offer_confidence (0.0-1.0), uncertainties (lista), test_recommendation "
+            "(svenska), recommended_variants (lista med korta beskrivningar).",
+            f"\n\n## Steg 7 (mk:offers)\n{_digest(offer, 'offer', 'weakest_lever')}",
+        )
+
+    # 9. Kunskapsfångst — vad varvet lärde oss som kontextpaketet inte bar.
+    #
+    # Motsvarar supportens steg 5: körs efter VARJE varv, kvalificerat eller
+    # inte. Ett diskvalificerat prospekt är ofta det som lär mest om var ICP:n
+    # går fel, och att bara fånga kunskap ur lyckade varv är att lära sig av
+    # halva materialet.
+    #
+    # Steget SKRIVER INGENTING. Det lägger sin bedömning i step_log och i
+    # returvärdet, precis som supportens gör — att låta en agent uppdatera
+    # kundens kontextpaket av sig själv är ett annat beslut, med en annan
+    # riskprofil, och det är inte taget.
+    kunskap = await _fanga_kunskap(
+        ledger,
+        trace,
+        base=base,
+        sammanfattning=_digest(
+            prospecting, "qualified", "icp_fit", "disqualifiers", "missing_information"
+        ),
+        pains=_digest(customer, "likely_pains", "business_model"),
+        instruktioner=lager,
     )
 
-    # 4. mk:competitor-profiling — dossiern (A1: FÖRE mk:competitors)
-    profiling = await step(
-        3,
-        "Profilera konkurrenslandskapet prospektet befinner sig i. Returnera JSON: "
-        "competitors (lista med objekt {name, positioning}), "
-        "prospect_positioning (svenska), differentiation_gaps (lista). "
-        "Markera tydligt vad som är slutsats och vad som står i källmaterialet.",
-        f"\n\n## Steg 3 (sa:account-research)\n{_digest(account, 'account_structure', 'trigger_events')}",
-    )
-
-    # 5. mk:competitors — jämförelsematerialet som dossiern formar
-    competitors = await step(
-        4,
-        "Forma jämförelsematerial för säljsamtalet. Returnera JSON: "
-        "comparison_angles (lista), where_we_win (svenska), where_we_lose (svenska), "
-        "honest_caveats (lista). Överdriv aldrig — en falsk fördel kostar affären senare.",
-        f"\n\n## Steg 4 (mk:competitor-profiling)\n{_digest(profiling, 'competitors', 'prospect_positioning', 'differentiation_gaps')}",
-    )
-
-    # 6. mk:sales-enablement (SKOPAD: invändningar, Del I)
-    objections = await step(
-        5,
-        "Ta fram invändningshanteringen för ETT KALLT MEJL — inte pitchdeck, inte "
-        "demoskript. Returnera JSON: likely_objections (lista med objekt "
-        "{objection, response}), hardest_objection (svenska), "
-        "what_would_disqualify_us (svenska).",
-        f"\n\n## Steg 5 (mk:competitors)\n{_digest(competitors, 'comparison_angles', 'where_we_win', 'honest_caveats')}",
-    )
-
-    # 7. mk:offers — erbjudandekonstruktionen (hel skill, Del H)
-    offer = await step(
-        6,
-        "Konstruera erbjudandet till det här prospektet. Returnera JSON: offer "
-        "(objekt {name, promise, proof, risk_reversal, cta}), weakest_lever "
-        "(vilken av spakarna som är svagast och varför, svenska), "
-        "offer_reasoning (svenska).",
-        f"\n\n## Steg 6 (mk:sales-enablement)\n{_digest(objections, 'likely_objections', 'hardest_objection')}",
-    )
-
-    # 8. mk:ab-testing — erbjudandenivå + explicit osäkerhet (A3)
-    ab = await step(
-        7,
-        "Bedöm hur säkert erbjudandet är och vad som borde testas. Returnera JSON: "
-        "offer_confidence (0.0-1.0), uncertainties (lista), test_recommendation "
-        "(svenska), recommended_variants (lista med korta beskrivningar).",
-        f"\n\n## Steg 7 (mk:offers)\n{_digest(offer, 'offer', 'weakest_lever')}",
-    )
+    # Insikten persisteras som FÖRSLAG (agent_suggestions, migration 051) i
+    # stället för att kastas — förut fanns den bara i step_log och samma
+    # ICP-lucka återupptäcktes från noll i varje varv. Beslutet ovan står
+    # kvar: steget skriver ALDRIG självt i kontextpaketet eller ICP:n; en
+    # människa godkänner i admin (INV-LEARN-001).
+    insikt = str(kunskap.get("gap") or kunskap.get("icp_adjustment") or "").strip()
+    if kunskap.get("reveals_gap") and insikt:
+        try:
+            await storage.save_agent_suggestion(
+                tenant_id,
+                agent_type="leads",
+                kind="marknadsinsikt",
+                title=insikt[:200],
+                content={
+                    "gap": kunskap.get("gap"),
+                    "icp_adjustment": kunskap.get("icp_adjustment"),
+                    "evidence": kunskap.get("evidence") or [],
+                },
+                dedupe_key=hashlib.sha256(insikt.casefold().encode("utf-8")).hexdigest()[:32],
+            )
+        except Exception:  # noqa: BLE001 — förslaget är en bonus, researchen är jobbet
+            logger.exception("Kunde inte spara marknadsinsikten för varvet.")
 
     offer_obj = offer.get("offer") or {}
     offer_summary = " · ".join(
@@ -419,7 +904,7 @@ async def run_research_step(
     await storage.log_agent_run(
         tenant_id,
         agent_type="leads_research",
-        pack_version=pack_version(RESEARCH_V1.name),
+        pack_version=pack_version(RESEARCH_V1.name, lager.hash),
         skills_used=trace.skills_used,
         input_text=brief,
         output_text=final_output,
@@ -427,6 +912,8 @@ async def run_research_step(
         tokens_in=trace.total_tokens_in,
         tokens_out=trace.total_tokens_out,
         latency_ms=latency_ms,
+        is_test=is_test,
+        model=f"{settings.llm_provider}:{settings.model}",
     )
 
     # Underlaget grundningsgrinden (W5) mäter utkastets påståenden mot.
@@ -445,6 +932,32 @@ async def run_research_step(
     ]
 
     escalated_steps = [s.skill for s in trace.steps if s.escalated]
+
+    # Kundkrav, ordagrant: "leadsagenten måste vid körning kunna hitta MINST
+    # EN kontaktperson". `slutlig_kontaktniva` är kod-härledd (från
+    # _uppgradera_kontakt, som i sin tur bara skriver vad som BOKSTAVLIGEN
+    # stod i det skrapade materialet) — aldrig modelltext, så det här fältet
+    # kan inte råka bära en gissning. contact_missing_reason förklarar VAR i
+    # kedjan sökningen gav upp, helt utan att någon behöver läsa loggen.
+    contact_missing = kontakt_saknas
+    if not contact_missing:
+        contact_missing_reason = None
+    elif not kontakt_diagnostik["hemsidematerial_tillgangligt"]:
+        contact_missing_reason = (
+            "Startsidan gick inte att hämta — kontaktsökningen kunde inte köras."
+        )
+    elif not kontakt_diagnostik["kandidater"]:
+        contact_missing_reason = (
+            "Hittade ingen kontakt- eller om oss-länk på bolagets webbplats."
+        )
+    elif not kontakt_diagnostik["skrapade"]:
+        contact_missing_reason = "Kontaktsidan/-sidorna hittades men gick inte att hämta."
+    else:
+        contact_missing_reason = (
+            "Kontaktsidan hittades men innehöll ingen verifierbar kontaktperson "
+            "eller adress."
+        )
+
     return {
         "scraped_sources": scraped_sources,
         "scrape_errors": scrape_errors,
@@ -454,15 +967,21 @@ async def run_research_step(
         "step_log": trace.as_log(),
         "step_outputs": trace.as_full(),
         "escalated_steps": escalated_steps,
-        "qualified": bool(prospecting.get("qualified")),
+        "kunskap": kunskap,
+        "qualified": kvalificerad,
         "icp_fit": prospecting.get("icp_fit"),
+        "stopped_early": stopped_early,
         "offer_summary": offer_summary,
         "final_output": final_output,
+        "contact_level": slutlig_kontaktniva,
+        "contact_missing": contact_missing,
+        "contact_missing_reason": contact_missing_reason,
+        "contact_discovery": kontakt_diagnostik,
         "tokens_in": trace.total_tokens_in,
         "tokens_out": trace.total_tokens_out,
         "reasoning_tokens": trace.total_reasoning_tokens,
         "latency_ms": latency_ms,
-        "pack_version": pack_version(RESEARCH_V1.name),
+        "pack_version": pack_version(RESEARCH_V1.name, lager.hash),
     }
 
 
@@ -488,6 +1007,7 @@ async def run_outreach_draft(
     # kunna köras DAGAR efter researchen behövs persistens — då är tabellen
     # rätt form. Ingen har uttryckt det behovet 2026-08-14.
     research_evidence: tuple[str, ...] = (),
+    is_test: bool = False,
 ) -> dict[str, Any]:
     """Fas C: fyra skill-steg, sedan köar KODEN utkastet (INV-SEC-004 —
     modellen har inget sändverktyg och kan inte köa själv)."""
@@ -499,11 +1019,15 @@ async def run_outreach_draft(
     await require_business_context(storage, tenant_id)
 
     started = time.monotonic()
+    settings = get_settings()
     steps = OUTREACH_V1.steps
 
     thread = await storage.get_outreach_thread(tenant_id, thread_id) or {}
     language_state = thread.get("language_state") or "sv"
     soul_block = await load_soul(storage, tenant_id)
+    lager = await las_instruktioner(
+        storage, tenant_id, agent_type="leads", tenant_namn=tenant_name
+    )
 
     # De hårda reglerna (G4: LinkedIn-förbudet, ren text, språkregeln) låg
     # tidigare här som en f-sträng. De bor nu i overlayen leads-hard-rules,
@@ -533,15 +1057,33 @@ async def run_outreach_draft(
             task=task,
             case_context=base + extra_context,
             playbook_role=_OUTREACH_ROLE,
+            instruktioner=lager,
         )
 
     # 1. sa:draft-outreach — själva utkastet
-    draft = await step(
-        0,
-        "Skriv utkastet. Returnera JSON: subject (svenska, ren text), "
-        "body (svenska, ren text, inga punktlistor), personalization_notes "
-        "(vad i researchen mejlet faktiskt bygger på), draft_reasoning (svenska).",
-    )
+    draft = await step(0, _UTKASTSUPPGIFT)
+
+    # ETT FÖRSÖK TILL innan tomheten får bli en överlämning.
+    #
+    # `body` längre ned faller tillbaka genom personalisering och granskning
+    # hela vägen till det här steget, så en tom brödtext HÄR blir en tom
+    # brödtext DÄR — och där finns bara `_request_human_handoff_impl` kvar.
+    # Att lämna över på "Playbooken producerade ingen brödtext" är agenten som
+    # ger upp, inte ett ärende som behöver en människa.
+    #
+    # Omförsöket ligger här och inte i slutet av kedjan med flit: gör man det
+    # sist måste personalisering, granskning och humanisering göras om, alltså
+    # tre extra anrop för att laga ett fel som uppstod i det första.
+    if not str(draft.get("body") or "").strip():
+        draft = await step(
+            0,
+            _UTKASTSUPPGIFT
+            + "\n\nDITT FÖRRA SVAR SAKNADE BRÖDTEXT. Fältet `body` var tomt "
+            "eller saknades. Svara igen med en FAKTISK brödtext — några korta "
+            "meningar räcker. Har du för lite att gå på: skriv det kortaste "
+            "ärliga mejl underlaget bär, och håll dig till det du faktiskt vet. "
+            "Ett kort mejl går att granska; ett tomt går inte att skicka.",
+        )
 
     # 2. mk:cold-email SKOPAD (personalisering) — skärper utkastet
     personalized = await step(
@@ -584,7 +1126,10 @@ async def run_outreach_draft(
 
     # --- Kod: sidoeffekter ------------------------------------------------
     context = OutreachContext(
-        storage=storage, tenant_id=tenant_id, thread_id=thread_id, prospect_email=prospect_email
+        storage=storage,
+        tenant_id=tenant_id,
+        thread_id=thread_id,
+        prospect_email=prospect_email,
     )
     escalated_steps = [s.skill for s in trace.steps if s.escalated]
     queue_result: dict[str, Any] = {}
@@ -608,6 +1153,7 @@ async def run_outreach_draft(
             body=body,
             base=base,
             tenant_name=tenant_name,
+            instruktioner=lager,
             facts=build_permitted_facts(
                 context_pack=context_pack,
                 research_evidence=research_evidence,
@@ -652,7 +1198,7 @@ async def run_outreach_draft(
     await storage.log_agent_run(
         tenant_id,
         agent_type="leads_outreach",
-        pack_version=pack_version(OUTREACH_V1.name),
+        pack_version=pack_version(OUTREACH_V1.name, lager.hash),
         skills_used=trace.skills_used,
         input_text=brief,
         output_text=f"{subject}\n\n{final_body}",
@@ -660,6 +1206,8 @@ async def run_outreach_draft(
         tokens_in=trace.total_tokens_in,
         tokens_out=trace.total_tokens_out,
         latency_ms=latency_ms,
+        is_test=is_test,
+        model=f"{settings.llm_provider}:{settings.model}",
     )
 
     return {
@@ -680,5 +1228,5 @@ async def run_outreach_draft(
         "tokens_out": trace.total_tokens_out,
         "reasoning_tokens": trace.total_reasoning_tokens,
         "latency_ms": latency_ms,
-        "pack_version": pack_version(OUTREACH_V1.name),
+        "pack_version": pack_version(OUTREACH_V1.name, lager.hash),
     }

@@ -1,5 +1,17 @@
 # Migrationer — status
 
+## 063–064: EJ VERIFIERADE MOT RAILWAY (2026-09-13)
+
+Railway-projektet var nere när de skrevs (development-Postgres stängde
+anslutningen), så det går inte att säga om `063` redan är körd. Kör
+`python scripts/railway_migrate.py --env development` (visar vad som saknas)
+och sedan `--apply` när miljön är uppe igen.
+
+| Migration | Varför den behövs | Verifiera med |
+|---|---|---|
+| `063_workspace_addons_admin` | Tilläggsväljaren i adminens kundprofil skriver via `set_workspace_addons`. Saknas funktionen visar väljaren nu ett fel som namnger migrationen (testarfynd: "tillval går inte att aktivera"). | `select set_workspace_addons(...)` som platform admin |
+| `064_workspaces_admin_read` | Adminvyns paketkolumn läser `workspaces.products` oskopat under `snajp_app`; utan policyn blir paketet härlett ur aktivitet och Trio syns aldrig. | Som `snajp_app` utan tenant-kontext: `select count(*) from workspaces` = antalet `postgres` ser |
+
 ## 030–033: APPLICERADE MOT PRODUKTIONEN 2026-08-17
 
 Kördes med versioner som matchar filnamnen (`030`–`033`), inte med nya
@@ -19,6 +31,65 @@ uid, inte som `postgres`. Frågan `isPlatformAdmin()` ställer ger nu exakt en
 rad. Som `postgres` med BYPASSRLS hade den sett rätt ut hela tiden — det är
 precis den blindheten som lät rekursionen ligga oupptäckt.
 
+## Supabase-grenen `development`: MIGRATIONS_FAILED, och det är INTE SQL:en (2026-08-23)
+
+Grenen har stått i `MIGRATIONS_FAILED` sedan 15 augusti. Två separata orsaker,
+varav den ena är åtgärdad.
+
+### Åtgärdat: fjärrversioner utan lokal fil
+
+Fem ändringar applicerades genom Management-API:t den 18 och 21 augusti. API:t
+registrerar sin EGEN 14-siffriga tidsstämpel, medan repot bär dem som `034`,
+`035`, `036`, `037` och `039`. Branching-checken föll på
+
+    Remote migration versions not found in local migrations directory.
+
+Fem tomma historiska versionsposter stänger det, samma mönster som
+`20260815230625` en gång införde. Grenens liggare har numera INGA föräldralösa
+fjärrversioner — verifierat direkt mot `PREVIEW_POSTGRES_URL`.
+
+### Kvarstår: felet ligger hos Supabase, inte hos oss
+
+Fjorton migrationer väntar på grenen (`0000`, `034`–`042` plus de fyra tomma).
+De kördes **allihop i en enda transaktion mot grenens databas och rullades
+tillbaka** — varenda en gick igenom utan fel. SQL:en är alltså inte problemet.
+
+En `rebase_branch` kördes 2026-08-23. Statusen gick till `CREATING_PROJECT` och
+tillbaka till `MIGRATIONS_FAILED`. `updated_at` på grenposten står kvar på 15
+augusti trots det, så fältet verkar inte underhållas — lita inte på det vid
+felsökning.
+
+BESLUT: grenen lämnas som den är. Den tillhör den gamla Vercel/Render-stacken;
+produkten kör på Railway, där båda miljöerna har alla migrationer och verifieras
+gröna av `scripts/verify_railway.py`. Nästa steg vore `reset_branch`, som
+raderar otrackad data — och grenen är skapad `--with-data`, alltså en spegel av
+riktig kunddata. Det är inte värt en röd statusflagga på en miljö ingen använder.
+
+### Två fynd på vägen, båda kvar
+
+**`workspace_tenant_keys` saknas helt i grenens databas.** Tabellen kommer ur
+`040_testkund_egen_tenant.sql`, som aldrig körts där. Testarbetsytor kan alltså
+inte fungera mot Supabase-grenen.
+
+**Fyra versionsnummer är dubblerade i katalogen**, och det har en tyst följd:
+
+| Version | Bokförd som | Har ALDRIG körts mot Supabase |
+|---|---|---|
+| `030` | `suppressions_tenant_scope` | `030_snajp_web_role.sql` |
+| `031` | `prospect_nischfalt` | `031_business_context_unique.sql` |
+| `032` | `platform_admin_bootstrap` | `032_invite_write_policies.sql` |
+| `033` | `platform_admins_recursion` | `033_platform_admins_self_read_fix.sql` |
+
+Supabases liggare nycklar på VERSION, så bara en fil per par kan bokföras — den
+andra hoppas tyst över vid varje försök. Filerna är INTE omdöpta: ett nytt
+filnamn är en ny version, och Railway (som nycklar på hela filnamnet och har kört
+båda) hade då kört om dem mot produktion i onödan.
+
+Rollerna `snajp_app` och `snajp_web` finns ändå på grenen, så `030` har
+uppenbarligen applicerats utanför liggaren någon gång. Det är precis den sortens
+dubbla bokföring som gör att liggaren inte går att lita på ensam — kontrollera
+objektet, inte raden.
+
 ## Återstår
 
 ### `SNAJP_KEY_SNAJP`
@@ -36,6 +107,198 @@ avsiktligt — utan nyckel svarar vi hellre inte alls än som ett annat bolag.
 ### `021_seed_platform_admin.sql`
 
 Ersatt av `032`, som gör samma sak utan ordningsberoende. Kan tas bort.
+
+## railway-main: cutovern är GJORD (2026-08-22)
+
+`railway-main` bär sedan 2026-08-22 samma kod som `development` (`b5277d1`).
+Vägen dit blev alternativ 1 nedan — force-push — efter ett uttryckligt ja.
+
+De 22 commits som bara fanns i den grenens historik ligger kvar på
+`railway-main-fore-cutover-2026-08-22` (`0329452`). Den grenen är inte kopplad
+till någon miljö och deployar ingenting; den finns för att en force-push aldrig
+ska vara det enda som stod mellan oss och en historik.
+
+Verifierat mot produktionen efter deployen, inte antaget:
+
+| Kontroll | Utfall |
+|---|---|
+| `web` och `api`, miljö `main` | SUCCESS, båda |
+| `web/`, `/leads`, `/api/health` | 200 |
+| `api/health/ready` | `ok`, `mode: live`, storage postgres |
+| `POST /api/triage` | 200 med riktig klassificering (leverans, konfidens 0.7) |
+| `POST /api/chat` + jobbpollning | `completed`, svaret grundat i kunskapsbasen |
+| `POST /api/inbox/mock` | 6 ärenden inlästa och processade |
+| `POST /api/inbox/sync` | `connected: false` med kundvänlig text |
+
+Det som fällde den gamla koden — `KeyError: 'conversation_id'` vid en
+agentkörning — är alltså borta: körningen ovan gick hela vägen.
+
+`health/ready` rapporterar fortfarande `degraded: true` med två varningar, och
+båda är sanna och sedan tidigare kända: ingen IMAP-inkorg är kopplad, och det
+finns ingen riktig sändväg (godkända svar loggas, de skickas inte till kund).
+Ingen av dem är en följd av cutovern.
+
+### Det som INTE är gjort
+
+`SNAJP_SUPPORT_URL` på Vercel pekar fortfarande på den gamla backenden. Nu när
+koden i railway-main faktiskt kan köra är det ett beslut, inte en blockering.
+
+### Historik: så såg blockeringen ut (2026-08-21 kväll)
+
+Cutovern av `snajp.vercel.app` till Railway är förberedd men **blockerad**, och
+blockeringen är en grendivergens — inte något som går att lösa med en flagga.
+
+### Vad som ÄR gjort
+
+| Steg | Läge |
+|---|---|
+| API-nycklar i railway-main | `RAILWAY_MAIN_KEY_SNAJP`, `RAILWAY_MAIN_KEY_LIVRUSTNING` utfärdade |
+| Livrustnings agentprofil | **Migrerad**: 22 KB-artiklar, 8 fackregler, ICP och autonomi |
+| Vektorer i railway-main | 41 skrivna, 0 misslyckade — livrustning 22/22, nordlys 16/16, public-demo 3/3, alla 1536 dim |
+| Migrationskedjan i railway-main | 82 av 82 |
+
+Migreringen gjordes med `scripts/migrera_till_railway.py` via API:t, inte via
+SQL: båda ändarna scopar varje läsning på tenanten nyckeln pekar ut, så två
+kunder kan per konstruktion inte blandas ihop.
+
+### Blockeringen
+
+`railway-main` står på `0329452` från **16 augusti**. `development` är 158
+commits före — och `railway-main` har samtidigt **22 egna commits** som
+development saknar. Grenarna har alltså divergerat, och 61 filer skiljer.
+
+Följden är mätbar, i två riktningar:
+
+* **Gammal kod mot nytt schema.** En agentkörning mot railway-main faller med
+  `KeyError: 'conversation_id'`. Databasen bär hela kedjan (jag körde den i
+  morse), koden gör det inte.
+* **Dimensionskrocken.** `POST /api/kb` svarade 500 tills jag tillfälligt tömde
+  `GEMINI_API_KEY`: koden saknar `dimensions=1536` och skickade en 3072-vektor
+  mot en `vector(1536)`-kolumn. Nyckeln är återställd, och vektorerna räknades i
+  stället LOKALT med den rättade koden (`scripts/fyll_embeddings.py --env main`).
+
+### Vad som måste bestämmas
+
+Migrationsnumren har förgrenat sig: `030` heter `suppressions_tenant_scope` i
+development och `snajp_web_role` i railway-main. Innehållet finns sannolikt i
+båda grenarna, men under olika filnamn — och båda kedjorna är redan APPLICERADE
+i var sin databas.
+
+Det går alltså inte att merga mekaniskt. Två vägar:
+
+1. **Force-push** `development` → `railway-main`. Snabbast, men kastar 22
+   commits ur den grenens historik. Kräver ett uttryckligt ja — det står i
+   CLAUDE.md att force-push som skriver över annans arbete alltid gör det.
+2. **Merge** och stäm av migrationsfilerna mot liggaren i båda databaserna, så
+   att inget körs två gånger under ett annat namn.
+
+Förrän en av dem är gjord ska `SNAJP_SUPPORT_URL` på Vercel **inte** peka om.
+Kunskapsbasen finns nu i Railway, men agenten som ska svara ur den kan inte
+köra.
+
+## Railway: BÅDA miljöerna är i kapp (2026-08-20 kväll)
+
+Migrationskedjan är körd hela vägen i både `railway-development` och
+`railway-main`. Ingen migration väntar i någondera miljön.
+
+| Miljö | Före | Efter |
+|---|---|---|
+| `railway-development` | stod just före `039` | hela kedjan, inklusive 039 och 040 |
+| `railway-main` | 36 av 82 | 82 av 82 — 46 migrationer körda i en följd |
+
+**Verifierat direkt mot databasen, inte via API:t:** `prospects.origin` finns,
+`public.workspace_tenant_keys` finns, och båda versionerna står i
+`supabase_migrations.schema_migrations`. Ett API-svar hade bara visat att
+tjänsten svarar; frågan var om kolumnen finns.
+
+`verify_railway.py` säger numera **"Alla kontroller gröna, båda miljöerna"** —
+inklusive radsäkerhet på varje publik tabell, `snajp_app`/`snajp_web` utan
+BYPASSRLS, och korskopplingen (mains nyckel avvisas av dev-api och tvärtom).
+
+Två skarpa prov, inte bara gröna kontroller:
+
+* **Exempelbolag i drift.** `POST /api/leads/prospects/exempel` mot
+  dev-deployen skapade `Eknäs Bygg Gruppen AB` med `origin='example'`. Raden
+  ligger kvar i dev; den kan aldrig mejlas (spärr noll i
+  `scheduler._kor_send_guard`).
+* **Plattformsadmin.** `admin_cleanup.py --diagnos` säger
+  `isPlatformAdmin() som appen . True` i BÅDA miljöerna. Frågan ställs som
+  `snajp_web` med `app.user_id` satt, alltså med RLS påslagen — som `postgres`
+  (BYPASSRLS) hade den sett rätt ut även när den inte var det. Det var precis
+  den blindheten som lät rekursionen i `033` ligga oupptäckt.
+
+**LLM-nyckeln i `main` är lagad.** Värdet hade ett tecken utanför ASCII på
+position 0 och kunde därför inte skickas i ett Authorization-huvud. Kandidaten
+prövades mot DeepSeek FÖRE skrivning (status 200), och `/health/ready` gick
+från `simulation` till `live` 50 sekunder efter omdeployen.
+
+### Fällan som kostade en körning
+
+`railway_gor_klart.py` startar varje steg med `sys.executable`. Körd med
+systemets Python — som saknar `psycopg2` — föll alla fem databassteg på
+`ModuleNotFoundError`, ett i taget, medan sammanfattningen ändå avslutade med
+"exempelbolagsvägen: GRÖN". Skriptet kontrollerar numera tolken före planen.
+Kör det med en tolk som har beroendena:
+
+```bash
+snajp-support/.venv/Scripts/python.exe scripts/railway_gor_klart.py --apply
+```
+
+### Testytorna är kopplade — en tenant var (2026-08-20 kväll)
+
+Migration 040 ger nya konton en egen tenant. Den körs bara för NYA konton, så
+nio arbetsytor i development stod kvar med `slug = null` — och
+`requireSnajpTenant()` svarar 409 på varenda av deras egna ytor. En testkund
+som inte kan använda produkten testar ingenting.
+
+`scripts/koppla_testytor.py --env development --apply` kopplade fem av dem.
+Uppmätt efteråt:
+
+| Arbetsyta | Slug | Egen KB | Egen nyckel |
+|---|---|---|---|
+| Test Testsson workspace | `testkund-50287cb4` | 16 artiklar | ja |
+| Demo workspace | `testkund-1fc3df92` | 16 artiklar | ja |
+| Testkund 66677210 workspace | `testkund-1d8909f0` | 16 artiklar | ja |
+| Testkund 67000961 workspace | `testkund-02ae648c` | 16 artiklar | ja |
+| Testkund 68331404 workspace | `testkund-b5aa5b93` | 16 artiklar | ja |
+
+**Fem arbetsytor, fem SKILDA tenants.** En delad tenant hade gett en. Ingen av
+dem kan längre grunda ett svar i ett annat bolags villkor.
+
+Fyra arbetsytor hoppades över: de saknar profilrader helt. Kopplingen sker i
+den inloggades namn (`app.user_id`), så en arbetsyta utan medlem har ingen att
+göra det som — de listas i stället för att gissas åt.
+
+Den gamla delade `testkund`-tenanten har nu exakt EN arbetsyta kvar och är
+därmed i praktiken isolerad den också.
+
+### Kvar i Railway-miljöerna — inte migrationer
+
+Två noteringar står kvar i driftkontrollen, båda i BÅDA miljöerna, och båda är
+kända öppna trådar snarare än fel:
+
+* **IMAP saknas** — inga inkommande mail hämtas i någon Railway-miljö.
+* **Ingen riktig sändväg** — godkända svar loggas men skickas aldrig till kund.
+
+## 041_delete_grants — körd i BÅDA Railway-miljöerna 2026-08-21
+
+`snajp_app` hade `select, insert, update` på arton tabeller sedan migration
+009, och `alter default privileges` upprepade samma tre för allt som skapats
+sedan dess. Aldrig `delete`.
+
+Det märktes först 2026-08-21: `POST /api/inbox/mock` svarade 500 med
+`permission denied for table ss_emails`. Det gick alltså inte att generera ett
+enda testmejl i någon miljö som kör med den roll INV-SEC-001 kräver. Två skäl
+till att det låg dolt — bara två kodvägar i hela backenden gör DELETE, och
+sviten kör mot MemoryStorage, som inte har några rättigheter att sakna.
+
+Kört och verifierat i `development` och `main` (`= 041_delete_grants` i
+liggaren, och `/api/inbox/mock` svarar 201 med sex mejl).
+
+**Supabase-produktionen har SAMMA lucka och den är INTE åtgärdad.** Den är
+ofarlig där just nu eftersom `DATABASE_URL` fortfarande pekar på en roll med
+BYPASSRLS — men den blir akut i samma sekund som `snajp_app`-övergången görs,
+och den övergången är redan blockerad av 028. Kör 041 tillsammans med 028.
 
 ## Fortfarande öppet — inte migrationer
 

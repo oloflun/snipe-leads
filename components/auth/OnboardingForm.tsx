@@ -48,6 +48,20 @@ export function OnboardingForm() {
   const [fokus, setFokus] = useState("");
 
   const [orgnrVarning, setOrgnrVarning] = useState<string | null>(null);
+  const [testkund, setTestkund] = useState(false);
+  /**
+   * Notisfrågan, ställd EN gång — här, när kontot skapas.
+   *
+   * Förvalt JA, och det är ett medvetet val som är värt att kunna försvara:
+   * agenterna arbetar när ingen tittar, och ett nytt lead eller en eskalering
+   * som ingen får veta om ligger obesvarad tills någon råkar logga in. Ett
+   * förvalt nej hade gjort produkten tyst på ett sätt kunden inte bad om.
+   *
+   * Därför är det också en RUTA och inte finstilt text: rutan går att kryssa
+   * ur på vägen in, med samma klick som det tar att svara ja. Ångrar man sig
+   * senare ligger samma val under /settings/notiser, per händelsetyp.
+   */
+  const [notiser, setNotiser] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -67,22 +81,33 @@ export function OnboardingForm() {
     event.preventDefault();
     setError(null);
 
-    const fel = orgnrFel(orgnr);
+    // Testkund: organisationsnumret hoppas över helt. Det finns inget riktigt
+    // bolag bakom en testarbetsyta, och att kräva ett giltigt nummer betyder i
+    // praktiken att man klistrar in NÅGON ANNANS — vilket är sämre än att
+    // markera arbetsytan som ett test.
+    const fel = testkund ? null : orgnrFel(orgnr);
     if (fel) {
       setOrgnrVarning(fel);
       return;
     }
     if (!produkt.trim()) {
-      setError("Skriv en rad om vad ni säljer. Det är det agenten ska sälja.");
+      setError("Skriv en rad om vad ni säljer. Det är det agenterna ska sälja.");
       return;
     }
     if (!webbplats.trim()) {
-      setError("Fyll i webbplatsen. Det är den agenten läser för att förstå er.");
+      setError("Fyll i webbplatsen. Det är den agenterna läser för att förstå er.");
       return;
     }
 
     startTransition(async () => {
-      const result = await saveBusinessContext({ orgnr, webbplats, produkt, fokus });
+      const result = await saveBusinessContext({
+        orgnr: testkund ? "" : orgnr,
+        webbplats,
+        produkt,
+        fokus,
+        testkund,
+        notiser
+      });
       if (!result.success) {
         setError(result.error ?? "Kunde inte spara affärskontexten.");
       }
@@ -92,7 +117,7 @@ export function OnboardingForm() {
   return (
     <form onSubmit={handleSubmit}>
       <p className="mt-4 max-w-[62ch] text-[15px] leading-[1.65] text-ink/70">
-        Fyll i fyra rader. Agenten läser er webbplats och tar reda på resten
+        Fyll i fyra rader. Agenterna läser er webbplats och tar reda på resten
         själv — bransch, tonläge och hur ni beskriver er.
       </p>
 
@@ -110,9 +135,37 @@ export function OnboardingForm() {
           autoComplete="off"
         />
 
+        {/* Testarbetsyta.
+
+            Utan den här rutan finns bara två vägar för att skapa en testkund:
+            hitta på ett organisationsnummer som råkar klara Luhn, eller
+            klistra in ett riktigt bolags. Det andra är sämre än det ser ut —
+            numret hamnar i affärskontexten som agenterna sedan säljer utifrån.
+
+            Markeringen skrivs in i affärskontexten, inte bara som ett flaggfält,
+            så att den syns för den som läser kunden i adminvyn. En testkund som
+            ser ut som en riktig kund i portföljen är precis den sortens siffra
+            som fattar beslut åt en. */}
+        <label className="col-span-12 flex items-start gap-3 md:col-span-6">
+          <input
+            type="checkbox"
+            checked={testkund}
+            onChange={(e) => {
+              setTestkund(e.target.checked);
+              if (e.target.checked) setOrgnrVarning(null);
+            }}
+            className="focus-ring mt-1 h-4 w-4 shrink-0"
+          />
+          <span className="text-[14px] leading-6 text-ink/70">
+            <span className="font-medium text-ink">Testarbetsyta</span> — hoppa över
+            organisationsnumret. Använd bara för test; arbetsytan märks som
+            testkund i affärskontexten.
+          </span>
+        </label>
+
         <Falt
           label="Webbplats"
-          hint="Den här läser agenten. Utan den vet den bara ert nummer."
+          hint="Den här läser agenterna. Utan den vet de bara ert nummer."
           span="md:col-span-6"
           value={webbplats}
           onChange={setWebbplats}
@@ -123,7 +176,7 @@ export function OnboardingForm() {
 
         <Falt
           label="Vad ni säljer"
-          hint="En rad räcker. Agenten fyller på från sajten."
+          hint="En rad räcker. Agenterna fyller på från sajten."
           span="md:col-span-12"
           value={produkt}
           onChange={setProdukt}
@@ -132,12 +185,46 @@ export function OnboardingForm() {
 
         <Falt
           label="Något extra att fokusera på (valfritt)"
-          hint="Till exempel en nisch, ett segment ni vill åt, eller något ni vill att agenten undviker."
+          hint="Till exempel en nisch, ett segment ni vill åt, eller något ni vill att agenterna undviker."
           span="md:col-span-12"
           value={fokus}
           onChange={setFokus}
           placeholder={PLACEHOLDER.fokus}
         />
+
+        {/* Notisfrågan.
+
+            INRAMAD och inte en rad bland fälten ovanför. De fyra fälten
+            beskriver bolaget; det här är den enda punkten i formuläret där vi
+            ber om lov att kontakta en människa, och en samtyckesfråga som ser
+            ut som ett inmatningsfält är en fråga folk klickar förbi.
+
+            Den ställs här och ingen annanstans i flödet, av samma skäl som
+            gör den värd att ställa alls: den som just skapat ett konto vet
+            ännu inte att agenterna arbetar utan att man tittar, och en fråga
+            som kommer senare kommer efter det första omejlade leadet. */}
+        <div className="col-span-12 rounded-panel border border-ink/15 bg-paper2/50 p-5">
+          <p className="kicker text-mineral">Notiser</p>
+          <label className="mt-3 flex items-start gap-3">
+            <input
+              type="checkbox"
+              checked={notiser}
+              onChange={(e) => setNotiser(e.target.checked)}
+              className="focus-ring mt-1 h-4 w-4 shrink-0"
+            />
+            <span className="text-[14px] leading-6 text-ink/70">
+              <span className="font-medium text-ink">Ja, mejla mig</span> när ett
+              nytt lead landar eller när kundtjänstagenten lämnar över ett ärende
+              till en människa. Inget annat — vi mejlar aldrig om annat än ert
+              eget arbete.
+            </span>
+          </label>
+          <p className="mt-3 text-[13px] leading-[1.55] text-mineral">
+            Går att ändra när som helst under Inställningar → Notiser, per
+            händelsetyp. Kryssar du ur den här syns allt fortfarande i
+            arbetsytan — det är bara påminnelsen som uteblir.
+          </p>
+        </div>
       </div>
 
       {error ? (
@@ -155,7 +242,7 @@ export function OnboardingForm() {
       </button>
 
       <p className="mt-4 max-w-[62ch] text-[13px] leading-[1.55] text-mineral">
-        Inget skickas till någon mottagare av det här. Agenten läser er sajt och
+        Inget skickas till någon mottagare av det här. Agenterna läser er sajt och
         förbereder underlag — utskick kräver att ni själva slår på det, och de
         tre första granskas alltid av en människa.
       </p>

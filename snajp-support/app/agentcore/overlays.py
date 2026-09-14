@@ -114,14 +114,22 @@ def manifest_hash() -> str:
     return json.loads(path.read_text(encoding="utf-8")).get("manifest_hash", "")
 
 
-def pack_version(playbook_name: str) -> str:
-    """'<manifest[:12]>+<overlay[:8]>+<global[:8]>:<playbook>'
+def pack_version(playbook_name: str, instruktionshash: str | None = None) -> str:
+    """'<manifest[:12]>+<overlay[:8]>+<instr[:8]>:<playbook>'
 
-    Alla tre hasharna måste med. Den vendorade baselinen är låst, men tuning-
-    och policylagren är fritt redigerbara — utan dem i pack_version går en
-    körning inte att reproducera, och agent_runs pekar på en baseline som inte
-    ensam förklarar vad modellen faktiskt läste (INV-AUDIT-001)."""
-    return f"{manifest_hash()[:12]}+{overlay_hash()[:8]}+{global_hash()[:8]}:{playbook_name}"
+    Alla hasharna måste med. Den vendorade baselinen är låst, men tuning- och
+    policylagren är fritt redigerbara — utan dem i pack_version går en körning
+    inte att reproducera, och agent_runs pekar på en baseline som inte ensam
+    förklarar vad modellen faktiskt läste (INV-AUDIT-001).
+
+    `instruktionshash` kommer från agentcore.instruktioner.Instruktionslager
+    och täcker det globala OCH det kundspecifika lagret. Sedan migration 049
+    bor de i databasen och är redigerbara i drift, alltså kan versionen inte
+    längre härledas ur git — `global_hash()` (filens sha256) duger bara som
+    fallback, för den beskriver text som inte längre är den som lästes.
+    """
+    instr = (instruktionshash or global_hash())[:8]
+    return f"{manifest_hash()[:12]}+{overlay_hash()[:8]}+{instr}:{playbook_name}"
 
 
 def cache_clear() -> None:

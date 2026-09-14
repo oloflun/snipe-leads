@@ -1,17 +1,40 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+import { cookies } from "next/headers";
 import "./globals.css";
 import { fontVariables } from "@/lib/fonts";
+import { colorScheme, dataTheme, parseTema, TEMA_COOKIE } from "@/lib/tema";
 import { LocaleProvider } from "@/lib/i18n";
 import { paletteToCss } from "@/lib/tenants";
+import { arProduktion } from "@/lib/miljo";
 import { getCurrentTenant } from "@/lib/tenants/server";
+import { KANONISK_ORIGIN } from "@/lib/kanonisk";
+import { InstalleraApp } from "@/components/InstalleraApp";
 
 export async function generateMetadata(): Promise<Metadata> {
   const tenant = await getCurrentTenant();
 
+  /**
+   * Allt utom den skarpa produktionen är noindex.
+   *
+   * `development` är en SPEGEL av produktionen — samma sajt, riktiga kunders
+   * ärenden bakom inloggningen — och den låg fritt indexerbar fram till
+   * 2026-08-24: ingen robots.txt, ingen X-Robots-Tag. Vercels SSO täckte det
+   * förut, och ingen ersättning lades in vid flytten till Railway.
+   *
+   * Den här taggen och app/robots.ts hör ihop och gör olika saker: robots.txt
+   * hindrar NY indexering, `noindex` tar bort det som redan hunnit in. Ta inte
+   * bort den ena för att den andra finns.
+   */
+  const robots = arProduktion() ? undefined : { index: false, follow: false };
+
   if (tenant) {
+    // INGET manifest och inga appikoner på kundens domän. Enligt TENANTS.md ska
+    // Snajps egna ytor aldrig synas där — och ett manifest som heter "Snajp"
+    // hade erbjudit kundens besökare att installera VÅR app från kundens sajt.
     return {
       title: `${tenant.name} — ${tenant.tagline}`,
-      description: tenant.tagline
+      description: tenant.tagline,
+      robots
     };
   }
 
@@ -19,16 +42,81 @@ export async function generateMetadata(): Promise<Metadata> {
     title: "Snajp, AI för leads och kundtjänst",
     description:
       "Snajp skriver säljmejlen och svarar på kundmejlen. Två verktyg, en arbetsyta. Testa båda direkt i webbläsaren.",
-    metadataBase: new URL("https://snajp.se")
+    metadataBase: new URL(KANONISK_ORIGIN),
+    robots,
+    manifest: "/manifest.webmanifest",
+    icons: {
+      // Bara SVG:n här. icon-192.png har med flit en ogenomskinlig
+      // pappersbakgrund (se scripts/generera_ikoner.mjs) — rätt för ett
+      // installerat app-ikon, men en flikfavicon ska vara transparent.
+      // `apple` nedan är det enda stället app-ikonens beiga bakgrund hör
+      // hemma, tillsammans med manifest.webmanifest.
+      icon: [{ url: "/snajp-symbol-black.svg", type: "image/svg+xml" }],
+      apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180" }]
+    },
+    appleWebApp: {
+      capable: true,
+      // Namnet under ikonen på iOS hemskärm. Utan det tar Safari <title>,
+      // alltså "Snajp, AI för leads och kundtjänst" — som kapas till "Snajp,
+      // AI f…" och ser trasigt ut.
+      title: "Snajp",
+      // `default` och inte `black-translucent`: den senare låter sidan rita
+      // under statusfältet, vilket kräver att VARJE sidhuvud kompenserar för
+      // det. Ett missat sidhuvud lägger uret ovanpå en rubrik.
+      statusBarStyle: "default"
+    }
   };
 }
+
+/**
+ * Skild från generateMetadata eftersom viewport är sin egen export i Next.
+ *
+ * `viewportFit: "cover"` låter sidan använda hela skärmen på en iPhone med
+ * notch — och är förutsättningen för att `env(safe-area-inset-*)` ska ge något
+ * annat än noll. Utan den är säkerhetsmarginalerna i AppShell och
+ * ImpersonationBanner tysta nollor.
+ */
+export const viewport: Viewport = {
+  themeColor: "#f6f3ed",
+  viewportFit: "cover",
+  // Nypa-zoom ska INTE stängas av. `maximumScale: 1` är det vanligaste sättet
+  // att göra en webbapp otillgänglig för den som behöver förstora text.
+  initialScale: 1,
+  width: "device-width"
+};
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const tenant = await getCurrentTenant();
 
+  /**
+   * Temat läses PÅ SERVERN och stämplas på <html> innan svaret lämnar oss.
+   *
+   * Alternativet — ett skript som läser localStorage och sätter attributet i
+   * webbläsaren — hade gett en vit blink vid varje sidladdning för den som valt
+   * mörkt, eftersom sidan redan målats när skriptet hinner köra. Se lib/tema.ts.
+   *
+   * Kundens egen domän är UNDANTAGEN. `paletteToCss` nedan skriver tenantens
+   * palett, och den är vald av kunden för deras besökare — vår
+   * inställningscookie hör inte hemma där. En besökare på kundens sajt har
+   * dessutom aldrig varit inne i /settings och kan inte ha satt den.
+   */
+  const tema = tenant ? "ljust" : parseTema((await cookies()).get(TEMA_COOKIE)?.value);
+
   return (
-    <html lang="sv" className={fontVariables}>
+    <html
+      lang="sv"
+      className={fontVariables}
+      data-theme={dataTheme(tema)}
+      style={{ colorScheme: colorScheme(tema) }}
+    >
       <head>
+        {/* Next 16 skriver `mobile-web-app-capable` — den moderna taggen, som
+            iOS läser från 16.4. Den apple-prefixade är den ENDA som äldre iOS
+            förstår, och utan den öppnas appen från hemskärmen i ett vanligt
+            Safari-fönster med adressfält i stället för i helskärm. Den står
+            därför här och inte i metadata-objektet, som inte längre kan skriva
+            den. Tas bort den dag vi slutar bry oss om iOS < 16.4. */}
+        {tenant ? null : <meta name="apple-mobile-web-app-capable" content="yes" />}
         {/* Här låg tidigare en <noscript>-override som tvingade .rise synlig,
             eftersom .rise startade på opacity 0 och en utebliven observer gav
             en blank sida. Den behövs inte längre: sedan 2026-08-10 döljer
@@ -42,6 +130,9 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       </head>
       <body>
         <LocaleProvider>{children}</LocaleProvider>
+        {/* Inte på kundens domän. Där är vi supportchatten på deras sajt, och
+            en ruta som ber besökaren installera VÅR app hör inte hemma. */}
+        {tenant ? null : <InstalleraApp />}
       </body>
     </html>
   );

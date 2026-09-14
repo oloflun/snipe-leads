@@ -9,6 +9,8 @@ tsconfig.tsbuildinfo
 __pycache__/
 .pytest_cache/
 .claude/settings.local.json
+# Parallella agenters arbetskopior — egna checkouts, inte källkod.
+.claude/worktrees/
 .mcp.json
 
 # Stale backup copy of snajp-support (from Downloads, 2026-07-22) — not source
@@ -56,4 +58,26 @@ screenshots/cookies-dump.json
 # Materialized per-tenant context packs (snajp-support/app/leads/context_pack.py)
 # — runtime state derived from agent_context_docs, regenerated every run.
 snajp-support/var/
+# Benchmark-/mätutdata i repo-roten (scripts/benchmark_leads_kedja.py)
+var/
 .env*
+
+# Besiktningsbilder från qa_vyer.mjs (BILDER=). Sessionsbevis, inte källkod —
+# ~50 MB per körning och regenereras av ett kommando.
+screenshots/railway-dev/
+
+# Adminytans skärmdumpar. Portföljvyn visar riktiga kundnamn, månadsintäkt och
+# adminens mejladress — CLAUDE.md: inga skärmdumpar med kunddata. Demovyns
+# bilder är däremot påhittad Nordlys-data och får ligga kvar som bevis.
+screenshots/**/*admin*.png
+
+# Käll-hemligheter för scripts/migrera_till_railway.py — aldrig i repot.
+scripts/.kalla.env
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.beads/proxieddb/
+.beads/interactions.jsonl
+.marketing/

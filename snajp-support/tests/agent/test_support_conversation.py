@@ -187,7 +187,7 @@ def test_samtalsoverlay_bunden_till_bade_utkast_och_humanisering():
 
 # -- Påhoppsspärren i svarsvägen -------------------------------------------
 #
-# abuse_gate har sina egna enhetstester i tests/leads/test_abuse_gate.py.
+# abuse_gate har sina egna enhetstester i tests/moderation/test_abuse_gate.py.
 # Testerna nedan bevisar något annat: att support-agenten faktiskt ANROPAR den
 # och att beslutet får genomslag i svaret.
 

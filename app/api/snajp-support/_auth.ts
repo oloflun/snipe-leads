@@ -19,10 +19,41 @@ import { proxyWithApiKey } from "./_lib";
 export async function proxyAsTenant(path: string, init: RequestInit) {
   try {
     const tenant = await requireSnajpTenant();
-    return await proxyWithApiKey(path, init, tenant.apiKey, tenant.userId);
+
+    let begaran: RequestInit = init;
+
+    let backendPath = path;
+    const metod = String(begaran.method ?? "GET").toUpperCase();
+    const arSkrivning = metod !== "GET" && metod !== "HEAD";
+    if (tenant.impersonerar && arSkrivning) {
+      // Admin som tittar som kund: allt som SKRIVS är test. Läsning måste
+      // visa kundens riktiga inkorg — annars gömmer `?is_test=true` på GET
+      // de skarpa ärendena och admin tror att profilen är tom.
+      // Query-parametern täcker leads/prospects; JSON-kroppen chat, batch, mock.
+      if (!backendPath.includes("is_test=")) {
+        backendPath += (backendPath.includes("?") ? "&" : "?") + "is_test=true";
+      }
+      if (typeof begaran.body === "string" && begaran.body.length > 0) {
+        try {
+          const parsed: unknown = JSON.parse(begaran.body);
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+            begaran = { ...begaran, body: JSON.stringify({ ...parsed, is_test: true }) };
+          }
+        } catch {
+          // Inte JSON — lämna kroppen orörd.
+        }
+      }
+    }
+
+    return await proxyWithApiKey(backendPath, begaran, tenant.apiKey, tenant.userId, tenant.isDemo);
   } catch (error) {
     if (error instanceof SnajpTenantError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
+      // `kod` går med, så att gränssnittet kan skilja "inte aktiverad ännu"
+      // från "något gick sönder" utan att tolka svensk text.
+      return NextResponse.json(
+        { error: error.message, kod: error.kod },
+        { status: error.status }
+      );
     }
     throw error;
   }

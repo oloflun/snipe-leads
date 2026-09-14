@@ -1,155 +1,65 @@
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { getToken } from "next-auth/jwt";
 import { NextResponse, type NextRequest } from "next/server";
 import { isAuthRoute, isProtectedRoute } from "@/lib/routes";
-import { getServerSupabaseKey, getSupabaseUrl, hasServerSupabaseEnv } from "@/lib/supabase/env";
 
-async function hasBusinessContext(
-  supabase: ReturnType<typeof createServerClient>,
-  userId: string
-): Promise<boolean> {
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("workspace_id")
-    .eq("id", userId)
-    .maybeSingle<{ workspace_id: string }>();
-
-  if (!profile?.workspace_id) {
-    return false;
-  }
-
-  const { data: businessContext } = await supabase
-    .from("business_contexts")
-    .select("id")
-    .eq("workspace_id", profile.workspace_id)
-    .maybeSingle<{ id: string }>();
-
-  return Boolean(businessContext);
-}
-
+/**
+ * Proxyn läser Auth.js sessions-JWT i stället för Supabases cookie.
+ *
+ * Den gjorde förut TVÅ databasfrågor per skyddad request för att avgöra om
+ * användaren var onboardad. Den frågan ställs numera i layouten i stället, där
+ * svaret är färskt, och proxyn gör noll frågor. Det är också vad som gör att
+ * den kan köra på Edge, där `pg` inte finns.
+ */
 export async function proxy(request: NextRequest) {
-  try {
-    return await proxyMedSession(request);
-  } catch (error) {
-    // Proxyn kör FÖRE varje route i matchern. Kastar den blir svaret 500 med tom
-    // body på HELA den inloggade ytan samtidigt — inloggning, dashboard,
-    // inställningar, onboarding och admin — och felet syns inte i UI:t, bara i
-    // Vercel-loggen. Det hände 2026-08-17 på en enda felstavad miljövariabel.
-    //
-    // Samma val som vid saknad env nedan: stå åt sidan hellre än att fälla allt.
-    // Grinden som bär är inte den här — det är requirePlatformAdmin() och
-    // sidornas egna sessionskontroller, som fortfarande kör. Utan session ser en
-    // skyddad sida ingen data att visa.
-    console.error("[proxy] stod åt sidan efter oväntat fel:", error);
-    return NextResponse.next({ request });
-  }
-}
-
-async function proxyMedSession(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request });
-
-  // Without Supabase configured there are no sessions to guard. Throwing here
-  // took down every route including the public product pages, so stand aside
-  // instead: protected routes stay unreachable in practice because they have no
-  // data to show.
-  if (!hasServerSupabaseEnv()) {
-    return supabaseResponse;
-  }
-
-  const supabase = createServerClient(getSupabaseUrl(), getServerSupabaseKey(), {
-    cookies: {
-      getAll() {
-        return request.cookies.getAll();
-      },
-      setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
-        cookiesToSet.forEach(({ name, value }) => {
-          request.cookies.set(name, value);
-        });
-        supabaseResponse = NextResponse.next({ request });
-        cookiesToSet.forEach(({ name, value, options }) => {
-          supabaseResponse.cookies.set(name, value, options);
-        });
-      }
-    }
-  });
-
-
-  /**
-   * Varje omdirigering MÅSTE bära med sig sessionscookies.
-   *
-   * `supabase.auth.getUser()` roterar refresh-token och skriver de nya
-   * värdena till `supabaseResponse` via setAll(). Ett `NextResponse.redirect()`
-   * är ett HELT NYTT svar — utan den här kopieringen kastas de nya cookies
-   * bort, och webbläsaren sitter kvar med en förbrukad token.
-   *
-   * Följden, uppmätt i produktionens Vercel-logg 2026-08-17 13:13:
-   *
-   *     /login → /dashboard → /onboarding → /login → /dashboard → ...
-   *
-   * /login såg en användare och skickade vidare; /onboarding såg ingen och
-   * skickade tillbaka. Samma session, olika svar, beroende på om just den
-   * requesten råkade komma före eller efter rotationen. Symptomen var
-   * "Internal Server Error", "Sidan finns inte" och en inloggning som verkade
-   * lyckas utan att leda någonstans — tre olika felbilder ur samma orsak.
-   *
-   * Detta är den dokumenterade fällan i Supabases SSR-mellanvara. Lägger någon
-   * till en ny redirect här utan att gå via den här funktionen är loopen
-   * tillbaka, och den syns inte i något test.
-   */
-  function redirectMedSession(url: URL): NextResponse {
-    const svar = NextResponse.redirect(url);
-    supabaseResponse.cookies.getAll().forEach((cookie) => {
-      svar.cookies.set(cookie);
-    });
-    return svar;
-  }
-
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-
   const { pathname } = request.nextUrl;
 
-  if (isProtectedRoute(pathname) && !user) {
+  // Utan AUTH_SECRET finns ingen session att validera — men det betyder INTE
+  // att skyddade routes ska stå öppna. Tvärtom: utan secret är ALLA oinloggade,
+  // så skyddade routes redirectas till /login i stället för att släppas igenom.
+  // Publika produktsidor fortsätter rendera. Att kasta här tog förut ner varenda
+  // route inklusive marknadsföringssidorna; en redirect bara för skyddade routes
+  // har inte det problemet. Det här är fail-CLOSED, inte fail-open.
+  if (!process.env.AUTH_SECRET) {
+    if (isProtectedRoute(pathname)) {
+      const loginUrl = request.nextUrl.clone();
+      loginUrl.pathname = "/login";
+      loginUrl.searchParams.set("next", pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+    return NextResponse.next({ request });
+  }
+
+  const token = await getToken({
+    req: request,
+    secret: process.env.AUTH_SECRET,
+    secureCookie: request.nextUrl.protocol === "https:"
+  });
+
+  if (isProtectedRoute(pathname) && !token) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
     loginUrl.searchParams.set("next", pathname);
-    return redirectMedSession(loginUrl);
+    return NextResponse.redirect(loginUrl);
   }
 
-  if (user && pathname === "/login") {
+  if (token && pathname === "/login") {
     const dashboardUrl = request.nextUrl.clone();
     dashboardUrl.pathname = "/dashboard";
     dashboardUrl.search = "";
-    return redirectMedSession(dashboardUrl);
+    return NextResponse.redirect(dashboardUrl);
   }
 
-  if (user && isProtectedRoute(pathname) && pathname !== "/onboarding") {
-    const onboarded = await hasBusinessContext(supabase, user.id);
+  // Onboardingdirigeringen bor INTE här. Den låg här och läste ett anspråk ur
+  // sessions-token, vilket gav en loop i drift: raden skrevs, cookien sa
+  // fortfarande false. Proxyn avgör numera bara EN sak — finns det en session —
+  // och det är den enda frågan vars svar inte kan hinna bli inaktuellt.
+  // Se lib/auth/onboarding-gate.ts.
 
-    if (!onboarded) {
-      const onboardingUrl = request.nextUrl.clone();
-      onboardingUrl.pathname = "/onboarding";
-      onboardingUrl.search = "";
-      return redirectMedSession(onboardingUrl);
-    }
+  if (token && isAuthRoute(pathname) && pathname !== "/login") {
+    return NextResponse.next({ request });
   }
 
-  if (user && pathname === "/onboarding") {
-    const onboarded = await hasBusinessContext(supabase, user.id);
-
-    if (onboarded) {
-      const dashboardUrl = request.nextUrl.clone();
-      dashboardUrl.pathname = "/dashboard";
-      dashboardUrl.search = "";
-      return redirectMedSession(dashboardUrl);
-    }
-  }
-
-  if (user && isAuthRoute(pathname) && pathname !== "/login") {
-    return supabaseResponse;
-  }
-
-  return supabaseResponse;
+  return NextResponse.next({ request });
 }
 
 // Namnet är inte valfritt: Next läser matchern från en export som heter `config`
@@ -165,11 +75,10 @@ export const config = {
     "/settings/:path*",
     "/onboarding/:path*",
     // /admin är tredje lagret, inte det bärande. Grinden som räknas är
-    // requirePlatformAdmin() i app/admin/layout.tsx, som svarar 404 — och
+    // getPlatformAdmin() i app/admin/layout.tsx, som svarar 404 — och
     // /api/admin, som proxyn medvetet INTE täcker (en redirect till /login
     // är fel svarsform för ett API-anrop och skulle dölja 404:an).
     "/admin/:path*",
-    "/login",
-    "/auth/callback"
+    "/login"
   ]
 };

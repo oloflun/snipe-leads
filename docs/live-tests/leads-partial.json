@@ -1,0 +1,33 @@
+{
+  "tenant": "Snajp",
+  "onboarding_missing": [],
+  "context_pack_chars": 2705,
+  "prospects": [
+    "Gina Tricot",
+    "Blomsterlandet",
+    "Sportamore"
+  ],
+  "modes": [
+    "disabled"
+  ],
+  "snajp": {
+    "Gina Tricot::disabled": {
+      "prospect": "Gina Tricot",
+      "thinking_mode": "disabled",
+      "tenant": "Snajp",
+      "research_error": "APITimeoutError: Request timed out."
+    },
+    "Blomsterlandet::disabled": {
+      "prospect": "Blomsterlandet",
+      "thinking_mode": "disabled",
+      "tenant": "Snajp",
+      "research_error": "APITimeoutError: Request timed out."
+    },
+    "Sportamore::disabled": {
+      "prospect": "Sportamore",
+      "thinking_mode": "disabled",
+      "tenant": "Snajp",
+      "research_error": "APITimeoutError: Request timed out."
+    }
+  }
+}

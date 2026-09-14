@@ -40,12 +40,31 @@ def test_omkastade_siffror_fangas():
         validera_format("556824-9202")
 
 
-def test_personnummer_avvisas_med_ett_begripligt_skal():
-    """Utan den här kontrollen lagrar vi en känslig personuppgift i en kolumn
-    som aldrig var avsedd för det."""
+def test_enskild_firma_accepteras_med_personnummer():
+    """ENSKILD FIRMA HAR PERSONNUMMER SOM ORGANISATIONSNUMMER.
+
+    Testet vändes 2026-08-18. Det krävde tidigare att ett personnummer NEKAS,
+    vilket avvisade en hel bolagsform: tio siffror med tredje siffran < 2 är en
+    månad, alltså en fysisk person — och för enskild firma är det numret också
+    företagets.
+
+    Vad som gick förlorat, så att nästa läsare inte tror att det var en miss:
+    kontrollen fanns av ett INTEGRITETSskäl. Den hindrade en privatperson från
+    att av misstag klistra in sitt personnummer i ett fält vi behandlar som
+    företagsdata. Det skyddet finns inte längre, efter ett uttryckligt beslut.
+    Kolumnen kan alltså innehålla en känslig personuppgift.
+    """
+    # Sekelprefixet strippas, kontrollsiffran räknas på de tio.
+    assert validera_format("19850312-1207") == "8503121207"
+    assert validera_format("850312-1207") == "8503121207"
+
+
+def test_luhn_galler_fortfarande_for_personnummer():
+    """Formatspärren släpptes, kontrollsiffran gjorde det inte. Ett skrivfel
+    ska fortfarande fångas — annars är fältet ingen validering alls."""
     with pytest.raises(OgiltigtOrgnrError) as fel:
-        validera_format("19850312-1234")
-    assert "personnummer" in str(fel.value)
+        validera_format("850312-1234")
+    assert "Kontrollsiffran" in str(fel.value)
 
 
 def test_fel_langd_sager_vilken_langd():

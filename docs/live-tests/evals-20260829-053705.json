@@ -1,0 +1,71 @@
+{
+  "godkanda": 6,
+  "totalt": 7,
+  "resultat": [
+    {
+      "case": "betalfraga-mot-seedad-kb",
+      "godkand": true,
+      "fel": [],
+      "eskalerade": false,
+      "kategori": "betalning",
+      "svar": "Hej! Kul att du funderar på att handla hos oss. För att jag ska ge dig ett så bra svar som möjligt, kan du berätta lite mer om vad du är ute efter? Om du till exempel tänker handla i vår webbutik eller hos någon av våra återförsäljare, så kan jag hjälpa dig vidare.",
+      "latency_ms": 41454
+    },
+    {
+      "case": "irriterad-leverans-ar-inte-uppsagning",
+      "godkand": true,
+      "fel": [],
+      "eskalerade": false,
+      "kategori": "leverans",
+      "svar": "Jag förstår att det är frustrerande att paketet inte har kommit fram än. Börja gärna med att kolla spårningslänken i ditt leveransmail. Om spårningen inte har uppdaterats på tre vardagar kan paketet vara försenat hos transportören. Har det gått mer än sju vardagar sedan din beställning startade kan vi starta en efterlysning hos transportören, vilket tar 1–3 vardagar. Hör av dig med ditt ordernummer så hjälper vi dig vidare.",
+      "latency_ms": 30548
+    },
+    {
+      "case": "aterbetalningskrav-till-manniska",
+      "godkand": true,
+      "fel": [],
+      "eskalerade": true,
+      "kategori": "retur_reklamation",
+      "svar": "Hej, vad tråkigt att produkten gick sönder så snabbt. Det låter som ett garantiärende, och vi hjälper gärna till. För att vi ska kunna hantera det behöver vi ditt ordernummer och en bild på felet. Eftersom det gäller återbetalning kommer en medarbetare att hantera ärendet, så det kan ta lite längre tid än vanligt. Skicka gärna ordernumret och bilden så tar vi det vidare.",
+      "latency_ms": 53197
+    },
+    {
+      "case": "gdpr-radering-till-manniska",
+      "godkand": true,
+      "fel": [],
+      "eskalerade": true,
+      "kategori": "ovrigt",
+      "svar": "Hej! Tack för att du hör av dig. Vi tar emot din begäran om radering av personuppgifter enligt GDPR. Den hanteras manuellt av vår personuppgiftsansvarige, och vi bekräftar inom 30 dagar. Observera att orderhistorik som krävs enligt bokföringslagen sparas i 7 år även efter radering. Har du frågor eller vill komplettera din begäran, är du välkommen att återkomma.",
+      "latency_ms": 21738
+    },
+    {
+      "case": "hot-avbryter-samtalet",
+      "godkand": false,
+      "fel": [
+        "körningen kraschade: APITimeoutError: Request timed out."
+      ],
+      "eskalerade": false,
+      "kategori": "",
+      "svar": "",
+      "latency_ms": 22728
+    },
+    {
+      "case": "tom-halsning-far-motfraga",
+      "godkand": true,
+      "fel": [],
+      "eskalerade": false,
+      "kategori": "ovrigt",
+      "svar": "Hej, hur kan jag hjälpa dig?",
+      "latency_ms": 58121
+    },
+    {
+      "case": "uppsagningshot-triggar-retention",
+      "godkand": true,
+      "fel": [],
+      "eskalerade": true,
+      "kategori": "teknisk_support",
+      "svar": "Jag förstår att det är frustrerande när samma fel upprepas, och jag ber om ursäkt. Det här är tredje gången, och det är inte okej. För att jag ska kunna gå vidare behöver jag veta vilket fel det gäller och gärna ditt ordernummer. Kan du berätta mer om vad som hänt? Jag ser till att en kollega tar över direkt för att lösa det här. Vi återkommer inom kort.",
+      "latency_ms": 41454
+    }
+  ]
+}

@@ -1,0 +1,254 @@
+"""Spärren som hindrar att kunddata skickas till DeepSeek (Kina).
+
+Testet finns för att spärren är det slags skydd som är lätt att råka vända
+tillbaka: någon sätter LLM_PROVIDER=deepseek i Railway för att spara pengar,
+allt ser ut att fungera lokalt, och felet upptäcks först vid en tillsyn.
+Ett rött test i CI är den billigaste platsen att upptäcka det på.
+
+Se app/config.py: Settings.llm_provider_fault.
+"""
+
+import pytest
+
+from app.agent.llm import ForbjudenProviderIMiljon, krav_tillaten_provider
+from app.config import Settings, get_settings
+
+
+def _settings(**kwargs) -> Settings:
+    # _env_file=None: annars läses snajp-support/.env in och testet mäter
+    # utvecklarens maskin i stället för koden.
+    return Settings(_env_file=None, **kwargs)
+
+
+@pytest.mark.parametrize("miljo", ["main", "MAIN", "production", "development", "dev"])
+def test_deepseek_vagras_i_miljoer_med_kunddata(miljo):
+    fel = _settings(llm_provider="deepseek", environment=miljo).llm_provider_fault()
+    assert fel is not None
+    assert "deepseek" in fel.lower()
+
+
+def test_railway_variabeln_racker_ensam():
+    """Railway sätter RAILWAY_ENVIRONMENT_NAME automatiskt. Spärren får inte
+    kräva att någon dessutom kommer ihåg att sätta ENVIRONMENT — en spärr som
+    kräver en manuell variabel skyddar bara den som redan var noggrann."""
+    fel = _settings(
+        llm_provider="deepseek", railway_environment_name="development"
+    ).llm_provider_fault()
+    assert fel is not None
+
+
+def test_openai_ar_alltid_tillaten():
+    for miljo in ("main", "development", "", "lokal"):
+        assert _settings(llm_provider="openai", environment=miljo).llm_provider_fault() is None
+
+
+def test_gemini_ar_tillaten_och_far_ratt_nyckel_och_endpoint():
+    """Gemini drev vision och embeddings långt innan den blev chattprovider.
+    Att den var okänd HÄR var det som gjorde bytet tyst — se nästa test."""
+    from app.agent.llm import _GEMINI_BASE_URL, _resolve_base_url
+
+    s = _settings(llm_provider="gemini", environment="main", gemini_api_key="g" * 40)
+    assert s.llm_provider_fault() is None
+    assert s.active_llm_key() == "g" * 40
+    assert _resolve_base_url(s) == _GEMINI_BASE_URL
+    # gpt-defaulten mot Geminis endpoint är ett 404 som syns först hos en kund.
+    assert not s.model.startswith("gpt-")
+
+
+@pytest.mark.parametrize("provider", ["gemeni", "GEMINI", "openai ", "claude", ""])
+def test_okant_providernamn_ar_ett_fel_inte_simuleringslage(provider):
+    """Regressionen från 2026-08-24.
+
+    `active_llm_key` slutade tidigare med `return self.openai_api_key`, så
+    VARJE okänt värde gav en tom nyckel. LLM_PROVIDER=gemini startade därför
+    tjänsten i simuleringsläge: den svarade kunder med regelmotorn i stället
+    för med agenten, deployen gick igenom och ingenting larmade.
+
+    Ett okänt värde ska fälla uppstarten. Ett tyst fel som ser friskt ut är
+    dyrare än ett högljutt som inte gör det.
+    """
+    s = _settings(llm_provider=provider, environment="main", openai_api_key="o" * 40)
+    fel = s.llm_provider_fault()
+    assert fel is not None
+    assert "känner till" in fel
+    assert s.active_llm_key() == ""
+
+
+def test_deepseek_tillaten_mot_syntetisk_data():
+    """Okänd/lokal miljö = utveckling mot MemoryStorage. Se `har_riktig_kunddata`
+    för varför det är rätt håll att falla."""
+    assert _settings(llm_provider="deepseek", environment="").llm_provider_fault() is None
+    assert _settings(llm_provider="deepseek", environment="lokal").llm_provider_fault() is None
+
+
+def test_klientbygget_kastar_i_stallet_for_att_bygga(monkeypatch):
+    """Bältet till hängslet: en ingång som inte går via lifespan ska också
+    stoppas, och den ska stoppas INNAN en klient finns att ringa med."""
+    monkeypatch.setenv("LLM_PROVIDER", "deepseek")
+    monkeypatch.setenv("ENVIRONMENT", "main")
+    get_settings.cache_clear()
+    try:
+        with pytest.raises(ForbjudenProviderIMiljon):
+            krav_tillaten_provider()
+    finally:
+        get_settings.cache_clear()
+
+
+def test_modell_fran_fel_provider_faller_uppstarten():
+    """Regressionen från 2026-08-24, andra halvan.
+
+    `MODEL` stod kvar på "deepseek-v4-flash" när LLM_PROVIDER byttes till
+    "gemini". Tjänsten startade, hälsokontrollen sa `mode: live` — och varje
+    anrop svarade 404: "models/deepseek-v4-flash is not found".
+
+    Hälsokontrollen mäter att en NYCKEL finns, aldrig att MODELLEN existerar
+    hos den provider nyckeln pekar på. Den skillnaden går inte att mäta utan
+    att ringa leverantören, och en hälsokontroll som kostar pengar per
+    pollning blir avstängd. Alltså kontrolleras namnet i stället.
+    """
+    s = _settings(
+        llm_provider="gemini",
+        environment="main",
+        gemini_api_key="g" * 40,
+        model="deepseek-v4-flash",
+    )
+    fel = s.llm_provider_fault()
+    assert fel is not None
+    assert "deepseek-v4-flash" in fel
+    assert "404" in fel
+
+
+def test_ratt_modell_for_providern_gar_igenom():
+    for provider, nyckel, modell in (
+        ("gemini", "gemini_api_key", "gemini-3.6-flash"),
+        ("openai", "openai_api_key", "gpt-4o-mini"),
+    ):
+        s = _settings(
+            llm_provider=provider, environment="main", model=modell, **{nyckel: "k" * 40}
+        )
+        assert s.llm_provider_fault() is None, f"{provider}/{modell}"
+
+
+def test_okant_modellnamn_blockeras_inte():
+    """Leverantörerna döper nya modeller utan att fråga oss. En för snäv lista
+    hade blockerat giltig konfiguration, vilket är hur en spärr blir
+    bortkommenterad."""
+    s = _settings(
+        llm_provider="gemini",
+        environment="main",
+        gemini_api_key="g" * 40,
+        model="nagot-nytt-2027",
+    )
+    assert s.llm_provider_fault() is None
+
+
+# -- Render-fyndet 2026-08-24 -------------------------------------------------
+#
+# Spärren grindade på MILJÖNAMNET, och motiveringen var att "Railway sätter
+# alltid RAILWAY_ENVIRONMENT_NAME". Sant, och ändå fel: det antog att Railway
+# är den enda värden.
+#
+# Två Render-tjänster från den gamla stacken låg kvar levande, deployade
+# automatiskt vid varje push till main och development, och startade med
+# provider=deepseek mot en riktig Postgres. Där finns ingen
+# RAILWAY_ENVIRONMENT_NAME — miljönamnet var tomt, spärren läste det som
+# utveckling, och släppte igenom.
+#
+# Regeln keyar numera på databasen. Testerna nedan är den regelns fallbeskrivning.
+
+
+def test_okand_vard_med_fjarrdatabas_racknas_som_riktig_data():
+    """Render-fallet. En process som kan öppna en REMOTE databas kan nå riktiga
+    personuppgifter, oavsett vad miljön råkar heta."""
+    s = _settings(
+        llm_provider="deepseek",
+        deepseek_api_key="d" * 40,
+        environment="",
+        database_url="postgresql://u:p@dpg-abc.frankfurt-postgres.render.com:5432/db",
+    )
+    assert s.har_riktig_kunddata()
+    assert s.llm_provider_fault() is not None
+
+
+@pytest.mark.parametrize(
+    "dsn",
+    [
+        "postgresql://snajp_app:x@127.0.0.1:5432/railway",
+        "postgresql://u:p@localhost:5432/db",
+        "postgresql://u:p@[::1]:5432/db",
+        "postgresql://u:p@host.docker.internal:5432/db",
+    ],
+)
+def test_loopback_ar_syntetisk_data(dsn):
+    """`scripts/lokal_stack.py` kör mot 127.0.0.1 och är tom. Undantaget gäller
+    ADRESSEN och inte en flagga någon kan sätta — en flagga hade blivit satt."""
+    s = _settings(llm_provider="deepseek", deepseek_api_key="d" * 40, database_url=dsn)
+    assert not s.har_riktig_kunddata()
+    assert s.llm_provider_fault() is None
+
+
+def test_losenord_med_snabel_a_forvirrar_inte_vardsuppslaget():
+    """En DSN kan bära ett lösenord med `@` i. Tas värden efter FÖRSTA `@` blir
+    en produktionsdatabas plötsligt 'localhost', vilket är exakt fel riktning
+    för en dataskyddsspärr att gissa åt."""
+    s = _settings(
+        llm_provider="deepseek",
+        deepseek_api_key="d" * 40,
+        database_url="postgresql://u:pa@ss@db.exempel.se:5432/d",
+    )
+    assert s.har_riktig_kunddata()
+
+
+def test_ingen_databas_ar_fortfarande_syntetisk():
+    """Testsviten sätter tom DATABASE_URL (conftest). Den vägen ska vara öppen,
+    annars kan DeepSeek inte prövas alls."""
+    s = _settings(llm_provider="deepseek", deepseek_api_key="d" * 40, database_url="")
+    assert not s.har_riktig_kunddata()
+    assert s.llm_provider_fault() is None
+
+
+# -- Vertex AI (2026-09) -------------------------------------------------------
+
+
+_FAKE_SA_JSON = '{"type":"service_account","project_id":"test-proj","private_key_id":"abc","private_key":"-----BEGIN RSA PRIVATE KEY-----\\nfake\\n-----END RSA PRIVATE KEY-----\\n","client_email":"sa@test-proj.iam.gserviceaccount.com","client_id":"123","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://oauth2.googleapis.com/token","auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs","client_x509_cert_url":"https://www.googleapis.com/robot/v1/metadata/x509/sa%40test-proj.iam.gserviceaccount.com","universe_domain":"googleapis.com"}'
+
+
+def test_vertex_ai_inte_simulation():
+    """Med service account JSON ska tjänsten vara live, inte simulation."""
+    s = _settings(
+        llm_provider="gemini",
+        environment="main",
+        google_service_account_json=_FAKE_SA_JSON,
+    )
+    assert not s.is_simulation()
+
+
+def test_vertex_ai_ingen_llm_key_fault():
+    """Vertex AI använder OAuth2-tokens, inte en statisk nyckel."""
+    s = _settings(
+        llm_provider="gemini",
+        google_service_account_json=_FAKE_SA_JSON,
+    )
+    assert s.llm_key_fault() is None
+
+
+def test_vertex_ai_provider_ok():
+    s = _settings(
+        llm_provider="gemini",
+        environment="main",
+        google_service_account_json=_FAKE_SA_JSON,
+    )
+    assert s.llm_provider_fault() is None
+
+
+def test_vertex_ai_resolve_base_url():
+    from app.agent.llm import _resolve_base_url
+    s = _settings(
+        llm_provider="gemini",
+        google_service_account_json=_FAKE_SA_JSON,
+        google_cloud_region="europe-west1",
+    )
+    url = _resolve_base_url(s)
+    assert "europe-west1-aiplatform.googleapis.com" in url
+    assert "test-proj" in url
+    assert url.endswith("/endpoints/openapi/")

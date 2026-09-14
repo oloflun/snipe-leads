@@ -220,12 +220,12 @@ function DraftLogo({ compact = false, light = false }: Readonly<{ compact?: bool
     <span className="relative inline-flex items-center">
       <span className="relative z-10 -mr-2 block h-12 w-[78px] md:h-14 md:w-[92px]">
         <Image
-          src="/snipe_logo.svg"
+          src={light ? "/snajp-symbol-white.svg" : "/snajp-symbol-black.svg"}
           alt=""
           fill
           priority
           sizes="92px"
-          className={cn("object-contain object-left", light ? "invert" : "")}
+          className="object-contain object-left"
         />
       </span>
       {!compact ? (
@@ -284,7 +284,7 @@ function EditorialLandingHeader({ variant, asMain = false }: Readonly<{ variant:
       <div className="mx-auto flex max-w-[1480px] items-center justify-between px-6 py-5 md:px-8 md:py-6">
         <Link href={homeHref} className="focus-ring flex items-center gap-2.5">
           <span className="relative block h-11 w-[72px] shrink-0">
-            <Image src="/snipe_logo.svg" alt="" fill sizes="72px" className="object-contain object-left" />
+            <Image src="/snajp-symbol-black.svg" alt="" fill sizes="72px" className="object-contain object-left" />
           </span>
           <span className="font-display italic-disp text-[30px] leading-none tighten md:text-[34px]">Snajp</span>
         </Link>
@@ -608,13 +608,13 @@ export function DraftLanding({ variant, asMain = false }: Readonly<{ variant: Dr
           <div className="col-span-12 mt-8 flex flex-col justify-between border-paper/15 md:col-span-5 md:mt-0 md:border-l md:pl-10">
             <p className="max-w-[44ch] text-[17px] leading-[1.6] text-paper/85">
               {locale === "sv" ? (
-                <>Mejla oss på <a href="mailto:hej@snajp.se" className="text-ochre underline decoration-ochre/40 underline-offset-[6px] decoration-[1px] transition hover:decoration-ochre">hej@snajp.se</a>. Hellre ett vanligt mejl än en demo-bokning. Vi svarar samma dag.</>
+                <>Mejla oss på <a href="mailto:Snajpsupport@gmail.com" className="text-ochre underline decoration-ochre/40 underline-offset-[6px] decoration-[1px] transition hover:decoration-ochre">Snajpsupport@gmail.com</a>. Hellre ett vanligt mejl än en demo-bokning. Vi svarar samma dag.</>
               ) : (
-                <>Email us at <a href="mailto:hej@snajp.se" className="text-ochre underline decoration-ochre/40 underline-offset-[6px] decoration-[1px] transition hover:decoration-ochre">hej@snajp.se</a>. A plain email beats a demo booking. We reply the same day.</>
+                <>Email us at <a href="mailto:Snajpsupport@gmail.com" className="text-ochre underline decoration-ochre/40 underline-offset-[6px] decoration-[1px] transition hover:decoration-ochre">Snajpsupport@gmail.com</a>. A plain email beats a demo booking. We reply the same day.</>
               )}
             </p>
             <div className="mt-10 flex flex-wrap items-center gap-5">
-              <a href="mailto:hej@snajp.se" className="inline-flex items-center gap-3 bg-paper px-6 py-4 font-mono text-[13px] uppercase tracking-[0.18em] text-ink transition-colors duration-500 hover:bg-ochre">
+              <a href="mailto:Snajpsupport@gmail.com" className="inline-flex items-center gap-3 bg-paper px-6 py-4 font-mono text-[13px] uppercase tracking-[0.18em] text-ink transition-colors duration-500 hover:bg-ochre">
                 {locale === "sv" ? "Skriv till oss" : "Write to us"} <span className="font-mono">↗</span>
               </a>
               <a href="#prislista" className="inline-flex items-center gap-3 border border-paper/35 px-6 py-4 font-mono text-[13px] uppercase tracking-[0.18em] text-paper transition-colors hover:border-ochre hover:text-ochre">
@@ -627,7 +627,7 @@ export function DraftLanding({ variant, asMain = false }: Readonly<{ variant: Dr
           <div className="mx-auto grid max-w-[1480px] grid-cols-12 gap-x-8 px-6 py-8 md:px-8 kicker text-paper/55">
             <div className="col-span-12 md:col-span-3">Snajp AB · Föreningsgatan 41 · Malmö</div>
             <div className="col-span-12 mt-2 md:col-span-3 md:mt-0">Org. 559412-8804</div>
-            <div className="col-span-12 mt-2 md:col-span-3 md:mt-0">hej@snajp.se · 040-220 814</div>
+            <div className="col-span-12 mt-2 md:col-span-3 md:mt-0">Snajpsupport@gmail.com · 040-220 814</div>
             <div className="col-span-12 mt-2 md:col-span-3 md:mt-0 md:text-right">© MMXXVI · {locale === "sv" ? "Tryckt i en webbläsare" : "Printed in a browser"}</div>
           </div>
         </div>
@@ -760,7 +760,7 @@ function EditorialIterationPortal({ slug }: Readonly<{ slug: string[] }>) {
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[243px] border-r border-ink/10 bg-paper/88 px-4 py-5 backdrop-blur-xl lg:flex lg:flex-col">
         <Link href="/" className="flex items-center gap-3">
           <span className="relative block h-11 w-[72px] shrink-0">
-            <Image src="/snipe_logo.svg" alt="" fill sizes="72px" className="object-contain object-left" priority />
+            <Image src="/snajp-symbol-black.svg" alt="" fill sizes="72px" className="object-contain object-left" priority />
           </span>
           <span className="font-display italic-disp text-[28px] leading-none tighten">Snajp</span>
         </Link>

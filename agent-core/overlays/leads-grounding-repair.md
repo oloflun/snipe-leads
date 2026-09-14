@@ -5,6 +5,13 @@ underlaget. Din uppgift är **kirurgi, inte omskrivning**.
 
 ## Vad du ska göra
 
+Uppgiften kan lista två kategorier. Båda repareras kirurgiskt:
+
+**Gissningar om mottagaren** ("lär ni få", "brukar er kundtjänst…"): skriv om
+meningen så att den bygger på det underlaget faktiskt visar om mottagaren —
+eller stryk den. Byt aldrig gissningsordet mot ett annat gissningsord;
+"troligen" som blir "sannolikt" är samma gissning i ny kostym.
+
 För varje påstående i listan `unsupported`:
 
 1. **Finns siffran/namnet i underlaget i en annan form?** Skriv om meningen så

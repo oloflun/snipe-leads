@@ -76,6 +76,17 @@ syns inte i koden. Sätt `background: "dark"` så hamnar den på mörkt fält.
 
 ### 4. Configfil
 
+**Configfilen styr den PUBLIKA chatten, inte kundens inloggade arbetsyta.**
+Sedan migration 061 kopplar uppstarten varje ny arbetsyta till en egen
+backend-tenant automatiskt (`kund-<8 tecken ur workspace-id>`), och nyckeln
+sparas i `workspace_tenant_keys`. Kunden kan alltså logga in och använda
+översikt, röstdokument, målgrupp och kunskapsbas utan att någon av oss gör
+något — det som tidigare krävde `scripts/onboard_tenant.py` och en deploy per
+kund. Se `lib/snajp/provisionering.ts`.
+
+Rutinen nedan gäller fortfarande för kunder som ska ha en egen chattlänk på sin
+egen domän med sitt eget varumärke. Den ska inte gissas fram.
+
 `lib/tenants/<slug>.ts`, registrerad i `tenants` i `lib/tenants/index.ts`.
 Innehåller logotyp, palett, kontaktuppgifter till sidfoten, kundens hemsida och
 agentens startfrågor.

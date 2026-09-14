@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useLocale } from "@/lib/i18n";
 import type { Localized } from "@/lib/i18n";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
+import { useArbetsvag } from "@/components/AppShell";
+import { paketForProdukter } from "@/lib/admin/halsa";
 
 /**
  * Den gemensamma översikten högst upp när en arbetsyta har BÅDA produkterna.
@@ -38,19 +40,27 @@ const copy = {
   support: { sv: "Kundtjänst", en: "Support" },
   supportRad: { sv: "Ärenden, inkorg och kunskapsbas", en: "Cases, inbox and knowledge base" },
   tillLeads: { sv: "Öppna leads", en: "Open leads" },
-  tillSupport: { sv: "Öppna kundtjänst", en: "Open support" },
-  paketet: { sv: "Snajp Duo", en: "Snajp Duo" }
+  tillSupport: { sv: "Öppna kundtjänst", en: "Open support" }
 } satisfies Record<string, Localized>;
 
 export function DuoSummary() {
   const { text } = useLocale();
-  const { shows, workspaceName } = useDashboard();
+  const { shows, products, workspaceName } = useDashboard();
+  const vag = useArbetsvag();
 
   // Båda krävs. Se komponentens docstring om varför det inte finns något
   // utgråat mellanläge.
   if (!shows("leads") || !shows("support")) {
     return null;
   }
+
+  // Paketnamnet HÄRLEDS ur produkterna, samma källa som Plan och fakturering.
+  // Duo-namnet stod hårdkodat här, och efter ett byte till Trio (som bara
+  // skriver workspaces.products) visade översikten fortfarande Duo — remsan
+  // renderas ju för varje arbetsyta med leads OCH support, och det är Trio med.
+  // Okänd kombination = inget märke, hellre än ett påhittat namn.
+  const paketNamn = paketForProdukter(products)?.namn ?? null;
+  const markning = [paketNamn, workspaceName].filter(Boolean).join(" · ");
 
   return (
     <section
@@ -61,10 +71,11 @@ export function DuoSummary() {
         <h2 id="duo-oversikt" className="text-[1.125rem] font-semibold tracking-[-0.01em]">
           {text(copy.rubrik)}
         </h2>
-        <span className="kicker rounded-input bg-ochre/12 px-2.5 py-1 text-ochre">
-          {text(copy.paketet)}
-          {workspaceName ? ` · ${workspaceName}` : ""}
-        </span>
+        {markning ? (
+          <span className="kicker rounded-input bg-ochre/12 px-2.5 py-1 text-ochre">
+            {markning}
+          </span>
+        ) : null}
       </div>
 
       <p className="mt-3 max-w-[68ch] text-[0.9375rem] leading-[1.6] text-ink/70">
@@ -75,13 +86,13 @@ export function DuoSummary() {
         <Kort
           rubrik={text(copy.leads)}
           rad={text(copy.leadsRad)}
-          href="/dashboard/leads"
+          href={vag("/dashboard/leads")}
           knapp={text(copy.tillLeads)}
         />
         <Kort
           rubrik={text(copy.support)}
           rad={text(copy.supportRad)}
-          href="/dashboard/support"
+          href={vag("/dashboard/support")}
           knapp={text(copy.tillSupport)}
         />
       </div>

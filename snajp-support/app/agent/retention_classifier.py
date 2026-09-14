@@ -12,6 +12,11 @@ from .llm import get_llm_client
 
 CANCELLATION_RISK_THRESHOLD = 0.6
 
+#: Missnöje kan BARA förstärka en uppsägningssignal som redan finns — aldrig
+#: bära risken ensamt. Gränsfallsnivån för den förstärkta vägen.
+FORSTARKT_INTENT_GOLV = 0.4
+FORSTARKT_MISSNOJE_KRAV = 0.7
+
 _PROMPT = """Bedöm kundmeddelandet på två axlar, 0.0-1.0. Svara ENBART med JSON:
 {{
   "uppsagningsavsikt": 0.0-1.0,
@@ -45,7 +50,22 @@ async def classify_cancellation_risk(message: str) -> tuple[float, float]:
 
 
 def is_cancellation_risk(cancellation_intent: float, dissatisfaction: float) -> bool:
+    """Uppsägningsavsikten BÄR beslutet; missnöje kan bara förstärka den.
+
+    Villkoret var tidigare `intent >= 0.6 OR missnöje >= 0.6` — ren irritation
+    utan minsta uppsägningssignal blev alltså "retention_risk". Mätt skarpt
+    2026-08-26 (S2, försenat paket): en saklig leveransfråga fick
+    retention-steget injicerat mot en playbook som inte finns, eskalerade med
+    etiketten retention_risk, och människan som tog över fick fel förklaring
+    på ett ärende som inte handlade om uppsägning.
+
+    Missnöje ensamt är redan sentiment-eskaleringens jobb
+    (SENTIMENT_ESCALATION_THRESHOLD i support_agent) — två grindar för samma
+    signal med olika etiketter gör den ena etiketten till en lögn.
+    """
+    if cancellation_intent >= CANCELLATION_RISK_THRESHOLD:
+        return True
     return (
-        cancellation_intent >= CANCELLATION_RISK_THRESHOLD
-        or dissatisfaction >= CANCELLATION_RISK_THRESHOLD
+        cancellation_intent >= FORSTARKT_INTENT_GOLV
+        and dissatisfaction >= FORSTARKT_MISSNOJE_KRAV
     )

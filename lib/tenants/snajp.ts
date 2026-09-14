@@ -34,9 +34,9 @@ export const snajp: Tenant = {
   supportKeyEnv: "SNAJP_KEY_SNAJP",
 
   logo: {
-    src: "/snipe_logo.svg",
-    width: 132,
-    height: 36,
+    src: "/snajp-logo-v1-black.svg",
+    width: 552,
+    height: 159,
     alt: "Snajp",
     // Ljust fält. Logotypen är mörk ordbild och syns mot papper — motsatsen
     // till Livrustnings, som är vit och försvinner. Kontrollerat mot båda
@@ -71,12 +71,12 @@ export const snajp: Tenant = {
   },
 
   supportIntro:
-    "Fråga om agenten, vad den kan svara på, vad den kostar eller hur en uppstart går till.",
+    "Fråga om agenterna, vad de kan svara på, vad de kostar eller hur en uppstart går till.",
   supportPrompts: [
     "Vad kostar Snajp och vad ingår i paketen?",
-    "Hur lång tid tar en uppstart innan agenten kan svara?",
-    "Var hämtar agenten sina svar ifrån?",
-    "Vad händer om agenten inte vet svaret på en fråga?",
+    "Hur lång tid tar en uppstart innan agenterna kan svara?",
+    "Var hämtar agenterna sina svar ifrån?",
+    "Vad händer om agenterna inte vet svaret på en fråga?",
     "Kan vi testa innan vi bestämmer oss?"
   ]
 };

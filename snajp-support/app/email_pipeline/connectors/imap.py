@@ -16,6 +16,8 @@ import email.header
 import email.utils
 import imaplib
 import logging
+import urllib.parse
+import urllib.request
 
 from ..models import InboundAttachment, InboundEmail
 
@@ -90,11 +92,42 @@ def _extract_attachments(message: email.message.Message) -> list[InboundAttachme
     return attachments
 
 
-def _fetch_sync(host: str, user: str, password: str, folder: str) -> list[InboundEmail]:
+def _refresh_access_token(client_id: str, client_secret: str, refresh_token: str, token_url: str) -> str:
+    """Hämta en kortlivad access-token utan att logga hemligheter."""
+    data = urllib.parse.urlencode({
+        "client_id": client_id, "client_secret": client_secret,
+        "refresh_token": refresh_token, "grant_type": "refresh_token",
+    }).encode()
+    request = urllib.request.Request(token_url, data=data, method="POST")
+    with urllib.request.urlopen(request, timeout=30) as response:
+        import json
+        payload = json.loads(response.read().decode())
+    token = str(payload.get("access_token") or "")
+    if not token:
+        raise RuntimeError("OAuth-leverantören returnerade ingen access_token.")
+    return token
+
+
+def _xoauth2_bytes(user: str, access_token: str) -> bytes:
+    return f"user={user}\x01auth=Bearer {access_token}\x01\x01".encode()
+
+
+def _fetch_sync(
+    host: str, user: str, password: str, folder: str, *,
+    oauth_client_id: str = "", oauth_client_secret: str = "",
+    oauth_refresh_token: str = "",
+    oauth_token_url: str = "https://oauth2.googleapis.com/token",
+) -> list[InboundEmail]:
     emails: list[InboundEmail] = []
     client = imaplib.IMAP4_SSL(host, timeout=30)
     try:
-        client.login(user, password)
+        if oauth_client_id and oauth_client_secret and oauth_refresh_token:
+            access_token = _refresh_access_token(
+                oauth_client_id, oauth_client_secret, oauth_refresh_token, oauth_token_url
+            )
+            client.authenticate("XOAUTH2", lambda _: _xoauth2_bytes(user, access_token))
+        else:
+            client.login(user, password)
         client.select(folder)
         _, data = client.search(None, "UNSEEN")
         message_ids = data[0].split()[:MAX_MESSAGES_PER_SYNC]
@@ -132,11 +165,20 @@ def _fetch_sync(host: str, user: str, password: str, folder: str) -> list[Inboun
 
 
 async def fetch_new(
-    host: str, user: str, password: str, folder: str = "INBOX"
+    host: str, user: str, password: str = "", folder: str = "INBOX", *,
+    oauth_client_id: str = "", oauth_client_secret: str = "",
+    oauth_refresh_token: str = "",
+    oauth_token_url: str = "https://oauth2.googleapis.com/token",
 ) -> tuple[list[InboundEmail], str | None]:
     """Returnerar (mail, felmeddelande). Kastar aldrig."""
     try:
-        emails = await asyncio.to_thread(_fetch_sync, host, user, password, folder)
+        emails = await asyncio.to_thread(
+            _fetch_sync, host, user, password, folder,
+            oauth_client_id=oauth_client_id,
+            oauth_client_secret=oauth_client_secret,
+            oauth_refresh_token=oauth_refresh_token,
+            oauth_token_url=oauth_token_url,
+        )
         return emails, None
     except imaplib.IMAP4.error as error:
         logger.warning("IMAP-autentisering/protokollfel: %s", error)

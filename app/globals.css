@@ -40,6 +40,103 @@
   --font-mono: var(--font-jetbrains), ui-monospace, "SFMono-Regular", Consolas, monospace;
 }
 
+/* -- Mörkt läge ------------------------------------------------------------
+ *
+ * ENBART tokens. Inte en enda komponent känner till att mörkt läge finns, och
+ * det är villkoret för att det ska fungera: hela kodbasen målar genom `ink`,
+ * `paper`, `paper2`, `mineral` och `ochre`, och en genomsökning efter
+ * `bg-white`, `text-black` och hexvärden i app/ och components/ ger noll
+ * träffar. Byts tokens byts därför allt — inklusive `border-ink/15`, som i
+ * mörkt läge blir en ljus hårlinje på mörk yta, vilket är samma linje sedd
+ * från andra hållet och inte en ny designbeslut.
+ *
+ * Skriv ALDRIG en färg direkt i en komponent. Den blir osynlig i ett av de två
+ * lägena, och det läget är alltid det du inte testade.
+ *
+ * ## Varför `:root[data-theme="dark"]` och inte `html[data-theme]`
+ *
+ * Kundens palett i app/layout.tsx skrivs som en `:root`-regel i en <style> i
+ * <head>, alltså SENARE i dokumentet än den här filen. Källordning avgör bara
+ * vid samma specificitet — `:root[data-theme="dark"]` (0,2,0) slår `:root`
+ * (0,1,0) oavsett ordning. Med `html[data-theme="dark"]` (0,1,1) hade den
+ * också vunnit, men marginalen hade varit en enda klass bred.
+ *
+ * ## Varför inget prefers-color-scheme
+ *
+ * Temat är ett VAL i inställningarna, inte en systemavläsning. Att låta
+ * operativsystemet styra hade betytt att växeln ibland inte gör något — den
+ * som valt ljust på en mörk telefon hade fått mörkt ändå vid nästa laddning.
+ * Vill vi följa systemet får det bli ett tredje värde ("system") i lib/tema.ts,
+ * och då är det fortfarande ett val.
+ *
+ * Ljust läge stämplar ingenting: :root ovan ÄR den ljusa paletten.
+ */
+:root[data-theme="dark"] {
+  /* Rollerna byter plats, inte nyanserna. `ink` är fortfarande "det texten
+     skrivs i" och `paper` "det den står på" — bara att ljusheten vänds.
+     Papperets värmeton (hue 88) sitter kvar i texten så att mörkt läge känns
+     som samma produkt och inte som en annan app. */
+  --ink: 0.94 0.006 88;
+  /* Ljusare än --ink, precis som i ljust läge: `hover:bg-ink2` på den primära
+     knappen ska LYFTA ytan, inte sänka den. Vänds den här enskilda relationen
+     med resten blir knappen mörkare vid hover i ett läge och ljusare i det
+     andra. */
+  --ink2: 0.99 0.004 88;
+  --paper: 0.185 0.010 252;
+  /* 0.06 ifrån --paper. I ljust läge räcker 0.035 eftersom en mörk hårlinje
+     bär skillnaden; på mörk yta är hårlinjen ljus och svagare, så planet får
+     bära mer själv. Uppmätt mot .plane, som ritar paper2 med 55 % opacitet. */
+  --paper2: 0.245 0.012 252;
+  /* Accenten lyfts från 0.74 till 0.80: samma nyans, men mot en yta på 0.185
+     i stället för 0.965 behöver den mer ljushet för att läsa som accent och
+     inte som en brun fläck. */
+  --ochre: 0.80 0.15 64;
+  /* Dämpad text. 0.68 mot paper 0.185 ger ~7:1 — samma nivå som --mineral
+     håller i ljust läge, alltså AA med marginal även vid 13px. */
+  --mineral: 0.68 0.016 252;
+  /* Låg i ljust läge (0.42), hög här: seal är alltid STARKARE än mineral,
+     och "starkare" betyder längre bort från papperet åt det håll papperet
+     inte ligger. */
+  --seal: 0.80 0.020 252;
+  --moss: 0.74 0.10 142;
+  --danger: 0.71 0.17 27;
+  --focus: 0.80 0.15 64;
+  /* --warning är den TEXTSÄKRA ochren (se :root). I ljust läge betyder det
+     mörkare än accenten; på mörk yta betyder samma krav ljusare. Att kopiera
+     0.54 hit hade gett 1.9:1 mot papperet — den token som finns just för att
+     vara läsbar hade blivit den enda som inte var det. */
+  --warning: 0.86 0.12 64;
+
+  color-scheme: dark;
+}
+
+/* Skuggorna är definierade i tailwind.config.ts som `oklch(var(--ink) / …)`.
+   Med bytta tokens blir --ink nästan vitt, och en skugga blir ett SKEN —
+   `shadow-lift` lyser då upp 70px runt panelen som en neonram. En skugga är
+   frånvaro av ljus och måste därför vara mörk i båda lägena; den ritas här mot
+   svart i stället, med högre opacitet eftersom en mörk skugga på mörk yta
+   annars inte syns alls. */
+:root[data-theme="dark"] .shadow-hairline {
+  box-shadow: 0 0 0 1px oklch(1 0 0 / 0.1);
+}
+
+:root[data-theme="dark"] .shadow-lift {
+  box-shadow: 0 24px 70px oklch(0 0 0 / 0.55);
+}
+
+/* Nordljuset (.daylight) är ett radialt sken uppifrån vänster. Det ritas redan
+   i ochre med låg opacitet och fungerar oförändrat på mörk botten — men det
+   ska vara SVAGARE där, eftersom ett sken på mörkt underlag har mycket större
+   kontrast att arbeta mot än samma sken på papper. */
+:root[data-theme="dark"] .daylight {
+  background: radial-gradient(
+    120% 80% at 15% -10%,
+    oklch(var(--ochre) / 0.09) 0%,
+    oklch(var(--ochre) / 0.035) 35%,
+    transparent 70%
+  );
+}
+
 * {
   box-sizing: border-box;
 }
@@ -299,18 +396,24 @@ button {
    image renders at its natural size and clips, which is what a missing
    definition looked like on the statement band and the grid-break photo.
 
-   `fixed` attachment only on a real pointer. Touch browsers either ignore it or
-   jitter, and iOS repaints the whole band on every scroll frame. */
+   Två fullbreddsband bär en fotografi-bakgrund: uttalandet och fasaddelaren.
+
+   `background-attachment: fixed` stod här för hela desktopklassen. Det är den
+   ena kända orsaken till att en sida "fryser några sekunder" under scroll:
+   en fäst bakgrund kan inte scrollas av kompositorn, så webbläsaren målar om
+   bandet — en cover-skalad WebP i fullbredd — på varje enskild bildruta. På en
+   maskin utan marginal blir det tappade rutor, och de kommer i skurar när man
+   passerar just de sektionerna.
+
+   Bakgrunden ligger nu still i sitt eget lager. `translateZ(0)` lyfter den
+   till kompositorn så att scrollen aldrig rör pixlarna igen, och `will-change`
+   säger det i förväg i stället för att webbläsaren ska gissa. */
 .parallax {
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .parallax {
-    background-attachment: fixed;
-  }
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 .marquee {
@@ -419,4 +522,36 @@ button {
   nav {
     max-width: 100%;
   }
+}
+
+/* -- Säkerhetszoner på iOS (notch och home indicator) ----------------------
+ *
+ * Aktiveras av `viewportFit: "cover"` i app/layout.tsx. Utan den exporten är
+ * varje `env(safe-area-inset-*)` noll, och reglerna nedan är tysta no-ops —
+ * vilket är exakt hur de här marginalerna brukar sluta se ut som att de
+ * "inte gör något". De två hör ihop; tas den ena bort ska den andra också bort.
+ *
+ * `max()` och inte bara insetet: på en enhet UTAN notch är insetet 0, och en
+ * ren `padding-top: env(...)` hade tagit bort sidhuvudets vanliga luft.
+ */
+
+.safe-top {
+  padding-top: max(env(safe-area-inset-top), 0px);
+}
+
+.safe-bottom {
+  padding-bottom: max(env(safe-area-inset-bottom), 0px);
+}
+
+/* Sidled gäller i liggande läge, där notchen äter en av kanterna. Ligger på
+   body och inte på varje container: alternativet är att komma ihåg det i tjugo
+   vyer, och den vy som glöms är den som ser trasig ut. */
+body {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* Flytande element vid nederkanten hamnar annars under home-indikatorn. */
+.fixed.bottom-5 {
+  bottom: max(1.25rem, env(safe-area-inset-bottom));
 }

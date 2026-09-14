@@ -1,23 +1,24 @@
-# Byggkontexten är repo-ROTEN (render.yaml rootDir: .), eftersom agent-core/
-# ligger utanför snajp-support/ och Docker inte kan COPY:a utanför kontexten.
+# Repo-rotens ignorefil: en DENYLIST för skräp, ingen allowlist.
 #
-# Utan den här filen skickas node_modules/, .next/, .git/, .shots/ och docs/
-# (som innehåller en 811 KB genererad rapport) till daemonen vid varje bygge.
+# Allowlisten som stod här bor numera i snajp-support/Dockerfile.dockerignore.
+# BuildKit läser `<sökväg-till-Dockerfile>.dockerignore` FÖRE den här filen, så
+# api-tjänstens byggkontext är fortfarande smal — men bara api-tjänstens.
 #
-# ALLOWLIST, inte denylist. En denylist ruttnar tyst: nästa person som lägger
-# en stor katalog i repo-roten får den med i imagen utan att märka det. Den
-# här listan går sönder högljutt i stället — glömmer du lägga till något som
-# behövs failar bygget direkt.
-**
-
-!agent-core
-!snajp-support/app
-!snajp-support/requirements.txt
-
-# Skräp inuti de tillåtna katalogerna (sista matchning vinner).
+# VARFÖR FLYTTEN: allowlisten släppte in agent-core/ och snajp-support/app och
+# INGET annat. Den var skriven för api och gällde alla. web-tjänsten byggdes med
+# railpack från samma rot och föll på `"/package-lock.json": not found` —
+# alltså inte på ett fel i Next-appen, utan på att hela Next-appen var
+# bortfiltrerad innan bygget började. En ignorefil för ett repo med två
+# tjänster kan inte vara skriven för den ena.
+.git
+node_modules
+.next
+.venv
 **/__pycache__
 **/*.pyc
 **/*.pyo
 **/.pytest_cache
+.shots
+docs
 **/.env
 **/.env.*

@@ -33,33 +33,67 @@ def password_env_name(tenant_slug: str) -> str:
     return f"IMAP_PASSWORD_{tenant_slug.upper().replace('-', '_')}"
 
 
-def _host_for(mailbox: dict) -> str | None:
+def host_for_mailbox(mailbox: dict) -> str | None:
+    """IMAP-värden för en inkorgsrad, eller None när den inte går att härleda.
+
+    Publik sedan inkorgs-API:t behöver samma svar som pollern: en rad utan
+    värd går inte att synka, och UI:t ska kunna säga det innan kunden trycker
+    i stället för efter.
+    """
     return mailbox.get("imap_host") or PROVIDER_HOSTS.get(mailbox.get("provider") or "")
+
+
+#: Kvar under det gamla namnet — modulen anropar sig själv på flera ställen.
+_host_for = host_for_mailbox
 
 
 async def sync_mailbox(storage: Storage, tenant_id: str, tenant_slug: str, mailbox: dict) -> dict:
     """Hämtar och processar nya mail för EN inkorg."""
     settings = get_settings()
 
+    async def stampla(resultat: dict) -> dict:
+        """Varje synkFÖRSÖK stämplar raden: last_sync_at = nu, last_error =
+        utfallet. Kolumnerna stod oskrivna i fyra månader — kundens "senaste
+        synk" var tom för evigt och ett fel lösenord helt tyst. Stämpeln får
+        aldrig fälla synken: resultatet är redan framme, och en trasig
+        statistikskrivning är inte skäl att kasta bort det."""
+        try:
+            await storage.touch_mailbox_sync(
+                tenant_id, mailbox["id"], last_error=resultat.get("error")
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("Kunde inte stämpla synken för %s", mailbox.get("address"))
+        return resultat
+
     host = _host_for(mailbox)
     if not host:
-        return {
+        return await stampla({
             "fetched": 0,
             "processed": 0,
             "error": f"Ingen IMAP-värd angiven för {mailbox['address']} (sätt imap_host).",
-        }
+        })
 
-    password = os.environ.get(password_env_name(tenant_slug))
-    if not password:
-        # Inte ett fel: kunden har ännu inte lämnat sitt app-lösenord. Raden får
-        # ligga kvar och pollern tar den så fort nyckeln finns.
-        return {
+    password = os.environ.get(password_env_name(tenant_slug), "")
+    oauth_ready = bool(
+        settings.imap_oauth_client_id
+        and settings.imap_oauth_client_secret
+        and settings.imap_oauth_refresh_token
+    )
+    if not password and not oauth_ready:
+        # Inte ett fel: kunden har ännu inte lämnat app-lösenord eller OAuth.
+        return await stampla({
             "fetched": 0,
             "processed": 0,
-            "error": f"{password_env_name(tenant_slug)} saknas — hoppar över {mailbox['address']}.",
-        }
+            "error": f"{password_env_name(tenant_slug)} eller IMAP OAuth saknas — hoppar över {mailbox['address']}.",
+        })
 
-    inbound, error = await imap.fetch_new(host, mailbox["address"], password, settings.imap_folder)
+    inbound, error = await imap.fetch_new(
+        host, mailbox["address"], password, settings.imap_folder,
+        oauth_client_id=settings.imap_oauth_client_id,
+        oauth_client_secret=settings.imap_oauth_client_secret,
+        oauth_refresh_token=settings.imap_oauth_refresh_token,
+        oauth_token_url=settings.imap_oauth_token_url,
+    )
 
     processed = 0
     for message in inbound:
@@ -67,7 +101,7 @@ async def sync_mailbox(storage: Storage, tenant_id: str, tenant_slug: str, mailb
         if email:
             await process_email(storage, tenant_id, email)
             processed += 1
-    return {"fetched": len(inbound), "processed": processed, "error": error}
+    return await stampla({"fetched": len(inbound), "processed": processed, "error": error})
 
 
 async def sync_imap_once(storage: Storage, tenant_id: str = DEFAULT_TENANT_ID) -> dict:
@@ -77,11 +111,20 @@ async def sync_imap_once(storage: Storage, tenant_id: str = DEFAULT_TENANT_ID) -
     begäran. Den periodiska pollern använder sync_all_mailboxes.
     """
     settings = get_settings()
-    if not (settings.imap_host and settings.imap_user and settings.imap_password):
+    oauth_ready = bool(
+        settings.imap_oauth_client_id
+        and settings.imap_oauth_client_secret
+        and settings.imap_oauth_refresh_token
+    )
+    if not (settings.imap_host and settings.imap_user and (settings.imap_password or oauth_ready)):
         return {"fetched": 0, "processed": 0, "error": "IMAP är inte konfigurerat (IMAP_HOST/USER/PASSWORD)."}
 
     inbound, error = await imap.fetch_new(
-        settings.imap_host, settings.imap_user, settings.imap_password, settings.imap_folder
+        settings.imap_host, settings.imap_user, settings.imap_password, settings.imap_folder,
+        oauth_client_id=settings.imap_oauth_client_id,
+        oauth_client_secret=settings.imap_oauth_client_secret,
+        oauth_refresh_token=settings.imap_oauth_refresh_token,
+        oauth_token_url=settings.imap_oauth_token_url,
     )
     processed = 0
     for message in inbound:

@@ -2,7 +2,6 @@
 
 import {
   CheckCircle2,
-  ChevronDown,
   Image as ImageIcon,
   Inbox,
   Loader2,
@@ -15,8 +14,12 @@ import {
   UserRound,
   X
 } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useArbetsvag } from "@/components/AppShell";
+import { EjAktiverad, arEjAktiverad } from "@/components/EjAktiverad";
 import { Badge, btnPrimary, btnSecondary } from "@/components/ui";
+import { mejlaOss } from "@/components/marketing/copy";
 import { createDemoSupportApi } from "@/lib/demo/support-inbox";
 import { readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
@@ -52,14 +55,13 @@ type EmailRow = {
   draft: Draft | null;
   has_image: boolean;
   attachment_count: number;
+  is_test?: boolean;
 };
 
 type EmailDetail = EmailRow & {
   attachments: { id: string; filename: string; content_type: string; data_url: string | null; is_image: boolean }[];
   decisions: { event: string; detail: Record<string, unknown>; created_at: string }[];
 };
-
-type Rule = { category: string; label: string; mode: "auto" | "draft" | "escalate" };
 
 // Måste spegla CATEGORIES i snajp-support/app/config.py. Backenden (som
 // deployas från development) klassar numera i garanti och utbildning; utan
@@ -97,8 +99,17 @@ const EVENT_LABELS: Record<string, string> = {
   draft_rejected: "Utkast avvisat",
   taken_over: "Manuellt övertaget",
   failed: "Fel vid bearbetning",
-  rule_changed: "Regel ändrad"
+  rule_changed: "Regel ändrad",
+  befordrad: "Flyttad till ärenden"
 };
+
+/** Markör så refresh() kan skilja väntläget från riktiga fel utan texttolkning. */
+class EjAktiveradFel extends Error {
+  constructor() {
+    super("Arbetsytan är inte aktiverad ännu.");
+    this.name = "EjAktiveradFel";
+  }
+}
 
 function ConfidenceBar({ value }: Readonly<{ value: number }>) {
   const percent = Math.round(value * 100);
@@ -127,22 +138,62 @@ function ConfidenceBar({ value }: Readonly<{ value: number }>) {
  * felmeddelande mitt i produktdemon. Grinden står kvar orörd; det är indatan
  * som byts, precis som app/demo/[[...slug]]/page.tsx föreskriver.
  */
-export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
+export function Dashboard({
+  demo = false,
+  lager = "arenden",
+  onMeta
+}: Readonly<{
+  demo?: boolean;
+  lager?: "arenden" | "testmail";
+  onMeta?: (meta: { visar_test_i_arenden: boolean }) => void;
+}>) {
+  const vag = useArbetsvag();
   const [emails, setEmails] = useState<EmailRow[]>([]);
   const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({});
   const [selected, setSelected] = useState<EmailDetail | null>(null);
   const [draftText, setDraftText] = useState("");
-  const [rules, setRules] = useState<Rule[]>([]);
-  const [rulesOpen, setRulesOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [ejAktiverad, setEjAktiverad] = useState(false);
   const [syncInfo, setSyncInfo] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  /**
+   * Söktexten som faktiskt ligger till grund för en fråga till backenden.
+   *
+   * `search` uppdateras vid varje tangenttryck, och `refresh` hänger på den.
+   * Utan den här fördröjningen blev "paket" fem anrop genom proxyn till
+   * backenden, var och en med en fullständig omrendering av listan medan man
+   * skrev — det är den hackighet som märks efter en stunds klickande, och
+   * inget som syns i ett enskilt klick.
+   */
+  const [sokning, setSokning] = useState("");
+
+  useEffect(() => {
+    const id = window.setTimeout(() => setSokning(search), 300);
+    return () => window.clearTimeout(id);
+  }, [search]);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  /** True medan bakgrundsklassningen av nyss hämtade testmail pågår. */
+  const [bearbetas, setBearbetas] = useState(false);
+  /** Demo-/testkonton visar testmail under Ärenden. null = inte hämtat än. */
+  const [visarTestIArenden, setVisarTestIArenden] = useState<boolean | null>(null);
+  const onMetaRef = useRef(onMeta);
+  onMetaRef.current = onMeta;
+
 
   // En instans per monterad vy, så att demons tillstånd inte delas mellan
   // flikar eller återställs vid varje omrendering.
+  // Sätts när komponenten avmonteras. Utan den fortsätter pollningen efter
+  // att kunden bytt flik, och varje varv sätter state på en borttagen vy.
+  const avbrutet = useRef(false);
+  useEffect(() => {
+    avbrutet.current = false;
+    return () => {
+      avbrutet.current = true;
+    };
+  }, []);
+
   const demoApi = useRef<ReturnType<typeof createDemoSupportApi> | null>(null);
   if (demo && !demoApi.current) {
     demoApi.current = createDemoSupportApi();
@@ -172,6 +223,13 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
       );
     }
     if (!response.ok) {
+      // Ej aktiverad är ett VÄNTLÄGE, inte ett fel — samma gräns som i
+      // Svar/Bolagsregister/Kontakter. Utan den här grenen visades
+      // driftinstruktionen ur requireSnajpTenant() i en röd banner för en
+      // nyregistrerad kund, i den vy som är supportkundens huvudvy.
+      if (arEjAktiverad(response.status, payload)) {
+        throw new EjAktiveradFel();
+      }
       throw new Error(payload.detail ?? payload.error ?? "Okänt fel");
     }
     return payload;
@@ -181,29 +239,57 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
     try {
       setError(null);
       const params = new URLSearchParams();
-      if (search) params.set("q", search);
+      if (sokning) params.set("q", sokning);
       if (statusFilter) params.set("status", statusFilter);
       if (categoryFilter) params.set("category", categoryFilter);
+      if (lager === "testmail") params.set("is_test", "true");
       const data = await api(`/inbox?${params.toString()}`);
       setEmails(data.emails);
       setCategoryCounts(data.category_counts);
+      if (typeof data.visar_test_i_arenden === "boolean") {
+        setVisarTestIArenden(data.visar_test_i_arenden);
+        onMetaRef.current?.({ visar_test_i_arenden: data.visar_test_i_arenden });
+      }
     } catch (caught) {
+      if (caught instanceof EjAktiveradFel) {
+        setEjAktiverad(true);
+        return;
+      }
       setError(caught instanceof Error ? caught.message : "Kunde inte hämta inkorgen.");
     }
-  }, [api, search, statusFilter, categoryFilter]);
-
-  const loadRules = useCallback(async () => {
-    try {
-      setRules((await api("/rules")).rules);
-    } catch {
-      /* reglerna är inte kritiska för listan */
-    }
-  }, [api]);
+  }, [api, sokning, statusFilter, categoryFilter, lager]);
 
   useEffect(() => {
     void refresh();
-    void loadRules();
-  }, [refresh, loadRules]);
+  }, [refresh]);
+
+  /**
+   * Är en riktig inkorg kopplad?
+   *
+   * `null` betyder "vet inte än" och renderar ingen knapp alls. Att gissa
+   * `true` hade gett samma fel som fanns förut: en knapp som ser tryckbar ut
+   * och alltid svarar med ett konfigurationsfel. Att gissa `false` hade dolt
+   * knappen ett ögonblick för kunder som HAR en inkorg, vilket blinkar.
+   */
+  const [inkorgKopplad, setInkorgKopplad] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let avbruten = false;
+    void (async () => {
+      try {
+        const svar = await api<{ kan_synka?: boolean }>("/inbox/mailboxes");
+        if (!avbruten) setInkorgKopplad(Boolean(svar?.kan_synka));
+      } catch {
+        // Ett fel här är inte kundens problem och ska inte visas som ett.
+        // Utan svar vet vi inte, och då är rätt beteende att inte lova något:
+        // knappen uteblir och texten under säger hur man kopplar en inkorg.
+        if (!avbruten) setInkorgKopplad(false);
+      }
+    })();
+    return () => {
+      avbruten = true;
+    };
+  }, [api]);
 
   const openEmail = useCallback(
     async (id: string) => {
@@ -237,16 +323,76 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
     [refresh, openEmail, selected]
   );
 
-  const seedMock = () =>
+  /**
+   * Hämtar nya testmail och läser om listan medan agenten arbetar.
+   *
+   * ## Varför den pollar
+   *
+   * Backenden svarar numera så fort mailen är inlästa och klassificerar dem i
+   * en bakgrundsuppgift — den ändringen gjordes för att knappen annars
+   * snurrade i över en minut och dödades av proxyns 60-sekundersgräns. Följden
+   * här: ärendena syns direkt men utan fack och utkast, och listan måste läsas
+   * om några gånger för att fyllas i.
+   *
+   * Pollningen är BEGRÄNSAD med flit — åtta försök, växande mellanrum, sedan
+   * slut. En obegränsad `setInterval` mot ett API är hur en flik som legat
+   * öppen över natten blir en lastgenerator, och den sortens bakgrundsarbete
+   * är också vad som får en sida att hacka efter tio minuters klickande.
+   */
+  const pollaTills = useCallback(
+    async (forsok = 8) => {
+      setBearbetas(true);
+      try {
+        for (let i = 0; i < forsok; i += 1) {
+          await new Promise((r) => setTimeout(r, 1500 + i * 1000));
+          if (avbrutet.current) return;
+          await refresh();
+        }
+      } finally {
+        if (!avbrutet.current) setBearbetas(false);
+      }
+    },
+    [refresh]
+  );
+
+  /**
+   * `category` skickas med: står kunden i ett fack ska nya mail hamna DÄR.
+   * Utan den bytte varje klick ut hela testinkorgen, och det fack man tittade
+   * på kunde få noll nya mail medan de andra fylldes på.
+   */
+  const seedMock = (kategori: string | null = categoryFilter) =>
     act("seed", async () => {
-      await api("/inbox/mock", { method: "POST" });
+      const svar = await api<{ kb_tom?: boolean; ingested?: number; processing?: boolean }>(
+        "/inbox/mock",
+        { method: "POST", body: JSON.stringify(kategori ? { category: kategori } : {}) }
+      );
       setSelected(null);
+      // `kb_tom` sägs ut. Utan den läser kunden sex eskalerade rader som ett
+      // produktfel, när agenterna i själva verket vägrade gissa ur en tom bas —
+      // vilket är rätt beteende och fel intryck.
+      setSyncInfo(
+        svar?.kb_tom
+          ? "Testmailen är inlästa. Kunskapsbasen är tom, så agenterna eskalerar allt tills ni lagt in något — det är avsiktligt, de gissar aldrig."
+          : `${svar?.ingested ?? 0} nya mail i inkorgen. Agenterna sorterar och skriver utkast nu.`
+      );
+      if (svar?.processing) void pollaTills();
     });
 
   const syncInbox = () =>
     act("sync", async () => {
       setSyncInfo(null);
-      const result = await api("/inbox/sync", { method: "POST" });
+      const result = await api<{ fetched: number; processed: number; connected?: boolean; error?: string }>(
+        "/inbox/sync",
+        { method: "POST" }
+      );
+      // `connected: false` är inte ett fel — det är ett svar. Att kasta här
+      // gav en röd felruta för ett läge som bara betyder "vi har inte kopplat
+      // er inkorg ännu", och den rutan såg ut som en krasch.
+      if (result.connected === false) {
+        setInkorgKopplad(false);
+        setSyncInfo(result.error ?? "Ingen inkorg är kopplad ännu.");
+        return;
+      }
       if (result.error) {
         throw new Error(result.error);
       }
@@ -276,10 +422,11 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
     selected &&
     act("takeover", () => api(`/inbox/${selected.id}/takeover`, { method: "POST" }));
 
-  const setRule = (category: string, mode: string) =>
-    act("rule", async () => {
-      await api("/rules", { method: "PUT", body: JSON.stringify({ category, mode }) });
-      await loadRules();
+  const flyttaTillArenden = () =>
+    selected &&
+    act("befordra", async () => {
+      await api(`/inbox/${selected.id}/befordra`, { method: "POST" });
+      setSelected(null);
     });
 
   const totalPending = useMemo(
@@ -293,35 +440,77 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
 
   const canReview = selected?.draft?.status === "pending";
 
+  if (ejAktiverad) {
+    return <EjAktiverad yta="Kundtjänst" />;
+  }
+
   return (
     <div className="space-y-6">
       {/* Åtgärdsrad */}
       <div className="flex flex-wrap items-center gap-3">
+        {/* Alltid alla fack: knappen ska visa hur en hel inkorg ser ut. Det
+            fackvisa läget hör till "Uppdatera" bredvid.
+
+            Göms när en riktig inkorg är kopplad. Testmail bland en kunds
+            verkliga ärenden är inte en demo, det är skräp i deras inkorg —
+            och de har redan sett hur produkten fungerar. */}
+        {inkorgKopplad || (lager === "arenden" && visarTestIArenden === false) ? null : (
+          <button
+            type="button"
+            onClick={() => void seedMock(null)}
+            disabled={busy !== null}
+            className={btnPrimary}
+          >
+            {busy === "seed" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Inbox className="h-4 w-4" />}
+            Hämta testmail
+          </button>
+        )}
+        {/* Knappen finns bara när det finns en inkorg att synka. Den satt
+            förut alltid framme och svarade "IMAP är inte konfigurerat
+            (IMAP_HOST/USER/PASSWORD)" för varje kund — en felutskrift om
+            miljövariabler kunden varken kan se eller sätta. */}
+        {inkorgKopplad ? (
+          <button
+            type="button"
+            onClick={syncInbox}
+            disabled={busy !== null}
+            title="Hämtar olästa mail från er kopplade Gmail- eller Outlook-inkorg"
+            className={btnSecondary}
+          >
+            {busy === "sync" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+            Synka inkorg
+          </button>
+        ) : null}
+        {/* "Uppdatera" hämtar NYA testmail när inkorgen är en sandlåda: står
+            kunden i ett fack fylls det facket på, står de i "Alla" byts hela
+            testinkorgen ut.
+
+            MEN bara då. Är en riktig inkorg kopplad betyder "Uppdatera" läs om
+            listan, ingenting annat — att skriva in påhittade kundmail bland en
+            kunds verkliga ärenden vore att förstöra deras inkorg med en knapp
+            som ser ut att bara ladda om. */}
         <button
           type="button"
-          onClick={seedMock}
+          onClick={() =>
+            inkorgKopplad || (lager === "arenden" && visarTestIArenden === false)
+              ? void refresh()
+              : void seedMock(categoryFilter)
+          }
           disabled={busy !== null}
-          className={btnPrimary}
-        >
-          {busy === "seed" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Inbox className="h-4 w-4" />}
-          Hämta testmail
-        </button>
-        <button
-          type="button"
-          onClick={syncInbox}
-          disabled={busy !== null}
-          title="Hämtar olästa mail från kopplad Gmail/Outlook-inkorg (IMAP)"
+          title={
+            inkorgKopplad || (lager === "arenden" && visarTestIArenden === false)
+              ? "Läser om inkorgen"
+              : categoryFilter
+                ? "Hämtar nya testmail till det här facket"
+                : "Hämtar nya testmail till alla fack"
+          }
           className={btnSecondary}
         >
-          {busy === "sync" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
-          Synka inkorg
-        </button>
-        <button
-          type="button"
-          onClick={() => void refresh()}
-          className={btnSecondary}
-        >
-          <RefreshCw className="h-4 w-4" />
+          {busy === "seed" && !inkorgKopplad ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4" />
+          )}
           Uppdatera
         </button>
         <div className="relative min-w-[220px] flex-1">
@@ -345,49 +534,29 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
             </option>
           ))}
         </select>
-        <button
-          type="button"
-          onClick={() => setRulesOpen((open) => !open)}
-          className={btnSecondary}
-        >
-          <Settings2 className="h-4 w-4" />
-          Regler
-          <ChevronDown className={cn("h-3.5 w-3.5 transition", rulesOpen ? "rotate-180" : "")} />
-        </button>
+        {/* Reglerna bor numera under Inställningar, bredvid leads-agentens
+            motsvarande kontroll. Se components/settings/SupportRegler.tsx. */}
+        {demo ? null : (
+          <Link href={vag("/settings/regler")} className={btnSecondary}>
+            <Settings2 className="h-4 w-4" />
+            Regler
+          </Link>
+        )}
       </div>
-
-      {rulesOpen ? (
-        <div className="rounded-card bg-paper p-5">
-          <p className="text-[0.8125rem] font-medium text-ink/45">Autosvarsregler per fack</p>
-          <p className="mt-2 max-w-[70ch] text-sm leading-6 text-ink/60">
-            <strong>Utkast</strong> = svaret väntar på ditt godkännande (default). <strong>Auto</strong> = skickas
-            direkt om konfidensen är hög och tonen inte är negativ. <strong>Eskalera</strong> = alltid till människa.
-            Pengar, juridik, GDPR och arga kunder eskaleras alltid, oavsett regel.
-          </p>
-          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {rules.map((rule) => (
-              <div key={rule.category} className="flex items-center justify-between gap-2 rounded-input border border-ink/10 bg-paper2/50 px-3 py-2.5">
-                <span className="text-sm font-medium">{rule.label}</span>
-                <select
-                  value={rule.mode}
-                  onChange={(event) => void setRule(rule.category, event.target.value)}
-                  className="focus-ring rounded-input bg-paper px-2 py-1.5 text-xs"
-                >
-                  <option value="draft">Utkast</option>
-                  <option value="auto">Auto</option>
-                  <option value="escalate">Eskalera</option>
-                </select>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
 
       {error ? (
         <div className="rounded-[8px] border border-danger/25 bg-danger/5 px-4 py-3 text-sm text-ink/80">{error}</div>
       ) : null}
       {syncInfo ? (
-        <div className="rounded-[8px] border border-moss/25 bg-moss/5 px-4 py-3 text-sm text-ink/80">{syncInfo}</div>
+        <div
+          className={
+            syncInfo.includes("Kunskapsbasen är tom")
+              ? "rounded-[8px] border border-ochre/40 bg-ochre/10 px-4 py-3 text-sm text-ink/80"
+              : "rounded-[8px] border border-moss/25 bg-moss/5 px-4 py-3 text-sm text-ink/80"
+          }
+        >
+          {syncInfo}
+        </div>
       ) : null}
 
       {/* Fack-översikt */}
@@ -432,10 +601,32 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
             <div className="rounded-card border border-dashed border-ink/15 bg-paper/45 p-10 text-center">
               <Inbox className="mx-auto h-6 w-6 text-mineral" />
               <h3 className="mt-4 font-semibold">Inkorgen är tom</h3>
+              {/* Stod: "koppla en riktig inkorg (Gmail/Outlook via IMAP) i
+                  backendens miljövariabler". En instruktion till oss, tryckt i
+                  kundens vy — kunden har varken tillgång till backenden eller
+                  anledning att veta vad IMAP är. */}
               <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-ink/60">
-                Klicka på <strong>Hämta testmail</strong> för att seeda sex svenska kundmail, eller koppla en riktig
-                inkorg (Gmail/Outlook via IMAP) i backendens miljövariabler.
+                {lager === "testmail" || visarTestIArenden !== false ? (
+                  <>
+                    Klicka på <strong>Hämta testmail</strong> för att skicka testärenden mot
+                    den här profilens kunskapsbas och se hur agenten svarar.
+                  </>
+                ) : (
+                  <>Inga ärenden ännu. När en inkorg är kopplad hamnar kundmailen här.</>
+                )}
               </p>
+              {inkorgKopplad ? null : (
+                <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-ink/55">
+                  Vill ni koppla er riktiga inkorg?{" "}
+                  <a
+                    href={mejlaOss("Koppla vår inkorg")}
+                    className="focus-ring rounded-input underline underline-offset-4 hover:text-ochre"
+                  >
+                    Hör av er
+                  </a>{" "}
+                  så kopplar vi Gmail eller Outlook åt er.
+                </p>
+              )}
             </div>
           ) : (
             <div className="divide-y divide-ink/10 overflow-hidden rounded-card bg-paper">
@@ -456,13 +647,16 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
                         <p className="flex items-center gap-2 truncate text-sm font-semibold">
                           {email.subject || "(utan ämne)"}
                           {email.has_image ? <ImageIcon className="h-3.5 w-3.5 shrink-0 text-ink/40" /> : null}
+                          {email.is_test ? <span className="kicker shrink-0 text-mineral">Test</span> : null}
                         </p>
                         <p className="mt-0.5 truncate font-mono text-xs text-ink/45">
                           {email.from_name ? `${email.from_name} · ` : ""}
                           {email.from_email}
                         </p>
                       </div>
-                      <Badge tone={meta.tone}>{meta.label}</Badge>
+                      <Badge tone={bearbetas && !email.classification ? "neutral" : meta.tone}>
+                        {bearbetas && !email.classification ? "Bearbetas" : meta.label}
+                      </Badge>
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       {email.classification ? (
@@ -474,7 +668,7 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
                           ) : null}
                         </>
                       ) : (
-                        <Badge tone="neutral">Obearbetat</Badge>
+                        <Badge tone="neutral">{bearbetas ? "Agenten läser…" : "Obearbetat"}</Badge>
                       )}
                     </div>
                   </button>
@@ -525,6 +719,22 @@ export function Dashboard({ demo = false }: Readonly<{ demo?: boolean }>) {
                   </div>
                 ) : null}
               </div>
+
+              {selected.is_test ? (
+                <button
+                  type="button"
+                  onClick={() => void flyttaTillArenden()}
+                  disabled={busy !== null}
+                  className={btnSecondary}
+                >
+                  {busy === "befordra" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  Flytta till ärenden
+                </button>
+              ) : null}
+
+              {!selected.classification && bearbetas ? (
+                <p className="text-sm leading-6 text-ink/55">Agenten läser mailet och skriver ett utkast…</p>
+              ) : null}
 
               {selected.classification ? (
                 <div className="rounded-input border border-ink/10 bg-paper2/50 p-4">

@@ -22,7 +22,27 @@ from ..storage.base import Storage
 logger = logging.getLogger("snajp-support.processor")
 
 _GREETING = "Hej{name}!\n\n"
-_SIGNATURE = "\n\nVänliga hälsningar,\nSnajp-Support"
+_SIGNATURE = "\n\nVänliga hälsningar,\nSnajp Support"
+
+
+def _wrap_reply(body: str, recipient_name: str | None) -> str:
+    """Lägg på exakt en hälsning och en Snajp-signatur."""
+    lines = body.strip().splitlines()
+    if lines and lines[0].strip().casefold().startswith("hej"):
+        lines.pop(0)
+        while lines and not lines[0].strip():
+            lines.pop(0)
+    while lines and not lines[-1].strip():
+        lines.pop()
+    if len(lines) >= 2 and lines[-2].strip().casefold() in {
+        "vänliga hälsningar,", "med vänliga hälsningar,",
+        "vänlig hälsning,", "med vänlig hälsning,"
+    } and lines[-1].strip().casefold() in {"snajp support", "snajp-support"}:
+        lines = lines[:-2]
+        while lines and not lines[-1].strip():
+            lines.pop()
+    clean_body = "\n".join(lines).strip()
+    return (_GREETING.format(name=_first_name(recipient_name)) + clean_body + _SIGNATURE).strip()
 
 _ESCALATION_BODY = (
     "Tack för ditt meddelande. Jag förstår att det här är viktigt, och den här typen "
@@ -171,6 +191,7 @@ async def process_email(
             category=triage["category"],
             channel="email",
             priority=triage.get("priority", "normal"),
+            is_test=bool(email.get("is_test")),
         )
         await storage.save_message(
             tenant_id,
@@ -200,7 +221,7 @@ async def process_email(
             body = _ESCALATION_BODY if must_escalate and articles else (
                 _NO_MATCH_BODY if not articles else _ESCALATION_BODY
             )
-            content = (greeting + body + _SIGNATURE).strip()
+            content = _wrap_reply(body, email["from_name"])
             await storage.update_ticket(
                 tenant_id, ticket["id"], status="escalated", priority="high",
                 escalation_reason=reason,
@@ -216,7 +237,7 @@ async def process_email(
             )
             return {"action": "escalated", "draft_id": draft["id"], "ticket_id": ticket["id"]}
 
-        content = (greeting + (triage.get("draft_body") or _NO_MATCH_BODY) + _SIGNATURE).strip()
+        content = _wrap_reply(triage.get("draft_body") or _NO_MATCH_BODY, email["from_name"])
 
         # 4: autosvar — bara om regeln säger auto OCH säkerhetsvillkoren håller.
         auto_ok = (
@@ -224,6 +245,22 @@ async def process_email(
             and confidence >= settings.auto_send_min_confidence
             and (sentiment is None or sentiment >= 0.4)
         )
+        if auto_ok:
+            # Sändningen sker FÖRE varje statusskrivning, samma kontrakt som
+            # godkännandevägen (api/drafts.py). Misslyckas den degraderar
+            # ärendet till ett vanligt utkast i granskningskön — fail mot
+            # människa, aldrig mot en 'auto_sent'-rad utan mejl bakom sig.
+            from .sender import SandningsFel, skicka_supportsvar
+
+            try:
+                sandnotering = await skicka_supportsvar(email, content=content, tenant_id=tenant_id, storage=storage)
+            except SandningsFel as fel:
+                await storage.log_decision(
+                    tenant_id, email_id=email_id, event="auto_send_failed",
+                    detail={"rule": rule, "note": str(fel)},
+                )
+                auto_ok = False
+
         if auto_ok:
             draft = await storage.create_draft(
                 tenant_id, email_id=email_id, ticket_id=ticket["id"],
@@ -239,7 +276,9 @@ async def process_email(
                 tenant_id, email_id=email_id, event="auto_sent",
                 detail={
                     "rule": rule, "confidence": confidence,
-                    "note": "Utskick simulerat — riktig SMTP/Graph-sändning är nästa steg.",
+                    # Sanningen för just det här mejlet: SMTP, simulerat
+                    # eller testmejl — se email_pipeline/sender.py.
+                    "note": sandnotering,
                 },
             )
             return {"action": "auto_sent", "draft_id": draft["id"], "ticket_id": ticket["id"]}
@@ -266,8 +305,23 @@ async def process_email(
 
     except Exception as error:  # noqa: BLE001 — ett trasigt mail får inte stoppa kön
         logger.exception("Processering av mail %s misslyckades", email_id)
+        # Beslutsloggen är KUNDENS yta. Ett 429 från leverantören bar tidigare
+        # hela råtexten — inklusive "Your prepayment credits are depleted" och
+        # en länk till VÅR fakturering — rakt in i kundens ärendevy. Kvotfel
+        # får samma svenska besked som chatten; rådatan finns redan i
+        # serverloggen via logger.exception ovan. Se test_kvotfel.py för
+        # varför detekteringen läser statuskod och typnamn, inte text.
+        from ..api.events import _ar_kvotfel
+
+        if _ar_kvotfel(error):
+            beskrivning = (
+                "AI-leverantörens kvot är slut just nu. Mejlet är sparat och "
+                "kan processas om när kvoten är åtgärdad — inget är förlorat."
+            )
+        else:
+            beskrivning = str(error)
         await storage.update_email(tenant_id, email_id, status="failed")
         await storage.log_decision(
-            tenant_id, email_id=email_id, event="failed", detail={"error": str(error)},
+            tenant_id, email_id=email_id, event="failed", detail={"error": beskrivning},
         )
-        return {"action": "failed", "error": str(error)}
+        return {"action": "failed", "error": beskrivning}

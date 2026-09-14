@@ -1,0 +1,23 @@
+# Byggkontexten är repo-ROTEN (render.yaml rootDir: .), eftersom agent-core/
+# ligger utanför snajp-support/ och Docker inte kan COPY:a utanför kontexten.
+#
+# Utan den här filen skickas node_modules/, .next/, .git/, .shots/ och docs/
+# (som innehåller en 811 KB genererad rapport) till daemonen vid varje bygge.
+#
+# ALLOWLIST, inte denylist. En denylist ruttnar tyst: nästa person som lägger
+# en stor katalog i repo-roten får den med i imagen utan att märka det. Den
+# här listan går sönder högljutt i stället — glömmer du lägga till något som
+# behövs failar bygget direkt.
+**
+
+!agent-core
+!snajp-support/app
+!snajp-support/requirements.txt
+
+# Skräp inuti de tillåtna katalogerna (sista matchning vinner).
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/.pytest_cache
+**/.env
+**/.env.*

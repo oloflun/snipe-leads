@@ -1,0 +1,12 @@
+{
+  "company_name": "Smålands Stålhallar AB",
+  "website": "https://smalandsstalhallar.se",
+  "context_pack": "## Kontextpaket\n\n### Köparen\nSnajp säljer en svensk AI-supportagent till små och medelstora B2B-bolag. Agenten svarar på kundfrågor grundat i kundens egen kunskapsbas, eskalerar till människa vid osäkerhet, och gissar aldrig.\n\n### ICP\n- Bransch: tillverkning, bygg, industri med återkommande kundfrågor\n- Storlek: 10–100 anställda\n- Geografi: Sverige\n- Signal: rekryterar kundtjänst/innesälj, eller växer snabbt\n- Egna kriterier (diskvalificerar): redan en chattlösning, under 10 anställda",
+  "material": "# Smålands Stålhallar AB\nVi projekterar och monterar stålhallar för lantbruk, industri och ridsport. 28 anställda i Värnamo.\n\n## Aktuellt\nVi expanderar till Skåne under hösten och öppnar ett nytt platskontor i Hässleholm.\n\n## Vanliga frågor\nVåra säljare lägger mycket tid på återkommande frågor om bygglov, grundläggning och leveranstider.\n\n## Kontakt\nAllmänna frågor: info@smalandsstalhallar.se\nFörsäljningschef: Jonas Ek, jonas.ek@smalandsstalhallar.se, 0370-12 34 56",
+  "facit": {
+    "qualified": true,
+    "contact_email": "jonas.ek@smalandsstalhallar.se",
+    "contact_name": "Jonas Ek",
+    "motivering": "28 anställda, bygg/tillverkning, expanderar (signal), säljarna dränks i återkommande frågor, ingen chatt."
+  }
+}

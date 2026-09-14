@@ -1,0 +1,12 @@
+{
+  "company_name": "Polar Logistik i Luleå AB",
+  "website": "https://polarlogistik.se",
+  "context_pack": "## Kontextpaket\n\n### Köparen\nSnajp säljer en svensk AI-supportagent till små och medelstora B2B-bolag. Agenten svarar på kundfrågor grundat i kundens egen kunskapsbas, eskalerar till människa vid osäkerhet, och gissar aldrig.\n\n### ICP\n- Bransch: tillverkning, bygg, industri med återkommande kundfrågor\n- Storlek: 10–100 anställda\n- Geografi: Sverige\n- Signal: rekryterar kundtjänst/innesälj, eller växer snabbt\n- Egna kriterier (diskvalificerar): redan en chattlösning, under 10 anställda",
+  "material": "# Polar Logistik i Luleå AB\nTransport och tredjepartslogistik i Norrbotten sedan 1998. Ett 70-tal medarbetare, egen terminal vid Luleå hamn.\n\n## Lediga tjänster\nKundtjänstmedarbetare, heltid — våra industrikunder hör av sig dygnet runt om leveransstatus och vi behöver förstärka teamet.\n\n## Kontakt\nTrafikledning: trafik@polarlogistik.se\nKundtjänst: kundtjanst@polarlogistik.se\nBesöksadress: Hamnvägen 3, Luleå\n\nObs: transportbranschen ligger utanför köparens ICP-branschlista — men signalerna (rekryterar kundtjänst, återkommande leveransfrågor) är starka. Gränsfall.",
+  "facit": {
+    "qualified": null,
+    "contact_email": "kundtjanst@polarlogistik.se",
+    "contact_name": null,
+    "motivering": "Medvetet gränsfall: fel bransch enligt ICP-listan men mycket starka signaler. qualified=null i facit betyder att båda bedömningarna accepteras — det som mäts är resonemanget och kontaktfälten."
+  }
+}

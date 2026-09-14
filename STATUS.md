@@ -1,5 +1,925 @@
 # Snipra Status
 
+## 2026-09-12 — Claude — Vertex AI deployat och verifierat pa bada Railway-miljoerna
+
+Koden fran 2026-09-11 committad, pushad och deployad. Service account JSON
+satt lokalt och pa Railway (development + main). `gemini-3.6-flash` finns inte
+i Vertex AI — default andrad till `gemini-2.5-flash`. `MODEL` satt pa bada
+miljoerna. Bada verifierade: `mode=live`. Embeddings via Vertex AI:s OpenAI-
+compat endpoint ar trasig (Google-bugg, 500) — systemet faller tillbaka pa
+svensk full-text-sokning.
+
+## 2026-09-11 — Claude — Vertex AI-stod implementerat (service account JSON + OAuth2)
+
+Google tog bort Cloud-krediter fran AI Studio. Hela Python-backenden stodjer
+nu Vertex AI via service account JSON (`GOOGLE_SERVICE_ACCOUNT_JSON`): trad-
+saker credential-caching med token-refresh i `llm.py`, Bearer-token i
+`discovery.py`, nya falt i `config.py`, och `google-auth>=2.29` i
+requirements. Bakatkompatiblitet med enkel `GEMINI_API_KEY` behalls.
+
+4 nya tester, alla 1721 grona. Email Studio
+(`route.ts`) anvander fortfarande `GEMINI_API_KEY` (separat arbete).
+
+## 2026-09-08 — Claude — designhookarnas spärrar: fyra falska larm bortmätta
+
+Den delade hookkedjan i `~/.claude/hooks/` behandlade backend-arbete som
+designarbete. Fyra spärrar sitter nu, var och en mätt eller testad mot det fall
+den påstår sig laga.
+
+**Skrivsidan:** `design-route.py` och `design-gate.py` frågade `is_ui_file(path)`
+UTAN innehåll, och den grenen svarar True för varje tvetydig `.ts`/`.js`.
+Följden var routes som ingen skill kan ladda — rapporten 2026-09-02 bar GAP = 2
+på `lib/snajp/standard.ts`, `testtenant.ts` och `provisionering.ts` — och en
+`gate-pass` kvitterad för varje backend-fil. Ny `is_ui_write()` löser ut
+innehållet ur hunken PLUS filen på disk; hunken ensam räcker inte, för en hunk
+ur en äkta komponent bär ofta ingen UI-signal.
+
+**Promptsidan:** `\b` behandlar `-` och `.` som ordgränser, så `design` inuti
+`design-gate.py` läste som det nakna ordet och fällde ut hela designproceduren i
+en ren Python-uppgift. `strip_code_tokens()` maskerar nu kod innan ordlistan får
+se prompten. Samtidigt lagades svensk böjning och sammansättning: "komponenten",
+"layouten" och "designarbetet" träffade inte alls tidigare.
+
+**Mätt, inte gissat:** `matt_bojning.py` kör tre stadier av ordlistan över
+12 056 rader av repots egen prosa. 301 → 321 → 336 träffar, noll bortfall, varje
+ny träff granskad för hand. Det var så engelskans "designed" hittades — inte
+designavsikt, och fyra av nitton nya träffar.
+
+**Tre fel som testerna hittade EFTER att spärren skrivits:** sammansättningens
+svans var `\w`, som innehåller `_`, och åt därmed upp `DESIGN_GATE_BLOCKING` och
+rev upp kod-token-spärren igen. Böjningsändelsen `isk` lät "heroisk" fyra som
+stark signal. Och två böjningar av samma ord räknades som två svaga signaler, så
+ett enda begrepp räckte för att fyra.
+
+Snipe-leads egen kod är orörd. Tester och mätverktyg: `~/.claude/hooks/tests/`.
+
+## 2026-09-02 (kväll) — Claude — kundbesök läckte in i Snajps egen arbetsyta; Livrustnings produktbeskrivning var tom
+
+Anton rapporterade att Affärskontext visade IDENTISKT innehåll (Snajps egen
+pitch) under två olika kundbesök ("Du testar som nordlys-handel" och "Du
+testar som livrustning"), och att leadskörningar sa sig blockerade trots
+betalt Gemini-konto med kvarvarande krediter.
+
+**Rotorsak, bekräftad genom kodspårning:** `aktivVy()` har tre lägen
+(admin/demo/kund), men `lib/actions/affarskontext.ts` särskiljde bara demo.
+`business_contexts` är RLS-scopad mot ARBETSYTAN, och under ett kundbesök
+(`vy === "kund"`) är arbetsytan fortfarande adminens EGEN — så både läsning
+och skrivning träffade Snajps rad, oavsett vilken kund bannern visade. Samma
+olagade fälla fanns i `betalsatt.ts`, `plan.ts` och `team.ts` (alla
+blockerade bara demo) — där hade ett kundbesök kunnat ändra SNAJPS EGNA
+plan/betalsätt eller skicka en riktig teaminbjudan från Snajps konto.
+`plan.ts`:s egen docstring förutspådde exakt den här klassen av fel utan att
+täcka kund-grenen. Alla fem funktioner behandlar nu demo och kund lika.
+
+**Sidofynd:** `snajp-support/app/tenants/livrustning_business_context.py` —
+en noggrant skriven produktbeskrivning för Livrustning — hade aldrig
+importerats någonstans (ingen `.pyc` i `__pycache__`, till skillnad från
+syskonfilerna). Livrustnings `product_marketing` var därför TOMT i
+development, vilket blockerar varje utkast (`MissingBusinessContextError`,
+minst 120 tecken krävs). `scripts/livrustning_produktkontext.py` (nytt,
+idempotent, samma mönster som `seed_demo.py`) materialiserade filens
+innehåll: 0 → 2737 tecken, version 1, körd mot development. nordlys-handel
+hade redan ett giltigt dokument (726 tecken) — den kundens problem var
+enbart UI-buggen ovan.
+
+**Dygnsbudgeten (LEADS_DAILY_TOKEN_BUDGET) är INTE en bugg.** Meddelandet i
+screenshoten ("5 485 872 av 2 000 000 tokens") är en egen kostnadsspärr
+(app/leads/budget.py, tillagd 2026-09-01 efter en återtagsbugg som
+dubblerade kostnaden), helt orelaterad till Gemini-kontots faktureringsnivå.
+Google AI Studio bekräftar Paid-nivå med SEK 53,84 kvar i kredit — just den
+låga summan är skälet att INTE höja taket utan Antons tal: en ny
+kostnadsincident skulle bränna resten på en dag. Kvar till Anton: säg ett
+tak (eller vänta ut 24-timmarsfönstret).
+
+**⚠️ En hemlighet exponerades under felsökningen:** en Railway-variabelfråga
+för att kontrollera om `LEADS_DAILY_TOKEN_BUDGET` var satt i development
+skrevs för brett och visade Gemini-nyckelns fulla värde i sessionsloggen
+(samma felklass som Redis-lösenordet tidigare, se global MEMORY.md).
+Rekommendation: rotera nyckeln i Google AI Studio.
+
+Verifierat: `tsc --noEmit` rent, stickprov av backendtester grönt (13/13).
+Pushat till `development` (`68e1b75`). Ingen ändring gjord mot `main` —
+Livrustning-materialiseringen kördes bara mot development; samma körning mot
+main kräver Antons uttryckliga go enligt produktionsspärren.
+
+## 2026-09-02 — Claude/Sebbe — agenterna drar färre anrop: grindar, snabbsök, GDPR-lager
+
+Beställningen var att sänka credits/anrop utan kvalitetstapp, och svaret är
+GRINDAR för utfall som ändå kasserades — inte tunnare prompts:
+
+* **Leads:** okvalificerat eller kontaktlöst prospekt stoppar efter
+  ICP-steget: 3 anrop i stället för 9, och utkastfasen (4–7 anrop till)
+  hoppas över. `icp_fit`/`qualified`/`disqualifiers` persisteras ÄNTLIGEN på
+  prospektraden (migration 024:s syfte — ingen kodväg skrev dem).
+  Sökprompten bär nu SNI-koder, regioner och exclude_domains — en kund med
+  enbart SNI-koder sökte tidigare "hela internet" med tom målgruppstext.
+  Kontaktkravet är kodgrind, inte bara prompttext.
+* **Leads-snabbsöket byggt** (`scope="sok"` + `LeadsSnabbsok.tsx` till höger
+  om formuläret på /admin/testkorningar): en rad, "Sök Leads", 12 leads med
+  kontaktväg för EN Gemini-sökning. Träffar utan kontakt räknas separat.
+* **Support:** eskaleringssteget (kedjans enda thinking-anrop) villkorat —
+  körs bara vid kb-lucka, säkerhetssignal eller när kunden ber om en
+  människa (ny kodregex tar över exakt den signalen). 6→5 anrop på lyckliga
+  flödet. Följdfrågegränsen höjd till TVÅ motfrågor innan kb-lucka
+  eskalerar. Påhoppsgrinden orörd och verifierad: svordomar eskalerar inte,
+  riktade allvarliga hot gör det.
+* **Bokföring:** chattagenten läser nu det globala instruktionslagret (var
+  enda LLM-ytan där adminredigerade regler inte nådde fram), dataskyddsblock
+  i systemprompten och nytt kunskapsämne `gdpr_och_bokforing`.
+* **Dataskydd:** ScrapeGraphAI stod INTE i underleverantörslistan trots att
+  den hämtat prospektsidor sedan skrapningen byggdes — tillagd i
+  `lib/bolag.ts`, DPA/region flaggade till Anton. Full kunddatalista i
+  handoffen. INV-API-001 föll på HEAD (`lib/skatteverket/oauth.ts`) — lagad.
+
+Parallellsessionen (snipe-leads-28) levererade i samma push: INV-JOB-002-
+liggaren (migration 059, körd mot dev före pushen), tokenbudget och
+V2-playbooks bakom env-flagga; körvägen `leads_research_v2.py` kommer i
+deras egen push.
+
+**1717 backendtester + 386 rotvakter gröna, tsc rent.** Deployad `ef9a1af`
+(auto-deployen fungerar igen). Handoff:
+`HANDOFF-2026-09-02-RESURSER-OCH-GRINDAR.md`.
+
+## 2026-09-01 — Claude/Sebbe — UTSKICKEN FUNGERAR. Sista sändblockeraren avförd.
+
+Ett riktigt mejl gick från Railway-containern hela vägen till inkorgen:
+`Snajp <kontakt@snajp.se>` -> snajpsupport@gmail.com, status **delivered**
+i Resend. Egen domän, DKIM-signerat, via HTTPS.
+
+Vägen dit, för den som möter samma vägg igen:
+* Railway blockerar utgående SMTP på Free/Trial/Hobby (mätt inifrån
+  containern med `GET /api/admin/sandvag`: 587/465/2525 ger alla timeout).
+  Gmail-app-lösenord kan alltså aldrig fungera här. Samma vägg som Render
+  gav 2026-07-30.
+* Lösningen är HTTPS via Resend (`ResendMailer`, väljs av RESEND_API_KEY och
+  går före SMTP). snajp.se är verifierad i **eu-west-1** — EU-regionen valdes
+  medvetet, samma dataskyddsresonemang som fällde DeepSeek.
+* DNS hos Loopia: DKIM-TXT på `resend._domainkey`, CNAME `send` och `rsend`,
+  TXT `_dmarc`. Apex orörd — MX:en dit `kontakt@snajp.se` pekar.
+* Två falska spår kostade tid: negativ DNS-cache hos Google (jag slog upp
+  posterna innan de fanns), och en API-nyckel som var sändnings-begränsad
+  och därför inte kunde se att domänen var verifierad.
+
+**Verifiera själv:** `POST /api/admin/sandvag/prov?till=<adress>` (master-nyckel).
+
+**Kvar på sändsidan:** godkänt supportsvar genom hela flödet är ännu inte
+kört mot ett RIKTIGT inkommande mejl — testmejl (provider='mock') skickas
+aldrig med flit, och IMAP är inte kopplat, så det finns inga riktiga att
+godkänna än. Koden är enhetstestad; kedjan är bevisad till och med Resend.
+Produktionen (`main`) har INGA mejlvariabler satta — den är orörd.
+
+## 2026-08-31 (eftermiddag) — Grok — Starta körning dog på timeout
+
+Anton tryckte Starta körning (tomma Egna bolag) och fick "Kunde inte nå
+servern". Inte 422: Gemini+Google-sökningen låg i POST-svaret, Next-proxyn
+avbryter efter 9 s, Safari ser TypeError. Sökningen är nu ett jobb
+(`fase=soker`); knappen får 202 direkt. POST görs inte om (fem omförsök
+startade fem sökningar). Manuell Railway-deploy krävs.
+
+## 2026-08-31 (sen kväll) — Grok — leads-kedjan hittar bolag
+
+Körningen krävde ifyllda namn i Egna bolag (422), behandlade "Inget, hitta
+själv" som bolagsnamn, plockade gamla rader ur registret och skrev inget
+utkast trots "Research och utkast". Nu: ICP → sök (Gemini + Google) →
+registrera bolagets egen sajt → research → utkast. Egna bolag är valfritt.
+Placeholder säger det.
+
+## 2026-08-31 (kväll) — Grok — testmail isolerade, flytta-formulär, byt kund, pushat
+
+Kvarvarande punkter från morgonens plan: is_test på inkorg/ärenden (migration
+057 körd mot development), Testmail-flik för riktiga kunder, ifyllnad vid
+Flytta över, sökbar kundväxel i headern, knapp för testkund → riktigt konto.
+21 exempelbolag raderade från Snajp-tenanten. Redis: EU, SEMANTIC_CACHE=shadow,
+TLS fortfarande av (kräver `python scripts/redis_tls_pa.py --apply` av Anton).
+
+Pushat till `origin/development`. Auto-deploytriggern är död sedan 29/8 —
+manuell Railway-deploy krävs. Handoff:
+`HANDOFF-2026-08-31-TESTISOLERING.md`.
+
+## 2026-08-31 — Grok — exempelkörningar borta, testmail mot profilen, testchatt kalibrerar
+
+Anton visade fjorton skärmbilder: leads som spottade färdiga VVS-pitchar,
+flytta röd på `.example`, inkorg som först såg statisk ut, nästan allt
+eskalerat, testchattens kunskapsartikel som lät som uppladdad affärskontext.
+
+Byggt lokalt på `development` (inte pushat):
+
+- Exempelbolag skapas bara för Nordlys/demo. Formuläret pollar den riktiga
+  batchen. 403 utanför demon.
+- Testmail byggs ur tenantens kunskapsbas. Inkorgen visar Bearbetas medan
+  agenten läser.
+- Testchatten öppnar undersökningsärende i stället för att default-spara KB.
+  Feedback 403 på skarpa körningar; rättningar läses i nästa testchatt.
+- Admin som tittar som kund tvingar `is_test` i proxyn.
+- Inställningsmenyn: Underlag först, vanlig svenska.
+
+Live mot Railway och Redis-TLS är inte kört. Handoff:
+`HANDOFF-2026-08-31-TESTLAGER-OCH-UI.md`.
+
+## 2026-08-30 — Claude — leads-batchens NameError lagad; UI:t visar ändå bara exempelbolag
+
+Anton rapporterade att leadskörningar "fortfarande genererar färdiga exempel
+direkt" trots gårdagens Redis-fasleverans. Grävning visade två separata fel:
+
+- **Backend, lagad:** `_gather_registered_sources` i `leads_agent.py` kraschade
+  med `NameError: name 'skatteverket' is not defined` på VARJE riktig
+  batchkörning, före första LLM-anropet. Sviten var grön eftersom alla
+  batchtester monkeypatchar `run_research_step`. Fixad, omockat test
+  verifierat rött→grönt, deployad och verifierad med en riktig körning mot
+  live dev (`status: completed`).
+- **Frontend, INTE lagad — dokumenterad handoff:** `LeadsRunForm.tsx` visar
+  aldrig den riktiga körningens resultat. Exempelbolagens pitch-text är
+  hundraprocentigt färdigskriven i kod och renderas direkt (default-checkbox
+  påslagen); den riktiga batchens `job_id` pollas aldrig. Se
+  `HANDOFF-2026-08-30-LEADS-KORNING.md`.
+
+Samtidigt: KB-artikeltext wrappas nu som opålitlig text (INV-SEC-012 skärkt
+till två lager), och Railways deploytrigger för `development` visade sig ha
+slutat fira sedan 2026-08-29 22:42Z — omgången med manuell deploy, orsaken
+inte undersökt. Se `HANDOFF-2026-08-30-KB-WRAP.md` och
+`session-logs/2026-08-30-session-log.md`.
+
+## 2026-08-29 (sen kväll) — Claude/Sebbe — adminytan fylld, tvåspråkig och läsbar; tokenkostnaden satt till leverantörens riktiga pris
+
+**Utgångspunkt: tre skärmbilder.** Kolumner fulla av nollor i Översikt och
+Kunder & Data, engelska flikar över svenska tabellrubriker, och ett notiscenter
+som visade leverantörernas råa JSON-fel som brödtext.
+
+**Byggt och deployat (sex commits, alla `SUCCESS` på development):**
+- **Exempeldata** (`lib/admin/exempeldata.ts`) på arbetsytor HELT utan
+  aktivitet. Deterministiskt härlett ur tenantens id, sex profiler, varje rad
+  märkt `Exempel` och räknad i en fotnot. Rader med riktig aktivitet — Nordlys
+  Handel, Snajp — rörs aldrig. Av med `NEXT_PUBLIC_ADMIN_EXEMPELDATA=av`.
+- **Tvåspråkig adminyta** (`lib/admin/sprak.ts`). Kolumnrubriker, hälsotexter,
+  statistik, rådgivarens frågor och svar, fotnoter, plattformsflikar. Språkvalet
+  sparas i `localStorage` — det snäppte förut tillbaka vid varje omladdning.
+- **Läsbara händelsetexter** (`lib/admin/handelsetext.ts`). Tio tolkare gör om
+  undantagstext till rubrik och förklaring; råtexten ligger kvar bakom
+  "Tekniska detaljer". `RateLimitError: Error code: 429 - [{'error'...` blev
+  "Kvoten hos Google Gemini (gemini-3.6-flash) är slut".
+- **Statistikgrafen** fylls av exempelraderna, utspridda över hela
+  tolvveckorsfönstret. Demoytorna (`nordlys-handel`, `public-demo`) räknas
+  aldrig som kunder, oavsett märke.
+
+**Hydreringsbugg hittad och rättad i samma andetag.** Konverteringen till
+klientkomponenter tog med `Date.now()` och tidszonsberoende datumformatering
+över server/klient-gränsen: servern kör UTC, webbläsaren Europe/Stockholm, och
+en tidsstämpel strax före midnatt UTC blev olika datum i de två renderingarna.
+Klockan läses nu en gång på servern och skickas ned som `nu: number`; tidszonen
+är spikad i `sprak.ts`. Verifierat med Playwright mot tre webbläsartidszoner,
+med och utan fixen — ett hydreringstest som inte kan falla bevisar ingenting.
+
+**Tokenkostnaden var fel om fel leverantör.** `TOKENKOSTNAD_PER_MILJON_SEK = 12`
+beskrev "DeepSeek-klassen". Railway säger `LLM_PROVIDER=gemini`,
+`MODEL=gemini-3.6-flash` i BÅDA miljöerna, och DeepSeek är dessutom spärrad där
+kunddata finns. Konstanten är nu två, eftersom utgående tokens kostar fem gånger
+mer än ingående: **7,14 kr in / 35,71 kr ut per miljon**, Googles listpris
+omräknat till 9,5237 SEK/USD.
+
+**MÄTT: faktureringen hos Google är fortfarande inte påslagen.** Felloggen visar
+`generate_content_free_tier_requests, limit: 20`, samma sak som
+`docs/JURIDIK_ATGARDER.md` mätte. Det verkliga utfallet i kronor är alltså noll
+— betalat i genomströmning i stället för i pengar — och talen ovan visar vad det
+kostar den dag faktureringen slås på. **Listpriset dubblas 2027-01-01**
+(14,29 / 71,43); står i docstringen så att marginalfallet inte läses som en bugg.
+
+**Kvarstår:** marginalkolumnen är i praktiken konstant 100 % vid realistiska
+volymer — ett paket på 6 990 kr tål ~39 miljoner utgående tokens innan
+marginalen ens blir gul. Det är en egenskap hos affären, inte hos koden, och
+kräver ett beslut när en riktig faktura finns.
+
+Session: `session-logs/2026-08-29-session-log-4.md` ·
+Plan: `plans/2026-08-29-adminytan-exempeldata-och-sprak.md`
+
+## 2026-08-29 (kväll) — Claude/Sebbe — main och development delade Redis-nyckelrymd: jobbströmmen korsade miljögränsen
+
+**Hittat genom att svara på varför `redis-cli` inte fanns på Windows.** Mätt
+mot Railways API och den körande instansen: `main` och `development` har
+IDENTISK `REDIS_URL`, båda svarade `jobs: redis`, och ingen nyckel bar miljö.
+Redis Cloud-gratisnivån ger EN logisk databas (`SELECT 1` → "DB index is out
+of range"), så miljöerna låg i samma nyckelrymd.
+
+**Aktivt exponerat, inte teoretiskt:**
+- **Jobbströmmen.** En enda consumer group `agenter` på `crm:jobb:chatt`, med
+  konsumenter från NIO containrar. En grupp delar ut varje post till exakt EN
+  konsument — ett chattjobb från en riktig kund kunde alltså köras av en
+  development-container mot spegeldatabasen, och tvärtom. Att en specifik
+  körning korsade går inte att bevisa i efterhand (pending var 0, ingen
+  per-post-logg); exponeringen var det.
+- **Arbetsminnet** (`minne:{tenant}:{kund}`). Kopplas in så fort `REDIS_URL`
+  finns, alltså i båda miljöerna, och development speglar produktionen med
+  IDENTISKA tenant- och kund-id:n.
+
+**Latent, inte aktivt:** svarscachen delade `svarscache_idx` (filtrerar på
+`tenant`), men `SEMANTIC_CACHE` är osatt i main och defaulten är `off` — den
+hade blivit aktiv i samma sekund någon slog på den. Embeddingcachen delas
+också, vilket är ofarligt (ren funktion av texten).
+
+**Åtgärdat i kod:** nio ytor går nu genom `app/redisnycklar.nyckel()` —
+jobbposter, chatt- och leadsströmmarna, embeddingcachen, KB- och
+konfigversionerna, arbetsminnet, samt svarscachens nycklar OCH dess FT-index.
+Fröet är HELA DSN:en plus miljönamnet, och det är ett mätresultat: första
+utkastet hashade värd + databasnamn och hade varit VERKNINGSLÖST, eftersom
+båda miljöerna kör mot `postgres.railway.internal:5432/railway` som
+`snajp_app` — bara lösenordet skiljer. `INV-REDIS-001` prövar exakt det
+fallet, och är verifierad genom att brytas med flit.
+
+**Verifierat mot körande Redis efter deploy:** `nsb340e34a:crm:jobb:chatt`
+och `...:leads` finns nu med egna konsumenter. Development har lämnat den
+delade rymden, alltså är korskopplingen stängd framåt. 1998 tester gröna.
+
+**KVAR — Antons hand:** `main` kör fortfarande på de onamnrymdade nycklarna
+tills den deployas (tvåstegspushen + NO-GO-listan). Den är ensam där nu, så
+exponeringen är borta, men produktionen får sin namnrymd först vid deploy.
+Egen Redis-instans åt `main` (plan R5) kräver betald nivå och är fortfarande
+rätt slutläge. Redis-lösenordet klistrades in i klartext i en chatt — rotera
+det i Redis Cloud när tillfälle ges.
+
+## 2026-08-29 (morgon) — Claude — sjufasplanen + Redis-arkitekturen byggd, verifierad och PUSHAD till development
+
+**Hela beställningen från 2026-08-28 är implementerad** (Fas 1–6 + Fas 7:s
+förberedelse) plus den nya Redis-arkitekturen (Fas R0–R4), tre commits
+(`cb05da0`, `f25e91b`, `0512ab3`). Arbetet dirigerades till nio
+Sonnet-delagenter med egen granskning av varje leverans — viktigaste
+egenfyndet var RediSearch TAG-escapningsbuggen (UUID-bindestreck), som
+BARA liveverifieringen mot dev-databasens riktiga Query Engine kunde se.
+
+**Chattkörningar överlever nu en deploy** (Redis Streams + XAUTOCLAIM +
+idempotent återupptagning, INV-JOB-001), **semantisk svarscache** i
+mörkstartsläge (`SEMANTIC_CACHE=shadow` satt i dev — träffkvot läses i
+Händelser; INV-CACHE-001 med PII-/minnes-/påhopps-/kategorigrindar),
+**rullande samtalsminne** (INV-MEM-002), Testchatt-flik mot inloggad tenant,
+befordran test→riktigt konto med Luhn-validering, `agent_runs.model`,
+`origin='test'` hela vägen. Migration 054+055 applicerade FÖRE pushen.
+**1586+362 tester gröna** (101 nya), tsc rent, `qa_vyer` GRÖNT mot live dev,
+uppstartsloggen visar ström-workers + cachelager aktiva.
+
+**B1 skärpt med mätdata:** nya Gemini-nyckeln svarar ~170 s/anrop (strypt
+kö) och Railway kör fortfarande GAMLA nyckeln i båda miljöerna —
+chatt-E2E:t på dev gick hela strömkedjan och föll exakt på 429-dygnskvoten.
+**Antons kommandolista** (allt förberett, klassificeraren krävde
+människohand): `redis_tls_pa.py --apply` (TLS är AV — trafiken okrypterad,
+regionen EU-verifierad), `gemini_web_konfig.py --apply`, Redis DPA,
+B1-konsolsteget. Redis Cloud + Resend står nu som underbiträden i
+juridikkedjan; Resend-sändvägen bekräftad live (varningen borta).
+
+Fullständig karta: [HANDOFF-2026-08-29-REDIS-OCH-FASERNA.md](HANDOFF-2026-08-29-REDIS-OCH-FASERNA.md)
+· [plans/2026-08-29-redis-agentarkitektur.md](plans/2026-08-29-redis-agentarkitektur.md)
+· [session-logs/2026-08-29-session-log-3.md](session-logs/2026-08-29-session-log-3.md)
+
+## 2026-08-29 — Claude — Sebbes 24 commits genomgångna, Resend + Redis konfigurerade i development
+
+**Läste in och redogjorde för allt Sebbe (med Claude) byggt sedan Antons
+senaste commit (`090a0ba` → `9d15d73`, 24 commits, tre nätter):**
+lanseringsgranskningen (triage-timtak, dev-masternyckelvakt,
+`agent_feedback`-sortering, fyra frontend-fixar), mejlsändningen i tre steg
+(SMTP byggd → uppmätt att Railway blockerar utgående SMTP på trial-planen →
+byggd om till Resend/HTTPS), och adminfliken "Kunder & Data" (kundregister
+med käll-märkning per fält, statistik, felöversikt — intäkter/utgifter
+medvetet INTE byggt som siffror, väntar på Antons beslut om datakälla). Full
+detalj i `HANDOFF-2026-08-27-GRANSKNING.md` och
+`HANDOFF-2026-08-29-KUNDER-DATA.md`.
+
+**Resend satt i `development`:** `RESEND_API_KEY`, `EMAIL_PROVIDER=resend`,
+`SMTP_FROM=kontakt@snajp.se` — bekräftat i Railways variabellager, men
+deployen stod kvar som `BUILDING` vid sessionens slut och `/health/ready`
+visade fortfarande varningen om saknad sändväg i sista kontrollen. Inget
+fel, bara inte utrullad än — nästa session kollar `curl .../health/ready`
+igen innan den litar på att den är live.
+
+**Redis Cloud kopplad som jobbkö.** Ny databas ("Snajp-Chat-Data") satt som
+`REDIS_URL` på `development/api` (`scripts/redis_konfig.py`, nytt).
+**Bekräftat live:** `/health` svarar `"jobs":"redis"` — en omstart av
+`api`-tjänsten tappar inte längre pågående chatt-/leads-jobb. Redis Clouds
+konto-nivå-API sparat i `.env.deploy` (`scripts/redis_cloud_nycklar.py`,
+nytt) efter en felsökning som visade att Cloudflare (framför Redis Clouds
+API) blockerade Pythons standard-`User-Agent` — inget fel i nyckelparet, som
+det först såg ut som. Förkravet för att provisionera fler Redis-databaser är
+nu på plats; vad de ska användas till är en öppen fråga till Anton.
+
+Redis-databasen delas INTE med `main` — samma tysta-korskoppling-resonemang
+som redan gäller `GEMINI_API_KEY`. `main` har fortfarande varken Resend,
+Redis eller Kunder & Data; produktionsspärren från
+`plans/2026-08-28-skarpa-korningar-och-produktion.md` §8.1a gäller
+oförändrat, allt arbete gick mot `development`.
+
+Fullständig sessionslogg: [session-logs/2026-08-29-session-log.md](session-logs/2026-08-29-session-log.md)
+
+## 2026-08-29 (natt) — Claude/Sebbe — adminfliken Kunder & Data: kundregister, statistik, felöversikt
+
+**Live i development, migration 053 körd.** Handoff till Anton:
+[HANDOFF-2026-08-29-KUNDER-DATA.md](HANDOFF-2026-08-29-KUNDER-DATA.md).
+
+Befintliga fliken Kunder utbyggd (inte kopierad) till "Kunder & Data",
+sidtitel `Snajp - Kunder&Data`. **Migration 053**: `ss_customer_details`
+(orgnr, fakturerings- och adressfält, kund_sedan, avtal_signerat) +
+`ss_customer_contacts`, båda admin-only via 029-mönstret (åtkomliga bara på
+OSKOPAD anslutning). Backend: `api/admin_kunddata.py` bakom
+`require_master_key`, fältlistan delad i `storage/base.py`. Skrivningen går via
+server actions, eftersom adminproxyn är GET-only med flit och den regeln inte
+luckrades upp.
+
+**Bärande beslut: varje fält bär sin källa** (`manuell`/`onboarding`/`system`/
+saknas). Bara orgnr och kund-sedan går att härleda i dag; resten finns inte i
+någon datakälla. Ett härlett värde som ser handbekräftat ut i ett
+faktureringsunderlag är felet som kostar pengar hos någon annan. Följdregel:
+klienten skickar bara ÄNDRADE fält, annars blir varje härlett värde manuellt
+vid första sparning.
+
+Statistik: avtal per dag/vecka/månad/år + veckograf (nya kunder, signerade
+avtal) + försäljningstakt. Demo- och testytor räknas aldrig som kunder, men
+göms inte. Fel & eskaleringar sammanfattar `platform_events` +
+`ss_tickets.status='escalated'` — inget nytt felsystem, länk till Händelser.
+
+**Intäkter/utgifter byggdes MEDVETET inte.** Det finns ingen riktig
+betalkälla: migration 044:s betalsätt är Stripes testkort mot simulerad
+provider, fakturor/nummerserie/moms saknas i kod. Sidan säger det rakt ut i
+stället för att visa påhittade siffror. Datakälla är Antons beslut.
+
+**1505 tester gröna** (13 nya), tsc rent, `qa_vyer.mjs` GRÖNT mot körande dev,
+nya detaljvyn besiktigad inloggad (noll JS-fel, noll 4xx). Lokal fullstack gick
+inte att resa — pgvector saknas i lokala PostgreSQL 17 — så UI:t granskades via
+en okommittad preview-route + Playwright på 1440/375 i båda lägena.
+
+## 2026-08-28 — Claude — sjufasplan för skarpa körningar, produktionsspärren hittad, Loopia satt
+
+Anton bad om sju saker på en gång: gör alla körningar skarpa, skilj
+testkörningar från kundens riktiga konto, prospektbefordran, Email-studion
+in i leaden, en Testchatt-flik, minst 10 riktiga rundor DeepSeek/Gemini, och
+förberedd produktion på `main`. Fem parallella delagenter kartlade ytan;
+varje bärande fynd verifierades själv innan det gick in i planen —
+[plans/2026-08-28-skarpa-korningar-och-produktion.md](plans/2026-08-28-skarpa-korningar-och-produktion.md),
+17 `bd`-ärenden med beroenden, publicerat sammanfattningsdokument.
+
+**Varför körningarna ser autogenererade ut — fyra oberoende orsaker.**
+Email-studions modellväljare kände aldrig till Gemini (bara OpenAI/DeepSeek),
+föll alltid till mallgenererad text; exempelbolagen är deterministiska med
+flit men oskiljbara från en AI-körning i UI:t; Gemini kör gratisnivå (20
+anrop/dygn) trots betalt faktureringskonto — nyckelns PROJEKT var inte
+kopplat till kontot; ingen sändväg finns (varken IMAP in eller SMTP ut).
+Simuleringsläget i backenden var **inte** aktivt — båda miljöer `mode: live`.
+
+**Produktionsdeployen är farligare än dokumenterat.** `git rev-list` mot
+`origin` visade `main` som strikt förfader till `railway-main` (152 commits
+efter, noll före) — den dokumenterade `git push origin main:railway-main`
+skulle i dag avvisas eller, tvingad igenom, rulla tillbaka 22 aug-omläggningen
+och 25 aug-hotfixen. Verifierat att `development` redan innehåller hotfixens
+fulla innehåll, så säkra vägen är merge, inte force. **Produktionen rörs inte
+förrän Anton säger till** — skrivet in i planen på tre ställen.
+
+**Loopia satt och verifierat live.** `scripts/loopia_nycklar.py` (nytt,
+säker inklistring via getpass) → `python scripts/loopia_dns.py` returnerade
+riktiga MX/NS/TXT-poster från Loopias servrar, alltså bekräftat fungerande.
+`www.snajp.se`-CNAME väntar bara på `--apply`; apex-vidarebefordran förblir
+manuell (finns inte i LoopiaAPI).
+
+**Gemini — pågående, inte stängt.** Nyckeln var en Vertex AI Express
+Mode-nyckel vars PROJEKT (`snajp-506221`) inte var kopplat till
+faktureringskontot — därför gratisnivå trots betalt konto. Anton har sedan
+kopplat ett nytt projekt och bytt nyckel via `scripts/keys.py`, men det är
+INTE verifierat live än (nästa session: `python scripts/kor_evals.py`, ingen
+429 = bekräftat).
+
+`scripts/keys.py` säkrad: ett `FIXED`-block skrev tidigare ovillkorligt över
+`LLM_PROVIDER`/`MODEL` vid varje inklistring — samma felklass som
+`snipe-u70`. Skriver nu bara på ett tomt fält.
+
+Fullständig sessionslogg: [session-logs/2026-08-28-session-log.md](session-logs/2026-08-28-session-log.md)
+
+## 2026-08-28 — Claude/Sebbe — MÄTT: Railway blockerar SMTP. HTTPS-vägen byggd.
+
+`/api/admin/sandvag` kördes mot den körande dev-containern: portarna 587, 465
+och 2525 ger alla TimeoutError ut mot smtp.gmail.com. Railway släpper igenom
+utgående SMTP först på Pro; projektet ligger på `trial`. **Gmail-kontot med
+app-lösenord kan alltså aldrig fungera här** — det är inte ett fel i
+uppgifterna, och ingen ska felsöka lösenordet igen.
+
+Samma vägg som Render gav 2026-07-30 (commit 0d3ac1d). Byggt i stället:
+`ResendMailer` (HTTPS, väljs av RESEND_API_KEY och går före SMTP),
+`BlockeradSmtpPort` som översätter errno 101/110/111 till "byt kanal", och
+`/api/admin/sandvag` så frågan går att ställa på en sekund nästa gång.
+
+**Kvar — och bara en människa kan göra det:** konto på resend.com, verifiera
+snajp.se med tre DNS-poster hos Loopia (ger DKIM), sedan
+`python scripts/smtp_konfig.py --env development --apply --resend
+--avsandare-resend hej@snajp.se`. Gratisnivån (3 000/mån) rymmer paketens 300.
+
+## 2026-08-28 (efter midnatt) — Claude/Sebbe — SMTP-sändvägen byggd (snipe-ork stängd i kod)
+
+`SmtpMailer` + `email_pipeline/sender.py` + kopplingen i approve/autosvar,
+commit `cec72ad`, live i development. Kontraktet: 'sent' kan aldrig ljuga —
+sändning sker före status, fel ger 502/granskningskö, testmejl skickas aldrig,
+torrkörning vinner över SMTP. 17 nya tester, 1467 gröna. **Aktivering är ett
+människosteg:** sätt SMTP_HOST/USER/PASSWORD (+ ev. FROM) i Railway, se
+DEPLOY.md § "Kundvänd utgående SMTP". Tills dess loggas utskick som förut.
+Kvar: per-tenant-avsändare (Del F), Next-appens egna mejlvägar (glömt
+lösenord/demo-länk), snipe-xl9 väntar på riktiga inkommande svar.
+
+## 2026-08-27 (senare samma natt) — Claude/Sebbe — go/no-go-granskning, tre av Antons trådar stängda, fem fixar live i development
+
+Full lanseringsgranskning av hela ytan + live-verifiering; rapport i
+`HANDOFF-2026-08-27-GRANSKNING.md`, sessionslogg i
+`session-logs/2026-08-27-session-log.md`. **Isolering GODKÄND mot körande DB**
+(snajp_web/snajp_app utan BYPASSRLS, RLS 64/64 tabeller). Antons agentbackend-
+handoff genomgången: RRF-fusionen skarpverifierad mot Postgres, chat-E2E grön
+hela HTTP-vägen (KB-grundat svar), larande-vyerna verifierade inloggat.
+Svar-E2E blockerad av Gemini-429 (chatten gick igenom — troligen annan
+kvotpott per modell). Antons enda röda test lagat (agent_feedback-sortering)
+→ 1450 gröna. Nytt i koden: timtak på /api/triage (var enda LLM-vägen utan
+enforce), startvakt mot dev-masternyckeln, error.tsx/global-error.tsx,
+429-texter, EjAktiverad i supportinkorgen, fyra catch-lösa hämtvägar.
+Pushat till `development` (nya deploy-kedjan), deployad commit f081e11
+verifierad med verify_railway.py — allt grönt. `main` orörd; kvarstående
+main-blockerare i handoffens §4 (SMTP-attrappen, fakturering, orgnr-
+platshållaren, kvoterna 150/300, Redis, Gemini-kvoten).
+
+
+## 2026-08-27 (natt) — Claude — varv 2–3: mätningen bevisad, grindarna skärpta, och två arkitekturmönster hämtade utifrån
+
+Fortsättning på kvällens audit, på Antons uttryckliga "fortsätt tills jag säger
+stopp". Milstolperapport med all mätdata:
+https://claude.ai/code/artifact/862c4b3b-e058-4959-86b8-caa84591b127
+
+**Mätningen gjord på riktigt (4 skarpa körningar + jämförelseskript).**
+Support: S1-vändningen (7 aug eskalerade mot seedad KB → svarar nu),
+S2-vändningen (falsk retention_risk → svarar själv med KB-grundad plan;
+klassarvillkoret lagat: missnöje ensamt bär aldrig retention-etiketten).
+Leads: evidensreglerna bet direkt (ämnesrader bär mottagarens fakta, EN
+uppmaning, "troligen" borta); referensregeln träffade 3/3 i EFTER-körningen;
+grundningscykeln fällde+reparerade+köade skarpt. `--skarp`-verifiering:
+modellen följde injicerad kundinstruktion ordagrant.
+
+**Gissningsordsgrinden i kod** (`app/leads/gissnings_gate.py`): overlay-regeln
+visade sig vara en riktning ("lär"/"brukar" slank igenom) — nu kodgrind,
+testad mot exakt de meningarna, inkopplad i alla tre utkastvägarna med samma
+reparationscykel som grundningen.
+
+**Adminytan Lärande** (`/dashboard/larande`, `components/leads/AgentLarande.tsx`):
+förslagen godkänns/avfärdas (godkänd KB-artikel skapas av backend-endpointen,
+aldrig av klienten), teamets domar listas read-only därunder. Wirad i
+routes/i18n/WorkspaceViews; rotvaktpost tillagd (333 gröna). *(En
+processomstart tappade kontexten om att ytan byggts — en mellanversion av den
+här posten kallade den felaktigt obyggd; verifierad på disk och i tsc/vaktposter
+2026-08-27.)*
+
+**Varv 3 — arkitektur utifrån, husanpassad:**
+- **Eval-harness** (Langfuse/promptfoo/Ragas-mönstret): `app/agent/evals.py`,
+  7 golden cases ur VERKLIGA incidenter, faithfulness mätt med
+  grundningsextraktorn i stället för LLM-domare, `scripts/kor_evals.py`
+  (exit 1 vid fall). Döda `agent_evals` fick sin första kodväg, och nedtummad
+  feedback med rättad text blir AUTOMATISKT ett eval-case — fältets
+  "live trafik in i golden-setet", mekaniskt.
+- **Kundminne** (mem0 ADD-only): migration 052 `customer_memory`, extraktion
+  inbakad i triagesteget (noll extra anrop), ny invariant **INV-MEM-001**
+  (bara kundens egna utsagor, aldrig agentens slutsatser, alltid
+  untrusted-wrappat — injektionsattack-testat). `agent_feedback` fick också
+  sin första kodväg (verdict + corrected_output, POST /api/agent/feedback).
+- Avvisade med motivering: Zep-graf, LLM-domare, A/B-bandit (blockerad av att
+  offers-rader aldrig skrivs — samma rot som weakest_lever, snipe-3dx).
+
+**1445 backendtester gröna** (1338 vid sessionens start), 333 rotvaktposter.
+**Eval-harnessen skarpkörd: 7/7 golden cases godkända mot riktig modell**
+(docs/live-tests/evals-20260826-222210.json) — inklusive faithfulness-mätningen.
+Migration 051+052 parsas som pending. Allt okommittat — commit/push/migration
+väntar på Antons ord.
+
+## 2026-08-26 (kväll) — Claude — djupaudit av agentbackenden: tre döda kedjor hittade, självlärningen persisterad, svar och uppföljningar byggda
+
+**Tre saker som såg färdiga ut var aldrig inkopplade, och en av dem kunde inte
+ens köras i produktion.** (1) Ingen kodväg skapade någonsin en
+`outreach_threads`-rad — `queue_outreach_message` skrev mot ett thread_id som
+bara hand-SQL kunde ha skapat. MemoryStorage saknar FK-kontrollen, så sviten
+var grön medan Postgres hade fällt första riktiga köningen. Nu:
+`ensure_outreach_thread` (get-or-create per prospekt) i alla tre lagringarna,
+och API:t tar `prospect_id` som alternativ till `thread_id`. (2) Prospektsvar
+hade ingen hanteringsväg alls — `list_replies` läste en tabell inget fyllde,
+`route_handoff` saknade anropare. (3) `follow_up.py`:s hela sekvenslogik
+anropades bara från tester (snipe-3dx).
+
+**Svarshanteringen byggd** (`app/leads/svar.py`, `POST /api/leads/svar`):
+klassificering (positivt/invandning/fraga/negativt/avregistrering/autosvar,
+okänt faller till fraga), påhoppsgrind i kod före allt. Positivt → kön ställs
+in, `route_handoff` + `sa:call-prep`-underlag + prioriterat mejl, prospekt →
+`meeting`. Invändning/fråga → svarsutkast (skopad mk:sales-enablement →
+humanizer → grundningsgrind) som ALLTID köas `awaiting_review`, oavsett
+autonominivå — autonomin styr utgående sekvens, inte svar i levande samtal.
+Avregistrering → suppression (samma spärr som länken). Autosvar → kön skjuts
+en vecka. Grundlöst påstående → människa, ingen reparationsrunda.
+
+**Uppföljningsgeneratorn byggd** (`app/leads/follow_up_generator.py`):
+ren due-policy (`trad_som_ar_forfallna`) skild från I/O; stigande delays
+(4/6/8/10 dagar), spakvinklar + breakup, grundningsgrind, köning genom SAMMA
+väg som första mejlet (fot, språkgrind, autonomi — `draft` ⇒ granskning).
+Självbegränsande: ogodkänt utkast gör tråden icke-förfallen; inkommet svar
+tar den ur svepet. Schemaläggaren sveper varje timme; manuell trigger
+`POST /api/leads/uppfoljning/svep`.
+
+**Självlärningen persisteras** (migration 051, `agent_suggestions`, ny
+invariant INV-LEARN-001): supportens `cs:kb-article` och leads
+`_fanga_kunskap` räknade ut lärdomar på varje körning och KASTADE dem —
+utdatan fanns bara i step_log. Nu sparas de som förslag med dedupe (tio
+ärenden om samma lucka = EN rad), och agenten skriver ALDRIG själv i
+underlaget: `POST /api/agent/forslag/{id}/godkann` (människans klick) skapar
+KB-artikeln. `cs:kb-article` är dessutom VILLKORAT — körs bara vid
+kunskapslucka eller säkerhetskritiskt ärende (~1 anrop av 6 sparat på
+lyckliga flödet, som per definition saknar lucka att skriva om).
+
+**Retrieval förbättrad på två punkter.** Postgres `search_kb` kör nu UNION av
+vektor + fulltext i stället för antingen/eller — en enda svag vektorträff
+över tröskeln stängde förut fulltexten helt, även när svaret stod där.
+Flerturssökningen: ett kort svar i en fortsättning ("Ja, en Android.") söker
+nu med kundens FÖRRA replik inlagd i frågan — den bär ämnet.
+
+**Paritetsluckor som systemet självt fångade under bygget:** `agent_type`-
+värdena `leads_svar`/`leads_followup` fälldes av AGENT_RUN_TYPES-spegeln i
+test (exakt den mekanism som byggdes efter halvårsbuggen), och memorys
+`get_outreach_thread` speglade inte SQL-joinens `prospect_email` — lagat.
+
+**Verifierat:** 1338 → **1390 tester gröna** (52 nya, 0 regressioner).
+`verifiera_instruktioner.py`: 6/6 fält i rätt position, global regel i alla
+steg. Skill-audit: 22 steg i 4 playbooks renderar komplett, inga trasiga
+referenser. Migration 051 parsas och listas som pending av railway_migrate
+(appliceras efter deploy, samma ordning som handoffen).
+
+**Kvar:** live före/efter-körningen (`run_live_tests.py --support/--leads`)
+blockerades av auto-mode-klassificeraren efter harness-fixen (den blankar nu
+DATABASE_URL i egen process — spärren själv är orörd och gjorde rätt) —
+snipe-kea. Adminyta för förslagen: snipe-lu4. Mejlpipeline-routing av
+prospektsvar: snipe-xl9 (blockeras reellt av snipe-ork). pg_trgm-kandidaten:
+snipe-a6i.
+
+## 2026-08-26 — Claude — instruktionslagren byggda och deployade, och pausen från 24:e har hävts utan att åtgärdslistan gjordes
+
+**Migration 049: `agent_configs.instructions_md`/`.tone` fick sin läsväg.** Fälten hade
+funnits sedan migration 010 utan att någon kodväg läste dem — en kund kunde spara nya
+instruktioner och få identiskt oförändrade svar. Byggt: en global instruktionstabell
+(admin-redigerad, fallback till `agent-core/AGENTS.md`), per-kund-instruktioner i
+systemposition, en struktureringsgrind (fri text → imperativa regler under fasta
+rubriker, kodstädad efteråt), och en adminkundprofil (`/admin/kunder/<id>`) som visar
+varje fälts promptposition explicit. Affärskontexten nådde tidigare bara leads-agenten,
+aldrig supporten — samma klass av fel, nu åtgärdad. Verifierat med
+`scripts/verifiera_instruktioner.py`: sex av sex fält i rätt position, global regel i
+alla sex steg, och med `--skarp` följde en riktig modell den injicerade instruktionen
+ordagrant. Se `HANDOFF-2026-08-25-INSTRUKTIONER.md` och `docs/FALTKARTA.md`.
+
+**KB-sökningen kedjar nu vektor → fulltext.** Vektorvägen gav tom träfflista så fort
+den kom tom, utan fallback; tom träfflista är ett hårt eskaleringsvillkor, så en
+retrievalmiss blev ett onödigt människoärende i stället för ett sämre svar.
+
+**Rebasen mot en parallell session (Sebbe/PR #10) hittade en bugg innan den nådde
+production.** Ett nytt kunskapssteg (`sa:call-summary`, `_fanga_kunskap`) anropade
+`run_step` utan instruktionslagren — det hade läst filens `AGENTS.md` medan de åtta
+stegen omkring läste kundens, tyst, utan att något felade. Lagat: varje `run_step`-
+anrop i `leads_agent.py` bär nu `instruktioner=`.
+
+**En Supabase-import sänkte tyst Nordlys Handels affärskontext (2026-08-24, upptäckt och
+rättat 2026-08-25/26).** Ett tidigt skript skrev importerade kontextdokument som
+`max(version)+1`, alltså senaste — ett 726-teckens dokument ersattes av en 43-teckens
+Supabase-stubbe utan att något felade. Återställt (ingen historik raderad).
+`far_importeras()` vägrar nu skriva in i ett fack som redan har innehåll; regeln testad
+mot exakt den import som orsakade skadan.
+
+**Windows/git-fälla värd att komma ihåg:** Python-skript utan explicit `newline='\n'`
+skrev CRLF i tio filer i det här LF-repot, vilket fick en 3200-radersdiff att se ut
+som 7000+ rader omskrivna och hade gett konflikt på varenda rad i en rebase. Normaliserat
+före commit; se global `MEMORY.md`.
+
+### Det som INTE är löst, och som blev tydligare i kväll
+
+**Pausen från 2026-08-24 kväll är hävd, utan att åtgärdslistan i `docs/JURIDIK_ATGARDER.md`
+P0.1c genomfördes.** Den kvällen pausades `main` uttryckligen till simuleringsläge:
+gratisnivåns Gemini-avtal tillåter Google att använda kunddata för produktförbättring,
+och riktiga kundmejl gick dit. Fyra åtgärder listades innan pausen skulle hävas:
+bekräfta nivån, aktivera fakturering eller byt provider, skaffa en EGEN nyckel per miljö,
+teckna DPA.
+
+Mätt i kväll: **både `main` och `development` svarar `mode: live`.** Samma
+`GEMINI_API_KEY` delas fortfarande mellan miljöerna. Kvoten är fortfarande FreeTier
+(`GenerateRequestsPerMinutePerProjectPerModel-FreeTier` triggas efter 6 anrop/minut —
+en betald nivå har inte den kvotklassen). Ingen av de fyra åtgärderna är genomförd.
+Ingen av `JURIDIK_ATGARDER.md`, det här dokumentet, eller integritetspolicyn uppdaterades
+när pausen hävdes. Riktiga kundmejl går just nu till gratisnivån igen — precis det
+pausen fanns för att förhindra. Spårat som `snipe-a1c` (P0). Flaggat till Anton direkt,
+inte bara här.
+
+**`main` ligger ~80 commits efter `development`** och saknar migration 043–049.
+`snipe-zfc`.
+
+## 2026-08-24 — Claude — produktionen pausad, Render tystad, Gemini-frågan avgjord
+
+**Gemini-nyckeln ÄR gratisnivån.** Inga indicier kvar — Googles eget kvotfel namnger den:
+`GenerateRequestsPerDayPerProjectPerModel-FreeTier`, 20 anrop per dygn per projekt och modell.
+Dagens demo-anrop åt upp hela ransonen för båda miljöerna, som delar nyckel.
+
+**Produktionen är pausad till simuleringsläge.** Efter hotfixen svarade den 429 på VARJE anrop
+och skickade kunddata till en nivå vars villkor tillåter träning — sämre på båda axlarna än
+läget innan. Nu: `mode: simulation`, regelmotorn svarar, ingenting går till någon leverantör.
+Verifierat med ett riktigt anrop. Ångras med `llm_provider.py --env main --satt gemini --apply`.
+
+`--pausa` är byggt som en flagga och inte ett engångskommando, eftersom det är något man vill
+kunna göra om och backa.
+
+**Render-tjänsterna är tystade men inte avstängda.** DEEPSEEK_API_KEY blankad på båda; båda
+rapporterar SIMULERINGSLÄGE i uppstartsloggen. Render-verktyget saknar suspend och Chrome-
+tillägget är inte anslutet, så själva avstängningen är ett handgrepp i dashboarden.
+
+**Kvotfel ser inte längre ut som en krasch** — 429 med begriplig text i stället för
+"Något gick fel på vår sida", som är samma svar som ett nullpointerfel gav.
+
+## 2026-08-24 — Claude — Gemini-nyckeln är på gratisnivån, och båda miljöerna delar den
+
+Sista verifieringen av maskeringen föll — men på något annat än maskeringen:
+
+    openai.RateLimitError: 429 "You exceeded your current quota, please check
+    your plan and billing details."
+
+Det är gratisnivåns signatur. Ett fakturerat Gemini-projekt slår inte i kvoten på en handfull
+anrop en kväll, och det stämmer med vad kodbasen själv säger om nyckeln ("vald för
+gratisnivån"). Indicier, inte ett kontoutdrag — men planera inte som om det vore något annat.
+
+**Juridiskt** tillåter gratisnivån Google att använda innehållet för produktförbättring, och
+riktiga kundmejl går dit sedan produktionen lagades i kväll. Till skillnad från DeepSeek-läget,
+där grunden saknades för en överföring, har vi här aktivt lämnat bort innehållet.
+
+**Operativt** kommer produktionen att svara 429 under all verklig belastning.
+
+**Och nyckeln är SAMMA i main och development**, alltså samma kvot: en provkörning i dev kan ta
+ner produktionen. Repot varnar redan för mönstret — `PER_ENV_SECRETS` i railway_provision.py
+kallar en delad hemlighet "tyst korskoppling". GEMINI_API_KEY står inte i den listan och borde.
+
+Övervägande värt att ta: pausa den skarpa trafiken tills nivån är bytt. Produktionen körde
+simuleringsläge fram till i kväll och har klarat sig utan agenten hittills.
+
+## 2026-08-24 — Claude — Render-stacken var inte död, och min spärr missade den
+
+**Två Render-tjänster låg kvar levande och startade med `provider=deepseek` mot en riktig
+Postgres.** `snajp-support` (gren `main`) och `snajp-support-dev` (gren `development`), båda med
+autoDeploy — varje push till våra grenar deployade dit, inklusive dagens. DeepSeek-överföringen
+som stoppades på Railway i dag var alltså aldrig stoppad överallt.
+
+Ytan fanns inte i någon dokumentation, inte i registerförteckningen, och inte i min egen
+bedömning. Den hittades genom att incidentposten om den läckta Render-nyckeln skulle bedömas —
+frågan "vad nådde nyckeln?" ledde rakt till den.
+
+**Min spärr fångade den inte, och det var ett designfel.** `har_riktig_kunddata()` grindade på
+miljönamnet med motiveringen att "Railway sätter alltid RAILWAY_ENVIRONMENT_NAME". Sant, och
+ändå fel: det antog att Railway är den enda värden. På Render var namnet tomt, så spärren läste
+det som utveckling och släppte igenom. Grenen som skulle skydda en lokal körning skyddade i
+stället en bortglömd produktionsyta från att bli upptäckt.
+
+Regeln keyar nu på DATABASEN: en fjärrdatabas betyder riktig data oavsett värd. Loopback är
+undantaget, eftersom `lokal_stack.py` kör där och den stacken är tom. Undantaget gäller
+adressen, inte en flagga någon kan sätta — en flagga hade blivit satt.
+
+Tjänsterna är INTE avstängda av mig; det är utåtriktat och Antons beslut. Se
+`docs/JURIDIK_ATGARDER.md`, P0.2b, och två nya poster i incidentloggen.
+
+## 2026-08-24 — Claude — produktionen lagad med en hotfix, dev-spegeln av-indexerad
+
+**Produktionen svarade riktiga kunder med regelmotorn.** `LLM_PROVIDER=gemini` mot kod som
+inte kände till värdet gav en tom nyckel, och en tom nyckel är simuleringsläge. Hälsokontrollen
+sa `status: ok` hela tiden — ordet som avslöjade det var "simulation" i ett fält ingen larmar på.
+
+Rättat med en KIRURGISK hotfix på `railway-main` (78c900e, 39 rader), inte en full merge.
+Produktionen deployar från `railway-main`, inte från `main` — den senare är den döda
+Vercel-grenen och ligger 151 commits efter. Skillnaden till development var 37 commits, och att
+skicka alla för att laga en tom nyckel hade varit fel växling. Produktionen bär nu rättningen
+men INTE spärrarna, de juridiska sidorna eller avregistreringen.
+
+**Dev-spegeln låg fritt indexerbar.** Ingen robots.txt, ingen X-Robots-Tag — en fullständig
+kopia av säljsajten med en inloggning till riktig kunddata. Vercels SSO täckte det förut.
+Stängt med `app/robots.ts` och en noindex-tagg, båda styrda av `lib/miljo.ts`, som läser
+RAILWAY_ENVIRONMENT_NAME och inte NODE_ENV — den senare är "production" i BÅDA miljöerna.
+Appens egen grind mättes samtidigt och håller.
+
+**Två buggar hittades genom att köra skarpt**, inga tester fångade dem: avregistreringen reste
+ett undantag för en tenant utan arbetsyta, och `add_suppression` skrev tyst noll rader i samma
+läge. Migration 049. Kedjan är nu klickad hela vägen på development.
+
+DPIA och intresseavvägning skrivna som utkast. DPIA:ns R1 — okontrollerat kundinnehåll till
+modelleverantören — är blockerad av att Geminis avtalsnivå inte är fastställd, och kan inte
+stängas i kod.
+
+## 2026-08-24 — Claude — modellnamnet följde inte med providerbytet
+
+Fortsättning på posten nedan, och en påminnelse om att `mode: live` inte är ett bevis.
+
+`MODEL` stod kvar på `deepseek-v4-flash` när LLM_PROVIDER byttes till `gemini`. Omskrivningen
+i `_default_model_for_provider` utlöses bara när MODEL lämnats på gpt-defaulten, så ett namn
+satt för hand gick rakt igenom. Development startade, hälsokontrollen sa `mode: live`, och
+varje anrop svarade `404 models/deepseek-v4-flash is not found`. Hälsokontrollen mäter att en
+NYCKEL finns — aldrig att modellen existerar hos den provider nyckeln pekar på.
+
+Nu fäller ett modellnamn från fel familj uppstarten, med 404-orsaken utskriven i
+felmeddelandet. Okända namn släpps fortfarande igenom: leverantörerna döper nya modeller utan
+att fråga oss, och en för snäv lista blir bortkommenterad.
+
+**Produktionen kör simuleringsläge.** `main` ligger på kod från 23 augusti som inte känner
+till `gemini`, faller till den tomma OpenAI-nyckeln, och svarar riktiga kunder med regelmotorn
+i stället för med agenten. Det kräver både rättade variabler och en deploy av main — se
+`docs/JURIDIK_ATGARDER.md`, P0.1d. Development är åtgärdad och verifierad med ett riktigt
+anrop, inte bara med hälsokontrollen.
+
+## 2026-08-24 — Claude — Gemini kopplad som chattprovider, och tystnaden stängd
+
+`LLM_PROVIDER=gemini` sattes för hand i båda Railway-miljöerna. DeepSeek är därmed borta —
+men `gemini` var inget värde koden kände till. `active_llm_key` slutade med
+`return self.openai_api_key`, så VARJE okänt providernamn gav en tom nyckel, och en tom
+nyckel är simuleringsläge. Development svarade `mode: simulation` med regelmotorn i stället
+för agenten. Deployen gick igenom. Ingenting larmade.
+
+Tre ändringar: Gemini är nu en riktig chattprovider (nyckel, endpoint, modellnamn — samma
+som vision-sidovagnen redan använder mot samma endpoint). Okända providernamn fäller
+uppstarten i stället för att degradera tyst. Och `scripts/llm_provider.py` frågar numera
+"har den här tjänsten rätt nyckel för det den påstår sig köra?" i stället för att leta efter
+just OpenAI — det var den frågan som inte ställdes.
+
+**Kvar och brådskande (P0.1c):** nyckeln är den kodbasen själv beskriver som vald för
+GRATISNIVÅN. Gratisnivåer tillåter typiskt leverantören att använda innehållet för
+produktförbättring, och går det på kunddata är det värre än DeepSeek var. Påståendet i
+integritetspolicyn om att leverantören "inte tränar på texten" är borttaget tills någon
+läst avtalet — ett löfte i en integritetspolicy är bindande.
+
+## 2026-08-24 — Claude — GDPR: DeepSeek utspärrad, juridiska sidor, gallring och rättighetsflöde
+
+**DeepSeek får inte längre se kunddata.** `LLM_PROVIDER=deepseek` fäller uppstarten i `main`
+och `development` (spegelmiljön räknas — den bär riktiga kunders ärenden). Spärren ligger i
+`Settings.llm_provider_fault()`, körs från `app/main.py` före databasen och från
+`agent/llm.py` vid klientbygget. Motivet står i CLAUDE.md så att nästa session inte vänder
+tillbaka det av kostnadsskäl. **Läst ur Railway efteråt: BÅDE main och development kör `LLM_PROVIDER=deepseek`, och
+ingen miljö har en `OPENAI_API_KEY`.** Produktionen skickar alltså riktiga kundmejl till
+DeepSeek i skrivande stund, och providern går inte att vända förrän en nyckel finns —
+utan nyckel startar tjänsten i simuleringsläge, vilket är ett fel som inte larmar.
+Deployen av den här commiten till development föll som avsett på spärren; Railway lät
+den gamla versionen ligga kvar. `python scripts/llm_provider.py` visar läget, `--apply`
+byter provider men vägrar göra det utan nyckel. Se `docs/JURIDIK_ATGARDER.md`, P0.1b.
+
+**Tre juridiska sidor finns**: `/integritetspolicy`, `/villkor`, `/cookies`, med en delad
+sidfot som bär bolagsidentifikation. Alla texter är förstautkast och bär en synlig
+"Förstautkast"-ruta tills en jurist läst dem. Bolagsuppgifterna i `lib/bolag.ts` är
+platshållare med flit — ett gissat organisationsnummer kan tillhöra ett annat bolag.
+
+**Marknadstexten sa inte hela sanningen.** Dataskyddsstycket lovade att ingenting delas mellan
+kunder men nämnde inte att mejltexten skickas till en AI-leverantör. Den säger det nu, och är
+mer specifik i stället för mer försiktig.
+
+**Art. 14-sidfoten byggs numera i KOD, inte av modellen.** `send_guard` har blockerat utskick
+utan avsändaridentifikation och avregistreringslänk sedan Del 2.3 — men ingenting LADE DIT
+dem. Det gör `app/leads/utskicksfot.py` nu, vid köning, så att texten en människa granskar är
+texten som skickas. Avregistreringslänken fungerar hela vägen: ogenomskinlig token i
+`ss_avregistreringslankar`, inlöst via en security definer-funktion på
+`/avregistrera/[token]`.
+
+**Gallring och rättighetsflöde finns som skript, inte som instruktioner**: `scripts/gallra.py`
+(torrkörning som default) och `scripts/gdpr_radera.py` (sök, registerutdrag, radering).
+Retentionsperioden är MEDVETET inte satt — det är ett affärsbeslut, och ingen policy betyder
+ingen gallring.
+
+**Migration 046 och 048 är skrivna men inte körda.** Avregistreringssidan och gallringen gör
+ingenting förrän de är applicerade.
+
+Öppen post i incidentloggen: den läckta Render-nyckeln. Se `INCIDENT_RESPONSE.md`.
+
+
+## 2026-08-16 — Claude — Plattformen färdig, preview-miljö byggd, riktningsbyte mot enad stack
+
+**Alla sju faser i plattformsplanen är byggda och committade.** Fas 1.3–1.5 (RPC-härdning,
+DB-baserad rate limiting, INV-SEC-010), Fas 2 (plattformsadmin, glömt lösenord, OAuth,
+inbjudningar), Fas 3 (fail-closed entitlements, tillägg, navrensning), Fas 4 (autonominivå,
+ICP, körkontroller), Fas 6 (admin master control, notiscenter, spårvy). 454 backend-tester och
+47 invarianter gröna.
+
+**Migration 018–029 körda och verifierade i produktion.** Blockeraren är löst: `agent_runs`
+avvisade varje leads-körning i ett halvår, och `MemoryStorage` saknade villkoret så testerna
+var gröna. Två RLS-buggar hittades först vid skarp körning som `snajp_app`:
+
+- **028** — `current_setting('app.tenant_id', true)` blir `''`, aldrig NULL, efter första
+  skopade transaktionen på en poolad anslutning. Varje senare oskopad fråga kastade `''::uuid`.
+- **029** — 028 stoppade kraschen men inte TYSTNADEN: adminvyn gav 0 körningar av 10, och
+  kundöversikten fyra kunder med nollställda tal. Trovärdiga men felaktiga siffror.
+
+**Preview-miljön fungerar.** Push till `development` ger Vercel Preview, Render
+`snajp-support-dev` och en Supabase-gren som är en full spegel av produktionen (`--with-data`,
+Antons beslut — konsekvensen är kunddata i preview, dokumenterat i `CLAUDE.md`).
+
+**Nio buggar som bara verklig körning avslöjade**, bland dem tre kolumnbuggar i SQL som aldrig
+exekverats, `scheduler.py` som hade adresserat mejl till strängen "okänd", migrationskedjan som
+inte var självbärande, och `INV-DEPLOY-001` som blev blind när en andra tjänst lades till.
+
+**Två misstag jag gjorde:** raderade två produktionsvariabler i Vercel (`env rm` tar hela
+posten när den delas mellan scope — återställda, spärr inbyggd), och läckte Render-API-nyckeln
+i transkriptet under felsökning. **Rotera den.**
+
+**Riktningsbyte:** upplägget kostade åtta separata infrastrukturfällor att få på plats. Anton
+vill utvärdera en enad Railway-stack. Plan skriven; kartläggningen visar att beroendet till
+Supabase går genom två strupar — `current_workspace_id()` (15 av 17 policyer) och
+`getWorkspaceContext()` (9 av 11 filer). Neon kvar som fallback.
+
+**Grenar:** `feature/plattform-fas1-7` är FRYST säkerhetskopia av allt detta.
+`feature/railway-stack` är arbetsgrenen. `main` ligger 20 commits efter och är orörd.
+
+Sessionslogg: `session-logs/2026-08-16-session-log.md`
+
 ## 2026-08-15 — Claude — Anonymt API stängt, ren kundchatt, agenten vet var i samtalet den är
 
 **Hela backend-API:t var anonymt nåbart i produktion.** `proxy.ts`-matchern täcker bara

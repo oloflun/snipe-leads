@@ -1,0 +1,12 @@
+{
+  "company_name": "Baltic Pump Systems AB",
+  "website": "https://balticpump.se",
+  "context_pack": "## Kontextpaket\n\n### Köparen\nSnajp säljer en svensk AI-supportagent till små och medelstora B2B-bolag. Agenten svarar på kundfrågor grundat i kundens egen kunskapsbas, eskalerar till människa vid osäkerhet, och gissar aldrig.\n\n### ICP\n- Bransch: tillverkning, bygg, industri med återkommande kundfrågor\n- Storlek: 10–100 anställda\n- Geografi: Sverige\n- Signal: rekryterar kundtjänst/innesälj, eller växer snabbt\n- Egna kriterier (diskvalificerar): redan en chattlösning, under 10 anställda",
+  "material": "# Baltic Pump Systems AB\nIndustripumpar och service för processindustrin. Huvudkontor i Karlstad, ca 60 anställda, serviceverkstäder i Örebro och Västerås.\n\n## Support\nVår tekniska support får dagligen frågor om reservdelar, tryckklasser och installationsmått. Vanliga frågor besvaras i vår FAQ — övrigt via support@balticpump.se eller chatten nere till höger (drivs av ChatAssist).\n\n## Om oss\nVD: Mats Öberg\nServicechef: Priya Nair, priya.nair@balticpump.se",
+  "facit": {
+    "qualified": false,
+    "contact_email": "priya.nair@balticpump.se",
+    "contact_name": "Priya Nair",
+    "motivering": "Rätt bransch och storlek MEN har redan en chattlösning (ChatAssist) — kundens eget diskvalificeringskriterium."
+  }
+}

@@ -1,52 +1,183 @@
 # Miljöer och driftsättning
 
-Två miljöer, två grenar. Inget deployas genom att någon klickar i en dashboard.
+Inget deployas genom att någon klickar i en dashboard.
 
-| | Produktion | Preview |
+> **LÄS DET HÄR FÖRST.** Repot har **två deploy-kedjor, och bara den ena är
+> levande.** Fram till 2026-08-29 gick den döda kedjan fortfarande grön i
+> GitHub Actions utan att säga ifrån — den byggde bara en miljö ingen
+> använder. Uppmätt 2026-08-23, efter att en push till `development` inte syntes
+> någonstans. De två arbetsflödena som gav den falska signalen
+> (`deploy-production.yml`, `deploy-development.yml`) är sedan 2026-08-29
+> borttagna (§8.3) — kvar är dokumentationen av den döda kedjan nedan, för att
+> förklara varför saker fortfarande ser ut som de gör.
+
+## Den levande kedjan: Railway
+
+| | Produktion | Development |
 |---|---|---|
-| Gren | `main` | `development` |
-| Frontend | Vercel-projekt `snajp` | samma projekt, Preview-scope |
-| Backend | Render `snajp-support` (`main`) | Render `snajp-support-dev` (`development`) |
-| Databas | Supabase `spsmblyvasagpekjmgmf` | Supabase-gren `development` (`eppgmjswfnrfwnqvtrge`) |
-| Utlöses av | push till `main` | push till `development` |
+| **Gren som deployar** | `railway-main` (tills vidare, se nedan) | **`development`** |
+| Tjänster | Railway `web` + `api` | samma, i miljön `development` |
+| Databas | Railway Postgres (`main`) | Railway Postgres (`development`) |
+| Webb-URL | `web-production-1fe2c.up.railway.app` | `web-development-6c85.up.railway.app` |
+| API-URL | `api-production-d7695.up.railway.app` | `api-development-5cc3.up.railway.app` |
 
-**Allt arbete går till `development`.** `main` rörs bara när något är verifierat
-i previewen.
+URL:erna står i `.env.deploy` som `RAILWAY_{MAIN,DEVELOPMENT}_{WEB,API}_URL`.
+Railway-projektet är `b4ec4f98-2d00-4410-bfae-12fb69652d0b`.
+
+### `development` deployar sig själv sedan 2026-08-27
+
+Vi har släppt Vercel helt (se legacy-avsnittet nedan). Railways `deploymentTrigger`
+för `web` och `api` i miljön `development` pekade tidigare på grenen
+`railway-development` — en spegelgren som fanns bara för att trigga Railway,
+och som krävde en andra push varje gång:
+
+```bash
+git push origin development
+git push origin development:railway-development   # den här raden fanns förut
+```
+
+**Det behövs inte längre.** Triggerns `branch`-fält ändrades via Railways
+GraphQL-API (`deploymentTriggerUpdate`) från `railway-development` till
+`development` direkt. En push till `development` startar nu byggen av `web`
+och `api` i Railway-miljön `development` utan mellansteg. `railway-development`
+som gren är därmed överflödig för development — den kan lämnas orörd eller
+tas bort, inget läser den längre.
+
+**Produktionen (`main`) är INTE omlagd än.** `railway-main` är fortfarande
+den gren som triggar produktionsdeployen — det är ett separat, medvetet beslut
+som väntar på att göras (main ska ersätta railway-main på samma sätt).
+
+> ## ⛔ Kör INTE den gamla kedjan
+>
+> ```bash
+> git push origin main
+> git push origin main:railway-main
+> ```
+>
+> **Den här kedjan är i dag uppmätt FARLIG, inte bara föråldrad.**
+> `git rev-list` mot `origin`-referenser (inte den lokala kopian) visar att
+> `origin/main` ligger **152 commits efter** `origin/railway-main` och **noll
+> före**. `git push origin main:railway-main` avvisas därför i dag som
+> non-fast-forward — och tvingas den igenom (`--force`) rullar den tillbaka
+> produktionen 152 commits, inklusive omläggningen 22 aug och hotfixen 25 aug.
+> `main` är inte längre produktionens källa; `railway-main` är. Se
+> `plans/2026-08-28-skarpa-korningar-och-produktion.md` §8.1 för hela
+> verifieringen.
+
+**Den verifierade ordningen, när den dagen kommer** (planens §8.1):
+
+1. `git checkout development && git merge origin/railway-main` — tar in den
+   enda commit produktionen har som `development` saknar (`78c900e`).
+   Konflikt i `llm.py`/`config.py` väntas; lösningen är
+   `development`-versionen — `development` innehåller redan hela
+   `railway-main`s innehåll i utökad form.
+2. Testsviterna gröna (`snajp-support` + `tests/`, se `plans/…§7`).
+3. `python scripts/railway_migrate.py --env main --apply` — **torrkörning
+   först** (utan `--apply`).
+4. `git push origin development:railway-main` — nu fast-forward, ingen
+   `--force` behövs eller ska användas.
+5. Lägg om `main`s deployment trigger på samma sätt som `development` gjordes
+   2026-08-27 (`deploymentTriggerUpdate` mot grenen `main` direkt) och släck
+   tvåstegsfällan för gott — samma steg som ändrade `ENVIRONMENTS["main"]` i
+   `scripts/railway_provision.py`.
+
+**Varje steg i den listan mot produktion kräver Antons uttryckliga ord
+innan det körs** (`plans/2026-08-28-skarpa-korningar-och-produktion.md` §8.1a)
+— inklusive steg 1–2, som inte rör `main`/`railway-main` direkt men förbereder
+den push som gör. Läsning (`git log`, `git rev-list`, torrkörningar utan
+`--apply`, `/health`-anrop) är fri och ändrar ingenting.
+
+Kontrollera grenen innan du felsöker "min ändring syns inte" — särskilt för
+`main`, som fortfarande har den gamla tvåstegs-fällan tills ordningen ovan är
+körd. Det är andra gången samma fälla slog till för development innan den
+lagades — `verify_railway.py` bär en kommentar om att `web` byggde fel gren i
+tre deployer i rad medan felsökningen letade i byggkontexten. Byggmeddelandet
+var sant hela tiden; det beskrev en annan commit.
+
+```bash
+python scripts/verify_railway.py     # kontrollerar bland annat trigger-grenen
+```
+
+Trigger-configen läses och ändras med `scripts/railway.py` (rå GraphQL-klient,
+token ur `.env.deploy`). Exempel — lista aktuell branch för en trigger:
+
+```bash
+python scripts/railway.py q \
+  'query($p:String!,$e:String!,$s:String!){ deploymentTriggers(projectId:$p,environmentId:$e,serviceId:$s){ edges{ node{ id branch } } } }' \
+  '{"p":"b4ec4f98-2d00-4410-bfae-12fb69652d0b","e":"<environmentId>","s":"<serviceId>"}'
+```
+
+`environmentId`/`serviceId` för respektive miljö och tjänst står i "Faktiska
+identiteter" längst ned i den här filen.
+
+### Migrationer körs mot Railway
+
+```bash
+python scripts/railway_migrate.py --env development --apply
+python scripts/railway_migrate.py --env main --apply
+```
+
+**Inte** genom Supabase Management-API:t. Det registrerar sin egen 14-siffriga
+version utan motsvarande fil i katalogen, vilket är den dubbla bokföring som
+fällt liggaren två gånger. Se `MIGRATIONS-PENDING.md`.
+
+Verifiera alltid som `snajp_web` med `app.user_id` satt — aldrig som `postgres`.
+Tabellägaren kringgår RLS utan att något syns i en diff.
 
 ---
 
-## PROJEKTREGEL: preview-databasen är en spegel av produktionen
+## Den döda kedjan: Vercel + Render + Supabase
 
-Preview-grenen skapas **alltid med `--with-data`**:
+Beskrivs längre ner i den här filen och i avsnitten om Render, Vercel och
+Supabase-grenar. **Den driver ingenting längre.** Avsnitten står kvar för att de
+förklarar varför saker ser ut som de gör, inte för att de beskriver hur något
+deployas i dag.
 
-```bash
-npx supabase branches create development \
-  --project-ref spsmblyvasagpekjmgmf --region eu-west-1 \
-  --persistent --with-data --git-branch development
-```
+Två konkreta konsekvenser som annars ser ut som buggar:
 
-**Varför:** en ändring ska gå att utvärdera med allt annat lika. En tom
-preview-databas testar bara att koden startar — inte att den fungerar mot
-verklig datamängd, riktiga tenants och de kanttillfällen som bara finns i
-verklig data. Skiljer sig underlaget går skillnaden i utfall inte att tillskriva
-ändringen.
+* `.github/workflows/deploy-production.yml` deployade en Vercel-förhandsvisning
+  mot den döda stacken på varje push till `main` och gick **grönt** — en falsk
+  hälsosignal, eftersom den aldrig nådde produkten. Borttagen 2026-08-29 (§8.3
+  i `plans/2026-08-28-skarpa-korningar-och-produktion.md`).
+* `.github/workflows/deploy-development.yml` gjorde samma sak för
+  `development` fram till 2026-08-25, då den byttes till att i stället spegla
+  `development` → `railway-development` (se ovan). Den speglingen blev själv
+  överflödig 2026-08-27 när `development`s trigger lades om till att lyssna på
+  `development` direkt — och filen, vars enda uppgift var speglingssteget, är
+  därför också borttagen 2026-08-29.
+* Vercel-previewen läser Supabase-grenen `development`, som står i
+  `MIGRATIONS_FAILED` sedan 2026-08-15. Inloggning där ger
+  `CallbackRouteError` — `authorize` i `lib/auth.ts` kastar mot en databas som
+  saknar halva schemat. Det är inte ett kodfel och ska inte felsökas som ett.
 
-**Konsekvensen, som måste stå skriven:** previewen innehåller därmed **riktiga
+Städa inte bort kedjan utan att först flytta det som fortfarande används:
+Vercel-scopet håller variabler som `scripts/onboard_tenant.py` skriver till.
+
+---
+
+## PROJEKTREGEL: development-databasen är en spegel av produktionen
+
+Gäller **Railway-miljön `development`**, som bär en spegelmarkör (`mirror_meta`)
+och kontrolleras av `verify_railway.py`. Regeln följde med från Supabase-grenen
+och gäller oförändrad — bara databasen under den har bytts.
+
+**Varför:** en ändring ska gå att utvärdera med allt annat lika. En tom databas
+testar bara att koden startar — inte att den fungerar mot verklig datamängd,
+riktiga tenants och de kanttillfällen som bara finns i verklig data. Skiljer sig
+underlaget går skillnaden i utfall inte att tillskriva ändringen.
+
+**Konsekvensen, som måste stå skriven:** miljön innehåller därmed **riktiga
 kunders ärenden, mejladresser och kunskapsbaser**. Den ska behandlas med samma
 sekretess som produktionen:
 
-- Inga preview-länkar till utomstående.
+- Inga länkar till `web-development-6c85.up.railway.app` för utomstående.
 - Inga skärmdumpar med kunddata i chattar, ärenden eller dokument.
 - Samma personkrets som har åtkomst till produktionen, ingen bredare.
+- Peka inte en lokal utvecklingsserver mot den. Kör `scripts/lokal_stack.py`
+  i stället — den reser hela kedjan från noll mot en tom lokal databas.
 
-**Har grenen drivit för långt från `main`:** radera och skapa om, lappa inte.
-Persistenta grenar måste göras ephemeral först, annars vägrar API:t:
-
-```bash
-npx supabase branches update development --persistent=false
-npx supabase branches delete development
-# skapa sedan om enligt kommandot ovan
-```
+`main` får ALDRIG en spegelmarkör. Den är målets kännetecken; dyker den upp där
+har riktningen vänts.
 
 ---
 
@@ -69,6 +200,10 @@ tabellerna.
 ---
 
 ## Render
+
+> **LEGACY — driver ingenting i dag.** Produkten deployas från Railway; se
+> "Den levande kedjan" högst upp. Avsnittet står kvar för att det förklarar
+> varför saker ser ut som de gör, inte för att beskriva hur något deployas nu.
 
 Blueprinten är `snajp-support/render.yaml` och innehåller **båda** tjänsterna.
 
@@ -98,12 +233,30 @@ tjänst till Starter (~7 USD/mån), vilket också tar bort SMTP-blockeringen.
 
 ## Vercel
 
+> **LEGACY — driver ingenting i dag.** Produkten deployas från Railway; se
+> "Den levande kedjan" högst upp. Avsnittet står kvar för att det förklarar
+> varför saker ser ut som de gör, inte för att beskriva hur något deployas nu.
+
 Variabler sätts **per scope**. `vercel env add <namn> preview`.
 
-Sju variabler måste finnas i Preview-scopet:
-`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-`SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SITE_URL`, `SNAJP_SUPPORT_URL`,
-`SNAJP_INTERNAL_API_KEY`, `SNAJP_MASTER_API_KEY`.
+Efter Auth.js-bytet (`3c2cb2b`) är de kritiska Preview-variablerna:
+
+`AUTH_SECRET` — signerar sessions-JWT:n. Utan den är ALLA oinloggade: proxyn
+redirectar `/dashboard` → `/login` (fail-closed) och inloggningen svarar med en
+konfig-felsträng i stället för en generisk 500. Generera: `openssl rand -base64 32`.
+
+`DATABASE_URL` — pooler-värdet för Postgres (se fälla 3 nedan). PER MILJÖ:
+preview pekar på preview-grenens databas, production på produktionsdatabasen.
+Utan den kastar `lib/db.ts` och inloggningen 500:ar.
+
+Sedan de som redan fanns: `SNAJP_SUPPORT_URL`, `SNAJP_INTERNAL_API_KEY`,
+`SNAJP_MASTER_API_KEY` (backend-proxy + admin), `OPENAI_API_KEY` (email-studio,
+simulerar utan), `AUTH_GOOGLE_ID` / `AUTH_MICROSOFT_ENTRA_ID_ID` (SSO, valfria).
+
+De gamla Supabase-auth-variablerna (`NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
+`NEXT_PUBLIC_SITE_URL`) konsumeras INTE längre av frontenden — Supabase-klienten
+är borttagen i Auth.js-bytet.
 
 ### `NEXT_PUBLIC_SITE_URL` är fällan
 
@@ -134,6 +287,10 @@ variablerna saknas. Alla tre Supabase-variablerna måste sättas i preview.
 
 ## Känd begränsning: kundytor går inte att testa på `.vercel.app`
 
+> **LEGACY — driver ingenting i dag.** Produkten deployas från Railway; se
+> "Den levande kedjan" högst upp. Avsnittet står kvar för att det förklarar
+> varför saker ser ut som de gör, inte för att beskriva hur något deployas nu.
+
 `tenantSlugFromHost()` (`lib/tenants/index.ts`) returnerar medvetet `null` för
 allt som slutar på `.vercel.app`, eftersom preview-URL:er har formen
 `snajp-git-branch-team.vercel.app` där första etiketten inte är en kund.
@@ -142,6 +299,220 @@ Kundspecifika ytor kräver alltså en egen wildcard-domän för att kunna testas
 preview. Dokumenterat i stället för kringgått.
 
 ---
+
+## Email Studio behöver en modellnyckel på WEBB-tjänsten
+
+Åtgärderna i Email Studio (Kortare, Skriv om, Förbättra, Personalisera,
+Översätt, Uppföljning, Analysera, A/B) körs av `app/api/email-studio/route.ts`,
+alltså i Next-appen — **inte** av agent-backenden. Nyckeln måste därför ligga på
+`web`, inte bara på `api`.
+
+Så var det inte. Uppmätt 2026-08-23 saknades `OPENAI_API_KEY` på `web` i båda
+miljöerna, och routen föll då till sitt simuleringsläge. Följden var att varje
+**inloggad, betalande** kund fick mallgenererad text med `success: true` och
+ingenting som sa att den inte kom från en modell. Åtgärderna tog noll sekunder,
+vilket var det enda som avslöjade det.
+
+| Variabel | Tjänst | Betydelse |
+|---|---|---|
+| `OPENAI_API_KEY` | `web` | Används först när den finns |
+| `DEEPSEEK_API_KEY` | `web` | Används annars, mot `https://api.deepseek.com` |
+| `EMAIL_STUDIO_MODEL` | `web` | Valfri. Default `gpt-4o-mini` / `deepseek-chat` |
+
+DeepSeek talar OpenAI-protokollet och är vad agenterna redan kör mot, så
+projektet betalar inte för en ny leverantör. Nyckeln är kopierad från `api` till
+`web` i båda miljöerna.
+
+**Saknas båda simulerar routen fortfarande** — men svaret bär nu `simulated:
+true` och editorn skriver "Exempelsvar" ovanför resultatet. Ta inte bort den
+markeringen: utan den går ett simulerat svar inte att skilja från agentens
+arbete.
+
+**Anonyma anrop simuleras ALLTID**, oavsett vilka nycklar som finns. Det är den
+raden som gör att marknadssidans knappar fungerar utan att en oinloggad kan
+bränna nyckeln (INV-SEC-010). Den kontrollen får inte tas bort.
+
+## Prioriterat mejl vid eskalering — kräver ett app-lösenord ▸ Anton
+
+När support, bokföring eller leads lämnar över ett ärende till en människa går
+ett mejl till `snajpsupport@gmail.com` med `[PRIORITERAT]` i ämnesraden och en
+direktlänk in i adminvyn. Sändvägen är `app/notifications/prioriterat_mejl.py` — ETT
+konto för hela plattformen, inte per kund, och ingenting med kundutskick att
+göra. Det är ett mejl, inte ett larmsystem: ingen sida övervakas och ingen jour
+väcks.
+
+| Variabel | Tjänst | Betydelse |
+|---|---|---|
+| `INTERNLARM_SMTP_ANVANDARE` | `api` | `snajpsupport@gmail.com` |
+| `INTERNLARM_SMTP_LOSENORD` | `api` | **App-lösenord**, 16 tecken — inte kontolösenordet |
+| `PUBLIC_BASE_URL` | `api` | Utan den bygger mejlet ingen länk in i adminvyn |
+
+**Lösenordet är inte kontolösenordet.** Ett Gmail med tvåstegsverifiering kan
+inte logga in på SMTP med det. Ett app-specifikt lösenord skapas under
+Google-kontots säkerhetsinställningar → *Appspecifika lösenord*, och kräver att
+tvåstegsverifiering redan är påslagen. Nycklar och lösenord är undantaget i
+`CLAUDE.md` — det här är din hand, inte agentens.
+
+Variabelnamnen bär fortfarande `INTERNLARM_`. De behålls med flit: de står i
+Railway och här, och att döpa om dem är en driftändring — inte en omdöpning i
+koden.
+
+`PUBLIC_BASE_URL` står redan som en post i
+[`docs/JURIDIK_ATGARDER.md`](docs/JURIDIK_ATGARDER.md) (avregistreringslänken
+behöver den). Mejlet är alltså ett andra skäl att sätta samma variabel, inte ett
+nytt.
+
+## Kundvänd utgående SMTP (leads-utskick + godkända supportsvar)
+
+Sändvägen är opt-in: utan alla tre variablerna nedan väljer backenden
+`LoggingSendProvider`, ingenting skickas, och `/health/ready` visar
+"Ingen riktig sändväg". Halvsatt räknas som osatt (loggas som varning).
+ETT konto för hela plattformen i v1 — per-tenant-avsändare är Del F.
+
+| Variabel | Tjänst | Betydelse |
+|---|---|---|
+| `SMTP_HOST` | `api` | t.ex. `smtp.gmail.com` |
+| `SMTP_PORT` | `api` | 587 (STARTTLS, default) eller 465 (implicit TLS) |
+| `SMTP_USER` | `api` | Kontot som loggar in |
+| `SMTP_PASSWORD` | `api` | **App-lösenord** — samma regel som internlarmet |
+| `SMTP_FROM` | `api` | Avsändaradress i From:. Tom => `SMTP_USER` |
+| `SMTP_FROM_NAME` | `api` | Visningsnamn, valfritt |
+
+### Railway blockerar SMTP — MÄTT 2026-08-28, läs det här först
+
+Verifierat inifrån den körande containern med `GET /api/admin/sandvag`
+(master-nyckel): portarna 587, 465 och 2525 ger alla timeout ut mot
+smtp.gmail.com. Kör den endpointen innan någon felsöker ett SMTP-lösenord.
+
+Railway släpper igenom utgående SMTP (portarna 25/465/587/2525) **bara på Pro
+och uppåt**. Projektet `brave-passion` ligger på `trial`, så SMTP-vägen kan
+inte fungera i drift oavsett hur rätt uppgifterna är — containern får
+`Network is unreachable`. Samma blockering fanns på Render och löstes
+2026-07-30 (commit `0d3ac1d`).
+
+**Vägen som fungerar på nuvarande plan är Resend över HTTPS:**
+
+| Variabel | Tjänst | Betydelse |
+|---|---|---|
+| `RESEND_API_KEY` | `api` | Nyckeln från resend.com. Ensam räcker den — kanalen väljs automatiskt |
+| `SMTP_FROM` | `api` | Avsändaradress, t.ex. `hej@snajp.se`. Måste ligga på en domän som är **verifierad hos Resend** |
+| `SMTP_FROM_NAME` | `api` | Visningsnamn, t.ex. `Snajp` |
+| `EMAIL_PROVIDER` | `api` | Valfri. Tom = auto. `smtp` tvingar SMTP-vägen för mätning |
+
+Tre steg: skapa konto på resend.com, lägg till `snajp.se` och för in de tre
+DNS-posterna Resend visar hos Loopia (DKIM + SPF + return-path), och sätt
+`RESEND_API_KEY` i Railway. Domänverifieringen ger DKIM-signering, alltså
+bättre leveransbarhet än både Gmail och en delad SMTP-brevlåda — och den löser
+samtidigt att `hej@snajp.se` måste vara en riktig avsändare.
+
+Gratisnivån är 3 000 mejl/månad och 100/dag, vilket rymmer paketens 300
+mejl/månad med marginal.
+
+**Sätt dem med skriptet, inte för hand:**
+
+```bash
+python scripts/smtp_konfig.py --env development            # visa läget
+python scripts/smtp_konfig.py --env development --apply    # testa inloggning + sätt
+```
+
+Skriptet loggar in på SMTP-servern INNAN det rör Railway. Ett fel lösenord
+ger annars inget felmeddelande vid deploy — bara mejl som tyst inte går fram.
+Lösenordet läses med `getpass` och skrivs aldrig ut.
+
+**Kontot måste ligga hos Loopia.** `snajp.se` har SPF-posten
+`v=spf1 include:spf.loopia.se -all`, och `-all` är ett HÅRT avslag: bara
+Loopias servrar får skicka som @snajp.se. Ett Gmail-konto med
+`From: hej@snajp.se` skulle inte hamna i skräpposten — det skulle avvisas.
+Brevlådan skapas i Loopias kundzon under E-post (LoopiaAPI-uppgifterna i
+`.env.deploy` är tomma, och ett kontolösenord kräver en människa ändå).
+Utgående server: `mailcluster.loopia.se` port **587** — 465 svarar inte där.
+
+Skild från `INTERNLARM_SMTP_*` med flit — de två vägarna får aldrig dela
+konto eller egenskaper (`app/notifications/prioriterat_mejl.py` skriver ut
+varför). Tre saker som INTE ändras av att variablerna sätts: send_guard-
+spärrarna gäller varje leads-utskick som förut, testmejl (`provider='mock'`)
+skickas aldrig oavsett konfiguration, och `SNAJP_OUTBOX_DIR` (torrkörning)
+vinner över SMTP om båda är satta — den kollisionen ska kosta en .eml-fil,
+aldrig ett riktigt mejl.
+
+**Saknas variablerna skickas ingenting, tyst.** Det är rätt utfall lokalt och i
+testsviten — men det betyder också att ett bortglömt steg inte märks förrän
+någon undrar var mejlen tog vägen. `prioriterat_mejl.har_konfiguration()` svarar på
+om steget är gjort, utan att skicka ett provmejl och utan att något värde kan
+hamna i en logg.
+
+**Mejlet kan aldrig fälla det det handlar om.** Varje undantag fångas, SMTP körs
+i en tråd med tio sekunders tak, och `skicka_prioriterat()` returnerar `False` i
+stället för att kasta. Ett ärende som eskalerar har redan gått fel för kunden; att svaret
+också uteblev för att Gmail hade en dålig dag vore att göra ett problem till
+två.
+
+**Ett mejl per eskaleringshändelse.** För support går dedupen på om KUNDEN redan
+har ett eskalerat ärende — varje meddelande i chatten öppnar ett eget ärende, så
+utan det hade en pågående, redan överlämnad tråd mejlat en gång per replik. För
+bokföringsperioden bär nyckeln periodens brister, eftersom rapporten hämtas varje
+gång någon öppnar vyn.
+
+Dubblettminnet är PROCESSLOKALT. Två repliker har var sitt, och en omstart
+glömmer. Följden är i värsta fall ett extra mejl, aldrig ett uteblivet — och de
+två ställen där dubbletter annars skulle bli många dedupliceras dessutom mot
+databasen.
+
+## DNS hos Loopia — automatiserat, utom API-användaren
+
+`www.snajp.se` är tillagd i Railway och väntar på en CNAME. Posten sätts med
+
+```bash
+python scripts/loopia_dns.py            # visa nuvarande poster
+python scripts/loopia_dns.py --apply    # sätt CNAME mot Railway
+```
+
+Skriptet talar XML-RPC mot `https://api.loopia.se/RPCSERV`, städar bort poster
+som krockar med en CNAME på samma namn, och skriver ut zonen före och efter.
+
+**API-användaren är VALFRI.** Utan `LOOPIA_API_USER` och
+`LOOPIA_API_PASSWORD` i `.env.deploy` kör skriptet i kontrolläge: det slår upp
+`www` live, säger om posten är satt, och skriver ut exakt vad som ska fyllas i
+om den inte är det. Posten går att sätta för hand i kundzonen på två minuter —
+målet är en DNS-post, inte ett API.
+
+Skapa API-användaren om du vill kunna ändra DNS **härifrån** i framtiden.
+
+API-användaren Den skapas i
+kundzonen under **Kontoinställningar → LoopiaAPI** och är en egen inloggning,
+skild från kontolösenordet. Lägg den i `.env.deploy`:
+
+```
+LOOPIA_API_USER=nagot@loopiaapi
+LOOPIA_API_PASSWORD=...
+```
+
+Det är ett kontolösenord, alltså ett av undantagen i CLAUDE.md som alltid
+kräver dig. Allt efter den punkten är ett kommando.
+
+### Apex går inte att peka på Railway
+
+Och det är inte en begränsning i skriptet:
+
+* En CNAME får enligt DNS-standarden inte samexistera med andra poster på
+  samma namn, och apex MÅSTE ha NS och SOA. Det kräver ALIAS/ANAME, som är en
+  leverantörsspecifik utökning — Loopia har den inte.
+* Railways plan tillåter dessutom bara **en** egen domän per tjänst, och den är
+  använd av `www`. Apex avvisades med *"You have reached the limit for custom
+  domains per service on your plan."*
+
+Lös det med Loopias egen **webbvidarebefordran**, `snajp.se` →
+`https://www.snajp.se`. Den funktionen finns inte i LoopiaAPI, så den punkten
+förblir manuell. Skriptet upptäcker att apex pekar på Loopias parkering
+(194.9.94.85/86) och påminner om det.
+
+Verifiera kopplingen från Railways sida när DNS spridit sig:
+
+```bash
+python scripts/railway_doman.py --env main
+```
+
+Den skriver `OK` i stället för `VÄNTAR` när posten pekar rätt.
 
 ## Ny kund
 
@@ -156,7 +527,22 @@ logotyp och besiktning kräver ögon och skrivs ut som checklista. Se `TENANTS.m
 
 ---
 
-## Faktiska identiteter (2026-08-15)
+## Faktiska identiteter
+
+### Railway — det som gäller
+
+| | Värde |
+|---|---|
+| Projekt | `b4ec4f98-2d00-4410-bfae-12fb69652d0b` |
+| Miljöer | `main` (`47bc7047-a458-404b-a1de-ccec612cb96e`), `development` (`02c39616-1b8e-47b7-beea-d8c6cfba1acd`) |
+| Tjänster | `web` (`0261f633-1247-4d92-b5ab-40c2a1828b90`), `api` (`5828c279-ad8f-429b-b5e1-969372db8a0a`), `Postgres` (en uppsättning per miljö) |
+| Deploy-gren, main | `railway-main` (oförändrat — main ska läggas om senare) |
+| Deploy-gren, development | **`development`** (omlagd 2026-08-27, var `railway-development`) |
+
+Verifierat mot Railways API — grenarna är lästa ur `deploymentTriggers`, inte
+antagna. Senast omkontrollerat 2026-08-27 efter omläggningen av development.
+
+### Vercel, Render och Supabase (2026-08-15) — LEGACY
 
 | | Värde |
 |---|---|
@@ -278,6 +664,10 @@ att ta Neon-spåret.
 ---
 
 ## Varför Supabase-workflowen visade MIGRATIONS: FAILED
+
+> **LEGACY.** Supabase-grenen används inte längre. Felet är dokumenterat
+> i `MIGRATIONS-PENDING.md`, där beslutet att lämna grenen som den är
+> också står. Migrationer körs mot Railway.
 
 Två numreringssystem som aldrig möttes.
 

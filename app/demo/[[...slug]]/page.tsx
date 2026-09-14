@@ -1,15 +1,16 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageShell } from "@/components/AppShell";
 import { DashboardProvider } from "@/components/dashboard/DashboardContext";
-import { Overview } from "@/components/dashboard/Overview";
+import { StartView } from "@/components/dashboard/StartView";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
+import { CrmDemo } from "@/components/crm/CrmDemo";
+import { BokforingDemo } from "@/components/bookkeeping/BokforingDemo";
 import { Dashboard as SupportDashboard } from "@/components/snajp/Dashboard";
 import { LeadsControls } from "@/components/leads/LeadsControls";
+import { SupportRegler } from "@/components/settings/SupportRegler";
 import {
   AnalyticsView,
   AssistantView,
-  CampaignsView,
   CompaniesView,
   ContactsView,
   InboxView,
@@ -57,28 +58,17 @@ export const metadata = {
 const DEMO_STATE = {
   // Demon är aldrig plattformsadmin: den ytan visar ALLA kunders siffror.
   isPlatformAdmin: false,
-  products: ["leads", "support"] as const,
+  vy: "admin" as const,
+  impersonation: null,
+  initialScope: "both" as const,
+  isDemo: false,
+  products: ["leads", "support", "bookkeeping"] as const,
   addons: [],
-  variant: "demo" as const,
   workspaceName: "Demo AB",
   // Styr om vyerna erbjuder åtgärder som kräver session. En demo som låtsas
   // vara inloggad visar knappar som inte kan göra något.
   signedIn: false
 };
-
-const SEKTIONER = [
-  ["", "Översikt"],
-  ["leads", "Leads"],
-  ["emails", "Email studio"],
-  ["campaigns", "Kampanjer"],
-  ["companies", "Företag"],
-  ["contacts", "Kontakter"],
-  ["inbox", "Svar"],
-  ["analytics", "Analys"],
-  ["assistant", "Assistant"],
-  ["kontroll", "Leads-kontroll"],
-  ["support", "Kundtjänst"]
-] as const;
 
 export default async function Page({
   params
@@ -94,43 +84,9 @@ export default async function Page({
 
   return (
     <div className="min-h-screen bg-paper text-ink">
-      <div className="border-b border-ink/15 bg-paper2/50">
-        <div className="mx-auto max-w-[1480px] px-4 py-4 md:px-6">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <span className="kicker rounded-input border border-ochre/40 bg-ochre/10 px-3 py-1.5 text-ochre">
-              Demo · exempeldata, ingen inloggning
-            </span>
-            <Link href="/" className="kicker text-mineral hover:text-ochre">
-              Till startsidan
-            </Link>
-            <Link href="/login" className="kicker ml-auto text-mineral hover:text-ochre">
-              Logga in på din arbetsyta
-            </Link>
-          </div>
-
-          <nav
-            aria-label="Demo-sektioner"
-            className="thin-scrollbar -mx-1 mt-3 flex gap-1 overflow-x-auto px-1 pb-1"
-          >
-            {SEKTIONER.map(([väg, etikett]) => {
-              const aktiv = (sektion ?? "") === väg;
-              return (
-                <Link
-                  key={väg || "oversikt"}
-                  href={`/demo${väg ? `/${väg}` : ""}`}
-                  aria-current={aktiv ? "page" : undefined}
-                  className={`focus-ring min-h-10 shrink-0 rounded-input px-3 text-sm font-medium transition-colors ${
-                    aktiv ? "bg-ink text-paper" : "text-ink/65 hover:bg-paper2"
-                  }`}
-                >
-                  {etikett}
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
-      </div>
-
+      {/* Ingen egen chrome här. Sektionsraden, demomarkören och de två
+          utvägarna ritas av AppShell, i samma header som arbetsytan har —
+          se lib/demo/sektioner.ts. Sidan bidrar bara med innehållet. */}
       <DashboardProvider state={{ ...DEMO_STATE, products: [...DEMO_STATE.products] }}>
         {innehall}
       </DashboardProvider>
@@ -142,30 +98,69 @@ export default async function Page({
 function renderSektion(sektion: string | undefined): React.ReactNode | null {
   switch (sektion) {
     case undefined:
-      return <Overview />;
+      return <StartView demo />;
     case "leads":
-      return <LeadsView />;
+      return <LeadsView demo />;
     case "emails":
       return <EmailStudioDemo />;
-    case "campaigns":
-      return <CampaignsView />;
+    case "crm":
+      // Den omgjorda leadsagenten i demoform: kundens egen CRM-lista in
+      // (CSV, parsas i webbläsaren), en isolerad Email studio per kund ut.
+      // Följer filens regel — CrmDemo når varken session eller databas.
+      return (
+        <PageShell
+          kicker="Leadsagenten"
+          title="Din CRM-lista, en studio per kund"
+          description="Ladda upp kundlistan ur ert CRM som CSV. Agenten bevakar kundernas signaler, och varje kund får en egen, isolerad Email studio som skriver utifrån signalerna och er produkt. Listan stannar i webbläsaren och inget skickas."
+        >
+          <CrmDemo />
+        </PageShell>
+      );
     case "companies":
-      return <CompaniesView />;
+      return <CompaniesView demo />;
     case "contacts":
-      return <ContactsView />;
+      return <ContactsView demo />;
     case "inbox":
-      return <InboxView />;
+      return <InboxView demo />;
     case "analytics":
-      return <AnalyticsView />;
+      return <AnalyticsView demo />;
     case "assistant":
       return <AssistantView />;
     case "kontroll":
       return <LeadsControls demo />;
+    case "bokforing":
+      // Egen demokomponent och inte `BookkeepingView`. Den vyn anropar
+      // backenden för underlag och period, och regeln för den här routen är att
+      // INGENTING här får sträcka sig efter en session eller databasen — se
+      // filens docstring. BokforingDemo renderar handräknade konstanter.
+      return (
+        <PageShell
+          kicker="Bokföring"
+          title="Ett kvitto, hela vägen till periodrapport"
+          description="Avläsningen, verifikatet och summorna för ett påhittat underlag. Ingen modell körs på den här sidan."
+        >
+          <BokforingDemo />
+        </PageShell>
+      );
+    case "regler":
+      return <ReglerDemo />;
     case "support":
       return <SupportDashboard demo />;
     default:
       return null;
   }
+}
+
+function ReglerDemo() {
+  return (
+    <PageShell
+      kicker="Kundtjänst"
+      title="Fack och autosvar"
+      description="Vilka ärenden agenterna får besvara själva, och vilka som alltid går till en människa. Ändringarna sparas inte i demon."
+    >
+      <SupportRegler demo />
+    </PageShell>
+  );
 }
 
 function EmailStudioDemo() {

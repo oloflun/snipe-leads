@@ -30,7 +30,10 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 DOCKERFILE = ROOT / "snajp-support" / "Dockerfile"
 RENDER_YAML = ROOT / "snajp-support" / "render.yaml"
-DOCKERIGNORE = ROOT / ".dockerignore"
+# BuildKit läser `<Dockerfile>.dockerignore` FÖRE repo-rotens. Allowlisten
+# flyttade dit när web-tjänsten tillkom: skriven för api gällde den alla, och
+# filtrerade bort hela Next-appen ur web-bygget. Se INV-DEPLOY-002.
+DOCKERIGNORE = ROOT / "snajp-support" / "Dockerfile.dockerignore"
 
 
 def _render_services() -> list[dict[str, str]]:
@@ -133,21 +136,30 @@ def test_dockerfile_preserves_the_repo_directory_depth():
 
 def test_dockerignore_allowlists_agent_core():
     """Byggkontexten är repo-roten, som innehåller node_modules/, .next/,
-    .git/ och .shots/. Utan .dockerignore skickas allt till daemonen. Och
+    .git/ och .shots/. Utan ignorefil skickas allt till daemonen. Och
     listan måste vara en ALLOWLIST — en denylist ruttnar tyst när någon
-    lägger till en ny stor katalog."""
-    assert DOCKERIGNORE.is_file(), ".dockerignore saknas i repo-roten."
+    lägger till en ny stor katalog.
+
+    Filen ligger bredvid Dockerfilen, inte i repo-roten: BuildKit läser
+    `<Dockerfile>.dockerignore` först, och en allowlist i roten gällde ALLA
+    tjänster — den raderade Next-appen ur web-tjänstens byggkontext."""
+    assert DOCKERIGNORE.is_file(), (
+        "snajp-support/Dockerfile.dockerignore saknas. Utan den gäller repo-rotens "
+        "denylist för api-bygget, och byggkontexten sväller till hela repot."
+    )
     lines = [
         line.strip()
         for line in DOCKERIGNORE.read_text(encoding="utf-8").splitlines()
         if line.strip() and not line.strip().startswith("#")
     ]
     assert "**" in lines, (
-        ".dockerignore måste börja med `**` (allowlist-idiomet). En denylist "
-        "släpper igenom nästa stora katalog någon lägger i repo-roten."
+        "Dockerfile.dockerignore måste börja med `**` (allowlist-idiomet). En "
+        "denylist släpper igenom nästa stora katalog någon lägger i repo-roten."
     )
     for required in ("!agent-core", "!snajp-support/app", "!snajp-support/requirements.txt"):
-        assert required in lines, f".dockerignore saknar {required!r} — bygget skulle fela."
+        assert required in lines, (
+            f"snajp-support/Dockerfile.dockerignore saknar {required!r} — bygget skulle fela."
+        )
 
 
 def test_render_never_pins_skill_source_to_db():

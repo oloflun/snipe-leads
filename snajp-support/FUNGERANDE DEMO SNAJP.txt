@@ -1,0 +1,70 @@
+Utgå från den fungerande Snajp-Support-agenten vi redan byggt i projektet (baserad på arkitekturen från https://github.com/jawwad-ali/ai-customer-support-agent: FastAPI + OpenAI Agents SDK + PostgreSQL/pgvector + Redis + Next.js demo).
+
+Nuvarande status: Vi har en fungerande localhost-demo där man kan chatta med agenten om frågor kring tex leverans. Agenten ska nu utvecklas till att kunna ta emot, sortera och svara på riktiga inkommande kundservicemail – precis som en first-line support-medarbetare.
+
+### Huvudmål för denna iteration
+1. **Email-inbox integration**  
+   - Stöd för Gmail (via Gmail API eller IMAP) och Microsoft 365 / Outlook (via Microsoft Graph eller IMAP).  
+   - Polling eller webhook/push-notifiering för nya mail.  
+   - Spara råmail + bilagor (inklusive bilder) i databasen.
+
+2. **Intelligent triage / sortering**  
+   Agenten ska automatiskt klassificera varje inkommande mail i minst dessa fack:
+   - Teknisk support
+   - Leverans / frakt
+   - Betalning / faktura
+   - Reklamation / retur
+   - Orderstatus
+   - Konto / inloggning
+   - Övrigt
+   - Eskalering (arg kund, refund, juridik, känsligt)
+
+   Klassificeringen ska ske med den befintliga agenten + semantic search mot knowledge base. Resultatet ska sparas och synas tydligt i dashboarden.
+
+3. **Autosvar med säkerhet**  
+   - Agenten genererar ett svar baserat endast på knowledge base (samma guardrails som idag).  
+   - Default-läge: "utkast" – svaret sparas som draft och väntar på godkännande.  
+   - Möjlighet att sätta regler per kategori: t.ex. teknisk support kan svara automatiskt, reklamation måste godkännas.  
+   - Om agenten är osäker, sentimentet är negativt, eller frågan handlar om pengar/juridiska frågor → eskalera till mänsklig handläggare.
+
+4. **Dashboard för företaget**  
+   - Ren, modern översikt där företaget ser:
+     - Nya mail per kategori (fack)
+     - Vad agenten föreslagit / svarat
+     - Konfidensnivå
+     - Historik per kund
+   - Möjlighet att godkänna, redigera eller avvisa utkast.
+   - Möjlighet att ta över ett ärende manuellt.
+   - Filter och sök.
+
+5. **Headless / API-first**  
+   - All funktionalitet ska vara tillgänglig via API så vi senare kan koppla in agenten i kundernas egna system (Zendesk, Intercom, egen CRM, etc.).  
+   - Behåll den befintliga demo-chatten, men gör den till en "live preview"-yta.
+
+6. **Vision**  
+   - Agenten ska kunna läsa och förstå bilder som skickas i mail (t.ex. skärmdumpar av felmeddelanden, fakturor, leveransbevis). Använd vision-kapabilitet (gpt-4o eller motsvarande).
+
+### Tekniska krav
+- Fortsätt använda samma stack: FastAPI + OpenAI Agents SDK + PostgreSQL (pgvector) + Redis.
+- Lägg till tabeller för: emails, email_attachments, classifications, drafts, human_reviews.
+- Multi-tenant redo (tenant_id på alla relevanta tabeller) även om vi inte aktiverar full multi-tenancy ännu.
+- All data lagras så att vi enkelt kan byta till Supabase senare om vi vill (använd standard Postgres-scheman).
+- Robust felhantering: om Gmail/Outlook-token går ut, om Redis är nere, om OpenAI är långsam – systemet ska inte krascha.
+- Loggning av varje beslut agenten tar (varför den valde en viss kategori, varför den eskalerade, etc.).
+
+### UI-krav
+- Behåll den cleana, moderna stilen vi redan har (inte den tråkiga GitHub-exempelstilen).
+- Dashboarden ska kännas professionell och lugn – tydliga fack, statusfärger, snabb översikt.
+- Demo-chatten ska fortfarande fungera på localhost så vi kan testa agenten direkt.
+
+### Leverans
+När du är klar ska jag kunna:
+1. Starta allt med docker-compose eller vanliga kommandon.
+2. Koppla en test-Gmail-inkorg (eller mocka med testmail).
+3. Se hur agenten sorterar och genererar svar.
+4. Godkänna/redigera svar i dashboarden.
+5. Testa via localhost.
+
+Börja med att analysera den befintliga kodbasen, föreslå de exakta filerna och databasändringarna som behövs, och implementera steg för steg. Fråga mig om du behöver API-nycklar eller credentials för Gmail/Outlook under utvecklingen.
+
+Kör.
