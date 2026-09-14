@@ -70,6 +70,11 @@ AGENT_TYPE = "bookkeeping"
 #: Vad step_log kallar steget. Inte ett skill-namn: det finns inget i registret.
 STEG_AVLASNING = "snajp:bokforing-avlasning"
 
+#: Den andra genomgången av samma underlag. Eget namn så att step_log visar
+#: att båda faktiskt kördes — två rader "avlasning" hade sett ut som ett
+#: omförsök, vilket är något annat (omförsöket handlar om brutet kontrakt).
+STEG_KONTROLLASNING = "snajp:bokforing-kontrollasning"
+
 #: Det juridiska förbehållet. Bodde i api/bookkeeping.py och flyttade hit när
 #: chatten tillkom: agenten får inte importera från sitt eget API-lager, och
 #: två kopior av samma text hade blivit två olika. API:t importerar den härifrån.
@@ -155,11 +160,16 @@ class Avlasning:
         return self.verdikt.status
 
 
-async def _kor_avlasning(text: str, trace: RunTrace) -> dict[str, Any]:
+async def _kor_avlasning(
+    text: str, trace: RunTrace, *, steg: str = STEG_AVLASNING
+) -> dict[str, Any]:
     """Ett LLM-anrop i JSON-läge, med ett omförsök vid brutet kontrakt.
 
     Strukturen speglar `step_runner.run_step` med flit — se modulens docstring
     för varför den inte ÄR run_step.
+
+    `steg` är bara etiketten i step_log: `las_underlag` kör funktionen två
+    gånger (avläsning + kontrolläsning) och de två raderna ska gå att skilja åt.
     """
     settings = get_settings()
     client = get_llm_client()
@@ -240,7 +250,7 @@ async def _kor_avlasning(text: str, trace: RunTrace) -> dict[str, Any]:
     escalated = verdict.verdict == "escalate"
     trace.steps.append(
         StepResult(
-            skill=STEG_AVLASNING,
+            skill=steg,
             output=output,
             attempts=attempt,
             escalated=escalated,
@@ -290,18 +300,82 @@ def bygg_verifikat(falt: dict[str, Any]) -> tuple[Konteringsrad, ...]:
     )
 
 
+#: Fälten de två genomgångarna jämförs på. Samma lista som normalisera_falt
+#: släpper igenom — "anmarkning" hanteras separat eftersom två formuleringar
+#: av samma iakttagelse inte är en konflikt.
+_JAMFORDA_FALT = ("datum", "motpart", "brutto", "momssats", "riktning", "betalstatus", "kategori")
+
+
+def _sammanfor_avlasningar(
+    forsta: dict[str, Any], andra: dict[str, Any]
+) -> tuple[dict[str, Any], list[str]]:
+    """Två oberoende genomgångar blir en: luckor fylls, konflikter utelämnas.
+
+    Båda argumenten är REDAN normaliserade (`normalisera_falt`), så värdena är
+    jämförbara med `==` — datum är date, belopp är Decimal, resten strängar.
+
+    Regeln följer avläsningens grundregel "utelämna hellre än gissa", fast på
+    nästa nivå: ett fält som bara EN genomgång såg tas med (det är hela
+    poängen med den andra genomgången — fånga det den första missade), men
+    ett fält där de två läste OLIKA värden utelämnas, så att grinden skickar
+    underlaget till manuell granskning i stället för att någon av läsningarna
+    vinner på ordningsföljd.
+    """
+    resultat: dict[str, Any] = {}
+    konflikter: list[str] = []
+    for falt in _JAMFORDA_FALT:
+        i_forsta = falt in forsta
+        i_andra = falt in andra
+        if i_forsta and i_andra:
+            if forsta[falt] == andra[falt]:
+                resultat[falt] = forsta[falt]
+            else:
+                konflikter.append(
+                    f"Dubbelkontrollen läste olika värden för {falt} "
+                    f"({forsta[falt]} respektive {andra[falt]}) — fältet lämnas till granskning."
+                )
+        elif i_forsta:
+            resultat[falt] = forsta[falt]
+        elif i_andra:
+            resultat[falt] = andra[falt]
+    return resultat, konflikter
+
+
 async def las_underlag(text: str, *, underlag_id: str = "") -> Avlasning:
-    """Hela kedjan: modellen läser, koden normaliserar, grinden avgör.
+    """Hela kedjan: modellen läser TVÅ gånger, koden sammanför, grinden avgör.
+
+    ## Varför två genomgångar
+
+    Produktkrav (2026-09-14): varje underlag gås igenom två gånger så att en
+    enskild felläsning varken tappar ett fält eller sätter ett fel värde.
+    Genomgångarna är oberoende anrop på samma text; `_sammanfor_avlasningar`
+    fyller luckor med det den andra såg och utelämnar fält där de läste olika,
+    vilket ger manuell granskning i stället för ett gissat vinnarvärde.
+    Kostnaden är ett extra LLM-anrop per underlag, och den är tagen med öppna
+    ögon — ett felläst belopp hamnar i en momsdeklaration.
 
     Returnerar ALLTID en Avlasning. Det finns ingen utgång som ger ett
     konterat verifikat utan att grinden sagt ja, och ingen som tyst fyller i
     ett saknat fält.
     """
     trace = RunTrace()
-    rat = await _kor_avlasning(text, trace)
+    rat1 = await _kor_avlasning(text, trace)
+    rat2 = await _kor_avlasning(text, trace, steg=STEG_KONTROLLASNING)
 
-    anmarkning = str(rat.get("anmarkning") or "")
-    falt = normalisera_falt(rat)
+    falt, konflikter = _sammanfor_avlasningar(normalisera_falt(rat1), normalisera_falt(rat2))
+    # Anmärkningarna från båda genomgångarna plus konfliktnoterna, utan
+    # dubbletter och utan tomma led. dict.fromkeys bevarar ordningen.
+    anmarkning = "; ".join(
+        dict.fromkeys(
+            led
+            for led in (
+                str(rat1.get("anmarkning") or "").strip(),
+                str(rat2.get("anmarkning") or "").strip(),
+                *konflikter,
+            )
+            if led
+        )
+    )
     verdikt = check_underlag(falt, underlag_id=underlag_id)
 
     if not verdikt.ok:

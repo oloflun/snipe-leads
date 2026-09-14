@@ -12,6 +12,16 @@
       "autoPort": true
     },
     {
+      "name": "bokforing",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "start:local"
+      ],
+      "cwd": "bokforing-webb",
+      "port": 3100
+    },
+    {
       "name": "backend",
       "runtimeExecutable": ".venv/Scripts/python.exe",
       "runtimeArgs": [
