@@ -475,7 +475,14 @@ async function generateMedForsok(opts: {
         maxOutputTokens: 3000,
         // SDK:n har egna omtag; de stängs av så att loopens tidsbudget håller.
         maxRetries: 0,
-        abortSignal: AbortSignal.timeout(15_000)
+        // 15 s var budgeterat mot Vercels maxDuration=60 — men appen kör på
+        // Railway, där det taket inte finns. Uppmätt 2026-09-15: Vertex
+        // gemini-2.5-flash med tänktokens + 3000-tokensbudget tar ibland
+        // >15 s, och kunden fick då mallfallbacken ("Modellen svarade inte
+        // just nu") trots att modellen var frisk. 25 s per försök ger
+        // 3 × 25 + 3 s paus = 78 s värsta fall — acceptabelt för en knapp
+        // som uttryckligen visar arbetsläge, och normalfallet är opåverkat.
+        abortSignal: AbortSignal.timeout(25_000)
       });
       return text;
     } catch (error) {
