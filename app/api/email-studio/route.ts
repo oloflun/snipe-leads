@@ -505,7 +505,10 @@ async function generateMedForsok(opts: {
         // reasoning_effort="none" till thinking_budget=0 för 2.5-flash.
         // En knapptryckning i mejleditorn behöver formulering, inte
         // resonemang — samma slutsats som THINKING=disabled i leadskedjan.
-        providerOptions: { openai: { reasoningEffort: "none" } }
+        // "none" AVVISAS av Vertex-kompatlagret (uppmätt 2026-09-15, 400:
+        // "Expected ... one of: 'high', 'low', 'max', 'medium', 'minimal'");
+        // "minimal" är lägsta accepterade och gav 200 i samma mätning.
+        providerOptions: { openai: { reasoningEffort: "minimal" } }
       });
       return text;
     } catch (error) {
