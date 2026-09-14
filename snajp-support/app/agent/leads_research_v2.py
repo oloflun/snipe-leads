@@ -181,6 +181,18 @@ async def run_research_step_v2(
         or rad_efter_uppgradering.get("contact_name")
         or rad_efter_uppgradering.get("contact_form_url")
     )
+    # Samma grind som V1 (leads_agent.py). V2 har inga senare RESEARCH-steg
+    # att hoppa över, men batch-vägen läser stopped_early för att hoppa över
+    # UTKASTET. Returen hade `None` hårdkodat, så varje underkänt bolag fick
+    # ett mejlutkast ändå - uppmätt 2026-09-15 i QA-kundens körning: Eccera
+    # ("Antal anställda överstiger 49") och Seequaly (qualified=false) fick
+    # utkast i granskningskön.
+    if not kvalificerad:
+        stopped_early: str | None = "ej_kvalificerad"
+    elif kontakt_saknas:
+        stopped_early = "kontakt_saknas"
+    else:
+        stopped_early = None
 
     # ICP-bedömningen persisteras på raden (migration 024) — samma bokföring
     # som V1:s grind gör, även om V2 inte har några senare steg att hoppa
@@ -310,9 +322,8 @@ async def run_research_step_v2(
         "kunskap": kunskap,
         "qualified": kvalificerad,
         "icp_fit": fynd.get("icp_fit"),
-        # V2 har inget att stoppa tidigt — hela varvet ÄR ett anrop. Nyckeln
-        # finns kvar för kontraktsparitet med V1:s grind.
-        "stopped_early": None,
+        # Utkastgrinden i batch-vägen, se ovan.
+        "stopped_early": stopped_early,
         # Toppnivå med flit (V1-bugg: api/leads.py:s batch-väg läste de här
         # nycklarna som aldrig fanns på toppnivå och skickade null till
         # utkastet).
