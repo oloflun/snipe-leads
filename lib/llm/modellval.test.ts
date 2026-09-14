@@ -13,7 +13,8 @@ import {
   harRiktigKunddata,
   lasServiceAccount,
   valjModell,
-  vertexBaseUrl
+  vertexBaseUrl,
+  vertexModellnamn
 } from "./modellval.ts";
 
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -38,7 +39,8 @@ test("Vertex väljs före GEMINI_API_KEY när service account finns", () => {
   assert.equal(val?.provider, "vertex");
   assert.ok(val && val.provider === "vertex");
   assert.equal(val.region, "europe-west1");
-  assert.equal(val.namn, "gemini-2.5-flash");
+  // Med publisher: openapi-endpointen svarar 400 på ett bart namn.
+  assert.equal(val.namn, "google/gemini-2.5-flash");
   assert.equal(
     val.baseURL,
     "https://europe-west1-aiplatform.googleapis.com/v1beta1/projects/test-proj/locations/europe-west1/endpoints/openapi/"
@@ -49,12 +51,27 @@ test("Vertex: GOOGLE_CLOUD_REGION och ett gemini-MODEL respekteras", () => {
   const val = valjModell({ GOOGLE_SERVICE_ACCOUNT_JSON: SA_JSON, GOOGLE_CLOUD_REGION: "europe-north1", MODEL: "gemini-2.5-pro" });
   assert.ok(val && val.provider === "vertex");
   assert.equal(val.region, "europe-north1");
-  assert.equal(val.namn, "gemini-2.5-pro");
+  assert.equal(val.namn, "google/gemini-2.5-pro");
   assert.ok(val.baseURL.startsWith("https://europe-north1-aiplatform.googleapis.com/"));
 });
 
 test("Vertex: ett MODEL från annan leverantör ger gemini-default, inte 404", () => {
   const val = valjModell({ GOOGLE_SERVICE_ACCOUNT_JSON: SA_JSON, MODEL: "deepseek-v4-flash" });
+  assert.equal(val?.namn, "google/gemini-2.5-flash");
+});
+
+test("vertexModellnamn: bart namn får google/, en satt publisher lämnas orörd", () => {
+  assert.equal(vertexModellnamn("gemini-2.5-flash"), "google/gemini-2.5-flash");
+  assert.equal(vertexModellnamn("  gemini-2.5-pro "), "google/gemini-2.5-pro");
+  // Aldrig google/google/… — en redan prefixad sträng är ett beslut.
+  assert.equal(vertexModellnamn("google/gemini-2.5-flash"), "google/gemini-2.5-flash");
+  assert.equal(vertexModellnamn("meta/llama-4"), "meta/llama-4");
+  assert.equal(vertexModellnamn(""), "");
+});
+
+test("GEMINI_API_KEY-grenen (AI Studio) får INTE prefix — den endpointen vill ha bart namn", () => {
+  const val = valjModell({ GEMINI_API_KEY: NYCKEL });
+  assert.equal(val?.provider, "gemini");
   assert.equal(val?.namn, "gemini-2.5-flash");
 });
 

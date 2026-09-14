@@ -141,6 +141,21 @@ export function vertexBaseUrl(projekt: string, region: string): string {
  * stod en gång kvar på "deepseek-v4-flash" efter ett providerbyte och gav 404
  * på varje anrop (MODELLFAMILJER i config.py). Samma vakt som discovery.py.
  */
+/**
+ * Modellnamnet som Vertex openapi-endpoint vill ha: `google/<modell>`.
+ *
+ * Ett bart `gemini-2.5-flash` mot `endpoints/openapi/` svarar 400 "Malformed
+ * publisher model … expected '<publisher>/<model>'" — uppmätt 2026-09-14 mot
+ * båda miljöernas service account. Spegel av `vertex_modellnamn` i
+ * snajp-support/app/agent/llm.py; ändra båda om du ändrar den ena. Ett namn
+ * som redan bär en publisher lämnas orört.
+ */
+export function vertexModellnamn(namn: string): string {
+  const rent = (namn || "").trim();
+  if (!rent || rent.includes("/")) return rent;
+  return `google/${rent}`;
+}
+
 function geminiModell(env: Miljo, standard: string): string {
   const model = (env.MODEL || "").trim();
   return model.toLowerCase().startsWith("gemini") ? model : standard;
@@ -160,8 +175,9 @@ export function valjModell(env: Miljo): Modellval | null {
       serviceAccount,
       region,
       baseURL: vertexBaseUrl(serviceAccount.project_id, region),
-      // Backendens modell i båda miljöerna sedan 2026-09-12.
-      namn: geminiModell(env, "gemini-2.5-flash")
+      // Backendens modell i båda miljöerna sedan 2026-09-12 — med publisher,
+      // eftersom routen anropar openapi-endpointen (se vertexModellnamn).
+      namn: vertexModellnamn(geminiModell(env, "gemini-2.5-flash"))
     };
   }
 
