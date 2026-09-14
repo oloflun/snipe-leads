@@ -28,15 +28,17 @@ git push origin development
 Vercel är avvecklat helt. `railway-development` som gren är överflödig för
 development men rörs inte — inget läser den längre.
 
-**⛔ `main`-kedjan: kör INTE den gamla tvåstegspushen.** Uppmätt 2026-08-28:
-`origin/main` är en strikt förfader till `origin/railway-main` (152 commits
-efter, 0 före), så `git push origin main:railway-main` avvisas som
-non-fast-forward — och tvingad igenom rullar den tillbaka produktionen 152
-commits. Den verifierade vägen (merge, inte push) står i `DEPLOY.md`s
-main-avsnitt och i `plans/2026-08-28-skarpa-korningar-och-produktion.md` §8.1.
-Varje steg mot produktion kräver Antons uttryckliga ord (§8.1a). De döda
-GitHub Actions-kedjorna (`deploy-production.yml`, `deploy-development.yml`)
-är borttagna 2026-08-29 — de gav bara falska gröna signaler mot den gamla
+**`main` deployar sig själv sedan 2026-09-15.** §8.1-ordningen kördes
+2026-09-14/15 med Antons godkännande och mains triggers pekar nu på grenen
+`main` direkt (se `DEPLOY.md`s main-avsnitt). Release = PR `development` →
+`main`; grenskyddet kräver code owner-review från `oloflun` (Anton), så
+mergen är alltid hans handgrepp — det ERSÄTTER inte §8.1a: varje release
+mot produktion kräver fortfarande Antons uttryckliga ord. Kör migrationer
+mot main (torrkörning först) INNAN mergen när releasen bär nya.
+**⛔ `railway-main` är pensionerad** — pusha aldrig till den; den gamla
+tvåstegskedjan i äldre dokument/handoffs ska inte följas. De döda GitHub
+Actions-kedjorna (`deploy-production.yml`, `deploy-development.yml`) är
+borttagna 2026-08-29 — de gav bara falska gröna signaler mot den gamla
 stacken.
 
 Levande dev-miljö: `https://web-development-6c85.up.railway.app`
