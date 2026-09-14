@@ -157,7 +157,22 @@ function parseRichRefine(content: string) {
     };
   }
 
-  // 4) Fallback: whole content (last resort)
+  // 4) Fallback: whole content (last resort) — men ALDRIG JSON-bråte.
+  // Uppmätt 2026-09-15: ett svar trunkerat INNE i new_version-strängen
+  // passerade hit och kunden fick ```json-skräp presenterat som "Ny
+  // version" — och det läckte vidare in i redigeringsfältet. Ser texten
+  // ut som ett kodstaket eller ett JSON-objekt är den ett HAVERERAT
+  // strukturerat svar, inte en mejltext: returnera tomt så att routens
+  // tomt-svar-väg ger den ärliga mallfallbacken i stället.
+  if (trimmed.startsWith("```") || trimmed.startsWith("{")) {
+    return {
+      original_version: null,
+      new_version: "",
+      explanation: "",
+      subject_suggestions: [],
+      confidence_tips: undefined
+    };
+  }
   return {
     original_version: null,
     new_version: trimmed,
@@ -482,7 +497,15 @@ async function generateMedForsok(opts: {
         // just nu") trots att modellen var frisk. 25 s per försök ger
         // 3 × 25 + 3 s paus = 78 s värsta fall — acceptabelt för en knapp
         // som uttryckligen visar arbetsläge, och normalfallet är opåverkat.
-        abortSignal: AbortSignal.timeout(25_000)
+        abortSignal: AbortSignal.timeout(25_000),
+        // Tänkandet stängs av: Vertex gemini-2.5-flash drar annars en
+        // GODTYCKLIG andel av maxOutputTokens till tänktokens (uppmätt
+        // 2026-09-15: ett svar klipptes inne i new_version-strängen trots
+        // 3000-budget). Googles OpenAI-kompatibla lager mappar
+        // reasoning_effort="none" till thinking_budget=0 för 2.5-flash.
+        // En knapptryckning i mejleditorn behöver formulering, inte
+        // resonemang — samma slutsats som THINKING=disabled i leadskedjan.
+        providerOptions: { openai: { reasoningEffort: "none" } }
       });
       return text;
     } catch (error) {
