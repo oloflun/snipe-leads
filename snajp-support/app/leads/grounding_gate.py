@@ -80,6 +80,37 @@ _SUPERLATIVES = frozenset(
     }
 )
 
+# Fasta uttryck som BÄR ett superlativ-ord utan att vara ett påstående om
+# erbjudandet. Delsträngsmatchningen ovan är avsiktlig — "bäst" ska fånga "vår
+# bästa lösning" — men den fångade också idiomen, och ett idiom kan aldrig
+# vara ogrundat: det säger något om hur vi hjälper, inte om vad vi är.
+#
+# Uppmätt 2026-09-14 i den gyllene evalsviten mot riktig modell:
+# retentionssvaret "Det tar jag på största allvar … hjälpa dig på bästa sätt"
+# fälldes på exakt de två orden och inget annat. Maskas med samma längd så att
+# Claim.span fortsatt pekar rätt i originaltexten.
+#
+# Listan är snäv med flit. Varje post här är ett ställe där grinden slutar
+# titta, så bara uttryck som inte GÅR att läsa som ett påstående om bolaget
+# står med — "den enda", "vår bästa", "störst i Norden" hör inte hit.
+_SUPERLATIV_IDIOM = re.compile(
+    r"(?<![a-zåäö])(?:"
+    r"på bästa (?:möjliga )?sätt"
+    r"|i bästa fall"
+    r"|bästa hälsningar"
+    r"|på största allvar"
+    r"|i största möjliga mån"
+    r"|med största sannolikhet"
+    r")(?![a-zåäö])",
+    re.IGNORECASE,
+)
+
+
+def _maska_idiom(lowered: str) -> str:
+    """Byt idiomen mot blanksteg av samma längd — spannen förblir giltiga."""
+    return _SUPERLATIV_IDIOM.sub(lambda m: " " * len(m.group(0)), lowered)
+
+
 # Namngivna kundreferenser fångas BARA i uppräknade ramar. Alternativet —
 # "varje versal token" — träffar Vi, Bolagsverket, prospektets egna
 # produktnamn och veckodagar, och gör grinden oanvändbar på första körningen.
@@ -277,7 +308,7 @@ def check_grounding(text: str, facts: PermittedFacts) -> GroundingVerdict:
     # alternativet, att behandla varje versal ordsekvens som ett påstående,
     # träffar Vi/Bolagsverket/produktnamn och gör grinden oanvändbar.
 
-    lowered = text.lower()
+    lowered = _maska_idiom(text.lower())
     for word in _SUPERLATIVES:
         if word in lowered and word not in facts.superlatives:
             position = lowered.index(word)

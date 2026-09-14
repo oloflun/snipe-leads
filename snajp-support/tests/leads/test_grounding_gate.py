@@ -153,6 +153,56 @@ def test_superlative_present_in_the_sources_is_allowed():
     assert check_grounding("Vi är marknadsledande.", facts).ok
 
 
+@pytest.mark.parametrize(
+    "mening",
+    [
+        "Det tar jag på största allvar.",
+        "Vi vill hjälpa dig på bästa sätt.",
+        "Vi löser det på bästa möjliga sätt.",
+        "I bästa fall är det åtgärdat i morgon.",
+        "Vi försöker i största möjliga mån.",
+        "Det är med största sannolikhet en reservation.",
+        "Bästa hälsningar, Snajp",
+    ],
+)
+def test_idiom_med_superlativord_ar_inget_pastaende(mening):
+    """Uppmätt 2026-09-14: evalsvitens retentionsfall fälldes på 'på största
+    allvar' och 'på bästa sätt' — idiom, inte påståenden om erbjudandet."""
+    assert check_grounding(mening, _facts()).ok
+
+
+def test_verkligt_superlativ_fangas_aven_bredvid_ett_idiom():
+    """Maskningen får inte bli ett hål: ett idiom i samma mening som ett
+    riktigt superlativ släpper bara idiomet."""
+    verdict = check_grounding(
+        "Vi hjälper dig på bästa sätt — vi är Sveriges största aktör.", _facts()
+    )
+    assert not verdict.ok
+    assert [c.raw for c in verdict.unsupported] == ["störst"]
+    # Spannet pekar fortfarande på rätt ställe i ORIGINALTEXTEN.
+    text = "Vi hjälper dig på bästa sätt — vi är Sveriges största aktör."
+    start, slut = verdict.unsupported[0].span
+    assert text.lower()[start:slut] == "störst"
+
+
+@pytest.mark.parametrize(
+    "mening",
+    ["Det här är vår bästa lösning.", "Vi är bäst på svensk kundtjänst.", "Den bästa supporten i Norden."],
+)
+def test_bojt_superlativ_om_erbjudandet_fangas_fortfarande(mening):
+    assert not check_grounding(mening, _facts()).ok
+
+
+def test_retentionssvaret_ur_evalsviten_passerar():
+    """Regressionsfall: exakt de meningar som fälldes 2026-09-14."""
+    svar = (
+        "Jag förstår att du känner att det här är sista chansen. Det tar jag på "
+        "största allvar. För att min kollega ska kunna hjälpa dig på bästa "
+        "sätt behöver vi veta vilket specifikt fel det gäller."
+    )
+    assert check_grounding(svar, _facts()).ok
+
+
 # -- Taken, explicit ------------------------------------------------------
 
 
