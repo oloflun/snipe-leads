@@ -42,16 +42,24 @@ def test_grenen_ar_utskriven(source: str):
     upplägget blev två miljöer: gren-per-miljö är själva mekanismen som gör
     main och development åtskiljbara, och den bärs av deployment-triggern.
 
-    2026-08-27: development bytte till att deploya direkt från `development`
-    (Vercel avvecklat, spegelgrenen `railway-development` inte längre
-    nödvändig). main är MEDVETET oförändrad — se kommentaren i
-    railway_provision.py om vad som ska ändras när main läggs om likadant.
+    2026-08-27: development bytte till att deploya direkt från `development`.
+    2026-09-15: main lades om likadant (§8.1 steg 5, Antons godkännande) —
+    båda main-triggerna pekar på grenen `main` via `deploymentTriggerUpdate`,
+    och `railway-main` är pensionerad. Asserten låser den NYA sanningen lika
+    hårt: dyker `railway-main` upp här igen är det en regression, inte en
+    återställning.
     """
     match = re.search(r"ENVIRONMENTS\s*:\s*dict\[str,\s*str\]\s*=\s*\{([^}]+)\}", source)
     assert match, "ENVIRONMENTS-mappen saknas — grenen per miljö blir då odefinierad."
     body = match.group(1)
-    assert '"railway-main"' in body and '"development"' in body, (
-        "ENVIRONMENTS måste binda main till railway-main och development till development."
+    assert '"main": "main"' in body.replace(" ", "").replace('":"', '": "') or '"main":"main"' in body.replace(" ", ""), (
+        "ENVIRONMENTS måste binda main till main (sedan 2026-09-15) — railway-main är pensionerad."
+    )
+    assert '"railway-main"' not in body, (
+        "railway-main är pensionerad sedan 2026-09-15 och får inte återinföras som deploygren."
+    )
+    assert '"development"' in body, (
+        "ENVIRONMENTS måste binda development till development."
     )
 
 

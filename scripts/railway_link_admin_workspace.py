@@ -44,6 +44,19 @@ def main() -> None:
     p.add_argument("--env", choices=sorted(ENVIRONMENTS), default="railway-development")
     p.add_argument("--slug", default=SLUG)
     p.add_argument("--diagnos", action="store_true", help="Läs bara.")
+    p.add_argument(
+        "--flytta-fran",
+        default="",
+        metavar="SLUG",
+        help=(
+            "Flytta en BEFINTLIG koppling: skriv nuvarande slug ordagrant som "
+            "kvitto på att flytten är avsiktlig. Utan flaggan vägrar skriptet, "
+            "som förut. Bakgrund: migration 061 gav varje workspace en egen "
+            "autogenererad tenant, så adminens workspace i main pekade på "
+            "'kund-<id>' i stället för snajp (uppmätt 2026-09-15, gav 409 på "
+            "varje arbetsyteflik i adminytan)."
+        ),
+    )
     args = p.parse_args()
 
     conn = psycopg2.connect(dsn_for(ENVIRONMENTS[args.env]))
@@ -78,11 +91,11 @@ def main() -> None:
     if ws_slug == args.slug and str(ws_tenant) == str(tenant_id):
         print("  → redan kopplad, ingenting att göra.")
         return
-    if ws_slug and ws_slug != args.slug:
+    if ws_slug and ws_slug != args.slug and args.flytta_fran != ws_slug:
         sys.exit(
             f"AVBRYTER: workspacet pekar redan på '{ws_slug}'. Att flytta en "
-            "befintlig koppling byter kund under en inloggad användare — gör det "
-            "för hand om det är avsiktligt."
+            "befintlig koppling byter kund under en inloggad användare — är "
+            f"flytten avsiktlig: kör om med --flytta-fran '{ws_slug}'."
         )
     if args.diagnos:
         print("  → skulle kopplas. Kör utan --diagnos.")

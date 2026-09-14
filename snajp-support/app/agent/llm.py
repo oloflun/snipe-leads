@@ -99,6 +99,69 @@ def _uses_vertex(settings: Settings) -> bool:
     return settings.llm_provider == "gemini" and bool(settings.google_service_account_json)
 
 
+# --- Modellnamnet mot Vertex ----------------------------------------------------
+#
+# Vertex OpenAI-kompatibla endpoint (`endpoints/openapi/`) kräver
+# `<publisher>/<modell>`. Ett bart `gemini-2.5-flash` svarar
+#
+#     400 Malformed publisher model (`model`: 'gemini-2.5-flash') for the
+#     'openapi' request endpoint ID; expected '<publisher>/<model>'.
+#
+# Uppmätt 2026-09-14 mot båda miljöernas service account: `google/gemini-2.5-
+# flash` ger 200 (även i JSON-läge), bart namn ger 400 — i BÅDA miljöerna. Varje
+# agentanrop har alltså fallit sedan flytten till Vertex (b1a651e), medan
+# /health/ready svarade `mode: live`: hälsokontrollen mäter att credentials
+# finns, inte att modellnamnet går igenom.
+#
+# Prefixet läggs HÄR, på klienten, och inte i `MODEL`:
+#
+#   * `discovery.py` anropar Vertex NATIVE-endpoint
+#     (`publishers/google/models/{modell}:generateContent`), där modellen redan
+#     står i sökvägen och ett prefix hade gett en dubbel publisher — bart namn
+#     ger 200 där. Ett prefixat `MODEL` hade brutit leadssökningen.
+#   * `provider_for_model()` känner igen `gemini…`, inte `google/gemini…`, så
+#     uppstartskontrollen mot fel modellfamilj hade tyst slutat mäta.
+#   * Anropsställena är många (run_step, triage, bokföring, retention,
+#     strukturera, vision, Agents SDK). Ett prefix per anropsställe är åtta
+#     ställen att glömma — klienten är det enda de alla passerar.
+
+
+def vertex_modellnamn(namn: str) -> str:
+    """Modellnamnet som Vertex openapi-endpoint vill ha: `google/<modell>`.
+
+    Ett namn som redan bär en publisher (`google/…`, `meta/…`) lämnas orört —
+    en uttryckligt satt publisher är ett beslut, inte ett fel att rätta.
+    """
+    rent = (namn or "").strip()
+    if not rent or "/" in rent:
+        return rent
+    return f"google/{rent}"
+
+
+def _med_vertex_modellnamn(client: AsyncOpenAI) -> AsyncOpenAI:
+    """Låt klientens chat.completions.create prefixa modellnamnet.
+
+    `client.chat` och `.completions` är cached_property i openai-SDK:n, så
+    objektet är detsamma vid varje anrop — och Agents SDK går via exakt samma
+    `create` (openai_chatcompletions.py: `self._get_client().chat.completions
+    .create(**create_kwargs)`). Idempotent: en redan omsluten klient omsluts
+    inte igen, annars hade en omläst cache gett `google/google/…`.
+    """
+    completions = client.chat.completions
+    original = completions.create
+    if getattr(original, "_vertex_modellnamn", False):
+        return client
+
+    async def create(*args, **kwargs):
+        if "model" in kwargs:
+            kwargs["model"] = vertex_modellnamn(kwargs["model"])
+        return await original(*args, **kwargs)
+
+    create._vertex_modellnamn = True  # type: ignore[attr-defined]
+    completions.create = create  # type: ignore[method-assign]
+    return client
+
+
 # --- URL-upplösning -----------------------------------------------------------
 
 
@@ -207,6 +270,8 @@ def get_llm_client() -> AsyncOpenAI:
             base_url=_resolve_base_url(settings),
             max_retries=1,
         )
+        if _uses_vertex(settings):
+            _med_vertex_modellnamn(_llm_client)
         return _llm_client
 
 
@@ -251,9 +316,11 @@ def get_vision_client() -> AsyncOpenAI | None:
             if _vision_client is not None:
                 _vision_client.api_key = _vertex_token(settings)
                 return _vision_client
-            _vision_client = AsyncOpenAI(
-                api_key=_vertex_token(settings),
-                base_url=_vertex_base_url(settings),
+            _vision_client = _med_vertex_modellnamn(
+                AsyncOpenAI(
+                    api_key=_vertex_token(settings),
+                    base_url=_vertex_base_url(settings),
+                )
             )
             return _vision_client
 

@@ -43,53 +43,29 @@ och `api` i Railway-miljön `development` utan mellansteg. `railway-development`
 som gren är därmed överflödig för development — den kan lämnas orörd eller
 tas bort, inget läser den längre.
 
-**Produktionen (`main`) är INTE omlagd än.** `railway-main` är fortfarande
-den gren som triggar produktionsdeployen — det är ett separat, medvetet beslut
-som väntar på att göras (main ska ersätta railway-main på samma sätt).
+**Produktionen (`main`) är omlagd sedan 2026-09-15.** §8.1-ordningen i
+`plans/2026-08-28-skarpa-korningar-och-produktion.md` kördes i sin helhet
+2026-09-14/15 med Antons godkännande: merge av `railway-main` in i
+`development` (`ffda526`), migrationer 043–064 applicerade mot main-databasen,
+fast-forward till `railway-main`, PR #11 mergad till `main` av `oloflun`
+(grenskyddet kräver code owner-review från det kontot — en PR-författare kan
+inte godkänna sin egen), och **båda main-tjänsternas deployment triggers
+omlagda via `deploymentTriggerUpdate` till grenen `main` direkt**.
 
-> ## ⛔ Kör INTE den gamla kedjan
+**Releaseflödet är nu:** allt arbete på `development` (deployar sig själv),
+release till produktion = PR `development` → `main` som Anton (`oloflun`)
+godkänner och mergar — mergen deployar `web` + `api` i main-miljön utan
+mellansteg. Kör migrationer mot main (torrkörning först) INNAN mergen när
+releasen bär nya.
+
+> ## ⛔ `railway-main` är pensionerad
 >
-> ```bash
-> git push origin main
-> git push origin main:railway-main
-> ```
->
-> **Den här kedjan är i dag uppmätt FARLIG, inte bara föråldrad.**
-> `git rev-list` mot `origin`-referenser (inte den lokala kopian) visar att
-> `origin/main` ligger **152 commits efter** `origin/railway-main` och **noll
-> före**. `git push origin main:railway-main` avvisas därför i dag som
-> non-fast-forward — och tvingas den igenom (`--force`) rullar den tillbaka
-> produktionen 152 commits, inklusive omläggningen 22 aug och hotfixen 25 aug.
-> `main` är inte längre produktionens källa; `railway-main` är. Se
-> `plans/2026-08-28-skarpa-korningar-och-produktion.md` §8.1 för hela
-> verifieringen.
+> Grenen triggar ingenting längre och ska inte pushas till. Den gamla
+> tvåstegskedjan (`git push origin main:railway-main`) stod här som en
+> uppmätt FARLIG instruktion i tre veckor — historiken finns i planens §8.1.
+> Ser du den kedjan i ett äldre dokument eller en handoff: följ inte den.
 
-**Den verifierade ordningen, när den dagen kommer** (planens §8.1):
-
-1. `git checkout development && git merge origin/railway-main` — tar in den
-   enda commit produktionen har som `development` saknar (`78c900e`).
-   Konflikt i `llm.py`/`config.py` väntas; lösningen är
-   `development`-versionen — `development` innehåller redan hela
-   `railway-main`s innehåll i utökad form.
-2. Testsviterna gröna (`snajp-support` + `tests/`, se `plans/…§7`).
-3. `python scripts/railway_migrate.py --env main --apply` — **torrkörning
-   först** (utan `--apply`).
-4. `git push origin development:railway-main` — nu fast-forward, ingen
-   `--force` behövs eller ska användas.
-5. Lägg om `main`s deployment trigger på samma sätt som `development` gjordes
-   2026-08-27 (`deploymentTriggerUpdate` mot grenen `main` direkt) och släck
-   tvåstegsfällan för gott — samma steg som ändrade `ENVIRONMENTS["main"]` i
-   `scripts/railway_provision.py`.
-
-**Varje steg i den listan mot produktion kräver Antons uttryckliga ord
-innan det körs** (`plans/2026-08-28-skarpa-korningar-och-produktion.md` §8.1a)
-— inklusive steg 1–2, som inte rör `main`/`railway-main` direkt men förbereder
-den push som gör. Läsning (`git log`, `git rev-list`, torrkörningar utan
-`--apply`, `/health`-anrop) är fri och ändrar ingenting.
-
-Kontrollera grenen innan du felsöker "min ändring syns inte" — särskilt för
-`main`, som fortfarande har den gamla tvåstegs-fällan tills ordningen ovan är
-körd. Det är andra gången samma fälla slog till för development innan den
+Kontrollera grenen innan du felsöker "min ändring syns inte". Det är andra gången samma fälla slog till för development innan den
 lagades — `verify_railway.py` bär en kommentar om att `web` byggde fel gren i
 tre deployer i rad medan felsökningen letade i byggkontexten. Byggmeddelandet
 var sant hela tiden; det beskrev en annan commit.
@@ -536,6 +512,7 @@ logotyp och besiktning kräver ögon och skrivs ut som checklista. Se `TENANTS.m
 | Projekt | `b4ec4f98-2d00-4410-bfae-12fb69652d0b` |
 | Miljöer | `main` (`47bc7047-a458-404b-a1de-ccec612cb96e`), `development` (`02c39616-1b8e-47b7-beea-d8c6cfba1acd`) |
 | Tjänster | `web` (`0261f633-1247-4d92-b5ab-40c2a1828b90`), `api` (`5828c279-ad8f-429b-b5e1-969372db8a0a`), `Postgres` (en uppsättning per miljö) |
+| `bokforing` (bara development) | Fristående bokföringssajt ur `bokforing-webb/` — provisionerad 2026-09-14 av `scripts/railway_bokforing.py`, gren `development`, rootDirectory `/bokforing-webb`, `https://bokforing-development.up.railway.app` (Basic Auth: `RAILWAY_DEVELOPMENT_BOKFORING_LOSEN` i `.env.deploy`) |
 | Deploy-gren, main | `railway-main` (oförändrat — main ska läggas om senare) |
 | Deploy-gren, development | **`development`** (omlagd 2026-08-27, var `railway-development`) |
 

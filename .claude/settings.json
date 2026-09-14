@@ -1,4 +1,22 @@
 {
+  "enabledPlugins": {
+    "foreman@foreman-marketplace": true,
+    "super-intelligence@super-intelligence": true
+  },
+  "extraKnownMarketplaces": {
+    "foreman-marketplace": {
+      "source": {
+        "repo": "fatihguner/foreman",
+        "source": "github"
+      }
+    },
+    "super-intelligence": {
+      "source": {
+        "repo": "oloflun/super-intelligence-public",
+        "source": "github"
+      }
+    }
+  },
   "hooks": {
     "SessionStart": [
       {
@@ -13,30 +31,12 @@
       {
         "hooks": [
           {
-            "type": "command",
-            "command": "bash -c '[ \"$CLAUDE_CODE_REMOTE\" = \"true\" ] && { claude plugin marketplace add oloflun/super-intelligence-public >/dev/null 2>&1; claude plugin install super-intelligence@super-intelligence --yes >/dev/null 2>&1; echo \"{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"<plugin-bootstrap>super-intelligence-pluginet installerades. Kor /reload-plugins --force forst.</plugin-bootstrap>\"}}\"; } || true'",
-            "timeout": 60
+            "command": "bash -c '[ \"$CLAUDE_CODE_REMOTE\" = \"true\" ] \u0026\u0026 { claude plugin marketplace add oloflun/super-intelligence-public \u003e/dev/null 2\u003e\u00261; claude plugin install super-intelligence@super-intelligence --yes \u003e/dev/null 2\u003e\u00261; echo \"{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"\u003cplugin-bootstrap\u003esuper-intelligence-pluginet installerades. Kor /reload-plugins --force forst.\u003c/plugin-bootstrap\u003e\"}}\"; } || true'",
+            "timeout": 60,
+            "type": "command"
           }
         ]
       }
     ]
-  },
-  "extraKnownMarketplaces": {
-    "super-intelligence": {
-      "source": {
-        "source": "github",
-        "repo": "oloflun/super-intelligence-public"
-      }
-    },
-    "foreman-marketplace": {
-      "source": {
-        "source": "github",
-        "repo": "fatihguner/foreman"
-      }
-    }
-  },
-  "enabledPlugins": {
-    "super-intelligence@super-intelligence": true,
-    "foreman@foreman-marketplace": true
   }
 }
