@@ -32,13 +32,13 @@ ENV_DEPLOY = REPO_ROOT / ".env.deploy"
 #: som körs och syns annars inte i någon diff. INV-DEPLOY-002 vaktar det.
 #:
 #: `development` deployar sig SJÄLV sedan 2026-08-27 (Vercel är avvecklat, en
-#: spegelgren för att trigga Railway är inte längre nödvändig). `main` pekar
-#: fortfarande på `railway-main` med flit — samma omläggning för produktion är
-#: ett separat, medvetet beslut som inte är taget än. Ändras `main` till att
-#: deploya direkt: ta bort den raden i `DEPLOY.md`/`CLAUDE.md` som beskriver
-#: den gamla tvåstegspushen dit, i SAMMA ändring som den här raden.
+#: spegelgren för att trigga Railway är inte längre nödvändig). `main` deployar
+#: från grenen `main` sedan 2026-09-15 — §8.1-ordningen kördes med Antons
+#: godkännande och båda main-triggerna lades om via `deploymentTriggerUpdate`.
+#: `railway-main` är pensionerad; DEPLOY.md/CLAUDE.md uppdaterades i samma
+#: släpp (0306119), precis som instruktionen här krävde.
 ENVIRONMENTS: dict[str, str] = {
-    "main": "railway-main",
+    "main": "main",
     "development": "development",
 }
 
