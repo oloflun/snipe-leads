@@ -6,11 +6,12 @@ för maskinell användning (JobTech Dev). TOS-bedömning: publik API-yta med
 öppen licens — ingen skrapning, inga användarvillkor bryts (jfr modulens
 __init__-regel om allabolag/hitta/ratsit).
 
-Varför jobbannonser: ett bolag som rekryterar kundtjänst/innesälj berättar
-själv att volymen växer — det är den starkaste gratis köpsignalen som finns
-för svensk SMB, och den ersätter det breda Gemini-sökandet i stället för
-att komplettera det (kostnadsarbetet 2026-09-02). Annonsen ger dessutom
-arbetsgivarnamn, ort och ofta webbadress.
+Varför jobbannonser: ett bolag i kundens målbransch som rekryterar berättar
+själv att det växer — den starkaste gratis köpsignalen som finns för svensk
+SMB, och den ersätter det breda Gemini-sökandet i stället för att
+komplettera det (kostnadsarbetet 2026-09-02). Annonsen ger dessutom
+arbetsgivarnamn, ort och ofta webbadress. Sökorden är kundens, se
+`sokord_for`.
 
 GDPR (INV-DATA-001): posterna är BOLAGSDATA (arbetsgivare, ort, annons-URL).
 Kontaktpersoner ur annonser tas medvetet INTE med — kontaktpersonen hämtas
@@ -32,10 +33,62 @@ logger = logging.getLogger("snajp-support.leads.sources.jobtech")
 
 API_URL = "https://jobsearch.api.jobtechdev.se/search"
 
-#: Yrkesord som signalerar att bolaget drunknar i kundfrågor — det är DE
-#: annonserna som är köpsignal för en supportagent, inte vilken rekrytering
-#: som helst. Ordlistan är en startpunkt; ICP:ns roles läggs ovanpå.
-_SIGNALROLLER = ("kundtjänst", "kundservice", "innesälj", "kundsupport", "ordermottagning")
+#: Sökorden kommer ur KUNDENS målgrupp, aldrig ur en fast lista.
+#:
+#: Fram till 2026-09-15 sökte källan alltid på "kundtjänst", "kundservice"
+#: och "innesälj" — Snajps EGEN köpsignal (ett bolag som rekryterar
+#: kundtjänst behöver en supportagent) — plus ICP:ns roller, och branscherna
+#: lästes aldrig. Uppmätt som kunden Nordform Kontor (säljer skrivbord,
+#: branscher IT-konsulter/redovisningsbyråer, Stockholm/Göteborg): alla fem
+#: bolagen kom från frågan "kundtjänst Stockholm Göteborg" — SafeTeam,
+#: PitchPoint, CHUOMO SERVICE — och fyllde körningen, så Gemini-utfyllnaden
+#: som faktiskt ser branscherna kördes aldrig. Roller används inte heller:
+#: "VD Stockholm" ger rekryteringsfirmor och storbolag som söker en VD.
+#:
+#: Fritext ur "Signaler som krävs" (leadslistornas titel hamnar där) används
+#: bara när den är kort nog att vara ett sökord. En hel mening som fråga ger
+#: slumpträffar; då är ingen källträff bättre, och Gemini tolkar fritexten.
+_MAX_ORD_I_FRITEXT = 3
+
+#: Annonsören är inte alltid arbetsgivaren: bemannings- och rekryteringsbolag
+#: annonserar åt sina kunder, och en branschsökning ("redovisningsbyrå
+#: Stockholm") ger dem överst. De är aldrig bolaget som annonsen handlar om.
+_FORMEDLARORD = ("rekryter", "bemanning", "recruit", "staffing")
+_FORMEDLARE = (
+    "academic work",
+    "randstad",
+    "manpower",
+    "adecco",
+    "experis",
+    "poolia",
+    "proffice",
+    "studentconsulting",
+    "uniflex",
+    "lernia",
+)
+
+
+def ar_formedlare(namn: str) -> bool:
+    """True för bemannings- och rekryteringsbolag som annonserar åt andra."""
+    rent = namn.casefold()
+    return any(ord in rent for ord in (*_FORMEDLARORD, *_FORMEDLARE))
+
+
+def sokord_for(icp: dict[str, Any]) -> list[str]:
+    """Sökorden för en målgrupp: branscher först, annars korta nischord.
+
+    Tom lista betyder att målgruppen inte går att ställa som annonsfråga —
+    källan ska då inte söka alls, inte falla tillbaka på en fast ordlista.
+    """
+    branscher = [str(b).strip() for b in (icp.get("industries") or []) if str(b).strip()]
+    if branscher:
+        return list(dict.fromkeys(branscher[:2]))
+    nisch = [
+        str(n).strip()
+        for n in (icp.get("must_have") or [])
+        if str(n).strip() and len(str(n).split()) <= _MAX_ORD_I_FRITEXT
+    ]
+    return list(dict.fromkeys(nisch[:2]))
 
 
 class JobTechSource(ProspectSource):
@@ -63,8 +116,9 @@ class JobTechSource(ProspectSource):
             geografi = " ".join(str(g).strip() for g in geo_ra if str(g).strip())
         else:
             geografi = str(geo_ra).strip()
-        roller = [str(r).strip() for r in (icp.get("roles") or []) if str(r).strip()]
-        termer = list(dict.fromkeys([*_SIGNALROLLER[:3], *roller[:2]]))
+        termer = sokord_for(icp)
+        if not termer:
+            return []
 
         prospekt: dict[str, Prospect] = {}
         try:
@@ -97,6 +151,8 @@ class JobTechSource(ProspectSource):
         namn = str(arbetsgivare).strip()
         # Offentlig sektor är aldrig ett leads-prospekt för SMB-produkten.
         if any(ord in namn.lower() for ord in ("kommun", "region ", "myndighet", "landsting")):
+            return None
+        if ar_formedlare(namn):
             return None
         adress = hit.get("workplace_address") or {}
         webb = (hit.get("employer") or {}).get("url") or None
