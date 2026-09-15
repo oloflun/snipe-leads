@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { PageShell } from "@/components/AppShell";
+import { AgentSajtKnapp } from "@/components/AgentSajtKnapp";
 import { BookkeepingView } from "@/components/bookkeeping/BookkeepingView";
 import { StartView } from "@/components/dashboard/StartView";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
@@ -215,6 +216,7 @@ function SupportSection({ workspaceName }: Readonly<{ workspaceName: string | nu
   // produkten men färdigt.
   return (
     <PageShell title="Inkorg och utkast">
+      <AgentSajtKnapp agent="support" />
       <SupportWorkspaceTabs workspaceName={workspaceName} />
     </PageShell>
   );

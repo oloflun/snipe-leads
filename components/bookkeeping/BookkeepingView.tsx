@@ -1,11 +1,9 @@
-import { ArrowUpRight } from "lucide-react";
+import { AgentSajtKnapp } from "@/components/AgentSajtKnapp";
 import { PageShell } from "@/components/AppShell";
 import { BokforingChatt } from "@/components/bookkeeping/BokforingChatt";
 import { BokforingPanel } from "@/components/bookkeeping/BokforingPanel";
 import { Felanmalan } from "@/components/bookkeeping/Felanmalan";
 import { Forbehall } from "@/components/bookkeeping/Forbehall";
-import { btnPrimary } from "@/components/ui";
-import { cn } from "@/lib/utils";
 
 /**
  * Bokföringsvyn. Serverskal, klientpanel — samma delning som resten av
@@ -41,30 +39,9 @@ export function BookkeepingView() {
       title="Kvitton, fakturor och underlag"
       description="Ladda upp dina kvitton, fakturor och andra underlag. Agenten läser av, organiserar och föreslår kontering och periodisering – så att pappersarbetet blir klart för granskning och bokföring."
     >
-      {/* Vägen till den fristående bokföringssajten — en KNAPP, inte en
-          redirect (Sebbes ord 2026-09-15: menyklicket ska landa här som
-          vanligt). Länken går via /api/bokforing/sso, som skapar en färsk
-          engångsbiljett vid klicket så att kunden landar på sajten som sig
-          själv, med sin egen bokföring. Renderas bara när miljön pekat ut
-          sajten — utan BOKFORING_EXTERN_URL finns ingen knapp att visa. */}
-      {process.env.BOKFORING_EXTERN_URL ? (
-        <div className="mb-12 flex flex-wrap items-center justify-between gap-x-8 gap-y-4 border-y border-ink/15 py-5">
-          <div className="min-w-0 max-w-[62ch]">
-            <p className="text-[0.9375rem] font-semibold text-ink">
-              Bokföringsagenten har fått en egen arbetsyta
-            </p>
-            <p className="mt-1 text-[0.9375rem] leading-6 text-ink/60">
-              Samma underlag och siffror som här, med mer plats: resultat,
-              intäkter och utgifter, PDF-filer och assistenten som egna flikar.
-              Du loggas in automatiskt.
-            </p>
-          </div>
-          <a href="/api/bokforing/sso" className={cn(btnPrimary, "shrink-0")}>
-            Öppna bokföringssajten
-            <ArrowUpRight className="h-4 w-4" aria-hidden />
-          </a>
-        </div>
-      ) : null}
+      {/* Vägen till agentens egen sajt — en KNAPP, inte en redirect på
+          menyklicket. Samma banner för alla tre agenterna: AgentSajtKnapp. */}
+      <AgentSajtKnapp agent="bokforing" />
 
       {/* gap-x först från lg. Under lg ligger allt i col-span-12, och elva
           kolumnmellanrum à 40px hade då bara ätit bredd — samma fälla som

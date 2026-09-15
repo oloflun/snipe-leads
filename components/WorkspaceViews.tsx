@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 
+import { AgentSajtKnapp } from "@/components/AgentSajtKnapp";
 import { SoulEditor } from "@/components/SoulEditor";
 import { Agentinstruktioner } from "@/components/admin/Agentinstruktioner";
 import { PageShell, useArbetsvag } from "@/components/AppShell";
@@ -120,6 +121,9 @@ export function LeadsView({ demo = false }: Readonly<{ demo?: boolean }>) {
       title="Skräddarsydda leads efter din målgrupp och produkt."
       description="Beskriv er målgrupp och produkt — agenterna letar fram bolagen som matchar."
     >
+      {/* Aldrig i demon: knappen bär en riktig SSO-väg, och demobesökaren
+          har ingen tenant att landa som. */}
+      {demo ? null : <AgentSajtKnapp agent="leads" />}
       <LeadsBody demo={demo} />
     </PageShell>
   );

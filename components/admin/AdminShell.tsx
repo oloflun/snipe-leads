@@ -51,8 +51,8 @@ const PLATTFORM = [
   { href: "/admin/korningar", label: { sv: "Körningar", en: "Runs" } },
   { href: "/admin/testkorningar", label: { sv: "Testkörningar", en: "Test runs" } },
   {
-    href: "/admin/bokforingsanvandning",
-    label: { sv: "Bokföringsanvändning", en: "Bookkeeping usage" }
+    href: "/admin/agentanvandning",
+    label: { sv: "Agentanvändning", en: "Agent usage" }
   },
   { href: "/admin/handelser", label: { sv: "Händelser", en: "Events" } }
 ];
