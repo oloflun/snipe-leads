@@ -4,17 +4,12 @@ Sebbe har beställt att allt på `development` går till produktion. Grenskyddet
 kräver din review och merge (§8.1a) — den här filen är hela underlaget, med
 nästa steg körbara direkt efter mergen.
 
-## FÖRE mergen — ett steg, obligatoriskt
+## FÖRE mergen — inget kvar
 
-Migration **065** (`workspaces_admin_grant`) är körd mot development men INTE
-mot main. 064 lade RLS-policyn men glömde granten: main-api:t loggar
-`InsufficientPrivilegeError` var 30:e sekund och adminvyn visar härledda paket
-tills den är körd.
-
-```bash
-python scripts/railway_migrate.py --env main            # torrkörning först
-python scripts/railway_migrate.py --env main --apply
-```
+Migration **065** (`workspaces_admin_grant`) är **redan körd mot main** och
+verifierad verksam (2026-09-15; `has_table_privilege=true`). `verify_railway`
+noterar "schemat ligger före koden" tills mergen — det är förväntat och
+försvinner med den. Ingen migration återstår före merge.
 
 ## Mergen
 
