@@ -43,6 +43,29 @@ uppfattning om vad som är ett bra bolag.
   tyngst.
 - `missing_information`: vad som saknades för en säker bedömning.
 - `qualification_reasoning`: resonemang på svenska, kort.
+- `antal_anstallda`: heltal eller null. BARA när källmaterialet anger
+  antalet ("vi är 14 medarbetare") eller visar ett räknebart belägg, som en
+  personalsida med namngivna medarbetare. Aldrig en uppskattning ur bransch
+  eller intryck — null är rätt när materialet inte säger det.
+- `ar_bemanningsforetag`: true om bolagets affär är att hyra ut, rekrytera
+  eller förmedla personal eller konsulter åt andra bolag; false om inte;
+  null om materialet inte räcker.
+
+**Storlek och bemanning — skarpa regler (koden kontrollerar dig):**
+
+- Målgruppens "Antal anställda" är ett krav, inte en preferens. Visar
+  materialet ett antal utanför intervallet ⇒ `qualified` false, med antalet
+  i `disqualifiers`. En koncern, ett börsnoterat moderbolag eller kontor i
+  flera länder räcker som disqualifier mot ett tak under 50 anställda.
+- **Okänt är inte fel.** Saknas uppgift om storlek, ort eller signal hör det
+  hemma i `missing_information`, inte i `disqualifiers`. De flesta småbolag
+  skriver aldrig ut sitt antal anställda; att fälla dem för det tömmer
+  målgruppen.
+- Ett bemannings- eller rekryteringsföretag tillhör INTE branschen det
+  rekryterar till: ett bolag som hyr ut IT-konsulter är inte "IT-konsulter"
+  i målgruppens mening, och dess jobbannonser visar kundernas behov, inte
+  egen tillväxt. Nämner målgruppen inte uttryckligen bemanning eller
+  rekrytering ⇒ `qualified` false.
 
 ## Bolagsbilden (mk:customer-research-kärnan)
 

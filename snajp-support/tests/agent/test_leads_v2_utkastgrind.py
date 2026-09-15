@@ -32,7 +32,7 @@ def _fake_deepseek_key(monkeypatch):
     get_settings.cache_clear()
 
 
-async def _kor(overrides: dict, *, sida: str | None = None) -> dict:
+async def _kor(overrides: dict, *, sida: str | None = None, icp: dict | None = None) -> dict:
     storage = MemoryStorage()
     prospect_id = await _prepare_prospect(storage)
     llm = _FakeLLM(overrides={"sa:account-research": overrides})
@@ -49,6 +49,7 @@ async def _kor(overrides: dict, *, sida: str | None = None) -> dict:
             context_pack="## Kontextpaket\nICP: svensk e-handel.",
             brief="",
             is_test=True,
+            icp=icp,
         )
 
 
@@ -68,4 +69,27 @@ async def test_kvalificerat_bolag_utan_kontaktvag_stoppas():
 
 async def test_kvalificerat_bolag_med_kontakt_gar_vidare():
     result = await _kor({"qualified": True})
+    assert result["stopped_early"] is None
+
+
+_NORDFORM = {
+    "industries": ["IT-konsulter", "redovisningsbyråer"],
+    "size": {"anstallda_min": 10, "anstallda_max": 49},
+}
+
+
+async def test_kodgrinden_faller_kand_storlek_over_taket_fore_utkastet():
+    result = await _kor({"qualified": True, "icp_fit": 0.8, "antal_anstallda": 250}, icp=_NORDFORM)
+    assert result["qualified"] is False
+    assert result["stopped_early"] == "ej_kvalificerad"
+    assert result["icp_fit"] <= 0.3
+
+
+async def test_kodgrinden_faller_bemanningsforetag_fore_utkastet():
+    result = await _kor({"qualified": True, "icp_fit": 0.7, "ar_bemanningsforetag": True}, icp=_NORDFORM)
+    assert result["stopped_early"] == "ej_kvalificerad"
+
+
+async def test_okand_storlek_stoppar_inte():
+    result = await _kor({"qualified": True, "antal_anstallda": None}, icp=_NORDFORM)
     assert result["stopped_early"] is None

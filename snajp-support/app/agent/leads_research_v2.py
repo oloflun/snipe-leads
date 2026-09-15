@@ -67,7 +67,11 @@ _RESEARCH_V2_UPPGIFT = (
     "(bool eller null), contact_name, contact_role, contact_email (alla tre "
     "null om de inte bokstavligen står i källmaterialet), icp_fit (0.0-1.0), "
     "qualified (bool), disqualifiers (lista), qualification_reasoning, "
-    "missing_information (lista), account_structure, decision_makers (lista "
+    "missing_information (lista), antal_anstallda (heltal eller null — BARA "
+    "om källmaterialet anger antalet eller bär ett tydligt belägg som ”vi är "
+    "12 konsulter”; aldrig en uppskattning), ar_bemanningsforetag (bool eller "
+    "null — true om bolagets affär är att hyra ut, rekrytera eller förmedla "
+    "personal åt andra), account_structure, decision_makers (lista "
     "med ROLLER), trigger_events (lista), open_questions (lista), "
     "prospect_positioning, comparison_angles (lista), honest_caveats (lista), "
     "likely_objections (lista med {objection, response}), hardest_objection, "
@@ -126,6 +130,7 @@ async def run_research_step_v2(
     context_pack: str,
     brief: str,
     is_test: bool = False,
+    icp: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Fas B för ETT prospekt i ETT LLM-anrop. Samma returnycklar som
     leads_agent.run_research_step — plus company_summary/likely_pains på
@@ -166,6 +171,19 @@ async def run_research_step_v2(
         instruktioner=lager,
         talamod_429=True,
     )
+
+    # Kodgrinden för storlek och bemanning (leads/kvalificeringsgrind.py) -
+    # kan bara fälla, aldrig godkänna. `icp` är körningens sammanslagna
+    # målgrupp (batch-vägen skickar med överskrivningarna); utan den gäller
+    # arbetsytans sparade.
+    if icp is None:
+        from ..leads.icp import normalize_icp
+
+        installningar = await storage.get_agent_settings(tenant_id, agent_type="leads")
+        icp = normalize_icp(installningar.get("icp"))
+    from ..leads.kvalificeringsgrind import skarp_kvalificering
+
+    fynd = skarp_kvalificering(fynd, icp, company_name=str(prospect_row.get("company_name") or ""))
 
     # Kontakttrappan (INV-CONTACT-001) — samma kodväg som V1: uppgraderar
     # bara, skriver aldrig över en bättre nivå, hittar aldrig på en adress.
