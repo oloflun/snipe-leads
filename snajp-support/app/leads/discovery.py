@@ -93,7 +93,13 @@ _EXEMPEL_TLD = (".example", ".invalid", ".test")
 #: 2026-08-31 visade httpx.ReadTimeout vid 45 s som dödade hela batchkörningen
 #: (se hitta_bolag). Anslutningen ska ändå vara snabb; det är LÄSNINGEN som
 #: behöver gott om tid.
-_SOKNING_TIMEOUT = httpx.Timeout(10.0, connect=10.0, read=90.0)
+#:
+#: Uppmätt 2026-09-15 mot Vertex med samma målgrupp två gånger i rad: 55 s och
+#: 156 s. Med read=90 och tre försök föll en kundkörning efter 4,5 minuter
+#: (tre lästimeouter) — och varje omförsök startade om samma långa sökning
+#: från noll. Därför: ett generöst lästak, och en LÄSTIMEOUT görs inte om
+#: (se _gemini_med_sokning). Anslutningsfel och 5xx är snabba och görs om.
+_SOKNING_TIMEOUT = httpx.Timeout(10.0, connect=10.0, read=180.0)
 _SOKNING_FORSOK = 3
 _SOKNING_BACKOFF_BAS = 2.0  # sekunder, dubblas per omförsök
 
@@ -472,9 +478,16 @@ async def _gemini_med_sokning(prompt: str) -> str:
         try:
             async with httpx.AsyncClient(timeout=_SOKNING_TIMEOUT) as client:
                 svar = await client.post(url, params=params, headers=headers, json=kropp)
+        except httpx.ReadTimeout as fel:
+            # Sökningen hann inte svara inom lästaket. Ett omförsök startar
+            # samma långa grounded sökning från noll och spräcker kundens
+            # väntetid — hellre ett tydligt fel direkt.
+            raise DiscoveryError(
+                "Sokningen mot Gemini svarade inte i tid — modellen dröjde for lange."
+            ) from fel
         except httpx.HTTPError as fel:
-            # Basklassen för httpx transportfel — täcker ReadTimeout,
-            # ConnectError m.fl. utan att räkna upp varje underklass.
+            # Basklassen för övriga httpx transportfel (ConnectError m.fl.) —
+            # snabba fel där ett nytt försök ofta lyckas.
             if sista_forsoket:
                 raise DiscoveryError(
                     "Sokningen mot Gemini svarade inte i tid — natverket eller "

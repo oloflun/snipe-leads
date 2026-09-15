@@ -205,11 +205,14 @@ export function LeadsRunForm({
     return kropp;
   }
 
-  async function pollaJobb(jobId: string): Promise<{ status: string; error?: string; jobs?: Jobb[] }> {
+  async function pollaJobb(
+    jobId: string,
+    maxForsok = 90
+  ): Promise<{ status: string; error?: string; jobs?: Jobb[] }> {
     // Prefixet är en literal i anropet så rotvakten ser sökvägen.
     // `/leads/jobb/` är den inloggade proxyn — inte `/jobs/`, som är den
     // anonyma chattpollningen och slår upp under demonyckeln.
-    for (let forsok = 0; forsok < 90; forsok += 1) {
+    for (let forsok = 0; forsok < maxForsok; forsok += 1) {
       await new Promise((r) => setTimeout(r, forsok < 5 ? 800 : 2000));
       const jobb = await anropa<{
         status?: string;
@@ -252,7 +255,12 @@ export function LeadsRunForm({
         if (!sokId) {
           throw new Error("Körningen startade inte. Försök igen.");
         }
-        const sok = await pollaJobb(sokId);
+        // Sökfasen får vänta ~5 min, research-jobben ~3. Den grundade
+        // sökningen tog 55–156 s i mätningen 2026-09-15 och backendens tak
+        // är ~3,3 min (discovery._SOKNING_TIMEOUT) — formuläret ska aldrig ge
+        // upp före backenden, annars ser kunden "tog för lång tid" i stället
+        // för det riktiga beskedet.
+        const sok = await pollaJobb(sokId, 150);
         if (sok.status !== "completed") {
           throw new Error(sok.error ?? "Sökningen hittade inga bolag.");
         }

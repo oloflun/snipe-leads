@@ -59,7 +59,10 @@ const KONTAKTETIKETT: Record<string, string> = {
 };
 
 async function pollaJobb<T>(jobId: string): Promise<T> {
-  for (let försök = 0; försök < 90; försök += 1) {
+  // ~5 min: den grundade sökningen tog 55–156 s i mätningen 2026-09-15 och
+  // backendens tak är ~3,3 min (discovery._SOKNING_TIMEOUT). Formuläret ska
+  // aldrig ge upp före backenden.
+  for (let försök = 0; försök < 150; försök += 1) {
     await new Promise((r) => setTimeout(r, försök < 5 ? 800 : 2000));
     const svar = await fetch(`/api/snajp-support/leads/jobb/${jobId}`);
     const j =
