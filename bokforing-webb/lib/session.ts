@@ -23,6 +23,18 @@ export async function sessionsvarde(losen: string): Promise<string> {
     .join("");
 }
 
+/**
+ * Publika basadressen — ur x-forwarded-headrarna, INTE request.url.
+ * Bakom Railways proxy är request.url i en route handler den interna
+ * adressen (http://localhost:8080); en redirect byggd på den skickade
+ * webbläsaren till localhost. Uppmätt live 2026-09-15.
+ */
+export function basUrl(request: { headers: Headers }): string {
+  const proto = request.headers.get("x-forwarded-proto") ?? "https";
+  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "";
+  return `${proto}://${host}`;
+}
+
 /** Bara interna sökvägar får vara mål efter inloggning — en öppen redirect
  *  är en nätfiskekomponent, även bakom en vägg. */
 export function saneraNasta(nasta: string | null | undefined): string {

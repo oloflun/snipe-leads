@@ -74,7 +74,7 @@ function Flikrad({ flik, aktiv }: Readonly<{ flik: Flik; aktiv: boolean }>) {
   );
 }
 
-export function Sidebar() {
+export function Sidebar({ kundnamn = null }: Readonly<{ kundnamn?: string | null }>) {
   const pathname = usePathname();
   const arAktiv = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -105,9 +105,28 @@ export function Sidebar() {
         {BOTTENFLIKAR.map((flik) => (
           <Flikrad key={flik.href} flik={flik} aktiv={arAktiv(flik.href)} />
         ))}
-        <p className="hidden px-3 pb-1 pt-4 text-[0.75rem] leading-5 text-paper/35 lg:block">
-          En tjänst från Snajp
-        </p>
+        {/* Vems bokföring railen bär — bara när kunden kom via Snajp-webbens
+            SSO. Utloggningen är en ren form-POST: fungerar utan JavaScript,
+            och rensar både kund- och förhandssessionen. */}
+        <div className="hidden px-3 pb-1 pt-4 lg:block">
+          {kundnamn ? (
+            <p className="truncate text-[0.8125rem] leading-5 text-paper/60" title={kundnamn}>
+              {kundnamn}
+            </p>
+          ) : null}
+          {/* div, inte p: en form är inte giltigt innehåll i ett stycke. */}
+          <div className="flex items-baseline gap-2 text-[0.75rem] leading-5 text-paper/35">
+            <span>En tjänst från Snajp</span>
+            <form method="post" action="/api/logga-ut">
+              <button
+                type="submit"
+                className="focus-ring rounded-[4px] text-paper/45 underline decoration-paper/25 underline-offset-4 transition-colors hover:text-paper"
+              >
+                Logga ut
+              </button>
+            </form>
+          </div>
+        </div>
       </div>
     </aside>
   );

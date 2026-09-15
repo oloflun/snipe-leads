@@ -32,21 +32,51 @@ function arChatt(run: RunRow): boolean {
   }
 }
 
+/**
+ * Listpris för Gemini 2.5 Flash på Vertex AI, USD per miljon tokens
+ * (avläst 2026-09-15). En UPPSKATTNING enligt listpris — inte fakturan
+ * från Google, som även bär rabatter, valuta och andra tjänster. Byts
+ * modellen i driften ska talen bytas här, därav namnet.
+ */
+const USD_PER_MILJON = { in: 0.3, ut: 2.5 };
+
+function kostnadUsd(tokensIn: number, tokensUt: number): number {
+  return (tokensIn * USD_PER_MILJON.in + tokensUt * USD_PER_MILJON.ut) / 1_000_000;
+}
+
+function usd(varde: number): string {
+  return `$${varde.toFixed(2)}`;
+}
+
 type Rad = {
   kund: string;
   uppladdningar: number;
   fragor: number;
+  tokensIn: number;
+  tokensUt: number;
   senast: string | null;
 };
 
-function summera(runs: RunRow[]): { rader: Rad[]; uppladdningar: number; fragor: number } {
+type Summering = {
+  rader: Rad[];
+  uppladdningar: number;
+  fragor: number;
+  tokensIn: number;
+  tokensUt: number;
+};
+
+function summera(runs: RunRow[]): Summering {
   const perKund = new Map<string, Rad>();
 
   for (const run of runs) {
     const kund = run.tenant_slug || "okänd";
-    const rad = perKund.get(kund) ?? { kund, uppladdningar: 0, fragor: 0, senast: null };
+    const rad =
+      perKund.get(kund) ??
+      { kund, uppladdningar: 0, fragor: 0, tokensIn: 0, tokensUt: 0, senast: null };
     if (arChatt(run)) rad.fragor += 1;
     else rad.uppladdningar += 1;
+    rad.tokensIn += run.tokens_in ?? 0;
+    rad.tokensUt += run.tokens_out ?? 0;
     // Körningarna kommer nyast först från backenden, men den ordningen är
     // backendens och inte ett kontrakt. Vi jämför i stället.
     if (!rad.senast || run.created_at > rad.senast) rad.senast = run.created_at;
@@ -54,12 +84,17 @@ function summera(runs: RunRow[]): { rader: Rad[]; uppladdningar: number; fragor:
   }
 
   const rader = [...perKund.values()].sort(
-    (a, b) => b.uppladdningar + b.fragor - (a.uppladdningar + a.fragor)
+    (a, b) =>
+      kostnadUsd(b.tokensIn, b.tokensUt) - kostnadUsd(a.tokensIn, a.tokensUt) ||
+      b.uppladdningar + b.fragor - (a.uppladdningar + a.fragor)
   );
+  const sum = (valj: (r: Rad) => number) => rader.reduce((s, r) => s + valj(r), 0);
   return {
     rader,
-    uppladdningar: rader.reduce((s, r) => s + r.uppladdningar, 0),
-    fragor: rader.reduce((s, r) => s + r.fragor, 0)
+    uppladdningar: sum((r) => r.uppladdningar),
+    fragor: sum((r) => r.fragor),
+    tokensIn: sum((r) => r.tokensIn),
+    tokensUt: sum((r) => r.tokensUt)
   };
 }
 
@@ -73,7 +108,7 @@ function Matt({ etikett, varde }: Readonly<{ etikett: string; varde: number | st
 }
 
 export function Bokforingsanvandning({ runs }: Readonly<{ runs: RunRow[] }>) {
-  const { rader, uppladdningar, fragor } = summera(runs);
+  const { rader, uppladdningar, fragor, tokensIn, tokensUt } = summera(runs);
 
   if (runs.length === 0) {
     return (
@@ -90,6 +125,9 @@ export function Bokforingsanvandning({ runs }: Readonly<{ runs: RunRow[] }>) {
         <Matt etikett="Uppladdade underlag" varde={uppladdningar} />
         <Matt etikett="Frågor till assistenten" varde={fragor} />
         <Matt etikett="Kunder som använt den" varde={rader.length} />
+        <Matt etikett="Tokens in" varde={tokensIn.toLocaleString("sv-SE")} />
+        <Matt etikett="Tokens ut" varde={tokensUt.toLocaleString("sv-SE")} />
+        <Matt etikett="AI-kostnad, uppskattad" varde={usd(kostnadUsd(tokensIn, tokensUt))} />
       </div>
 
       <table className="mt-10 w-full text-[15px]">
@@ -98,6 +136,8 @@ export function Bokforingsanvandning({ runs }: Readonly<{ runs: RunRow[] }>) {
             <th className="kicker py-2 font-normal text-mineral">Kund</th>
             <th className="kicker py-2 text-right font-normal text-mineral">Underlag</th>
             <th className="kicker py-2 text-right font-normal text-mineral">Frågor</th>
+            <th className="kicker py-2 text-right font-normal text-mineral">Tokens</th>
+            <th className="kicker py-2 text-right font-normal text-mineral">Kostnad</th>
             <th className="kicker py-2 text-right font-normal text-mineral">Senast</th>
           </tr>
         </thead>
@@ -107,6 +147,10 @@ export function Bokforingsanvandning({ runs }: Readonly<{ runs: RunRow[] }>) {
               <td className="py-3 font-mono text-[13px]">{rad.kund}</td>
               <td className="num py-3 text-right">{rad.uppladdningar}</td>
               <td className="num py-3 text-right">{rad.fragor}</td>
+              <td className="num py-3 text-right">
+                {(rad.tokensIn + rad.tokensUt).toLocaleString("sv-SE")}
+              </td>
+              <td className="num py-3 text-right">{usd(kostnadUsd(rad.tokensIn, rad.tokensUt))}</td>
               <td className="py-3 text-right text-[13px] text-mineral">
                 {rad.senast ? rad.senast.slice(0, 16).replace("T", " ") : "—"}
               </td>
@@ -117,8 +161,11 @@ export function Bokforingsanvandning({ runs }: Readonly<{ runs: RunRow[] }>) {
 
       <p className="mt-6 max-w-[70ch] text-[13px] leading-6 text-mineral">
         Räknat ur `agent_runs` med agent_type=bookkeeping. En rad per körning:
-        ett uppladdat underlag eller en fråga till assistenten. Siffrorna är
-        alltså aktivitet, inte fakturerbar volym.
+        ett uppladdat underlag (två genomgångar) eller en fråga till
+        assistenten. Kostnaden är en uppskattning enligt Vertex listpris för
+        Gemini 2.5 Flash ({`$${USD_PER_MILJON.in}`}/M in, {`$${USD_PER_MILJON.ut}`}/M ut,
+        avläst 2026-09-15) — aktivitet och riktmärke, inte Googles faktura och
+        inte fakturerbar volym.
       </p>
     </div>
   );

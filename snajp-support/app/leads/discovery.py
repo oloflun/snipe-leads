@@ -93,7 +93,13 @@ _EXEMPEL_TLD = (".example", ".invalid", ".test")
 #: 2026-08-31 visade httpx.ReadTimeout vid 45 s som dödade hela batchkörningen
 #: (se hitta_bolag). Anslutningen ska ändå vara snabb; det är LÄSNINGEN som
 #: behöver gott om tid.
-_SOKNING_TIMEOUT = httpx.Timeout(10.0, connect=10.0, read=90.0)
+#:
+#: Uppmätt 2026-09-15 mot Vertex med samma målgrupp två gånger i rad: 55 s och
+#: 156 s. Med read=90 och tre försök föll en kundkörning efter 4,5 minuter
+#: (tre lästimeouter) — och varje omförsök startade om samma långa sökning
+#: från noll. Därför: ett generöst lästak, och en LÄSTIMEOUT görs inte om
+#: (se _gemini_med_sokning). Anslutningsfel och 5xx är snabba och görs om.
+_SOKNING_TIMEOUT = httpx.Timeout(10.0, connect=10.0, read=180.0)
 _SOKNING_FORSOK = 3
 _SOKNING_BACKOFF_BAS = 2.0  # sekunder, dubblas per omförsök
 
@@ -472,9 +478,16 @@ async def _gemini_med_sokning(prompt: str) -> str:
         try:
             async with httpx.AsyncClient(timeout=_SOKNING_TIMEOUT) as client:
                 svar = await client.post(url, params=params, headers=headers, json=kropp)
+        except httpx.ReadTimeout as fel:
+            # Sökningen hann inte svara inom lästaket. Ett omförsök startar
+            # samma långa grounded sökning från noll och spräcker kundens
+            # väntetid — hellre ett tydligt fel direkt.
+            raise DiscoveryError(
+                "Sokningen mot Gemini svarade inte i tid — modellen dröjde for lange."
+            ) from fel
         except httpx.HTTPError as fel:
-            # Basklassen för httpx transportfel — täcker ReadTimeout,
-            # ConnectError m.fl. utan att räkna upp varje underklass.
+            # Basklassen för övriga httpx transportfel (ConnectError m.fl.) —
+            # snabba fel där ett nytt försök ofta lyckas.
             if sista_forsoket:
                 raise DiscoveryError(
                     "Sokningen mot Gemini svarade inte i tid — natverket eller "
@@ -808,6 +821,7 @@ async def _sok_registrerade_kallor(
     (Gemini-utfyllnaden tar vid), och sökningen körs i en tråd eftersom
     källprotokollet är synkront (se sources/base.py).
     """
+    from .platshallare import ar_platshallare
     from .sources import standardkallor
 
     traffar: list[dict[str, Any]] = []
@@ -857,6 +871,18 @@ async def _sok_registrerade_kallor(
                 # Utan verifierad egen webbplats finns ingen skrapyta och
                 # ingen kontaktväg — träffen är inte användbar som lead.
                 continue
+            orsak = await ar_platshallare(webb)
+            if orsak:
+                # Kontrollen sitter FÖRE räkningen, så nästa kandidat tar
+                # platsen i stället för att den blir tom (2026-09-15).
+                logger.info(
+                    "Källan %s gav %s en platshållarsida (%s) — nästa kandidat tar platsen.",
+                    p.source_name,
+                    p.company_name,
+                    orsak,
+                )
+                sedda.add(nyckel)
+                continue
             sedda.add(nyckel)
             traffar.append(
                 {
@@ -884,6 +910,13 @@ async def _sok_registrerade_kallor(
     return traffar
 
 
+def _reserver(antal: int) -> int:
+    """Extra rader att be Gemini om: hälften av det som fattas, minst 2 och
+    högst 5. De täcker det som faller i platshållarfiltret och i
+    `_rena_traffar`; överskottet kapas bort."""
+    return min(5, max(2, (antal + 1) // 2))
+
+
 async def hitta_bolag(
     icp: dict[str, Any],
     antal: int,
@@ -905,13 +938,18 @@ async def hitta_bolag(
     from .platshallare import utan_platshallare
 
     # Parkerade domäner och "under konstruktion" tas bort INNAN de tar en
-    # plats: uppmätt 2026-09-15 var två av fem researchade bolag sådana, och
-    # varje plats kostar ett helt researchvarv (se leads/platshallare.py).
-    fran_kallor = await utan_platshallare(await _sok_registrerade_kallor(icp, antal, uteslut))
+    # plats (se leads/platshallare.py) — och platsen fylls på: källslingan
+    # hoppar till nästa kandidat, och Gemini ombeds om reserver i samma
+    # anrop. Uppmätt 2026-09-15: filtret utan påfyllning gav 4 bolag när
+    # kunden beställt 5.
+    fran_kallor = await _sok_registrerade_kallor(icp, antal, uteslut)
     if len(fran_kallor) >= antal:
         return fran_kallor[:antal]
     uteslut = uteslut | {t["company_name"].casefold() for t in fran_kallor}
     antal_kvar = antal - len(fran_kallor)
+    # Reserverna ryms i SAMMA sökanrop — taket på ett grounded anrop per
+    # körning står kvar.
+    antal_begart = antal_kvar + _reserver(antal_kvar)
     roller = [str(r).strip() for r in (icp.get("roles") or []) if str(r).strip()]
     roll_text = (
         ", ".join(roller)
@@ -957,7 +995,7 @@ async def hitta_bolag(
         "contact_form_url MASTE vara pa samma doman som website.\n\n"
         f"Malgrupp:\n{_icp_som_text(icp)}\n"
         f"Uteslut dessa namn: {', '.join(sorted(uteslut)) or '(inga)'}\n"
-    ).format(antal=antal_kvar)
+    ).format(antal=antal_begart)
     try:
         text = await _gemini_med_sokning(prompt)
     except DiscoveryError:
@@ -968,8 +1006,8 @@ async def hitta_bolag(
             return fran_kallor
         logger.warning("Discovery-sokningen misslyckades.")
         raise
-    rena = await utan_platshallare(_rena_traffar(_plocka_json(text), uteslut=uteslut, tak=antal_kvar))
-    return fran_kallor + rena
+    rena = await utan_platshallare(_rena_traffar(_plocka_json(text), uteslut=uteslut, tak=antal_begart))
+    return fran_kallor + rena[:antal_kvar]
 
 
 async def sla_upp_webbplats(company_name: str, *, geografi: str | None = None) -> str | None:

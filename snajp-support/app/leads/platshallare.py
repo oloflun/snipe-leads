@@ -124,6 +124,14 @@ async def platshallare_for_webbplats(url: str | None) -> str | None:
     return platshallarskal(html_till_text(svar.text[:400_000]))
 
 
+async def ar_platshallare(url: str | None) -> str | None:
+    """Samma bedömning som `utan_platshallare`, för EN webbplats och med samma
+    testlägesbrytare. None när kontrollen är avstängd."""
+    if not _kontroll_pa():
+        return None
+    return await platshallare_for_webbplats(url)
+
+
 async def utan_platshallare(traffar: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Filtrerar bort träffar vars webbplats är en platshållare. Ordningen
     behålls; kontrollerna körs parallellt."""

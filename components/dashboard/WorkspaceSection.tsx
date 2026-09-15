@@ -84,27 +84,12 @@ export async function WorkspaceSection({ slug = [] }: Readonly<{ slug?: string[]
   }
 
   switch (section) {
-    case "bokforing": {
-      /**
-       * Bokföringsagenten bor sedan 2026-09-15 på en EGEN sajt (bokforing-webb/,
-       * Railway-tjänsten `bokforing`). Inloggade kunder skickas dit; den
-       * inbyggda vyn nedan är reserven när miljön inte pekat ut sajten.
-       *
-       * Env-styrt med flit: main saknar bokforing-tjänsten tills den
-       * provisioneras (scripts/railway_bokforing.py --env main), och en
-       * hårdkodad URL hade skickat produktionens kunder till development —
-       * som är lösenordsväggad och speglar annan data. Osatt variabel =
-       * exakt gamla beteendet.
-       *
-       * Demon ("Prova bokföringsagenten", /demo) rörs INTE av det här —
-       * den renderar sin egen demokomponent och ska fortsätta göra det.
-       */
-      const externUrl = process.env.BOKFORING_EXTERN_URL;
-      if (externUrl) {
-        redirect(externUrl);
-      }
+    case "bokforing":
+      // Menyklicket landar HÄR, i den inbyggda vyn — det var en kort stund
+      // en redirect till den fristående bokföringssajten, tillbakadraget på
+      // Sebbes ord 2026-09-15: sajten nås i stället via knappen i vyn
+      // (BookkeepingView → /api/bokforing/sso, som bär kundens identitet).
       return <BookkeepingView />;
-    }
     case "leads":
       // /dashboard/leads/kontroll. Egen sektion i sectionProduct hade betytt
       // /dashboard/kontroll, vilket inte är där kontrollerna hör hemma —

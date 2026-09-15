@@ -144,3 +144,84 @@ async def test_hitta_bolag_sorterar_bort_platshallare_fran_gemini(monkeypatch):
     with patch("app.leads.discovery._gemini_med_sokning", gemini):
         traffar = await discovery.hitta_bolag({"industries": ["redovisningsbyråer"]}, 2)
     assert [t["company_name"] for t in traffar] == ["Ekord AB"]
+
+
+def _gemini_rad(namn: str, webb: str) -> dict:
+    return {"company_name": namn, "website": webb, "contact_email": f"info@{webb.split('//')[1]}", "contact_level": "role_address"}
+
+
+_FYRA = [
+    _gemini_rad("Ekonomihuset i Göteborg AB", "https://ekonomihuset.se"),
+    _gemini_rad("Ekord AB", "https://ekord.se"),
+    _gemini_rad("Dear Friends", "https://dearfriends.se"),
+    _gemini_rad("Seequaly AB", "https://seequaly.se"),
+]
+
+
+@pytest.mark.anyio
+async def test_bortsorterad_plats_fylls_pa_ur_reserverna(monkeypatch):
+    """Uppmätt 2026-09-15: Ekonomihuset (parkerad) sorterades bort och
+    körningen gav 4 bolag i stället för 5. Reserverna ur samma anrop fyller."""
+    from app.leads import discovery
+
+    monkeypatch.setenv("LEADS_PLATSHALLARKONTROLL", "1")
+    monkeypatch.setattr("app.leads.sources.standardkallor", lambda: [])
+    monkeypatch.setattr(
+        platshallare,
+        "platshallare_for_webbplats",
+        AsyncMock(side_effect=lambda u: "parkerad domän" if "ekonomihuset" in (u or "") else None),
+    )
+    gemini = AsyncMock(return_value=json.dumps(_FYRA))
+    with patch("app.leads.discovery._gemini_med_sokning", gemini):
+        traffar = await discovery.hitta_bolag({"industries": ["redovisningsbyråer"]}, 2)
+
+    assert [t["company_name"] for t in traffar] == ["Ekord AB", "Dear Friends"]
+    assert gemini.await_count == 1, "reserverna ska komma ur SAMMA sökanrop"
+    assert "Hitta 4 RIKTIGA" in gemini.await_args.args[0]
+
+
+@pytest.mark.anyio
+async def test_reserver_kapas_nar_inget_sorteras_bort(monkeypatch):
+    from app.leads import discovery
+
+    monkeypatch.setenv("LEADS_PLATSHALLARKONTROLL", "1")
+    monkeypatch.setattr("app.leads.sources.standardkallor", lambda: [])
+    monkeypatch.setattr(platshallare, "platshallare_for_webbplats", AsyncMock(return_value=None))
+    gemini = AsyncMock(return_value=json.dumps(_FYRA))
+    with patch("app.leads.discovery._gemini_med_sokning", gemini):
+        traffar = await discovery.hitta_bolag({"industries": ["redovisningsbyråer"]}, 2)
+    assert len(traffar) == 2, "kunden ska få exakt det beställda antalet, inte reserverna"
+
+
+@pytest.mark.anyio
+async def test_kallslingan_tar_nasta_kandidat_nar_en_ar_platshallare(monkeypatch):
+    from app.leads import discovery
+    from app.leads.sources.base import Prospect
+
+    class _Kalla:
+        name = "fejk"
+
+        def search(self, icp):
+            return [
+                Prospect(company_name="Alma Property Partners", website="https://almapropertypartners.se", source_name="jobtech"),
+                Prospect(company_name="Nordkap Moduler AB", website="https://nordkapmoduler.se", source_name="jobtech"),
+                Prospect(company_name="Smålands Stålhallar AB", website="https://smalandsstalhallar.se", source_name="nyheter"),
+            ]
+
+    monkeypatch.setenv("LEADS_PLATSHALLARKONTROLL", "1")
+    monkeypatch.setattr("app.leads.sources.standardkallor", lambda: [_Kalla()])
+    monkeypatch.setattr(
+        platshallare,
+        "platshallare_for_webbplats",
+        AsyncMock(side_effect=lambda u: "parkerad domän" if "alma" in (u or "") else None),
+    )
+    gemini = AsyncMock(side_effect=AssertionError("källorna räcker — Gemini ska inte anropas"))
+    with patch("app.leads.discovery._gemini_med_sokning", gemini):
+        traffar = await discovery.hitta_bolag({"industries": ["tillverkning"]}, 2)
+    assert [t["company_name"] for t in traffar] == ["Nordkap Moduler AB", "Smålands Stålhallar AB"]
+
+
+def test_reservantalet():
+    from app.leads.discovery import _reserver
+
+    assert [_reserver(n) for n in (1, 2, 3, 5, 10, 50)] == [2, 2, 2, 3, 5, 5]
