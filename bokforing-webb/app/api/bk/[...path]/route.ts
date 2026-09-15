@@ -1,4 +1,11 @@
 import type { NextRequest } from "next/server";
+import {
+  KUND_KAKA,
+  KUNDSESSION_MAX_MS,
+  dekrypteraKundsession,
+  tillatnaBackends,
+  type Kundsession
+} from "@/lib/kundsession";
 
 /**
  * Proxyn mot snajp-support-backendens bokföringsyta.
@@ -25,15 +32,44 @@ const MAL = process.env.SNAJP_SUPPORT_URL ?? "http://127.0.0.1:8010";
 // hemlighet. En riktig miljö sätter SNAJP_BOOKKEEPING_API_KEY.
 const NYCKEL = process.env.SNAJP_BOOKKEEPING_API_KEY ?? "snajp_demo_2f8c1a9e4b7d";
 
+/**
+ * Vems nyckel, mot vilken backend?
+ *
+ * En kund som kom via Snajp-webbens SSO bär sin tenantnyckel i kundkakan
+ * (lib/kundsession.ts) och arbetar mot SIN data. Backend-URL:en ur kakan
+ * valideras mot allowlistan IGEN här — kakan är visserligen vår egen
+ * kryptering, men en kontroll som bara görs vid utfärdandet är en kontroll
+ * som slutar gälla när listan ändras.
+ *
+ * Utan kundkaka (förhandslösnet, lokal utveckling): miljöns delade nyckel
+ * mot miljöns backend — demo-tenanten.
+ */
+async function nyckelOchMal(request: NextRequest): Promise<{ nyckel: string; bas: string }> {
+  const kaka = request.cookies.get(KUND_KAKA)?.value;
+  const hemlighet = process.env.BOKFORING_SSO_SECRET;
+  if (kaka && hemlighet) {
+    const kund = await dekrypteraKundsession<Kundsession>(kaka, hemlighet);
+    if (
+      kund?.apiKey &&
+      Date.now() - kund.utfardad < KUNDSESSION_MAX_MS &&
+      tillatnaBackends().includes(kund.backendUrl)
+    ) {
+      return { nyckel: kund.apiKey, bas: kund.backendUrl };
+    }
+  }
+  return { nyckel: NYCKEL, bas: MAL };
+}
+
 async function vidare(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> }
 ): Promise<Response> {
   const { path } = await params;
   const inUrl = new URL(request.url);
-  const mal = `${MAL}/api/bookkeeping/${path.join("/")}${inUrl.search}`;
+  const { nyckel, bas } = await nyckelOchMal(request);
+  const mal = `${bas}/api/bookkeeping/${path.join("/")}${inUrl.search}`;
 
-  const headers = new Headers({ "X-API-Key": NYCKEL });
+  const headers = new Headers({ "X-API-Key": nyckel });
   const contentType = request.headers.get("content-type");
   if (contentType) headers.set("content-type", contentType);
 

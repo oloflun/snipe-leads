@@ -1,4 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  KUND_KAKA,
+  KUNDSESSION_MAX_MS,
+  dekrypteraKundsession,
+  type Kundsession
+} from "@/lib/kundsession";
 import { SESSION_KAKA, sessionsvarde } from "@/lib/session";
 
 /**
@@ -22,13 +28,25 @@ export async function proxy(request: NextRequest) {
   if (!losen) return NextResponse.next();
 
   const { pathname } = request.nextUrl;
-  if (pathname === "/logga-in" || pathname === "/api/logga-in") {
+  if (pathname === "/logga-in" || pathname === "/api/logga-in" || pathname === "/sso") {
     return NextResponse.next();
   }
 
+  // Två giltiga sessionsformer: förhandslösnets kaka, eller kundsessionen
+  // från Snajp-webbens SSO (lib/kundsession.ts). Kundens är den vanliga —
+  // lösnet är dörren för oss själva och för direktbesök.
   const kaka = request.cookies.get(SESSION_KAKA)?.value;
   if (kaka && kaka === (await sessionsvarde(losen))) {
     return NextResponse.next();
+  }
+
+  const kundKaka = request.cookies.get(KUND_KAKA)?.value;
+  const ssoHemlighet = process.env.BOKFORING_SSO_SECRET;
+  if (kundKaka && ssoHemlighet) {
+    const kund = await dekrypteraKundsession<Kundsession>(kundKaka, ssoHemlighet);
+    if (kund?.apiKey && Date.now() - kund.utfardad < KUNDSESSION_MAX_MS) {
+      return NextResponse.next();
+    }
   }
 
   if (pathname.startsWith("/api/")) {
