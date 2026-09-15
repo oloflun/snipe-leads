@@ -730,7 +730,9 @@ async def run_research_step(
         "antal_anstallda (heltal eller null — BARA om källmaterialet anger "
         "antalet; aldrig en uppskattning), ar_bemanningsforetag (bool eller "
         "null — true om bolagets affär är att hyra ut eller rekrytera "
-        "personal åt andra).",
+        "personal åt andra). OKÄNT ÄR INTE FEL: en uppgift som saknas i "
+        "källmaterialet (antal anställda, ort, signal) är ALDRIG ett skäl i "
+        "disqualifiers — skriv den i missing_information.",
         f"\n\n## Steg 1 (mk:customer-research)\n{_digest(customer, 'company_summary', 'business_model', 'likely_pains', 'existing_support_channels', 'has_chatbot')}",
     )
 

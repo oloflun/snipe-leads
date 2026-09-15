@@ -78,6 +78,14 @@ _RESEARCH_V2_UPPGIFT = (
     "offer ({name, promise, proof, risk_reversal, cta}), weakest_lever, "
     "offer_confidence (0.0-1.0), uncertainties (lista), reveals_gap (bool), "
     "gap (eller null), icp_adjustment (eller null), kunskap_evidence (lista).\n\n"
+    # Står i overlayen också, men mätt 2026-09-15 räckte inte det: Spoon
+    # Agency fälldes med "Antal anställda okänt" trots overlayens regel. I
+    # uppgiften ligger den närmast svaret. Kodgrinden kan bara fälla, så en
+    # sådan felaktig fällning går inte att rätta i kod - den måste förhindras.
+    "OKÄNT ÄR INTE FEL: en uppgift som saknas i källmaterialet (antal "
+    "anställda, ort, signal) är ALDRIG ett skäl i disqualifiers och sänker "
+    "inte qualified — den hör hemma i missing_information. Fäll bara på det "
+    "materialet faktiskt visar.\n\n"
     # Svarslängden är en kostnad, men beläggen är grundningens RÅVARA:
     # evidence + likely_pains + trigger_events blir build_permitted_facts,
     # och 5-fixturemätningen 2026-09-02 visade att en hård cap på evidence
