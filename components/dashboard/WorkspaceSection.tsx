@@ -105,7 +105,9 @@ export async function WorkspaceSection({ slug = [] }: Readonly<{ slug?: string[]
       if (id === "listor") {
         return <LeadslistorSection harTillagg={addons.includes("leadlists")} />;
       }
-      return <LeadsView />;
+      // Bannern serverrenderas här och går in som prop — LeadsView är en
+      // klientkomponent och kan inte läsa miljön själv (se kommentaren där).
+      return <LeadsView agentKnapp={<AgentSajtKnapp agent="leads" />} />;
     case "companies":
       return id ? <CompanyDetailView id={id} /> : <CompaniesView />;
     case "contacts":
