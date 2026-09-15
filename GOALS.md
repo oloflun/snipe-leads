@@ -232,6 +232,13 @@ rebase. Ändringar behöver samordnas, inte bara pushas.
 
 ## Ändringslogg
 
+- 2026-09-15 — claude — leads-agentens träffsäkerhet (delmål 2) mätt som kund
+  mot testkunden Nordforms målgrupp: leadslistan 0/10 → 10/10, leadskörningen
+  0/5 → 5/5 i rätt bransch och stad. Sex fel rättade (jobbannonskällan sökte på
+  Snajps egna ord, Gemini-sökningen föll på Vertex, underkända bolag fick
+  utkast, formulärets storlek nådde inte agenten, okänd storlek fällde bolag,
+  skrapningen blockerade servern och gav upp på parkerade sajter). Fyra släppta
+  med PR #13, två väntar i PR #14. Målbilden (delmålslistan) orörd.
 - 2026-09-02 — claude — kostnadsgrindar i alla tre agenter (leads: stopp efter
   ICP-steget för okvalificerade/kontaktlösa prospekt, 3 anrop i st.f. 9;
   support: eskaleringssteget villkorat, 6→5 anrop; bokföring: globala

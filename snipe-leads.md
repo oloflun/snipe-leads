@@ -9,10 +9,10 @@ money_weight: 4
 goal: "AI outbound SaaS: Snipra (leads-dashboard) + Snajp (support-agent) i ett repo, multi-tenant Next.js/Supabase"
 next_milestone: "main uppdaterad till samma kod som development, och Livrustning-tenantens garantiperiod bekraftad av kund"
 milestone_blockers:
-  - "main ligger ~80 commits efter development och kor gammal kod (snipe-zfc)"
+  - "main uppdaterad via PR #12 och #13 (2026-09-15); PR #14 (leads-skrapning) vantar pa Antons review"
   - "IMAP_PASSWORD_LIVRUSTNING saknas pa Railway api (bade main och development)"
   - "Vantar pa kundens bekraftelse av garantiperioden"
-updated: 2026-09-12
+updated: 2026-09-15
 ---
 
 # Snipra / Snajp
@@ -111,6 +111,10 @@ separate thing entirely — user-message position only, never system. See
 | `snajp-support/app/storage/base.py` | The `Storage` interface — read this to see every operation the agent layer can perform; both `memory.py` (tests, dev) and `postgres.py` (production) implement it. |
 | `scripts/run_live_tests.py`, `scripts/run_live_leads.py` | Live comparison harness against real API keys; writes to `docs/live-tests/`. |
 | `snajp-support/app/leads/grounding_gate.py` | The fabricated-claim extractor/checker. `build_permitted_facts` and `check_grounding` run the *same* extractor in both directions — one function, two callers, so the two sides can't drift apart. |
+| `snajp-support/app/leads/sources/jobtech.py` | Jobbannonskällan i discovery. Sökorden kommer ur KUNDENS branscher (annars korta nischord), aldrig ur en fast lista — fram till 2026-09-15 sökte den alltid "kundtjänst", och källträffarna fyllde körningen så Gemini aldrig kördes. Bemannings-/rekryteringsbolag filtreras. |
+| `snajp-support/app/leads/kvalificeringsgrind.py` | Kodregel efter ICP-bedömningen (V1 och V2): känd `antal_anstallda` utanför intervallet eller bemanningsföretag fäller bolaget, om målgruppen inte gäller bemanning. Kan bara fälla, aldrig godkänna; okänd storlek fäller inget. |
+| `snajp-support/app/leads/platshallare.py` | Känner igen parkerade domäner, "under konstruktion", till salu och standardsidor (bara korta sidor). `hitta_bolag` sorterar bort sådana träffar; researchen får en kodnotering. Av i testläge via `LEADS_PLATSHALLARKONTROLL`. |
+| `snajp-support/app/agent/research_tools.py` | Den enda skrapvägen i research: ScrapeGraphAI i tråd med tak 60 s (SDK:t är synkront och blockerade api:ts händelseloop), reservhämtning av SAMMA registrerade URL, ingen omdirigering till annan domän. |
 | `snajp-support/app/leads/text_delta.py` | Lossless sentence-splitter (offsets, not strings — `''.join(spans) == text` is the whole safety property) + diff + splice, so a repair only re-humanizes the sentences it actually changed. |
 | `snajp-support/app/agentcore/overlays.py` | Loads/hashes `agent-core/AGENTS.md` and `agent-core/overlays/*.md`; `pack_version()` is the three-hash string (manifest+overlay+global) that makes a run reproducible. |
 | `snajp-support/app/leads/soul.py` | Renders the customer's voice document — always via `wrap_untrusted_content`, always user-message position. Read this before touching anything near `case_context`. |
