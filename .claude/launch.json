@@ -12,6 +12,26 @@
       "autoPort": true
     },
     {
+      "name": "support-sajt",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "start:local"
+      ],
+      "cwd": "support-webb",
+      "port": 3102
+    },
+    {
+      "name": "leads",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "start:local"
+      ],
+      "cwd": "leads-webb",
+      "port": 3101
+    },
+    {
       "name": "bokforing",
       "runtimeExecutable": "npm",
       "runtimeArgs": [

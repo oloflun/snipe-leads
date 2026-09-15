@@ -1,0 +1,197 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Snajp Bokföring · genre: nordic-editorial · design-system: ../DESIGN.md · designed-as-app
+ *
+ * Samma tokens som huvudappen (app/globals.css i repo-roten). Produktyta i
+ * App-familjen: fast typskala, täta rader, hårlinjer — inga marknadsmoduler
+ * (daylight, marquee, rise) hör hemma här och är därför inte medtagna.
+ * Ljust läge enbart: sajten har ingen temaväxel ännu, och en halv mörk palett
+ * är sämre än ingen. */
+
+:root {
+  --ink: 0.20 0.018 252;
+  --ink2: 0.28 0.018 252;
+  --paper: 0.965 0.008 88;
+  --paper2: 0.93 0.012 88;
+  --ochre: 0.74 0.16 64;
+  --mineral: 0.55 0.015 252;
+  --seal: 0.42 0.022 252;
+  --moss: 0.42 0.071 142;
+  --danger: 0.57 0.18 27;
+  --focus: 0.74 0.16 64;
+  /* Textsäker ochre — se rotens globals.css: --ochre (L 0.74) ger 2.17:1 mot
+     paper och duger bara som accentyta, aldrig som 16px text. */
+  --warning: 0.54 0.16 64;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-short: 180ms;
+  --dur-mid: 300ms;
+
+  --radius-panel: 20px;
+  --radius-card: 12px;
+  --radius-input: 8px;
+
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-serif: var(--font-fraunces), ui-serif, Georgia, serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background: oklch(var(--paper));
+  color: oklch(var(--ink));
+  font-family: var(--font-sans);
+  overflow-x: clip;
+}
+
+body {
+  min-height: 100%;
+  margin: 0;
+  background: oklch(var(--paper));
+  overflow-x: clip;
+  text-wrap: pretty;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+  transition: color var(--dur-short) var(--ease-out);
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+::selection {
+  background: oklch(var(--ochre) / 0.35);
+}
+
+/* Även textmarkering på den mörka railen ska läsa som husets. */
+.rail ::selection {
+  background: oklch(var(--ochre) / 0.55);
+}
+
+.font-display {
+  font-family: var(--font-serif);
+  font-variation-settings: "opsz" 144, "SOFT" 30;
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+.tighten {
+  letter-spacing: -0.02em;
+}
+
+.num {
+  font-feature-settings: "tnum", "ss01";
+}
+
+/* Strukturella hårlinjer — bärande, inte dekor. Se DESIGN.md. */
+.hrule {
+  border-top: 1px solid oklch(var(--ink) / 0.14);
+}
+
+.hrule-strong {
+  border-top: 1px solid oklch(var(--ink) / 0.24);
+}
+
+/* Stora display-tal: Fraunces, tabulärt, ochre bara där talet är sidans
+   ankare. */
+.numeral {
+  font-family: var(--font-serif);
+  font-variation-settings: "opsz" 144, "SOFT" 30;
+  font-feature-settings: "tnum";
+  line-height: 0.9;
+}
+
+/* Fokus är opt-out, inte opt-in — samma beslut som i rotens globals.css:
+   :where() ger specificitet 0 så en komponent kan skriva över medvetet. */
+:where(a, button, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid oklch(var(--ochre));
+  outline-offset: 2px;
+}
+
+.focus-ring {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+.focus-ring:focus-visible {
+  outline-color: oklch(var(--ochre));
+}
+
+.thin-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: oklch(var(--mineral) / 0.35) transparent;
+}
+
+/* Webbläsarytor vi inte ritar själva ska ändå bära paletten. */
+input,
+textarea {
+  caret-color: oklch(var(--ochre));
+}
+
+/* Dropzonens aktiva läge. En klass i stället för inline-stil så att
+   övergången bor på ett ställe. */
+.dropzone {
+  transition: border-color var(--dur-short) var(--ease-out), background-color var(--dur-short) var(--ease-out);
+}
+
+.dropzone.ar-over {
+  border-color: oklch(var(--ochre));
+  background: oklch(var(--ochre) / 0.06);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (max-width: 767px) {
+  main,
+  section,
+  header,
+  footer {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  h1,
+  h2,
+  h3 {
+    overflow-wrap: anywhere;
+    min-width: 0;
+  }
+
+  p,
+  li,
+  dd {
+    overflow-wrap: break-word;
+    min-width: 0;
+  }
+
+  .grid > * {
+    min-width: 0;
+  }
+}

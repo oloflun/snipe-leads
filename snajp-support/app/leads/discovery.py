@@ -470,7 +470,12 @@ async def _gemini_med_sokning(prompt: str) -> str:
         # källan fyllde körningarna så att sökningen sällan behövdes.
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "tools": [{"google_search": {}}],
-        "generationConfig": {"temperature": 0.2},
+        # Tänkandet AV. Uppmätt 2026-09-15 mot Vertex med Nordforms prompt:
+        # standardtänkande gav timeout efter 300 s respektive 258 s och 1 rad
+        # (63 592 tänktokens); thinkingBudget 0 gav 16 s och 9 s med 8
+        # användbara rader vardera. Grounded-sökningen behöver söka, inte
+        # resonera — tänkandet var hela latensen.
+        "generationConfig": {"temperature": 0.2, "thinkingConfig": {"thinkingBudget": 0}},
     }
     svar: httpx.Response | None = None
     for forsok in range(1, _SOKNING_FORSOK + 1):

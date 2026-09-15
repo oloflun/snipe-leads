@@ -114,12 +114,21 @@ export function LeadsBody({ demo = false }: Readonly<{ demo?: boolean }>) {
   );
 }
 
-export function LeadsView({ demo = false }: Readonly<{ demo?: boolean }>) {
+export function LeadsView({
+  demo = false,
+  agentKnapp = null
+}: Readonly<{ demo?: boolean; agentKnapp?: React.ReactNode }>) {
   return (
     <PageShell
       title="Skräddarsydda leads efter din målgrupp och produkt."
       description="Beskriv er målgrupp och produkt — agenterna letar fram bolagen som matchar."
     >
+      {/* Kör Agent-bannern kommer som SERVERRENDERAD prop från dispatchern
+          (WorkspaceSection): den här filen är "use client", och bannern
+          läser process.env — i webbläsaren är den tom, så en banner som
+          renderades HÄR försvann tyst. Uppmätt i dev 2026-09-15. Demon
+          skickar aldrig med någon knapp: demobesökaren har ingen tenant. */}
+      {demo ? null : agentKnapp}
       <LeadsBody demo={demo} />
     </PageShell>
   );

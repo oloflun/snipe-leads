@@ -1,5 +1,15 @@
 # Snipra Status
 
+## 2026-09-15 (eftermiddag) — Claude — leadssökningens latens: påfyllning och timeout i PR #15, grundorsak öppen
+
+PR #14 i produktion (skrapning + okänt-regeln). `567b43f` fyller bortsorterade
+platshållarplatser; `2319aa8` ger sökningen ett lästak på 180 s utan omförsök
+vid lästimeout och låter formulären vänta ~5 min, så kunden får det riktiga
+felet. Båda i PR #15 (Antons merge). Kvar: Gemini grounded-sökningen tog
+>180 s i dev två gånger, så en körning utan källträffar ger 0 bolag — gäller
+main lika. Mätning av `thinkingBudget: 0` pågick vid sessionens slut; se
+sessionsloggen för nästa steg.
+
 ## 2026-09-15 — Claude — leads-träffsäkerheten mätt som kund: 0/10 → 10/10, sex fel rättade
 
 Mätt som QA-kunden Nordform (IT-konsulter/redovisning/arkitekt/reklam,
