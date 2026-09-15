@@ -3,7 +3,8 @@ import { Logo } from "@/components/Logo";
 import { btnPrimary } from "@/components/ui";
 import { saneraNasta } from "@/lib/session";
 
-export const metadata: Metadata = { title: "Logga in — Snajp Bokföring" };
+// Bara namnet — rotlayoutens mall lägger till "— Snajp Bokföring".
+export const metadata: Metadata = { title: "Logga in" };
 
 /**
  * Inloggningssidan — Content-familjen: en spalt, typografi, ingen meny.
