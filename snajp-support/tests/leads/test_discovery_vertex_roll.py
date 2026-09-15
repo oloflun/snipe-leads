@@ -65,6 +65,8 @@ async def test_sokningens_innehall_bar_rollen_user(monkeypatch, vertex):
     innehall = fangat["kropp"]["contents"]
     assert [del_["role"] for del_ in innehall] == ["user"]
     assert fangat["kropp"]["tools"] == [{"google_search": {}}]
+    # 2026-09-15: med tänkande tog sökningen 258–300+ s, utan 9–16 s.
+    assert fangat["kropp"]["generationConfig"]["thinkingConfig"] == {"thinkingBudget": 0}
     if vertex:
         assert "aiplatform.googleapis.com" in fangat["url"]
         assert "/publishers/google/models/gemini-2.5-flash:generateContent" in fangat["url"]
