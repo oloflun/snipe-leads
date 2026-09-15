@@ -74,10 +74,18 @@ export function AgentVy() {
       }
       setFas({ lage: "klart", antal: researchJobb.length });
     } catch (orsak) {
+      // `error` FÖRE `detail`, båda före den generiska texten: kvotsvaren
+      // bär `error`, FastAPI:s 422:or bär `detail` — och 422-meningen ÄR
+      // beskedet ("Beskriv vilka bolag ni söker …"). Utan detail-läsningen
+      // visades "Oväntat svar (status 422)" — uppmätt i dev 2026-09-15.
+      const kropp =
+        orsak instanceof HttpJsonError && orsak.body && typeof orsak.body === "object"
+          ? (orsak.body as { error?: unknown; detail?: unknown })
+          : {};
       const text =
-        orsak instanceof HttpJsonError && typeof (orsak.body as { error?: string })?.error === "string"
-          ? ((orsak.body as { error: string }).error)
-          : felmeddelande(orsak);
+        (typeof kropp.error === "string" && kropp.error) ||
+        (typeof kropp.detail === "string" && kropp.detail) ||
+        felmeddelande(orsak);
       setFas({ lage: "fel", text });
     }
   }
@@ -94,7 +102,7 @@ export function AgentVy() {
       <section className="max-w-[38rem]">
         <div className="border-y border-ink/15 py-6">
           <label className="block">
-            <span className="text-[0.875rem] font-medium text-ink">Antal bolag att hämta</span>
+            <span className="block text-[0.875rem] font-medium text-ink">Antal bolag att hämta</span>
             <input
               type="number"
               min={1}
