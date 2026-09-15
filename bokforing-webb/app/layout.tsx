@@ -1,9 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { Sidebar } from "@/components/Sidebar";
 import { fontVariables } from "@/lib/fonts";
-import { PeriodProvider } from "@/lib/period";
-import { ProfilProvider } from "@/lib/profil";
 
 export const metadata: Metadata = {
   title: {
@@ -27,22 +24,11 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  // Portalens skal (meny + providers) bor i app/(portal)/layout.tsx —
+  // inloggningssidan renderas utan det.
   return (
     <html lang="sv" className={fontVariables}>
-      <body>
-        <PeriodProvider>
-          <ProfilProvider>
-            <div className="flex min-h-dvh">
-              <Sidebar />
-              <main className="min-w-0 flex-1">
-                <div className="mx-auto max-w-[1060px] px-5 py-8 sm:px-8 lg:px-12 lg:py-10">
-                  {children}
-                </div>
-              </main>
-            </div>
-          </ProfilProvider>
-        </PeriodProvider>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

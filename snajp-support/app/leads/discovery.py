@@ -458,7 +458,11 @@ async def _gemini_med_sokning(prompt: str) -> str:
         params = {"key": nyckel}
 
     kropp = {
-        "contents": [{"parts": [{"text": prompt}]}],
+        # role krävs av Vertex ("Please use a valid role: user, model." -> 400);
+        # AI Studio gissade "user" tyst. Uppmätt 2026-09-15: utan den föll
+        # varje grounded sökning i Vertex-miljöerna, dolt av att JobTech-
+        # källan fyllde körningarna så att sökningen sällan behövdes.
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "tools": [{"google_search": {}}],
         "generationConfig": {"temperature": 0.2},
     }
@@ -778,7 +782,11 @@ async def gissa_webbplats_via_head(namn: str) -> str | None:
                     plats = svar.headers.get("location") or ""
                     # Följ bara en redirect till SAMMA stam — en parkerad
                     # domän som pekar mot en aggregator är ingen träff.
-                    if plats.startswith("http") and slug in plats:
+                    # Stammen ska stå i VÄRDNAMNET, inte var som helst i
+                    # URL:en: edza.se pekade 2026-09-15 mot
+                    # home.student.uu.se/edza0987, som "EdZa AB" fick som
+                    # webbplats eftersom slugen stod i sökvägen.
+                    if plats.startswith("http") and slug in _host(plats).replace("-", ""):
                         slutlig = plats
                     elif not plats.startswith("/"):
                         continue

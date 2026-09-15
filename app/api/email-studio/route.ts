@@ -95,6 +95,34 @@ function parseRichRefine(content: string) {
     } catch {}
   }
 
+  // 2b) Trunkerad JSON (svar klippt av tokentaket: oppningsstaket finns men
+  //     inget avslut, eller avslutande } saknas). new_version ligger FORST i
+  //     schemat och ar da komplett aven nar resten klipptes. Faltet plockas
+  //     med en JSON-strangtolerant regex och avkodas via JSON.parse av just
+  //     strangen, sa "\n" och '\"' blir riktiga tecken.
+  {
+    const plocka = (falt: string): string | null => {
+      const m = trimmed.match(new RegExp('"' + falt + '"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"'));
+      if (!m) return null;
+      try { return String(JSON.parse('"' + m[1] + '"')).trim(); } catch { return null; }
+    };
+    const nv = plocka("new_version");
+    if (nv) {
+      const amnen = trimmed.match(/"subject_suggestions"\s*:\s*\[([\s\S]*?)\]/);
+      let subject_suggestions: string[] = [];
+      if (amnen) {
+        try { subject_suggestions = (JSON.parse("[" + amnen[1] + "]") as unknown[]).map((x) => String(x).trim()).slice(0, 3); } catch {}
+      }
+      return {
+        original_version: null,
+        new_version: nv,
+        explanation: plocka("explanation") || "",
+        subject_suggestions,
+        confidence_tips: plocka("confidence_tips") ?? undefined
+      };
+    }
+  }
+
   // 3) Parse the exact sectioned format from the system prompt ( **Ny version:** etc )
   function extractSection(src: string, labels: string[]): string | null {
     for (const label of labels) {
@@ -129,7 +157,22 @@ function parseRichRefine(content: string) {
     };
   }
 
-  // 4) Fallback: whole content (last resort)
+  // 4) Fallback: whole content (last resort) — men ALDRIG JSON-bråte.
+  // Uppmätt 2026-09-15: ett svar trunkerat INNE i new_version-strängen
+  // passerade hit och kunden fick ```json-skräp presenterat som "Ny
+  // version" — och det läckte vidare in i redigeringsfältet. Ser texten
+  // ut som ett kodstaket eller ett JSON-objekt är den ett HAVERERAT
+  // strukturerat svar, inte en mejltext: returnera tomt så att routens
+  // tomt-svar-väg ger den ärliga mallfallbacken i stället.
+  if (trimmed.startsWith("```") || trimmed.startsWith("{")) {
+    return {
+      original_version: null,
+      new_version: "",
+      explanation: "",
+      subject_suggestions: [],
+      confidence_tips: undefined
+    };
+  }
   return {
     original_version: null,
     new_version: trimmed,
@@ -360,7 +403,7 @@ Använd alltid principerna: "The email should read like it came from someone who
 
 **Output-format (EXAKT detta — ingen avvikelse):**
 Svara med ETT giltigt JSON-objekt och ingenting annat — ingen inledande text, ingen kodstängsel:
-{"new_version":"<den nya mejltexten>","explanation":"<kort, referera specifik princip, t.ex. 'Ruthlessly short enligt cold-email/SKILL.md'>","subject_suggestions":["<2-3 korta, interna, peer-liknande ämnesrader>"],"original_version":"<ursprungstexten eller null>","confidence_tips":"<valfritt: förväntad reply-rate, compliance-not eller nästa steg>"}
+{"new_version":"<den nya mejltexten>","explanation":"<kort, referera specifik princip, t.ex. 'Ruthlessly short enligt cold-email/SKILL.md'>","subject_suggestions":["<2-3 korta, interna, peer-liknande ämnesrader>"],"original_version":null,"confidence_tips":"<valfritt: förväntad reply-rate, compliance-not eller nästa steg>"}
 
 **Språk och variation (viktigt):**
 - Variera ditt språk. Upprepa inte samma fraser, meningsöppningar eller ordval inom en konversation eller mellan förslag. Om du nyss skrev "Såg att..." — öppna nästa gång annorlunda.
@@ -440,10 +483,32 @@ async function generateMedForsok(opts: {
         system: opts.system,
         prompt: opts.prompt,
         temperature: 0.7,
-        maxOutputTokens: 1800,
+        // 1800 klipptes mitt i JSON-svaret nar Vertex gemini-2.5-flash drog
+        // tanktokens ur SAMMA budget (uppmatt 2026-09-15: svaret slutade utan
+        // avslutande staket och kunden sag ra JSON under "Oformaterat svar").
+        // Ekot av ursprungstexten i prompten ar ocksa borttaget av samma skal.
+        maxOutputTokens: 3000,
         // SDK:n har egna omtag; de stängs av så att loopens tidsbudget håller.
         maxRetries: 0,
-        abortSignal: AbortSignal.timeout(15_000)
+        // 15 s var budgeterat mot Vercels maxDuration=60 — men appen kör på
+        // Railway, där det taket inte finns. Uppmätt 2026-09-15: Vertex
+        // gemini-2.5-flash med tänktokens + 3000-tokensbudget tar ibland
+        // >15 s, och kunden fick då mallfallbacken ("Modellen svarade inte
+        // just nu") trots att modellen var frisk. 25 s per försök ger
+        // 3 × 25 + 3 s paus = 78 s värsta fall — acceptabelt för en knapp
+        // som uttryckligen visar arbetsläge, och normalfallet är opåverkat.
+        abortSignal: AbortSignal.timeout(25_000),
+        // Tänkandet stängs av: Vertex gemini-2.5-flash drar annars en
+        // GODTYCKLIG andel av maxOutputTokens till tänktokens (uppmätt
+        // 2026-09-15: ett svar klipptes inne i new_version-strängen trots
+        // 3000-budget). Googles OpenAI-kompatibla lager mappar
+        // reasoning_effort="none" till thinking_budget=0 för 2.5-flash.
+        // En knapptryckning i mejleditorn behöver formulering, inte
+        // resonemang — samma slutsats som THINKING=disabled i leadskedjan.
+        // "none" AVVISAS av Vertex-kompatlagret (uppmätt 2026-09-15, 400:
+        // "Expected ... one of: 'high', 'low', 'max', 'medium', 'minimal'");
+        // "minimal" är lägsta accepterade och gav 200 i samma mätning.
+        providerOptions: { openai: { reasoningEffort: "minimal" } }
       });
       return text;
     } catch (error) {

@@ -67,7 +67,11 @@ _RESEARCH_V2_UPPGIFT = (
     "(bool eller null), contact_name, contact_role, contact_email (alla tre "
     "null om de inte bokstavligen står i källmaterialet), icp_fit (0.0-1.0), "
     "qualified (bool), disqualifiers (lista), qualification_reasoning, "
-    "missing_information (lista), account_structure, decision_makers (lista "
+    "missing_information (lista), antal_anstallda (heltal eller null — BARA "
+    "om källmaterialet anger antalet eller bär ett tydligt belägg som ”vi är "
+    "12 konsulter”; aldrig en uppskattning), ar_bemanningsforetag (bool eller "
+    "null — true om bolagets affär är att hyra ut, rekrytera eller förmedla "
+    "personal åt andra), account_structure, decision_makers (lista "
     "med ROLLER), trigger_events (lista), open_questions (lista), "
     "prospect_positioning, comparison_angles (lista), honest_caveats (lista), "
     "likely_objections (lista med {objection, response}), hardest_objection, "
@@ -126,6 +130,7 @@ async def run_research_step_v2(
     context_pack: str,
     brief: str,
     is_test: bool = False,
+    icp: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Fas B för ETT prospekt i ETT LLM-anrop. Samma returnycklar som
     leads_agent.run_research_step — plus company_summary/likely_pains på
@@ -167,6 +172,19 @@ async def run_research_step_v2(
         talamod_429=True,
     )
 
+    # Kodgrinden för storlek och bemanning (leads/kvalificeringsgrind.py) -
+    # kan bara fälla, aldrig godkänna. `icp` är körningens sammanslagna
+    # målgrupp (batch-vägen skickar med överskrivningarna); utan den gäller
+    # arbetsytans sparade.
+    if icp is None:
+        from ..leads.icp import normalize_icp
+
+        installningar = await storage.get_agent_settings(tenant_id, agent_type="leads")
+        icp = normalize_icp(installningar.get("icp"))
+    from ..leads.kvalificeringsgrind import skarp_kvalificering
+
+    fynd = skarp_kvalificering(fynd, icp, company_name=str(prospect_row.get("company_name") or ""))
+
     # Kontakttrappan (INV-CONTACT-001) — samma kodväg som V1: uppgraderar
     # bara, skriver aldrig över en bättre nivå, hittar aldrig på en adress.
     slutlig_kontaktniva = await _uppgradera_kontakt(
@@ -181,6 +199,18 @@ async def run_research_step_v2(
         or rad_efter_uppgradering.get("contact_name")
         or rad_efter_uppgradering.get("contact_form_url")
     )
+    # Samma grind som V1 (leads_agent.py). V2 har inga senare RESEARCH-steg
+    # att hoppa över, men batch-vägen läser stopped_early för att hoppa över
+    # UTKASTET. Returen hade `None` hårdkodat, så varje underkänt bolag fick
+    # ett mejlutkast ändå - uppmätt 2026-09-15 i QA-kundens körning: Eccera
+    # ("Antal anställda överstiger 49") och Seequaly (qualified=false) fick
+    # utkast i granskningskön.
+    if not kvalificerad:
+        stopped_early: str | None = "ej_kvalificerad"
+    elif kontakt_saknas:
+        stopped_early = "kontakt_saknas"
+    else:
+        stopped_early = None
 
     # ICP-bedömningen persisteras på raden (migration 024) — samma bokföring
     # som V1:s grind gör, även om V2 inte har några senare steg att hoppa
@@ -310,9 +340,8 @@ async def run_research_step_v2(
         "kunskap": kunskap,
         "qualified": kvalificerad,
         "icp_fit": fynd.get("icp_fit"),
-        # V2 har inget att stoppa tidigt — hela varvet ÄR ett anrop. Nyckeln
-        # finns kvar för kontraktsparitet med V1:s grind.
-        "stopped_early": None,
+        # Utkastgrinden i batch-vägen, se ovan.
+        "stopped_early": stopped_early,
         # Toppnivå med flit (V1-bugg: api/leads.py:s batch-väg läste de här
         # nycklarna som aldrig fanns på toppnivå och skickade null till
         # utkastet).

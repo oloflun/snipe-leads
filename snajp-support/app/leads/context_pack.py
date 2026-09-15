@@ -105,6 +105,16 @@ def _med_overrides(icp: dict | None, overrides: dict | None) -> dict | None:
         if hi is not None:
             storlek["max"] = hi
         sammanslagen["company_size"] = storlek
+        # `size` är fältet normalize_icp läser SIST (company_size är bara
+        # utgångsläget), och en sparad ICP bär båda. Utan raderna nedan skrevs
+        # formulärets storlek över av den sparade - uppmätt 2026-09-15: en
+        # körning beställd på 10–49 anställda fällde Filed AB mot "1-49".
+        size = dict(sammanslagen.get("size") or {})
+        if lo is not None:
+            size["anstallda_min"] = lo
+        if hi is not None:
+            size["anstallda_max"] = hi
+        sammanslagen["size"] = size
 
     return sammanslagen
 

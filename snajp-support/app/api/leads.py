@@ -1727,6 +1727,11 @@ async def _run_batch_prospect(
         context_pack, missing = await build_context_pack(
             storage, tenant["tenant_id"], overrides=overrides
         )
+        # Samma sammanslagna målgrupp som kontextpaketet, till kodgrinden för
+        # storlek och bemanning (leads/kvalificeringsgrind.py). Utan den mätte
+        # grinden mot den sparade ICP:n medan modellen läste formulärets.
+        installningar = await storage.get_agent_settings(tenant["tenant_id"], agent_type="leads")
+        korningens_icp = normalize_icp(_med_overrides(installningar.get("icp"), overrides) or {})
         result = await run_research_step(
             storage,
             tenant["tenant_id"],
@@ -1735,6 +1740,7 @@ async def _run_batch_prospect(
             context_pack=context_pack,
             brief="",
             is_test=is_test,
+            icp=korningens_icp,
         )
         result["onboarding_missing"] = list(missing)
         result["prospect_id"] = prospect_id

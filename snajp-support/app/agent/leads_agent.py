@@ -629,6 +629,7 @@ async def run_research_step(
     # med default false, och portföljvyn räknade alltså in vårt eget provande
     # som kundvolym. Se `is_test` i LeadsBatchRequest.
     is_test: bool = False,
+    icp: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Fas B för ETT prospekt: upp till åtta skill-steg, ett LLM-anrop vardera.
 
@@ -725,8 +726,25 @@ async def run_research_step(
         1,
         "Kvalificera prospektet mot köparens ICP i kontextpaketet. Returnera JSON: "
         "icp_fit (0.0-1.0), qualified (bool), disqualifiers (lista), "
-        "qualification_reasoning (svenska), missing_information (lista).",
+        "qualification_reasoning (svenska), missing_information (lista), "
+        "antal_anstallda (heltal eller null — BARA om källmaterialet anger "
+        "antalet; aldrig en uppskattning), ar_bemanningsforetag (bool eller "
+        "null — true om bolagets affär är att hyra ut eller rekrytera "
+        "personal åt andra).",
         f"\n\n## Steg 1 (mk:customer-research)\n{_digest(customer, 'company_summary', 'business_model', 'likely_pains', 'existing_support_channels', 'has_chatbot')}",
+    )
+
+    # Kodgrinden för storlek och bemanning, samma som V2 (se
+    # leads/kvalificeringsgrind.py) - kan bara fälla, aldrig godkänna.
+    if icp is None:
+        from ..leads.icp import normalize_icp
+
+        installningar = await storage.get_agent_settings(tenant_id, agent_type="leads")
+        icp = normalize_icp(installningar.get("icp"))
+    from ..leads.kvalificeringsgrind import skarp_kvalificering
+
+    prospecting = skarp_kvalificering(
+        prospecting, icp, company_name=str(prospect_row.get("company_name") or "")
     )
 
     # GRINDEN (2026-09-02, kundkrav: nischning + kontaktperson). Två villkor,
