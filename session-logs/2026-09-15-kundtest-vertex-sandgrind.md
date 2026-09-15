@@ -80,3 +80,33 @@ requeue:ar utanför sändfönstret, så en "queued" rad kl 01 bevisar ingenting.
 - Efter releasen pushade testkörning c158455 och aa68ccf till development.
   De ligger INTE i main och behöver ett nytt release-tåg (PR med
   oloflun-review) när deras QA är klar.
+
+## Tillägg: PR #14, PR #8 och ångerrätt-rättningen
+
+- **PR #14 mergad** av oloflun. main och prod står på `871aa7d`, api och web
+  SUCCESS. Den tog allt från development, inklusive testkörnings rättningar.
+- **PR #8 stängd.** Dess `8fc8d34` var trasig. Innehållet var rätt, men de avsedda
+  `\n\n`-escapesekvenserna hade blivit riktiga radbrytningar inne i en
+  strängliteral, så app.main gick inte att importera. Konsolens "kr�ver" var
+  bara visningen av "kräver", inte ett kodningsfel.
+- **Egen felpush:** en cherry-pick av 8fc8d34 pushades eftersom `pytest | tail`
+  under `set -e` ger tails exitkod. Den revertades direkt (`56d9dc7`), och dev
+  hann aldrig servera den. Lärdom: kör pytest utan pipe, eller med pipefail.
+- **Omskriven rättning `b756198`** med regressionstestet
+  `tests/test_livrustning_kb.py`. Samma escape-fel dök upp i min egen testfil
+  (Bash-verktyget äter backslashar), och testet stoppade det före push.
+  Sviten: 1943 passed.
+- **RÄTTELSE av ett eget påstående:** jag skrev att prod hade 0
+  Livrustning-artiklar, både i commitmeddelandet för b756198 och i chatten.
+  Det stämmer inte. Frågan sökte på `Livrustning AB`, men prod-tenanten heter
+  `Livrustning` (dev: `Livrustning AB`). Prod seedades 2026-08-21 med 22
+  artiklar, och ångerrätt-artikeln där är **byte-identisk** med b756198:s
+  modul, eftersom den kom med när PR #8-grenen seedades i augusti. Prod
+  behövde alltså ingen ändring.
+- **Dev-raden (`233950cf`) är fortfarande gammal.** Min UPDATE stoppades av
+  auto-lägets klassificerare. Sebbe körde SQL:en själv, men den landade inte i
+  dev och inte heller i prod (id:t saknas där, 0 nya rader senaste 3 h).
+  Cacheversionen höjdes inte, eftersom det inte fanns något att invalidera.
+  Återstår: kör UPDATE i Railway-projektets development-miljö och höj sedan
+  `cachev:kb:<tenant>` (namnrymden kommer från DATABASE_URL och miljönamnet,
+  se app/redisnycklar.py).
