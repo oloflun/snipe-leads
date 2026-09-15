@@ -902,7 +902,12 @@ async def hitta_bolag(
         return []
     uteslut = {n.casefold() for n in (uteslut_namn or set()) if n}
 
-    fran_kallor = await _sok_registrerade_kallor(icp, antal, uteslut)
+    from .platshallare import utan_platshallare
+
+    # Parkerade domäner och "under konstruktion" tas bort INNAN de tar en
+    # plats: uppmätt 2026-09-15 var två av fem researchade bolag sådana, och
+    # varje plats kostar ett helt researchvarv (se leads/platshallare.py).
+    fran_kallor = await utan_platshallare(await _sok_registrerade_kallor(icp, antal, uteslut))
     if len(fran_kallor) >= antal:
         return fran_kallor[:antal]
     uteslut = uteslut | {t["company_name"].casefold() for t in fran_kallor}
@@ -963,7 +968,8 @@ async def hitta_bolag(
             return fran_kallor
         logger.warning("Discovery-sokningen misslyckades.")
         raise
-    return fran_kallor + _rena_traffar(_plocka_json(text), uteslut=uteslut, tak=antal_kvar)
+    rena = await utan_platshallare(_rena_traffar(_plocka_json(text), uteslut=uteslut, tak=antal_kvar))
+    return fran_kallor + rena
 
 
 async def sla_upp_webbplats(company_name: str, *, geografi: str | None = None) -> str | None:

@@ -52,6 +52,10 @@ def _force_simulation_mode(monkeypatch):
         # källorna eller sätter variabeln själv, se
         # tests/leads/test_sources_federation.py. Fjärde gången samma läxa.
         "LEADS_KALLOR",
+        # Platshållarkontrollen i discovery (leads/platshallare.py) hämtar
+        # varje träffs startsida. Tom sträng = avstängd; test_platshallare.py
+        # sätter den själv och mockar hämtningen. Femte gången.
+        "LEADS_PLATSHALLARKONTROLL",
     ):
         monkeypatch.setenv(name, "")
     get_settings.cache_clear()
