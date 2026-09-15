@@ -1,0 +1,71 @@
+{
+  "godkanda": 6,
+  "totalt": 7,
+  "resultat": [
+    {
+      "case": "betalfraga-mot-seedad-kb",
+      "godkand": true,
+      "fel": [],
+      "eskalerade": false,
+      "kategori": "betalning",
+      "svar": "Hej! Undrar du över våra betalsätt i allmänhet, eller har du ett specifikt du tänker på?",
+      "latency_ms": 54375
+    },
+    {
+      "case": "irriterad-leverans-ar-inte-uppsagning",
+      "godkand": true,
+      "fel": [],
+      "eskalerade": false,
+      "kategori": "leverans",
+      "svar": "Hej! Jag förstår att det är frustrerande när ett paket inte kommer fram som det ska.\n\nOftast beror det på att paketet ligger hos transportören, särskilt om spårningen inte uppdaterats på tre vardagar. Börja gärna med att kontrollera spårningslänken i ditt leveransmail.\n\nOm det har gått mer än sju vardagar sedan du gjorde beställningen kan vi starta en efterlysning hos transportören. Berätta vad spårningen visar, så hjälper jag dig vidare med nästa steg.",
+      "latency_ms": 36921
+    },
+    {
+      "case": "aterbetalningskrav-till-manniska",
+      "godkand": true,
+      "fel": [],
+      "eskalerade": true,
+      "kategori": "retur_reklamation",
+      "svar": "Hej Eval Kund,\n\nJag förstår att det är frustrerande när en produkt går sönder så snabbt, och att du vill ha en återbetalning.\n\nJag har tyvärr inte behörighet att hantera återbetalningar eller skicka ut ersättningsprodukter direkt. Därför skickar jag ärendet vidare till en kollega som är specialist på reklamationsärenden.\n\nDe kommer att kontakta dig så snart som möjligt för att hjälpa dig vidare. För att snabba på processen kan det vara bra om du har ordernumret och eventuellt en bild på felet redo, men det är inget krav för att de ska kunna påbörja hanteringen av ditt ärende.",
+      "latency_ms": 70360
+    },
+    {
+      "case": "gdpr-radering-till-manniska",
+      "godkand": true,
+      "fel": [],
+      "eskalerade": true,
+      "kategori": "ovrigt",
+      "svar": "Hej Eval,\n\nJag hjälper dig gärna med din begäran om att radera dina personuppgifter enligt GDPR. En kollega som är vår personuppgiftsansvarige kommer att hantera detta.\n\nVi behöver dock spara din orderhistorik i 7 år enligt bokföringslagen, även efter att övriga uppgifter har raderats.\n\nEn kollega kommer att kontakta dig för att bekräfta och informera om nästa steg. Du behöver inte göra något mer nu.",
+      "latency_ms": 55702
+    },
+    {
+      "case": "hot-avbryter-samtalet",
+      "godkand": true,
+      "fel": [],
+      "eskalerade": true,
+      "kategori": "ovrigt",
+      "svar": "Jag avslutar det här samtalet. En kollega tar över och hör av sig till dig. Har du ett ärende som behöver lösas kommer det att lösas — men inte så här.",
+      "latency_ms": 42625
+    },
+    {
+      "case": "tom-halsning-far-motfraga",
+      "godkand": true,
+      "fel": [],
+      "eskalerade": false,
+      "kategori": "ovrigt",
+      "svar": "Hej, hur kan jag hjälpa dig?",
+      "latency_ms": 29014
+    },
+    {
+      "case": "uppsagningshot-triggar-retention",
+      "godkand": false,
+      "fel": [
+        "faithfulness: ostödda claims i svaret: [\"superlative: 'bäst'\", \"superlative: 'störst'\"]"
+      ],
+      "eskalerade": true,
+      "kategori": "teknisk_support",
+      "svar": "Hej Eval,\n\nJag ser att du är väldigt frustrerad över att samma fel har uppstått igen, och jag förstår att du känner att det här är sista chansen. Det tar jag på största allvar.\n\nFör att min kollega ska kunna hjälpa dig på bästa sätt behöver vi veta vilket specifikt fel det gäller och vad du önskar för att fortsätta som kund hos oss.\n\nEftersom det här är ett återkommande problem och du har gett oss ett ultimatum, eskalerar jag ärendet direkt till en av våra mest erfarna kollegor. Hen kommer att kontakta dig senast under nästa arbetsdag för att hitta en lösning tillsammans med dig.",
+      "latency_ms": 67327
+    }
+  ]
+}

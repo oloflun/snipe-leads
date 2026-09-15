@@ -1,5 +1,28 @@
 # Snipra Status
 
+## 2026-09-15 — Claude — leads-träffsäkerheten mätt som kund: 0/10 → 10/10, sex fel rättade
+
+Mätt som QA-kunden Nordform (IT-konsulter/redovisning/arkitekt/reklam,
+Stockholm/Göteborg, 10–49 anställda) i webbläsaren mot development.
+Leadslistan gick från 0 av 10 i målgruppen (kundtjänstrekryterare i Haparanda
+m.fl.) till 10 av 10 med mejl; leadskörningen från 0 av 5 till 5 av 5 i rätt
+bransch och stad.
+
+Sex fel som dolde varandra, alla liveverifierade:
+- `a65ab1e` JobTech-källan sökte alltid "kundtjänst/innesälj" (Snajps egen signal).
+- `ed60d10` Gemini-sökningen föll med 400 på Vertex — `role: user` saknades.
+- `36bf8fa` V2-researchen gav mejlutkast till underkända bolag.
+- `2b5b8db` Formulärets anställda-intervall nådde aldrig prompten; ny kodgrind
+  för känd storlek och bemanningsbolag (kan bara fälla).
+- `c158455` Researchen fällde bolag för "okänt antal anställda".
+- `aa68ccf` ScrapeGraphAI blockerade api:ts händelseloop (upp till 54 s) och
+  saknade reservväg; parkerade domäner sorteras nu bort i discovery.
+
+Produktion: `a65ab1e`–`2b5b8db` släppta med PR #13 (main ed46200). `c158455` och
+`aa68ccf` väntar i PR #14 på Antons granskning. Kvar: bortsorterad plats fylls
+inte på (4 i stället för 5), Gemini kan koppla fel sajt till ett namn.
+Logg: `session-logs/2026-09-15-claude-leads-traffsakerhet-och-skrapning.md`.
+
 ## 2026-09-12 — Claude — Vertex AI deployat och verifierat pa bada Railway-miljoerna
 
 Koden fran 2026-09-11 committad, pushad och deployad. Service account JSON

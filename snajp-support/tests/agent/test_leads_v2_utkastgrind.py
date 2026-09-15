@@ -90,6 +90,30 @@ async def test_kodgrinden_faller_bemanningsforetag_fore_utkastet():
     assert result["stopped_early"] == "ej_kvalificerad"
 
 
+async def test_regeln_okant_ar_inte_fel_nar_modellen():
+    """Mätt 2026-09-15: Spoon Agency fälldes med 'Antal anställda okänt' trots
+    overlayens regel. Regeln ska stå i det modellen faktiskt får."""
+    storage = MemoryStorage()
+    prospect_id = await _prepare_prospect(storage)
+    llm = _FakeLLM()
+    with (
+        patch("app.agent.step_runner.get_llm_client", return_value=llm),
+        patch("app.agent.leads_agent._scrape_registered_source_impl", new=_fake_scrape()),
+    ):
+        await run_research_step_v2(
+            storage,
+            TENANT,
+            prospect_id=prospect_id,
+            tenant_name="Snajp",
+            context_pack="## Kontextpaket\nICP: svensk e-handel.",
+            brief="",
+            is_test=True,
+        )
+    fick = llm.system_prompts[0] + llm.user_messages[0]
+    assert "OKÄNT ÄR INTE FEL" in fick
+    assert "missing_information" in fick
+
+
 async def test_okand_storlek_stoppar_inte():
     result = await _kor({"qualified": True, "antal_anstallda": None}, icp=_NORDFORM)
     assert result["stopped_early"] is None

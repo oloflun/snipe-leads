@@ -3,7 +3,7 @@ i kodbasen som gör ett riktigt utgående nätverksanrop, och det gör det
 bara mot en redan registrerad källa, aldrig en godtycklig URL."""
 
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -153,8 +153,14 @@ async def test_scrape_failure_from_the_service_is_reported_not_swallowed():
     fake_client.scrape.return_value = _fake_scrape_result(
         "", status="failed", error="timeout"
     )
-    with patch("scrapegraph_py.ScrapeGraphAI", return_value=fake_client):
+    # Reservhämtningen (sedan 2026-09-15) mockas: sviten gör inga nätanrop.
+    direkt = AsyncMock(return_value=(None, "direkthämtning: ConnectError"))
+    with (
+        patch("scrapegraph_py.ScrapeGraphAI", return_value=fake_client),
+        patch("app.agent.research_tools._hamta_direkt", new=direkt),
+    ):
         result = await _scrape_registered_source_impl(ctx, "https://exempelbolaget.se")
+    direkt.assert_awaited_once_with("https://exempelbolaget.se")
 
     assert "error" in result
     assert "timeout" in result

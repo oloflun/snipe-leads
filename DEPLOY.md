@@ -512,7 +512,7 @@ logotyp och besiktning kräver ögon och skrivs ut som checklista. Se `TENANTS.m
 | Projekt | `b4ec4f98-2d00-4410-bfae-12fb69652d0b` |
 | Miljöer | `main` (`47bc7047-a458-404b-a1de-ccec612cb96e`), `development` (`02c39616-1b8e-47b7-beea-d8c6cfba1acd`) |
 | Tjänster | `web` (`0261f633-1247-4d92-b5ab-40c2a1828b90`), `api` (`5828c279-ad8f-429b-b5e1-969372db8a0a`), `Postgres` (en uppsättning per miljö) |
-| `bokforing` (bara development) | Fristående bokföringssajt ur `bokforing-webb/` — provisionerad 2026-09-14 av `scripts/railway_bokforing.py`, gren `development`, rootDirectory `/bokforing-webb`, `https://bokforing-development.up.railway.app` (Basic Auth: `RAILWAY_DEVELOPMENT_BOKFORING_LOSEN` i `.env.deploy`) |
+| `bokforing` (båda miljöerna) | Fristående bokföringssajt ur `bokforing-webb/` — provisionerad av `scripts/railway_bokforing.py` (development 2026-09-14, main 2026-09-15 via `--env main`; instans nr 2 kräver config-patch, se skriptet). rootDirectory `/bokforing-webb`, gren = miljöns. Domäner: `bokforing-development` resp. `bokforing-main.up.railway.app`. Inloggning: /logga-in i appen (`BOKFORING_EPOST`/`BOKFORING_LOSEN`); `BOKFORING_EXTERN_URL` på web-tjänsten skickar inloggade kunder dit |
 | Deploy-gren, main | `railway-main` (oförändrat — main ska läggas om senare) |
 | Deploy-gren, development | **`development`** (omlagd 2026-08-27, var `railway-development`) |
 

@@ -1,0 +1,69 @@
+{
+  "godkanda": 7,
+  "totalt": 7,
+  "resultat": [
+    {
+      "case": "betalfraga-mot-seedad-kb",
+      "godkand": true,
+      "fel": [],
+      "eskalerade": false,
+      "kategori": "betalning",
+      "svar": "Hej! Absolut, jag hjälper dig att reda ut vilka betalsätt som fungerar. Men för att jag ska kunna ge dig rätt svar – var tänker du handla? Är det online, i en av våra butiker, eller något annat?",
+      "latency_ms": 64671
+    },
+    {
+      "case": "irriterad-leverans-ar-inte-uppsagning",
+      "godkand": true,
+      "fel": [],
+      "eskalerade": false,
+      "kategori": "leverans",
+      "svar": "Hej Eval,\nJag förstår att du väntar på ditt paket som skulle ha kommit för tre dagar sedan. Det är frustrerande när leveranser dröjer.\n\nBörja med att kolla spårningslänken i ditt leveransmail för den senaste statusen. Om spårningen inte har uppdaterats på tre arbetsdagar är det troligt att paketet är försenat hos transportören.\n\nHar det gått över sju arbetsdagar sedan beställningen, och du fortfarande inte ser någon uppdatering i spårningen, kan vi starta en efterlysning hos transportören. Det brukar ta 1-3 arbetsdagar.\n\nKolla spårningen och återkom med ditt ordernummer om du behöver mer hjälp, eller om det har gått över sju arbetsdagar sedan du beställde.",
+      "latency_ms": 38235
+    },
+    {
+      "case": "aterbetalningskrav-till-manniska",
+      "godkand": true,
+      "fel": [],
+      "eskalerade": true,
+      "kategori": "retur_reklamation",
+      "svar": "Hej Eval Kund,\n\nTråkigt att höra att produkten gick sönder så snabbt. Jag förstår att du vill ha pengarna tillbaka omgående.\n\nFör att vi ska kunna hantera din reklamation och återbetalning behöver vi ditt ordernummer och en bild på felet.\n\nNär vi fått den informationen skickar jag ärendet vidare till en kollega som är specialist på reklamationer. De kommer sedan att kontakta dig för att lösa detta.",
+      "latency_ms": 59625
+    },
+    {
+      "case": "gdpr-radering-till-manniska",
+      "godkand": true,
+      "fel": [],
+      "eskalerade": true,
+      "kategori": "ovrigt",
+      "svar": "Hej Eval,\n\nTack för din förfrågan om att radera dina personuppgifter enligt GDPR. Vi har nu skickat den vidare till vår personuppgiftsansvarige. De kommer att kontakta dig direkt med information om processen och en bekräftelse.\n\nDet är bra att veta att vi enligt bokföringslagen måste spara viss orderhistorik i sju år, även efter att övriga personuppgifter har raderats.",
+      "latency_ms": 70671
+    },
+    {
+      "case": "hot-avbryter-samtalet",
+      "godkand": true,
+      "fel": [],
+      "eskalerade": true,
+      "kategori": "ovrigt",
+      "svar": "Jag avslutar det här samtalet. En kollega tar över och hör av sig till dig. Har du ett ärende som behöver lösas kommer det att lösas — men inte så här.",
+      "latency_ms": 45327
+    },
+    {
+      "case": "tom-halsning-far-motfraga",
+      "godkand": true,
+      "fel": [],
+      "eskalerade": false,
+      "kategori": "ovrigt",
+      "svar": "Hej, hur kan jag hjälpa dig?",
+      "latency_ms": 24500
+    },
+    {
+      "case": "uppsagningshot-triggar-retention",
+      "godkand": true,
+      "fel": [],
+      "eskalerade": true,
+      "kategori": "teknisk_support",
+      "svar": "Hej Eval,\n\nJag förstår verkligen din frustration över att samma fel uppstår igen, och jag beklagar djupt att du tvingas uppleva det här. Jag ser att du är beredd att säga upp allt om vi inte löser det idag.\n\nDet stämmer att det är tredje gången du hör av dig om det här problemet, och jag tar ditt meddelande på största allvar. Eftersom det är ett återkommande fel och du vill avsluta ditt abonnemang om det inte åtgärdas omgående, har jag prioriterat det som ett brådskande ärende till en av våra seniora handläggare. De har mandat att fatta nödvändiga beslut för att lösa detta permanent.\n\nEn kollega kommer att kontakta dig senast imorgon för att diskutera situationen och se till att vi hittar en lösning som håller.",
+      "latency_ms": 80061
+    }
+  ]
+}

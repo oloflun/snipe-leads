@@ -61,3 +61,22 @@ requeue:ar utanför sändfönstret, så en "queued" rad kl 01 bevisar ingenting.
 - Ett tidigare "Enter skickar inte chatten"-fynd DROGS TILLBAKA: formuläret
   är korrekt; det var browserpanelens syntetiska tangenttryck som inte
   utlöser implicit submit. Verifiera formulär från koden innan de döms.
+
+## Tillägg: produktionsreleasen (PR #13)
+
+- e6 lämnade över släppet. Den här sessionen öppnade release-PR #13 och
+  kvitterade varje spetsflytt med en grindkommentar (c7b242b → 817ba04 →
+  35d4f70). Före varje grönt verifierades deltat: bara `bokforing-webb/` och
+  dokument, noll web/api-filer.
+- Migration 065 visade sig redan applicerad på main och är verifierad verksam
+  (`has_table_privilege` och filens eget verifieringskommando som snajp_app).
+- Anton mergade. main står på `ed46200`, api och web SUCCESS, health 200.
+- email-studio är pixelverifierad i produktion som admin: Förbättra ger
+  formaterad version, förklaring, ämnesradsförslag och konfidens.
+- qa_vyer mot produktion: anonym och admin är gröna. Kundrollen ger alltid
+  2 avvikelser, eftersom `kund@example.com` är en dev-fixtur och med avsikt
+  saknas i prods `auth.users` (0 träffar). Samma sak gällde i slutsvepet före
+  releasen, så det är ingen regression.
+- Efter releasen pushade testkörning c158455 och aa68ccf till development.
+  De ligger INTE i main och behöver ett nytt release-tåg (PR med
+  oloflun-review) när deras QA är klar.
