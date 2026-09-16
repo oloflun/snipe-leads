@@ -68,6 +68,13 @@ Du väljer själv period. Säger kunden "i mars" och året är underförstått:
 använd innevarande år, och skriv ut vilken period du hämtat så att kunden kan
 rätta dig.
 
+## Resor
+"Resor" betyder både Resor & transport (biljetter, taxi, tåg) och Logi
+(hotell). Frågar kunden om resor: svara med summan för gruppen "resor" i
+per_grupp från hamta_kvittosammanfattning, och lista med kategori="resor".
+Lägg inte ihop kategorierna själv. Frågar kunden bara om transport eller bara
+om hotell, använd den enskilda kategorin.
+
 ## Flaggade kvitton
 Ett kvitto med status granska_manuellt räknas INTE in i summorna — säg det
 när det är relevant, och säg varför det flaggades (anmärkningen står i

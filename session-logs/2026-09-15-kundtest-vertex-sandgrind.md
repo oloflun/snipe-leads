@@ -110,3 +110,14 @@ requeue:ar utanför sändfönstret, så en "queued" rad kl 01 bevisar ingenting.
   Återstår: kör UPDATE i Railway-projektets development-miljö och höj sedan
   `cachev:kb:<tenant>` (namnrymden kommer från DATABASE_URL och miljönamnet,
   se app/redisnycklar.py).
+
+## Tillägg 2026-09-16: slutläge vid avslut
+
+- PR #18 mergad av oloflun 16:37Z; prod verifierad på `7cb74a8` (api/web/bokforing
+  SUCCESS, health 200, SSO "Kör Agent", /demo-railen).
+- Därefter gick Iris och Kvittohanteraren till main via annan session (main `e9564a6`).
+- development = `b91cc48`, lokalt rent, inget opushat; alla fem dev-tjänster SUCCESS.
+- Main saknar endast `b91cc48` (kvitto-assistentens resor) → release-PR #20, alla
+  checkar gröna, väntar på Antons review. Inga migrationer i deltat; torrkörning
+  mot main och development: inget väntande (063 redan körd i main).
+- Öppet: Antons merge av #20 + prodverifiering; IMAP-host för kontakt@livrustning.se.
