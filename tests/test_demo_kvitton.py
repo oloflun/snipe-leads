@@ -115,8 +115,8 @@ def _kr_text(v: Decimal) -> str:
 def test_fragornas_belopp_ar_harledbara():
     """Varje kronbelopp i svaren måste finnas på sidan eller vara en summa av
     det som gör det. Tillåtna: radbelopp, radens moms, kategorisummor, totalen,
-    totala momsen, samt resor + resor & logi (svaret säger uttryckligen att det
-    är den summan)."""
+    totala momsen, samt resor & transport + logi (svaret säger uttryckligen att
+    det är den summan)."""
     tillatna: set[str] = set()
     for m in KLARA:
         tillatna.add(_kr_text(Decimal(m["belopp"])).replace(" ", " "))

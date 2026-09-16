@@ -48,6 +48,17 @@ KATEGORIETIKETTER: dict[str, str] = {
 }
 
 
+#: Kategorier som kunden tänker på som EN sak, fast kontona är flera. "Resor"
+#: är både resan och hotellet, men biljett och kost_och_logi är olika BAS-konton
+#: med olika momssatser och ska förbli två rader. Gruppens summa räknas här, i
+#: kod, för att kvitto-assistenten inte får addera (INV-BOOK-003): utan den
+#: fanns summan för resor aldrig i ett verktygssvar, och modellen svarade med
+#: bara transporten.
+KATEGORIGRUPPER: dict[str, tuple[str, tuple[str, ...]]] = {
+    "resor": ("Resor (transport och logi)", ("biljett", "kost_och_logi")),
+}
+
+
 def kategorietikett(nyckel: str | None) -> str:
     if not nyckel:
         return "Okategoriserat"
@@ -118,6 +129,20 @@ def sammanstall(rader: list[dict[str, Any]]) -> dict[str, Any]:
 
     kategorier = sorted(per_kategori.values(), key=lambda p: p["summa"], reverse=True)
 
+    per_grupp: list[dict[str, Any]] = []
+    for grupp, (etikett, nycklar) in KATEGORIGRUPPER.items():
+        delar = [per_kategori[n] for n in nycklar if n in per_kategori]
+        if delar:
+            per_grupp.append(
+                {
+                    "grupp": grupp,
+                    "etikett": etikett,
+                    "kategorier": list(nycklar),
+                    "antal": sum(p["antal"] for p in delar),
+                    "summa": _kr(sum((p["summa"] for p in delar), Decimal("0"))),
+                }
+            )
+
     return {
         "antal": len(rader),
         "antal_klara": len(klara),
@@ -127,6 +152,7 @@ def sammanstall(rader: list[dict[str, Any]]) -> dict[str, Any]:
         "per_kategori": [
             {**p, "summa": _kr(p["summa"])} for p in kategorier
         ],
+        "per_grupp": per_grupp,
         "storsta": (
             {"motpart": storsta["motpart"], "brutto": _kr(storsta["brutto"])}
             if storsta
@@ -206,8 +232,8 @@ _MANADER = {
 #: tal är både resan och hotellet, så ordet täcker båda kontona; den som
 #: frågar om transport eller logi specifikt får bara det.
 _FRAGEKATEGORIER: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("resor", ("biljett", "kost_och_logi")),
-    ("resa", ("biljett", "kost_och_logi")),
+    ("resor", KATEGORIGRUPPER["resor"][1]),
+    ("resa", KATEGORIGRUPPER["resor"][1]),
     ("transport", ("biljett",)),
     ("taxi", ("biljett",)),
     ("tåg", ("biljett",)),

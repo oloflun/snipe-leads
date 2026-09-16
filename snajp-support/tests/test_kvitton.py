@@ -175,6 +175,57 @@ def test_svarsmotorn_svarar_grundat_utan_modell():
     assert "3 kvitton" in granska
 
 
+def test_resegruppen_raknas_i_kod():
+    storage = MemoryStorage()
+    _skanna(storage)
+    samman = sammanstall(_lista(storage))
+
+    # Kontona står kvar som två rader...
+    etiketter = {p["etikett"]: p["summa"] for p in samman["per_kategori"]}
+    assert etiketter["Resor & transport"] == "1034.00"
+    assert etiketter["Logi"] == "1890.00"
+    # ...och gruppen bär summan som modellen annars hade behövt addera.
+    resor = next(g for g in samman["per_grupp"] if g["grupp"] == "resor")
+    assert resor["summa"] == "2924.00"
+    assert resor["antal"] == 3
+
+
+def test_modellvagen_kan_svara_grundat_om_resor():
+    """I drift svarar språkmodellen, inte svara_utan_modell. Den får inte
+    räkna, så summan för resor måste stå i verktygssvaret. Utan per_grupp
+    fälldes "2 924 kr" av beloppsspärren och modellen svarade med bara
+    transporten (1 034 kr)."""
+    import asyncio
+    import json
+
+    from app.agent.kvitto_chat_tools import (
+        KvittoChattContext,
+        _hamta_kvittosammanfattning_impl,
+        _lista_kvitton_impl,
+    )
+    from app.bookkeeping.beloppsgrind import check_belopp
+
+    storage = MemoryStorage()
+    _skanna(storage)
+    ctx = KvittoChattContext(storage=storage, tenant_id="t1")
+
+    asyncio.run(_hamta_kvittosammanfattning_impl(ctx, "2026-09-01", "2026-09-30"))
+    svar = "I september lade ni 2 924 kr på resor."
+    assert check_belopp(svar, ctx.resultat).ok, "Resesumman finns inte i verktygssvaret."
+
+    lista = json.loads(
+        asyncio.run(_lista_kvitton_impl(ctx, "2026-09-01", "2026-09-30", kategori="resor"))
+    )
+    motparter = {k["motpart"] for k in lista["kvitton"]}
+    assert lista["antal"] == 3
+    assert any("Stadshotellet" in (m or "") for m in motparter), "Hotellet föll ur resorna."
+
+    bara_transport = json.loads(
+        asyncio.run(_lista_kvitton_impl(ctx, "2026-09-01", "2026-09-30", kategori="biljett"))
+    )
+    assert bara_transport["antal"] == 2
+
+
 def test_perioden_laser_manadsnamn_ur_fragan():
     fran, till = tolka_period_ur_fraga(
         "Hur mycket la vi på resor i mars?",

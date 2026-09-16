@@ -18,6 +18,7 @@ from agents import RunContextWrapper, function_tool
 
 from ..bookkeeping.verifieringsgrind import STATUS_GRANSKA, STATUS_KLAR
 from ..kvitton.sammanfattning import (
+    KATEGORIGRUPPER,
     bara_utlagg,
     kategorietikett,
     sammanstall,
@@ -78,8 +79,9 @@ async def _hamta_kvittosammanfattning_impl(
 async def hamta_kvittosammanfattning(
     ctx: RunContextWrapper[KvittoChattContext], fran: str, till: str
 ) -> str:
-    """Summorna för en period: antal kvitton, totalbelopp, ingående moms och
-    summan per kategori. Samma uträkning som resultatvyn i produkten.
+    """Summorna för en period: antal kvitton, totalbelopp, ingående moms,
+    summan per kategori och summan per kategorigrupp (per_grupp, till exempel
+    "resor" = transport och logi). Samma uträkning som resultatvyn i produkten.
 
     Args:
         fran: Första dagen i perioden, ÅÅÅÅ-MM-DD.
@@ -109,7 +111,10 @@ async def _lista_kvitton_impl(
     if status is not None:
         rader = [r for r in rader if r.get("status") == status]
     if kategori is not None:
-        rader = [r for r in rader if (r.get("kategori") or "") == kategori.strip()]
+        # Ett gruppnamn ("resor") filtrerar på alla gruppens konton; annars
+        # hade kategori="biljett" gett taxin och tåget men inte hotellet.
+        nycklar = KATEGORIGRUPPER.get(kategori.strip(), (None, (kategori.strip(),)))[1]
+        rader = [r for r in rader if (r.get("kategori") or "") in nycklar]
 
     smalt = [
         {
@@ -145,7 +150,7 @@ async def lista_kvitton(
         till: Sista dagen, ÅÅÅÅ-MM-DD.
         status: Valfritt filter: "klar" eller "granska_manuellt".
         kategori: Valfritt kategorifilter, till exempel "biljett" eller
-            "representation".
+            "representation", eller gruppen "resor" (biljett och kost_och_logi).
     """
     return await _lista_kvitton_impl(ctx.context, fran, till, status, kategori)
 
