@@ -10,6 +10,8 @@
  * som huvudappen läser är kontraktet som finns.
  */
 
+import type { Eskaleringsregler } from "@/lib/iris";
+
 export const BAS = "/api/ag";
 
 export type Prospekt = {
@@ -47,6 +49,7 @@ export type LeadsConfig = {
   autonomy?: string;
   autonomy_description?: string;
   icp?: Record<string, unknown>;
+  eskalering?: Eskaleringsregler;
 };
 
 export type Jobb = {

@@ -27,8 +27,8 @@ Artisans produkt, texter, prisramning eller databaslöften.
 
 ### Iris-registret (leads-webb/lib/iris.ts)
 
-Persona, gränslistan `GRANSER`, eskaleringsregler (typ + localStorage-
-läs/skriv), `kallEtikett()` (URL → LinkedIn/Platsbanken/värdnamn) och
+Persona, gränslistan `GRANSER`, eskaleringsreglernas typ (backendens
+fältnamn), `kallEtikett()` (URL → LinkedIn/Platsbanken/värdnamn) och
 `statusEtikett()` (backendens `new` → "Ny"). Namn och regler bor HÄR;
 huvudappens motsvarighet är `lib/agentsajt.ts`.
 
@@ -40,8 +40,10 @@ huvudappens motsvarighet är `lib/agentsajt.ts`.
   Skriv aldrig in en gräns som koden inte upprätthåller.
 - Konfigurerbara eskaleringsregler under /installningar
   (`components/vyer/Eskalering.tsx`): osäker kvalificering med tröskel,
-  pris/avtal, negativt svar, juridik. **Sparas i localStorage** tills
-  backenden bär ett fält — vyn säger det rakt ut. Uppföljning: snipe-e45.
+  pris/avtal, negativt svar, juridik. **Uppdatering 2026-09-17:** reglerna
+  bor nu i backenden (`agent_configs.settings.eskalering`, snipe-e45) och
+  verkställs i `leads/svar.py` och i batchkörningen, se
+  `snajp-support/app/leads/eskalering.py`.
 
 ### Källtransparens
 
@@ -87,15 +89,15 @@ Seeda källdata i minnesbackenden (UTF-8-bytes krävs i PS 5.1, annars 400):
   prospekt och /leads — alla lästa. Fynd som rättades: `[object Object]` i
   Målgrupp (nästlade ICP-värden plattas + tomfiltreras i `InstallningarVy`),
   rå status `new` i badgar (statusEtikett). Omskott rena.
-- Eskaleringsväxeln: av → omladdning → läget kvarstår (localStorage).
+- Eskaleringsväxeln: av → omladdning → läget kvarstår (2026-09-17: läst ur
+  backenden via `GET /leads/config`, inte ur webbläsaren).
 - **Ej visuellt verifierad:** dashboardbannern "Kör Iris" (kräver inloggning;
   lokal server ska inte logga in mot fjärr-Supabase). Kodvägen är rak:
   `WorkspaceSection` → `<AgentSajtKnapp agent="leads"/>` → `text.knapp`.
 
 ## Öppna trådar
 
-1. **snipe-e45**: eskaleringsreglerna till backendfält (agent_configs) +
-   koppling till svarshanteringen; localStorage är en lokal placeholder.
+1. ~~snipe-e45~~ klar 2026-09-17: eskaleringsreglerna i backenden och verkställda.
 2. Dashboardbannern verifieras visuellt vid nästa inloggade QA-pass
    (qa_vyer.mjs-mönstret).
 3. Commit väntar på Antons/Sebbes klartecken; plocka Iris-filerna separat

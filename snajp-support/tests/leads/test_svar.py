@@ -217,8 +217,10 @@ async def test_grundlost_pastaende_i_svarsutkastet_gar_till_manniska():
     """INV-GROUND-001 gäller svar: en påhittad siffra köas inte."""
     storage = MemoryStorage()
     thread_id = await _tradd_med_skickat(storage)
-    resultat, _, mejl = await _kor(storage, thread_id, "Vad kostar det?", {
-        "sa:call-summary": {"klass": "fraga", "fraga_karna": "Pris."},
+    # Inte en prisfråga: den hade lämnats över av eskaleringsregeln innan
+    # något utkast fanns att grunda (se testerna längst ner).
+    resultat, _, mejl = await _kor(storage, thread_id, "Hur snabbt svarar ni kunderna?", {
+        "sa:call-summary": {"klass": "fraga", "fraga_karna": "Svarstid."},
         "mk:sales-enablement": {"subject": "Re:", "body": "Våra kunder sparar 40 % på supporten."},
         "snajp:humanizer-svenska": {"final_subject": "Re:", "final_body": "Våra kunder sparar 40 % på supporten."},
     })
@@ -254,3 +256,91 @@ async def test_agent_run_loggas_med_steglogg():
 
 def test_klasserna_ar_de_koden_agerar_pa():
     assert KLASSER == ("positivt", "invandning", "fraga", "negativt", "avregistrering", "autosvar")
+
+
+# -- Eskaleringsreglerna (app/leads/eskalering.py) ---------------------------
+
+
+async def _med_regler(storage, **regler):
+    await storage.set_agent_settings(TENANT, agent_type="leads", settings={"eskalering": regler})
+
+
+@pytest.mark.anyio
+async def test_prisfraga_far_inget_utkast_utan_lamnas_over():
+    """Standardregeln: Iris skriver aldrig ett svar om pris. Kön ställs in,
+    kunden aviseras, och ingen utkaststeg körs alls."""
+    storage = MemoryStorage()
+    thread_id = await _tradd_med_skickat(storage)
+    resultat, anrop, mejl = await _kor(storage, thread_id, "Låter bra, men vad kostar det per månad?", {
+        "sa:call-summary": {"klass": "fraga", "fraga_karna": "Pris."},
+        "mk:sales-enablement": {"subject": "Re:", "body": "Det kostar 990 kr."},
+    })
+
+    assert resultat["eskalerat"] == ["pris"]
+    assert resultat["handoff"] is True
+    assert resultat["queued"] is False
+    assert resultat["cancelled_sends"] == 1
+    assert "mk:sales-enablement" not in anrop, "Ett prisutkast skrevs trots regeln."
+    mejl.assert_awaited()
+    assert await storage.list_review_queue(TENANT) == []
+
+
+@pytest.mark.anyio
+async def test_modellens_flagga_racker_nar_ordfiltret_missar():
+    storage = MemoryStorage()
+    thread_id = await _tradd_med_skickat(storage)
+    resultat, anrop, _ = await _kor(storage, thread_id, "Vad landar det på för en firma som vår?", {
+        "sa:call-summary": {"klass": "fraga", "tar_upp_pris": True},
+    })
+    assert resultat["eskalerat"] == ["pris"]
+    assert "mk:sales-enablement" not in anrop
+
+
+@pytest.mark.anyio
+async def test_juridikfraga_lamnas_over():
+    storage = MemoryStorage()
+    thread_id = await _tradd_med_skickat(storage)
+    resultat, anrop, _ = await _kor(storage, thread_id, "Har ni ett personuppgiftsbiträdesavtal?", {
+        "sa:call-summary": {"klass": "fraga"},
+    })
+    assert resultat["eskalerat"] == ["juridik"]
+    assert "mk:sales-enablement" not in anrop
+
+
+@pytest.mark.anyio
+async def test_avstangd_prisregel_ger_utkast_till_granskning_som_forut():
+    storage = MemoryStorage()
+    await _med_regler(storage, prisfragor=False)
+    thread_id = await _tradd_med_skickat(storage)
+    resultat, anrop, _ = await _kor(storage, thread_id, "Vad kostar det?", {
+        "sa:call-summary": {"klass": "fraga", "fraga_karna": "Pris."},
+        "mk:sales-enablement": {"subject": "Re: Snabb fråga", "body": "Snajp säljer AI-support till e-handlare."},
+        "snajp:humanizer-svenska": {
+            "final_subject": "Re: Snabb fråga",
+            "final_body": "Snajp säljer AI-support till e-handlare.",
+        },
+    })
+    assert resultat["eskalerat"] == []
+    assert "mk:sales-enablement" in anrop
+
+
+@pytest.mark.anyio
+async def test_negativt_svar_aviserar_bara_nar_regeln_ar_pa():
+    storage = MemoryStorage()
+    thread_id = await _tradd_med_skickat(storage)
+    pa, _, mejl_pa = await _kor(storage, thread_id, "Nej tack, inte intresserade.", {
+        "sa:call-summary": {"klass": "negativt"},
+    })
+    assert pa["eskalerat"] == ["negativt_svar"]
+    assert pa["cancelled_sends"] == 1
+    mejl_pa.assert_awaited()
+
+    storage_av = MemoryStorage()
+    await _med_regler(storage_av, negativt_svar=False)
+    thread_av = await _tradd_med_skickat(storage_av)
+    av, _, mejl_av = await _kor(storage_av, thread_av, "Nej tack, inte intresserade.", {
+        "sa:call-summary": {"klass": "negativt"},
+    })
+    assert av["eskalerat"] == []
+    assert av["cancelled_sends"] == 1, "Kön ställs in oavsett regeln: ett nej är ett nej."
+    mejl_av.assert_not_awaited()
