@@ -110,10 +110,11 @@ export const appRoutes: AppRoute[] = [
   { href: "/dashboard/larande", labelKey: "nav.larande", product: "shared", preview: true },
   { href: "/dashboard/analytics", labelKey: "nav.analytics", product: "leads", preview: true },
   { href: "/dashboard/assistant", labelKey: "nav.assistant", product: "leads", preview: true },
-  // Bokföringsagenten. En riktig produkt sedan den fick pris, marknadssida
-  // och ett eget värde i `workspaces.products` (migration 047) — grindas
-  // därför på entitlement som leads och support, inte på adminstatus.
-  { href: "/dashboard/bokforing", labelKey: "nav.bokforing", product: "bookkeeping" },
+  // Kvittohanteraren (f.d. Bokföringsagenten, ombyggd 2026-09-16). Behåller
+  // produktnyckeln "bookkeeping" — det är värdet i `workspaces.products`
+  // (migration 047), och en nyckel i databasen byter man inte namn på för att
+  // produkten gjorde det. Grindas på entitlement som leads och support.
+  { href: "/dashboard/kvitton", labelKey: "nav.kvitton", product: "bookkeeping" },
   { href: "/settings", labelKey: "nav.settings", product: "shared" }
 ];
 
@@ -437,7 +438,7 @@ export function productForSettingsSection(section: SettingsSectionKey): ProductK
  * Public marketing surfaces. `/leads` and `/support` render the same shell with a
  * different product selected, so both are linkable and crawlable.
  */
-export const publicProductRoutes = ["/", "/leads", "/support", "/bokforing"] as const;
+export const publicProductRoutes = ["/", "/leads", "/support", "/kvitton"] as const;
 
 // Auth route guards (pure, no server dependencies — safe for middleware).
 // /leads, /support och /bokforing är INTE listade: de är publika produktsidor,

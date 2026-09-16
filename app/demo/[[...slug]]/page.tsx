@@ -1,10 +1,10 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { PageShell } from "@/components/AppShell";
 import { DashboardProvider } from "@/components/dashboard/DashboardContext";
 import { StartView } from "@/components/dashboard/StartView";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { CrmDemo } from "@/components/crm/CrmDemo";
-import { BokforingDemo } from "@/components/bookkeeping/BokforingDemo";
+import { KvittoDemo } from "@/components/kvitton/KvittoDemo";
 import { DemoSupportYta } from "@/components/snajp/DemoSupportYta";
 import { LeadsControls } from "@/components/leads/LeadsControls";
 import { SupportRegler } from "@/components/settings/SupportRegler";
@@ -109,9 +109,9 @@ function renderSektion(sektion: string | undefined): React.ReactNode | null {
       // Följer filens regel — CrmDemo når varken session eller databas.
       return (
         <PageShell
-          kicker="Leadsagenten"
+          kicker="Iris"
           title="Din CRM-lista, en studio per kund"
-          description="Ladda upp kundlistan ur ert CRM som CSV. Agenten bevakar kundernas signaler, och varje kund får en egen, isolerad Email studio som skriver utifrån signalerna och er produkt. Listan stannar i webbläsaren och inget skickas."
+          description="Ladda upp kundlistan ur ert CRM som CSV. Iris bevakar kundernas signaler, och varje kund får en egen, isolerad Email studio som skriver utifrån signalerna och er produkt. Listan stannar i webbläsaren och inget skickas."
         >
           <CrmDemo />
         </PageShell>
@@ -129,17 +129,21 @@ function renderSektion(sektion: string | undefined): React.ReactNode | null {
     case "kontroll":
       return <LeadsControls demo />;
     case "bokforing":
-      // Egen demokomponent och inte `BookkeepingView`. Den vyn anropar
-      // backenden för underlag och period, och regeln för den här routen är att
-      // INGENTING här får sträcka sig efter en session eller databasen — se
-      // filens docstring. BokforingDemo renderar handräknade konstanter.
+      // Gamla adressen — Kvittohanteraren ersatte bokföringsdemon 2026-09-16.
+      redirect("/demo/kvitton");
+    // eslint-disable-next-line no-fallthrough -- redirect kastar, nås aldrig
+    case "kvitton":
+      // Egen demokomponent och inte `KvittoVy`. Den vyn anropar backenden,
+      // och regeln för den här routen är att INGENTING här får sträcka sig
+      // efter en session eller databasen — se filens docstring. KvittoDemo
+      // renderar handräknade konstanter och spelar upp dem.
       return (
         <PageShell
-          kicker="Bokföring"
-          title="Ett underlag, hela vägen till periodrapport"
-          description="Välj ett underlag och följ avläsningen, verifikatet och summorna. Tre påhittade underlag, tre olika konteringsvägar. Ingen modell körs på den här sidan."
+          kicker="Kvittohanteraren"
+          title="Inkorgen läses, kvittona plockas ut"
+          description="Tryck på Skanna inkorgen och se agenten identifiera kvitton, lyfta ut beloppen och sammanställa perioden. Påhittade mejl, förberedda svar. Ingen modell körs på den här sidan."
         >
-          <BokforingDemo />
+          <KvittoDemo />
         </PageShell>
       );
     case "regler":

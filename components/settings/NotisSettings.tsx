@@ -32,7 +32,7 @@ const HANDELSER: { nyckel: Notishandelse; etikett: string; beskrivning: string }
     nyckel: "lead",
     etikett: "Nytt lead",
     beskrivning:
-      "Leads-agenten har hittat och kvalificerat ett bolag. Ett mejl per lead, inte per körning."
+      "Iris har hittat och kvalificerat ett bolag. Ett mejl per lead, inte per körning."
   },
   {
     nyckel: "escalation",

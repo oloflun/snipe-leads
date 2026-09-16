@@ -7,7 +7,8 @@ import {
   ListChecks,
   Mail,
   Play,
-  Settings
+  Settings,
+  Sparkles
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -18,7 +19,7 @@ import { cn } from "@/lib/utils";
  * Vänsterrailen — sajtens EN tonala inversion (DESIGN.md: en per sida).
  * Alltid synlig; smala skärmar får ikonrail, aldrig hamburgare.
  * Ordningen är arbetsordningen: läget (Översikt), materialet (Prospekt,
- * Granskning, Leadslistor), handlingen (Kör agenten), och sist ramen.
+ * Granskning, Leadslistor), handlingen (Kör Iris, demon), och sist ramen.
  */
 
 type Flik = {
@@ -32,7 +33,8 @@ const FLIKAR: Flik[] = [
   { href: "/prospekt", etikett: "Prospekt", Ikon: Building2 },
   { href: "/granskning", etikett: "Granskning", Ikon: CheckCheck },
   { href: "/listor", etikett: "Leadslistor", Ikon: ListChecks },
-  { href: "/agenten", etikett: "Kör agenten", Ikon: Play }
+  { href: "/agenten", etikett: "Kör Iris", Ikon: Play },
+  { href: "/demo", etikett: "Se Iris arbeta", Ikon: Sparkles }
 ];
 
 const BOTTENFLIKAR: Flik[] = [
@@ -76,7 +78,7 @@ export function Sidebar({ kundnamn = null }: Readonly<{ kundnamn?: string | null
   return (
     <aside className="rail sticky top-0 flex h-dvh w-[64px] shrink-0 flex-col bg-ink text-paper lg:w-[260px]">
       <div className="flex items-center gap-3 px-3 pb-5 pt-6 lg:px-5">
-        <Link href="/" className="focus-ring rounded-[6px]" aria-label="Snajp Leads — till översikten">
+        <Link href="/" className="focus-ring rounded-[6px]" aria-label="Iris, Snajp Leads: till översikten">
           <span className="hidden lg:block">
             <Logo tone="paper" />
           </span>
@@ -86,7 +88,7 @@ export function Sidebar({ kundnamn = null }: Readonly<{ kundnamn?: string | null
         </Link>
       </div>
       <p className="hidden px-5 pb-4 text-[0.75rem] font-medium uppercase tracking-[0.14em] text-paper/40 lg:block">
-        Leads
+        Iris · Leads
       </p>
 
       <nav aria-label="Huvudmeny" className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 lg:px-3">

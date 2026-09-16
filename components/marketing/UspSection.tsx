@@ -43,12 +43,12 @@ const leads: ProduktCopy = {
     en: "Leads that come to you, and you always have the final say."
   },
   lede: {
-    sv: "Leads-agenten letar prospekt baserat på er produkt och gör en behovsanalys som den senare använder för att skapa professionella utgående mail.",
-    en: "The leads agent finds prospects based on your product and works out what they need, then uses that analysis to write professional outgoing emails."
+    sv: "Iris, leadsagenten, letar prospekt baserat på er produkt och gör en behovsanalys som hon senare använder för att skapa professionella utgående mail.",
+    en: "Iris, the leads agent, finds prospects based on your product and works out what they need, then uses that analysis to write professional outgoing emails."
   },
   punkter: {
     sv: [
-      ["Hittar rätt bolag", "Agenterna letar prospekt utifrån er produkt och gör en behovsanalys innan en enda rad skrivs."],
+      ["Hittar rätt bolag", "Iris letar prospekt utifrån er produkt och gör en behovsanalys innan en enda rad skrivs."],
       ["Personliga, professionella mail", "Behovsanalysen och ert erbjudande går in i mejlet. Ni får ett utkast att ändra i, inte en mall att fylla i."],
       ["Ni har sista ordet", "Inget går ut utan att ni bestämt det. Mailen granskas alltid av en människa innan de skickas."]
     ],
@@ -85,25 +85,25 @@ const support: ProduktCopy = {
 
 const bokforing: ProduktCopy = {
   rubrik: {
-    sv: "Du skickar in. Agenten ordnar. Du godkänner.",
-    en: "You send it in. The agent organises. You approve."
+    sv: "Mejlen kommer in. Agenten plockar ut. Du godkänner.",
+    en: "The mail comes in. The agent picks out. You approve."
   },
   lede: {
-    sv: "Bokföringsagenten läser av kvitton och fakturor, föreslår kontering ur BAS-kontoplanen och summerar perioden. Den bokför ingenting själv.",
-    en: "The bookkeeping agent reads receipts and invoices, proposes entries from the Swedish BAS chart and totals the period. It does no bookkeeping itself."
+    sv: "Kvittohanteraren läser din inkorg med read-only-åtkomst, hittar kvitton och utlägg, läser av belopp, moms, datum och kategori och sammanställer perioden. Den bokför ingenting själv.",
+    en: "The receipt agent reads your inbox with read-only access, finds receipts and expenses, reads amount, VAT, date and category, and totals the period. It does no bookkeeping itself."
   },
   punkter: {
     sv: [
-      ["Avläsning utan gissningar", "Saknas ett fält på underlaget gissar agenten aldrig fram det. Kvittot går till granskning i stället – rätt hellre än snabbt."],
+      ["Avläsning utan gissningar", "Saknas ett fält på kvittot gissar agenten aldrig fram det. Kvittot flaggas för granskning i stället – rätt hellre än snabbt."],
+      ["Samma kvitto räknas aldrig två gånger", "Varje mejl och fil får ett fingeravtryck, och ett kvitto som redan är inläst hoppas över. Ett omskickat kvitto flaggas som möjlig dubblett."],
       ["Koden räknar, inte modellen", "Moms och summor beräknas i kod, med exakta decimaler varje gång. En språkmodell som räknar själv kan missa – det har vi byggt bort."],
-      ["Perioden går ihop, eller visas inte", "Balanserar inte verifikationen ser ni det direkt – aldrig en siffra som bara ser rätt ut. Så vet ni att underlaget går att lita på."],
-      ["Du för in det, inte vi", "Agenten föreslår, ni bokför. Inget skickas till Skatteverket och ingen konsult blir överflödig – bara mindre manuellt arbete för er."]
+      ["Din inkorg är din", "Åtkomsten är read-only och kan tas bort när som helst. Mejlens text sparas aldrig – bara de utlästa kvittofälten, avsändare och ämnesrad samt en kontrollsumma."]
     ],
     en: [
-      ["Reading without guessing", "If a field is missing from the document the agent never invents it. The receipt goes to review instead – right rather than fast."],
+      ["Reading without guessing", "If a field is missing from the receipt the agent never invents it. The receipt is flagged for review instead – right rather than fast."],
+      ["The same receipt is never counted twice", "Every mail and file gets a fingerprint, and a receipt already read is skipped. A re-sent receipt is flagged as a possible duplicate."],
       ["The code calculates, not the model", "VAT and totals are computed in code, with exact decimals every time. A language model doing its own arithmetic can slip – we built that out."],
-      ["The period balances, or it is not shown", "If the entry does not balance you see it at once – never a number that merely looks right. So you know the records can be trusted."],
-      ["You enter it, not us", "The agent proposes, you book. Nothing is filed with the tax agency and no accountant is made redundant – just less manual work for you."]
+      ["Your inbox stays yours", "Access is read-only and can be revoked at any time. The body of your mail is never stored – only the extracted receipt fields, sender and subject line, and a checksum."]
     ]
   }
 };

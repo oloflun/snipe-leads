@@ -1,8 +1,7 @@
-import type { Metadata } from "next";
-import { AgentVy } from "@/components/vyer/AgentVy";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Bokföringsagenten" };
-
-export default function Sida() {
-  return <AgentVy />;
+/** Gamla uppladdningsfliken. Kvittohanteraren skannar inkorgen — och
+ *  uppladdningen bor numera under Kvitton. Bokmärken ska landa rätt. */
+export default function Page() {
+  redirect("/inkorgen");
 }

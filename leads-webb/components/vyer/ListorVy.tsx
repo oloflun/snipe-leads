@@ -30,7 +30,7 @@ export function ListorVy() {
     <div className="space-y-8">
       <PageHeader
         rubrik="Leadslistor"
-        beskrivning="Färdiga listor agenten byggt: verifierade bolag med kontaktväg, källa och signal per rad. Ingenting i en lista skickas någonsin automatiskt."
+        beskrivning="Färdiga listor Iris byggt: verifierade bolag med kontaktväg, källa och signal per rad. Ingenting i en lista skickas någonsin automatiskt."
       />
 
       {fel ? (

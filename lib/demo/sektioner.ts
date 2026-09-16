@@ -41,7 +41,7 @@ export const DEMO_NAV = [
   ["crm", "CRM-lista"],
   ["support", "Kundtjänst"],
   ["emails", "Email studio"],
-  ["bokforing", "Bokföring"]
+  ["kvitton", "Kvitton"]
 ] as const;
 
 /** Länken till en sektion. Tom sträng = demons startsida. */

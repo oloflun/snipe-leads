@@ -1,13 +1,11 @@
 "use client";
 
 import {
-  ArrowLeftRight,
-  BarChart3,
-  FileText,
+  Inbox,
   LayoutDashboard,
   Mail,
   MessagesSquare,
-  ScanLine,
+  Receipt,
   Settings
 } from "lucide-react";
 import Link from "next/link";
@@ -20,9 +18,10 @@ import { cn } from "@/lib/utils";
  * Alltid synlig: på smala skärmar krymper den till en ikonrail i stället för
  * att gömmas bakom en hamburgare, eftersom menyn ÄR sajtens karta.
  *
- * Ordningen är arbetsordningen, uppifrån och ner: läget (Översikt, Resultat,
- * Intäkter & utgifter), arbetet (Bokföringsagenten, PDF-filer, Assistent),
- * och sist ramen (Inställningar, Kontakt) i en egen grupp vid botten.
+ * Ordningen är arbetsordningen, uppifrån och ner: läget (Översikt), arbetet
+ * (Inkorgen, Kvitton, Assistent), och sist ramen (Inställningar, Kontakt) i
+ * en egen grupp vid botten. Kvittohanteraren ersatte bokföringsagenten
+ * 2026-09-16 — färre flikar är en följd av produkten, inte en bantning.
  */
 
 type Flik = {
@@ -33,10 +32,8 @@ type Flik = {
 
 const FLIKAR: Flik[] = [
   { href: "/", etikett: "Översikt", Ikon: LayoutDashboard },
-  { href: "/resultat", etikett: "Resultat", Ikon: BarChart3 },
-  { href: "/intakter-utgifter", etikett: "Intäkter & utgifter", Ikon: ArrowLeftRight },
-  { href: "/agenten", etikett: "Bokföringsagenten", Ikon: ScanLine },
-  { href: "/pdf-filer", etikett: "PDF-filer", Ikon: FileText },
+  { href: "/inkorgen", etikett: "Inkorgen", Ikon: Inbox },
+  { href: "/kvitton", etikett: "Kvitton", Ikon: Receipt },
   { href: "/assistent", etikett: "Assistent", Ikon: MessagesSquare }
 ];
 
@@ -82,7 +79,7 @@ export function Sidebar({ kundnamn = null }: Readonly<{ kundnamn?: string | null
   return (
     <aside className="rail sticky top-0 flex h-dvh w-[64px] shrink-0 flex-col bg-ink text-paper lg:w-[260px]">
       <div className="flex items-center gap-3 px-3 pb-5 pt-6 lg:px-5">
-        <Link href="/" className="focus-ring rounded-[6px]" aria-label="Snajp Bokföring — till översikten">
+        <Link href="/" className="focus-ring rounded-[6px]" aria-label="Snajp Kvitton — till översikten">
           <span className="hidden lg:block">
             <Logo tone="paper" />
           </span>
@@ -92,7 +89,7 @@ export function Sidebar({ kundnamn = null }: Readonly<{ kundnamn?: string | null
         </Link>
       </div>
       <p className="hidden px-5 pb-4 text-[0.75rem] font-medium uppercase tracking-[0.14em] text-paper/40 lg:block">
-        Bokföring
+        Kvitton
       </p>
 
       <nav aria-label="Huvudmeny" className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 lg:px-3">

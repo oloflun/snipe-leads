@@ -28,6 +28,7 @@ from .api import (
     inbox,
     kb,
     keys,
+    kvitton,
     leads,
     rules,
     sending_domains_api,
@@ -334,6 +335,9 @@ app.include_router(admin_kunddata.router)
 app.include_router(admin_konvertera.router)
 app.include_router(analytics.router)
 app.include_router(bookkeeping.router)
+# Kvittohanteraren — produktytan som ersatte bokföringsagenten (2026-09-16).
+# Bokföringsroutern ovan står kvar som maskineri (SIE-exporten m.m.).
+app.include_router(kvitton.router)
 
 # Ohanterade fel hamnar i platform_events i stället för att rulla förbi i
 # Renders stdout och försvinna vid nästa spin-down (migration 026).

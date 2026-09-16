@@ -4,11 +4,11 @@ import { fontVariables } from "@/lib/fonts";
 
 export const metadata: Metadata = {
   title: {
-    default: "Snajp Leads",
-    template: "%s — Snajp Leads"
+    default: "Iris · Snajp Leads",
+    template: "%s · Iris, Snajp Leads"
   },
   description:
-    "Leadsagenten hittar bolagen som matchar din målgrupp, gör research och skriver utkasten — du granskar och godkänner.",
+    "Iris, Snajps leadsagent, hittar bolagen som matchar din målgrupp, gör research med synliga källor och skriver utkasten. Du granskar och godkänner.",
   icons: {
     icon: [{ url: "/snajp-symbol-black.svg", type: "image/svg+xml" }]
   },

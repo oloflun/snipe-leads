@@ -54,7 +54,7 @@ export function GranskningVy() {
     <div className="space-y-8">
       <PageHeader
         rubrik="Granskning"
-        beskrivning="Utkasten agenten skrivit, i väntan på ditt ja eller nej. Godkända utkast går till schemaläggaren — ingenting skickas i samma sekund du klickar."
+        beskrivning="Utkasten Iris skrivit, i väntan på ditt ja eller nej. Godkända utkast går till schemaläggaren, så ingenting skickas i samma sekund du klickar."
       />
 
       {fel ? (
@@ -68,7 +68,7 @@ export function GranskningVy() {
       ) : poster.length === 0 ? (
         <EmptyState
           title="Granskningskön är tom"
-          body="När agenten skrivit ett utkast till ett kvalificerat bolag hamnar det här, och ingenting skickas förrän du godkänt det."
+          body="När Iris skrivit ett utkast till ett kvalificerat bolag hamnar det här, och ingenting skickas förrän du godkänt det."
         />
       ) : (
         <div className="space-y-8">

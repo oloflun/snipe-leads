@@ -32,6 +32,25 @@
       "port": 3101
     },
     {
+      "name": "iris-leads-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "cwd": "leads-webb",
+      "port": 3101
+    },
+    {
+      "name": "iris-backend",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "lokal_iris.py"
+      ],
+      "cwd": "snajp-support",
+      "port": 8010
+    },
+    {
       "name": "bokforing",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
@@ -40,6 +59,25 @@
       ],
       "cwd": "bokforing-webb",
       "port": 3100
+    },
+    {
+      "name": "kvitton-portal-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "cwd": "bokforing-webb",
+      "port": 3100
+    },
+    {
+      "name": "kvitton-backend",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "lokal_kvitton.py"
+      ],
+      "cwd": "snajp-support",
+      "port": 8000
     },
     {
       "name": "backend",

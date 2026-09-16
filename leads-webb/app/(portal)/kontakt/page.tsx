@@ -13,7 +13,7 @@ export default function Sida() {
     <div className="space-y-8">
       <PageHeader
         rubrik="Kontakt"
-        beskrivning="Snajp Leads är en tjänst från Snajp. Frågor, fel och önskemål går rakt till oss."
+        beskrivning="Iris och Snajp Leads är en tjänst från Snajp. Frågor, fel och önskemål går rakt till oss."
       />
 
       <section className="max-w-[38rem]">
@@ -26,8 +26,8 @@ export default function Sida() {
             {KONTAKT_MEJL}
           </a>
           <p className="mt-3 max-w-[52ch] text-[0.9375rem] leading-6 text-ink/62">
-            Skriv vad det gäller — ett bolag, ett utkast eller en körning — så
-            blir svaret bättre.
+            Skriv vad det gäller, till exempel ett bolag, ett utkast eller en
+            körning, så blir svaret bättre.
           </p>
           <a href={`mailto:${KONTAKT_MEJL}?subject=${encodeURIComponent("Snajp Leads")}`} className={`${btnPrimary} mt-5`}>
             <Mail className="h-4 w-4" aria-hidden />
@@ -43,7 +43,7 @@ export default function Sida() {
               granskningskön, och grindarna körs en gång till vid utskickstid.
             </li>
             <li>
-              Underkända bolag står kvar med sitt skäl — det agenten valt bort
+              Underkända bolag står kvar med sitt skäl. Det Iris valt bort
               ska gå att kontrollera, inte bara försvinna.
             </li>
             <li>

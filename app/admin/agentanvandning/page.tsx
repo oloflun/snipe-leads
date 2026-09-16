@@ -64,7 +64,7 @@ export default async function Page() {
       )
     },
     {
-      rubrik: "Bokföring",
+      rubrik: "Kvitton",
       fel: bok.error,
       innehall: (
         <AgentAnvandning

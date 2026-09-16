@@ -207,7 +207,7 @@ try {
 // --- 5. Bokföringen -------------------------------------------------------
 console.log("\n=== 5. Bokföringen ===");
 try {
-  const r = await page.goto(`${BASE}/dashboard/bokforing`, { waitUntil: "networkidle", timeout: 45000 });
+  const r = await page.goto(`${BASE}/dashboard/kvitton`, { waitUntil: "networkidle", timeout: 45000 });
   const info = await page.evaluate(() => ({
     väg: location.pathname,
     text: document.body.innerText.slice(0, 400)

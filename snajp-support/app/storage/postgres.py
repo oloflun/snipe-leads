@@ -27,6 +27,7 @@ from .base import (
     bk_datum,
     kontrollera_bk_balans,
     kontrollera_bk_betalstatus,
+    kontrollera_bk_kalla,
     kontrollera_bk_riktning,
     kontrollera_bk_status,
     normalisera_kunddata,
@@ -2924,17 +2925,26 @@ class PostgresStorage:
         kategori: str | None = None,
         betalstatus: str | None = None,
         anmarkning: str = "",
+        kalla: str = "uppladdning",
+        mejl_id: str | None = None,
+        mejl_amne: str | None = None,
+        mejl_avsandare: str | None = None,
+        valuta: str = "SEK",
+        belopp_original: str | None = None,
     ) -> dict[str, Any]:
         kontrollera_bk_status(status)
         kontrollera_bk_riktning(riktning)
         kontrollera_bk_betalstatus(betalstatus)
+        kontrollera_bk_kalla(kalla)
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
                 """
                 insert into bk_underlag
                   (tenant_id, sha256, filnamn, mimetyp, status, datum, motpart,
-                   brutto, momssats, riktning, kategori, betalstatus, anmarkning)
-                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                   brutto, momssats, riktning, kategori, betalstatus, anmarkning,
+                   kalla, mejl_id, mejl_amne, mejl_avsandare, valuta, belopp_original)
+                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+                        $14, $15, $16, $17, $18, $19)
                 returning *
                 """,
                 tenant_id,
@@ -2950,6 +2960,12 @@ class PostgresStorage:
                 kategori,
                 betalstatus,
                 anmarkning,
+                kalla,
+                mejl_id,
+                mejl_amne,
+                mejl_avsandare,
+                valuta,
+                belopp_original,
             )
         return _row(record)
 

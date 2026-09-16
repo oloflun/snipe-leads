@@ -308,6 +308,25 @@ class Settings(BaseSettings):
     imap_oauth_refresh_token: str = ""
     imap_oauth_token_url: str = "https://oauth2.googleapis.com/token"
 
+    # Kvittohanteraren: mejlkontot agenten läser kvitton ur. Samma mönster som
+    # IMAP-kopplingen ovan — refresh-token i miljön, aldrig i databasen, och
+    # samtycket fångas med scripts/kvitto_oauth.py. "mock" är demoinkorgen
+    # (kvitton/mejl.py) och är läget för demo, lokal stack och testresor.
+    kvitto_mejl_leverantor: str = ""  # "" = ingen koppling | mock | gmail | microsoft
+    kvitto_mejl_adress: str = ""
+    # VEMS inkorg det är: tenant-id (uuid). Kopplingen är per deployment, men
+    # inkorgen tillhör EN kund — utan det här fältet hade varje tenant i
+    # miljön kunnat skanna samma inkorg. Riktiga leverantörer (gmail,
+    # microsoft) kräver fältet och svarar annars "ingen koppling"; mocken
+    # gäller alla tenants när fältet är tomt (den bär bara påhittade mejl).
+    kvitto_mejl_tenant: str = ""
+    kvitto_oauth_client_id: str = ""
+    kvitto_oauth_client_secret: str = ""
+    kvitto_oauth_refresh_token: str = ""
+    # "auto" = modellen när nyckel finns; "deterministisk" tvingar regexläsaren
+    # (kvitton/tolkning.py) — testsvitens och den lokala stackens läge.
+    kvitto_tolkning: str = "auto"
+
     # Publik bas-URL för länkar som hamnar i utgående mejl (idag bara
     # avregistreringslänken). MÅSTE peka på Next-appen, inte på det här API:t —
     # det är Next som renderar /avregistrera/<token>.

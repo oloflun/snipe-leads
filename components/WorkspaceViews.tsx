@@ -121,7 +121,7 @@ export function LeadsView({
   return (
     <PageShell
       title="Skräddarsydda leads efter din målgrupp och produkt."
-      description="Beskriv er målgrupp och produkt — agenterna letar fram bolagen som matchar."
+      description="Beskriv er målgrupp och produkt — Iris letar fram bolagen som matchar."
     >
       {/* Kör Agent-bannern kommer som SERVERRENDERAD prop från dispatchern
           (WorkspaceSection): den här filen är "use client", och bannern
@@ -139,7 +139,7 @@ export function CompaniesView({ demo = false }: Readonly<{ demo?: boolean }>) {
     <PageShell
       kicker="Företag"
       title="Företagsintelligens, källor och säljvinklar i samma vy."
-      description="Bolagen agenten hittat åt dig, med signalen som motiverade poängen."
+      description="Bolagen Iris hittat åt dig, med signalen som motiverade poängen."
     >
       <Bolagsregister demo={demo} />
     </PageShell>
@@ -172,7 +172,7 @@ export function ContactsView({ demo = false }: Readonly<{ demo?: boolean }>) {
     <PageShell
       kicker="Kontakter"
       title="Personerna bakom bolagen."
-      description="Kontaktpersonen agenten hittat per bolag, och var prospektet står."
+      description="Kontaktpersonen Iris hittat per bolag, och var prospektet står."
     >
       <Kontakter demo={demo} />
     </PageShell>
