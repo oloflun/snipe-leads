@@ -103,7 +103,7 @@ export default function Sida() {
             isTest
             rubrik={
               <>
-                <h2 className="font-display text-2xl tracking-[-0.02em]">Leads-agenten</h2>
+                <h2 className="font-display text-2xl tracking-[-0.02em]">Iris, leadsagenten</h2>
                 <p className="mt-2 max-w-[65ch] text-[15px] text-mineral">
                   Kör research över prospekten. Lämna ett fält tomt för att använda arbetsytans
                   sparade värde.

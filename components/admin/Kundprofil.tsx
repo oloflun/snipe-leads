@@ -104,7 +104,7 @@ const FALT: Falt[] = [
     nyckel: "affarskontext",
     rubrik: "Affärskontext",
     hjalp:
-      "Vad kunden säljer och till vem. Under 120 tecken vägrar leads-agenten starta en körning. En tom beskrivning ger generisk AI-text.",
+      "Vad kunden säljer och till vem. Under 120 tecken vägrar Iris starta en körning. En tom beskrivning ger generisk AI-text.",
     position: "user (opålitligt innehåll)",
     rader: 10,
     max: 20_000,

@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { Badge, SkeletonRows, btnLiten, btnPrimary } from "@/components/ui";
 import { BAS, type KoPost, type Prospekt } from "@/lib/api";
 import { felmeddelande, readJson } from "@/lib/http/json";
+import { statusEtikett } from "@/lib/iris";
 import { cn } from "@/lib/utils";
 
 /**
@@ -49,11 +50,11 @@ export function OversiktVy() {
     <div className="space-y-10">
       <PageHeader
         rubrik="Översikt"
-        beskrivning="Bolagen agenten hittat, hur många som kvalificerat sig, och utkasten som väntar på ditt godkännande. Ingenting skickas utan att du sagt ja."
+        beskrivning="Bolagen Iris hittat, hur många som kvalificerat sig, och utkasten som väntar på ditt godkännande. Ingenting skickas utan att du sagt ja."
         actions={
           <Link href="/agenten" className={cn(btnPrimary, btnLiten)}>
             <Play className="h-4 w-4" aria-hidden />
-            Kör agenten
+            Kör Iris
           </Link>
         }
       />
@@ -113,14 +114,14 @@ export function OversiktVy() {
         ) : senaste.length === 0 ? (
           <div className="mt-4 border-y border-ink/15 py-10 text-center">
             <p className="font-display text-[1.375rem] text-ink">
-              Inga prospekt ännu — låt agenten leta.
+              Inga prospekt ännu. Låt Iris leta.
             </p>
             <p className="mx-auto mt-2 max-w-[52ch] text-[0.9375rem] leading-6 text-ink/60">
-              Agenten söker fram bolag som matchar din målgrupp, gör research
+              Iris söker fram bolag som matchar din målgrupp, gör research
               och skriver utkast som du granskar innan något skickas.
             </p>
             <Link href="/agenten" className={cn(btnPrimary, "mt-5")}>
-              Kör agenten
+              Kör Iris
               <ArrowRight className="h-4 w-4" aria-hidden />
             </Link>
           </div>
@@ -128,7 +129,7 @@ export function OversiktVy() {
           <div className="mt-4 divide-y divide-ink/12 border-y border-ink/15">
             {senaste.map((rad) => (
               <div key={rad.id} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 py-3">
-                <span className="min-w-0 flex-1 truncate text-[0.9375rem] font-medium">
+                <span className="min-w-0 flex-1 basis-full break-words text-[0.9375rem] font-medium sm:basis-auto sm:truncate">
                   {rad.company_name}
                 </span>
                 {rad.ort ? <span className="text-[0.875rem] text-ink/50">{rad.ort}</span> : null}
@@ -136,7 +137,7 @@ export function OversiktVy() {
                   {typeof rad.icp_fit === "number" ? `${Math.round(rad.icp_fit * 100)} %` : "—"}
                 </span>
                 <Badge tone={rad.qualified ? "good" : "neutral"}>
-                  {rad.qualified ? "Kvalificerad" : rad.status || "Ny"}
+                  {rad.qualified ? "Kvalificerad" : (rad.status && statusEtikett(rad.status)) || "Ny"}
                 </Badge>
               </div>
             ))}

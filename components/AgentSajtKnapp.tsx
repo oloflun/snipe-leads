@@ -25,7 +25,7 @@ export function AgentSajtKnapp({ agent }: Readonly<{ agent: AgentSajt }>) {
         <p className="mt-1 text-[0.9375rem] leading-6 text-ink/60">{text.beskrivning}</p>
       </div>
       <a href={`/api/agentsajt/${agent}/sso`} className={cn(btnPrimary, "shrink-0")}>
-        Kör Agent
+        {text.knapp}
         <ArrowUpRight className="h-4 w-4" aria-hidden />
       </a>
     </div>

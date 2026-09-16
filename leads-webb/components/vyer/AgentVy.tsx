@@ -3,14 +3,16 @@
 import { Loader2, Play } from "lucide-react";
 import Link from "next/link";
 import { useRef, useState } from "react";
+import { IrisGranser } from "@/components/IrisGranser";
 import { PageHeader } from "@/components/PageHeader";
 import { btnPrimary } from "@/components/ui";
+import { IRIS } from "@/lib/iris";
 import { BAS, type Jobb } from "@/lib/api";
 import { HttpJsonError, felmeddelande, readJson } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
 
 /**
- * Kör agenten — en körning från knapp till klart, med ärlig fasrapport.
+ * Kör Iris — en körning från knapp till klart, med ärlig fasrapport.
  *
  * POST /leads/runs/batch svarar 202 med sökjobbet; när det är klart ligger
  * research-jobben i resultatet (samma kedja som huvudappens LeadsRunForm).
@@ -56,7 +58,7 @@ export function AgentVy() {
         body: JSON.stringify({ scope: "research_and_draft", limit: antal })
       }).then((s) => readJson<{ jobs: Array<{ job_id: string }> }>(s));
       const sokjobb = start?.jobs?.[0]?.job_id;
-      if (!sokjobb) throw new Error("Körningen startade inte — inget jobb kom tillbaka.");
+      if (!sokjobb) throw new Error("Körningen startade inte. Inget jobb kom tillbaka.");
 
       const sokKlart = await pollaTillsKlart(sokjobb);
       const researchJobb: Array<{ job_id: string }> = Array.isArray(
@@ -95,8 +97,8 @@ export function AgentVy() {
   return (
     <div className="space-y-10">
       <PageHeader
-        rubrik="Kör agenten"
-        beskrivning="Agenten söker fram bolag som matchar din målgrupp, gör research på varje bolag och skriver utkast till de som kvalificerar sig. Utkasten hamnar i granskningskön — ingenting skickas utan ditt ja."
+        rubrik="Kör Iris"
+        beskrivning={IRIS.persona}
       />
 
       <section className="max-w-[38rem]">
@@ -128,7 +130,7 @@ export function AgentVy() {
             ) : (
               <Play className="h-4 w-4" aria-hidden />
             )}
-            Kör Agent
+            Kör Iris
           </button>
 
           <div className="mt-4 min-h-[1.5rem] text-[0.9375rem] leading-6" role="status">
@@ -140,7 +142,7 @@ export function AgentVy() {
               </span>
             ) : fas.lage === "klart" ? (
               <span className="text-moss">
-                Klart — {fas.antal} bolag researchade. Se resultatet under{" "}
+                Klart: {fas.antal} bolag researchade. Se resultatet under{" "}
                 <Link href="/prospekt" className="focus-ring rounded-[4px] underline decoration-ochre/50 underline-offset-4">
                   Prospekt
                 </Link>{" "}
@@ -157,20 +159,20 @@ export function AgentVy() {
         </div>
       </section>
 
-      <section aria-label="Så arbetar agenten">
-        <h2 className="font-display text-[1.25rem]">Så arbetar agenten</h2>
+      <section aria-label="Så arbetar Iris">
+        <h2 className="font-display text-[1.25rem]">Så arbetar Iris</h2>
         <ol className="mt-3 grid gap-y-5 border-y border-ink/15 py-5 sm:grid-cols-3 sm:gap-x-8">
           {[
             {
               rubrik: "Söker",
-              text: "Bolag som matchar målgruppen i dina inställningar — bransch, storlek och geografi. Rekryterings- och bemanningsannonser sorteras bort."
+              text: "Bolag som matchar målgruppen i dina inställningar: bransch, storlek och geografi. Rekryterings- och bemanningsannonser sorteras bort."
             },
             {
               rubrik: "Researchar",
-              text: "Varje bolag bedöms mot din målgrupp med källor som går att kontrollera. Bolag som inte håller underkänns med skäl — de får aldrig utkast."
+              text: "Varje bolag bedöms mot din målgrupp med källor som går att kontrollera. Bolag som inte håller underkänns med skäl och får aldrig utkast."
             },
             {
-              rubrik: "Skriver — du godkänner",
+              rubrik: "Skriver, du godkänner",
               text: "Kvalificerade bolag med kontaktväg får ett utkast i granskningskön. Ingenting skickas förrän du sagt ja, och grindarna körs en gång till vid utskick."
             }
           ].map((steg, i) => (
@@ -182,6 +184,8 @@ export function AgentVy() {
           ))}
         </ol>
       </section>
+
+      <IrisGranser />
     </div>
   );
 }
