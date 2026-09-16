@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useArbetsvag } from "@/components/AppShell";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
-import { Badge, SkeletonRows, btnSecondary } from "@/components/ui";
+import { Badge, Rad, Radlista, SkeletonRows, btnSecondary } from "@/components/ui";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { createDemoSupportApi } from "@/lib/demo/support-inbox";
 import { readJsonBody } from "@/lib/http/json";
@@ -245,10 +245,13 @@ function Stapellista({
   // att färga varje stapel hade gjort accenten till en tapet i stället för till
   // information — uppmätt i skärmdump: fem lika stora ochre staplar i rad.
   const harLedare = störst > Math.min(...varden);
+  // Radlista bär hårlinjerna; varje rad har SAMMA deklarerade spann
+  // (etikett 6, stapel 4, tal 2), så kolumnerna står stilla oavsett
+  // hur lång en etikett är.
   return (
-    <ul className="divide-y divide-ink/10 border-y border-ink/15">
+    <Radlista>
       {rader.map(([etikett, värde]) => (
-        <li key={etikett} className="grid grid-cols-12 items-center gap-x-4 py-3">
+        <Rad key={etikett} className="grid grid-cols-12 items-center gap-x-4">
           <span className="col-span-6 truncate text-[0.875rem]" title={etikett}>
             {etikett}
           </span>
@@ -266,9 +269,9 @@ function Stapellista({
           <span className="num col-span-2 text-right text-[0.875rem] tabular-nums text-ink/70">
             {värde}
           </span>
-        </li>
+        </Rad>
       ))}
-    </ul>
+    </Radlista>
   );
 }
 
@@ -323,6 +326,9 @@ function AttGora({
   }
   return (
     <div className="rounded-card bg-ink p-5 text-paper md:p-6">
+      {/* Samma spannlogik som Stapellista, i mörk färgvärld: rubrik/underrad
+          8 spann, meta 4, deklarerat på VARJE rad — metakolumnen ritas även
+          tom, så den står på samma plats oavsett om en rad har meta. */}
       <ul className="divide-y divide-paper/15">
         {rader.slice(0, 5).map((rad) => (
           <li key={rad.id} className="grid grid-cols-12 gap-x-4 py-3 first:pt-0 last:pb-0">
@@ -330,11 +336,9 @@ function AttGora({
               <p className="truncate text-[0.9375rem] font-semibold">{rad.rubrik}</p>
               <p className="mt-0.5 truncate text-[0.8125rem] text-paper/60">{rad.under}</p>
             </div>
-            {rad.meta ? (
-              <p className="col-span-12 mt-1 text-[0.8125rem] text-paper/55 sm:col-span-4 sm:mt-0 sm:text-right">
-                {rad.meta}
-              </p>
-            ) : null}
+            <p className="col-span-12 mt-1 truncate text-[0.8125rem] text-paper/55 sm:col-span-4 sm:mt-0 sm:text-right">
+              {rad.meta ?? ""}
+            </p>
           </li>
         ))}
       </ul>

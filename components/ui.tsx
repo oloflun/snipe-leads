@@ -130,3 +130,132 @@ export function LoadingToast({ label }: Readonly<{ label: string }>) {
 export function localizedList(items: Localized[], text: (value: Localized) => string) {
   return items.map((item) => text(item));
 }
+
+/**
+ * EN tabell för varje listyta. Före 2026-09-15 fanns fem rad-idiom sida vid
+ * sida — riktiga tabeller med autobredd, grid-cols-12-rader, flex-rader med
+ * justify-between, handmätta fasta flexbredder och kort-i-lista — och ingen av
+ * de riktiga tabellerna använde `table-fixed` eller `<colgroup>`, så kolumnerna
+ * hoppade med innehållet mellan sidor och laddningstillstånd.
+ *
+ * `Tabell` är den gemensamma formen: fast layout (kolumnbredderna deklareras,
+ * inte förhandlas), kicker-huvuden i mineral som i Bolagsregister, hårlinjer
+ * mellan raderna och `tnum` på talkolumner via `Cell hoger`.
+ *
+ * Bredderna anges i procent och ska summera till 100. `table-fixed` betyder
+ * att webbläsaren ALDRIG jämkar: en kolumn utan bredd delar på det som blir
+ * över, och innehåll som inte ryms bryts eller trunkeras i cellen i stället
+ * för att trycka grannkolumnen ur läge.
+ */
+export type TabellKolumn = {
+  rubrik: React.ReactNode;
+  /** Fast bredd, t.ex. "24%". Utelämnad = dela på resten. */
+  bredd?: string;
+  /** Högerställd kolumn — tal och status. Sätter också tnum på huvudet. */
+  hoger?: boolean;
+  /** Rubriken finns för skärmläsare men ritas inte (t.ex. kryssrutekolumn). */
+  srOnly?: boolean;
+};
+
+export function Tabell({
+  kolumner,
+  minBredd = 720,
+  ariaLabel,
+  children
+}: Readonly<{
+  kolumner: TabellKolumn[];
+  /** Under den här bredden (px) scrollar tabellen internt i stället för att klämmas. */
+  minBredd?: number;
+  ariaLabel?: string;
+  children: React.ReactNode;
+}>) {
+  return (
+    <div className="thin-scrollbar overflow-x-auto">
+      <table
+        aria-label={ariaLabel}
+        className="w-full table-fixed border-collapse text-[15px]"
+        style={{ minWidth: `${minBredd}px` }}
+      >
+        <colgroup>
+          {kolumner.map((kolumn, i) => (
+            <col key={i} style={kolumn.bredd ? { width: kolumn.bredd } : undefined} />
+          ))}
+        </colgroup>
+        <thead>
+          <tr className="border-b border-ink/15 text-left">
+            {kolumner.map((kolumn, i) => (
+              <th
+                key={i}
+                scope="col"
+                // text-left OCH text-right får aldrig stå på samma element:
+                // cn() är ett rent join utan tailwind-merge, så det är css-
+                // filens ordning som avgör vilken som vinner — se btnLiten.
+                className={cn(
+                  "kicker py-3 pr-4 font-medium text-mineral last:pr-0",
+                  kolumn.hoger ? "text-right" : "text-left"
+                )}
+              >
+                {kolumn.srOnly ? <span className="sr-only">{kolumn.rubrik}</span> : kolumn.rubrik}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-ink/12 border-b border-ink/15">{children}</tbody>
+      </table>
+    </div>
+  );
+}
+
+/** Radklassen för Tabell-rader — hover hör till rader man kan agera på. */
+export const tabellRad = "transition-colors hover:bg-paper2/60";
+
+/**
+ * En cell i Tabell. `hoger` ger högerställning och tabulära siffror; `titel`
+ * markerar radens namnkolumn (semantiskt ett radhuvud). Trunkering är
+ * medveten: i en fast tabell är det cellen som ger med sig, aldrig kolumnen.
+ */
+export function Cell({
+  hoger = false,
+  titel = false,
+  className,
+  children
+}: Readonly<{ hoger?: boolean; titel?: boolean; className?: string; children: React.ReactNode }>) {
+  const Element = titel ? "th" : "td";
+  return (
+    <Element
+      scope={titel ? "row" : undefined}
+      className={cn(
+        "py-4 pr-4 align-top font-normal last:pr-0",
+        // Samma regel som i huvudet: en av dem, aldrig båda.
+        hoger ? "num text-right" : "text-left",
+        className
+      )}
+    >
+      {children}
+    </Element>
+  );
+}
+
+/**
+ * Fasta rader för listor som inte är tabeller — poster med brödtext eller
+ * blandat innehåll där kolumner vore en lögn. Samma hårlinjespråk som Tabell,
+ * så de två kan stå på samma sida utan att se ut som två system.
+ */
+export function Radlista({
+  ariaLabel,
+  children,
+  className
+}: Readonly<{ ariaLabel?: string; children: React.ReactNode; className?: string }>) {
+  return (
+    <ul aria-label={ariaLabel} className={cn("divide-y divide-ink/12 border-y border-ink/15", className)}>
+      {children}
+    </ul>
+  );
+}
+
+export function Rad({
+  className,
+  children
+}: Readonly<{ className?: string; children: React.ReactNode }>) {
+  return <li className={cn("py-4", className)}>{children}</li>;
+}

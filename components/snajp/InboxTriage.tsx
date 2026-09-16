@@ -151,7 +151,7 @@ export function InboxTriage() {
               <span className="col-span-12 truncate text-[0.8125rem] text-ink/50 md:col-span-3">
                 {email.from}
               </span>
-              <span className="col-span-12 mt-1 text-sm font-semibold md:col-span-3 md:mt-0">
+              <span className="col-span-12 mt-1 truncate text-sm font-semibold md:col-span-3 md:mt-0">
                 {email.subject}
               </span>
               <span className="col-span-12 mt-1 truncate text-sm text-ink/55 md:col-span-6 md:mt-0">

@@ -4,6 +4,7 @@ import { RefreshCw, Send } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
+import { DemoKorning } from "@/components/leads/DemoKorning";
 import type { EmailStudioData } from "@/lib/data/emails";
 import { btnPrimary, btnSecondary } from "@/components/ui";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
@@ -365,22 +366,14 @@ export function LeadsRunForm({
       </div>
 
       {/* På demoytan finns ingen session, och /api/snajp-support/* svarar 401
-          med flit (requireSnajpTenant härleder kunden ur sessionen). Att visa
-          en knapp som alltid svarar "Du måste vara inloggad" är sämre än att
-          säga det innan den trycks — och att fejka ett körresultat vore värst
-          av allt: hela poängen med vyn är att den visar vad agenten FAKTISKT
-          gjorde. */}
+          med flit (requireSnajpTenant härleder kunden ur sessionen). Tidigare
+          stod här bara en logga-in-uppmaning: att fejka ett körresultat som
+          ser körningsäkta ut vore värst av allt. Sedan 2026-09-15 kan demon
+          ändå köras — som en MÄRKT exempelkörning (DemoKorning), samma
+          mönster som bokföringens förskrivna svar. Märkningen är det som gör
+          det ärligt; se lib/demo/leads-korning.ts. */}
       {demo ? (
-        <div className="mt-6 rounded-card bg-paper2/60 p-5">
-          <p className="max-w-[65ch] text-[15px] leading-7 text-ink/70">
-            Formuläret är det riktiga. En körning kostar LLM-anrop mot er egen
-            målgrupp och kräver därför ett konto — här visar vi vilka reglagen är,
-            inte ett påhittat resultat.
-          </p>
-          <Link href="/login" className={cn(btnPrimary, "mt-4")}>
-            Logga in för att köra
-          </Link>
-        </div>
+        <DemoKorning />
       ) : (
         <button type="button" onClick={() => void kör()} disabled={busy} className={cn(btnPrimary, "mt-6")}>
           {busy ? "Startar…" : isTest ? "Starta testkörning" : "Starta körning"}

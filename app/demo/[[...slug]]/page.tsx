@@ -5,7 +5,7 @@ import { StartView } from "@/components/dashboard/StartView";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { CrmDemo } from "@/components/crm/CrmDemo";
 import { BokforingDemo } from "@/components/bookkeeping/BokforingDemo";
-import { Dashboard as SupportDashboard } from "@/components/snajp/Dashboard";
+import { DemoSupportYta } from "@/components/snajp/DemoSupportYta";
 import { LeadsControls } from "@/components/leads/LeadsControls";
 import { SupportRegler } from "@/components/settings/SupportRegler";
 import {
@@ -136,8 +136,8 @@ function renderSektion(sektion: string | undefined): React.ReactNode | null {
       return (
         <PageShell
           kicker="Bokföring"
-          title="Ett kvitto, hela vägen till periodrapport"
-          description="Avläsningen, verifikatet och summorna för ett påhittat underlag. Ingen modell körs på den här sidan."
+          title="Ett underlag, hela vägen till periodrapport"
+          description="Välj ett underlag och följ avläsningen, verifikatet och summorna. Tre påhittade underlag, tre olika konteringsvägar. Ingen modell körs på den här sidan."
         >
           <BokforingDemo />
         </PageShell>
@@ -145,7 +145,16 @@ function renderSektion(sektion: string | undefined): React.ReactNode | null {
     case "regler":
       return <ReglerDemo />;
     case "support":
-      return <SupportDashboard demo />;
+      // Samma skal som /dashboard/support (SupportSection i WorkspaceSection):
+      // utan PageShell stod inkorgen ensam i viewporten, utan rail och utan
+      // väg tillbaka — den enda demosektionen med en helt egen chrome.
+      // DemoSupportYta lägger kundchatten (förladdade svar) som flik bredvid
+      // inkorgen, samma flikmönster som arbetsytans SupportWorkspaceTabs.
+      return (
+        <PageShell title="Inkorg och utkast">
+          <DemoSupportYta />
+        </PageShell>
+      );
     default:
       return null;
   }

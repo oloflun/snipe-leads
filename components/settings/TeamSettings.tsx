@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { Rad, Radlista } from "@/components/ui";
 import { inviteMember, listTeam, revokeInvite, type TeamMember } from "@/lib/actions/team";
 
 /**
@@ -84,14 +85,18 @@ export function TeamSettings() {
             Du är ensam i arbetsytan. Bjud in någon nedan.
           </p>
         ) : (
-          <ul className="mt-5">
+          <Radlista ariaLabel="Personer med åtkomst" className="mt-5">
+            {/* Fast schema: namn/e-post | roll | åtgärd. Åtgärdsspalten har fast
+                bredd så att "Ta bort" står på samma plats på varje rad — och
+                lämnar ett tomt fält på rader utan åtgärd i stället för att
+                rollen glider ut i kanten. */}
             {members.map((member) => (
-              <li
+              <Rad
                 key={member.id}
-                className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-6 gap-y-2 border-t border-ink/15 py-4"
+                className="grid grid-cols-[minmax(0,1fr)_auto_4.5rem] items-baseline gap-x-6"
               >
                 <span className="min-w-0 break-words text-[15px]">{member.label}</span>
-                <span className="kicker shrink-0 text-mineral">
+                <span className="kicker justify-self-end text-mineral">
                   {member.role === "owner" ? "Ägare" : "Medlem"}
                   {member.status === "invited" ? " · inbjuden" : null}
                 </span>
@@ -100,14 +105,16 @@ export function TeamSettings() {
                     type="button"
                     disabled={isPending}
                     onClick={() => handleRevoke(member.id)}
-                    className="shrink-0 text-[13px] text-mineral underline underline-offset-4 transition hover:text-danger disabled:opacity-60"
+                    className="justify-self-end text-[13px] text-mineral underline underline-offset-4 transition hover:text-danger disabled:opacity-60"
                   >
                     Ta bort
                   </button>
-                ) : null}
-              </li>
+                ) : (
+                  <span aria-hidden />
+                )}
+              </Rad>
             ))}
-          </ul>
+          </Radlista>
         )}
       </div>
 

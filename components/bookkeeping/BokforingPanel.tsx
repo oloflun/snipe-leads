@@ -4,11 +4,14 @@ import { AlertTriangle, Download, Forward, Loader2, Scale, Trash2, Upload } from
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Badge,
+  Cell,
   EmptyState,
   SkeletonRows,
+  Tabell,
   btnLiten,
   btnPrimary,
-  btnSecondary
+  btnSecondary,
+  tabellRad
 } from "@/components/ui";
 import { HttpJsonError, felmeddelande, readJson } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
@@ -528,21 +531,36 @@ export function BokforingPanel() {
             ))}
           </ul>
 
+          {/* Fast Tabell i stället för handmätta flexbredder: kolumnerna står
+              stilla oavsett hur lång en transaktionstext är. Se Tabell i
+              components/ui.tsx. */}
           {avstamning.saknar_underlag.length ? (
             <div className="mt-4">
               <p className="kicker text-mineral">Banktransaktioner utan underlag</p>
-              <div className="mt-2 divide-y divide-ink/15 border-y border-ink/15">
-                {avstamning.saknar_underlag.map((rad, i) => (
-                  <div key={i} className="flex flex-wrap items-baseline gap-x-4 py-2">
-                    <span className="w-[6.5rem] shrink-0 text-[0.875rem] tabular-nums text-ink/62">
-                      {rad.datum}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate text-[0.875rem]">{rad.text || "—"}</span>
-                    <span className="w-[7.5rem] text-right text-[0.875rem] font-medium tabular-nums">
-                      {kronor(rad.belopp)}
-                    </span>
-                  </div>
-                ))}
+              <div className="mt-2">
+                <Tabell
+                  ariaLabel="Banktransaktioner utan underlag"
+                  minBredd={480}
+                  kolumner={[
+                    { rubrik: "Datum", bredd: "20%" },
+                    { rubrik: "Text", bredd: "55%" },
+                    { rubrik: "Belopp", bredd: "25%", hoger: true }
+                  ]}
+                >
+                  {avstamning.saknar_underlag.map((rad, i) => (
+                    <tr key={i} className={tabellRad}>
+                      <Cell>
+                        <span className="text-[0.875rem] tabular-nums text-ink/62">{rad.datum}</span>
+                      </Cell>
+                      <Cell>
+                        <span className="block truncate text-[0.875rem]">{rad.text || "—"}</span>
+                      </Cell>
+                      <Cell hoger>
+                        <span className="text-[0.875rem] font-medium">{kronor(rad.belopp)}</span>
+                      </Cell>
+                    </tr>
+                  ))}
+                </Tabell>
               </div>
             </div>
           ) : null}
@@ -550,20 +568,32 @@ export function BokforingPanel() {
           {avstamning.saknar_banktransaktion.length ? (
             <div className="mt-4">
               <p className="kicker text-mineral">Underlag utan banktransaktion</p>
-              <div className="mt-2 divide-y divide-ink/15 border-y border-ink/15">
-                {avstamning.saknar_banktransaktion.map((rad, i) => (
-                  <div key={i} className="flex flex-wrap items-baseline gap-x-4 py-2">
-                    <span className="w-[6.5rem] shrink-0 text-[0.875rem] tabular-nums text-ink/62">
-                      {rad.datum}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate text-[0.875rem]">
-                      {rad.motpart || "—"}
-                    </span>
-                    <span className="w-[7.5rem] text-right text-[0.875rem] font-medium tabular-nums">
-                      {kronor(rad.brutto)}
-                    </span>
-                  </div>
-                ))}
+              <div className="mt-2">
+                <Tabell
+                  ariaLabel="Underlag utan banktransaktion"
+                  minBredd={480}
+                  kolumner={[
+                    { rubrik: "Datum", bredd: "20%" },
+                    { rubrik: "Motpart", bredd: "55%" },
+                    { rubrik: "Belopp", bredd: "25%", hoger: true }
+                  ]}
+                >
+                  {avstamning.saknar_banktransaktion.map((rad, i) => (
+                    <tr key={i} className={tabellRad}>
+                      <Cell>
+                        <span className="text-[0.875rem] tabular-nums text-ink/62">{rad.datum}</span>
+                      </Cell>
+                      <Cell>
+                        <span className="block truncate text-[0.875rem]">
+                          {rad.motpart || "—"}
+                        </span>
+                      </Cell>
+                      <Cell hoger>
+                        <span className="text-[0.875rem] font-medium">{kronor(rad.brutto)}</span>
+                      </Cell>
+                    </tr>
+                  ))}
+                </Tabell>
               </div>
             </div>
           ) : null}
@@ -690,31 +720,51 @@ export function BokforingPanel() {
             />
           </div>
         ) : (
-          <div className="mt-4 divide-y divide-ink/15 border-y border-ink/15">
-            {underlag.map((rad) => (
-              <div key={rad.id} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 py-3">
-                <span className="w-[6.5rem] shrink-0 text-[0.9375rem] tabular-nums text-ink/62">
-                  {rad.datum ?? "—"}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-[0.9375rem]">
-                  {rad.motpart || rad.filnamn}
-                </span>
-                <span className="text-[0.9375rem] text-ink/62">{procent(rad.momssats)}</span>
-                <span className="w-[7.5rem] text-right text-[0.9375rem] font-medium tabular-nums">
-                  {kronor(rad.brutto)}
-                </span>
-                {/* Obetalt märks ut, betalt gör det inte: det obetalda är det
-                    som fortfarande kräver en handling av kunden, och en etikett
-                    på varje rad hade slutat betyda något. */}
-                {rad.betalstatus === "obetald" ? <Badge tone="warn">Obetald</Badge> : null}
-                <Badge tone={rad.status === "granska_manuellt" ? "warn" : "good"}>
-                  {rad.status === "granska_manuellt" ? "Granska" : "Klar"}
-                </Badge>
-                {rad.anmarkning ? (
-                  <p className="w-full text-[0.875rem] text-ink/55">{rad.anmarkning}</p>
-                ) : null}
-              </div>
-            ))}
+          /* Fast Tabell i stället för handmätta flexbredder: samma kolumn på
+             samma plats på varje rad. Anmärkningen bor som andra rad i
+             motpartscellen, inte som egen fullbreddsrad. */
+          <div className="mt-4">
+            <Tabell
+              ariaLabel="Dokument i perioden"
+              kolumner={[
+                { rubrik: "Datum", bredd: "14%" },
+                { rubrik: "Motpart", bredd: "38%" },
+                { rubrik: "Moms", bredd: "10%", hoger: true },
+                { rubrik: "Belopp", bredd: "18%", hoger: true },
+                { rubrik: "Status", bredd: "20%", hoger: true }
+              ]}
+            >
+              {underlag.map((rad) => (
+                <tr key={rad.id} className={tabellRad}>
+                  <Cell>
+                    <span className="tabular-nums text-ink/62">{rad.datum ?? "—"}</span>
+                  </Cell>
+                  <Cell titel>
+                    <p className="truncate">{rad.motpart || rad.filnamn}</p>
+                    {rad.anmarkning ? (
+                      <p className="mt-1 text-[0.875rem] text-ink/55">{rad.anmarkning}</p>
+                    ) : null}
+                  </Cell>
+                  <Cell hoger>
+                    <span className="text-ink/62">{procent(rad.momssats)}</span>
+                  </Cell>
+                  <Cell hoger>
+                    <span className="font-medium">{kronor(rad.brutto)}</span>
+                  </Cell>
+                  <Cell hoger>
+                    <span className="flex flex-wrap items-center justify-end gap-1.5">
+                      {/* Obetalt märks ut, betalt gör det inte: det obetalda är det
+                          som fortfarande kräver en handling av kunden, och en etikett
+                          på varje rad hade slutat betyda något. */}
+                      {rad.betalstatus === "obetald" ? <Badge tone="warn">Obetald</Badge> : null}
+                      <Badge tone={rad.status === "granska_manuellt" ? "warn" : "good"}>
+                        {rad.status === "granska_manuellt" ? "Granska" : "Klar"}
+                      </Badge>
+                    </span>
+                  </Cell>
+                </tr>
+              ))}
+            </Tabell>
           </div>
         )}
       </section>

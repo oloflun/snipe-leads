@@ -8,6 +8,7 @@ import type { ProductKey } from "@/lib/routes";
 import { productKeys } from "@/lib/routes";
 import { KONTAKT_MEJL, mejlaOss, productCopy, shared } from "@/components/marketing/copy";
 import { imagery, photo, sectionCopy } from "@/components/marketing/copy-sections";
+import { AgentResultat } from "@/components/marketing/AgentResultat";
 import { PricingSection } from "@/components/marketing/PricingSection";
 import { UspSection } from "@/components/marketing/UspSection";
 import { LaddaNerAppen } from "@/components/marketing/LaddaNerAppen";
@@ -392,6 +393,12 @@ export function LandingPhoto({
             <div className="mt-4"><Label>{text(copy.exampleNote)}</Label></div>
           </div>
         </section>
+
+        {/* RESULTATVYN. Direkt efter demon: besökaren har just provat HUR
+            agenten arbetar, det här visar VAD arbetet ger — per agent, med
+            exempeldata inuti produktpanelen och en rad som säger det. Se
+            components/marketing/AgentResultat.tsx för förebilderna. */}
+        <AgentResultat product={product} />
 
         {/* PLACE. Photograph and copy share the row; the image is content here,
             not decoration, so it carries a real alt. */}

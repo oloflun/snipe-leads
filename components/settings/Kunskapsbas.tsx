@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useArbetsvag } from "@/components/AppShell";
 import { hamtaAffarskontext } from "@/lib/actions/affarskontext";
-import { btnPrimary, btnSecondary } from "@/components/ui";
+import { Rad, Radlista, btnPrimary, btnSecondary } from "@/components/ui";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
 
@@ -379,16 +379,16 @@ export function KunskapsbasPanel() {
             det betyder också att den inte kan svara på något förrän det ligger något här.
           </p>
         ) : (
-          <ul className="mt-4 divide-y divide-ink/10">
+          <Radlista ariaLabel="Dokument i kunskapsbasen" className="mt-4">
             {artiklar.map((artikel, index) => (
-              <li key={artikel.id ?? `${artikel.title}-${index}`} className="py-4">
+              <Rad key={artikel.id ?? `${artikel.title}-${index}`}>
                 <p className="text-[15px] font-medium">{artikel.title}</p>
                 <p className="mt-1 line-clamp-2 max-w-[80ch] text-[14px] leading-6 text-ink/60">
                   {artikel.content}
                 </p>
-              </li>
+              </Rad>
             ))}
-          </ul>
+          </Radlista>
         )}
       </section>
     </div>

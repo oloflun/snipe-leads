@@ -629,6 +629,10 @@ export function Dashboard({
               )}
             </div>
           ) : (
+            /* Kolumnfasta rader: ämne/avsändare 6 spann, fack+konfidens 3,
+               status 3 — samma deklarerade spann på varje rad, så status-
+               och fackkolumnerna står på samma plats oavsett textlängd.
+               Raden är fortfarande en hel knapp, markeringen orörd. */
             <div className="divide-y divide-ink/10 overflow-hidden rounded-card bg-paper">
               {emails.map((email) => {
                 const meta = STATUS_META[email.status] ?? STATUS_META.new;
@@ -638,27 +642,22 @@ export function Dashboard({
                     type="button"
                     onClick={() => void openEmail(email.id)}
                     className={cn(
-                      "focus-ring block w-full px-4 py-3.5 text-left transition hover:bg-ochre/5",
+                      "focus-ring grid w-full grid-cols-12 items-start gap-x-3 gap-y-2 px-4 py-3.5 text-left transition hover:bg-ochre/5",
                       selected?.id === email.id ? "bg-ochre/5" : ""
                     )}
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="flex items-center gap-2 truncate text-sm font-semibold">
-                          {email.subject || "(utan ämne)"}
-                          {email.has_image ? <ImageIcon className="h-3.5 w-3.5 shrink-0 text-ink/40" /> : null}
-                          {email.is_test ? <span className="kicker shrink-0 text-mineral">Test</span> : null}
-                        </p>
-                        <p className="mt-0.5 truncate font-mono text-xs text-ink/45">
-                          {email.from_name ? `${email.from_name} · ` : ""}
-                          {email.from_email}
-                        </p>
-                      </div>
-                      <Badge tone={bearbetas && !email.classification ? "neutral" : meta.tone}>
-                        {bearbetas && !email.classification ? "Bearbetas" : meta.label}
-                      </Badge>
+                    <div className="col-span-12 min-w-0 md:col-span-6">
+                      <p className="flex items-center gap-2 truncate text-sm font-semibold">
+                        {email.subject || "(utan ämne)"}
+                        {email.has_image ? <ImageIcon className="h-3.5 w-3.5 shrink-0 text-ink/40" /> : null}
+                        {email.is_test ? <span className="kicker shrink-0 text-mineral">Test</span> : null}
+                      </p>
+                      <p className="mt-0.5 truncate font-mono text-xs text-ink/45">
+                        {email.from_name ? `${email.from_name} · ` : ""}
+                        {email.from_email}
+                      </p>
                     </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <div className="col-span-12 flex min-w-0 flex-wrap items-center gap-2 md:col-span-3">
                       {email.classification ? (
                         <>
                           <Badge tone="neutral">{CATEGORY_LABELS[email.classification.category]}</Badge>
@@ -670,6 +669,11 @@ export function Dashboard({
                       ) : (
                         <Badge tone="neutral">{bearbetas ? "Agenten läser…" : "Obearbetat"}</Badge>
                       )}
+                    </div>
+                    <div className="col-span-12 flex md:col-span-3 md:justify-end">
+                      <Badge tone={bearbetas && !email.classification ? "neutral" : meta.tone}>
+                        {bearbetas && !email.classification ? "Bearbetas" : meta.label}
+                      </Badge>
                     </div>
                   </button>
                 );

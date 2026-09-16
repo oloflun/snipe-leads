@@ -3,6 +3,7 @@
 import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { createDemoSupportApi } from "@/lib/demo/support-inbox";
+import { Rad, Radlista } from "@/components/ui";
 import { readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
 
@@ -114,14 +115,17 @@ export function SupportRegler({ demo = false }: Readonly<{ demo?: boolean }>) {
         ))}
       </dl>
 
-      <div className="divide-y divide-ink/10 border-y border-ink/15">
+      <Radlista ariaLabel="Regler per fack">
+        {/* Fast schema: kategori i vänsterspalten, selecten alltid på samma
+            plats längst till höger. Alla rader delar samma select-bredd
+            eftersom alternativen är samma, så spalten står stilla. */}
         {regler.map((regel) => (
-          <div
+          <Rad
             key={regel.category}
-            className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 py-3.5"
+            className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6"
           >
-            <span className="text-[0.9375rem]">{regel.label}</span>
-            <span className="flex items-center gap-2">
+            <span className="min-w-0 break-words text-[0.9375rem]">{regel.label}</span>
+            <span className="flex items-center gap-2 justify-self-end">
               {sparar === regel.category ? (
                 <Loader2 className="h-4 w-4 animate-spin text-ink/40" aria-hidden />
               ) : null}
@@ -142,9 +146,9 @@ export function SupportRegler({ demo = false }: Readonly<{ demo?: boolean }>) {
                 ))}
               </select>
             </span>
-          </div>
+          </Rad>
         ))}
-      </div>
+      </Radlista>
 
       {klart ? (
         <p role="status" className="text-[0.875rem] text-moss">

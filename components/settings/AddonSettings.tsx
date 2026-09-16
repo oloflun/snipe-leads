@@ -3,6 +3,7 @@
 import { addonCatalog } from "@/lib/addons";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { mejlaOss } from "@/components/marketing/copy";
+import { Rad, Radlista } from "@/components/ui";
 
 /**
  * Tilläggstjänsterna, aktiva och låsta i samma lista.
@@ -25,11 +26,11 @@ export function AddonSettings() {
           andra ord — två meningar om samma sak, synligt bredvid varandra i
           samma vy. Sett i pixlar. */}
 
-      <ul className="grid gap-px">
+      <Radlista ariaLabel="Tilläggstjänster">
         {addonCatalog.map((addon) => {
           const active = addons.includes(addon.key);
           return (
-            <li key={addon.key} className="min-w-0 border-t border-ink/15 py-6">
+            <Rad key={addon.key} className="min-w-0">
               <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
                 <h4 className="min-w-0 break-words text-[17px]">{addon.name}</h4>
                 {/* Ochre bara på avvikelsen — här "ingår", som är det
@@ -61,10 +62,10 @@ export function AddonSettings() {
                   </a>
                 </>
               ) : null}
-            </li>
+            </Rad>
           );
         })}
-      </ul>
+      </Radlista>
     </div>
   );
 }

@@ -1,6 +1,18 @@
 "use client";
 
-import { LogOut } from "lucide-react";
+import {
+  ArrowLeftRight,
+  FileText,
+  LayoutDashboard,
+  ListChecks,
+  LogOut,
+  Mail,
+  MessagesSquare,
+  ScanLine,
+  Settings,
+  Target,
+  Users
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -19,11 +31,21 @@ import type { Scope } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
 /**
- * Operate mode. Same tokens as the marketing surfaces, product cadence: fixed
- * type scale, dense rows, no hero, no reveals, no daylight wash.
+ * Operate mode. Samma tokens som marknadsytorna, produktens kadens: fast
+ * typskala, täta rader, ingen hero, inga reveals.
  *
- * The nav renders only what the workspace is entitled to, so a Support-only
- * customer never learns that Leads exists.
+ * ## Skalet är en vänsterrail sedan 2026-09-15
+ *
+ * Arbetsytan bar tidigare en topp-header med flikrad — en tredje chrome vid
+ * sidan av bokforing-webbs rail och demons band. Nu delar alla produktytor
+ * bokforing-webbs struktur (components/Sidebar.tsx där): en fast ink-rail till
+ * vänster — sajtens EN tonala inversion — med ochre-markör på aktiv flik, och
+ * en smal kontrollrad överst i innehållskolumnen. På smala skärmar krymper
+ * railen till en ikonrail i stället för att gömmas bakom en hamburgare:
+ * menyn ÄR ytans karta.
+ *
+ * Navigationen renderar bara det arbetsytan har rätt till, så en Support-kund
+ * aldrig får veta att Leads finns.
  */
 
 /**
@@ -67,6 +89,36 @@ export const FLIKENS_LAGE: Record<string, Scope> = {
   "/dashboard/support": "support"
 };
 
+/**
+ * Ikon per menypost. Railen bär ikoner även i smalt läge, så varje route som
+ * kan stå i menyn behöver en — okänd route får LayoutDashboard hellre än att
+ * railen renderar ett hål.
+ */
+const RUTT_IKONER: Record<string, typeof LayoutDashboard> = {
+  "/dashboard": LayoutDashboard,
+  "/dashboard/leads": Target,
+  "/dashboard/leads/listor": ListChecks,
+  "/dashboard/support": MessagesSquare,
+  "/dashboard/emails": Mail,
+  "/dashboard/companies": Users,
+  "/dashboard/contacts": Users,
+  "/dashboard/inbox": Mail,
+  "/dashboard/larande": FileText,
+  "/dashboard/analytics": ArrowLeftRight,
+  "/dashboard/assistant": MessagesSquare,
+  "/dashboard/bokforing": ScanLine,
+  "/settings": Settings
+};
+
+const DEMO_IKONER: Record<string, typeof LayoutDashboard> = {
+  "": LayoutDashboard,
+  leads: Target,
+  crm: Users,
+  support: MessagesSquare,
+  emails: Mail,
+  bokforing: ScanLine
+};
+
 function iDemolage(pathname: string): boolean {
   return pathname === "/demo" || pathname.startsWith("/demo/");
 }
@@ -100,6 +152,50 @@ export function useArbetsvag(): (href: string) => string {
     }
     return demoAnpassa(href, pathname);
   };
+}
+
+/**
+ * En rad i railen. Ochre-markör på aktiv flik — DESIGN.md:s "current
+ * selection" — och etikett bara från lg; under det bär `title` namnet.
+ */
+function RailRad({
+  href,
+  etikett,
+  Ikon,
+  aktiv,
+  onClick
+}: Readonly<{
+  href: string;
+  etikett: string;
+  Ikon: typeof LayoutDashboard;
+  aktiv: boolean;
+  onClick?: () => void;
+}>) {
+  return (
+    <Link
+      href={href}
+      onClick={onClick}
+      aria-current={aktiv ? "page" : undefined}
+      title={etikett}
+      className={cn(
+        "focus-ring relative flex h-11 shrink-0 items-center gap-3 rounded-input px-3 text-[0.9375rem] transition-colors",
+        "justify-center lg:justify-start",
+        aktiv
+          ? "bg-paper/10 font-semibold text-paper"
+          : "text-paper/60 hover:bg-paper/5 hover:text-paper"
+      )}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          "absolute bottom-2 left-0 top-2 w-[2px] rounded-full bg-ochre transition-opacity",
+          aktiv ? "opacity-100" : "opacity-0"
+        )}
+      />
+      <Ikon className={cn("h-[18px] w-[18px] shrink-0", aktiv && "text-ochre")} aria-hidden />
+      <span className="hidden truncate lg:inline">{etikett}</span>
+    </Link>
+  );
 }
 
 export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -187,246 +283,252 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   // användaren ur den flik de stod i. Uppmätt i skärmdump, inte antaget.
   //
   // Villkoret läser pathname och inte en prop, för att PageShell anropas från
-  // ~20 vyer som inte vet vilken yta de renderas i — och inte ska behöva veta.
+  // ~20 vyer som inte vet vilken yta den renderas i — och inte ska behöva veta.
   if (pathname === "/admin" || pathname.startsWith("/admin/")) {
     return <>{children}</>;
   }
 
+  const demolage = iDemolage(pathname);
+
+  // Railens huvudlista och bottenlista. Inställningar dras ut ur huvudflödet
+  // och står i en egen grupp vid botten, som i bokforing-webb: den hör till
+  // ramen, inte till arbetet. Demon har ingen inställningspost alls — se
+  // lib/demo/sektioner.ts för varför.
+  const huvudRoutes = navRoutes.filter((route) => route.href !== "/settings");
+  const settingsRoute = navRoutes.find((route) => route.href === "/settings");
+
   return (
     <div className="min-h-screen bg-paper text-ink">
-      {/* Före headern i DOM och med högre z-index: bannern ska ligga ÖVER det
-          klistrade sidhuvudet, inte försvinna bakom det vid scroll. */}
+      {/* Före allt annat i DOM och med högre z-index: bannern ska ligga ÖVER
+          det klistrade innehållet, inte försvinna bakom det vid scroll. */}
       <ImpersonationBanner />
-      <header className="safe-top sticky top-0 z-30 bg-paper/85 backdrop-blur-xl">
-        {/* Tre kolumner: logotyp, flikar, kontroller.
 
-            Ordningen sätts EXPLICIT från md och uppåt (order-1/2/3). I DOM
-            ligger kontrollerna före flikraden — det är rätt på mobil, där
-            flikarna ska hamna på egen rad UNDER allt annat (`order-last`). Utan
-            den explicita ordningen ärvde flikraden sin DOM-plats på desktop och
-            hamnade till HÖGER om kontrollerna. Uppmätt: 773 px luft till
-            vänster, 28 till höger.
-
-            Flikraden låg tidigare på en EGEN rad under logotypen (`order-last`
-            + `w-full`), vänsterställd. Nu ligger den i mitten av samma rad, och
-            `flex-1` på nav-elementet ger lika mycket luft åt båda hållen oavsett
-            hur breda grannkolumnerna är — uppmätt 61 px åt vardera hållet i
-            förhandsvisningen.
-
-            `flex-wrap` är kvar: under ~900px lägger sig flikraden på egen rad
-            igen i stället för att klämmas ihop, vilket är rätt beteende på en
-            telefon.
-
-            KRYMPNINGEN, och varför den ligger som den ligger. Flikraden bar
-            både `min-w-0` och `shrink-0` — motstridigt, och `shrink-0` vann.
-            Följden syntes bara för plattformsadmin, som har en Admin/Demo-växel
-            extra i kontrollkolumnen: när raden blev trång var flikraden den
-            enda som vägrade ge med sig, så kontrollkolumnen klämdes ihop under
-            sitt eget innehåll. Med `justify-end` spiller ett sådant innehåll
-            åt VÄNSTER — rakt in i flikarna. Uppmätt vid 820px: kontrollboxen
-            126px bred med 261px innehåll, 111px överlappning, och ordet "Leads"
-            läsbart bakom Demo-knappen.
-
-            Nu är det tvärtom: kontrollkolumnen är `shrink-0` och behåller alltid
-            sin innehållsbredd, och flikraden krymper och scrollar internt
-            (`min-w-0` + `overflow-x-auto`, som alltid var avsikten). */}
-        <div className="mx-auto flex max-w-[1400px] flex-wrap items-stretch gap-x-6 gap-y-3 px-4 py-3 md:px-6">
-          {/* `flex-1 basis-0` på BÅDA sidokolumnerna. Utan det centreras
-              flikraden bara inom sin egen box, och den boxen ligger inte mitt i
-              headern — logotypen är smalare än kontrollerna, så raden hamnar
-              till höger. Uppmätt före: 561 px luft till vänster, 240 till höger.
-
-              Med lika flex får kolumnerna samma bredd oavsett innehåll, och
-              mitten blir headerns mitt. `min-w-0` låter dem krympa i stället
-              för att tvinga fram horisontell scroll. */}
-          <Link
-            href={demoAnpassa("/dashboard", pathname)}
-            className="focus-ring inline-flex min-w-0 flex-1 basis-0 shrink-0 items-center rounded-input md:order-1"
-          >
-            {/* Större märke, och arbetsytans namn UNDER ordmärket i stället för
-                bredvid. Logotypen fyller därmed höjden av båda de gamla raderna
-                och sitter i vänsterkanten, i stället för att vara en liten rad
-                ovanför flikarna. */}
-            <Logo stor undertext={workspaceName} />
-          </Link>
-
-          {/* Demomarkören sitter bredvid logotypen och inte i ett eget band.
-              Den säger vad ytan ÄR, alltså hör den ihop med märket. */}
-          {iDemolage(pathname) ? (
-            <span className="order-1 hidden shrink-0 items-center self-center rounded-input border border-ochre/40 bg-ochre/10 px-2.5 py-1 text-[13px] font-medium text-ochre lg:inline-flex">
-              Demo · exempeldata
-            </span>
-          ) : null}
-
-          <div className="order-last ml-auto flex shrink-0 flex-1 basis-0 items-center justify-end gap-1.5 md:order-3">
-            {/* Admin / Demo. Ersätter både den gamla /admin-länken längst ut i
-                flikraden och läges­växlaren: läget styrs numera av Leads- och
-                Support-flikarna själva, se nedan. */}
-            <BytKund />
-            <VyVaxel />
-            <button
-              type="button"
-              onClick={toggleLocale}
-              className="focus-ring min-h-11 rounded-input px-3 text-sm font-medium text-ink/55 transition-colors hover:text-ink"
+      <div className="flex min-h-dvh">
+        {/* Vänsterrailen — sajtens EN tonala inversion (DESIGN.md: en per
+            sida). Alltid synlig: på smala skärmar krymper den till en ikonrail
+            i stället för att gömmas bakom en hamburgare, eftersom menyn ÄR
+            ytans karta. Samma struktur som bokforing-webb/components/Sidebar. */}
+        <aside className="rail sticky top-0 flex h-dvh w-[64px] shrink-0 flex-col bg-ink text-paper lg:w-[260px]">
+          <div className="flex items-center gap-3 px-3 pb-4 pt-6 lg:px-5">
+            <Link
+              href={demoAnpassa("/dashboard", pathname)}
+              className="focus-ring rounded-[6px]"
+              aria-label={demolage ? "Snajp demo — till översikten" : "Snajp — till översikten"}
             >
-              {locale === "sv" ? "EN" : "SV"}
-            </button>
-            {/* Samma meny som på kundserviceytan. Den ligger i AppShell och
-                inte per sida: kontaktuppgifter, dataskydd och möjligheten att
-                anmäla ett felaktigt svar är lika relevanta på leads-vyn som på
-                supportvyn, och en meny som bara finns på hälften av ytorna är
-                en meny användaren slutar leta efter. */}
-            <AgentMenu yta="leads" kontext={`dashboard${pathname ? `:${pathname}` : ""}`} />
-
-            {/* Utloggning. Fanns inte alls: signOut() i lib/actions/auth.ts var
-                skriven och fungerande, men ingen komponent anropade den. Enda
-                sättet att byta konto var att rensa cookies för hand.
-                Samma sorts lucka som den saknade /admin-länken — funktionen var
-                byggd, vägen dit var det inte.
-
-                Formulär och inte onClick: signOut är en server action, och ett
-                formulär gör att den fungerar även innan JavaScript laddat. */}
-            {signedIn ? (
-              <form action={signOut}>
-                <button
-                  type="submit"
-                  className="focus-ring inline-flex min-h-11 items-center gap-1.5 rounded-input px-3 text-sm font-medium text-ink/55 transition-colors hover:text-ink"
-                >
-                  <LogOut className="h-4 w-4" aria-hidden />
-                  <span className="hidden sm:inline">Logga ut</span>
-                </button>
-              </form>
-            ) : null}
-
-            {/* Demons två utvägar. De låg förut i sidans eget band, i versal
-                mono — ett redaktionellt grepp från marknadssidorna som inte
-                liknade något annat i appens chrome. Här står de där varje
-                annan kontroll står, i samma register. */}
-            {iDemolage(pathname) ? (
-              <>
-                <Link
-                  href="/"
-                  className="focus-ring hidden min-h-11 items-center rounded-input px-3 text-sm font-medium text-ink/55 transition-colors hover:text-ink sm:inline-flex"
-                >
-                  Till startsidan
-                </Link>
-                <Link
-                  href="/login"
-                  className="focus-ring inline-flex min-h-11 items-center rounded-input px-3 text-sm font-medium text-ink/55 transition-colors hover:text-ink"
-                >
-                  Logga in
-                </Link>
-              </>
-            ) : null}
+              <span className="hidden lg:block">
+                <Logo tone="paper" />
+              </span>
+              <span className="lg:hidden">
+                <Logo tone="paper" compact />
+              </span>
+            </Link>
           </div>
 
-          {/* Flikraden. EN rad, samma plats på arbetsytan som i demon.
+          {/* Arbetsytans namn — samma plats som "Bokföring"-etiketten i
+              bokforing-webbs rail. I demon står demomarkören här i stället:
+              den säger vad ytan ÄR, alltså hör den ihop med märket. */}
+          {demolage ? (
+            <p className="hidden px-5 pb-4 lg:block">
+              <span className="inline-flex items-center rounded-input border border-ochre/40 bg-ochre/10 px-2 py-0.5 text-[0.75rem] font-medium text-ochre">
+                Demo · exempeldata
+              </span>
+            </p>
+          ) : (
+            <p className="hidden truncate px-5 pb-4 text-[0.75rem] font-medium uppercase tracking-[0.14em] text-paper/40 lg:block">
+              {workspaceName}
+            </p>
+          )}
 
-              Demon ritade tidigare sina tolv sektioner själv, i ett eget band
-              OVANFÖR den här headern, och raden nedan undertrycktes för att de
-              annars staplades på varandra. Följden var att /demo hade en helt
-              annan chrome än /dashboard — tre rader mot arbetsytans en.
-
-              Nu matas samma <nav> med demons sektioner i stället (se
-              lib/demo/sektioner.ts). Demon får därmed arbetsytans layout:
-              logotyp till vänster, flikar i mitten, kontroller till höger.
-
-              Det löser också den gamla buggen som motiverade undertryckandet:
-              fyra av arbetsytans fem länkar mappas till /demo/* av
-              `demoAnpassa`, men "Inställningar" har ingen demomotsvarighet och
-              pekade därför på /settings — den riktiga appen, bakom inloggning.
-              Demons egen lista innehåller ingen sådan post, så en besökare utan
-              konto kan inte längre klicka sig till inloggningssidan från en yta
-              vars hela löfte är "ingen inloggning".
-
-              Villkoret läser pathname och inte en prop, av samma skäl som
-              admin-villkoret: PageShell anropas från ett tjugotal vyer som inte
-              vet vilken yta de renderas i, och inte ska behöva veta. */}
           <nav
             aria-label={t("nav.dashboard")}
-            className="thin-scrollbar order-last flex w-full min-w-0 items-center justify-center gap-1 overflow-x-auto px-1 md:order-2 md:w-auto"
+            className="thin-scrollbar flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 lg:px-3"
           >
-            {iDemolage(pathname)
+            {demolage
               ? DEMO_NAV.map(([vag, etikett]) => {
                   const href = demoSektionsVag(vag);
-                  const active = pathname === href;
                   return (
-                    <Link
+                    <RailRad
                       key={href}
                       href={href}
-                      aria-current={active ? "page" : undefined}
-                      className={cn(
-                        "focus-ring inline-flex min-h-11 shrink-0 items-center rounded-input px-3 text-sm font-medium transition-colors",
-                        active ? "bg-paper2 text-ink" : "text-ink/55 hover:bg-paper2/60 hover:text-ink"
-                      )}
-                    >
-                      {etikett}
-                    </Link>
+                      etikett={etikett}
+                      Ikon={DEMO_IKONER[vag] ?? LayoutDashboard}
+                      aktiv={pathname === href}
+                    />
                   );
                 })
-              : navRoutes.map((route) => {
-                  const active =
+              : huvudRoutes.map((route) => {
+                  const aktiv =
                     route.href === "/dashboard"
                       ? pathname === "/dashboard"
                       : pathname === route.href || pathname.startsWith(`${route.href}/`);
                   return (
-                    <Link
+                    <RailRad
                       key={route.href}
                       href={demoAnpassa(route.href, pathname)}
-                      // Läget sätts vid klicket, inte i en effekt på den nya sidan:
-                      // en effekt hade hunnit rendera målsidan i det gamla läget
-                      // först, och bytet hade synts som ett hopp.
+                      etikett={t(route.labelKey)}
+                      Ikon={RUTT_IKONER[route.href] ?? LayoutDashboard}
+                      aktiv={aktiv}
+                      // Läget sätts vid klicket, inte i en effekt på den nya
+                      // sidan: en effekt hade hunnit rendera målsidan i det
+                      // gamla läget först, och bytet hade synts som ett hopp.
                       onClick={() => {
                         const lage = FLIKENS_LAGE[route.href];
                         if (lage && availableScopes.includes(lage)) {
                           setScope(lage);
                         }
                       }}
-                      aria-current={active ? "page" : undefined}
-                      className={cn(
-                        "focus-ring inline-flex min-h-11 shrink-0 items-center rounded-input px-3 text-sm font-medium transition-colors",
-                        active ? "bg-paper2 text-ink" : "text-ink/55 hover:bg-paper2/60 hover:text-ink"
-                      )}
-                    >
-                      {t(route.labelKey)}
-                    </Link>
+                    />
                   );
                 })}
           </nav>
-        </div>
-      </header>
 
-      <main>
-        {/* Demo-banner: en demo-workspace ska veta vad den är och vad som
-            begränsar den. Uppgraderingen till fullt konto (med planval) är
-            uppskjuten — vägen ut är kontakt just nu. */}
-        {isDemo || vy === "demo" ? (
-          <div className="border-b border-ochre/30 bg-ochre/10">
-            <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 md:px-6">
-              <span className="kicker text-ochre">Demo</span>
-              {/* Demovyn bär ingen förklarande rad längre. Märkningen "Demo"
-                  räcker där; texten om demokontot namngav dessutom
-                  exempelbutiken i en yta som visas för kunder. */}
-              {vy === "demo" ? null : (
-                <span className="text-[13px] text-ink/70">
-                  Du testar Snajp med ett begränsat antal körningar.
+          <div className="flex flex-col gap-1 border-t border-paper/10 px-2 py-3 lg:px-3">
+            {settingsRoute && !demolage ? (
+              <RailRad
+                href={settingsRoute.href}
+                etikett={t(settingsRoute.labelKey)}
+                Ikon={Settings}
+                aktiv={pathname === "/settings" || pathname.startsWith("/settings/")}
+              />
+            ) : null}
+            <p className="hidden px-3 pb-1 pt-3 text-[0.75rem] leading-5 text-paper/35 lg:block">
+              {demolage ? "Snajp — prova utan konto" : "En tjänst från Snajp"}
+            </p>
+          </div>
+        </aside>
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          {/* Kontrollraden. Railen bär navigationen; det här är allt som inte
+              är navigation — kontosaker, växlar, språk. De bor i en ljus rad
+              överst i innehållet i stället för på railen: BytKund, VyVaxel och
+              AgentMenu är ritade för ljus yta, och en mörk rail med tre ljusa
+              öar hade varit sämre än två renodlade ytor. */}
+          <header className="safe-top sticky top-0 z-30 border-b border-ink/10 bg-paper/85 backdrop-blur-xl">
+            <div className="flex min-h-[52px] flex-wrap items-center justify-end gap-x-1.5 gap-y-1 px-4 py-1.5 md:px-6">
+              {/* Demomarkören igen, för smala skärmar där railens etikett inte
+                  får plats — utan den vet en mobil besökare inte vad ytan är. */}
+              {demolage ? (
+                <span className="mr-auto inline-flex items-center rounded-input border border-ochre/40 bg-ochre/10 px-2.5 py-1 text-[13px] font-medium text-ochre lg:hidden">
+                  Demo · exempeldata
+                </span>
+              ) : (
+                <span className="mr-auto truncate text-[13px] font-medium text-ink/45 lg:hidden">
+                  {workspaceName}
                 </span>
               )}
-              {vy === "demo" ? null : (
-                /* Samma adress som marknadssidan, via samma konstant. Hårdkodad
-                   här stod den utanför bytet i copy.ts. */
-                <a
-                  href={mejlaOss()}
-                  className="kicker ml-auto text-ochre underline underline-offset-4 hover:text-ink"
-                >
-                  Kontakta oss
-                </a>
-              )}
+
+              {/* Admin / Demo. Ersätter både den gamla /admin-länken längst ut
+                  i flikraden och lägesväxlaren: läget styrs numera av Leads-
+                  och Support-posterna i railen, se ovan. */}
+              <BytKund />
+              <VyVaxel />
+              <button
+                type="button"
+                onClick={toggleLocale}
+                className="focus-ring min-h-11 rounded-input px-3 text-sm font-medium text-ink/55 transition-colors hover:text-ink"
+              >
+                {locale === "sv" ? "EN" : "SV"}
+              </button>
+              {/* Samma meny som på kundserviceytan. Den ligger i AppShell och
+                  inte per sida: kontaktuppgifter, dataskydd och möjligheten att
+                  anmäla ett felaktigt svar är lika relevanta på leads-vyn som
+                  på supportvyn, och en meny som bara finns på hälften av
+                  ytorna är en meny användaren slutar leta efter. */}
+              <AgentMenu yta="leads" kontext={`dashboard${pathname ? `:${pathname}` : ""}`} />
+
+              {/* Utloggning. Formulär och inte onClick: signOut är en server
+                  action, och ett formulär gör att den fungerar även innan
+                  JavaScript laddat. */}
+              {signedIn ? (
+                <form action={signOut}>
+                  <button
+                    type="submit"
+                    className="focus-ring inline-flex min-h-11 items-center gap-1.5 rounded-input px-3 text-sm font-medium text-ink/55 transition-colors hover:text-ink"
+                  >
+                    <LogOut className="h-4 w-4" aria-hidden />
+                    <span className="hidden sm:inline">Logga ut</span>
+                  </button>
+                </form>
+              ) : null}
+
+              {/* Demons två utvägar, i samma register som varje annan
+                  kontroll. */}
+              {demolage ? (
+                <>
+                  <Link
+                    href="/"
+                    className="focus-ring hidden min-h-11 items-center rounded-input px-3 text-sm font-medium text-ink/55 transition-colors hover:text-ink sm:inline-flex"
+                  >
+                    Till startsidan
+                  </Link>
+                  <Link
+                    href="/login"
+                    className="focus-ring inline-flex min-h-11 items-center rounded-input px-3 text-sm font-medium text-ink/55 transition-colors hover:text-ink"
+                  >
+                    Logga in
+                  </Link>
+                </>
+              ) : null}
             </div>
-          </div>
-        ) : null}
-        {children}
-      </main>
+          </header>
+
+          <main className="min-w-0 flex-1">
+            {/* Den öppna demons väg vidare. Demon är första steget från
+                "Prova agenten"-länkarna på marknadssidorna; nästa steg är
+                testkundsläget — den kompletta arbetsytan med egna data, via
+                inloggningslänk. Frågan ställs HÄR, i ytan besökaren redan
+                bestämt sig för att utforska, inte bara på inloggningssidan. */}
+            {demolage ? (
+              <div className="border-b border-ochre/30 bg-ochre/10">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 md:px-6">
+                  <span className="text-[13px] text-ink/70">
+                    Allt här är exempeldata. Klicka fritt, inget skickas.
+                  </span>
+                  {/* Ink-knapp, inte ochre-text: --ochre (L 0.74) ger 2.17:1
+                      mot paper och duger aldrig som 13px text — se DESIGN.md
+                      om uppmätt kontrast. */}
+                  <Link
+                    href="/login"
+                    className="focus-ring ml-auto inline-flex min-h-8 items-center rounded-input bg-ink px-3 py-1 text-[13px] font-semibold text-paper transition-colors hover:bg-ink2"
+                  >
+                    Testa fullständiga tjänsten med era egna data, kostnadsfritt
+                  </Link>
+                </div>
+              </div>
+            ) : null}
+
+            {/* Demo-banner: en demo-workspace ska veta vad den är och vad som
+                begränsar den. Uppgraderingen till fullt konto (med planval) är
+                uppskjuten — vägen ut är kontakt just nu. */}
+            {isDemo || vy === "demo" ? (
+              <div className="border-b border-ochre/30 bg-ochre/10">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 md:px-6">
+                  <span className="kicker text-ochre">Demo</span>
+                  {/* Demovyn bär ingen förklarande rad längre. Märkningen
+                      "Demo" räcker där; texten om demokontot namngav dessutom
+                      exempelbutiken i en yta som visas för kunder. */}
+                  {vy === "demo" ? null : (
+                    <span className="text-[13px] text-ink/70">
+                      Du testar Snajp med ett begränsat antal körningar.
+                    </span>
+                  )}
+                  {vy === "demo" ? null : (
+                    /* Samma adress som marknadssidan, via samma konstant.
+                       Hårdkodad här stod den utanför bytet i copy.ts. */
+                    <a
+                      href={mejlaOss()}
+                      className="kicker ml-auto text-ochre underline underline-offset-4 hover:text-ink"
+                    >
+                      Kontakta oss
+                    </a>
+                  )}
+                </div>
+              </div>
+            ) : null}
+            {children}
+          </main>
+        </div>
+      </div>
     </div>
   );
 }
@@ -461,7 +563,9 @@ export function PageShell({
 
   return (
     <AppShell>
-      <section className={iAdmin ? "" : "mx-auto max-w-[1400px] px-4 py-8 md:px-6 md:py-10"}>
+      {/* 1200 och inte 1400: innehållet delar numera raden med railen, och
+          1400 hade gett över 90 tecken per rad i tabellerna på en bred skärm. */}
+      <section className={iAdmin ? "" : "mx-auto w-full max-w-[1200px] px-4 py-8 md:px-8 md:py-10"}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             {/* Tomma rader renderas inte alls. Flera vyer har fått sin
@@ -469,7 +573,7 @@ export function PageShell({
                 sin marginal — rubriken hade legat och flutit en rad för lågt
                 utan något som förklarar varför. */}
             {kicker ? <p className="text-[0.8125rem] font-medium text-ink/45">{kicker}</p> : null}
-            <h1 className={cn("text-[1.5rem] font-semibold leading-tight tracking-[-0.02em]", kicker && "mt-1")}>
+            <h1 className={cn("font-display text-[1.625rem] font-semibold leading-tight tracking-[-0.02em]", kicker && "mt-1")}>
               {title}
             </h1>
             {description ? (

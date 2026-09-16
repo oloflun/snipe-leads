@@ -975,8 +975,21 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
         </p>
       ) : null}
 
+      {/* Fast layout (table-fixed + colgroup): bredderna deklareras i procent
+          och summerar till 100 — se Tabell i components/ui.tsx. Knappkolumnen
+          finns bara när mejlbron är på, så colgroup och expanderradens colSpan
+          måste följa samma villkor som cellerna. */}
       <div className="mt-4 hidden overflow-x-auto border-y border-ink/15 md:block">
-        <table className="w-full min-w-[960px] border-collapse text-[15px]">
+        <table className="w-full min-w-[960px] table-fixed border-collapse text-[15px]">
+          <colgroup>
+            <col style={{ width: "22%" }} />
+            <col style={{ width: "10%" }} />
+            <col style={{ width: "18%" }} />
+            <col style={{ width: "12%" }} />
+            <col style={{ width: "24%" }} />
+            <col style={{ width: "14%" }} />
+            {mejlbro ? <col style={{ width: "130px" }} /> : null}
+          </colgroup>
           <thead>
             <tr className="border-b border-ink/15 text-left">
               {[..."Bolag,Ort,Kontakt,Kontaktnivå,Signal,Källa".split(","), ...(mejlbro ? [""] : [])].map(
@@ -1037,7 +1050,9 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
               </tr>,
               oppenRad === rad.id ? (
                 <tr key={`${rad.id}-mejl`}>
-                  <td colSpan={7} className="pb-6 pt-1">
+                  {/* Samma villkor som colgroup och huvudet: sex kolumner utan
+                      mejlbro, sju med. */}
+                  <td colSpan={mejlbro ? 7 : 6} className="pb-6 pt-1">
                     <MejlRuta lista={lista} rad={rad} />
                   </td>
                 </tr>

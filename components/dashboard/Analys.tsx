@@ -269,8 +269,18 @@ function AgentBlock({
       {/* Bred tabell från md och upp; kortlayout under. Ett bord som krymps
           till mobilbredd blir sex kolumner à 40px och därmed oläsligt — se
           DESIGN.md App-familjen. */}
+      {/* Fast layout (table-fixed + colgroup): veckokolumnen får en deklarerad
+          bredd och talkolumnerna delar resten lika, så siffrorna står i samma
+          spalt oavsett hur många kolumner blocket har — se Tabell i
+          components/ui.tsx. Summan är alltid 100. */}
       <div className="mt-6 hidden md:block">
-        <table className="w-full border-collapse text-sm">
+        <table className="w-full table-fixed border-collapse text-sm">
+          <colgroup>
+            <col style={{ width: "16%" }} />
+            {kolumner.map((k) => (
+              <col key={k.nyckel} style={{ width: `${84 / kolumner.length}%` }} />
+            ))}
+          </colgroup>
           <thead>
             <tr className="border-y border-ink/15">
               <th scope="col" className="kicker py-3 text-left font-medium text-mineral">
