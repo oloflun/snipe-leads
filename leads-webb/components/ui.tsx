@@ -1,0 +1,60 @@
+import { CheckCircle2 } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+/**
+ * Samma knappvokabulär som huvudappen (components/ui.tsx i roten) — Snajp
+ * Bokföring är en egen sajt men samma hus, och en sparaknapp som ser
+ * annorlunda ut här hade betytt att en av dem är fel.
+ */
+export const btnBase =
+  "focus-ring inline-flex min-h-11 items-center justify-center gap-2 rounded-input px-5 text-[0.9375rem] font-semibold transition-colors active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40";
+
+export const btnPrimary = `${btnBase} bg-ink text-paper hover:bg-ink2`;
+
+export const btnSecondary = `${btnBase} bg-paper2 text-ink hover:bg-paper2/70`;
+
+/** Storlek ovanpå btnPrimary/btnSecondary — se rotens ui.tsx för varför
+ *  varje klass bär `!` (cn är join, ordningen i CSS-filen avgör). */
+export const btnLiten = "!min-h-0 !h-9 !gap-1.5 !px-3 !text-[0.875rem]";
+
+export function Badge({
+  children,
+  tone = "neutral"
+}: Readonly<{ children: React.ReactNode; tone?: "neutral" | "good" | "warn" | "danger" }>) {
+  const tones = {
+    neutral: "border-ink/10 bg-ink/[0.035] text-ink/70",
+    good: "border-moss/20 bg-moss/10 text-moss",
+    warn: "border-ochre/25 bg-ochre/10 text-ink",
+    danger: "border-danger/40 bg-danger/10 text-ink"
+  };
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-[6px] border px-2.5 py-1 text-xs font-medium",
+        tones[tone]
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+export function EmptyState({ title, body }: Readonly<{ title: string; body: string }>) {
+  return (
+    <div className="rounded-[8px] border border-dashed border-ink/15 bg-paper/45 p-8 text-center">
+      <CheckCircle2 className="mx-auto h-6 w-6 text-moss" aria-hidden />
+      <h3 className="mt-4 font-semibold">{title}</h3>
+      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-ink/62">{body}</p>
+    </div>
+  );
+}
+
+export function SkeletonRows() {
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div key={index} className="h-12 animate-pulse rounded-[7px] bg-ink/[0.055]" />
+      ))}
+    </div>
+  );
+}

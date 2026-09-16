@@ -4,7 +4,7 @@ import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useArbetsvag } from "@/components/AppShell";
-import { EmptyState, SkeletonRows } from "@/components/ui";
+import { Cell, EmptyState, SkeletonRows, Tabell, tabellRad } from "@/components/ui";
 import { EjAktiverad, arEjAktiverad } from "@/components/EjAktiverad";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { readJsonBody } from "@/lib/http/json";
@@ -146,36 +146,53 @@ export function Kontakter({ demo = false }: Readonly<{ demo?: boolean }>) {
     );
   }
 
+  // Fast tabell i stället för flexrader: samma kolumn på samma plats på varje
+  // rad, oavsett hur långt ett namn eller en adress är. Se Tabell i
+  // components/ui.tsx för varför bredderna är deklarerade.
   return (
-    <ul className="divide-y divide-ink/15 border-y border-ink/15">
+    <Tabell
+      ariaLabel="Kontaktpersoner"
+      kolumner={[
+        { rubrik: "Kontakt", bredd: "30%" },
+        { rubrik: "Bolag", bredd: "28%" },
+        { rubrik: "Segment", bredd: "26%" },
+        { rubrik: "Status", bredd: "16%", hoger: true }
+      ]}
+    >
       {kontakter.map((p) => (
-        <li key={p.id} className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 py-4">
-          <div className="min-w-0">
-            <p className="text-[1.0625rem] font-semibold tracking-[-0.01em]">
+        <tr key={p.id} className={tabellRad}>
+          <Cell titel>
+            <p className="truncate font-semibold tracking-[-0.01em]">
               {p.contact_name ?? p.contact_email}
             </p>
             {p.contact_name && p.contact_email ? (
-              <p className="mt-1 break-all text-sm text-ink/55">{p.contact_email}</p>
+              <p className="mt-1 truncate text-sm text-ink/55">{p.contact_email}</p>
             ) : null}
-          </div>
-          <div className="min-w-0 text-right">
+          </Cell>
+          <Cell>
             {demo ? (
-              <span className="text-[15px]">{p.company_name}</span>
+              <span className="block truncate">{p.company_name}</span>
             ) : (
               <Link
                 href={vag(`/dashboard/companies/${p.id}`)}
-                className="focus-ring text-[15px] underline decoration-ink/25 underline-offset-4"
+                className="focus-ring block truncate underline decoration-ink/25 underline-offset-4"
               >
                 {p.company_name}
               </Link>
             )}
-            <p className="kicker mt-1 text-mineral">
-              {[p.sni, p.ort].filter(Boolean).join(" · ")}
-              {p.status ? ` · ${STATUS_ETIKETT[p.status] ?? p.status}` : ""}
-            </p>
-          </div>
-        </li>
+          </Cell>
+          <Cell>
+            <span className="block truncate text-sm text-ink/65">
+              {[p.sni, p.ort].filter(Boolean).join(" · ") || "–"}
+            </span>
+          </Cell>
+          <Cell hoger>
+            <span className="text-sm text-ink/70">
+              {p.status ? (STATUS_ETIKETT[p.status] ?? p.status) : "–"}
+            </span>
+          </Cell>
+        </tr>
       ))}
-    </ul>
+    </Tabell>
   );
 }

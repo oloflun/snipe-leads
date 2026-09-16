@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { PageShell } from "@/components/AppShell";
+import { AgentSajtKnapp } from "@/components/AgentSajtKnapp";
 import { BookkeepingView } from "@/components/bookkeeping/BookkeepingView";
 import { StartView } from "@/components/dashboard/StartView";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
@@ -104,7 +105,9 @@ export async function WorkspaceSection({ slug = [] }: Readonly<{ slug?: string[]
       if (id === "listor") {
         return <LeadslistorSection harTillagg={addons.includes("leadlists")} />;
       }
-      return <LeadsView />;
+      // Bannern serverrenderas här och går in som prop — LeadsView är en
+      // klientkomponent och kan inte läsa miljön själv (se kommentaren där).
+      return <LeadsView agentKnapp={<AgentSajtKnapp agent="leads" />} />;
     case "companies":
       return id ? <CompanyDetailView id={id} /> : <CompaniesView />;
     case "contacts":
@@ -215,6 +218,7 @@ function SupportSection({ workspaceName }: Readonly<{ workspaceName: string | nu
   // produkten men färdigt.
   return (
     <PageShell title="Inkorg och utkast">
+      <AgentSajtKnapp agent="support" />
       <SupportWorkspaceTabs workspaceName={workspaceName} />
     </PageShell>
   );

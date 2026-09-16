@@ -54,6 +54,15 @@ Leadsagenternas träffsäkerhet mot QA-kunden Nordforms målgrupp mättes som ku
 - "Hej ," när kontaktnamn saknas i utkast, och dubblettrisk vid listbeställning när servern startas om mitt i — båda kvar.
 - De två otrackade `docs/live-tests/evals-20260914-*.json` ska inte committas.
 
+## Tillägg eftermiddag 2026-09-15
+
+- PR #14 mergad 13:12 (main 871aa7d): skrapningen och okänt-regeln i produktion.
+- `567b43f` påfyllning av bortsorterade platshållarplatser (källslingan kollar före räkning; Gemini ombeds om reserver i samma anrop, kapas efter filtret). 1938 tester.
+- Liveverifieringen föll två gånger: Gemini grounded-sökningen tog >180 s i dev. Lokalt mätt: 55 s med reserver, 156 s utan — reserverna är inte orsaken, Vertex-latensen varierar.
+- `2319aa8` lästak 180 s, ReadTimeout görs inte om, formulären (LeadsRunForm sökfas, LeadsSnabbsok) väntar ~5 min. Verifierat live: kunden får nu "Kunde inte söka efter bolag just nu" i stället för att formuläret ger upp — men sökningen gav fortfarande 0 av 5.
+- PR #15 (öppnad av Vertex koppling, spets 2319aa8) väntar på Antons merge; mitt besked i PR:en: "inte klart, men säkert att släppa" (main har samma sega sökning med sämre hantering).
+- ÖPPET: mätning av `thinkingBudget: 0` mot standardtänkande för grounded-sökningen körs i bakgrunden; resultatet skrivs till `%TEMP%/claude/C--Users-sebbe-Desktop-snipe-leads/c498f2b8-.../tasks/b7fxz5b47.output`. Nästa steg: om thinkingBudget 0 är klart snabbare med likvärdiga träffar → lägg `"thinkingConfig": {"thinkingBudget": 0}` i `generationConfig` i `discovery._gemini_med_sokning`, test, push, liveverifiera Nordform-körningen, kvittera i PR #15.
+
 ## Cross-Project Handoffs
 - None this session.
 

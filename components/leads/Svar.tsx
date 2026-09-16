@@ -2,7 +2,7 @@
 
 import { AlertTriangle } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { EmptyState, SkeletonRows } from "@/components/ui";
+import { EmptyState, Rad, Radlista, SkeletonRows } from "@/components/ui";
 import { EjAktiverad, arEjAktiverad } from "@/components/EjAktiverad";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { readJsonBody } from "@/lib/http/json";
@@ -152,10 +152,12 @@ export function Svar({ demo = false }: Readonly<{ demo?: boolean }>) {
     );
   }
 
+  // Radlista/Rad ur components/ui.tsx: samma hårlinjespråk som tabellerna,
+  // skrivet en gång i stället för som lösa klasser här.
   return (
-    <ul className="divide-y divide-ink/15 border-y border-ink/15">
+    <Radlista ariaLabel="Svar från prospekt">
       {lage.svar.map((s) => (
-        <li key={s.id} className="py-5">
+        <Rad key={s.id}>
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
             <p className="text-[1.0625rem] font-semibold tracking-[-0.01em]">
               {s.contact_name ?? s.contact_email ?? "Okänd avsändare"}
@@ -171,8 +173,8 @@ export function Svar({ demo = false }: Readonly<{ demo?: boolean }>) {
           <p className="mt-2 max-w-[75ch] whitespace-pre-line text-[15px] leading-6 text-ink/78">
             {s.body}
           </p>
-        </li>
+        </Rad>
       ))}
-    </ul>
+    </Radlista>
   );
 }

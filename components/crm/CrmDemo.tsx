@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileDown, Mail, Newspaper, Search, Upload } from "lucide-react";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import type { EmailStudioData } from "@/lib/data/emails";
-import { btnLiten, btnPrimary, btnSecondary } from "@/components/ui";
+import { Radlista, btnLiten, btnPrimary, btnSecondary } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 /**
@@ -723,8 +723,12 @@ export function CrmDemo() {
 
         {kunder.length > 0 ? (
           <div className="mt-5 grid gap-6 lg:grid-cols-12">
-            {/* Listan: ett klick byter innehåll i panelen, listan flyttar sig inte. */}
-            <ul className="lg:col-span-5 divide-y divide-ink/8 border-y border-ink/8" aria-label="Kunder">
+            {/* Listan: ett klick byter innehåll i panelen, listan flyttar sig inte.
+                Radlista bär hårlinjerna; raderna är bara <li> (inte Rad) för att
+                knappen ska fylla hela raden och bära hover/markering själv.
+                Kolumnfast rad: namn/kontakt/notering 9 spann, ort 3 högerställd,
+                deklarerat på varje rad — orten står stilla oavsett namnlängd. */}
+            <Radlista ariaLabel="Kunder" className="lg:col-span-5">
               {filtrerade.map((kund) => {
                 const vald = kund.id === valdKund;
                 return (
@@ -734,22 +738,24 @@ export function CrmDemo() {
                       onClick={() => valjKund(kund.id)}
                       aria-current={vald ? "true" : undefined}
                       className={cn(
-                        "focus-ring block w-full px-3 py-3 text-left transition-colors",
+                        "focus-ring grid w-full grid-cols-12 items-baseline gap-x-3 px-3 py-3 text-left transition-colors",
                         vald ? "bg-ochre/10" : "hover:bg-paper2/60"
                       )}
                     >
-                      <span className="flex items-baseline justify-between gap-3">
-                        <span className="truncate text-[0.9375rem] font-medium text-ink">{kund.foretag}</span>
-                        {kund.ort ? <span className="shrink-0 text-[0.8125rem] text-ink/45">{kund.ort}</span> : null}
+                      <span className="col-span-9 min-w-0">
+                        <span className="block truncate text-[0.9375rem] font-medium text-ink">{kund.foretag}</span>
+                        {kund.kontakt || kund.epost ? (
+                          <span className="mt-0.5 block truncate text-[0.8125rem] text-ink/55">
+                            {[kund.kontakt, kund.epost].filter(Boolean).join(" · ")}
+                          </span>
+                        ) : null}
+                        {kund.notering ? (
+                          <span className="mt-0.5 block truncate text-[0.8125rem] text-ink/45">{kund.notering}</span>
+                        ) : null}
                       </span>
-                      {kund.kontakt || kund.epost ? (
-                        <span className="mt-0.5 block truncate text-[0.8125rem] text-ink/55">
-                          {[kund.kontakt, kund.epost].filter(Boolean).join(" · ")}
-                        </span>
-                      ) : null}
-                      {kund.notering ? (
-                        <span className="mt-0.5 block truncate text-[0.8125rem] text-ink/45">{kund.notering}</span>
-                      ) : null}
+                      <span className="col-span-3 truncate text-right text-[0.8125rem] text-ink/45">
+                        {kund.ort}
+                      </span>
                     </button>
                   </li>
                 );
@@ -757,7 +763,7 @@ export function CrmDemo() {
               {filtrerade.length === 0 ? (
                 <li className="px-3 py-6 text-[0.9375rem] text-ink/55">Inga kunder matchar sökningen.</li>
               ) : null}
-            </ul>
+            </Radlista>
 
             {/* Detaljpanelen: signaler + kundens egen studio. */}
             <div ref={detaljRef} className="lg:col-span-7 min-w-0 scroll-mt-6">

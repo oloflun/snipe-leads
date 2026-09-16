@@ -3,6 +3,7 @@
 import { Loader2, Mail } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { KONTAKT_MEJL, mejlaOss } from "@/components/marketing/copy";
+import { Rad, Radlista } from "@/components/ui";
 import { readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
 
@@ -135,31 +136,39 @@ export function Inkorgar() {
           </a>
         </div>
       ) : (
-        <div className="divide-y divide-ink/10 border-y border-ink/15">
+        <Radlista ariaLabel="Kopplade inkorgar">
+          {/* Fast schema per rad: adress i vänsterspalten, status alltid längst
+              till höger på samma plats. Metaraden och ett eventuellt fel spänner
+              över båda spalterna. */}
           {inkorgar.map((inkorg) => (
-            <div key={inkorg.address ?? Math.random()} className="grid gap-1 py-4">
-              <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                <span className="text-[0.9375rem] font-semibold">{inkorg.address ?? "—"}</span>
-                <span
-                  className={cn(
-                    "kicker",
-                    inkorg.kan_synka ? "text-moss" : "text-mineral"
-                  )}
-                >
-                  {inkorg.kan_synka ? "kopplad" : "väntar på koppling"}
-                </span>
-              </div>
-              <p className="text-[0.875rem] leading-6 text-ink/60">
+            <Rad
+              key={inkorg.address ?? Math.random()}
+              className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 gap-y-1"
+            >
+              <span className="min-w-0 break-words text-[0.9375rem] font-semibold">
+                {inkorg.address ?? "—"}
+              </span>
+              <span
+                className={cn(
+                  "kicker justify-self-end",
+                  inkorg.kan_synka ? "text-moss" : "text-mineral"
+                )}
+              >
+                {inkorg.kan_synka ? "kopplad" : "väntar på koppling"}
+              </span>
+              <p className="col-span-2 text-[0.875rem] leading-6 text-ink/60">
                 {[inkorg.provider, inkorg.host, `senaste synk ${nar(inkorg.last_sync_at)}`]
                   .filter(Boolean)
                   .join(" · ")}
               </p>
               {inkorg.last_error ? (
-                <p className="text-[0.875rem] leading-6 text-danger">{inkorg.last_error}</p>
+                <p className="col-span-2 text-[0.875rem] leading-6 text-danger">
+                  {inkorg.last_error}
+                </p>
               ) : null}
-            </div>
+            </Rad>
           ))}
-        </div>
+        </Radlista>
       )}
 
       <button

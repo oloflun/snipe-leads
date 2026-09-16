@@ -68,7 +68,7 @@ unfinished.
 | Family | Routes | Shape |
 |---|---|---|
 | Marketing | `/`, `/leads`, `/support` | Hero → problem → statement → live demo → place → steps → objections → limits → close |
-| App | `/dashboard/*`, `/settings/*` | Workbench: dense rows, fixed type scale, no hero, no reveals, no imagery |
+| App | `/dashboard/*`, `/settings/*`, `/demo/*` | Workbench: fast ink-vänsterrail (ikonrail <lg, ochre-markör på aktiv flik — sidans EN tonala inversion), dense rows, fasta tabeller (`Tabell`/`Radlista` i components/ui.tsx: deklarerade kolumnbredder, kicker-huvuden, tnum), fixed type scale, no hero, no reveals, no imagery. Samma railmönster som bokforing-webb/components/Sidebar.tsx |
 | Content | `/login`, `/onboarding`, `/not-found` | Single column, typography only |
 
 ## Theme

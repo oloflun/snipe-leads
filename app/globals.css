@@ -186,6 +186,12 @@ button {
   background: oklch(var(--ochre) / 0.35);
 }
 
+/* Även textmarkering på den mörka railen ska läsa som husets. Samma regel
+   som bokforing-webb/app/globals.css — railen är arbetsytans skal här med. */
+.rail ::selection {
+  background: oklch(var(--ochre) / 0.55);
+}
+
 .font-display {
   font-family: var(--font-serif);
   font-variation-settings: "opsz" 144, "SOFT" 30;

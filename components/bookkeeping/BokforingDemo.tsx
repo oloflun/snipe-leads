@@ -2,13 +2,8 @@
 
 import { ArrowRight, FileText } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import {
-  AVLASNING,
-  EXEMPELKVITTO,
-  FRAGOR,
-  PERIOD,
-  VERIFIKAT
-} from "@/lib/demo/bokforing";
+import { FRAGOR, PERIOD, UNDERLAG } from "@/lib/demo/bokforing";
+import { cn } from "@/lib/utils";
 
 /**
  * Bokföringen visad hela vägen, med ett påhittat kvitto.
@@ -180,6 +175,17 @@ function DemoChatt() {
  * ett känt sätt att göra innehåll oåtkomligt med tummen.
  */
 export function BokforingDemo() {
+  // Vilket underlag besökaren tittar på. Väljaren är demons första handling:
+  // tre olika vägar genom samma maskineri (skuld, fordran, direktbetalning),
+  // och att byta ska kännas som att byta fil, inte som att byta sida.
+  const [valtId, setValtId] = useState(UNDERLAG[0].id);
+  const valt = UNDERLAG.find((u) => u.id === valtId) ?? UNDERLAG[0];
+
+  // Verifikatets summarad räknas ur raderna som visas, inte ur en konstant:
+  // med tre valbara underlag hade en hårdkodad summa varit rätt för ett av dem.
+  const debetSumma = valt.verifikat.reduce((acc, rad) => acc + Number(rad.debet ?? 0), 0);
+  const kreditSumma = valt.verifikat.reduce((acc, rad) => acc + Number(rad.kredit ?? 0), 0);
+
   return (
     <div className="mx-auto max-w-[1120px]">
       {/* Märkningen är EN lågmäld rad, inte den gamla varningsrutan — copyn
@@ -188,26 +194,57 @@ export function BokforingDemo() {
           ut att komma ur en körning säger att de inte gör det. Samma regel
           som leads-agentens exempelbolag. Ta inte bort raden utan waiver. */}
       <p className="mb-4 text-[0.8125rem] leading-6 text-ink/55">
-        <strong className="font-semibold text-ink/70">Exempel.</strong> Underlaget,
-        bolaget och siffrorna är påhittade och svaren skrivna i förväg — ingen modell
+        <strong className="font-semibold text-ink/70">Exempel.</strong> Underlagen,
+        bolagen och siffrorna är påhittade och svaren skrivna i förväg — ingen modell
         körs på den här sidan.
       </p>
+
+      {/* VÄLJAREN. Tre underlag, tre olika konteringsvägar. Ligger ovanför
+          båda rutorna: den styr vänsterrutan, men den är hela demons ratt. */}
+      <div className="mb-5">
+        <p className="text-[0.8125rem] text-mineral">Välj ett underlag att följa:</p>
+        <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Välj underlag">
+          {UNDERLAG.map((u) => (
+            <button
+              key={u.id}
+              type="button"
+              onClick={() => setValtId(u.id)}
+              aria-pressed={u.id === valtId}
+              className={cn(
+                "focus-ring inline-flex min-h-10 items-center gap-2 rounded-input border px-3.5 text-[0.875rem] transition-colors",
+                u.id === valtId
+                  ? "border-ink bg-ink font-medium text-paper"
+                  : "border-ink/15 text-ink/70 hover:border-ochre hover:text-ink"
+              )}
+            >
+              <FileText
+                className={cn("h-4 w-4 shrink-0", u.id === valtId ? "text-ochre" : "text-mineral")}
+                aria-hidden
+              />
+              {u.etikett}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="grid gap-5 lg:grid-cols-12 lg:gap-6">
-        {/* VÄNSTER: vägen från kvitto till periodrapport. */}
+        {/* VÄNSTER: vägen från underlag till periodrapport. */}
         <div className="lg:col-span-7">
           <div className="rounded-card border border-ink/12 bg-paper2/30 p-5">
-            <p className="kicker text-mineral">Från kvitto till underlag</p>
+            <p className="kicker text-mineral">Från underlag till periodrapport</p>
             <div className="mt-4 lg:max-h-[30rem] lg:overflow-y-auto lg:pr-4">
 
       <Steg nummer={1} rubrik="Underlaget">
         <p className="flex items-center gap-2 text-[0.9375rem] text-ink">
           <FileText className="h-4 w-4 shrink-0 text-mineral" aria-hidden />
-          {EXEMPELKVITTO.filnamn}
+          {valt.filnamn}
         </p>
         <p className="mt-2 text-[0.875rem] leading-6 text-ink/60">
-          En drivmedelsfaktura från {EXEMPELKVITTO.motpart}. I produkten läses filen i
-          minnet och kastas — det som sparas är fälten nedan plus en kontrollsumma.
+          {valt.riktning === "intakt" ? "En kundfaktura till" : "Ett kostnadsunderlag från"}{" "}
+          {valt.motpart}. I produkten läses filen i minnet och kastas — det som
+          sparas är fälten nedan plus en kontrollsumma.
         </p>
+        <p className="mt-2 text-[0.875rem] leading-6 text-ink/60">{valt.poang}</p>
       </Steg>
 
       <Steg nummer={2} rubrik="Avläsningen">
@@ -216,7 +253,7 @@ export function BokforingDemo() {
             bröt monotexten mitt i fakturaraden. Nu står citatet under värdet,
             där det ändå hör hemma: det är belägget FÖR värdet. */}
         <dl className="divide-y divide-ink/10 border-y border-ink/10">
-          {AVLASNING.map((rad) => (
+          {valt.avlasning.map((rad) => (
             <div key={rad.falt} className="py-2.5">
               <div className="flex items-baseline justify-between gap-4">
                 <dt className="text-[0.8125rem] text-mineral">{rad.falt}</dt>
@@ -241,12 +278,15 @@ export function BokforingDemo() {
             </tr>
           </thead>
           <tbody className="divide-y divide-ink/10">
-            {VERIFIKAT.map((rad) => (
+            {valt.verifikat.map((rad) => (
               <tr key={rad.konto}>
                 <td className="py-2 font-mono text-[0.8125rem]">{rad.konto}</td>
                 <td className="py-2 text-ink/75">{rad.kontonamn}</td>
-                <td className="num py-2 text-right">{rad.debet ? kr(rad.debet) : ""}</td>
-                <td className="num py-2 text-right">{rad.kredit ? kr(rad.kredit) : ""}</td>
+                {/* nowrap: "18 750,00 kr" bröt raden mitt i beloppet i den
+                    smala vänsterrutan — benämningen är kolumnen som får ge
+                    med sig, aldrig ett belopp. */}
+                <td className="num whitespace-nowrap py-2 pl-3 text-right">{rad.debet ? kr(rad.debet) : ""}</td>
+                <td className="num whitespace-nowrap py-2 pl-3 text-right">{rad.kredit ? kr(rad.kredit) : ""}</td>
               </tr>
             ))}
           </tbody>
@@ -255,14 +295,19 @@ export function BokforingDemo() {
               <td className="py-2" colSpan={2}>
                 Summa
               </td>
-              <td className="num py-2 text-right">{kr("1250.00")}</td>
-              <td className="num py-2 text-right">{kr("1250.00")}</td>
+              <td className="num py-2 text-right">{kr(debetSumma.toFixed(2))}</td>
+              <td className="num py-2 text-right">{kr(kreditSumma.toFixed(2))}</td>
             </tr>
           </tfoot>
         </table>
       </Steg>
 
       <Steg nummer={4} rubrik="Perioden">
+        {/* Perioden är summan av ALLA tre underlagen, inte bara det valda —
+            det står, annars ser siffrorna ut att inte stämma med steg 3. */}
+        <p className="mb-3 text-[0.8125rem] leading-5 text-ink/55">
+          Rapporten summerar periodens alla {PERIOD.antal_underlag} underlag, inte bara det valda.
+        </p>
         <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
           {[
             ["Intäkter", PERIOD.summor.intakter],

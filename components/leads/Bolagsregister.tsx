@@ -748,15 +748,34 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
       ) : (
         <>
           {/* Tabell från md och upp, kort under. Sex kolumner krympta till 375px
-              blir ~40px styck och därmed oläsliga — se DESIGN.md App-familjen. */}
+              blir ~40px styck och därmed oläsliga — se DESIGN.md App-familjen.
+
+              Fast layout (table-fixed + colgroup): bredderna deklareras i
+              procent och summerar till 100, så kolumnerna står på samma plats
+              oavsett innehåll — se Tabell i components/ui.tsx för resonemanget.
+              Primitiven används inte rakt av här: kryssrutekolumnen och den
+              villkorade kolumnuppsättningen (demo saknar kryssrutor) kräver
+              att colgroup följer samma villkor som cellerna. */}
           <div className="hidden overflow-x-auto border-y border-ink/15 md:block">
-            <table className="w-full min-w-[900px] border-collapse text-[15px]">
+            <table className="w-full min-w-[900px] table-fixed border-collapse text-[15px]">
+              <colgroup>
+                {/* Samma villkor som th/td nedan — annars pekar bredderna på
+                    fel kolumner i demon. Kryssrutan får fast smal bredd. */}
+                {!demo ? <col style={{ width: "44px" }} /> : null}
+                <col style={{ width: "24%" }} />
+                <col style={{ width: "14%" }} />
+                <col style={{ width: "18%" }} />
+                <col style={{ width: "24%" }} />
+                <col style={{ width: "8%" }} />
+                <col style={{ width: "12%" }} />
+              </colgroup>
               <thead>
                 <tr className="border-b border-ink/15 text-left">
                   {/* Fas 3 §4: kryssrutekolumnen har ingen rubriktext — bara i den
                       riktiga vyn, av samma skäl som knappen nedan. */}
                   {!demo ? (
-                    <th scope="col" className="w-10 py-4 pr-3">
+                    // Bredden bor i colgroup — inte här.
+                    <th scope="col" className="py-4 pr-3">
                       <span className="sr-only">Välj</span>
                     </th>
                   ) : null}
@@ -817,7 +836,9 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
                         {p.origin === "example" ? <span className="kicker text-mineral">Exempel</span> : null}
                         {p.origin === "test" ? <span className="kicker text-mineral">Test</span> : null}
                       </div>
-                      {p.website ? <p className="mt-1 text-sm text-ink/55">{p.website}</p> : null}
+                      {/* truncate: i en fast tabell är det cellen som ger med
+                          sig, aldrig kolumnen. */}
+                      {p.website ? <p className="mt-1 truncate text-sm text-ink/55">{p.website}</p> : null}
                     </th>
                     <td className="kicker py-5 pr-6 text-mineral">{segment(p)}</td>
                     <td className="py-5 pr-6">

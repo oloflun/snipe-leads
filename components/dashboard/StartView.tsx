@@ -50,8 +50,10 @@ const copy = {
   titleBoth: { sv: "Arbetsytan", en: "Workspace" },
   descBoth: {
     // Inte "båda": en Trio-kund har tre agenter, och texten visas för dem också.
-    sv: "Läget i agenterna, och vad som väntar på dig. Byt vad som visas uppe till höger.",
-    en: "Where your agents stand, and what is waiting for you. Change what is shown at the top right."
+    // "i menyn till vänster", inte "uppe till höger": lägesväxeln är
+    // railens Leads- och Kundtjänstposter sedan skalbytet 2026-09-15.
+    sv: "Läget i agenterna, och vad som väntar på dig. Byt vad som visas i menyn till vänster.",
+    en: "Where your agents stand, and what is waiting for you. Change what is shown in the menu on the left."
   },
   descLeads: {
     sv: "Vad agenterna hittat, vad de grundade urvalet i, och vad som väntar på ditt godkännande.",
