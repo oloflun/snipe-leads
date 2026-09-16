@@ -14,7 +14,7 @@ export default function Sida() {
     <div className="space-y-8">
       <PageHeader
         rubrik="Kontakt"
-        beskrivning="Snajp Bokföring är en tjänst från Snajp. Frågor, fel och önskemål går rakt till oss."
+        beskrivning="Snajp Kvitton är en tjänst från Snajp. Frågor, fel och önskemål går rakt till oss."
       />
 
       <section className="max-w-[38rem]">
@@ -30,7 +30,7 @@ export default function Sida() {
             Skriv vad det gäller och vilken period det handlar om, så blir svaret bättre. Gäller
             det ett underlag som lästs fel: nämn filnamnet — själva filen har vi aldrig kvar.
           </p>
-          <a href={`mailto:${KONTAKT_MEJL}?subject=${encodeURIComponent("Snajp Bokföring")}`} className={`${btnPrimary} mt-5`}>
+          <a href={`mailto:${KONTAKT_MEJL}?subject=${encodeURIComponent("Snajp Kvitton")}`} className={`${btnPrimary} mt-5`}>
             <Mail className="h-4 w-4" aria-hidden />
             Skriv till oss
           </a>
@@ -40,7 +40,7 @@ export default function Sida() {
           <h2 className="font-display text-[1.25rem]">Bra att veta</h2>
           <ul className="mt-3 space-y-3 text-[0.9375rem] leading-6 text-ink/62">
             <li>
-              Förslag, inte bokföring: agentens konteringar är förslag som du eller din
+              Förslag, inte bokföring: agentens avläsningar är förslag som du eller din
               redovisningskonsult godkänner — de ersätter inte en auktoriserad konsult.
             </li>
             <li>

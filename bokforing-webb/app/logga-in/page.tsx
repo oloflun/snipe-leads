@@ -26,7 +26,7 @@ export default async function Sida({
           Logga in
         </h1>
         <p className="mt-2 text-[0.9375rem] leading-6 text-ink/60">
-          Snajp Bokföring är i förhandsversion. Logga in med uppgifterna du
+          Snajp Kvitton är i förhandsversion. Logga in med uppgifterna du
           fått av Snajp.
         </p>
 

@@ -184,8 +184,8 @@ const support: SectionCopy = {
 const bokforing: SectionCopy = {
   statementLabel: { sv: "Så tänker vi", en: "How we see it" },
   statement: {
-    sv: "Bokföring är inte svårt. Det är segt – och segt är det som blir liggande.",
-    en: "Bookkeeping is not hard. It is slow – and slow is what gets left lying."
+    sv: "Kvitton är inte svåra. De är många – och många är det som blir liggande.",
+    en: "Receipts are not hard. They are many – and many is what gets left lying."
   },
   problemLabel: TOM,
   problemHeading: {
@@ -226,12 +226,12 @@ const bokforing: SectionCopy = {
   objections: [
     {
       q: {
-        sv: "Bokför den åt mig?",
-        en: "Does it do my bookkeeping for me?"
+        sv: "Måste jag koppla min mejl?",
+        en: "Do I have to connect my mailbox?"
       },
       a: {
-        sv: "Nej. Den föreslår kontering och räknar perioden. Du godkänner och för in det i ert bokföringssystem, eller exporterar en SIE-fil dit.",
-        en: "No. It proposes entries and totals the period. You approve and enter it in your accounting system, or export a SIE file to it."
+        sv: "Nej, du kan ladda upp kvitton manuellt. Men kopplingen är poängen: kvitton som kommer med mejlen läses in av sig själva. Åtkomsten är read-only och kan tas bort när som helst.",
+        en: "No, you can upload receipts manually. But the connection is the point: receipts that arrive by mail read themselves in. Access is read-only and can be revoked at any time."
       }
     },
     {
@@ -240,8 +240,8 @@ const bokforing: SectionCopy = {
         en: "Can I trust the numbers?"
       },
       a: {
-        sv: "Modellen räknar aldrig. Den läser av vad som står på kvittot, och all aritmetik görs i kod med exakta decimaltal. Går perioden inte ihop visas bristerna i stället för summorna.",
-        en: "The model never calculates. It reads what the receipt says, and all arithmetic runs in code with exact decimals. If the period does not balance you get the gaps instead of the totals."
+        sv: "Modellen räknar aldrig. Den läser av vad som står på kvittot, och all aritmetik görs i kod med exakta decimaltal. Ett kvitto med otydligt belopp eller utländsk valuta flaggas för granskning i stället för att gissas fram.",
+        en: "The model never calculates. It reads what the receipt says, and all arithmetic runs in code with exact decimals. A receipt with an unclear amount or a foreign currency is flagged for review instead of being guessed."
       }
     },
     {
@@ -256,12 +256,12 @@ const bokforing: SectionCopy = {
     },
     {
       q: {
-        sv: "Vad händer med mina kvitton?",
-        en: "What happens to my receipts?"
+        sv: "Vad händer med mina mejl?",
+        en: "What happens to my mail?"
       },
       a: {
-        sv: "Filen läses i minnet och kastas. Det som sparas är fälten som lästes av, plus en kontrollsumma av filen.",
-        en: "The file is read in memory and discarded. What is stored are the fields that were read, plus a checksum of the file."
+        sv: "De läses med read-only-åtkomst och mejltexten sparas aldrig — det som lagras är de utlästa kvittofälten, avsändare och ämnesrad samt en kontrollsumma. Inget delas med tredje part utöver den AI-tjänst som tolkar kvittotexten, under personuppgiftsbiträdesavtal.",
+        en: "They are read with read-only access and the mail body is never stored — what is kept are the extracted receipt fields, sender and subject line, and a checksum. Nothing is shared with third parties beyond the AI service that interprets the receipt text, under a data processing agreement."
       }
     }
   ]

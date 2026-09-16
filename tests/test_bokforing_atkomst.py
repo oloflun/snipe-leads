@@ -73,8 +73,8 @@ def test_bokforing_ar_en_productkey():
 
 
 def test_routen_grindas_pa_entitlement_inte_admin():
-    rad = next((r for r in ROUTES_KOD.splitlines() if "/dashboard/bokforing" in r), None)
-    assert rad is not None, "Bokföringsrouten saknas i appRoutes."
+    rad = next((r for r in ROUTES_KOD.splitlines() if "/dashboard/kvitton" in r), None)
+    assert rad is not None, "Kvittorouten saknas i appRoutes."
     assert 'product: "bookkeeping"' in rad, f"Routen har fel produkt: {rad.strip()}"
     assert "adminOnly" not in rad, (
         "Routen är fortfarande admin-märkt. Då ser en kund som KÖPT bokföringen "
@@ -157,20 +157,25 @@ def test_bokforing_gar_via_entitlement_kartan():
     bokföringen inte där finns ingen entitlement-kontroll för den alls.
     """
     karta = SECTION_KOD.split("const sectionProduct")[1].split("}")[0]
-    assert re.search(r'bokforing:\s*"bookkeeping"', karta), (
-        "bokforing saknas i sectionProduct — då grindas vyn inte på entitlement."
+    assert re.search(r'kvitton:\s*"bookkeeping"', karta), (
+        "kvitton saknas i sectionProduct — då grindas vyn inte på entitlement."
     )
 
 
-def test_ingen_admin_gren_kvar_for_bokforing():
-    """Den gamla adminkontrollen får inte ligga kvar bredvid den nya.
+def test_gamla_bokforingsgrenen_ar_bara_en_redirect():
+    """`bokforing`-grenen får finnas — men BARA som redirect till /dashboard/kvitton.
 
-    Två grindar för samma yta är en grind för mycket: den som köpt produkten
-    hade mötts av 404 från den kvarglömda.
+    Kvittohanteraren ersatte bokföringsagenten 2026-09-16 och sluggen byttes.
+    En gren som gör något annat än att skicka vidare (rendera en vy, grinda på
+    admin) vore en andra grind bredvid entitlement-kartan — precis det den
+    gamla versionen av det här testet fanns för att stoppa.
     """
-    assert 'section === "bokforing"' not in SECTION_KOD, (
-        "Det finns en särskild bokforing-gren kvar i WorkspaceSection. "
-        "Entitlement-kontrollen nedanför täcker den redan."
+    if 'section === "bokforing"' not in SECTION_KOD:
+        return  # grenen borttagen helt — också rätt
+    gren = SECTION_KOD.split('section === "bokforing"')[1].split("}")[0]
+    assert 'redirect("/dashboard/kvitton")' in gren, (
+        "bokforing-grenen i WorkspaceSection gör något annat än att skicka "
+        "vidare till /dashboard/kvitton."
     )
 
 
@@ -244,7 +249,10 @@ def test_marknadssidan_och_paketet_finns():
     inverterad form så att beslutet går att bryta AVSIKTLIGT och inte genom att
     någon råkar ta bort sidan.
     """
-    assert (ROT / "app" / "bokforing" / "page.tsx").exists(), "Marknadssidan saknas."
+    assert (ROT / "app" / "kvitton" / "page.tsx").exists(), "Marknadssidan saknas."
+    # Gamla adressen ska skicka vidare, inte försvinna — bokmärken finns.
+    gammal = (ROT / "app" / "bokforing" / "page.tsx").read_text(encoding="utf-8")
+    assert 'redirect("/kvitton")' in gammal, "/bokforing skickar inte vidare till /kvitton."
     pricing = (ROT / "lib" / "pricing.ts").read_text(encoding="utf-8")
     assert '"bookkeeping"' in pricing, "Bokföringen saknas i prissättningen."
 

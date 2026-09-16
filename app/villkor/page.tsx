@@ -8,7 +8,7 @@ import { notFoundOnTenant } from "@/lib/tenants/server";
 export const metadata: Metadata = {
   title: "Användarvillkor — Snajp",
   description:
-    "Villkoren mellan Snajp och det företag som tecknar avtal om supportagenten, leadsagenten eller bokföringsagenten.",
+    "Villkoren mellan Snajp och det företag som tecknar avtal om supportagenten, leadsagenten eller kvittohanteraren.",
   alternates: { canonical: "/villkor" }
 };
 
@@ -43,7 +43,8 @@ export default async function Page() {
       <p>
         Snajp levererar en eller flera agenter enligt vad Kunden tecknat: supportagenten, som läser
         och besvarar inkommande kundmejl; leadsagenten, som tar fram prospekt och skriver utgående
-        mejl; och, i förekommande fall, bokföringsagenten.
+        mejl; och, i förekommande fall, kvittohanteraren, som läser av kvitton
+        ur Kundens kopplade mejlkonto och uppladdade filer.
       </p>
 
       <h2>Kundens ansvar</h2>
@@ -54,8 +55,8 @@ export default async function Page() {
       </p>
       <p>
         Kunden ansvarar även för att arkivera räkenskapsinformation i enlighet med bokföringslagen.
-        Snajps bokföringsagent lagrar inte originalunderlag som kvitton och fakturor, och ersätter
-        inte Kundens egen arkiveringsskyldighet.
+        Snajps kvittohanterare lagrar inte originalunderlag som kvitton, fakturor eller mejl, och
+        ersätter inte Kundens egen arkiveringsskyldighet.
       </p>
       <p>
         Kunden ansvarar för att informera sina egna kunder om att inkommande ärenden behandlas

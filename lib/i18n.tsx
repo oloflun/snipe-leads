@@ -32,7 +32,7 @@ const commonCopy = {
   "nav.leadslistor": { sv: "Leadslistor", en: "Lead lists" },
   "nav.support": { sv: "Kundtjänst", en: "Support" },
   "nav.analytics": { sv: "Analys", en: "Analytics" },
-  "nav.bokforing": { sv: "Bokföring", en: "Bookkeeping" },
+  "nav.kvitton": { sv: "Kvitton", en: "Receipts" },
   "nav.inbox": { sv: "Svar", en: "Replies" },
   "nav.larande": { sv: "Lärande", en: "Learning" },
   "nav.settings": { sv: "Inställningar", en: "Settings" },

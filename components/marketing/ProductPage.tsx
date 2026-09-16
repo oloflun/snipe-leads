@@ -1,4 +1,4 @@
-import { BokforingDemo } from "@/components/bookkeeping/BokforingDemo";
+import { KvittoDemo } from "@/components/kvitton/KvittoDemo";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { LandingPhoto } from "@/components/marketing/LandingPhoto";
 import { SupportShowcase } from "@/components/marketing/SupportShowcase";
@@ -29,7 +29,7 @@ export function ProductPage({ initial }: Readonly<{ initial: ProductKey }>) {
       initial={initial}
       leadsDemo={<EmailStudioEditor data={emailData} compact />}
       supportDemo={<SupportShowcase tenant={supportTenant} />}
-      bookkeepingDemo={<BokforingDemo />}
+      bookkeepingDemo={<KvittoDemo />}
     />
   );
 }

@@ -1072,8 +1072,20 @@ class Storage(Protocol):
         kategori: str | None = None,
         betalstatus: str | None = None,
         anmarkning: str = "",
+        kalla: str = "uppladdning",
+        mejl_id: str | None = None,
+        mejl_amne: str | None = None,
+        mejl_avsandare: str | None = None,
+        valuta: str = "SEK",
+        belopp_original: str | None = None,
     ) -> dict[str, Any]:
         """Ett underlag, med de fält avläsningen faktiskt hittade.
+
+        Kvittofälten (migration 063): `kalla` säger VAR kvittot kom ifrån
+        (uppladdning eller mejl), mejl_*-fälten bär avsändare och ämne när
+        källan är ett mejl, och `valuta`/`belopp_original` bär ett utländskt
+        belopp som INTE räknats om — SEK-kolumnen lämnas då tom och grinden
+        flaggar raden.
 
         Fälten är `None`-bara med flit: ett underlag där grinden fällt SKA gå
         att spara med hål i, annars finns ingen granskningskö att fylla.
@@ -1247,6 +1259,17 @@ def kontrollera_bk_betalstatus(betalstatus: str | None) -> None:
         raise BkValideringsfel(
             f"betalstatus={betalstatus!r} finns inte i bk_underlag "
             f"check-villkoret {BK_BETALSTATUSAR}."
+        )
+
+
+#: Kvittots väg in (migration 063). Spegel av check-villkoret i migrationen.
+BK_KALLOR: tuple[str, ...] = ("uppladdning", "mejl")
+
+
+def kontrollera_bk_kalla(kalla: str) -> None:
+    if kalla not in BK_KALLOR:
+        raise BkValideringsfel(
+            f"kalla={kalla!r} finns inte i bk_underlag check-villkoret {BK_KALLOR}."
         )
 
 

@@ -83,11 +83,11 @@ export const PAKET: Paket[] = [
     namn: "Snajp Leads",
     prisPerManad: 4490,
     beskrivning: {
-      sv: "Leads-agenten som hittar och skriver till rätt företag.",
-      en: "The leads agent that finds and writes to the right companies."
+      sv: "Iris, leadsagenten som hittar och skriver till rätt företag.",
+      en: "Iris, the leads agent that finds and writes to the right companies."
     },
     ingar: [
-      { sv: "Leads-agent", en: "Leads agent" },
+      { sv: "Iris, leadsagenten", en: "Iris, the leads agent" },
       { sv: "ICP-konfiguration", en: "ICP configuration" },
       { sv: "150 prospekt per månad", en: "150 prospects per month" },
       { sv: "300 mejl per månad", en: "300 emails per month" },
@@ -135,14 +135,14 @@ export const PAKET: Paket[] = [
     namn: "Snajp Trio",
     prisPerManad: 9990,
     beskrivning: {
-      sv: "Alla tre agenterna: leads, kundtjänst och bokföring.",
-      en: "All three agents: leads, support and bookkeeping."
+      sv: "Alla tre agenterna: leads, kundtjänst och kvittohantering.",
+      en: "All three agents: leads, support and receipts."
     },
     ingar: [
       { sv: "Alla tre agenterna", en: "All three agents" },
       { sv: "Gemensam dashboard", en: "One shared dashboard" },
       { sv: "Delad kunddata mellan leads och kundtjänst", en: "Shared customer data between leads and support" },
-      { sv: "Bokföring med SIE4-export", en: "Bookkeeping with SIE4 export" }
+      { sv: "Kvittohantering med SIE4-export", en: "Receipt handling with SIE4 export" }
     ],
     notisMall: {
       sv: "Sparar {belopp}/mån jämfört med att köpa dem var för sig.",
@@ -158,22 +158,22 @@ export const PAKET: Paket[] = [
      * bokföringen köper det här.
      */
     id: "bookkeeping",
-    namn: "Snajp Bokföring",
+    namn: "Snajp Kvitton",
     prisPerManad: 2690,
     beskrivning: {
-      sv: "Bokföringsagenten som läser kvitton och föreslår kontering.",
-      en: "The bookkeeping agent that reads receipts and proposes entries."
+      sv: "Kvittohanteraren som läser inkorgen och sammanställer kvittona.",
+      en: "The receipt agent that reads your inbox and totals the receipts."
     },
     kampanj: {
-      sv: "Rabatt på extra-agent till bokföringen nu för endast {belopp}.",
+      sv: "Rabatt på extra-agent till kvittohanteringen nu för endast {belopp}.",
       en: "Discount on an extra agent for bookkeeping, now only {belopp}."
     },
     ingar: [
-      { sv: "Avläsning av kvitton och fakturor", en: "Reading of receipts and invoices" },
-      { sv: "Konteringsförslag ur BAS-kontoplanen", en: "Proposed entries from the Swedish BAS chart" },
-      { sv: "Periodrapport med momssummor", en: "Period report with VAT totals" },
+      { sv: "Kvitton ur mejlen: Gmail, Outlook och Hotmail (read-only)", en: "Receipts from mail: Gmail, Outlook and Hotmail (read-only)" },
+      { sv: "Belopp, moms, datum och kategori avlästa per kvitto", en: "Amount, VAT, date and category read per receipt" },
+      { sv: "Sammanställning per kategori med dublettkontroll", en: "Per-category totals with duplicate control" },
       { sv: "SIE4-export till ert bokföringsprogram", en: "SIE4 export to your accounting software" },
-      { sv: "Bokföringsassistent i chatt", en: "Bookkeeping assistant in chat" }
+      { sv: "Kvitto-assistent i chatt", en: "Receipt assistant in chat" }
     ]
   }
 ];

@@ -10,28 +10,38 @@ export type AgentSajt = "bokforing" | "leads" | "support";
 
 export const AGENTSAJTER: Record<
   AgentSajt,
-  { produkt: ProductKey; envUrl: string; rubrik: string; beskrivning: string }
+  { produkt: ProductKey; envUrl: string; rubrik: string; beskrivning: string; knapp: string }
 > = {
+  // Nyckeln "bokforing" står kvar fast produkten heter Kvittohanteraren:
+  // den sitter i SSO-routens URL, i miljövariabelnamnet och i sajtens
+  // biljettkontrakt — deployade ytor som inte ska bytas i takt med ett
+  // produktnamn. Det kunden ser är rubriken nedan.
   bokforing: {
     produkt: "bookkeeping",
     envUrl: "BOKFORING_EXTERN_URL",
-    rubrik: "Bokföringsagenten har fått en egen arbetsyta",
+    rubrik: "Kvittohanteraren har fått en egen arbetsyta",
     beskrivning:
-      "Samma underlag och siffror som här, med mer plats: resultat, intäkter och utgifter, PDF-filer och assistenten som egna flikar. Du loggas in automatiskt."
+      "Samma kvitton och summor som här, med mer plats: inkorgen, kvittolistan och assistenten som egna flikar. Du loggas in automatiskt.",
+    knapp: "Kör Agent"
   },
   leads: {
     produkt: "leads",
     envUrl: "LEADS_EXTERN_URL",
-    rubrik: "Leadsagenten har fått en egen arbetsyta",
+    // Leadsagenten heter Iris sedan 2026-09-16 — namnet bor HÄR och i
+    // leads-webb/lib/iris.ts; glider de isär är det den här raden som vinner
+    // på Snajp-webben.
+    rubrik: "Iris, din leadsagent, har fått en egen arbetsyta",
     beskrivning:
-      "Prospekten, utkasten och granskningskön som egna flikar, med mer plats att arbeta. Du loggas in automatiskt."
+      "Iris letar fram bolagen, gör research med synliga källor och skriver utkasten. Prospekten, granskningskön och hennes demo som egna flikar. Du loggas in automatiskt.",
+    knapp: "Kör Iris"
   },
   support: {
     produkt: "support",
     envUrl: "SUPPORT_EXTERN_URL",
     rubrik: "Supportagenten har fått en egen arbetsyta",
     beskrivning:
-      "Ärendena, utkasten och kunskapsbasen som egna flikar, med mer plats att arbeta. Du loggas in automatiskt."
+      "Ärendena, utkasten och kunskapsbasen som egna flikar, med mer plats att arbeta. Du loggas in automatiskt.",
+    knapp: "Kör Agent"
   }
 };
 

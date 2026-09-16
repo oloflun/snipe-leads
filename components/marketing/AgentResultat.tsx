@@ -192,15 +192,15 @@ function BokforingPanel() {
   const { text } = useLocale();
 
   const rader = [
-    { etikett: { sv: "Intäkter", en: "Revenue" }, varde: "312 400 kr" },
-    { etikett: { sv: "Kostnader", en: "Costs" }, varde: "228 100 kr" },
-    { etikett: { sv: "Resultat före skatt", en: "Profit before tax" }, varde: "84 300 kr", stark: true },
-    { etikett: { sv: "Moms att betala", en: "VAT to pay" }, varde: "23 150 kr" }
+    { etikett: { sv: "Kvitton ur mejlen", en: "Receipts from mail" }, varde: "96" },
+    { etikett: { sv: "Uppladdade kvitton", en: "Uploaded receipts" }, varde: "32" },
+    { etikett: { sv: "Summa utlägg", en: "Total expenses" }, varde: "48 230 kr", stark: true },
+    { etikett: { sv: "Ingående moms", en: "Input VAT" }, varde: "9 410 kr" }
   ];
 
   return (
     <Panel>
-      <PanelHuvud>{text({ sv: "Perioden, räknad ur underlagen", en: "The period, computed from the documents" })}</PanelHuvud>
+      <PanelHuvud>{text({ sv: "Perioden, sammanställd ur kvittona", en: "The period, totalled from the receipts" })}</PanelHuvud>
       <div className="divide-y divide-ink/10">
         {rader.map((rad) => (
           <div key={rad.etikett.sv} className="grid grid-cols-12 items-baseline gap-x-4 px-5 py-3.5">
@@ -216,12 +216,12 @@ function BokforingPanel() {
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-ochre" aria-hidden />
           <div className="min-w-0">
             <p className="text-[0.875rem] font-semibold">
-              {text({ sv: "3 underlag behöver din blick", en: "3 documents need your eye" })}
+              {text({ sv: "3 kvitton behöver din blick", en: "3 receipts need your eye" })}
             </p>
             <p className="mt-1 text-[0.875rem] leading-[1.55] text-ink/70">
               {text({
-                sv: "Ett kvitto saknar momsrad, en faktura har oläsligt datum och ett belopp balanserar inte. Agenten gissar aldrig, den frågar.",
-                en: "One receipt is missing its VAT line, one invoice has an unreadable date and one amount does not balance. The agent never guesses, it asks."
+                sv: "Ett omskickat kvitto flaggades som möjlig dubblett, ett är i utländsk valuta och ett saknar läsbart belopp. Agenten gissar aldrig, den frågar.",
+                en: "A re-sent receipt was flagged as a possible duplicate, one is in a foreign currency and one lacks a readable amount. The agent never guesses, it asks."
               })}
             </p>
           </div>
@@ -280,16 +280,16 @@ export function AgentResultat({ product }: Readonly<{ product: ProductKey }>) {
     },
     bookkeeping: {
       rubrik: {
-        sv: "Rapporten *lever*, avvikelserna talar klarspråk.",
-        en: "The report is *live*, and deviations speak plainly."
+        sv: "Sammanställningen *lever*, avvikelserna talar klarspråk.",
+        en: "The summary is *live*, and deviations speak plainly."
       },
       brod: {
-        sv: "Resultat, moms och kostnader räknas ur underlagen och uppdateras när nya kommer in. Avviker något flaggas det i klarspråk med förslag på rättning, i stället för att gömma sig i en transaktionslista.",
-        en: "Profit, VAT and costs are computed from the documents and update as new ones arrive. Anything off is flagged in plain language with a suggested fix, instead of hiding in a transaction list."
+        sv: "Utlägg, moms och kategorier räknas ur kvittona och uppdateras när nya mejl kommer in. Ett flaggat kvitto — en dubblett, en utländsk valuta, ett otydligt belopp — pekas ut i klarspråk i stället för att gömma sig i en lista.",
+        en: "Expenses, VAT and categories are computed from the receipts and update as new mail arrives. A flagged receipt — a duplicate, a foreign currency, an unclear amount — is called out in plain language instead of hiding in a list."
       },
       stats: [
-        { varde: "128", etikett: { sv: "underlag bokförda", en: "documents booked" } },
-        { varde: "3", etikett: { sv: "avvikelser att granska", en: "deviations to review" } },
+        { varde: "128", etikett: { sv: "kvitton inlästa", en: "receipts read" } },
+        { varde: "3", etikett: { sv: "flaggade att granska", en: "flagged for review" } },
         { varde: "100 %", etikett: { sv: "moms räknad i kod", en: "VAT computed in code" } },
         { varde: "0", etikett: { sv: "gissade fält", en: "guessed fields" } }
       ],

@@ -68,7 +68,7 @@ const DEMO_VAGAR: Record<string, string> = {
   "/dashboard/analytics": "/demo/analytics",
   "/dashboard/assistant": "/demo/assistant",
   "/dashboard/support": "/demo/support",
-  "/dashboard/bokforing": "/demo/bokforing"
+  "/dashboard/kvitton": "/demo/kvitton"
 };
 
 /**
@@ -106,7 +106,7 @@ const RUTT_IKONER: Record<string, typeof LayoutDashboard> = {
   "/dashboard/larande": FileText,
   "/dashboard/analytics": ArrowLeftRight,
   "/dashboard/assistant": MessagesSquare,
-  "/dashboard/bokforing": ScanLine,
+  "/dashboard/kvitton": ScanLine,
   "/settings": Settings
 };
 
@@ -116,7 +116,7 @@ const DEMO_IKONER: Record<string, typeof LayoutDashboard> = {
   crm: Users,
   support: MessagesSquare,
   emails: Mail,
-  bokforing: ScanLine
+  kvitton: ScanLine
 };
 
 function iDemolage(pathname: string): boolean {

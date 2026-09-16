@@ -34,7 +34,7 @@ import { cn } from "@/lib/utils";
 const pathForProduct: Record<ProductKey, string> = {
   leads: "/leads",
   support: "/support",
-  bookkeeping: "/bokforing"
+  bookkeeping: "/kvitton"
 };
 
 function Display({ text: value, accentClass = "italic-disp text-ochre" }: Readonly<{ text: string; accentClass?: string }>) {
@@ -257,7 +257,7 @@ export function LandingPhoto({
                     <span aria-hidden className="transition-transform group-hover:translate-x-0.5">→</span>
                   </Link>
                   <Link
-                    href="/demo/bokforing"
+                    href="/demo/kvitton"
                     className="focus-ring group inline-flex items-center gap-2 text-[0.9375rem] font-medium text-paper/85 transition-colors hover:text-paper"
                   >
                     {text(shared.demoBokforing)}
@@ -359,7 +359,7 @@ export function LandingPhoto({
                     ? "Email Studio"
                     : product === "support"
                       ? "Snajp Support"
-                      : "Snajp Bokföring"}
+                      : "Snajp Kvitton"}
                 </span>
                 {/* Ingen statusuppgift här: supportchatten rapporterar sitt
                     eget läge, och backenden kan gå i simulering. Två sanningar

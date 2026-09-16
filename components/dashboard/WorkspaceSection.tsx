@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { PageShell } from "@/components/AppShell";
 import { AgentSajtKnapp } from "@/components/AgentSajtKnapp";
-import { BookkeepingView } from "@/components/bookkeeping/BookkeepingView";
+import { KvittoVy } from "@/components/kvitton/KvittoVy";
 import { StartView } from "@/components/dashboard/StartView";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { SupportWorkspaceTabs } from "@/components/snajp/SupportWorkspaceTabs";
@@ -51,10 +51,9 @@ const sectionProduct: Record<string, ProductKey> = {
   analytics: "leads",
   assistant: "leads",
   support: "support",
-  // Bokföringen grindas på entitlement sedan den blev en riktig produkt.
-  // Låg tidigare i en egen gren ovanför, kontrollerad mot isPlatformAdmin —
-  // se lib/routes.ts, AppRoute.adminOnly, för vad den grenen fanns till.
-  bokforing: "bookkeeping"
+  // Kvittohanteraren (f.d. bokföringen) grindas på entitlement — produktnyckeln
+  // "bookkeeping" är databasens värde och står kvar, se lib/routes.ts.
+  kvitton: "bookkeeping"
 };
 
 export async function WorkspaceSection({ slug = [] }: Readonly<{ slug?: string[] }>) {
@@ -72,6 +71,13 @@ export async function WorkspaceSection({ slug = [] }: Readonly<{ slug?: string[]
     return <AgentLarandeView />;
   }
 
+  // Gamla adressen. Bokföringsagenten byggdes om till Kvittohanteraren
+  // 2026-09-16 och fliken bytte slug — bokmärken och gamla länkar ska landa
+  // rätt, inte i en 404.
+  if (section === "bokforing") {
+    redirect("/dashboard/kvitton");
+  }
+
   const product = sectionProduct[section];
   if (!product) {
     notFound();
@@ -85,12 +91,11 @@ export async function WorkspaceSection({ slug = [] }: Readonly<{ slug?: string[]
   }
 
   switch (section) {
-    case "bokforing":
-      // Menyklicket landar HÄR, i den inbyggda vyn — det var en kort stund
-      // en redirect till den fristående bokföringssajten, tillbakadraget på
-      // Sebbes ord 2026-09-15: sajten nås i stället via knappen i vyn
-      // (BookkeepingView → /api/bokforing/sso, som bär kundens identitet).
-      return <BookkeepingView />;
+    case "kvitton":
+      // Menyklicket landar HÄR, i den inbyggda vyn — aldrig en redirect till
+      // agentsajten (Sebbes ord 2026-09-15): sajten nås via Kör Agent-knappen
+      // i vyn, som bär kundens identitet genom SSO-biljetten.
+      return <KvittoVy />;
     case "leads":
       // /dashboard/leads/kontroll. Egen sektion i sectionProduct hade betytt
       // /dashboard/kontroll, vilket inte är där kontrollerna hör hemma —

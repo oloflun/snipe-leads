@@ -82,9 +82,9 @@ export const shared = {
     sv: "Utvecklat i Sverige",
     en: "Built in Sweden"
   },
-  demoLeads: { sv: "Prova leads-agenten", en: "Try the leads agent" },
+  demoLeads: { sv: "Prova Iris, leadsagenten", en: "Try Iris, the leads agent" },
   demoSupport: { sv: "Prova kundtjänstagenten", en: "Try the support agent" },
-  demoBokforing: { sv: "Prova bokföringsagenten", en: "Try the bookkeeping agent" },
+  demoBokforing: { sv: "Prova kvittohanteraren", en: "Try the receipt agent" },
   footerKontakt: { sv: "Kontakt", en: "Contact" },
   //: MENYN. Etiketterna bytte namn 2026-08-25, och nycklarna bytte med dem —
   //: en nyckel som heter `menyKontakt` men renderar "Boka demo" är en lögn för
@@ -168,12 +168,12 @@ export const shared = {
 export const leadsCopy: ProductCopy = {
   word: { sv: "Leads", en: "Leads" },
   headline: {
-    sv: "Din säljare som aldrig *sover*.",
-    en: "Your sales rep that never *sleeps*."
+    sv: "Möt *Iris*, din säljare som aldrig sover.",
+    en: "Meet *Iris*, your sales rep that never sleeps."
   },
   lede: {
-    sv: "Leads-agenten letar prospekt utifrån er produkt, gör en behovsanalys och skriver mejlet medan tajmingen fortfarande gäller. Ni läser igenom och godkänner innan något går ut.",
-    en: "The leads agent finds prospects based on your product, works out what they need and writes the email while the timing still holds. You read it through and approve before anything goes out."
+    sv: "Iris är Snajps leadsagent. Hon letar prospekt utifrån er produkt, gör en behovsanalys med källor som går att kontrollera och skriver mejlet medan tajmingen fortfarande gäller. Ni läser igenom och godkänner innan något går ut.",
+    en: "Iris is Snajp's leads agent. She finds prospects based on your product, works out what they need with sources you can check, and writes the email while the timing still holds. You read it through and approve before anything goes out."
   },
   cta: { sv: "Testa Email Studio", en: "Try Email Studio" },
   demoHeading: {
@@ -193,8 +193,8 @@ export const leadsCopy: ProductCopy = {
     {
       title: { sv: "Hittar nya leads", en: "Finds new leads" },
       body: {
-        sv: "Ett bolag som just investerat i en ny lokal. Ett bolag som behöver höja effektiviteten. Agenterna letar nya kunder baserat på er produkt.",
-        en: "A company that just invested in new premises. A company that needs to raise its efficiency. The agent finds new customers based on your product."
+        sv: "Ett bolag som just investerat i en ny lokal. Ett bolag som behöver höja effektiviteten. Iris letar nya kunder baserat på er produkt.",
+        en: "A company that just invested in new premises. A company that needs to raise its efficiency. Iris finds new customers based on your product."
       }
     },
     {
@@ -324,25 +324,23 @@ export const supportCopy: ProductCopy = {
  * kunden upptäcker skillnaden vid en revision.
  */
 export const bokforingCopy: ProductCopy = {
-  word: { sv: "Bokföring", en: "Bookkeeping" },
+  word: { sv: "Kvitton", en: "Receipts" },
   headline: {
-    sv: "Från kvitto till bokfört – på *sekunder*.",
-    en: "From receipt to booked – in *seconds*."
+    sv: "Kvittona i mejlen, *utplockade* åt dig.",
+    en: "The receipts in your inbox, *picked out* for you."
   },
   lede: {
-    sv: "Slipp manuell hantering. Ta en bild på kvittot, så plockar agenten fram datum, belopp och moms och lägger fram ett konteringsförslag, klart att godkänna.",
-    en: "Skip the manual handling. Snap a photo of the receipt and the agent pulls out date, amount and VAT and lays out a posting proposal, ready to approve."
+    sv: "Koppla mejlen med read-only-åtkomst, så hittar agenten kvitton och utlägg i inkorgen, läser av belopp, moms, datum och kategori och sammanställer perioden. Dubbletter räknas aldrig två gånger, och det du fotar själv laddar du bara upp.",
+    en: "Connect your mailbox with read-only access and the agent finds receipts and expenses in the inbox, reads amount, VAT, date and category, and totals the period. Duplicates are never counted twice, and anything you photograph yourself you simply upload."
   },
   cta: { sv: "Se hur det fungerar", en: "See how it works" },
   demoHeading: {
-    // No-break spaces (U+00A0) efter "avläst": rubriken bröt raden före
-    // "och konterat", och den ska stå på en rad.
-    sv: "Ett kvitto, *avläst* och konterat.",
-    en: "One receipt, *read* and posted."
+    sv: "Inkorgen, *läst* i realtid.",
+    en: "The inbox, *read* in real time."
   },
   demoLede: {
-    sv: "Nedan visas ett exempel steg för steg. Du kan också chatta med bokföringsassistenten och ställa egna frågor om siffrorna.",
-    en: "Below is an example, step by step. You can also chat with the bookkeeping assistant and ask your own questions about the numbers."
+    sv: "Nedan rullar en exempelinkorg in och agenten plockar ut beloppen medan du tittar på. Du kan också fråga kvitto-assistenten om siffrorna.",
+    en: "Below, an example inbox rolls in and the agent picks out the amounts while you watch. You can also ask the receipt assistant about the numbers."
   },
   exampleNote: { sv: "", en: "" },
   stepsHeading: {
@@ -351,24 +349,24 @@ export const bokforingCopy: ProductCopy = {
   },
   steps: [
     {
-      title: { sv: "Läser av underlaget", en: "Reads the document" },
+      title: { sv: "Hittar kvittona i mejlen", en: "Finds the receipts in the mail" },
       body: {
-        sv: "Datum, motpart, totalbelopp och momssats. Saknas ett fält på kvittot gissar vi aldrig fram det – det går till granskning i stället.",
-        en: "Date, counterparty, total and VAT rate. If a field is missing from the receipt we never invent it – it goes to review instead."
+        sv: "Agenten läser inkorgen med read-only-åtkomst och skiljer kvitton och utlägg från allt annat. Nyhetsbrev och mötesmejl lämnas orörda.",
+        en: "The agent reads the inbox with read-only access and separates receipts and expenses from everything else. Newsletters and meeting mail are left untouched."
       }
     },
     {
-      title: { sv: "Föreslår konteringen", en: "Proposes the entries" },
+      title: { sv: "Läser av fälten", en: "Reads the fields" },
       body: {
-        sv: "Modellen väljer kategori, systemet väljer konto ur kontoplanen och bygger raderna. Verifikatet balanserar därför redan från start – inte som en kontroll i efterhand.",
-        en: "The model picks a category, the system picks the account from the chart and builds the rows. The entry therefore balances from the start – not as an afterthought check."
+        sv: "Belopp, moms, datum, butik och kategori. Saknas ett fält gissar vi aldrig fram det, kvittot flaggas för granskning i stället. Samma kvitto räknas aldrig två gånger.",
+        en: "Amount, VAT, date, merchant and category. If a field is missing we never invent it, the receipt is flagged for review instead. The same receipt is never counted twice."
       }
     },
     {
-      title: { sv: "Du godkänner", en: "You approve" },
+      title: { sv: "Sammanställer, du godkänner", en: "Totals it, you approve" },
       body: {
-        sv: "Perioden summeras bara när den går ihop. Gör den inte det, ser du bristerna direkt – aldrig en siffra som bara verkar stämma.",
-        en: "The period is totalled only when it balances. If it does not, you see the gaps at once – never a number that merely seems right."
+        sv: "Perioden summeras per kategori, med en sammanfattning i klartext. Flaggade kvitton räknas inte förrän du godkänt dem, aldrig en siffra som bara verkar stämma.",
+        en: "The period is totalled per category, with a plain-language summary. Flagged receipts do not count until you approve them, never a number that merely seems right."
       }
     }
   ],
@@ -378,16 +376,16 @@ export const bokforingCopy: ProductCopy = {
   },
   limits: [
     {
-      sv: "Bokför ingenting. Den föreslår, du godkänner och för in.",
-      en: "Books nothing. It proposes, you approve and enter."
+      sv: "Bokför ingenting. Den läser av och sammanställer. Du godkänner och för in.",
+      en: "Books nothing. It reads and totals. You approve and enter."
     },
     {
-      sv: "Lämnar ingenting till Skatteverket eller Bolagsverket.",
-      en: "Files nothing with the Swedish Tax Agency or Companies Registration Office."
+      sv: "Skriver aldrig i din inkorg. Åtkomsten är read-only och kan tas bort när som helst.",
+      en: "Never writes in your inbox. Access is read-only and can be revoked at any time."
     },
     {
-      sv: "Ingen data är publik. Er data hanteras enbart för att driva agenterna, ingenting annat.",
-      en: "No data is public. Your data is handled solely to run the agents, nothing else."
+      sv: "Sparar aldrig mejlens text. Det som lagras är de utlästa kvittofälten, avsändare och ämnesrad samt en kontrollsumma.",
+      en: "Never stores the body of your mail. What is kept are the extracted receipt fields, sender and subject line, and a checksum."
     }
   ]
 };

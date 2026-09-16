@@ -1,8 +1,6 @@
-import type { Metadata } from "next";
-import { ResultatVy } from "@/components/vyer/ResultatVy";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Resultat" };
-
-export default function Sida() {
-  return <ResultatVy />;
+/** Resultatvyn hörde till bokföringsagenten. Översikten bär summorna nu. */
+export default function Page() {
+  redirect("/");
 }

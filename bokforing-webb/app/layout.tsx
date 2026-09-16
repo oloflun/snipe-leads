@@ -4,11 +4,11 @@ import { fontVariables } from "@/lib/fonts";
 
 export const metadata: Metadata = {
   title: {
-    default: "Snajp Bokföring",
-    template: "%s — Snajp Bokföring"
+    default: "Snajp Kvitton",
+    template: "%s — Snajp Kvitton"
   },
   description:
-    "Bokföringsagenten läser dina kvitton och fakturor, räknar moms och resultat, och svarar på frågor om siffrorna.",
+    "Kvittohanteraren läser kvittona i din inkorg, plockar ut belopp, moms och kategori, och svarar på frågor om siffrorna.",
   icons: {
     icon: [{ url: "/snajp-symbol-black.svg", type: "image/svg+xml" }]
   },

@@ -1,8 +1,6 @@
-import type { Metadata } from "next";
-import { DokumentVy } from "@/components/vyer/DokumentVy";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "PDF-filer" };
-
-export default function Sida() {
-  return <DokumentVy />;
+/** Gamla dokumentfliken — kvittolistan är dess efterträdare. */
+export default function Page() {
+  redirect("/kvitton");
 }

@@ -53,15 +53,15 @@ export const FAQ: FaqPost[] = [
     svar: [
       {
         sv:
-          "Tre agenter i en arbetsyta. Leads-agenten söker upp företag som liknar era befintliga " +
+          "Tre agenter i en arbetsyta. Iris, leadsagenten, söker upp företag som liknar era befintliga " +
           "kunder och skriver ett förslag till mejl. Supportagenten läser kundtjänstinkorgen, " +
-          "sorterar ärendena och föreslår svar ur er egen kunskapsbas. Bokföringsagenten läser av " +
-          "kvitton och fakturor och föreslår kontering.",
+          "sorterar ärendena och föreslår svar ur er egen kunskapsbas. Kvittohanteraren läser " +
+          "kvittona i er inkorg och sammanställer belopp, moms och kategorier.",
         en:
-          "Three agents in one workspace. The leads agent finds companies that resemble your " +
+          "Three agents in one workspace. Iris, the leads agent, finds companies that resemble your " +
           "existing customers and drafts an email. The support agent reads your service inbox, " +
-          "sorts the cases and proposes replies from your own knowledge base. The bookkeeping " +
-          "agent reads receipts and invoices and proposes the accounting entries."
+          "sorts the cases and proposes replies from your own knowledge base. The receipt agent " +
+          "reads the receipts in your inbox and totals amounts, VAT and categories."
       },
       {
         sv:
@@ -83,11 +83,11 @@ export const FAQ: FaqPost[] = [
     svar: [
       {
         sv:
-          "Nej. Utkast är standardläget, och sändknappen är er. Bokföringsagenten har dessutom " +
+          "Nej. Utkast är standardläget, och sändknappen är er. Kvittohanteraren har dessutom " +
           "en spärr som fäller svar där ett belopp inte går att härleda till ett underlag: hellre " +
           "”jag vet inte” än en siffra som ser rimlig ut.",
         en:
-          "No. Draft is the default state, and the send button is yours. The bookkeeping agent " +
+          "No. Draft is the default state, and the send button is yours. The receipt agent " +
           "also has a gate that rejects answers where a figure cannot be traced to a document: " +
           "better ”I don't know” than a number that merely looks plausible."
       }

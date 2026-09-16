@@ -34,6 +34,7 @@ from .base import (
     kontrollera_bk_balans,
     normalisera_kunddata,
     kontrollera_bk_betalstatus,
+    kontrollera_bk_kalla,
     kontrollera_bk_riktning,
     kontrollera_bk_status,
     status_transition_allowed,
@@ -2159,10 +2160,17 @@ class MemoryStorage:
         kategori: str | None = None,
         betalstatus: str | None = None,
         anmarkning: str = "",
+        kalla: str = "uppladdning",
+        mejl_id: str | None = None,
+        mejl_amne: str | None = None,
+        mejl_avsandare: str | None = None,
+        valuta: str = "SEK",
+        belopp_original: str | None = None,
     ) -> dict[str, Any]:
         kontrollera_bk_status(status)
         kontrollera_bk_riktning(riktning)
         kontrollera_bk_betalstatus(betalstatus)
+        kontrollera_bk_kalla(kalla)
         rad = {
             "id": str(uuid.uuid4()),
             "tenant_id": tenant_id,
@@ -2181,6 +2189,12 @@ class MemoryStorage:
             "kategori": kategori,
             "betalstatus": betalstatus,
             "anmarkning": anmarkning,
+            "kalla": kalla,
+            "mejl_id": mejl_id,
+            "mejl_amne": mejl_amne,
+            "mejl_avsandare": mejl_avsandare,
+            "valuta": valuta,
+            "belopp_original": belopp_original,
             "created_at": _now(),
         }
         self.bk_underlag.setdefault(tenant_id, []).append(rad)

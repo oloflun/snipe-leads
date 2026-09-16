@@ -1,8 +1,7 @@
-import type { Metadata } from "next";
-import { IntakterUtgifterVy } from "@/components/vyer/IntakterUtgifterVy";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Intäkter & utgifter" };
-
-export default function Sida() {
-  return <IntakterUtgifterVy />;
+/** Intäkter & utgifter hörde till bokföringsagenten. Kvitton är utlägg —
+ *  listan och kategorisummorna bor under Kvitton respektive Översikt. */
+export default function Page() {
+  redirect("/kvitton");
 }
