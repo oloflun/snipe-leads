@@ -49,61 +49,22 @@ export const GRANSER: ReadonlyArray<{ rubrik: string; text: string }> = [
  * Eskaleringsreglerna: när ett lead eller ett svar ska lämnas till en
  * människa i stället för att hanteras vidare automatiskt.
  *
- * Sparas lokalt i webbläsaren tills backenden bär ett eget fält för dem —
- * det här är den lokala utvecklingsytan, och inställningen ska inte låtsas
- * vara synkad när den inte är det. Vyn säger det rakt ut.
+ * Bor i backenden (agent_configs.settings.eskalering, se
+ * snajp-support/app/leads/eskalering.py) och verkställs där: i
+ * svarshanteringen och före utkastet i körningen. Fältnamnen är backendens.
  */
 export type Eskaleringsregler = {
-  /** Kvalificering under tröskeln går till dig i stället för till utkast. */
-  osakerKvalificering: boolean;
+  /** Kvalificerade bolag under tröskeln får inget automatiskt utkast. */
+  osaker_kvalificering: boolean;
   /** Träffsäkerhet i procent, 0 till 100. */
   kvalificeringstroskel: number;
-  /** Svar som tar upp pris, rabatt eller avtal lämnas alltid till dig. */
-  prisforhandling: boolean;
-  /** Irriterade eller avvisande svar lämnas till dig, uppföljning stoppas. */
-  negativtSentiment: boolean;
-  /** Frågor om juridik, avtal eller personuppgifter lämnas alltid till dig. */
+  /** Svar om pris, rabatt eller budget får inget utkast; du aviseras. */
+  prisfragor: boolean;
+  /** Avvisande svar aviserar dig; uppföljningen stoppas alltid. */
+  negativt_svar: boolean;
+  /** Svar om avtal, villkor, juridik eller personuppgifter får inget utkast. */
   juridik: boolean;
 };
-
-export const ESKALERING_STANDARD: Eskaleringsregler = {
-  osakerKvalificering: true,
-  kvalificeringstroskel: 60,
-  prisforhandling: true,
-  negativtSentiment: true,
-  juridik: true
-};
-
-const ESKALERING_NYCKEL = "iris-eskaleringsregler";
-
-/** Läser reglerna ur localStorage; faller alltid tillbaka på standarden.
- *  try/catch för att lagringen kan vara blockerad (privat läge, policy). */
-export function lasEskaleringsregler(): Eskaleringsregler {
-  try {
-    const ra = window.localStorage.getItem(ESKALERING_NYCKEL);
-    if (!ra) return ESKALERING_STANDARD;
-    const tolkad = JSON.parse(ra) as Partial<Eskaleringsregler>;
-    return {
-      ...ESKALERING_STANDARD,
-      ...tolkad,
-      kvalificeringstroskel: Math.min(
-        100,
-        Math.max(0, Number(tolkad.kvalificeringstroskel ?? ESKALERING_STANDARD.kvalificeringstroskel) || 0)
-      )
-    };
-  } catch {
-    return ESKALERING_STANDARD;
-  }
-}
-
-export function sparaEskaleringsregler(regler: Eskaleringsregler): boolean {
-  try {
-    window.localStorage.setItem(ESKALERING_NYCKEL, JSON.stringify(regler));
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 /**
  * Människoläsbar etikett för en käll-URL: "linkedin.com" blir "LinkedIn",

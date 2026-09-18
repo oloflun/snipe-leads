@@ -29,6 +29,7 @@ from ..leads.autonomy import describe as describe_autonomy
 from ..leads.autonomy import kan_aktivera_auto_send
 from ..leads.autonomy import normalize as normalize_autonomy
 from ..leads.befordran import saknade_falt
+from ..leads import eskalering
 from ..leads.business_context import (
     MissingBusinessContextError,
     ar_ifyllt as business_context_ar_ifyllt,
@@ -1183,6 +1184,7 @@ async def get_leads_config(request: Request, tenant: dict = Depends(require_tena
             {"value": level, "description": describe_autonomy(level)} for level in AUTONOMY_LEVELS
         ],
         "icp": normalize_icp(settings.get("icp")),
+        "eskalering": eskalering.normalisera(settings.get("eskalering")),
         # Valen som finns att välja MELLAN, inte kundens val. UI:t ska kunna
         # rendera en lista utan att ha en egen kopia av geo.py och sni.py —
         # en andra kopia hade drivit isär, och symptomet blivit att ett
@@ -1226,6 +1228,14 @@ async def put_leads_config(
             merged["icp"] = validate_icp(payload.icp)
         except IcpValidationError as error:
             raise HTTPException(status_code=422, detail=str(error)) from None
+    if payload.eskalering is not None:
+        # Fältvis sammanslagning: en växel skickar bara sitt eget fält.
+        merged["eskalering"] = eskalering.normalisera(
+            {
+                **eskalering.normalisera(current.get("eskalering")),
+                **payload.eskalering.model_dump(exclude_none=True),
+            }
+        )
 
     # auto_send-grinden körs EFTER sammanslagningen, mot det ICP som faktiskt
     # kommer att gälla. Hade den körts mot `current` kunde en och samma PUT
@@ -1259,6 +1269,7 @@ async def put_leads_config(
         "autonomy": autonomy,
         "autonomy_description": describe_autonomy(autonomy),
         "icp": normalize_icp(saved.get("icp")),
+        "eskalering": eskalering.normalisera(saved.get("eskalering")),
     }
 
 
@@ -1745,16 +1756,37 @@ async def _run_batch_prospect(
         result["onboarding_missing"] = list(missing)
         result["prospect_id"] = prospect_id
 
-        if scope == "research_and_draft" and result.get("stopped_early"):
-            # Grinden i run_research_step föll — antingen kvalificerar bolaget
-            # inte mot ICP:n, eller så finns ingen kontaktväg. Ett utkast är
-            # 4–7 LLM-anrop till, för ett mejl som aldrig ska skickas.
-            result["draft_note"] = (
-                "Hoppar över utkastet: bolaget kvalificerar inte mot målgruppen."
-                if result["stopped_early"] == "ej_kvalificerad"
-                else "Hoppar över utkastet: ingen kontaktperson eller kontaktväg "
-                "hittades. Komplettera kontakten i registret och kör Processa om."
+        # Kundens eskaleringsregel (leads/eskalering.py). Här och inte i
+        # researchstegen: då gäller den både V1 och V2, och ett utkast som
+        # kunden själv begär för ett enskilt bolag stoppas inte — den som
+        # klickar ÄR människan regeln lämnar över till.
+        regler = eskalering.normalisera(installningar.get("eskalering"))
+        if (
+            scope == "research_and_draft"
+            and not result.get("stopped_early")
+            and eskalering.under_troskel(
+                regler, qualified=bool(result.get("qualified")), icp_fit=result.get("icp_fit")
             )
+        ):
+            result["stopped_early"] = "under_troskel"
+
+        if scope == "research_and_draft" and result.get("stopped_early"):
+            # Grinden föll — bolaget kvalificerar inte, ligger under kundens
+            # tröskel, eller saknar kontaktväg. Ett utkast är 4–7 LLM-anrop
+            # till, för ett mejl som inte ska skickas automatiskt.
+            if result["stopped_early"] == "ej_kvalificerad":
+                result["draft_note"] = "Hoppar över utkastet: bolaget kvalificerar inte mot målgruppen."
+            elif result["stopped_early"] == "under_troskel":
+                result["draft_note"] = (
+                    "Hoppar över utkastet: träffsäkerheten ligger under din tröskel på "
+                    f"{regler['kvalificeringstroskel']} procent. Bolaget står kvar i Prospekt "
+                    "för din bedömning."
+                )
+            else:
+                result["draft_note"] = (
+                    "Hoppar över utkastet: ingen kontaktperson eller kontaktväg "
+                    "hittades. Komplettera kontakten i registret och kör Processa om."
+                )
         elif scope == "research_and_draft":
             prospect = await storage.get_prospect(tenant["tenant_id"], prospect_id) or {}
             email = prospect.get("contact_email")

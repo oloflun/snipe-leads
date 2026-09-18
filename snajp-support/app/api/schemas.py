@@ -75,6 +75,23 @@ class LeadsConfigRequest(BaseModel):
         default=None, pattern=r"^(draft|first_contact|meeting|auto_send)$"
     )
     icp: dict | None = None
+    eskalering: "EskaleringRequest | None" = None
+
+
+class EskaleringRequest(BaseModel):
+    """Eskaleringsreglerna (app/leads/eskalering.py). Varje fält är valfritt:
+    en växel i UI:t skickar bara sitt eget fält, och resten står kvar."""
+
+    model_config = {"extra": "forbid"}
+
+    osaker_kvalificering: bool | None = None
+    kvalificeringstroskel: int | None = Field(default=None, ge=0, le=100)
+    prisfragor: bool | None = None
+    negativt_svar: bool | None = None
+    juridik: bool | None = None
+
+
+LeadsConfigRequest.model_rebuild()
 
 
 class LeadsRunOverrides(BaseModel):

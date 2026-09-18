@@ -33,6 +33,11 @@ koden AGERAR. Ett svar ger:
   autosvar       -> köade utskick skjuts en vecka. Ett frånvaromeddelande är
                     inte ett svar.
 
+Kundens eskaleringsregler (leads/eskalering.py, standard: påslagna) flyttar
+två av utgångarna till en människa: en invändning eller fråga som tar upp pris
+eller avtal/juridik/personuppgifter får INGET utkast (kön ställs in, kunden
+aviseras), och ett negativt svar aviserar kunden utöver att kön ställs in.
+
 Påhoppsbedömningen körs i KOD före klassificeringen, precis som i support:
 beslutet att avbryta ska inte kunna pratas bort av innehållet i meddelandet.
 
@@ -58,6 +63,7 @@ from ..agentcore.packs import Playbook, PlaybookStep, RunLedger
 from ..config import get_settings
 from ..moderation.abuse_gate import check_abuse
 from ..notifications.prioriterat_mejl import skicka_prioriterat
+from . import eskalering
 from .gissnings_gate import check_gissningar
 from .grounding_gate import build_permitted_facts, check_grounding
 from .handoff import route_handoff
@@ -167,6 +173,8 @@ async def hantera_prospektsvar(
     )
 
     lager = await las_instruktioner(storage, tenant_id, agent_type="leads", tenant_namn=tenant_name)
+    installningar = await storage.get_agent_settings(tenant_id, agent_type="leads")
+    regler = eskalering.normalisera(installningar.get("eskalering"))
     ledger = RunLedger(satisfied={"context_pack"})
     trace = RunTrace()
 
@@ -191,6 +199,8 @@ async def hantera_prospektsvar(
         "draft_subject": None,
         "draft_body": None,
         "grounding": None,
+        # Vilka av kundens eskaleringsregler som lämnade svaret till en människa.
+        "eskalerat": [],
     }
 
     if abuse.ska_eskalera:
@@ -224,7 +234,10 @@ async def hantera_prospektsvar(
             f"{', '.join(KLASSER)}), motivering (svenska), "
             "invandning_karna (svenska eller null — den faktiska invändningen "
             "i en mening, om klass är invandning), "
-            "fraga_karna (svenska eller null — frågan i en mening, om klass är fraga). "
+            "fraga_karna (svenska eller null — frågan i en mening, om klass är fraga), "
+            "tar_upp_pris (bool — frågar eller resonerar om pris, kostnad, rabatt "
+            "eller budget), tar_upp_juridik (bool — avtal, villkor, juridik eller "
+            "personuppgifter). "
             "'autosvar' är frånvaromeddelanden och autosvar. 'avregistrering' är en "
             "uttrycklig begäran att slippa fler mejl. Osäker mellan två klasser: välj "
             "den försiktigare (fraga före positivt, negativt före avregistrering)."
@@ -252,6 +265,18 @@ async def hantera_prospektsvar(
                 tenant_id,
                 prospect_id,
                 status="suppressed" if klass == "avregistrering" else "lost",
+            )
+        if klass == "negativt" and regler["negativt_svar"]:
+            # Kön är redan inställd ovan; regeln lägger till att kunden får
+            # veta det. Ett avvisande svar ska inte bara tyst bli "lost".
+            utfall["handoff"] = True
+            utfall["eskalerat"].append("negativt_svar")
+            await _notifiera(
+                tenant_id,
+                rubrik=f"Iris lämnar över: {company_name} svarade nej",
+                vad=f"{company_name} svarade avvisande. All uppföljning mot bolaget är stoppad.",
+                varfor="Din eskaleringsregel för negativa svar.",
+                nyckel=f"leads-svar:{tenant_id}:{thread_id}",
             )
 
     elif klass == "autosvar":
@@ -299,6 +324,26 @@ async def hantera_prospektsvar(
         )
 
     else:  # invandning / fraga
+        amnen = eskalering.amnen_i_svar(body)
+        if klassificering.get("tar_upp_pris") is True:
+            amnen.add("pris")
+        if klassificering.get("tar_upp_juridik") is True:
+            amnen.add("juridik")
+        att_lamna_over = eskalering.aktiva_amnen(regler, amnen)
+        if att_lamna_over:
+            return await _lamna_over_amne(
+                storage,
+                tenant_id,
+                thread_id=thread_id,
+                prospect_id=prospect_id,
+                company_name=company_name,
+                amnen=att_lamna_over,
+                utfall=utfall,
+                trace=trace,
+                lager=lager,
+                body=body,
+                started=started,
+            )
         karna = str(
             klassificering.get("invandning_karna")
             or klassificering.get("fraga_karna")
@@ -396,6 +441,48 @@ async def hantera_prospektsvar(
         if prospect_id:
             await storage.update_prospect(tenant_id, prospect_id, status="replied")
 
+    return await _avsluta(storage, tenant_id, trace, lager, body, utfall, started)
+
+
+_AMNESTEXT = {"pris": "pris och kostnad", "juridik": "avtal, juridik eller personuppgifter"}
+
+
+async def _lamna_over_amne(
+    storage,
+    tenant_id: str,
+    *,
+    thread_id: str,
+    prospect_id: str,
+    company_name: str,
+    amnen: list[str],
+    utfall: dict[str, Any],
+    trace: RunTrace,
+    lager,
+    body: str,
+    started: float,
+) -> dict[str, Any]:
+    """Eskaleringsregel för pris eller juridik: inget AI-utkast, en människa svarar.
+
+    Köade uppföljningar ställs in — samtalet är nu kundens, och en
+    automatisk uppföljning ovanpå en obesvarad prisfråga vore det sämsta
+    svaret av alla.
+    """
+    utfall["handoff"] = True
+    utfall["eskalerat"].extend(amnen)
+    utfall["cancelled_sends"] = await storage.cancel_pending_sends(tenant_id, thread_id)
+    beskrivning = " och ".join(_AMNESTEXT[a] for a in amnen)
+    await _notifiera(
+        tenant_id,
+        rubrik=f"Iris lämnar över: {company_name} frågar om {beskrivning}",
+        vad=(
+            f"{company_name} svarade med en fråga om {beskrivning}. Iris skriver inget "
+            "utkast på sådant, så svaret är ditt. Köade uppföljningar är stoppade."
+        ),
+        varfor="Din eskaleringsregel för " + beskrivning + ".",
+        nyckel=f"leads-svar:{tenant_id}:{thread_id}",
+    )
+    if prospect_id:
+        await storage.update_prospect(tenant_id, prospect_id, status="replied")
     return await _avsluta(storage, tenant_id, trace, lager, body, utfall, started)
 
 
