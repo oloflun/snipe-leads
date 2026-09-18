@@ -9,6 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ..agent import overlamning, support_regler
 from ..agent.support_agent import ar_overlamnat
+from ..kanaler import KanalFel
+from ..kanaler import leverans as kanaler_leverans
 from .deps import kraev_uuid, require_tenant
 from .schemas import MedarbetarsvarRequest
 
@@ -60,7 +62,30 @@ async def svara_i_chatt(
         )
     except overlamning.OverlamningsFel as fel:
         raise HTTPException(status_code=409, detail=str(fel)) from None
-    return {"message": resultat["message"], "ticket_id": resultat["ticket"]["id"]}
+    # Kanalerna (bd snipe-36u): en kund i WhatsApp, Messenger, Slack eller
+    # Teams har ingen widget som hämtar svaret — det måste SKICKAS dit. Svaret
+    # är redan sparat; ett leveransfel (t.ex. WhatsApps 24-timmarsfönster)
+    # redovisas för medarbetaren i stället för att fälla anropet.
+    levererat: bool | None = None
+    leveransfel: str | None = None
+    try:
+        levererat = await kanaler_leverans.leverera(
+            request.app.state.storage,
+            tenant["tenant_id"],
+            customer_id=customer_id,
+            kanal=resultat["ticket"].get("channel"),
+            text=payload.text,
+        ) or None
+    except KanalFel as fel:
+        levererat, leveransfel = False, str(fel)
+    return {
+        "message": resultat["message"],
+        "ticket_id": resultat["ticket"]["id"],
+        # None = webbchatten (hämtar själv), True = skickat i kanalen,
+        # False = sparat men inte levererat (se leveransfel).
+        "levererat": levererat,
+        "leveransfel": leveransfel,
+    }
 
 
 @router.post("/api/chattar/{customer_id}/aterlamna")

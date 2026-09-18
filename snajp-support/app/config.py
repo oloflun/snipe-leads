@@ -398,6 +398,22 @@ class Settings(BaseSettings):
     resend_api_key: str = ""
     resend_webhook_secret: str = ""
 
+    # Integrationer och kanaler (bd snipe-36u): kundernas API-nycklar, MCP-
+    # tokens och kanalhemligheter krypteras med den här nyckeln innan de
+    # sparas. Fernet-nyckel (urlsafe base64, 32 byte). Kommaseparerad lista
+    # för rotation: den FÖRSTA krypterar, alla dekrypterar. Tom i en miljö med
+    # riktig kunddata = hemligheter går inte att spara (se
+    # app/integrationer/hemligheter.py) — hellre ett tydligt fel vid
+    # konfigureringen än en klartextnyckel i databasen.
+    integration_nyckel: str = ""
+    # Den här tjänstens EGEN publika adress — dit Meta, Slack och Microsoft
+    # skickar kanalernas webhooks (app/api/kanaler.py). Railway sätter
+    # RAILWAY_PUBLIC_DOMAIN själv; API_PUBLIK_URL vinner om den är satt.
+    # Används bara för att VISA webhookadressen i portalen — inget anrop
+    # beror på den.
+    api_publik_url: str = ""
+    railway_public_domain: str = ""
+
     # CORS: kommaseparerade origins som får anropa API:t direkt från en
     # webbläsare. Tom = av, vilket räcker för vår egen frontend — Next-proxyn
     # anropar backenden server-side, så webbläsaren träffar aldrig den här

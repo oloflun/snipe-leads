@@ -29,6 +29,8 @@ from ..agentcore.instruktioner import las_instruktioner
 from ..agentcore.overlays import pack_version
 from ..agentcore.packs import RunLedger
 from ..cache import svarscache, versioner
+from ..integrationer import handelser as integrationshandelser
+from ..integrationer import uppslag as integrationsuppslag
 from ..minne import arbetsminne
 from ..moderation.abuse_gate import check_abuse, ton_instruktion
 from ..moderation.maskering import maskera_personnummer
@@ -545,6 +547,14 @@ async def run_support_agent(
     # Fas 2.5 (snipe-vxq): admintester ska märkas i agent_runs, inte räknas
     # som kundvolym. Samma flagga som leads-vägen redan trådar (rad ~419).
     is_test: bool = False,
+    # Kanalerna (bd snipe-36u): en kund i WhatsApp, Messenger, Slack eller
+    # Teams är redan uppslagen via ss_channel_contacts
+    # (app/kanaler/mottagning.py) — ofta utan e-post, så find_or_create hade
+    # skapat en ny kund per meddelande. Satt = uppslaget hoppas över.
+    # `customer_phone` följer med till find_or_create och till
+    # integrationernas {{kund.telefon}}. Båda None = oförändrat beteende.
+    kund_id: str | None = None,
+    customer_phone: str | None = None,
 ) -> dict[str, Any]:
     started = time.monotonic()
     settings = get_settings()
@@ -636,9 +646,12 @@ async def run_support_agent(
     # ska in i case_context, och case_context byggs före första steget.
     # find_or_create har skapandet som sidoeffekt, men det skedde ändå
     # ovillkorligen — bara senare i samma funktion.
-    customer = await storage.find_or_create_customer(
-        tenant_id, email=customer_email, phone=None, name=customer_name
-    )
+    if kund_id:
+        customer = {"id": kund_id, "name": customer_name}
+    else:
+        customer = await storage.find_or_create_customer(
+            tenant_id, email=customer_email, phone=customer_phone, name=customer_name
+        )
     history = await storage.get_customer_history(tenant_id, customer["id"])
 
     # --- Samtalsläge (migration 066): äger en människa samtalet? ----------
@@ -891,6 +904,35 @@ async def run_support_agent(
             kb_forsok.append(f"förenklad fråga ({bredare!r})")
     kb_block = _kb_block(articles)
 
+    # --- Kod + villkorat steg: kundens egna system (bd snipe-36u) ----------
+    #
+    # Körs bara när kunden har aktiva integrationer (HTTP-verktyg eller
+    # MCP-servrar, app/integrationer/). Modellen väljer vilka system som ska
+    # frågas; koden anropar, med kundens nycklar som modellen aldrig ser och
+    # med kontextvärdena (kund.email …) satta av koden, inte av meddelandet.
+    # Utan integrationer: inget anrop, och kedjan är exakt densamma som förut.
+    integrationskontext = integrationsuppslag.kontextvarden(
+        kund_email=customer_email,
+        kund_namn=customer_name,
+        kund_telefon=customer_phone,
+        kund_id=customer["id"],
+        arende_id=ticket["id"],
+        kategori=category,
+        kanal=channel,
+        tenant_namn=tenant_namn,
+    )
+    underlag = await integrationsuppslag.hamta(
+        storage,
+        tenant_id,
+        steg=steg,
+        ledger=ledger,
+        trace=trace,
+        case_context=f"{case_context}\n\n## Kunskapsbas\n{kb_block}",
+        kontext=integrationskontext,
+        is_test=is_test,
+    )
+    systemblock = f"\n\n{underlag.block}" if underlag else ""
+
     # --- Steg 2: research --------------------------------------------------
     research = await steg(
         steps["cs:customer-research"],
@@ -903,9 +945,16 @@ async def run_support_agent(
             "behover_fortydligande (bool: frågan är för vag eller tvetydig för att "
             "besvaras, och en motfråga skulle göra den besvarbar. false när frågan "
             "är tydlig — även om kunskapsbasen saknar svaret)."
+            + (integrationsuppslag.RESEARCH_TILLAGG if underlag else "")
         ),
         case_context=(
-            f"{case_context}\n\n## Kunskapsbas (ENDA tillåtna faktakällan)\n{kb_block}\n\n"
+            f"{case_context}\n\n"
+            + (
+                "## Kunskapsbas (tillåten faktakälla, liksom uppgifterna från kundens system nedan)"
+                if underlag
+                else "## Kunskapsbas (ENDA tillåtna faktakällan)"
+            )
+            + f"\n{kb_block}{systemblock}\n\n"
             f"Tidigare ärenden från kunden: {len(history)}"
         ),
     )
@@ -939,7 +988,9 @@ async def run_support_agent(
     # behover_fortydligande) men kan inte prata bort ett beslut: en kund som
     # ber om en människa får en, och ett träffat känsligt ord lämnas över.
     kb_stodjer_svar = bool(research.get("kb_supports_answer"))
-    kb_saknar_svar = not articles or not kb_stodjer_svar
+    # Ett lyckat svar ur kundens system är underlag lika mycket som en
+    # KB-träff (bd snipe-36u) — "var är min order?" står aldrig i biblioteket.
+    kb_saknar_svar = (not articles and not underlag.kallor) or not kb_stodjer_svar
 
     sentimentgrans = regler["sentimentgrans"] / 100
     sakerhetskritiskt = bool(
@@ -1084,12 +1135,17 @@ async def run_support_agent(
             "något närliggande), hämtat ur kunskapsbasen eller ärendet — inte en "
             "standardfras. Ren text, ingen markdown. Returnera JSON: draft (svenska)."
         )
+    if underlag:
+        uppgift += integrationsuppslag.UTKAST_TILLAGG
     draft = await steg(
         steps["cs:draft-response"],
         ledger,
         trace,
         task=uppgift,
-        case_context=f"{case_context}\n\n## Kunskapsbas\n{kb_block}\n\n## Research\n{research.get('findings', '')}",
+        case_context=(
+            f"{case_context}\n\n## Kunskapsbas\n{kb_block}{systemblock}\n\n"
+            f"## Research\n{research.get('findings', '')}"
+        ),
     )
 
     # --- Steg 4: eskaleringsbedömning (villkorat) ---------------------------
@@ -1279,6 +1335,9 @@ async def run_support_agent(
         kallor = _faktakallor(
             articles, subject=subject, message=message, conversation_block=conversation_block
         )
+        # Lyckade svar ur kundens system (bd snipe-36u) är stöd precis som
+        # kunskapsbasen — annars fälls ett korrekt återgivet leveransdatum.
+        kallor += underlag.kallor
         dom = support_faktagrind.kontrollera(
             reply, niva=installningar["faktakontroll"], kallor=kallor, tenant_namn=tenant_namn
         )
@@ -1299,7 +1358,7 @@ async def run_support_agent(
                     "på något nytt och ändra inget annat. Ren text, ingen markdown. "
                     "Returnera JSON: final_reply (svenska)."
                 ),
-                case_context=f"{case_context}\n\n## Kunskapsbas\n{kb_block}\n\n## Text att rätta\n{reply}",
+                case_context=f"{case_context}\n\n## Kunskapsbas\n{kb_block}{systemblock}\n\n## Text att rätta\n{reply}",
             )
             kandidat = strip_dangling_sign_off(
                 strip_markdown(rattning.get("final_reply") or "").strip()
@@ -1406,6 +1465,28 @@ async def run_support_agent(
         tenant_id, ticket_id=ticket["id"], metric_name="sentiment", value=sentiment
     )
 
+    # Kundens eget ärendesystem (bd snipe-36u): en förfrågan bunden till
+    # arende_eskalerat skapar ärendet där med hela samtalet. Samma villkor som
+    # det prioriterade mejlet ovan — EN gång per överlämning, inte per
+    # meddelande. Efter att svaret sparats, så att agentens överlämningsreplik
+    # följer med i samtalet, och i bakgrunden, så att ett långsamt
+    # ärendesystem aldrig blir kundens väntetid.
+    if (
+        escalated
+        and not any(t.get("status") == "escalated" for t in history)
+        and await integrationshandelser.har_handelse(storage, tenant_id, "arende_eskalerat")
+    ):
+        integrationshandelser.eskalering_i_bakgrunden(
+            storage,
+            tenant_id,
+            kontext=integrationskontext,
+            customer_id=customer["id"],
+            orsak=escalation_reason,
+            orsakskod=orsak,
+            arendelank=arendelank(settings.publik_bas_url, ticket["id"]),
+            is_test=is_test,
+        )
+
     # Samtalsläget (migration 066). Vid överlämning äger en människa samtalet
     # från och med nu: nästa meddelande från kunden hamnar i DET HÄR ärendets
     # tråd och får ingen AI-replik (se _svara_under_overlamning). Annars
@@ -1441,6 +1522,11 @@ async def run_support_agent(
         and svarslage == "besvara"
         and not erbjod_manniska
         and category in svarscache.CACHEBARA_KATEGORIER
+        # Ett svar byggt på uppgifter ur kundens system (bd snipe-36u) gäller
+        # EN kund: "din order skickades i går" får aldrig serveras till nästa
+        # som frågar "var är min order?". Ett misslyckat anrop är lika
+        # personligt — det säger något om just det här ärendet.
+        and not underlag
     ):
         await svarscache.spara(
             tenant_id,
@@ -1487,6 +1573,19 @@ async def run_support_agent(
 
     latency_ms = int((time.monotonic() - started) * 1000)
     pack = pack_version(SUPPORT_V1.name, lager.hash)
+    steglogg = trace.as_log()
+    if underlag.logg or underlag.katalogfel:
+        # Pseudo-steg, samma form som svarscachens: nyckeln "step" och inte
+        # "skill", så att kvotbokföringen (chat.py) inte räknar det som ett
+        # LLM-anrop. Bär VAD som anropades och hur det gick, aldrig svaren.
+        steglogg.append(
+            {
+                "step": "integrationer",
+                "anrop": underlag.logg,
+                "rundor": underlag.rundor,
+                "katalogfel": underlag.katalogfel,
+            }
+        )
     run = await storage.log_agent_run(
         tenant_id,
         agent_type="support",
@@ -1494,7 +1593,7 @@ async def run_support_agent(
         skills_used=trace.skills_used,
         input_text=message,
         output_text=reply,
-        step_log=trace.as_log(),
+        step_log=steglogg,
         tokens_in=trace.total_tokens_in,
         tokens_out=trace.total_tokens_out,
         latency_ms=latency_ms,
@@ -1528,7 +1627,9 @@ async def run_support_agent(
         "returning_customer": len(history) > 0,
         "simulation": False,
         "skills_used": trace.skills_used,
-        "step_log": trace.as_log(),
+        "step_log": steglogg,
         "cancellation_risk": cancellation_risk,
         "pack_version": pack,
+        # bd snipe-36u: vilka av kundens system som frågades (utan svarsdata).
+        "integrationer": underlag.logg,
     }
