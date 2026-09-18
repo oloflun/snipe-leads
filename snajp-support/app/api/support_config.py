@@ -27,6 +27,7 @@ def _svar(installningar: support_regler.SupportInstallningar) -> dict:
             "utanfor_amnet": list(support_regler.UTANFOR_AMNET_VAL),
             "max_misslyckade_tak": support_regler.MAX_MISSLYCKADE_TAK,
             "amnesomrade_tak": support_regler.AMNESOMRADE_TAK,
+            "sprak": list(support_regler.SPRAKVAL),
         },
         "orsaker": support_regler.ORSAKER,
     }
@@ -54,7 +55,7 @@ async def put_support_config(
                 **payload.eskalering.model_dump(exclude_none=True),
             }
         )
-    for falt in ("tonlage", "faktakontroll", "amnesomrade"):
+    for falt in ("tonlage", "faktakontroll", "amnesomrade", "sprak"):
         varde = getattr(payload, falt)
         if varde is not None:
             merged[falt] = varde.strip() if isinstance(varde, str) else varde

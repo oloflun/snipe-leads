@@ -516,6 +516,7 @@ class PostgresStorage:
         erbjod_manniska: bool,
         overlamnad_orsak: str | None = None,
         overlamnad_ticket_id: str | None = None,
+        sprak: str | None = None,
     ) -> dict[str, Any]:
         kontrollera_samtalslage(lage, misslyckade_i_rad)
         async with self._scoped(tenant_id) as conn:
@@ -526,8 +527,8 @@ class PostgresStorage:
                 """
                 insert into ss_chat_state as s
                   (tenant_id, customer_id, lage, misslyckade_i_rad, erbjod_manniska,
-                   overlamnad_orsak, overlamnad_ticket_id, overlamnad_at, updated_at)
-                values ($1, $2, $3, $4, $5, $6, $7,
+                   overlamnad_orsak, overlamnad_ticket_id, sprak, overlamnad_at, updated_at)
+                values ($1, $2, $3, $4, $5, $6, $7, $8,
                         case when $3 = 'overlamnad' then now() end, now())
                 on conflict (tenant_id, customer_id) do update set
                   lage = excluded.lage,
@@ -535,6 +536,7 @@ class PostgresStorage:
                   erbjod_manniska = excluded.erbjod_manniska,
                   overlamnad_orsak = excluded.overlamnad_orsak,
                   overlamnad_ticket_id = excluded.overlamnad_ticket_id,
+                  sprak = excluded.sprak,
                   overlamnad_at = case
                     when excluded.lage <> 'overlamnad' then null
                     when s.lage = 'overlamnad' and s.overlamnad_at is not null
@@ -551,6 +553,7 @@ class PostgresStorage:
                 erbjod_manniska,
                 overlamnad_orsak,
                 overlamnad_ticket_id,
+                sprak,
             )
         return _row(record)
 

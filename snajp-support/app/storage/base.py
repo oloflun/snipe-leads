@@ -186,6 +186,7 @@ class Storage(Protocol):
         erbjod_manniska: bool,
         overlamnad_orsak: str | None = None,
         overlamnad_ticket_id: str | None = None,
+        sprak: str | None = None,
     ) -> dict[str, Any]:
         """Upsert av hela läget. `overlamnad_at` sätts av lagringen när
         `lage` går från 'agent' till 'overlamnad' (och står kvar vid en
@@ -1436,6 +1437,7 @@ def standard_samtalslage(tenant_id: str, customer_id: str) -> dict[str, Any]:
         "overlamnad_orsak": None,
         "overlamnad_ticket_id": None,
         "overlamnad_at": None,
+        "sprak": None,
         "updated_at": None,
     }
 

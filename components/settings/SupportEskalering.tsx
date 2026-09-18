@@ -28,6 +28,7 @@ type Installningar = {
   tonlage: "standard" | "formell" | "personlig" | "kortfattad";
   faktakontroll: "tillatande" | "forsiktig" | "strikt";
   amnesomrade: string;
+  sprak: "kundens" | "svenska";
   options?: { amnesomrade_tak?: number };
 };
 
@@ -86,19 +87,34 @@ export function SupportEskalering() {
     return kropp;
   }, []);
 
-  useEffect(() => {
-    void (async () => {
-      try {
-        const svar = await anropa();
-        setData(svar);
-        setAmne(svar.amnesomrade ?? "");
-      } catch (orsak) {
-        setFel(orsak instanceof Error ? orsak.message : "Kunde inte hämta inställningarna.");
-      }
-    })();
+  const ladda = useCallback(async () => {
+    setFel(null);
+    try {
+      const svar = await anropa();
+      setData(svar);
+      setAmne(svar.amnesomrade ?? "");
+    } catch (orsak) {
+      setFel(orsak instanceof Error ? orsak.message : "Kunde inte hämta inställningarna.");
+    }
   }, [anropa]);
 
-  async function spara(falt: string, kropp: Record<string, unknown>) {
+  useEffect(() => {
+    void ladda();
+  }, [ladda]);
+
+  /**
+   * Optimistiskt: väljaren visar det nya värdet direkt i stället för att hoppa
+   * tillbaka tills servern svarat, och backar till det sparade om sparningen
+   * fallerar — en växel som står kvar på ett värde som aldrig sparades vore
+   * värre än en som hoppar.
+   */
+  async function spara(
+    falt: string,
+    kropp: Record<string, unknown>,
+    lokalt?: (nu: Installningar) => Installningar
+  ) {
+    const fore = data;
+    if (lokalt && fore) setData(lokalt(fore));
     setSparar(falt);
     setFel(null);
     try {
@@ -106,6 +122,7 @@ export function SupportEskalering() {
       setData(svar);
       if (falt === "amnesomrade") setAmne(svar.amnesomrade ?? "");
     } catch (orsak) {
+      if (fore) setData(fore);
       setFel(orsak instanceof Error ? orsak.message : "Kunde inte spara.");
     } finally {
       setSparar(null);
@@ -114,9 +131,14 @@ export function SupportEskalering() {
 
   if (data === null) {
     return fel ? (
-      <p role="alert" className="mt-10 max-w-[62ch] text-[0.875rem] text-danger">
-        {fel}
-      </p>
+      <div className="mt-10">
+        <p role="alert" className="max-w-[62ch] break-words text-[0.875rem] text-danger">
+          {fel}
+        </p>
+        <button type="button" onClick={() => void ladda()} className={cn(btnSecondary, btnLiten, "mt-3")}>
+          Försök igen
+        </button>
+      </div>
     ) : (
       <div className="mt-10 grid gap-3" aria-busy="true">
         {Array.from({ length: 4 }).map((_, index) => (
@@ -135,10 +157,10 @@ export function SupportEskalering() {
   return (
     <div className="mt-12 grid gap-7">
       <div>
-        <h2 className="font-display text-[1.25rem]">Ton, faktakontroll och överlämning</h2>
+        <h2 className="font-display text-[1.25rem]">Ton, språk, faktakontroll och överlämning</h2>
         <p className="mt-1 max-w-[62ch] text-[0.9375rem] leading-6 text-ink/60">
-          Hur agenten låter, hur strängt svaren kontrolleras mot kunskapsbasen, och när en
-          människa tar över. Överlämningen sker i kundens eget chattfönster, och hela
+          Hur agenten låter, vilket språk den svarar på, hur strängt svaren kontrolleras mot
+          kunskapsbasen, och när en människa tar över. Överlämningen sker i kundens eget chattfönster, och hela
           samtalet följer med.
         </p>
       </div>
@@ -152,7 +174,10 @@ export function SupportEskalering() {
               value={data.tonlage}
               disabled={upptagen}
               aria-label="Tonläge"
-              onChange={(e) => void spara("tonlage", { tonlage: e.target.value })}
+              onChange={(e) => {
+                const tonlage = e.target.value as Installningar["tonlage"];
+                void spara("tonlage", { tonlage }, (nu) => ({ ...nu, tonlage }));
+              }}
               className={valjarKlass}
             >
               {TONLAGEN.map((t) => (
@@ -160,6 +185,31 @@ export function SupportEskalering() {
                   {t.etikett}
                 </option>
               ))}
+            </select>
+          </span>
+        </Rad>
+        <Rad className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6">
+          <span className="min-w-0 text-[0.9375rem]">
+            Svarsspråk
+            <span className="mt-0.5 block text-[0.8125rem] leading-5 text-ink/55">
+              Skriver kunden på engelska, arabiska eller något annat språk kan agenten svara
+              på samma språk — kunskapsbasen kan fortfarande vara på svenska.
+            </span>
+          </span>
+          <span className="flex items-center gap-2 justify-self-end">
+            {spinner("sprak")}
+            <select
+              value={data.sprak}
+              disabled={upptagen}
+              aria-label="Svarsspråk"
+              onChange={(e) => {
+                const sprak = e.target.value as Installningar["sprak"];
+                void spara("sprak", { sprak }, (nu) => ({ ...nu, sprak }));
+              }}
+              className={valjarKlass}
+            >
+              <option value="kundens">Kundens språk</option>
+              <option value="svenska">Alltid svenska</option>
             </select>
           </span>
         </Rad>
@@ -176,7 +226,10 @@ export function SupportEskalering() {
               value={data.faktakontroll}
               disabled={upptagen}
               aria-label="Faktakontroll"
-              onChange={(e) => void spara("faktakontroll", { faktakontroll: e.target.value })}
+              onChange={(e) => {
+                const faktakontroll = e.target.value as Installningar["faktakontroll"];
+                void spara("faktakontroll", { faktakontroll }, (nu) => ({ ...nu, faktakontroll }));
+              }}
               className={valjarKlass}
             >
               {FAKTAKONTROLL.map((f) => (
@@ -203,11 +256,13 @@ export function SupportEskalering() {
               value={esk.max_misslyckade}
               disabled={upptagen}
               aria-label="Misslyckade försök innan överlämning"
-              onChange={(e) =>
-                void spara("max_misslyckade", {
-                  eskalering: { max_misslyckade: Number(e.target.value) }
-                })
-              }
+              onChange={(e) => {
+                const max_misslyckade = Number(e.target.value);
+                void spara("max_misslyckade", { eskalering: { max_misslyckade } }, (nu) => ({
+                  ...nu,
+                  eskalering: { ...nu.eskalering, max_misslyckade }
+                }));
+              }}
               className={valjarKlass}
             >
               {[0, 1, 2, 3, 4, 5].map((n) => (
@@ -231,11 +286,13 @@ export function SupportEskalering() {
               value={esk.sentimentgrans}
               disabled={upptagen}
               aria-label="Gräns för missnöje"
-              onChange={(e) =>
-                void spara("sentimentgrans", {
-                  eskalering: { sentimentgrans: Number(e.target.value) }
-                })
-              }
+              onChange={(e) => {
+                const sentimentgrans = Number(e.target.value);
+                void spara("sentimentgrans", { eskalering: { sentimentgrans } }, (nu) => ({
+                  ...nu,
+                  eskalering: { ...nu.eskalering, sentimentgrans }
+                }));
+              }}
               className={valjarKlass}
             >
               {Array.from(new Set([...SENTIMENTGRANSER, esk.sentimentgrans]))
@@ -256,9 +313,13 @@ export function SupportEskalering() {
               value={esk.utanfor_amnet}
               disabled={upptagen}
               aria-label="Frågor utanför ämnesområdet"
-              onChange={(e) =>
-                void spara("utanfor_amnet", { eskalering: { utanfor_amnet: e.target.value } })
-              }
+              onChange={(e) => {
+                const utanfor_amnet = e.target.value as Installningar["eskalering"]["utanfor_amnet"];
+                void spara("utanfor_amnet", { eskalering: { utanfor_amnet } }, (nu) => ({
+                  ...nu,
+                  eskalering: { ...nu.eskalering, utanfor_amnet }
+                }));
+              }}
               className={valjarKlass}
             >
               <option value="erbjud">Erbjud en människa</option>
@@ -273,7 +334,12 @@ export function SupportEskalering() {
         beskrivning="Säger kunden att agenten inte förstår, räknas det mot gränsen ovan i stället för att agenten svarar samma sak igen."
         pa={esk.frustration_raknas}
         disabled={upptagen}
-        onChange={(nytt) => void spara("frustration_raknas", { eskalering: { frustration_raknas: nytt } })}
+        onChange={(nytt) =>
+          void spara("frustration_raknas", { eskalering: { frustration_raknas: nytt } }, (nu) => ({
+            ...nu,
+            eskalering: { ...nu.eskalering, frustration_raknas: nytt }
+          }))
+        }
       />
 
       <div>

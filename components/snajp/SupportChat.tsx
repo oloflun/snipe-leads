@@ -1033,7 +1033,7 @@ export function SupportChat({
                     {text({ sv: "Medarbetare", en: "Team member" })}
                   </p>
                 ) : null}
-                <p className="whitespace-pre-wrap">{message.content}</p>
+                <p dir="auto" className="whitespace-pre-wrap break-words">{message.content}</p>
               </div>
               {/* Feedback (6.3) — BARA i testMode och BARA på ett svar som bär
                   ett run_id. Den publika widgeten ska aldrig få tummar. */}

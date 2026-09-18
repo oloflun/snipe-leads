@@ -49,7 +49,11 @@ function Chattar() {
   const [svar, setSvar] = useState("");
   const [fel, setFel] = useState<string | null>(null);
   const [pagar, setPagar] = useState<"svar" | "aterlamna" | null>(null);
+  const [detaljFel, setDetaljFel] = useState<string | null>(null);
   const utskriftRef = useRef<HTMLDivElement>(null);
+  // Det samtal som är valt JUST NU. Ett svar som kommer tillbaka för ett
+  // samtal man redan klickat vidare från ska inte skriva över det nya.
+  const valtRef = useRef<string | null>(valtFranUrl);
 
   const hamtaLista = useCallback(async () => {
     try {
@@ -64,9 +68,12 @@ function Chattar() {
   const hamtaDetalj = useCallback(async (kund: string) => {
     try {
       const data = await fetch(`${BAS}/chattar/${kund}`).then((s) => readJson<Chattdetalj>(s));
+      if (valtRef.current !== kund) return;
       setDetalj(data);
+      setDetaljFel(null);
     } catch (orsak) {
-      setFel(felmeddelande(orsak));
+      if (valtRef.current !== kund) return;
+      setDetaljFel(felmeddelande(orsak));
     }
   }, []);
 
@@ -89,7 +96,9 @@ function Chattar() {
   }, [antalRader]);
 
   function valj(kund: string) {
+    valtRef.current = kund;
     setFel(null);
+    setDetaljFel(null);
     setSvar("");
     setDetalj(null);
     setValtId(kund);
@@ -122,6 +131,7 @@ function Chattar() {
     setFel(null);
     try {
       await readJson(await fetch(`${BAS}/chattar/${valtId}/aterlamna`, { method: "POST" }));
+      valtRef.current = null;
       setValtId(null);
       setDetalj(null);
       await hamtaLista();
@@ -163,6 +173,7 @@ function Chattar() {
                   key={rad.customer_id}
                   type="button"
                   onClick={() => valj(rad.customer_id)}
+                  aria-current={valtId === rad.customer_id ? "true" : undefined}
                   className={cn(
                     "focus-ring block w-full rounded-[4px] py-3 text-left transition-colors hover:bg-paper2/50",
                     valtId === rad.customer_id && "bg-paper2/60"
@@ -196,6 +207,19 @@ function Chattar() {
               <p className="border-y border-ink/15 py-8 text-[0.9375rem] text-ink/55">
                 Välj ett samtal i listan så visas hela samtalet här.
               </p>
+            ) : !detalj && detaljFel ? (
+              <div className="border-y border-ink/15 py-6">
+                <p role="alert" className="max-w-[62ch] text-[0.9375rem] text-danger">
+                  Samtalet gick inte att hämta. {detaljFel}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void hamtaDetalj(valtId)}
+                  className={cn(btnSecondary, btnLiten, "mt-3")}
+                >
+                  Försök igen
+                </button>
+              </div>
             ) : !detalj ? (
               <SkeletonRows />
             ) : (
@@ -217,6 +241,8 @@ function Chattar() {
 
                 <div
                   ref={utskriftRef}
+                  aria-live="polite"
+                  aria-label="Samtalet"
                   className="mt-4 max-h-[420px] space-y-3 overflow-y-auto border-l-[1px] border-ink/15 pl-4"
                 >
                   {detalj.meddelanden.map((rad) => (
@@ -226,8 +252,9 @@ function Chattar() {
                         <span className="ml-2 font-normal num text-ink/40">{tid(rad.created_at)}</span>
                       </p>
                       <p
+                        dir="auto"
                         className={cn(
-                          "mt-0.5 max-w-[72ch] whitespace-pre-wrap text-[0.9375rem] leading-7",
+                          "mt-0.5 max-w-[72ch] whitespace-pre-wrap break-words text-[0.9375rem] leading-7",
                           rad.author === "customer" ? "text-ink" : "text-ink/70"
                         )}
                       >
@@ -244,11 +271,21 @@ function Chattar() {
                   id="medarbetarsvar"
                   value={svar}
                   onChange={(e) => setSvar(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                      e.preventDefault();
+                      void skicka();
+                    }
+                  }}
+                  aria-describedby="medarbetarsvar-tips"
                   rows={4}
                   maxLength={4000}
                   placeholder="Svaret visas i kundens chattfönster."
                   className="focus-ring mt-2 w-full rounded-input border border-ink/15 bg-paper px-3 py-2.5 text-[16px] leading-6"
                 />
+                <p id="medarbetarsvar-tips" className="mt-1 text-[0.8125rem] text-ink/45">
+                  Ctrl+Enter skickar.
+                </p>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <button
                     type="button"

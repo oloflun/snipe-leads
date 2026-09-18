@@ -122,6 +122,8 @@ class SupportConfigRequest(BaseModel):
     faktakontroll: Literal["tillatande", "forsiktig", "strikt"] | None = None
     #: Kundskriven text. Taket verkställs här OCH i support_regler.normalisera.
     amnesomrade: str | None = Field(default=None, max_length=600)
+    #: Svarsspråk (bd snipe-xtr): kundens språk eller alltid svenska.
+    sprak: Literal["kundens", "svenska"] | None = None
 
 
 class MedarbetarsvarRequest(BaseModel):

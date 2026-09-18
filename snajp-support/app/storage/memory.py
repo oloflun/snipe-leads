@@ -462,6 +462,7 @@ class MemoryStorage:
         erbjod_manniska: bool,
         overlamnad_orsak: str | None = None,
         overlamnad_ticket_id: str | None = None,
+        sprak: str | None = None,
     ) -> dict[str, Any]:
         kontrollera_samtalslage(lage, misslyckade_i_rad)
         tidigare = self.chat_states.get((tenant_id, customer_id))
@@ -483,6 +484,7 @@ class MemoryStorage:
             "overlamnad_orsak": overlamnad_orsak,
             "overlamnad_ticket_id": overlamnad_ticket_id,
             "overlamnad_at": overlamnad_at,
+            "sprak": sprak,
             "updated_at": nu,
         }
         self.chat_states[(tenant_id, customer_id)] = rad

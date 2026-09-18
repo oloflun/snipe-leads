@@ -17,7 +17,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
-import random
 import re
 import time
 from collections.abc import Awaitable, Callable
@@ -39,7 +38,7 @@ from ..notifications.prioriterat_mejl import arendelank, skicka_prioriterat
 from ..leads.untrusted_content import wrap_untrusted_content
 from ..config import CATEGORY_LABELS, get_settings
 from ..storage.base import Storage
-from . import support_faktagrind, support_regler
+from . import support_faktagrind, support_regler, support_texter
 from .retention_classifier import classify_cancellation_risk, is_cancellation_risk
 from .step_runner import RunTrace, run_step
 from .support_playbook import SUPPORT_V1
@@ -61,51 +60,9 @@ SENTIMENT_ESCALATION_THRESHOLD = support_regler.STANDARD_ESKALERING["sentimentgr
 #: nytt meddelande i samtalet och av varje medarbetarsvar.
 OVERLAMNING_GILTIG_TIMMAR = 24
 
-#: Kvittensen när kunden skriver medan samtalet väntar på en människa. Bara
-#: medan INGEN medarbetare svarat ännu — när en människa är i samtalet svarar
-#: agenten inte alls; ett "tack, det är noterat" mellan två människor är brus.
-_KVITTENSER = (
-    "Det är tillagt i ärendet, så kollegan ser det direkt när ärendet tas över. "
-    "Svaret kommer här i chatten.",
-    "Tack, jag har lagt till det. Kollegan som tar över ser hela samtalet och "
-    "svarar här.",
-    "Noterat i ärendet. Du behöver inte upprepa något — svaret kommer i den här "
-    "chatten.",
-)
-
-#: Läggs till EFTER humaniseraren när modellens eskaleringsbedömning lämnar
-#: över ett samtal som koden hade tänkt besvara. Kod, inte modelltext: löftet
-#: om en människa får bara ges när ärendet faktiskt är överlämnat, och en
-#: formulering som humaniseraren kan mjuka upp är inget löfte.
-_OVERLAMNINGSRADER = (
-    "Jag kopplar också in en kollega som tar över här i chatten. Hela samtalet "
-    "följer med, så du behöver inte börja om.",
-    "En kollega tar över härifrån, i samma chatt och med hela samtalet framför sig.",
-)
-
-#: När faktagrinden fäller svaret även efter reparationsrundan. Uttrycklig
-#: osäkerhet i stället för en gissning, och ett erbjudande om en människa —
-#: aldrig en uppgift vi inte kan stå för.
-_OSAKERHETSSVAR = (
-    "Det här vill jag inte gissa på, och jag hittar inget säkert svar i det "
-    "underlag jag har. Vill du att jag kopplar in en kollega?",
-    "Jag har ingen uppgift om det som jag kan stå för. Ska jag koppla in en "
-    "kollega som kan svara säkert?",
-)
-
-#: Hela överlämningsbeskedet, när det inte finns en modelltext att bygga på
-#: (tomt utkast, fälld faktagrind på ett eskalerat ärende, en motfråga som
-#: modellens bedömning gjorde till en överlämning). Säger de tre saker Ebbots
-#: överlämning gör bra: en människa tar över, HÄR i chatten, med hela samtalet.
-_OVERLAMNINGSSVAR = (
-    "Det här behöver en kollega titta på, så jag lämnar över ärendet. Svaret "
-    "kommer här i chatten, och hela samtalet följer med — du behöver inte "
-    "upprepa något.",
-    "Jag kopplar in en kollega som tar över härifrån, i samma chatt. Hela "
-    "samtalet följer med, så du behöver inte börja om.",
-    "En kollega tar över ärendet nu. Du får svaret här i chatten, och kollegan "
-    "ser allt vi skrivit hittills.",
-)
+#: De fasta replikerna (kvittens, överlämningsbesked, osäkerhetssvar) bor i
+#: support_texter.py, på svenska och engelska — se modulen för varför de är
+#: kod och inte modelltext.
 
 # Hur mycket av samtalet som följer med in i prompten. Varje meddelande i
 # chatten öppnar ett eget ärende, så "tidigare turer" är tidigare ärenden för
@@ -119,7 +76,8 @@ MAX_HISTORY_TURNS = 8
 # avsändaren; i en chatt finns ingen avsändare att sätta dit, så raden ska bort.
 _DANGLING_SIGN_OFF = re.compile(
     r"\n*\s*(?:med\s+vänliga\s+hälsningar|vänliga\s+hälsningar|hälsningar|mvh|"
-    r"bästa\s+hälsningar|vänligen)\s*[,.!]?\s*$",
+    r"bästa\s+hälsningar|vänligen|best\s+regards|kind\s+regards|regards|"
+    r"sincerely|yours\s+sincerely)\s*[,.!]?\s*$",
     re.IGNORECASE,
 )
 
@@ -454,7 +412,7 @@ async def _svara_under_overlamning(
 
     meddelanden = await storage.get_messages(tenant_id, ticket["conversation_id"])
     manniska_i_samtalet = any(m.get("author") == "human" for m in meddelanden)
-    reply = "" if manniska_i_samtalet else random.choice(_KVITTENSER)
+    reply = "" if manniska_i_samtalet else support_texter.text("kvittens", samtal.get("sprak"))
     if reply:
         await storage.save_message(
             tenant_id,
@@ -476,6 +434,7 @@ async def _svara_under_overlamning(
         erbjod_manniska=False,
         overlamnad_orsak=samtal.get("overlamnad_orsak"),
         overlamnad_ticket_id=ticket["id"],
+        sprak=samtal.get("sprak"),
     )
 
     step_log = [{"step": "overlamnad", "manniska_i_samtalet": manniska_i_samtalet}]
@@ -834,12 +793,26 @@ async def run_support_agent(
             "agenten rimligen ska hjälpa till med. false BARA när den uppenbart "
             "ligger utanför — väder, läxhjälp, andra företags produkter), "
             "missforstadd (bool: kunden säger att förra svaret missade, att du "
-            "inte förstått, eller upprepar frustrerat samma fråga)."
+            "inte förstått, eller upprepar frustrerat samma fråga), "
+            "sprak (ISO 639-1-koden för språket i kundens meddelande, t.ex. "
+            "\"sv\", \"en\", \"ar\". \"sv\" när du är osäker eller meddelandet är för "
+            "kort för att avgöra), "
+            "sokfraga_sv (kundens fråga omformulerad till en kort svensk "
+            "sökfråga för kunskapsbasen; tom sträng när meddelandet redan är på svenska)."
         ),
         case_context=case_context,
     )
     category = triage.get("category") if triage.get("category") in taxonomy else "ovrigt"
     sentiment = max(0.0, min(1.0, float(triage.get("sentiment") or 0.5)))
+
+    # Svarsspråket (bd snipe-xtr): kundens språk om kunden (tenanten) valt
+    # det, med förra turens språk som reserv och svenska i varje tveksamhet.
+    # Kunskapsbasen är fortfarande svensk — därför en svensk sökfråga nedan.
+    svar_sprak = support_regler.svarsprak(
+        installningar, triage.get("sprak"), tidigare=samtal.get("sprak")
+    )
+    ar_svenska = svar_sprak == "sv"
+    sprak_namn = support_regler.spraknamn(svar_sprak)
 
     # --- Kod: kundminne, ärende, inkommande meddelande ---------------------
     nya_fakta = [str(f).strip() for f in (triage.get("kundfakta") or []) if str(f).strip()]
@@ -895,8 +868,13 @@ async def run_support_agent(
     # nytt meddelande bär sitt eget ämne, och mer text späder rankningen.
     if turn_count and senaste_kundreplik and len(message) < 80:
         sokfraga = f"{sokfraga} {senaste_kundreplik}".strip()
+    # En fråga på ett annat språk hittar ingenting i en svensk fulltext-
+    # sökning. Triagens svenska omformulering tar dess plats.
+    sokfraga_sv = str(triage.get("sokfraga_sv") or "").strip()
+    if not ar_svenska and sokfraga_sv:
+        sokfraga = sokfraga_sv
     articles = await _sok_kb(storage, tenant_id, sokfraga)
-    kb_forsok = ["hela meddelandet"]
+    kb_forsok = ["hela meddelandet" if ar_svenska or not sokfraga_sv else "svensk sökfråga"]
     if not articles:
         bredare = _forenklad_fraga(subject, message)
         if bredare:
@@ -1137,6 +1115,12 @@ async def run_support_agent(
         )
     if underlag:
         uppgift += integrationsuppslag.UTKAST_TILLAGG
+    if not ar_svenska:
+        uppgift = uppgift.replace(
+            "Returnera JSON: draft (svenska).",
+            f"Skriv hela svaret på {sprak_namn} — kundens språk — även om "
+            f"kunskapsbasen är på svenska. Returnera JSON: draft ({sprak_namn}).",
+        )
     draft = await steg(
         steps["cs:draft-response"],
         ledger,
@@ -1302,7 +1286,11 @@ async def run_support_agent(
         current_draft = retention.get("revised_draft") or current_draft
 
     # --- Steg 7: humanizer (ALLTID sist) -----------------------------------
-    humanized = await steg(
+    #
+    # Bara på svenska (bd snipe-xtr). Skillen är snajp:humanizer-SVENSKA: på
+    # ett annat språk hade den översatt tillbaka till svenska, alltså ångrat
+    # det enda utkaststeget just gjort. Där är utkastet sista handen.
+    humanized = {"final_reply": current_draft} if not ar_svenska else await steg(
         steps["snajp:humanizer-svenska"],
         ledger,
         trace,
@@ -1347,7 +1335,7 @@ async def run_support_agent(
                 "Faktagrinden fällde supportsvaret (tenant %s): %s", tenant_id, dom.ostodda
             )
             rattning = await steg(
-                steps["snajp:humanizer-svenska"],
+                steps["snajp:humanizer-svenska" if ar_svenska else "cs:draft-response"],
                 ledger,
                 trace,
                 task=(
@@ -1356,7 +1344,11 @@ async def run_support_agent(
                     + ". Skriv om texten så att de uppgifterna stryks. Där de "
                     "behövdes: säg rakt ut att du inte har den uppgiften. Hitta inte "
                     "på något nytt och ändra inget annat. Ren text, ingen markdown. "
-                    "Returnera JSON: final_reply (svenska)."
+                    + (
+                        "Returnera JSON: final_reply (svenska)."
+                        if ar_svenska
+                        else f"Skriv på {sprak_namn}. Returnera JSON: final_reply ({sprak_namn})."
+                    )
                 ),
                 case_context=f"{case_context}\n\n## Kunskapsbas\n{kb_block}{systemblock}\n\n## Text att rätta\n{reply}",
             )
@@ -1369,9 +1361,9 @@ async def run_support_agent(
                 reply = kandidat
                 faktagrind.update(ok=True, reparerad=True)
             elif escalated:
-                reply = random.choice(_OVERLAMNINGSSVAR)
+                reply = support_texter.text("overlamningssvar", svar_sprak)
             else:
-                reply = random.choice(_OSAKERHETSSVAR)
+                reply = support_texter.text("osakerhet", svar_sprak)
                 erbjod_manniska = True
 
     # Modellens eskaleringsbedömning lämnade över ett samtal koden tänkt
@@ -1381,9 +1373,9 @@ async def run_support_agent(
     # du? en kollega tar över" är två besked som motsäger varandra.
     if modellen_lamnar_over and not abuse.ska_eskalera:
         if svarslage == "fraga" or not reply:
-            reply = random.choice(_OVERLAMNINGSSVAR)
+            reply = support_texter.text("overlamningssvar", svar_sprak)
         else:
-            reply = f"{reply}\n\n{random.choice(_OVERLAMNINGSRADER)}"
+            reply = f"{reply}\n\n{support_texter.text("overlamningsrad", svar_sprak)}"
 
     # Påhoppsspärren appliceras EFTER humaniseraren, och det är hela poängen.
     # Ett kontrollerat säkerhetssvar ska inte formuleras om av en modell — den
@@ -1405,18 +1397,9 @@ async def run_support_agent(
         # ett oeskalerat ärende), och den varieras så att en kund som träffar
         # den två gånger inte läser exakt samma mening två gånger.
         if escalated:
-            reply = random.choice(_OVERLAMNINGSSVAR)
+            reply = support_texter.text("overlamningssvar", svar_sprak)
         else:
-            reply = random.choice(
-                [
-                    "Där fick jag inte ihop ett bra svar. Kan du beskriva vad "
-                    "du är ute efter på ett annat sätt, så gör jag ett nytt försök?",
-                    "Jag vill inte gissa mig till ett svar här. Berätta gärna "
-                    "lite mer om vad du behöver, så tittar jag igen.",
-                    "Den frågan kunde jag inte besvara ordentligt på första "
-                    "försöket. Formulera den gärna på ett annat sätt så löser vi det.",
-                ]
-            )
+            reply = support_texter.text("tomt", svar_sprak)
     if len(reply) > config["max_length"]:
         reply = reply[: config["max_length"] - 1].rstrip() + "…"
 
@@ -1500,6 +1483,7 @@ async def run_support_agent(
         erbjod_manniska=False if escalated else erbjod_manniska,
         overlamnad_orsak=orsak if escalated else None,
         overlamnad_ticket_id=ticket["id"] if escalated else None,
+        sprak=svar_sprak,
     )
 
     # --- Fas R2: cache-STORE (INV-CACHE-001) --------------------------------
@@ -1623,6 +1607,7 @@ async def run_support_agent(
         "overlamnad": escalated,
         "svarslage": svarslage,
         "faktagrind": faktagrind,
+        "sprak": svar_sprak,
         "kb_sources": [{"title": a["title"], "similarity": a["similarity"]} for a in articles],
         "returning_customer": len(history) > 0,
         "simulation": False,

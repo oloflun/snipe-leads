@@ -60,6 +60,8 @@ class SupportInstallningar(TypedDict):
     #: Kundens egen beskrivning av vad agenten ska hjälpa till med. KUNDSKRIVEN
     #: text: når prompten bara wrappad och i user-position (INV-SEC-009).
     amnesomrade: str
+    #: Nyckel i SPRAKVAL: svara på kundens språk, eller alltid på svenska.
+    sprak: str
 
 
 STANDARD_ESKALERING: Eskaleringsregler = {
@@ -97,12 +99,63 @@ TONLAGEN: dict[str, str] = {
 #: i stället för av en andra modell.
 FAKTAKONTROLL = ("tillatande", "forsiktig", "strikt")
 
+#: Svarsspråket. "kundens" = samma språk som kundens meddelande (Ebbots
+#: "same as user"); "svenska" = alltid svenska, oavsett vad kunden skriver.
+SPRAKVAL = ("kundens", "svenska")
+
+#: Språknamn för prompten. En ISO-kod utanför listan skickas som kod —
+#: modellen känner dem — men de vanligaste får ett namn, så att instruktionen
+#: inte kan läsas som något annat än ett språk.
+SPRAKNAMN: dict[str, str] = {
+    "sv": "svenska", "en": "engelska", "de": "tyska", "fr": "franska",
+    "es": "spanska", "it": "italienska", "pt": "portugisiska", "nl": "nederländska",
+    "da": "danska", "no": "norska", "nb": "norska", "nn": "nynorska",
+    "fi": "finska", "is": "isländska", "et": "estniska", "lv": "lettiska",
+    "lt": "litauiska", "pl": "polska", "uk": "ukrainska", "ru": "ryska",
+    "ar": "arabiska", "fa": "persiska", "so": "somaliska", "ti": "tigrinja",
+    "tr": "turkiska", "ku": "kurdiska", "bs": "bosniska", "hr": "kroatiska",
+    "sr": "serbiska", "ro": "rumänska", "hu": "ungerska", "el": "grekiska",
+    "zh": "kinesiska", "ja": "japanska", "ko": "koreanska", "th": "thailändska",
+    "vi": "vietnamesiska", "hi": "hindi", "ur": "urdu",
+}
+
+_ISO_KOD = re.compile(r"^[a-z]{2}$")
+
 STANDARD: SupportInstallningar = {
     "eskalering": STANDARD_ESKALERING,
     "tonlage": "standard",
     "faktakontroll": "forsiktig",
     "amnesomrade": "",
+    "sprak": "kundens",
 }
+
+
+def svarsprak(
+    installningar: SupportInstallningar,
+    signal: Any,
+    *,
+    tidigare: Any = None,
+) -> str:
+    """Vilket språk svaret ska skrivas på, som ISO 639-1-kod.
+
+    `signal` är triagens bedömning av kundens meddelande. Svenska vinner
+    varje tveksamhet: ett ogiltigt värde, en saknad signal, eller kundens
+    val "svenska". `tidigare` är samtalets språk från förra turen och
+    används när signalen saknas — ett "ok" mitt i ett engelskt samtal ska
+    inte slå om till svenska för att triagen inte hade något att gå på.
+    """
+    if installningar["sprak"] == "svenska":
+        return "sv"
+    for kandidat in (signal, tidigare):
+        kod = str(kandidat or "").strip().lower()[:2]
+        if _ISO_KOD.match(kod):
+            return kod
+    return "sv"
+
+
+def spraknamn(kod: str) -> str:
+    """Namnet på språket, för prompten ("engelska"), eller koden själv."""
+    return SPRAKNAMN.get(kod, kod)
 
 
 def normalisera_eskalering(ratt: Any) -> Eskaleringsregler:
@@ -129,6 +182,7 @@ def normalisera(settings: Any) -> SupportInstallningar:
     tonlage = rad.get("tonlage")
     faktakontroll = rad.get("faktakontroll")
     amnesomrade = rad.get("amnesomrade")
+    sprak = rad.get("sprak")
     return {
         "eskalering": normalisera_eskalering(rad.get("eskalering")),
         "tonlage": tonlage if tonlage in TONLAGEN else "standard",
@@ -136,6 +190,7 @@ def normalisera(settings: Any) -> SupportInstallningar:
         "amnesomrade": (
             amnesomrade.strip()[:AMNESOMRADE_TAK] if isinstance(amnesomrade, str) else ""
         ),
+        "sprak": sprak if sprak in SPRAKVAL else "kundens",
     }
 
 
