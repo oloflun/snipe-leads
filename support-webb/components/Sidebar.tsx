@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Mail,
   MessagesSquare,
+  Plug,
   Settings
 } from "lucide-react";
 import Link from "next/link";
@@ -36,6 +37,7 @@ const FLIKAR: Flik[] = [
 ];
 
 const BOTTENFLIKAR: Flik[] = [
+  { href: "/integrationer", etikett: "Integrationer", Ikon: Plug },
   { href: "/installningar", etikett: "Inställningar", Ikon: Settings },
   { href: "/kontakt", etikett: "Kontakt", Ikon: Mail }
 ];
