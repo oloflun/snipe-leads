@@ -46,6 +46,10 @@ create table if not exists ss_chat_state (
   overlamnad_orsak     text,
   overlamnad_ticket_id uuid references ss_tickets(id) on delete set null,
   overlamnad_at        timestamptz,
+  -- Samtalets språk (ISO 639-1, t.ex. 'sv', 'en'), satt av agentens senaste
+  -- tur. Läses av kvittensen under en överlämning, som inte kör någon modell
+  -- och därför inte kan avgöra språket själv. NULL = svenska.
+  sprak                text,
   updated_at           timestamptz not null default now(),
   primary key (tenant_id, customer_id)
 );
