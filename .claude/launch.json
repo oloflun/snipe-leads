@@ -91,6 +91,25 @@
       ],
       "cwd": "snajp-support",
       "port": 8000
+    },
+    {
+      "name": "support-backend",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "lokal_support.py"
+      ],
+      "cwd": "snajp-support",
+      "port": 8000
+    },
+    {
+      "name": "support-sajt-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "cwd": "support-webb",
+      "port": 3102
     }
   ]
 }

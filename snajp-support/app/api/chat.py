@@ -22,7 +22,7 @@ from ..kvotfel import (
 )
 from . import rate_limit_db
 from .deps import require_tenant
-from .schemas import ChatRequest
+from .schemas import ChatRequest, SamtalRequest
 
 logger = logging.getLogger("snajp-support")
 
@@ -281,6 +281,49 @@ async def chat(
             _process(request.app.state, job_id, tenant["tenant_id"], payload, attachments, scopes)
         )
     return {"job_id": job_id, "status": "processing"}
+
+
+#: Chattfönstrets besökare identifieras av en slumpad sessionsnyckel
+#: (components/snajp/SupportChat.tsx: `<uuid>@session.snajp.se`). Bara SÅDANA
+#: identiteter kan läsas tillbaka anonymt. En riktig e-postadress (en tenant
+#: som integrerar /api/chat med kundens mejl) går att gissa — en sessionsnyckel
+#: är en 122-bitars hemlighet som bara besökarens egen flik känner till.
+_SESSIONSDOMAN = "@session.snajp.se"
+
+
+@router.post("/api/chat/samtal")
+async def hamta_samtal(
+    request: Request, payload: SamtalRequest, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Samtalet för en chattsession: läget och meddelandena (bd snipe-1fl).
+
+    Chattfönstret pollar den här efter en överlämning för att visa
+    medarbetarens svar i SAMMA fönster, och läser hela samtalet när en
+    besökare öppnar sin sessionslänk igen. En okänd session är inte ett fel —
+    det är en besökare som inte skrivit något ännu — och skapar ingen kundrad.
+    """
+    from ..agent import overlamning
+    from ..agent.support_agent import ar_overlamnat
+
+    email = payload.customer_email.strip().lower()
+    if not email.endswith(_SESSIONSDOMAN):
+        raise HTTPException(
+            status_code=422, detail="Bara chattsessioner kan läsas tillbaka här."
+        )
+    storage = request.app.state.storage
+    kund = await storage.find_customer(tenant["tenant_id"], email=email)
+    if not kund:
+        return {"overlamnad": False, "meddelanden": []}
+    samtal = await storage.get_chat_state(tenant["tenant_id"], kund["id"])
+    rader = await overlamning.samtalsutskrift(storage, tenant["tenant_id"], kund["id"])
+    return {
+        "overlamnad": ar_overlamnat(samtal),
+        "meddelanden": [
+            # Bara det chattfönstret visar — inget ärende-id, ingen orsakskod.
+            {"id": r["id"], "author": r["author"], "content": r["content"], "created_at": r["created_at"]}
+            for r in overlamning.efter(rader, payload.efter)
+        ],
+    }
 
 
 @router.get("/api/jobs/{job_id}")

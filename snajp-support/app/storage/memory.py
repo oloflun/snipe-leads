@@ -29,6 +29,7 @@ from .base import (
     ANALYTICS_COVERAGE,
     FEEDBACK_VERDICTS,
     LEADS_BUDGET_AGENT_TYPES,
+    MEDDELANDE_AVSANDARE,
     bk_belopp,
     bk_datum,
     kontrollera_bk_balans,
@@ -37,6 +38,8 @@ from .base import (
     kontrollera_bk_kalla,
     kontrollera_bk_riktning,
     kontrollera_bk_status,
+    kontrollera_samtalslage,
+    standard_samtalslage,
     status_transition_allowed,
 )
 
@@ -166,6 +169,8 @@ class MemoryStorage:
         self.agent_feedback: dict[str, list[dict[str, Any]]] = {}
         # Kundminne (migration 052): (tenant_id, customer_id) -> faktarader.
         self.customer_memory: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        # Samtalsläge (migration 066): (tenant_id, customer_id) -> läget.
+        self.chat_states: dict[tuple[str, str], dict[str, Any]] = {}
         # Golden eval-cases (agent_evals, migration 010 — första kodvägen
         # 2026-08-27).
         self.eval_cases: dict[str, list[dict[str, Any]]] = {}
@@ -405,10 +410,14 @@ class MemoryStorage:
         content: str,
         sentiment: float | None = None,
         has_image: bool = False,
+        author: str | None = None,
     ) -> dict[str, Any]:
         conversation = self.conversations.get(conversation_id)
         if not conversation or conversation["tenant_id"] != tenant_id:
             raise ValueError("Konversationen tillhör inte denna tenant.")
+        if author is not None and author not in MEDDELANDE_AVSANDARE:
+            # Samma villkor som ss_messages_author_check i migration 066.
+            raise ValueError(f"Okänd avsändare: {author!r}")
         message = {
             "id": str(uuid.uuid4()),
             "tenant_id": tenant_id,
@@ -417,6 +426,7 @@ class MemoryStorage:
             "content": content,
             "sentiment": sentiment,
             "has_image": has_image,
+            "author": author,
             "created_at": _now(),
         }
         self.messages.setdefault(conversation_id, []).append(message)
@@ -429,6 +439,75 @@ class MemoryStorage:
         if not conversation or conversation["tenant_id"] != tenant_id:
             return []
         return self.messages.get(conversation_id, [])
+
+    async def find_customer(self, tenant_id: str, *, email: str) -> dict[str, Any] | None:
+        if not email:
+            return None
+        customer_id = self.identifiers.get((tenant_id, "email", email.lower()))
+        return self.customers.get(customer_id) if customer_id else None
+
+    # -- Samtalsläge (migration 066) ----------------------------------------
+
+    async def get_chat_state(self, tenant_id: str, customer_id: str) -> dict[str, Any]:
+        rad = self.chat_states.get((tenant_id, customer_id))
+        return dict(rad) if rad else standard_samtalslage(tenant_id, customer_id)
+
+    async def save_chat_state(
+        self,
+        tenant_id: str,
+        customer_id: str,
+        *,
+        lage: str,
+        misslyckade_i_rad: int,
+        erbjod_manniska: bool,
+        overlamnad_orsak: str | None = None,
+        overlamnad_ticket_id: str | None = None,
+    ) -> dict[str, Any]:
+        kontrollera_samtalslage(lage, misslyckade_i_rad)
+        tidigare = self.chat_states.get((tenant_id, customer_id))
+        nu = _now()
+        if lage == "overlamnad":
+            overlamnad_at = (
+                tidigare["overlamnad_at"]
+                if tidigare and tidigare["lage"] == "overlamnad" and tidigare["overlamnad_at"]
+                else nu
+            )
+        else:
+            overlamnad_at = None
+        rad = {
+            "tenant_id": tenant_id,
+            "customer_id": customer_id,
+            "lage": lage,
+            "misslyckade_i_rad": misslyckade_i_rad,
+            "erbjod_manniska": erbjod_manniska,
+            "overlamnad_orsak": overlamnad_orsak,
+            "overlamnad_ticket_id": overlamnad_ticket_id,
+            "overlamnad_at": overlamnad_at,
+            "updated_at": nu,
+        }
+        self.chat_states[(tenant_id, customer_id)] = rad
+        return dict(rad)
+
+    async def list_chat_handovers(
+        self, tenant_id: str, *, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        rader = []
+        for (tid, customer_id), rad in self.chat_states.items():
+            if tid != tenant_id or rad["lage"] != "overlamnad":
+                continue
+            kund = self.customers.get(customer_id) or {}
+            arende = self.tickets.get(rad.get("overlamnad_ticket_id") or "") or {}
+            rader.append(
+                {
+                    **rad,
+                    "customer_name": kund.get("name"),
+                    "subject": arende.get("subject"),
+                    "category": arende.get("category"),
+                    "is_test": bool(arende.get("is_test")),
+                }
+            )
+        rader.sort(key=lambda r: r["updated_at"], reverse=True)
+        return rader[:limit]
 
     # -- Kunskapsbas --------------------------------------------------------
 

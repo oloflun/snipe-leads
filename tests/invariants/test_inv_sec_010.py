@@ -42,6 +42,13 @@ ANON_ALLOWLIST: dict[str, str] = {
         "länken själv; att kräva inloggning här hade varit att kräva inloggning "
         "av kundens kunder. Skyddas av rate limit (migration 019), inte session."
     ),
+    "snajp-support/chat/samtal/route.ts": (
+        "Chattfönstrets hämtning av sitt EGET samtal: medarbetarens svar efter "
+        "en överlämning (bd snipe-1fl). Samma besökare som chatten ovan, som "
+        "aldrig loggar in. Backenden läser bara tillbaka sessionsidentiteter "
+        "(slumpad uuid@session.snajp.se), aldrig en riktig mejladress, och "
+        "skapar ingen kundrad för en okänd session."
+    ),
     "snajp-support/jobs/[jobId]/route.ts": (
         "Pollning av ett jobb som chatten ovan startade. Jobb-id är UUID och "
         "backenden kontrollerar att jobbet tillhör den tenant nyckeln pekar på."

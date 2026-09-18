@@ -132,20 +132,25 @@ async def test_one_llm_call_per_skill_step_in_declared_order():
 
 
 @pytest.mark.anyio
-async def test_begaran_om_manniska_kor_eskaleringssteget_aven_pa_lyckligt_flode():
-    """Villkoret 2026-09-02: eskaleringssteget hoppas över när inget finns att
-    bedöma — men "jag vill prata med en människa" är exakt det som ska
-    bedömas av modellen, även när KB bar svaret och inget annat flaggade.
-    Regexen _BER_OM_MANNISKA är stegets väckarklocka, inte dess ersättare."""
+async def test_begaran_om_manniska_lamnar_over_i_kod_utan_modellens_rost():
+    """OMVÄNT 2026-09-18 (bd snipe-1fl, Ebbot-researchen).
+
+    Före: regexen väckte eskaleringssteget och modellen kunde rösta nej — en
+    kund som bad om en människa kunde få en bot. Nu är en uttrycklig begäran
+    en TRIGGER i kod: överlämning direkt, utan övertalningsförsök, och det
+    dyra thinking-steget körs inte alls (beslutet och motiveringen finns
+    redan)."""
     storage, llm = MemoryStorage(), _FakeLLM()
     result = await _run(
         storage, llm, message="Vilka betalsätt tar ni? Jag vill helst prata med en människa."
     )
 
-    assert "cs:customer-escalation" in llm.calls
-    # Modellen (fejken) röstade nej och inget kodvillkor föll — beslutet är
-    # fortfarande modellens att fatta, inte regexens.
-    assert result["escalated"] is False
+    assert result["escalated"] is True
+    assert result["escalation_code"] == "kund_bad_om_manniska"
+    assert "cs:customer-escalation" not in llm.calls
+    samtal = await storage.get_chat_state(TENANT, result["customer_id"])
+    assert samtal["lage"] == "overlamnad"
+    assert samtal["overlamnad_ticket_id"] == result["ticket_id"]
 
 
 @pytest.mark.anyio

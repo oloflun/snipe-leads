@@ -2,6 +2,7 @@
 
 import {
   BookOpen,
+  Headset,
   Inbox,
   LayoutDashboard,
   Mail,
@@ -16,7 +17,8 @@ import { cn } from "@/lib/utils";
 /**
  * Vänsterrailen — sajtens EN tonala inversion. Alltid synlig; smala skärmar
  * får ikonrail. Ordningen är arbetsordningen: läget (Översikt), arbetet
- * (Inkorg), kunskapen (Kunskapsbas), provet (Testchatt), och sist ramen.
+ * (Inkorg, och Chattar som agenten lämnat över), kunskapen (Kunskapsbas),
+ * provet (Testchatt), och sist ramen.
  */
 
 type Flik = {
@@ -28,6 +30,7 @@ type Flik = {
 const FLIKAR: Flik[] = [
   { href: "/", etikett: "Översikt", Ikon: LayoutDashboard },
   { href: "/inkorg", etikett: "Inkorg", Ikon: Inbox },
+  { href: "/chattar", etikett: "Chattar", Ikon: Headset },
   { href: "/kunskapsbas", etikett: "Kunskapsbas", Ikon: BookOpen },
   { href: "/testchatt", etikett: "Testchatt", Ikon: MessagesSquare }
 ];

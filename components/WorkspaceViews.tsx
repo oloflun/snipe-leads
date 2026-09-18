@@ -19,6 +19,7 @@ import { Discovery } from "@/components/leads/Discovery";
 import { LeadsControls } from "@/components/leads/LeadsControls";
 import { Affarskontext } from "@/components/settings/Affarskontext";
 import { KunskapsbasPanel } from "@/components/settings/Kunskapsbas";
+import { SupportEskalering } from "@/components/settings/SupportEskalering";
 import { SupportRegler } from "@/components/settings/SupportRegler";
 import { SettingsNav } from "@/components/settings/SettingsNav";
 import { TeamSettings } from "@/components/settings/TeamSettings";
@@ -308,7 +309,12 @@ export function SettingsView({
           {section === "foretaget" ? <CompanySettings /> : null}
           {section === "affarskontext" ? <Affarskontext /> : null}
           {section === "kunskapsbas" ? <KunskapsbasPanel /> : null}
-          {section === "regler" ? <SupportRegler /> : null}
+          {section === "regler" ? (
+            <>
+              <SupportRegler />
+              <SupportEskalering />
+            </>
+          ) : null}
           {section === "leads" ? <LeadsControls /> : null}
           {section === "soul" ? <SoulEditor /> : null}
           {section === "notiser" ? <NotisSettings /> : null}
