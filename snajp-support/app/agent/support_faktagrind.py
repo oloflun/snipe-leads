@@ -61,6 +61,20 @@ _LOFTESORD = re.compile(
 #: Siffror och belopp — det `forsiktig` kontrollerar ur leads-grindens fynd.
 _SIFFERSLAG = ("number", "percent", "amount")
 
+#: Klockslag ("14:00", "9:30"). Sifferextraktorn läser kolonet som en
+#: avgränsare och ser två tal, 14 och 00 — och "00" finns sällan i en
+#: kunskapsbas som skriver "klockan 14". Uppmätt 2026-09-19 på dev: ett
+#: korrekt arabiskt svar ("قبل الساعة 14:00") fälldes på exakt det och
+#: ersattes av osäkerhetssvaret. Skrivs om till decimalform (14.00 → 14,
+#: 14:30 → 14.3) på BÅDA sidor, så att normaliseringen förblir symmetrisk.
+#: `\d` är Unicode här med flit: en arabisk kund kan få "١٤:٠٠", och
+#: normalize_number läser arabisk-indiska siffror (float("١٤") == 14.0).
+_KLOCKSLAG = re.compile(r"\b(\d{1,2}):(\d{2})\b")
+
+
+def _klockslag_som_tal(text: str) -> str:
+    return _KLOCKSLAG.sub(r"\1.\2", text)
+
 
 @dataclass(frozen=True)
 class Faktadom:
@@ -117,7 +131,7 @@ def kontrollera(
 
     if niva != "tillatande":
         fakta = build_permitted_facts(
-            context_pack=underlag,
+            context_pack=_klockslag_som_tal(underlag),
             research_evidence=(),
             offer_summary="",
             brief="",
@@ -126,7 +140,7 @@ def kontrollera(
         )
         # Kontaktuppgifterna är redan kontrollerade ovan, och listmarkörer
         # är inga påståenden — båda maskas med samma längd.
-        maskerad = _LISTMARKOR.sub(lambda m: " " * len(m.group(0)), svar)
+        maskerad = _LISTMARKOR.sub(lambda m: " " * len(m.group(0)), _klockslag_som_tal(svar))
         dom = check_grounding(maskerad, fakta)
         for claim in dom.unsupported:
             if niva == "strikt" or claim.kind in _SIFFERSLAG:

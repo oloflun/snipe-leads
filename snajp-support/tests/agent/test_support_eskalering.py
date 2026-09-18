@@ -488,3 +488,19 @@ async def test_faktagrinden_vagrar_gissa_nar_reparationen_ocksa_hittar_pa():
     assert svar["escalated"] is False
     samtal = await storage.get_chat_state(TENANT, svar["customer_id"])
     assert samtal["erbjod_manniska"] is True, "Osäkerhetssvaret erbjöd en människa men läget vet inte om det."
+
+
+def test_faktagrinden_laser_klockslag_som_klockslag():
+    """Uppmätt på dev 2026-09-19: "före 14:00" fälldes som talet "00" mot en
+    kunskapsbas som skriver "klockan 14", och ett korrekt svar ersattes av
+    osäkerhetssvaret."""
+    kallor = ["Beställer du före klockan 14 skickas ordern samma dag. Kundtjänst har öppet 9.30–16."]
+    for svar in (
+        "Beställ före 14:00 så skickas ordern samma dag.",
+        "اطلب قبل الساعة 14:00",
+        "اطلب قبل الساعة ١٤:٠٠",
+        "Vi har öppet från 9:30.",
+    ):
+        assert support_faktagrind.kontrollera(svar, niva="forsiktig", kallor=kallor).ok, svar
+    # Ett påhittat klockslag fälls fortfarande.
+    assert not support_faktagrind.kontrollera("Beställ före 15:00.", niva="forsiktig", kallor=kallor).ok
