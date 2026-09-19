@@ -148,11 +148,59 @@ class Storage(Protocol):
         content: str,
         sentiment: float | None = None,
         has_image: bool = False,
-    ) -> dict[str, Any]: ...
+        author: str | None = None,
+    ) -> dict[str, Any]:
+        """`author` (migration 066): 'customer', 'agent' eller 'human'. None
+        lämnar kolumnen tom, vilket läses som inbound = kunden, outbound =
+        agenten — beteendet för varje rad före migrationen."""
+        ...
 
     async def get_messages(
         self, tenant_id: str, conversation_id: str
     ) -> list[dict[str, Any]]: ...
+
+    async def find_customer(self, tenant_id: str, *, email: str) -> dict[str, Any] | None:
+        """Kunden med den här e-postidentifieraren, eller None. Skapar ALDRIG.
+
+        Skild från find_or_create_customer av ett skäl: chattfönstrets
+        pollning är anonym, och en läsväg som skapar en kundrad per okänt
+        sessions-id vore en skrivväg för vem som helst med en slumpgenerator.
+        """
+        ...
+
+    # -- Samtalsläge (migration 066) ----------------------------------------
+    #
+    # En rad per (tenant, kund). Saknas raden gäller standardläget — läsaren
+    # får alltid en fullständig dict, aldrig None, så att agenten inte
+    # behöver särskilja "ny kund" från "kund utan läge".
+
+    async def get_chat_state(self, tenant_id: str, customer_id: str) -> dict[str, Any]: ...
+
+    async def save_chat_state(
+        self,
+        tenant_id: str,
+        customer_id: str,
+        *,
+        lage: str,
+        misslyckade_i_rad: int,
+        erbjod_manniska: bool,
+        overlamnad_orsak: str | None = None,
+        overlamnad_ticket_id: str | None = None,
+        sprak: str | None = None,
+    ) -> dict[str, Any]:
+        """Upsert av hela läget. `overlamnad_at` sätts av lagringen när
+        `lage` går från 'agent' till 'overlamnad' (och står kvar vid en
+        uppdatering av ett redan överlämnat samtal); den nollas när läget går
+        tillbaka till 'agent'. `updated_at` sätts vid varje anrop — det är
+        klockan överlämningens giltighetstid räknas från."""
+        ...
+
+    async def list_chat_handovers(
+        self, tenant_id: str, *, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """Överlämnade samtal, senast uppdaterade först, med kundens namn och
+        det överlämnade ärendets ämne/kategori/is_test. Portalens Chattar-vy."""
+        ...
 
     async def search_kb(
         self,
@@ -1366,6 +1414,41 @@ ANALYTICS_COVERAGE: dict[str, bool] = {
     "resolved": True,
     "meetings": False,
 }
+
+
+#: ss_messages.author (migration 066). None är också giltigt — en äldre rad.
+MEDDELANDE_AVSANDARE = ("customer", "agent", "human")
+
+#: ss_chat_state.lage (migration 066).
+SAMTALSLAGEN = ("agent", "overlamnad")
+
+
+def standard_samtalslage(tenant_id: str, customer_id: str) -> dict[str, Any]:
+    """Läget för en kund utan rad: agenten svarar, inget räknat, inget erbjudet.
+
+    Delad av båda lagringarna så att "ingen rad" betyder exakt samma dict i
+    sviten som i drift — samma skäl som bk-valideringarna ovan bor här."""
+    return {
+        "tenant_id": tenant_id,
+        "customer_id": customer_id,
+        "lage": "agent",
+        "misslyckade_i_rad": 0,
+        "erbjod_manniska": False,
+        "overlamnad_orsak": None,
+        "overlamnad_ticket_id": None,
+        "overlamnad_at": None,
+        "sprak": None,
+        "updated_at": None,
+    }
+
+
+def kontrollera_samtalslage(lage: str, misslyckade_i_rad: int) -> None:
+    """Samma villkor som tabellens check-constraints, körda FÖRE skrivningen
+    i båda lagringarna — annars säger minnet ja där Postgres säger nej."""
+    if lage not in SAMTALSLAGEN:
+        raise ValueError(f"Okänt samtalsläge: {lage!r}")
+    if misslyckade_i_rad < 0:
+        raise ValueError("misslyckade_i_rad kan inte vara negativ.")
 
 
 # Framåtriktade statusövergångar, som i referensrepot (forward-only).

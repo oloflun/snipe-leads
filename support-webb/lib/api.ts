@@ -53,6 +53,34 @@ export type Regel = {
   mode?: string | null;
 };
 
+/** Ett överlämnat samtal (GET /api/chattar, bd snipe-1fl). */
+export type Chatt = {
+  customer_id: string;
+  customer_name?: string | null;
+  subject?: string | null;
+  category?: string | null;
+  is_test?: boolean | null;
+  overlamnad_orsak?: string | null;
+  orsak_text?: string | null;
+  overlamnad_at?: string | null;
+  updated_at?: string | null;
+  /** Falskt när samtalet legat stilla längre än giltighetstiden — då svarar agenten igen. */
+  aktiv?: boolean;
+};
+
+/** En rad i samtalsutskriften: kunden, agenten eller en medarbetare. */
+export type ChattRad = {
+  id: string;
+  author: "customer" | "agent" | "human";
+  content: string;
+  created_at?: string | null;
+};
+
+export type Chattdetalj = {
+  samtal: Chatt & { lage?: string };
+  meddelanden: ChattRad[];
+};
+
 export type Jobb = {
   status: string;
   result?: { reply?: string; simulation?: boolean } | null;

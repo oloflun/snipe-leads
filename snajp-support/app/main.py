@@ -23,15 +23,19 @@ from .api import (
     analytics,
     bookkeeping,
     chat,
+    chattar,
     demo,
     drafts,
     inbox,
+    integrationer,
+    kanaler,
     kb,
     keys,
     kvitton,
     leads,
     rules,
     sending_domains_api,
+    support_config,
     tickets,
     triage,
 )
@@ -315,6 +319,14 @@ if _origins:
     )
 
 app.include_router(chat.router)
+# bd snipe-1fl: medarbetarens sida av överlämningen och kundens supportregler.
+app.include_router(chattar.router)
+app.include_router(support_config.router)
+# bd snipe-36u: kundens egna system (HTTP-verktyg, MCP) och kanalerna
+# (WhatsApp, Messenger, Slack, Teams). Kanalwebhooks autentiseras av
+# kanalens signatur, inte av X-API-Key — se api/kanaler.py.
+app.include_router(integrationer.router)
+app.include_router(kanaler.router)
 app.include_router(triage.router)
 app.include_router(tickets.router)
 app.include_router(keys.router)

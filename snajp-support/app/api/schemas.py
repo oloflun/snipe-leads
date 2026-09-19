@@ -1,5 +1,7 @@
 """Pydantic-scheman för API:t."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -92,6 +94,53 @@ class EskaleringRequest(BaseModel):
 
 
 LeadsConfigRequest.model_rebuild()
+
+
+# -- Support-agentens regler per kund (bd snipe-1fl) ------------------------
+
+
+class SupportEskaleringRequest(BaseModel):
+    """Eskaleringsreglerna (app/agent/support_regler.py). Varje fält är
+    valfritt: ett formulär skickar bara det det rör, och resten står kvar."""
+
+    model_config = {"extra": "forbid"}
+
+    max_misslyckade: int | None = Field(default=None, ge=0, le=5)
+    sentimentgrans: int | None = Field(default=None, ge=0, le=100)
+    utanfor_amnet: Literal["erbjud", "eskalera"] | None = None
+    frustration_raknas: bool | None = None
+
+
+class SupportConfigRequest(BaseModel):
+    """PUT /api/support/config. Okända fält avvisas (extra=forbid) — samma
+    skydd som ICP:n: en insmugglad `system_prompt` ska ge 422, inte sparas."""
+
+    model_config = {"extra": "forbid"}
+
+    eskalering: SupportEskaleringRequest | None = None
+    tonlage: Literal["standard", "formell", "personlig", "kortfattad"] | None = None
+    faktakontroll: Literal["tillatande", "forsiktig", "strikt"] | None = None
+    #: Kundskriven text. Taket verkställs här OCH i support_regler.normalisera.
+    amnesomrade: str | None = Field(default=None, max_length=600)
+    #: Svarsspråk (bd snipe-xtr): kundens språk eller alltid svenska.
+    sprak: Literal["kundens", "svenska"] | None = None
+
+
+class MedarbetarsvarRequest(BaseModel):
+    """POST /api/chattar/{customer_id}/svar."""
+
+    text: str = Field(..., min_length=1, max_length=4000)
+
+
+class SamtalRequest(BaseModel):
+    """POST /api/chat/samtal — chattfönstrets hämtning av samtalet.
+
+    POST och inte GET med flit: identifieraren ska inte hamna i en URL, en
+    åtkomstlogg eller en Referer."""
+
+    customer_email: str = Field(..., min_length=3, max_length=200)
+    #: ISO-tidpunkt; bara rader skapade efter den returneras. Tom = hela samtalet.
+    efter: str | None = Field(default=None, max_length=64)
 
 
 class LeadsRunOverrides(BaseModel):

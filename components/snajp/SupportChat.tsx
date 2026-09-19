@@ -29,11 +29,39 @@ type AgentMeta = {
 
 type ChatMessage = {
   id: string;
-  role: "user" | "agent" | "system";
+  // "human" = en medarbetare som tagit över samtalet (bd snipe-1fl). Samma
+  // bubbla som agentens, med en etikett — kunden ska se att det är en människa.
+  role: "user" | "agent" | "human" | "system";
   content: string;
   imagePreview?: string;
   meta?: AgentMeta;
 };
+
+/** En rad ur POST /api/chat/samtal (snajp-support/app/api/chat.py). */
+type SamtalsRad = {
+  id: string;
+  author: "customer" | "agent" | "human";
+  content: string;
+  created_at?: string | null;
+};
+
+type SamtalsSvar = { overlamnad?: boolean; meddelanden?: SamtalsRad[] };
+
+/**
+ * Pollningen efter medarbetarens svar (bd snipe-1fl). Tätt de första två
+ * minuterna — det är då en medarbetare som fått ärendet oftast svarar — sedan
+ * glesare, och helt slut efter en halvtimme: en flik som står öppen över
+ * natten ska inte fråga backenden var tionde sekund. Kunden som återvänder
+ * till sin sessionslänk får hela samtalet igen vid sidladdningen.
+ */
+const POLL_TAT_MS = 4000;
+const POLL_GLES_MS = 10000;
+const POLL_TAT_FONSTER_MS = 2 * 60 * 1000;
+const POLL_MAX_MS = 30 * 60 * 1000;
+
+function tillChattRoll(author: SamtalsRad["author"]): ChatMessage["role"] {
+  return author === "customer" ? "user" : author === "human" ? "human" : "agent";
+}
 
 /**
  * Testchatt-lägets två kortyper (Fas 5.4/5.5/5.6), i SAMMA flöde som
@@ -234,7 +262,13 @@ type JobbSvar = {
   offline?: boolean;
   error?: string;
   status?: string;
-  result?: { simulation?: boolean; reply: string; run_id?: string | null };
+  result?: {
+    simulation?: boolean;
+    reply: string;
+    run_id?: string | null;
+    /** Sant när en människa äger samtalet — chattfönstret börjar hämta hennes svar. */
+    overlamnad?: boolean;
+  };
 };
 
 async function hamtaJobbstatusMedRetry(url: string): Promise<JobbSvar> {
@@ -296,6 +330,88 @@ export function SupportChat({
   // uppdatering.
   const testchattOppnadRef = useRef<number>(Date.now());
   const kandaForslagRef = useRef<Set<string>>(new Set());
+
+  // -- Sömlös överlämning (bd snipe-1fl) ------------------------------------
+  // Medarbetarens svar hämtas från samma samtal och visas i samma fönster.
+  // Id:na för redan visade rader hindrar dubbletter mellan två hämtningar.
+  const visadeRaderRef = useRef<Set<string>>(new Set());
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollStartRef = useRef<number>(0);
+  useEffect(
+    () => () => {
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+    },
+    []
+  );
+
+  /** Samma identitet och samma route-familj som send() använder. */
+  const hamtaSamtal = useCallback(async (): Promise<SamtalsSvar | null> => {
+    const sessionId = testMode ? testchattSessionId() : (session ?? demoSessionId());
+    const url = testMode ? "/api/snajp-support/testchatt/samtal" : "/api/snajp-support/chat/samtal";
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customer_email: `${sessionId}@session.snajp.se`, tenant })
+      });
+      if (!response.ok) return null;
+      return (await readJsonBody<SamtalsSvar>(response)) ?? null;
+    } catch {
+      // En missad hämtning är ingenting kunden behöver se — nästa varv försöker igen.
+      return null;
+    }
+  }, [session, tenant, testMode]);
+
+  const startaPollning = useCallback(() => {
+    if (pollTimerRef.current) return;
+    pollStartRef.current = Date.now();
+    const varv = async () => {
+      pollTimerRef.current = null;
+      if (!alive.current) return;
+      const svar = await hamtaSamtal();
+      if (!alive.current) return;
+      const nya = (svar?.meddelanden ?? []).filter(
+        (rad) => rad.author === "human" && !visadeRaderRef.current.has(rad.id)
+      );
+      if (nya.length) {
+        nya.forEach((rad) => visadeRaderRef.current.add(rad.id));
+        setMessages((current) => [
+          ...current,
+          ...nya.map((rad) => ({ id: rad.id, role: "human" as const, content: rad.content }))
+        ]);
+      }
+      const gatt = Date.now() - pollStartRef.current;
+      // Samtalet lämnat tillbaka till agenten, eller fönstret har stått för länge.
+      if ((svar && !svar.overlamnad) || gatt > POLL_MAX_MS) return;
+      pollTimerRef.current = setTimeout(
+        () => void varv(),
+        gatt < POLL_TAT_FONSTER_MS ? POLL_TAT_MS : POLL_GLES_MS
+      );
+    };
+    pollTimerRef.current = setTimeout(() => void varv(), POLL_TAT_MS);
+  }, [hamtaSamtal]);
+
+  // Återvänder besökaren till sin sessionslänk (eller laddar om fliken) visas
+  // hela samtalet igen — inklusive ett medarbetarsvar som kom medan fönstret
+  // var stängt. Kunden ska aldrig behöva börja om.
+  useEffect(() => {
+    let avbruten = false;
+    void (async () => {
+      const svar = await hamtaSamtal();
+      if (avbruten || !svar?.meddelanden?.length) return;
+      const rader = svar.meddelanden;
+      rader.forEach((rad) => visadeRaderRef.current.add(rad.id));
+      setMessages((current) =>
+        current.length
+          ? current
+          : rader.map((rad) => ({ id: rad.id, role: tillChattRoll(rad.author), content: rad.content }))
+      );
+      if (svar.overlamnad) startaPollning();
+    })();
+    return () => {
+      avbruten = true;
+    };
+  }, [hamtaSamtal, startaPollning]);
 
 
   useEffect(() => {
@@ -443,15 +559,23 @@ export function SupportChat({
             // avsmalningen av job.result.
             const resultat = job.result;
             setMode(resultat.simulation ? "simulation" : "live");
-            setMessages((current) => [
-              ...current,
-              {
-                id: crypto.randomUUID(),
-                role: "agent",
-                content: resultat.reply,
-                meta: resultat
-              }
-            ]);
+            // Tomt svar = en medarbetare är redan i samtalet och agenten
+            // tiger (bd snipe-1fl). Ingen tom bubbla — svaret kommer från
+            // människan, via pollningen nedan.
+            if (resultat.reply) {
+              setMessages((current) => [
+                ...current,
+                {
+                  id: crypto.randomUUID(),
+                  role: "agent",
+                  content: resultat.reply,
+                  meta: resultat
+                }
+              ]);
+            }
+            if (resultat.overlamnad) {
+              startaPollning();
+            }
             // Fas 5.6: agentens föreslagna KB-ändringar dyker upp som kort
             // strax efter svaret. En bakgrundshämtning som inte blockerar
             // eller kan fela chatten — förslag är en bonus i flödet.
@@ -504,7 +628,7 @@ export function SupportChat({
     // varje rendering, inte bara en saknad lint-rad. send() anropar den
     // ändå korrekt, eftersom anropet sker långt efter att hela komponenten
     // (och därmed uppdateraForslag) har initierats klart.
-    [attachment, busy, testMode]
+    [attachment, busy, testMode, startaPollning]
   );
 
   const onFile = useCallback(async (file: File | undefined) => {
@@ -902,7 +1026,14 @@ export function SupportChat({
                     (components/snajp/Dashboard.tsx:497-536) och av admin-spårningen.
                     Ingen prop styr det här: en kundvänd komponent ska inte gå att
                     konfigurera till att läcka. */}
-                <p className="whitespace-pre-wrap">{message.content}</p>
+                {message.role === "human" ? (
+                  // bd snipe-1fl: kunden ska se att det nu är en människa som
+                  // svarar — samma bubbla, en rad text, ingen ny komponent.
+                  <p className="mb-1 text-[0.75rem] font-semibold text-ink/55">
+                    {text({ sv: "Medarbetare", en: "Team member" })}
+                  </p>
+                ) : null}
+                <p dir="auto" className="whitespace-pre-wrap break-words">{message.content}</p>
               </div>
               {/* Feedback (6.3) — BARA i testMode och BARA på ett svar som bär
                   ett run_id. Den publika widgeten ska aldrig få tummar. */}

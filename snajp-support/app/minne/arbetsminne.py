@@ -289,7 +289,13 @@ async def alla_samtalsrader(storage: Storage, tenant_id: str, history: list[dict
         if not conversation_id:
             continue
         for msg in await storage.get_messages(tenant_id, conversation_id):
-            who = "Kunden" if msg["direction"] == "inbound" else "Du"
+            # Migration 066: medarbetarens repliker är inte agentens — samma
+            # märkning som support_agent._render_conversation.
+            who = (
+                "Kunden"
+                if msg["direction"] == "inbound"
+                else "Kollegan" if msg.get("author") == "human" else "Du"
+            )
             content = (msg.get("content") or "").strip()
             if content:
                 rader.append(f"{who}: {content}")

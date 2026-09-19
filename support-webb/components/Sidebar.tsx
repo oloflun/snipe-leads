@@ -2,10 +2,12 @@
 
 import {
   BookOpen,
+  Headset,
   Inbox,
   LayoutDashboard,
   Mail,
   MessagesSquare,
+  Plug,
   Settings
 } from "lucide-react";
 import Link from "next/link";
@@ -16,7 +18,8 @@ import { cn } from "@/lib/utils";
 /**
  * Vänsterrailen — sajtens EN tonala inversion. Alltid synlig; smala skärmar
  * får ikonrail. Ordningen är arbetsordningen: läget (Översikt), arbetet
- * (Inkorg), kunskapen (Kunskapsbas), provet (Testchatt), och sist ramen.
+ * (Inkorg, och Chattar som agenten lämnat över), kunskapen (Kunskapsbas),
+ * provet (Testchatt), och sist ramen.
  */
 
 type Flik = {
@@ -28,11 +31,13 @@ type Flik = {
 const FLIKAR: Flik[] = [
   { href: "/", etikett: "Översikt", Ikon: LayoutDashboard },
   { href: "/inkorg", etikett: "Inkorg", Ikon: Inbox },
+  { href: "/chattar", etikett: "Chattar", Ikon: Headset },
   { href: "/kunskapsbas", etikett: "Kunskapsbas", Ikon: BookOpen },
   { href: "/testchatt", etikett: "Testchatt", Ikon: MessagesSquare }
 ];
 
 const BOTTENFLIKAR: Flik[] = [
+  { href: "/integrationer", etikett: "Integrationer", Ikon: Plug },
   { href: "/installningar", etikett: "Inställningar", Ikon: Settings },
   { href: "/kontakt", etikett: "Kontakt", Ikon: Mail }
 ];
