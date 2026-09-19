@@ -162,7 +162,10 @@ async def test_kb_article_runs_on_kb_gap_and_suggestion_is_persisted():
     storage = MemoryStorage()
     llm = _FakeLLM(
         overrides={
-            "cs:customer-research": {"kb_supports_answer": False},
+            # Luckan utan motfråga: kunskapssteget hoppas över när agenten
+            # ställer en motfråga (2026-09-19), så testet måste säga att
+            # frågan var tydlig.
+            "cs:customer-research": {"kb_supports_answer": False, "behover_fortydligande": False},
             "cs:kb-article": {
                 "should_create": True,
                 "title": "Leveranstid till Norge",
@@ -185,12 +188,33 @@ async def test_kb_article_runs_on_kb_gap_and_suggestion_is_persisted():
 
 
 @pytest.mark.anyio
+async def test_kb_article_hoppas_over_nar_agenten_stallar_en_motfraga():
+    """En fråga för vag att besvara går inte att skriva en artikel om — steget
+    kostade ~5 000 tokens per motfrågetur för ingenting (2026-09-19)."""
+    storage = MemoryStorage()
+    llm = _FakeLLM(
+        overrides={
+            "cs:customer-research": {"kb_supports_answer": False, "behover_fortydligande": True},
+            "cs:kb-article": {"should_create": True, "title": "Vag fråga", "content": "Ska aldrig skapas."},
+        }
+    )
+    result = await _run(storage, llm)
+
+    assert result["svarslage"] == "fraga"
+    assert "cs:kb-article" not in llm.calls
+    assert await storage.list_agent_suggestions(TENANT, status="ny") == []
+
+
+@pytest.mark.anyio
 async def test_samma_kunskapslucka_ger_en_rad_inte_tio():
     """Dedupe: tio ärenden om samma lucka ska ge EN rad att granska."""
     storage = MemoryStorage()
     llm = _FakeLLM(
         overrides={
-            "cs:customer-research": {"kb_supports_answer": False},
+            # Luckan utan motfråga: kunskapssteget hoppas över när agenten
+            # ställer en motfråga (2026-09-19), så testet måste säga att
+            # frågan var tydlig.
+            "cs:customer-research": {"kb_supports_answer": False, "behover_fortydligande": False},
             "cs:kb-article": {
                 "should_create": True,
                 "title": "Leveranstid till Norge",

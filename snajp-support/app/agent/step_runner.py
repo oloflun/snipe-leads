@@ -62,6 +62,23 @@ def thinking_kwargs(mode: str) -> dict[str, Any]:
     return {}
 
 
+GEMINI_REASONING_EFFORT = ("none", "low", "medium", "high")
+
+
+def gemini_tank_kwargs(mode: str | None, effort: str) -> dict[str, Any]:
+    """Geminis tänkande via OpenAI-kompatibilitetens `reasoning_effort`.
+
+    Tomt `effort` = ingenting skickas (leverantörens default). Ett steg som
+    uttryckligen vill tänka (thinking="enabled") får alltid leverantörens
+    default — eskaleringsbedömningen ska inte strypas av en kostnadsflagga.
+    Ett okänt värde skickas inte: ett felstavat env-värde ska inte ge 400 på
+    varje agentanrop.
+    """
+    if not effort or mode == "enabled" or effort not in GEMINI_REASONING_EFFORT:
+        return {}
+    return {"reasoning_effort": effort}
+
+
 @dataclass
 class StepResult:
     skill: str
@@ -278,7 +295,12 @@ async def run_step(
     # Steget vinner över den globala defaulten om det deklarerar en egen
     # thinking-nivå (t.ex. cs:customer-escalation, se support_playbook.py).
     effective_mode = step.thinking if step.thinking is not None else settings.thinking_mode
-    extra = thinking_kwargs(effective_mode) if settings.llm_provider == "deepseek" else {}
+    if settings.llm_provider == "deepseek":
+        extra = thinking_kwargs(effective_mode)
+    elif settings.llm_provider == "gemini":
+        extra = gemini_tank_kwargs(step.thinking, settings.gemini_reasoning_effort.strip().lower())
+    else:
+        extra = {}
 
     # Formuleringssteg (humanizer, utkast) får deklarera en varmare temperatur
     # i playbooken; analys- och bedömningssteg ärver den kalla defaulten.

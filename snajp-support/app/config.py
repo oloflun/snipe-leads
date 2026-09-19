@@ -217,6 +217,17 @@ class Settings(BaseSettings):
     # den globala defaulten för att "lösa" leads — testa och besluta separat.
     thinking_mode: str = "disabled"
 
+    # Geminis tänkande (2026-09-19). `thinking_mode` ovan når bara DeepSeek —
+    # gemini-2.5-flash tänker som standard, och tänktokens debiteras som
+    # utdata utan att synas i completion_tokens (de ligger i
+    # completion_tokens_details.reasoning_tokens, se step_runner). Tomt =
+    # leverantörens default, alltså beteendet före 2026-09-19. Satt ("none",
+    # "low", "medium", "high") skickas den som `reasoning_effort` på varje steg
+    # UTOM de som deklarerat thinking="enabled" (eskaleringsbedömningen), som
+    # behåller sitt tänkande. INERT tills en miljö sätter den: mät
+    # step_log.reasoning_tokens och kör scripts/kor_evals.py före och efter.
+    gemini_reasoning_effort: str = ""
+
     # Fas B research (G4). Tomt => research-verktyget vägrar med ett tydligt
     # fel i stället för att krascha eller tyst hoppa över skrapningen.
     scrapegraphai_api_key: str = ""

@@ -78,3 +78,53 @@ async def test_step_override_disabled_matches_explicit_global_enabled(monkeypatc
 
     assert llm.received_extra_body[0] == {"thinking": {"type": "disabled"}}
     assert trace.steps[0].thinking_mode == "disabled"
+
+
+# --- Gemini: reasoning_effort (2026-09-19) ------------------------------------
+
+
+class _RecordingKwargs(_RecordingLLM):
+    def __init__(self):
+        super().__init__()
+        self.kwargs = []
+
+    async def create(self, *, model, response_format, temperature, messages, **kwargs):
+        self.kwargs.append(kwargs)
+        return await super().create(
+            model=model, response_format=response_format, temperature=temperature, messages=messages, **kwargs
+        )
+
+
+async def _run_gemini(step, monkeypatch, effort):
+    monkeypatch.setenv("LLM_PROVIDER", "gemini")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key-not-a-real-credential-000000")
+    monkeypatch.setenv("GEMINI_REASONING_EFFORT", effort)
+    get_settings.cache_clear()
+    llm = _RecordingKwargs()
+    monkeypatch.setattr("app.agent.step_runner.get_llm_client", lambda: llm)
+    await run_step(step, RunLedger(satisfied={"context_pack"}), RunTrace(), task="test", case_context="test")
+    return llm.kwargs[0]
+
+
+@pytest.mark.anyio
+async def test_gemini_utan_flagga_skickar_inget(monkeypatch):
+    step = PlaybookStep(skill="cs:ticket-triage", requires=("context_pack",))
+    assert await _run_gemini(step, monkeypatch, "") == {}
+
+
+@pytest.mark.anyio
+async def test_gemini_med_flagga_skickar_reasoning_effort(monkeypatch):
+    step = PlaybookStep(skill="cs:ticket-triage", requires=("context_pack",))
+    assert await _run_gemini(step, monkeypatch, "none") == {"reasoning_effort": "none"}
+
+
+@pytest.mark.anyio
+async def test_gemini_eskaleringssteget_behaller_sitt_tankande(monkeypatch):
+    step = PlaybookStep(skill="cs:customer-escalation", requires=("context_pack",), thinking="enabled")
+    assert await _run_gemini(step, monkeypatch, "none") == {}
+
+
+@pytest.mark.anyio
+async def test_gemini_felstavad_flagga_skickas_inte(monkeypatch):
+    step = PlaybookStep(skill="cs:ticket-triage", requires=("context_pack",))
+    assert await _run_gemini(step, monkeypatch, "av") == {}

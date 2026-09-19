@@ -1304,7 +1304,16 @@ async def run_support_agent(
     # över är inga kunskapsluckor: en väderfråga ska inte bli ett
     # artikelförslag, och en kund som ber om en människa har inte avslöjat
     # något biblioteket saknar.
-    if (kb_saknar_svar or sakerhetskritiskt) and behover_eskaleringsbedomning:
+    #
+    # 2026-09-19: och inte när agenten ställer en motfråga. En fråga som är
+    # för vag att besvara går inte att skriva en artikel om, och luckan (om
+    # det finns en) fångas nästa tur när kunden förtydligat. ~5 000 tokens
+    # per motfrågetur.
+    if (
+        (kb_saknar_svar or sakerhetskritiskt)
+        and behover_eskaleringsbedomning
+        and svarslage != "fraga"
+    ):
         kb_forslag = await steg(
             steps["cs:kb-article"],
             ledger,
