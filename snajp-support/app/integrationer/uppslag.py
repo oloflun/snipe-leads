@@ -113,7 +113,14 @@ def _uppgift(runda: int) -> str:
         '"anrop" (lista med {"verktyg": exakt namn ur listan, "argument": objekt}, '
         f"högst {MAX_ANROP_PER_RUNDA}, tom lista om inget behövs), "
         '"klar" (bool, false bara om du behöver svaren för att välja ett anrop till), '
-        '"motivering" (svenska, en mening).'
+        '"motivering" (svenska, en mening). '
+        # Uppmätt 2026-09-19 i development: "Which carrier is delivering it?"
+        # efter ett ordersvar gav inget nytt uppslag ("transportören angavs
+        # redan i föregående svar") och lämnades över, eftersom agentens egna
+        # tidigare svar med flit aldrig räknas som källa.
+        "Är meddelandet en följdfråga om något som kom ur kundens system, fråga "
+        "systemet igen med identifierarna (ordernummer, kundnummer) ur samtalet: "
+        "det du själv skrev i ett tidigare svar räknas inte som underlag nu."
         + (
             " Det här är runda 2: välj bara anrop som bygger på svaren nedan och inte "
             "redan är gjorda."
