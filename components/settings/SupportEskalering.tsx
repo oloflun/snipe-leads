@@ -152,13 +152,13 @@ export function SupportEskalering() {
   const esk = data.eskalering;
   const upptagen = sparar !== null;
   const spinner = (falt: string) =>
-    sparar === falt ? <Loader2 className="h-4 w-4 animate-spin text-ink/40" aria-hidden /> : null;
+    sparar === falt ? <Loader2 className="h-4 w-4 animate-spin text-ink-subtle" aria-hidden /> : null;
 
   return (
     <div className="mt-12 grid gap-7">
       <div>
         <h2 className="font-display text-[1.25rem]">Ton, språk, faktakontroll och överlämning</h2>
-        <p className="mt-1 max-w-[62ch] text-[0.9375rem] leading-6 text-ink/60">
+        <p className="mt-1 max-w-[62ch] text-[0.9375rem] leading-6 text-ink-muted">
           Hur agenten låter, vilket språk den svarar på, hur strängt svaren kontrolleras mot
           kunskapsbasen, och när en människa tar över. Överlämningen sker i kundens eget chattfönster, och hela
           samtalet följer med.
@@ -191,7 +191,7 @@ export function SupportEskalering() {
         <Rad className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6">
           <span className="min-w-0 text-[0.9375rem]">
             Svarsspråk
-            <span className="mt-0.5 block text-[0.8125rem] leading-5 text-ink/55">
+            <span className="mt-0.5 block text-[0.8125rem] leading-5 text-ink-muted">
               Skriver kunden på engelska, arabiska eller något annat språk kan agenten svara
               på samma språk — kunskapsbasen kan fortfarande vara på svenska.
             </span>
@@ -216,7 +216,7 @@ export function SupportEskalering() {
         <Rad className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6">
           <span className="min-w-0 text-[0.9375rem]">
             Faktakontroll
-            <span className="mt-0.5 block text-[0.8125rem] leading-5 text-ink/55">
+            <span className="mt-0.5 block text-[0.8125rem] leading-5 text-ink-muted">
               {FAKTAKONTROLL.find((f) => f.varde === data.faktakontroll)?.forklaring}
             </span>
           </span>
@@ -246,7 +246,7 @@ export function SupportEskalering() {
         <Rad className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6">
           <span className="min-w-0 text-[0.9375rem]">
             Misslyckade försök innan överlämning
-            <span className="mt-0.5 block text-[0.8125rem] leading-5 text-ink/55">
+            <span className="mt-0.5 block text-[0.8125rem] leading-5 text-ink-muted">
               Motfrågor i följd, eller gånger kunden säger att svaret missade.
             </span>
           </span>
@@ -276,7 +276,7 @@ export function SupportEskalering() {
         <Rad className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6">
           <span className="min-w-0 text-[0.9375rem]">
             Lämna över vid missnöje under
-            <span className="mt-0.5 block text-[0.8125rem] leading-5 text-ink/55">
+            <span className="mt-0.5 block text-[0.8125rem] leading-5 text-ink-muted">
               Hur negativ tonen i kundens meddelande får vara innan en människa tar över.
             </span>
           </span>
@@ -346,7 +346,7 @@ export function SupportEskalering() {
         <label htmlFor="amnesomrade" className="text-[0.9375rem] font-semibold">
           Vad agenten ska hjälpa till med
         </label>
-        <p className="mt-1 max-w-[62ch] text-[0.875rem] leading-6 text-ink/60">
+        <p className="mt-1 max-w-[62ch] text-[0.875rem] leading-6 text-ink-muted">
           Några meningar om ert område. Frågor som uppenbart ligger utanför besvaras inte —
           agenten säger det och erbjuder en människa. Lämna tomt för att agenten ska utgå
           från kunskapsbasen.
@@ -369,7 +369,7 @@ export function SupportEskalering() {
             {spinner("amnesomrade")}
             Spara
           </button>
-          <span className="text-[0.8125rem] num text-ink/45">
+          <span className="text-[0.8125rem] num text-ink-subtle">
             {amne.length} / {tak}
           </span>
         </div>

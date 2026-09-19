@@ -1029,7 +1029,7 @@ export function SupportChat({
                 {message.role === "human" ? (
                   // bd snipe-1fl: kunden ska se att det nu är en människa som
                   // svarar — samma bubbla, en rad text, ingen ny komponent.
-                  <p className="mb-1 text-[0.75rem] font-semibold text-ink/55">
+                  <p className="mb-1 text-[0.75rem] font-semibold text-ink-muted">
                     {text({ sv: "Medarbetare", en: "Team member" })}
                   </p>
                 ) : null}
