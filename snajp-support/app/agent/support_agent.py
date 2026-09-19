@@ -216,6 +216,38 @@ def _kb_block(articles: list[dict[str, Any]]) -> str:
     )
 
 
+#: Namnen modellerna brukar välja när de lägger texten i ett objekt.
+_TEXTNYCKLAR = ("text", "draft", "final_reply", "revised_draft", "reply", "svar", "content", "message")
+
+
+def _text(varde: Any) -> str:
+    """Ett stegs textfält som text, vad modellen än returnerade.
+
+    Kontraktet säger sträng, men modellen svarar ibland med ett objekt.
+    Uppmätt 2026-09-19 i development: en följdfråga på engelska fick
+    `"draft": {...}`. Humaniseraren hoppas över på andra språk än svenska, så
+    objektet gick rakt in i strip_markdown, som kastade TypeError, och kunden
+    fick ett felmeddelande i stället för ett svar. På svenska hade
+    humaniseraren dolt felet genom att skriva ny text.
+
+    Ett objekt ger sin text under ett av de vanliga namnen, annars sitt
+    längsta textvärde (inte alla ihopslagna: ett objekt per språk hade gett
+    ett tvåspråkigt svar). En lista ger sina textdelar i följd.
+    """
+    if isinstance(varde, str):
+        return varde
+    if isinstance(varde, dict):
+        for nyckel in _TEXTNYCKLAR:
+            kandidat = varde.get(nyckel)
+            if isinstance(kandidat, str) and kandidat.strip():
+                return kandidat
+        texter = [_text(v) for v in varde.values()]
+        return max(texter, key=len, default="")
+    if isinstance(varde, list):
+        return "\n\n".join(t for t in (_text(v) for v in varde) if t.strip())
+    return ""
+
+
 async def _sok_kb(storage: Storage, tenant_id: str, fraga: str) -> list[dict[str, Any]]:
     """En KB-sökning, med embedding när det går och fulltext annars.
 
@@ -797,8 +829,11 @@ async def run_support_agent(
             "sprak (ISO 639-1-koden för språket i kundens meddelande, t.ex. "
             "\"sv\", \"en\", \"ar\". \"sv\" när du är osäker eller meddelandet är för "
             "kort för att avgöra), "
-            "sokfraga_sv (kundens fråga omformulerad till en kort svensk "
-            "sökfråga för kunskapsbasen; tom sträng när meddelandet redan är på svenska)."
+            "sokfraga_sv (kundens fråga som en kort svensk sökfråga för "
+            "kunskapsbasen, ÄVEN när meddelandet redan är på svenska: kärnan i "
+            "frågan med de ord en hjälpartikel troligen har i rubriken, gärna med "
+            "ett synonymt ord, t.ex. \"betalningsmetoder betalsätt\" eller "
+            "\"leveranstid frakt\"; tom sträng bara när meddelandet inte är en fråga)."
         ),
         case_context=case_context,
     )
@@ -870,11 +905,23 @@ async def run_support_agent(
         sokfraga = f"{sokfraga} {senaste_kundreplik}".strip()
     # En fråga på ett annat språk hittar ingenting i en svensk fulltext-
     # sökning. Triagens svenska omformulering tar dess plats.
-    sokfraga_sv = str(triage.get("sokfraga_sv") or "").strip()
+    #
+    # På svenska LÄGGS omformuleringen till (2026-09-19, kundtest mot dev):
+    # "Vilka betalsätt har ni?" hittade inte artikeln "Betalningsmetoder vi
+    # accepterar" — den svenska stemmern kopplar inte `betalsät` till
+    # `betalningsmetod` — utan bara "Så gör du en retur", och den irrelevanta
+    # träffen stoppade de senare sökförsöken (de körs bara på en TOM lista).
+    # Kunden fick en överlämning på en FAQ. Fulltexten ORar orden och
+    # rangordnar med ts_rank, så fler ord ger fler träffmöjligheter.
+    sokfraga_sv = _text(triage.get("sokfraga_sv")).strip()
+    kb_forsok = ["hela meddelandet"]
     if not ar_svenska and sokfraga_sv:
         sokfraga = sokfraga_sv
+        kb_forsok = ["svensk sökfråga"]
+    elif sokfraga_sv and sokfraga_sv.casefold() not in sokfraga.casefold():
+        sokfraga = f"{sokfraga} {sokfraga_sv}"
+        kb_forsok = [f"hela meddelandet + omformulering ({sokfraga_sv!r})"]
     articles = await _sok_kb(storage, tenant_id, sokfraga)
-    kb_forsok = ["hela meddelandet" if ar_svenska or not sokfraga_sv else "svensk sökfråga"]
     if not articles:
         bredare = _forenklad_fraga(subject, message)
         if bredare:
@@ -1194,7 +1241,7 @@ async def run_support_agent(
         # saknade svar" är fel förklaring på ett hot.
         f"Avbrutet samtal: {abuse.niva}"
         if abuse.ska_eskalera
-        else escalation.get("reason") or ("retention_risk" if cancellation_risk else None)
+        else _text(escalation.get("reason")) or ("retention_risk" if cancellation_risk else None)
     )
     if escalated and not escalation_reason:
         escalation_reason = (
@@ -1256,7 +1303,7 @@ async def run_support_agent(
                 logger.exception("Kunde inte spara KB-förslaget för ärendet.")
 
     # --- Steg 6: retention (villkorat) -------------------------------------
-    current_draft = draft.get("draft", "")
+    current_draft = _text(draft.get("draft"))
 
     if cancellation_risk and not abuse.ska_eskalera:
         retention_playbook = await storage.get_latest_context_doc(
@@ -1283,7 +1330,7 @@ async def run_support_agent(
                 f"## Nuvarande utkast\n{current_draft}"
             ),
         )
-        current_draft = retention.get("revised_draft") or current_draft
+        current_draft = _text(retention.get("revised_draft")) or current_draft
 
     # --- Steg 7: humanizer (ALLTID sist) -----------------------------------
     #
@@ -1301,7 +1348,7 @@ async def run_support_agent(
         case_context=f"{case_context}\n\n## Text att humanisera\n{current_draft}",
     )
 
-    reply = strip_markdown(humanized.get("final_reply") or current_draft or "").strip()
+    reply = strip_markdown(_text(humanized.get("final_reply")) or current_draft or "").strip()
     # Efter humaniseraren, före längdkapningen: en avslutningsfras utan namn
     # under är trasig oavsett vilket steg som skrev den.
     reply = strip_dangling_sign_off(reply)
@@ -1353,7 +1400,7 @@ async def run_support_agent(
                 case_context=f"{case_context}\n\n## Kunskapsbas\n{kb_block}{systemblock}\n\n## Text att rätta\n{reply}",
             )
             kandidat = strip_dangling_sign_off(
-                strip_markdown(rattning.get("final_reply") or "").strip()
+                strip_markdown(_text(rattning.get("final_reply"))).strip()
             )
             if kandidat and support_faktagrind.kontrollera(
                 kandidat, niva=installningar["faktakontroll"], kallor=kallor, tenant_namn=tenant_namn
