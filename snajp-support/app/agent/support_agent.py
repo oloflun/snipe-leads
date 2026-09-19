@@ -1197,7 +1197,9 @@ async def run_support_agent(
         uppgift = uppgift.replace(
             "Returnera JSON: draft (svenska).",
             f"Skriv hela svaret på {sprak_namn} — kundens språk — även om "
-            f"kunskapsbasen är på svenska. Returnera JSON: draft ({sprak_namn}).",
+            f"kunskapsbasen är på svenska. Returnera JSON med fältet draft: EN "
+            f"sträng med hela svaret till kunden på {sprak_namn}. Inte skillens "
+            f"mallformat (To/Re/Notes) och inga andra textfält.",
         )
     draft = await steg(
         steps["cs:draft-response"],
@@ -1425,7 +1427,9 @@ async def run_support_agent(
                     + (
                         "Returnera JSON: final_reply (svenska)."
                         if ar_svenska
-                        else f"Skriv på {sprak_namn}. Returnera JSON: final_reply ({sprak_namn})."
+                        else f"Skriv på {sprak_namn}. Returnera JSON med fältet final_reply: "
+                        f"EN sträng med hela den rättade texten, inte skillens "
+                        f"mallformat (To/Re/Notes)."
                     )
                 ),
                 case_context=f"{case_context}\n\n## Kunskapsbas\n{kb_block}{systemblock}\n\n## Text att rätta\n{reply}",

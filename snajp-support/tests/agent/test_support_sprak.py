@@ -181,3 +181,27 @@ async def test_kvittensen_under_overlamning_foljer_samtalets_sprak():
 
     andra = await _tur(storage, _LLM(), "Hello?")
     assert andra["reply"] in support_texter._TEXTER["en"]["kvittens"]
+
+
+@pytest.mark.anyio
+async def test_icke_svenskt_utkast_ber_om_ett_strangfalt_och_tal_mallformatet():
+    """Kundtest på dev 2026-09-19: på engelska följde utkaststeget skillens
+    mejlmall ({"To", "Re", "Draft response text", "Notes for You"}) i stället
+    för JSON-fältet draft, och ett korrekt svar byttes mot reservtexten. Två
+    lager: instruktionen ber uttryckligen om ETT strängfält (här), och
+    avläsningen tål mallformatet ändå (_textfalt, 7da19bb)."""
+    storage = MemoryStorage()
+    llm = _LLM(triage={"sprak": "en", "sokfraga_sv": "leverans"})
+    mall = {
+        "To": "Customer",
+        "Re": "Delivery",
+        "Draft response text": "Your order is delivered by PostNord.",
+        "Notes for You": {"tone": "friendly"},
+    }
+    llm.draft = mall  # type: ignore[assignment]
+    svar = await _tur(storage, llm, "Which carrier is delivering it?")
+
+    prompt = llm.user_by_skill["cs:draft-response"]
+    assert "Returnera JSON med fältet draft: EN sträng" in prompt
+    assert "Inte skillens mallformat" in prompt
+    assert svar["reply"] == "Your order is delivered by PostNord."
