@@ -132,7 +132,7 @@ export function AgentLarande() {
           fas: "fel",
           meddelande:
             fRes.status >= 500
-              ? "Tjänsten svarar inte just nu. Den vaknar ur viloläge och kan ta upp till en minut."
+              ? "Tjänsten svarar inte. Försök igen om en minut."
               : `Kunde inte hämta förslagen (status ${fRes.status}).`
         });
         return;
@@ -208,10 +208,7 @@ export function AgentLarande() {
         <h2 className="kicker text-mineral">Väntar på ditt beslut</h2>
         {lage.forslag.length === 0 ? (
           <div className="mt-3">
-            <EmptyState
-              title="Inga förslag just nu"
-              body="När supportagenten ser en kunskapslucka eller leads-agenten lär sig något om marknaden hamnar förslaget här. Ingenting skrivs in i din kunskapsbas eller målgrupp utan ditt godkännande."
-            />
+            <EmptyState title="Inga förslag just nu" />
           </div>
         ) : (
           <ul className="mt-3 divide-y divide-ink/15 border-y border-ink/15">
@@ -269,11 +266,7 @@ export function AgentLarande() {
       <section>
         <h2 className="kicker text-mineral">Domar från teamet</h2>
         {lage.feedback.length === 0 ? (
-          <p className="mt-3 max-w-[75ch] text-[15px] leading-6 text-ink-muted">
-            Inga domar ännu. När någon i teamet markerar en körning som bra
-            eller fel samlas den här — och en rättad text är det starkaste
-            underlaget agenterna kan lära sig av.
-          </p>
+          <p className="mt-3 text-[15px] leading-6 text-ink-muted">Inga domar ännu.</p>
         ) : (
           <ul className="mt-3 divide-y divide-ink/15 border-y border-ink/15">
             {lage.feedback.map((r) => (

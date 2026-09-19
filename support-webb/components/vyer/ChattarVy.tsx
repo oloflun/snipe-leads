@@ -175,10 +175,7 @@ function Chattar() {
 
   return (
     <div className="space-y-8">
-      <PageHeader
-        rubrik="Chattar"
-        beskrivning="Samtal agenten har lämnat över till en människa. Du ser hela samtalet, och ditt svar hamnar i kundens eget chattfönster — kunden behöver inte börja om."
-      />
+      <PageHeader rubrik="Chattar" />
 
       {fel ? (
         <p role="alert" className="max-w-[70ch] text-[0.875rem] text-danger">
@@ -189,10 +186,7 @@ function Chattar() {
       {chattar === null ? (
         <SkeletonRows />
       ) : chattar.length === 0 && !valtId ? (
-        <EmptyState
-          title="Inga överlämnade chattar"
-          body="När agenten lämnar över ett samtal — kunden ber om en människa, frågan ligger utanför det agenten vet, eller ärendet är känsligt — hamnar det här."
-        />
+        <EmptyState title="Inga överlämnade chattar" />
       ) : (
         <div className="grid gap-10 lg:grid-cols-12">
           <section className="lg:col-span-5" aria-label="Överlämnade chattar">
@@ -234,9 +228,7 @@ function Chattar() {
 
           <section className="lg:col-span-7" aria-label="Valt samtal">
             {!valtId ? (
-              <p className="border-y border-ink/15 py-8 text-[0.9375rem] text-ink/55">
-                Välj ett samtal i listan så visas hela samtalet här.
-              </p>
+              <p className="border-y border-ink/15 py-8 text-[0.9375rem] text-ink-muted">Välj ett samtal.</p>
             ) : !detalj && detaljFel ? (
               <div className="border-y border-ink/15 py-6">
                 <p role="alert" className="max-w-[62ch] text-[0.9375rem] text-danger">
@@ -263,14 +255,13 @@ function Chattar() {
                   </p>
                 ) : null}
                 {KANALNAMN[valt?.channel ?? ""] ? (
-                  <p className="mt-0.5 text-[0.875rem] text-ink/55">
-                    Kunden skriver i {KANALNAMN[valt?.channel ?? ""]}. Ditt svar skickas dit.
+                  <p className="mt-0.5 text-[0.875rem] text-ink-muted">
+                    Kanal: {KANALNAMN[valt?.channel ?? ""]}
                   </p>
                 ) : null}
                 {detalj.samtal.aktiv === false && detalj.samtal.lage === "overlamnad" ? (
-                  <p className="mt-2 max-w-[62ch] text-[0.8125rem] text-ink/50">
-                    Samtalet har legat stilla ett dygn, så agenten svarar kunden igen. Ditt
-                    svar tar tillbaka det.
+                  <p className="mt-2 max-w-[62ch] text-[0.8125rem] text-ink-subtle">
+                    Vilande — agenten svarar igen tills du svarar.
                   </p>
                 ) : null}
 

@@ -31,14 +31,12 @@ const HANDELSER: { nyckel: Notishandelse; etikett: string; beskrivning: string }
   {
     nyckel: "lead",
     etikett: "Nytt lead",
-    beskrivning:
-      "Iris har hittat och kvalificerat ett bolag. Ett mejl per lead, inte per körning."
+    beskrivning: "Ett mejl per kvalificerat bolag."
   },
   {
     nyckel: "escalation",
     etikett: "Eskalering",
-    beskrivning:
-      "Kundtjänstagenten vägrade gissa och lämnade över ärendet till en människa. Det här är den notis som faktiskt kräver något av dig."
+    beskrivning: "Ett ärende lämnades över till dig."
   }
 ];
 
@@ -106,11 +104,7 @@ export function NotisSettings() {
         setFel(svar.error ?? "Kunde inte spara.");
         return;
       }
-      setKlart(
-        falt.epost
-          ? "Sparat. Notiserna går till adressen du loggar in med."
-          : "Sparat. Vi mejlar dig inte längre — allt syns fortfarande i arbetsytan."
-      );
+      setKlart(falt.epost ? "Sparat. Notiserna går till din inloggningsadress." : "Sparat.");
     } catch (orsak) {
       setFel(orsak instanceof Error ? orsak.message : "Kunde inte spara.");
     } finally {
@@ -123,7 +117,6 @@ export function NotisSettings() {
       <div className="border-t border-ink/15 pt-5">
         <Vaxel
           etikett="Mejla mig"
-          beskrivning="Huvudströmbrytaren. Är den av skickar vi inga notismejl alls — arbetet syns ändå i arbetsytan, det är bara påminnelsen som uteblir."
           pa={falt.epost}
           onChange={vaxlaEpost}
         />
@@ -131,10 +124,6 @@ export function NotisSettings() {
 
       <fieldset className="border-t border-ink/15 pt-5" disabled={!falt.epost}>
         <legend className="kicker text-mineral">Vad vi mejlar om</legend>
-        <p className="mt-2 max-w-[52ch] text-[0.8125rem] leading-5 text-ink-subtle">
-          Två sorters händelser. Välj båda, en av dem, eller ingen — inget val
-          gör samma sak som att stänga av notiser helt.
-        </p>
 
         {/* Nedtonad, inte gömd. Se docstringen: den som slår på notiser ska
             kunna se vad hen tackar ja till innan hen gör det. */}
@@ -166,7 +155,7 @@ export function NotisSettings() {
         </button>
         {saknasSession ? (
           <p role="status" className="max-w-[60ch] text-[0.875rem] text-mineral">
-            Inställningen hör till ditt konto och kräver en inloggad session.
+            Kräver inloggning.
           </p>
         ) : null}
         {klart ? (

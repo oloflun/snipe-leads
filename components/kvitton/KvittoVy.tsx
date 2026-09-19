@@ -15,10 +15,7 @@ import { KONTAKT_MEJL } from "@/components/marketing/copy";
  */
 export function KvittoVy() {
   return (
-    <PageShell
-      title="Kvitton, direkt ur inkorgen"
-      description="Koppla mejlen, så läser agenten inkommande kvitton och utlägg åt dig: belopp, moms, datum, butik och kategori — med dublettkontroll och en sammanfattning som går ihop. Du kan också ladda upp kvitton själv."
-    >
+    <PageShell title="Kvitton">
       <div className="grid grid-cols-12 gap-x-0 gap-y-12 lg:gap-x-10">
         <div className="col-span-12 lg:col-span-7">
           <KvittoYta />
@@ -43,8 +40,7 @@ export function KvittoVy() {
           </span>
         </summary>
         <p className="mt-3 max-w-[78ch] text-[0.8125rem] leading-6 text-ink-subtle">
-          Kvittohanteraren läser av och sammanställer dina kvitton. Beloppen är
-          avlästa maskinellt och ska granskas av en människa innan de används i
+          Beloppen är maskinellt avlästa och ska granskas av en människa innan de används i
           bokföring eller deklaration.
         </p>
       </details>
@@ -52,16 +48,15 @@ export function KvittoVy() {
       <section className="mt-8 border-t border-ink/15 pt-6">
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.875rem] leading-6 text-ink-muted">
           <LifeBuoy className="h-4 w-4 shrink-0 text-mineral" aria-hidden />
-          Ser något fel ut i en avläsning eller en summa?
+          Fel i en avläsning?
           <a
             href={`mailto:${KONTAKT_MEJL}?subject=${encodeURIComponent("Snajp Kvittohanteraren — felanmälan")}&body=${encodeURIComponent(
               ["Beskriv gärna kort:", "", "1. Vilket kvitto eller vilken period gäller det?", "2. Vad blev fel?", "3. Vad hade du förväntat dig i stället?", ""].join("\n")
             )}`}
             className="focus-ring rounded-input font-medium text-ink underline underline-offset-4 hover:text-ochre"
           >
-            Anmäl det till oss
+            Anmäl det
           </a>
-          <span className="text-ink-subtle">så tittar vi på det.</span>
         </p>
       </section>
     </PageShell>

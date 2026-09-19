@@ -27,12 +27,12 @@ const LAGEN: { varde: Regel["mode"]; etikett: string; forklaring: string }[] = [
   {
     varde: "draft",
     etikett: "Utkast",
-    forklaring: "Agenterna hanterar mailet, du klickar godkänn och skicka."
+    forklaring: "Du godkänner innan det skickas."
   },
   {
     varde: "auto",
     etikett: "Auto",
-    forklaring: "Väljer automatiskt det bästa valet för svaret på frågan."
+    forklaring: "Agenten väljer själv."
   },
   { varde: "escalate", etikett: "Eskalera", forklaring: "Går alltid till en människa." }
 ];

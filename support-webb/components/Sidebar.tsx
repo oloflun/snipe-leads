@@ -107,8 +107,7 @@ export function Sidebar({ kundnamn = null }: Readonly<{ kundnamn?: string | null
               {kundnamn}
             </p>
           ) : null}
-          <div className="flex items-baseline gap-2 text-[0.75rem] leading-5 text-paper/35">
-            <span>En tjänst från Snajp</span>
+          <div className="flex items-baseline gap-2 text-[0.75rem] leading-5">
             <form method="post" action="/api/logga-ut">
               <button
                 type="submit"

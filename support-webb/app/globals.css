@@ -24,6 +24,10 @@
   /* Textsäker ochre — se rotens globals.css: --ochre (L 0.74) ger 2.17:1 mot
      paper och duger bara som accentyta, aldrig som 16px text. */
   --warning: 0.54 0.16 64;
+  /* Dämpad text som token, aldrig ink/xx-opacitet — samma värden och mätningar
+     som huvudappen (DESIGN.md: ink-muted 7.63:1, ink-subtle 5.90:1 mot paper). */
+  --ink-muted: 0.42 0.018 252;
+  --ink-subtle: 0.48 0.018 252;
 
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --dur-short: 180ms;

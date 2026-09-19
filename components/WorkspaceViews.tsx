@@ -54,15 +54,9 @@ import type { Tema } from "@/lib/tema";
  */
 export function AssistantView() {
   return (
-    <PageShell
-      kicker="Assistant"
-      title="Assistenten är ett reglage i arbetsflödet, inte ett chattfönster."
-      description="Varje kommando landar i discovery, research, sekvens, email eller analys. Det går att följa exakt vilken signal som styrde texten."
-    >
+    <PageShell title="Assistent">
       <p className="mb-8 border-y border-ochre/40 bg-ochre/10 px-4 py-3 text-[15px] text-ink-muted">
-        <strong className="font-semibold">Exempel.</strong> Samtalet nedan visar hur assistenten
-        är tänkt att fungera. Den är inte kopplad till din arbetsyta ännu, så ingenting här är
-        körningar hos dig.
+        <strong className="font-semibold">Exempel.</strong> Inte kopplad till din arbetsyta.
       </p>
       <div className="grid grid-cols-12 gap-x-8 gap-y-10">
         <div className="col-span-12 border-y border-ink/15 md:col-span-7">
@@ -104,11 +98,7 @@ export function AssistantView() {
 
 export function CompaniesView({ demo = false }: Readonly<{ demo?: boolean }>) {
   return (
-    <PageShell
-      kicker="Företag"
-      title="Företagsintelligens, källor och säljvinklar i samma vy."
-      description="Bolagen Iris hittat åt dig, med signalen som motiverade poängen."
-    >
+    <PageShell title="Företag">
       <Bolagsregister demo={demo} />
     </PageShell>
   );
@@ -137,11 +127,7 @@ function TextList({ title, items }: Readonly<{ title: string; items: string[] }>
 
 export function ContactsView({ demo = false }: Readonly<{ demo?: boolean }>) {
   return (
-    <PageShell
-      kicker="Kontakter"
-      title="Personerna bakom bolagen."
-      description="Kontaktpersonen Iris hittat per bolag, och var prospektet står."
-    >
+    <PageShell title="Kontakter">
       <Kontakter demo={demo} />
     </PageShell>
   );
@@ -158,11 +144,7 @@ export function ContactsView({ demo = false }: Readonly<{ demo?: boolean }>) {
  */
 export function AnalyticsView({ demo = false }: Readonly<{ demo?: boolean }>) {
   return (
-    <PageShell
-      kicker="Analys"
-      title="Analys som läser som en resultattabell, inte en chart-demo."
-      description="Skick, svar och ärenden per vecka — räknat ur din egen arbetsyta."
-    >
+    <PageShell title="Analys">
       <Analys demo={demo} />
     </PageShell>
   );
@@ -170,11 +152,7 @@ export function AnalyticsView({ demo = false }: Readonly<{ demo?: boolean }>) {
 
 export function InboxView({ demo = false }: Readonly<{ demo?: boolean }>) {
   return (
-    <PageShell
-      kicker="Svar"
-      title="Svaren från bolagen agenten kontaktat."
-      description="Vem som svarat, vad de skrev och var prospektet står nu."
-    >
+    <PageShell title="Svar">
       <Svar demo={demo} />
     </PageShell>
   );
@@ -182,11 +160,7 @@ export function InboxView({ demo = false }: Readonly<{ demo?: boolean }>) {
 
 export function AgentLarandeView() {
   return (
-    <PageShell
-      kicker="Lärande"
-      title="Det agenterna lärt sig — och väntar på ditt ok för."
-      description="Kunskapsluckor ur supportärenden och marknadsinsikter ur research. Inget skrivs in i ditt underlag utan att du godkänner det här."
-    >
+    <PageShell title="Lärande">
       <AgentLarande />
     </PageShell>
   );
@@ -199,7 +173,7 @@ export function SettingsView({
   const titles: Record<SettingsSectionKey, string> = {
     foretaget: "Företaget",
     mailboxes: "Inkorgar",
-    team: "Teamroller och audit-logik.",
+    team: "Team",
     billing: "Plan och fakturering",
     affarskontext: "Affärskontext",
     kunskapsbas: "Kunskapsbas",
@@ -217,20 +191,12 @@ export function SettingsView({
   // känner igen orden eller behöver veta vår stack. Att stacken sedan byttes
   // gjorde texten dessutom osann — vilket är själva argumentet mot att skriva
   // ut infrastruktur i en kundvänd yta.
-  const descriptions: Record<SettingsSectionKey, string> = {
-    foretaget: "Bolaget bakom arbetsytan — namn, organisationsnummer och webbplats.",
-    mailboxes: "Vilka mejladresser agenterna läser och svarar från.",
-    team: "Vilka som har tillgång till arbetsytan, och vad de får göra.",
-    billing: "Vilket paket arbetsytan har, och vad som ingår i det.",
-    affarskontext: "Vad ni säljer och till vem. Båda agenterna läser härifrån.",
-    kunskapsbas: "Dokumenten agenterna svarar ur. Ligger inget här gissar de aldrig — de eskalerar.",
-    leads: "Vilka bolag agenterna ska leta efter, och hur långt de får gå på egen hand.",
-    regler: "Vilka ärenden agenterna får besvara själva, och vilka som alltid går till en människa.",
-    soul: "Beskriv hur ni låter. Agenterna skriver så i både utskick och svar — dokumentet är delat mellan dem.",
-    notiser:
-      "När vi ska mejla dig, och om vad. Gäller dig personligen — inte dina kollegor i samma arbetsyta.",
-    tema: "Ljus eller mörk arbetsyta. Valet gäller den här webbläsaren och slår igenom direkt.",
-    addons: "Det agenterna kan göra utöver det som ingår i er plan.",
+  // Sedan 2026-09-19 står en beskrivning bara där rubriken inte räcker.
+  const descriptions: Partial<Record<SettingsSectionKey, string>> = {
+    affarskontext: "Vad ni säljer och till vem.",
+    soul: "Tonen i utskick och svar.",
+    notiser: "Gäller bara dig.",
+    tema: "Gäller den här webbläsaren.",
     agentinstruktioner:
       "Reglerna varje agent läser först, för varje kund. Policy och säkerhet — ton och röst hör hemma hos kunden."
   };
@@ -326,13 +292,10 @@ function CompanySettings() {
       </div>
       <div className="grid grid-cols-12 gap-x-6 border-t border-ink/15 pt-5">
         <span className="kicker col-span-12 text-mineral md:col-span-3">Bolagsuppgifter</span>
-        <p className="col-span-12 mt-2 max-w-[60ch] text-[15px] leading-7 text-ink-muted md:col-span-9 md:mt-0">
-          Organisationsnummer och webbplats fylldes i vid uppstarten och används av båda
-          agenterna.{" "}
+        <p className="col-span-12 mt-2 text-[15px] leading-7 text-ink-muted md:col-span-9 md:mt-0">
           <Link href="/onboarding" className="underline underline-offset-4 hover:text-ochre">
-            Ändra dem i uppstartsformuläret
+            Ändra i uppstartsformuläret
           </Link>
-          .
         </p>
       </div>
     </div>

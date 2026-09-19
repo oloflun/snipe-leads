@@ -250,9 +250,7 @@ export function LeadslistorView() {
   async function bestall() {
     const antalTal = Number(antal);
     if (!titel.trim()) {
-      setBestallFel(
-        "Beskriv vilka bolag listan ska hitta — beskrivningen är både sökningen och listans namn."
-      );
+      setBestallFel("Beskriv vilka bolag listan ska hitta.");
       return;
     }
     if (!Number.isInteger(antalTal) || antalTal < 1 || antalTal > 200) {
@@ -283,7 +281,7 @@ export function LeadslistorView() {
         })
       });
       setTitel("");
-      setStatus("Listan är beställd. Agenten bygger den nu — status uppdateras här.");
+      setStatus("Listan är beställd.");
       await hamtaListor(true);
     } catch (fel) {
       setBestallFel(felmeddelande(fel));
@@ -319,13 +317,9 @@ export function LeadslistorView() {
         <h2 id="bestall-lista" className="text-[1.125rem] font-semibold tracking-[-0.01em]">
           Beställ en lista
         </h2>
-        <p className="mt-1 max-w-[65ch] text-[13px] text-ink-subtle">
-          Agenten letar, verifierar och lägger raderna här — ingenting skickas och inga utkast
-          skrivs.
-        </p>
 
         <div className="mt-6 grid max-w-[760px] gap-5 sm:grid-cols-2">
-          <Rad etikett="Vilka bolag ska listan hitta?" hint="t.ex. Bygg i Norrland, 10–50 anställda">
+          <Rad etikett="Vilka bolag ska listan hitta?">
             <input
               value={titel}
               onChange={(e) => setTitel(e.target.value)}
@@ -387,10 +381,7 @@ export function LeadslistorView() {
           </div>
         ) : listor.length === 0 ? (
           <div className="mt-4">
-            <EmptyState
-              title="Inga listor ännu"
-              body="Beställ en lista ovan. Den byggs i bakgrunden och dyker upp här när den är klar — listan är tom tills dess."
-            />
+            <EmptyState title="Inga listor ännu" />
           </div>
         ) : (
           <ul className="mt-4 divide-y divide-ink/15 border-y border-ink/15">
@@ -499,9 +490,7 @@ const KAPACITETSMARKORER = [
 ];
 
 /** Saknad erbjudandetext gäller varje rad lika — därför stoppar den svepet. */
-const OFFERT_SAKNAS =
-  "Affärskontexten (Vad ni säljer) behövs för utkastet. Fyll i den under Inställningar, " +
-  "Vad agenterna vet, Affärskontext — och kontrollera att du fortfarande är inloggad.";
+const OFFERT_SAKNAS = "Fyll i Vad ni säljer under Inställningar först.";
 
 /** Ska svepet stanna helt? 429 = budgettak, 503 = ingen skarp LLM, eller en
  *  kredit-/kvottext ur ett misslyckat jobb. Allt annat gäller bara raden. */
@@ -652,16 +641,13 @@ async function skrivUtkastForRad(
     // texten nedan, och "agenten lämnade över till en människa" är inte vad
     // som hände — jobbet kan fortfarande bli klart.
     if (!klart) {
-      throw new Error(
-        "Utkastet tog för lång tid att skriva. Det kan dyka upp i granskningskön ändå — titta där innan ni försöker igen."
-      );
+      throw new Error("Utkastet tog för lång tid. Titta i granskningskön innan du försöker igen.");
     }
   }
 
   if (svar.escalated || !svar.body) {
     throw new Error(
-      svar.escalation_reason ||
-        "Agenten lämnade över till en människa i stället för att skriva klart utkastet."
+      svar.escalation_reason || "Utkastet blev inte klart."
     );
   }
 
@@ -809,7 +795,7 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
         stoppadAvDig ? "Stoppat" : null,
         nya ? `${nya} ${nya === 1 ? "nytt" : "nya"} utkast` : null,
         fanns ? `${fanns} hade redan ett utkast` : null,
-        fel ? `${fel} gick inte att skriva — öppna raden för att se varför` : null
+        fel ? `${fel} gick inte att skriva` : null
       ]
         .filter(Boolean)
         .join(" · ") || "Inga utkast skrevs."
@@ -819,7 +805,7 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
   if (!items.length) {
     return (
       <p className="mt-4 border-t border-ink/10 pt-4 text-[15px] text-ink-muted">
-        Listan är klar men innehåller inga rader.
+        Listan är tom.
       </p>
     );
   }
@@ -896,11 +882,9 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
           <p className="max-w-[70ch] text-[0.875rem] leading-6 text-ink">
             Agenten skriver <strong className="font-semibold">{omgang.length} utkast</strong>
             {kandidater.length > omgang.length
-              ? ` — de första ${omgang.length} av ${kandidater.length} med adress. Nästa klick tar resten.`
+              ? ` av ${kandidater.length} med adress.`
               : ", ett per bolag med mejladress."}{" "}
-            Utkasten landar i granskningskön under Leads.{" "}
-            <strong className="font-semibold">Ingenting skickas</strong> förrän ni godkänner
-            varje mejl. Varje utkast räknas mot er leadsbudget.
+            Varje utkast räknas mot er leadsbudget.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button
@@ -948,30 +932,15 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
         </p>
       ) : null}
       {svepResultat ? (
-        <p className="mt-3 text-[13px] text-ink-subtle">
-          {svepResultat} — utkasten ligger i granskningskön under Leads.
-        </p>
+        <p className="mt-3 text-[13px] text-ink-subtle">{svepResultat}</p>
       ) : null}
 
       {allaResultat ? (
-        <p className="mt-3 text-[13px] text-ink-subtle">
-          {allaResultat} — bolagen ligger under Leads och kan researchas och mejlas därifrån.
-        </p>
+        <p className="mt-3 text-[13px] text-ink-subtle">{allaResultat}</p>
       ) : null}
       {radFel ? (
         <p role="alert" className="mt-3 max-w-[70ch] break-words text-[14px] text-danger">
           {radFel}
-        </p>
-      ) : null}
-
-      {/* Testaren hittade inte bron alls: knappen syntes bara på rader med
-          adress, och den listan hade inga. En rad om vad raderna gör kostar
-          ingenting och gör vägen till Email studio synlig även innan någon
-          klickat. */}
-      {mejlbro ? (
-        <p className="mt-4 max-w-[70ch] text-[13px] leading-6 text-ink-subtle">
-          Skriv mejl på en rad öppnar Email studio: agenten skriver ett utkast som ni kan
-          förbättra, personalisera och godkänna.
         </p>
       ) : null}
 
@@ -1167,7 +1136,7 @@ function MejlRuta({ lista, rad }: Readonly<{ lista: Lista; rad: ListRad }>) {
   function sparaAdress() {
     const varde = adressfalt.trim();
     if (!ADRESS_RE.test(varde)) {
-      setAdressFel("Skriv en hel mejladress, t.ex. namn@bolaget.se.");
+      setAdressFel("Skriv en hel mejladress.");
       return;
     }
     setAdressFel(null);
@@ -1203,10 +1172,7 @@ function MejlRuta({ lista, rad }: Readonly<{ lista: Lista; rad: ListRad }>) {
             sparaAdress();
           }}
         >
-          <p className="max-w-[65ch] text-[14px] leading-6 text-ink-muted">
-            Raden saknar mejladress. Lägg till mottagaren, så skriver agenten utkastet. Adressen
-            sparas på bolaget under Leads.
-          </p>
+          <p className="text-[14px] leading-6 text-ink-muted">Raden saknar mejladress.</p>
           <label className="mt-3 block max-w-[420px]">
             <span className="text-[13px] font-medium text-ink-muted">Mejladress</span>
             <input
@@ -1270,8 +1236,7 @@ function MejlRuta({ lista, rad }: Readonly<{ lista: Lista; rad: ListRad }>) {
         <div className="mt-4">
           <EmailStudioEditor data={data} compact />
           <p className="mt-4 max-w-[65ch] text-[13px] leading-6 text-ink-subtle">
-            Godkänn skickar utkastet som det sparades i granskningskön. Ändringar i fälten ovan
-            uppdaterar bara den här vyn tills en sparväg finns.
+            Ändringar ovan sparas inte. Godkänn skickar det sparade utkastet.
           </p>
           <div className="mt-4 border-t border-ink/15 pt-4">
             {godkant ? (
@@ -1290,9 +1255,8 @@ function MejlRuta({ lista, rad }: Readonly<{ lista: Lista; rad: ListRad }>) {
                   {godkannBusy ? "Godkänner…" : "Godkänn och skicka"}
                 </button>
                 {!queueItemId ? (
-                  <p className="mt-3 max-w-[65ch] text-[13px] leading-6 text-ink-subtle">
-                    Utkastet saknar ett kö-id och kan inte godkännas härifrån. Se granskningskön
-                    under Leads.
+                  <p className="mt-3 text-[13px] leading-6 text-ink-subtle">
+                    Godkänn i Iris › Granskning.
                   </p>
                 ) : null}
                 {godkannFel ? (

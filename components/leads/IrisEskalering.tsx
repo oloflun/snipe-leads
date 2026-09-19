@@ -139,11 +139,6 @@ export function IrisEskalering() {
   return (
     <section aria-label="Eskalering till människa">
       <h3 className="kicker text-mineral">När Iris lämnar över till dig</h3>
-      <p className="mt-3 max-w-[64ch] text-[15px] leading-7 text-ink-muted">
-        Reglerna avgör när ett lead eller ett svar går till dig i stället för att hanteras vidare
-        automatiskt. Avstängd regel betyder att Iris fortsätter enligt sitt vanliga flöde,
-        fortfarande med granskningskön som sista spärr.
-      </p>
 
       {lage.fas === "laddar" ? (
         <div className="mt-5 grid gap-px">
@@ -160,7 +155,7 @@ export function IrisEskalering() {
           <Vaxel
             paslagen={lage.regler.osaker_kvalificering}
             etikett="Osäker kvalificering"
-            beskrivning="Bolag under träffsäkerhetströskeln får inget automatiskt utkast. De står kvar i Bolag för din bedömning."
+            beskrivning="Bolag under tröskeln får inget automatiskt utkast."
             upptagen={sparar}
             onByt={(v) => void spara({ osaker_kvalificering: v })}
           />
@@ -188,30 +183,26 @@ export function IrisEskalering() {
                 />
                 <span className="text-[0.9375rem] text-ink-muted">procent</span>
               </div>
-              <p className="w-full text-[0.8125rem] leading-5 text-ink-subtle">
-                Under {lage.regler.kvalificeringstroskel} procent mot din målgrupp får bolaget
-                inget utkast i körningen. Sparas när du lämnar fältet.
-              </p>
             </div>
           ) : null}
           <Vaxel
             paslagen={lage.regler.prisfragor}
             etikett="Pris och budget"
-            beskrivning="Svar som tar upp pris, rabatt eller budget får inget utkast från Iris. Uppföljningen stoppas och du får ett mejl."
+            beskrivning="Svar om pris, rabatt eller budget går till dig."
             upptagen={sparar}
             onByt={(v) => void spara({ prisfragor: v })}
           />
           <Vaxel
             paslagen={lage.regler.negativt_svar}
             etikett="Negativt svar"
-            beskrivning="Du får ett mejl när ett bolag svarar avvisande. Uppföljningen mot bolaget stoppas alltid, även med regeln avstängd."
+            beskrivning="Mejl till dig när ett bolag svarar avvisande."
             upptagen={sparar}
             onByt={(v) => void spara({ negativt_svar: v })}
           />
           <Vaxel
             paslagen={lage.regler.juridik}
             etikett="Avtal, juridik och personuppgifter"
-            beskrivning="Svar om avtal, villkor, juridik eller personuppgifter får inget utkast från Iris. Uppföljningen stoppas och du får ett mejl."
+            beskrivning="Svar om avtal, juridik eller personuppgifter går till dig."
             upptagen={sparar}
             onByt={(v) => void spara({ juridik: v })}
           />
@@ -222,13 +213,7 @@ export function IrisEskalering() {
         role={sparfel ? "alert" : "status"}
         className={cn("mt-2 min-h-5 text-[0.8125rem] leading-5", sparfel ? "text-danger" : "text-ink-subtle")}
       >
-        {sparfel
-          ? sparfel
-          : sparad
-            ? "Sparat. Gäller från nästa svar och nästa körning."
-            : lage.fas === "klar"
-              ? "Sparas i ditt konto och gäller för alla som arbetar med Iris."
-              : null}
+        {sparfel ? sparfel : sparad ? "Sparat." : null}
       </p>
     </section>
   );

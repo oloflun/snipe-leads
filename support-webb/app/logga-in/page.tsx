@@ -25,10 +25,6 @@ export default async function Sida({
         <h1 className="font-display tighten mt-8 text-[1.75rem] leading-tight text-ink">
           Logga in
         </h1>
-        <p className="mt-2 text-[0.9375rem] leading-6 text-ink/60">
-          Snajp Support är i förhandsversion. Logga in med uppgifterna du
-          fått av Snajp.
-        </p>
 
         <form method="post" action="/api/logga-in" className="mt-7 space-y-5">
           <input type="hidden" name="nasta" value={mal} />
@@ -58,8 +54,7 @@ export default async function Sida({
 
           {fel ? (
             <p role="alert" className="text-[0.875rem] leading-5 text-danger">
-              Fel e-postadress eller lösenord. Kontrollera uppgifterna och
-              försök igen.
+              Fel e-postadress eller lösenord.
             </p>
           ) : null}
 

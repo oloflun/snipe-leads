@@ -466,7 +466,7 @@ function OversiktShell({
           className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-card bg-paper2/60 px-4 py-3 text-[0.875rem] text-ink-muted"
         >
           <AlertTriangle className="h-4 w-4 shrink-0 text-warning" aria-hidden />
-          En del av siffrorna kunde inte hämtas och visas som streck. Resten stämmer.
+          Vissa siffror kunde inte hämtas.
           <button
             type="button"
             disabled={uppdaterar}
@@ -674,7 +674,7 @@ export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
           onboarding?.missing?.includes("product_marketing")
             ? [
                 {
-                  text: "Agenterna vet inte vad ni säljer. Utan den texten kan de varken välja bolag eller skriva ett utkast som håller.",
+                  text: "Agenterna vet inte vad ni säljer.",
                   href: vag("/settings/affarskontext"),
                   knapp: "Fyll i affärskontexten"
                 }
@@ -740,26 +740,26 @@ export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
           }))}
           href={vag("/dashboard/iris/granskning")}
           knapp="Öppna granskningskön"
-          tomtext="Inget mail ligger och väntar på ditt godkännande. Mailen agenterna skriver hamnar här."
+          tomtext="Inga utkast väntar."
         />
       </Sektion>
 
       <div className="grid gap-10 lg:grid-cols-12">
         <div className="min-w-0 lg:col-span-4">
           <Sektion rubrik="Var agenterna letar">
-            <Stapellista rader={orter} tomtext="Ingen ort utläst ur prospekten ännu." />
+            <Stapellista rader={orter} tomtext="Inga orter ännu." />
           </Sektion>
         </div>
         <div className="min-w-0 lg:col-span-4">
           <Sektion rubrik="Vad de hittar">
-            <Stapellista rader={branscher} tomtext="Ingen bransch utläst ur prospekten ännu." />
+            <Stapellista rader={branscher} tomtext="Inga branscher ännu." />
           </Sektion>
         </div>
         <div className="min-w-0 lg:col-span-4">
           <Sektion rubrik="Varför bolag valdes bort">
             <Stapellista
               rader={bortvalda}
-              tomtext="Inget prospekt har valts bort med angiven orsak ännu. Orsakerna sparas när agenterna researchat."
+              tomtext="Inga bortval ännu."
             />
           </Sektion>
         </div>
@@ -948,7 +948,7 @@ export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) 
           kbAntal === 0
             ? [
                 {
-                  text: "Kunskapsbasen är tom. Agenterna gissar aldrig — de eskalerar varje ärende de inte kan grunda, så inkorgen blir en lista med röda rader tills det ligger något här.",
+                  text: "Kunskapsbasen är tom.",
                   href: vag("/settings/kunskapsbas"),
                   knapp: "Fyll kunskapsbasen"
                 }
@@ -993,17 +993,9 @@ export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) 
         />
       </Talrad>
 
-      {regler === null ? null : (
-        <Pastaende
-          markerat={
-            auto.length === 0
-              ? "Ingenting"
-              : `${auto.length} ${auto.length === 1 ? "fack" : "fack"}`
-          }
-        >
-          {auto.length === 0
-            ? "skickas utan att du sett det. Varje svar ligger som utkast tills du godkänt det."
-            : `besvaras av agenterna själva: ${auto.map((r) => r.label.toLowerCase()).join(", ")}.`}
+      {regler === null || auto.length === 0 ? null : (
+        <Pastaende markerat={`${auto.length} fack`}>
+          {`besvaras av agenterna själva: ${auto.map((r) => r.label.toLowerCase()).join(", ")}.`}
         </Pastaende>
       )}
 
@@ -1019,7 +1011,7 @@ export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) 
           }))}
           href={vag("/dashboard/support")}
           knapp="Granska utkasten"
-          tomtext="Inget mail ligger och väntar på ditt godkännande. Svaren agenterna skriver hamnar här först."
+          tomtext="Inga utkast väntar."
         />
       </Sektion>
 
@@ -1054,16 +1046,13 @@ export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) 
               ]}
             />
             {eskaleratUtanKalla > 0 ? (
-              <p className="mt-4 max-w-[52ch] text-[0.875rem] leading-6 text-ink-muted">
-                De ärendena lämnades över för att agenterna inte hittade något att svara ur, inte för
-                att frågan var svår.{" "}
+              <p className="mt-4 text-[0.875rem] leading-6 text-ink-muted">
                 <Link
                   href={vag("/settings/kunskapsbas")}
                   className="focus-ring rounded-input underline underline-offset-4 hover:text-ochre"
                 >
                   Fyll på kunskapsbasen
-                </Link>{" "}
-                så minskar de.
+                </Link>
               </p>
             ) : null}
           </Sektion>
@@ -1092,7 +1081,7 @@ export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) 
               ton: status.ton
             };
           })}
-          tomtext="Inkorgen är tom. Koppla en inkorg under Inställningar, eller hämta testmail i kundtjänstvyn."
+          tomtext="Inkorgen är tom."
         />
       </Sektion>
     </OversiktShell>

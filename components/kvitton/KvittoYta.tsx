@@ -379,7 +379,7 @@ export function KvittoYta() {
               title={
                 konto?.kopplad
                   ? undefined
-                  : "Ingen mejlinkorg är kopplad ännu — koppla under Inställningar."
+                  : "Ingen inkorg kopplad."
               }
               className={cn(btnPrimary, btnLiten)}
             >
@@ -448,20 +448,17 @@ export function KvittoYta() {
                     ? "Outlook/Hotmail"
                     : "Demokonto"}
               </Badge>
-              <span className="text-ink-subtle">Läses med read-only-åtkomst.</span>
             </>
           ) : (
             <>
-              Ingen inkorg kopplad ännu. Vi kopplar Gmail, Outlook eller Hotmail åt
-              dig med read-only-åtkomst —{" "}
+              Ingen inkorg kopplad.{" "}
               <a
                 href="mailto:kontakt@snajp.se?subject=Koppla%20mejl%20till%20Kvittohanteraren"
                 className="focus-ring rounded-input font-medium text-ink underline underline-offset-4 hover:text-ochre"
               >
-                hör av dig
+                Hör av dig
               </a>{" "}
-              så är det klart på ett kort möte. Du kan ladda upp kvitton manuellt
-              redan nu.
+              så kopplar vi den.
             </>
           )}
         </p>
@@ -520,7 +517,7 @@ export function KvittoYta() {
           {uppspelningKlar ? (
             <p className="mt-3 flex items-center gap-2 border-t border-ink/10 pt-3 text-[0.8125rem] text-moss">
               <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden />
-              Klart — resultatet står i tabellen nedanför, sammanfattningen till höger.
+              Klart.
             </p>
           ) : null}
         </section>
@@ -553,10 +550,7 @@ export function KvittoYta() {
           </div>
         ) : kvitton.length === 0 ? (
           <div className="mt-4">
-            <EmptyState
-              title="Inga kvitton i perioden"
-              body="Skanna inkorgen eller ladda upp ett kvitto, så läser agenten av belopp, moms, datum och kategori."
-            />
+            <EmptyState title="Inga kvitton i perioden" />
           </div>
         ) : (
           <div className="mt-4">
@@ -673,9 +667,7 @@ export function KvittoSammanfattning() {
       {samman === null ? (
         <p className="mt-3 text-[0.875rem] text-ink-subtle">Hämtar…</p>
       ) : samman.antal === 0 ? (
-        <p className="mt-3 text-[0.875rem] leading-6 text-ink-subtle">
-          När kvittona är inlästa landar periodens summor och en sammanfattning här.
-        </p>
+        <p className="mt-3 text-[0.875rem] leading-6 text-ink-subtle">Inga inlästa kvitton.</p>
       ) : (
         <>
           <p className="mt-3 font-display text-[2.25rem] leading-none tracking-[-0.01em]">

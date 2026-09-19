@@ -26,25 +26,25 @@ const FALT: { nyckel: keyof Affarskontextfalt; etikett: string; hjalp: string; r
   {
     nyckel: "product",
     etikett: "Vad ni säljer",
-    hjalp: "En eller två meningar. Det här är det agenterna ska sälja.",
+    hjalp: "En eller två meningar.",
     rader: 3
   },
   {
     nyckel: "target_audience",
     etikett: "Vem ni säljer till",
-    hjalp: "Vilka bolag och vilka roller. Skriv som ni skulle beskrivit det för en ny säljare.",
+    hjalp: "Vilka bolag och vilka roller.",
     rader: 3
   },
   {
     nyckel: "offer",
     etikett: "Erbjudandet",
-    hjalp: "Vad kunden får, och vad det kostar dem att inte ha det.",
+    hjalp: "Vad kunden får.",
     rader: 3
   },
   {
     nyckel: "cta",
     etikett: "Nästa steg ni vill ha",
-    hjalp: "Vad ett lyckat mejl leder till. Ett kort samtal, en demo, ett prisförslag.",
+    hjalp: "Samtal, demo eller prisförslag.",
     rader: 2
   }
 ];
@@ -97,7 +97,7 @@ export function Affarskontext() {
         setFel(svar.error ?? "Kunde inte spara.");
         return;
       }
-      setKlart(svar.varning ?? "Sparat. Båda agenterna läser texten från nästa körning.");
+      setKlart(svar.varning ?? "Sparat.");
     } catch (orsak) {
       setFel(orsak instanceof Error ? orsak.message : "Kunde inte spara.");
     } finally {

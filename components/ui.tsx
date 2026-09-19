@@ -98,12 +98,12 @@ export function MetricCard({
   );
 }
 
-export function EmptyState({ title, body }: Readonly<{ title: string; body: string }>) {
+export function EmptyState({ title, body }: Readonly<{ title: string; body?: string }>) {
   return (
     <div className="rounded-[8px] border border-dashed border-ink/15 bg-paper/45 p-8 text-center">
       <CheckCircle2 className="mx-auto h-6 w-6 text-moss" />
       <h3 className="mt-4 font-semibold">{title}</h3>
-      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-ink-muted">{body}</p>
+      {body ? <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-ink-muted">{body}</p> : null}
     </div>
   );
 }

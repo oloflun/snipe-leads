@@ -158,11 +158,6 @@ export function SupportEskalering() {
     <div className="mt-12 grid gap-7">
       <div>
         <h2 className="font-display text-[1.25rem]">Ton, språk, faktakontroll och överlämning</h2>
-        <p className="mt-1 max-w-[62ch] text-[0.9375rem] leading-6 text-ink-muted">
-          Hur agenten låter, vilket språk den svarar på, hur strängt svaren kontrolleras mot
-          kunskapsbasen, och när en människa tar över. Överlämningen sker i kundens eget chattfönster, och hela
-          samtalet följer med.
-        </p>
       </div>
 
       <Radlista ariaLabel="Ton och faktakontroll">
@@ -189,13 +184,7 @@ export function SupportEskalering() {
           </span>
         </Rad>
         <Rad className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6">
-          <span className="min-w-0 text-[0.9375rem]">
-            Svarsspråk
-            <span className="mt-0.5 block text-[0.8125rem] leading-5 text-ink-muted">
-              Skriver kunden på engelska, arabiska eller något annat språk kan agenten svara
-              på samma språk — kunskapsbasen kan fortfarande vara på svenska.
-            </span>
-          </span>
+          <span className="min-w-0 text-[0.9375rem]">Svarsspråk</span>
           <span className="flex items-center gap-2 justify-self-end">
             {spinner("sprak")}
             <select
@@ -277,7 +266,7 @@ export function SupportEskalering() {
           <span className="min-w-0 text-[0.9375rem]">
             Lämna över vid missnöje under
             <span className="mt-0.5 block text-[0.8125rem] leading-5 text-ink-muted">
-              Hur negativ tonen i kundens meddelande får vara innan en människa tar över.
+              Hur negativ kundens ton får vara.
             </span>
           </span>
           <span className="flex items-center gap-2 justify-self-end">
@@ -331,7 +320,6 @@ export function SupportEskalering() {
 
       <Vaxel
         etikett="Räkna frustration som ett misslyckat försök"
-        beskrivning="Säger kunden att agenten inte förstår, räknas det mot gränsen ovan i stället för att agenten svarar samma sak igen."
         pa={esk.frustration_raknas}
         disabled={upptagen}
         onChange={(nytt) =>
@@ -346,10 +334,8 @@ export function SupportEskalering() {
         <label htmlFor="amnesomrade" className="text-[0.9375rem] font-semibold">
           Vad agenten ska hjälpa till med
         </label>
-        <p className="mt-1 max-w-[62ch] text-[0.875rem] leading-6 text-ink-muted">
-          Några meningar om ert område. Frågor som uppenbart ligger utanför besvaras inte —
-          agenten säger det och erbjuder en människa. Lämna tomt för att agenten ska utgå
-          från kunskapsbasen.
+        <p className="mt-1 text-[0.875rem] leading-6 text-ink-muted">
+          Tomt: agenten utgår från kunskapsbasen.
         </p>
         <textarea
           id="amnesomrade"

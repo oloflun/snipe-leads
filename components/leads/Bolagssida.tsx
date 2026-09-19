@@ -330,7 +330,7 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
           fas: "fel",
           meddelande:
             response.status >= 500
-              ? "Tjänsten svarar inte just nu. Den vaknar ur viloläge och kan ta upp till en minut."
+              ? "Tjänsten svarar inte. Försök igen om en minut."
               : `Kunde inte hämta bolaget (status ${response.status}).`
         });
         return;
@@ -365,8 +365,7 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
     if (!p.contact_email) {
       setUtkastLage({
         fas: "fel",
-        meddelande:
-          "Prospektet saknar en mottagaradress. Lägg till en kontaktkälla med adress innan ett utkast kan skapas."
+        meddelande: "Mottagaradress saknas."
       });
       return;
     }
@@ -412,8 +411,7 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
         setUtkastLage({
           fas: "fel",
           meddelande:
-            svar.escalation_reason ||
-            "Agenten lämnade över till en människa i stället för att skriva klart utkastet. Försök igen om en stund."
+            svar.escalation_reason || "Utkastet blev inte klart. Försök igen om en stund."
         });
         return;
       }
@@ -488,10 +486,7 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
   if (lage.fas === "saknas") {
     return (
       <PageShell kicker="Företag" title="Bolaget finns inte">
-        <EmptyState
-          title="Hittade inget sådant bolag"
-          body="Prospektet finns inte i din arbetsyta. Det kan ha tagits bort, eller så pekar länken fel."
-        />
+        <EmptyState title="Hittade inget sådant bolag" />
         <Link href={vag("/dashboard/companies")} className={cn(btnPrimary, "mt-6")}>
           Till bolagen
         </Link>
@@ -549,8 +544,8 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
             value={p.anstallda == null ? "—" : String(p.anstallda)}
             detail={p.orgnr ? `org.nr ${p.orgnr}` : "org.nr saknas"}
           />
-          <Matt label="Källor" value={String(kallor.length)} detail="provenienskällor" />
-          <Matt label="Status" value={STATUS_ETIKETT[p.status] ?? p.status} detail="nuvarande läge" />
+          <Matt label="Källor" value={String(kallor.length)} />
+          <Matt label="Status" value={STATUS_ETIKETT[p.status] ?? p.status} />
         </dl>
 
         <section className="col-span-12 md:col-span-7">
@@ -581,8 +576,7 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
             </ul>
           ) : (
             <p className="mt-5 border-y border-ink/15 py-4 text-[15px] text-ink-muted">
-              Ingen poängmotivering sparad för det här bolaget. Den skrivs vid körningen — ett
-              prospekt som lagts till för hand har ingen.
+              Ingen poängmotivering sparad.
             </p>
           )}
 
@@ -626,10 +620,7 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
               ))}
             </ul>
           ) : (
-            <p className="mt-4 text-[15px] text-ink-muted">
-              Inga källor sparade. Utan minst en källa får agenten inte skriva ett utkast — se
-              provenienskravet i leads-agentens regler.
-            </p>
+            <p className="mt-4 text-[15px] text-ink-muted">Inga källor sparade.</p>
           )}
         </section>
 
@@ -642,11 +633,7 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
 
           {demo ? (
             <div className="mt-5 rounded-card bg-paper2/60 p-5">
-              <p className="max-w-[65ch] text-[15px] leading-7 text-ink-muted">
-                Ett utkast kostar LLM-anrop mot er egen granskningskö och kräver därför ett
-                konto. Här visar vi var det hade legat, inte ett påhittat resultat.
-              </p>
-              <Link href="/login" className={cn(btnPrimary, "mt-4")}>
+              <Link href="/login" className={btnPrimary}>
                 Logga in för att skapa utkast
               </Link>
             </div>
@@ -658,10 +645,7 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
 
               {utkastLage.fas === "ingen" ? (
                 <div>
-                  <p className="max-w-[65ch] text-[15px] leading-7 text-ink-muted">
-                    Inget utkast ännu. Ett klick skriver ett första mejl utifrån poängmotiveringen
-                    och källorna ovan, sedan väntar det på din granskning i kön.
-                  </p>
+                  <p className="text-[15px] leading-7 text-ink-muted">Inget utkast ännu.</p>
                   <button type="button" onClick={() => void skapaUtkast()} className={cn(btnPrimary, "mt-4")}>
                     Skapa utkast
                   </button>
@@ -698,8 +682,7 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
                       sparväg. Utan raden hade knappen sett ut att skicka det
                       som står i fälten just nu, vilket den inte gör. */}
                   <p className="mt-4 max-w-[65ch] text-[13px] leading-6 text-ink-subtle">
-                    Godkänn skickar utkastet som det sparades i granskningskön. Ändringar i
-                    fälten ovan uppdaterar bara den här vyn tills en sparväg finns.
+                    Ändringar ovan sparas inte. Godkänn skickar det sparade utkastet.
                   </p>
 
                   <div className="mt-5 border-t border-ink/15 pt-5">
@@ -719,9 +702,8 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
                           {godkannBusy ? "Godkänner…" : "Godkänn och skicka"}
                         </button>
                         {!utkastLage.queueItemId ? (
-                          <p className="mt-3 max-w-[65ch] text-[13px] leading-6 text-ink-subtle">
-                            Det här utkastet saknar ett kö-id och kan inte godkännas härifrån.
-                            Se granskningskön under Leads-inställningarna.
+                          <p className="mt-3 text-[13px] leading-6 text-ink-subtle">
+                            Godkänn i Iris › Granskning.
                           </p>
                         ) : null}
                         {godkannFel ? (
@@ -744,10 +726,8 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
                             className="mt-1 h-4 w-4 accent-ochre"
                           />
                           <span className="text-[14px] leading-6 text-ink-muted">
-                            Vill du att agenten skriver utkast automatiskt framöver?{" "}
-                            <span className="text-ink-subtle">
-                              Redan på. Utan mänsklig granskning lämnar inget huset ändå.
-                            </span>
+                            Skriv utkast automatiskt framöver{" "}
+                            <span className="text-ink-subtle">(redan på)</span>
                           </span>
                         </label>
 
@@ -791,14 +771,14 @@ function Matt({
   label,
   value,
   detail
-}: Readonly<{ label: string; value: string; detail: string }>) {
+}: Readonly<{ label: string; value: string; detail?: string }>) {
   return (
     <div className="col-span-6 border-t border-ink/15 pt-4 md:col-span-3">
       <dt className="kicker text-mineral">{label}</dt>
       <dd className="num mt-3 text-[1.75rem] font-semibold tabular-nums tracking-[-0.02em]">
         {value}
       </dd>
-      <p className="mt-2 text-[14px] leading-6 text-ink-muted">{detail}</p>
+      {detail ? <p className="mt-2 text-[14px] leading-6 text-ink-muted">{detail}</p> : null}
     </div>
   );
 }

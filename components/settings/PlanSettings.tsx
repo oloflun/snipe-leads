@@ -90,8 +90,8 @@ export function PlanSettings() {
             ) : (
               <p className="max-w-[58ch] text-[0.9375rem] leading-6 text-ink-muted">
                 {products.length === 0
-                  ? "Arbetsytan har ingen aktiv produkt. Välj ett paket här bredvid."
-                  : "Er plan är satt manuellt och matchar inget standardpaket. Väljer ni ett paket här bredvid ersätts den."}
+                  ? "Ingen aktiv produkt."
+                  : "Manuellt satt plan. Ett paketval ersätter den."}
               </p>
             )}
           </div>
@@ -135,15 +135,13 @@ export function PlanSettings() {
         <p className="max-w-[62ch] text-[0.9375rem] leading-6 text-ink-muted">
           Fakturan går till{" "}
           {workspaceName ? <strong className="font-semibold">{workspaceName}</strong> : "er arbetsyta"}.
-          Paketbytet ovan träder i kraft direkt; faktureringen justeras vid nästa
-          period. Vill ni se er förbrukning eller diskutera villkoren, skriv till{" "}
+          Faktureringen justeras vid nästa period. Frågor:{" "}
           <a
             href={mejlaOss("Plan och fakturering")}
             className="focus-ring rounded-input underline underline-offset-4 hover:text-ochre"
           >
             {KONTAKT_MEJL}
-          </a>{" "}
-          så svarar vi samma dag.
+          </a>
         </p>
       </div>
     </div>

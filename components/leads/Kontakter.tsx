@@ -87,7 +87,7 @@ export function Kontakter({ demo = false }: Readonly<{ demo?: boolean }>) {
           fas: "fel",
           meddelande:
             response.status >= 500
-              ? "Tjänsten svarar inte just nu. Den vaknar ur viloläge och kan ta upp till en minut."
+              ? "Tjänsten svarar inte. Försök igen om en minut."
               : `Kunde inte hämta kontakterna (status ${response.status}).`
         });
         return;
@@ -139,10 +139,7 @@ export function Kontakter({ demo = false }: Readonly<{ demo?: boolean }>) {
 
   if (!kontakter.length) {
     return (
-      <EmptyState
-        title="Inga kontaktpersoner ännu"
-        body="Agenten hittar kontaktpersonen när den researchar ett bolag. Bolag utan hittad kontakt står kvar i bolagslistan."
-      />
+      <EmptyState title="Inga kontaktpersoner ännu" />
     );
   }
 

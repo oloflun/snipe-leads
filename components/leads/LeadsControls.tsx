@@ -233,10 +233,8 @@ export function LeadsControls({
 
       <section className="border-t border-ink/15 pt-8">
         <p className="kicker text-mineral">Målgrupp</p>
-        <p className="mt-3 max-w-[64ch] text-[15px] leading-7 text-mineral">
-          <strong className="font-semibold text-ink">Er röst styr tonen, målgruppen styr urvalet.</strong>{" "}
-          Det här avgör vilka bolag agenterna bearbetar, inte hur de låter. Skriv
-          med komma emellan.
+        <p className="mt-3 text-[15px] leading-7 text-mineral">
+          Styr urvalet, inte tonen. Separera med komma.
         </p>
 
         <form
@@ -314,7 +312,7 @@ export function LeadsControls({
           <div className="mt-5 h-16 animate-pulse border-t border-ink/15 bg-ink/[0.03]" />
         ) : queue.length === 0 ? (
           <p className="mt-5 border-t border-ink/15 pt-5 text-[15px] text-mineral">
-            Inget väntar på granskning just nu.
+            Inget väntar på granskning.
           </p>
         ) : (
           <ul className="mt-5">

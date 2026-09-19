@@ -99,7 +99,7 @@ export function Betalsatt() {
       // Kortnumret och CVC kastas här, inte när formuläret stängs: stängningen
       // är ett annat klick och kan hoppas över.
       nollstall();
-      setKlart("Betalsättet är sparat. Inget har debiterats — testläge.");
+      setKlart("Betalsättet är sparat.");
     } catch (orsak) {
       setFel(orsak instanceof Error ? orsak.message : "Kunde inte spara betalsättet.");
     } finally {
@@ -138,10 +138,7 @@ export function Betalsatt() {
       </div>
 
       <p className="max-w-[62ch] text-[0.875rem] leading-6 text-ink-muted">
-        Ingen betalväxel är inkopplad ännu. Flödet nedan är det riktiga —
-        formulär, validering och felväg — men <strong className="font-semibold">
-        ingenting debiteras</strong>, och bara testkort tas emot. Skriv aldrig in
-        ett riktigt kortnummer här.
+        Bara testkort. <strong className="font-semibold">Skriv aldrig in ett riktigt kortnummer.</strong>
       </p>
 
       {befintligt ? (
@@ -267,7 +264,7 @@ export function Betalsatt() {
               ))}
             </ul>
             <p className="mt-3 text-[0.8125rem] leading-5 text-ink-subtle">
-              Vilken framtida giltighetstid och vilken CVC som helst fungerar.
+              Valfri framtida giltighetstid och CVC.
             </p>
           </div>
         </form>

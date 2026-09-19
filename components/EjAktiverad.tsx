@@ -41,12 +41,7 @@ export function EjAktiverad({ yta }: Readonly<{ yta?: string }>) {
             Din arbetsyta aktiveras
           </p>
           <p className="mt-2 max-w-[62ch] text-[15px] leading-7 text-ink-muted">
-            {yta ? `${yta} är` : "Den här vyn är"} redo så fort vi kopplat er till agenterna. Vi
-            går igenom er webbplats och bygger kunskapsbasen först — det är den som gör att svaren
-            blir era och inte generiska.
-          </p>
-          <p className="mt-3 max-w-[62ch] text-[15px] leading-7 text-ink-subtle">
-            Du behöver inte göra något. Hör gärna av dig om det dröjer.
+            {yta ? `${yta} är` : "Vyn är"} redo när vi kopplat er till agenterna.
           </p>
         </div>
       </div>

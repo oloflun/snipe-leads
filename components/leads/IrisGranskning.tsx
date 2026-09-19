@@ -121,10 +121,7 @@ export function IrisGranskning({ demo = false }: Readonly<{ demo?: boolean }>) {
   return (
     <div>
       {demo ? (
-        <p className="mb-6 max-w-[70ch] text-[13px] leading-6 text-ink-subtle">
-          Exempelutkast, samma sex bolag som i Bolag. Godkänn eller avvisa ändrar bara den här
-          sidan, ingenting skickas.
-        </p>
+        <p className="mb-6 text-[13px] leading-6 text-ink-subtle">Exempelutkast.</p>
       ) : null}
 
       {fel ? (
@@ -136,10 +133,7 @@ export function IrisGranskning({ demo = false }: Readonly<{ demo?: boolean }>) {
       {poster === null ? (
         <SkeletonRows />
       ) : poster.length === 0 ? (
-        <EmptyState
-          title="Granskningskön är tom"
-          body="När Iris skrivit ett utkast till ett kvalificerat bolag hamnar det här, och ingenting skickas förrän du godkänt det."
-        />
+        <EmptyState title="Granskningskön är tom" />
       ) : (
         <div className="divide-y divide-ink/15 border-y border-ink/15">
           {poster.map((post) => {
@@ -213,7 +207,7 @@ export function IrisGranskning({ demo = false }: Readonly<{ demo?: boolean }>) {
         <p role="status" className="mt-6 text-[13px] text-ink-subtle">
           {`${Object.entries(besked)
             .map(([id, val]) => `${EXEMPELBOLAG.find((b) => b.id === id)?.companyName ?? id}: ${val === "approve" ? "godkänt" : "avvisat"}`)
-            .join(" · ")}. Inget av det här skickades.`}
+            .join(" · ")}.`}
         </p>
       ) : null}
     </div>

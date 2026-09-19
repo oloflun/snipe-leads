@@ -1,9 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { PageShell, useArbetsvag } from "@/components/AppShell";
+import { PageShell } from "@/components/AppShell";
 import { EjAktiverad, arEjAktiverad } from "@/components/EjAktiverad";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
@@ -17,7 +16,6 @@ import type { EmailStudioData } from "@/lib/data/emails";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { EXEMPELBOLAG, EXEMPEL_OMGANG_1, EXEMPEL_OMGANG_2, kontaktnamn, type ExempelBolag } from "@/lib/demo/iris-exempel";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
-import { GRANSER, IRIS } from "@/lib/iris";
 import { kriterier } from "@/lib/prospekt";
 import { cn } from "@/lib/utils";
 
@@ -199,7 +197,7 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
           fas: "fel",
           meddelande:
             response.status >= 500
-              ? "Tjänsten svarar inte just nu. Den vaknar ur viloläge och kan ta upp till en minut."
+              ? "Tjänsten svarar inte. Försök igen om en minut."
               : `Kunde inte hämta bolagen (status ${response.status}).`
         });
         return;
@@ -276,7 +274,6 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
   return (
     <PageShell
       title="Iris"
-      description={IRIS.persona}
       action={
         <button
           type="button"
@@ -297,15 +294,14 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
               <div>
                 <h2 className="text-[1.125rem] font-semibold tracking-[-0.01em]">Hitta bolag</h2>
                 <p className="mt-1 text-[13px] text-ink-subtle">
-                  Lämna ett fält tomt för att använda er sparade målgrupp.
+                  Tomma fält använder er sparade målgrupp.
                 </p>
               </div>
             }
             demoAction={
               <div className="mt-6 rounded-card bg-paper p-5">
                 <p className="max-w-[65ch] text-[15px] leading-7 text-ink-muted">
-                  Prova en färdiggenererad exempelkörning: bolagen läggs överst i listan nedan,
-                  märkta Exempel. Ingen modell körs och inget skickas.
+                  Exempelbolag läggs överst i listan.
                 </p>
                 <button
                   type="button"
@@ -377,10 +373,7 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
               ) : lage.fas === "fel" ? (
                 <FelBox meddelande={lage.meddelande} onForsok={() => void hamta()} />
               ) : alla.length === 0 ? (
-                <EmptyState
-                  title="Inga bolag ännu"
-                  body="Tryck på Kör Iris och beskriv vilka ni söker. Bolagen som Iris hittar hamnar här."
-                />
+                <EmptyState title="Inga bolag ännu" />
               ) : (
                 <ul className="divide-y divide-ink/12 border-y border-ink/15">
                   {alla.map((p) => {
@@ -462,7 +455,7 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
                 {valdId ? null : (
                   <div className="rounded-card border border-ink/12 bg-paper2/40 p-6">
                     <p className="text-[0.9375rem] leading-[1.6] text-ink-muted">
-                      Välj ett bolag i listan. Research, källor och mejlutkastet visas här.
+                      Välj ett bolag i listan.
                     </p>
                   </div>
                 )}
@@ -481,10 +474,6 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
             ) : null}
           </div>
         )}
-      </div>
-
-      <div className="mt-16 border-t border-ink/15 pt-8">
-        <IrisGranserKompakt />
       </div>
     </PageShell>
   );
@@ -517,7 +506,6 @@ function ListorUpsell() {
         <span className="kicker shrink-0 text-mineral">Tillval</span>
       </div>
       <p className="mt-3 max-w-[64ch] text-[15px] leading-7">{spec.what}</p>
-      <p className="mt-2 max-w-[64ch] text-[14px] leading-6 text-mineral">{spec.why}</p>
       <a
         href={mejlaOss(`Tillägg: ${spec.name}`)}
         className="mt-4 inline-block text-[13px] underline underline-offset-4 transition hover:text-ochre"
@@ -525,38 +513,6 @@ function ListorUpsell() {
         Hör av dig om {spec.name.toLowerCase()}
       </a>
     </div>
-  );
-}
-
-/** Kompakt gränslista längst ner på Bolag, med en länk vidare till hela listan i Inställningar. */
-function IrisGranserKompakt() {
-  return (
-    <section aria-label="Så arbetar Iris">
-      {/* Kicker, inte rubrik: sektionens tillgängliga namn kommer från
-          aria-label ovan. Var en <h3> direkt under sidans <h1> utan någon
-          <h2> emellan — axe heading-order, moderate, 2026-09-19. */}
-      <p className="kicker text-mineral">Så arbetar Iris</p>
-      <ul className="mt-3 divide-y divide-ink/12 border-y border-ink/15">
-        {GRANSER.slice(0, 3).map((grans) => (
-          <li key={grans.rubrik} className="py-3">
-            <p className="text-[0.875rem] font-semibold text-ink">{grans.rubrik}</p>
-          </li>
-        ))}
-      </ul>
-      <IrisInstallningarLank />
-    </section>
-  );
-}
-
-function IrisInstallningarLank() {
-  const vag = useArbetsvag();
-  return (
-    <Link
-      href={`${vag("/dashboard/iris/installningar")}#granser`}
-      className="focus-ring mt-3 inline-block text-[13px] font-medium text-warning underline underline-offset-4 hover:text-ink"
-    >
-      Läs alla gränser och ställ in eskalering
-    </Link>
   );
 }
 
@@ -732,7 +688,7 @@ function LeadDetail({
     if (!p.contact_email) {
       setUtkastLage({
         fas: "fel",
-        meddelande: "Prospektet saknar en mottagaradress. Lägg till en kontaktkälla med adress innan ett utkast kan skapas."
+        meddelande: "Mottagaradress saknas."
       });
       return;
     }
@@ -766,7 +722,7 @@ function LeadDetail({
           fas: "fel",
           meddelande:
             svar.escalation_reason ||
-            "Agenten lämnade över till en människa i stället för att skriva klart utkastet. Försök igen om en stund."
+            "Utkastet blev inte klart. Försök igen om en stund."
         });
         return;
       }
@@ -852,7 +808,7 @@ function LeadDetail({
             ))}
           </ul>
         ) : (
-          <p className="mt-3 text-[14px] text-ink-subtle">Ingen poängmotivering sparad för det här bolaget.</p>
+          <p className="mt-3 text-[14px] text-ink-subtle">Ingen poängmotivering sparad.</p>
         )}
 
         {p.disqualifiers?.length ? (
@@ -885,9 +841,7 @@ function LeadDetail({
             ))}
           </ul>
         ) : (
-          <p className="mt-2 text-[14px] text-ink-subtle">
-            Inga källor sparade. Utan minst en källa får Iris inte skriva ett utkast.
-          </p>
+          <p className="mt-2 text-[14px] text-ink-subtle">Inga källor sparade.</p>
         )}
       </div>
 
@@ -900,16 +854,10 @@ function LeadDetail({
 
         {utkastLage.fas === "ingen" ? (
           demo ? (
-            <p className="mt-3 max-w-[65ch] text-[14px] leading-6 text-ink-muted">
-              Inget utkast till det här bolaget. I drift skriver Iris ett första mejl utifrån
-              poängmotiveringen och källorna ovan.
-            </p>
+            <p className="mt-3 text-[14px] leading-6 text-ink-muted">Inget utkast ännu.</p>
           ) : (
             <div className="mt-3">
-              <p className="max-w-[65ch] text-[14px] leading-6 text-ink-muted">
-                Inget utkast ännu. Ett klick skriver ett första mejl utifrån research och källor,
-                sedan väntar det på din granskning i kön.
-              </p>
+              <p className="text-[14px] leading-6 text-ink-muted">Inget utkast ännu.</p>
               <button type="button" onClick={() => void skapaUtkast()} className={cn(btnPrimary, "mt-4")}>
                 Skapa utkast
               </button>
@@ -940,9 +888,7 @@ function LeadDetail({
             {!demo && !exempel ? (
               <GodkannKnapp queueItemId={utkastLage.queueItemId} />
             ) : (
-              <p className="mt-4 max-w-[65ch] text-[13px] leading-6 text-ink-subtle">
-                Exempelutkast. Inget skickas härifrån.
-              </p>
+              <p className="mt-4 text-[13px] leading-6 text-ink-subtle">Exempelutkast.</p>
             )}
           </div>
         ) : null}
@@ -989,9 +935,7 @@ function GodkannKnapp({ queueItemId }: Readonly<{ queueItemId: string | null }>)
         {busy ? "Godkänner…" : "Godkänn och skicka"}
       </button>
       {!queueItemId ? (
-        <p className="mt-3 max-w-[65ch] text-[13px] leading-6 text-ink-subtle">
-          Det här utkastet saknar ett kö-id och kan inte godkännas härifrån. Se Iris › Granskning.
-        </p>
+        <p className="mt-3 text-[13px] leading-6 text-ink-subtle">Godkänn i Iris › Granskning.</p>
       ) : null}
       {fel ? (
         <p role="alert" className="mt-3 max-w-[65ch] text-[14px] text-danger">

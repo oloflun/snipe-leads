@@ -28,7 +28,7 @@ const HEMLIGHETSETIKETT: Record<string, { etikett: string; hjalp?: string }> = {
   app_secret: { etikett: "Apphemlighet", hjalp: "Meta-appen → Appinställningar → Grundläggande → Apphemlighet." },
   verify_token: {
     etikett: "Verifieringstoken",
-    hjalp: "En valfri sträng ni hittar på. Samma sträng klistras in hos Meta tillsammans med webhookadressen."
+    hjalp: "Valfri sträng. Klistras in hos Meta tillsammans med webhookadressen."
   },
   bot_token: { etikett: "Bot-token", hjalp: "Börjar med xoxb-. Finns under OAuth & Permissions." },
   signing_secret: { etikett: "Signing Secret", hjalp: "Finns under Basic Information → App Credentials." },
@@ -94,9 +94,7 @@ function Kopiera({ text }: Readonly<{ text: string }>) {
 function Webhook({ url }: Readonly<{ url: string | null }>) {
   if (!url) {
     return (
-      <p className="text-[0.8125rem] text-ink/55">
-        Webhookadressen visas när tjänstens publika adress är känd.
-      </p>
+      <p className="text-[0.8125rem] text-ink-muted">Webhookadressen är inte klar än.</p>
     );
   }
   return (
@@ -325,16 +323,9 @@ export function KanalSektion() {
   return (
     <section aria-labelledby="rubrik-kanaler">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 id="rubrik-kanaler" className="font-display text-[1.25rem]">
-            Kanaler
-          </h2>
-          <p className="mt-1 max-w-[62ch] text-[0.9375rem] leading-6 text-ink/60">
-            Agenten svarar i WhatsApp, Messenger, Slack och Teams, med samma kunskapsbas och samma
-            regler som i webbchatten. När den lämnar över svarar ni från Chattar, och svaret går ut i
-            samma kanal.
-          </p>
-        </div>
+        <h2 id="rubrik-kanaler" className="font-display text-[1.25rem]">
+          Kanaler
+        </h2>
         {!ny ? (
           <button type="button" onClick={() => setNy(true)} className={btnSecondary} disabled={!data}>
             <Plus className="h-4 w-4" aria-hidden />
@@ -368,10 +359,7 @@ export function KanalSektion() {
           <SkeletonRows />
         ) : data.anslutningar.length === 0 ? (
           ny ? null : (
-            <EmptyState
-              title="Ingen kanal ansluten"
-              body="Agenten svarar i dag i webbchatten och i mejl. Anslut en kanal för att möta kunderna där de redan skriver."
-            />
+            <EmptyState title="Ingen kanal ansluten" />
           )
         ) : (
           <ul className="divide-y divide-ink/12 border-y border-ink/15">
@@ -420,8 +408,7 @@ export function KanalSektion() {
                 <Webhook url={a.webhook_url} />
                 {nyss === a.id ? (
                   <p role="status" className="text-[0.8125rem] leading-5 text-moss">
-                    Ansluten. Klistra in webhookadressen hos {KANALNAMN[a.kanal]} och prova sedan
-                    anslutningen.
+                    Ansluten. Klistra in webhookadressen hos {KANALNAMN[a.kanal]} och prova anslutningen.
                   </p>
                 ) : null}
                 {besked[a.id] ? (

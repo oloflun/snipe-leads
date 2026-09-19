@@ -124,9 +124,7 @@ export function Inkorgar() {
           <Mail className="mx-auto h-6 w-6 text-mineral" aria-hidden />
           <h2 className="mt-4 text-[1.0625rem] font-semibold">Ingen inkorg är kopplad ännu</h2>
           <p className="mx-auto mt-2 max-w-[52ch] text-[0.9375rem] leading-6 text-ink-muted">
-            Kundtjänstagenterna svarar i chatten redan nu. Ska de läsa och besvara mejl behöver vi
-            koppla er Gmail eller Outlook — det gör vi åt er, eftersom kopplingen kräver ett
-            app-lösenord som aldrig ska passera ett webbformulär.
+            Vi kopplar er Gmail eller Outlook åt er.
           </p>
           <a
             href={mejlaOss("Koppla vår inkorg")}

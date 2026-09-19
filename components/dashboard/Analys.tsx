@@ -107,7 +107,7 @@ export function Analys({ demo = false }: Readonly<{ demo?: boolean }>) {
           fas: "fel",
           meddelande:
             response.status >= 500
-              ? "Tjänsten svarar inte just nu. Den vaknar ur viloläge och kan ta upp till en minut."
+              ? "Tjänsten svarar inte. Försök igen om en minut."
               : `Kunde inte hämta statistiken (status ${response.status}).`
         });
         return;
@@ -172,10 +172,7 @@ export function Analys({ demo = false }: Readonly<{ demo?: boolean }>) {
 
   if (!veckor.length || !harTrafik) {
     return (
-      <EmptyState
-        title="Ingen data ännu"
-        body="Här visas skick, svarsfrekvens och ärenden per vecka så fort agenterna har kört mot din arbetsyta. Tomt betyder tomt — inga siffror räknas fram i förväg."
-      />
+      <EmptyState title="Ingen data ännu" />
     );
   }
 
@@ -183,7 +180,6 @@ export function Analys({ demo = false }: Readonly<{ demo?: boolean }>) {
     <div className="space-y-10">
       <AgentBlock
         rubrik="Leads"
-        underrubrik="Utskick och svar per vecka."
         veckor={veckor}
         kolumner={[
           { nyckel: "sent", etikett: "Skick", tacks: tackning.sent },
@@ -203,7 +199,6 @@ export function Analys({ demo = false }: Readonly<{ demo?: boolean }>) {
 
       <AgentBlock
         rubrik="Kundtjänst"
-        underrubrik="Ärenden per vecka och hur de slutade."
         veckor={veckor}
         kolumner={[
           { nyckel: "tickets", etikett: "Ärenden", tacks: tackning.tickets },
@@ -231,14 +226,12 @@ type Kolumn = {
 
 function AgentBlock({
   rubrik,
-  underrubrik,
   veckor,
   kolumner,
   kurva,
   kurvetikett
 }: Readonly<{
   rubrik: string;
-  underrubrik: string;
   veckor: Vecka[];
   kolumner: Kolumn[];
   kurva: (v: Vecka) => number;
@@ -253,14 +246,10 @@ function AgentBlock({
     <section>
       <header className="mb-4">
         <h2 className="text-[1.0625rem] font-semibold text-ink">{rubrik}</h2>
-        <p className="mt-0.5 text-sm text-ink-muted">{underrubrik}</p>
       </header>
 
       {!nagotMats ? (
-        <p className="border-y border-ink/15 py-4 text-sm text-ink-muted">
-          Ingenting mäts för {rubrik.toLowerCase()} ännu. Här kommer veckoserien så fort det
-          finns något att räkna — tills dess står det ingenting hellre än nollor.
-        </p>
+        <p className="border-y border-ink/15 py-4 text-sm text-ink-muted">Ingenting mäts ännu.</p>
       ) : (
         <>
 
@@ -344,7 +333,7 @@ function AgentBlock({
 function Cell({ kolumn, vecka }: Readonly<{ kolumn: Kolumn; vecka: Vecka }>) {
   if (!kolumn.tacks) {
     return (
-      <span className="text-ink-subtle" title="Mäts inte ännu — se noten under tabellen.">
+      <span className="text-ink-subtle" title="Mäts inte ännu">
         —
       </span>
     );
@@ -436,9 +425,7 @@ function OtackadeFotnot({ tackning }: Readonly<{ tackning: Tackning }>) {
 
   return (
     <p className="border-t border-ink/15 pt-4 text-sm text-ink-muted">
-      Strecken i tabellen är {saknas.map((n) => etiketter[n] ?? n).join(", ")} — de mäts inte
-      ännu och redovisas därför inte som noll. En nolla här hade betytt att det inte hände
-      något; ett streck betyder att vi inte räknar det.
+      Mäts inte ännu: {saknas.map((n) => etiketter[n] ?? n).join(", ")}.
     </p>
   );
 }

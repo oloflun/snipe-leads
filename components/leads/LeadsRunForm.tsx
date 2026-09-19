@@ -286,7 +286,7 @@ export function LeadsRunForm({
 
       if (!jobb.length) {
         throw new Error(
-          "Inga bolag hittades som matchar målgruppen. Prova en bredare bransch eller region, eller fyll i bolag ni själva vill träffa."
+          "Inga bolag matchade målgruppen. Prova en bredare sökning."
         );
       }
 
@@ -307,8 +307,8 @@ export function LeadsRunForm({
 
       setStatus(
         misslyckade
-          ? `Klart: ${klara} bolag researchade, ${misslyckade} misslyckades. Se registret nedan.`
-          : `Klart: ${klara} bolag researchade. Se registret nedan.`
+          ? `Klart: ${klara} bolag researchade, ${misslyckade} misslyckades.`
+          : `Klart: ${klara} bolag researchade.`
       );
       window.dispatchEvent(new Event("snipra:leads-korning-klar"));
     } catch (cause) {
@@ -353,7 +353,7 @@ export function LeadsRunForm({
         <Rad etikett={ICP_ETIKETTER.geography.label}>
           <input value={geografi} onChange={(e) => setGeografi(e.target.value)} placeholder={ICP_ETIKETTER.geography.hint} className={fältklass} />
         </Rad>
-        <Rad etikett={ICP_ETIKETTER.roles.label} hint="vem agenterna ska leta efter">
+        <Rad etikett={ICP_ETIKETTER.roles.label}>
           <input value={roller} onChange={(e) => setRoller(e.target.value)} placeholder={ICP_ETIKETTER.roles.hint} className={fältklass} />
         </Rad>
         <Rad etikett={ICP_ETIKETTER.must_have.label} hint="nischen">
@@ -370,12 +370,12 @@ export function LeadsRunForm({
             <input type="number" min={0} value={maxAnst} onChange={(e) => setMaxAnst(e.target.value)} className={fältklass} />
           </Rad>
         </div>
-        <Rad etikett="Egna bolag" hint="valfritt — ett per rad. Tomt = agenten letar">
+        <Rad etikett="Egna bolag" hint="valfritt, ett per rad">
           <textarea
             value={egnaBolag}
             onChange={(e) => setEgnaBolag(e.target.value)}
             rows={3}
-            placeholder="Lämna tomt så letar agenten upp bolag som matchar fälten ovan"
+            placeholder="Tomt: agenten letar själv"
             className={cn(fältklass, "resize-y")}
           />
         </Rad>
@@ -441,7 +441,7 @@ export function LeadsRunForm({
               </dl>
             ) : (
               <p className="mt-2 text-[13px] text-ink-subtle">
-                Er sparade målgrupp användes — inga fält ändrades för den här körningen.
+                Sparad målgrupp användes.
               </p>
             )}
           </div>

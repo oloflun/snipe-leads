@@ -22,7 +22,6 @@ export function AgentSajtKnapp({ agent }: Readonly<{ agent: AgentSajt }>) {
     <div className="mb-12 flex flex-wrap items-center justify-between gap-x-8 gap-y-4 border-y border-ink/15 py-5">
       <div className="min-w-0 max-w-[62ch]">
         <p className="text-[0.9375rem] font-semibold text-ink">{text.rubrik}</p>
-        <p className="mt-1 text-[0.9375rem] leading-6 text-ink-muted">{text.beskrivning}</p>
       </div>
       <a href={`/api/agentsajt/${agent}/sso`} className={cn(btnPrimary, "shrink-0")}>
         {text.knapp}

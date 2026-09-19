@@ -95,7 +95,7 @@ export function Svar({ demo = false }: Readonly<{ demo?: boolean }>) {
           fas: "fel",
           meddelande:
             response.status >= 500
-              ? "Tjänsten svarar inte just nu. Den vaknar ur viloläge och kan ta upp till en minut."
+              ? "Tjänsten svarar inte. Försök igen om en minut."
               : `Kunde inte hämta svaren (status ${response.status}).`
         });
         return;
@@ -145,10 +145,7 @@ export function Svar({ demo = false }: Readonly<{ demo?: boolean }>) {
 
   if (!lage.svar.length) {
     return (
-      <EmptyState
-        title="Inga svar ännu"
-        body="Här hamnar svaren från bolagen agenten kontaktat. Listan är tom tills någon svarat — inga exempelsvar som platshållare."
-      />
+      <EmptyState title="Inga svar ännu" />
     );
   }
 

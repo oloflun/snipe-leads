@@ -72,19 +72,9 @@ export function TemaSettings({ initial }: Readonly<{ initial: Tema }>) {
       <div className="border-t border-ink/15 pt-5">
         <Vaxel
           etikett="Mörkt läge"
-          beskrivning="Byter arbetsytans papper mot svart. Allt annat följer med — text, hårlinjer, accenter och grafer — eftersom hela gränssnittet målas genom samma färgvariabler."
           pa={tema === "morkt"}
           onChange={(pa) => valj(pa ? "morkt" : "ljust")}
         />
-      </div>
-
-      <div className="border-t border-ink/15 pt-5">
-        <p className="kicker text-mineral">Hur det sparas</p>
-        <p className="mt-3 max-w-[60ch] text-[0.875rem] leading-6 text-ink-muted">
-          Valet ligger i den här webbläsaren och gäller direkt — det finns inget
-          att spara. Loggar du in på en annan dator börjar den i ljust läge tills
-          du väljer om.
-        </p>
       </div>
 
       {/* Provbiten. En växel som ändrar hela sidan behöver inte en
@@ -95,9 +85,7 @@ export function TemaSettings({ initial }: Readonly<{ initial: Tema }>) {
         <p className="kicker text-mineral">Så ser ytorna ut</p>
         <div className="mt-4 rounded-panel border border-ink/15 bg-paper2/50 p-5">
           <p className="text-[15px] font-medium text-ink">Brödtext på papper</p>
-          <p className="mt-1 text-[0.875rem] leading-6 text-mineral">
-            Dämpad text — hjälptexter, tidsstämplar och etiketter.
-          </p>
+          <p className="mt-1 text-[0.875rem] leading-6 text-mineral">Dämpad text</p>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <span className="rounded-input bg-ink px-3 py-1.5 text-[0.8125rem] font-semibold text-paper">
               Primär knapp

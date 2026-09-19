@@ -349,9 +349,11 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                   aktiv={pathname === "/settings" || pathname.startsWith("/settings/")}
                 />
               ) : null}
-              <p className="hidden px-3 pb-1 pt-3 text-[0.75rem] leading-5 text-paper-subtle lg:block">
-                {demolage ? "Snajp — prova utan konto" : "En tjänst från Snajp"}
-              </p>
+              {demolage ? (
+                <p className="hidden px-3 pb-1 pt-3 text-[0.75rem] leading-5 text-paper-subtle lg:block">
+                  Snajp — prova utan konto
+                </p>
+              ) : null}
             </>
           }
         />

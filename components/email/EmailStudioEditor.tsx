@@ -42,10 +42,7 @@ const ui = {
   signal: { sv: "Signal", en: "Signal" },
   offer: { sv: "Erbjudande", en: "Offer" },
   cta: { sv: "CTA", en: "CTA" },
-  exempel: {
-    sv: "Exempelmejl. Ni har inga utkast ännu — starta en körning under Leads, så ligger era egna här.",
-    en: "Example email. You have no drafts yet — start a run under Leads and your own will appear here."
-  },
+  exempel: { sv: "Exempelmejl.", en: "Example email." },
   forskrivet: { sv: "Förskrivet förslag, ingen modell kördes.", en: "Pre-written suggestion, no model ran." }
 } satisfies Record<string, Localized>;
 
@@ -73,8 +70,8 @@ const SIMULERINGSORSAKER: Record<string, Localized> = {
     en: "AI assistance is not switched on in this environment."
   },
   kreditslut: {
-    sv: "AI-krediterna är slut hos oss. Det beror inte på dig, och din text är orörd — åtgärderna fungerar igen när vi har fyllt på.",
-    en: "Our AI credits have run out. This is not caused by you, and your text is untouched — the actions will work again once we have topped up."
+    sv: "AI-krediterna är slut hos oss. Din text är orörd.",
+    en: "Our AI credits have run out. Your text is untouched."
   },
   kvot: {
     sv: "AI-leverantörens kvot är slut just nu. Prova igen om en stund.",

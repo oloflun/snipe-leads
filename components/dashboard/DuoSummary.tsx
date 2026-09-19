@@ -31,10 +31,6 @@ import { paketForProdukter } from "@/lib/admin/halsa";
 
 const copy = {
   rubrik: { sv: "Gemensam översikt", en: "Shared overview" },
-  lede: {
-    sv: "Båda agenterna arbetar mot samma kunddata. Ett bolag som hör av sig till kundtjänsten syns här även om det kom in som ett prospekt.",
-    en: "Both agents work against the same customer data. A company that contacts support shows up here even if it arrived as a prospect."
-  },
   leads: { sv: "Leads", en: "Leads" },
   leadsRad: { sv: "Prospekt, utkast och granskningskö", en: "Prospects, drafts and review queue" },
   support: { sv: "Kundtjänst", en: "Support" },
@@ -77,10 +73,6 @@ export function DuoSummary() {
           </span>
         ) : null}
       </div>
-
-      <p className="mt-3 max-w-[68ch] text-[0.9375rem] leading-[1.6] text-ink-muted">
-        {text(copy.lede)}
-      </p>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         <Kort

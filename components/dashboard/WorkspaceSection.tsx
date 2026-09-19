@@ -132,14 +132,14 @@ export async function WorkspaceSection({
       // utanför de två kända) är en 404, inte en tyst fallback till Bolag.
       if (id === "granskning") {
         return (
-          <PageShell kicker="Iris" title="Granskning" description="Utkasten Iris skrivit, i väntan på ditt ja eller nej.">
+          <PageShell kicker="Iris" title="Granskning">
             <IrisGranskning />
           </PageShell>
         );
       }
       if (id === "installningar") {
         return (
-          <PageShell kicker="Iris" title="Inställningar" description="Målgrupp, autonomi och gränserna Iris alltid håller.">
+          <PageShell kicker="Iris" title="Inställningar">
             <IrisInstallningar />
           </PageShell>
         );

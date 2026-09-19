@@ -50,17 +50,12 @@ export function AddonSettings() {
               <p className="mt-3 max-w-[64ch] text-[15px] leading-7">{addon.what}</p>
 
               {!active ? (
-                <>
-                  <p className="mt-2 max-w-[64ch] text-[14px] leading-6 text-mineral">
-                    {addon.why}
-                  </p>
-                  <a
-                    href={mejlaOss(`Tillägg: ${addon.name}`)}
-                    className="mt-4 inline-block text-[13px] underline underline-offset-4 transition hover:text-ochre"
-                  >
-                    Hör av dig om {addon.name.toLowerCase()}
-                  </a>
-                </>
+                <a
+                  href={mejlaOss(`Tillägg: ${addon.name}`)}
+                  className="mt-4 inline-block text-[13px] underline underline-offset-4 transition hover:text-ochre"
+                >
+                  Hör av dig om {addon.name.toLowerCase()}
+                </a>
               ) : null}
             </Rad>
           );

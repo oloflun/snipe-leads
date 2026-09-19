@@ -150,9 +150,7 @@ export function KunskapsbasKort() {
             Affärskontext och kunskapsbas
           </h2>
           <p className="mt-1 max-w-[62ch] text-[14px] leading-6 text-ink-muted">
-            {antal === 0
-              ? "Tom. Agenterna svarar bara ur det ni lagt in — utan underlag eskalerar kundtjänstagenten varje ärende."
-              : `${antal ?? "—"} dokument. Ladda upp villkor, vanliga frågor och rutiner så svarar agenterna ur dem.`}
+            {antal === 0 ? "Tom." : `${antal ?? "—"} dokument.`}
           </p>
           {/* Rubriken lovar två saker. Utan den här raden svarade kortet bara
               på den ena, och affärskontexten var något man fick hitta själv. */}
@@ -257,9 +255,7 @@ export function KunskapsbasPanel() {
           );
         }
         setMeddelande(
-          nya.length === 1
-            ? "Sparat. Agenterna kan svara ur texten från nästa ärende."
-            : `${nya.length} dokument sparade. Agenterna kan svara ur dem från nästa ärende.`
+          nya.length === 1 ? "Sparat." : `${nya.length} dokument sparade.`
         );
         setRubrik("");
         setText("");
@@ -291,8 +287,7 @@ export function KunskapsbasPanel() {
     }
     if (avvisade.length) {
       setFel(
-        `Hoppade över ${avvisade.join(", ")}. Textfiler läses direkt (${LÄSBARA.join(", ")}); ` +
-          "för PDF och Word: klistra in texten i rutan nedan i stället."
+        `Hoppade över ${avvisade.join(", ")}. PDF och Word: klistra in texten nedan.`
       );
     }
     await spara(nya);
@@ -304,10 +299,7 @@ export function KunskapsbasPanel() {
       <section>
         <div className="rounded-card border border-dashed border-ink/25 bg-paper2/40 p-6 text-center">
           <FileText className="mx-auto h-6 w-6 text-ink-subtle" aria-hidden />
-          <p className="mt-3 text-[15px] text-ink-muted">
-            Ladda upp era villkor, vanliga frågor, garantitexter och rutiner.
-          </p>
-          <p className="mt-1 text-[13px] text-ink-subtle">
+          <p className="mt-3 text-[13px] text-ink-subtle">
             Textfiler ({LÄSBARA.join(", ")}). PDF och Word: klistra in texten nedan.
           </p>
           <input
@@ -344,7 +336,7 @@ export function KunskapsbasPanel() {
             value={text}
             onChange={(e) => setText(e.target.value)}
             rows={8}
-            placeholder="Texten agenterna ska svara ur. Skriv som ni skulle svarat en kund."
+            placeholder="Texten agenterna ska svara ur"
             className="w-full resize-y rounded-input border border-ink/15 bg-paper px-3 py-2 text-[15px] leading-6 focus-ring"
           />
           <div>
@@ -374,10 +366,7 @@ export function KunskapsbasPanel() {
         {artiklar === null ? (
           <p className="mt-4 text-[15px] text-ink-subtle">Hämtar…</p>
         ) : artiklar.length === 0 ? (
-          <p className="mt-4 max-w-[65ch] text-[15px] leading-7 text-ink-muted">
-            Tom. Agenterna eskalerar varje ärende de inte kan grunda — det är rätt beteende, men
-            det betyder också att den inte kan svara på något förrän det ligger något här.
-          </p>
+          <p className="mt-4 text-[15px] leading-7 text-ink-muted">Tom.</p>
         ) : (
           <Radlista ariaLabel="Dokument i kunskapsbasen" className="mt-4">
             {artiklar.map((artikel, index) => (

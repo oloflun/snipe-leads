@@ -55,7 +55,7 @@ export function SoulEditor() {
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       setSaved(content);
-      setMessage("Sparat. Gäller från nästa mejl och svar.");
+      setMessage("Sparat.");
     } catch {
       setMessage("Kunde inte spara. Försök igen.");
     } finally {
@@ -115,7 +115,7 @@ export function SoulEditor() {
             aldrig ensam bärare här — meningen står utskriven. */}
         <span id="soul-count" className={over ? "text-warning" : "text-mineral"}>
           {content.length} / {MAX_CHARS} tecken
-          {over ? " — för långt, korta ner innan du sparar" : ""}
+          {over ? " — för långt" : ""}
         </span>
         <button
           type="button"

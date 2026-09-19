@@ -32,13 +32,13 @@ const FORSLAG = [
 ];
 
 const NATFEL = [
-  "Jag når inte assistenten just nu. Kontrollera uppkopplingen och prova igen — det du skrev står kvar.",
-  "Anropet kom inte fram. Vänta en liten stund och tryck på skicka igen, så gör vi ett nytt försök."
+  "Kunde inte nå assistenten. Försök igen.",
+  "Anropet kom inte fram. Försök igen."
 ];
 
 const SVARSFEL = [
-  "Assistenten fick inte fram ett svar den här gången. Prova gärna igen om en liten stund — frågan står kvar.",
-  "Något hakade upp sig när svaret skulle tas fram. Skicka frågan igen, eller formulera den på ett annat sätt."
+  "Inget svar den här gången. Försök igen.",
+  "Något gick fel. Skicka frågan igen."
 ];
 
 function slumpad(texter: string[]): string {
@@ -113,11 +113,6 @@ export function KvittoChatt() {
         <Sparkles className="h-4 w-4 shrink-0 text-warning" aria-hidden />
         <h2 className="text-[0.9375rem] font-semibold text-ink">Kvitto-assistenten</h2>
       </header>
-
-      <p className="px-4 pt-3 text-[0.8125rem] leading-5 text-ink-subtle">
-        Fråga om en period, en kategori eller ett enskilt kvitto. Den hämtar
-        siffrorna ur dina inlästa kvitton och räknar aldrig själv.
-      </p>
 
       <div className="flex min-h-[16rem] flex-col gap-3 overflow-y-auto px-4 py-4 lg:max-h-[26rem]">
         {rader.length === 0 ? (
