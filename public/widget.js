@@ -137,6 +137,13 @@
     knapp.innerHTML = kryss;
     knapp.setAttribute("aria-label", "Stäng chatten");
     knapp.setAttribute("aria-expanded", "true");
+    // Fullskärmsläget: knappen låg annars kvar ÖVER chattens skickaknapp
+    // (uppmätt på 375px). Chatten har sitt eget kryss i sidhuvudet — men
+    // BARA när iframen faktiskt laddat. Felrutan har inget kryss, så där
+    // står knappen kvar som enda väg ut.
+    if (mobil && mobil.matches && redo) {
+      knapp.style.display = "none";
+    }
   }
 
   function dolj() {
@@ -156,6 +163,7 @@
     knapp.innerHTML = bubbla;
     knapp.setAttribute("aria-label", "Öppna chatten");
     knapp.setAttribute("aria-expanded", "false");
+    knapp.style.display = "flex";
   }
 
   knapp.addEventListener("click", function () {
