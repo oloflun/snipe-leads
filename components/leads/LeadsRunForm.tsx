@@ -83,6 +83,9 @@ type Exempelbolag = {
   pitch_subject?: string | null;
   pitch_body?: string | null;
   pitch_varfor_nu?: string | null;
+  /** Det konkreta erbjudandet och uppmaningen — se lib/demo/iris-exempel.ts. */
+  offer?: string | null;
+  cta?: string | null;
 };
 
 /**
@@ -112,8 +115,8 @@ function Rad({
 }: Readonly<{ etikett: string; hint?: string; children: React.ReactNode }>) {
   return (
     <label className="block">
-      <span className="text-[13px] font-medium text-ink/70">{etikett}</span>
-      {hint ? <span className="ml-2 text-[12px] text-ink/45">{hint}</span> : null}
+      <span className="text-[13px] font-medium text-ink-muted">{etikett}</span>
+      {hint ? <span className="ml-2 text-[12px] text-ink-subtle">{hint}</span> : null}
       <div className="mt-1.5">{children}</div>
     </label>
   );
@@ -143,8 +146,21 @@ function tal(värde: string): number | undefined {
 export function LeadsRunForm({
   isTest = true,
   demo = false,
-  rubrik = null
-}: Readonly<{ isTest?: boolean; demo?: boolean; rubrik?: React.ReactNode }>) {
+  rubrik = null,
+  demoAction = null
+}: Readonly<{
+  isTest?: boolean;
+  demo?: boolean;
+  rubrik?: React.ReactNode;
+  /**
+   * Ersätter `DemoKorning` i demoläget. Iris › Bolag (IrisBolag.tsx) skickar
+   * en egen "Kör exempelkörningen"-knapp här: den infogar de sex fixturbolagen
+   * ur lib/demo/iris-exempel.ts överst i BOLAGSLISTAN i stället för att visa en
+   * egen, fristående resultatlista med andra påhittade bolag
+   * (lib/demo/leads-korning.ts) — kravet är EN lista, inte två.
+   */
+  demoAction?: React.ReactNode;
+}>) {
   const [limit, setLimit] = useState("3");
   const [scope, setScope] = useState<"research" | "research_and_draft">("research");
   const [branscher, setBranscher] = useState("");
@@ -270,7 +286,7 @@ export function LeadsRunForm({
 
       if (!jobb.length) {
         throw new Error(
-          "Inga bolag hittades som matchar målgruppen. Prova en bredare bransch eller region, eller fyll i bolag ni själva vill träffa."
+          "Inga bolag matchade målgruppen. Prova en bredare sökning."
         );
       }
 
@@ -291,8 +307,8 @@ export function LeadsRunForm({
 
       setStatus(
         misslyckade
-          ? `Klart: ${klara} bolag researchade, ${misslyckade} misslyckades. Se registret nedan.`
-          : `Klart: ${klara} bolag researchade. Se registret nedan.`
+          ? `Klart: ${klara} bolag researchade, ${misslyckade} misslyckades.`
+          : `Klart: ${klara} bolag researchade.`
       );
       window.dispatchEvent(new Event("snipra:leads-korning-klar"));
     } catch (cause) {
@@ -337,7 +353,7 @@ export function LeadsRunForm({
         <Rad etikett={ICP_ETIKETTER.geography.label}>
           <input value={geografi} onChange={(e) => setGeografi(e.target.value)} placeholder={ICP_ETIKETTER.geography.hint} className={fältklass} />
         </Rad>
-        <Rad etikett={ICP_ETIKETTER.roles.label} hint="vem agenterna ska leta efter">
+        <Rad etikett={ICP_ETIKETTER.roles.label}>
           <input value={roller} onChange={(e) => setRoller(e.target.value)} placeholder={ICP_ETIKETTER.roles.hint} className={fältklass} />
         </Rad>
         <Rad etikett={ICP_ETIKETTER.must_have.label} hint="nischen">
@@ -354,12 +370,12 @@ export function LeadsRunForm({
             <input type="number" min={0} value={maxAnst} onChange={(e) => setMaxAnst(e.target.value)} className={fältklass} />
           </Rad>
         </div>
-        <Rad etikett="Egna bolag" hint="valfritt — ett per rad. Tomt = agenten letar">
+        <Rad etikett="Egna bolag" hint="valfritt, ett per rad">
           <textarea
             value={egnaBolag}
             onChange={(e) => setEgnaBolag(e.target.value)}
             rows={3}
-            placeholder="Lämna tomt så letar agenten upp bolag som matchar fälten ovan"
+            placeholder="Tomt: agenten letar själv"
             className={cn(fältklass, "resize-y")}
           />
         </Rad>
@@ -373,14 +389,14 @@ export function LeadsRunForm({
           mönster som bokföringens förskrivna svar. Märkningen är det som gör
           det ärligt; se lib/demo/leads-korning.ts. */}
       {demo ? (
-        <DemoKorning />
+        demoAction ?? <DemoKorning />
       ) : (
         <button type="button" onClick={() => void kör()} disabled={busy} className={cn(btnPrimary, "mt-6")}>
           {busy ? "Startar…" : isTest ? "Starta testkörning" : "Starta körning"}
         </button>
       )}
 
-      {status ? <p className="mt-3 text-[13px] text-ink/55">{status}</p> : null}
+      {status ? <p className="mt-3 text-[13px] text-ink-subtle">{status}</p> : null}
 
       {fel ? (
         <p role="alert" className="mt-5 max-w-[70ch] break-words text-[15px] text-danger">
@@ -413,10 +429,10 @@ export function LeadsRunForm({
                   if (värde === undefined || värde === null) return null;
                   return (
                     <div key={nyckel} className="border-t border-ink/10 pt-2">
-                      <dt className="text-[12px] font-medium uppercase tracking-[0.04em] text-ink/45">
+                      <dt className="text-[12px] font-medium uppercase tracking-[0.04em] text-ink-subtle">
                         {etikett}
                       </dt>
-                      <dd className="mt-1 text-[14px] leading-6 text-ink/80">
+                      <dd className="mt-1 text-[14px] leading-6 text-ink-muted">
                         {Array.isArray(värde) ? värde.join(", ") : String(värde)}
                       </dd>
                     </div>
@@ -424,14 +440,14 @@ export function LeadsRunForm({
                 })}
               </dl>
             ) : (
-              <p className="mt-2 text-[13px] text-ink/55">
-                Er sparade målgrupp användes — inga fält ändrades för den här körningen.
+              <p className="mt-2 text-[13px] text-ink-subtle">
+                Sparad målgrupp användes.
               </p>
             )}
           </div>
 
           {jobbLage && jobbLage.totalt > 0 ? (
-            <p className="text-[14px] text-ink/70">
+            <p className="text-[14px] text-ink-muted">
               {jobbLage.klara + jobbLage.misslyckade}/{jobbLage.totalt} jobb avslutade
               {jobbLage.misslyckade ? ` · ${jobbLage.misslyckade} misslyckades` : null}
             </p>
@@ -475,7 +491,7 @@ export function Exempelbolagslista({
           <h3 id="exempelbolag" className="text-[1.0625rem] font-semibold tracking-[-0.01em]">
             {bolag.length} exempelbolag inlagda
           </h3>
-          <p className="mt-0.5 text-[13px] text-ink/45">Påhittade — kan aldrig mejlas</p>
+          <p className="mt-0.5 text-[13px] text-ink-subtle">Påhittade — kan aldrig mejlas</p>
         </div>
 
         {/* Uppdatera startar INGEN körning. Den som vill se agenten formulera
@@ -509,20 +525,20 @@ export function Exempelbolagslista({
             <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
               <div className="min-w-0">
                 <p className="text-[15px] font-semibold tracking-[-0.01em]">{b.company_name}</p>
-                <p className="mt-1 font-mono text-[12px] text-ink/45">
+                <p className="mt-1 font-mono text-[12px] text-ink-subtle">
                   {[b.orgnr, b.ort, b.website].filter(Boolean).join(" · ")}
                 </p>
               </div>
-              <span className="shrink-0 rounded-input bg-ochre/15 px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.06em] text-ochre">
+              <span className="shrink-0 rounded-input bg-ochre/15 px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.06em] text-warning">
                 Exempel
               </span>
             </div>
 
             {b.beskrivning ? (
-              <p className="mt-2 max-w-[70ch] text-[14px] leading-6 text-ink/70">{b.beskrivning}</p>
+              <p className="mt-2 max-w-[70ch] text-[14px] leading-6 text-ink-muted">{b.beskrivning}</p>
             ) : null}
 
-            <p className="mt-2 text-[13px] text-ink/50">
+            <p className="mt-2 text-[13px] text-ink-subtle">
               {[
                 b.contact_name ? `Beslutsfattare: ${b.contact_name}` : null,
                 typeof b.anstallda === "number" ? `${b.anstallda} anställda` : null,
@@ -532,9 +548,8 @@ export function Exempelbolagslista({
                 .join(" · ")}
             </p>
 
-            <p className="mt-2 inline-flex items-center gap-1.5 text-[13px] font-medium text-ochre">
+            <p className="mt-2 text-[13px] font-medium text-warning">
               {öppen ? "Dölj utkastet" : "Öppna utkastet"}
-              <span aria-hidden>{öppen ? "↑" : "→"}</span>
             </p>
             </button>
 
@@ -544,7 +559,7 @@ export function Exempelbolagslista({
         })}
       </ul>
 
-      <p className="mt-4 border-t border-ink/10 pt-4 text-[13px] leading-6 text-ink/50">
+      <p className="mt-4 border-t border-ink/10 pt-4 text-[13px] leading-6 text-ink-subtle">
         Organisationsnumren har medvetet fel kontrollsiffra och webbadresserna
         ligger under <span className="font-mono text-[12px]">.example</span>, som aldrig kan
         registreras. Ett påhittat bolag med giltiga uppgifter hade kunnat vara någon annans.
@@ -591,11 +606,9 @@ function Pitchutkast({ bolag }: Readonly<{ bolag: Exempelbolag }>) {
       companyId: bolag.id ?? null,
       contactId: null,
       companyName: bolag.company_name,
-      signal: bolag.signal ?? null,
-      // "Varför nu" är det som gör signalen till ett skäl att höra av sig, och
-      // det är precis vad Personalisera behöver för att inte bli en omskrivning.
-      offer: bolag.pitch_varfor_nu ?? null,
-      cta: null,
+      signal: bolag.signal ?? bolag.pitch_varfor_nu ?? null,
+      offer: bolag.offer ?? null,
+      cta: bolag.cta ?? null,
       contactName: bolag.contact_name ?? null
     }
   };
@@ -613,7 +626,7 @@ function Pitchutkast({ bolag }: Readonly<{ bolag: Exempelbolag }>) {
           <Send className="h-4 w-4" aria-hidden />
           Skicka test
         </button>
-        <p className="text-[13px] leading-6 text-ink/55">
+        <p className="text-[13px] leading-6 text-ink-subtle">
           {skickat
             ? "Ingenting skickades. Utkastet finns kvar här och bolaget är påhittat — så här skulle utskicket ha sett ut."
             : "Provar hela vägen fram utan att något lämnar huset."}

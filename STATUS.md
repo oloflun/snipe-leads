@@ -1,5 +1,36 @@
 # Snipra Status
 
+## 2026-09-19 — Claude — Integrationer och kanaler för support-agenten (bd snipe-36u), release-PR #22
+
+Support-agenten kopplas till kundens egna system via HTTP-anrop i Ebbots format
+eller en MCP-server. Den slår upp ordrar och konton, och skickar ett eskalerat
+ärende med hela samtalet till kundens ärendesystem. Den svarar också i WhatsApp,
+Messenger, Slack och Teams, och medarbetarens svar i Chattar går ut i samma
+kanal. Kunden konfigurerar allt i supportportalens nya vy Integrationer.
+Kundtestat på dev med riktig modell: ordersvar, följdfråga på engelska,
+överlämning, medarbetarsvar och WhatsApp-webhook. Fyra fel hittades och
+rättades (`1926725`, `7a579c7`, `7da19bb`, `5f1ef42`). Migration 067 och
+`INTEGRATION_NYCKEL` är klara i båda miljöerna, och PR #22 väntar bara på
+Antons merge. Öppna frågor till Anton: kundnycklar i databasen (GOALS 10) och
+dataskyddet för kanaler (GOALS 11). Uppföljningar: `snipe-36u.7`–`.9`
+(skarp kanalverifiering, bilder, överleva deploy).
+Logg: `session-logs/2026-09-19-claude-integrationer-och-kanaler.md`.
+
+## 2026-09-19 — Claude — Support-agentens eskalering, överlämning och språk (Ebbot-modellen), release-PR #22
+
+Fasta eskaleringsregler i kod med orsakskod och inställningar per kund. Sömlös
+överlämning i samma chattfönster: medarbetaren svarar i supportportalens nya
+Chattar-vy, och svaret syns hos kunden. Faktagrinden kontrollerar svaren mot
+kunskapsbasen, och agenten svarar på kundens språk. Migration 066. Allt ligger
+på `development` (`5f1ef42`) och är kundtestat på dev med riktig modell
+tillsammans med kanalsessionen, där sex fel hittades och rättades.
+PR #22 (development → main) innehåller även kanalerna och integrationerna samt
+Antons Iris-meny. Stegen före merge är klara: 066, 067 och 068 är körda mot
+main (verifierat med torrkörning), och `INTEGRATION_NYCKEL` finns i main.
+PR:en väntar bara på Antons merge. Uppföljningar: `snipe-v60`,
+`snipe-njh`, `snipe-pgz`.
+Logg: `session-logs/2026-09-19-claude-support-eskalering-och-sprak.md`.
+
 ## 2026-09-15 (eftermiddag) — Claude — leadssökningens latens: påfyllning och timeout i PR #15, grundorsak öppen
 
 PR #14 i produktion (skrapning + okänt-regeln). `567b43f` fyller bortsorterade

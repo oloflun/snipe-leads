@@ -133,7 +133,7 @@ export function UspSection({ product }: Readonly<{ product: ProductKey }>) {
           {text(copy.rubrik)}
         </h2>
 
-        <p className="mt-6 max-w-[58ch] text-[1.125rem] leading-[1.65] text-ink/80">
+        <p className="mt-6 max-w-[58ch] text-[1.125rem] leading-[1.65] text-ink-muted">
           {text(copy.lede)}
         </p>
 
@@ -143,7 +143,7 @@ export function UspSection({ product }: Readonly<{ product: ProductKey }>) {
               {/* Inget "01" här. Numreringen var gul, satt över varje rubrik
                   och läste som en ordningsföljd punkterna inte har. */}
               <h3 className="text-[1.0625rem] font-semibold tracking-[-0.01em]">{rubrik}</h3>
-              <p className="mt-2 max-w-[42ch] text-[0.9375rem] leading-[1.6] text-ink/70">
+              <p className="mt-2 max-w-[42ch] text-[0.9375rem] leading-[1.6] text-ink-muted">
                 {brod}
               </p>
             </div>

@@ -115,7 +115,7 @@ export function InboxTriage() {
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <p className="max-w-[58ch] text-[0.9375rem] leading-6 text-ink/65">
+        <p className="max-w-[58ch] text-[0.9375rem] leading-6 text-ink-muted">
           {text({
             sv: "Sex osorterade kundmejl ligger i inkorgen. Ett klick, och agenterna läser dem, lägger dem i rätt fack, bedömer ton och prioritet och skriver färdiga svarsutkast.",
             en: "Six unsorted customer emails sit in the inbox. One click, and the agents read them, file them into the right queue, score tone and priority and draft ready replies."
@@ -133,7 +133,7 @@ export function InboxTriage() {
       </div>
 
       {error ? (
-        <div className="rounded-input bg-danger/10 px-4 py-3 text-[0.9375rem] text-ink/80">
+        <div className="rounded-input bg-danger/10 px-4 py-3 text-[0.9375rem] text-ink-muted">
           {error}
         </div>
       ) : null}
@@ -141,20 +141,20 @@ export function InboxTriage() {
       {!results ? (
         <div className="divide-y divide-ink/8 overflow-hidden rounded-card bg-paper">
           <div className="flex items-center gap-2 bg-paper2/70 px-5 py-3">
-            <Inbox className="h-4 w-4 text-ink/45" />
-            <span className="text-[0.8125rem] font-medium text-ink/45">
+            <Inbox className="h-4 w-4 text-ink-subtle" />
+            <span className="text-[0.8125rem] font-medium text-ink-subtle">
               {text({ sv: "Inkorg · 6 olästa", en: "Inbox · 6 unread" })}
             </span>
           </div>
           {sampleEmails.map((email) => (
             <div key={email.from} className="grid grid-cols-12 gap-x-4 px-5 py-4">
-              <span className="col-span-12 truncate text-[0.8125rem] text-ink/50 md:col-span-3">
+              <span className="col-span-12 truncate text-[0.8125rem] text-ink-subtle md:col-span-3">
                 {email.from}
               </span>
               <span className="col-span-12 mt-1 truncate text-sm font-semibold md:col-span-3 md:mt-0">
                 {email.subject}
               </span>
-              <span className="col-span-12 mt-1 truncate text-sm text-ink/55 md:col-span-6 md:mt-0">
+              <span className="col-span-12 mt-1 truncate text-sm text-ink-subtle md:col-span-6 md:mt-0">
                 {email.body}
               </span>
             </div>
@@ -165,7 +165,7 @@ export function InboxTriage() {
           {grouped.map((group) => (
             <div key={group.category} className="overflow-hidden rounded-card bg-paper">
               <div className="flex items-center justify-between bg-paper2/70 px-4 py-3">
-                <span className="text-[0.8125rem] font-medium text-ink/60">{group.label}</span>
+                <span className="text-[0.8125rem] font-medium text-ink-muted">{group.label}</span>
                 <Badge tone="neutral">{group.items.length}</Badge>
               </div>
               <div className="divide-y divide-ink/10">
@@ -181,10 +181,10 @@ export function InboxTriage() {
                       >
                         <div className="min-w-0">
                           <p className="truncate text-sm font-semibold">{item.subject}</p>
-                          <p className="truncate text-[0.8125rem] text-ink/45">{item.from}</p>
+                          <p className="truncate text-[0.8125rem] text-ink-subtle">{item.from}</p>
                         </div>
                         <ChevronDown
-                          className={cn("mt-1 h-4 w-4 shrink-0 text-ink/40 transition", open ? "rotate-180" : "")}
+                          className={cn("mt-1 h-4 w-4 shrink-0 text-ink-subtle transition", open ? "rotate-180" : "")}
                         />
                       </button>
                       <div className="mt-2 flex flex-wrap gap-1.5">
@@ -209,7 +209,7 @@ export function InboxTriage() {
                       </div>
                       {open ? (
                         <div className="mt-3 space-y-3">
-                          <div className="rounded-input bg-paper2/70 p-3 text-[0.8125rem] leading-5 text-ink/65">
+                          <div className="rounded-input bg-paper2/70 p-3 text-[0.8125rem] leading-5 text-ink-muted">
                             {item.body}
                           </div>
                           {item.escalation_reason ? (
@@ -219,7 +219,7 @@ export function InboxTriage() {
                             <p className="mb-2 text-[0.8125rem] font-medium text-moss">
                               {text({ sv: "AI-utkast", en: "AI draft" })}
                             </p>
-                            <p className="whitespace-pre-wrap text-xs leading-5 text-ink/80">
+                            <p className="whitespace-pre-wrap text-xs leading-5 text-ink-muted">
                               {item.draft_reply}
                             </p>
                           </div>

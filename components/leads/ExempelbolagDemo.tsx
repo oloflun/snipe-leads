@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Exempelbolagslista } from "@/components/leads/LeadsRunForm";
+import { EXEMPEL_OMGANG_1, EXEMPEL_OMGANG_2, kontaktnamn, type ExempelBolag } from "@/lib/demo/iris-exempel";
 
 /**
  * Exempellistan som EGEN komponent, med sina data.
@@ -11,157 +12,50 @@ import { Exempelbolagslista } from "@/components/leads/LeadsRunForm";
  * leads-vy) fanns två vägar: kopiera de tre bolagen till varje yta, eller
  * flytta dem hit EN gång. Kopior av exempeldata glider isär precis som
  * formulärkopior gjorde (se LeadsRunForm:s docstring) — därför bor bolagen
- * här och alla ytor renderar samma komponent.
+ * i lib/demo/iris-exempel.ts och alla ytor renderar samma komponent.
  *
  * Allt är påhittat och kan aldrig mejlas: org.numren har medvetet fel
  * kontrollsiffra och domänerna ligger under `.example` (RFC 2606). Se
- * app/leads/exempelbolag.py — samma regel som backendens generator.
+ * app/leads/exempelbolag.py — samma regel som backendens (separata) generator.
+ *
+ * ## Varför bolagen och utkasten flyttades till lib/demo/iris-exempel.ts
+ *
+ * Uppmätt 2026-09-18: knapparna i Email Studio genererade utkasten ur
+ * strängmallar (`simulateAction` i app/api/email-studio/route.ts, borttagen),
+ * och `contact_name` här var en ROLL ("Inköpschef") som gick rakt in som
+ * hälsning — "Hej Inköpschef,". De sex bolagen och deras HANDSKRIVNA utkast
+ * bor nu i EN källa som både den här listan och API-routens demoläge läser,
+ * så att listan och knapparnas svar aldrig kan glida isär.
  *
  * "Uppdatera" växlar mellan två fasta urval. I produkten hämtar knappen ett
  * nytt urval från backenden (`fro` i ExempelbolagRequest); fördröjningen här
  * motsvarar det anropet så att knappens läge går att se.
  */
 
-/** Samma form som backendens pitch. Se app/leads/exempelbolag.py. */
-function PITCH(namn: string, ort: string, oppning: string, varforNu: string): string {
-  return [
-    "Hej!",
-    `${oppning} i ${ort}. Anledningen att jag hör av mig just nu är att ${varforNu}.`,
-    `Vi säljer hjärtstartare och HLR-utbildning till arbetsplatser. I det läge ${namn} är i brukar det vara relevant precis nu, innan rutinerna satt sig.`,
-    "Är det något ni tittar på? I så fall svarar jag gärna på hur det brukar se ut — annars säger du bara till, så hör jag inte av mig igen.",
-    "Vänliga hälsningar,\nAnna, Hjärtsäker AB"
-  ].join("\n\n");
+/** Fixturens form → formen `Exempelbolagslista`/`Pitchutkast` (LeadsRunForm.tsx) förväntar sig. */
+function tillListvy(b: ExempelBolag) {
+  return {
+    id: b.id,
+    company_name: b.companyName,
+    contact_name: `${kontaktnamn(b)}, ${b.contactRole}`,
+    orgnr: b.orgnr,
+    ort: b.ort,
+    website: b.website,
+    anstallda: b.anstallda,
+    bransch: b.bransch,
+    beskrivning: b.beskrivning,
+    pitch_subject: b.draft.subject,
+    pitch_body: b.draft.body,
+    signal: b.signal,
+    offer: b.offer,
+    cta: b.cta
+  };
 }
-
-const BOLAG = [
-  {
-    id: "1",
-    company_name: "Lundsund Bygg & Partner AB",
-    pitch_subject: "Grattis till den nya lokalen",
-    pitch_varfor_nu: "en ny lokal ska utrustas från grunden, och den listan skrivs en gång",
-    pitch_body: PITCH(
-      "Lundsund Bygg & Partner AB",
-      "Umeå",
-      "Grattis till den nya lokalen",
-      "en ny lokal ska utrustas från grunden, och den listan skrivs en gång"
-    ),
-    contact_name: "Inköpschef",
-    orgnr: "556438-7011",
-    ort: "Umeå",
-    website: "lundsundbyggpartnerab.example",
-    anstallda: 13,
-    bransch: "Bygg",
-    beskrivning: "Bygg i Umeå med 13 anställda. Söker en ny inköpschef sedan i våras."
-  },
-  {
-    id: "2",
-    company_name: "Viksund Bygg Gruppen AB",
-    pitch_subject: "Grattis till den nya lokalen",
-    pitch_varfor_nu: "en ny lokal ska utrustas från grunden, och den listan skrivs en gång",
-    pitch_body: PITCH(
-      "Viksund Bygg Gruppen AB",
-      "Umeå",
-      "Grattis till den nya lokalen",
-      "en ny lokal ska utrustas från grunden, och den listan skrivs en gång"
-    ),
-    contact_name: "Inköpschef",
-    orgnr: "556859-7318",
-    ort: "Umeå",
-    website: "viksundbygggruppenab.example",
-    anstallda: 14,
-    bransch: "Bygg",
-    beskrivning:
-      "Bygg i Umeå med 14 anställda. Har lagt om sin tjänstesida och lyfter fram service."
-  },
-  {
-    id: "3",
-    company_name: "Hammarnäs Bygg Sverige AB",
-    pitch_subject: "Grattis till den nya lokalen",
-    pitch_varfor_nu: "en ny lokal ska utrustas från grunden, och den listan skrivs en gång",
-    pitch_body: PITCH(
-      "Hammarnäs Bygg Sverige AB",
-      "Umeå",
-      "Grattis till den nya lokalen",
-      "en ny lokal ska utrustas från grunden, och den listan skrivs en gång"
-    ),
-    contact_name: "Inköpschef",
-    orgnr: "556201-4453",
-    ort: "Umeå",
-    website: "hammarnasbyggsverigeab.example",
-    anstallda: 31,
-    bransch: "Bygg",
-    beskrivning: "Bygg i Umeå med 31 anställda. Har flyttat till större lokal."
-  }
-];
-
-/** Ett andra urval, så att "Uppdatera" går att prova. */
-const ANDRA_OMGANGEN = [
-  {
-    id: "4",
-    company_name: "Granstrand Tillverkning AB",
-    contact_name: "Inköpschef",
-    orgnr: "556744-1288",
-    ort: "Jönköping",
-    website: "granstrandtillverkningab.example",
-    anstallda: 37,
-    bransch: "Tillverkning",
-    beskrivning:
-      "Tillverkning i Jönköping med 37 anställda. Rekryterar till produktionen — tre annonser ute.",
-    pitch_subject: "Rekryterar till produktionen — en fråga",
-    pitch_varfor_nu: "fler i produktionen betyder fler som ska introduceras, utrustas och hållas med",
-    pitch_body: PITCH(
-      "Granstrand Tillverkning AB",
-      "Jönköping",
-      "Jag såg att ni rekryterar till produktionen",
-      "fler i produktionen betyder fler som ska introduceras, utrustas och hållas med"
-    )
-  },
-  {
-    id: "5",
-    company_name: "Sjöhaga Logistik Gruppen AB",
-    contact_name: "Platschef",
-    orgnr: "556019-5473",
-    ort: "Örebro",
-    website: "sjohagalogistikgruppenab.example",
-    anstallda: 22,
-    bransch: "Logistik",
-    beskrivning:
-      "Logistik i Örebro med 22 anställda. Har bytt affärssystem och skriver om det på sin blogg.",
-    pitch_subject: "Bytt affärssystem — en fråga",
-    pitch_varfor_nu: "ett systembyte är det enda tillfället på flera år då rutiner faktiskt görs om",
-    pitch_body: PITCH(
-      "Sjöhaga Logistik Gruppen AB",
-      "Örebro",
-      "Jag såg att ni bytt affärssystem",
-      "ett systembyte är det enda tillfället på flera år då rutiner faktiskt görs om"
-    )
-  },
-  {
-    id: "6",
-    company_name: "Almnäs Fastighet AB",
-    contact_name: "VD",
-    orgnr: "556352-9061",
-    ort: "Västerås",
-    website: "almnasfastighetab.example",
-    anstallda: 14,
-    bransch: "Fastighet",
-    beskrivning:
-      "Fastighet i Västerås med 14 anställda. Har lagt om sin tjänstesida och lyfter fram service.",
-    pitch_subject: "Er nya tjänstesida — en fråga",
-    pitch_varfor_nu: "när servicelöftet skärps blir det som håller det uppe plötsligt en fråga för er",
-    pitch_body: PITCH(
-      "Almnäs Fastighet AB",
-      "Västerås",
-      "Jag läste er nya tjänstesida",
-      "när servicelöftet skärps blir det som håller det uppe plötsligt en fråga för er"
-    )
-  }
-];
 
 export function ExempelbolagDemo() {
   const [omgang, setOmgang] = useState(0);
   const [hamtar, setHamtar] = useState(false);
-  const bolag = omgang % 2 === 0 ? BOLAG : ANDRA_OMGANGEN;
+  const bolag = (omgang % 2 === 0 ? EXEMPEL_OMGANG_1 : EXEMPEL_OMGANG_2).map(tillListvy);
 
   function uppdatera() {
     setHamtar(true);

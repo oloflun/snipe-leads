@@ -2,21 +2,20 @@ import { notFound, redirect } from "next/navigation";
 import { PageShell } from "@/components/AppShell";
 import { DashboardProvider } from "@/components/dashboard/DashboardContext";
 import { StartView } from "@/components/dashboard/StartView";
-import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { CrmDemo } from "@/components/crm/CrmDemo";
 import { KvittoDemo } from "@/components/kvitton/KvittoDemo";
 import { DemoSupportYta } from "@/components/snajp/DemoSupportYta";
-import { LeadsControls } from "@/components/leads/LeadsControls";
+import { IrisBolag } from "@/components/leads/IrisBolag";
+import { IrisGranskning } from "@/components/leads/IrisGranskning";
+import { IrisInstallningar } from "@/components/leads/IrisInstallningar";
 import { SupportRegler } from "@/components/settings/SupportRegler";
 import {
   AnalyticsView,
   AssistantView,
   CompaniesView,
   ContactsView,
-  InboxView,
-  LeadsView
+  InboxView
 } from "@/components/WorkspaceViews";
-import { loadPublicEmailStudioData } from "@/lib/data/emails";
 import { notFoundOnTenant } from "@/lib/tenants/server";
 
 /**
@@ -37,9 +36,9 @@ import { notFoundOnTenant } from "@/lib/tenants/server";
  * INGENTING här får sträcka sig efter en session eller databasen.
  *
  *  * `resolveDashboardState()` anropas INTE — state är en konstant nedan.
- *  * `loadEmailStudioData()` anropas INTE — den läser `generated_emails` för
- *    inloggat workspace. Vi använder `loadPublicEmailStudioData()`, som är
- *    synkron och Supabase-fri av exakt det skälet.
+ *  * `IrisBolag`/`IrisGranskning`/`IrisInstallningar` läser demo-fixturer
+ *    (`lib/demo/oversikt.ts`, `lib/demo/iris-exempel.ts`) i stället för
+ *    `/api/snajp-support/*` när `demo` är satt — se respektive komponent.
  *  * Vyerna under `WorkspaceViews` är klientkomponenter som läser
  *    `lib/mock-data`. Kontrollera det innan du lägger till en ny sektion här.
  *
@@ -75,9 +74,9 @@ export default async function Page({
 }: Readonly<{ params: Promise<{ slug?: string[] }> }>) {
   await notFoundOnTenant();
   const { slug = [] } = await params;
-  const [sektion] = slug;
+  const [sektion, undersektion] = slug;
 
-  const innehall = renderSektion(sektion);
+  const innehall = renderSektion(sektion, undersektion);
   if (innehall === null) {
     notFound();
   }
@@ -95,14 +94,44 @@ export default async function Page({
 }
 
 /** null = okänd sektion, alltså 404. */
-function renderSektion(sektion: string | undefined): React.ReactNode | null {
+function renderSektion(
+  sektion: string | undefined,
+  undersektion?: string
+): React.ReactNode | null {
   switch (sektion) {
     case undefined:
       return <StartView demo />;
+    case "iris":
+      // Samma tre undersidor som /dashboard/iris — se
+      // components/dashboard/WorkspaceSection.tsx. Ett okänt tredje
+      // slugsegment är en 404, inte en tyst fallback till Bolag.
+      if (undersektion === "granskning") {
+        return (
+          <PageShell kicker="Iris" title="Granskning" description="Utkasten Iris skrivit, i väntan på ditt ja eller nej.">
+            <IrisGranskning demo />
+          </PageShell>
+        );
+      }
+      if (undersektion === "installningar") {
+        return (
+          <PageShell kicker="Iris" title="Inställningar" description="Målgrupp, autonomi och gränserna Iris alltid håller.">
+            <IrisInstallningar demo />
+          </PageShell>
+        );
+      }
+      if (undersektion) {
+        return null;
+      }
+      return <IrisBolag demo />;
+    // Gamla adresserna — Iris flyttade in från tre separata ställen
+    // 2026-09-19 (se HANDOFF/plan). Bokmärken ska landa rätt, inte i en 404.
     case "leads":
-      return <LeadsView demo />;
     case "emails":
-      return <EmailStudioDemo />;
+      redirect("/demo/iris");
+    // eslint-disable-next-line no-fallthrough -- redirect kastar, nås aldrig
+    case "kontroll":
+      redirect("/demo/iris/installningar");
+    // eslint-disable-next-line no-fallthrough -- redirect kastar, nås aldrig
     case "crm":
       // Den omgjorda leadsagenten i demoform: kundens egen CRM-lista in
       // (CSV, parsas i webbläsaren), en isolerad Email studio per kund ut.
@@ -126,8 +155,6 @@ function renderSektion(sektion: string | undefined): React.ReactNode | null {
       return <AnalyticsView demo />;
     case "assistant":
       return <AssistantView />;
-    case "kontroll":
-      return <LeadsControls demo />;
     case "bokforing":
       // Gamla adressen — Kvittohanteraren ersatte bokföringsdemon 2026-09-16.
       redirect("/demo/kvitton");
@@ -176,18 +203,3 @@ function ReglerDemo() {
   );
 }
 
-function EmailStudioDemo() {
-  // Den PUBLIKA laddaren. Se filens docstring — den authade varianten läser
-  // generated_emails för inloggat workspace och hör inte hemma här.
-  const data = loadPublicEmailStudioData();
-
-  return (
-    <PageShell
-      kicker="Email studio"
-      title="Skriv och skriv om"
-      description="Exempelmejl. Skriv om det, korta det, ändra tonläget — inget sparas och inget skickas."
-    >
-      <EmailStudioEditor data={data} />
-    </PageShell>
-  );
-}

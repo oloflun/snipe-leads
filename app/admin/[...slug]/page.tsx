@@ -18,5 +18,5 @@ export default async function Page({
   params
 }: Readonly<{ params: Promise<{ slug?: string[] }> }>) {
   const { slug = [] } = await params;
-  return <WorkspaceSection slug={slug} />;
+  return <WorkspaceSection slug={slug} base="/admin" />;
 }

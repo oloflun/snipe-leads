@@ -37,7 +37,7 @@ const pathForProduct: Record<ProductKey, string> = {
   bookkeeping: "/kvitton"
 };
 
-function Display({ text: value, accentClass = "italic-disp text-ochre" }: Readonly<{ text: string; accentClass?: string }>) {
+function Display({ text: value, accentClass = "italic-disp text-warning" }: Readonly<{ text: string; accentClass?: string }>) {
   return (
     <>
       {value.split(/\*([^*]+)\*/g).map((part, i) =>
@@ -62,7 +62,7 @@ function Label({ children, tone = "ink" }: Readonly<{ children: React.ReactNode;
   if (typeof children === "string" && children.trim() === "") return null;
 
   return (
-    <p className={cn("text-[0.8125rem] font-medium tracking-[0.02em]", tone === "ink" ? "text-ink/45" : "text-paper/60")}>
+    <p className={cn("text-[0.8125rem] font-medium tracking-[0.02em]", tone === "ink" ? "text-ink-subtle" : "text-paper-muted")}>
       {children}
     </p>
   );
@@ -126,13 +126,13 @@ export function LandingPhoto({
             <button
               type="button"
               onClick={toggleLocale}
-              className="focus-ring min-h-11 rounded-input px-3 text-sm font-medium text-paper/70 transition-colors hover:text-paper"
+              className="focus-ring min-h-11 rounded-input px-3 text-sm font-medium text-paper-muted transition-colors hover:text-paper"
             >
               {locale === "sv" ? "EN" : "SV"}
             </button>
             <Link
               href="/login"
-              className="focus-ring inline-flex min-h-11 items-center rounded-input px-3 text-sm font-medium text-paper/70 transition-colors hover:text-paper"
+              className="focus-ring inline-flex min-h-11 items-center rounded-input px-3 text-sm font-medium text-paper-muted transition-colors hover:text-paper"
             >
               {text(shared.navLogin)}
             </Link>
@@ -179,7 +179,7 @@ export function LandingPhoto({
 
             <div className="mt-10 grid grid-cols-12 gap-y-8 lg:gap-x-10">
               <div className="col-span-12 lg:col-span-5">
-                <p className="max-w-[46ch] text-[1.0625rem] leading-[1.65] text-paper/85">
+                <p className="max-w-[46ch] text-[1.0625rem] leading-[1.65] text-paper-muted">
                   {text(copy.lede)}
                 </p>
                 <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -243,22 +243,22 @@ export function LandingPhoto({
                     /demo/bokforing funnits sedan den blev en egen produkt. */}
                 <div className="mt-5 flex flex-col gap-2 border-t border-paper/25 pt-4">
                   <Link
-                    href="/demo/leads"
-                    className="focus-ring group inline-flex items-center gap-2 text-[0.9375rem] font-medium text-paper/85 transition-colors hover:text-paper"
+                    href="/demo/iris"
+                    className="focus-ring group inline-flex items-center gap-2 text-[0.9375rem] font-medium text-paper-muted transition-colors hover:text-paper"
                   >
                     {text(shared.demoLeads)}
                     <span aria-hidden className="transition-transform group-hover:translate-x-0.5">→</span>
                   </Link>
                   <Link
                     href="/demo/support"
-                    className="focus-ring group inline-flex items-center gap-2 text-[0.9375rem] font-medium text-paper/85 transition-colors hover:text-paper"
+                    className="focus-ring group inline-flex items-center gap-2 text-[0.9375rem] font-medium text-paper-muted transition-colors hover:text-paper"
                   >
                     {text(shared.demoSupport)}
                     <span aria-hidden className="transition-transform group-hover:translate-x-0.5">→</span>
                   </Link>
                   <Link
                     href="/demo/kvitton"
-                    className="focus-ring group inline-flex items-center gap-2 text-[0.9375rem] font-medium text-paper/85 transition-colors hover:text-paper"
+                    className="focus-ring group inline-flex items-center gap-2 text-[0.9375rem] font-medium text-paper-muted transition-colors hover:text-paper"
                   >
                     {text(shared.demoBokforing)}
                     <span aria-hidden className="transition-transform group-hover:translate-x-0.5">→</span>
@@ -294,10 +294,10 @@ export function LandingPhoto({
                 </h2>
               </div>
               <div className="col-span-12 lg:col-span-4 lg:col-start-9">
-                <p className="rise rise-1 text-[1.0625rem] leading-[1.7] text-ink/75">{text(sec.problemBody)}</p>
+                <p className="rise rise-1 text-[1.0625rem] leading-[1.7] text-ink-muted">{text(sec.problemBody)}</p>
                 <ul className="mt-8">
                   {sec.problemPoints.map((point) => (
-                    <li key={point.sv} className="hrule py-4 text-[0.9375rem] leading-[1.55] text-ink/65">
+                    <li key={point.sv} className="hrule py-4 text-[0.9375rem] leading-[1.55] text-ink-muted">
                       {text(point)}
                     </li>
                   ))}
@@ -330,7 +330,7 @@ export function LandingPhoto({
             }}
           />
           <div className="relative mx-auto max-w-[1480px] px-6 py-28 text-center md:px-10 md:py-40">
-            <p className="text-[0.8125rem] font-medium tracking-[0.14em] text-ochre">
+            <p className="text-[0.8125rem] font-medium tracking-[0.14em] text-warning">
               {text(sec.statementLabel).toUpperCase()}
             </p>
             <p className="rise mx-auto mt-8 max-w-[20ch] font-display text-[clamp(2rem,5.2vw,4.5rem)] font-semibold leading-[1.12] tracking-[-0.005em] text-paper">
@@ -346,7 +346,7 @@ export function LandingPhoto({
               <h2 className="font-display text-[clamp(1.875rem,3.6vw,2.875rem)] font-semibold leading-[1.06] tracking-[-0.028em]">
                 <Display text={text(copy.demoHeading)} />
               </h2>
-              <p className="mt-4 text-[1.0625rem] leading-[1.65] text-ink/70">{text(copy.demoLede)}</p>
+              <p className="mt-4 text-[1.0625rem] leading-[1.65] text-ink-muted">{text(copy.demoLede)}</p>
             </div>
             <div className="mt-10 overflow-hidden rounded-panel border border-ink/12 bg-paper">
               <div className="flex items-center justify-between gap-4 border-b border-ink/10 bg-paper2/60 px-5 py-3.5">
@@ -354,7 +354,7 @@ export function LandingPhoto({
                     support": den grenen visade "Snajp Support" ovanför
                     bokföringsdemon — fel produktnamn på en sida som säljer en
                     annan produkt. */}
-                <span className="text-[0.8125rem] font-medium tracking-[0.02em] text-ink/55">
+                <span className="text-[0.8125rem] font-medium tracking-[0.02em] text-ink-subtle">
                   {product === "leads"
                     ? "Email Studio"
                     : product === "support"
@@ -418,7 +418,7 @@ export function LandingPhoto({
               <h2 className="rise mt-5 max-w-[15ch] font-display text-[clamp(2rem,4.2vw,3.25rem)] font-semibold leading-[1.04] tracking-[-0.03em]">
                 <Display text={text(sec.placeHeading)} />
               </h2>
-              <p className="mt-6 max-w-[44ch] text-[1.0625rem] leading-[1.7] text-ink/75">
+              <p className="mt-6 max-w-[44ch] text-[1.0625rem] leading-[1.7] text-ink-muted">
                 {text(sec.placeBody)}
               </p>
             </div>
@@ -441,7 +441,7 @@ export function LandingPhoto({
                   <h3 className="font-display text-[1.3125rem] font-semibold leading-tight tracking-[-0.015em]">
                     {text(step.title)}
                   </h3>
-                  <p className="mt-2.5 text-[0.9375rem] leading-[1.6] text-ink/70">{text(step.body)}</p>
+                  <p className="mt-2.5 text-[0.9375rem] leading-[1.6] text-ink-muted">{text(step.body)}</p>
                 </div>
               ))}
             </div>
@@ -481,10 +481,10 @@ export function LandingPhoto({
                 </h2>
               </div>
               <div className="col-span-12 lg:col-span-7 lg:col-start-6">
-                <p className="rise max-w-[62ch] text-[1.0625rem] leading-[1.7] text-ink/78">
+                <p className="rise max-w-[62ch] text-[1.0625rem] leading-[1.7] text-ink-muted">
                   {text(shared.vilkaText1)}
                 </p>
-                <p className="rise mt-6 max-w-[62ch] text-[1.0625rem] leading-[1.7] text-ink/78">
+                <p className="rise mt-6 max-w-[62ch] text-[1.0625rem] leading-[1.7] text-ink-muted">
                   {text(shared.vilkaText2)}
                 </p>
                 {/* Två vägar vidare, inte en utbytt. Avsnittet reser frågan
@@ -526,7 +526,7 @@ export function LandingPhoto({
                     <dt className="font-display text-[1.25rem] font-semibold leading-snug tracking-[-0.015em]">
                       {text(item.q)}
                     </dt>
-                    <dd className="mt-3 max-w-[62ch] text-[1rem] leading-[1.7] text-ink/70">
+                    <dd className="mt-3 max-w-[62ch] text-[1rem] leading-[1.7] text-ink-muted">
                       {text(item.a)}
                     </dd>
                   </div>
@@ -560,7 +560,7 @@ export function LandingPhoto({
                       av spärrar som gäller lika mycket allihop. Punkten är vit
                       medan texten behåller sin dämpade ton. */}
                   <span aria-hidden="true" className="mt-[0.6em] h-1.5 w-1.5 shrink-0 rounded-full bg-paper" />
-                  <span className="text-[1rem] leading-[1.6] text-paper/75">{text(limit)}</span>
+                  <span className="text-[1rem] leading-[1.6] text-paper-muted">{text(limit)}</span>
                 </li>
               ))}
             </ul>
@@ -589,7 +589,7 @@ export function LandingPhoto({
               <h2 className="font-display text-[clamp(2.25rem,5vw,3.75rem)] font-semibold leading-[1.02] tracking-[-0.03em]">
                 <Display text={text(shared.closingHeading)} />
               </h2>
-              <p className="mt-6 max-w-[46ch] text-[1.0625rem] leading-[1.7] text-ink/80">
+              <p className="mt-6 max-w-[46ch] text-[1.0625rem] leading-[1.7] text-ink-muted">
                 {text(shared.closingBody)}
               </p>
               <a
@@ -613,7 +613,7 @@ export function LandingPhoto({
           <div className="grid grid-cols-12 gap-y-10 lg:gap-x-12">
             <div className="col-span-12 lg:col-span-4">
               <Logo />
-              <p className="mt-4 text-[0.875rem] text-ink/45">{text(shared.footerPlats)}</p>
+              <p className="mt-4 text-[0.875rem] text-ink-subtle">{text(shared.footerPlats)}</p>
             </div>
 
             <div id="kontakt" className="col-span-12 scroll-mt-24 sm:col-span-5 lg:col-span-3">
@@ -633,7 +633,7 @@ export function LandingPhoto({
               <h2 className="max-w-[28ch] text-[1.0625rem] font-semibold leading-snug tracking-[-0.01em]">
                 {text(shared.gdprRubrik)}
               </h2>
-              <p className="mt-3 max-w-[52ch] text-[0.9375rem] leading-[1.6] text-ink/70">
+              <p className="mt-3 max-w-[52ch] text-[0.9375rem] leading-[1.6] text-ink-muted">
                 {text(shared.gdprText)}
               </p>
               {/* Ersätter raden "Sverige · GDPR · RLS". Tre förkortningar var

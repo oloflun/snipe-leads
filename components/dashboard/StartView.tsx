@@ -48,29 +48,6 @@ const copy = {
   titleLeads: { sv: "Leads", en: "Leads" },
   titleSupport: { sv: "Kundtjänst", en: "Support" },
   titleBoth: { sv: "Arbetsytan", en: "Workspace" },
-  descBoth: {
-    // Inte "båda": en Trio-kund har tre agenter, och texten visas för dem också.
-    // "i menyn till vänster", inte "uppe till höger": lägesväxeln är
-    // railens Leads- och Kundtjänstposter sedan skalbytet 2026-09-15.
-    sv: "Läget i agenterna, och vad som väntar på dig. Byt vad som visas i menyn till vänster.",
-    en: "Where your agents stand, and what is waiting for you. Change what is shown in the menu on the left."
-  },
-  descLeads: {
-    sv: "Vad agenterna hittat, vad de grundade urvalet i, och vad som väntar på ditt godkännande.",
-    en: "What the agents found, what they based the selection on, and what is waiting for your approval."
-  },
-  descSupport: {
-    sv: "Vad som kommit in, hur mycket agenterna klarade själva, och vad som ligger hos dig.",
-    en: "What came in, how much the agents handled on their own, and what is waiting for you."
-  },
-  freshBody: {
-    sv: "Arbetsytan är tom. Beskriv vad ni säljer och vem ni säljer till, så kan Snajp börja föreslå bolag och skriva utkast.",
-    en: "The workspace is empty. Describe what you sell and who you sell to, and Snajp can start suggesting companies and drafting emails."
-  },
-  freshSupport: {
-    sv: "Kundtjänstagenten behöver en kunskapsbas att svara ur. Lägg in era vanligaste svar, så börjar den sortera inkorgen.",
-    en: "The support agent needs a knowledge base to answer from. Add your most common replies and it will start sorting the inbox."
-  },
   leadsHeading: { sv: "Leads", en: "Leads" },
   supportHeading: { sv: "Kundtjänst", en: "Support" }
 } satisfies Record<string, Localized>;
@@ -81,10 +58,9 @@ export function StartView({ demo = false }: Readonly<{ demo?: boolean }>) {
 
   const bada = shows("leads") && shows("support");
   const title = bada ? copy.titleBoth : shows("leads") ? copy.titleLeads : copy.titleSupport;
-  const description = bada ? copy.descBoth : shows("leads") ? copy.descLeads : copy.descSupport;
 
   return (
-    <PageShell kicker={text(copy.kicker)} title={text(title)} description={text(description)}>
+    <PageShell kicker={text(copy.kicker)} title={text(title)}>
       <div className="space-y-14">
         {/* Högst upp bland vyerna, och bara när båda produkterna visas.
             Komponenten returnerar null av sig själv annars — se DuoSummary. */}

@@ -1,10 +1,14 @@
 import type { Tenant } from "./types";
 
 /**
- * Livrustning AB — utbildning i HLR, första hjälpen, brand och krisstöd.
+ * Livrustning AB — utbildning i HLR, första hjälpen och brand.
  *
  * Kunden behåller livrustning.se. Vi levererar supportchatten, dit deras
  * besökare kommer via en länk från den sajten eller i ett mejl.
+ *
+ * Uppgifterna följer den nya sajten (2026-09-19, se
+ * snajp-support/app/tenants/livrustning_kb.py): en adress, ett telefonnummer,
+ * ingen webbutik — Livrustning säljer inte hjärtstartare längre.
  *
  * Paletten matchar inte deras grafiska profil och ska inte göra det — chatten
  * bär Snajps formspråk med kundens logotyp. Accenten är petrol snarare än rött
@@ -15,7 +19,7 @@ import type { Tenant } from "./types";
 export const livrustning: Tenant = {
   slug: "livrustning",
   name: "Livrustning AB",
-  tagline: "Utbildning i hjärt-lungräddning, första hjälpen, brand och krisstöd",
+  tagline: "Utbildning i HLR, första hjälpen och brand",
   website: "https://livrustning.se",
   supportKeyEnv: "SNAJP_KEY_LIVRUSTNING",
 
@@ -44,22 +48,17 @@ export const livrustning: Tenant = {
   company: {
     legalName: "Livrustning AB",
     orgNumber: "556824-9022",
-    addresses: [
-      "Rudsjövägen 112, 131 47 Nacka, Sverige",
-      "Kurskontor: Hökaren 49, 907 88 Täfteå"
-    ],
-    phones: ["08-972247", "070-733 32 54"],
-    email: "kontakt@livrustning.se",
-    webshop: "hjartstartarbutiken.com"
+    addresses: ["Hökaren 49, 907 88 Täfteå"],
+    phones: ["070-733 32 54"],
+    email: "kontakt@livrustning.se"
   },
 
-  supportIntro:
-    "Beskriv ditt ärende — kursbokning, en beställd hjärtstartare, faktura eller något annat.",
+  supportIntro: "Fråga om utbildningar, bokning, offert eller intyg.",
   supportPrompts: [
-    "Hur lång är garantin på en hjärtstartare?",
-    "Kan jag ångra mitt köp och hur gör jag i så fall?",
-    "Vad kostar frakten och hur snabbt kommer varan?",
     "Vi är 15 personer på kontoret — hur bokar vi en HLR-kurs?",
-    "Vad ingår i eHLR och kan den göras på distans?"
+    "Vad ingår i en Säkerhetsdag?",
+    "Hur många kan vara med på ett eHLR-Event?",
+    "Hur får deltagarna sitt intyg?",
+    "Hur blir vi en Hjärtsäker zon?"
   ]
 };

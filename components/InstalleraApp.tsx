@@ -87,10 +87,10 @@ export function InstalleraApp() {
       style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
     >
       <div className="mx-auto flex max-w-[1400px] items-center gap-3 px-4 pt-3 md:px-6">
-        <Download className="hidden h-4 w-4 shrink-0 text-ochre sm:block" aria-hidden />
+        <Download className="hidden h-4 w-4 shrink-0 text-warning sm:block" aria-hidden />
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-medium text-ink">Installera Snajp som app</p>
-          <p className="mt-0.5 text-[13px] text-ink/60">
+          <p className="mt-0.5 text-[13px] text-ink-muted">
             {visaIOS
               ? "Tryck på Dela och välj “Lägg till på hemskärmen”."
               : "Egen ikon, eget fönster, ingen adressrad."}
@@ -111,7 +111,7 @@ export function InstalleraApp() {
           type="button"
           onClick={avvisa}
           aria-label="Stäng"
-          className="focus-ring inline-flex min-h-9 w-9 shrink-0 items-center justify-center rounded-input text-ink/50 hover:text-ink"
+          className="focus-ring inline-flex min-h-9 w-9 shrink-0 items-center justify-center rounded-input text-ink-subtle hover:text-ink"
         >
           <X className="h-4 w-4" aria-hidden />
         </button>

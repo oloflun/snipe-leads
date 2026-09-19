@@ -22,26 +22,6 @@
       "port": 3102
     },
     {
-      "name": "leads",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": [
-        "run",
-        "start:local"
-      ],
-      "cwd": "leads-webb",
-      "port": 3101
-    },
-    {
-      "name": "iris-leads-dev",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": [
-        "run",
-        "dev"
-      ],
-      "cwd": "leads-webb",
-      "port": 3101
-    },
-    {
       "name": "iris-backend",
       "runtimeExecutable": ".venv/Scripts/python.exe",
       "runtimeArgs": [
@@ -49,26 +29,6 @@
       ],
       "cwd": "snajp-support",
       "port": 8010
-    },
-    {
-      "name": "bokforing",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": [
-        "run",
-        "start:local"
-      ],
-      "cwd": "bokforing-webb",
-      "port": 3100
-    },
-    {
-      "name": "kvitton-portal-dev",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": [
-        "run",
-        "dev"
-      ],
-      "cwd": "bokforing-webb",
-      "port": 3100
     },
     {
       "name": "kvitton-backend",
@@ -91,6 +51,25 @@
       ],
       "cwd": "snajp-support",
       "port": 8000
+    },
+    {
+      "name": "support-backend",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "lokal_support.py"
+      ],
+      "cwd": "snajp-support",
+      "port": 8000
+    },
+    {
+      "name": "support-sajt-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "cwd": "support-webb",
+      "port": 3102
     }
   ]
 }

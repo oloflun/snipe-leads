@@ -614,10 +614,10 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
   if (lage.fas === "fel") {
     return (
       <div className="flex items-start gap-3 border-y border-ochre/40 bg-ochre/10 px-4 py-4">
-        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-ochre" aria-hidden />
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
         <div className="min-w-0">
           <p className="text-sm font-medium text-ink">Bolagen kunde inte hämtas</p>
-          <p className="mt-1 text-sm text-ink/70">{lage.meddelande}</p>
+          <p className="mt-1 text-sm text-ink-muted">{lage.meddelande}</p>
           <button
             type="button"
             onClick={() => void hamta()}
@@ -663,7 +663,7 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
                 type="button"
                 disabled={genererarUtkast || processarOm}
                 onClick={() => void skapaUtkastForValda()}
-                className="border border-ink/40 px-4 py-2 font-mono text-[12px] uppercase tracking-[0.18em] text-ink/70 transition hover:border-ink hover:text-ink disabled:opacity-60"
+                className="border border-ink/40 px-4 py-2 font-mono text-[12px] uppercase tracking-[0.18em] text-ink-muted transition hover:border-ink hover:text-ink disabled:opacity-60"
               >
                 {genererarUtkast ? "Skapar utkast..." : `Skapa utkast för valda (${valda.size})`}
               </button>
@@ -671,7 +671,7 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
                 type="button"
                 disabled={genererarUtkast || processarOm}
                 onClick={() => void processaOmValda()}
-                className="border border-ink/40 px-4 py-2 font-mono text-[12px] uppercase tracking-[0.18em] text-ink/70 transition hover:border-ink hover:text-ink disabled:opacity-60"
+                className="border border-ink/40 px-4 py-2 font-mono text-[12px] uppercase tracking-[0.18em] text-ink-muted transition hover:border-ink hover:text-ink disabled:opacity-60"
               >
                 {processarOm ? "Processar om..." : `Processa om (${valda.size})`}
               </button>
@@ -741,7 +741,7 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
       ) : null}
 
       {synliga.length === 0 ? (
-        <p className="border-y border-ink/15 py-6 text-[15px] text-ink/60">
+        <p className="border-y border-ink/15 py-6 text-[15px] text-ink-muted">
           Alla {antalTest} bolag just nu är testkörningar och är dolda. Slå på "Visa
           testkörningar" ovan för att se dem.
         </p>
@@ -838,16 +838,16 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
                       </div>
                       {/* truncate: i en fast tabell är det cellen som ger med
                           sig, aldrig kolumnen. */}
-                      {p.website ? <p className="mt-1 truncate text-sm text-ink/55">{p.website}</p> : null}
+                      {p.website ? <p className="mt-1 truncate text-sm text-ink-subtle">{p.website}</p> : null}
                     </th>
                     <td className="kicker py-5 pr-6 text-mineral">{segment(p)}</td>
                     <td className="py-5 pr-6">
                       <p className="text-[15px]">{p.contact_name ?? "—"}</p>
                       {p.contact_email ? (
-                        <p className="mt-1 break-all text-sm text-ink/55">{p.contact_email}</p>
+                        <p className="mt-1 break-all text-sm text-ink-subtle">{p.contact_email}</p>
                       ) : null}
                     </td>
-                    <td className="py-5 pr-6 text-[15px] leading-6 text-ink/72">{signal(p)}</td>
+                    <td className="py-5 pr-6 text-[15px] leading-6 text-ink-muted">{signal(p)}</td>
                     <td className="num py-5 pr-6 text-right text-[1.0625rem] font-semibold tabular-nums">
                       {poang(p)}
                     </td>
@@ -891,9 +891,9 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
                   <span className="num shrink-0 text-[15px] font-semibold tabular-nums">{poang(p)}</span>
                 </div>
                 <p className="kicker mt-1 text-mineral">{segment(p)}</p>
-                <p className="mt-2 text-sm leading-6 text-ink/72">{signal(p)}</p>
+                <p className="mt-2 text-sm leading-6 text-ink-muted">{signal(p)}</p>
                 <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                  <span className="text-sm text-ink/60">{p.contact_name ?? "Ingen kontakt"}</span>
+                  <span className="text-sm text-ink-muted">{p.contact_name ?? "Ingen kontakt"}</span>
                   <StatusOrd status={p.status} />
                 </div>
               </li>
@@ -926,7 +926,7 @@ function Ifyllnad({
         onSubmit();
       }}
     >
-      <label className="block text-[12px] text-ink/60">
+      <label className="block text-[12px] text-ink-muted">
         Organisationsnummer
         <input
           name={`${id}-orgnr`}
@@ -936,7 +936,7 @@ function Ifyllnad({
           className="focus-ring mt-1 block min-h-11 w-full rounded-input bg-paper2 px-3 text-sm text-ink"
         />
       </label>
-      <label className="block text-[12px] text-ink/60">
+      <label className="block text-[12px] text-ink-muted">
         Webbplats
         <input
           name={`${id}-website`}
@@ -946,7 +946,7 @@ function Ifyllnad({
           className="focus-ring mt-1 block min-h-11 w-full rounded-input bg-paper2 px-3 text-sm text-ink"
         />
       </label>
-      <label className="block text-[12px] text-ink/60">
+      <label className="block text-[12px] text-ink-muted">
         E-post
         <input
           name={`${id}-email`}
@@ -971,7 +971,7 @@ function Ifyllnad({
 
 function StatusOrd({ status }: Readonly<{ status: string }>) {
   return (
-    <span className={`kicker ${AKTIV_STATUS.has(status) ? "text-ochre" : "text-mineral"}`}>
+    <span className={`kicker ${AKTIV_STATUS.has(status) ? "text-warning" : "text-mineral"}`}>
       {STATUS_ETIKETT[status] ?? status}
     </span>
   );

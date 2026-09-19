@@ -59,7 +59,7 @@ export function SnajpSupportDemo() {
           <div key={item.title.sv} className="rounded-[10px] border border-ink/12 bg-paper p-5 shadow-hairline">
             <span className="kicker text-mineral">0{index + 1}</span>
             <h3 className="mt-3 font-semibold">{text(item.title)}</h3>
-            <p className="mt-2 text-sm leading-6 text-ink/62">{text(item.body)}</p>
+            <p className="mt-2 text-sm leading-6 text-ink-muted">{text(item.body)}</p>
           </div>
         ))}
       </div>
@@ -75,7 +75,7 @@ export function SnajpSupportDemo() {
                 "focus-ring -mb-px border-b-2 px-4 py-3 text-sm font-semibold transition",
                 tab === item.id
                   ? "border-ochre text-ink"
-                  : "border-transparent text-ink/50 hover:text-ink"
+                  : "border-transparent text-ink-subtle hover:text-ink"
               )}
             >
               {text(item.label)}

@@ -119,15 +119,9 @@ export default function manifest(): MetadataRoute.Manifest {
         icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }]
       },
       {
-        name: "Leads",
-        short_name: "Leads",
-        url: "/dashboard/leads",
-        icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }]
-      },
-      {
-        name: "Email studio",
-        short_name: "Mejl",
-        url: "/dashboard/emails",
+        name: "Iris",
+        short_name: "Iris",
+        url: "/dashboard/iris",
         icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }]
       }
     ]

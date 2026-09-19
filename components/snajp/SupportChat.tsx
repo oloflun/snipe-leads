@@ -29,11 +29,39 @@ type AgentMeta = {
 
 type ChatMessage = {
   id: string;
-  role: "user" | "agent" | "system";
+  // "human" = en medarbetare som tagit över samtalet (bd snipe-1fl). Samma
+  // bubbla som agentens, med en etikett — kunden ska se att det är en människa.
+  role: "user" | "agent" | "human" | "system";
   content: string;
   imagePreview?: string;
   meta?: AgentMeta;
 };
+
+/** En rad ur POST /api/chat/samtal (snajp-support/app/api/chat.py). */
+type SamtalsRad = {
+  id: string;
+  author: "customer" | "agent" | "human";
+  content: string;
+  created_at?: string | null;
+};
+
+type SamtalsSvar = { overlamnad?: boolean; meddelanden?: SamtalsRad[] };
+
+/**
+ * Pollningen efter medarbetarens svar (bd snipe-1fl). Tätt de första två
+ * minuterna — det är då en medarbetare som fått ärendet oftast svarar — sedan
+ * glesare, och helt slut efter en halvtimme: en flik som står öppen över
+ * natten ska inte fråga backenden var tionde sekund. Kunden som återvänder
+ * till sin sessionslänk får hela samtalet igen vid sidladdningen.
+ */
+const POLL_TAT_MS = 4000;
+const POLL_GLES_MS = 10000;
+const POLL_TAT_FONSTER_MS = 2 * 60 * 1000;
+const POLL_MAX_MS = 30 * 60 * 1000;
+
+function tillChattRoll(author: SamtalsRad["author"]): ChatMessage["role"] {
+  return author === "customer" ? "user" : author === "human" ? "human" : "agent";
+}
 
 /**
  * Testchatt-lägets två kortyper (Fas 5.4/5.5/5.6), i SAMMA flöde som
@@ -234,7 +262,13 @@ type JobbSvar = {
   offline?: boolean;
   error?: string;
   status?: string;
-  result?: { simulation?: boolean; reply: string; run_id?: string | null };
+  result?: {
+    simulation?: boolean;
+    reply: string;
+    run_id?: string | null;
+    /** Sant när en människa äger samtalet — chattfönstret börjar hämta hennes svar. */
+    overlamnad?: boolean;
+  };
 };
 
 async function hamtaJobbstatusMedRetry(url: string): Promise<JobbSvar> {
@@ -296,6 +330,88 @@ export function SupportChat({
   // uppdatering.
   const testchattOppnadRef = useRef<number>(Date.now());
   const kandaForslagRef = useRef<Set<string>>(new Set());
+
+  // -- Sömlös överlämning (bd snipe-1fl) ------------------------------------
+  // Medarbetarens svar hämtas från samma samtal och visas i samma fönster.
+  // Id:na för redan visade rader hindrar dubbletter mellan två hämtningar.
+  const visadeRaderRef = useRef<Set<string>>(new Set());
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollStartRef = useRef<number>(0);
+  useEffect(
+    () => () => {
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+    },
+    []
+  );
+
+  /** Samma identitet och samma route-familj som send() använder. */
+  const hamtaSamtal = useCallback(async (): Promise<SamtalsSvar | null> => {
+    const sessionId = testMode ? testchattSessionId() : (session ?? demoSessionId());
+    const url = testMode ? "/api/snajp-support/testchatt/samtal" : "/api/snajp-support/chat/samtal";
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customer_email: `${sessionId}@session.snajp.se`, tenant })
+      });
+      if (!response.ok) return null;
+      return (await readJsonBody<SamtalsSvar>(response)) ?? null;
+    } catch {
+      // En missad hämtning är ingenting kunden behöver se — nästa varv försöker igen.
+      return null;
+    }
+  }, [session, tenant, testMode]);
+
+  const startaPollning = useCallback(() => {
+    if (pollTimerRef.current) return;
+    pollStartRef.current = Date.now();
+    const varv = async () => {
+      pollTimerRef.current = null;
+      if (!alive.current) return;
+      const svar = await hamtaSamtal();
+      if (!alive.current) return;
+      const nya = (svar?.meddelanden ?? []).filter(
+        (rad) => rad.author === "human" && !visadeRaderRef.current.has(rad.id)
+      );
+      if (nya.length) {
+        nya.forEach((rad) => visadeRaderRef.current.add(rad.id));
+        setMessages((current) => [
+          ...current,
+          ...nya.map((rad) => ({ id: rad.id, role: "human" as const, content: rad.content }))
+        ]);
+      }
+      const gatt = Date.now() - pollStartRef.current;
+      // Samtalet lämnat tillbaka till agenten, eller fönstret har stått för länge.
+      if ((svar && !svar.overlamnad) || gatt > POLL_MAX_MS) return;
+      pollTimerRef.current = setTimeout(
+        () => void varv(),
+        gatt < POLL_TAT_FONSTER_MS ? POLL_TAT_MS : POLL_GLES_MS
+      );
+    };
+    pollTimerRef.current = setTimeout(() => void varv(), POLL_TAT_MS);
+  }, [hamtaSamtal]);
+
+  // Återvänder besökaren till sin sessionslänk (eller laddar om fliken) visas
+  // hela samtalet igen — inklusive ett medarbetarsvar som kom medan fönstret
+  // var stängt. Kunden ska aldrig behöva börja om.
+  useEffect(() => {
+    let avbruten = false;
+    void (async () => {
+      const svar = await hamtaSamtal();
+      if (avbruten || !svar?.meddelanden?.length) return;
+      const rader = svar.meddelanden;
+      rader.forEach((rad) => visadeRaderRef.current.add(rad.id));
+      setMessages((current) =>
+        current.length
+          ? current
+          : rader.map((rad) => ({ id: rad.id, role: tillChattRoll(rad.author), content: rad.content }))
+      );
+      if (svar.overlamnad) startaPollning();
+    })();
+    return () => {
+      avbruten = true;
+    };
+  }, [hamtaSamtal, startaPollning]);
 
 
   useEffect(() => {
@@ -443,15 +559,23 @@ export function SupportChat({
             // avsmalningen av job.result.
             const resultat = job.result;
             setMode(resultat.simulation ? "simulation" : "live");
-            setMessages((current) => [
-              ...current,
-              {
-                id: crypto.randomUUID(),
-                role: "agent",
-                content: resultat.reply,
-                meta: resultat
-              }
-            ]);
+            // Tomt svar = en medarbetare är redan i samtalet och agenten
+            // tiger (bd snipe-1fl). Ingen tom bubbla — svaret kommer från
+            // människan, via pollningen nedan.
+            if (resultat.reply) {
+              setMessages((current) => [
+                ...current,
+                {
+                  id: crypto.randomUUID(),
+                  role: "agent",
+                  content: resultat.reply,
+                  meta: resultat
+                }
+              ]);
+            }
+            if (resultat.overlamnad) {
+              startaPollning();
+            }
             // Fas 5.6: agentens föreslagna KB-ändringar dyker upp som kort
             // strax efter svaret. En bakgrundshämtning som inte blockerar
             // eller kan fela chatten — förslag är en bonus i flödet.
@@ -504,7 +628,7 @@ export function SupportChat({
     // varje rendering, inte bara en saknad lint-rad. send() anropar den
     // ändå korrekt, eftersom anropet sker långt efter att hela komponenten
     // (och därmed uppdateraForslag) har initierats klart.
-    [attachment, busy, testMode]
+    [attachment, busy, testMode, startaPollning]
   );
 
   const onFile = useCallback(async (file: File | undefined) => {
@@ -815,11 +939,11 @@ export function SupportChat({
           </span>
           <p className="text-sm font-semibold">
             Snajp Support
-            <span className="ml-2 font-normal text-ink/50">{statusLabel}</span>
+            <span className="ml-2 font-normal text-ink-subtle">{statusLabel}</span>
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <span className="hidden text-sm text-ink/45 md:block">{brandLabel}</span>
+          <span className="hidden text-sm text-ink-subtle md:block">{brandLabel}</span>
           {/* Menyn sitter i chattens huvud och inte i sidfoten: den som vill
               anmäla ett felaktigt svar eller läsa dataskyddstexten letar
               uppåt, inte nedanför en scrollande meddelandelista. */}
@@ -835,7 +959,7 @@ export function SupportChat({
           // finns plats och släpper taget när det inte gör det.
           <div className="flex min-h-full flex-col items-center text-center">
             <div className="m-auto flex flex-col items-center gap-5 py-2">
-            <p className="max-w-md text-[0.9375rem] leading-6 text-ink/60">
+            <p className="max-w-md text-[0.9375rem] leading-6 text-ink-muted">
               {intro ??
                 text({
                   sv: "Du kan också ladda upp en skärmdump eller en bild på en skadad vara.",
@@ -848,7 +972,7 @@ export function SupportChat({
                   key={prompt}
                   type="button"
                   onClick={() => send(prompt)}
-                  className="focus-ring min-h-11 rounded-input bg-paper2/80 px-3 py-2 text-left text-[0.8125rem] leading-5 text-ink/75 transition-colors hover:bg-paper2 hover:text-ink"
+                  className="focus-ring min-h-11 rounded-input bg-paper2/80 px-3 py-2 text-left text-[0.8125rem] leading-5 text-ink-muted transition-colors hover:bg-paper2 hover:text-ink"
                 >
                   {prompt}
                 </button>
@@ -881,7 +1005,7 @@ export function SupportChat({
                   message.role === "user"
                     ? "bg-ink text-paper"
                     : message.role === "system"
-                      ? "bg-danger/10 text-ink/80"
+                      ? "bg-danger/10 text-ink-muted"
                       : "bg-paper2/80 text-ink"
                 )}
               >
@@ -902,7 +1026,14 @@ export function SupportChat({
                     (components/snajp/Dashboard.tsx:497-536) och av admin-spårningen.
                     Ingen prop styr det här: en kundvänd komponent ska inte gå att
                     konfigurera till att läcka. */}
-                <p className="whitespace-pre-wrap">{message.content}</p>
+                {message.role === "human" ? (
+                  // bd snipe-1fl: kunden ska se att det nu är en människa som
+                  // svarar — samma bubbla, en rad text, ingen ny komponent.
+                  <p className="mb-1 text-[0.75rem] font-semibold text-ink-muted">
+                    {text({ sv: "Medarbetare", en: "Team member" })}
+                  </p>
+                ) : null}
+                <p dir="auto" className="whitespace-pre-wrap break-words">{message.content}</p>
               </div>
               {/* Feedback (6.3) — BARA i testMode och BARA på ett svar som bär
                   ett run_id. Den publika widgeten ska aldrig få tummar. */}
@@ -930,7 +1061,7 @@ export function SupportChat({
 
         {busy ? (
           <div className="flex justify-start">
-            <div className="inline-flex items-center gap-2 rounded-card bg-paper2/80 px-4 py-3 text-[0.9375rem] text-ink/60">
+            <div className="inline-flex items-center gap-2 rounded-card bg-paper2/80 px-4 py-3 text-[0.9375rem] text-ink-muted">
               <Loader2 className="h-4 w-4 animate-spin" />
               {vaknar
                 ? text({
@@ -948,11 +1079,11 @@ export function SupportChat({
           <div className="mb-3 inline-flex items-center gap-2 rounded-input bg-paper p-1.5 pr-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={attachment} alt="Förhandsvisning" className="h-10 w-10 rounded-[6px] object-cover" />
-            <span className="text-xs text-ink/60">{text({ sv: "Bild bifogad", en: "Image attached" })}</span>
+            <span className="text-xs text-ink-muted">{text({ sv: "Bild bifogad", en: "Image attached" })}</span>
             <button
               type="button"
               onClick={() => setAttachment(null)}
-              className="focus-ring rounded-full p-1 text-ink/50 hover:text-danger"
+              className="focus-ring rounded-full p-1 text-ink-subtle hover:text-danger"
               aria-label={text({ sv: "Ta bort bild", en: "Remove image" })}
             >
               <X className="h-3.5 w-3.5" />
@@ -989,7 +1120,7 @@ export function SupportChat({
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
-            className="focus-ring inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-input bg-paper text-ink/60 transition-colors hover:text-ink max-[359px]:order-2"
+            className="focus-ring inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-input bg-paper text-ink-muted transition-colors hover:text-ink max-[359px]:order-2"
             aria-label={text({ sv: "Bifoga bild", en: "Attach image" })}
           >
             <ImagePlus className="h-4 w-4" />
@@ -1009,7 +1140,7 @@ export function SupportChat({
               <button
                 type="button"
                 onClick={() => kbFileRef.current?.click()}
-                className="focus-ring inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-input bg-paper text-ink/60 transition-colors hover:text-ink max-[359px]:order-2"
+                className="focus-ring inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-input bg-paper text-ink-muted transition-colors hover:text-ink max-[359px]:order-2"
                 aria-label="Lägg till dokument i kunskapsbasen"
                 title="Textfil eller PDF till kunskapsbasen"
               >
@@ -1072,7 +1203,7 @@ function KbForhandsvisningKortVy({
           {kort.kalla === "pdf" ? "PDF" : "Textfil"} · {kort.filnamn}
         </p>
         {kort.status === "extraherar" ? (
-          <p className="mt-2 flex items-center gap-2 text-ink/60">
+          <p className="mt-2 flex items-center gap-2 text-ink-muted">
             <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
             Läser ut texten…
           </p>
@@ -1082,13 +1213,13 @@ function KbForhandsvisningKortVy({
           <>
             <p className="mt-2 font-semibold text-ink">{kort.titel}</p>
             {kort.varning ? (
-              <p className="mt-1.5 max-w-[65ch] text-ochre">{kort.varning}</p>
+              <p className="mt-1.5 max-w-[65ch] text-warning">{kort.varning}</p>
             ) : null}
-            <div className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap rounded-input bg-paper px-3 py-2 text-ink/75">
+            <div className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap rounded-input bg-paper px-3 py-2 text-ink-muted">
               {kort.innehall || "(ingen text hittades i filen)"}
             </div>
             {kort.sidor ? (
-              <p className="mt-1 text-[0.75rem] text-ink/45">
+              <p className="mt-1 text-[0.75rem] text-ink-subtle">
                 {kort.sidor} {kort.sidor === 1 ? "sida" : "sidor"}
               </p>
             ) : null}
@@ -1130,7 +1261,7 @@ function ForslagKortVy({
       <div className="max-w-[90%] rounded-card border border-ochre/30 bg-ochre/5 px-4 py-3 text-[0.875rem] leading-6">
         <p className="kicker text-mineral">Agenten behöver undersöka det här innan den svarar</p>
         <p className="mt-2 font-semibold text-ink">{kort.rubrik}</p>
-        {kort.brodtext ? <p className="mt-1 whitespace-pre-wrap text-ink/75">{kort.brodtext}</p> : null}
+        {kort.brodtext ? <p className="mt-1 whitespace-pre-wrap text-ink-muted">{kort.brodtext}</p> : null}
         {kort.status === "arende" ? (
           <p className="mt-3 text-moss">
             Öppnat som ärende. Det ligger under Testkörningar tills ni har underlag att svara med.
@@ -1138,7 +1269,7 @@ function ForslagKortVy({
         ) : kort.status === "sparat" ? (
           <p className="mt-3 text-moss">Sparad som kunskapsartikel.</p>
         ) : kort.status === "avfardat" ? (
-          <p className="mt-3 text-ink/50">Avfärdat.</p>
+          <p className="mt-3 text-ink-subtle">Avfärdat.</p>
         ) : (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <button
@@ -1204,7 +1335,7 @@ function FeedbackRad({
 }>) {
   if (lage.fas === "skickad") {
     return (
-      <p className="mt-1.5 text-[0.75rem] text-ink/45">
+      <p className="mt-1.5 text-[0.75rem] text-ink-subtle">
         Feedbacken är kalibrerad in — nästa testsvar tar hänsyn till den.
       </p>
     );
@@ -1218,7 +1349,7 @@ function FeedbackRad({
           onClick={onBra}
           disabled={lage.fas === "skickar"}
           aria-label="Bra svar"
-          className="focus-ring inline-flex h-8 w-8 items-center justify-center rounded-input text-ink/40 transition-colors hover:bg-paper2 hover:text-moss disabled:opacity-50"
+          className="focus-ring inline-flex h-8 w-8 items-center justify-center rounded-input text-ink-subtle transition-colors hover:bg-paper2 hover:text-moss disabled:opacity-50"
         >
           <ThumbsUp className="h-3.5 w-3.5" />
         </button>
@@ -1230,7 +1361,7 @@ function FeedbackRad({
           aria-expanded={lage.fas === "rattar"}
           className={cn(
             "focus-ring inline-flex h-8 w-8 items-center justify-center rounded-input transition-colors hover:bg-paper2 hover:text-danger disabled:opacity-50",
-            lage.fas === "rattar" ? "text-danger" : "text-ink/40"
+            lage.fas === "rattar" ? "text-danger" : "text-ink-subtle"
           )}
         >
           <ThumbsDown className="h-3.5 w-3.5" />
@@ -1238,7 +1369,7 @@ function FeedbackRad({
       </div>
       {lage.fas === "rattar" ? (
         <div className="mt-2 rounded-input border border-ink/12 bg-paper p-3">
-          <label className="text-[0.75rem] font-medium text-ink/60" htmlFor={`feedback-rattning-${messageId}`}>
+          <label className="text-[0.75rem] font-medium text-ink-muted" htmlFor={`feedback-rattning-${messageId}`}>
             Vad borde agenten ha svarat? (frivilligt)
           </label>
           <textarea
@@ -1260,7 +1391,7 @@ function FeedbackRad({
             <button
               type="button"
               onClick={onDaligHoppaOver}
-              className="focus-ring inline-flex min-h-8 items-center rounded-input px-3 text-[0.75rem] font-medium text-ink/50 hover:text-ink"
+              className="focus-ring inline-flex min-h-8 items-center rounded-input px-3 text-[0.75rem] font-medium text-ink-subtle hover:text-ink"
             >
               Hoppa över
             </button>

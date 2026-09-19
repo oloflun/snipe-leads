@@ -125,7 +125,7 @@ export function Agentinstruktioner() {
             föll den ihop med "ingen rad sparad" påstod sidan "Sparad —, sparad
             som den skrevs" med ett tomt datum och ett ensamt brädgårdstecken.
             Trovärdigt, och osant. */}
-        <p className="mt-2 max-w-[70ch] text-[0.9375rem] leading-7 text-ink/65">
+        <p className="mt-2 max-w-[70ch] text-[0.9375rem] leading-7 text-ink-muted">
           {!lage
             ? "Läget kunde inte läsas."
             : lage.fran_fil
@@ -134,7 +134,7 @@ export function Agentinstruktioner() {
                   lage.uppdaterad ? new Date(lage.uppdaterad).toLocaleString("sv-SE") : "okänt datum"
                 }, ${lage.kalla === "ai" ? "strukturerad av modellen" : "sparad som den skrevs"}.`}
           {lage?.hash ? (
-            <span className="ml-2 font-mono text-[0.8125rem] text-ink/60">#{lage.hash}</span>
+            <span className="ml-2 font-mono text-[0.8125rem] text-ink-muted">#{lage.hash}</span>
           ) : null}
         </p>
         <pre className="mt-4 max-h-64 overflow-auto whitespace-pre-wrap rounded-input border border-ink/15 bg-paper2/50 p-4 text-[0.8125rem] leading-6">
@@ -147,7 +147,7 @@ export function Agentinstruktioner() {
           <label htmlFor="rav" className="kicker text-mineral">
             Dina instruktioner och din feedback
           </label>
-          <p className="mt-2 max-w-[60ch] text-[0.9375rem] leading-7 text-ink/65">
+          <p className="mt-2 max-w-[60ch] text-[0.9375rem] leading-7 text-ink-muted">
             Skriv fritt. Vad agenterna ska och inte ska göra, och vad som gått fel.
             Modellen gör om det till regler när du sparar.
           </p>
@@ -162,7 +162,7 @@ export function Agentinstruktioner() {
               "Agenten svarar för långt i chatten.\nDen ska aldrig lova återbetalning. Det går alltid till en människa.\nSluta inleda varje replik med Hej."
             }
           />
-          <p className="mt-2 text-[0.8125rem] text-ink/60">
+          <p className="mt-2 text-[0.8125rem] text-ink-muted">
             {rav.length} / {MAX} tecken
           </p>
         </section>
@@ -171,7 +171,7 @@ export function Agentinstruktioner() {
           <label htmlFor="dokument" className="kicker text-mineral">
             Vad agenten kommer att läsa
           </label>
-          <p className="mt-2 max-w-[60ch] text-[0.9375rem] leading-7 text-ink/65">
+          <p className="mt-2 max-w-[60ch] text-[0.9375rem] leading-7 text-ink-muted">
             Går att redigera. Rör du texten här sparas den precis som du skrev den.
             Den struktureras inte om.
           </p>
@@ -187,7 +187,7 @@ export function Agentinstruktioner() {
             className="focus-ring mt-4 w-full resize-y rounded-input border border-ink/15 bg-paper p-4 font-mono text-[1rem] leading-6"
             placeholder="(struktureras när du förhandsgranskar eller sparar)"
           />
-          <p className="mt-2 text-[0.8125rem] text-ink/60">
+          <p className="mt-2 text-[0.8125rem] text-ink-muted">
             {redigerat ? "Redigerad för hand, sparas ordagrant." : "Struktureras av modellen."}
           </p>
         </section>
@@ -224,19 +224,19 @@ export function Agentinstruktioner() {
       {lage?.historik?.length ? (
         <section className="border-t border-ink/15 pt-5">
           <h2 className="kicker text-mineral">Historik</h2>
-          <p className="mt-2 max-w-[70ch] text-[0.9375rem] leading-7 text-ink/65">
+          <p className="mt-2 max-w-[70ch] text-[0.9375rem] leading-7 text-ink-muted">
             Varje sparning är en ny version. Den som är aktiv är den agenten läser;
             de andra finns kvar för att en körning ska gå att förklara i efterhand.
           </p>
           <ul className="mt-4 grid gap-2 text-[0.8125rem]">
             {lage.historik.map((rad) => (
-              <li key={rad.id} className="flex flex-wrap gap-x-4 text-ink/65">
+              <li key={rad.id} className="flex flex-wrap gap-x-4 text-ink-muted">
                 <span className="tabular-nums">
                   {new Date(rad.created_at).toLocaleString("sv-SE")}
                 </span>
                 <span>{rad.kalla === "ai" ? "strukturerad" : "manuell"}</span>
                 <span className="tabular-nums">{rad.strukturerad_tecken} tecken</span>
-                {rad.aktiv ? <span className="text-ochre">aktiv</span> : null}
+                {rad.aktiv ? <span className="text-warning">aktiv</span> : null}
               </li>
             ))}
           </ul>

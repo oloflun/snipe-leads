@@ -82,7 +82,7 @@ export function TeamSettings() {
           </div>
         ) : members.length === 0 ? (
           <p className="mt-5 border-t border-ink/15 pt-5 text-[15px] text-mineral">
-            Du är ensam i arbetsytan. Bjud in någon nedan.
+            Du är ensam i arbetsytan.
           </p>
         ) : (
           <Radlista ariaLabel="Personer med åtkomst" className="mt-5">

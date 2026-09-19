@@ -60,7 +60,7 @@ export function Kundstatistik({ stat }: Readonly<{ stat: Statistik }>) {
         />
       </div>
 
-      <p className="mt-3 max-w-[70ch] text-[0.875rem] leading-6 text-ink/70">
+      <p className="mt-3 max-w-[70ch] text-[0.875rem] leading-6 text-ink-muted">
         {taktText}{" "}
         <span className="text-mineral">
           {text({
@@ -74,7 +74,7 @@ export function Kundstatistik({ stat }: Readonly<{ stat: Statistik }>) {
           allt som inte är noll — talen är ensiffriga och etiketten är
           snabbare än en axel. Rutnätet är avsiktligt glest och hårfint. */}
       <figure className="mt-6">
-        <figcaption className="flex flex-wrap items-center gap-x-6 gap-y-2 text-[0.8125rem] text-ink/70">
+        <figcaption className="flex flex-wrap items-center gap-x-6 gap-y-2 text-[0.8125rem] text-ink-muted">
           <span className="inline-flex items-center gap-2">
             <span aria-hidden className="h-2.5 w-2.5 rounded-[2px] bg-ink" />
             {a("nyaKunder", locale)}
@@ -140,7 +140,7 @@ export function Kundstatistik({ stat }: Readonly<{ stat: Statistik }>) {
 
         {/* Tabellversionen av samma tal — för skärmläsare, och för den som
             hellre läser siffror än staplar. */}
-        <details className="mt-2 text-[0.8125rem] text-ink/70">
+        <details className="mt-2 text-[0.8125rem] text-ink-muted">
           <summary className="focus-ring inline-flex min-h-11 cursor-pointer items-center rounded-input text-mineral hover:text-ink">
             {a("visaSomTabell", locale)}
           </summary>
@@ -243,7 +243,7 @@ function Nyckeltal({
     <div className="bg-paper px-4 py-3">
       <p className="kicker text-mineral">{etikett}</p>
       <p className="mt-1 font-display text-[1.375rem] tabular-nums tracking-[-0.02em]">{varde}</p>
-      {rad ? <p className="mt-0.5 text-[0.8125rem] leading-[1.45] text-ink/60">{rad}</p> : null}
+      {rad ? <p className="mt-0.5 text-[0.8125rem] leading-[1.45] text-ink-muted">{rad}</p> : null}
     </div>
   );
 }

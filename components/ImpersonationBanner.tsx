@@ -40,11 +40,11 @@ export function ImpersonationBanner() {
       className="safe-top sticky top-0 z-40 border-b border-ochre/50 bg-ochre/20"
     >
       <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2 md:px-6">
-        <Eye className="h-4 w-4 shrink-0 text-ochre" aria-hidden />
+        <Eye className="h-4 w-4 shrink-0 text-warning" aria-hidden />
         <p className="text-[13px] font-medium text-ink">
           Du testar som <strong className="font-semibold">{impersonation.namn}</strong>.
         </p>
-        <p className="text-[13px] text-ink/60">
+        <p className="text-[13px] text-ink-muted">
           Allt du kör här är test och syns inte på kundens riktiga profil. Inga skärmdumpar.
         </p>
 

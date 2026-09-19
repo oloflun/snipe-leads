@@ -87,7 +87,7 @@ export function Kontakter({ demo = false }: Readonly<{ demo?: boolean }>) {
           fas: "fel",
           meddelande:
             response.status >= 500
-              ? "Tjänsten svarar inte just nu. Den vaknar ur viloläge och kan ta upp till en minut."
+              ? "Tjänsten svarar inte. Försök igen om en minut."
               : `Kunde inte hämta kontakterna (status ${response.status}).`
         });
         return;
@@ -119,10 +119,10 @@ export function Kontakter({ demo = false }: Readonly<{ demo?: boolean }>) {
   if (lage.fas === "fel") {
     return (
       <div className="flex items-start gap-3 border-y border-ochre/40 bg-ochre/10 px-4 py-4">
-        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-ochre" aria-hidden />
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
         <div className="min-w-0">
           <p className="text-sm font-medium text-ink">Kontakterna kunde inte hämtas</p>
-          <p className="mt-1 text-sm text-ink/70">{lage.meddelande}</p>
+          <p className="mt-1 text-sm text-ink-muted">{lage.meddelande}</p>
           <button
             type="button"
             onClick={() => void hamta()}
@@ -139,10 +139,7 @@ export function Kontakter({ demo = false }: Readonly<{ demo?: boolean }>) {
 
   if (!kontakter.length) {
     return (
-      <EmptyState
-        title="Inga kontaktpersoner ännu"
-        body="Agenten hittar kontaktpersonen när den researchar ett bolag. Bolag utan hittad kontakt står kvar i bolagslistan."
-      />
+      <EmptyState title="Inga kontaktpersoner ännu" />
     );
   }
 
@@ -166,7 +163,7 @@ export function Kontakter({ demo = false }: Readonly<{ demo?: boolean }>) {
               {p.contact_name ?? p.contact_email}
             </p>
             {p.contact_name && p.contact_email ? (
-              <p className="mt-1 truncate text-sm text-ink/55">{p.contact_email}</p>
+              <p className="mt-1 truncate text-sm text-ink-subtle">{p.contact_email}</p>
             ) : null}
           </Cell>
           <Cell>
@@ -182,12 +179,12 @@ export function Kontakter({ demo = false }: Readonly<{ demo?: boolean }>) {
             )}
           </Cell>
           <Cell>
-            <span className="block truncate text-sm text-ink/65">
+            <span className="block truncate text-sm text-ink-muted">
               {[p.sni, p.ort].filter(Boolean).join(" · ") || "–"}
             </span>
           </Cell>
           <Cell hoger>
-            <span className="text-sm text-ink/70">
+            <span className="text-sm text-ink-muted">
               {p.status ? (STATUS_ETIKETT[p.status] ?? p.status) : "–"}
             </span>
           </Cell>

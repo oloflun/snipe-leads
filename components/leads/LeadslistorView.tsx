@@ -94,8 +94,8 @@ function Rad({
 }: Readonly<{ etikett: string; hint?: string; children: React.ReactNode }>) {
   return (
     <label className="block">
-      <span className="text-[13px] font-medium text-ink/70">{etikett}</span>
-      {hint ? <span className="ml-2 text-[12px] text-ink/45">{hint}</span> : null}
+      <span className="text-[13px] font-medium text-ink-muted">{etikett}</span>
+      {hint ? <span className="ml-2 text-[12px] text-ink-subtle">{hint}</span> : null}
       <div className="mt-1.5">{children}</div>
     </label>
   );
@@ -250,9 +250,7 @@ export function LeadslistorView() {
   async function bestall() {
     const antalTal = Number(antal);
     if (!titel.trim()) {
-      setBestallFel(
-        "Beskriv vilka bolag listan ska hitta — beskrivningen är både sökningen och listans namn."
-      );
+      setBestallFel("Beskriv vilka bolag listan ska hitta.");
       return;
     }
     if (!Number.isInteger(antalTal) || antalTal < 1 || antalTal > 200) {
@@ -283,7 +281,7 @@ export function LeadslistorView() {
         })
       });
       setTitel("");
-      setStatus("Listan är beställd. Agenten bygger den nu — status uppdateras här.");
+      setStatus("Listan är beställd.");
       await hamtaListor(true);
     } catch (fel) {
       setBestallFel(felmeddelande(fel));
@@ -319,13 +317,9 @@ export function LeadslistorView() {
         <h2 id="bestall-lista" className="text-[1.125rem] font-semibold tracking-[-0.01em]">
           Beställ en lista
         </h2>
-        <p className="mt-1 max-w-[65ch] text-[13px] text-ink/45">
-          Agenten letar, verifierar och lägger raderna här — ingenting skickas och inga utkast
-          skrivs.
-        </p>
 
         <div className="mt-6 grid max-w-[760px] gap-5 sm:grid-cols-2">
-          <Rad etikett="Vilka bolag ska listan hitta?" hint="t.ex. Bygg i Norrland, 10–50 anställda">
+          <Rad etikett="Vilka bolag ska listan hitta?">
             <input
               value={titel}
               onChange={(e) => setTitel(e.target.value)}
@@ -354,7 +348,7 @@ export function LeadslistorView() {
           {bestaller ? "Beställer…" : "Beställ lista"}
         </button>
 
-        {status ? <p className="mt-3 text-[13px] text-ink/55">{status}</p> : null}
+        {status ? <p className="mt-3 text-[13px] text-ink-subtle">{status}</p> : null}
         {bestallFel ? (
           <p role="alert" className="mt-5 max-w-[70ch] break-words text-[15px] text-danger">
             {bestallFel}
@@ -387,10 +381,7 @@ export function LeadslistorView() {
           </div>
         ) : listor.length === 0 ? (
           <div className="mt-4">
-            <EmptyState
-              title="Inga listor ännu"
-              body="Beställ en lista ovan. Den byggs i bakgrunden och dyker upp här när den är klar — listan är tom tills dess."
-            />
+            <EmptyState title="Inga listor ännu" />
           </div>
         ) : (
           <ul className="mt-4 divide-y divide-ink/15 border-y border-ink/15">
@@ -414,7 +405,7 @@ export function LeadslistorView() {
                         <p className="text-[15px] font-semibold tracking-[-0.01em]">
                           {lista.titel}
                         </p>
-                        <p className="mt-1 text-[13px] text-ink/50">
+                        <p className="mt-1 text-[13px] text-ink-subtle">
                           {[
                             `${lista.antal} beställda`,
                             typeof lista.item_count === "number"
@@ -434,7 +425,7 @@ export function LeadslistorView() {
                           lista.status === "fel"
                             ? "text-danger"
                             : PAGAENDE.has(lista.status)
-                              ? "text-ochre"
+                              ? "text-warning"
                               : "text-mineral"
                         )}
                       >
@@ -447,7 +438,7 @@ export function LeadslistorView() {
                       </p>
                     ) : null}
                     {klar ? (
-                      <p className="mt-2 inline-flex items-center gap-1.5 text-[13px] font-medium text-ochre">
+                      <p className="mt-2 inline-flex items-center gap-1.5 text-[13px] font-medium text-warning">
                         {oppnar === lista.id
                           ? "Hämtar…"
                           : oppen
@@ -499,9 +490,7 @@ const KAPACITETSMARKORER = [
 ];
 
 /** Saknad erbjudandetext gäller varje rad lika — därför stoppar den svepet. */
-const OFFERT_SAKNAS =
-  "Affärskontexten (Vad ni säljer) behövs för utkastet. Fyll i den under Inställningar, " +
-  "Vad agenterna vet, Affärskontext — och kontrollera att du fortfarande är inloggad.";
+const OFFERT_SAKNAS = "Fyll i Vad ni säljer under Inställningar först.";
 
 /** Ska svepet stanna helt? 429 = budgettak, 503 = ingen skarp LLM, eller en
  *  kredit-/kvottext ur ett misslyckat jobb. Allt annat gäller bara raden. */
@@ -652,16 +641,13 @@ async function skrivUtkastForRad(
     // texten nedan, och "agenten lämnade över till en människa" är inte vad
     // som hände — jobbet kan fortfarande bli klart.
     if (!klart) {
-      throw new Error(
-        "Utkastet tog för lång tid att skriva. Det kan dyka upp i granskningskön ändå — titta där innan ni försöker igen."
-      );
+      throw new Error("Utkastet tog för lång tid. Titta i granskningskön innan du försöker igen.");
     }
   }
 
   if (svar.escalated || !svar.body) {
     throw new Error(
-      svar.escalation_reason ||
-        "Agenten lämnade över till en människa i stället för att skriva klart utkastet."
+      svar.escalation_reason || "Utkastet blev inte klart."
     );
   }
 
@@ -809,7 +795,7 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
         stoppadAvDig ? "Stoppat" : null,
         nya ? `${nya} ${nya === 1 ? "nytt" : "nya"} utkast` : null,
         fanns ? `${fanns} hade redan ett utkast` : null,
-        fel ? `${fel} gick inte att skriva — öppna raden för att se varför` : null
+        fel ? `${fel} gick inte att skriva` : null
       ]
         .filter(Boolean)
         .join(" · ") || "Inga utkast skrevs."
@@ -818,8 +804,8 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
 
   if (!items.length) {
     return (
-      <p className="mt-4 border-t border-ink/10 pt-4 text-[15px] text-ink/60">
-        Listan är klar men innehåller inga rader.
+      <p className="mt-4 border-t border-ink/10 pt-4 text-[15px] text-ink-muted">
+        Listan är tom.
       </p>
     );
   }
@@ -841,7 +827,7 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
   return (
     <div className="mt-4 rounded-card border border-ink/10 bg-paper p-4 md:p-5">
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
-        <p className="text-[13px] text-ink/50">
+        <p className="text-[13px] text-ink-subtle">
           {items.length} bolag i listan · {medAdress.length} med mejladress
         </p>
         <div className="flex flex-wrap items-center gap-2">
@@ -896,11 +882,9 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
           <p className="max-w-[70ch] text-[0.875rem] leading-6 text-ink">
             Agenten skriver <strong className="font-semibold">{omgang.length} utkast</strong>
             {kandidater.length > omgang.length
-              ? ` — de första ${omgang.length} av ${kandidater.length} med adress. Nästa klick tar resten.`
+              ? ` av ${kandidater.length} med adress.`
               : ", ett per bolag med mejladress."}{" "}
-            Utkasten landar i granskningskön under Leads.{" "}
-            <strong className="font-semibold">Ingenting skickas</strong> förrän ni godkänner
-            varje mejl. Varje utkast räknas mot er leadsbudget.
+            Varje utkast räknas mot er leadsbudget.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button
@@ -926,7 +910,7 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
 
       {svep?.fas === "kor" ? (
         <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
-          <p role="status" className="text-[13px] text-ink/60">
+          <p role="status" className="text-[13px] text-ink-muted">
             Skriver utkast {svep.klara + 1} av {svep.totalt} — {svep.bolag}
           </p>
           <button
@@ -936,7 +920,7 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
               setStopparBegart(true);
             }}
             disabled={stopparBegart}
-            className="focus-ring text-[13px] underline underline-offset-4 hover:text-ochre disabled:text-ink/50 disabled:no-underline"
+            className="focus-ring text-[13px] underline underline-offset-4 hover:text-ochre disabled:text-ink-subtle disabled:no-underline"
           >
             {stopparBegart ? "Stoppar efter det här utkastet…" : "Stoppa efter det här utkastet"}
           </button>
@@ -948,30 +932,15 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
         </p>
       ) : null}
       {svepResultat ? (
-        <p className="mt-3 text-[13px] text-ink/55">
-          {svepResultat} — utkasten ligger i granskningskön under Leads.
-        </p>
+        <p className="mt-3 text-[13px] text-ink-subtle">{svepResultat}</p>
       ) : null}
 
       {allaResultat ? (
-        <p className="mt-3 text-[13px] text-ink/55">
-          {allaResultat} — bolagen ligger under Leads och kan researchas och mejlas därifrån.
-        </p>
+        <p className="mt-3 text-[13px] text-ink-subtle">{allaResultat}</p>
       ) : null}
       {radFel ? (
         <p role="alert" className="mt-3 max-w-[70ch] break-words text-[14px] text-danger">
           {radFel}
-        </p>
-      ) : null}
-
-      {/* Testaren hittade inte bron alls: knappen syntes bara på rader med
-          adress, och den listan hade inga. En rad om vad raderna gör kostar
-          ingenting och gör vägen till Email studio synlig även innan någon
-          klickat. */}
-      {mejlbro ? (
-        <p className="mt-4 max-w-[70ch] text-[13px] leading-6 text-ink/55">
-          Skriv mejl på en rad öppnar Email studio: agenten skriver ett utkast som ni kan
-          förbättra, personalisera och godkänna.
         </p>
       ) : null}
 
@@ -1016,18 +985,18 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
                     {rad.company_name}
                   </p>
                   {rad.website ? (
-                    <p className="mt-1 break-all text-sm text-ink/55">{rad.website}</p>
+                    <p className="mt-1 break-all text-sm text-ink-subtle">{rad.website}</p>
                   ) : null}
                 </th>
                 <td className="kicker py-4 pr-6 text-mineral">{rad.ort ?? "—"}</td>
                 <td className="py-4 pr-6">
                   <p className="text-[15px]">{kontakt(rad)}</p>
                   {rad.contact_email && (rad.contact_name || rad.contact_role) ? (
-                    <p className="mt-1 break-all text-sm text-ink/55">{rad.contact_email}</p>
+                    <p className="mt-1 break-all text-sm text-ink-subtle">{rad.contact_email}</p>
                   ) : null}
                 </td>
-                <td className="py-4 pr-6 text-[14px] text-ink/72">{kontaktniva(rad) ?? "—"}</td>
-                <td className="py-4 pr-6 text-[15px] leading-6 text-ink/72">{signaltext(rad)}</td>
+                <td className="py-4 pr-6 text-[14px] text-ink-muted">{kontaktniva(rad) ?? "—"}</td>
+                <td className="py-4 pr-6 text-[15px] leading-6 text-ink-muted">{signaltext(rad)}</td>
                 <td className="py-4 pr-6">
                   {rad.source_url ? (
                     <a
@@ -1039,7 +1008,7 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
                       {rad.source_name || "Källa"}
                     </a>
                   ) : (
-                    <span className="text-[14px] text-ink/55">{rad.source_name ?? "—"}</span>
+                    <span className="text-[14px] text-ink-subtle">{rad.source_name ?? "—"}</span>
                   )}
                 </td>
                 {/* Knappen står på VARJE rad. Förut syntes den bara där en
@@ -1073,15 +1042,15 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
                 {rad.company_name}
               </span>
               {kontaktniva(rad) ? (
-                <span className="shrink-0 text-[12px] text-ink/55">{kontaktniva(rad)}</span>
+                <span className="shrink-0 text-[12px] text-ink-subtle">{kontaktniva(rad)}</span>
               ) : null}
             </div>
             <p className="kicker mt-1 text-mineral">
               {[rad.ort, rad.website].filter(Boolean).join(" · ") || "—"}
             </p>
-            <p className="mt-2 text-sm leading-6 text-ink/72">{signaltext(rad)}</p>
+            <p className="mt-2 text-sm leading-6 text-ink-muted">{signaltext(rad)}</p>
             <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-              <span className="min-w-0 break-all text-sm text-ink/60">{kontakt(rad)}</span>
+              <span className="min-w-0 break-all text-sm text-ink-muted">{kontakt(rad)}</span>
               {rad.source_url ? (
                 <a
                   href={rad.source_url}
@@ -1167,7 +1136,7 @@ function MejlRuta({ lista, rad }: Readonly<{ lista: Lista; rad: ListRad }>) {
   function sparaAdress() {
     const varde = adressfalt.trim();
     if (!ADRESS_RE.test(varde)) {
-      setAdressFel("Skriv en hel mejladress, t.ex. namn@bolaget.se.");
+      setAdressFel("Skriv en hel mejladress.");
       return;
     }
     setAdressFel(null);
@@ -1203,12 +1172,9 @@ function MejlRuta({ lista, rad }: Readonly<{ lista: Lista; rad: ListRad }>) {
             sparaAdress();
           }}
         >
-          <p className="max-w-[65ch] text-[14px] leading-6 text-ink/70">
-            Raden saknar mejladress. Lägg till mottagaren, så skriver agenten utkastet. Adressen
-            sparas på bolaget under Leads.
-          </p>
+          <p className="text-[14px] leading-6 text-ink-muted">Raden saknar mejladress.</p>
           <label className="mt-3 block max-w-[420px]">
-            <span className="text-[13px] font-medium text-ink/70">Mejladress</span>
+            <span className="text-[13px] font-medium text-ink-muted">Mejladress</span>
             <input
               type="email"
               value={adressfalt}
@@ -1232,7 +1198,7 @@ function MejlRuta({ lista, rad }: Readonly<{ lista: Lista; rad: ListRad }>) {
       ) : null}
 
       {fas === "skapar" ? (
-        <p className="mt-3 text-[14px] text-ink/55" role="status">
+        <p className="mt-3 text-[14px] text-ink-subtle" role="status">
           {steg}
         </p>
       ) : null}
@@ -1269,9 +1235,8 @@ function MejlRuta({ lista, rad }: Readonly<{ lista: Lista; rad: ListRad }>) {
       {fas === "klar" && data ? (
         <div className="mt-4">
           <EmailStudioEditor data={data} compact />
-          <p className="mt-4 max-w-[65ch] text-[13px] leading-6 text-ink/50">
-            Godkänn skickar utkastet som det sparades i granskningskön. Ändringar i fälten ovan
-            uppdaterar bara den här vyn tills en sparväg finns.
+          <p className="mt-4 max-w-[65ch] text-[13px] leading-6 text-ink-subtle">
+            Ändringar ovan sparas inte. Godkänn skickar det sparade utkastet.
           </p>
           <div className="mt-4 border-t border-ink/15 pt-4">
             {godkant ? (
@@ -1290,9 +1255,8 @@ function MejlRuta({ lista, rad }: Readonly<{ lista: Lista; rad: ListRad }>) {
                   {godkannBusy ? "Godkänner…" : "Godkänn och skicka"}
                 </button>
                 {!queueItemId ? (
-                  <p className="mt-3 max-w-[65ch] text-[13px] leading-6 text-ink/50">
-                    Utkastet saknar ett kö-id och kan inte godkännas härifrån. Se granskningskön
-                    under Leads.
+                  <p className="mt-3 text-[13px] leading-6 text-ink-subtle">
+                    Godkänn i Iris › Granskning.
                   </p>
                 ) : null}
                 {godkannFel ? (

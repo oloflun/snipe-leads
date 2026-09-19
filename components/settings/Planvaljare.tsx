@@ -110,7 +110,7 @@ export function Planvaljare({
         return;
       }
       setValt(nyttId);
-      setKlart("Paketet är bytt. Menyn och agentvyerna följer med direkt.");
+      setKlart("Paketet är bytt.");
       // Serverkomponenterna — navigationen, flikraden, inställningsmenyn —
       // läser products på servern. Utan refresh står den gamla menyn kvar tills
       // användaren råkar navigera om.
@@ -155,10 +155,10 @@ export function Planvaljare({
                 {laddar ? (
                   <Loader2 className="ml-auto h-4 w-4 shrink-0 animate-spin text-mineral" aria-hidden />
                 ) : aktiv ? (
-                  <Check className="ml-auto h-4 w-4 shrink-0 text-ochre" aria-hidden />
+                  <Check className="ml-auto h-4 w-4 shrink-0 text-warning" aria-hidden />
                 ) : null}
               </span>
-              <span className="mt-1 block text-[0.8125rem] leading-5 text-ink/55">
+              <span className="mt-1 block text-[0.8125rem] leading-5 text-ink-subtle">
                 {text(p.beskrivning)}
               </span>
               {aktiv ? <span className="sr-only">Nuvarande paket</span> : null}
@@ -178,9 +178,8 @@ export function Planvaljare({
             <strong className="font-semibold">
               {PAKET.find((p) => p.id === bekraftar)?.namn}
             </strong>
-            . Vyerna för det ni lämnar försvinner ur menyn direkt.{" "}
-            <strong className="font-semibold">Ingenting raderas</strong> — kunskapsbas,
-            ärenden och prospekt ligger kvar och kommer tillbaka om ni uppgraderar igen.
+            . Vyerna för det ni lämnar försvinner ur menyn.{" "}
+            <strong className="font-semibold">Ingenting raderas.</strong>
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button

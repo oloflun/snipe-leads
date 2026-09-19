@@ -39,7 +39,7 @@ export const btnLiten = "!min-h-0 !h-9 !gap-1.5 !px-3 !text-[0.875rem]";
 
 export function Badge({ children, tone = "neutral" }: Readonly<{ children: React.ReactNode; tone?: "neutral" | "good" | "warn" | "danger" }>) {
   const tones = {
-    neutral: "border-ink/10 bg-ink/[0.035] text-ink/70",
+    neutral: "border-ink/10 bg-ink/[0.035] text-ink-muted",
     good: "border-moss/20 bg-moss/10 text-moss",
     warn: "border-copper/25 bg-copper/10 text-ink",
     // text-ink, inte text-danger. Uppmätt på den KOMPOSITERADE ytan (badgens
@@ -64,7 +64,7 @@ export function ButtonLink({
   const variants = {
     primary: "bg-ink text-paper hover:bg-copper hover:text-ink",
     secondary: "bg-paper text-ink shadow-hairline hover:bg-linen",
-    ghost: "text-ink/70 hover:text-ink"
+    ghost: "text-ink-muted hover:text-ink"
   };
   return (
     <a
@@ -89,21 +89,21 @@ export function MetricCard({
   return (
     <div className="rounded-[8px] bg-paper/72 p-4 shadow-hairline backdrop-blur">
       <div className="flex items-center justify-between gap-4">
-        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink/45">{label}</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-subtle">{label}</p>
         <span className={cn("h-2 w-2 rounded-full", tone === "good" ? "bg-moss" : tone === "warn" ? "bg-copper" : "bg-steel")} />
       </div>
       <p className="mt-4 font-display text-4xl leading-none">{value}</p>
-      <p className="mt-2 text-sm text-ink/62">{detail}</p>
+      <p className="mt-2 text-sm text-ink-muted">{detail}</p>
     </div>
   );
 }
 
-export function EmptyState({ title, body }: Readonly<{ title: string; body: string }>) {
+export function EmptyState({ title, body }: Readonly<{ title: string; body?: string }>) {
   return (
     <div className="rounded-[8px] border border-dashed border-ink/15 bg-paper/45 p-8 text-center">
       <CheckCircle2 className="mx-auto h-6 w-6 text-moss" />
       <h3 className="mt-4 font-semibold">{title}</h3>
-      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-ink/62">{body}</p>
+      {body ? <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-ink-muted">{body}</p> : null}
     </div>
   );
 }

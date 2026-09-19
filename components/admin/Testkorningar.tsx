@@ -135,7 +135,7 @@ export function Testkorningar() {
 
         <div className="mt-6 max-w-[760px]">
           <label className="block">
-            <span className="text-[13px] font-medium text-ink/70">Fråga</span>
+            <span className="text-[13px] font-medium text-ink-muted">Fråga</span>
             <div className="mt-1.5">
               <textarea
                 value={fråga}
@@ -157,7 +157,7 @@ export function Testkorningar() {
         </button>
 
         {supportBusy ? (
-          <p className="mt-3 text-[13px] text-ink/55">
+          <p className="mt-3 text-[13px] text-ink-subtle">
             Första svaret kan ta upp till en minut om backenden sovit.
           </p>
         ) : null}

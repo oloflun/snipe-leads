@@ -12,6 +12,7 @@ precis som referensarkitekturen. Saknas embeddings används
 import hashlib
 import json
 import logging
+import uuid
 from contextlib import asynccontextmanager
 from datetime import date
 from decimal import Decimal
@@ -23,6 +24,7 @@ from .base import (
     ANALYTICS_COVERAGE,
     KUNDDATA_FALT,
     LEADS_BUDGET_AGENT_TYPES,
+    MEDDELANDE_AVSANDARE,
     bk_belopp,
     bk_datum,
     kontrollera_bk_balans,
@@ -30,7 +32,9 @@ from .base import (
     kontrollera_bk_kalla,
     kontrollera_bk_riktning,
     kontrollera_bk_status,
+    kontrollera_samtalslage,
     normalisera_kunddata,
+    standard_samtalslage,
     status_transition_allowed,
 )
 
@@ -448,7 +452,12 @@ class PostgresStorage:
         content: str,
         sentiment: float | None = None,
         has_image: bool = False,
+        author: str | None = None,
     ) -> dict[str, Any]:
+        if author is not None and author not in MEDDELANDE_AVSANDARE:
+            # Samma villkor som ss_messages_author_check — kontrollerat före
+            # anropet så att minnet och Postgres avvisar exakt samma värden.
+            raise ValueError(f"Okänd avsändare: {author!r}")
         async with self._scoped(tenant_id) as conn:
             owner = await conn.fetchval(
                 "select tenant_id from ss_conversations where id = $1", conversation_id
@@ -457,8 +466,9 @@ class PostgresStorage:
                 raise ValueError("Konversationen tillhör inte denna tenant.")
             record = await conn.fetchrow(
                 """
-                insert into ss_messages (tenant_id, conversation_id, direction, content, sentiment, has_image)
-                values ($1, $2, $3, $4, $5, $6) returning *
+                insert into ss_messages
+                  (tenant_id, conversation_id, direction, content, sentiment, has_image, author)
+                values ($1, $2, $3, $4, $5, $6, $7) returning *
                 """,
                 tenant_id,
                 conversation_id,
@@ -466,8 +476,108 @@ class PostgresStorage:
                 content,
                 sentiment,
                 has_image,
+                author,
             )
         return _row(record)
+
+    async def find_customer(self, tenant_id: str, *, email: str) -> dict[str, Any] | None:
+        if not email:
+            return None
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                select c.* from ss_customers c
+                join ss_customer_identifiers i on i.customer_id = c.id
+                where c.tenant_id = $1 and i.tenant_id = $1
+                  and i.type = 'email' and lower(i.value) = lower($2)
+                """,
+                tenant_id,
+                email,
+            )
+        return _row(record)
+
+    # -- Samtalsläge (migration 066) ----------------------------------------
+
+    async def get_chat_state(self, tenant_id: str, customer_id: str) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                "select * from ss_chat_state where tenant_id = $1 and customer_id = $2",
+                tenant_id,
+                customer_id,
+            )
+        return _row(record) or standard_samtalslage(tenant_id, customer_id)
+
+    async def save_chat_state(
+        self,
+        tenant_id: str,
+        customer_id: str,
+        *,
+        lage: str,
+        misslyckade_i_rad: int,
+        erbjod_manniska: bool,
+        overlamnad_orsak: str | None = None,
+        overlamnad_ticket_id: str | None = None,
+        sprak: str | None = None,
+    ) -> dict[str, Any]:
+        kontrollera_samtalslage(lage, misslyckade_i_rad)
+        async with self._scoped(tenant_id) as conn:
+            # overlamnad_at: behålls när ett redan överlämnat samtal
+            # uppdateras (en medarbetare svarar), sätts när läget BLIR
+            # överlämnat, nollas när det går tillbaka till agenten.
+            record = await conn.fetchrow(
+                """
+                insert into ss_chat_state as s
+                  (tenant_id, customer_id, lage, misslyckade_i_rad, erbjod_manniska,
+                   overlamnad_orsak, overlamnad_ticket_id, sprak, overlamnad_at, updated_at)
+                values ($1, $2, $3, $4, $5, $6, $7, $8,
+                        case when $3 = 'overlamnad' then now() end, now())
+                on conflict (tenant_id, customer_id) do update set
+                  lage = excluded.lage,
+                  misslyckade_i_rad = excluded.misslyckade_i_rad,
+                  erbjod_manniska = excluded.erbjod_manniska,
+                  overlamnad_orsak = excluded.overlamnad_orsak,
+                  overlamnad_ticket_id = excluded.overlamnad_ticket_id,
+                  sprak = excluded.sprak,
+                  overlamnad_at = case
+                    when excluded.lage <> 'overlamnad' then null
+                    when s.lage = 'overlamnad' and s.overlamnad_at is not null
+                      then s.overlamnad_at
+                    else now()
+                  end,
+                  updated_at = now()
+                returning *
+                """,
+                tenant_id,
+                customer_id,
+                lage,
+                misslyckade_i_rad,
+                erbjod_manniska,
+                overlamnad_orsak,
+                overlamnad_ticket_id,
+                sprak,
+            )
+        return _row(record)
+
+    async def list_chat_handovers(
+        self, tenant_id: str, *, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select s.*, c.name as customer_name, t.subject, t.category, t.channel,
+                       coalesce(t.is_test, false) as is_test
+                from ss_chat_state s
+                join ss_customers c on c.id = s.customer_id and c.tenant_id = s.tenant_id
+                left join ss_tickets t
+                  on t.id = s.overlamnad_ticket_id and t.tenant_id = s.tenant_id
+                where s.tenant_id = $1 and s.lage = 'overlamnad'
+                order by s.updated_at desc
+                limit $2
+                """,
+                tenant_id,
+                limit,
+            )
+        return [_row(r) for r in records]
 
     async def get_messages(
         self, tenant_id: str, conversation_id: str
@@ -635,6 +745,21 @@ class PostgresStorage:
                 embedding,
             )
         return _row(record)
+
+    async def delete_kb_article(self, tenant_id: str, artikel_id: str) -> bool:
+        """Se Storage.delete_kb_article. Ett id som inte är en uuid är en
+        artikel som inte finns, inte ett 500."""
+        try:
+            uuid.UUID(str(artikel_id))
+        except ValueError:
+            return False
+        async with self._scoped(tenant_id) as conn:
+            resultat = await conn.execute(
+                "delete from ss_knowledge_base where tenant_id = $1 and id = $2::uuid",
+                tenant_id,
+                str(artikel_id),
+            )
+        return str(resultat).endswith(" 1")
 
     # -- Kanaler & metrics --------------------------------------------------
 

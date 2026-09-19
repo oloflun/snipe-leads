@@ -38,6 +38,18 @@ redis>=5.0,<7
 # Vertex AI: OAuth2-token ur service account JSON. AI Studio tog bort
 # Cloud-krediter, så Gemini-anropen kräver nu Vertex-autentisering.
 google-auth>=2.29
+# Integrationer och kanaler (bd snipe-36u, app/integrationer/ + app/kanaler/).
+# jmespath är NYTT: Ebbot-kompatibla `responsePath` är JMESPath-uttryck, och
+# utan paketet dör importen av support-agenten — alltså hela API:t — vid start.
+# De tre andra följde redan med transitivt (mcp via openai-agents, pyjwt via
+# mcp, cryptography via google-auth), men koden importerar dem DIREKT: ett
+# beroende som bara finns för att ett annat paket råkar dra in det försvinner
+# den dag det paketet slutar göra det. Taken av samma skäl som openai-agents
+# ovan — mcp 2.0 får vara ett beslut, inte något nästa bygge väljer.
+jmespath>=1.0,<2
+mcp>=1.28,<2
+pyjwt[crypto]>=2.10,<3
+cryptography>=42
 # Windows saknar IANA-tidszonsdatabasen, så ZoneInfo("Europe/Stockholm") i
 # sändningsfönstret kastar ZoneInfoNotFoundError och HELA testsviten faller vid
 # collection. Linux (Docker/Render) har den via OS:et — därav lätt att missa.

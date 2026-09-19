@@ -41,6 +41,15 @@ export type AppRoute = {
   /** Mock-driven surface: routen finns, men den står inte i kundens meny. */
   preview?: boolean;
   /**
+   * Undersidor i railen (Iris idag: Bolag/Granskning/Inställningar). Renderas
+   * indraget under posten när den är aktiv — se `components/shell/Rail.tsx`.
+   * `href` är den fulla `/dashboard/...`-sökvägen; anroparna (AppShell,
+   * AdminShell) kör den genom samma `demoAnpassa`/`tillAdminvag` som
+   * toppnivåns `href` redan går igenom, så barnen behöver inte veta vilken
+   * yta de renderas på.
+   */
+  children?: { href: string; labelKey: CopyKey }[];
+  /**
    * Bara för plattformsadmin. Skilt från `product` med flit.
    *
    * INGEN ROUTE ANVÄNDER DEN I DAG, och det är värt att veta innan du läser
@@ -89,19 +98,22 @@ export type AppRoute = {
  */
 export const appRoutes: AppRoute[] = [
   { href: "/dashboard", labelKey: "nav.dashboard", product: "shared" },
-  { href: "/dashboard/leads", labelKey: "nav.leads", product: "leads" },
-  // Tillägget Leadslistor (migration 060). Menyposten grindas bara på
-  // PRODUKTEN — tillägget avgörs i WorkspaceSection, på servern: utan
-  // "leadlists" renderar sidan ett upsell-kort i stället för vyn. Låsta
-  // tillägg ska synas, inte gömmas — se lib/addons.ts.
-  { href: "/dashboard/leads/listor", labelKey: "nav.leadslistor", product: "leads" },
+  // Iris (leadsagenten, döpt om 2026-09-16) fick 2026-09-19 en egen sida i
+  // stället för att vara utspridd över Leads, Leadslistor och Email studio.
+  // Leadslistor (migration 060, tillägget "leadlists") är ett SEGMENT inuti
+  // Bolag, inte en egen menypost — grinden på tillägget avgörs numera i
+  // klienten (useDashboard().addons), se components/leads/IrisBolag.tsx.
+  {
+    href: "/dashboard/iris",
+    labelKey: "nav.iris",
+    product: "leads",
+    children: [
+      { href: "/dashboard/iris", labelKey: "nav.iris.bolag" },
+      { href: "/dashboard/iris/granskning", labelKey: "nav.iris.granskning" },
+      { href: "/dashboard/iris/installningar", labelKey: "nav.iris.installningar" }
+    ]
+  },
   { href: "/dashboard/support", labelKey: "nav.support", product: "support" },
-  // Fas 4 (2026-08-29): Email-studion flyttade in i Bolagssidan — se
-  // components/leads/Bolagssida.tsx. Menyposten är borta, men routen är
-  // MEDVETET kvar och nåbar direkt: `preview: true` döljer bara
-  // menyposten (routesForProducts filtrerar på den), grinden i dispatchern
-  // rörs inte. Ingen fil raderas, ingen länk pekar hit längre.
-  { href: "/dashboard/emails", labelKey: "nav.emails", product: "leads", preview: true },
   { href: "/dashboard/companies", labelKey: "nav.companies", product: "leads", preview: true },
   { href: "/dashboard/contacts", labelKey: "nav.contacts", product: "leads", preview: true },
   { href: "/dashboard/inbox", labelKey: "nav.inbox", product: "leads", preview: true },

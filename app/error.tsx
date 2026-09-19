@@ -35,7 +35,7 @@ export default function Error({
         </h1>
         <p className="mt-4 text-[17px] leading-8 text-ink2">
           Felet är loggat på vår sida. Prova igen — hjälper inte det, mejla{" "}
-          <a href="mailto:kontakt@snajp.se" className="text-ochre">
+          <a href="mailto:kontakt@snajp.se" className="text-warning">
             kontakt@snajp.se
           </a>
           .

@@ -17,13 +17,13 @@ export default async function NotFound() {
           </h1>
           <p className="mt-4 text-[17px] leading-8 text-ink2">
             Adressen kan ha ändrats. Starta ett supportärende nedan, eller hör av dig på{" "}
-            <a href={`mailto:${tenant.company.email}`} className="text-ochre">
+            <a href={`mailto:${tenant.company.email}`} className="text-warning">
               {tenant.company.email}
             </a>
             .
           </p>
           <p className="mt-8 flex flex-wrap justify-center gap-x-6 gap-y-2">
-            <Link href={`/chat/${tenant.slug}`} className="kicker text-ochre">
+            <Link href={`/chat/${tenant.slug}`} className="kicker text-warning">
               Till kundtjänst
             </Link>
             <a href={tenant.website} className="kicker text-mineral hover:text-ochre">

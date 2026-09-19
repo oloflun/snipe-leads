@@ -42,10 +42,7 @@ const ui = {
   signal: { sv: "Signal", en: "Signal" },
   offer: { sv: "Erbjudande", en: "Offer" },
   cta: { sv: "CTA", en: "CTA" },
-  exempel: {
-    sv: "Exempelmejl. Ni har inga utkast ännu — starta en körning under Leads, så ligger era egna här.",
-    en: "Example email. You have no drafts yet — start a run under Leads and your own will appear here."
-  },
+  exempel: { sv: "Exempelmejl.", en: "Example email." },
   forskrivet: { sv: "Förskrivet förslag, ingen modell kördes.", en: "Pre-written suggestion, no model ran." }
 } satisfies Record<string, Localized>;
 
@@ -73,8 +70,8 @@ const SIMULERINGSORSAKER: Record<string, Localized> = {
     en: "AI assistance is not switched on in this environment."
   },
   kreditslut: {
-    sv: "AI-krediterna är slut hos oss. Det beror inte på dig, och din text är orörd — åtgärderna fungerar igen när vi har fyllt på.",
-    en: "Our AI credits have run out. This is not caused by you, and your text is untouched — the actions will work again once we have topped up."
+    sv: "AI-krediterna är slut hos oss. Din text är orörd.",
+    en: "Our AI credits have run out. Your text is untouched."
   },
   kvot: {
     sv: "AI-leverantörens kvot är slut just nu. Prova igen om en stund.",
@@ -122,6 +119,11 @@ type RichApiPayload = {
 
 function toRefineContext(data: EmailStudioData) {
   return {
+    // Se lib/data/emails.ts toRefineContext (samma fält, duplicerad här av
+    // samma skäl som resten av filen) — companyId gör att /api/email-studio
+    // kan slå upp exakt vilket exempelbolag (lib/demo/iris-exempel.ts) ett
+    // anonymt anrop gäller.
+    companyId: data.email.companyId ?? undefined,
     companyName: data.email.companyName ?? undefined,
     signal: data.email.signal ?? undefined,
     offer: data.email.offer ?? data.businessContext?.offer ?? undefined,
@@ -235,8 +237,8 @@ export function EmailStudioEditor({
           <dl className="space-y-5">
             {inputRows.map(([label, value]) => (
               <div key={label}>
-                <dt className="text-[0.8125rem] font-medium text-ink/45">{label}</dt>
-                <dd className="mt-1 text-[0.9375rem] leading-6 text-ink/80">{value}</dd>
+                <dt className="text-[0.8125rem] font-medium text-ink-subtle">{label}</dt>
+                <dd className="mt-1 text-[0.9375rem] leading-6 text-ink-muted">{value}</dd>
               </div>
             ))}
           </dl>
@@ -251,12 +253,12 @@ export function EmailStudioEditor({
             de aldrig hört talas om, omärkt, i sin egen Email Studio — och
             ingenting sa att agenterna inte redan hade skrivit det åt dem. */}
         {!compact && data.source === "mock" ? (
-          <p className="mb-5 rounded-input bg-paper2/70 px-4 py-3 text-[0.875rem] leading-6 text-ink/65">
+          <p className="mb-5 rounded-input bg-paper2/70 px-4 py-3 text-[0.875rem] leading-6 text-ink-muted">
             {text(ui.exempel)}
           </p>
         ) : null}
 
-        <label htmlFor="studio-subject" className="block text-[0.8125rem] font-medium text-ink/45">
+        <label htmlFor="studio-subject" className="block text-[0.8125rem] font-medium text-ink-subtle">
           {text(ui.subjectLabel)}
         </label>
         <input
@@ -267,7 +269,7 @@ export function EmailStudioEditor({
           className="focus-ring mt-2 w-full rounded-input border border-ink/12 bg-paper px-4 py-3 text-[1.25rem] font-semibold tracking-[-0.01em] outline-none transition-colors focus:border-ink/30"
         />
 
-        <label htmlFor="studio-body" className="mt-6 block text-[0.8125rem] font-medium text-ink/45">
+        <label htmlFor="studio-body" className="mt-6 block text-[0.8125rem] font-medium text-ink-subtle">
           {text(ui.bodyLabel)}
         </label>
         <textarea
@@ -308,7 +310,7 @@ export function EmailStudioEditor({
 
         <div aria-live="polite" className="mt-4">
           {isPending && activeLabel ? (
-            <p className="text-[0.875rem] text-ink/50">
+            <p className="text-[0.875rem] text-ink-subtle">
               {text(ui.working)}
               <span className="ml-1 inline-flex">
                 <span className="animate-pulse">.</span>
@@ -326,7 +328,7 @@ export function EmailStudioEditor({
         {lastResult && !isPending ? (
           <div className="reveal mt-5 rounded-card bg-paper p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-[0.8125rem] font-semibold text-ochre">{text(ui.updated)}</p>
+              <p className="text-[0.8125rem] font-semibold text-warning">{text(ui.updated)}</p>
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
@@ -338,7 +340,7 @@ export function EmailStudioEditor({
                 <button
                   type="button"
                   onClick={() => setLastResult(null)}
-                  className="focus-ring inline-flex min-h-11 items-center rounded-input px-4 text-[0.875rem] font-medium text-ink/60 transition-colors hover:text-ink"
+                  className="focus-ring inline-flex min-h-11 items-center rounded-input px-4 text-[0.875rem] font-medium text-ink-muted transition-colors hover:text-ink"
                 >
                   {text(ui.dismiss)}
                 </button>
@@ -347,8 +349,8 @@ export function EmailStudioEditor({
 
             {lastResult.original_version ? (
               <>
-                <p className="mt-5 text-[0.8125rem] font-medium text-ink/45">{text(ui.original)}</p>
-                <p className="mt-1 whitespace-pre-wrap text-[0.9375rem] leading-7 text-ink/55">
+                <p className="mt-5 text-[0.8125rem] font-medium text-ink-subtle">{text(ui.original)}</p>
+                <p className="mt-1 whitespace-pre-wrap text-[0.9375rem] leading-7 text-ink-subtle">
                   {lastResult.original_version}
                 </p>
               </>
@@ -371,22 +373,22 @@ export function EmailStudioEditor({
               </p>
             ) : null}
 
-            <p className="mt-5 text-[0.8125rem] font-medium text-ink/45">{text(ui.updated)}</p>
+            <p className="mt-5 text-[0.8125rem] font-medium text-ink-subtle">{text(ui.updated)}</p>
             <p className="mt-1 whitespace-pre-wrap text-[0.9375rem] leading-7 text-ink">
               {lastResult.new_version}
             </p>
 
             {lastResult.explanation ? (
               <>
-                <p className="mt-5 text-[0.8125rem] font-medium text-ink/45">{text(ui.explanation)}</p>
-                <p className="mt-1 text-[0.9375rem] leading-7 text-ink/80">{lastResult.explanation}</p>
+                <p className="mt-5 text-[0.8125rem] font-medium text-ink-subtle">{text(ui.explanation)}</p>
+                <p className="mt-1 text-[0.9375rem] leading-7 text-ink-muted">{lastResult.explanation}</p>
               </>
             ) : null}
 
             {lastResult.subject_suggestions?.length > 0 ? (
               <>
-                <p className="mt-5 text-[0.8125rem] font-medium text-ink/45">{text(ui.subjects)}</p>
-                <ul className="mt-1 space-y-1 text-[0.9375rem] leading-7 text-ink/80">
+                <p className="mt-5 text-[0.8125rem] font-medium text-ink-subtle">{text(ui.subjects)}</p>
+                <ul className="mt-1 space-y-1 text-[0.9375rem] leading-7 text-ink-muted">
                   {lastResult.subject_suggestions.map((suggestion) => (
                     <li key={suggestion}>{suggestion}</li>
                   ))}
@@ -396,8 +398,8 @@ export function EmailStudioEditor({
 
             {lastResult.confidence_tips ? (
               <>
-                <p className="mt-5 text-[0.8125rem] font-medium text-ink/45">{text(ui.tips)}</p>
-                <p className="mt-1 text-[0.9375rem] leading-7 text-ink/80">{lastResult.confidence_tips}</p>
+                <p className="mt-5 text-[0.8125rem] font-medium text-ink-subtle">{text(ui.tips)}</p>
+                <p className="mt-1 text-[0.9375rem] leading-7 text-ink-muted">{lastResult.confidence_tips}</p>
               </>
             ) : null}
           </div>

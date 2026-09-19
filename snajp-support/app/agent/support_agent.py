@@ -17,10 +17,10 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
-import random
 import re
 import time
 from collections.abc import Awaitable, Callable
+from datetime import datetime, timedelta, timezone
 from functools import partial
 from typing import Any
 
@@ -28,6 +28,8 @@ from ..agentcore.instruktioner import las_instruktioner
 from ..agentcore.overlays import pack_version
 from ..agentcore.packs import RunLedger
 from ..cache import svarscache, versioner
+from ..integrationer import handelser as integrationshandelser
+from ..integrationer import uppslag as integrationsuppslag
 from ..minne import arbetsminne
 from ..moderation.abuse_gate import check_abuse, ton_instruktion
 from ..moderation.maskering import maskera_personnummer
@@ -36,6 +38,7 @@ from ..notifications.prioriterat_mejl import arendelank, skicka_prioriterat
 from ..leads.untrusted_content import wrap_untrusted_content
 from ..config import CATEGORY_LABELS, get_settings
 from ..storage.base import Storage
+from . import support_faktagrind, support_regler, support_texter
 from .retention_classifier import classify_cancellation_risk, is_cancellation_risk
 from .step_runner import RunTrace, run_step
 from .support_playbook import SUPPORT_V1
@@ -45,8 +48,21 @@ from .vision import describe_image
 logger = logging.getLogger("snajp-support.support-agent")
 
 # Sentiment under denna tröskel eskalerar oavsett vad modellen tycker
-# (samma regel som tidigare låg i den handskrivna prompten).
-SENTIMENT_ESCALATION_THRESHOLD = 0.3
+# (samma regel som tidigare låg i den handskrivna prompten). Sedan
+# 2026-09-18 är det STANDARDVÄRDET — varje kund kan flytta gränsen
+# (support_regler.Eskaleringsregler.sentimentgrans, 0–100).
+SENTIMENT_ESCALATION_THRESHOLD = support_regler.STANDARD_ESKALERING["sentimentgrans"] / 100
+
+#: Hur länge ett överlämnat samtal tillhör människan utan att något händer i
+#: det. Sedan tar agenten nya meddelanden igen — en kund som återvänder efter
+#: två dygn med en ny fråga ska få ett svar, inte en kvittens om ett ärende
+#: ingen tittat på. Klockan är ss_chat_state.updated_at, som flyttas av varje
+#: nytt meddelande i samtalet och av varje medarbetarsvar.
+OVERLAMNING_GILTIG_TIMMAR = 24
+
+#: De fasta replikerna (kvittens, överlämningsbesked, osäkerhetssvar) bor i
+#: support_texter.py, på svenska och engelska — se modulen för varför de är
+#: kod och inte modelltext.
 
 # Hur mycket av samtalet som följer med in i prompten. Varje meddelande i
 # chatten öppnar ett eget ärende, så "tidigare turer" är tidigare ärenden för
@@ -60,7 +76,8 @@ MAX_HISTORY_TURNS = 8
 # avsändaren; i en chatt finns ingen avsändare att sätta dit, så raden ska bort.
 _DANGLING_SIGN_OFF = re.compile(
     r"\n*\s*(?:med\s+vänliga\s+hälsningar|vänliga\s+hälsningar|hälsningar|mvh|"
-    r"bästa\s+hälsningar|vänligen)\s*[,.!]?\s*$",
+    r"bästa\s+hälsningar|vänligen|best\s+regards|kind\s+regards|regards|"
+    r"sincerely|yours\s+sincerely)\s*[,.!]?\s*$",
     re.IGNORECASE,
 )
 
@@ -94,7 +111,14 @@ async def _render_conversation(
     senaste_kundreplik = ""
     for ticket in reversed(history[:MAX_HISTORY_TICKETS]):  # äldst först
         for msg in await storage.get_messages(tenant_id, ticket["conversation_id"]):
-            who = "Kunden" if msg["direction"] == "inbound" else "Du"
+            # Migration 066: en utgående rad kan vara en MEDARBETARES svar.
+            # Agenten ska veta vad en människa sagt eller lovat — inte tro att
+            # den sagt det själv.
+            who = (
+                "Kunden"
+                if msg["direction"] == "inbound"
+                else "Kollegan" if msg.get("author") == "human" else "Du"
+            )
             content = (msg.get("content") or "").strip()
             if content:
                 turns.append(f"{who}: {content}")
@@ -162,22 +186,10 @@ _KANSLIGT = re.compile(
     re.IGNORECASE,
 )
 
-#: Kunden ber uttryckligen om en människa. Fram till 2026-09-02 bar BARA
-#: eskaleringssteget (cs:customer-escalation) den signalen — och det steget
-#: är numera villkorat och körs inte på lyckliga flödet. Regexen tar över
-#: exakt den delen av stegets uppdrag i kod: fälls den körs steget, och
-#: modellen får göra den fulla bedömningen precis som förut. Kort lista med
-#: flit — ett falskt utslag kostar bara ett extra modellanrop, ett missat
-#: kostar en kund som bad om en människa och fick en bot.
-_BER_OM_MANNISKA = re.compile(
-    r"\b(prata|tala|snacka)\s+med\s+(en\s+)?(människa|person|någon|"
-    r"handläggare|anställd|er\s+personal)|"
-    r"\b(riktig|levande)\s+(människa|person)\b|"
-    r"\bmänsklig\s+(hjälp|kontakt|support)\b|"
-    r"\bkoppla\s+(mig|vidare)\b|"
-    r"\bringa?\s+(upp\s+)?mig\b",
-    re.IGNORECASE,
-)
+#: Kunden ber uttryckligen om en människa: se `support_regler.ber_om_manniska`.
+#: Fram till 2026-09-18 väckte regexen bara eskaleringssteget och modellen
+#: kunde rösta nej. Sedan Ebbot-researchen är begäran en TRIGGER i kod — en
+#: kund som ber om en människa får en, utan övertalningsförsök.
 
 #: Ord som inte bär betydelse i en sökfråga. Kort lista med flit — samma
 #: resonemang som abuse_gate: en lång lista fäller fel, och här kostar ett
@@ -204,6 +216,69 @@ def _kb_block(articles: list[dict[str, Any]]) -> str:
     )
 
 
+#: Namnen modellerna brukar välja när de lägger texten i ett objekt.
+_TEXTNYCKLAR = ("text", "draft", "final_reply", "revised_draft", "reply", "svar", "content", "message")
+
+
+def _text(varde: Any) -> str:
+    """Ett stegs textfält som text, vad modellen än returnerade.
+
+    Kontraktet säger sträng, men modellen svarar ibland med ett objekt.
+    Uppmätt 2026-09-19 i development: en följdfråga på engelska fick
+    `"draft": {...}`. Humaniseraren hoppas över på andra språk än svenska, så
+    objektet gick rakt in i strip_markdown, som kastade TypeError, och kunden
+    fick ett felmeddelande i stället för ett svar. På svenska hade
+    humaniseraren dolt felet genom att skriva ny text.
+
+    Ett objekt ger sin text under ett av de vanliga namnen, annars sitt
+    längsta textvärde (inte alla ihopslagna: ett objekt per språk hade gett
+    ett tvåspråkigt svar). En lista ger sina textdelar i följd.
+    """
+    if isinstance(varde, str):
+        return varde
+    if isinstance(varde, dict):
+        for nyckel in _TEXTNYCKLAR:
+            kandidat = varde.get(nyckel)
+            if isinstance(kandidat, str) and kandidat.strip():
+                return kandidat
+        texter = [_text(v) for v in varde.values()]
+        return max(texter, key=len, default="")
+    if isinstance(varde, list):
+        return "\n\n".join(t for t in (_text(v) for v in varde) if t.strip())
+    return ""
+
+
+#: Ord i en fältnyckel som avslöjar att fältet ÄR svarstexten, när modellen
+#: döpt det själv. Kontraktsfälten (sources_used, context_refs) räknas aldrig.
+_SVARSLEDTRADAR = ("draft", "utkast", "svar", "response", "reply", "text")
+
+
+def _textfalt(utdata: dict[str, Any], falt: str) -> str:
+    """Stegets svarstext ur `falt`, även när modellen döpt fältet själv.
+
+    Uppmätt 2026-09-19 i development: på engelska följde cs:draft-response
+    skillens eget MALLFORMAT i stället för JSON-kontraktet, alltså
+    `{"To": ..., "Draft response text": "Your order A-17 ...", "Notes for You":
+    {...}}` utan `draft`. Utkastet blev tomt och kunden fick reservtexten
+    ("I don't want to guess ..."), trots att modellen skrivit rätt svar.
+    Fältet med kontraktets namn vinner; annars det första vars namn bär en
+    av _SVARSLEDTRADAR. "Notes for You" och liknande bär ingen ledtråd och
+    når därför aldrig kunden.
+    """
+    direkt = _text(utdata.get(falt))
+    if direkt.strip():
+        return direkt
+    for nyckel, varde in utdata.items():
+        namn = str(nyckel).casefold()
+        if namn in ("sources_used", "context_refs") or namn.startswith("notes"):
+            continue
+        if any(ledtrad in namn for ledtrad in _SVARSLEDTRADAR):
+            text = _text(varde)
+            if text.strip():
+                return text
+    return ""
+
+
 async def _sok_kb(storage: Storage, tenant_id: str, fraga: str) -> list[dict[str, Any]]:
     """En KB-sökning, med embedding när det går och fulltext annars.
 
@@ -224,6 +299,23 @@ async def _sok_kb(storage: Storage, tenant_id: str, fraga: str) -> list[dict[str
     except Exception:  # noqa: BLE001 — utan embeddings används fulltext-fallback
         embedding = None
     return await storage.search_kb(tenant_id, fraga, embedding=embedding)
+
+
+def _korta_svar(svar: str, tak: int) -> str:
+    """Svaret inom kanalens teckentak, kortat vid ett MENINGSSLUT.
+
+    Förut kapades det på tecknet med ett "…" efter — mitt i ett ord, och
+    kunden läste "så att alla får ut så mycket som mö…" (kundtest mot
+    Livrustning 2026-09-19). Ett meningsslut i takets sista 40 % vinner; finns
+    inget kortas det vid ett ordslut med "…".
+    """
+    if len(svar) <= tak:
+        return svar
+    utdrag = svar[:tak]
+    slut = max(utdrag.rfind(t) for t in (". ", "! ", "? ", ".\n", "!\n", "?\n"))
+    if slut >= int(tak * 0.6):
+        return utdrag[: slut + 1].rstrip()
+    return utdrag[: tak - 1].rsplit(" ", 1)[0].rstrip(" ,;:–—") + "…"
 
 
 def _forenklad_fraga(subject: str, message: str) -> str:
@@ -267,6 +359,205 @@ def _ar_kansligt(text: str) -> bool:
     return bool(_KANSLIGT.search(text or ""))
 
 
+def _tid(varde: Any) -> datetime | None:
+    """ISO-sträng (båda lagringarna ger det, se postgres._row) → datetime."""
+    if not varde:
+        return None
+    try:
+        tid = datetime.fromisoformat(str(varde))
+    except ValueError:
+        return None
+    return tid if tid.tzinfo else tid.replace(tzinfo=timezone.utc)
+
+
+def ar_overlamnat(samtal: dict[str, Any], *, nu: datetime | None = None) -> bool:
+    """Äger en människa samtalet just nu?
+
+    Överlämnat OCH aktivt inom OVERLAMNING_GILTIG_TIMMAR. Ett läge utan
+    tidsstämpel räknas som aktivt — hellre en kvittens för mycket än att
+    agenten tar tillbaka ett samtal en människa sitter i.
+    """
+    if samtal.get("lage") != "overlamnad":
+        return False
+    senast = _tid(samtal.get("updated_at"))
+    if senast is None:
+        return True
+    nu = nu or datetime.now(timezone.utc)
+    return nu - senast < timedelta(hours=OVERLAMNING_GILTIG_TIMMAR)
+
+
+def _faktakallor(
+    articles: list[dict[str, Any]],
+    *,
+    subject: str,
+    message: str,
+    conversation_block: str,
+) -> list[str]:
+    """Faktagrindens underlag: kunskapsbasens träffar plus det KUNDEN och en
+    MEDARBETARE sagt i samtalet. Agentens egna tidigare repliker ingår inte —
+    då hade en uppgift agenten hittat på i tur 2 blivit "stödd" i tur 3."""
+    kallor = [f"{a.get('title') or ''}\n{a.get('content') or ''}" for a in articles]
+    kallor += [subject or "", message or ""]
+    for rad in (conversation_block or "").splitlines():
+        if rad.startswith(("Kunden:", "Kollegan:")):
+            kallor.append(rad.split(":", 1)[1])
+    return kallor
+
+
+async def _las_samtalslage(storage: Storage, tenant_id: str, customer_id: str) -> dict[str, Any]:
+    """Samtalsläget, eller standardläget om läsningen fallerar. Ett trasigt
+    läge får aldrig fälla chatten — utan det svarar agenten precis som före
+    migration 066."""
+    try:
+        return await storage.get_chat_state(tenant_id, customer_id)
+    except Exception:  # noqa: BLE001 — läget är en förbättring, svaret är jobbet
+        logger.exception("Kunde inte läsa samtalsläget (tenant %s).", tenant_id)
+        return {"lage": "agent", "misslyckade_i_rad": 0, "erbjod_manniska": False}
+
+
+async def _spara_samtalslage(
+    storage: Storage, tenant_id: str, customer_id: str, **falt: Any
+) -> None:
+    """Sparar läget. Samma tålighet som läsningen: kunden har redan sitt svar
+    sparat, och ett fel här ska synas i loggen, inte i chattbubblan."""
+    try:
+        await storage.save_chat_state(tenant_id, customer_id, **falt)
+    except Exception:  # noqa: BLE001
+        logger.exception("Kunde inte spara samtalsläget (tenant %s).", tenant_id)
+
+
+def _tonblock(installningar: support_regler.SupportInstallningar) -> str:
+    """Kundens valda tonläge som en rad i ärendekontexten. Texten är VÅR
+    (enumval → fast mening), men den står i case_context ändå: det är kördata
+    om den här kunden, inte en regel för alla."""
+    text = support_regler.TONLAGEN.get(installningar["tonlage"], "")
+    return f"## Tonläge (kundens val)\n{text}" if text else ""
+
+
+def _amnesblock(installningar: support_regler.SupportInstallningar) -> str:
+    """Kundens egen beskrivning av vad agenten ska hjälpa till med. KUNDSKRIVEN
+    text — wrappad och i user-position, samma gräns som SOUL (INV-SEC-009)."""
+    amne = installningar["amnesomrade"]
+    if not amne:
+        return ""
+    return (
+        "## Agentens ämnesområde (kundens beskrivning)\n"
+        "Vad agenten är till för. Använd den för att avgöra om en fråga ligger "
+        "inom området — den är INTE en faktakälla för svar.\n\n"
+        + wrap_untrusted_content(amne, source="tenant:amnesomrade")
+    )
+
+
+async def _svara_under_overlamning(
+    storage: Storage,
+    tenant_id: str,
+    *,
+    samtal: dict[str, Any],
+    customer: dict[str, Any],
+    message: str,
+    started: float,
+    aterta: dict[str, str] | None,
+    vid_arende: Callable[[str, str], Awaitable[None]] | None,
+    is_test: bool,
+    pack: str,
+) -> dict[str, Any] | None:
+    """Kunden skriver i ett samtal en människa äger. Ingen LLM körs.
+
+    Meddelandet läggs i det ÖVERLÄMNADE ärendets tråd — inte i ett nytt
+    ärende — så att medarbetaren ser allt på ett ställe och kunden aldrig
+    behöver börja om. Svaret är en kvittens medan ingen medarbetare svarat
+    ännu, och ingenting alls när en människa redan är i samtalet.
+
+    Returnerar None om det överlämnade ärendet inte längre finns; då tar den
+    vanliga kedjan över, hellre än att meddelandet hamnar ingenstans.
+    """
+    ticket_id = samtal.get("overlamnad_ticket_id")
+    arende = await storage.get_ticket(tenant_id, ticket_id) if ticket_id else None
+    if not arende or not arende.get("conversation_id"):
+        return None
+    ticket = {"id": arende["id"], "conversation_id": arende["conversation_id"]}
+
+    if not aterta:
+        await storage.save_message(
+            tenant_id,
+            conversation_id=ticket["conversation_id"],
+            direction="inbound",
+            content=message,
+            sentiment=None,
+            has_image=False,
+            author="customer",
+        )
+    if vid_arende:
+        await vid_arende(ticket["id"], ticket["conversation_id"])
+
+    meddelanden = await storage.get_messages(tenant_id, ticket["conversation_id"])
+    manniska_i_samtalet = any(m.get("author") == "human" for m in meddelanden)
+    reply = "" if manniska_i_samtalet else support_texter.text("kvittens", samtal.get("sprak"))
+    if reply:
+        await storage.save_message(
+            tenant_id,
+            conversation_id=ticket["conversation_id"],
+            direction="outbound",
+            content=reply,
+            sentiment=None,
+            has_image=False,
+            author="agent",
+        )
+
+    # Flyttar updated_at: samtalet hamnar överst i portalens Chattar-vy och
+    # överlämningens giltighetstid räknas från det senaste livstecknet.
+    await storage.save_chat_state(
+        tenant_id,
+        customer["id"],
+        lage="overlamnad",
+        misslyckade_i_rad=int(samtal.get("misslyckade_i_rad") or 0),
+        erbjod_manniska=False,
+        overlamnad_orsak=samtal.get("overlamnad_orsak"),
+        overlamnad_ticket_id=ticket["id"],
+        sprak=samtal.get("sprak"),
+    )
+
+    step_log = [{"step": "overlamnad", "manniska_i_samtalet": manniska_i_samtalet}]
+    run = await storage.log_agent_run(
+        tenant_id,
+        agent_type="support",
+        pack_version=pack,
+        skills_used=[],
+        input_text=message,
+        output_text=reply,
+        step_log=step_log,
+        tokens_in=0,
+        tokens_out=0,
+        latency_ms=int((time.monotonic() - started) * 1000),
+        is_test=is_test,
+        # Samma skäl som svarscachens "svarscache": ingen modell kördes.
+        model="overlamnad",
+    )
+    orsak = samtal.get("overlamnad_orsak")
+    return {
+        "reply": reply,
+        "run_id": (run or {}).get("id"),
+        "ticket_id": ticket["id"],
+        "customer_id": customer["id"],
+        "category": arende.get("category") or "ovrigt",
+        "category_label": CATEGORY_LABELS.get(arende.get("category") or "ovrigt", "Övrigt"),
+        "sentiment": None,
+        "escalated": True,
+        "escalation_reason": arende.get("escalation_reason"),
+        "escalation_code": orsak,
+        "overlamnad": True,
+        "svarslage": "overlamnad",
+        "faktagrind": None,
+        "kb_sources": [],
+        "returning_customer": True,
+        "simulation": False,
+        "skills_used": [],
+        "step_log": step_log,
+        "cancellation_risk": False,
+        "pack_version": pack,
+    }
+
+
 async def run_support_agent(
     storage: Storage,
     tenant_id: str,
@@ -295,6 +586,14 @@ async def run_support_agent(
     # Fas 2.5 (snipe-vxq): admintester ska märkas i agent_runs, inte räknas
     # som kundvolym. Samma flagga som leads-vägen redan trådar (rad ~419).
     is_test: bool = False,
+    # Kanalerna (bd snipe-36u): en kund i WhatsApp, Messenger, Slack eller
+    # Teams är redan uppslagen via ss_channel_contacts
+    # (app/kanaler/mottagning.py) — ofta utan e-post, så find_or_create hade
+    # skapat en ny kund per meddelande. Satt = uppslaget hoppas över.
+    # `customer_phone` följer med till find_or_create och till
+    # integrationernas {{kund.telefon}}. Båda None = oförändrat beteende.
+    kund_id: str | None = None,
+    customer_phone: str | None = None,
 ) -> dict[str, Any]:
     started = time.monotonic()
     settings = get_settings()
@@ -314,6 +613,12 @@ async def run_support_agent(
     )
     steg = partial(run_step, instruktioner=lager)
     agentkonfig = await storage.get_agent_config(tenant_id, agent_type="support")
+    # Kundens egna regler (bd snipe-1fl): eskaleringsgränser, tonläge,
+    # ämnesområde och faktakontroll. Standardvärdena är beteendet före flytten.
+    installningar = support_regler.normalisera(
+        await storage.get_agent_settings(tenant_id, agent_type="support")
+    )
+    regler = installningar["eskalering"]
 
     # G9: bilder beskrivs av vision-sidovagnen och kastas — aldrig lagrade.
     vision_note = ""
@@ -380,10 +685,36 @@ async def run_support_agent(
     # ska in i case_context, och case_context byggs före första steget.
     # find_or_create har skapandet som sidoeffekt, men det skedde ändå
     # ovillkorligen — bara senare i samma funktion.
-    customer = await storage.find_or_create_customer(
-        tenant_id, email=customer_email, phone=None, name=customer_name
-    )
+    if kund_id:
+        customer = {"id": kund_id, "name": customer_name}
+    else:
+        customer = await storage.find_or_create_customer(
+            tenant_id, email=customer_email, phone=customer_phone, name=customer_name
+        )
     history = await storage.get_customer_history(tenant_id, customer["id"])
+
+    # --- Samtalsläge (migration 066): äger en människa samtalet? ----------
+    #
+    # Kontrolleras FÖRE cachen och före varje LLM-anrop. Ett överlämnat
+    # samtal ska inte få ett AI-svar som går människan i förväg — Ebbots
+    # modell: när en människa tagit över är samtalet hennes tills hon lämnar
+    # tillbaka det (eller det legat stilla i OVERLAMNING_GILTIG_TIMMAR).
+    samtal = await _las_samtalslage(storage, tenant_id, customer["id"])
+    if ar_overlamnat(samtal):
+        under_overlamning = await _svara_under_overlamning(
+            storage,
+            tenant_id,
+            samtal=samtal,
+            customer=customer,
+            message=message,
+            started=started,
+            aterta=aterta,
+            vid_arende=vid_arende,
+            is_test=is_test,
+            pack=pack_version(SUPPORT_V1.name, lager.hash),
+        )
+        if under_overlamning is not None:
+            return under_overlamning
 
     # Kundminnet (migration 052) — mem0:s ADD-only-mönster. Bär ENBART vad
     # kunden själv uppgett i tidigare ärenden; agentens slutsatser lagras
@@ -478,6 +809,11 @@ async def run_support_agent(
         + (f"\n\n{soul_block}" if soul_block else "")
         + (f"\n\n{minnesblock}" if minnesblock else "")
     )
+    # Kundens valda tonläge och ämnesområde (bd snipe-1fl). Tonläget är vår
+    # text via ett enumval; ämnesområdet är kundskrivet och wrappat.
+    for block in (_tonblock(installningar), _amnesblock(installningar)):
+        if block:
+            case_context = f"{case_context}\n\n{block}"
 
     # Tonläget läggs på case_context och inte på systemprompten: det är kördata
     # om DET HÄR meddelandet, inte en regel. Tom sträng när inget hänt.
@@ -485,48 +821,13 @@ async def run_support_agent(
     if ton:
         case_context = f"{case_context}\n\n{ton}"
 
-    ledger = RunLedger(satisfied={"context_pack"})
-    trace = RunTrace()
-
-    # --- Steg 1: triage ----------------------------------------------------
-    #
-    # Kundfakta-fältet (2026-08-27): mem0-mönstrets extraktionssteg, inbakat i
-    # triagen i stället för ett eget LLM-anrop — triagen läser ändå hela
-    # meddelandet. BARA vad kunden själv uppgett; modellens egna slutsatser
-    # (sentiment, kategori) lagras aldrig som fakta.
-    triage = await steg(
-        steps["cs:ticket-triage"],
-        ledger,
-        trace,
-        task=(
-            "Klassificera ärendet. Returnera JSON med: category (exakt ett av de "
-            "giltiga), priority (P1-P4), sentiment (0.0-1.0), escalate (bool), "
-            "reasoning (svenska), "
-            "kundfakta (lista med korta, stabila fakta kunden SJÄLV uppger i "
-            "meddelandet — produkt, enhet, ordernummer, preferens. Bara det som "
-            "sannolikt gäller nästa gång kunden hör av sig; tom lista annars. "
-            "Aldrig dina egna bedömningar)."
-        ),
-        case_context=case_context,
-    )
-    category = triage.get("category") if triage.get("category") in taxonomy else "ovrigt"
-    sentiment = max(0.0, min(1.0, float(triage.get("sentiment") or 0.5)))
-
-    # --- Kod: kundminne, ärende, inkommande meddelande ---------------------
-    nya_fakta = [str(f).strip() for f in (triage.get("kundfakta") or []) if str(f).strip()]
-    if nya_fakta:
-        try:
-            # Kapade: en modell som en dag returnerar en uppsats ska inte
-            # kunna fylla minnet med den. ADD-only med dubblettspärr i lagret.
-            await storage.add_customer_facts(
-                tenant_id, customer["id"], fakta=[f[:200] for f in nya_fakta[:6]]
-            )
-        except Exception:  # noqa: BLE001 — minnet är en bonus, svaret är jobbet
-            logger.exception("Kunde inte spara kundfakta.")
-
     # Samtalsläget är ett VÄRDE i ärendekontexten, inte i overlayen. Overlays
     # laddas ordagrant utan .format() (se agentcore/overlays.py), så kördata hör
     # hemma här och regeln som läser den står i support-conversation.md.
+    #
+    # Flyttat FÖRE triagen 2026-09-18: triagen avgör numera om kunden säger
+    # att förra svaret missade ("fattar du inte?"), och det går inte att
+    # avgöra utan att se förra svaret.
     conversation_block, turn_count, senaste_kundreplik = await _render_conversation(
         storage, tenant_id, customer["id"], history
     )
@@ -540,6 +841,73 @@ async def run_support_agent(
         + (f"\n\n{conversation_block}" if conversation_block else "")
     )
     case_context = f"{case_context}\n\n{conversation_state}"
+
+    ledger = RunLedger(satisfied={"context_pack"})
+    trace = RunTrace()
+
+    # --- Steg 1: triage ----------------------------------------------------
+    #
+    # Kundfakta-fältet (2026-08-27): mem0-mönstrets extraktionssteg, inbakat i
+    # triagen i stället för ett eget LLM-anrop — triagen läser ändå hela
+    # meddelandet. BARA vad kunden själv uppgett; modellens egna slutsatser
+    # (sentiment, kategori) lagras aldrig som fakta.
+    #
+    # Tre eskaleringssignaler (2026-09-18, bd snipe-1fl), också inbakade här
+    # i stället för egna anrop. Modellen LEVERERAR signalerna; beslutet att
+    # lämna över fattas i kod längre ned, mot kundens egna gränser.
+    triage = await steg(
+        steps["cs:ticket-triage"],
+        ledger,
+        trace,
+        task=(
+            "Klassificera ärendet. Returnera JSON med: category (exakt ett av de "
+            "giltiga), priority (P1-P4), sentiment (0.0-1.0), escalate (bool), "
+            "reasoning (svenska), "
+            "kundfakta (lista med korta, stabila fakta kunden SJÄLV uppger i "
+            "meddelandet — produkt, enhet, ordernummer, preferens. Bara det som "
+            "sannolikt gäller nästa gång kunden hör av sig; tom lista annars. "
+            "Aldrig dina egna bedömningar), "
+            "ber_om_manniska (bool: kunden ber i DET HÄR meddelandet uttryckligen "
+            "att få prata med eller bli kontaktad av en människa eller medarbetare), "
+            "inom_amnesomradet (bool: frågan gäller verksamheten eller något "
+            "agenten rimligen ska hjälpa till med. false BARA när den uppenbart "
+            "ligger utanför — väder, läxhjälp, andra företags produkter), "
+            "missforstadd (bool: kunden säger att förra svaret missade, att du "
+            "inte förstått, eller upprepar frustrerat samma fråga), "
+            "sprak (ISO 639-1-koden för språket i kundens meddelande, t.ex. "
+            "\"sv\", \"en\", \"ar\". \"sv\" när du är osäker eller meddelandet är för "
+            "kort för att avgöra), "
+            "sokfraga_sv (kundens fråga som en kort svensk sökfråga för "
+            "kunskapsbasen, ÄVEN när meddelandet redan är på svenska: kärnan i "
+            "frågan med de ord en hjälpartikel troligen har i rubriken, gärna med "
+            "ett synonymt ord, t.ex. \"betalningsmetoder betalsätt\" eller "
+            "\"leveranstid frakt\"; tom sträng bara när meddelandet inte är en fråga)."
+        ),
+        case_context=case_context,
+    )
+    category = triage.get("category") if triage.get("category") in taxonomy else "ovrigt"
+    sentiment = max(0.0, min(1.0, float(triage.get("sentiment") or 0.5)))
+
+    # Svarsspråket (bd snipe-xtr): kundens språk om kunden (tenanten) valt
+    # det, med förra turens språk som reserv och svenska i varje tveksamhet.
+    # Kunskapsbasen är fortfarande svensk — därför en svensk sökfråga nedan.
+    svar_sprak = support_regler.svarsprak(
+        installningar, triage.get("sprak"), tidigare=samtal.get("sprak")
+    )
+    ar_svenska = svar_sprak == "sv"
+    sprak_namn = support_regler.spraknamn(svar_sprak)
+
+    # --- Kod: kundminne, ärende, inkommande meddelande ---------------------
+    nya_fakta = [str(f).strip() for f in (triage.get("kundfakta") or []) if str(f).strip()]
+    if nya_fakta:
+        try:
+            # Kapade: en modell som en dag returnerar en uppsats ska inte
+            # kunna fylla minnet med den. ADD-only med dubblettspärr i lagret.
+            await storage.add_customer_facts(
+                tenant_id, customer["id"], fakta=[f[:200] for f in nya_fakta[:6]]
+            )
+        except Exception:  # noqa: BLE001 — minnet är en bonus, svaret är jobbet
+            logger.exception("Kunde inte spara kundfakta.")
 
     if aterta:
         # Återupptagen körning (INV-JOB-001): ärendet och det inkommande
@@ -564,6 +932,7 @@ async def run_support_agent(
             content=message,
             sentiment=sentiment,
             has_image=bool(attachments),
+            author="customer",
         )
     if vid_arende:
         await vid_arende(ticket["id"], ticket["conversation_id"])
@@ -582,14 +951,60 @@ async def run_support_agent(
     # nytt meddelande bär sitt eget ämne, och mer text späder rankningen.
     if turn_count and senaste_kundreplik and len(message) < 80:
         sokfraga = f"{sokfraga} {senaste_kundreplik}".strip()
-    articles = await _sok_kb(storage, tenant_id, sokfraga)
+    # En fråga på ett annat språk hittar ingenting i en svensk fulltext-
+    # sökning. Triagens svenska omformulering tar dess plats.
+    #
+    # På svenska LÄGGS omformuleringen till (2026-09-19, kundtest mot dev):
+    # "Vilka betalsätt har ni?" hittade inte artikeln "Betalningsmetoder vi
+    # accepterar" — den svenska stemmern kopplar inte `betalsät` till
+    # `betalningsmetod` — utan bara "Så gör du en retur", och den irrelevanta
+    # träffen stoppade de senare sökförsöken (de körs bara på en TOM lista).
+    # Kunden fick en överlämning på en FAQ. Fulltexten ORar orden och
+    # rangordnar med ts_rank, så fler ord ger fler träffmöjligheter.
+    sokfraga_sv = _text(triage.get("sokfraga_sv")).strip()
     kb_forsok = ["hela meddelandet"]
+    if not ar_svenska and sokfraga_sv:
+        sokfraga = sokfraga_sv
+        kb_forsok = ["svensk sökfråga"]
+    elif sokfraga_sv and sokfraga_sv.casefold() not in sokfraga.casefold():
+        sokfraga = f"{sokfraga} {sokfraga_sv}"
+        kb_forsok = [f"hela meddelandet + omformulering ({sokfraga_sv!r})"]
+    articles = await _sok_kb(storage, tenant_id, sokfraga)
     if not articles:
         bredare = _forenklad_fraga(subject, message)
         if bredare:
             articles = await _sok_kb(storage, tenant_id, bredare)
             kb_forsok.append(f"förenklad fråga ({bredare!r})")
     kb_block = _kb_block(articles)
+
+    # --- Kod + villkorat steg: kundens egna system (bd snipe-36u) ----------
+    #
+    # Körs bara när kunden har aktiva integrationer (HTTP-verktyg eller
+    # MCP-servrar, app/integrationer/). Modellen väljer vilka system som ska
+    # frågas; koden anropar, med kundens nycklar som modellen aldrig ser och
+    # med kontextvärdena (kund.email …) satta av koden, inte av meddelandet.
+    # Utan integrationer: inget anrop, och kedjan är exakt densamma som förut.
+    integrationskontext = integrationsuppslag.kontextvarden(
+        kund_email=customer_email,
+        kund_namn=customer_name,
+        kund_telefon=customer_phone,
+        kund_id=customer["id"],
+        arende_id=ticket["id"],
+        kategori=category,
+        kanal=channel,
+        tenant_namn=tenant_namn,
+    )
+    underlag = await integrationsuppslag.hamta(
+        storage,
+        tenant_id,
+        steg=steg,
+        ledger=ledger,
+        trace=trace,
+        case_context=f"{case_context}\n\n## Kunskapsbas\n{kb_block}",
+        kontext=integrationskontext,
+        is_test=is_test,
+    )
+    systemblock = f"\n\n{underlag.block}" if underlag else ""
 
     # --- Steg 2: research --------------------------------------------------
     research = await steg(
@@ -599,10 +1014,20 @@ async def run_support_agent(
         task=(
             "Bedöm vad kunskapsbasen faktiskt svarar på och med vilken konfidens. "
             "Returnera JSON: findings (svenska), confidence (0.0-1.0), "
-            "kb_supports_answer (bool), missing_info (svenska eller null)."
+            "kb_supports_answer (bool), missing_info (svenska eller null), "
+            "behover_fortydligande (bool: frågan är för vag eller tvetydig för att "
+            "besvaras, och en motfråga skulle göra den besvarbar. false när frågan "
+            "är tydlig — även om kunskapsbasen saknar svaret)."
+            + (integrationsuppslag.RESEARCH_TILLAGG if underlag else "")
         ),
         case_context=(
-            f"{case_context}\n\n## Kunskapsbas (ENDA tillåtna faktakällan)\n{kb_block}\n\n"
+            f"{case_context}\n\n"
+            + (
+                "## Kunskapsbas (tillåten faktakälla, liksom uppgifterna från kundens system nedan)"
+                if underlag
+                else "## Kunskapsbas (ENDA tillåtna faktakällan)"
+            )
+            + f"\n{kb_block}{systemblock}\n\n"
             f"Tidigare ärenden från kunden: {len(history)}"
         ),
     )
@@ -618,85 +1043,206 @@ async def run_support_agent(
             kb_forsok.append(f"missing_info ({saknas[:60]!r})")
             kb_block = _kb_block(articles)
 
-    # --- Kod: ska agenten fråga i stället för att lämna över? --------------
+    # --- Kod: vad ska svaret VARA? (bd snipe-1fl, 2026-09-18) --------------
     #
-    # Se `_ar_kansligt`. Beslutet fattas HÄR, före utkastet,
-    # eftersom det ändrar vad utkastet ska vara — inte efteråt, som en
-    # efterhandsredigering av en text som redan skrivits.
+    # Beslutet fattas HÄR, före utkastet, eftersom det ändrar vad utkastet ska
+    # vara — inte efteråt, som en efterhandsredigering av en text som redan
+    # skrivits. Fyra lägen:
+    #
+    #   besvara   — kunskapsbasen bär svaret.
+    #   fraga     — frågan är för vag; EN motfråga (under kundens tak).
+    #   avgransa  — frågan ligger utanför ämnesområdet; säg det och erbjud en
+    #               människa (kundens val "erbjud").
+    #   overlamna — en människa tar över, i samma chatt.
+    #
+    # Eskaleringstriggerna är FASTA och avgörs i kod, i prioritetsordning.
+    # Modellen levererar signalerna (triage: ber_om_manniska,
+    # inom_amnesomradet, missforstadd; research: kb_supports_answer,
+    # behover_fortydligande) men kan inte prata bort ett beslut: en kund som
+    # ber om en människa får en, och ett träffat känsligt ord lämnas över.
     kb_stodjer_svar = bool(research.get("kb_supports_answer"))
-    kb_saknar_svar = not articles or not kb_stodjer_svar
+    # Ett lyckat svar ur kundens system är underlag lika mycket som en
+    # KB-träff (bd snipe-36u) — "var är min order?" står aldrig i biblioteket.
+    kb_saknar_svar = (not articles and not underlag.kallor) or not kb_stodjer_svar
 
+    sentimentgrans = regler["sentimentgrans"] / 100
     sakerhetskritiskt = bool(
         abuse.ska_eskalera
         or cancellation_risk
         or triage.get("escalate")
-        or sentiment < SENTIMENT_ESCALATION_THRESHOLD
+        or sentiment < sentimentgrans
         or _ar_kansligt(f"{subject} {message}")
     )
 
-    fragar_uppfoljning = (
-        kb_saknar_svar
-        and not sakerhetskritiskt
-        # Högst TVÅ motfrågor, sedan överlämning. `turn_count` räknar
-        # REPLIKER (in + ut), så kundens första meddelande ger 0, deras svar
-        # på första motfrågan ger 2, och svaret på den andra ger 4. Har
-        # kunden svarat två gånger och vi fortfarande inte kan svara, är en
-        # tredje motfråga inte omsorg utan en loop — och den loopen är värre
-        # än en överlämning.
-        #
-        # 2026-09-02: gränsen höjdes från `turn_count == 0` till `<= 2`
-        # (kundkrav: eskalera inte i första taget). Första motfrågan fångar
-        # en vag fråga; kundens svar bär ofta ämnet men inte detaljen, och
-        # flerturssökningen (som väver in förra repliken) förtjänar ett varv
-        # till innan tomheten är ett besked. Vid tredje varvet gäller det
-        # gamla resonemanget oförändrat.
-        #
-        # 2026-08-25: `_kb_ar_tunn`-villkoret togs bort. Det stängde
-        # följdfrågevägen så fort biblioteket hade fem artiklar — på den
-        # publika demon (31 artiklar) blev varje miss en överlämning, aldrig
-        # en fråga. Men en första miss på ett FULLT bibliotek betyder oftare
-        # "frågan var för vag för att sökas" än "svaret finns inte".
-        and turn_count <= 2
+    # Uttrycklig begäran: ordfiltret i kod, triagens signal (fångar
+    # omskrivningar), eller ett ja på agentens eget erbjudande i förra
+    # repliken. Ett "ja" läses bara som en begäran när vi faktiskt erbjöd.
+    bad_om_manniska = bool(
+        support_regler.ber_om_manniska(f"{subject} {message}")
+        or triage.get("ber_om_manniska") is True
+        or (samtal.get("erbjod_manniska") and support_regler.jakande_svar(message))
     )
 
+    # Utanför ämnesområdet kräver BÅDA: triagen säger att frågan ligger
+    # utanför, och kunskapsbasen bär inget svar. En falsk "utanför" på en
+    # fråga biblioteket kan besvara ska aldrig kosta kunden svaret.
+    utanfor_amnet = triage.get("inom_amnesomradet") is False and kb_saknar_svar
+
+    # Saknat fält = dagens beteende (fråga hellre än lämna över). Bara ett
+    # uttryckligt false från researchsteget gör en KB-miss till "utanför
+    # kunskapsbasen" — en tydlig fråga biblioteket inte kan besvara.
+    behover_fortydligande = research.get("behover_fortydligande") is not False
+    missforstadd = regler["frustration_raknas"] and triage.get("missforstadd") is True
+
+    # Misslyckade rundor i FÖLJD. En runda är misslyckad när agenten måste
+    # ställa en motfråga, eller när kunden säger att förra svaret missade —
+    # högst EN per runda. En lyckad runda nollar räknaren. Taket är kundens
+    # (`max_misslyckade`, standard 2 = två motfrågor, sedan en människa).
+    #
+    # Ersätter `turn_count <= 2` (2026-09-02), som räknade samtalets ALLA
+    # repliker: en kund med tre besvarade frågor bakom sig fick aldrig en
+    # motfråga på sin fjärde, och en kund som sa "fattar du inte?" räknades
+    # inte alls — den loop Ebbots chatt fastnade i.
+    tidigare_misslyckade = (
+        int(samtal.get("misslyckade_i_rad") or 0) if samtal.get("lage") == "agent" else 0
+    )
+    vill_fraga = (
+        kb_saknar_svar
+        and behover_fortydligande
+        and not sakerhetskritiskt
+        and not bad_om_manniska
+        and not utanfor_amnet
+    )
+    runda_misslyckad = missforstadd or vill_fraga
+    misslyckade_nu = tidigare_misslyckade + 1 if runda_misslyckad else 0
+    tak_nått = runda_misslyckad and misslyckade_nu > regler["max_misslyckade"]
+
+    orsak: str | None = None
+    if abuse.ska_eskalera:
+        orsak = "pahopp"
+    elif bad_om_manniska:
+        orsak = "kund_bad_om_manniska"
+    elif sakerhetskritiskt:
+        orsak = "sakerhet"
+    elif utanfor_amnet:
+        if regler["utanfor_amnet"] == "eskalera":
+            orsak = "utanfor_amnesomradet"
+    elif tak_nått:
+        orsak = "fortydligandetak"
+    elif kb_saknar_svar and not behover_fortydligande:
+        orsak = "utanfor_kunskapsbasen"
+
+    if orsak:
+        svarslage = "overlamna"
+    elif utanfor_amnet:
+        svarslage = "avgransa"
+    elif vill_fraga:
+        svarslage = "fraga"
+    else:
+        svarslage = "besvara"
+    # Namnet står kvar för läsbarhetens skull: det är vad eskaleringssteget
+    # och testerna frågar efter ("ställer svaret en följdfråga?").
+    fragar_uppfoljning = svarslage == "fraga"
+
     # --- Steg 3: utkast ----------------------------------------------------
+    missade_rad = (
+        "Kunden säger att förra svaret missade. Läs samtalet igen, svara på det "
+        "kunden faktiskt frågar och upprepa inte förra svaret. "
+        if missforstadd
+        else ""
+    )
+    if svarslage == "fraga":
+        uppgift = (
+            missade_rad
+            + "Kunskapsbasen räcker inte för att svara på frågan, men ärendet är "
+            "varken juridiskt, säkerhetskritiskt eller en uppsägningsrisk. "
+            "Lämna INTE över till en människa. Ställ i stället EN kort, öppen "
+            "följdfråga som skulle göra frågan besvarbar — den mest användbara "
+            "du kan komma på. Säg gärna i en halv mening vad du uppfattat, så att "
+            "kunden ser vad som saknas. Påstå ingenting om produkten eller "
+            "villkoren som inte står i kunskapsbasen, och lova inte att någon "
+            "återkommer. Ren text, ingen markdown. Returnera JSON: draft (svenska)."
+        )
+    elif svarslage == "avgransa":
+        uppgift = (
+            "Frågan ligger utanför det du är här för att hjälpa till med. Säg det "
+            "vänligt och kort, berätta i en mening vad du KAN hjälpa till med "
+            "(utifrån ämnesområdet eller kunskapsbasen), och fråga om kunden vill "
+            "att du kopplar in en kollega. Svara inte på själva frågan och gissa "
+            "inte. Ren text, ingen markdown. Returnera JSON: draft (svenska)."
+        )
+    elif svarslage == "overlamna":
+        inledning = {
+            "kund_bad_om_manniska": (
+                "Kunden har bett om en människa. Bekräfta kort att du kopplar in "
+                "en kollega — försök inte lösa ärendet själv och försök inte "
+                "övertala kunden att stanna hos dig. "
+            ),
+            "sakerhet": (
+                "Ärendet rör något en människa måste avgöra (pengar, juridik, "
+                "personuppgifter eller ett tydligt missnöje). Svara på det "
+                "kunskapsbasen faktiskt täcker om det hjälper kunden, men lova "
+                "ingenting om utfallet. "
+            ),
+        }.get(
+            orsak or "",
+            "Du kan inte svara säkert på det här utifrån kunskapsbasen. Säg det "
+            "rakt ut — gissa inte, och påstå ingenting om produkten eller "
+            "villkoren. ",
+        )
+        uppgift = (
+            inledning
+            + "Berätta sedan att en kollega tar över HÄR i chatten, att hela "
+            "samtalet följer med så att kunden inte behöver upprepa något, och att "
+            "svaret kommer i samma chatt. Lova ingen tid. Ren text, ingen "
+            "markdown. Returnera JSON: draft (svenska)."
+        )
+    else:
+        uppgift = (
+            missade_rad
+            + "Skriv ett svar till kunden, grundat ENBART i kunskapsbasen ovan. "
+            "Täcker kunskapsbasen bara en del av frågan: svara på den delen och "
+            "säg rakt ut vilken del du inte har någon uppgift om — gissa aldrig "
+            "och fyll aldrig i luckor. Avsluta med ETT konkret nästa steg som "
+            "hjälper kunden vidare (vad hen kan göra nu, eller en kort fråga om "
+            "något närliggande), hämtat ur kunskapsbasen eller ärendet — inte en "
+            "standardfras. Ren text, ingen markdown. Returnera JSON: draft (svenska)."
+        )
+    if underlag:
+        uppgift += integrationsuppslag.UTKAST_TILLAGG
+    if not ar_svenska:
+        uppgift = uppgift.replace(
+            "Returnera JSON: draft (svenska).",
+            f"Skriv hela svaret på {sprak_namn} — kundens språk — även om "
+            f"kunskapsbasen är på svenska. Returnera JSON med fältet draft: EN "
+            f"sträng med hela svaret till kunden på {sprak_namn}. Inte skillens "
+            f"mallformat (To/Re/Notes) och inga andra textfält.",
+        )
     draft = await steg(
         steps["cs:draft-response"],
         ledger,
         trace,
-        task=(
-            "Kunskapsbasen räcker inte för att svara på frågan, men ärendet är "
-            "varken juridiskt, säkerhetskritiskt eller en uppsägningsrisk. "
-            "Lämna INTE över till en människa. Ställ i stället EN kort, öppen "
-            "följdfråga som skulle göra frågan besvarbar — den mest användbara "
-            "du kan komma på. Påstå ingenting om produkten eller villkoren som "
-            "inte står i kunskapsbasen, och lova inte att någon återkommer. "
-            "Ren text, ingen markdown. Returnera JSON: draft (svenska)."
-            if fragar_uppfoljning
-            else "Skriv ett svar till kunden, grundat ENBART i kunskapsbasen ovan. "
-            "Ren text, ingen markdown. Returnera JSON: draft (svenska)."
+        task=uppgift,
+        case_context=(
+            f"{case_context}\n\n## Kunskapsbas\n{kb_block}{systemblock}\n\n"
+            f"## Research\n{research.get('findings', '')}"
         ),
-        case_context=f"{case_context}\n\n## Kunskapsbas\n{kb_block}\n\n## Research\n{research.get('findings', '')}",
     )
 
-    # --- Steg 4: eskaleringsbedömning (villkorat sedan 2026-09-02) ---------
+    # --- Steg 4: eskaleringsbedömning (villkorat) ---------------------------
     #
-    # Steget kör med thinking påslaget och var det dyraste anropet i kedjan —
-    # och på lyckliga flödet (KB bar svaret, inget säkerhetskritiskt, kunden
-    # bad inte om en människa) röstade modellen i praktiken alltid "nej".
-    # Kodbeslutet nedan OR:ar ändå ihop de oberoende villkoren, så det enda
-    # steget ensamt tillförde där var juridik/människa-bedömningen — och
-    # juridiken fångas av `_ar_kansligt` (som ingår i `sakerhetskritiskt`),
-    # människo-önskan av `_BER_OM_MANNISKA`. Faller någon av signalerna körs
-    # steget precis som förut, med full modellbedömning.
-    # MEDVETET INTE med i villkoret: triagekategorin. "Vilka betalsätt tar
-    # ni?" är kategorin betalning och en ren FAQ — att köra bedömningssteget
-    # där är exakt kostnaden villkoret finns för att ta bort. Ett verkligt
-    # kontoärende i samma kategori fångas ändå: antingen saknar KB svaret
-    # (kb_saknar_svar) eller så träffar ordvalet _KANSLIGT (återbetalning,
-    # kompensation, häva köpet ...).
+    # Steget kör med thinking påslaget och är kedjans dyraste anrop. Det körs
+    # när det finns något för modellen att bedöma UTÖVER kodbeslutet: en
+    # kunskapslucka eller ett säkerhetskritiskt ärende, där stegets motivering
+    # blir det medarbetaren läser. Hoppas över (2026-09-18) när kunden bett om
+    # en människa — beslutet är redan fattat i kod och motiveringen given —
+    # och när frågan ligger utanför ämnesområdet med kundens val "erbjud":
+    # där hade stegets "eskalera om kunskapsbasen saknar svar" lämnat över en
+    # väderfråga.
     behover_eskaleringsbedomning = bool(
-        kb_saknar_svar or sakerhetskritiskt or _BER_OM_MANNISKA.search(f"{subject} {message}")
+        (kb_saknar_svar or sakerhetskritiskt)
+        and orsak != "kund_bad_om_manniska"
+        and svarslage != "avgransa"
     )
     if not behover_eskaleringsbedomning:
         escalation: dict[str, Any] = {"should_escalate": False, "reason": None}
@@ -731,52 +1277,29 @@ async def run_support_agent(
         )
 
     # Eskalering avgörs i KOD av oberoende villkor — inte av modellen ensam.
-    #
-    # ## Vad som ändrades 2026-08-24, och vad som INTE gjorde det
-    #
-    # Före: `or not articles` fällde ensamt. En tenant med sex artiklar
-    # eskalerade därför nästan varje fråga som inte råkade formuleras som en
-    # artikelrubrik — inte för att ärendet behövde en människa, utan för att
-    # sökningen gick tom på första försöket.
-    #
-    # Nu: `kb_saknar_svar` väger in `kb_supports_answer` från researchsteget,
-    # som tidigare bara stod som KONTEXT åt eskaleringssteget och aldrig
-    # avgjorde något i kod. Den är det bättre måttet — noll träffar på ett tunt
-    # bibliotek betyder något annat än noll träffar på ett fullt. Och när
-    # ärendet varken är känsligt eller en fortsättning ställs en följdfråga i
-    # stället för att lämna över (`fragar_uppfoljning`).
-    #
-    # OFÖRÄNDRADE, och avsiktligt lika lätta att utlösa som förut:
-    # `abuse.ska_eskalera`, uppsägningsrisk, triageflaggan, lågt sentiment och
-    # modellens egen `should_escalate` (som bär juridik/ARN/GDPR). De är rätt
-    # beslut varje gång, inte agenten som ger upp.
-    #
-    # Och en tredje sak, i lagringslagret: `storage.search_kb` kedjar numera
-    # vektorsökning -> fulltext. Vektorvägen filtrerar på
-    # `embedding is not null` och gav tom lista så fort de nyaste träffarna låg
-    # under likhetströskeln, även när svaret stod i en äldre artikel. Sökningen
-    # är alltså bättre vid källan, inte bara mildare bedömd här.
-    escalated = bool(
-        escalation.get("should_escalate")
-        or triage.get("escalate")
-        or sentiment < SENTIMENT_ESCALATION_THRESHOLD
-        or cancellation_risk
-        or abuse.ska_eskalera
-        or (kb_saknar_svar and not fragar_uppfoljning)
-    )
+    # `orsak` bär kodens fasta triggers; modellens egen `should_escalate`
+    # (juridik/ARN/GDPR-nyansen) kan lägga till en överlämning men aldrig ta
+    # bort en. Triageflaggan, lågt sentiment, uppsägningsrisk och påhopp
+    # ingår i `sakerhetskritiskt` och är lika lätta att utlösa som förut.
+    modellen_lamnar_over = bool(escalation.get("should_escalate")) and orsak is None
+    if modellen_lamnar_over:
+        orsak = "modellbedomning"
+    escalated = orsak is not None
     escalation_reason = (
         # Påhoppet vinner över modellens egen motivering: en människa som tar
         # över ärendet ska se VARFÖR det lämnades över, och "kunskapsbasen
         # saknade svar" är fel förklaring på ett hot.
         f"Avbrutet samtal: {abuse.niva}"
         if abuse.ska_eskalera
-        else escalation.get("reason") or ("retention_risk" if cancellation_risk else None)
+        else _text(escalation.get("reason")) or ("retention_risk" if cancellation_risk else None)
     )
     if escalated and not escalation_reason:
         escalation_reason = (
             f"Kunskapsbasen räckte inte ({', '.join(kb_forsok)} prövades, "
             f"kb_supports_answer={kb_stodjer_svar})"
-            if kb_saknar_svar
+            if orsak in ("utanfor_kunskapsbasen", "fortydligandetak") and kb_saknar_svar
+            else support_regler.ORSAKER.get(orsak or "", "Lågt sentiment eller triageflagga")
+            if orsak != "sakerhet"
             else "Lågt sentiment eller triageflagga"
         )
 
@@ -792,7 +1315,22 @@ async def run_support_agent(
     # sparas den som ett FÖRSLAG (agent_suggestions) som en människa
     # godkänner i admin — agenten skriver aldrig själv i kunskapsbasen
     # (INV-LEARN-001).
-    if kb_saknar_svar or sakerhetskritiskt:
+    #
+    # 2026-09-18: och bara när eskaleringssteget kördes. Steget kräver det
+    # (`requires` i support_playbook.py), och de fall där det numera hoppas
+    # över är inga kunskapsluckor: en väderfråga ska inte bli ett
+    # artikelförslag, och en kund som ber om en människa har inte avslöjat
+    # något biblioteket saknar.
+    #
+    # 2026-09-19: och inte när agenten ställer en motfråga. En fråga som är
+    # för vag att besvara går inte att skriva en artikel om, och luckan (om
+    # det finns en) fångas nästa tur när kunden förtydligat. ~5 000 tokens
+    # per motfrågetur.
+    if (
+        (kb_saknar_svar or sakerhetskritiskt)
+        and behover_eskaleringsbedomning
+        and svarslage != "fraga"
+    ):
         kb_forslag = await steg(
             steps["cs:kb-article"],
             ledger,
@@ -824,7 +1362,7 @@ async def run_support_agent(
                 logger.exception("Kunde inte spara KB-förslaget för ärendet.")
 
     # --- Steg 6: retention (villkorat) -------------------------------------
-    current_draft = draft.get("draft", "")
+    current_draft = _textfalt(draft, "draft")
 
     if cancellation_risk and not abuse.ska_eskalera:
         retention_playbook = await storage.get_latest_context_doc(
@@ -851,10 +1389,14 @@ async def run_support_agent(
                 f"## Nuvarande utkast\n{current_draft}"
             ),
         )
-        current_draft = retention.get("revised_draft") or current_draft
+        current_draft = _textfalt(retention, "revised_draft") or current_draft
 
     # --- Steg 7: humanizer (ALLTID sist) -----------------------------------
-    humanized = await steg(
+    #
+    # Bara på svenska (bd snipe-xtr). Skillen är snajp:humanizer-SVENSKA: på
+    # ett annat språk hade den översatt tillbaka till svenska, alltså ångrat
+    # det enda utkaststeget just gjort. Där är utkastet sista handen.
+    humanized = {"final_reply": current_draft} if not ar_svenska else await steg(
         steps["snajp:humanizer-svenska"],
         ledger,
         trace,
@@ -865,10 +1407,83 @@ async def run_support_agent(
         case_context=f"{case_context}\n\n## Text att humanisera\n{current_draft}",
     )
 
-    reply = strip_markdown(humanized.get("final_reply") or current_draft or "").strip()
+    reply = strip_markdown(_textfalt(humanized, "final_reply") or current_draft or "").strip()
     # Efter humaniseraren, före längdkapningen: en avslutningsfras utan namn
     # under är trasig oavsett vilket steg som skrev den.
     reply = strip_dangling_sign_off(reply)
+
+    # --- Kod: faktagrinden (bd snipe-1fl) ----------------------------------
+    #
+    # Körs på den EXAKTA text kunden ska få, efter humaniseraren — samma
+    # princip som INV-GROUND-001 i leads: en instruktion om att bara grunda
+    # sig i kunskapsbasen är en förhoppning, grinden är en kontroll. Nivån är
+    # kundens (tillatande/forsiktig/strikt, se support_faktagrind.py).
+    #
+    # EN reparationsrunda: humaniseraren får stryka just det som saknar stöd.
+    # Fäller grinden igen kastas texten — hellre ett uttryckligt "det vet jag
+    # inte" och ett erbjudande om en människa än en uppgift vi inte kan stå
+    # för. Påhoppsrepliken kontrolleras inte: den är vår fasta text.
+    erbjod_manniska = svarslage == "avgransa"
+    faktagrind: dict[str, Any] = {"niva": installningar["faktakontroll"], "ok": True}
+    if reply and not abuse.ska_eskalera:
+        kallor = _faktakallor(
+            articles, subject=subject, message=message, conversation_block=conversation_block
+        )
+        # Lyckade svar ur kundens system (bd snipe-36u) är stöd precis som
+        # kunskapsbasen — annars fälls ett korrekt återgivet leveransdatum.
+        kallor += underlag.kallor
+        dom = support_faktagrind.kontrollera(
+            reply, niva=installningar["faktakontroll"], kallor=kallor, tenant_namn=tenant_namn
+        )
+        if not dom.ok:
+            faktagrind.update(ok=False, ostodda=list(dom.ostodda), reparerad=False)
+            logger.warning(
+                "Faktagrinden fällde supportsvaret (tenant %s): %s", tenant_id, dom.ostodda
+            )
+            rattning = await steg(
+                steps["snajp:humanizer-svenska" if ar_svenska else "cs:draft-response"],
+                ledger,
+                trace,
+                task=(
+                    "Texten innehåller uppgifter som INTE finns i kunskapsbasen: "
+                    + "; ".join(dom.ostodda)
+                    + ". Skriv om texten så att de uppgifterna stryks. Där de "
+                    "behövdes: säg rakt ut att du inte har den uppgiften. Hitta inte "
+                    "på något nytt och ändra inget annat. Ren text, ingen markdown. "
+                    + (
+                        "Returnera JSON: final_reply (svenska)."
+                        if ar_svenska
+                        else f"Skriv på {sprak_namn}. Returnera JSON med fältet final_reply: "
+                        f"EN sträng med hela den rättade texten, inte skillens "
+                        f"mallformat (To/Re/Notes)."
+                    )
+                ),
+                case_context=f"{case_context}\n\n## Kunskapsbas\n{kb_block}{systemblock}\n\n## Text att rätta\n{reply}",
+            )
+            kandidat = strip_dangling_sign_off(
+                strip_markdown(_textfalt(rattning, "final_reply")).strip()
+            )
+            if kandidat and support_faktagrind.kontrollera(
+                kandidat, niva=installningar["faktakontroll"], kallor=kallor, tenant_namn=tenant_namn
+            ).ok:
+                reply = kandidat
+                faktagrind.update(ok=True, reparerad=True)
+            elif escalated:
+                reply = support_texter.text("overlamningssvar", svar_sprak)
+            else:
+                reply = support_texter.text("osakerhet", svar_sprak)
+                erbjod_manniska = True
+
+    # Modellens eskaleringsbedömning lämnade över ett samtal koden tänkt
+    # besvara eller fråga i. Löftet om en människa läggs på i KOD — det får
+    # bara ges när ärendet faktiskt är överlämnat, och kunden ska få veta att
+    # det sker i samma chatt. En motfråga ersätts helt: "vilken telefon har
+    # du? en kollega tar över" är två besked som motsäger varandra.
+    if modellen_lamnar_over and not abuse.ska_eskalera:
+        if svarslage == "fraga" or not reply:
+            reply = support_texter.text("overlamningssvar", svar_sprak)
+        else:
+            reply = f"{reply}\n\n{support_texter.text("overlamningsrad", svar_sprak)}"
 
     # Påhoppsspärren appliceras EFTER humaniseraren, och det är hela poängen.
     # Ett kontrollerat säkerhetssvar ska inte formuleras om av en modell — den
@@ -890,29 +1505,10 @@ async def run_support_agent(
         # ett oeskalerat ärende), och den varieras så att en kund som träffar
         # den två gånger inte läser exakt samma mening två gånger.
         if escalated:
-            reply = random.choice(
-                [
-                    "Tack för ditt meddelande! Jag har öppnat ett ärende och en "
-                    "kollega återkommer så snart som möjligt.",
-                    "Jag har lagt upp ett ärende av det här, så tar en kollega "
-                    "det vidare och hör av sig till dig.",
-                    "Det här behöver en människa titta på — jag har öppnat ett "
-                    "ärende och någon av oss återkommer så snart det går.",
-                ]
-            )
+            reply = support_texter.text("overlamningssvar", svar_sprak)
         else:
-            reply = random.choice(
-                [
-                    "Där fick jag inte ihop ett bra svar. Kan du beskriva vad "
-                    "du är ute efter på ett annat sätt, så gör jag ett nytt försök?",
-                    "Jag vill inte gissa mig till ett svar här. Berätta gärna "
-                    "lite mer om vad du behöver, så tittar jag igen.",
-                    "Den frågan kunde jag inte besvara ordentligt på första "
-                    "försöket. Formulera den gärna på ett annat sätt så löser vi det.",
-                ]
-            )
-    if len(reply) > config["max_length"]:
-        reply = reply[: config["max_length"] - 1].rstrip() + "…"
+            reply = support_texter.text("tomt", svar_sprak)
+    reply = _korta_svar(reply, config["max_length"])
 
     # --- Kod: sidoeffekter -------------------------------------------------
     if escalated:
@@ -953,9 +1549,48 @@ async def run_support_agent(
         content=reply,
         sentiment=None,
         has_image=False,
+        author="agent",
     )
     await storage.log_metric(
         tenant_id, ticket_id=ticket["id"], metric_name="sentiment", value=sentiment
+    )
+
+    # Kundens eget ärendesystem (bd snipe-36u): en förfrågan bunden till
+    # arende_eskalerat skapar ärendet där med hela samtalet. Samma villkor som
+    # det prioriterade mejlet ovan — EN gång per överlämning, inte per
+    # meddelande. Efter att svaret sparats, så att agentens överlämningsreplik
+    # följer med i samtalet, och i bakgrunden, så att ett långsamt
+    # ärendesystem aldrig blir kundens väntetid.
+    if (
+        escalated
+        and not any(t.get("status") == "escalated" for t in history)
+        and await integrationshandelser.har_handelse(storage, tenant_id, "arende_eskalerat")
+    ):
+        integrationshandelser.eskalering_i_bakgrunden(
+            storage,
+            tenant_id,
+            kontext=integrationskontext,
+            customer_id=customer["id"],
+            orsak=escalation_reason,
+            orsakskod=orsak,
+            arendelank=arendelank(settings.publik_bas_url, ticket["id"]),
+            is_test=is_test,
+        )
+
+    # Samtalsläget (migration 066). Vid överlämning äger en människa samtalet
+    # från och med nu: nästa meddelande från kunden hamnar i DET HÄR ärendets
+    # tråd och får ingen AI-replik (se _svara_under_overlamning). Annars
+    # sparas räknaren för misslyckade rundor och om vi erbjöd en människa.
+    await _spara_samtalslage(
+        storage,
+        tenant_id,
+        customer["id"],
+        lage="overlamnad" if escalated else "agent",
+        misslyckade_i_rad=0 if escalated else misslyckade_nu,
+        erbjod_manniska=False if escalated else erbjod_manniska,
+        overlamnad_orsak=orsak if escalated else None,
+        overlamnad_ticket_id=ticket["id"] if escalated else None,
+        sprak=svar_sprak,
     )
 
     # --- Fas R2: cache-STORE (INV-CACHE-001) --------------------------------
@@ -966,11 +1601,23 @@ async def run_support_agent(
     # de rena faktafrågorna (svarscache.CACHEBARA_KATEGORIER). En "on"-TRÄFF
     # når aldrig hit — den grenen returnerade redan högre upp — så det här
     # är bara miss/off/shadow-vägen.
+    #
+    # 2026-09-18: dessutom bara ett BESVARANDE svar som inte erbjuder en
+    # människa. En motfråga eller en avgränsning bär ett samtalsläge (räknare,
+    # erbjudande) som en cacheträff aldrig sätter — ett cachat "vill du prata
+    # med en kollega?" hade gjort kundens "ja" till en ny fråga.
     if (
         settings.semantic_cache in ("on", "shadow")
         and cache_kontext.behorig
         and not escalated
+        and svarslage == "besvara"
+        and not erbjod_manniska
         and category in svarscache.CACHEBARA_KATEGORIER
+        # Ett svar byggt på uppgifter ur kundens system (bd snipe-36u) gäller
+        # EN kund: "din order skickades i går" får aldrig serveras till nästa
+        # som frågar "var är min order?". Ett misslyckat anrop är lika
+        # personligt — det säger något om just det här ärendet.
+        and not underlag
     ):
         await svarscache.spara(
             tenant_id,
@@ -1017,6 +1664,19 @@ async def run_support_agent(
 
     latency_ms = int((time.monotonic() - started) * 1000)
     pack = pack_version(SUPPORT_V1.name, lager.hash)
+    steglogg = trace.as_log()
+    if underlag.logg or underlag.katalogfel:
+        # Pseudo-steg, samma form som svarscachens: nyckeln "step" och inte
+        # "skill", så att kvotbokföringen (chat.py) inte räknar det som ett
+        # LLM-anrop. Bär VAD som anropades och hur det gick, aldrig svaren.
+        steglogg.append(
+            {
+                "step": "integrationer",
+                "anrop": underlag.logg,
+                "rundor": underlag.rundor,
+                "katalogfel": underlag.katalogfel,
+            }
+        )
     run = await storage.log_agent_run(
         tenant_id,
         agent_type="support",
@@ -1024,7 +1684,7 @@ async def run_support_agent(
         skills_used=trace.skills_used,
         input_text=message,
         output_text=reply,
-        step_log=trace.as_log(),
+        step_log=steglogg,
         tokens_in=trace.total_tokens_in,
         tokens_out=trace.total_tokens_out,
         latency_ms=latency_ms,
@@ -1047,11 +1707,21 @@ async def run_support_agent(
         "sentiment": sentiment,
         "escalated": escalated,
         "escalation_reason": escalation_reason,
+        # bd snipe-1fl: orsakskoden (support_regler.ORSAKER), svarsläget och
+        # faktagrindens utfall. `overlamnad` = en människa äger samtalet nu,
+        # chattfönstret börjar hämta medarbetarens svar.
+        "escalation_code": orsak,
+        "overlamnad": escalated,
+        "svarslage": svarslage,
+        "faktagrind": faktagrind,
+        "sprak": svar_sprak,
         "kb_sources": [{"title": a["title"], "similarity": a["similarity"]} for a in articles],
         "returning_customer": len(history) > 0,
         "simulation": False,
         "skills_used": trace.skills_used,
-        "step_log": trace.as_log(),
+        "step_log": steglogg,
         "cancellation_risk": cancellation_risk,
         "pack_version": pack,
+        # bd snipe-36u: vilka av kundens system som frågades (utan svarsdata).
+        "integrationer": underlag.logg,
     }

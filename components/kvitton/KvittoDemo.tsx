@@ -60,7 +60,7 @@ function DemoChatt() {
             <p className="ml-auto max-w-[92%] rounded-card bg-paper2 px-3.5 py-2.5 text-[0.875rem] leading-6 text-ink">
               {FRAGOR[i].fraga}
             </p>
-            <p className="max-w-[92%] whitespace-pre-wrap rounded-card border border-ink/15 px-3.5 py-2.5 text-[0.875rem] leading-6 text-ink/85">
+            <p className="max-w-[92%] whitespace-pre-wrap rounded-card border border-ink/15 px-3.5 py-2.5 text-[0.875rem] leading-6 text-ink-muted">
               {FRAGOR[i].svar}
             </p>
           </div>
@@ -78,7 +78,7 @@ function DemoChatt() {
                 key={i}
                 type="button"
                 onClick={() => setStallda((f) => [...f, i])}
-                className="focus-ring rounded-input border border-ink/15 px-3 py-2 text-left text-[0.8125rem] text-ink/70 hover:border-ochre hover:text-ink"
+                className="focus-ring rounded-input border border-ink/15 px-3 py-2 text-left text-[0.8125rem] text-ink-muted hover:border-ochre hover:text-ink"
               >
                 {FRAGOR[i].fraga}
               </button>
@@ -144,8 +144,8 @@ export function KvittoDemo() {
 
   return (
     <div className="mx-auto max-w-[1160px]">
-      <p className="mb-4 text-[0.8125rem] leading-6 text-ink/55">
-        <strong className="font-semibold text-ink/70">Exempel.</strong> Inkorgen,
+      <p className="mb-4 text-[0.8125rem] leading-6 text-ink-subtle">
+        <strong className="font-semibold text-ink-muted">Exempel.</strong> Inkorgen,
         bolagen och siffrorna är påhittade och svaren skrivna i förväg — ingen
         modell körs på den här sidan. I produkten läser agenten din riktiga
         inkorg, med samma kontroller.
@@ -158,7 +158,7 @@ export function KvittoDemo() {
             onClick={starta}
             className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-input bg-ink px-5 text-[0.9375rem] font-semibold text-paper transition-colors hover:bg-ink2"
           >
-            <Play className="h-4 w-4 text-ochre" aria-hidden />
+            <Play className="h-4 w-4 text-warning" aria-hidden />
             Skanna inkorgen
           </button>
         ) : (
@@ -197,7 +197,7 @@ export function KvittoDemo() {
             </div>
 
             {steg < 0 ? (
-              <p className="mt-4 flex items-center gap-2 border-t border-ink/10 pt-4 text-[0.875rem] leading-6 text-ink/55">
+              <p className="mt-4 flex items-center gap-2 border-t border-ink/10 pt-4 text-[0.875rem] leading-6 text-ink-subtle">
                 <Mail className="h-4 w-4 shrink-0 text-mineral" aria-hidden />
                 Tryck på Skanna inkorgen, så läser agenten mejlen ett i taget och
                 plockar ut beloppen medan du tittar på.
@@ -215,7 +215,7 @@ export function KvittoDemo() {
                       <div className="flex min-w-0 items-baseline justify-between gap-3">
                         <p className="min-w-0 truncate text-[0.875rem] font-medium text-ink">
                           {mejl.avsandare}
-                          <span className="ml-2 font-normal text-ink/55">{mejl.amne}</span>
+                          <span className="ml-2 font-normal text-ink-subtle">{mejl.amne}</span>
                         </p>
                         <span className="shrink-0">
                           {!last ? (
@@ -229,7 +229,7 @@ export function KvittoDemo() {
                           )}
                         </span>
                       </div>
-                      <p className="mt-1 truncate font-mono text-[0.75rem] text-ink/45">
+                      <p className="mt-1 truncate font-mono text-[0.75rem] text-ink-subtle">
                         {last && mejl.belopp ? (
                           <>
                             {mejl.rad.split(/Totalt: |Total: /)[0]}
@@ -252,8 +252,8 @@ export function KvittoDemo() {
                         )}
                       </p>
                       {last && mejl.anmarkning ? (
-                        <p className="mt-1 flex items-start gap-1.5 text-[0.75rem] leading-5 text-ink/55">
-                          <ShieldQuestion className="mt-0.5 h-3 w-3 shrink-0 text-ochre" aria-hidden />
+                        <p className="mt-1 flex items-start gap-1.5 text-[0.75rem] leading-5 text-ink-subtle">
+                          <ShieldQuestion className="mt-0.5 h-3 w-3 shrink-0 text-warning" aria-hidden />
                           {mejl.anmarkning}
                         </p>
                       ) : null}
@@ -292,7 +292,7 @@ export function KvittoDemo() {
                   {kvitton.map((mejl) => (
                     <tr key={mejl.id} className="animate-mejl-in">
                       <td className="py-2.5 pr-4 align-top">
-                        <span className="text-[0.8125rem] tabular-nums text-ink/62">
+                        <span className="text-[0.8125rem] tabular-nums text-ink-muted">
                           {mejl.datum.slice(5)}
                         </span>
                       </td>
@@ -300,7 +300,7 @@ export function KvittoDemo() {
                         <p className="truncate text-[0.875rem]">{mejl.avsandare}</p>
                       </td>
                       <td className="py-2.5 pr-4 align-top">
-                        <span className="text-[0.8125rem] text-ink/62">
+                        <span className="text-[0.8125rem] text-ink-muted">
                           {mejl.kategoriEtikett ?? "—"}
                         </span>
                       </td>
@@ -334,14 +334,14 @@ export function KvittoDemo() {
                   <p className="mt-3 font-display text-[2.25rem] leading-none tracking-[-0.01em]">
                     {kr(SAMMANFATTNING.totalt)}
                   </p>
-                  <p className="mt-1 text-[0.8125rem] text-ink/55">
+                  <p className="mt-1 text-[0.8125rem] text-ink-subtle">
                     {SAMMANFATTNING.antalKlara} avlästa kvitton · ingående moms{" "}
                     {kr(SAMMANFATTNING.moms)}
                   </p>
                   <dl className="mt-4 divide-y divide-ink/10 border-y border-ink/10">
                     {SAMMANFATTNING.perKategori.map((rad) => (
                       <div key={rad.etikett} className="flex items-baseline justify-between gap-4 py-2">
-                        <dt className="text-[0.875rem] text-ink/70">
+                        <dt className="text-[0.875rem] text-ink-muted">
                           {rad.etikett}
                           <span className="ml-1.5 text-[0.75rem] text-mineral">×{rad.antal}</span>
                         </dt>
@@ -349,12 +349,12 @@ export function KvittoDemo() {
                       </div>
                     ))}
                   </dl>
-                  <p className="mt-4 text-[0.875rem] leading-6 text-ink/70">
+                  <p className="mt-4 text-[0.875rem] leading-6 text-ink-muted">
                     {SAMMANFATTNINGSTEXT}
                   </p>
                 </>
               ) : (
-                <p className="mt-3 text-[0.875rem] leading-6 text-ink/55">
+                <p className="mt-3 text-[0.875rem] leading-6 text-ink-subtle">
                   {kor
                     ? "Summorna skrivs när alla mejl är lästa — inga halva sanningar."
                     : "Kör skanningen, så landar periodens summor och en sammanfattning här."}
@@ -364,7 +364,7 @@ export function KvittoDemo() {
 
             <div className="rounded-card border border-ink/12 bg-paper p-5">
               <p className="kicker text-mineral">Fråga kvitto-assistenten</p>
-              <p className="mt-2 text-[0.8125rem] leading-6 text-ink/60">
+              <p className="mt-2 text-[0.8125rem] leading-6 text-ink-muted">
                 Klicka på en fråga så svarar den utifrån kvittona till vänster.
               </p>
               <div data-rullyta className="mt-4 lg:max-h-[24rem] lg:overflow-y-auto lg:pr-3">

@@ -34,7 +34,7 @@ export function Sidfot() {
   return (
     <div className="border-t border-ink/12">
       <div className="mx-auto max-w-[1480px] px-6 py-8 md:px-10">
-        <div className="flex flex-col gap-4 text-[0.875rem] leading-[1.6] text-ink/50 md:flex-row md:items-baseline md:justify-between">
+        <div className="flex flex-col gap-4 text-[0.875rem] leading-[1.6] text-ink-subtle md:flex-row md:items-baseline md:justify-between">
           <p>{bolagsraden()}</p>
 
           <nav className="flex flex-wrap gap-x-6 gap-y-2">
@@ -60,8 +60,8 @@ export function Sidfot() {
           </nav>
         </div>
 
-        <p className="mt-4 text-[0.8125rem] text-ink/35">
-          Frågor om tjänsten: <a href={`mailto:${KONTAKT_MEJL}`} className="focus-ring hover:text-ink/60">{KONTAKT_MEJL}</a>
+        <p className="mt-4 text-[0.8125rem] text-ink-subtle">
+          Frågor om tjänsten: <a href={`mailto:${KONTAKT_MEJL}`} className="focus-ring hover:text-ink-muted">{KONTAKT_MEJL}</a>
         </p>
       </div>
     </div>

@@ -15,10 +15,10 @@ import { Bolagsregister } from "@/components/leads/Bolagsregister";
 import { Bolagssida } from "@/components/leads/Bolagssida";
 import { Kontakter } from "@/components/leads/Kontakter";
 import { Svar } from "@/components/leads/Svar";
-import { Discovery } from "@/components/leads/Discovery";
 import { LeadsControls } from "@/components/leads/LeadsControls";
 import { Affarskontext } from "@/components/settings/Affarskontext";
 import { KunskapsbasPanel } from "@/components/settings/Kunskapsbas";
+import { SupportEskalering } from "@/components/settings/SupportEskalering";
 import { SupportRegler } from "@/components/settings/SupportRegler";
 import { SettingsNav } from "@/components/settings/SettingsNav";
 import { TeamSettings } from "@/components/settings/TeamSettings";
@@ -54,15 +54,9 @@ import type { Tema } from "@/lib/tema";
  */
 export function AssistantView() {
   return (
-    <PageShell
-      kicker="Assistant"
-      title="Assistenten är ett reglage i arbetsflödet, inte ett chattfönster."
-      description="Varje kommando landar i discovery, research, sekvens, email eller analys. Det går att följa exakt vilken signal som styrde texten."
-    >
-      <p className="mb-8 border-y border-ochre/40 bg-ochre/10 px-4 py-3 text-[15px] text-ink/80">
-        <strong className="font-semibold">Exempel.</strong> Samtalet nedan visar hur assistenten
-        är tänkt att fungera. Den är inte kopplad till din arbetsyta ännu, så ingenting här är
-        körningar hos dig.
+    <PageShell title="Assistent">
+      <p className="mb-8 border-y border-ochre/40 bg-ochre/10 px-4 py-3 text-[15px] text-ink-muted">
+        <strong className="font-semibold">Exempel.</strong> Inte kopplad till din arbetsyta.
       </p>
       <div className="grid grid-cols-12 gap-x-8 gap-y-10">
         <div className="col-span-12 border-y border-ink/15 md:col-span-7">
@@ -74,7 +68,7 @@ export function AssistantView() {
           ].map(([speaker, message]) => (
             <div key={`${speaker}-${message}`} className="grid grid-cols-12 gap-x-6 border-b border-ink/15 py-5 last:border-b-0">
               <div className="kicker col-span-3 text-mineral">{speaker}</div>
-              <p className="col-span-9 text-[16px] leading-7 text-ink/78">{message}</p>
+              <p className="col-span-9 text-[16px] leading-7 text-ink-muted">{message}</p>
             </div>
           ))}
         </div>
@@ -83,7 +77,7 @@ export function AssistantView() {
           <div className="mt-4 divide-y divide-ink/15 border-y border-ink/15">
             {workflowSteps.map((step, index) => (
               <div key={step} className="grid grid-cols-12 py-3">
-                <span className="num col-span-2 font-mono text-sm text-ink/45">{String(index + 1).padStart(2, "0")}</span>
+                <span className="num col-span-2 font-mono text-sm text-ink-subtle">{String(index + 1).padStart(2, "0")}</span>
                 <span className="col-span-10 text-[15px]">{step}</span>
               </div>
             ))}
@@ -94,53 +88,17 @@ export function AssistantView() {
   );
 }
 
-/**
- * Leads-vyns innehåll utan skal, så att startsidan kan montera den bredvid
- * kundtjänstvyn utan att nästla två PageShell (alltså två headers).
- *
- * Discovery-formuläret startar körningen; bolagsregistret under hämtar
- * tenantens prospekt. Exempellistan i Discoverys högerkolumn är märkt
- * "Exempel" per rad och kan aldrig mejlas (se ExempelbolagDemo) — omärkta
- * exempelbolag hör fortfarande bara hemma på /demo.
- */
-export function LeadsBody({ demo = false }: Readonly<{ demo?: boolean }>) {
-  return (
-    <>
-      <Discovery demo={demo} />
-      <div className="mt-12">
-        <Bolagsregister demo={demo} />
-      </div>
-    </>
-  );
-}
-
-export function LeadsView({
-  demo = false,
-  agentKnapp = null
-}: Readonly<{ demo?: boolean; agentKnapp?: React.ReactNode }>) {
-  return (
-    <PageShell
-      title="Skräddarsydda leads efter din målgrupp och produkt."
-      description="Beskriv er målgrupp och produkt — Iris letar fram bolagen som matchar."
-    >
-      {/* Kör Agent-bannern kommer som SERVERRENDERAD prop från dispatchern
-          (WorkspaceSection): den här filen är "use client", och bannern
-          läser process.env — i webbläsaren är den tom, så en banner som
-          renderades HÄR försvann tyst. Uppmätt i dev 2026-09-15. Demon
-          skickar aldrig med någon knapp: demobesökaren har ingen tenant. */}
-      {demo ? null : agentKnapp}
-      <LeadsBody demo={demo} />
-    </PageShell>
-  );
-}
+// LeadsBody/LeadsView bodde här: Discovery (körformuläret) + Bolagsregister
+// (tabellen). Ersatta 2026-09-19 av components/leads/IrisBolag.tsx, som slår
+// ihop dem till EN master/detalj-sida under Iris i railen — se
+// WorkspaceSection.tsx (case "iris") och app/demo/[[...slug]]/page.tsx.
+// Discovery.tsx är borttagen (ingen annan anropare); Bolagsregister.tsx och
+// Bolagssida.tsx lever kvar och driver den fristående, olänkade
+// /dashboard/companies-förhandsvyn nedan (CompaniesView/CompanyDetailView).
 
 export function CompaniesView({ demo = false }: Readonly<{ demo?: boolean }>) {
   return (
-    <PageShell
-      kicker="Företag"
-      title="Företagsintelligens, källor och säljvinklar i samma vy."
-      description="Bolagen Iris hittat åt dig, med signalen som motiverade poängen."
-    >
+    <PageShell title="Företag">
       <Bolagsregister demo={demo} />
     </PageShell>
   );
@@ -160,7 +118,7 @@ function TextList({ title, items }: Readonly<{ title: string; items: string[] }>
       <h2 className="kicker text-mineral">{title}</h2>
       <div className="mt-4 divide-y divide-ink/15 border-y border-ink/15">
         {items.map((item) => (
-          <p key={item} className="py-4 text-[15px] leading-6 text-ink/72">{item}</p>
+          <p key={item} className="py-4 text-[15px] leading-6 text-ink-muted">{item}</p>
         ))}
       </div>
     </div>
@@ -169,11 +127,7 @@ function TextList({ title, items }: Readonly<{ title: string; items: string[] }>
 
 export function ContactsView({ demo = false }: Readonly<{ demo?: boolean }>) {
   return (
-    <PageShell
-      kicker="Kontakter"
-      title="Personerna bakom bolagen."
-      description="Kontaktpersonen Iris hittat per bolag, och var prospektet står."
-    >
+    <PageShell title="Kontakter">
       <Kontakter demo={demo} />
     </PageShell>
   );
@@ -190,11 +144,7 @@ export function ContactsView({ demo = false }: Readonly<{ demo?: boolean }>) {
  */
 export function AnalyticsView({ demo = false }: Readonly<{ demo?: boolean }>) {
   return (
-    <PageShell
-      kicker="Analys"
-      title="Analys som läser som en resultattabell, inte en chart-demo."
-      description="Skick, svar och ärenden per vecka — räknat ur din egen arbetsyta."
-    >
+    <PageShell title="Analys">
       <Analys demo={demo} />
     </PageShell>
   );
@@ -202,11 +152,7 @@ export function AnalyticsView({ demo = false }: Readonly<{ demo?: boolean }>) {
 
 export function InboxView({ demo = false }: Readonly<{ demo?: boolean }>) {
   return (
-    <PageShell
-      kicker="Svar"
-      title="Svaren från bolagen agenten kontaktat."
-      description="Vem som svarat, vad de skrev och var prospektet står nu."
-    >
+    <PageShell title="Svar">
       <Svar demo={demo} />
     </PageShell>
   );
@@ -214,11 +160,7 @@ export function InboxView({ demo = false }: Readonly<{ demo?: boolean }>) {
 
 export function AgentLarandeView() {
   return (
-    <PageShell
-      kicker="Lärande"
-      title="Det agenterna lärt sig — och väntar på ditt ok för."
-      description="Kunskapsluckor ur supportärenden och marknadsinsikter ur research. Inget skrivs in i ditt underlag utan att du godkänner det här."
-    >
+    <PageShell title="Lärande">
       <AgentLarande />
     </PageShell>
   );
@@ -231,7 +173,7 @@ export function SettingsView({
   const titles: Record<SettingsSectionKey, string> = {
     foretaget: "Företaget",
     mailboxes: "Inkorgar",
-    team: "Teamroller och audit-logik.",
+    team: "Team",
     billing: "Plan och fakturering",
     affarskontext: "Affärskontext",
     kunskapsbas: "Kunskapsbas",
@@ -249,20 +191,12 @@ export function SettingsView({
   // känner igen orden eller behöver veta vår stack. Att stacken sedan byttes
   // gjorde texten dessutom osann — vilket är själva argumentet mot att skriva
   // ut infrastruktur i en kundvänd yta.
-  const descriptions: Record<SettingsSectionKey, string> = {
-    foretaget: "Bolaget bakom arbetsytan — namn, organisationsnummer och webbplats.",
-    mailboxes: "Vilka mejladresser agenterna läser och svarar från.",
-    team: "Vilka som har tillgång till arbetsytan, och vad de får göra.",
-    billing: "Vilket paket arbetsytan har, och vad som ingår i det.",
-    affarskontext: "Vad ni säljer och till vem. Båda agenterna läser härifrån.",
-    kunskapsbas: "Dokumenten agenterna svarar ur. Ligger inget här gissar de aldrig — de eskalerar.",
-    leads: "Vilka bolag agenterna ska leta efter, och hur långt de får gå på egen hand.",
-    regler: "Vilka ärenden agenterna får besvara själva, och vilka som alltid går till en människa.",
-    soul: "Beskriv hur ni låter. Agenterna skriver så i både utskick och svar — dokumentet är delat mellan dem.",
-    notiser:
-      "När vi ska mejla dig, och om vad. Gäller dig personligen — inte dina kollegor i samma arbetsyta.",
-    tema: "Ljus eller mörk arbetsyta. Valet gäller den här webbläsaren och slår igenom direkt.",
-    addons: "Det agenterna kan göra utöver det som ingår i er plan.",
+  // Sedan 2026-09-19 står en beskrivning bara där rubriken inte räcker.
+  const descriptions: Partial<Record<SettingsSectionKey, string>> = {
+    affarskontext: "Vad ni säljer och till vem.",
+    soul: "Tonen i utskick och svar.",
+    notiser: "Gäller bara dig.",
+    tema: "Gäller den här webbläsaren.",
     agentinstruktioner:
       "Reglerna varje agent läser först, för varje kund. Policy och säkerhet — ton och röst hör hemma hos kunden."
   };
@@ -308,7 +242,12 @@ export function SettingsView({
           {section === "foretaget" ? <CompanySettings /> : null}
           {section === "affarskontext" ? <Affarskontext /> : null}
           {section === "kunskapsbas" ? <KunskapsbasPanel /> : null}
-          {section === "regler" ? <SupportRegler /> : null}
+          {section === "regler" ? (
+            <>
+              <SupportRegler />
+              <SupportEskalering />
+            </>
+          ) : null}
           {section === "leads" ? <LeadsControls /> : null}
           {section === "soul" ? <SoulEditor /> : null}
           {section === "notiser" ? <NotisSettings /> : null}
@@ -340,7 +279,7 @@ function CompanySettings() {
         <span className="kicker col-span-12 text-mineral md:col-span-3">Arbetsyta</span>
         <span className="col-span-12 mt-2 text-[15px] md:col-span-9 md:mt-0">
           {workspaceName ?? "—"}
-          {isDemo ? <span className="ml-2 text-[13px] text-ochre">testarbetsyta</span> : null}
+          {isDemo ? <span className="ml-2 text-[13px] text-warning">testarbetsyta</span> : null}
         </span>
       </div>
       <div className="grid grid-cols-12 gap-x-6 border-t border-ink/15 pt-5">
@@ -353,13 +292,10 @@ function CompanySettings() {
       </div>
       <div className="grid grid-cols-12 gap-x-6 border-t border-ink/15 pt-5">
         <span className="kicker col-span-12 text-mineral md:col-span-3">Bolagsuppgifter</span>
-        <p className="col-span-12 mt-2 max-w-[60ch] text-[15px] leading-7 text-ink/65 md:col-span-9 md:mt-0">
-          Organisationsnummer och webbplats fylldes i vid uppstarten och används av båda
-          agenterna.{" "}
+        <p className="col-span-12 mt-2 text-[15px] leading-7 text-ink-muted md:col-span-9 md:mt-0">
           <Link href="/onboarding" className="underline underline-offset-4 hover:text-ochre">
-            Ändra dem i uppstartsformuläret
+            Ändra i uppstartsformuläret
           </Link>
-          .
         </p>
       </div>
     </div>
@@ -384,10 +320,10 @@ export function LoginView() {
       <div className="mx-auto grid min-h-screen max-w-[1480px] grid-cols-12 px-6 py-10 md:gap-x-8 md:px-8">
         <section className="col-span-12 flex flex-col justify-between bg-ink p-8 text-paper md:col-span-6">
           <div>
-            <p className="kicker text-paper/55">Snajp workspace</p>
+            <p className="kicker text-paper-muted">Snajp workspace</p>
             <h1 className="mt-8 text-[1.75rem] font-semibold leading-tight tracking-[-0.02em]">Logga in</h1>
           </div>
-          <p className="mt-12 max-w-[44ch] text-[16px] leading-7 text-paper/70">Logga in med lösenord eller magic link. Efter första inloggningen konfigurerar du business context innan dashboarden öppnas.</p>
+          <p className="mt-12 max-w-[44ch] text-[16px] leading-7 text-paper-muted">Logga in med lösenord eller magic link. Efter första inloggningen konfigurerar du business context innan dashboarden öppnas.</p>
         </section>
         <section className="col-span-12 mt-8 flex items-center md:col-span-6 md:mt-0 md:pl-10">
           <LoginForm />
@@ -408,7 +344,7 @@ export function OnboardingView() {
             <form action={signOut} className="mt-3">
               <button type="submit" className="kicker text-mineral hover:text-ochre">Logga ut</button>
             </form>
-            <p className="kicker mt-4 text-ink/45">Steg 1 av 4</p>
+            <p className="kicker mt-4 text-ink-subtle">Steg 1 av 4</p>
           </div>
           <div className="col-span-12 mt-8 md:col-span-9 md:mt-0">
             <h1 className="max-w-3xl text-[1.75rem] font-semibold leading-tight tracking-[-0.02em]">Berätta hur ni säljer</h1>

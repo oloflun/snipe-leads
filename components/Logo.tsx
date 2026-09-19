@@ -99,7 +99,7 @@ export function Logo({
       {/* Undertexten renderas bara i stort läge. I kompakt läge finns ingen
           höjd att lägga den på, och en rad som ibland finns och ibland inte
           flyttar allt annat i headern när den dyker upp. */}
-      <span className="mt-1 hidden text-[13px] leading-none text-ink/45 sm:block">
+      <span className="mt-1 hidden text-[13px] leading-none text-ink-subtle sm:block">
         {undertext}
       </span>
     </span>

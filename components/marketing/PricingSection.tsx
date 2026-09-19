@@ -108,7 +108,7 @@ export function PricingSection() {
         >
           {text(copy.rubrik)}
         </h2>
-        <p className="mt-5 max-w-[54ch] text-[1.0625rem] leading-[1.7] text-ink/80">
+        <p className="mt-5 max-w-[54ch] text-[1.0625rem] leading-[1.7] text-ink-muted">
           {text(copy.lede)}
         </p>
 
@@ -128,13 +128,13 @@ export function PricingSection() {
                   {paket.namn}
                 </h3>
                 {paket.populärast ? (
-                  <span className="kicker shrink-0 rounded-input bg-ochre/12 px-2.5 py-1 text-ochre">
+                  <span className="kicker shrink-0 rounded-input bg-ochre/12 px-2.5 py-1 text-warning">
                     {text(copy.populärast)}
                   </span>
                 ) : null}
               </div>
 
-              <p className="mt-3 min-h-[3.25rem] max-w-[38ch] text-[0.9375rem] leading-[1.6] text-ink/75">
+              <p className="mt-3 min-h-[3.25rem] max-w-[38ch] text-[0.9375rem] leading-[1.6] text-ink-muted">
                 {text(paket.beskrivning)}
               </p>
 
@@ -198,7 +198,7 @@ export function PricingSection() {
                 {paket.ingar.map((rad, index) => (
                   <li
                     key={index}
-                    className="flex gap-2.5 text-[0.9375rem] leading-[1.5] text-ink/85"
+                    className="flex gap-2.5 text-[0.9375rem] leading-[1.5] text-ink-muted"
                   >
                     <span aria-hidden="true" className="mt-[0.55em] h-1 w-1 shrink-0 rounded-full bg-ochre" />
                     {text(rad)}
@@ -223,7 +223,7 @@ export function PricingSection() {
               <dt className="font-display text-[1.25rem] font-semibold tracking-[-0.02em]">
                 {rad.term}
               </dt>
-              <dd className="mt-1 text-[0.875rem] leading-[1.5] text-ink/70">{rad.desc}</dd>
+              <dd className="mt-1 text-[0.875rem] leading-[1.5] text-ink-muted">{rad.desc}</dd>
             </div>
           ))}
         </dl>
@@ -239,7 +239,7 @@ export function PricingSection() {
             <p className="font-display text-[1.25rem] font-semibold tracking-[-0.02em]">
               {text(copy.ctaRubrik)}
             </p>
-            <p className="mt-2 max-w-[52ch] text-[0.9375rem] leading-[1.6] text-ink/75">
+            <p className="mt-2 max-w-[52ch] text-[0.9375rem] leading-[1.6] text-ink-muted">
               {text(copy.ctaBody)}
             </p>
           </div>

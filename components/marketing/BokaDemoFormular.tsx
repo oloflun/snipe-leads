@@ -38,7 +38,7 @@ export function BokaDemoFormular({ kalla = "/boka-demo" }: Readonly<{ kalla?: st
         <h2 className="mt-4 font-display text-[1.5rem] font-semibold leading-snug tracking-[-0.02em]">
           Tack, vi har din förfrågan.
         </h2>
-        <p className="mt-3 max-w-[52ch] text-[1rem] leading-[1.7] text-ink/75">
+        <p className="mt-3 max-w-[52ch] text-[1rem] leading-[1.7] text-ink-muted">
           En människa läser den och hör av sig med ett par tider som passar. Är det bråttom går
           det snabbare att mejla oss direkt på{" "}
           <a
@@ -89,7 +89,7 @@ export function BokaDemoFormular({ kalla = "/boka-demo" }: Readonly<{ kalla?: st
       </div>
 
       <div className="mt-5">
-        <label htmlFor="meddelande" className="text-[0.9375rem] font-medium text-ink/75">
+        <label htmlFor="meddelande" className="text-[0.9375rem] font-medium text-ink-muted">
           Vad vill ni titta på?
         </label>
         <textarea
@@ -116,7 +116,7 @@ export function BokaDemoFormular({ kalla = "/boka-demo" }: Readonly<{ kalla?: st
         Skicka förfrågan
       </button>
 
-      <p className="mt-4 max-w-[52ch] text-[0.8125rem] leading-[1.6] text-ink/50">
+      <p className="mt-4 max-w-[52ch] text-[0.8125rem] leading-[1.6] text-ink-subtle">
         Vi använder uppgifterna för att kontakta dig om demon, ingenting annat. Läs mer i{" "}
         <a href="/integritetspolicy" className="underline underline-offset-4 hover:text-ochre">
           integritetspolicyn
@@ -145,12 +145,12 @@ function Falt({
   const hjalpId = hjalp ? `${namn}-hjalp` : undefined;
   return (
     <div>
-      <label htmlFor={namn} className="text-[0.9375rem] font-medium text-ink/75">
+      <label htmlFor={namn} className="text-[0.9375rem] font-medium text-ink-muted">
         {etikett}
         {krav ? (
-          <span className="text-ink/45"> (obligatoriskt)</span>
+          <span className="text-ink-subtle"> (obligatoriskt)</span>
         ) : (
-          <span className="text-ink/45"> (valfritt)</span>
+          <span className="text-ink-subtle"> (valfritt)</span>
         )}
       </label>
       <input
@@ -163,7 +163,7 @@ function Falt({
         className="focus-ring mt-2 min-h-12 w-full rounded-input bg-paper px-4 text-[1rem]"
       />
       {hjalp ? (
-        <p id={hjalpId} className="mt-1.5 text-[0.8125rem] text-ink/50">
+        <p id={hjalpId} className="mt-1.5 text-[0.8125rem] text-ink-subtle">
           {hjalp}
         </p>
       ) : null}

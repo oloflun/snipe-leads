@@ -167,7 +167,7 @@ export function Kundprofil({ profil }: Readonly<{ profil: Profil }>) {
   return (
     <div className="grid gap-10">
       <section className="grid gap-2 border-t border-ink/15 pt-5 text-[0.9375rem]">
-        <div className="flex flex-wrap gap-x-8 gap-y-2 text-ink/65">
+        <div className="flex flex-wrap gap-x-8 gap-y-2 text-ink-muted">
           <span>
             Agenttyp: <span className="text-ink">{agentNamn(profil.agent_type)}</span>
           </span>
@@ -186,7 +186,7 @@ export function Kundprofil({ profil }: Readonly<{ profil: Profil }>) {
           </span>
         </div>
         {profil.global_fran_fil ? (
-          <p className="max-w-[70ch] text-[0.875rem] leading-6 text-ink/55">
+          <p className="max-w-[70ch] text-[0.875rem] leading-6 text-ink-subtle">
             Ingen global instruktion är sparad. Agenten kör på den incheckade
             agent-core/AGENTS.md ovanpå det som står här.
           </p>
@@ -198,12 +198,12 @@ export function Kundprofil({ profil }: Readonly<{ profil: Profil }>) {
           <label htmlFor={falt.sparfalt} className="kicker text-mineral">
             {falt.rubrik}
           </label>
-          <p className="mt-2 max-w-[70ch] text-[0.9375rem] leading-7 text-ink/65">{falt.hjalp}</p>
+          <p className="mt-2 max-w-[70ch] text-[0.9375rem] leading-7 text-ink-muted">{falt.hjalp}</p>
           {/* Positionen låg först som den ljusaste raden på sidan, alltså som
               finstilt — trots att den är den enda skillnad som avgör om
               agenten LYDER texten eller bara läser den. Märket bär skillnaden,
               förklaringen står kvar bredvid. */}
-          <p className="mt-3 flex max-w-[70ch] flex-wrap items-baseline gap-x-2 gap-y-1 text-[0.8125rem] leading-6 text-ink/55">
+          <p className="mt-3 flex max-w-[70ch] flex-wrap items-baseline gap-x-2 gap-y-1 text-[0.8125rem] leading-6 text-ink-subtle">
             <Badge tone={falt.position === "system" ? "warn" : "neutral"}>
               {POSITIONSETIKETT[falt.position]}
             </Badge>
@@ -236,7 +236,7 @@ export function Kundprofil({ profil }: Readonly<{ profil: Profil }>) {
             >
               {sparar === falt.sparfalt ? "Sparar…" : `Spara ${falt.rubrik.toLowerCase()}`}
             </button>
-            <span className="text-[0.8125rem] text-ink/60 tabular-nums">
+            <span className="text-[0.8125rem] text-ink-muted tabular-nums">
               {(varden[falt.sparfalt] ?? "").length} / {falt.max}
             </span>
             {/* aria-live: kvittot är den enda återkopplingen på att sparandet
@@ -257,7 +257,7 @@ export function Kundprofil({ profil }: Readonly<{ profil: Profil }>) {
       {profil.instruktioner_md ? (
         <section className="border-t border-ink/15 pt-5">
           <h2 className="kicker text-mineral">Vad agenten läser för den här kunden</h2>
-          <p className="mt-2 max-w-[70ch] text-[0.9375rem] leading-7 text-ink/65">
+          <p className="mt-2 max-w-[70ch] text-[0.9375rem] leading-7 text-ink-muted">
             Den strukturerade versionen av instruktionerna ovan. Den här texten går in i
             systemprompten, efter de globala reglerna.
           </p>

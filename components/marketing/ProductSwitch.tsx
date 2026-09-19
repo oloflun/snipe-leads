@@ -79,8 +79,8 @@ export function ProductSwitch({
                     ? "italic-disp text-paper"
                     : "italic-disp text-ink"
                   : tone === "paper"
-                    ? "text-paper/40 hover:text-paper/75"
-                    : "text-ink/25 hover:text-ink/60 active:text-ink/70"
+                    ? "text-paper-subtle hover:text-paper-muted"
+                    : "text-ink-subtle hover:text-ink-muted active:text-ink-muted"
               )}
             >
               {text(productCopy[key].word)}
@@ -89,7 +89,7 @@ export function ProductSwitch({
                 fyra marginaler à 8px är 32px, och de 16px som sparas är
                 skillnaden mellan att raden ryms och inte i 219px-kolumnen. */}
             {index < productKeys.length - 1 ? (
-              <span aria-hidden="true" className={cn("mx-1", tone === "paper" ? "text-paper/30" : "text-ink/20")}>
+              <span aria-hidden="true" className={cn("mx-1", tone === "paper" ? "text-paper-subtle" : "text-ink-subtle")}>
                 /
               </span>
             ) : null}
