@@ -12,6 +12,7 @@ precis som referensarkitekturen. Saknas embeddings används
 import hashlib
 import json
 import logging
+import uuid
 from contextlib import asynccontextmanager
 from datetime import date
 from decimal import Decimal
@@ -744,6 +745,21 @@ class PostgresStorage:
                 embedding,
             )
         return _row(record)
+
+    async def delete_kb_article(self, tenant_id: str, artikel_id: str) -> bool:
+        """Se Storage.delete_kb_article. Ett id som inte är en uuid är en
+        artikel som inte finns, inte ett 500."""
+        try:
+            uuid.UUID(str(artikel_id))
+        except ValueError:
+            return False
+        async with self._scoped(tenant_id) as conn:
+            resultat = await conn.execute(
+                "delete from ss_knowledge_base where tenant_id = $1 and id = $2::uuid",
+                tenant_id,
+                str(artikel_id),
+            )
+        return str(resultat).endswith(" 1")
 
     # -- Kanaler & metrics --------------------------------------------------
 

@@ -579,6 +579,12 @@ class MemoryStorage:
         self.kb.setdefault(tenant_id, []).append(row)
         return {"id": row["id"], "title": title, "category": category}
 
+    async def delete_kb_article(self, tenant_id: str, artikel_id: str) -> bool:
+        artiklar = self.kb.get(tenant_id, [])
+        kvar = [a for a in artiklar if str(a["id"]) != str(artikel_id)]
+        self.kb[tenant_id] = kvar
+        return len(kvar) < len(artiklar)
+
     # -- Kanaler & metrics --------------------------------------------------
 
     async def get_channel_config(self, tenant_id: str, channel: str) -> dict[str, Any]:

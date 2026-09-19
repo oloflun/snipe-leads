@@ -222,6 +222,12 @@ class Storage(Protocol):
         embedding: list[float] | None = None,
     ) -> dict[str, Any]: ...
 
+    async def delete_kb_article(self, tenant_id: str, artikel_id: str) -> bool:
+        """Tar bort EN artikel i tenantens egen bas. False om den inte finns
+        (eller tillhör någon annan — RLS gör de två fallen omöjliga att skilja
+        åt, och det ska de vara). Kräver migration 069 (delete-grant)."""
+        ...
+
     # -- Agentens föreslagna lärdomar (självlärning, 2026-08-26) -------------
     #
     # Supportens cs:kb-article och leads _fanga_kunskap RÄKNADE UT lärdomar på

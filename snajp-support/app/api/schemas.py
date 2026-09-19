@@ -405,6 +405,13 @@ class KbArticleRequest(BaseModel):
     articles: list[KbArticle] = Field(..., min_length=1, max_length=50)
 
 
+class KbSkannaRequest(BaseModel):
+    """Kundens egen webbplats, som skannas till artikelutkast (app/kb_skanning.py).
+    Ingenting sparas av skanningen — utkasten godkänns och går via POST /api/kb."""
+
+    webbplats: str = Field(..., min_length=4, max_length=300)
+
+
 class KbExtraheraRequest(BaseModel):
     """Fas 5.5 (Testchatt, snipe-0r9): PDF in, textlager ut. Filen sparas
     aldrig, se app/api/kb.py. Taket här är medvetet GROVARE än det riktiga
