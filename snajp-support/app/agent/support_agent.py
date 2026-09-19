@@ -301,6 +301,23 @@ async def _sok_kb(storage: Storage, tenant_id: str, fraga: str) -> list[dict[str
     return await storage.search_kb(tenant_id, fraga, embedding=embedding)
 
 
+def _korta_svar(svar: str, tak: int) -> str:
+    """Svaret inom kanalens teckentak, kortat vid ett MENINGSSLUT.
+
+    Förut kapades det på tecknet med ett "…" efter — mitt i ett ord, och
+    kunden läste "så att alla får ut så mycket som mö…" (kundtest mot
+    Livrustning 2026-09-19). Ett meningsslut i takets sista 40 % vinner; finns
+    inget kortas det vid ett ordslut med "…".
+    """
+    if len(svar) <= tak:
+        return svar
+    utdrag = svar[:tak]
+    slut = max(utdrag.rfind(t) for t in (". ", "! ", "? ", ".\n", "!\n", "?\n"))
+    if slut >= int(tak * 0.6):
+        return utdrag[: slut + 1].rstrip()
+    return utdrag[: tak - 1].rsplit(" ", 1)[0].rstrip(" ,;:–—") + "…"
+
+
 def _forenklad_fraga(subject: str, message: str) -> str:
     """En bredare andra sökfråga, byggd i kod.
 
@@ -1491,8 +1508,7 @@ async def run_support_agent(
             reply = support_texter.text("overlamningssvar", svar_sprak)
         else:
             reply = support_texter.text("tomt", svar_sprak)
-    if len(reply) > config["max_length"]:
-        reply = reply[: config["max_length"] - 1].rstrip() + "…"
+    reply = _korta_svar(reply, config["max_length"])
 
     # --- Kod: sidoeffekter -------------------------------------------------
     if escalated:

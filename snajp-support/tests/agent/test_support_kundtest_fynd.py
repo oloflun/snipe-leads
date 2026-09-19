@@ -203,3 +203,27 @@ async def test_svensk_fraga_soker_med_triagens_omformulering(monkeypatch):
     await _kor(MemoryStorage(), llm, "Hej! Vilka betalsätt har ni?")
     assert "betalningsmetoder" in sokningar[0]
     assert sokningar[0].startswith("Hej! Vilka betalsätt har ni?")
+
+
+# --- Svaret kortas vid ett meningsslut (kundtest Livrustning 2026-09-19) -------
+
+from app.agent.support_agent import _korta_svar  # noqa: E402
+
+
+def test_kort_svar_orort():
+    assert _korta_svar("Hej! Kort svar.", 1500) == "Hej! Kort svar."
+
+
+def test_langt_svar_kortas_vid_meningsslut_inte_mitt_i_ett_ord():
+    svar = ("Första meningen är här. " * 70).strip()
+    kortat = _korta_svar(svar, 1500)
+    assert len(kortat) <= 1500
+    assert kortat.endswith("här.")
+    assert not kortat.endswith("…")
+
+
+def test_utan_meningsslut_kortas_vid_ordslut_med_ellips():
+    svar = "ord " * 600
+    kortat = _korta_svar(svar, 1500)
+    assert len(kortat) <= 1500
+    assert kortat.endswith("ord…")
