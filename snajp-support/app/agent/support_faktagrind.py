@@ -61,6 +61,9 @@ _LOFTESORD = re.compile(
 #: Siffror och belopp — det `forsiktig` kontrollerar ur leads-grindens fynd.
 _SIFFERSLAG = ("number", "percent", "amount")
 
+#: Talets storlek ur en normaliserad nyckel ("3990SEK" -> "3990", "2.5%" -> "2.5").
+_STORLEK = re.compile(r"^\d+(?:\.\d+)?")
+
 #: Klockslag ("14:00", "9:30"). Sifferextraktorn läser kolonet som en
 #: avgränsare och ser två tal, 14 och 00 — och "00" finns sällan i en
 #: kunskapsbas som skriver "klockan 14". Uppmätt 2026-09-19 på dev: ett
@@ -72,7 +75,18 @@ _SIFFERSLAG = ("number", "percent", "amount")
 _KLOCKSLAG = re.compile(r"\b(\d{1,2}):(\d{2})\b")
 
 
+#: Engelsk tusentalsavgränsare ("3,990", "12,500", "1,234,567"). Sifferext-
+#: raktorn är svensk: komma är decimaltecken, så "3,990" blev 3.99 och föll
+#: mot kunskapsbasens "3 990 kr". Uppmätt på dev 2026-09-19: en engelsk kund
+#: fick "I don't have information on the exact monthly cost" — faktagrinden
+#: hade strukit ett KORREKT pris. Bara grupper om exakt tre siffror efter
+#: kommat räknas, så en svensk decimal ("3,99", "1,5") är orörd. Samma
+#: omskrivning på båda sidor håller jämförelsen symmetrisk.
+_TUSENTAL_KOMMA = re.compile(r"(?<![\d,])(\d{1,3})((?:,\d{3})+)(?![\d,])")
+
+
 def _klockslag_som_tal(text: str) -> str:
+    text = _TUSENTAL_KOMMA.sub(lambda m: m.group(1) + m.group(2).replace(",", ""), text)
     return _KLOCKSLAG.sub(r"\1.\2", text)
 
 
@@ -142,7 +156,17 @@ def kontrollera(
         # är inga påståenden — båda maskas med samma längd.
         maskerad = _LISTMARKOR.sub(lambda m: " " * len(m.group(0)), _klockslag_som_tal(svar))
         dom = check_grounding(maskerad, fakta)
+        # Storleken, inte enheten. Leads-extraktorn läser enheten bara EFTER
+        # talet och bara på svenska: "SEK 3,990" blir talet 3990 medan
+        # kunskapsbasens "3 990 kr" blir beloppet 3990SEK, och engelskans
+        # "25 percent" matchar inte "25 procent". Ett påhittat tal har en
+        # storlek som inte finns i underlaget — den fångas fortfarande.
+        tillatna = {m.group(0) for n in fakta.numbers if (m := _STORLEK.match(n))}
         for claim in dom.unsupported:
+            if claim.kind in _SIFFERSLAG:
+                storlek = _STORLEK.match(claim.normalized)
+                if storlek and storlek.group(0) in tillatna:
+                    continue
             if niva == "strikt" or claim.kind in _SIFFERSLAG:
                 ostodda.append(claim.describe())
 
