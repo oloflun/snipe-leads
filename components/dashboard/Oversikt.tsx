@@ -112,17 +112,6 @@ function andel(del: number, av: number): string {
   );
 }
 
-/** Räknar förekomster och returnerar de N vanligaste. */
-function vanligast(varden: (string | null | undefined)[], antal: number): [string, number][] {
-  const räknare = new Map<string, number>();
-  for (const värde of varden) {
-    const rent = (värde ?? "").trim();
-    if (!rent) continue;
-    räknare.set(rent, (räknare.get(rent) ?? 0) + 1);
-  }
-  return [...räknare.entries()].sort((a, b) => b[1] - a[1]).slice(0, antal);
-}
-
 // -- Delade byggstenar -----------------------------------------------------
 
 type Tillstand = { etikett: string; varde: string; larm?: boolean; drift?: boolean };
@@ -621,20 +610,6 @@ export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
     0
   );
 
-  const sniNamn = new Map((config?.options?.sni ?? []).map((o) => [o.value, o.label]));
-  const branscher = vanligast(
-    rader.map((p) => (p.sni ? (sniNamn.get(p.sni) ?? p.sni) : null)),
-    5
-  );
-  const orter = vanligast(
-    rader.map((p) => p.ort),
-    5
-  );
-  const bortvalda = vanligast(
-    rader.flatMap((p) => p.disqualifiers ?? []),
-    4
-  );
-
   const ofullstandig =
     prospekt === null || korningar === null || ko === null || config === null || kbAntal === null;
 
@@ -744,84 +719,13 @@ export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
         />
       </Sektion>
 
-      <div className="grid gap-10 lg:grid-cols-12">
-        <div className="min-w-0 lg:col-span-4">
-          <Sektion rubrik="Var agenterna letar">
-            <Stapellista rader={orter} tomtext="Inga orter ännu." />
-          </Sektion>
-        </div>
-        <div className="min-w-0 lg:col-span-4">
-          <Sektion rubrik="Vad de hittar">
-            <Stapellista rader={branscher} tomtext="Inga branscher ännu." />
-          </Sektion>
-        </div>
-        <div className="min-w-0 lg:col-span-4">
-          <Sektion rubrik="Varför bolag valdes bort">
-            <Stapellista
-              rader={bortvalda}
-              tomtext="Inga bortval ännu."
-            />
-          </Sektion>
-        </div>
-      </div>
-
-      <Sektion
-        rubrik="Senaste körningarna"
-        bredvid={
-          <Link
-            href={vag("/dashboard/iris")}
-            className="focus-ring rounded-input text-[0.875rem] text-ink-subtle underline-offset-4 transition-colors hover:text-ink hover:underline"
-          >
-            Starta en körning
-          </Link>
-        }
-      >
-        <Ledger
-          rader={veckansKorningar.slice(0, 6).map((k) => {
-            const steg = stegAv(k);
-            const eskalerade = steg.filter((s) => s.escalated).length;
-            const skills = steg.map((s) => s.skill).filter(Boolean).join(", ");
-            return {
-              id: k.id,
-              vanster: sedan(k.created_at),
-              mitten: steg.length
-                ? `${steg.length} steg${skills ? ` · ${skills}` : ""}`
-                : "Ingen stegloggning på körningen",
-              hoger: eskalerade ? `${eskalerade} eskalerade` : "utan eskalering",
-              ton: eskalerade ? ("warn" as const) : ("neutral" as const)
-            };
-          })}
-          tomtext="Inga körningar den senaste veckan."
-        />
-      </Sektion>
+      {/* Stapellistorna (orter, branscher, bortval) och Senaste körningarna
+          stod här. Borttagna 2026-09-19: mest tomlägen, för rörigt. */}
     </OversiktShell>
   );
 }
 
 // -- Kundtjänst ------------------------------------------------------------
-
-/** Nyckeltal utan stapel: värdena är inte jämförbara med varandra. */
-function Faktalista({ rader }: Readonly<{ rader: { etikett: string; varde: string; larm?: boolean }[] }>) {
-  return (
-    <dl className="divide-y divide-ink/10 border-y border-ink/15">
-      {rader.map((rad) => (
-        <div key={rad.etikett} className="grid grid-cols-12 items-baseline gap-x-4 py-3">
-          <dt className="col-span-8 text-[0.875rem] text-ink-muted">{rad.etikett}</dt>
-          <dd
-            className={cn(
-              "num col-span-4 flex items-center justify-end gap-2 text-right text-[0.875rem] tabular-nums",
-              rad.larm ? "font-semibold text-ink" : "text-ink-muted"
-            )}
-          >
-            {/* Samma sak som i Tal: pricken bär larmet, inte textfärgen. */}
-            {rad.larm ? <span className="h-2 w-2 rounded-full bg-ochre" aria-hidden /> : null}
-            {rad.varde}
-          </dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
 
 type Klassificering = {
   category: string;
@@ -897,17 +801,6 @@ export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) 
   const vantar = rader.filter((a) => a.status === "awaiting_approval");
   const eskalerade = rader.filter((a) => a.status === "escalated");
   const klarade = rader.filter((a) => a.status === "auto_sent" || a.status === "sent");
-  const klassade = rader.filter((a) => a.classification);
-  const medKalla = klassade.filter((a) => (a.classification?.kb_sources ?? []).length > 0);
-  const snittKonfidens = klassade.length
-    ? klassade.reduce((summa, a) => summa + (a.classification?.confidence ?? 0), 0) / klassade.length
-    : null;
-  // Det tal som pekar rakt på luckorna i basen: agenten lämnade över för att
-  // den inte hittade något att grunda svaret i, inte för att ärendet var svårt.
-  const eskaleratUtanKalla = eskalerade.filter(
-    (a) => (a.classification?.kb_sources ?? []).length === 0
-  ).length;
-
   const auto = (regler ?? []).filter((r) => r.mode === "auto");
   const utkast = (regler ?? []).filter((r) => r.mode === "draft").length;
   const alltidManniska = (regler ?? []).filter((r) => r.mode === "escalate").length;
@@ -1015,49 +908,16 @@ export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) 
         />
       </Sektion>
 
-      <div className="grid gap-10 lg:grid-cols-12">
-        <div className="min-w-0 lg:col-span-7">
-          <Sektion rubrik="Vad ärendena handlar om">
-            <Stapellista
-              rader={Object.entries(fack ?? {})
-                .map(([kod, antal]) => [fackNamn.get(kod) ?? kod, antal] as [string, number])
-                .sort((a, b) => b[1] - a[1])}
-              tomtext="Inga klassificerade ärenden ännu."
-            />
-          </Sektion>
-        </div>
-        <div className="min-w-0 lg:col-span-5">
-          <Sektion rubrik="Hur väl agenterna kan grunda svaren">
-            <Faktalista
-              rader={[
-                {
-                  etikett: "Ärenden med träff i kunskapsbasen",
-                  varde: klassade.length ? `${medKalla.length} av ${klassade.length}` : "—"
-                },
-                {
-                  etikett: "Snittkonfidens i klassificeringen",
-                  varde: snittKonfidens === null ? "—" : andel(snittKonfidens, 1)
-                },
-                {
-                  etikett: "Eskalerade utan träff i basen",
-                  varde: arenden === null ? "—" : String(eskaleratUtanKalla),
-                  larm: eskaleratUtanKalla > 0
-                }
-              ]}
-            />
-            {eskaleratUtanKalla > 0 ? (
-              <p className="mt-4 text-[0.875rem] leading-6 text-ink-muted">
-                <Link
-                  href={vag("/settings/kunskapsbas")}
-                  className="focus-ring rounded-input underline underline-offset-4 hover:text-ochre"
-                >
-                  Fyll på kunskapsbasen
-                </Link>
-              </p>
-            ) : null}
-          </Sektion>
-        </div>
-      </div>
+      {/* "Hur väl agenterna kan grunda svaren" (Faktalista) stod bredvid.
+          Borttagen 2026-09-19: mest streck i tomläge, för rörigt. */}
+      <Sektion rubrik="Vad ärendena handlar om">
+        <Stapellista
+          rader={Object.entries(fack ?? {})
+            .map(([kod, antal]) => [fackNamn.get(kod) ?? kod, antal] as [string, number])
+            .sort((a, b) => b[1] - a[1])}
+          tomtext="Inga klassificerade ärenden ännu."
+        />
+      </Sektion>
 
       <Sektion
         rubrik="Senaste ärendena"
