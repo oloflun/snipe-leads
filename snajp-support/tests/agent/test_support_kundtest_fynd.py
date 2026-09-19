@@ -1,4 +1,4 @@
-"""Två fynd från kundtestet mot development 2026-09-19.
+"""Tre fynd från kundtestet mot development 2026-09-19.
 
 1. Modellen svarade `draft` som ett OBJEKT. På engelska hoppas humaniseraren
    över, så objektet gick rakt in i strip_markdown -> TypeError, och kunden
@@ -7,6 +7,9 @@
    "Betalningsmetoder vi accepterar" (den svenska stemmern kopplar inte
    betalsät till betalningsmetod), och kunden fick en överlämning på en FAQ.
    Triagens omformulering (sokfraga_sv) söks nu med på svenska också.
+3. På engelska följde utkaststeget skillens MALLFORMAT ("Draft response
+   text", "Notes for You") i stället för kontraktets `draft`. Utkastet blev
+   tomt och kunden fick reservtexten fast modellen skrivit rätt svar.
 
 Samma fejkmodell som tests/agent/test_support_agent_wiring.py: bara
 nätverksgränsen mockas.
@@ -109,6 +112,50 @@ async def test_draft_som_objekt_pa_engelska_kraschar_inte():
     resultat = await _kor(storage, llm, "Which payment methods do you accept?")
     assert resultat["reply"] == "We accept card, Swish and Klarna."
     assert "snajp:humanizer-svenska" not in resultat["skills_used"]
+
+
+def test_textfalt_hittar_svaret_i_skillens_mallformat():
+    from app.agent.support_agent import _textfalt
+
+    # Ordagrant formatet cs:draft-response gav i development 2026-09-19.
+    mall = {
+        "To": "Customer",
+        "Re": "Your order A-17",
+        "Channel": "Web",
+        "Tone": "Professional, direct, helpful",
+        "Draft response text": "Your order A-17 is being delivered by PostNord.",
+        "Notes for You": {"Why this approach": "Directly answers the customer's question."},
+        "sources_used": ["previous conversation"],
+    }
+    assert _textfalt(mall, "draft") == "Your order A-17 is being delivered by PostNord."
+    assert _textfalt({"draft": "Kontraktets fält vinner.", "reply": "inte detta"}, "draft") == "Kontraktets fält vinner."
+    assert _textfalt({"Notes for You": "anteckning", "To": "Customer"}, "draft") == ""
+
+
+@pytest.mark.anyio
+async def test_mallformat_pa_engelska_blir_svaret_inte_reservtexten():
+    storage = MemoryStorage()
+    llm = _Fejk(
+        {
+            "cs:ticket-triage": {
+                "category": "leverans", "priority": "P3", "sentiment": 0.6, "escalate": False,
+                "ber_om_manniska": False, "inom_amnesomradet": True, "missforstadd": False,
+                "sprak": "en", "sokfraga_sv": "leverans transportör",
+            },
+            "cs:customer-research": {
+                "findings": "Leveransinfo finns.", "confidence": 0.9,
+                "kb_supports_answer": True, "behover_fortydligande": False,
+            },
+            "cs:draft-response": {
+                "To": "Customer",
+                "Re": "Delivery",
+                "Draft response text": "We deliver with PostNord.",
+                "Notes for You": {"Why this approach": "Answers directly."},
+            },
+        }
+    )
+    resultat = await _kor(storage, llm, "Which carrier do you use?")
+    assert resultat["reply"] == "We deliver with PostNord."
 
 
 @pytest.mark.anyio

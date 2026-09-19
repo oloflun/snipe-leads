@@ -248,6 +248,37 @@ def _text(varde: Any) -> str:
     return ""
 
 
+#: Ord i en fältnyckel som avslöjar att fältet ÄR svarstexten, när modellen
+#: döpt det själv. Kontraktsfälten (sources_used, context_refs) räknas aldrig.
+_SVARSLEDTRADAR = ("draft", "utkast", "svar", "response", "reply", "text")
+
+
+def _textfalt(utdata: dict[str, Any], falt: str) -> str:
+    """Stegets svarstext ur `falt`, även när modellen döpt fältet själv.
+
+    Uppmätt 2026-09-19 i development: på engelska följde cs:draft-response
+    skillens eget MALLFORMAT i stället för JSON-kontraktet, alltså
+    `{"To": ..., "Draft response text": "Your order A-17 ...", "Notes for You":
+    {...}}` utan `draft`. Utkastet blev tomt och kunden fick reservtexten
+    ("I don't want to guess ..."), trots att modellen skrivit rätt svar.
+    Fältet med kontraktets namn vinner; annars det första vars namn bär en
+    av _SVARSLEDTRADAR. "Notes for You" och liknande bär ingen ledtråd och
+    når därför aldrig kunden.
+    """
+    direkt = _text(utdata.get(falt))
+    if direkt.strip():
+        return direkt
+    for nyckel, varde in utdata.items():
+        namn = str(nyckel).casefold()
+        if namn in ("sources_used", "context_refs") or namn.startswith("notes"):
+            continue
+        if any(ledtrad in namn for ledtrad in _SVARSLEDTRADAR):
+            text = _text(varde)
+            if text.strip():
+                return text
+    return ""
+
+
 async def _sok_kb(storage: Storage, tenant_id: str, fraga: str) -> list[dict[str, Any]]:
     """En KB-sökning, med embedding när det går och fulltext annars.
 
@@ -1303,7 +1334,7 @@ async def run_support_agent(
                 logger.exception("Kunde inte spara KB-förslaget för ärendet.")
 
     # --- Steg 6: retention (villkorat) -------------------------------------
-    current_draft = _text(draft.get("draft"))
+    current_draft = _textfalt(draft, "draft")
 
     if cancellation_risk and not abuse.ska_eskalera:
         retention_playbook = await storage.get_latest_context_doc(
@@ -1330,7 +1361,7 @@ async def run_support_agent(
                 f"## Nuvarande utkast\n{current_draft}"
             ),
         )
-        current_draft = _text(retention.get("revised_draft")) or current_draft
+        current_draft = _textfalt(retention, "revised_draft") or current_draft
 
     # --- Steg 7: humanizer (ALLTID sist) -----------------------------------
     #
@@ -1348,7 +1379,7 @@ async def run_support_agent(
         case_context=f"{case_context}\n\n## Text att humanisera\n{current_draft}",
     )
 
-    reply = strip_markdown(_text(humanized.get("final_reply")) or current_draft or "").strip()
+    reply = strip_markdown(_textfalt(humanized, "final_reply") or current_draft or "").strip()
     # Efter humaniseraren, före längdkapningen: en avslutningsfras utan namn
     # under är trasig oavsett vilket steg som skrev den.
     reply = strip_dangling_sign_off(reply)
@@ -1400,7 +1431,7 @@ async def run_support_agent(
                 case_context=f"{case_context}\n\n## Kunskapsbas\n{kb_block}{systemblock}\n\n## Text att rätta\n{reply}",
             )
             kandidat = strip_dangling_sign_off(
-                strip_markdown(_text(rattning.get("final_reply"))).strip()
+                strip_markdown(_textfalt(rattning, "final_reply")).strip()
             )
             if kandidat and support_faktagrind.kontrollera(
                 kandidat, niva=installningar["faktakontroll"], kallor=kallor, tenant_namn=tenant_namn
