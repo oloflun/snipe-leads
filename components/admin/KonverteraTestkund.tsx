@@ -101,7 +101,7 @@ export function KonverteraTestkund({
         <div className="mt-6 max-w-[70ch] border-y border-ink/15 py-4 text-[0.9375rem] leading-7">
           <p>{rapport.meddelande}</p>
           {rapport.kunskapsbas ? (
-            <ul className="mt-3 space-y-1 text-ink/70">
+            <ul className="mt-3 space-y-1 text-ink-muted">
               <li>
                 Kunskapsbas: {rapport.kunskapsbas.till} rader i målet raderas,{" "}
                 {rapport.kunskapsbas.fran} kopieras.

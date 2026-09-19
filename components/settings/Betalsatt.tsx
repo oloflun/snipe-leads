@@ -137,7 +137,7 @@ export function Betalsatt() {
         </span>
       </div>
 
-      <p className="max-w-[62ch] text-[0.875rem] leading-6 text-ink/60">
+      <p className="max-w-[62ch] text-[0.875rem] leading-6 text-ink-muted">
         Ingen betalväxel är inkopplad ännu. Flödet nedan är det riktiga —
         formulär, validering och felväg — men <strong className="font-semibold">
         ingenting debiteras</strong>, och bara testkort tas emot. Skriv aldrig in
@@ -163,7 +163,7 @@ export function Betalsatt() {
                 setOppen(true);
                 setKlart(null);
               }}
-              className="focus-ring rounded-input px-3 py-1.5 text-[0.8125rem] text-ink/70 hover:bg-paper2 hover:text-ink"
+              className="focus-ring rounded-input px-3 py-1.5 text-[0.8125rem] text-ink-muted hover:bg-paper2 hover:text-ink"
             >
               Byt kort
             </button>
@@ -266,7 +266,7 @@ export function Betalsatt() {
                 </li>
               ))}
             </ul>
-            <p className="mt-3 text-[0.8125rem] leading-5 text-ink/50">
+            <p className="mt-3 text-[0.8125rem] leading-5 text-ink-subtle">
               Vilken framtida giltighetstid och vilken CVC som helst fungerar.
             </p>
           </div>

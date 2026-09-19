@@ -815,11 +815,11 @@ export function SupportChat({
           </span>
           <p className="text-sm font-semibold">
             Snajp Support
-            <span className="ml-2 font-normal text-ink/50">{statusLabel}</span>
+            <span className="ml-2 font-normal text-ink-subtle">{statusLabel}</span>
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <span className="hidden text-sm text-ink/45 md:block">{brandLabel}</span>
+          <span className="hidden text-sm text-ink-subtle md:block">{brandLabel}</span>
           {/* Menyn sitter i chattens huvud och inte i sidfoten: den som vill
               anmäla ett felaktigt svar eller läsa dataskyddstexten letar
               uppåt, inte nedanför en scrollande meddelandelista. */}
@@ -835,7 +835,7 @@ export function SupportChat({
           // finns plats och släpper taget när det inte gör det.
           <div className="flex min-h-full flex-col items-center text-center">
             <div className="m-auto flex flex-col items-center gap-5 py-2">
-            <p className="max-w-md text-[0.9375rem] leading-6 text-ink/60">
+            <p className="max-w-md text-[0.9375rem] leading-6 text-ink-muted">
               {intro ??
                 text({
                   sv: "Du kan också ladda upp en skärmdump eller en bild på en skadad vara.",
@@ -848,7 +848,7 @@ export function SupportChat({
                   key={prompt}
                   type="button"
                   onClick={() => send(prompt)}
-                  className="focus-ring min-h-11 rounded-input bg-paper2/80 px-3 py-2 text-left text-[0.8125rem] leading-5 text-ink/75 transition-colors hover:bg-paper2 hover:text-ink"
+                  className="focus-ring min-h-11 rounded-input bg-paper2/80 px-3 py-2 text-left text-[0.8125rem] leading-5 text-ink-muted transition-colors hover:bg-paper2 hover:text-ink"
                 >
                   {prompt}
                 </button>
@@ -881,7 +881,7 @@ export function SupportChat({
                   message.role === "user"
                     ? "bg-ink text-paper"
                     : message.role === "system"
-                      ? "bg-danger/10 text-ink/80"
+                      ? "bg-danger/10 text-ink-muted"
                       : "bg-paper2/80 text-ink"
                 )}
               >
@@ -930,7 +930,7 @@ export function SupportChat({
 
         {busy ? (
           <div className="flex justify-start">
-            <div className="inline-flex items-center gap-2 rounded-card bg-paper2/80 px-4 py-3 text-[0.9375rem] text-ink/60">
+            <div className="inline-flex items-center gap-2 rounded-card bg-paper2/80 px-4 py-3 text-[0.9375rem] text-ink-muted">
               <Loader2 className="h-4 w-4 animate-spin" />
               {vaknar
                 ? text({
@@ -948,11 +948,11 @@ export function SupportChat({
           <div className="mb-3 inline-flex items-center gap-2 rounded-input bg-paper p-1.5 pr-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={attachment} alt="Förhandsvisning" className="h-10 w-10 rounded-[6px] object-cover" />
-            <span className="text-xs text-ink/60">{text({ sv: "Bild bifogad", en: "Image attached" })}</span>
+            <span className="text-xs text-ink-muted">{text({ sv: "Bild bifogad", en: "Image attached" })}</span>
             <button
               type="button"
               onClick={() => setAttachment(null)}
-              className="focus-ring rounded-full p-1 text-ink/50 hover:text-danger"
+              className="focus-ring rounded-full p-1 text-ink-subtle hover:text-danger"
               aria-label={text({ sv: "Ta bort bild", en: "Remove image" })}
             >
               <X className="h-3.5 w-3.5" />
@@ -989,7 +989,7 @@ export function SupportChat({
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
-            className="focus-ring inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-input bg-paper text-ink/60 transition-colors hover:text-ink max-[359px]:order-2"
+            className="focus-ring inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-input bg-paper text-ink-muted transition-colors hover:text-ink max-[359px]:order-2"
             aria-label={text({ sv: "Bifoga bild", en: "Attach image" })}
           >
             <ImagePlus className="h-4 w-4" />
@@ -1009,7 +1009,7 @@ export function SupportChat({
               <button
                 type="button"
                 onClick={() => kbFileRef.current?.click()}
-                className="focus-ring inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-input bg-paper text-ink/60 transition-colors hover:text-ink max-[359px]:order-2"
+                className="focus-ring inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-input bg-paper text-ink-muted transition-colors hover:text-ink max-[359px]:order-2"
                 aria-label="Lägg till dokument i kunskapsbasen"
                 title="Textfil eller PDF till kunskapsbasen"
               >
@@ -1072,7 +1072,7 @@ function KbForhandsvisningKortVy({
           {kort.kalla === "pdf" ? "PDF" : "Textfil"} · {kort.filnamn}
         </p>
         {kort.status === "extraherar" ? (
-          <p className="mt-2 flex items-center gap-2 text-ink/60">
+          <p className="mt-2 flex items-center gap-2 text-ink-muted">
             <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
             Läser ut texten…
           </p>
@@ -1082,13 +1082,13 @@ function KbForhandsvisningKortVy({
           <>
             <p className="mt-2 font-semibold text-ink">{kort.titel}</p>
             {kort.varning ? (
-              <p className="mt-1.5 max-w-[65ch] text-ochre">{kort.varning}</p>
+              <p className="mt-1.5 max-w-[65ch] text-warning">{kort.varning}</p>
             ) : null}
-            <div className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap rounded-input bg-paper px-3 py-2 text-ink/75">
+            <div className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap rounded-input bg-paper px-3 py-2 text-ink-muted">
               {kort.innehall || "(ingen text hittades i filen)"}
             </div>
             {kort.sidor ? (
-              <p className="mt-1 text-[0.75rem] text-ink/45">
+              <p className="mt-1 text-[0.75rem] text-ink-subtle">
                 {kort.sidor} {kort.sidor === 1 ? "sida" : "sidor"}
               </p>
             ) : null}
@@ -1130,7 +1130,7 @@ function ForslagKortVy({
       <div className="max-w-[90%] rounded-card border border-ochre/30 bg-ochre/5 px-4 py-3 text-[0.875rem] leading-6">
         <p className="kicker text-mineral">Agenten behöver undersöka det här innan den svarar</p>
         <p className="mt-2 font-semibold text-ink">{kort.rubrik}</p>
-        {kort.brodtext ? <p className="mt-1 whitespace-pre-wrap text-ink/75">{kort.brodtext}</p> : null}
+        {kort.brodtext ? <p className="mt-1 whitespace-pre-wrap text-ink-muted">{kort.brodtext}</p> : null}
         {kort.status === "arende" ? (
           <p className="mt-3 text-moss">
             Öppnat som ärende. Det ligger under Testkörningar tills ni har underlag att svara med.
@@ -1138,7 +1138,7 @@ function ForslagKortVy({
         ) : kort.status === "sparat" ? (
           <p className="mt-3 text-moss">Sparad som kunskapsartikel.</p>
         ) : kort.status === "avfardat" ? (
-          <p className="mt-3 text-ink/50">Avfärdat.</p>
+          <p className="mt-3 text-ink-subtle">Avfärdat.</p>
         ) : (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <button
@@ -1204,7 +1204,7 @@ function FeedbackRad({
 }>) {
   if (lage.fas === "skickad") {
     return (
-      <p className="mt-1.5 text-[0.75rem] text-ink/45">
+      <p className="mt-1.5 text-[0.75rem] text-ink-subtle">
         Feedbacken är kalibrerad in — nästa testsvar tar hänsyn till den.
       </p>
     );
@@ -1218,7 +1218,7 @@ function FeedbackRad({
           onClick={onBra}
           disabled={lage.fas === "skickar"}
           aria-label="Bra svar"
-          className="focus-ring inline-flex h-8 w-8 items-center justify-center rounded-input text-ink/40 transition-colors hover:bg-paper2 hover:text-moss disabled:opacity-50"
+          className="focus-ring inline-flex h-8 w-8 items-center justify-center rounded-input text-ink-subtle transition-colors hover:bg-paper2 hover:text-moss disabled:opacity-50"
         >
           <ThumbsUp className="h-3.5 w-3.5" />
         </button>
@@ -1230,7 +1230,7 @@ function FeedbackRad({
           aria-expanded={lage.fas === "rattar"}
           className={cn(
             "focus-ring inline-flex h-8 w-8 items-center justify-center rounded-input transition-colors hover:bg-paper2 hover:text-danger disabled:opacity-50",
-            lage.fas === "rattar" ? "text-danger" : "text-ink/40"
+            lage.fas === "rattar" ? "text-danger" : "text-ink-subtle"
           )}
         >
           <ThumbsDown className="h-3.5 w-3.5" />
@@ -1238,7 +1238,7 @@ function FeedbackRad({
       </div>
       {lage.fas === "rattar" ? (
         <div className="mt-2 rounded-input border border-ink/12 bg-paper p-3">
-          <label className="text-[0.75rem] font-medium text-ink/60" htmlFor={`feedback-rattning-${messageId}`}>
+          <label className="text-[0.75rem] font-medium text-ink-muted" htmlFor={`feedback-rattning-${messageId}`}>
             Vad borde agenten ha svarat? (frivilligt)
           </label>
           <textarea
@@ -1260,7 +1260,7 @@ function FeedbackRad({
             <button
               type="button"
               onClick={onDaligHoppaOver}
-              className="focus-ring inline-flex min-h-8 items-center rounded-input px-3 text-[0.75rem] font-medium text-ink/50 hover:text-ink"
+              className="focus-ring inline-flex min-h-8 items-center rounded-input px-3 text-[0.75rem] font-medium text-ink-subtle hover:text-ink"
             >
               Hoppa över
             </button>

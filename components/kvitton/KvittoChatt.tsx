@@ -110,11 +110,11 @@ export function KvittoChatt() {
   return (
     <section className="flex flex-col rounded-panel border border-ink/15 bg-paper2/40">
       <header className="flex items-center gap-2 border-b border-ink/15 px-4 py-3">
-        <Sparkles className="h-4 w-4 shrink-0 text-ochre" aria-hidden />
+        <Sparkles className="h-4 w-4 shrink-0 text-warning" aria-hidden />
         <h2 className="text-[0.9375rem] font-semibold text-ink">Kvitto-assistenten</h2>
       </header>
 
-      <p className="px-4 pt-3 text-[0.8125rem] leading-5 text-ink/55">
+      <p className="px-4 pt-3 text-[0.8125rem] leading-5 text-ink-subtle">
         Fråga om en period, en kategori eller ett enskilt kvitto. Den hämtar
         siffrorna ur dina inlästa kvitton och räknar aldrig själv.
       </p>
@@ -128,7 +128,7 @@ export function KvittoChatt() {
                 type="button"
                 disabled={busy}
                 onClick={() => void skicka(f)}
-                className="focus-ring rounded-input border border-ink/15 bg-paper px-3 py-2 text-left text-[0.8125rem] text-ink/70 hover:border-ink/35 hover:text-ink"
+                className="focus-ring rounded-input border border-ink/15 bg-paper px-3 py-2 text-left text-[0.8125rem] text-ink-muted hover:border-ink/35 hover:text-ink"
               >
                 {f}
               </button>
@@ -143,7 +143,7 @@ export function KvittoChatt() {
               "max-w-[92%] rounded-card px-3.5 py-2.5 text-[0.875rem] leading-6",
               rad.roll === "kund"
                 ? "ml-auto bg-ink text-paper"
-                : "border border-ink/15 bg-paper text-ink/85"
+                : "border border-ink/15 bg-paper text-ink-muted"
             )}
           >
             <p className="whitespace-pre-wrap">{rad.text}</p>

@@ -55,7 +55,7 @@ export function SupportWorkspaceTabs({ workspaceName }: Readonly<{ workspaceName
             onClick={() => setTab(item.id)}
             className={cn(
               "focus-ring -mb-px border-b-2 px-4 py-3 text-sm font-semibold transition",
-              tab === item.id ? "border-ochre text-ink" : "border-transparent text-ink/50 hover:text-ink"
+              tab === item.id ? "border-ochre text-ink" : "border-transparent text-ink-subtle hover:text-ink"
             )}
           >
             {item.label}

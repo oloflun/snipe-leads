@@ -138,7 +138,7 @@ export function AgentMenu({
         onClick={() => setOppen((v) => !v)}
         aria-expanded={oppen}
         aria-haspopup="dialog"
-        className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-input border border-ink/15 px-3 text-sm font-medium text-ink/80 transition-colors hover:bg-paper2"
+        className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-input border border-ink/15 px-3 text-sm font-medium text-ink-muted transition-colors hover:bg-paper2"
       >
         <span aria-hidden="true" className="flex flex-col gap-[3px]">
           <span className="block h-[2px] w-4 bg-current" />
@@ -173,7 +173,7 @@ export function AgentMenu({
                     "focus-ring min-h-9 rounded-input px-3 text-sm font-medium transition-colors",
                     locale === val
                       ? "bg-ink text-paper"
-                      : "text-ink/70 hover:bg-paper2"
+                      : "text-ink-muted hover:bg-paper2"
                   )}
                 >
                   {val === "sv" ? "Svenska" : "English"}
@@ -191,7 +191,7 @@ export function AgentMenu({
                 aria-pressed={flik === namn}
                 className={cn(
                   "focus-ring min-h-11 flex-1 px-3 text-sm font-medium transition-colors",
-                  flik === namn ? "bg-paper2 text-ink" : "text-ink/70 hover:bg-paper2/60"
+                  flik === namn ? "bg-paper2 text-ink" : "text-ink-muted hover:bg-paper2/60"
                 )}
               >
                 {text(copy[namn] as Localized)}
@@ -204,12 +204,12 @@ export function AgentMenu({
               <p className="font-display text-[1rem] font-semibold">
                 {text(copy.kontaktRubrik as Localized)}
               </p>
-              <p className="mt-2 text-[0.875rem] leading-[1.6] text-ink/75">
+              <p className="mt-2 text-[0.875rem] leading-[1.6] text-ink-muted">
                 {text(copy.kontaktBody as Localized)}
               </p>
               <a
                 href={`mailto:${SNAJP_SUPPORT_EPOST}`}
-                className="focus-ring mt-3 inline-block rounded-input text-[0.875rem] font-medium text-ochre underline underline-offset-4"
+                className="focus-ring mt-3 inline-block rounded-input text-[0.875rem] font-medium text-warning underline underline-offset-4"
               >
                 {SNAJP_SUPPORT_EPOST}
               </a>
@@ -223,7 +223,7 @@ export function AgentMenu({
               </p>
               <ul className="mt-3 flex flex-col gap-2.5">
                 {gdprPunkter.map((punkt, i) => (
-                  <li key={i} className="flex gap-2.5 text-[0.8125rem] leading-[1.55] text-ink/80">
+                  <li key={i} className="flex gap-2.5 text-[0.8125rem] leading-[1.55] text-ink-muted">
                     <span
                       aria-hidden="true"
                       className="mt-[0.5em] h-1 w-1 shrink-0 rounded-full bg-ochre"
@@ -236,7 +236,7 @@ export function AgentMenu({
                 {text(copy.gdprFot as Localized)}
                 <a
                   href={`mailto:${SNAJP_SUPPORT_EPOST}`}
-                  className="focus-ring rounded-input text-ochre underline underline-offset-4"
+                  className="focus-ring rounded-input text-warning underline underline-offset-4"
                 >
                   {SNAJP_SUPPORT_EPOST}
                 </a>
@@ -249,7 +249,7 @@ export function AgentMenu({
             <p className="text-[0.875rem] font-semibold">
               {text(copy.eskaleraRubrik as Localized)}
             </p>
-            <p className="mt-1.5 text-[0.8125rem] leading-[1.55] text-ink/70">
+            <p className="mt-1.5 text-[0.8125rem] leading-[1.55] text-ink-muted">
               {text(copy.eskaleraBody as Localized)}
             </p>
             <a

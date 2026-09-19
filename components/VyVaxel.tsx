@@ -38,7 +38,7 @@ export function VyVaxel() {
       aria-current={vy === varde ? "true" : undefined}
       className={cn(
         "focus-ring inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-input px-2.5 text-[13px] font-medium transition-colors",
-        vy === varde ? "bg-paper text-ink shadow-sm" : "text-ink/50 hover:text-ink"
+        vy === varde ? "bg-paper text-ink shadow-sm" : "text-ink-subtle hover:text-ink"
       )}
     >
       <Ikon className="h-3.5 w-3.5" aria-hidden />

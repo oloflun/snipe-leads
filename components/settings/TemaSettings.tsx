@@ -80,7 +80,7 @@ export function TemaSettings({ initial }: Readonly<{ initial: Tema }>) {
 
       <div className="border-t border-ink/15 pt-5">
         <p className="kicker text-mineral">Hur det sparas</p>
-        <p className="mt-3 max-w-[60ch] text-[0.875rem] leading-6 text-ink/60">
+        <p className="mt-3 max-w-[60ch] text-[0.875rem] leading-6 text-ink-muted">
           Valet ligger i den här webbläsaren och gäller direkt — det finns inget
           att spara. Loggar du in på en annan dator börjar den i ljust läge tills
           du väljer om.

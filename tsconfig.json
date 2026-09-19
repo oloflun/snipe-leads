@@ -41,8 +41,6 @@
     "supabase/functions",
     "email-studio/kopior",
     "snajp-support/frontend",
-    "bokforing-webb",
-    "leads-webb",
     "support-webb"
   ]
 }

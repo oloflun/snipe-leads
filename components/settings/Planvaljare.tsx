@@ -155,10 +155,10 @@ export function Planvaljare({
                 {laddar ? (
                   <Loader2 className="ml-auto h-4 w-4 shrink-0 animate-spin text-mineral" aria-hidden />
                 ) : aktiv ? (
-                  <Check className="ml-auto h-4 w-4 shrink-0 text-ochre" aria-hidden />
+                  <Check className="ml-auto h-4 w-4 shrink-0 text-warning" aria-hidden />
                 ) : null}
               </span>
-              <span className="mt-1 block text-[0.8125rem] leading-5 text-ink/55">
+              <span className="mt-1 block text-[0.8125rem] leading-5 text-ink-subtle">
                 {text(p.beskrivning)}
               </span>
               {aktiv ? <span className="sr-only">Nuvarande paket</span> : null}

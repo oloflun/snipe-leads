@@ -131,7 +131,7 @@ export function NotisSettings() {
 
       <fieldset className="border-t border-ink/15 pt-5" disabled={!falt.epost}>
         <legend className="kicker text-mineral">Vad vi mejlar om</legend>
-        <p className="mt-2 max-w-[52ch] text-[0.8125rem] leading-5 text-ink/50">
+        <p className="mt-2 max-w-[52ch] text-[0.8125rem] leading-5 text-ink-subtle">
           Två sorters händelser. Välj båda, en av dem, eller ingen — inget val
           gör samma sak som att stänga av notiser helt.
         </p>

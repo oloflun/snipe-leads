@@ -31,7 +31,7 @@ export function SupportShowcase({ tenant }: Readonly<{ tenant?: string }> = {}) 
         <div className="mt-4">
           <SupportChat tenant={tenant} />
         </div>
-        <p className="mt-3 text-[0.8125rem] text-ink/45">{text(copy.wake)}</p>
+        <p className="mt-3 text-[0.8125rem] text-ink-subtle">{text(copy.wake)}</p>
       </div>
 
       <div>

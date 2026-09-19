@@ -116,7 +116,7 @@ export function OnboardingForm() {
 
   return (
     <form onSubmit={handleSubmit}>
-      <p className="mt-4 max-w-[62ch] text-[15px] leading-[1.65] text-ink/70">
+      <p className="mt-4 max-w-[62ch] text-[15px] leading-[1.65] text-ink-muted">
         Fyll i fyra rader. Agenterna läser er webbplats och tar reda på resten
         själv — bransch, tonläge och hur ni beskriver er.
       </p>
@@ -156,7 +156,7 @@ export function OnboardingForm() {
             }}
             className="focus-ring mt-1 h-4 w-4 shrink-0"
           />
-          <span className="text-[14px] leading-6 text-ink/70">
+          <span className="text-[14px] leading-6 text-ink-muted">
             <span className="font-medium text-ink">Testarbetsyta</span> — hoppa över
             organisationsnumret. Använd bara för test; arbetsytan märks som
             testkund i affärskontexten.
@@ -212,7 +212,7 @@ export function OnboardingForm() {
               onChange={(e) => setNotiser(e.target.checked)}
               className="focus-ring mt-1 h-4 w-4 shrink-0"
             />
-            <span className="text-[14px] leading-6 text-ink/70">
+            <span className="text-[14px] leading-6 text-ink-muted">
               <span className="font-medium text-ink">Ja, mejla mig</span> när ett
               nytt lead landar eller när kundtjänstagenten lämnar över ett ärende
               till en människa. Inget annat — vi mejlar aldrig om annat än ert

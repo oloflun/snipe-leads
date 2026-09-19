@@ -44,7 +44,7 @@ function Kontroller({ stor = false }: Readonly<{ stor?: boolean }>) {
   return (
     <div className={cn("flex items-center gap-1.5", stor && "self-start")}>
       <div className="flex items-center rounded-input bg-paper2/70 p-0.5">
-        <span className="inline-flex items-center gap-1.5 rounded-input px-2.5 py-1 text-[13px] text-ink/50">
+        <span className="inline-flex items-center gap-1.5 rounded-input px-2.5 py-1 text-[13px] text-ink-subtle">
           <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
           Admin
         </span>
@@ -53,12 +53,12 @@ function Kontroller({ stor = false }: Readonly<{ stor?: boolean }>) {
           Demo
         </span>
       </div>
-      <span className="px-3 text-sm font-medium text-ink/55">EN</span>
-      <span className="inline-flex items-center gap-1.5 rounded-input border border-ink/15 px-3 py-1.5 text-sm font-medium text-ink/70">
+      <span className="px-3 text-sm font-medium text-ink-subtle">EN</span>
+      <span className="inline-flex items-center gap-1.5 rounded-input border border-ink/15 px-3 py-1.5 text-sm font-medium text-ink-muted">
         <Menu className="h-4 w-4" aria-hidden />
         Meny
       </span>
-      <span className="inline-flex items-center gap-1.5 px-3 text-sm font-medium text-ink/55">
+      <span className="inline-flex items-center gap-1.5 px-3 text-sm font-medium text-ink-subtle">
         <LogOut className="h-4 w-4" aria-hidden />
         Logga ut
       </span>
@@ -74,7 +74,7 @@ function HeaderNu({ aktiv }: Readonly<{ aktiv: string }>) {
         <span className="inline-flex items-center gap-2.5">
           <Image src="/snajp-logo-v1-black.svg" alt="Snajp" width={552} height={159} className="h-[29px] w-auto" />
         </span>
-        <span className="hidden text-sm text-ink/45 sm:inline">Nordlys Handel</span>
+        <span className="hidden text-sm text-ink-subtle sm:inline">Nordlys Handel</span>
 
         <div className="ml-auto">
           <Kontroller />
@@ -86,7 +86,7 @@ function HeaderNu({ aktiv }: Readonly<{ aktiv: string }>) {
               key={flik}
               className={cn(
                 "inline-flex min-h-11 shrink-0 items-center rounded-input px-3 text-sm font-medium",
-                flik === aktiv ? "bg-paper2 text-ink" : "text-ink/55"
+                flik === aktiv ? "bg-paper2 text-ink" : "text-ink-subtle"
               )}
             >
               {flik}
@@ -111,7 +111,7 @@ function HeaderForslag({
         <span className="flex shrink-0 items-center gap-3">
           <span className="flex flex-col justify-center">
             <Image src="/snajp-logo-v1-black.svg" alt="Snajp" width={552} height={159} className="h-[55px] w-auto" />
-            <span className="mt-1 text-[13px] leading-none text-ink/45">Nordlys Handel</span>
+            <span className="mt-1 text-[13px] leading-none text-ink-subtle">Nordlys Handel</span>
           </span>
         </span>
 
@@ -127,7 +127,7 @@ function HeaderForslag({
                 onClick={() => onValj(flik)}
                 className={cn(
                   "focus-ring inline-flex min-h-11 shrink-0 items-center rounded-input px-3.5 text-sm font-medium transition-colors",
-                  flik === aktiv ? "bg-paper2 text-ink" : "text-ink/55 hover:bg-paper2/60 hover:text-ink"
+                  flik === aktiv ? "bg-paper2 text-ink" : "text-ink-subtle hover:bg-paper2/60 hover:text-ink"
                 )}
               >
                 {flik}
@@ -152,11 +152,11 @@ function Innehall({ flik }: Readonly<{ flik: string }>) {
   };
   return (
     <div className="mx-auto max-w-[1400px] border-t border-ink/10 px-4 py-8 md:px-6">
-      <p className="text-[0.8125rem] font-medium text-ink/45">{flik}</p>
+      <p className="text-[0.8125rem] font-medium text-ink-subtle">{flik}</p>
       <h2 className="mt-1 text-[1.5rem] font-semibold leading-tight tracking-[-0.02em]">
         {flik === "Kundtjänst" ? "Inkorg och utkast" : flik}
       </h2>
-      <p className="mt-2 max-w-[68ch] text-[0.9375rem] leading-[1.6] text-ink/65">{text[flik]}</p>
+      <p className="mt-2 max-w-[68ch] text-[0.9375rem] leading-[1.6] text-ink-muted">{text[flik]}</p>
     </div>
   );
 }
@@ -167,15 +167,15 @@ export default function Page() {
   return (
     <main className="min-h-screen bg-paper text-ink">
       <div className="mx-auto max-w-[1100px] px-4 py-10 md:px-6">
-        <p className="text-[0.8125rem] font-medium text-ink/45">Förhandsvisning</p>
+        <p className="text-[0.8125rem] font-medium text-ink-subtle">Förhandsvisning</p>
         <h1 className="mt-1 text-[1.5rem] font-semibold leading-tight tracking-[-0.02em]">
           Menyraden — tre ändringar
         </h1>
-        <p className="mt-2 max-w-[68ch] text-[0.9375rem] leading-[1.6] text-ink/65">
+        <p className="mt-2 max-w-[68ch] text-[0.9375rem] leading-[1.6] text-ink-muted">
           Ingenting är applicerat. Så här skulle det se ut.
         </p>
 
-        <ol className="mt-5 max-w-[72ch] space-y-3 text-[15px] leading-6 text-ink/75">
+        <ol className="mt-5 max-w-[72ch] space-y-3 text-[15px] leading-6 text-ink-muted">
           <li>
             <strong className="font-semibold">Kundtjänst finns i menyn</strong> och går att klicka
             på. Att den saknas idag är ett fel, inte ett val: flikarna är lägesväxeln, och när du
@@ -195,7 +195,7 @@ export default function Page() {
 
       <section className="border-y border-ink/10 bg-paper2/30 py-8">
         <div className="mx-auto max-w-[1400px] px-4 md:px-6">
-          <p className="text-[13px] font-medium uppercase tracking-[0.04em] text-ink/45">Nu</p>
+          <p className="text-[13px] font-medium uppercase tracking-[0.04em] text-ink-subtle">Nu</p>
         </div>
         <div className="mt-3 border-y border-ink/10 bg-paper">
           <HeaderNu aktiv="Översikt" />
@@ -204,7 +204,7 @@ export default function Page() {
 
       <section className="py-8">
         <div className="mx-auto max-w-[1400px] px-4 md:px-6">
-          <p className="text-[13px] font-medium uppercase tracking-[0.04em] text-ochre">
+          <p className="text-[13px] font-medium uppercase tracking-[0.04em] text-warning">
             Förslag — klicka på flikarna
           </p>
         </div>

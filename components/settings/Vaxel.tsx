@@ -40,7 +40,7 @@ export function Vaxel({
       <span className="min-w-0">
         <span className="block text-[15px] font-medium leading-6 text-ink">{etikett}</span>
         {beskrivning ? (
-          <span className="mt-1 block max-w-[52ch] text-[0.8125rem] leading-5 text-ink/55">
+          <span className="mt-1 block max-w-[52ch] text-[0.8125rem] leading-5 text-ink-subtle">
             {beskrivning}
           </span>
         ) : null}

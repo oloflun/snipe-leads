@@ -119,10 +119,10 @@ export function Kontakter({ demo = false }: Readonly<{ demo?: boolean }>) {
   if (lage.fas === "fel") {
     return (
       <div className="flex items-start gap-3 border-y border-ochre/40 bg-ochre/10 px-4 py-4">
-        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-ochre" aria-hidden />
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
         <div className="min-w-0">
           <p className="text-sm font-medium text-ink">Kontakterna kunde inte hämtas</p>
-          <p className="mt-1 text-sm text-ink/70">{lage.meddelande}</p>
+          <p className="mt-1 text-sm text-ink-muted">{lage.meddelande}</p>
           <button
             type="button"
             onClick={() => void hamta()}
@@ -166,7 +166,7 @@ export function Kontakter({ demo = false }: Readonly<{ demo?: boolean }>) {
               {p.contact_name ?? p.contact_email}
             </p>
             {p.contact_name && p.contact_email ? (
-              <p className="mt-1 truncate text-sm text-ink/55">{p.contact_email}</p>
+              <p className="mt-1 truncate text-sm text-ink-subtle">{p.contact_email}</p>
             ) : null}
           </Cell>
           <Cell>
@@ -182,12 +182,12 @@ export function Kontakter({ demo = false }: Readonly<{ demo?: boolean }>) {
             )}
           </Cell>
           <Cell>
-            <span className="block truncate text-sm text-ink/65">
+            <span className="block truncate text-sm text-ink-muted">
               {[p.sni, p.ort].filter(Boolean).join(" · ") || "–"}
             </span>
           </Cell>
           <Cell hoger>
-            <span className="text-sm text-ink/70">
+            <span className="text-sm text-ink-muted">
               {p.status ? (STATUS_ETIKETT[p.status] ?? p.status) : "–"}
             </span>
           </Cell>

@@ -124,8 +124,8 @@ export function LaddaNerAppen({ tone = "ink" }: Readonly<{ tone?: "ink" | "paper
         // man missar är en knapp som inte finns.
           "focus-ring group inline-flex min-h-9 items-center gap-1.5 rounded-input border px-3 text-[0.8125rem] font-medium transition-colors [@media(pointer:coarse)]:min-h-11",
           tone === "paper"
-            ? "border-paper/30 text-paper/85 hover:border-paper/60 hover:text-paper"
-            : "border-ink/20 text-ink/75 hover:border-ink/45 hover:text-ink"
+            ? "border-paper/30 text-paper-muted hover:border-paper/60 hover:text-paper"
+            : "border-ink/20 text-ink-muted hover:border-ink/45 hover:text-ink"
         )}
       >
         {klar ? (
@@ -153,7 +153,7 @@ export function LaddaNerAppen({ tone = "ink" }: Readonly<{ tone?: "ink" | "paper
               type="button"
               onClick={() => setÖppen(false)}
               aria-label="Stäng"
-              className="focus-ring -mr-1 -mt-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-input text-ink/45 hover:text-ink"
+              className="focus-ring -mr-1 -mt-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-input text-ink-subtle hover:text-ink"
             >
               <X className="h-4 w-4" aria-hidden />
             </button>
@@ -161,7 +161,7 @@ export function LaddaNerAppen({ tone = "ink" }: Readonly<{ tone?: "ink" | "paper
 
           <ol className="mt-3 grid gap-2.5">
             {instruktion.steg.map((s, i) => (
-              <li key={s} className="flex gap-2.5 text-[0.875rem] leading-6 text-ink/75">
+              <li key={s} className="flex gap-2.5 text-[0.875rem] leading-6 text-ink-muted">
                 <span
                   aria-hidden
                   className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-ochre/15 font-mono text-[0.6875rem] text-warning"
@@ -174,7 +174,7 @@ export function LaddaNerAppen({ tone = "ink" }: Readonly<{ tone?: "ink" | "paper
           </ol>
 
           {plattform === "ios" ? (
-            <p className="mt-3 flex items-center gap-2 border-t border-ink/15 pt-3 text-[0.8125rem] text-ink/50">
+            <p className="mt-3 flex items-center gap-2 border-t border-ink/15 pt-3 text-[0.8125rem] text-ink-subtle">
               <Share className="h-3.5 w-3.5 shrink-0" aria-hidden />
               Dela-ikonen är fyrkanten med pilen uppåt.
             </p>

@@ -62,7 +62,7 @@ export function DemoKorning() {
     <div className="mt-6 rounded-card bg-paper2/60 p-5">
       {fas === "vilar" ? (
         <>
-          <p className="max-w-[65ch] text-[15px] leading-7 text-ink/70">
+          <p className="max-w-[65ch] text-[15px] leading-7 text-ink-muted">
             Prova en färdiggenererad exempelkörning: stegen är desamma som i en
             riktig körning, men bolagen är påhittade och utkasten skrivna i
             förväg. Ingen modell körs och inget skickas.
@@ -92,13 +92,13 @@ export function DemoKorning() {
                   key={steg.text}
                   className={cn(
                     "flex items-center gap-2.5 text-[0.9375rem]",
-                    klar ? "text-ink/70" : pagaende ? "text-ink" : "text-ink/35"
+                    klar ? "text-ink-muted" : pagaende ? "text-ink" : "text-ink-subtle"
                   )}
                 >
                   {klar ? (
                     <Check className="h-4 w-4 shrink-0 text-moss" aria-hidden />
                   ) : pagaende ? (
-                    <Loader2 className="h-4 w-4 shrink-0 animate-spin text-ochre" aria-hidden />
+                    <Loader2 className="h-4 w-4 shrink-0 animate-spin text-warning" aria-hidden />
                   ) : (
                     <span aria-hidden className="inline-block h-4 w-4 shrink-0" />
                   )}
@@ -110,8 +110,8 @@ export function DemoKorning() {
 
           {fas === "klar" ? (
             <div className="mt-5 border-t border-ink/12 pt-5">
-              <p className="text-[0.8125rem] leading-6 text-ink/55">
-                <strong className="font-semibold text-ink/70">Exempel.</strong>{" "}
+              <p className="text-[0.8125rem] leading-6 text-ink-subtle">
+                <strong className="font-semibold text-ink-muted">Exempel.</strong>{" "}
                 Bolagen är påhittade och utkasten skrivna i förväg. I produkten
                 kommer raderna ur en riktig körning mot er målgrupp.
               </p>
@@ -131,16 +131,16 @@ export function DemoKorning() {
                           <span className="block truncate font-semibold tracking-[-0.01em]">
                             {resultat.bolag}
                           </span>
-                          <span className="block truncate text-[0.8125rem] text-ink/50">
+                          <span className="block truncate text-[0.8125rem] text-ink-subtle">
                             {resultat.kontakt} · {resultat.ort}
                           </span>
                         </span>
-                        <span className="col-span-10 mt-1 min-w-0 truncate text-[0.875rem] text-ink/65 sm:col-span-7 sm:mt-0">
+                        <span className="col-span-10 mt-1 min-w-0 truncate text-[0.875rem] text-ink-muted sm:col-span-7 sm:mt-0">
                           {resultat.signal}
                         </span>
                         <span className="col-span-2 mt-1 flex justify-end sm:col-span-1 sm:mt-0">
                           <ChevronDown
-                            className={cn("h-4 w-4 text-ink/40 transition-transform", arOppet && "rotate-180")}
+                            className={cn("h-4 w-4 text-ink-subtle transition-transform", arOppet && "rotate-180")}
                             aria-hidden
                           />
                         </span>
@@ -148,16 +148,16 @@ export function DemoKorning() {
 
                       {arOppet ? (
                         <div className="pb-5">
-                          <p className="max-w-[65ch] text-[0.875rem] leading-6 text-ink/65">
+                          <p className="max-w-[65ch] text-[0.875rem] leading-6 text-ink-muted">
                             {resultat.behov}
                           </p>
-                          <p className="mt-4 text-[0.8125rem] font-medium text-ink/45">Ämnesrad</p>
+                          <p className="mt-4 text-[0.8125rem] font-medium text-ink-subtle">Ämnesrad</p>
                           <p className="mt-1 text-[1rem] font-semibold tracking-[-0.01em]">
                             {resultat.amne}
                           </p>
                           <label
                             htmlFor={`demo-utkast-${i}`}
-                            className="mt-4 block text-[0.8125rem] font-medium text-ink/45"
+                            className="mt-4 block text-[0.8125rem] font-medium text-ink-subtle"
                           >
                             Utkastet, ditt att ändra i
                           </label>
@@ -170,7 +170,7 @@ export function DemoKorning() {
                             }
                             className="focus-ring mt-2 min-h-[200px] w-full resize-y rounded-card border border-ink/12 bg-paper p-4 text-[0.9375rem] leading-7 outline-none transition-colors focus:border-ink/30"
                           />
-                          <p className="mt-2 text-[0.8125rem] text-ink/50">
+                          <p className="mt-2 text-[0.8125rem] text-ink-subtle">
                             Inget skickas härifrån. I produkten granskar ni och
                             skickar när ni bestämt er.
                           </p>

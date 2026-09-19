@@ -61,7 +61,7 @@ export default async function Page() {
         <h2 className="font-display text-[1.75rem] font-semibold leading-snug tracking-[-0.025em]">
           Varför Snajp finns
         </h2>
-        <div className="mt-5 max-w-[62ch] space-y-5 text-[1.0625rem] leading-[1.7] text-ink/78">
+        <div className="mt-5 max-w-[62ch] space-y-5 text-[1.0625rem] leading-[1.7] text-ink-muted">
           <p>
             B2B-prospektering är tidskrävande och blir opersonlig precis när den skalas. Antingen
             skriver någon femton genomtänkta mejl i veckan, eller så skickas trehundra som alla
@@ -102,7 +102,7 @@ export default async function Page() {
                   className="flex aspect-square w-full items-center justify-center rounded-card bg-paper2"
                   aria-hidden
                 >
-                  <span className="font-display text-[2.5rem] font-semibold text-ink/25">
+                  <span className="font-display text-[2.5rem] font-semibold text-ink-subtle">
                     {initialer(medlem.namn)}
                   </span>
                 </div>
@@ -114,7 +114,7 @@ export default async function Page() {
               {/* Tom bio UTELÄMNAS. Ett tomt <p> hade lämnat ett glapp under
                   rollen som ser ut som en text som inte laddat. */}
               {medlem.bio ? (
-                <p className="mt-3 text-[0.9375rem] leading-[1.65] text-ink/70">{medlem.bio}</p>
+                <p className="mt-3 text-[0.9375rem] leading-[1.65] text-ink-muted">{medlem.bio}</p>
               ) : null}
             </li>
           ))}
@@ -129,7 +129,7 @@ export default async function Page() {
           {VARDERINGAR.map((v) => (
             <li key={v.rubrik} className="border-t border-ink/15 pt-5">
               <h3 className="text-[1.0625rem] font-semibold leading-snug">{v.rubrik}</h3>
-              <p className="mt-2 text-[0.9375rem] leading-[1.65] text-ink/70">{v.text}</p>
+              <p className="mt-2 text-[0.9375rem] leading-[1.65] text-ink-muted">{v.text}</p>
             </li>
           ))}
         </ul>

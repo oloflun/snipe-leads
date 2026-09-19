@@ -35,7 +35,7 @@ import { useLocale } from "@/lib/i18n";
 /** Nivåns färg. Bara felen får varningsfärg — annars är ingen färg en signal. */
 const NIVAFARG: Record<string, string> = {
   error: "text-warning",
-  warning: "text-ochre",
+  warning: "text-warning",
   info: "text-mineral",
 };
 
@@ -100,7 +100,7 @@ export function Handelselista({
             </div>
 
             {tolkning.forklaring ? (
-              <p className="mt-1.5 max-w-[78ch] text-[14px] leading-[1.6] text-ink/70">
+              <p className="mt-1.5 max-w-[78ch] text-[14px] leading-[1.6] text-ink-muted">
                 {text(tolkning.forklaring)}
               </p>
             ) : null}
@@ -143,7 +143,7 @@ export function Handelselista({
                 <summary className="focus-ring inline-flex min-h-9 cursor-pointer items-center rounded-input text-mineral hover:text-ink">
                   {a("tekniskaDetaljer", locale)}
                 </summary>
-                <pre className="thin-scrollbar mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-input bg-paper2 p-3 font-mono text-[12px] leading-[1.55] text-ink/70">
+                <pre className="thin-scrollbar mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-input bg-paper2 p-3 font-mono text-[12px] leading-[1.55] text-ink-muted">
                   {tolkning.teknisk}
                 </pre>
               </details>

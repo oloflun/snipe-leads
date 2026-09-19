@@ -77,7 +77,7 @@ export function BytKund() {
         type="button"
         onClick={() => setOppen((v) => !v)}
         aria-expanded={oppen}
-        className="focus-ring inline-flex min-h-9 items-center rounded-input bg-paper2 px-2.5 text-[13px] font-medium text-ink/70 transition-colors hover:text-ink"
+        className="focus-ring inline-flex min-h-9 items-center rounded-input bg-paper2 px-2.5 text-[13px] font-medium text-ink-muted transition-colors hover:text-ink"
       >
         {impersonation ? impersonation.namn : "Byt kund"}
       </button>
@@ -93,7 +93,7 @@ export function BytKund() {
           />
           {fel ? <p className="mt-2 px-1 text-[13px] text-danger">{fel}</p> : null}
           {!fel && kunder === null ? (
-            <p className="mt-2 px-1 text-[13px] text-ink/50">Hämtar…</p>
+            <p className="mt-2 px-1 text-[13px] text-ink-subtle">Hämtar…</p>
           ) : null}
           <ul className="mt-1 max-h-64 overflow-y-auto">
             {filtrerade.map((kund) => (
@@ -106,7 +106,7 @@ export function BytKund() {
                     className="focus-ring flex min-h-11 w-full items-center rounded-input px-3 text-left text-[13px] hover:bg-paper2"
                   >
                     <span className="min-w-0 truncate font-medium">{kund.name}</span>
-                    <span className="ml-auto shrink-0 pl-3 font-mono text-[11px] text-ink/40">
+                    <span className="ml-auto shrink-0 pl-3 font-mono text-[11px] text-ink-subtle">
                       {kund.slug}
                     </span>
                   </button>
@@ -115,7 +115,7 @@ export function BytKund() {
             ))}
           </ul>
           {kunder && filtrerade.length === 0 ? (
-            <p className="px-1 py-2 text-[13px] text-ink/50">Ingen kund matchade.</p>
+            <p className="px-1 py-2 text-[13px] text-ink-subtle">Ingen kund matchade.</p>
           ) : null}
         </div>
       ) : null}

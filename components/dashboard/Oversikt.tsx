@@ -143,7 +143,7 @@ function Tillstandsrad({ poster }: Readonly<{ poster: Tillstand[] }>) {
           <dd
             className={cn(
               "mt-1.5 flex items-center gap-2 truncate text-[0.9375rem]",
-              post.larm ? "font-semibold text-ink" : "text-ink/75"
+              post.larm ? "font-semibold text-ink" : "text-ink-muted"
             )}
             title={post.varde}
           >
@@ -200,7 +200,7 @@ function Tal({
       <p className="num mt-3 text-[2.5rem] font-semibold leading-none tabular-nums tracking-[-0.03em] text-ink">
         {varde}
       </p>
-      <p className="mt-2.5 text-[0.8125rem] leading-5 text-ink/60">{detalj}</p>
+      <p className="mt-2.5 text-[0.8125rem] leading-5 text-ink-muted">{detalj}</p>
     </div>
   );
 }
@@ -237,7 +237,7 @@ function Stapellista({
   tomtext
 }: Readonly<{ rader: [string, number][]; tomtext: string }>) {
   if (rader.length === 0) {
-    return <p className="max-w-[60ch] text-[0.875rem] leading-6 text-ink/55">{tomtext}</p>;
+    return <p className="max-w-[60ch] text-[0.875rem] leading-6 text-ink-subtle">{tomtext}</p>;
   }
   const varden = rader.map(([, värde]) => värde);
   const störst = Math.max(...varden);
@@ -266,7 +266,7 @@ function Stapellista({
               />
             </span>
           </span>
-          <span className="num col-span-2 text-right text-[0.875rem] tabular-nums text-ink/70">
+          <span className="num col-span-2 text-right text-[0.875rem] tabular-nums text-ink-muted">
             {värde}
           </span>
         </Rad>
@@ -297,7 +297,7 @@ function Pastaende({
           {markerat}
         </span>
       ) : null}
-      <span className="text-ink/80">{children}</span>
+      <span className="text-ink-muted">{children}</span>
     </p>
   );
 }
@@ -319,7 +319,7 @@ function AttGora({
 }: Readonly<{ rader: AttGoraRad[]; href: string; knapp: string; tomtext: string }>) {
   if (rader.length === 0) {
     return (
-      <p className="max-w-[62ch] rounded-card bg-paper2/50 px-5 py-4 text-[0.875rem] leading-6 text-ink/60">
+      <p className="max-w-[62ch] rounded-card bg-paper2/50 px-5 py-4 text-[0.875rem] leading-6 text-ink-muted">
         {tomtext}
       </p>
     );
@@ -334,9 +334,9 @@ function AttGora({
           <li key={rad.id} className="grid grid-cols-12 gap-x-4 py-3 first:pt-0 last:pb-0">
             <div className="col-span-12 min-w-0 sm:col-span-8">
               <p className="truncate text-[0.9375rem] font-semibold">{rad.rubrik}</p>
-              <p className="mt-0.5 truncate text-[0.8125rem] text-paper/60">{rad.under}</p>
+              <p className="mt-0.5 truncate text-[0.8125rem] text-paper-muted">{rad.under}</p>
             </div>
-            <p className="col-span-12 mt-1 truncate text-[0.8125rem] text-paper/55 sm:col-span-4 sm:mt-0 sm:text-right">
+            <p className="col-span-12 mt-1 truncate text-[0.8125rem] text-paper-muted sm:col-span-4 sm:mt-0 sm:text-right">
               {rad.meta ?? ""}
             </p>
           </li>
@@ -385,7 +385,7 @@ function Komigang({ rader }: Readonly<{ rader: { text: string; href: string; kna
       <ul className="mt-4 grid gap-4">
         {rader.map((rad) => (
           <li key={rad.href} className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-            <p className="max-w-[62ch] text-[0.9375rem] leading-6 text-ink/70">{rad.text}</p>
+            <p className="max-w-[62ch] text-[0.9375rem] leading-6 text-ink-muted">{rad.text}</p>
             <Link href={rad.href} className={cn(btnSecondary, "shrink-0")}>
               {rad.knapp}
             </Link>
@@ -400,7 +400,7 @@ type LedgerRad = { id: string; vanster: string; mitten: string; hoger: string; t
 
 function Ledger({ rader, tomtext }: Readonly<{ rader: LedgerRad[]; tomtext: string }>) {
   if (rader.length === 0) {
-    return <p className="max-w-[62ch] text-[0.875rem] leading-6 text-ink/55">{tomtext}</p>;
+    return <p className="max-w-[62ch] text-[0.875rem] leading-6 text-ink-subtle">{tomtext}</p>;
   }
   return (
     <div className="divide-y divide-ink/10 border-y border-ink/15">
@@ -414,7 +414,7 @@ function Ledger({ rader, tomtext }: Readonly<{ rader: LedgerRad[]; tomtext: stri
             {rad.ton && rad.ton !== "neutral" ? (
               <Badge tone={rad.ton}>{rad.hoger}</Badge>
             ) : (
-              <span className="num text-[0.875rem] tabular-nums text-ink/65">{rad.hoger}</span>
+              <span className="num text-[0.875rem] tabular-nums text-ink-muted">{rad.hoger}</span>
             )}
           </span>
         </div>
@@ -463,9 +463,9 @@ function OversiktShell({
       {ofullstandig ? (
         <p
           role="status"
-          className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-card bg-paper2/60 px-4 py-3 text-[0.875rem] text-ink/70"
+          className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-card bg-paper2/60 px-4 py-3 text-[0.875rem] text-ink-muted"
         >
-          <AlertTriangle className="h-4 w-4 shrink-0 text-ochre" aria-hidden />
+          <AlertTriangle className="h-4 w-4 shrink-0 text-warning" aria-hidden />
           En del av siffrorna kunde inte hämtas och visas som streck. Resten stämmer.
           <button
             type="button"
@@ -738,7 +738,7 @@ export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
             under: post.subject ?? "Utan ämnesrad",
             meta: post.scheduled_at ? `köat ${sedan(post.scheduled_at)}` : undefined
           }))}
-          href={vag("/dashboard/leads")}
+          href={vag("/dashboard/iris/granskning")}
           knapp="Öppna granskningskön"
           tomtext="Inget mail ligger och väntar på ditt godkännande. Mailen agenterna skriver hamnar här."
         />
@@ -769,8 +769,8 @@ export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
         rubrik="Senaste körningarna"
         bredvid={
           <Link
-            href={vag("/dashboard/leads")}
-            className="focus-ring rounded-input text-[0.875rem] text-ink/55 underline-offset-4 transition-colors hover:text-ink hover:underline"
+            href={vag("/dashboard/iris")}
+            className="focus-ring rounded-input text-[0.875rem] text-ink-subtle underline-offset-4 transition-colors hover:text-ink hover:underline"
           >
             Starta en körning
           </Link>
@@ -806,11 +806,11 @@ function Faktalista({ rader }: Readonly<{ rader: { etikett: string; varde: strin
     <dl className="divide-y divide-ink/10 border-y border-ink/15">
       {rader.map((rad) => (
         <div key={rad.etikett} className="grid grid-cols-12 items-baseline gap-x-4 py-3">
-          <dt className="col-span-8 text-[0.875rem] text-ink/75">{rad.etikett}</dt>
+          <dt className="col-span-8 text-[0.875rem] text-ink-muted">{rad.etikett}</dt>
           <dd
             className={cn(
               "num col-span-4 flex items-center justify-end gap-2 text-right text-[0.875rem] tabular-nums",
-              rad.larm ? "font-semibold text-ink" : "text-ink/70"
+              rad.larm ? "font-semibold text-ink" : "text-ink-muted"
             )}
           >
             {/* Samma sak som i Tal: pricken bär larmet, inte textfärgen. */}
@@ -1054,7 +1054,7 @@ export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) 
               ]}
             />
             {eskaleratUtanKalla > 0 ? (
-              <p className="mt-4 max-w-[52ch] text-[0.875rem] leading-6 text-ink/60">
+              <p className="mt-4 max-w-[52ch] text-[0.875rem] leading-6 text-ink-muted">
                 De ärendena lämnades över för att agenterna inte hittade något att svara ur, inte för
                 att frågan var svår.{" "}
                 <Link
@@ -1075,7 +1075,7 @@ export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) 
         bredvid={
           <Link
             href={vag("/dashboard/support")}
-            className="focus-ring rounded-input text-[0.875rem] text-ink/55 underline-offset-4 transition-colors hover:text-ink hover:underline"
+            className="focus-ring rounded-input text-[0.875rem] text-ink-subtle underline-offset-4 transition-colors hover:text-ink hover:underline"
           >
             Öppna inkorgen
           </Link>

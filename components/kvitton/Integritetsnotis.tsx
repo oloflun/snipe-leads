@@ -18,10 +18,10 @@ import { ShieldCheck } from "lucide-react";
  */
 export function Integritetsnotis() {
   return (
-    <p className="flex items-start gap-2.5 rounded-card border border-ink/12 bg-paper2/40 px-4 py-3.5 text-[0.8125rem] leading-6 text-ink/65">
+    <p className="flex items-start gap-2.5 rounded-card border border-ink/12 bg-paper2/40 px-4 py-3.5 text-[0.8125rem] leading-6 text-ink-muted">
       <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-moss" aria-hidden />
       <span>
-        <strong className="font-semibold text-ink/80">Dina mejl stannar dina.</strong>{" "}
+        <strong className="font-semibold text-ink-muted">Dina mejl stannar dina.</strong>{" "}
         Vi läser med read-only-åtkomst, säljer aldrig din data och delar den
         aldrig med tredje part utöver den AI-tjänst som tolkar kvittotexten,
         under personuppgiftsbiträdesavtal. Mejlens text sparas inte — det som

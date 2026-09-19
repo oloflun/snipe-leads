@@ -94,8 +94,8 @@ function Rad({
 }: Readonly<{ etikett: string; hint?: string; children: React.ReactNode }>) {
   return (
     <label className="block">
-      <span className="text-[13px] font-medium text-ink/70">{etikett}</span>
-      {hint ? <span className="ml-2 text-[12px] text-ink/45">{hint}</span> : null}
+      <span className="text-[13px] font-medium text-ink-muted">{etikett}</span>
+      {hint ? <span className="ml-2 text-[12px] text-ink-subtle">{hint}</span> : null}
       <div className="mt-1.5">{children}</div>
     </label>
   );
@@ -319,7 +319,7 @@ export function LeadslistorView() {
         <h2 id="bestall-lista" className="text-[1.125rem] font-semibold tracking-[-0.01em]">
           Beställ en lista
         </h2>
-        <p className="mt-1 max-w-[65ch] text-[13px] text-ink/45">
+        <p className="mt-1 max-w-[65ch] text-[13px] text-ink-subtle">
           Agenten letar, verifierar och lägger raderna här — ingenting skickas och inga utkast
           skrivs.
         </p>
@@ -354,7 +354,7 @@ export function LeadslistorView() {
           {bestaller ? "Beställer…" : "Beställ lista"}
         </button>
 
-        {status ? <p className="mt-3 text-[13px] text-ink/55">{status}</p> : null}
+        {status ? <p className="mt-3 text-[13px] text-ink-subtle">{status}</p> : null}
         {bestallFel ? (
           <p role="alert" className="mt-5 max-w-[70ch] break-words text-[15px] text-danger">
             {bestallFel}
@@ -414,7 +414,7 @@ export function LeadslistorView() {
                         <p className="text-[15px] font-semibold tracking-[-0.01em]">
                           {lista.titel}
                         </p>
-                        <p className="mt-1 text-[13px] text-ink/50">
+                        <p className="mt-1 text-[13px] text-ink-subtle">
                           {[
                             `${lista.antal} beställda`,
                             typeof lista.item_count === "number"
@@ -434,7 +434,7 @@ export function LeadslistorView() {
                           lista.status === "fel"
                             ? "text-danger"
                             : PAGAENDE.has(lista.status)
-                              ? "text-ochre"
+                              ? "text-warning"
                               : "text-mineral"
                         )}
                       >
@@ -447,7 +447,7 @@ export function LeadslistorView() {
                       </p>
                     ) : null}
                     {klar ? (
-                      <p className="mt-2 inline-flex items-center gap-1.5 text-[13px] font-medium text-ochre">
+                      <p className="mt-2 inline-flex items-center gap-1.5 text-[13px] font-medium text-warning">
                         {oppnar === lista.id
                           ? "Hämtar…"
                           : oppen
@@ -818,7 +818,7 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
 
   if (!items.length) {
     return (
-      <p className="mt-4 border-t border-ink/10 pt-4 text-[15px] text-ink/60">
+      <p className="mt-4 border-t border-ink/10 pt-4 text-[15px] text-ink-muted">
         Listan är klar men innehåller inga rader.
       </p>
     );
@@ -841,7 +841,7 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
   return (
     <div className="mt-4 rounded-card border border-ink/10 bg-paper p-4 md:p-5">
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
-        <p className="text-[13px] text-ink/50">
+        <p className="text-[13px] text-ink-subtle">
           {items.length} bolag i listan · {medAdress.length} med mejladress
         </p>
         <div className="flex flex-wrap items-center gap-2">
@@ -926,7 +926,7 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
 
       {svep?.fas === "kor" ? (
         <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
-          <p role="status" className="text-[13px] text-ink/60">
+          <p role="status" className="text-[13px] text-ink-muted">
             Skriver utkast {svep.klara + 1} av {svep.totalt} — {svep.bolag}
           </p>
           <button
@@ -936,7 +936,7 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
               setStopparBegart(true);
             }}
             disabled={stopparBegart}
-            className="focus-ring text-[13px] underline underline-offset-4 hover:text-ochre disabled:text-ink/50 disabled:no-underline"
+            className="focus-ring text-[13px] underline underline-offset-4 hover:text-ochre disabled:text-ink-subtle disabled:no-underline"
           >
             {stopparBegart ? "Stoppar efter det här utkastet…" : "Stoppa efter det här utkastet"}
           </button>
@@ -948,13 +948,13 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
         </p>
       ) : null}
       {svepResultat ? (
-        <p className="mt-3 text-[13px] text-ink/55">
+        <p className="mt-3 text-[13px] text-ink-subtle">
           {svepResultat} — utkasten ligger i granskningskön under Leads.
         </p>
       ) : null}
 
       {allaResultat ? (
-        <p className="mt-3 text-[13px] text-ink/55">
+        <p className="mt-3 text-[13px] text-ink-subtle">
           {allaResultat} — bolagen ligger under Leads och kan researchas och mejlas därifrån.
         </p>
       ) : null}
@@ -969,7 +969,7 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
           ingenting och gör vägen till Email studio synlig även innan någon
           klickat. */}
       {mejlbro ? (
-        <p className="mt-4 max-w-[70ch] text-[13px] leading-6 text-ink/55">
+        <p className="mt-4 max-w-[70ch] text-[13px] leading-6 text-ink-subtle">
           Skriv mejl på en rad öppnar Email studio: agenten skriver ett utkast som ni kan
           förbättra, personalisera och godkänna.
         </p>
@@ -1016,18 +1016,18 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
                     {rad.company_name}
                   </p>
                   {rad.website ? (
-                    <p className="mt-1 break-all text-sm text-ink/55">{rad.website}</p>
+                    <p className="mt-1 break-all text-sm text-ink-subtle">{rad.website}</p>
                   ) : null}
                 </th>
                 <td className="kicker py-4 pr-6 text-mineral">{rad.ort ?? "—"}</td>
                 <td className="py-4 pr-6">
                   <p className="text-[15px]">{kontakt(rad)}</p>
                   {rad.contact_email && (rad.contact_name || rad.contact_role) ? (
-                    <p className="mt-1 break-all text-sm text-ink/55">{rad.contact_email}</p>
+                    <p className="mt-1 break-all text-sm text-ink-subtle">{rad.contact_email}</p>
                   ) : null}
                 </td>
-                <td className="py-4 pr-6 text-[14px] text-ink/72">{kontaktniva(rad) ?? "—"}</td>
-                <td className="py-4 pr-6 text-[15px] leading-6 text-ink/72">{signaltext(rad)}</td>
+                <td className="py-4 pr-6 text-[14px] text-ink-muted">{kontaktniva(rad) ?? "—"}</td>
+                <td className="py-4 pr-6 text-[15px] leading-6 text-ink-muted">{signaltext(rad)}</td>
                 <td className="py-4 pr-6">
                   {rad.source_url ? (
                     <a
@@ -1039,7 +1039,7 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
                       {rad.source_name || "Källa"}
                     </a>
                   ) : (
-                    <span className="text-[14px] text-ink/55">{rad.source_name ?? "—"}</span>
+                    <span className="text-[14px] text-ink-subtle">{rad.source_name ?? "—"}</span>
                   )}
                 </td>
                 {/* Knappen står på VARJE rad. Förut syntes den bara där en
@@ -1073,15 +1073,15 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
                 {rad.company_name}
               </span>
               {kontaktniva(rad) ? (
-                <span className="shrink-0 text-[12px] text-ink/55">{kontaktniva(rad)}</span>
+                <span className="shrink-0 text-[12px] text-ink-subtle">{kontaktniva(rad)}</span>
               ) : null}
             </div>
             <p className="kicker mt-1 text-mineral">
               {[rad.ort, rad.website].filter(Boolean).join(" · ") || "—"}
             </p>
-            <p className="mt-2 text-sm leading-6 text-ink/72">{signaltext(rad)}</p>
+            <p className="mt-2 text-sm leading-6 text-ink-muted">{signaltext(rad)}</p>
             <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-              <span className="min-w-0 break-all text-sm text-ink/60">{kontakt(rad)}</span>
+              <span className="min-w-0 break-all text-sm text-ink-muted">{kontakt(rad)}</span>
               {rad.source_url ? (
                 <a
                   href={rad.source_url}
@@ -1203,12 +1203,12 @@ function MejlRuta({ lista, rad }: Readonly<{ lista: Lista; rad: ListRad }>) {
             sparaAdress();
           }}
         >
-          <p className="max-w-[65ch] text-[14px] leading-6 text-ink/70">
+          <p className="max-w-[65ch] text-[14px] leading-6 text-ink-muted">
             Raden saknar mejladress. Lägg till mottagaren, så skriver agenten utkastet. Adressen
             sparas på bolaget under Leads.
           </p>
           <label className="mt-3 block max-w-[420px]">
-            <span className="text-[13px] font-medium text-ink/70">Mejladress</span>
+            <span className="text-[13px] font-medium text-ink-muted">Mejladress</span>
             <input
               type="email"
               value={adressfalt}
@@ -1232,7 +1232,7 @@ function MejlRuta({ lista, rad }: Readonly<{ lista: Lista; rad: ListRad }>) {
       ) : null}
 
       {fas === "skapar" ? (
-        <p className="mt-3 text-[14px] text-ink/55" role="status">
+        <p className="mt-3 text-[14px] text-ink-subtle" role="status">
           {steg}
         </p>
       ) : null}
@@ -1269,7 +1269,7 @@ function MejlRuta({ lista, rad }: Readonly<{ lista: Lista; rad: ListRad }>) {
       {fas === "klar" && data ? (
         <div className="mt-4">
           <EmailStudioEditor data={data} compact />
-          <p className="mt-4 max-w-[65ch] text-[13px] leading-6 text-ink/50">
+          <p className="mt-4 max-w-[65ch] text-[13px] leading-6 text-ink-subtle">
             Godkänn skickar utkastet som det sparades i granskningskön. Ändringar i fälten ovan
             uppdaterar bara den här vyn tills en sparväg finns.
           </p>
@@ -1290,7 +1290,7 @@ function MejlRuta({ lista, rad }: Readonly<{ lista: Lista; rad: ListRad }>) {
                   {godkannBusy ? "Godkänner…" : "Godkänn och skicka"}
                 </button>
                 {!queueItemId ? (
-                  <p className="mt-3 max-w-[65ch] text-[13px] leading-6 text-ink/50">
+                  <p className="mt-3 max-w-[65ch] text-[13px] leading-6 text-ink-subtle">
                     Utkastet saknar ett kö-id och kan inte godkännas härifrån. Se granskningskön
                     under Leads.
                   </p>

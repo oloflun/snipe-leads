@@ -4,7 +4,6 @@ import {
   ArrowLeftRight,
   FileText,
   LayoutDashboard,
-  ListChecks,
   LogOut,
   Mail,
   MessagesSquare,
@@ -13,13 +12,15 @@ import {
   Target,
   Users
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { Logo } from "@/components/Logo";
 import { mejlaOss } from "@/components/marketing/copy";
 import { AgentMenu } from "@/components/snajp/AgentMenu";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
+import { Rail, RailRad } from "@/components/shell/Rail";
+import type { RailNavItem } from "@/components/shell/Rail";
 import { signOut } from "@/lib/actions/auth";
 import { DEMO_NAV, demoSektionsVag } from "@/lib/demo/sektioner";
 import { BytKund } from "@/components/admin/BytKund";
@@ -53,17 +54,16 @@ import { cn } from "@/lib/utils";
  * session, så en sådan länk studsar besökaren till /login — mitt i det de
  * skulle prova.
  *
- * Kartan är explicit och inte en strängersättning: /dashboard/leads/kontroll
- * ligger under /demo/kontroll, alltså inte en ren prefixbyte. En regex hade
- * tyst gett /demo/leads/kontroll, som är en 404.
+ * Kartan är explicit och inte en strängersättning: den täcker alla ytor och
+ * hindrar att en ny /dashboard-route glöms bort och tyst pekar in i /login.
  */
 const DEMO_VAGAR: Record<string, string> = {
   "/dashboard": "/demo",
-  "/dashboard/leads": "/demo/leads",
-  "/dashboard/leads/kontroll": "/demo/kontroll",
+  "/dashboard/iris": "/demo/iris",
+  "/dashboard/iris/granskning": "/demo/iris/granskning",
+  "/dashboard/iris/installningar": "/demo/iris/installningar",
   "/dashboard/companies": "/demo/companies",
   "/dashboard/contacts": "/demo/contacts",
-  "/dashboard/emails": "/demo/emails",
   "/dashboard/inbox": "/demo/inbox",
   "/dashboard/analytics": "/demo/analytics",
   "/dashboard/assistant": "/demo/assistant",
@@ -85,7 +85,7 @@ const DEMO_VAGAR: Record<string, string> = {
  */
 export const FLIKENS_LAGE: Record<string, Scope> = {
   "/dashboard": "both",
-  "/dashboard/leads": "leads",
+  "/dashboard/iris": "leads",
   "/dashboard/support": "support"
 };
 
@@ -93,13 +93,15 @@ export const FLIKENS_LAGE: Record<string, Scope> = {
  * Ikon per menypost. Railen bär ikoner även i smalt läge, så varje route som
  * kan stå i menyn behöver en — okänd route får LayoutDashboard hellre än att
  * railen renderar ett hål.
+ *
+ * Exporterad: `AdminShell` återanvänder samma karta för sin "Arbetsyta"-grupp,
+ * så att samma /dashboard/*-route alltid bär samma ikon oavsett vilken yta
+ * den renderas på.
  */
-const RUTT_IKONER: Record<string, typeof LayoutDashboard> = {
+export const RUTT_IKONER: Record<string, LucideIcon> = {
   "/dashboard": LayoutDashboard,
-  "/dashboard/leads": Target,
-  "/dashboard/leads/listor": ListChecks,
+  "/dashboard/iris": Target,
   "/dashboard/support": MessagesSquare,
-  "/dashboard/emails": Mail,
   "/dashboard/companies": Users,
   "/dashboard/contacts": Users,
   "/dashboard/inbox": Mail,
@@ -112,10 +114,9 @@ const RUTT_IKONER: Record<string, typeof LayoutDashboard> = {
 
 const DEMO_IKONER: Record<string, typeof LayoutDashboard> = {
   "": LayoutDashboard,
-  leads: Target,
+  iris: Target,
   crm: Users,
   support: MessagesSquare,
-  emails: Mail,
   kvitton: ScanLine
 };
 
@@ -152,50 +153,6 @@ export function useArbetsvag(): (href: string) => string {
     }
     return demoAnpassa(href, pathname);
   };
-}
-
-/**
- * En rad i railen. Ochre-markör på aktiv flik — DESIGN.md:s "current
- * selection" — och etikett bara från lg; under det bär `title` namnet.
- */
-function RailRad({
-  href,
-  etikett,
-  Ikon,
-  aktiv,
-  onClick
-}: Readonly<{
-  href: string;
-  etikett: string;
-  Ikon: typeof LayoutDashboard;
-  aktiv: boolean;
-  onClick?: () => void;
-}>) {
-  return (
-    <Link
-      href={href}
-      onClick={onClick}
-      aria-current={aktiv ? "page" : undefined}
-      title={etikett}
-      className={cn(
-        "focus-ring relative flex h-11 shrink-0 items-center gap-3 rounded-input px-3 text-[0.9375rem] transition-colors",
-        "justify-center lg:justify-start",
-        aktiv
-          ? "bg-paper/10 font-semibold text-paper"
-          : "text-paper/60 hover:bg-paper/5 hover:text-paper"
-      )}
-    >
-      <span
-        aria-hidden
-        className={cn(
-          "absolute bottom-2 left-0 top-2 w-[2px] rounded-full bg-ochre transition-opacity",
-          aktiv ? "opacity-100" : "opacity-0"
-        )}
-      />
-      <Ikon className={cn("h-[18px] w-[18px] shrink-0", aktiv && "text-ochre")} aria-hidden />
-      <span className="hidden truncate lg:inline">{etikett}</span>
-    </Link>
-  );
 }
 
 export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -297,6 +254,55 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   const huvudRoutes = navRoutes.filter((route) => route.href !== "/settings");
   const settingsRoute = navRoutes.find((route) => route.href === "/settings");
 
+  // Railens navposter, omsatta till Rail-komponentens generiska form. Samma
+  // beräkning som innan extraktionen (se components/shell/Rail.tsx) — bara
+  // flyttad hit så att markupen kan delas med AdminShell.
+  const navItems: RailNavItem[] = demolage
+    ? DEMO_NAV.map((item) => {
+        const href = demoSektionsVag(item.slug);
+        const children = item.children?.map((child) => {
+          const childHref = demoSektionsVag(child.slug);
+          return { href: childHref, label: child.label, active: pathname === childHref };
+        });
+        return {
+          href,
+          label: item.label,
+          Icon: DEMO_IKONER[item.slug] ?? LayoutDashboard,
+          // Föräldern räknas aktiv om man står på den, ELLER på ett av dess
+          // barn — CRM-listan har t.ex. sökvägen /demo/crm, alltså inte under
+          // /demo/iris/, och ett prefix-test hade missat den.
+          active: pathname === href || Boolean(children?.some((c) => c.active)),
+          children
+        };
+      })
+    : huvudRoutes.map((route) => {
+        const aktiv =
+          route.href === "/dashboard"
+            ? pathname === "/dashboard"
+            : pathname === route.href || pathname.startsWith(`${route.href}/`);
+        return {
+          href: demoAnpassa(route.href, pathname),
+          label: t(route.labelKey),
+          Icon: RUTT_IKONER[route.href] ?? LayoutDashboard,
+          active: aktiv,
+          // Läget sätts vid klicket, inte i en effekt på den nya sidan: en
+          // effekt hade hunnit rendera målsidan i det gamla läget först, och
+          // bytet hade synts som ett hopp.
+          onClick: () => {
+            const lage = FLIKENS_LAGE[route.href];
+            if (lage && availableScopes.includes(lage)) {
+              setScope(lage);
+            }
+          },
+          // Barnen (Iris: Bolag/Granskning/Inställningar) — exakt match, inte
+          // prefix: /dashboard/iris/granskning ska inte markera /dashboard/iris.
+          children: route.children?.map((child) => {
+            const childHref = demoAnpassa(child.href, pathname);
+            return { href: childHref, label: t(child.labelKey), active: pathname === childHref };
+          })
+        };
+      });
+
   return (
     <div className="min-h-screen bg-paper text-ink">
       {/* Före allt annat i DOM och med högre z-index: bannern ska ligga ÖVER
@@ -307,95 +313,48 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
         {/* Vänsterrailen — sajtens EN tonala inversion (DESIGN.md: en per
             sida). Alltid synlig: på smala skärmar krymper den till en ikonrail
             i stället för att gömmas bakom en hamburgare, eftersom menyn ÄR
-            ytans karta. Samma struktur som bokforing-webb/components/Sidebar. */}
-        <aside className="rail sticky top-0 flex h-dvh w-[64px] shrink-0 flex-col bg-ink text-paper lg:w-[260px]">
-          <div className="flex items-center gap-3 px-3 pb-4 pt-6 lg:px-5">
-            <Link
-              href={demoAnpassa("/dashboard", pathname)}
-              className="focus-ring rounded-[6px]"
-              aria-label={demolage ? "Snajp demo — till översikten" : "Snajp — till översikten"}
-            >
-              <span className="hidden lg:block">
-                <Logo tone="paper" />
-              </span>
-              <span className="lg:hidden">
-                <Logo tone="paper" compact />
-              </span>
-            </Link>
-          </div>
-
-          {/* Arbetsytans namn — samma plats som "Bokföring"-etiketten i
-              bokforing-webbs rail. I demon står demomarkören här i stället:
-              den säger vad ytan ÄR, alltså hör den ihop med märket. */}
-          {demolage ? (
-            <p className="hidden px-5 pb-4 lg:block">
-              <span className="inline-flex items-center rounded-input border border-ochre/40 bg-ochre/10 px-2 py-0.5 text-[0.75rem] font-medium text-ochre">
-                Demo · exempeldata
-              </span>
-            </p>
-          ) : (
-            <p className="hidden truncate px-5 pb-4 text-[0.75rem] font-medium uppercase tracking-[0.14em] text-paper/40 lg:block">
-              {workspaceName}
-            </p>
-          )}
-
-          <nav
-            aria-label={t("nav.dashboard")}
-            className="thin-scrollbar flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 lg:px-3"
-          >
-            {demolage
-              ? DEMO_NAV.map(([vag, etikett]) => {
-                  const href = demoSektionsVag(vag);
-                  return (
-                    <RailRad
-                      key={href}
-                      href={href}
-                      etikett={etikett}
-                      Ikon={DEMO_IKONER[vag] ?? LayoutDashboard}
-                      aktiv={pathname === href}
-                    />
-                  );
-                })
-              : huvudRoutes.map((route) => {
-                  const aktiv =
-                    route.href === "/dashboard"
-                      ? pathname === "/dashboard"
-                      : pathname === route.href || pathname.startsWith(`${route.href}/`);
-                  return (
-                    <RailRad
-                      key={route.href}
-                      href={demoAnpassa(route.href, pathname)}
-                      etikett={t(route.labelKey)}
-                      Ikon={RUTT_IKONER[route.href] ?? LayoutDashboard}
-                      aktiv={aktiv}
-                      // Läget sätts vid klicket, inte i en effekt på den nya
-                      // sidan: en effekt hade hunnit rendera målsidan i det
-                      // gamla läget först, och bytet hade synts som ett hopp.
-                      onClick={() => {
-                        const lage = FLIKENS_LAGE[route.href];
-                        if (lage && availableScopes.includes(lage)) {
-                          setScope(lage);
-                        }
-                      }}
-                    />
-                  );
-                })}
-          </nav>
-
-          <div className="flex flex-col gap-1 border-t border-paper/10 px-2 py-3 lg:px-3">
-            {settingsRoute && !demolage ? (
-              <RailRad
-                href={settingsRoute.href}
-                etikett={t(settingsRoute.labelKey)}
-                Ikon={Settings}
-                aktiv={pathname === "/settings" || pathname.startsWith("/settings/")}
-              />
-            ) : null}
-            <p className="hidden px-3 pb-1 pt-3 text-[0.75rem] leading-5 text-paper/35 lg:block">
-              {demolage ? "Snajp — prova utan konto" : "En tjänst från Snajp"}
-            </p>
-          </div>
-        </aside>
+            ytans karta. Delad med AdminShell via components/shell/Rail.tsx. */}
+        <Rail
+          logoHref={demoAnpassa("/dashboard", pathname)}
+          logoAriaLabel={demolage ? "Snajp demo — till översikten" : "Snajp — till översikten"}
+          brand={
+            // Arbetsytans namn — samma plats som "Bokföring"-etiketten i
+            // bokforing-webbs rail. I demon står demomarkören här i stället:
+            // den säger vad ytan ÄR, alltså hör den ihop med märket.
+            demolage ? (
+              <p className="hidden px-5 pb-4 lg:block">
+                {/* Renderas inuti railen (bg-ink) via Rail-komponentens
+                    brand-slot — text-warning är kalibrerad mot ljusa ytor och
+                    gav bara 2.51:1 här. text-ochre ger 6.54:1 mot den
+                    ochre-tonade railbakgrunden. */}
+                <span className="inline-flex items-center rounded-input border border-ochre/40 bg-ochre/10 px-2 py-0.5 text-[0.75rem] font-medium text-ochre">
+                  Demo · exempeldata
+                </span>
+              </p>
+            ) : (
+              <p className="hidden truncate px-5 pb-4 text-[0.75rem] font-medium uppercase tracking-[0.14em] text-paper-subtle lg:block">
+                {workspaceName}
+              </p>
+            )
+          }
+          navLabel={t("nav.dashboard")}
+          groups={[{ items: navItems }]}
+          footer={
+            <>
+              {settingsRoute && !demolage ? (
+                <RailRad
+                  href={settingsRoute.href}
+                  etikett={t(settingsRoute.labelKey)}
+                  Ikon={Settings}
+                  aktiv={pathname === "/settings" || pathname.startsWith("/settings/")}
+                />
+              ) : null}
+              <p className="hidden px-3 pb-1 pt-3 text-[0.75rem] leading-5 text-paper-subtle lg:block">
+                {demolage ? "Snajp — prova utan konto" : "En tjänst från Snajp"}
+              </p>
+            </>
+          }
+        />
 
         <div className="flex min-w-0 flex-1 flex-col">
           {/* Kontrollraden. Railen bär navigationen; det här är allt som inte
@@ -408,11 +367,11 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
               {/* Demomarkören igen, för smala skärmar där railens etikett inte
                   får plats — utan den vet en mobil besökare inte vad ytan är. */}
               {demolage ? (
-                <span className="mr-auto inline-flex items-center rounded-input border border-ochre/40 bg-ochre/10 px-2.5 py-1 text-[13px] font-medium text-ochre lg:hidden">
+                <span className="mr-auto inline-flex items-center rounded-input border border-ochre/40 bg-ochre/10 px-2.5 py-1 text-[13px] font-medium text-warning lg:hidden">
                   Demo · exempeldata
                 </span>
               ) : (
-                <span className="mr-auto truncate text-[13px] font-medium text-ink/45 lg:hidden">
+                <span className="mr-auto truncate text-[13px] font-medium text-ink-subtle lg:hidden">
                   {workspaceName}
                 </span>
               )}
@@ -425,7 +384,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
               <button
                 type="button"
                 onClick={toggleLocale}
-                className="focus-ring min-h-11 rounded-input px-3 text-sm font-medium text-ink/55 transition-colors hover:text-ink"
+                className="focus-ring min-h-11 rounded-input px-3 text-sm font-medium text-ink-subtle transition-colors hover:text-ink"
               >
                 {locale === "sv" ? "EN" : "SV"}
               </button>
@@ -443,7 +402,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                 <form action={signOut}>
                   <button
                     type="submit"
-                    className="focus-ring inline-flex min-h-11 items-center gap-1.5 rounded-input px-3 text-sm font-medium text-ink/55 transition-colors hover:text-ink"
+                    className="focus-ring inline-flex min-h-11 items-center gap-1.5 rounded-input px-3 text-sm font-medium text-ink-subtle transition-colors hover:text-ink"
                   >
                     <LogOut className="h-4 w-4" aria-hidden />
                     <span className="hidden sm:inline">Logga ut</span>
@@ -457,13 +416,13 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                 <>
                   <Link
                     href="/"
-                    className="focus-ring hidden min-h-11 items-center rounded-input px-3 text-sm font-medium text-ink/55 transition-colors hover:text-ink sm:inline-flex"
+                    className="focus-ring hidden min-h-11 items-center rounded-input px-3 text-sm font-medium text-ink-subtle transition-colors hover:text-ink sm:inline-flex"
                   >
                     Till startsidan
                   </Link>
                   <Link
                     href="/login"
-                    className="focus-ring inline-flex min-h-11 items-center rounded-input px-3 text-sm font-medium text-ink/55 transition-colors hover:text-ink"
+                    className="focus-ring inline-flex min-h-11 items-center rounded-input px-3 text-sm font-medium text-ink-subtle transition-colors hover:text-ink"
                   >
                     Logga in
                   </Link>
@@ -481,7 +440,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
             {demolage ? (
               <div className="border-b border-ochre/30 bg-ochre/10">
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 md:px-6">
-                  <span className="text-[13px] text-ink/70">
+                  <span className="text-[13px] text-ink-muted">
                     Allt här är exempeldata. Klicka fritt, inget skickas.
                   </span>
                   {/* Ink-knapp, inte ochre-text: --ochre (L 0.74) ger 2.17:1
@@ -503,12 +462,12 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
             {isDemo || vy === "demo" ? (
               <div className="border-b border-ochre/30 bg-ochre/10">
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 md:px-6">
-                  <span className="kicker text-ochre">Demo</span>
+                  <span className="kicker text-warning">Demo</span>
                   {/* Demovyn bär ingen förklarande rad längre. Märkningen
                       "Demo" räcker där; texten om demokontot namngav dessutom
                       exempelbutiken i en yta som visas för kunder. */}
                   {vy === "demo" ? null : (
-                    <span className="text-[13px] text-ink/70">
+                    <span className="text-[13px] text-ink-muted">
                       Du testar Snajp med ett begränsat antal körningar.
                     </span>
                   )}
@@ -517,7 +476,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                        Hårdkodad här stod den utanför bytet i copy.ts. */
                     <a
                       href={mejlaOss()}
-                      className="kicker ml-auto text-ochre underline underline-offset-4 hover:text-ink"
+                      className="kicker ml-auto text-warning underline underline-offset-4 hover:text-ink"
                     >
                       Kontakta oss
                     </a>
@@ -572,12 +531,12 @@ export function PageShell({
                 överrad eller ingress borttagen, och ett tomt <p> lämnar kvar
                 sin marginal — rubriken hade legat och flutit en rad för lågt
                 utan något som förklarar varför. */}
-            {kicker ? <p className="text-[0.8125rem] font-medium text-ink/45">{kicker}</p> : null}
+            {kicker ? <p className="text-[0.8125rem] font-medium text-ink-subtle">{kicker}</p> : null}
             <h1 className={cn("font-display text-[1.625rem] font-semibold leading-tight tracking-[-0.02em]", kicker && "mt-1")}>
               {title}
             </h1>
             {description ? (
-              <p className="mt-2 max-w-[68ch] text-[0.9375rem] leading-[1.6] text-ink/65">{description}</p>
+              <p className="mt-2 max-w-[68ch] text-[0.9375rem] leading-[1.6] text-ink-muted">{description}</p>
             ) : null}
           </div>
           {action ? <div className="shrink-0">{action}</div> : null}

@@ -62,7 +62,7 @@ export function SettingsNav() {
                     aria-current={aktiv ? "page" : undefined}
                     className={cn(
                       "focus-ring inline-flex min-h-11 items-center rounded-input px-3 text-[15px] transition-colors",
-                      aktiv ? "bg-paper2 text-ink" : "text-ink/60 hover:bg-paper2/60 hover:text-ink"
+                      aktiv ? "bg-paper2 text-ink" : "text-ink-muted hover:bg-paper2/60 hover:text-ink"
                     )}
                   >
                     {text(route.label)}

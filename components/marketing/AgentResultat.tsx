@@ -37,7 +37,7 @@ function Accent({ text: value }: Readonly<{ text: string }>) {
     <>
       {value.split(ACCENT).map((part, i) =>
         i % 2 === 1 ? (
-          <span key={i} className="italic-disp text-ochre">
+          <span key={i} className="italic-disp text-warning">
             {part}
           </span>
         ) : (
@@ -55,10 +55,10 @@ function StatRad({ stats }: Readonly<{ stats: Stat[] }>) {
     <dl className="grid grid-cols-2 gap-x-6 gap-y-6 border-y border-ink/15 py-6 sm:grid-cols-4">
       {stats.map((stat) => (
         <div key={stat.etikett.sv} className="min-w-0">
-          <dd className="numeral text-[clamp(1.75rem,3.2vw,2.75rem)] font-semibold text-ochre">
+          <dd className="numeral text-[clamp(1.75rem,3.2vw,2.75rem)] font-semibold text-warning">
             {stat.varde}
           </dd>
-          <dt className="mt-2 text-[0.8125rem] leading-snug text-ink/60">{text(stat.etikett)}</dt>
+          <dt className="mt-2 text-[0.8125rem] leading-snug text-ink-muted">{text(stat.etikett)}</dt>
         </div>
       ))}
     </dl>
@@ -76,7 +76,7 @@ function Panel({ children }: Readonly<{ children: React.ReactNode }>) {
 function PanelHuvud({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <div className="border-b border-ink/10 bg-paper2/60 px-5 py-3">
-      <span className="text-[0.8125rem] font-medium text-ink/55">{children}</span>
+      <span className="text-[0.8125rem] font-medium text-ink-subtle">{children}</span>
     </div>
   );
 }
@@ -122,14 +122,14 @@ function LeadsPanel() {
             <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
               <p className="font-semibold tracking-[-0.01em]">
                 {k.namn}
-                <span className="ml-2 font-normal text-ink/55">{k.bolag}</span>
+                <span className="ml-2 font-normal text-ink-subtle">{k.bolag}</span>
               </p>
-              <p className="text-[0.8125rem] text-ink/45">{text(k.tid)}</p>
+              <p className="text-[0.8125rem] text-ink-subtle">{text(k.tid)}</p>
             </div>
-            <p className="mt-2 max-w-[58ch] text-[0.9375rem] leading-[1.6] text-ink/75">{text(k.rad)}</p>
+            <p className="mt-2 max-w-[58ch] text-[0.9375rem] leading-[1.6] text-ink-muted">{text(k.rad)}</p>
             <p className="mt-3 inline-flex items-center gap-1.5 text-[0.875rem] font-semibold text-ink">
               {text({ sv: "Ta över tråden", en: "Take over the thread" })}
-              <ArrowUpRight className="h-4 w-4 text-ochre" aria-hidden />
+              <ArrowUpRight className="h-4 w-4 text-warning" aria-hidden />
             </p>
           </div>
         ))}
@@ -160,9 +160,9 @@ function SupportPanel() {
         {rader.map((rad) => (
           <div key={rad.kategori.sv} className="grid grid-cols-12 items-baseline gap-x-4 px-5 py-3.5">
             <p className="col-span-7 truncate text-[0.9375rem]">{text(rad.kategori)}</p>
-            <p className="num col-span-5 text-right text-[0.9375rem] text-ink/70">
+            <p className="num col-span-5 text-right text-[0.9375rem] text-ink-muted">
               {rad.losta}{" "}
-              <span className="text-[0.8125rem] text-ink/45">
+              <span className="text-[0.8125rem] text-ink-subtle">
                 {text({ sv: "löst utan människa", en: "resolved without a human" })}
               </span>
             </p>
@@ -170,7 +170,7 @@ function SupportPanel() {
         ))}
         <div className="flex items-start gap-3 px-5 py-4">
           <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-moss" aria-hidden />
-          <p className="text-[0.875rem] leading-[1.55] text-ink/70">
+          <p className="text-[0.875rem] leading-[1.55] text-ink-muted">
             {text({
               sv: "Resten eskalerades med färdigt utkast och full ärendehistorik. Ingen fråga lämnades obesvarad.",
               en: "The rest were escalated with a ready draft and the full case history. No question was left unanswered."
@@ -207,18 +207,18 @@ function BokforingPanel() {
             <p className={cn("col-span-7 truncate text-[0.9375rem]", rad.stark && "font-semibold")}>
               {text(rad.etikett)}
             </p>
-            <p className={cn("num col-span-5 text-right text-[0.9375rem]", rad.stark ? "font-semibold" : "text-ink/70")}>
+            <p className={cn("num col-span-5 text-right text-[0.9375rem]", rad.stark ? "font-semibold" : "text-ink-muted")}>
               {rad.varde}
             </p>
           </div>
         ))}
         <div className="flex items-start gap-3 bg-ochre/[0.07] px-5 py-4">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-ochre" aria-hidden />
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
           <div className="min-w-0">
             <p className="text-[0.875rem] font-semibold">
               {text({ sv: "3 kvitton behöver din blick", en: "3 receipts need your eye" })}
             </p>
-            <p className="mt-1 text-[0.875rem] leading-[1.55] text-ink/70">
+            <p className="mt-1 text-[0.875rem] leading-[1.55] text-ink-muted">
               {text({
                 sv: "Ett omskickat kvitto flaggades som möjlig dubblett, ett är i utländsk valuta och ett saknar läsbart belopp. Agenten gissar aldrig, den frågar.",
                 en: "A re-sent receipt was flagged as a possible duplicate, one is in a foreign currency and one lacks a readable amount. The agent never guesses, it asks."
@@ -310,7 +310,7 @@ export function AgentResultat({ product }: Readonly<{ product: ProductKey }>) {
             >
               <Accent text={text(copy.rubrik)} />
             </h2>
-            <p className="rise rise-1 mt-6 max-w-[48ch] text-[1.0625rem] leading-[1.7] text-ink/75">
+            <p className="rise rise-1 mt-6 max-w-[48ch] text-[1.0625rem] leading-[1.7] text-ink-muted">
               {text(copy.brod)}
             </p>
             <div className="rise rise-2 mt-10">
@@ -320,7 +320,7 @@ export function AgentResultat({ product }: Readonly<{ product: ProductKey }>) {
           <div className="col-span-12 lg:col-span-6 lg:col-start-7">
             <div className="rise rise-1">{copy.panel}</div>
             {/* Honest-proof: siffrorna ovan är illustration, och det står. */}
-            <p className="mt-4 text-[0.8125rem] font-medium text-ink/45">
+            <p className="mt-4 text-[0.8125rem] font-medium text-ink-subtle">
               {text({
                 sv: "Illustration med exempeldata, inte uppmätta resultat.",
                 en: "Illustration with example data, not measured results."

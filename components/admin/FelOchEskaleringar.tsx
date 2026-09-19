@@ -79,7 +79,7 @@ export function FelOchEskaleringar({
         })}
         <Link
           href="/admin/handelser"
-          className="focus-ring text-ochre underline underline-offset-4"
+          className="focus-ring text-warning underline underline-offset-4"
         >
           {a("handelser", locale)}
         </Link>
@@ -175,7 +175,7 @@ function Nyckeltal({
       >
         {varde}
       </p>
-      {rad ? <p className="mt-0.5 text-[0.8125rem] leading-[1.45] text-ink/60">{rad}</p> : null}
+      {rad ? <p className="mt-0.5 text-[0.8125rem] leading-[1.45] text-ink-muted">{rad}</p> : null}
     </div>
   );
 }

@@ -261,7 +261,7 @@ export async function requestDemoAccess(
   email: string,
   // Behålls i signaturen: anropsstället skickar den, och att ta bort parametern
   // hade dolt att vägen ska tillbaka så snart en sändväg finns.
-  _nextPath = "/dashboard/emails"
+  _nextPath = "/dashboard/iris"
 ): Promise<AuthActionResult> {
   return {
     success: false,

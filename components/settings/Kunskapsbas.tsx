@@ -149,21 +149,21 @@ export function KunskapsbasKort() {
           <h2 className="text-[1.0625rem] font-semibold tracking-[-0.01em]">
             Affärskontext och kunskapsbas
           </h2>
-          <p className="mt-1 max-w-[62ch] text-[14px] leading-6 text-ink/65">
+          <p className="mt-1 max-w-[62ch] text-[14px] leading-6 text-ink-muted">
             {antal === 0
               ? "Tom. Agenterna svarar bara ur det ni lagt in — utan underlag eskalerar kundtjänstagenten varje ärende."
               : `${antal ?? "—"} dokument. Ladda upp villkor, vanliga frågor och rutiner så svarar agenterna ur dem.`}
           </p>
           {/* Rubriken lovar två saker. Utan den här raden svarade kortet bara
               på den ena, och affärskontexten var något man fick hitta själv. */}
-          <p className="mt-2 text-[13px] text-ink/55">
+          <p className="mt-2 text-[13px] text-ink-subtle">
             Affärskontext:{" "}
             {kontextIfylld === null ? (
               "hämtar…"
             ) : kontextIfylld ? (
               <span className="text-moss">ifylld</span>
             ) : (
-              <span className="text-ochre">inte ifylld ännu</span>
+              <span className="text-warning">inte ifylld ännu</span>
             )}{" "}
             ·{" "}
             <Link
@@ -194,7 +194,7 @@ export function KunskapsbasKort() {
           </button>
           <Link
             href={vag("/settings/kunskapsbas")}
-            className="focus-ring inline-flex min-h-11 items-center rounded-input px-3 text-[14px] font-medium text-ink/55 hover:text-ink"
+            className="focus-ring inline-flex min-h-11 items-center rounded-input px-3 text-[14px] font-medium text-ink-subtle hover:text-ink"
           >
             Hantera
           </Link>
@@ -303,11 +303,11 @@ export function KunskapsbasPanel() {
     <div className="grid gap-8">
       <section>
         <div className="rounded-card border border-dashed border-ink/25 bg-paper2/40 p-6 text-center">
-          <FileText className="mx-auto h-6 w-6 text-ink/35" aria-hidden />
-          <p className="mt-3 text-[15px] text-ink/70">
+          <FileText className="mx-auto h-6 w-6 text-ink-subtle" aria-hidden />
+          <p className="mt-3 text-[15px] text-ink-muted">
             Ladda upp era villkor, vanliga frågor, garantitexter och rutiner.
           </p>
-          <p className="mt-1 text-[13px] text-ink/45">
+          <p className="mt-1 text-[13px] text-ink-subtle">
             Textfiler ({LÄSBARA.join(", ")}). PDF och Word: klistra in texten nedan.
           </p>
           <input
@@ -372,9 +372,9 @@ export function KunskapsbasPanel() {
           I kunskapsbasen {artiklar ? `(${artiklar.length})` : ""}
         </h3>
         {artiklar === null ? (
-          <p className="mt-4 text-[15px] text-ink/50">Hämtar…</p>
+          <p className="mt-4 text-[15px] text-ink-subtle">Hämtar…</p>
         ) : artiklar.length === 0 ? (
-          <p className="mt-4 max-w-[65ch] text-[15px] leading-7 text-ink/60">
+          <p className="mt-4 max-w-[65ch] text-[15px] leading-7 text-ink-muted">
             Tom. Agenterna eskalerar varje ärende de inte kan grunda — det är rätt beteende, men
             det betyder också att den inte kan svara på något förrän det ligger något här.
           </p>
@@ -383,7 +383,7 @@ export function KunskapsbasPanel() {
             {artiklar.map((artikel, index) => (
               <Rad key={artikel.id ?? `${artikel.title}-${index}`}>
                 <p className="text-[15px] font-medium">{artikel.title}</p>
-                <p className="mt-1 line-clamp-2 max-w-[80ch] text-[14px] leading-6 text-ink/60">
+                <p className="mt-1 line-clamp-2 max-w-[80ch] text-[14px] leading-6 text-ink-muted">
                   {artikel.content}
                 </p>
               </Rad>

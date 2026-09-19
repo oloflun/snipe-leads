@@ -110,7 +110,7 @@ export function SoulEditor() {
       </label>
 
       <div className="flex flex-wrap items-center gap-4">
-        {/* text-warning, inte text-ochre: ochre är en accent på 2.17:1 mot
+        {/* text-warning, inte text-warning: ochre är en accent på 2.17:1 mot
             paper (uppmätt) och underkänd för 16px text. Färgen är dessutom
             aldrig ensam bärare här — meningen står utskriven. */}
         <span id="soul-count" className={over ? "text-warning" : "text-mineral"}>

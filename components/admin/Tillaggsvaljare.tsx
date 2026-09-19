@@ -115,7 +115,7 @@ export function Tillaggsvaljare({
                 står i kundens egen vy som skäl till att det inte ingår, och
                 här som påminnelse om vad ett påslag faktiskt förbinder oss
                 till. Se lib/addons.ts. */}
-            <p className="mt-2 max-w-[60ch] text-[0.8125rem] leading-5 text-ink/45">
+            <p className="mt-2 max-w-[60ch] text-[0.8125rem] leading-5 text-ink-subtle">
               {spec.why}
             </p>
           </div>

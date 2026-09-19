@@ -39,7 +39,7 @@ export function AddonSettings() {
                 <span
                   className={
                     active
-                      ? "kicker shrink-0 text-ochre"
+                      ? "kicker shrink-0 text-warning"
                       : "kicker shrink-0 text-mineral"
                   }
                 >

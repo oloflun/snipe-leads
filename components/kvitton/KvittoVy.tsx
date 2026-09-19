@@ -1,5 +1,4 @@
 import { Info, LifeBuoy } from "lucide-react";
-import { AgentSajtKnapp } from "@/components/AgentSajtKnapp";
 import { PageShell } from "@/components/AppShell";
 import { KvittoChatt } from "@/components/kvitton/KvittoChatt";
 import { KvittoSammanfattning, KvittoYta } from "@/components/kvitton/KvittoYta";
@@ -20,8 +19,6 @@ export function KvittoVy() {
       title="Kvitton, direkt ur inkorgen"
       description="Koppla mejlen, så läser agenten inkommande kvitton och utlägg åt dig: belopp, moms, datum, butik och kategori — med dublettkontroll och en sammanfattning som går ihop. Du kan också ladda upp kvitton själv."
     >
-      <AgentSajtKnapp agent="bokforing" />
-
       <div className="grid grid-cols-12 gap-x-0 gap-y-12 lg:gap-x-10">
         <div className="col-span-12 lg:col-span-7">
           <KvittoYta />
@@ -38,14 +35,14 @@ export function KvittoVy() {
       {/* Förbehållet, hopfällt — en rad stängd, hela texten ett klick bort.
           Originalet är FORBEHALL i app/agent/kvitto_agent.py. */}
       <details className="group mt-10 border-t border-ink/15 pt-4">
-        <summary className="focus-ring flex cursor-pointer list-none items-center gap-2 rounded-input text-[0.8125rem] text-ink/50 hover:text-ink/75">
+        <summary className="focus-ring flex cursor-pointer list-none items-center gap-2 rounded-input text-[0.8125rem] text-ink-subtle hover:text-ink-muted">
           <Info className="h-3.5 w-3.5 shrink-0" aria-hidden />
           Förslag, inte bokföring
-          <span aria-hidden className="text-ink/35 transition-transform group-open:rotate-90">
+          <span aria-hidden className="text-ink-subtle transition-transform group-open:rotate-90">
             ›
           </span>
         </summary>
-        <p className="mt-3 max-w-[78ch] text-[0.8125rem] leading-6 text-ink/55">
+        <p className="mt-3 max-w-[78ch] text-[0.8125rem] leading-6 text-ink-subtle">
           Kvittohanteraren läser av och sammanställer dina kvitton. Beloppen är
           avlästa maskinellt och ska granskas av en människa innan de används i
           bokföring eller deklaration.
@@ -53,7 +50,7 @@ export function KvittoVy() {
       </details>
 
       <section className="mt-8 border-t border-ink/15 pt-6">
-        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.875rem] leading-6 text-ink/60">
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.875rem] leading-6 text-ink-muted">
           <LifeBuoy className="h-4 w-4 shrink-0 text-mineral" aria-hidden />
           Ser något fel ut i en avläsning eller en summa?
           <a
@@ -64,7 +61,7 @@ export function KvittoVy() {
           >
             Anmäl det till oss
           </a>
-          <span className="text-ink/45">så tittar vi på det.</span>
+          <span className="text-ink-subtle">så tittar vi på det.</span>
         </p>
       </section>
     </PageShell>

@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "type-check": "tsc --noEmit",
+    "test": "node --test \"lib/**/*.test.ts\"",
     "provision:supabase": "node scripts/provision-supabase.mjs",
     "apply:schema": "node scripts/apply-schema.mjs",
     "bundle:skills": "node scripts/bundle-marketing-skills.mjs"

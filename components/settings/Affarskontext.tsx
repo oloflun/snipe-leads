@@ -111,7 +111,7 @@ export function Affarskontext() {
         <label key={f.nyckel} className="grid grid-cols-12 gap-x-6 border-t border-ink/15 pt-5">
           <span className="col-span-12 md:col-span-3">
             <span className="kicker block text-mineral">{f.etikett}</span>
-            <span className="mt-2 block text-[0.8125rem] leading-5 text-ink/50">{f.hjalp}</span>
+            <span className="mt-2 block text-[0.8125rem] leading-5 text-ink-subtle">{f.hjalp}</span>
           </span>
           <textarea
             value={falt[f.nyckel]}

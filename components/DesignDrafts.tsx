@@ -233,7 +233,7 @@ function DraftLogo({ compact = false, light = false }: Readonly<{ compact?: bool
           <span className={cn("font-display text-2xl font-semibold tracking-normal md:text-3xl", light ? "text-paper" : "text-ink")}>
             Snajp
           </span>
-          <span className={cn("kicker mt-2", light ? "text-paper/55" : "text-mineral")}>sales os</span>
+          <span className={cn("kicker mt-2", light ? "text-paper-muted" : "text-mineral")}>sales os</span>
         </span>
       ) : null}
     </span>
@@ -248,7 +248,7 @@ function DraftHeader({ variant, portal = false }: Readonly<{ variant: DraftVaria
         <Link href={draftPath(variant)} className="focus-ring">
           <DraftLogo />
         </Link>
-        <nav className={cn("hidden items-center gap-8 md:flex", modern ? "font-modern text-[13px] font-medium text-ink/70" : "kicker text-ink/70")}>
+        <nav className={cn("hidden items-center gap-8 md:flex", modern ? "font-modern text-[13px] font-medium text-ink-muted" : "kicker text-ink-muted")}>
           <Link href={draftPath(variant)} className="transition hover:text-ochre">Landning</Link>
           <Link href={draftPath(variant, "portal")} className="transition hover:text-ochre">Portal</Link>
           <Link href={draftPath(otherVariant(variant))} className="transition hover:text-ochre">Byt draft</Link>
@@ -288,7 +288,7 @@ function EditorialLandingHeader({ variant, asMain = false }: Readonly<{ variant:
           </span>
           <span className="font-display italic-disp text-[30px] leading-none tighten md:text-[34px]">Snajp</span>
         </Link>
-        <nav className="hidden items-baseline gap-12 md:flex kicker text-ink/80">
+        <nav className="hidden items-baseline gap-12 md:flex kicker text-ink-muted">
           <a href="#metod" className="transition hover:text-ochre">{locale === "sv" ? "Metod" : "Method"}</a>
           <a href="#bevis" className="transition hover:text-ochre">{locale === "sv" ? "Bevis" : "Proof"}</a>
           <Link href={asMain ? "/dashboard" : draftPath(variant, "portal")} className="transition hover:text-ochre">Portal</Link>
@@ -339,14 +339,14 @@ export function DraftLanding({ variant, asMain = false }: Readonly<{ variant: Dr
                 locale === "sv" ? (
                   <>
                     <span className="block">Snajp</span>
-                    <span className="block italic-disp text-ochre">hittar</span>
+                    <span className="block italic-disp text-warning">hittar</span>
                     <span className="block">rätt läge</span>
                     <span className="block italic-disp text-ink2">för nästa mejl.</span>
                   </>
                 ) : (
                   <>
                     <span className="block">Snajp</span>
-                    <span className="block italic-disp text-ochre">finds</span>
+                    <span className="block italic-disp text-warning">finds</span>
                     <span className="block">the right moment</span>
                     <span className="block italic-disp text-ink2">for the next email.</span>
                   </>
@@ -355,14 +355,14 @@ export function DraftLanding({ variant, asMain = false }: Readonly<{ variant: Dr
                 locale === "sv" ? (
                   <>
                     <span className="block">En</span>
-                    <span className="block italic-disp text-ochre">säljare</span>
+                    <span className="block italic-disp text-warning">säljare</span>
                     <span className="block">som skriver</span>
                     <span className="block">i <span className="italic-disp text-ink2">ditt</span> tonläge.</span>
                   </>
                 ) : (
                   <>
                     <span className="block">A</span>
-                    <span className="block italic-disp text-ochre">sales rep</span>
+                    <span className="block italic-disp text-warning">sales rep</span>
                     <span className="block">that writes</span>
                     <span className="block">in <span className="italic-disp text-ink2">your</span> voice.</span>
                   </>
@@ -372,7 +372,7 @@ export function DraftLanding({ variant, asMain = false }: Readonly<{ variant: Dr
           </div>
 
           <div className="reveal reveal-delay-1 col-span-12 mt-12 min-w-0 border-ink/15 lg:col-span-3 lg:mt-0 lg:border-l lg:pl-8">
-            <p className="max-w-[36ch] text-[17px] leading-[1.55] text-ink/85">
+            <p className="max-w-[36ch] text-[17px] leading-[1.55] text-ink-muted">
               {locale === "sv"
                 ? "Snajp läser svenska bolagssignaler, matchar dem mot er ICP och skriver outreach med källor, timing och CTA nära till hands."
                 : "Snajp reads Swedish company signals, matches them against your ICP and writes outreach with sources, timing and CTA close at hand."}
@@ -387,7 +387,7 @@ export function DraftLanding({ variant, asMain = false }: Readonly<{ variant: Dr
                 <div key={String(label)}>
                   <div className="block md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-baseline md:gap-3">
                     <dt className="kicker min-w-0 text-mineral">{label}</dt>
-                    <dd className={`mt-2 block font-display text-2xl italic-disp md:mt-0 md:text-right ${accent ? "text-ochre" : ""}`}>{value}</dd>
+                    <dd className={`mt-2 block font-display text-2xl italic-disp md:mt-0 md:text-right ${accent ? "text-warning" : ""}`}>{value}</dd>
                   </div>
                   <div className="rule mt-5 text-ink" />
                 </div>
@@ -409,10 +409,10 @@ export function DraftLanding({ variant, asMain = false }: Readonly<{ variant: Dr
 
       {/* Marquee */}
       <section className="overflow-hidden border-y border-ink/15 py-7">
-        <div className="marquee whitespace-nowrap font-display text-[28px] italic-disp text-ink/45 tighten">
+        <div className="marquee whitespace-nowrap font-display text-[28px] italic-disp text-ink-subtle tighten">
           {[...customerBand, ...customerBand].map((name, index) => (
             <span key={`${name}-${index}`} className="px-6">
-              {name}<span className="pl-12 text-ochre">·</span>
+              {name}<span className="pl-12 text-warning">·</span>
             </span>
           ))}
         </div>
@@ -435,12 +435,12 @@ export function DraftLanding({ variant, asMain = false }: Readonly<{ variant: Dr
         <div className="grid grid-cols-12 gap-x-8 gap-y-12">
           {landingSignals.map((signal, index) => (
             <article key={signal.title.sv} className="col-span-12 grid grid-cols-12 gap-x-6 border-t border-ink/15 pt-8 md:col-span-6">
-              <div className="col-span-3 font-mono text-[clamp(2rem,4vw,3.5rem)] leading-none text-ochre/60 num">
+              <div className="col-span-3 font-mono text-[clamp(2rem,4vw,3.5rem)] leading-none text-warning/60 num">
                 {String(index + 1).padStart(2, "0")}
               </div>
               <div className="col-span-9">
                 <h3 className="mb-3 font-display text-2xl tighten">{locale === "sv" ? signal.title.sv : signal.title.en}</h3>
-                <p className="max-w-[48ch] text-[16px] leading-[1.65] text-ink/75">{locale === "sv" ? signal.body.sv : signal.body.en}</p>
+                <p className="max-w-[48ch] text-[16px] leading-[1.65] text-ink-muted">{locale === "sv" ? signal.body.sv : signal.body.en}</p>
               </div>
             </article>
           ))}
@@ -452,8 +452,8 @@ export function DraftLanding({ variant, asMain = false }: Readonly<{ variant: Dr
         <div className="blob pointer-events-none absolute right-[-200px] top-40 h-[600px] w-[600px] rounded-full bg-ochre/20" />
         <div className="relative mx-auto grid max-w-[1480px] grid-cols-12 gap-x-8 px-6 py-24 md:px-8">
           <div className="col-span-12 md:col-span-3">
-            <div className="kicker text-paper/55">Email proof</div>
-            <p className="kicker mt-3 leading-snug text-paper/55">{locale === "sv" ? "Två utkast, samma system." : "Two drafts, one system."}</p>
+            <div className="kicker text-paper-muted">Email proof</div>
+            <p className="kicker mt-3 leading-snug text-paper-muted">{locale === "sv" ? "Två utkast, samma system." : "Two drafts, one system."}</p>
           </div>
           <div className="col-span-12 mt-10 grid gap-6 md:col-span-9 md:mt-0 md:grid-cols-2">
             {[
@@ -471,10 +471,10 @@ export function DraftLanding({ variant, asMain = false }: Readonly<{ variant: Dr
               }
             ].map((mail) => (
               <article key={mail.title} className="border border-paper/15 p-6 md:p-8">
-                <span className="kicker text-ochre">{mail.meta}</span>
+                <span className="kicker text-warning">{mail.meta}</span>
                 <h3 className="mb-4 mt-8 font-display text-xl text-paper tighten">{mail.title}</h3>
-                <p className="text-[16px] leading-[1.7] text-paper/82">{mail.body}</p>
-                <div className="kicker mt-8 text-paper/55">{mail.bridge}</div>
+                <p className="text-[16px] leading-[1.7] text-paper-muted">{mail.body}</p>
+                <div className="kicker mt-8 text-paper-muted">{mail.bridge}</div>
               </article>
             ))}
           </div>
@@ -489,7 +489,7 @@ export function DraftLanding({ variant, asMain = false }: Readonly<{ variant: Dr
               <div className="mx-auto grid max-w-[1480px] grid-cols-12 gap-x-8 px-6 py-16 md:px-8 md:py-20">
                 <div className="col-span-12 md:col-span-3">
                   <div className="flex items-center gap-4">
-                    <span className="num font-mono text-sm text-ochre">{String(index + 1).padStart(2, "0")}</span>
+                    <span className="num font-mono text-sm text-warning">{String(index + 1).padStart(2, "0")}</span>
                     <span className="kicker text-mineral">{locale === "sv" ? section.kicker.sv : section.kicker.en}</span>
                   </div>
                   <div className="rule mt-3 text-ink" />
@@ -498,7 +498,7 @@ export function DraftLanding({ variant, asMain = false }: Readonly<{ variant: Dr
                   <h2 className="font-display text-[clamp(2rem,4.5vw,4rem)] leading-[0.98] tighten">
                     {locale === "sv" ? section.title.sv : section.title.en}
                   </h2>
-                  <p className="mt-4 max-w-[60ch] text-[16px] leading-7 text-ink/68">
+                  <p className="mt-4 max-w-[60ch] text-[16px] leading-7 text-ink-muted">
                     {locale === "sv" ? section.desc.sv : section.desc.en}
                   </p>
                 </div>
@@ -527,7 +527,7 @@ export function DraftLanding({ variant, asMain = false }: Readonly<{ variant: Dr
             {modernNavItems.map((item) => (
               <Link key={item.href} href={draftPath(variant, item.href)} className="row grid grid-cols-12 gap-x-6 py-5 transition hover:bg-ochre/5">
                 <div className="ticker col-span-12 font-display text-2xl italic-disp tighten md:col-span-4">{locale === "sv" ? item.sv : item.en}</div>
-                <div className="kicker col-span-6 mt-2 text-right text-ochre md:col-span-8 md:mt-0 md:text-right">{locale === "sv" ? "öppna ↗" : "open ↗"}</div>
+                <div className="kicker col-span-6 mt-2 text-right text-warning md:col-span-8 md:mt-0 md:text-right">{locale === "sv" ? "öppna ↗" : "open ↗"}</div>
               </Link>
             ))}
           </div>
@@ -579,8 +579,8 @@ export function DraftLanding({ variant, asMain = false }: Readonly<{ variant: Dr
             ].map((plan) => (
               <li key={plan.name} className="grid grid-cols-12 items-baseline gap-x-6 border-b border-ink/15 pb-7 last:border-0 last:pb-1">
                 <div className="col-span-12 md:col-span-5">
-                  <h3 className={cn("font-display text-3xl italic-disp tighten", plan.nameAccent ? "text-ochre" : "")}>{plan.name}</h3>
-                  <p className="mt-2 max-w-[42ch] text-[15px] leading-relaxed text-ink/75">{plan.desc}</p>
+                  <h3 className={cn("font-display text-3xl italic-disp tighten", plan.nameAccent ? "text-warning" : "")}>{plan.name}</h3>
+                  <p className="mt-2 max-w-[42ch] text-[15px] leading-relaxed text-ink-muted">{plan.desc}</p>
                 </div>
                 <div className="col-span-12 mt-3 leading-snug md:col-span-3 md:mt-0 kicker text-mineral">{plan.includes}</div>
                 <div className="col-span-12 mt-3 text-right font-display text-5xl italic-disp tighten md:col-span-4 md:mt-0">
@@ -599,18 +599,18 @@ export function DraftLanding({ variant, asMain = false }: Readonly<{ variant: Dr
           <div className="col-span-12 md:col-span-7">
             <h2 className="font-display text-[clamp(3rem,7vw,7rem)] leading-[0.92] tighten">
               {locale === "sv" ? (
-                <>Skicka <span className="italic-disp text-ochre">ett mejl</span>,<br />så svarar någon.<br /><span className="italic-disp">På riktigt.</span></>
+                <>Skicka <span className="italic-disp text-warning">ett mejl</span>,<br />så svarar någon.<br /><span className="italic-disp">På riktigt.</span></>
               ) : (
-                <>Send <span className="italic-disp text-ochre">one email</span>,<br />someone replies.<br /><span className="italic-disp">For real.</span></>
+                <>Send <span className="italic-disp text-warning">one email</span>,<br />someone replies.<br /><span className="italic-disp">For real.</span></>
               )}
             </h2>
           </div>
           <div className="col-span-12 mt-8 flex flex-col justify-between border-paper/15 md:col-span-5 md:mt-0 md:border-l md:pl-10">
-            <p className="max-w-[44ch] text-[17px] leading-[1.6] text-paper/85">
+            <p className="max-w-[44ch] text-[17px] leading-[1.6] text-paper-muted">
               {locale === "sv" ? (
-                <>Mejla oss på <a href="mailto:Snajpsupport@gmail.com" className="text-ochre underline decoration-ochre/40 underline-offset-[6px] decoration-[1px] transition hover:decoration-ochre">Snajpsupport@gmail.com</a>. Hellre ett vanligt mejl än en demo-bokning. Vi svarar samma dag.</>
+                <>Mejla oss på <a href="mailto:Snajpsupport@gmail.com" className="text-warning underline decoration-ochre/40 underline-offset-[6px] decoration-[1px] transition hover:decoration-ochre">Snajpsupport@gmail.com</a>. Hellre ett vanligt mejl än en demo-bokning. Vi svarar samma dag.</>
               ) : (
-                <>Email us at <a href="mailto:Snajpsupport@gmail.com" className="text-ochre underline decoration-ochre/40 underline-offset-[6px] decoration-[1px] transition hover:decoration-ochre">Snajpsupport@gmail.com</a>. A plain email beats a demo booking. We reply the same day.</>
+                <>Email us at <a href="mailto:Snajpsupport@gmail.com" className="text-warning underline decoration-ochre/40 underline-offset-[6px] decoration-[1px] transition hover:decoration-ochre">Snajpsupport@gmail.com</a>. A plain email beats a demo booking. We reply the same day.</>
               )}
             </p>
             <div className="mt-10 flex flex-wrap items-center gap-5">
@@ -624,7 +624,7 @@ export function DraftLanding({ variant, asMain = false }: Readonly<{ variant: Dr
           </div>
         </div>
         <div className="border-t border-paper/15">
-          <div className="mx-auto grid max-w-[1480px] grid-cols-12 gap-x-8 px-6 py-8 md:px-8 kicker text-paper/55">
+          <div className="mx-auto grid max-w-[1480px] grid-cols-12 gap-x-8 px-6 py-8 md:px-8 kicker text-paper-muted">
             <div className="col-span-12 md:col-span-3">Snajp AB · Föreningsgatan 41 · Malmö</div>
             <div className="col-span-12 mt-2 md:col-span-3 md:mt-0">Org. 559412-8804</div>
             <div className="col-span-12 mt-2 md:col-span-3 md:mt-0">Snajpsupport@gmail.com · 040-220 814</div>
@@ -654,12 +654,12 @@ function EditorialScrollShowcase({ variant }: Readonly<{ variant: DraftVariant }
         <div className="col-span-12 mt-8 md:col-span-8 md:mt-0">
           <h1 className="font-display text-[clamp(2.8rem,6vw,6rem)] leading-[0.94] tighten">
             {locale === "sv" ? (
-              <><span className="italic-disp text-ochre">Portalen</span> — ett arbetsblad<br />från signal till svar.</>
+              <><span className="italic-disp text-warning">Portalen</span> — ett arbetsblad<br />från signal till svar.</>
             ) : (
-              <><span className="italic-disp text-ochre">The portal</span> — a workspace<br />from signal to reply.</>
+              <><span className="italic-disp text-warning">The portal</span> — a workspace<br />from signal to reply.</>
             )}
           </h1>
-          <p className="mt-8 max-w-[54ch] text-[17px] leading-[1.6] text-ink/75">
+          <p className="mt-8 max-w-[54ch] text-[17px] leading-[1.6] text-ink-muted">
             {locale === "sv"
               ? "Alla vyer i ett flöde. Scrolla för att se hur Snajp hanterar discovery, research, skrivarbete och analys i en sammanhängande arbetsyta."
               : "All views in one flow. Scroll to see how Snajp handles discovery, research, copywriting and analytics in a connected workspace."}
@@ -674,7 +674,7 @@ function EditorialScrollShowcase({ variant }: Readonly<{ variant: DraftVariant }
             {/* Section header */}
             <div className="col-span-12 md:col-span-3">
               <div className="flex items-center gap-4">
-                <span className="num font-mono text-sm text-ochre">{String(index + 1).padStart(2, "0")}</span>
+                <span className="num font-mono text-sm text-warning">{String(index + 1).padStart(2, "0")}</span>
                 <span className="kicker text-mineral">{locale === "sv" ? section.kicker.sv : section.kicker.en}</span>
               </div>
               <div className="rule mt-3 text-ink" />
@@ -683,7 +683,7 @@ function EditorialScrollShowcase({ variant }: Readonly<{ variant: DraftVariant }
               <h2 className="font-display text-[clamp(2rem,4.5vw,4rem)] leading-[0.98] tighten">
                 {locale === "sv" ? section.title.sv : section.title.en}
               </h2>
-              <p className="mt-4 max-w-[60ch] text-[16px] leading-7 text-ink/68">
+              <p className="mt-4 max-w-[60ch] text-[16px] leading-7 text-ink-muted">
                 {locale === "sv" ? section.desc.sv : section.desc.en}
               </p>
             </div>
@@ -787,7 +787,7 @@ function EditorialIterationPortal({ slug }: Readonly<{ slug: string[] }>) {
 
         <div className="mt-auto rounded-[9px] border border-ink/12 bg-paper/62 p-4 shadow-[inset_0_1px_0_oklch(var(--paper)/0.9)]">
           <div className="kicker text-mineral">Showcase</div>
-          <p className="mt-4 text-[14px] leading-[1.7] text-ink/88">
+          <p className="mt-4 text-[14px] leading-[1.7] text-ink-muted">
             Alla nuvarande produktområden finns kvar som preview-sidor i draften.
           </p>
         </div>
@@ -848,10 +848,10 @@ function EditorialIterationHeader({ kicker, title, desc }: Readonly<{ kicker: st
           <h1 className="mt-3 font-display text-[clamp(2.4rem,3.2vw,4rem)] leading-[0.94] tracking-[-0.015em]">
             {title}
           </h1>
-          <p className="mt-3 max-w-[720px] text-[15px] leading-[1.6] text-ink/75">{desc}</p>
+          <p className="mt-3 max-w-[720px] text-[15px] leading-[1.6] text-ink-muted">{desc}</p>
         </div>
         <div className="col-span-12 flex justify-start gap-3 xl:col-span-3 xl:justify-end">
-          <button type="button" className="rounded-[10px] border border-ink/10 bg-paper/62 px-5 py-2.5 text-[15px] font-semibold text-ink/60 transition hover:border-ochre hover:text-ochre">
+          <button type="button" className="rounded-[10px] border border-ink/10 bg-paper/62 px-5 py-2.5 text-[15px] font-semibold text-ink-muted transition hover:border-ochre hover:text-ochre">
             Export
           </button>
           <button type="button" className="rounded-[10px] bg-ink px-5 py-2.5 text-[15px] font-semibold text-paper transition hover:bg-ochre hover:text-ink">
@@ -879,8 +879,8 @@ function EditorialIterationOverview() {
         ].map(([label, value, detail, accent]) => (
           <article key={String(label)} className="rounded-[10px] border border-ink/10 bg-[linear-gradient(135deg,oklch(var(--paper)/0.9),oklch(var(--ochre)/0.08))] p-5 shadow-[inset_0_1px_0_oklch(var(--paper)/0.9)]">
             <div className="kicker text-mineral">{label}</div>
-            <div className={cn("mt-5 text-[38px] font-bold leading-none tracking-[-0.025em]", accent ? "text-ochre" : "text-ink")}>{value}</div>
-            <div className="mt-3 text-[18px] leading-none text-ink/82">{detail}</div>
+            <div className={cn("mt-5 text-[38px] font-bold leading-none tracking-[-0.025em]", accent ? "text-warning" : "text-ink")}>{value}</div>
+            <div className="mt-3 text-[18px] leading-none text-ink-muted">{detail}</div>
           </article>
         ))}
       </div>
@@ -899,7 +899,7 @@ function EditorialIterationOverview() {
             ].map(([title, body]) => (
               <div key={title} className="py-4">
                 <h3 className="text-[17px] font-semibold leading-snug">{title}</h3>
-                <p className="mt-2 text-[15px] leading-[1.5] text-ink/72">{body}</p>
+                <p className="mt-2 text-[15px] leading-[1.5] text-ink-muted">{body}</p>
               </div>
             ))}
           </div>
@@ -956,7 +956,7 @@ function EditorialCompanyTable({ mode }: Readonly<{ mode: "overview" | "leads" }
             >
               <div>
                 <div className="font-bold">{company.name}</div>
-                <div className="mt-1 text-ink/82">{company.website}</div>
+                <div className="mt-1 text-ink-muted">{company.website}</div>
               </div>
               <div>{company.industry} · {company.location}</div>
               <div>
@@ -964,7 +964,7 @@ function EditorialCompanyTable({ mode }: Readonly<{ mode: "overview" | "leads" }
                 <div>{contact.role}</div>
               </div>
               <div>{company.latestSignal.sv}</div>
-              <div className="font-bold text-ochre">{company.score}</div>
+              <div className="font-bold text-warning">{company.score}</div>
               <div>
                 <EditorialStatusPill value={company.status} />
               </div>
@@ -978,7 +978,7 @@ function EditorialCompanyTable({ mode }: Readonly<{ mode: "overview" | "leads" }
 
 function EditorialStatusPill({ value }: Readonly<{ value: string }>) {
   const highlighted = value === "recommended" || value === "queued";
-  return <span className={cn("kicker", highlighted ? "text-ochre" : "text-mineral")}>{value}</span>;
+  return <span className={cn("kicker", highlighted ? "text-warning" : "text-mineral")}>{value}</span>;
 }
 
 function ModernPortal({ slug }: Readonly<{ slug: string[] }>) {
@@ -1006,11 +1006,11 @@ function ModernPortal({ slug }: Readonly<{ slug: string[] }>) {
                 href={`/design-drafts/modern-blend/${item.href}`}
                 className={cn(
                   "flex items-center justify-between rounded px-3 py-2 text-[13px] transition",
-                  active ? "bg-paper/12 text-ochre" : "text-paper/65 hover:bg-paper/8 hover:text-paper"
+                  active ? "bg-paper/12 text-warning" : "text-paper-muted hover:bg-paper/8 hover:text-paper"
                 )}
               >
                 <span>{locale === "sv" ? item.sv : item.en}</span>
-                {active ? <span className="kicker text-ochre/70">aktiv</span> : null}
+                {active ? <span className="kicker text-warning/70">aktiv</span> : null}
               </Link>
             );
           })}
@@ -1021,7 +1021,7 @@ function ModernPortal({ slug }: Readonly<{ slug: string[] }>) {
           <button
             type="button"
             onClick={toggleLocale}
-            className="kicker text-paper/45 transition hover:text-ochre"
+            className="kicker text-paper-subtle transition hover:text-ochre"
           >
             {locale === "sv" ? "Switch to EN" : "Växla till SV"}
           </button>
@@ -1052,7 +1052,7 @@ function ModernPortal({ slug }: Readonly<{ slug: string[] }>) {
             </Link>
             <Link
               href="/design-drafts/modern-blend"
-              className="kicker flex items-center gap-1 border border-ink/15 px-3 py-1.5 text-ink/70 transition hover:border-ochre hover:text-ochre"
+              className="kicker flex items-center gap-1 border border-ink/15 px-3 py-1.5 text-ink-muted transition hover:border-ochre hover:text-ochre"
             >
               {locale === "sv" ? "Landning" : "Landing"} ↗
             </Link>
@@ -1082,10 +1082,10 @@ function ModernPortalContent({ route }: Readonly<{ route: PortalRoute }>) {
         <div>
           <div className="kicker text-mineral">{kicker}</div>
           <h1 className="mt-2 font-display text-[clamp(1.8rem,3.5vw,3rem)] leading-[1.02] tighten">{title}</h1>
-          <p className="mt-2 max-w-[60ch] text-[14px] leading-6 text-ink/60">{desc}</p>
+          <p className="mt-2 max-w-[60ch] text-[14px] leading-6 text-ink-muted">{desc}</p>
         </div>
         <div className="flex shrink-0 items-center gap-3">
-          <button type="button" className="border border-ink/15 px-4 py-2 text-[13px] text-ink/65 transition hover:border-ochre hover:text-ochre">
+          <button type="button" className="border border-ink/15 px-4 py-2 text-[13px] text-ink-muted transition hover:border-ochre hover:text-ochre">
             {locale === "sv" ? "Exportera" : "Export"}
           </button>
           <button type="button" className="bg-ink px-4 py-2 text-[13px] text-paper transition hover:bg-ochre hover:text-ink">
@@ -1176,7 +1176,7 @@ function DashboardShowcase({ variant }: Readonly<{ variant: DraftVariant }>) {
             ].map(([title, body]) => (
               <div key={title} className="py-5">
                 <h3 className="font-display text-2xl italic-disp tighten">{title}</h3>
-                <p className="mt-2 text-[15px] leading-6 text-ink/70">{body}</p>
+                <p className="mt-2 text-[15px] leading-6 text-ink-muted">{body}</p>
               </div>
             ))}
           </div>
@@ -1204,7 +1204,7 @@ function AssistantShowcase({ variant }: Readonly<{ variant: DraftVariant }>) {
     <div className="grid grid-cols-12 gap-x-8 gap-y-10">
       <section className={cn("col-span-12 xl:col-span-7", surface(variant))}>
         <div className="px-5 py-4">
-          <div className="border border-ink/15 bg-paper2/55 px-4 py-3 text-[15px] text-ink/55">
+          <div className="border border-ink/15 bg-paper2/55 px-4 py-3 text-[15px] text-ink-subtle">
             {locale === "sv" ? "Sök, analysera, skriv eller pausa..." : "Search, analyse, write or pause..."}
           </div>
         </div>
@@ -1212,7 +1212,7 @@ function AssistantShowcase({ variant }: Readonly<{ variant: DraftVariant }>) {
           {messages.map(([speaker, message]) => (
             <div key={`${speaker}-${message}`} className="grid grid-cols-12 gap-x-6 px-5 py-5">
               <div className="kicker col-span-3 text-mineral">{speaker}</div>
-              <p className="col-span-9 text-[16px] leading-7 text-ink/76">{message}</p>
+              <p className="col-span-9 text-[16px] leading-7 text-ink-muted">{message}</p>
             </div>
           ))}
         </div>
@@ -1222,7 +1222,7 @@ function AssistantShowcase({ variant }: Readonly<{ variant: DraftVariant }>) {
         <div className="mt-5 divide-y divide-ink/15 border-y border-ink/15">
           {workflowSteps.map((step, index) => (
             <div key={step} className="grid grid-cols-12 py-4">
-              <span className="num col-span-2 font-mono text-sm text-ochre">{String(index + 1).padStart(2, "0")}</span>
+              <span className="num col-span-2 font-mono text-sm text-warning">{String(index + 1).padStart(2, "0")}</span>
               <span className="col-span-10 text-[15px] leading-6">{step}</span>
             </div>
           ))}
@@ -1245,7 +1245,7 @@ function LeadsShowcase({ variant }: Readonly<{ variant: DraftVariant }>) {
           <div key={item} className="grid grid-cols-12 gap-x-6 py-4">
             <span className="kicker col-span-3 text-mineral">{locale === "sv" ? "Sökning" : "Search"} {String(index + 1).padStart(2, "0")}</span>
             <span className="ticker col-span-8 font-display text-xl italic-disp tighten">{item}</span>
-            <span className="kicker col-span-1 text-right text-ochre">↗</span>
+            <span className="kicker col-span-1 text-right text-warning">↗</span>
           </div>
         ))}
       </div>
@@ -1281,16 +1281,16 @@ function CompanyDetailShowcase({ variant, id }: Readonly<{ variant: DraftVariant
                 <div className="kicker col-span-12 text-mineral md:col-span-3">{formatDate(signal.detectedAt)}</div>
                 <div className="col-span-12 mt-3 md:col-span-9 md:mt-0">
                   <h3 className="font-display text-2xl italic-disp tighten">{locale === "sv" ? signal.title.sv : signal.title.en}</h3>
-                  <p className="mt-2 max-w-[65ch] text-[15px] leading-6 text-ink/70">{locale === "sv" ? signal.summary.sv : signal.summary.en}</p>
-                  <p className="kicker mt-4 text-ochre">{signal.source} · {Math.round(signal.confidence * 100)} % confidence</p>
+                  <p className="mt-2 max-w-[65ch] text-[15px] leading-6 text-ink-muted">{locale === "sv" ? signal.summary.sv : signal.summary.en}</p>
+                  <p className="kicker mt-4 text-warning">{signal.source} · {Math.round(signal.confidence * 100)} % confidence</p>
                 </div>
               </div>
             ))}
           </div>
         </section>
         <aside className={cn("col-span-12 px-5 py-5 xl:col-span-5", surface(variant))}>
-          <h2 className="font-display text-3xl italic-disp tighten text-ochre">{locale === "sv" ? "Rekommenderad säljvinkel" : "Recommended angle"}</h2>
-          <p className="mt-4 text-[16px] leading-7 text-ink/75">{locale === "sv" ? company.angle.sv : company.angle.en}</p>
+          <h2 className="font-display text-3xl italic-disp tighten text-warning">{locale === "sv" ? "Rekommenderad säljvinkel" : "Recommended angle"}</h2>
+          <p className="mt-4 text-[16px] leading-7 text-ink-muted">{locale === "sv" ? company.angle.sv : company.angle.en}</p>
           <div className="rule my-6 text-ink" />
           <p className="kicker text-mineral">CTA</p>
           <p className="mt-3 text-[17px] leading-7">{locale === "sv" ? company.recommendedCta.sv : company.recommendedCta.en}</p>
@@ -1315,11 +1315,11 @@ function ContactRow({ contact }: Readonly<{ contact: Contact }>) {
     <Link href={`${navBase}/contacts/${contact.id}`} className="row grid grid-cols-12 gap-x-6 py-5 transition hover:bg-ochre/5">
       <div className="ticker col-span-12 md:col-span-4">
         <p className="font-display text-2xl italic-disp tighten">{contact.fullName}</p>
-        <p className="mt-1 text-sm text-ink/55">{contact.email}</p>
+        <p className="mt-1 text-sm text-ink-subtle">{contact.email}</p>
       </div>
       <div className="kicker col-span-6 mt-3 text-mineral md:col-span-2 md:mt-0">{contact.role}</div>
       <div className="col-span-6 mt-3 text-[15px] md:col-span-3 md:mt-0">{company.name}</div>
-      <div className="col-span-8 mt-3 text-sm text-ink/65 md:col-span-2 md:mt-0">{contact.linkedin}</div>
+      <div className="col-span-8 mt-3 text-sm text-ink-muted md:col-span-2 md:mt-0">{contact.linkedin}</div>
       <div className="col-span-4 mt-3 text-right md:col-span-1 md:mt-0"><StatusWord value={contact.status} /></div>
     </Link>
   );
@@ -1359,11 +1359,11 @@ function CampaignsShowcase({ variant }: Readonly<{ variant: DraftVariant }>) {
         <Link key={campaign.id} href={`${navBase}/campaigns/${campaign.id}`} className="row grid grid-cols-12 gap-x-6 py-6 transition hover:bg-ochre/5">
           <div className="ticker col-span-12 md:col-span-4">
             <h2 className="font-display text-3xl italic-disp tighten">{locale === "sv" ? campaign.name.sv : campaign.name.en}</h2>
-            <p className="mt-2 max-w-[44ch] text-[15px] leading-6 text-ink/65">{locale === "sv" ? campaign.segment.sv : campaign.segment.en}</p>
+            <p className="mt-2 max-w-[44ch] text-[15px] leading-6 text-ink-muted">{locale === "sv" ? campaign.segment.sv : campaign.segment.en}</p>
           </div>
           <div className="kicker col-span-6 mt-4 text-mineral md:col-span-2 md:mt-0">{campaign.geography}</div>
           <div className="num col-span-2 mt-4 font-display text-2xl italic-disp md:mt-0">{campaign.volume}</div>
-          <div className="num col-span-2 mt-4 font-display text-2xl italic-disp text-ochre md:mt-0">{formatPercent(campaign.replyRate)}</div>
+          <div className="num col-span-2 mt-4 font-display text-2xl italic-disp text-warning md:mt-0">{formatPercent(campaign.replyRate)}</div>
           <div className="num col-span-2 mt-4 text-right font-display text-2xl italic-disp md:mt-0">{campaign.meetings}</div>
         </Link>
       ))}
@@ -1381,10 +1381,10 @@ function CampaignDetailShowcase({ variant, id }: Readonly<{ variant: DraftVarian
         <div className="mt-5 divide-y divide-ink/15 border-y border-ink/15">
           {campaign.sequence.map((step) => (
             <div key={`${step.day}-${step.label.sv}`} className="grid grid-cols-12 gap-x-6 py-5">
-              <div className="num col-span-2 font-display text-3xl italic-disp text-ochre">D{step.day}</div>
+              <div className="num col-span-2 font-display text-3xl italic-disp text-warning">D{step.day}</div>
               <div className="col-span-10">
                 <p className="font-display text-2xl italic-disp tighten">{locale === "sv" ? step.label.sv : step.label.en}</p>
-                <p className="mt-2 text-[15px] leading-6 text-ink/68">{locale === "sv" ? step.goal.sv : step.goal.en}</p>
+                <p className="mt-2 text-[15px] leading-6 text-ink-muted">{locale === "sv" ? step.goal.sv : step.goal.en}</p>
               </div>
             </div>
           ))}
@@ -1392,7 +1392,7 @@ function CampaignDetailShowcase({ variant, id }: Readonly<{ variant: DraftVarian
       </section>
       <aside className={cn("col-span-12 px-5 py-5 md:col-span-5", surface(variant))}>
         <h2 className="kicker text-mineral">Guardrails</h2>
-        <div className="mt-5 space-y-4 text-[16px] leading-7 text-ink/75">
+        <div className="mt-5 space-y-4 text-[16px] leading-7 text-ink-muted">
           <p>{locale === "sv" ? "Stop on reply är aktiverat." : "Stop on reply is active."}</p>
           <p>{locale === "sv" ? "Skickfönster: tisdag till torsdag, 08:30 till 15:20." : "Send window: Tuesday to Thursday, 08:30 to 15:20."}</p>
           <p>{locale === "sv" ? "Suppression kontrolleras före varje queue." : "Suppression is checked before every queue."}</p>
@@ -1425,7 +1425,7 @@ function EmailComposer({ variant, compact = false }: Readonly<{ variant: DraftVa
             ].map(([label, value]) => (
               <div key={label} className="py-4">
                 <p className="kicker text-mineral">{label}</p>
-                <p className="mt-2 text-[15px] leading-6 text-ink/72">{value}</p>
+                <p className="mt-2 text-[15px] leading-6 text-ink-muted">{value}</p>
               </div>
             ))}
           </div>
@@ -1433,7 +1433,7 @@ function EmailComposer({ variant, compact = false }: Readonly<{ variant: DraftVa
       ) : null}
       <section className={cn("col-span-12", compact ? "" : "md:col-span-8")}>
         <div className="border-y border-ink/15 py-5">
-          <p className="kicker text-ochre">{selected.length} · {selected.type}</p>
+          <p className="kicker text-warning">{selected.length} · {selected.type}</p>
           <h2 className="mt-4 font-display text-4xl italic-disp tighten">{locale === "sv" ? selected.subject.sv : selected.subject.en}</h2>
         </div>
         <textarea
@@ -1463,7 +1463,7 @@ function AnalyticsShowcase({ variant }: Readonly<{ variant: DraftVariant }>) {
         <div key={point.week} className="grid grid-cols-12 gap-x-6 py-5">
           <div className="kicker col-span-3 text-mineral">{point.week}</div>
           <div className="num col-span-3 font-display text-2xl italic-disp">{point.sent} {locale === "sv" ? "skick" : "sent"}</div>
-          <div className="num col-span-3 font-display text-2xl italic-disp text-ochre">{formatPercent(point.replies / point.sent)} {locale === "sv" ? "svar" : "reply"}</div>
+          <div className="num col-span-3 font-display text-2xl italic-disp text-warning">{formatPercent(point.replies / point.sent)} {locale === "sv" ? "svar" : "reply"}</div>
           <div className="num col-span-3 text-right font-display text-2xl italic-disp">{point.meetings} {locale === "sv" ? "möten" : "meetings"}</div>
           <div className="col-span-12 mt-4 h-2 bg-ink/10">
             <div className="h-2 bg-ochre" style={{ width: `${Math.min(92, (point.replies / point.sent) * 420)}%` }} />
@@ -1491,7 +1491,7 @@ function InboxShowcase({ variant }: Readonly<{ variant: DraftVariant }>) {
       {rows.map(([name, body, status]) => (
         <div key={name} className="grid grid-cols-12 gap-x-6 py-5">
           <div className="font-display col-span-12 text-2xl italic-disp tighten md:col-span-3">{name}</div>
-          <p className="col-span-12 mt-3 text-[16px] leading-7 text-ink/72 md:col-span-7 md:mt-0">{body}</p>
+          <p className="col-span-12 mt-3 text-[16px] leading-7 text-ink-muted md:col-span-7 md:mt-0">{body}</p>
           <div className="col-span-12 mt-3 text-right md:col-span-2 md:mt-0"><StatusWord value={status} /></div>
         </div>
       ))}
@@ -1549,7 +1549,7 @@ function TextList({ title, items }: Readonly<{ title: string; items: string[] }>
       <h2 className="kicker text-mineral">{title}</h2>
       <div className="mt-4 divide-y divide-ink/15 border-y border-ink/15">
         {items.map((item) => (
-          <p key={item} className="py-4 text-[15px] leading-6 text-ink/72">{item}</p>
+          <p key={item} className="py-4 text-[15px] leading-6 text-ink-muted">{item}</p>
         ))}
       </div>
     </div>
@@ -1563,8 +1563,8 @@ function MetricStrip({ variant, metrics }: Readonly<{ variant: DraftVariant; met
       {metrics.map(([label, value, detail], index) => (
         <div key={label} className={cn("border-t border-ink/15 pt-4", modern ? "col-span-6 md:col-span-3" : "col-span-6 md:col-span-3")}>
           <dt className="kicker text-mineral">{label}</dt>
-          <dd className={`num mt-3 font-display text-4xl italic-disp tighten ${index === 1 ? "text-ochre" : ""}`}>{value}</dd>
-          <p className="mt-2 text-[14px] leading-6 text-ink/65">{detail}</p>
+          <dd className={`num mt-3 font-display text-4xl italic-disp tighten ${index === 1 ? "text-warning" : ""}`}>{value}</dd>
+          <p className="mt-2 text-[14px] leading-6 text-ink-muted">{detail}</p>
         </div>
       ))}
     </dl>
@@ -1589,14 +1589,14 @@ function CompanyLedger({ variant, rows }: Readonly<{ variant: DraftVariant; rows
             <Link key={company.id} href={`${navBase}/companies/${company.id}`} className="row grid grid-cols-12 gap-x-5 gap-y-3 py-5 transition hover:bg-ochre/5">
               <div className="ticker col-span-8 md:col-span-4">
                 <p className="font-display text-[22px] italic-disp leading-none tighten">{company.name}</p>
-                <p className="mt-1 text-sm text-ink/55">{company.website}</p>
+                <p className="mt-1 text-sm text-ink-subtle">{company.website}</p>
               </div>
               <div className="kicker col-span-8 mt-1 text-mineral md:col-span-3 md:mt-2">{company.industry} · {company.location}</div>
               <div className="col-span-8 mt-1 md:col-span-3">
                 <p className="text-[15px]">{contact.fullName}</p>
-                <p className="mt-1 text-sm text-ink/55">{contact.role}</p>
+                <p className="mt-1 text-sm text-ink-subtle">{contact.role}</p>
               </div>
-              <div className="num col-span-4 row-start-1 text-right font-display text-2xl italic-disp leading-none text-ochre md:col-span-2 md:row-auto md:mt-1">{company.score}</div>
+              <div className="num col-span-4 row-start-1 text-right font-display text-2xl italic-disp leading-none text-warning md:col-span-2 md:row-auto md:mt-1">{company.score}</div>
             </Link>
           );
         })}
@@ -1607,5 +1607,5 @@ function CompanyLedger({ variant, rows }: Readonly<{ variant: DraftVariant; rows
 
 function StatusWord({ value }: Readonly<{ value: string }>) {
   const accent = ["recommended", "active", "replied", "queued", "positive"].includes(value);
-  return <span className={`kicker ${accent ? "text-ochre" : "text-mineral"}`}>{value}</span>;
+  return <span className={`kicker ${accent ? "text-warning" : "text-mineral"}`}>{value}</span>;
 }

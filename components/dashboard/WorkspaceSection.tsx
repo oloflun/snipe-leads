@@ -3,7 +3,6 @@ import { PageShell } from "@/components/AppShell";
 import { AgentSajtKnapp } from "@/components/AgentSajtKnapp";
 import { KvittoVy } from "@/components/kvitton/KvittoVy";
 import { StartView } from "@/components/dashboard/StartView";
-import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { SupportWorkspaceTabs } from "@/components/snajp/SupportWorkspaceTabs";
 import {
   AgentLarandeView,
@@ -12,15 +11,12 @@ import {
   CompaniesView,
   CompanyDetailView,
   ContactsView,
-  InboxView,
-  LeadsView
+  InboxView
 } from "@/components/WorkspaceViews";
-import { LeadsControls } from "@/components/leads/LeadsControls";
-import { LeadslistorView } from "@/components/leads/LeadslistorView";
-import { mejlaOss } from "@/components/marketing/copy";
-import { loadEmailStudioData } from "@/lib/data/emails";
+import { IrisBolag } from "@/components/leads/IrisBolag";
+import { IrisGranskning } from "@/components/leads/IrisGranskning";
+import { IrisInstallningar } from "@/components/leads/IrisInstallningar";
 import { resolveDashboardState } from "@/lib/data/dashboard";
-import { addonSpec } from "@/lib/addons";
 import type { ProductKey } from "@/lib/routes";
 
 /**
@@ -43,10 +39,13 @@ import type { ProductKey } from "@/lib/routes";
  */
 
 const sectionProduct: Record<string, ProductKey> = {
-  leads: "leads",
+  iris: "leads",
+  // "leads" och "emails" (de gamla sluggarna) står INTE här: de redirectas
+  // ovan, INNAN den här kartan slås upp, till sin Iris-motsvarighet — som
+  // sedan grindas på entitlement som vanligt. Två grindar för samma sak vore
+  // en för många.
   companies: "leads",
   contacts: "leads",
-  emails: "leads",
   inbox: "leads",
   analytics: "leads",
   assistant: "leads",
@@ -56,7 +55,21 @@ const sectionProduct: Record<string, ProductKey> = {
   kvitton: "bookkeeping"
 };
 
-export async function WorkspaceSection({ slug = [] }: Readonly<{ slug?: string[] }>) {
+export async function WorkspaceSection({
+  slug = [],
+  base = "/dashboard"
+}: Readonly<{
+  slug?: string[];
+  /**
+   * `/dashboard` för kundens yta, `/admin` inifrån adminytan — se
+   * `app/admin/[...slug]/page.tsx`. Varje `redirect()` i den här filen måste
+   * gå genom `base`, annars landar en admin som klickar ett gammalt Iris-
+   * bokmärke på `/dashboard/iris` och studsas rakt tillbaka till `/admin` av
+   * `app/dashboard/layout.tsx` — samma fälla som AppShells `useArbetsvag()`
+   * finns för att undvika i vanlig navigering.
+   */
+  base?: string;
+}>) {
   const [section, id] = slug;
 
   if (!section) {
@@ -75,7 +88,23 @@ export async function WorkspaceSection({ slug = [] }: Readonly<{ slug?: string[]
   // 2026-09-16 och fliken bytte slug — bokmärken och gamla länkar ska landa
   // rätt, inte i en 404.
   if (section === "bokforing") {
-    redirect("/dashboard/kvitton");
+    redirect(`${base}/kvitton`);
+  }
+
+  // Iris flyttade in från tre separata ställen (Leads, Leadslistor, Email
+  // studio) 2026-09-19 — se lib/routes.ts. Gamla adresser ska landa på sin
+  // Iris-motsvarighet, inte i en 404. Görs FÖRE produktgrinden nedan skulle en
+  // spärrad arbetsyta läcka att "iris" finns; görs den EFTER (som här) delar
+  // den gamla adressen exakt samma entitlement-svar som den nya.
+  const gammalLeadsId: Record<string, string> = {
+    listor: `${base}/iris?vy=listor`,
+    kontroll: `${base}/iris/installningar`
+  };
+  if (section === "leads") {
+    redirect((id && gammalLeadsId[id]) || `${base}/iris`);
+  }
+  if (section === "emails") {
+    redirect(`${base}/iris`);
   }
 
   const product = sectionProduct[section];
@@ -85,34 +114,40 @@ export async function WorkspaceSection({ slug = [] }: Readonly<{ slug?: string[]
 
   // Entitlement is enforced here, on the server. Hiding a nav item is a courtesy;
   // this is the actual gate.
-  const { products, addons, workspaceName } = await resolveDashboardState();
+  const { products, workspaceName } = await resolveDashboardState();
   if (!products.includes(product)) {
     notFound();
   }
 
   switch (section) {
     case "kvitton":
-      // Menyklicket landar HÄR, i den inbyggda vyn — aldrig en redirect till
-      // agentsajten (Sebbes ord 2026-09-15): sajten nås via Kör Agent-knappen
-      // i vyn, som bär kundens identitet genom SSO-biljetten.
+      // Menyklicket landar HÄR, i den inbyggda vyn. Den fristående
+      // agentsajten och SSO-bron dit ("Kör Agent"-knappen) togs bort
+      // 2026-09-19 — Kvittohanteraren är bara den här vyn nu.
       return <KvittoVy />;
-    case "leads":
-      // /dashboard/leads/kontroll. Egen sektion i sectionProduct hade betytt
-      // /dashboard/kontroll, vilket inte är där kontrollerna hör hemma —
-      // de gäller leads och ska ligga under leads.
-      if (id === "kontroll") {
-        return <LeadsControlSection />;
+    case "iris":
+      // Tre undersidor (Bolag/Granskning/Inställningar), samma mönster som
+      // Leads/kontroll hade — men under EN sektion i stället för tre, se
+      // lib/routes.ts AppRoute.children. Ett okänt tredje slugsegment (`id`
+      // utanför de två kända) är en 404, inte en tyst fallback till Bolag.
+      if (id === "granskning") {
+        return (
+          <PageShell kicker="Iris" title="Granskning" description="Utkasten Iris skrivit, i väntan på ditt ja eller nej.">
+            <IrisGranskning />
+          </PageShell>
+        );
       }
-      // /dashboard/leads/listor — tillägget Leadslistor. Produktgrinden ovan
-      // räcker inte: vyn kräver även tillägget "leadlists", och det avgörs
-      // HÄR på servern. Utan tillägget renderas ett upsell-kort i stället —
-      // ett låst tillägg som bara är osynligt säljer ingenting (lib/addons.ts).
-      if (id === "listor") {
-        return <LeadslistorSection harTillagg={addons.includes("leadlists")} />;
+      if (id === "installningar") {
+        return (
+          <PageShell kicker="Iris" title="Inställningar" description="Målgrupp, autonomi och gränserna Iris alltid håller.">
+            <IrisInstallningar />
+          </PageShell>
+        );
       }
-      // Bannern serverrenderas här och går in som prop — LeadsView är en
-      // klientkomponent och kan inte läsa miljön själv (se kommentaren där).
-      return <LeadsView agentKnapp={<AgentSajtKnapp agent="leads" />} />;
+      if (id) {
+        notFound();
+      }
+      return <IrisBolag />;
     case "companies":
       return id ? <CompanyDetailView id={id} /> : <CompaniesView />;
     case "contacts":
@@ -130,11 +165,9 @@ export async function WorkspaceSection({ slug = [] }: Readonly<{ slug?: string[]
        * prospektets — se components/leads/Kontakter.tsx, som länkar hit.
        */
       if (id) {
-        redirect(`/dashboard/companies/${id}`);
+        redirect(`${base}/companies/${id}`);
       }
       return <ContactsView />;
-    case "emails":
-      return <EmailStudioSection />;
     case "inbox":
       return <InboxView />;
     case "analytics":
@@ -146,73 +179,6 @@ export async function WorkspaceSection({ slug = [] }: Readonly<{ slug?: string[]
     default:
       notFound();
   }
-}
-
-async function EmailStudioSection() {
-  const data = await loadEmailStudioData();
-
-  return (
-    <PageShell
-      kicker="Email studio"
-      title="Skriv och skriv om"
-      description="Ämnesrad, brödtext och uppföljning. Varje åtgärd visar vad den ändrade och varför."
-    >
-      <EmailStudioEditor data={data} />
-    </PageShell>
-  );
-}
-
-/**
- * Leadslistor — tilläggsgrindad, till skillnad från grannarna.
- *
- * `harTillagg` avgörs i dispatchern ovan ur samma serverlästa state som
- * produktgrinden. Utan tillägget renderas INTE en 404: sidan finns och säljer
- * sig själv med samma ruled kort som /settings/addons använder — vad kunden
- * får, varför det inte ingår, och en "Hör av dig"-CTA.
- */
-function LeadslistorSection({ harTillagg }: Readonly<{ harTillagg: boolean }>) {
-  const spec = addonSpec("leadlists");
-  return (
-    <PageShell
-      kicker="Leads · listor"
-      title="Färdiga leadslistor att granska och exportera"
-      description="Agenten bygger listan åt er — verifierade svenska B2B-bolag med kontaktväg, källa och signal per rad. Ingenting skickas."
-    >
-      {harTillagg ? (
-        <LeadslistorView />
-      ) : (
-        // Samma form som AddonSettings låsta kort: ruled rad, vad/varför,
-        // mejl-CTA. Ingen gråad yta och ingen fejkad vy — den som inte har
-        // tillägget ska se vad det ÄR, inte en avstängd version av det.
-        <div className="min-w-0 border-t border-ink/15 py-6">
-          <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-            <h4 className="min-w-0 break-words text-[17px]">{spec.name}</h4>
-            <span className="kicker shrink-0 text-mineral">Tillval</span>
-          </div>
-          <p className="mt-3 max-w-[64ch] text-[15px] leading-7">{spec.what}</p>
-          <p className="mt-2 max-w-[64ch] text-[14px] leading-6 text-mineral">{spec.why}</p>
-          <a
-            href={mejlaOss(`Tillägg: ${spec.name}`)}
-            className="mt-4 inline-block text-[13px] underline underline-offset-4 transition hover:text-ochre"
-          >
-            Hör av dig om {spec.name.toLowerCase()}
-          </a>
-        </div>
-      )}
-    </PageShell>
-  );
-}
-
-function LeadsControlSection() {
-  return (
-    <PageShell
-      kicker="Leads · kontroll"
-      title="Vad agenterna får göra"
-      description="Hur långt de får gå, vilka bolag de ska leta efter, och vad som väntar på ditt godkännande."
-    >
-      <LeadsControls />
-    </PageShell>
-  );
 }
 
 function SupportSection({ workspaceName }: Readonly<{ workspaceName: string | null }>) {

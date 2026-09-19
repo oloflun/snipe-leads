@@ -186,10 +186,10 @@ export function AgentLarande() {
   if (lage.fas === "fel") {
     return (
       <div className="flex items-start gap-3 border-y border-ochre/40 bg-ochre/10 px-4 py-4">
-        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-ochre" aria-hidden />
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
         <div className="min-w-0">
           <p className="text-sm font-medium text-ink">Lärandet kunde inte hämtas</p>
-          <p className="mt-1 text-sm text-ink/70">{lage.meddelande}</p>
+          <p className="mt-1 text-sm text-ink-muted">{lage.meddelande}</p>
           <button
             type="button"
             onClick={() => void hamta()}
@@ -226,14 +226,14 @@ export function AgentLarande() {
                     </span>
                   </div>
                   {brodtext ? (
-                    <p className="mt-2 max-w-[75ch] whitespace-pre-line text-[15px] leading-6 text-ink/78">
+                    <p className="mt-2 max-w-[75ch] whitespace-pre-line text-[15px] leading-6 text-ink-muted">
                       {brodtext}
                     </p>
                   ) : null}
                   {belagg.length > 0 ? (
                     <ul className="mt-2 max-w-[75ch] space-y-1">
                       {belagg.map((b) => (
-                        <li key={b} className="text-[13px] leading-5 text-ink/55">
+                        <li key={b} className="text-[13px] leading-5 text-ink-subtle">
                           ”{b}”
                         </li>
                       ))}
@@ -269,7 +269,7 @@ export function AgentLarande() {
       <section>
         <h2 className="kicker text-mineral">Domar från teamet</h2>
         {lage.feedback.length === 0 ? (
-          <p className="mt-3 max-w-[75ch] text-[15px] leading-6 text-ink/60">
+          <p className="mt-3 max-w-[75ch] text-[15px] leading-6 text-ink-muted">
             Inga domar ännu. När någon i teamet markerar en körning som bra
             eller fel samlas den här — och en rättad text är det starkaste
             underlaget agenterna kan lära sig av.
@@ -282,13 +282,13 @@ export function AgentLarande() {
                   <p className="text-[15px] font-semibold">
                     {VERDICT_ETIKETT[r.verdict] ?? r.verdict}
                     {r.comment ? (
-                      <span className="ml-2 font-normal text-ink/70">{r.comment}</span>
+                      <span className="ml-2 font-normal text-ink-muted">{r.comment}</span>
                     ) : null}
                   </p>
                   <span className="kicker shrink-0 text-mineral">{nar(r.created_at)}</span>
                 </div>
                 {r.corrected_output ? (
-                  <p className="mt-2 max-w-[75ch] whitespace-pre-line text-[14px] leading-6 text-ink/70">
+                  <p className="mt-2 max-w-[75ch] whitespace-pre-line text-[14px] leading-6 text-ink-muted">
                     Rättad text: {r.corrected_output}
                   </p>
                 ) : null}

@@ -41,7 +41,7 @@ export function InnehallsSida({
               annars kod som aldrig kan utlösas: menyn hade bara funnits på
               sidor som ingen menypost pekar på. */}
           <div className="flex items-center gap-1">
-            <Link href="/" className="focus-ring rounded-input px-3 py-2 text-sm text-ink/60 hover:text-ink">
+            <Link href="/" className="focus-ring rounded-input px-3 py-2 text-sm text-ink-muted hover:text-ink">
               Till startsidan
             </Link>
             <SidMeny />
@@ -74,7 +74,7 @@ export function SidRubrik({
         {rubrik}
       </h1>
       {ingress ? (
-        <p className="mt-6 max-w-[62ch] text-[1.125rem] leading-[1.7] text-ink/75">{ingress}</p>
+        <p className="mt-6 max-w-[62ch] text-[1.125rem] leading-[1.7] text-ink-muted">{ingress}</p>
       ) : null}
     </>
   );
@@ -100,7 +100,7 @@ export function SidAvslut({
       <h2 className="font-display text-[1.5rem] font-semibold leading-snug tracking-[-0.02em]">
         {rubrik}
       </h2>
-      <p className="mt-3 max-w-[58ch] text-[1rem] leading-[1.7] text-ink/70">{text}</p>
+      <p className="mt-3 max-w-[58ch] text-[1rem] leading-[1.7] text-ink-muted">{text}</p>
       <div className="mt-6 flex flex-wrap gap-3">
         <Link
           href={primar.href}

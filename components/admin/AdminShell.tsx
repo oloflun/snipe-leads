@@ -1,12 +1,21 @@
 "use client";
 
-import { LogOut } from "lucide-react";
-import Link from "next/link";
+import {
+  Activity,
+  Bell,
+  FlaskConical,
+  Gauge,
+  LayoutDashboard,
+  LogOut,
+  Users
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { usePathname } from "next/navigation";
-import { Logo } from "@/components/Logo";
-import { FLIKENS_LAGE } from "@/components/AppShell";
+import { FLIKENS_LAGE, RUTT_IKONER } from "@/components/AppShell";
 import { BytKund } from "@/components/admin/BytKund";
 import { VyVaxel } from "@/components/VyVaxel";
+import { Rail } from "@/components/shell/Rail";
+import type { RailNavGroup } from "@/components/shell/Rail";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { AgentMenu } from "@/components/snajp/AgentMenu";
 import { signOut } from "@/lib/actions/auth";
@@ -15,7 +24,7 @@ import { routesForProducts, tillAdminvag } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
 /**
- * Adminytans skal — samma chrome som kundens AppShell, plus plattformsraden.
+ * Adminytans skal — samma vänsterrail som kundens AppShell, sedan 2026-09-18.
  *
  * ## Varför skalet bor här och inte i layouten
  *
@@ -24,6 +33,15 @@ import { cn } from "@/lib/utils";
  * för aktiv flik, `useLocale` för språkväxlaren och en form-action för
  * utloggning — alltså klientsidan. Layouten grindar och hämtar; det här
  * renderar.
+ *
+ * ## Historik: topp-header med flikrad, ersatt av railen
+ *
+ * Adminytan bar tidigare en egen topp-header med två flikrader (plattform +
+ * arbetsyta) — en tredje chrome vid sidan av kundytans rail och demons band.
+ * Nu delar admin components/shell/Rail.tsx med AppShell: samma komponent,
+ * två navgrupper. Grupp 1 är plattformssidorna (Översikt, Kunder, …), grupp 2
+ * är arbetsytans sektioner under en hårlinje och etiketten "Arbetsyta" — se
+ * `arbetsyta` nedan, byggd av samma routekarta som kundens nav.
  *
  * ## Varför det inte räcker att återanvända AppShell rakt av
  *
@@ -34,27 +52,36 @@ import { cn } from "@/lib/utils";
  * poängen med att adminytan är en superset och inte en andra yta.
  *
  * AppShell renderar därför BARA innehåll under /admin (se den filen), så att
- * det inte blir två staplade headers. Uppmätt: det var det innan.
+ * det inte blir två staplade railer. Uppmätt: det var det innan.
  */
 
 /**
- * Plattformsflikarna — det som skiljer adminytan från kundens arbetsyta.
+ * Plattformssidorna — det som skiljer adminytan från kundens arbetsyta.
  *
- * Etiketterna är Localized och inte svenska strängar: arbetsytans rad under
- * översätts redan av `t()`, och en plattformsrad som stod kvar på svenska
- * gjorde EN-läget till ett halvöversatt gränssnitt — det syntes tydligast
- * här, eftersom de två raderna ligger ovanpå varandra.
+ * Etiketterna är Localized och inte svenska strängar: arbetsytans grupp
+ * översätts redan av `t()`, och en plattformsgrupp som stod kvar på svenska
+ * gjorde EN-läget till ett halvöversatt gränssnitt.
+ *
+ * `/admin/bokforingsanvandning` står MEDVETET utanför listan: sidan finns
+ * kvar som en redirect till `/admin/agentanvandning` (bokmärken ska landa
+ * rätt), men `agentanvandning` är dess efterträdare och den enda som hör
+ * hemma i navigationen.
  */
-const PLATTFORM = [
-  { href: "/admin", label: { sv: "Översikt", en: "Overview" } },
-  { href: "/admin/kunder", label: { sv: "Kunder", en: "Customers" } },
-  { href: "/admin/korningar", label: { sv: "Körningar", en: "Runs" } },
-  { href: "/admin/testkorningar", label: { sv: "Testkörningar", en: "Test runs" } },
+const PLATTFORM: Array<{ href: string; label: { sv: string; en: string }; Icon: LucideIcon }> = [
+  { href: "/admin", label: { sv: "Översikt", en: "Overview" }, Icon: LayoutDashboard },
+  { href: "/admin/kunder", label: { sv: "Kunder", en: "Customers" }, Icon: Users },
+  { href: "/admin/korningar", label: { sv: "Körningar", en: "Runs" }, Icon: Activity },
+  {
+    href: "/admin/testkorningar",
+    label: { sv: "Testkörningar", en: "Test runs" },
+    Icon: FlaskConical
+  },
   {
     href: "/admin/agentanvandning",
-    label: { sv: "Agentanvändning", en: "Agent usage" }
+    label: { sv: "Agentanvändning", en: "Agent usage" },
+    Icon: Gauge
   },
-  { href: "/admin/handelser", label: { sv: "Händelser", en: "Events" } }
+  { href: "/admin/handelser", label: { sv: "Händelser", en: "Events" }, Icon: Bell }
 ];
 
 function matchar(pathname: string, href: string): boolean {
@@ -102,140 +129,145 @@ export function AdminShell({
   const arbetsyta = routesForProducts(products, { isAdmin: true })
     .filter((route) => route.product === "shared" || shows(route.product))
     .map((route) => ({
+      // Originalrouten (före tillAdminvag) — nyckeln RUTT_IKONER känner igen,
+      // så samma /dashboard/*-route bär samma ikon på båda ytorna.
+      origHref: route.href,
       href: tillAdminvag(route.href),
-      // Samma flik, samma läge. Utan den här raden byter Leads-fliken vy på
+      // Samma flik, samma läge. Utan den här raden byter Iris-fliken vy på
       // kundens yta men inte på adminens, och samma knapp gör då olika saker
       // beroende på var man står.
       lage: FLIKENS_LAGE[route.href],
       // "Min arbetsyta" och inte t("nav.dashboard") ("Översikt"): plattforms-
-      // raden har redan en flik som heter Översikt, och två flikar med samma
-      // namn i samma header är inte en etikett utan en gissningslek.
-      // Localized och inte en svensk sträng — resten av raden byter språk med
-      // EN/SV-knappen, och en flik som inte gör det ser ut som en bugg.
+      // gruppen har redan en post som heter Översikt, och två poster med
+      // samma namn i samma rail är inte en etikett utan en gissningslek.
+      // Localized och inte en svensk sträng — resten av railen byter språk
+      // med EN/SV-knappen, och en post som inte gör det ser ut som en bugg.
       label:
         route.href === "/dashboard"
           ? text({ sv: "Min arbetsyta", en: "My workspace" })
-          : t(route.labelKey)
+          : t(route.labelKey),
+      // Iris tre barn, körda genom samma tillAdminvag-karta som föräldern —
+      // /dashboard/iris/granskning blir /admin/iris/granskning, inte en
+      // hårdkodad andra karta som kan glida isär från den här.
+      children: route.children?.map((child) => ({
+        href: tillAdminvag(child.href),
+        label: t(child.labelKey)
+      }))
     }));
 
-  // Båda raderna räknas som EN uppsättning: annars markerar plattformsradens
-  // "Översikt" (/admin) sig själv samtidigt som arbetsytans flik är den man
-  // faktiskt står på.
+  // Alla hrefs, INKLUSIVE barnens — annars markerar t.ex.
+  // /admin/iris/granskning bara "Iris" som aktiv utan att någon barnrad lyser.
   const aktiv = aktivHref(pathname, [
     ...PLATTFORM.map((f) => f.href),
-    ...arbetsyta.map((f) => f.href)
+    ...arbetsyta.map((f) => f.href),
+    ...arbetsyta.flatMap((f) => f.children?.map((c) => c.href) ?? [])
   ]);
+
+  const plattformGroup: RailNavGroup = {
+    key: "plattform",
+    items: PLATTFORM.map((flik) => ({
+      href: flik.href,
+      label: text(flik.label),
+      Icon: flik.Icon,
+      active: aktiv === flik.href
+    }))
+  };
+
+  const arbetsytaGroup: RailNavGroup = {
+    key: "arbetsyta",
+    label: text({ sv: "Arbetsyta", en: "Workspace" }),
+    items: arbetsyta.map((flik) => {
+      const barnAktiva = flik.children?.some((c) => aktiv === c.href) ?? false;
+      return {
+        href: flik.href,
+        label: flik.label,
+        Icon: RUTT_IKONER[flik.origHref] ?? LayoutDashboard,
+        active: aktiv === flik.href || barnAktiva,
+        onClick: () => {
+          if (flik.lage && availableScopes.includes(flik.lage)) {
+            setScope(flik.lage);
+          }
+        },
+        children: flik.children?.map((child) => ({
+          href: child.href,
+          label: child.label,
+          active: aktiv === child.href
+        }))
+      };
+    })
+  };
 
   return (
     <div className="min-h-screen bg-paper text-ink">
-      <header className="sticky top-0 z-30 bg-paper/85 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3 md:px-6">
-          <Link href="/admin" className="focus-ring inline-flex min-h-11 items-center rounded-input">
-            <Logo />
-          </Link>
+      <div className="flex min-h-dvh">
+        <Rail
+          logoHref="/admin"
+          logoAriaLabel={text({
+            sv: "Snajp admin, till översikten",
+            en: "Snajp admin, go to overview"
+          })}
+          brand={
+            <p className="hidden truncate px-5 pb-4 text-[0.75rem] font-medium uppercase tracking-[0.14em] text-paper-subtle lg:block">
+              {workspaceName ? `Admin · ${workspaceName}` : "Admin"}
+            </p>
+          }
+          navLabel={text({ sv: "Adminnavigering", en: "Admin navigation" })}
+          groups={arbetsyta.length > 0 ? [plattformGroup, arbetsytaGroup] : [plattformGroup]}
+          footer={
+            <>
+              {/* Alltid nåbart, oavsett railbredd: språkval och utloggning
+                  behöver ingen bredd att gömma sig bakom. */}
+              <div className="flex items-center justify-center gap-1 lg:justify-start">
+                <button
+                  type="button"
+                  onClick={toggleLocale}
+                  className="focus-ring min-h-9 shrink-0 rounded-input px-2 text-[13px] font-medium text-paper-muted transition-colors hover:bg-paper/5 hover:text-paper lg:px-3"
+                >
+                  {locale === "sv" ? "EN" : "SV"}
+                </button>
+              </div>
 
-          <span className="kicker text-ochre">Admin</span>
+              {/* Kunduppslag, vy-växel, kontaktmeny och kontoadress — byggda
+                  för en ljus yta (se AppShells motivering ovan för varför de
+                  aldrig stod direkt på en mörk rail). En egen ljus platta i
+                  stället för tre lösa öar, och bara vid lg+: platsen räcker
+                  inte i ikonläget, och de här kontrollerna saknar ett
+                  ikon-only-läge. */}
+              <div className="hidden flex-col gap-1.5 rounded-input border border-paper/10 bg-paper2 p-1.5 lg:flex">
+                <div className="flex flex-wrap items-center gap-1">
+                  <BytKund />
+                  <VyVaxel />
+                </div>
+                <AgentMenu yta="leads" kontext={`admin:${pathname}`} />
+                {email ? (
+                  <p className="truncate px-1 pt-0.5 text-[0.75rem] text-ink-subtle">{email}</p>
+                ) : null}
+              </div>
 
-          {workspaceName ? (
-            <span className="hidden text-sm text-ink/45 sm:inline">{workspaceName}</span>
-          ) : null}
-
-          <div className="ml-auto flex items-center gap-1.5">
-            {/* Vägen till demovyn. Samma knapp som i kundskalet, för att det
-                ska vara samma knapp på båda ytorna — en växel som ser olika ut
-                beroende på var man står är en växel man letar efter. */}
-            <BytKund />
-            <VyVaxel />
-
-            <button
-              type="button"
-              onClick={toggleLocale}
-              className="focus-ring min-h-11 rounded-input px-3 text-sm font-medium text-ink/55 transition-colors hover:text-ink"
-            >
-              {locale === "sv" ? "EN" : "SV"}
-            </button>
-
-            <AgentMenu yta="leads" kontext={`admin:${pathname}`} />
-
-            {email ? (
-              <span className="hidden text-sm text-ink/45 lg:inline">{email}</span>
-            ) : null}
-
-            {/* Utloggning fanns inte alls i adminytan. signOut() var skriven och
-                fungerande, men ingen komponent i adminskalet anropade den — samma
-                lucka som en gång saknade länken TILL /admin. Formulär och inte
-                onClick: signOut är en server action och fungerar utan JS. */}
-            <form action={signOut}>
-              <button
-                type="submit"
-                className="focus-ring inline-flex min-h-11 items-center gap-1.5 rounded-input px-3 text-sm font-medium text-ink/55 transition-colors hover:text-ink"
-              >
-                <LogOut className="h-4 w-4" aria-hidden />
-                <span className="hidden sm:inline">
-                  {text({ sv: "Logga ut", en: "Sign out" })}
-                </span>
-              </button>
-            </form>
-          </div>
-
-          {/* Plattformsraden först: det är den som skiljer ytan från kundens,
-              och den ska inte behöva letas upp bland arbetsytans flikar. */}
-          <nav
-            aria-label={text({ sv: "Plattform", en: "Platform" })}
-            className="thin-scrollbar order-last -mx-1 flex w-full min-w-0 gap-1 overflow-x-auto px-1 pb-1"
-          >
-            {PLATTFORM.map((flik) => {
-              const på = aktiv === flik.href;
-              return (
-                <Link
-                  key={flik.href}
-                  href={flik.href}
-                  aria-current={på ? "page" : undefined}
+              {/* Utloggning fanns inte alls i adminytan från början. signOut()
+                  var skriven och fungerande, men ingen komponent i skalet
+                  anropade den — samma lucka som en gång saknade länken TILL
+                  /admin. Formulär och inte onClick: signOut är en server
+                  action och fungerar utan JS. */}
+              <form action={signOut}>
+                <button
+                  type="submit"
+                  title={text({ sv: "Logga ut", en: "Sign out" })}
                   className={cn(
-                    "focus-ring inline-flex min-h-11 shrink-0 items-center rounded-input px-3 text-sm font-medium transition-colors",
-                    på ? "bg-ochre/15 text-ink" : "text-ochre hover:bg-ochre/10"
+                    "focus-ring flex min-h-11 w-full items-center justify-center gap-1.5 rounded-input px-3 text-sm font-medium transition-colors",
+                    "text-paper-muted hover:bg-paper/5 hover:text-paper lg:justify-start"
                   )}
                 >
-                  {text(flik.label)}
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
+                  <LogOut className="h-4 w-4 shrink-0" aria-hidden />
+                  <span className="hidden lg:inline">{text({ sv: "Logga ut", en: "Sign out" })}</span>
+                </button>
+              </form>
+            </>
+          }
+        />
 
-        {arbetsyta.length > 0 ? (
-          <div className="mx-auto max-w-[1400px] px-4 pb-2 md:px-6">
-            <nav
-              aria-label={text({ sv: "Min arbetsyta", en: "My workspace" })}
-              className="thin-scrollbar -mx-1 flex min-w-0 gap-1 overflow-x-auto px-1"
-            >
-              {arbetsyta.map((flik) => {
-                const på = aktiv === flik.href;
-                return (
-                  <Link
-                    key={flik.href}
-                    href={flik.href}
-                    onClick={() => {
-                      if (flik.lage && availableScopes.includes(flik.lage)) {
-                        setScope(flik.lage);
-                      }
-                    }}
-                    aria-current={på ? "page" : undefined}
-                    className={cn(
-                      "focus-ring inline-flex min-h-11 shrink-0 items-center rounded-input px-3 text-sm font-medium transition-colors",
-                      på ? "bg-paper2 text-ink" : "text-ink/55 hover:bg-paper2/60 hover:text-ink"
-                    )}
-                  >
-                    {flik.label}
-                  </Link>
-                );
-              })}
-            </nav>
-          </div>
-        ) : null}
-      </header>
-
-      <main>{children}</main>
+        <main className="min-w-0 flex-1">{children}</main>
+      </div>
     </div>
   );
 }
