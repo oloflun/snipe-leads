@@ -442,6 +442,15 @@ class SeedMockRequest(BaseModel):
     antal: int | None = None
 
 
+class HanteradRequest(BaseModel):
+    """Kroppen till POST /api/inbox/{id}/hanterad — avbockningen i inkorgen.
+
+    `hanterad: false` ångrar en avbockning. Default true, så att den enkla
+    knappen kan posta utan kropp."""
+
+    hanterad: bool = True
+
+
 class IngestEmailRequest(BaseModel):
     """API-first-ingest: externa system (Zendesk, CRM, webhook) postar mail hit."""
 

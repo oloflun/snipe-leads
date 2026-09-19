@@ -23,8 +23,15 @@ skadad vara → retur_reklamation). Svara ENBART med JSON:
   "escalate": true/false,
   "escalation_reason": "svensk motivering eller null",
   "reasoning": "kort svensk motivering av klassificeringen (inkl. vad ev. bilder visar)",
-  "draft_reply": "komplett svenskt svarsutkast grundat ENBART i kunskapsbasen"
+  "draft_reply": "komplett svenskt svarsutkast grundat ENBART i kunskapsbasen",
+  "offertforfragan": true/false,
+  "utbildningsintresse": true/false
 }}
+
+"offertforfragan" är true när avsändaren frågar efter pris, offert eller
+kostnadsförslag — även utan ordet offert. "utbildningsintresse" är true när
+mailet uttrycker intresse för en utbildning, kurs eller liknande. Båda kan
+vara true samtidigt, och de är oberoende av vilket fack du väljer.
 
 Eskalera vid: återbetalning, juridik/ARN, GDPR/kontoradering, sentiment < 0.3.
 Vid eskalering ska draft_reply vara ett artigt hållsvar. Hitta ALDRIG på fakta
@@ -90,4 +97,6 @@ async def triage_email_llm(
         "escalation_reason": data.get("escalation_reason"),
         "reasoning": data.get("reasoning", ""),
         "draft_reply": data.get("draft_reply", ""),
+        "offertforfragan": bool(data.get("offertforfragan", False)),
+        "utbildningsintresse": bool(data.get("utbildningsintresse", False)),
     }

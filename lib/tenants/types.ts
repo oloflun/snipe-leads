@@ -77,4 +77,21 @@ export type Tenant = {
    * kunskapsbas, vilket är exakt det egna tenants finns för att undvika.
    */
   perWorkspaceKey?: boolean;
+  /**
+   * Chattwidgetens PUBLIKA nyckel — det enda som står i kundens snippet.
+   *
+   * Publik per definition (den ligger i kundens HTML), så den ger ingen
+   * åtkomst: den löser bara upp vilken tenants PUBLIKA chatt som visas,
+   * precis som sluggen i /chat/<slug>. Slumpad ändå, så att /embed inte blir
+   * en katalog man kan räkna upp med gissade slugs. Saknas fältet har kunden
+   * ingen widget — /embed svarar 404.
+   */
+  publicKey?: string;
+  /**
+   * Domäner som får bädda in widgeten (CSP frame-ancestors, sätts i
+   * proxy.ts). Skyddet om nyckeln sprids: webbläsaren vägrar rendera
+   * iframen på en domän som inte står här. 'self' läggs alltid till, så
+   * vår egen testsida fungerar. Fullständiga origins med schema.
+   */
+  embedOrigins?: string[];
 };

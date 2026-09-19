@@ -154,6 +154,10 @@ export async function sparaAffarskontext(
   if (!context) {
     return { success: false, error: "Du måste vara inloggad." };
   }
+  const { arLasare, LASROLL_FEL } = await import("@/lib/auth/lasroll");
+  if (arLasare(context)) {
+    return { success: false, error: LASROLL_FEL };
+  }
 
   const produkt = input.product.trim();
   if (!produkt) {

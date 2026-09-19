@@ -2,6 +2,7 @@ import type { Tenant, TenantPalette } from "./types";
 import { livrustning } from "./livrustning";
 import { snajp } from "./snajp";
 import { testkund } from "./testkund";
+import { hittaTenantMedPublicKey } from "./widget";
 
 export type { Tenant, TenantLogo, TenantPalette } from "./types";
 
@@ -67,6 +68,18 @@ export function getTenant(slug: string | null | undefined): Tenant | null {
 export function tenantSlugs(): string[] {
   return Object.keys(tenants);
 }
+
+/**
+ * Widgetens uppslag: publik nyckel → tenant, bundet till registret. Bara
+ * configfils-tenants med ett satt `publicKey` deltar — testarbetsytor och
+ * tenants utan widget ger null, och /embed svarar 404. Funktionerna bor i
+ * widget.ts (ren lövmodul) så att node --test kan köra dem.
+ */
+export function getTenantByPublicKey(publicKey: string | null | undefined): Tenant | null {
+  return hittaTenantMedPublicKey(Object.values(tenants), publicKey);
+}
+
+export { frameAncestors } from "./widget";
 
 /**
  * Plockar kundens slug ur värdnamnet. `livrustning.snajp.se` → `livrustning`.

@@ -38,6 +38,7 @@ from .api import (
     support_config,
     tickets,
     triage,
+    usage,
 )
 from .api.events import install_exception_handler
 from .config import DEFAULT_TENANT_ID, get_settings
@@ -346,6 +347,9 @@ app.include_router(admin_profil.router)
 app.include_router(admin_kunddata.router)
 app.include_router(admin_konvertera.router)
 app.include_router(analytics.router)
+# Journalens tenant-scopade förbrukning (Livrustning-piloten) — samma fråga
+# som /api/admin/usage men med kundens egen nyckel. Se api/usage.py.
+app.include_router(usage.router)
 app.include_router(bookkeeping.router)
 # Kvittohanteraren — produktytan som ersatte bokföringsagenten (2026-09-16).
 # Bokföringsroutern ovan står kvar som maskineri (SIE-exporten m.m.).

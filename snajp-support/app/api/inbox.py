@@ -24,7 +24,7 @@ from ..config import (
 )
 from ..scripts.seed_kb import ensure_tenant_kb
 from .deps import require_tenant
-from .schemas import IngestEmailRequest, SeedMockRequest
+from .schemas import HanteradRequest, IngestEmailRequest, SeedMockRequest
 
 logger = logging.getLogger("snajp-support.inbox")
 
@@ -369,6 +369,34 @@ async def takeover(
     return {"status": "taken_over"}
 
 
+@router.post("/api/inbox/{email_id}/hanterad")
+async def markera_hanterad(
+    request: Request,
+    email_id: str,
+    payload: HanteradRequest | None = None,
+    tenant: dict = Depends(require_tenant),
+) -> dict:
+    """Bocka av (eller ångra avbockningen av) ett mail i inkorgen.
+
+    Skild från `status` med flit (migration 071): status bär pipelinens
+    tillstånd, hanterad_at bär människans. En medarbetare ska kunna bocka av
+    ett eskalerat mail som lösts i telefon utan att röra pipelinespåret.
+    """
+    storage = request.app.state.storage
+    hanterad = payload.hanterad if payload else True
+    updated = await storage.update_email(
+        tenant["tenant_id"], email_id, hanterad=hanterad
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Mailet finns inte.")
+    await storage.log_decision(
+        tenant["tenant_id"], email_id=email_id,
+        event="hanterad" if hanterad else "ohanterad",
+        detail={"by": "human"},
+    )
+    return {"email_id": email_id, "hanterad_at": updated.get("hanterad_at")}
+
+
 @router.post("/api/inbox/{email_id}/processa-om")
 async def processa_om_mail(
     request: Request, email_id: str, tenant: dict = Depends(require_tenant)
@@ -396,10 +424,13 @@ async def processa_om_mail(
     email = await storage.get_email(tenant["tenant_id"], email_id)
     if not email:
         raise HTTPException(status_code=404, detail="Mailet finns inte.")
-    if email.get("status") != "failed":
+    # 'new' hör hit sedan avtalsgrinden och supportbudgeten (070/071-arbetet):
+    # ett mail som stoppades FÖRE triagen ligger kvar som new utan CRM-rader,
+    # så en omkörning därifrån dubblerar lika lite som från failed.
+    if email.get("status") not in ("failed", "new"):
         raise HTTPException(
             status_code=409,
-            detail=f"Mailet är {email.get('status')!r} — bara failed kan processas om.",
+            detail=f"Mailet är {email.get('status')!r} — bara failed eller new kan processas om.",
         )
 
     await storage.log_decision(

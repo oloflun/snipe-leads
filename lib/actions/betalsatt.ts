@@ -66,6 +66,10 @@ export async function sparaBetalsatt(input: Kortuppgifter): Promise<BetalsattRes
   if (!context) {
     return { success: false, error: "Du måste vara inloggad." };
   }
+  const { arLasare, LASROLL_FEL } = await import("@/lib/auth/lasroll");
+  if (arLasare(context)) {
+    return { success: false, error: LASROLL_FEL };
+  }
 
   if ((await aktivVy()).vy !== "admin") {
     return {
@@ -147,6 +151,10 @@ export async function taBortBetalsatt(): Promise<BetalsattResultat> {
   const context = await getWorkspaceContext();
   if (!context) {
     return { success: false, error: "Du måste vara inloggad." };
+  }
+  const { arLasare, LASROLL_FEL } = await import("@/lib/auth/lasroll");
+  if (arLasare(context)) {
+    return { success: false, error: LASROLL_FEL };
   }
 
   if ((await aktivVy()).vy !== "admin") {

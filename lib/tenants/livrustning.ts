@@ -23,6 +23,17 @@ export const livrustning: Tenant = {
   website: "https://livrustning.se",
   supportKeyEnv: "SNAJP_KEY_LIVRUSTNING",
 
+  // Widgetens publika nyckel — står i snippet:et på kundens sajt, ger ingen
+  // åtkomst (se types.ts). Domänlistan är skyddet om den sprids: widgeten
+  // renderas bara i ramar på Livrustnings egna domäner (+ 'self' för vår
+  // testsida, läggs till automatiskt i frameAncestors).
+  publicKey: "pk_livrustning_b16ab0bdad5130c90d8996b8",
+  embedOrigins: [
+    "https://livrustning.se",
+    "https://www.livrustning.se",
+    "https://livrustning.vercel.app"
+  ],
+
   logo: {
     src: "/tenants/livrustning/logo.png",
     width: 264,

@@ -47,6 +47,7 @@ const DEMO_STATE = {
   isPlatformAdmin: false,
   vy: "admin" as const,
   impersonation: null,
+  arLasare: false,
   initialScope: "both" as const,
   isDemo: false,
   // BÅDA produkterna. Det är hela poängen med ytan.

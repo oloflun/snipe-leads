@@ -97,7 +97,11 @@ export function TeamSettings() {
               >
                 <span className="min-w-0 break-words text-[15px]">{member.label}</span>
                 <span className="kicker justify-self-end text-mineral">
-                  {member.role === "owner" ? "Ägare" : "Medlem"}
+                  {member.role === "owner"
+                    ? "Ägare"
+                    : member.role === "viewer"
+                      ? "Läsbehörighet"
+                      : "Medlem"}
                   {member.status === "invited" ? " · inbjuden" : null}
                 </span>
                 {member.status === "invited" ? (
@@ -147,6 +151,9 @@ export function TeamSettings() {
             >
               <option value="member">Medlem</option>
               <option value="owner">Ägare</option>
+              {/* Läsrollen: extern kontakt (t.ex. kundens pilotansvarige) som
+                  följer allt men inte kan ändra något. Spärren är serverside. */}
+              <option value="viewer">Läsbehörighet</option>
             </select>
           </label>
 

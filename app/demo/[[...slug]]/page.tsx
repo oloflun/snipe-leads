@@ -59,6 +59,7 @@ const DEMO_STATE = {
   isPlatformAdmin: false,
   vy: "admin" as const,
   impersonation: null,
+  arLasare: false,
   initialScope: "both" as const,
   isDemo: false,
   products: ["leads", "support", "bookkeeping"] as const,

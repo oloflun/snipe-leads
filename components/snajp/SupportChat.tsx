@@ -189,6 +189,13 @@ export type SupportChatProps = {
   /** Bara i testMode: namnet som visas i chatthuvudet i stället för ett
    * kundvarumärke — det finns inget varumärke i test, bara arbetsytan. */
   workspaceLabel?: string;
+  /**
+   * "kort" (default) är den fristående rutan med fast meddelandehöjd, som på
+   * /chat och marknadssidan. "fyll" fyller förälderns hela höjd — widgetens
+   * iframe (/embed) har en egen, varierande höjd och en fast 420px-lista
+   * hade lämnat ett dött fält under fältet. Ingen funktionsskillnad i övrigt.
+   */
+  layout?: "kort" | "fyll";
 };
 
 /**
@@ -293,7 +300,8 @@ export function SupportChat({
   tenant,
   session,
   testMode = false,
-  workspaceLabel
+  workspaceLabel,
+  layout = "kort"
 }: SupportChatProps = {}) {
   // Demons varumärke och exempelfrågor gäller demon. På en kunds supportsida är
   // "Nordlys Handel" och frågor om felkoder i kassan direkt vilseledande — de
@@ -308,8 +316,17 @@ export function SupportChat({
 
   // The poll loop runs up to 90 iterations; without this it keeps writing state
   // after the component is gone.
+  //
+  // alive ÅTERSTÄLLS i effektkroppen, inte bara i cleanupen: StrictMode i dev
+  // monterar om komponenten (mount → unmount → mount), och utan raden blev
+  // alive false för alltid efter dubbelmonteringen — varje kodväg som
+  // kontrollerar alive.current (offline-omförsöket, jobbpollningen) avbröts
+  // då tyst i dev. Samma mönster som `avbrutet` i Dashboard.tsx.
   const alive = useRef(true);
-  useEffect(() => () => { alive.current = false; }, []);
+  useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; };
+  }, []);
   const { text } = useLocale();
   const [messages, setMessages] = useState<FeedItem[]>([]);
   const [input, setInput] = useState("");
@@ -521,8 +538,13 @@ export function SupportChat({
           // (FastAPI HTTPException), LLM-kvotens som `error` — utan båda
           // fälten visades "Okänt fel" i stället för kvottexten.
           const kvottext = payload.error ?? payload.detail;
+          // 403 hör hit sedan avtalsgrinden (snajp-support/app/avtalsgrind.py):
+          // dess detail är en kundvänd mening, och "försök igen om en stund"
+          // hade varit fel besked för en stängd dörr.
           throw new VisbartFel(
-            response.status === 429 && kvottext ? kvottext : slumpad(FELTEXTER)
+            (response.status === 429 || response.status === 403) && kvottext
+              ? kvottext
+              : slumpad(FELTEXTER)
           );
         }
 
@@ -920,7 +942,12 @@ export function SupportChat({
       : text({ sv: "Online", en: "Online" });
 
   return (
-    <div className="overflow-hidden rounded-card bg-paper">
+    <div
+      className={cn(
+        "overflow-hidden bg-paper",
+        layout === "fyll" ? "flex h-full min-h-0 flex-col" : "rounded-card"
+      )}
+    >
       <div className="flex items-center justify-between gap-4 bg-paper2/70 px-5 py-4">
         <div className="flex items-center gap-3">
           <span className="relative flex h-2.5 w-2.5">
@@ -951,7 +978,13 @@ export function SupportChat({
         </div>
       </div>
 
-      <div ref={scrollRef} className="h-[420px] space-y-4 overflow-y-auto px-5 py-6">
+      <div
+        ref={scrollRef}
+        className={cn(
+          "space-y-4 overflow-y-auto px-5 py-6",
+          layout === "fyll" ? "min-h-0 flex-1" : "h-[420px]"
+        )}
+      >
         {messages.length === 0 ? (
           // m-auto i stället för justify-center: i en scrollcontainer gör
           // justify-center att överskottet ovanför blir oåtkomligt, och vid 320px

@@ -1,0 +1,42 @@
+<!doctype html>
+<!-- Intern testsida för chattwidgeten (docs/WIDGET.md). Bäddar in widgeten
+     på vår egen origin ('self' står alltid i frame-ancestors), så att
+     knappen, panelen, temat och felvägarna går att verifiera utan kundens
+     sajt. Ingen kunddata, ingen marknadsföring — bara en neutral yta. -->
+<html lang="sv">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Widgettest</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+        color: #1f2937;
+        background: #f5f2ec;
+        display: grid;
+        place-items: center;
+      }
+      main { max-width: 44ch; padding: 24px; }
+      h1 { font-size: 1.25rem; }
+      code { background: #e8e4db; padding: 1px 5px; border-radius: 4px; font-size: .875em; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Testsida för chattwidgeten</h1>
+      <p>
+        Den här sidan bäddar in widgeten med Livrustnings publika nyckel.
+        Knappen ska dyka upp nere till höger, ta kundens accentfärg när
+        iframen laddat, och öppna chatten i en panel.
+      </p>
+      <p>
+        Simulera en trasig backend genom att stoppa den — panelen ska då visa
+        chattens offline-mening, aldrig en tom ruta.
+      </p>
+    </main>
+    <script src="/widget.js" data-nyckel="pk_livrustning_b16ab0bdad5130c90d8996b8" async></script>
+  </body>
+</html>

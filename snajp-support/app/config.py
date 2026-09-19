@@ -288,6 +288,13 @@ class Settings(BaseSettings):
     # (lib/admin/halsa.ts). 0 = grinden avstängd (test/dev utan databas har
     # inget att skydda). Sätts per miljö via LEADS_DAILY_TOKEN_BUDGET.
     leads_daily_token_budget: int = 2_000_000
+    # Supportens dygnstak (app/budget.py, Livrustning-piloten): max summa
+    # tokens_in+tokens_out per tenant och rullande 24 timmar för agent_type
+    # 'support'. 0 = avstängd (default — taket sätts per miljö via
+    # SUPPORT_DAILY_TOKEN_BUDGET, aldrig som en kodändring, så befintliga
+    # kunder inte får ett tak de aldrig haft). Per-tenant-override via env
+    # SUPPORT_BUDGET_<SLUG>. Förvarning vid 80 %, se app/budget.py.
+    support_daily_token_budget: int = 0
     # Städaren (app/jobs/stadare.py): leads-jobb i queued/processing och
     # leadslistor i bestalld/byggs som är äldre än så här markeras som
     # misslyckade med ett ärligt besked. Räknat från KÖANDET (liggaren har

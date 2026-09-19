@@ -25,6 +25,7 @@ import { signOut } from "@/lib/actions/auth";
 import { DEMO_NAV, demoSektionsVag } from "@/lib/demo/sektioner";
 import { BytKund } from "@/components/admin/BytKund";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
+import { LasrollBanner } from "@/components/LasrollBanner";
 import { VyVaxel } from "@/components/VyVaxel";
 import { useLocale } from "@/lib/i18n";
 import { produktForInstallningsvag, routesForProducts, tillAdminvag } from "@/lib/routes";
@@ -308,6 +309,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
       {/* Före allt annat i DOM och med högre z-index: bannern ska ligga ÖVER
           det klistrade innehållet, inte försvinna bakom det vid scroll. */}
       <ImpersonationBanner />
+      <LasrollBanner />
 
       <div className="flex min-h-dvh">
         {/* Vänsterrailen — sajtens EN tonala inversion (DESIGN.md: en per

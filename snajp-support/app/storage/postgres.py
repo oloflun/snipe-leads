@@ -25,6 +25,7 @@ from .base import (
     KUNDDATA_FALT,
     LEADS_BUDGET_AGENT_TYPES,
     MEDDELANDE_AVSANDARE,
+    SUPPORT_BUDGET_AGENT_TYPES,
     bk_belopp,
     bk_datum,
     kontrollera_bk_balans,
@@ -1892,6 +1893,58 @@ class PostgresStorage:
             )
         return int(summa or 0)
 
+    async def sum_support_tokens(self, tenant_id: str, *, hours: int = 24) -> int:
+        async with self._scoped(tenant_id) as conn:
+            # Samma fråga som sum_leads_tokens med supportens agenttyper —
+            # inklusive is_test-resonemanget: testkörningar kostar samma
+            # pengar hos leverantören som skarpa.
+            summa = await conn.fetchval(
+                """
+                select coalesce(sum(tokens_in + tokens_out), 0)
+                from agent_runs
+                where tenant_id = $1
+                  and agent_type = any($2::text[])
+                  and created_at > now() - make_interval(hours => $3)
+                """,
+                tenant_id,
+                list(SUPPORT_BUDGET_AGENT_TYPES),
+                hours,
+            )
+        return int(summa or 0)
+
+    async def daily_support_usage(
+        self, tenant_id: str, *, days: int = 30
+    ) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select created_at::date as datum,
+                       count(*) filter (where not is_test) as korningar,
+                       count(*) filter (where is_test) as korningar_test,
+                       coalesce(sum(tokens_in), 0) as tokens_in,
+                       coalesce(sum(tokens_out), 0) as tokens_out
+                from agent_runs
+                where tenant_id = $1
+                  and agent_type = any($2::text[])
+                  and created_at > now() - make_interval(days => $3)
+                group by created_at::date
+                order by datum desc
+                """,
+                tenant_id,
+                list(SUPPORT_BUDGET_AGENT_TYPES),
+                days,
+            )
+        return [
+            {
+                "datum": str(r["datum"]),
+                "korningar": int(r["korningar"]),
+                "korningar_test": int(r["korningar_test"]),
+                "tokens_in": int(r["tokens_in"]),
+                "tokens_out": int(r["tokens_out"]),
+            }
+            for r in records
+        ]
+
     async def weekly_analytics(self, tenant_id: str, *, weeks: int = 8) -> dict[str, Any]:
         # Se protokollet i base.py för varför `coverage` finns.
         #
@@ -2198,6 +2251,7 @@ class PostgresStorage:
         status: str | None = None,
         ticket_id: str | None = None,
         is_test: bool | None = None,
+        hanterad: bool | None = None,
     ) -> dict[str, Any] | None:
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
@@ -2206,6 +2260,11 @@ class PostgresStorage:
                   status = coalesce($3, status),
                   ticket_id = coalesce($4::uuid, ticket_id),
                   is_test = case when $5::boolean is null then is_test else $5 end,
+                  hanterad_at = case
+                    when $6::boolean is null then hanterad_at
+                    when $6 then coalesce(hanterad_at, now())
+                    else null
+                  end,
                   updated_at = now()
                 where tenant_id = $1 and id = $2 returning *
                 """,
@@ -2214,6 +2273,7 @@ class PostgresStorage:
                 status,
                 ticket_id,
                 is_test,
+                hanterad,
             )
         return _row(record)
 
@@ -2259,14 +2319,18 @@ class PostgresStorage:
         reasoning: str,
         kb_sources: list[dict[str, Any]],
         model: str,
+        offertforfragan: bool = False,
+        utbildningsintresse: bool = False,
     ) -> dict[str, Any]:
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
                 """
                 insert into ss_classifications
                   (tenant_id, email_id, category, priority, sentiment, confidence,
-                   escalate, escalation_reason, reasoning, kb_sources, model)
-                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11) returning *
+                   escalate, escalation_reason, reasoning, kb_sources, model,
+                   offertforfragan, utbildningsintresse)
+                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13)
+                returning *
                 """,
                 tenant_id,
                 email_id,
@@ -2279,6 +2343,8 @@ class PostgresStorage:
                 reasoning,
                 json.dumps(kb_sources, ensure_ascii=False),
                 model,
+                offertforfragan,
+                utbildningsintresse,
             )
         return _row(record)
 

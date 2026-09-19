@@ -55,6 +55,13 @@ export type DashboardState = {
    */
   impersonation: { slug: string; namn: string } | null;
   /**
+   * Läsrollen (lib/auth/lasroll.ts): profilen är en `viewer` — extern kontakt
+   * med full läsrätt och noll skrivrätt. UI:t använder fältet för bannern och
+   * för att dölja skrivåtgärder; SPÄRREN sitter serverside (proxyAsTenant och
+   * server actions), inte här.
+   */
+  arLasare: boolean;
+  /**
    * Läget vid första renderingen — Duo, bara Leads eller bara Support.
    *
    * Avgörs på servern ur cookien så att `/settings/*` kan grinda på det, och
@@ -88,6 +95,7 @@ const ANONYMOUS: DashboardState = {
   isPlatformAdmin: false,
   vy: "admin",
   impersonation: null,
+  arLasare: false,
   initialScope: "both"
 };
 
@@ -192,6 +200,7 @@ export async function resolveDashboardState(): Promise<DashboardState> {
       isPlatformAdmin: true,
       vy,
       impersonation: { slug: lage.slug, namn: rader[0]?.name ?? lage.slug },
+      arLasare: false,
       initialScope: await scopeFranCookie(ALL_PRODUCTS)
     };
   }
@@ -214,6 +223,7 @@ export async function resolveDashboardState(): Promise<DashboardState> {
       vy,
       // Demokontot är inte en kund. Ingen gul banner — se lib/vy.ts.
       impersonation: null,
+      arLasare: false,
       initialScope: await scopeFranCookie(ALL_PRODUCTS)
     };
   }
@@ -227,6 +237,7 @@ export async function resolveDashboardState(): Promise<DashboardState> {
     isPlatformAdmin: Boolean(await getPlatformAdmin()),
     vy,
     impersonation: null,
+    arLasare: (context.profile.role ?? "") === "viewer",
     initialScope: await scopeFranCookie(products)
   };
 }

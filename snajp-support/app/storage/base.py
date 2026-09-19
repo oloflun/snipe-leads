@@ -568,6 +568,24 @@ class Storage(Protocol):
         pengar hos leverantören som skarpa körningar."""
         ...
 
+    async def sum_support_tokens(self, tenant_id: str, *, hours: int = 24) -> int:
+        """Supportens motsvarighet till sum_leads_tokens: summan för
+        SUPPORT_BUDGET_AGENT_TYPES de senaste `hours` timmarna — frågan
+        bakom supportbudgeten (app/budget.py). Testkörningar räknas MED,
+        av samma skäl."""
+        ...
+
+    async def daily_support_usage(
+        self, tenant_id: str, *, days: int = 30
+    ) -> list[dict[str, Any]]:
+        """Journalens dagliga serie (GET /api/usage): en rad per dag med
+        körningar för SUPPORT_BUDGET_AGENT_TYPES, nyaste först. Fält per rad:
+        `datum` (ISO-dag), `korningar`, `korningar_test`, `tokens_in`,
+        `tokens_out`. Dagar utan körningar utelämnas — en tom dag är ingen
+        rad, inte en nollrad (till skillnad från weekly_analytics, som är en
+        kurva och behöver sina hål ifyllda)."""
+        ...
+
     # -- Leadslistor (tillägget 'leadlists', migration 060) -----------------
     #
     # Metoderna står i PROTOKOLLET av samma skäl som log_agent_run: en
@@ -838,7 +856,12 @@ class Storage(Protocol):
         status: str | None = None,
         ticket_id: str | None = None,
         is_test: bool | None = None,
-    ) -> dict[str, Any] | None: ...
+        hanterad: bool | None = None,
+    ) -> dict[str, Any] | None:
+        """`hanterad` styr `hanterad_at` (migration 071): True stämplar (om
+        inte redan stämplad), False nollar, None rör inte. Oberoende av
+        `status` — se migrationens motivering."""
+        ...
 
     async def add_attachment(
         self,
@@ -866,6 +889,8 @@ class Storage(Protocol):
         reasoning: str,
         kb_sources: list[dict[str, Any]],
         model: str,
+        offertforfragan: bool = False,
+        utbildningsintresse: bool = False,
     ) -> dict[str, Any]: ...
 
     async def create_draft(
@@ -1268,6 +1293,12 @@ AGENT_RUN_TYPES = (
 #: app/leads/budget.py). Delmängd av AGENT_RUN_TYPES — bor här av samma skäl
 #: som resten: EN lista, speglad av båda lagringarna, aldrig två svar.
 LEADS_BUDGET_AGENT_TYPES = ("leads_research", "leads_outreach", "leads_svar", "leads_followup")
+
+#: Agenttyperna som räknas mot supportbudgeten (sum_support_tokens /
+#: app/budget.py). Bara 'support' i dag: chatten och kanalerna loggar sina
+#: körningar så, medan e-postpipelinens fristående triage-anrop inte loggas
+#: som agent_runs alls — grinden prövas ändå i processorn.
+SUPPORT_BUDGET_AGENT_TYPES = ("support",)
 
 
 # Värdemängden för bk_underlag.status, spegel av check-villkoret i migration

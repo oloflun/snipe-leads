@@ -33,6 +33,10 @@ type Classification = {
   escalation_reason?: string | null;
   reasoning?: string;
   kb_sources: { title: string; similarity: number }[];
+  /** Pilotflaggorna (migration 071): mailet ber om pris/offert respektive
+   * uttrycker utbildningsintresse. Oberoende av facket. */
+  offertforfragan?: boolean;
+  utbildningsintresse?: boolean;
 };
 
 type Draft = {
@@ -56,6 +60,8 @@ type EmailRow = {
   has_image: boolean;
   attachment_count: number;
   is_test?: boolean;
+  /** Manuell avbockning (migration 071). Null/undefined = ohanterad. */
+  hanterad_at?: string | null;
 };
 
 type EmailDetail = EmailRow & {
@@ -174,6 +180,9 @@ export function Dashboard({
   }, [search]);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  /** Klientfilter: visa bara mail utan hanterad-stämpel. Listan är redan
+   * hämtad (max 50 rader), så det behövs ingen serverresa för filtret. */
+  const [baraOhanterade, setBaraOhanterade] = useState(false);
   /** True medan bakgrundsklassningen av nyss hämtade testmail pågår. */
   const [bearbetas, setBearbetas] = useState(false);
   /** Demo-/testkonton visar testmail under Ärenden. null = inte hämtat än. */
@@ -429,6 +438,17 @@ export function Dashboard({
       setSelected(null);
     });
 
+  /** Avbockningen (migration 071) — skild från status: en medarbetare ska
+   * kunna bocka av ett eskalerat mail som lösts i telefon. */
+  const vaxlaHanterad = () =>
+    selected &&
+    act("hanterad", () =>
+      api(`/inbox/${selected.id}/hanterad`, {
+        method: "POST",
+        body: JSON.stringify({ hanterad: !selected.hanterad_at })
+      })
+    );
+
   const totalPending = useMemo(
     () => emails.filter((e) => e.status === "awaiting_approval").length,
     [emails]
@@ -588,6 +608,18 @@ export function Dashboard({
             {label} ({categoryCounts[category] ?? 0})
           </button>
         ))}
+        <button
+          type="button"
+          onClick={() => setBaraOhanterade((v) => !v)}
+          className={cn(
+            "focus-ring rounded-input border px-3 py-2 text-xs font-semibold transition",
+            baraOhanterade
+              ? "border-ochre bg-ochre/10 text-ink"
+              : "bg-paper2/60 text-ink-muted hover:text-ink"
+          )}
+        >
+          Bara ohanterade
+        </button>
         <span className="ml-auto flex gap-2">
           {totalPending > 0 ? <Badge tone="warn">{totalPending} väntar på godkännande</Badge> : null}
           {totalEscalated > 0 ? <Badge tone="danger">{totalEscalated} eskalerade</Badge> : null}
@@ -634,7 +666,7 @@ export function Dashboard({
                och fackkolumnerna står på samma plats oavsett textlängd.
                Raden är fortfarande en hel knapp, markeringen orörd. */
             <div className="divide-y divide-ink/10 overflow-hidden rounded-card bg-paper">
-              {emails.map((email) => {
+              {(baraOhanterade ? emails.filter((e) => !e.hanterad_at) : emails).map((email) => {
                 const meta = STATUS_META[email.status] ?? STATUS_META.new;
                 return (
                   <button
@@ -661,6 +693,16 @@ export function Dashboard({
                       {email.classification ? (
                         <>
                           <Badge tone="neutral">{CATEGORY_LABELS[email.classification.category]}</Badge>
+                          {/* Pilotflaggorna: offert är kundens viktigaste
+                              signal (hela tratten är "kontakta oss för
+                              offert") och får en varm badge; utbildning en
+                              neutral. Oberoende av facket. */}
+                          {email.classification.offertforfragan ? (
+                            <Badge tone="warn">Offert</Badge>
+                          ) : null}
+                          {email.classification.utbildningsintresse ? (
+                            <Badge tone="good">Utbildning</Badge>
+                          ) : null}
                           <ConfidenceBar value={email.classification.confidence} />
                           {email.classification.escalate ? (
                             <ShieldAlert className="h-3.5 w-3.5 text-danger" />
@@ -670,7 +712,13 @@ export function Dashboard({
                         <Badge tone="neutral">{bearbetas ? "Agenten läser…" : "Obearbetat"}</Badge>
                       )}
                     </div>
-                    <div className="col-span-12 flex md:col-span-3 md:justify-end">
+                    <div className="col-span-12 flex items-center gap-2 md:col-span-3 md:justify-end">
+                      {email.hanterad_at ? (
+                        <CheckCircle2
+                          className="h-4 w-4 shrink-0 text-moss"
+                          aria-label="Hanterat"
+                        />
+                      ) : null}
                       <Badge tone={bearbetas && !email.classification ? "neutral" : meta.tone}>
                         {bearbetas && !email.classification ? "Bearbetas" : meta.label}
                       </Badge>
@@ -724,17 +772,34 @@ export function Dashboard({
                 ) : null}
               </div>
 
-              {selected.is_test ? (
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={() => void flyttaTillArenden()}
+                  onClick={() => void vaxlaHanterad()}
                   disabled={busy !== null}
                   className={btnSecondary}
                 >
-                  {busy === "befordra" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                  Flytta till ärenden
+                  {busy === "hanterad" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2
+                      className={cn("h-4 w-4", selected.hanterad_at ? "text-moss" : "")}
+                    />
+                  )}
+                  {selected.hanterad_at ? "Markera som ohanterat" : "Markera som hanterat"}
                 </button>
-              ) : null}
+                {selected.is_test ? (
+                  <button
+                    type="button"
+                    onClick={() => void flyttaTillArenden()}
+                    disabled={busy !== null}
+                    className={btnSecondary}
+                  >
+                    {busy === "befordra" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    Flytta till ärenden
+                  </button>
+                ) : null}
+              </div>
 
               {!selected.classification && bearbetas ? (
                 <p className="text-sm leading-6 text-ink-subtle">Agenten läser mailet och skriver ett utkast…</p>
@@ -744,6 +809,12 @@ export function Dashboard({
                 <div className="rounded-input border border-ink/10 bg-paper2/50 p-4">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge tone="neutral">{CATEGORY_LABELS[selected.classification.category]}</Badge>
+                    {selected.classification.offertforfragan ? (
+                      <Badge tone="warn">Offertförfrågan</Badge>
+                    ) : null}
+                    {selected.classification.utbildningsintresse ? (
+                      <Badge tone="good">Utbildningsintresse</Badge>
+                    ) : null}
                     <ConfidenceBar value={selected.classification.confidence} />
                     {typeof selected.classification.sentiment === "number" ? (
                       <Badge

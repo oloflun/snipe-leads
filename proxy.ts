@@ -1,6 +1,7 @@
 import { getToken } from "next-auth/jwt";
 import { NextResponse, type NextRequest } from "next/server";
 import { isAuthRoute, isProtectedRoute } from "@/lib/routes";
+import { frameAncestors, getTenantByPublicKey } from "@/lib/tenants";
 
 /**
  * Proxyn läser Auth.js sessions-JWT i stället för Supabases cookie.
@@ -12,6 +13,23 @@ import { isAuthRoute, isProtectedRoute } from "@/lib/routes";
  */
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // Widgetens inbäddningssida: domän-allowlisten per tenant sätts som CSP
+  // frame-ancestors HÄR, eftersom en app-router-sida inte kan sätta sina
+  // egna svarshuvuden. Det är webbläsaren som upprätthåller listan — läcker
+  // den publika nyckeln renderas widgeten ändå inte på en främmande domän.
+  // Grenen ligger FÖRE auth-logiken: sidan är publik (kundens kunder), och
+  // en redirect till /login hade varit fel svar. Ingen tenant-data läses —
+  // uppslaget är registret i lib/tenants, ren kod, Edge-säkert.
+  if (pathname.startsWith("/embed/")) {
+    const nyckel = pathname.split("/")[2] ?? "";
+    const response = NextResponse.next({ request });
+    response.headers.set("Content-Security-Policy", frameAncestors(getTenantByPublicKey(nyckel)));
+    // En inbäddningsadress ska aldrig hamna i ett sökindex — samma beslut
+    // som sessionssidorna i /chat.
+    response.headers.set("X-Robots-Tag", "noindex, nofollow");
+    return response;
+  }
 
   // Utan AUTH_SECRET finns ingen session att validera — men det betyder INTE
   // att skyddade routes ska stå öppna. Tvärtom: utan secret är ALLA oinloggade,
@@ -79,6 +97,10 @@ export const config = {
     // /api/admin, som proxyn medvetet INTE täcker (en redirect till /login
     // är fel svarsform för ett API-anrop och skulle dölja 404:an).
     "/admin/:path*",
-    "/login"
+    "/login",
+    // Publik, men behöver per-tenant CSP frame-ancestors (se embed-grenen
+    // överst i proxy()) — en statisk headers()-post i next.config kan inte
+    // variera per nyckel.
+    "/embed/:path*"
   ]
 };

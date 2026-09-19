@@ -30,6 +30,7 @@ from .base import (
     FEEDBACK_VERDICTS,
     LEADS_BUDGET_AGENT_TYPES,
     MEDDELANDE_AVSANDARE,
+    SUPPORT_BUDGET_AGENT_TYPES,
     bk_belopp,
     bk_datum,
     kontrollera_bk_balans,
@@ -1397,10 +1398,41 @@ class MemoryStorage:
     async def sum_leads_tokens(self, tenant_id: str, *, hours: int = 24) -> int:
         # Speglar SQL-frågan i postgres.py: leads-typerna, tidsfönster,
         # tokens_in + tokens_out, testkörningar MEDräknade.
+        return self._sum_tokens(tenant_id, LEADS_BUDGET_AGENT_TYPES, hours)
+
+    async def sum_support_tokens(self, tenant_id: str, *, hours: int = 24) -> int:
+        return self._sum_tokens(tenant_id, SUPPORT_BUDGET_AGENT_TYPES, hours)
+
+    async def daily_support_usage(
+        self, tenant_id: str, *, days: int = 30
+    ) -> list[dict[str, Any]]:
+        # Speglar SQL-frågan i postgres.py: gruppera per dag, nyaste först,
+        # dagar utan körningar utelämnas.
+        granser = datetime.now(timezone.utc) - timedelta(days=days)
+        per_dag: dict[str, dict[str, int]] = {}
+        for r in self.agent_runs.get(tenant_id, []):
+            if r["agent_type"] not in SUPPORT_BUDGET_AGENT_TYPES:
+                continue
+            skapad = datetime.fromisoformat(r["created_at"])
+            if skapad < granser:
+                continue
+            dag = per_dag.setdefault(
+                skapad.date().isoformat(),
+                {"korningar": 0, "korningar_test": 0, "tokens_in": 0, "tokens_out": 0},
+            )
+            dag["korningar_test" if r.get("is_test") else "korningar"] += 1
+            dag["tokens_in"] += int(r.get("tokens_in") or 0)
+            dag["tokens_out"] += int(r.get("tokens_out") or 0)
+        return [
+            {"datum": datum, **varden}
+            for datum, varden in sorted(per_dag.items(), reverse=True)
+        ]
+
+    def _sum_tokens(self, tenant_id: str, agent_types: tuple[str, ...], hours: int) -> int:
         granser = datetime.now(timezone.utc) - timedelta(hours=hours)
         total = 0
         for r in self.agent_runs.get(tenant_id, []):
-            if r["agent_type"] not in LEADS_BUDGET_AGENT_TYPES:
+            if r["agent_type"] not in agent_types:
                 continue
             if datetime.fromisoformat(r["created_at"]) < granser:
                 continue
@@ -1563,6 +1595,7 @@ class MemoryStorage:
             "status": "new",
             "ticket_id": None,
             "is_test": is_test,
+            "hanterad_at": None,
             "created_at": _now(),
             "updated_at": _now(),
         }
@@ -1675,6 +1708,7 @@ class MemoryStorage:
         status: str | None = None,
         ticket_id: str | None = None,
         is_test: bool | None = None,
+        hanterad: bool | None = None,
     ) -> dict[str, Any] | None:
         email = self.emails.get(email_id)
         if not email or email["tenant_id"] != tenant_id:
@@ -1685,6 +1719,12 @@ class MemoryStorage:
             email["ticket_id"] = ticket_id
         if is_test is not None:
             email["is_test"] = is_test
+        if hanterad is not None:
+            # Speglar SQL:en: True stämplar bara en ostämplad rad, False nollar.
+            if hanterad:
+                email["hanterad_at"] = email.get("hanterad_at") or _now()
+            else:
+                email["hanterad_at"] = None
         email["updated_at"] = _now()
         return email
 
@@ -1727,6 +1767,8 @@ class MemoryStorage:
         reasoning: str,
         kb_sources: list[dict[str, Any]],
         model: str,
+        offertforfragan: bool = False,
+        utbildningsintresse: bool = False,
     ) -> dict[str, Any]:
         classification = {
             "id": str(uuid.uuid4()),
@@ -1741,6 +1783,8 @@ class MemoryStorage:
             "reasoning": reasoning,
             "kb_sources": kb_sources,
             "model": model,
+            "offertforfragan": offertforfragan,
+            "utbildningsintresse": utbildningsintresse,
             "created_at": _now(),
         }
         self.classifications[email_id] = classification
