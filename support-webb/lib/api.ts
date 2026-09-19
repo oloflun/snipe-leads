@@ -59,6 +59,8 @@ export type Chatt = {
   customer_name?: string | null;
   subject?: string | null;
   category?: string | null;
+  /** web, email, whatsapp, messenger, slack eller teams (bd snipe-36u). */
+  channel?: string | null;
   is_test?: boolean | null;
   overlamnad_orsak?: string | null;
   orsak_text?: string | null;

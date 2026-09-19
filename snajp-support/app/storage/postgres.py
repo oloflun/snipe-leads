@@ -563,7 +563,7 @@ class PostgresStorage:
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(
                 """
-                select s.*, c.name as customer_name, t.subject, t.category,
+                select s.*, c.name as customer_name, t.subject, t.category, t.channel,
                        coalesce(t.is_test, false) as is_test
                 from ss_chat_state s
                 join ss_customers c on c.id = s.customer_id and c.tenant_id = s.tenant_id

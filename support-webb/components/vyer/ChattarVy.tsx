@@ -21,6 +21,20 @@ import { cn } from "@/lib/utils";
 
 const UPPDATERA_MS = 10000;
 
+/** Kanaler där kunden INTE sitter i webbchatten, så svaret måste skickas dit
+ *  (bd snipe-36u). Webbchatten hämtar själv och får ingen etikett. */
+const KANALNAMN: Record<string, string> = {
+  whatsapp: "WhatsApp",
+  messenger: "Messenger",
+  slack: "Slack",
+  teams: "Teams",
+  email: "E-post"
+};
+
+/** Svaret från POST /api/chattar/{kund}/svar: levererat är null för
+ *  webbchatten, sant när kanalen tog emot svaret, falskt när den inte gjorde det. */
+type Svarsutfall = { levererat?: boolean | null; leveransfel?: string | null };
+
 const AVSANDARE: Record<ChattRad["author"], string> = {
   customer: "Kunden",
   agent: "Agenten",
@@ -50,6 +64,10 @@ function Chattar() {
   const [fel, setFel] = useState<string | null>(null);
   const [pagar, setPagar] = useState<"svar" | "aterlamna" | null>(null);
   const [detaljFel, setDetaljFel] = useState<string | null>(null);
+  // Utfallet av senaste svaret i en extern kanal. Ett svar kan vara sparat
+  // men ändå inte ha nått kunden (WhatsApps 24-timmarsfönster, en borttagen
+  // kanal), och det ska medarbetaren få veta, inte tro att det gick fram.
+  const [leverans, setLeverans] = useState<{ ok: boolean; text: string } | null>(null);
   const utskriftRef = useRef<HTMLDivElement>(null);
   // Det samtal som är valt JUST NU. Ett svar som kommer tillbaka för ett
   // samtal man redan klickat vidare från ska inte skriva över det nya.
@@ -101,6 +119,7 @@ function Chattar() {
     setDetaljFel(null);
     setSvar("");
     setDetalj(null);
+    setLeverans(null);
     setValtId(kund);
   }
 
@@ -108,14 +127,24 @@ function Chattar() {
     if (!valtId || !svar.trim()) return;
     setPagar("svar");
     setFel(null);
+    setLeverans(null);
     try {
-      await readJson(
+      const utfall = await readJson<Svarsutfall>(
         await fetch(`${BAS}/chattar/${valtId}/svar`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text: svar.trim() })
         })
       );
+      const kanal = KANALNAMN[valt?.channel ?? ""] ?? "kundens kanal";
+      if (utfall?.levererat === true) {
+        setLeverans({ ok: true, text: `Skickat till kunden i ${kanal}.` });
+      } else if (utfall?.levererat === false) {
+        setLeverans({
+          ok: false,
+          text: `Svaret är sparat men nådde inte kunden i ${kanal}. ${utfall.leveransfel ?? ""}`.trim()
+        });
+      }
       setSvar("");
       await Promise.all([hamtaDetalj(valtId), hamtaLista()]);
     } catch (orsak) {
@@ -185,6 +214,7 @@ function Chattar() {
                     </span>
                     <span className="flex shrink-0 gap-1.5">
                       {rad.is_test ? <Badge>Test</Badge> : null}
+                      {KANALNAMN[rad.channel ?? ""] ? <Badge>{KANALNAMN[rad.channel ?? ""]}</Badge> : null}
                       <Badge tone={rad.aktiv ? "warn" : "neutral"}>
                         {rad.aktiv ? "Väntar" : "Vilande"}
                       </Badge>
@@ -230,6 +260,11 @@ function Chattar() {
                 {detalj.samtal.orsak_text ? (
                   <p className="mt-0.5 text-[0.875rem] text-ink/55">
                     Överlämnat: {detalj.samtal.orsak_text}
+                  </p>
+                ) : null}
+                {KANALNAMN[valt?.channel ?? ""] ? (
+                  <p className="mt-0.5 text-[0.875rem] text-ink/55">
+                    Kunden skriver i {KANALNAMN[valt?.channel ?? ""]}. Ditt svar skickas dit.
                   </p>
                 ) : null}
                 {detalj.samtal.aktiv === false && detalj.samtal.lage === "overlamnad" ? (
@@ -280,7 +315,11 @@ function Chattar() {
                   aria-describedby="medarbetarsvar-tips"
                   rows={4}
                   maxLength={4000}
-                  placeholder="Svaret visas i kundens chattfönster."
+                  placeholder={
+                    KANALNAMN[valt?.channel ?? ""]
+                      ? `Svaret skickas till kunden i ${KANALNAMN[valt?.channel ?? ""]}.`
+                      : "Svaret visas i kundens chattfönster."
+                  }
                   className="focus-ring mt-2 w-full rounded-input border border-ink/15 bg-paper px-3 py-2.5 text-[16px] leading-6"
                 />
                 <p id="medarbetarsvar-tips" className="mt-1 text-[0.8125rem] text-ink/45">
@@ -315,6 +354,14 @@ function Chattar() {
                     Lämna tillbaka till agenten
                   </button>
                 </div>
+                {leverans ? (
+                  <p
+                    role={leverans.ok ? "status" : "alert"}
+                    className={cn("mt-3 max-w-[62ch] text-[0.875rem]", leverans.ok ? "text-moss" : "text-danger")}
+                  >
+                    {leverans.text}
+                  </p>
+                ) : null}
               </article>
             )}
           </section>

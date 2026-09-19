@@ -412,6 +412,55 @@ async def test_medarbetarsvar_levereras_i_kundens_kanal(svara):
 
 
 @pytest.mark.anyio
+async def test_chattar_visar_kanalen_och_redovisar_leveransen(svara):
+    """Medarbetarens väg genom API:t, som portalens Chattar-vy går den.
+
+    Listan ska säga VAR kunden sitter, och svaret ska säga om det nådde fram:
+    ett svar efter WhatsApps 24-timmarsfönster är sparat men inte levererat,
+    och det får medarbetaren inte tro motsatsen om.
+    """
+    from app.api import chattar
+
+    app = FastAPI()
+    app.include_router(chattar.router)
+    storage = app.state.storage = MemoryStorage()
+    anslutning = await lagring.skapa_anslutning(
+        storage, TENANT, kanal="whatsapp", namn="", extern_id="PNID1", konfig={}, hemligheter=META_HEMLIGHETER
+    )
+    kund = await storage.find_or_create_customer(TENANT, email=None, phone="+46701234567", name="Kim")
+    await lagring.spara_kontakt(
+        storage, TENANT, anslutning_id=anslutning["id"], customer_id=kund["id"],
+        extern_anvandare="46701234567", adress={"wa_id": "46701234567"}, visningsnamn="Kim",
+    )
+    arende = await storage.create_ticket(
+        TENANT, customer_id=kund["id"], subject="Var är min order?", category="leverans", channel="whatsapp"
+    )
+    await storage.save_message(
+        TENANT, conversation_id=arende["conversation_id"], direction="inbound",
+        content="Jag vill prata med en människa", sentiment=None, has_image=False,
+    )
+    await storage.save_chat_state(
+        TENANT, kund["id"], lage="overlamnad", misslyckade_i_rad=0, erbjod_manniska=False,
+        overlamnad_orsak="kund_bad_om_manniska", overlamnad_ticket_id=arende["id"],
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test", headers=NYCKEL) as klient:
+        lista = (await klient.get("/api/chattar")).json()["chattar"]
+        assert lista[0]["channel"] == "whatsapp"
+
+        meta = svara(lambda r: httpx.Response(200, json={"messages": [{"id": "wamid.ut"}]}))
+        ok = await klient.post(f"/api/chattar/{kund['id']}/svar", json={"text": "Hej Kim, Sara här."})
+        assert ok.status_code == 201
+        assert ok.json()["levererat"] is True and ok.json()["leveransfel"] is None
+        assert json.loads(meta[0].content)["text"]["body"] == "Hej Kim, Sara här."
+
+        svara(lambda r: httpx.Response(400, json={"error": {"code": 131047, "message": "Re-engagement message"}}))
+        sent = await klient.post(f"/api/chattar/{kund['id']}/svar", json={"text": "Är du kvar?"})
+        assert sent.status_code == 201  # sparat ändå
+        assert sent.json()["levererat"] is False and "24 timmar" in sent.json()["leveransfel"]
+
+
+@pytest.mark.anyio
 async def test_whatsapps_24_timmarsfonster_blir_ett_begripligt_fel(svara):
     storage = MemoryStorage()
     anslutning = await lagring.skapa_anslutning(

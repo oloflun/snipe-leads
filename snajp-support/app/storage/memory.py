@@ -505,6 +505,9 @@ class MemoryStorage:
                     "customer_name": kund.get("name"),
                     "subject": arende.get("subject"),
                     "category": arende.get("category"),
+                    # Kanalerna (bd snipe-36u): Chattar-vyn visar var kunden
+                    # sitter, och att ett svar måste SKICKAS dit.
+                    "channel": arende.get("channel"),
                     "is_test": bool(arende.get("is_test")),
                 }
             )
