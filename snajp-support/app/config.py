@@ -217,16 +217,26 @@ class Settings(BaseSettings):
     # den globala defaulten för att "lösa" leads — testa och besluta separat.
     thinking_mode: str = "disabled"
 
-    # Geminis tänkande (2026-09-19). `thinking_mode` ovan når bara DeepSeek —
-    # gemini-2.5-flash tänker som standard, och tänktokens debiteras som
-    # utdata utan att synas i completion_tokens (de ligger i
-    # completion_tokens_details.reasoning_tokens, se step_runner). Tomt =
-    # leverantörens default, alltså beteendet före 2026-09-19. Satt ("none",
-    # "low", "medium", "high") skickas den som `reasoning_effort` på varje steg
-    # UTOM de som deklarerat thinking="enabled" (eskaleringsbedömningen), som
-    # behåller sitt tänkande. INERT tills en miljö sätter den: mät
-    # step_log.reasoning_tokens och kör scripts/kor_evals.py före och efter.
-    gemini_reasoning_effort: str = ""
+    # Geminis tänkande: AV som standard sedan 2026-09-19. `thinking_mode` ovan
+    # når bara DeepSeek — gemini-2.5-flash tänker annars på varje anrop, och
+    # tänktokens debiteras som utdata utan att synas i completion_tokens.
+    #
+    # Beslutsunderlag (Vertex, gemini-2.5-flash, 2026-09-19):
+    # - I drift (development, 3 veckor) tänkte stegen 5–13× sin synliga
+    #   utdata: triage 986, research 748, utkast 1 459, humaniserare 1 876.
+    # - Supportens golden-evals, 2×7 fall: MED 12/14 godkända, 107 351
+    #   tänktokens, 51 s/chatt, ~0,54 kr/chatt. UTAN 14/14, 10 723 (bara
+    #   eskaleringssteget), 15 s/chatt, ~0,31 kr/chatt.
+    # - Iris V2 på de 5 benchmarkfixturerna: samma kvalificering, kontakt och
+    #   faktagrind; blind parvis dom i båda ordningarna 1–1, två oavgjorda;
+    #   ~0,53 -> ~0,26 kr/lead, 292 -> 66 s.
+    #
+    # "none" = tankebudget 0 (se llm.gemini_tank_kwargs — Vertex avvisar
+    # reasoning_effort="none"). Steg med thinking="enabled" behåller sitt
+    # tänkande: eskaleringsbedömningen och kvittoavläsningen. Tom sträng ger
+    # leverantörens default; "minimal"/"low"/"medium"/"high" går som
+    # reasoning_effort.
+    gemini_reasoning_effort: str = "none"
 
     # Fas B research (G4). Tomt => research-verktyget vägrar med ett tydligt
     # fel i stället för att krascha eller tyst hoppa över skrapningen.

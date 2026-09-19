@@ -60,7 +60,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from ..agent.llm import get_llm_client
+from ..agent.llm import get_llm_client, tankande_kwargs
 from ..config import get_settings
 from ..leads.untrusted_content import wrap_untrusted_content
 from ..storage.base import Storage
@@ -351,6 +351,7 @@ async def uppdatera_arbetsminne(
             response_format={"type": "json_object"},
             temperature=0.0,
             messages=[{"role": "user", "content": prompt}],
+            **tankande_kwargs(),
         )
         data = json.loads(response.choices[0].message.content or "{}")
         summering = str(data.get("sammanfattning") or "").strip()[:MAX_SUMMERING_TECKEN]

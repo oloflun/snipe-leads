@@ -113,9 +113,31 @@ async def test_gemini_utan_flagga_skickar_inget(monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_gemini_med_flagga_skickar_reasoning_effort(monkeypatch):
+async def test_gemini_none_stanger_av_med_tankebudget_noll(monkeypatch):
+    """Vertex avvisar reasoning_effort="none" (400, uppmätt 2026-09-19) och
+    "minimal" stänger inte av — av betyder thinking_budget 0 via extra_body."""
     step = PlaybookStep(skill="cs:ticket-triage", requires=("context_pack",))
-    assert await _run_gemini(step, monkeypatch, "none") == {"reasoning_effort": "none"}
+    kwargs = await _run_gemini(step, monkeypatch, "none")
+    assert "reasoning_effort" not in kwargs
+    assert kwargs["extra_body"]["extra_body"]["google"]["thinking_config"] == {"thinking_budget": 0}
+
+
+@pytest.mark.anyio
+async def test_gemini_ovriga_nivaer_skickas_som_reasoning_effort(monkeypatch):
+    step = PlaybookStep(skill="cs:ticket-triage", requires=("context_pack",))
+    assert await _run_gemini(step, monkeypatch, "low") == {"reasoning_effort": "low"}
+
+
+def test_smaanropen_foljer_flaggan_bara_pa_gemini(monkeypatch):
+    from app.agent.llm import TANKANDE_AV, tankande_kwargs
+
+    monkeypatch.setenv("GEMINI_REASONING_EFFORT", "none")
+    get_settings.cache_clear()
+    assert tankande_kwargs() == {}  # autouse-fixturen kör DeepSeek
+    monkeypatch.setenv("LLM_PROVIDER", "gemini")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key-not-a-real-credential-000000")
+    get_settings.cache_clear()
+    assert tankande_kwargs() == TANKANDE_AV
 
 
 @pytest.mark.anyio

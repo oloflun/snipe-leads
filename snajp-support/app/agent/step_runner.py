@@ -30,7 +30,7 @@ from ..agentcore.overlays import load_overlay
 from ..agentcore.packs import PlaybookStep, RunLedger, check_output_contract, check_preconditions
 from ..config import get_settings
 from ..kvotfel import ar_kreditslut
-from .llm import get_llm_client
+from .llm import gemini_tank_kwargs, get_llm_client
 
 _OVERLAY_OPEN = """## TILLÄGGSINSTRUKTIONER (Snajp-overlay: {name})
 Dessa kommer FRÅN OSS, inte från skillen ovan, och gäller ÖVER den där de
@@ -62,21 +62,8 @@ def thinking_kwargs(mode: str) -> dict[str, Any]:
     return {}
 
 
-GEMINI_REASONING_EFFORT = ("none", "low", "medium", "high")
-
-
-def gemini_tank_kwargs(mode: str | None, effort: str) -> dict[str, Any]:
-    """Geminis tänkande via OpenAI-kompatibilitetens `reasoning_effort`.
-
-    Tomt `effort` = ingenting skickas (leverantörens default). Ett steg som
-    uttryckligen vill tänka (thinking="enabled") får alltid leverantörens
-    default — eskaleringsbedömningen ska inte strypas av en kostnadsflagga.
-    Ett okänt värde skickas inte: ett felstavat env-värde ska inte ge 400 på
-    varje agentanrop.
-    """
-    if not effort or mode == "enabled" or effort not in GEMINI_REASONING_EFFORT:
-        return {}
-    return {"reasoning_effort": effort}
+# Geminis motsvarighet bor i llm.py (gemini_tank_kwargs), eftersom även
+# småanropen utanför stegmotorn använder den.
 
 
 @dataclass

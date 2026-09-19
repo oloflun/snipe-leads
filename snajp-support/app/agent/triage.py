@@ -9,7 +9,7 @@ from typing import Any
 
 from ..config import CATEGORIES, CATEGORY_LABELS, get_settings
 from ..moderation.maskering import maskera_personnummer
-from .llm import get_llm_client
+from .llm import get_llm_client, tankande_kwargs
 
 _TRIAGE_PROMPT = """Du är Snajp-Supports triagemotor. Klassificera kundmailet och
 skriv ett svenskt svarsutkast. Om bilder bifogats: beskriv kort vad du ser i
@@ -74,6 +74,7 @@ async def triage_email_llm(
         response_format={"type": "json_object"},
         temperature=0.3,
         messages=[{"role": "user", "content": content}],
+        **tankande_kwargs(),
     )
     data = json.loads(response.choices[0].message.content or "{}")
     category = data.get("category", "ovrigt")
