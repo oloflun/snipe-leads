@@ -9,10 +9,10 @@ money_weight: 4
 goal: "AI outbound SaaS: Snipra (leads-dashboard) + Snajp (support-agent) i ett repo, multi-tenant Next.js/Supabase"
 next_milestone: "main uppdaterad till samma kod som development, och Livrustning-tenantens garantiperiod bekraftad av kund"
 milestone_blockers:
-  - "main uppdaterad via PR #12 och #13 (2026-09-15); PR #14 (leads-skrapning) vantar pa Antons review"
+  - "PR #22 (support-eskalering, sprak, integrationer/kanaler, Iris-menyn) vantar bara pa Antons merge; migrationer och INTEGRATION_NYCKEL klara i main (2026-09-19)"
   - "IMAP_PASSWORD_LIVRUSTNING saknas pa Railway api (bade main och development)"
   - "Vantar pa kundens bekraftelse av garantiperioden"
-updated: 2026-09-15
+updated: 2026-09-19
 ---
 
 # Snipra / Snajp
@@ -133,6 +133,45 @@ separate thing entirely — user-message position only, never system. See
 | `scripts/gemini_web_konfig.py` | Copies `GEMINI_API_KEY` from the local env file onto Railway's `web` service (Fas 1.2) so Email-studio stops simulating for logged-in customers. Anton runs it — same classifier gate. |
 | `plans/2026-08-29-redis-agentarkitektur.md` | The Redis architecture: deploy-surviving runs (Streams), tenant-scoped semantic answer cache, rolling conversation memory — plus the verdicts on Redis Iris (Agent Memory, LangCache, Context Retriever). |
 | `docs/REDIS_IRIS_EVAL.md` | The adoption gates and sandbox protocol for the managed Iris services — synthetic data only, eight gates before any production use. |
+
+## Support-agentens eskalering och överlämning (2026-09-19)
+
+Byggt efter en Ebbot-research (bd `snipe-1fl`, `snipe-xtr`). Agenten försöker
+alltid själv först. När den lämnar över sker det i samma chattfönster, och
+hela samtalet följer med till medarbetaren.
+
+| Läge | När | Vad kunden får |
+|---|---|---|
+| besvara | kunskapsbasen bär svaret | svar ur kunskapsbasen plus ett nästa steg |
+| fraga | frågan är vag och taket inte nått | en kort motfråga |
+| avgransa | frågan ligger utanför ämnet (kundens val "erbjud") | "det kan jag inte hjälpa till med" plus ett erbjudande om en människa |
+| overlamna | kunden ber om en människa, utanför ämnet ("eskalera"), en tydlig fråga saknar svar i kunskapsbasen, taket för misslyckade försök är nått, eller ett känsligt ärende | ärligt besked och överlämning HÄR i chatten |
+
+Efter en överlämning (`ss_chat_state.lage = 'overlamnad'`) körs ingen
+språkmodell. Kunden får en kvittens tills en medarbetare svarat, och sedan
+ingenting från agenten. Överlämningen gäller i 24 timmar från senaste livstecken.
+
+**Dokumentkarta**
+- `snajp-support/app/agent/support_agent.py` — beslutslogiken, överlämningsvägen, faktagrinden, språket
+- `snajp-support/app/agent/support_regler.py` — regler per kund (`agent_configs.settings`, agent_type support), orsakskoder, igenkänning av en begäran om människa
+- `snajp-support/app/agent/support_faktagrind.py` — faktakontroll mot kunskapsbasen (tillåtande/försiktig/strikt), jämför talets storlek och normaliserar klockslag och tusentalskomma
+- `snajp-support/app/agent/support_texter.py` — fasta repliker på svenska och engelska
+- `snajp-support/app/agent/overlamning.py` + `app/api/chattar.py` — medarbetarens sida (samtalsutskrift, svar, återlämning)
+- `snajp-support/app/api/chat.py` `POST /api/chat/samtal` — chattfönstrets hämtning (anonym, bara `@session.snajp.se`)
+- `snajp-support/app/api/support_config.py` — `GET/PUT /api/support/config`
+- `components/snajp/SupportChat.tsx` — pollning av medarbetarens svar, återställning vid omladdning
+- `support-webb/components/vyer/ChattarVy.tsx` — medarbetarens vy; `components/settings/SupportEskalering.tsx` — kundens inställningar
+- `supabase/migrations/066_support_samtalslage.sql` — `ss_chat_state`, `ss_messages.author`
+- `snajp-support/lokal_support.py` — hela flödet lokalt med en fejkmodell (port 8000 och 8010, samma process)
+
+**Fällor**
+- INV-ESC-001: en begäran om en människa lämnar alltid över, och ett överlämnat samtal får aldrig ett AI-svar.
+- Triagens fält (`ber_om_manniska`, `inom_amnesomradet`, `missforstadd`, `sprak`, `sokfraga_sv`) och researchstegets fält (`kb_supports_answer`, `behover_fortydligande`) bär besluten. Ta inte bort dem vid tokenoptimering.
+- `support_agent.py` och `main.py` har CRLF-blobbar i indexet. Bevara CRLF.
+- Lokalt blockerar Windows programkontroll asyncpg-DLL:en. Kör INV-STORE-001 med asyncpg stubbat.
+- Kundtester mot dev delar minutkvoten mot AI-leverantören. Kör aldrig två sessioners tester samtidigt.
+
+**Verifiera:** `pytest tests/agent/test_support_eskalering.py tests/agent/test_support_sprak.py tests/agent/test_support_kundtest_fynd.py tests/api/test_chattar_api.py`, samt ett kundtest på `/support` på dev.
 
 ## Invariants and gotchas
 
