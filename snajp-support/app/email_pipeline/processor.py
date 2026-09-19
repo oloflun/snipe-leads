@@ -14,10 +14,13 @@ Varje steg loggas i ss_decision_log med motivering.
 import logging
 from typing import Any
 
+from ..avtalsgrind import avtal_saknas
+from ..budget import SupportBudgetExceededError, kontrollera_support_budget
 from ..config import CATEGORY_LABELS, get_settings
 from ..simulation.sim_agent import article_in_category
 from ..simulation.sim_triage import classify
 from ..storage.base import Storage
+from .flaggor import ar_offertforfragan, ar_utbildningsintresse
 
 logger = logging.getLogger("snajp-support.processor")
 
@@ -141,6 +144,30 @@ async def process_email(
     """Kör hela flödet för ett sparat mail. Kastar aldrig — fel ger status failed."""
     settings = get_settings()
     email_id = email["id"]
+
+    # Avtalsgrinden FÖRE allt annat: ingen kundtext får gå till modell-
+    # leverantören för en tenant utan registrerat avtal (migration 070).
+    # Mejlet är redan sparat och listbart — det som skjuts upp är LLM-
+    # bearbetningen. Status lämnas som 'new' så att processa-om (och nästa
+    # synk av nya mejl) tar det när avtalet är registrerat.
+    if await avtal_saknas(storage, tenant_id):
+        await storage.log_decision(
+            tenant_id, email_id=email_id, event="vantar_avtal",
+            detail={"note": "Avtalet är inte registrerat — mejlet väntar oprocessat."},
+        )
+        return {"action": "vantar_avtal"}
+
+    # Supportbudgeten (app/budget.py): samma tak som chatten. Ett stoppat
+    # mejl blir kvar som 'new' och kan processas om när fönstret rullat.
+    try:
+        await kontrollera_support_budget(storage, tenant_id)
+    except SupportBudgetExceededError:
+        await storage.log_decision(
+            tenant_id, email_id=email_id, event="budget",
+            detail={"note": "Dygnsbudgeten för support är förbrukad — mejlet väntar oprocessat."},
+        )
+        return {"action": "budget"}
+
     try:
         await storage.update_email(tenant_id, email_id, status="processing")
 
@@ -155,6 +182,11 @@ async def process_email(
             {"title": a["title"], "similarity": a["similarity"]} for a in articles
         ]
 
+        # Pilotflaggorna (migration 071): vokabulär ELLER modellbedömning,
+        # se email_pipeline/flaggor.py för varför båda vägarna finns.
+        offert = ar_offertforfragan(email["subject"], email["body_text"], triage)
+        utbildning = ar_utbildningsintresse(email["subject"], email["body_text"], triage)
+
         await storage.save_classification(
             tenant_id,
             email_id=email_id,
@@ -167,6 +199,8 @@ async def process_email(
             reasoning=triage.get("reasoning", ""),
             kb_sources=kb_sources,
             model=triage.get("model", "simulation"),
+            offertforfragan=offert,
+            utbildningsintresse=utbildning,
         )
         await storage.log_decision(
             tenant_id,
@@ -177,6 +211,8 @@ async def process_email(
                 "confidence": triage.get("confidence"),
                 "sentiment": triage.get("sentiment"),
                 "reasoning": triage.get("reasoning", ""),
+                "offertforfragan": offert,
+                "utbildningsintresse": utbildning,
             },
         )
 

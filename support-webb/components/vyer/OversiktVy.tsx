@@ -49,10 +49,7 @@ export function OversiktVy() {
 
   return (
     <div className="space-y-10">
-      <PageHeader
-        rubrik="Översikt"
-        beskrivning="Kundmejlen agenten tagit emot, sorterat och skrivit utkast till. Utkast skickas aldrig utan ditt godkännande — sändknappen är din."
-      />
+      <PageHeader rubrik="Översikt" />
 
       {fel ? (
         <p role="alert" className="max-w-[70ch] text-[0.875rem] text-danger">
@@ -61,7 +58,7 @@ export function OversiktVy() {
       ) : null}
 
       <section aria-label="Inkorgens nyckeltal">
-        <dl className="grid gap-y-6 border-y border-ink/15 py-6 sm:grid-cols-3 lg:divide-x lg:divide-ink/12">
+        <dl className="grid gap-y-6 border-b border-ink/15 pb-6 sm:grid-cols-3 lg:divide-x lg:divide-ink/12">
           {nyckeltal.map(([etikett, varde, lyft], i) => (
             <div key={etikett} className={cn("min-w-0", i > 0 && "lg:pl-8", i < 2 && "lg:pr-8")}>
               <dt className="text-[0.8125rem] font-medium text-ink/55">{etikett}</dt>
@@ -92,10 +89,6 @@ export function OversiktVy() {
         ) : senaste.length === 0 ? (
           <div className="mt-4 border-y border-ink/15 py-10 text-center">
             <p className="font-display text-[1.375rem] text-ink">Inkorgen är tom.</p>
-            <p className="mx-auto mt-2 max-w-[52ch] text-[0.9375rem] leading-6 text-ink/60">
-              När kundmejl kommer in sorterar agenten dem, föreslår svar ur er
-              kunskapsbas och lägger utkasten här för ditt godkännande.
-            </p>
           </div>
         ) : (
           <div className="mt-4 divide-y divide-ink/12 border-y border-ink/15">

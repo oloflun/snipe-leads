@@ -663,6 +663,28 @@ test_uppdateringsprompten_bar_kontamineringssparren — regressionstest på
 KONTAMINERINGSSPARR:s exakta formulering)
 Införd: 2026-08-29 · Upphävs endast genom waiver
 
+### INV-ESC-001 — En kund som ber om en människa får en, och ett överlämnat samtal får aldrig ett AI-svar
+Överlämningen avgörs i KOD i `app/agent/support_agent.run_support_agent`, med
+en orsakskod ur `app/agent/support_regler.ORSAKER`. En uttrycklig begäran
+(`support_regler.ber_om_manniska`, triagens `ber_om_manniska`, eller ett ja på
+agentens eget erbjudande) lämnar över utan att eskaleringssteget ens körs —
+modellen kan inte rösta nej. Därefter äger en människa samtalet
+(`ss_chat_state.lage = 'overlamnad'`, migration 066): kundens nästa
+meddelanden hamnar i DET överlämnade ärendets tråd via
+`_svara_under_overlamning`, som inte gör ett enda LLM-anrop, och agenten
+tiger helt när en medarbetare svarat. Samtalet går tillbaka till agenten
+bara när medarbetaren lämnar tillbaka det (`overlamning.aterlamna`) eller
+efter `OVERLAMNING_GILTIG_TIMMAR` utan livstecken. Medarbetarens svar sparas
+med `author='human'` och når kundens eget chattfönster (`POST /api/chat/samtal`,
+som bara läser tillbaka sessionsidentiteter).
+Varför: Ebbot-researchen 2026-09-18 (bd snipe-1fl). Före ändringen kunde
+eskaleringssteget rösta nej till "jag vill prata med en människa", och ett
+överlämnat samtal fick ett nytt AI-svar på nästa meddelande — ett ärende som
+en människa redan ägde besvarades av en bot i hennes namn, och kunden fick
+börja om i en annan kanal.
+Test: snajp-support/tests/agent/test_support_eskalering.py
+Införd: 2026-09-18 · Upphävs endast genom waiver
+
 ## Roadmap
 
 Ids this plan will introduce, in the order `Genomförandeordning` builds them. Not yet enforced by CI.

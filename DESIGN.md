@@ -74,16 +74,20 @@ unfinished.
 ## Theme
 
 ```css
---ink      0.20  0.018 252   /* primary text, primary fill */
---ink2     0.28  0.018 252   /* secondary text on paper */
---paper    0.965 0.008 88    /* page ground — warm, never #fff */
---paper2   0.93  0.012 88    /* raised plane, always WITH a hairline */
---mineral  0.55  0.015 252   /* muted text */
---seal     0.42  0.022 252   /* deep plane on dark sections */
---ochre    0.74  0.16  64    /* the only accent */
---moss     0.42  0.071 142   /* success */
---danger   0.57  0.18  27    /* error, escalation */
---focus    = ochre
+--ink         0.20  0.018 252   /* primary text, primary fill */
+--ink2        0.28  0.018 252   /* secondary text on paper */
+--paper       0.965 0.008 88    /* page ground — warm, never #fff */
+--paper2      0.93  0.012 88    /* raised plane, always WITH a hairline */
+--mineral     0.50  0.015 252   /* muted text (kicker colour) — 0.55 until 2026-09-19 */
+--ink-muted   0.42  0.018 252   /* secondary text on paper, muted role */
+--ink-subtle  0.48  0.018 252   /* tertiary/meta text on paper, muted role */
+--paper-muted 0.72  0.008 88    /* secondary text on the dark ink rail */
+--paper-subtle 0.62 0.008 88    /* tertiary/meta text on the dark ink rail */
+--seal        0.42  0.022 252   /* deep plane on dark sections */
+--ochre       0.74  0.16  64    /* the only accent */
+--moss        0.42  0.071 142   /* success */
+--danger      0.57  0.18  27    /* error, escalation */
+--focus       = ochre
 ```
 
 **Accent discipline.** Ochre on: the primary CTA, the current selection, the focus ring, state
@@ -94,6 +98,50 @@ Driving it to zero is as wrong as flooding it.
 luminance for 3:1. An ochre form at `oklch(0.80)` is nowhere near it, and no scrim rescues text laid
 over it. This was found the hard way: measure by hiding the text and sampling the background, never
 by sampling a screenshot that still has glyphs in it.
+
+**Muted text uses tokens, never `ink/xx` or `paper/xx` opacity.** An axe scan of the production demo
+(2026-09-19) found 181 `color-contrast` nodes failing WCAG 2.2 AA across 8 routes, all traced to two
+things: the ad-hoc opacity trail on `--ink`/`--paper` (20 distinct steps in use, `text-ink/20`
+through `text-ink/88`, computed contrast ranging 1.7:1 to 12.6:1 with no relationship to role) and
+`--mineral` at `L 0.55`, which measured 4.38:1 on `--paper` — under the 4.5:1 floor. Opacity steps
+don't carry contrast guarantees: `oklch(var(--ink) / 0.45)` blends toward the background it sits on,
+so the same class passes on `--ink` and fails on `--paper2`, and nobody can tell which without
+measuring. The fix is four named, solid (non-alpha) tokens plus one adjusted existing token, each
+picked to clear AA on every ground it is used on, with margin for the second-worst ground measured
+(`--paper2` for the light tokens):
+
+| Token | Value | On `--paper` | On `--paper2` | On `--ink` (rail) | Replaced |
+|---|---|---|---|---|---|
+| `--mineral` | `0.50 0.015 252` | 5.41:1 | 4.88:1 | — | itself (was `0.55`, 4.38:1 — failed) |
+| `--ink-muted` | `0.42 0.018 252` | 7.63:1 | 6.87:1 | — | `text-ink/55`, `/60` |
+| `--ink-subtle` | `0.48 0.018 252` | 5.90:1 | 5.31:1 | — | `text-ink/20`…`/50` |
+| `--paper-muted` | `0.72 0.008 88` | — | — | 7.29:1 | `text-paper/55`…`/85` |
+| `--paper-subtle` | `0.62 0.008 88` | — | — | 4.97:1 | `text-paper/25`…`/50` |
+
+Everything above `ink/55` and `paper/50` (`ink/60` through `/88`, `paper/55` through `/85`) already
+cleared 4.5:1 on both grounds it is measured against, so those steps were folded into
+`ink-muted`/`paper-muted` too, for consistency — one vocabulary, not two — not because they were
+failing. Two steps per ground hold the hierarchy DESIGN.md requires (2-3 distinguishable muted
+levels); twenty did not add a third visible level, they added noise. `--ink` (full), `--ink2` and
+`--ochre`/`--warning`/`--danger`/`--moss` are unchanged — they already passed or are governed
+separately (`--warning` for text-on-accent, see above). Dark mode carries matching pairs with the
+ink/paper roles swapped, same method, same margins (see `app/globals.css` `:root[data-theme="dark"]`).
+
+Tailwind exposes all four as color utilities the normal way: `text-ink-muted`, `text-ink-subtle`,
+`text-paper-muted`, `text-paper-subtle` (`tailwind.config.ts`). Write muted or meta text with one of
+these, or with `text-mineral` for kickers — never with `text-ink/NN` or `text-paper/NN` again. The
+`placeholder:` opacity variants are unaffected: placeholder text is out of AA's normal-text scope
+and keeps the old opacity trail.
+
+The same scan also caught bare `text-ochre` used as running text (badges, kickers, marked words,
+inline links): `--ochre` measures 2.16:1 on paper, nowhere near 3:1 let alone 4.5:1. `--warning`
+already existed as the text-safe ochre variant (see above) and is now used everywhere `text-ochre`
+was doing double duty as body text, moved from `L 0.54` to `L 0.50` so it also clears the
+ochre-tinted demo banner background (`bg-ochre/10`/`/12`), which measured 4.33:1 at the old value.
+`text-ochre` itself is untouched and stays correct for two cases this scan doesn't reach: an accent
+on a non-text element (background, border, icon fill), and text sitting on the dark `--ink` rail,
+where `--ochre` gives 7.56:1 and `--warning` would only give 3.44:1 — the text-safe variant is
+calibrated for light grounds, not the rail.
 
 ## Typography
 
@@ -183,6 +231,12 @@ to change what a sentence asserts, that pass has overreached.
 No em-dashes in any visible string, in either language.
 
 ## Accessibility floor
+
+A `.kicker` label is a caption, not a heading — mark it up as `<p>`/`<span>`, even sitting right under
+a page `<h1>`. Rendering it as `<h3>` reads as a level skip to axe (`heading-order`) the moment
+there is no `<h2>` between them, which is the common case for a kicker that opens a section. Found
+on `/demo/iris` and `/demo/iris/installningar` 2026-09-19, fixed in `components/leads/IrisBolag.tsx`
+and `components/leads/IrisInstallningar.tsx`.
 
 Every interactive element ships all 8 states. Focus ring is ochre, 2px, 2px offset, no exceptions.
 Tap targets 44px. `<html lang>` follows the locale switch, or a screen reader reads English copy

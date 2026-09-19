@@ -31,10 +31,6 @@ import { paketForProdukter } from "@/lib/admin/halsa";
 
 const copy = {
   rubrik: { sv: "Gemensam översikt", en: "Shared overview" },
-  lede: {
-    sv: "Båda agenterna arbetar mot samma kunddata. Ett bolag som hör av sig till kundtjänsten syns här även om det kom in som ett prospekt.",
-    en: "Both agents work against the same customer data. A company that contacts support shows up here even if it arrived as a prospect."
-  },
   leads: { sv: "Leads", en: "Leads" },
   leadsRad: { sv: "Prospekt, utkast och granskningskö", en: "Prospects, drafts and review queue" },
   support: { sv: "Kundtjänst", en: "Support" },
@@ -72,21 +68,17 @@ export function DuoSummary() {
           {text(copy.rubrik)}
         </h2>
         {markning ? (
-          <span className="kicker rounded-input bg-ochre/12 px-2.5 py-1 text-ochre">
+          <span className="kicker rounded-input bg-ochre/12 px-2.5 py-1 text-warning">
             {markning}
           </span>
         ) : null}
       </div>
 
-      <p className="mt-3 max-w-[68ch] text-[0.9375rem] leading-[1.6] text-ink/70">
-        {text(copy.lede)}
-      </p>
-
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         <Kort
           rubrik={text(copy.leads)}
           rad={text(copy.leadsRad)}
-          href={vag("/dashboard/leads")}
+          href={vag("/dashboard/iris")}
           knapp={text(copy.tillLeads)}
         />
         <Kort
@@ -109,7 +101,7 @@ function Kort({
   return (
     <div className="flex flex-col rounded-input border border-ink/15 bg-paper p-5">
       <p className="text-[0.9375rem] font-semibold">{rubrik}</p>
-      <p className="mt-1.5 text-[0.875rem] leading-[1.5] text-ink/65">{rad}</p>
+      <p className="mt-1.5 text-[0.875rem] leading-[1.5] text-ink-muted">{rad}</p>
       <Link
         href={href}
         className="focus-ring mt-4 inline-flex min-h-10 w-fit items-center rounded-input border border-ink/20 px-4 text-[0.875rem] font-medium transition-colors hover:bg-paper2"

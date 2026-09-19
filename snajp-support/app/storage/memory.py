@@ -29,6 +29,8 @@ from .base import (
     ANALYTICS_COVERAGE,
     FEEDBACK_VERDICTS,
     LEADS_BUDGET_AGENT_TYPES,
+    MEDDELANDE_AVSANDARE,
+    SUPPORT_BUDGET_AGENT_TYPES,
     bk_belopp,
     bk_datum,
     kontrollera_bk_balans,
@@ -37,6 +39,8 @@ from .base import (
     kontrollera_bk_kalla,
     kontrollera_bk_riktning,
     kontrollera_bk_status,
+    kontrollera_samtalslage,
+    standard_samtalslage,
     status_transition_allowed,
 )
 
@@ -166,6 +170,8 @@ class MemoryStorage:
         self.agent_feedback: dict[str, list[dict[str, Any]]] = {}
         # Kundminne (migration 052): (tenant_id, customer_id) -> faktarader.
         self.customer_memory: dict[tuple[str, str], list[dict[str, Any]]] = {}
+        # Samtalsläge (migration 066): (tenant_id, customer_id) -> läget.
+        self.chat_states: dict[tuple[str, str], dict[str, Any]] = {}
         # Golden eval-cases (agent_evals, migration 010 — första kodvägen
         # 2026-08-27).
         self.eval_cases: dict[str, list[dict[str, Any]]] = {}
@@ -405,10 +411,14 @@ class MemoryStorage:
         content: str,
         sentiment: float | None = None,
         has_image: bool = False,
+        author: str | None = None,
     ) -> dict[str, Any]:
         conversation = self.conversations.get(conversation_id)
         if not conversation or conversation["tenant_id"] != tenant_id:
             raise ValueError("Konversationen tillhör inte denna tenant.")
+        if author is not None and author not in MEDDELANDE_AVSANDARE:
+            # Samma villkor som ss_messages_author_check i migration 066.
+            raise ValueError(f"Okänd avsändare: {author!r}")
         message = {
             "id": str(uuid.uuid4()),
             "tenant_id": tenant_id,
@@ -417,6 +427,7 @@ class MemoryStorage:
             "content": content,
             "sentiment": sentiment,
             "has_image": has_image,
+            "author": author,
             "created_at": _now(),
         }
         self.messages.setdefault(conversation_id, []).append(message)
@@ -429,6 +440,80 @@ class MemoryStorage:
         if not conversation or conversation["tenant_id"] != tenant_id:
             return []
         return self.messages.get(conversation_id, [])
+
+    async def find_customer(self, tenant_id: str, *, email: str) -> dict[str, Any] | None:
+        if not email:
+            return None
+        customer_id = self.identifiers.get((tenant_id, "email", email.lower()))
+        return self.customers.get(customer_id) if customer_id else None
+
+    # -- Samtalsläge (migration 066) ----------------------------------------
+
+    async def get_chat_state(self, tenant_id: str, customer_id: str) -> dict[str, Any]:
+        rad = self.chat_states.get((tenant_id, customer_id))
+        return dict(rad) if rad else standard_samtalslage(tenant_id, customer_id)
+
+    async def save_chat_state(
+        self,
+        tenant_id: str,
+        customer_id: str,
+        *,
+        lage: str,
+        misslyckade_i_rad: int,
+        erbjod_manniska: bool,
+        overlamnad_orsak: str | None = None,
+        overlamnad_ticket_id: str | None = None,
+        sprak: str | None = None,
+    ) -> dict[str, Any]:
+        kontrollera_samtalslage(lage, misslyckade_i_rad)
+        tidigare = self.chat_states.get((tenant_id, customer_id))
+        nu = _now()
+        if lage == "overlamnad":
+            overlamnad_at = (
+                tidigare["overlamnad_at"]
+                if tidigare and tidigare["lage"] == "overlamnad" and tidigare["overlamnad_at"]
+                else nu
+            )
+        else:
+            overlamnad_at = None
+        rad = {
+            "tenant_id": tenant_id,
+            "customer_id": customer_id,
+            "lage": lage,
+            "misslyckade_i_rad": misslyckade_i_rad,
+            "erbjod_manniska": erbjod_manniska,
+            "overlamnad_orsak": overlamnad_orsak,
+            "overlamnad_ticket_id": overlamnad_ticket_id,
+            "overlamnad_at": overlamnad_at,
+            "sprak": sprak,
+            "updated_at": nu,
+        }
+        self.chat_states[(tenant_id, customer_id)] = rad
+        return dict(rad)
+
+    async def list_chat_handovers(
+        self, tenant_id: str, *, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        rader = []
+        for (tid, customer_id), rad in self.chat_states.items():
+            if tid != tenant_id or rad["lage"] != "overlamnad":
+                continue
+            kund = self.customers.get(customer_id) or {}
+            arende = self.tickets.get(rad.get("overlamnad_ticket_id") or "") or {}
+            rader.append(
+                {
+                    **rad,
+                    "customer_name": kund.get("name"),
+                    "subject": arende.get("subject"),
+                    "category": arende.get("category"),
+                    # Kanalerna (bd snipe-36u): Chattar-vyn visar var kunden
+                    # sitter, och att ett svar måste SKICKAS dit.
+                    "channel": arende.get("channel"),
+                    "is_test": bool(arende.get("is_test")),
+                }
+            )
+        rader.sort(key=lambda r: r["updated_at"], reverse=True)
+        return rader[:limit]
 
     # -- Kunskapsbas --------------------------------------------------------
 
@@ -494,6 +579,12 @@ class MemoryStorage:
         row = _kb_row(tenant_id, {"title": title, "content": content, "category": category})
         self.kb.setdefault(tenant_id, []).append(row)
         return {"id": row["id"], "title": title, "category": category}
+
+    async def delete_kb_article(self, tenant_id: str, artikel_id: str) -> bool:
+        artiklar = self.kb.get(tenant_id, [])
+        kvar = [a for a in artiklar if str(a["id"]) != str(artikel_id)]
+        self.kb[tenant_id] = kvar
+        return len(kvar) < len(artiklar)
 
     # -- Kanaler & metrics --------------------------------------------------
 
@@ -1307,10 +1398,41 @@ class MemoryStorage:
     async def sum_leads_tokens(self, tenant_id: str, *, hours: int = 24) -> int:
         # Speglar SQL-frågan i postgres.py: leads-typerna, tidsfönster,
         # tokens_in + tokens_out, testkörningar MEDräknade.
+        return self._sum_tokens(tenant_id, LEADS_BUDGET_AGENT_TYPES, hours)
+
+    async def sum_support_tokens(self, tenant_id: str, *, hours: int = 24) -> int:
+        return self._sum_tokens(tenant_id, SUPPORT_BUDGET_AGENT_TYPES, hours)
+
+    async def daily_support_usage(
+        self, tenant_id: str, *, days: int = 30
+    ) -> list[dict[str, Any]]:
+        # Speglar SQL-frågan i postgres.py: gruppera per dag, nyaste först,
+        # dagar utan körningar utelämnas.
+        granser = datetime.now(timezone.utc) - timedelta(days=days)
+        per_dag: dict[str, dict[str, int]] = {}
+        for r in self.agent_runs.get(tenant_id, []):
+            if r["agent_type"] not in SUPPORT_BUDGET_AGENT_TYPES:
+                continue
+            skapad = datetime.fromisoformat(r["created_at"])
+            if skapad < granser:
+                continue
+            dag = per_dag.setdefault(
+                skapad.date().isoformat(),
+                {"korningar": 0, "korningar_test": 0, "tokens_in": 0, "tokens_out": 0},
+            )
+            dag["korningar_test" if r.get("is_test") else "korningar"] += 1
+            dag["tokens_in"] += int(r.get("tokens_in") or 0)
+            dag["tokens_out"] += int(r.get("tokens_out") or 0)
+        return [
+            {"datum": datum, **varden}
+            for datum, varden in sorted(per_dag.items(), reverse=True)
+        ]
+
+    def _sum_tokens(self, tenant_id: str, agent_types: tuple[str, ...], hours: int) -> int:
         granser = datetime.now(timezone.utc) - timedelta(hours=hours)
         total = 0
         for r in self.agent_runs.get(tenant_id, []):
-            if r["agent_type"] not in LEADS_BUDGET_AGENT_TYPES:
+            if r["agent_type"] not in agent_types:
                 continue
             if datetime.fromisoformat(r["created_at"]) < granser:
                 continue
@@ -1473,6 +1595,7 @@ class MemoryStorage:
             "status": "new",
             "ticket_id": None,
             "is_test": is_test,
+            "hanterad_at": None,
             "created_at": _now(),
             "updated_at": _now(),
         }
@@ -1585,6 +1708,7 @@ class MemoryStorage:
         status: str | None = None,
         ticket_id: str | None = None,
         is_test: bool | None = None,
+        hanterad: bool | None = None,
     ) -> dict[str, Any] | None:
         email = self.emails.get(email_id)
         if not email or email["tenant_id"] != tenant_id:
@@ -1595,6 +1719,12 @@ class MemoryStorage:
             email["ticket_id"] = ticket_id
         if is_test is not None:
             email["is_test"] = is_test
+        if hanterad is not None:
+            # Speglar SQL:en: True stämplar bara en ostämplad rad, False nollar.
+            if hanterad:
+                email["hanterad_at"] = email.get("hanterad_at") or _now()
+            else:
+                email["hanterad_at"] = None
         email["updated_at"] = _now()
         return email
 
@@ -1637,6 +1767,8 @@ class MemoryStorage:
         reasoning: str,
         kb_sources: list[dict[str, Any]],
         model: str,
+        offertforfragan: bool = False,
+        utbildningsintresse: bool = False,
     ) -> dict[str, Any]:
         classification = {
             "id": str(uuid.uuid4()),
@@ -1651,6 +1783,8 @@ class MemoryStorage:
             "reasoning": reasoning,
             "kb_sources": kb_sources,
             "model": model,
+            "offertforfragan": offertforfragan,
+            "utbildningsintresse": utbildningsintresse,
             "created_at": _now(),
         }
         self.classifications[email_id] = classification

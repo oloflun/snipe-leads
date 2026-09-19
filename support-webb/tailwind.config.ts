@@ -12,6 +12,8 @@ const config: Config = {
       colors: {
         ink: "oklch(var(--ink) / <alpha-value>)",
         ink2: "oklch(var(--ink2) / <alpha-value>)",
+        "ink-muted": "oklch(var(--ink-muted) / <alpha-value>)",
+        "ink-subtle": "oklch(var(--ink-subtle) / <alpha-value>)",
         paper: "oklch(var(--paper) / <alpha-value>)",
         paper2: "oklch(var(--paper2) / <alpha-value>)",
         mineral: "oklch(var(--mineral) / <alpha-value>)",

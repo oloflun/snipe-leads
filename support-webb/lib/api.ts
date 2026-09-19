@@ -10,6 +10,22 @@
 
 export const BAS = "/api/ag";
 
+/** Backendens kategorinycklar (app/config.py CATEGORY_LABELS) i klartext. */
+const KATEGORIER: Record<string, string> = {
+  teknisk_support: "Teknisk support",
+  garanti: "Garanti",
+  leverans: "Leverans",
+  utbildning: "Utbildning",
+  retur_reklamation: "Retur & reklamation",
+  betalning: "Betalning",
+  orderstatus: "Orderstatus",
+  ovrigt: "Övrigt"
+};
+
+export function kategori(nyckel: string): string {
+  return KATEGORIER[nyckel] ?? nyckel;
+}
+
 export type Klassificering = {
   category?: string | null;
   confidence?: number | null;
@@ -51,6 +67,36 @@ export type KbArtikel = {
 export type Regel = {
   category?: string | null;
   mode?: string | null;
+};
+
+/** Ett överlämnat samtal (GET /api/chattar, bd snipe-1fl). */
+export type Chatt = {
+  customer_id: string;
+  customer_name?: string | null;
+  subject?: string | null;
+  category?: string | null;
+  /** web, email, whatsapp, messenger, slack eller teams (bd snipe-36u). */
+  channel?: string | null;
+  is_test?: boolean | null;
+  overlamnad_orsak?: string | null;
+  orsak_text?: string | null;
+  overlamnad_at?: string | null;
+  updated_at?: string | null;
+  /** Falskt när samtalet legat stilla längre än giltighetstiden — då svarar agenten igen. */
+  aktiv?: boolean;
+};
+
+/** En rad i samtalsutskriften: kunden, agenten eller en medarbetare. */
+export type ChattRad = {
+  id: string;
+  author: "customer" | "agent" | "human";
+  content: string;
+  created_at?: string | null;
+};
+
+export type Chattdetalj = {
+  samtal: Chatt & { lage?: string };
+  meddelanden: ChattRad[];
 };
 
 export type Jobb = {

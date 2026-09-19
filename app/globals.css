@@ -10,17 +10,41 @@
   --paper: 0.965 0.008 88;
   --paper2: 0.93 0.012 88;
   --ochre: 0.74 0.16 64;
-  --mineral: 0.55 0.015 252;
+  /* 0.55 gav 4.38:1 mot paper — under AA:s 4.5:1, uppmätt av axe 2026-09-19.
+     0.50 ger 5.41:1 mot paper och 4.88:1 mot paper2 (den svagare ytan), minsta
+     lyft som klarar båda. Samma nyans, ingen extra token: mineral ÄR redan en
+     muted-text-token, den var bara för ljus. */
+  --mineral: 0.50 0.015 252;
   --seal: 0.42 0.022 252;
   --moss: 0.42 0.071 142;
   --danger: 0.57 0.18 27;
   --focus: 0.74 0.16 64;
+  /* Muted text-tokens. Ersätter text-ink/NN och text-paper/NN som textfärg —
+     opacitetstrappan (20 distinkta steg, uppmätt) gav osystematiska kontraster
+     från 1.7:1 till 12.6:1 och åtskilliga av dem klarade inte 4.5:1 mot sin
+     grund (axe: 181 color-contrast-noder över 8 sidor, 2026-09-19). Två steg
+     per grund räcker för hierarkin (DESIGN.md kräver 2-3) och båda klarar AA
+     med marginal mot varje yta token faktiskt används på:
+       ink-muted   7.63:1 / paper2 6.87:1   (sekundär text på papper)
+       ink-subtle  5.90:1 / paper2 5.31:1   (tertiär/meta-text på papper)
+       paper-muted 7.29:1 (mot ink-rail)    (sekundär text i mörk rail)
+       paper-subtle 4.97:1 (mot ink-rail)   (tertiär/meta-text i mörk rail)
+     Regel: muted text använder alltid en token, aldrig ink/xx- eller
+     paper/xx-opacitet — se DESIGN.md. */
+  --ink-muted: 0.42 0.018 252;
+  --ink-subtle: 0.48 0.018 252;
+  --paper-muted: 0.72 0.008 88;
+  --paper-subtle: 0.62 0.008 88;
   /* Textsäker variant av ochre. --ochre (L 0.74) är en ACCENT — den ger 2.17:1
      mot paper (uppmätt), vilket duger för stora sifferdisplayer och rutor men
-     inte för 16px text. L 0.54 i samma nyans ger 4.75:1 och klarar AA.
-     Använd den här när ochre bär en text ett fel beror på; använd --ochre när
-     den bara dekorerar. */
-  --warning: 0.54 0.16 64;
+     inte för 16px text. L 0.54 gav 4.75:1 mot ren paper men bara 4.33:1 mot
+     den ochre-tonade demobannern (bg-ochre/12 över paper) — axe fångade den
+     ytan 2026-09-19. L 0.50 ger 5.63:1 mot paper och 5.13:1 mot bannern,
+     marginal på båda. Använd den här när ochre bär text (även på en
+     ochre-tonad yta som bannern eller ett badge); använd --ochre när den
+     bara dekorerar eller sitter på den mörka railen (--ink), där --ochre
+     redan klarar 7.56:1 och --warning bara ger 3.44:1. */
+  --warning: 0.50 0.16 64;
 
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   /* Alias — ~40 existing usages reference the old name. Same curve, no churn. */
@@ -94,6 +118,15 @@
   /* Dämpad text. 0.68 mot paper 0.185 ger ~7:1 — samma nivå som --mineral
      håller i ljust läge, alltså AA med marginal även vid 13px. */
   --mineral: 0.68 0.016 252;
+  /* ink-muted/ink-subtle bär nu ink-rollens (ljusa) nyans, dämpad mot den
+     mörka papperet — samma par som i ljust läge, rollerna vända:
+     ink-muted 7.51:1, ink-subtle 5.12:1 mot --paper. paper-muted/paper-subtle
+     bär paper-rollens (mörka) nyans, mot den ljusa ink-ytan (railen i mörkt
+     läge): 7.09:1 / 5.48:1. */
+  --ink-muted: 0.72 0.006 88;
+  --ink-subtle: 0.62 0.006 88;
+  --paper-muted: 0.42 0.010 252;
+  --paper-subtle: 0.48 0.010 252;
   /* Låg i ljust läge (0.42), hög här: seal är alltid STARKARE än mineral,
      och "starkare" betyder längre bort från papperet åt det håll papperet
      inte ligger. */

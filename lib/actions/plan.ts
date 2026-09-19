@@ -49,6 +49,10 @@ export async function bytPlan(paketId: string): Promise<Planbyte> {
   if (!context) {
     return { success: false, error: "Du måste vara inloggad." };
   }
+  const { arLasare, LASROLL_FEL } = await import("@/lib/auth/lasroll");
+  if (arLasare(context)) {
+    return { success: false, error: LASROLL_FEL };
+  }
 
   if ((await aktivVy()).vy !== "admin") {
     return {

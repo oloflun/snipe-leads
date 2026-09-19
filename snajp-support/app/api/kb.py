@@ -4,15 +4,29 @@ Embeddings beräknas vid inläggning om en riktig OpenAI-nyckel finns; annars
 lämnas kolumnen tom och sökningen faller tillbaka på fulltext/nyckelord.
 """
 
+import asyncio
 import base64
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ..config import get_settings
+from . import rate_limit_db
 from .deps import require_tenant
-from .schemas import KbArticleRequest, KbExtraheraRequest
+from .schemas import KbArticleRequest, KbExtraheraRequest, KbSkannaRequest
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+#: Skanningar per tenant och timme (rate_limit_db:s fönster). En skanning är
+#: högst MAX_LLM_ANROP modellanrop plus tjugo sidhämtningar — taket är till för
+#: en kund som trycker om och om igen, inte för normal användning.
+SKANNINGAR_PER_TIMME = 5
+SKANNING = "kb_skanning"
+
+#: Referenser till pågående skanningar, så att skräpsamlaren inte tar en
+#: uppgift som bara event-loopen håller i (asyncio.create_task är svag).
+_pagaende: set[asyncio.Task] = set()
 
 #: Taket är på de AVKODADE bytesen, ~8 MB enligt planen (Fas 5.5). Schemat
 #: begränsar redan den råa strängen (base64-påslaget är ~4/3), det här är den
@@ -89,6 +103,84 @@ async def add_kb_articles(
     # inte gick att räkna ut (se agent/embeddings.py), och skillnaden syns
     # annars först som att sökningen blivit sämre utan att något felat.
     return {"created": created, "embeddings": vektorer, "utan_vektor": len(created) - vektorer}
+
+
+@router.delete("/api/kb/{artikel_id}")
+async def ta_bort_kb_artikel(
+    request: Request, artikel_id: str, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """En artikel som inte längre stämmer ska kunna tas bort — annars citerar
+    agenten den för alltid. Samma KB-versionsbump som vid inläggning."""
+    if not await request.app.state.storage.delete_kb_article(tenant["tenant_id"], artikel_id):
+        raise HTTPException(status_code=404, detail="Artikeln finns inte.")
+    from ..cache import versioner
+
+    await versioner.bumpa_kb(tenant["tenant_id"])
+    return {"deleted": artikel_id}
+
+
+async def _kor_skanning(app_state, job_id: str, webbplats: str, bolagsnamn: str, scopes) -> None:
+    from .. import kb_skanning
+
+    try:
+        await app_state.jobs.start(job_id)
+        resultat = await kb_skanning.skanna(webbplats, bolagsnamn, kb_skanning.bygg_anropare())
+        # Modellanropen räknas mot tenantens vanliga LLM-tak, som allt annat.
+        await rate_limit_db.record(app_state.storage, scopes, resultat["anrop"])
+        if resultat["anrop"] and len(resultat["fel"]) == resultat["anrop"]:
+            await app_state.jobs.fail(job_id, resultat["fel"][0])
+            return
+        await app_state.jobs.complete(job_id, resultat)
+    except Exception as fel:  # noqa: BLE001 — jobbet ska alltid landa i ett slutläge
+        logger.exception("kb-skanning föll för %s", webbplats)
+        await app_state.jobs.fail(job_id, f"Skanningen avbröts ({type(fel).__name__}).")
+
+
+@router.post("/api/kb/skanna", status_code=202)
+async def skanna_webbplats(
+    request: Request, payload: KbSkannaRequest, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Skannar kundens EGEN webbplats till artikelutkast (app/kb_skanning.py).
+
+    Svarar 202 med ett jobb-id; resultatet pollas via GET /api/jobs/{id}.
+    Ingenting sparas: utkasten visas, kunden väljer, och de valda går genom
+    POST /api/kb precis som en handskriven artikel.
+    """
+    from ..leads.discovery import normalisera_webbplats, webbplats_ar_bolagets
+
+    try:
+        webbplats = normalisera_webbplats(payload.webbplats.strip())
+    except Exception as fel:  # noqa: BLE001 — en adress som inte går att tolka
+        raise HTTPException(status_code=422, detail="Adressen går inte att läsa.") from fel
+    if not webbplats_ar_bolagets(webbplats):
+        raise HTTPException(
+            status_code=422,
+            detail="Ange er egen webbplats — register, annonsplattformar och exempeldomäner skannas inte.",
+        )
+    from .. import kb_skanning
+
+    if not await asyncio.to_thread(kb_skanning.ar_publik_vard, webbplats):
+        raise HTTPException(status_code=422, detail="Webbplatsen hittades inte.")
+
+    storage = request.app.state.storage
+    skanningar = [rate_limit_db.Scope("tenant", tenant["tenant_id"], SKANNINGAR_PER_TIMME, SKANNING)]
+    scopes = rate_limit_db.scopes_for(tenant["tenant_id"], request.headers.get("x-snajp-user"))
+    try:
+        await rate_limit_db.enforce(storage, skanningar + scopes)
+    except rate_limit_db.RateLimitDbExceededError as fel:
+        raise HTTPException(
+            status_code=429, detail="För många skanningar den senaste timmen. Försök igen senare."
+        ) from fel
+    # Skanningen räknas när den STARTAR, så att fem snabba klick inte blir tio.
+    await rate_limit_db.record(storage, skanningar, 1)
+
+    job_id = await request.app.state.jobs.create(tenant_id=tenant["tenant_id"], status="queued")
+    uppgift = asyncio.create_task(
+        _kor_skanning(request.app.state, job_id, webbplats, tenant.get("tenant_name") or "", scopes)
+    )
+    _pagaende.add(uppgift)
+    uppgift.add_done_callback(_pagaende.discard)
+    return {"job_id": job_id, "status": "queued", "webbplats": webbplats}
 
 
 @router.post("/api/kb/extrahera")

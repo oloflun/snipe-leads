@@ -224,11 +224,11 @@ export function Portfoljvy({
                     ) : null}
                     {rad.ar_exempel ? <Exempelmarke /> : null}
                   </p>
-                  <p className="mt-0.5 truncate text-[0.8125rem] text-ink/60">
+                  <p className="mt-0.5 truncate text-[0.8125rem] text-ink-muted">
                     {text(ekonomi.motivering)}
                   </p>
                 </div>
-                <div className="col-span-2 text-[0.875rem] text-ink/70">
+                <div className="col-span-2 text-[0.875rem] text-ink-muted">
                   {ekonomi.paketNamn ?? "—"}
                   {ekonomi.intakt > 0 ? (
                     <span className="block text-[0.8125rem] text-mineral">
@@ -244,7 +244,7 @@ export function Portfoljvy({
                       En siffra som tyst blivit mindre är svårare att lita på än
                       en siffra som säger vad den utelämnat. */}
                   {rad.test_runs ? (
-                    <span className="block text-[0.8125rem] text-ink/40">
+                    <span className="block text-[0.8125rem] text-ink-subtle">
                       +{rad.test_runs} {a("test", locale)}
                     </span>
                   ) : null}
@@ -257,7 +257,7 @@ export function Portfoljvy({
                 {/* Ochre bara på avvikelsen. */}
                 <div
                   className={`col-span-1 text-right tabular-nums text-[0.9375rem] ${
-                    rad.errors > 0 ? "text-ochre" : "text-ink/45"
+                    rad.errors > 0 ? "text-warning" : "text-ink-subtle"
                   }`}
                 >
                   {rad.errors}
@@ -269,7 +269,7 @@ export function Portfoljvy({
       </div>
 
       {rader.length === 0 ? (
-        <p className="mt-8 text-[15px] text-ink/60">{a("ingaKunder", locale)}</p>
+        <p className="mt-8 text-[15px] text-ink-muted">{a("ingaKunder", locale)}</p>
       ) : null}
 
       <div className="mt-10 max-w-[80ch] space-y-2 border-t border-ink/15 pt-5 text-[0.8125rem] leading-[1.6] text-mineral">
@@ -278,7 +278,7 @@ export function Portfoljvy({
             marginalen räknas, inte efter. */}
         {exempelrader > 0 ? (
           <p>
-            <strong className="text-ink/70">
+            <strong className="text-ink-muted">
               {text({
                 sv: `${exempelrader} av ${rader.length} rader visar exempeldata`,
                 en: `${exempelrader} of ${rader.length} rows show example data`
@@ -295,7 +295,7 @@ export function Portfoljvy({
             och gratisnivån utskriven går påståendet att falsifiera på en
             minut. */}
         <p>
-          <strong className="text-ink/70">
+          <strong className="text-ink-muted">
             {text({
               sv: "Kostnaden är leverantörens listpris",
               en: "The cost is the provider's list price"
@@ -320,7 +320,7 @@ export function Portfoljvy({
         </p>
         {harleddaRader > 0 ? (
           <p>
-            <strong className="text-ink/70">
+            <strong className="text-ink-muted">
               {text({
                 sv: `${harleddaRader} av ${rader.length} rader har ett härlett paket`,
                 en: `${harleddaRader} of ${rader.length} rows have an inferred plan`
@@ -354,7 +354,7 @@ export function Portfoljvy({
       <p className="mt-8">
         <Link
           href="/admin/korningar"
-          className="focus-ring text-[15px] text-ochre underline underline-offset-4"
+          className="focus-ring text-[15px] text-warning underline underline-offset-4"
         >
           {a("seAllaKorningar", locale)}
         </Link>
@@ -391,14 +391,14 @@ function Nyckeltal({
     <div className="bg-paper px-5 py-4">
       <p className="kicker text-mineral">{etikett}</p>
       <p className="mt-1.5 font-display text-[1.75rem] tabular-nums tracking-[-0.02em]">{varde}</p>
-      <p className="mt-1 text-[0.8125rem] leading-[1.45] text-ink/60">{rad}</p>
+      <p className="mt-1 text-[0.8125rem] leading-[1.45] text-ink-muted">{rad}</p>
     </div>
   );
 }
 
 function Tal({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <div className="col-span-1 text-right tabular-nums text-[0.9375rem] text-ink/75">
+    <div className="col-span-1 text-right tabular-nums text-[0.9375rem] text-ink-muted">
       {children}
     </div>
   );

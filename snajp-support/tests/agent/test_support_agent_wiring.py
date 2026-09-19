@@ -132,20 +132,25 @@ async def test_one_llm_call_per_skill_step_in_declared_order():
 
 
 @pytest.mark.anyio
-async def test_begaran_om_manniska_kor_eskaleringssteget_aven_pa_lyckligt_flode():
-    """Villkoret 2026-09-02: eskaleringssteget hoppas över när inget finns att
-    bedöma — men "jag vill prata med en människa" är exakt det som ska
-    bedömas av modellen, även när KB bar svaret och inget annat flaggade.
-    Regexen _BER_OM_MANNISKA är stegets väckarklocka, inte dess ersättare."""
+async def test_begaran_om_manniska_lamnar_over_i_kod_utan_modellens_rost():
+    """OMVÄNT 2026-09-18 (bd snipe-1fl, Ebbot-researchen).
+
+    Före: regexen väckte eskaleringssteget och modellen kunde rösta nej — en
+    kund som bad om en människa kunde få en bot. Nu är en uttrycklig begäran
+    en TRIGGER i kod: överlämning direkt, utan övertalningsförsök, och det
+    dyra thinking-steget körs inte alls (beslutet och motiveringen finns
+    redan)."""
     storage, llm = MemoryStorage(), _FakeLLM()
     result = await _run(
         storage, llm, message="Vilka betalsätt tar ni? Jag vill helst prata med en människa."
     )
 
-    assert "cs:customer-escalation" in llm.calls
-    # Modellen (fejken) röstade nej och inget kodvillkor föll — beslutet är
-    # fortfarande modellens att fatta, inte regexens.
-    assert result["escalated"] is False
+    assert result["escalated"] is True
+    assert result["escalation_code"] == "kund_bad_om_manniska"
+    assert "cs:customer-escalation" not in llm.calls
+    samtal = await storage.get_chat_state(TENANT, result["customer_id"])
+    assert samtal["lage"] == "overlamnad"
+    assert samtal["overlamnad_ticket_id"] == result["ticket_id"]
 
 
 @pytest.mark.anyio
@@ -157,7 +162,10 @@ async def test_kb_article_runs_on_kb_gap_and_suggestion_is_persisted():
     storage = MemoryStorage()
     llm = _FakeLLM(
         overrides={
-            "cs:customer-research": {"kb_supports_answer": False},
+            # Luckan utan motfråga: kunskapssteget hoppas över när agenten
+            # ställer en motfråga (2026-09-19), så testet måste säga att
+            # frågan var tydlig.
+            "cs:customer-research": {"kb_supports_answer": False, "behover_fortydligande": False},
             "cs:kb-article": {
                 "should_create": True,
                 "title": "Leveranstid till Norge",
@@ -180,12 +188,33 @@ async def test_kb_article_runs_on_kb_gap_and_suggestion_is_persisted():
 
 
 @pytest.mark.anyio
+async def test_kb_article_hoppas_over_nar_agenten_stallar_en_motfraga():
+    """En fråga för vag att besvara går inte att skriva en artikel om — steget
+    kostade ~5 000 tokens per motfrågetur för ingenting (2026-09-19)."""
+    storage = MemoryStorage()
+    llm = _FakeLLM(
+        overrides={
+            "cs:customer-research": {"kb_supports_answer": False, "behover_fortydligande": True},
+            "cs:kb-article": {"should_create": True, "title": "Vag fråga", "content": "Ska aldrig skapas."},
+        }
+    )
+    result = await _run(storage, llm)
+
+    assert result["svarslage"] == "fraga"
+    assert "cs:kb-article" not in llm.calls
+    assert await storage.list_agent_suggestions(TENANT, status="ny") == []
+
+
+@pytest.mark.anyio
 async def test_samma_kunskapslucka_ger_en_rad_inte_tio():
     """Dedupe: tio ärenden om samma lucka ska ge EN rad att granska."""
     storage = MemoryStorage()
     llm = _FakeLLM(
         overrides={
-            "cs:customer-research": {"kb_supports_answer": False},
+            # Luckan utan motfråga: kunskapssteget hoppas över när agenten
+            # ställer en motfråga (2026-09-19), så testet måste säga att
+            # frågan var tydlig.
+            "cs:customer-research": {"kb_supports_answer": False, "behover_fortydligande": False},
             "cs:kb-article": {
                 "should_create": True,
                 "title": "Leveranstid till Norge",

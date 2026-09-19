@@ -222,6 +222,10 @@ export async function saveEmailDraft(input: {
 
 export function toRefineContext(data: EmailStudioData) {
   return {
+    // Skickas med så att /api/email-studio kan slå upp EXAKT vilket av de
+    // sex exempelbolagen (lib/demo/iris-exempel.ts) ett anonymt anrop gäller
+    // — stabilt även om kunden hunnit redigera bolagsnamnet i ämnesraden.
+    companyId: data.email.companyId ?? undefined,
     companyName: data.email.companyName ?? undefined,
     signal: data.email.signal ?? undefined,
     offer: data.email.offer ?? data.businessContext?.offer ?? undefined,

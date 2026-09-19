@@ -52,7 +52,7 @@ export function Radgivare({ rader }: Readonly<{ rader: Rad[] }>) {
         </span>
       </div>
 
-      <p className="mt-2 max-w-[70ch] text-[0.875rem] leading-[1.6] text-ink/65">
+      <p className="mt-2 max-w-[70ch] text-[0.875rem] leading-[1.6] text-ink-muted">
         {text({
           sv: "Svaren räknas ur samma data som tabellen ovan. De kan inte säga emot vad du ser, och de kan inte hitta på ett tal — men rådgivaren förstår bara frågor den känner igen, och säger till när den inte gör det.",
           en: "Answers are computed from the same data as the table above. They cannot contradict what you see, and they cannot invent a number — but the adviser only understands questions it recognises, and says so when it does not."
@@ -70,7 +70,7 @@ export function Radgivare({ rader }: Readonly<{ rader: Rad[] }>) {
               </p>
               <p
                 className={`mt-1 inline-block max-w-[68ch] whitespace-pre-line rounded-input px-4 py-3 text-left text-[0.9375rem] leading-[1.6] ${
-                  tur.fran === "du" ? "bg-ink text-paper" : "bg-paper text-ink/85"
+                  tur.fran === "du" ? "bg-ink text-paper" : "bg-paper text-ink-muted"
                 }`}
               >
                 {tur.text}

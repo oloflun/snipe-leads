@@ -76,7 +76,7 @@ export default async function Page({
                 <span aria-hidden>←</span> {forra.name}
               </Link>
             ) : null}
-            <span className="tabular-nums text-ink/45">
+            <span className="tabular-nums text-ink-subtle">
               {position + 1} av {alla.length}
             </span>
             {nasta ? (
@@ -95,7 +95,7 @@ export default async function Page({
         Kontaktpersoner, fakturerings- och avtalsuppgifter. Agentens beteende styrs i{" "}
         <Link
           href={`/admin/kunder/${kunddata.tenant.id}`}
-          className="focus-ring text-ochre underline underline-offset-4"
+          className="focus-ring text-warning underline underline-offset-4"
         >
           agentprofilen
         </Link>

@@ -99,7 +99,7 @@ export function Betalsatt() {
       // Kortnumret och CVC kastas här, inte när formuläret stängs: stängningen
       // är ett annat klick och kan hoppas över.
       nollstall();
-      setKlart("Betalsättet är sparat. Inget har debiterats — testläge.");
+      setKlart("Betalsättet är sparat.");
     } catch (orsak) {
       setFel(orsak instanceof Error ? orsak.message : "Kunde inte spara betalsättet.");
     } finally {
@@ -137,11 +137,8 @@ export function Betalsatt() {
         </span>
       </div>
 
-      <p className="max-w-[62ch] text-[0.875rem] leading-6 text-ink/60">
-        Ingen betalväxel är inkopplad ännu. Flödet nedan är det riktiga —
-        formulär, validering och felväg — men <strong className="font-semibold">
-        ingenting debiteras</strong>, och bara testkort tas emot. Skriv aldrig in
-        ett riktigt kortnummer här.
+      <p className="max-w-[62ch] text-[0.875rem] leading-6 text-ink-muted">
+        Bara testkort. <strong className="font-semibold">Skriv aldrig in ett riktigt kortnummer.</strong>
       </p>
 
       {befintligt ? (
@@ -163,7 +160,7 @@ export function Betalsatt() {
                 setOppen(true);
                 setKlart(null);
               }}
-              className="focus-ring rounded-input px-3 py-1.5 text-[0.8125rem] text-ink/70 hover:bg-paper2 hover:text-ink"
+              className="focus-ring rounded-input px-3 py-1.5 text-[0.8125rem] text-ink-muted hover:bg-paper2 hover:text-ink"
             >
               Byt kort
             </button>
@@ -266,8 +263,8 @@ export function Betalsatt() {
                 </li>
               ))}
             </ul>
-            <p className="mt-3 text-[0.8125rem] leading-5 text-ink/50">
-              Vilken framtida giltighetstid och vilken CVC som helst fungerar.
+            <p className="mt-3 text-[0.8125rem] leading-5 text-ink-subtle">
+              Valfri framtida giltighetstid och CVC.
             </p>
           </div>
         </form>

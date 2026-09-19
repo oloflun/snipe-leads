@@ -112,14 +112,14 @@ export default async function Page({
           <h1 className="font-display text-[clamp(1.75rem,4vw,2.5rem)] font-semibold leading-tight tracking-[-0.02em]">
             {besked.rubrik}
           </h1>
-          <p className="mt-5 text-[1.0625rem] leading-[1.7] text-ink/75">{besked.text}</p>
+          <p className="mt-5 text-[1.0625rem] leading-[1.7] text-ink-muted">{besked.text}</p>
         </>
       ) : (
         <>
           <h1 className="font-display text-[clamp(1.75rem,4vw,2.5rem)] font-semibold leading-tight tracking-[-0.02em]">
             Vill du sluta få de här mejlen?
           </h1>
-          <p className="mt-5 text-[1.0625rem] leading-[1.7] text-ink/75">
+          <p className="mt-5 text-[1.0625rem] leading-[1.7] text-ink-muted">
             Tryck på knappen så tas din adress bort ur utskicken. Det gäller
             omedelbart och för alla framtida utskick från avsändaren.
           </p>

@@ -75,8 +75,15 @@ function asList(value: string): string[] {
  * `demo` byter ut backend-anropen mot exempeldata i webbläsaren. Se
  * lib/demo/leads-controls.ts för skälet — grinden mot den riktiga backenden
  * står kvar orörd, det är indatan som byts.
+ *
+ * `visaKo` döljer "Väntar på dig"-kön. Iris › Inställningar visar kön i
+ * Granskning i stället (se IrisGranskning.tsx) — dubblerad här blir den en
+ * andra, äldre kö som glider isär från den riktiga.
  */
-export function LeadsControls({ demo = false }: Readonly<{ demo?: boolean }>) {
+export function LeadsControls({
+  demo = false,
+  visaKo = true
+}: Readonly<{ demo?: boolean; visaKo?: boolean }>) {
   const [config, setConfig] = useState<Config | null>(null);
   const [queue, setQueue] = useState<QueueItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -101,7 +108,7 @@ export function LeadsControls({ demo = false }: Readonly<{ demo?: boolean }>) {
     try {
       const [configResponse, queueResponse] = await Promise.all([
         call("/api/snajp-support/leads/config", { cache: "no-store" }),
-        call("/api/snajp-support/leads/queue", { cache: "no-store" })
+        visaKo ? call("/api/snajp-support/leads/queue", { cache: "no-store" }) : null
       ]);
       if (!configResponse.ok) {
         const body = await readJsonBody<{ error?: string }>(configResponse).catch(() => null);
@@ -114,16 +121,16 @@ export function LeadsControls({ demo = false }: Readonly<{ demo?: boolean }>) {
         setConfig(laddadConfig);
       }
       // Kön är inte kritisk för vyn — en trasig kropp ska inte fälla
-      // inställningarna som redan lästs.
-      const koSvar = queueResponse.ok
+      // inställningarna som redan lästs. Utan visaKo hämtas den inte alls.
+      const koSvar = queueResponse?.ok
         ? await readJsonBody<{ items?: QueueItem[] }>(queueResponse).catch(() => null)
         : null;
-      setQueue(koSvar?.items ?? []);
+      setQueue(visaKo ? (koSvar?.items ?? []) : []);
     } catch (cause) {
       setError(felmeddelande(cause));
       setQueue([]);
     }
-  }, [call]);
+  }, [call, visaKo]);
 
   useEffect(() => {
     void load();
@@ -197,7 +204,8 @@ export function LeadsControls({ demo = false }: Readonly<{ demo?: boolean }>) {
   return (
     <div className="grid gap-12">
       <section>
-        <h3 className="kicker text-mineral">Hur långt agenterna får gå</h3>
+        {/* Kicker, inte rubrik — se DESIGN.md Accessibility floor. */}
+        <p className="kicker text-mineral">Hur långt agenterna får gå</p>
 
         <div className="mt-5 flex min-w-0 flex-wrap gap-3">
           {config.autonomy_levels.map((level) => (
@@ -224,11 +232,9 @@ export function LeadsControls({ demo = false }: Readonly<{ demo?: boolean }>) {
       </section>
 
       <section className="border-t border-ink/15 pt-8">
-        <h3 className="kicker text-mineral">Målgrupp</h3>
-        <p className="mt-3 max-w-[64ch] text-[15px] leading-7 text-mineral">
-          <strong className="font-semibold text-ink">Er röst styr tonen, målgruppen styr urvalet.</strong>{" "}
-          Det här avgör vilka bolag agenterna bearbetar — inte hur de låter. Skriv
-          med komma emellan.
+        <p className="kicker text-mineral">Målgrupp</p>
+        <p className="mt-3 text-[15px] leading-7 text-mineral">
+          Styr urvalet, inte tonen. Separera med komma.
         </p>
 
         <form
@@ -298,14 +304,15 @@ export function LeadsControls({ demo = false }: Readonly<{ demo?: boolean }>) {
         </form>
       </section>
 
+      {visaKo ? (
       <section className="border-t border-ink/15 pt-8">
-        <h3 className="kicker text-mineral">Väntar på dig</h3>
+        <p className="kicker text-mineral">Väntar på dig</p>
 
         {queue === null ? (
           <div className="mt-5 h-16 animate-pulse border-t border-ink/15 bg-ink/[0.03]" />
         ) : queue.length === 0 ? (
           <p className="mt-5 border-t border-ink/15 pt-5 text-[15px] text-mineral">
-            Inget väntar på granskning just nu.
+            Inget väntar på granskning.
           </p>
         ) : (
           <ul className="mt-5">
@@ -321,7 +328,7 @@ export function LeadsControls({ demo = false }: Readonly<{ demo?: boolean }>) {
                 </div>
 
                 {item.body ? (
-                  <p className="mt-3 max-w-[70ch] whitespace-pre-line text-[15px] leading-7 text-ink/75">
+                  <p className="mt-3 max-w-[70ch] whitespace-pre-line text-[15px] leading-7 text-ink-muted">
                     {item.body}
                   </p>
                 ) : null}
@@ -350,6 +357,7 @@ export function LeadsControls({ demo = false }: Readonly<{ demo?: boolean }>) {
           </ul>
         )}
       </section>
+      ) : null}
 
       {error ? (
         <p role="alert" className="break-words text-[14px] text-danger">

@@ -33,6 +33,10 @@ type Classification = {
   escalation_reason?: string | null;
   reasoning?: string;
   kb_sources: { title: string; similarity: number }[];
+  /** Pilotflaggorna (migration 071): mailet ber om pris/offert respektive
+   * uttrycker utbildningsintresse. Oberoende av facket. */
+  offertforfragan?: boolean;
+  utbildningsintresse?: boolean;
 };
 
 type Draft = {
@@ -56,6 +60,8 @@ type EmailRow = {
   has_image: boolean;
   attachment_count: number;
   is_test?: boolean;
+  /** Manuell avbockning (migration 071). Null/undefined = ohanterad. */
+  hanterad_at?: string | null;
 };
 
 type EmailDetail = EmailRow & {
@@ -124,7 +130,7 @@ function ConfidenceBar({ value }: Readonly<{ value: number }>) {
           style={{ width: `${percent}%` }}
         />
       </span>
-      <span className="font-mono text-[11px] text-ink/50">{percent}%</span>
+      <span className="font-mono text-[11px] text-ink-subtle">{percent}%</span>
     </span>
   );
 }
@@ -174,6 +180,9 @@ export function Dashboard({
   }, [search]);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  /** Klientfilter: visa bara mail utan hanterad-stämpel. Listan är redan
+   * hämtad (max 50 rader), så det behövs ingen serverresa för filtret. */
+  const [baraOhanterade, setBaraOhanterade] = useState(false);
   /** True medan bakgrundsklassningen av nyss hämtade testmail pågår. */
   const [bearbetas, setBearbetas] = useState(false);
   /** Demo-/testkonton visar testmail under Ärenden. null = inte hämtat än. */
@@ -429,6 +438,17 @@ export function Dashboard({
       setSelected(null);
     });
 
+  /** Avbockningen (migration 071) — skild från status: en medarbetare ska
+   * kunna bocka av ett eskalerat mail som lösts i telefon. */
+  const vaxlaHanterad = () =>
+    selected &&
+    act("hanterad", () =>
+      api(`/inbox/${selected.id}/hanterad`, {
+        method: "POST",
+        body: JSON.stringify({ hanterad: !selected.hanterad_at })
+      })
+    );
+
   const totalPending = useMemo(
     () => emails.filter((e) => e.status === "awaiting_approval").length,
     [emails]
@@ -514,7 +534,7 @@ export function Dashboard({
           Uppdatera
         </button>
         <div className="relative min-w-[220px] flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/35" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-subtle" />
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
@@ -545,14 +565,14 @@ export function Dashboard({
       </div>
 
       {error ? (
-        <div className="rounded-[8px] border border-danger/25 bg-danger/5 px-4 py-3 text-sm text-ink/80">{error}</div>
+        <div className="rounded-[8px] border border-danger/25 bg-danger/5 px-4 py-3 text-sm text-ink-muted">{error}</div>
       ) : null}
       {syncInfo ? (
         <div
           className={
             syncInfo.includes("Kunskapsbasen är tom")
-              ? "rounded-[8px] border border-ochre/40 bg-ochre/10 px-4 py-3 text-sm text-ink/80"
-              : "rounded-[8px] border border-moss/25 bg-moss/5 px-4 py-3 text-sm text-ink/80"
+              ? "rounded-[8px] border border-ochre/40 bg-ochre/10 px-4 py-3 text-sm text-ink-muted"
+              : "rounded-[8px] border border-moss/25 bg-moss/5 px-4 py-3 text-sm text-ink-muted"
           }
         >
           {syncInfo}
@@ -568,7 +588,7 @@ export function Dashboard({
             "focus-ring rounded-input border px-3 py-2 text-xs font-semibold transition",
             categoryFilter === null
               ? "border-ochre bg-ochre/10 text-ink"
-              : "bg-paper2/60 text-ink/60 hover:text-ink"
+              : "bg-paper2/60 text-ink-muted hover:text-ink"
           )}
         >
           Alla ({emails.length})
@@ -582,12 +602,24 @@ export function Dashboard({
               "focus-ring rounded-input border px-3 py-2 text-xs font-semibold transition",
               categoryFilter === category
                 ? "border-ochre bg-ochre/10 text-ink"
-                : "bg-paper2/60 text-ink/60 hover:text-ink"
+                : "bg-paper2/60 text-ink-muted hover:text-ink"
             )}
           >
             {label} ({categoryCounts[category] ?? 0})
           </button>
         ))}
+        <button
+          type="button"
+          onClick={() => setBaraOhanterade((v) => !v)}
+          className={cn(
+            "focus-ring rounded-input border px-3 py-2 text-xs font-semibold transition",
+            baraOhanterade
+              ? "border-ochre bg-ochre/10 text-ink"
+              : "bg-paper2/60 text-ink-muted hover:text-ink"
+          )}
+        >
+          Bara ohanterade
+        </button>
         <span className="ml-auto flex gap-2">
           {totalPending > 0 ? <Badge tone="warn">{totalPending} väntar på godkännande</Badge> : null}
           {totalEscalated > 0 ? <Badge tone="danger">{totalEscalated} eskalerade</Badge> : null}
@@ -605,7 +637,7 @@ export function Dashboard({
                   backendens miljövariabler". En instruktion till oss, tryckt i
                   kundens vy — kunden har varken tillgång till backenden eller
                   anledning att veta vad IMAP är. */}
-              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-ink/60">
+              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-ink-muted">
                 {lager === "testmail" || visarTestIArenden !== false ? (
                   <>
                     Klicka på <strong>Hämta testmail</strong> för att skicka testärenden mot
@@ -616,7 +648,7 @@ export function Dashboard({
                 )}
               </p>
               {inkorgKopplad ? null : (
-                <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-ink/55">
+                <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-ink-subtle">
                   Vill ni koppla er riktiga inkorg?{" "}
                   <a
                     href={mejlaOss("Koppla vår inkorg")}
@@ -634,7 +666,7 @@ export function Dashboard({
                och fackkolumnerna står på samma plats oavsett textlängd.
                Raden är fortfarande en hel knapp, markeringen orörd. */
             <div className="divide-y divide-ink/10 overflow-hidden rounded-card bg-paper">
-              {emails.map((email) => {
+              {(baraOhanterade ? emails.filter((e) => !e.hanterad_at) : emails).map((email) => {
                 const meta = STATUS_META[email.status] ?? STATUS_META.new;
                 return (
                   <button
@@ -649,10 +681,10 @@ export function Dashboard({
                     <div className="col-span-12 min-w-0 md:col-span-6">
                       <p className="flex items-center gap-2 truncate text-sm font-semibold">
                         {email.subject || "(utan ämne)"}
-                        {email.has_image ? <ImageIcon className="h-3.5 w-3.5 shrink-0 text-ink/40" /> : null}
+                        {email.has_image ? <ImageIcon className="h-3.5 w-3.5 shrink-0 text-ink-subtle" /> : null}
                         {email.is_test ? <span className="kicker shrink-0 text-mineral">Test</span> : null}
                       </p>
-                      <p className="mt-0.5 truncate font-mono text-xs text-ink/45">
+                      <p className="mt-0.5 truncate font-mono text-xs text-ink-subtle">
                         {email.from_name ? `${email.from_name} · ` : ""}
                         {email.from_email}
                       </p>
@@ -661,6 +693,16 @@ export function Dashboard({
                       {email.classification ? (
                         <>
                           <Badge tone="neutral">{CATEGORY_LABELS[email.classification.category]}</Badge>
+                          {/* Pilotflaggorna: offert är kundens viktigaste
+                              signal (hela tratten är "kontakta oss för
+                              offert") och får en varm badge; utbildning en
+                              neutral. Oberoende av facket. */}
+                          {email.classification.offertforfragan ? (
+                            <Badge tone="warn">Offert</Badge>
+                          ) : null}
+                          {email.classification.utbildningsintresse ? (
+                            <Badge tone="good">Utbildning</Badge>
+                          ) : null}
                           <ConfidenceBar value={email.classification.confidence} />
                           {email.classification.escalate ? (
                             <ShieldAlert className="h-3.5 w-3.5 text-danger" />
@@ -670,7 +712,13 @@ export function Dashboard({
                         <Badge tone="neutral">{bearbetas ? "Agenten läser…" : "Obearbetat"}</Badge>
                       )}
                     </div>
-                    <div className="col-span-12 flex md:col-span-3 md:justify-end">
+                    <div className="col-span-12 flex items-center gap-2 md:col-span-3 md:justify-end">
+                      {email.hanterad_at ? (
+                        <CheckCircle2
+                          className="h-4 w-4 shrink-0 text-moss"
+                          aria-label="Hanterat"
+                        />
+                      ) : null}
                       <Badge tone={bearbetas && !email.classification ? "neutral" : meta.tone}>
                         {bearbetas && !email.classification ? "Bearbetas" : meta.label}
                       </Badge>
@@ -689,7 +737,7 @@ export function Dashboard({
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h3 className="break-words font-semibold">{selected.subject || "(utan ämne)"}</h3>
-                  <p className="mt-1 font-mono text-xs text-ink/50">
+                  <p className="mt-1 font-mono text-xs text-ink-subtle">
                     {selected.from_name ? `${selected.from_name} · ` : ""}
                     {selected.from_email}
                   </p>
@@ -697,14 +745,14 @@ export function Dashboard({
                 <button
                   type="button"
                   onClick={() => setSelected(null)}
-                  className="focus-ring rounded-full p-1.5 text-ink/40 hover:text-ink"
+                  className="focus-ring rounded-full p-1.5 text-ink-subtle hover:text-ink"
                   aria-label="Stäng"
                 >
                   <X className="h-4 w-4" />
                 </button>
               </div>
 
-              <div className="rounded-input bg-ink/[0.03] p-4 text-sm leading-6 text-ink/75">
+              <div className="rounded-input bg-ink/[0.03] p-4 text-sm leading-6 text-ink-muted">
                 <p className="whitespace-pre-wrap">{selected.body_text}</p>
                 {selected.attachments.filter((a) => a.is_image && a.data_url).length > 0 ? (
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -724,26 +772,49 @@ export function Dashboard({
                 ) : null}
               </div>
 
-              {selected.is_test ? (
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={() => void flyttaTillArenden()}
+                  onClick={() => void vaxlaHanterad()}
                   disabled={busy !== null}
                   className={btnSecondary}
                 >
-                  {busy === "befordra" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                  Flytta till ärenden
+                  {busy === "hanterad" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2
+                      className={cn("h-4 w-4", selected.hanterad_at ? "text-moss" : "")}
+                    />
+                  )}
+                  {selected.hanterad_at ? "Markera som ohanterat" : "Markera som hanterat"}
                 </button>
-              ) : null}
+                {selected.is_test ? (
+                  <button
+                    type="button"
+                    onClick={() => void flyttaTillArenden()}
+                    disabled={busy !== null}
+                    className={btnSecondary}
+                  >
+                    {busy === "befordra" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    Flytta till ärenden
+                  </button>
+                ) : null}
+              </div>
 
               {!selected.classification && bearbetas ? (
-                <p className="text-sm leading-6 text-ink/55">Agenten läser mailet och skriver ett utkast…</p>
+                <p className="text-sm leading-6 text-ink-subtle">Agenten läser mailet och skriver ett utkast…</p>
               ) : null}
 
               {selected.classification ? (
                 <div className="rounded-input border border-ink/10 bg-paper2/50 p-4">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge tone="neutral">{CATEGORY_LABELS[selected.classification.category]}</Badge>
+                    {selected.classification.offertforfragan ? (
+                      <Badge tone="warn">Offertförfrågan</Badge>
+                    ) : null}
+                    {selected.classification.utbildningsintresse ? (
+                      <Badge tone="good">Utbildningsintresse</Badge>
+                    ) : null}
                     <ConfidenceBar value={selected.classification.confidence} />
                     {typeof selected.classification.sentiment === "number" ? (
                       <Badge
@@ -766,7 +837,7 @@ export function Dashboard({
                     ) : null}
                   </div>
                   {selected.classification.reasoning ? (
-                    <p className="mt-3 text-xs leading-5 text-ink/60">{selected.classification.reasoning}</p>
+                    <p className="mt-3 text-xs leading-5 text-ink-muted">{selected.classification.reasoning}</p>
                   ) : null}
                   {selected.classification.escalation_reason ? (
                     <p className="mt-2 text-xs leading-5 text-danger">
@@ -774,7 +845,7 @@ export function Dashboard({
                     </p>
                   ) : null}
                   {selected.classification.kb_sources.length > 0 ? (
-                    <p className="mt-2 text-xs text-ink/50">
+                    <p className="mt-2 text-xs text-ink-subtle">
                       Källor: {selected.classification.kb_sources.map((s) => s.title).join(" · ")}
                     </p>
                   ) : null}
@@ -803,7 +874,7 @@ export function Dashboard({
                       className="focus-ring mt-3 w-full resize-y rounded-input bg-paper p-3 text-sm leading-6 outline-none"
                     />
                   ) : (
-                    <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-ink/75">
+                    <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-ink-muted">
                       {selected.draft.content}
                     </p>
                   )}
@@ -835,7 +906,7 @@ export function Dashboard({
                         type="button"
                         onClick={takeover}
                         disabled={busy !== null}
-                        className="focus-ring inline-flex min-h-10 items-center gap-2 rounded-input border border-ink/15 px-4 py-2 text-sm font-semibold text-ink/70 transition hover:text-ink disabled:opacity-40"
+                        className="focus-ring inline-flex min-h-10 items-center gap-2 rounded-input border border-ink/15 px-4 py-2 text-sm font-semibold text-ink-muted transition hover:text-ink disabled:opacity-40"
                       >
                         <UserRound className="h-4 w-4" />
                         Ta över ärendet
@@ -847,12 +918,12 @@ export function Dashboard({
 
               {selected.decisions.length > 0 ? (
                 <div>
-                  <p className="text-[0.8125rem] font-medium text-ink/45">Beslutslogg</p>
+                  <p className="text-[0.8125rem] font-medium text-ink-subtle">Beslutslogg</p>
                   <ol className="mt-3 space-y-2 border-l border-ink/10 pl-4">
                     {selected.decisions.map((decision, index) => (
-                      <li key={index} className="relative text-xs leading-5 text-ink/65">
+                      <li key={index} className="relative text-xs leading-5 text-ink-muted">
                         <span className="absolute -left-[21px] top-1.5 h-2 w-2 rounded-full bg-ochre" />
-                        <span className="font-semibold text-ink/80">
+                        <span className="font-semibold text-ink-muted">
                           {EVENT_LABELS[decision.event] ?? decision.event}
                         </span>
                         {decision.detail?.reasoning ? <>. {String(decision.detail.reasoning)}</> : null}
@@ -866,7 +937,7 @@ export function Dashboard({
               ) : null}
 
               {selected.status === "sent" || selected.status === "auto_sent" ? (
-                <p className="flex items-center gap-2 text-xs text-ink/50">
+                <p className="flex items-center gap-2 text-xs text-ink-subtle">
                   <CheckCircle2 className="h-4 w-4 text-moss" />
                   Ärendet är besvarat och stängt i CRM:et.
                 </p>

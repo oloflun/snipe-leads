@@ -47,7 +47,7 @@ export default async function SupportSessionPage({ params }: Props) {
           <span
             className={
               logo.background === "dark"
-                ? "kicker text-paper/45"
+                ? "kicker text-paper-subtle"
                 : "kicker text-mineral"
             }
           >

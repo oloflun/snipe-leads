@@ -30,6 +30,7 @@ const FALLBACK: DashboardState = {
   isPlatformAdmin: false,
   vy: "admin" as const,
   impersonation: null,
+  arLasare: false,
   initialScope: "both" as const
 };
 

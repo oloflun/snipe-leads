@@ -55,6 +55,8 @@ export type DemoEmail = {
   draft: DemoDraft | null;
   has_image: boolean;
   attachment_count: number;
+  /** Avbockningen (migration 071). Frivillig — grundmejlen är ohanterade. */
+  hanterad_at?: string | null;
   attachments: {
     id: string;
     filename: string;
@@ -490,6 +492,18 @@ export function createDemoSupportApi() {
         ];
       }
       return { ok: true } as T;
+    }
+
+    // Avbockningen (migration 071) — demon speglar riktiga endpointens
+    // stämpelsemantik så knappen beter sig likadant på /demo.
+    const hanterad = rutt.match(/^\/inbox\/(.+)\/hanterad$/);
+    if (hanterad && metod === "POST") {
+      const traff = hitta(hanterad[1]);
+      const { hanterad: varde = true } = JSON.parse((init?.body as string) ?? "{}");
+      if (traff) {
+        traff.hanterad_at = varde ? (traff.hanterad_at ?? nu()) : null;
+      }
+      return { email_id: hanterad[1], hanterad_at: traff?.hanterad_at ?? null } as T;
     }
 
     const detalj = rutt.match(/^\/inbox\/(.+)$/);

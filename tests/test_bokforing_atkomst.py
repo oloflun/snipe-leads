@@ -172,8 +172,10 @@ def test_gamla_bokforingsgrenen_ar_bara_en_redirect():
     """
     if 'section === "bokforing"' not in SECTION_KOD:
         return  # grenen borttagen helt — också rätt
-    gren = SECTION_KOD.split('section === "bokforing"')[1].split("}")[0]
-    assert 'redirect("/dashboard/kvitton")' in gren, (
+    gren = SECTION_KOD.split('section === "bokforing"')[1].split("\n  }")[0]
+    # `${base}/kvitton`: samma dispatcher tjänar /admin, och redirecten ska
+    # stanna under den yta anroparen står på.
+    assert 'redirect("/dashboard/kvitton")' in gren or "redirect(`${base}/kvitton`)" in gren, (
         "bokforing-grenen i WorkspaceSection gör något annat än att skicka "
         "vidare till /dashboard/kvitton."
     )

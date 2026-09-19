@@ -54,7 +54,7 @@ export default async function Page() {
         ].map(([rubrik, text]) => (
           <li key={rubrik} className="border-t border-ink/15 pt-4">
             <h2 className="text-[1rem] font-semibold leading-snug">{rubrik}</h2>
-            <p className="mt-1.5 text-[0.9375rem] leading-[1.6] text-ink/70">{text}</p>
+            <p className="mt-1.5 text-[0.9375rem] leading-[1.6] text-ink-muted">{text}</p>
           </li>
         ))}
       </ul>
@@ -69,7 +69,7 @@ export default async function Page() {
               loading="lazy"
               className="h-[720px] w-full rounded-card border border-ink/12 bg-paper2/40"
             />
-            <p className="mt-4 text-[0.875rem] text-ink/50">
+            <p className="mt-4 text-[0.875rem] text-ink-subtle">
               Går kalendern inte att ladda?{" "}
               <a
                 href={`mailto:${KONTAKT_MEJL}?subject=${encodeURIComponent("Boka demo")}`}

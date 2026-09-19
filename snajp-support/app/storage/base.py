@@ -148,11 +148,59 @@ class Storage(Protocol):
         content: str,
         sentiment: float | None = None,
         has_image: bool = False,
-    ) -> dict[str, Any]: ...
+        author: str | None = None,
+    ) -> dict[str, Any]:
+        """`author` (migration 066): 'customer', 'agent' eller 'human'. None
+        lämnar kolumnen tom, vilket läses som inbound = kunden, outbound =
+        agenten — beteendet för varje rad före migrationen."""
+        ...
 
     async def get_messages(
         self, tenant_id: str, conversation_id: str
     ) -> list[dict[str, Any]]: ...
+
+    async def find_customer(self, tenant_id: str, *, email: str) -> dict[str, Any] | None:
+        """Kunden med den här e-postidentifieraren, eller None. Skapar ALDRIG.
+
+        Skild från find_or_create_customer av ett skäl: chattfönstrets
+        pollning är anonym, och en läsväg som skapar en kundrad per okänt
+        sessions-id vore en skrivväg för vem som helst med en slumpgenerator.
+        """
+        ...
+
+    # -- Samtalsläge (migration 066) ----------------------------------------
+    #
+    # En rad per (tenant, kund). Saknas raden gäller standardläget — läsaren
+    # får alltid en fullständig dict, aldrig None, så att agenten inte
+    # behöver särskilja "ny kund" från "kund utan läge".
+
+    async def get_chat_state(self, tenant_id: str, customer_id: str) -> dict[str, Any]: ...
+
+    async def save_chat_state(
+        self,
+        tenant_id: str,
+        customer_id: str,
+        *,
+        lage: str,
+        misslyckade_i_rad: int,
+        erbjod_manniska: bool,
+        overlamnad_orsak: str | None = None,
+        overlamnad_ticket_id: str | None = None,
+        sprak: str | None = None,
+    ) -> dict[str, Any]:
+        """Upsert av hela läget. `overlamnad_at` sätts av lagringen när
+        `lage` går från 'agent' till 'overlamnad' (och står kvar vid en
+        uppdatering av ett redan överlämnat samtal); den nollas när läget går
+        tillbaka till 'agent'. `updated_at` sätts vid varje anrop — det är
+        klockan överlämningens giltighetstid räknas från."""
+        ...
+
+    async def list_chat_handovers(
+        self, tenant_id: str, *, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """Överlämnade samtal, senast uppdaterade först, med kundens namn och
+        det överlämnade ärendets ämne/kategori/is_test. Portalens Chattar-vy."""
+        ...
 
     async def search_kb(
         self,
@@ -173,6 +221,12 @@ class Storage(Protocol):
         category: str,
         embedding: list[float] | None = None,
     ) -> dict[str, Any]: ...
+
+    async def delete_kb_article(self, tenant_id: str, artikel_id: str) -> bool:
+        """Tar bort EN artikel i tenantens egen bas. False om den inte finns
+        (eller tillhör någon annan — RLS gör de två fallen omöjliga att skilja
+        åt, och det ska de vara). Kräver migration 069 (delete-grant)."""
+        ...
 
     # -- Agentens föreslagna lärdomar (självlärning, 2026-08-26) -------------
     #
@@ -514,6 +568,24 @@ class Storage(Protocol):
         pengar hos leverantören som skarpa körningar."""
         ...
 
+    async def sum_support_tokens(self, tenant_id: str, *, hours: int = 24) -> int:
+        """Supportens motsvarighet till sum_leads_tokens: summan för
+        SUPPORT_BUDGET_AGENT_TYPES de senaste `hours` timmarna — frågan
+        bakom supportbudgeten (app/budget.py). Testkörningar räknas MED,
+        av samma skäl."""
+        ...
+
+    async def daily_support_usage(
+        self, tenant_id: str, *, days: int = 30
+    ) -> list[dict[str, Any]]:
+        """Journalens dagliga serie (GET /api/usage): en rad per dag med
+        körningar för SUPPORT_BUDGET_AGENT_TYPES, nyaste först. Fält per rad:
+        `datum` (ISO-dag), `korningar`, `korningar_test`, `tokens_in`,
+        `tokens_out`. Dagar utan körningar utelämnas — en tom dag är ingen
+        rad, inte en nollrad (till skillnad från weekly_analytics, som är en
+        kurva och behöver sina hål ifyllda)."""
+        ...
+
     # -- Leadslistor (tillägget 'leadlists', migration 060) -----------------
     #
     # Metoderna står i PROTOKOLLET av samma skäl som log_agent_run: en
@@ -784,7 +856,12 @@ class Storage(Protocol):
         status: str | None = None,
         ticket_id: str | None = None,
         is_test: bool | None = None,
-    ) -> dict[str, Any] | None: ...
+        hanterad: bool | None = None,
+    ) -> dict[str, Any] | None:
+        """`hanterad` styr `hanterad_at` (migration 071): True stämplar (om
+        inte redan stämplad), False nollar, None rör inte. Oberoende av
+        `status` — se migrationens motivering."""
+        ...
 
     async def add_attachment(
         self,
@@ -812,6 +889,8 @@ class Storage(Protocol):
         reasoning: str,
         kb_sources: list[dict[str, Any]],
         model: str,
+        offertforfragan: bool = False,
+        utbildningsintresse: bool = False,
     ) -> dict[str, Any]: ...
 
     async def create_draft(
@@ -1215,6 +1294,12 @@ AGENT_RUN_TYPES = (
 #: som resten: EN lista, speglad av båda lagringarna, aldrig två svar.
 LEADS_BUDGET_AGENT_TYPES = ("leads_research", "leads_outreach", "leads_svar", "leads_followup")
 
+#: Agenttyperna som räknas mot supportbudgeten (sum_support_tokens /
+#: app/budget.py). Bara 'support' i dag: chatten och kanalerna loggar sina
+#: körningar så, medan e-postpipelinens fristående triage-anrop inte loggas
+#: som agent_runs alls — grinden prövas ändå i processorn.
+SUPPORT_BUDGET_AGENT_TYPES = ("support",)
+
 
 # Värdemängden för bk_underlag.status, spegel av check-villkoret i migration
 # 045. Bor här av exakt samma skäl som AGENT_RUN_TYPES ovan — och `klar`/
@@ -1366,6 +1451,41 @@ ANALYTICS_COVERAGE: dict[str, bool] = {
     "resolved": True,
     "meetings": False,
 }
+
+
+#: ss_messages.author (migration 066). None är också giltigt — en äldre rad.
+MEDDELANDE_AVSANDARE = ("customer", "agent", "human")
+
+#: ss_chat_state.lage (migration 066).
+SAMTALSLAGEN = ("agent", "overlamnad")
+
+
+def standard_samtalslage(tenant_id: str, customer_id: str) -> dict[str, Any]:
+    """Läget för en kund utan rad: agenten svarar, inget räknat, inget erbjudet.
+
+    Delad av båda lagringarna så att "ingen rad" betyder exakt samma dict i
+    sviten som i drift — samma skäl som bk-valideringarna ovan bor här."""
+    return {
+        "tenant_id": tenant_id,
+        "customer_id": customer_id,
+        "lage": "agent",
+        "misslyckade_i_rad": 0,
+        "erbjod_manniska": False,
+        "overlamnad_orsak": None,
+        "overlamnad_ticket_id": None,
+        "overlamnad_at": None,
+        "sprak": None,
+        "updated_at": None,
+    }
+
+
+def kontrollera_samtalslage(lage: str, misslyckade_i_rad: int) -> None:
+    """Samma villkor som tabellens check-constraints, körda FÖRE skrivningen
+    i båda lagringarna — annars säger minnet ja där Postgres säger nej."""
+    if lage not in SAMTALSLAGEN:
+        raise ValueError(f"Okänt samtalsläge: {lage!r}")
+    if misslyckade_i_rad < 0:
+        raise ValueError("misslyckade_i_rad kan inte vara negativ.")
 
 
 # Framåtriktade statusövergångar, som i referensrepot (forward-only).

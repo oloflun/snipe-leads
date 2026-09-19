@@ -83,7 +83,7 @@ export function AgentAnvandning({
   const { rader, a, b, tokensIn, tokensUt } = summera(runs, delning);
 
   if (runs.length === 0) {
-    return <p className="mt-4 max-w-[70ch] text-[15px] leading-7 text-ink/65">{tomtext}</p>;
+    return <p className="mt-4 max-w-[70ch] text-[15px] leading-7 text-ink-muted">{tomtext}</p>;
   }
 
   return (

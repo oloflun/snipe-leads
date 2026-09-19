@@ -376,11 +376,18 @@ function startutkast(kund: Kund, profil: Affarsprofil, signal: Signal | null): {
  * ännu" gäller arbetsytan, inte demon (samma val som MejlRuta i
  * LeadslistorView).
  *
- * Erbjudandet skickas som den korta erbjudandefrasen, inte hela affärsidén:
- * demons anonyma väg svarar med simulateAction, som klistrar in `offer`
- * ordagrant mitt i meningar; 800 tecken affärsidé mitt i ett kallmejl
- * (uppmätt i demon 2026-09-11). Frasen bär vinkeln och håller mejlet
- * läsbart; den inloggade LLM-vägen har egna regler för bakgrunden.
+ * Erbjudandet skickas som den korta erbjudandefrasen, inte hela affärsidén —
+ * 800 tecken affärsidé mitt i ett kallmejl var uppmätt i demon 2026-09-11.
+ * Frasen bär vinkeln och håller mejlet läsbart; den inloggade LLM-vägen har
+ * egna regler för bakgrunden.
+ *
+ * OBS 2026-09-18: /api/email-studios anonyma väg svarar numera med ett av de
+ * SEX handskrivna exempelsvaren i lib/demo/iris-exempel.ts (matchat på
+ * bolags-id), inte längre med en generisk `simulateAction`-mall. En uppladdad
+ * CRM-kund matchar aldrig något av de sex, så Email Studio-KNAPPARNA
+ * (Kortare, Skriv om …) svarar här med en ärlig "demot har inga färdiga svar
+ * till det här bolaget"-text i stället för en omskrivning — basutkastet
+ * `startutkast()` bygger lokalt ovan är opåverkat och visas som förut.
  */
 function byggStudioData(
   kund: Kund,
@@ -570,12 +577,12 @@ export function CrmDemo() {
       {/* ————— Affärsprofilen: det agenten läser om ER ————— */}
       <section className="rounded-card border border-ink/12 bg-paper p-5 md:p-6">
         <p className="kicker text-mineral">Er produkt och affärsidé</p>
-        <p className="mt-2 max-w-[70ch] text-[0.9375rem] leading-[1.6] text-ink/65">
+        <p className="mt-2 max-w-[70ch] text-[0.9375rem] leading-[1.6] text-ink-muted">
           Det här läser Email studio inför varje omskrivning, som bakgrund för ton och vinkel,
           aldrig som text att klistra in i mejlet. I drift läser agenten även er webbplats själv;
           i demon står texten här för den. Ändra och se hur förslagen följer med.
         </p>
-        <label htmlFor="crm-affarside" className="mt-5 block text-[0.8125rem] font-medium text-ink/45">
+        <label htmlFor="crm-affarside" className="mt-5 block text-[0.8125rem] font-medium text-ink-subtle">
           Vad ni säljer och varför
         </label>
         <textarea
@@ -587,7 +594,7 @@ export function CrmDemo() {
         />
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <div>
-            <label htmlFor="crm-erbjudande" className="block text-[0.8125rem] font-medium text-ink/45">
+            <label htmlFor="crm-erbjudande" className="block text-[0.8125rem] font-medium text-ink-subtle">
               Erbjudandet, i en kort fras
             </label>
             <input
@@ -599,7 +606,7 @@ export function CrmDemo() {
             />
           </div>
           <div>
-            <label htmlFor="crm-webbplats" className="block text-[0.8125rem] font-medium text-ink/45">
+            <label htmlFor="crm-webbplats" className="block text-[0.8125rem] font-medium text-ink-subtle">
               Er webbplats
             </label>
             <input
@@ -612,7 +619,7 @@ export function CrmDemo() {
             />
           </div>
         </div>
-        <label htmlFor="crm-cta" className="mt-4 block text-[0.8125rem] font-medium text-ink/45">
+        <label htmlFor="crm-cta" className="mt-4 block text-[0.8125rem] font-medium text-ink-subtle">
           Önskat nästa steg (CTA)
         </label>
         <input
@@ -627,7 +634,7 @@ export function CrmDemo() {
       {/* ————— Importen: CRM-listan in ————— */}
       <section className="rounded-card border border-ink/12 bg-paper p-5 md:p-6">
         <p className="kicker text-mineral">Ladda upp er CRM-lista</p>
-        <p className="mt-2 max-w-[70ch] text-[0.9375rem] leading-[1.6] text-ink/65">
+        <p className="mt-2 max-w-[70ch] text-[0.9375rem] leading-[1.6] text-ink-muted">
           Exportera kundlistan som CSV ur ert CRM (HubSpot, Pipedrive, Lime och Excel kan alla) och
           släpp den här. Kolumnerna känns igen automatiskt. Listan stannar i din webbläsare och
           laddas aldrig upp till någon server i demon.
@@ -672,7 +679,7 @@ export function CrmDemo() {
         ) : null}
 
         {resultat && !importFel ? (
-          <div className="mt-4 rounded-input bg-paper2/70 px-4 py-3 text-[0.875rem] leading-6 text-ink/70">
+          <div className="mt-4 rounded-input bg-paper2/70 px-4 py-3 text-[0.875rem] leading-6 text-ink-muted">
             <p role="status">
               {resultat.importerade === 1 ? "1 kund importerad" : `${resultat.importerade} kunder importerade`}
               {resultat.dubbletter > 0
@@ -687,7 +694,7 @@ export function CrmDemo() {
               .
             </p>
             {resultat.mappning.length > 0 ? (
-              <p className="mt-1 text-ink/55">
+              <p className="mt-1 text-ink-subtle">
                 Kolumner: {resultat.mappning.map(([falt, rubrik]) => `${falt} ← ”${rubrik}”`).join(" · ")}
                 {resultat.ignorerade.length > 0 ? ` · Ignorerade: ${resultat.ignorerade.join(", ")}` : ""}
               </p>
@@ -701,7 +708,7 @@ export function CrmDemo() {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="kicker text-mineral">Kundlistan</p>
-            <p className="mt-1 max-w-[60ch] text-[0.9375rem] text-ink/65">
+            <p className="mt-1 max-w-[60ch] text-[0.9375rem] text-ink-muted">
               {kunder.length === 0
                 ? "Ingen lista inläst ännu. Välj en CSV-fil ovan, eller börja med exempellistan."
                 : `${kunder.length === 1 ? "1 kund" : `${kunder.length} kunder`}. Klicka på en kund: signalerna och en egen Email studio öppnas bredvid listan.`}
@@ -709,7 +716,7 @@ export function CrmDemo() {
           </div>
           {kunder.length > 0 ? (
             <label className="relative block">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/35" aria-hidden />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-subtle" aria-hidden />
               <span className="sr-only">Sök i kundlistan</span>
               <input
                 value={sok}
@@ -745,15 +752,15 @@ export function CrmDemo() {
                       <span className="col-span-9 min-w-0">
                         <span className="block truncate text-[0.9375rem] font-medium text-ink">{kund.foretag}</span>
                         {kund.kontakt || kund.epost ? (
-                          <span className="mt-0.5 block truncate text-[0.8125rem] text-ink/55">
+                          <span className="mt-0.5 block truncate text-[0.8125rem] text-ink-subtle">
                             {[kund.kontakt, kund.epost].filter(Boolean).join(" · ")}
                           </span>
                         ) : null}
                         {kund.notering ? (
-                          <span className="mt-0.5 block truncate text-[0.8125rem] text-ink/45">{kund.notering}</span>
+                          <span className="mt-0.5 block truncate text-[0.8125rem] text-ink-subtle">{kund.notering}</span>
                         ) : null}
                       </span>
-                      <span className="col-span-3 truncate text-right text-[0.8125rem] text-ink/45">
+                      <span className="col-span-3 truncate text-right text-[0.8125rem] text-ink-subtle">
                         {kund.ort}
                       </span>
                     </button>
@@ -761,7 +768,7 @@ export function CrmDemo() {
                 );
               })}
               {filtrerade.length === 0 ? (
-                <li className="px-3 py-6 text-[0.9375rem] text-ink/55">Inga kunder matchar sökningen.</li>
+                <li className="px-3 py-6 text-[0.9375rem] text-ink-subtle">Inga kunder matchar sökningen.</li>
               ) : null}
             </Radlista>
 
@@ -778,7 +785,7 @@ export function CrmDemo() {
                 />
               ) : (
                 <div className="rounded-card border border-ink/12 bg-paper2/40 p-6">
-                  <p className="text-[0.9375rem] leading-[1.6] text-ink/60">
+                  <p className="text-[0.9375rem] leading-[1.6] text-ink-muted">
                     Välj en kund i listan. Här visas kundens signaler och en Email studio som är
                     isolerad till just den kunden.
                   </p>
@@ -803,7 +810,7 @@ export function CrmDemo() {
                           compact
                         />
                       </div>
-                      <p className="mt-4 max-w-[70ch] text-[0.8125rem] leading-6 text-ink/50">
+                      <p className="mt-4 max-w-[70ch] text-[0.8125rem] leading-6 text-ink-subtle">
                         Studion är isolerad till {kund.foretag}: text och förslag här påverkar aldrig
                         någon annan kund i listan. Inget skickas från demon.
                       </p>
@@ -844,12 +851,12 @@ function KundDetalj({
     <div className="rounded-card border border-ink/12 bg-paper p-4 md:p-5">
       <h2 className="text-[1.125rem] font-semibold tracking-[-0.01em] text-ink">{kund.foretag}</h2>
       {fakta.length > 0 ? (
-        <p className="mt-1 text-[0.875rem] leading-6 text-ink/55">{fakta.join(" · ")}</p>
+        <p className="mt-1 text-[0.875rem] leading-6 text-ink-subtle">{fakta.join(" · ")}</p>
       ) : null}
 
       <div className="hrule mt-4 pt-4">
-        <p className="flex items-center gap-2 text-[0.8125rem] font-medium text-ink/45">
-          <Newspaper className="h-4 w-4 text-ink/40" aria-hidden />
+        <p className="flex items-center gap-2 text-[0.8125rem] font-medium text-ink-subtle">
+          <Newspaper className="h-4 w-4 text-ink-subtle" aria-hidden />
           Signaler och affärsmöjligheter
         </p>
         <ul className="mt-3 space-y-2">
@@ -859,12 +866,12 @@ function KundDetalj({
               <li key={s.id} className={cn("rounded-input border p-3", anvands ? "border-ochre/60 bg-ochre/10" : "border-ink/10 bg-paper2/40")}>
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-[0.75rem] font-medium uppercase tracking-wide text-ink/40">{s.kalla}</p>
+                    <p className="text-[0.75rem] font-medium uppercase tracking-wide text-ink-subtle">{s.kalla}</p>
                     <p className="mt-0.5 text-[0.9375rem] leading-6 text-ink">{s.text}</p>
-                    <p className="mt-1 text-[0.8125rem] leading-6 text-ink/55">{s.mojlighet}</p>
+                    <p className="mt-1 text-[0.8125rem] leading-6 text-ink-subtle">{s.mojlighet}</p>
                   </div>
                   {anvands ? (
-                    <span className="shrink-0 text-[0.8125rem] font-medium text-ochre">Används i mejlet</span>
+                    <span className="shrink-0 text-[0.8125rem] font-medium text-warning">Används i mejlet</span>
                   ) : (
                     <button
                       type="button"
@@ -880,7 +887,7 @@ function KundDetalj({
             );
           })}
         </ul>
-        <p className="mt-3 max-w-[70ch] text-[0.8125rem] leading-6 text-ink/45">
+        <p className="mt-3 max-w-[70ch] text-[0.8125rem] leading-6 text-ink-subtle">
           Nyhets- och annonsraden är simulerad i demon. I drift bevakar agenten Platsbanken och
           nyhetskällor per kund i listan, och läser er webbplats ({profil.webbplats || "ingen angiven"})
           för att veta vad mejlen ska utgå från. Signalbytet används av studions knappar vid nästa

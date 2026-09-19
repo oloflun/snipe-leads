@@ -95,7 +95,7 @@ export function Svar({ demo = false }: Readonly<{ demo?: boolean }>) {
           fas: "fel",
           meddelande:
             response.status >= 500
-              ? "Tjänsten svarar inte just nu. Den vaknar ur viloläge och kan ta upp till en minut."
+              ? "Tjänsten svarar inte. Försök igen om en minut."
               : `Kunde inte hämta svaren (status ${response.status}).`
         });
         return;
@@ -127,10 +127,10 @@ export function Svar({ demo = false }: Readonly<{ demo?: boolean }>) {
   if (lage.fas === "fel") {
     return (
       <div className="flex items-start gap-3 border-y border-ochre/40 bg-ochre/10 px-4 py-4">
-        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-ochre" aria-hidden />
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
         <div className="min-w-0">
           <p className="text-sm font-medium text-ink">Svaren kunde inte hämtas</p>
-          <p className="mt-1 text-sm text-ink/70">{lage.meddelande}</p>
+          <p className="mt-1 text-sm text-ink-muted">{lage.meddelande}</p>
           <button
             type="button"
             onClick={() => void hamta()}
@@ -145,10 +145,7 @@ export function Svar({ demo = false }: Readonly<{ demo?: boolean }>) {
 
   if (!lage.svar.length) {
     return (
-      <EmptyState
-        title="Inga svar ännu"
-        body="Här hamnar svaren från bolagen agenten kontaktat. Listan är tom tills någon svarat — inga exempelsvar som platshållare."
-      />
+      <EmptyState title="Inga svar ännu" />
     );
   }
 
@@ -162,7 +159,7 @@ export function Svar({ demo = false }: Readonly<{ demo?: boolean }>) {
             <p className="text-[1.0625rem] font-semibold tracking-[-0.01em]">
               {s.contact_name ?? s.contact_email ?? "Okänd avsändare"}
               {s.company_name ? (
-                <span className="ml-2 text-[15px] font-normal text-ink/55">{s.company_name}</span>
+                <span className="ml-2 text-[15px] font-normal text-ink-subtle">{s.company_name}</span>
               ) : null}
             </p>
             <span className="kicker shrink-0 text-mineral">
@@ -170,7 +167,7 @@ export function Svar({ demo = false }: Readonly<{ demo?: boolean }>) {
               {s.status ? ` · ${STATUS_ETIKETT[s.status] ?? s.status}` : ""}
             </span>
           </div>
-          <p className="mt-2 max-w-[75ch] whitespace-pre-line text-[15px] leading-6 text-ink/78">
+          <p className="mt-2 max-w-[75ch] whitespace-pre-line text-[15px] leading-6 text-ink-muted">
             {s.body}
           </p>
         </Rad>

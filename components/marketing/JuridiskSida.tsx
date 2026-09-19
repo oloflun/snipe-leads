@@ -36,7 +36,7 @@ export function JuridiskSida({
           <Link href="/" className="focus-ring" aria-label="Till startsidan">
             <Logo />
           </Link>
-          <Link href="/" className="focus-ring text-sm text-ink/60 hover:text-ink">
+          <Link href="/" className="focus-ring text-sm text-ink-muted hover:text-ink">
             Till startsidan
           </Link>
         </div>
@@ -52,19 +52,19 @@ export function JuridiskSida({
             vi inte vet. Sätts `policyUppdaterad` i lib/bolag.ts kommer raden
             tillbaka av sig själv. */}
         {utanPlatshallare(BOLAG.policyUppdaterad) ? (
-          <p className="mt-4 text-[0.875rem] text-ink/45">
+          <p className="mt-4 text-[0.875rem] text-ink-subtle">
             Senast uppdaterad: {BOLAG.policyUppdaterad}
           </p>
         ) : null}
         {ingress ? (
-          <p className="mt-6 text-[1.125rem] leading-[1.7] text-ink/75">{ingress}</p>
+          <p className="mt-6 text-[1.125rem] leading-[1.7] text-ink-muted">{ingress}</p>
         ) : null}
 
         {/* Typografin sätts här i stället för per sida. `prose`-liknande
             regler skrivna för hand: kodbasen har ingen typography-plugin, och
             att lägga till ett beroende för tre sidor är fel växling. */}
         <div
-          className="mt-12 space-y-6 text-[1.0625rem] leading-[1.75] text-ink/80
+          className="mt-12 space-y-6 text-[1.0625rem] leading-[1.75] text-ink-muted
             [&_a]:underline [&_a]:underline-offset-4 [&_a:hover]:text-ochre
             [&_h2]:mt-14 [&_h2]:font-display [&_h2]:text-[1.5rem] [&_h2]:font-semibold
             [&_h2]:leading-snug [&_h2]:tracking-[-0.02em] [&_h2]:text-ink

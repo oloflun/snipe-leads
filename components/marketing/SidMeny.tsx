@@ -107,7 +107,7 @@ export function SidMeny({ tone = "paper" }: Readonly<{ tone?: "paper" | "ink" }>
         aria-haspopup="true"
         className={cn(
           "focus-ring inline-flex min-h-11 items-center gap-1.5 rounded-input px-3 text-sm font-medium transition-colors",
-          ljus ? "text-paper/70 hover:text-paper" : "text-ink/60 hover:text-ink"
+          ljus ? "text-paper-muted hover:text-paper" : "text-ink-muted hover:text-ink"
         )}
       >
         {text(shared.menyEtikett)}
@@ -126,7 +126,7 @@ export function SidMeny({ tone = "paper" }: Readonly<{ tone?: "paper" | "ink" }>
             const aktiv = arAktiv(post.href, sokvag);
             const klass = cn(
               "focus-ring block px-4 py-3 text-[0.9375rem] transition-colors hover:bg-paper2 hover:text-ink",
-              aktiv ? "bg-paper2 font-semibold text-ink" : "text-ink/75"
+              aktiv ? "bg-paper2 font-semibold text-ink" : "text-ink-muted"
             );
             // aria-current och inte bara en fetare vikt: markeringen ska nå
             // den som inte ser den. Utan attributet är en aktiv post

@@ -217,6 +217,27 @@ class Settings(BaseSettings):
     # den globala defaulten för att "lösa" leads — testa och besluta separat.
     thinking_mode: str = "disabled"
 
+    # Geminis tänkande: AV som standard sedan 2026-09-19. `thinking_mode` ovan
+    # når bara DeepSeek — gemini-2.5-flash tänker annars på varje anrop, och
+    # tänktokens debiteras som utdata utan att synas i completion_tokens.
+    #
+    # Beslutsunderlag (Vertex, gemini-2.5-flash, 2026-09-19):
+    # - I drift (development, 3 veckor) tänkte stegen 5–13× sin synliga
+    #   utdata: triage 986, research 748, utkast 1 459, humaniserare 1 876.
+    # - Supportens golden-evals, 2×7 fall: MED 12/14 godkända, 107 351
+    #   tänktokens, 51 s/chatt, ~0,54 kr/chatt. UTAN 14/14, 10 723 (bara
+    #   eskaleringssteget), 15 s/chatt, ~0,31 kr/chatt.
+    # - Iris V2 på de 5 benchmarkfixturerna: samma kvalificering, kontakt och
+    #   faktagrind; blind parvis dom i båda ordningarna 1–1, två oavgjorda;
+    #   ~0,53 -> ~0,26 kr/lead, 292 -> 66 s.
+    #
+    # "none" = tankebudget 0 (se llm.gemini_tank_kwargs — Vertex avvisar
+    # reasoning_effort="none"). Steg med thinking="enabled" behåller sitt
+    # tänkande: eskaleringsbedömningen och kvittoavläsningen. Tom sträng ger
+    # leverantörens default; "minimal"/"low"/"medium"/"high" går som
+    # reasoning_effort.
+    gemini_reasoning_effort: str = "none"
+
     # Fas B research (G4). Tomt => research-verktyget vägrar med ett tydligt
     # fel i stället för att krascha eller tyst hoppa över skrapningen.
     scrapegraphai_api_key: str = ""
@@ -267,6 +288,13 @@ class Settings(BaseSettings):
     # (lib/admin/halsa.ts). 0 = grinden avstängd (test/dev utan databas har
     # inget att skydda). Sätts per miljö via LEADS_DAILY_TOKEN_BUDGET.
     leads_daily_token_budget: int = 2_000_000
+    # Supportens dygnstak (app/budget.py, Livrustning-piloten): max summa
+    # tokens_in+tokens_out per tenant och rullande 24 timmar för agent_type
+    # 'support'. 0 = avstängd (default — taket sätts per miljö via
+    # SUPPORT_DAILY_TOKEN_BUDGET, aldrig som en kodändring, så befintliga
+    # kunder inte får ett tak de aldrig haft). Per-tenant-override via env
+    # SUPPORT_BUDGET_<SLUG>. Förvarning vid 80 %, se app/budget.py.
+    support_daily_token_budget: int = 0
     # Städaren (app/jobs/stadare.py): leads-jobb i queued/processing och
     # leadslistor i bestalld/byggs som är äldre än så här markeras som
     # misslyckade med ett ärligt besked. Räknat från KÖANDET (liggaren har
@@ -397,6 +425,22 @@ class Settings(BaseSettings):
     email_provider: str = ""
     resend_api_key: str = ""
     resend_webhook_secret: str = ""
+
+    # Integrationer och kanaler (bd snipe-36u): kundernas API-nycklar, MCP-
+    # tokens och kanalhemligheter krypteras med den här nyckeln innan de
+    # sparas. Fernet-nyckel (urlsafe base64, 32 byte). Kommaseparerad lista
+    # för rotation: den FÖRSTA krypterar, alla dekrypterar. Tom i en miljö med
+    # riktig kunddata = hemligheter går inte att spara (se
+    # app/integrationer/hemligheter.py) — hellre ett tydligt fel vid
+    # konfigureringen än en klartextnyckel i databasen.
+    integration_nyckel: str = ""
+    # Den här tjänstens EGEN publika adress — dit Meta, Slack och Microsoft
+    # skickar kanalernas webhooks (app/api/kanaler.py). Railway sätter
+    # RAILWAY_PUBLIC_DOMAIN själv; API_PUBLIK_URL vinner om den är satt.
+    # Används bara för att VISA webhookadressen i portalen — inget anrop
+    # beror på den.
+    api_publik_url: str = ""
+    railway_public_domain: str = ""
 
     # CORS: kommaseparerade origins som får anropa API:t direkt från en
     # webbläsare. Tom = av, vilket räcker för vår egen frontend — Next-proxyn

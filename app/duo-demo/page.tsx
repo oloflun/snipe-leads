@@ -47,6 +47,7 @@ const DEMO_STATE = {
   isPlatformAdmin: false,
   vy: "admin" as const,
   impersonation: null,
+  arLasare: false,
   initialScope: "both" as const,
   isDemo: false,
   // BÅDA produkterna. Det är hela poängen med ytan.
@@ -65,7 +66,7 @@ export default async function Page() {
   return (
     <div className="min-h-screen bg-paper text-ink">
       <div className="mx-auto max-w-[1480px] px-4 py-6 md:px-6">
-        <p className="kicker rounded-input border border-ochre/40 bg-ochre/10 px-3 py-2 text-ochre">
+        <p className="kicker rounded-input border border-ochre/40 bg-ochre/10 px-3 py-2 text-warning">
           Demo · exempeldata, ingen inloggning och ingen kunddata
         </p>
       </div>

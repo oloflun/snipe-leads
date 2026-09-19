@@ -22,7 +22,7 @@ function Field({ label, value }: Readonly<{ label: string; value?: string | null
   return (
     <details className="mt-3 border-t border-ink/15 pt-3">
       <summary className="kicker cursor-pointer text-mineral hover:text-ochre">{label}</summary>
-      <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words text-[13px] leading-6 text-ink/75">
+      <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words text-[13px] leading-6 text-ink-muted">
         {value}
       </pre>
     </details>

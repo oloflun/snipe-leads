@@ -11,38 +11,43 @@
  *
  * ## Varför nav-listan är kortare än sektionslistan
  *
- * `/dashboard` visar INTE alla vyer. Fem av posterna i `lib/routes.ts` bär
+ * `/dashboard` visar INTE alla vyer. Flera poster i `lib/routes.ts` bär
  * `preview: true` — Företag, Kontakter, Svar, Analys, Assistant — och
  * `routesForProducts` filtrerar bort dem om inte anroparen ber om dem.
- * Arbetsytan visar alltså fem flikar, inte tolv.
  *
- * Demon ritade tolv. Den exponerade därmed sektioner som den riktiga
- * arbetsytan medvetet döljer, och raden blev så bred att kontrollerna föll ner
- * på en andra rad — vilket var hela anledningen till att den inte såg ut som
- * /dashboard.
- *
- * `DEMO_NAV` speglar därför arbetsytans icke-preview-uppsättning, i samma
- * ordning. Vyerna finns kvar och svarar på sina adresser (sidan har en `switch`
- * som är sanningen om vad som är giltigt) — de annonseras bara inte i headern,
+ * Demon speglar därför arbetsytans icke-preview-uppsättning, i samma ordning.
+ * Vyerna finns kvar och svarar på sina adresser (sidan har en `switch` som är
+ * sanningen om vad som är giltigt) — de annonseras bara inte i headern,
  * precis som på /dashboard.
  *
- * "Inställningar" står inte med: den har ingen demomotsvarighet och pekade
- * förut på /settings, alltså den riktiga appen bakom inloggning. En besökare
- * utan konto möttes av inloggningssidan från en yta vars hela löfte är "ingen
- * inloggning".
+ * "Inställningar" står inte med som EGEN toppnivåpost: den har ingen
+ * demomotsvarighet utanför Iris (arbetsytans /settings ligger bakom
+ * inloggning). Iris eget Inställningar-barn är däremot demobart, se nedan.
  */
-export const DEMO_NAV = [
-  ["", "Översikt"],
-  ["leads", "Leads"],
-  // Avsteg från spegelregeln ovan, med avsikt: CRM-listan är den omgjorda
-  // leadsagentens demoyta (kundens egen kundlista + en Email studio per kund)
-  // och finns ännu inte på /dashboard. Posten annonseras här för att den ska
-  // gå att hitta — flyttas in i lib/routes.ts den dag funktionen byggs skarpt.
-  ["crm", "CRM-lista"],
-  ["support", "Kundtjänst"],
-  ["emails", "Email studio"],
-  ["kvitton", "Kvitton"]
-] as const;
+
+export type DemoNavChild = { slug: string; label: string };
+
+export type DemoNavItem = { slug: string; label: string; children?: DemoNavChild[] };
+
+export const DEMO_NAV: DemoNavItem[] = [
+  { slug: "", label: "Översikt" },
+  {
+    slug: "iris",
+    label: "Iris",
+    children: [
+      { slug: "iris", label: "Bolag" },
+      { slug: "iris/granskning", label: "Granskning" },
+      { slug: "iris/installningar", label: "Inställningar" },
+      // Avsteg från spegelregeln ovan, med avsikt: CRM-listan är den omgjorda
+      // leadsagentens demo av KUNDENS EGEN kundlista (i stället för att Iris
+      // letar prospekt) och finns bara i demon — ett fjärde barn under Iris,
+      // inte en egen toppnivåpost.
+      { slug: "crm", label: "CRM-lista" }
+    ]
+  },
+  { slug: "support", label: "Kundtjänst" },
+  { slug: "kvitton", label: "Kvitton" }
+];
 
 /** Länken till en sektion. Tom sträng = demons startsida. */
 export function demoSektionsVag(vag: string): string {

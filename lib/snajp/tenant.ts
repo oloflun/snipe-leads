@@ -84,6 +84,12 @@ export type SnajpTenant = {
    * märkas is_test så de inte dyker upp i kundens skarpa inkorg/lista.
    */
   impersonerar: boolean;
+  /**
+   * profiles.role för den inloggade — "owner", "member" eller "viewer".
+   * proxyAsTenant använder den för läsrollens skrivspärr (lib/auth/lasroll.ts):
+   * en viewer får läsa varje tenant-scopad yta men aldrig skriva.
+   */
+  roll: string;
 };
 
 export async function requireSnajpTenant(): Promise<SnajpTenant> {
@@ -93,6 +99,7 @@ export async function requireSnajpTenant(): Promise<SnajpTenant> {
   }
 
   const { workspace, user } = context;
+  const roll = context.profile.role ?? "member";
 
   /**
    * Demovyn — plattformsadmin, och ENBART plattformsadmin, mot demokontot.
@@ -158,7 +165,8 @@ export async function requireSnajpTenant(): Promise<SnajpTenant> {
           apiKey: demoKey,
           userId: user.id,
           isDemo: false,
-          impersonerar: true
+          impersonerar: true,
+          roll
         };
       }
     }
@@ -204,7 +212,8 @@ export async function requireSnajpTenant(): Promise<SnajpTenant> {
       // Ett kundbesök ska inte köra med sänkt löptak: det är kundens riktiga
       // trafik som granskas, och en strypt körning svarar på fel fråga.
       isDemo: false,
-      impersonerar: true
+      impersonerar: true,
+      roll
     };
   }
 
@@ -223,7 +232,8 @@ export async function requireSnajpTenant(): Promise<SnajpTenant> {
       userId: user.id,
       // Se lib/data/dashboard.ts: demovyn ska köra skarpt, inte med sänkt tak.
       isDemo: false,
-      impersonerar: false
+      impersonerar: false,
+      roll
     };
   }
 
@@ -248,7 +258,8 @@ export async function requireSnajpTenant(): Promise<SnajpTenant> {
         apiKey: nykopplad.apiKey,
         userId: user.id,
         isDemo: workspace.is_demo,
-        impersonerar: false
+        impersonerar: false,
+        roll
       };
     }
 
@@ -327,6 +338,7 @@ export async function requireSnajpTenant(): Promise<SnajpTenant> {
     apiKey,
     userId: user.id,
     isDemo: workspace.is_demo,
-    impersonerar: false
+    impersonerar: false,
+    roll
   };
 }

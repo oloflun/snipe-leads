@@ -27,12 +27,17 @@ ROOT = Path(__file__).resolve().parents[2]
 TENANTS_DIR = ROOT / "lib" / "tenants"
 INDEX = TENANTS_DIR / "index.ts"
 
-#: Filer i lib/tenants/ som inte är kunder.
-NOT_TENANTS = {"index.ts", "types.ts", "server.ts"}
+#: Filer i lib/tenants/ som inte är kunder. Widgetens lövmodul och dess
+#: node-test (widget.ts/widget.test.ts) hör hit sedan embed-arbetet.
+NOT_TENANTS = {"index.ts", "types.ts", "server.ts", "widget.ts"}
 
 
 def _tenant_files() -> list[Path]:
-    return sorted(p for p in TENANTS_DIR.glob("*.ts") if p.name not in NOT_TENANTS)
+    return sorted(
+        p
+        for p in TENANTS_DIR.glob("*.ts")
+        if p.name not in NOT_TENANTS and not p.name.endswith(".test.ts")
+    )
 
 
 def _field(source: str, name: str) -> str | None:

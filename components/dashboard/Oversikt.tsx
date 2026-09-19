@@ -112,17 +112,6 @@ function andel(del: number, av: number): string {
   );
 }
 
-/** Räknar förekomster och returnerar de N vanligaste. */
-function vanligast(varden: (string | null | undefined)[], antal: number): [string, number][] {
-  const räknare = new Map<string, number>();
-  for (const värde of varden) {
-    const rent = (värde ?? "").trim();
-    if (!rent) continue;
-    räknare.set(rent, (räknare.get(rent) ?? 0) + 1);
-  }
-  return [...räknare.entries()].sort((a, b) => b[1] - a[1]).slice(0, antal);
-}
-
 // -- Delade byggstenar -----------------------------------------------------
 
 type Tillstand = { etikett: string; varde: string; larm?: boolean; drift?: boolean };
@@ -143,7 +132,7 @@ function Tillstandsrad({ poster }: Readonly<{ poster: Tillstand[] }>) {
           <dd
             className={cn(
               "mt-1.5 flex items-center gap-2 truncate text-[0.9375rem]",
-              post.larm ? "font-semibold text-ink" : "text-ink/75"
+              post.larm ? "font-semibold text-ink" : "text-ink-muted"
             )}
             title={post.varde}
           >
@@ -200,7 +189,7 @@ function Tal({
       <p className="num mt-3 text-[2.5rem] font-semibold leading-none tabular-nums tracking-[-0.03em] text-ink">
         {varde}
       </p>
-      <p className="mt-2.5 text-[0.8125rem] leading-5 text-ink/60">{detalj}</p>
+      <p className="mt-2.5 text-[0.8125rem] leading-5 text-ink-muted">{detalj}</p>
     </div>
   );
 }
@@ -237,7 +226,7 @@ function Stapellista({
   tomtext
 }: Readonly<{ rader: [string, number][]; tomtext: string }>) {
   if (rader.length === 0) {
-    return <p className="max-w-[60ch] text-[0.875rem] leading-6 text-ink/55">{tomtext}</p>;
+    return <p className="max-w-[60ch] text-[0.875rem] leading-6 text-ink-subtle">{tomtext}</p>;
   }
   const varden = rader.map(([, värde]) => värde);
   const störst = Math.max(...varden);
@@ -266,7 +255,7 @@ function Stapellista({
               />
             </span>
           </span>
-          <span className="num col-span-2 text-right text-[0.875rem] tabular-nums text-ink/70">
+          <span className="num col-span-2 text-right text-[0.875rem] tabular-nums text-ink-muted">
             {värde}
           </span>
         </Rad>
@@ -297,7 +286,7 @@ function Pastaende({
           {markerat}
         </span>
       ) : null}
-      <span className="text-ink/80">{children}</span>
+      <span className="text-ink-muted">{children}</span>
     </p>
   );
 }
@@ -319,7 +308,7 @@ function AttGora({
 }: Readonly<{ rader: AttGoraRad[]; href: string; knapp: string; tomtext: string }>) {
   if (rader.length === 0) {
     return (
-      <p className="max-w-[62ch] rounded-card bg-paper2/50 px-5 py-4 text-[0.875rem] leading-6 text-ink/60">
+      <p className="max-w-[62ch] rounded-card bg-paper2/50 px-5 py-4 text-[0.875rem] leading-6 text-ink-muted">
         {tomtext}
       </p>
     );
@@ -334,9 +323,9 @@ function AttGora({
           <li key={rad.id} className="grid grid-cols-12 gap-x-4 py-3 first:pt-0 last:pb-0">
             <div className="col-span-12 min-w-0 sm:col-span-8">
               <p className="truncate text-[0.9375rem] font-semibold">{rad.rubrik}</p>
-              <p className="mt-0.5 truncate text-[0.8125rem] text-paper/60">{rad.under}</p>
+              <p className="mt-0.5 truncate text-[0.8125rem] text-paper-muted">{rad.under}</p>
             </div>
-            <p className="col-span-12 mt-1 truncate text-[0.8125rem] text-paper/55 sm:col-span-4 sm:mt-0 sm:text-right">
+            <p className="col-span-12 mt-1 truncate text-[0.8125rem] text-paper-muted sm:col-span-4 sm:mt-0 sm:text-right">
               {rad.meta ?? ""}
             </p>
           </li>
@@ -385,7 +374,7 @@ function Komigang({ rader }: Readonly<{ rader: { text: string; href: string; kna
       <ul className="mt-4 grid gap-4">
         {rader.map((rad) => (
           <li key={rad.href} className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-            <p className="max-w-[62ch] text-[0.9375rem] leading-6 text-ink/70">{rad.text}</p>
+            <p className="max-w-[62ch] text-[0.9375rem] leading-6 text-ink-muted">{rad.text}</p>
             <Link href={rad.href} className={cn(btnSecondary, "shrink-0")}>
               {rad.knapp}
             </Link>
@@ -400,7 +389,7 @@ type LedgerRad = { id: string; vanster: string; mitten: string; hoger: string; t
 
 function Ledger({ rader, tomtext }: Readonly<{ rader: LedgerRad[]; tomtext: string }>) {
   if (rader.length === 0) {
-    return <p className="max-w-[62ch] text-[0.875rem] leading-6 text-ink/55">{tomtext}</p>;
+    return <p className="max-w-[62ch] text-[0.875rem] leading-6 text-ink-subtle">{tomtext}</p>;
   }
   return (
     <div className="divide-y divide-ink/10 border-y border-ink/15">
@@ -414,7 +403,7 @@ function Ledger({ rader, tomtext }: Readonly<{ rader: LedgerRad[]; tomtext: stri
             {rad.ton && rad.ton !== "neutral" ? (
               <Badge tone={rad.ton}>{rad.hoger}</Badge>
             ) : (
-              <span className="num text-[0.875rem] tabular-nums text-ink/65">{rad.hoger}</span>
+              <span className="num text-[0.875rem] tabular-nums text-ink-muted">{rad.hoger}</span>
             )}
           </span>
         </div>
@@ -463,10 +452,10 @@ function OversiktShell({
       {ofullstandig ? (
         <p
           role="status"
-          className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-card bg-paper2/60 px-4 py-3 text-[0.875rem] text-ink/70"
+          className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-card bg-paper2/60 px-4 py-3 text-[0.875rem] text-ink-muted"
         >
-          <AlertTriangle className="h-4 w-4 shrink-0 text-ochre" aria-hidden />
-          En del av siffrorna kunde inte hämtas och visas som streck. Resten stämmer.
+          <AlertTriangle className="h-4 w-4 shrink-0 text-warning" aria-hidden />
+          Vissa siffror kunde inte hämtas.
           <button
             type="button"
             disabled={uppdaterar}
@@ -621,20 +610,6 @@ export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
     0
   );
 
-  const sniNamn = new Map((config?.options?.sni ?? []).map((o) => [o.value, o.label]));
-  const branscher = vanligast(
-    rader.map((p) => (p.sni ? (sniNamn.get(p.sni) ?? p.sni) : null)),
-    5
-  );
-  const orter = vanligast(
-    rader.map((p) => p.ort),
-    5
-  );
-  const bortvalda = vanligast(
-    rader.flatMap((p) => p.disqualifiers ?? []),
-    4
-  );
-
   const ofullstandig =
     prospekt === null || korningar === null || ko === null || config === null || kbAntal === null;
 
@@ -674,7 +649,7 @@ export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
           onboarding?.missing?.includes("product_marketing")
             ? [
                 {
-                  text: "Agenterna vet inte vad ni säljer. Utan den texten kan de varken välja bolag eller skriva ett utkast som håller.",
+                  text: "Agenterna vet inte vad ni säljer.",
                   href: vag("/settings/affarskontext"),
                   knapp: "Fyll i affärskontexten"
                 }
@@ -738,90 +713,19 @@ export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
             under: post.subject ?? "Utan ämnesrad",
             meta: post.scheduled_at ? `köat ${sedan(post.scheduled_at)}` : undefined
           }))}
-          href={vag("/dashboard/leads")}
+          href={vag("/dashboard/iris/granskning")}
           knapp="Öppna granskningskön"
-          tomtext="Inget mail ligger och väntar på ditt godkännande. Mailen agenterna skriver hamnar här."
+          tomtext="Inga utkast väntar."
         />
       </Sektion>
 
-      <div className="grid gap-10 lg:grid-cols-12">
-        <div className="min-w-0 lg:col-span-4">
-          <Sektion rubrik="Var agenterna letar">
-            <Stapellista rader={orter} tomtext="Ingen ort utläst ur prospekten ännu." />
-          </Sektion>
-        </div>
-        <div className="min-w-0 lg:col-span-4">
-          <Sektion rubrik="Vad de hittar">
-            <Stapellista rader={branscher} tomtext="Ingen bransch utläst ur prospekten ännu." />
-          </Sektion>
-        </div>
-        <div className="min-w-0 lg:col-span-4">
-          <Sektion rubrik="Varför bolag valdes bort">
-            <Stapellista
-              rader={bortvalda}
-              tomtext="Inget prospekt har valts bort med angiven orsak ännu. Orsakerna sparas när agenterna researchat."
-            />
-          </Sektion>
-        </div>
-      </div>
-
-      <Sektion
-        rubrik="Senaste körningarna"
-        bredvid={
-          <Link
-            href={vag("/dashboard/leads")}
-            className="focus-ring rounded-input text-[0.875rem] text-ink/55 underline-offset-4 transition-colors hover:text-ink hover:underline"
-          >
-            Starta en körning
-          </Link>
-        }
-      >
-        <Ledger
-          rader={veckansKorningar.slice(0, 6).map((k) => {
-            const steg = stegAv(k);
-            const eskalerade = steg.filter((s) => s.escalated).length;
-            const skills = steg.map((s) => s.skill).filter(Boolean).join(", ");
-            return {
-              id: k.id,
-              vanster: sedan(k.created_at),
-              mitten: steg.length
-                ? `${steg.length} steg${skills ? ` · ${skills}` : ""}`
-                : "Ingen stegloggning på körningen",
-              hoger: eskalerade ? `${eskalerade} eskalerade` : "utan eskalering",
-              ton: eskalerade ? ("warn" as const) : ("neutral" as const)
-            };
-          })}
-          tomtext="Inga körningar den senaste veckan."
-        />
-      </Sektion>
+      {/* Stapellistorna (orter, branscher, bortval) och Senaste körningarna
+          stod här. Borttagna 2026-09-19: mest tomlägen, för rörigt. */}
     </OversiktShell>
   );
 }
 
 // -- Kundtjänst ------------------------------------------------------------
-
-/** Nyckeltal utan stapel: värdena är inte jämförbara med varandra. */
-function Faktalista({ rader }: Readonly<{ rader: { etikett: string; varde: string; larm?: boolean }[] }>) {
-  return (
-    <dl className="divide-y divide-ink/10 border-y border-ink/15">
-      {rader.map((rad) => (
-        <div key={rad.etikett} className="grid grid-cols-12 items-baseline gap-x-4 py-3">
-          <dt className="col-span-8 text-[0.875rem] text-ink/75">{rad.etikett}</dt>
-          <dd
-            className={cn(
-              "num col-span-4 flex items-center justify-end gap-2 text-right text-[0.875rem] tabular-nums",
-              rad.larm ? "font-semibold text-ink" : "text-ink/70"
-            )}
-          >
-            {/* Samma sak som i Tal: pricken bär larmet, inte textfärgen. */}
-            {rad.larm ? <span className="h-2 w-2 rounded-full bg-ochre" aria-hidden /> : null}
-            {rad.varde}
-          </dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
 
 type Klassificering = {
   category: string;
@@ -897,17 +801,6 @@ export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) 
   const vantar = rader.filter((a) => a.status === "awaiting_approval");
   const eskalerade = rader.filter((a) => a.status === "escalated");
   const klarade = rader.filter((a) => a.status === "auto_sent" || a.status === "sent");
-  const klassade = rader.filter((a) => a.classification);
-  const medKalla = klassade.filter((a) => (a.classification?.kb_sources ?? []).length > 0);
-  const snittKonfidens = klassade.length
-    ? klassade.reduce((summa, a) => summa + (a.classification?.confidence ?? 0), 0) / klassade.length
-    : null;
-  // Det tal som pekar rakt på luckorna i basen: agenten lämnade över för att
-  // den inte hittade något att grunda svaret i, inte för att ärendet var svårt.
-  const eskaleratUtanKalla = eskalerade.filter(
-    (a) => (a.classification?.kb_sources ?? []).length === 0
-  ).length;
-
   const auto = (regler ?? []).filter((r) => r.mode === "auto");
   const utkast = (regler ?? []).filter((r) => r.mode === "draft").length;
   const alltidManniska = (regler ?? []).filter((r) => r.mode === "escalate").length;
@@ -948,7 +841,7 @@ export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) 
           kbAntal === 0
             ? [
                 {
-                  text: "Kunskapsbasen är tom. Agenterna gissar aldrig — de eskalerar varje ärende de inte kan grunda, så inkorgen blir en lista med röda rader tills det ligger något här.",
+                  text: "Kunskapsbasen är tom.",
                   href: vag("/settings/kunskapsbas"),
                   knapp: "Fyll kunskapsbasen"
                 }
@@ -993,17 +886,9 @@ export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) 
         />
       </Talrad>
 
-      {regler === null ? null : (
-        <Pastaende
-          markerat={
-            auto.length === 0
-              ? "Ingenting"
-              : `${auto.length} ${auto.length === 1 ? "fack" : "fack"}`
-          }
-        >
-          {auto.length === 0
-            ? "skickas utan att du sett det. Varje svar ligger som utkast tills du godkänt det."
-            : `besvaras av agenterna själva: ${auto.map((r) => r.label.toLowerCase()).join(", ")}.`}
+      {regler === null || auto.length === 0 ? null : (
+        <Pastaende markerat={`${auto.length} fack`}>
+          {`besvaras av agenterna själva: ${auto.map((r) => r.label.toLowerCase()).join(", ")}.`}
         </Pastaende>
       )}
 
@@ -1019,63 +904,27 @@ export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) 
           }))}
           href={vag("/dashboard/support")}
           knapp="Granska utkasten"
-          tomtext="Inget mail ligger och väntar på ditt godkännande. Svaren agenterna skriver hamnar här först."
+          tomtext="Inga utkast väntar."
         />
       </Sektion>
 
-      <div className="grid gap-10 lg:grid-cols-12">
-        <div className="min-w-0 lg:col-span-7">
-          <Sektion rubrik="Vad ärendena handlar om">
-            <Stapellista
-              rader={Object.entries(fack ?? {})
-                .map(([kod, antal]) => [fackNamn.get(kod) ?? kod, antal] as [string, number])
-                .sort((a, b) => b[1] - a[1])}
-              tomtext="Inga klassificerade ärenden ännu."
-            />
-          </Sektion>
-        </div>
-        <div className="min-w-0 lg:col-span-5">
-          <Sektion rubrik="Hur väl agenterna kan grunda svaren">
-            <Faktalista
-              rader={[
-                {
-                  etikett: "Ärenden med träff i kunskapsbasen",
-                  varde: klassade.length ? `${medKalla.length} av ${klassade.length}` : "—"
-                },
-                {
-                  etikett: "Snittkonfidens i klassificeringen",
-                  varde: snittKonfidens === null ? "—" : andel(snittKonfidens, 1)
-                },
-                {
-                  etikett: "Eskalerade utan träff i basen",
-                  varde: arenden === null ? "—" : String(eskaleratUtanKalla),
-                  larm: eskaleratUtanKalla > 0
-                }
-              ]}
-            />
-            {eskaleratUtanKalla > 0 ? (
-              <p className="mt-4 max-w-[52ch] text-[0.875rem] leading-6 text-ink/60">
-                De ärendena lämnades över för att agenterna inte hittade något att svara ur, inte för
-                att frågan var svår.{" "}
-                <Link
-                  href={vag("/settings/kunskapsbas")}
-                  className="focus-ring rounded-input underline underline-offset-4 hover:text-ochre"
-                >
-                  Fyll på kunskapsbasen
-                </Link>{" "}
-                så minskar de.
-              </p>
-            ) : null}
-          </Sektion>
-        </div>
-      </div>
+      {/* "Hur väl agenterna kan grunda svaren" (Faktalista) stod bredvid.
+          Borttagen 2026-09-19: mest streck i tomläge, för rörigt. */}
+      <Sektion rubrik="Vad ärendena handlar om">
+        <Stapellista
+          rader={Object.entries(fack ?? {})
+            .map(([kod, antal]) => [fackNamn.get(kod) ?? kod, antal] as [string, number])
+            .sort((a, b) => b[1] - a[1])}
+          tomtext="Inga klassificerade ärenden ännu."
+        />
+      </Sektion>
 
       <Sektion
         rubrik="Senaste ärendena"
         bredvid={
           <Link
             href={vag("/dashboard/support")}
-            className="focus-ring rounded-input text-[0.875rem] text-ink/55 underline-offset-4 transition-colors hover:text-ink hover:underline"
+            className="focus-ring rounded-input text-[0.875rem] text-ink-subtle underline-offset-4 transition-colors hover:text-ink hover:underline"
           >
             Öppna inkorgen
           </Link>
@@ -1092,7 +941,7 @@ export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) 
               ton: status.ton
             };
           })}
-          tomtext="Inkorgen är tom. Koppla en inkorg under Inställningar, eller hämta testmail i kundtjänstvyn."
+          tomtext="Inkorgen är tom."
         />
       </Sektion>
     </OversiktShell>

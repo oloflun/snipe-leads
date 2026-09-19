@@ -83,15 +83,15 @@ export function PlanSettings() {
                       : `${text(PRIS_PREFIX)} ${formateraPris(paket.prisPerManad)}/mån`}
                   </span>
                 </p>
-                <p className="mt-2 max-w-[58ch] text-[0.9375rem] leading-6 text-ink/65">
+                <p className="mt-2 max-w-[58ch] text-[0.9375rem] leading-6 text-ink-muted">
                   {text(paket.beskrivning)}
                 </p>
               </>
             ) : (
-              <p className="max-w-[58ch] text-[0.9375rem] leading-6 text-ink/65">
+              <p className="max-w-[58ch] text-[0.9375rem] leading-6 text-ink-muted">
                 {products.length === 0
-                  ? "Arbetsytan har ingen aktiv produkt. Välj ett paket här bredvid."
-                  : "Er plan är satt manuellt och matchar inget standardpaket. Väljer ni ett paket här bredvid ersätts den."}
+                  ? "Ingen aktiv produkt."
+                  : "Manuellt satt plan. Ett paketval ersätter den."}
               </p>
             )}
           </div>
@@ -106,18 +106,18 @@ export function PlanSettings() {
         <h2 className="kicker text-mineral">Det här ingår</h2>
         <ul className="mt-4 flex flex-col gap-2.5 border-y border-ink/15 py-5">
           {(paket?.ingar ?? []).map((rad, index) => (
-            <li key={index} className="flex gap-2.5 text-[0.9375rem] leading-6 text-ink/85">
+            <li key={index} className="flex gap-2.5 text-[0.9375rem] leading-6 text-ink-muted">
               <span aria-hidden className="mt-[0.55em] h-1 w-1 shrink-0 rounded-full bg-ochre" />
               {text(rad)}
             </li>
           ))}
           {addons.length > 0 ? (
-            <li className="mt-2 text-[0.9375rem] leading-6 text-ink/65">
+            <li className="mt-2 text-[0.9375rem] leading-6 text-ink-muted">
               Tillägg: {addons.join(", ")}
             </li>
           ) : null}
           {paket ? null : (
-            <li className="text-[0.9375rem] leading-6 text-ink/65">
+            <li className="text-[0.9375rem] leading-6 text-ink-muted">
               {products.length ? products.join(", ") : "—"}
             </li>
           )}
@@ -132,18 +132,16 @@ export function PlanSettings() {
         {/* Ingen förbrukningssiffra. Se docstringen: vi mäter den inte per
             arbetsyta ännu, och kunden är den enda som kan falsifiera en
             påhittad — på fakturan. */}
-        <p className="max-w-[62ch] text-[0.9375rem] leading-6 text-ink/65">
+        <p className="max-w-[62ch] text-[0.9375rem] leading-6 text-ink-muted">
           Fakturan går till{" "}
           {workspaceName ? <strong className="font-semibold">{workspaceName}</strong> : "er arbetsyta"}.
-          Paketbytet ovan träder i kraft direkt; faktureringen justeras vid nästa
-          period. Vill ni se er förbrukning eller diskutera villkoren, skriv till{" "}
+          Faktureringen justeras vid nästa period. Frågor:{" "}
           <a
             href={mejlaOss("Plan och fakturering")}
             className="focus-ring rounded-input underline underline-offset-4 hover:text-ochre"
           >
             {KONTAKT_MEJL}
-          </a>{" "}
-          så svarar vi samma dag.
+          </a>
         </p>
       </div>
     </div>

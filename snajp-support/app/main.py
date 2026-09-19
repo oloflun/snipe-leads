@@ -23,17 +23,22 @@ from .api import (
     analytics,
     bookkeeping,
     chat,
+    chattar,
     demo,
     drafts,
     inbox,
+    integrationer,
+    kanaler,
     kb,
     keys,
     kvitton,
     leads,
     rules,
     sending_domains_api,
+    support_config,
     tickets,
     triage,
+    usage,
 )
 from .api.events import install_exception_handler
 from .config import DEFAULT_TENANT_ID, get_settings
@@ -315,6 +320,14 @@ if _origins:
     )
 
 app.include_router(chat.router)
+# bd snipe-1fl: medarbetarens sida av överlämningen och kundens supportregler.
+app.include_router(chattar.router)
+app.include_router(support_config.router)
+# bd snipe-36u: kundens egna system (HTTP-verktyg, MCP) och kanalerna
+# (WhatsApp, Messenger, Slack, Teams). Kanalwebhooks autentiseras av
+# kanalens signatur, inte av X-API-Key — se api/kanaler.py.
+app.include_router(integrationer.router)
+app.include_router(kanaler.router)
 app.include_router(triage.router)
 app.include_router(tickets.router)
 app.include_router(keys.router)
@@ -334,6 +347,9 @@ app.include_router(admin_profil.router)
 app.include_router(admin_kunddata.router)
 app.include_router(admin_konvertera.router)
 app.include_router(analytics.router)
+# Journalens tenant-scopade förbrukning (Livrustning-piloten) — samma fråga
+# som /api/admin/usage men med kundens egen nyckel. Se api/usage.py.
+app.include_router(usage.router)
 app.include_router(bookkeeping.router)
 # Kvittohanteraren — produktytan som ersatte bokföringsagenten (2026-09-16).
 # Bokföringsroutern ovan står kvar som maskineri (SIE-exporten m.m.).

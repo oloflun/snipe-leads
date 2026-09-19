@@ -8,7 +8,7 @@ ensam)."""
 import json
 
 from ..config import get_settings
-from .llm import get_llm_client
+from .llm import get_llm_client, tankande_kwargs
 
 CANCELLATION_RISK_THRESHOLD = 0.6
 
@@ -42,6 +42,7 @@ async def classify_cancellation_risk(message: str) -> tuple[float, float]:
         response_format={"type": "json_object"},
         temperature=0.0,
         messages=[{"role": "user", "content": _PROMPT.format(message=message)}],
+        **tankande_kwargs(),
     )
     data = json.loads(response.choices[0].message.content or "{}")
     cancellation_intent = max(0.0, min(1.0, float(data.get("uppsagningsavsikt", 0.0))))

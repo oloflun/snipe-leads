@@ -70,6 +70,15 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
   const { skapaTesttenant } = await import("@/lib/snajp/testtenant");
   let profile = await getProfileForUser(user.id);
 
+  // Läsrollen: en inbjuden läsare landar i en FÄRDIG arbetsyta och ska aldrig
+  // skriva om dess affärskontext, hur onboardingflödet än nås.
+  {
+    const { LASROLL, LASROLL_FEL } = await import("@/lib/auth/lasroll");
+    if ((profile?.role ?? "") === LASROLL) {
+      return { success: false, error: LASROLL_FEL };
+    }
+  }
+
   if (!profile) {
     // "Försök logga in igen" var en återvändsgränd: en ny inloggning gav aldrig
     // en profilrad, eftersom bara signup-triggern kunde skapa den. Läk istället.

@@ -60,7 +60,7 @@ export function FaqDragspel({ start }: Readonly<{ start?: string }>) {
     <div className="mt-12">
       <div className="relative">
         <Search
-          className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/40"
+          className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-subtle"
           aria-hidden
         />
         <label htmlFor={sokId} className="sr-only">
@@ -79,7 +79,7 @@ export function FaqDragspel({ start }: Readonly<{ start?: string }>) {
       {/* Antalet träffar sägs i en live-region. Utan den vet den som söker med
           skärmläsare inte att listan under ändrat sig — fältet ger ingen
           återkoppling av sig självt. */}
-      <p aria-live="polite" className="mt-3 text-[0.875rem] text-ink/50">
+      <p aria-live="polite" className="mt-3 text-[0.875rem] text-ink-subtle">
         {soker
           ? text({
               sv: `${synliga.length} träffar`,
@@ -89,7 +89,7 @@ export function FaqDragspel({ start }: Readonly<{ start?: string }>) {
       </p>
 
       {synliga.length === 0 ? (
-        <p className="mt-8 text-[1rem] leading-[1.7] text-ink/70">
+        <p className="mt-8 text-[1rem] leading-[1.7] text-ink-muted">
           {text({
             sv: "Ingen fråga matchar. Hör av dig, så svarar vi direkt.",
             en: "No question matches. Get in touch and we will answer directly."
@@ -128,7 +128,7 @@ export function FaqDragspel({ start }: Readonly<{ start?: string }>) {
                         </span>
                         <ChevronDown
                           className={cn(
-                            "mt-1 h-5 w-5 shrink-0 text-ink/45 transition-transform",
+                            "mt-1 h-5 w-5 shrink-0 text-ink-subtle transition-transform",
                             utfalld && "rotate-180"
                           )}
                           aria-hidden
@@ -146,7 +146,7 @@ export function FaqDragspel({ start }: Readonly<{ start?: string }>) {
                         {post.svar.map((stycke) => (
                           <p
                             key={stycke.sv}
-                            className="mt-0 max-w-[62ch] pt-1 text-[1rem] leading-[1.7] text-ink/72 [&+&]:mt-4"
+                            className="mt-0 max-w-[62ch] pt-1 text-[1rem] leading-[1.7] text-ink-muted [&+&]:mt-4"
                           >
                             {text(stycke)}
                           </p>

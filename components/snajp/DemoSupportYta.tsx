@@ -26,8 +26,8 @@ function Kundchatt() {
 
   return (
     <div className="max-w-[720px]">
-      <p className="text-[0.8125rem] leading-6 text-ink/55">
-        <strong className="font-semibold text-ink/70">Exempel.</strong> Butiken
+      <p className="text-[0.8125rem] leading-6 text-ink-subtle">
+        <strong className="font-semibold text-ink-muted">Exempel.</strong> Butiken
         Nordlys Handel är påhittad och svaren skrivna i förväg ur dess
         kunskapsbas — ingen modell körs på den här sidan. I produkten svarar
         agenten ur ER kunskapsbas, på riktigt.
@@ -46,7 +46,7 @@ function Kundchatt() {
                   Eskalerat till en människa
                 </p>
               ) : null}
-              <p className="whitespace-pre-wrap rounded-card border border-ink/15 px-3.5 py-2.5 text-[0.875rem] leading-6 text-ink/85">
+              <p className="whitespace-pre-wrap rounded-card border border-ink/15 px-3.5 py-2.5 text-[0.875rem] leading-6 text-ink-muted">
                 {CHATTFRAGOR[i].svar}
               </p>
             </div>
@@ -65,7 +65,7 @@ function Kundchatt() {
                 key={i}
                 type="button"
                 onClick={() => setStallda((f) => [...f, i])}
-                className="focus-ring rounded-input border border-ink/15 px-3 py-2 text-left text-[0.8125rem] text-ink/70 hover:border-ochre hover:text-ink"
+                className="focus-ring rounded-input border border-ink/15 px-3 py-2 text-left text-[0.8125rem] text-ink-muted hover:border-ochre hover:text-ink"
               >
                 {CHATTFRAGOR[i].fraga}
               </button>
@@ -105,7 +105,7 @@ export function DemoSupportYta() {
               "focus-ring -mb-px inline-flex min-h-11 items-center border-b-2 px-4 text-[0.9375rem] font-medium transition-colors",
               flik === id
                 ? "border-ochre text-ink"
-                : "border-transparent text-ink/55 hover:text-ink"
+                : "border-transparent text-ink-subtle hover:text-ink"
             )}
           >
             {etikett}

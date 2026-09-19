@@ -157,7 +157,7 @@ export function LeadsSnabbsok({ isTest = false }: { isTest?: boolean }) {
       </form>
 
       {busy ? (
-        <p role="status" className="mt-3 text-[13px] text-ink/55">
+        <p role="status" className="mt-3 text-[13px] text-ink-subtle">
           Söker bolag mot målgruppen — tar vanligen under en minut.
         </p>
       ) : null}
@@ -181,7 +181,7 @@ export function LeadsSnabbsok({ isTest = false }: { isTest?: boolean }) {
             <li key={lead.prospect_id} className="py-3">
               <div className="flex flex-wrap items-baseline justify-between gap-x-3">
                 <span className="text-[15px] font-medium">{lead.company_name}</span>
-                {lead.ort ? <span className="text-[13px] text-ink/55">{lead.ort}</span> : null}
+                {lead.ort ? <span className="text-[13px] text-ink-subtle">{lead.ort}</span> : null}
               </div>
               <p className="mt-1 break-words text-[13px] leading-5 text-mineral">
                 {lead.contact_name ? (
@@ -196,7 +196,7 @@ export function LeadsSnabbsok({ isTest = false }: { isTest?: boolean }) {
                   "Kontaktformulär på bolagets webbplats"
                 ) : null}
               </p>
-              <p className="mt-0.5 text-[12px] text-ink/45">
+              <p className="mt-0.5 text-[12px] text-ink-subtle">
                 {lead.contact_level ? (KONTAKTETIKETT[lead.contact_level] ?? lead.contact_level) : null}
                 {lead.website ? (
                   <>
@@ -218,7 +218,7 @@ export function LeadsSnabbsok({ isTest = false }: { isTest?: boolean }) {
       ) : null}
 
       {leads && utanKontakt > 0 ? (
-        <p className="mt-3 text-[12px] text-ink/45">
+        <p className="mt-3 text-[12px] text-ink-subtle">
           {utanKontakt} träff{utanKontakt === 1 ? "" : "ar"} utan kontaktväg listas inte här men
           finns i bolagsregistret för komplettering.
         </p>

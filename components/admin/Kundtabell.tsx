@@ -102,20 +102,20 @@ export function Kundtabell({ kunder }: Readonly<{ kunder: BerikadTenant[] }>) {
                     ) : null}
                   </span>
                 </td>
-                <td className="py-3 pr-6 font-mono text-[13px] text-ink/55">
+                <td className="py-3 pr-6 font-mono text-[13px] text-ink-subtle">
                   {kund.slug ?? <span className="text-danger">{a("saknas", locale)}</span>}
                 </td>
-                <td className="py-3 pr-6 text-right tabular-nums text-ink/70">
+                <td className="py-3 pr-6 text-right tabular-nums text-ink-muted">
                   {datum(kund.kund_sedan, locale)}
                 </td>
                 {/* Ett datum ÄR avtalsstatusen: null betyder att inget avtal
                     är registrerat, och det sägs med ett ord i stället för
                     ett tomt hål som ser ut som saknad data. */}
-                <td className="py-3 pr-6 text-right tabular-nums text-ink/70">
+                <td className="py-3 pr-6 text-right tabular-nums text-ink-muted">
                   {kund.avtal_signerat ? (
                     datum(kund.avtal_signerat, locale)
                   ) : (
-                    <span className="text-ink/40">{a("inget", locale)}</span>
+                    <span className="text-ink-subtle">{a("inget", locale)}</span>
                   )}
                 </td>
                 <td className="py-3 pr-6 text-right tabular-nums">{antal(kund.tickets, locale)}</td>
@@ -124,7 +124,7 @@ export function Kundtabell({ kunder }: Readonly<{ kunder: BerikadTenant[] }>) {
                   {/* Samma redovisning som Översikten: testkörningar räknas
                       inte som kundvolym men göms inte heller. */}
                   {kund.test_runs ? (
-                    <span className="block text-[0.8125rem] text-ink/40">
+                    <span className="block text-[0.8125rem] text-ink-subtle">
                       +{kund.test_runs} {a("test", locale)}
                     </span>
                   ) : null}
@@ -132,7 +132,7 @@ export function Kundtabell({ kunder }: Readonly<{ kunder: BerikadTenant[] }>) {
                 <td className="py-3 pr-6 text-right tabular-nums">
                   {kund.errors > 0 ? <span className="text-danger">{kund.errors}</span> : "0"}
                 </td>
-                <td className="py-3 pr-6 text-right tabular-nums text-ink/70">
+                <td className="py-3 pr-6 text-right tabular-nums text-ink-muted">
                   {datum(kund.last_activity, locale)}
                 </td>
                 {/* Två vägar in, och de gör olika saker: "Profil" ändrar hur
@@ -167,7 +167,7 @@ export function Kundtabell({ kunder }: Readonly<{ kunder: BerikadTenant[] }>) {
 
       {exempelrader > 0 ? (
         <p className="mt-4 max-w-[80ch] text-[0.8125rem] leading-6 text-mineral">
-          <strong className="text-ink/70">
+          <strong className="text-ink-muted">
             {text({
               sv: `${exempelrader} av ${sorterade.length} rader visar exempeldata`,
               en: `${exempelrader} of ${sorterade.length} rows show example data`

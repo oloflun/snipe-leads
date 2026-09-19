@@ -30,7 +30,7 @@ from ..agentcore.overlays import load_overlay
 from ..agentcore.packs import PlaybookStep, RunLedger, check_output_contract, check_preconditions
 from ..config import get_settings
 from ..kvotfel import ar_kreditslut
-from .llm import get_llm_client
+from .llm import gemini_tank_kwargs, get_llm_client
 
 _OVERLAY_OPEN = """## TILLÄGGSINSTRUKTIONER (Snajp-overlay: {name})
 Dessa kommer FRÅN OSS, inte från skillen ovan, och gäller ÖVER den där de
@@ -60,6 +60,10 @@ def thinking_kwargs(mode: str) -> dict[str, Any]:
     if mode == "disabled":
         return {"extra_body": {"thinking": {"type": "disabled"}}}
     return {}
+
+
+# Geminis motsvarighet bor i llm.py (gemini_tank_kwargs), eftersom även
+# småanropen utanför stegmotorn använder den.
 
 
 @dataclass
@@ -278,7 +282,12 @@ async def run_step(
     # Steget vinner över den globala defaulten om det deklarerar en egen
     # thinking-nivå (t.ex. cs:customer-escalation, se support_playbook.py).
     effective_mode = step.thinking if step.thinking is not None else settings.thinking_mode
-    extra = thinking_kwargs(effective_mode) if settings.llm_provider == "deepseek" else {}
+    if settings.llm_provider == "deepseek":
+        extra = thinking_kwargs(effective_mode)
+    elif settings.llm_provider == "gemini":
+        extra = gemini_tank_kwargs(step.thinking, settings.gemini_reasoning_effort.strip().lower())
+    else:
+        extra = {}
 
     # Formuleringssteg (humanizer, utkast) får deklarera en varmare temperatur
     # i playbooken; analys- och bedömningssteg ärver den kalla defaulten.

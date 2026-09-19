@@ -227,12 +227,12 @@ export function Kunddata({ data }: Readonly<{ data: Data }>) {
           någon, inte för att läsa ett orgnr. */}
       <section className="border-t border-ink/15 pt-4">
         <h2 className="kicker text-mineral">Kontaktpersoner</h2>
-        <p className="mt-1.5 max-w-[70ch] text-[0.875rem] leading-6 text-ink/65">
+        <p className="mt-1.5 max-w-[70ch] text-[0.875rem] leading-6 text-ink-muted">
           Förvaltas för hand. Namn krävs; roll, mejl och direktnummer är valfria.
         </p>
 
         {data.kontakter.length === 0 ? (
-          <p className="mt-4 text-[0.875rem] text-ink/60">Inga kontaktpersoner ännu.</p>
+          <p className="mt-4 text-[0.875rem] text-ink-muted">Inga kontaktpersoner ännu.</p>
         ) : (
           <ul className="mt-4">
             {data.kontakter.map((kontakt) => (
@@ -259,7 +259,7 @@ export function Kunddata({ data }: Readonly<{ data: Data }>) {
 
       <section className="border-t border-ink/15 pt-4">
         <h2 className="kicker text-mineral">Kunduppgifter</h2>
-        <p className="mt-1.5 max-w-[70ch] text-[0.875rem] leading-6 text-ink/65">
+        <p className="mt-1.5 max-w-[70ch] text-[0.875rem] leading-6 text-ink-muted">
           Märket vid varje fält säger var värdet kommer ifrån. Det som fylls i här
           sparas som manuellt och vinner över det automatiska. Ett tömt fält går
           tillbaka till det automatiska värdet, om ett finns.
@@ -291,7 +291,7 @@ export function Kunddata({ data }: Readonly<{ data: Data }>) {
 
         {/* Avtalsstatusen utskriven i klartext. Datumfältet ensamt säger inte
             "inget avtal finns" — ett tomt fält ser likadant ut som ett ofyllt. */}
-        <p className="mt-3 text-[0.875rem] text-ink/65">
+        <p className="mt-3 text-[0.875rem] text-ink-muted">
           {avtal
             ? `Avtal finns, signerat ${avtal}.`
             : "Inget avtal registrerat. Fyll i signeringsdatumet ovan när det finns."}

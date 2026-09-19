@@ -27,12 +27,12 @@ const LAGEN: { varde: Regel["mode"]; etikett: string; forklaring: string }[] = [
   {
     varde: "draft",
     etikett: "Utkast",
-    forklaring: "Agenterna hanterar mailet, du klickar godkänn och skicka."
+    forklaring: "Du godkänner innan det skickas."
   },
   {
     varde: "auto",
     etikett: "Auto",
-    forklaring: "Väljer automatiskt det bästa valet för svaret på frågan."
+    forklaring: "Agenten väljer själv."
   },
   { varde: "escalate", etikett: "Eskalera", forklaring: "Går alltid till en människa." }
 ];
@@ -110,7 +110,7 @@ export function SupportRegler({ demo = false }: Readonly<{ demo?: boolean }>) {
         {LAGEN.map((lage) => (
           <div key={lage.varde}>
             <dt className="text-[0.9375rem] font-semibold">{lage.etikett}</dt>
-            <dd className="mt-1 text-[0.875rem] leading-6 text-ink/60">{lage.forklaring}</dd>
+            <dd className="mt-1 text-[0.875rem] leading-6 text-ink-muted">{lage.forklaring}</dd>
           </div>
         ))}
       </dl>
@@ -127,7 +127,7 @@ export function SupportRegler({ demo = false }: Readonly<{ demo?: boolean }>) {
             <span className="min-w-0 break-words text-[0.9375rem]">{regel.label}</span>
             <span className="flex items-center gap-2 justify-self-end">
               {sparar === regel.category ? (
-                <Loader2 className="h-4 w-4 animate-spin text-ink/40" aria-hidden />
+                <Loader2 className="h-4 w-4 animate-spin text-ink-subtle" aria-hidden />
               ) : null}
               <select
                 value={regel.mode}

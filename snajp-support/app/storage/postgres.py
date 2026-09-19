@@ -12,6 +12,7 @@ precis som referensarkitekturen. Saknas embeddings används
 import hashlib
 import json
 import logging
+import uuid
 from contextlib import asynccontextmanager
 from datetime import date
 from decimal import Decimal
@@ -23,6 +24,8 @@ from .base import (
     ANALYTICS_COVERAGE,
     KUNDDATA_FALT,
     LEADS_BUDGET_AGENT_TYPES,
+    MEDDELANDE_AVSANDARE,
+    SUPPORT_BUDGET_AGENT_TYPES,
     bk_belopp,
     bk_datum,
     kontrollera_bk_balans,
@@ -30,7 +33,9 @@ from .base import (
     kontrollera_bk_kalla,
     kontrollera_bk_riktning,
     kontrollera_bk_status,
+    kontrollera_samtalslage,
     normalisera_kunddata,
+    standard_samtalslage,
     status_transition_allowed,
 )
 
@@ -448,7 +453,12 @@ class PostgresStorage:
         content: str,
         sentiment: float | None = None,
         has_image: bool = False,
+        author: str | None = None,
     ) -> dict[str, Any]:
+        if author is not None and author not in MEDDELANDE_AVSANDARE:
+            # Samma villkor som ss_messages_author_check — kontrollerat före
+            # anropet så att minnet och Postgres avvisar exakt samma värden.
+            raise ValueError(f"Okänd avsändare: {author!r}")
         async with self._scoped(tenant_id) as conn:
             owner = await conn.fetchval(
                 "select tenant_id from ss_conversations where id = $1", conversation_id
@@ -457,8 +467,9 @@ class PostgresStorage:
                 raise ValueError("Konversationen tillhör inte denna tenant.")
             record = await conn.fetchrow(
                 """
-                insert into ss_messages (tenant_id, conversation_id, direction, content, sentiment, has_image)
-                values ($1, $2, $3, $4, $5, $6) returning *
+                insert into ss_messages
+                  (tenant_id, conversation_id, direction, content, sentiment, has_image, author)
+                values ($1, $2, $3, $4, $5, $6, $7) returning *
                 """,
                 tenant_id,
                 conversation_id,
@@ -466,8 +477,108 @@ class PostgresStorage:
                 content,
                 sentiment,
                 has_image,
+                author,
             )
         return _row(record)
+
+    async def find_customer(self, tenant_id: str, *, email: str) -> dict[str, Any] | None:
+        if not email:
+            return None
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                select c.* from ss_customers c
+                join ss_customer_identifiers i on i.customer_id = c.id
+                where c.tenant_id = $1 and i.tenant_id = $1
+                  and i.type = 'email' and lower(i.value) = lower($2)
+                """,
+                tenant_id,
+                email,
+            )
+        return _row(record)
+
+    # -- Samtalsläge (migration 066) ----------------------------------------
+
+    async def get_chat_state(self, tenant_id: str, customer_id: str) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                "select * from ss_chat_state where tenant_id = $1 and customer_id = $2",
+                tenant_id,
+                customer_id,
+            )
+        return _row(record) or standard_samtalslage(tenant_id, customer_id)
+
+    async def save_chat_state(
+        self,
+        tenant_id: str,
+        customer_id: str,
+        *,
+        lage: str,
+        misslyckade_i_rad: int,
+        erbjod_manniska: bool,
+        overlamnad_orsak: str | None = None,
+        overlamnad_ticket_id: str | None = None,
+        sprak: str | None = None,
+    ) -> dict[str, Any]:
+        kontrollera_samtalslage(lage, misslyckade_i_rad)
+        async with self._scoped(tenant_id) as conn:
+            # overlamnad_at: behålls när ett redan överlämnat samtal
+            # uppdateras (en medarbetare svarar), sätts när läget BLIR
+            # överlämnat, nollas när det går tillbaka till agenten.
+            record = await conn.fetchrow(
+                """
+                insert into ss_chat_state as s
+                  (tenant_id, customer_id, lage, misslyckade_i_rad, erbjod_manniska,
+                   overlamnad_orsak, overlamnad_ticket_id, sprak, overlamnad_at, updated_at)
+                values ($1, $2, $3, $4, $5, $6, $7, $8,
+                        case when $3 = 'overlamnad' then now() end, now())
+                on conflict (tenant_id, customer_id) do update set
+                  lage = excluded.lage,
+                  misslyckade_i_rad = excluded.misslyckade_i_rad,
+                  erbjod_manniska = excluded.erbjod_manniska,
+                  overlamnad_orsak = excluded.overlamnad_orsak,
+                  overlamnad_ticket_id = excluded.overlamnad_ticket_id,
+                  sprak = excluded.sprak,
+                  overlamnad_at = case
+                    when excluded.lage <> 'overlamnad' then null
+                    when s.lage = 'overlamnad' and s.overlamnad_at is not null
+                      then s.overlamnad_at
+                    else now()
+                  end,
+                  updated_at = now()
+                returning *
+                """,
+                tenant_id,
+                customer_id,
+                lage,
+                misslyckade_i_rad,
+                erbjod_manniska,
+                overlamnad_orsak,
+                overlamnad_ticket_id,
+                sprak,
+            )
+        return _row(record)
+
+    async def list_chat_handovers(
+        self, tenant_id: str, *, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select s.*, c.name as customer_name, t.subject, t.category, t.channel,
+                       coalesce(t.is_test, false) as is_test
+                from ss_chat_state s
+                join ss_customers c on c.id = s.customer_id and c.tenant_id = s.tenant_id
+                left join ss_tickets t
+                  on t.id = s.overlamnad_ticket_id and t.tenant_id = s.tenant_id
+                where s.tenant_id = $1 and s.lage = 'overlamnad'
+                order by s.updated_at desc
+                limit $2
+                """,
+                tenant_id,
+                limit,
+            )
+        return [_row(r) for r in records]
 
     async def get_messages(
         self, tenant_id: str, conversation_id: str
@@ -635,6 +746,21 @@ class PostgresStorage:
                 embedding,
             )
         return _row(record)
+
+    async def delete_kb_article(self, tenant_id: str, artikel_id: str) -> bool:
+        """Se Storage.delete_kb_article. Ett id som inte är en uuid är en
+        artikel som inte finns, inte ett 500."""
+        try:
+            uuid.UUID(str(artikel_id))
+        except ValueError:
+            return False
+        async with self._scoped(tenant_id) as conn:
+            resultat = await conn.execute(
+                "delete from ss_knowledge_base where tenant_id = $1 and id = $2::uuid",
+                tenant_id,
+                str(artikel_id),
+            )
+        return str(resultat).endswith(" 1")
 
     # -- Kanaler & metrics --------------------------------------------------
 
@@ -1767,6 +1893,58 @@ class PostgresStorage:
             )
         return int(summa or 0)
 
+    async def sum_support_tokens(self, tenant_id: str, *, hours: int = 24) -> int:
+        async with self._scoped(tenant_id) as conn:
+            # Samma fråga som sum_leads_tokens med supportens agenttyper —
+            # inklusive is_test-resonemanget: testkörningar kostar samma
+            # pengar hos leverantören som skarpa.
+            summa = await conn.fetchval(
+                """
+                select coalesce(sum(tokens_in + tokens_out), 0)
+                from agent_runs
+                where tenant_id = $1
+                  and agent_type = any($2::text[])
+                  and created_at > now() - make_interval(hours => $3)
+                """,
+                tenant_id,
+                list(SUPPORT_BUDGET_AGENT_TYPES),
+                hours,
+            )
+        return int(summa or 0)
+
+    async def daily_support_usage(
+        self, tenant_id: str, *, days: int = 30
+    ) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select created_at::date as datum,
+                       count(*) filter (where not is_test) as korningar,
+                       count(*) filter (where is_test) as korningar_test,
+                       coalesce(sum(tokens_in), 0) as tokens_in,
+                       coalesce(sum(tokens_out), 0) as tokens_out
+                from agent_runs
+                where tenant_id = $1
+                  and agent_type = any($2::text[])
+                  and created_at > now() - make_interval(days => $3)
+                group by created_at::date
+                order by datum desc
+                """,
+                tenant_id,
+                list(SUPPORT_BUDGET_AGENT_TYPES),
+                days,
+            )
+        return [
+            {
+                "datum": str(r["datum"]),
+                "korningar": int(r["korningar"]),
+                "korningar_test": int(r["korningar_test"]),
+                "tokens_in": int(r["tokens_in"]),
+                "tokens_out": int(r["tokens_out"]),
+            }
+            for r in records
+        ]
+
     async def weekly_analytics(self, tenant_id: str, *, weeks: int = 8) -> dict[str, Any]:
         # Se protokollet i base.py för varför `coverage` finns.
         #
@@ -2073,6 +2251,7 @@ class PostgresStorage:
         status: str | None = None,
         ticket_id: str | None = None,
         is_test: bool | None = None,
+        hanterad: bool | None = None,
     ) -> dict[str, Any] | None:
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
@@ -2081,6 +2260,11 @@ class PostgresStorage:
                   status = coalesce($3, status),
                   ticket_id = coalesce($4::uuid, ticket_id),
                   is_test = case when $5::boolean is null then is_test else $5 end,
+                  hanterad_at = case
+                    when $6::boolean is null then hanterad_at
+                    when $6 then coalesce(hanterad_at, now())
+                    else null
+                  end,
                   updated_at = now()
                 where tenant_id = $1 and id = $2 returning *
                 """,
@@ -2089,6 +2273,7 @@ class PostgresStorage:
                 status,
                 ticket_id,
                 is_test,
+                hanterad,
             )
         return _row(record)
 
@@ -2134,14 +2319,18 @@ class PostgresStorage:
         reasoning: str,
         kb_sources: list[dict[str, Any]],
         model: str,
+        offertforfragan: bool = False,
+        utbildningsintresse: bool = False,
     ) -> dict[str, Any]:
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
                 """
                 insert into ss_classifications
                   (tenant_id, email_id, category, priority, sentiment, confidence,
-                   escalate, escalation_reason, reasoning, kb_sources, model)
-                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11) returning *
+                   escalate, escalation_reason, reasoning, kb_sources, model,
+                   offertforfragan, utbildningsintresse)
+                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13)
+                returning *
                 """,
                 tenant_id,
                 email_id,
@@ -2154,6 +2343,8 @@ class PostgresStorage:
                 reasoning,
                 json.dumps(kb_sources, ensure_ascii=False),
                 model,
+                offertforfragan,
+                utbildningsintresse,
             )
         return _row(record)
 

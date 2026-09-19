@@ -18,7 +18,11 @@ const config: Config = {
         copper: "oklch(var(--ochre) / <alpha-value>)",
         frost: "oklch(var(--paper2) / <alpha-value>)",
         danger: "oklch(var(--danger) / <alpha-value>)",
-        warning: "oklch(var(--warning) / <alpha-value>)"
+        warning: "oklch(var(--warning) / <alpha-value>)",
+        "ink-muted": "oklch(var(--ink-muted) / <alpha-value>)",
+        "ink-subtle": "oklch(var(--ink-subtle) / <alpha-value>)",
+        "paper-muted": "oklch(var(--paper-muted) / <alpha-value>)",
+        "paper-subtle": "oklch(var(--paper-subtle) / <alpha-value>)"
       },
       fontFamily: {
         // Fraunces is reachable only through `font-display`, and DESIGN.md limits

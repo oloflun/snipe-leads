@@ -2,6 +2,8 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from ..avtalsgrind import KUNDTEXT_AVTAL, avtal_saknas
+from ..budget import SupportBudgetExceededError, kontrollera_support_budget
 from ..config import CATEGORY_LABELS, get_settings
 from ..simulation.sim_triage import classify
 from . import rate_limit_db
@@ -65,6 +67,12 @@ async def triage(
     # den billigaste vägen att bränna nyckeln för den som skriptar. Taket
     # gäller även simuleringsläget: kontrollen kostar en indexerad räkning,
     # och en demo som svälter ut riktiga kunders kvot är fel åt andra hållet.
+    # Avtalsgrinden och supportbudgeten — samma grindar som chatten, av
+    # samma skäl: routen är en LLM-väg mot kundtext (se app/avtalsgrind.py
+    # och app/budget.py).
+    if await avtal_saknas(storage, tenant_id):
+        raise HTTPException(status_code=403, detail=KUNDTEXT_AVTAL)
+
     scopes = rate_limit_db.scopes_for(
         tenant_id,
         request.headers.get("x-snajp-user"),
@@ -73,6 +81,10 @@ async def triage(
     try:
         await rate_limit_db.enforce(storage, scopes)
     except rate_limit_db.RateLimitDbExceededError as error:
+        raise HTTPException(status_code=429, detail=str(error)) from error
+    try:
+        await kontrollera_support_budget(storage, tenant_id)
+    except SupportBudgetExceededError as error:
         raise HTTPException(status_code=429, detail=str(error)) from error
 
     results = []

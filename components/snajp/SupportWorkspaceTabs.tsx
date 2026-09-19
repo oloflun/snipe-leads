@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Dashboard } from "./Dashboard";
+import { JournalVy } from "./JournalVy";
 import { SupportChat } from "./SupportChat";
 
 /**
@@ -23,7 +24,7 @@ import { SupportChat } from "./SupportChat";
  * räknas som kundvolym.
  */
 export function SupportWorkspaceTabs({ workspaceName }: Readonly<{ workspaceName: string | null }>) {
-  const [tab, setTab] = useState<"kundtjanst" | "testmail" | "testchatt">("kundtjanst");
+  const [tab, setTab] = useState<"kundtjanst" | "testmail" | "testchatt" | "journal">("kundtjanst");
   /** null = vet inte än. false = riktig kund, Testmail-fliken ska synas. */
   const [visarTestIArenden, setVisarTestIArenden] = useState<boolean | null>(null);
 
@@ -41,7 +42,11 @@ export function SupportWorkspaceTabs({ workspaceName }: Readonly<{ workspaceName
     [
       { id: "kundtjanst", label: "Kundtjänst" },
       ...(visarTestIArenden === false ? [{ id: "testmail" as const, label: "Testmail" }] : []),
-      { id: "testchatt", label: "Testchatt" }
+      { id: "testchatt", label: "Testchatt" },
+      // Journalen (Livrustning-piloten): körningar, kostnad och
+      // överlämningar för den egna tenanten — vyn kundens kontaktperson
+      // (läsrollen) följer piloten i. Ren läsning, se JournalVy.tsx.
+      { id: "journal", label: "Journal" }
     ] as const
   );
 
@@ -55,7 +60,7 @@ export function SupportWorkspaceTabs({ workspaceName }: Readonly<{ workspaceName
             onClick={() => setTab(item.id)}
             className={cn(
               "focus-ring -mb-px border-b-2 px-4 py-3 text-sm font-semibold transition",
-              tab === item.id ? "border-ochre text-ink" : "border-transparent text-ink/50 hover:text-ink"
+              tab === item.id ? "border-ochre text-ink" : "border-transparent text-ink-subtle hover:text-ink"
             )}
           >
             {item.label}
@@ -73,6 +78,7 @@ export function SupportWorkspaceTabs({ workspaceName }: Readonly<{ workspaceName
             <SupportChat testMode workspaceLabel={workspaceName ?? undefined} />
           </div>
         ) : null}
+        {tab === "journal" ? <JournalVy /> : null}
       </div>
     </div>
   );

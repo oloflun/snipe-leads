@@ -83,7 +83,7 @@ export default async function Page() {
   return (
     <div>
       <h1 className="font-display text-4xl italic-disp tighten">Agentanvändning</h1>
-      <p className="mt-4 max-w-[70ch] text-[15px] leading-7 text-ink/65">
+      <p className="mt-4 max-w-[70ch] text-[15px] leading-7 text-ink-muted">
         Hur mycket varje agent används och vad AI-anropen uppskattningsvis
         kostar, per kund. Kostnaden räknas på Vertex listpris för Gemini 2.5
         Flash (${USD_PER_MILJON.in}/M in, ${USD_PER_MILJON.ut}/M ut, avläst

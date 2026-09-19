@@ -191,6 +191,11 @@ export async function persistEmailDraft(input: {
   subject: string;
   body: string;
 }): Promise<{ success: boolean; error?: string }> {
+  const { getWorkspaceContext } = await import("@/lib/workspace");
+  const { arLasare, LASROLL_FEL } = await import("@/lib/auth/lasroll");
+  if (arLasare(await getWorkspaceContext())) {
+    return { success: false, error: LASROLL_FEL };
+  }
   const { saveEmailDraft } = await import("@/lib/data/emails");
   return saveEmailDraft(input);
 }
