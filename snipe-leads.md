@@ -173,6 +173,40 @@ ingenting från agenten. Överlämningen gäller i 24 timmar från senaste livst
 
 **Verifiera:** `pytest tests/agent/test_support_eskalering.py tests/agent/test_support_sprak.py tests/agent/test_support_kundtest_fynd.py tests/api/test_chattar_api.py`, samt ett kundtest på `/support` på dev.
 
+## Integrationer och kanaler (2026-09-19, bd snipe-36u)
+
+Support-agenten mot kundens egna system och i fler kanaler. Kunden konfigurerar
+allt i supportportalens vy **Integrationer** (`support-webb/components/integrationer/`).
+
+| Del | Fil | Vad den gör |
+| --- | --- | --- |
+| Konfig | `snajp-support/app/integrationer/modell.py` | Ebbot-kompatibla HTTP-förfrågningar, MCP-server och händelser. Tre namnrymder: `{{hemlighet.x}}`, kodens kontextvärden (`{{kund.email}}` …) och modellens argument |
+| Nätvakt | `app/integrationer/natvakt.py` | Bara publika https-adresser. Varje omdirigering prövas, rubrikerna tappas vid värdbyte, 1 MB och 15 s. Gäller även MCP-SDK:ts egna förfrågningar |
+| Hemligheter | `app/integrationer/hemligheter.py` | Fernet med `INTEGRATION_NYCKEL`. Når aldrig prompten och tvättas ur varje svar |
+| Agentsteget | `app/integrationer/uppslag.py` + `agent-core/overlays/support-integrationsuppslag.md` | Villkorat: bara när kunden har integrationer. Modellen väljer, koden anropar. Högst 3 anrop per runda, 2 rundor och 1 ändrande anrop per ärende |
+| Händelser | `app/integrationer/handelser.py` | `arende_eskalerat` skickar ärendet till kundens ärendesystem med hela samtalet, i bakgrunden och en gång per överlämning |
+| Kanaler | `app/kanaler/` | WhatsApp/Messenger (HMAC, Graph), Slack (v0-signatur, tidsfönster), Teams (JWT mot Bot Framework). Mottagning med dubblettspärr, leverans av medarbetarsvar |
+| API | `app/api/integrationer.py`, `app/api/kanaler.py` | Admin-CRUD och provkörning. Webhooks: `/api/kanaler/{kanal}/{tenant}/{anslutning}/webhook` |
+| Schema | `supabase/migrations/067_integrationer_och_kanaler.sql` | 4 tabeller + breddad kanalkontroll (068 lägger NULLIF-vakten på policyerna) |
+| Drift | `scripts/integration_nyckel.py` | Skapar nyckeln på Railway, med kopia i `.env.deploy`, och ersätter aldrig en befintlig |
+
+**Fällor:**
+- `INTEGRATION_NYCKEL` får aldrig ersättas: då blir varje sparad kundnyckel
+  oläsbar. Rotation görs som `"ny,gammal"`.
+- Ett svar byggt på systemdata cachas aldrig (`and not underlag` i
+  cachevillkoret). Svarscachen cachar kategorierna leverans och orderstatus.
+- Agentens egna tidigare svar räknas aldrig som källa, så följdfrågor om
+  systemdata måste slås upp igen. Regeln står i overlayen och i `_uppgift`.
+- Modellen svarar ibland med objekt eller skillens mallformat i stället för
+  kontraktets strängfält. Läs alltid stegens text via `_text`/`_textfalt`
+  i `support_agent.py`.
+- Kundnycklarna i databasen strider formellt mot GOALS-beslutet om hemligheter,
+  och frågan ligger hos Anton (GOALS 10).
+
+**Verifiera:** `pytest tests/integrationer` (91), och kundtestet mot dev med en
+`*@session.snajp.se`-identitet. Ingen riktig kanal är provad hela vägen ännu
+(`snipe-36u.7`).
+
 ## Invariants and gotchas
 
 - **Skills are never edited — HARD RULE, mechanically enforced
