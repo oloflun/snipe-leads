@@ -41,8 +41,14 @@ export function Avstangning({
   const [pending, start] = useTransition();
 
   const trialDatum = trialSlut ? trialSlut.slice(0, 10) : null;
-  const trialSlutPasserad =
-    trialDatum !== null && Date.parse(trialDatum) < Date.now() && !avtalSignerat;
+  // "Idag" i Europe/Stockholm på BÅDA sidor av hydreringen, som i Kundtabell:
+  // Date.now() i render ger olika svar på servern (UTC-dygn) och i
+  // webbläsaren kring midnatt — hydreringskrocken den här kodbasen redan
+  // betalat för. sv-SE-formatet är YYYY-MM-DD, så strängjämförelsen håller.
+  const idag = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Stockholm" }).format(
+    new Date()
+  );
+  const trialSlutPasserad = trialDatum !== null && trialDatum < idag && !avtalSignerat;
 
   const skriv = (active: boolean, orsakstext: string) => {
     start(async () => {
