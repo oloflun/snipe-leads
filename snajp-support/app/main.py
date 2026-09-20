@@ -286,6 +286,14 @@ async def lifespan(app: FastAPI):
 
         stadare_task = asyncio.create_task(run_leads_stadare(app.state))
 
+    # Trial-påminnaren: mejlar kunden 7 dagar och 1 dag före provperiodens
+    # slut — "ingen tyst övergång". Se app/jobs/trial_paminnare.py.
+    trial_task = None
+    if settings.trial_paminnelse_sekunder > 0:
+        from .jobs.trial_paminnare import run_trial_paminnare
+
+        trial_task = asyncio.create_task(run_trial_paminnare(app.state))
+
     yield
 
     if poller_task:
@@ -294,6 +302,8 @@ async def lifespan(app: FastAPI):
         send_scheduler_task.cancel()
     if stadare_task:
         stadare_task.cancel()
+    if trial_task:
+        trial_task.cancel()
     for task in chat_worker_tasks:
         task.cancel()
     for task in leads_worker_tasks:

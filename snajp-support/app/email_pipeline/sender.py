@@ -28,6 +28,18 @@ Det betyder att svaret INTE kommer från tenantens egen supportadress — tråde
 i kundens mejlklient bryts. Det är en känd v1-begränsning, dokumenterad i
 stället för gömd: per-tenant-avsändare kräver credentials som inte är
 modellerade än (samma Del F-lucka som send_provider.py beskriver).
+
+## Varför spärrlistan INTE kontrolleras här — medvetet, inte glömt
+
+Supportsvar går inte genom send_guard och kontrolleras inte mot
+`suppressions`. Det är rätt utfall: ett supportsvar är ett svar på
+mottagarens EGEN inkommande fråga, inte marknadsföring, och en kund som
+avregistrerat sig från en tenants kallmejl ska fortfarande få svar när den
+själv mejlar supporten — att vägra svara vore det felaktiga utfallet.
+Spärrlistan gäller kalla utskick, och de har sin enda väg genom
+`leads/scheduler.py` + `send_guard`. Flytta inte in en suppressionskontroll
+hit utan att läsa det här stycket igen (dokumenterat 2026-09-20 efter
+granskningsfynd: valet var rätt men stod ingenstans).
 """
 
 from __future__ import annotations

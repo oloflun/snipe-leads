@@ -67,6 +67,7 @@ def bygg_fot(
     postadress: str,
     lank: str,
     kontakt_epost: str = "",
+    policy_url: str = "",
     kalla: str = "offentliga företagsuppgifter",
 ) -> str:
     """Bottenraden. Fyra stycken, i den ordning en mottagare läser dem.
@@ -86,22 +87,27 @@ def bygg_fot(
     kontakt = (kontakt_epost or _FALLBACK_KONTAKT).strip()
     kontaktrad = f" Du når oss på {kontakt}." if kontakt else ""
 
-    return "\n".join(
-        [
-            "--",
-            f"{foretagsnamn}, org.nr {orgnr}",
-            postadress,
-            "",
-            f"Du får det här mejlet därför att din adress är hämtad ur {kalla} och "
-            f"vi bedömer att erbjudandet är relevant för din verksamhet. Ändamålet "
-            f"är att ta en första affärskontakt.",
-            f"{foretagsnamn} är personuppgiftsansvarig för dina uppgifter. Du har "
-            f"rätt att invända mot behandlingen och att få dina uppgifter "
-            f"raderade.{kontaktrad}",
-            "",
-            f"Vill du inte höra av oss igen: {lank}",
-        ]
-    )
+    rader = [
+        "--",
+        f"{foretagsnamn}, org.nr {orgnr}",
+        postadress,
+        "",
+        f"Du får det här mejlet därför att din adress är hämtad ur {kalla} och "
+        f"vi bedömer att erbjudandet är relevant för din verksamhet. Ändamålet "
+        f"är att ta en första affärskontakt.",
+        f"{foretagsnamn} är personuppgiftsansvarig för dina uppgifter. Du har "
+        f"rätt att invända mot behandlingen och att få dina uppgifter "
+        f"raderade.{kontaktrad}",
+    ]
+    if policy_url.strip():
+        # Art. 14.2 pekar mot mer än fyra meningar rymmer — lagringstid,
+        # mottagare, rätten att klaga till IMY. Länken bär resten, och
+        # send_guard blockerar utskick som saknar den, så raden är inte
+        # kosmetik. Ordet "personuppgifter" på samma rad som länken är det
+        # guarden letar efter — se _POLICY_MONSTER i send_guard.py.
+        rader.append(f"Hur {foretagsnamn} behandlar personuppgifter: {policy_url.strip()}")
+    rader += ["", f"Vill du inte höra av oss igen: {lank}"]
+    return "\n".join(rader)
 
 
 #: Samma mönster som `send_guard._OPT_OUT_MONSTER`. Duplicerat med flit — den

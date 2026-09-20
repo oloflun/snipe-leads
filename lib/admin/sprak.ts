@@ -41,6 +41,7 @@ export const ADMIN: Record<string, Localized> = {
   kolSlug: { sv: "Slug", en: "Slug" },
   kolKundSedan: { sv: "Kund sedan", en: "Customer since" },
   kolAvtal: { sv: "Avtal", en: "Contract" },
+  kolTrial: { sv: "Trial", en: "Trial" },
   kolSenastAktiv: { sv: "Senast aktiv", en: "Last active" },
 
   /* -------------------------------------------------- Hälsa */

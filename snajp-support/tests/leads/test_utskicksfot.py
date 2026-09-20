@@ -32,6 +32,7 @@ FOT = bygg_fot(
     postadress=AVSANDARE.postadress,
     lank=avregistreringslank("https://snajp.se", "a" * 32),
     kontakt_epost="dataskydd@livrustning.se",
+    policy_url="https://livrustning.example/integritetspolicy",
 )
 
 

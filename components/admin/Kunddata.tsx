@@ -39,6 +39,9 @@ const FALT: { nyckel: string; etikett: string; typ: "text" | "date"; brett?: boo
   { nyckel: "kund_sedan", etikett: "Kund sedan", typ: "date" },
   { nyckel: "faktureringsadress", etikett: "Faktureringsadress", typ: "text", brett: true },
   { nyckel: "foretagsadress", etikett: "Företagets adress", typ: "text", brett: true },
+  // Obligatorisk i kallmejlfoten sedan migration 073 — utan den blockerar
+  // send_guard varje utskick för kunden, med besked som pekar hit.
+  { nyckel: "policy_url", etikett: "Integritetspolicy (URL)", typ: "text", brett: true },
   { nyckel: "avtal_signerat", etikett: "Avtal signerat", typ: "date" }
 ];
 

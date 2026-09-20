@@ -26,6 +26,7 @@ KUNDDATA_FALT = (
     "faktureringsmejl",
     "telefon",
     "foretagsadress",
+    "policy_url",
     "kund_sedan",
     "avtal_signerat",
 )
@@ -74,6 +75,15 @@ class Storage(Protocol):
     async def get_tenant(self, tenant_id: str) -> dict[str, Any] | None: ...
 
     async def list_tenants(self) -> list[dict[str, Any]]: ...
+
+    async def get_tenant_products(self, tenant_id: str) -> list[str] | None:
+        """Paketet ur den kopplade arbetsytans `workspaces.products`.
+
+        `None` betyder "ingen kopplad arbetsyta" (configfil-kunder), inte
+        "inga produkter" — anropare ska behandla None som okänt och inte
+        stänga något på det. Se produktgrinden i app/api/deps.py.
+        """
+        ...
 
     # -- Inkorgar -----------------------------------------------------------
 
@@ -158,6 +168,40 @@ class Storage(Protocol):
     async def get_messages(
         self, tenant_id: str, conversation_id: str
     ) -> list[dict[str, Any]]: ...
+
+    # -- Trial (migration 074) ----------------------------------------------
+
+    async def list_trial_paminnelse_kandidater(self, *, idag: date) -> list[dict[str, Any]]:
+        """Arbetsytor vars trial går ut om exakt 7 eller exakt 1 dagar.
+
+        En kandidat är en riktig arbetsyta (inte demo) utan signerat avtal
+        vars påminnelse av den typen inte redan är loggad. Raden bär
+        `workspace_id`, `name`, `trial_slut`, `email` (ägarens) och
+        `dagar_kvar` (7 eller 1). Läses OSKOPAT — plattformssvep, inte
+        kunddata; se app/jobs/trial_paminnare.py.
+        """
+        ...
+
+    async def spara_trial_paminnelse(
+        self, *, workspace_id: str, typ: str, skickad_till: str
+    ) -> bool:
+        """Loggar en skickad påminnelse. False när typen redan var loggad.
+
+        Skickning sker FÖRE loggning (hellre en dubblett efter en krasch än
+        en tyst utebliven påminnelse); unikheten per (workspace, typ) är det
+        som gör sveparen omkörningsbar.
+        """
+        ...
+
+    async def list_customer_emails(self, tenant_id: str) -> list[str]:
+        """Tenantens egna slutkunders mejladresser (ss_customer_identifiers).
+
+        Underlaget till send_guard regel 3:s `egna_kunder`: en befintlig kund
+        ska inte få ett kallmejl om det den redan köpt. Fram till 2026-09-20
+        skickade schemaläggaren en tom mängd hit — spärren fanns i guarden men
+        hade aldrig data att döma mot.
+        """
+        ...
 
     async def find_customer(self, tenant_id: str, *, email: str) -> dict[str, Any] | None:
         """Kunden med den här e-postidentifieraren, eller None. Skapar ALDRIG.
@@ -1216,7 +1260,7 @@ class Storage(Protocol):
         *,
         underlag_id: str,
         serie: str,
-        nummer: str,
+        nummer: str | None = None,
         datum: date,
         text: str,
         rader: list[dict[str, Any]],
@@ -1226,6 +1270,12 @@ class Storage(Protocol):
         Rader och huvud i samma skrivning: ett verifikat utan rader balanserar
         inte, och ett halvskrivet verifikat är precis den sortens post som får
         en periodrapport att se rimlig ut och vara fel.
+
+        `nummer=None` betyder "nästa lediga i serien", räknat av LAGRINGEN i
+        själva skrivningen. Anropare ska inte räkna numret själva ur en
+        listlängd — två samtidiga anrop läser då samma längd och skriver samma
+        nummer (granskningsfynd snipe-a4y). Postgres backar upp med ett unikt
+        index per (tenant, serie, nummer) och försöker om vid kollision.
         """
         ...
 

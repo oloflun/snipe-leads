@@ -321,7 +321,7 @@ väcks.
 |---|---|---|
 | `INTERNLARM_SMTP_ANVANDARE` | `api` | `snajpsupport@gmail.com` |
 | `INTERNLARM_SMTP_LOSENORD` | `api` | **App-lösenord**, 16 tecken — inte kontolösenordet |
-| `PUBLIC_BASE_URL` | `api` | Utan den bygger mejlet ingen länk in i adminvyn |
+| `PUBLIC_BASE_URL` | `api` | Utan den bygger mejlet ingen länk in i adminvyn — och ingen avregistreringslänk i kallmejl (se nedan) |
 
 **Lösenordet är inte kontolösenordet.** Ett Gmail med tvåstegsverifiering kan
 inte logga in på SMTP med det. Ett app-specifikt lösenord skapas under
@@ -337,6 +337,14 @@ koden.
 [`docs/JURIDIK_ATGARDER.md`](docs/JURIDIK_ATGARDER.md) (avregistreringslänken
 behöver den). Mejlet är alltså ett andra skäl att sätta samma variabel, inte ett
 nytt.
+
+**Om namnet:** koden läser sedan 2026-09-20 BÅDA formerna `PUBLIC_BASE_URL`
+och `PUBLIK_BAS_URL` (alias i `snajp-support/app/config.py`). Fram till dess
+lästes bara den svenska formen — den engelska, som stod här och i Railway,
+gjorde ingenting, så utskicksfoten kunde aldrig byggas och send_guard hade
+blockerat varje kallmejl. Värdet ska peka på **Next-appen** (webben), inte på
+API:t: det är webben som renderar `/avregistrera/<token>`. I `development`:
+`https://web-development-6c85.up.railway.app`.
 
 ## Kundvänd utgående SMTP (leads-utskick + godkända supportsvar)
 
