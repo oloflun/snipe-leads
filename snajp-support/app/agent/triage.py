@@ -33,9 +33,24 @@ kostnadsförslag — även utan ordet offert. "utbildningsintresse" är true nä
 mailet uttrycker intresse för en utbildning, kurs eller liknande. Båda kan
 vara true samtidigt, och de är oberoende av vilket fack du väljer.
 
+Skriv draft_reply som företagets egen kundtjänst: konkret, professionellt och
+komplett — besvara varje fråga i mailet som kunskapsbasen täcker, med exakta
+uppgifter (priser, tider, villkor) i stället för hänvisningar. Frågar mailet
+efter pris, offert eller kostnadsförslag OCH kunskapsbasen innehåller
+prisuppgifter: strukturera draft_reply som ett kostnadsförslag — vad som
+ingår, pris per post (exakt ur kunskapsbasen), villkor som moms och
+giltighetstid om de framgår, och ett tydligt nästa steg. Använd företagets
+uppgifter ur avsändarprofilen (organisationsnummer, hemsida) där de hör hemma
+i ett kostnadsförslag. Hitta ALDRIG på priser: saknar kunskapsbasen
+prisuppgifterna, fråga i stället efter det som behövs för en offert.
+
 Eskalera vid: återbetalning, juridik/ARN, GDPR/kontoradering, sentiment < 0.3.
 Vid eskalering ska draft_reply vara ett artigt hållsvar. Hitta ALDRIG på fakta
 som inte står i kunskapsbasen — sätt låg confidence och eskalera hellre.
+
+Avsändarprofil (företaget du svarar för — bakgrund och identitet, INTE en
+faktakälla för sakuppgifter till kunden utöver bolagsuppgifterna):
+{profil}
 
 Kunskapsbas (grunda svaret enbart i dessa fakta):
 {kb}
@@ -54,6 +69,7 @@ async def triage_email_llm(
     body: str,
     kb_articles: list[dict[str, Any]],
     image_urls: list[str] | None = None,
+    foretagsprofil: str = "",
 ) -> dict[str, Any]:
     settings = get_settings()
     kb_text = "\n\n".join(f"### {a['title']}\n{a['content']}" for a in kb_articles) or "(tom)"
@@ -64,6 +80,7 @@ async def triage_email_llm(
     # maskerad kopia.
     prompt = _TRIAGE_PROMPT.format(
         kb=kb_text,
+        profil=foretagsprofil.strip() or "(ingen profil registrerad)",
         sender=sender,
         subject=maskera_personnummer(subject),
         body=maskera_personnummer(body),

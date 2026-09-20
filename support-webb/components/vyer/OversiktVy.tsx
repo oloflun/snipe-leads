@@ -15,7 +15,14 @@ import { cn } from "@/lib/utils";
  */
 
 const STATUSETIKETT: Record<string, string> = {
+  // Samma rättelse som InkorgVy: backendens status heter awaiting_approval.
+  awaiting_approval: "Väntar på dig",
   awaiting_review: "Väntar på dig",
+  new: "Ny",
+  processing: "Bearbetas",
+  sent: "Skickat",
+  rejected: "Avvisat",
+  taken_over: "Övertaget",
   auto_sent: "Skickade själv",
   escalated: "Eskalerade",
   failed: "Föll"
@@ -43,7 +50,7 @@ export function OversiktVy() {
 
   const nyckeltal: Array<[string, number | string, boolean]> = [
     ["Ärenden i inkorgen", inkorg?.emails.length ?? "—", false],
-    ["Väntar på dig", laddar ? "—" : statusar.awaiting_review ?? 0, (statusar.awaiting_review ?? 0) > 0],
+    ["Väntar på dig", laddar ? "—" : statusar.awaiting_approval ?? 0, (statusar.awaiting_approval ?? 0) > 0],
     ["Eskalerade", laddar ? "—" : statusar.escalated ?? 0, false]
   ];
 
@@ -107,7 +114,7 @@ export function OversiktVy() {
                 {mail.classification?.category ? (
                   <Badge tone="neutral">{mail.classification.category}</Badge>
                 ) : null}
-                <Badge tone={mail.status === "awaiting_review" ? "warn" : "good"}>
+                <Badge tone={mail.status === "awaiting_approval" ? "warn" : "good"}>
                   {STATUSETIKETT[mail.status ?? ""] ?? mail.status ?? "—"}
                 </Badge>
               </Link>

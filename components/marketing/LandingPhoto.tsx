@@ -9,6 +9,7 @@ import { productKeys } from "@/lib/routes";
 import { KONTAKT_MEJL, mejlaOss, productCopy, shared } from "@/components/marketing/copy";
 import { imagery, photo, sectionCopy } from "@/components/marketing/copy-sections";
 import { AgentResultat } from "@/components/marketing/AgentResultat";
+import { ProduktBilder } from "@/components/marketing/ProduktBilder";
 import { PricingSection } from "@/components/marketing/PricingSection";
 import { UspSection } from "@/components/marketing/UspSection";
 import { LaddaNerAppen } from "@/components/marketing/LaddaNerAppen";
@@ -283,29 +284,12 @@ export function LandingPhoto({
             innan sidan hinner beskriva problemet. */}
         <UspSection product={product} />
 
-        {/* PROBLEM. Named before the solution is offered. */}
-        <section className="border-b border-ink/12">
-          <div className="mx-auto max-w-[1480px] px-6 py-24 md:px-10 md:py-32">
-            <div className="grid grid-cols-12 gap-y-10 lg:gap-x-12">
-              <div className="col-span-12 lg:col-span-7">
-                <Label>{text(sec.problemLabel)}</Label>
-                <h2 className="rise mt-5 max-w-[16ch] font-display text-[clamp(2.25rem,5vw,4rem)] font-semibold leading-[1.02] tracking-[-0.03em]">
-                  <Display text={text(sec.problemHeading)} />
-                </h2>
-              </div>
-              <div className="col-span-12 lg:col-span-4 lg:col-start-9">
-                <p className="rise rise-1 text-[1.0625rem] leading-[1.7] text-ink-muted">{text(sec.problemBody)}</p>
-                <ul className="mt-8">
-                  {sec.problemPoints.map((point) => (
-                    <li key={point.sv} className="hrule py-4 text-[0.9375rem] leading-[1.55] text-ink-muted">
-                      {text(point)}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </div>
-        </section>
+        {/* PRODUKTBILDERNA. Ersatte problemtexten 2026-09-21: två renderade
+            produktytor per agent (widget + inkorg, utkast + leadslista,
+            kvitton + verifikat), med sidorna växlade per flik. Texten som
+            stod här bar problemet i ord; ytorna visar det i stället.
+            Se components/marketing/ProduktBilder.tsx. */}
+        <ProduktBilder product={product} locale={locale} />
 
 
         {/* STATEMENT. One line, a photograph almost fully darkened behind it.

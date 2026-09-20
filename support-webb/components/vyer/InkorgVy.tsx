@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Hand, Loader2, X } from "lucide-react";
+import { Check, Hand, Loader2, Scissors, Smile, Sparkles, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { PageHeader } from "@/components/PageHeader";
@@ -15,8 +15,29 @@ import { cn } from "@/lib/utils";
  * du ser i rutan, inte en osynlig originalversion.
  */
 
+/**
+ * Omformuleringsknapparna vid Godkänn & skicka. Varje knapp skriver om texten
+ * SOM DEN STÅR I RUTAN (inklusive egna redigeringar) via
+ * /drafts/{id}/omformulera — inget skickas och det sparade utkastet rörs
+ * inte; resultatet landar i rutan och blir verkligt först vid Godkänn.
+ */
+const OMFORMULERINGAR = [
+  { lage: "forbattra", etikett: "Förbättra", Ikon: Sparkles },
+  { lage: "kortare", etikett: "Kortare", Ikon: Scissors },
+  { lage: "personligare", etikett: "Mer personlig", Ikon: Smile }
+] as const;
+
 const STATUSETIKETT: Record<string, string> = {
+  // Backendens status är awaiting_approval (email_pipeline/processor.py) —
+  // vyn testade länge mot "awaiting_review", som är LEADS-kös status, och
+  // Godkänn-knappen var därför alltid avstängd. Etiketten står kvar för
+  // båda ifall gamla svar cachats.
+  awaiting_approval: "Väntar på dig",
   awaiting_review: "Väntar på dig",
+  new: "Ny",
+  processing: "Bearbetas",
+  sent: "Skickat",
+  rejected: "Avvisat",
   auto_sent: "Skickat",
   approved_and_sent: "Godkänt & skickat",
   escalated: "Eskalerat",
@@ -74,7 +95,28 @@ function Inkorg() {
     }
   }
 
-  const kanGodkanna = valt?.draft && valt.status === "awaiting_review";
+  const kanGodkanna = valt?.draft && valt.status === "awaiting_approval";
+
+  /** Skriv om rutans text i vald riktning. Egen väg i stället för handling():
+   *  den hämtar om både listan och ärendet, och en omhämtning här hade
+   *  skrivit över precis den text kunden just fick omformulerad. */
+  async function omformulera(lage: string) {
+    if (!valt?.draft) return;
+    setPagar(`omformulera-${lage}`);
+    setFel(null);
+    try {
+      const svar = await fetch(`${BAS}/drafts/${valt.draft.id}/omformulera`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lage, content: utkastText })
+      }).then((s) => readJson<{ content: string }>(s));
+      if (svar?.content) setUtkastText(svar.content);
+    } catch (orsak) {
+      setFel(felmeddelande(orsak));
+    } finally {
+      setPagar(null);
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -108,7 +150,7 @@ function Inkorg() {
                     <span className="min-w-0 truncate text-[0.9375rem] font-medium">
                       {rad.subject || "Utan ämnesrad"}
                     </span>
-                    <Badge tone={rad.status === "awaiting_review" ? "warn" : "neutral"}>
+                    <Badge tone={rad.status === "awaiting_approval" ? "warn" : "neutral"}>
                       {STATUSETIKETT[rad.status ?? ""] ?? rad.status ?? "—"}
                     </Badge>
                   </span>
@@ -202,6 +244,28 @@ function Inkorg() {
                         <Hand className="h-4 w-4" aria-hidden />
                         Ta över
                       </button>
+
+                      {/* Omformuleringarna, avskilda från skicka/avvisa med en
+                          tunn linje: de ändrar bara texten i rutan, aldrig
+                          ärendets tillstånd. */}
+                      <span aria-hidden className="mx-1 hidden h-5 w-px bg-ink/15 sm:block" />
+                      {OMFORMULERINGAR.map(({ lage, etikett, Ikon }) => (
+                        <button
+                          key={lage}
+                          type="button"
+                          disabled={!kanGodkanna || pagar !== null}
+                          onClick={() => void omformulera(lage)}
+                          title={`Skriv om utkastet: ${etikett.toLowerCase()}. Inget skickas förrän du godkänner.`}
+                          className={cn(btnSecondary, btnLiten)}
+                        >
+                          {pagar === `omformulera-${lage}` ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                          ) : (
+                            <Ikon className="h-3.5 w-3.5" aria-hidden />
+                          )}
+                          {etikett}
+                        </button>
+                      ))}
                     </div>
                     {!kanGodkanna ? (
                       <p className="mt-2 text-[0.8125rem] text-ink-subtle">Ärendet är redan hanterat.</p>
