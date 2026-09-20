@@ -5,15 +5,39 @@ import { redirect } from "next/navigation";
 import { formateraOrgnr, orgnrFel } from "@/lib/orgnr";
 
 /**
- * Fyra fält, inte åtta. Se components/auth/OnboardingForm.tsx om varför de
- * gamla fälten var aktivt skadliga: de var förifyllda med påhittade värden som
- * gick att skicka in rakt av.
+ * Bolagsfälten är fyra, inte åtta — de gamla åtta var förifyllda med påhittade
+ * värden som gick att skicka in rakt av (se OnboardingWizard, som ärvde
+ * lärdomen). Sedan 2026-09-20 bär flödet dessutom bransch, kontaktperson och
+ * paketval, i fyra steg — se components/auth/OnboardingWizard.tsx.
  */
 export type OnboardingInput = {
   orgnr: string;
   webbplats: string;
   produkt: string;
   fokus: string;
+  /**
+   * Kundens EGEN bransch, ur listan i lib/bransch.ts. Skrivs som en rad i
+   * produkttexten (agenternas kontext och ordförråd) — ALDRIG i
+   * `industries`, som är leads-agentens målgruppsfilter. Se lib/bransch.ts.
+   */
+  bransch: string;
+  /**
+   * Kontaktpersonen hos kunden — den vi hör av oss till. Landar i
+   * kundregistret (ss_customer_contacts) via lib/snajp/kundregister.ts och
+   * som en rad i produkttexten, så uppgiften överlever även om
+   * CRM-skrivningen fallerar.
+   */
+  kontaktNamn: string;
+  kontaktRoll?: string;
+  kontaktMejl: string;
+  kontaktTelefon?: string;
+  /**
+   * Paketet kunden valde i onboardingen. Sätter `workspaces.products` via
+   * samma RPC som paketbytet i inställningarna (set_workspace_products,
+   * migration 044) — paketet ÄR entitlementen. Utelämnat = defaulten
+   * (leads + support) står kvar.
+   */
+  paket?: string;
   /**
    * Testarbetsyta: organisationsnumret hoppas över.
    *
@@ -125,6 +149,28 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
 
   const fokus = input.fokus.trim();
 
+  const { arBransch } = await import("@/lib/bransch");
+  if (!arBransch(input.bransch)) {
+    return { success: false, error: "Välj er bransch i listan." };
+  }
+
+  const kontaktNamn = input.kontaktNamn.trim();
+  const kontaktMejl = input.kontaktMejl.trim().toLowerCase();
+  if (!kontaktNamn) {
+    return { success: false, error: "Fyll i vem som är kontaktperson hos er." };
+  }
+  if (!kontaktMejl.includes("@")) {
+    return { success: false, error: "Fyll i kontaktpersonens e-postadress." };
+  }
+  const kontaktRoll = (input.kontaktRoll ?? "").trim();
+  const kontaktTelefon = (input.kontaktTelefon ?? "").trim();
+
+  const { arPaketId } = await import("@/lib/pricing");
+  const paket = input.paket && arPaketId(input.paket) ? input.paket : null;
+  if (input.paket && !paket) {
+    return { success: false, error: `Okänt paket: ${input.paket}.` };
+  }
+
   // De gamla kolumnerna är not null i schemat och kan inte lämnas tomma. De
   // fylls därför med det agenten VET, inte med gissningar: målgrupp, branscher,
   // geografi och tonläge härleds ur webbplatsen i researchsteget, och att
@@ -139,8 +185,15 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
         ? "Organisationsnummer: — (TESTARBETSYTA, inget riktigt bolag)"
         : `Organisationsnummer: ${formateraOrgnr(input.orgnr)}`,
       `Webbplats: ${webbplats}`,
+      `Bransch: ${input.bransch}`,
       `Vad vi säljer: ${produkt}`,
-      fokus ? `Särskilt fokus: ${fokus}` : null
+      fokus ? `Särskilt fokus: ${fokus}` : null,
+      // Kontaktpersonen står i texten OCKSÅ när CRM-skrivningen lyckas:
+      // affärskontexten är det lager som aldrig tappas bort, och admin-
+      // fliken Kunder & Data härleder redan andra fält härifrån.
+      `Kontaktperson: ${kontaktNamn}${kontaktRoll ? ` (${kontaktRoll})` : ""} — ${kontaktMejl}${
+        kontaktTelefon ? `, ${kontaktTelefon}` : ""
+      }`
     ]
       .filter(Boolean)
       .join("\n"),
@@ -165,6 +218,25 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
     await sparaBusinessContext(user.id, payload);
   } catch (error) {
     return { success: false, error: (error as Error).message };
+  }
+
+  /**
+   * Paketvalet — samma RPC som paketbytet i inställningarna (migration 044),
+   * så onboardingen kan aldrig sätta något inställningssidan inte kan.
+   *
+   * Fäller inte onboardingen: defaulten (leads + support) är ett fungerande
+   * läge, och kunden kan byta paket under Inställningar → Plan. Ett fel här
+   * loggas i stället för att kasta bort ett sparat bolag.
+   */
+  if (paket) {
+    try {
+      const { PRODUKTER_FOR_PAKET } = await import("@/lib/pricing");
+      await sqlAsUser(user.id, "select public.set_workspace_products($1::text[])", [
+        PRODUKTER_FOR_PAKET[paket]
+      ]);
+    } catch (error) {
+      console.error("[onboarding] kunde inte sätta paketet:", error);
+    }
   }
 
   /**
@@ -280,7 +352,7 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
         // Samma fyra fält som `Kundunderlag` — payloaden ovan är redan den
         // text kunden skrev, så en omläsning ur databasen hade bara varit en
         // extra tur och retur för samma sak.
-        await sakerstallKundtenant(
+        const kopplad = await sakerstallKundtenant(
           user.id,
           workspace,
           {
@@ -293,6 +365,23 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
           // enda tillfället kunden faktiskt väntar på att bli upplagd.
           true
         );
+
+        // Kundregistret (Admin → Kunder → Data) fylls direkt vid onboarding —
+        // lanseringshandoffens beställning 2026-09-20. Fail-soft: se
+        // lib/snajp/kundregister.ts. Sluggen kommer ur provisioneringen,
+        // aldrig ur klienten.
+        if (kopplad?.slug) {
+          const { registreraKunduppgifter } = await import("@/lib/snajp/kundregister");
+          await registreraKunduppgifter(kopplad.slug, {
+            orgnr: formateraOrgnr(input.orgnr),
+            kontakt: {
+              namn: kontaktNamn,
+              roll: kontaktRoll || null,
+              mejl: kontaktMejl,
+              telefon: kontaktTelefon || null
+            }
+          });
+        }
       }
     } catch (error) {
       console.error("[onboarding] kunde inte koppla arbetsytans tenant:", error);

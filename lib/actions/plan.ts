@@ -35,14 +35,9 @@ import { getWorkspaceContext } from "@/lib/workspace";
 
 export type Planbyte = { success: boolean; error?: string; products?: ProductKey[] };
 
-/** Paketen kunden kan välja mellan, och vad de ger. Speglar `PAKET` i lib/pricing.ts. */
-const PRODUKTER_FOR_PAKET: Record<string, ProductKey[]> = {
-  leads: ["leads"],
-  support: ["support"],
-  bookkeeping: ["bookkeeping"],
-  duo: ["leads", "support"],
-  trio: ["leads", "support", "bookkeeping"]
-};
+// Kartan bor i lib/pricing.ts sedan onboardingen också behöver den — en
+// "use server"-fil får inte exportera const, och två kartor glider isär.
+import { PRODUKTER_FOR_PAKET, arPaketId } from "@/lib/pricing";
 
 export async function bytPlan(paketId: string): Promise<Planbyte> {
   const context = await getWorkspaceContext();
@@ -62,10 +57,10 @@ export async function bytPlan(paketId: string): Promise<Planbyte> {
     };
   }
 
-  const nya = PRODUKTER_FOR_PAKET[paketId];
-  if (!nya) {
+  if (!arPaketId(paketId)) {
     return { success: false, error: `Okänt paket: ${paketId}.` };
   }
+  const nya = PRODUKTER_FOR_PAKET[paketId];
 
   let rader: { set_workspace_products: string[] }[];
   try {

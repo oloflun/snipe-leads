@@ -25,6 +25,8 @@ export type EmbedYtaProps = {
   logo: TenantLogo;
   /** Accentfärgen som CSS-värde, t.ex. "oklch(0.48 0.105 215)" — till knappen på kundens sida. */
   farg: string;
+  /** Pratbubblan som frågar först, om kunden har en (lib/tenants/types.ts). */
+  inbjudan?: { rubrik: string; text: string };
 };
 
 function embedSessionId(slug: string): string {
@@ -43,14 +45,23 @@ function tillForaldern(data: Record<string, string>) {
   }
 }
 
-export function EmbedYta({ slug, namn, logo, farg }: EmbedYtaProps) {
+export function EmbedYta({ slug, namn, logo, farg, inbjudan }: EmbedYtaProps) {
   // Sessionen skapas först på klienten — servern känner ingen identitet, och
   // utan vakten hade SSR och klient renderat olika props (hydreringskrock).
   const [session, setSession] = useState<string | null>(null);
   useEffect(() => {
     setSession(embedSessionId(slug));
-    tillForaldern({ typ: "snajp:redo", farg });
-  }, [slug, farg]);
+    // Inbjudans text följer med hit: widget.js är gemensam för alla kunder
+    // och ska inte bära en enda kunds mening. Fälten utelämnas när kunden
+    // saknar inbjudan, och då ritar skriptet ingen bubbla.
+    tillForaldern({
+      typ: "snajp:redo",
+      farg,
+      ...(inbjudan
+        ? { inbjudanRubrik: inbjudan.rubrik, inbjudanText: inbjudan.text }
+        : {})
+    });
+  }, [slug, farg, inbjudan]);
 
   const morkt = logo.background === "dark";
 

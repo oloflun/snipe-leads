@@ -27,8 +27,6 @@ import { Inkorgar } from "@/components/settings/Inkorgar";
 import { NotisSettings } from "@/components/settings/NotisSettings";
 import { TemaSettings } from "@/components/settings/TemaSettings";
 import { PlanSettings } from "@/components/settings/PlanSettings";
-import { OnboardingForm } from "@/components/auth/OnboardingForm";
-import { signOut } from "@/lib/actions/auth";
 // Kvar ur mock-data: BARA `workflowSteps`, som är AssistantViews stegkedja —
 // en beskrivning av hur agenten arbetar, inte kunddata som utger sig för att
 // vara kundens. Allt annat härifrån (companies, contacts, emailVariants,
@@ -315,8 +313,9 @@ function CompanySettings() {
 export function LoginView() {
   return (
     <main className="min-h-screen bg-paper text-ink">
-      {/* gap-x först vid md — se kommentaren i OnboardingForm: under md är båda
-          sektionerna col-span-12, och gapen ensamma är bredare än viewporten. */}
+      {/* gap-x först vid md — se kommentaren i OnboardingWizard.Falt: under md
+          är båda sektionerna col-span-12, och gapen ensamma är bredare än
+          viewporten. */}
       <div className="mx-auto grid min-h-screen max-w-[1480px] grid-cols-12 px-6 py-10 md:gap-x-8 md:px-8">
         <section className="col-span-12 flex flex-col justify-between bg-ink p-8 text-paper md:col-span-6">
           <div>
@@ -333,28 +332,10 @@ export function LoginView() {
   );
 }
 
-export function OnboardingView() {
-  return (
-    <main className="min-h-screen bg-paper text-ink">
-      <div className="mx-auto max-w-[1480px] px-6 py-10 md:px-8">
-        <div className="grid grid-cols-12 md:gap-x-8">
-          <div className="col-span-12 md:col-span-3">
-            <Link href="/" className="kicker text-mineral hover:text-ochre">Till startsidan</Link>
-            <div className="rule mt-3 text-ink" />
-            <form action={signOut} className="mt-3">
-              <button type="submit" className="kicker text-mineral hover:text-ochre">Logga ut</button>
-            </form>
-            <p className="kicker mt-4 text-ink-subtle">Steg 1 av 4</p>
-          </div>
-          <div className="col-span-12 mt-8 md:col-span-9 md:mt-0">
-            <h1 className="max-w-3xl text-[1.75rem] font-semibold leading-tight tracking-[-0.02em]">Berätta hur ni säljer</h1>
-            <OnboardingForm />
-          </div>
-        </div>
-      </div>
-    </main>
-  );
-}
+// OnboardingView bor numera i app/onboarding/page.tsx + components/auth/
+// OnboardingWizard.tsx: flödet blev fyra steg (företag, bransch,
+// kontaktperson, paket) och behöver sessionen (förifylld kontaktmejl), vilket
+// kräver en server component — den här filen är "use client".
 
 export function LoadingStatesView() {
   return (

@@ -73,6 +73,9 @@ if (ATERANVAND) {
   await page.waitForURL((u) => u.pathname.startsWith("/onboarding"), { timeout: 45000 });
   rad(true, "registreringen landar på /onboarding");
 
+  // Onboardingen är en wizard i fyra steg sedan 2026-09-20 (OnboardingWizard):
+  // företaget → bransch → kontaktperson → paket. Kontaktfälten förifylls ur
+  // sessionen, så de fylls bara om de är tomma.
   await page.locator('input[type="checkbox"]').first().check(); // testarbetsyta
   for (const [etikett, värde] of [
     ["Webbplats", "https://testkund.example.se"],
@@ -81,10 +84,34 @@ if (ATERANVAND) {
   ]) {
     await page.getByLabel(etikett).fill(värde);
   }
-  await page.getByRole("button", { name: /Spara och läs in/ }).click();
-  await page.waitForURL((u) => u.pathname === "/dashboard", { timeout: 45000 });
+  await bild(page, "01a-onboarding-foretag");
+  await page.getByRole("button", { name: /Fortsätt/ }).click();
+
+  await page.getByRole("radio", { name: "Industri & tillverkning" }).click();
+  await bild(page, "01b-onboarding-bransch");
+  await page.getByRole("button", { name: /Fortsätt/ }).click();
+
+  const namnfalt = page.getByLabel("Namn", { exact: true });
+  if (!(await namnfalt.inputValue())) await namnfalt.fill(`Testkund ${STAMP}`);
+  const mejlfalt = page.getByLabel("E-post", { exact: true });
+  if (!(await mejlfalt.inputValue())) await mejlfalt.fill(EPOST);
+  await bild(page, "01c-onboarding-kontakt");
+  await page.getByRole("button", { name: /Fortsätt/ }).click();
+
+  // Steg 4: Duo är förvalt (paketet vi vill sälja) — resan kör med det, så
+  // kvittofliken nedan ska stå MÖRKLAGD och steg 5 möta upsell-vyn.
+  await bild(page, "01d-onboarding-paket");
+  await page.getByRole("button", { name: /Öppna arbetsytan/ }).click();
+  await page.waitForURL((u) => u.pathname === "/dashboard", { timeout: 60000 });
   await page.waitForLoadState("networkidle").catch(() => {});
-  rad(true, "onboardingen landar på /dashboard");
+  rad(true, "onboardingen (fyra steg) landar på /dashboard");
+
+  // Mörkläggningen: en agent utan paket ska STÅ i menyn, nedtonad, med
+  // förklarande title — inte vara dold. Det är säljytan, inte ett hål.
+  const morka = await page
+    .locator('a[title="Ingår inte i ert paket ännu — klicka och läs mer"]')
+    .count();
+  rad(morka >= 1, `menyn visar ${morka} mörklagd agent (Duo ⇒ Kvitton ska vara mörk)`);
   await bild(page, "01-dashboard");
 } catch (e) {
   rad(false, `konto/onboarding: ${String(e).slice(0, 160)}`);
@@ -252,13 +279,14 @@ try {
     väg: location.pathname,
     text: document.body.innerText.slice(0, 400)
   }));
-  // Entitlement-grinden ÄR en 404 (WorkspaceSection: !products.includes →
-  // notFound()), samma designbeslut som /admin för en kund. Första körningen
-  // 2026-09-08 dömde 404:an som avvikelse — det var skriptets fel, inte
-  // produktens: en osåld produkt ska inte ens synas, inte visa en säljruta.
-  const öppen = /Bokföringsassistent|underlag|kvitto/i.test(info.text);
-  const grindad = r?.status() === 404 || /Sidan finns inte/i.test(info.text);
-  rad(öppen || grindad, `bokföringen: ${öppen ? "öppen för kontot" : grindad ? "korrekt entitlement-grindad (404, som /admin)" : `oväntat läge (${r?.status()} ${info.väg})`}`);
+  // Sedan 2026-09-20 är en osåld agent en UPSELL-VY, inte en 404: menyn
+  // visar posten mörklagd och klicket landar i erbjudandet (AgentLast).
+  // Grinden är densamma — ingen kunddata för agenten renderas, bara pitchen
+  // med pris och "Lägg till i ert paket". En 404 här vore numera ett FEL.
+  const öppen = /Bokföringsassistent|underlag|kvitto.*(godkänn|inkorg)/i.test(info.text);
+  const upsell =
+    /Ingår inte i ert paket ännu/i.test(info.text) && /Lägg till i ert paket/i.test(info.text);
+  rad(öppen || upsell, `bokföringen: ${öppen ? "öppen för kontot" : upsell ? "korrekt mörklagd — upsell-vyn med pris och Lägg till" : `oväntat läge (${r?.status()} ${info.väg})`}`);
   await bild(page, "05-bokforing");
 } catch (e) {
   rad(false, `bokforing: ${String(e).slice(0, 160)}`);

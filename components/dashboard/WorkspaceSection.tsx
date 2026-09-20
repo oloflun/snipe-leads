@@ -116,6 +116,14 @@ export async function WorkspaceSection({
   // this is the actual gate.
   const { products, workspaceName } = await resolveDashboardState();
   if (!products.includes(product)) {
+    // De tre agentytorna: menyn visar dem MÖRKLAGDA (AppShell), och klicket
+    // ska landa i agentens erbjudande — inte i en 404. Grinden är densamma:
+    // ingen data för agenten renderas, bara pitchen. Preview-ytorna
+    // (companies, contacts …) behåller 404:an — de står inte i någon meny.
+    if (section === "iris" || section === "support" || section === "kvitton") {
+      const { AgentLast } = await import("@/components/dashboard/AgentLast");
+      return <AgentLast product={product} />;
+    }
     notFound();
   }
 
