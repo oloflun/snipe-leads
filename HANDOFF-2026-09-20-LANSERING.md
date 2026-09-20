@@ -164,12 +164,16 @@ Snajp-tenanten. För kundtenants: fyll kundregistret vid onboarding.
 - **Synligt i admin**: ny kolumn "Trial" i Kundtabellen — dagar/veckor kvar,
   "Sista dagen", eller slutdatum när den passerat; streck för betalande.
   Datat flödar via `list_tenants_with_stats`.
-- **⛔ STOPP enligt beställningen: ingen automatisk konvertering till
-  betalning är byggd.** När trialen går ut händer INGENTING tekniskt — ingen
-  avstängning, ingen debitering (det finns ingen betalväxel att debitera
-  genom). Det är ert affärsbeslut: säg till så bygger vi vald väg
-  (avstängning, nedgradering, manuell faktura eller Stripe-flödet som ligger
-  färdigskrivet i död kod under `snajp-support/backend/`).
+- **Konverteringen beslutad och byggd senare samma dag: manuell avstängning
+  med bekräftelse i admin.** Ny sektion "Avstängning" sist på kundprofilen:
+  trialkontexten i klartext, tvåstegsbekräftelse med obligatorisk orsak (blir
+  en warning-rad i `platform_events`), och återaktivering med ett klick.
+  Skrivningen är `PUT /api/admin/tenants/{id}/aktiv` (`admin_profil.py`,
+  masternyckel). Avstängningen ÄR `ss_tenants.active` — nycklarna avvisas med
+  401 i samma ögonblick, alla tre agenterna/webben/portalen/publika chatten
+  låses, inget raderas. Liveverifierad mot development: avstängd
+  granskningstenant fick 401 direkt, återaktivering öppnade igen. Ingen
+  automatik: ingenting händer vid trial-slut förrän en människa trycker.
 
 ---
 
