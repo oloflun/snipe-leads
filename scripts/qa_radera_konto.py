@@ -59,30 +59,8 @@ TESTKUND_PREFIX = "testkund-"
 #: kunddatakontrollen nedan — får de rader är kontot inte ett QA-konto.
 TENANTBEROENDEN = ("agent_context_docs", "agent_configs", "ss_api_keys")
 
-#: QA-aktivitet, i den ordning den måste bort: barn före förälder.
-#:
-#: Behövs för att `qa_kundresa.mjs` med FLIT använder produkten — den skriver
-#: ett ärende, en chatt och en leads-körning, för ett konto som bara kan logga
-#: in bevisar ingenting. Följden var att varje konto resan skapade blev
-#: permanent ostädbart: spärren nedan fällde det, och `gdpr_radera.py` är
-#: personcentrerad och kräver en handpåskriven bekräftelse. Flaggan
-#: `--aven-qa-aktivitet` öppnar just den dörren, och BARA för en tenant vars
-#: slug bär TESTKUND_PREFIX — alltså samma bevis som avgör seedningen.
-#:
-#: `agent_runs` står före `prospects`: raden pekar på prospektet.
-QA_AKTIVITET = (
-    "ss_messages",
-    "ss_drafts",
-    "ss_classifications",
-    "ss_emails",
-    "ss_tickets",
-    "ss_conversations",
-    "ss_customers",
-    "outreach_messages",
-    "send_queue",
-    "agent_runs",
-    "prospects",
-)
+#: Hur QA-aktiviteten hittas: se qa_aktivitetstabeller().
+
 
 #: Spår av riktig verksamhet. En rad här betyder att kontot INTE är ett tomt
 #: QA-konto, och då ska den här vägen inte användas.
@@ -144,6 +122,59 @@ def registrerade_tenants() -> set[str]:
         for rad in block.splitlines()
         if rad.strip() and not rad.strip().startswith("//")
     }
+
+
+def qa_aktivitetstabeller(cur) -> list[str]:
+    """Tabeller som måste tömmas FÖRE ss_tenants, i rätt ordning.
+
+    Härledd ur katalogen och inte skriven för hand, av samma skäl som
+    `registrerade_tenants()`: en handskriven lista glider isär från schemat vid
+    nästa migration, och glidningen syns först när en radering faller halvvägs.
+    Det hände omedelbart — första versionen räknade upp elva tabeller ur minnet
+    och `ss_agent_metrics` fällde hela transaktionen. Ofarligt, den rullades
+    tillbaka, men beviset kom av en körning och inte av läsningen.
+
+    Bara tabeller med NO ACTION eller RESTRICT tas med: CASCADE städar sig
+    själv, och att radera ur den vore att skriva samma sak två gånger.
+
+    Ordningen är topologisk: pekar A på B töms A först, annars vägrar B.
+    Kvarvarande cykler läggs sist i godtycklig ordning — faller det, faller
+    hela transaktionen och ingenting går förlorat.
+    """
+    cur.execute(
+        "select distinct cl.relname "
+        "  from pg_constraint con "
+        "  join pg_class cl on cl.oid = con.conrelid "
+        "  join information_schema.columns c "
+        "    on c.table_schema = 'public' and c.table_name = cl.relname "
+        "   and c.column_name = 'tenant_id' "
+        " where con.confrelid = 'public.ss_tenants'::regclass "
+        "   and con.contype = 'f' and con.confdeltype in ('a', 'r')"
+    )
+    kvar = {r[0] for r in cur.fetchall()}
+
+    cur.execute(
+        "select cl.relname, mal.relname "
+        "  from pg_constraint con "
+        "  join pg_class cl on cl.oid = con.conrelid "
+        "  join pg_class mal on mal.oid = con.confrelid "
+        " where con.contype = 'f' and cl.relname <> mal.relname"
+    )
+    pekar_pa: dict[str, set[str]] = {t: set() for t in kvar}
+    for barn, foralder in cur.fetchall():
+        if barn in kvar and foralder in kvar:
+            pekar_pa[barn].add(foralder)
+
+    ordning: list[str] = []
+    while kvar:
+        # En tabell får tömmas när ingen KVARVARANDE tabell pekar på den.
+        fria = sorted(t for t in kvar if not any(t in pekar_pa[a] for a in kvar))
+        if not fria:
+            ordning.extend(sorted(kvar))
+            break
+        ordning.extend(fria)
+        kvar -= set(fria)
+    return ordning
 
 
 def main() -> int:
@@ -251,20 +282,9 @@ def main() -> int:
     skyddad = tenant_slug in registrerade_tenants() if tenant_slug else False
 
     if tenant_id and not skyddad:
-        # Före allt annat: aktiviteten resan skapade. Bara med flaggan, och
-        # bara för tabeller som FINNS och har tenant_id — det måste avgöras
-        # med läsningar, eftersom en misslyckad sats fäller hela transaktionen
-        # och därmed också det som skulle ha gått bra.
+        # Före allt annat: aktiviteten resan skapade. Bara med flaggan.
         if args.aven_qa_aktivitet and seedad_kb:
-            for tabell in QA_AKTIVITET:
-                cur.execute(
-                    "select count(*) from information_schema.columns "
-                    "where table_schema = 'public' and table_name = %s "
-                    "and column_name = 'tenant_id'",
-                    (tabell,),
-                )
-                if not cur.fetchone()[0]:
-                    continue
+            for tabell in qa_aktivitetstabeller(cur):
                 plan.append(
                     (tabell, f"delete from public.{tabell} where tenant_id = %s", (tenant_id,))
                 )
@@ -277,7 +297,13 @@ def main() -> int:
         # läsbar på ETT ställe, inte utspridd på två.
         if seedad_kb:
             beroenden.append("ss_knowledge_base")
+        # Redan planerade tabeller hoppas över: med --aven-qa-aktivitet står
+        # de tre beroendena nedan redan i den härledda listan, och en andra
+        # DELETE på samma tabell är visserligen ofarlig men läser som ett fel.
+        redan = {etikett for etikett, _, _ in plan}
         for tabell in beroenden:
+            if tabell in redan:
+                continue
             plan.append((tabell, f"delete from public.{tabell} where tenant_id = %s", (tenant_id,)))
         plan.append(("ss_tenants", "delete from public.ss_tenants where id = %s", (tenant_id,)))
     elif skyddad:
