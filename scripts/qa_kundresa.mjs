@@ -98,15 +98,22 @@ if (ATERANVAND) {
 } else try {
   await page.goto(`${BASE}/settings/kunskapsbas`, { waitUntil: "networkidle" });
   await page.getByPlaceholder("Rubrik — t.ex. Ångerrätt och returer").fill("Priser och offert");
+  // Platshållaren och kvittensen kortades 2026-09-19 när arbetsytorna
+  // rensades på förklarande text. Väljarna matchar därför på PREFIX i stället
+  // för hela meningen — en yta som kortar sin egen text ska inte läsas som en
+  // trasig produkt. Det gjorde den 2026-09-20: två falsklarm i den här filen.
   await page
-    .getByPlaceholder("Texten agenterna ska svara ur. Skriv som ni skulle svarat en kund.")
+    .getByPlaceholder(/^Texten agenterna ska svara ur/)
     .fill(
       "En årsbesiktning av en lyftanordning kostar från 4 900 kr exklusive moms. " +
         "Offert lämnas inom två arbetsdagar efter förfrågan. Vi besiktigar i hela " +
         "Skåne och ombesiktning efter anmärkning ingår i priset."
     );
   await page.getByRole("button", { name: /Spara i kunskapsbasen/ }).click();
-  await page.waitForSelector("text=Sparat. Agenterna kan svara ur texten", { timeout: 20000 });
+  await page.waitForFunction(
+    () => /Sparat\.|dokument sparade\./.test(document.body.innerText),
+    { timeout: 20000 }
+  );
   rad(true, "artikeln sparad — agenterna kan svara ur den");
   await bild(page, "02-kunskapsbas");
 } catch (e) {
@@ -163,7 +170,12 @@ try {
 // --- 4. Leads-körning -----------------------------------------------------
 console.log("\n=== 4. Leads-körning ===");
 try {
+  // `/dashboard/leads` studsar till `/dashboard/iris` sedan Iris tog över
+  // fliken (2026-09-19). Körformuläret ligger bakom "Kör Iris" i sidhuvudet
+  // och finns inte i DOM:en förrän panelen är öppnad — utan klicket nedan
+  // föll fyllningen på timeout och såg ut som ett produktfel.
   await page.goto(`${BASE}/dashboard/leads`, { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: /^Kör Iris$/ }).click();
   await page.getByLabel(/Antal bolag/).fill("2");
   await page.getByLabel(/^Branscher/).fill("Industri, bygg");
   await page.getByLabel(/^Stad/).fill("Skåne");
@@ -171,29 +183,57 @@ try {
   await page.getByRole("button", { name: /Starta (test)?körning/ }).click();
 
   // Formuläret pollar jobben självt: sök-fasen, sedan research per bolag.
-  // Första versionen matchade mot HELA sidtexten och blev grön på
-  // exempelbolagspanelens "Öppna utkastet" medan knappen fortfarande sa
-  // "Startar…". Nu: vänta tills knappen lämnat Startar-läget OCH antingen
-  // ett role=alert-fel eller formulärets resultatblock finns — och citera
-  // det som faktiskt står där i stället för att gissa en dom.
-  const utfall = await page
-    .waitForFunction(
-      () => {
-        const knapp = [...document.querySelectorAll("button")].find((b) =>
-          /Starta|Startar/.test(b.textContent || "")
-        );
-        if (knapp && /Startar/.test(knapp.textContent || "")) return false;
-        const alert = document.querySelector('[role="alert"]');
-        if (alert?.textContent?.trim()) return { slag: "fel", text: alert.textContent.trim() };
-        const t = document.body.innerText;
-        const m = t.match(/(Research klar[^\n]*|Hittade \d+ bolag[^\n]*|\d+ av \d+ bolag[^\n]*)/);
-        if (m) return { slag: "klart", text: m[1] };
-        return false;
-      },
-      { timeout: 480000 }
-    )
-    .then((h) => h.jsonValue())
-    .catch(() => ({ slag: "tystnad", text: "(varken resultat eller fel inom 8 min)" }));
+  //
+  // Vad "klart" SER UT SOM i ytan, och varför villkoret ser ut så här:
+  // LeadsRunForm skriver visserligen "Klart: N bolag researchade", men
+  // IrisBolag stänger panelen i samma ögonblick (händelsen
+  // `snipra:leads-korning-klar`) och flyttar fokus till listan, så den
+  // meningen hinner aldrig synas. Att leta efter den gav 8 minuters tystnad
+  // på en körning som i själva verket tog 8 SEKUNDER — uppmätt 2026-09-20.
+  // Kvittot för kunden är därför panelen som stänger sig OCH bolagsraderna
+  // som dyker upp, och det är vad som mäts här.
+  // Mätningen går mot API:t och inte mot sidtexten. Tomläget "Inga bolag
+  // ännu" står nämligen kvar i DOM:en ett ögonblick efter att panelen stängt,
+  // och en DOM-avläsning där rapporterade "noll träffar" på en körning som
+  // hade lagt in två bolag — uppmätt 2026-09-20. Prospektlistan är samma
+  // källa som vyn läser, så noll här betyder verkligen noll.
+  // Pollningen sker i Node och inte i sidan: `waitForFunction` med en ASYNK
+  // predikatfunktion gav `undefined` tillbaka ur `jsonValue()` (uppmätt
+  // 2026-09-20), alltså en tyst avvikelse på en körning som fungerade.
+  const slut = Date.now() + 480000;
+  let utfall = { slag: "tystnad", text: "(varken resultat eller fel inom 8 min)" };
+  while (Date.now() < slut) {
+    const larm = await page
+      .locator('[role="alert"]')
+      .first()
+      .textContent()
+      .catch(() => null);
+    if (larm?.trim()) {
+      utfall = { slag: "fel", text: larm.trim() };
+      break;
+    }
+    const stangd = await page
+      .getByRole("button", { name: /^Kör Iris$/ })
+      .getAttribute("aria-expanded")
+      .catch(() => null);
+    if (stangd === "false") {
+      const lage = await page.evaluate(async () => {
+        const r = await fetch("/api/snajp-support/leads/prospects", { cache: "no-store" });
+        if (!r.ok) return { antal: 0, kvalificerade: 0 };
+        const j = await r.json();
+        const p = Array.isArray(j?.prospects) ? j.prospects : [];
+        return { antal: p.length, kvalificerade: p.filter((x) => x.qualified === true).length };
+      });
+      if (lage.antal) {
+        utfall = {
+          slag: "klart",
+          text: `${lage.antal} bolag i listan, ${lage.kvalificerade} kvalificerade`
+        };
+        break;
+      }
+    }
+    await page.waitForTimeout(2000);
+  }
   await bild(page, "04b-leads-resultat");
   rad(
     utfall.slag === "klart" || utfall.slag === "fel",
