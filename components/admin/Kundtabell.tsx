@@ -85,7 +85,7 @@ export function Kundtabell({ kunder }: Readonly<{ kunder: BerikadTenant[] }>) {
   return (
     <>
       <div className="mt-10 overflow-x-auto">
-        <table className="w-full min-w-[900px] border-collapse text-[15px]">
+        <table className="w-full min-w-[980px] border-collapse text-[15px]">
           <thead>
             <tr className="border-b border-ink/15 text-left">
               <th className="py-3 pr-6 font-medium text-mineral">{a("kolKund", locale)}</th>
@@ -166,8 +166,10 @@ export function Kundtabell({ kunder }: Readonly<{ kunder: BerikadTenant[] }>) {
                 </td>
                 {/* Trialstatusen räknas ur datumet vid rendering (074): dagar
                     kvar medan den löper, slutdatum när den passerat, streck
-                    för en betalande kund (avtalet gör datumet ointressant). */}
-                <td className="py-3 pr-6 text-right tabular-nums text-ink-muted">
+                    för en betalande kund (avtalet gör datumet ointressant).
+                    nowrap: "4 veckor kvar" bröts till tre rader i den smala
+                    kolumnen — sett i skärmdump, inte i koden. */}
+                <td className="whitespace-nowrap py-3 pr-6 text-right tabular-nums text-ink-muted">
                   {trialStatus(kund, locale, text)}
                 </td>
                 <td className="py-3 pr-6 text-right tabular-nums">{antal(kund.tickets, locale)}</td>
