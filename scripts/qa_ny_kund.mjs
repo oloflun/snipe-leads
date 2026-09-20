@@ -90,9 +90,9 @@ try {
   await sida.getByRole("button", { name: /Fortsätt/ }).click();
   await sida.getByRole("radio", { name: "Industri & tillverkning" }).click();
   await sida.getByRole("button", { name: /Fortsätt/ }).click();
-  const kontaktNamnFalt = sida.getByLabel("Namn", { exact: true });
+  const kontaktNamnFalt = sida.getByLabel(/^Namn/);
   if (!(await kontaktNamnFalt.inputValue())) await kontaktNamnFalt.fill("QA Nykund");
-  const kontaktMejlFalt = sida.getByLabel("E-post", { exact: true });
+  const kontaktMejlFalt = sida.getByLabel(/^E-post/);
   if (!(await kontaktMejlFalt.inputValue())) await kontaktMejlFalt.fill(EPOST);
   await sida.getByRole("button", { name: /Fortsätt/ }).click();
   await sida.getByRole("button", { name: /Öppna arbetsytan/ }).click();

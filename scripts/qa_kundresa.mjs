@@ -91,9 +91,9 @@ if (ATERANVAND) {
   await bild(page, "01b-onboarding-bransch");
   await page.getByRole("button", { name: /Fortsätt/ }).click();
 
-  const namnfalt = page.getByLabel("Namn", { exact: true });
+  const namnfalt = page.getByLabel(/^Namn/);
   if (!(await namnfalt.inputValue())) await namnfalt.fill(`Testkund ${STAMP}`);
-  const mejlfalt = page.getByLabel("E-post", { exact: true });
+  const mejlfalt = page.getByLabel(/^E-post/);
   if (!(await mejlfalt.inputValue())) await mejlfalt.fill(EPOST);
   await bild(page, "01c-onboarding-kontakt");
   await page.getByRole("button", { name: /Fortsätt/ }).click();
@@ -283,9 +283,12 @@ try {
   // visar posten mörklagd och klicket landar i erbjudandet (AgentLast).
   // Grinden är densamma — ingen kunddata för agenten renderas, bara pitchen
   // med pris och "Lägg till i ert paket". En 404 här vore numera ett FEL.
-  const öppen = /Bokföringsassistent|underlag|kvitto.*(godkänn|inkorg)/i.test(info.text);
+  // Upsell prövas FÖRST: dess ingår-lista nämner kvitton och inkorg, så en
+  // öppen-regex som läser hela sidan blev grön på fel vy (uppmätt 2026-09-20 —
+  // körningen sa "öppen för kontot" om en pixel-bevisad upsell-sida).
   const upsell =
     /Ingår inte i ert paket ännu/i.test(info.text) && /Lägg till i ert paket/i.test(info.text);
+  const öppen = !upsell && /Bokföringsassistent|underlag|kvitto.*(godkänn|inkorg)/i.test(info.text);
   rad(öppen || upsell, `bokföringen: ${öppen ? "öppen för kontot" : upsell ? "korrekt mörklagd — upsell-vyn med pris och Lägg till" : `oväntat läge (${r?.status()} ${info.väg})`}`);
   await bild(page, "05-bokforing");
 } catch (e) {
