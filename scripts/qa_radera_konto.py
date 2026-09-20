@@ -59,6 +59,31 @@ TESTKUND_PREFIX = "testkund-"
 #: kunddatakontrollen nedan — får de rader är kontot inte ett QA-konto.
 TENANTBEROENDEN = ("agent_context_docs", "agent_configs", "ss_api_keys")
 
+#: QA-aktivitet, i den ordning den måste bort: barn före förälder.
+#:
+#: Behövs för att `qa_kundresa.mjs` med FLIT använder produkten — den skriver
+#: ett ärende, en chatt och en leads-körning, för ett konto som bara kan logga
+#: in bevisar ingenting. Följden var att varje konto resan skapade blev
+#: permanent ostädbart: spärren nedan fällde det, och `gdpr_radera.py` är
+#: personcentrerad och kräver en handpåskriven bekräftelse. Flaggan
+#: `--aven-qa-aktivitet` öppnar just den dörren, och BARA för en tenant vars
+#: slug bär TESTKUND_PREFIX — alltså samma bevis som avgör seedningen.
+#:
+#: `agent_runs` står före `prospects`: raden pekar på prospektet.
+QA_AKTIVITET = (
+    "ss_messages",
+    "ss_drafts",
+    "ss_classifications",
+    "ss_emails",
+    "ss_tickets",
+    "ss_conversations",
+    "ss_customers",
+    "outreach_messages",
+    "send_queue",
+    "agent_runs",
+    "prospects",
+)
+
 #: Spår av riktig verksamhet. En rad här betyder att kontot INTE är ett tomt
 #: QA-konto, och då ska den här vägen inte användas.
 KUNDDATA = (
@@ -125,6 +150,14 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--epost", required=True, help="Kontots e-postadress.")
     ap.add_argument("--radera", action="store_true", help="Radera på riktigt.")
+    ap.add_argument(
+        "--aven-qa-aktivitet",
+        action="store_true",
+        help=(
+            "Radera även ärenden, prospekt och körningar som QA-resan själv "
+            "skapade. Gäller BARA en tenant vars slug bär 'testkund-'."
+        ),
+    )
     args = ap.parse_args()
 
     conn = psycopg2.connect(dsn(env_read(), "development"))
@@ -183,10 +216,12 @@ def main() -> int:
                 continue
             if antal:
                 fynd.append(f"{tabell}={antal}")
-        if fynd:
+        if fynd and not (args.aven_qa_aktivitet and seedad_kb):
             print("\nAVBRYTER — tenanten bär kunddata: " + ", ".join(fynd))
             print("Det här är inte ett tomt QA-konto. Använd scripts/gdpr_radera.py.")
             return 1
+        if fynd:
+            print("\nQA-aktivitet som resan skapade, tas med: " + ", ".join(fynd))
 
     plan: list[tuple[str, str, tuple]] = []
     if workspace_id:
@@ -216,6 +251,24 @@ def main() -> int:
     skyddad = tenant_slug in registrerade_tenants() if tenant_slug else False
 
     if tenant_id and not skyddad:
+        # Före allt annat: aktiviteten resan skapade. Bara med flaggan, och
+        # bara för tabeller som FINNS och har tenant_id — det måste avgöras
+        # med läsningar, eftersom en misslyckad sats fäller hela transaktionen
+        # och därmed också det som skulle ha gått bra.
+        if args.aven_qa_aktivitet and seedad_kb:
+            for tabell in QA_AKTIVITET:
+                cur.execute(
+                    "select count(*) from information_schema.columns "
+                    "where table_schema = 'public' and table_name = %s "
+                    "and column_name = 'tenant_id'",
+                    (tabell,),
+                )
+                if not cur.fetchone()[0]:
+                    continue
+                plan.append(
+                    (tabell, f"delete from public.{tabell} where tenant_id = %s", (tenant_id,))
+                )
+
         # Före tenanten: de här hänger på den med NO ACTION.
         beroenden = list(TENANTBEROENDEN)
         # Bara den SEEDADE basen raderas som ett beroende. Är den kundens egen
