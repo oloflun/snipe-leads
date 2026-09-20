@@ -140,6 +140,67 @@ function feltext(orsak: unknown): string {
   return felmeddelande(orsak);
 }
 
+/**
+ * Att göra-kortet — samma bärande yta som översikterna fick 2026-09-20:
+ * antalet i klartext, tonal inversion (sidans enda), och HANDLINGEN på raden.
+ * Här är handlingen inte en länk till en kö utan själva godkännandet, för
+ * granskningen bor i den här vyn. Underraden är anmärkningen, alltså skälet
+ * till att kvittot väntar. Tom kö ritar ingenting: tabellen nedanför bär
+ * redan statusen, och en tom svart ruta hade skrikit i onödan.
+ *
+ * Exporterad för att kunna monteras ensam i en skiss under verifiering.
+ */
+export function KvittoAttGora({
+  rader,
+  onGodkann
+}: Readonly<{ rader: Kvitto[]; onGodkann: (rad: Kvitto) => void }>) {
+  if (rader.length === 0) return null;
+  const fler = rader.length - 5;
+  return (
+    <section aria-label="Att göra" className="rounded-card bg-ink p-6 text-paper md:p-8">
+      <h2 className="text-[1.25rem] font-semibold tracking-[-0.01em]">
+        {rader.length === 1 ? "1 kvitto väntar på dig" : `${rader.length} kvitton väntar på dig`}
+      </h2>
+      <ul className="mt-5 border-t border-paper/15">
+        {rader.slice(0, 5).map((rad) => (
+          <li
+            key={rad.id}
+            className="grid grid-cols-12 items-center gap-x-4 border-b border-paper/15 py-3.5"
+          >
+            <div className="col-span-12 min-w-0 sm:col-span-7">
+              <p className="truncate text-[0.9375rem] font-semibold">
+                {rad.motpart || rad.mejl_amne || rad.filnamn || "Kvitto"}
+              </p>
+              <p className="mt-0.5 truncate text-[0.8125rem] text-paper-muted">
+                {rad.anmarkning ||
+                  [rad.datum, rad.kategorietikett].filter(Boolean).join(" · ") ||
+                  "Uppgifter saknas."}
+              </p>
+            </div>
+            <div className="col-span-12 mt-2 flex items-center justify-between gap-4 sm:col-span-5 sm:mt-0 sm:justify-end">
+              <span className="num text-[0.875rem] tabular-nums text-paper-muted">
+                {rad.brutto !== null ? kronor(rad.brutto) : (rad.belopp_original ?? "—")}
+              </span>
+              <button
+                type="button"
+                onClick={() => onGodkann(rad)}
+                className="focus-ring inline-flex min-h-9 shrink-0 items-center rounded-input bg-paper px-4 text-[0.875rem] font-semibold text-ink transition-colors hover:bg-paper/85"
+              >
+                Godkänn
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+      {fler > 0 ? (
+        <p className="mt-4 text-[0.8125rem] text-paper-muted">
+          {fler === 1 ? "1 till i tabellen nedan." : `${fler} till i tabellen nedan.`}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
 export function KvittoYta() {
   const [konto, setKonto] = useState<Mejlkonto | null>(null);
   const [kvitton, setKvitton] = useState<Kvitto[] | null>(null);
@@ -540,6 +601,14 @@ export function KvittoYta() {
           </ul>
         </div>
       ) : null}
+
+      {/* Det som väntar på kunden, före tabellen. Härleds ur samma lista som
+          tabellen, så kortet töms i samma stund som sista godkännandet går
+          igenom — ingen egen hämtning, inget eget tillstånd. */}
+      <KvittoAttGora
+        rader={(kvitton ?? []).filter((rad) => rad.status === "granska_manuellt")}
+        onGodkann={(rad) => void godkann(rad)}
+      />
 
       {/* Kvittona. */}
       <section>

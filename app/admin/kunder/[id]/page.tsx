@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { Avstangning } from "@/components/admin/Avstangning";
 import { KonverteraTestkund } from "@/components/admin/KonverteraTestkund";
 import { Kundprofil } from "@/components/admin/Kundprofil";
 import { Tillaggsvaljare } from "@/components/admin/Tillaggsvaljare";
@@ -37,10 +38,15 @@ export default async function Page({
   // till snajp-support och tilläggen en databasrundtur, och de vet inget om
   // varandra. Sekventiellt lade de sina latenser på varandra i en sida som
   // redan bär maxDuration = 60.
-  const [{ profil, error }, tillagg] = await Promise.all([
+  // Kundlistan hämtas alltid, inte bara för testkund-flytten: avstängningen
+  // längst ned behöver radens aktiv-läge, trialdatum och avtalsstatus, och
+  // de bor i list_tenants_with_stats — profil-endpointen bär dem inte.
+  const [{ profil, error }, tillagg, tenantsSvar] = await Promise.all([
     hamtaKundprofil(id, agentType),
-    hamtaTillagg(id)
+    hamtaTillagg(id),
+    listTenants()
   ]);
+  const rad = unwrap(tenantsSvar).data?.find((t) => t.id === id);
 
   if (error || !profil) {
     return (
@@ -131,10 +137,24 @@ export default async function Page({
         <KonverteraTestkund
           fran={profil.tenant.slug}
           mal={
-            unwrap(await listTenants())
+            unwrap(tenantsSvar)
               .data?.filter((t) => t.slug && !t.slug.startsWith("testkund-"))
               .map((t) => ({ slug: t.slug as string, name: t.name })) ?? []
           }
+        />
+      ) : null}
+
+      {/* Sist på sidan, efter innehåll, omfattning och flytt: avstängningen
+          gäller HELA kontot och är den manuella trial-konverteringen. Rendera
+          bara när raden gick att läsa — utan aktiv-läget vore knappen en
+          gissning om vilket håll den slår åt. */}
+      {rad ? (
+        <Avstangning
+          tenantId={id}
+          namn={profil.tenant.name}
+          aktiv={rad.active !== false}
+          trialSlut={rad.trial_slut ?? null}
+          avtalSignerat={rad.avtal_signerat ?? null}
         />
       ) : null}
     </div>

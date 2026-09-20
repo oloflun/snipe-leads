@@ -64,6 +64,14 @@ export const livrustning: Tenant = {
     email: "kontakt@livrustning.se"
   },
 
+  // Bubblan som frågar först. "Dygnet runt" är ett påstående om AGENTEN,
+  // som svarar när som helst — når frågan en människa säger chatten det
+  // själv i samma stund, så de två beskeden kan inte säga emot varandra.
+  widgetInbjudan: {
+    rubrik: "Frågor om utbildningar?",
+    text: "Jag svarar dygnet runt."
+  },
+
   supportIntro: "Fråga om utbildningar, bokning, offert eller intyg.",
   supportPrompts: [
     "Vi är 15 personer på kontoret — hur bokar vi en HLR-kurs?",

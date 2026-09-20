@@ -178,6 +178,26 @@ export const PAKET: Paket[] = [
   }
 ];
 
+/**
+ * Vilka produkter (entitlements) ett paket ger. Paketet ÄR entitlementen —
+ * `workspaces.products` är samma kolumn som grindar varje flik och agentvy.
+ *
+ * Bor HÄR och inte i lib/actions/plan.ts där den föddes: en "use server"-fil
+ * får bara exportera async-funktioner, och onboardingen behöver samma karta.
+ * Två kartor över samma sanning glider isär — det är hela filens tes.
+ */
+export const PRODUKTER_FOR_PAKET: Record<Paket["id"], ("leads" | "support" | "bookkeeping")[]> = {
+  leads: ["leads"],
+  support: ["support"],
+  bookkeeping: ["bookkeeping"],
+  duo: ["leads", "support"],
+  trio: ["leads", "support", "bookkeeping"]
+};
+
+export function arPaketId(varde: string): varde is Paket["id"] {
+  return varde in PRODUKTER_FOR_PAKET;
+}
+
 /** Engångsavgift vid start: kunskapsbas och konfiguration. Sänkt 2026-08-25 från 4 900. */
 export const UPPSTARTSAVGIFT = 1590;
 

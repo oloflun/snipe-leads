@@ -79,3 +79,27 @@ async def require_master_key(
     if not tenant["master"]:
         raise HTTPException(status_code=403, detail="Kräver master-nyckel.")
     return tenant
+
+
+async def require_bookkeeping_tenant(
+    request: Request, x_api_key: str | None = Header(default=None)
+) -> dict:
+    """Tenant MED bookkeeping-paketet — grinden för /api/kvitton och /api/bookkeeping.
+
+    Produktgrinden satt tidigare enbart i webbens och portalens proxyer
+    (granskningsfynd snipe-h12): en tenant utan bookkeeping-paketet men med
+    sin giltiga nyckel nådde motorn direkt mot backenden. Nu speglas webbens
+    beteende här:
+
+    - 404 och inte 403 — en yta man inte betalar för ska inte gå att skilja
+      från en som inte finns (samma resonemang som kraev_uuid ovan).
+    - `products is None` betyder "ingen kopplad arbetsyta" (configfil-kunder,
+      demo-tenanten) och släpps igenom — där är webbens entitlement-grind
+      fortfarande enda vakten, precis som före den här grinden. Att stänga
+      på okänt hade fällt varje kund som lades upp före migration 061.
+    """
+    tenant = await require_tenant(request, x_api_key)
+    products = await request.app.state.storage.get_tenant_products(tenant["tenant_id"])
+    if products is not None and "bookkeeping" not in products:
+        raise HTTPException(status_code=404, detail="Sidan finns inte.")
+    return tenant

@@ -27,6 +27,49 @@ import { useLocale } from "@/lib/i18n";
  * precis vad sidans egen fotnot varnar för; en märkt är ett förbehåll.
  */
 
+/**
+ * Trialstatusen som text: dagar/veckor kvar, "sista dagen", eller slutdatumet
+ * när perioden passerat. Betalande kund (avtal) och kund utan arbetsyta får
+ * streck. "Idag" räknas i Europe/Stockholm på BÅDA sidor av hydreringen —
+ * serverns UTC-dygn och webbläsarens lokala dygn kan annars ge olika text
+ * kring midnatt, och det är exakt den sortens hydreringskrock den här
+ * kodbasen redan betalat för en gång.
+ */
+function trialStatus(
+  kund: BerikadTenant,
+  locale: Parameters<typeof datum>[1],
+  text: (t: { sv: string; en: string }) => string
+) {
+  if (kund.avtal_signerat || !kund.trial_slut) {
+    return <span className="text-ink-subtle">—</span>;
+  }
+  const idag = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Stockholm" }).format(
+    new Date()
+  );
+  const dagar = Math.round(
+    (Date.parse(kund.trial_slut.slice(0, 10)) - Date.parse(idag)) / 86_400_000
+  );
+  if (dagar < 0) {
+    return (
+      <span className="text-ink-subtle">
+        {text({ sv: "Slut", en: "Ended" })} {datum(kund.trial_slut, locale)}
+      </span>
+    );
+  }
+  if (dagar === 0) {
+    return <span className="text-danger">{text({ sv: "Sista dagen", en: "Last day" })}</span>;
+  }
+  const snartSlut = dagar <= 7;
+  const etikett =
+    dagar > 14
+      ? text({ sv: `${Math.round(dagar / 7)} veckor kvar`, en: `${Math.round(dagar / 7)} weeks left` })
+      : text({
+          sv: dagar === 1 ? "1 dag kvar" : `${dagar} dagar kvar`,
+          en: dagar === 1 ? "1 day left" : `${dagar} days left`
+        });
+  return <span className={snartSlut ? "text-danger" : undefined}>{etikett}</span>;
+}
+
 export function Kundtabell({ kunder }: Readonly<{ kunder: BerikadTenant[] }>) {
   const { locale, text } = useLocale();
 
@@ -42,7 +85,7 @@ export function Kundtabell({ kunder }: Readonly<{ kunder: BerikadTenant[] }>) {
   return (
     <>
       <div className="mt-10 overflow-x-auto">
-        <table className="w-full min-w-[900px] border-collapse text-[15px]">
+        <table className="w-full min-w-[980px] border-collapse text-[15px]">
           <thead>
             <tr className="border-b border-ink/15 text-left">
               <th className="py-3 pr-6 font-medium text-mineral">{a("kolKund", locale)}</th>
@@ -52,6 +95,9 @@ export function Kundtabell({ kunder }: Readonly<{ kunder: BerikadTenant[] }>) {
               </th>
               <th className="py-3 pr-6 text-right font-medium text-mineral">
                 {a("kolAvtal", locale)}
+              </th>
+              <th className="py-3 pr-6 text-right font-medium text-mineral">
+                {a("kolTrial", locale)}
               </th>
               <th className="py-3 pr-6 text-right font-medium text-mineral">
                 {a("kolArenden", locale)}
@@ -117,6 +163,14 @@ export function Kundtabell({ kunder }: Readonly<{ kunder: BerikadTenant[] }>) {
                   ) : (
                     <span className="text-ink-subtle">{a("inget", locale)}</span>
                   )}
+                </td>
+                {/* Trialstatusen räknas ur datumet vid rendering (074): dagar
+                    kvar medan den löper, slutdatum när den passerat, streck
+                    för en betalande kund (avtalet gör datumet ointressant).
+                    nowrap: "4 veckor kvar" bröts till tre rader i den smala
+                    kolumnen — sett i skärmdump, inte i koden. */}
+                <td className="whitespace-nowrap py-3 pr-6 text-right tabular-nums text-ink-muted">
+                  {trialStatus(kund, locale, text)}
                 </td>
                 <td className="py-3 pr-6 text-right tabular-nums">{antal(kund.tickets, locale)}</td>
                 <td className="py-3 pr-6 text-right tabular-nums">

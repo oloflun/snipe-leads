@@ -355,6 +355,18 @@ class InstruktionRequest(BaseModel):
     strukturera: bool = True
 
 
+class TenantAktivRequest(BaseModel):
+    """Manuell avstängning/återaktivering av en kund — trial-konverteringens
+    mänskliga väg (beslut 2026-09-20: ingen automatisk konvertering).
+
+    `orsak` är fri text som hamnar i platform_events — "Trial gick ut, inget
+    avtal" är underlaget den som tittar i händelseloggen om ett halvår behöver.
+    """
+
+    active: bool
+    orsak: str | None = Field(default=None, max_length=500)
+
+
 class TenantProfilRequest(BaseModel):
     """Adminens skrivning mot EN kunds agentprofil.
 
@@ -387,6 +399,13 @@ class KunddataRequest(BaseModel):
     faktureringsmejl: str | None = Field(default=None, max_length=320)
     telefon: str | None = Field(default=None, max_length=40)
     foretagsadress: str | None = Field(default=None, max_length=500)
+    # policy_url saknades här till 2026-09-20 och fältet föll tyst: kolumnen
+    # finns (073), KUNDDATA_FALT bär den, adminvyn har rutan "Integritetspolicy
+    # (URL)" och klienten skickade den — men pydantic kastar okända fält utan
+    # att säga något, så spara svarade 200 och skrev ingenting. Följden var att
+    # send_guard regel 2, som blockerar varje kallmejl utan policylänk, aldrig
+    # kunde uppfyllas av någon kund. Uppmätt mot development.
+    policy_url: str | None = Field(default=None, max_length=500)
     kund_sedan: str | None = Field(default=None, max_length=10)
     avtal_signerat: str | None = Field(default=None, max_length=10)
 

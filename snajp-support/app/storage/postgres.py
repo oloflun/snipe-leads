@@ -213,9 +213,57 @@ class PostgresStorage:
         return _row(record)
 
     async def get_tenant(self, tenant_id: str) -> dict[str, Any] | None:
+        # Kundregistrets avsändaruppgifter (orgnr, företagsadress, policy_url)
+        # läggs ovanpå tenantraden: utskicksfoten och send_guard läser dem ur
+        # tenant-dicten, och utan joinen fanns fälten bara i MemoryStorage —
+        # varje skarpt utskick föll på regel 1 utan att någon förstod varför.
+        # Läsningen kräver policyn ss_customer_details_tenant_read (073).
         async with self._scoped(tenant_id) as conn:
-            record = await conn.fetchrow("select * from ss_tenants where id = $1", tenant_id)
+            record = await conn.fetchrow(
+                """
+                select t.*,
+                       d.orgnr,
+                       d.foretagsadress as postal_address,
+                       d.policy_url
+                from ss_tenants t
+                left join ss_customer_details d on d.tenant_id = t.id
+                where t.id = $1
+                """,
+                tenant_id,
+            )
         return _row(record)
+
+    async def set_tenant_active(self, tenant_id: str, *, active: bool) -> dict[str, Any] | None:
+        # OSKOPAD med flit: administrativ skrivning bakom require_master_key,
+        # samma policy (ss_tenants_admin_write, 029) som create_tenant.
+        async with self.pool.acquire() as conn:
+            record = await conn.fetchrow(
+                "update ss_tenants set active = $2 where id = $1 returning *",
+                tenant_id,
+                active,
+            )
+        return _row(record)
+
+    async def get_tenant_products(self, tenant_id: str) -> list[str] | None:
+        # OSKOPAD med flit, samma väg och samma policy som
+        # list_tenants_with_stats (064_workspaces_admin_read): `workspaces`
+        # bär workspace-RLS, inte tenant-RLS, så en tenant-skopad anslutning
+        # ser noll rader. Policyn tillåter snajp_app att läsa när INGEN
+        # tenant-kontext är satt, och frågan läser bara products-kolumnen.
+        # Tidigast skapade arbetsytan vinner när flera delar tenant.
+        async with self.pool.acquire() as conn:
+            record = await conn.fetchrow(
+                """
+                select products from workspaces
+                where ss_tenant_id = $1
+                order by created_at
+                limit 1
+                """,
+                tenant_id,
+            )
+        if record is None:
+            return None
+        return list(record["products"] or [])
 
     async def list_tenants(self) -> list[dict[str, Any]]:
         # Administrativ, körs utan tenant-kontext: pollern måste se alla tenants
@@ -496,6 +544,70 @@ class PostgresStorage:
                 email,
             )
         return _row(record)
+
+    async def list_trial_paminnelse_kandidater(self, *, idag: date) -> list[dict[str, Any]]:
+        # OSKOPAD: plattformssvep över alla arbetsytor, samma villkor som
+        # 029/064 (läsning bara utan tenant-kontext). Ägarens mejl läses ur
+        # auth.users via profiles (grant + policy i migration 074). En ägare
+        # per arbetsyta — den först skapade profilen vinner vid flera.
+        async with self.pool.acquire() as conn:
+            records = await conn.fetch(
+                """
+                select distinct on (w.id)
+                       w.id::text as workspace_id,
+                       w.name,
+                       w.trial_slut,
+                       u.email,
+                       (w.trial_slut - $1::date) as dagar_kvar
+                from workspaces w
+                join profiles p on p.workspace_id = w.id and p.role = 'owner'
+                join auth.users u on u.id = p.id
+                left join ss_customer_details d on d.tenant_id = w.ss_tenant_id
+                where coalesce(w.is_demo, false) = false
+                  and w.trial_slut in ($1::date + 7, $1::date + 1)
+                  and d.avtal_signerat is null
+                  and not exists (
+                      select 1 from trial_paminnelser tp
+                      where tp.workspace_id = w.id
+                        and tp.typ = case
+                              when w.trial_slut = $1::date + 7 then '7_dagar'
+                              else '1_dag'
+                            end
+                  )
+                order by w.id, p.created_at
+                """,
+                idag,
+            )
+        return [dict(r) for r in records]
+
+    async def spara_trial_paminnelse(
+        self, *, workspace_id: str, typ: str, skickad_till: str
+    ) -> bool:
+        async with self.pool.acquire() as conn:
+            record = await conn.fetchrow(
+                """
+                insert into trial_paminnelser (workspace_id, typ, skickad_till)
+                values ($1, $2, $3)
+                on conflict (workspace_id, typ) do nothing
+                returning id
+                """,
+                workspace_id,
+                typ,
+                skickad_till,
+            )
+        return record is not None
+
+    async def list_customer_emails(self, tenant_id: str) -> list[str]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select lower(value) as email from ss_customer_identifiers
+                where tenant_id = $1 and type = 'email'
+                order by 1
+                """,
+                tenant_id,
+            )
+        return [r["email"] for r in records]
 
     # -- Samtalsläge (migration 066) ----------------------------------------
 
@@ -2863,16 +2975,18 @@ class PostgresStorage:
             # Tidigast skapade arbetsytan vinner när flera delar tenant (den
             # gamla delade `testkund`-tenanten, migration 038).
             produkter: dict[str, list[str]] = {}
+            trial: dict[str, Any] = {}
             try:
                 for rad in await conn.fetch(
                     """
-                    select distinct on (ss_tenant_id) ss_tenant_id, products
+                    select distinct on (ss_tenant_id) ss_tenant_id, products, trial_slut
                     from workspaces
                     where ss_tenant_id is not null
                     order by ss_tenant_id, created_at
                     """
                 ):
                     produkter[str(rad["ss_tenant_id"])] = list(rad["products"] or [])
+                    trial[str(rad["ss_tenant_id"])] = rad["trial_slut"]
             except Exception:  # noqa: BLE001 — ett extra fält får inte fälla adminlistan
                 logger.warning(
                     "list_tenants_with_stats: kunde inte läsa workspaces.products", exc_info=True
@@ -2881,6 +2995,9 @@ class PostgresStorage:
         rader = [_row(r) for r in records]
         for rad in rader:
             rad["products"] = produkter.get(str(rad["id"]))
+            # Trial (074): datumet per kopplad arbetsyta. None = ingen
+            # arbetsyta (configfil-kund) eller kolumnen kunde inte läsas.
+            rad["trial_slut"] = trial.get(str(rad["id"]))
         return rader
 
     async def list_agent_runs_all(
@@ -3257,12 +3374,44 @@ class PostgresStorage:
         *,
         underlag_id: str,
         serie: str,
-        nummer: str,
+        nummer: str | None = None,
         datum: date,
         text: str,
         rader: list[dict[str, Any]],
     ) -> dict[str, Any]:
         kontrollera_bk_balans(rader)
+        # `nummer=None`: nästa lediga räknas i SAMMA insert som skriver raden.
+        # Det unika indexet (migration 072) gör att två samtidiga skrivningar
+        # inte kan få samma nummer — förloraren får UniqueViolation och
+        # försöker om med ett nytt max. Tre försök räcker: varje omtag kräver
+        # att ytterligare en skrivning hann emellan.
+        for forsok in range(3):
+            try:
+                return await self._skriv_bk_verifikat(
+                    tenant_id,
+                    underlag_id=underlag_id,
+                    serie=serie,
+                    nummer=nummer,
+                    datum=datum,
+                    text=text,
+                    rader=rader,
+                )
+            except asyncpg.UniqueViolationError:
+                if nummer is not None or forsok == 2:
+                    raise
+        raise RuntimeError("ohittbar: retry-loopen returnerar eller kastar")
+
+    async def _skriv_bk_verifikat(
+        self,
+        tenant_id: str,
+        *,
+        underlag_id: str,
+        serie: str,
+        nummer: str | None,
+        datum: date,
+        text: str,
+        rader: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         # EN transaktion för huvud och rader. _scoped öppnar redan en, så ett
         # fel på någon rad rullar tillbaka hela verifikatet — ett halvskrivet
         # verifikat balanserar inte och gör varje senare periodrapport fel.
@@ -3270,7 +3419,15 @@ class PostgresStorage:
             record = await conn.fetchrow(
                 """
                 insert into bk_verifikat (tenant_id, underlag_id, serie, nummer, datum, text)
-                values ($1, $2, $3, $4, $5, $6)
+                values (
+                    $1, $2, $3,
+                    coalesce($4, (
+                        select (coalesce(max(nummer::int), 0) + 1)::text
+                        from bk_verifikat
+                        where tenant_id = $1 and serie = $3 and nummer ~ '^[0-9]+$'
+                    )),
+                    $5, $6
+                )
                 returning *
                 """,
                 tenant_id,

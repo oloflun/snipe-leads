@@ -81,6 +81,10 @@ async def _med_lagstadgad_fot(outreach: OutreachContext, brodtext: str) -> str:
             postadress=postadress,
             lank=avregistreringslank(bas_url, token),
             kontakt_epost=str(tenant.get("contact_email") or "").strip(),
+            # Ur kundregistret (migration 073). Saknas den byggs foten utan
+            # policyrad och send_guard regel 2 blockerar med besked — samma
+            # fail-closed-mönster som resten av underlaget.
+            policy_url=str(tenant.get("policy_url") or "").strip(),
         ),
     )
 

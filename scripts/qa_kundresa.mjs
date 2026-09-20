@@ -73,6 +73,9 @@ if (ATERANVAND) {
   await page.waitForURL((u) => u.pathname.startsWith("/onboarding"), { timeout: 45000 });
   rad(true, "registreringen landar på /onboarding");
 
+  // Onboardingen är en wizard i fyra steg sedan 2026-09-20 (OnboardingWizard):
+  // företaget → bransch → kontaktperson → paket. Kontaktfälten förifylls ur
+  // sessionen, så de fylls bara om de är tomma.
   await page.locator('input[type="checkbox"]').first().check(); // testarbetsyta
   for (const [etikett, värde] of [
     ["Webbplats", "https://testkund.example.se"],
@@ -81,10 +84,34 @@ if (ATERANVAND) {
   ]) {
     await page.getByLabel(etikett).fill(värde);
   }
-  await page.getByRole("button", { name: /Spara och läs in/ }).click();
-  await page.waitForURL((u) => u.pathname === "/dashboard", { timeout: 45000 });
+  await bild(page, "01a-onboarding-foretag");
+  await page.getByRole("button", { name: /Fortsätt/ }).click();
+
+  await page.getByRole("radio", { name: "Industri & tillverkning" }).click();
+  await bild(page, "01b-onboarding-bransch");
+  await page.getByRole("button", { name: /Fortsätt/ }).click();
+
+  const namnfalt = page.getByLabel(/^Namn/);
+  if (!(await namnfalt.inputValue())) await namnfalt.fill(`Testkund ${STAMP}`);
+  const mejlfalt = page.getByLabel(/^E-post/);
+  if (!(await mejlfalt.inputValue())) await mejlfalt.fill(EPOST);
+  await bild(page, "01c-onboarding-kontakt");
+  await page.getByRole("button", { name: /Fortsätt/ }).click();
+
+  // Steg 4: Duo är förvalt (paketet vi vill sälja) — resan kör med det, så
+  // kvittofliken nedan ska stå MÖRKLAGD och steg 5 möta upsell-vyn.
+  await bild(page, "01d-onboarding-paket");
+  await page.getByRole("button", { name: /Öppna arbetsytan/ }).click();
+  await page.waitForURL((u) => u.pathname === "/dashboard", { timeout: 60000 });
   await page.waitForLoadState("networkidle").catch(() => {});
-  rad(true, "onboardingen landar på /dashboard");
+  rad(true, "onboardingen (fyra steg) landar på /dashboard");
+
+  // Mörkläggningen: en agent utan paket ska STÅ i menyn, nedtonad, med
+  // förklarande title — inte vara dold. Det är säljytan, inte ett hål.
+  const morka = await page
+    .locator('a[title="Ingår inte i ert paket ännu — klicka och läs mer"]')
+    .count();
+  rad(morka >= 1, `menyn visar ${morka} mörklagd agent (Duo ⇒ Kvitton ska vara mörk)`);
   await bild(page, "01-dashboard");
 } catch (e) {
   rad(false, `konto/onboarding: ${String(e).slice(0, 160)}`);
@@ -98,15 +125,22 @@ if (ATERANVAND) {
 } else try {
   await page.goto(`${BASE}/settings/kunskapsbas`, { waitUntil: "networkidle" });
   await page.getByPlaceholder("Rubrik — t.ex. Ångerrätt och returer").fill("Priser och offert");
+  // Platshållaren och kvittensen kortades 2026-09-19 när arbetsytorna
+  // rensades på förklarande text. Väljarna matchar därför på PREFIX i stället
+  // för hela meningen — en yta som kortar sin egen text ska inte läsas som en
+  // trasig produkt. Det gjorde den 2026-09-20: två falsklarm i den här filen.
   await page
-    .getByPlaceholder("Texten agenterna ska svara ur. Skriv som ni skulle svarat en kund.")
+    .getByPlaceholder(/^Texten agenterna ska svara ur/)
     .fill(
       "En årsbesiktning av en lyftanordning kostar från 4 900 kr exklusive moms. " +
         "Offert lämnas inom två arbetsdagar efter förfrågan. Vi besiktigar i hela " +
         "Skåne och ombesiktning efter anmärkning ingår i priset."
     );
   await page.getByRole("button", { name: /Spara i kunskapsbasen/ }).click();
-  await page.waitForSelector("text=Sparat. Agenterna kan svara ur texten", { timeout: 20000 });
+  await page.waitForFunction(
+    () => /Sparat\.|dokument sparade\./.test(document.body.innerText),
+    { timeout: 20000 }
+  );
   rad(true, "artikeln sparad — agenterna kan svara ur den");
   await bild(page, "02-kunskapsbas");
 } catch (e) {
@@ -163,7 +197,12 @@ try {
 // --- 4. Leads-körning -----------------------------------------------------
 console.log("\n=== 4. Leads-körning ===");
 try {
+  // `/dashboard/leads` studsar till `/dashboard/iris` sedan Iris tog över
+  // fliken (2026-09-19). Körformuläret ligger bakom "Kör Iris" i sidhuvudet
+  // och finns inte i DOM:en förrän panelen är öppnad — utan klicket nedan
+  // föll fyllningen på timeout och såg ut som ett produktfel.
   await page.goto(`${BASE}/dashboard/leads`, { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: /^Kör Iris$/ }).click();
   await page.getByLabel(/Antal bolag/).fill("2");
   await page.getByLabel(/^Branscher/).fill("Industri, bygg");
   await page.getByLabel(/^Stad/).fill("Skåne");
@@ -171,29 +210,57 @@ try {
   await page.getByRole("button", { name: /Starta (test)?körning/ }).click();
 
   // Formuläret pollar jobben självt: sök-fasen, sedan research per bolag.
-  // Första versionen matchade mot HELA sidtexten och blev grön på
-  // exempelbolagspanelens "Öppna utkastet" medan knappen fortfarande sa
-  // "Startar…". Nu: vänta tills knappen lämnat Startar-läget OCH antingen
-  // ett role=alert-fel eller formulärets resultatblock finns — och citera
-  // det som faktiskt står där i stället för att gissa en dom.
-  const utfall = await page
-    .waitForFunction(
-      () => {
-        const knapp = [...document.querySelectorAll("button")].find((b) =>
-          /Starta|Startar/.test(b.textContent || "")
-        );
-        if (knapp && /Startar/.test(knapp.textContent || "")) return false;
-        const alert = document.querySelector('[role="alert"]');
-        if (alert?.textContent?.trim()) return { slag: "fel", text: alert.textContent.trim() };
-        const t = document.body.innerText;
-        const m = t.match(/(Research klar[^\n]*|Hittade \d+ bolag[^\n]*|\d+ av \d+ bolag[^\n]*)/);
-        if (m) return { slag: "klart", text: m[1] };
-        return false;
-      },
-      { timeout: 480000 }
-    )
-    .then((h) => h.jsonValue())
-    .catch(() => ({ slag: "tystnad", text: "(varken resultat eller fel inom 8 min)" }));
+  //
+  // Vad "klart" SER UT SOM i ytan, och varför villkoret ser ut så här:
+  // LeadsRunForm skriver visserligen "Klart: N bolag researchade", men
+  // IrisBolag stänger panelen i samma ögonblick (händelsen
+  // `snipra:leads-korning-klar`) och flyttar fokus till listan, så den
+  // meningen hinner aldrig synas. Att leta efter den gav 8 minuters tystnad
+  // på en körning som i själva verket tog 8 SEKUNDER — uppmätt 2026-09-20.
+  // Kvittot för kunden är därför panelen som stänger sig OCH bolagsraderna
+  // som dyker upp, och det är vad som mäts här.
+  // Mätningen går mot API:t och inte mot sidtexten. Tomläget "Inga bolag
+  // ännu" står nämligen kvar i DOM:en ett ögonblick efter att panelen stängt,
+  // och en DOM-avläsning där rapporterade "noll träffar" på en körning som
+  // hade lagt in två bolag — uppmätt 2026-09-20. Prospektlistan är samma
+  // källa som vyn läser, så noll här betyder verkligen noll.
+  // Pollningen sker i Node och inte i sidan: `waitForFunction` med en ASYNK
+  // predikatfunktion gav `undefined` tillbaka ur `jsonValue()` (uppmätt
+  // 2026-09-20), alltså en tyst avvikelse på en körning som fungerade.
+  const slut = Date.now() + 480000;
+  let utfall = { slag: "tystnad", text: "(varken resultat eller fel inom 8 min)" };
+  while (Date.now() < slut) {
+    const larm = await page
+      .locator('[role="alert"]')
+      .first()
+      .textContent()
+      .catch(() => null);
+    if (larm?.trim()) {
+      utfall = { slag: "fel", text: larm.trim() };
+      break;
+    }
+    const stangd = await page
+      .getByRole("button", { name: /^Kör Iris$/ })
+      .getAttribute("aria-expanded")
+      .catch(() => null);
+    if (stangd === "false") {
+      const lage = await page.evaluate(async () => {
+        const r = await fetch("/api/snajp-support/leads/prospects", { cache: "no-store" });
+        if (!r.ok) return { antal: 0, kvalificerade: 0 };
+        const j = await r.json();
+        const p = Array.isArray(j?.prospects) ? j.prospects : [];
+        return { antal: p.length, kvalificerade: p.filter((x) => x.qualified === true).length };
+      });
+      if (lage.antal) {
+        utfall = {
+          slag: "klart",
+          text: `${lage.antal} bolag i listan, ${lage.kvalificerade} kvalificerade`
+        };
+        break;
+      }
+    }
+    await page.waitForTimeout(2000);
+  }
   await bild(page, "04b-leads-resultat");
   rad(
     utfall.slag === "klart" || utfall.slag === "fel",
@@ -212,13 +279,17 @@ try {
     väg: location.pathname,
     text: document.body.innerText.slice(0, 400)
   }));
-  // Entitlement-grinden ÄR en 404 (WorkspaceSection: !products.includes →
-  // notFound()), samma designbeslut som /admin för en kund. Första körningen
-  // 2026-09-08 dömde 404:an som avvikelse — det var skriptets fel, inte
-  // produktens: en osåld produkt ska inte ens synas, inte visa en säljruta.
-  const öppen = /Bokföringsassistent|underlag|kvitto/i.test(info.text);
-  const grindad = r?.status() === 404 || /Sidan finns inte/i.test(info.text);
-  rad(öppen || grindad, `bokföringen: ${öppen ? "öppen för kontot" : grindad ? "korrekt entitlement-grindad (404, som /admin)" : `oväntat läge (${r?.status()} ${info.väg})`}`);
+  // Sedan 2026-09-20 är en osåld agent en UPSELL-VY, inte en 404: menyn
+  // visar posten mörklagd och klicket landar i erbjudandet (AgentLast).
+  // Grinden är densamma — ingen kunddata för agenten renderas, bara pitchen
+  // med pris och "Lägg till i ert paket". En 404 här vore numera ett FEL.
+  // Upsell prövas FÖRST: dess ingår-lista nämner kvitton och inkorg, så en
+  // öppen-regex som läser hela sidan blev grön på fel vy (uppmätt 2026-09-20 —
+  // körningen sa "öppen för kontot" om en pixel-bevisad upsell-sida).
+  const upsell =
+    /Ingår inte i ert paket ännu/i.test(info.text) && /Lägg till i ert paket/i.test(info.text);
+  const öppen = !upsell && /Bokföringsassistent|underlag|kvitto.*(godkänn|inkorg)/i.test(info.text);
+  rad(öppen || upsell, `bokföringen: ${öppen ? "öppen för kontot" : upsell ? "korrekt mörklagd — upsell-vyn med pris och Lägg till" : `oväntat läge (${r?.status()} ${info.väg})`}`);
   await bild(page, "05-bokforing");
 } catch (e) {
   rad(false, `bokforing: ${String(e).slice(0, 160)}`);

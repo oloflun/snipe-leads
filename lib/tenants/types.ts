@@ -94,4 +94,19 @@ export type Tenant = {
    * vår egen testsida fungerar. Fullständiga origins med schema.
    */
   embedOrigins?: string[];
+  /**
+   * Widgetens egen inbjudan: pratbubblan som dyker upp bredvid knappen och
+   * FRÅGAR om den får hjälpa till, i stället för att vänta på ett klick.
+   *
+   * Mönstret är Skatteverkets ("Frågor?" / "Chatta med mig!"), som är den
+   * chattbot flest svenskar har sett — en rad i fetstil och en inbjudan under.
+   * Utseendet är däremot vårt: deras tecknade figur hör till deras varumärke,
+   * och chatten bär Snajps formspråk med kundens logotyp (se livrustning.ts).
+   *
+   * Texten bor HÄR och inte i public/widget.js därför att skriptet är
+   * gemensamt för alla kunder: en hårdkodad mening där hade blivit fel för
+   * varannan kund. Saknas fältet visas ingen bubbla alls — knappen ensam är
+   * ett fullgott läge, och en kund som inte vill bli påkallad ska slippa.
+   */
+  widgetInbjudan?: { rubrik: string; text: string };
 };

@@ -3,7 +3,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import model_validator
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Default-tenanten (Nordlys Handel) — samma fasta UUID som i 003_snajp_multitenant.sql.
@@ -304,6 +304,11 @@ class Settings(BaseSettings):
     # Hur ofta bakgrundssvepet körs. 0 = ingen bakgrundsloop (den lata
     # städningen vid listläsning gäller ändå).
     leads_stadning_sekunder: int = 300
+
+    # Trial-påminnaren (app/jobs/trial_paminnare.py): hur ofta svepet körs.
+    # 0 stänger av den. Svepet är idempotent (unik logg per arbetsyta och
+    # typ), så intervallet styr bara hur snabbt en ny kandidat upptäcks.
+    trial_paminnelse_sekunder: int = 6 * 3600
     # Fas R2 (bd snipe-cku): semantisk svarscache. "off" (default): cachen
     # rörs aldrig — varken lookup eller store, inte ens ett embedding-anrop.
     # "shadow": lookup+store körs, men en TRÄFF ändrar inget i svaret, bara
@@ -362,7 +367,17 @@ class Settings(BaseSettings):
     # Tom => `app/leads/utskicksfot.py` kan inte bygga en fungerande länk, och
     # då blockerar send_guard regel 2 utskicket. Det är rätt utfall: ett
     # kallmejl med en trasig avregistreringslänk är värre än inget kallmejl.
-    publik_bas_url: str = ""
+    #
+    # BÅDA namnen läses (granskningsfynd 2026-09-20): Railway, DEPLOY.md och
+    # handoffs har hela tiden sagt PUBLIC_BASE_URL, men fältnamnet mappar till
+    # PUBLIK_BAS_URL — så den satta variabeln lästes aldrig, foten kunde inte
+    # byggas och varje utskick hade blockerats med ett fel som pekade på
+    # bolagsuppgifterna i stället för på URL:en. Aliaset gör den deployade
+    # verkligheten giltig; ta inte bort någon av formerna utan att också byta
+    # namnet i Railway och i DEPLOY.md.
+    publik_bas_url: str = Field(
+        "", validation_alias=AliasChoices("PUBLIK_BAS_URL", "publik_bas_url", "PUBLIC_BASE_URL")
+    )
 
     # SMTP-uppgifterna för snajpsupport@gmail.com. ETT konto för HELA
     # plattformen — det här är prioriterade mejl till OSS, inte kundutskick,

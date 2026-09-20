@@ -43,6 +43,7 @@ export default async function EmbedPage({ params }: Props) {
         namn={tenant.name}
         logo={tenant.logo}
         farg={`oklch(${tenant.palette.ochre})`}
+        inbjudan={tenant.widgetInbjudan}
       />
     </>
   );

@@ -47,6 +47,7 @@ Du får det här mejlet därför att vi är personuppgiftsansvarig för uppgifte
 Ändamål: att erbjuda utbildning. Uppgiften är hämtad från din arbetsgivares
 offentliga webbplats. Du har rätt att invända och att få dina uppgifter
 raderade.
+Hur vi behandlar personuppgifter: https://livrustning.example/integritetspolicy
 
 Avregistrera dig: https://livrustning.example/avregistrera?t=abc123
 """
@@ -148,6 +149,30 @@ def test_regel_2_godtar_inte_svara_stopp():
         "Svara STOPP så tar vi bort dig.",
     )
     assert kor(utskick=utskick(brodtext=text)).regel == "2_avregistrering"
+
+
+def test_regel_2_kraver_policylank():
+    """Integritetspolicylänken är obligatorisk i varje mejl (2026-09-20):
+    art. 14-styckena i foten rymmer inte lagringstid, mottagare och rätten
+    att klaga till IMY — länken bär resten."""
+    text = FULLSTANDIG_TEXT.replace(
+        "Hur vi behandlar personuppgifter: https://livrustning.example/integritetspolicy",
+        "",
+    )
+    beslut = kor(utskick=utskick(brodtext=text))
+    assert beslut.atgard == BLOCKERA
+    assert beslut.regel == "2_avregistrering"
+    assert "integritetspolicy" in beslut.skal
+
+
+def test_regel_2_policylank_utan_policyord_i_urlen():
+    """Kundens policysida kan heta vad som helst — ordet "personuppgifter" på
+    samma rad som länken räcker, vilket är exakt vad utskicksfoten skriver."""
+    text = FULLSTANDIG_TEXT.replace(
+        "Hur vi behandlar personuppgifter: https://livrustning.example/integritetspolicy",
+        "Hur vi behandlar personuppgifter: https://livrustning.example/om-oss/policy",
+    )
+    assert kor(utskick=utskick(brodtext=text)).atgard == SKICKA
 
 
 # -- Regel 3: suppression ---------------------------------------------------

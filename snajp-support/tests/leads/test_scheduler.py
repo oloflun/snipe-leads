@@ -32,6 +32,7 @@ class _FakeSendProvider:
 GODKAND_BRODTEXT = """Hej, jag såg en signal som gör tajmingen relevant.
 
 Testbolaget AB · Org.nr 556000-0000 · Testgatan 1, 111 22 Stockholm
+Hur vi behandlar personuppgifter: https://testbolaget.example/integritetspolicy
 Avregistrera dig: https://testbolaget.example/avregistrera?t=abc
 """
 
@@ -287,6 +288,28 @@ async def test_send_guard_blockerar_avregistrerad_mottagare():
     storage = MemoryStorage()
     item_id, thread_id, _ = _seed(storage, scheduled_at=WITHIN_WINDOW_UTC)
     await storage.add_suppression(TENANT, email="Prospect@Example.se", reason="klickade avregistrera")
+    provider = _FakeSendProvider()
+
+    outcome = await process_due_item(
+        storage, TENANT, {"id": item_id, "thread_id": thread_id}, provider, now=WITHIN_WINDOW_UTC
+    )
+
+    assert outcome == "blocked"
+    assert provider.sent == []
+    assert storage.send_queue[TENANT][0]["gate_checks"]["send_guard_regel"] == "3_suppression"
+
+
+@pytest.mark.anyio
+async def test_send_guard_blockerar_kundens_egen_kund():
+    """Supportens kundregister är kundens kundlista: den som redan har ett
+    ärende hos tenantens support ska inte få ett kallmejl om det den köpt.
+    Underlaget var en tom mängd fram till 2026-09-20 — spärren fanns i guarden
+    men fick aldrig data (granskningsfynd)."""
+    storage = MemoryStorage()
+    item_id, thread_id, _ = _seed(storage, scheduled_at=WITHIN_WINDOW_UTC)
+    await storage.find_or_create_customer(
+        TENANT, email="prospect@example.se", phone=None, name=None
+    )
     provider = _FakeSendProvider()
 
     outcome = await process_due_item(
