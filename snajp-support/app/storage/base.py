@@ -76,6 +76,16 @@ class Storage(Protocol):
 
     async def list_tenants(self) -> list[dict[str, Any]]: ...
 
+    async def set_tenant_active(self, tenant_id: str, *, active: bool) -> dict[str, Any] | None:
+        """Slår på eller av kundens konto. None när tenanten inte finns.
+
+        Avstängning är trial-konverteringens manuella väg (beslut 2026-09-20):
+        `validate_api_key` avvisar nycklar för en inaktiv tenant, så alla tre
+        agenterna, webben och den publika chatten låses ute i samma ögonblick.
+        Ingenting raderas — en återaktivering öppnar allt igen.
+        """
+        ...
+
     async def get_tenant_products(self, tenant_id: str) -> list[str] | None:
         """Paketet ur den kopplade arbetsytans `workspaces.products`.
 

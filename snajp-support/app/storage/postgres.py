@@ -233,6 +233,17 @@ class PostgresStorage:
             )
         return _row(record)
 
+    async def set_tenant_active(self, tenant_id: str, *, active: bool) -> dict[str, Any] | None:
+        # OSKOPAD med flit: administrativ skrivning bakom require_master_key,
+        # samma policy (ss_tenants_admin_write, 029) som create_tenant.
+        async with self.pool.acquire() as conn:
+            record = await conn.fetchrow(
+                "update ss_tenants set active = $2 where id = $1 returning *",
+                tenant_id,
+                active,
+            )
+        return _row(record)
+
     async def get_tenant_products(self, tenant_id: str) -> list[str] | None:
         # OSKOPAD med flit, samma väg och samma policy som
         # list_tenants_with_stats (064_workspaces_admin_read): `workspaces`

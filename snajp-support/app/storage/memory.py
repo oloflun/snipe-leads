@@ -292,6 +292,13 @@ class MemoryStorage:
                 overlagd[nyckel] = detaljer.get(falt)
         return overlagd
 
+    async def set_tenant_active(self, tenant_id: str, *, active: bool) -> dict[str, Any] | None:
+        tenant = self.tenants.get(tenant_id)
+        if tenant is None:
+            return None
+        tenant["active"] = active
+        return dict(tenant)
+
     async def get_tenant_products(self, tenant_id: str) -> list[str] | None:
         # Minnet har inga arbetsytor — tester sätter `products` direkt på
         # tenantposten, samma nyckel som list_tenants_with_stats speglar.

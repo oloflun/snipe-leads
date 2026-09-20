@@ -46,7 +46,7 @@ from ..agentcore.instruktioner import las_instruktioner
 from ..agentcore.strukturera import strukturera as strukturera_text
 from ..leads.soul import SOUL_KIND
 from .deps import kraev_uuid, require_master_key
-from .schemas import InstruktionRequest, TenantProfilRequest
+from .schemas import InstruktionRequest, TenantAktivRequest, TenantProfilRequest
 
 router = APIRouter(prefix="/api/admin", dependencies=[Depends(require_master_key)])
 
@@ -285,3 +285,43 @@ async def spara_profil(request: Request, tenant_id: str, payload: TenantProfilRe
             await versioner.bumpa_config(tenant_id)
 
     return {"sparat": andrade, "anmarkning": anmarkning}
+
+
+@router.put("/tenants/{tenant_id}/aktiv")
+async def satt_tenant_aktiv(
+    request: Request, tenant_id: str, payload: TenantAktivRequest
+) -> dict:
+    """Stänger av eller återaktiverar en kund — trial-konverteringens manuella väg.
+
+    Beslutet 2026-09-20: ingen automatisk konvertering när provperioden går
+    ut. En människa stänger av, med bekräftelse i adminytan, och det här är
+    skrivningen bakom den knappen. Avstängningen ÄR `ss_tenants.active`:
+    `validate_api_key` avvisar nycklar för en inaktiv tenant, så alla tre
+    agenterna, den inloggade arbetsytan, portalen och den publika chatten
+    låses ute i samma ögonblick — med 401, inte 403, så en avstängd kunds
+    nyckel inte går att skilja från en ogiltig utifrån.
+
+    Ingenting raderas. Data, inställningar och historik står orörda, och en
+    återaktivering öppnar allt igen — avstängning är en förhandling, inte en
+    gallring (gallringen har sin egen väg, scripts/gallra.py).
+    """
+    kraev_uuid(tenant_id, "Kunden")
+    storage = request.app.state.storage
+    tenant = await storage.set_tenant_active(tenant_id, active=payload.active)
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Kunden finns inte.")
+
+    await storage.log_platform_event(
+        # warning vid avstängning: det är händelsen någon kan behöva förklara
+        # i efterhand, och den ska inte drunkna bland info-raderna.
+        level="info" if payload.active else "warning",
+        source="admin.avstangning",
+        message=(
+            f"Kontot återaktiverat: {tenant.get('name') or tenant_id}."
+            if payload.active
+            else f"Kontot avstängt: {tenant.get('name') or tenant_id}."
+        ),
+        tenant_id=tenant_id,
+        detail={"active": payload.active, "orsak": payload.orsak or ""},
+    )
+    return {"tenant": tenant}

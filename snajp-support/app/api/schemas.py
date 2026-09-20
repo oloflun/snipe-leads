@@ -355,6 +355,18 @@ class InstruktionRequest(BaseModel):
     strukturera: bool = True
 
 
+class TenantAktivRequest(BaseModel):
+    """Manuell avstängning/återaktivering av en kund — trial-konverteringens
+    mänskliga väg (beslut 2026-09-20: ingen automatisk konvertering).
+
+    `orsak` är fri text som hamnar i platform_events — "Trial gick ut, inget
+    avtal" är underlaget den som tittar i händelseloggen om ett halvår behöver.
+    """
+
+    active: bool
+    orsak: str | None = Field(default=None, max_length=500)
+
+
 class TenantProfilRequest(BaseModel):
     """Adminens skrivning mot EN kunds agentprofil.
 
