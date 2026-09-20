@@ -294,11 +294,17 @@ function Pastaende({
 type AttGoraRad = { id: string; rubrik: string; under: string; meta?: string };
 
 /**
- * Det enda blocket på sidan som är HANDLING och inte information.
+ * Det enda blocket på sidan som är HANDLING och inte information — och sedan
+ * 2026-09-20 sidans bärande yta: det står FÖRE nyckeltalen och bär sin egen
+ * rubrik, med antalet i klartext ("2 utkast väntar på dig") i stället för ett
+ * generiskt "Att göra" utanför kortet.
  *
  * Ligger i tonal inversion när kön inte är tom — sidans enda, och den betyder
  * "du måste göra något". Är kön tom blir den en mening på papper: en tom svart
  * ruta hade skrikit lika högt som en full, vilket är precis fel signal.
+ *
+ * Varje rad är en länk till samma kö som knappen — kortet ska gå att agera på
+ * var man än träffar det, inte bara i nedre vänstra hörnet.
  */
 function AttGora({
   rader,
@@ -313,31 +319,52 @@ function AttGora({
       </p>
     );
   }
+  const fler = rader.length - 5;
   return (
-    <div className="rounded-card bg-ink p-5 text-paper md:p-6">
+    <section aria-label="Att göra" className="rounded-card bg-ink p-6 text-paper md:p-8">
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
+        <h2 className="text-[1.25rem] font-semibold tracking-[-0.01em]">
+          {rader.length === 1 ? "1 utkast väntar på dig" : `${rader.length} utkast väntar på dig`}
+        </h2>
+        <Link
+          href={href}
+          className="focus-ring inline-flex min-h-11 items-center rounded-input bg-paper px-5 text-[0.9375rem] font-semibold text-ink transition-colors hover:bg-paper/85"
+        >
+          {knapp}
+        </Link>
+      </div>
       {/* Samma spannlogik som Stapellista, i mörk färgvärld: rubrik/underrad
           8 spann, meta 4, deklarerat på VARJE rad — metakolumnen ritas även
           tom, så den står på samma plats oavsett om en rad har meta. */}
-      <ul className="divide-y divide-paper/15">
+      <ul className="mt-5 border-t border-paper/15">
         {rader.slice(0, 5).map((rad) => (
-          <li key={rad.id} className="grid grid-cols-12 gap-x-4 py-3 first:pt-0 last:pb-0">
-            <div className="col-span-12 min-w-0 sm:col-span-8">
-              <p className="truncate text-[0.9375rem] font-semibold">{rad.rubrik}</p>
-              <p className="mt-0.5 truncate text-[0.8125rem] text-paper-muted">{rad.under}</p>
-            </div>
-            <p className="col-span-12 mt-1 truncate text-[0.8125rem] text-paper-muted sm:col-span-4 sm:mt-0 sm:text-right">
-              {rad.meta ?? ""}
-            </p>
+          <li key={rad.id} className="border-b border-paper/15">
+            <Link
+              href={href}
+              // text-paper uttryckligen: globals.css sätter `a { color: ink }`,
+              // och utan den här klassen står rubriken bläck-på-bläck. Uppmätt
+              // i skärmdump: raden såg ut att sakna sin rubrikrad helt.
+              className="focus-ring -mx-3 grid grid-cols-12 gap-x-4 rounded-input px-3 py-3.5 text-paper transition-colors hover:bg-paper/10"
+            >
+              <span className="col-span-12 min-w-0 sm:col-span-8">
+                <span className="block truncate text-[0.9375rem] font-semibold">{rad.rubrik}</span>
+                <span className="mt-0.5 block truncate text-[0.8125rem] text-paper-muted">
+                  {rad.under}
+                </span>
+              </span>
+              <span className="col-span-12 mt-1 truncate text-[0.8125rem] text-paper-muted sm:col-span-4 sm:mt-0 sm:self-center sm:text-right">
+                {rad.meta ?? ""}
+              </span>
+            </Link>
           </li>
         ))}
       </ul>
-      <Link
-        href={href}
-        className="focus-ring mt-5 inline-flex min-h-11 items-center rounded-input bg-paper px-5 text-[0.9375rem] font-semibold text-ink transition-colors hover:bg-paper/85"
-      >
-        {knapp}
-      </Link>
-    </div>
+      {fler > 0 ? (
+        <p className="mt-4 text-[0.8125rem] text-paper-muted">
+          {fler === 1 ? "1 till i kön." : `${fler} till i kön.`}
+        </p>
+      ) : null}
+    </section>
   );
 }
 
@@ -658,6 +685,20 @@ export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
         }
       />
 
+      {/* Handlingen före siffrorna: kortet är sidans bärande block sedan
+          2026-09-20, så det som väntar på kunden står överst. */}
+      <AttGora
+        rader={(ko ?? []).map((post) => ({
+          id: post.id,
+          rubrik: post.company_name ?? post.prospect_email ?? "Utkast",
+          under: post.subject ?? "Utan ämnesrad",
+          meta: post.scheduled_at ? `köat ${sedan(post.scheduled_at)}` : undefined
+        }))}
+        href={vag("/dashboard/iris/granskning")}
+        knapp="Öppna granskningskön"
+        tomtext="Inga utkast väntar."
+      />
+
       <Talrad>
         <Tal
           etikett="Prospekt"
@@ -704,20 +745,6 @@ export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
           skriver ...") stod här. Den upprepade tillståndsraden ovanför och
           inställningen under Målgrupp och autonomi, alltså samma uppgift på
           tre ställen. */}
-
-      <Sektion rubrik="Att göra">
-        <AttGora
-          rader={(ko ?? []).map((post) => ({
-            id: post.id,
-            rubrik: post.company_name ?? post.prospect_email ?? "Utkast",
-            under: post.subject ?? "Utan ämnesrad",
-            meta: post.scheduled_at ? `köat ${sedan(post.scheduled_at)}` : undefined
-          }))}
-          href={vag("/dashboard/iris/granskning")}
-          knapp="Öppna granskningskön"
-          tomtext="Inga utkast väntar."
-        />
-      </Sektion>
 
       {/* Stapellistorna (orter, branscher, bortval) och Senaste körningarna
           stod här. Borttagna 2026-09-19: mest tomlägen, för rörigt. */}
@@ -850,6 +877,21 @@ export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) 
         }
       />
 
+      {/* Handlingen före siffrorna — samma ordning som leadsöversikten. */}
+      <AttGora
+        rader={vantar.map((a) => ({
+          id: a.id,
+          rubrik: a.subject || "(utan ämne)",
+          under: a.from_name ? `${a.from_name} · ${a.from_email}` : a.from_email,
+          meta: a.draft
+            ? `konfidens ${andel(a.draft.confidence, 1)}`
+            : sedan(a.received_at)
+        }))}
+        href={vag("/dashboard/support")}
+        knapp="Granska utkasten"
+        tomtext="Inga utkast väntar."
+      />
+
       <Talrad>
         <Tal
           etikett="Ärenden"
@@ -891,22 +933,6 @@ export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) 
           {`besvaras av agenterna själva: ${auto.map((r) => r.label.toLowerCase()).join(", ")}.`}
         </Pastaende>
       )}
-
-      <Sektion rubrik="Att göra">
-        <AttGora
-          rader={vantar.map((a) => ({
-            id: a.id,
-            rubrik: a.subject || "(utan ämne)",
-            under: a.from_name ? `${a.from_name} · ${a.from_email}` : a.from_email,
-            meta: a.draft
-              ? `konfidens ${andel(a.draft.confidence, 1)}`
-              : sedan(a.received_at)
-          }))}
-          href={vag("/dashboard/support")}
-          knapp="Granska utkasten"
-          tomtext="Inga utkast väntar."
-        />
-      </Sektion>
 
       {/* "Hur väl agenterna kan grunda svaren" (Faktalista) stod bredvid.
           Borttagen 2026-09-19: mest streck i tomläge, för rörigt. */}
