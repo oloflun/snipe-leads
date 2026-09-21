@@ -300,8 +300,10 @@ type AttGoraRad = { id: string; rubrik: string; under: string; meta?: string };
  * generiskt "Att göra" utanför kortet.
  *
  * Ligger i tonal inversion när kön inte är tom — sidans enda, och den betyder
- * "du måste göra något". Är kön tom blir den en mening på papper: en tom svart
- * ruta hade skrikit lika högt som en full, vilket är precis fel signal.
+ * "du måste göra något". Är kön tom renderas INGENTING (2026-09-21, på
+ * begäran): rutan "Inga utkast väntar." var ett tomt kort mitt på sidan, och
+ * en kö utan poster behöver inte meddela att den är tom — nyckeltalen under
+ * säger redan läget.
  *
  * Varje rad är en länk till samma kö som knappen — kortet ska gå att agera på
  * var man än träffar det, inte bara i nedre vänstra hörnet.
@@ -309,16 +311,9 @@ type AttGoraRad = { id: string; rubrik: string; under: string; meta?: string };
 function AttGora({
   rader,
   href,
-  knapp,
-  tomtext
-}: Readonly<{ rader: AttGoraRad[]; href: string; knapp: string; tomtext: string }>) {
-  if (rader.length === 0) {
-    return (
-      <p className="max-w-[62ch] rounded-card bg-paper2/50 px-5 py-4 text-[0.875rem] leading-6 text-ink-muted">
-        {tomtext}
-      </p>
-    );
-  }
+  knapp
+}: Readonly<{ rader: AttGoraRad[]; href: string; knapp: string }>) {
+  if (rader.length === 0) return null;
   const fler = rader.length - 5;
   return (
     <section aria-label="Att göra" className="rounded-card bg-ink p-6 text-paper md:p-8">
@@ -696,7 +691,6 @@ export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
         }))}
         href={vag("/dashboard/iris/granskning")}
         knapp="Öppna granskningskön"
-        tomtext="Inga utkast väntar."
       />
 
       <Talrad>
@@ -889,7 +883,6 @@ export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) 
         }))}
         href={vag("/dashboard/support")}
         knapp="Granska utkasten"
-        tomtext="Inga utkast väntar."
       />
 
       <Talrad>
