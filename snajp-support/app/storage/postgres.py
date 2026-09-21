@@ -2351,7 +2351,9 @@ class PostgresStorage:
                          where a.email_id = e.id and a.is_image) as has_image
                 from ss_emails e
                 where e.tenant_id = $1
-                  and ($2::text is null or e.status = $2)
+                  -- Utan statusfilter visas inte larmen (migration 078):
+                  -- de bor i fliken Att hantera, som frågar efter statusen.
+                  and (($2::text is null and e.status <> 'att_hantera') or e.status = $2)
                   and ($3::text is null or exists(
                         select 1 from ss_classifications c
                         where c.email_id = e.id and c.category = $3))

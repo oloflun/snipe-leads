@@ -85,8 +85,11 @@ function lokal(v: Localized, locale: "sv" | "en") {
 
 export function AgentMenu({
   yta,
-  kontext
+  kontext,
+  ton = "ljus"
 }: Readonly<{
+  /** "rail": mörk variant för adminens sidopanel; panelen fäller då uppåt. */
+  ton?: "ljus" | "rail";
   /** Vilken agentyta menyn sitter på. Följer med i eskaleringsmejlet. */
   yta: "kundservice" | "leads";
   /** Fritt fält som hamnar i eskaleringens tekniska uppgifter (t.ex. sessions-id). */
@@ -138,7 +141,12 @@ export function AgentMenu({
         onClick={() => setOppen((v) => !v)}
         aria-expanded={oppen}
         aria-haspopup="dialog"
-        className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-input border border-ink/15 px-3 text-sm font-medium text-ink-muted transition-colors hover:bg-paper2"
+        className={cn(
+          "focus-ring inline-flex items-center gap-2 rounded-input border px-3 text-sm font-medium transition-colors",
+          ton === "rail"
+            ? "min-h-9 border-paper/15 text-paper-muted hover:bg-paper/5 hover:text-paper"
+            : "min-h-11 border-ink/15 text-ink-muted hover:bg-paper2"
+        )}
       >
         <span aria-hidden="true" className="flex flex-col gap-[3px]">
           <span className="block h-[2px] w-4 bg-current" />
@@ -156,7 +164,10 @@ export function AgentMenu({
           // mot VIEWPORTEN i stället, och det är inte kosmetik: knappen sitter
           // en bit in från kanten, så en högerankrad panel på 22rem sköt ut
           // 31px utanför vänsterkanten vid 375px bredd. Uppmätt, inte gissat.
-          className="absolute right-0 z-40 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-input border border-ink/15 bg-paper shadow-lift max-sm:fixed max-sm:inset-x-4 max-sm:top-auto max-sm:mt-0 max-sm:w-auto"
+          className={cn(
+            "absolute z-40 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-input border border-ink/15 bg-paper text-ink shadow-lift max-sm:fixed max-sm:inset-x-4 max-sm:top-auto max-sm:mt-0 max-sm:w-auto",
+            ton === "rail" ? "bottom-full left-0 mb-2" : "right-0 mt-2"
+          )}
         >
           {/* Språkvalet ligger överst och inte bakom en flik: den som behöver
               det behöver det för att kunna läsa resten av menyn. */}

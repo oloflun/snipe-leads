@@ -196,12 +196,38 @@ async def _triage_email(
     return result, articles
 
 
+def ar_snajp_notis(subject: str | None, body: str | None) -> bool:
+    """Är mejlet ett eskaleringslarm/notis från Snajp självt?
+
+    Båda villkoren krävs: ämnet börjar med prioritetsmarkören OCH brödtexten
+    bär Snajps avsändarrad. En kund som råkar skriva "[PRIORITERAT]" i sitt
+    ämne ska fortfarande få ett svar. Texterna är kontrakt med
+    notifications/prioriterat_mejl.py — ändras de där måste de ändras här.
+    """
+    from ..notifications.prioriterat_mejl import PRIORITETSMARKOR
+
+    return (subject or "").strip().startswith(PRIORITETSMARKOR) and (
+        "Det här mejlet kommer från Snajp" in (body or "")
+    )
+
+
 async def process_email(
     storage: Storage, tenant_id: str, email: dict[str, Any]
 ) -> dict[str, Any]:
     """Kör hela flödet för ett sparat mail. Kastar aldrig — fel ger status failed."""
     settings = get_settings()
     email_id = email["id"]
+
+    # Snajps egna larm (migration 078) FÖRE allt annat: de ska varken
+    # triageras, kosta LLM-budget eller få ett AI-utkast som svarar Snajp på
+    # sitt eget larm. De hamnar i fliken Att hantera, där en människa läser dem.
+    if ar_snajp_notis(email.get("subject"), email.get("body_text")):
+        await storage.update_email(tenant_id, email_id, status="att_hantera")
+        await storage.log_decision(
+            tenant_id, email_id=email_id, event="notis",
+            detail={"note": "Eskaleringslarm från Snajp — till Att hantera, inget utkast."},
+        )
+        return {"action": "att_hantera"}
 
     # Avtalsgrinden FÖRE allt annat: ingen kundtext får gå till modell-
     # leverantören för en tenant utan registrerat avtal (migration 070).

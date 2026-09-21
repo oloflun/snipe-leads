@@ -1781,6 +1781,9 @@ class MemoryStorage:
             summary = self._email_summary(email)
             if status and summary["status"] != status:
                 continue
+            # Samma som postgres: utan statusfilter syns inte larmen (078).
+            if not status and summary["status"] == "att_hantera":
+                continue
             if category and (
                 not summary["classification"]
                 or summary["classification"]["category"] != category
