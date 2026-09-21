@@ -227,20 +227,19 @@ export function AdminShell({
                 </button>
               </div>
 
-              {/* Kunduppslag, vy-växel, kontaktmeny och kontoadress — byggda
-                  för en ljus yta (se AppShells motivering ovan för varför de
-                  aldrig stod direkt på en mörk rail). En egen ljus platta i
-                  stället för tre lösa öar, och bara vid lg+: platsen räcker
-                  inte i ikonläget, och de här kontrollerna saknar ett
-                  ikon-only-läge. */}
-              <div className="hidden flex-col gap-1.5 rounded-input border border-paper/10 bg-paper2 p-1.5 lg:flex">
+              {/* Kunduppslag, vy-växel, kontaktmeny och kontoadress, i
+                  railens egen mörka ton (`ton="rail"`) sedan 2026-09-22 — den
+                  ljusa plattan de stod på förut bröt mot resten av panelen.
+                  Bara vid lg+: platsen räcker inte i ikonläget, och
+                  kontrollerna saknar ett ikon-only-läge. */}
+              <div className="hidden flex-col gap-1.5 border-t border-paper/10 px-1 pt-3 lg:flex">
                 <div className="flex flex-wrap items-center gap-1">
-                  <BytKund />
-                  <VyVaxel />
+                  <BytKund ton="rail" />
+                  <VyVaxel ton="rail" />
                 </div>
-                <AgentMenu yta="leads" kontext={`admin:${pathname}`} />
+                <AgentMenu yta="leads" kontext={`admin:${pathname}`} ton="rail" />
                 {email ? (
-                  <p className="truncate px-1 pt-0.5 text-[0.75rem] text-ink-subtle">{email}</p>
+                  <p className="truncate px-1 pt-0.5 text-[0.75rem] text-paper-subtle">{email}</p>
                 ) : null}
               </div>
 

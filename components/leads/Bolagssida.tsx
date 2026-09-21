@@ -75,6 +75,7 @@ type Lage =
 type UtkastLage =
   | { fas: "kontrollerar" }
   | { fas: "ingen" }
+  | { fas: "letar-kontakt" }
   | { fas: "skapar" }
   | { fas: "fel"; meddelande: string }
   | { fas: "klar"; data: EmailStudioData; queueItemId: string | null };
@@ -361,13 +362,40 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
   /** 5.2/5.3: "Skapa utkast" — anropar den riktiga kedjan, inte studions egen route. */
   const skapaUtkast = useCallback(async () => {
     if (lage.fas !== "klar") return;
-    const p = lage.prospekt;
+    let p = lage.prospekt;
     if (!p.contact_email) {
-      setUtkastLage({
-        fas: "fel",
-        meddelande: "Mottagaradress saknas."
-      });
-      return;
+      // Ingen återvändsgränd ("Mottagaradress saknas."): starta kontaktjakten
+      // — processa-om kör researchen som skrapar bolagets kontakt-/om-oss-
+      // sidor och skriver kontaktfälten — och fortsätt själv när adressen
+      // finns. Samma flöde som tvillingen IrisBolag.tsx.
+      setUtkastLage({ fas: "letar-kontakt" });
+      try {
+        await snajpAnrop("/leads/prospects/processa-om", {
+          method: "POST",
+          body: JSON.stringify({ prospect_ids: [p.id], scope: "research" })
+        });
+        let hittad: Prospekt | null = null;
+        for (let forsok = 0; forsok < 24 && !hittad; forsok += 1) {
+          await new Promise((r) => setTimeout(r, 5_000));
+          const kropp = await snajpAnrop<{ prospect?: Prospekt }>(
+            `/leads/prospects/${encodeURIComponent(p.id)}`
+          );
+          if (kropp.prospect?.contact_email) hittad = kropp.prospect;
+        }
+        if (!hittad) {
+          setUtkastLage({
+            fas: "fel",
+            meddelande:
+              "Iris hittade ingen kontaktadress på bolagets sajt. Försök igen om en stund, eller komplettera bolaget med en adress."
+          });
+          return;
+        }
+        p = hittad;
+        setLage({ fas: "klar", prospekt: hittad, kallor: lage.kallor });
+      } catch (cause) {
+        setUtkastLage({ fas: "fel", meddelande: felmeddelande(cause) });
+        return;
+      }
     }
 
     setUtkastLage({ fas: "skapar" });
@@ -650,6 +678,13 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
                     Skapa utkast
                   </button>
                 </div>
+              ) : null}
+
+              {utkastLage.fas === "letar-kontakt" ? (
+                <p className="text-[14px] leading-6 text-ink-subtle">
+                  Iris letar kontaktadress på bolagets sajt … Det tar ungefär en minut,
+                  och utkastet skrivs direkt efteråt.
+                </p>
               ) : null}
 
               {utkastLage.fas === "skapar" ? (

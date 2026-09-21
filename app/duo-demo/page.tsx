@@ -54,6 +54,7 @@ const DEMO_STATE = {
   products: ["leads", "support"] as const,
   addons: [],
   workspaceName: "Duo Demo AB",
+  userEmail: null,
   // false, och det är inte kosmetik: signedIn styr om vyerna erbjuder
   // åtgärder som kräver en session. En demo som låtsas vara inloggad hade
   // visat knappar som inte kan göra något.

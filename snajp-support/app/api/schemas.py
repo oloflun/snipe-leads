@@ -492,6 +492,19 @@ class RejectDraftRequest(BaseModel):
     note: str | None = None
 
 
+class KopplaInkorgRequest(BaseModel):
+    """Självbetjänad inkorgskoppling (migration 077).
+
+    `app_losenord` är ett app-lösenord (Gmail/iCloud kräver det; Outlook ett
+    vanligt eller app-lösenord med IMAP påslaget). Det verifieras mot servern,
+    Fernet-krypteras och lagras — aldrig i klartext, aldrig i loggar.
+    `imap_host` behövs bara för adresser utanför de kända domänerna."""
+
+    address: str = Field(..., min_length=5, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    app_losenord: str = Field(..., min_length=6, max_length=200)
+    imap_host: str | None = Field(default=None, max_length=253)
+
+
 class OmformuleraDraftRequest(BaseModel):
     """Skriv om utkastet i en riktning — Förbättra, Kortare, Mer personlig.
 

@@ -312,6 +312,48 @@ class MemoryStorage:
     async def list_mailboxes(self, tenant_id: str) -> list[dict[str, Any]]:
         return [m for m in self.mailboxes.values() if m["tenant_id"] == tenant_id]
 
+    async def upsert_mailbox(
+        self,
+        tenant_id: str,
+        *,
+        provider: str,
+        address: str,
+        imap_host: str | None = None,
+        secret_enc: str | None = None,
+    ) -> dict[str, Any]:
+        adress = address.strip().lower()
+        for rad in self.mailboxes.values():
+            if rad["tenant_id"] == tenant_id and rad["address"] == adress:
+                rad.update(
+                    provider=provider,
+                    imap_host=imap_host,
+                    secret_enc=secret_enc,
+                    status="active",
+                    last_error=None,
+                )
+                return rad
+        rad = {
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "provider": provider,
+            "address": adress,
+            "status": "active",
+            "imap_host": imap_host,
+            "secret_enc": secret_enc,
+            "last_sync_at": None,
+            "last_error": None,
+            "created_at": _now(),
+        }
+        self.mailboxes[rad["id"]] = rad
+        return rad
+
+    async def delete_mailbox(self, tenant_id: str, mailbox_id: str) -> bool:
+        rad = self.mailboxes.get(mailbox_id)
+        if rad and rad["tenant_id"] == tenant_id:
+            del self.mailboxes[mailbox_id]
+            return True
+        return False
+
     async def touch_mailbox_sync(
         self, tenant_id: str, mailbox_id: str, *, last_error: str | None
     ) -> None:
@@ -1728,6 +1770,7 @@ class MemoryStorage:
         search: str | None = None,
         limit: int = 50,
         is_test: bool | None = False,
+        inkludera_larm: bool = False,
     ) -> list[dict[str, Any]]:
         rows = [e for e in self.emails.values() if e["tenant_id"] == tenant_id]
         rows.sort(key=lambda e: e["received_at"], reverse=True)
@@ -1738,6 +1781,9 @@ class MemoryStorage:
                 continue
             summary = self._email_summary(email)
             if status and summary["status"] != status:
+                continue
+            # Samma som postgres: utan statusfilter syns inte larmen (078).
+            if not status and not inkludera_larm and summary["status"] == "att_hantera":
                 continue
             if category and (
                 not summary["classification"]

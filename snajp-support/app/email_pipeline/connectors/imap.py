@@ -164,6 +164,39 @@ def _fetch_sync(
     return emails
 
 
+def _prova_sync(host: str, user: str, password: str) -> None:
+    client = imaplib.IMAP4_SSL(host, timeout=15)
+    try:
+        client.login(user, password)
+    finally:
+        try:
+            client.logout()
+        except Exception:
+            pass
+
+
+async def prova_inloggning(host: str, user: str, password: str) -> str | None:
+    """Provar en IMAP-inloggning. None när den lyckas, annars ett KUNDVÄNLIGT fel.
+
+    Körs när kunden kopplar sin inkorg: ett fel app-lösenord ska fångas i det
+    ögonblicket, med ett besked som går att agera på — inte vid första synken
+    som ett kryptiskt IMAP-fel på en inställningssida kunden redan lämnat.
+    """
+    try:
+        await asyncio.to_thread(_prova_sync, host, user, password)
+        return None
+    except imaplib.IMAP4.error as error:
+        logger.info("IMAP-inloggning nekades för %s@%s: %s", user, host, error)
+        return (
+            "Inloggningen nekades. Kontrollera att adressen stämmer och att du "
+            "använder ett APP-LÖSENORD (inte ditt vanliga lösenord) — Gmail och "
+            "iCloud kräver det, och Outlook kräver att IMAP är påslaget."
+        )
+    except Exception as error:  # noqa: BLE001 — nätfel ska ge besked, inte 500
+        logger.warning("IMAP-inloggning mot %s gick inte att prova: %s", host, error)
+        return f"Gick inte att nå mejlservern {host}. Försök igen om en stund."
+
+
 async def fetch_new(
     host: str, user: str, password: str = "", folder: str = "INBOX", *,
     oauth_client_id: str = "", oauth_client_secret: str = "",

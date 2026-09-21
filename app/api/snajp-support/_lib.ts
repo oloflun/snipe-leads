@@ -103,6 +103,27 @@ export function offlineResponse(cause?: unknown) {
 const ATTEMPT_TIMEOUT_MS = 9_000;
 const MAX_ATTEMPTS = 5;
 
+/**
+ * Vägar som ÄGER sin långsamhet och får en längre, enskild tidsbudget.
+ *
+ * Standardbudgeten (5 × 9 s för GET, 1 × 9 s för POST) är byggd för
+ * kallstarten. En POST som själv gör ett nätverksarbete — IMAP-synken
+ * hämtar mail från kundens mejlserver, kopplingen provar en inloggning —
+ * kan ta längre än 9 s av HELT friska skäl, och dödades då mitt i: kunden
+ * fick "Assistenten har svårt att nå sin motor" fast backenden arbetade
+ * (felrapporten 2026-09-21 för "Synka inkorg"). 45 s ryms under routernas
+ * maxDuration = 60 med marginal för svarshanteringen.
+ */
+const LANGSAMMA_POST_VAGAR = ["/api/inbox/sync", "/api/inbox/mailboxes"];
+
+function budgetFor(path: string, metod: string): number {
+  const ren = path.split("?")[0];
+  if (metod === "POST" && LANGSAMMA_POST_VAGAR.some((v) => ren === v)) {
+    return 45_000;
+  }
+  return ATTEMPT_TIMEOUT_MS;
+}
+
 /** Exponentiell paus med lite jitter, så fem klienter inte väcker backenden i takt. */
 function paus(attempt: number): Promise<void> {
   const bas = Math.min(500 * 2 ** attempt, 2000);
@@ -127,11 +148,12 @@ export async function proxyWithApiKey(
   // lämnade spökprospekt när den första ändå blev klar efter aborten.
   const farGorasOm = metod === "GET" || metod === "HEAD";
   const forsok = farGorasOm ? MAX_ATTEMPTS : 1;
+  const budgetMs = budgetFor(path, metod);
   let lastCause: unknown;
 
   for (let attempt = 0; attempt < forsok; attempt += 1) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), ATTEMPT_TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(), budgetMs);
     try {
       const response = await fetch(`${SNAJP_SUPPORT_URL}${path}`, {
         ...init,
