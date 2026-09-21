@@ -31,8 +31,6 @@ const STATUSTEXT: Record<string, string> = {
 
 export function Kortbetalning({ paketId }: Readonly<{ paketId: string | undefined }>) {
   const [lage, setLage] = useState<Kortbetalningslage | null>(null);
-  const [busy, setBusy] = useState<"checkout" | "portal" | null>(null);
-  const [fel, setFel] = useState<string | null>(null);
   const [retur, setRetur] = useState<string | null>(null);
 
   useEffect(() => {
@@ -53,6 +51,18 @@ export function Kortbetalning({ paketId }: Readonly<{ paketId: string | undefine
   }, [paketId]);
 
   if (!lage?.aktiverad) return null;
+  return <KortbetalningVy lage={lage} paketId={paketId} retur={retur} />;
+}
+
+/** Själva ytan, utan hämtning — skild från laddaren så att den går att
+ *  rendera och granska med givna lägen. */
+export function KortbetalningVy({
+  lage,
+  paketId,
+  retur
+}: Readonly<{ lage: Kortbetalningslage; paketId: string | undefined; retur: string | null }>) {
+  const [busy, setBusy] = useState<"checkout" | "portal" | null>(null);
+  const [fel, setFel] = useState<string | null>(null);
 
   async function till(vag: "checkout" | "portal") {
     setBusy(vag);
@@ -77,11 +87,20 @@ export function Kortbetalning({ paketId }: Readonly<{ paketId: string | undefine
   }
 
   const abonnemang = lage.abonnemang;
+  const status = abonnemang?.status ?? "none";
   const harAbonnemang = Boolean(abonnemang?.stripe_customer_id);
-  const aktivt = abonnemang && (abonnemang.status === "active" || abonnemang.status === "trialing");
-  const periodSlut = abonnemang?.current_period_end
-    ? new Date(abonnemang.current_period_end).toLocaleDateString("sv-SE", { timeZone: "Europe/Stockholm" })
-    : null;
+  const aktivt = status === "active" || status === "trialing";
+  // Ett nytt köp är bara rätt när det INTE finns en levande prenumeration. Vid
+  // ett misslyckat kortdrag lagas kortet i portalen; en ny Checkout där hade
+  // gett kunden två prenumerationer och två dragningar.
+  const kanKopa = status === "none" || status === "canceled" || status === "incomplete_expired";
+  const betalningsproblem = status === "past_due" || status === "unpaid";
+  // Datumet sägs bara om ett abonnemang som faktiskt löper. "Förnyas" om en
+  // betalning som just misslyckats vore ett löfte vi inte kan hålla.
+  const periodSlut =
+    aktivt && abonnemang?.current_period_end
+      ? new Date(abonnemang.current_period_end).toLocaleDateString("sv-SE", { timeZone: "Europe/Stockholm" })
+      : null;
 
   return (
     <div>
@@ -99,15 +118,22 @@ export function Kortbetalning({ paketId }: Readonly<{ paketId: string | undefine
           </p>
         ) : null}
 
-        {abonnemang && abonnemang.status !== "none" ? (
-          <p className="max-w-[62ch] text-[0.9375rem] leading-6 text-ink-muted">
-            <span className="font-semibold text-ink">{STATUSTEXT[abonnemang.status] ?? abonnemang.status}</span>
-            {periodSlut
-              ? abonnemang.cancel_at_period_end
-                ? ` · avslutas ${periodSlut}`
-                : ` · förnyas ${periodSlut}`
-              : null}
-          </p>
+        {abonnemang && status !== "none" ? (
+          <>
+            <p className="max-w-[62ch] text-[0.9375rem] leading-6 text-ink-muted">
+              <span className="font-semibold text-ink">{STATUSTEXT[status] ?? status}</span>
+              {periodSlut
+                ? abonnemang.cancel_at_period_end
+                  ? ` · avslutas ${periodSlut}`
+                  : ` · förnyas ${periodSlut}`
+                : null}
+            </p>
+            {betalningsproblem ? (
+              <p className="mt-2 max-w-[62ch] text-[0.9375rem] leading-6 text-danger">
+                Kortdraget gick inte igenom. Uppdatera kortet i kundportalen så fortsätter abonnemanget.
+              </p>
+            ) : null}
+          </>
         ) : (
           <p className="max-w-[62ch] text-[0.9375rem] leading-6 text-ink-muted">
             Betala ert paket med kort, månadsvis. Kvitton och fakturor finns sedan i Stripes kundportal.
@@ -115,7 +141,7 @@ export function Kortbetalning({ paketId }: Readonly<{ paketId: string | undefine
         )}
 
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          {!aktivt ? (
+          {kanKopa ? (
             <button
               type="button"
               onClick={() => void till("checkout")}
@@ -148,7 +174,7 @@ export function Kortbetalning({ paketId }: Readonly<{ paketId: string | undefine
           ) : null}
         </div>
 
-        {!lage.paketHarPris && !aktivt ? (
+        {!lage.paketHarPris && kanKopa ? (
           <p className="mt-3 max-w-[62ch] text-[0.8125rem] leading-5 text-ink-subtle">
             Ert nuvarande paket kan inte betalas med kort än. Välj ett paket ovan, eller skriv till oss.
           </p>
