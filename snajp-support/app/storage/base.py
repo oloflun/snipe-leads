@@ -919,7 +919,11 @@ class Storage(Protocol):
         search: str | None = None,
         limit: int = 50,
         is_test: bool | None = False,
-    ) -> list[dict[str, Any]]: ...
+        inkludera_larm: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Utan statusfilter utesluts 'att_hantera' (migration 078) — utom
+        när `inkludera_larm` är satt, vilket get_email-uppslag behöver."""
+        ...
 
     async def get_email(self, tenant_id: str, email_id: str) -> dict[str, Any] | None: ...
 

@@ -2337,6 +2337,7 @@ class PostgresStorage:
         search: str | None = None,
         limit: int = 50,
         is_test: bool | None = False,
+        inkludera_larm: bool = False,
     ) -> list[dict[str, Any]]:
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(
@@ -2353,7 +2354,10 @@ class PostgresStorage:
                 where e.tenant_id = $1
                   -- Utan statusfilter visas inte larmen (migration 078):
                   -- de bor i fliken Att hantera, som frågar efter statusen.
-                  and (($2::text is null and e.status <> 'att_hantera') or e.status = $2)
+                  -- get_email slår upp via den här listan och måste se ALLA
+                  -- rader, därav inkludera_larm ($7).
+                  and (($2::text is null and ($7::boolean or e.status <> 'att_hantera'))
+                       or e.status = $2)
                   and ($3::text is null or exists(
                         select 1 from ss_classifications c
                         where c.email_id = e.id and c.category = $3))
@@ -2370,6 +2374,7 @@ class PostgresStorage:
                 search,
                 limit,
                 is_test,
+                inkludera_larm,
             )
         results = []
         for record in records:
@@ -2381,7 +2386,7 @@ class PostgresStorage:
         return results
 
     async def get_email(self, tenant_id: str, email_id: str) -> dict[str, Any] | None:
-        rows = await self.list_emails(tenant_id, limit=1000, is_test=None)
+        rows = await self.list_emails(tenant_id, limit=1000, is_test=None, inkludera_larm=True)
         email = next((e for e in rows if e["id"] == email_id), None)
         if not email:
             return None

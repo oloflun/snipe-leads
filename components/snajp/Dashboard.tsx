@@ -585,7 +585,8 @@ export function Dashboard({
             className="focus-ring min-h-11 w-full rounded-input bg-paper py-2.5 pl-9 pr-3 text-sm outline-none placeholder:text-ink/35"
           />
         </div>
-        <select
+        {lager === "att_hantera" ? null : (
+          <select
           value={statusFilter ?? ""}
           onChange={(event) => setStatusFilter(event.target.value || null)}
           className="focus-ring min-h-11 rounded-input bg-paper px-3 py-2.5 text-sm"
@@ -596,10 +597,11 @@ export function Dashboard({
               {meta.label}
             </option>
           ))}
-        </select>
+          </select>
+        )}
         {/* Reglerna bor numera under Inställningar, bredvid leads-agentens
             motsvarande kontroll. Se components/settings/SupportRegler.tsx. */}
-        {demo ? null : (
+        {demo || lager === "att_hantera" ? null : (
           <Link href={vag("/settings/regler")} className={btnSecondary}>
             <Settings2 className="h-4 w-4" />
             Regler

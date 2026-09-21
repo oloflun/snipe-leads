@@ -1770,6 +1770,7 @@ class MemoryStorage:
         search: str | None = None,
         limit: int = 50,
         is_test: bool | None = False,
+        inkludera_larm: bool = False,
     ) -> list[dict[str, Any]]:
         rows = [e for e in self.emails.values() if e["tenant_id"] == tenant_id]
         rows.sort(key=lambda e: e["received_at"], reverse=True)
@@ -1782,7 +1783,7 @@ class MemoryStorage:
             if status and summary["status"] != status:
                 continue
             # Samma som postgres: utan statusfilter syns inte larmen (078).
-            if not status and summary["status"] == "att_hantera":
+            if not status and not inkludera_larm and summary["status"] == "att_hantera":
                 continue
             if category and (
                 not summary["classification"]
