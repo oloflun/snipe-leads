@@ -540,6 +540,37 @@ type UtkastLage =
 const KONTAKTJAKT_FORSOK = 24;
 const KONTAKTJAKT_PAUS_MS = 5_000;
 
+async function pollaLeadsJobb(jobId: string): Promise<{
+  status?: string;
+  error?: string;
+  result?: {
+    body?: string;
+    subject?: string;
+    escalated?: boolean;
+    escalation_reason?: string | null;
+    queue_item_id?: string | null;
+  };
+}> {
+  for (let forsok = 0; forsok < 90; forsok += 1) {
+    await new Promise((r) => setTimeout(r, forsok < 5 ? 800 : 2000));
+    const jobb = await snajpAnrop<{
+      status?: string;
+      error?: string;
+      result?: {
+        body?: string;
+        subject?: string;
+        escalated?: boolean;
+        escalation_reason?: string | null;
+        queue_item_id?: string | null;
+      };
+    }>("/leads/jobb/" + encodeURIComponent(jobId), { method: "GET" });
+    if (jobb.status === "completed" || jobb.status === "failed") {
+      return jobb;
+    }
+  }
+  return { status: "timeout", error: "Utkastet tog för lång tid." };
+}
+
 async function jagaKontakt(prospektId: string): Promise<Prospekt | null> {
   await snajpAnrop("/leads/prospects/processa-om", {
     method: "POST",
@@ -712,7 +743,7 @@ function LeadDetail({
     setUtkastLage({ fas: "skapar" });
     try {
       const offerSummary = await lasOffertForUtkast();
-      const svar = await snajpAnrop<{
+      const koat = await snajpAnrop<{
         job_id?: string;
         fase?: string;
         escalated?: boolean;
@@ -734,6 +765,22 @@ function LeadDetail({
           research_summary: byggForskningssammanfattning(p)
         })
       });
+
+      // /leads/outreach/draft svarar 202 med ett job_id — LLM-körningen får
+      // inte ligga i POST-svaret (proxyns tidsbudget). Utkastet hämtas ur
+      // jobbet, precis som tvillingen Bolagssida.tsx gör. Utan pollningen
+      // lästes 202-svaret som ett färdigt utkast utan body, och VARJE
+      // "Skapa utkast" härifrån slutade i "Utkastet blev inte klart."
+      // (uppmätt i development 2026-09-21).
+      let svar = koat;
+      if (koat.job_id && (koat.fase === "skriver" || !koat.body)) {
+        const klart = await pollaLeadsJobb(koat.job_id);
+        if (klart.status !== "completed" || !klart.result) {
+          throw new Error(klart.error || "Utkastet kunde inte skrivas.");
+        }
+        svar = klart.result;
+      }
+
       if (svar.escalated || !svar.body) {
         setUtkastLage({
           fas: "fel",
