@@ -2,6 +2,7 @@
 
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { Betalsatt } from "@/components/settings/Betalsatt";
+import { Kortbetalning } from "@/components/settings/Kortbetalning";
 import { Planvaljare } from "@/components/settings/Planvaljare";
 import { KONTAKT_MEJL, mejlaOss } from "@/components/marketing/copy";
 import { PAKET, PRIS_PREFIX, PRIS_SAKNAS, formateraPris } from "@/lib/pricing";
@@ -123,6 +124,10 @@ export function PlanSettings() {
           )}
         </ul>
       </div>
+
+      {/* Stripe-växeln (lib/billing/stripe.ts). Renderar ingenting förrän
+          STRIPE_SECRET_KEY är satt i miljön — då står Betalsatt ensamt. */}
+      <Kortbetalning paketId={paketId} />
 
       <div className="border-t border-ink/15 pt-7">
         <Betalsatt />
