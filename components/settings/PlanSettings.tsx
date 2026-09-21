@@ -1,8 +1,9 @@
 "use client";
 
+import { Mail } from "lucide-react";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
-import { Betalsatt } from "@/components/settings/Betalsatt";
-import { Planvaljare } from "@/components/settings/Planvaljare";
+import { btnLiten, btnSecondary } from "@/components/ui";
+import { cn } from "@/lib/utils";
 import { KONTAKT_MEJL, mejlaOss } from "@/components/marketing/copy";
 import { PAKET, PRIS_PREFIX, PRIS_SAKNAS, formateraPris } from "@/lib/pricing";
 import { useLocale } from "@/lib/i18n";
@@ -62,15 +63,10 @@ export function PlanSettings() {
     <div className="grid gap-8">
       <div>
         <h2 className="kicker text-mineral">Er plan</h2>
-        {/* Två kolumner: vad ni HAR till vänster, vad ni kan byta till höger.
-            Väljaren låg först under texten, och då hamnade den under "Det här
-            ingår" — alltså efter en lista som beskriver det paket man just
-            funderar på att lämna. Sida vid sida läses de mot varandra, vilket
-            är precis vad ett paketbyte är.
-
+        {/* Två kolumner: vad ni HAR till vänster, hur ni byter till höger.
             Staplat under md: två kolumner à sex på en telefon ger ett prisfält
-            på halva bredden, och det är samma fälla som gap-x-8 vid 320px
-            (se WorkspaceViews). */}
+            på halva bredden, samma fälla som gap-x-8 vid 320px (se
+            WorkspaceViews). */}
         <div className="mt-4 grid grid-cols-12 gap-x-0 gap-y-8 border-y border-ink/15 py-5 md:gap-x-10">
           <div className="col-span-12 md:col-span-6">
             {paket ? (
@@ -91,13 +87,27 @@ export function PlanSettings() {
               <p className="max-w-[58ch] text-[0.9375rem] leading-6 text-ink-muted">
                 {products.length === 0
                   ? "Ingen aktiv produkt."
-                  : "Manuellt satt plan. Ett paketval ersätter den."}
+                  : "Manuellt satt plan. Kontakta oss om ni vill byta."}
               </p>
             )}
           </div>
 
+          {/* Paketbyte via kontakt (beslut 2026-09-21), inte en väljare: vi
+              fakturerar personligen, så ett byte är något vi ordnar med
+              kunden. Knappen öppnar kundens mejlprogram med vår adress i
+              Till-fältet. */}
           <div className="col-span-12 md:col-span-6">
-            <Planvaljare aktivtPaket={paketId} />
+            <h3 className="kicker text-mineral">Byt paket</h3>
+            <p className="mt-3 max-w-[46ch] text-[0.9375rem] leading-6 text-ink-muted">
+              Vill du uppgradera eller byta paket, kontakta oss nedan.
+            </p>
+            <a
+              href={mejlaOss(`Byte av paket${workspaceName ? `: ${workspaceName}` : ""}`)}
+              className={cn(btnSecondary, btnLiten, "mt-4 border border-ink/15 hover:border-ink/30")}
+            >
+              <Mail className="h-3.5 w-3.5" aria-hidden />
+              Kontakta oss
+            </a>
           </div>
         </div>
       </div>
@@ -124,25 +134,29 @@ export function PlanSettings() {
         </ul>
       </div>
 
-      <div className="border-t border-ink/15 pt-7">
-        <Betalsatt />
-      </div>
-
+      {/* Fakturering. Kunderna faktureras av oss personligen (beslut
+          2026-09-21): ingen kortbetalning och ingen betalväxel i appen, så här
+          finns inget kortformulär. Allt som rör betalning går via kontakt.
+          Ingen förbrukningssiffra heller, se docstringen. */}
       <div>
-        {/* Ingen förbrukningssiffra. Se docstringen: vi mäter den inte per
-            arbetsyta ännu, och kunden är den enda som kan falsifiera en
-            påhittad — på fakturan. */}
-        <p className="max-w-[62ch] text-[0.9375rem] leading-6 text-ink-muted">
-          Fakturan går till{" "}
-          {workspaceName ? <strong className="font-semibold">{workspaceName}</strong> : "er arbetsyta"}.
-          Faktureringen justeras vid nästa period. Frågor:{" "}
-          <a
-            href={mejlaOss("Plan och fakturering")}
-            className="focus-ring rounded-input underline underline-offset-4 hover:text-ochre"
-          >
-            {KONTAKT_MEJL}
-          </a>
-        </p>
+        <h2 className="kicker text-mineral">Fakturering</h2>
+        <div className="mt-4 border-y border-ink/15 py-5">
+          <p className="max-w-[62ch] text-[0.9375rem] leading-6 text-ink-muted">
+            Vi skickar e-faktura till{" "}
+            {workspaceName ? <strong className="font-semibold text-ink">{workspaceName}</strong> : "er arbetsyta"}
+            . Ingen kortbetalning görs här i appen.
+          </p>
+          <p className="mt-3 max-w-[62ch] text-[0.9375rem] leading-6 text-ink-muted">
+            Vill ni ändra fakturauppgifter eller säga upp, hör av er till oss så ordnar vi det.
+          </p>
+          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-3">
+            <a href={mejlaOss("Fakturering")} className={cn(btnSecondary, btnLiten, "border border-ink/15 hover:border-ink/30")}>
+              <Mail className="h-3.5 w-3.5" aria-hidden />
+              Kontakta oss
+            </a>
+            <span className="text-[0.875rem] text-ink-subtle">{KONTAKT_MEJL}</span>
+          </div>
+        </div>
       </div>
     </div>
   );

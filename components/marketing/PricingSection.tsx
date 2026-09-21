@@ -24,9 +24,10 @@ import { cn } from "@/lib/utils";
  * ALL data kommer från `lib/pricing.ts`. Den här filen innehåller ingen enda
  * prissiffra, och ska inte göra det — se resonemanget i pricing.ts.
  *
- * Ingen köpknapp. Vi har ingen betallösning kopplad (Stripe-koden ligger kvar i
- * den icke-mergade kvotgrenen), och en knapp som ser ut att gå att trycka på
- * men leder till ett mejlformulär är sämre än en tydlig kontaktuppmaning.
+ * Ingen köpknapp. Kunderna faktureras av oss personligen och tar kontakt för
+ * att komma igång (beslut 2026-09-21, då en Stripe-port också återkallades),
+ * och en knapp som ser ut att gå att trycka på men leder till ett mejlformulär
+ * är sämre än en tydlig kontaktuppmaning.
  */
 
 /**

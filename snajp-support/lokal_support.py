@@ -114,6 +114,35 @@ step_runner.get_llm_client = lambda: _Fejkmodell()
 support_agent.classify_cancellation_risk = _ingen_uppsagningsrisk
 
 
+# --- Mejlpipelinen (Inkorgen i portalen) ------------------------------------
+#
+# Fejken ovan täcker bara chatten (step_runner). Mejltriagen och
+# omformuleringen läser get_settings()/get_llm_client själva, och eftersom
+# fejknyckeln ser äkta ut trodde de sig vara live: varje seedat mejl gick mot
+# en riktig endpoint och fick status failed på ett 401 (uppmätt 2026-09-21).
+# Här tvingas BARA mejlvägarna till simuleringsläget — den deterministiska
+# nyckelordstriagen och de deterministiska omformuleringstransformerna —
+# medan chatten behåller sin fejkmodell.
+
+from app.config import get_settings as _riktiga_settings  # noqa: E402
+from app.email_pipeline import omformulering as _omformulering  # noqa: E402
+from app.email_pipeline import processor as _processor  # noqa: E402
+
+
+class _SimSettings:
+    """Riktiga settings, men is_simulation() svarar alltid ja."""
+
+    def __getattr__(self, namn):
+        return getattr(_riktiga_settings(), namn)
+
+    def is_simulation(self) -> bool:
+        return True
+
+
+_processor.get_settings = lambda: _SimSettings()
+_omformulering.get_settings = lambda: _SimSettings()
+
+
 # --- Webbplatsskanningen (Kunskapsbas -> Skanna webbplats) ------------------
 #
 # Lokalt skannas ALDRIG nätet: vilken adress som helst läses som testfixturen

@@ -492,6 +492,17 @@ class RejectDraftRequest(BaseModel):
     note: str | None = None
 
 
+class OmformuleraDraftRequest(BaseModel):
+    """Skriv om utkastet i en riktning — Förbättra, Kortare, Mer personlig.
+
+    `content` är texten SOM GRANSKAREN SER (inklusive egna redigeringar);
+    utelämnad används det sparade utkastet. Ingenting persisteras — svaret
+    landar i granskarens textruta och skickas först vid Godkänn."""
+
+    lage: Literal["forbattra", "kortare", "personligare"]
+    content: str | None = Field(default=None, max_length=16000)
+
+
 class CategoryRuleRequest(BaseModel):
     category: str
     mode: str = Field(..., pattern="^(auto|draft|escalate)$")
