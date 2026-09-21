@@ -1,9 +1,9 @@
 "use client";
 
+import { Mail } from "lucide-react";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
-import { Betalsatt } from "@/components/settings/Betalsatt";
-import { Kortbetalning } from "@/components/settings/Kortbetalning";
 import { Planvaljare } from "@/components/settings/Planvaljare";
+import { btnPrimary } from "@/components/ui";
 import { KONTAKT_MEJL, mejlaOss } from "@/components/marketing/copy";
 import { PAKET, PRIS_PREFIX, PRIS_SAKNAS, formateraPris } from "@/lib/pricing";
 import { useLocale } from "@/lib/i18n";
@@ -125,29 +125,34 @@ export function PlanSettings() {
         </ul>
       </div>
 
-      {/* Stripe-växeln (lib/billing/stripe.ts). Renderar ingenting förrän
-          STRIPE_SECRET_KEY är satt i miljön — då står Betalsatt ensamt. */}
-      <Kortbetalning paketId={paketId} />
-
-      <div className="border-t border-ink/15 pt-7">
-        <Betalsatt />
-      </div>
-
+      {/* Fakturering. Kunderna faktureras av oss personligen (beslut
+          2026-09-21): ingen kortbetalning och ingen betalväxel i appen, så här
+          finns inget kortformulär. Allt som rör betalning går via kontakt.
+          Ingen förbrukningssiffra heller, se docstringen. */}
       <div>
-        {/* Ingen förbrukningssiffra. Se docstringen: vi mäter den inte per
-            arbetsyta ännu, och kunden är den enda som kan falsifiera en
-            påhittad — på fakturan. */}
-        <p className="max-w-[62ch] text-[0.9375rem] leading-6 text-ink-muted">
-          Fakturan går till{" "}
-          {workspaceName ? <strong className="font-semibold">{workspaceName}</strong> : "er arbetsyta"}.
-          Faktureringen justeras vid nästa period. Frågor:{" "}
-          <a
-            href={mejlaOss("Plan och fakturering")}
-            className="focus-ring rounded-input underline underline-offset-4 hover:text-ochre"
-          >
-            {KONTAKT_MEJL}
-          </a>
-        </p>
+        <h2 className="kicker text-mineral">Fakturering</h2>
+        <div className="mt-4 border-y border-ink/15 py-5">
+          <p className="max-w-[62ch] text-[0.9375rem] leading-6 text-ink-muted">
+            Vi fakturerar er direkt. Fakturan går till{" "}
+            {workspaceName ? <strong className="font-semibold text-ink">{workspaceName}</strong> : "er arbetsyta"}
+            , och ingen kortbetalning görs här i appen.
+          </p>
+          <p className="mt-3 max-w-[62ch] text-[0.9375rem] leading-6 text-ink-muted">
+            Vill ni ändra fakturauppgifter, byta betalningssätt eller säga upp? Hör av er till oss, så ordnar vi det.
+          </p>
+          <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-3">
+            <a href={mejlaOss("Fakturering")} className={btnPrimary}>
+              <Mail className="h-4 w-4" aria-hidden />
+              Kontakta oss om fakturering
+            </a>
+            <a
+              href={mejlaOss("Fakturering")}
+              className="focus-ring rounded-input text-[0.9375rem] underline underline-offset-4 hover:text-ochre"
+            >
+              {KONTAKT_MEJL}
+            </a>
+          </div>
+        </div>
       </div>
     </div>
   );

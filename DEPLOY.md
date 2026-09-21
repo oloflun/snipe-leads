@@ -308,40 +308,6 @@ arbete.
 raden som gör att marknadssidans knappar fungerar utan att en oinloggad kan
 bränna nyckeln (INV-SEC-010). Den kontrollen får inte tas bort.
 
-## Kortbetalning via Stripe — vilande tills nycklarna sätts ▸ Sebbe/Anton
-
-Porterad 2026-09-21 från grenen `feature/snajp-multitenant-saas` till dagens
-paketmodell (`lib/billing/stripe.ts`, `app/api/billing/{checkout,portal,webhook}`,
-migration 075). **Inga Stripe-nycklar finns i någon miljö än**, så växeln är
-avstängd: faktureringssidan visar ingen Stripe-yta och routerna svarar 503.
-Testkortsformuläret (`Betalsatt`) står kvar orört.
-
-Att tända den kräver ett Stripe-konto, och kontot och eventuella avtalsvillkor
-är ett människobeslut, inte ett kodbeslut. Därefter, i testläge först:
-
-1. Skapa ett återkommande månadspris per paket i Stripe (samma belopp som
-   `lib/pricing.ts`).
-2. Skapa en webhook mot `https://<web>/api/billing/webhook` med händelserna
-   `checkout.session.completed`, `customer.subscription.created|updated|deleted`
-   och `invoice.payment_failed`.
-3. Slå på kundportalen i Stripe (Settings → Billing → Customer portal).
-4. Sätt variablerna nedan på `web` i Railway.
-
-| Variabel | Tjänst | Betydelse |
-|---|---|---|
-| `STRIPE_SECRET_KEY` | `web` | `sk_test_…` först. Tom = växeln avstängd |
-| `STRIPE_WEBHOOK_SECRET` | `web` | `whsec_…` från webhooken i steg 2 |
-| `STRIPE_PRICE_SUPPORT` / `_LEADS` / `_DUO` / `_TRIO` / `_BOOKKEEPING` | `web` | `price_…` per paket |
-
-**Vad webhooken får göra:** ett aktivt köp sätter `workspaces.products` till
-paketets produkter. En uppsägning eller ett misslyckat kortdrag stänger
-**inte** av något. Det speglas bara som status, eftersom avstängning är ett
-manuellt handgrepp i admin (beslutet från trial-konverteringen).
-
-**Inte porterat från grenen:** kvotnivåerna Prova/Bas/Plus/Pro och kvottaket
-per svar. De ersattes av paket per agent och av supportbudgeten
-(`app/budget.py`), och en port hade skrivit över de nyare besluten.
-
 ## Prioriterat mejl vid eskalering — kräver ett app-lösenord ▸ Anton
 
 När support, bokföring eller leads lämnar över ett ärende till en människa går
