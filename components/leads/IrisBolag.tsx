@@ -523,9 +523,35 @@ function ListorUpsell() {
 type UtkastLage =
   | { fas: "kontrollerar" }
   | { fas: "ingen" }
+  | { fas: "letar-kontakt" }
   | { fas: "skapar" }
   | { fas: "fel"; meddelande: string }
   | { fas: "klar"; data: EmailStudioData; queueItemId: string | null };
+
+/**
+ * Prospekt utan kontaktmail: "Skapa utkast" slutade förut i ett dött
+ * "Mottagaradress saknas." — ett fel kunden inte kan åtgärda själv, för ett
+ * bolag Iris själv presenterat (uppmätt 2026-09-21 på ett listbolag utan
+ * research). Nu startar knappen i stället kontaktjakten: processa-om kör
+ * researchen, som skrapar bolagets egna kontakt-/om-oss-sidor och skriver
+ * kontaktfälten (_uppgradera_kontakt i backenden). Vi pollar prospektet tills
+ * adressen finns och fortsätter sedan själva in i utkastet.
+ */
+const KONTAKTJAKT_FORSOK = 24;
+const KONTAKTJAKT_PAUS_MS = 5_000;
+
+async function jagaKontakt(prospektId: string): Promise<Prospekt | null> {
+  await snajpAnrop("/leads/prospects/processa-om", {
+    method: "POST",
+    body: JSON.stringify({ prospect_ids: [prospektId], scope: "research" })
+  });
+  for (let forsok = 0; forsok < KONTAKTJAKT_FORSOK; forsok += 1) {
+    await new Promise((r) => setTimeout(r, KONTAKTJAKT_PAUS_MS));
+    const kropp = await snajpAnrop<{ prospect?: Prospekt }>(`/leads/prospects/${prospektId}`);
+    if (kropp.prospect?.contact_email) return kropp.prospect;
+  }
+  return null;
+}
 
 async function snajpAnrop<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api/snajp-support${path}`, {
@@ -682,16 +708,7 @@ function LeadDetail({
     };
   }, [id, demo, exempel, forsok]);
 
-  const skapaUtkast = useCallback(async () => {
-    if (lage.fas !== "klar" || demo || exempel) return;
-    const p = lage.prospekt;
-    if (!p.contact_email) {
-      setUtkastLage({
-        fas: "fel",
-        meddelande: "Mottagaradress saknas."
-      });
-      return;
-    }
+  const skapaUtkastFor = useCallback(async (p: Prospekt) => {
     setUtkastLage({ fas: "skapar" });
     try {
       const offerSummary = await lasOffertForUtkast();
@@ -752,7 +769,34 @@ function LeadDetail({
     } catch (error) {
       setUtkastLage({ fas: "fel", meddelande: felmeddelande(error) });
     }
-  }, [lage, demo, exempel]);
+  }, []);
+
+  const skapaUtkast = useCallback(async () => {
+    if (lage.fas !== "klar" || demo || exempel) return;
+    let p = lage.prospekt;
+    if (!p.contact_email) {
+      // Ingen återvändsgränd: starta kontaktjakten och fortsätt själv när
+      // adressen finns. Se jagaKontakt ovan.
+      setUtkastLage({ fas: "letar-kontakt" });
+      try {
+        const uppdaterad = await jagaKontakt(p.id);
+        if (!uppdaterad) {
+          setUtkastLage({
+            fas: "fel",
+            meddelande:
+              "Iris hittade ingen kontaktadress på bolagets sajt. Försök igen om en stund, eller komplettera bolaget med en adress."
+          });
+          return;
+        }
+        p = uppdaterad;
+        setLage({ fas: "klar", prospekt: uppdaterad, kallor: lage.kallor });
+      } catch (error) {
+        setUtkastLage({ fas: "fel", meddelande: felmeddelande(error) });
+        return;
+      }
+    }
+    await skapaUtkastFor(p);
+  }, [lage, demo, exempel, skapaUtkastFor]);
 
   if (lage.fas === "laddar") {
     return <SkeletonRows />;
@@ -863,6 +907,13 @@ function LeadDetail({
               </button>
             </div>
           )
+        ) : null}
+
+        {utkastLage.fas === "letar-kontakt" ? (
+          <p className="mt-3 text-[14px] leading-6 text-ink-subtle">
+            Iris letar kontaktadress på bolagets sajt … Det tar ungefär en minut, och
+            utkastet skrivs direkt efteråt.
+          </p>
         ) : null}
 
         {utkastLage.fas === "skapar" ? <p className="mt-3 text-[14px] text-ink-subtle">Skriver utkastet…</p> : null}

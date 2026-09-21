@@ -58,9 +58,9 @@ async def test_saknat_losenord_stamplar_felet(monkeypatch):
 
     resultat = await poller.sync_mailbox(storage, TENANT, "nordlys-handel", rad)
 
-    assert "saknas" in (resultat["error"] or "")
+    assert "app-lösenord" in (resultat["error"] or "")
     assert rad["last_sync_at"] is not None
-    assert "saknas" in (rad["last_error"] or "")
+    assert "app-lösenord" in (rad["last_error"] or "")
 
 
 async def test_imapfel_stamplar_felet(monkeypatch):

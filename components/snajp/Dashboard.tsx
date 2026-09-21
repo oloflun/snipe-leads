@@ -7,10 +7,13 @@ import {
   Loader2,
   Mail,
   RefreshCw,
+  Scissors,
   Search,
   Send,
   Settings2,
   ShieldAlert,
+  Smile,
+  Sparkles,
   UserRound,
   X
 } from "lucide-react";
@@ -390,10 +393,13 @@ export function Dashboard({
   const syncInbox = () =>
     act("sync", async () => {
       setSyncInfo(null);
-      const result = await api<{ fetched: number; processed: number; connected?: boolean; error?: string }>(
-        "/inbox/sync",
-        { method: "POST" }
-      );
+      const result = await api<{
+        fetched: number;
+        processed: number;
+        connected?: boolean;
+        processing?: boolean;
+        error?: string;
+      }>("/inbox/sync", { method: "POST" });
       // `connected: false` är inte ett fel — det är ett svar. Att kasta här
       // gav en röd felruta för ett läge som bara betyder "vi har inte kopplat
       // er inkorg ännu", och den rutan såg ut som en krasch.
@@ -405,9 +411,15 @@ export function Dashboard({
       if (result.error) {
         throw new Error(result.error);
       }
+      // Backenden svarar när mailen är HÄMTADE; klassificering och utkast
+      // körs i bakgrunden (samma mönster som testmailen). Listan läses om
+      // medan agenten arbetar, annars ser nya rader ut att sakna fack.
       setSyncInfo(
-        `Synk klar: ${result.fetched} nya mail hämtade, ${result.processed} processade.`
+        result.fetched === 0
+          ? "Synk klar: inga nya olästa mail i inkorgen."
+          : `${result.fetched} nya mail hämtade. Agenten sorterar och skriver utkast nu.`
       );
+      if (result.processing) void pollaTills();
     });
 
   const approve = () =>
@@ -420,6 +432,30 @@ export function Dashboard({
         )
       })
     );
+
+  /**
+   * Skriver om texten i rutan i vald riktning (Förbättra/Kortare/Mer
+   * personlig). Egen väg i stället för act(): act() läser om listan och
+   * ärendet, och en omhämtning här hade skrivit över precis den text kunden
+   * just fick omformulerad. Inget skickas och det sparade utkastet rörs inte
+   * — det som godkänns är som alltid innehållet i rutan.
+   */
+  const omformulera = async (lage: string) => {
+    if (!selected?.draft) return;
+    setBusy(`omformulera-${lage}`);
+    setError(null);
+    try {
+      const svar = await api<{ content?: string }>(
+        `/drafts/${selected.draft.id}/omformulera`,
+        { method: "POST", body: JSON.stringify({ lage, content: draftText }) }
+      );
+      if (svar?.content) setDraftText(svar.content);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Kunde inte skriva om utkastet.");
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const reject = () =>
     selected?.draft &&
@@ -649,14 +685,15 @@ export function Dashboard({
               </p>
               {inkorgKopplad ? null : (
                 <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-ink-subtle">
-                  Vill ni koppla er riktiga inkorg?{" "}
-                  <a
-                    href={mejlaOss("Koppla vår inkorg")}
+                  Vill ni koppla er riktiga inkorg? Koppla Gmail, Outlook eller iCloud
+                  under{" "}
+                  <Link
+                    href="/settings/mailboxes"
                     className="focus-ring rounded-input underline underline-offset-4 hover:text-ochre"
                   >
-                    Hör av er
-                  </a>{" "}
-                  så kopplar vi Gmail eller Outlook åt er.
+                    Inställningar → Inkorgar
+                  </Link>
+                  , så hämtas era olästa kundmail hit.
                 </p>
               )}
             </div>
@@ -911,6 +948,33 @@ export function Dashboard({
                         <UserRound className="h-4 w-4" />
                         Ta över ärendet
                       </button>
+                      {/* Omformuleringarna, avskilda med en tunn linje: de
+                          ändrar bara texten i rutan, aldrig ärendets
+                          tillstånd. Samma trio som support-portalens inkorg. */}
+                      <span aria-hidden className="mx-0.5 hidden self-center h-5 w-px bg-ink/15 sm:block" />
+                      {(
+                        [
+                          ["forbattra", "Förbättra", Sparkles],
+                          ["kortare", "Kortare", Scissors],
+                          ["personligare", "Mer personlig", Smile]
+                        ] as const
+                      ).map(([lage, etikett, Ikon]) => (
+                        <button
+                          key={lage}
+                          type="button"
+                          onClick={() => void omformulera(lage)}
+                          disabled={busy !== null}
+                          title={`Skriv om utkastet: ${etikett.toLowerCase()}. Inget skickas förrän du godkänner.`}
+                          className="focus-ring inline-flex min-h-10 items-center gap-1.5 rounded-input border border-ink/15 px-3 py-2 text-[0.8125rem] font-semibold text-ink-muted transition hover:text-ink disabled:opacity-40"
+                        >
+                          {busy === `omformulera-${lage}` ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Ikon className="h-3.5 w-3.5" />
+                          )}
+                          {etikett}
+                        </button>
+                      ))}
                     </div>
                   ) : null}
                 </div>

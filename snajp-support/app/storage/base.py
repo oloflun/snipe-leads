@@ -99,6 +99,27 @@ class Storage(Protocol):
 
     async def list_mailboxes(self, tenant_id: str) -> list[dict[str, Any]]: ...
 
+    async def upsert_mailbox(
+        self,
+        tenant_id: str,
+        *,
+        provider: str,
+        address: str,
+        imap_host: str | None = None,
+        secret_enc: str | None = None,
+    ) -> dict[str, Any]:
+        """Kopplar (eller kopplar OM) en inkorg — självbetjäningsvägen.
+
+        Upsert på (tenant_id, address): en kund som skriver in ett nytt
+        app-lösenord för samma adress ska uppdatera raden, inte samla
+        dubbletter. `secret_enc` är Fernet-krypterat i API-lagret INNAN det
+        når hit (migration 077) — den här metoden får aldrig se klartext."""
+        ...
+
+    async def delete_mailbox(self, tenant_id: str, mailbox_id: str) -> bool:
+        """Kopplar ur en inkorg. True när en rad faktiskt togs bort."""
+        ...
+
     async def touch_mailbox_sync(
         self, tenant_id: str, mailbox_id: str, *, last_error: str | None
     ) -> None:

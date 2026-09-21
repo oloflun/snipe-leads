@@ -312,6 +312,48 @@ class MemoryStorage:
     async def list_mailboxes(self, tenant_id: str) -> list[dict[str, Any]]:
         return [m for m in self.mailboxes.values() if m["tenant_id"] == tenant_id]
 
+    async def upsert_mailbox(
+        self,
+        tenant_id: str,
+        *,
+        provider: str,
+        address: str,
+        imap_host: str | None = None,
+        secret_enc: str | None = None,
+    ) -> dict[str, Any]:
+        adress = address.strip().lower()
+        for rad in self.mailboxes.values():
+            if rad["tenant_id"] == tenant_id and rad["address"] == adress:
+                rad.update(
+                    provider=provider,
+                    imap_host=imap_host,
+                    secret_enc=secret_enc,
+                    status="active",
+                    last_error=None,
+                )
+                return rad
+        rad = {
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "provider": provider,
+            "address": adress,
+            "status": "active",
+            "imap_host": imap_host,
+            "secret_enc": secret_enc,
+            "last_sync_at": None,
+            "last_error": None,
+            "created_at": _now(),
+        }
+        self.mailboxes[rad["id"]] = rad
+        return rad
+
+    async def delete_mailbox(self, tenant_id: str, mailbox_id: str) -> bool:
+        rad = self.mailboxes.get(mailbox_id)
+        if rad and rad["tenant_id"] == tenant_id:
+            del self.mailboxes[mailbox_id]
+            return True
+        return False
+
     async def touch_mailbox_sync(
         self, tenant_id: str, mailbox_id: str, *, last_error: str | None
     ) -> None:
