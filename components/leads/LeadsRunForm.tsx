@@ -147,11 +147,19 @@ export function LeadsRunForm({
   isTest = true,
   demo = false,
   rubrik = null,
-  demoAction = null
+  demoAction = null,
+  filtrerbar = false
 }: Readonly<{
   isTest?: boolean;
   demo?: boolean;
   rubrik?: React.ReactNode;
+  /**
+   * Göm fälten bakom en "Filtrera"-knapp bredvid rubriken (Iris › Bolag).
+   * Utan filter körs arbetsytans sparade målgrupp — Iris hittar själv de
+   * bolag som passar kundens produkt bäst. Adminens testkörningar och
+   * förhandsvisningen behåller det alltid utfällda formuläret.
+   */
+  filtrerbar?: boolean;
   /**
    * Ersätter `DemoKorning` i demoläget. Iris › Bolag (IrisBolag.tsx) skickar
    * en egen "Kör exempelkörningen"-knapp här: den infogar de sex fixturbolagen
@@ -161,6 +169,7 @@ export function LeadsRunForm({
    */
   demoAction?: React.ReactNode;
 }>) {
+  const [filterOppna, setFilterOppna] = useState(!filtrerbar);
   const [limit, setLimit] = useState("3");
   const [scope, setScope] = useState<"research" | "research_and_draft">("research");
   const [branscher, setBranscher] = useState("");
@@ -319,11 +328,50 @@ export function LeadsRunForm({
     }
   }
 
+  // Ifyllda filter överlever en hopfälld panel (värdena bor i state, se
+  // nedan) — då måste knappen säga att de fortfarande gäller, annars tror
+  // kunden att nästa körning är ofiltrerad. Antal/omfattning räknas inte:
+  // de filtrerar inget, de dimensionerar körningen.
+  const aktivaFilter =
+    [
+      lista(branscher),
+      lista(undvik),
+      lista(geografi),
+      lista(roller),
+      lista(kravs),
+      lista(diskvalificerar),
+      tal(minAnst),
+      tal(maxAnst)
+    ].filter((v) => v !== undefined).length + (rader(egnaBolag).length ? 1 : 0);
+
   return (
     <div>
-      {rubrik}
+      {filtrerbar ? (
+        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+          {rubrik}
+          <button
+            type="button"
+            aria-expanded={filterOppna}
+            aria-controls="leads-filter"
+            onClick={() => setFilterOppna((v) => !v)}
+            className={cn(btnSecondary, "shrink-0 tabular-nums")}
+          >
+            {filterOppna
+              ? "Dölj filter"
+              : aktivaFilter
+                ? `Filtrera · ${aktivaFilter}`
+                : "Filtrera"}
+          </button>
+        </div>
+      ) : (
+        rubrik
+      )}
 
-      <div className="mt-6 grid max-w-[760px] gap-5 sm:grid-cols-2">
+      {/* Villkorlig rendering, inte `hidden`-attributet: Tailwinds `grid`
+          sätter display efter UA-regeln [hidden]{display:none} och vinner.
+          Fältvärdena bor i komponentens state, så inget tappas vid stängning. */}
+      {filterOppna ? (
+      <div id="leads-filter" className="mt-6 grid max-w-[760px] gap-5 sm:grid-cols-2">
         <Rad etikett="Antal bolag" hint="1–50">
           <input
             type="number"
@@ -380,6 +428,7 @@ export function LeadsRunForm({
           />
         </Rad>
       </div>
+      ) : null}
 
       {/* På demoytan finns ingen session, och /api/snajp-support/* svarar 401
           med flit (requireSnajpTenant härleder kunden ur sessionen). Tidigare
