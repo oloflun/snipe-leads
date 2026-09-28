@@ -290,11 +290,13 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
           <LeadsRunForm
             isTest={demo || isDemo || vy === "demo"}
             demo={demo}
+            filtrerbar
             rubrik={
               <div>
                 <h2 className="text-[1.125rem] font-semibold tracking-[-0.01em]">Hitta bolag</h2>
-                <p className="mt-1 text-[13px] text-ink-subtle">
-                  Tomma fält använder er sparade målgrupp.
+                <p className="mt-1 max-w-[52ch] text-[13px] leading-5 text-ink-subtle">
+                  Utan filter hittar Iris själv de bolag som passar er produkt bäst,
+                  utifrån er sparade målgrupp.
                 </p>
               </div>
             }
