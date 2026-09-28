@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { flik, flikAktiv, flikInaktiv, rubrikPanel } from "@/components/ui";
 import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { Dashboard } from "./Dashboard";
@@ -21,8 +22,8 @@ const highlights = [
   {
     title: { sv: "Sorterar i fack", en: "Sorts into queues" },
     body: {
-      sv: "Teknisk support, garanti, leverans, utbildning, reklamation, betalning och orderstatus — varje ärende klassas och prioriteras automatiskt.",
-      en: "Technical support, warranty, delivery, training, claims, payment and order status — every case is classified and prioritised automatically."
+      sv: "Teknisk support, garanti, leverans, utbildning, reklamation, betalning och orderstatus. Varje ärende klassas och prioriteras automatiskt.",
+      en: "Technical support, warranty, delivery, training, claims, payment and order status. Every case is classified and prioritised automatically."
     }
   },
   {
@@ -42,8 +43,8 @@ const highlights = [
   {
     title: { sv: "Vet när människor behövs", en: "Knows when humans are needed" },
     body: {
-      sv: "Återbetalningar, juridik, GDPR och arga kunder lämnas alltid vidare — med komplett ärendehistorik.",
-      en: "Refunds, legal matters, GDPR and angry customers are always handed over — with the full case history."
+      sv: "Återbetalningar, juridik, GDPR och arga kunder lämnas alltid vidare, med komplett ärendehistorik.",
+      en: "Refunds, legal matters, GDPR and angry customers are always handed over, with the full case history."
     }
   }
 ];
@@ -55,28 +56,23 @@ export function SnajpSupportDemo() {
   return (
     <div className="space-y-12">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {highlights.map((item, index) => (
+        {highlights.map((item) => (
           <div key={item.title.sv} className="rounded-[10px] border border-ink/12 bg-paper p-5 shadow-hairline">
-            <span className="kicker text-mineral">0{index + 1}</span>
-            <h3 className="mt-3 font-semibold">{text(item.title)}</h3>
-            <p className="mt-2 text-sm leading-6 text-ink-muted">{text(item.body)}</p>
+            <h3 className={rubrikPanel}>{text(item.title)}</h3>
+            <p className="mt-2 text-[0.9375rem] leading-6 text-ink-muted">{text(item.body)}</p>
           </div>
         ))}
       </div>
 
       <div>
-        <div className="flex flex-wrap gap-2 border-b border-ink/12 pb-px">
+        <div className="flex flex-wrap gap-2">
           {tabs.map((item) => (
             <button
               key={item.id}
               type="button"
               onClick={() => setTab(item.id)}
-              className={cn(
-                "focus-ring -mb-px border-b-2 px-4 py-3 text-sm font-semibold transition",
-                tab === item.id
-                  ? "border-ochre text-ink"
-                  : "border-transparent text-ink-subtle hover:text-ink"
-              )}
+              aria-pressed={tab === item.id}
+              className={cn(flik, tab === item.id ? flikAktiv : flikInaktiv)}
             >
               {text(item.label)}
             </button>

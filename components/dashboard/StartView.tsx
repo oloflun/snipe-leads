@@ -44,7 +44,6 @@ import type { Localized } from "@/lib/i18n";
  */
 
 const copy = {
-  kicker: { sv: "Översikt", en: "Overview" },
   titleLeads: { sv: "Leads", en: "Leads" },
   titleSupport: { sv: "Kundtjänst", en: "Support" },
   titleBoth: { sv: "Arbetsytan", en: "Workspace" },
@@ -60,7 +59,7 @@ export function StartView({ demo = false }: Readonly<{ demo?: boolean }>) {
   const title = bada ? copy.titleBoth : shows("leads") ? copy.titleLeads : copy.titleSupport;
 
   return (
-    <PageShell kicker={text(copy.kicker)} title={text(title)}>
+    <PageShell title={text(title)}>
       <div className="space-y-14">
         {/* Högst upp bland vyerna, och bara när båda produkterna visas.
             Komponenten returnerar null av sig själv annars — se DuoSummary. */}

@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 
+import { Nyckeltal, Rad, Radlista, Sektion, Tomt, meta, rubrikPanel } from "@/components/ui";
 import { kallnamn, tolkaHandelse } from "@/lib/admin/handelsetext";
 import { a, tidpunkt } from "@/lib/admin/sprak";
 import type { EventRow, TenantRow } from "@/lib/data/admin";
 import { useLocale } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
 /**
  * Fel & eskaleringar i Kunder & Data — en SAMMANFATTNING av det som redan
@@ -69,73 +71,85 @@ export function FelOchEskaleringar({
   const eskalerade = tenants.reduce((summa, t) => summa + (t.escalated ?? 0), 0);
   const minst = taketNaddes ? a("minst", locale) : "";
 
+  // Ingressen som stod här är borta (F-016). Att hela listan bor under
+  // Händelser är nu sektionens åtgärd; att felkolumnen i kundtabellen visar
+  // samma fel syns i tabellen själv. Raderna har samma anatomi som i
+  // Händelselista.tsx: rubrik, antal i klartext till höger, källa först i
+  // metaraden (namnet när vi känner källan, annars koden i mono).
   return (
-    <section className="mt-10 border-t border-ink/15 pt-4">
-      <h2 className="kicker text-mineral">{a("felOchEskaleringar", locale)}</h2>
-      <p className="mt-1.5 max-w-[70ch] text-[0.875rem] leading-6 text-mineral">
-        {text({
-          sv: "Sammanfattning av plattformens fellogg och eskalerade ärenden. Hela listan, med filter per nivå och kund, ligger under ",
-          en: "A summary of the platform error log and escalated tickets. The full list, filterable by level and customer, lives under "
-        })}
+    <Sektion
+      title={a("felOchEskaleringar", locale)}
+      action={
         <Link
           href="/admin/handelser"
-          className="focus-ring text-warning underline underline-offset-4"
+          className="focus-ring text-[0.9375rem] underline underline-offset-4 hover:text-ochre"
         >
-          {a("handelser", locale)}
+          {text({ sv: "Alla händelser", en: "All events" })}
         </Link>
-        {text({
-          sv: ". Felkolumnen i tabellen ovan visar samma fel per kund.",
-          en: ". The error column in the table above shows the same errors per customer."
-        })}
-      </p>
-
-      <div className="mt-4 grid gap-px overflow-hidden rounded-input border border-ink/15 bg-ink/15 sm:grid-cols-3">
-        <Nyckeltal
-          etikett={text({
-            sv: `Fel senaste ${FONSTER_DAGAR} dagarna`,
-            en: `Errors in the last ${FONSTER_DAGAR} days`
-          })}
-          varde={`${minst}${fel.length}`}
-          varning={fel.length > 0}
-        />
-        <Nyckeltal
-          etikett={text({
-            sv: `Varningar senaste ${FONSTER_DAGAR} dagarna`,
-            en: `Warnings in the last ${FONSTER_DAGAR} days`
-          })}
-          varde={`${minst}${varningar.length}`}
-        />
-        <Nyckeltal
-          etikett={a("eskaleradeArenden", locale)}
-          varde={String(eskalerade)}
-          rad={a("allaKunderTotalt", locale)}
-        />
-      </div>
+      }
+    >
+      <Nyckeltal
+        poster={[
+          {
+            etikett: text({
+              sv: `Fel, ${FONSTER_DAGAR} dagar`,
+              en: `Errors, ${FONSTER_DAGAR} days`
+            }),
+            varde: (
+              <span className={fel.length > 0 ? "text-warning" : undefined}>
+                {`${minst}${fel.length}`}
+              </span>
+            )
+          },
+          {
+            etikett: text({
+              sv: `Varningar, ${FONSTER_DAGAR} dagar`,
+              en: `Warnings, ${FONSTER_DAGAR} days`
+            }),
+            varde: `${minst}${varningar.length}`
+          },
+          {
+            etikett: a("eskaleradeArenden", locale),
+            varde: eskalerade,
+            notis: a("allaKunderTotalt", locale)
+          }
+        ]}
+      />
 
       {toppfel.length === 0 ? (
-        <p className="mt-4 text-[0.875rem] text-mineral">
-          {text({
-            sv: `Inga fel de senaste ${FONSTER_DAGAR} dagarna. Det är det önskade tillståndet.`,
-            en: `No errors in the last ${FONSTER_DAGAR} days. That is the desired state.`
-          })}
-        </p>
+        <div className="mt-6">
+          <Tomt>
+            {text({
+              sv: `Inga fel de senaste ${FONSTER_DAGAR} dagarna.`,
+              en: `No errors in the last ${FONSTER_DAGAR} days.`
+            })}
+          </Tomt>
+        </div>
       ) : (
-        <ul className="mt-4">
+        <Radlista className="mt-6">
           {toppfel.map(({ antal: forekomster, senaste }) => {
             const tolkning = tolkaHandelse(senaste.message);
+            const kalla = kallnamn(senaste.source);
             return (
-              <li key={senaste.id} className="min-w-0 border-t border-ink/10 py-4">
-                <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-                  {/* Rubriken, inte råtexten — se filens docstring. */}
-                  <span className="min-w-0 break-words text-[0.9375rem]">
+              <Rad key={senaste.id} className="min-w-0">
+                <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-6 gap-y-1">
+                  {/* Rubriken, inte råtexten. Se filens docstring. */}
+                  <h3 className={cn(rubrikPanel, "min-w-0 break-words")}>
                     {text(tolkning.rubrik)}
-                  </span>
-                  <span className="kicker shrink-0 text-warning">
-                    {text(kallnamn(senaste.source))}
-                    {forekomster > 1 ? ` · ${forekomster} ${a("ggr", locale)}` : ""}
-                  </span>
+                  </h3>
+                  {forekomster > 1 ? (
+                    <span className={cn(meta, "num shrink-0")}>
+                      {forekomster} {text({ sv: "gånger", en: "times" })}
+                    </span>
+                  ) : null}
                 </div>
-                <p className="mt-1 text-[0.8125rem] tabular-nums text-mineral">
+                <p className={cn(meta, "num mt-1 break-words")}>
+                  {kalla.sv === senaste.source ? (
+                    <span className="font-mono">{senaste.source}</span>
+                  ) : (
+                    text(kalla)
+                  )}
+                  {" · "}
                   {senaste.tenant_slug ?? a("plattformsniva", locale)} ·{" "}
                   {tidpunkt(senaste.created_at, locale)}
                   {senaste.run_id ? (
@@ -150,32 +164,11 @@ export function FelOchEskaleringar({
                     </>
                   ) : null}
                 </p>
-              </li>
+              </Rad>
             );
           })}
-        </ul>
+        </Radlista>
       )}
-    </section>
-  );
-}
-
-function Nyckeltal({
-  etikett,
-  varde,
-  rad,
-  varning
-}: Readonly<{ etikett: string; varde: string; rad?: string; varning?: boolean }>) {
-  return (
-    <div className="bg-paper px-4 py-3">
-      <p className="kicker text-mineral">{etikett}</p>
-      <p
-        className={`mt-1 font-display text-[1.375rem] tabular-nums tracking-[-0.02em] ${
-          varning ? "text-warning" : ""
-        }`}
-      >
-        {varde}
-      </p>
-      {rad ? <p className="mt-0.5 text-[0.8125rem] leading-[1.45] text-ink-muted">{rad}</p> : null}
-    </div>
+    </Sektion>
   );
 }

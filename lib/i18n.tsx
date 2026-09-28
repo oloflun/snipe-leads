@@ -23,7 +23,7 @@ const commonCopy = {
   "action.human": { sv: "Mer mänsklig", en: "More human" },
   "action.persuasive": { sv: "Mer övertygande", en: "More persuasive" },
   "nav.dashboard": { sv: "Översikt", en: "Dashboard" },
-  "nav.assistant": { sv: "Assistant", en: "Assistant" },
+  "nav.assistant": { sv: "Assistenten", en: "Assistant" },
   "nav.iris": { sv: "Iris", en: "Iris" },
   "nav.iris.bolag": { sv: "Bolag", en: "Companies" },
   "nav.iris.granskning": { sv: "Granskning", en: "Review" },

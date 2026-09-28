@@ -27,10 +27,59 @@ PROVIDER_HOSTS = {
     "outlook": "outlook.office365.com",
 }
 
+#: Adressdomän → (provider-värde i ss_mailboxes, IMAP-värd). Självbetjänings-
+#: kopplingen slår upp värden ur kundens egen adress — kunden ska skriva sitt
+#: app-lösenord, inte veta vad en IMAP-värd är. iCloud får provider 'imap'
+#: (schemats check-constraint listar gmail/outlook/imap/mock) med värden
+#: utskriven på raden.
+DOMAN_TILL_IMAP: dict[str, tuple[str, str]] = {
+    "gmail.com": ("gmail", "imap.gmail.com"),
+    "googlemail.com": ("gmail", "imap.gmail.com"),
+    "outlook.com": ("outlook", "outlook.office365.com"),
+    "hotmail.com": ("outlook", "outlook.office365.com"),
+    "hotmail.se": ("outlook", "outlook.office365.com"),
+    "live.com": ("outlook", "outlook.office365.com"),
+    "live.se": ("outlook", "outlook.office365.com"),
+    "msn.com": ("outlook", "outlook.office365.com"),
+    "icloud.com": ("imap", "imap.mail.me.com"),
+    "me.com": ("imap", "imap.mail.me.com"),
+    "mac.com": ("imap", "imap.mail.me.com"),
+}
+
+
+def imap_for_adress(address: str) -> tuple[str, str] | None:
+    """(provider, imap_host) för en mejladress, eller None för okänd domän."""
+    doman = address.rsplit("@", 1)[-1].strip().lower()
+    return DOMAN_TILL_IMAP.get(doman)
+
 
 def password_env_name(tenant_slug: str) -> str:
     """IMAP_PASSWORD_LIVRUSTNING för tenanten 'livrustning'."""
     return f"IMAP_PASSWORD_{tenant_slug.upper().replace('-', '_')}"
+
+
+def losenord_for(mailbox: dict, tenant_slug: str) -> str:
+    """App-lösenordet för en inkorgsrad: env-vägen först, sedan radens
+    krypterade kolumn.
+
+    Env vinner med flit — det är vägen vi själva förvaltar (Livrustning), och
+    en kund som senare kopplar om samma adress via självbetjäningen ska inte
+    tyst kunna skugga den. Dekrypteringen görs här och ingen annanstans:
+    klartexten lever bara i anropsögonblicket (migration 077).
+    """
+    ur_env = os.environ.get(password_env_name(tenant_slug), "")
+    if ur_env:
+        return ur_env
+    token = mailbox.get("secret_enc")
+    if not token:
+        return ""
+    from ..integrationer.hemligheter import dekryptera
+
+    try:
+        return dekryptera(token).get("losenord", "")
+    except Exception:  # noqa: BLE001 — fel nyckel/skadad rad ska ge "saknas", inte 500
+        logger.exception("Kunde inte dekryptera inkorgshemligheten för %s", mailbox.get("address"))
+        return ""
 
 
 def host_for_mailbox(mailbox: dict) -> str | None:
@@ -47,8 +96,27 @@ def host_for_mailbox(mailbox: dict) -> str | None:
 _host_for = host_for_mailbox
 
 
-async def sync_mailbox(storage: Storage, tenant_id: str, tenant_slug: str, mailbox: dict) -> dict:
-    """Hämtar och processar nya mail för EN inkorg."""
+async def sync_mailbox(
+    storage: Storage,
+    tenant_id: str,
+    tenant_slug: str,
+    mailbox: dict,
+    *,
+    bearbeta: bool = True,
+) -> dict:
+    """Hämtar (och normalt processar) nya mail för EN inkorg.
+
+    `bearbeta=False` är knappvägen (/api/inbox/sync): mailen hämtas och
+    skrivs in så att de SYNS i inkorgen direkt, medan LLM-klassificeringen
+    körs i en bakgrundsuppgift av anroparen. Utan den delningen tog en synk
+    med några mail långt över proxyns tidsbudget, och kunden fick
+    "Assistenten har svårt att nå sin motor" fast backenden arbetade — samma
+    klass av fel som testmailsknappen hade (uppmätt 60,3 s där). Pollern
+    behåller default True: den har ingen klocka emot sig.
+
+    Svaret bär `email_ids`: de oprocessade radernas id:n, för bakgrunds-
+    uppgiften.
+    """
     settings = get_settings()
 
     async def stampla(resultat: dict) -> dict:
@@ -73,7 +141,7 @@ async def sync_mailbox(storage: Storage, tenant_id: str, tenant_slug: str, mailb
             "error": f"Ingen IMAP-värd angiven för {mailbox['address']} (sätt imap_host).",
         })
 
-    password = os.environ.get(password_env_name(tenant_slug), "")
+    password = losenord_for(mailbox, tenant_slug)
     oauth_ready = bool(
         settings.imap_oauth_client_id
         and settings.imap_oauth_client_secret
@@ -84,7 +152,8 @@ async def sync_mailbox(storage: Storage, tenant_id: str, tenant_slug: str, mailb
         return await stampla({
             "fetched": 0,
             "processed": 0,
-            "error": f"{password_env_name(tenant_slug)} eller IMAP OAuth saknas — hoppar över {mailbox['address']}.",
+            "email_ids": [],
+            "error": f"Inget app-lösenord för {mailbox['address']} — koppla om inkorgen under Inställningar → Inkorgar.",
         })
 
     inbound, error = await imap.fetch_new(
@@ -96,12 +165,19 @@ async def sync_mailbox(storage: Storage, tenant_id: str, tenant_slug: str, mailb
     )
 
     processed = 0
+    email_ids: list[str] = []
     for message in inbound:
         email = await ingest_email(storage, tenant_id, message)
-        if email:
+        if not email:
+            continue
+        if bearbeta:
             await process_email(storage, tenant_id, email)
             processed += 1
-    return await stampla({"fetched": len(inbound), "processed": processed, "error": error})
+        else:
+            email_ids.append(email["id"])
+    return await stampla(
+        {"fetched": len(inbound), "processed": processed, "email_ids": email_ids, "error": error}
+    )
 
 
 async def sync_imap_once(storage: Storage, tenant_id: str = DEFAULT_TENANT_ID) -> dict:

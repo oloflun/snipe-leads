@@ -316,7 +316,11 @@ def extrahera_kontaktlankar(material: str, webbplats: str, *, tak: int = 3) -> l
     kandidater: list[tuple[int, int, str]] = []  # (rank, ordning, url)
     sedda: set[str] = set()
     for ordning, (text, ravurl) in enumerate(par):
-        ravurl = ravurl.strip()
+        # Citattecken runt url:en följer med när skrapet innehåller
+        # [Kontakt]("https://…") — urljoin gjorde då adressen till
+        # https://<domän>/%22https://…%22, en sida som inte finns, och
+        # kontaktjakten hämtade tomhet (uppmätt på ekan.com 2026-09-21).
+        ravurl = ravurl.strip().strip("\"'")
         if not ravurl or ravurl.lower().startswith(("mailto:", "tel:", "javascript:", "#")):
             continue
         try:

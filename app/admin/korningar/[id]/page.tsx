@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { Badge, Radlista, Rad, Sidhuvud, Tomt, etikett, meta, rubrikPanel } from "@/components/ui";
 import { getRun, unwrap, type StepLogEntry } from "@/lib/data/admin";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -15,14 +17,19 @@ export const maxDuration = 60;
  * sektioner. Fälten är kapade till 8 000 tecken vardera redan vid skrivningen
  * (step_runner.TRACE_FIELD_MAX_CHARS); utfällda direkt hade en enda körning
  * ändå varit femtio skärmar text, och det man letar efter är oftast ETT steg.
+ *
+ * Rubriken är "Körning" och inte agent_type: koden är en maskin-id och står i
+ * mono i metaraden under. Ingen tillbakalänk överst; railens Körningar leder dit.
  */
 
 function Field({ label, value }: Readonly<{ label: string; value?: string | null }>) {
   if (!value) return null;
   return (
     <details className="mt-3 border-t border-ink/15 pt-3">
-      <summary className="kicker cursor-pointer text-mineral hover:text-ochre">{label}</summary>
-      <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words text-[13px] leading-6 text-ink-muted">
+      <summary className={cn(etikett, "focus-ring cursor-pointer rounded-input hover:text-ink")}>
+        {label}
+      </summary>
+      <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words font-mono text-[0.8125rem] leading-6 text-ink-muted">
         {value}
       </pre>
     </details>
@@ -31,42 +38,44 @@ function Field({ label, value }: Readonly<{ label: string; value?: string | null
 
 function Step({ step, index }: Readonly<{ step: StepLogEntry; index: number }>) {
   return (
-    <li className="min-w-0 border-t border-ink/15 py-6">
+    <Rad className="min-w-0">
       <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-        <h2 className="min-w-0 break-words text-[17px]">
-          <span className="kicker mr-3 text-mineral">{index + 1}</span>
-          {step.skill}
+        <h2 className={cn(rubrikPanel, "min-w-0 break-words")}>
+          Steg {index + 1}
+          <span className="ml-3 font-mono text-[0.8125rem] font-normal text-ink-muted">
+            {step.skill}
+          </span>
         </h2>
-        {/* --warning, inte --ochre: ochre mäter 2.17:1 mot papper och får
-            aldrig bära text i brödstorlek (DESIGN.md). */}
-        {step.escalated ? <span className="kicker shrink-0 text-warning">eskalerade</span> : null}
+        {step.escalated ? <Badge tone="warn">Eskalerade</Badge> : null}
       </div>
 
-      <dl className="mt-3 flex flex-wrap gap-x-8 gap-y-2 text-[14px] text-mineral">
+      <dl className="mt-3 flex flex-wrap gap-x-8 gap-y-2 text-[0.8125rem]">
         {[
           ["Försök", String(step.attempts)],
           ["Tokens", `${step.tokens_in} / ${step.tokens_out}`],
           ["Reasoning", String(step.reasoning_tokens)],
           ["Latens", `${step.latency_ms} ms`],
           ["Thinking", step.thinking_mode],
-          ["Overlay", step.overlay ?? "—"]
+          ["Overlay", step.overlay ?? "–"]
         ].map(([label, value]) => (
           <div key={label}>
-            <dt className="kicker inline">{label}</dt>{" "}
-            <dd className="inline tabular-nums text-ink">{value}</dd>
+            <dt className={cn(etikett, "inline")}>{label}</dt>{" "}
+            <dd className="num inline text-ink">{value}</dd>
           </div>
         ))}
       </dl>
 
+      {/* --warning, inte --ochre: ochre mäter 2.17:1 mot papper och får
+          aldrig bära text i brödstorlek (DESIGN.md). */}
       {step.escalation_reason ? (
-        <p className="mt-3 max-w-[70ch] text-[14px] leading-6 text-warning">
+        <p className="mt-3 max-w-[70ch] text-[0.9375rem] leading-7 text-warning">
           {step.escalation_reason}
         </p>
       ) : null}
 
       {step.sources_used?.length ? (
-        <p className="mt-3 max-w-[70ch] text-[14px] leading-6">
-          <span className="kicker text-mineral">Grundat i</span> {step.sources_used.join(" · ")}
+        <p className="mt-3 max-w-[70ch] text-[0.9375rem] leading-7">
+          <span className={etikett}>Grundat i</span> {step.sources_used.join(" · ")}
         </p>
       ) : null}
 
@@ -74,7 +83,7 @@ function Step({ step, index }: Readonly<{ step: StepLogEntry; index: number }>) 
       <Field label="Användarmeddelande" value={step.user_message} />
       <Field label="Råsvar" value={step.raw_output} />
       <Field label="Reasoning" value={step.reasoning_content} />
-    </li>
+    </Rad>
   );
 }
 
@@ -85,13 +94,13 @@ export default async function Page({ params }: Readonly<{ params: Promise<{ id: 
   if (error || !run) {
     return (
       <div>
-        <h1 className="font-display text-4xl italic-disp tighten">Körningen</h1>
-        <p role="alert" className="mt-6 max-w-[70ch] break-words text-[15px] text-danger">
+        <Sidhuvud title="Körning" />
+        <p role="alert" className="mt-8 max-w-[70ch] break-words text-[15px] text-danger">
           {error ?? "Körningen finns inte."}
         </p>
         <Link
           href="/admin/korningar"
-          className="mt-6 inline-block underline underline-offset-4 hover:text-ochre"
+          className="focus-ring mt-6 inline-block underline underline-offset-4 hover:text-ochre"
         >
           Tillbaka till körningarna
         </Link>
@@ -103,27 +112,25 @@ export default async function Page({ params }: Readonly<{ params: Promise<{ id: 
 
   return (
     <div>
-      <Link href="/admin/korningar" className="kicker text-mineral hover:text-ochre">
-        ← Körningar
-      </Link>
-
-      <h1 className="mt-4 font-display text-4xl italic-disp tighten">{run.agent_type}</h1>
-      <p className="mt-3 text-[15px] tabular-nums text-mineral">
-        {run.tenant_slug ?? "—"} · {run.created_at.slice(0, 19).replace("T", " ")} ·{" "}
-        {run.pack_version}
+      <Sidhuvud title="Körning" />
+      <p className={cn(meta, "num mt-2 break-words")}>
+        <span className="font-mono">{run.agent_type}</span> · {run.tenant_slug ?? "–"} ·{" "}
+        {run.created_at.slice(0, 19).replace("T", " ")} ·{" "}
+        <span className="font-mono">{run.pack_version}</span>
       </p>
 
+      {/* Fas A (onboarding) kör Runner.run och skriver ingen step_log: en känd
+          lucka i instrumenteringen, inte en körning utan steg. */}
       {steps.length === 0 ? (
-        <p className="mt-8 max-w-[70ch] border-t border-ink/15 pt-5 text-[15px] leading-7 text-mineral">
-          Ingen spårning för den här körningen. Fas A (onboarding) kör Runner.run och skriver
-          ingen step_log — det är en känd lucka i instrumenteringen, inte en körning utan steg.
-        </p>
+        <div className="mt-8">
+          <Tomt>Körningen har ingen spårning. Onboardingkörningar (fas A) loggar inga steg.</Tomt>
+        </div>
       ) : (
-        <ol className="mt-8">
+        <Radlista ariaLabel="Steg" className="mt-8">
           {steps.map((step, index) => (
             <Step key={`${step.skill}-${index}`} step={step} index={index} />
           ))}
-        </ol>
+        </Radlista>
       )}
     </div>
   );

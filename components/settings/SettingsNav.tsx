@@ -6,6 +6,7 @@ import { useArbetsvag } from "@/components/AppShell";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { useLocale } from "@/lib/i18n";
 import { settingsGroupsForProducts } from "@/lib/routes";
+import { etikett } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 /**
@@ -29,7 +30,11 @@ import { cn } from "@/lib/utils";
 export function SettingsNav() {
   const pathname = usePathname();
   const vag = useArbetsvag();
-  const { products, shows, vy } = useDashboard();
+  const { products, shows, vy: rattVy, isPlatformAdmin } = useDashboard();
+  // `vy` är "admin" som standard även för en vanlig kund (lib/vy.ts), så filtret
+  // på adminOnly släppte igenom "Plattformen" i kundens meny. Sidan själv var
+  // grindad på servern; menyposten avslöjade ändå att den fanns.
+  const vy = isPlatformAdmin ? rattVy : "kund";
   const { text } = useLocale();
 
   // Tre filter, tre olika frågor: rättighet (products), vad läget visar just nu
@@ -42,7 +47,7 @@ export function SettingsNav() {
     <nav aria-label="Inställningar" className="grid gap-7">
       {grupper.map((grupp) => (
         <div key={grupp.label.sv}>
-          <p className="kicker text-mineral">{text(grupp.label)}</p>
+          <p className={etikett}>{text(grupp.label)}</p>
           <ul className="mt-3 grid gap-1">
             {grupp.routes.map((route) => {
               const href = vag(route.href);

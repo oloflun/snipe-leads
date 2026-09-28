@@ -685,6 +685,18 @@ börja om i en annan kanal.
 Test: snajp-support/tests/agent/test_support_eskalering.py
 Införd: 2026-09-18 · Upphävs endast genom waiver
 
+### INV-UI-001 — Appytorna bär ingen mikrotext och ingen andra typografi
+Ingen fil under `/admin`, `/dashboard`, `/settings` eller deras komponentkataloger
+använder `kicker`, `uppercase`, spärrning (`tracking-[0.06em]` och uppåt), kursiva
+Fraunces-rubriker eller em-streck i kod utanför kommentarer. Rubriker, etiketter,
+nyckeltal, flikar och tomlägen går genom primitiverna i `components/ui.tsx`.
+Varför: Anton förbjöd liten beskrivande text 2026-09-19 (FEEDBACK.md F-016). En vecka
+senare fanns ändå 146 kickers, fyra olika sidrubriker och kursiva rubriker på två
+adminsidor kvar: regeln stod i prosa och bröts av nästa vy som byggdes. Se
+plans/2026-09-27-appytor-enhetlighet.md.
+Test: tests/invariants/test_inv_ui_001.py
+Införd: 2026-09-28 · Upphävs endast genom waiver
+
 ## Roadmap
 
 Ids this plan will introduce, in the order `Genomförandeordning` builds them. Not yet enforced by CI.

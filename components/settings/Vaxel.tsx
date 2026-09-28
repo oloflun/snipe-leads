@@ -1,5 +1,7 @@
 "use client";
 
+import { useId } from "react";
+import { rubrikPanel } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 /**
@@ -35,12 +37,20 @@ export function Vaxel({
   onChange: (nytt: boolean) => void;
   disabled?: boolean;
 }>) {
+  // Etiketten och hjälpmeningen KOPPLAS till knappen. Förut stod de bara
+  // bredvid den, så skärmläsaren läste växeln som "På" eller "Av" utan namn.
+  const id = useId();
   return (
-    <div className="flex items-start justify-between gap-6">
+    <div className="flex items-center justify-between gap-6">
       <span className="min-w-0">
-        <span className="block text-[15px] font-medium leading-6 text-ink">{etikett}</span>
+        <span id={`${id}-etikett`} className={cn(rubrikPanel, "block")}>
+          {etikett}
+        </span>
         {beskrivning ? (
-          <span className="mt-1 block max-w-[52ch] text-[0.8125rem] leading-5 text-ink-subtle">
+          <span
+            id={`${id}-hjalp`}
+            className="mt-1 block max-w-[62ch] text-[0.9375rem] leading-6 text-ink-muted"
+          >
             {beskrivning}
           </span>
         ) : null}
@@ -50,12 +60,14 @@ export function Vaxel({
         type="button"
         role="switch"
         aria-checked={pa}
+        aria-labelledby={`${id}-etikett`}
+        aria-describedby={beskrivning ? `${id}-hjalp` : undefined}
         disabled={disabled}
         onClick={() => onChange(!pa)}
         className={cn(
           // shrink-0: knappen är den enda fasta bredden i raden, och utan den
           // krymper den i stället för texten när etiketten är lång.
-          "focus-ring relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition-colors duration-200",
+          "focus-ring relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200",
           disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer",
           pa ? "bg-ochre" : "bg-ink/20"
         )}

@@ -94,6 +94,8 @@ export type TenantRow = {
 export type RunRow = {
   id: string;
   tenant_slug?: string | null;
+  /** Skickas av backenden (join mot ss_tenants). Kundnamnet, inte sluggen, är vad admin läser. */
+  tenant_name?: string | null;
   agent_type: string;
   pack_version: string;
   tokens_in: number | null;

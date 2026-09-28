@@ -7,10 +7,13 @@ import {
   Loader2,
   Mail,
   RefreshCw,
+  Scissors,
   Search,
   Send,
   Settings2,
   ShieldAlert,
+  Smile,
+  Sparkles,
   UserRound,
   X
 } from "lucide-react";
@@ -92,11 +95,15 @@ const STATUS_META: Record<string, { label: string; tone: "neutral" | "good" | "w
   escalated: { label: "Eskalerat", tone: "danger" },
   rejected: { label: "Utkast avvisat", tone: "neutral" },
   taken_over: { label: "Manuellt övertaget", tone: "neutral" },
-  failed: { label: "Fel", tone: "danger" }
+  failed: { label: "Fel", tone: "danger" },
+  // Eskaleringslarm och notiser från Snajp (migration 078). Egen flik,
+  // aldrig ett utkast — se processor.ar_snajp_notis.
+  att_hantera: { label: "Att hantera", tone: "warn" }
 };
 
 const EVENT_LABELS: Record<string, string> = {
   received: "Mail mottaget",
+  notis: "Larm från Snajp, flyttat till Att hantera",
   classified: "Klassificerat",
   escalated: "Eskalerat till människa",
   draft_created: "Utkast skapat",
@@ -150,7 +157,7 @@ export function Dashboard({
   onMeta
 }: Readonly<{
   demo?: boolean;
-  lager?: "arenden" | "testmail";
+  lager?: "arenden" | "testmail" | "att_hantera";
   onMeta?: (meta: { visar_test_i_arenden: boolean }) => void;
 }>) {
   const vag = useArbetsvag();
@@ -252,6 +259,9 @@ export function Dashboard({
       if (statusFilter) params.set("status", statusFilter);
       if (categoryFilter) params.set("category", categoryFilter);
       if (lager === "testmail") params.set("is_test", "true");
+      // "Att hantera" är en egen status, inte ett filter i listan: fliken
+      // visar BARA larmen, och huvudlistan utesluter dem (backenden).
+      if (lager === "att_hantera") params.set("status", "att_hantera");
       const data = await api(`/inbox?${params.toString()}`);
       setEmails(data.emails);
       setCategoryCounts(data.category_counts);
@@ -390,10 +400,13 @@ export function Dashboard({
   const syncInbox = () =>
     act("sync", async () => {
       setSyncInfo(null);
-      const result = await api<{ fetched: number; processed: number; connected?: boolean; error?: string }>(
-        "/inbox/sync",
-        { method: "POST" }
-      );
+      const result = await api<{
+        fetched: number;
+        processed: number;
+        connected?: boolean;
+        processing?: boolean;
+        error?: string;
+      }>("/inbox/sync", { method: "POST" });
       // `connected: false` är inte ett fel — det är ett svar. Att kasta här
       // gav en röd felruta för ett läge som bara betyder "vi har inte kopplat
       // er inkorg ännu", och den rutan såg ut som en krasch.
@@ -405,9 +418,15 @@ export function Dashboard({
       if (result.error) {
         throw new Error(result.error);
       }
+      // Backenden svarar när mailen är HÄMTADE; klassificering och utkast
+      // körs i bakgrunden (samma mönster som testmailen). Listan läses om
+      // medan agenten arbetar, annars ser nya rader ut att sakna fack.
       setSyncInfo(
-        `Synk klar: ${result.fetched} nya mail hämtade, ${result.processed} processade.`
+        result.fetched === 0
+          ? "Synk klar: inga nya olästa mail i inkorgen."
+          : `${result.fetched} nya mail hämtade. Agenten sorterar och skriver utkast nu.`
       );
+      if (result.processing) void pollaTills();
     });
 
   const approve = () =>
@@ -420,6 +439,30 @@ export function Dashboard({
         )
       })
     );
+
+  /**
+   * Skriver om texten i rutan i vald riktning (Förbättra/Kortare/Mer
+   * personlig). Egen väg i stället för act(): act() läser om listan och
+   * ärendet, och en omhämtning här hade skrivit över precis den text kunden
+   * just fick omformulerad. Inget skickas och det sparade utkastet rörs inte
+   * — det som godkänns är som alltid innehållet i rutan.
+   */
+  const omformulera = async (lage: string) => {
+    if (!selected?.draft) return;
+    setBusy(`omformulera-${lage}`);
+    setError(null);
+    try {
+      const svar = await api<{ content?: string }>(
+        `/drafts/${selected.draft.id}/omformulera`,
+        { method: "POST", body: JSON.stringify({ lage, content: draftText }) }
+      );
+      if (svar?.content) setDraftText(svar.content);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Kunde inte skriva om utkastet.");
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const reject = () =>
     selected?.draft &&
@@ -474,7 +517,7 @@ export function Dashboard({
             Göms när en riktig inkorg är kopplad. Testmail bland en kunds
             verkliga ärenden är inte en demo, det är skräp i deras inkorg —
             och de har redan sett hur produkten fungerar. */}
-        {inkorgKopplad || (lager === "arenden" && visarTestIArenden === false) ? null : (
+        {inkorgKopplad || lager === "att_hantera" || (lager === "arenden" && visarTestIArenden === false) ? null : (
           <button
             type="button"
             onClick={() => void seedMock(null)}
@@ -512,13 +555,13 @@ export function Dashboard({
         <button
           type="button"
           onClick={() =>
-            inkorgKopplad || (lager === "arenden" && visarTestIArenden === false)
+            inkorgKopplad || lager === "att_hantera" || (lager === "arenden" && visarTestIArenden === false)
               ? void refresh()
               : void seedMock(categoryFilter)
           }
           disabled={busy !== null}
           title={
-            inkorgKopplad || (lager === "arenden" && visarTestIArenden === false)
+            inkorgKopplad || lager === "att_hantera" || (lager === "arenden" && visarTestIArenden === false)
               ? "Läser om inkorgen"
               : categoryFilter
                 ? "Hämtar nya testmail till det här facket"
@@ -542,7 +585,8 @@ export function Dashboard({
             className="focus-ring min-h-11 w-full rounded-input bg-paper py-2.5 pl-9 pr-3 text-sm outline-none placeholder:text-ink/35"
           />
         </div>
-        <select
+        {lager === "att_hantera" ? null : (
+          <select
           value={statusFilter ?? ""}
           onChange={(event) => setStatusFilter(event.target.value || null)}
           className="focus-ring min-h-11 rounded-input bg-paper px-3 py-2.5 text-sm"
@@ -553,10 +597,11 @@ export function Dashboard({
               {meta.label}
             </option>
           ))}
-        </select>
+          </select>
+        )}
         {/* Reglerna bor numera under Inställningar, bredvid leads-agentens
             motsvarande kontroll. Se components/settings/SupportRegler.tsx. */}
-        {demo ? null : (
+        {demo || lager === "att_hantera" ? null : (
           <Link href={vag("/settings/regler")} className={btnSecondary}>
             <Settings2 className="h-4 w-4" />
             Regler
@@ -579,52 +624,58 @@ export function Dashboard({
         </div>
       ) : null}
 
-      {/* Fack-översikt */}
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={() => setCategoryFilter(null)}
-          className={cn(
-            "focus-ring rounded-input border px-3 py-2 text-xs font-semibold transition",
-            categoryFilter === null
-              ? "border-ochre bg-ochre/10 text-ink"
-              : "bg-paper2/60 text-ink-muted hover:text-ink"
-          )}
-        >
-          Alla ({emails.length})
-        </button>
-        {Object.entries(CATEGORY_LABELS).map(([category, label]) => (
+      {/* Fack-översikt. Bara fack som HAR ärenden visas (plus det valda):
+          nio chips där sju står på (0) var den största delen av bruset i
+          inkorgen (kundtest 2026-09-22). Summeringen till höger är text, inte
+          fler färgade rutor. Döljs i Att hantera: larmen har inga fack. */}
+      {lager === "att_hantera" ? null : (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {[
+            { id: null as string | null, label: "Alla", antal: emails.length },
+            ...Object.entries(CATEGORY_LABELS)
+              .map(([id, label]) => ({ id: id as string | null, label, antal: categoryCounts[id] ?? 0 }))
+              .filter((f) => f.antal > 0 || categoryFilter === f.id)
+          ].map((f) => (
+            <button
+              key={f.id ?? "alla"}
+              type="button"
+              onClick={() => setCategoryFilter(f.id === null || categoryFilter === f.id ? null : f.id)}
+              className={cn(
+                "focus-ring rounded-full px-3 py-1.5 text-[0.8125rem] font-medium transition",
+                categoryFilter === f.id
+                  ? "bg-ink text-paper"
+                  : "text-ink-muted hover:bg-paper2/70 hover:text-ink"
+              )}
+            >
+              {f.label}
+              <span className={cn("ml-1.5 tabular-nums", categoryFilter === f.id ? "text-paper-muted" : "text-ink-subtle")}>
+                {f.antal}
+              </span>
+            </button>
+          ))}
+          <span aria-hidden className="mx-1 h-4 w-px bg-ink/15" />
           <button
-            key={category}
             type="button"
-            onClick={() => setCategoryFilter(categoryFilter === category ? null : category)}
+            onClick={() => setBaraOhanterade((v) => !v)}
             className={cn(
-              "focus-ring rounded-input border px-3 py-2 text-xs font-semibold transition",
-              categoryFilter === category
-                ? "border-ochre bg-ochre/10 text-ink"
-                : "bg-paper2/60 text-ink-muted hover:text-ink"
+              "focus-ring rounded-full px-3 py-1.5 text-[0.8125rem] font-medium transition",
+              baraOhanterade ? "bg-ink text-paper" : "text-ink-muted hover:bg-paper2/70 hover:text-ink"
             )}
           >
-            {label} ({categoryCounts[category] ?? 0})
+            Bara ohanterade
           </button>
-        ))}
-        <button
-          type="button"
-          onClick={() => setBaraOhanterade((v) => !v)}
-          className={cn(
-            "focus-ring rounded-input border px-3 py-2 text-xs font-semibold transition",
-            baraOhanterade
-              ? "border-ochre bg-ochre/10 text-ink"
-              : "bg-paper2/60 text-ink-muted hover:text-ink"
-          )}
-        >
-          Bara ohanterade
-        </button>
-        <span className="ml-auto flex gap-2">
-          {totalPending > 0 ? <Badge tone="warn">{totalPending} väntar på godkännande</Badge> : null}
-          {totalEscalated > 0 ? <Badge tone="danger">{totalEscalated} eskalerade</Badge> : null}
-        </span>
-      </div>
+          {totalPending > 0 || totalEscalated > 0 ? (
+            <span className="ml-auto text-[0.8125rem] text-ink-muted">
+              {[
+                totalPending > 0 ? `${totalPending} väntar på dig` : null,
+                totalEscalated > 0 ? `${totalEscalated} eskalerade` : null
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
+          ) : null}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
         {/* Maillista */}
@@ -632,13 +683,20 @@ export function Dashboard({
           {emails.length === 0 ? (
             <div className="rounded-card border border-dashed border-ink/15 bg-paper/45 p-10 text-center">
               <Inbox className="mx-auto h-6 w-6 text-mineral" />
-              <h3 className="mt-4 font-semibold">Inkorgen är tom</h3>
+              <h3 className="mt-4 font-semibold">
+                {lager === "att_hantera" ? "Inget att hantera" : "Inkorgen är tom"}
+              </h3>
               {/* Stod: "koppla en riktig inkorg (Gmail/Outlook via IMAP) i
                   backendens miljövariabler". En instruktion till oss, tryckt i
                   kundens vy — kunden har varken tillgång till backenden eller
                   anledning att veta vad IMAP är. */}
               <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-ink-muted">
-                {lager === "testmail" || visarTestIArenden !== false ? (
+                {lager === "att_hantera" ? (
+                  <>
+                    Här hamnar eskaleringar och larm när ett ärende lämnas över till er. De får
+                    aldrig ett AI-utkast.
+                  </>
+                ) : lager === "testmail" || visarTestIArenden !== false ? (
                   <>
                     Klicka på <strong>Hämta testmail</strong> för att skicka testärenden mot
                     den här profilens kunskapsbas och se hur agenten svarar.
@@ -647,82 +705,72 @@ export function Dashboard({
                   <>Inga ärenden ännu. När en inkorg är kopplad hamnar kundmailen här.</>
                 )}
               </p>
-              {inkorgKopplad ? null : (
+              {inkorgKopplad || lager === "att_hantera" ? null : (
                 <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-ink-subtle">
-                  Vill ni koppla er riktiga inkorg?{" "}
-                  <a
-                    href={mejlaOss("Koppla vår inkorg")}
+                  Vill ni koppla er riktiga inkorg? Koppla Gmail, Outlook eller iCloud
+                  under{" "}
+                  <Link
+                    href="/settings/mailboxes"
                     className="focus-ring rounded-input underline underline-offset-4 hover:text-ochre"
                   >
-                    Hör av er
-                  </a>{" "}
-                  så kopplar vi Gmail eller Outlook åt er.
+                    Inställningar → Inkorgar
+                  </Link>
+                  , så hämtas era olästa kundmail hit.
                 </p>
               )}
             </div>
           ) : (
-            /* Kolumnfasta rader: ämne/avsändare 6 spann, fack+konfidens 3,
-               status 3 — samma deklarerade spann på varje rad, så status-
-               och fackkolumnerna står på samma plats oavsett textlängd.
-               Raden är fortfarande en hel knapp, markeringen orörd. */
+            /* Två rader text och EN tyst status (kundtest 2026-09-22: sex
+               etiketter per rad — fack, Offert, Utbildning, konfidensstapel,
+               sköld, statusruta — gjorde inkorgen svårläst). Fack och flaggor
+               står som text i metaraden; konfidensen och motiveringen finns
+               kvar i detaljpanelen, där de faktiskt läses. */
             <div className="divide-y divide-ink/10 overflow-hidden rounded-card bg-paper">
               {(baraOhanterade ? emails.filter((e) => !e.hanterad_at) : emails).map((email) => {
                 const meta = STATUS_META[email.status] ?? STATUS_META.new;
+                const lasesNu = bearbetas && !email.classification;
+                const statusText = lasesNu ? "Agenten läser…" : meta.label;
+                const prick = lasesNu
+                  ? "bg-ink/25"
+                  : { neutral: "bg-ink/25", good: "bg-moss", warn: "bg-ochre", danger: "bg-danger" }[meta.tone];
+                const detaljer = [
+                  email.from_name || email.from_email,
+                  email.classification ? CATEGORY_LABELS[email.classification.category] : null
+                ].filter(Boolean);
                 return (
                   <button
                     key={email.id}
                     type="button"
                     onClick={() => void openEmail(email.id)}
                     className={cn(
-                      "focus-ring grid w-full grid-cols-12 items-start gap-x-3 gap-y-2 px-4 py-3.5 text-left transition hover:bg-ochre/5",
-                      selected?.id === email.id ? "bg-ochre/5" : ""
+                      "focus-ring grid w-full grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 px-4 py-3 text-left transition hover:bg-paper2/50",
+                      selected?.id === email.id ? "bg-paper2/70" : ""
                     )}
                   >
-                    <div className="col-span-12 min-w-0 md:col-span-6">
-                      <p className="flex items-center gap-2 truncate text-sm font-semibold">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className={cn("truncate text-sm", email.hanterad_at ? "font-medium text-ink-muted" : "font-semibold")}>
                         {email.subject || "(utan ämne)"}
-                        {email.has_image ? <ImageIcon className="h-3.5 w-3.5 shrink-0 text-ink-subtle" /> : null}
-                        {email.is_test ? <span className="kicker shrink-0 text-mineral">Test</span> : null}
-                      </p>
-                      <p className="mt-0.5 truncate font-mono text-xs text-ink-subtle">
-                        {email.from_name ? `${email.from_name} · ` : ""}
-                        {email.from_email}
-                      </p>
-                    </div>
-                    <div className="col-span-12 flex min-w-0 flex-wrap items-center gap-2 md:col-span-3">
-                      {email.classification ? (
-                        <>
-                          <Badge tone="neutral">{CATEGORY_LABELS[email.classification.category]}</Badge>
-                          {/* Pilotflaggorna: offert är kundens viktigaste
-                              signal (hela tratten är "kontakta oss för
-                              offert") och får en varm badge; utbildning en
-                              neutral. Oberoende av facket. */}
-                          {email.classification.offertforfragan ? (
-                            <Badge tone="warn">Offert</Badge>
-                          ) : null}
-                          {email.classification.utbildningsintresse ? (
-                            <Badge tone="good">Utbildning</Badge>
-                          ) : null}
-                          <ConfidenceBar value={email.classification.confidence} />
-                          {email.classification.escalate ? (
-                            <ShieldAlert className="h-3.5 w-3.5 text-danger" />
-                          ) : null}
-                        </>
-                      ) : (
-                        <Badge tone="neutral">{bearbetas ? "Agenten läser…" : "Obearbetat"}</Badge>
-                      )}
-                    </div>
-                    <div className="col-span-12 flex items-center gap-2 md:col-span-3 md:justify-end">
+                      </span>
+                      {email.has_image ? <ImageIcon className="h-3.5 w-3.5 shrink-0 text-ink-subtle" /> : null}
+                      {email.is_test ? <span className="kicker shrink-0 text-mineral">Test</span> : null}
+                    </span>
+                    <span className="flex items-center gap-1.5 whitespace-nowrap text-[0.8125rem] text-ink-muted">
                       {email.hanterad_at ? (
-                        <CheckCircle2
-                          className="h-4 w-4 shrink-0 text-moss"
-                          aria-label="Hanterat"
-                        />
+                        <CheckCircle2 className="h-3.5 w-3.5 text-moss" aria-label="Hanterat" />
+                      ) : (
+                        <span aria-hidden className={cn("h-1.5 w-1.5 rounded-full", prick)} />
+                      )}
+                      {statusText}
+                    </span>
+                    <span className="col-span-2 mt-0.5 flex min-w-0 items-center gap-1.5 text-[0.8125rem] text-ink-subtle">
+                      <span className="truncate">{detaljer.join(" · ")}</span>
+                      {email.classification?.offertforfragan ? (
+                        <span className="shrink-0 font-medium text-warning">· Offert</span>
                       ) : null}
-                      <Badge tone={bearbetas && !email.classification ? "neutral" : meta.tone}>
-                        {bearbetas && !email.classification ? "Bearbetas" : meta.label}
-                      </Badge>
-                    </div>
+                      {email.classification?.utbildningsintresse ? (
+                        <span className="shrink-0 font-medium text-moss">· Utbildning</span>
+                      ) : null}
+                    </span>
                   </button>
                 );
               })}
@@ -911,6 +959,33 @@ export function Dashboard({
                         <UserRound className="h-4 w-4" />
                         Ta över ärendet
                       </button>
+                      {/* Omformuleringarna, avskilda med en tunn linje: de
+                          ändrar bara texten i rutan, aldrig ärendets
+                          tillstånd. Samma trio som support-portalens inkorg. */}
+                      <span aria-hidden className="mx-0.5 hidden self-center h-5 w-px bg-ink/15 sm:block" />
+                      {(
+                        [
+                          ["forbattra", "Förbättra", Sparkles],
+                          ["kortare", "Kortare", Scissors],
+                          ["personligare", "Mer personlig", Smile]
+                        ] as const
+                      ).map(([lage, etikett, Ikon]) => (
+                        <button
+                          key={lage}
+                          type="button"
+                          onClick={() => void omformulera(lage)}
+                          disabled={busy !== null}
+                          title={`Skriv om utkastet: ${etikett.toLowerCase()}. Inget skickas förrän du godkänner.`}
+                          className="focus-ring inline-flex min-h-10 items-center gap-1.5 rounded-input border border-ink/15 px-3 py-2 text-[0.8125rem] font-semibold text-ink-muted transition hover:text-ink disabled:opacity-40"
+                        >
+                          {busy === `omformulera-${lage}` ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Ikon className="h-3.5 w-3.5" />
+                          )}
+                          {etikett}
+                        </button>
+                      ))}
                     </div>
                   ) : null}
                 </div>

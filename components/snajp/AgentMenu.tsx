@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocale } from "@/lib/i18n";
 import type { Localized } from "@/lib/i18n";
+import { etikett, rubrikPanel } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 /**
@@ -38,13 +39,13 @@ const copy = {
 
   kontaktRubrik: { sv: "Snajp", en: "Snajp" },
   kontaktBody: {
-    sv: "Vi bygger och driftar agenterna. Gäller din fråga en beställning eller ett ärende hos företaget du chattar med, skriv det i chatten i stället — de svarar snabbare på sitt eget.",
+    sv: "Vi bygger och driftar agenterna. Gäller din fråga en beställning eller ett ärende hos företaget du chattar med, skriv det i chatten i stället. De svarar snabbare på sitt eget.",
     en: "We build and operate the agent. If your question concerns an order or a case with the company you are chatting with, write it in the chat instead. They answer faster on their own matters."
   },
 
   eskaleraRubrik: { sv: "Svarade agenten fel?", en: "Did the agent answer incorrectly?" },
   eskaleraBody: {
-    sv: "Anmäl svaret så läser en människa hos oss igenom det. Knappen öppnar din e-postklient med ärendet förifyllt — inget skickas utan att du trycker skicka.",
+    sv: "Anmäl svaret så läser en människa hos oss igenom det. Knappen öppnar din e-postklient med ärendet förifyllt. Inget skickas utan att du trycker skicka.",
     en: "Report the answer and a person at our end will read it. The button opens your email client with the case prefilled. Nothing is sent until you press send."
   },
   eskaleraAmne: {
@@ -85,8 +86,11 @@ function lokal(v: Localized, locale: "sv" | "en") {
 
 export function AgentMenu({
   yta,
-  kontext
+  kontext,
+  ton = "ljus"
 }: Readonly<{
+  /** "rail": mörk variant för adminens sidopanel; panelen fäller då uppåt. */
+  ton?: "ljus" | "rail";
   /** Vilken agentyta menyn sitter på. Följer med i eskaleringsmejlet. */
   yta: "kundservice" | "leads";
   /** Fritt fält som hamnar i eskaleringens tekniska uppgifter (t.ex. sessions-id). */
@@ -138,7 +142,12 @@ export function AgentMenu({
         onClick={() => setOppen((v) => !v)}
         aria-expanded={oppen}
         aria-haspopup="dialog"
-        className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-input border border-ink/15 px-3 text-sm font-medium text-ink-muted transition-colors hover:bg-paper2"
+        className={cn(
+          "focus-ring inline-flex items-center gap-2 rounded-input border px-3 text-sm font-medium transition-colors",
+          ton === "rail"
+            ? "min-h-9 border-paper/15 text-paper-muted hover:bg-paper/5 hover:text-paper"
+            : "min-h-11 border-ink/15 text-ink-muted hover:bg-paper2"
+        )}
       >
         <span aria-hidden="true" className="flex flex-col gap-[3px]">
           <span className="block h-[2px] w-4 bg-current" />
@@ -156,12 +165,15 @@ export function AgentMenu({
           // mot VIEWPORTEN i stället, och det är inte kosmetik: knappen sitter
           // en bit in från kanten, så en högerankrad panel på 22rem sköt ut
           // 31px utanför vänsterkanten vid 375px bredd. Uppmätt, inte gissat.
-          className="absolute right-0 z-40 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-input border border-ink/15 bg-paper shadow-lift max-sm:fixed max-sm:inset-x-4 max-sm:top-auto max-sm:mt-0 max-sm:w-auto"
+          className={cn(
+            "absolute z-40 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-input border border-ink/15 bg-paper text-ink shadow-lift max-sm:fixed max-sm:inset-x-4 max-sm:top-auto max-sm:mt-0 max-sm:w-auto",
+            ton === "rail" ? "bottom-full left-0 mb-2" : "right-0 mt-2"
+          )}
         >
           {/* Språkvalet ligger överst och inte bakom en flik: den som behöver
               det behöver det för att kunna läsa resten av menyn. */}
           <div className="flex items-center justify-between gap-3 border-b border-ink/10 px-4 py-3">
-            <span className="kicker text-mineral">{text(copy.sprak as Localized)}</span>
+            <span className={etikett}>{text(copy.sprak as Localized)}</span>
             <div className="flex gap-1" role="group">
               {(["sv", "en"] as const).map((val) => (
                 <button
@@ -201,10 +213,8 @@ export function AgentMenu({
 
           {flik === "kontakt" ? (
             <div className="px-4 py-4">
-              <p className="font-display text-[1rem] font-semibold">
-                {text(copy.kontaktRubrik as Localized)}
-              </p>
-              <p className="mt-2 text-[0.875rem] leading-[1.6] text-ink-muted">
+              <p className={rubrikPanel}>{text(copy.kontaktRubrik as Localized)}</p>
+              <p className="mt-2 text-[0.9375rem] leading-[1.6] text-ink-muted">
                 {text(copy.kontaktBody as Localized)}
               </p>
               <a
@@ -218,12 +228,10 @@ export function AgentMenu({
 
           {flik === "gdpr" ? (
             <div className="max-h-[50vh] overflow-y-auto px-4 py-4">
-              <p className="font-display text-[1rem] font-semibold">
-                {text(copy.gdprRubrik as Localized)}
-              </p>
+              <p className={rubrikPanel}>{text(copy.gdprRubrik as Localized)}</p>
               <ul className="mt-3 flex flex-col gap-2.5">
                 {gdprPunkter.map((punkt, i) => (
-                  <li key={i} className="flex gap-2.5 text-[0.8125rem] leading-[1.55] text-ink-muted">
+                  <li key={i} className="flex gap-2.5 text-[0.9375rem] leading-[1.55] text-ink-muted">
                     <span
                       aria-hidden="true"
                       className="mt-[0.5em] h-1 w-1 shrink-0 rounded-full bg-ochre"
@@ -232,7 +240,7 @@ export function AgentMenu({
                   </li>
                 ))}
               </ul>
-              <p className="mt-3 text-[0.8125rem] leading-[1.55] text-mineral">
+              <p className="mt-3 text-[0.9375rem] leading-[1.55] text-ink-muted">
                 {text(copy.gdprFot as Localized)}
                 <a
                   href={`mailto:${SNAJP_SUPPORT_EPOST}`}
@@ -246,10 +254,8 @@ export function AgentMenu({
           ) : null}
 
           <div className="border-t border-ink/10 bg-paper2/60 px-4 py-4">
-            <p className="text-[0.875rem] font-semibold">
-              {text(copy.eskaleraRubrik as Localized)}
-            </p>
-            <p className="mt-1.5 text-[0.8125rem] leading-[1.55] text-ink-muted">
+            <p className={rubrikPanel}>{text(copy.eskaleraRubrik as Localized)}</p>
+            <p className="mt-1.5 text-[0.9375rem] leading-[1.55] text-ink-muted">
               {text(copy.eskaleraBody as Localized)}
             </p>
             <a

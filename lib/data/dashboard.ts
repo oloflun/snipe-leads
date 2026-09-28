@@ -29,6 +29,13 @@ export type DashboardState = {
   /** Tillköpta tilläggstjänster (migration 022). Tomt = inga. */
   addons: AddonKey[];
   workspaceName: string | null;
+  /**
+   * Den INLOGGADES e-post — till förifyllning (inkorgskopplingen föreslår
+   * kontots adress). Null anonymt och i demo-/kundvyn: där är den inloggade
+   * adminen, och att föreslå adminens adress i en kunds arbetsyta vore fel
+   * åt båda hållen.
+   */
+  userEmail: string | null;
   signedIn: boolean;
   /** Demo-läge: egen instans utan förladdad data, begränsat antal körningar. */
   isDemo: boolean;
@@ -90,6 +97,7 @@ const ANONYMOUS: DashboardState = {
   products: ALL_PRODUCTS,
   addons: [],
   workspaceName: null,
+  userEmail: null,
   signedIn: false,
   isDemo: false,
   isPlatformAdmin: false,
@@ -195,6 +203,7 @@ export async function resolveDashboardState(): Promise<DashboardState> {
       // påslaget inte fungerade.
       addons,
       workspaceName: rader[0]?.name ?? lage.slug,
+      userEmail: null,
       signedIn: true,
       isDemo: false,
       isPlatformAdmin: true,
@@ -214,6 +223,7 @@ export async function resolveDashboardState(): Promise<DashboardState> {
       products: ALL_PRODUCTS,
       addons: [],
       workspaceName: DEMO_ARBETSYTA,
+      userEmail: null,
       signedIn: true,
       // Medvetet false. Flaggan går vidare som X-Snajp-Demo och sänker
       // löptaket; demovyn ska kunna köra skarpa testkörningar. Att vyn ÄR en
@@ -232,6 +242,7 @@ export async function resolveDashboardState(): Promise<DashboardState> {
     products,
     addons: (context.workspace.addons ?? []).filter(isAddonKey),
     workspaceName: context.workspace.name,
+    userEmail: context.user.email,
     signedIn: true,
     isDemo: context.workspace.is_demo,
     isPlatformAdmin: Boolean(await getPlatformAdmin()),

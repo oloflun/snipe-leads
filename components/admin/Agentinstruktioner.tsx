@@ -2,7 +2,17 @@
 
 import { useEffect, useState, useTransition } from "react";
 
-import { btnPrimary, btnSecondary } from "@/components/ui";
+import {
+  Badge,
+  Cell,
+  Sektion,
+  Tabell,
+  btnPrimary,
+  btnSecondary,
+  etikett,
+  meta
+} from "@/components/ui";
+import { cn } from "@/lib/utils";
 import {
   forhandsgranskaInstruktioner,
   hamtaInstruktioner,
@@ -109,7 +119,7 @@ export function Agentinstruktioner() {
   }
 
   return (
-    <div className="grid gap-8">
+    <div>
       {/* Felet först, och stort. Låg det bara nere vid knapparna kunde sidan
           se ut att ha laddat tomt — och en tom ruta som egentligen är ett
           rättighetsfel får någon att skriva om instruktionerna i onödan. */}
@@ -119,20 +129,24 @@ export function Agentinstruktioner() {
         </p>
       ) : null}
 
-      <section className="border-t border-ink/15 pt-5">
-        <h2 className="kicker text-mineral">Vad agenten läser just nu</h2>
+      <Sektion title="Vad agenten läser just nu">
         {/* `lage` är null när hämtningen föll. Den grenen MÅSTE finnas för sig:
             föll den ihop med "ingen rad sparad" påstod sidan "Sparad —, sparad
             som den skrevs" med ett tomt datum och ett ensamt brädgårdstecken.
             Trovärdigt, och osant. */}
-        <p className="mt-2 max-w-[70ch] text-[0.9375rem] leading-7 text-ink-muted">
-          {!lage
-            ? "Läget kunde inte läsas."
-            : lage.fran_fil
-              ? "Ingen instruktion är sparad. Agenten kör på den incheckade agent-core/AGENTS.md."
-              : `Sparad ${
-                  lage.uppdaterad ? new Date(lage.uppdaterad).toLocaleString("sv-SE") : "okänt datum"
-                }, ${lage.kalla === "ai" ? "strukturerad av modellen" : "sparad som den skrevs"}.`}
+        <p className="max-w-[70ch] text-[0.9375rem] leading-7 text-ink-muted">
+          {!lage ? (
+            "Läget kunde inte läsas."
+          ) : lage.fran_fil ? (
+            <>
+              Ingen instruktion är sparad. Agenten kör på den incheckade{" "}
+              <span className="font-mono text-[0.8125rem]">agent-core/AGENTS.md</span>.
+            </>
+          ) : (
+            `Sparad ${
+              lage.uppdaterad ? new Date(lage.uppdaterad).toLocaleString("sv-SE") : "okänt datum"
+            }, ${lage.kalla === "ai" ? "strukturerad av modellen" : "sparad som den skrevs"}.`
+          )}
           {lage?.hash ? (
             <span className="ml-2 font-mono text-[0.8125rem] text-ink-muted">#{lage.hash}</span>
           ) : null}
@@ -140,41 +154,42 @@ export function Agentinstruktioner() {
         <pre className="mt-4 max-h-64 overflow-auto whitespace-pre-wrap rounded-input border border-ink/15 bg-paper2/50 p-4 text-[0.8125rem] leading-6">
           {lage?.aktiv_text || "(tomt)"}
         </pre>
-      </section>
+      </Sektion>
 
-      <div className="grid gap-8 lg:grid-cols-2">
+      {/* Inga förklarande rader under etiketterna (F-016). Att vänster ruta
+          struktureras till den högra står i den högras platshållare, och att
+          en handredigering sparas ordagrant står i statusraden under den, som
+          ändras när man skriver. Det var samma sak sagt två gånger. */}
+      {/* Den enda raden som styr VAD som skrivs här: ton och röst är kundens
+          (SOUL, /settings/soul), plattformens instruktioner är policy. */}
+      <p className="mt-12 max-w-[70ch] text-[0.9375rem] leading-7 text-ink-muted">
+        Här står policy och säkerhet. Ton och röst ställer varje kund in själv.
+      </p>
+      <div className="mt-6 grid gap-8 lg:grid-cols-2">
         <section>
-          <label htmlFor="rav" className="kicker text-mineral">
+          <label htmlFor="rav" className={cn(etikett, "block")}>
             Dina instruktioner och din feedback
           </label>
-          <p className="mt-2 max-w-[60ch] text-[0.9375rem] leading-7 text-ink-muted">
-            Skriv fritt. Vad agenterna ska och inte ska göra, och vad som gått fel.
-            Modellen gör om det till regler när du sparar.
-          </p>
           <textarea
             id="rav"
             value={rav}
             maxLength={MAX}
             onChange={(event) => setRav(event.target.value)}
             rows={18}
-            className="focus-ring mt-4 w-full resize-y rounded-input border border-ink/15 bg-paper p-4 font-mono text-[1rem] leading-6"
+            className="focus-ring mt-2 w-full resize-y rounded-input border border-ink/15 bg-paper p-4 text-[1rem] leading-6"
             placeholder={
               "Agenten svarar för långt i chatten.\nDen ska aldrig lova återbetalning. Det går alltid till en människa.\nSluta inleda varje replik med Hej."
             }
           />
-          <p className="mt-2 text-[0.8125rem] text-ink-muted">
+          <p className={cn(meta, "num mt-2")}>
             {rav.length} / {MAX} tecken
           </p>
         </section>
 
         <section>
-          <label htmlFor="dokument" className="kicker text-mineral">
+          <label htmlFor="dokument" className={cn(etikett, "block")}>
             Vad agenten kommer att läsa
           </label>
-          <p className="mt-2 max-w-[60ch] text-[0.9375rem] leading-7 text-ink-muted">
-            Går att redigera. Rör du texten här sparas den precis som du skrev den.
-            Den struktureras inte om.
-          </p>
           <textarea
             id="dokument"
             value={dokument}
@@ -184,16 +199,16 @@ export function Agentinstruktioner() {
               setRedigerat(true);
             }}
             rows={18}
-            className="focus-ring mt-4 w-full resize-y rounded-input border border-ink/15 bg-paper p-4 font-mono text-[1rem] leading-6"
+            className="focus-ring mt-2 w-full resize-y rounded-input border border-ink/15 bg-paper p-4 text-[1rem] leading-6"
             placeholder="(struktureras när du förhandsgranskar eller sparar)"
           />
-          <p className="mt-2 text-[0.8125rem] text-ink-muted">
+          <p className={cn(meta, "mt-2")}>
             {redigerat ? "Redigerad för hand, sparas ordagrant." : "Struktureras av modellen."}
           </p>
         </section>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 border-t border-ink/15 pt-5">
+      <div className="mt-8 flex flex-wrap items-center gap-3 border-t border-ink/15 pt-5">
         <button
           type="button"
           onClick={forhandsgranska}
@@ -216,31 +231,35 @@ export function Agentinstruktioner() {
             om att sparandet gick vägen, och utbytt text i en vanlig span läses
             aldrig upp. Elementet renderas ALLTID — en region som tillkommer
             samtidigt som sin text annonseras inte av alla skärmläsare. */}
-        <span aria-live="polite" className="text-[0.875rem] text-mineral">
+        <span aria-live="polite" className="text-[0.9375rem] text-ink-muted">
           {meddelande ?? ""}
         </span>
       </div>
 
+      {/* Varje sparning är en ny version; de inaktiva finns kvar för att en
+          körning ska gå att förklara i efterhand. Tabulär data, alltså Tabell. */}
       {lage?.historik?.length ? (
-        <section className="border-t border-ink/15 pt-5">
-          <h2 className="kicker text-mineral">Historik</h2>
-          <p className="mt-2 max-w-[70ch] text-[0.9375rem] leading-7 text-ink-muted">
-            Varje sparning är en ny version. Den som är aktiv är den agenten läser;
-            de andra finns kvar för att en körning ska gå att förklara i efterhand.
-          </p>
-          <ul className="mt-4 grid gap-2 text-[0.8125rem]">
+        <Sektion title="Historik">
+          <Tabell
+            minBredd={480}
+            ariaLabel="Historik"
+            kolumner={[
+              { rubrik: "Sparad", bredd: "34%" },
+              { rubrik: "Källa", bredd: "26%" },
+              { rubrik: "Tecken", bredd: "20%", hoger: true },
+              { rubrik: "Status", bredd: "20%", hoger: true }
+            ]}
+          >
             {lage.historik.map((rad) => (
-              <li key={rad.id} className="flex flex-wrap gap-x-4 text-ink-muted">
-                <span className="tabular-nums">
-                  {new Date(rad.created_at).toLocaleString("sv-SE")}
-                </span>
-                <span>{rad.kalla === "ai" ? "strukturerad" : "manuell"}</span>
-                <span className="tabular-nums">{rad.strukturerad_tecken} tecken</span>
-                {rad.aktiv ? <span className="text-warning">aktiv</span> : null}
-              </li>
+              <tr key={rad.id}>
+                <Cell className="num">{new Date(rad.created_at).toLocaleString("sv-SE")}</Cell>
+                <Cell>{rad.kalla === "ai" ? "Strukturerad" : "Manuell"}</Cell>
+                <Cell hoger>{rad.strukturerad_tecken}</Cell>
+                <Cell hoger>{rad.aktiv ? <Badge tone="good">Aktiv</Badge> : "–"}</Cell>
+              </tr>
             ))}
-          </ul>
-        </section>
+          </Tabell>
+        </Sektion>
       ) : null}
     </div>
   );

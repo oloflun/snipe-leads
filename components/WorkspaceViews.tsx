@@ -199,7 +199,12 @@ export function SettingsView({
       "Reglerna varje agent läser först, för varje kund. Policy och säkerhet — ton och röst hör hemma hos kunden."
   };
   return (
-    <PageShell title={titles[section]} description={descriptions[section]}>
+    <PageShell title={titles[section]}>
+      {descriptions[section] ? (
+        <p className="-mt-4 mb-8 max-w-[68ch] text-[0.9375rem] leading-[1.6] text-ink-muted">
+          {descriptions[section]}
+        </p>
+      ) : null}
       {/* gap-x först från md. grid-cols-12 med gap-x-8 kräver 11 x 32px = 352px
           BARA till mellanrum: vid 320px-vyn (288px container) klampades alla
           tolv kolumner till 0px, och rutnätet blev 352px brett oavsett
@@ -339,7 +344,7 @@ export function LoginView() {
 
 export function LoadingStatesView() {
   return (
-    <PageShell kicker="States" title="Loading, empty och error states i Snajps formspråk." description="Gemensamma UI-states för vidare produktion.">
+    <PageShell title="Loading, empty och error states i Snajps formspråk">
       <div className="grid grid-cols-12 gap-x-8 gap-y-8">
         <TextList title="Loading" items={["Fyra linjer i ledgern får låg kontrast och shimmer via opacity, inte spinner."]} />
         <TextList title="Empty" items={["Ingen kampanj vald. Välj en kampanj eller låt Snajp föreslå ett segment."]} />

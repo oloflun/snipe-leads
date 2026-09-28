@@ -75,6 +75,7 @@ type Lage =
 type UtkastLage =
   | { fas: "kontrollerar" }
   | { fas: "ingen" }
+  | { fas: "letar-kontakt" }
   | { fas: "skapar" }
   | { fas: "fel"; meddelande: string }
   | { fas: "klar"; data: EmailStudioData; queueItemId: string | null };
@@ -361,13 +362,40 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
   /** 5.2/5.3: "Skapa utkast" — anropar den riktiga kedjan, inte studions egen route. */
   const skapaUtkast = useCallback(async () => {
     if (lage.fas !== "klar") return;
-    const p = lage.prospekt;
+    let p = lage.prospekt;
     if (!p.contact_email) {
-      setUtkastLage({
-        fas: "fel",
-        meddelande: "Mottagaradress saknas."
-      });
-      return;
+      // Ingen återvändsgränd ("Mottagaradress saknas."): starta kontaktjakten
+      // — processa-om kör researchen som skrapar bolagets kontakt-/om-oss-
+      // sidor och skriver kontaktfälten — och fortsätt själv när adressen
+      // finns. Samma flöde som tvillingen IrisBolag.tsx.
+      setUtkastLage({ fas: "letar-kontakt" });
+      try {
+        await snajpAnrop("/leads/prospects/processa-om", {
+          method: "POST",
+          body: JSON.stringify({ prospect_ids: [p.id], scope: "research" })
+        });
+        let hittad: Prospekt | null = null;
+        for (let forsok = 0; forsok < 24 && !hittad; forsok += 1) {
+          await new Promise((r) => setTimeout(r, 5_000));
+          const kropp = await snajpAnrop<{ prospect?: Prospekt }>(
+            `/leads/prospects/${encodeURIComponent(p.id)}`
+          );
+          if (kropp.prospect?.contact_email) hittad = kropp.prospect;
+        }
+        if (!hittad) {
+          setUtkastLage({
+            fas: "fel",
+            meddelande:
+              "Iris hittade ingen kontaktadress på bolagets sajt. Försök igen om en stund, eller komplettera bolaget med en adress."
+          });
+          return;
+        }
+        p = hittad;
+        setLage({ fas: "klar", prospekt: hittad, kallor: lage.kallor });
+      } catch (cause) {
+        setUtkastLage({ fas: "fel", meddelande: felmeddelande(cause) });
+        return;
+      }
     }
 
     setUtkastLage({ fas: "skapar" });
@@ -485,7 +513,7 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
 
   if (lage.fas === "saknas") {
     return (
-      <PageShell kicker="Företag" title="Bolaget finns inte">
+      <PageShell title="Bolaget finns inte">
         <EmptyState title="Hittade inget sådant bolag" />
         <Link href={vag("/dashboard/companies")} className={cn(btnPrimary, "mt-6")}>
           Till bolagen
@@ -496,7 +524,7 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
 
   if (lage.fas === "fel") {
     return (
-      <PageShell kicker="Företag" title="Bolaget kunde inte hämtas">
+      <PageShell title="Bolaget kunde inte hämtas">
         <div className="flex items-start gap-3 border-y border-ochre/40 bg-ochre/10 px-4 py-4">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
           <div className="min-w-0">
@@ -524,9 +552,7 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
 
   return (
     <PageShell
-      kicker={[p.sni, p.ort].filter(Boolean).join(" · ") || "Företag"}
       title={p.company_name}
-      description={p.website ?? undefined}
       action={
         // Länken till den frikopplade Email-studion är BORTA (Fas 4,
         // 2026-08-29): mejlutkastet renderas numera inline i den här sidan,
@@ -536,6 +562,15 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
         p.origin === "example" ? <span className="kicker text-mineral">Exempel</span> : null
       }
     >
+      {/* Vad kickern och beskrivningen bar: bransch/ort och webbplats,
+          nu en rad i brödtextstorlek direkt under rubriken (F-016). */}
+      {[p.sni, p.ort].filter(Boolean).join(" · ") || p.website ? (
+        <p className="-mt-1 mb-8 text-[0.9375rem] text-ink-muted">
+          {[p.sni, p.ort].filter(Boolean).join(" · ")}
+          {p.website ? (p.sni || p.ort ? " · " : "") + p.website : ""}
+        </p>
+      ) : null}
+
       <div className="grid grid-cols-12 gap-x-8 gap-y-10">
         <dl className="col-span-12 grid grid-cols-12 gap-x-8 gap-y-8">
           <Matt label="Score" value={poang} detail={p.qualified === false ? "diskvalificerad" : "kvalificerad"} />
@@ -650,6 +685,13 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
                     Skapa utkast
                   </button>
                 </div>
+              ) : null}
+
+              {utkastLage.fas === "letar-kontakt" ? (
+                <p className="text-[14px] leading-6 text-ink-subtle">
+                  Iris letar kontaktadress på bolagets sajt … Det tar ungefär en minut,
+                  och utkastet skrivs direkt efteråt.
+                </p>
               ) : null}
 
               {utkastLage.fas === "skapar" ? (

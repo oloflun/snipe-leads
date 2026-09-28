@@ -24,7 +24,7 @@ import { SupportChat } from "./SupportChat";
  * räknas som kundvolym.
  */
 export function SupportWorkspaceTabs({ workspaceName }: Readonly<{ workspaceName: string | null }>) {
-  const [tab, setTab] = useState<"kundtjanst" | "testmail" | "testchatt" | "journal">("kundtjanst");
+  const [tab, setTab] = useState<"kundtjanst" | "att_hantera" | "testmail" | "testchatt" | "journal">("kundtjanst");
   /** null = vet inte än. false = riktig kund, Testmail-fliken ska synas. */
   const [visarTestIArenden, setVisarTestIArenden] = useState<boolean | null>(null);
 
@@ -41,6 +41,9 @@ export function SupportWorkspaceTabs({ workspaceName }: Readonly<{ workspaceName
   const flikar = (
     [
       { id: "kundtjanst", label: "Kundtjänst" },
+      // Eskaleringar och larm (migration 078): egen flik så att de aldrig
+      // blandas med kundärenden eller får ett AI-utkast (kundtest 2026-09-22).
+      { id: "att_hantera", label: "Att hantera" },
       ...(visarTestIArenden === false ? [{ id: "testmail" as const, label: "Testmail" }] : []),
       { id: "testchatt", label: "Testchatt" },
       // Journalen (Livrustning-piloten): körningar, kostnad och
@@ -72,6 +75,7 @@ export function SupportWorkspaceTabs({ workspaceName }: Readonly<{ workspaceName
         {tab === "kundtjanst" ? (
           <Dashboard onMeta={onMeta} />
         ) : null}
+        {tab === "att_hantera" ? <Dashboard lager="att_hantera" /> : null}
         {tab === "testmail" ? <Dashboard lager="testmail" /> : null}
         {tab === "testchatt" ? (
           <div className="mx-auto max-w-3xl">

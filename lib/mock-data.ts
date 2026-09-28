@@ -511,17 +511,17 @@ export const analyticsSeries: AnalyticsPoint[] = [
 ];
 
 export const workflowSteps = [
-  "Fetch leads",
-  "Enrich company",
-  "Detect signals",
-  "Analyze company",
-  "Score relevance",
-  "Generate outreach angle",
-  "Generate email variants",
-  "Queue sending",
-  "Watch replies/events",
-  "Plan follow-up",
-  "Update CRM/analytics"
+  "Hämta bolag",
+  "Berika bolagsdata",
+  "Hitta signaler",
+  "Analysera bolaget",
+  "Poängsätt relevans",
+  "Välj ingång för mejlet",
+  "Skriv mejlvarianter",
+  "Köa utskick",
+  "Bevaka svar",
+  "Planera uppföljning",
+  "Uppdatera CRM och analys"
 ] as const;
 
 export const agents = [

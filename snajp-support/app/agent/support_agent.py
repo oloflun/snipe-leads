@@ -1180,22 +1180,34 @@ async def run_support_agent(
             ),
             "sakerhet": (
                 "Ärendet rör något en människa måste avgöra (pengar, juridik, "
-                "personuppgifter eller ett tydligt missnöje). Svara på det "
-                "kunskapsbasen faktiskt täcker om det hjälper kunden, men lova "
-                "ingenting om utfallet. "
+                "personuppgifter eller ett tydligt missnöje). Svara bara på det "
+                "kunskapsbasen täcker om det besvarar kundens EGEN fråga — "
+                "återberätta aldrig allmänt vad produkten gör. Lova ingenting om "
+                "utfallet. "
             ),
         }.get(
             orsak or "",
-            "Du kan inte svara säkert på det här utifrån kunskapsbasen. Säg det "
-            "rakt ut — gissa inte, och påstå ingenting om produkten eller "
-            "villkoren. ",
+            "Du kan inte svara säkert på det här utifrån kunskapsbasen — gissa "
+            "inte, och påstå ingenting om produkten eller villkoren. ",
         )
+        # Kundtest 2026-09-22: "Vår supportagent krashade, vad gör ni åt det?"
+        # fick först en allmän beskrivning av agenten och sedan "jag har ingen
+        # information om vad som orsakar en krasch" — som om kunden pratade om
+        # något okänt. Överlämningen var rätt; svaret lät dumt. En kollega
+        # behöver detaljerna ändå, så svaret ska ta in dem direkt.
         uppgift = (
             inledning
-            + "Berätta sedan att en kollega tar över HÄR i chatten, att hela "
-            "samtalet följer med så att kunden inte behöver upprepa något, och att "
-            "svaret kommer i samma chatt. Lova ingen tid. Ren text, ingen "
-            "markdown. Returnera JSON: draft (svenska)."
+            + "Inled inte med en beskrivning av dig själv eller tjänsten, och säg "
+            "aldrig att du saknar information om det kunden beskriver som om det "
+            "vore något okänt. Beskriver kunden ett fel eller problem utan "
+            "detaljer: bekräfta kort att du förstått och be om det en kollega "
+            "behöver för att lösa det — till exempel vad som hände, ett "
+            "eventuellt felmeddelande och när det började — som högst två korta "
+            "frågor i samma mening. Berätta sedan att en kollega tar över HÄR i "
+            "chatten, att hela samtalet följer med så att kunden inte behöver "
+            "upprepa något, och att svaret kommer i samma chatt. Lova ingen tid. "
+            "Håll hela svaret kort. Ren text, ingen markdown. Returnera JSON: "
+            "draft (svenska)."
         )
     else:
         uppgift = (

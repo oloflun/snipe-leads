@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { FelOchEskaleringar } from "@/components/admin/FelOchEskaleringar";
-import { Kundfotnot, Kundrubrik } from "@/components/admin/Kundrubrik";
+import { Kundrubrik } from "@/components/admin/Kundrubrik";
 import { Kundstatistik } from "@/components/admin/Kundstatistik";
 import { Kundtabell } from "@/components/admin/Kundtabell";
 import { berikaAlla } from "@/lib/admin/exempeldata";
@@ -26,6 +26,15 @@ export const maxDuration = 60;
  * plus kundregistret (053). Marginalen bor i Översikten, med sitt förbehåll.
  * Rader utan någon aktivitet alls får exempeltal ur `lib/admin/exempeldata.ts`
  * och är då märkta som sådana; se den filen för varför.
+ *
+ * Intäkter och utgifter har MEDVETET ingen sektion på den här sidan: det finns
+ * ingen riktig betal- eller bokföringskälla i systemet ännu (betalsätten är
+ * simulerade testkort, fakturor finns inte i kod). Bygg inte in siffror här
+ * förrän en riktig datakälla är vald. Det stod förut i en fotnot längst ned på
+ * sidan; den togs bort 2026-09-27 (F-016), regeln gäller fortfarande.
+ *
+ * Ordningen är tabellen, sedan fel och eskaleringar, sist statistiken: det som
+ * väntar på admin före talen som bara ska läsas.
  */
 
 /** Händelsetaket. Fullt svar => talen i felsektionen prefixas "minst". */
@@ -45,7 +54,7 @@ export default async function Page() {
     return (
       <div>
         <Kundrubrik />
-        <p role="alert" className="mt-6 max-w-[70ch] break-words text-[15px] text-danger">
+        <p role="alert" className="mt-8 max-w-[70ch] break-words text-[0.9375rem] text-danger">
           {error}
         </p>
       </div>
@@ -67,19 +76,6 @@ export default async function Page() {
 
       <Kundtabell kunder={kunder} />
 
-      {/* Statistiken räknas på SAMMA rader som tabellen ovan, inte en egen
-          hämtning — två uträkningar av samma tal blir förr eller senare två
-          olika tal. `new Date()` är okej i en force-dynamic server component:
-          sidan renderas per anrop.
-
-          Exempelraderna ändrar INTE statistiken: `arRiktigKund()` filtrerar
-          bort test- och demoarbetsytor, och det är hela poängen med den regeln
-          — en testyta som syns i en försäljningskurva fattar beslut åt någon.
-          Kurvan är därför fortsatt gles, och det är avsiktligt. */}
-      {kunder.length > 0 ? (
-        <Kundstatistik stat={beraknaKundstatistik(kunder, nu)} />
-      ) : null}
-
       {/* Fel & eskaleringar: sammanfattar det som redan loggas. Renderas även
           när händelselistan inte gick att hämta — då med tom lista, eftersom
           eskaleringstalet kommer ur tenantraderna och står på egna ben. */}
@@ -92,7 +88,18 @@ export default async function Page() {
         />
       ) : null}
 
-      <Kundfotnot />
+      {/* Statistiken räknas på SAMMA rader som tabellen ovan, inte en egen
+          hämtning — två uträkningar av samma tal blir förr eller senare två
+          olika tal. `new Date()` är okej i en force-dynamic server component:
+          sidan renderas per anrop.
+
+          Test- och demoarbetsytor räknas inte (`raknasSomKund()` i
+          lib/admin/statistik.ts) — en testyta som syns i en försäljningskurva
+          fattar beslut åt någon. Exempelraderna räknas däremot, eftersom de är
+          märkta, och Kundstatistik säger hur många de är. */}
+      {kunder.length > 0 ? (
+        <Kundstatistik stat={beraknaKundstatistik(kunder, nu)} />
+      ) : null}
     </div>
   );
 }

@@ -36,7 +36,7 @@ export default async function Page({
     return (
       <div>
         <Handelserubrik />
-        <p role="alert" className="mt-6 max-w-[70ch] break-words text-[15px] text-danger">
+        <p role="alert" className="mt-8 max-w-[70ch] break-words text-[15px] text-danger">
           {error}
         </p>
       </div>

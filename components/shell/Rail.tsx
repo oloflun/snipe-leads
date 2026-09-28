@@ -182,7 +182,7 @@ export function Rail({
           <Fragment key={group.key ?? gi}>
             {gi > 0 ? <div aria-hidden className="my-2 border-t border-paper/10" /> : null}
             {group.label ? (
-              <p className="hidden px-3 pb-1 text-[0.6875rem] font-medium uppercase tracking-[0.14em] text-paper-subtle lg:block">
+              <p className="hidden px-3 pb-1 text-[0.8125rem] font-medium text-paper-subtle lg:block">
                 {group.label}
               </p>
             ) : null}

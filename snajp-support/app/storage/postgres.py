@@ -278,16 +278,54 @@ class PostgresStorage:
     # -- Inkorgar -----------------------------------------------------------
 
     async def list_mailboxes(self, tenant_id: str) -> list[dict[str, Any]]:
+        # secret_enc följer med (Fernet-krypterat, migration 077): pollern och
+        # synken behöver det för att låsa upp lösenordet. API-svaren plockar
+        # ALDRIG med fältet ut till klienten — se list_inbox_mailboxes.
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(
                 """
                 select id, tenant_id, provider, address, status, imap_host,
-                       last_sync_at, last_error
+                       secret_enc, last_sync_at, last_error
                 from ss_mailboxes where tenant_id = $1 order by created_at
                 """,
                 tenant_id,
             )
         return [_row(r) for r in records]
+
+    async def upsert_mailbox(
+        self,
+        tenant_id: str,
+        *,
+        provider: str,
+        address: str,
+        imap_host: str | None = None,
+        secret_enc: str | None = None,
+    ) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                insert into ss_mailboxes
+                    (tenant_id, provider, address, status, imap_host, secret_enc)
+                values ($1, $2, lower(trim($3)), 'active', $4, $5)
+                on conflict (tenant_id, address) do update set
+                    provider = excluded.provider,
+                    imap_host = excluded.imap_host,
+                    secret_enc = excluded.secret_enc,
+                    status = 'active',
+                    last_error = null
+                returning *
+                """,
+                tenant_id, provider, address, imap_host, secret_enc,
+            )
+        return _row(record)
+
+    async def delete_mailbox(self, tenant_id: str, mailbox_id: str) -> bool:
+        async with self._scoped(tenant_id) as conn:
+            resultat = await conn.execute(
+                "delete from ss_mailboxes where tenant_id = $1 and id = $2",
+                tenant_id, mailbox_id,
+            )
+        return resultat.endswith("1")
 
     # -- Kunddata -----------------------------------------------------------
 
@@ -2299,6 +2337,7 @@ class PostgresStorage:
         search: str | None = None,
         limit: int = 50,
         is_test: bool | None = False,
+        inkludera_larm: bool = False,
     ) -> list[dict[str, Any]]:
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(
@@ -2313,7 +2352,12 @@ class PostgresStorage:
                          where a.email_id = e.id and a.is_image) as has_image
                 from ss_emails e
                 where e.tenant_id = $1
-                  and ($2::text is null or e.status = $2)
+                  -- Utan statusfilter visas inte larmen (migration 078):
+                  -- de bor i fliken Att hantera, som frågar efter statusen.
+                  -- get_email slår upp via den här listan och måste se ALLA
+                  -- rader, därav inkludera_larm ($7).
+                  and (($2::text is null and ($7::boolean or e.status <> 'att_hantera'))
+                       or e.status = $2)
                   and ($3::text is null or exists(
                         select 1 from ss_classifications c
                         where c.email_id = e.id and c.category = $3))
@@ -2330,6 +2374,7 @@ class PostgresStorage:
                 search,
                 limit,
                 is_test,
+                inkludera_larm,
             )
         results = []
         for record in records:
@@ -2341,7 +2386,7 @@ class PostgresStorage:
         return results
 
     async def get_email(self, tenant_id: str, email_id: str) -> dict[str, Any] | None:
-        rows = await self.list_emails(tenant_id, limit=1000, is_test=None)
+        rows = await self.list_emails(tenant_id, limit=1000, is_test=None, inkludera_larm=True)
         email = next((e for e in rows if e["id"] == email_id), None)
         if not email:
             return None

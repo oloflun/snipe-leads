@@ -1,17 +1,18 @@
 """Inkorgs-API: seedning/synk/ingest, lista, detalj och ta över — tenant-skopat."""
 
 import logging
-import os
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request
 
+from ..email_pipeline.connectors import imap as imap_connector
 from ..email_pipeline.connectors.mock import build_mock_emails
 from ..email_pipeline.ingest import ingest_email
 from ..email_pipeline.models import InboundAttachment, InboundEmail
 from ..email_pipeline.poller import (
     host_for_mailbox,
-    password_env_name,
+    imap_for_adress,
+    losenord_for,
     sync_imap_once,
     sync_mailbox,
 )
@@ -22,9 +23,10 @@ from ..config import (
     PUBLIC_DEMO_TENANT_ID,
     get_settings,
 )
+from ..integrationer.hemligheter import IngenNyckelError, kryptera
 from ..scripts.seed_kb import ensure_tenant_kb
 from .deps import require_tenant
-from .schemas import HanteradRequest, IngestEmailRequest, SeedMockRequest
+from .schemas import HanteradRequest, IngestEmailRequest, KopplaInkorgRequest, SeedMockRequest
 
 logger = logging.getLogger("snajp-support.inbox")
 
@@ -169,7 +171,6 @@ async def list_inbox_mailboxes(request: Request, tenant: dict = Depends(require_
     ]
 
     slug = await _tenant_slug(storage, tenant["tenant_id"])
-    har_losenord = bool(slug and os.environ.get(password_env_name(slug)))
 
     # Den globala envvägen räknas som en kopplad inkorg. Den finns kvar för
     # enkelinstallationer och för testerna.
@@ -179,6 +180,7 @@ async def list_inbox_mailboxes(request: Request, tenant: dict = Depends(require_
 
     rader = [
         {
+            "id": m.get("id"),
             "address": m.get("address"),
             "provider": m.get("provider"),
             "status": m.get("status"),
@@ -187,7 +189,9 @@ async def list_inbox_mailboxes(request: Request, tenant: dict = Depends(require_
             "last_error": m.get("last_error"),
             # Utan lösenord kan raden inte synkas. Det sägs rakt ut, så att
             # UI:t kan skilja "ingen inkorg" från "inkorg utan nyckel".
-            "kan_synka": bool(host_for_mailbox(m)) and har_losenord,
+            # Sedan migration 077 räcker radens egen krypterade hemlighet —
+            # env-vägen är kvar och vinner (se poller.losenord_for).
+            "kan_synka": bool(host_for_mailbox(m)) and bool(losenord_for(m, slug)),
         }
         for m in inkorgar
     ]
@@ -199,8 +203,97 @@ async def list_inbox_mailboxes(request: Request, tenant: dict = Depends(require_
     }
 
 
+@router.post("/api/inbox/mailboxes")
+async def koppla_inkorg(
+    request: Request,
+    payload: KopplaInkorgRequest,
+    tenant: dict = Depends(require_tenant),
+) -> dict:
+    """Kopplar kundens egen inkorg — självbetjäning (migration 077).
+
+    Ordningen är kontraktet:
+
+    1. Värden slås upp ur adressens domän (gmail/hotmail/outlook/icloud …);
+       okänd domän kräver `imap_host` och får provider 'imap'.
+    2. Inloggningen PROVAS mot servern innan något sparas. Ett fel
+       app-lösenord ska fångas här, med ett besked kunden kan agera på —
+       inte vid första synken.
+    3. Lösenordet Fernet-krypteras (samma nyckel som integrations-
+       hemligheterna) och läggs på raden. Klartexten lever bara i det här
+       anropet och loggas aldrig.
+
+    Adressen får vara vilken som helst som kunden har lösenordet till —
+    förifyllningen i UI:t är kontots e-post, men det är LÖSENORDET som är
+    behörighetsbeviset, inte adressfältet.
+    """
+    storage = request.app.state.storage
+    adress = payload.address.strip().lower()
+
+    uppslag = imap_for_adress(adress)
+    if uppslag:
+        provider, host = uppslag
+    elif payload.imap_host:
+        provider, host = "imap", payload.imap_host.strip().lower()
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Vi känner inte igen mejlleverantören. Ange IMAP-värden "
+                "(står i din mejlleverantörs inställningar), eller hör av dig så hjälper vi till."
+            ),
+        )
+
+    fel = await imap_connector.prova_inloggning(host, adress, payload.app_losenord)
+    if fel:
+        raise HTTPException(status_code=422, detail=fel)
+
+    try:
+        hemlighet = kryptera({"losenord": payload.app_losenord})
+    except IngenNyckelError as orsak:
+        # Miljö med riktig kunddata utan INTEGRATION_NYCKEL: vägra spara i
+        # stället för att lagra klartext. Samma gräns som integrationerna.
+        raise HTTPException(
+            status_code=503,
+            detail="Hemligheter kan inte sparas i den här miljön ännu. Hör av dig till oss.",
+        ) from orsak
+
+    rad = await storage.upsert_mailbox(
+        tenant["tenant_id"],
+        provider=provider,
+        address=adress,
+        # Kända providers härleder sin värd (host_for_mailbox); bara okända
+        # behöver den utskriven — utom icloud, vars provider är 'imap'.
+        imap_host=None if provider in ("gmail", "outlook") else host,
+        secret_enc=hemlighet,
+    )
+    return {
+        "connected": True,
+        "mailbox": {
+            "id": rad.get("id"),
+            "address": rad.get("address"),
+            "provider": rad.get("provider"),
+            "host": host,
+            "kan_synka": True,
+        },
+    }
+
+
+@router.delete("/api/inbox/mailboxes/{mailbox_id}")
+async def koppla_ur_inkorg(
+    request: Request, mailbox_id: str, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Kopplar ur en inkorg. Hemligheten dör med raden; mailen som redan
+    hämtats ligger kvar som ärenden — de är kundens historik, inte kopplingens."""
+    borttagen = await request.app.state.storage.delete_mailbox(tenant["tenant_id"], mailbox_id)
+    if not borttagen:
+        raise HTTPException(status_code=404, detail="Inkorgen finns inte.")
+    return {"deleted": True}
+
+
 @router.post("/api/inbox/sync")
-async def sync_inbox(request: Request, tenant: dict = Depends(require_tenant)) -> dict:
+async def sync_inbox(
+    request: Request, bakgrund: BackgroundTasks, tenant: dict = Depends(require_tenant)
+) -> dict:
     """Hämtar nya mail från KUNDENS egna inkorgar nu.
 
     Routen synkade förut alltid mot de GLOBALA IMAP-inställningarna
@@ -218,6 +311,16 @@ async def sync_inbox(request: Request, tenant: dict = Depends(require_tenant)) -
     den periodiska pollern använder. Den globala envvägen är kvar som fallback
     för enkelinstallationer och för testerna, och används bara när kunden inte
     har någon egen inkorgsrad.
+
+    ## Hämta snabbt, klassificera i bakgrunden (2026-09-21)
+
+    Routen hämtade och LLM-processade förut ALLT innan den svarade. Proxyn
+    ger en POST en enda tidsbudget, och några mail à ett triageanrop sprängde
+    den varje gång: kunden fick "Assistenten har svårt att nå sin motor" fast
+    synken arbetade — exakt samma fel som testmailsknappen hade (60,3 s
+    uppmätt där, samma lösning här). Nu skrivs mailen in och svaret går
+    direkt; klassificeringen körs i en bakgrundsuppgift och UI:t läser om
+    listan medan facken och utkasten fylls i (`processing`-flaggan).
     """
     storage = request.app.state.storage
     tenant_id = tenant["tenant_id"]
@@ -231,29 +334,37 @@ async def sync_inbox(request: Request, tenant: dict = Depends(require_tenant)) -
     if not inkorgar:
         settings = get_settings()
         if settings.imap_host and settings.imap_user and settings.imap_password:
-            return {"connected": True, **await sync_imap_once(storage, tenant_id)}
+            return {"connected": True, "processing": False, **await sync_imap_once(storage, tenant_id)}
         return {
             "fetched": 0,
             "processed": 0,
             "connected": False,
-            "error": "Ingen inkorg är kopplad ännu. Vi kopplar er Gmail eller Outlook åt er.",
+            "processing": False,
+            "error": "Ingen inkorg är kopplad ännu. Koppla er Gmail, Outlook eller iCloud under Inställningar → Inkorgar.",
         }
 
     slug = await _tenant_slug(storage, tenant_id)
     hamtade = 0
-    processade = 0
+    oprocessade: list[str] = []
     fel: list[str] = []
     for mailbox in inkorgar:
-        summering = await sync_mailbox(storage, tenant_id, slug, mailbox)
+        summering = await sync_mailbox(storage, tenant_id, slug, mailbox, bearbeta=False)
         hamtade += summering.get("fetched", 0)
-        processade += summering.get("processed", 0)
+        oprocessade += summering.get("email_ids", [])
         if summering.get("error"):
             fel.append(str(summering["error"]))
 
+    if oprocessade:
+        # Samma bakgrundsväg som testmailen: raderna finns redan i inkorgen,
+        # klassificering och utkast fylls i medan UI:t pollar.
+        mail = [m for m in [await storage.get_email(tenant_id, eid) for eid in oprocessade] if m]
+        bakgrund.add_task(_processa_i_bakgrunden, storage, tenant_id, mail)
+
     return {
         "fetched": hamtade,
-        "processed": processade,
+        "processed": 0,
         "connected": True,
+        "processing": bool(oprocessade),
         "error": " ".join(fel) or None,
     }
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { Cell, Nyckeltal, Sektion, Tabell, meta } from "@/components/ui";
 import { a } from "@/lib/admin/sprak";
 import type { Kundstatistik as Statistik } from "@/lib/admin/statistik";
 import { useLocale } from "@/lib/i18n";
@@ -19,6 +20,15 @@ import { useLocale } from "@/lib/i18n";
  * finns för att visa. Identiteten bärs av legenden och direktetiketterna,
  * inte av färgen ensam, och ljushetsavståndet mellan ink (L 0.20) och ochre
  * (L 0.74) gör paret läsbart även utan färgseende.
+ *
+ * ## Vad som togs bort 2026-09-27
+ *
+ * Ingressen under rubriken, meningen med totalerna (avtalen stod redan i
+ * nyckeltalet "Avtal i år") och fotnoten om bortfiltrerade test- och
+ * demoytor (F-016: finstilt text om sidan). Testytorna är märkta i tabellen
+ * ovanför; att de inte räknas som kunder är regeln, inte ett undantag att
+ * redovisa. Exempelraderna räknas däremot med, och det står kvar som en
+ * mening, eftersom kurvan annars ser ut som verklig försäljning.
  */
 
 const STAPEL = { bredd: 14, gap: 2, grupp: 18 };
@@ -43,32 +53,37 @@ export function Kundstatistik({ stat }: Readonly<{ stat: Statistik }>) {
   });
 
   return (
-    <section className="mt-10 border-t border-ink/15 pt-4">
-      <h2 className="kicker text-mineral">{a("statistik", locale)}</h2>
-      <p className="mt-1.5 max-w-[70ch] text-[0.875rem] leading-6 text-mineral">
-        {a("statistikIngress", locale)}
-      </p>
+    <Sektion title={a("statistik", locale)}>
+      <Nyckeltal
+        poster={[
+          { etikett: a("avtalIdag", locale), varde: stat.avtal.idag },
+          { etikett: a("avtalVeckan", locale), varde: stat.avtal.veckan },
+          { etikett: a("avtalManaden", locale), varde: stat.avtal.manaden },
+          {
+            etikett: a("avtalAret", locale),
+            varde: stat.avtal.aret,
+            notis: text({ sv: `${stat.avtal.totalt} totalt`, en: `${stat.avtal.totalt} in total` })
+          }
+        ]}
+      />
 
-      <div className="mt-4 grid gap-px overflow-hidden rounded-input border border-ink/15 bg-ink/15 sm:grid-cols-2 lg:grid-cols-4">
-        <Nyckeltal etikett={a("avtalIdag", locale)} varde={stat.avtal.idag} />
-        <Nyckeltal etikett={a("avtalVeckan", locale)} varde={stat.avtal.veckan} />
-        <Nyckeltal etikett={a("avtalManaden", locale)} varde={stat.avtal.manaden} />
-        <Nyckeltal
-          etikett={a("avtalAret", locale)}
-          varde={stat.avtal.aret}
-          rad={text({ sv: `${stat.avtal.totalt} totalt`, en: `${stat.avtal.totalt} in total` })}
-        />
-      </div>
+      <p className="mt-4 max-w-[70ch] text-[0.9375rem] text-ink-muted">{taktText}</p>
 
-      <p className="mt-3 max-w-[70ch] text-[0.875rem] leading-6 text-ink-muted">
-        {taktText}{" "}
-        <span className="text-mineral">
-          {text({
-            sv: `${stat.nyaKunder.totalt} kunder och ${stat.avtal.totalt} registrerade avtal totalt.`,
-            en: `${stat.nyaKunder.totalt} customers and ${stat.avtal.totalt} registered contracts in total.`
-          })}
-        </span>
-      </p>
+      {/* Exempelraderna ingår i talen och i kurvan. Utan den här meningen
+          ser 12 avtal ut som 12 sålda avtal. */}
+      {stat.exempel > 0 ? (
+        <p className="mt-2 max-w-[70ch] text-[0.9375rem] text-ink-muted">
+          {stat.exempel === 1
+            ? text({
+                sv: "Talen och kurvan räknar med exempeldata från en kund, och dess datum är påhittade.",
+                en: "The figures and the chart include example data from one customer, and its dates are invented."
+              })
+            : text({
+                sv: `Talen och kurvan räknar med exempeldata från ${stat.exempel} kunder, och deras datum är påhittade.`,
+                en: `The figures and the chart include example data from ${stat.exempel} customers, and their dates are invented.`
+              })}
+        </p>
+      ) : null}
 
       {/* Grafen: grupperade staplar per vecka, 12 veckor. Direktetiketter på
           allt som inte är noll — talen är ensiffriga och etiketten är
@@ -83,7 +98,7 @@ export function Kundstatistik({ stat }: Readonly<{ stat: Statistik }>) {
             <span aria-hidden className="h-2.5 w-2.5 rounded-[2px] bg-ochre" />
             {a("signeradeAvtal", locale)}
           </span>
-          <span className="text-mineral">{a("perVecka12", locale)}</span>
+          <span className={meta}>{a("perVecka12", locale)}</span>
         </figcaption>
 
         <div className="mt-3 overflow-x-auto">
@@ -144,57 +159,27 @@ export function Kundstatistik({ stat }: Readonly<{ stat: Statistik }>) {
           <summary className="focus-ring inline-flex min-h-11 cursor-pointer items-center rounded-input text-mineral hover:text-ink">
             {a("visaSomTabell", locale)}
           </summary>
-          <table className="mt-2 border-collapse tabular-nums">
-            <thead>
-              <tr className="border-b border-ink/15 text-left">
-                <th className="py-1.5 pr-6 font-medium text-mineral">{a("vecka", locale)}</th>
-                <th className="py-1.5 pr-6 text-right font-medium text-mineral">
-                  {a("nyaKunder", locale)}
-                </th>
-                <th className="py-1.5 text-right font-medium text-mineral">
-                  {a("signeradeAvtal", locale)}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
+          <div className="mt-2">
+            <Tabell
+              minBredd={320}
+              kolumner={[
+                { rubrik: a("vecka", locale), bredd: "34%" },
+                { rubrik: a("nyaKunder", locale), bredd: "33%", hoger: true },
+                { rubrik: a("signeradeAvtal", locale), bredd: "33%", hoger: true }
+              ]}
+            >
               {stat.veckor.map((vecka, i) => (
-                <tr key={`tab-${vecka.vecka}-${i}`} className="border-b border-ink/8">
-                  <td className="py-1.5 pr-6">{veckoetikett(vecka.vecka, locale)}</td>
-                  <td className="py-1.5 pr-6 text-right">{vecka.nyaKunder}</td>
-                  <td className="py-1.5 text-right">{vecka.avtal}</td>
+                <tr key={`tab-${vecka.vecka}-${i}`}>
+                  <Cell>{veckoetikett(vecka.vecka, locale)}</Cell>
+                  <Cell hoger>{vecka.nyaKunder}</Cell>
+                  <Cell hoger>{vecka.avtal}</Cell>
                 </tr>
               ))}
-            </tbody>
-          </table>
+            </Tabell>
+          </div>
         </details>
       </figure>
-
-      {/* Exempelfotnoten står FÖRE bortfiltrerings-fotnoten: läsaren ska veta
-          att kurvan innehåller påhittade tal innan hen läser vad som utelämnats.
-          Utan den här raden ser 12 avtal ut som 12 sålda avtal. */}
-      {stat.exempel > 0 ? (
-        <p className="mt-4 max-w-[70ch] text-[0.8125rem] leading-6 text-mineral">
-          {text({
-            sv: `${stat.exempel} av raderna i talen och kurvan ovan är exempeldata — arbetsytor utan egen aktivitet, märkta med Exempel i tabellen. Både registrerings- och avtalsdatumen är påhittade och utspridda över fönstret, så kurvans FORM säger ingenting om verklig försäljningstakt. Stäng av dem med NEXT_PUBLIC_ADMIN_EXEMPELDATA=av.`,
-            en: `${stat.exempel} of the rows behind the figures and the chart above are example data — workspaces with no activity of their own, tagged Example in the table. Both the registration and contract dates are fabricated and spread across the window, so the SHAPE of the curve says nothing about real sales velocity. Turn them off with NEXT_PUBLIC_ADMIN_EXEMPELDATA=av.`
-          })}
-        </p>
-      ) : null}
-
-      {stat.bortfiltrerade > 0 ? (
-        <p className="mt-4 max-w-[70ch] text-[0.8125rem] leading-6 text-mineral">
-          {stat.bortfiltrerade === 1
-            ? text({
-                sv: "En demo- eller testarbetsyta ingår inte i talen ovan. Den räknas inte som kund, men den göms inte heller.",
-                en: "One demo or test workspace is excluded from the figures above. It does not count as a customer, but it is not hidden either."
-              })
-            : text({
-                sv: `${stat.bortfiltrerade} demo- och testarbetsytor ingår inte i talen ovan. De räknas inte som kunder, men de göms inte heller.`,
-                en: `${stat.bortfiltrerade} demo and test workspaces are excluded from the figures above. They do not count as customers, but they are not hidden either.`
-              })}
-        </p>
-      ) : null}
-    </section>
+    </Sektion>
   );
 }
 
@@ -231,19 +216,5 @@ function Stapel({
         </text>
       ) : null}
     </>
-  );
-}
-
-function Nyckeltal({
-  etikett,
-  varde,
-  rad
-}: Readonly<{ etikett: string; varde: number; rad?: string }>) {
-  return (
-    <div className="bg-paper px-4 py-3">
-      <p className="kicker text-mineral">{etikett}</p>
-      <p className="mt-1 font-display text-[1.375rem] tabular-nums tracking-[-0.02em]">{varde}</p>
-      {rad ? <p className="mt-0.5 text-[0.8125rem] leading-[1.45] text-ink-muted">{rad}</p> : null}
-    </div>
   );
 }

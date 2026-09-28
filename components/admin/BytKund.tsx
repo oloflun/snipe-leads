@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { bytVy } from "@/lib/actions/vy";
 import { readJsonBody } from "@/lib/http/json";
+import { cn } from "@/lib/utils";
 
 type Kund = { slug: string; name: string };
 
@@ -23,7 +24,10 @@ type Kund = { slug: string; name: string };
  * för …". Växeln erbjöd alltså kunder som inte gick att öppna. Den nya routen
  * listar arbetsytorna, alltså exakt de som har en tenant att gå in i.
  */
-export function BytKund() {
+/** `ton="rail"`: mörk variant för adminens sidopanel (kundtest 2026-09-22 —
+ *  den ljusa plattan stack ut mot resten av railen). Listan fäller då UPPÅT
+ *  och åt höger: nere i panelen hade den annars hamnat utanför skärmen. */
+export function BytKund({ ton = "ljus" }: Readonly<{ ton?: "ljus" | "rail" }> = {}) {
   const { isPlatformAdmin, impersonation } = useDashboard();
   const [oppen, setOppen] = useState(false);
   const [q, setQ] = useState("");
@@ -77,19 +81,29 @@ export function BytKund() {
         type="button"
         onClick={() => setOppen((v) => !v)}
         aria-expanded={oppen}
-        className="focus-ring inline-flex min-h-9 items-center rounded-input bg-paper2 px-2.5 text-[13px] font-medium text-ink-muted transition-colors hover:text-ink"
+        className={cn(
+          "focus-ring inline-flex min-h-9 items-center rounded-input px-2.5 text-[13px] font-medium transition-colors",
+          ton === "rail"
+            ? "bg-paper/[0.06] text-paper-muted hover:bg-paper/10 hover:text-paper"
+            : "bg-paper2 text-ink-muted hover:text-ink"
+        )}
       >
         {impersonation ? impersonation.namn : "Byt kund"}
       </button>
       {oppen ? (
-        <div className="absolute right-0 z-40 mt-1 w-[min(20rem,calc(100vw-2rem))] rounded-input border border-ink/15 bg-paper p-2 shadow-sm">
+        <div
+          className={cn(
+            "absolute z-40 w-[min(20rem,calc(100vw-2rem))] rounded-input border border-ink/15 bg-paper p-2 text-ink shadow-sm",
+            ton === "rail" ? "bottom-full left-0 mb-1" : "right-0 mt-1"
+          )}
+        >
           <input
             type="search"
             value={q}
             onChange={(event) => setQ(event.target.value)}
             placeholder="Sök kund eller slug…"
             autoFocus
-            className="focus-ring min-h-11 w-full rounded-input bg-paper2 px-3 text-sm outline-none placeholder:text-ink/35"
+            className="focus-ring min-h-11 w-full rounded-input bg-paper2 px-3 text-[1rem] outline-none placeholder:text-ink/35"
           />
           {fel ? <p className="mt-2 px-1 text-[13px] text-danger">{fel}</p> : null}
           {!fel && kunder === null ? (
@@ -106,7 +120,7 @@ export function BytKund() {
                     className="focus-ring flex min-h-11 w-full items-center rounded-input px-3 text-left text-[13px] hover:bg-paper2"
                   >
                     <span className="min-w-0 truncate font-medium">{kund.name}</span>
-                    <span className="ml-auto shrink-0 pl-3 font-mono text-[11px] text-ink-subtle">
+                    <span className="ml-auto shrink-0 pl-3 font-mono text-[0.8125rem] text-ink-subtle">
                       {kund.slug}
                     </span>
                   </button>

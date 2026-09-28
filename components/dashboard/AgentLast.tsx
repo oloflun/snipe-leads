@@ -39,7 +39,8 @@ export function AgentLast({ product }: Readonly<{ product: ProductKey }>) {
   if (!paket) return null;
 
   return (
-    <PageShell kicker="Ingår inte i ert paket ännu" title={paket.namn}>
+    <PageShell title={paket.namn}>
+      <p className="mb-8 text-[0.9375rem] text-ink-subtle">Ingår inte i ert paket ännu.</p>
       <div className="max-w-[720px]">
         <p className="max-w-[62ch] text-[1.0625rem] leading-[1.7] text-ink-muted">{agent.vad}</p>
 

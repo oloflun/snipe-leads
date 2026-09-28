@@ -110,7 +110,7 @@ export function SupportRegler({ demo = false }: Readonly<{ demo?: boolean }>) {
         {LAGEN.map((lage) => (
           <div key={lage.varde}>
             <dt className="text-[0.9375rem] font-semibold">{lage.etikett}</dt>
-            <dd className="mt-1 text-[0.875rem] leading-6 text-ink-muted">{lage.forklaring}</dd>
+            <dd className="mt-1 text-[0.9375rem] leading-6 text-ink-muted">{lage.forklaring}</dd>
           </div>
         ))}
       </dl>
@@ -151,12 +151,12 @@ export function SupportRegler({ demo = false }: Readonly<{ demo?: boolean }>) {
       </Radlista>
 
       {klart ? (
-        <p role="status" className="text-[0.875rem] text-moss">
+        <p role="status" className="text-[0.9375rem] text-moss">
           {klart}
         </p>
       ) : null}
       {fel ? (
-        <p role="alert" className="max-w-[62ch] break-words text-[0.875rem] text-danger">
+        <p role="alert" className="max-w-[62ch] break-words text-[0.9375rem] text-danger">
           {fel}
         </p>
       ) : null}

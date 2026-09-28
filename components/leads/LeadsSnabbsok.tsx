@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { btnPrimary } from "@/components/ui";
+import { Badge, Rad, Radlista, btnPrimary, meta, rubrikPanel } from "@/components/ui";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
 
@@ -121,14 +121,14 @@ export function LeadsSnabbsok({ isTest = false }: { isTest?: boolean }) {
 
   return (
     <section aria-labelledby="leads-snabbsok" className="rounded-card bg-paper2/60 p-5">
-      <h3 id="leads-snabbsok" className="font-display text-xl tracking-[-0.02em]">
-        Sök Leads
+      <h3 id="leads-snabbsok" className={rubrikPanel}>
+        Sök bolag
       </h3>
-      <p className="mt-2 text-[14px] leading-6 text-mineral">
-        Beskriv vilka kunder du behöver och till vilken produkt. Sökningen utgår från arbetsytans
-        sparade målgrupp och nischar ner mot raden — varje träff har en kontaktväg.
-      </p>
 
+      {/* Ingen ingress under rubriken (F-016). Det enda fältet inte själv säger
+          är att sökningen smalnar av den SPARADE målgruppen i stället för att
+          leta brett, och det står som hjälptext under fältet, där det används.
+          Att varje träff har en kontaktväg syns i raderna och i fotnoten. */}
       <form
         className="mt-4 flex flex-wrap gap-2"
         onSubmit={(e) => {
@@ -146,48 +146,57 @@ export function LeadsSnabbsok({ isTest = false }: { isTest?: boolean }) {
           maxLength={200}
           placeholder="T.ex. byggbolag i Skåne som saknar chattsupport"
           aria-label="Vilka kunder behöver du, och till vilken produkt?"
+          aria-describedby="leads-snabbsok-hjalp"
           // min-w-[180px] och inte min-w-0: med noll krymper fältet till en
           // springa bredvid knappen på 320px-skärmar. Med ett golv radbryts
           // knappen (flex-wrap på formen) och fältet förblir skrivbart.
-          className="min-w-[180px] flex-1 rounded-input border border-ink/15 bg-paper px-3 py-2 text-[15px] focus-ring"
+          className="min-h-11 min-w-[180px] flex-1 rounded-input border border-ink/15 bg-paper px-3 py-2 text-base focus-ring"
         />
         <button type="submit" disabled={busy || !fråga.trim()} className={cn(btnPrimary)}>
-          {busy ? "Söker…" : "Sök Leads"}
+          {busy ? "Söker…" : "Sök"}
         </button>
       </form>
+      <p id="leads-snabbsok-hjalp" className="mt-2 text-[0.9375rem] text-ink-muted">
+        Sökningen letar inom arbetsytans sparade målgrupp.
+      </p>
 
       {busy ? (
-        <p role="status" className="mt-3 text-[13px] text-ink-subtle">
-          Söker bolag mot målgruppen — tar vanligen under en minut.
+        <p role="status" className="mt-3 text-[0.9375rem] text-ink-muted">
+          Söker bolag mot målgruppen. Det tar vanligen under en minut.
         </p>
       ) : null}
 
       {fel ? (
-        <p role="alert" className="mt-4 break-words text-[14px] text-danger">
+        <p role="alert" className="mt-4 break-words text-[15px] text-danger">
           {fel}
         </p>
       ) : null}
 
+      {/* Inte "formuläret till vänster": under xl ligger formuläret ovanför. */}
       {leads && leads.length === 0 ? (
-        <p className="mt-4 text-[14px] text-mineral">
-          Inga bolag med kontaktväg hittades på den raden. Prova en bredare beskrivning, eller kör
-          en full körning i formuläret till vänster.
+        <p className="mt-4 text-[0.9375rem] text-ink-muted">
+          Inga bolag med kontaktväg hittades. Prova en bredare beskrivning, eller starta en full
+          körning i formuläret.
         </p>
       ) : null}
 
+      {/* Radens anatomi som i resten av appen: bolaget med kontaktnivån som
+          bricka till höger, kontakten under, ort och webbplats som meta. */}
       {leads && leads.length > 0 ? (
-        <ul className="mt-4 divide-y divide-ink/10">
+        <Radlista className="mt-4">
           {leads.map((lead) => (
-            <li key={lead.prospect_id} className="py-3">
-              <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-                <span className="text-[15px] font-medium">{lead.company_name}</span>
-                {lead.ort ? <span className="text-[13px] text-ink-subtle">{lead.ort}</span> : null}
+            <Rad key={lead.prospect_id} className="min-w-0">
+              <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-3 gap-y-1">
+                <p className="min-w-0 break-words text-[0.9375rem] font-medium">{lead.company_name}</p>
+                {lead.contact_level ? (
+                  <Badge>{KONTAKTETIKETT[lead.contact_level] ?? lead.contact_level}</Badge>
+                ) : null}
               </div>
-              <p className="mt-1 break-words text-[13px] leading-5 text-mineral">
+              <p className="mt-1 break-words text-[0.9375rem] text-ink-muted">
                 {lead.contact_name ? (
                   <>
                     {lead.contact_name}
-                    {lead.contact_role ? ` — ${lead.contact_role}` : null}
+                    {lead.contact_role ? `, ${lead.contact_role}` : null}
                     {lead.contact_email ? ` · ${lead.contact_email}` : null}
                   </>
                 ) : lead.contact_email ? (
@@ -196,30 +205,32 @@ export function LeadsSnabbsok({ isTest = false }: { isTest?: boolean }) {
                   "Kontaktformulär på bolagets webbplats"
                 ) : null}
               </p>
-              <p className="mt-0.5 text-[12px] text-ink-subtle">
-                {lead.contact_level ? (KONTAKTETIKETT[lead.contact_level] ?? lead.contact_level) : null}
-                {lead.website ? (
-                  <>
-                    {lead.contact_level ? " · " : null}
-                    <a
-                      href={lead.website}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="underline decoration-ink/25 underline-offset-2 hover:decoration-ink/60"
-                    >
-                      {lead.website.replace(/^https?:\/\//, "")}
-                    </a>
-                  </>
-                ) : null}
-              </p>
-            </li>
+              {lead.ort || lead.website ? (
+                <p className={cn(meta, "mt-1 break-words")}>
+                  {lead.ort}
+                  {lead.website ? (
+                    <>
+                      {lead.ort ? " · " : null}
+                      <a
+                        href={lead.website}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="focus-ring underline decoration-ink/25 underline-offset-2 hover:decoration-ink/60"
+                      >
+                        {lead.website.replace(/^https?:\/\//, "")}
+                      </a>
+                    </>
+                  ) : null}
+                </p>
+              ) : null}
+            </Rad>
           ))}
-        </ul>
+        </Radlista>
       ) : null}
 
       {leads && utanKontakt > 0 ? (
-        <p className="mt-3 text-[12px] text-ink-subtle">
-          {utanKontakt} träff{utanKontakt === 1 ? "" : "ar"} utan kontaktväg listas inte här men
+        <p className="mt-3 text-[0.9375rem] text-ink-muted">
+          {utanKontakt} träff{utanKontakt === 1 ? "" : "ar"} utan kontaktväg listas inte här, men
           finns i bolagsregistret för komplettering.
         </p>
       ) : null}

@@ -2,6 +2,7 @@
 
 import { useTransition } from "react";
 import { signOut } from "@/lib/actions/auth";
+import { btnSecondary } from "@/components/ui";
 
 /**
  * Utloggningsknappen.
@@ -19,7 +20,7 @@ export function SignOutButton() {
       type="button"
       disabled={pending}
       onClick={() => startTransition(() => void signOut())}
-      className="kicker border border-ink/15 px-4 py-2 text-mineral transition-colors hover:border-ochre hover:text-ochre disabled:opacity-50"
+      className={btnSecondary}
     >
       {pending ? "Loggar ut…" : "Logga ut"}
     </button>
