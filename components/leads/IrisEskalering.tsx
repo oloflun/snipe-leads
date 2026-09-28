@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Sektion, rubrikPanel } from "@/components/ui";
 import type { Eskaleringsregler } from "@/lib/iris";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
@@ -42,8 +41,8 @@ function Vaxel({
   return (
     <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-2 py-4">
       <div className="min-w-0 max-w-[56ch] flex-1 basis-72">
-        <p className={rubrikPanel}>{etikett}</p>
-        <p className="mt-0.5 text-[0.9375rem] leading-6 text-ink-muted">{beskrivning}</p>
+        <p className="text-[0.9375rem] font-semibold text-ink">{etikett}</p>
+        <p className="mt-0.5 text-[0.875rem] leading-6 text-ink-muted">{beskrivning}</p>
       </div>
       <button
         type="button"
@@ -138,14 +137,8 @@ export function IrisEskalering() {
   }
 
   return (
-    // En Sektion (h2) i stället för kicker + ingress. Ingressens första mening
-    // upprepade rubriken; kvar står bara det rubriken inte säger — vad en
-    // avstängd regel betyder.
-    <Sektion title="När Iris lämnar över till dig">
-      <p className="max-w-[64ch] text-[0.9375rem] leading-7 text-ink-muted">
-        En avstängd regel betyder att Iris fortsätter som vanligt, med granskningskön som sista
-        spärr.
-      </p>
+    <section aria-label="Eskalering till människa">
+      <h3 className="kicker text-mineral">När Iris lämnar över till dig</h3>
 
       {lage.fas === "laddar" ? (
         <div className="mt-5 grid gap-px">
@@ -162,7 +155,7 @@ export function IrisEskalering() {
           <Vaxel
             paslagen={lage.regler.osaker_kvalificering}
             etikett="Osäker kvalificering"
-            beskrivning="Bolag under träffsäkerhetströskeln får inget automatiskt utkast. De står kvar i Bolag för din bedömning."
+            beskrivning="Bolag under tröskeln får inget automatiskt utkast."
             upptagen={sparar}
             onByt={(v) => void spara({ osaker_kvalificering: v })}
           />
@@ -190,30 +183,26 @@ export function IrisEskalering() {
                 />
                 <span className="text-[0.9375rem] text-ink-muted">procent</span>
               </div>
-              <p className="w-full text-[0.9375rem] leading-6 text-ink-muted">
-                Under {lage.regler.kvalificeringstroskel} procent mot din målgrupp får bolaget
-                inget utkast i körningen. Sparas när du lämnar fältet.
-              </p>
             </div>
           ) : null}
           <Vaxel
             paslagen={lage.regler.prisfragor}
             etikett="Pris och budget"
-            beskrivning="Svar som tar upp pris, rabatt eller budget får inget utkast från Iris. Uppföljningen stoppas och du får ett mejl."
+            beskrivning="Svar om pris, rabatt eller budget går till dig."
             upptagen={sparar}
             onByt={(v) => void spara({ prisfragor: v })}
           />
           <Vaxel
             paslagen={lage.regler.negativt_svar}
             etikett="Negativt svar"
-            beskrivning="Du får ett mejl när ett bolag svarar avvisande. Uppföljningen mot bolaget stoppas alltid, även med regeln avstängd."
+            beskrivning="Mejl till dig när ett bolag svarar avvisande."
             upptagen={sparar}
             onByt={(v) => void spara({ negativt_svar: v })}
           />
           <Vaxel
             paslagen={lage.regler.juridik}
             etikett="Avtal, juridik och personuppgifter"
-            beskrivning="Svar om avtal, villkor, juridik eller personuppgifter får inget utkast från Iris. Uppföljningen stoppas och du får ett mejl."
+            beskrivning="Svar om avtal, juridik eller personuppgifter går till dig."
             upptagen={sparar}
             onByt={(v) => void spara({ juridik: v })}
           />
@@ -222,13 +211,10 @@ export function IrisEskalering() {
 
       <p
         role={sparfel ? "alert" : "status"}
-        className={cn("mt-2 min-h-6 text-[0.9375rem] leading-6", sparfel ? "text-danger" : "text-ink-muted")}
+        className={cn("mt-2 min-h-5 text-[0.8125rem] leading-5", sparfel ? "text-danger" : "text-ink-subtle")}
       >
-        {/* Viloläget ("Sparas i ditt konto …") är struket: en rad som bara
-            beskriver ytan. Raden finns för besked, och ett besked kommer
-            först när något sparats eller fallit. */}
-        {sparfel ? sparfel : sparad ? "Sparat. Gäller från nästa svar och nästa körning." : null}
+        {sparfel ? sparfel : sparad ? "Sparat." : null}
       </p>
-    </Sektion>
+    </section>
   );
 }

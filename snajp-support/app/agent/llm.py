@@ -216,6 +216,48 @@ def krav_tillaten_provider() -> None:
         raise ForbjudenProviderIMiljon(fel)
 
 
+# --- Geminis tänkande ---------------------------------------------------------
+
+GEMINI_REASONING_EFFORT = ("none", "minimal", "low", "medium", "high")
+
+#: Tänkandet AV. Uppmätt mot Vertex 2026-09-19 (gemini-2.5-flash):
+#: `reasoning_effort="none"` ger 400 ("Expected one of: high, low, max,
+#: medium, minimal"), och "minimal" stänger INTE av tänkandet (48 tänktokens
+#: mot 51 utan parameter). Budget 0 via extra_body ger 0 tänktokens. Den
+#: nästlade formen är AI Studios dokumenterade — och Vertex godtar den också.
+TANKANDE_AV = {"extra_body": {"extra_body": {"google": {"thinking_config": {"thinking_budget": 0}}}}}
+
+
+def gemini_tank_kwargs(mode: str | None, effort: str) -> dict:
+    """Geminis tänkande. "none" = av (tankebudget 0), övriga värden skickas som
+    OpenAI-kompatibilitetens `reasoning_effort`.
+
+    Tomt `effort` = ingenting skickas (leverantörens default). Ett steg som
+    uttryckligen vill tänka (thinking="enabled") får alltid leverantörens
+    default — eskaleringsbedömningen ska inte strypas av en kostnadsflagga.
+    Ett okänt värde skickas inte: ett felstavat env-värde ska inte ge 400 på
+    varje agentanrop.
+    """
+    if not effort or mode == "enabled" or effort not in GEMINI_REASONING_EFFORT:
+        return {}
+    if effort == "none":
+        return TANKANDE_AV
+    return {"reasoning_effort": effort}
+
+
+def tankande_kwargs() -> dict:
+    """För småanropen UTANFÖR stegmotorn (klassificerare, sammanfattningar,
+    bildbeskrivning): samma inställning som stegen, bara på Gemini.
+
+    Uppmätt i development 2026-09-19: uppsägningsklassificeraren tänkte i
+    snitt 408 tokens för att skriva 30 — tänkandet var nästan hela anropets
+    kostnad."""
+    settings = get_settings()
+    if settings.llm_provider != "gemini":
+        return {}
+    return gemini_tank_kwargs(None, settings.gemini_reasoning_effort.strip().lower())
+
+
 # --- Klienterna ---------------------------------------------------------------
 #
 # Vertex AI-tokens går ut efter ~1 timme. Klienterna cachelagras i module-

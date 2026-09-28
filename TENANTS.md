@@ -108,6 +108,13 @@ insert into workspaces (name, slug, ss_tenant_id, products) values (...);
 Se [007_workspace_tenants.sql](supabase/migrations/007_workspace_tenants.sql).
 Fyll även `business_contexts` för workspacet — det är leads-agentens produktdata.
 
+### 5b. Chattwidget på kundens egen sajt (valfritt)
+
+Vill kunden ha chatten INBÄDDAD på sin sajt i stället för (eller utöver) den
+länkade `/chat/<slug>`-sidan: sätt `publicKey` och `embedOrigins` i
+configfilen och skicka snippet-raden. Hela flödet, säkerhetsmodellen och
+verifieringen står i [docs/WIDGET.md](docs/WIDGET.md).
+
 ### 6. Nycklar och drift
 
 | Vad | Var | Hur |

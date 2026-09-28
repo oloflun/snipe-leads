@@ -83,6 +83,12 @@ export type TenantRow = {
   kund_sedan?: string | null;
   /** Null = inget avtal registrerat. Ett datum = avtal finns, signerat då. */
   avtal_signerat?: string | null;
+  /**
+   * Sista dagen i den fria provperioden (workspaces.trial_slut, migration
+   * 074). Null = ingen kopplad arbetsyta. Ett signerat avtal gör datumet
+   * ointressant — kunden betalar redan.
+   */
+  trial_slut?: string | null;
 };
 
 export type RunRow = {

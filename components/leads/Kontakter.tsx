@@ -4,11 +4,10 @@ import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useArbetsvag } from "@/components/AppShell";
-import { Badge, Cell, SkeletonRows, Tabell, Tomt, btnLiten, btnSecondary, meta, tabellRad } from "@/components/ui";
+import { Cell, EmptyState, SkeletonRows, Tabell, tabellRad } from "@/components/ui";
 import { EjAktiverad, arEjAktiverad } from "@/components/EjAktiverad";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { readJsonBody } from "@/lib/http/json";
-import { cn } from "@/lib/utils";
 
 /**
  * Kontakterna — personerna bakom prospekten.
@@ -59,9 +58,6 @@ const STATUS_ETIKETT: Record<string, string> = {
   suppressed: "Spärrad"
 };
 
-/** Status som betyder att något väntar på kunden — samma urval som Bolagsregistret. */
-const AKTIV_STATUS = new Set(["ready", "replied", "meeting"]);
-
 export function Kontakter({ demo = false }: Readonly<{ demo?: boolean }>) {
   const [lage, setLage] = useState<Lage>({ fas: "laddar" });
   const vag = useArbetsvag();
@@ -91,7 +87,7 @@ export function Kontakter({ demo = false }: Readonly<{ demo?: boolean }>) {
           fas: "fel",
           meddelande:
             response.status >= 500
-              ? "Tjänsten svarar inte just nu. Den vaknar ur viloläge och kan ta upp till en minut."
+              ? "Tjänsten svarar inte. Försök igen om en minut."
               : `Kunde inte hämta kontakterna (status ${response.status}).`
         });
         return;
@@ -125,9 +121,13 @@ export function Kontakter({ demo = false }: Readonly<{ demo?: boolean }>) {
       <div className="flex items-start gap-3 border-y border-ochre/40 bg-ochre/10 px-4 py-4">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
         <div className="min-w-0">
-          <p className="text-[0.9375rem] font-medium text-ink">Kontakterna kunde inte hämtas</p>
-          <p className="mt-1 text-[0.9375rem] text-ink-muted">{lage.meddelande}</p>
-          <button type="button" onClick={() => void hamta()} className={cn(btnSecondary, btnLiten, "mt-3")}>
+          <p className="text-sm font-medium text-ink">Kontakterna kunde inte hämtas</p>
+          <p className="mt-1 text-sm text-ink-muted">{lage.meddelande}</p>
+          <button
+            type="button"
+            onClick={() => void hamta()}
+            className="focus-ring mt-3 inline-flex min-h-9 items-center rounded-input bg-paper2 px-3 text-[13px] font-medium"
+          >
             Försök igen
           </button>
         </div>
@@ -139,10 +139,7 @@ export function Kontakter({ demo = false }: Readonly<{ demo?: boolean }>) {
 
   if (!kontakter.length) {
     return (
-      <Tomt>
-        Inga kontaktpersoner ännu. Agenten hittar kontaktpersonen när den researchar ett bolag.
-        Bolag utan hittad kontakt står kvar i bolagslistan.
-      </Tomt>
+      <EmptyState title="Inga kontaktpersoner ännu" />
     );
   }
 
@@ -162,9 +159,11 @@ export function Kontakter({ demo = false }: Readonly<{ demo?: boolean }>) {
       {kontakter.map((p) => (
         <tr key={p.id} className={tabellRad}>
           <Cell titel>
-            <p className="truncate font-semibold">{p.contact_name ?? p.contact_email}</p>
+            <p className="truncate font-semibold tracking-[-0.01em]">
+              {p.contact_name ?? p.contact_email}
+            </p>
             {p.contact_name && p.contact_email ? (
-              <p className={cn(meta, "mt-1 truncate")}>{p.contact_email}</p>
+              <p className="mt-1 truncate text-sm text-ink-subtle">{p.contact_email}</p>
             ) : null}
           </Cell>
           <Cell>
@@ -180,18 +179,14 @@ export function Kontakter({ demo = false }: Readonly<{ demo?: boolean }>) {
             )}
           </Cell>
           <Cell>
-            <span className="block truncate text-ink-muted">
+            <span className="block truncate text-sm text-ink-muted">
               {[p.sni, p.ort].filter(Boolean).join(" · ") || "–"}
             </span>
           </Cell>
           <Cell hoger>
-            {p.status ? (
-              <Badge tone={AKTIV_STATUS.has(p.status) ? "warn" : "neutral"}>
-                {STATUS_ETIKETT[p.status] ?? p.status}
-              </Badge>
-            ) : (
-              "–"
-            )}
+            <span className="text-sm text-ink-muted">
+              {p.status ? (STATUS_ETIKETT[p.status] ?? p.status) : "–"}
+            </span>
           </Cell>
         </tr>
       ))}

@@ -504,3 +504,20 @@ def test_faktagrinden_laser_klockslag_som_klockslag():
         assert support_faktagrind.kontrollera(svar, niva="forsiktig", kallor=kallor).ok, svar
     # Ett påhittat klockslag fälls fortfarande.
     assert not support_faktagrind.kontrollera("Beställ före 15:00.", niva="forsiktig", kallor=kallor).ok
+
+
+def test_faktagrinden_forstar_engelsk_tusentalsavgransare():
+    """Uppmätt på dev 2026-09-19: "SEK 3,990" lästes som 3,99 mot kunskaps-
+    basens "3 990 kr", och en engelsk kund fick "I don't have information on
+    the exact monthly cost" i stället för det korrekta priset."""
+    kallor = ["Snajp Support kostar 3 990 kr per månad. Moms 25 procent. Rabatt 2,5 procent."]
+    for svar in (
+        "It costs SEK 3,990 per month.",
+        "It costs 3,990 kr per month.",
+        "VAT is 25 percent.",
+        "A 2,5 percent discount applies.",
+    ):
+        assert support_faktagrind.kontrollera(svar, niva="forsiktig", kallor=kallor).ok, svar
+    # Fel belopp fälls fortfarande, i båda formaten.
+    assert not support_faktagrind.kontrollera("It costs SEK 4,990.", niva="forsiktig", kallor=kallor).ok
+    assert not support_faktagrind.kontrollera("Det kostar 4 990 kr.", niva="forsiktig", kallor=kallor).ok

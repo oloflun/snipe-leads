@@ -211,30 +211,27 @@ export function AdminShell({
             en: "Snajp admin, go to overview"
           })}
           brand={
-            // Bara arbetsytans namn, som i kundens rail. "Admin ·" framför
-            // upprepade vad vyväxeln i railens fot redan visar.
-            <p className="hidden truncate px-5 pb-4 text-[0.8125rem] font-medium text-paper-muted lg:block">
-              {workspaceName ?? "Admin"}
+            <p className="hidden truncate px-5 pb-4 text-[0.75rem] font-medium uppercase tracking-[0.14em] text-paper-subtle lg:block">
+              {workspaceName ? `Admin · ${workspaceName}` : "Admin"}
             </p>
           }
           navLabel={text({ sv: "Adminnavigering", en: "Admin navigation" })}
           groups={arbetsyta.length > 0 ? [plattformGroup, arbetsytaGroup] : [plattformGroup]}
           footer={
             <>
-              {/* Kunduppslag, vy-växel, kontaktmeny och kontoadress — byggda
-                  för en ljus yta (se AppShells motivering ovan för varför de
-                  aldrig stod direkt på en mörk rail). En egen ljus platta i
-                  stället för tre lösa öar, och bara vid lg+: platsen räcker
-                  inte i ikonläget, och de här kontrollerna saknar ett
-                  ikon-only-läge. */}
-              <div className="hidden flex-col gap-1.5 rounded-input border border-paper/10 bg-paper2 p-1.5 lg:flex">
+              {/* Kunduppslag, vy-växel, kontaktmeny och kontoadress, i
+                  railens egen mörka ton (`ton="rail"`) sedan 2026-09-22 — den
+                  ljusa plattan de stod på förut bröt mot resten av panelen.
+                  Bara vid lg+: platsen räcker inte i ikonläget, och
+                  kontrollerna saknar ett ikon-only-läge. */}
+              <div className="hidden flex-col gap-1.5 border-t border-paper/10 px-1 pt-3 lg:flex">
                 <div className="flex flex-wrap items-center gap-1">
-                  <BytKund />
-                  <VyVaxel />
+                  <BytKund ton="rail" />
+                  <VyVaxel ton="rail" />
                 </div>
-                <AgentMenu yta="leads" kontext={`admin:${pathname}`} />
+                <AgentMenu yta="leads" kontext={`admin:${pathname}`} ton="rail" />
                 {email ? (
-                  <p className="truncate px-1 pt-0.5 text-[0.8125rem] text-ink-subtle">{email}</p>
+                  <p className="truncate px-1 pt-0.5 text-[0.75rem] text-paper-subtle">{email}</p>
                 ) : null}
               </div>
 

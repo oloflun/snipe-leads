@@ -98,6 +98,7 @@ export async function sparaKunddata(
       | "faktureringsmejl"
       | "telefon"
       | "foretagsadress"
+      | "policy_url"
       | "kund_sedan"
       | "avtal_signerat",
       string

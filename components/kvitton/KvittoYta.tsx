@@ -2,9 +2,11 @@
 
 import {
   AlertTriangle,
+  CheckCircle2,
   Download,
   Inbox,
   Loader2,
+  Mail,
   ScanLine,
   Trash2,
   Upload
@@ -13,17 +15,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Badge,
   Cell,
-  Nyckeltal,
-  Sektion,
+  EmptyState,
   SkeletonRows,
   Tabell,
-  Tomt,
   btnLiten,
   btnPrimary,
   btnSecondary,
-  etikett,
-  meta,
-  rubrikPanel,
   tabellRad
 } from "@/components/ui";
 import { Integritetsnotis } from "@/components/kvitton/Integritetsnotis";
@@ -107,9 +104,8 @@ function innevarandeManad(): { fran: string; till: string } {
   return { fran: iso(fran), till: iso(till) };
 }
 
-/** Tomt värde ger tankstreck, aldrig em-streck (DESIGN.md). */
 function kronor(varde: string | null): string {
-  if (varde === null) return "–";
+  if (varde === null) return "—";
   const negativt = varde.startsWith("-");
   const [heltal, decimaler = "00"] = varde.replace("-", "").split(".");
   const grupperat = heltal.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
@@ -124,11 +120,11 @@ const MOMSETIKETT: Record<string, string> = {
 };
 
 function procent(varde: string | null): string {
-  if (varde === null) return "–";
+  if (varde === null) return "—";
   const normaliserad = varde.includes(".")
     ? varde.replace(/0+$/, "").replace(/\.$/, "")
     : varde;
-  return MOMSETIKETT[normaliserad] ?? "–";
+  return MOMSETIKETT[normaliserad] ?? "—";
 }
 
 function feltext(orsak: unknown): string {
@@ -142,6 +138,67 @@ function feltext(orsak: unknown): string {
     );
   }
   return felmeddelande(orsak);
+}
+
+/**
+ * Att göra-kortet — samma bärande yta som översikterna fick 2026-09-20:
+ * antalet i klartext, tonal inversion (sidans enda), och HANDLINGEN på raden.
+ * Här är handlingen inte en länk till en kö utan själva godkännandet, för
+ * granskningen bor i den här vyn. Underraden är anmärkningen, alltså skälet
+ * till att kvittot väntar. Tom kö ritar ingenting: tabellen nedanför bär
+ * redan statusen, och en tom svart ruta hade skrikit i onödan.
+ *
+ * Exporterad för att kunna monteras ensam i en skiss under verifiering.
+ */
+export function KvittoAttGora({
+  rader,
+  onGodkann
+}: Readonly<{ rader: Kvitto[]; onGodkann: (rad: Kvitto) => void }>) {
+  if (rader.length === 0) return null;
+  const fler = rader.length - 5;
+  return (
+    <section aria-label="Att göra" className="rounded-card bg-ink p-6 text-paper md:p-8">
+      <h2 className="text-[1.25rem] font-semibold tracking-[-0.01em]">
+        {rader.length === 1 ? "1 kvitto väntar på dig" : `${rader.length} kvitton väntar på dig`}
+      </h2>
+      <ul className="mt-5 border-t border-paper/15">
+        {rader.slice(0, 5).map((rad) => (
+          <li
+            key={rad.id}
+            className="grid grid-cols-12 items-center gap-x-4 border-b border-paper/15 py-3.5"
+          >
+            <div className="col-span-12 min-w-0 sm:col-span-7">
+              <p className="truncate text-[0.9375rem] font-semibold">
+                {rad.motpart || rad.mejl_amne || rad.filnamn || "Kvitto"}
+              </p>
+              <p className="mt-0.5 truncate text-[0.8125rem] text-paper-muted">
+                {rad.anmarkning ||
+                  [rad.datum, rad.kategorietikett].filter(Boolean).join(" · ") ||
+                  "Uppgifter saknas."}
+              </p>
+            </div>
+            <div className="col-span-12 mt-2 flex items-center justify-between gap-4 sm:col-span-5 sm:mt-0 sm:justify-end">
+              <span className="num text-[0.875rem] tabular-nums text-paper-muted">
+                {rad.brutto !== null ? kronor(rad.brutto) : (rad.belopp_original ?? "—")}
+              </span>
+              <button
+                type="button"
+                onClick={() => onGodkann(rad)}
+                className="focus-ring inline-flex min-h-9 shrink-0 items-center rounded-input bg-paper px-4 text-[0.875rem] font-semibold text-ink transition-colors hover:bg-paper/85"
+              >
+                Godkänn
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+      {fler > 0 ? (
+        <p className="mt-4 text-[0.8125rem] text-paper-muted">
+          {fler === 1 ? "1 till i tabellen nedan." : `${fler} till i tabellen nedan.`}
+        </p>
+      ) : null}
+    </section>
+  );
 }
 
 export function KvittoYta() {
@@ -343,21 +400,21 @@ export function KvittoYta() {
   const datumfalt = (
     <div className="flex flex-wrap items-end gap-2">
       <label className="flex flex-col gap-1">
-        <span className={etikett}>Från</span>
+        <span className="text-[0.75rem] font-medium text-ink-subtle">Från</span>
         <input
           type="date"
           value={period.fran}
           onChange={(e) => setPeriod((p) => ({ ...p, fran: e.target.value }))}
-          className="focus-ring h-9 rounded-input bg-paper2 px-2.5 text-[1rem]"
+          className="focus-ring h-9 rounded-input bg-paper2 px-2.5 text-[0.875rem]"
         />
       </label>
       <label className="flex flex-col gap-1">
-        <span className={etikett}>Till</span>
+        <span className="text-[0.75rem] font-medium text-ink-subtle">Till</span>
         <input
           type="date"
           value={period.till}
           onChange={(e) => setPeriod((p) => ({ ...p, till: e.target.value }))}
-          className="focus-ring h-9 rounded-input bg-paper2 px-2.5 text-[1rem]"
+          className="focus-ring h-9 rounded-input bg-paper2 px-2.5 text-[0.875rem]"
         />
       </label>
     </div>
@@ -366,7 +423,7 @@ export function KvittoYta() {
   return (
     <div className="space-y-8">
       {fel ? (
-        <p role="alert" className="max-w-[70ch] text-[0.9375rem] text-danger">
+        <p role="alert" className="max-w-[70ch] text-[14px] text-danger">
           {fel}
         </p>
       ) : null}
@@ -383,7 +440,7 @@ export function KvittoYta() {
               title={
                 konto?.kopplad
                   ? undefined
-                  : "Ingen mejlinkorg är kopplad ännu."
+                  : "Ingen inkorg kopplad."
               }
               className={cn(btnPrimary, btnLiten)}
             >
@@ -437,9 +494,8 @@ export function KvittoYta() {
           </div>
         </div>
 
-        {/* Ingen ikon först: i en flex-wrap-rad blev den ensam på egen rad
-            ovanför texten så fort meningen bröts. */}
-        <p className="mt-3 text-[0.9375rem] leading-7 text-ink-muted">
+        <p className="mt-3 flex flex-wrap items-center gap-2 text-[0.875rem] text-ink-muted">
+          <Mail className="h-4 w-4 shrink-0 text-mineral" aria-hidden />
           {konto === null ? (
             "Hämtar mejlkontot…"
           ) : konto.kopplad ? (
@@ -456,34 +512,28 @@ export function KvittoYta() {
             </>
           ) : (
             <>
-              Ingen inkorg kopplad ännu. Vi kopplar Gmail, Outlook eller Hotmail åt
-              dig med read-only-åtkomst.{" "}
+              Ingen inkorg kopplad.{" "}
               <a
                 href="mailto:kontakt@snajp.se?subject=Koppla%20mejl%20till%20Kvittohanteraren"
                 className="focus-ring rounded-input font-medium text-ink underline underline-offset-4 hover:text-ochre"
               >
                 Hör av dig
               </a>{" "}
-              så är det klart på ett kort möte. Du kan ladda upp kvitton manuellt
-              redan nu.
+              så kopplar vi den.
             </>
           )}
         </p>
       </section>
 
-      {/* Inkorgsvyn, uppspelningen av senaste skanningen. Panelrubrik och
-          metarad i husets form; "Inkorgen" var en spärrad kicker. */}
+      {/* Inkorgsvyn — uppspelningen av senaste skanningen. */}
       {handelser !== null ? (
         <section className="rounded-card border border-ink/12 bg-paper2/30 p-5">
           <div className="flex items-baseline justify-between gap-4">
-            {/* h2 med panelstil, som Sammanfattning och Kvitto-assistenten:
-                panelen står före sektionen "Kvitton i perioden", och en h3
-                här hade hoppat direkt från sidans h1. */}
-            <h2 className={cn(rubrikPanel, "flex items-center gap-2")}>
-              <Inbox className="h-4 w-4 text-ink-muted" aria-hidden />
+            <p className="kicker flex items-center gap-2 text-mineral">
+              <Inbox className="h-3.5 w-3.5" aria-hidden />
               Inkorgen
-            </h2>
-            <p className={cn(meta, "num")} role="status">
+            </p>
+            <p className="text-[0.75rem] tabular-nums text-mineral" role="status">
               {uppspelningKlar
                 ? `${handelser.length} mejl genomlästa`
                 : `läser mejl ${Math.min(visadeHandelser + 1, handelser.length)} av ${handelser.length}…`}
@@ -493,7 +543,7 @@ export function KvittoYta() {
             {handelser.slice(0, visadeHandelser).map((h) => (
               <li key={h.mejl_id} className="animate-mejl-in py-2.5">
                 <div className="flex min-w-0 items-baseline justify-between gap-3">
-                  <p className="min-w-0 truncate text-[0.9375rem] font-medium text-ink">
+                  <p className="min-w-0 truncate text-[0.875rem] font-medium text-ink">
                     {h.avsandare}
                     <span className="ml-2 font-normal text-ink-subtle">{h.amne}</span>
                   </p>
@@ -503,14 +553,14 @@ export function KvittoYta() {
                     ) : h.utfall === "kvitto_granska" ? (
                       <Badge tone="warn">Granska</Badge>
                     ) : h.utfall === "redan_last" ? (
-                      <span className={meta}>Redan inläst</span>
+                      <span className="text-[0.75rem] text-mineral">redan inläst</span>
                     ) : (
-                      <span className={meta}>Inte ett kvitto</span>
+                      <span className="text-[0.75rem] text-mineral">inte ett kvitto</span>
                     )}
                   </span>
                 </div>
                 {h.belopp || h.belopp_original ? (
-                  <p className={cn(meta, "mt-1")}>
+                  <p className="mt-1 font-mono text-[0.75rem] text-ink-subtle">
                     Belopp:{" "}
                     <mark
                       className={cn(
@@ -525,6 +575,12 @@ export function KvittoYta() {
               </li>
             ))}
           </ul>
+          {uppspelningKlar ? (
+            <p className="mt-3 flex items-center gap-2 border-t border-ink/10 pt-3 text-[0.8125rem] text-moss">
+              <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden />
+              Klart.
+            </p>
+          ) : null}
         </section>
       ) : null}
 
@@ -538,7 +594,7 @@ export function KvittoYta() {
           </p>
           <ul className="mt-2 space-y-1">
             {uppladdningsfel.map((rad, i) => (
-              <li key={i} className="text-[0.9375rem] text-ink-muted">
+              <li key={i} className="text-[0.875rem] text-ink-muted">
                 {rad}
               </li>
             ))}
@@ -546,77 +602,90 @@ export function KvittoYta() {
         </div>
       ) : null}
 
-      {/* Kvittona. `Sektion` ger husets sektionsrubrik; tomläget är ett
-          `Tomt` med samma två meningar som den gamla EmptyState-rutan. */}
-      <Sektion title="Kvitton i perioden">
+      {/* Det som väntar på kunden, före tabellen. Härleds ur samma lista som
+          tabellen, så kortet töms i samma stund som sista godkännandet går
+          igenom — ingen egen hämtning, inget eget tillstånd. */}
+      <KvittoAttGora
+        rader={(kvitton ?? []).filter((rad) => rad.status === "granska_manuellt")}
+        onGodkann={(rad) => void godkann(rad)}
+      />
+
+      {/* Kvittona. */}
+      <section>
+        <h2 className="font-display text-[1.25rem]">Kvitton i perioden</h2>
         {kvitton === null ? (
-          <SkeletonRows />
+          <div className="mt-4">
+            <SkeletonRows />
+          </div>
         ) : kvitton.length === 0 ? (
-          <Tomt>
-            Inga kvitton i perioden. Skanna inkorgen eller ladda upp ett kvitto, så läser agenten av
-            belopp, moms, datum och kategori.
-          </Tomt>
+          <div className="mt-4">
+            <EmptyState title="Inga kvitton i perioden" />
+          </div>
         ) : (
-          <Tabell
-            ariaLabel="Kvitton i perioden"
-            kolumner={[
-              { rubrik: "Datum", bredd: "12%" },
-              { rubrik: "Butik", bredd: "32%" },
-              { rubrik: "Kategori", bredd: "16%" },
-              { rubrik: "Källa", bredd: "10%" },
-              { rubrik: "Moms", bredd: "8%", hoger: true },
-              { rubrik: "Belopp", bredd: "12%", hoger: true },
-              { rubrik: "Status", bredd: "10%", hoger: true }
-            ]}
-          >
-            {kvitton.map((rad) => (
-              <tr key={rad.id} className={tabellRad}>
-                <Cell>
-                  <span className="tabular-nums text-ink-muted">{rad.datum ?? "–"}</span>
-                </Cell>
-                <Cell titel>
-                  <p className="truncate">{rad.motpart || rad.mejl_amne || rad.filnamn}</p>
-                  {rad.anmarkning ? (
-                    <p className={cn(meta, "mt-1")}>{rad.anmarkning}</p>
-                  ) : null}
-                </Cell>
-                <Cell>
-                  <span className="text-ink-muted">{rad.kategorietikett}</span>
-                </Cell>
-                <Cell>
-                  <span className="text-ink-muted">
-                    {rad.kalla === "mejl" ? "Mejl" : "Uppladdad"}
-                  </span>
-                </Cell>
-                <Cell hoger>
-                  <span className="text-ink-muted">{procent(rad.momssats)}</span>
-                </Cell>
-                <Cell hoger>
-                  <span className="font-medium">
-                    {rad.brutto !== null ? kronor(rad.brutto) : (rad.belopp_original ?? "–")}
-                  </span>
-                </Cell>
-                <Cell hoger>
-                  <span className="flex flex-wrap items-center justify-end gap-1.5">
-                    <Badge tone={rad.status === "granska_manuellt" ? "warn" : "good"}>
-                      {rad.status === "granska_manuellt" ? "Granska" : "Klar"}
-                    </Badge>
-                    {rad.status === "granska_manuellt" ? (
-                      <button
-                        type="button"
-                        onClick={() => void godkann(rad)}
-                        className="focus-ring rounded-input text-[0.8125rem] font-medium text-ink underline underline-offset-4 hover:text-ochre"
-                      >
-                        Godkänn
-                      </button>
+          <div className="mt-4">
+            <Tabell
+              ariaLabel="Kvitton i perioden"
+              kolumner={[
+                { rubrik: "Datum", bredd: "12%" },
+                { rubrik: "Butik", bredd: "32%" },
+                { rubrik: "Kategori", bredd: "16%" },
+                { rubrik: "Källa", bredd: "10%" },
+                { rubrik: "Moms", bredd: "8%", hoger: true },
+                { rubrik: "Belopp", bredd: "12%", hoger: true },
+                { rubrik: "Status", bredd: "10%", hoger: true }
+              ]}
+            >
+              {kvitton.map((rad) => (
+                <tr key={rad.id} className={tabellRad}>
+                  <Cell>
+                    <span className="tabular-nums text-ink-muted">{rad.datum ?? "—"}</span>
+                  </Cell>
+                  <Cell titel>
+                    <p className="truncate">{rad.motpart || rad.mejl_amne || rad.filnamn}</p>
+                    {rad.anmarkning ? (
+                      <p className="mt-1 text-[0.875rem] font-normal text-ink-subtle">
+                        {rad.anmarkning}
+                      </p>
                     ) : null}
-                  </span>
-                </Cell>
-              </tr>
-            ))}
-          </Tabell>
+                  </Cell>
+                  <Cell>
+                    <span className="text-ink-muted">{rad.kategorietikett}</span>
+                  </Cell>
+                  <Cell>
+                    <span className="text-ink-muted">
+                      {rad.kalla === "mejl" ? "Mejl" : "Uppladdad"}
+                    </span>
+                  </Cell>
+                  <Cell hoger>
+                    <span className="text-ink-muted">{procent(rad.momssats)}</span>
+                  </Cell>
+                  <Cell hoger>
+                    <span className="font-medium">
+                      {rad.brutto !== null ? kronor(rad.brutto) : (rad.belopp_original ?? "—")}
+                    </span>
+                  </Cell>
+                  <Cell hoger>
+                    <span className="flex flex-wrap items-center justify-end gap-1.5">
+                      <Badge tone={rad.status === "granska_manuellt" ? "warn" : "good"}>
+                        {rad.status === "granska_manuellt" ? "Granska" : "Klar"}
+                      </Badge>
+                      {rad.status === "granska_manuellt" ? (
+                        <button
+                          type="button"
+                          onClick={() => void godkann(rad)}
+                          className="focus-ring rounded-input text-[0.8125rem] font-medium text-ink underline underline-offset-4 hover:text-ochre"
+                        >
+                          Godkänn
+                        </button>
+                      ) : null}
+                    </span>
+                  </Cell>
+                </tr>
+              ))}
+            </Tabell>
+          </div>
         )}
-      </Sektion>
+      </section>
 
       <input
         ref={filväljare}
@@ -663,40 +732,34 @@ export function KvittoSammanfattning() {
 
   return (
     <div className="rounded-card border border-ink/12 bg-paper p-5">
-      <h2 className={rubrikPanel}>Sammanfattning</h2>
+      <p className="kicker text-mineral">Sammanfattning</p>
       {samman === null ? (
-        <p className="mt-3 text-[0.9375rem] text-ink-muted">Hämtar…</p>
+        <p className="mt-3 text-[0.875rem] text-ink-subtle">Hämtar…</p>
+      ) : samman.antal === 0 ? (
+        <p className="mt-3 text-[0.875rem] leading-6 text-ink-subtle">Inga inlästa kvitton.</p>
       ) : (
         <>
-          <div className="mt-3">
-            <Nyckeltal
-              poster={[
-                {
-                  etikett: "Totalt",
-                  varde: kronor(samman.totalt),
-                  notis: `${samman.antal_klara} avlästa kvitton`
-                },
-                { etikett: "Ingående moms", varde: kronor(samman.moms) }
-              ]}
-            />
-          </div>
+          <p className="mt-3 font-display text-[2.25rem] leading-none tracking-[-0.01em]">
+            {kronor(samman.totalt)}
+          </p>
+          <p className="mt-1 text-[0.8125rem] text-ink-subtle">
+            {samman.antal_klara} avlästa kvitton · ingående moms {kronor(samman.moms)}
+          </p>
           {samman.per_kategori.length ? (
-            <dl className="mt-4 divide-y divide-ink/10 border-b border-ink/10">
+            <dl className="mt-4 divide-y divide-ink/10 border-y border-ink/10">
               {samman.per_kategori.map((rad) => (
                 <div key={rad.kategori} className="flex items-baseline justify-between gap-4 py-2">
-                  <dt className="text-[0.9375rem] text-ink-muted">
+                  <dt className="text-[0.875rem] text-ink-muted">
                     {rad.etikett}
-                    <span className={cn(meta, "num ml-1.5")}>×{rad.antal}</span>
+                    <span className="ml-1.5 text-[0.75rem] text-mineral">×{rad.antal}</span>
                   </dt>
-                  <dd className="num text-[0.9375rem]">{kronor(rad.summa)}</dd>
+                  <dd className="num text-[0.875rem]">{kronor(rad.summa)}</dd>
                 </div>
               ))}
             </dl>
           ) : null}
-          {/* Utan kvitton säger backendens text samma sak som tomläget i
-              tabellen bredvid. Då står den bara där. */}
-          {samman.text && samman.antal > 0 ? (
-            <p className="mt-4 text-[0.9375rem] leading-6 text-ink-muted">{samman.text}</p>
+          {samman.text ? (
+            <p className="mt-4 text-[0.875rem] leading-6 text-ink-muted">{samman.text}</p>
           ) : null}
         </>
       )}

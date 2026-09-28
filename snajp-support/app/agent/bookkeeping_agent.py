@@ -44,6 +44,7 @@ from agents import Agent, ModelSettings, Runner
 
 from ..agentcore.instruktioner import las_instruktioner
 from ..agentcore.overlays import load_global_instructions
+from ..agentcore import humanizer_skopor
 from ..agentcore.packs import PlaybookStep, RunLedger, check_output_contract
 from ..bookkeeping.beloppsgrind import check_belopp
 from ..bookkeeping.kontoplan import (
@@ -701,6 +702,11 @@ _OMFORSOK_INSTRUKTION = (
 _CHATT_POLERING = PlaybookStep(
     skill="snajp:humanizer-svenska",
     requires=("bokforing_svar_grundat",),
+    # Samma skopa som supportchattens sista hand (agentcore/humanizer_skopor.py):
+    # ett svar i en chatt är affärsskrivande, exemplen och de andra registren
+    # var ~9 000 tecken per tur utan uppgift här.
+    scope=humanizer_skopor.SVAR,
+    rationale=humanizer_skopor.SVAR_RATIONALE,
 )
 
 

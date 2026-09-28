@@ -57,9 +57,11 @@ from ..kvotfel import (
     ar_kvotfel,
     larma_kreditslut,
 )
-from .deps import require_tenant
+from .deps import require_bookkeeping_tenant, require_tenant
 
-router = APIRouter()
+# Produktgrinden på router-nivå — se motiveringen i app/api/deps.py
+# (require_bookkeeping_tenant, snipe-h12).
+router = APIRouter(dependencies=[Depends(require_bookkeeping_tenant)])
 logger = logging.getLogger("snajp-support.bookkeeping")
 
 #: Tillägg när chattens bilaga HANN sparas men svaret föll på kvoten efteråt.
@@ -208,15 +210,14 @@ async def ta_emot_underlag(
     )
 
     if avlasning.verifikat:
-        # Verifikatnumret räknas ur antalet befintliga verifikat, inte ur en
-        # räknarkolumn: en räknare kan glida isär med verkligheten, och ett
-        # hoppat verifikatnummer är en anmärkning vid revision.
-        befintliga = await storage.list_bk_verifikat(tenant_id)
+        # nummer=None: lagringen räknar nästa lediga i serien atomiskt, med
+        # unikt index som spärr (snipe-a4y — len(lista)+1 här gav samma nummer
+        # åt två samtidiga uppladdningar).
         await storage.create_bk_verifikat(
             tenant_id,
             underlag_id=underlag["id"],
             serie="A",
-            nummer=str(len(befintliga) + 1),
+            nummer=None,
             datum=avlasning.falt["datum"],
             text=avlasning.falt.get("motpart", ""),
             rader=[

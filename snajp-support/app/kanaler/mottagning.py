@@ -29,6 +29,8 @@ import random
 from typing import Any
 
 from ..api import rate_limit_db
+from ..avtalsgrind import KUNDTEXT_AVTAL, avtal_saknas
+from ..budget import SupportBudgetExceededError, kontrollera_support_budget
 from ..kvotfel import ar_kreditslut, larma_kreditslut
 from . import lagring
 from .bas import Adapter, Inkommande, KanalFel
@@ -141,6 +143,16 @@ async def ta_emot(
         )
         return {"status": "fel"}
 
+    # Avtalsgrinden (migration 070): samma dörr som chatten och mejlflödet.
+    if await avtal_saknas(storage, tenant_id):
+        await _logga(
+            storage, tenant_id, "warning",
+            f"{adapter.kanal}: meddelande avvisat — avtalet är inte registrerat",
+            {"anslutning_id": anslutning["id"]},
+        )
+        await _svara(storage, tenant_id, adapter, anslutning, hemligheter, inkommande, KUNDTEXT_AVTAL)
+        return {"status": "avtal"}
+
     scopes = rate_limit_db.scopes_for(tenant_id, None)
     try:
         await rate_limit_db.enforce(storage, scopes)
@@ -151,6 +163,18 @@ async def ta_emot(
         )
         await _svara(storage, tenant_id, adapter, anslutning, hemligheter, inkommande, TEXT_TILLFALLIGT_FEL)
         return {"status": "kvot"}
+
+    # Supportbudgeten (app/budget.py): dygnstaket, med 80 %-larm.
+    try:
+        await kontrollera_support_budget(storage, tenant_id)
+    except SupportBudgetExceededError as fel:
+        await _logga(
+            storage, tenant_id, "warning",
+            f"{adapter.kanal}: dygnsbudgeten för support är förbrukad",
+            {"anslutning_id": anslutning["id"]},
+        )
+        await _svara(storage, tenant_id, adapter, anslutning, hemligheter, inkommande, str(fel))
+        return {"status": "budget"}
 
     try:
         from ..agent.support_agent import run_support_agent

@@ -233,15 +233,15 @@ function Formular({
               className={cn(textfaltklass, "font-mono text-[0.8125rem] leading-5")}
             />
           </label>
-          <div className="mt-2 max-w-[72ch] space-y-1.5 text-[0.8125rem] leading-5 text-ink/60">
+          <div className="mt-2 max-w-[72ch] space-y-1.5 text-[0.8125rem] leading-5 text-ink-muted">
             <p>
-              Samma format som Ebbots <code className="font-mono">http_request</code>: varje post i{" "}
-              <code className="font-mono">requests</code> blir ett verktyg agenten kan använda. Bara https.
+              Ebbots <code className="font-mono">http_request</code>-format: varje post i{" "}
+              <code className="font-mono">requests</code> blir ett verktyg. Bara https.
             </p>
             <p>
               <code className="font-mono">{"{{namn}}"}</code> fylls i av agenten.{" "}
               <code className="font-mono">{"{{hemlighet.namn}}"}</code> hämtas ur nycklarna nedan.{" "}
-              Följande fyller Snajp i själv, och agenten kan inte ändra dem:{" "}
+              Fylls i av Snajp, låsta för agenten:{" "}
               {kontextvarden.map((k, i) => (
                 <span key={k}>
                   <code className="font-mono">{`{{${k}}}`}</code>
@@ -250,9 +250,8 @@ function Formular({
               ))}
             </p>
             <p>
-              Anrop med annan metod än GET räknas som ändrande. Agenten gör högst ett sådant per ärende,
-              och i testchatten skickas det inte. Ett sökanrop med POST markeras med{" "}
-              <code className="font-mono">{'"skrivande": false'}</code>.
+              Annan metod än GET räknas som ändrande: högst ett per ärende, aldrig i testchatten. Markera
+              ett sökanrop med POST med <code className="font-mono">{'"skrivande": false'}</code>.
             </p>
             <details className="group">
               <summary className="focus-ring inline-flex cursor-pointer list-none items-center gap-1 rounded-[4px] font-medium text-ink/75">
@@ -313,9 +312,9 @@ function Formular({
               placeholder="t.ex. avboka_order, uppdatera_adress"
               className={faltklass}
             />
-            <span className="mt-1.5 block text-[0.8125rem] leading-5 text-ink/55">
-              Högst ett ändrande anrop per ärende. I testchatten skickas de inte. Verktyg som servern själv
-              märker som ändrande räknas hit automatiskt.
+            <span className="mt-1.5 block text-[0.8125rem] leading-5 text-ink-muted">
+              Högst ett anrop per ärende, aldrig i testchatten. Verktyg som servern märker som ändrande
+              räknas in automatiskt.
             </span>
           </label>
         </div>
@@ -323,9 +322,6 @@ function Formular({
 
       <div>
         <h3 className="text-[0.875rem] font-medium text-ink">Nycklar</h3>
-        <p className="mt-0.5 text-[0.8125rem] leading-5 text-ink/55">
-          Sparas krypterade. Varken agenten eller den här sidan kan läsa dem igen.
-        </p>
         <div className="mt-2">
           <Hemligheter
             sparade={sparade}
@@ -607,15 +603,9 @@ export function SystemSektion() {
   return (
     <section aria-labelledby="rubrik-system">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 id="rubrik-system" className="font-display text-[1.25rem]">
-            Era system
-          </h2>
-          <p className="mt-1 max-w-[62ch] text-[0.9375rem] leading-6 text-ink/60">
-            Ordersystem, CRM eller ärendehantering, via ett öppet API eller en MCP-server. Agenten
-            hämtar uppgifter därifrån när kunskapsbasen inte räcker.
-          </p>
-        </div>
+        <h2 id="rubrik-system" className="font-display text-[1.25rem]">
+          Era system
+        </h2>
         {redigerar === null ? (
           <button type="button" onClick={() => setRedigerar("ny")} className={btnSecondary}>
             <Plus className="h-4 w-4" aria-hidden />
@@ -650,10 +640,7 @@ export function SystemSektion() {
           <SkeletonRows />
         ) : data.integrationer.length === 0 ? (
           redigerar === null ? (
-            <EmptyState
-              title="Inga system kopplade"
-              body="Utan ett kopplat system svarar agenten bara ur kunskapsbasen. Koppla ert ordersystem eller CRM, så kan den svara på frågor om en specifik order eller ett konto."
-            />
+            <EmptyState title="Inga system kopplade" />
           ) : null
         ) : (
           <ul className="divide-y divide-ink/12 border-y border-ink/15">

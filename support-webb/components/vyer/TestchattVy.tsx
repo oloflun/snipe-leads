@@ -68,17 +68,11 @@ export function TestchattVy() {
 
   return (
     <div className="flex min-h-[calc(100dvh-5rem)] flex-col space-y-6">
-      <PageHeader
-        rubrik="Testchatt"
-        beskrivning="Skriv ett kundmejl på låtsas och se exakt vad agenten hade svarat — mot er riktiga kunskapsbas. Ingenting skickas till någon kund, och körningen märks som test."
-      />
+      <PageHeader rubrik="Testchatt" />
 
       <div className="thin-scrollbar flex min-h-[18rem] flex-1 flex-col gap-3 overflow-y-auto rounded-panel border border-ink/15 bg-paper2/40 px-4 py-4">
         {rader.length === 0 ? (
-          <p className="my-auto text-center text-[0.875rem] text-ink/50">
-            Prova med något era kunder faktiskt frågar — öppettider, leveranser,
-            en reklamation.
-          </p>
+          <p className="my-auto text-center text-[0.875rem] text-ink-subtle">Skriv en kundfråga nedan.</p>
         ) : null}
         {rader.map((rad, i) => (
           <div
@@ -96,7 +90,7 @@ export function TestchattVy() {
         {busy ? (
           <p className="flex items-center gap-2 text-[0.8125rem] text-mineral">
             <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-            Agenten läser kunskapsbasen och skriver …
+            Agenten skriver …
           </p>
         ) : null}
       </div>

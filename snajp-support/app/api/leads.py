@@ -29,6 +29,7 @@ from ..leads.autonomy import describe as describe_autonomy
 from ..leads.autonomy import kan_aktivera_auto_send
 from ..leads.autonomy import normalize as normalize_autonomy
 from ..leads.befordran import saknade_falt
+from ..leads.rollkoppling import med_rollflagga
 from ..leads import eskalering
 from ..leads.business_context import (
     MissingBusinessContextError,
@@ -500,7 +501,9 @@ async def list_prospects(request: Request, tenant: dict = Depends(require_tenant
     # gamla default-checkboxen ska inte dyka upp som "fynd" hos en kund.
     if tenant["tenant_id"] != DEFAULT_TENANT_ID:
         prospects = [p for p in prospects if p.get("origin") != "example"]
-    return {"prospects": prospects}
+    # rollkoppling_oklar: underlag för intresseavvägningen, härlett vid
+    # läsning — se app/leads/rollkoppling.py för varför den inte lagras.
+    return {"prospects": [med_rollflagga(p) for p in prospects]}
 
 
 @router.get("/api/leads/prospects/{prospect_id}")
@@ -528,7 +531,7 @@ async def get_prospect(
     )
     # Sorterad lista och inte set: JSON har ingen mängdtyp, och en ordning som
     # varierar mellan anrop ger en sida som hoppar utan att något ändrats.
-    return {"prospect": prospect, "sources": sorted(urls)}
+    return {"prospect": med_rollflagga(prospect), "sources": sorted(urls)}
 
 
 @router.post("/api/leads/prospects/{prospect_id}/sources", status_code=201)

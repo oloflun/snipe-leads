@@ -3,8 +3,7 @@
 import { addonCatalog } from "@/lib/addons";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { mejlaOss } from "@/components/marketing/copy";
-import { Badge, Rad, Radlista, rubrikPanel } from "@/components/ui";
-import { cn } from "@/lib/utils";
+import { Rad, Radlista } from "@/components/ui";
 
 /**
  * Tilläggstjänsterna, aktiva och låsta i samma lista.
@@ -21,40 +20,47 @@ export function AddonSettings() {
   const { addons } = useDashboard();
 
   return (
-    // Ingen ingress. Sidan hade en i form av sidrubrikens beskrivning, och den
-    // här komponenten en till med samma innehåll i andra ord; båda är borta
-    // (F-016). Raden bär namn, status, vad tillägget gör och, för det som inte
-    // ingår, skälet och vägen dit.
-    <Radlista ariaLabel="Tilläggstjänster">
-      {addonCatalog.map((addon) => {
-        const active = addons.includes(addon.key);
-        return (
-          <Rad key={addon.key} className="min-w-0">
-            <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-6 gap-y-2">
-              <h2 className={cn(rubrikPanel, "min-w-0 break-words")}>{addon.name}</h2>
-              {/* Färg bara på avvikelsen: "Ingår" är det ovanliga tillståndet.
-                  Ett låst tillägg är utgångsläget och får den neutrala brickan. */}
-              <Badge tone={active ? "good" : "neutral"}>{active ? "Ingår" : "Tillval"}</Badge>
-            </div>
+    <div className="grid gap-8">
+      {/* Ingen egen ingress här. Sidrubriken ovanför säger redan "Det agenten kan
+          göra utöver det som ingår i er plan", och den här upprepade det med
+          andra ord — två meningar om samma sak, synligt bredvid varandra i
+          samma vy. Sett i pixlar. */}
 
-            <p className="mt-2 max-w-[64ch] text-[0.9375rem] leading-6 text-ink">{addon.what}</p>
+      <Radlista ariaLabel="Tilläggstjänster">
+        {addonCatalog.map((addon) => {
+          const active = addons.includes(addon.key);
+          return (
+            <Rad key={addon.key} className="min-w-0">
+              <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+                <h4 className="min-w-0 break-words text-[17px]">{addon.name}</h4>
+                {/* Ochre bara på avvikelsen — här "ingår", som är det
+                    ovanliga tillståndet. Ett aktivt tillägg är nyheten;
+                    ett låst är utgångsläget och behöver ingen färg. */}
+                <span
+                  className={
+                    active
+                      ? "kicker shrink-0 text-warning"
+                      : "kicker shrink-0 text-mineral"
+                  }
+                >
+                  {active ? "Ingår" : "Tillval"}
+                </span>
+              </div>
 
-            {!active ? (
-              <>
-                <p className="mt-1 max-w-[64ch] text-[0.9375rem] leading-6 text-ink-muted">
-                  {addon.why}
-                </p>
+              <p className="mt-3 max-w-[64ch] text-[15px] leading-7">{addon.what}</p>
+
+              {!active ? (
                 <a
                   href={mejlaOss(`Tillägg: ${addon.name}`)}
-                  className="focus-ring mt-3 inline-flex min-h-11 items-center rounded-input text-[0.9375rem] underline underline-offset-4 transition hover:text-ochre"
+                  className="mt-4 inline-block text-[13px] underline underline-offset-4 transition hover:text-ochre"
                 >
                   Hör av dig om {addon.name.toLowerCase()}
                 </a>
-              </>
-            ) : null}
-          </Rad>
-        );
-      })}
-    </Radlista>
+              ) : null}
+            </Rad>
+          );
+        })}
+      </Radlista>
+    </div>
   );
 }

@@ -30,6 +30,7 @@ from .base import (
     FEEDBACK_VERDICTS,
     LEADS_BUDGET_AGENT_TYPES,
     MEDDELANDE_AVSANDARE,
+    SUPPORT_BUDGET_AGENT_TYPES,
     bk_belopp,
     bk_datum,
     kontrollera_bk_balans,
@@ -134,6 +135,10 @@ class MemoryStorage:
 
     def __init__(self) -> None:
         self.tenants: dict[str, dict[str, Any]] = {}
+        # Trial (074): kandidatrader sätts av tester, loggen speglar
+        # trial_paminnelser-tabellen med (workspace_id, typ) som nyckel.
+        self.trial_kandidater: list[dict[str, Any]] = []
+        self.trial_paminnelser: dict[tuple[str, str], dict[str, Any]] = {}
         self.customers: dict[str, dict[str, Any]] = {}
         # (tenant_id, typ, värde) → customer_id: samma e-post kan finnas hos flera tenants.
         self.identifiers: dict[tuple[str, str, str], str] = {}
@@ -270,7 +275,34 @@ class MemoryStorage:
         return tenant
 
     async def get_tenant(self, tenant_id: str) -> dict[str, Any] | None:
-        return self.tenants.get(tenant_id)
+        tenant = self.tenants.get(tenant_id)
+        if tenant is None:
+            return None
+        # Samma överlagring som Postgres-joinen mot ss_customer_details:
+        # registrets avsändaruppgifter syns i tenant-dicten. Värden som redan
+        # står på tenantposten vinner — testerna sätter dem ofta direkt där.
+        detaljer = self.customer_details.get(tenant_id, {})
+        overlagd = dict(tenant)
+        for nyckel, falt in (
+            ("orgnr", "orgnr"),
+            ("postal_address", "foretagsadress"),
+            ("policy_url", "policy_url"),
+        ):
+            if overlagd.get(nyckel) is None:
+                overlagd[nyckel] = detaljer.get(falt)
+        return overlagd
+
+    async def set_tenant_active(self, tenant_id: str, *, active: bool) -> dict[str, Any] | None:
+        tenant = self.tenants.get(tenant_id)
+        if tenant is None:
+            return None
+        tenant["active"] = active
+        return dict(tenant)
+
+    async def get_tenant_products(self, tenant_id: str) -> list[str] | None:
+        # Minnet har inga arbetsytor — tester sätter `products` direkt på
+        # tenantposten, samma nyckel som list_tenants_with_stats speglar.
+        return (self.tenants.get(tenant_id) or {}).get("products")
 
     async def list_tenants(self) -> list[dict[str, Any]]:
         return [t for t in self.tenants.values() if t.get("active", True)]
@@ -279,6 +311,48 @@ class MemoryStorage:
 
     async def list_mailboxes(self, tenant_id: str) -> list[dict[str, Any]]:
         return [m for m in self.mailboxes.values() if m["tenant_id"] == tenant_id]
+
+    async def upsert_mailbox(
+        self,
+        tenant_id: str,
+        *,
+        provider: str,
+        address: str,
+        imap_host: str | None = None,
+        secret_enc: str | None = None,
+    ) -> dict[str, Any]:
+        adress = address.strip().lower()
+        for rad in self.mailboxes.values():
+            if rad["tenant_id"] == tenant_id and rad["address"] == adress:
+                rad.update(
+                    provider=provider,
+                    imap_host=imap_host,
+                    secret_enc=secret_enc,
+                    status="active",
+                    last_error=None,
+                )
+                return rad
+        rad = {
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "provider": provider,
+            "address": adress,
+            "status": "active",
+            "imap_host": imap_host,
+            "secret_enc": secret_enc,
+            "last_sync_at": None,
+            "last_error": None,
+            "created_at": _now(),
+        }
+        self.mailboxes[rad["id"]] = rad
+        return rad
+
+    async def delete_mailbox(self, tenant_id: str, mailbox_id: str) -> bool:
+        rad = self.mailboxes.get(mailbox_id)
+        if rad and rad["tenant_id"] == tenant_id:
+            del self.mailboxes[mailbox_id]
+            return True
+        return False
 
     async def touch_mailbox_sync(
         self, tenant_id: str, mailbox_id: str, *, last_error: str | None
@@ -446,6 +520,38 @@ class MemoryStorage:
         customer_id = self.identifiers.get((tenant_id, "email", email.lower()))
         return self.customers.get(customer_id) if customer_id else None
 
+    async def list_trial_paminnelse_kandidater(self, *, idag: date) -> list[dict[str, Any]]:
+        # Minnet har inga arbetsytor — tester fyller `self.trial_kandidater`
+        # med färdiga rader (samma fält som Postgres-frågan returnerar) och
+        # den här metoden filtrerar bara bort redan loggade påminnelser,
+        # så att svepar-logiken kan mätas utan databas.
+        rader = []
+        for rad in getattr(self, "trial_kandidater", []):
+            typ = "7_dagar" if rad.get("dagar_kvar") == 7 else "1_dag"
+            if (rad["workspace_id"], typ) not in self.trial_paminnelser:
+                rader.append(dict(rad))
+        return rader
+
+    async def spara_trial_paminnelse(
+        self, *, workspace_id: str, typ: str, skickad_till: str
+    ) -> bool:
+        if (workspace_id, typ) in self.trial_paminnelser:
+            return False
+        self.trial_paminnelser[(workspace_id, typ)] = {
+            "workspace_id": workspace_id,
+            "typ": typ,
+            "skickad_till": skickad_till,
+            "created_at": _now(),
+        }
+        return True
+
+    async def list_customer_emails(self, tenant_id: str) -> list[str]:
+        return sorted(
+            varde
+            for (tid, typ, varde) in self.identifiers
+            if tid == tenant_id and typ == "email"
+        )
+
     # -- Samtalsläge (migration 066) ----------------------------------------
 
     async def get_chat_state(self, tenant_id: str, customer_id: str) -> dict[str, Any]:
@@ -505,6 +611,9 @@ class MemoryStorage:
                     "customer_name": kund.get("name"),
                     "subject": arende.get("subject"),
                     "category": arende.get("category"),
+                    # Kanalerna (bd snipe-36u): Chattar-vyn visar var kunden
+                    # sitter, och att ett svar måste SKICKAS dit.
+                    "channel": arende.get("channel"),
                     "is_test": bool(arende.get("is_test")),
                 }
             )
@@ -575,6 +684,12 @@ class MemoryStorage:
         row = _kb_row(tenant_id, {"title": title, "content": content, "category": category})
         self.kb.setdefault(tenant_id, []).append(row)
         return {"id": row["id"], "title": title, "category": category}
+
+    async def delete_kb_article(self, tenant_id: str, artikel_id: str) -> bool:
+        artiklar = self.kb.get(tenant_id, [])
+        kvar = [a for a in artiklar if str(a["id"]) != str(artikel_id)]
+        self.kb[tenant_id] = kvar
+        return len(kvar) < len(artiklar)
 
     # -- Kanaler & metrics --------------------------------------------------
 
@@ -1388,10 +1503,41 @@ class MemoryStorage:
     async def sum_leads_tokens(self, tenant_id: str, *, hours: int = 24) -> int:
         # Speglar SQL-frågan i postgres.py: leads-typerna, tidsfönster,
         # tokens_in + tokens_out, testkörningar MEDräknade.
+        return self._sum_tokens(tenant_id, LEADS_BUDGET_AGENT_TYPES, hours)
+
+    async def sum_support_tokens(self, tenant_id: str, *, hours: int = 24) -> int:
+        return self._sum_tokens(tenant_id, SUPPORT_BUDGET_AGENT_TYPES, hours)
+
+    async def daily_support_usage(
+        self, tenant_id: str, *, days: int = 30
+    ) -> list[dict[str, Any]]:
+        # Speglar SQL-frågan i postgres.py: gruppera per dag, nyaste först,
+        # dagar utan körningar utelämnas.
+        granser = datetime.now(timezone.utc) - timedelta(days=days)
+        per_dag: dict[str, dict[str, int]] = {}
+        for r in self.agent_runs.get(tenant_id, []):
+            if r["agent_type"] not in SUPPORT_BUDGET_AGENT_TYPES:
+                continue
+            skapad = datetime.fromisoformat(r["created_at"])
+            if skapad < granser:
+                continue
+            dag = per_dag.setdefault(
+                skapad.date().isoformat(),
+                {"korningar": 0, "korningar_test": 0, "tokens_in": 0, "tokens_out": 0},
+            )
+            dag["korningar_test" if r.get("is_test") else "korningar"] += 1
+            dag["tokens_in"] += int(r.get("tokens_in") or 0)
+            dag["tokens_out"] += int(r.get("tokens_out") or 0)
+        return [
+            {"datum": datum, **varden}
+            for datum, varden in sorted(per_dag.items(), reverse=True)
+        ]
+
+    def _sum_tokens(self, tenant_id: str, agent_types: tuple[str, ...], hours: int) -> int:
         granser = datetime.now(timezone.utc) - timedelta(hours=hours)
         total = 0
         for r in self.agent_runs.get(tenant_id, []):
-            if r["agent_type"] not in LEADS_BUDGET_AGENT_TYPES:
+            if r["agent_type"] not in agent_types:
                 continue
             if datetime.fromisoformat(r["created_at"]) < granser:
                 continue
@@ -1554,6 +1700,7 @@ class MemoryStorage:
             "status": "new",
             "ticket_id": None,
             "is_test": is_test,
+            "hanterad_at": None,
             "created_at": _now(),
             "updated_at": _now(),
         }
@@ -1623,6 +1770,7 @@ class MemoryStorage:
         search: str | None = None,
         limit: int = 50,
         is_test: bool | None = False,
+        inkludera_larm: bool = False,
     ) -> list[dict[str, Any]]:
         rows = [e for e in self.emails.values() if e["tenant_id"] == tenant_id]
         rows.sort(key=lambda e: e["received_at"], reverse=True)
@@ -1633,6 +1781,9 @@ class MemoryStorage:
                 continue
             summary = self._email_summary(email)
             if status and summary["status"] != status:
+                continue
+            # Samma som postgres: utan statusfilter syns inte larmen (078).
+            if not status and not inkludera_larm and summary["status"] == "att_hantera":
                 continue
             if category and (
                 not summary["classification"]
@@ -1666,6 +1817,7 @@ class MemoryStorage:
         status: str | None = None,
         ticket_id: str | None = None,
         is_test: bool | None = None,
+        hanterad: bool | None = None,
     ) -> dict[str, Any] | None:
         email = self.emails.get(email_id)
         if not email or email["tenant_id"] != tenant_id:
@@ -1676,6 +1828,12 @@ class MemoryStorage:
             email["ticket_id"] = ticket_id
         if is_test is not None:
             email["is_test"] = is_test
+        if hanterad is not None:
+            # Speglar SQL:en: True stämplar bara en ostämplad rad, False nollar.
+            if hanterad:
+                email["hanterad_at"] = email.get("hanterad_at") or _now()
+            else:
+                email["hanterad_at"] = None
         email["updated_at"] = _now()
         return email
 
@@ -1718,6 +1876,8 @@ class MemoryStorage:
         reasoning: str,
         kb_sources: list[dict[str, Any]],
         model: str,
+        offertforfragan: bool = False,
+        utbildningsintresse: bool = False,
     ) -> dict[str, Any]:
         classification = {
             "id": str(uuid.uuid4()),
@@ -1732,6 +1892,8 @@ class MemoryStorage:
             "reasoning": reasoning,
             "kb_sources": kb_sources,
             "model": model,
+            "offertforfragan": offertforfragan,
+            "utbildningsintresse": utbildningsintresse,
             "created_at": _now(),
         }
         self.classifications[email_id] = classification
@@ -2051,6 +2213,8 @@ class MemoryStorage:
                     # arbetsyta" som SQL:en ger.
                     "active": tenant.get("active", True),
                     "products": tenant.get("products"),
+                    # Speglar Postgres-frågans workspaces.trial_slut (074).
+                    "trial_slut": tenant.get("trial_slut"),
                     "tickets": sum(1 for t in self.tickets.values() if t["tenant_id"] == tid),
                     "escalated": sum(
                         1
@@ -2369,12 +2533,22 @@ class MemoryStorage:
         *,
         underlag_id: str,
         serie: str,
-        nummer: str,
+        nummer: str | None = None,
         datum: date,
         text: str,
         rader: list[dict[str, Any]],
     ) -> dict[str, Any]:
         kontrollera_bk_balans(rader)
+        if nummer is None:
+            # Nästa lediga i serien — högsta befintliga plus ett, inte
+            # listlängden plus ett: ett explicit satt nummer (SIE-import)
+            # skulle annars kollidera med nästa automatiska.
+            befintliga = [
+                int(p["nummer"])
+                for p in self.bk_verifikat.get(tenant_id, [])
+                if p["serie"] == serie and str(p["nummer"]).isdigit()
+            ]
+            nummer = str(max(befintliga, default=0) + 1)
         post = {
             "id": str(uuid.uuid4()),
             "tenant_id": tenant_id,

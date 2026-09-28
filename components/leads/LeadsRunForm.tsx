@@ -6,7 +6,7 @@ import { useState } from "react";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { DemoKorning } from "@/components/leads/DemoKorning";
 import type { EmailStudioData } from "@/lib/data/emails";
-import { Badge, btnPrimary, btnSecondary, etikett as etikettKlass, meta, rubrikPanel } from "@/components/ui";
+import { btnPrimary, btnSecondary } from "@/components/ui";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { ICP_ETIKETTER } from "@/lib/leads/icpLabels";
 import { cn } from "@/lib/utils";
@@ -110,13 +110,13 @@ const fältklass =
 
 function Rad({
   etikett,
+  hint,
   children
-}: Readonly<{ etikett: string; children: React.ReactNode }>) {
-  // Ingen liten grå hint bredvid etiketten (F-016): det som behövs står i
-  // etiketten ("Antal bolag, 1–50"), exemplen står i platshållaren.
+}: Readonly<{ etikett: string; hint?: string; children: React.ReactNode }>) {
   return (
     <label className="block">
-      <span className={etikettKlass}>{etikett}</span>
+      <span className="text-[13px] font-medium text-ink-muted">{etikett}</span>
+      {hint ? <span className="ml-2 text-[12px] text-ink-subtle">{hint}</span> : null}
       <div className="mt-1.5">{children}</div>
     </label>
   );
@@ -286,7 +286,7 @@ export function LeadsRunForm({
 
       if (!jobb.length) {
         throw new Error(
-          "Inga bolag hittades som matchar målgruppen. Prova en bredare bransch eller region, eller fyll i bolag ni själva vill träffa."
+          "Inga bolag matchade målgruppen. Prova en bredare sökning."
         );
       }
 
@@ -307,8 +307,8 @@ export function LeadsRunForm({
 
       setStatus(
         misslyckade
-          ? `Klart: ${klara} bolag researchade, ${misslyckade} misslyckades. Se registret nedan.`
-          : `Klart: ${klara} bolag researchade. Se registret nedan.`
+          ? `Klart: ${klara} bolag researchade, ${misslyckade} misslyckades.`
+          : `Klart: ${klara} bolag researchade.`
       );
       window.dispatchEvent(new Event("snipra:leads-korning-klar"));
     } catch (cause) {
@@ -324,7 +324,7 @@ export function LeadsRunForm({
       {rubrik}
 
       <div className="mt-6 grid max-w-[760px] gap-5 sm:grid-cols-2">
-        <Rad etikett="Antal bolag, 1–50">
+        <Rad etikett="Antal bolag" hint="1–50">
           <input
             type="number"
             min={1}
@@ -344,7 +344,7 @@ export function LeadsRunForm({
             <option value="research_and_draft">Research och utkast</option>
           </select>
         </Rad>
-        <Rad etikett={ICP_ETIKETTER.industries.label}>
+        <Rad etikett={ICP_ETIKETTER.industries.label} hint="komma emellan">
           <input value={branscher} onChange={(e) => setBranscher(e.target.value)} placeholder={ICP_ETIKETTER.industries.hint} className={fältklass} />
         </Rad>
         <Rad etikett={ICP_ETIKETTER.exclude_industries.label}>
@@ -356,7 +356,7 @@ export function LeadsRunForm({
         <Rad etikett={ICP_ETIKETTER.roles.label}>
           <input value={roller} onChange={(e) => setRoller(e.target.value)} placeholder={ICP_ETIKETTER.roles.hint} className={fältklass} />
         </Rad>
-        <Rad etikett={ICP_ETIKETTER.must_have.label}>
+        <Rad etikett={ICP_ETIKETTER.must_have.label} hint="nischen">
           <input value={kravs} onChange={(e) => setKravs(e.target.value)} placeholder={ICP_ETIKETTER.must_have.hint} className={fältklass} />
         </Rad>
         <Rad etikett={ICP_ETIKETTER.deal_breakers.label}>
@@ -366,17 +366,16 @@ export function LeadsRunForm({
           <Rad etikett="Anställda, min">
             <input type="number" min={0} value={minAnst} onChange={(e) => setMinAnst(e.target.value)} className={fältklass} />
           </Rad>
-          <Rad etikett="Anställda, max">
+          <Rad etikett="max">
             <input type="number" min={0} value={maxAnst} onChange={(e) => setMaxAnst(e.target.value)} className={fältklass} />
           </Rad>
         </div>
-        {/* "Tomt = agenten letar" stod i både ledtråden och platshållaren. */}
-        <Rad etikett="Egna bolag, ett per rad">
+        <Rad etikett="Egna bolag" hint="valfritt, ett per rad">
           <textarea
             value={egnaBolag}
             onChange={(e) => setEgnaBolag(e.target.value)}
             rows={3}
-            placeholder="Lämna tomt så letar agenten upp bolag som matchar fälten ovan"
+            placeholder="Tomt: agenten letar själv"
             className={cn(fältklass, "resize-y")}
           />
         </Rad>
@@ -397,7 +396,7 @@ export function LeadsRunForm({
         </button>
       )}
 
-      {status ? <p className="mt-3 text-[0.9375rem] text-ink-muted">{status}</p> : null}
+      {status ? <p className="mt-3 text-[13px] text-ink-subtle">{status}</p> : null}
 
       {fel ? (
         <p role="alert" className="mt-5 max-w-[70ch] break-words text-[15px] text-danger">
@@ -430,8 +429,10 @@ export function LeadsRunForm({
                   if (värde === undefined || värde === null) return null;
                   return (
                     <div key={nyckel} className="border-t border-ink/10 pt-2">
-                      <dt className={etikettKlass}>{etikett}</dt>
-                      <dd className="mt-1 text-[0.9375rem] leading-6 text-ink-muted">
+                      <dt className="text-[12px] font-medium uppercase tracking-[0.04em] text-ink-subtle">
+                        {etikett}
+                      </dt>
+                      <dd className="mt-1 text-[14px] leading-6 text-ink-muted">
                         {Array.isArray(värde) ? värde.join(", ") : String(värde)}
                       </dd>
                     </div>
@@ -439,12 +440,14 @@ export function LeadsRunForm({
                 })}
               </dl>
             ) : (
-              <p className="mt-2 text-[0.9375rem] text-ink-muted">Körningen använde er sparade målgrupp.</p>
+              <p className="mt-2 text-[13px] text-ink-subtle">
+                Sparad målgrupp användes.
+              </p>
             )}
           </div>
 
           {jobbLage && jobbLage.totalt > 0 ? (
-            <p className="text-[0.9375rem] text-ink-muted">
+            <p className="text-[14px] text-ink-muted">
               {jobbLage.klara + jobbLage.misslyckade}/{jobbLage.totalt} jobb avslutade
               {jobbLage.misslyckade ? ` · ${jobbLage.misslyckade} misslyckades` : null}
             </p>
@@ -485,12 +488,10 @@ export function Exempelbolagslista({
     <section aria-labelledby="exempelbolag" className="rounded-card bg-paper2/40 p-5 md:p-6">
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
         <div>
-          {/* "Påhittade — kan aldrig mejlas" under rubriken är struken
-              (F-016): Exempel-brickan på varje rad bär samma besked, och det
-              är den som följer med raden in i registret. */}
-          <h3 id="exempelbolag" className={rubrikPanel}>
+          <h3 id="exempelbolag" className="text-[1.0625rem] font-semibold tracking-[-0.01em]">
             {bolag.length} exempelbolag inlagda
           </h3>
+          <p className="mt-0.5 text-[13px] text-ink-subtle">Påhittade — kan aldrig mejlas</p>
         </div>
 
         {/* Uppdatera startar INGEN körning. Den som vill se agenten formulera
@@ -523,27 +524,21 @@ export function Exempelbolagslista({
             >
             <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
               <div className="min-w-0">
-                <p className="text-[0.9375rem] font-semibold">{b.company_name}</p>
-                <p className={cn(meta, "mt-1")}>
+                <p className="text-[15px] font-semibold tracking-[-0.01em]">{b.company_name}</p>
+                <p className="mt-1 font-mono text-[12px] text-ink-subtle">
                   {[b.orgnr, b.ort, b.website].filter(Boolean).join(" · ")}
                 </p>
               </div>
-              <Badge>Exempel</Badge>
+              <span className="shrink-0 rounded-input bg-ochre/15 px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.06em] text-warning">
+                Exempel
+              </span>
             </div>
 
-            {/* Två rader i listan, hela beskrivningen när raden är öppen. */}
             {b.beskrivning ? (
-              <p
-                className={cn(
-                  "mt-2 max-w-[70ch] text-[0.9375rem] leading-6 text-ink-muted",
-                  !öppen && "line-clamp-2"
-                )}
-              >
-                {b.beskrivning}
-              </p>
+              <p className="mt-2 max-w-[70ch] text-[14px] leading-6 text-ink-muted">{b.beskrivning}</p>
             ) : null}
 
-            <p className={cn(meta, "mt-2")}>
+            <p className="mt-2 text-[13px] text-ink-subtle">
               {[
                 b.contact_name ? `Beslutsfattare: ${b.contact_name}` : null,
                 typeof b.anstallda === "number" ? `${b.anstallda} anställda` : null,
@@ -553,7 +548,7 @@ export function Exempelbolagslista({
                 .join(" · ")}
             </p>
 
-            <p className="mt-2 text-[0.8125rem] font-medium text-warning">
+            <p className="mt-2 text-[13px] font-medium text-warning">
               {öppen ? "Dölj utkastet" : "Öppna utkastet"}
             </p>
             </button>
@@ -563,9 +558,12 @@ export function Exempelbolagslista({
           );
         })}
       </ul>
-      {/* Sidfotsraden om fel kontrollsiffra och .example-domäner är struken
-          (F-016): den förklarade exemplets konstruktion, inte bolagen. Skälet
-          står kvar i typens docstring ovan och i app/leads/exempelbolag.py. */}
+
+      <p className="mt-4 border-t border-ink/10 pt-4 text-[13px] leading-6 text-ink-subtle">
+        Organisationsnumren har medvetet fel kontrollsiffra och webbadresserna
+        ligger under <span className="font-mono text-[12px]">.example</span>, som aldrig kan
+        registreras. Ett påhittat bolag med giltiga uppgifter hade kunnat vara någon annans.
+      </p>
     </section>
   );
 }
@@ -628,9 +626,9 @@ function Pitchutkast({ bolag }: Readonly<{ bolag: Exempelbolag }>) {
           <Send className="h-4 w-4" aria-hidden />
           Skicka test
         </button>
-        <p className="text-[0.9375rem] leading-6 text-ink-muted">
+        <p className="text-[13px] leading-6 text-ink-subtle">
           {skickat
-            ? "Ingenting skickades. Utkastet finns kvar och bolaget är påhittat."
+            ? "Ingenting skickades. Utkastet finns kvar här och bolaget är påhittat — så här skulle utskicket ha sett ut."
             : "Provar hela vägen fram utan att något lämnar huset."}
         </p>
       </div>

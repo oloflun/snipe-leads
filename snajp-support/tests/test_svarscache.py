@@ -353,3 +353,38 @@ def test_tag_escapar_uuid_och_kolon():
     )
     assert RedisSvarscache._tag("3:7") == "3\:7"
     assert RedisSvarscache._tag("abc123") == "abc123"
+
+
+def test_tolka_traff_hanterar_redis_py_8_dictform():
+    """redis-py 8 ger FT.SEARCH-svaret som en dict (results/extra_attributes),
+    inte den dokumenterade platta listan. Uppmätt live mot dev-Redis
+    2026-09-20: den platta tolkningen gav miss på VARJE legitim träff — cachen
+    var i praktiken avstängd, tyst. Båda formerna ska tolkas."""
+    from app.cache.svarscache import RedisSvarscache
+
+    cache = RedisSvarscache(object())
+    dictsvar = {
+        b"results": [
+            {
+                b"id": b"ns:svarscache:abc",
+                b"extra_attributes": {
+                    b"avstand": b"0.02",
+                    b"svar": b"Cachat svar",
+                    b"kategori": b"leverans",
+                },
+            }
+        ],
+        b"total_results": 1,
+    }
+    post = cache._tolka_traff(dictsvar, tenant="t", kbv="v1", cfgv="v1")
+    assert post is not None
+    assert post.svar == "Cachat svar"
+    assert post.kategori == "leverans"
+    assert abs(post.likhet - 0.98) < 1e-9
+
+    tom = {b"results": [], b"total_results": 0}
+    assert cache._tolka_traff(tom, tenant="t", kbv="v1", cfgv="v1") is None
+
+    platt = [1, b"ns:svarscache:abc", [b"avstand", b"0.02", b"svar", b"Platt svar", b"kategori", b"ovrigt"]]
+    platt_post = cache._tolka_traff(platt, tenant="t", kbv="v1", cfgv="v1")
+    assert platt_post is not None and platt_post.svar == "Platt svar"

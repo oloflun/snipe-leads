@@ -120,6 +120,24 @@ tydligt inte nått i dag, och de två sakerna som saknas är konkreta:
 
 ### Beslutat
 
+- **Kundtjänstagenten eskalerar enligt fasta regler per kund och lämnar över
+  sömlöst i samma chatt.** Sebbe beställde det 2026-09-18 med Ebbot som
+  förebild, och det är byggt. Regler i kod med orsakskod: kunden ber om en
+  människa, frågan ligger utanför ämnet, en tydlig fråga saknar svar i
+  kunskapsbasen, taket för misslyckade försök, känsliga ärenden. Varje kund
+  ställer in trösklar, ton, språk och hur strängt svaren kontrolleras mot
+  kunskapsbasen. Medarbetaren svarar i portalens Chattar-vy, och svaret
+  hamnar i kundens eget chattfönster med hela samtalet synligt. Agenten
+  svarar på kundens språk.
+- **Kundtjänstagenten kopplas till kundens egna system och svarar i fler
+  kanaler.** Sebbe beställde det 2026-09-18 (Ebbots löfte om integrationer via
+  öppna API:er eller MCP), och det är byggt och kundtestat på development
+  2026-09-19. Kunden lägger själv in HTTP-anrop i Ebbots format eller en
+  MCP-server i portalvyn Integrationer. Agenten slår upp ordrar och konton där
+  och skickar ett eskalerat ärende med hela samtalet till kundens ärendesystem.
+  Den svarar också i WhatsApp, Messenger, Slack och Teams, och medarbetarens
+  svar går ut i samma kanal. Kundens nycklar lagras krypterade (se öppen fråga
+  10), och ett svar som bygger på kundens systemdata cachas aldrig.
 - **Tre agenter, sålda var för sig eller i paket.** Support 3 990 kr/mån, Leads
   4 490 kr/mån, Bokföring 2 690 kr/mån, Duo (support + leads) 6 990 kr/mån, Trio
   (alla tre) 9 990 kr/mån, plus 1 590 kr i startavgift. Beslutat 2026-08-22 och
@@ -229,9 +247,35 @@ rebase. Ändringar behöver samordnas, inte bara pushas.
    ett uttryckligt ja enligt planen.
 9. **Livrustnings garantifråga — vem jagar kunden?** Den har stått öppen sedan
    7 augusti och blockerar en av de två delarna i den registrerade milstolpen.
+10. **Får kundernas integrationsnycklar ligga krypterade i databasen?** Beslutet
+   ovan säger att hemligheter aldrig lagras i databasen, bara som
+   miljövariabler. Kundernas egna API-nycklar (Zendesk, CRM, WhatsApp och
+   liknande) är olika för varje kund och går inte att lägga som miljövariabler.
+   De ligger därför krypterade (Fernet, nyckeln INTEGRATION_NYCKEL finns bara
+   som miljövariabel) och lämnas aldrig ut av API:t. Godkänner du det som ett
+   undantag, eller vill du ha en annan lösning (till exempel en extern
+   nyckelhanterare)?
+11. **Dataskyddet när kunden kopplar in en kanal.** WhatsApp och Messenger (Meta),
+   Slack och Teams (Microsoft) behandlar samtalen, ofta i USA. Det sker på
+   kundens uppdrag och med kundens egna konton, men borde det stå i
+   PUB-avtalet och i `docs/JURIDIK_ATGARDER.md` innan första kunden aktiverar
+   en kanal?
 
 ## Ändringslogg
 
+- 2026-09-19 — claude — delmål 1 utökat med integrationer och kanaler (bd
+  snipe-36u): HTTP-anrop och MCP mot kundens egna system, händelsen "ärende
+  eskalerat" till kundens ärendesystem, samt WhatsApp, Messenger, Slack och
+  Teams. Portalvyn Integrationer. Kundtestat på dev med riktig modell, där fyra
+  fel i skarven mot eskaleringen hittades och rättades. Migrationerna och
+  INTEGRATION_NYCKEL är klara i main, och PR #22 väntar på Antons merge. Ny post
+  under Beslutat och två nya öppna frågor (10, 11). Delmålslistan är orörd.
+- 2026-09-19 — claude — delmål 1 (kundtjänstagenten) fördjupat efter Ebbot-
+  research: fasta eskaleringsregler per kund, sömlös överlämning i samma chatt
+  (portalvyn Chattar), faktagrind mot kunskapsbasen och svar på kundens språk.
+  Kundtestat på dev med riktig modell, där sex fel hittades och rättades.
+  Release-PR #22 väntar på Antons merge. Delmålslistan är orörd, med en ny
+  post under Beslutat.
 - 2026-09-15 — claude — leads-agentens träffsäkerhet (delmål 2) mätt som kund
   mot testkunden Nordforms målgrupp: leadslistan 0/10 → 10/10, leadskörningen
   0/5 → 5/5 i rätt bransch och stad. Sex fel rättade (jobbannonskällan sökte på

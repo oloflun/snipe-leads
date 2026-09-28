@@ -12,6 +12,7 @@ precis som referensarkitekturen. Saknas embeddings används
 import hashlib
 import json
 import logging
+import uuid
 from contextlib import asynccontextmanager
 from datetime import date
 from decimal import Decimal
@@ -24,6 +25,7 @@ from .base import (
     KUNDDATA_FALT,
     LEADS_BUDGET_AGENT_TYPES,
     MEDDELANDE_AVSANDARE,
+    SUPPORT_BUDGET_AGENT_TYPES,
     bk_belopp,
     bk_datum,
     kontrollera_bk_balans,
@@ -211,9 +213,57 @@ class PostgresStorage:
         return _row(record)
 
     async def get_tenant(self, tenant_id: str) -> dict[str, Any] | None:
+        # Kundregistrets avsändaruppgifter (orgnr, företagsadress, policy_url)
+        # läggs ovanpå tenantraden: utskicksfoten och send_guard läser dem ur
+        # tenant-dicten, och utan joinen fanns fälten bara i MemoryStorage —
+        # varje skarpt utskick föll på regel 1 utan att någon förstod varför.
+        # Läsningen kräver policyn ss_customer_details_tenant_read (073).
         async with self._scoped(tenant_id) as conn:
-            record = await conn.fetchrow("select * from ss_tenants where id = $1", tenant_id)
+            record = await conn.fetchrow(
+                """
+                select t.*,
+                       d.orgnr,
+                       d.foretagsadress as postal_address,
+                       d.policy_url
+                from ss_tenants t
+                left join ss_customer_details d on d.tenant_id = t.id
+                where t.id = $1
+                """,
+                tenant_id,
+            )
         return _row(record)
+
+    async def set_tenant_active(self, tenant_id: str, *, active: bool) -> dict[str, Any] | None:
+        # OSKOPAD med flit: administrativ skrivning bakom require_master_key,
+        # samma policy (ss_tenants_admin_write, 029) som create_tenant.
+        async with self.pool.acquire() as conn:
+            record = await conn.fetchrow(
+                "update ss_tenants set active = $2 where id = $1 returning *",
+                tenant_id,
+                active,
+            )
+        return _row(record)
+
+    async def get_tenant_products(self, tenant_id: str) -> list[str] | None:
+        # OSKOPAD med flit, samma väg och samma policy som
+        # list_tenants_with_stats (064_workspaces_admin_read): `workspaces`
+        # bär workspace-RLS, inte tenant-RLS, så en tenant-skopad anslutning
+        # ser noll rader. Policyn tillåter snajp_app att läsa när INGEN
+        # tenant-kontext är satt, och frågan läser bara products-kolumnen.
+        # Tidigast skapade arbetsytan vinner när flera delar tenant.
+        async with self.pool.acquire() as conn:
+            record = await conn.fetchrow(
+                """
+                select products from workspaces
+                where ss_tenant_id = $1
+                order by created_at
+                limit 1
+                """,
+                tenant_id,
+            )
+        if record is None:
+            return None
+        return list(record["products"] or [])
 
     async def list_tenants(self) -> list[dict[str, Any]]:
         # Administrativ, körs utan tenant-kontext: pollern måste se alla tenants
@@ -228,16 +278,54 @@ class PostgresStorage:
     # -- Inkorgar -----------------------------------------------------------
 
     async def list_mailboxes(self, tenant_id: str) -> list[dict[str, Any]]:
+        # secret_enc följer med (Fernet-krypterat, migration 077): pollern och
+        # synken behöver det för att låsa upp lösenordet. API-svaren plockar
+        # ALDRIG med fältet ut till klienten — se list_inbox_mailboxes.
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(
                 """
                 select id, tenant_id, provider, address, status, imap_host,
-                       last_sync_at, last_error
+                       secret_enc, last_sync_at, last_error
                 from ss_mailboxes where tenant_id = $1 order by created_at
                 """,
                 tenant_id,
             )
         return [_row(r) for r in records]
+
+    async def upsert_mailbox(
+        self,
+        tenant_id: str,
+        *,
+        provider: str,
+        address: str,
+        imap_host: str | None = None,
+        secret_enc: str | None = None,
+    ) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                insert into ss_mailboxes
+                    (tenant_id, provider, address, status, imap_host, secret_enc)
+                values ($1, $2, lower(trim($3)), 'active', $4, $5)
+                on conflict (tenant_id, address) do update set
+                    provider = excluded.provider,
+                    imap_host = excluded.imap_host,
+                    secret_enc = excluded.secret_enc,
+                    status = 'active',
+                    last_error = null
+                returning *
+                """,
+                tenant_id, provider, address, imap_host, secret_enc,
+            )
+        return _row(record)
+
+    async def delete_mailbox(self, tenant_id: str, mailbox_id: str) -> bool:
+        async with self._scoped(tenant_id) as conn:
+            resultat = await conn.execute(
+                "delete from ss_mailboxes where tenant_id = $1 and id = $2",
+                tenant_id, mailbox_id,
+            )
+        return resultat.endswith("1")
 
     # -- Kunddata -----------------------------------------------------------
 
@@ -495,6 +583,70 @@ class PostgresStorage:
             )
         return _row(record)
 
+    async def list_trial_paminnelse_kandidater(self, *, idag: date) -> list[dict[str, Any]]:
+        # OSKOPAD: plattformssvep över alla arbetsytor, samma villkor som
+        # 029/064 (läsning bara utan tenant-kontext). Ägarens mejl läses ur
+        # auth.users via profiles (grant + policy i migration 074). En ägare
+        # per arbetsyta — den först skapade profilen vinner vid flera.
+        async with self.pool.acquire() as conn:
+            records = await conn.fetch(
+                """
+                select distinct on (w.id)
+                       w.id::text as workspace_id,
+                       w.name,
+                       w.trial_slut,
+                       u.email,
+                       (w.trial_slut - $1::date) as dagar_kvar
+                from workspaces w
+                join profiles p on p.workspace_id = w.id and p.role = 'owner'
+                join auth.users u on u.id = p.id
+                left join ss_customer_details d on d.tenant_id = w.ss_tenant_id
+                where coalesce(w.is_demo, false) = false
+                  and w.trial_slut in ($1::date + 7, $1::date + 1)
+                  and d.avtal_signerat is null
+                  and not exists (
+                      select 1 from trial_paminnelser tp
+                      where tp.workspace_id = w.id
+                        and tp.typ = case
+                              when w.trial_slut = $1::date + 7 then '7_dagar'
+                              else '1_dag'
+                            end
+                  )
+                order by w.id, p.created_at
+                """,
+                idag,
+            )
+        return [dict(r) for r in records]
+
+    async def spara_trial_paminnelse(
+        self, *, workspace_id: str, typ: str, skickad_till: str
+    ) -> bool:
+        async with self.pool.acquire() as conn:
+            record = await conn.fetchrow(
+                """
+                insert into trial_paminnelser (workspace_id, typ, skickad_till)
+                values ($1, $2, $3)
+                on conflict (workspace_id, typ) do nothing
+                returning id
+                """,
+                workspace_id,
+                typ,
+                skickad_till,
+            )
+        return record is not None
+
+    async def list_customer_emails(self, tenant_id: str) -> list[str]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select lower(value) as email from ss_customer_identifiers
+                where tenant_id = $1 and type = 'email'
+                order by 1
+                """,
+                tenant_id,
+            )
+        return [r["email"] for r in records]
+
     # -- Samtalsläge (migration 066) ----------------------------------------
 
     async def get_chat_state(self, tenant_id: str, customer_id: str) -> dict[str, Any]:
@@ -563,7 +715,7 @@ class PostgresStorage:
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(
                 """
-                select s.*, c.name as customer_name, t.subject, t.category,
+                select s.*, c.name as customer_name, t.subject, t.category, t.channel,
                        coalesce(t.is_test, false) as is_test
                 from ss_chat_state s
                 join ss_customers c on c.id = s.customer_id and c.tenant_id = s.tenant_id
@@ -744,6 +896,21 @@ class PostgresStorage:
                 embedding,
             )
         return _row(record)
+
+    async def delete_kb_article(self, tenant_id: str, artikel_id: str) -> bool:
+        """Se Storage.delete_kb_article. Ett id som inte är en uuid är en
+        artikel som inte finns, inte ett 500."""
+        try:
+            uuid.UUID(str(artikel_id))
+        except ValueError:
+            return False
+        async with self._scoped(tenant_id) as conn:
+            resultat = await conn.execute(
+                "delete from ss_knowledge_base where tenant_id = $1 and id = $2::uuid",
+                tenant_id,
+                str(artikel_id),
+            )
+        return str(resultat).endswith(" 1")
 
     # -- Kanaler & metrics --------------------------------------------------
 
@@ -1876,6 +2043,58 @@ class PostgresStorage:
             )
         return int(summa or 0)
 
+    async def sum_support_tokens(self, tenant_id: str, *, hours: int = 24) -> int:
+        async with self._scoped(tenant_id) as conn:
+            # Samma fråga som sum_leads_tokens med supportens agenttyper —
+            # inklusive is_test-resonemanget: testkörningar kostar samma
+            # pengar hos leverantören som skarpa.
+            summa = await conn.fetchval(
+                """
+                select coalesce(sum(tokens_in + tokens_out), 0)
+                from agent_runs
+                where tenant_id = $1
+                  and agent_type = any($2::text[])
+                  and created_at > now() - make_interval(hours => $3)
+                """,
+                tenant_id,
+                list(SUPPORT_BUDGET_AGENT_TYPES),
+                hours,
+            )
+        return int(summa or 0)
+
+    async def daily_support_usage(
+        self, tenant_id: str, *, days: int = 30
+    ) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select created_at::date as datum,
+                       count(*) filter (where not is_test) as korningar,
+                       count(*) filter (where is_test) as korningar_test,
+                       coalesce(sum(tokens_in), 0) as tokens_in,
+                       coalesce(sum(tokens_out), 0) as tokens_out
+                from agent_runs
+                where tenant_id = $1
+                  and agent_type = any($2::text[])
+                  and created_at > now() - make_interval(days => $3)
+                group by created_at::date
+                order by datum desc
+                """,
+                tenant_id,
+                list(SUPPORT_BUDGET_AGENT_TYPES),
+                days,
+            )
+        return [
+            {
+                "datum": str(r["datum"]),
+                "korningar": int(r["korningar"]),
+                "korningar_test": int(r["korningar_test"]),
+                "tokens_in": int(r["tokens_in"]),
+                "tokens_out": int(r["tokens_out"]),
+            }
+            for r in records
+        ]
+
     async def weekly_analytics(self, tenant_id: str, *, weeks: int = 8) -> dict[str, Any]:
         # Se protokollet i base.py för varför `coverage` finns.
         #
@@ -2118,6 +2337,7 @@ class PostgresStorage:
         search: str | None = None,
         limit: int = 50,
         is_test: bool | None = False,
+        inkludera_larm: bool = False,
     ) -> list[dict[str, Any]]:
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(
@@ -2132,7 +2352,12 @@ class PostgresStorage:
                          where a.email_id = e.id and a.is_image) as has_image
                 from ss_emails e
                 where e.tenant_id = $1
-                  and ($2::text is null or e.status = $2)
+                  -- Utan statusfilter visas inte larmen (migration 078):
+                  -- de bor i fliken Att hantera, som frågar efter statusen.
+                  -- get_email slår upp via den här listan och måste se ALLA
+                  -- rader, därav inkludera_larm ($7).
+                  and (($2::text is null and ($7::boolean or e.status <> 'att_hantera'))
+                       or e.status = $2)
                   and ($3::text is null or exists(
                         select 1 from ss_classifications c
                         where c.email_id = e.id and c.category = $3))
@@ -2149,6 +2374,7 @@ class PostgresStorage:
                 search,
                 limit,
                 is_test,
+                inkludera_larm,
             )
         results = []
         for record in records:
@@ -2160,7 +2386,7 @@ class PostgresStorage:
         return results
 
     async def get_email(self, tenant_id: str, email_id: str) -> dict[str, Any] | None:
-        rows = await self.list_emails(tenant_id, limit=1000, is_test=None)
+        rows = await self.list_emails(tenant_id, limit=1000, is_test=None, inkludera_larm=True)
         email = next((e for e in rows if e["id"] == email_id), None)
         if not email:
             return None
@@ -2182,6 +2408,7 @@ class PostgresStorage:
         status: str | None = None,
         ticket_id: str | None = None,
         is_test: bool | None = None,
+        hanterad: bool | None = None,
     ) -> dict[str, Any] | None:
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
@@ -2190,6 +2417,11 @@ class PostgresStorage:
                   status = coalesce($3, status),
                   ticket_id = coalesce($4::uuid, ticket_id),
                   is_test = case when $5::boolean is null then is_test else $5 end,
+                  hanterad_at = case
+                    when $6::boolean is null then hanterad_at
+                    when $6 then coalesce(hanterad_at, now())
+                    else null
+                  end,
                   updated_at = now()
                 where tenant_id = $1 and id = $2 returning *
                 """,
@@ -2198,6 +2430,7 @@ class PostgresStorage:
                 status,
                 ticket_id,
                 is_test,
+                hanterad,
             )
         return _row(record)
 
@@ -2243,14 +2476,18 @@ class PostgresStorage:
         reasoning: str,
         kb_sources: list[dict[str, Any]],
         model: str,
+        offertforfragan: bool = False,
+        utbildningsintresse: bool = False,
     ) -> dict[str, Any]:
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
                 """
                 insert into ss_classifications
                   (tenant_id, email_id, category, priority, sentiment, confidence,
-                   escalate, escalation_reason, reasoning, kb_sources, model)
-                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11) returning *
+                   escalate, escalation_reason, reasoning, kb_sources, model,
+                   offertforfragan, utbildningsintresse)
+                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13)
+                returning *
                 """,
                 tenant_id,
                 email_id,
@@ -2263,6 +2500,8 @@ class PostgresStorage:
                 reasoning,
                 json.dumps(kb_sources, ensure_ascii=False),
                 model,
+                offertforfragan,
+                utbildningsintresse,
             )
         return _row(record)
 
@@ -2781,16 +3020,18 @@ class PostgresStorage:
             # Tidigast skapade arbetsytan vinner när flera delar tenant (den
             # gamla delade `testkund`-tenanten, migration 038).
             produkter: dict[str, list[str]] = {}
+            trial: dict[str, Any] = {}
             try:
                 for rad in await conn.fetch(
                     """
-                    select distinct on (ss_tenant_id) ss_tenant_id, products
+                    select distinct on (ss_tenant_id) ss_tenant_id, products, trial_slut
                     from workspaces
                     where ss_tenant_id is not null
                     order by ss_tenant_id, created_at
                     """
                 ):
                     produkter[str(rad["ss_tenant_id"])] = list(rad["products"] or [])
+                    trial[str(rad["ss_tenant_id"])] = rad["trial_slut"]
             except Exception:  # noqa: BLE001 — ett extra fält får inte fälla adminlistan
                 logger.warning(
                     "list_tenants_with_stats: kunde inte läsa workspaces.products", exc_info=True
@@ -2799,6 +3040,9 @@ class PostgresStorage:
         rader = [_row(r) for r in records]
         for rad in rader:
             rad["products"] = produkter.get(str(rad["id"]))
+            # Trial (074): datumet per kopplad arbetsyta. None = ingen
+            # arbetsyta (configfil-kund) eller kolumnen kunde inte läsas.
+            rad["trial_slut"] = trial.get(str(rad["id"]))
         return rader
 
     async def list_agent_runs_all(
@@ -3175,12 +3419,44 @@ class PostgresStorage:
         *,
         underlag_id: str,
         serie: str,
-        nummer: str,
+        nummer: str | None = None,
         datum: date,
         text: str,
         rader: list[dict[str, Any]],
     ) -> dict[str, Any]:
         kontrollera_bk_balans(rader)
+        # `nummer=None`: nästa lediga räknas i SAMMA insert som skriver raden.
+        # Det unika indexet (migration 072) gör att två samtidiga skrivningar
+        # inte kan få samma nummer — förloraren får UniqueViolation och
+        # försöker om med ett nytt max. Tre försök räcker: varje omtag kräver
+        # att ytterligare en skrivning hann emellan.
+        for forsok in range(3):
+            try:
+                return await self._skriv_bk_verifikat(
+                    tenant_id,
+                    underlag_id=underlag_id,
+                    serie=serie,
+                    nummer=nummer,
+                    datum=datum,
+                    text=text,
+                    rader=rader,
+                )
+            except asyncpg.UniqueViolationError:
+                if nummer is not None or forsok == 2:
+                    raise
+        raise RuntimeError("ohittbar: retry-loopen returnerar eller kastar")
+
+    async def _skriv_bk_verifikat(
+        self,
+        tenant_id: str,
+        *,
+        underlag_id: str,
+        serie: str,
+        nummer: str | None,
+        datum: date,
+        text: str,
+        rader: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         # EN transaktion för huvud och rader. _scoped öppnar redan en, så ett
         # fel på någon rad rullar tillbaka hela verifikatet — ett halvskrivet
         # verifikat balanserar inte och gör varje senare periodrapport fel.
@@ -3188,7 +3464,15 @@ class PostgresStorage:
             record = await conn.fetchrow(
                 """
                 insert into bk_verifikat (tenant_id, underlag_id, serie, nummer, datum, text)
-                values ($1, $2, $3, $4, $5, $6)
+                values (
+                    $1, $2, $3,
+                    coalesce($4, (
+                        select (coalesce(max(nummer::int), 0) + 1)::text
+                        from bk_verifikat
+                        where tenant_id = $1 and serie = $3 and nummer ~ '^[0-9]+$'
+                    )),
+                    $5, $6
+                )
                 returning *
                 """,
                 tenant_id,

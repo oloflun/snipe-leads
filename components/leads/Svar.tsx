@@ -2,11 +2,10 @@
 
 import { AlertTriangle } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { Badge, Rad, Radlista, SkeletonRows, Tomt, btnLiten, btnSecondary, meta, rubrikPanel } from "@/components/ui";
+import { EmptyState, Rad, Radlista, SkeletonRows } from "@/components/ui";
 import { EjAktiverad, arEjAktiverad } from "@/components/EjAktiverad";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { readJsonBody } from "@/lib/http/json";
-import { cn } from "@/lib/utils";
 
 /**
  * Svar — vad prospekten faktiskt svarat.
@@ -61,11 +60,10 @@ const STATUS_ETIKETT: Record<string, string> = {
   suppressed: "Spärrad"
 };
 
-/** Datumet, eller null — raden utelämnar då datumet i stället för att visa ett streck. */
-function nar(iso: string | null): string | null {
-  if (!iso) return null;
+function nar(iso: string | null): string {
+  if (!iso) return "—";
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
+  if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleDateString("sv-SE", { day: "numeric", month: "short" });
 }
 
@@ -97,7 +95,7 @@ export function Svar({ demo = false }: Readonly<{ demo?: boolean }>) {
           fas: "fel",
           meddelande:
             response.status >= 500
-              ? "Tjänsten svarar inte just nu. Den vaknar ur viloläge och kan ta upp till en minut."
+              ? "Tjänsten svarar inte. Försök igen om en minut."
               : `Kunde inte hämta svaren (status ${response.status}).`
         });
         return;
@@ -131,9 +129,13 @@ export function Svar({ demo = false }: Readonly<{ demo?: boolean }>) {
       <div className="flex items-start gap-3 border-y border-ochre/40 bg-ochre/10 px-4 py-4">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
         <div className="min-w-0">
-          <p className="text-[0.9375rem] font-medium text-ink">Svaren kunde inte hämtas</p>
-          <p className="mt-1 text-[0.9375rem] text-ink-muted">{lage.meddelande}</p>
-          <button type="button" onClick={() => void hamta()} className={cn(btnSecondary, btnLiten, "mt-3")}>
+          <p className="text-sm font-medium text-ink">Svaren kunde inte hämtas</p>
+          <p className="mt-1 text-sm text-ink-muted">{lage.meddelande}</p>
+          <button
+            type="button"
+            onClick={() => void hamta()}
+            className="focus-ring mt-3 inline-flex min-h-9 items-center rounded-input bg-paper2 px-3 text-[13px] font-medium"
+          >
             Försök igen
           </button>
         </div>
@@ -143,7 +145,7 @@ export function Svar({ demo = false }: Readonly<{ demo?: boolean }>) {
 
   if (!lage.svar.length) {
     return (
-      <Tomt>Inga svar ännu från bolagen som Iris kontaktat.</Tomt>
+      <EmptyState title="Inga svar ännu" />
     );
   }
 
@@ -153,20 +155,19 @@ export function Svar({ demo = false }: Readonly<{ demo?: boolean }>) {
     <Radlista ariaLabel="Svar från prospekt">
       {lage.svar.map((s) => (
         <Rad key={s.id}>
-          {/* Radens anatomi: avsändare → bolag och datum som meta → status
-              som Badge till höger. */}
-          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
-            <div className="min-w-0">
-              <p className={rubrikPanel}>{s.contact_name ?? s.contact_email ?? "Okänd avsändare"}</p>
-              {s.company_name || nar(s.sent_at) ? (
-                <p className={cn(meta, "mt-0.5")}>
-                  {[s.company_name, nar(s.sent_at)].filter(Boolean).join(" · ")}
-                </p>
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <p className="text-[1.0625rem] font-semibold tracking-[-0.01em]">
+              {s.contact_name ?? s.contact_email ?? "Okänd avsändare"}
+              {s.company_name ? (
+                <span className="ml-2 text-[15px] font-normal text-ink-subtle">{s.company_name}</span>
               ) : null}
-            </div>
-            {s.status ? <Badge>{STATUS_ETIKETT[s.status] ?? s.status}</Badge> : null}
+            </p>
+            <span className="kicker shrink-0 text-mineral">
+              {nar(s.sent_at)}
+              {s.status ? ` · ${STATUS_ETIKETT[s.status] ?? s.status}` : ""}
+            </span>
           </div>
-          <p className="mt-2 max-w-[75ch] whitespace-pre-line text-[0.9375rem] leading-6 text-ink-muted">
+          <p className="mt-2 max-w-[75ch] whitespace-pre-line text-[15px] leading-6 text-ink-muted">
             {s.body}
           </p>
         </Rad>

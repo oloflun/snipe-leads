@@ -114,6 +114,76 @@ step_runner.get_llm_client = lambda: _Fejkmodell()
 support_agent.classify_cancellation_risk = _ingen_uppsagningsrisk
 
 
+# --- Mejlpipelinen (Inkorgen i portalen) ------------------------------------
+#
+# Fejken ovan täcker bara chatten (step_runner). Mejltriagen och
+# omformuleringen läser get_settings()/get_llm_client själva, och eftersom
+# fejknyckeln ser äkta ut trodde de sig vara live: varje seedat mejl gick mot
+# en riktig endpoint och fick status failed på ett 401 (uppmätt 2026-09-21).
+# Här tvingas BARA mejlvägarna till simuleringsläget — den deterministiska
+# nyckelordstriagen och de deterministiska omformuleringstransformerna —
+# medan chatten behåller sin fejkmodell.
+
+from app.config import get_settings as _riktiga_settings  # noqa: E402
+from app.email_pipeline import omformulering as _omformulering  # noqa: E402
+from app.email_pipeline import processor as _processor  # noqa: E402
+
+
+class _SimSettings:
+    """Riktiga settings, men is_simulation() svarar alltid ja."""
+
+    def __getattr__(self, namn):
+        return getattr(_riktiga_settings(), namn)
+
+    def is_simulation(self) -> bool:
+        return True
+
+
+_processor.get_settings = lambda: _SimSettings()
+_omformulering.get_settings = lambda: _SimSettings()
+
+
+# --- Webbplatsskanningen (Kunskapsbas -> Skanna webbplats) ------------------
+#
+# Lokalt skannas ALDRIG nätet: vilken adress som helst läses som testfixturen
+# tests/fixtures/pilot_kb/exempelbutik (en påhittad kuddbutik med villkor,
+# garanti, FAQ och kontakt), och fejkmodellen skriver en artikel per sida —
+# rubriken och sidans första rader. Räcker för att prova hela flödet i
+# portalen: skanna, välj förslag, lägg till, ta bort.
+from pathlib import Path  # noqa: E402
+from urllib.parse import urlparse  # noqa: E402
+
+from app import kb_skanning  # noqa: E402
+
+_FIXTUR = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "pilot_kb" / "exempelbutik"
+
+
+class _FixturHamtare:
+    def hamta(self, url: str) -> kb_skanning.Svar:
+        return kb_skanning.SimuleradHamtare(_FIXTUR, url).hamta(url)
+
+
+async def _fejk_utkast(_system: str, anvandare: str) -> str:
+    artiklar = []
+    for kalla, rubrik, text in re.findall(
+        r"source='([^']+)'>\n.*?\n\nRubrik: ([^\n]*)\n\n(.*?)\n</untrusted-data", anvandare, re.S
+    ):
+        rader = [r.lstrip("#- ").strip() for r in text.splitlines() if r.strip()]
+        artiklar.append({
+            "title": rubrik.split(" (del ")[0] or urlparse(kalla).path,
+            "content": " ".join(rader)[:500],
+            "category": kb_skanning.kategori_for(kalla, rubrik),
+            "source_url": kalla,
+            "confidence": 0.8,
+        })
+    return json.dumps({"artiklar": artiklar, "saknas": []}, ensure_ascii=False)
+
+
+kb_skanning.PublikHamtare = _FixturHamtare
+kb_skanning.ar_publik_vard = lambda _url: True
+kb_skanning.bygg_anropare = lambda: _fejk_utkast
+
+
 async def main() -> None:
     from app.main import app
 

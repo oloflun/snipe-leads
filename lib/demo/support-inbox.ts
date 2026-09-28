@@ -55,6 +55,8 @@ export type DemoEmail = {
   draft: DemoDraft | null;
   has_image: boolean;
   attachment_count: number;
+  /** Avbockningen (migration 071). Frivillig — grundmejlen är ohanterade. */
+  hanterad_at?: string | null;
   attachments: {
     id: string;
     filename: string;
@@ -442,6 +444,35 @@ export function createDemoSupportApi() {
       } as T;
     }
 
+    // Omformuleringsknapparna (Förbättra/Kortare/Mer personlig). Demon gör
+    // samma deterministiska transformer som backendens simuleringsläge
+    // (snajp-support/app/email_pipeline/omformulering.py) — knappen ska göra
+    // NÅGOT synligt på /demo, inte 404:a.
+    const omformulera = rutt.match(/^\/drafts\/(.+)\/omformulera$/);
+    if (omformulera && metod === "POST") {
+      const { lage, content } = JSON.parse((init?.body as string) ?? "{}") as {
+        lage?: string;
+        content?: string;
+      };
+      const traff = mejl.find((m) => m.draft?.id === omformulera[1]);
+      const text = (content ?? traff?.draft?.content ?? "").trim();
+      const rader = text.split("\n");
+      const halsning = rader[0]?.toLowerCase().startsWith("hej") ? rader.shift() : null;
+      let kropp = rader.join("\n").trim();
+      if (lage === "kortare") {
+        const meningar = kropp.split(/(?<=[.!?])\s+/).filter(Boolean);
+        kropp = meningar.slice(0, Math.max(1, Math.ceil(meningar.length / 2))).join(" ");
+      } else if (lage === "personligare") {
+        const fornamn = traff?.from_name?.split(" ")[0];
+        if (!kropp.toLowerCase().includes("tack för att du hörde av dig")) {
+          kropp = `Tack för att du hörde av dig${fornamn ? `, ${fornamn}` : ""}! ${kropp}`;
+        }
+      } else {
+        kropp = kropp.replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n");
+      }
+      return { content: [halsning, kropp].filter(Boolean).join("\n\n"), lage } as T;
+    }
+
     const godkann = rutt.match(/^\/drafts\/(.+)\/approve$/);
     if (godkann && metod === "POST") {
       const { edited_content } = JSON.parse((init?.body as string) ?? "{}");
@@ -490,6 +521,18 @@ export function createDemoSupportApi() {
         ];
       }
       return { ok: true } as T;
+    }
+
+    // Avbockningen (migration 071) — demon speglar riktiga endpointens
+    // stämpelsemantik så knappen beter sig likadant på /demo.
+    const hanterad = rutt.match(/^\/inbox\/(.+)\/hanterad$/);
+    if (hanterad && metod === "POST") {
+      const traff = hitta(hanterad[1]);
+      const { hanterad: varde = true } = JSON.parse((init?.body as string) ?? "{}");
+      if (traff) {
+        traff.hanterad_at = varde ? (traff.hanterad_at ?? nu()) : null;
+      }
+      return { email_id: hanterad[1], hanterad_at: traff?.hanterad_at ?? null } as T;
     }
 
     const detalj = rutt.match(/^\/inbox\/(.+)$/);

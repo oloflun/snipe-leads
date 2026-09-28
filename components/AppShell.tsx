@@ -25,10 +25,10 @@ import { signOut } from "@/lib/actions/auth";
 import { DEMO_NAV, demoSektionsVag } from "@/lib/demo/sektioner";
 import { BytKund } from "@/components/admin/BytKund";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
+import { LasrollBanner } from "@/components/LasrollBanner";
 import { VyVaxel } from "@/components/VyVaxel";
-import { Sidhuvud } from "@/components/ui";
 import { useLocale } from "@/lib/i18n";
-import { produktForInstallningsvag, routesForProducts, tillAdminvag } from "@/lib/routes";
+import { appRoutes, produktForInstallningsvag, routesForProducts, tillAdminvag } from "@/lib/routes";
 import type { Scope } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 
@@ -191,6 +191,21 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
       route.product === "shared" || route.href in FLIKENS_LAGE || shows(route.product)
   );
 
+  /**
+   * Agenterna arbetsytan INTE har — de MÖRKLÄGGS i menyn i stället för att
+   * döljas. Den som köpt Support ska se att Iris och Kvitton finns (klicket
+   * leder till agentens upsell-vy i WorkspaceSection), men nedtonade så att
+   * det egna paketet är det som lyser. Bara de tre riktiga agentflikarna:
+   * preview-ytor och delade poster berörs inte, och scope-växeln lämnar dem
+   * ifred — en agent man inte äger har inget läge att visa.
+   */
+  const morkaRoutes = appRoutes.filter(
+    (route) =>
+      route.product !== "shared" &&
+      !route.preview &&
+      !products.includes(route.product)
+  );
+
   // Narrowing the scope while standing on a section it excludes would strand the
   // user on a page they can no longer navigate back to.
   //
@@ -212,9 +227,14 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
     (route) => route.product === "shared" || shows(route.product)
   );
 
-  const stranded = natbaraRoutes.every(
-    (route) => route.href === "/dashboard" || !pathname.startsWith(route.href)
-  );
+  const stranded =
+    natbaraRoutes.every(
+      (route) => route.href === "/dashboard" || !pathname.startsWith(route.href)
+    ) &&
+    // En mörklagd agents upsell-vy är en giltig plats att stå på — den som
+    // klickade på Kvitton utan paketet ska läsa erbjudandet, inte studsas
+    // tillbaka till översikten av scope-skyddet.
+    !morkaRoutes.some((route) => pathname.startsWith(route.href));
 
   // Samma resonemang för inställningarna, som skyddet aldrig täckte: filtret
   // där grindade på `products` (rättighet) och aldrig på läget, så den som
@@ -276,39 +296,63 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
           children
         };
       })
-    : huvudRoutes.map((route) => {
-        const aktiv =
-          route.href === "/dashboard"
-            ? pathname === "/dashboard"
-            : pathname === route.href || pathname.startsWith(`${route.href}/`);
-        return {
-          href: demoAnpassa(route.href, pathname),
+    : [
+        ...huvudRoutes.map((route) => {
+          const aktiv =
+            route.href === "/dashboard"
+              ? pathname === "/dashboard"
+              : pathname === route.href || pathname.startsWith(`${route.href}/`);
+          return {
+            grundHref: route.href,
+            href: demoAnpassa(route.href, pathname),
+            label: t(route.labelKey),
+            Icon: RUTT_IKONER[route.href] ?? LayoutDashboard,
+            active: aktiv,
+            // Läget sätts vid klicket, inte i en effekt på den nya sidan: en
+            // effekt hade hunnit rendera målsidan i det gamla läget först, och
+            // bytet hade synts som ett hopp.
+            onClick: () => {
+              const lage = FLIKENS_LAGE[route.href];
+              if (lage && availableScopes.includes(lage)) {
+                setScope(lage);
+              }
+            },
+            // Barnen (Iris: Bolag/Granskning/Inställningar) — exakt match, inte
+            // prefix: /dashboard/iris/granskning ska inte markera /dashboard/iris.
+            children: route.children?.map((child) => {
+              const childHref = demoAnpassa(child.href, pathname);
+              return { href: childHref, label: t(child.labelKey), active: pathname === childHref };
+            })
+          };
+        }),
+        // De mörklagda agenterna — syns, men nedtonade (se morkaRoutes ovan).
+        // Inget onClick: en agent utan paket har inget scope att växla till,
+        // och inga barn — upsell-vyn är EN sida.
+        ...morkaRoutes.map((route) => ({
+          grundHref: route.href,
+          href: route.href,
           label: t(route.labelKey),
           Icon: RUTT_IKONER[route.href] ?? LayoutDashboard,
-          active: aktiv,
-          // Läget sätts vid klicket, inte i en effekt på den nya sidan: en
-          // effekt hade hunnit rendera målsidan i det gamla läget först, och
-          // bytet hade synts som ett hopp.
-          onClick: () => {
-            const lage = FLIKENS_LAGE[route.href];
-            if (lage && availableScopes.includes(lage)) {
-              setScope(lage);
-            }
-          },
-          // Barnen (Iris: Bolag/Granskning/Inställningar) — exakt match, inte
-          // prefix: /dashboard/iris/granskning ska inte markera /dashboard/iris.
-          children: route.children?.map((child) => {
-            const childHref = demoAnpassa(child.href, pathname);
-            return { href: childHref, label: t(child.labelKey), active: pathname === childHref };
-          })
-        };
-      });
+          active: pathname === route.href || pathname.startsWith(`${route.href}/`),
+          dimmad: true,
+          dimmadTitel: "Ingår inte i ert paket ännu — klicka och läs mer"
+        }))
+      ]
+        // Menyn ska stå i appRoutes ordning oavsett vilka poster som är
+        // mörklagda — Iris före Support före Kvitton, som för en Trio-kund.
+        .sort(
+          (a, b) =>
+            appRoutes.findIndex((r) => r.href === a.grundHref) -
+            appRoutes.findIndex((r) => r.href === b.grundHref)
+        )
+        .map(({ grundHref: _grundHref, ...item }) => item);
 
   return (
     <div className="min-h-screen bg-paper text-ink">
       {/* Före allt annat i DOM och med högre z-index: bannern ska ligga ÖVER
           det klistrade innehållet, inte försvinna bakom det vid scroll. */}
       <ImpersonationBanner />
+      <LasrollBanner />
 
       <div className="flex min-h-dvh">
         {/* Vänsterrailen — sajtens EN tonala inversion (DESIGN.md: en per
@@ -491,12 +535,12 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
 }
 
 /**
- * Arbetsytans sidram: skalet, containern och `Sidhuvud`.
+ * Arbetsytans sidram: skalet, containern och sidhuvudet.
  *
- * `kicker` och `description` togs bort 2026-09-27. Överraden och ingressen under
+ * `kicker` och `description` togs bort 2026-09-28. Överraden och ingressen under
  * rubriken var mikrotext enligt F-016 — de beskrev sidan i mindre storlek än
- * brödtexten — och så länge propparna fanns fylldes de. Utan dem pekar
- * kompilatorn ut varje sida som hade en, se plans/2026-09-27-appytor-enhetlighet.md.
+ * brödtexten. Nödvändig information flyttades till varje anropsställe: in i
+ * rubriken, i en meta-rad, eller bort där railen redan sa samma sak.
  */
 export function PageShell({
   title,
@@ -518,7 +562,12 @@ export function PageShell({
       {/* 1200 och inte 1400: innehållet delar numera raden med railen, och
           1400 hade gett över 90 tecken per rad i tabellerna på en bred skärm. */}
       <section className={iAdmin ? "" : "mx-auto w-full max-w-[1200px] px-4 py-8 md:px-8 md:py-10"}>
-        <Sidhuvud title={title} action={action} />
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <h1 className="min-w-0 break-words font-display text-[1.625rem] font-semibold leading-tight tracking-[-0.02em]">
+            {title}
+          </h1>
+          {action ? <div className="shrink-0">{action}</div> : null}
+        </div>
         <div className="mt-8">{children}</div>
       </section>
     </AppShell>

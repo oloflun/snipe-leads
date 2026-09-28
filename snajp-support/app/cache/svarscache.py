@@ -315,18 +315,34 @@ class RedisSvarscache:
     def _tolka_traff(
         self, raw: Any, *, tenant: str, kbv: str, cfgv: str
     ) -> CachePost | None:
-        """`FT.SEARCH`-svaret är en platt lista: [antal, key1, [fält...], ...].
-        Ingen riktig Redis har körts mot den här koden ännu (se
-        klassdocstringen) — tolkningen är skriven mot den dokumenterade
-        formen, inte verifierad live."""
+        """Tolkar BÅDA svarsformerna för `FT.SEARCH`.
+
+        Den dokumenterade RESP2-formen är en platt lista
+        `[antal, key1, [fält...], ...]`. redis-py 8 ger i stället en dict
+        `{b'results': [{b'extra_attributes': {...}}], b'total_results': n}`.
+        Uppmätt live mot dev-Redis 2026-09-20: den platta tolkningen gav
+        "miss" på VARJE legitim träff — cachen var i praktiken avstängd,
+        tyst, precis som graceful-fallbacken är byggd att dölja. Tenant-
+        taggfiltret verifierades i samma körning (fel tenant = miss).
+        """
         try:
-            if not raw or raw[0] in (0, b"0"):
-                return None
-            falt = raw[2]
-            data = {
-                (falt[i].decode() if isinstance(falt[i], bytes) else falt[i]): falt[i + 1]
-                for i in range(0, len(falt), 2)
-            }
+            if isinstance(raw, dict):
+                resultat = raw.get(b"results") or raw.get("results") or []
+                if not resultat:
+                    return None
+                data = dict(
+                    resultat[0].get(b"extra_attributes")
+                    or resultat[0].get("extra_attributes")
+                    or {}
+                )
+            else:
+                if not raw or raw[0] in (0, b"0"):
+                    return None
+                falt = raw[2]
+                data = {
+                    (falt[i].decode() if isinstance(falt[i], bytes) else falt[i]): falt[i + 1]
+                    for i in range(0, len(falt), 2)
+                }
             svar_text = data.get("svar") or data.get(b"svar")
             kategori = data.get("kategori") or data.get(b"kategori")
             avstand = data.get("avstand") or data.get(b"avstand")

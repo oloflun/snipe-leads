@@ -64,11 +64,13 @@ const DEMO_STATE = {
   isPlatformAdmin: false,
   vy: "admin" as const,
   impersonation: null,
+  arLasare: false,
   initialScope: "both" as const,
   isDemo: false,
   products: ["leads", "support", "bookkeeping"] as const,
   addons: [],
   workspaceName: "Demo AB",
+  userEmail: null,
   // Styr om vyerna erbjuder åtgärder som kräver session. En demo som låtsas
   // vara inloggad visar knappar som inte kan göra något.
   signedIn: false

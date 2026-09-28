@@ -11,6 +11,8 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from ..avtalsgrind import KUNDTEXT_AVTAL, avtal_saknas
+from ..budget import SupportBudgetExceededError, kontrollera_support_budget
 from ..config import get_settings
 from ..kvotfel import (
     KUNDTEXT_KREDITSLUT,
@@ -233,6 +235,12 @@ async def chat(
 ) -> dict:
     attachments = _validate_attachments(payload)
 
+    # Avtalsgrinden (migration 070): en pilottenant utan registrerat avtal
+    # får ingen kundtext skickad till modelleverantören. 403 och inte 429 —
+    # det här är inte ett tak som rullar vidare, det är en stängd dörr.
+    if await avtal_saknas(request.app.state.storage, tenant["tenant_id"]):
+        raise HTTPException(status_code=403, detail=KUNDTEXT_AVTAL)
+
     # X-Snajp-User sätts av Next-proxyn efter sessionen. Den är frivillig:
     # saknas den gäller bara tenant-taket, och en förfalskad rubrik kan bara
     # ge en snävare kvot åt den som förfalskar den.
@@ -244,6 +252,14 @@ async def chat(
     except rate_limit_db.RateLimitDbExceededError as error:
         # 429 med svenskt besked. En slut kvot är inte ett fel i koden, och
         # meddelandet ska gå att förstå utan att läsa loggen.
+        raise HTTPException(status_code=429, detail=str(error)) from error
+
+    # Supportbudgeten (app/budget.py): dygnstaket i tokens, med 80 %-larm.
+    # Prövas EFTER timtaket — timtaket är billigare att räkna och den som
+    # slår i båda ska få dygnsbeskedet sist, inte först.
+    try:
+        await kontrollera_support_budget(request.app.state.storage, tenant["tenant_id"])
+    except SupportBudgetExceededError as error:
         raise HTTPException(status_code=429, detail=str(error)) from error
 
     job_id = await request.app.state.jobs.create(tenant_id=tenant["tenant_id"])

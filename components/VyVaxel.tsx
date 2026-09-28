@@ -18,7 +18,8 @@ import { cn } from "@/lib/utils";
  * `getPlatformAdmin()` i både `bytVy` och `aktivVy` — en manipulerad flagga
  * ritar alltså en knapp som inte gör någonting.
  */
-export function VyVaxel() {
+/** `ton="rail"`: mörk variant för adminens sidopanel, se BytKund. */
+export function VyVaxel({ ton = "ljus" }: Readonly<{ ton?: "ljus" | "rail" }> = {}) {
   const { isPlatformAdmin, vy } = useDashboard();
 
   if (!isPlatformAdmin) {
@@ -38,7 +39,13 @@ export function VyVaxel() {
       aria-current={vy === varde ? "true" : undefined}
       className={cn(
         "focus-ring inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-input px-2.5 text-[13px] font-medium transition-colors",
-        vy === varde ? "bg-paper text-ink shadow-sm" : "text-ink-subtle hover:text-ink"
+        ton === "rail"
+          ? vy === varde
+            ? "bg-paper/15 text-paper"
+            : "text-paper-subtle hover:text-paper"
+          : vy === varde
+            ? "bg-paper text-ink shadow-sm"
+            : "text-ink-subtle hover:text-ink"
       )}
     >
       <Ikon className="h-3.5 w-3.5" aria-hidden />
@@ -47,7 +54,13 @@ export function VyVaxel() {
   );
 
   return (
-    <form action={bytVy} className="flex items-center gap-0.5 rounded-input bg-paper2 p-0.5">
+    <form
+      action={bytVy}
+      className={cn(
+        "flex items-center gap-0.5 rounded-input p-0.5",
+        ton === "rail" ? "bg-paper/[0.06]" : "bg-paper2"
+      )}
+    >
       {segment("admin", "Admin", ShieldCheck)}
       {segment("demo", "Demo", Eye)}
     </form>

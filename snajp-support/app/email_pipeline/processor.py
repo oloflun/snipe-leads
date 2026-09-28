@@ -14,19 +14,34 @@ Varje steg loggas i ss_decision_log med motivering.
 import logging
 from typing import Any
 
+from ..avtalsgrind import avtal_saknas
+from ..budget import SupportBudgetExceededError, kontrollera_support_budget
 from ..config import CATEGORY_LABELS, get_settings
+from ..leads.untrusted_content import wrap_untrusted_content
 from ..simulation.sim_agent import article_in_category
 from ..simulation.sim_triage import classify
 from ..storage.base import Storage
+from .flaggor import ar_offertforfragan, ar_utbildningsintresse
 
 logger = logging.getLogger("snajp-support.processor")
 
 _GREETING = "Hej{name}!\n\n"
-_SIGNATURE = "\n\nVänliga hälsningar,\nSnajp Support"
+_SIGNATURE = "\n\nVänliga hälsningar,\n{avsandare}"
+
+#: Signaturen när tenanten saknar bolagsnamn — beteendet före per-tenant-
+#: signaturen (2026-09-21), och det testsviten mot MemoryStorage utan
+#: tenantrad förväntar sig.
+_STANDARD_AVSANDARE = "Snajp Support"
 
 
-def _wrap_reply(body: str, recipient_name: str | None) -> str:
-    """Lägg på exakt en hälsning och en Snajp-signatur."""
+def _wrap_reply(body: str, recipient_name: str | None, avsandare: str = _STANDARD_AVSANDARE) -> str:
+    """Lägg på exakt en hälsning och en signatur från AVSÄNDARENS företag.
+
+    Signaturen bär tenantens bolagsnamn, inte "Snajp Support": svaret går ut i
+    kundens namn från kundens supportadress, och en mottagare som får "Vänliga
+    hälsningar, Snajp Support" från sin cykelbutik undrar med rätta vem Snajp
+    är. Powered by Snajp hör hemma i widgeten, inte i mejlsignaturen.
+    """
     lines = body.strip().splitlines()
     if lines and lines[0].strip().casefold().startswith("hej"):
         lines.pop(0)
@@ -37,12 +52,56 @@ def _wrap_reply(body: str, recipient_name: str | None) -> str:
     if len(lines) >= 2 and lines[-2].strip().casefold() in {
         "vänliga hälsningar,", "med vänliga hälsningar,",
         "vänlig hälsning,", "med vänlig hälsning,"
-    } and lines[-1].strip().casefold() in {"snajp support", "snajp-support"}:
+    } and lines[-1].strip().casefold() in {"snajp support", "snajp-support", avsandare.casefold()}:
         lines = lines[:-2]
         while lines and not lines[-1].strip():
             lines.pop()
     clean_body = "\n".join(lines).strip()
-    return (_GREETING.format(name=_first_name(recipient_name)) + clean_body + _SIGNATURE).strip()
+    return (
+        _GREETING.format(name=_first_name(recipient_name))
+        + clean_body
+        + _SIGNATURE.format(avsandare=avsandare)
+    ).strip()
+
+
+async def _foretagsprofil(storage: Storage, tenant_id: str, tenant: dict[str, Any]) -> str:
+    """Avsändarprofilen till utkastprompten: tenantens bolagsuppgifter plus
+    affärskontexten.
+
+    Bolagsuppgifterna (namn, orgnr, adress — kundregistret, migration 053/073)
+    är strukturerad data vi själva förvaltar och skrivs som rader. Affärs-
+    kontexten är KUNDSKRIVEN text (samma dokument som chattagenten läser) och
+    wrappas som opålitligt innehåll — den bär ofta hemsida, erbjudande och
+    tonalitet, vilket är precis vad ett offertsvar behöver, men den får inte
+    kunna omdefiniera reglerna i prompten (INV-SEC-003).
+    """
+    rader: list[str] = []
+    namn = str(tenant.get("company_name") or tenant.get("name") or "").strip()
+    if namn:
+        rader.append(f"Företagsnamn: {namn}")
+    for etikett, falt in (
+        ("Organisationsnummer", "orgnr"),
+        ("Postadress", "postal_address"),
+        ("Kontaktmejl", "contact_email"),
+        ("Integritetspolicy", "policy_url"),
+    ):
+        varde = str(tenant.get(falt) or "").strip()
+        if varde:
+            rader.append(f"{etikett}: {varde}")
+
+    profil = "\n".join(rader)
+    try:
+        doc = await storage.get_latest_context_doc(tenant_id, kind="product_marketing")
+    except Exception:  # noqa: BLE001 — profilen är en förbättring, utkastet är jobbet
+        doc = None
+    kontext = ((doc or {}).get("content") or "").strip()
+    if kontext:
+        profil += ("\n\n" if profil else "") + (
+            "Affärskontext (kundens egen beskrivning av verksamheten — hemsida, "
+            "erbjudande, målgrupp):\n"
+            + wrap_untrusted_content(kontext[:2500], source="tenant:product_marketing")
+        )
+    return profil
 
 _ESCALATION_BODY = (
     "Tack för ditt meddelande. Jag förstår att det här är viktigt, och den här typen "
@@ -79,6 +138,7 @@ async def _triage_email(
     tenant_id: str,
     email: dict[str, Any],
     image_urls: list[str],
+    foretagsprofil: str = "",
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Returnerar (triage-resultat med confidence/reasoning/draft_body, KB-träffar)."""
     settings = get_settings()
@@ -128,11 +188,27 @@ async def _triage_email(
         body=email["body_text"],
         kb_articles=articles,
         image_urls=image_urls,
+        foretagsprofil=foretagsprofil,
     )
     result["draft_body"] = result.pop("draft_reply", None)
     result.setdefault("reasoning", "LLM-klassificering.")
     result["model"] = get_settings().model
     return result, articles
+
+
+def ar_snajp_notis(subject: str | None, body: str | None) -> bool:
+    """Är mejlet ett eskaleringslarm/notis från Snajp självt?
+
+    Båda villkoren krävs: ämnet börjar med prioritetsmarkören OCH brödtexten
+    bär Snajps avsändarrad. En kund som råkar skriva "[PRIORITERAT]" i sitt
+    ämne ska fortfarande få ett svar. Texterna är kontrakt med
+    notifications/prioriterat_mejl.py — ändras de där måste de ändras här.
+    """
+    from ..notifications.prioriterat_mejl import PRIORITETSMARKOR
+
+    return (subject or "").strip().startswith(PRIORITETSMARKOR) and (
+        "Det här mejlet kommer från Snajp" in (body or "")
+    )
 
 
 async def process_email(
@@ -141,6 +217,41 @@ async def process_email(
     """Kör hela flödet för ett sparat mail. Kastar aldrig — fel ger status failed."""
     settings = get_settings()
     email_id = email["id"]
+
+    # Snajps egna larm (migration 078) FÖRE allt annat: de ska varken
+    # triageras, kosta LLM-budget eller få ett AI-utkast som svarar Snajp på
+    # sitt eget larm. De hamnar i fliken Att hantera, där en människa läser dem.
+    if ar_snajp_notis(email.get("subject"), email.get("body_text")):
+        await storage.update_email(tenant_id, email_id, status="att_hantera")
+        await storage.log_decision(
+            tenant_id, email_id=email_id, event="notis",
+            detail={"note": "Eskaleringslarm från Snajp — till Att hantera, inget utkast."},
+        )
+        return {"action": "att_hantera"}
+
+    # Avtalsgrinden FÖRE allt annat: ingen kundtext får gå till modell-
+    # leverantören för en tenant utan registrerat avtal (migration 070).
+    # Mejlet är redan sparat och listbart — det som skjuts upp är LLM-
+    # bearbetningen. Status lämnas som 'new' så att processa-om (och nästa
+    # synk av nya mejl) tar det när avtalet är registrerat.
+    if await avtal_saknas(storage, tenant_id):
+        await storage.log_decision(
+            tenant_id, email_id=email_id, event="vantar_avtal",
+            detail={"note": "Avtalet är inte registrerat — mejlet väntar oprocessat."},
+        )
+        return {"action": "vantar_avtal"}
+
+    # Supportbudgeten (app/budget.py): samma tak som chatten. Ett stoppat
+    # mejl blir kvar som 'new' och kan processas om när fönstret rullat.
+    try:
+        await kontrollera_support_budget(storage, tenant_id)
+    except SupportBudgetExceededError:
+        await storage.log_decision(
+            tenant_id, email_id=email_id, event="budget",
+            detail={"note": "Dygnsbudgeten för support är förbrukad — mejlet väntar oprocessat."},
+        )
+        return {"action": "budget"}
+
     try:
         await storage.update_email(tenant_id, email_id, status="processing")
 
@@ -150,10 +261,24 @@ async def process_email(
             if a["is_image"] and a.get("data_url")
         ][:3]
 
-        triage, articles = await _triage_email(storage, tenant_id, email, image_urls)
+        # Avsändarprofilen (bolagsuppgifter + affärskontext) läses en gång och
+        # driver både utkastpromptens skärpa och mejlsignaturen nedan.
+        tenant = await storage.get_tenant(tenant_id) or {}
+        profil = await _foretagsprofil(storage, tenant_id, tenant)
+        avsandare = (
+            str(tenant.get("company_name") or tenant.get("name") or "").strip()
+            or _STANDARD_AVSANDARE
+        )
+
+        triage, articles = await _triage_email(storage, tenant_id, email, image_urls, profil)
         kb_sources = [
             {"title": a["title"], "similarity": a["similarity"]} for a in articles
         ]
+
+        # Pilotflaggorna (migration 071): vokabulär ELLER modellbedömning,
+        # se email_pipeline/flaggor.py för varför båda vägarna finns.
+        offert = ar_offertforfragan(email["subject"], email["body_text"], triage)
+        utbildning = ar_utbildningsintresse(email["subject"], email["body_text"], triage)
 
         await storage.save_classification(
             tenant_id,
@@ -167,6 +292,8 @@ async def process_email(
             reasoning=triage.get("reasoning", ""),
             kb_sources=kb_sources,
             model=triage.get("model", "simulation"),
+            offertforfragan=offert,
+            utbildningsintresse=utbildning,
         )
         await storage.log_decision(
             tenant_id,
@@ -177,6 +304,8 @@ async def process_email(
                 "confidence": triage.get("confidence"),
                 "sentiment": triage.get("sentiment"),
                 "reasoning": triage.get("reasoning", ""),
+                "offertforfragan": offert,
+                "utbildningsintresse": utbildning,
             },
         )
 
@@ -221,7 +350,7 @@ async def process_email(
             body = _ESCALATION_BODY if must_escalate and articles else (
                 _NO_MATCH_BODY if not articles else _ESCALATION_BODY
             )
-            content = _wrap_reply(body, email["from_name"])
+            content = _wrap_reply(body, email["from_name"], avsandare)
             await storage.update_ticket(
                 tenant_id, ticket["id"], status="escalated", priority="high",
                 escalation_reason=reason,
@@ -237,7 +366,7 @@ async def process_email(
             )
             return {"action": "escalated", "draft_id": draft["id"], "ticket_id": ticket["id"]}
 
-        content = _wrap_reply(triage.get("draft_body") or _NO_MATCH_BODY, email["from_name"])
+        content = _wrap_reply(triage.get("draft_body") or _NO_MATCH_BODY, email["from_name"], avsandare)
 
         # 4: autosvar — bara om regeln säger auto OCH säkerhetsvillkoren håller.
         auto_ok = (

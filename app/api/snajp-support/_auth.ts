@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { LASROLL, LASROLL_FEL } from "@/lib/auth/lasroll";
 import { requireSnajpTenant, SnajpTenantError } from "@/lib/snajp/tenant";
 import { proxyWithApiKey } from "./_lib";
 
@@ -25,6 +26,16 @@ export async function proxyAsTenant(path: string, init: RequestInit) {
     let backendPath = path;
     const metod = String(begaran.method ?? "GET").toUpperCase();
     const arSkrivning = metod !== "GET" && metod !== "HEAD";
+
+    // Läsrollen (lib/auth/lasroll.ts): en viewer läser varje tenant-scopad
+    // yta men skriver ingenting. Spärren sitter HÄR för att varje inloggad
+    // backend-skrivning (kunskapsbas, inkorgsåtgärder, testchatt,
+    // inställningar, leads) passerar den här punkten — en dold knapp i UI:t
+    // är hövlighet, det här är skyddet.
+    if (arSkrivning && tenant.roll === LASROLL) {
+      return NextResponse.json({ error: LASROLL_FEL, kod: "lasroll" }, { status: 403 });
+    }
+
     if (tenant.impersonerar && arSkrivning) {
       // Admin som tittar som kund: allt som SKRIVS är test. Läsning måste
       // visa kundens riktiga inkorg — annars gömmer `?is_test=true` på GET

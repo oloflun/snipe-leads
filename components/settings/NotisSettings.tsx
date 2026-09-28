@@ -2,7 +2,7 @@
 
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Rad, Radlista, btnPrimary, etikett } from "@/components/ui";
+import { btnPrimary } from "@/components/ui";
 import { Vaxel } from "@/components/settings/Vaxel";
 import { hamtaNotiser, sparaNotiser } from "@/lib/actions/notiser";
 import { STANDARD, type Notishandelse, type Notisinstallningar } from "@/lib/notiser";
@@ -31,14 +31,12 @@ const HANDELSER: { nyckel: Notishandelse; etikett: string; beskrivning: string }
   {
     nyckel: "lead",
     etikett: "Nytt lead",
-    beskrivning:
-      "Iris har hittat och kvalificerat ett bolag. Ett mejl per lead, inte per körning."
+    beskrivning: "Ett mejl per kvalificerat bolag."
   },
   {
     nyckel: "escalation",
     etikett: "Eskalering",
-    beskrivning:
-      "Kundtjänstagenten vägrade gissa och lämnade över ärendet till en människa. Det här är den notis som faktiskt kräver något av dig."
+    beskrivning: "Ett ärende lämnades över till dig."
   }
 ];
 
@@ -106,11 +104,7 @@ export function NotisSettings() {
         setFel(svar.error ?? "Kunde inte spara.");
         return;
       }
-      setKlart(
-        falt.epost
-          ? "Sparat. Notiserna går till adressen du loggar in med."
-          : "Sparat. Vi mejlar dig inte längre, men allt syns fortfarande i arbetsytan."
-      );
+      setKlart(falt.epost ? "Sparat. Notiserna går till din inloggningsadress." : "Sparat.");
     } catch (orsak) {
       setFel(orsak instanceof Error ? orsak.message : "Kunde inte spara.");
     } finally {
@@ -119,45 +113,37 @@ export function NotisSettings() {
   }
 
   return (
-    <div className="grid gap-6">
-      {/* "Gäller bara dig" stod tidigare som ingress under sidrubriken; nu står
-          det vid växeln det gäller. Meningen som förklarade att inget val är
-          samma sak som att stänga av är struken: huvudväxeln slår själv om när
-          sista händelsen stängs, och det syns. */}
-      <Radlista ariaLabel="Notiser">
-        <Rad>
-          <Vaxel
-            etikett="Mejla mig"
-            beskrivning="Gäller bara dig, inte dina kollegor. Stänger du av får du inga notismejl alls, men arbetet syns ändå i arbetsytan."
-            pa={falt.epost}
-            onChange={vaxlaEpost}
-          />
-        </Rad>
-        <Rad>
-          <fieldset disabled={!falt.epost}>
-            <legend className={etikett}>Vad vi mejlar om</legend>
+    <div className="grid gap-7">
+      <div className="border-t border-ink/15 pt-5">
+        <Vaxel
+          etikett="Mejla mig"
+          pa={falt.epost}
+          onChange={vaxlaEpost}
+        />
+      </div>
 
-            {/* Nedtonad, inte gömd. Se docstringen: den som slår på notiser ska
-                kunna se vad hen tackar ja till innan hen gör det. */}
-            <div
-              className={`mt-4 grid gap-5 transition-opacity ${falt.epost ? "" : "opacity-45"}`}
-            >
-              {HANDELSER.map((h) => (
-                <Vaxel
-                  key={h.nyckel}
-                  etikett={h.etikett}
-                  beskrivning={h.beskrivning}
-                  pa={falt.handelser.includes(h.nyckel)}
-                  disabled={!falt.epost}
-                  onChange={(pa) => vaxlaHandelse(h.nyckel, pa)}
-                />
-              ))}
-            </div>
-          </fieldset>
-        </Rad>
-      </Radlista>
+      <fieldset className="border-t border-ink/15 pt-5" disabled={!falt.epost}>
+        <legend className="kicker text-mineral">Vad vi mejlar om</legend>
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+        {/* Nedtonad, inte gömd. Se docstringen: den som slår på notiser ska
+            kunna se vad hen tackar ja till innan hen gör det. */}
+        <div
+          className={`mt-5 grid gap-5 transition-opacity ${falt.epost ? "" : "opacity-45"}`}
+        >
+          {HANDELSER.map((h) => (
+            <Vaxel
+              key={h.nyckel}
+              etikett={h.etikett}
+              beskrivning={h.beskrivning}
+              pa={falt.handelser.includes(h.nyckel)}
+              disabled={!falt.epost}
+              onChange={(pa) => vaxlaHandelse(h.nyckel, pa)}
+            />
+          ))}
+        </div>
+      </fieldset>
+
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-3 border-t border-ink/15 pt-6">
         <button
           type="button"
           onClick={() => void spara()}
@@ -168,17 +154,17 @@ export function NotisSettings() {
           {busy ? "Sparar…" : "Spara notisinställningarna"}
         </button>
         {saknasSession ? (
-          <p role="status" className="max-w-[62ch] text-[0.9375rem] text-ink-muted">
-            Inställningen hör till ditt konto och kräver en inloggad session.
+          <p role="status" className="max-w-[60ch] text-[0.875rem] text-mineral">
+            Kräver inloggning.
           </p>
         ) : null}
         {klart ? (
-          <p role="status" className="text-[0.9375rem] text-moss">
+          <p role="status" className="text-[0.875rem] text-moss">
             {klart}
           </p>
         ) : null}
         {fel ? (
-          <p role="alert" className="max-w-[62ch] break-words text-[0.9375rem] text-danger">
+          <p role="alert" className="max-w-[60ch] break-words text-[0.875rem] text-danger">
             {fel}
           </p>
         ) : null}

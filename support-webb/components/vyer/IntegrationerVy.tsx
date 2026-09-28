@@ -13,10 +13,7 @@ import { SystemSektion } from "@/components/integrationer/System";
 export function IntegrationerVy() {
   return (
     <div className="space-y-12">
-      <PageHeader
-        rubrik="Integrationer"
-        beskrivning="Koppla agenten till era egna system och kanaler. Den kan slå upp ordrar och konton, skapa ärendet i ert ärendesystem när den lämnar över, och svara kunderna där de redan skriver."
-      />
+      <PageHeader rubrik="Integrationer" />
       <SystemSektion />
       <KanalSektion />
     </div>

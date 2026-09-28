@@ -1,21 +1,11 @@
 "use client";
 
-import { Loader2, Upload } from "lucide-react";
+import { FileText, Loader2, Upload } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useArbetsvag } from "@/components/AppShell";
 import { hamtaAffarskontext } from "@/lib/actions/affarskontext";
-import {
-  Rad,
-  Radlista,
-  Sektion,
-  Tomt,
-  btnPrimary,
-  btnSecondary,
-  etikett,
-  meta,
-  rubrikPanel
-} from "@/components/ui";
+import { Rad, Radlista, btnPrimary, btnSecondary } from "@/components/ui";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
 
@@ -142,7 +132,7 @@ export function KunskapsbasKort() {
         setMeddelande(`${nya.length} dokument tillagda.`);
       }
       if (avvisade.length) {
-        setFel(`Hoppade över ${avvisade.join(", ")}. Läsbara format är ${LÄSBARA.join(", ")}.`);
+        setFel(`Hoppade över ${avvisade.join(", ")} — läsbara format är ${LÄSBARA.join(", ")}.`);
       }
     } catch (cause) {
       setFel(felmeddelande(cause));
@@ -156,15 +146,15 @@ export function KunskapsbasKort() {
     <section className="rounded-card bg-paper2/50 p-5 md:p-6">
       <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
         <div className="min-w-0">
-          <h2 className={rubrikPanel}>Affärskontext och kunskapsbas</h2>
-          <p className="mt-1 max-w-[62ch] text-[0.9375rem] leading-6 text-ink-muted">
-            {antal === 0
-              ? "Tom. Agenterna svarar bara ur det ni lagt in, och utan underlag eskalerar kundtjänstagenten varje ärende."
-              : `${antal ?? "–"} dokument. Ladda upp villkor, vanliga frågor och rutiner så svarar agenterna ur dem.`}
+          <h2 className="text-[1.0625rem] font-semibold tracking-[-0.01em]">
+            Affärskontext och kunskapsbas
+          </h2>
+          <p className="mt-1 max-w-[62ch] text-[14px] leading-6 text-ink-muted">
+            {antal === 0 ? "Tom." : `${antal ?? "—"} dokument.`}
           </p>
           {/* Rubriken lovar två saker. Utan den här raden svarade kortet bara
               på den ena, och affärskontexten var något man fick hitta själv. */}
-          <p className={cn(meta, "mt-2")}>
+          <p className="mt-2 text-[13px] text-ink-subtle">
             Affärskontext:{" "}
             {kontextIfylld === null ? (
               "hämtar…"
@@ -182,7 +172,7 @@ export function KunskapsbasKort() {
             </Link>
           </p>
         </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <input
             ref={filväljare}
             type="file"
@@ -190,8 +180,6 @@ export function KunskapsbasKort() {
             accept={LÄSBARA.join(",")}
             onChange={(e) => void väljFiler(e.target.files)}
             className="sr-only"
-            tabIndex={-1}
-            aria-hidden
           />
           <button
             type="button"
@@ -204,19 +192,15 @@ export function KunskapsbasKort() {
           </button>
           <Link
             href={vag("/settings/kunskapsbas")}
-            className="focus-ring inline-flex min-h-11 items-center rounded-input px-3 text-[0.9375rem] font-medium text-ink-muted hover:text-ink"
+            className="focus-ring inline-flex min-h-11 items-center rounded-input px-3 text-[14px] font-medium text-ink-subtle hover:text-ink"
           >
             Hantera
           </Link>
         </div>
       </div>
-      {meddelande ? (
-        <p role="status" className="mt-3 text-[0.9375rem] text-moss">
-          {meddelande}
-        </p>
-      ) : null}
+      {meddelande ? <p className="mt-3 text-[14px] text-moss">{meddelande}</p> : null}
       {fel ? (
-        <p role="alert" className="mt-3 max-w-[62ch] break-words text-[0.9375rem] text-danger">
+        <p role="alert" className="mt-3 max-w-[70ch] break-words text-[14px] text-danger">
           {fel}
         </p>
       ) : null}
@@ -271,9 +255,7 @@ export function KunskapsbasPanel() {
           );
         }
         setMeddelande(
-          nya.length === 1
-            ? "Sparat. Agenterna kan svara ur texten från nästa ärende."
-            : `${nya.length} dokument sparade. Agenterna kan svara ur dem från nästa ärende.`
+          nya.length === 1 ? "Sparat." : `${nya.length} dokument sparade.`
         );
         setRubrik("");
         setText("");
@@ -305,8 +287,7 @@ export function KunskapsbasPanel() {
     }
     if (avvisade.length) {
       setFel(
-        `Hoppade över ${avvisade.join(", ")}. Textfiler läses direkt (${LÄSBARA.join(", ")}); ` +
-          "för PDF och Word: klistra in texten i rutan nedan i stället."
+        `Hoppade över ${avvisade.join(", ")}. PDF och Word: klistra in texten nedan.`
       );
     }
     await spara(nya);
@@ -314,114 +295,91 @@ export function KunskapsbasPanel() {
   }
 
   return (
-    <div>
-      {/* Samma radform som resten av inställningarna. Här låg en streckad
-          uppladdningsruta med ikon, som såg ut som en dropzon men inte tog
-          emot något som släpptes på den. */}
-      <Sektion title="Lägg till dokument">
-        <Radlista ariaLabel="Lägg till dokument">
-          <Rad className="grid gap-x-6 gap-y-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-            <div className="min-w-0">
-              <p className={rubrikPanel}>Ladda upp filer</p>
-              <p id="kb-filer-hjalp" className="mt-1 max-w-[62ch] text-[0.9375rem] leading-6 text-ink-muted">
-                Villkor, vanliga frågor, garantitexter och rutiner, som textfiler ({LÄSBARA.join(", ")}).
-                Text ur PDF och Word klistrar du in nedan.
-              </p>
-            </div>
-            <input
-              ref={filväljare}
-              type="file"
-              multiple
-              accept={LÄSBARA.join(",")}
-              onChange={(e) => void väljFiler(e.target.files)}
-              className="sr-only"
-              id="kb-filer"
-              tabIndex={-1}
-              aria-hidden
-            />
+    <div className="grid gap-8">
+      <section>
+        <div className="rounded-card border border-dashed border-ink/25 bg-paper2/40 p-6 text-center">
+          <FileText className="mx-auto h-6 w-6 text-ink-subtle" aria-hidden />
+          <p className="mt-3 text-[13px] text-ink-subtle">
+            Textfiler ({LÄSBARA.join(", ")}). PDF och Word: klistra in texten nedan.
+          </p>
+          <input
+            ref={filväljare}
+            type="file"
+            multiple
+            accept={LÄSBARA.join(",")}
+            onChange={(e) => void väljFiler(e.target.files)}
+            className="sr-only"
+            id="kb-filer"
+          />
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => filväljare.current?.click()}
+            className={cn(btnPrimary, "mt-5")}
+          >
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Upload className="h-4 w-4" aria-hidden />}
+            Välj filer
+          </button>
+        </div>
+      </section>
+
+      <section className="border-t border-ink/15 pt-6">
+        <h3 className="text-[15px] font-semibold">Skriv eller klistra in</h3>
+        <div className="mt-4 grid gap-3">
+          <input
+            value={rubrik}
+            onChange={(e) => setRubrik(e.target.value)}
+            placeholder="Rubrik — t.ex. Ångerrätt och returer"
+            className="w-full rounded-input border border-ink/15 bg-paper px-3 py-2 text-[15px] focus-ring"
+          />
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            rows={8}
+            placeholder="Texten agenterna ska svara ur"
+            className="w-full resize-y rounded-input border border-ink/15 bg-paper px-3 py-2 text-[15px] leading-6 focus-ring"
+          />
+          <div>
             <button
               type="button"
-              disabled={busy}
-              aria-describedby="kb-filer-hjalp"
-              onClick={() => filväljare.current?.click()}
-              className={cn(btnPrimary, "justify-self-start sm:justify-self-end")}
+              disabled={busy || !rubrik.trim() || !text.trim()}
+              onClick={() => void spara([{ title: rubrik.trim(), content: text.trim() }])}
+              className={btnSecondary}
             >
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Upload className="h-4 w-4" aria-hidden />}
-              Välj filer
+              {busy ? "Sparar…" : "Spara i kunskapsbasen"}
             </button>
-          </Rad>
-
-          <Rad className="grid gap-3">
-            <p className={rubrikPanel}>Skriv eller klistra in</p>
-            <label className="grid gap-2">
-              <span className={etikett}>Rubrik</span>
-              <input
-                value={rubrik}
-                onChange={(e) => setRubrik(e.target.value)}
-                placeholder="Till exempel Ångerrätt och returer"
-                className="focus-ring min-h-11 w-full rounded-input border border-ink/15 bg-paper px-3 text-[16px]"
-              />
-            </label>
-            <label className="grid gap-2">
-              <span className={etikett}>Text</span>
-              <textarea
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                rows={8}
-                placeholder="Skriv som ni skulle svarat en kund."
-                className="focus-ring w-full resize-y rounded-input border border-ink/15 bg-paper px-3 py-2.5 text-[16px] leading-6"
-              />
-            </label>
-            <div>
-              <button
-                type="button"
-                disabled={busy || !rubrik.trim() || !text.trim()}
-                onClick={() => void spara([{ title: rubrik.trim(), content: text.trim() }])}
-                className={btnSecondary}
-              >
-                {busy ? "Sparar…" : "Spara i kunskapsbasen"}
-              </button>
-            </div>
-          </Rad>
-        </Radlista>
-
-        {fel ? (
-          <p role="alert" className="mt-4 max-w-[62ch] break-words text-[0.9375rem] text-danger">
-            {fel}
-          </p>
-        ) : null}
-        {meddelande ? (
-          <p role="status" className="mt-4 text-[0.9375rem] text-moss">
-            {meddelande}
-          </p>
-        ) : null}
-      </Sektion>
-
-      <Sektion title={artiklar ? `Dokument (${artiklar.length})` : "Dokument"}>
-        {artiklar === null ? (
-          <div className="grid gap-3" aria-busy="true">
-            {[0, 1, 2].map((rad) => (
-              <div key={rad} className="h-14 animate-pulse rounded-card bg-ink/[0.055]" />
-            ))}
           </div>
+        </div>
+      </section>
+
+      {fel ? (
+        <p role="alert" className="max-w-[70ch] break-words text-[15px] text-danger">
+          {fel}
+        </p>
+      ) : null}
+      {meddelande ? <p className="text-[15px] text-moss">{meddelande}</p> : null}
+
+      <section className="border-t border-ink/15 pt-6">
+        <h3 className="text-[15px] font-semibold">
+          I kunskapsbasen {artiklar ? `(${artiklar.length})` : ""}
+        </h3>
+        {artiklar === null ? (
+          <p className="mt-4 text-[15px] text-ink-subtle">Hämtar…</p>
         ) : artiklar.length === 0 ? (
-          <Tomt>
-            Tom. Agenterna eskalerar varje ärende de inte hittar stöd för i kunskapsbasen, så de
-            svarar inte på något förrän det ligger dokument här.
-          </Tomt>
+          <p className="mt-4 text-[15px] leading-7 text-ink-muted">Tom.</p>
         ) : (
-          <Radlista ariaLabel="Dokument i kunskapsbasen">
+          <Radlista ariaLabel="Dokument i kunskapsbasen" className="mt-4">
             {artiklar.map((artikel, index) => (
               <Rad key={artikel.id ?? `${artikel.title}-${index}`}>
-                <p className={rubrikPanel}>{artikel.title}</p>
-                <p className="mt-1 line-clamp-2 max-w-[80ch] text-[0.9375rem] leading-6 text-ink-muted">
+                <p className="text-[15px] font-medium">{artikel.title}</p>
+                <p className="mt-1 line-clamp-2 max-w-[80ch] text-[14px] leading-6 text-ink-muted">
                   {artikel.content}
                 </p>
               </Rad>
             ))}
           </Radlista>
         )}
-      </Sektion>
+      </section>
     </div>
   );
 }

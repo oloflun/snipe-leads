@@ -113,7 +113,17 @@ for (const [etikett, värde] of [
 await page.waitForTimeout(400);
 await bild(page, "06-onboarding-ifylld");
 
-await page.getByRole("button", { name: /Spara och läs in/ }).click();
+// Wizard i fyra steg sedan 2026-09-20 (OnboardingWizard): företag → bransch
+// → kontaktperson → paket. Kontaktfälten förifylls ur sessionen.
+await page.getByRole("button", { name: /Fortsätt/ }).click();
+await page.getByRole("radio", { name: "Industri & tillverkning" }).click();
+await page.getByRole("button", { name: /Fortsätt/ }).click();
+const namnfalt = page.getByLabel(/^Namn/);
+if (!(await namnfalt.inputValue())) await namnfalt.fill("Testkund QA");
+const mejlfalt = page.getByLabel(/^E-post/);
+if (!(await mejlfalt.inputValue())) await mejlfalt.fill(EPOST);
+await page.getByRole("button", { name: /Fortsätt/ }).click();
+await page.getByRole("button", { name: /Öppna arbetsytan/ }).click();
 await page.waitForURL((u) => !u.pathname.startsWith("/onboarding"), { timeout: 45000 }).catch(() => {});
 await page.waitForLoadState("networkidle").catch(() => {});
 await page.waitForTimeout(2000);

@@ -1,16 +1,113 @@
+"use client";
+
+import Link from "next/link";
+import { useLocale } from "@/lib/i18n";
+import type { Localized } from "@/lib/i18n";
+import { useDashboard } from "@/components/dashboard/DashboardContext";
+import { useArbetsvag } from "@/components/AppShell";
+import { paketForProdukter } from "@/lib/admin/halsa";
+
 /**
- * Pensionerad 2026-09-27 (plans/2026-09-27-appytor-enhetlighet.md, regel 4).
+ * Den gemensamma översikten högst upp när en arbetsyta har BÅDA produkterna.
  *
- * Kortet "Gemensam översikt" bar en märkning med paket- och arbetsytans namn
- * (namnet står redan i railen), en ingress om sidan och två länkkort till
- * Leads och Kundtjänst (samma vägar som railen). Inget av det klarade regel 1
- * eller 4, och StartView renderar det inte längre; varje produktsektion bär
- * sina egna länkar där de används.
+ * ## Varför den behövs
  *
- * Filen står kvar som en tom komponent i stället för att raderas, eftersom en
- * radering av en produktionsfil kräver Antons godkännande. Radera den, och
- * importen försvinner inte någonstans: ingen importerar den.
+ * Utan den är duo-vyn två separata dashboards staplade på varandra. Kunden
+ * betalar för att de hör ihop, och det enda som visade det var att de låg på
+ * samma sida. Den här remsan är stället där de faktiskt möts: ett ärende och
+ * ett utskick som rör samma bolag är samma kundrelation, inte två.
+ *
+ * ## Varför den ALDRIG renderas för en enproduktskund
+ *
+ * `shows()` kräver att arbetsytan äger produkten, och komponenten kräver att
+ * BÅDA visas. En kund som bara har support ska inte ens ana att leads-ytan
+ * finns — inte se den utgråad. Att gråa ut något är att berätta vad någon inte
+ * betalar för, och det är en säljteknik vi inte använder mot befintliga kunder.
+ *
+ * Det är samma regel som `app/dashboard/[[...slug]]/page.tsx` upprätthåller
+ * med `notFound()` på routenivå. Den här komponenten är det andra lagret, inte
+ * det bärande — en dold ruta är inte ett skydd.
  */
+
+const copy = {
+  rubrik: { sv: "Gemensam översikt", en: "Shared overview" },
+  leads: { sv: "Leads", en: "Leads" },
+  leadsRad: { sv: "Prospekt, utkast och granskningskö", en: "Prospects, drafts and review queue" },
+  support: { sv: "Kundtjänst", en: "Support" },
+  supportRad: { sv: "Ärenden, inkorg och kunskapsbas", en: "Cases, inbox and knowledge base" },
+  tillLeads: { sv: "Öppna leads", en: "Open leads" },
+  tillSupport: { sv: "Öppna kundtjänst", en: "Open support" }
+} satisfies Record<string, Localized>;
+
 export function DuoSummary() {
-  return null;
+  const { text } = useLocale();
+  const { shows, products, workspaceName } = useDashboard();
+  const vag = useArbetsvag();
+
+  // Båda krävs. Se komponentens docstring om varför det inte finns något
+  // utgråat mellanläge.
+  if (!shows("leads") || !shows("support")) {
+    return null;
+  }
+
+  // Paketnamnet HÄRLEDS ur produkterna, samma källa som Plan och fakturering.
+  // Duo-namnet stod hårdkodat här, och efter ett byte till Trio (som bara
+  // skriver workspaces.products) visade översikten fortfarande Duo — remsan
+  // renderas ju för varje arbetsyta med leads OCH support, och det är Trio med.
+  // Okänd kombination = inget märke, hellre än ett påhittat namn.
+  const paketNamn = paketForProdukter(products)?.namn ?? null;
+  const markning = [paketNamn, workspaceName].filter(Boolean).join(" · ");
+
+  return (
+    <section
+      aria-labelledby="duo-oversikt"
+      className="rounded-card border border-ochre/40 bg-paper2/60 p-6 md:p-8"
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+        <h2 id="duo-oversikt" className="text-[1.125rem] font-semibold tracking-[-0.01em]">
+          {text(copy.rubrik)}
+        </h2>
+        {markning ? (
+          <span className="kicker rounded-input bg-ochre/12 px-2.5 py-1 text-warning">
+            {markning}
+          </span>
+        ) : null}
+      </div>
+
+      <div className="mt-6 grid gap-4 sm:grid-cols-2">
+        <Kort
+          rubrik={text(copy.leads)}
+          rad={text(copy.leadsRad)}
+          href={vag("/dashboard/iris")}
+          knapp={text(copy.tillLeads)}
+        />
+        <Kort
+          rubrik={text(copy.support)}
+          rad={text(copy.supportRad)}
+          href={vag("/dashboard/support")}
+          knapp={text(copy.tillSupport)}
+        />
+      </div>
+    </section>
+  );
+}
+
+function Kort({
+  rubrik,
+  rad,
+  href,
+  knapp
+}: Readonly<{ rubrik: string; rad: string; href: string; knapp: string }>) {
+  return (
+    <div className="flex flex-col rounded-input border border-ink/15 bg-paper p-5">
+      <p className="text-[0.9375rem] font-semibold">{rubrik}</p>
+      <p className="mt-1.5 text-[0.875rem] leading-[1.5] text-ink-muted">{rad}</p>
+      <Link
+        href={href}
+        className="focus-ring mt-4 inline-flex min-h-10 w-fit items-center rounded-input border border-ink/20 px-4 text-[0.875rem] font-medium transition-colors hover:bg-paper2"
+      >
+        {knapp}
+      </Link>
+    </div>
+  );
 }

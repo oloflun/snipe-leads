@@ -177,16 +177,34 @@ _OPT_OUT_MONSTER = re.compile(
     r"https?://\S*(avregistrera|avanmal|unsubscribe|optout|opt-out)\S*", re.IGNORECASE
 )
 
+#: Länken till avsändarens integritetspolicy. Två sätt att träffa: ett
+#: policyord i själva URL:en (integritetspolicy, privacy, …), eller ordet
+#: "personuppgift" på SAMMA rad som en länk — det senare för kunder vars
+#: policysida heter något annat (/om-oss/policy). Utskicksfoten skriver
+#: raden "Hur <kund> behandlar personuppgifter: <url>" och träffar alltid.
+_POLICY_MONSTER = re.compile(
+    r"https?://\S*(integritet|privacy|personuppgift|dataskydd|gdpr)\S*"
+    r"|personuppgift[^\n]*https?://\S+",
+    re.IGNORECASE,
+)
+
 
 def _regel_2_avregistrering(*, avsandare, utskick, historik, nu) -> GuardBeslut | None:
-    """Fungerande opt-out-länk i varje mejl.
+    """Fungerande opt-out-länk OCH integritetspolicylänk i varje mejl.
 
-    VARFÖR: utan den finns ingen laglig väg ut ur utskicken, och en mottagare
-    som inte kan avregistrera sig anmäler i stället. En klick ska skriva till
-    `suppressions` och gälla OMEDELBART för hela tenanten — inte bara den
-    kampanjen. Det sistnämnda är det vanliga felet: en avregistrering som
-    bara gäller en kampanj betyder att samma person får nästa kampanj, och då
-    är löftet i mejlet ett brutet löfte.
+    VARFÖR opt-out: utan den finns ingen laglig väg ut ur utskicken, och en
+    mottagare som inte kan avregistrera sig anmäler i stället. En klick ska
+    skriva till `suppressions` och gälla OMEDELBART för hela tenanten — inte
+    bara den kampanjen. Det sistnämnda är det vanliga felet: en avregistrering
+    som bara gäller en kampanj betyder att samma person får nästa kampanj, och
+    då är löftet i mejlet ett brutet löfte.
+
+    VARFÖR policylänken (tillagd 2026-09-20): art. 14-styckena i foten rymmer
+    inte allt art. 14.2 kräver — lagringstid, mottagarkategorier, rätten att
+    klaga till IMY. Länken till avsändarens integritetspolicy bär resten.
+    Kravet ligger i samma regel som opt-out-länken eftersom båda är
+    obligatoriska LÄNKAR i varje mejl; en tenant utan `policy_url` i
+    kundregistret (migration 073) får sitt utskick blockerat här, med besked.
     """
     if not _OPT_OUT_MONSTER.search(utskick.brodtext):
         return GuardBeslut(
@@ -195,6 +213,13 @@ def _regel_2_avregistrering(*, avsandare, utskick, historik, nu) -> GuardBeslut 
             "Mejlet saknar en klickbar avregistreringslänk. En uppmaning att "
             "svara på mejlet räcker inte — den går varken att verifiera eller "
             "att åtgärda automatiskt.",
+        )
+    if not _POLICY_MONSTER.search(utskick.brodtext):
+        return GuardBeslut(
+            BLOCKERA,
+            "2_avregistrering",
+            "Mejlet saknar en länk till avsändarens integritetspolicy. Fyll i "
+            "policy_url i kundregistret så bygger foten raden själv.",
         )
     return None
 

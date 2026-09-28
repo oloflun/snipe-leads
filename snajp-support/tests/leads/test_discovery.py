@@ -274,6 +274,22 @@ def test_extrahera_kontaktlankar_hittar_markdown_lankar():
     assert "https://acme.se/nyheter" not in lankar
 
 
+def test_extrahera_kontaktlankar_skalar_citattecken_runt_urlen():
+    """Skrap med [Kontakt]("https://…") — citattecknen följde med in i
+    urljoin och gav https://<domän>/%22https://…%22, en sida som inte finns.
+    Kontaktjakten hämtade då tomhet i stället för kontaktsidan (uppmätt på
+    ekan.com i development 2026-09-21)."""
+    material = (
+        "# Ekan AB\n\n"
+        '[Kontakt]("https://ekan.com/kontakt/") | '
+        "[Om oss]('https://ekan.com/om-oss/')\n"
+    )
+    lankar = extrahera_kontaktlankar(material, "https://ekan.com")
+    assert "https://ekan.com/kontakt" in lankar
+    assert "https://ekan.com/om-oss" in lankar
+    assert not any("%22" in lank or '"' in lank or "'" in lank for lank in lankar)
+
+
 def test_extrahera_kontaktlankar_hittar_lankar_ur_rå_html():
     """En del skrapningar ger tillbaka HTML-fragment i markdownfältet i
     stället för konverterat markdown — länkextraktionen får inte bero på

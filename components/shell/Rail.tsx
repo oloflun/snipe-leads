@@ -37,6 +37,17 @@ export type RailNavItem = {
   active: boolean;
   onClick?: () => void;
   /**
+   * Mörklagd post: en agent arbetsytan INTE har. Syns med flit — den som har
+   * Support ska se att Iris och Kvitton finns (klicket leder till en
+   * upsell-vy, se WorkspaceSection) — men texten är nedtonad så att det egna
+   * paketet är det som lyser. Tonen är `paper-subtle`, den mörkaste nivå som
+   * fortfarande klarar AA på railen (DESIGN.md:s tokentabell) — mörkare vore
+   * att skriva text som inte går att läsa.
+   */
+  dimmad?: boolean;
+  /** Tooltip/title när posten är mörklagd — säger varför den ser ut så. */
+  dimmadTitel?: string;
+  /**
    * Undersidor till posten, t.ex. Iris tre flikar. Renderas som en indragen
    * lista under posten NÄR `active` är sant — anroparen avgör det, med samma
    * pathname-prefix-logik som toppnivåns `active` redan använder (exakt match
@@ -72,7 +83,9 @@ export function RailRad({
   Ikon,
   aktiv,
   onClick,
-  compact = false
+  compact = false,
+  dimmad = false,
+  dimmadTitel
 }: Readonly<{
   href: string;
   etikett: string;
@@ -80,20 +93,26 @@ export function RailRad({
   aktiv: boolean;
   onClick?: () => void;
   compact?: boolean;
+  dimmad?: boolean;
+  dimmadTitel?: string;
 }>) {
   return (
     <Link
       href={href}
       onClick={onClick}
       aria-current={aktiv ? "page" : undefined}
-      title={etikett}
+      title={dimmad ? (dimmadTitel ?? etikett) : etikett}
       className={cn(
         "focus-ring relative flex h-11 shrink-0 items-center gap-3 rounded-input px-3 text-[0.9375rem] transition-colors",
         "justify-center lg:justify-start",
         compact && "h-9 px-2 text-[0.8125rem]",
         aktiv
           ? "bg-paper/10 font-semibold text-paper"
-          : "text-paper-muted hover:bg-paper/5 hover:text-paper"
+          : dimmad
+            ? // Mörklagd: nedtonad men läsbar (se RailNavItem.dimmad). Hover
+              // lyfter den till den vanliga nivån — den ska kännas nåbar.
+              "text-paper-subtle hover:bg-paper/5 hover:text-paper-muted"
+            : "text-paper-muted hover:bg-paper/5 hover:text-paper"
       )}
     >
       <span
@@ -104,7 +123,14 @@ export function RailRad({
         )}
       />
       {Ikon ? (
-        <Ikon className={cn("h-[18px] w-[18px] shrink-0", aktiv && "text-ochre")} aria-hidden />
+        <Ikon
+          className={cn(
+            "h-[18px] w-[18px] shrink-0",
+            aktiv && "text-ochre",
+            !aktiv && dimmad && "opacity-70"
+          )}
+          aria-hidden
+        />
       ) : (
         <span
           aria-hidden
@@ -196,6 +222,8 @@ export function Rail({
                   Ikon={item.Icon}
                   aktiv={item.active}
                   onClick={item.onClick}
+                  dimmad={item.dimmad}
+                  dimmadTitel={item.dimmadTitel}
                 />
               )
             )}

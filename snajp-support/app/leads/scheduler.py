@@ -109,7 +109,10 @@ async def _kor_send_guard(storage, tenant_id: str, thread: dict, message: dict, 
         # Trådens egna tidigare kontakter räknas inte som "tidigare kontaktad" —
         # det är hela poängen med en uppföljning. Regel 3 gäller nya trådar.
         tidigare_kontaktade=frozenset(),
-        egna_kunder=frozenset(),
+        # Supportens kundregister ÄR kundens kundlista: den som har ett ärende
+        # hos tenantens support är en befintlig kund och ska inte kallmejlas.
+        # Var frozenset() fram till 2026-09-20 — spärren fanns utan data.
+        egna_kunder=frozenset(await storage.list_customer_emails(tenant_id)),
     )
 
     return check_send_guard(

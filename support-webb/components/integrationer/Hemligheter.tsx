@@ -158,10 +158,10 @@ export function Hemligheter({
             <Plus className="h-4 w-4" aria-hidden />
             Lägg till nyckel
           </button>
-          <p className="w-full text-[0.8125rem] leading-5 text-ink/55">
+          <p className="w-full text-[0.8125rem] leading-5 text-ink-muted">
             {namnFel
-              ? "Namnet får bara innehålla bokstäver, siffror och _, och får inte börja med en siffra."
-              : "Refereras i konfigurationen som {{hemlighet.namn}}. Agenten ser aldrig värdet."}
+              ? "Bara bokstäver, siffror och _, och inte en siffra först."
+              : "Används i konfigurationen som {{hemlighet.namn}}."}
           </p>
         </div>
       ) : null}

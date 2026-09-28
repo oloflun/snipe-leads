@@ -116,6 +116,14 @@ export async function WorkspaceSection({
   // this is the actual gate.
   const { products, workspaceName } = await resolveDashboardState();
   if (!products.includes(product)) {
+    // De tre agentytorna: menyn visar dem MÖRKLAGDA (AppShell), och klicket
+    // ska landa i agentens erbjudande — inte i en 404. Grinden är densamma:
+    // ingen data för agenten renderas, bara pitchen. Preview-ytorna
+    // (companies, contacts …) behåller 404:an — de står inte i någon meny.
+    if (section === "iris" || section === "support" || section === "kvitton") {
+      const { AgentLast } = await import("@/components/dashboard/AgentLast");
+      return <AgentLast product={product} />;
+    }
     notFound();
   }
 
@@ -130,8 +138,6 @@ export async function WorkspaceSection({
       // Leads/kontroll hade — men under EN sektion i stället för tre, se
       // lib/routes.ts AppRoute.children. Ett okänt tredje slugsegment (`id`
       // utanför de två kända) är en 404, inte en tyst fallback till Bolag.
-      // Ingen överrad "Iris" och ingen ingress: Iris står redan i railen som
-      // förälder till undersidan (plans/2026-09-27-appytor-enhetlighet.md).
       if (id === "granskning") {
         return (
           <PageShell title="Granskning">
@@ -190,8 +196,7 @@ function SupportSection({ workspaceName }: Readonly<{ workspaceName: string | nu
   // — mönstret i components/snajp/SnajpSupportDemo.tsx, i dag oanvänd i
   // produkten men färdigt.
   return (
-    // Samma namn som railen. "Inkorg och utkast" var sidans innehåll, inte dess namn.
-    <PageShell title="Kundtjänst">
+    <PageShell title="Inkorg och utkast">
       <AgentSajtKnapp agent="support" />
       <SupportWorkspaceTabs workspaceName={workspaceName} />
     </PageShell>

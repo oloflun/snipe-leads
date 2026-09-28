@@ -10,6 +10,22 @@
 
 export const BAS = "/api/ag";
 
+/** Backendens kategorinycklar (app/config.py CATEGORY_LABELS) i klartext. */
+const KATEGORIER: Record<string, string> = {
+  teknisk_support: "Teknisk support",
+  garanti: "Garanti",
+  leverans: "Leverans",
+  utbildning: "Utbildning",
+  retur_reklamation: "Retur & reklamation",
+  betalning: "Betalning",
+  orderstatus: "Orderstatus",
+  ovrigt: "Övrigt"
+};
+
+export function kategori(nyckel: string): string {
+  return KATEGORIER[nyckel] ?? nyckel;
+}
+
 export type Klassificering = {
   category?: string | null;
   confidence?: number | null;
@@ -59,6 +75,8 @@ export type Chatt = {
   customer_name?: string | null;
   subject?: string | null;
   category?: string | null;
+  /** web, email, whatsapp, messenger, slack eller teams (bd snipe-36u). */
+  channel?: string | null;
   is_test?: boolean | null;
   overlamnad_orsak?: string | null;
   orsak_text?: string | null;

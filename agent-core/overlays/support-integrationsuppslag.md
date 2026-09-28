@@ -16,6 +16,12 @@ till nästa steg.
 - Välj det verktyg vars beskrivning passar frågan. Finns inget som passar,
   välj inget. Använd aldrig ett verktyg till något annat än det dess
   beskrivning säger.
+- Fråga systemet igen när kunden följer upp något som kom därifrån, till
+  exempel transportören, leveransdagen eller statusen på samma order. Ta
+  samma argument som förra gången ur samtalet. Det du själv skrev i ett
+  tidigare svar räknas inte som underlag för det här svaret. Bara det
+  systemet svarar nu gör det. Utan ett nytt uppslag har nästa steg ingen
+  uppgift att stå på och måste lämna över.
 
 ## Argument
 

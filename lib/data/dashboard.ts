@@ -29,6 +29,13 @@ export type DashboardState = {
   /** Tillköpta tilläggstjänster (migration 022). Tomt = inga. */
   addons: AddonKey[];
   workspaceName: string | null;
+  /**
+   * Den INLOGGADES e-post — till förifyllning (inkorgskopplingen föreslår
+   * kontots adress). Null anonymt och i demo-/kundvyn: där är den inloggade
+   * adminen, och att föreslå adminens adress i en kunds arbetsyta vore fel
+   * åt båda hållen.
+   */
+  userEmail: string | null;
   signedIn: boolean;
   /** Demo-läge: egen instans utan förladdad data, begränsat antal körningar. */
   isDemo: boolean;
@@ -54,6 +61,13 @@ export type DashboardState = {
    * annans". Null i alla andra lägen.
    */
   impersonation: { slug: string; namn: string } | null;
+  /**
+   * Läsrollen (lib/auth/lasroll.ts): profilen är en `viewer` — extern kontakt
+   * med full läsrätt och noll skrivrätt. UI:t använder fältet för bannern och
+   * för att dölja skrivåtgärder; SPÄRREN sitter serverside (proxyAsTenant och
+   * server actions), inte här.
+   */
+  arLasare: boolean;
   /**
    * Läget vid första renderingen — Duo, bara Leads eller bara Support.
    *
@@ -83,11 +97,13 @@ const ANONYMOUS: DashboardState = {
   products: ALL_PRODUCTS,
   addons: [],
   workspaceName: null,
+  userEmail: null,
   signedIn: false,
   isDemo: false,
   isPlatformAdmin: false,
   vy: "admin",
   impersonation: null,
+  arLasare: false,
   initialScope: "both"
 };
 
@@ -187,11 +203,13 @@ export async function resolveDashboardState(): Promise<DashboardState> {
       // påslaget inte fungerade.
       addons,
       workspaceName: rader[0]?.name ?? lage.slug,
+      userEmail: null,
       signedIn: true,
       isDemo: false,
       isPlatformAdmin: true,
       vy,
       impersonation: { slug: lage.slug, namn: rader[0]?.name ?? lage.slug },
+      arLasare: false,
       initialScope: await scopeFranCookie(ALL_PRODUCTS)
     };
   }
@@ -205,6 +223,7 @@ export async function resolveDashboardState(): Promise<DashboardState> {
       products: ALL_PRODUCTS,
       addons: [],
       workspaceName: DEMO_ARBETSYTA,
+      userEmail: null,
       signedIn: true,
       // Medvetet false. Flaggan går vidare som X-Snajp-Demo och sänker
       // löptaket; demovyn ska kunna köra skarpa testkörningar. Att vyn ÄR en
@@ -214,6 +233,7 @@ export async function resolveDashboardState(): Promise<DashboardState> {
       vy,
       // Demokontot är inte en kund. Ingen gul banner — se lib/vy.ts.
       impersonation: null,
+      arLasare: false,
       initialScope: await scopeFranCookie(ALL_PRODUCTS)
     };
   }
@@ -222,11 +242,13 @@ export async function resolveDashboardState(): Promise<DashboardState> {
     products,
     addons: (context.workspace.addons ?? []).filter(isAddonKey),
     workspaceName: context.workspace.name,
+    userEmail: context.user.email,
     signedIn: true,
     isDemo: context.workspace.is_demo,
     isPlatformAdmin: Boolean(await getPlatformAdmin()),
     vy,
     impersonation: null,
+    arLasare: (context.profile.role ?? "") === "viewer",
     initialScope: await scopeFranCookie(products)
   };
 }

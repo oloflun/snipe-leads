@@ -13,6 +13,7 @@ injicerats, aldrig vad modellen faktiskt använt. Förvillkorsgrinden
 
 from __future__ import annotations
 
+from ..agentcore import humanizer_skopor
 from ..agentcore.packs import Playbook, PlaybookStep
 
 SUPPORT_V1 = Playbook(
@@ -89,6 +90,11 @@ SUPPORT_V1 = Playbook(
             requires=("skill:cs:draft-response",),
             overlay="support-conversation",
             temperature=0.7,
+            # Skopad 2026-09-19: 27 081 -> ~18 100 tecken, ~2 400 tokens
+            # mindre per chatt. Samma skopa som outreach V2 (domartestad)
+            # plus mönster 14 och 16 — se agentcore/humanizer_skopor.py.
+            scope=humanizer_skopor.SVAR,
+            rationale=humanizer_skopor.SVAR_RATIONALE,
         ),
     ),
 )

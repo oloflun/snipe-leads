@@ -24,7 +24,11 @@ export type TeamMember = {
   status: "member" | "invited";
 };
 
-const ROLES = ["owner", "member"] as const;
+// "viewer" är läsrollen (lib/auth/lasroll.ts, Livrustning-piloten): extern
+// kontakt som följer agentens arbete utan skrivrättigheter. Värdet flödar
+// workspace_invites.role → on_auth_user_created → profiles.role utan
+// migration — kolumnerna är text utan check-villkor.
+const ROLES = ["owner", "member", "viewer"] as const;
 type Role = (typeof ROLES)[number];
 
 /**

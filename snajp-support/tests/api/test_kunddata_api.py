@@ -173,3 +173,43 @@ async def test_kontakt_id_ur_annan_kunds_lista_ger_404(client: TestClient):
 
     kvar = client.get(VAG, headers=_master()).json()["kunddata"]["kontakter"]
     assert kvar and kvar[0]["namn"] == "Anna Ek"
+
+
+async def test_policy_url_sparas(client: TestClient):
+    """Regressionsvakt: policy_url föll tyst till 2026-09-20.
+
+    Kolumnen fanns (073), KUNDDATA_FALT bar den, adminvyn hade rutan och
+    klienten skickade den — men fältet saknades i `KunddataRequest`, och
+    pydantic kastar okända fält UTAN att säga något. Spara svarade 200 med
+    fältet utelämnat ur `sparat`, och ingen läste den listan. Följden: send_guard
+    regel 2 blockerar varje kallmejl utan policylänk, och länken gick inte att
+    fylla i — alltså kunde ingen kund skicka.
+    """
+    svar = client.put(
+        VAG, headers=_master(), json={"policy_url": "https://exempel.se/integritetspolicy"}
+    )
+    assert svar.status_code == 200, svar.text
+    assert "policy_url" in svar.json()["sparat"], "fältet kastades tyst av modellen"
+
+    falt = client.get(VAG, headers=_master()).json()["kunddata"]["falt"]
+    assert falt["policy_url"]["varde"] == "https://exempel.se/integritetspolicy"
+
+
+async def test_varje_kunddatafalt_gar_att_skriva(client: TestClient):
+    """Modellen och KUNDDATA_FALT får inte glida isär igen.
+
+    Det här testet vaktar KLASSEN av fel, inte bara policy_url: varje fält
+    lagringen känner till ska gå att sätta via API:t. Glöms ett i
+    `KunddataRequest` faller det här, i stället för att upptäckas av en kund
+    vars sparning inte tog.
+    """
+    from app.storage.base import KUNDDATA_FALT
+
+    varden = {
+        falt: ("2026-01-01" if falt in ("kund_sedan", "avtal_signerat") else f"varde-{falt}")
+        for falt in KUNDDATA_FALT
+    }
+    svar = client.put(VAG, headers=_master(), json=varden)
+    assert svar.status_code == 200, svar.text
+    saknade = sorted(set(KUNDDATA_FALT) - set(svar.json()["sparat"]))
+    assert not saknade, f"fält som API-modellen tappar: {saknade}"

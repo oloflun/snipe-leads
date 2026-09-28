@@ -2,9 +2,9 @@
 
 import { PageShell } from "@/components/AppShell";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
+import { DuoSummary } from "@/components/dashboard/DuoSummary";
 import { LeadsOversikt, SupportOversikt } from "@/components/dashboard/Oversikt";
 import { KunskapsbasKort } from "@/components/settings/Kunskapsbas";
-import { Sektion } from "@/components/ui";
 import { useLocale } from "@/lib/i18n";
 import type { Localized } from "@/lib/i18n";
 
@@ -37,58 +37,65 @@ import type { Localized } from "@/lib/i18n";
  * inloggade backenden från /demo, där ingen session finns — och panelen svarade
  * "Du måste vara inloggad" mitt i produktdemon.
  *
- * ## En anatomi oavsett antal produkter (2026-09-27)
+ * ## Duo-kunder
  *
- * Rubriken är alltid "Arbetsytan" och varje produkt är en `Sektion` under den,
- * även när arbetsytan bara har en. Tidigare bytte sidrubriken till "Leads"
- * eller "Kundtjänst" för en enproduktskund och sektionsrubriken föll bort, så
- * samma översikt hade två olika rubrikstrukturer och delrubrikerna i
- * Oversikt.tsx hoppade från h1 till h3. Nu ser en sektion likadan ut för alla.
- *
- * `DuoSummary` (kortet "Gemensam översikt" med två länkkort till Leads och
- * Kundtjänst) renderas inte längre: korten upprepade railens navigering, och
- * märkningen ovanför upprepade arbetsytans namn som redan står i railen
- * (plans/2026-09-27-appytor-enhetlighet.md, regel 4). Varje sektion bär i
- * stället sina egna länkar där de används — granskningskön, inkorgen.
+ * Med båda paketen styr scope-växeln vad som visas, och `DuoSummary` ligger
+ * högst upp när båda är på.
  */
 
 const copy = {
-  title: { sv: "Arbetsytan", en: "Workspace" },
-  // Samma namn som railen: agenten heter Iris överallt, inte Leads på en yta och Iris på nästa.
-  leadsHeading: { sv: "Iris", en: "Iris" },
+  titleLeads: { sv: "Leads", en: "Leads" },
+  titleSupport: { sv: "Kundtjänst", en: "Support" },
+  titleBoth: { sv: "Arbetsytan", en: "Workspace" },
+  leadsHeading: { sv: "Leads", en: "Leads" },
   supportHeading: { sv: "Kundtjänst", en: "Support" }
 } satisfies Record<string, Localized>;
 
 export function StartView({ demo = false }: Readonly<{ demo?: boolean }>) {
   const { text } = useLocale();
-  const { shows } = useDashboard();
+  const { shows, scope } = useDashboard();
+
+  const bada = shows("leads") && shows("support");
+  const title = bada ? copy.titleBoth : shows("leads") ? copy.titleLeads : copy.titleSupport;
 
   return (
-    <PageShell title={text(copy.title)}>
-      {shows("leads") ? (
-        <Sektion title={text(copy.leadsHeading)}>
-          <LeadsOversikt demo={demo} />
-        </Sektion>
-      ) : null}
+    <PageShell title={text(title)}>
+      <div className="space-y-14">
+        {/* Högst upp bland vyerna, och bara när båda produkterna visas.
+            Komponenten returnerar null av sig själv annars — se DuoSummary. */}
+        <DuoSummary />
 
-      {shows("support") ? (
-        <Sektion title={text(copy.supportHeading)}>
-          <SupportOversikt demo={demo} />
-        </Sektion>
-      ) : null}
+        {shows("leads") ? (
+          <section>
+            {scope === "both" ? (
+              <h2 className="mb-6 text-[1.125rem] font-semibold tracking-[-0.01em]">
+                {text(copy.leadsHeading)}
+              </h2>
+            ) : null}
+            <LeadsOversikt demo={demo} />
+          </section>
+        ) : null}
 
-      {/* Underlaget SIST, inte först.
-          Kortet låg tidigare överst, före allt annat på startsidan. Det är
-          rätt prioritering första dagen och fel varje dag därefter: en kund
-          med en fylld bas fick en uppladdningsruta mellan sig och sina
-          siffror. Nu står bristen i statusraden i varje sektion (0 dokument
-          markeras), och verktyget för att åtgärda den ligger här.
-          Inte på demoytan: där finns ingen session att ladda upp till. */}
-      {demo ? null : (
-        <div className="mt-12">
-          <KunskapsbasKort />
-        </div>
-      )}
+        {shows("support") ? (
+          <section>
+            {scope === "both" ? (
+              <h2 className="mb-6 text-[1.125rem] font-semibold tracking-[-0.01em]">
+                {text(copy.supportHeading)}
+              </h2>
+            ) : null}
+            <SupportOversikt demo={demo} />
+          </section>
+        ) : null}
+
+        {/* Underlaget SIST, inte först.
+            Kortet låg tidigare överst, före allt annat på startsidan. Det är
+            rätt prioritering första dagen och fel varje dag därefter: en kund
+            med en fylld bas fick en uppladdningsruta mellan sig och sina
+            siffror. Nu står bristen i tillståndsraden högst upp (0 dokument
+            markeras), och verktyget för att åtgärda den ligger här.
+            Inte på demoytan: där finns ingen session att ladda upp till. */}
+        {demo ? null : <KunskapsbasKort />}
+      </div>
     </PageShell>
   );
 }

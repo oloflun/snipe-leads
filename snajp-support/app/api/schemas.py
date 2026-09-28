@@ -355,6 +355,18 @@ class InstruktionRequest(BaseModel):
     strukturera: bool = True
 
 
+class TenantAktivRequest(BaseModel):
+    """Manuell avstängning/återaktivering av en kund — trial-konverteringens
+    mänskliga väg (beslut 2026-09-20: ingen automatisk konvertering).
+
+    `orsak` är fri text som hamnar i platform_events — "Trial gick ut, inget
+    avtal" är underlaget den som tittar i händelseloggen om ett halvår behöver.
+    """
+
+    active: bool
+    orsak: str | None = Field(default=None, max_length=500)
+
+
 class TenantProfilRequest(BaseModel):
     """Adminens skrivning mot EN kunds agentprofil.
 
@@ -387,6 +399,13 @@ class KunddataRequest(BaseModel):
     faktureringsmejl: str | None = Field(default=None, max_length=320)
     telefon: str | None = Field(default=None, max_length=40)
     foretagsadress: str | None = Field(default=None, max_length=500)
+    # policy_url saknades här till 2026-09-20 och fältet föll tyst: kolumnen
+    # finns (073), KUNDDATA_FALT bär den, adminvyn har rutan "Integritetspolicy
+    # (URL)" och klienten skickade den — men pydantic kastar okända fält utan
+    # att säga något, så spara svarade 200 och skrev ingenting. Följden var att
+    # send_guard regel 2, som blockerar varje kallmejl utan policylänk, aldrig
+    # kunde uppfyllas av någon kund. Uppmätt mot development.
+    policy_url: str | None = Field(default=None, max_length=500)
     kund_sedan: str | None = Field(default=None, max_length=10)
     avtal_signerat: str | None = Field(default=None, max_length=10)
 
@@ -403,6 +422,13 @@ class KontaktRequest(BaseModel):
 
 class KbArticleRequest(BaseModel):
     articles: list[KbArticle] = Field(..., min_length=1, max_length=50)
+
+
+class KbSkannaRequest(BaseModel):
+    """Kundens egen webbplats, som skannas till artikelutkast (app/kb_skanning.py).
+    Ingenting sparas av skanningen — utkasten godkänns och går via POST /api/kb."""
+
+    webbplats: str = Field(..., min_length=4, max_length=300)
 
 
 class KbExtraheraRequest(BaseModel):
@@ -435,6 +461,15 @@ class SeedMockRequest(BaseModel):
     antal: int | None = None
 
 
+class HanteradRequest(BaseModel):
+    """Kroppen till POST /api/inbox/{id}/hanterad — avbockningen i inkorgen.
+
+    `hanterad: false` ångrar en avbockning. Default true, så att den enkla
+    knappen kan posta utan kropp."""
+
+    hanterad: bool = True
+
+
 class IngestEmailRequest(BaseModel):
     """API-first-ingest: externa system (Zendesk, CRM, webhook) postar mail hit."""
 
@@ -455,6 +490,30 @@ class ApproveDraftRequest(BaseModel):
 
 class RejectDraftRequest(BaseModel):
     note: str | None = None
+
+
+class KopplaInkorgRequest(BaseModel):
+    """Självbetjänad inkorgskoppling (migration 077).
+
+    `app_losenord` är ett app-lösenord (Gmail/iCloud kräver det; Outlook ett
+    vanligt eller app-lösenord med IMAP påslaget). Det verifieras mot servern,
+    Fernet-krypteras och lagras — aldrig i klartext, aldrig i loggar.
+    `imap_host` behövs bara för adresser utanför de kända domänerna."""
+
+    address: str = Field(..., min_length=5, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    app_losenord: str = Field(..., min_length=6, max_length=200)
+    imap_host: str | None = Field(default=None, max_length=253)
+
+
+class OmformuleraDraftRequest(BaseModel):
+    """Skriv om utkastet i en riktning — Förbättra, Kortare, Mer personlig.
+
+    `content` är texten SOM GRANSKAREN SER (inklusive egna redigeringar);
+    utelämnad används det sparade utkastet. Ingenting persisteras — svaret
+    landar i granskarens textruta och skickas först vid Godkänn."""
+
+    lage: Literal["forbattra", "kortare", "personligare"]
+    content: str | None = Field(default=None, max_length=16000)
 
 
 class CategoryRuleRequest(BaseModel):

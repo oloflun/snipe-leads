@@ -25,11 +25,13 @@ const FALLBACK: DashboardState = {
   products: [...productKeys],
   addons: [],
   workspaceName: null,
+  userEmail: null,
   signedIn: false,
   isDemo: false,
   isPlatformAdmin: false,
   vy: "admin" as const,
   impersonation: null,
+  arLasare: false,
   initialScope: "both" as const
 };
 

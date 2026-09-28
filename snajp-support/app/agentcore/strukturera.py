@@ -145,7 +145,7 @@ async def strukturera(ravtext: str) -> Strukturering:
             anmarkning="Simuleringsläge — texten sparas ostrukturerad.",
         )
 
-    from ..agent.llm import get_llm_client
+    from ..agent.llm import get_llm_client, tankande_kwargs
 
     try:
         client = get_llm_client()
@@ -159,6 +159,7 @@ async def strukturera(ravtext: str) -> Strukturering:
                 {"role": "system", "content": _SYSTEM.format(rubriker=", ".join(RUBRIKER))},
                 {"role": "user", "content": f"## Anteckningar att strukturera\n\n{ravtext}"},
             ],
+            **tankande_kwargs(),
         )
         svar = json.loads(response.choices[0].message.content or "{}")
         dokument = stada(str(svar.get("dokument") or ""))

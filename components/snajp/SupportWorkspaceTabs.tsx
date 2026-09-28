@@ -1,19 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { flik, flikAktiv, flikInaktiv } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { Dashboard } from "./Dashboard";
+import { JournalVy } from "./JournalVy";
 import { SupportChat } from "./SupportChat";
 
 /**
  * "Kundtjänst" och "Testchatt" bredvid varandra i arbetsytans supportflik
  * (Fas 5, plan 2026-08-28 §6.1, bd snipe-0r9).
  *
- * Flikraden bär husets flikform (`flik` i components/ui.tsx) sedan
- * 2026-09-27. Den hade tidigare en egen understrykningsrad med ochre på den
- * aktiva, och var därmed den enda flikraden i appen som såg annorlunda ut
- * (plans/2026-09-27-appytor-enhetlighet.md).
+ * Mönstret är hämtat rakt av från components/snajp/SnajpSupportDemo.tsx,
+ * som redan gör exakt det här för marknadssidans demo (flikraden med
+ * border-ochre på den aktiva) — i dag oanvänd i produkten, men färdigt och
+ * beprövat, så det byggs inte om.
  *
  * "Kundtjänst" är den befintliga interna inkorgen. På riktiga konton finns
  * dessutom "Testmail" — testärenden som inte ska blandas med skarpa. Demo-
@@ -24,7 +24,7 @@ import { SupportChat } from "./SupportChat";
  * räknas som kundvolym.
  */
 export function SupportWorkspaceTabs({ workspaceName }: Readonly<{ workspaceName: string | null }>) {
-  const [tab, setTab] = useState<"kundtjanst" | "testmail" | "testchatt">("kundtjanst");
+  const [tab, setTab] = useState<"kundtjanst" | "att_hantera" | "testmail" | "testchatt" | "journal">("kundtjanst");
   /** null = vet inte än. false = riktig kund, Testmail-fliken ska synas. */
   const [visarTestIArenden, setVisarTestIArenden] = useState<boolean | null>(null);
 
@@ -40,24 +40,31 @@ export function SupportWorkspaceTabs({ workspaceName }: Readonly<{ workspaceName
 
   const flikar = (
     [
-      // "Inkorg" och inte "Kundtjänst": sidan heter redan Kundtjänst, och en
-      // flik med sidans namn säger inte vad den visar.
-      { id: "kundtjanst", label: "Inkorg" },
+      { id: "kundtjanst", label: "Kundtjänst" },
+      // Eskaleringar och larm (migration 078): egen flik så att de aldrig
+      // blandas med kundärenden eller får ett AI-utkast (kundtest 2026-09-22).
+      { id: "att_hantera", label: "Att hantera" },
       ...(visarTestIArenden === false ? [{ id: "testmail" as const, label: "Testmail" }] : []),
-      { id: "testchatt", label: "Testchatt" }
+      { id: "testchatt", label: "Testchatt" },
+      // Journalen (Livrustning-piloten): körningar, kostnad och
+      // överlämningar för den egna tenanten — vyn kundens kontaktperson
+      // (läsrollen) följer piloten i. Ren läsning, se JournalVy.tsx.
+      { id: "journal", label: "Journal" }
     ] as const
   );
 
   return (
     <div>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 border-b border-ink/12 pb-px">
         {flikar.map((item) => (
           <button
             key={item.id}
             type="button"
             onClick={() => setTab(item.id)}
-            aria-pressed={tab === item.id}
-            className={cn(flik, tab === item.id ? flikAktiv : flikInaktiv)}
+            className={cn(
+              "focus-ring -mb-px border-b-2 px-4 py-3 text-sm font-semibold transition",
+              tab === item.id ? "border-ochre text-ink" : "border-transparent text-ink-subtle hover:text-ink"
+            )}
           >
             {item.label}
           </button>
@@ -68,12 +75,14 @@ export function SupportWorkspaceTabs({ workspaceName }: Readonly<{ workspaceName
         {tab === "kundtjanst" ? (
           <Dashboard onMeta={onMeta} />
         ) : null}
+        {tab === "att_hantera" ? <Dashboard lager="att_hantera" /> : null}
         {tab === "testmail" ? <Dashboard lager="testmail" /> : null}
         {tab === "testchatt" ? (
           <div className="mx-auto max-w-3xl">
             <SupportChat testMode workspaceLabel={workspaceName ?? undefined} />
           </div>
         ) : null}
+        {tab === "journal" ? <JournalVy /> : null}
       </div>
     </div>
   );

@@ -216,6 +216,69 @@ def _kb_block(articles: list[dict[str, Any]]) -> str:
     )
 
 
+#: Namnen modellerna brukar välja när de lägger texten i ett objekt.
+_TEXTNYCKLAR = ("text", "draft", "final_reply", "revised_draft", "reply", "svar", "content", "message")
+
+
+def _text(varde: Any) -> str:
+    """Ett stegs textfält som text, vad modellen än returnerade.
+
+    Kontraktet säger sträng, men modellen svarar ibland med ett objekt.
+    Uppmätt 2026-09-19 i development: en följdfråga på engelska fick
+    `"draft": {...}`. Humaniseraren hoppas över på andra språk än svenska, så
+    objektet gick rakt in i strip_markdown, som kastade TypeError, och kunden
+    fick ett felmeddelande i stället för ett svar. På svenska hade
+    humaniseraren dolt felet genom att skriva ny text.
+
+    Ett objekt ger sin text under ett av de vanliga namnen, annars sitt
+    längsta textvärde (inte alla ihopslagna: ett objekt per språk hade gett
+    ett tvåspråkigt svar). En lista ger sina textdelar i följd.
+    """
+    if isinstance(varde, str):
+        return varde
+    if isinstance(varde, dict):
+        for nyckel in _TEXTNYCKLAR:
+            kandidat = varde.get(nyckel)
+            if isinstance(kandidat, str) and kandidat.strip():
+                return kandidat
+        texter = [_text(v) for v in varde.values()]
+        return max(texter, key=len, default="")
+    if isinstance(varde, list):
+        return "\n\n".join(t for t in (_text(v) for v in varde) if t.strip())
+    return ""
+
+
+#: Ord i en fältnyckel som avslöjar att fältet ÄR svarstexten, när modellen
+#: döpt det själv. Kontraktsfälten (sources_used, context_refs) räknas aldrig.
+_SVARSLEDTRADAR = ("draft", "utkast", "svar", "response", "reply", "text")
+
+
+def _textfalt(utdata: dict[str, Any], falt: str) -> str:
+    """Stegets svarstext ur `falt`, även när modellen döpt fältet själv.
+
+    Uppmätt 2026-09-19 i development: på engelska följde cs:draft-response
+    skillens eget MALLFORMAT i stället för JSON-kontraktet, alltså
+    `{"To": ..., "Draft response text": "Your order A-17 ...", "Notes for You":
+    {...}}` utan `draft`. Utkastet blev tomt och kunden fick reservtexten
+    ("I don't want to guess ..."), trots att modellen skrivit rätt svar.
+    Fältet med kontraktets namn vinner; annars det första vars namn bär en
+    av _SVARSLEDTRADAR. "Notes for You" och liknande bär ingen ledtråd och
+    når därför aldrig kunden.
+    """
+    direkt = _text(utdata.get(falt))
+    if direkt.strip():
+        return direkt
+    for nyckel, varde in utdata.items():
+        namn = str(nyckel).casefold()
+        if namn in ("sources_used", "context_refs") or namn.startswith("notes"):
+            continue
+        if any(ledtrad in namn for ledtrad in _SVARSLEDTRADAR):
+            text = _text(varde)
+            if text.strip():
+                return text
+    return ""
+
+
 async def _sok_kb(storage: Storage, tenant_id: str, fraga: str) -> list[dict[str, Any]]:
     """En KB-sökning, med embedding när det går och fulltext annars.
 
@@ -236,6 +299,23 @@ async def _sok_kb(storage: Storage, tenant_id: str, fraga: str) -> list[dict[str
     except Exception:  # noqa: BLE001 — utan embeddings används fulltext-fallback
         embedding = None
     return await storage.search_kb(tenant_id, fraga, embedding=embedding)
+
+
+def _korta_svar(svar: str, tak: int) -> str:
+    """Svaret inom kanalens teckentak, kortat vid ett MENINGSSLUT.
+
+    Förut kapades det på tecknet med ett "…" efter — mitt i ett ord, och
+    kunden läste "så att alla får ut så mycket som mö…" (kundtest mot
+    Livrustning 2026-09-19). Ett meningsslut i takets sista 40 % vinner; finns
+    inget kortas det vid ett ordslut med "…".
+    """
+    if len(svar) <= tak:
+        return svar
+    utdrag = svar[:tak]
+    slut = max(utdrag.rfind(t) for t in (". ", "! ", "? ", ".\n", "!\n", "?\n"))
+    if slut >= int(tak * 0.6):
+        return utdrag[: slut + 1].rstrip()
+    return utdrag[: tak - 1].rsplit(" ", 1)[0].rstrip(" ,;:–—") + "…"
 
 
 def _forenklad_fraga(subject: str, message: str) -> str:
@@ -797,8 +877,11 @@ async def run_support_agent(
             "sprak (ISO 639-1-koden för språket i kundens meddelande, t.ex. "
             "\"sv\", \"en\", \"ar\". \"sv\" när du är osäker eller meddelandet är för "
             "kort för att avgöra), "
-            "sokfraga_sv (kundens fråga omformulerad till en kort svensk "
-            "sökfråga för kunskapsbasen; tom sträng när meddelandet redan är på svenska)."
+            "sokfraga_sv (kundens fråga som en kort svensk sökfråga för "
+            "kunskapsbasen, ÄVEN när meddelandet redan är på svenska: kärnan i "
+            "frågan med de ord en hjälpartikel troligen har i rubriken, gärna med "
+            "ett synonymt ord, t.ex. \"betalningsmetoder betalsätt\" eller "
+            "\"leveranstid frakt\"; tom sträng bara när meddelandet inte är en fråga)."
         ),
         case_context=case_context,
     )
@@ -870,11 +953,23 @@ async def run_support_agent(
         sokfraga = f"{sokfraga} {senaste_kundreplik}".strip()
     # En fråga på ett annat språk hittar ingenting i en svensk fulltext-
     # sökning. Triagens svenska omformulering tar dess plats.
-    sokfraga_sv = str(triage.get("sokfraga_sv") or "").strip()
+    #
+    # På svenska LÄGGS omformuleringen till (2026-09-19, kundtest mot dev):
+    # "Vilka betalsätt har ni?" hittade inte artikeln "Betalningsmetoder vi
+    # accepterar" — den svenska stemmern kopplar inte `betalsät` till
+    # `betalningsmetod` — utan bara "Så gör du en retur", och den irrelevanta
+    # träffen stoppade de senare sökförsöken (de körs bara på en TOM lista).
+    # Kunden fick en överlämning på en FAQ. Fulltexten ORar orden och
+    # rangordnar med ts_rank, så fler ord ger fler träffmöjligheter.
+    sokfraga_sv = _text(triage.get("sokfraga_sv")).strip()
+    kb_forsok = ["hela meddelandet"]
     if not ar_svenska and sokfraga_sv:
         sokfraga = sokfraga_sv
+        kb_forsok = ["svensk sökfråga"]
+    elif sokfraga_sv and sokfraga_sv.casefold() not in sokfraga.casefold():
+        sokfraga = f"{sokfraga} {sokfraga_sv}"
+        kb_forsok = [f"hela meddelandet + omformulering ({sokfraga_sv!r})"]
     articles = await _sok_kb(storage, tenant_id, sokfraga)
-    kb_forsok = ["hela meddelandet" if ar_svenska or not sokfraga_sv else "svensk sökfråga"]
     if not articles:
         bredare = _forenklad_fraga(subject, message)
         if bredare:
@@ -1085,22 +1180,34 @@ async def run_support_agent(
             ),
             "sakerhet": (
                 "Ärendet rör något en människa måste avgöra (pengar, juridik, "
-                "personuppgifter eller ett tydligt missnöje). Svara på det "
-                "kunskapsbasen faktiskt täcker om det hjälper kunden, men lova "
-                "ingenting om utfallet. "
+                "personuppgifter eller ett tydligt missnöje). Svara bara på det "
+                "kunskapsbasen täcker om det besvarar kundens EGEN fråga — "
+                "återberätta aldrig allmänt vad produkten gör. Lova ingenting om "
+                "utfallet. "
             ),
         }.get(
             orsak or "",
-            "Du kan inte svara säkert på det här utifrån kunskapsbasen. Säg det "
-            "rakt ut — gissa inte, och påstå ingenting om produkten eller "
-            "villkoren. ",
+            "Du kan inte svara säkert på det här utifrån kunskapsbasen — gissa "
+            "inte, och påstå ingenting om produkten eller villkoren. ",
         )
+        # Kundtest 2026-09-22: "Vår supportagent krashade, vad gör ni åt det?"
+        # fick först en allmän beskrivning av agenten och sedan "jag har ingen
+        # information om vad som orsakar en krasch" — som om kunden pratade om
+        # något okänt. Överlämningen var rätt; svaret lät dumt. En kollega
+        # behöver detaljerna ändå, så svaret ska ta in dem direkt.
         uppgift = (
             inledning
-            + "Berätta sedan att en kollega tar över HÄR i chatten, att hela "
-            "samtalet följer med så att kunden inte behöver upprepa något, och att "
-            "svaret kommer i samma chatt. Lova ingen tid. Ren text, ingen "
-            "markdown. Returnera JSON: draft (svenska)."
+            + "Inled inte med en beskrivning av dig själv eller tjänsten, och säg "
+            "aldrig att du saknar information om det kunden beskriver som om det "
+            "vore något okänt. Beskriver kunden ett fel eller problem utan "
+            "detaljer: bekräfta kort att du förstått och be om det en kollega "
+            "behöver för att lösa det — till exempel vad som hände, ett "
+            "eventuellt felmeddelande och när det började — som högst två korta "
+            "frågor i samma mening. Berätta sedan att en kollega tar över HÄR i "
+            "chatten, att hela samtalet följer med så att kunden inte behöver "
+            "upprepa något, och att svaret kommer i samma chatt. Lova ingen tid. "
+            "Håll hela svaret kort. Ren text, ingen markdown. Returnera JSON: "
+            "draft (svenska)."
         )
     else:
         uppgift = (
@@ -1119,7 +1226,9 @@ async def run_support_agent(
         uppgift = uppgift.replace(
             "Returnera JSON: draft (svenska).",
             f"Skriv hela svaret på {sprak_namn} — kundens språk — även om "
-            f"kunskapsbasen är på svenska. Returnera JSON: draft ({sprak_namn}).",
+            f"kunskapsbasen är på svenska. Returnera JSON med fältet draft: EN "
+            f"sträng med hela svaret till kunden på {sprak_namn}. Inte skillens "
+            f"mallformat (To/Re/Notes) och inga andra textfält.",
         )
     draft = await steg(
         steps["cs:draft-response"],
@@ -1194,7 +1303,7 @@ async def run_support_agent(
         # saknade svar" är fel förklaring på ett hot.
         f"Avbrutet samtal: {abuse.niva}"
         if abuse.ska_eskalera
-        else escalation.get("reason") or ("retention_risk" if cancellation_risk else None)
+        else _text(escalation.get("reason")) or ("retention_risk" if cancellation_risk else None)
     )
     if escalated and not escalation_reason:
         escalation_reason = (
@@ -1224,7 +1333,16 @@ async def run_support_agent(
     # över är inga kunskapsluckor: en väderfråga ska inte bli ett
     # artikelförslag, och en kund som ber om en människa har inte avslöjat
     # något biblioteket saknar.
-    if (kb_saknar_svar or sakerhetskritiskt) and behover_eskaleringsbedomning:
+    #
+    # 2026-09-19: och inte när agenten ställer en motfråga. En fråga som är
+    # för vag att besvara går inte att skriva en artikel om, och luckan (om
+    # det finns en) fångas nästa tur när kunden förtydligat. ~5 000 tokens
+    # per motfrågetur.
+    if (
+        (kb_saknar_svar or sakerhetskritiskt)
+        and behover_eskaleringsbedomning
+        and svarslage != "fraga"
+    ):
         kb_forslag = await steg(
             steps["cs:kb-article"],
             ledger,
@@ -1256,7 +1374,7 @@ async def run_support_agent(
                 logger.exception("Kunde inte spara KB-förslaget för ärendet.")
 
     # --- Steg 6: retention (villkorat) -------------------------------------
-    current_draft = draft.get("draft", "")
+    current_draft = _textfalt(draft, "draft")
 
     if cancellation_risk and not abuse.ska_eskalera:
         retention_playbook = await storage.get_latest_context_doc(
@@ -1283,7 +1401,7 @@ async def run_support_agent(
                 f"## Nuvarande utkast\n{current_draft}"
             ),
         )
-        current_draft = retention.get("revised_draft") or current_draft
+        current_draft = _textfalt(retention, "revised_draft") or current_draft
 
     # --- Steg 7: humanizer (ALLTID sist) -----------------------------------
     #
@@ -1301,7 +1419,7 @@ async def run_support_agent(
         case_context=f"{case_context}\n\n## Text att humanisera\n{current_draft}",
     )
 
-    reply = strip_markdown(humanized.get("final_reply") or current_draft or "").strip()
+    reply = strip_markdown(_textfalt(humanized, "final_reply") or current_draft or "").strip()
     # Efter humaniseraren, före längdkapningen: en avslutningsfras utan namn
     # under är trasig oavsett vilket steg som skrev den.
     reply = strip_dangling_sign_off(reply)
@@ -1347,13 +1465,15 @@ async def run_support_agent(
                     + (
                         "Returnera JSON: final_reply (svenska)."
                         if ar_svenska
-                        else f"Skriv på {sprak_namn}. Returnera JSON: final_reply ({sprak_namn})."
+                        else f"Skriv på {sprak_namn}. Returnera JSON med fältet final_reply: "
+                        f"EN sträng med hela den rättade texten, inte skillens "
+                        f"mallformat (To/Re/Notes)."
                     )
                 ),
                 case_context=f"{case_context}\n\n## Kunskapsbas\n{kb_block}{systemblock}\n\n## Text att rätta\n{reply}",
             )
             kandidat = strip_dangling_sign_off(
-                strip_markdown(rattning.get("final_reply") or "").strip()
+                strip_markdown(_textfalt(rattning, "final_reply")).strip()
             )
             if kandidat and support_faktagrind.kontrollera(
                 kandidat, niva=installningar["faktakontroll"], kallor=kallor, tenant_namn=tenant_namn
@@ -1400,8 +1520,7 @@ async def run_support_agent(
             reply = support_texter.text("overlamningssvar", svar_sprak)
         else:
             reply = support_texter.text("tomt", svar_sprak)
-    if len(reply) > config["max_length"]:
-        reply = reply[: config["max_length"] - 1].rstrip() + "…"
+    reply = _korta_svar(reply, config["max_length"])
 
     # --- Kod: sidoeffekter -------------------------------------------------
     if escalated:

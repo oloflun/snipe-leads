@@ -16,6 +16,7 @@ förvillkorsgrinden fortfarande bevisar ordningen — se `requires` på steg 1.
 
 from __future__ import annotations
 
+from ..agentcore import humanizer_skopor
 from ..agentcore.packs import Playbook, PlaybookStep
 
 # thinking AV i hela leadsflödet — se research_playbook.THINKING för beslutet.
@@ -59,6 +60,15 @@ GROUNDING_V1 = Playbook(
             requires=("skill:mk:copy-editing",),
             overlay="leads-hard-rules",
             thinking=THINKING,
+            # Samma skopa som outreach V2:s humanizer (domartestad 2026-09-02):
+            # texten som repareras ÄR ett kallmejl. Hela skillen kostade
+            # ~2 700 tokens extra i en cykel som bara körs när grinden föll.
+            scope=humanizer_skopor.KALLMEJL,
+            rationale=(
+                "Reparationen gäller ett kallmejl. Samma skopa som utkastets "
+                "humanizer: exempel, registren för rapport/artikel/socialt och "
+                "mönster 10, 14 och 16 utelämnade."
+            ),
         ),
     ),
 )

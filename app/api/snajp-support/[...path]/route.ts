@@ -44,9 +44,7 @@ export async function PUT(request: NextRequest, { params }: Params) {
   });
 }
 
-// PATCH för delvisa uppdateringar (prospektets bedömning). Ingen DELETE här:
-// ingen backend-endpoint tar DELETE, och en metod som proxas utan mottagare
-// är bara en yta till att hålla stängd.
+// PATCH för delvisa uppdateringar (prospektets bedömning).
 export async function PATCH(request: NextRequest, { params }: Params) {
   const { path } = await params;
   const body = await request.text();
@@ -54,4 +52,12 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     method: "PATCH",
     body: body || undefined
   });
+}
+
+// DELETE fick sin första mottagare 2026-09-21 (koppla ur inkorg,
+// DELETE /api/inbox/mailboxes/{id}). Innan dess proxades metoden medvetet
+// inte — en metod utan mottagare är bara en yta att hålla stängd.
+export async function DELETE(request: NextRequest, { params }: Params) {
+  const { path } = await params;
+  return proxyAsTenant(backendPath(path, request.nextUrl.search), { method: "DELETE" });
 }

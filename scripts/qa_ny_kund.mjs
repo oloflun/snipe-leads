@@ -86,7 +86,16 @@ try {
     await sida.getByLabel(etikett).fill(varde);
   }
   await sida.waitForTimeout(400);
-  await sida.getByRole("button", { name: /Spara och läs in/ }).click();
+  // Wizard i fyra steg sedan 2026-09-20 — se OnboardingWizard.
+  await sida.getByRole("button", { name: /Fortsätt/ }).click();
+  await sida.getByRole("radio", { name: "Industri & tillverkning" }).click();
+  await sida.getByRole("button", { name: /Fortsätt/ }).click();
+  const kontaktNamnFalt = sida.getByLabel(/^Namn/);
+  if (!(await kontaktNamnFalt.inputValue())) await kontaktNamnFalt.fill("QA Nykund");
+  const kontaktMejlFalt = sida.getByLabel(/^E-post/);
+  if (!(await kontaktMejlFalt.inputValue())) await kontaktMejlFalt.fill(EPOST);
+  await sida.getByRole("button", { name: /Fortsätt/ }).click();
+  await sida.getByRole("button", { name: /Öppna arbetsytan/ }).click();
   await sida.waitForURL((u) => !u.pathname.startsWith("/onboarding"), { timeout: 60_000 }).catch(() => {});
   await sida.waitForLoadState("networkidle").catch(() => {});
   await sida.waitForTimeout(2500);

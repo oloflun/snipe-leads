@@ -38,6 +38,16 @@ const nextConfig: NextConfig = {
           { key: "Cache-Control", value: "no-cache, must-revalidate" },
           { key: "Service-Worker-Allowed", value: "/" }
         ]
+      },
+      {
+        /**
+         * Chattwidgetens snippet ligger i kundernas HTML och pekar hit. Kort
+         * cache: en fix ska nå kundens besökare inom minuter, inte efter en
+         * CDN-dags eftertanke — men varje sidvisning hos kunden ska inte
+         * heller kosta oss en förfrågan.
+         */
+        source: "/widget.js",
+        headers: [{ key: "Cache-Control", value: "public, max-age=300" }]
       }
     ];
   },

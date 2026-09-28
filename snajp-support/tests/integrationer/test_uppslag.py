@@ -234,6 +234,22 @@ async def test_testchatten_simulerar_skrivande_anrop():
 
 
 @pytest.mark.anyio
+async def test_foljdfragan_ber_om_nytt_uppslag_med_samtalets_identifierare(svara):
+    """Uppmätt i development: en följdfråga ("Which carrier?") fick inget nytt
+    uppslag eftersom svaret "redan stod i förra svaret", och lämnades sedan
+    över. Agentens egna svar räknas aldrig som källa, så steget måste be om
+    ett nytt uppslag. Både overlayen och uppgiften säger det."""
+    storage = MemoryStorage()
+    await _med_integration(storage)
+    llm = _FejkLLM([{"anrop": [], "klar": True}])
+    await _kor(storage, llm)
+    system, anvandare = llm.prompter[0][0]["content"], llm.prompter[0][1]["content"]
+    assert "Fråga systemet igen när kunden följer upp" in system  # overlayen
+    assert "följdfråga om något som kom ur kundens system" in anvandare  # uppgiften
+    assert "räknas inte som underlag" in anvandare
+
+
+@pytest.mark.anyio
 async def test_trasig_integration_hoppas_over_med_besked():
     storage = MemoryStorage()
     await _med_integration(storage)

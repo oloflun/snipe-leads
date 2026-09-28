@@ -26,6 +26,7 @@ KUNDDATA_FALT = (
     "faktureringsmejl",
     "telefon",
     "foretagsadress",
+    "policy_url",
     "kund_sedan",
     "avtal_signerat",
 )
@@ -75,9 +76,49 @@ class Storage(Protocol):
 
     async def list_tenants(self) -> list[dict[str, Any]]: ...
 
+    async def set_tenant_active(self, tenant_id: str, *, active: bool) -> dict[str, Any] | None:
+        """Slår på eller av kundens konto. None när tenanten inte finns.
+
+        Avstängning är trial-konverteringens manuella väg (beslut 2026-09-20):
+        `validate_api_key` avvisar nycklar för en inaktiv tenant, så alla tre
+        agenterna, webben och den publika chatten låses ute i samma ögonblick.
+        Ingenting raderas — en återaktivering öppnar allt igen.
+        """
+        ...
+
+    async def get_tenant_products(self, tenant_id: str) -> list[str] | None:
+        """Paketet ur den kopplade arbetsytans `workspaces.products`.
+
+        `None` betyder "ingen kopplad arbetsyta" (configfil-kunder), inte
+        "inga produkter" — anropare ska behandla None som okänt och inte
+        stänga något på det. Se produktgrinden i app/api/deps.py.
+        """
+        ...
+
     # -- Inkorgar -----------------------------------------------------------
 
     async def list_mailboxes(self, tenant_id: str) -> list[dict[str, Any]]: ...
+
+    async def upsert_mailbox(
+        self,
+        tenant_id: str,
+        *,
+        provider: str,
+        address: str,
+        imap_host: str | None = None,
+        secret_enc: str | None = None,
+    ) -> dict[str, Any]:
+        """Kopplar (eller kopplar OM) en inkorg — självbetjäningsvägen.
+
+        Upsert på (tenant_id, address): en kund som skriver in ett nytt
+        app-lösenord för samma adress ska uppdatera raden, inte samla
+        dubbletter. `secret_enc` är Fernet-krypterat i API-lagret INNAN det
+        når hit (migration 077) — den här metoden får aldrig se klartext."""
+        ...
+
+    async def delete_mailbox(self, tenant_id: str, mailbox_id: str) -> bool:
+        """Kopplar ur en inkorg. True när en rad faktiskt togs bort."""
+        ...
 
     async def touch_mailbox_sync(
         self, tenant_id: str, mailbox_id: str, *, last_error: str | None
@@ -159,6 +200,40 @@ class Storage(Protocol):
         self, tenant_id: str, conversation_id: str
     ) -> list[dict[str, Any]]: ...
 
+    # -- Trial (migration 074) ----------------------------------------------
+
+    async def list_trial_paminnelse_kandidater(self, *, idag: date) -> list[dict[str, Any]]:
+        """Arbetsytor vars trial går ut om exakt 7 eller exakt 1 dagar.
+
+        En kandidat är en riktig arbetsyta (inte demo) utan signerat avtal
+        vars påminnelse av den typen inte redan är loggad. Raden bär
+        `workspace_id`, `name`, `trial_slut`, `email` (ägarens) och
+        `dagar_kvar` (7 eller 1). Läses OSKOPAT — plattformssvep, inte
+        kunddata; se app/jobs/trial_paminnare.py.
+        """
+        ...
+
+    async def spara_trial_paminnelse(
+        self, *, workspace_id: str, typ: str, skickad_till: str
+    ) -> bool:
+        """Loggar en skickad påminnelse. False när typen redan var loggad.
+
+        Skickning sker FÖRE loggning (hellre en dubblett efter en krasch än
+        en tyst utebliven påminnelse); unikheten per (workspace, typ) är det
+        som gör sveparen omkörningsbar.
+        """
+        ...
+
+    async def list_customer_emails(self, tenant_id: str) -> list[str]:
+        """Tenantens egna slutkunders mejladresser (ss_customer_identifiers).
+
+        Underlaget till send_guard regel 3:s `egna_kunder`: en befintlig kund
+        ska inte få ett kallmejl om det den redan köpt. Fram till 2026-09-20
+        skickade schemaläggaren en tom mängd hit — spärren fanns i guarden men
+        hade aldrig data att döma mot.
+        """
+        ...
+
     async def find_customer(self, tenant_id: str, *, email: str) -> dict[str, Any] | None:
         """Kunden med den här e-postidentifieraren, eller None. Skapar ALDRIG.
 
@@ -221,6 +296,12 @@ class Storage(Protocol):
         category: str,
         embedding: list[float] | None = None,
     ) -> dict[str, Any]: ...
+
+    async def delete_kb_article(self, tenant_id: str, artikel_id: str) -> bool:
+        """Tar bort EN artikel i tenantens egen bas. False om den inte finns
+        (eller tillhör någon annan — RLS gör de två fallen omöjliga att skilja
+        åt, och det ska de vara). Kräver migration 069 (delete-grant)."""
+        ...
 
     # -- Agentens föreslagna lärdomar (självlärning, 2026-08-26) -------------
     #
@@ -562,6 +643,24 @@ class Storage(Protocol):
         pengar hos leverantören som skarpa körningar."""
         ...
 
+    async def sum_support_tokens(self, tenant_id: str, *, hours: int = 24) -> int:
+        """Supportens motsvarighet till sum_leads_tokens: summan för
+        SUPPORT_BUDGET_AGENT_TYPES de senaste `hours` timmarna — frågan
+        bakom supportbudgeten (app/budget.py). Testkörningar räknas MED,
+        av samma skäl."""
+        ...
+
+    async def daily_support_usage(
+        self, tenant_id: str, *, days: int = 30
+    ) -> list[dict[str, Any]]:
+        """Journalens dagliga serie (GET /api/usage): en rad per dag med
+        körningar för SUPPORT_BUDGET_AGENT_TYPES, nyaste först. Fält per rad:
+        `datum` (ISO-dag), `korningar`, `korningar_test`, `tokens_in`,
+        `tokens_out`. Dagar utan körningar utelämnas — en tom dag är ingen
+        rad, inte en nollrad (till skillnad från weekly_analytics, som är en
+        kurva och behöver sina hål ifyllda)."""
+        ...
+
     # -- Leadslistor (tillägget 'leadlists', migration 060) -----------------
     #
     # Metoderna står i PROTOKOLLET av samma skäl som log_agent_run: en
@@ -820,7 +919,11 @@ class Storage(Protocol):
         search: str | None = None,
         limit: int = 50,
         is_test: bool | None = False,
-    ) -> list[dict[str, Any]]: ...
+        inkludera_larm: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Utan statusfilter utesluts 'att_hantera' (migration 078) — utom
+        när `inkludera_larm` är satt, vilket get_email-uppslag behöver."""
+        ...
 
     async def get_email(self, tenant_id: str, email_id: str) -> dict[str, Any] | None: ...
 
@@ -832,7 +935,12 @@ class Storage(Protocol):
         status: str | None = None,
         ticket_id: str | None = None,
         is_test: bool | None = None,
-    ) -> dict[str, Any] | None: ...
+        hanterad: bool | None = None,
+    ) -> dict[str, Any] | None:
+        """`hanterad` styr `hanterad_at` (migration 071): True stämplar (om
+        inte redan stämplad), False nollar, None rör inte. Oberoende av
+        `status` — se migrationens motivering."""
+        ...
 
     async def add_attachment(
         self,
@@ -860,6 +968,8 @@ class Storage(Protocol):
         reasoning: str,
         kb_sources: list[dict[str, Any]],
         model: str,
+        offertforfragan: bool = False,
+        utbildningsintresse: bool = False,
     ) -> dict[str, Any]: ...
 
     async def create_draft(
@@ -1185,7 +1295,7 @@ class Storage(Protocol):
         *,
         underlag_id: str,
         serie: str,
-        nummer: str,
+        nummer: str | None = None,
         datum: date,
         text: str,
         rader: list[dict[str, Any]],
@@ -1195,6 +1305,12 @@ class Storage(Protocol):
         Rader och huvud i samma skrivning: ett verifikat utan rader balanserar
         inte, och ett halvskrivet verifikat är precis den sortens post som får
         en periodrapport att se rimlig ut och vara fel.
+
+        `nummer=None` betyder "nästa lediga i serien", räknat av LAGRINGEN i
+        själva skrivningen. Anropare ska inte räkna numret själva ur en
+        listlängd — två samtidiga anrop läser då samma längd och skriver samma
+        nummer (granskningsfynd snipe-a4y). Postgres backar upp med ett unikt
+        index per (tenant, serie, nummer) och försöker om vid kollision.
         """
         ...
 
@@ -1262,6 +1378,12 @@ AGENT_RUN_TYPES = (
 #: app/leads/budget.py). Delmängd av AGENT_RUN_TYPES — bor här av samma skäl
 #: som resten: EN lista, speglad av båda lagringarna, aldrig två svar.
 LEADS_BUDGET_AGENT_TYPES = ("leads_research", "leads_outreach", "leads_svar", "leads_followup")
+
+#: Agenttyperna som räknas mot supportbudgeten (sum_support_tokens /
+#: app/budget.py). Bara 'support' i dag: chatten och kanalerna loggar sina
+#: körningar så, medan e-postpipelinens fristående triage-anrop inte loggas
+#: som agent_runs alls — grinden prövas ändå i processorn.
+SUPPORT_BUDGET_AGENT_TYPES = ("support",)
 
 
 # Värdemängden för bk_underlag.status, spegel av check-villkoret i migration

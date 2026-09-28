@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Vaxel } from "@/components/settings/Vaxel";
-import { Rad, Radlista } from "@/components/ui";
 import { colorScheme, dataTheme, TEMA_COOKIE, type Tema } from "@/lib/tema";
 
 /**
@@ -68,22 +67,37 @@ export function TemaSettings({ initial }: Readonly<{ initial: Tema }>) {
     document.cookie = `${TEMA_COOKIE}=${nytt}; path=/; max-age=31536000; samesite=lax`;
   }
 
-  // En rad, samma form som övriga inställningar. "Hur det sparas" stod här
-  // som en egen etikett med ett stycke under, och sidrubrikens ingress sa
-  // samma sak en gång till; nu är det en mening vid växeln. Provbiten med
-  // "Brödtext på papper", "Primär knapp" och "Accent" är borttagen: växeln
-  // byter hela sidan, så sidan ÄR förhandsvisningen, och rutans text handlade
-  // bara om rutan själv (F-018).
   return (
-    <Radlista ariaLabel="Tema">
-      <Rad>
+    <div className="grid gap-7">
+      <div className="border-t border-ink/15 pt-5">
         <Vaxel
           etikett="Mörkt läge"
-          beskrivning="Valet gäller bara den här webbläsaren och slår igenom direkt. På en annan dator börjar arbetsytan i ljust läge tills du väljer om."
           pa={tema === "morkt"}
           onChange={(pa) => valj(pa ? "morkt" : "ljust")}
         />
-      </Rad>
-    </Radlista>
+      </div>
+
+      {/* Provbiten. En växel som ändrar hela sidan behöver inte en
+          förhandsvisning — men rutan visar de fyra rollerna vid sidan av
+          varandra, och det är där ett tema faktiskt går sönder: när accenten
+          slutar synas mot papperet eller den dämpade texten blir oläslig. */}
+      <div className="border-t border-ink/15 pt-5">
+        <p className="kicker text-mineral">Så ser ytorna ut</p>
+        <div className="mt-4 rounded-panel border border-ink/15 bg-paper2/50 p-5">
+          <p className="text-[15px] font-medium text-ink">Brödtext på papper</p>
+          <p className="mt-1 text-[0.875rem] leading-6 text-mineral">Dämpad text</p>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <span className="rounded-input bg-ink px-3 py-1.5 text-[0.8125rem] font-semibold text-paper">
+              Primär knapp
+            </span>
+            <span className="rounded-input border border-ochre/40 bg-ochre/10 px-3 py-1.5 text-[0.8125rem] text-warning">
+              Accent
+            </span>
+            <span className="text-[0.8125rem] text-moss">Klart</span>
+            <span className="text-[0.8125rem] text-danger">Fel</span>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

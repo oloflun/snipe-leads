@@ -48,7 +48,7 @@ export function InstallningarVy() {
     <div className="space-y-10">
       <PageHeader
         rubrik="Inställningar"
-        beskrivning="Vad agenten får göra per ärendekategori, och vilka inkorgar den läser. Ändringar görs i arbetsytan på Snajp-webben — här ser du vad som gäller."
+        beskrivning="Ändras i arbetsytan på Snajp-webben."
       />
 
       {fel ? (
@@ -64,8 +64,8 @@ export function InstallningarVy() {
             <SkeletonRows />
           </div>
         ) : regler.length === 0 ? (
-          <p className="mt-3 border-y border-ink/15 py-4 text-[0.9375rem] text-ink/55">
-            Inga regler ännu — standardläget är utkast till dig för allt.
+          <p className="mt-3 border-y border-ink/15 py-4 text-[0.9375rem] text-ink-muted">
+            Inga regler — allt blir utkast till dig.
           </p>
         ) : (
           <dl className="mt-3 divide-y divide-ink/12 border-y border-ink/15">
@@ -91,9 +91,8 @@ export function InstallningarVy() {
             <SkeletonRows />
           </div>
         ) : inkorgar.length === 0 ? (
-          <p className="mt-3 border-y border-ink/15 py-4 text-[0.9375rem] text-ink/55">
-            Ingen inkorg kopplad ännu — koppla en i arbetsytan på Snajp-webben,
-            så läser agenten mejlen därifrån.
+          <p className="mt-3 border-y border-ink/15 py-4 text-[0.9375rem] text-ink-muted">
+            Ingen inkorg kopplad.
           </p>
         ) : (
           <div className="mt-3 divide-y divide-ink/12 border-y border-ink/15">

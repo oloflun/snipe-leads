@@ -39,6 +39,13 @@ export async function GET(
   if (hemlighet && backend) {
     try {
       const tenant = await requireSnajpTenant();
+      // Läsrollen stannar i huvudappen: support-webb-portalen har ingen
+      // rollmodell (en biljett ger full redigeringsrätt där), så en viewer
+      // som fick biljetten hade kunnat skriva bakvägen. Journalen och
+      // inkorgen finns i huvudappens läsytor.
+      if (tenant.roll === "viewer") {
+        return NextResponse.json({ error: "Hittades inte." }, { status: 404 });
+      }
       const biljett = skapaBokforingsBiljett(
         {
           k: tenant.apiKey,

@@ -15,23 +15,15 @@ import { ShieldCheck } from "lucide-react";
  * Originalet är `INTEGRITETSNOTIS` i snajp-support/app/agent/kvitto_agent.py
  * och följer med API-svaren. Den här kopian är för ögat; ändras den ena ska
  * den andra ändras i samma commit.
- *
- * 2026-09-27: em-strecket i sista meningen blev en punkt (DESIGN.md: inga
- * em-streck i synlig text), och texten står i brödtextstorlek i stället för
- * 13 px. Vad den säger är oförändrat. Backendens kopia har redan en annan
- * ordalydelse och ett eget em-streck; den ligger utanför den här ändringen.
  */
 export function Integritetsnotis() {
   return (
-    <p className="flex items-start gap-2.5 rounded-card border border-ink/12 bg-paper2/40 px-4 py-3.5 text-[0.9375rem] leading-6 text-ink-muted">
+    <p className="flex items-start gap-2.5 rounded-card border border-ink/12 bg-paper2/40 px-4 py-3.5 text-[0.8125rem] leading-6 text-ink-muted">
       <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-moss" aria-hidden />
       <span>
-        <strong className="font-semibold text-ink-muted">Dina mejl stannar dina.</strong>{" "}
-        Vi läser med read-only-åtkomst, säljer aldrig din data och delar den
-        aldrig med tredje part utöver den AI-tjänst som tolkar kvittotexten,
-        under personuppgiftsbiträdesavtal. Mejlens text sparas inte. Det som
-        lagras är de utlästa kvittofälten, avsändare och ämnesrad samt en
-        kontrollsumma.
+        Read-only-åtkomst. Inget säljs eller delas med tredje part utöver AI-tjänsten som
+        tolkar kvittotexten, under personuppgiftsbiträdesavtal. Mejlens text sparas inte,
+        bara kvittofälten, avsändare, ämnesrad och en kontrollsumma.
       </span>
     </p>
   );

@@ -127,14 +127,21 @@ async def run_support(modes: list[str]) -> dict:
             print(f"  kör {key} ...", flush=True)
             results[key] = await _run_support_scenario(scenario, mode)
 
-    # Skill-integritet: jämför injicerad längd mot registrets egen fulla längd.
+    # Skill-integritet: jämför injicerad längd mot vad steget SKA ladda — hela
+    # skillen, eller dess skopa när playbooken deklarerar en (humaniseraren är
+    # skopad sedan 2026-09-19, agentcore/humanizer_skopor.py). Mot hela skillen
+    # hade en avsiktlig skopning rapporterats som en ofullständig laddning.
+    from app.agent.support_playbook import SUPPORT_V1
+
+    skopade = {steg.skill: len(steg.render()) for steg in SUPPORT_V1.steps if steg.scope}
     integrity = {}
     for result in results.values():
         for entry in result.get("step_log", []):
             skill = entry["skill"]
-            expected = len(load_full_skill(skill))
+            expected = skopade.get(skill) or len(load_full_skill(skill))
             integrity[skill] = {
                 "expected_full_chars": expected,
+                "scoped": skill in skopade,
                 "injected_chars": entry["injected_chars"],
                 "complete": entry["injected_chars"] == expected,
             }

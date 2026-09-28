@@ -61,9 +61,13 @@ from ..kvitton.sammanfattning import (
 from ..kvitton.skanning import skanna_inkorg
 from ..kvitton.tolkning import tolka_deterministiskt, valutaspärr
 from .bookkeeping import _kvotsvar
-from .deps import require_tenant
+from .deps import require_bookkeeping_tenant, require_tenant
 
-router = APIRouter()
+# Produktgrinden på router-nivå: varje endpoint här är bookkeeping-paketets
+# yta, och grinden i proxyn räcker inte när nyckeln används direkt (snipe-h12).
+# require_tenant i endpoint-signaturerna kostar inget extra — FastAPI cachar
+# dependencyn per request.
+router = APIRouter(dependencies=[Depends(require_bookkeeping_tenant)])
 logger = logging.getLogger("snajp-support.kvitton")
 
 
@@ -337,12 +341,12 @@ async def ta_emot_kvittofil(
     )
 
     if verifikatrader:
-        befintliga = await storage.list_bk_verifikat(tenant_id)
+        # nummer=None: nästa lediga i serien sätts av lagringen (snipe-a4y).
         await storage.create_bk_verifikat(
             tenant_id,
             underlag_id=underlag["id"],
             serie="A",
-            nummer=str(len(befintliga) + 1),
+            nummer=None,
             datum=falt["datum"],
             text=falt.get("motpart", ""),
             rader=[
@@ -501,7 +505,7 @@ async def godkann(
             tenant_id,
             underlag_id=kvitto_id,
             serie="A",
-            nummer=str(len(befintliga) + 1),
+            nummer=None,
             datum=falt["datum"],
             text=str(falt.get("motpart") or ""),
             rader=[

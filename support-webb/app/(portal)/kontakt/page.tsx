@@ -11,10 +11,7 @@ const KONTAKT_MEJL = "kontakt@snajp.se";
 export default function Sida() {
   return (
     <div className="space-y-8">
-      <PageHeader
-        rubrik="Kontakt"
-        beskrivning="Snajp Support är en tjänst från Snajp. Frågor, fel och önskemål går rakt till oss."
-      />
+      <PageHeader rubrik="Kontakt" />
 
       <section className="max-w-[38rem]">
         <div className="border-y border-ink/15 py-6">
@@ -25,32 +22,10 @@ export default function Sida() {
           >
             {KONTAKT_MEJL}
           </a>
-          <p className="mt-3 max-w-[52ch] text-[0.9375rem] leading-6 text-ink/62">
-            Skriv vad det gäller — ett ärende, ett utkast eller en regel — så
-            blir svaret bättre.
-          </p>
           <a href={`mailto:${KONTAKT_MEJL}?subject=${encodeURIComponent("Snajp Support")}`} className={`${btnPrimary} mt-5`}>
             <Mail className="h-4 w-4" aria-hidden />
             Skriv till oss
           </a>
-        </div>
-
-        <div className="py-6">
-          <h2 className="font-display text-[1.25rem]">Bra att veta</h2>
-          <ul className="mt-3 space-y-3 text-[0.9375rem] leading-6 text-ink/62">
-            <li>
-              Sändknappen är din: utkast skickas bara när du godkänt dem, om
-              du inte själv satt en kategori på "svarar själv".
-            </li>
-            <li>
-              Agenten svarar bara ur er kunskapsbas — ärenden utan täckning
-              eskaleras till dig i stället för att gissas.
-            </li>
-            <li>
-              Regler och inkorgar ställs in i arbetsytan på Snajp-webben och
-              visas här under Inställningar.
-            </li>
-          </ul>
         </div>
       </section>
     </div>

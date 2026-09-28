@@ -2,9 +2,11 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from ..budget import SupportBudgetExceededError, kontrollera_support_budget
+from ..email_pipeline.omformulering import omformulera_utkast
 from ..email_pipeline.sender import SandningsFel, skicka_supportsvar
 from .deps import require_tenant
-from .schemas import ApproveDraftRequest, RejectDraftRequest
+from .schemas import ApproveDraftRequest, OmformuleraDraftRequest, RejectDraftRequest
 
 router = APIRouter()
 
@@ -73,6 +75,47 @@ async def approve_draft(
         },
     )
     return {"status": "sent", "edited": edited, "content": content}
+
+
+@router.post("/api/drafts/{draft_id}/omformulera")
+async def omformulera_draft(
+    request: Request,
+    draft_id: str,
+    payload: OmformuleraDraftRequest,
+    tenant: dict = Depends(require_tenant),
+) -> dict:
+    """Skriver om utkastet i vald riktning och returnerar den nya texten.
+
+    Persisterar INGENTING: utkastet står kvar som pending med sitt original,
+    och den omskrivna texten blir verklig först när granskaren godkänner den
+    (approve med edited_content). Se omformulering.py för hela resonemanget.
+    """
+    storage = request.app.state.storage
+    tenant_id = tenant["tenant_id"]
+    draft = await storage.get_draft(tenant_id, draft_id)
+    if not draft:
+        raise HTTPException(status_code=404, detail="Utkastet finns inte.")
+    if draft["status"] not in ("pending",):
+        raise HTTPException(status_code=409, detail=f"Utkastet är redan {draft['status']}.")
+
+    # Samma dygnsbudget som resten av supporten: en omformulering är ett
+    # LLM-anrop och ska inte kunna köras obegränsat när taket är nått.
+    try:
+        await kontrollera_support_budget(storage, tenant_id)
+    except SupportBudgetExceededError as fel:
+        raise HTTPException(status_code=429, detail=str(fel)) from fel
+
+    email = await storage.get_email(tenant_id, draft["email_id"])
+    text = payload.content if (payload.content or "").strip() else draft["content"]
+    nytt = await omformulera_utkast(lage=payload.lage, content=text, email=email)
+
+    await storage.log_decision(
+        tenant_id,
+        email_id=draft["email_id"],
+        event="draft_omformulerad",
+        detail={"lage": payload.lage},
+    )
+    return {"content": nytt, "lage": payload.lage}
 
 
 @router.post("/api/drafts/{draft_id}/reject")

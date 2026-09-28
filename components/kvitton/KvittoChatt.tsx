@@ -2,7 +2,6 @@
 
 import { Loader2, Send, ShieldAlert, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { meta, rubrikPanel } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 /**
@@ -33,13 +32,13 @@ const FORSLAG = [
 ];
 
 const NATFEL = [
-  "Jag når inte assistenten just nu. Kontrollera uppkopplingen och prova igen. Det du skrev står kvar.",
-  "Anropet kom inte fram. Vänta en liten stund och tryck på skicka igen, så gör vi ett nytt försök."
+  "Kunde inte nå assistenten. Försök igen.",
+  "Anropet kom inte fram. Försök igen."
 ];
 
 const SVARSFEL = [
-  "Assistenten fick inte fram ett svar den här gången. Prova gärna igen om en liten stund. Frågan står kvar.",
-  "Något hakade upp sig när svaret skulle tas fram. Skicka frågan igen, eller formulera den på ett annat sätt."
+  "Inget svar den här gången. Försök igen.",
+  "Något gick fel. Skicka frågan igen."
 ];
 
 function slumpad(texter: string[]): string {
@@ -112,16 +111,8 @@ export function KvittoChatt() {
     <section className="flex flex-col rounded-panel border border-ink/15 bg-paper2/40">
       <header className="flex items-center gap-2 border-b border-ink/15 px-4 py-3">
         <Sparkles className="h-4 w-4 shrink-0 text-warning" aria-hidden />
-        <h2 className={rubrikPanel}>Kvitto-assistenten</h2>
+        <h2 className="text-[0.9375rem] font-semibold text-ink">Kvitto-assistenten</h2>
       </header>
-
-      {/* En mening i brödtextstorlek. "Fråga om en period, en kategori eller
-          ett enskilt kvitto" stod före den i 13 px; förslagsknapparna under
-          visar redan vad man kan fråga. Det som står kvar är det man inte
-          ser: att assistenten aldrig räknar själv. */}
-      <p className="px-4 pt-3 text-[0.9375rem] leading-6 text-ink-muted">
-        Assistenten hämtar siffrorna ur dina inlästa kvitton och räknar aldrig själv.
-      </p>
 
       <div className="flex min-h-[16rem] flex-col gap-3 overflow-y-auto px-4 py-4 lg:max-h-[26rem]">
         {rader.length === 0 ? (
@@ -144,7 +135,7 @@ export function KvittoChatt() {
           <div
             key={i}
             className={cn(
-              "max-w-[92%] rounded-card px-3.5 py-2.5 text-[0.9375rem] leading-6",
+              "max-w-[92%] rounded-card px-3.5 py-2.5 text-[0.875rem] leading-6",
               rad.roll === "kund"
                 ? "ml-auto bg-ink text-paper"
                 : "border border-ink/15 bg-paper text-ink-muted"
@@ -152,7 +143,7 @@ export function KvittoChatt() {
           >
             <p className="whitespace-pre-wrap">{rad.text}</p>
             {rad.roll === "assistent" && rad.grundad === false ? (
-              <p className="mt-2 flex items-start gap-1.5 border-t border-warning/30 pt-2 text-[0.8125rem] leading-5 text-warning">
+              <p className="mt-2 flex items-start gap-1.5 border-t border-warning/30 pt-2 text-[0.75rem] leading-5 text-warning">
                 <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
                 Stoppat av beloppskontrollen: en siffra gick inte att härleda.
               </p>
@@ -161,7 +152,7 @@ export function KvittoChatt() {
         ))}
 
         {busy ? (
-          <p className={cn(meta, "flex items-center gap-2")}>
+          <p className="flex items-center gap-2 text-[0.8125rem] text-mineral">
             <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
             Hämtar siffrorna…
           </p>
