@@ -18,7 +18,18 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useArbetsvag } from "@/components/AppShell";
 import { EjAktiverad, arEjAktiverad } from "@/components/EjAktiverad";
-import { Badge, btnPrimary, btnSecondary } from "@/components/ui";
+import {
+  Badge,
+  Tomt,
+  btnPrimary,
+  btnSecondary,
+  etikett,
+  flik,
+  flikAktiv,
+  flikInaktiv,
+  meta as metaKlass,
+  rubrikPanel
+} from "@/components/ui";
 import { mejlaOss } from "@/components/marketing/copy";
 import { createDemoSupportApi } from "@/lib/demo/support-inbox";
 import { readJsonBody } from "@/lib/http/json";
@@ -124,7 +135,7 @@ function ConfidenceBar({ value }: Readonly<{ value: number }>) {
           style={{ width: `${percent}%` }}
         />
       </span>
-      <span className="font-mono text-[11px] text-ink-subtle">{percent}%</span>
+      <span className={cn(metaKlass, "num")}>{percent}%</span>
     </span>
   );
 }
@@ -372,7 +383,7 @@ export function Dashboard({
       // vilket är rätt beteende och fel intryck.
       setSyncInfo(
         svar?.kb_tom
-          ? "Testmailen är inlästa. Kunskapsbasen är tom, så agenterna eskalerar allt tills ni lagt in något — det är avsiktligt, de gissar aldrig."
+          ? "Testmailen är inlästa. Kunskapsbasen är tom, så agenterna eskalerar allt tills ni lagt in något. Det är avsiktligt: de gissar aldrig."
           : `${svar?.ingested ?? 0} nya mail i inkorgen. Agenterna sorterar och skriver utkast nu.`
       );
       if (svar?.processing) void pollaTills();
@@ -519,13 +530,14 @@ export function Dashboard({
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Sök avsändare, ämne eller innehåll…"
-            className="focus-ring min-h-11 w-full rounded-input bg-paper py-2.5 pl-9 pr-3 text-sm outline-none placeholder:text-ink/35"
+            className="focus-ring min-h-11 w-full rounded-input bg-paper py-2.5 pl-9 pr-3 text-[1rem] outline-none placeholder:text-ink/35"
           />
         </div>
         <select
+          aria-label="Filtrera på status"
           value={statusFilter ?? ""}
           onChange={(event) => setStatusFilter(event.target.value || null)}
-          className="focus-ring min-h-11 rounded-input bg-paper px-3 py-2.5 text-sm"
+          className="focus-ring min-h-11 rounded-input bg-paper px-3 py-2.5 text-[1rem]"
         >
           <option value="">Alla statusar</option>
           {Object.entries(STATUS_META).map(([value, meta]) => (
@@ -545,31 +557,29 @@ export function Dashboard({
       </div>
 
       {error ? (
-        <div className="rounded-[8px] border border-danger/25 bg-danger/5 px-4 py-3 text-sm text-ink-muted">{error}</div>
+        <div className="rounded-input border border-danger/25 bg-danger/5 px-4 py-3 text-[0.9375rem] text-ink-muted">{error}</div>
       ) : null}
       {syncInfo ? (
         <div
           className={
             syncInfo.includes("Kunskapsbasen är tom")
-              ? "rounded-[8px] border border-ochre/40 bg-ochre/10 px-4 py-3 text-sm text-ink-muted"
-              : "rounded-[8px] border border-moss/25 bg-moss/5 px-4 py-3 text-sm text-ink-muted"
+              ? "rounded-input border border-ochre/40 bg-ochre/10 px-4 py-3 text-[0.9375rem] text-ink-muted"
+              : "rounded-input border border-moss/25 bg-moss/5 px-4 py-3 text-[0.9375rem] text-ink-muted"
           }
         >
           {syncInfo}
         </div>
       ) : null}
 
-      {/* Fack-översikt */}
+      {/* Fackfilter i husets flikform (`flik` i components/ui.tsx), samma
+          piller som Iris "Alla bolag / Listor". Stod tidigare i 12 px med
+          ochre kant på det valda. */}
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={() => setCategoryFilter(null)}
-          className={cn(
-            "focus-ring rounded-input border px-3 py-2 text-xs font-semibold transition",
-            categoryFilter === null
-              ? "border-ochre bg-ochre/10 text-ink"
-              : "bg-paper2/60 text-ink-muted hover:text-ink"
-          )}
+          aria-pressed={categoryFilter === null}
+          className={cn(flik, categoryFilter === null ? flikAktiv : flikInaktiv)}
         >
           Alla ({emails.length})
         </button>
@@ -578,12 +588,8 @@ export function Dashboard({
             key={category}
             type="button"
             onClick={() => setCategoryFilter(categoryFilter === category ? null : category)}
-            className={cn(
-              "focus-ring rounded-input border px-3 py-2 text-xs font-semibold transition",
-              categoryFilter === category
-                ? "border-ochre bg-ochre/10 text-ink"
-                : "bg-paper2/60 text-ink-muted hover:text-ink"
-            )}
+            aria-pressed={categoryFilter === category}
+            className={cn(flik, categoryFilter === category ? flikAktiv : flikInaktiv)}
           >
             {label} ({categoryCounts[category] ?? 0})
           </button>
@@ -598,36 +604,36 @@ export function Dashboard({
         {/* Maillista */}
         <div className={cn("min-w-0", selected ? "xl:col-span-6" : "xl:col-span-12")}>
           {emails.length === 0 ? (
-            <div className="rounded-card border border-dashed border-ink/15 bg-paper/45 p-10 text-center">
-              <Inbox className="mx-auto h-6 w-6 text-mineral" />
-              <h3 className="mt-4 font-semibold">Inkorgen är tom</h3>
-              {/* Stod: "koppla en riktig inkorg (Gmail/Outlook via IMAP) i
-                  backendens miljövariabler". En instruktion till oss, tryckt i
-                  kundens vy — kunden har varken tillgång till backenden eller
-                  anledning att veta vad IMAP är. */}
-              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-ink-muted">
-                {lager === "testmail" || visarTestIArenden !== false ? (
-                  <>
-                    Klicka på <strong>Hämta testmail</strong> för att skicka testärenden mot
-                    den här profilens kunskapsbas och se hur agenten svarar.
-                  </>
-                ) : (
-                  <>Inga ärenden ännu. När en inkorg är kopplad hamnar kundmailen här.</>
-                )}
-              </p>
+            // Tomt i stället för ikon + h3 i streckad ram (ui.tsx: en mening,
+            // ingen ikon, ingen streckad ram). Meningarna är desamma.
+            //
+            // Stod en gång: "koppla en riktig inkorg (Gmail/Outlook via IMAP) i
+            // backendens miljövariabler". En instruktion till oss, tryckt i
+            // kundens vy — kunden har varken tillgång till backenden eller
+            // anledning att veta vad IMAP är.
+            <Tomt>
+              {lager === "testmail" || visarTestIArenden !== false ? (
+                <>
+                  Inkorgen är tom. Klicka på <strong className="font-semibold text-ink">Hämta testmail</strong>{" "}
+                  för att skicka testärenden mot den här profilens kunskapsbas och se hur agenten svarar.
+                </>
+              ) : (
+                <>Inga ärenden ännu. När en inkorg är kopplad hamnar kundmailen här.</>
+              )}
               {inkorgKopplad ? null : (
-                <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-ink-subtle">
+                <>
+                  {" "}
                   Vill ni koppla er riktiga inkorg?{" "}
                   <a
                     href={mejlaOss("Koppla vår inkorg")}
-                    className="focus-ring rounded-input underline underline-offset-4 hover:text-ochre"
+                    className="focus-ring rounded-input text-ink underline underline-offset-4 hover:text-ochre"
                   >
                     Hör av er
                   </a>{" "}
                   så kopplar vi Gmail eller Outlook åt er.
-                </p>
+                </>
               )}
-            </div>
+            </Tomt>
           ) : (
             /* Kolumnfasta rader: ämne/avsändare 6 spann, fack+konfidens 3,
                status 3 — samma deklarerade spann på varje rad, så status-
@@ -647,12 +653,12 @@ export function Dashboard({
                     )}
                   >
                     <div className="col-span-12 min-w-0 md:col-span-6">
-                      <p className="flex items-center gap-2 truncate text-sm font-semibold">
+                      <p className={cn(rubrikPanel, "flex items-center gap-2 truncate")}>
                         {email.subject || "(utan ämne)"}
                         {email.has_image ? <ImageIcon className="h-3.5 w-3.5 shrink-0 text-ink-subtle" /> : null}
-                        {email.is_test ? <span className="kicker shrink-0 text-mineral">Test</span> : null}
+                        {email.is_test ? <Badge tone="neutral">Test</Badge> : null}
                       </p>
-                      <p className="mt-0.5 truncate font-mono text-xs text-ink-subtle">
+                      <p className={cn(metaKlass, "mt-0.5 truncate")}>
                         {email.from_name ? `${email.from_name} · ` : ""}
                         {email.from_email}
                       </p>
@@ -688,8 +694,8 @@ export function Dashboard({
             <div className="space-y-5 rounded-card bg-paper p-5">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h3 className="break-words font-semibold">{selected.subject || "(utan ämne)"}</h3>
-                  <p className="mt-1 font-mono text-xs text-ink-subtle">
+                  <h3 className={cn(rubrikPanel, "break-words")}>{selected.subject || "(utan ämne)"}</h3>
+                  <p className={cn(metaKlass, "mt-1")}>
                     {selected.from_name ? `${selected.from_name} · ` : ""}
                     {selected.from_email}
                   </p>
@@ -704,7 +710,7 @@ export function Dashboard({
                 </button>
               </div>
 
-              <div className="rounded-input bg-ink/[0.03] p-4 text-sm leading-6 text-ink-muted">
+              <div className="rounded-input bg-ink/[0.03] p-4 text-[0.9375rem] leading-6 text-ink-muted">
                 <p className="whitespace-pre-wrap">{selected.body_text}</p>
                 {selected.attachments.filter((a) => a.is_image && a.data_url).length > 0 ? (
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -737,7 +743,7 @@ export function Dashboard({
               ) : null}
 
               {!selected.classification && bearbetas ? (
-                <p className="text-sm leading-6 text-ink-subtle">Agenten läser mailet och skriver ett utkast…</p>
+                <p className="text-[0.9375rem] leading-6 text-ink-muted">Agenten läser mailet och skriver ett utkast…</p>
               ) : null}
 
               {selected.classification ? (
@@ -766,15 +772,15 @@ export function Dashboard({
                     ) : null}
                   </div>
                   {selected.classification.reasoning ? (
-                    <p className="mt-3 text-xs leading-5 text-ink-muted">{selected.classification.reasoning}</p>
+                    <p className="mt-3 text-[0.9375rem] leading-6 text-ink-muted">{selected.classification.reasoning}</p>
                   ) : null}
                   {selected.classification.escalation_reason ? (
-                    <p className="mt-2 text-xs leading-5 text-danger">
+                    <p className="mt-2 text-[0.9375rem] leading-6 text-ink">
                       {selected.classification.escalation_reason}
                     </p>
                   ) : null}
                   {selected.classification.kb_sources.length > 0 ? (
-                    <p className="mt-2 text-xs text-ink-subtle">
+                    <p className={cn(metaKlass, "mt-2")}>
                       Källor: {selected.classification.kb_sources.map((s) => s.title).join(" · ")}
                     </p>
                   ) : null}
@@ -784,7 +790,7 @@ export function Dashboard({
               {selected.draft ? (
                 <div className="rounded-input border border-moss/20 bg-moss/5 p-4">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-[0.8125rem] font-medium text-moss">
+                    <p className={etikett}>
                       {selected.draft.status === "auto_sent"
                         ? "Autosvar (skickat)"
                         : selected.draft.status === "approved"
@@ -800,10 +806,10 @@ export function Dashboard({
                       value={draftText}
                       onChange={(event) => setDraftText(event.target.value)}
                       rows={8}
-                      className="focus-ring mt-3 w-full resize-y rounded-input bg-paper p-3 text-sm leading-6 outline-none"
+                      className="focus-ring mt-3 w-full resize-y rounded-input bg-paper p-3 text-[1rem] leading-6 outline-none"
                     />
                   ) : (
-                    <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-ink-muted">
+                    <p className="mt-3 whitespace-pre-wrap text-[0.9375rem] leading-6 text-ink-muted">
                       {selected.draft.content}
                     </p>
                   )}
@@ -847,11 +853,11 @@ export function Dashboard({
 
               {selected.decisions.length > 0 ? (
                 <div>
-                  <p className="text-[0.8125rem] font-medium text-ink-subtle">Beslutslogg</p>
+                  <p className={etikett}>Beslutslogg</p>
                   <ol className="mt-3 space-y-2 border-l border-ink/10 pl-4">
                     {selected.decisions.map((decision, index) => (
-                      <li key={index} className="relative text-xs leading-5 text-ink-muted">
-                        <span className="absolute -left-[21px] top-1.5 h-2 w-2 rounded-full bg-ochre" />
+                      <li key={index} className="relative text-[0.9375rem] leading-6 text-ink-muted">
+                        <span className="absolute -left-[21px] top-2 h-2 w-2 rounded-full bg-ochre" />
                         <span className="font-semibold text-ink-muted">
                           {EVENT_LABELS[decision.event] ?? decision.event}
                         </span>
@@ -866,7 +872,7 @@ export function Dashboard({
               ) : null}
 
               {selected.status === "sent" || selected.status === "auto_sent" ? (
-                <p className="flex items-center gap-2 text-xs text-ink-subtle">
+                <p className="flex items-center gap-2 text-[0.9375rem] text-ink-muted">
                   <CheckCircle2 className="h-4 w-4 text-moss" />
                   Ärendet är besvarat och stängt i CRM:et.
                 </p>

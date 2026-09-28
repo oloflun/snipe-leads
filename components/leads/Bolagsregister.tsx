@@ -5,7 +5,23 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useArbetsvag } from "@/components/AppShell";
 import { kriterier } from "@/lib/prospekt";
-import { EmptyState, SkeletonRows } from "@/components/ui";
+import {
+  Badge,
+  Cell,
+  Rad,
+  Radlista,
+  SkeletonRows,
+  Tabell,
+  Tomt,
+  btnLiten,
+  btnSecondary,
+  etikett,
+  flik,
+  flikAktiv,
+  flikInaktiv,
+  meta,
+  tabellRad
+} from "@/components/ui";
 import { EjAktiverad, arEjAktiverad } from "@/components/EjAktiverad";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
@@ -113,7 +129,7 @@ const STATUS_ETIKETT: Record<string, string> = {
 const AKTIV_STATUS = new Set(["ready", "replied", "meeting"]);
 
 function segment(p: Prospekt): string {
-  return [p.sni, p.ort].filter(Boolean).join(" · ") || "—";
+  return [p.sni, p.ort].filter(Boolean).join(" · ") || "–";
 }
 
 /**
@@ -131,13 +147,14 @@ function signal(p: Prospekt): string {
   const träff = kriterier(p.score_breakdown).find(
     (k) => k.motivering && k.utfall !== "saknas"
   );
-  return träff?.motivering ?? "—";
+  return träff?.motivering ?? "–";
 }
 
+/** Tomt värde i en tabellcell är "–" (tankstreck), aldrig em-streck. */
 function poang(p: Prospekt): string {
   if (typeof p.score_total === "number") return String(p.score_total);
   if (typeof p.icp_fit === "number") return String(Math.round(p.icp_fit * 100));
-  return "—";
+  return "–";
 }
 
 /** Knapptexten SKA säga vilken riktning som gäller — se docstringen på
@@ -616,13 +633,9 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
       <div className="flex items-start gap-3 border-y border-ochre/40 bg-ochre/10 px-4 py-4">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
         <div className="min-w-0">
-          <p className="text-sm font-medium text-ink">Bolagen kunde inte hämtas</p>
-          <p className="mt-1 text-sm text-ink-muted">{lage.meddelande}</p>
-          <button
-            type="button"
-            onClick={() => void hamta()}
-            className="focus-ring mt-3 inline-flex min-h-9 items-center rounded-input bg-paper2 px-3 text-[13px] font-medium"
-          >
+          <p className="text-[0.9375rem] font-medium text-ink">Bolagen kunde inte hämtas</p>
+          <p className="mt-1 text-[0.9375rem] text-ink-muted">{lage.meddelande}</p>
+          <button type="button" onClick={() => void hamta()} className={cn(btnSecondary, btnLiten, "mt-3")}>
             Försök igen
           </button>
         </div>
@@ -630,13 +643,10 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
     );
   }
 
+  // "Formuläret ovan" som den gamla tomtexten pekade på finns inte längre här
+  // (Discovery.tsx togs bort) — körningen startas från Iris.
   if (!lage.prospekt.length) {
-    return (
-      <EmptyState
-        title="Inga bolag ännu"
-        body="Beskriv vilka ni söker i formuläret ovan och starta en körning. Bolagen som agenten hittar hamnar här — listan är tom tills den har hittat några riktiga."
-      />
-    );
+    return <Tomt>Inga bolag ännu. Kör Iris för att hitta bolag som matchar er målgrupp.</Tomt>;
   }
 
   // Fas 2 §3, 2.4-UI: testkörningar döljs som default, exempelbolag aldrig.
@@ -650,46 +660,47 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
       {(antalTest > 0 || (!demo && valda.size > 0)) && (
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           {!demo && valda.size > 0 ? (
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 disabled={flyttar}
                 onClick={() => void flyttaOverValda()}
-                className="border border-ink px-4 py-2 font-mono text-[12px] uppercase tracking-[0.18em] transition hover:bg-ink hover:text-paper disabled:opacity-60"
+                className={cn(btnSecondary, btnLiten)}
               >
-                {flyttar ? "Flyttar..." : flyttaKnappText(riktning, valda.size)}
+                {flyttar ? "Flyttar…" : flyttaKnappText(riktning, valda.size)}
               </button>
               <button
                 type="button"
                 disabled={genererarUtkast || processarOm}
                 onClick={() => void skapaUtkastForValda()}
-                className="border border-ink/40 px-4 py-2 font-mono text-[12px] uppercase tracking-[0.18em] text-ink-muted transition hover:border-ink hover:text-ink disabled:opacity-60"
+                className={cn(btnSecondary, btnLiten)}
               >
-                {genererarUtkast ? "Skapar utkast..." : `Skapa utkast för valda (${valda.size})`}
+                {genererarUtkast ? "Skapar utkast…" : `Skapa utkast för valda (${valda.size})`}
               </button>
               <button
                 type="button"
                 disabled={genererarUtkast || processarOm}
                 onClick={() => void processaOmValda()}
-                className="border border-ink/40 px-4 py-2 font-mono text-[12px] uppercase tracking-[0.18em] text-ink-muted transition hover:border-ink hover:text-ink disabled:opacity-60"
+                className={cn(btnSecondary, btnLiten)}
               >
-                {processarOm ? "Processar om..." : `Processa om (${valda.size})`}
+                {processarOm ? "Processar om…" : `Processa om (${valda.size})`}
               </button>
             </div>
           ) : (
             <span />
           )}
           {antalTest > 0 ? (
-            // "Diskret" — text i kicker/mineral, inte en stor inställningsväxel.
-            // Den hör hemma i arbetsflödet, inte i en inställningsyta.
+            // Ett filter i arbetsflödet, inte en inställningsväxel: samma
+            // flikspråk som vyflikarna, markerad när testkörningarna syns.
+            // Etiketten står still — en switch byter läge, inte namn.
             <button
               type="button"
               role="switch"
               aria-checked={visaTest}
               onClick={() => setVisaTest((v) => !v)}
-              className="focus-ring kicker text-mineral transition hover:text-ochre"
+              className={cn(flik, visaTest ? flikAktiv : flikInaktiv)}
             >
-              {visaTest ? "Dölj testkörningar" : `Visa testkörningar (${antalTest})`}
+              {`Visa testkörningar (${antalTest})`}
             </button>
           ) : null}
         </div>
@@ -698,13 +709,13 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
       {utfall && utfall.length > 0 ? (
         <ul className="mb-5 space-y-3 border-y border-ink/15 py-4">
           {utfall.map((rad) => (
-            <li key={rad.id} className="text-sm leading-6">
+            <li key={rad.id} className="text-[0.9375rem] leading-6">
               <span className="font-medium text-ink">{rad.company_name}</span>{" "}
               {rad.ok ? (
                 <span className="text-moss">
                   {rad.riktning === "till_skarp"
                     ? "flyttades över till den riktiga listan."
-                    : "flyttades till testytan — kan inte längre skickas."}
+                    : "flyttades till testytan och kan inte längre skickas."}
                 </span>
               ) : (
                 <span className="text-danger">kunde inte flyttas: {rad.saknas?.join(" ")}</span>
@@ -728,7 +739,7 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
       {utkastResultat && utkastResultat.length > 0 ? (
         <ul className="mb-5 space-y-2 border-y border-ink/15 py-4">
           {utkastResultat.map((rad) => (
-            <li key={rad.id} className="text-sm leading-6">
+            <li key={rad.id} className="text-[0.9375rem] leading-6">
               <span className="font-medium text-ink">{rad.company_name}</span>{" "}
               {rad.ok ? (
                 <span className="text-moss">utkast skapat och köat för granskning.</span>
@@ -741,128 +752,96 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
       ) : null}
 
       {synliga.length === 0 ? (
-        <p className="border-y border-ink/15 py-6 text-[15px] text-ink-muted">
-          Alla {antalTest} bolag just nu är testkörningar och är dolda. Slå på "Visa
-          testkörningar" ovan för att se dem.
-        </p>
+        <Tomt>
+          Alla {antalTest} bolag just nu är testkörningar och är dolda. Slå på &quot;Visa
+          testkörningar&quot; ovan för att se dem.
+        </Tomt>
       ) : (
         <>
-          {/* Tabell från md och upp, kort under. Sex kolumner krympta till 375px
-              blir ~40px styck och därmed oläsliga — se DESIGN.md App-familjen.
+          {/* Tabell från md och upp, rader under. Sex kolumner krympta till
+              375px blir ~40px styck och därmed oläsliga — se DESIGN.md
+              App-familjen.
 
-              Fast layout (table-fixed + colgroup): bredderna deklareras i
-              procent och summerar till 100, så kolumnerna står på samma plats
-              oavsett innehåll — se Tabell i components/ui.tsx för resonemanget.
-              Primitiven används inte rakt av här: kryssrutekolumnen och den
-              villkorade kolumnuppsättningen (demo saknar kryssrutor) kräver
-              att colgroup följer samma villkor som cellerna. */}
-          <div className="hidden overflow-x-auto border-y border-ink/15 md:block">
-            <table className="w-full min-w-[900px] table-fixed border-collapse text-[15px]">
-              <colgroup>
-                {/* Samma villkor som th/td nedan — annars pekar bredderna på
-                    fel kolumner i demon. Kryssrutan får fast smal bredd. */}
-                {!demo ? <col style={{ width: "44px" }} /> : null}
-                <col style={{ width: "24%" }} />
-                <col style={{ width: "14%" }} />
-                <col style={{ width: "18%" }} />
-                <col style={{ width: "24%" }} />
-                <col style={{ width: "8%" }} />
-                <col style={{ width: "12%" }} />
-              </colgroup>
-              <thead>
-                <tr className="border-b border-ink/15 text-left">
-                  {/* Fas 3 §4: kryssrutekolumnen har ingen rubriktext — bara i den
-                      riktiga vyn, av samma skäl som knappen nedan. */}
+              `Tabell` ur components/ui.tsx: kolumnlistan byggs med samma
+              villkor som cellerna (demo saknar kryssrutor), så colgroup och
+              celler kan aldrig peka på olika kolumner. Bredderna summerar
+              till 100 % bredvid kryssrutans fasta 44px. */}
+          <div className="hidden md:block">
+            <Tabell
+              ariaLabel="Bolag"
+              minBredd={900}
+              kolumner={[
+                ...(!demo ? [{ rubrik: "Välj", bredd: "44px", srOnly: true }] : []),
+                { rubrik: "Bolag", bredd: "24%" },
+                { rubrik: "Segment", bredd: "14%" },
+                { rubrik: "Kontakt", bredd: "18%" },
+                { rubrik: "Signal", bredd: "24%" },
+                { rubrik: "Poäng", bredd: "8%", hoger: true },
+                { rubrik: "Status", bredd: "12%", hoger: true }
+              ]}
+            >
+              {synliga.map((p) => (
+                <tr key={p.id} className={tabellRad}>
                   {!demo ? (
-                    // Bredden bor i colgroup — inte här.
-                    <th scope="col" className="py-4 pr-3">
-                      <span className="sr-only">Välj</span>
-                    </th>
+                    <Cell>
+                      <input
+                        type="checkbox"
+                        checked={valda.has(p.id)}
+                        onChange={() => vaxlaVal(p.id)}
+                        aria-label={`Välj ${p.company_name}`}
+                        className="h-4 w-4 accent-ochre"
+                      />
+                    </Cell>
                   ) : null}
-                  {/* Bara SISTA kolumnen saknar högerpadding. Villkoret var `i >= 4`,
-                      vilket tog bort luften även från Score — och eftersom både
-                      Score och Status är högerställda skrevs de ihop till
-                      "84RESEARCH PÅGÅR". Syns i en skärmbild, inte i ett test som
-                      läser textinnehåll. */}
-                  {["Bolag", "Segment", "Kontakt", "Signal", "Score", "Status"].map((rubrik, i, alla) => (
-                    <th
-                      key={rubrik}
-                      scope="col"
-                      className={cn(
-                        "kicker py-4 font-medium text-mineral",
-                        i >= 4 ? "text-right" : "",
-                        i < alla.length - 1 ? "pr-6" : ""
+                  <Cell titel>
+                    {/* Ingen länk i demon. Bolagssidan ligger under /dashboard,
+                        alltså bakom inloggningen — en besökare som klickar hade
+                        mötts av en inloggningsruta mitt i en demo. */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {demo ? (
+                        <span className="font-semibold">{p.company_name}</span>
+                      ) : (
+                        <Link href={vag(`/dashboard/companies/${p.id}`)} className="focus-ring font-semibold">
+                          {p.company_name}
+                        </Link>
                       )}
-                    >
-                      {rubrik}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-ink/15">
-                {synliga.map((p) => (
-                  <tr key={p.id} className="transition hover:bg-paper2/60">
-                    {!demo ? (
-                      <td className="py-5 pr-3">
-                        <input
-                          type="checkbox"
-                          checked={valda.has(p.id)}
-                          onChange={() => vaxlaVal(p.id)}
-                          aria-label={`Välj ${p.company_name}`}
-                          className="h-4 w-4 accent-ochre"
-                        />
-                      </td>
+                      {/* Ett påhittat bolag ska inte gå att ta för en riktig
+                          AI-körning — samma Badge som statusen. */}
+                      {p.origin === "example" ? <Badge>Exempel</Badge> : null}
+                      {p.origin === "test" ? <Badge>Test</Badge> : null}
+                    </div>
+                    {/* truncate: i en fast tabell är det cellen som ger med
+                        sig, aldrig kolumnen. */}
+                    {p.website ? <p className={cn(meta, "mt-1 truncate")}>{p.website}</p> : null}
+                  </Cell>
+                  <Cell className="text-ink-muted">{segment(p)}</Cell>
+                  <Cell>
+                    <p>{p.contact_name ?? "–"}</p>
+                    {p.contact_email ? (
+                      <p className={cn(meta, "mt-1 break-all")}>{p.contact_email}</p>
                     ) : null}
-                    <th scope="row" className="py-5 pr-6 text-left font-normal">
-                      {/* Ingen länk i demon. Bolagssidan ligger under /dashboard,
-                          alltså bakom inloggningen — en besökare som klickar hade
-                          mötts av en inloggningsruta mitt i en demo. */}
-                      <div className="flex flex-wrap items-baseline gap-2">
-                        {demo ? (
-                          <span className="text-[1.0625rem] font-semibold tracking-[-0.01em]">
-                            {p.company_name}
-                          </span>
-                        ) : (
-                          <Link
-                            href={vag(`/dashboard/companies/${p.id}`)}
-                            className="focus-ring text-[1.0625rem] font-semibold tracking-[-0.01em]"
-                          >
-                            {p.company_name}
-                          </Link>
-                        )}
-                        {/* Samma märkning som StatusOrd nedan — kicker/mineral, ingen
-                            egen badgestil. Ett påhittat bolag ska inte gå att ta för
-                            en riktig AI-körning. */}
-                        {p.origin === "example" ? <span className="kicker text-mineral">Exempel</span> : null}
-                        {p.origin === "test" ? <span className="kicker text-mineral">Test</span> : null}
-                      </div>
-                      {/* truncate: i en fast tabell är det cellen som ger med
-                          sig, aldrig kolumnen. */}
-                      {p.website ? <p className="mt-1 truncate text-sm text-ink-subtle">{p.website}</p> : null}
-                    </th>
-                    <td className="kicker py-5 pr-6 text-mineral">{segment(p)}</td>
-                    <td className="py-5 pr-6">
-                      <p className="text-[15px]">{p.contact_name ?? "—"}</p>
-                      {p.contact_email ? (
-                        <p className="mt-1 break-all text-sm text-ink-subtle">{p.contact_email}</p>
-                      ) : null}
-                    </td>
-                    <td className="py-5 pr-6 text-[15px] leading-6 text-ink-muted">{signal(p)}</td>
-                    <td className="num py-5 pr-6 text-right text-[1.0625rem] font-semibold tabular-nums">
-                      {poang(p)}
-                    </td>
-                    <td className="py-5 text-right whitespace-nowrap">
-                      <StatusOrd status={p.status} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                  </Cell>
+                  {/* Två rader i tabellen — hela motiveringen står på
+                      bolagssidan, och i title för den som pekar. */}
+                  <Cell className="leading-6 text-ink-muted">
+                    <span className="line-clamp-2" title={signal(p)}>
+                      {signal(p)}
+                    </span>
+                  </Cell>
+                  <Cell hoger>
+                    <span className="font-semibold">{poang(p)}</span>
+                  </Cell>
+                  <Cell hoger>
+                    <StatusOrd status={p.status} />
+                  </Cell>
+                </tr>
+              ))}
+            </Tabell>
           </div>
 
-          <ul className="space-y-2 md:hidden">
+          <Radlista className="md:hidden">
             {synliga.map((p) => (
-              <li key={p.id} className="rounded-input border border-ink/15 px-4 py-3">
+              <Rad key={p.id}>
                 <div className="flex items-baseline justify-between gap-3">
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     {!demo ? (
@@ -875,30 +854,28 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
                       />
                     ) : null}
                     {demo ? (
-                      <span className="min-w-0 text-[15px] font-semibold tracking-[-0.01em]">
-                        {p.company_name}
-                      </span>
+                      <span className="min-w-0 text-[0.9375rem] font-semibold">{p.company_name}</span>
                     ) : (
                       <Link
                         href={vag(`/dashboard/companies/${p.id}`)}
-                        className="focus-ring min-w-0 text-[15px] font-semibold tracking-[-0.01em]"
+                        className="focus-ring min-w-0 text-[0.9375rem] font-semibold"
                       >
                         {p.company_name}
                       </Link>
                     )}
-                    {p.origin === "example" ? <span className="kicker text-mineral">Exempel</span> : null}
+                    {p.origin === "example" ? <Badge>Exempel</Badge> : null}
                   </div>
-                  <span className="num shrink-0 text-[15px] font-semibold tabular-nums">{poang(p)}</span>
+                  <span className="num shrink-0 text-[0.9375rem] font-semibold">{poang(p)}</span>
                 </div>
-                <p className="kicker mt-1 text-mineral">{segment(p)}</p>
-                <p className="mt-2 text-sm leading-6 text-ink-muted">{signal(p)}</p>
-                <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                  <span className="text-sm text-ink-muted">{p.contact_name ?? "Ingen kontakt"}</span>
+                <p className={cn(meta, "mt-1")}>{segment(p)}</p>
+                <p className="mt-2 line-clamp-2 text-[0.9375rem] leading-6 text-ink-muted">{signal(p)}</p>
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                  <span className="text-[0.9375rem] text-ink-muted">{p.contact_name ?? "Ingen kontakt"}</span>
                   <StatusOrd status={p.status} />
                 </div>
-              </li>
+              </Rad>
             ))}
-          </ul>
+          </Radlista>
         </>
       )}
     </>
@@ -926,7 +903,7 @@ function Ifyllnad({
         onSubmit();
       }}
     >
-      <label className="block text-[12px] text-ink-muted">
+      <label className={cn(etikett, "block")}>
         Organisationsnummer
         <input
           name={`${id}-orgnr`}
@@ -936,7 +913,7 @@ function Ifyllnad({
           className="focus-ring mt-1 block min-h-11 w-full rounded-input bg-paper2 px-3 text-sm text-ink"
         />
       </label>
-      <label className="block text-[12px] text-ink-muted">
+      <label className={cn(etikett, "block")}>
         Webbplats
         <input
           name={`${id}-website`}
@@ -946,7 +923,7 @@ function Ifyllnad({
           className="focus-ring mt-1 block min-h-11 w-full rounded-input bg-paper2 px-3 text-sm text-ink"
         />
       </label>
-      <label className="block text-[12px] text-ink-muted">
+      <label className={cn(etikett, "block")}>
         E-post
         <input
           name={`${id}-email`}
@@ -957,11 +934,7 @@ function Ifyllnad({
         />
       </label>
       <div className="sm:col-span-3">
-        <button
-          type="submit"
-          disabled={disabled}
-          className="border border-ink px-4 py-2 font-mono text-[12px] uppercase tracking-[0.18em] transition hover:bg-ink hover:text-paper disabled:opacity-60"
-        >
+        <button type="submit" disabled={disabled} className={cn(btnSecondary, btnLiten)}>
           Spara och flytta
         </button>
       </div>
@@ -969,10 +942,9 @@ function Ifyllnad({
   );
 }
 
+/** Status som Badge: det som väntar på kunden bär ochre-tonen, resten är neutralt. */
 function StatusOrd({ status }: Readonly<{ status: string }>) {
   return (
-    <span className={`kicker ${AKTIV_STATUS.has(status) ? "text-warning" : "text-mineral"}`}>
-      {STATUS_ETIKETT[status] ?? status}
-    </span>
+    <Badge tone={AKTIV_STATUS.has(status) ? "warn" : "neutral"}>{STATUS_ETIKETT[status] ?? status}</Badge>
   );
 }

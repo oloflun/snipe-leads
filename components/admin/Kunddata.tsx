@@ -2,7 +2,18 @@
 
 import { useState } from "react";
 
-import { Badge, btnLiten, btnPrimary, btnSecondary } from "@/components/ui";
+import {
+  Badge,
+  Rad,
+  Radlista,
+  Sektion,
+  Tomt,
+  btnLiten,
+  btnPrimary,
+  btnSecondary,
+  etikett,
+  rubrikPanel
+} from "@/components/ui";
 import {
   skapaKontakt,
   sparaKunddata,
@@ -30,6 +41,14 @@ import {
  * första sparning — datumet som kom ur registreringen hade plötsligt sett
  * handbekräftat ut. Diffen mot utgångsläget är alltså semantik, inte en
  * optimering.
+ *
+ * ## Vad som togs bort 2026-09-27
+ *
+ * Ingresserna under båda sektionsrubrikerna (F-016) och meningen om
+ * avtalsstatus under fälten. Den senare upprepade fältet "Avtal signerat",
+ * vars märke redan säger "Saknas" när inget avtal är registrerat. Att ett
+ * manuellt värde vinner över det automatiska, och att ett tömt fält går
+ * tillbaka till det automatiska, syns i märket efter sparning.
  */
 
 const FALT: { nyckel: string; etikett: string; typ: "text" | "date"; brett?: boolean }[] = [
@@ -51,7 +70,7 @@ const KALLETIKETT: Record<string, string> = {
 // 16px textstorlek är golvet (iOS force-zoomar under det); det kompakta
 // sitter i paddingen, inte i typografin.
 const inputKlass =
-  "focus-ring mt-1 w-full rounded-input border border-ink/15 bg-paper px-2.5 py-1.5 text-[1rem] leading-6";
+  "focus-ring mt-1 w-full rounded-input border border-ink/15 bg-paper px-2.5 py-1.5 text-[1rem] leading-6 text-ink";
 
 function KallaBadge({ kalla }: Readonly<{ kalla: string | null }>) {
   if (!kalla) {
@@ -85,7 +104,7 @@ function KontaktFalt({
           ["telefon", "Direktnummer"]
         ] as const
       ).map(([falt, etikett]) => (
-        <label key={falt} className="block text-[0.8125rem] text-mineral">
+        <label key={falt} className={`block ${etikett}`}>
           {etikett}
           <input
             type={falt === "mejl" ? "email" : "text"}
@@ -139,7 +158,7 @@ function KontaktRad({
   }
 
   return (
-    <li className="border-t border-ink/10 py-3 first:border-t-0">
+    <Rad>
       <KontaktFalt varden={varden} satt={setVarden} prefix={kontakt.id} />
       <div className="mt-2.5 flex flex-wrap items-center gap-3">
         <button type="button" onClick={spara} disabled={arbetar} className={`${btnSecondary} ${btnLiten}`}>
@@ -157,7 +176,7 @@ function KontaktRad({
           {kvitto}
         </span>
       </div>
-    </li>
+    </Rad>
   );
 }
 
@@ -212,12 +231,10 @@ export function Kunddata({ data }: Readonly<{ data: Data }>) {
     })();
   }
 
-  const avtal = data.falt.avtal_signerat?.varde;
-
   return (
-    <div className="grid gap-7">
+    <div>
       {fel ? (
-        <p role="alert" className="max-w-[70ch] break-words text-[0.9375rem] text-danger">
+        <p role="alert" className="mb-8 max-w-[70ch] break-words text-[0.9375rem] text-danger">
           {fel}
         </p>
       ) : null}
@@ -225,25 +242,20 @@ export function Kunddata({ data }: Readonly<{ data: Data }>) {
       {/* Kontaktpersonerna först — det är det enda i vyn som ALLTID är
           manuellt, och den som öppnar en kund gör det oftast för att ringa
           någon, inte för att läsa ett orgnr. */}
-      <section className="border-t border-ink/15 pt-4">
-        <h2 className="kicker text-mineral">Kontaktpersoner</h2>
-        <p className="mt-1.5 max-w-[70ch] text-[0.875rem] leading-6 text-ink-muted">
-          Förvaltas för hand. Namn krävs; roll, mejl och direktnummer är valfria.
-        </p>
-
+      <Sektion title="Kontaktpersoner">
         {data.kontakter.length === 0 ? (
-          <p className="mt-4 text-[0.875rem] text-ink-muted">Inga kontaktpersoner ännu.</p>
+          <Tomt>Inga kontaktpersoner ännu.</Tomt>
         ) : (
-          <ul className="mt-4">
+          <Radlista>
             {data.kontakter.map((kontakt) => (
               <KontaktRad key={kontakt.id} tenantId={tenantId} kontakt={kontakt} onFel={setFel} />
             ))}
-          </ul>
+          </Radlista>
         )}
 
-        <div className="mt-4 rounded-input border border-ink/15 bg-paper2/40 p-3.5">
-          <h3 className="text-[0.875rem] font-semibold">Lägg till kontaktperson</h3>
-          <div className="mt-2.5">
+        <div className="mt-4 rounded-input border border-ink/15 bg-paper2/40 p-4">
+          <h3 className={rubrikPanel}>Lägg till kontaktperson</h3>
+          <div className="mt-3">
             <KontaktFalt varden={ny} satt={setNy} prefix="ny" />
           </div>
           <button
@@ -255,21 +267,14 @@ export function Kunddata({ data }: Readonly<{ data: Data }>) {
             {laggerTill ? "Lägger till…" : "Lägg till"}
           </button>
         </div>
-      </section>
+      </Sektion>
 
-      <section className="border-t border-ink/15 pt-4">
-        <h2 className="kicker text-mineral">Kunduppgifter</h2>
-        <p className="mt-1.5 max-w-[70ch] text-[0.875rem] leading-6 text-ink-muted">
-          Märket vid varje fält säger var värdet kommer ifrån. Det som fylls i här
-          sparas som manuellt och vinner över det automatiska. Ett tömt fält går
-          tillbaka till det automatiska värdet, om ett finns.
-        </p>
-
-        <div className="mt-4 grid gap-x-6 gap-y-3.5 sm:grid-cols-2">
+      <Sektion title="Kunduppgifter">
+        <div className="grid gap-x-6 gap-y-3.5 sm:grid-cols-2">
           {FALT.map((falt) => (
             <label
               key={falt.nyckel}
-              className={`block text-[0.8125rem] text-mineral ${falt.brett ? "sm:col-span-2" : ""}`}
+              className={`block ${etikett} ${falt.brett ? "sm:col-span-2" : ""}`}
             >
               <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                 {falt.etikett}
@@ -289,14 +294,6 @@ export function Kunddata({ data }: Readonly<{ data: Data }>) {
           ))}
         </div>
 
-        {/* Avtalsstatusen utskriven i klartext. Datumfältet ensamt säger inte
-            "inget avtal finns" — ett tomt fält ser likadant ut som ett ofyllt. */}
-        <p className="mt-3 text-[0.875rem] text-ink-muted">
-          {avtal
-            ? `Avtal finns, signerat ${avtal}.`
-            : "Inget avtal registrerat. Fyll i signeringsdatumet ovan när det finns."}
-        </p>
-
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <button
             type="button"
@@ -310,7 +307,7 @@ export function Kunddata({ data }: Readonly<{ data: Data }>) {
             {kvitto}
           </span>
         </div>
-      </section>
+      </Sektion>
     </div>
   );
 }

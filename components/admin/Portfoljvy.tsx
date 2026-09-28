@@ -3,30 +3,29 @@
 import Link from "next/link";
 import { Radgivare } from "@/components/admin/Radgivare";
 import { Radmarke } from "@/components/admin/Radmarke";
+import { Badge, Cell, Nyckeltal, Sektion, Sidhuvud, Tabell, Tomt, meta, tabellRad } from "@/components/ui";
 import type { BerikadTenant } from "@/lib/admin/exempeldata";
 import { a, antal } from "@/lib/admin/sprak";
 import { arTestyta } from "@/lib/admin/statistik";
 import { useLocale, type Locale } from "@/lib/i18n";
 import { formateraPris } from "@/lib/pricing";
-import {
-  type Halsa,
-  MARGINAL_GRON,
-  MARGINAL_ROD,
-  TOKENKOSTNAD_IN_PER_MILJON_SEK,
-  TOKENKOSTNAD_MODELL,
-  TOKENKOSTNAD_UT_PER_MILJON_SEK,
-  TYST_EFTER_DAGAR,
-  bedomKund,
-  sammanfattaPortfolj
-} from "@/lib/admin/halsa";
+import { cn } from "@/lib/utils";
+import { type Halsa, TOKENKOSTNAD_MODELL, bedomKund, sammanfattaPortfolj } from "@/lib/admin/halsa";
 
 /**
  * Adminöversikten: hela portföljen på en skärm.
  *
- * Ledger, inte kort — en rad per kund, hairline mellan, tabularsiffror så
- * kolumnerna går att jämföra vertikalt. Symbolen längst till vänster är det
- * enda som får färg; hade varje kolumn haft en accent hade ingen av dem varit
- * en.
+ * ## Ordningen är vad admin ska göra, inte vad som är störst
+ *
+ * Kunderna som kräver en åtgärd (låg marginal eller tysta) står först, i en
+ * egen tabell. Ekonomin kommer sedan, övriga kunder efter den. Före
+ * 2026-09-27 stod nyckeltalen överst och talet "Kräver åtgärd" i en ruta,
+ * medan raderna det räknade låg längre ned i samma tabell som alla andra.
+ * Nu ÄR sektionen listan, och rutan med talet finns inte längre: två ställen
+ * som säger samma sak är två ställen som kan säga olika saker.
+ *
+ * Status är en `Badge` längst till höger. Symbolkolumnen med emoji som stod
+ * här förut behövde en fotnot för att gå att läsa; ett ord gör det inte.
  *
  * ## Varför den är en klientkomponent
  *
@@ -36,23 +35,26 @@ import {
  * hämtas fortfarande på servern (`app/admin/page.tsx`) och skickas ned som
  * props; det är BARA renderingen som flyttat.
  *
- * ## Två saker som INTE är mätvärden, och som därför står utskrivna
+ * ## Tre saker som INTE är mätvärden, och var det står
+ *
+ * Fotnoterna under tabellen togs bort 2026-09-27 (F-016: finstilt text om
+ * sidan). Det de bar och som behövs står nu där talet står:
  *
  * 1. **Paketet kommer ur `workspaces.products`** när admin-API:t kan läsa
- *    det (sedan 2026-09-13). Saknas det — ingen kopplad arbetsyta, eller en
- *    databas där backendens roll inte får läsa `workspaces` — härleds det ur
- *    aktivitet som förut: ärenden = Support, körningar = Leads. Härledningen
- *    blir fel för en kund som betalar utan att använda och ger aldrig Trio,
- *    så fotnoten räknar hur många rader som fortfarande härleds.
+ *    det (sedan 2026-09-13). Saknas det härleds det ur aktivitet: ärenden =
+ *    Support, körningar = Leads. Härledningen blir fel för en kund som betalar
+ *    utan att använda och ger aldrig Trio, så paketcellen säger "härlett" på
+ *    just de raderna.
  *
- * 2. **Tokenkostnaden är en uppskattning**, inte en faktura. Se
- *    `TOKENKOSTNAD_PER_MILJON_SEK`. Fotnoten under tabellen säger det till
- *    läsaren, eftersom en marginal som presenteras utan förbehåll blir ett
- *    beslutsunderlag den inte är.
+ * 2. **Tokenkostnaden är en uppskattning**, inte en faktura. Etiketten säger
+ *    "Uppskattad" och notisen namnger modellen och att det är listpriset, så
+ *    påståendet går att kontrollera. Priset och varför miljön inte faktureras
+ *    står vid `TOKENKOSTNAD_PER_MILJON_SEK` i lib/admin/halsa.ts.
  *
  * 3. **Exempelrader är märkta.** Rader vars tal kommer ur
- *    `lib/admin/exempeldata.ts` bär en synlig etikett och räknas i fotnoten.
- *    Se den filen för varför de finns.
+ *    `lib/admin/exempeldata.ts` bär märket Exempel, och en mening under
+ *    nyckeltalen säger hur många av dem talen räknar med. Se den filen för
+ *    varför de finns.
  */
 
 /** Lagrade produkter om de finns, annars härledda ur aktivitet. En tom lista
@@ -82,11 +84,26 @@ const HALSOETIKETT = {
   okand: "halsaOkand"
 } as const;
 
+/** Badge-ton per hälsoläge. Röd bara på det som kostar pengar nu. */
+const HALSOTON: Record<Halsa, "neutral" | "good" | "warn" | "danger"> = {
+  bra: "good",
+  ok: "warn",
+  dalig: "danger",
+  tyst: "warn",
+  okand: "neutral",
+  test: "neutral"
+};
+
 /** Etiketten för ett hälsoläge. `test` står inline: sprak.ts ägs av en annan
  *  yta, och ett enda ord motiverar inte en nyckel där. */
 function halsoetikett(halsa: Halsa, locale: Locale): string {
   if (halsa === "test") return locale === "sv" ? "Testarbetsyta" : "Test workspace";
   return a(HALSOETIKETT[halsa], locale);
+}
+
+/** Samma villkor som `sammanfattaPortfolj` räknar som "Kräver åtgärd". */
+function kraverAtgard(halsa: Halsa): boolean {
+  return halsa === "dalig" || halsa === "tyst";
 }
 
 export function Portfoljvy({
@@ -125,281 +142,186 @@ export function Portfoljvy({
   );
 
   const p = sammanfattaPortfolj(rader.map((r) => r.ekonomi));
-
-  // Decimaltecknet foljer spraket: 7,14 kr pa svenska, 7.14 kr pa engelska.
-  // Rakt interpolerade JS-tal ger alltid punkt, och en svensk driftvy som
-  // skriver "7.14 kr" ser ut att ha rott ihop tusental med decimaler.
-  const kr = (v: number) => v.toLocaleString(locale === "sv" ? "sv-SE" : "en-GB", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  });
+  const kraver = rader.filter(({ ekonomi }) => kraverAtgard(ekonomi.halsa));
+  const ovriga = rader.filter(({ ekonomi }) => !kraverAtgard(ekonomi.halsa));
   const exempelrader = rader.filter(({ rad }) => rad.ar_exempel).length;
-  const harleddaRader = rader.filter(({ rad }) => !harLagradeProdukter(rad)).length;
+
+  // Samma tabell i två sektioner. En funktion i komponenten och inte en egen
+  // komponent: den behöver `locale` och `text` och har ingen annan läsare.
+  const kundtabell = (lista: typeof rader) => (
+    <Tabell
+      minBredd={960}
+      kolumner={[
+        { rubrik: a("kolKund", locale), bredd: "24%" },
+        { rubrik: a("kolPaket", locale), bredd: "13%" },
+        { rubrik: a("kolArenden", locale), bredd: "8%", hoger: true },
+        { rubrik: a("kolKorningar", locale), bredd: "9%", hoger: true },
+        { rubrik: a("kolTokens", locale), bredd: "10%", hoger: true },
+        { rubrik: a("kolKostnad", locale), bredd: "9%", hoger: true },
+        { rubrik: a("kolMarginal", locale), bredd: "8%", hoger: true },
+        { rubrik: a("kolFel", locale), bredd: "6%", hoger: true },
+        { rubrik: text({ sv: "Status", en: "Status" }), bredd: "13%", hoger: true }
+      ]}
+    >
+      {lista.map(({ rad, ekonomi }) => (
+        <tr key={rad.id} className={tabellRad}>
+          <Cell titel>
+            <span className="flex min-w-0 items-baseline gap-2">
+              {/* Namnet leder till kundprofilen — agentinstruktioner och
+                  tillägg. Förut var raden en återvändsgränd, och vägen
+                  till tilläggen gick bara via en ikonknapp på en ANNAN
+                  flik. */}
+              <Link
+                href={`/admin/kunder/${rad.id}`}
+                className="focus-ring truncate rounded-input font-semibold underline decoration-ink/25 underline-offset-4 hover:text-ochre"
+              >
+                {rad.name}
+              </Link>
+              {/* Testarbetsytan får inget eget märke här: statusen säger
+                  redan "Testarbetsyta" längst till höger på samma rad. */}
+              {rad.active === false ? (
+                <Radmarke>{text({ sv: "Inaktiv", en: "Inactive" })}</Radmarke>
+              ) : null}
+              {rad.ar_exempel ? (
+                <Radmarke title={a("exempeldataMarkning", locale)}>{a("exempel", locale)}</Radmarke>
+              ) : null}
+            </span>
+            <span className={cn(meta, "mt-1 line-clamp-2")}>{text(ekonomi.motivering)}</span>
+          </Cell>
+          <Cell className="text-ink-muted">
+            {ekonomi.paketNamn ?? "–"}
+            {ekonomi.paketNamn && !harLagradeProdukter(rad) ? (
+              <span
+                className="text-ink-subtle"
+                title={text({
+                  sv: "Härlett ur aktivitet, eftersom arbetsytans produkter inte gick att läsa.",
+                  en: "Inferred from activity, because the workspace's products could not be read."
+                })}
+              >
+                {text({ sv: ", härlett", en: ", inferred" })}
+              </span>
+            ) : null}
+            {ekonomi.intakt > 0 ? (
+              <span className={cn(meta, "num block")}>
+                {formateraPris(ekonomi.intakt)}
+                {a("perManad", locale)}
+              </span>
+            ) : null}
+          </Cell>
+          <Cell hoger className="text-ink-muted">
+            {antal(rad.tickets, locale)}
+          </Cell>
+          <Cell hoger className="text-ink-muted">
+            {antal(rad.runs, locale)}
+            {/* Testkörningar göms inte, de räknas bara inte som kundvolym.
+                En siffra som tyst blivit mindre är svårare att lita på än
+                en siffra som säger vad den utelämnat. */}
+            {rad.test_runs ? (
+              <span className={cn(meta, "block")}>
+                +{rad.test_runs} {a("test", locale)}
+              </span>
+            ) : null}
+          </Cell>
+          <Cell hoger className="text-ink-muted">
+            {antal((rad.tokens_in ?? 0) + (rad.tokens_out ?? 0), locale)}
+          </Cell>
+          <Cell hoger className="text-ink-muted">
+            {formateraPris(Math.round(ekonomi.kostnad))}
+          </Cell>
+          <Cell hoger className="text-ink-muted">
+            {ekonomi.marginal === null ? "–" : `${Math.round(ekonomi.marginal * 100)} %`}
+          </Cell>
+          {/* Varningsfärg bara på avvikelsen. */}
+          <Cell hoger className={rad.errors > 0 ? "text-warning" : "text-ink-subtle"}>
+            {rad.errors}
+          </Cell>
+          <Cell hoger>
+            <Badge tone={HALSOTON[ekonomi.halsa]}>{halsoetikett(ekonomi.halsa, locale)}</Badge>
+          </Cell>
+        </tr>
+      ))}
+    </Tabell>
+  );
 
   return (
     <div>
       {/* "Översikt" och inte "Kunder": fliken heter Översikt, och NÄSTA flik
           heter Kunder och leder till en annan sida. Två flikar vars sidor båda
           rubricerades "Kunder" läste som samma vy renderad två gånger. */}
-      <h1 className="font-display text-4xl tracking-[-0.03em]">{a("oversiktRubrik", locale)}</h1>
+      <Sidhuvud title={a("oversiktRubrik", locale)} />
 
-      <div className="mt-8 grid gap-px overflow-hidden rounded-input border border-ink/15 bg-ink/15 sm:grid-cols-2 lg:grid-cols-4">
-        <Nyckeltal
-          etikett={a("manadsintakt", locale)}
-          varde={formateraPris(p.mrr)}
-          rad={text({
-            sv: `${p.antalBetalande} av ${p.antalKunder} kunder betalar`,
-            en: `${p.antalBetalande} of ${p.antalKunder} customers pay`
-          })}
-        />
-        <Nyckeltal
-          etikett={a("uppskattadKostnad", locale)}
-          varde={formateraPris(Math.round(p.kostnad))}
-          rad={a("tokensAllaKunder", locale)}
-        />
-        <Nyckeltal
-          etikett={a("marginal", locale)}
-          varde={p.marginal === null ? "—" : `${Math.round(p.marginal * 100)} %`}
-          rad={
-            p.marginal === null ? a("ingenIntakt", locale) : a("intaktMinusToken", locale)
-          }
-        />
-        <Nyckeltal
-          etikett={a("kraverAtgard", locale)}
-          varde={String(p.fordelning.dalig + p.fordelning.tyst)}
-          rad={text({
-            sv: `${p.fordelning.dalig} med låg marginal, ${p.fordelning.tyst} tysta`,
-            en: `${p.fordelning.dalig} on thin margin, ${p.fordelning.tyst} dormant`
-          })}
-        />
+      <div className="mt-8">
+        {rader.length === 0 ? (
+          <Tomt>{a("ingaRegistrerade", locale)}</Tomt>
+        ) : (
+          <>
+            <Sektion title={a("kraverAtgard", locale)}>
+              {kraver.length > 0 ? (
+                kundtabell(kraver)
+              ) : (
+                <Tomt>{text({ sv: "Ingen kund kräver åtgärd.", en: "No customer needs attention." })}</Tomt>
+              )}
+            </Sektion>
+
+            <Sektion title={text({ sv: "Ekonomi", en: "Finances" })}>
+              <Nyckeltal
+                poster={[
+                  {
+                    etikett: a("manadsintakt", locale),
+                    varde: formateraPris(p.mrr),
+                    notis: text({
+                      sv: `${p.antalBetalande} av ${p.antalKunder} kunder betalar`,
+                      en: `${p.antalBetalande} of ${p.antalKunder} customers pay`
+                    })
+                  },
+                  {
+                    // Modellen och "listpris" i notisen: "en uppskattning" utan
+                    // att säga av vad är ett förbehåll man inte kan kontrollera.
+                    etikett: text({ sv: "Uppskattad tokenkostnad", en: "Estimated token cost" }),
+                    varde: formateraPris(Math.round(p.kostnad)),
+                    notis: text({
+                      sv: `Listpris, ${TOKENKOSTNAD_MODELL}`,
+                      en: `List price, ${TOKENKOSTNAD_MODELL}`
+                    })
+                  },
+                  {
+                    etikett: text({ sv: "Marginal efter tokenkostnad", en: "Margin after token cost" }),
+                    varde: p.marginal === null ? "–" : `${Math.round(p.marginal * 100)} %`,
+                    notis: p.marginal === null ? a("ingenIntakt", locale) : undefined
+                  }
+                ]}
+              />
+              {/* Exempelraderna räknas med i talen ovan, och det ska synas
+                  innan någon läser månadsintäkten som ett utfall. */}
+              {exempelrader > 0 ? (
+                <p className="mt-4 max-w-[70ch] text-[0.9375rem] text-ink-muted">
+                  {exempelrader === 1
+                    ? text({
+                        sv: "Nyckeltalen räknar med exempeldata från en kund.",
+                        en: "The key figures include example data from one customer."
+                      })
+                    : text({
+                        sv: `Nyckeltalen räknar med exempeldata från ${exempelrader} kunder.`,
+                        en: `The key figures include example data from ${exempelrader} customers.`
+                      })}
+                </p>
+              ) : null}
+            </Sektion>
+
+            {ovriga.length > 0 ? (
+              <Sektion title={text({ sv: "Övriga kunder", en: "Other customers" })}>
+                {kundtabell(ovriga)}
+              </Sektion>
+            ) : null}
+          </>
+        )}
+
+        {/* Rådgivaren får SAMMA rader som tabellen räknat fram, inte en egen
+            hämtning. Två uträkningar av samma tal är två tillfällen att räkna
+            olika, och här skulle skillnaden synas som att sidan säger emot sig
+            själv. */}
+        <Radgivare rader={rader.map(({ rad, ekonomi }) => ({ namn: rad.name, ekonomi }))} />
       </div>
-
-      <div className="mt-10 overflow-x-auto">
-        <div className="min-w-[900px]">
-          <div className="grid grid-cols-12 gap-x-4 border-b border-ink/15 pb-3">
-            {[
-              ["", "col-span-1"],
-              [a("kolKund", locale), "col-span-3"],
-              [a("kolPaket", locale), "col-span-2"],
-              [a("kolArenden", locale), "col-span-1 text-right"],
-              [a("kolKorningar", locale), "col-span-1 text-right"],
-              [a("kolTokens", locale), "col-span-1 text-right"],
-              [a("kolKostnad", locale), "col-span-1 text-right"],
-              [a("kolMarginal", locale), "col-span-1 text-right"],
-              [a("kolFel", locale), "col-span-1 text-right"]
-            ].map(([rubrik, kl]) => (
-              <div key={String(rubrik) || "symbol"} className={`kicker text-mineral ${kl}`}>
-                {rubrik}
-              </div>
-            ))}
-          </div>
-
-          <div className="divide-y divide-ink/15">
-            {rader.map(({ rad, ekonomi }) => (
-              <div key={rad.id} className="grid grid-cols-12 items-baseline gap-x-4 py-4">
-                <div
-                  className="col-span-1 text-[1.25rem]"
-                  title={halsoetikett(ekonomi.halsa, locale)}
-                >
-                  <span aria-hidden="true">{ekonomi.symbol}</span>
-                  <span className="sr-only">{halsoetikett(ekonomi.halsa, locale)}</span>
-                </div>
-                <div className="col-span-3 min-w-0">
-                  <p className="flex min-w-0 items-baseline gap-2 text-[1rem] font-semibold">
-                    {/* Namnet leder till kundprofilen — agentinstruktioner och
-                        tillägg. Förut var raden en återvändsgränd, och vägen
-                        till tilläggen gick bara via en ikonknapp på en ANNAN
-                        flik. */}
-                    <Link
-                      href={`/admin/kunder/${rad.id}`}
-                      className="focus-ring truncate rounded-input underline decoration-ink/25 underline-offset-4 hover:text-ochre"
-                    >
-                      {rad.name}
-                    </Link>
-                    {ekonomi.halsa === "test" ? (
-                      <Radmarke>{text({ sv: "Testarbetsyta", en: "Test workspace" })}</Radmarke>
-                    ) : null}
-                    {rad.active === false ? (
-                      <Radmarke>{text({ sv: "Inaktiv", en: "Inactive" })}</Radmarke>
-                    ) : null}
-                    {rad.ar_exempel ? <Exempelmarke /> : null}
-                  </p>
-                  <p className="mt-0.5 truncate text-[0.8125rem] text-ink-muted">
-                    {text(ekonomi.motivering)}
-                  </p>
-                </div>
-                <div className="col-span-2 text-[0.875rem] text-ink-muted">
-                  {ekonomi.paketNamn ?? "—"}
-                  {ekonomi.intakt > 0 ? (
-                    <span className="block text-[0.8125rem] text-mineral">
-                      {formateraPris(ekonomi.intakt)}
-                      {a("perManad", locale)}
-                    </span>
-                  ) : null}
-                </div>
-                <Tal>{antal(rad.tickets, locale)}</Tal>
-                <Tal>
-                  {antal(rad.runs, locale)}
-                  {/* Testkörningar göms inte, de räknas bara inte som kundvolym.
-                      En siffra som tyst blivit mindre är svårare att lita på än
-                      en siffra som säger vad den utelämnat. */}
-                  {rad.test_runs ? (
-                    <span className="block text-[0.8125rem] text-ink-subtle">
-                      +{rad.test_runs} {a("test", locale)}
-                    </span>
-                  ) : null}
-                </Tal>
-                <Tal>{antal((rad.tokens_in ?? 0) + (rad.tokens_out ?? 0), locale)}</Tal>
-                <Tal>{formateraPris(Math.round(ekonomi.kostnad))}</Tal>
-                <Tal>
-                  {ekonomi.marginal === null ? "—" : `${Math.round(ekonomi.marginal * 100)} %`}
-                </Tal>
-                {/* Ochre bara på avvikelsen. */}
-                <div
-                  className={`col-span-1 text-right tabular-nums text-[0.9375rem] ${
-                    rad.errors > 0 ? "text-warning" : "text-ink-subtle"
-                  }`}
-                >
-                  {rad.errors}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {rader.length === 0 ? (
-        <p className="mt-8 text-[15px] text-ink-muted">{a("ingaKunder", locale)}</p>
-      ) : null}
-
-      <div className="mt-10 max-w-[80ch] space-y-2 border-t border-ink/15 pt-5 text-[0.8125rem] leading-[1.6] text-mineral">
-        {/* Exempelfotnoten står FÖRST av fotnoterna när den finns. Läsaren ska
-            veta att en del av tabellen är påhittad innan hen läser hur
-            marginalen räknas, inte efter. */}
-        {exempelrader > 0 ? (
-          <p>
-            <strong className="text-ink-muted">
-              {text({
-                sv: `${exempelrader} av ${rader.length} rader visar exempeldata`,
-                en: `${exempelrader} of ${rader.length} rows show example data`
-              })}
-            </strong>{" "}
-            {text({
-              sv: "och är märkta med Exempel. De arbetsytorna har ingen egen aktivitet — talen finns för att vyn ska gå att bedöma, och de räknas med i nyckeltalen ovan. Stäng av dem med NEXT_PUBLIC_ADMIN_EXEMPELDATA=av.",
-              en: "and carry an Example tag. Those workspaces have no activity of their own — the figures exist so the view can be evaluated, and they are included in the key figures above. Turn them off with NEXT_PUBLIC_ADMIN_EXEMPELDATA=av."
-            })}
-          </p>
-        ) : null}
-{/* Fotnoten namnger MODELLEN och nivån. "En uppskattning" utan att säga
-            av vad är ett förbehåll man inte kan kontrollera; med modellnamnet
-            och gratisnivån utskriven går påståendet att falsifiera på en
-            minut. */}
-        <p>
-          <strong className="text-ink-muted">
-            {text({
-              sv: "Kostnaden är leverantörens listpris",
-              en: "The cost is the provider's list price"
-            })}
-          </strong>
-          {text({
-            sv: `, inte en faktura: ${kr(TOKENKOSTNAD_IN_PER_MILJON_SEK)} kr per miljon ingående och ${kr(TOKENKOSTNAD_UT_PER_MILJON_SEK)} kr per miljon utgående tokens för ${TOKENKOSTNAD_MODELL}. Någon faktura finns inte — miljön kör på Geminis gratisnivå, så det verkliga utfallet i kronor är noll tills faktureringen slås på. Talen visar vad det kostar då. Priset dubblas 2027-01-01; ändra i `,
-            en: `, not an invoice: ${kr(TOKENKOSTNAD_IN_PER_MILJON_SEK)} kr per million input and ${kr(TOKENKOSTNAD_UT_PER_MILJON_SEK)} kr per million output tokens for ${TOKENKOSTNAD_MODELL}. There is no invoice — this environment runs on Gemini's free tier, so the real outcome in kronor is zero until billing is switched on. These figures show what it costs then. The price doubles on 2027-01-01; change it in `
-          })}
-          <code>lib/admin/halsa.ts</code>.
-        </p>
-        <p>
-          {text({
-            sv: `Grönt över ${Math.round(MARGINAL_GRON * 100)} % marginal, gult över ${Math.round(MARGINAL_ROD * 100)} %. En kund utan aktivitet på ${TYST_EFTER_DAGAR} dagar visas som tyst`,
-            en: `Green above ${Math.round(MARGINAL_GRON * 100)} % margin, amber above ${Math.round(MARGINAL_ROD * 100)} %. A customer with no activity for ${TYST_EFTER_DAGAR} days shows as dormant`
-          })}{" "}
-          <span aria-hidden="true">😴</span>{" "}
-          {text({
-            sv: "oavsett marginal — den som inte använder tjänsten har låg kostnad och ser lönsam ut precis innan den säger upp sig.",
-            en: "regardless of margin — a customer who has stopped using the service has low costs and looks profitable right up until they cancel."
-          })}
-        </p>
-        {harleddaRader > 0 ? (
-          <p>
-            <strong className="text-ink-muted">
-              {text({
-                sv: `${harleddaRader} av ${rader.length} rader har ett härlett paket`,
-                en: `${harleddaRader} of ${rader.length} rows have an inferred plan`
-              })}
-            </strong>
-            {text({
-              sv: ": deras ",
-              en: ": their "
-            })}
-            <code>workspaces.products</code>
-            {text({
-              sv: " gick inte att läsa, så paketet gissas ur aktivitet. En kund som betalar utan att använda får då fel paket — och är samtidigt precis den kund raden ska varna för.",
-              en: " could not be read, so the plan is guessed from activity. A customer who pays without using then gets the wrong plan — and is exactly the customer the row exists to flag."
-            })}
-          </p>
-        ) : null}
-        <p>
-          {text({
-            sv: "Testarbetsytor (🧪) är våra egna. Deras testkörningar räknas som aktivitet, men de ger ingen intäkt och räknas inte in i Kräver åtgärd.",
-            en: "Test workspaces (🧪) are our own. Their test runs count as activity, but they bring no revenue and are not counted under Needs attention."
-          })}
-        </p>
-      </div>
-
-      {/* Rådgivaren får SAMMA rader som tabellen räknat fram, inte en egen
-          hämtning. Två uträkningar av samma tal är två tillfällen att räkna
-          olika, och här skulle skillnaden synas som att sidan säger emot sig
-          själv. */}
-      <Radgivare rader={rader.map(({ rad, ekonomi }) => ({ namn: rad.name, ekonomi }))} />
-
-      <p className="mt-8">
-        <Link
-          href="/admin/korningar"
-          className="focus-ring text-[15px] text-warning underline underline-offset-4"
-        >
-          {a("seAllaKorningar", locale)}
-        </Link>
-      </p>
-    </div>
-  );
-}
-
-/**
- * Märket som skiljer en påhittad rad från en mätt.
- *
- * Hairline och mineral, inte ochre: accenten i den här vyn är reserverad för
- * avvikelser man ska agera på, och en exempelrad är inte en avvikelse — den är
- * ett förbehåll. Syns tydligt, ropar inte.
- */
-function Exempelmarke() {
-  const { locale } = useLocale();
-  return (
-    <span
-      title={a("exempeldataMarkning", locale)}
-      className="shrink-0 rounded-[3px] border border-ink/20 px-1.5 py-px font-mono text-[10px] uppercase tracking-[0.14em] text-mineral"
-    >
-      {a("exempel", locale)}
-    </span>
-  );
-}
-
-function Nyckeltal({
-  etikett,
-  varde,
-  rad
-}: Readonly<{ etikett: string; varde: string; rad: string }>) {
-  return (
-    <div className="bg-paper px-5 py-4">
-      <p className="kicker text-mineral">{etikett}</p>
-      <p className="mt-1.5 font-display text-[1.75rem] tabular-nums tracking-[-0.02em]">{varde}</p>
-      <p className="mt-1 text-[0.8125rem] leading-[1.45] text-ink-muted">{rad}</p>
-    </div>
-  );
-}
-
-function Tal({ children }: Readonly<{ children: React.ReactNode }>) {
-  return (
-    <div className="col-span-1 text-right tabular-nums text-[0.9375rem] text-ink-muted">
-      {children}
     </div>
   );
 }

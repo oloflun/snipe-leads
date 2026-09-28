@@ -4,8 +4,13 @@ import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { Betalsatt } from "@/components/settings/Betalsatt";
 import { Planvaljare } from "@/components/settings/Planvaljare";
 import { KONTAKT_MEJL, mejlaOss } from "@/components/marketing/copy";
-import { PAKET, PRIS_PREFIX, PRIS_SAKNAS, formateraPris } from "@/lib/pricing";
+import { Rad, Radlista, Sektion, btnSecondary, rubrikPanel } from "@/components/ui";
+import { PAKET } from "@/lib/pricing";
 import { useLocale } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
+
+/** Radformen, samma som i resten av inställningarna. Under sm staplas den. */
+const radform = "grid gap-x-6 gap-y-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center";
 
 /**
  * Inställningar → Plan och fakturering.
@@ -59,52 +64,24 @@ export function PlanSettings() {
   const paket = PAKET.find((p) => p.id === paketId);
 
   return (
-    <div className="grid gap-8">
-      <div>
-        <h2 className="kicker text-mineral">Er plan</h2>
-        {/* Två kolumner: vad ni HAR till vänster, vad ni kan byta till höger.
-            Väljaren låg först under texten, och då hamnade den under "Det här
-            ingår" — alltså efter en lista som beskriver det paket man just
-            funderar på att lämna. Sida vid sida läses de mot varandra, vilket
-            är precis vad ett paketbyte är.
+    <div>
+      {/* Ett paket, visat EN gång. Här stod tidigare det aktiva paketets namn,
+          pris och beskrivning i en vänsterspalt, och samma tre saker igen i
+          väljaren bredvid, där det aktiva paketet redan är markerat. Nu är
+          väljaren ensam, och texten ovanför finns bara när inget paket matchar. */}
+      <Sektion title="Paket">
+        {paket ? null : (
+          <p className="mb-4 max-w-[62ch] text-[0.9375rem] leading-6 text-ink-muted">
+            {products.length === 0
+              ? "Arbetsytan har ingen aktiv produkt. Välj ett paket nedan."
+              : "Er plan är satt manuellt och matchar inget standardpaket. Väljer ni ett paket nedan ersätts den."}
+          </p>
+        )}
+        <Planvaljare aktivtPaket={paketId} />
+      </Sektion>
 
-            Staplat under md: två kolumner à sex på en telefon ger ett prisfält
-            på halva bredden, och det är samma fälla som gap-x-8 vid 320px
-            (se WorkspaceViews). */}
-        <div className="mt-4 grid grid-cols-12 gap-x-0 gap-y-8 border-y border-ink/15 py-5 md:gap-x-10">
-          <div className="col-span-12 md:col-span-6">
-            {paket ? (
-              <>
-                <p className="flex items-baseline gap-2">
-                  <span className="text-[1.0625rem] font-semibold">{paket.namn}</span>
-                  <span className="text-[0.9375rem] text-mineral">
-                    {paket.prisPerManad === null
-                      ? text(PRIS_SAKNAS)
-                      : `${text(PRIS_PREFIX)} ${formateraPris(paket.prisPerManad)}/mån`}
-                  </span>
-                </p>
-                <p className="mt-2 max-w-[58ch] text-[0.9375rem] leading-6 text-ink-muted">
-                  {text(paket.beskrivning)}
-                </p>
-              </>
-            ) : (
-              <p className="max-w-[58ch] text-[0.9375rem] leading-6 text-ink-muted">
-                {products.length === 0
-                  ? "Arbetsytan har ingen aktiv produkt. Välj ett paket här bredvid."
-                  : "Er plan är satt manuellt och matchar inget standardpaket. Väljer ni ett paket här bredvid ersätts den."}
-              </p>
-            )}
-          </div>
-
-          <div className="col-span-12 md:col-span-6">
-            <Planvaljare aktivtPaket={paketId} />
-          </div>
-        </div>
-      </div>
-
-      <div>
-        <h2 className="kicker text-mineral">Det här ingår</h2>
-        <ul className="mt-4 flex flex-col gap-2.5 border-y border-ink/15 py-5">
+      <Sektion title={paket ? `Det här ingår i ${paket.namn}` : "Det här ingår"}>
+        <ul className="flex flex-col gap-2.5 border-y border-ink/15 py-5">
           {(paket?.ingar ?? []).map((rad, index) => (
             <li key={index} className="flex gap-2.5 text-[0.9375rem] leading-6 text-ink-muted">
               <span aria-hidden className="mt-[0.55em] h-1 w-1 shrink-0 rounded-full bg-ochre" />
@@ -118,34 +95,42 @@ export function PlanSettings() {
           ) : null}
           {paket ? null : (
             <li className="text-[0.9375rem] leading-6 text-ink-muted">
-              {products.length ? products.join(", ") : "—"}
+              {products.length ? products.join(", ") : "–"}
             </li>
           )}
         </ul>
-      </div>
+      </Sektion>
 
-      <div className="border-t border-ink/15 pt-7">
-        <Betalsatt />
-      </div>
+      <Betalsatt />
 
-      <div>
-        {/* Ingen förbrukningssiffra. Se docstringen: vi mäter den inte per
-            arbetsyta ännu, och kunden är den enda som kan falsifiera en
-            påhittad — på fakturan. */}
-        <p className="max-w-[62ch] text-[0.9375rem] leading-6 text-ink-muted">
-          Fakturan går till{" "}
-          {workspaceName ? <strong className="font-semibold">{workspaceName}</strong> : "er arbetsyta"}.
-          Paketbytet ovan träder i kraft direkt; faktureringen justeras vid nästa
-          period. Vill ni se er förbrukning eller diskutera villkoren, skriv till{" "}
-          <a
-            href={mejlaOss("Plan och fakturering")}
-            className="focus-ring rounded-input underline underline-offset-4 hover:text-ochre"
-          >
-            {KONTAKT_MEJL}
-          </a>{" "}
-          så svarar vi samma dag.
-        </p>
-      </div>
+      {/* Ingen förbrukningssiffra. Se docstringen: vi mäter den inte per
+          arbetsyta ännu, och kunden är den enda som kan falsifiera en
+          påhittad, på fakturan. Stycket som stod här är nu två rader i samma
+          radform som resten av inställningarna; meningen om när ett paketbyte
+          gäller står vid väljaren. */}
+      <Sektion title="Fakturering">
+        <Radlista ariaLabel="Fakturering">
+          <Rad className={radform}>
+            <span className={rubrikPanel}>Fakturamottagare</span>
+            <span className="text-[0.9375rem] sm:text-right">{workspaceName ?? "–"}</span>
+          </Rad>
+          <Rad className={radform}>
+            <span className="min-w-0">
+              <span className={cn(rubrikPanel, "block")}>Förbrukning och villkor</span>
+              <span id="fakturering-hjalp" className="mt-1 block text-[0.9375rem] leading-6 text-ink-muted">
+                Vi svarar samma dag.
+              </span>
+            </span>
+            <a
+              href={mejlaOss("Plan och fakturering")}
+              aria-describedby="fakturering-hjalp"
+              className={cn(btnSecondary, "justify-self-start sm:justify-self-end")}
+            >
+              Skriv till {KONTAKT_MEJL}
+            </a>
+          </Rad>
+        </Radlista>
+      </Sektion>
     </div>
   );
 }

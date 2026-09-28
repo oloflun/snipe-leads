@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { Vaxel } from "@/components/settings/Vaxel";
+import { Sektion } from "@/components/ui";
 import { addonCatalog, type AddonKey } from "@/lib/addons";
 import { sattTillagg } from "@/lib/actions/tillagg";
 
@@ -27,8 +28,12 @@ import { sattTillagg } from "@/lib/actions/tillagg";
  * återställs läget och felet skrivs ut — en växel som står kvar i påslaget
  * läge efter ett misslyckat anrop är en lögn om kundens entitlement.
  *
- * Raden som skrivs bär "— sparar…" i etiketten under tiden. Det är statusen
+ * Raden som skrivs bär "(sparar…)" i etiketten under tiden. Det är statusen
  * som redan fanns i `sparar` och aldrig renderades: spårad, men osynlig.
+ *
+ * Ingressen under rubriken togs bort 2026-09-27 (F-016). Att ändringen
+ * gäller direkt säger kvittot efter varje växling, och att tilläggen slås på
+ * av oss och inte av kunden följer av att växlarna står i adminytan.
  */
 export function Tillaggsvaljare({
   tenantId,
@@ -88,36 +93,21 @@ export function Tillaggsvaljare({
   }
 
   return (
-    <section aria-labelledby="tillagg-rubrik">
-      <h2 id="tillagg-rubrik" className="kicker text-mineral">
-        Tillägg
-      </h2>
-      {/* Kundnamnet står redan som sidans rubrik. Interpolerat i en mening
-          blev det dessutom oläsligt för arbetsytor vars NAMN är en URL —
-          uppmätt i pixlar: "Det Testarbetsyta https://www.snajp.se får
-          utöver sitt paket". */}
-      <p className="mt-2 max-w-[70ch] text-[0.9375rem] leading-7 text-mineral">
-        Vad kunden får utöver sitt paket. Slås på av oss, inte av kunden — ett tillägg
-        kräver uppsättning på vår sida, och en vy som tänds innan den kan leverera är värre
-        än ingen vy. Ändringen gäller direkt.
-      </p>
-
-      <div className="mt-6 divide-y divide-ink/12 border-y border-ink/12">
+    <Sektion title="Tillägg">
+      <div className="divide-y divide-ink/12 border-y border-ink/15">
         {addonCatalog.map((spec) => (
-          <div key={spec.key} className="py-5">
+          // `why` är vad tillägget KOSTAR oss att sätta upp — den texten står i
+          // kundens egen vy som skäl till att det inte ingår, och här som
+          // påminnelse om vad ett påslag förbinder oss till (lib/addons.ts).
+          // Som radens title sedan 2026-09-27: en andra finstilt rad under
+          // växelns egen beskrivning var en förklaring för mycket (F-016).
+          <div key={spec.key} className="py-5" title={spec.why}>
             <Vaxel
-              etikett={sparar === spec.key ? `${spec.name} — sparar…` : spec.name}
+              etikett={sparar === spec.key ? `${spec.name} (sparar…)` : spec.name}
               beskrivning={spec.what}
               pa={addons.includes(spec.key)}
               onChange={(nytt) => void vaxla(spec.key, nytt)}
             />
-            {/* `why` är vad tillägget KOSTAR oss att sätta upp — den texten
-                står i kundens egen vy som skäl till att det inte ingår, och
-                här som påminnelse om vad ett påslag faktiskt förbinder oss
-                till. Se lib/addons.ts. */}
-            <p className="mt-2 max-w-[60ch] text-[0.8125rem] leading-5 text-ink-subtle">
-              {spec.why}
-            </p>
           </div>
         ))}
       </div>
@@ -132,6 +122,6 @@ export function Tillaggsvaljare({
           {kvitto}
         </p>
       ) : null}
-    </section>
+    </Sektion>
   );
 }

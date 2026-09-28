@@ -15,7 +15,9 @@ export const btnBase =
 
 export const btnPrimary = `${btnBase} bg-ink text-paper hover:bg-ink2`;
 
-export const btnSecondary = `${btnBase} bg-paper2 text-ink hover:bg-paper2/70`;
+// Hårlinjen gör knappen synlig på en paper2-yta (Tomt, kort). Utan den var
+// sekundärknappen samma färg som plattan den stod på och läste som lös text.
+export const btnSecondary = `${btnBase} border border-ink/15 bg-paper2 text-ink hover:border-ink/30 hover:bg-paper`;
 
 /**
  * STORLEK, inte en sjunde variant. Läggs ovanpå btnPrimary/btnSecondary med
@@ -80,20 +82,109 @@ export function ButtonLink({
   );
 }
 
-export function MetricCard({
-  label,
-  value,
-  detail,
-  tone = "neutral"
-}: Readonly<{ label: string; value: string; detail: string; tone?: "neutral" | "good" | "warn" }>) {
+/**
+ * Appytornas typografi — EN skala för varje inloggad sida (plans/2026-09-27-appytor-enhetlighet.md).
+ *
+ * Före 2026-09-27 fanns fyra sidrubriker (Fraunces 36 rak, 36 kursiv, 26 halvfet, Geist 28),
+ * sex sektionsrubriker och 282 `kicker`-etiketter i 10,5 px spärrad mono. Ingen av dem var fel
+ * var för sig; tillsammans såg varje sida ut att komma från en egen produkt. Fast rem-skala och
+ * inte clamp: en arbetsyta läses i samma storlek oavsett fönsterbredd (Operate-läge).
+ *
+ * Klassträngar av samma skäl som knapparna ovan: anropsställena behåller sina element.
+ */
+export const rubrikSida = "font-display text-[2.25rem] leading-[1.1] tracking-[-0.02em]";
+export const rubrikSektion = "font-display text-[1.5rem] leading-tight tracking-[-0.015em]";
+export const rubrikPanel = "text-[1.0625rem] font-semibold leading-snug text-ink";
+
+/**
+ * Etikett: fält, kolumnhuvud, nyckeltal, navigeringsgrupp. Ersätter `.kicker` på appytorna —
+ * samma jobb (säga vad värdet är), men i brödtextens typsnitt och versaler som i vanlig text.
+ * Spärrad mono i 10,5 px var det som fick varje sida att viska (F-016).
+ */
+export const etikett = "text-[0.8125rem] font-medium text-ink-muted";
+
+/** Meta: datum, domän, stad, antal — det som identifierar en rad utan att vara dess rubrik. */
+export const meta = "text-[0.8125rem] text-ink-subtle";
+
+/** Filter- och vyflikar. Pillren Iris redan hade, nu det enda flikspråket. */
+export const flik =
+  "focus-ring inline-flex min-h-11 items-center rounded-input px-4 text-[0.875rem] font-medium transition-colors";
+export const flikAktiv = "bg-ink text-paper";
+export const flikInaktiv = "bg-paper2 text-ink-muted hover:text-ink";
+
+export function Sidhuvud({
+  title,
+  action
+}: Readonly<{ title: React.ReactNode; action?: React.ReactNode }>) {
   return (
-    <div className="rounded-[8px] bg-paper/72 p-4 shadow-hairline backdrop-blur">
-      <div className="flex items-center justify-between gap-4">
-        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-subtle">{label}</p>
-        <span className={cn("h-2 w-2 rounded-full", tone === "good" ? "bg-moss" : tone === "warn" ? "bg-copper" : "bg-steel")} />
+    <div className="flex flex-wrap items-start justify-between gap-4">
+      <h1 className={cn(rubrikSida, "min-w-0 break-words")}>{title}</h1>
+      {/* min-w-0, inte shrink-0: breda åtgärder ska bryta rad vid 320 px, inte
+          trycka sidan i sidled. */}
+      {action ? <div className="flex min-w-0 flex-wrap items-center gap-2">{action}</div> : null}
+    </div>
+  );
+}
+
+export function Sektion({
+  title,
+  action,
+  className,
+  children
+}: Readonly<{
+  title: React.ReactNode;
+  action?: React.ReactNode;
+  className?: string;
+  children: React.ReactNode;
+}>) {
+  return (
+    <section className={cn("mt-12 first:mt-0", className)}>
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <h2 className={cn(rubrikSektion, "min-w-0 break-words")}>{title}</h2>
+        {action ? <div className="flex shrink-0 flex-wrap items-center gap-2">{action}</div> : null}
       </div>
-      <p className="mt-4 font-display text-4xl leading-none">{value}</p>
-      <p className="mt-2 text-sm text-ink-muted">{detail}</p>
+      <div className="mt-4">{children}</div>
+    </section>
+  );
+}
+
+/**
+ * Nyckeltal. Etiketten ovanför värdet och bär enhet och period ("Körningar, 7 dagar") —
+ * talet ensamt säger inte vad det räknar. Hårlinje ovanför varje post och under raden, så
+ * att två rader nyckeltal inte får dubbla linjer emellan.
+ */
+const nyckeltalKolumner = ["sm:grid-cols-1", "sm:grid-cols-2", "sm:grid-cols-3", "sm:grid-cols-4"];
+
+export function Nyckeltal({
+  poster
+}: Readonly<{ poster: { etikett: string; varde: React.ReactNode; notis?: React.ReactNode }[] }>) {
+  return (
+    <dl
+      className={cn(
+        "grid grid-cols-2 gap-x-8 border-b border-ink/15",
+        nyckeltalKolumner[Math.min(poster.length, 4) - 1]
+      )}
+    >
+      {poster.map((post) => (
+        <div key={post.etikett} className="min-w-0 border-t border-ink/15 py-4">
+          <dt className={etikett}>{post.etikett}</dt>
+          <dd className="num mt-2 font-display text-[2rem] leading-none tracking-[-0.02em]">{post.varde}</dd>
+          {post.notis ? <dd className={cn(meta, "mt-2")}>{post.notis}</dd> : null}
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** Tomt läge: en mening, och en handling om det finns en. Ingen ikon, ingen streckad ram. */
+export function Tomt({
+  children,
+  action
+}: Readonly<{ children: React.ReactNode; action?: React.ReactNode }>) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-input border border-ink/10 bg-paper2 px-5 py-4 text-[0.9375rem] text-ink-muted">
+      <p className="min-w-0">{children}</p>
+      {action ? <div className="shrink-0">{action}</div> : null}
     </div>
   );
 }
@@ -139,8 +230,8 @@ export function localizedList(items: Localized[], text: (value: Localized) => st
  * hoppade med innehållet mellan sidor och laddningstillstånd.
  *
  * `Tabell` är den gemensamma formen: fast layout (kolumnbredderna deklareras,
- * inte förhandlas), kicker-huvuden i mineral som i Bolagsregister, hårlinjer
- * mellan raderna och `tnum` på talkolumner via `Cell hoger`.
+ * inte förhandlas), `etikett`-huvuden (kicker-huvudena togs bort 2026-09-27,
+ * F-016), hårlinjer mellan raderna och `tnum` på talkolumner via `Cell hoger`.
  *
  * Bredderna anges i procent och ska summera till 100. `table-fixed` betyder
  * att webbläsaren ALDRIG jämkar: en kolumn utan bredd delar på det som blir
@@ -191,7 +282,8 @@ export function Tabell({
                 // cn() är ett rent join utan tailwind-merge, så det är css-
                 // filens ordning som avgör vilken som vinner — se btnLiten.
                 className={cn(
-                  "kicker py-3 pr-4 font-medium text-mineral last:pr-0",
+                  etikett,
+                  "py-3 pr-4 last:pr-0",
                   kolumn.hoger ? "text-right" : "text-left"
                 )}
               >

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { Badge, btnPrimary } from "@/components/ui";
+import { Badge, Sektion, btnPrimary, meta, rubrikPanel } from "@/components/ui";
 import { sparaKundprofil, type Kundprofil as Profil } from "@/lib/actions/agentinstruktioner";
 
 /**
@@ -24,16 +24,8 @@ function fackNamn(nyckel: string): string {
   return FACKETIKETT[nyckel] ?? nyckel;
 }
 
-/**
- * Samma sak för agenttypen. Sidans egna flikar säger redan "Kundtjänst" och
- * "Leads" — att metadataraden strax under sa "support" var två namn på samma
- * sak inom samma vy.
- */
-function agentNamn(typ: string): string {
-  return typ === "leads" ? "Leads" : typ === "support" ? "Kundtjänst" : typ;
-}
-
-/** Kort etikett för positionen. Den långa förklaringen står i POSITIONSTEXT. */
+/** Kort etikett för positionen. Den långa förklaringen står i POSITIONSTEXT,
+ *  som märkets title. */
 const POSITIONSETIKETT: Record<string, string> = {
   system: "Regel",
   "user (ärendekontext)": "Uppgift",
@@ -124,6 +116,14 @@ const FALT: Falt[] = [
  * inte känner till den skriver en regel i fel ruta och drar slutsatsen att
  * agenten ignorerar den.
  *
+ * Märket (Regel/Uppgift/Underlag) står i fältets rubrikrad sedan 2026-09-27,
+ * och den långa förklaringen är märkets title. Den stod förut som en egen
+ * finstilt rad under hjälptexten, och varje fält bar då två förklaringar som
+ * delvis sade samma sak (F-016).
+ *
+ * "Agenttyp" i metadataraden togs bort samma dag: flikarna ovanför säger
+ * redan vilken agent profilen gäller.
+ *
  * ## Varför varje sektion sparas för sig
  *
  * En knapp per fält, inte en knapp för hela sidan. Ett samlat sparande skickar
@@ -169,9 +169,6 @@ export function Kundprofil({ profil }: Readonly<{ profil: Profil }>) {
       <section className="grid gap-2 border-t border-ink/15 pt-5 text-[0.9375rem]">
         <div className="flex flex-wrap gap-x-8 gap-y-2 text-ink-muted">
           <span>
-            Agenttyp: <span className="text-ink">{agentNamn(profil.agent_type)}</span>
-          </span>
-          <span>
             Kunskapsbas: <span className="text-ink tabular-nums">{profil.kb_artiklar}</span> artiklar
           </span>
           <span>
@@ -186,7 +183,7 @@ export function Kundprofil({ profil }: Readonly<{ profil: Profil }>) {
           </span>
         </div>
         {profil.global_fran_fil ? (
-          <p className="max-w-[70ch] text-[0.875rem] leading-6 text-ink-subtle">
+          <p className="max-w-[70ch] text-[0.9375rem] text-ink-muted">
             Ingen global instruktion är sparad. Agenten kör på den incheckade
             agent-core/AGENTS.md ovanpå det som står här.
           </p>
@@ -195,20 +192,19 @@ export function Kundprofil({ profil }: Readonly<{ profil: Profil }>) {
 
       {FALT.map((falt) => (
         <section key={falt.sparfalt} className="border-t border-ink/15 pt-5">
-          <label htmlFor={falt.sparfalt} className="kicker text-mineral">
-            {falt.rubrik}
-          </label>
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <label htmlFor={falt.sparfalt} className={rubrikPanel}>
+              {falt.rubrik}
+            </label>
+            {/* Märket bär skillnaden mellan regel och underlag, den enda som
+                avgör om agenten LYDER texten eller bara läser den. */}
+            <span title={POSITIONSTEXT[falt.position]}>
+              <Badge tone={falt.position === "system" ? "warn" : "neutral"}>
+                {POSITIONSETIKETT[falt.position]}
+              </Badge>
+            </span>
+          </div>
           <p className="mt-2 max-w-[70ch] text-[0.9375rem] leading-7 text-ink-muted">{falt.hjalp}</p>
-          {/* Positionen låg först som den ljusaste raden på sidan, alltså som
-              finstilt — trots att den är den enda skillnad som avgör om
-              agenten LYDER texten eller bara läser den. Märket bär skillnaden,
-              förklaringen står kvar bredvid. */}
-          <p className="mt-3 flex max-w-[70ch] flex-wrap items-baseline gap-x-2 gap-y-1 text-[0.8125rem] leading-6 text-ink-subtle">
-            <Badge tone={falt.position === "system" ? "warn" : "neutral"}>
-              {POSITIONSETIKETT[falt.position]}
-            </Badge>
-            <span>{POSITIONSTEXT[falt.position]}</span>
-          </p>
           <textarea
             id={falt.sparfalt}
             rows={falt.rader}
@@ -221,7 +217,7 @@ export function Kundprofil({ profil }: Readonly<{ profil: Profil }>) {
               setStatus((s) => (s[falt.sparfalt] ? { ...s, [falt.sparfalt]: "" } : s));
             }}
             placeholder={falt.exempel}
-            className="focus-ring mt-4 w-full resize-y rounded-input border border-ink/15 bg-paper p-4 font-mono text-[1rem] leading-6"
+            className="focus-ring mt-4 w-full resize-y rounded-input border border-ink/15 bg-paper p-4 text-[1rem] leading-6"
           />
           <div className="mt-3 flex flex-wrap items-center gap-3">
             <button
@@ -236,7 +232,7 @@ export function Kundprofil({ profil }: Readonly<{ profil: Profil }>) {
             >
               {sparar === falt.sparfalt ? "Sparar…" : `Spara ${falt.rubrik.toLowerCase()}`}
             </button>
-            <span className="text-[0.8125rem] text-ink-muted tabular-nums">
+            <span className={`${meta} num`}>
               {(varden[falt.sparfalt] ?? "").length} / {falt.max}
             </span>
             {/* aria-live: kvittot är den enda återkopplingen på att sparandet
@@ -254,17 +250,18 @@ export function Kundprofil({ profil }: Readonly<{ profil: Profil }>) {
         </section>
       ))}
 
+      {/* Ingressen ("den strukturerade versionen av instruktionerna ovan")
+          togs bort 2026-09-27 (F-016); rubriken säger vad texten är.
+          Omslaget gör Sektion till första barn, så att dess mt-12 faller bort
+          och rutnätets gap ensamt bär avståndet. */}
       {profil.instruktioner_md ? (
-        <section className="border-t border-ink/15 pt-5">
-          <h2 className="kicker text-mineral">Vad agenten läser för den här kunden</h2>
-          <p className="mt-2 max-w-[70ch] text-[0.9375rem] leading-7 text-ink-muted">
-            Den strukturerade versionen av instruktionerna ovan. Den här texten går in i
-            systemprompten, efter de globala reglerna.
-          </p>
-          <pre className="mt-4 max-h-64 overflow-auto whitespace-pre-wrap rounded-input border border-ink/15 bg-paper2/50 p-4 text-[0.8125rem] leading-6">
-            {profil.instruktioner_md}
-          </pre>
-        </section>
+        <div>
+          <Sektion title="Vad agenten läser för den här kunden">
+            <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-input border border-ink/15 bg-paper2/50 p-4 font-sans text-[0.9375rem] leading-6">
+              {profil.instruktioner_md}
+            </pre>
+          </Sektion>
+        </div>
       ) : null}
     </div>
   );

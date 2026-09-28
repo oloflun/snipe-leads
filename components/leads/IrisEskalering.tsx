@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Sektion, rubrikPanel } from "@/components/ui";
 import type { Eskaleringsregler } from "@/lib/iris";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
@@ -41,8 +42,8 @@ function Vaxel({
   return (
     <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-2 py-4">
       <div className="min-w-0 max-w-[56ch] flex-1 basis-72">
-        <p className="text-[0.9375rem] font-semibold text-ink">{etikett}</p>
-        <p className="mt-0.5 text-[0.875rem] leading-6 text-ink-muted">{beskrivning}</p>
+        <p className={rubrikPanel}>{etikett}</p>
+        <p className="mt-0.5 text-[0.9375rem] leading-6 text-ink-muted">{beskrivning}</p>
       </div>
       <button
         type="button"
@@ -137,12 +138,13 @@ export function IrisEskalering() {
   }
 
   return (
-    <section aria-label="Eskalering till människa">
-      <h3 className="kicker text-mineral">När Iris lämnar över till dig</h3>
-      <p className="mt-3 max-w-[64ch] text-[15px] leading-7 text-ink-muted">
-        Reglerna avgör när ett lead eller ett svar går till dig i stället för att hanteras vidare
-        automatiskt. Avstängd regel betyder att Iris fortsätter enligt sitt vanliga flöde,
-        fortfarande med granskningskön som sista spärr.
+    // En Sektion (h2) i stället för kicker + ingress. Ingressens första mening
+    // upprepade rubriken; kvar står bara det rubriken inte säger — vad en
+    // avstängd regel betyder.
+    <Sektion title="När Iris lämnar över till dig">
+      <p className="max-w-[64ch] text-[0.9375rem] leading-7 text-ink-muted">
+        En avstängd regel betyder att Iris fortsätter som vanligt, med granskningskön som sista
+        spärr.
       </p>
 
       {lage.fas === "laddar" ? (
@@ -188,7 +190,7 @@ export function IrisEskalering() {
                 />
                 <span className="text-[0.9375rem] text-ink-muted">procent</span>
               </div>
-              <p className="w-full text-[0.8125rem] leading-5 text-ink-subtle">
+              <p className="w-full text-[0.9375rem] leading-6 text-ink-muted">
                 Under {lage.regler.kvalificeringstroskel} procent mot din målgrupp får bolaget
                 inget utkast i körningen. Sparas när du lämnar fältet.
               </p>
@@ -220,16 +222,13 @@ export function IrisEskalering() {
 
       <p
         role={sparfel ? "alert" : "status"}
-        className={cn("mt-2 min-h-5 text-[0.8125rem] leading-5", sparfel ? "text-danger" : "text-ink-subtle")}
+        className={cn("mt-2 min-h-6 text-[0.9375rem] leading-6", sparfel ? "text-danger" : "text-ink-muted")}
       >
-        {sparfel
-          ? sparfel
-          : sparad
-            ? "Sparat. Gäller från nästa svar och nästa körning."
-            : lage.fas === "klar"
-              ? "Sparas i ditt konto och gäller för alla som arbetar med Iris."
-              : null}
+        {/* Viloläget ("Sparas i ditt konto …") är struket: en rad som bara
+            beskriver ytan. Raden finns för besked, och ett besked kommer
+            först när något sparats eller fallit. */}
+        {sparfel ? sparfel : sparad ? "Sparat. Gäller från nästa svar och nästa körning." : null}
       </p>
-    </section>
+    </Sektion>
   );
 }

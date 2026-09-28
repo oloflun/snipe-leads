@@ -1,6 +1,7 @@
 "use client";
 
 import { Eye } from "lucide-react";
+import { btnLiten, btnSecondary } from "@/components/ui";
 import { bytVy } from "@/lib/actions/vy";
 import { useLocale } from "@/lib/i18n";
 
@@ -27,7 +28,9 @@ export function OppnaArbetsyta({ slug, namn }: Readonly<{ slug: string; namn: st
         type="submit"
         name="vy"
         value={`kund:${slug}`}
-        className="focus-ring inline-flex min-h-9 items-center gap-1.5 rounded-input bg-paper2 px-3 text-[13px] font-medium text-ink hover:bg-paper2/70"
+        // Knappvokabulären och inte egna klasser: den står bredvid "Profil och
+        // tillägg" i samma cell, och två knappar i samma rad ska se likadana ut.
+        className={`${btnSecondary} ${btnLiten}`}
         // Skärmläsare får hela meningen; seende ser knapptexten i sin rad.
         aria-label={text({
           sv: `Öppna arbetsytan för ${namn} i admin-läge`,

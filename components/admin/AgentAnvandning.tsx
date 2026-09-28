@@ -1,3 +1,4 @@
+import { Cell, Nyckeltal, Tabell, Tomt, meta } from "@/components/ui";
 import type { RunRow } from "@/lib/data/admin";
 
 /**
@@ -41,7 +42,7 @@ type Rad = {
 function summera(runs: RunRow[], delning: Slagdelning | null) {
   const perKund = new Map<string, Rad>();
   for (const run of runs) {
-    const kund = run.tenant_slug || "okänd";
+    const kund = run.tenant_name || run.tenant_slug || "okänd";
     const rad =
       perKund.get(kund) ?? { kund, a: 0, b: 0, tokensIn: 0, tokensUt: 0, senast: null };
     if (delning?.arB(run)) rad.b += 1;
@@ -66,71 +67,92 @@ function summera(runs: RunRow[], delning: Slagdelning | null) {
   };
 }
 
-function Matt({ etikett, varde }: Readonly<{ etikett: string; varde: number | string }>) {
-  return (
-    <div className="border-y border-ink/15 py-4">
-      <p className="kicker text-mineral">{etikett}</p>
-      <p className="num mt-2 font-display text-[2rem] leading-none tracking-[-0.02em]">{varde}</p>
-    </div>
-  );
-}
+/**
+ * Prisunderlaget, på EN plats: som `title` på kostnadsnyckeltalet. Att talet är
+ * en uppskattning står synligt i etiketten; listpriset och avläsningsdatumet
+ * behövs bara av den som vill kontrollera det, och var tidigare en ingress
+ * under sidrubriken (F-016).
+ */
+const PRISUNDERLAG = `Räknad på Vertex listpris för Gemini 2.5 Flash ($${USD_PER_MILJON.in} per miljon tokens in, $${USD_PER_MILJON.ut} per miljon ut, avläst 2026-09-15), inte på Googles faktura.`;
 
+/**
+ * Fyra nyckeltal i varje sektion, alltid samma fyra: sex poster i ett
+ * fyrkolumnsrutnät gav en trasig andra rad. Slagdelningen (Underlag/Frågor)
+ * står därför som notis under Körningar (och per kund i tabellen), och tokens
+ * in/ut som notis under Tokens.
+ */
 export function AgentAnvandning({
   runs,
   delning = null,
-  tomtext
-}: Readonly<{ runs: RunRow[]; delning?: Slagdelning | null; tomtext: string }>) {
+  tomtext,
+  vidTaket = null
+}: Readonly<{
+  runs: RunRow[];
+  delning?: Slagdelning | null;
+  tomtext: string;
+  /** Satt när hämtningen nådde backendens tak: talen är då en undre gräns. */
+  vidTaket?: number | null;
+}>) {
   const { rader, a, b, tokensIn, tokensUt } = summera(runs, delning);
 
   if (runs.length === 0) {
-    return <p className="mt-4 max-w-[70ch] text-[15px] leading-7 text-ink-muted">{tomtext}</p>;
+    return <Tomt>{tomtext}</Tomt>;
   }
 
   return (
-    <div className="mt-4">
-      <div className="grid gap-x-10 sm:grid-cols-3">
-        <Matt etikett={delning?.etikettA ?? "Körningar"} varde={a} />
-        {delning ? <Matt etikett={delning.etikettB} varde={b} /> : null}
-        <Matt etikett="Kunder" varde={rader.length} />
-        <Matt etikett="Tokens in" varde={tokensIn.toLocaleString("sv-SE")} />
-        <Matt etikett="Tokens ut" varde={tokensUt.toLocaleString("sv-SE")} />
-        <Matt etikett="AI-kostnad, uppskattad" varde={usd(kostnadUsd(tokensIn, tokensUt))} />
-      </div>
+    <div>
+      <Nyckeltal
+        poster={[
+          {
+            etikett: "Körningar",
+            varde: vidTaket ? `${a + b}+` : a + b,
+            notis: vidTaket
+              ? `De senaste ${vidTaket} per agenttyp. Äldre körningar räknas inte.`
+              : delning
+                ? `${a} ${delning.etikettA.toLowerCase()}, ${b} ${delning.etikettB.toLowerCase()}`
+                : undefined
+          },
+          { etikett: "Kunder", varde: rader.length },
+          {
+            etikett: "Tokens",
+            varde: (tokensIn + tokensUt).toLocaleString("sv-SE"),
+            notis: `${tokensIn.toLocaleString("sv-SE")} in, ${tokensUt.toLocaleString("sv-SE")} ut`
+          },
+          {
+            etikett: "AI-kostnad, uppskattad",
+            varde: <span title={PRISUNDERLAG}>{usd(kostnadUsd(tokensIn, tokensUt))}</span>
+          }
+        ]}
+      />
 
-      <table className="mt-8 w-full text-[15px]">
-        <thead>
-          <tr className="border-b border-ink/15 text-left">
-            <th className="kicker py-2 font-normal text-mineral">Kund</th>
-            <th className="kicker py-2 text-right font-normal text-mineral">
-              {delning?.etikettA ?? "Körningar"}
-            </th>
-            {delning ? (
-              <th className="kicker py-2 text-right font-normal text-mineral">
-                {delning.etikettB}
-              </th>
-            ) : null}
-            <th className="kicker py-2 text-right font-normal text-mineral">Tokens</th>
-            <th className="kicker py-2 text-right font-normal text-mineral">Kostnad</th>
-            <th className="kicker py-2 text-right font-normal text-mineral">Senast</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-ink/10">
+      <div className="mt-8">
+        <Tabell
+          minBredd={560}
+          kolumner={[
+            { rubrik: "Kund" },
+            { rubrik: delning?.etikettA ?? "Körningar", bredd: "13%", hoger: true },
+            ...(delning ? [{ rubrik: delning.etikettB, bredd: "13%", hoger: true }] : []),
+            { rubrik: "Tokens", bredd: "16%", hoger: true },
+            { rubrik: "Kostnad", bredd: "13%", hoger: true },
+            { rubrik: "Senast", bredd: "20%", hoger: true }
+          ]}
+        >
           {rader.map((rad) => (
             <tr key={rad.kund}>
-              <td className="py-3 font-mono text-[13px]">{rad.kund}</td>
-              <td className="num py-3 text-right">{rad.a}</td>
-              {delning ? <td className="num py-3 text-right">{rad.b}</td> : null}
-              <td className="num py-3 text-right">
-                {(rad.tokensIn + rad.tokensUt).toLocaleString("sv-SE")}
-              </td>
-              <td className="num py-3 text-right">{usd(kostnadUsd(rad.tokensIn, rad.tokensUt))}</td>
-              <td className="py-3 text-right text-[13px] text-mineral">
-                {rad.senast ? rad.senast.slice(0, 16).replace("T", " ") : "—"}
-              </td>
+              <Cell titel className="break-words">
+                {rad.kund}
+              </Cell>
+              <Cell hoger>{rad.a}</Cell>
+              {delning ? <Cell hoger>{rad.b}</Cell> : null}
+              <Cell hoger>{(rad.tokensIn + rad.tokensUt).toLocaleString("sv-SE")}</Cell>
+              <Cell hoger>{usd(kostnadUsd(rad.tokensIn, rad.tokensUt))}</Cell>
+              <Cell hoger className={meta}>
+                {rad.senast ? rad.senast.slice(0, 16).replace("T", " ") : "–"}
+              </Cell>
             </tr>
           ))}
-        </tbody>
-      </table>
+        </Tabell>
+      </div>
     </div>
   );
 }

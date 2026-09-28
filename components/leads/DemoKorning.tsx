@@ -4,7 +4,7 @@ import { Check, ChevronDown, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { EXEMPELRESULTAT, KORSTEG } from "@/lib/demo/leads-korning";
-import { btnPrimary } from "@/components/ui";
+import { Badge, btnPrimary, etikett, meta } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 /**
@@ -110,13 +110,9 @@ export function DemoKorning() {
 
           {fas === "klar" ? (
             <div className="mt-5 border-t border-ink/12 pt-5">
-              <p className="text-[0.8125rem] leading-6 text-ink-subtle">
-                <strong className="font-semibold text-ink-muted">Exempel.</strong>{" "}
-                Bolagen är påhittade och utkasten skrivna i förväg. I produkten
-                kommer raderna ur en riktig körning mot er målgrupp.
-              </p>
-
-              <ul className="mt-4 divide-y divide-ink/12 border-y border-ink/15" aria-label="Exempelkörningens resultat">
+              {/* Märkningen sitter på varje rad (Exempel-brickan), inte som en
+                  liten notis ovanför listan: raden är det som läses. */}
+              <ul className="divide-y divide-ink/12 border-y border-ink/15" aria-label="Exempelkörningens resultat">
                 {EXEMPELRESULTAT.map((resultat, i) => {
                   const arOppet = oppet === i;
                   return (
@@ -128,10 +124,11 @@ export function DemoKorning() {
                         className="focus-ring grid w-full grid-cols-12 items-baseline gap-x-4 py-3.5 text-left transition-colors hover:bg-paper2/70"
                       >
                         <span className="col-span-12 min-w-0 sm:col-span-4">
-                          <span className="block truncate font-semibold tracking-[-0.01em]">
-                            {resultat.bolag}
+                          <span className="flex min-w-0 items-center gap-2">
+                            <span className="truncate font-semibold">{resultat.bolag}</span>
+                            <Badge>Exempel</Badge>
                           </span>
-                          <span className="block truncate text-[0.8125rem] text-ink-subtle">
+                          <span className={cn(meta, "block truncate")}>
                             {resultat.kontakt} · {resultat.ort}
                           </span>
                         </span>
@@ -151,13 +148,13 @@ export function DemoKorning() {
                           <p className="max-w-[65ch] text-[0.875rem] leading-6 text-ink-muted">
                             {resultat.behov}
                           </p>
-                          <p className="mt-4 text-[0.8125rem] font-medium text-ink-subtle">Ämnesrad</p>
+                          <p className={cn(etikett, "mt-4")}>Ämnesrad</p>
                           <p className="mt-1 text-[1rem] font-semibold tracking-[-0.01em]">
                             {resultat.amne}
                           </p>
                           <label
                             htmlFor={`demo-utkast-${i}`}
-                            className="mt-4 block text-[0.8125rem] font-medium text-ink-subtle"
+                            className={cn(etikett, "mt-4 block")}
                           >
                             Utkastet, ditt att ändra i
                           </label>
@@ -170,10 +167,7 @@ export function DemoKorning() {
                             }
                             className="focus-ring mt-2 min-h-[200px] w-full resize-y rounded-card border border-ink/12 bg-paper p-4 text-[0.9375rem] leading-7 outline-none transition-colors focus:border-ink/30"
                           />
-                          <p className="mt-2 text-[0.8125rem] text-ink-subtle">
-                            Inget skickas härifrån. I produkten granskar ni och
-                            skickar när ni bestämt er.
-                          </p>
+                          <p className="mt-2 text-[0.9375rem] text-ink-muted">Inget skickas härifrån.</p>
                         </div>
                       ) : null}
                     </li>

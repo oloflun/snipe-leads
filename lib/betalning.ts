@@ -47,7 +47,7 @@ export const TESTKORT: { nummer: string; marke: Kortmarke; not: string }[] = [
   {
     nummer: "4000000000000002",
     marke: "Visa",
-    not: "Nekas av banken — för att se felvägen"
+    not: "Nekas av banken, för att prova felvägen"
   }
 ];
 

@@ -2,9 +2,21 @@
 
 import { AlertTriangle, Check, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { EmptyState, SkeletonRows } from "@/components/ui";
+import {
+  Rad,
+  Radlista,
+  Sektion,
+  SkeletonRows,
+  Tomt,
+  btnLiten,
+  btnPrimary,
+  btnSecondary,
+  meta,
+  rubrikPanel
+} from "@/components/ui";
 import { EjAktiverad, arEjAktiverad } from "@/components/EjAktiverad";
 import { readJsonBody } from "@/lib/http/json";
+import { cn } from "@/lib/utils";
 
 /**
  * Agentens lärande — förslagen och kundens domar, på ett ställe.
@@ -63,6 +75,12 @@ const KIND_ETIKETT: Record<string, string> = {
   marknadsinsikt: "Marknadsinsikt"
 };
 
+/** agent_type är backendens kod; raden visar agentens namn i klartext. */
+const AGENT_ETIKETT: Record<string, string> = {
+  support: "Support",
+  leads: "Iris"
+};
+
 const VERDICT_ETIKETT: Record<string, string> = {
   good: "Bra",
   bad: "Fel",
@@ -71,7 +89,7 @@ const VERDICT_ETIKETT: Record<string, string> = {
 
 function nar(iso: string): string {
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
+  if (Number.isNaN(d.getTime())) return "–";
   return d.toLocaleDateString("sv-SE", { day: "numeric", month: "short" });
 }
 
@@ -188,13 +206,9 @@ export function AgentLarande() {
       <div className="flex items-start gap-3 border-y border-ochre/40 bg-ochre/10 px-4 py-4">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
         <div className="min-w-0">
-          <p className="text-sm font-medium text-ink">Lärandet kunde inte hämtas</p>
-          <p className="mt-1 text-sm text-ink-muted">{lage.meddelande}</p>
-          <button
-            type="button"
-            onClick={() => void hamta()}
-            className="focus-ring mt-3 inline-flex min-h-9 items-center rounded-input bg-paper2 px-3 text-[13px] font-medium"
-          >
+          <p className="text-[0.9375rem] font-medium text-ink">Lärandet kunde inte hämtas</p>
+          <p className="mt-1 text-[0.9375rem] text-ink-muted">{lage.meddelande}</p>
+          <button type="button" onClick={() => void hamta()} className={cn(btnSecondary, btnLiten, "mt-3")}>
             Försök igen
           </button>
         </div>
@@ -203,100 +217,98 @@ export function AgentLarande() {
   }
 
   return (
-    <div className="space-y-12">
-      <section>
-        <h2 className="kicker text-mineral">Väntar på ditt beslut</h2>
+    <div>
+      <Sektion title="Väntar på ditt beslut">
         {lage.forslag.length === 0 ? (
-          <div className="mt-3">
-            <EmptyState
-              title="Inga förslag just nu"
-              body="När supportagenten ser en kunskapslucka eller leads-agenten lär sig något om marknaden hamnar förslaget här. Ingenting skrivs in i din kunskapsbas eller målgrupp utan ditt godkännande."
-            />
-          </div>
+          <Tomt>
+            Inga förslag just nu. De dyker upp när supportagenten hittar en kunskapslucka eller
+            Iris lär sig något om marknaden.
+          </Tomt>
         ) : (
-          <ul className="mt-3 divide-y divide-ink/15 border-y border-ink/15">
+          <Radlista>
             {lage.forslag.map((f) => {
               const { rubrik, brodtext, belagg } = innehall(f);
               return (
-                <li key={f.id} className="py-5">
+                <Rad key={f.id}>
                   <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                    <p className="text-[1.0625rem] font-semibold tracking-[-0.01em]">{rubrik}</p>
-                    <span className="kicker shrink-0 text-mineral">
-                      {KIND_ETIKETT[f.kind] ?? f.kind} · {f.agent_type} · {nar(f.created_at)}
+                    <p className={rubrikPanel}>{rubrik}</p>
+                    <span className={cn(meta, "shrink-0")}>
+                      {KIND_ETIKETT[f.kind] ?? f.kind} · {AGENT_ETIKETT[f.agent_type] ?? f.agent_type} ·{" "}
+                      {nar(f.created_at)}
                     </span>
                   </div>
                   {brodtext ? (
-                    <p className="mt-2 max-w-[75ch] whitespace-pre-line text-[15px] leading-6 text-ink-muted">
+                    <p className="mt-2 max-w-[75ch] whitespace-pre-line text-[0.9375rem] leading-6 text-ink-muted">
                       {brodtext}
                     </p>
                   ) : null}
+                  {/* Beläggen är källhänvisningar och står kvar — i meta-form,
+                      inte som egen liten typografi. */}
                   {belagg.length > 0 ? (
                     <ul className="mt-2 max-w-[75ch] space-y-1">
                       {belagg.map((b) => (
-                        <li key={b} className="text-[13px] leading-5 text-ink-subtle">
+                        <li key={b} className={meta}>
                           ”{b}”
                         </li>
                       ))}
                     </ul>
                   ) : null}
-                  <div className="mt-3 flex gap-2">
+                  <div className="mt-3 flex flex-wrap gap-2">
                     <button
                       type="button"
                       disabled={arbetar === f.id}
                       onClick={() => void avgor(f.id, "godkann")}
-                      className="focus-ring inline-flex min-h-9 items-center gap-1.5 rounded-input bg-ink px-3 text-[13px] font-medium text-paper disabled:opacity-50"
+                      className={cn(btnPrimary, btnLiten)}
                     >
                       <Check className="h-3.5 w-3.5" aria-hidden />
-                      {f.kind === "kb_article" ? "Godkänn — skapa artikeln" : "Godkänn"}
+                      {f.kind === "kb_article" ? "Godkänn och skapa artikeln" : "Godkänn"}
                     </button>
                     <button
                       type="button"
                       disabled={arbetar === f.id}
                       onClick={() => void avgor(f.id, "avfard")}
-                      className="focus-ring inline-flex min-h-9 items-center gap-1.5 rounded-input bg-paper2 px-3 text-[13px] font-medium disabled:opacity-50"
+                      className={cn(btnSecondary, btnLiten)}
                     >
                       <X className="h-3.5 w-3.5" aria-hidden />
                       Avfärda
                     </button>
                   </div>
-                </li>
+                </Rad>
               );
             })}
-          </ul>
+          </Radlista>
         )}
-      </section>
+      </Sektion>
 
-      <section>
-        <h2 className="kicker text-mineral">Domar från teamet</h2>
+      <Sektion title="Domar från teamet">
         {lage.feedback.length === 0 ? (
-          <p className="mt-3 max-w-[75ch] text-[15px] leading-6 text-ink-muted">
-            Inga domar ännu. När någon i teamet markerar en körning som bra
-            eller fel samlas den här — och en rättad text är det starkaste
-            underlaget agenterna kan lära sig av.
-          </p>
+          <Tomt>
+            Inga domar ännu. När någon i teamet markerar en körning som bra eller fel samlas domen
+            här.
+          </Tomt>
         ) : (
-          <ul className="mt-3 divide-y divide-ink/15 border-y border-ink/15">
+          <Radlista>
             {lage.feedback.map((r) => (
-              <li key={r.id} className="py-4">
+              <Rad key={r.id}>
                 <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                  <p className="text-[15px] font-semibold">
+                  <p className="text-[0.9375rem] font-semibold">
                     {VERDICT_ETIKETT[r.verdict] ?? r.verdict}
                     {r.comment ? (
                       <span className="ml-2 font-normal text-ink-muted">{r.comment}</span>
                     ) : null}
                   </p>
-                  <span className="kicker shrink-0 text-mineral">{nar(r.created_at)}</span>
+                  <span className={cn(meta, "shrink-0")}>{nar(r.created_at)}</span>
                 </div>
                 {r.corrected_output ? (
-                  <p className="mt-2 max-w-[75ch] whitespace-pre-line text-[14px] leading-6 text-ink-muted">
+                  <p className="mt-2 max-w-[75ch] whitespace-pre-line text-[0.9375rem] leading-6 text-ink-muted">
                     Rättad text: {r.corrected_output}
                   </p>
                 ) : null}
-              </li>
+              </Rad>
             ))}
-          </ul>
+          </Radlista>
         )}
-      </section>
+      </Sektion>
     </div>
   );
 }

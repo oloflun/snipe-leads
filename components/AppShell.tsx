@@ -26,6 +26,7 @@ import { DEMO_NAV, demoSektionsVag } from "@/lib/demo/sektioner";
 import { BytKund } from "@/components/admin/BytKund";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 import { VyVaxel } from "@/components/VyVaxel";
+import { Sidhuvud } from "@/components/ui";
 import { useLocale } from "@/lib/i18n";
 import { produktForInstallningsvag, routesForProducts, tillAdminvag } from "@/lib/routes";
 import type { Scope } from "@/lib/routes";
@@ -316,7 +317,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
             ytans karta. Delad med AdminShell via components/shell/Rail.tsx. */}
         <Rail
           logoHref={demoAnpassa("/dashboard", pathname)}
-          logoAriaLabel={demolage ? "Snajp demo — till översikten" : "Snajp — till översikten"}
+          logoAriaLabel={demolage ? "Snajp demo, till översikten" : "Snajp, till översikten"}
           brand={
             // Arbetsytans namn — samma plats som "Bokföring"-etiketten i
             // bokforing-webbs rail. I demon står demomarkören här i stället:
@@ -332,7 +333,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                 </span>
               </p>
             ) : (
-              <p className="hidden truncate px-5 pb-4 text-[0.75rem] font-medium uppercase tracking-[0.14em] text-paper-subtle lg:block">
+              <p className="hidden truncate px-5 pb-4 text-[0.8125rem] font-medium text-paper-muted lg:block">
                 {workspaceName}
               </p>
             )
@@ -349,9 +350,6 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                   aktiv={pathname === "/settings" || pathname.startsWith("/settings/")}
                 />
               ) : null}
-              <p className="hidden px-3 pb-1 pt-3 text-[0.75rem] leading-5 text-paper-subtle lg:block">
-                {demolage ? "Snajp — prova utan konto" : "En tjänst från Snajp"}
-              </p>
             </>
           }
         />
@@ -462,7 +460,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
             {isDemo || vy === "demo" ? (
               <div className="border-b border-ochre/30 bg-ochre/10">
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 md:px-6">
-                  <span className="kicker text-warning">Demo</span>
+                  <span className="text-[0.8125rem] font-semibold text-warning">Demo</span>
                   {/* Demovyn bär ingen förklarande rad längre. Märkningen
                       "Demo" räcker där; texten om demokontot namngav dessutom
                       exempelbutiken i en yta som visas för kunder. */}
@@ -476,7 +474,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                        Hårdkodad här stod den utanför bytet i copy.ts. */
                     <a
                       href={mejlaOss()}
-                      className="kicker ml-auto text-warning underline underline-offset-4 hover:text-ink"
+                      className="ml-auto text-[0.8125rem] font-medium text-warning underline underline-offset-4 hover:text-ink"
                     >
                       Kontakta oss
                     </a>
@@ -493,24 +491,19 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
 }
 
 /**
- * Section wrapper. Signature is unchanged from the editorial version so every
- * workspace view keeps working; only the register changed. `kicker` is now a
- * product label rather than a mono eyebrow, and the title is a fixed rem size:
- * a clamp-sized heading that shrinks inside a dense layout looks worse, not
- * better.
+ * Arbetsytans sidram: skalet, containern och `Sidhuvud`.
+ *
+ * `kicker` och `description` togs bort 2026-09-27. Överraden och ingressen under
+ * rubriken var mikrotext enligt F-016 — de beskrev sidan i mindre storlek än
+ * brödtexten — och så länge propparna fanns fylldes de. Utan dem pekar
+ * kompilatorn ut varje sida som hade en, se plans/2026-09-27-appytor-enhetlighet.md.
  */
 export function PageShell({
-  kicker,
   title,
-  description,
   children,
   action
 }: Readonly<{
-  /** Överraden. Utelämnas när sidan inte ska ha någon — se nedan. */
-  kicker?: string;
   title: string;
-  /** Ingressen. Samma sak: en vy utan ingress renderar ingen tom rad. */
-  description?: string;
   children: React.ReactNode;
   action?: React.ReactNode;
 }>) {
@@ -525,22 +518,7 @@ export function PageShell({
       {/* 1200 och inte 1400: innehållet delar numera raden med railen, och
           1400 hade gett över 90 tecken per rad i tabellerna på en bred skärm. */}
       <section className={iAdmin ? "" : "mx-auto w-full max-w-[1200px] px-4 py-8 md:px-8 md:py-10"}>
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0">
-            {/* Tomma rader renderas inte alls. Flera vyer har fått sin
-                överrad eller ingress borttagen, och ett tomt <p> lämnar kvar
-                sin marginal — rubriken hade legat och flutit en rad för lågt
-                utan något som förklarar varför. */}
-            {kicker ? <p className="text-[0.8125rem] font-medium text-ink-subtle">{kicker}</p> : null}
-            <h1 className={cn("font-display text-[1.625rem] font-semibold leading-tight tracking-[-0.02em]", kicker && "mt-1")}>
-              {title}
-            </h1>
-            {description ? (
-              <p className="mt-2 max-w-[68ch] text-[0.9375rem] leading-[1.6] text-ink-muted">{description}</p>
-            ) : null}
-          </div>
-          {action ? <div className="shrink-0">{action}</div> : null}
-        </div>
+        <Sidhuvud title={title} action={action} />
         <div className="mt-8">{children}</div>
       </section>
     </AppShell>

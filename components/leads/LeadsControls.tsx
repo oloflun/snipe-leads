@@ -1,9 +1,25 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import {
+  Rad,
+  Radlista,
+  Sektion,
+  Tomt,
+  btnLiten,
+  btnPrimary,
+  btnSecondary,
+  etikett,
+  flik,
+  flikAktiv,
+  flikInaktiv,
+  meta,
+  rubrikPanel
+} from "@/components/ui";
 import { createDemoLeadsFetch } from "@/lib/demo/leads-controls";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { ICP_ETIKETTER } from "@/lib/leads/icpLabels";
+import { cn } from "@/lib/utils";
 
 /**
  * Kundens kontroller över leads-agenten: hur långt den får gå, vem den ska
@@ -187,7 +203,7 @@ export function LeadsControls({
     // Sett i pixlar vid 375px.
     if (error) {
       return (
-        <p role="alert" className="break-words border-t border-ink/15 pt-6 text-[14px] text-danger">
+        <p role="alert" className="break-words border-t border-ink/15 pt-6 text-[0.9375rem] text-danger">
           {error}
         </p>
       );
@@ -201,13 +217,64 @@ export function LeadsControls({
     );
   }
 
+  // Ordning efter vad kunden agerar på (plans/2026-09-27-appytor-enhetlighet.md,
+  // regel 4): det som väntar på ett beslut först, inställningarna sedan. Kön
+  // låg tidigare sist, under två formulär.
   return (
-    <div className="grid gap-12">
-      <section>
-        {/* Kicker, inte rubrik — se DESIGN.md Accessibility floor. */}
-        <p className="kicker text-mineral">Hur långt agenterna får gå</p>
+    <div>
+      {visaKo ? (
+        <Sektion title="Väntar på dig">
+          {queue === null ? (
+            <div className="h-16 animate-pulse border-t border-ink/15 bg-ink/[0.03]" />
+          ) : queue.length === 0 ? (
+            <Tomt>Inget väntar på granskning just nu.</Tomt>
+          ) : (
+            <Radlista>
+              {queue.map((item) => (
+                <Rad key={item.id} className="min-w-0">
+                  <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+                    <span className={cn(rubrikPanel, "min-w-0 break-words")}>
+                      {item.subject || "Utan ämnesrad"}
+                    </span>
+                    <span className={cn(meta, "shrink-0")}>{item.prospect_email ?? "Okänd mottagare"}</span>
+                  </div>
 
-        <div className="mt-5 flex min-w-0 flex-wrap gap-3">
+                  {item.body ? (
+                    <p className="mt-3 max-w-[70ch] whitespace-pre-line text-[0.9375rem] leading-7 text-ink-muted">
+                      {item.body}
+                    </p>
+                  ) : null}
+
+                  {/* Inline, inte i en modal. Man godkänner tio i rad. */}
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={isPending}
+                      onClick={() => decide(item.id, "approve")}
+                      className={cn(btnPrimary, btnLiten)}
+                    >
+                      Godkänn
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isPending}
+                      onClick={() => decide(item.id, "reject")}
+                      className={cn(btnSecondary, btnLiten)}
+                    >
+                      Avvisa
+                    </button>
+                  </div>
+                </Rad>
+              ))}
+            </Radlista>
+          )}
+        </Sektion>
+      ) : null}
+
+      <Sektion title="Hur långt agenterna får gå">
+        {/* Samma pillerform som vyflikarna: ett val bland jämbördiga lägen,
+            markerat med flikAktiv. Spärrad mono i versaler var mikrotext. */}
+        <div className="flex min-w-0 flex-wrap gap-2">
           {config.autonomy_levels.map((level) => (
             <button
               key={level.value}
@@ -215,11 +282,11 @@ export function LeadsControls({
               disabled={isPending}
               aria-pressed={config.autonomy === level.value}
               onClick={() => save({ autonomy: level.value })}
-              className={
-                config.autonomy === level.value
-                  ? "border border-ochre bg-ochre/10 px-4 py-2 font-mono text-[12px] uppercase tracking-[0.18em] text-ink disabled:opacity-60"
-                  : "border border-ink/15 px-4 py-2 font-mono text-[12px] uppercase tracking-[0.18em] text-mineral transition hover:border-ochre hover:text-ochre disabled:opacity-60"
-              }
+              className={cn(
+                flik,
+                config.autonomy === level.value ? flikAktiv : flikInaktiv,
+                "disabled:opacity-60"
+              )}
             >
               {AUTONOMY_LABEL[level.value]}
             </button>
@@ -228,14 +295,13 @@ export function LeadsControls({
 
         {/* Raden som säger vad valet BETYDER. Utan den är det tre ord som
             låter lika, och kunden väljer det som låter mest kapabelt. */}
-        <p className="mt-4 max-w-[64ch] text-[15px] leading-7">{config.autonomy_description}</p>
-      </section>
+        <p className="mt-4 max-w-[64ch] text-[0.9375rem] leading-7">{config.autonomy_description}</p>
+      </Sektion>
 
-      <section className="border-t border-ink/15 pt-8">
-        <p className="kicker text-mineral">Målgrupp</p>
-        <p className="mt-3 max-w-[64ch] text-[15px] leading-7 text-mineral">
-          <strong className="font-semibold text-ink">Er röst styr tonen, målgruppen styr urvalet.</strong>{" "}
-          Det här avgör vilka bolag agenterna bearbetar, inte hur de låter. Skriv
+      <Sektion title="Målgrupp">
+        {/* Gränsen mot SOUL (se docstringen) i brödtextstorlek. */}
+        <p className="max-w-[64ch] text-[0.9375rem] leading-7 text-ink-muted">
+          Målgruppen styr vilka bolag agenterna bearbetar, inte hur de låter. Skriv flera värden
           med komma emellan.
         </p>
 
@@ -259,7 +325,7 @@ export function LeadsControls({
         >
           {ICP_FIELDS.map((field) => (
             <label key={field.key} className="grid grid-cols-12 gap-x-6 border-t border-ink/15 pt-5">
-              <span className="kicker col-span-12 text-mineral md:col-span-3">{field.label}</span>
+              <span className={cn(etikett, "col-span-12 md:col-span-3")}>{field.label}</span>
               <input
                 name={field.key}
                 defaultValue={(config.icp[field.key] as string[]).join(", ")}
@@ -270,7 +336,7 @@ export function LeadsControls({
           ))}
 
           <div className="grid grid-cols-12 gap-x-6 border-t border-ink/15 pt-5">
-            <span className="kicker col-span-12 text-mineral md:col-span-3">Anställda</span>
+            <span className={cn(etikett, "col-span-12 md:col-span-3")}>Anställda</span>
             <div className="col-span-12 mt-3 flex min-w-0 flex-wrap items-center gap-3 md:col-span-9 md:mt-0">
               <input
                 name="size_min"
@@ -280,7 +346,7 @@ export function LeadsControls({
                 placeholder="från"
                 className="h-12 w-28 min-w-0 border border-ink/15 bg-paper2/70 px-4 outline-none focus:border-ochre"
               />
-              <span className="text-mineral" aria-hidden>
+              <span className="text-ink-muted" aria-hidden>
                 –
               </span>
               <input
@@ -295,79 +361,20 @@ export function LeadsControls({
           </div>
 
           <div>
-            <button
-              type="submit"
-              disabled={isPending}
-              className="h-12 bg-ink px-5 font-mono text-[13px] uppercase tracking-[0.18em] text-paper transition-colors duration-500 hover:bg-ochre hover:text-ink disabled:opacity-60"
-            >
-              {isPending ? "Sparar..." : "Spara målgrupp"}
+            <button type="submit" disabled={isPending} className={btnPrimary}>
+              {isPending ? "Sparar…" : "Spara målgrupp"}
             </button>
           </div>
         </form>
-      </section>
-
-      {visaKo ? (
-      <section className="border-t border-ink/15 pt-8">
-        <p className="kicker text-mineral">Väntar på dig</p>
-
-        {queue === null ? (
-          <div className="mt-5 h-16 animate-pulse border-t border-ink/15 bg-ink/[0.03]" />
-        ) : queue.length === 0 ? (
-          <p className="mt-5 border-t border-ink/15 pt-5 text-[15px] text-mineral">
-            Inget väntar på granskning just nu.
-          </p>
-        ) : (
-          <ul className="mt-5">
-            {queue.map((item) => (
-              <li key={item.id} className="min-w-0 border-t border-ink/15 py-5">
-                <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-                  <span className="min-w-0 break-words text-[17px]">
-                    {item.subject || "Utan ämnesrad"}
-                  </span>
-                  <span className="kicker shrink-0 text-mineral">
-                    {item.prospect_email ?? "okänd mottagare"}
-                  </span>
-                </div>
-
-                {item.body ? (
-                  <p className="mt-3 max-w-[70ch] whitespace-pre-line text-[15px] leading-7 text-ink-muted">
-                    {item.body}
-                  </p>
-                ) : null}
-
-                {/* Inline, inte i en modal. Man godkänner tio i rad. */}
-                <div className="mt-4 flex flex-wrap gap-3">
-                  <button
-                    type="button"
-                    disabled={isPending}
-                    onClick={() => decide(item.id, "approve")}
-                    className="border border-ink px-4 py-2 font-mono text-[12px] uppercase tracking-[0.18em] transition hover:bg-ink hover:text-paper disabled:opacity-60"
-                  >
-                    Godkänn
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isPending}
-                    onClick={() => decide(item.id, "reject")}
-                    className="border border-ink/15 px-4 py-2 font-mono text-[12px] uppercase tracking-[0.18em] text-mineral transition hover:border-danger hover:text-danger disabled:opacity-60"
-                  >
-                    Avvisa
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-      ) : null}
+      </Sektion>
 
       {error ? (
-        <p role="alert" className="break-words text-[14px] text-danger">
+        <p role="alert" className="mt-6 break-words text-[0.9375rem] text-danger">
           {error}
         </p>
       ) : null}
       {message ? (
-        <p role="status" className="break-words text-[14px] text-moss">
+        <p role="status" className="mt-6 break-words text-[0.9375rem] text-moss">
           {message}
         </p>
       ) : null}

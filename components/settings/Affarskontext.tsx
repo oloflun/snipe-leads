@@ -2,7 +2,8 @@
 
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { btnPrimary } from "@/components/ui";
+import { Rad, Radlista, btnPrimary, rubrikPanel } from "@/components/ui";
+import { cn } from "@/lib/utils";
 import {
   hamtaAffarskontext,
   sparaAffarskontext,
@@ -106,39 +107,52 @@ export function Affarskontext() {
   }
 
   return (
-    <div className="grid gap-7">
-      {FALT.map((f) => (
-        <label key={f.nyckel} className="grid grid-cols-12 gap-x-6 border-t border-ink/15 pt-5">
-          <span className="col-span-12 md:col-span-3">
-            <span className="kicker block text-mineral">{f.etikett}</span>
-            <span className="mt-2 block text-[0.8125rem] leading-5 text-ink-subtle">{f.hjalp}</span>
-          </span>
-          <textarea
-            value={falt[f.nyckel]}
-            rows={f.rader}
-            onChange={(e) => setFalt({ ...falt, [f.nyckel]: e.target.value })}
-            className="focus-ring col-span-12 mt-3 w-full resize-y rounded-input border border-ink/15 bg-paper px-3 py-2.5 text-[16px] leading-6 outline-none md:col-span-9 md:mt-0"
-          />
-        </label>
-      ))}
+    <div className="grid gap-6">
+      {/* Samma radform som resten av inställningarna: etikett, en mening
+          hjälp i brödtextstorlek, fältet under. Hjälpen är kopplad till fältet
+          med aria-describedby, så den läses upp när fältet får fokus. */}
+      <Radlista ariaLabel="Affärskontext">
+        {FALT.map((f) => (
+          <Rad key={f.nyckel} className="grid gap-3">
+            <div>
+              <label htmlFor={`affarskontext-${f.nyckel}`} className={cn(rubrikPanel, "block")}>
+                {f.etikett}
+              </label>
+              <p
+                id={`affarskontext-${f.nyckel}-hjalp`}
+                className="mt-1 max-w-[62ch] text-[0.9375rem] leading-6 text-ink-muted"
+              >
+                {f.hjalp}
+              </p>
+            </div>
+            <textarea
+              id={`affarskontext-${f.nyckel}`}
+              aria-describedby={`affarskontext-${f.nyckel}-hjalp`}
+              value={falt[f.nyckel]}
+              rows={f.rader}
+              onChange={(e) => setFalt({ ...falt, [f.nyckel]: e.target.value })}
+              className="focus-ring w-full resize-y rounded-input border border-ink/15 bg-paper px-3 py-2.5 text-[16px] leading-6"
+            />
+          </Rad>
+        ))}
+      </Radlista>
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-3 border-t border-ink/15 pt-6">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
         <button type="button" onClick={() => void spara()} disabled={busy} className={btnPrimary}>
           {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
           {busy ? "Sparar…" : "Spara affärskontexten"}
         </button>
         {klart ? (
-          <p role="status" className="text-[0.875rem] text-moss">
+          <p role="status" className="text-[0.9375rem] text-moss">
             {klart}
           </p>
         ) : null}
         {fel ? (
-          <p role="alert" className="max-w-[60ch] break-words text-[0.875rem] text-danger">
+          <p role="alert" className="max-w-[62ch] break-words text-[0.9375rem] text-danger">
             {fel}
           </p>
         ) : null}
       </div>
-
     </div>
   );
 }

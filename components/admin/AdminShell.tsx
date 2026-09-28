@@ -85,6 +85,10 @@ const PLATTFORM: Array<{ href: string; label: { sv: string; en: string }; Icon: 
 ];
 
 function matchar(pathname: string, href: string): boolean {
+  // `/admin` (Översikt) matchar bara sig själv. Som prefix vann den varje
+  // adress som inte står i railen (förhandsvyerna /admin/companies m.fl.),
+  // och railen pekade då ut Översikt som sidan man stod på.
+  if (href === "/admin") return pathname === href;
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -207,26 +211,16 @@ export function AdminShell({
             en: "Snajp admin, go to overview"
           })}
           brand={
-            <p className="hidden truncate px-5 pb-4 text-[0.75rem] font-medium uppercase tracking-[0.14em] text-paper-subtle lg:block">
-              {workspaceName ? `Admin · ${workspaceName}` : "Admin"}
+            // Bara arbetsytans namn, som i kundens rail. "Admin ·" framför
+            // upprepade vad vyväxeln i railens fot redan visar.
+            <p className="hidden truncate px-5 pb-4 text-[0.8125rem] font-medium text-paper-muted lg:block">
+              {workspaceName ?? "Admin"}
             </p>
           }
           navLabel={text({ sv: "Adminnavigering", en: "Admin navigation" })}
           groups={arbetsyta.length > 0 ? [plattformGroup, arbetsytaGroup] : [plattformGroup]}
           footer={
             <>
-              {/* Alltid nåbart, oavsett railbredd: språkval och utloggning
-                  behöver ingen bredd att gömma sig bakom. */}
-              <div className="flex items-center justify-center gap-1 lg:justify-start">
-                <button
-                  type="button"
-                  onClick={toggleLocale}
-                  className="focus-ring min-h-9 shrink-0 rounded-input px-2 text-[13px] font-medium text-paper-muted transition-colors hover:bg-paper/5 hover:text-paper lg:px-3"
-                >
-                  {locale === "sv" ? "EN" : "SV"}
-                </button>
-              </div>
-
               {/* Kunduppslag, vy-växel, kontaktmeny och kontoadress — byggda
                   för en ljus yta (se AppShells motivering ovan för varför de
                   aldrig stod direkt på en mörk rail). En egen ljus platta i
@@ -240,7 +234,7 @@ export function AdminShell({
                 </div>
                 <AgentMenu yta="leads" kontext={`admin:${pathname}`} />
                 {email ? (
-                  <p className="truncate px-1 pt-0.5 text-[0.75rem] text-ink-subtle">{email}</p>
+                  <p className="truncate px-1 pt-0.5 text-[0.8125rem] text-ink-subtle">{email}</p>
                 ) : null}
               </div>
 
@@ -249,19 +243,32 @@ export function AdminShell({
                   anropade den — samma lucka som en gång saknade länken TILL
                   /admin. Formulär och inte onClick: signOut är en server
                   action och fungerar utan JS. */}
-              <form action={signOut}>
+              {/* Utloggning och språkval på EN rad. Som två rader åt de en hel
+                  radhöjd ur railen, och navigationen ovanför klipptes: Iris
+                  undersidor och Kundtjänst hamnade under kanten på en 1080-skärm.
+                  Under lg (ikonrail) staplas de, bredden räcker inte till två. */}
+              <div className="flex flex-col items-center gap-1 lg:flex-row lg:justify-between">
+                <form action={signOut} className="w-full lg:w-auto lg:flex-1">
+                  <button
+                    type="submit"
+                    title={text({ sv: "Logga ut", en: "Sign out" })}
+                    className={cn(
+                      "focus-ring flex min-h-11 w-full items-center justify-center gap-1.5 rounded-input px-3 text-sm font-medium transition-colors",
+                      "text-paper-muted hover:bg-paper/5 hover:text-paper lg:justify-start"
+                    )}
+                  >
+                    <LogOut className="h-4 w-4 shrink-0" aria-hidden />
+                    <span className="hidden lg:inline">{text({ sv: "Logga ut", en: "Sign out" })}</span>
+                  </button>
+                </form>
                 <button
-                  type="submit"
-                  title={text({ sv: "Logga ut", en: "Sign out" })}
-                  className={cn(
-                    "focus-ring flex min-h-11 w-full items-center justify-center gap-1.5 rounded-input px-3 text-sm font-medium transition-colors",
-                    "text-paper-muted hover:bg-paper/5 hover:text-paper lg:justify-start"
-                  )}
+                  type="button"
+                  onClick={toggleLocale}
+                  className="focus-ring min-h-11 shrink-0 rounded-input px-3 text-[13px] font-medium text-paper-muted transition-colors hover:bg-paper/5 hover:text-paper"
                 >
-                  <LogOut className="h-4 w-4 shrink-0" aria-hidden />
-                  <span className="hidden lg:inline">{text({ sv: "Logga ut", en: "Sign out" })}</span>
+                  {locale === "sv" ? "EN" : "SV"}
                 </button>
-              </form>
+              </div>
             </>
           }
         />

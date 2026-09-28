@@ -68,7 +68,7 @@ unfinished.
 | Family | Routes | Shape |
 |---|---|---|
 | Marketing | `/`, `/leads`, `/support` | Hero → problem → statement → live demo → place → steps → objections → limits → close |
-| App | `/dashboard/*`, `/settings/*`, `/demo/*` | Workbench: fast ink-vänsterrail (ikonrail <lg, ochre-markör på aktiv flik — sidans EN tonala inversion), dense rows, fasta tabeller (`Tabell`/`Radlista` i components/ui.tsx: deklarerade kolumnbredder, kicker-huvuden, tnum), fixed type scale, no hero, no reveals, no imagery. Samma railmönster som bokforing-webb/components/Sidebar.tsx |
+| App | `/dashboard/*`, `/settings/*`, `/demo/*` | Workbench: fast ink-vänsterrail (ikonrail <lg, ochre-markör på aktiv flik — sidans EN tonala inversion), dense rows, fasta tabeller (`Tabell`/`Radlista` i components/ui.tsx: deklarerade kolumnbredder, etikett-huvuden, tnum), fixed type scale (se § App surfaces), ingen mikrotext, no hero, no reveals, no imagery. Samma railmönster som bokforing-webb/components/Sidebar.tsx |
 | Content | `/login`, `/onboarding`, `/not-found` | Single column, typography only |
 
 ## Theme
@@ -158,7 +158,34 @@ dashboard sidebar looks worse, not better.
 
 **Micro-labels.** The original page carried 78 tracked mono eyebrows. That was too many. What
 survives is only what a first-time reader needs for context, set in the body face at 0.8125rem, not
-tracked-out mono. Mono is reserved for product surfaces where it reads as data.
+tracked-out mono. Mono is reserved for machine identifiers on product surfaces (event codes, run
+ids, keys), never for a label.
+
+### App surfaces
+
+`/admin`, `/dashboard`, `/settings` (and the same views under `/demo`) share one fixed scale,
+exported from `components/ui.tsx`. Until 2026-09-27 they had four page titles (Fraunces 36 roman,
+36 italic, 26 semibold, Geist 28), six section-heading styles and 146 `kicker` labels; every page
+read as a different product.
+
+| Role | Primitive | Set in |
+|---|---|---|
+| Page title | `Sidhuvud` · `rubrikSida` | Fraunces 2.25rem roman, never italic |
+| Section heading | `Sektion` · `rubrikSektion` | Fraunces 1.5rem |
+| Panel, card, row title | `rubrikPanel` | Geist 1.0625rem semibold |
+| Body / secondary | | Geist 0.9375rem, `ink` / `ink-muted` |
+| Label (field, column, stat, nav group) | `etikett` | Geist 0.8125rem medium, `ink-muted`, sentence case |
+| Meta (date, domain, count in a row) | `meta` | Geist 0.8125rem, `ink-subtle` |
+| Stat | `Nyckeltal` | Fraunces 2rem `tnum`, label above, hairlines |
+| Tabs and filters | `flik` · `flikAktiv` · `flikInaktiv` | ink pill active, `paper2` pill inactive |
+| Empty state | `Tomt` | one sentence on a `paper2` plate with a hairline |
+
+**What replaced the kicker.** Not nothing: the `etikett` does the kicker's one legitimate job
+(saying what a value is) at a reading size in the body face, and the Fraunces section heading does
+the structuring the kicker used to fake. Ledes under headings are gone (F-016, F-018); information
+a user needs to act lives in the label, the value, or one plain sentence where it is used.
+`tests/invariants/test_inv_ui_001.py` (INV-UI-001) fails on `kicker`, `uppercase`, tracked
+spacing, italic display headings and em-dashes anywhere in the app-surface source.
 
 **Inputs never below 16px.** iOS Safari force-zooms a focused field under 16px and breaks the layout.
 

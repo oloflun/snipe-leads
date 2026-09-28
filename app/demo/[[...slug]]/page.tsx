@@ -21,6 +21,11 @@ import { notFoundOnTenant } from "@/lib/tenants/server";
 /**
  * Hela arbetsytan att prova UTAN inloggning.
  *
+ * Sidhuvudena här bär bara en rubrik sedan 2026-09-27: `PageShell` tar inte
+ * längre `kicker` eller `description` (plans/2026-09-27-appytor-enhetlighet.md).
+ * Rubrikerna är desamma som arbetsytans och railens ("Kvitton", "CRM-lista"),
+ * inte egna säljmeningar.
+ *
  * ## Varför det här är en egen route och inte en lucka i grinden
  *
  * Det uppenbara sättet att göra funktionerna provbara vore att släppa
@@ -50,7 +55,7 @@ import { notFoundOnTenant } from "@/lib/tenants/server";
  */
 
 export const metadata = {
-  title: "Snajp — prova utan konto",
+  title: "Snajp · prova utan konto",
   description: "Hela arbetsytan med exempeldata. Ingen inloggning, ingen kunddata."
 };
 
@@ -107,14 +112,14 @@ function renderSektion(
       // slugsegment är en 404, inte en tyst fallback till Bolag.
       if (undersektion === "granskning") {
         return (
-          <PageShell kicker="Iris" title="Granskning" description="Utkasten Iris skrivit, i väntan på ditt ja eller nej.">
+          <PageShell title="Granskning">
             <IrisGranskning demo />
           </PageShell>
         );
       }
       if (undersektion === "installningar") {
         return (
-          <PageShell kicker="Iris" title="Inställningar" description="Målgrupp, autonomi och gränserna Iris alltid håller.">
+          <PageShell title="Inställningar">
             <IrisInstallningar demo />
           </PageShell>
         );
@@ -136,12 +141,9 @@ function renderSektion(
       // Den omgjorda leadsagenten i demoform: kundens egen CRM-lista in
       // (CSV, parsas i webbläsaren), en isolerad Email studio per kund ut.
       // Följer filens regel — CrmDemo når varken session eller databas.
+      // Att listan stannar i webbläsaren står i CrmDemos egen uppladdningsyta.
       return (
-        <PageShell
-          kicker="Iris"
-          title="Din CRM-lista, en studio per kund"
-          description="Ladda upp kundlistan ur ert CRM som CSV. Iris bevakar kundernas signaler, och varje kund får en egen, isolerad Email studio som skriver utifrån signalerna och er produkt. Listan stannar i webbläsaren och inget skickas."
-        >
+        <PageShell title="CRM-lista">
           <CrmDemo />
         </PageShell>
       );
@@ -165,11 +167,7 @@ function renderSektion(
       // efter en session eller databasen — se filens docstring. KvittoDemo
       // renderar handräknade konstanter och spelar upp dem.
       return (
-        <PageShell
-          kicker="Kvittohanteraren"
-          title="Inkorgen läses, kvittona plockas ut"
-          description="Tryck på Skanna inkorgen och se agenten identifiera kvitton, lyfta ut beloppen och sammanställa perioden. Påhittade mejl, förberedda svar. Ingen modell körs på den här sidan."
-        >
+        <PageShell title="Kvitton">
           <KvittoDemo />
         </PageShell>
       );
@@ -182,7 +180,7 @@ function renderSektion(
       // DemoSupportYta lägger kundchatten (förladdade svar) som flik bredvid
       // inkorgen, samma flikmönster som arbetsytans SupportWorkspaceTabs.
       return (
-        <PageShell title="Inkorg och utkast">
+        <PageShell title="Kundtjänst">
           <DemoSupportYta />
         </PageShell>
       );
@@ -193,11 +191,7 @@ function renderSektion(
 
 function ReglerDemo() {
   return (
-    <PageShell
-      kicker="Kundtjänst"
-      title="Fack och autosvar"
-      description="Vilka ärenden agenterna får besvara själva, och vilka som alltid går till en människa. Ändringarna sparas inte i demon."
-    >
+    <PageShell title="När agenten får svara själv">
       <SupportRegler demo />
     </PageShell>
   );

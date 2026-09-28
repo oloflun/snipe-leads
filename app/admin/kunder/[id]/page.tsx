@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { Sidhuvud, flik, flikAktiv, flikInaktiv } from "@/components/ui";
 import { KonverteraTestkund } from "@/components/admin/KonverteraTestkund";
 import { Kundprofil } from "@/components/admin/Kundprofil";
 import { Tillaggsvaljare } from "@/components/admin/Tillaggsvaljare";
@@ -22,6 +23,12 @@ export const maxDuration = 60;
  * Adressen bär tenantens UUID och inte sluggen. Backendens profil-endpoint
  * scopar på tenant_id, och att översätta slug -> id i en yta som skriver
  * betyder ett uppslag till som kan peka fel kund.
+ *
+ * Länken "Kunder" ovanför rubriken, "Tillbaka till kundlistan" i felläget och
+ * ingressen under rubriken togs bort 2026-09-27: railens Kunder-post är aktiv
+ * på den här sidan och leder dit länkarna ledde (regel 4 i
+ * plans/2026-09-27-appytor-enhetlighet.md), och ingressen beskrev sidan
+ * (F-016). Att en ändring gäller nästa körning säger kvittot vid Spara.
  */
 export default async function Page({
   params,
@@ -45,19 +52,16 @@ export default async function Page({
   if (error || !profil) {
     return (
       <div>
-        <h1 className="font-display text-4xl tracking-[-0.03em]">Kundprofil</h1>
-        <p role="alert" className="mt-6 max-w-[70ch] break-words text-[0.9375rem] text-danger">
+        <Sidhuvud title="Kundprofil" />
+        <p role="alert" className="mt-8 max-w-[70ch] break-words text-[0.9375rem] text-danger">
           {error ?? "Kunden gick inte att hämta."}
         </p>
-        <Link href="/admin/kunder" className="mt-6 inline-block text-[0.9375rem] underline underline-offset-4">
-          Tillbaka till kundlistan
-        </Link>
 
         {/* Tilläggen står kvar även när agentprofilen inte gick att hämta.
             De läses ur databasen, inte ur backenden, och adressen bär redan
             tenant-id:t. Förut försvann hela Tillägg-sektionen med profilen —
             en sovande backend gjorde alltså tilläggen omöjliga att slå på. */}
-        <div className="mt-14">
+        <div className="mt-12">
           <Tillaggsvaljare
             tenantId={id}
             initialaAddons={tillagg.addons ?? []}
@@ -71,42 +75,26 @@ export default async function Page({
 
   return (
     <div>
-      <Link
-        href="/admin/kunder"
-        className="text-[0.8125rem] text-mineral underline underline-offset-4 hover:text-ochre"
-      >
-        Kunder
-      </Link>
-      <h1 className="mt-2 font-display text-4xl tracking-[-0.03em]">{profil.tenant.name}</h1>
-      <p className="mt-3 max-w-[70ch] text-[0.9375rem] leading-7 text-mineral">
-        Allt som formar den här kundens agent. Ändringar gäller nästa körning. Pågående
-        ärenden kör klart på de regler de startade med.
-      </p>
+      <Sidhuvud title={profil.tenant.name} />
 
       {/* Två agenter, två profiler. Samma kund kan behöva olika instruktioner för
           kundtjänst och för utskick, och agent_configs är nycklad på båda. */}
-      <div className="mt-6 flex gap-2 text-[0.8125rem]">
+      <div className="mt-8 flex flex-wrap gap-2">
         {(["support", "leads"] as const).map((typ) => (
           <Link
             key={typ}
             href={`/admin/kunder/${profil.tenant.id}?agent=${typ}`}
             aria-current={agentType === typ ? "page" : undefined}
-            // min-h-11 = 44px, inte min-h-9. DESIGN.md sätter tryckytan till 44
-            // utan undantag, och en flik är lika mycket en tryckyta som en knapp.
-            // Hårfin linje på paper2-varianten av samma skäl som överallt annars:
-            // planet ligger 0.035 från pappret och separerar inte av sig självt.
-            className={`focus-ring inline-flex min-h-11 items-center rounded-input px-4 font-medium ${
-              agentType === typ
-                ? "bg-ink text-paper"
-                : "border border-ink/15 bg-paper2/50 text-ink hover:bg-paper2"
-            }`}
+            // Husets flikar (samma piller som Iris "Alla bolag / Listor"), inte
+            // egna klasser: 44 px tryckyta och samma aktiva läge som överallt.
+            className={`${flik} ${agentType === typ ? flikAktiv : flikInaktiv}`}
           >
-            {typ === "support" ? "Kundtjänst" : "Leads"}
+            {typ === "support" ? "Kundtjänst" : "Iris"}
           </Link>
         ))}
       </div>
 
-      <div className="mt-10">
+      <div className="mt-8">
         <Kundprofil profil={profil} />
       </div>
 
@@ -118,7 +106,7 @@ export default async function Page({
           Läsfelet skickas ned i stället för att fälla sidan: en trasig
           tilläggsläsning ska inte dölja instruktionerna ovanför, som är
           sidans huvudsak. */}
-      <div className="mt-14">
+      <div className="mt-12">
         <Tillaggsvaljare
           tenantId={profil.tenant.id}
           initialaAddons={tillagg.addons ?? []}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { btnPrimary, btnSecondary } from "@/components/ui";
+import { Sektion, btnPrimary, btnSecondary, etikett } from "@/components/ui";
 import {
   konverteraTestkund,
   type KonverteraRapport
@@ -13,6 +13,11 @@ type Mal = { slug: string; name: string };
  * Flyttar en testkunds inställningar till ett riktigt konto. Default är
  * torrkörning — apply skriver över målets kunskapsbas, röst och regler.
  * Ärenden och mail följer inte med.
+ *
+ * Ingressen under rubriken togs bort 2026-09-27 (F-016). Det den varnade för
+ * säger flödet självt: torrkörningens besked räknar upp vad som skrivs över,
+ * knappen heter "Skriv över <mål>", och kvittot efter flytten säger att
+ * ärenden, mail och körningar inte kopierades.
  */
 export function KonverteraTestkund({
   fran,
@@ -43,15 +48,8 @@ export function KonverteraTestkund({
   }
 
   return (
-    <section className="mt-12 border-t border-ink/15 pt-8">
-      <h2 className="font-display text-2xl tracking-[-0.03em]">Flytta till riktigt konto</h2>
-      <p className="mt-3 max-w-[70ch] text-[0.9375rem] leading-7 text-mineral">
-        Kopierar kunskapsbas, regler, agentinställningar och röstdokument från den här
-        testytan till ett riktigt konto. Målets befintliga inställningar skrivs över.
-        Ärenden, mail och körningar följer inte med.
-      </p>
-
-      <label className="mt-6 block text-[13px] font-medium text-ink">
+    <Sektion title="Flytta till riktigt konto">
+      <label className={`block ${etikett}`}>
         Målkonto
         <select
           value={till}
@@ -59,7 +57,7 @@ export function KonverteraTestkund({
             setTill(event.target.value);
             setRapport(null);
           }}
-          className="focus-ring mt-2 block min-h-11 w-full max-w-md rounded-input bg-paper2 px-3 text-sm"
+          className="focus-ring mt-2 block min-h-11 w-full max-w-md rounded-input bg-paper2 px-3 text-[1rem] text-ink"
         >
           {mal.length === 0 ? <option value="">Inga riktiga konton att flytta till</option> : null}
           {mal.map((m) => (
@@ -118,6 +116,6 @@ export function KonverteraTestkund({
           ) : null}
         </div>
       ) : null}
-    </section>
+    </Sektion>
   );
 }

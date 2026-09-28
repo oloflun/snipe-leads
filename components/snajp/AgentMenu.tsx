@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocale } from "@/lib/i18n";
 import type { Localized } from "@/lib/i18n";
+import { etikett, rubrikPanel } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 /**
@@ -38,13 +39,13 @@ const copy = {
 
   kontaktRubrik: { sv: "Snajp", en: "Snajp" },
   kontaktBody: {
-    sv: "Vi bygger och driftar agenterna. Gäller din fråga en beställning eller ett ärende hos företaget du chattar med, skriv det i chatten i stället — de svarar snabbare på sitt eget.",
+    sv: "Vi bygger och driftar agenterna. Gäller din fråga en beställning eller ett ärende hos företaget du chattar med, skriv det i chatten i stället. De svarar snabbare på sitt eget.",
     en: "We build and operate the agent. If your question concerns an order or a case with the company you are chatting with, write it in the chat instead. They answer faster on their own matters."
   },
 
   eskaleraRubrik: { sv: "Svarade agenten fel?", en: "Did the agent answer incorrectly?" },
   eskaleraBody: {
-    sv: "Anmäl svaret så läser en människa hos oss igenom det. Knappen öppnar din e-postklient med ärendet förifyllt — inget skickas utan att du trycker skicka.",
+    sv: "Anmäl svaret så läser en människa hos oss igenom det. Knappen öppnar din e-postklient med ärendet förifyllt. Inget skickas utan att du trycker skicka.",
     en: "Report the answer and a person at our end will read it. The button opens your email client with the case prefilled. Nothing is sent until you press send."
   },
   eskaleraAmne: {
@@ -161,7 +162,7 @@ export function AgentMenu({
           {/* Språkvalet ligger överst och inte bakom en flik: den som behöver
               det behöver det för att kunna läsa resten av menyn. */}
           <div className="flex items-center justify-between gap-3 border-b border-ink/10 px-4 py-3">
-            <span className="kicker text-mineral">{text(copy.sprak as Localized)}</span>
+            <span className={etikett}>{text(copy.sprak as Localized)}</span>
             <div className="flex gap-1" role="group">
               {(["sv", "en"] as const).map((val) => (
                 <button
@@ -201,10 +202,8 @@ export function AgentMenu({
 
           {flik === "kontakt" ? (
             <div className="px-4 py-4">
-              <p className="font-display text-[1rem] font-semibold">
-                {text(copy.kontaktRubrik as Localized)}
-              </p>
-              <p className="mt-2 text-[0.875rem] leading-[1.6] text-ink-muted">
+              <p className={rubrikPanel}>{text(copy.kontaktRubrik as Localized)}</p>
+              <p className="mt-2 text-[0.9375rem] leading-[1.6] text-ink-muted">
                 {text(copy.kontaktBody as Localized)}
               </p>
               <a
@@ -218,12 +217,10 @@ export function AgentMenu({
 
           {flik === "gdpr" ? (
             <div className="max-h-[50vh] overflow-y-auto px-4 py-4">
-              <p className="font-display text-[1rem] font-semibold">
-                {text(copy.gdprRubrik as Localized)}
-              </p>
+              <p className={rubrikPanel}>{text(copy.gdprRubrik as Localized)}</p>
               <ul className="mt-3 flex flex-col gap-2.5">
                 {gdprPunkter.map((punkt, i) => (
-                  <li key={i} className="flex gap-2.5 text-[0.8125rem] leading-[1.55] text-ink-muted">
+                  <li key={i} className="flex gap-2.5 text-[0.9375rem] leading-[1.55] text-ink-muted">
                     <span
                       aria-hidden="true"
                       className="mt-[0.5em] h-1 w-1 shrink-0 rounded-full bg-ochre"
@@ -232,7 +229,7 @@ export function AgentMenu({
                   </li>
                 ))}
               </ul>
-              <p className="mt-3 text-[0.8125rem] leading-[1.55] text-mineral">
+              <p className="mt-3 text-[0.9375rem] leading-[1.55] text-ink-muted">
                 {text(copy.gdprFot as Localized)}
                 <a
                   href={`mailto:${SNAJP_SUPPORT_EPOST}`}
@@ -246,10 +243,8 @@ export function AgentMenu({
           ) : null}
 
           <div className="border-t border-ink/10 bg-paper2/60 px-4 py-4">
-            <p className="text-[0.875rem] font-semibold">
-              {text(copy.eskaleraRubrik as Localized)}
-            </p>
-            <p className="mt-1.5 text-[0.8125rem] leading-[1.55] text-ink-muted">
+            <p className={rubrikPanel}>{text(copy.eskaleraRubrik as Localized)}</p>
+            <p className="mt-1.5 text-[0.9375rem] leading-[1.55] text-ink-muted">
               {text(copy.eskaleraBody as Localized)}
             </p>
             <a

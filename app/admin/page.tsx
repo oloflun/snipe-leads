@@ -1,4 +1,5 @@
 import { Portfoljvy } from "@/components/admin/Portfoljvy";
+import { Sidhuvud } from "@/components/ui";
 import { berikaAlla } from "@/lib/admin/exempeldata";
 import { listTenants, unwrap } from "@/lib/data/admin";
 
@@ -19,8 +20,8 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /**
- * Kundöversikten. Hela portföljen på en skärm: intäkt, uppskattad kostnad,
- * marginal och vilka kunder som kräver en åtgärd.
+ * Kundöversikten. Hela portföljen på en skärm: först de kunder som kräver en
+ * åtgärd, sedan intäkt, uppskattad kostnad och marginal, sist övriga kunder.
  *
  * Sidan hämtar och felhanterar; Portfoljvy räknar och renderar. Delningen gör
  * att hälsologiken i lib/admin/halsa.ts går att testa utan att rendera något.
@@ -31,8 +32,8 @@ export default async function Page() {
   if (error) {
     return (
       <div>
-        <h1 className="font-display text-4xl tracking-[-0.03em]">Översikt</h1>
-        <p role="alert" className="mt-6 max-w-[70ch] break-words text-[15px] text-danger">
+        <Sidhuvud title="Översikt" />
+        <p role="alert" className="mt-8 max-w-[70ch] break-words text-[0.9375rem] text-danger">
           {error}
         </p>
       </div>

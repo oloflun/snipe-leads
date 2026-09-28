@@ -4,7 +4,23 @@ import { Send } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
-import { btnPrimary, btnSecondary, EmptyState, SkeletonRows } from "@/components/ui";
+import {
+  Badge,
+  Cell,
+  Rad as Post,
+  Radlista,
+  Sektion,
+  SkeletonRows,
+  Tabell,
+  Tomt,
+  btnLiten,
+  btnPrimary,
+  btnSecondary,
+  etikett as etikettKlass,
+  meta,
+  rubrikPanel,
+  tabellRad
+} from "@/components/ui";
 import { lasOffertForUtkast } from "@/lib/actions/affarskontext";
 import type { EmailStudioData } from "@/lib/data/emails";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
@@ -94,8 +110,8 @@ function Rad({
 }: Readonly<{ etikett: string; hint?: string; children: React.ReactNode }>) {
   return (
     <label className="block">
-      <span className="text-[13px] font-medium text-ink-muted">{etikett}</span>
-      {hint ? <span className="ml-2 text-[12px] text-ink-subtle">{hint}</span> : null}
+      <span className={etikettKlass}>{etikett}</span>
+      {hint ? <span className={cn(meta, "ml-2")}>{hint}</span> : null}
       <div className="mt-1.5">{children}</div>
     </label>
   );
@@ -151,11 +167,12 @@ async function anropa<T>(path: string, init?: RequestInit): Promise<T> {
 /** Kontaktvägen som EN sträng: namn/roll om de finns, annars adressen. */
 function kontakt(rad: ListRad): string {
   const namnRoll = [rad.contact_name, rad.contact_role].filter(Boolean).join(", ");
-  return namnRoll || rad.contact_email || "—";
+  return namnRoll || rad.contact_email || "–";
 }
 
+/** Signal och detalj med kolon emellan — ett em-streck hör inte hemma i synlig text. */
 function signaltext(rad: ListRad): string {
-  return [rad.signal, rad.signal_detalj].filter(Boolean).join(" — ") || "—";
+  return [rad.signal, rad.signal_detalj].filter(Boolean).join(": ") || "–";
 }
 
 /** RFC 4180-citering. Semikolon som avgränsare och BOM först: svensk Excel
@@ -251,7 +268,7 @@ export function LeadslistorView() {
     const antalTal = Number(antal);
     if (!titel.trim()) {
       setBestallFel(
-        "Beskriv vilka bolag listan ska hitta — beskrivningen är både sökningen och listans namn."
+        "Beskriv vilka bolag listan ska hitta. Beskrivningen är både sökningen och listans namn."
       );
       return;
     }
@@ -283,7 +300,7 @@ export function LeadslistorView() {
         })
       });
       setTitel("");
-      setStatus("Listan är beställd. Agenten bygger den nu — status uppdateras här.");
+      setStatus("Listan är beställd och byggs nu. Statusen syns i listan nedan.");
       await hamtaListor(true);
     } catch (fel) {
       setBestallFel(felmeddelande(fel));
@@ -313,15 +330,13 @@ export function LeadslistorView() {
   }
 
   return (
-    <div className="grid gap-12">
+    <div>
       {/* ------------------------------------------- BESTÄLLNING */}
-      <section aria-labelledby="bestall-lista">
-        <h2 id="bestall-lista" className="text-[1.125rem] font-semibold tracking-[-0.01em]">
-          Beställ en lista
-        </h2>
-        <p className="mt-1 max-w-[65ch] text-[13px] text-ink-subtle">
-          Agenten letar, verifierar och lägger raderna här — ingenting skickas och inga utkast
-          skrivs.
+      <Sektion title="Beställ en lista">
+        {/* Det enda ingressen behöver säga: att en beställning inte har några
+            sidoeffekter. I brödtextstorlek, inte som liten rad under rubriken. */}
+        <p className="max-w-[65ch] text-[0.9375rem] text-ink-muted">
+          Iris letar upp och verifierar bolagen. Inget skickas och inga utkast skrivs.
         </p>
 
         <div className="mt-6 grid max-w-[760px] gap-5 sm:grid-cols-2">
@@ -354,51 +369,42 @@ export function LeadslistorView() {
           {bestaller ? "Beställer…" : "Beställ lista"}
         </button>
 
-        {status ? <p className="mt-3 text-[13px] text-ink-subtle">{status}</p> : null}
+        {status ? <p className="mt-3 text-[0.9375rem] text-ink-muted">{status}</p> : null}
         {bestallFel ? (
-          <p role="alert" className="mt-5 max-w-[70ch] break-words text-[15px] text-danger">
+          <p role="alert" className="mt-5 max-w-[70ch] break-words text-[0.9375rem] text-danger">
             {bestallFel}
           </p>
         ) : null}
-      </section>
+      </Sektion>
 
       {/* ---------------------------------------------- LISTORNA */}
-      <section aria-labelledby="dina-listor" className="border-t border-ink/15 pt-8">
-        <h2 id="dina-listor" className="text-[1.125rem] font-semibold tracking-[-0.01em]">
-          Dina listor
-        </h2>
-
+      <Sektion title="Dina listor">
         {listFel ? (
-          <div className="mt-4">
-            <p role="alert" className="max-w-[70ch] break-words text-[15px] text-danger">
+          <div>
+            <p role="alert" className="max-w-[70ch] break-words text-[0.9375rem] text-danger">
               {listFel}
             </p>
             <button
               type="button"
               onClick={() => void hamtaListor()}
-              className={cn(btnSecondary, "mt-4")}
+              className={cn(btnSecondary, btnLiten, "mt-4")}
             >
               Försök igen
             </button>
           </div>
         ) : listor === null ? (
-          <div className="mt-4">
-            <SkeletonRows />
-          </div>
+          <SkeletonRows />
         ) : listor.length === 0 ? (
-          <div className="mt-4">
-            <EmptyState
-              title="Inga listor ännu"
-              body="Beställ en lista ovan. Den byggs i bakgrunden och dyker upp här när den är klar — listan är tom tills dess."
-            />
-          </div>
+          <Tomt>
+            Inga listor ännu. En beställd lista byggs i bakgrunden och visas här när den är klar.
+          </Tomt>
         ) : (
-          <ul className="mt-4 divide-y divide-ink/15 border-y border-ink/15">
+          <Radlista>
             {listor.map((lista) => {
               const oppen = vald?.lista.id === lista.id;
               const klar = lista.status === "klar";
               return (
-                <li key={lista.id} className="py-4">
+                <Post key={lista.id}>
                   <button
                     type="button"
                     onClick={() => void oppna(lista)}
@@ -409,12 +415,10 @@ export function LeadslistorView() {
                       !klar && "cursor-default"
                     )}
                   >
-                    <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
                       <div className="min-w-0">
-                        <p className="text-[15px] font-semibold tracking-[-0.01em]">
-                          {lista.titel}
-                        </p>
-                        <p className="mt-1 text-[13px] text-ink-subtle">
+                        <p className={rubrikPanel}>{lista.titel}</p>
+                        <p className={cn(meta, "mt-1")}>
                           {[
                             `${lista.antal} beställda`,
                             typeof lista.item_count === "number"
@@ -428,49 +432,41 @@ export function LeadslistorView() {
                       </div>
                       {/* Ochre bara på det som pågår — klart är utgångsläget,
                           fel bär danger. Samma logik som StatusOrd i registret. */}
-                      <span
-                        className={cn(
-                          "kicker shrink-0",
-                          lista.status === "fel"
-                            ? "text-danger"
-                            : PAGAENDE.has(lista.status)
-                              ? "text-warning"
-                              : "text-mineral"
-                        )}
+                      <Badge
+                        tone={lista.status === "fel" ? "danger" : PAGAENDE.has(lista.status) ? "warn" : "neutral"}
                       >
                         {STATUS_ETIKETT[lista.status] ?? lista.status}
-                      </span>
+                      </Badge>
                     </div>
                     {lista.status === "fel" && lista.felorsak ? (
-                      <p className="mt-2 max-w-[70ch] text-[14px] leading-6 text-danger">
+                      <p className="mt-2 max-w-[70ch] text-[0.9375rem] leading-6 text-danger">
                         {lista.felorsak}
                       </p>
                     ) : null}
                     {klar ? (
-                      <p className="mt-2 inline-flex items-center gap-1.5 text-[13px] font-medium text-warning">
+                      <p className="mt-2 text-[0.8125rem] font-medium text-warning">
                         {oppnar === lista.id
                           ? "Hämtar…"
                           : oppen
                             ? "Dölj listan"
                             : "Öppna listan"}
-                        <span aria-hidden>{oppen ? "↑" : "→"}</span>
                       </p>
                     ) : null}
                   </button>
 
                   {oppen && vald ? <Listtabell lista={vald.lista} items={vald.items} /> : null}
-                </li>
+                </Post>
               );
             })}
-          </ul>
+          </Radlista>
         )}
 
         {detaljFel ? (
-          <p role="alert" className="mt-5 max-w-[70ch] break-words text-[15px] text-danger">
+          <p role="alert" className="mt-5 max-w-[70ch] break-words text-[0.9375rem] text-danger">
             {detaljFel}
           </p>
         ) : null}
-      </section>
+      </Sektion>
     </div>
   );
 }
@@ -500,8 +496,8 @@ const KAPACITETSMARKORER = [
 
 /** Saknad erbjudandetext gäller varje rad lika — därför stoppar den svepet. */
 const OFFERT_SAKNAS =
-  "Affärskontexten (Vad ni säljer) behövs för utkastet. Fyll i den under Inställningar, " +
-  "Vad agenterna vet, Affärskontext — och kontrollera att du fortfarande är inloggad.";
+  "Affärskontexten (Vad ni säljer) behövs för utkastet. Fyll i den under Inställningar › " +
+  "Vad agenterna vet › Affärskontext och kontrollera att du fortfarande är inloggad.";
 
 /** Ska svepet stanna helt? 429 = budgettak, 503 = ingen skarp LLM, eller en
  *  kredit-/kvottext ur ett misslyckat jobb. Allt annat gäller bara raden. */
@@ -653,7 +649,7 @@ async function skrivUtkastForRad(
     // som hände — jobbet kan fortfarande bli klart.
     if (!klart) {
       throw new Error(
-        "Utkastet tog för lång tid att skriva. Det kan dyka upp i granskningskön ändå — titta där innan ni försöker igen."
+        "Utkastet tog för lång tid att skriva. Det kan dyka upp i Iris › Granskning ändå, så titta där innan ni försöker igen."
       );
     }
   }
@@ -809,7 +805,7 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
         stoppadAvDig ? "Stoppat" : null,
         nya ? `${nya} ${nya === 1 ? "nytt" : "nya"} utkast` : null,
         fanns ? `${fanns} hade redan ett utkast` : null,
-        fel ? `${fel} gick inte att skriva — öppna raden för att se varför` : null
+        fel ? `${fel} gick inte att skriva, öppna raden för att se varför` : null
       ]
         .filter(Boolean)
         .join(" · ") || "Inga utkast skrevs."
@@ -818,9 +814,9 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
 
   if (!items.length) {
     return (
-      <p className="mt-4 border-t border-ink/10 pt-4 text-[15px] text-ink-muted">
-        Listan är klar men innehåller inga rader.
-      </p>
+      <div className="mt-4">
+        <Tomt>Listan är klar men innehåller inga rader.</Tomt>
+      </div>
     );
   }
 
@@ -841,7 +837,7 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
   return (
     <div className="mt-4 rounded-card border border-ink/10 bg-paper p-4 md:p-5">
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
-        <p className="text-[13px] text-ink-subtle">
+        <p className={meta}>
           {items.length} bolag i listan · {medAdress.length} med mejladress
         </p>
         <div className="flex flex-wrap items-center gap-2">
@@ -893,12 +889,14 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
           aria-label="Bekräfta utkast till hela listan"
           className="mt-4 rounded-card border border-warning/40 bg-warning/10 p-4"
         >
-          <p className="max-w-[70ch] text-[0.875rem] leading-6 text-ink">
-            Agenten skriver <strong className="font-semibold">{omgang.length} utkast</strong>
+          {/* Kön bor i Iris › Granskning sedan 2026-09-19 — "under Leads"
+              pekade dit den inte längre finns. */}
+          <p className="max-w-[70ch] text-[0.9375rem] leading-6 text-ink">
+            Iris skriver <strong className="font-semibold">{omgang.length} utkast</strong>
             {kandidater.length > omgang.length
-              ? ` — de första ${omgang.length} av ${kandidater.length} med adress. Nästa klick tar resten.`
+              ? `, de första ${omgang.length} av ${kandidater.length} med adress. Nästa klick tar resten.`
               : ", ett per bolag med mejladress."}{" "}
-            Utkasten landar i granskningskön under Leads.{" "}
+            Utkasten hamnar i Iris › Granskning.{" "}
             <strong className="font-semibold">Ingenting skickas</strong> förrän ni godkänner
             varje mejl. Varje utkast räknas mot er leadsbudget.
           </p>
@@ -909,15 +907,11 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
               // Bekräftelsen dyker upp på knapptryck; fokus följer med så att
               // tangentbordet landar på beslutet i stället för bakom det.
               autoFocus
-              className="focus-ring rounded-input bg-ink px-4 py-2 text-[0.8125rem] font-semibold text-paper hover:bg-ink2"
+              className={cn(btnPrimary, btnLiten)}
             >
               Skriv {omgang.length} utkast
             </button>
-            <button
-              type="button"
-              onClick={() => setSvep(null)}
-              className="focus-ring rounded-input bg-paper2 px-4 py-2 text-[0.8125rem] text-ink hover:bg-paper2/70"
-            >
+            <button type="button" onClick={() => setSvep(null)} className={cn(btnSecondary, btnLiten)}>
               Avbryt
             </button>
           </div>
@@ -926,8 +920,8 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
 
       {svep?.fas === "kor" ? (
         <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
-          <p role="status" className="text-[13px] text-ink-muted">
-            Skriver utkast {svep.klara + 1} av {svep.totalt} — {svep.bolag}
+          <p role="status" className="text-[0.9375rem] text-ink-muted">
+            Skriver utkast {svep.klara + 1} av {svep.totalt}: {svep.bolag}
           </p>
           <button
             type="button"
@@ -936,158 +930,129 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
               setStopparBegart(true);
             }}
             disabled={stopparBegart}
-            className="focus-ring text-[13px] underline underline-offset-4 hover:text-ochre disabled:text-ink-subtle disabled:no-underline"
+            className="focus-ring text-[0.9375rem] underline underline-offset-4 hover:text-ochre disabled:text-ink-subtle disabled:no-underline"
           >
             {stopparBegart ? "Stoppar efter det här utkastet…" : "Stoppa efter det här utkastet"}
           </button>
         </div>
       ) : null}
       {svepStopp ? (
-        <p role="alert" className="mt-3 max-w-[70ch] break-words text-[14px] text-danger">
+        <p role="alert" className="mt-3 max-w-[70ch] break-words text-[0.9375rem] text-danger">
           Svepet stoppades: {svepStopp}
         </p>
       ) : null}
       {svepResultat ? (
-        <p className="mt-3 text-[13px] text-ink-subtle">
-          {svepResultat} — utkasten ligger i granskningskön under Leads.
+        <p className="mt-3 text-[0.9375rem] text-ink-muted">
+          {svepResultat}. Utkasten ligger i Iris › Granskning.
         </p>
       ) : null}
 
       {allaResultat ? (
-        <p className="mt-3 text-[13px] text-ink-subtle">
-          {allaResultat} — bolagen ligger under Leads och kan researchas och mejlas därifrån.
+        <p className="mt-3 text-[0.9375rem] text-ink-muted">
+          {allaResultat}. Bolagen finns nu under Alla bolag.
         </p>
       ) : null}
       {radFel ? (
-        <p role="alert" className="mt-3 max-w-[70ch] break-words text-[14px] text-danger">
+        <p role="alert" className="mt-3 max-w-[70ch] break-words text-[0.9375rem] text-danger">
           {radFel}
         </p>
       ) : null}
 
-      {/* Testaren hittade inte bron alls: knappen syntes bara på rader med
-          adress, och den listan hade inga. En rad om vad raderna gör kostar
-          ingenting och gör vägen till Email studio synlig även innan någon
-          klickat. */}
-      {mejlbro ? (
-        <p className="mt-4 max-w-[70ch] text-[13px] leading-6 text-ink-subtle">
-          Skriv mejl på en rad öppnar Email studio: agenten skriver ett utkast som ni kan
-          förbättra, personalisera och godkänna.
-        </p>
-      ) : null}
+      {/* Här stod en förklarande rad om vad "Skriv mejl" gör. Den kom till när
+          testaren inte hittade bron, eftersom knappen bara syntes på rader
+          med adress. Sedan knappen står på VARJE rad (se nedan) är raden
+          mikrotext enligt F-016 och struken: knappen är sin egen förklaring. */}
 
-      {/* Fast layout (table-fixed + colgroup): bredderna deklareras i procent
-          och summerar till 100 — se Tabell i components/ui.tsx. Knappkolumnen
-          finns bara när mejlbron är på, så colgroup och expanderradens colSpan
-          måste följa samma villkor som cellerna. */}
-      <div className="mt-4 hidden overflow-x-auto border-y border-ink/15 md:block">
-        <table className="w-full min-w-[960px] table-fixed border-collapse text-[15px]">
-          <colgroup>
-            <col style={{ width: "22%" }} />
-            <col style={{ width: "10%" }} />
-            <col style={{ width: "18%" }} />
-            <col style={{ width: "12%" }} />
-            <col style={{ width: "24%" }} />
-            <col style={{ width: "14%" }} />
-            {mejlbro ? <col style={{ width: "130px" }} /> : null}
-          </colgroup>
-          <thead>
-            <tr className="border-b border-ink/15 text-left">
-              {[..."Bolag,Ort,Kontakt,Kontaktnivå,Signal,Källa".split(","), ...(mejlbro ? [""] : [])].map(
-                (rubrik, i, alla) => (
-                  <th
-                    key={rubrik}
-                    scope="col"
-                    className={cn(
-                      "kicker py-4 font-medium text-mineral",
-                      i < alla.length - 1 ? "pr-6" : ""
-                    )}
+      {/* `Tabell` ur components/ui.tsx: bredderna deklareras i procent och
+          summerar till 100 bredvid knappkolumnens fasta bredd. Knappkolumnen
+          finns bara när mejlbron är på, så kolumnlistan och expanderradens
+          colSpan följer samma villkor som cellerna. */}
+      <div className="mt-4 hidden md:block">
+        <Tabell
+          ariaLabel={lista.titel}
+          minBredd={960}
+          kolumner={[
+            { rubrik: "Bolag", bredd: "22%" },
+            { rubrik: "Ort", bredd: "10%" },
+            { rubrik: "Kontakt", bredd: "18%" },
+            { rubrik: "Kontaktnivå", bredd: "12%" },
+            { rubrik: "Signal", bredd: "24%" },
+            { rubrik: "Källa", bredd: "14%" },
+            ...(mejlbro ? [{ rubrik: "Mejl", bredd: "130px", srOnly: true }] : [])
+          ]}
+        >
+          {items.map((rad, index) => [
+            <tr key={`${rad.company_name}-${index}`} className={tabellRad}>
+              <Cell titel>
+                <p className="font-semibold">{rad.company_name}</p>
+                {rad.website ? <p className={cn(meta, "mt-1 break-all")}>{rad.website}</p> : null}
+              </Cell>
+              <Cell className="text-ink-muted">{rad.ort ?? "–"}</Cell>
+              <Cell>
+                <p>{kontakt(rad)}</p>
+                {rad.contact_email && (rad.contact_name || rad.contact_role) ? (
+                  <p className={cn(meta, "mt-1 break-all")}>{rad.contact_email}</p>
+                ) : null}
+              </Cell>
+              <Cell className="text-ink-muted">{kontaktniva(rad) ?? "–"}</Cell>
+              {/* Två rader i tabellen, hela signalen i title och i CSV:n. */}
+              <Cell className="leading-6 text-ink-muted">
+                <span className="line-clamp-2" title={signaltext(rad)}>
+                  {signaltext(rad)}
+                </span>
+              </Cell>
+              <Cell>
+                {rad.source_url ? (
+                  <a
+                    href={rad.source_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="focus-ring underline underline-offset-4 transition hover:text-ochre"
                   >
-                    {rubrik}
-                  </th>
-                )
-              )}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-ink/15">
-            {items.map((rad, index) => [
-              <tr key={`${rad.company_name}-${index}`} className="transition hover:bg-paper2/60">
-                <th scope="row" className="py-4 pr-6 text-left font-normal">
-                  <p className="text-[15px] font-semibold tracking-[-0.01em]">
-                    {rad.company_name}
-                  </p>
-                  {rad.website ? (
-                    <p className="mt-1 break-all text-sm text-ink-subtle">{rad.website}</p>
-                  ) : null}
-                </th>
-                <td className="kicker py-4 pr-6 text-mineral">{rad.ort ?? "—"}</td>
-                <td className="py-4 pr-6">
-                  <p className="text-[15px]">{kontakt(rad)}</p>
-                  {rad.contact_email && (rad.contact_name || rad.contact_role) ? (
-                    <p className="mt-1 break-all text-sm text-ink-subtle">{rad.contact_email}</p>
-                  ) : null}
+                    {rad.source_name || "Källa"}
+                  </a>
+                ) : (
+                  <span className="text-ink-muted">{rad.source_name ?? "–"}</span>
+                )}
+              </Cell>
+              {/* Knappen står på VARJE rad. Förut syntes den bara där en
+                  adress fanns, och i en lista utan adresser fanns ingen
+                  väg till Email studio alls. Saknas adressen frågar rutan
+                  efter den i stället. */}
+              {mejlbro ? <Cell hoger>{skrivMejlKnapp(rad, btnLiten)}</Cell> : null}
+            </tr>,
+            oppenRad === rad.id ? (
+              <tr key={`${rad.id}-mejl`}>
+                {/* Samma villkor som kolumnlistan: sex kolumner utan
+                    mejlbro, sju med. */}
+                <td colSpan={mejlbro ? 7 : 6} className="pb-6 pt-1">
+                  <MejlRuta lista={lista} rad={rad} />
                 </td>
-                <td className="py-4 pr-6 text-[14px] text-ink-muted">{kontaktniva(rad) ?? "—"}</td>
-                <td className="py-4 pr-6 text-[15px] leading-6 text-ink-muted">{signaltext(rad)}</td>
-                <td className="py-4 pr-6">
-                  {rad.source_url ? (
-                    <a
-                      href={rad.source_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="focus-ring text-[14px] underline underline-offset-4 transition hover:text-ochre"
-                    >
-                      {rad.source_name || "Källa"}
-                    </a>
-                  ) : (
-                    <span className="text-[14px] text-ink-subtle">{rad.source_name ?? "—"}</span>
-                  )}
-                </td>
-                {/* Knappen står på VARJE rad. Förut syntes den bara där en
-                    adress fanns, och i en lista utan adresser fanns ingen
-                    väg till Email studio alls. Saknas adressen frågar rutan
-                    efter den i stället. */}
-                {mejlbro ? <td className="py-4 text-right">{skrivMejlKnapp(rad)}</td> : null}
-              </tr>,
-              oppenRad === rad.id ? (
-                <tr key={`${rad.id}-mejl`}>
-                  {/* Samma villkor som colgroup och huvudet: sex kolumner utan
-                      mejlbro, sju med. */}
-                  <td colSpan={mejlbro ? 7 : 6} className="pb-6 pt-1">
-                    <MejlRuta lista={lista} rad={rad} />
-                  </td>
-                </tr>
-              ) : null
-            ])}
-          </tbody>
-        </table>
+              </tr>
+            ) : null
+          ])}
+        </Tabell>
       </div>
 
-      <ul className="mt-4 space-y-2 md:hidden">
+      <Radlista className="mt-4 md:hidden">
         {items.map((rad, index) => (
-          <li
-            key={`${rad.company_name}-${index}`}
-            className="rounded-input border border-ink/15 px-4 py-3"
-          >
+          <Post key={`${rad.company_name}-${index}`}>
             <div className="flex items-baseline justify-between gap-3">
-              <span className="min-w-0 text-[15px] font-semibold tracking-[-0.01em]">
-                {rad.company_name}
-              </span>
-              {kontaktniva(rad) ? (
-                <span className="shrink-0 text-[12px] text-ink-subtle">{kontaktniva(rad)}</span>
-              ) : null}
+              <span className="min-w-0 text-[0.9375rem] font-semibold">{rad.company_name}</span>
+              {kontaktniva(rad) ? <span className={cn(meta, "shrink-0")}>{kontaktniva(rad)}</span> : null}
             </div>
-            <p className="kicker mt-1 text-mineral">
-              {[rad.ort, rad.website].filter(Boolean).join(" · ") || "—"}
-            </p>
-            <p className="mt-2 text-sm leading-6 text-ink-muted">{signaltext(rad)}</p>
+            {rad.ort || rad.website ? (
+              <p className={cn(meta, "mt-1")}>{[rad.ort, rad.website].filter(Boolean).join(" · ")}</p>
+            ) : null}
+            <p className="mt-2 line-clamp-2 text-[0.9375rem] leading-6 text-ink-muted">{signaltext(rad)}</p>
             <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-              <span className="min-w-0 break-all text-sm text-ink-muted">{kontakt(rad)}</span>
+              <span className="min-w-0 break-all text-[0.9375rem] text-ink-muted">{kontakt(rad)}</span>
               {rad.source_url ? (
                 <a
                   href={rad.source_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="focus-ring text-[13px] underline underline-offset-4"
+                  className="focus-ring text-[0.9375rem] underline underline-offset-4"
                 >
                   {rad.source_name || "Källa"}
                 </a>
@@ -1099,9 +1064,9 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
                 <MejlRuta lista={lista} rad={rad} />
               </div>
             ) : null}
-          </li>
+          </Post>
         ))}
-      </ul>
+      </Radlista>
     </div>
   );
 }
@@ -1191,7 +1156,7 @@ function MejlRuta({ lista, rad }: Readonly<{ lista: Lista; rad: ListRad }>) {
 
   return (
     <div className="rounded-card border border-ink/15 bg-paper2/50 p-4 md:p-5">
-      <p className="kicker text-mineral">Mejl till {adress ?? rad.company_name}</p>
+      <h3 className={rubrikPanel}>Mejl till {adress ?? rad.company_name}</h3>
 
       {fas === "adress" ? (
         <form
@@ -1203,12 +1168,14 @@ function MejlRuta({ lista, rad }: Readonly<{ lista: Lista; rad: ListRad }>) {
             sparaAdress();
           }}
         >
-          <p className="max-w-[65ch] text-[14px] leading-6 text-ink-muted">
-            Raden saknar mejladress. Lägg till mottagaren, så skriver agenten utkastet. Adressen
-            sparas på bolaget under Leads.
+          {/* "under Leads" struket: Leads finns inte längre som flik, och
+              adressen sparas på bolaget oavsett var det visas. */}
+          <p className="max-w-[65ch] text-[0.9375rem] leading-6 text-ink-muted">
+            Raden saknar mejladress. Lägg till mottagaren, så skriver Iris utkastet. Adressen sparas
+            på bolaget.
           </p>
           <label className="mt-3 block max-w-[420px]">
-            <span className="text-[13px] font-medium text-ink-muted">Mejladress</span>
+            <span className={etikettKlass}>Mejladress</span>
             <input
               type="email"
               value={adressfalt}
@@ -1221,7 +1188,7 @@ function MejlRuta({ lista, rad }: Readonly<{ lista: Lista; rad: ListRad }>) {
             />
           </label>
           {adressFel ? (
-            <p id={`adressfel-${rad.id}`} role="alert" className="mt-2 text-[14px] text-danger">
+            <p id={`adressfel-${rad.id}`} role="alert" className="mt-2 text-[0.9375rem] text-danger">
               {adressFel}
             </p>
           ) : null}
@@ -1232,14 +1199,14 @@ function MejlRuta({ lista, rad }: Readonly<{ lista: Lista; rad: ListRad }>) {
       ) : null}
 
       {fas === "skapar" ? (
-        <p className="mt-3 text-[14px] text-ink-subtle" role="status">
+        <p className="mt-3 text-[0.9375rem] text-ink-muted" role="status">
           {steg}
         </p>
       ) : null}
 
       {fas === "fel" ? (
         <div className="mt-3">
-          <p role="alert" className="max-w-[70ch] text-[14px] leading-6 text-danger">
+          <p role="alert" className="max-w-[70ch] text-[0.9375rem] leading-6 text-danger">
             {fel}
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -1269,13 +1236,13 @@ function MejlRuta({ lista, rad }: Readonly<{ lista: Lista; rad: ListRad }>) {
       {fas === "klar" && data ? (
         <div className="mt-4">
           <EmailStudioEditor data={data} compact />
-          <p className="mt-4 max-w-[65ch] text-[13px] leading-6 text-ink-subtle">
+          <p className="mt-4 max-w-[65ch] text-[0.9375rem] leading-6 text-ink-muted">
             Godkänn skickar utkastet som det sparades i granskningskön. Ändringar i fälten ovan
             uppdaterar bara den här vyn tills en sparväg finns.
           </p>
           <div className="mt-4 border-t border-ink/15 pt-4">
             {godkant ? (
-              <p role="status" className="text-[15px] text-moss">
+              <p role="status" className="text-[0.9375rem] text-moss">
                 Godkänt. Mejlet ligger nu i sändkön.
               </p>
             ) : (
@@ -1290,13 +1257,12 @@ function MejlRuta({ lista, rad }: Readonly<{ lista: Lista; rad: ListRad }>) {
                   {godkannBusy ? "Godkänner…" : "Godkänn och skicka"}
                 </button>
                 {!queueItemId ? (
-                  <p className="mt-3 max-w-[65ch] text-[13px] leading-6 text-ink-subtle">
-                    Utkastet saknar ett kö-id och kan inte godkännas härifrån. Se granskningskön
-                    under Leads.
+                  <p className="mt-3 max-w-[65ch] text-[0.9375rem] leading-6 text-ink-muted">
+                    Utkastet saknar ett kö-id och kan inte godkännas härifrån. Se Iris › Granskning.
                   </p>
                 ) : null}
                 {godkannFel ? (
-                  <p role="alert" className="mt-3 max-w-[65ch] text-[14px] text-danger">
+                  <p role="alert" className="mt-3 max-w-[65ch] text-[0.9375rem] text-danger">
                     {godkannFel}
                   </p>
                 ) : null}
@@ -1332,7 +1298,7 @@ function byggStudioData(
       companyId: prospectId,
       contactId: null,
       companyName: rad.company_name,
-      signal: signaltext(rad) === "—" ? null : signaltext(rad),
+      signal: signaltext(rad) === "–" ? null : signaltext(rad),
       offer: offert,
       cta: null,
       contactName: rad.contact_name ?? null

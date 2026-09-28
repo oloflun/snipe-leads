@@ -2,10 +2,24 @@
 
 import Link from "next/link";
 
+import {
+  Badge,
+  Rad,
+  Radlista,
+  Sidhuvud,
+  Tomt,
+  etikett,
+  flik,
+  flikAktiv,
+  flikInaktiv,
+  meta,
+  rubrikPanel,
+} from "@/components/ui";
 import { NIVANAMN, kallnamn, tolkaHandelse } from "@/lib/admin/handelsetext";
 import { a, tidpunkt } from "@/lib/admin/sprak";
 import type { EventRow } from "@/lib/data/admin";
 import { useLocale } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 
 /**
  * Notiscentret.
@@ -32,11 +46,19 @@ import { useLocale } from "@/lib/i18n";
  * det som händer nu är mer intressant än det som hänt mest.
  */
 
-/** Nivåns färg. Bara felen får varningsfärg — annars är ingen färg en signal. */
-const NIVAFARG: Record<string, string> = {
-  error: "text-warning",
-  warning: "text-warning",
-  info: "text-mineral",
+/**
+ * Nivån som bricka. Bara fel och varningar får ton: färgas allt är ingen färg
+ * en signal längre.
+ *
+ * Radens högerkant var en spärrad mono-rad ("INFO · ADMIN.IMPERSONATION ·
+ * 11 GGR"). Nu står nivån som bricka, antalet i klartext bredvid, och källan
+ * först i metaraden: källans namn när vi känner den, annars koden i mono,
+ * eftersom en okänd kod är en maskin-id och inte en rubrik.
+ */
+const NIVATON: Record<string, "neutral" | "warn" | "danger"> = {
+  error: "danger",
+  warning: "warn",
+  info: "neutral",
 };
 
 type Grupp = { antal: number; senaste: EventRow; forsta: EventRow };
@@ -69,43 +91,53 @@ export function Handelselista({
 
   if (rader.length === 0) {
     return (
-      <p className="mt-8 border-t border-ink/15 pt-5 text-[15px] text-mineral">
-        {niva ? a("ingaHandelserFilter", locale) : a("ingaHandelser", locale)}
-      </p>
+      <div className="mt-6">
+        <Tomt>{niva ? a("ingaHandelserFilter", locale) : a("ingaHandelser", locale)}</Tomt>
+      </div>
     );
   }
 
   return (
-    <ul className="mt-8">
+    <Radlista className="mt-6">
       {rader.map(({ antal: forekomster, senaste, forsta }) => {
         const tolkning = tolkaHandelse(senaste.message);
-        const kalla = text(kallnamn(senaste.source));
+        const kalla = kallnamn(senaste.source);
         const nivanamn = text(
           NIVANAMN[senaste.level] ?? { sv: senaste.level, en: senaste.level },
         );
 
         return (
-          <li key={senaste.id} className="min-w-0 border-t border-ink/15 py-5">
-            <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-              {/* Rubriken är en mening, inte en nyttolast. Se filens docstring. */}
-              <h2 className="min-w-0 break-words text-[16px] font-medium leading-[1.45]">
+          <Rad key={senaste.id} className="min-w-0">
+            <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-6 gap-y-2">
+              {/* Rubriken är en mening, inte en nyttolast. Se filens docstring.
+                  h2 och inte h3: sidan har inga sektioner, så raden är nivån
+                  under sidrubriken. Utseendet är radrubrikens. */}
+              <h2 className={cn(rubrikPanel, "min-w-0 break-words")}>
                 {text(tolkning.rubrik)}
               </h2>
-              <span
-                className={`kicker shrink-0 ${NIVAFARG[senaste.level] ?? "text-mineral"}`}
-              >
-                {nivanamn} · {kalla}
-                {forekomster > 1 ? ` · ${forekomster} ${a("ggr", locale)}` : ""}
-              </span>
+              <div className="flex shrink-0 items-center gap-3">
+                {forekomster > 1 ? (
+                  <span className={cn(meta, "num")}>
+                    {forekomster} {text({ sv: "gånger", en: "times" })}
+                  </span>
+                ) : null}
+                <Badge tone={NIVATON[senaste.level] ?? "neutral"}>{nivanamn}</Badge>
+              </div>
             </div>
 
             {tolkning.forklaring ? (
-              <p className="mt-1.5 max-w-[78ch] text-[14px] leading-[1.6] text-ink-muted">
+              <p className="mt-1.5 max-w-[78ch] text-[0.9375rem] leading-[1.6] text-ink-muted">
                 {text(tolkning.forklaring)}
               </p>
             ) : null}
 
-            <p className="mt-2 text-[13px] tabular-nums text-mineral">
+            <p className={cn(meta, "num mt-2 break-words")}>
+              {kalla.sv === senaste.source ? (
+                <span className="font-mono">{senaste.source}</span>
+              ) : (
+                text(kalla)
+              )}
+              {" · "}
               {senaste.tenant_slug ?? a("plattformsniva", locale)} ·{" "}
               {a("senast", locale)} {tidpunkt(senaste.created_at, locale)}
               {/* Spannet visas bara när gruppen faktiskt sträcker sig över tid.
@@ -139,19 +171,24 @@ export function Handelselista({
                 också på de rader där den hade haft något att visa. */}
             {tolkning.teknisk.trim() &&
             tolkning.teknisk.trim() !== text(tolkning.rubrik).trim() ? (
-              <details className="mt-2 min-w-0 text-[13px]">
-                <summary className="focus-ring inline-flex min-h-9 cursor-pointer items-center rounded-input text-mineral hover:text-ink">
+              <details className="mt-2 min-w-0">
+                <summary
+                  className={cn(
+                    etikett,
+                    "focus-ring inline-flex min-h-9 cursor-pointer items-center rounded-input hover:text-ink",
+                  )}
+                >
                   {a("tekniskaDetaljer", locale)}
                 </summary>
-                <pre className="thin-scrollbar mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-input bg-paper2 p-3 font-mono text-[12px] leading-[1.55] text-ink-muted">
+                <pre className="thin-scrollbar mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-input bg-paper2 p-3 font-mono text-[0.8125rem] leading-[1.55] text-ink-muted">
                   {tolkning.teknisk}
                 </pre>
               </details>
             ) : null}
-          </li>
+          </Rad>
         );
       })}
-    </ul>
+    </Radlista>
   );
 }
 
@@ -170,8 +207,8 @@ export function Handelsefilter({ niva }: Readonly<{ niva: string }>) {
   ];
 
   return (
-    <div className="mt-6 flex min-w-0 flex-wrap gap-3">
-      {val.map(({ varde, etikett }) => {
+    <div className="mt-8 flex min-w-0 flex-wrap gap-2">
+      {val.map(({ varde, etikett: namn }) => {
         const pa = niva === varde;
         return (
           <Link
@@ -180,13 +217,9 @@ export function Handelsefilter({ niva }: Readonly<{ niva: string }>) {
               varde ? `/admin/handelser?level=${varde}` : "/admin/handelser"
             }
             aria-current={pa ? "page" : undefined}
-            className={
-              pa
-                ? "focus-ring rounded-input border border-ochre bg-ochre/10 px-4 py-2 font-mono text-[12px] uppercase tracking-[0.18em]"
-                : "focus-ring rounded-input border border-ink/15 px-4 py-2 font-mono text-[12px] uppercase tracking-[0.18em] text-mineral transition hover:border-ochre hover:text-ochre"
-            }
+            className={cn(flik, pa ? flikAktiv : flikInaktiv)}
           >
-            {etikett}
+            {namn}
           </Link>
         );
       })}
@@ -194,17 +227,11 @@ export function Handelsefilter({ niva }: Readonly<{ niva: string }>) {
   );
 }
 
-/** Sidrubriken och ingressen. Klientsida av samma skäl som resten. */
+/**
+ * Sidrubriken. Klientsida av samma skäl som resten. Ingressen under den är
+ * borta (F-016); `handelserIngress` i lib/admin/sprak.ts läses inte längre.
+ */
 export function Handelserubrik() {
   const { locale } = useLocale();
-  return (
-    <>
-      <h1 className="font-display text-4xl italic-disp tighten">
-        {a("handelser", locale)}
-      </h1>
-      <p className="mt-3 max-w-[70ch] text-[15px] leading-7 text-mineral">
-        {a("handelserIngress", locale)}
-      </p>
-    </>
-  );
+  return <Sidhuvud title={a("handelser", locale)} />;
 }

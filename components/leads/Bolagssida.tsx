@@ -6,7 +6,20 @@ import { useCallback, useEffect, useState } from "react";
 import { useArbetsvag } from "@/components/AppShell";
 import { PageShell } from "@/components/AppShell";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
-import { EmptyState, SkeletonRows, btnPrimary } from "@/components/ui";
+import {
+  Badge,
+  Nyckeltal,
+  Rad,
+  Radlista,
+  Sektion,
+  SkeletonRows,
+  Tomt,
+  btnLiten,
+  btnPrimary,
+  btnSecondary,
+  meta,
+  rubrikPanel
+} from "@/components/ui";
 import type { EmailStudioData } from "@/lib/data/emails";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
@@ -225,6 +238,14 @@ const STATUS_ETIKETT: Record<string, string> = {
   lost: "Förlorad",
   suppressed: "Spärrad"
 };
+
+/** Status som betyder att något väntar på kunden — samma urval som Bolagsregistret. */
+const AKTIV_STATUS = new Set(["ready", "replied", "meeting"]);
+
+/** "träff" → "Träff": brickor i versal/gemen som vanlig text. */
+function versal(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
 
 export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: boolean }>) {
   const [lage, setLage] = useState<Lage>({ fas: "laddar" });
@@ -487,30 +508,28 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
 
   if (lage.fas === "saknas") {
     return (
-      <PageShell kicker="Företag" title="Bolaget finns inte">
-        <EmptyState
-          title="Hittade inget sådant bolag"
-          body="Prospektet finns inte i din arbetsyta. Det kan ha tagits bort, eller så pekar länken fel."
-        />
-        <Link href={vag("/dashboard/companies")} className={cn(btnPrimary, "mt-6")}>
-          Till bolagen
-        </Link>
+      <PageShell title="Bolaget finns inte">
+        <Tomt
+          action={
+            <Link href={vag("/dashboard/companies")} className={cn(btnSecondary, btnLiten)}>
+              Till bolagen
+            </Link>
+          }
+        >
+          Prospektet finns inte i din arbetsyta. Det kan ha tagits bort, eller så pekar länken fel.
+        </Tomt>
       </PageShell>
     );
   }
 
   if (lage.fas === "fel") {
     return (
-      <PageShell kicker="Företag" title="Bolaget kunde inte hämtas">
+      <PageShell title="Bolaget kunde inte hämtas">
         <div className="flex items-start gap-3 border-y border-ochre/40 bg-ochre/10 px-4 py-4">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
           <div className="min-w-0">
-            <p className="text-sm text-ink-muted">{lage.meddelande}</p>
-            <button
-              type="button"
-              onClick={() => void hamta()}
-              className="focus-ring mt-3 inline-flex min-h-9 items-center rounded-input bg-paper2 px-3 text-[13px] font-medium"
-            >
+            <p className="text-[0.9375rem] text-ink-muted">{lage.meddelande}</p>
+            <button type="button" onClick={() => void hamta()} className={cn(btnSecondary, btnLiten, "mt-3")}>
               Försök igen
             </button>
           </div>
@@ -525,280 +544,269 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
       ? `${p.score_total}/100`
       : typeof p.icp_fit === "number"
         ? `${Math.round(p.icp_fit * 100)}/100`
-        : "—";
+        : "–";
+  // Bransch, ort och webbplats identifierar bolaget. De stod som överrad och
+  // ingress runt rubriken; nu är de EN meta-rad överst i innehållet.
+  const metaRad = [p.sni, p.ort, p.website].filter(Boolean).join(" · ");
 
   return (
     <PageShell
-      kicker={[p.sni, p.ort].filter(Boolean).join(" · ") || "Företag"}
       title={p.company_name}
-      description={p.website ?? undefined}
       action={
         // Länken till den frikopplade Email-studion är BORTA (Fas 4,
         // 2026-08-29): mejlutkastet renderas numera inline i den här sidan,
-        // se sektionen "Mejlutkast" nedan. Kvar i action-sloten står bara
-        // märkningen — samma stil som statusetiketterna i Bolagsregister
-        // (kicker/mineral), inte en egen badgestil.
-        p.origin === "example" ? <span className="kicker text-mineral">Exempel</span> : null
+        // se sektionen "Mejlutkast" nedan. I action-sloten står status och
+        // märkningen, båda som Badge — samma brickor som Bolagsregistret.
+        <>
+          <Badge tone={AKTIV_STATUS.has(p.status) ? "warn" : "neutral"}>
+            {STATUS_ETIKETT[p.status] ?? p.status}
+          </Badge>
+          {p.origin === "example" ? <Badge>Exempel</Badge> : null}
+        </>
       }
     >
-      <div className="grid grid-cols-12 gap-x-8 gap-y-10">
-        <dl className="col-span-12 grid grid-cols-12 gap-x-8 gap-y-8">
-          <Matt label="Score" value={poang} detail={p.qualified === false ? "diskvalificerad" : "kvalificerad"} />
-          <Matt
-            label="Anställda"
-            value={p.anstallda == null ? "—" : String(p.anstallda)}
-            detail={p.orgnr ? `org.nr ${p.orgnr}` : "org.nr saknas"}
-          />
-          <Matt label="Källor" value={String(kallor.length)} detail="provenienskällor" />
-          <Matt label="Status" value={STATUS_ETIKETT[p.status] ?? p.status} detail="nuvarande läge" />
-        </dl>
+      {metaRad ? <p className={cn(meta, "mb-6")}>{metaRad}</p> : null}
 
-        <section className="col-span-12 md:col-span-7">
-          <h2 className="kicker text-mineral">Så räknades poängen</h2>
-          {kriterier(p.score_breakdown).length ? (
-            <ul className="mt-5 divide-y divide-ink/15 border-y border-ink/15">
-              {kriterier(p.score_breakdown).map((k, i) => (
-                <li key={`${k.nyckel ?? k.etikett}-${i}`} className="py-4">
-                  <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                    <p className="text-[15px] font-medium">{k.etikett}</p>
-                    <span
-                      className={cn(
-                        "kicker",
-                        k.hart && k.utfall === "miss" ? "text-danger" : "text-mineral"
-                      )}
+      <Nyckeltal
+        poster={[
+          { etikett: "Poäng", varde: poang, notis: p.qualified === false ? "Diskvalificerad" : "Kvalificerad" },
+          {
+            etikett: "Anställda",
+            varde: p.anstallda == null ? "–" : p.anstallda,
+            notis: p.orgnr ? `Org.nr ${p.orgnr}` : "Org.nr saknas"
+          },
+          { etikett: "Källor", varde: kallor.length }
+        ]}
+      />
+
+      <div className="mt-12 grid gap-x-8 gap-y-12 md:grid-cols-12">
+        <div className="min-w-0 md:col-span-7">
+          <Sektion title="Så räknades poängen">
+            {kriterier(p.score_breakdown).length ? (
+              <Radlista>
+                {kriterier(p.score_breakdown).map((k, i) => (
+                  <Rad key={`${k.nyckel ?? k.etikett}-${i}`}>
+                    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                      <p className="text-[0.9375rem] font-medium">{k.etikett}</p>
+                      <Badge tone={k.hart && k.utfall === "miss" ? "danger" : "neutral"}>
+                        {versal(k.utfall)}
+                        {typeof k.vikt === "number" ? ` · vikt ${k.vikt}` : ""}
+                      </Badge>
+                    </div>
+                    {k.motivering ? (
+                      <p className="mt-1.5 max-w-[65ch] text-[0.9375rem] leading-6 text-ink-muted">
+                        {k.motivering}
+                      </p>
+                    ) : null}
+                  </Rad>
+                ))}
+              </Radlista>
+            ) : (
+              <Tomt>
+                Ingen poängmotivering sparad för det här bolaget. Den skrivs vid körningen, så ett
+                prospekt som lagts till för hand har ingen.
+              </Tomt>
+            )}
+
+            {p.disqualifiers?.length ? (
+              <div className="mt-8">
+                <h3 className={rubrikPanel}>{ICP_ETIKETTER.deal_breakers.label}</h3>
+                <ul className="mt-4 space-y-2">
+                  {p.disqualifiers.map((skäl) => (
+                    <li key={skäl} className="border-l-2 border-danger pl-3 text-[0.9375rem] text-ink-muted">
+                      {skäl}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </Sektion>
+        </div>
+
+        <div className="min-w-0 md:col-span-5">
+          <Sektion title="Kontakt">
+            <div className="border-y border-ink/15 py-4">
+              <p className="text-[0.9375rem]">{p.contact_name ?? "Ingen kontaktperson hittad"}</p>
+              {p.contact_email ? (
+                <p className="mt-1 break-all text-[0.9375rem] text-ink-muted">{p.contact_email}</p>
+              ) : null}
+            </div>
+          </Sektion>
+
+          <Sektion title="Källor">
+            {kallor.length ? (
+              <ul className="space-y-2">
+                {kallor.map((url) => (
+                  <li key={url}>
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="focus-ring break-all text-[0.9375rem] text-ink-muted underline decoration-ink/25 underline-offset-4"
                     >
-                      {k.utfall}
-                      {typeof k.vikt === "number" ? ` · vikt ${k.vikt}` : ""}
-                    </span>
-                  </div>
-                  {k.motivering ? (
-                    <p className="mt-1.5 max-w-[65ch] text-[15px] leading-6 text-ink-muted">
-                      {k.motivering}
-                    </p>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-5 border-y border-ink/15 py-4 text-[15px] text-ink-muted">
-              Ingen poängmotivering sparad för det här bolaget. Den skrivs vid körningen — ett
-              prospekt som lagts till för hand har ingen.
-            </p>
-          )}
-
-          {p.disqualifiers?.length ? (
-            <div className="mt-8">
-              <h2 className="kicker text-mineral">{ICP_ETIKETTER.deal_breakers.label}</h2>
-              <ul className="mt-4 space-y-2">
-                {p.disqualifiers.map((skäl) => (
-                  <li key={skäl} className="border-l-2 border-danger pl-3 text-[15px] text-ink-muted">
-                    {skäl}
+                      {url}
+                    </a>
                   </li>
                 ))}
               </ul>
-            </div>
-          ) : null}
-        </section>
+            ) : (
+              <Tomt>Inga källor sparade. Utan minst en källa får Iris inte skriva ett utkast.</Tomt>
+            )}
+          </Sektion>
+        </div>
+      </div>
 
-        <section className="col-span-12 md:col-span-5">
-          <h2 className="kicker text-mineral">Kontakt</h2>
-          <div className="mt-4 border-y border-ink/15 py-4">
-            <p className="text-[15px]">{p.contact_name ?? "Ingen kontaktperson hittad"}</p>
-            {p.contact_email ? (
-              <p className="mt-1 break-all text-sm text-ink-muted">{p.contact_email}</p>
-            ) : null}
-          </div>
-
-          <h2 className="kicker mt-8 text-mineral">Källor</h2>
-          {kallor.length ? (
-            <ul className="mt-4 space-y-2">
-              {kallor.map((url) => (
-                <li key={url}>
-                  <a
-                    href={url}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="focus-ring break-all text-sm text-ink-muted underline decoration-ink/25 underline-offset-4"
-                  >
-                    {url}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-4 text-[15px] text-ink-muted">
-              Inga källor sparade. Utan minst en källa får agenten inte skriva ett utkast — se
-              provenienskravet i leads-agentens regler.
-            </p>
-          )}
-        </section>
-
-        {/* Fas 4 (2026-08-29): Email-studion flyttade in i leaden. Ersätter
-            den gamla "Skriv mejl ↗"-länken till den frikopplade, generiska
-            studion — den kunde bara visa E-Tech-exemplet, oavsett vilket
-            bolag man tittade på. */}
-        <section className="col-span-12 border-t border-ink/15 pt-8">
-          <h2 className="kicker text-mineral">Mejlutkast</h2>
-
-          {demo ? (
-            <div className="mt-5 rounded-card bg-paper2/60 p-5">
-              <p className="max-w-[65ch] text-[15px] leading-7 text-ink-muted">
-                Ett utkast kostar LLM-anrop mot er egen granskningskö och kräver därför ett
-                konto. Här visar vi var det hade legat, inte ett påhittat resultat.
-              </p>
-              <Link href="/login" className={cn(btnPrimary, "mt-4")}>
+      {/* Fas 4 (2026-08-29): Email-studion flyttade in i leaden. Ersätter
+          den gamla "Skriv mejl ↗"-länken till den frikopplade, generiska
+          studion — den kunde bara visa E-Tech-exemplet, oavsett vilket
+          bolag man tittade på. */}
+      <Sektion title="Mejlutkast">
+        {demo ? (
+          // Andra meningen ("Här visar vi var det hade legat …") är struken:
+          // den handlade om sidan, inte om utkastet (F-018).
+          <Tomt
+            action={
+              <Link href="/login" className={cn(btnPrimary, btnLiten)}>
                 Logga in för att skapa utkast
               </Link>
-            </div>
-          ) : (
-            <div className="mt-5">
-              {utkastLage.fas === "kontrollerar" ? (
-                <div className="h-16 animate-pulse border-t border-ink/15 bg-ink/[0.03]" />
-              ) : null}
+            }
+          >
+            Ett utkast kostar LLM-anrop mot er egen granskningskö och kräver därför ett konto.
+          </Tomt>
+        ) : (
+          <div>
+            {utkastLage.fas === "kontrollerar" ? (
+              <div className="h-16 animate-pulse border-t border-ink/15 bg-ink/[0.03]" />
+            ) : null}
 
-              {utkastLage.fas === "ingen" ? (
-                <div>
-                  <p className="max-w-[65ch] text-[15px] leading-7 text-ink-muted">
-                    Inget utkast ännu. Ett klick skriver ett första mejl utifrån poängmotiveringen
-                    och källorna ovan, sedan väntar det på din granskning i kön.
-                  </p>
-                  <button type="button" onClick={() => void skapaUtkast()} className={cn(btnPrimary, "mt-4")}>
-                    Skapa utkast
+            {utkastLage.fas === "ingen" ? (
+              <div>
+                <p className="max-w-[65ch] text-[0.9375rem] leading-7 text-ink-muted">
+                  Inget utkast ännu. Ett klick skriver ett första mejl utifrån poängmotiveringen
+                  och källorna ovan, sedan väntar det på din granskning i kön.
+                </p>
+                <button type="button" onClick={() => void skapaUtkast()} className={cn(btnPrimary, "mt-4")}>
+                  Skapa utkast
+                </button>
+              </div>
+            ) : null}
+
+            {utkastLage.fas === "skapar" ? (
+              <p className="text-[0.9375rem] text-ink-muted">Skriver utkastet…</p>
+            ) : null}
+
+            {utkastLage.fas === "fel" ? (
+              <div className="flex items-start gap-3 border-y border-ochre/40 bg-ochre/10 px-4 py-4">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
+                <div className="min-w-0">
+                  <p className="text-[0.9375rem] text-ink-muted">{utkastLage.meddelande}</p>
+                  <button
+                    type="button"
+                    onClick={() => void skapaUtkast()}
+                    className={cn(btnSecondary, btnLiten, "mt-3")}
+                  >
+                    Försök igen
                   </button>
                 </div>
-              ) : null}
+              </div>
+            ) : null}
 
-              {utkastLage.fas === "skapar" ? (
-                <p className="text-[14px] text-ink-subtle">Skriver utkastet…</p>
-              ) : null}
+            {utkastLage.fas === "klar" ? (
+              <div>
+                <EmailStudioEditor data={utkastLage.data} compact />
 
-              {utkastLage.fas === "fel" ? (
-                <div className="flex items-start gap-3 border-y border-ochre/40 bg-ochre/10 px-4 py-4">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
-                  <div className="min-w-0">
-                    <p className="text-sm text-ink-muted">{utkastLage.meddelande}</p>
-                    <button
-                      type="button"
-                      onClick={() => void skapaUtkast()}
-                      className="focus-ring mt-3 inline-flex min-h-9 items-center rounded-input bg-paper2 px-3 text-[13px] font-medium"
-                    >
-                      Försök igen
-                    </button>
-                  </div>
-                </div>
-              ) : null}
+                {/* Redigeringar ovan lever bara i webbläsaren. Ingen väg
+                    sparar dem tillbaka till outreach_messages innan
+                    godkännande — se rapportens avsnitt om saknad
+                    sparväg. Utan raden hade knappen sett ut att skicka det
+                    som står i fälten just nu, vilket den inte gör. */}
+                <p className="mt-4 max-w-[65ch] text-[0.9375rem] leading-6 text-ink-muted">
+                  Godkänn skickar utkastet som det sparades i granskningskön. Ändringar i
+                  fälten ovan uppdaterar bara den här vyn tills en sparväg finns.
+                </p>
 
-              {utkastLage.fas === "klar" ? (
-                <div>
-                  <EmailStudioEditor data={utkastLage.data} compact />
+                <div className="mt-5 border-t border-ink/15 pt-5">
+                  {godkant ? (
+                    <p role="status" className="text-[0.9375rem] text-moss">
+                      Godkänt. Utkastet ligger nu i sändkön.
+                    </p>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        disabled={godkannBusy || !utkastLage.queueItemId}
+                        onClick={() => void godkannOchSkicka()}
+                        className={cn(btnPrimary, "disabled:cursor-wait disabled:opacity-60")}
+                      >
+                        <Send className="h-4 w-4" aria-hidden />
+                        {godkannBusy ? "Godkänner…" : "Godkänn och skicka"}
+                      </button>
+                      {/* Kön bor i Iris › Granskning sedan 2026-09-19 —
+                          "Leads-inställningarna" pekade dit den inte längre finns. */}
+                      {!utkastLage.queueItemId ? (
+                        <p className="mt-3 max-w-[65ch] text-[0.9375rem] leading-6 text-ink-muted">
+                          Det här utkastet saknar ett kö-id och kan inte godkännas härifrån. Se
+                          Iris › Granskning.
+                        </p>
+                      ) : null}
+                      {godkannFel ? (
+                        <p role="alert" className="mt-3 max-w-[65ch] text-[0.9375rem] text-danger">
+                          {godkannFel}
+                        </p>
+                      ) : null}
+                    </>
+                  )}
 
-                  {/* Redigeringar ovan lever bara i webbläsaren. Ingen väg
-                      sparar dem tillbaka till outreach_messages innan
-                      godkännande — se rapportens avsnitt om saknad
-                      sparväg. Utan raden hade knappen sett ut att skicka det
-                      som står i fälten just nu, vilket den inte gör. */}
-                  <p className="mt-4 max-w-[65ch] text-[13px] leading-6 text-ink-subtle">
-                    Godkänn skickar utkastet som det sparades i granskningskön. Ändringar i
-                    fälten ovan uppdaterar bara den här vyn tills en sparväg finns.
-                  </p>
-
-                  <div className="mt-5 border-t border-ink/15 pt-5">
-                    {godkant ? (
-                      <p role="status" className="text-[15px] text-moss">
-                        Godkänt. Utkastet ligger nu i sändkön.
-                      </p>
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          disabled={godkannBusy || !utkastLage.queueItemId}
-                          onClick={() => void godkannOchSkicka()}
-                          className={cn(btnPrimary, "disabled:cursor-wait disabled:opacity-60")}
-                        >
-                          <Send className="h-4 w-4" aria-hidden />
-                          {godkannBusy ? "Godkänner…" : "Godkänn och skicka"}
-                        </button>
-                        {!utkastLage.queueItemId ? (
-                          <p className="mt-3 max-w-[65ch] text-[13px] leading-6 text-ink-subtle">
-                            Det här utkastet saknar ett kö-id och kan inte godkännas härifrån.
-                            Se granskningskön under Leads-inställningarna.
-                          </p>
-                        ) : null}
-                        {godkannFel ? (
-                          <p role="alert" className="mt-3 max-w-[65ch] text-[14px] text-danger">
-                            {godkannFel}
-                          </p>
-                        ) : null}
-                      </>
-                    )}
-
-                    {/* 5.6: uppföljningsfrågan, bara efter ett lyckat godkännande. */}
-                    {godkant ? (
-                      <div className="mt-6 max-w-[65ch] space-y-4 rounded-card bg-paper2/60 p-5">
-                        <label className="flex items-start gap-3">
-                          <input
-                            type="checkbox"
-                            checked
-                            readOnly
-                            disabled
-                            className="mt-1 h-4 w-4 accent-ochre"
-                          />
-                          <span className="text-[14px] leading-6 text-ink-muted">
-                            Vill du att agenten skriver utkast automatiskt framöver?{" "}
-                            <span className="text-ink-subtle">
-                              Redan på. Utan mänsklig granskning lämnar inget huset ändå.
-                            </span>
+                  {/* 5.6: uppföljningsfrågan, bara efter ett lyckat godkännande. */}
+                  {godkant ? (
+                    <div className="mt-6 max-w-[65ch] space-y-4 rounded-card bg-paper2/60 p-5">
+                      <label className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked
+                          readOnly
+                          disabled
+                          className="mt-1 h-4 w-4 accent-ochre"
+                        />
+                        <span className="text-[0.9375rem] leading-6 text-ink-muted">
+                          Vill du att agenten skriver utkast automatiskt framöver?{" "}
+                          <span className="text-ink-subtle">
+                            Redan på. Utan mänsklig granskning lämnar inget huset ändå.
                           </span>
-                        </label>
+                        </span>
+                      </label>
 
-                        <label className="flex items-start gap-3">
-                          <input
-                            type="checkbox"
-                            checked={autoSkicka}
-                            disabled={autonomiSparar}
-                            onChange={(event) => void hanteraAutoSkicka(event.target.checked)}
-                            className="mt-1 h-4 w-4 accent-ochre disabled:cursor-wait"
-                          />
-                          <span className="text-[14px] leading-6 text-ink-muted">
-                            …och skickar automatiskt, utan granskning?
-                          </span>
-                        </label>
+                      <label className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={autoSkicka}
+                          disabled={autonomiSparar}
+                          onChange={(event) => void hanteraAutoSkicka(event.target.checked)}
+                          className="mt-1 h-4 w-4 accent-ochre disabled:cursor-wait"
+                        />
+                        <span className="text-[0.9375rem] leading-6 text-ink-muted">
+                          …och skickar automatiskt, utan granskning?
+                        </span>
+                      </label>
 
-                        {autonomiFel ? (
-                          <p role="alert" className="text-[13px] leading-6 text-danger">
-                            {autonomiFel}
-                          </p>
-                        ) : null}
-                        {autonomiSparad ? (
-                          <p role="status" className="text-[13px] text-moss">
-                            Sparat.
-                          </p>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
+                      {autonomiFel ? (
+                        <p role="alert" className="text-[0.9375rem] leading-6 text-danger">
+                          {autonomiFel}
+                        </p>
+                      ) : null}
+                      {autonomiSparad ? (
+                        <p role="status" className="text-[0.9375rem] text-moss">
+                          Sparat.
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
-            </div>
-          )}
-        </section>
-      </div>
+              </div>
+            ) : null}
+          </div>
+        )}
+      </Sektion>
     </PageShell>
-  );
-}
-
-function Matt({
-  label,
-  value,
-  detail
-}: Readonly<{ label: string; value: string; detail: string }>) {
-  return (
-    <div className="col-span-6 border-t border-ink/15 pt-4 md:col-span-3">
-      <dt className="kicker text-mineral">{label}</dt>
-      <dd className="num mt-3 text-[1.75rem] font-semibold tabular-nums tracking-[-0.02em]">
-        {value}
-      </dd>
-      <p className="mt-2 text-[14px] leading-6 text-ink-muted">{detail}</p>
-    </div>
   );
 }

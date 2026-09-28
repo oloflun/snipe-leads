@@ -51,20 +51,11 @@ export const ADMIN: Record<string, Localized> = {
   halsaOkand: { sv: "Okänd", en: "Unknown" },
 
   /* -------------------------------------------------- Fotnoter, Översikt */
-  ingaKunder: {
-    sv: "Inga kunder ännu. Tom lista är ett giltigt svar, inte ett fel.",
-    en: "No customers yet. An empty list is a valid answer, not a failure."
-  },
-  seAllaKorningar: { sv: "Se alla körningar", en: "See all runs" },
   perManad: { sv: "/mån", en: "/mo" },
   test: { sv: "test", en: "test" },
 
   /* -------------------------------------------------- Kunder & Data */
   kunderRubrik: { sv: "Kunder & Data", en: "Customers & Data" },
-  kunderIngress: {
-    sv: "Alla registrerade kunder med volym, avtal och senaste aktivitet. Klicka på kundnamnet för kontaktpersoner och faktureringsuppgifter. Ekonomin och hälsobedömningen ligger under Översikt.",
-    en: "Every registered customer with volume, contract and last activity. Click a customer name for contacts and billing details. Finances and the health assessment live under Overview."
-  },
   ingaRegistrerade: {
     sv: "Inga kunder registrerade ännu.",
     en: "No customers registered yet."
@@ -77,10 +68,6 @@ export const ADMIN: Record<string, Localized> = {
 
   /* -------------------------------------------------- Statistik */
   statistik: { sv: "Statistik", en: "Statistics" },
-  statistikIngress: {
-    sv: "Signerade avtal och nya kunder över tid. Försäljningstakten nedan är definierad som nya kunder och signerade avtal per vecka — säg till om den ska mäta något annat.",
-    en: "Signed contracts and new customers over time. The sales rate below is defined as new customers and signed contracts per week — say so if it should measure something else."
-  },
   avtalIdag: { sv: "Avtal i dag", en: "Contracts today" },
   avtalVeckan: { sv: "Avtal denna vecka", en: "Contracts this week" },
   avtalManaden: { sv: "Avtal denna månad", en: "Contracts this month" },
@@ -97,7 +84,6 @@ export const ADMIN: Record<string, Localized> = {
   allaKunderTotalt: { sv: "alla kunder, totalt", en: "all customers, total" },
   handelser: { sv: "Händelser", en: "Events" },
   minst: { sv: "minst ", en: "at least " },
-  ggr: { sv: "ggr", en: "times" },
   tillKorningen: { sv: "till körningen", en: "to the run" },
   plattformsniva: { sv: "plattformsnivå", en: "platform level" },
 
@@ -106,13 +92,9 @@ export const ADMIN: Record<string, Localized> = {
   filterFel: { sv: "Fel", en: "Errors" },
   filterVarningar: { sv: "Varningar", en: "Warnings" },
   filterInfo: { sv: "Info", en: "Info" },
-  handelserIngress: {
-    sv: "Allt som plattformen loggat, grupperat på källa och orsak. Samma fel hundra gånger är ett problem, inte hundra — antalet står vid raden.",
-    en: "Everything the platform has logged, grouped by source and cause. The same error a hundred times is one problem, not a hundred — the count sits on the row."
-  },
   ingaHandelser: {
-    sv: "Inga händelser. Det är det önskade tillståndet.",
-    en: "No events. That is the desired state."
+    sv: "Inga händelser.",
+    en: "No events."
   },
   ingaHandelserFilter: {
     sv: "Inga händelser på den här nivån.",
@@ -125,8 +107,8 @@ export const ADMIN: Record<string, Localized> = {
   /* -------------------------------------------------- Exempeldata */
   exempel: { sv: "Exempel", en: "Example" },
   exempeldataMarkning: {
-    sv: "Exempeldata — arbetsytan har ingen egen aktivitet",
-    en: "Example data — this workspace has no activity of its own"
+    sv: "Exempeldata. Arbetsytan har ingen egen aktivitet.",
+    en: "Example data. This workspace has no activity of its own."
   }
 };
 

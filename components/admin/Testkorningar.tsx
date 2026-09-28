@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ExempelbolagDemo } from "@/components/leads/ExempelbolagDemo";
 import { LeadsRunForm } from "@/components/leads/LeadsRunForm";
 import { LeadsSnabbsok } from "@/components/leads/LeadsSnabbsok";
-import { btnSecondary } from "@/components/ui";
+import { Sektion, btnSecondary, etikett } from "@/components/ui";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
 
@@ -54,9 +54,9 @@ export function Testkorningar() {
           customer_email: "admin-test@session.snajp.se",
           customer_name: "Admin testkörning",
           session_key: `admin-test-${Date.now()}`,
-          // Fas 2.5 (snipe-vxq): löftet i beskrivningen nedanför var tomt —
-          // fältet fanns inte i ChatRequest förrän nu, så admintester
-          // räknades som kundvolym.
+          // Fas 2.5 (snipe-vxq): löftet att admintester aldrig räknas som
+          // kundvolym var tomt. Fältet fanns inte i ChatRequest förrän nu, så
+          // de räknades.
           is_test: true
         })
       });
@@ -82,7 +82,7 @@ export function Testkorningar() {
           throw new Error(j.error ?? "Agentkörningen misslyckades.");
         }
       }
-      throw new Error("Svaret tog för lång tid. Backenden kan ha somnat — försök igen.");
+      throw new Error("Svaret tog för lång tid. Backenden kan ha somnat. Försök igen.");
     } catch (fel) {
       setSupportFel(felmeddelande(fel));
     } finally {
@@ -91,31 +91,27 @@ export function Testkorningar() {
   }
 
   return (
-    <div className="grid gap-12">
-      <p className="max-w-[70ch] text-[15px] leading-7 text-mineral">
-        Körningar startade härifrån märks <code className="font-mono text-[13px]">is_test</code> och
-        räknas aldrig som kundvolym i Översikten. Inställningarna gäller bara den enskilda
-        körningen — arbetsytans sparade målgrupp rörs inte.
-      </p>
-
+    <div>
       {/* -------------------------------------------------- LEADS */}
       {/* Två kolumner på bred skärm: körningsformuläret till vänster (capat
           760px sedan tidigare), snabbsökpanelen och exempellistan staplade i
           högerkolumnen. Exempellistan visar hur ett färdigt resultat ser ut
           utan att någon behöver bränna en körning. På smalare skärmar (under
-          xl) staplas allt i en kolumn under formuläret. */}
-      <section className="border-t border-ink/15 pt-8">
+          xl) staplas allt i en kolumn under formuläret.
+
+          Sektionsnamnen är produktens (railens Iris och Kundtjänst). Hjälp-
+          texten är det enda formuläret kräver för att användas: vad ett tomt
+          fält betyder och att inget sparas. `is_test`-märkningen syns inte;
+          den förklaras i filens docstring och är ingenting man väljer. */}
+      <Sektion title="Iris">
         <div className="grid grid-cols-1 gap-8 xl:grid-cols-2 xl:items-start">
           <LeadsRunForm
             isTest
             rubrik={
-              <>
-                <h2 className="font-display text-2xl tracking-[-0.02em]">Iris, leadsagenten</h2>
-                <p className="mt-2 max-w-[65ch] text-[15px] text-mineral">
-                  Kör research över prospekten. Lämna ett fält tomt för att använda arbetsytans
-                  sparade värde.
-                </p>
-              </>
+              <p className="max-w-[65ch] text-[0.9375rem] text-ink-muted">
+                Tomma fält tar värdet från arbetsytans sparade målgrupp, och det du fyller i gäller
+                bara den här körningen.
+              </p>
             }
           />
           <div className="grid gap-8">
@@ -123,19 +119,15 @@ export function Testkorningar() {
             <ExempelbolagDemo />
           </div>
         </div>
-      </section>
+      </Sektion>
 
       {/* ------------------------------------------------ SUPPORT */}
-      <section className="border-t border-ink/15 pt-8">
-        <h2 className="font-display text-2xl tracking-[-0.02em]">Kundtjänstagenten</h2>
-        <p className="mt-2 max-w-[65ch] text-[15px] text-mineral">
-          Ställ en fråga och se det grundade svaret. Går svaret inte att grunda i kunskapsbasen ska
-          agenten eskalera i stället för att gissa — det är också ett giltigt testresultat.
-        </p>
-
-        <div className="mt-6 max-w-[760px]">
+      {/* Ett svar som eskalerar i stället för att gissa är också ett giltigt
+          testresultat: det betyder att kunskapsbasen saknade underlaget. */}
+      <Sektion title="Kundtjänst">
+        <div className="max-w-[760px]">
           <label className="block">
-            <span className="text-[13px] font-medium text-ink-muted">Fråga</span>
+            <span className={etikett}>Fråga</span>
             <div className="mt-1.5">
               <textarea
                 value={fråga}
@@ -157,7 +149,7 @@ export function Testkorningar() {
         </button>
 
         {supportBusy ? (
-          <p className="mt-3 text-[13px] text-ink-subtle">
+          <p role="status" className="mt-3 text-[0.9375rem] text-ink-muted">
             Första svaret kan ta upp till en minut om backenden sovit.
           </p>
         ) : null}
@@ -168,12 +160,14 @@ export function Testkorningar() {
           </p>
         ) : null}
 
+        {/* paper2 alltid MED hårlinje (DESIGN.md): utan den är plattan nästan
+            osynlig mot pappret. Samma yta som Tomt. */}
         {supportSvar ? (
-          <div className="mt-5 max-w-[70ch] whitespace-pre-wrap rounded-card bg-paper2/60 p-5 text-[15px] leading-7">
+          <div className="mt-5 max-w-[70ch] whitespace-pre-wrap rounded-input border border-ink/10 bg-paper2 p-5 text-[15px] leading-7">
             {supportSvar}
           </div>
         ) : null}
-      </section>
+      </Sektion>
     </div>
   );
 }

@@ -12,7 +12,7 @@ milestone_blockers:
   - "main uppdaterad via PR #12 och #13 (2026-09-15); PR #14 (leads-skrapning) vantar pa Antons review"
   - "IMAP_PASSWORD_LIVRUSTNING saknas pa Railway api (bade main och development)"
   - "Vantar pa kundens bekraftelse av garantiperioden"
-updated: 2026-09-15
+updated: 2026-09-28
 ---
 
 # Snipra / Snajp

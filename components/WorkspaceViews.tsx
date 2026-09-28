@@ -5,7 +5,7 @@ import Link from "next/link";
 import { SoulEditor } from "@/components/SoulEditor";
 import { Agentinstruktioner } from "@/components/admin/Agentinstruktioner";
 import { PageShell, useArbetsvag } from "@/components/AppShell";
-import { btnPrimary, btnSecondary } from "@/components/ui";
+import { Badge, Rad, Radlista, btnPrimary, btnSecondary, etikett, meta, rubrikPanel } from "@/components/ui";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { SignOutButton } from "@/components/auth/SignOutButton";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
@@ -37,6 +37,7 @@ import { signOut } from "@/lib/actions/auth";
 import { workflowSteps } from "@/lib/mock-data";
 import type { SettingsSectionKey } from "@/lib/routes";
 import type { Tema } from "@/lib/tema";
+import { cn } from "@/lib/utils";
 
 /**
  * Assistenten — MÄRKT som exempel, eftersom den inte är kopplad än.
@@ -54,40 +55,36 @@ import type { Tema } from "@/lib/tema";
  */
 export function AssistantView() {
   return (
-    <PageShell
-      kicker="Assistant"
-      title="Assistenten är ett reglage i arbetsflödet, inte ett chattfönster."
-      description="Varje kommando landar i discovery, research, sekvens, email eller analys. Det går att följa exakt vilken signal som styrde texten."
-    >
-      <p className="mb-8 border-y border-ochre/40 bg-ochre/10 px-4 py-3 text-[15px] text-ink-muted">
-        <strong className="font-semibold">Exempel.</strong> Samtalet nedan visar hur assistenten
-        är tänkt att fungera. Den är inte kopplad till din arbetsyta ännu, så ingenting här är
-        körningar hos dig.
+    <PageShell title="Assistenten">
+      <p className="mb-8 border-y border-ochre/40 bg-ochre/10 px-4 py-3 text-[0.9375rem] text-ink-muted">
+        <strong className="font-semibold">Exempel:</strong> assistenten är inte kopplad till din
+        arbetsyta ännu, och inget av det här har körts hos dig.
       </p>
-      <div className="grid grid-cols-12 gap-x-8 gap-y-10">
-        <div className="col-span-12 border-y border-ink/15 md:col-span-7">
+      {/* gap-x först från md: se kommentaren i SettingsView om grid-cols-12 vid 320px. */}
+      <div className="grid grid-cols-12 gap-x-0 gap-y-10 md:gap-x-8">
+        <Radlista ariaLabel="Exempelsamtal" className="col-span-12 md:col-span-7">
           {[
             ["Du", "Hitta byggbolag i Malmö med expansions- eller rekryteringssignal."],
             ["Snajp", "37 bolag hittade. Byggkompaniet Syd är starkast: ny lokal i Hyllie, fyra platsannonser och tydlig kontaktroll."],
             ["Du", "Generera ett första mejl i mediumlängd."],
             ["Snajp", "Jag använder Hyllie-signalen, arbetsledarrekryteringen och CTA:n från business context. Tonen hålls lågmäld."]
           ].map(([speaker, message]) => (
-            <div key={`${speaker}-${message}`} className="grid grid-cols-12 gap-x-6 border-b border-ink/15 py-5 last:border-b-0">
-              <div className="kicker col-span-3 text-mineral">{speaker}</div>
-              <p className="col-span-9 text-[16px] leading-7 text-ink-muted">{message}</p>
-            </div>
+            <Rad key={`${speaker}-${message}`}>
+              <p className={etikett}>{speaker}</p>
+              <p className="mt-1 text-[0.9375rem] leading-6 text-ink">{message}</p>
+            </Rad>
           ))}
-        </div>
+        </Radlista>
         <div className="col-span-12 md:col-span-5">
-          <div className="kicker text-mineral">Stateful workflow</div>
-          <div className="mt-4 divide-y divide-ink/15 border-y border-ink/15">
+          <h2 className={rubrikPanel}>Arbetsflöde</h2>
+          <Radlista ariaLabel="Arbetsflöde" className="mt-4">
             {workflowSteps.map((step, index) => (
-              <div key={step} className="grid grid-cols-12 py-3">
-                <span className="num col-span-2 font-mono text-sm text-ink-subtle">{String(index + 1).padStart(2, "0")}</span>
-                <span className="col-span-10 text-[15px]">{step}</span>
-              </div>
+              <Rad key={step} className="flex gap-4">
+                <span className={cn(meta, "num w-6 shrink-0")}>{index + 1}</span>
+                <span className="min-w-0 text-[0.9375rem]">{step}</span>
+              </Rad>
             ))}
-          </div>
+          </Radlista>
         </div>
       </div>
     </PageShell>
@@ -104,11 +101,7 @@ export function AssistantView() {
 
 export function CompaniesView({ demo = false }: Readonly<{ demo?: boolean }>) {
   return (
-    <PageShell
-      kicker="Företag"
-      title="Företagsintelligens, källor och säljvinklar i samma vy."
-      description="Bolagen Iris hittat åt dig, med signalen som motiverade poängen."
-    >
+    <PageShell title="Företag">
       <Bolagsregister demo={demo} />
     </PageShell>
   );
@@ -125,7 +118,7 @@ export function CompanyDetailView({ id, demo = false }: Readonly<{ id: string; d
 function TextList({ title, items }: Readonly<{ title: string; items: string[] }>) {
   return (
     <div className="col-span-12 md:col-span-4">
-      <h2 className="kicker text-mineral">{title}</h2>
+      <h2 className={rubrikPanel}>{title}</h2>
       <div className="mt-4 divide-y divide-ink/15 border-y border-ink/15">
         {items.map((item) => (
           <p key={item} className="py-4 text-[15px] leading-6 text-ink-muted">{item}</p>
@@ -137,11 +130,7 @@ function TextList({ title, items }: Readonly<{ title: string; items: string[] }>
 
 export function ContactsView({ demo = false }: Readonly<{ demo?: boolean }>) {
   return (
-    <PageShell
-      kicker="Kontakter"
-      title="Personerna bakom bolagen."
-      description="Kontaktpersonen Iris hittat per bolag, och var prospektet står."
-    >
+    <PageShell title="Kontakter">
       <Kontakter demo={demo} />
     </PageShell>
   );
@@ -158,11 +147,7 @@ export function ContactsView({ demo = false }: Readonly<{ demo?: boolean }>) {
  */
 export function AnalyticsView({ demo = false }: Readonly<{ demo?: boolean }>) {
   return (
-    <PageShell
-      kicker="Analys"
-      title="Analys som läser som en resultattabell, inte en chart-demo."
-      description="Skick, svar och ärenden per vecka — räknat ur din egen arbetsyta."
-    >
+    <PageShell title="Analys">
       <Analys demo={demo} />
     </PageShell>
   );
@@ -170,11 +155,7 @@ export function AnalyticsView({ demo = false }: Readonly<{ demo?: boolean }>) {
 
 export function InboxView({ demo = false }: Readonly<{ demo?: boolean }>) {
   return (
-    <PageShell
-      kicker="Svar"
-      title="Svaren från bolagen agenten kontaktat."
-      description="Vem som svarat, vad de skrev och var prospektet står nu."
-    >
+    <PageShell title="Svar">
       <Svar demo={demo} />
     </PageShell>
   );
@@ -182,11 +163,7 @@ export function InboxView({ demo = false }: Readonly<{ demo?: boolean }>) {
 
 export function AgentLarandeView() {
   return (
-    <PageShell
-      kicker="Lärande"
-      title="Det agenterna lärt sig — och väntar på ditt ok för."
-      description="Kunskapsluckor ur supportärenden och marknadsinsikter ur research. Inget skrivs in i ditt underlag utan att du godkänner det här."
-    >
+    <PageShell title="Lärande">
       <AgentLarande />
     </PageShell>
   );
@@ -199,43 +176,27 @@ export function SettingsView({
   const titles: Record<SettingsSectionKey, string> = {
     foretaget: "Företaget",
     mailboxes: "Inkorgar",
-    team: "Teamroller och audit-logik.",
+    team: "Team",
     billing: "Plan och fakturering",
-    affarskontext: "Affärskontext",
+    // Samma ord som menyposten som leder hit (lib/routes.ts settingsGroups).
+    // Fyra sidor hette något annat än länken man klickat på.
+    affarskontext: "Vad ni säljer",
     kunskapsbas: "Kunskapsbas",
-    leads: "Målgrupp och autonomi",
-    regler: "Fack och autosvar",
-    soul: "Er röst",
+    leads: "Vilka bolag ni vill nå",
+    regler: "När agenten får svara själv",
+    soul: "Så ska agenten låta",
     notiser: "Notiser",
     tema: "Tema",
     addons: "Tillägg",
     agentinstruktioner: "Globala agentinstruktioner"
   };
-  // Beskrivningen var tidigare EN generisk sträng för alla sektioner. På
-  // röstsidan blev den både felaktig (den beskriver inte sektionen) och
-  // olämplig: den räknade upp "Supabase Auth och RLS" för en KUND, som varken
-  // känner igen orden eller behöver veta vår stack. Att stacken sedan byttes
-  // gjorde texten dessutom osann — vilket är själva argumentet mot att skriva
-  // ut infrastruktur i en kundvänd yta.
-  const descriptions: Record<SettingsSectionKey, string> = {
-    foretaget: "Bolaget bakom arbetsytan — namn, organisationsnummer och webbplats.",
-    mailboxes: "Vilka mejladresser agenterna läser och svarar från.",
-    team: "Vilka som har tillgång till arbetsytan, och vad de får göra.",
-    billing: "Vilket paket arbetsytan har, och vad som ingår i det.",
-    affarskontext: "Vad ni säljer och till vem. Båda agenterna läser härifrån.",
-    kunskapsbas: "Dokumenten agenterna svarar ur. Ligger inget här gissar de aldrig — de eskalerar.",
-    leads: "Vilka bolag agenterna ska leta efter, och hur långt de får gå på egen hand.",
-    regler: "Vilka ärenden agenterna får besvara själva, och vilka som alltid går till en människa.",
-    soul: "Beskriv hur ni låter. Agenterna skriver så i både utskick och svar — dokumentet är delat mellan dem.",
-    notiser:
-      "När vi ska mejla dig, och om vad. Gäller dig personligen — inte dina kollegor i samma arbetsyta.",
-    tema: "Ljus eller mörk arbetsyta. Valet gäller den här webbläsaren och slår igenom direkt.",
-    addons: "Det agenterna kan göra utöver det som ingår i er plan.",
-    agentinstruktioner:
-      "Reglerna varje agent läser först, för varje kund. Policy och säkerhet — ton och röst hör hemma hos kunden."
-  };
+  // Ingen beskrivning under rubriken. Här låg en mening per sektion, och
+  // nästan alla beskrev sidan ("Vilka mejladresser agenterna läser och svarar
+  // från."). De få som bar något användaren behöver för att fylla i rätt står
+  // nu vid fältet de gäller, i sektionens egen komponent (F-016,
+  // plans/2026-09-27-appytor-enhetlighet.md).
   return (
-    <PageShell title={titles[section]} description={descriptions[section]}>
+    <PageShell title={titles[section]}>
       {/* gap-x först från md. grid-cols-12 med gap-x-8 kräver 11 x 32px = 352px
           BARA till mellanrum: vid 320px-vyn (288px container) klampades alla
           tolv kolumner till 0px, och rutnätet blev 352px brett oavsett
@@ -244,7 +205,7 @@ export function SettingsView({
           scroll. Uppmätt via gridTemplateColumns = "0px 0px 0px ...".
           På mobil ligger allt ändå staplat i col-span-12, så x-mellanrummet
           gjorde ingen nytta där. Samma mönster finns på tre ställen till i
-          den här filen — de är inte visuellt verifierade och lämnas orörda. */}
+          den här filen; AssistantView och LoadingStatesView rättades 2026-09-27. */}
       <div className="grid grid-cols-12 gap-x-0 gap-y-10 md:gap-x-8">
         {/* min-w-0: ett grid-barn har min-width:auto som default och vägrar
             därför krympa under sitt innehåll — flex-wrap får aldrig chansen
@@ -263,7 +224,10 @@ export function SettingsView({
             Grupperingen per agent är hela poängen: "Röst och tonläge" hör till
             leads-agenten och "Inkorgar" till kundtjänstagenten, och en platt
             lista tvingar läsaren att veta det innan hen klickar. */}
-        <div className="col-span-12 md:col-span-3">
+        {/* order-last under md: på mobil fyllde menyn hela första skärmen på
+            varje inställningssida, och inställningen man öppnat låg under den.
+            Innehållet först, menyn efter. */}
+        <div className="order-last col-span-12 md:order-none md:col-span-3">
           <SettingsNav />
           {/* Utloggningen bor här och inte i navigationsraden: den hör till
               kontot, inte till arbetsytan, och /settings är den enda ytan som
@@ -307,35 +271,45 @@ export function SettingsView({
  */
 function CompanySettings() {
   const { workspaceName, products, isDemo } = useDashboard();
+  // Radformen för alla inställningar: etikett (och ev. en mening hjälp) till
+  // vänster, värde eller kontroll till höger. Under sm staplas de.
+  const rad = "grid gap-x-6 gap-y-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center";
   return (
-    <div className="grid gap-5">
-      <div className="grid grid-cols-12 gap-x-6 border-t border-ink/15 pt-5">
-        <span className="kicker col-span-12 text-mineral md:col-span-3">Arbetsyta</span>
-        <span className="col-span-12 mt-2 text-[15px] md:col-span-9 md:mt-0">
-          {workspaceName ?? "—"}
-          {isDemo ? <span className="ml-2 text-[13px] text-warning">testarbetsyta</span> : null}
+    <Radlista ariaLabel="Företaget">
+      <Rad className={rad}>
+        <span className={rubrikPanel}>Arbetsyta</span>
+        <span className="flex flex-wrap items-center gap-2 text-[0.9375rem] sm:justify-end">
+          {workspaceName ?? "–"}
+          {isDemo ? <Badge tone="warn">Testarbetsyta</Badge> : null}
         </span>
-      </div>
-      <div className="grid grid-cols-12 gap-x-6 border-t border-ink/15 pt-5">
-        <span className="kicker col-span-12 text-mineral md:col-span-3">Paket</span>
-        <span className="col-span-12 mt-2 text-[15px] md:col-span-9 md:mt-0">
+      </Rad>
+      <Rad className={rad}>
+        <span className={rubrikPanel}>Paket</span>
+        <span className="text-[0.9375rem] sm:text-right">
           {products.length === 0
-            ? "—"
-            : products.map((p) => (p === "leads" ? "Leads" : "Kundtjänst")).join(" och ")}
+            ? "–"
+            : // Railens namn. Den gamla tvåvägsmappningen kallade Kvitton för Kundtjänst.
+              new Intl.ListFormat("sv", { type: "conjunction" }).format(
+                products.map((p) => ({ leads: "Iris", support: "Kundtjänst", bookkeeping: "Kvitton" })[p])
+              )}
         </span>
-      </div>
-      <div className="grid grid-cols-12 gap-x-6 border-t border-ink/15 pt-5">
-        <span className="kicker col-span-12 text-mineral md:col-span-3">Bolagsuppgifter</span>
-        <p className="col-span-12 mt-2 max-w-[60ch] text-[15px] leading-7 text-ink-muted md:col-span-9 md:mt-0">
-          Organisationsnummer och webbplats fylldes i vid uppstarten och används av båda
-          agenterna.{" "}
-          <Link href="/onboarding" className="underline underline-offset-4 hover:text-ochre">
-            Ändra dem i uppstartsformuläret
-          </Link>
-          .
-        </p>
-      </div>
-    </div>
+      </Rad>
+      <Rad className={rad}>
+        <span className="min-w-0">
+          <span className={cn(rubrikPanel, "block")}>Organisationsnummer och webbplats</span>
+          <span id="bolagsuppgifter-hjalp" className="mt-1 block max-w-[62ch] text-[0.9375rem] leading-6 text-ink-muted">
+            Används av båda agenterna och ändras i uppstartsformuläret.
+          </span>
+        </span>
+        <Link
+          href="/onboarding"
+          aria-describedby="bolagsuppgifter-hjalp"
+          className={cn(btnSecondary, "justify-self-start sm:justify-self-end")}
+        >
+          Ändra
+        </Link>
+      </Rad>
+    </Radlista>
   );
 }
 
@@ -357,7 +331,9 @@ export function LoginView() {
       <div className="mx-auto grid min-h-screen max-w-[1480px] grid-cols-12 px-6 py-10 md:gap-x-8 md:px-8">
         <section className="col-span-12 flex flex-col justify-between bg-ink p-8 text-paper md:col-span-6">
           <div>
-            <p className="kicker text-paper-muted">Snajp workspace</p>
+            {/* Etiketten i etikett-form (inte kicker); paper-muted eftersom
+                grunden här är den mörka ink-ytan. */}
+            <p className="text-[0.8125rem] font-medium text-paper-muted">Snajp</p>
             <h1 className="mt-8 text-[1.75rem] font-semibold leading-tight tracking-[-0.02em]">Logga in</h1>
           </div>
           <p className="mt-12 max-w-[44ch] text-[16px] leading-7 text-paper-muted">Logga in med lösenord eller magic link. Efter första inloggningen konfigurerar du business context innan dashboarden öppnas.</p>
@@ -376,12 +352,16 @@ export function OnboardingView() {
       <div className="mx-auto max-w-[1480px] px-6 py-10 md:px-8">
         <div className="grid grid-cols-12 md:gap-x-8">
           <div className="col-span-12 md:col-span-3">
-            <Link href="/" className="kicker text-mineral hover:text-ochre">Till startsidan</Link>
-            <div className="rule mt-3 text-ink" />
-            <form action={signOut} className="mt-3">
-              <button type="submit" className="kicker text-mineral hover:text-ochre">Logga ut</button>
+            <Link href="/" className={cn(etikett, "focus-ring inline-flex min-h-11 items-center rounded-input hover:text-ink")}>
+              Till startsidan
+            </Link>
+            <div className="rule text-ink" />
+            <form action={signOut}>
+              <button type="submit" className={cn(etikett, "focus-ring inline-flex min-h-11 items-center rounded-input hover:text-ink")}>
+                Logga ut
+              </button>
             </form>
-            <p className="kicker mt-4 text-ink-subtle">Steg 1 av 4</p>
+            <p className={cn(meta, "mt-2")}>Steg 1 av 4</p>
           </div>
           <div className="col-span-12 mt-8 md:col-span-9 md:mt-0">
             <h1 className="max-w-3xl text-[1.75rem] font-semibold leading-tight tracking-[-0.02em]">Berätta hur ni säljer</h1>
@@ -395,8 +375,8 @@ export function OnboardingView() {
 
 export function LoadingStatesView() {
   return (
-    <PageShell kicker="States" title="Loading, empty och error states i Snajps formspråk." description="Gemensamma UI-states för vidare produktion.">
-      <div className="grid grid-cols-12 gap-x-8 gap-y-8">
+    <PageShell title="Tillstånd">
+      <div className="grid grid-cols-12 gap-x-0 gap-y-8 md:gap-x-8">
         <TextList title="Loading" items={["Fyra linjer i ledgern får låg kontrast och shimmer via opacity, inte spinner."]} />
         <TextList title="Empty" items={["Ingen kampanj vald. Välj en kampanj eller låt Snajp föreslå ett segment."]} />
         <TextList title="Error" items={["Provider saknas. LinkedIn enrichment kräver adapter eller användarauktoriserad input."]} />

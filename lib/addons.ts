@@ -48,14 +48,14 @@ export const addonCatalog: readonly AddonSpec[] = [
   {
     key: "vision",
     name: "Bildanalys",
-    what: "Kunder kan bifoga foton — en skadad vara, en felkod på en display — och agenterna läser bilden.",
+    what: "Kunder kan bifoga foton, till exempel en skadad vara eller en felkod på en display, och agenterna läser bilden.",
     why: "Egen modellkostnad per bild, och den körs som en separat tjänst vid sidan av samtalet."
   },
   {
     key: "kb_autoingest",
     name: "Synkad kunskapsbas",
     what: "Kunskapsbasen hämtas från er egen sajt och hålls uppdaterad när ni ändrar där.",
-    why: "Löpande hämtning i stället för en engångsinläsning — det är drift, inte uppsättning."
+    why: "Löpande hämtning i stället för en engångsinläsning. Det är drift, inte uppsättning."
   },
   {
     key: "multilang",
@@ -73,13 +73,13 @@ export const addonCatalog: readonly AddonSpec[] = [
     key: "reports",
     name: "Månadsrapport",
     what: "Ärendevolym, vad frågorna handlade om, och hur ofta agenterna lämnade över till en människa.",
-    why: "Egen datavy som räknas fram separat — den ingår inte i den löpande driften."
+    why: "Egen datavy som räknas fram separat. Den ingår inte i den löpande driften."
   },
   {
     key: "leadlists",
     name: "Leadslistor",
-    what: "Agenten bygger färdiga, granskningsbara leadslistor — verifierade svenska B2B-bolag med kontaktväg, källa och signal per rad, exporterbara som CSV.",
-    why: "Volymkörningar med egen kvot och egen granskning — det är ett eget arbetsflöde vid sidan av de riktade utskicken."
+    what: "Agenten bygger färdiga, granskningsbara leadslistor: verifierade svenska B2B-bolag med kontaktväg, källa och signal per rad, exporterbara som CSV.",
+    why: "Volymkörningar med egen kvot och egen granskning. Det är ett eget arbetsflöde vid sidan av de riktade utskicken."
   }
 ];
 

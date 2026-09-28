@@ -1,6 +1,7 @@
 "use client";
 
 import { Clock } from "lucide-react";
+import { rubrikPanel } from "@/components/ui";
 
 /**
  * "Din arbetsyta aktiveras" — det en NY kund ska möta, inte ett 409.
@@ -37,15 +38,13 @@ export function EjAktiverad({ yta }: Readonly<{ yta?: string }>) {
       <div className="flex items-start gap-3">
         <Clock className="mt-0.5 h-4 w-4 shrink-0 text-mineral" aria-hidden />
         <div className="min-w-0">
-          <p className="text-[1.0625rem] font-semibold tracking-[-0.01em] text-ink">
-            Din arbetsyta aktiveras
-          </p>
-          <p className="mt-2 max-w-[62ch] text-[15px] leading-7 text-ink-muted">
+          <p className={rubrikPanel}>Din arbetsyta aktiveras</p>
+          <p className="mt-2 max-w-[62ch] text-[0.9375rem] leading-7 text-ink-muted">
             {yta ? `${yta} är` : "Den här vyn är"} redo så fort vi kopplat er till agenterna. Vi
-            går igenom er webbplats och bygger kunskapsbasen först — det är den som gör att svaren
+            går igenom er webbplats och bygger kunskapsbasen först. Det är den som gör att svaren
             blir era och inte generiska.
           </p>
-          <p className="mt-3 max-w-[62ch] text-[15px] leading-7 text-ink-subtle">
+          <p className="mt-3 max-w-[62ch] text-[0.9375rem] leading-7 text-ink-muted">
             Du behöver inte göra något. Hör gärna av dig om det dröjer.
           </p>
         </div>

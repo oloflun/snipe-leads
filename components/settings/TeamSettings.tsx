@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { Rad, Radlista } from "@/components/ui";
+import { Badge, Rad, Radlista, Sektion, Tomt, btnPrimary, btnSecondary, etikett, meta } from "@/components/ui";
+import { cn } from "@/lib/utils";
 import { inviteMember, listTeam, revokeInvite, type TeamMember } from "@/lib/actions/team";
 
 /**
@@ -68,44 +69,40 @@ export function TeamSettings() {
   }
 
   return (
-    <div className="grid gap-8">
-      <div>
-        <h3 className="kicker text-mineral">Teamet</h3>
-
+    <div>
+      <Sektion title="Personer med åtkomst">
         {members === null ? (
           // Skelettrader, inte en spinnare mitt i innehållet: raderna hoppar
           // inte när datan landar.
-          <div className="mt-5 grid gap-px">
+          <div className="grid gap-px">
             {[0, 1, 2].map((row) => (
               <div key={row} className="h-12 animate-pulse border-t border-ink/15 bg-ink/[0.03]" />
             ))}
           </div>
         ) : members.length === 0 ? (
-          <p className="mt-5 border-t border-ink/15 pt-5 text-[15px] text-mineral">
-            Du är ensam i arbetsytan. Bjud in någon nedan.
-          </p>
+          <Tomt>Du är ensam i arbetsytan. Bjud in någon nedan.</Tomt>
         ) : (
-          <Radlista ariaLabel="Personer med åtkomst" className="mt-5">
-            {/* Fast schema: namn/e-post | roll | åtgärd. Åtgärdsspalten har fast
-                bredd så att "Ta bort" står på samma plats på varje rad — och
-                lämnar ett tomt fält på rader utan åtgärd i stället för att
+          <Radlista ariaLabel="Personer med åtkomst">
+            {/* Fast schema: namn/e-post | roll och status | åtgärd. Åtgärdsspalten
+                har fast bredd så att "Ta bort" står på samma plats på varje rad,
+                och lämnar ett tomt fält på rader utan åtgärd i stället för att
                 rollen glider ut i kanten. */}
             {members.map((member) => (
               <Rad
                 key={member.id}
-                className="grid grid-cols-[minmax(0,1fr)_auto_4.5rem] items-baseline gap-x-6"
+                className="grid grid-cols-[minmax(0,1fr)_auto_7rem] items-center gap-x-4"
               >
-                <span className="min-w-0 break-words text-[15px]">{member.label}</span>
-                <span className="kicker justify-self-end text-mineral">
-                  {member.role === "owner" ? "Ägare" : "Medlem"}
-                  {member.status === "invited" ? " · inbjuden" : null}
+                <span className="min-w-0 break-words text-[0.9375rem]">{member.label}</span>
+                <span className="flex flex-wrap items-center justify-end gap-2">
+                  <span className={meta}>{member.role === "owner" ? "Ägare" : "Medlem"}</span>
+                  {member.status === "invited" ? <Badge tone="warn">Inbjuden</Badge> : null}
                 </span>
                 {member.status === "invited" ? (
                   <button
                     type="button"
                     disabled={isPending}
                     onClick={() => handleRevoke(member.id)}
-                    className="justify-self-end text-[13px] text-mineral underline underline-offset-4 transition hover:text-danger disabled:opacity-60"
+                    className={cn(btnSecondary, "justify-self-end")}
                   >
                     Ta bort
                   </button>
@@ -116,60 +113,56 @@ export function TeamSettings() {
             ))}
           </Radlista>
         )}
-      </div>
+      </Sektion>
 
-      <form onSubmit={handleInvite} className="border-t border-ink/15 pt-6">
-        <h3 className="kicker text-mineral">Bjud in</h3>
+      <Sektion title="Bjud in">
+        <form onSubmit={handleInvite}>
+          <div className="flex min-w-0 flex-wrap items-end gap-4">
+            {/* basis-full under sm: `flex-1 min-w-0` kan krympa till noll i stället
+                för att tvinga fram en radbrytning, och vid 320px lämnade Roll +
+                knappen ~30px åt adressfältet. Etiketten bröts till "E-/POST" och
+                fältet gick inte att skriva i. Uppmätt i pixlar, inte antaget. */}
+            <label className="grid min-w-0 basis-full gap-2 sm:flex-1 sm:basis-0">
+              <span className={etikett}>E-post</span>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="kollega@bolag.se"
+                className="focus-ring min-h-11 w-full min-w-0 rounded-input border border-ink/15 bg-paper px-3 text-[16px]"
+              />
+            </label>
 
-        <div className="mt-5 flex min-w-0 flex-wrap items-end gap-4">
-          {/* basis-full under sm: `flex-1 min-w-0` kan krympa till noll i stället
-              för att tvinga fram en radbrytning, och vid 320px lämnade Roll +
-              knappen ~30px åt adressfältet. Etiketten bröts till "E-/POST" och
-              fältet gick inte att skriva i. Uppmätt i pixlar, inte antaget. */}
-          <label className="grid min-w-0 basis-full gap-2 text-[15px] sm:flex-1 sm:basis-0">
-            <span className="kicker text-mineral">E-post</span>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="kollega@bolag.se"
-              className="h-12 w-full min-w-0 border border-ink/15 bg-paper2/70 px-4 outline-none focus:border-ochre"
-            />
-          </label>
+            <label className="grid gap-2">
+              <span className={etikett}>Roll</span>
+              <select
+                value={role}
+                onChange={(event) => setRole(event.target.value)}
+                className="focus-ring min-h-11 rounded-input border border-ink/15 bg-paper px-3 text-[16px]"
+              >
+                <option value="member">Medlem</option>
+                <option value="owner">Ägare</option>
+              </select>
+            </label>
 
-          <label className="grid gap-2 text-[15px]">
-            <span className="kicker text-mineral">Roll</span>
-            <select
-              value={role}
-              onChange={(event) => setRole(event.target.value)}
-              className="h-12 border border-ink/15 bg-paper2/70 px-4 outline-none focus:border-ochre"
-            >
-              <option value="member">Medlem</option>
-              <option value="owner">Ägare</option>
-            </select>
-          </label>
+            <button type="submit" disabled={isPending} className={btnPrimary}>
+              {isPending ? "Bjuder in…" : "Bjud in"}
+            </button>
+          </div>
 
-          <button
-            type="submit"
-            disabled={isPending}
-            className="h-12 bg-ink px-5 font-mono text-[13px] uppercase tracking-[0.18em] text-paper transition-colors duration-500 hover:bg-ochre hover:text-ink disabled:opacity-60"
-          >
-            {isPending ? "Sparar..." : "Bjud in"}
-          </button>
-        </div>
-
-        {error ? (
-          <p role="alert" className="mt-5 break-words text-[14px] text-danger">
-            {error}
-          </p>
-        ) : null}
-        {message ? (
-          <p role="status" className="mt-5 break-words text-[14px] text-moss">
-            {message}
-          </p>
-        ) : null}
-      </form>
+          {error ? (
+            <p role="alert" className="mt-4 break-words text-[0.9375rem] text-danger">
+              {error}
+            </p>
+          ) : null}
+          {message ? (
+            <p role="status" className="mt-4 break-words text-[0.9375rem] text-moss">
+              {message}
+            </p>
+          ) : null}
+        </form>
+      </Sektion>
     </div>
   );
 }

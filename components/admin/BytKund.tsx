@@ -89,7 +89,7 @@ export function BytKund() {
             onChange={(event) => setQ(event.target.value)}
             placeholder="Sök kund eller slug…"
             autoFocus
-            className="focus-ring min-h-11 w-full rounded-input bg-paper2 px-3 text-sm outline-none placeholder:text-ink/35"
+            className="focus-ring min-h-11 w-full rounded-input bg-paper2 px-3 text-[1rem] outline-none placeholder:text-ink/35"
           />
           {fel ? <p className="mt-2 px-1 text-[13px] text-danger">{fel}</p> : null}
           {!fel && kunder === null ? (
@@ -106,7 +106,7 @@ export function BytKund() {
                     className="focus-ring flex min-h-11 w-full items-center rounded-input px-3 text-left text-[13px] hover:bg-paper2"
                   >
                     <span className="min-w-0 truncate font-medium">{kund.name}</span>
-                    <span className="ml-auto shrink-0 pl-3 font-mono text-[11px] text-ink-subtle">
+                    <span className="ml-auto shrink-0 pl-3 font-mono text-[0.8125rem] text-ink-subtle">
                       {kund.slug}
                     </span>
                   </button>

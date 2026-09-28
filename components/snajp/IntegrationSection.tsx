@@ -36,8 +36,8 @@ export function IntegrationSection() {
           </div>
           <p className="mt-3 text-sm leading-6 text-ink-muted">
             {text({
-              sv: "Agenterna är helt headless: samma backend som driver demon ovan exponeras som ett REST-API. Koppla ert affärssystem, e-postflöde eller webbformulär direkt mot endpointsen — varje kund får en egen API-nyckel och all historik lagras som ett komplett CRM i PostgreSQL.",
-              en: "The agents are fully headless: the same backend that powers the demo above is exposed as a REST API. Wire your business system, email flow or web form straight to the endpoints — each customer gets their own API key and all history is stored as a complete CRM in PostgreSQL."
+              sv: "Agenterna är helt headless: samma backend som driver demon ovan exponeras som ett REST-API. Koppla ert affärssystem, e-postflöde eller webbformulär direkt mot endpointsen. Varje kund får en egen API-nyckel och all historik lagras som ett komplett CRM i PostgreSQL.",
+              en: "The agents are fully headless: the same backend that powers the demo above is exposed as a REST API. Wire your business system, email flow or web form straight to the endpoints. Each customer gets their own API key and all history is stored as a complete CRM in PostgreSQL."
             })}
           </p>
           <div className="mt-4 overflow-x-auto">
@@ -48,8 +48,8 @@ export function IntegrationSection() {
                     <td className="py-2.5 pr-3">
                       <Badge tone={endpoint.method === "POST" ? "warn" : "neutral"}>{endpoint.method}</Badge>
                     </td>
-                    <td className="py-2.5 pr-3 font-mono text-xs">{endpoint.path}</td>
-                    <td className="py-2.5 text-xs text-ink-muted">{text(endpoint.note)}</td>
+                    <td className="py-2.5 pr-3 font-mono text-[0.8125rem]">{endpoint.path}</td>
+                    <td className="py-2.5 text-[0.8125rem] text-ink-muted">{text(endpoint.note)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -77,20 +77,22 @@ export function IntegrationSection() {
           </div>
           <p className="mt-3 text-sm leading-6 text-ink-muted">
             {text({
-              sv: "Web, e-post och WhatsApp har egna tonlägen och maxlängder. Inkommande mail kan pekas mot triage-endpointen via er e-postleverantörs webhook — svaren hamnar färdiga som utkast i ert system, eller skickas automatiskt.",
-              en: "Web, email and WhatsApp have their own tone and length settings. Inbound email can be pointed at the triage endpoint via your email provider's webhook — replies land as ready drafts in your system, or are sent automatically."
+              sv: "Web, e-post och WhatsApp har egna tonlägen och maxlängder. Inkommande mail kan pekas mot triage-endpointen via er e-postleverantörs webhook. Svaren hamnar färdiga som utkast i ert system, eller skickas automatiskt.",
+              en: "Web, email and WhatsApp have their own tone and length settings. Inbound email can be pointed at the triage endpoint via your email provider's webhook. Replies land as ready drafts in your system, or are sent automatically."
             })}
           </p>
         </div>
       </div>
 
       <div className="rounded-[10px] border border-ink/15 bg-ink p-6 text-paper shadow-lift">
-        <p className="kicker text-paper-subtle">Exempel · cURL</p>
+        <p className="text-[0.8125rem] font-medium text-paper-muted">Exempel · cURL</p>
         <pre className="mt-4 overflow-x-auto font-mono text-xs leading-6 text-paper-muted">
           <code>{curlExample}</code>
         </pre>
         <div className="mt-6 border-t border-paper/15 pt-5">
-          <p className="kicker text-paper-subtle">{text({ sv: "Svar (jobb klart)", en: "Response (job done)" })}</p>
+          <p className="text-[0.8125rem] font-medium text-paper-muted">
+            {text({ sv: "Svar (jobb klart)", en: "Response (job done)" })}
+          </p>
           <pre className="mt-3 overflow-x-auto font-mono text-xs leading-6 text-paper-muted">
             <code>{`{
   "status": "completed",

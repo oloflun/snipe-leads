@@ -3,7 +3,7 @@
 import { Check, Loader2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
-import { EmptyState, SkeletonRows, btnLiten, btnPrimary, btnSecondary } from "@/components/ui";
+import { Rad, Radlista, SkeletonRows, Tomt, btnLiten, btnPrimary, btnSecondary, meta, rubrikPanel } from "@/components/ui";
 import type { EmailStudioData } from "@/lib/data/emails";
 import { EXEMPELBOLAG } from "@/lib/demo/iris-exempel";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
@@ -120,15 +120,11 @@ export function IrisGranskning({ demo = false }: Readonly<{ demo?: boolean }>) {
 
   return (
     <div>
-      {demo ? (
-        <p className="mb-6 max-w-[70ch] text-[13px] leading-6 text-ink-subtle">
-          Exempelutkast, samma sex bolag som i Bolag. Godkänn eller avvisa ändrar bara den här
-          sidan, ingenting skickas.
-        </p>
-      ) : null}
+      {/* Ingen egen demorad: skalets demobanner säger redan att allt är
+          exempeldata och att inget skickas. */}
 
       {fel ? (
-        <p role="alert" className="mb-5 max-w-[70ch] text-[0.875rem] text-danger">
+        <p role="alert" className="mb-5 max-w-[70ch] text-[0.9375rem] text-danger">
           {fel}
         </p>
       ) : null}
@@ -136,16 +132,13 @@ export function IrisGranskning({ demo = false }: Readonly<{ demo?: boolean }>) {
       {poster === null ? (
         <SkeletonRows />
       ) : poster.length === 0 ? (
-        <EmptyState
-          title="Granskningskön är tom"
-          body="När Iris skrivit ett utkast till ett kvalificerat bolag hamnar det här, och ingenting skickas förrän du godkänt det."
-        />
+        <Tomt>Inga utkast väntar på granskning.</Tomt>
       ) : (
-        <div className="divide-y divide-ink/15 border-y border-ink/15">
+        <Radlista ariaLabel="Utkast som väntar på granskning">
           {poster.map((post) => {
             const öppen = oppen === post.id;
             return (
-              <article key={post.id} className="py-5">
+              <Rad key={post.id}>
                 <button
                   type="button"
                   onClick={() => setOppen(öppen ? null : post.id)}
@@ -154,10 +147,10 @@ export function IrisGranskning({ demo = false }: Readonly<{ demo?: boolean }>) {
                 >
                   <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
                     <div className="min-w-0">
-                      <h2 className="truncate text-[1.0625rem] font-semibold text-ink">
+                      <h2 className={cn(rubrikPanel, "truncate")}>
                         {post.subject || "Utan ämnesrad"}
                       </h2>
-                      <p className="mt-0.5 text-[0.875rem] text-ink-subtle">
+                      <p className={cn(meta, "mt-0.5")}>
                         {[post.company_name, post.prospect_email].filter(Boolean).join(" · ") || "Okänd mottagare"}
                       </p>
                     </div>
@@ -167,9 +160,13 @@ export function IrisGranskning({ demo = false }: Readonly<{ demo?: boolean }>) {
                   </div>
                 </button>
 
+                {/* Två rader i listan (regel 3), hela texten i editorn när
+                    posten öppnas. Radbrytningarna slås ihop här med flit:
+                    med pre-wrap hade de två raderna ofta varit "Hej Anna,"
+                    och en tomrad. */}
                 {!öppen && post.body ? (
-                  <p className="mt-3 max-w-[72ch] whitespace-pre-wrap text-[0.9375rem] leading-7 text-ink-muted">
-                    {post.body.length > 220 ? `${post.body.slice(0, 220)}…` : post.body}
+                  <p className="mt-3 line-clamp-2 max-w-[72ch] text-[0.9375rem] leading-6 text-ink-muted">
+                    {post.body}
                   </p>
                 ) : null}
 
@@ -203,14 +200,14 @@ export function IrisGranskning({ demo = false }: Readonly<{ demo?: boolean }>) {
                     Avvisa
                   </button>
                 </div>
-              </article>
+              </Rad>
             );
           })}
-        </div>
+        </Radlista>
       )}
 
       {demo && Object.keys(besked).length > 0 ? (
-        <p role="status" className="mt-6 text-[13px] text-ink-subtle">
+        <p role="status" className="mt-6 text-[0.9375rem] text-ink-muted">
           {`${Object.entries(besked)
             .map(([id, val]) => `${EXEMPELBOLAG.find((b) => b.id === id)?.companyName ?? id}: ${val === "approve" ? "godkänt" : "avvisat"}`)
             .join(" · ")}. Inget av det här skickades.`}

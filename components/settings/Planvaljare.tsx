@@ -1,8 +1,9 @@
 "use client";
 
-import { Check, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Badge, btnPrimary, btnSecondary, meta, rubrikPanel } from "@/components/ui";
 import { useLocale } from "@/lib/i18n";
 import { bytPlan } from "@/lib/actions/plan";
 import { PAKET, PRIS_PREFIX, PRIS_SAKNAS, formateraPris } from "@/lib/pricing";
@@ -124,9 +125,10 @@ export function Planvaljare({
 
   return (
     <div className="grid gap-3">
-      <p className="kicker text-mineral">Byt paket</p>
-
-      <div className="grid gap-2">
+      {/* Ingen egen etikett ("Byt paket"): sektionsrubriken ovanför säger det.
+          Meningen under listan är den som stod i fakturastycket längst ned på
+          sidan, flyttad hit där beslutet fattas. */}
+      <div role="group" aria-label="Paket" aria-describedby="paket-hjalp" className="grid gap-2">
         {paket.map((p) => {
           const aktiv = p.id === valt;
           const laddar = busy === p.id;
@@ -145,27 +147,34 @@ export function Planvaljare({
                 busy !== null && !laddar ? "opacity-50" : ""
               )}
             >
-              <span className="flex items-baseline gap-2">
-                <span className="text-[0.9375rem] font-semibold text-ink">{p.namn}</span>
-                <span className="text-[0.8125rem] text-mineral">
+              <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className={rubrikPanel}>{p.namn}</span>
+                <span className={cn(meta, "num")}>
                   {p.prisPerManad === null
                     ? text(PRIS_SAKNAS)
                     : `${text(PRIS_PREFIX)} ${formateraPris(p.prisPerManad)}/mån`}
                 </span>
+                {/* Ordet, inte bara bocken: markeringen var en ochrekant och
+                    en ikon, och "nuvarande" fanns bara för skärmläsaren. */}
                 {laddar ? (
-                  <Loader2 className="ml-auto h-4 w-4 shrink-0 animate-spin text-mineral" aria-hidden />
+                  <Loader2 className="ml-auto h-4 w-4 shrink-0 animate-spin text-ink-subtle" aria-hidden />
                 ) : aktiv ? (
-                  <Check className="ml-auto h-4 w-4 shrink-0 text-warning" aria-hidden />
+                  <span className="ml-auto">
+                    <Badge>Nuvarande</Badge>
+                  </span>
                 ) : null}
               </span>
-              <span className="mt-1 block text-[0.8125rem] leading-5 text-ink-subtle">
+              <span className="mt-1 block text-[0.9375rem] leading-6 text-ink-muted">
                 {text(p.beskrivning)}
               </span>
-              {aktiv ? <span className="sr-only">Nuvarande paket</span> : null}
             </button>
           );
         })}
       </div>
+
+      <p id="paket-hjalp" className="max-w-[62ch] text-[0.9375rem] leading-6 text-ink-muted">
+        Ett paketbyte gäller direkt, och vi justerar faktureringen vid nästa period.
+      </p>
 
       {bekraftar ? (
         <div
@@ -173,28 +182,20 @@ export function Planvaljare({
           aria-label="Bekräfta nedgradering"
           className="rounded-card border border-warning/40 bg-warning/10 p-4"
         >
-          <p className="text-[0.875rem] leading-6 text-ink">
+          <p className="text-[0.9375rem] leading-6 text-ink">
             Nedgradering till{" "}
             <strong className="font-semibold">
               {PAKET.find((p) => p.id === bekraftar)?.namn}
             </strong>
             . Vyerna för det ni lämnar försvinner ur menyn direkt.{" "}
-            <strong className="font-semibold">Ingenting raderas</strong> — kunskapsbas,
+            <strong className="font-semibold">Ingenting raderas:</strong> kunskapsbas,
             ärenden och prospekt ligger kvar och kommer tillbaka om ni uppgraderar igen.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => void genomfor(bekraftar)}
-              className="focus-ring rounded-input bg-ink px-4 py-2 text-[0.8125rem] font-semibold text-paper hover:bg-ink2"
-            >
+            <button type="button" onClick={() => void genomfor(bekraftar)} className={btnPrimary}>
               Ja, byt paket
             </button>
-            <button
-              type="button"
-              onClick={() => setBekraftar(null)}
-              className="focus-ring rounded-input bg-paper2 px-4 py-2 text-[0.8125rem] text-ink hover:bg-paper2/70"
-            >
+            <button type="button" onClick={() => setBekraftar(null)} className={btnSecondary}>
               Avbryt
             </button>
           </div>
@@ -202,12 +203,12 @@ export function Planvaljare({
       ) : null}
 
       {klart ? (
-        <p role="status" className="text-[0.8125rem] text-moss">
+        <p role="status" className="text-[0.9375rem] text-moss">
           {klart}
         </p>
       ) : null}
       {fel ? (
-        <p role="alert" className="max-w-[46ch] break-words text-[0.8125rem] text-danger">
+        <p role="alert" className="max-w-[62ch] break-words text-[0.9375rem] text-danger">
           {fel}
         </p>
       ) : null}

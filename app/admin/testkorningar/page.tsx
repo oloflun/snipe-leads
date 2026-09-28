@@ -1,4 +1,5 @@
 import { Testkorningar } from "@/components/admin/Testkorningar";
+import { Sidhuvud } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -12,11 +13,8 @@ export const dynamic = "force-dynamic";
 export default function Page() {
   return (
     <div>
-      <h1 className="font-display text-4xl tracking-[-0.03em]">Testkörningar</h1>
-      <p className="mt-3 max-w-[70ch] text-[15px] leading-7 text-mineral">
-        Kör agenterna på beställning i stället för att vänta på att något går fel hos en kund.
-      </p>
-      <div className="mt-10">
+      <Sidhuvud title="Testkörningar" />
+      <div className="mt-8">
         <Testkorningar />
       </div>
     </div>

@@ -130,16 +130,18 @@ export async function WorkspaceSection({
       // Leads/kontroll hade — men under EN sektion i stället för tre, se
       // lib/routes.ts AppRoute.children. Ett okänt tredje slugsegment (`id`
       // utanför de två kända) är en 404, inte en tyst fallback till Bolag.
+      // Ingen överrad "Iris" och ingen ingress: Iris står redan i railen som
+      // förälder till undersidan (plans/2026-09-27-appytor-enhetlighet.md).
       if (id === "granskning") {
         return (
-          <PageShell kicker="Iris" title="Granskning" description="Utkasten Iris skrivit, i väntan på ditt ja eller nej.">
+          <PageShell title="Granskning">
             <IrisGranskning />
           </PageShell>
         );
       }
       if (id === "installningar") {
         return (
-          <PageShell kicker="Iris" title="Inställningar" description="Målgrupp, autonomi och gränserna Iris alltid håller.">
+          <PageShell title="Inställningar">
             <IrisInstallningar />
           </PageShell>
         );
@@ -188,7 +190,8 @@ function SupportSection({ workspaceName }: Readonly<{ workspaceName: string | nu
   // — mönstret i components/snajp/SnajpSupportDemo.tsx, i dag oanvänd i
   // produkten men färdigt.
   return (
-    <PageShell title="Inkorg och utkast">
+    // Samma namn som railen. "Inkorg och utkast" var sidans innehåll, inte dess namn.
+    <PageShell title="Kundtjänst">
       <AgentSajtKnapp agent="support" />
       <SupportWorkspaceTabs workspaceName={workspaceName} />
     </PageShell>

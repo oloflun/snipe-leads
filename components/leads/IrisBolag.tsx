@@ -9,7 +9,23 @@ import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { LeadslistorView } from "@/components/leads/LeadslistorView";
 import { LeadsRunForm } from "@/components/leads/LeadsRunForm";
-import { EmptyState, SkeletonRows, btnPrimary, btnSecondary } from "@/components/ui";
+import {
+  Badge,
+  Nyckeltal,
+  Radlista,
+  Sektion,
+  SkeletonRows,
+  Tomt,
+  btnLiten,
+  btnPrimary,
+  btnSecondary,
+  etikett,
+  flik,
+  flikAktiv,
+  flikInaktiv,
+  meta,
+  rubrikPanel
+} from "@/components/ui";
 import { mejlaOss } from "@/components/marketing/copy";
 import { addonSpec } from "@/lib/addons";
 import { lasOffertForUtkast } from "@/lib/actions/affarskontext";
@@ -17,7 +33,7 @@ import type { EmailStudioData } from "@/lib/data/emails";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { EXEMPELBOLAG, EXEMPEL_OMGANG_1, EXEMPEL_OMGANG_2, kontaktnamn, type ExempelBolag } from "@/lib/demo/iris-exempel";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
-import { GRANSER, IRIS } from "@/lib/iris";
+import { GRANSER } from "@/lib/iris";
 import { kriterier } from "@/lib/prospekt";
 import { cn } from "@/lib/utils";
 
@@ -83,6 +99,9 @@ const STATUS_ETIKETT: Record<string, string> = {
   suppressed: "Spärrad"
 };
 
+/** Status som betyder att något väntar på kunden — samma urval som Bolagsregistret. */
+const AKTIV_STATUS = new Set(["ready", "replied", "meeting"]);
+
 function domanAv(url: string | null | undefined): string | null {
   if (!url) return null;
   try {
@@ -92,8 +111,9 @@ function domanAv(url: string | null | undefined): string | null {
   }
 }
 
+/** Meta-raden under bolagsnamnet. Tom sträng = ingen rad, aldrig ett streck. */
 function segment(p: Prospekt): string {
-  return [p.orgnr, p.ort, domanAv(p.website)].filter(Boolean).join(" · ") || "—";
+  return [p.orgnr, p.ort, domanAv(p.website)].filter(Boolean).join(" · ");
 }
 
 function beskrivning(p: Prospekt): string | null {
@@ -130,10 +150,20 @@ function useDesktop(): boolean {
   return desktop;
 }
 
-function poang(p: Prospekt): string {
+/**
+ * Poängen, eller null när ingen finns. Listraden utelämnar då talet helt —
+ * ett ensamt streck ovanför statusen sa ingenting (skärmdump 2026-09-27) —
+ * och detaljpanelen visar "–".
+ */
+function poang(p: Prospekt): string | null {
   if (typeof p.score_total === "number") return String(p.score_total);
   if (typeof p.icp_fit === "number") return String(Math.round(p.icp_fit * 100));
-  return "—";
+  return null;
+}
+
+/** "träff" → "Träff": brickor i versal/gemen som vanlig text. */
+function versal(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 /** Fixturbolaget som ett prospekt-format radlistan redan vet hur den ritar. */
@@ -273,10 +303,14 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
 
   const harListaddon = addons.includes("leadlists");
 
+  // Rubriken är undersidans namn, inte agentens: "Iris" står redan i railen
+  // som förälder till Bolag/Granskning/Inställningar, och de två syskonen
+  // heter efter sin undersida. Personaingressen (IRIS.persona) är struken
+  // enligt F-016; att Iris aldrig skickar något utan granskning står i
+  // gränslistan längst ner.
   return (
     <PageShell
-      title="Iris"
-      description={IRIS.persona}
+      title="Bolag"
       action={
         <button
           type="button"
@@ -295,15 +329,17 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
             demo={demo}
             rubrik={
               <div>
-                <h2 className="text-[1.125rem] font-semibold tracking-[-0.01em]">Hitta bolag</h2>
-                <p className="mt-1 text-[13px] text-ink-subtle">
+                <h2 className={rubrikPanel}>Hitta bolag</h2>
+                <p className="mt-1 text-[0.9375rem] text-ink-muted">
                   Lämna ett fält tomt för att använda er sparade målgrupp.
                 </p>
               </div>
             }
             demoAction={
-              <div className="mt-6 rounded-card bg-paper p-5">
-                <p className="max-w-[65ch] text-[15px] leading-7 text-ink-muted">
+              // Hårlinje, inte ett kort i kortet: formuläret runt om är redan
+              // den egna ytan.
+              <div className="mt-6 border-t border-ink/12 pt-5">
+                <p className="max-w-[65ch] text-[0.9375rem] leading-7 text-ink-muted">
                   Prova en färdiggenererad exempelkörning: bolagen läggs överst i listan nedan,
                   märkta Exempel. Ingen modell körs och inget skickas.
                 </p>
@@ -339,10 +375,7 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
           role="tab"
           aria-selected={segmentVal === "bolag"}
           onClick={() => setSegmentVal("bolag")}
-          className={cn(
-            "focus-ring rounded-input px-4 py-2 text-[13px] font-medium transition-colors",
-            segmentVal === "bolag" ? "bg-ink text-paper" : "bg-paper2 text-ink-muted hover:text-ink"
-          )}
+          className={cn(flik, segmentVal === "bolag" ? flikAktiv : flikInaktiv)}
         >
           Alla bolag
         </button>
@@ -351,10 +384,7 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
           role="tab"
           aria-selected={segmentVal === "listor"}
           onClick={() => setSegmentVal("listor")}
-          className={cn(
-            "focus-ring rounded-input px-4 py-2 text-[13px] font-medium transition-colors",
-            segmentVal === "listor" ? "bg-ink text-paper" : "bg-paper2 text-ink-muted hover:text-ink"
-          )}
+          className={cn(flik, segmentVal === "listor" ? flikAktiv : flikInaktiv)}
         >
           Listor
         </button>
@@ -369,7 +399,11 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
           )
         ) : (
           <div className="grid gap-8 lg:grid-cols-12 lg:items-start">
-            <div ref={listaRef} tabIndex={-1} className="min-w-0 outline-none lg:col-span-5">
+            <div
+              ref={listaRef}
+              tabIndex={-1}
+              className={cn("min-w-0 outline-none", alla.length === 0 ? "lg:col-span-12" : "lg:col-span-5")}
+            >
               {lage.fas === "laddar" && exempelRader.length === 0 ? (
                 <SkeletonRows />
               ) : lage.fas === "ejAktiverad" ? (
@@ -377,14 +411,13 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
               ) : lage.fas === "fel" ? (
                 <FelBox meddelande={lage.meddelande} onForsok={() => void hamta()} />
               ) : alla.length === 0 ? (
-                <EmptyState
-                  title="Inga bolag ännu"
-                  body="Tryck på Kör Iris och beskriv vilka ni söker. Bolagen som Iris hittar hamnar här."
-                />
+                // Ingen egen "Kör Iris" här: samma knapp står i sidhuvudet.
+                <Tomt>Inga bolag ännu. Tryck Kör Iris och beskriv vilka ni söker.</Tomt>
               ) : (
-                <ul className="divide-y divide-ink/12 border-y border-ink/15">
+                <Radlista>
                   {alla.map((p) => {
                     const vald = p.id === valdId;
+                    const poangen = poang(p);
                     return (
                       <li key={p.id}>
                         <button
@@ -396,38 +429,38 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
                             vald ? "bg-ochre/10" : "hover:bg-paper2/60"
                           )}
                         >
+                          {/* Radens anatomi: rubrik → meta under → status/tal
+                              till höger. Resonemanget klipps till två rader —
+                              hela texten står i detaljpanelen, annars går
+                              listan inte att skanna (Evolushi AB, nio rader). */}
                           <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
                             <div className="min-w-0">
-                              <div className="flex flex-wrap items-baseline gap-2">
-                                <span className="text-[1.0625rem] font-semibold tracking-[-0.01em]">
-                                  {p.company_name}
-                                </span>
-                                {p.origin === "example" ? (
-                                  <span className="kicker text-mineral">Exempel</span>
-                                ) : null}
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className={rubrikPanel}>{p.company_name}</span>
+                                {p.origin === "example" ? <Badge>Exempel</Badge> : null}
                               </div>
-                              <p className="mt-1 truncate font-mono text-[12px] text-ink-subtle">
-                                {segment(p)}
-                              </p>
+                              {segment(p) ? <p className={cn(meta, "mt-1 truncate")}>{segment(p)}</p> : null}
                             </div>
                             {p.origin !== "example" ? (
-                              <div className="shrink-0 text-right">
-                                <p className="num text-[1.0625rem] font-semibold tabular-nums">
-                                  {poang(p)}
-                                </p>
-                                <p className="kicker mt-0.5 text-mineral">
+                              <div className="flex shrink-0 items-center gap-3">
+                                {poangen ? (
+                                  <span title="Poäng" className="num text-[1.0625rem] font-semibold">
+                                    {poangen}
+                                  </span>
+                                ) : null}
+                                <Badge tone={AKTIV_STATUS.has(p.status) ? "warn" : "neutral"}>
                                   {STATUS_ETIKETT[p.status] ?? p.status}
-                                </p>
+                                </Badge>
                               </div>
                             ) : null}
                           </div>
                           {beskrivning(p) ? (
-                            <p className="mt-2 max-w-[65ch] text-[14px] leading-6 text-ink-muted">
+                            <p className="mt-2 line-clamp-2 max-w-[65ch] text-[0.9375rem] leading-6 text-ink-muted">
                               {beskrivning(p)}
                             </p>
                           ) : null}
                           {beslutsfattareRad(p) ? (
-                            <p className="mt-2 text-[13px] text-ink-subtle">{beslutsfattareRad(p)}</p>
+                            <p className={cn(meta, "mt-2")}>{beslutsfattareRad(p)}</p>
                           ) : null}
                         </button>
 
@@ -453,19 +486,14 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
                       </li>
                     );
                   })}
-                </ul>
+                </Radlista>
               )}
             </div>
 
             {isDesktop ? (
               <div ref={detaljRef} className="min-w-0 scroll-mt-6 lg:sticky lg:top-24 lg:col-span-7">
-                {valdId ? null : (
-                  <div className="rounded-card border border-ink/12 bg-paper2/40 p-6">
-                    <p className="text-[0.9375rem] leading-[1.6] text-ink-muted">
-                      Välj ett bolag i listan. Research, källor och mejlutkastet visas här.
-                    </p>
-                  </div>
-                )}
+                {/* Pekar bara på en lista som finns. */}
+                {valdId || alla.length === 0 ? null : <Tomt>Välj ett bolag i listan.</Tomt>}
                 {alla
                   .filter((p) => oppnade.includes(p.id))
                   .map((p) => (
@@ -483,9 +511,7 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
         )}
       </div>
 
-      <div className="mt-16 border-t border-ink/15 pt-8">
-        <IrisGranserKompakt />
-      </div>
+      <IrisGranserKompakt />
     </PageShell>
   );
 }
@@ -494,13 +520,9 @@ function FelBox({ meddelande, onForsok }: Readonly<{ meddelande: string; onForso
   return (
     <div className="flex items-start gap-3 border-y border-ochre/40 bg-ochre/10 px-4 py-4">
       <div className="min-w-0">
-        <p className="text-sm font-medium text-ink">Bolagen kunde inte hämtas</p>
-        <p className="mt-1 text-sm text-ink-muted">{meddelande}</p>
-        <button
-          type="button"
-          onClick={onForsok}
-          className="focus-ring mt-3 inline-flex min-h-9 items-center rounded-input bg-paper2 px-3 text-[13px] font-medium"
-        >
+        <p className="text-[0.9375rem] font-medium text-ink">Bolagen kunde inte hämtas</p>
+        <p className="mt-1 text-[0.9375rem] text-ink-muted">{meddelande}</p>
+        <button type="button" onClick={onForsok} className={cn(btnSecondary, btnLiten, "mt-3")}>
           Försök igen
         </button>
       </div>
@@ -512,15 +534,15 @@ function ListorUpsell() {
   const spec = addonSpec("leadlists");
   return (
     <div className="min-w-0 border-t border-ink/15 py-6">
-      <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-        <h4 className="min-w-0 break-words text-[17px]">{spec.name}</h4>
-        <span className="kicker shrink-0 text-mineral">Tillval</span>
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-6 gap-y-2">
+        <h2 className={cn(rubrikPanel, "min-w-0 break-words")}>{spec.name}</h2>
+        <Badge>Tillval</Badge>
       </div>
-      <p className="mt-3 max-w-[64ch] text-[15px] leading-7">{spec.what}</p>
-      <p className="mt-2 max-w-[64ch] text-[14px] leading-6 text-mineral">{spec.why}</p>
+      <p className="mt-3 max-w-[64ch] text-[0.9375rem] leading-7">{spec.what}</p>
+      <p className="mt-2 max-w-[64ch] text-[0.9375rem] leading-7 text-ink-muted">{spec.why}</p>
       <a
         href={mejlaOss(`Tillägg: ${spec.name}`)}
-        className="mt-4 inline-block text-[13px] underline underline-offset-4 transition hover:text-ochre"
+        className="focus-ring mt-4 inline-block text-[0.9375rem] font-medium text-warning underline underline-offset-4 hover:text-ink"
       >
         Hör av dig om {spec.name.toLowerCase()}
       </a>
@@ -528,23 +550,24 @@ function ListorUpsell() {
   );
 }
 
-/** Kompakt gränslista längst ner på Bolag, med en länk vidare till hela listan i Inställningar. */
+/**
+ * Kompakt gränslista längst ner på Bolag, med en länk vidare till hela listan
+ * i Inställningar. En riktig `Sektion` (h2) sedan 2026-09-27: kickern som stod
+ * här i stället för en rubrik (axe heading-order 2026-09-19) var mikrotext
+ * enligt F-016, och h1 → h2 är ingen nivåhoppning.
+ */
 function IrisGranserKompakt() {
   return (
-    <section aria-label="Så arbetar Iris">
-      {/* Kicker, inte rubrik: sektionens tillgängliga namn kommer från
-          aria-label ovan. Var en <h3> direkt under sidans <h1> utan någon
-          <h2> emellan — axe heading-order, moderate, 2026-09-19. */}
-      <p className="kicker text-mineral">Så arbetar Iris</p>
-      <ul className="mt-3 divide-y divide-ink/12 border-y border-ink/15">
+    <Sektion title="Så arbetar Iris">
+      <Radlista>
         {GRANSER.slice(0, 3).map((grans) => (
           <li key={grans.rubrik} className="py-3">
-            <p className="text-[0.875rem] font-semibold text-ink">{grans.rubrik}</p>
+            <p className="text-[0.9375rem] font-semibold text-ink">{grans.rubrik}</p>
           </li>
         ))}
-      </ul>
+      </Radlista>
       <IrisInstallningarLank />
-    </section>
+    </Sektion>
   );
 }
 
@@ -553,7 +576,7 @@ function IrisInstallningarLank() {
   return (
     <Link
       href={`${vag("/dashboard/iris/installningar")}#granser`}
-      className="focus-ring mt-3 inline-block text-[13px] font-medium text-warning underline underline-offset-4 hover:text-ink"
+      className="focus-ring mt-3 inline-block text-[0.9375rem] font-medium text-warning underline underline-offset-4 hover:text-ink"
     >
       Läs alla gränser och ställ in eskalering
     </Link>
@@ -807,60 +830,60 @@ function LeadDetail({
   }
 
   const { prospekt: p, kallor } = lage;
+  const poangen = poang(p);
 
   return (
     <div className="rounded-card border border-ink/12 bg-paper p-5 md:p-6">
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div className="min-w-0">
-          <h2 className="text-[1.125rem] font-semibold tracking-[-0.01em] text-ink">{p.company_name}</h2>
-          <p className="mt-1 text-[13px] text-ink-subtle">{segment(p)}</p>
+          <h2 className={rubrikPanel}>{p.company_name}</h2>
+          {segment(p) ? <p className={cn(meta, "mt-1")}>{segment(p)}</p> : null}
         </div>
-        {p.origin === "example" ? <span className="kicker shrink-0 text-mineral">Exempel</span> : null}
+        {/* Status är en bricka i huvudet, inte ett nyckeltal: den är ett
+            ord, inte ett tal. */}
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <Badge tone={AKTIV_STATUS.has(p.status) ? "warn" : "neutral"}>
+            {STATUS_ETIKETT[p.status] ?? p.status}
+          </Badge>
+          {p.origin === "example" ? <Badge>Exempel</Badge> : null}
+        </div>
       </div>
 
-      <dl className="mt-5 grid grid-cols-3 gap-x-6 gap-y-4 border-t border-ink/12 pt-4">
-        <div>
-          <dt className="kicker text-mineral">Score</dt>
-          <dd className="num mt-1 text-[1.25rem] font-semibold tabular-nums">{poang(p)}</dd>
-        </div>
-        <div>
-          <dt className="kicker text-mineral">Status</dt>
-          <dd className="mt-1 text-[15px]">{STATUS_ETIKETT[p.status] ?? p.status}</dd>
-        </div>
-        <div>
-          <dt className="kicker text-mineral">Källor</dt>
-          <dd className="mt-1 text-[15px]">{kallor.length}</dd>
-        </div>
-      </dl>
+      <div className="mt-5">
+        <Nyckeltal
+          poster={[
+            { etikett: "Poäng", varde: poangen ?? "–" },
+            { etikett: "Källor", varde: kallor.length }
+          ]}
+        />
+      </div>
 
-      <div className="mt-6 border-t border-ink/12 pt-5">
-        <h3 className="kicker text-mineral">Research</h3>
+      <div className="mt-6">
+        <h3 className={rubrikPanel}>Research</h3>
         {kriterier(p.score_breakdown).length ? (
           <ul className="mt-3 divide-y divide-ink/10">
             {kriterier(p.score_breakdown).map((k, i) => (
               <li key={`${k.nyckel ?? k.etikett}-${i}`} className="py-3">
-                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                  <p className="text-[14px] font-medium">{k.etikett}</p>
-                  <span className={cn("kicker", k.hart && k.utfall === "miss" ? "text-danger" : "text-mineral")}>
-                    {k.utfall}
-                  </span>
+                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                  <p className="text-[0.9375rem] font-medium">{k.etikett}</p>
+                  <Badge tone={k.hart && k.utfall === "miss" ? "danger" : "neutral"}>{versal(k.utfall)}</Badge>
                 </div>
                 {k.motivering ? (
-                  <p className="mt-1 max-w-[65ch] text-[14px] leading-6 text-ink-muted">{k.motivering}</p>
+                  <p className="mt-1 max-w-[65ch] text-[0.9375rem] leading-6 text-ink-muted">{k.motivering}</p>
                 ) : null}
               </li>
             ))}
           </ul>
         ) : (
-          <p className="mt-3 text-[14px] text-ink-subtle">Ingen poängmotivering sparad för det här bolaget.</p>
+          <p className="mt-3 text-[0.9375rem] text-ink-muted">Ingen poängmotivering sparad för det här bolaget.</p>
         )}
 
         {p.disqualifiers?.length ? (
           <div className="mt-4">
-            <h4 className="kicker text-mineral">Skäl</h4>
+            <h4 className={etikett}>Skäl</h4>
             <ul className="mt-2 space-y-1.5">
               {p.disqualifiers.map((skal) => (
-                <li key={skal} className="border-l-2 border-danger pl-3 text-[14px] text-ink-muted">
+                <li key={skal} className="border-l-2 border-danger pl-3 text-[0.9375rem] text-ink-muted">
                   {skal}
                 </li>
               ))}
@@ -868,7 +891,7 @@ function LeadDetail({
           </div>
         ) : null}
 
-        <h4 className="mt-5 kicker text-mineral">Källor</h4>
+        <h4 className={cn(etikett, "mt-5")}>Källor</h4>
         {kallor.length ? (
           <ul className="mt-2 space-y-1.5">
             {kallor.map((kalla) => (
@@ -877,7 +900,7 @@ function LeadDetail({
                   href={kalla.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="focus-ring break-all text-[13px] text-ink-muted underline decoration-ink/25 underline-offset-4"
+                  className="focus-ring break-all text-[0.9375rem] text-ink-muted underline decoration-ink/25 underline-offset-4"
                 >
                   {kalla.label}
                 </a>
@@ -885,14 +908,14 @@ function LeadDetail({
             ))}
           </ul>
         ) : (
-          <p className="mt-2 text-[14px] text-ink-subtle">
+          <p className="mt-2 text-[0.9375rem] text-ink-muted">
             Inga källor sparade. Utan minst en källa får Iris inte skriva ett utkast.
           </p>
         )}
       </div>
 
       <div className="mt-6 border-t border-ink/12 pt-5">
-        <h3 className="kicker text-mineral">Mejlutkast</h3>
+        <h3 className={rubrikPanel}>Mejlutkast</h3>
 
         {utkastLage.fas === "kontrollerar" ? (
           <div className="mt-3 h-16 animate-pulse rounded-input bg-ink/[0.03]" />
@@ -900,13 +923,13 @@ function LeadDetail({
 
         {utkastLage.fas === "ingen" ? (
           demo ? (
-            <p className="mt-3 max-w-[65ch] text-[14px] leading-6 text-ink-muted">
+            <p className="mt-3 max-w-[65ch] text-[0.9375rem] leading-6 text-ink-muted">
               Inget utkast till det här bolaget. I drift skriver Iris ett första mejl utifrån
               poängmotiveringen och källorna ovan.
             </p>
           ) : (
             <div className="mt-3">
-              <p className="max-w-[65ch] text-[14px] leading-6 text-ink-muted">
+              <p className="max-w-[65ch] text-[0.9375rem] leading-6 text-ink-muted">
                 Inget utkast ännu. Ett klick skriver ett första mejl utifrån research och källor,
                 sedan väntar det på din granskning i kön.
               </p>
@@ -917,11 +940,11 @@ function LeadDetail({
           )
         ) : null}
 
-        {utkastLage.fas === "skapar" ? <p className="mt-3 text-[14px] text-ink-subtle">Skriver utkastet…</p> : null}
+        {utkastLage.fas === "skapar" ? <p className="mt-3 text-[0.9375rem] text-ink-muted">Skriver utkastet…</p> : null}
 
         {utkastLage.fas === "fel" ? (
           <div className="mt-3">
-            <p role="alert" className="text-[14px] text-danger">
+            <p role="alert" className="text-[0.9375rem] text-danger">
               {utkastLage.meddelande}
             </p>
             <button
@@ -940,7 +963,7 @@ function LeadDetail({
             {!demo && !exempel ? (
               <GodkannKnapp queueItemId={utkastLage.queueItemId} />
             ) : (
-              <p className="mt-4 max-w-[65ch] text-[13px] leading-6 text-ink-subtle">
+              <p className="mt-4 max-w-[65ch] text-[0.9375rem] leading-6 text-ink-muted">
                 Exempelutkast. Inget skickas härifrån.
               </p>
             )}
@@ -989,12 +1012,12 @@ function GodkannKnapp({ queueItemId }: Readonly<{ queueItemId: string | null }>)
         {busy ? "Godkänner…" : "Godkänn och skicka"}
       </button>
       {!queueItemId ? (
-        <p className="mt-3 max-w-[65ch] text-[13px] leading-6 text-ink-subtle">
+        <p className="mt-3 max-w-[65ch] text-[0.9375rem] leading-6 text-ink-muted">
           Det här utkastet saknar ett kö-id och kan inte godkännas härifrån. Se Iris › Granskning.
         </p>
       ) : null}
       {fel ? (
-        <p role="alert" className="mt-3 max-w-[65ch] text-[14px] text-danger">
+        <p role="alert" className="mt-3 max-w-[65ch] text-[0.9375rem] text-danger">
           {fel}
         </p>
       ) : null}

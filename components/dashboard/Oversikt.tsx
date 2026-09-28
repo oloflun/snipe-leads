@@ -4,8 +4,19 @@ import { AlertTriangle, Loader2, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useArbetsvag } from "@/components/AppShell";
-import { useDashboard } from "@/components/dashboard/DashboardContext";
-import { Badge, Rad, Radlista, SkeletonRows, btnSecondary } from "@/components/ui";
+import {
+  Badge,
+  Nyckeltal,
+  Rad,
+  Radlista,
+  SkeletonRows,
+  Tomt,
+  btnLiten,
+  btnSecondary,
+  etikett,
+  meta,
+  rubrikPanel
+} from "@/components/ui";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { createDemoSupportApi } from "@/lib/demo/support-inbox";
 import { readJsonBody } from "@/lib/http/json";
@@ -41,16 +52,20 @@ import { cn } from "@/lib/utils";
  *    200 senaste ärendena. När listan ligger på taket säger raden det, i
  *    stället för att presentera ett sidantal som ett totalantal.
  *  * **Ett trasigt anrop tömmer inte vyn.** Varje hämtning är sin egen, och en
- *    ruta utan svar visar `—`. Alternativet — en tom sida när en av fem
+ *    ruta utan svar visar `–`. Alternativet — en tom sida när en av fem
  *    endpoints somnat — ser ut som att arbetsytan är tom.
  *
- * ## Register
+ * ## Register och ordning (2026-09-27)
  *
- * Operate mode, DESIGN.md App-familjen: fast rem-skala, täta rader, ingen
- * hero, inga reveals, ingen bild. Talen sätts i Geist med `tnum` — DESIGN.md
- * reserverar Fraunces för list- och stegnummer, inte för data i tiles. Ochre
- * bär bara tillstånd: det som väntar på dig, och det största värdet i en
- * fördelning.
+ * Operate mode, DESIGN.md App-familjen, byggd av primitiverna i
+ * components/ui.tsx (plans/2026-09-27-appytor-enhetlighet.md): `Nyckeltal`
+ * för talen, `Radlista` för raderna, `Tomt` för tomlägena, `etikett`/`meta`
+ * för det som tidigare stod i spärrade kicker-etiketter.
+ *
+ * Varje produktsektion har samma ordning, efter vad användaren agerar på:
+ * det som väntar på dig först, nyckeltalen sedan, fördelningar och senaste
+ * händelser, och status (agent, kunskapsbas, senaste körning) sist. Ochre bär
+ * bara tillstånd: en tom kunskapsbas, och det största värdet i en fördelning.
  */
 
 // -- Hämtning --------------------------------------------------------------
@@ -63,7 +78,7 @@ type Hamtare = <T>(path: string) => Promise<T | null>;
  * inloggade vägen går genom requireSnajpTenant(), som härleder tenanten ur
  * sessionen och saknar demo-väg med flit.
  *
- * Fel sväljs och blir `null`. Anroparen visar `—` för den rutan; se
+ * Fel sväljs och blir `null`. Anroparen visar `–` för den rutan; se
  * modulens docstring om varför en död endpoint inte får tömma sidan.
  */
 function useHamtare(demo: boolean): Hamtare {
@@ -91,11 +106,11 @@ function useHamtare(demo: boolean): Hamtare {
   );
 }
 
-/** "3 dagar sedan". Tom sträng in ger em-streck ut. */
+/** "3 dagar sedan". Tom sträng in ger tankstreck ut (aldrig em-streck, DESIGN.md). */
 function sedan(iso: string | null | undefined): string {
-  if (!iso) return "—";
+  if (!iso) return "–";
   const ms = Date.now() - new Date(iso).getTime();
-  if (Number.isNaN(ms)) return "—";
+  if (Number.isNaN(ms)) return "–";
   const minuter = Math.floor(ms / 60000);
   if (minuter < 1) return "nyss";
   if (minuter < 60) return `${minuter} min sedan`;
@@ -106,7 +121,7 @@ function sedan(iso: string | null | undefined): string {
 }
 
 function andel(del: number, av: number): string {
-  if (!av) return "—";
+  if (!av) return "–";
   return new Intl.NumberFormat("sv-SE", { style: "percent", maximumFractionDigits: 0 }).format(
     del / av
   );
@@ -128,22 +143,26 @@ function vanligast(varden: (string | null | undefined)[], antal: number): [strin
 type Tillstand = { etikett: string; varde: string; larm?: boolean; drift?: boolean };
 
 /**
- * Raden överst: vad agenten vet och vad den får göra, på en rad.
+ * Statusraden: vad agenten vet och vad den får göra, i etikett/värde-form.
  *
- * Den finns för att båda talen under är meningslösa utan den. Noll ärenden
+ * Den finns för att talen ovanför är meningslösa utan den. Noll ärenden
  * besvarade betyder en sak när kunskapsbasen har 40 dokument och en helt annan
  * när den är tom, och den skillnaden syntes ingenstans tidigare.
+ *
+ * SIST i sektionen sedan 2026-09-27, inte först: det är läge och
+ * konfiguration, inte något användaren agerar på. Arbetsytans namn stod här
+ * också; det står redan i railen och togs bort (regel 4 i planen).
  */
 function Tillstandsrad({ poster }: Readonly<{ poster: Tillstand[] }>) {
   return (
-    <dl className="grid gap-x-8 gap-y-4 border-y border-ink/15 py-4 sm:grid-cols-2 lg:grid-cols-4">
+    <dl className="grid gap-x-8 gap-y-4 border-y border-ink/15 py-4 sm:grid-cols-3">
       {poster.map((post) => (
         <div key={post.etikett} className="min-w-0">
-          <dt className="kicker text-mineral">{post.etikett}</dt>
+          <dt className={etikett}>{post.etikett}</dt>
           <dd
             className={cn(
-              "mt-1.5 flex items-center gap-2 truncate text-[0.9375rem]",
-              post.larm ? "font-semibold text-ink" : "text-ink-muted"
+              "mt-1 flex items-center gap-2 truncate text-[0.9375rem] text-ink",
+              post.larm && "font-semibold"
             )}
             title={post.varde}
           >
@@ -176,54 +195,41 @@ function Tillstandsrad({ poster }: Readonly<{ poster: Tillstand[] }>) {
 }
 
 /**
- * Ett tal. Geist med `tnum`, inte Fraunces: DESIGN.md sätter data i tables och
- * tiles i brödtextfamiljen och reserverar den serifa displayfiguren för list-
- * och stegnummer. En displayfigur i en UI-etikett är dessutom på Operate-lägets
- * lista över vad man inte gör.
+ * En delsektion inuti en produktsektion. h3 och `rubrikPanel`: produkten är
+ * h2 (`Sektion` i StartView), så delarna under den är ett steg ner.
  *
- * `larm` färgar talet ochre. Det är ett TILLSTÅND — något väntar på dig — och
- * inte en dekoration, vilket är den enda formen accenten får ta här.
+ * De egna talrutorna (`Tal`/`Talrad`, Geist 2.5rem med ochre linje) ersattes
+ * 2026-09-27 av `Nyckeltal` i components/ui.tsx, så att talen här ser ut som
+ * talen på varje annan appyta.
  */
-function Tal({
-  etikett,
-  varde,
-  detalj,
-  larm = false
-}: Readonly<{ etikett: string; varde: string; detalj: string; larm?: boolean }>) {
-  return (
-    <div className={cn("border-t pt-4", larm ? "border-ochre" : "border-ink/15")}>
-      <p className="kicker text-mineral">{etikett}</p>
-      {/* Talet står i bläck, alltid. Ochre bär larmet som LINJE över rutan:
-          2,17:1 för ochre text mot papper är under 3:1-golvet för stor text,
-          och ingen grad räddar det. Linjen har inget kontrastkrav och syns
-          dessutom i ögonvrån, vilket en textfärg inte gör. */}
-      <p className="num mt-3 text-[2.5rem] font-semibold leading-none tabular-nums tracking-[-0.03em] text-ink">
-        {varde}
-      </p>
-      <p className="mt-2.5 text-[0.8125rem] leading-5 text-ink-muted">{detalj}</p>
-    </div>
-  );
-}
-
-function Talrad({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <dl className="grid grid-cols-2 gap-x-6 gap-y-8 lg:grid-cols-4">{children}</dl>;
-}
-
-function Sektion({
+function Delsektion({
   rubrik,
   bredvid,
   children
-}: Readonly<{ rubrik: string; bredvid?: React.ReactNode; children: React.ReactNode }>) {
+}: Readonly<{ rubrik: React.ReactNode; bredvid?: React.ReactNode; children: React.ReactNode }>) {
   return (
     <section>
       <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-        <h2 className="text-[1.0625rem] font-semibold tracking-[-0.01em]">{rubrik}</h2>
+        <h3 className={cn(rubrikPanel, "flex items-center gap-2")}>{rubrik}</h3>
         {bredvid}
       </div>
       <div className="mt-4">{children}</div>
     </section>
   );
 }
+
+/** Iris körningstyper i klartext, samma ord som filtren under /admin/korningar. */
+const KORNINGSTYP: Record<string, string> = {
+  leads: "Körning",
+  leads_research: "Research",
+  leads_outreach: "Utskick",
+  leads_svar: "Svar",
+  leads_followup: "Uppföljning"
+};
+
+/** Länken vid en delsektions rubrik. En form för alla, så att de ser ut som ett system. */
+const sektionslank =
+  "focus-ring rounded-input text-[0.875rem] text-ink-muted underline-offset-4 transition-colors hover:text-ink hover:underline";
 
 /**
  * Fördelning som ruled lista med stapel.
@@ -237,7 +243,7 @@ function Stapellista({
   tomtext
 }: Readonly<{ rader: [string, number][]; tomtext: string }>) {
   if (rader.length === 0) {
-    return <p className="max-w-[60ch] text-[0.875rem] leading-6 text-ink-subtle">{tomtext}</p>;
+    return <Tomt>{tomtext}</Tomt>;
   }
   const varden = rader.map(([, värde]) => värde);
   const störst = Math.max(...varden);
@@ -252,7 +258,7 @@ function Stapellista({
     <Radlista>
       {rader.map(([etikett, värde]) => (
         <Rad key={etikett} className="grid grid-cols-12 items-center gap-x-4">
-          <span className="col-span-6 truncate text-[0.875rem]" title={etikett}>
+          <span className="col-span-6 truncate text-[0.9375rem]" title={etikett}>
             {etikett}
           </span>
           <span className="col-span-4">
@@ -266,7 +272,7 @@ function Stapellista({
               />
             </span>
           </span>
-          <span className="num col-span-2 text-right text-[0.875rem] tabular-nums text-ink-muted">
+          <span className="num col-span-2 text-right text-[0.9375rem] tabular-nums text-ink-muted">
             {värde}
           </span>
         </Rad>
@@ -276,79 +282,50 @@ function Stapellista({
 }
 
 /**
- * En mening i stor grad — sidans enda ställe där ochre står i brödtextgrad.
- *
- * Meningen är inte pynt: den säger vad agenten får göra på egen hand, vilket
- * är det man behöver veta innan man litar på talen ovanför. Texten kommer ur
- * `autonomy_description` respektive reglerna, alltså ur samma källa som styr
- * beteendet — aldrig ur en hårdkodad sträng som kan bli osann.
+ * Autonomimeningen (`Pastaende`, 1.25rem med ochre platta) togs bort
+ * 2026-09-27. Den sade vilka fack som besvaras utan granskning, vilket nu är
+ * värdet på statusraden "Autosvar" — samma uppgift, en gång, i samma form som
+ * resten av statusen.
  */
-function Pastaende({
-  children,
-  markerat
-}: Readonly<{ children: React.ReactNode; markerat?: string }>) {
-  return (
-    <p className="max-w-[52ch] border-t border-ink/15 pt-6 text-[1.25rem] leading-[1.45] tracking-[-0.01em]">
-      {/* Ochre som PLATTA, inte som textfärg. Samma skäl som ovan, och samma
-          grepp som Badge redan använder: accenten står kvar i display-grad
-          medan texten stannar i bläck. */}
-      {markerat ? (
-        <span className="mr-1.5 rounded-input bg-ochre/25 px-2 py-0.5 font-semibold text-ink">
-          {markerat}
-        </span>
-      ) : null}
-      <span className="text-ink-muted">{children}</span>
-    </p>
-  );
-}
 
 type AttGoraRad = { id: string; rubrik: string; under: string; meta?: string };
 
 /**
- * Det enda blocket på sidan som är HANDLING och inte information.
+ * Det som väntar på dig — sektionens första block, eftersom det är det enda
+ * som är HANDLING och inte information.
  *
- * Ligger i tonal inversion när kön inte är tom — sidans enda, och den betyder
- * "du måste göra något". Är kön tom blir den en mening på papper: en tom svart
- * ruta hade skrikit lika högt som en full, vilket är precis fel signal.
+ * Före 2026-09-27 låg listan i en egen ink-platta (tonal inversion). Appytan
+ * har redan sin enda inversion i railen (DESIGN.md App-familjen), så nu är det
+ * en vanlig `Radlista` med samma radanatomi som resten: rubrik, metarad under,
+ * tid till höger. Antalet står vid rubriken och länken till kön vid rubriken
+ * (se `Delsektion`), en tom kö är ett `Tomt`.
  */
-function AttGora({
-  rader,
-  href,
-  knapp,
-  tomtext
-}: Readonly<{ rader: AttGoraRad[]; href: string; knapp: string; tomtext: string }>) {
+function AttGora({ rader, tomtext }: Readonly<{ rader: AttGoraRad[]; tomtext: string }>) {
   if (rader.length === 0) {
-    return (
-      <p className="max-w-[62ch] rounded-card bg-paper2/50 px-5 py-4 text-[0.875rem] leading-6 text-ink-muted">
-        {tomtext}
-      </p>
-    );
+    return <Tomt>{tomtext}</Tomt>;
   }
   return (
-    <div className="rounded-card bg-ink p-5 text-paper md:p-6">
-      {/* Samma spannlogik som Stapellista, i mörk färgvärld: rubrik/underrad
-          8 spann, meta 4, deklarerat på VARJE rad — metakolumnen ritas även
-          tom, så den står på samma plats oavsett om en rad har meta. */}
-      <ul className="divide-y divide-paper/15">
-        {rader.slice(0, 5).map((rad) => (
-          <li key={rad.id} className="grid grid-cols-12 gap-x-4 py-3 first:pt-0 last:pb-0">
-            <div className="col-span-12 min-w-0 sm:col-span-8">
-              <p className="truncate text-[0.9375rem] font-semibold">{rad.rubrik}</p>
-              <p className="mt-0.5 truncate text-[0.8125rem] text-paper-muted">{rad.under}</p>
-            </div>
-            <p className="col-span-12 mt-1 truncate text-[0.8125rem] text-paper-muted sm:col-span-4 sm:mt-0 sm:text-right">
-              {rad.meta ?? ""}
-            </p>
-          </li>
-        ))}
-      </ul>
-      <Link
-        href={href}
-        className="focus-ring mt-5 inline-flex min-h-11 items-center rounded-input bg-paper px-5 text-[0.9375rem] font-semibold text-ink transition-colors hover:bg-paper/85"
-      >
-        {knapp}
-      </Link>
-    </div>
+    <Radlista>
+      {rader.slice(0, 5).map((rad) => (
+        <Rad key={rad.id} className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className={cn(rubrikPanel, "truncate")}>{rad.rubrik}</p>
+            <p className={cn(meta, "mt-0.5 truncate")}>{rad.under}</p>
+          </div>
+          {rad.meta ? <p className={cn(meta, "num shrink-0 text-right")}>{rad.meta}</p> : null}
+        </Rad>
+      ))}
+    </Radlista>
+  );
+}
+
+/** Rubriken för "väntar på dig", med antalet i en bricka när kön inte är tom. */
+function VantarRubrik({ antal }: Readonly<{ antal: number }>) {
+  return (
+    <>
+      Väntar på dig
+      {antal > 0 ? <Badge tone="warn">{antal}</Badge> : null}
+    </>
   );
 }
 
@@ -365,23 +342,21 @@ function AttGora({
  * försvinner av sig självt när underlaget finns — till skillnad från en tom
  * sida, som inte kan visa att den blivit mindre tom.
  *
- * Papper och inte bläck: den tonala inversionen är reserverad för ATT GÖRA,
- * alltså arbete som väntar. Det här är uppstart, inte en kö.
+ * Papper och inte bläck: appytans enda tonala inversion är railen. Det här är
+ * uppstart, inte en kö, och står först i sektionen eftersom inget annat i den
+ * betyder något förrän det är gjort.
  */
 function Komigang({ rader }: Readonly<{ rader: { text: string; href: string; knapp: string }[] }>) {
   if (rader.length === 0) return null;
   // Ingen färgad kantlist på ena sidan. Den läser som ett AI-manér, och
   // detektorn namnger den ("side-tab accent border"). Ochre bär larmet med
-  // samma prick som tillståndsraden — ett tecken på ytan, inte två.
+  // samma prick som statusraden — ett tecken på ytan, inte två.
   return (
-    <section aria-labelledby="komigang" className="rounded-card bg-paper2/60 p-5 md:p-6">
-      <h2
-        id="komigang"
-        className="flex items-center gap-2.5 text-[1.0625rem] font-semibold tracking-[-0.01em]"
-      >
+    <section className="rounded-card border border-ink/10 bg-paper2 p-5 md:p-6">
+      <h3 className={cn(rubrikPanel, "flex items-center gap-2.5")}>
         <span className="h-2 w-2 shrink-0 rounded-full bg-ochre" aria-hidden />
         Innan agenterna kan börja
-      </h2>
+      </h3>
       <ul className="mt-4 grid gap-4">
         {rader.map((rad) => (
           <li key={rad.href} className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
@@ -396,30 +371,39 @@ function Komigang({ rader }: Readonly<{ rader: { text: string; href: string; kna
   );
 }
 
-type LedgerRad = { id: string; vanster: string; mitten: string; hoger: string; ton?: "neutral" | "good" | "warn" | "danger" };
+/**
+ * Senaste händelserna. Radanatomin är densamma som i `AttGora`: rubrik,
+ * metarad under (tiden stod förut i en spärrad kicker-kolumn till vänster),
+ * status till höger. Status med `ton` blir en `Badge`, utan `ton` en metarad.
+ */
+type LedgerRad = {
+  id: string;
+  rubrik: string;
+  meta: string;
+  hoger: string;
+  ton?: "neutral" | "good" | "warn" | "danger";
+};
 
 function Ledger({ rader, tomtext }: Readonly<{ rader: LedgerRad[]; tomtext: string }>) {
   if (rader.length === 0) {
-    return <p className="max-w-[62ch] text-[0.875rem] leading-6 text-ink-subtle">{tomtext}</p>;
+    return <Tomt>{tomtext}</Tomt>;
   }
   return (
-    <div className="divide-y divide-ink/10 border-y border-ink/15">
+    <Radlista>
       {rader.map((rad) => (
-        <div key={rad.id} className="row grid grid-cols-12 items-baseline gap-x-4 gap-y-1 py-3.5">
-          <span className="kicker col-span-12 text-mineral sm:col-span-3">{rad.vanster}</span>
-          <span className="col-span-12 truncate text-[0.875rem] sm:col-span-6" title={rad.mitten}>
-            {rad.mitten}
+        <Rad key={rad.id} className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="truncate text-[0.9375rem] text-ink" title={rad.rubrik}>
+              {rad.rubrik}
+            </p>
+            <p className={cn(meta, "mt-0.5 truncate")}>{rad.meta}</p>
+          </div>
+          <span className="shrink-0 text-right">
+            {rad.ton ? <Badge tone={rad.ton}>{rad.hoger}</Badge> : <span className={meta}>{rad.hoger}</span>}
           </span>
-          <span className="col-span-12 sm:col-span-3 sm:text-right">
-            {rad.ton && rad.ton !== "neutral" ? (
-              <Badge tone={rad.ton}>{rad.hoger}</Badge>
-            ) : (
-              <span className="num text-[0.875rem] tabular-nums text-ink-muted">{rad.hoger}</span>
-            )}
-          </span>
-        </div>
+        </Rad>
       ))}
-    </div>
+    </Radlista>
   );
 }
 
@@ -429,7 +413,7 @@ function Ledger({ rader, tomtext }: Readonly<{ rader: LedgerRad[]; tomtext: stri
  *
  * Skelett och inte spinner — Operate-läget säger det, och skälet är att en
  * spinner mitt i innehållet inte visar VAD som kommer. Felraden fäller inte
- * sidan: rutorna som fick svar står kvar, och den som inte fick visar `—`.
+ * sidan: rutorna som fick svar står kvar, och den som inte fick visar `–`.
  */
 function OversiktShell({
   laddar,
@@ -459,11 +443,11 @@ function OversiktShell({
   }
 
   return (
-    <div className="space-y-12">
+    <div className="space-y-10">
       {ofullstandig ? (
         <p
           role="status"
-          className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-card bg-paper2/60 px-4 py-3 text-[0.875rem] text-ink-muted"
+          className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-input border border-ink/10 bg-paper2 px-5 py-3 text-[0.9375rem] text-ink-muted"
         >
           <AlertTriangle className="h-4 w-4 shrink-0 text-warning" aria-hidden />
           En del av siffrorna kunde inte hämtas och visas som streck. Resten stämmer.
@@ -476,7 +460,7 @@ function OversiktShell({
               // Knappen släpps när nästa rendering kommer med nya siffror.
               window.setTimeout(() => setUppdaterar(false), 1200);
             }}
-            className={cn(btnSecondary, "ml-auto min-h-10 px-4 text-[0.875rem]")}
+            className={cn(btnSecondary, btnLiten, "ml-auto")}
           >
             {uppdaterar ? (
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
@@ -557,7 +541,6 @@ const KORNINGSTAK = 200;
 export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
   const hamta = useHamtare(demo);
   const vag = useArbetsvag();
-  const { workspaceName } = useDashboard();
   const [laddar, setLaddar] = useState(true);
   const [nyckel, setNyckel] = useState(0);
 
@@ -644,31 +627,6 @@ export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
       ofullstandig={ofullstandig}
       uppdatera={() => setNyckel((n) => n + 1)}
     >
-      <Tillstandsrad
-        poster={[
-          { etikett: "Arbetsyta", varde: workspaceName ?? "—" },
-          {
-            // Stod "Agenten får" med autonomiläget som värde ("Skriver
-            // utkast"). Etikett och värde lästes ihop till "Agenten får
-            // skriver utkast", vilket inte är en mening. Raden säger nu att
-            // agenten är i drift; autonomiläget styrs och visas under
-            // Målgrupp och autonomi, där det hör hemma.
-            etikett: "Agenten",
-            varde: "Jobbar",
-            drift: true
-          },
-          {
-            etikett: "Kunskapsbas",
-            varde: kbAntal === null ? "—" : `${kbAntal} dokument`,
-            larm: kbAntal === 0
-          },
-          {
-            etikett: "Senaste körning",
-            varde: korningar === null ? "—" : sedan(korningar[0]?.created_at)
-          }
-        ]}
-      />
-
       <Komigang
         rader={
           onboarding?.missing?.includes("product_marketing")
@@ -683,95 +641,98 @@ export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
         }
       />
 
-      <Talrad>
-        <Tal
-          etikett="Prospekt"
-          varde={prospekt === null ? "—" : String(rader.length)}
-          detalj={
-            prospekt === null
-              ? "kunde inte hämtas"
-              : rader.length >= PROSPEKTTAK
-                ? `${exempel} exempelbolag · av de ${PROSPEKTTAK} senaste`
-                : exempel
-                  ? `${exempel} av dem är exempelbolag`
-                  : "inga exempelbolag"
-          }
-        />
-        <Tal
-          etikett="Kvalificerade"
-          varde={prospekt === null ? "—" : String(kvalificerade)}
-          detalj={
-            snittFit === null
-              ? "ingen bedömning ännu"
-              : `snittpassning ${andel(snittFit, 1)} mot ert ICP`
-          }
-        />
-        <Tal
-          etikett="Väntar på dig"
-          varde={ko === null ? "—" : String(ko.length)}
-          detalj={ko?.length ? "utkast i granskningskön" : "granskningskön är tom"}
-          larm={Boolean(ko?.length)}
-        />
-        <Tal
-          etikett="Körningar 7 dgr"
-          varde={korningar === null ? "—" : String(veckansKorningar.length)}
-          detalj={
-            korningar === null
-              ? "kunde inte hämtas"
-              : eskaleradeSteg
-                ? `${eskaleradeSteg} steg eskalerade till dig`
-                : "inga steg eskalerade"
-          }
-        />
-      </Talrad>
-
-      {/* Autonomibeskrivningen ("Skriver utkast — Agenten researchar och
-          skriver ...") stod här. Den upprepade tillståndsraden ovanför och
-          inställningen under Målgrupp och autonomi, alltså samma uppgift på
-          tre ställen. */}
-
-      <Sektion rubrik="Att göra">
+      <Delsektion
+        rubrik={<VantarRubrik antal={ko?.length ?? 0} />}
+        bredvid={
+          ko?.length ? (
+            <Link href={vag("/dashboard/iris/granskning")} className={sektionslank}>
+              Öppna granskningskön
+            </Link>
+          ) : null
+        }
+      >
         <AttGora
           rader={(ko ?? []).map((post) => ({
             id: post.id,
             rubrik: post.company_name ?? post.prospect_email ?? "Utkast",
             under: post.subject ?? "Utan ämnesrad",
-            meta: post.scheduled_at ? `köat ${sedan(post.scheduled_at)}` : undefined
+            meta: post.scheduled_at ? `Köat ${sedan(post.scheduled_at)}` : undefined
           }))}
-          href={vag("/dashboard/iris/granskning")}
-          knapp="Öppna granskningskön"
-          tomtext="Inget mail ligger och väntar på ditt godkännande. Mailen agenterna skriver hamnar här."
+          tomtext="Inga utkast väntar på ditt godkännande."
         />
-      </Sektion>
+      </Delsektion>
 
+      {/* "Väntar på dig" stod också som nyckeltal. Kön står nu överst med
+          antalet vid rubriken, så talet hade varit samma uppgift två gånger. */}
+      <Nyckeltal
+        poster={[
+          {
+            etikett: "Prospekt",
+            varde: prospekt === null ? "–" : String(rader.length),
+            notis:
+              prospekt === null
+                ? "Kunde inte hämtas"
+                : rader.length >= PROSPEKTTAK
+                  ? `${exempel} exempelbolag · av de ${PROSPEKTTAK} senaste`
+                  : exempel
+                    ? `${exempel} av dem är exempelbolag`
+                    : "Inga exempelbolag"
+          },
+          {
+            etikett: "Kvalificerade",
+            varde: prospekt === null ? "–" : String(kvalificerade),
+            notis:
+              snittFit === null
+                ? "Ingen bedömning ännu"
+                : `Snittpassning ${andel(snittFit, 1)} mot ert ICP`
+          },
+          {
+            etikett: "Körningar, 7 dagar",
+            varde: korningar === null ? "–" : String(veckansKorningar.length),
+            notis:
+              korningar === null
+                ? "Kunde inte hämtas"
+                : eskaleradeSteg
+                  ? `${eskaleradeSteg} steg eskalerade till dig`
+                  : "Inga steg eskalerade"
+          }
+        ]}
+      />
+
+      {/* Autonomibeskrivningen ("Skriver utkast — Agenten researchar och
+          skriver ...") stod här. Den upprepade statusraden och inställningen
+          under Målgrupp och autonomi, alltså samma uppgift på tre ställen. */}
+
+      {/* Fördelningarna visas först när det finns något att fördela. Tre tomma
+          plattor bredvid varandra på en ny arbetsyta sa samma sak tre gånger,
+          och nyckeltalen ovanför säger den redan (0 prospekt). */}
+      {orter.length + branscher.length + bortvalda.length > 0 ? (
       <div className="grid gap-10 lg:grid-cols-12">
         <div className="min-w-0 lg:col-span-4">
-          <Sektion rubrik="Var agenterna letar">
+          <Delsektion rubrik="Var agenterna letar">
             <Stapellista rader={orter} tomtext="Ingen ort utläst ur prospekten ännu." />
-          </Sektion>
+          </Delsektion>
         </div>
         <div className="min-w-0 lg:col-span-4">
-          <Sektion rubrik="Vad de hittar">
+          <Delsektion rubrik="Vad de hittar">
             <Stapellista rader={branscher} tomtext="Ingen bransch utläst ur prospekten ännu." />
-          </Sektion>
+          </Delsektion>
         </div>
         <div className="min-w-0 lg:col-span-4">
-          <Sektion rubrik="Varför bolag valdes bort">
+          <Delsektion rubrik="Varför bolag valdes bort">
             <Stapellista
               rader={bortvalda}
               tomtext="Inget prospekt har valts bort med angiven orsak ännu. Orsakerna sparas när agenterna researchat."
             />
-          </Sektion>
+          </Delsektion>
         </div>
       </div>
+      ) : null}
 
-      <Sektion
+      <Delsektion
         rubrik="Senaste körningarna"
         bredvid={
-          <Link
-            href={vag("/dashboard/iris")}
-            className="focus-ring rounded-input text-[0.875rem] text-ink-subtle underline-offset-4 transition-colors hover:text-ink hover:underline"
-          >
+          <Link href={vag("/dashboard/iris")} className={sektionslank}>
             Starta en körning
           </Link>
         }
@@ -780,20 +741,43 @@ export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
           rader={veckansKorningar.slice(0, 6).map((k) => {
             const steg = stegAv(k);
             const eskalerade = steg.filter((s) => s.escalated).length;
-            const skills = steg.map((s) => s.skill).filter(Boolean).join(", ");
+            // Rubriken är vad körningen gjorde, i klartext. Skill-id:n
+            // (`snajp/support-triage`) som rubrik var intern kod (plan regel 4).
             return {
               id: k.id,
-              vanster: sedan(k.created_at),
-              mitten: steg.length
-                ? `${steg.length} steg${skills ? ` · ${skills}` : ""}`
-                : "Ingen stegloggning på körningen",
-              hoger: eskalerade ? `${eskalerade} eskalerade` : "utan eskalering",
-              ton: eskalerade ? ("warn" as const) : ("neutral" as const)
+              rubrik: KORNINGSTYP[k.agent_type ?? ""] ?? "Körning",
+              meta: steg.length ? `${sedan(k.created_at)} · ${steg.length} steg` : sedan(k.created_at),
+              hoger: eskalerade ? `${eskalerade} eskalerade` : "Utan eskalering",
+              ton: eskalerade ? ("warn" as const) : undefined
             };
           })}
           tomtext="Inga körningar den senaste veckan."
         />
-      </Sektion>
+      </Delsektion>
+
+      <Tillstandsrad
+        poster={[
+          {
+            // Stod "Agenten får" med autonomiläget som värde ("Skriver
+            // utkast"). Etikett och värde lästes ihop till "Agenten får
+            // skriver utkast", vilket inte är en mening. Raden säger nu att
+            // agenten är i drift; autonomiläget styrs och visas under
+            // Målgrupp och autonomi, där det hör hemma.
+            etikett: "Agenten",
+            varde: "Jobbar",
+            drift: true
+          },
+          {
+            etikett: "Kunskapsbas",
+            varde: kbAntal === null ? "–" : `${kbAntal} dokument`,
+            larm: kbAntal === 0
+          },
+          {
+            etikett: "Senaste körning",
+            varde: korningar === null ? "–" : sedan(korningar[0]?.created_at)
+          }
+        ]}
+      />
     </OversiktShell>
   );
 }
@@ -806,14 +790,14 @@ function Faktalista({ rader }: Readonly<{ rader: { etikett: string; varde: strin
     <dl className="divide-y divide-ink/10 border-y border-ink/15">
       {rader.map((rad) => (
         <div key={rad.etikett} className="grid grid-cols-12 items-baseline gap-x-4 py-3">
-          <dt className="col-span-8 text-[0.875rem] text-ink-muted">{rad.etikett}</dt>
+          <dt className="col-span-8 text-[0.9375rem] text-ink-muted">{rad.etikett}</dt>
           <dd
             className={cn(
-              "num col-span-4 flex items-center justify-end gap-2 text-right text-[0.875rem] tabular-nums",
+              "num col-span-4 flex items-center justify-end gap-2 text-right text-[0.9375rem] tabular-nums",
               rad.larm ? "font-semibold text-ink" : "text-ink-muted"
             )}
           >
-            {/* Samma sak som i Tal: pricken bär larmet, inte textfärgen. */}
+            {/* Samma sak som i statusraden: pricken bär larmet, inte textfärgen. */}
             {rad.larm ? <span className="h-2 w-2 rounded-full bg-ochre" aria-hidden /> : null}
             {rad.varde}
           </dd>
@@ -860,7 +844,6 @@ const STATUSORD: Record<string, { text: string; ton: "neutral" | "good" | "warn"
 export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
   const hamta = useHamtare(demo);
   const vag = useArbetsvag();
-  const { workspaceName } = useDashboard();
   const [laddar, setLaddar] = useState(true);
   const [nyckel, setNyckel] = useState(0);
 
@@ -909,8 +892,6 @@ export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) 
   ).length;
 
   const auto = (regler ?? []).filter((r) => r.mode === "auto");
-  const utkast = (regler ?? []).filter((r) => r.mode === "draft").length;
-  const alltidManniska = (regler ?? []).filter((r) => r.mode === "escalate").length;
   const fackNamn = new Map((regler ?? []).map((r) => [r.category, r.label]));
 
   const ofullstandig = arenden === null || regler === null || kbAntal === null;
@@ -921,34 +902,12 @@ export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) 
       ofullstandig={ofullstandig}
       uppdatera={() => setNyckel((n) => n + 1)}
     >
-      <Tillstandsrad
-        poster={[
-          { etikett: "Arbetsyta", varde: workspaceName ?? "—" },
-          {
-            etikett: "Regler",
-            varde:
-              regler === null
-                ? "—"
-                : `${auto.length} auto · ${utkast} utkast · ${alltidManniska} eskalera`
-          },
-          {
-            etikett: "Kunskapsbas",
-            varde: kbAntal === null ? "—" : `${kbAntal} dokument`,
-            larm: kbAntal === 0
-          },
-          {
-            etikett: "Senaste ärendet",
-            varde: arenden === null ? "—" : sedan(rader[0]?.received_at)
-          }
-        ]}
-      />
-
       <Komigang
         rader={
           kbAntal === 0
             ? [
                 {
-                  text: "Kunskapsbasen är tom. Agenterna gissar aldrig — de eskalerar varje ärende de inte kan grunda, så inkorgen blir en lista med röda rader tills det ligger något här.",
+                  text: "Kunskapsbasen är tom. Agenterna gissar aldrig. De eskalerar varje ärende de inte kan grunda, så inkorgen blir en lista med röda rader tills det ligger något i basen.",
                   href: vag("/settings/kunskapsbas"),
                   knapp: "Fyll kunskapsbasen"
                 }
@@ -957,104 +916,91 @@ export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) 
         }
       />
 
-      <Talrad>
-        <Tal
-          etikett="Ärenden"
-          varde={arenden === null ? "—" : String(rader.length)}
-          detalj={
-            arenden === null
-              ? "kunde inte hämtas"
-              : rader.length >= ARENDETAK
-                ? `de ${ARENDETAK} senaste i inkorgen`
-                : "i inkorgen"
-          }
-        />
-        <Tal
-          etikett="Klarade själv"
-          varde={arenden === null ? "—" : String(klarade.length)}
-          detalj={
-            rader.length ? `${andel(klarade.length, rader.length)} av ärendena` : "inga ärenden ännu"
-          }
-        />
-        <Tal
-          etikett="Väntar på dig"
-          varde={arenden === null ? "—" : String(vantar.length)}
-          detalj={vantar.length ? "utkast att godkänna" : "inget utkast att granska"}
-          larm={vantar.length > 0}
-        />
-        <Tal
-          etikett="Eskalerade"
-          varde={arenden === null ? "—" : String(eskalerade.length)}
-          detalj={
-            rader.length
-              ? `${andel(eskalerade.length, rader.length)} gick till en människa`
-              : "inga ärenden ännu"
-          }
-        />
-      </Talrad>
-
-      {regler === null ? null : (
-        <Pastaende
-          markerat={
-            auto.length === 0
-              ? "Ingenting"
-              : `${auto.length} ${auto.length === 1 ? "fack" : "fack"}`
-          }
-        >
-          {auto.length === 0
-            ? "skickas utan att du sett det. Varje svar ligger som utkast tills du godkänt det."
-            : `besvaras av agenterna själva: ${auto.map((r) => r.label.toLowerCase()).join(", ")}.`}
-        </Pastaende>
-      )}
-
-      <Sektion rubrik="Att göra">
+      <Delsektion
+        rubrik={<VantarRubrik antal={vantar.length} />}
+        bredvid={
+          vantar.length ? (
+            <Link href={vag("/dashboard/support")} className={sektionslank}>
+              Granska utkasten
+            </Link>
+          ) : null
+        }
+      >
         <AttGora
           rader={vantar.map((a) => ({
             id: a.id,
             rubrik: a.subject || "(utan ämne)",
             under: a.from_name ? `${a.from_name} · ${a.from_email}` : a.from_email,
             meta: a.draft
-              ? `konfidens ${andel(a.draft.confidence, 1)}`
+              ? `Konfidens ${andel(a.draft.confidence, 1)}`
               : sedan(a.received_at)
           }))}
-          href={vag("/dashboard/support")}
-          knapp="Granska utkasten"
-          tomtext="Inget mail ligger och väntar på ditt godkännande. Svaren agenterna skriver hamnar här först."
+          tomtext="Inga utkast väntar på ditt godkännande."
         />
-      </Sektion>
+      </Delsektion>
+
+      {/* "Väntar på dig" stod också som nyckeltal; se LeadsOversikt. */}
+      <Nyckeltal
+        poster={[
+          {
+            etikett: "Ärenden i inkorgen",
+            varde: arenden === null ? "–" : String(rader.length),
+            notis:
+              arenden === null
+                ? "Kunde inte hämtas"
+                : rader.length >= ARENDETAK
+                  ? `De ${ARENDETAK} senaste`
+                  : undefined
+          },
+          {
+            etikett: "Klarade själv",
+            varde: arenden === null ? "–" : String(klarade.length),
+            notis: rader.length
+              ? `${andel(klarade.length, rader.length)} av ärendena`
+              : "Inga ärenden ännu"
+          },
+          {
+            etikett: "Eskalerade",
+            varde: arenden === null ? "–" : String(eskalerade.length),
+            notis: rader.length
+              ? `${andel(eskalerade.length, rader.length)} gick till en människa`
+              : "Inga ärenden ännu"
+          }
+        ]}
+      />
 
       <div className="grid gap-10 lg:grid-cols-12">
         <div className="min-w-0 lg:col-span-7">
-          <Sektion rubrik="Vad ärendena handlar om">
+          <Delsektion rubrik="Vad ärendena handlar om">
             <Stapellista
               rader={Object.entries(fack ?? {})
                 .map(([kod, antal]) => [fackNamn.get(kod) ?? kod, antal] as [string, number])
                 .sort((a, b) => b[1] - a[1])}
               tomtext="Inga klassificerade ärenden ännu."
             />
-          </Sektion>
+          </Delsektion>
         </div>
         <div className="min-w-0 lg:col-span-5">
-          <Sektion rubrik="Hur väl agenterna kan grunda svaren">
+          <Delsektion rubrik="Hur väl agenterna kan grunda svaren">
             <Faktalista
               rader={[
                 {
                   etikett: "Ärenden med träff i kunskapsbasen",
-                  varde: klassade.length ? `${medKalla.length} av ${klassade.length}` : "—"
+                  varde: klassade.length ? `${medKalla.length} av ${klassade.length}` : "–"
                 },
                 {
                   etikett: "Snittkonfidens i klassificeringen",
-                  varde: snittKonfidens === null ? "—" : andel(snittKonfidens, 1)
+                  varde: snittKonfidens === null ? "–" : andel(snittKonfidens, 1)
                 },
                 {
                   etikett: "Eskalerade utan träff i basen",
-                  varde: arenden === null ? "—" : String(eskaleratUtanKalla),
+                  varde: arenden === null ? "–" : String(eskaleratUtanKalla),
                   larm: eskaleratUtanKalla > 0
                 }
               ]}
             />
             {eskaleratUtanKalla > 0 ? (
-              <p className="mt-4 max-w-[52ch] text-[0.875rem] leading-6 text-ink-muted">
+              <p className="mt-4 max-w-[52ch] text-[0.9375rem] leading-6 text-ink-muted">
                 De ärendena lämnades över för att agenterna inte hittade något att svara ur, inte för
                 att frågan var svår.{" "}
                 <Link
@@ -1066,17 +1012,14 @@ export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) 
                 så minskar de.
               </p>
             ) : null}
-          </Sektion>
+          </Delsektion>
         </div>
       </div>
 
-      <Sektion
+      <Delsektion
         rubrik="Senaste ärendena"
         bredvid={
-          <Link
-            href={vag("/dashboard/support")}
-            className="focus-ring rounded-input text-[0.875rem] text-ink-subtle underline-offset-4 transition-colors hover:text-ink hover:underline"
-          >
+          <Link href={vag("/dashboard/support")} className={sektionslank}>
             Öppna inkorgen
           </Link>
         }
@@ -1086,15 +1029,42 @@ export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) 
             const status = STATUSORD[a.status] ?? STATUSORD.new;
             return {
               id: a.id,
-              vanster: sedan(a.received_at),
-              mitten: `${a.subject || "(utan ämne)"} · ${a.from_name ?? a.from_email}`,
+              rubrik: a.subject || "(utan ämne)",
+              meta: `${a.from_name ?? a.from_email} · ${sedan(a.received_at)}`,
               hoger: status.text,
               ton: status.ton
             };
           })}
           tomtext="Inkorgen är tom. Koppla en inkorg under Inställningar, eller hämta testmail i kundtjänstvyn."
         />
-      </Sektion>
+      </Delsektion>
+
+      {/* "Regler" (3 auto · 2 utkast · 1 eskalera) och autonomimeningen
+          ersattes av "Autosvar": vilka fack som skickas utan att du sett
+          svaret är det man behöver veta innan man litar på talen. Hur de
+          övriga facken fördelas hör till Inställningar > Regler. */}
+      <Tillstandsrad
+        poster={[
+          {
+            etikett: "Autosvar",
+            varde:
+              regler === null
+                ? "–"
+                : auto.length === 0
+                  ? "Inga fack"
+                  : auto.map((r) => r.label).join(", ")
+          },
+          {
+            etikett: "Kunskapsbas",
+            varde: kbAntal === null ? "–" : `${kbAntal} dokument`,
+            larm: kbAntal === 0
+          },
+          {
+            etikett: "Senaste ärendet",
+            varde: arenden === null ? "–" : sedan(rader[0]?.received_at)
+          }
+        ]}
+      />
     </OversiktShell>
   );
 }

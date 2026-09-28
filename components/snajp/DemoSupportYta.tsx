@@ -3,12 +3,13 @@
 import { ShieldAlert } from "lucide-react";
 import { useState } from "react";
 import { Dashboard as SupportDashboard } from "@/components/snajp/Dashboard";
+import { Badge, etikett, flik, flikAktiv, flikInaktiv } from "@/components/ui";
 import { CHATTFRAGOR } from "@/lib/demo/support-chatt";
 import { cn } from "@/lib/utils";
 
 /**
- * Demons kundtjänst: inkorgen OCH kundchatten, i samma flikmönster som
- * arbetsytans SupportWorkspaceTabs (border-ochre på aktiv flik).
+ * Demons kundtjänst: inkorgen OCH kundchatten, i samma flikform som
+ * arbetsytans SupportWorkspaceTabs (`flik` i components/ui.tsx).
  *
  * ## Varför chatten är förladdad
  *
@@ -16,8 +17,12 @@ import { cn } from "@/lib/utils";
  * Här finns ingen tenant och ingen session, och en LLM-körning per anonym
  * besökare kostar pengar och kan svara olika varje gång. Besökaren väljer
  * i stället fråga och svaret fälls ut — samma mönster som bokföringsdemons
- * chatt, och det står på sidan. En av frågorna eskalerar med flit: gränsen
- * är en del av produkten.
+ * chatt. En av frågorna eskalerar med flit: gränsen är en del av produkten.
+ *
+ * Exempelnotisen ovanför chatten ("Butiken Nordlys Handel är påhittad …")
+ * och slutraden ("Det var frågorna i exemplet …") togs bort 2026-09-27
+ * (plans/2026-09-27-appytor-enhetlighet.md, regel 1): de handlade om
+ * exemplet, inte om kunden, och demoskalet märker redan hela ytan som demo.
  */
 
 function Kundchatt() {
@@ -26,27 +31,22 @@ function Kundchatt() {
 
   return (
     <div className="max-w-[720px]">
-      <p className="text-[0.8125rem] leading-6 text-ink-subtle">
-        <strong className="font-semibold text-ink-muted">Exempel.</strong> Butiken
-        Nordlys Handel är påhittad och svaren skrivna i förväg ur dess
-        kunskapsbas — ingen modell körs på den här sidan. I produkten svarar
-        agenten ur ER kunskapsbas, på riktigt.
-      </p>
-
-      <div className="mt-4 grid gap-3">
+      <div className="grid gap-3">
         {stallda.map((i) => (
           <div key={i} className="grid gap-3">
-            <p className="ml-auto max-w-[92%] rounded-card bg-paper2 px-3.5 py-2.5 text-[0.875rem] leading-6 text-ink">
+            <p className="ml-auto max-w-[92%] rounded-card bg-paper2 px-3.5 py-2.5 text-[0.9375rem] leading-6 text-ink">
               {CHATTFRAGOR[i].fraga}
             </p>
             <div className="max-w-[92%]">
               {CHATTFRAGOR[i].eskalerar ? (
-                <p className="mb-1.5 inline-flex items-center gap-1.5 text-[0.75rem] font-medium text-danger">
-                  <ShieldAlert className="h-3.5 w-3.5" aria-hidden />
-                  Eskalerat till en människa
+                <p className="mb-1.5">
+                  <Badge tone="danger">
+                    <ShieldAlert className="h-3 w-3" aria-hidden />
+                    Eskalerat till en människa
+                  </Badge>
                 </p>
               ) : null}
-              <p className="whitespace-pre-wrap rounded-card border border-ink/15 px-3.5 py-2.5 text-[0.875rem] leading-6 text-ink-muted">
+              <p className="whitespace-pre-wrap rounded-card border border-ink/15 px-3.5 py-2.5 text-[0.9375rem] leading-6 text-ink-muted">
                 {CHATTFRAGOR[i].svar}
               </p>
             </div>
@@ -55,8 +55,8 @@ function Kundchatt() {
       </div>
 
       {kvar.length ? (
-        <div className={stallda.length ? "mt-5" : "mt-4"}>
-          <p className="text-[0.8125rem] text-mineral">
+        <div className={stallda.length ? "mt-5" : ""}>
+          <p className={etikett}>
             {stallda.length ? "Fråga något mer:" : "Klicka på en fråga, som kund:"}
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
@@ -72,23 +72,19 @@ function Kundchatt() {
             ))}
           </div>
         </div>
-      ) : (
-        <p className="mt-5 text-[0.8125rem] text-mineral">
-          Det var frågorna i exemplet. I produkten skriver kunderna fritt, och
-          agenten svarar ur er kunskapsbas eller eskalerar.
-        </p>
-      )}
+      ) : null}
     </div>
   );
 }
 
 export function DemoSupportYta() {
-  const [flik, setFlik] = useState<"inkorg" | "chatt">("inkorg");
+  // `valdFlik` och inte `flik`: det namnet är klassen ur components/ui.tsx.
+  const [valdFlik, setFlik] = useState<"inkorg" | "chatt">("inkorg");
 
   return (
     <div>
-      {/* Samma flikmönster som SupportWorkspaceTabs: border-ochre bär valet. */}
-      <div className="flex gap-1 border-b border-ink/12" role="tablist" aria-label="Kundtjänstens ytor">
+      {/* Samma flikform som SupportWorkspaceTabs. */}
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Kundtjänstens ytor">
         {(
           [
             ["inkorg", "Inkorgen"],
@@ -99,14 +95,9 @@ export function DemoSupportYta() {
             key={id}
             type="button"
             role="tab"
-            aria-selected={flik === id}
+            aria-selected={valdFlik === id}
             onClick={() => setFlik(id)}
-            className={cn(
-              "focus-ring -mb-px inline-flex min-h-11 items-center border-b-2 px-4 text-[0.9375rem] font-medium transition-colors",
-              flik === id
-                ? "border-ochre text-ink"
-                : "border-transparent text-ink-subtle hover:text-ink"
-            )}
+            className={cn(flik, valdFlik === id ? flikAktiv : flikInaktiv)}
           >
             {etikett}
           </button>
@@ -114,7 +105,7 @@ export function DemoSupportYta() {
       </div>
 
       <div className="mt-6">
-        {flik === "inkorg" ? <SupportDashboard demo /> : <Kundchatt />}
+        {valdFlik === "inkorg" ? <SupportDashboard demo /> : <Kundchatt />}
       </div>
     </div>
   );

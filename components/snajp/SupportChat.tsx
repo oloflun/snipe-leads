@@ -2,7 +2,7 @@
 
 import { Check, FileText, ImagePlus, Loader2, Send, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { btnPrimary, btnSecondary } from "@/components/ui";
+import { btnLiten, btnPrimary, btnSecondary, etikett, meta } from "@/components/ui";
 import { AgentMenu } from "@/components/snajp/AgentMenu";
 import { LÄSBARA, läsbar } from "@/components/settings/Kunskapsbas";
 import { HttpJsonError, felmeddelande, readJsonBody } from "@/lib/http/json";
@@ -211,12 +211,12 @@ export type SupportChatProps = {
  */
 const FELTEXTER = [
   "Jag fick inte fram ett svar den här gången. Prova gärna att skicka frågan igen om en liten stund.",
-  "Något hakade upp sig på vägen — frågan kom aldrig hela vägen fram. Skicka den gärna en gång till.",
+  "Något hakade upp sig på vägen, och frågan kom aldrig hela vägen fram. Skicka den gärna en gång till.",
   "Där tappade jag tråden. Ställ gärna frågan igen, eller formulera den på ett annat sätt så gör jag ett nytt försök."
 ];
 
 const TIMEOUT_TEXTER = [
-  "Det här svaret tog längre tid än det borde. Skicka gärna frågan igen — andra försöket brukar gå fortare.",
+  "Det här svaret tog längre tid än det borde. Skicka gärna frågan igen. Andra försöket brukar gå fortare.",
   "Svaret hann inte bli klart. Prova igen om en liten stund, så tar jag det därifrån."
 ];
 
@@ -1029,7 +1029,7 @@ export function SupportChat({
                 {message.role === "human" ? (
                   // bd snipe-1fl: kunden ska se att det nu är en människa som
                   // svarar — samma bubbla, en rad text, ingen ny komponent.
-                  <p className="mb-1 text-[0.75rem] font-semibold text-ink-muted">
+                  <p className={cn(etikett, "mb-1")}>
                     {text({ sv: "Medarbetare", en: "Team member" })}
                   </p>
                 ) : null}
@@ -1065,8 +1065,8 @@ export function SupportChat({
               <Loader2 className="h-4 w-4 animate-spin" />
               {vaknar
                 ? text({
-                    sv: "Assistenten vaknar — det kan ta upp till en minut",
-                    en: "The assistant is waking up — this can take up to a minute"
+                    sv: "Assistenten vaknar. Det kan ta upp till en minut.",
+                    en: "The assistant is waking up. This can take up to a minute."
                   })
                 : text({ sv: "Agenten arbetar", en: "The agent is working" })}
             </div>
@@ -1079,7 +1079,7 @@ export function SupportChat({
           <div className="mb-3 inline-flex items-center gap-2 rounded-input bg-paper p-1.5 pr-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={attachment} alt="Förhandsvisning" className="h-10 w-10 rounded-[6px] object-cover" />
-            <span className="text-xs text-ink-muted">{text({ sv: "Bild bifogad", en: "Image attached" })}</span>
+            <span className={meta}>{text({ sv: "Bild bifogad", en: "Image attached" })}</span>
             <button
               type="button"
               onClick={() => setAttachment(null)}
@@ -1199,7 +1199,7 @@ function KbForhandsvisningKortVy({
   return (
     <div className="flex justify-start">
       <div className="max-w-[90%] rounded-card border border-ink/12 bg-paper2/60 px-4 py-3 text-[0.875rem] leading-6">
-        <p className="kicker text-mineral">
+        <p className={etikett}>
           {kort.kalla === "pdf" ? "PDF" : "Textfil"} · {kort.filnamn}
         </p>
         {kort.status === "extraherar" ? (
@@ -1219,7 +1219,7 @@ function KbForhandsvisningKortVy({
               {kort.innehall || "(ingen text hittades i filen)"}
             </div>
             {kort.sidor ? (
-              <p className="mt-1 text-[0.75rem] text-ink-subtle">
+              <p className={cn(meta, "mt-1")}>
                 {kort.sidor} {kort.sidor === 1 ? "sida" : "sidor"}
               </p>
             ) : null}
@@ -1259,7 +1259,7 @@ function ForslagKortVy({
   return (
     <div className="flex justify-start">
       <div className="max-w-[90%] rounded-card border border-ochre/30 bg-ochre/5 px-4 py-3 text-[0.875rem] leading-6">
-        <p className="kicker text-mineral">Agenten behöver undersöka det här innan den svarar</p>
+        <p className={etikett}>Agenten behöver undersöka det här innan den svarar</p>
         <p className="mt-2 font-semibold text-ink">{kort.rubrik}</p>
         {kort.brodtext ? <p className="mt-1 whitespace-pre-wrap text-ink-muted">{kort.brodtext}</p> : null}
         {kort.status === "arende" ? (
@@ -1335,8 +1335,8 @@ function FeedbackRad({
 }>) {
   if (lage.fas === "skickad") {
     return (
-      <p className="mt-1.5 text-[0.75rem] text-ink-subtle">
-        Feedbacken är kalibrerad in — nästa testsvar tar hänsyn till den.
+      <p className={cn(meta, "mt-1.5")}>
+        Feedbacken är kalibrerad in. Nästa testsvar tar hänsyn till den.
       </p>
     );
   }
@@ -1369,7 +1369,7 @@ function FeedbackRad({
       </div>
       {lage.fas === "rattar" ? (
         <div className="mt-2 rounded-input border border-ink/12 bg-paper p-3">
-          <label className="text-[0.75rem] font-medium text-ink-muted" htmlFor={`feedback-rattning-${messageId}`}>
+          <label className={etikett} htmlFor={`feedback-rattning-${messageId}`}>
             Vad borde agenten ha svarat? (frivilligt)
           </label>
           <textarea
@@ -1378,27 +1378,27 @@ function FeedbackRad({
             onChange={(event) => onTextAndring(event.target.value)}
             rows={2}
             maxLength={4000}
-            className="focus-ring mt-1.5 w-full resize-y rounded-input border border-ink/12 bg-paper2/40 px-2.5 py-2 text-[0.8125rem] leading-5 outline-none"
+            className="focus-ring mt-1.5 w-full resize-y rounded-input border border-ink/12 bg-paper2/40 px-2.5 py-2 text-[1rem] leading-6 outline-none"
           />
           <div className="mt-2 flex gap-2">
             <button
               type="button"
               onClick={onDaligSkicka}
-              className="focus-ring inline-flex min-h-8 items-center rounded-input bg-ink px-3 text-[0.75rem] font-medium text-paper"
+              className={cn(btnPrimary, btnLiten)}
             >
               Skicka rättning
             </button>
             <button
               type="button"
               onClick={onDaligHoppaOver}
-              className="focus-ring inline-flex min-h-8 items-center rounded-input px-3 text-[0.75rem] font-medium text-ink-subtle hover:text-ink"
+              className={cn(btnSecondary, btnLiten)}
             >
               Hoppa över
             </button>
           </div>
         </div>
       ) : null}
-      {lage.fas === "fel" ? <p className="mt-1 text-[0.75rem] text-danger">{lage.fel}</p> : null}
+      {lage.fas === "fel" ? <p className="mt-1 text-[0.8125rem] text-danger">{lage.fel}</p> : null}
     </div>
   );
 }

@@ -2,7 +2,17 @@
 
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { EmptyState, SkeletonRows } from "@/components/ui";
+import {
+  Cell,
+  Sektion,
+  SkeletonRows,
+  Tabell,
+  Tomt,
+  btnLiten,
+  btnSecondary,
+  etikett as etikettKlass,
+  meta
+} from "@/components/ui";
 import { EjAktiverad, arEjAktiverad } from "@/components/EjAktiverad";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { readJsonBody } from "@/lib/http/json";
@@ -147,12 +157,12 @@ export function Analys({ demo = false }: Readonly<{ demo?: boolean }>) {
       <div className="flex items-start gap-3 border-y border-ochre/40 bg-ochre/10 px-4 py-4">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
         <div className="min-w-0">
-          <p className="text-sm font-medium text-ink">Statistiken kunde inte hämtas</p>
-          <p className="mt-1 text-sm text-ink-muted">{lage.meddelande}</p>
+          <p className="text-[0.9375rem] font-medium text-ink">Statistiken kunde inte hämtas</p>
+          <p className="mt-1 text-[0.9375rem] text-ink-muted">{lage.meddelande}</p>
           <button
             type="button"
             onClick={() => void hamta()}
-            className="focus-ring mt-3 inline-flex min-h-9 items-center rounded-input bg-paper2 px-3 text-[13px] font-medium"
+            className={cn(btnSecondary, btnLiten, "mt-3")}
           >
             Försök igen
           </button>
@@ -170,20 +180,22 @@ export function Analys({ demo = false }: Readonly<{ demo?: boolean }>) {
     (v) => v.sent || v.replies || v.leads_runs || v.support_runs || v.tickets
   );
 
+  // "Tomt betyder tomt, inga siffror räknas fram i förväg" stod efter
+  // meningen här. Den försvarade sidans egna val i stället för att säga
+  // något om kundens data (F-018) och togs bort 2026-09-27.
   if (!veckor.length || !harTrafik) {
     return (
-      <EmptyState
-        title="Ingen data ännu"
-        body="Här visas skick, svarsfrekvens och ärenden per vecka så fort agenterna har kört mot din arbetsyta. Tomt betyder tomt — inga siffror räknas fram i förväg."
-      />
+      <Tomt>
+        Ingen data ännu. Här visas skick, svarsfrekvens och ärenden per vecka så fort agenterna har
+        kört mot din arbetsyta.
+      </Tomt>
     );
   }
 
   return (
-    <div className="space-y-10">
+    <div>
       <AgentBlock
-        rubrik="Leads"
-        underrubrik="Utskick och svar per vecka."
+        rubrik="Iris"
         veckor={veckor}
         kolumner={[
           { nyckel: "sent", etikett: "Skick", tacks: tackning.sent },
@@ -203,7 +215,6 @@ export function Analys({ demo = false }: Readonly<{ demo?: boolean }>) {
 
       <AgentBlock
         rubrik="Kundtjänst"
-        underrubrik="Ärenden per vecka och hur de slutade."
         veckor={veckor}
         kolumner={[
           { nyckel: "tickets", etikett: "Ärenden", tacks: tackning.tickets },
@@ -229,16 +240,20 @@ type Kolumn = {
   varde?: (v: Vecka) => string | null;
 };
 
+/**
+ * Ett block per agent: `Sektion` med rubrik, trendkurva och veckotabell.
+ *
+ * Underrubrikerna ("Utskick och svar per vecka.") togs bort 2026-09-27: de
+ * beskrev tabellen som stod direkt under, och kolumnhuvudena säger detsamma.
+ */
 function AgentBlock({
   rubrik,
-  underrubrik,
   veckor,
   kolumner,
   kurva,
   kurvetikett
 }: Readonly<{
   rubrik: string;
-  underrubrik: string;
   veckor: Vecka[];
   kolumner: Kolumn[];
   kurva: (v: Vecka) => number;
@@ -250,107 +265,67 @@ function AgentBlock({
   const nagotMats = kolumner.some((k) => k.tacks);
 
   return (
-    <section>
-      <header className="mb-4">
-        <h2 className="text-[1.0625rem] font-semibold text-ink">{rubrik}</h2>
-        <p className="mt-0.5 text-sm text-ink-muted">{underrubrik}</p>
-      </header>
-
+    <Sektion title={rubrik}>
       {!nagotMats ? (
-        <p className="border-y border-ink/15 py-4 text-sm text-ink-muted">
-          Ingenting mäts för {rubrik.toLowerCase()} ännu. Här kommer veckoserien så fort det
-          finns något att räkna — tills dess står det ingenting hellre än nollor.
-        </p>
+        <Tomt>Ingenting mäts för {rubrik.toLowerCase()} ännu.</Tomt>
       ) : (
         <>
+          <Trend veckor={veckor} varde={kurva} etikett={kurvetikett} />
 
-      <Trend veckor={veckor} varde={kurva} etikett={kurvetikett} />
-
-      {/* Bred tabell från md och upp; kortlayout under. Ett bord som krymps
-          till mobilbredd blir sex kolumner à 40px och därmed oläsligt — se
-          DESIGN.md App-familjen. */}
-      {/* Fast layout (table-fixed + colgroup): veckokolumnen får en deklarerad
-          bredd och talkolumnerna delar resten lika, så siffrorna står i samma
-          spalt oavsett hur många kolumner blocket har — se Tabell i
-          components/ui.tsx. Summan är alltid 100. */}
-      <div className="mt-6 hidden md:block">
-        <table className="w-full table-fixed border-collapse text-sm">
-          <colgroup>
-            <col style={{ width: "16%" }} />
-            {kolumner.map((k) => (
-              <col key={k.nyckel} style={{ width: `${84 / kolumner.length}%` }} />
-            ))}
-          </colgroup>
-          <thead>
-            <tr className="border-y border-ink/15">
-              <th scope="col" className="kicker py-3 text-left font-medium text-mineral">
-                Vecka
-              </th>
-              {kolumner.map((k) => (
-                <th
-                  key={k.nyckel}
-                  scope="col"
-                  className="kicker py-3 text-right font-medium text-mineral"
-                >
-                  {k.etikett}
-                </th>
+          {/* `Tabell` ur components/ui.tsx: fast layout, etikett-huvuden, och
+              intern scroll under minbredden i stället för en egen kortlayout
+              på mobil (plans/2026-09-27-appytor-enhetlighet.md, regel 3:
+              aldrig kort-i-lista, aldrig en rå <table>). Veckokolumnen har en
+              deklarerad bredd och talkolumnerna delar resten lika, så
+              siffrorna står i samma spalt oavsett antal kolumner. */}
+          <div className="mt-6">
+            <Tabell
+              ariaLabel={`${rubrik} per vecka`}
+              minBredd={560}
+              kolumner={[
+                { rubrik: "Vecka", bredd: "16%" },
+                ...kolumner.map((k) => ({
+                  rubrik: k.etikett,
+                  bredd: `${84 / kolumner.length}%`,
+                  hoger: true
+                }))
+              ]}
+            >
+              {veckor.map((v) => (
+                <tr key={v.week}>
+                  <Cell titel className="font-medium text-ink">
+                    {v.week}
+                  </Cell>
+                  {kolumner.map((k) => (
+                    <Cell key={k.nyckel} hoger className="text-ink-muted">
+                      <Varde kolumn={k} vecka={v} />
+                    </Cell>
+                  ))}
+                </tr>
               ))}
-            </tr>
-          </thead>
-          <tbody>
-            {veckor.map((v) => (
-              <tr key={v.week} className="border-b border-ink/10">
-                <th scope="row" className="py-3 text-left font-medium text-ink">
-                  {v.week}
-                </th>
-                {kolumner.map((k) => (
-                  <td
-                    key={k.nyckel}
-                    className="num py-3 text-right tabular-nums text-ink-muted"
-                  >
-                    <Cell kolumn={k} vecka={v} />
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <ul className="mt-6 space-y-2 md:hidden">
-        {veckor.map((v) => (
-          <li key={v.week} className="rounded-input border border-ink/15 px-4 py-3">
-            <p className="kicker text-mineral">{v.week}</p>
-            <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5">
-              {kolumner.map((k) => (
-                <div key={k.nyckel} className="flex items-baseline justify-between gap-2">
-                  <dt className="text-[13px] text-ink-muted">{k.etikett}</dt>
-                  <dd className="num text-sm font-medium tabular-nums text-ink">
-                    <Cell kolumn={k} vecka={v} />
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          </li>
-        ))}
-      </ul>
+            </Tabell>
+          </div>
         </>
       )}
-    </section>
+    </Sektion>
   );
 }
 
-/** Ett mätvärde utan källa blir ett streck med en titel som säger varför. */
-function Cell({ kolumn, vecka }: Readonly<{ kolumn: Kolumn; vecka: Vecka }>) {
+/**
+ * Ett mätvärde utan källa blir ett tankstreck (aldrig em-streck) med en titel
+ * som säger varför. Hette `Cell` före 2026-09-27; bytte namn för att inte
+ * skugga `Cell` ur components/ui.tsx.
+ */
+function Varde({ kolumn, vecka }: Readonly<{ kolumn: Kolumn; vecka: Vecka }>) {
   if (!kolumn.tacks) {
     return (
-      <span className="text-ink-subtle" title="Mäts inte ännu — se noten under tabellen.">
-        —
+      <span className="text-ink-subtle" title="Mäts inte ännu.">
+        –
       </span>
     );
   }
   if (kolumn.varde) {
-    return <>{kolumn.varde(vecka) ?? <span className="text-ink-subtle">—</span>}</>;
+    return <>{kolumn.varde(vecka) ?? <span className="text-ink-subtle">–</span>}</>;
   }
   return <>{(vecka as unknown as Record<string, number>)[kolumn.nyckel] ?? 0}</>;
 }
@@ -370,7 +345,7 @@ function Trend({
 
   return (
     <div className="border-y border-ink/15 py-4">
-      <p className="kicker mb-3 text-mineral">{etikett}</p>
+      <p className={cn(etikettKlass, "mb-3")}>{etikett}</p>
       {/* `items-stretch` (default) och INTE `items-end`: kolumnerna måste ärva
           den bestämda höjden från h-24. Med items-end blev varje kolumn så hög
           som sitt innehåll, spåret under fick ingen bestämd höjd, och
@@ -403,9 +378,7 @@ function Trend({
                   style={{ height: `${Math.max(höjd, 2)}%` }}
                 />
               </div>
-              <span className="kicker truncate text-center text-[11px] text-ink-subtle">
-                {v.week}
-              </span>
+              <span className={cn(meta, "num truncate text-center")}>{v.week}</span>
             </div>
           );
         })}
@@ -434,11 +407,17 @@ function OtackadeFotnot({ tackning }: Readonly<{ tackning: Tackning }>) {
     support_runs: "kundtjänstkörningar"
   };
 
+  // En mening i brödtextstorlek. Stod tidigare som tre meningar i 14 px som
+  // förklarade skillnaden mellan noll och streck; det läsaren behöver är
+  // vilka värden som inte mäts.
+  const namn = saknas.map((n) => etiketter[n] ?? n);
+  const lista =
+    namn.length > 1 ? `${namn.slice(0, -1).join(", ")} och ${namn[namn.length - 1]}` : namn[0];
+
   return (
-    <p className="border-t border-ink/15 pt-4 text-sm text-ink-muted">
-      Strecken i tabellen är {saknas.map((n) => etiketter[n] ?? n).join(", ")} — de mäts inte
-      ännu och redovisas därför inte som noll. En nolla här hade betytt att det inte hände
-      något; ett streck betyder att vi inte räknar det.
+    <p className="mt-6 text-[0.9375rem] text-ink-muted">
+      {lista.charAt(0).toUpperCase() + lista.slice(1)} mäts inte ännu och står därför som streck,
+      inte som noll.
     </p>
   );
 }

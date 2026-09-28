@@ -2,7 +2,8 @@
 
 import { CreditCard, Loader2, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { btnPrimary, btnSecondary } from "@/components/ui";
+import { Badge, Sektion, btnPrimary, btnSecondary, etikett, meta } from "@/components/ui";
+import { cn } from "@/lib/utils";
 import { hamtaBetalsatt, sparaBetalsatt, taBortBetalsatt } from "@/lib/actions/betalsatt";
 import {
   TESTKORT,
@@ -99,7 +100,7 @@ export function Betalsatt() {
       // Kortnumret och CVC kastas här, inte när formuläret stängs: stängningen
       // är ett annat klick och kan hoppas över.
       nollstall();
-      setKlart("Betalsättet är sparat. Inget har debiterats — testläge.");
+      setKlart("Betalsättet är sparat. Inget har debiterats, eftersom det är testläge.");
     } catch (orsak) {
       setFel(orsak instanceof Error ? orsak.message : "Kunde inte spara betalsättet.");
     } finally {
@@ -124,38 +125,39 @@ export function Betalsatt() {
     }
   }
 
+  // Sektionen omsluter även laddningsläget, så att rubriken inte hoppar in
+  // när kortet väl är hämtat.
   if (befintligt === undefined) {
-    return <div className="h-24 animate-pulse rounded-card bg-ink/[0.055]" aria-busy="true" />;
+    return (
+      <Sektion title="Betalsätt">
+        <div className="h-24 animate-pulse rounded-card bg-ink/[0.055]" aria-busy="true" />
+      </Sektion>
+    );
   }
 
   return (
+    <Sektion title="Betalsätt" action={<Badge tone="warn">Testläge</Badge>}>
     <div className="grid gap-4">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <h2 className="kicker text-mineral">Betalsätt</h2>
-        <span className="rounded-input border border-warning/40 bg-warning/10 px-2 py-0.5 text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-warning">
-          Testläge
-        </span>
-      </div>
-
-      <p className="max-w-[62ch] text-[0.875rem] leading-6 text-ink-muted">
-        Ingen betalväxel är inkopplad ännu. Flödet nedan är det riktiga —
-        formulär, validering och felväg — men <strong className="font-semibold">
-        ingenting debiteras</strong>, och bara testkort tas emot. Skriv aldrig in
-        ett riktigt kortnummer här.
+      {/* EN mening: det användaren måste veta innan hen skriver något. Stycket
+          som stod här beskrev dessutom flödet ("formulär, validering och
+          felväg"), vilket är sidan som talar om sig själv. */}
+      <p className="max-w-[62ch] text-[0.9375rem] leading-6 text-ink-muted">
+        Vi debiterar ingenting och tar bara emot testkort, så skriv aldrig in ett riktigt
+        kortnummer här.
       </p>
 
       {befintligt ? (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-card border border-ink/15 bg-paper2/50 px-4 py-3.5">
-          <CreditCard className="h-5 w-5 shrink-0 text-mineral" aria-hidden />
+        // Ingen platta under kortraden: knapparna är bg-paper2 och försvann
+        // mot en paper2-yta. Hårlinjen räcker för att göra raden till ett objekt.
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-card border border-ink/15 px-4 py-3.5">
+          <CreditCard className="h-5 w-5 shrink-0 text-ink-subtle" aria-hidden />
           <span className="text-[0.9375rem] text-ink">
             {befintligt.brand} •••• {befintligt.last4}
           </span>
-          <span className="text-[0.8125rem] text-mineral">
+          <span className={cn(meta, "num")}>
             Giltigt t.o.m. {String(befintligt.exp_month).padStart(2, "0")}/{befintligt.exp_year}
           </span>
-          {befintligt.is_test ? (
-            <span className="text-[0.75rem] uppercase tracking-[0.14em] text-warning">Test</span>
-          ) : null}
+          {befintligt.is_test ? <Badge tone="warn">Testkort</Badge> : null}
           <span className="ml-auto flex gap-2">
             <button
               type="button"
@@ -163,7 +165,7 @@ export function Betalsatt() {
                 setOppen(true);
                 setKlart(null);
               }}
-              className="focus-ring rounded-input px-3 py-1.5 text-[0.8125rem] text-ink-muted hover:bg-paper2 hover:text-ink"
+              className={btnSecondary}
             >
               Byt kort
             </button>
@@ -171,9 +173,9 @@ export function Betalsatt() {
               type="button"
               onClick={() => void taBort()}
               disabled={busy}
-              className="focus-ring inline-flex items-center gap-1.5 rounded-input px-3 py-1.5 text-[0.8125rem] text-danger hover:bg-danger/10"
+              className={btnSecondary}
             >
-              <Trash2 className="h-3.5 w-3.5" aria-hidden />
+              <Trash2 className="h-4 w-4" aria-hidden />
               Ta bort
             </button>
           </span>
@@ -187,7 +189,7 @@ export function Betalsatt() {
       )}
 
       {oppen ? (
-        <form onSubmit={spara} className="rounded-panel border border-ink/15 bg-paper2/40 p-5">
+        <form onSubmit={spara} className="rounded-panel border border-ink/15 p-5">
           <div className="grid grid-cols-12 gap-x-4 gap-y-4">
             <Falt
               label="Kortnummer"
@@ -249,24 +251,27 @@ export function Betalsatt() {
               hända. Numren är Stripes publicerade testnummer och kan inte
               debitera någon. */}
           <div className="mt-6 border-t border-ink/15 pt-4">
-            <p className="kicker text-mineral">Kort att prova med</p>
-            <ul className="mt-3 grid gap-1.5">
+            <p id="testkort-etikett" className={etikett}>
+              Kort att prova med
+            </p>
+            {/* Kortnumret är ett maskin-id och får mono; resten är brödtext. */}
+            <ul aria-labelledby="testkort-etikett" className="mt-2 grid gap-1">
               {TESTKORT.map((k) => (
-                <li key={k.nummer} className="flex flex-wrap items-baseline gap-x-3 text-[0.8125rem]">
+                <li key={k.nummer} className="flex flex-wrap items-center gap-x-3 text-[0.9375rem]">
                   <button
                     type="button"
                     onClick={() => setNummer(k.nummer)}
-                    className="focus-ring rounded-input font-mono text-ink underline underline-offset-4 hover:text-ochre"
+                    className="focus-ring inline-flex min-h-11 items-center rounded-input font-mono text-[0.8125rem] text-ink underline underline-offset-4 hover:text-ochre"
                   >
                     {formateraKortnummer(k.nummer)}
                   </button>
-                  <span className="text-mineral">
-                    {k.marke} — {k.not}
+                  <span className="text-ink-muted">
+                    {k.marke}, {k.not}
                   </span>
                 </li>
               ))}
             </ul>
-            <p className="mt-3 text-[0.8125rem] leading-5 text-ink-subtle">
+            <p className="mt-2 max-w-[62ch] text-[0.9375rem] leading-6 text-ink-muted">
               Vilken framtida giltighetstid och vilken CVC som helst fungerar.
             </p>
           </div>
@@ -274,16 +279,17 @@ export function Betalsatt() {
       ) : null}
 
       {klart ? (
-        <p role="status" className="text-[0.875rem] text-moss">
+        <p role="status" className="text-[0.9375rem] text-moss">
           {klart}
         </p>
       ) : null}
       {fel ? (
-        <p role="alert" className="max-w-[62ch] break-words text-[0.875rem] text-danger">
+        <p role="alert" className="max-w-[62ch] break-words text-[0.9375rem] text-danger">
           {fel}
         </p>
       ) : null}
     </div>
+    </Sektion>
   );
 }
 
@@ -304,9 +310,9 @@ function Falt({
 }>) {
   return (
     <label className={`grid gap-2 ${span}`}>
-      <span className="kicker text-mineral">{label}</span>
+      <span className={etikett}>{label}</span>
       <input
-        className="h-12 rounded-input border border-ink/15 bg-paper px-3 text-[16px] focus:border-ochre"
+        className="focus-ring min-h-11 w-full min-w-0 rounded-input border border-ink/15 bg-paper px-3 text-[16px]"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}

@@ -1,9 +1,9 @@
 "use client";
 
-import { Loader2, Mail } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { KONTAKT_MEJL, mejlaOss } from "@/components/marketing/copy";
-import { Rad, Radlista } from "@/components/ui";
+import { Badge, Rad, Radlista, Tomt, btnSecondary, meta } from "@/components/ui";
 import { readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
 
@@ -108,10 +108,17 @@ export function Inkorgar() {
   }
 
   if (fel) {
+    // Felet får en väg vidare. Uppdatera-knappen nedan renderas inte i det här
+    // läget, så utan den här var sidan en återvändsgränd tills man laddade om.
     return (
-      <p role="alert" className="max-w-[62ch] text-[0.9375rem] leading-6 text-danger">
-        {fel}
-      </p>
+      <div>
+        <p role="alert" className="max-w-[62ch] text-[0.9375rem] leading-6 text-danger">
+          {fel}
+        </p>
+        <button type="button" onClick={() => void hamta()} className={cn(btnSecondary, "mt-3")}>
+          Försök igen
+        </button>
+      </div>
     );
   }
 
@@ -120,49 +127,42 @@ export function Inkorgar() {
   return (
     <div className="grid gap-7">
       {inkorgar.length === 0 ? (
-        <div className="rounded-card border border-dashed border-ink/15 bg-paper/45 p-8 text-center">
-          <Mail className="mx-auto h-6 w-6 text-mineral" aria-hidden />
-          <h2 className="mt-4 text-[1.0625rem] font-semibold">Ingen inkorg är kopplad ännu</h2>
-          <p className="mx-auto mt-2 max-w-[52ch] text-[0.9375rem] leading-6 text-ink-muted">
-            Kundtjänstagenterna svarar i chatten redan nu. Ska de läsa och besvara mejl behöver vi
-            koppla er Gmail eller Outlook — det gör vi åt er, eftersom kopplingen kräver ett
-            app-lösenord som aldrig ska passera ett webbformulär.
-          </p>
-          <a
-            href={mejlaOss("Koppla vår inkorg")}
-            className="focus-ring mt-5 inline-flex min-h-11 items-center rounded-input border border-ink/20 px-5 text-[0.9375rem] font-semibold transition-colors hover:border-ink"
-          >
-            Skriv till {KONTAKT_MEJL}
-          </a>
-        </div>
+        // Tomt läge i husets form: en mening och handlingen. Ikonen och den
+        // streckade ramen gjorde det till ett eget litet kort.
+        <Tomt
+          action={
+            <a href={mejlaOss("Koppla vår inkorg")} className={btnSecondary}>
+              Skriv till {KONTAKT_MEJL}
+            </a>
+          }
+        >
+          Ingen inkorg är kopplad. Vi kopplar er Gmail eller Outlook åt er, eftersom kopplingen
+          kräver ett app-lösenord som aldrig ska skrivas in i ett webbformulär.
+        </Tomt>
       ) : (
         <Radlista ariaLabel="Kopplade inkorgar">
-          {/* Fast schema per rad: adress i vänsterspalten, status alltid längst
-              till höger på samma plats. Metaraden och ett eventuellt fel spänner
-              över båda spalterna. */}
+          {/* Radens anatomi: adress, metaraden under, status till höger. Ett
+              eventuellt fel spänner över båda spalterna. */}
           {inkorgar.map((inkorg) => (
             <Rad
               key={inkorg.address ?? Math.random()}
               className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 gap-y-1"
             >
               <span className="min-w-0 break-words text-[0.9375rem] font-semibold">
-                {inkorg.address ?? "—"}
+                {inkorg.address ?? "–"}
               </span>
-              <span
-                className={cn(
-                  "kicker justify-self-end",
-                  inkorg.kan_synka ? "text-moss" : "text-mineral"
-                )}
-              >
-                {inkorg.kan_synka ? "kopplad" : "väntar på koppling"}
+              <span className="justify-self-end">
+                <Badge tone={inkorg.kan_synka ? "good" : "neutral"}>
+                  {inkorg.kan_synka ? "Kopplad" : "Väntar på koppling"}
+                </Badge>
               </span>
-              <p className="col-span-2 text-[0.875rem] leading-6 text-ink-muted">
+              <p className={cn(meta, "col-span-2")}>
                 {[inkorg.provider, inkorg.host, `senaste synk ${nar(inkorg.last_sync_at)}`]
                   .filter(Boolean)
                   .join(" · ")}
               </p>
               {inkorg.last_error ? (
-                <p className="col-span-2 text-[0.875rem] leading-6 text-danger">
+                <p className="col-span-2 text-[0.9375rem] leading-6 text-danger">
                   {inkorg.last_error}
                 </p>
               ) : null}
@@ -174,7 +174,7 @@ export function Inkorgar() {
       <button
         type="button"
         onClick={() => void hamta()}
-        className="focus-ring inline-flex min-h-11 w-fit items-center gap-2 rounded-input border border-ink/20 px-4 text-[0.9375rem] font-medium transition-colors hover:border-ink"
+        className={cn(btnSecondary, "w-fit")}
       >
         {laddar ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
         Uppdatera

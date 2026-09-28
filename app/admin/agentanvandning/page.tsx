@@ -1,4 +1,5 @@
-import { AgentAnvandning, USD_PER_MILJON } from "@/components/admin/AgentAnvandning";
+import { AgentAnvandning } from "@/components/admin/AgentAnvandning";
+import { Sektion, Sidhuvud } from "@/components/ui";
 import { listRuns, unwrap, type RunRow } from "@/lib/data/admin";
 
 export const dynamic = "force-dynamic";
@@ -25,40 +26,54 @@ function arBokforingschatt(run: RunRow): boolean {
   }
 }
 
+/**
+ * Backendens tak per anrop (snajp-support/app/api/admin.py, `min(limit, 200)`).
+ * Utan `limit` gällde standardvärdet 50, och nyckeltalen räknade då bara de 50
+ * senaste körningarna per agenttyp men stod där som totaler.
+ * ponytail: tak 200, ett aggregat-endpoint i backenden om volymen växer förbi det.
+ */
+const TAK = 200;
+
 export default async function Page() {
   const [bokforing, support, ...leadsDelar] = await Promise.all([
-    listRuns("?agent_type=bookkeeping"),
-    listRuns("?agent_type=support"),
-    ...LEADS_TYPER.map((typ) => listRuns(`?agent_type=${typ}`))
+    listRuns(`?agent_type=bookkeeping&limit=${TAK}`),
+    listRuns(`?agent_type=support&limit=${TAK}`),
+    ...LEADS_TYPER.map((typ) => listRuns(`?agent_type=${typ}&limit=${TAK}`))
   ]);
 
   const bok = unwrap(bokforing);
   const sup = unwrap(support);
   const leadsRuns: RunRow[] = [];
   let leadsFel: string | null = null;
+  let leadsVidTaket = false;
   for (const del of leadsDelar) {
     const { data, error } = unwrap(del);
     if (error) leadsFel = error;
+    leadsVidTaket ||= (data?.length ?? 0) >= TAK;
     leadsRuns.push(...(data ?? []));
   }
 
+  // Sektionerna heter som i railen (Iris, Kundtjänst, Kvitton), inte som
+  // agent_type-familjerna: samma agent ska inte ha två namn i samma app.
   const sektioner = [
     {
-      rubrik: "Leads",
+      rubrik: "Iris",
       fel: leadsFel,
       innehall: (
         <AgentAnvandning
           runs={leadsRuns}
+          vidTaket={leadsVidTaket ? TAK : null}
           tomtext="Ingen leadskörning loggad ännu."
         />
       )
     },
     {
-      rubrik: "Support",
+      rubrik: "Kundtjänst",
       fel: sup.error,
       innehall: (
         <AgentAnvandning
           runs={sup.data ?? []}
+          vidTaket={(sup.data?.length ?? 0) >= TAK ? TAK : null}
           tomtext="Ingen supportkörning loggad ännu."
         />
       )
@@ -69,6 +84,7 @@ export default async function Page() {
       innehall: (
         <AgentAnvandning
           runs={bok.data ?? []}
+          vidTaket={(bok.data?.length ?? 0) >= TAK ? TAK : null}
           delning={{
             etikettA: "Underlag",
             etikettB: "Frågor",
@@ -80,28 +96,25 @@ export default async function Page() {
     }
   ];
 
+  // Ingen ingress: att kostnaden är uppskattad står i nyckeltalets etikett, och
+  // prisunderlaget bor i AgentAnvandning.tsx (PRISUNDERLAG).
   return (
     <div>
-      <h1 className="font-display text-4xl italic-disp tighten">Agentanvändning</h1>
-      <p className="mt-4 max-w-[70ch] text-[15px] leading-7 text-ink-muted">
-        Hur mycket varje agent används och vad AI-anropen uppskattningsvis
-        kostar, per kund. Kostnaden räknas på Vertex listpris för Gemini 2.5
-        Flash (${USD_PER_MILJON.in}/M in, ${USD_PER_MILJON.ut}/M ut, avläst
-        2026-09-15) — riktmärke, inte Googles faktura.
-      </p>
+      <Sidhuvud title="Agentanvändning" />
 
-      {sektioner.map((sektion) => (
-        <section key={sektion.rubrik} className="mt-12">
-          <h2 className="font-display text-2xl tighten">{sektion.rubrik}</h2>
-          {sektion.fel ? (
-            <p role="alert" className="mt-4 max-w-[70ch] break-words text-[15px] text-danger">
-              {sektion.fel}
-            </p>
-          ) : (
-            sektion.innehall
-          )}
-        </section>
-      ))}
+      <div className="mt-8">
+        {sektioner.map((sektion) => (
+          <Sektion key={sektion.rubrik} title={sektion.rubrik}>
+            {sektion.fel ? (
+              <p role="alert" className="max-w-[70ch] break-words text-[15px] text-danger">
+                {sektion.fel}
+              </p>
+            ) : (
+              sektion.innehall
+            )}
+          </Sektion>
+        ))}
+      </div>
     </div>
   );
 }
