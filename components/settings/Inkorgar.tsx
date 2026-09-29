@@ -66,7 +66,7 @@ const EPOST = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 /** Var app-lösenordet skapas, per leverantör — sidan kunden faktiskt behöver. */
 const LOSENORDSGUIDE: Record<Guide, { lank?: { href: string; text: string }; steg: string[]; not?: string }> = {
   google: {
-    lank: { href: "https://myaccount.google.com/apppasswords", text: "Öppna Googles sida för app-lösenord" },
+    lank: { href: "https://myaccount.google.com/apppasswords", text: "Öppna Google-kontot" },
     steg: [
       "Logga in med kontot som tar emot kundmailen.",
       "Skriv Snajp som namn och tryck Skapa.",
@@ -75,7 +75,7 @@ const LOSENORDSGUIDE: Record<Guide, { lank?: { href: string; text: string }; ste
     not: "Syns inte sidan måste tvåstegsverifiering slås på i Google-kontot först."
   },
   apple: {
-    lank: { href: "https://account.apple.com/account/manage", text: "Öppna Apples kontosida" },
+    lank: { href: "https://account.apple.com/account/manage", text: "Öppna Apple-kontot" },
     steg: [
       "Välj Inloggning och säkerhet → Appspecifika lösenord.",
       "Skapa ett lösenord med namnet Snajp.",
@@ -83,7 +83,7 @@ const LOSENORDSGUIDE: Record<Guide, { lank?: { href: string; text: string }; ste
     ]
   },
   microsoft: {
-    lank: { href: "https://account.microsoft.com/security", text: "Öppna Microsofts säkerhetssida" },
+    lank: { href: "https://account.microsoft.com/security", text: "Öppna Microsoft-kontot" },
     steg: [
       "Välj Avancerade säkerhetsalternativ → Applösenord (kräver tvåstegsverifiering).",
       "Skapa ett applösenord och kopiera det."
@@ -159,10 +159,12 @@ export function Inkorgar() {
   }, [hamta]);
 
   useEffect(() => {
-    if (userEmail && !adress) setAdress(userEmail);
+    // Inte en adress som redan är kopplad — då är förifyllningen en fälla.
+    const redanKopplad = svar?.mailboxes.some((m) => m.address === userEmail?.toLowerCase());
+    if (userEmail && !adress && svar && !redanKopplad) setAdress(userEmail);
     // Bara förifyllning: kundens egen inmatning ska aldrig skrivas över.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userEmail]);
+  }, [userEmail, svar]);
 
   // Vem driver adressens mejl? Frågas efter en kort paus i skrivandet, så
   // att steg 2 kan visa rätt leverantörs lösenordssida. Egen domän slås upp
@@ -425,7 +427,7 @@ export function Inkorgar() {
                       href={guide.lank.href}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className={cn(btnSecondary, btnLiten, "w-fit border border-ink/15 hover:border-ink/30")}
+                      className={cn(btnSecondary, btnLiten, "w-fit whitespace-nowrap border border-ink/15 hover:border-ink/30")}
                     >
                       <ExternalLink className="h-3.5 w-3.5" aria-hidden />
                       {guide.lank.text}
@@ -504,7 +506,7 @@ function Steg({
   children
 }: Readonly<{ nummer: number; rubrik: string; children: React.ReactNode }>) {
   return (
-    <li className="grid grid-cols-[2rem_minmax(0,1fr)] gap-x-3 py-5 first:pt-0">
+    <li className="grid grid-cols-[1.25rem_minmax(0,1fr)] gap-x-2 py-5 first:pt-0 sm:grid-cols-[2rem_minmax(0,1fr)] sm:gap-x-3">
       <span className="text-[1.25rem] font-semibold leading-7 text-mineral tabular-nums" aria-hidden>
         {nummer}
       </span>
