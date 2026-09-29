@@ -115,6 +115,14 @@ export default async function Page() {
         <Link href="/integritetspolicy">integritetspolicyn</Link>.
       </p>
 
+      <h2>Distansavtal och ångerrätt</h2>
+      <p>
+        Avtalet ingås på distans. Vad det innebär — och varför distansavtalslagens ångerrätt
+        inte gäller företagsavtal — beskrivs på sidan{" "}
+        <Link href="/angerratt">Distansavtal och ångerrätt</Link>, som är en del av
+        förhandsinformationen vid registreringen.
+      </p>
+
       <h2>Tillämplig lag</h2>
       <p>Svensk rätt gäller.</p>
     </JuridiskSida>

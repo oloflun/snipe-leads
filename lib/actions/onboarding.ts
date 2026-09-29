@@ -60,6 +60,21 @@ export type OnboardingInput = {
    * måste kunna bära.
    */
   notiser?: boolean;
+  /**
+   * Villkorskryssrutan i sista steget: användarvillkoren och informationen om
+   * distansavtalslagen och ångerrätt (/villkor och /angerratt). Krävs för ALLA
+   * — även testarbetsytor använder tjänsten. Tidpunkten sätts på serversidan
+   * och skrivs in i affärskontexten som beviskedja; en boolean från klienten
+   * duger som svar men inte som klockslag.
+   */
+  villkorGodkanda?: boolean;
+  /**
+   * Faktureringsadressen — dit fakturan går efter gratisperioden. Krävs för
+   * riktiga kunder; null för testarbetsytor, som inte har något bolag att
+   * fakturera. Landar i kundregistrets fält `faktureringsadress`
+   * (Admin → Kunder → Data), samma fält som adminvyn redigerar.
+   */
+  faktureringsadress?: { gata: string; postnummer: string; ort: string } | null;
 };
 
 export type OnboardingActionResult = {
@@ -165,6 +180,31 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
   const kontaktRoll = (input.kontaktRoll ?? "").trim();
   const kontaktTelefon = (input.kontaktTelefon ?? "").trim();
 
+  // Villkoren måste vara godkända — kryssrutan finns i klienten, men det som
+  // skyddar är alltid den här sidan. Utan godkännande finns inget avtal att
+  // starta en gratisperiod på.
+  if (!input.villkorGodkanda) {
+    return {
+      success: false,
+      error: "Kryssa i att ni godkänner villkoren för att kunna starta gratisperioden."
+    };
+  }
+
+  // Faktureringsadressen: krävs för riktiga kunder, hoppas över för
+  // testarbetsytor av samma skäl som organisationsnumret — ett obligatoriskt
+  // fält utan riktigt bolag bakom fylls med påhitt.
+  const faktGata = (input.faktureringsadress?.gata ?? "").trim();
+  const faktPostnr = (input.faktureringsadress?.postnummer ?? "").trim();
+  const faktOrt = (input.faktureringsadress?.ort ?? "").trim();
+  if (!input.testkund && (!faktGata || !faktPostnr || !faktOrt)) {
+    return {
+      success: false,
+      error: "Fyll i faktureringsadressen — dit går fakturan efter gratisperioden."
+    };
+  }
+  const faktureringsadress =
+    faktGata && faktPostnr && faktOrt ? `${faktGata}, ${faktPostnr} ${faktOrt}` : null;
+
   const { arPaketId } = await import("@/lib/pricing");
   const paket = input.paket && arPaketId(input.paket) ? input.paket : null;
   if (input.paket && !paket) {
@@ -193,7 +233,11 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
       // fliken Kunder & Data härleder redan andra fält härifrån.
       `Kontaktperson: ${kontaktNamn}${kontaktRoll ? ` (${kontaktRoll})` : ""} — ${kontaktMejl}${
         kontaktTelefon ? `, ${kontaktTelefon}` : ""
-      }`
+      }`,
+      faktureringsadress ? `Faktureringsadress: ${faktureringsadress}` : null,
+      // Villkorsgodkännandet med serverns klockslag — beviskedjan för att
+      // avtalet ingicks, i det lager som aldrig tappas bort.
+      `Villkoren godkända vid registreringen: ${new Date().toISOString().slice(0, 10)} (användarvillkoren samt informationen om distansavtalslagen och ångerrätt)`
     ]
       .filter(Boolean)
       .join("\n"),
@@ -374,6 +418,7 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
           const { registreraKunduppgifter } = await import("@/lib/snajp/kundregister");
           await registreraKunduppgifter(kopplad.slug, {
             orgnr: formateraOrgnr(input.orgnr),
+            faktureringsadress,
             kontakt: {
               namn: kontaktNamn,
               roll: kontaktRoll || null,

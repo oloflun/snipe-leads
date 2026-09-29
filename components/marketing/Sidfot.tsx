@@ -44,6 +44,9 @@ export function Sidfot() {
             <Link href="/villkor" className="focus-ring hover:text-ink">
               Användarvillkor
             </Link>
+            <Link href="/angerratt" className="focus-ring hover:text-ink">
+              Ångerrätt
+            </Link>
             <Link href="/cookies" className="focus-ring hover:text-ink">
               Cookies
             </Link>

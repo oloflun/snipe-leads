@@ -53,6 +53,7 @@ const SIDOR: { vag: string; prioritet: number; frekvens: MetadataRoute.Sitemap[n
   { vag: "/vart-team", prioritet: 0.5, frekvens: "monthly" },
   { vag: "/integritetspolicy", prioritet: 0.3, frekvens: "yearly" },
   { vag: "/villkor", prioritet: 0.3, frekvens: "yearly" },
+  { vag: "/angerratt", prioritet: 0.3, frekvens: "yearly" },
   { vag: "/cookies", prioritet: 0.3, frekvens: "yearly" }
 ];
 

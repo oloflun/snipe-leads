@@ -82,6 +82,14 @@ export function OnboardingWizard({
   // Steg 4 — paketet. Duo förvalt: det är paketet vi vill sälja (pricing.ts).
   const [paket, setPaket] = useState<Paket["id"]>("duo");
   const [notiser, setNotiser] = useState(true);
+  // Faktureringsadressen — dit fakturan går efter gratisperioden. Krävs för
+  // riktiga kunder; en testarbetsyta har inget bolag att fakturera.
+  const [faktGata, setFaktGata] = useState("");
+  const [faktPostnr, setFaktPostnr] = useState("");
+  const [faktOrt, setFaktOrt] = useState("");
+  // Villkorsgodkännandet. Startar okryssad med flit — ett förkryssat samtycke
+  // är inget samtycke.
+  const [villkor, setVillkor] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -117,6 +125,15 @@ export function OnboardingWizard({
       if (!kontaktMejl.includes("@")) return "Fyll i kontaktpersonens e-postadress.";
       return null;
     }
+    if (vilket === 3) {
+      if (!testkund) {
+        if (!faktGata.trim() || !faktPostnr.trim() || !faktOrt.trim())
+          return "Fyll i faktureringsadressen — dit går fakturan efter gratisperioden.";
+      }
+      if (!villkor)
+        return "Kryssa i att ni godkänner villkoren för att kunna starta gratisperioden.";
+      return null;
+    }
     return null;
   }
 
@@ -140,7 +157,11 @@ export function OnboardingWizard({
   }
 
   function skickaIn() {
-    setError(null);
+    // Sista steget validerar som de andra — kryssrutan och adressen är inte
+    // dekor, och serversidan gör om samma kontroll för den som kringgår det.
+    const fel = stegFel(3);
+    setError(fel);
+    if (fel) return;
     startTransition(async () => {
       const result = await saveBusinessContext({
         orgnr: testkund ? "" : orgnr,
@@ -154,7 +175,11 @@ export function OnboardingWizard({
         kontaktTelefon,
         paket,
         testkund,
-        notiser
+        notiser,
+        villkorGodkanda: villkor,
+        faktureringsadress: testkund
+          ? null
+          : { gata: faktGata, postnummer: faktPostnr, ort: faktOrt }
       });
       if (!result.success) {
         setError(result.error ?? "Kunde inte spara. Försök igen.");
@@ -415,9 +440,8 @@ export function OnboardingWizard({
               }}
             >
               <p className="mt-4 max-w-[62ch] text-[15px] leading-[1.65] text-ink-muted">
-                <span className="font-semibold text-ink">Först två månader gratis</span> —
-                ingen betalning nu, och vi hör av oss i god tid innan perioden tar
-                slut. Byta paket går när som helst under Inställningar → Plan.
+                Alla paket börjar med två månader gratis — inga betalningsuppgifter
+                nu. Byta paket går när som helst under Inställningar → Plan.
               </p>
 
               <div className="mt-8 divide-y divide-ink/10 overflow-hidden rounded-card border border-ink/15 bg-paper">
@@ -489,6 +513,93 @@ export function OnboardingWizard({
                 </a>{" "}
                 — den öppnas i en ny flik, det här flödet står kvar.
               </p>
+
+              {/* Faktureringsadressen — bara för riktiga kunder. En testarbetsyta
+                  har inget bolag att fakturera, och ett obligatoriskt adressfält
+                  där hade bara lärt folk att skriva påhittade adresser. */}
+              {!testkund ? (
+                <div className="mt-8 rounded-panel border border-ink/15 bg-paper2/50 p-5">
+                  <p className="kicker text-mineral">Faktureringsadress</p>
+                  <p className="mt-2 text-[14px] leading-6 text-ink-muted">
+                    Hit går fakturan — först efter gratisperioden. Inga kortuppgifter
+                    behövs; vi fakturerar i efterhand.
+                  </p>
+                  <div className="mt-4 grid grid-cols-12 gap-y-5 md:gap-x-6">
+                    <Falt
+                      label="Gatuadress"
+                      hint="Postadressen fakturan ställs till."
+                      span="md:col-span-12"
+                      value={faktGata}
+                      onChange={setFaktGata}
+                      placeholder="Storgatan 1"
+                      autoComplete="street-address"
+                    />
+                    <Falt
+                      label="Postnummer"
+                      hint="Fem siffror."
+                      span="md:col-span-4"
+                      value={faktPostnr}
+                      onChange={setFaktPostnr}
+                      placeholder="111 22"
+                      inputMode="numeric"
+                      autoComplete="postal-code"
+                    />
+                    <Falt
+                      label="Ort"
+                      hint="Postorten."
+                      span="md:col-span-8"
+                      value={faktOrt}
+                      onChange={setFaktOrt}
+                      placeholder="Stockholm"
+                      autoComplete="address-level2"
+                    />
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Gratisperioden + villkorsgodkännandet. Kryssrutan startar
+                  okryssad — ett förkryssat samtycke är inget samtycke — och
+                  länkarna öppnas i nya flikar så att flödet står kvar. */}
+              <div className="mt-8 rounded-panel border border-ochre/40 bg-ochre/[0.07] p-5">
+                <p className="kicker text-warning">Testa gratis i 2 månader</p>
+                <p className="mt-2 max-w-[58ch] text-[14px] leading-6 text-ink-muted">
+                  Gratisperioden börjar direkt och löper i två kalendermånader.
+                  Ingen bindningstid, inget kort — vi hör av oss i god tid innan
+                  perioden tar slut, och att sluta kostar ingenting.
+                </p>
+                <label className="mt-4 flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={villkor}
+                    onChange={(e) => {
+                      setVillkor(e.target.checked);
+                      if (e.target.checked) setError(null);
+                    }}
+                    className="focus-ring mt-1 h-4 w-4 shrink-0"
+                  />
+                  <span className="text-[14px] leading-6 text-ink-muted">
+                    Jag godkänner{" "}
+                    <a
+                      href="/villkor"
+                      target="_blank"
+                      rel="noopener"
+                      className="focus-ring rounded-input font-medium text-ink underline underline-offset-4 hover:text-warning"
+                    >
+                      användarvillkoren
+                    </a>{" "}
+                    och har tagit del av{" "}
+                    <a
+                      href="/angerratt"
+                      target="_blank"
+                      rel="noopener"
+                      className="focus-ring rounded-input font-medium text-ink underline underline-offset-4 hover:text-warning"
+                    >
+                      informationen om distansavtalslagen och ångerrätt
+                    </a>
+                    .
+                  </span>
+                </label>
+              </div>
 
               <div className="mt-8 rounded-panel border border-ink/15 bg-paper2/50 p-5">
                 <p className="kicker text-mineral">Notiser</p>
