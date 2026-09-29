@@ -1,7 +1,9 @@
 "use client";
 
-import { Link2, Loader2, Mail, Trash2 } from "lucide-react";
+import { ExternalLink, Link2, Loader2, Mail, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { useArbetsvag } from "@/components/AppShell";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { KONTAKT_MEJL, mejlaOss } from "@/components/marketing/copy";
 import { Rad, Radlista, btnLiten, btnPrimary, btnSecondary } from "@/components/ui";
@@ -25,6 +27,13 @@ import { cn } from "@/lib/utils";
  * lagras sedan Fernet-krypterat i backenden (migration 077) — aldrig i
  * klartext och aldrig i den här klientens state längre än inskickningen.
  * Miljövariabelvägen finns kvar för kopplingar vi förvaltar åt kunder.
+ *
+ * ## Guiden i tre steg (2026-09-29)
+ *
+ * Adress → app-lösenord → koppla. Leverantören upptäcks av backenden
+ * (`/inbox/mailboxes/upptack`: fri domän ur tabellen, egen domän ur
+ * MX-posten), så steg 2 visar exakt var lösenordet skapas. Efter kopplingen
+ * körs en första synk direkt; därefter hämtar pollern nya mail själv.
  */
 
 type Inkorg = {
@@ -40,22 +49,54 @@ type Inkorg = {
 
 type Svar = {
   mailboxes: Inkorg[];
-  global_konfigurerad: boolean;
   kan_synka: boolean;
 };
 
-//: Domäner formuläret själv känner igen — samma lista som backendens
-//: DOMAN_TILL_IMAP (app/email_pipeline/poller.py). Övriga adresser får ett
-//: extra fält för IMAP-värden i stället för ett bakslag efter inskick.
-const KANDA_DOMANER = [
-  "gmail.com", "googlemail.com",
-  "outlook.com", "hotmail.com", "hotmail.se", "live.com", "live.se", "msn.com",
-  "icloud.com", "me.com", "mac.com"
-];
+type Guide = "google" | "microsoft" | "apple" | "annan";
 
-function domanFor(adress: string): string {
-  return adress.split("@")[1]?.trim().toLowerCase() ?? "";
-}
+type Upptackt = {
+  provider: string | null;
+  host: string | null;
+  leverantor: string | null;
+  guide: Guide;
+};
+
+const EPOST = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+/** Var app-lösenordet skapas, per leverantör — sidan kunden faktiskt behöver. */
+const LOSENORDSGUIDE: Record<Guide, { lank?: { href: string; text: string }; steg: string[]; not?: string }> = {
+  google: {
+    lank: { href: "https://myaccount.google.com/apppasswords", text: "Öppna Googles sida för app-lösenord" },
+    steg: [
+      "Logga in med kontot som tar emot kundmailen.",
+      "Skriv Snajp som namn och tryck Skapa.",
+      "Kopiera koden på 16 tecken."
+    ],
+    not: "Syns inte sidan måste tvåstegsverifiering slås på i Google-kontot först."
+  },
+  apple: {
+    lank: { href: "https://account.apple.com/account/manage", text: "Öppna Apples kontosida" },
+    steg: [
+      "Välj Inloggning och säkerhet → Appspecifika lösenord.",
+      "Skapa ett lösenord med namnet Snajp.",
+      "Kopiera lösenordet."
+    ]
+  },
+  microsoft: {
+    lank: { href: "https://account.microsoft.com/security", text: "Öppna Microsofts säkerhetssida" },
+    steg: [
+      "Välj Avancerade säkerhetsalternativ → Applösenord (kräver tvåstegsverifiering).",
+      "Skapa ett applösenord och kopiera det."
+    ],
+    not: "Microsoft har stängt lösenordsinloggning för många konton, och företagskonton i Microsoft 365 tillåter den oftast inte. Nekas inloggningen i steg 3 hjälper vi er koppla på annat sätt."
+  },
+  annan: {
+    steg: [
+      "Logga in hos er mejlleverantör.",
+      "Skapa ett app-lösenord för IMAP (heter ibland applösenord eller e-postlösenord), eller använd kontots vanliga lösenord om leverantören tillåter det."
+    ]
+  }
+};
 
 function nar(varde: string | null): string {
   if (!varde) return "aldrig";
@@ -69,22 +110,9 @@ function nar(varde: string | null): string {
   return `${Math.round(timmar / 24)} dagar sedan`;
 }
 
-/** Var app-lösenordet skapas, per leverantör — länken kunden faktiskt behöver. */
-function losenordshjalp(doman: string): string {
-  if (["gmail.com", "googlemail.com"].includes(doman)) {
-    return "Skapa app-lösenordet på myaccount.google.com → Säkerhet → Applösenord (kräver tvåstegsverifiering).";
-  }
-  if (["icloud.com", "me.com", "mac.com"].includes(doman)) {
-    return "Skapa app-lösenordet på account.apple.com → Inloggning och säkerhet → Appspecifika lösenord.";
-  }
-  if (doman) {
-    return "Outlook/Hotmail: använd ditt vanliga lösenord, eller ett app-lösenord om kontot har tvåstegsverifiering.";
-  }
-  return "";
-}
-
 export function Inkorgar() {
   const { userEmail, arLasare } = useDashboard();
+  const vag = useArbetsvag();
   const [svar, setSvar] = useState<Svar | null>(null);
   const [laddar, setLaddar] = useState(true);
   const [fel, setFel] = useState<string | null>(null);
@@ -98,6 +126,8 @@ export function Inkorgar() {
   const [formFel, setFormFel] = useState<string | null>(null);
   const [klart, setKlart] = useState<string | null>(null);
   const [kopplarUr, setKopplarUr] = useState<string | null>(null);
+  const [upptackt, setUpptackt] = useState<Upptackt | null>(null);
+  const [soker, setSoker] = useState(false);
 
   const hamta = useCallback(async () => {
     setLaddar(true);
@@ -115,7 +145,6 @@ export function Inkorgar() {
       }
       setSvar({
         mailboxes: kropp?.mailboxes ?? [],
-        global_konfigurerad: Boolean(kropp?.global_konfigurerad),
         kan_synka: Boolean(kropp?.kan_synka)
       });
     } catch (caught) {
@@ -135,8 +164,40 @@ export function Inkorgar() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userEmail]);
 
-  const doman = domanFor(adress);
-  const behoverVard = Boolean(doman) && !KANDA_DOMANER.includes(doman);
+  // Vem driver adressens mejl? Frågas efter en kort paus i skrivandet, så
+  // att steg 2 kan visa rätt leverantörs lösenordssida. Egen domän slås upp
+  // via MX-posten i backenden — kunden ska aldrig behöva veta vad IMAP är.
+  useEffect(() => {
+    const ren = adress.trim().toLowerCase();
+    if (!EPOST.test(ren)) {
+      setUpptackt(null);
+      setSoker(false);
+      return;
+    }
+    let avbruten = false;
+    setSoker(true);
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch(
+          `/api/snajp-support/inbox/mailboxes/upptack?adress=${encodeURIComponent(ren)}`,
+          { cache: "no-store" }
+        );
+        const kropp = await readJsonBody<Upptackt>(response);
+        if (!avbruten) setUpptackt(response.ok && kropp ? kropp : { provider: null, host: null, leverantor: null, guide: "annan" });
+      } catch {
+        if (!avbruten) setUpptackt({ provider: null, host: null, leverantor: null, guide: "annan" });
+      } finally {
+        if (!avbruten) setSoker(false);
+      }
+    }, 450);
+    return () => {
+      avbruten = true;
+      clearTimeout(timer);
+    };
+  }, [adress]);
+
+  const behoverVard = upptackt !== null && !upptackt.host;
+  const guide = upptackt ? LOSENORDSGUIDE[upptackt.guide] : null;
 
   async function koppla(event: React.FormEvent) {
     event.preventDefault();
@@ -159,7 +220,26 @@ export function Inkorgar() {
       }
       // Lösenordet har gjort sitt och ska inte ligga kvar i minnet.
       setLosenord("");
-      setKlart("Inkorgen är kopplad! Tryck på Synka inkorg i Kundtjänst så hämtas era olästa mail.");
+      await hamta();
+      // Första synken körs direkt — kunden ska inte behöva leta upp en knapp
+      // till. Därefter hämtar backendens poller nya mail av sig själv.
+      setKlart("Inkorgen är kopplad. Hämtar era olästa mail …");
+      try {
+        const synk = await fetch("/api/snajp-support/inbox/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" }
+        });
+        const resultat = await readJsonBody<{ fetched?: number; error?: string | null }>(synk);
+        setKlart(
+          !synk.ok || resultat?.error
+            ? "Inkorgen är kopplad. Första hämtningen gick inte igenom just nu, men nya mail hämtas automatiskt."
+            : resultat?.fetched
+              ? `Inkorgen är kopplad och ${resultat.fetched} olästa mail är hämtade. Agenten sorterar dem nu, och nya mail hämtas automatiskt.`
+              : "Inkorgen är kopplad. Inga olästa mail just nu. Nya mail hämtas automatiskt."
+        );
+      } catch {
+        setKlart("Inkorgen är kopplad. Nya mail hämtas automatiskt.");
+      }
       await hamta();
     } catch (caught) {
       setFormFel(caught instanceof Error ? caught.message : "Kopplingen misslyckades.");
@@ -268,94 +348,141 @@ export function Inkorgar() {
       )}
 
       {klart ? (
-        <p role="status" className="max-w-[62ch] text-[0.9375rem] leading-6 text-moss">
-          {klart}
-        </p>
+        <div role="status" className="grid max-w-[62ch] gap-2">
+          <p className="text-[0.9375rem] leading-6 text-moss">{klart}</p>
+          <Link
+            href={vag("/dashboard/support")}
+            className="focus-ring w-fit rounded-input text-[0.9375rem] font-medium underline underline-offset-4 hover:text-ochre"
+          >
+            Gå till Kundtjänst
+          </Link>
+        </div>
       ) : null}
 
       {arLasare ? null : (
+        /* Guide i tre steg, NOT ett fritt formulär: kunden ska aldrig undra
+           vad nästa sak att göra är. Steg 2 byter innehåll efter leverantören
+           som steg 1 upptäckte. */
         <form onSubmit={(event) => void koppla(event)} className="border-t border-ink/15 pt-6">
           <h2 className="kicker text-mineral">
-            {inkorgar.length === 0 ? "Koppla er inkorg" : "Koppla en inkorg till"}
+            {inkorgar.length === 0 ? "Koppla er inkorg i tre steg" : "Koppla en inkorg till"}
           </h2>
-          <p className="mt-3 max-w-[58ch] text-[0.9375rem] leading-6 text-ink-muted">
-            Ange adressen dit kundmailen kommer och ett app-lösenord. Vi provar inloggningen
-            direkt och sparar lösenordet krypterat — det visas aldrig igen.
-          </p>
 
-          <div className="mt-4 grid max-w-[420px] gap-4">
-            <label className="grid gap-1.5">
-              <span className="text-[0.875rem] font-medium">E-postadress</span>
+          <ol className="mt-4 grid max-w-[560px] divide-y divide-ink/10">
+            <Steg nummer={1} rubrik="Adressen dit kundmailen kommer">
               <input
                 type="email"
+                aria-label="E-postadress"
                 value={adress}
                 onChange={(event) => setAdress(event.target.value)}
                 required
                 autoComplete="email"
-                placeholder="er.adress@gmail.com"
-                className="focus-ring min-h-11 rounded-input border border-ink/15 bg-paper px-3 text-[16px]"
+                placeholder="info@erforetag.se"
+                className="focus-ring min-h-11 w-full rounded-input border border-ink/15 bg-paper px-3 text-[16px]"
               />
-            </label>
+              <p className="text-[0.875rem] leading-6 text-ink-muted" aria-live="polite">
+                {soker ? (
+                  "Letar upp er mejlleverantör …"
+                ) : upptackt?.host ? (
+                  <>
+                    <strong className="font-semibold text-ink">{upptackt.leverantor}</strong>, servern
+                    hittades automatiskt.
+                  </>
+                ) : upptackt ? (
+                  "Vi känner inte igen leverantören. Ange mejlservern nedan."
+                ) : null}
+              </p>
+              {behoverVard ? (
+                <label className="grid gap-1.5">
+                  <span className="text-[0.875rem] font-medium">IMAP-server</span>
+                  <input
+                    type="text"
+                    value={imapVard}
+                    onChange={(event) => setImapVard(event.target.value)}
+                    required
+                    placeholder={`mail.${adress.split("@")[1] ?? "erforetag.se"}`}
+                    className="focus-ring min-h-11 rounded-input border border-ink/15 bg-paper px-3 text-[16px]"
+                  />
+                  <span className="text-[0.8125rem] leading-5 text-ink-subtle">
+                    Står i er mejlleverantörs inställningar för IMAP, eller{" "}
+                    <a
+                      href={mejlaOss("Koppla vår inkorg")}
+                      className="focus-ring rounded-input underline underline-offset-4 hover:text-ochre"
+                    >
+                      skriv till {KONTAKT_MEJL}
+                    </a>{" "}
+                    så hjälper vi till.
+                  </span>
+                </label>
+              ) : null}
+            </Steg>
 
-            <label className="grid gap-1.5">
-              <span className="text-[0.875rem] font-medium">App-lösenord</span>
+            <Steg nummer={2} rubrik="Skapa ett app-lösenord">
+              {guide ? (
+                <>
+                  {guide.lank ? (
+                    <a
+                      href={guide.lank.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={cn(btnSecondary, btnLiten, "w-fit border border-ink/15 hover:border-ink/30")}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+                      {guide.lank.text}
+                    </a>
+                  ) : null}
+                  <ol className="grid list-decimal gap-1 pl-5 text-[0.9375rem] leading-6 text-ink-muted">
+                    {guide.steg.map((rad) => (
+                      <li key={rad}>{rad}</li>
+                    ))}
+                  </ol>
+                  {guide.not ? (
+                    <p className="text-[0.8125rem] leading-5 text-ink-subtle">{guide.not}</p>
+                  ) : null}
+                </>
+              ) : (
+                <p className="text-[0.9375rem] leading-6 text-ink-muted">
+                  Fyll i adressen först, så visar vi exakt var lösenordet skapas.
+                </p>
+              )}
+              <p className="text-[0.8125rem] leading-5 text-ink-subtle">
+                App-lösenordet gäller bara för Snajp och kan återkallas när som helst, utan att
+                ert vanliga lösenord ändras.
+              </p>
+            </Steg>
+
+            <Steg nummer={3} rubrik="Klistra in och koppla">
               <input
                 type="password"
+                aria-label="App-lösenord"
                 value={losenord}
                 onChange={(event) => setLosenord(event.target.value)}
                 required
                 minLength={6}
                 autoComplete="off"
                 placeholder="abcd efgh ijkl mnop"
-                className="focus-ring min-h-11 rounded-input border border-ink/15 bg-paper px-3 text-[16px]"
+                className="focus-ring min-h-11 w-full rounded-input border border-ink/15 bg-paper px-3 text-[16px]"
               />
-              {losenordshjalp(doman) ? (
-                <span className="text-[0.8125rem] leading-5 text-ink-subtle">
-                  {losenordshjalp(doman)}
-                </span>
-              ) : null}
-            </label>
-
-            {behoverVard ? (
-              <label className="grid gap-1.5">
-                <span className="text-[0.875rem] font-medium">IMAP-server</span>
-                <input
-                  type="text"
-                  value={imapVard}
-                  onChange={(event) => setImapVard(event.target.value)}
-                  required
-                  placeholder={`mail.${doman}`}
-                  className="focus-ring min-h-11 rounded-input border border-ink/15 bg-paper px-3 text-[16px]"
-                />
-                <span className="text-[0.8125rem] leading-5 text-ink-subtle">
-                  Adressen har en egen domän — ange mejlservern (står hos er mejlleverantör),
-                  eller{" "}
-                  <a
-                    href={mejlaOss("Koppla vår inkorg")}
-                    className="focus-ring rounded-input underline underline-offset-4 hover:text-ochre"
-                  >
-                    skriv till {KONTAKT_MEJL}
-                  </a>{" "}
-                  så hjälper vi till.
-                </span>
-              </label>
-            ) : null}
-
-            {formFel ? (
-              <p role="alert" className="text-[0.875rem] leading-6 text-danger">
-                {formFel}
+              <p className="text-[0.8125rem] leading-5 text-ink-subtle">
+                Vi provar inloggningen direkt och sparar lösenordet krypterat. Det visas aldrig
+                igen. Olästa mail hämtas direkt och sedan automatiskt, och markeras som lästa i
+                er inkorg när Snajp har tagit emot dem.
               </p>
-            ) : null}
-
-            <button type="submit" disabled={skickar} className={cn(btnPrimary, "w-fit")}>
-              {skickar ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-              ) : (
-                <Link2 className="h-4 w-4" aria-hidden />
-              )}
-              {skickar ? "Provar inloggningen …" : "Koppla inkorgen"}
-            </button>
-          </div>
+              {formFel ? (
+                <p role="alert" className="text-[0.875rem] leading-6 text-danger">
+                  {formFel}
+                </p>
+              ) : null}
+              <button type="submit" disabled={skickar || soker} className={cn(btnPrimary, "w-fit")}>
+                {skickar ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                ) : (
+                  <Link2 className="h-4 w-4" aria-hidden />
+                )}
+                {skickar ? "Provar inloggningen …" : "Koppla inkorgen"}
+              </button>
+            </Steg>
+          </ol>
         </form>
       )}
 
@@ -368,5 +495,26 @@ export function Inkorgar() {
         Uppdatera
       </button>
     </div>
+  );
+}
+
+function Steg({
+  nummer,
+  rubrik,
+  children
+}: Readonly<{ nummer: number; rubrik: string; children: React.ReactNode }>) {
+  return (
+    <li className="grid grid-cols-[2rem_minmax(0,1fr)] gap-x-3 py-5 first:pt-0">
+      <span className="text-[1.25rem] font-semibold leading-7 text-mineral tabular-nums" aria-hidden>
+        {nummer}
+      </span>
+      <div className="grid min-w-0 gap-3">
+        <h3 className="text-[1rem] font-semibold leading-7">
+          <span className="sr-only">Steg {nummer}: </span>
+          {rubrik}
+        </h3>
+        {children}
+      </div>
+    </li>
   );
 }

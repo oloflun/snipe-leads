@@ -414,7 +414,7 @@ export function createDemoSupportApi() {
     // grenen föll anropet igenom till "okänd väg" och Dashboard visade
     // "Synka inkorg" på en yta där det inte finns något att synka.
     if (rutt === "/inbox/mailboxes" && metod === "GET") {
-      return { mailboxes: [], global_konfigurerad: false, kan_synka: false } as T;
+      return { mailboxes: [], kan_synka: false } as T;
     }
 
     if (rutt === "/inbox/mock" && metod === "POST") {

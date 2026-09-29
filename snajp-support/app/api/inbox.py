@@ -11,17 +11,15 @@ from ..email_pipeline.ingest import ingest_email
 from ..email_pipeline.models import InboundAttachment, InboundEmail
 from ..email_pipeline.poller import (
     host_for_mailbox,
-    imap_for_adress,
     losenord_for,
-    sync_imap_once,
     sync_mailbox,
+    upptack_imap,
 )
 from ..email_pipeline.processor import process_email
 from ..config import (
     CATEGORIES,
     DEFAULT_TENANT_ID,
     PUBLIC_DEMO_TENANT_ID,
-    get_settings,
 )
 from ..integrationer.hemligheter import IngenNyckelError, kryptera
 from ..scripts.seed_kb import ensure_tenant_kb
@@ -162,7 +160,6 @@ async def list_inbox_mailboxes(request: Request, tenant: dict = Depends(require_
     räcka för att läsa kundens mail (se poller.py).
     """
     storage = request.app.state.storage
-    settings = get_settings()
 
     inkorgar = [
         m
@@ -172,11 +169,10 @@ async def list_inbox_mailboxes(request: Request, tenant: dict = Depends(require_
 
     slug = await _tenant_slug(storage, tenant["tenant_id"])
 
-    # Den globala envvägen räknas som en kopplad inkorg. Den finns kvar för
-    # enkelinstallationer och för testerna.
-    global_konfigurerad = bool(
-        settings.imap_host and settings.imap_user and settings.imap_password
-    )
+    # Den globala envvägen (IMAP_HOST/USER/PASSWORD) räknas INTE: den tillhör
+    # ingen kund. Att den räknades gav kan_synka=true för varje nytt konto,
+    # och synken hämtade då adminbrevlådan in i kundens ärenden (incident
+    # 2026-09-29, se sync_inbox).
 
     rader = [
         {
@@ -196,10 +192,19 @@ async def list_inbox_mailboxes(request: Request, tenant: dict = Depends(require_
         for m in inkorgar
     ]
 
-    return {
-        "mailboxes": rader,
-        "global_konfigurerad": global_konfigurerad,
-        "kan_synka": global_konfigurerad or any(r["kan_synka"] for r in rader),
+    return {"mailboxes": rader, "kan_synka": any(r["kan_synka"] for r in rader)}
+
+
+@router.get("/api/inbox/mailboxes/upptack")
+async def upptack_inkorg(
+    adress: str = Query(..., min_length=3, max_length=254),
+    tenant: dict = Depends(require_tenant),
+) -> dict:
+    """Vem driver den här adressens mejl? Guiden i Inställningar → Inkorgar
+    visar rätt steg för app-lösenordet utifrån svaret, och frågar efter en
+    IMAP-server bara när varken domänen eller MX-posten känns igen."""
+    return await upptack_imap(adress.strip().lower()) or {
+        "provider": None, "host": None, "leverantor": None, "guide": "annan"
     }
 
 
@@ -213,8 +218,9 @@ async def koppla_inkorg(
 
     Ordningen är kontraktet:
 
-    1. Värden slås upp ur adressens domän (gmail/hotmail/outlook/icloud …);
-       okänd domän kräver `imap_host` och får provider 'imap'.
+    1. Värden slås upp ur adressens domän (gmail/hotmail/outlook/icloud …),
+       för en egen domän ur MX-posten (Google Workspace, Microsoft 365,
+       Loopia …); först när ingen av dem känns igen krävs `imap_host`.
     2. Inloggningen PROVAS mot servern innan något sparas. Ett fel
        app-lösenord ska fångas här, med ett besked kunden kan agera på —
        inte vid första synken.
@@ -229,9 +235,9 @@ async def koppla_inkorg(
     storage = request.app.state.storage
     adress = payload.address.strip().lower()
 
-    uppslag = imap_for_adress(adress)
+    uppslag = None if payload.imap_host else await upptack_imap(adress)
     if uppslag:
-        provider, host = uppslag
+        provider, host = uppslag["provider"], uppslag["host"]
     elif payload.imap_host:
         provider, host = "imap", payload.imap_host.strip().lower()
     else:
@@ -308,9 +314,16 @@ async def sync_inbox(
        något bara vi kan åtgärda.
 
     Nu: kundens rader i `ss_mailboxes` synkas, en i taget, med samma väg som
-    den periodiska pollern använder. Den globala envvägen är kvar som fallback
-    för enkelinstallationer och för testerna, och används bara när kunden inte
-    har någon egen inkorgsrad.
+    den periodiska pollern använder.
+
+    ## Ingen global fallback (incident 2026-09-29)
+
+    Den globala envvägen fanns kvar "för enkelinstallationer" och användes när
+    kunden saknade egen inkorgsrad. Precis det fel punkt 1 varnar för hände
+    sedan: värdena SATTES i main och development, och ett nytt testkonto som
+    tryckte på knappen fick adminbrevlådans olästa mail inskrivna som sina
+    egna ärenden (och markerade lästa i adminbrevlådan). En kund utan egen
+    rad har ingen inkorg — punkt.
 
     ## Hämta snabbt, klassificera i bakgrunden (2026-09-21)
 
@@ -332,9 +345,6 @@ async def sync_inbox(
     ]
 
     if not inkorgar:
-        settings = get_settings()
-        if settings.imap_host and settings.imap_user and settings.imap_password:
-            return {"connected": True, "processing": False, **await sync_imap_once(storage, tenant_id)}
         return {
             "fetched": 0,
             "processed": 0,

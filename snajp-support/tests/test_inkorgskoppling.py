@@ -65,6 +65,8 @@ def imap_fejk(monkeypatch):
 
     monkeypatch.setattr(imap_connector, "prova_inloggning", ok_inloggning)
     monkeypatch.setattr(poller.imap, "fetch_new", ett_mail)
+    # Hermetiskt: inget riktigt DNS-uppslag för egna domäner.
+    monkeypatch.setattr(poller, "_mx_hostar", lambda doman: [])
     return ok_inloggning, ett_mail
 
 
@@ -128,6 +130,35 @@ async def test_koppla_synka_och_koppla_ur(imap_fejk):
             assert bort.status_code == 200
             efter = await client.post("/api/inbox/sync", headers=DEMO)
             assert efter.json()["connected"] is False
+
+
+@pytest.mark.anyio
+async def test_globala_imap_varden_lacker_aldrig_till_en_kund(imap_fejk, monkeypatch):
+    """Incident 2026-09-29: ett nytt testkonto utan egen inkorg tryckte
+    "Synka inkorg" och fick ADMINKONTOTS mail (Render, Railway, ChatGPT).
+
+    Kedjan: IMAP_HOST/USER/PASSWORD var satta i main och development →
+    /mailboxes svarade kan_synka=true för ALLA kunder → knappen visades →
+    /sync föll tillbaka på den globala brevlådan och skrev in den i den
+    frågande kundens ärenden. Globala värden tillhör ingen kund och får
+    aldrig nås från en tenant-skopad route.
+    """
+    _, ett_mail = imap_fejk
+    monkeypatch.setenv("IMAP_HOST", "imap.admin.example")
+    monkeypatch.setenv("IMAP_USER", "admin@snajp.example")
+    monkeypatch.setenv("IMAP_PASSWORD", "adminlosen")
+    get_settings.cache_clear()
+
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            lista = (await client.get("/api/inbox/mailboxes", headers=DEMO)).json()
+            assert lista["kan_synka"] is False, "en kund utan inkorg ska inte erbjudas synk"
+
+            synk = (await client.post("/api/inbox/sync", headers=DEMO)).json()
+            assert synk["connected"] is False
+            assert synk["fetched"] == 0
+
+    assert ett_mail.anrop == [], "den globala brevlådan öppnades för en kund"
 
 
 @pytest.mark.anyio
@@ -205,3 +236,39 @@ async def test_isolering_annan_tenant_ser_inte_inkorgen(imap_fejk):
             ] == []
             stulen = await client.delete(f"/api/inbox/mailboxes/{inkorg_id}", headers=granne)
             assert stulen.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_egen_doman_hittas_via_mx(imap_fejk, monkeypatch):
+    """info@foretag.se på Google Workspace ska kopplas lika enkelt som en
+    gmail-adress: MX-posten ger värden, kunden behöver ingen IMAP-server."""
+    ok_inloggning, _ = imap_fejk
+    monkeypatch.setattr(poller, "_mx_hostar", lambda doman: ["aspmx.l.google.com", "alt1.aspmx.l.google.com"])
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            upptack = (
+                await client.get("/api/inbox/mailboxes/upptack?adress=info@foretag.se", headers=DEMO)
+            ).json()
+            assert upptack == {
+                "provider": "gmail",
+                "host": "imap.gmail.com",
+                "leverantor": "Google Workspace",
+                "guide": "google",
+            }
+            svar = await client.post(
+                "/api/inbox/mailboxes",
+                headers=DEMO,
+                json={"address": "info@foretag.se", "app_losenord": "abcd efgh ijkl mnop"},
+            )
+            assert svar.status_code == 200, svar.text
+            assert svar.json()["mailbox"]["host"] == "imap.gmail.com"
+    assert ok_inloggning.anrop == [("imap.gmail.com", "info@foretag.se", "abcd efgh ijkl mnop")]
+
+
+@pytest.mark.anyio
+async def test_upptack_okand_doman_ber_om_server(imap_fejk):
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            svar = await client.get("/api/inbox/mailboxes/upptack?adress=info@eget-bolag.se", headers=DEMO)
+            assert svar.json()["host"] is None
+            assert svar.json()["guide"] == "annan"
