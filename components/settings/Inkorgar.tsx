@@ -66,7 +66,7 @@ const EPOST = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 /** Var app-lösenordet skapas, per leverantör — sidan kunden faktiskt behöver. */
 const LOSENORDSGUIDE: Record<Guide, { lank?: { href: string; text: string }; steg: string[]; not?: string }> = {
   google: {
-    lank: { href: "https://myaccount.google.com/apppasswords", text: "Öppna Google-kontot" },
+    lank: { href: "https://myaccount.google.com/apppasswords", text: "Google-kontot" },
     steg: [
       "Logga in med kontot som tar emot kundmailen.",
       "Skriv Snajp som namn och tryck Skapa.",
@@ -75,7 +75,7 @@ const LOSENORDSGUIDE: Record<Guide, { lank?: { href: string; text: string }; ste
     not: "Syns inte sidan måste tvåstegsverifiering slås på i Google-kontot först."
   },
   apple: {
-    lank: { href: "https://account.apple.com/account/manage", text: "Öppna Apple-kontot" },
+    lank: { href: "https://account.apple.com/account/manage", text: "Apple-kontot" },
     steg: [
       "Välj Inloggning och säkerhet → Appspecifika lösenord.",
       "Skapa ett lösenord med namnet Snajp.",
@@ -83,7 +83,7 @@ const LOSENORDSGUIDE: Record<Guide, { lank?: { href: string; text: string }; ste
     ]
   },
   microsoft: {
-    lank: { href: "https://account.microsoft.com/security", text: "Öppna Microsoft-kontot" },
+    lank: { href: "https://account.microsoft.com/security", text: "Microsoft-kontot" },
     steg: [
       "Välj Avancerade säkerhetsalternativ → Applösenord (kräver tvåstegsverifiering).",
       "Skapa ett applösenord och kopiera det."
@@ -295,7 +295,7 @@ export function Inkorgar() {
           <h2 className="mt-3 text-[1.0625rem] font-semibold">Ingen inkorg är kopplad ännu</h2>
           <p className="mx-auto mt-2 max-w-[52ch] text-[0.9375rem] leading-6 text-ink-muted">
             Koppla er Gmail, Outlook eller iCloud här nedanför, så hämtar agenten era olästa
-            kundmail när ni trycker Synka inkorg.
+            kundmail automatiskt.
           </p>
         </div>
       ) : (
@@ -430,7 +430,9 @@ export function Inkorgar() {
                       className={cn(btnSecondary, btnLiten, "w-fit whitespace-nowrap border border-ink/15 hover:border-ink/30")}
                     >
                       <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+                      <span className="sr-only">Öppna </span>
                       {guide.lank.text}
+                      <span className="sr-only"> (ny flik)</span>
                     </a>
                   ) : null}
                   <ol className="grid list-decimal gap-1 pl-5 text-[0.9375rem] leading-6 text-ink-muted">
