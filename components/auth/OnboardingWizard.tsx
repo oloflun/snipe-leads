@@ -115,6 +115,8 @@ export function OnboardingWizard({
         return "Fyll i webbplatsen. Det är den agenterna läser för att förstå er.";
       if (!produkt.trim())
         return "Skriv en rad om vad ni säljer. Det är det agenterna ska sälja.";
+      if (!testkund && (!faktGata.trim() || !faktPostnr.trim() || !faktOrt.trim()))
+        return "Fyll i faktureringsadressen — dit går fakturan efter gratisperioden.";
       return null;
     }
     if (vilket === 1) {
@@ -126,10 +128,6 @@ export function OnboardingWizard({
       return null;
     }
     if (vilket === 3) {
-      if (!testkund) {
-        if (!faktGata.trim() || !faktPostnr.trim() || !faktOrt.trim())
-          return "Fyll i faktureringsadressen — dit går fakturan efter gratisperioden.";
-      }
       if (!villkor)
         return "Kryssa i att ni godkänner villkoren för att kunna starta gratisperioden.";
       return null;
@@ -342,6 +340,42 @@ export function OnboardingWizard({
                   onChange={setFokus}
                   placeholder={PLACEHOLDER.fokus}
                 />
+                {/* Faktureringsadressen hör till bolagsuppgifterna och fylls i
+                    här, inte vid paketvalet. Döljs för testarbetsytor: inget
+                    bolag, ingen faktura, och ett obligatoriskt fält utan bolag
+                    bakom lär bara folk att skriva påhitt. */}
+                {!testkund ? (
+                  <>
+                    <Falt
+                      label="Faktureringsadress"
+                      hint="Hit går fakturan — först efter gratisperioden, alltid i efterhand."
+                      span="md:col-span-12"
+                      value={faktGata}
+                      onChange={setFaktGata}
+                      placeholder="Storgatan 1"
+                      autoComplete="street-address"
+                    />
+                    <Falt
+                      label="Postnummer"
+                      hint="Fem siffror."
+                      span="md:col-span-4"
+                      value={faktPostnr}
+                      onChange={setFaktPostnr}
+                      placeholder="111 22"
+                      inputMode="numeric"
+                      autoComplete="postal-code"
+                    />
+                    <Falt
+                      label="Ort"
+                      hint="Postorten."
+                      span="md:col-span-8"
+                      value={faktOrt}
+                      onChange={setFaktOrt}
+                      placeholder="Stockholm"
+                      autoComplete="address-level2"
+                    />
+                  </>
+                ) : null}
               </div>
               <Stegfot error={error} forsta />
             </form>
@@ -514,49 +548,6 @@ export function OnboardingWizard({
                 — den öppnas i en ny flik, det här flödet står kvar.
               </p>
 
-              {/* Faktureringsadressen — bara för riktiga kunder. En testarbetsyta
-                  har inget bolag att fakturera, och ett obligatoriskt adressfält
-                  där hade bara lärt folk att skriva påhittade adresser. */}
-              {!testkund ? (
-                <div className="mt-8 rounded-panel border border-ink/15 bg-paper2/50 p-5">
-                  <p className="kicker text-mineral">Faktureringsadress</p>
-                  <p className="mt-2 text-[14px] leading-6 text-ink-muted">
-                    Hit går fakturan — först efter gratisperioden. Inga kortuppgifter
-                    behövs; vi fakturerar i efterhand.
-                  </p>
-                  <div className="mt-4 grid grid-cols-12 gap-y-5 md:gap-x-6">
-                    <Falt
-                      label="Gatuadress"
-                      hint="Postadressen fakturan ställs till."
-                      span="md:col-span-12"
-                      value={faktGata}
-                      onChange={setFaktGata}
-                      placeholder="Storgatan 1"
-                      autoComplete="street-address"
-                    />
-                    <Falt
-                      label="Postnummer"
-                      hint="Fem siffror."
-                      span="md:col-span-4"
-                      value={faktPostnr}
-                      onChange={setFaktPostnr}
-                      placeholder="111 22"
-                      inputMode="numeric"
-                      autoComplete="postal-code"
-                    />
-                    <Falt
-                      label="Ort"
-                      hint="Postorten."
-                      span="md:col-span-8"
-                      value={faktOrt}
-                      onChange={setFaktOrt}
-                      placeholder="Stockholm"
-                      autoComplete="address-level2"
-                    />
-                  </div>
-                </div>
-              ) : null}
-
               {/* Gratisperioden + villkorsgodkännandet. Kryssrutan startar
                   okryssad — ett förkryssat samtycke är inget samtycke — och
                   länkarna öppnas i nya flikar så att flödet står kvar. */}
@@ -658,6 +649,33 @@ export function OnboardingWizard({
           ) : null}
         </div>
       </div>
+
+      {/* Villkorsraden — samma plats längst ner på VARJE steg, så villkoren
+          aldrig är mer än en blick bort oavsett var i flödet man står.
+          Blå med flit (beställd 2026-09-29): länkarna ska se ut som länkar
+          och inte konkurrera med ochre-accenten, som är flödets eget språk.
+          Öppnas i nya flikar — det ifyllda står kvar. */}
+      <nav
+        aria-label="Villkor och juridisk information"
+        className="col-span-12 mt-16 flex flex-wrap gap-x-6 gap-y-2 border-t border-ink/15 pt-4 text-[13px]"
+      >
+        {[
+          { href: "/villkor", text: "Användarvillkor" },
+          { href: "/angerratt", text: "Distansavtal & ångerrätt" },
+          { href: "/integritetspolicy", text: "Integritetspolicy" },
+          { href: "/cookies", text: "Cookies" }
+        ].map((lank) => (
+          <a
+            key={lank.href}
+            href={lank.href}
+            target="_blank"
+            rel="noopener"
+            className="focus-ring rounded-input text-[#23538f] underline underline-offset-4 hover:text-ink"
+          >
+            {lank.text}
+          </a>
+        ))}
+      </nav>
     </div>
   );
 }
