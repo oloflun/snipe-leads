@@ -60,6 +60,8 @@ from ..leads.icp import (
 from ..leads.icp import is_empty as icp_ar_tomt
 from ..leads.sni import SNI_NAMN, beskriv_kod
 from ..leads.onboarding_state import REQUIRED_KINDS, get_onboarding_state
+from ..leads import korning as iris_korning
+from ..leads.profil import las_kundtext, sakerstall_profil, slå_ihop, som_icp
 from .deps import kraev_uuid, require_tenant
 from ..leads.soul import SOUL_KIND, SOUL_MAX_CHARS
 from .schemas import (
@@ -86,8 +88,8 @@ router = APIRouter()
 logger = logging.getLogger("snajp-support.leads")
 
 _FEL_INGEN_MALGRUPP = (
-    "Beskriv vilka bolag ni söker (bransch eller region) så agenten "
-    "kan leta, eller fyll i bolag ni själva vill träffa."
+    "Iris vet inte vad ni säljer än. Fyll i Affärskontext under Inställningar "
+    "(vad ni säljer och till vem), eller fyll i bolag ni själva vill träffa."
 )
 _FEL_INGA_TRAFFAR = (
     "Inga bolag hittades som matchar målgruppen. Prova en bredare "
@@ -1276,6 +1278,34 @@ async def put_leads_config(
     }
 
 
+@router.get("/api/leads/profil")
+async def get_iris_profil(request: Request, tenant: dict = Depends(require_tenant)) -> dict:
+    """Iris-profilen — hur Iris tolkat kundens affärskontext och filter.
+
+    Kompileras om när indata ändrats (hashen i app/leads/profil.py), så
+    kunden ser alltid tolkningen av det som faktiskt gäller i nästa körning.
+    Utan LLM-nyckel blir profilen regelbaserad och säger det själv."""
+    return {"profil": await sakerstall_profil(request.app.state.storage, tenant["tenant_id"])}
+
+
+@router.post("/api/leads/profil/tolka-om")
+async def tolka_om_iris_profil(request: Request, tenant: dict = Depends(require_tenant)) -> dict:
+    """Tvingar en ny tolkning — samma indata kan ge en bättre tolkning när
+    modellen eller prompten förbättrats."""
+    await _kraev_leads_budget(request.app.state.storage, tenant["tenant_id"])
+    return {"profil": await sakerstall_profil(request.app.state.storage, tenant["tenant_id"], tvinga=True)}
+
+
+@router.get("/api/leads/jev/statistik")
+async def get_jev_statistik(request: Request, tenant: dict = Depends(require_tenant)) -> dict:
+    """Jevs triage och klassning mot kodens nivå — underlaget för att slå på
+    läge "pa" (app/leads/jev.py). Läser bara redan sparade bedömningar."""
+    from ..leads import jev
+
+    rader = await request.app.state.storage.list_prospects(tenant["tenant_id"], limit=500)
+    return jev.statistik(rader)
+
+
 @router.get("/api/leads/queue")
 async def list_review_queue(
     request: Request, tenant: dict = Depends(require_tenant), limit: int = 100
@@ -1357,6 +1387,55 @@ async def _registrera_webb(storage, tenant_id: str, prospect_id: str, website: s
         logger.exception("Kunde inte registrera källa för %s", prospect_id)
 
 
+async def _korningens_profil(storage, tenant_id: str, overrides: dict | None) -> tuple[dict, dict]:
+    """Iris-profilen och den effektiva ICP:n för EN körning.
+
+    Profilen (app/leads/profil.py) är kundens instruktionsfil: onboarding +
+    affärskontext + fritext, tolkad en gång. Filtrera-panelens värden läggs
+    ovanpå för just den här körningen — det sparade rörs aldrig."""
+    settings = await storage.get_agent_settings(tenant_id, agent_type="leads")
+    profil = await sakerstall_profil(storage, tenant_id)
+    icp = normalize_icp(_med_overrides(settings.get("icp"), overrides) or {})
+    korningens = {**slå_ihop(profil, icp), "version": profil.get("version")}
+    return korningens, som_icp(korningens, icp)
+
+
+async def _skapa_prospekt_ur_kandidat(storage, tenant_id: str, bolag: dict, origin: str) -> dict:
+    prospect = await storage.create_prospect(
+        tenant_id,
+        company_name=bolag["company_name"],
+        # `contact_name` glömdes tidigare helt här — hitta_bolag()
+        # kunde hitta en namngiven person men prospektraden fick
+        # ändå bara e-postadressen, aldrig namnet.
+        contact_name=bolag.get("contact_name"),
+        contact_email=bolag.get("contact_email"),
+        origin=origin,
+        profil={
+            k: bolag[k]
+            for k in (
+                "orgnr",
+                "website",
+                "ort",
+                "postnr",
+                "anstallda",
+                # Fallback-trappans nivå (migration 058) — se
+                # app/leads/discovery.py:KONTAKTNIVAER.
+                "contact_role",
+                "contact_level",
+                "contact_form_url",
+            )
+            if bolag.get(k) is not None
+        },
+    )
+    if bolag.get("jev_triage"):
+        await storage.spara_bedomning(
+            tenant_id, prospect["id"], bedomning={"jev": {"triage": bolag["jev_triage"]}}
+        )
+    if bolag.get("website"):
+        await _registrera_webb(storage, tenant_id, prospect["id"], bolag["website"])
+    return prospect
+
+
 async def _samla_korningens_prospekt(
     storage,
     tenant: dict,
@@ -1407,63 +1486,29 @@ async def _samla_korningens_prospekt(
         saknas = payload.limit - len(skapade)
 
     if saknas > 0:
-        har_malgrupp = _har_sokbar_malgrupp(icp)
-        if not har_malgrupp and not skapade:
-            raise HTTPException(status_code=422, detail=_FEL_INGEN_MALGRUPP)
-        if har_malgrupp:
-            # Uteslutningen omfattar även REGISTRETS befintliga bolag — inte
-            # bara den här körningens. Uppmätt i development 2026-09-06: två
-            # batchkörningar i rad gav Ur & Penn och Ohlssons Tyger EN GÅNG
-            # VAR PER KÖRNING; discovery visste inget om registret och
-            # skapade dubbletter. hitta_bolag casefoldar namnen själv.
-            befintliga_rader = await storage.list_prospects(tenant_id, limit=500)
-            try:
-                fynd = await hitta_bolag(
-                    icp,
-                    saknas,
-                    uteslut_namn={p["company_name"] for p in skapade}
-                    | {
-                        str(rad.get("company_name") or "")
-                        for rad in befintliga_rader
-                    },
-                )
-            except DiscoveryError as fel:
-                if not skapade:
-                    raise HTTPException(status_code=503, detail=_FEL_SOKNING) from fel
-                fynd = []
-            for bolag in fynd:
-                prospect = await storage.create_prospect(
-                    tenant_id,
-                    company_name=bolag["company_name"],
-                    # `contact_name` glömdes tidigare helt här — hitta_bolag()
-                    # kunde hitta en namngiven person men prospektraden fick
-                    # ändå bara e-postadressen, aldrig namnet. En del av
-                    # varför "hittar nästan aldrig en kontaktperson" var sant
-                    # även de gånger sökningen faktiskt fann en.
-                    contact_name=bolag.get("contact_name"),
-                    contact_email=bolag.get("contact_email"),
-                    origin=origin_fynd,
-                    profil={
-                        k: bolag[k]
-                        for k in (
-                            "orgnr",
-                            "website",
-                            "ort",
-                            "anstallda",
-                            # Fallback-trappans nivå (migration 058) — se
-                            # app/leads/discovery.py:KONTAKTNIVAER. Utan den
-                            # kan varken UI:t eller utkastnoten nedan skilja
-                            # en verifierad rollpost från en namngiven träff.
-                            "contact_role",
-                            "contact_level",
-                            "contact_form_url",
-                        )
-                        if bolag.get(k) is not None
-                    },
-                )
-                if bolag.get("website"):
-                    await _registrera_webb(storage, tenant_id, prospect["id"], bolag["website"])
-                skapade.append(prospect)
+        # Profilen ersätter kravet på en ifylld målgrupp (Alunix 2026-09-29:
+        # körningen vägrade starta utan stad). Den finns alltid efter
+        # onboarding; kompileras vid behov.
+        profil, sok_icp = await _korningens_profil(storage, tenant_id, overrides)
+        befintliga_rader = await storage.list_prospects(tenant_id, limit=500)
+        try:
+            fynd = await hitta_bolag(
+                sok_icp,
+                saknas,
+                uteslut_namn={p["company_name"] for p in skapade}
+                | {str(rad.get("company_name") or "") for rad in befintliga_rader},
+                profil=profil,
+            )
+        except DiscoveryError as fel:
+            if not skapade:
+                raise HTTPException(status_code=503, detail=_FEL_SOKNING) from fel
+            fynd = []
+        from ..leads.forfilter import forfiltrera
+
+        for bolag in fynd:
+            if forfiltrera(profil, bolag, exclude_domains=sok_icp.get("exclude_domains")):
+                continue
+            skapade.append(await _skapa_prospekt_ur_kandidat(storage, tenant_id, bolag, origin_fynd))
 
     if not skapade:
         raise HTTPException(status_code=422, detail=_FEL_INGA_TRAFFAR)
@@ -1471,9 +1516,19 @@ async def _samla_korningens_prospekt(
 
 
 async def _validera_batch_kan_starta(storage, tenant: dict, payload: LeadsBatchRequest) -> None:
-    """Snabba avvisningar — inget Gemini. Det som tar tid hör hemma i jobbet."""
+    """Snabba avvisningar — inget LLM. Det som tar tid hör hemma i jobbet.
+
+    Sedan 2026-09-30 stoppar INTE en tom målgrupp (Alunix: "den ska inte
+    kunna stoppas på det sättet"). Iris-profilen tolkas ur affärskontexten,
+    så det enda som stoppar är att Iris inte vet vad kunden säljer alls."""
     namn = [n.strip() for n in payload.company_names if n and n.strip()]
     if namn:
+        return
+    if tenant["tenant_id"] == DEFAULT_TENANT_ID:
+        befintliga = await storage.list_prospects(tenant["tenant_id"], limit=payload.limit * 2)
+        if any(p.get("origin") == "example" for p in befintliga):
+            return
+    if await las_kundtext(storage, tenant["tenant_id"]):
         return
     settings = await storage.get_agent_settings(tenant["tenant_id"], agent_type="leads")
     overrides = (
@@ -1481,13 +1536,8 @@ async def _validera_batch_kan_starta(storage, tenant: dict, payload: LeadsBatchR
         if payload.overrides and payload.overrides.har_nagot()
         else None
     )
-    icp = normalize_icp(_med_overrides(settings.get("icp"), overrides) or {})
-    if _har_sokbar_malgrupp(icp):
+    if not icp_ar_tomt(normalize_icp(_med_overrides(settings.get("icp"), overrides) or {})):
         return
-    if tenant["tenant_id"] == DEFAULT_TENANT_ID:
-        befintliga = await storage.list_prospects(tenant["tenant_id"], limit=payload.limit * 2)
-        if any(p.get("origin") == "example" for p in befintliga):
-            return
     raise HTTPException(status_code=422, detail=_FEL_INGEN_MALGRUPP)
 
 
@@ -1511,6 +1561,7 @@ async def _lagg_prospektjobb(
     overrides: dict | None,
     is_test: bool,
     limit: int,
+    batch_id: str | None = None,
 ) -> list[dict]:
     """En research-rad per prospekt. Sökningen är redan klar här.
 
@@ -1541,6 +1592,7 @@ async def _lagg_prospektjobb(
                     "scope": scope,
                     "overrides": overrides,
                     "is_test": is_test,
+                    "batch_id": batch_id,
                 }
             )
         else:
@@ -1553,10 +1605,100 @@ async def _lagg_prospektjobb(
                     scope=scope,
                     overrides=overrides,
                     is_test=is_test,
+                    batch_id=batch_id,
                 )
             )
         jobs.append({"job_id": job_id, "prospect_id": prospect["id"]})
     return jobs
+
+
+async def _fyll_pa(app_state, tenant: dict, batch_id: str) -> None:
+    """Köar research tills körningen har N leverbara leads (INV-LEADS-N-001).
+
+    Läser körningens tillstånd ur batchjobbets resultat, köar så många
+    kandidater som behövs, kör en ny sökrunda i nästa geo-ring när poolen är
+    tom, och avslutar ärligt när målet är nått eller det inte går längre.
+    Se app/leads/korning.py."""
+    jobs = app_state.jobs
+    storage = app_state.storage
+    post = await jobs.get(batch_id) or {}
+    resultat = dict(post.get("result") or {})
+    k = resultat.get("korning")
+    if not k or k.get("klar"):
+        return
+    tenant_id = tenant["tenant_id"]
+    profil, sok_icp = await _korningens_profil(storage, tenant_id, k.get("overrides"))
+    orsak = None
+    while k["levererade"] + k["pagaende"] < k["mal"]:
+        if k["undersokta"] + k["pagaende"] >= k["tak"]:
+            orsak = "tak"
+            break
+        if not k["kandidater"]:
+            if k["rundor"] >= iris_korning.MAX_RUNDOR:
+                orsak = "slut_pa_kandidater"
+                break
+            befintliga = await storage.list_prospects(tenant_id, limit=500)
+            uteslut = {str(r.get("company_name") or "") for r in befintliga} | {
+                str(t.get("namn") or "") for t in k["tratt"]
+            }
+            try:
+                await iris_korning.sokrunda(profil, sok_icp, k, uteslut=uteslut)
+            except DiscoveryError:
+                logger.warning("Sökrundan i körning %s misslyckades.", batch_id)
+                if k["rundor"] >= iris_korning.MAX_RUNDOR:
+                    orsak = "sokningen_foll"
+                    break
+            continue
+        try:
+            await kontrollera_leads_budget(storage, tenant_id)
+        except LeadsBudgetExceededError:
+            orsak = "budget"
+            break
+        kandidat = k["kandidater"].pop(0)
+        prospect = await _skapa_prospekt_ur_kandidat(
+            storage, tenant_id, kandidat, "test" if k.get("is_test") else "import"
+        )
+        barn = await _lagg_prospektjobb(
+            app_state,
+            tenant,
+            [prospect],
+            scope=k["scope"],
+            overrides=k.get("overrides"),
+            is_test=bool(k.get("is_test")),
+            limit=1,
+            batch_id=batch_id,
+        )
+        k["jobs"].extend({**b, "company_name": prospect.get("company_name")} for b in barn)
+        k["pagaende"] += len(barn)
+        # Spara INNAN nästa await: utan Redis startar jobbet som create_task
+        # och kan rapportera tillbaka innan loopen är klar — då hade det läst
+        # ett tillstånd utan sig själv.
+        resultat.update(korning=k, jobs=k["jobs"], count=len(k["jobs"]))
+        await jobs.complete(batch_id, resultat)
+    if k["pagaende"] == 0:
+        iris_korning.avsluta(k, "klar" if k["levererade"] >= k["mal"] else (orsak or "slut_pa_kandidater"))
+        k["sammanfattning"] = iris_korning.sammanfatta(k)
+    resultat.update(korning=k, jobs=k["jobs"], count=len(k["jobs"]))
+    await jobs.complete(batch_id, resultat)
+
+
+async def _rapportera_till_korning(
+    app_state, tenant: dict, batch_id: str, *, namn: str, leverbar: bool, skal: str | None
+) -> None:
+    """Ett prospektjobb är klart: räkna in det och fyll på. Kastar aldrig —
+    en trasig motor får inte fälla ett researchjobb som redan är sparat."""
+    try:
+        post = await app_state.jobs.get(batch_id) or {}
+        resultat = dict(post.get("result") or {})
+        k = resultat.get("korning")
+        if not k:
+            return
+        iris_korning.registrera_utfall(k, namn=namn, leverbar=leverbar, skal=skal)
+        resultat["korning"] = k
+        await app_state.jobs.complete(batch_id, resultat)
+        await _fyll_pa(app_state, tenant, batch_id)
+    except Exception:  # noqa: BLE001 — se docstringen
+        logger.exception("Kunde inte rapportera till körning %s", batch_id)
 
 
 async def _run_batch(app_state, payload: dict) -> None:
@@ -1579,6 +1721,18 @@ async def _run_batch(app_state, payload: dict) -> None:
     registrera_aktiv(job_id)
     try:
         req = _payload_till_request(payload)
+        demo = tenant["tenant_id"] == DEFAULT_TENANT_ID
+        if req.scope != "sok" and not req.company_names and not demo:
+            # Iris-motorn: N = leverbara leads, inte kandidater.
+            k = iris_korning.ny_korning(
+                mal=req.limit, scope=req.scope, overrides=payload.get("overrides"), is_test=req.is_test
+            )
+            await app_state.jobs.complete(job_id, {"fase": "research", "jobs": [], "count": 0, "korning": k})
+            await app_state.storage.set_leads_job_status(
+                tenant["tenant_id"], job_id=job_id, status="completed", scope="batch"
+            )
+            await _fyll_pa(app_state, tenant, job_id)
+            return
         prospects = await _samla_korningens_prospekt(app_state.storage, tenant, req)
         if req.scope == "sok":
             # Snabbsökningen stannar EFTER sökningen: bolagen är hittade och
@@ -1723,8 +1877,10 @@ async def _run_batch_prospect(
     app_state, job_id: str, tenant: dict, *, prospect_id: str, scope: str,
     overrides: dict | None = None,
     is_test: bool = False,
+    batch_id: str | None = None,
 ) -> None:
     run_research_step, run_outreach_draft = _valj_leads_kedja()
+    utfall: dict = {"namn": "", "leverbar": False, "skal": "Researchen misslyckades."}
 
     storage = app_state.storage
     await app_state.jobs.start(job_id)
@@ -1758,6 +1914,23 @@ async def _run_batch_prospect(
         )
         result["onboarding_missing"] = list(missing)
         result["prospect_id"] = prospect_id
+
+        # Leverbart = kvalificerat, över kundens tröskel och med en mejlväg
+        # (INV-LEADS-N-001) — det är vad körningens antal räknar.
+        from ..leads.discovery import ar_arbetsmejl as _ar_arbetsmejl
+
+        _rad = await storage.get_prospect(tenant["tenant_id"], prospect_id) or {}
+        _regler = eskalering.normalisera(installningar.get("eskalering"))
+        _mejl = _rad.get("contact_email")
+        utfall["namn"] = str(_rad.get("company_name") or "")
+        if not result.get("qualified"):
+            utfall["skal"] = (result.get("disqualifiers") or ["Uppfyllde inte kriterierna"])[0]
+        elif eskalering.under_troskel(_regler, qualified=True, icp_fit=result.get("icp_fit")):
+            utfall["skal"] = f"Under tröskeln: poäng {result.get('score_total')} av {_regler['kvalificeringstroskel']} krävda"
+        elif not (_mejl and _ar_arbetsmejl(_mejl, webb=_rad.get("website"))):
+            utfall["skal"] = "Ingen mejlväg: ingen arbetsadress hittades"
+        else:
+            utfall.update(leverbar=True, skal=None)
 
         # Kundens eskaleringsregel (leads/eskalering.py). Här och inte i
         # researchstegen: då gäller den både V1 och V2, och ett utkast som
@@ -1843,6 +2016,13 @@ async def _run_batch_prospect(
                             # det kostade.
                             "trigger_events": result.get("trigger_events")
                             or ur_final.get("trigger_events"),
+                            # Iris-profilen: VARFÖR bolaget valdes och vilken
+                            # ingång kunden vill ha — plus mätta fakta om
+                            # webbplatsen som utkastet får citera.
+                            "motivering": result.get("motivering"),
+                            "vinklar": result.get("vinklar"),
+                            "uppfyllda_kriterier": result.get("uppfyllda_kriterier"),
+                            "webbsignaler": result.get("webbsignaler"),
                         },
                         ensure_ascii=False,
                     )
@@ -1901,6 +2081,15 @@ async def _run_batch_prospect(
         )
     finally:
         avregistrera_aktiv(job_id)
+        if batch_id:
+            await _rapportera_till_korning(
+                app_state,
+                tenant,
+                batch_id,
+                namn=utfall["namn"],
+                leverbar=utfall["leverbar"],
+                skal=utfall["skal"],
+            )
 
 
 @router.post("/api/leads/prospects/processa-om", status_code=202)
@@ -2325,6 +2514,7 @@ async def hantera_leads_jobb(app_state, payload: dict) -> None:
         scope=payload["scope"],
         overrides=payload.get("overrides"),
         is_test=bool(payload.get("is_test")),
+        batch_id=payload.get("batch_id"),
     )
 
 

@@ -697,6 +697,42 @@ plans/2026-09-27-appytor-enhetlighet.md.
 Test: tests/invariants/test_inv_ui_001.py
 Införd: 2026-09-28 · Upphävs endast genom waiver
 
+### INV-LEADS-SCORE-001 — Ett researchat bolag har alltid poäng, nivå och motivering
+Efter research skriver `storage.spara_bedomning` (migration 079) på
+prospektraden: `score_total`, minst en `score_breakdown`-rad med motivering,
+en icke-tom `motivering`, nivån `niva` (A/B/C) och `profil_version`.
+Räknas i kod i `app/leads/bedomning.py`; tom modellmotivering ersätts av en
+sammanfattning ur utslagen, och en profil utan kriterier ger en ärlig rad som
+säger det.
+Varför: uppmätt 2026-09-29 hos Alunix — varje sökt bolag visade score "—"
+och "Ingen poängmotivering sparad." Motiveringen är det kunden köper.
+Test: snajp-support/tests/invariants/test_inv_leads_score_001.py
+Införd: 2026-09-30 · Upphävs endast genom waiver
+
+### INV-LEADS-PROFIL-001 — Bara Iris-profilens kriterier kan fälla ett bolag
+Modellen ger ett utslag per kriterium och uteslutning i kundens Iris-profil
+(`app/leads/profil.py`), med belägg som verifieras mot källmaterialet. Nivå
+och kvalificering räknas i kod ur utslagen; modellens fria `qualified` och
+`disqualifiers` avgör ingenting, och ett utslag utan verifierat citat räknas
+som okänt.
+Varför: uppmätt 2026-09-29 — en tvåmansbyrå fälldes för "Juristbyråer är
+inte en del av målgruppen" fast kunden aldrig nämnt bransch, och kundens EGEN
+bransch lästes som målbransch.
+Test: snajp-support/tests/invariants/test_inv_leads_score_001.py
+Införd: 2026-09-30 · Upphävs endast genom waiver
+
+### INV-LEADS-N-001 — En körning levererar N leverbara leads eller säger ärligt varför inte
+En Iris-körning utan egna bolagsnamn räknar LEVERBARA leads (kvalificerade,
+över kundens tröskel, med mejlväg) — inte kandidater. `_fyll_pa`
+(`app/api/leads.py`, motorn i `app/leads/korning.py`) fyller på med nya
+kandidater och nya sökrundor i nästa geo-ring tills målet är nått, eller tills
+poolen, taket (4×N undersökta) eller dygnsbudgeten tar slut — och avslutar
+då med en tratt som namnger det strypande kriteriet.
+Varför: uppmätt 2026-09-29 — 3 beställda leads blev 3 kandidater som Iris
+själv underkände, inga utkast, och körningen stannade vid "1/3 jobb".
+Test: snajp-support/tests/invariants/test_inv_leads_n_001.py
+Införd: 2026-09-30 · Upphävs endast genom waiver
+
 ## Roadmap
 
 Ids this plan will introduce, in the order `Genomförandeordning` builds them. Not yet enforced by CI.

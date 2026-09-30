@@ -338,8 +338,8 @@ export function LoginView() {
 }
 
 // OnboardingView bor numera i app/onboarding/page.tsx + components/auth/
-// OnboardingWizard.tsx: flödet blev fyra steg (företag, bransch,
-// kontaktperson, paket) och behöver sessionen (förifylld kontaktmejl), vilket
+// OnboardingWizard.tsx: flödet blev fem steg (företag, bransch,
+// kontaktperson, målgrupp, paket) och behöver sessionen (förifylld kontaktmejl), vilket
 // kräver en server component — den här filen är "use client".
 
 export function LoadingStatesView() {

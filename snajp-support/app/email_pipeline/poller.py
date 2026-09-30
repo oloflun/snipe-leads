@@ -10,10 +10,13 @@ en läsbehörighet på ss_mailboxes ska inte räcka för att läsa kundens mail.
 """
 
 import asyncio
+import json
 import logging
 import os
+import urllib.parse
+import urllib.request
 
-from ..config import DEFAULT_TENANT_ID, get_settings
+from ..config import get_settings
 from ..storage.base import Storage
 from .connectors import imap
 from .ingest import ingest_email
@@ -51,6 +54,63 @@ def imap_for_adress(address: str) -> tuple[str, str] | None:
     """(provider, imap_host) för en mejladress, eller None för okänd domän."""
     doman = address.rsplit("@", 1)[-1].strip().lower()
     return DOMAN_TILL_IMAP.get(doman)
+
+
+#: Egen domän (info@foretag.se): MX-postens värd avslöjar vem som driver
+#: mejlen. Det vanligaste B2B-fallet är Google Workspace eller Microsoft 365,
+#: och kunden ska inte behöva veta vad en IMAP-värd är för det.
+#: (delsträng i MX-värden, provider, IMAP-värd, leverantörsnamn, guide)
+MX_TILL_IMAP: list[tuple[str, str, str, str, str]] = [
+    ("google.com", "gmail", "imap.gmail.com", "Google Workspace", "google"),
+    ("googlemail.com", "gmail", "imap.gmail.com", "Google Workspace", "google"),
+    ("outlook.com", "outlook", "outlook.office365.com", "Microsoft 365", "microsoft"),
+    ("icloud.com", "imap", "imap.mail.me.com", "iCloud+", "apple"),
+    ("loopia.se", "imap", "mailcluster.loopia.se", "Loopia", "annan"),
+    ("one.com", "imap", "imap.one.com", "One.com", "annan"),
+]
+
+#: Kända fria domäner → (leverantörsnamn, guide) för UI:t.
+VARD_TILL_NAMN = {
+    "imap.gmail.com": ("Gmail", "google"),
+    "outlook.office365.com": ("Outlook", "microsoft"),
+    "imap.mail.me.com": ("iCloud", "apple"),
+}
+
+
+def _mx_hostar(doman: str) -> list[str]:
+    """MX-värdarna för en domän via DNS-over-HTTPS (stdlib, inget nytt paket).
+    Tom lista vid varje fel: uppslaget är en bekvämlighet, aldrig ett krav."""
+    url = "https://cloudflare-dns.com/dns-query?" + urllib.parse.urlencode({"name": doman, "type": "MX"})
+    try:
+        begaran = urllib.request.Request(url, headers={"accept": "application/dns-json"})
+        with urllib.request.urlopen(begaran, timeout=4) as svar:
+            data = json.load(svar)
+    except Exception:  # noqa: BLE001 — nätfel ger "okänd", inte 500
+        logger.info("MX-uppslag misslyckades för %s", doman)
+        return []
+    return [
+        str(a.get("data", "")).split()[-1].rstrip(".").lower()
+        for a in data.get("Answer", [])
+        if a.get("type") == 15 and a.get("data")
+    ]
+
+
+async def upptack_imap(address: str) -> dict | None:
+    """{provider, host, leverantor, guide} för en adress, eller None.
+
+    Fria domäner slås upp i tabellen; egna domäner via MX-posten."""
+    kand = imap_for_adress(address)
+    if kand:
+        namn, guide = VARD_TILL_NAMN[kand[1]]
+        return {"provider": kand[0], "host": kand[1], "leverantor": namn, "guide": guide}
+    doman = address.rsplit("@", 1)[-1].strip().lower()
+    if "." not in doman:
+        return None
+    for mx in await asyncio.to_thread(_mx_hostar, doman):
+        for delstrang, provider, host, namn, guide in MX_TILL_IMAP:
+            if mx == delstrang or mx.endswith("." + delstrang):
+                return {"provider": provider, "host": host, "leverantor": namn, "guide": guide}
+    return None
 
 
 def password_env_name(tenant_slug: str) -> str:
@@ -142,10 +202,15 @@ async def sync_mailbox(
         })
 
     password = losenord_for(mailbox, tenant_slug)
+    # Det globala OAuth-tokenet tillhör EN brevlåda (IMAP_USER). Samma klass
+    # som incidenten 2026-09-29: globala uppgifter får aldrig lånas ut till en
+    # annan kunds inkorgsrad.
     oauth_ready = bool(
         settings.imap_oauth_client_id
         and settings.imap_oauth_client_secret
         and settings.imap_oauth_refresh_token
+        and settings.imap_user
+        and settings.imap_user.strip().lower() == (mailbox.get("address") or "").strip().lower()
     )
     if not password and not oauth_ready:
         # Inte ett fel: kunden har ännu inte lämnat app-lösenord eller OAuth.
@@ -158,9 +223,9 @@ async def sync_mailbox(
 
     inbound, error = await imap.fetch_new(
         host, mailbox["address"], password, settings.imap_folder,
-        oauth_client_id=settings.imap_oauth_client_id,
-        oauth_client_secret=settings.imap_oauth_client_secret,
-        oauth_refresh_token=settings.imap_oauth_refresh_token,
+        oauth_client_id=settings.imap_oauth_client_id if oauth_ready else "",
+        oauth_client_secret=settings.imap_oauth_client_secret if oauth_ready else "",
+        oauth_refresh_token=settings.imap_oauth_refresh_token if oauth_ready else "",
         oauth_token_url=settings.imap_oauth_token_url,
     )
 
@@ -178,37 +243,6 @@ async def sync_mailbox(
     return await stampla(
         {"fetched": len(inbound), "processed": processed, "email_ids": email_ids, "error": error}
     )
-
-
-async def sync_imap_once(storage: Storage, tenant_id: str = DEFAULT_TENANT_ID) -> dict:
-    """Enkelinkorgs-synk mot de globala IMAP-inställningarna.
-
-    Behålls för /api/inbox/sync och testerna, som synkar en känd tenant på
-    begäran. Den periodiska pollern använder sync_all_mailboxes.
-    """
-    settings = get_settings()
-    oauth_ready = bool(
-        settings.imap_oauth_client_id
-        and settings.imap_oauth_client_secret
-        and settings.imap_oauth_refresh_token
-    )
-    if not (settings.imap_host and settings.imap_user and (settings.imap_password or oauth_ready)):
-        return {"fetched": 0, "processed": 0, "error": "IMAP är inte konfigurerat (IMAP_HOST/USER/PASSWORD)."}
-
-    inbound, error = await imap.fetch_new(
-        settings.imap_host, settings.imap_user, settings.imap_password, settings.imap_folder,
-        oauth_client_id=settings.imap_oauth_client_id,
-        oauth_client_secret=settings.imap_oauth_client_secret,
-        oauth_refresh_token=settings.imap_oauth_refresh_token,
-        oauth_token_url=settings.imap_oauth_token_url,
-    )
-    processed = 0
-    for message in inbound:
-        email = await ingest_email(storage, tenant_id, message)
-        if email:
-            await process_email(storage, tenant_id, email)
-            processed += 1
-    return {"fetched": len(inbound), "processed": processed, "error": error}
 
 
 async def sync_all_mailboxes(storage: Storage) -> list[dict]:

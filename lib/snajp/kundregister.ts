@@ -29,6 +29,8 @@ export async function registreraKunduppgifter(
   slug: string,
   uppgifter: {
     orgnr?: string | null;
+    /** En färdig rad: "Gata, postnummer ort". Samma fält som adminvyn redigerar. */
+    faktureringsadress?: string | null;
     kontakt?: {
       namn: string;
       roll?: string | null;
@@ -38,7 +40,7 @@ export async function registreraKunduppgifter(
   }
 ): Promise<void> {
   const masterKey = process.env.SNAJP_MASTER_API_KEY;
-  if (!masterKey || (!uppgifter.orgnr && !uppgifter.kontakt)) {
+  if (!masterKey || (!uppgifter.orgnr && !uppgifter.faktureringsadress && !uppgifter.kontakt)) {
     return;
   }
 
@@ -53,10 +55,15 @@ export async function registreraKunduppgifter(
       throw new Error(`tenanten "${slug}" fanns inte i adminlistan ännu`);
     }
 
-    if (uppgifter.orgnr) {
+    // Ett PUT för båda fälten: utelämnat fält rörs inte (samma semantik som
+    // sparaKunddata), så orgnr och faktureringsadress kan skickas ihop.
+    const kunddata: Record<string, string> = {};
+    if (uppgifter.orgnr) kunddata.orgnr = uppgifter.orgnr;
+    if (uppgifter.faktureringsadress) kunddata.faktureringsadress = uppgifter.faktureringsadress;
+    if (Object.keys(kunddata).length > 0) {
       const svar = await proxyWithApiKey(
         `/api/admin/tenants/${tenant.id}/kunddata`,
-        { method: "PUT", body: JSON.stringify({ orgnr: uppgifter.orgnr }) },
+        { method: "PUT", body: JSON.stringify(kunddata) },
         masterKey
       );
       if (!svar.ok) {

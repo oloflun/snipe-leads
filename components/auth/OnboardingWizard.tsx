@@ -11,8 +11,15 @@ import { PAKET, type Paket } from "@/lib/pricing";
 import { cn } from "@/lib/utils";
 
 /**
- * Onboardingen som ett flöde i fyra steg — företaget, branschen,
- * kontaktpersonen, paketet — i stället för ett formulär med allt på en gång.
+ * Onboardingen som ett flöde i fem steg — företaget, branschen,
+ * kontaktpersonen, målgruppen, paketet — i stället för ett formulär med allt
+ * på en gång.
+ *
+ * Målgruppen ligger FÖRE paketet och visas alltid, med enbart valfria fält:
+ * paketsteget bär villkoren och inskickningen och ska förbli sista steget, och
+ * ett steg som dyker upp eller försvinner beroende på ett senare val hade gjort
+ * stegraden opålitlig. Utan leadsagenten i paketet används svaren helt enkelt
+ * inte.
  *
  * ## Varför steg och inte ett långt formulär
  *
@@ -42,6 +49,7 @@ const STEG = [
   { kicker: "Företaget", rubrik: "Berätta om företaget" },
   { kicker: "Bransch", rubrik: "Vilken bransch är ni i?" },
   { kicker: "Kontaktperson", rubrik: "Vem pratar vi med hos er?" },
+  { kicker: "Målgrupp", rubrik: "Vilka bolag vill Iris hitta?" },
   { kicker: "Paket", rubrik: "Välj era agenter" }
 ] as const;
 
@@ -49,13 +57,26 @@ const PLACEHOLDER = {
   orgnr: "556824-9022",
   webbplats: "https://exempel.se",
   produkt: "Utbildning i hjärt-lungräddning och första hjälpen för arbetsplatser",
+  branscher: "Bygg, Fastighetsförvaltning",
+  orter: "Göteborg, Mölndal",
+  roller: "VD, Inköpschef",
+  undvik: "Offentlig sektor, Konkurrent AB",
   fokus: "Vi vill helst nå bolag som redan köpt hjärtstartare men saknar utbildning"
 };
 
+/** Heltal eller tomt — samma regel som serversidans tolkning. */
+const HELTAL = /^\d*$/;
+
 export function OnboardingWizard({
   epost,
-  namn
-}: Readonly<{ epost?: string | null; namn?: string | null }>) {
+  namn,
+  standardMalgrupp
+}: Readonly<{
+  epost?: string | null;
+  namn?: string | null;
+  /** Förifyllningen ur lib/snajp/standard.ts (server-only, därför en prop). */
+  standardMalgrupp: { roller: string[]; anstallda: [number, number] };
+}>) {
   const [steg, setSteg] = useState(0);
   /** Högsta steget som nåtts — stegraden låter en hoppa TILLBAKA, aldrig fram. */
   const [maxNatt, setMaxNatt] = useState(0);
@@ -66,7 +87,6 @@ export function OnboardingWizard({
   const [testkund, setTestkund] = useState(false);
   const [webbplats, setWebbplats] = useState("");
   const [produkt, setProdukt] = useState("");
-  const [fokus, setFokus] = useState("");
 
   // Steg 2 — branschen.
   const [bransch, setBransch] = useState<string | null>(null);
@@ -79,9 +99,29 @@ export function OnboardingWizard({
   const [kontaktMejl, setKontaktMejl] = useState(epost ?? "");
   const [kontaktTelefon, setKontaktTelefon] = useState("");
 
-  // Steg 4 — paketet. Duo förvalt: det är paketet vi vill sälja (pricing.ts).
+  // Steg 4 — målgruppen, leadsagentens grundfilter. Allt valfritt; tomt
+  // betyder "inget filter". Roller och storlek förifylls med samma defaultar
+  // som standardinställningarna annars hade skrivit. Fokus är fri text och
+  // landar i produkttexten som "Särskilt fokus".
+  const [branscher, setBranscher] = useState("");
+  const [orter, setOrter] = useState("");
+  const [anstMin, setAnstMin] = useState(String(standardMalgrupp.anstallda[0]));
+  const [anstMax, setAnstMax] = useState(String(standardMalgrupp.anstallda[1]));
+  const [roller, setRoller] = useState(standardMalgrupp.roller.join(", "));
+  const [undvik, setUndvik] = useState("");
+  const [fokus, setFokus] = useState("");
+
+  // Steg 5 — paketet. Duo förvalt: det är paketet vi vill sälja (pricing.ts).
   const [paket, setPaket] = useState<Paket["id"]>("duo");
   const [notiser, setNotiser] = useState(true);
+  // Faktureringsadressen — dit fakturan går efter gratisperioden. Krävs för
+  // riktiga kunder; en testarbetsyta har inget bolag att fakturera.
+  const [faktGata, setFaktGata] = useState("");
+  const [faktPostnr, setFaktPostnr] = useState("");
+  const [faktOrt, setFaktOrt] = useState("");
+  // Villkorsgodkännandet. Startar okryssad med flit — ett förkryssat samtycke
+  // är inget samtycke.
+  const [villkor, setVillkor] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -107,6 +147,8 @@ export function OnboardingWizard({
         return "Fyll i webbplatsen. Det är den agenterna läser för att förstå er.";
       if (!produkt.trim())
         return "Skriv en rad om vad ni säljer. Det är det agenterna ska sälja.";
+      if (!testkund && (!faktGata.trim() || !faktPostnr.trim() || !faktOrt.trim()))
+        return "Fyll i faktureringsadressen — dit går fakturan efter gratisperioden.";
       return null;
     }
     if (vilket === 1) {
@@ -115,6 +157,20 @@ export function OnboardingWizard({
     if (vilket === 2) {
       if (!kontaktNamn.trim()) return "Fyll i vem som är kontaktperson hos er.";
       if (!kontaktMejl.includes("@")) return "Fyll i kontaktpersonens e-postadress.";
+      return null;
+    }
+    if (vilket === 3) {
+      const min = anstMin.trim();
+      const max = anstMax.trim();
+      if (!HELTAL.test(min) || !HELTAL.test(max))
+        return "Skriv antal anställda som heltal — eller lämna fältet tomt.";
+      if (min && max && Number(min) > Number(max))
+        return "Minsta antal anställda är större än största.";
+      return null;
+    }
+    if (vilket === 4) {
+      if (!villkor)
+        return "Kryssa i att ni godkänner villkoren för att kunna starta gratisperioden.";
       return null;
     }
     return null;
@@ -140,13 +196,25 @@ export function OnboardingWizard({
   }
 
   function skickaIn() {
-    setError(null);
+    // Sista steget validerar som de andra — kryssrutan och adressen är inte
+    // dekor, och serversidan gör om samma kontroll för den som kringgår det.
+    const fel = stegFel(4);
+    setError(fel);
+    if (fel) return;
     startTransition(async () => {
       const result = await saveBusinessContext({
         orgnr: testkund ? "" : orgnr,
         webbplats,
         produkt,
         fokus,
+        malgrupp: {
+          branscher,
+          orter,
+          undvik,
+          roller,
+          anstalldaMin: anstMin,
+          anstalldaMax: anstMax
+        },
         bransch: bransch ?? "",
         kontaktNamn,
         kontaktRoll,
@@ -154,7 +222,11 @@ export function OnboardingWizard({
         kontaktTelefon,
         paket,
         testkund,
-        notiser
+        notiser,
+        villkorGodkanda: villkor,
+        faktureringsadress: testkund
+          ? null
+          : { gata: faktGata, postnummer: faktPostnr, ort: faktOrt }
       });
       if (!result.success) {
         setError(result.error ?? "Kunde inte spara. Försök igen.");
@@ -309,14 +381,42 @@ export function OnboardingWizard({
                   onChange={setProdukt}
                   placeholder={PLACEHOLDER.produkt}
                 />
-                <Falt
-                  label="Något extra att fokusera på (valfritt)"
-                  hint="En nisch, ett segment ni vill åt, eller något agenterna ska undvika."
-                  span="md:col-span-12"
-                  value={fokus}
-                  onChange={setFokus}
-                  placeholder={PLACEHOLDER.fokus}
-                />
+                {/* Faktureringsadressen hör till bolagsuppgifterna och fylls i
+                    här, inte vid paketvalet. Döljs för testarbetsytor: inget
+                    bolag, ingen faktura, och ett obligatoriskt fält utan bolag
+                    bakom lär bara folk att skriva påhitt. */}
+                {!testkund ? (
+                  <>
+                    <Falt
+                      label="Faktureringsadress"
+                      hint="Hit går fakturan — först efter gratisperioden, alltid i efterhand."
+                      span="md:col-span-12"
+                      value={faktGata}
+                      onChange={setFaktGata}
+                      placeholder="Storgatan 1"
+                      autoComplete="street-address"
+                    />
+                    <Falt
+                      label="Postnummer"
+                      hint="Fem siffror."
+                      span="md:col-span-4"
+                      value={faktPostnr}
+                      onChange={setFaktPostnr}
+                      placeholder="111 22"
+                      inputMode="numeric"
+                      autoComplete="postal-code"
+                    />
+                    <Falt
+                      label="Ort"
+                      hint="Postorten."
+                      span="md:col-span-8"
+                      value={faktOrt}
+                      onChange={setFaktOrt}
+                      placeholder="Stockholm"
+                      autoComplete="address-level2"
+                    />
+                  </>
+                ) : null}
               </div>
               <Stegfot error={error} forsta />
             </form>
@@ -408,6 +508,87 @@ export function OnboardingWizard({
           ) : null}
 
           {steg === 3 ? (
+            <form onSubmit={nasta}>
+              <p className="mt-4 max-w-[62ch] text-[15px] leading-[1.65] text-ink-muted">
+                Iris, leadsagenten, letar bolag inom de här ramarna. Allt är
+                valfritt och går att ändra när som helst — tomt betyder att Iris
+                inte filtrerar på det. Utan leadsagenten i paketet används det inte.
+              </p>
+              <div className="mt-8 grid grid-cols-12 gap-y-6 md:gap-x-8">
+                <Falt
+                  label="Branscher att söka i"
+                  hint="Kommaseparerat. Tomt = alla branscher."
+                  span="md:col-span-6"
+                  value={branscher}
+                  onChange={setBranscher}
+                  placeholder={PLACEHOLDER.branscher}
+                />
+                <Falt
+                  label="Orter och områden"
+                  hint="Kommaseparerat. Tomt = hela Sverige."
+                  span="md:col-span-6"
+                  value={orter}
+                  onChange={setOrter}
+                  placeholder={PLACEHOLDER.orter}
+                />
+                <Falt
+                  label="Anställda, minst"
+                  hint="Tomt = ingen nedre gräns."
+                  span="md:col-span-3"
+                  value={anstMin}
+                  onChange={setAnstMin}
+                  placeholder={String(standardMalgrupp.anstallda[0])}
+                  inputMode="numeric"
+                  autoComplete="off"
+                />
+                <Falt
+                  label="Anställda, högst"
+                  hint="Tomt = ingen övre gräns."
+                  span="md:col-span-3"
+                  value={anstMax}
+                  onChange={setAnstMax}
+                  placeholder={String(standardMalgrupp.anstallda[1])}
+                  inputMode="numeric"
+                  autoComplete="off"
+                />
+                <Falt
+                  label="Roller att nå"
+                  hint="Vem mejlet ska till. Kommaseparerat."
+                  span="md:col-span-6"
+                  value={roller}
+                  onChange={setRoller}
+                  placeholder={PLACEHOLDER.roller}
+                />
+                <Falt
+                  label="Undvik"
+                  hint="Branscher eller bolag Iris ska hoppa över. Kommaseparerat."
+                  span="md:col-span-12"
+                  value={undvik}
+                  onChange={setUndvik}
+                  placeholder={PLACEHOLDER.undvik}
+                />
+                {/* Fri text, inte ett filter: Iris läser den som riktning, och
+                    fälten ovan vinner alltid när de säger emot. */}
+                <label className="col-span-12 grid gap-2 border-t border-ink/15 pt-4">
+                  <span className="kicker text-mineral">Särskilt fokus</span>
+                  <textarea
+                    rows={3}
+                    className="rounded-input border border-ink/15 bg-paper2/70 px-4 py-3 text-[15px] leading-[1.6] focus:border-ochre"
+                    value={fokus}
+                    onChange={(e) => setFokus(e.target.value)}
+                    placeholder={PLACEHOLDER.fokus}
+                  />
+                  <span className="text-[13px] leading-[1.5] text-mineral">
+                    En nisch, ett segment ni vill åt, eller något Iris ska veta om
+                    vilka som brukar köpa.
+                  </span>
+                </label>
+              </div>
+              <Stegfot error={error} onTillbaka={tillbaka} />
+            </form>
+          ) : null}
+
+          {steg === 4 ? (
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -415,9 +596,8 @@ export function OnboardingWizard({
               }}
             >
               <p className="mt-4 max-w-[62ch] text-[15px] leading-[1.65] text-ink-muted">
-                <span className="font-semibold text-ink">Först två månader gratis</span> —
-                ingen betalning nu, och vi hör av oss i god tid innan perioden tar
-                slut. Byta paket går när som helst under Inställningar → Plan.
+                Alla paket börjar med två månader gratis — inga betalningsuppgifter
+                nu. Byta paket går när som helst under Inställningar → Plan.
               </p>
 
               <div className="mt-8 divide-y divide-ink/10 overflow-hidden rounded-card border border-ink/15 bg-paper">
@@ -490,6 +670,50 @@ export function OnboardingWizard({
                 — den öppnas i en ny flik, det här flödet står kvar.
               </p>
 
+              {/* Gratisperioden + villkorsgodkännandet. Kryssrutan startar
+                  okryssad — ett förkryssat samtycke är inget samtycke — och
+                  länkarna öppnas i nya flikar så att flödet står kvar. */}
+              <div className="mt-8 rounded-panel border border-ochre/40 bg-ochre/[0.07] p-5">
+                <p className="kicker text-warning">Testa gratis i 2 månader</p>
+                <p className="mt-2 max-w-[58ch] text-[14px] leading-6 text-ink-muted">
+                  Gratisperioden börjar direkt och löper i två kalendermånader.
+                  Ingen bindningstid, inget kort — vi hör av oss i god tid innan
+                  perioden tar slut, och att sluta kostar ingenting.
+                </p>
+                <label className="mt-4 flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={villkor}
+                    onChange={(e) => {
+                      setVillkor(e.target.checked);
+                      if (e.target.checked) setError(null);
+                    }}
+                    className="focus-ring mt-1 h-4 w-4 shrink-0"
+                  />
+                  <span className="text-[14px] leading-6 text-ink-muted">
+                    Jag godkänner{" "}
+                    <a
+                      href="/villkor"
+                      target="_blank"
+                      rel="noopener"
+                      className="focus-ring rounded-input font-medium text-ink underline underline-offset-4 hover:text-warning"
+                    >
+                      användarvillkoren
+                    </a>{" "}
+                    och har tagit del av{" "}
+                    <a
+                      href="/angerratt"
+                      target="_blank"
+                      rel="noopener"
+                      className="focus-ring rounded-input font-medium text-ink underline underline-offset-4 hover:text-warning"
+                    >
+                      informationen om distansavtalslagen och ångerrätt
+                    </a>
+                    .
+                  </span>
+                </label>
+              </div>
+
               <div className="mt-8 rounded-panel border border-ink/15 bg-paper2/50 p-5">
                 <p className="kicker text-mineral">Notiser</p>
                 <label className="mt-3 flex items-start gap-3">
@@ -547,11 +771,38 @@ export function OnboardingWizard({
           ) : null}
         </div>
       </div>
+
+      {/* Villkorsraden — samma plats längst ner på VARJE steg, så villkoren
+          aldrig är mer än en blick bort oavsett var i flödet man står.
+          Blå med flit (beställd 2026-09-29): länkarna ska se ut som länkar
+          och inte konkurrera med ochre-accenten, som är flödets eget språk.
+          Öppnas i nya flikar — det ifyllda står kvar. */}
+      <nav
+        aria-label="Villkor och juridisk information"
+        className="col-span-12 mt-16 flex flex-wrap gap-x-6 gap-y-2 border-t border-ink/15 pt-4 text-[13px]"
+      >
+        {[
+          { href: "/villkor", text: "Användarvillkor" },
+          { href: "/angerratt", text: "Distansavtal & ångerrätt" },
+          { href: "/integritetspolicy", text: "Integritetspolicy" },
+          { href: "/cookies", text: "Cookies" }
+        ].map((lank) => (
+          <a
+            key={lank.href}
+            href={lank.href}
+            target="_blank"
+            rel="noopener"
+            className="focus-ring rounded-input text-[#23538f] underline underline-offset-4 hover:text-ink"
+          >
+            {lank.text}
+          </a>
+        ))}
+      </nav>
     </div>
   );
 }
 
-/** Fortsätt/Tillbaka-raden för steg 1–3. Sista steget har sin egen. */
+/** Fortsätt/Tillbaka-raden för steg 1–4. Sista steget har sin egen. */
 function Stegfot({
   error,
   onTillbaka,

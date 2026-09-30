@@ -132,6 +132,16 @@ KEYS = [
         # innan den skrivs — samma resonemang som SNAJP_SKILL_UNLOCK_KEY.
         generated=True,
     ),
+    Key(
+        "TYPESAFE_API_KEY",
+        [BACKEND_ENV],
+        "Jev (TypeSafe jev-1.13.0) — Iris förbedömning och klassning av leads "
+        "(app/leads/jev.py). Valfri: utan den körs Iris som vanligt, bara utan Jev. "
+        "Jev ser bara prospektens publika bolagsdata, aldrig kundens egna data. "
+        "Samma nyckel som i ~/.secrets/knowledge-graph.env (Jev-experimentet).",
+        required=False,
+        where="https://typesafe.ai (konto → API keys)",
+    ),
 ]
 
 # Startvärden för en TOM uppsättning — de skrivs bara när fältet saknas eller
@@ -609,6 +619,72 @@ def cmd_push_railway() -> None:
     print("\nBåda miljöerna kör med riktig modell.")
 
 
+#: Lägena app/leads/jev.py förstår. "pa" fäller kandidater före research.
+JEV_LAGEN = ("off", "skugga", "pa")
+
+
+def _jev_levande(nyckel: str) -> str | None:
+    """Ett riktigt Jev-anrop. None = nyckeln fungerar, annars felet.
+
+    En satt variabel bevisar inte att nyckeln duger (skillens fallgrop 7);
+    ett svar med en sannolikhet gör det."""
+    import json
+    import urllib.request
+
+    kropp = json.dumps(
+        {
+            "state": {"company": "Exempel AB", "excerpt": "Vi säljer hemsidor till småföretag."},
+            "model": "jev-1.13.0",
+            "questions": {"test": {"type": "noul", "instructions": "Does this company sell websites?"}},
+        }
+    ).encode("utf-8")
+    anrop = urllib.request.Request(
+        "https://api.typesafe.ai/v1/systemone",
+        data=kropp,
+        headers={"Authorization": f"Bearer {nyckel}", "Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(anrop, timeout=30) as svar:
+            p = json.load(svar).get("answers", {}).get("test", {}).get("noul")
+    except Exception as fel:  # noqa: BLE001 — felet rapporteras, värdet aldrig
+        return f"{type(fel).__name__}"
+    return None if isinstance(p, (int, float)) else "svaret saknade en sannolikhet"
+
+
+def cmd_push_jev(env_name: str, lage: str) -> None:
+    """TYPESAFE_API_KEY + IRIS_JEV till api-tjänsten i EN Railway-miljö.
+
+    Medvetet inte en del av --push-railway: den skickar till BÅDA miljöerna,
+    och Jev ska inte nå produktion förrän Iris-profilen är släppt dit
+    (produktionsrelease kräver Antons ord). Nyckeln provas skarpt mot TypeSafe
+    INNAN den skickas, så en felklistrad nyckel aldrig deployas.
+    """
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from railway_provision import deploy, envs_by_name, services_by_name, set_vars, state
+
+    nyckel = read_env(BACKEND_ENV).get("TYPESAFE_API_KEY", "")
+    if not nyckel:
+        sys.exit("TYPESAFE_API_KEY saknas lokalt. Kör först: python scripts/keys.py --key TYPESAFE_API_KEY")
+    fault = key_fault(nyckel, "TYPESAFE_API_KEY")
+    if fault:
+        sys.exit(f"AVBRYTER: TYPESAFE_API_KEY {fault}.")
+    print(f"TYPESAFE_API_KEY: {len(nyckel)} tecken, slutar på …{nyckel[-4:]}")
+    fel = _jev_levande(nyckel)
+    if fel:
+        sys.exit(f"AVBRYTER: Jev svarade inte med nyckeln ({fel}). Inget skickat.")
+    print("Jev svarade med en sannolikhet — nyckeln fungerar.")
+
+    project = state()
+    environments = envs_by_name(project)
+    if env_name not in environments:
+        sys.exit(f"Miljön {env_name} finns inte i Railway-projektet.")
+    service_id = services_by_name(project)["api"]["id"]
+    set_vars(service_id, environments[env_name], {"TYPESAFE_API_KEY": nyckel, "IRIS_JEV": lage})
+    print(f"{env_name}: TYPESAFE_API_KEY och IRIS_JEV={lage} satta, deploy {deploy(service_id, environments[env_name])}")
+    print("Verifiera efter deployen: Iris › Inställningar visar Jev-raden, och "
+          "GET /api/leads/jev/statistik svarar med lage=" + lage + ".")
+
+
 def cmd_push_render() -> None:
     """Skicka backend-nycklarna till BÅDA Render-tjänsterna och verifiera.
 
@@ -805,6 +881,18 @@ def main() -> None:
         help="satt RAILWAY_TOKEN (via getpass, verifieras mot Railways API)",
     )
     parser.add_argument(
+        "--push-jev",
+        metavar="MILJO",
+        choices=("development", "main"),
+        help="skicka TYPESAFE_API_KEY + IRIS_JEV till api i EN Railway-miljö (provas skarpt först)",
+    )
+    parser.add_argument(
+        "--jev-lage",
+        default="skugga",
+        choices=JEV_LAGEN,
+        help="Jevs läge vid --push-jev: off, skugga (standard) eller pa",
+    )
+    parser.add_argument(
         "--new-unlock-key",
         action="store_true",
         help="generera SNAJP_SKILL_UNLOCK_KEY (värdet skrivs aldrig ut)",
@@ -825,6 +913,8 @@ def main() -> None:
         cmd_pull()
     elif args.push_railway:
         cmd_push_railway()
+    elif args.push_jev:
+        cmd_push_jev(args.push_jev, args.jev_lage)
     elif args.push_render:
         cmd_push_render()
     elif args.push:

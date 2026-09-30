@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   Image as ImageIcon,
   Inbox,
+  Link2,
   Loader2,
   Mail,
   RefreshCw,
@@ -543,6 +544,13 @@ export function Dashboard({
             {busy === "sync" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
             Synka inkorg
           </button>
+        ) : inkorgKopplad === false && !demo ? (
+          /* Utan kopplad inkorg leder knappen till guiden i stället för att
+             försvinna — annars hittar ett nytt konto aldrig vägen dit. */
+          <Link href={vag("/settings/mailboxes")} className={btnSecondary}>
+            <Link2 className="h-4 w-4" />
+            Koppla inkorg
+          </Link>
         ) : null}
         {/* "Uppdatera" hämtar NYA testmail när inkorgen är en sandlåda: står
             kunden i ett fack fylls det facket på, står de i "Alla" byts hela
@@ -710,7 +718,7 @@ export function Dashboard({
                   Vill ni koppla er riktiga inkorg? Koppla Gmail, Outlook eller iCloud
                   under{" "}
                   <Link
-                    href="/settings/mailboxes"
+                    href={vag("/settings/mailboxes")}
                     className="focus-ring rounded-input underline underline-offset-4 hover:text-ochre"
                   >
                     Inställningar → Inkorgar

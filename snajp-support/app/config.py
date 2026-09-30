@@ -281,6 +281,15 @@ class Settings(BaseSettings):
     # förlorade 3/4 blinda domar. Tom = ärv MODEL (huvudmodellen), vilket är
     # rätt läge tills en NY domarkörning bevisar annat. Se outreach_playbook.
     leads_humanizer_model: str = ""
+    # Iris-profilens kompilering (app/leads/profil.py) — ett anrop per
+    # ändrad affärskontext, så en starkare modell kostar nästan inget. Tom =
+    # ärv MODEL.
+    iris_profil_model: str = ""
+    # Jev-kaskaden (app/leads/jev.py): "off" | "skugga" (loggar Jevs beslut
+    # bredvid LLM-bedömningen, fäller inget) | "pa" (fäller uppenbara missar
+    # före researchanropet). Nyckeln bor i Railways variabellager.
+    iris_jev: str = "off"
+    typesafe_api_key: str = ""
     # Leads-budgeten (INV-JOB-002-arbetet, app/leads/budget.py): max summa
     # tokens_in+tokens_out per tenant och rullande 24 timmar över leads-
     # agenttyperna. Vid taket svarar körningsstarterna 429 i stället för att

@@ -37,6 +37,24 @@ export type Kriterium = {
   utfall: string;
   motivering: string;
   hart?: boolean;
+  /** Iris-bedömningen (2026-09-30): verifierade citat ur källmaterialet. */
+  belagg?: { url: string; citat: string }[];
+};
+
+/** Kodens nivå (app/leads/bedomning.py) — aldrig modellens eget omdöme. */
+export const NIVA_ETIKETT: Record<string, string> = {
+  A: "Stark",
+  B: "Möjlig",
+  C: "Bortvald"
+};
+
+/** Utfallen som kunden läser dem. */
+export const UTFALL_ETIKETT: Record<string, string> = {
+  träff: "Uppfyllt",
+  delvis: "Delvis",
+  miss: "Uppfylls inte",
+  okänd: "Okänt",
+  ej_satt: "Ej satt"
 };
 
 function arKriterium(v: unknown): v is Kriterium {

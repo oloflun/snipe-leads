@@ -2,6 +2,7 @@
 
 import { LeadsControls } from "@/components/leads/LeadsControls";
 import { IrisEskalering } from "@/components/leads/IrisEskalering";
+import { IrisProfil } from "@/components/leads/IrisProfil";
 
 /**
  * Iris › Inställningar — målgrupp och autonomi (LeadsControls, oförändrad)
@@ -13,7 +14,9 @@ import { IrisEskalering } from "@/components/leads/IrisEskalering";
 export function IrisInstallningar({ demo = false }: Readonly<{ demo?: boolean }>) {
   return (
     <div className="grid gap-12">
-      <section>
+      <IrisProfil demo={demo} />
+
+      <section className="border-t border-ink/15 pt-8">
         {/* Kicker, inte rubrik: en h3 direkt under sidans h1 utan
             mellanliggande h2 bryter axe heading-order (moderate, 2026-09-19). */}
         <p className="kicker text-mineral">Målgrupp och autonomi</p>
