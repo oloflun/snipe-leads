@@ -576,7 +576,9 @@ def _rena_kontaktformular(url: object, *, webb: str | None) -> str | None:
     return normaliserad
 
 
-def _rena_traffar(rader: list[dict[str, Any]], *, uteslut: set[str], tak: int) -> list[dict[str, Any]]:
+def _rena_traffar(
+    rader: list[dict[str, Any]], *, uteslut: set[str], tak: int, tillat_utan_webb: bool = False
+) -> list[dict[str, Any]]:
     rena: list[dict[str, Any]] = []
     sedda: set[str] = set()
     for rad in rader:
@@ -588,7 +590,13 @@ def _rena_traffar(rader: list[dict[str, Any]], *, uteslut: set[str], tak: int) -
         webb = rad.get("website")
         webb = normalisera_webbplats(str(webb)) if webb else None
         if not webbplats_ar_bolagets(webb):
-            continue
+            # Iris-profilen kan sikta på bolag UTAN webbplats (Alunix
+            # 2026-09-29: "gamla hemsidor eller ingen sida alls"). Då räcker
+            # ett orgnr eller en arbetsadress som identitet.
+            epost_rad = str(rad.get("contact_email") or "").strip()
+            if not (tillat_utan_webb and (rad.get("orgnr") or ar_arbetsmejl(epost_rad or None))):
+                continue
+            webb = None
         sedda.add(namn.casefold())
 
         # Kontaktfälten är ALLA valfria på radnivå — company_name och website
@@ -623,6 +631,7 @@ def _rena_traffar(rader: list[dict[str, Any]], *, uteslut: set[str], tak: int) -
                 "website": webb,
                 "orgnr": str(rad["orgnr"]).strip() if rad.get("orgnr") else None,
                 "ort": str(rad["ort"]).strip() if rad.get("ort") else None,
+                "postnr": str(rad["postnr"]).strip() if rad.get("postnr") else None,
                 "contact_name": kontaktnamn,
                 "contact_role": kontaktroll,
                 "contact_email": epost,
@@ -926,11 +935,46 @@ def _reserver(antal: int) -> int:
     return min(5, max(2, (antal + 1) // 2))
 
 
+def _profil_som_soktext(profil: dict[str, Any] | None, ring: int) -> str:
+    """Iris-profilens sökledtrådar (app/leads/profil.py) — det som gjorde
+    att Alunix körning 2026-09-29 letade fel: fokus, område och kriterier
+    fanns bara i kundens fritext och nådde aldrig sökningen."""
+    if not profil:
+        return ""
+    rader = []
+    if profil.get("malgrupp"):
+        rader.append(f"- Malgrupp: {profil['malgrupp']}")
+    if profil.get("egen_bransch"):
+        rader.append(f"- OBS: {profil['egen_bransch']} ar SALJARENS egen bransch, inte malgruppens.")
+    ringar = profil.get("geo_prioritet") or []
+    if ringar:
+        aktuell = ringar[min(ring, len(ringar) - 1)]
+        px = ", ".join(f"{p}xx" for p in aktuell.get("postnr_prefix") or [])
+        rader.append(
+            f"- Borja i: {aktuell['etikett']}" + (f" (postnummer {px})" if px else "")
+            + (" — om det inte racker, fortsatt utat i narliggande omraden." if ring < len(ringar) - 1 else "")
+        )
+    if profil.get("kommuner"):
+        rader.append("- Bolaget MASTE ligga i: " + ", ".join(profil["kommuner"]))
+    for k in profil.get("kriterier") or []:
+        rader.append(f"- {'Krav' if k.get('krav') == 'maste' else 'Helst'}: {k['text']}")
+    for u in profil.get("uteslut") or []:
+        rader.append(f"- Uteslut: {u['text']}")
+    if profil.get("utan_webbplats"):
+        rader.append(
+            "- Bolag UTAN egen webbplats ingar i malgruppen: satt website null och ange orgnr, "
+            "ort, postnr och en officiell kontakt-e-post om den finns i ett offentligt register."
+        )
+    return "Iris-profil (kundens egna kriterier):\n" + "\n".join(rader) + "\n"
+
+
 async def hitta_bolag(
     icp: dict[str, Any],
     antal: int,
     *,
     uteslut_namn: set[str] | None = None,
+    profil: dict[str, Any] | None = None,
+    ring: int = 0,
 ) -> list[dict[str, Any]]:
     """Returnerar upp till `antal` riktiga bolag. Tom lista = inga verifierbara traffar.
 
@@ -951,7 +995,12 @@ async def hitta_bolag(
     # hoppar till nästa kandidat, och Gemini ombeds om reserver i samma
     # anrop. Uppmätt 2026-09-15: filtret utan påfyllning gav 4 bolag när
     # kunden beställt 5.
-    fran_kallor = await _sok_registrerade_kallor(icp, antal, uteslut)
+    # Annons- och nyhetskällorna fyllde Alunix körning 2026-09-29 med
+    # 700-mannabolag och bemanningsföretag — de hittar bolag som REKRYTERAR,
+    # vilket bara är en signal när kunden uttryckligen kräver den. Med en
+    # profil körs de därför bara när "Signaler som krävs" är ifyllt.
+    kor_kallor = profil is None or bool(icp.get("must_have"))
+    fran_kallor = await _sok_registrerade_kallor(icp, antal, uteslut) if kor_kallor else []
     if len(fran_kallor) >= antal:
         return fran_kallor[:antal]
     uteslut = uteslut | {t["company_name"].casefold() for t in fran_kallor}
@@ -998,11 +1047,12 @@ async def hitta_bolag(
         "Returnera ENBART en JSON-lista:\n"
         '[{{"company_name":"...","website":"https://...","orgnr":null,"ort":"...",'
         '"contact_name":null,"contact_role":null,"contact_email":null,'
-        '"contact_level":null,"contact_form_url":null,"anstallda":null}}]\n'
+        '"contact_level":null,"contact_form_url":null,"anstallda":null,"postnr":null}}]\n'
         "website MÅSTE vara bolagets egen officiella sajt, inte allabolag/hitta/ratsit/"
         "linkedin. orgnr bara om det star pa bolagets egen sajt. contact_email och "
         "contact_form_url MASTE vara pa samma doman som website.\n\n"
         f"Malgrupp:\n{_icp_som_text(icp)}\n"
+        f"{_profil_som_soktext(profil, ring)}"
         f"Uteslut dessa namn: {', '.join(sorted(uteslut)) or '(inga)'}\n"
     ).format(antal=antal_begart)
     try:
@@ -1015,7 +1065,12 @@ async def hitta_bolag(
             return fran_kallor
         logger.warning("Discovery-sokningen misslyckades.")
         raise
-    rena = await utan_platshallare(_rena_traffar(_plocka_json(text), uteslut=uteslut, tak=antal_begart))
+    utan_webb = bool(profil and profil.get("utan_webbplats"))
+    rena = _rena_traffar(_plocka_json(text), uteslut=uteslut, tak=antal_begart, tillat_utan_webb=utan_webb)
+    # En platshållarsida ("under konstruktion") ÄR målgruppen när kunden
+    # söker bolag utan fungerande webbplats — den mäts av webbsignal i stället.
+    if not utan_webb:
+        rena = await utan_platshallare(rena)
     return fran_kallor + rena[:antal_kvar]
 
 

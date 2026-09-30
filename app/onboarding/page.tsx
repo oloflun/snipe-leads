@@ -1,6 +1,10 @@
 import { OnboardingWizard } from "@/components/auth/OnboardingWizard";
 import { auth } from "@/lib/auth";
 import { redirectIfOnboarded } from "@/lib/auth/onboarding-gate";
+// Målgruppsstegets förifyllning — samma tal och roller som standardinställningarna
+// skriver när steget saknas. Modulen är server-only, därför props och inte import
+// i klienten.
+import { SMAFORETAG, STANDARDROLLER } from "@/lib/snajp/standard";
 
 export default async function Page() {
   // Den som redan är klar ska inte fastna här. Kontrollen låg i proxyn och
@@ -18,6 +22,7 @@ export default async function Page() {
         <OnboardingWizard
           epost={session?.user?.email ?? null}
           namn={session?.user?.name ?? null}
+          standardMalgrupp={{ roller: STANDARDROLLER, anstallda: SMAFORETAG }}
         />
       </div>
     </main>

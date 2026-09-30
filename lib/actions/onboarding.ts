@@ -8,13 +8,33 @@ import { formateraOrgnr, orgnrFel } from "@/lib/orgnr";
  * Bolagsfälten är fyra, inte åtta — de gamla åtta var förifyllda med påhittade
  * värden som gick att skicka in rakt av (se OnboardingWizard, som ärvde
  * lärdomen). Sedan 2026-09-20 bär flödet dessutom bransch, kontaktperson och
- * paketval, i fyra steg — se components/auth/OnboardingWizard.tsx.
+ * paketval, och sedan 2026-09-30 leadsagentens målgrupp — i fem steg, se
+ * components/auth/OnboardingWizard.tsx.
  */
 export type OnboardingInput = {
   orgnr: string;
   webbplats: string;
   produkt: string;
+  /**
+   * "Särskilt fokus" ur målgruppssteget. Fri text till produkttexten, som
+   * Iris-profilen tolkar — det strukturerade i `malgrupp` vinner alltid över
+   * tolkningen.
+   */
   fokus: string;
+  /**
+   * Målgruppssteget — leads-agentens grundfilter, som råa fältvärden
+   * (kommaseparerade listor, tal som text). Tolkas här, på serversidan, och
+   * skrivs som ICP av lib/snajp/standard.ts — bara om ICP:n är tom, så en
+   * omkörning aldrig skriver över kundens egna val.
+   */
+  malgrupp?: {
+    branscher: string;
+    orter: string;
+    undvik: string;
+    roller: string;
+    anstalldaMin: string;
+    anstalldaMax: string;
+  };
   /**
    * Kundens EGEN bransch, ur listan i lib/bransch.ts. Skrivs som en rad i
    * produkttexten (agenternas kontext och ordförråd) — ALDRIG i
@@ -95,6 +115,21 @@ function normaliseraWebbplats(rå: string): string {
   return /^https?:\/\//i.test(text) ? text : `https://${text}`;
 }
 
+/** "Göteborg, Mölndal" → ["Göteborg", "Mölndal"]. Taket är backendens (25). */
+function kommalista(rå: string | undefined): string[] {
+  return (rå ?? "")
+    .split(",")
+    .map((del) => del.trim())
+    .filter(Boolean)
+    .slice(0, 25);
+}
+
+/** Tomt eller icke-tal = inget värde, alltså ingen gräns åt det hållet. */
+function heltal(rå: string | undefined): number | null {
+  const text = (rå ?? "").replace(/\s/g, "");
+  return /^\d+$/.test(text) ? Number(text) : null;
+}
+
 export async function saveBusinessContext(input: OnboardingInput): Promise<OnboardingActionResult> {
   const { auth } = await import("@/lib/auth");
   const session = await auth();
@@ -164,6 +199,27 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
 
   const fokus = input.fokus.trim();
 
+  // Målgruppen tolkas här och inte i klienten — det är den här sidan som
+  // skyddar. Ett spann där min > max hade fällts av backendens validate_icp
+  // (422) och hela ICP:n hade tyst uteblivit, så det stoppas med ett besked.
+  const malgrupp = input.malgrupp
+    ? {
+        branscher: kommalista(input.malgrupp.branscher),
+        orter: kommalista(input.malgrupp.orter),
+        undvik: kommalista(input.malgrupp.undvik),
+        roller: kommalista(input.malgrupp.roller),
+        anstalldaMin: heltal(input.malgrupp.anstalldaMin),
+        anstalldaMax: heltal(input.malgrupp.anstalldaMax)
+      }
+    : undefined;
+  if (
+    malgrupp?.anstalldaMin != null &&
+    malgrupp.anstalldaMax != null &&
+    malgrupp.anstalldaMin > malgrupp.anstalldaMax
+  ) {
+    return { success: false, error: "Minsta antal anställda är större än största." };
+  }
+
   const { arBransch } = await import("@/lib/bransch");
   if (!arBransch(input.bransch)) {
     return { success: false, error: "Välj er bransch i listan." };
@@ -225,7 +281,9 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
         ? "Organisationsnummer: — (TESTARBETSYTA, inget riktigt bolag)"
         : `Organisationsnummer: ${formateraOrgnr(input.orgnr)}`,
       `Webbplats: ${webbplats}`,
-      `Bransch: ${input.bransch}`,
+      // SÄLJARENS bransch, inte målgruppens — med bara "Bransch:" läste
+      // Iris-profilen raden som ett målfilter.
+      `Vår egen bransch: ${input.bransch}`,
       `Vad vi säljer: ${produkt}`,
       fokus ? `Särskilt fokus: ${fokus}` : null,
       // Kontaktpersonen står i texten OCKSÅ när CRM-skrivningen lyckas:
@@ -407,7 +465,8 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
           },
           // Tålmodigt: uppstarten får vänta ut en kallstartande backend. Det är
           // enda tillfället kunden faktiskt väntar på att bli upplagd.
-          true
+          true,
+          malgrupp
         );
 
         // Kundregistret (Admin → Kunder → Data) fylls direkt vid onboarding —

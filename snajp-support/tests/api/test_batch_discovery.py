@@ -43,14 +43,35 @@ async def _vanta_jobb(client, job_id: str, *, headers=DEMO) -> dict:
 
 
 @pytest.mark.anyio
-async def test_tom_malgrupp_utan_namn_ger_422(live_llm):
+async def test_tom_affarskontext_och_malgrupp_ger_422(live_llm, monkeypatch):
+    """Sedan 2026-09-30 stoppar INTE en tom målgrupp (Alunix: körningen
+    vägrade starta utan stad). Bara att Iris inte vet vad kunden säljer."""
+
+    async def _tom(*_a, **_k):
+        return ""
+
+    monkeypatch.setattr(leads_api, "las_kundtext", _tom)
     async with app.router.lifespan_context(app):
         async with _client() as client:
             svar = await client.post(
                 "/api/leads/runs/batch", headers=DEMO, json={"limit": 3, "is_test": True}
             )
             assert svar.status_code == 422
-            assert "söker" in svar.json()["detail"]
+            assert "Affärskontext" in svar.json()["detail"]
+
+
+@pytest.mark.anyio
+async def test_affarskontext_utan_filter_startar_korningen(live_llm, monkeypatch):
+    async def _text(*_a, **_k):
+        return "Vad vi säljer: hemsidor åt småföretag i Göteborg."
+
+    monkeypatch.setattr(leads_api, "las_kundtext", _text)
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            svar = await client.post(
+                "/api/leads/runs/batch", headers=DEMO, json={"limit": 3, "is_test": True}
+            )
+            assert svar.status_code == 202, svar.text
 
 
 @pytest.mark.anyio
@@ -58,7 +79,7 @@ async def test_batch_returnerar_innan_sokningen_ar_klar(live_llm, monkeypatch):
     """Regression: Gemini-sökningen i POST-svaret gjorde att proxyn dog efter
     9 s och Safari visade 'Kunde inte nå servern'."""
 
-    async def _langsam(icp, antal, *, uteslut_namn=None):
+    async def _langsam(icp, antal, *, uteslut_namn=None, profil=None, ring=0):
         await asyncio.sleep(0.4)
         return [
             {
@@ -71,7 +92,7 @@ async def test_batch_returnerar_innan_sokningen_ar_klar(live_llm, monkeypatch):
             }
         ][:antal]
 
-    async def _spion(state, job_id, tenant, *, prospect_id, scope, overrides, is_test=False):
+    async def _spion(state, job_id, tenant, *, prospect_id, scope, overrides, is_test=False, batch_id=None):
         return None
 
     monkeypatch.setattr(leads_api, "hitta_bolag", _langsam)
@@ -109,10 +130,10 @@ async def test_batch_returnerar_innan_sokningen_ar_klar(live_llm, monkeypatch):
 async def test_batch_hittar_bolag_och_ignorerar_gamla_rader(live_llm, monkeypatch):
     startade: list[str] = []
 
-    async def _spion(state, job_id, tenant, *, prospect_id, scope, overrides, is_test=False):
+    async def _spion(state, job_id, tenant, *, prospect_id, scope, overrides, is_test=False, batch_id=None):
         startade.append(prospect_id)
 
-    async def _fynd(icp, antal, *, uteslut_namn=None):
+    async def _fynd(icp, antal, *, uteslut_namn=None, profil=None, ring=0):
         return [
             {
                 "company_name": "Hittat Säljbolag AB",
@@ -160,7 +181,7 @@ async def test_batch_hittar_bolag_och_ignorerar_gamla_rader(live_llm, monkeypatc
 
 @pytest.mark.anyio
 async def test_egna_namn_blir_den_har_korningens_prospekt(live_llm, monkeypatch):
-    async def _spion(state, job_id, tenant, *, prospect_id, scope, overrides, is_test=False):
+    async def _spion(state, job_id, tenant, *, prospect_id, scope, overrides, is_test=False, batch_id=None):
         return None
 
     async def _webb(namn, *, geografi=None):
@@ -194,10 +215,10 @@ async def test_scope_sok_stannar_efter_sokningen_och_koar_ingen_research(live_ll
     `utan_kontakt` — raden finns kvar i registret för komplettering."""
     startade: list[str] = []
 
-    async def _spion(state, job_id, tenant, *, prospect_id, scope, overrides, is_test=False):
+    async def _spion(state, job_id, tenant, *, prospect_id, scope, overrides, is_test=False, batch_id=None):
         startade.append(prospect_id)
 
-    async def _fynd(icp, antal, *, uteslut_namn=None):
+    async def _fynd(icp, antal, *, uteslut_namn=None, profil=None, ring=0):
         return [
             {
                 "company_name": "Snabbfynd AB",

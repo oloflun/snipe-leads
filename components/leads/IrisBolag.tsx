@@ -16,7 +16,7 @@ import type { EmailStudioData } from "@/lib/data/emails";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { EXEMPELBOLAG, EXEMPEL_OMGANG_1, EXEMPEL_OMGANG_2, kontaktnamn, type ExempelBolag } from "@/lib/demo/iris-exempel";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
-import { kriterier } from "@/lib/prospekt";
+import { NIVA_ETIKETT, UTFALL_ETIKETT, kriterier } from "@/lib/prospekt";
 import { cn } from "@/lib/utils";
 
 /**
@@ -59,6 +59,15 @@ type Prospekt = {
   qualified: boolean | null;
   disqualifiers: string[] | null;
   score_breakdown: unknown;
+  /** Iris-bedömningen (migration 079): nivå A/B/C, motivering och Jev. */
+  niva?: "A" | "B" | "C" | null;
+  motivering?: string | null;
+  jev?: JevData | null;
+};
+
+type JevData = {
+  triage?: { lage?: string; fit?: number | null; skulle_falla?: boolean; fall_skal?: string[]; stodrad?: string | null } | null;
+  klassning?: { lage?: string; sannolikhet?: number | null; trafikniva?: string | null; insats?: string | null } | null;
 };
 
 type ExempelRad = Prospekt & { _exempel: ExempelBolag };
@@ -95,6 +104,7 @@ function segment(p: Prospekt): string {
 }
 
 function beskrivning(p: Prospekt): string | null {
+  if (p.motivering) return p.motivering;
   const träff = kriterier(p.score_breakdown).find((k) => k.motivering && k.utfall !== "saknas");
   return träff?.motivering ?? (p.disqualifiers?.[0] ?? null);
 }
@@ -126,6 +136,17 @@ function useDesktop(): boolean {
     return () => mql.removeEventListener("change", uppdatera);
   }, []);
   return desktop;
+}
+
+/** Researchen är köad eller pågår: raden finns men är inte bedömd än. */
+function researchPagar(p: Prospekt): boolean {
+  return p.origin !== "example" && !p.niva && p.score_total == null && p.icp_fit == null;
+}
+
+/** Bedömda först (A före B, högst poäng först), pågående sist — exemplen ligger kvar överst. */
+function sortera(rader: Prospekt[]): Prospekt[] {
+  const rang = (p: Prospekt) => (p.origin === "example" ? 0 : p.niva === "A" ? 1 : p.niva === "B" ? 2 : researchPagar(p) ? 4 : 3);
+  return [...rader].sort((a, b) => rang(a) - rang(b) || (b.score_total ?? -1) - (a.score_total ?? -1));
 }
 
 function poang(p: Prospekt): string {
@@ -172,6 +193,7 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
   const [demoKorFas, setDemoKorFas] = useState<"vilar" | "kor">("vilar");
   const [valdId, setValdId] = useState<string | null>(null);
   const [oppnade, setOppnade] = useState<string[]>([]);
+  const [visaBortvalda, setVisaBortvalda] = useState(false);
   const detaljRef = useRef<HTMLDivElement>(null);
   const listaRef = useRef<HTMLDivElement>(null);
   const isDesktop = useDesktop();
@@ -235,14 +257,23 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
       void hamta(true);
       avslutaKorning();
     };
+    const uppdatera = () => void hamta(true);
     window.addEventListener("snipra:leads-korning-klar", lyssna);
-    return () => window.removeEventListener("snipra:leads-korning-klar", lyssna);
+    window.addEventListener("snipra:leads-korning-steg", uppdatera);
+    return () => {
+      window.removeEventListener("snipra:leads-korning-klar", lyssna);
+      window.removeEventListener("snipra:leads-korning-steg", uppdatera);
+    };
   }, [hamta, avslutaKorning]);
 
-  const alla = useMemo<Prospekt[]>(() => {
+  const allaRader = useMemo<Prospekt[]>(() => {
     if (lage.fas !== "klar") return exempelRader;
-    return [...exempelRader, ...lage.prospekt];
+    return sortera([...exempelRader, ...lage.prospekt]);
   }, [lage, exempelRader]);
+  // Bortvalda (nivå C) är Iris eget arbete, inte leverans — de ligger bakom
+  // en växel i stället för att fylla listan (Alunix 2026-09-29).
+  const antalBortvalda = allaRader.filter((p) => p.niva === "C").length;
+  const alla = visaBortvalda ? allaRader : allaRader.filter((p) => p.niva !== "C");
 
   function valjRad(id: string) {
     setOppnade((forr) => (forr.includes(id) ? forr : [...forr, id]));
@@ -368,6 +399,18 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
         ) : (
           <div className="grid gap-8 lg:grid-cols-12 lg:items-start">
             <div ref={listaRef} tabIndex={-1} className="min-w-0 outline-none lg:col-span-5">
+              {antalBortvalda > 0 ? (
+                <div className="mb-3 flex justify-end">
+                  <button
+                    type="button"
+                    aria-pressed={visaBortvalda}
+                    onClick={() => setVisaBortvalda((v) => !v)}
+                    className="focus-ring text-[13px] text-ink-muted underline decoration-ink/25 underline-offset-4 hover:text-ink"
+                  >
+                    {visaBortvalda ? "Dölj bortvalda" : `Visa bortvalda (${antalBortvalda})`}
+                  </button>
+                </div>
+              ) : null}
               {lage.fas === "laddar" && exempelRader.length === 0 ? (
                 <SkeletonRows />
               ) : lage.fas === "ejAktiverad" ? (
@@ -408,10 +451,19 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
                             {p.origin !== "example" ? (
                               <div className="shrink-0 text-right">
                                 <p className="num text-[1.0625rem] font-semibold tabular-nums">
-                                  {poang(p)}
+                                  {researchPagar(p) ? "…" : poang(p)}
                                 </p>
-                                <p className="kicker mt-0.5 text-mineral">
-                                  {STATUS_ETIKETT[p.status] ?? p.status}
+                                <p
+                                  className={cn(
+                                    "kicker mt-0.5",
+                                    p.niva === "C" ? "text-danger" : "text-mineral"
+                                  )}
+                                >
+                                  {researchPagar(p)
+                                    ? "Researchar"
+                                    : p.niva
+                                      ? NIVA_ETIKETT[p.niva]
+                                      : STATUS_ETIKETT[p.status] ?? p.status}
                                 </p>
                               </div>
                             ) : null}
@@ -607,9 +659,12 @@ async function snajpAnrop<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 function byggForskningssammanfattning(p: Prospekt): string {
-  return kriterier(p.score_breakdown)
+  const rader = kriterier(p.score_breakdown)
     .map((k) => `${k.etikett} (${k.utfall})${k.motivering ? `: ${k.motivering}` : ""}`)
-    .join("\n")
+    .join("\n");
+  return [p.motivering ? `Varför bolaget valdes: ${p.motivering}` : null, rader]
+    .filter(Boolean)
+    .join("\n\n")
     .slice(0, 8000);
 }
 
@@ -869,12 +924,16 @@ function LeadDetail({
 
       <dl className="mt-5 grid grid-cols-3 gap-x-6 gap-y-4 border-t border-ink/12 pt-4">
         <div>
-          <dt className="kicker text-mineral">Score</dt>
-          <dd className="num mt-1 text-[1.25rem] font-semibold tabular-nums">{poang(p)}</dd>
+          <dt className="kicker text-mineral">Poäng</dt>
+          <dd className="num mt-1 text-[1.25rem] font-semibold tabular-nums">
+            {researchPagar(p) ? "…" : poang(p)}
+          </dd>
         </div>
         <div>
-          <dt className="kicker text-mineral">Status</dt>
-          <dd className="mt-1 text-[15px]">{STATUS_ETIKETT[p.status] ?? p.status}</dd>
+          <dt className="kicker text-mineral">Bedömning</dt>
+          <dd className={cn("mt-1 text-[15px]", p.niva === "C" && "text-danger")}>
+            {researchPagar(p) ? "Researchar" : p.niva ? NIVA_ETIKETT[p.niva] : STATUS_ETIKETT[p.status] ?? p.status}
+          </dd>
         </div>
         <div>
           <dt className="kicker text-mineral">Källor</dt>
@@ -883,7 +942,13 @@ function LeadDetail({
       </dl>
 
       <div className="mt-6 border-t border-ink/12 pt-5">
-        <h3 className="kicker text-mineral">Research</h3>
+        {p.motivering ? (
+          <>
+            <h3 className="kicker text-mineral">Motivering</h3>
+            <p className="mt-2 max-w-[65ch] text-[15px] leading-7 text-ink">{p.motivering}</p>
+          </>
+        ) : null}
+        <h3 className={cn("kicker text-mineral", p.motivering && "mt-5")}>Kriterier</h3>
         {kriterier(p.score_breakdown).length ? (
           <ul className="mt-3 divide-y divide-ink/10">
             {kriterier(p.score_breakdown).map((k, i) => (
@@ -891,22 +956,48 @@ function LeadDetail({
                 <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                   <p className="text-[14px] font-medium">{k.etikett}</p>
                   <span className={cn("kicker", k.hart && k.utfall === "miss" ? "text-danger" : "text-mineral")}>
-                    {k.utfall}
+                    {UTFALL_ETIKETT[k.utfall] ?? k.utfall}
                   </span>
                 </div>
                 {k.motivering ? (
                   <p className="mt-1 max-w-[65ch] text-[14px] leading-6 text-ink-muted">{k.motivering}</p>
                 ) : null}
+                {k.belagg?.length ? (
+                  <ul className="mt-2 space-y-1">
+                    {k.belagg.map((b) => (
+                      <li key={b.citat} className="border-l-2 border-ink/15 pl-3 text-[13px] leading-5 text-ink-subtle">
+                        ”{b.citat}”
+                        {b.url.startsWith("http") ? (
+                          <>
+                            {" "}
+                            <a
+                              href={b.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="focus-ring underline decoration-ink/25 underline-offset-4"
+                            >
+                              källa
+                            </a>
+                          </>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
               </li>
             ))}
           </ul>
         ) : (
-          <p className="mt-3 text-[14px] text-ink-subtle">Ingen poängmotivering sparad.</p>
+          <p className="mt-3 text-[14px] text-ink-subtle">
+            {researchPagar(p)
+              ? "Iris researchar bolaget. Poäng och motivering visas när researchen är klar."
+              : "Bedömdes innan Iris-profilen fanns. Kör researchen igen för poäng och motivering."}
+          </p>
         )}
 
-        {p.disqualifiers?.length ? (
+        {p.niva === "C" && p.disqualifiers?.length ? (
           <div className="mt-4">
-            <h4 className="kicker text-mineral">Skäl</h4>
+            <h4 className="kicker text-mineral">Varför bortvald</h4>
             <ul className="mt-2 space-y-1.5">
               {p.disqualifiers.map((skal) => (
                 <li key={skal} className="border-l-2 border-danger pl-3 text-[14px] text-ink-muted">
@@ -916,6 +1007,8 @@ function LeadDetail({
             </ul>
           </div>
         ) : null}
+
+        {p.jev?.triage || p.jev?.klassning ? <JevRad jev={p.jev} /> : null}
 
         <h4 className="mt-5 kicker text-mineral">Källor</h4>
         {kallor.length ? (
@@ -993,6 +1086,29 @@ function LeadDetail({
           </div>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+/** Jevs förbedömning och klassning (app/leads/jev.py) — visas för att
+ * kunden och vi ska kunna jämföra den med kodens bedömning. */
+function JevRad({ jev }: Readonly<{ jev: JevData }>) {
+  const t = jev.triage;
+  const k = jev.klassning;
+  const delar = [
+    t && typeof t.fit === "number" ? `förbedömning ${t.fit.toFixed(1)} av 3` : null,
+    t?.skulle_falla ? `hade valt bort (${(t.fall_skal ?? []).join("; ")})` : null,
+    k && typeof k.sannolikhet === "number" ? `bra lead ${Math.round(k.sannolikhet * 100)} %` : null,
+    k?.trafikniva ? `prioritet ${k.trafikniva}` : null
+  ].filter(Boolean);
+  if (!delar.length) return null;
+  return (
+    <div className="mt-5">
+      <h4 className="kicker text-mineral">Jev</h4>
+      <p className="mt-2 max-w-[65ch] text-[13px] leading-6 text-ink-subtle">
+        {delar.join(" · ")}
+        {t?.stodrad ? <span className="block">Stödrad: ”{t.stodrad}”</span> : null}
+      </p>
     </div>
   );
 }

@@ -65,6 +65,26 @@ def normalisera_kunddata(falt: dict[str, Any]) -> dict[str, Any]:
     return resultat
 
 
+
+#: Fälten `spara_bedomning` får skriva på prospektraden (Iris-bedömningen,
+#: migration 024/031/079). En lista, delad av båda lagringarna, så att de
+#: aldrig kan glida isär.
+BEDOMNINGSFALT = (
+    "niva",
+    "score_total",
+    "score_breakdown",
+    "motivering",
+    "profil_version",
+    "jev",
+    "icp_fit",
+    "qualified",
+    "disqualifiers",
+    "status",
+    "ort",
+    "postnr",
+    "anstallda",
+)
+
 class Storage(Protocol):
     name: str
 
@@ -846,6 +866,16 @@ class Storage(Protocol):
         skrapade källmaterialet och kan hitta en namngiven person där den
         breda `hitta_bolag()`-sökningen bara verifierade en rollbaserad
         adress. Se `app/agent/leads_agent.py::_uppgradera_kontakt`."""
+        ...
+
+    async def spara_bedomning(
+        self, tenant_id: str, prospect_id: str, *, bedomning: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """Iris-bedömningen (migration 079 + 024 + 031) i ETT anrop:
+        niva, score_total, score_breakdown, motivering, profil_version, jev,
+        icp_fit, qualified, disqualifiers, status — plus ort/postnr/anstallda
+        när researchen hittade dem. Nycklar som saknas i `bedomning` rörs inte.
+        Se app/leads/bedomning.py."""
         ...
 
     async def create_prospect_source(

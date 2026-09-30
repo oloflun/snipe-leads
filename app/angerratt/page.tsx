@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 
 /**
  * Informationen om distansavtalslagen som onboardingens villkorskryssruta
- * länkar till (OnboardingWizard, steg 4).
+ * länkar till (OnboardingWizard, paketsteget — sista steget).
  *
  * ## Rättsläget som texten bygger på (kontrollerat 2026-09-29)
  *

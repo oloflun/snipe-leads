@@ -2,7 +2,7 @@ import "server-only";
 
 import { sqlAsUser } from "@/lib/db";
 import type { BusinessContext, Workspace } from "@/lib/database.types";
-import { sattStandardinstallningar } from "@/lib/snajp/standard";
+import { sattStandardinstallningar, type Malgruppsfilter } from "@/lib/snajp/standard";
 import { skapaKundtenant, utfardaTenantnyckel } from "@/lib/snajp/testtenant";
 
 /**
@@ -97,7 +97,9 @@ export async function sakerstallKundtenant(
   workspace: Workspace,
   businessContext: Kundunderlag | null,
   /** `true` i uppstarten, där väntan på en kallstartande backend är poängen. */
-  tolamodigt = false
+  tolamodigt = false,
+  /** Onboardingens målgruppssteg. Bara uppstarten har det. */
+  malgrupp?: Malgruppsfilter
 ): Promise<Kundtenant | null> {
   if (workspace.slug) {
     // Redan kopplad. Den här funktionen kopplar; den flyttar aldrig en
@@ -142,7 +144,7 @@ export async function sakerstallKundtenant(
     return null;
   }
 
-  await fyllStandardinstallningar(apiKey, workspace, businessContext);
+  await fyllStandardinstallningar(apiKey, workspace, businessContext, malgrupp);
 
   return { slug: tenant.slug, apiKey };
 }
@@ -158,7 +160,8 @@ export async function sakerstallKundtenant(
 export async function fyllStandardinstallningar(
   apiKey: string,
   workspace: Workspace,
-  businessContext: Kundunderlag | null
+  businessContext: Kundunderlag | null,
+  malgrupp?: Malgruppsfilter
 ): Promise<void> {
   if (!businessContext) {
     // Inget underlag att härleda ur. Att skriva defaultarna ändå hade gett
@@ -173,7 +176,8 @@ export async function fyllStandardinstallningar(
     malgrupp: businessContext.target_audience,
     erbjudande: businessContext.offer,
     nastaSteg: businessContext.cta,
-    namn: workspace.name
+    namn: workspace.name,
+    malgruppsfilter: malgrupp
   });
 
   if (utfall.produktbeskrivning || utfall.rostdokument || utfall.icp) {

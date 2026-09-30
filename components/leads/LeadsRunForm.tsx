@@ -49,6 +49,23 @@ import { cn } from "@/lib/utils";
 
 type Jobb = { job_id: string; prospect_id?: string };
 
+/**
+ * Iris-motorns tillstånd (snajp-support/app/leads/korning.py). `mal` räknar
+ * LEVERBARA leads — kvalificerade, över tröskeln, med mejlväg — inte
+ * kandidater (INV-LEADS-N-001). Körningen fyller på själv tills målet är
+ * nått eller den säger ärligt varför inte (`sammanfattning`).
+ */
+type Korning = {
+  mal: number;
+  levererade: number;
+  undersokta: number;
+  pagaende: number;
+  klar: boolean;
+  slut_orsak?: string | null;
+  flaskhals?: string | null;
+  sammanfattning?: string | null;
+};
+
 type LeadsSvar = {
   jobs?: Jobb[];
   count?: number;
@@ -171,7 +188,9 @@ export function LeadsRunForm({
 }>) {
   const [filterOppna, setFilterOppna] = useState(!filtrerbar);
   const [limit, setLimit] = useState("3");
-  const [scope, setScope] = useState<"research" | "research_and_draft">("research");
+  // Utkast är standard: Iris levererar leads MED utkast (Alunix 2026-09-29 —
+  // "lyckades inte generera ett enda utkast"). Bara research är ett val.
+  const [scope, setScope] = useState<"research" | "research_and_draft">("research_and_draft");
   const [branscher, setBranscher] = useState("");
   const [undvik, setUndvik] = useState("");
   const [geografi, setGeografi] = useState("");
@@ -188,6 +207,7 @@ export function LeadsRunForm({
   const [jobbLage, setJobbLage] = useState<{ klara: number; totalt: number; misslyckade: number } | null>(
     null
   );
+  const [korning, setKorning] = useState<Korning | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [fel, setFel] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -234,7 +254,7 @@ export function LeadsRunForm({
   async function pollaJobb(
     jobId: string,
     maxForsok = 90
-  ): Promise<{ status: string; error?: string; jobs?: Jobb[] }> {
+  ): Promise<{ status: string; error?: string; jobs?: Jobb[]; korning?: Korning }> {
     // Prefixet är en literal i anropet så rotvakten ser sökvägen.
     // `/leads/jobb/` är den inloggade proxyn — inte `/jobs/`, som är den
     // anonyma chattpollningen och slår upp under demonyckeln.
@@ -243,13 +263,42 @@ export function LeadsRunForm({
       const jobb = await anropa<{
         status?: string;
         error?: string;
-        result?: { jobs?: Jobb[] };
+        result?: { jobs?: Jobb[]; korning?: Korning };
       }>("/leads/jobb/" + jobId, { method: "GET" });
       if (jobb.status === "completed" || jobb.status === "failed") {
-        return { status: jobb.status, error: jobb.error, jobs: jobb.result?.jobs };
+        return { status: jobb.status, error: jobb.error, jobs: jobb.result?.jobs, korning: jobb.result?.korning };
       }
     }
     return { status: "timeout", error: "Körningen tog för lång tid." };
+  }
+
+  /**
+   * Följer Iris-motorn tills körningen är klar. Listan uppdateras efter varje
+   * bolag som blivit klart (händelsen snipra:leads-korning-steg), inte först i
+   * slutet — Alunix 2026-09-29 såg "1/3 jobb" och ett enda bolag i listan.
+   * Körningen fortsätter på servern även om fliken stängs.
+   */
+  async function följKörning(batchId: string, första: Korning) {
+    let k = första;
+    let sett = -1;
+    for (let forsok = 0; forsok < 900; forsok += 1) {
+      setKorning(k);
+      const klara = k.undersokta + k.levererade;
+      if (klara !== sett) {
+        sett = klara;
+        window.dispatchEvent(new Event("snipra:leads-korning-steg"));
+      }
+      if (k.klar) break;
+      setStatus(
+        `Iris har ${k.levererade} av ${k.mal} leads · ${k.undersokta} bolag undersökta` +
+          (k.pagaende ? " · researchar nästa" : " · letar fler bolag")
+      );
+      await new Promise((r) => setTimeout(r, 3000));
+      const jobb = await anropa<{ result?: { korning?: Korning } }>("/leads/jobb/" + batchId, { method: "GET" });
+      if (jobb.result?.korning) k = jobb.result.korning;
+    }
+    setStatus(k.klar ? k.sammanfattning ?? `Klart: ${k.levererade} leads.` : "Körningen fortsätter i bakgrunden.");
+    window.dispatchEvent(new Event("snipra:leads-korning-klar"));
   }
 
   async function kör() {
@@ -257,6 +306,7 @@ export function LeadsRunForm({
     setFel(null);
     setSvar(null);
     setJobbLage(null);
+    setKorning(null);
     setStatus(null);
     try {
       const overrides = byggÖverskrivningar();
@@ -289,6 +339,11 @@ export function LeadsRunForm({
         const sok = await pollaJobb(sokId, 150);
         if (sok.status !== "completed") {
           throw new Error(sok.error ?? "Sökningen hittade inga bolag.");
+        }
+        if (sok.korning) {
+          setSvar({ ...resultat, jobs: [], count: sok.korning.mal, fase: "research" });
+          await följKörning(sokId, sok.korning);
+          return;
         }
         jobb = sok.jobs ?? [];
       }
@@ -370,28 +425,36 @@ export function LeadsRunForm({
       {/* Villkorlig rendering, inte `hidden`-attributet: Tailwinds `grid`
           sätter display efter UA-regeln [hidden]{display:none} och vinner.
           Fältvärdena bor i komponentens state, så inget tappas vid stängning. */}
+      {/* Antal och omfattning dimensionerar körningen och står alltid synliga:
+          gömda bakom Filtrera kördes varje körning som "bara research" utan
+          att kunden såg det (2026-09-29). */}
+      {!demo ? (
+        <div className="mt-6 grid max-w-[760px] gap-5 sm:grid-cols-2">
+          <Rad etikett="Antal leads" hint="1–50">
+            <input
+              type="number"
+              min={1}
+              max={50}
+              value={limit}
+              onChange={(e) => setLimit(e.target.value)}
+              className={fältklass}
+            />
+          </Rad>
+          <Rad etikett="Omfattning">
+            <select
+              value={scope}
+              onChange={(e) => setScope(e.target.value as typeof scope)}
+              className={fältklass}
+            >
+              <option value="research_and_draft">Research och utkast</option>
+              <option value="research">Bara research</option>
+            </select>
+          </Rad>
+        </div>
+      ) : null}
+
       {filterOppna ? (
       <div id="leads-filter" className="mt-6 grid max-w-[760px] gap-5 sm:grid-cols-2">
-        <Rad etikett="Antal bolag" hint="1–50">
-          <input
-            type="number"
-            min={1}
-            max={50}
-            value={limit}
-            onChange={(e) => setLimit(e.target.value)}
-            className={fältklass}
-          />
-        </Rad>
-        <Rad etikett="Omfattning">
-          <select
-            value={scope}
-            onChange={(e) => setScope(e.target.value as typeof scope)}
-            className={fältklass}
-          >
-            <option value="research">Bara research</option>
-            <option value="research_and_draft">Research och utkast</option>
-          </select>
-        </Rad>
         <Rad etikett={ICP_ETIKETTER.industries.label} hint="komma emellan">
           <input value={branscher} onChange={(e) => setBranscher(e.target.value)} placeholder={ICP_ETIKETTER.industries.hint} className={fältklass} />
         </Rad>
@@ -458,7 +521,7 @@ export function LeadsRunForm({
           <div className="rounded-card bg-paper2/60 p-5">
             <p className="text-[15px]">
               <strong className="font-semibold">{svar.count}</strong>{" "}
-              {svar.count === 1 ? "bolag" : "bolag"} i körningen ·{" "}
+              {korning ? "leads beställda" : "bolag i körningen"} ·{" "}
               {svar.scope === "research_and_draft" ? "research och utkast" : "bara research"}
               {svar.is_test ? " · testkörning" : null}
             </p>
@@ -494,6 +557,17 @@ export function LeadsRunForm({
               </p>
             )}
           </div>
+
+          {korning ? (
+            <p className="text-[14px] text-ink-muted" aria-live="polite">
+              <span className="num tabular-nums">{korning.levererade}</span> av{" "}
+              <span className="num tabular-nums">{korning.mal}</span> leads klara ·{" "}
+              <span className="num tabular-nums">{korning.undersokta}</span> bolag undersökta
+              {korning.klar && korning.levererade < korning.mal && korning.flaskhals
+                ? ` · det som strypte mest: ${korning.flaskhals.toLowerCase()}`
+                : null}
+            </p>
+          ) : null}
 
           {jobbLage && jobbLage.totalt > 0 ? (
             <p className="text-[14px] text-ink-muted">

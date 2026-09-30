@@ -36,12 +36,14 @@ import { readJsonBody } from "@/lib/http/json";
  *  * **Röstdokumentet** är ett UTKAST med de regler som gäller alla svenska
  *    B2B-utskick (du-tilltal, korta meningar, inga utropstecken). Det är text
  *    kunden kan stryka över, inte ett påstående om hur just de låter.
- *  * **ICP** får bara det som går att sätta utan att gissa: storleksspannet
- *    (EU:s definition av småföretag, samma tal som backendens
- *    `SMAFORETAG_ANSTALLDA`) och beslutsfattarrollerna. Bransch och geografi
- *    lämnas TOMMA med flit — ett gissat geografiskt filter smalnar av urvalet
- *    utan att någon bestämt det, och ett gissat branschfilter är samma sak fast
- *    dyrare.
+ *  * **ICP** är det kunden själv valde i onboardingens målgruppssteg
+ *    (`Underlag.malgruppsfilter`) — branscher, orter, undvik, roller och
+ *    storleksspann. Utan det steget (inloggningsvägens läkning) får den bara
+ *    det som går att sätta utan att gissa: storleksspannet (EU:s definition av
+ *    småföretag, samma tal som backendens `SMAFORETAG_ANSTALLDA`) och
+ *    beslutsfattarrollerna. Bransch och geografi GISSAS aldrig — ett gissat
+ *    geografiskt filter smalnar av urvalet utan att någon bestämt det, och ett
+ *    gissat branschfilter är samma sak fast dyrare.
  *  * **Autonomin** rörs inte. `draft` är backendens default och det enda läge
  *    som är säkert utan att en människa sagt något.
  */
@@ -58,6 +60,25 @@ export type Underlag = {
   nastaSteg?: string | null;
   /** Arbetsytans namn — rubriken i dokumentet. */
   namn?: string | null;
+  /**
+   * Målgruppen kunden fyllde i i onboardingen. Saknas i inloggningsvägen — då
+   * gäller standardrollerna och småföretagsspannet som förut.
+   */
+  malgruppsfilter?: Malgruppsfilter;
+};
+
+/**
+ * Onboardingens målgruppssteg, redan tolkat till listor och tal
+ * (lib/actions/onboarding.ts). Tomma listor betyder "inget filter" — samma
+ * semantik som ICP:n själv.
+ */
+export type Malgruppsfilter = {
+  branscher: string[];
+  orter: string[];
+  undvik: string[];
+  roller: string[];
+  anstalldaMin: number | null;
+  anstalldaMax: number | null;
 };
 
 /** Vad som faktiskt fylldes i. Loggas; ingen del av det är kritiskt. */
@@ -73,15 +94,19 @@ export type Standardutfall = {
  */
 const AVVAKTAR = "(läses in från webbplatsen)";
 
-/** Samma tal som `SMAFORETAG_ANSTALLDA` i snajp-support/app/leads/icp.py. */
-const SMAFORETAG: [number, number] = [1, 49];
+/**
+ * Samma tal som `SMAFORETAG_ANSTALLDA` i snajp-support/app/leads/icp.py.
+ * Exporteras för onboardingens förifyllning (app/onboarding/page.tsx skickar
+ * dem som props — modulen är server-only och kan inte importeras i klienten).
+ */
+export const SMAFORETAG: [number, number] = [1, 49];
 
 /**
  * Beslutsfattarrollerna i ett litet svenskt B2B-bolag. Samma exempel som
  * `ICP_ETIKETTER.roles` visar i formuläret, alltså inget kunden möts av för
  * första gången här.
  */
-const STANDARDROLLER = ["VD", "Inköpschef", "Platschef"];
+export const STANDARDROLLER = ["VD", "Inköpschef", "Platschef"];
 
 function rent(varde: string | null | undefined): string {
   const text = (varde ?? "").trim();
@@ -177,8 +202,10 @@ type Icp = {
  * kvar för formuläret. Båda måste säga samma sak — ett filter vars utfall beror
  * på vem som läser det är värre än inget filter.
  */
-function storlek(befintlig: Icp | undefined): Pick<Icp, "size" | "company_size"> {
-  const [min, max] = SMAFORETAG;
+function storlek(
+  befintlig: Icp | undefined,
+  [min, max]: [number | null, number | null] = SMAFORETAG
+): Pick<Icp, "size" | "company_size"> {
   return {
     size: { ...(befintlig?.size ?? {}), anstallda_min: min, anstallda_max: max },
     company_size: { min, max }
@@ -254,14 +281,36 @@ export async function sattStandardinstallningar(
   try {
     const svar = await anrop<{ icp?: Icp }>(apiKey, "/api/leads/config");
     if (icpArTomt(svar?.icp)) {
+      const m = underlag.malgruppsfilter;
+      // Kundens egna val från målgruppssteget, annars defaultarna. Fälten är
+      // ICP:ns egna namn (LIST_FIELDS i snajp-support/app/leads/icp.py).
+      const valt: Icp = m
+        ? {
+            industries: m.branscher,
+            geography: m.orter,
+            exclude_industries: m.undvik,
+            roles: m.roller,
+            ...storlek(svar?.icp, [m.anstalldaMin, m.anstalldaMax])
+          }
+        : { roles: STANDARDROLLER, ...storlek(svar?.icp) };
       await anrop(apiKey, "/api/leads/config", {
         method: "PUT",
-        body: JSON.stringify({ icp: { ...(svar?.icp ?? {}), roles: STANDARDROLLER, ...storlek(svar?.icp) } })
+        body: JSON.stringify({ icp: { ...(svar?.icp ?? {}), ...valt } })
       });
       utfall.icp = true;
     }
   } catch (error) {
     console.error("[standard] ICP-defaultarna kunde inte skrivas:", error);
+  }
+
+  // Iris-profilen kompileras direkt ur det som just skrevs, så att den är klar
+  // när kunden först öppnar leads. Väntas INTE in: kompileringen kan gå genom
+  // en LLM, och kunden ska inte sitta kvar i uppstarten för den. Uteblir den
+  // kompileras profilen ändå vid första läsningen (sakerstall_profil).
+  if (utfall.icp || utfall.produktbeskrivning) {
+    void anrop(apiKey, "/api/leads/profil").catch((error) => {
+      console.error("[standard] Iris-profilen kunde inte kompileras:", error);
+    });
   }
 
   return utfall;

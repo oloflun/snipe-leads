@@ -11,8 +11,15 @@ import { PAKET, type Paket } from "@/lib/pricing";
 import { cn } from "@/lib/utils";
 
 /**
- * Onboardingen som ett flöde i fyra steg — företaget, branschen,
- * kontaktpersonen, paketet — i stället för ett formulär med allt på en gång.
+ * Onboardingen som ett flöde i fem steg — företaget, branschen,
+ * kontaktpersonen, målgruppen, paketet — i stället för ett formulär med allt
+ * på en gång.
+ *
+ * Målgruppen ligger FÖRE paketet och visas alltid, med enbart valfria fält:
+ * paketsteget bär villkoren och inskickningen och ska förbli sista steget, och
+ * ett steg som dyker upp eller försvinner beroende på ett senare val hade gjort
+ * stegraden opålitlig. Utan leadsagenten i paketet används svaren helt enkelt
+ * inte.
  *
  * ## Varför steg och inte ett långt formulär
  *
@@ -42,6 +49,7 @@ const STEG = [
   { kicker: "Företaget", rubrik: "Berätta om företaget" },
   { kicker: "Bransch", rubrik: "Vilken bransch är ni i?" },
   { kicker: "Kontaktperson", rubrik: "Vem pratar vi med hos er?" },
+  { kicker: "Målgrupp", rubrik: "Vilka bolag vill Iris hitta?" },
   { kicker: "Paket", rubrik: "Välj era agenter" }
 ] as const;
 
@@ -49,13 +57,26 @@ const PLACEHOLDER = {
   orgnr: "556824-9022",
   webbplats: "https://exempel.se",
   produkt: "Utbildning i hjärt-lungräddning och första hjälpen för arbetsplatser",
+  branscher: "Bygg, Fastighetsförvaltning",
+  orter: "Göteborg, Mölndal",
+  roller: "VD, Inköpschef",
+  undvik: "Offentlig sektor, Konkurrent AB",
   fokus: "Vi vill helst nå bolag som redan köpt hjärtstartare men saknar utbildning"
 };
 
+/** Heltal eller tomt — samma regel som serversidans tolkning. */
+const HELTAL = /^\d*$/;
+
 export function OnboardingWizard({
   epost,
-  namn
-}: Readonly<{ epost?: string | null; namn?: string | null }>) {
+  namn,
+  standardMalgrupp
+}: Readonly<{
+  epost?: string | null;
+  namn?: string | null;
+  /** Förifyllningen ur lib/snajp/standard.ts (server-only, därför en prop). */
+  standardMalgrupp: { roller: string[]; anstallda: [number, number] };
+}>) {
   const [steg, setSteg] = useState(0);
   /** Högsta steget som nåtts — stegraden låter en hoppa TILLBAKA, aldrig fram. */
   const [maxNatt, setMaxNatt] = useState(0);
@@ -66,7 +87,6 @@ export function OnboardingWizard({
   const [testkund, setTestkund] = useState(false);
   const [webbplats, setWebbplats] = useState("");
   const [produkt, setProdukt] = useState("");
-  const [fokus, setFokus] = useState("");
 
   // Steg 2 — branschen.
   const [bransch, setBransch] = useState<string | null>(null);
@@ -79,7 +99,19 @@ export function OnboardingWizard({
   const [kontaktMejl, setKontaktMejl] = useState(epost ?? "");
   const [kontaktTelefon, setKontaktTelefon] = useState("");
 
-  // Steg 4 — paketet. Duo förvalt: det är paketet vi vill sälja (pricing.ts).
+  // Steg 4 — målgruppen, leadsagentens grundfilter. Allt valfritt; tomt
+  // betyder "inget filter". Roller och storlek förifylls med samma defaultar
+  // som standardinställningarna annars hade skrivit. Fokus är fri text och
+  // landar i produkttexten som "Särskilt fokus".
+  const [branscher, setBranscher] = useState("");
+  const [orter, setOrter] = useState("");
+  const [anstMin, setAnstMin] = useState(String(standardMalgrupp.anstallda[0]));
+  const [anstMax, setAnstMax] = useState(String(standardMalgrupp.anstallda[1]));
+  const [roller, setRoller] = useState(standardMalgrupp.roller.join(", "));
+  const [undvik, setUndvik] = useState("");
+  const [fokus, setFokus] = useState("");
+
+  // Steg 5 — paketet. Duo förvalt: det är paketet vi vill sälja (pricing.ts).
   const [paket, setPaket] = useState<Paket["id"]>("duo");
   const [notiser, setNotiser] = useState(true);
   // Faktureringsadressen — dit fakturan går efter gratisperioden. Krävs för
@@ -128,6 +160,15 @@ export function OnboardingWizard({
       return null;
     }
     if (vilket === 3) {
+      const min = anstMin.trim();
+      const max = anstMax.trim();
+      if (!HELTAL.test(min) || !HELTAL.test(max))
+        return "Skriv antal anställda som heltal — eller lämna fältet tomt.";
+      if (min && max && Number(min) > Number(max))
+        return "Minsta antal anställda är större än största.";
+      return null;
+    }
+    if (vilket === 4) {
       if (!villkor)
         return "Kryssa i att ni godkänner villkoren för att kunna starta gratisperioden.";
       return null;
@@ -157,7 +198,7 @@ export function OnboardingWizard({
   function skickaIn() {
     // Sista steget validerar som de andra — kryssrutan och adressen är inte
     // dekor, och serversidan gör om samma kontroll för den som kringgår det.
-    const fel = stegFel(3);
+    const fel = stegFel(4);
     setError(fel);
     if (fel) return;
     startTransition(async () => {
@@ -166,6 +207,14 @@ export function OnboardingWizard({
         webbplats,
         produkt,
         fokus,
+        malgrupp: {
+          branscher,
+          orter,
+          undvik,
+          roller,
+          anstalldaMin: anstMin,
+          anstalldaMax: anstMax
+        },
         bransch: bransch ?? "",
         kontaktNamn,
         kontaktRoll,
@@ -332,14 +381,6 @@ export function OnboardingWizard({
                   onChange={setProdukt}
                   placeholder={PLACEHOLDER.produkt}
                 />
-                <Falt
-                  label="Något extra att fokusera på (valfritt)"
-                  hint="En nisch, ett segment ni vill åt, eller något agenterna ska undvika."
-                  span="md:col-span-12"
-                  value={fokus}
-                  onChange={setFokus}
-                  placeholder={PLACEHOLDER.fokus}
-                />
                 {/* Faktureringsadressen hör till bolagsuppgifterna och fylls i
                     här, inte vid paketvalet. Döljs för testarbetsytor: inget
                     bolag, ingen faktura, och ett obligatoriskt fält utan bolag
@@ -467,6 +508,87 @@ export function OnboardingWizard({
           ) : null}
 
           {steg === 3 ? (
+            <form onSubmit={nasta}>
+              <p className="mt-4 max-w-[62ch] text-[15px] leading-[1.65] text-ink-muted">
+                Iris, leadsagenten, letar bolag inom de här ramarna. Allt är
+                valfritt och går att ändra när som helst — tomt betyder att Iris
+                inte filtrerar på det. Utan leadsagenten i paketet används det inte.
+              </p>
+              <div className="mt-8 grid grid-cols-12 gap-y-6 md:gap-x-8">
+                <Falt
+                  label="Branscher att söka i"
+                  hint="Kommaseparerat. Tomt = alla branscher."
+                  span="md:col-span-6"
+                  value={branscher}
+                  onChange={setBranscher}
+                  placeholder={PLACEHOLDER.branscher}
+                />
+                <Falt
+                  label="Orter och områden"
+                  hint="Kommaseparerat. Tomt = hela Sverige."
+                  span="md:col-span-6"
+                  value={orter}
+                  onChange={setOrter}
+                  placeholder={PLACEHOLDER.orter}
+                />
+                <Falt
+                  label="Anställda, minst"
+                  hint="Tomt = ingen nedre gräns."
+                  span="md:col-span-3"
+                  value={anstMin}
+                  onChange={setAnstMin}
+                  placeholder={String(standardMalgrupp.anstallda[0])}
+                  inputMode="numeric"
+                  autoComplete="off"
+                />
+                <Falt
+                  label="Anställda, högst"
+                  hint="Tomt = ingen övre gräns."
+                  span="md:col-span-3"
+                  value={anstMax}
+                  onChange={setAnstMax}
+                  placeholder={String(standardMalgrupp.anstallda[1])}
+                  inputMode="numeric"
+                  autoComplete="off"
+                />
+                <Falt
+                  label="Roller att nå"
+                  hint="Vem mejlet ska till. Kommaseparerat."
+                  span="md:col-span-6"
+                  value={roller}
+                  onChange={setRoller}
+                  placeholder={PLACEHOLDER.roller}
+                />
+                <Falt
+                  label="Undvik"
+                  hint="Branscher eller bolag Iris ska hoppa över. Kommaseparerat."
+                  span="md:col-span-12"
+                  value={undvik}
+                  onChange={setUndvik}
+                  placeholder={PLACEHOLDER.undvik}
+                />
+                {/* Fri text, inte ett filter: Iris läser den som riktning, och
+                    fälten ovan vinner alltid när de säger emot. */}
+                <label className="col-span-12 grid gap-2 border-t border-ink/15 pt-4">
+                  <span className="kicker text-mineral">Särskilt fokus</span>
+                  <textarea
+                    rows={3}
+                    className="rounded-input border border-ink/15 bg-paper2/70 px-4 py-3 text-[15px] leading-[1.6] focus:border-ochre"
+                    value={fokus}
+                    onChange={(e) => setFokus(e.target.value)}
+                    placeholder={PLACEHOLDER.fokus}
+                  />
+                  <span className="text-[13px] leading-[1.5] text-mineral">
+                    En nisch, ett segment ni vill åt, eller något Iris ska veta om
+                    vilka som brukar köpa.
+                  </span>
+                </label>
+              </div>
+              <Stegfot error={error} onTillbaka={tillbaka} />
+            </form>
+          ) : null}
+
+          {steg === 4 ? (
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -680,7 +802,7 @@ export function OnboardingWizard({
   );
 }
 
-/** Fortsätt/Tillbaka-raden för steg 1–3. Sista steget har sin egen. */
+/** Fortsätt/Tillbaka-raden för steg 1–4. Sista steget har sin egen. */
 function Stegfot({
   error,
   onTillbaka,

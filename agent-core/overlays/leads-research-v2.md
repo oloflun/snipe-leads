@@ -33,51 +33,42 @@ vilka regler som INTE får tappas. Vid konflikt gäller detta dokument.
 
 ## Kvalificering (mk:prospecting-kärnan)
 
-Mät prospektet mot köparens ICP i kontextpaketet — inte mot en allmän
-uppfattning om vad som är ett bra bolag.
+Mät prospektet mot kundens IRIS-PROFIL i kontextpaketet — inte mot en
+allmän uppfattning om vad som är ett bra bolag. Du avgör INTE själv om
+bolaget kvalificerar: koden gör det ur dina utslag (app/leads/bedomning.py).
 
-- `icp_fit` 0.0–1.0 och `qualified` (bool): en ärlig bedömning. Ett bolag
-  som inte passar ICP:n ÄR ett fullgott resultat — det sparar kundens tid.
-- `disqualifiers`: konkreta skäl (t.ex. "har redan chattlösning", "fel
-  bransch", "för få anställda"). Kundens egna kriterier i ICP:n väger
-  tyngst.
+- `bedomningar`: ETT objekt per kriterium (k1, k2 …) och per uteslutning
+  (u1, u2 …) i profilen: `{kriterie_id, belagg: [{url, citat}], resonemang,
+  utslag}`. Skriv belägg och resonemang FÖRE utslaget. `utslag` är "ja",
+  "nej" eller "okänt". För en uteslutning betyder "ja" att bolaget ÄR det
+  kunden vill utesluta.
+- **Beläggen verifieras i kod.** `citat` ska stå ordagrant i källmaterialet
+  eller under MÄTTA WEBBSIGNALER. Ett "ja" eller "nej" utan verifierbart
+  citat räknas som "okänt".
+- **Bara profilen räknas.** Bransch, storlek, bolagsform eller annat som
+  profilen inte nämner är aldrig ett skäl. Kundens EGEN bransch (står
+  utmärkt i profilen) är säljarens, inte målgruppens.
+- `motivering`: 2–3 meningar till kunden — varför bolaget passar eller inte,
+  med de konkreta beläggen. Det är det kunden läser först.
 - `missing_information`: vad som saknades för en säker bedömning.
-- `qualification_reasoning`: resonemang på svenska, kort.
+- `ort`, `postnummer`: ur bolagets adress i källmaterialet, annars null.
 - `antal_anstallda`: heltal eller null. BARA när källmaterialet anger
   antalet ("vi är 14 medarbetare") eller visar ett räknebart belägg, som en
-  personalsida med namngivna medarbetare. Aldrig en uppskattning ur bransch
-  eller intryck — null är rätt när materialet inte säger det.
-- `ar_bemanningsforetag`: true om bolagets affär är att hyra ut, rekrytera
-  eller förmedla personal eller konsulter åt andra bolag; false om inte;
-  null om materialet inte räcker.
+  personalsida med namngivna medarbetare. Aldrig en uppskattning.
 
-**Storlek och bemanning — skarpa regler (koden kontrollerar dig):**
-
-- Målgruppens "Antal anställda" är ett krav, inte en preferens. Visar
-  materialet ett antal utanför intervallet ⇒ `qualified` false, med antalet
-  i `disqualifiers`. En koncern, ett börsnoterat moderbolag eller kontor i
-  flera länder räcker som disqualifier mot ett tak under 50 anställda.
-- **Okänt är inte fel.** Saknas uppgift om storlek, ort eller signal hör det
-  hemma i `missing_information`, inte i `disqualifiers`. De flesta småbolag
-  skriver aldrig ut sitt antal anställda; att fälla dem för det tömmer
-  målgruppen.
-- Ett bemannings- eller rekryteringsföretag tillhör INTE branschen det
-  rekryterar till: ett bolag som hyr ut IT-konsulter är inte "IT-konsulter"
-  i målgruppens mening, och dess jobbannonser visar kundernas behov, inte
-  egen tillväxt. Nämner målgruppen inte uttryckligen bemanning eller
-  rekrytering ⇒ `qualified` false.
+**Okänt är inte fel.** Saknas uppgift om storlek, ort eller signal är
+utslaget "okänt" och uppgiften hör hemma i `missing_information`. De flesta
+småbolag skriver aldrig ut sitt antal anställda; att fälla dem för det
+tömmer målgruppen.
 
 ## Bolagsbilden (mk:customer-research-kärnan)
 
 - `company_summary`, `business_model`: vad de gör och hur de tjänar
   pengar, ur källmaterialet.
-- `likely_pains`: problem hos prospektet som köparens produkt löser.
+- `likely_pains`: problem hos prospektet som köparens produkt löser —
+  gärna ur de MÄTTA WEBBSIGNALERNA när kunden säljer webb eller marknadsföring.
 - `evidence`: korta ORDAGRANNA citat ur källmaterialet som stöder pains —
   det här är de enda påståenden ett senare mejl får luta sig mot.
-- `existing_support_channels`: kanaler källmaterialet visar att de
-  erbjuder kundservice i (mejl, telefon, chatt, sociala medier).
-- `has_chatbot`: bool eller null — null när materialet inte räcker.
-  En befintlig chattlösning är både en möjlig disqualifier och en vinkel.
 
 ## Konto och triggers (sa:account-research-kärnan)
 

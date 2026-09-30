@@ -128,6 +128,7 @@ async def build_context_pack(
     pipelinen aldrig dödlåser sig på utebliven onboarding."""
     from .icp import render_icp
     from .onboarding_state import get_onboarding_state, render_gap_notice
+    from .profil import utan_adminrader
 
     state = await get_onboarding_state(storage, tenant_id)
     settings = await storage.get_agent_settings(tenant_id, agent_type="leads")
@@ -136,7 +137,11 @@ async def build_context_pack(
         for kind in ("product_marketing", "customer_research", "retention_playbook")
     }
     rendered = render_context_pack(
-        product_marketing=docs["product_marketing"]["content"] if docs["product_marketing"] else None,
+        # Adminraderna (orgnr = personnummer för en enskild firma,
+        # fakturaadress, villkorsdatum) når aldrig en prompt — se profil.py.
+        product_marketing=utan_adminrader(docs["product_marketing"]["content"])
+        if docs["product_marketing"]
+        else None,
         customer_research=docs["customer_research"]["content"] if docs["customer_research"] else None,
         retention_playbook=docs["retention_playbook"]["content"] if docs["retention_playbook"] else None,
         gap_notice=render_gap_notice(state),

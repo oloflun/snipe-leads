@@ -177,7 +177,7 @@ async def test_testkorningen_startar_pa_de_inladdade_bolagen(live_llm, monkeypat
     # Att den kommer FRAM mäts inte här: jobben startas med
     # asyncio.create_task, så spionen har inte hunnit köra när testet läser.
     # Den mätningen görs deterministiskt i tests/leads/test_batch_markering.py.
-    async def _spion(state, job_id, tenant, *, prospect_id, scope, overrides, is_test=False):
+    async def _spion(state, job_id, tenant, *, prospect_id, scope, overrides, is_test=False, batch_id=None):
         startade.append(prospect_id)
 
     monkeypatch.setattr(leads_api, "_run_batch_prospect", _spion)
@@ -188,7 +188,7 @@ async def test_testkorningen_startar_pa_de_inladdade_bolagen(live_llm, monkeypat
                 "/api/leads/runs/batch", headers=DEMO, json={"limit": 3, "is_test": True}
             )
             assert tom.status_code == 422
-            assert "söker" in tom.json()["detail"].lower() or "egna bolag" in tom.json()["detail"].lower()
+            assert "affärskontext" in tom.json()["detail"].lower()
 
             body = await _ladda_exempelbolag(client, limit=3)
             exempel_id = {p["id"] for p in body["created"]}

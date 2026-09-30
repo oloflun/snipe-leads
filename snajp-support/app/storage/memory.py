@@ -25,6 +25,7 @@ from ..config import (
 )
 from ..kb_articles import DEMO_KB_ARTICLES, KB_ARTICLES
 from .base import (
+    BEDOMNINGSFALT,
     AGENT_RUN_TYPES,
     ANALYTICS_COVERAGE,
     FEEDBACK_VERDICTS,
@@ -1240,6 +1241,17 @@ class MemoryStorage:
         ):
             if value is not None:
                 prospect[field] = value
+        return prospect
+
+    async def spara_bedomning(
+        self, tenant_id: str, prospect_id: str, *, bedomning: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        prospect = await self.get_prospect(tenant_id, prospect_id)
+        if not prospect:
+            return None
+        for falt in BEDOMNINGSFALT:
+            if bedomning.get(falt) is not None:
+                prospect[falt] = bedomning[falt]
         return prospect
 
     async def create_prospect_source(

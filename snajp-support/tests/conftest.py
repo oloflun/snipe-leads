@@ -56,8 +56,26 @@ def _force_simulation_mode(monkeypatch):
         # varje träffs startsida. Tom sträng = avstängd; test_platshallare.py
         # sätter den själv och mockar hämtningen. Femte gången.
         "LEADS_PLATSHALLARKONTROLL",
+        # Iris-profilen (2026-09-30): webbsignalerna hämtar varje kandidats
+        # startsida, och Jev anropar TypeSafe. Sjätte gången — båda av här.
+        "LEADS_WEBBSIGNAL",
+        "TYPESAFE_API_KEY",
+        "IRIS_JEV",
     ):
         monkeypatch.setenv(name, "")
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def _hermetisk_irisprofil(monkeypatch):
+    """Profilkompileringen (app/leads/profil.py) anropar LLM:en direkt, och
+    tester som sätter en fejkad nyckel för att nå live-vägen hade annars gjort
+    ett skarpt anrop. Ett test som vill pröva kompileringen patchar
+    `_anropa_modell` själv — den patchen läggs efter den här och vinner."""
+
+    async def _ingen_modell(*_a, **_k):
+        raise RuntimeError("Ingen LLM i testsviten")
+
+    monkeypatch.setattr("app.leads.profil._anropa_modell", _ingen_modell)

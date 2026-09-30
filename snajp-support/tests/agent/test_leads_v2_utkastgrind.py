@@ -32,7 +32,9 @@ def _fake_deepseek_key(monkeypatch):
     get_settings.cache_clear()
 
 
-async def _kor(overrides: dict, *, sida: str | None = None, icp: dict | None = None) -> dict:
+async def _kor(
+    overrides: dict, *, sida: str | None = None, icp: dict | None = None, profil: dict | None = None
+) -> dict:
     storage = MemoryStorage()
     prospect_id = await _prepare_prospect(storage)
     llm = _FakeLLM(overrides={"sa:account-research": overrides})
@@ -50,13 +52,49 @@ async def _kor(overrides: dict, *, sida: str | None = None, icp: dict | None = N
             brief="",
             is_test=True,
             icp=icp,
+            profil=profil,
         )
 
 
+#: En profil med ETT måste-kriterium. Sedan 2026-09-30 fäller bara profilens
+#: kriterier (INV-LEADS-PROFIL-001) — modellens fria `qualified` avgör inget.
+_PROFIL = {
+    "version": "test",
+    "kriterier": [
+        {"id": "k1", "text": "Säljer kläder online", "krav": "maste", "vikt": 3, "belagg": "kalltext"}
+    ],
+    "uteslut": [{"text": "bemannings- eller rekryteringsföretag", "kallmening": ""}],
+}
+
+
 async def test_underkant_bolag_stoppas_fore_utkastet():
-    result = await _kor({"qualified": False, "icp_fit": 0.1, "disqualifiers": ["Antal anställda överstiger 49"]})
+    result = await _kor(
+        {"bedomningar": [{"kriterie_id": "k1", "utslag": "nej", "resonemang": "Säljer returtjänster.",
+                          "belagg": [{"url": "https://exempelbolaget.se", "citat": "Fri retur inom 30 dagar"}]}]},
+        profil=_PROFIL,
+    )
     assert result["qualified"] is False
+    assert result["niva"] == "C"
     assert result["stopped_early"] == "ej_kvalificerad"
+
+
+async def test_modellens_fria_underkannande_faller_inte_utan_profilkriterium():
+    """Alunix 2026-09-29: 'Juristbyråer är inte målgruppen' fällde ett bolag
+    fast profilen inte nämnde bransch. Ett fritt qualified=false utan utslag
+    på ett profilkriterium får inte fälla."""
+    result = await _kor({"qualified": False, "disqualifiers": ["Fel bransch"]}, profil=_PROFIL)
+    assert result["qualified"] is True
+    assert result["niva"] == "B"
+    assert result["motivering"]
+
+
+async def test_nej_utan_verifierat_citat_faller_inte():
+    result = await _kor(
+        {"bedomningar": [{"kriterie_id": "k1", "utslag": "nej", "resonemang": "Gissning.",
+                          "belagg": [{"citat": "står inte på sidan"}]}]},
+        profil=_PROFIL,
+    )
+    assert result["qualified"] is True
 
 
 async def test_kvalificerat_bolag_utan_kontaktvag_stoppas():
@@ -85,9 +123,14 @@ async def test_kodgrinden_faller_kand_storlek_over_taket_fore_utkastet():
     assert result["icp_fit"] <= 0.3
 
 
-async def test_kodgrinden_faller_bemanningsforetag_fore_utkastet():
-    result = await _kor({"qualified": True, "icp_fit": 0.7, "ar_bemanningsforetag": True}, icp=_NORDFORM)
-    assert result["stopped_early"] == "ej_kvalificerad"
+async def test_bemanning_falls_bara_via_profilens_uteslutning():
+    sida = "# Exempelbolaget\nVi hyr ut IT-konsulter till kunder.\nKontakta oss: kundservice@exempelbolaget.se"
+    svar = {"bedomningar": [{"kriterie_id": "u1", "utslag": "ja", "resonemang": "Hyr ut konsulter.",
+                             "belagg": [{"citat": "Vi hyr ut IT-konsulter till kunder."}]}]}
+    med = await _kor(svar, sida=sida, profil=_PROFIL)
+    assert med["stopped_early"] == "ej_kvalificerad"
+    utan = await _kor(svar, sida=sida, profil={**_PROFIL, "uteslut": []})
+    assert utan["stopped_early"] is None
 
 
 async def test_regeln_okant_ar_inte_fel_nar_modellen():
