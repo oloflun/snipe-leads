@@ -954,8 +954,9 @@ def _profil_som_soktext(profil: dict[str, Any] | None, ring: int) -> str:
             f"- Borja i: {aktuell['etikett']}" + (f" (postnummer {px})" if px else "")
             + (" — om det inte racker, fortsatt utat i narliggande omraden." if ring < len(ringar) - 1 else "")
         )
-    if profil.get("kommuner"):
-        rader.append("- Bolaget MASTE ligga i: " + ", ".join(profil["kommuner"]))
+    omrade = [*(profil.get("kommuner") or []), *(profil.get("omraden") or [])]
+    if omrade:
+        rader.append("- Bolaget MASTE ligga i: " + ", ".join(omrade))
     for k in profil.get("kriterier") or []:
         rader.append(f"- {'Krav' if k.get('krav') == 'maste' else 'Helst'}: {k['text']}")
     for u in profil.get("uteslut") or []:

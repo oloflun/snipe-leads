@@ -14,9 +14,9 @@ import { IrisProfil } from "@/components/leads/IrisProfil";
 export function IrisInstallningar({ demo = false }: Readonly<{ demo?: boolean }>) {
   return (
     <div className="grid gap-12">
-      {!demo ? <IrisProfil /> : null}
+      <IrisProfil demo={demo} />
 
-      <section className={demo ? undefined : "border-t border-ink/15 pt-8"}>
+      <section className="border-t border-ink/15 pt-8">
         {/* Kicker, inte rubrik: en h3 direkt under sidans h1 utan
             mellanliggande h2 bryter axe heading-order (moderate, 2026-09-19). */}
         <p className="kicker text-mineral">Målgrupp och autonomi</p>

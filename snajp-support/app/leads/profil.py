@@ -76,6 +76,7 @@ def tom_profil() -> dict[str, Any]:
         "branscher": [],
         "undvik_branscher": [],
         "kommuner": [],
+        "omraden": [],
         "geo_prioritet": [],
         "geo_kallmening": "",
         "anstallda_min": None,
@@ -224,6 +225,10 @@ def slå_ihop(profil: dict[str, Any], icp: object) -> dict[str, Any]:
         uttryckliga += [k.namn for k in REGIONER[nyckel].kommuner]
     if uttryckliga:
         p["kommuner"] = list(dict.fromkeys(uttryckliga))
+    # Län och landskap ("Västra Götaland") är inga kommuner vi kan filtrera på
+    # i kod, men de är kundens uttryckliga område — de följer med som text
+    # till sökningen och bedömningen i stället för att tyst försvinna.
+    p["omraden"] = [o for o in icp.get("geography") or [] if o.casefold() not in KOMMUNER]
     storlek = icp.get("size") or {}
     if storlek.get("anstallda_min") is not None or storlek.get("anstallda_max") is not None:
         p["anstallda_min"] = storlek.get("anstallda_min")
@@ -360,6 +365,8 @@ def render_profil(profil: dict[str, Any] | None) -> str:
         rader.append("- Branscher att undvika: " + ", ".join(profil["undvik_branscher"]))
     if profil.get("kommuner"):
         rader.append("- Kommuner: " + ", ".join(profil["kommuner"]))
+    if profil.get("omraden"):
+        rader.append("- Område (bolaget ska ligga här): " + ", ".join(profil["omraden"]))
     for i, ring in enumerate(profil.get("geo_prioritet") or [], start=1):
         px = ", ".join(f"{p}xx" for p in ring.get("postnr_prefix") or [])
         rader.append(f"- Geografisk prioritet {i}: {ring['etikett']}" + (f" (postnummer {px})" if px else ""))

@@ -78,8 +78,59 @@ export function demoOversiktSvar(path: string): unknown | undefined {
         icp_fit: Math.min(1, bolag.score / 100),
         qualified: bolag.score >= 70,
         disqualifiers: bolag.score >= 70 ? [] : ["Utanför storleksspannet"],
+        // Iris-bedömningen (migration 079): nivån räknas i backenden ur
+        // utslagen per kriterium; här härledd ur exempelpoängen.
+        niva: bolag.score >= 80 ? "A" : bolag.score >= 70 ? "B" : "C",
+        motivering:
+          bolag.score >= 70 ? bolag.latestSignal.sv : "Bortvald: fler anställda än målgruppens övre gräns.",
         created_at: timmarSedan(index * 9 + 2)
       }))
+    };
+  }
+
+  if (rutt === "/leads/profil") {
+    // Samma målgrupp som demons sparade filter (lib/demo/leads-controls.ts):
+    // i drift vinner det strukturerade alltid över tolkningen, och demon får
+    // inte visa en profil som motsäger formuläret under den.
+    return {
+      profil: {
+        kalla: "ai",
+        egen_bransch: "Utbildning och säkerhet",
+        erbjudande: "Hjärtstartare och HLR-utbildning för arbetsplatser",
+        malgrupp: "Tillverkande bolag som växer, med egen produktion och 10 till 250 anställda",
+        branscher: ["Tillverkning", "Bygg", "Logistik"],
+        undvik_branscher: ["Bemanning", "Spel"],
+        kommuner: [],
+        omraden: ["Västra Götaland", "Skåne"],
+        geo_prioritet: [],
+        anstallda_min: 10,
+        anstallda_max: 250,
+        utan_webbplats: false,
+        kriterier: [
+          {
+            id: "k1",
+            text: "Egen produktion",
+            krav: "maste",
+            kallmening: "Kundens filter: signaler som krävs"
+          },
+          {
+            id: "k2",
+            text: "Växer i antal anställda",
+            krav: "maste",
+            kallmening: "Kundens filter: signaler som krävs"
+          },
+          {
+            id: "k3",
+            text: "Saknar hjärtstartare eller aktuell HLR-utbildning",
+            krav: "bor",
+            kallmening: "Vi vill helst nå bolag som redan köpt hjärtstartare men saknar utbildning."
+          }
+        ],
+        uteslut: [{ text: "Färre än 10 anställda", kallmening: "Kundens filter: diskvalificerar" }],
+        roller: ["VD", "Inköpschef", "Platschef"],
+        ej_tolkat: [],
+        otolkat: []
+      }
     };
   }
 

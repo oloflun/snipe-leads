@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Sektion, Tomt, btnLiten, btnSecondary, etikett, meta, rubrikPanel } from "@/components/ui";
+import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +27,7 @@ type Profil = {
   branscher: string[];
   undvik_branscher: string[];
   kommuner: string[];
+  omraden?: string[];
   geo_prioritet: { etikett: string; postnr_prefix: string[] }[];
   anstallda_min: number | null;
   anstallda_max: number | null;
@@ -56,6 +58,14 @@ async function hamtaJson<T>(path: string, init?: RequestInit): Promise<T> {
   return kropp;
 }
 
+/** Var kriteriet kommer ifrån: kundens filter (backendens "Kundens filter: …") eller en mening i kundens text. */
+function kalla(kallmening: string): string {
+  const filter = /^Kundens filter:\s*/i;
+  return filter.test(kallmening)
+    ? `Från era filter: ${kallmening.replace(filter, "").toLowerCase()}`
+    : `Ur er text: ”${kallmening}”`;
+}
+
 function Falt({ etikett: namn, children }: Readonly<{ etikett: string; children: React.ReactNode }>) {
   return (
     <div className="border-t border-ink/10 pt-3">
@@ -65,7 +75,7 @@ function Falt({ etikett: namn, children }: Readonly<{ etikett: string; children:
   );
 }
 
-export function IrisProfil() {
+export function IrisProfil({ demo = false }: Readonly<{ demo?: boolean }>) {
   const [profil, setProfil] = useState<Profil | null>(null);
   const [jev, setJev] = useState<JevStatistik | null>(null);
   const [fel, setFel] = useState<string | null>(null);
@@ -73,6 +83,10 @@ export function IrisProfil() {
 
   const ladda = useCallback(async () => {
     setFel(null);
+    if (demo) {
+      setProfil((demoOversiktSvar("/leads/profil") as { profil: Profil }).profil);
+      return;
+    }
     try {
       const [p, j] = await Promise.all([
         hamtaJson<{ profil: Profil }>("/leads/profil"),
@@ -83,7 +97,7 @@ export function IrisProfil() {
     } catch (error) {
       setFel(felmeddelande(error));
     }
-  }, []);
+  }, [demo]);
 
   useEffect(() => {
     void ladda();
@@ -117,7 +131,7 @@ export function IrisProfil() {
     <Sektion
       title="Iris-profil"
       action={
-        <button type="button" onClick={() => void tolkaOm()} disabled={tolkar} className={cn(btnSecondary, btnLiten)}>
+        <button type="button" onClick={() => void tolkaOm()} disabled={tolkar || demo} className={cn(btnSecondary, btnLiten)}>
           {tolkar ? "Tolkar…" : "Tolka om"}
         </button>
       }
@@ -139,7 +153,7 @@ export function IrisProfil() {
           ) : null}
         </Falt>
         <Falt etikett="Område">
-          {profil.kommuner.length ? profil.kommuner.join(", ") : "Hela Sverige"}
+          {[...profil.kommuner, ...(profil.omraden ?? [])].join(", ") || "Hela Sverige"}
           {profil.geo_prioritet.length ? (
             <span className={cn(meta, "block")}>Börjar i {profil.geo_prioritet.map((r) => r.etikett).join(", sedan ")}</span>
           ) : null}
@@ -165,7 +179,7 @@ export function IrisProfil() {
                 <p className="text-[0.9375rem] font-medium">{k.text}</p>
                 <span className={etikett}>{k.krav === "maste" ? "Måste" : "Bör"}</span>
               </div>
-              {k.kallmening ? <p className={cn(meta, "mt-1 max-w-[65ch]")}>Ur er text: ”{k.kallmening}”</p> : null}
+              {k.kallmening ? <p className={cn(meta, "mt-1 max-w-[65ch]")}>{kalla(k.kallmening)}</p> : null}
             </li>
           ))}
         </ul>

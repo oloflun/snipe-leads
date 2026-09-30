@@ -156,3 +156,12 @@ async def test_profilendpointen_svarar_utan_nyckel():
             svar = await client.get("/api/leads/profil", headers=demo)
     assert svar.status_code == 200, svar.text
     assert svar.json()["profil"]["kalla"] == "regler"
+
+
+def test_lan_som_omrade_forsvinner_inte():
+    from app.leads.profil import slå_ihop, tom_profil
+
+    p = slå_ihop(tom_profil(), {"geography": ["Västra Götaland", "Mölndal"]})
+    assert p["kommuner"] == ["Mölndal"]
+    assert p["omraden"] == ["Västra Götaland"]
+    assert "Västra Götaland" in render_profil(p)
