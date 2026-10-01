@@ -127,6 +127,37 @@ async def test_sends_and_marks_message_and_queue_item_when_gates_pass(monkeypatc
 
 
 @pytest.mark.anyio
+async def test_levererande_provider_lagger_kopia_i_skickat(monkeypatch):
+    """Efter en RIKTIG sändning läggs en kopia i tenantens Skickat-mapp
+    (IMAP APPEND). _FakeSendProvider saknar levererar-attributet och räknas
+    som icke-levererande — testet ovan verifierar därmed samtidigt att en
+    simulerad sändning inte lämnar någon kopia."""
+    from app.email_pipeline import skickatkopia
+
+    storage = MemoryStorage()
+    item_id, thread_id, _ = _seed(storage, scheduled_at=WITHIN_WINDOW_UTC)
+
+    anrop: list[dict] = []
+
+    async def fejk_kopia(storage_, tenant_id, *, till, amne, brodtext, fran=""):
+        anrop.append({"tenant_id": tenant_id, "till": till, "amne": amne, "fran": fran})
+        return None
+
+    monkeypatch.setattr(skickatkopia, "kopiera_till_skickat", fejk_kopia)
+
+    provider = _FakeSendProvider()
+    provider.levererar = True
+    provider.avsandare = "hej@snajp.se"
+
+    outcome = await process_due_item(storage, TENANT, {"id": item_id, "thread_id": thread_id}, provider, now=WITHIN_WINDOW_UTC)
+
+    assert outcome == "sent"
+    assert anrop == [
+        {"tenant_id": TENANT, "till": "prospect@example.se", "amne": "En idé till er", "fran": "hej@snajp.se"}
+    ]
+
+
+@pytest.mark.anyio
 async def test_requeues_without_sending_when_outside_window():
     storage = MemoryStorage()
     item_id, thread_id, _ = _seed(storage, scheduled_at=OUTSIDE_WINDOW_UTC)

@@ -16,8 +16,11 @@ import email.header
 import email.utils
 import imaplib
 import logging
+import re
+import time
 import urllib.parse
 import urllib.request
+from email.message import EmailMessage
 
 from ..models import InboundAttachment, InboundEmail
 
@@ -219,3 +222,98 @@ async def fetch_new(
     except Exception as error:  # noqa: BLE001 — inkorgen får aldrig fälla tjänsten
         logger.warning("IMAP-hämtning misslyckades: %s", error)
         return [], f"IMAP-hämtning misslyckades: {error}"
+
+
+#: Mappar att prova när LIST-svaret inte bär \Sent-attributet. Engelsk Gmail
+#: först (vanligast), sedan de generiska namn Outlook/iCloud/cPanel använder.
+SKICKAT_KANDIDATER = (
+    "[Gmail]/Sent Mail",
+    "Sent",
+    "Sent Items",
+    "Sent Messages",
+    "INBOX.Sent",
+)
+
+#: En LIST-rad: (attribut) "avgränsare" mappnamn — namnet citerat eller inte.
+_LIST_RAD = re.compile(rb'^\((?P<attrs>[^)]*)\)\s+(?:"(?:[^"]*)"|NIL)\s+(?P<namn>.+)$')
+
+
+def _skickatmapp(client) -> str | None:
+    """Mappen med \\Sent-attributet ur LIST (RFC 6154).
+
+    Gmail och Outlook bär attributet i sitt vanliga LIST-svar, och det är
+    enda pålitliga vägen: NAMNET är lokaliserat efter kontots språk — svensk
+    Gmail heter "[Gmail]/Skickat", engelsk "[Gmail]/Sent Mail". Hårdkodade
+    namn är bara fallback (SKICKAT_KANDIDATER)."""
+    typ, rader = client.list()
+    if typ != "OK":
+        return None
+    for rad in rader or []:
+        if not isinstance(rad, bytes):
+            continue
+        traff = _LIST_RAD.match(rad.strip())
+        if not traff or b"\\sent" not in traff.group("attrs").lower():
+            continue
+        namn = traff.group("namn").strip()
+        if namn.startswith(b'"') and namn.endswith(b'"'):
+            namn = namn[1:-1]
+        # Modified UTF-7 (RFC 2060) är ren ASCII — namnet skickas tillbaka
+        # till servern i exakt den form LIST gav det.
+        return namn.decode("ascii", errors="replace")
+    return None
+
+
+def _spara_skickat_sync(
+    host: str, user: str, password: str, *, fran: str, till: str, amne: str, brodtext: str
+) -> None:
+    client = imaplib.IMAP4_SSL(host, timeout=30)
+    try:
+        client.login(user, password)
+        meddelande = EmailMessage()
+        meddelande["From"] = fran or user
+        meddelande["To"] = till
+        meddelande["Subject"] = amne
+        meddelande["Date"] = email.utils.formatdate()
+        meddelande.set_content(brodtext)
+
+        mappar = [m for m in (_skickatmapp(client),) if m] or list(SKICKAT_KANDIDATER)
+        sista_fel: object = None
+        for mapp in mappar:
+            try:
+                typ, svar = client.append(
+                    f'"{mapp}"', "\\Seen", imaplib.Time2Internaldate(time.time()),
+                    meddelande.as_bytes(),
+                )
+            except imaplib.IMAP4.error as error:
+                sista_fel = error
+                continue
+            if typ == "OK":
+                return
+            sista_fel = svar
+        raise RuntimeError(f"APPEND nekades av {host}: {sista_fel!r}")
+    finally:
+        try:
+            client.logout()
+        except Exception:
+            pass
+
+
+async def spara_i_skickat(
+    host: str, user: str, password: str, *, fran: str, till: str, amne: str, brodtext: str
+) -> str | None:
+    """Lägger en kopia av ett skickat mejl i kontots Skickat-mapp (APPEND).
+
+    Utskicken går över Resend/SMTP och passerar aldrig kundens eget konto —
+    utan den här kopian är "Skickat" i kundens mejlklient tomt. None vid
+    framgång, annars ett felmeddelande. Kastar aldrig: kopian är en
+    bekvämlighet och får inte fälla eller fördröja sändningen den speglar.
+    """
+    try:
+        await asyncio.to_thread(
+            _spara_skickat_sync, host, user, password,
+            fran=fran, till=till, amne=amne, brodtext=brodtext,
+        )
+        return None
+    except Exception as error:  # noqa: BLE001 — kopian får aldrig fälla sändningen
+        logger.warning("Kunde inte spara kopia i Skickat för %s@%s: %s", user, host, error)
+        return f"Kopian till Skickat misslyckades: {error}"

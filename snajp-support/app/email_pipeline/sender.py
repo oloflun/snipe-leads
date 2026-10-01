@@ -125,6 +125,18 @@ async def skicka_supportsvar(
             "Försök igen om en stund."
         ) from fel
 
+    if tenant_id and storage:
+        # Svaret gick över Resend/SMTP och passerade aldrig kundens eget
+        # konto — kopian är det som gör att det syns i kundens "Skickat".
+        # Efter sändningen med flit: kopiera_till_skickat kastar aldrig och
+        # får aldrig påverka noteringen eller statusflödet.
+        from . import skickatkopia
+
+        await skickatkopia.kopiera_till_skickat(
+            storage, tenant_id, till=mottagare, amne=amne, brodtext=content,
+            fran=from_email or "",
+        )
+
     kanal = "Resend" if provider.__class__.__name__ == "ResendMailer" else "SMTP"
     identitet = from_email or "global avsändare"
     id_del = f" Resend-id: {message_id}." if message_id else ""
