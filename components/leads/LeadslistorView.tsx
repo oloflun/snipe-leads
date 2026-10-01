@@ -47,6 +47,9 @@ type ListRad = {
   contact_name?: string | null;
   contact_role?: string | null;
   contact_email?: string | null;
+  /** Kontaktpersonens telefon (registerkällan, migration 081). */
+  contact_phone?: string | null;
+  orgnr?: string | null;
   contact_level?: string | null;
   source_name?: string | null;
   source_url?: string | null;
@@ -167,11 +170,13 @@ function csvFalt(värde: string | null | undefined): string {
 
 function byggCsv(items: ListRad[]): string {
   const rader = [
-    ["Bolag", "Ort", "Kontakt", "Kontaktnivå", "Signal", "Källa", "Källänk", "Webbplats", "E-post"],
+    ["Bolag", "Org.nr", "Ort", "Kontakt", "Telefon", "Kontaktnivå", "Signal", "Källa", "Källänk", "Webbplats", "E-post"],
     ...items.map((rad) => [
       rad.company_name,
+      rad.orgnr ?? "",
       rad.ort ?? "",
       kontakt(rad),
+      rad.contact_phone ?? "",
       kontaktniva(rad) ?? "",
       signaltext(rad),
       rad.source_name ?? "",
@@ -612,7 +617,8 @@ async function skrivUtkastForRad(
         rad.source_name ? `Källa: ${rad.source_name}` : null,
         rad.contact_name || rad.contact_role
           ? `Kontakt: ${[rad.contact_name, rad.contact_role].filter(Boolean).join(", ")}`
-          : null
+          : null,
+        rad.orgnr ? `Org.nr: ${rad.orgnr}` : null
       ]
         .filter(Boolean)
         .join("\n"),
@@ -991,6 +997,11 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
                 <td className="kicker py-4 pr-6 text-mineral">{rad.ort ?? "—"}</td>
                 <td className="py-4 pr-6">
                   <p className="text-[15px]">{kontakt(rad)}</p>
+                  {rad.contact_phone ? (
+                    <a href={`tel:${rad.contact_phone.replace(/[^\d+]/g, "")}`} className="num mt-1 block text-sm text-ink-muted underline-offset-4 hover:underline">
+                      {rad.contact_phone}
+                    </a>
+                  ) : null}
                   {rad.contact_email && (rad.contact_name || rad.contact_role) ? (
                     <p className="mt-1 break-all text-sm text-ink-subtle">{rad.contact_email}</p>
                   ) : null}
@@ -1050,7 +1061,10 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
             </p>
             <p className="mt-2 text-sm leading-6 text-ink-muted">{signaltext(rad)}</p>
             <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-              <span className="min-w-0 break-all text-sm text-ink-muted">{kontakt(rad)}</span>
+              <span className="min-w-0 break-all text-sm text-ink-muted">
+                {kontakt(rad)}
+                {rad.contact_phone ? ` · ${rad.contact_phone}` : ""}
+              </span>
               {rad.source_url ? (
                 <a
                   href={rad.source_url}

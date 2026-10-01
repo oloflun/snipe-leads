@@ -1196,6 +1196,7 @@ class MemoryStorage:
                     "contact_role",
                     "contact_level",
                     "contact_form_url",
+                    "contact_phone",
                 )
                 and värde is not None
             },
@@ -1491,6 +1492,8 @@ class MemoryStorage:
             "source_url": falt.get("source_url"),
             "signal": falt.get("signal"),
             "signal_detalj": falt.get("signal_detalj"),
+            "contact_phone": falt.get("contact_phone"),
+            "orgnr": falt.get("orgnr"),
             "created_at": _now(),
         }
         self.lead_list_items.append(rad)

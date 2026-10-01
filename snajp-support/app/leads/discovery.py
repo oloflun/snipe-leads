@@ -989,6 +989,19 @@ async def hitta_bolag(
         return []
     uteslut = {n.casefold() for n in (uteslut_namn or set()) if n}
 
+    # Registerkällan först (merinfo via ScrapeGraphAI, TILLFÄLLIG tills ett
+    # API-avtal finns, se sources/merinfo.py). Bara när LEADS_MERINFO är
+    # satt. Färre träffar än beställt levereras som de är: utfyllnaden nedan
+    # saknar telefon och skulle bryta kontaktkravet. None betyder att
+    # målgruppen inte gick att översätta till merinfos träd, och då tar den
+    # gamla kedjan vid.
+    from .sources import merinfo
+
+    if merinfo.aktiv():
+        fran_register = await merinfo.sok(icp, antal, uteslut=uteslut, profil=profil)
+        if fran_register is not None:
+            return fran_register
+
     from .platshallare import utan_platshallare
 
     # Parkerade domäner och "under konstruktion" tas bort INNAN de tar en

@@ -47,6 +47,9 @@ type Prospekt = {
   company_name: string;
   contact_name: string | null;
   contact_email: string | null;
+  contact_role?: string | null;
+  /** Registerkällans telefon (migration 081). */
+  contact_phone?: string | null;
   status: string;
   origin?: string | null;
   ort: string | null;
@@ -120,7 +123,9 @@ function beslutsfattareRad(p: Prospekt): string | null {
       .filter(Boolean)
       .join(" · ");
   }
-  return p.contact_name ? `Beslutsfattare: ${p.contact_name}` : null;
+  if (!p.contact_name) return null;
+  const vem = [p.contact_name, p.contact_role].filter(Boolean).join(", ");
+  return `Beslutsfattare: ${vem}${p.contact_phone ? ` · ${p.contact_phone}` : ""}`;
 }
 
 /** Samma brytpunkt som Tailwinds `lg` (1024px). Hela sidan är redan klientkod

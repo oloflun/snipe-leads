@@ -194,6 +194,7 @@ list[tuple[lan_slug, kommun_slug|None]]`.
 6. `jev.ranka` mot profilens kriterier → topp `antal`. Utan Jev-nyckel: ordning = ring → anställda närmast profilens mitt → omsättning.
 7. Skriv raderna först när hela bygget lyckats (samma regel som i dag).
 
+- [x] **B-tillfällig (2026-10-01, Antons beslut i väntan på API-avtal med merinfo/allabolag):** registerkällan via ScrapeGraphAI i `snajp-support/app/leads/sources/merinfo.py`, bakom `LEADS_MERINFO=scrapegraph`. Trädet (275 branscher, 21 län, 290 kommuner) incheckat i `merinfo_taxonomi.json` (`python -m app.leads.sources.merinfo taxonomi`). Antons geografiregel, kontaktkravet (namn + roll + telefon), Jev-rangordning när Jev är på, migration 081 (`contact_phone`, `orgnr` på listrader). 22 tester i `tests/leads/test_merinfo.py`. Skarpt prov lokalt: bygg i Mölndal, 3 leads på 30 s, alla med namn, roll och telefon. Byts mot API-hämtaren när avtalet finns; urvalet står kvar.
 - [ ] B1 Taxonomi-skriptet + JSON incheckad (kontroll: 275 branscher, 21 län, Västra Götaland 49 kommuner)
 - [ ] B2 Tolkning av list- och bolagssida mot sparade fixturer
 - [ ] B3 `MerinfoSource` bakom protokollet, hämtaren vald av `MERINFO_SAMTYCKE`/`MERINFO_API_NYCKEL`; utan någon av dem: `SourceError("merinfo: ingen tillåten hämtare")` och listan faller ärligt

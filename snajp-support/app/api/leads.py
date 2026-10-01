@@ -1449,6 +1449,10 @@ async def _skapa_prospekt_ur_kandidat(storage, tenant_id: str, bolag: dict, orig
                 "contact_role",
                 "contact_level",
                 "contact_form_url",
+                # Registerkällan (merinfo, migration 081).
+                "contact_phone",
+                "sni",
+                "omsattning",
             )
             if bolag.get(k) is not None
         },
@@ -2402,7 +2406,23 @@ async def _run_list_job(app_state, payload: dict) -> None:
         from ..leads.discovery import hamta_kontaktvag, sla_upp_webbplats
 
         icp = lista.get("icp") or {}
-        traffar = await hitta_bolag(icp, int(lista["antal"]))
+        from ..leads.sources import merinfo
+
+        traffar = None
+        if merinfo.aktiv():
+            # Registerkällan med kundens profil, så Jev kan rangordna mot
+            # kundens målgrupp och kriterier. Profilen skickas inte till den
+            # gamla kedjan: där ändrar den vilka källor som körs.
+            try:
+                from ..leads.profil import sakerstall_profil, slå_ihop
+
+                profil = slå_ihop(await sakerstall_profil(storage, tenant_id), icp)
+            except Exception:  # noqa: BLE001 — utan profil rangordnar koden ensam
+                logger.warning("Profilen gick inte att läsa för listan %s.", lista["id"])
+                profil = None
+            traffar = await merinfo.sok(icp, int(lista["antal"]), profil=profil)
+        if traffar is None:
+            traffar = await hitta_bolag(icp, int(lista["antal"]))
         rader: list[dict] = []
         geografi = (icp.get("geography") or [None])[0] if isinstance(icp.get("geography"), list) else icp.get("geography")
         for traff in traffar:
@@ -2417,7 +2437,10 @@ async def _run_list_job(app_state, payload: dict) -> None:
             # rad utan adress) — kundkravet är en kontaktväg per rad, och en
             # rad utan sajt hade annars aldrig ens nått regex-skörden. Bara
             # för rader utan adress: raderna som redan bär en kostar inget.
-            if not traff.get("contact_email") and not traff.get("website"):
+            # Registerraden (merinfo) bär redan namn, roll och telefon; ett
+            # webbplatsuppslag per rad vore ett Gemini-anrop för en kontaktväg
+            # som redan finns.
+            if not traff.get("contact_email") and not traff.get("website") and not traff.get("contact_phone"):
                 try:
                     webb = await sla_upp_webbplats(
                         traff.get("company_name") or "", geografi=geografi
@@ -2455,6 +2478,8 @@ async def _run_list_job(app_state, payload: dict) -> None:
                 contact_role=traff.get("contact_role"),
                 contact_email=traff.get("contact_email"),
                 contact_level=traff.get("contact_level"),
+                contact_phone=traff.get("contact_phone"),
+                orgnr=traff.get("orgnr"),
                 source_name=traff.get("source_name") or "gemini_sok",
                 source_url=traff.get("source_url"),
                 signal=traff.get("signal"),

@@ -60,6 +60,8 @@ _PROSPEKT_PROFILFALT = frozenset(
         "contact_role",
         "contact_level",
         "contact_form_url",
+        # Migration 081: kontaktpersonens telefon (registerkällan).
+        "contact_phone",
     }
 )
 
@@ -2005,8 +2007,9 @@ class PostgresStorage:
                 insert into lead_list_items
                   (list_id, tenant_id, item_typ, company_name, website, ort,
                    contact_name, contact_role, contact_email, contact_level,
-                   source_name, source_url, signal, signal_detalj)
-                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                   source_name, source_url, signal, signal_detalj,
+                   contact_phone, orgnr)
+                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
                 returning *
                 """,
                 list_id,
@@ -2023,6 +2026,8 @@ class PostgresStorage:
                 falt.get("source_url"),
                 falt.get("signal"),
                 falt.get("signal_detalj"),
+                falt.get("contact_phone"),
+                falt.get("orgnr"),
             )
         return _row(record)
 
