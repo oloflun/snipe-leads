@@ -166,6 +166,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
     shows,
     isDemo,
     signedIn,
+    userEmail,
     vy,
     availableScopes,
     setScope,
@@ -394,35 +395,88 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                   aktiv={pathname === "/settings" || pathname.startsWith("/settings/")}
                 />
               ) : null}
+
+              {/* Kontrollerna bor i railen sedan 2026-10-01, i exakt samma
+                  komposition som AdminShell: kunduppslag, vy-växel, menyn
+                  (kontakt, dataskydd, anmäl felaktigt svar), kontoadressen,
+                  och utloggning + språk på EN rad. Antons beställning: menyn
+                  ska inte ta plats överst på sidan. Bara vid lg+ — i ikonläget
+                  saknar kontrollerna ett ikon-only-läge, och mobilraden
+                  nedanför bär det som måste nås där. */}
+              <div className="hidden flex-col gap-1.5 border-t border-paper/10 px-1 pt-3 lg:flex">
+                {(isPlatformAdmin && !demolage) ? (
+                  <div className="flex flex-wrap items-center gap-1">
+                    <BytKund ton="rail" />
+                    <VyVaxel ton="rail" />
+                  </div>
+                ) : null}
+                <AgentMenu yta="leads" kontext={`dashboard${pathname ? `:${pathname}` : ""}`} ton="rail" />
+                {userEmail && !demolage ? (
+                  <p className="truncate px-1 pt-0.5 text-[0.75rem] text-paper-subtle">{userEmail}</p>
+                ) : null}
+              </div>
+              <div className="hidden flex-col items-center gap-1 lg:flex lg:flex-row lg:justify-between">
+                {signedIn ? (
+                  <form action={signOut} className="w-full lg:w-auto lg:flex-1">
+                    <button
+                      type="submit"
+                      className="focus-ring flex min-h-11 w-full items-center gap-1.5 rounded-input px-3 text-sm font-medium text-paper-muted transition-colors hover:bg-paper/5 hover:text-paper lg:justify-start"
+                    >
+                      <LogOut className="h-4 w-4 shrink-0" aria-hidden />
+                      <span>Logga ut</span>
+                    </button>
+                  </form>
+                ) : demolage ? (
+                  <div className="flex w-full flex-col lg:w-auto lg:flex-1">
+                    <Link
+                      href="/login"
+                      className="focus-ring flex min-h-11 items-center rounded-input px-3 text-sm font-medium text-paper-muted transition-colors hover:bg-paper/5 hover:text-paper"
+                    >
+                      Logga in
+                    </Link>
+                    <Link
+                      href="/"
+                      className="focus-ring flex min-h-11 items-center rounded-input px-3 text-sm font-medium text-paper-muted transition-colors hover:bg-paper/5 hover:text-paper"
+                    >
+                      Till startsidan
+                    </Link>
+                  </div>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={toggleLocale}
+                  className="focus-ring min-h-11 shrink-0 rounded-input px-3 text-[13px] font-medium text-paper-muted transition-colors hover:bg-paper/5 hover:text-paper"
+                >
+                  {locale === "sv" ? "EN" : "SV"}
+                </button>
+              </div>
             </>
           }
         />
 
         <div className="flex min-w-0 flex-1 flex-col">
-          {/* Kontrollraden. Railen bär navigationen; det här är allt som inte
-              är navigation — kontosaker, växlar, språk. De bor i en ljus rad
-              överst i innehållet i stället för på railen: BytKund, VyVaxel och
-              AgentMenu är ritade för ljus yta, och en mörk rail med tre ljusa
-              öar hade varit sämre än två renodlade ytor. */}
-          <header className="safe-top sticky top-0 z-30 border-b border-ink/10 bg-paper/85 backdrop-blur-xl">
+          {/* Mobilraden. Vid lg+ bär railens fot kontrollerna (samma
+              komposition som AdminShell, Antons beställning 2026-10-01: menyn
+              ska inte ta plats överst på sidan). Under lg är railen en ikonrail
+              utan plats för dem, så det som MÅSTE nås på en telefon står här:
+              ytans namn, menyn (kontakt, dataskydd, anmäl felaktigt svar),
+              språk och utloggning. Kunduppslag och vy-växel är adminverktyg
+              och saknas på mobilen — samma avgränsning som adminytan gör. */}
+          <header className="safe-top sticky top-0 z-30 border-b border-ink/10 bg-paper/85 backdrop-blur-xl lg:hidden">
             <div className="flex min-h-[52px] flex-wrap items-center justify-end gap-x-1.5 gap-y-1 px-4 py-1.5 md:px-6">
-              {/* Demomarkören igen, för smala skärmar där railens etikett inte
-                  får plats — utan den vet en mobil besökare inte vad ytan är. */}
+              {/* Demomarkören för smala skärmar där railens etikett inte får
+                  plats — utan den vet en mobil besökare inte vad ytan är. */}
               {demolage ? (
-                <span className="mr-auto inline-flex items-center rounded-input border border-ochre/40 bg-ochre/10 px-2.5 py-1 text-[13px] font-medium text-warning lg:hidden">
+                <span className="mr-auto inline-flex items-center rounded-input border border-ochre/40 bg-ochre/10 px-2.5 py-1 text-[13px] font-medium text-warning">
                   Demo · exempeldata
                 </span>
               ) : (
-                <span className="mr-auto truncate text-[13px] font-medium text-ink-subtle lg:hidden">
+                <span className="mr-auto truncate text-[13px] font-medium text-ink-subtle">
                   {workspaceName}
                 </span>
               )}
 
-              {/* Admin / Demo. Ersätter både den gamla /admin-länken längst ut
-                  i flikraden och lägesväxlaren: läget styrs numera av Leads-
-                  och Support-posterna i railen, se ovan. */}
-              <BytKund />
-              <VyVaxel />
+              <AgentMenu yta="leads" kontext={`dashboard${pathname ? `:${pathname}` : ""}`} />
               <button
                 type="button"
                 onClick={toggleLocale}
@@ -430,12 +484,6 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
               >
                 {locale === "sv" ? "EN" : "SV"}
               </button>
-              {/* Samma meny som på kundserviceytan. Den ligger i AppShell och
-                  inte per sida: kontaktuppgifter, dataskydd och möjligheten att
-                  anmäla ett felaktigt svar är lika relevanta på leads-vyn som
-                  på supportvyn, och en meny som bara finns på hälften av
-                  ytorna är en meny användaren slutar leta efter. */}
-              <AgentMenu yta="leads" kontext={`dashboard${pathname ? `:${pathname}` : ""}`} />
 
               {/* Utloggning. Formulär och inte onClick: signOut är en server
                   action, och ett formulär gör att den fungerar även innan
@@ -452,23 +500,13 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                 </form>
               ) : null}
 
-              {/* Demons två utvägar, i samma register som varje annan
-                  kontroll. */}
               {demolage ? (
-                <>
-                  <Link
-                    href="/"
-                    className="focus-ring hidden min-h-11 items-center rounded-input px-3 text-sm font-medium text-ink-subtle transition-colors hover:text-ink sm:inline-flex"
-                  >
-                    Till startsidan
-                  </Link>
-                  <Link
-                    href="/login"
-                    className="focus-ring inline-flex min-h-11 items-center rounded-input px-3 text-sm font-medium text-ink-subtle transition-colors hover:text-ink"
-                  >
-                    Logga in
-                  </Link>
-                </>
+                <Link
+                  href="/login"
+                  className="focus-ring inline-flex min-h-11 items-center rounded-input px-3 text-sm font-medium text-ink-subtle transition-colors hover:text-ink"
+                >
+                  Logga in
+                </Link>
               ) : null}
             </div>
           </header>
