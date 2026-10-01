@@ -181,6 +181,64 @@ async def test_fel_losenord_sparar_ingenting(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_mellanslag_i_applosenordet_provas_rensat(monkeypatch):
+    """Google visar app-lösenordet som "abcd efgh ijkl mnop" — kopieringen tar
+    med mellanslagen, och Gmails IMAP nekar dem. Kopplingen ska då prova det
+    RENSADE lösenordet och spara varianten som faktiskt loggade in."""
+
+    async def nekar_mellanslag(host, user, password):
+        nekar_mellanslag.anrop.append(password)
+        return None if " " not in password else "Inloggningen nekades."
+
+    nekar_mellanslag.anrop = []
+
+    async def fangar_losenord(host, user, password, folder="INBOX", **_):
+        fangar_losenord.anrop.append(password)
+        return [], None
+
+    fangar_losenord.anrop = []
+
+    monkeypatch.setattr(imap_connector, "prova_inloggning", nekar_mellanslag)
+    monkeypatch.setattr(poller.imap, "fetch_new", fangar_losenord)
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            svar = await client.post(
+                "/api/inbox/mailboxes",
+                headers=DEMO,
+                json={"address": "kajsa@gmail.com", "app_losenord": " abcd efgh ijkl mnop "},
+            )
+            assert svar.status_code == 200, svar.text
+            # Båda varianterna provades, i ordning: rå först, rensad sedan.
+            assert nekar_mellanslag.anrop == [" abcd efgh ijkl mnop ", "abcdefghijklmnop"]
+
+            # Synken använder den sparade (rensade) varianten.
+            await client.post("/api/inbox/sync", headers=DEMO)
+            assert fangar_losenord.anrop == ["abcdefghijklmnop"]
+
+
+@pytest.mark.anyio
+async def test_gmail_losenord_med_fel_langd_ger_tydligt_besked(monkeypatch):
+    """Ett halvt inklistrat Google-lösenord (11 tecken i stället för 16) ska ge
+    ett besked om LÄNGDEN, inte bara "inloggningen nekades"."""
+
+    async def nekad(host, user, password):
+        return "Inloggningen nekades."
+
+    monkeypatch.setattr(imap_connector, "prova_inloggning", nekad)
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            svar = await client.post(
+                "/api/inbox/mailboxes",
+                headers=DEMO,
+                json={"address": "kajsa@gmail.com", "app_losenord": "abcd efgh ijk"},
+            )
+            assert svar.status_code == 422
+            detalj = svar.json()["detail"]
+            assert "16 tecken" in detalj
+            assert "11" in detalj
+
+
+@pytest.mark.anyio
 async def test_okand_doman_kraver_imap_vard(imap_fejk):
     async with app.router.lifespan_context(app):
         async with _client() as client:

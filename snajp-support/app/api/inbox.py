@@ -249,12 +249,35 @@ async def koppla_inkorg(
             ),
         )
 
-    fel = await imap_connector.prova_inloggning(host, adress, payload.app_losenord)
+    # Google visar app-lösenordet som "abcd efgh ijkl mnop" och kopieringen
+    # tar med mellanslagen — som Gmails IMAP nekar. Rått först (ett riktigt
+    # lösenord kan innehålla mellanslag), sedan rensat; varianten som loggade
+    # in är den som sparas.
+    rensat = "".join(payload.app_losenord.split())
+    kandidater = [payload.app_losenord]
+    if rensat and rensat != payload.app_losenord:
+        kandidater.append(rensat)
+
+    losenord = payload.app_losenord
+    fel: str | None = None
+    for kandidat in kandidater:
+        fel = await imap_connector.prova_inloggning(host, adress, kandidat)
+        if fel is None:
+            losenord = kandidat
+            break
     if fel:
+        if provider == "gmail" and len(rensat) != 16:
+            # Det vanligaste felet är ett halvt inklistrat lösenord — säg det,
+            # i stället för ett generiskt "nekades".
+            fel = (
+                "Ett app-lösenord från Google är exakt 16 tecken — det ni "
+                f"klistrade in är {len(rensat)}. Gå tillbaka till Google-kontot "
+                "och kopiera hela koden."
+            )
         raise HTTPException(status_code=422, detail=fel)
 
     try:
-        hemlighet = kryptera({"losenord": payload.app_losenord})
+        hemlighet = kryptera({"losenord": losenord})
     except IngenNyckelError as orsak:
         # Miljö med riktig kunddata utan INTEGRATION_NYCKEL: vägra spara i
         # stället för att lagra klartext. Samma gräns som integrationerna.
