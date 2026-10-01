@@ -339,7 +339,7 @@ egen auth — vi har tenant/RLS och Next redan.
 
 ## Antons handgrepp (ingen kod löser dem)
 
-- [ ] merinfo: pris/avtal för API/fil, eller skriftligt samtycke för webbhämtning (del B, beslut 1 ovan)
+- [ ] merinfo: pris/avtal för API/fil, eller skriftligt samtycke för webbhämtning (del B, beslut 1 ovan) — utkast klart 2026-10-01 i `docs/utkast-merinfo-api-forfragan.md`, volym 1 000–7 500 uppslag/mån för 1–5 kunder; väntar på att Anton skickar
 - [ ] migration 079 mot main (`railway_migrate.py --env main`, torrkörning först) — annars kan spegeln inte köras
 - [ ] `FLYTT_NYCKEL` sätts i main och development med `scripts/keys.py` (värdet hanteras aldrig av agenten)
 - [ ] Jev-nyckeln (`keys.py --key TYPESAFE_API_KEY`, `--push-jev development`) så Jev-rankningen kan skuggmätas
