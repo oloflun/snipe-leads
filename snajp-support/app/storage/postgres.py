@@ -237,11 +237,39 @@ class PostgresStorage:
     async def set_tenant_active(self, tenant_id: str, *, active: bool) -> dict[str, Any] | None:
         # OSKOPAD med flit: administrativ skrivning bakom require_master_key,
         # samma policy (ss_tenants_admin_write, 029) som create_tenant.
+        #
+        # Status (080) skrivs i SAMMA sats: en avstängning via den gamla
+        # aktiv-vägen ska inte lämna etiketten på 'aktiv' — spärren och
+        # avsikten får aldrig säga olika saker. En PAUSAD kund som
+        # återaktiveras här blir 'aktiv' igen, vilket är rätt: båda vägarna
+        # öppnar kontot.
         async with self.pool.acquire() as conn:
             record = await conn.fetchrow(
-                "update ss_tenants set active = $2 where id = $1 returning *",
+                """
+                update ss_tenants
+                   set active = $2,
+                       status = case when $2 then 'aktiv' else 'avstangd' end
+                 where id = $1 returning *
+                """,
                 tenant_id,
                 active,
+            )
+        return _row(record)
+
+    async def set_tenant_status(self, tenant_id: str, *, status: str) -> dict[str, Any] | None:
+        # Samma väg och samma policy som set_tenant_active. active härleds ur
+        # status — check-villkoret ss_tenants_status_valid (080) är domaren
+        # för värdemängden, API-lagret validerar dessutom före anropet.
+        async with self.pool.acquire() as conn:
+            record = await conn.fetchrow(
+                """
+                update ss_tenants
+                   set status = $2,
+                       active = ($2 = 'aktiv')
+                 where id = $1 returning *
+                """,
+                tenant_id,
+                status,
             )
         return _row(record)
 
@@ -2982,7 +3010,7 @@ class PostgresStorage:
         async with self.pool.acquire() as conn:
             records = await conn.fetch(
                 """
-                select t.id, t.slug, t.name, t.active, t.created_at,
+                select t.id, t.slug, t.name, t.active, t.status, t.created_at,
                        coalesce(k.tickets, 0)      as tickets,
                        coalesce(k.escalated, 0)    as escalated,
                        coalesce(r.runs, 0)         as runs,

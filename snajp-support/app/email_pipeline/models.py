@@ -22,3 +22,7 @@ class InboundEmail:
     body_text: str
     received_at: str | None = None
     attachments: list[InboundAttachment] = field(default_factory=list)
+    # IMAP-UID:t mejlet hämtades med (PEEK, utan att röra \Seen). Pollern
+    # markerar läst FÖRST efter lyckad ingest — se imap.mark_seen. None för
+    # mock och API-ingest, som inte har någon server att markera på.
+    imap_uid: str | None = None

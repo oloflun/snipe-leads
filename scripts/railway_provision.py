@@ -332,7 +332,11 @@ def provision(env_name: str, branch: str, apply: bool) -> None:
                                        lambda: "snajp_master_" + secrets.token_urlsafe(24)),
         "SNAJP_DEMO_API_KEY": secret(env_name, "DEMO_API_KEY",
                                      lambda: "snajp_demo_" + secrets.token_urlsafe(16)),
-        "INBOX_POLL_SECONDS": "0",
+        # 300, inte 0, sedan 2026-10-01: UI:t lovar att nya mail hämtas
+        # automatiskt (Inkorgar.tsx), och med 0 var det löftet en lögn — bara
+        # knappen "Synka inkorg" hämtade något. Pollern hoppar själv över
+        # inaktiva tenants, mock-inkorgar och rader utan lösenord.
+        "INBOX_POLL_SECONDS": "300",
         "AUTO_SEND_MIN_CONFIDENCE": "0.75",
     }
     # snipe-u70: LLM_PROVIDER/MODEL skrevs tidigare OVILLKORLIGT här, VARJE

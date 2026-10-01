@@ -63,6 +63,21 @@ class SandningsFel(RuntimeError):
     skickat — det är hela skillnaden mot noteringarna ovan."""
 
 
+def _svarsheaders(email: dict[str, Any]) -> dict[str, str] | None:
+    """In-Reply-To/References för ett svar, eller None när inget original-id finns.
+
+    `provider_message_id` är mejlets eget Message-ID när det kom via IMAP
+    (<...@...>); mock och API-ingest kan bära syntetiska id:n ("imap-3",
+    "mock-1") och de får ALDRIG skickas som header — en ogiltig References
+    är värre för trådningen än ingen alls. Utan de här headrarna hamnade
+    varje svar som en NY tråd i kundens mejlklient, trots "Re:" i ämnet.
+    """
+    original = (email.get("provider_message_id") or "").strip()
+    if original.startswith("<") and original.endswith(">") and "@" in original:
+        return {"In-Reply-To": original, "References": original}
+    return None
+
+
 def _svarsamne(amne: str | None) -> str:
     text = (amne or "").strip()
     if not text:
@@ -110,12 +125,20 @@ async def skicka_supportsvar(
             fallback = f" Tenant-domänen {cfg.get('sending_domain')} är {cfg.get('status')}; synlig fallback användes."
     try:
         import inspect
-        if "from_email" in inspect.signature(provider.send).parameters or any(p.kind == inspect.Parameter.VAR_KEYWORD for p in inspect.signature(provider.send).parameters.values()):
-            message_id = await provider.send(to=mottagare, subject=amne, body=content,
+        params = inspect.signature(provider.send).parameters
+        har_kwargs = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
+        extra: dict[str, Any] = {}
+        if "from_email" in params or har_kwargs:
+            extra.update(
                 from_email=from_email, from_name=from_name, reply_to=reply_to,
-                tags=[{"name":"tenant_id","value":tenant_id}] if tenant_id else None)
-        else:
-            message_id = await provider.send(to=mottagare, subject=amne, body=content)
+                tags=[{"name": "tenant_id", "value": tenant_id}] if tenant_id else None,
+            )
+        # Trådning: svaret bär originalets Message-ID så kundens mejlklient
+        # lägger det i samma konversation. Skickas bara till providers som
+        # tar emot parametern — samma mjuka kontrakt som from_email ovan.
+        if "headers" in params or har_kwargs:
+            extra["headers"] = _svarsheaders(email)
+        message_id = await provider.send(to=mottagare, subject=amne, body=content, **extra)
     except Exception as fel:
         # Loggen får detaljerna; anroparen får ett svenskt besked utan
         # serverns interna feltext (den kan bära adresser och kontonamn).

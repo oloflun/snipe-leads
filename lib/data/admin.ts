@@ -63,6 +63,11 @@ export type TenantRow = {
   /** `ss_tenants.active`. Saknas i äldre backendsvar — tolka frånvaro som aktiv. */
   active?: boolean;
   /**
+   * `ss_tenants.status` (migration 080): aktiv, pausad eller avstangd.
+   * Saknas i äldre backendsvar — härled då ur `active` (false = avstangd).
+   */
+  status?: "aktiv" | "pausad" | "avstangd" | null;
+  /**
    * `workspaces.products` för arbetsytan som pekar på tenanten (ss_tenant_id).
    * Null = ingen kopplad arbetsyta, eller att backenden inte fick läsa den —
    * då härleds paketet ur aktivitet som förut. Se list_tenants_with_stats.

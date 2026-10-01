@@ -1,5 +1,14 @@
 # Migrationer — status
 
+## 080: Paketfliken (2026-10-01)
+
+`20261001090000_080_paket_admin.sql`: `ss_tenants.status`
+(aktiv/pausad/avstangd, backfill ur `active`) och
+`admin_set_workspace_products` (adminens paketbyte, spegel av 063).
+Körs via `python scripts/railway_migrate.py --env development --apply`
+respektive `--env main` (torrkörning först) INNAN koden deployas:
+`list_tenants_with_stats` läser `t.status` och faller utan kolumnen.
+
 ## 063–064: EJ VERIFIERADE MOT RAILWAY (2026-09-13)
 
 Railway-projektet var nere när de skrevs (development-Postgres stängde

@@ -106,6 +106,16 @@ class Storage(Protocol):
         """
         ...
 
+    async def set_tenant_status(self, tenant_id: str, *, status: str) -> dict[str, Any] | None:
+        """Sätter kontots läge: 'aktiv', 'pausad' eller 'avstangd' (migration 080).
+
+        `active` hålls i synk i SAMMA skrivning (active = status == 'aktiv') —
+        spärren och etiketten får aldrig säga olika saker. 'pausad' och
+        'avstangd' låser ute lika hårt; skillnaden är avsikten, och den läses
+        av adminytan och händelseloggen, inte av någon grind.
+        """
+        ...
+
     async def get_tenant_products(self, tenant_id: str) -> list[str] | None:
         """Paketet ur den kopplade arbetsytans `workspaces.products`.
 

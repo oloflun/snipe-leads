@@ -109,6 +109,54 @@ async def test_misslyckad_riktig_sandning_kastar():
         )
 
 
+class _TradSkickare(_Skickare):
+    """Provider som dessutom tar emot trådningsheadrar — som Resend/SMTP."""
+
+    async def send(self, *, to: str, subject: str, body: str, headers=None) -> None:  # type: ignore[override]
+        if self.spricker:
+            raise RuntimeError("SMTP nere")
+        self.skickade.append({"to": to, "subject": subject, "body": body, "headers": headers})
+
+
+async def test_svar_bar_tradningsheadrar():
+    """Svaret bär originalets Message-ID som In-Reply-To/References — annars
+    landar varje svar som en NY tråd i kundens mejlklient trots 'Re:' i ämnet."""
+    provider = _TradSkickare()
+    await skicka_supportsvar(
+        _mejlrad(provider_message_id="<orig-123@example.com>"),
+        content="Svar.",
+        provider=provider,
+    )
+    [skickat] = provider.skickade
+    assert skickat["headers"] == {
+        "In-Reply-To": "<orig-123@example.com>",
+        "References": "<orig-123@example.com>",
+    }
+
+
+async def test_syntetiskt_id_ger_inga_headrar():
+    """'imap-3'/'mock-1' är våra egna id:n, inte RFC-Message-ID:n — en ogiltig
+    References är värre för trådningen än ingen alls."""
+    provider = _TradSkickare()
+    await skicka_supportsvar(
+        _mejlrad(provider_message_id="imap-3"), content="Svar.", provider=provider
+    )
+    [skickat] = provider.skickade
+    assert skickat["headers"] is None
+
+
+async def test_provider_utan_headerstod_far_inga_extraargument():
+    """_Skickare saknar headers-parametern — sändningen ska ändå gå igenom,
+    samma mjuka kontrakt som from_email."""
+    provider = _Skickare()
+    notering = await skicka_supportsvar(
+        _mejlrad(provider_message_id="<orig-123@example.com>"),
+        content="Svar.",
+        provider=provider,
+    )
+    assert "kund@example.com" in notering
+
+
 # -- Godkännandevägen genom API:t --------------------------------------------
 
 

@@ -22,7 +22,7 @@ def test_refresh_access_token_posts_refresh_grant():
 
 def test_fetch_uses_xoauth2_when_refresh_credentials_exist():
     client = MagicMock()
-    client.search.return_value = ("OK", [b""])
+    client.uid.return_value = ("OK", [b""])
     with patch.object(imap.imaplib, "IMAP4_SSL", return_value=client), patch.object(
         imap, "_refresh_access_token", return_value="access"
     ):
