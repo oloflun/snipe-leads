@@ -188,10 +188,6 @@ export function IrisKorningar() {
               oppen={arOppen}
               onToggle={() => setOppen(arOppen ? null : rad.job_id)}
             >
-              <Cell titel>
-                <span className="num tabular-nums">{nar(rad.created_at)}</span>
-                {rad.is_test ? <span className={cn(meta, "ml-2")}>test</span> : null}
-              </Cell>
               <Cell>{typ(rad)}</Cell>
               <Cell hoger>{k ? k.mal : "–"}</Cell>
               <Cell hoger>
@@ -274,8 +270,11 @@ function Pagaende({ rad }: Readonly<{ rad: KorningsRad }>) {
 
 /**
  * En rad som fälls ut till sin detalj: levererade bolag med länk, tratten rad
- * för rad, och felorsaken. Knappen är hela radens första cell, så raden går
- * att öppna med tangentbordet.
+ * för rad, och felorsaken. Tangentbordet når en RIKTIG knapp i radhuvudet
+ * (datumet), inte en fokuserbar `<tr>`: en tabellrad med tabIndex och
+ * tangentlyssnare läses som "rad", aldrig som "knapp, hopfälld", och
+ * skärmläsaren vet då inte att den går att öppna. Musen får dessutom
+ * klicka var som helst på raden.
  */
 function RadMedDetalj({
   rad,
@@ -294,19 +293,23 @@ function RadMedDetalj({
   const kolumner = 6;
   return (
     <>
-      <tr
-        className={cn(tabellRad, "cursor-pointer")}
-        onClick={onToggle}
-        aria-expanded={oppen}
-        aria-controls={`korning-${rad.job_id}`}
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            onToggle();
-          }
-        }}
-      >
+      <tr className={cn(tabellRad, "cursor-pointer")} onClick={onToggle}>
+        <Cell titel>
+          <button
+            type="button"
+            aria-expanded={oppen}
+            aria-controls={`korning-${rad.job_id}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggle();
+            }}
+            className="focus-ring -mx-1 inline-flex min-h-11 items-center rounded-input px-1 text-left"
+          >
+            <span className="num tabular-nums">{nar(rad.created_at)}</span>
+            {rad.is_test ? <span className={cn(meta, "ml-2")}>test</span> : null}
+            <span className="sr-only">{oppen ? ", dölj detaljer" : ", visa detaljer"}</span>
+          </button>
+        </Cell>
         {children}
       </tr>
       {oppen ? (
