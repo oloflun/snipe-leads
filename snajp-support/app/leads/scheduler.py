@@ -229,6 +229,21 @@ async def process_due_item(
         await storage.update_send_queue_status(
             tenant_id, item["id"], status="sent", gate_checks={"decision": decision.reason}
         )
+        if getattr(provider, "levererar", False):
+            # Riktiga utskick passerar aldrig kundens eget mejlkonto (Resend/
+            # SMTP) — kopian är det som gör att de syns i kundens "Skickat".
+            # Efter statusskrivningarna med flit: kopian får aldrig påverka
+            # eller fördröja 'sent', och kopiera_till_skickat kastar aldrig.
+            from ..email_pipeline import skickatkopia
+
+            await skickatkopia.kopiera_till_skickat(
+                storage,
+                tenant_id,
+                till=thread.get("prospect_email", ""),
+                amne=message.get("subject", ""),
+                brodtext=message["body"],
+                fran=getattr(provider, "avsandare", ""),
+            )
         return "sent"
 
     if decision.action == "block":

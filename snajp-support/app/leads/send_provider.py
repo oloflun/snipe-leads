@@ -49,7 +49,7 @@ class SendProvider(Protocol):
     #: True bara för providers som faktiskt når internet.
     levererar: bool
 
-    async def send(self, *, to: str, subject: str, body: str, from_email: str | None = None, from_name: str | None = None, reply_to: str | None = None, tags: list[dict[str, str]] | None = None) -> str | None: ...
+    async def send(self, *, to: str, subject: str, body: str, from_email: str | None = None, from_name: str | None = None, reply_to: str | None = None, tags: list[dict[str, str]] | None = None, headers: dict[str, str] | None = None) -> str | None: ...
 
 
 class LoggingSendProvider:
@@ -94,13 +94,19 @@ class SmtpMailer:
         self.avsandare = avsandare
         self.avsandarnamn = avsandarnamn
 
-    def _blockerande(self, *, to: str, subject: str, body: str) -> None:
+    def _blockerande(
+        self, *, to: str, subject: str, body: str, headers: dict[str, str] | None = None
+    ) -> None:
         meddelande = EmailMessage()
         meddelande["Subject"] = subject
         meddelande["From"] = (
             formataddr((self.avsandarnamn, self.avsandare)) if self.avsandarnamn else self.avsandare
         )
         meddelande["To"] = to
+        # Trådningsheadrar (In-Reply-To/References) från supportsvar — satta
+        # före set_content så de följer med i själva meddelandet.
+        for namn, varde in (headers or {}).items():
+            meddelande[namn] = varde
         meddelande.set_content(body)
 
         # 465 är implicit TLS från första byte (SMTPS); allt annat är klartext
@@ -118,7 +124,9 @@ class SmtpMailer:
             server.login(self.user, self.password)
             server.send_message(meddelande)
 
-    async def send(self, *, to: str, subject: str, body: str) -> None:
+    async def send(
+        self, *, to: str, subject: str, body: str, headers: dict[str, str] | None = None
+    ) -> None:
         adress = (to or "").strip()
         if not adress or "@" not in adress:
             # Hellre ett tydligt fel än ett SMTP-avvisande tre lager ned:
@@ -128,7 +136,9 @@ class SmtpMailer:
             raise ValueError(f"Ogiltig mottagaradress: {to!r} — inget skickat.")
         try:
             await asyncio.wait_for(
-                asyncio.to_thread(self._blockerande, to=adress, subject=subject, body=body),
+                asyncio.to_thread(
+                    self._blockerande, to=adress, subject=subject, body=body, headers=headers
+                ),
                 timeout=SMTP_TIDSTAK_SEKUNDER + 5,
             )
         except OSError as fel:
@@ -229,7 +239,7 @@ class ResendMailer:
     def _from(self) -> str:
         return f"{self.avsandarnamn} <{self.avsandare}>" if self.avsandarnamn else self.avsandare
 
-    async def send(self, *, to: str, subject: str, body: str, from_email: str | None = None, from_name: str | None = None, reply_to: str | None = None, tags: list[dict[str, str]] | None = None) -> str | None:
+    async def send(self, *, to: str, subject: str, body: str, from_email: str | None = None, from_name: str | None = None, reply_to: str | None = None, tags: list[dict[str, str]] | None = None, headers: dict[str, str] | None = None) -> str | None:
         adress = (to or "").strip()
         if not adress or "@" not in adress:
             raise ValueError(f"Ogiltig mottagaradress: {to!r} — inget skickat.")
@@ -240,6 +250,9 @@ class ResendMailer:
         payload = {"from": f"{display} <{actual_from}>" if display else actual_from, "to": [adress], "subject": subject, "text": body}
         if reply_to: payload["reply_to"] = reply_to
         if tags: payload["tags"] = tags
+        # Resend tar egna headrar rakt av — trådningen (In-Reply-To/References)
+        # går samma väg som i SMTP-fallet.
+        if headers: payload["headers"] = headers
         async with httpx.AsyncClient(timeout=SMTP_TIDSTAK_SEKUNDER) as klient:
             svar = await klient.post(self.ENDPOINT, headers={"Authorization": f"Bearer {self.api_key}"}, json=payload)
         if svar.status_code >= 400:

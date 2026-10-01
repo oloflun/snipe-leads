@@ -367,6 +367,19 @@ class TenantAktivRequest(BaseModel):
     orsak: str | None = Field(default=None, max_length=500)
 
 
+class TenantStatusRequest(BaseModel):
+    """Kontots läge från adminytans paketflik (migration 080).
+
+    'pausad' och 'avstangd' låser ute lika hårt (active = false i samma
+    skrivning); skillnaden är avsikten — en paus ska öppnas igen, en
+    avstängning är ett avslut. `orsak` hamnar i platform_events, samma
+    kontrakt som TenantAktivRequest.
+    """
+
+    status: Literal["aktiv", "pausad", "avstangd"]
+    orsak: str | None = Field(default=None, max_length=500)
+
+
 class TenantProfilRequest(BaseModel):
     """Adminens skrivning mot EN kunds agentprofil.
 

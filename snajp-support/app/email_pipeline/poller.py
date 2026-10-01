@@ -231,8 +231,23 @@ async def sync_mailbox(
 
     processed = 0
     email_ids: list[str] = []
+    # Läst-markeringen sker EFTER ingest, aldrig före (hämtningen använder
+    # PEEK). Går en ingest sönder markeras bara de mejl som faktiskt står i
+    # databasen; resten är kvar som olästa och hämtas om nästa synk. En
+    # dublett (ingest_email returnerar None) markeras också — raden finns
+    # redan, och ett oläst exemplar hade annars klampat i 20-mejlsfönstret
+    # varje varv för evigt.
+    ingestade_uids: list[str] = []
+    ingest_fel: str | None = None
     for message in inbound:
-        email = await ingest_email(storage, tenant_id, message)
+        try:
+            email = await ingest_email(storage, tenant_id, message)
+        except Exception as fel:  # noqa: BLE001 — resten av mejlen ska stå kvar olästa
+            logger.exception("Ingest misslyckades för %s", message.provider_message_id)
+            ingest_fel = f"Ett mejl kunde inte sparas: {fel}"
+            break
+        if message.imap_uid:
+            ingestade_uids.append(message.imap_uid)
         if not email:
             continue
         if bearbeta:
@@ -240,8 +255,21 @@ async def sync_mailbox(
             processed += 1
         else:
             email_ids.append(email["id"])
+
+    mark_fel = await imap.mark_seen(
+        host, mailbox["address"], password, settings.imap_folder, ingestade_uids,
+        oauth_client_id=settings.imap_oauth_client_id if oauth_ready else "",
+        oauth_client_secret=settings.imap_oauth_client_secret if oauth_ready else "",
+        oauth_refresh_token=settings.imap_oauth_refresh_token if oauth_ready else "",
+        oauth_token_url=settings.imap_oauth_token_url,
+    )
     return await stampla(
-        {"fetched": len(inbound), "processed": processed, "email_ids": email_ids, "error": error}
+        {
+            "fetched": len(inbound),
+            "processed": processed,
+            "email_ids": email_ids,
+            "error": error or ingest_fel or mark_fel,
+        }
     )
 
 

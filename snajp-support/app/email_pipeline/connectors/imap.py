@@ -1,10 +1,13 @@
-"""IMAP-connector — täcker både Gmail och Microsoft 365/Outlook.
+r"""IMAP-connector — täcker både Gmail och Microsoft 365/Outlook.
 
 - Gmail:   IMAP_HOST=imap.gmail.com, IMAP_USER=<adress>, IMAP_PASSWORD=<app-lösenord>
 - Outlook: IMAP_HOST=outlook.office365.com, samma mönster.
 
-Hämtar olästa mail, extraherar text + bildbilagor (som data-URLs) och markerar
-dem lästa. imaplib är synkron — körs i trådpool så event-loopen aldrig blockeras.
+Hämtar olästa mail med BODY.PEEK (utan att röra \Seen) och extraherar text +
+bildbilagor (som data-URLs). Läst-markeringen görs av anroparen via mark_seen()
+EFTER lyckad ingest — ett mejl som markerats läst före databasskrivningen är
+ett mejl som försvinner om skrivningen faller. imaplib är synkron — körs i
+trådpool så event-loopen aldrig blockeras.
 Alla fel fångas och returneras som tom lista + felmeddelande; pipelinen kraschar
 aldrig på en trasig inkorg eller utgången token.
 """
@@ -16,8 +19,11 @@ import email.header
 import email.utils
 import imaplib
 import logging
+import re
+import time
 import urllib.parse
 import urllib.request
+from email.message import EmailMessage
 
 from ..models import InboundAttachment, InboundEmail
 
@@ -112,28 +118,46 @@ def _xoauth2_bytes(user: str, access_token: str) -> bytes:
     return f"user={user}\x01auth=Bearer {access_token}\x01\x01".encode()
 
 
+def _logga_in(client: imaplib.IMAP4_SSL, user: str, password: str, *,
+              oauth_client_id: str = "", oauth_client_secret: str = "",
+              oauth_refresh_token: str = "",
+              oauth_token_url: str = "https://oauth2.googleapis.com/token") -> None:
+    if oauth_client_id and oauth_client_secret and oauth_refresh_token:
+        access_token = _refresh_access_token(
+            oauth_client_id, oauth_client_secret, oauth_refresh_token, oauth_token_url
+        )
+        client.authenticate("XOAUTH2", lambda _: _xoauth2_bytes(user, access_token))
+    else:
+        client.login(user, password)
+
+
 def _fetch_sync(
     host: str, user: str, password: str, folder: str, *,
     oauth_client_id: str = "", oauth_client_secret: str = "",
     oauth_refresh_token: str = "",
     oauth_token_url: str = "https://oauth2.googleapis.com/token",
 ) -> list[InboundEmail]:
+    # UID + BODY.PEEK[], inte sekvensnummer + RFC822, och ingen \Seen-flagga
+    # här. Den gamla vägen markerade mejlet läst INNAN ingest — föll databasen
+    # efter hämtningen var mejlet borta för alltid (UNSEEN-sökningen ser det
+    # aldrig igen). PEEK rör ingenting; pollern markerar via mark_seen() när
+    # raden faktiskt står i databasen. UID och inte sekvensnummer för att
+    # markeringen sker i en EGEN anslutning — sekvensnummer kan glida mellan
+    # två select, UID:n står stilla så länge UIDVALIDITY gör det.
     emails: list[InboundEmail] = []
     client = imaplib.IMAP4_SSL(host, timeout=30)
     try:
-        if oauth_client_id and oauth_client_secret and oauth_refresh_token:
-            access_token = _refresh_access_token(
-                oauth_client_id, oauth_client_secret, oauth_refresh_token, oauth_token_url
-            )
-            client.authenticate("XOAUTH2", lambda _: _xoauth2_bytes(user, access_token))
-        else:
-            client.login(user, password)
+        _logga_in(
+            client, user, password,
+            oauth_client_id=oauth_client_id, oauth_client_secret=oauth_client_secret,
+            oauth_refresh_token=oauth_refresh_token, oauth_token_url=oauth_token_url,
+        )
         client.select(folder)
-        _, data = client.search(None, "UNSEEN")
-        message_ids = data[0].split()[:MAX_MESSAGES_PER_SYNC]
-        for msg_id in message_ids:
-            _, msg_data = client.fetch(msg_id, "(RFC822)")
-            if not msg_data or not msg_data[0]:
+        _, data = client.uid("search", None, "UNSEEN")
+        message_uids = data[0].split()[:MAX_MESSAGES_PER_SYNC]
+        for msg_uid in message_uids:
+            _, msg_data = client.uid("fetch", msg_uid, "(BODY.PEEK[])")
+            if not msg_data or not msg_data[0] or not isinstance(msg_data[0], tuple):
                 continue
             message = email.message_from_bytes(msg_data[0][1])
             from_name, from_email = email.utils.parseaddr(message.get("From", ""))
@@ -146,22 +170,44 @@ def _fetch_sync(
             emails.append(
                 InboundEmail(
                     provider="imap",
-                    provider_message_id=message.get("Message-ID") or f"imap-{msg_id.decode()}",
+                    provider_message_id=message.get("Message-ID") or f"imap-{msg_uid.decode()}",
                     from_email=from_email or "okand@avsandare.se",
                     from_name=_decode_header(from_name) or None,
                     subject=_decode_header(message.get("Subject")),
                     body_text=_extract_body_text(message).strip()[:8000],
                     received_at=received,
                     attachments=_extract_attachments(message),
+                    imap_uid=msg_uid.decode(),
                 )
             )
-            client.store(msg_id, "+FLAGS", "\\Seen")
     finally:
         try:
             client.logout()
         except Exception:
             pass
     return emails
+
+
+def _mark_seen_sync(
+    host: str, user: str, password: str, folder: str, uids: list[str], *,
+    oauth_client_id: str = "", oauth_client_secret: str = "",
+    oauth_refresh_token: str = "",
+    oauth_token_url: str = "https://oauth2.googleapis.com/token",
+) -> None:
+    client = imaplib.IMAP4_SSL(host, timeout=30)
+    try:
+        _logga_in(
+            client, user, password,
+            oauth_client_id=oauth_client_id, oauth_client_secret=oauth_client_secret,
+            oauth_refresh_token=oauth_refresh_token, oauth_token_url=oauth_token_url,
+        )
+        client.select(folder)
+        client.uid("store", ",".join(uids), "+FLAGS", "\\Seen")
+    finally:
+        try:
+            client.logout()
+        except Exception:
+            pass
 
 
 def _prova_sync(host: str, user: str, password: str) -> None:
@@ -197,6 +243,33 @@ async def prova_inloggning(host: str, user: str, password: str) -> str | None:
         return f"Gick inte att nå mejlservern {host}. Försök igen om en stund."
 
 
+async def mark_seen(
+    host: str, user: str, password: str = "", folder: str = "INBOX",
+    uids: list[str] | None = None, *,
+    oauth_client_id: str = "", oauth_client_secret: str = "",
+    oauth_refresh_token: str = "",
+    oauth_token_url: str = "https://oauth2.googleapis.com/token",
+) -> str | None:
+    """Markerar UID:n som lästa EFTER lyckad ingest. None vid framgång,
+    annars ett felmeddelande. Kastar aldrig — misslyckas markeringen hämtas
+    mejlen igen nästa synk och faller bort som dubletter i ingest_email,
+    vilket är den billiga sidan av felet (den dyra är ett tappat mejl)."""
+    if not uids:
+        return None
+    try:
+        await asyncio.to_thread(
+            _mark_seen_sync, host, user, password, folder, uids,
+            oauth_client_id=oauth_client_id,
+            oauth_client_secret=oauth_client_secret,
+            oauth_refresh_token=oauth_refresh_token,
+            oauth_token_url=oauth_token_url,
+        )
+        return None
+    except Exception as error:  # noqa: BLE001 — markeringen får aldrig fälla synken
+        logger.warning("Kunde inte markera %d mejl som lästa: %s", len(uids), error)
+        return f"Kunde inte markera mejlen som lästa: {error}"
+
+
 async def fetch_new(
     host: str, user: str, password: str = "", folder: str = "INBOX", *,
     oauth_client_id: str = "", oauth_client_secret: str = "",
@@ -219,3 +292,98 @@ async def fetch_new(
     except Exception as error:  # noqa: BLE001 — inkorgen får aldrig fälla tjänsten
         logger.warning("IMAP-hämtning misslyckades: %s", error)
         return [], f"IMAP-hämtning misslyckades: {error}"
+
+
+#: Mappar att prova när LIST-svaret inte bär \Sent-attributet. Engelsk Gmail
+#: först (vanligast), sedan de generiska namn Outlook/iCloud/cPanel använder.
+SKICKAT_KANDIDATER = (
+    "[Gmail]/Sent Mail",
+    "Sent",
+    "Sent Items",
+    "Sent Messages",
+    "INBOX.Sent",
+)
+
+#: En LIST-rad: (attribut) "avgränsare" mappnamn — namnet citerat eller inte.
+_LIST_RAD = re.compile(rb'^\((?P<attrs>[^)]*)\)\s+(?:"(?:[^"]*)"|NIL)\s+(?P<namn>.+)$')
+
+
+def _skickatmapp(client) -> str | None:
+    """Mappen med \\Sent-attributet ur LIST (RFC 6154).
+
+    Gmail och Outlook bär attributet i sitt vanliga LIST-svar, och det är
+    enda pålitliga vägen: NAMNET är lokaliserat efter kontots språk — svensk
+    Gmail heter "[Gmail]/Skickat", engelsk "[Gmail]/Sent Mail". Hårdkodade
+    namn är bara fallback (SKICKAT_KANDIDATER)."""
+    typ, rader = client.list()
+    if typ != "OK":
+        return None
+    for rad in rader or []:
+        if not isinstance(rad, bytes):
+            continue
+        traff = _LIST_RAD.match(rad.strip())
+        if not traff or b"\\sent" not in traff.group("attrs").lower():
+            continue
+        namn = traff.group("namn").strip()
+        if namn.startswith(b'"') and namn.endswith(b'"'):
+            namn = namn[1:-1]
+        # Modified UTF-7 (RFC 2060) är ren ASCII — namnet skickas tillbaka
+        # till servern i exakt den form LIST gav det.
+        return namn.decode("ascii", errors="replace")
+    return None
+
+
+def _spara_skickat_sync(
+    host: str, user: str, password: str, *, fran: str, till: str, amne: str, brodtext: str
+) -> None:
+    client = imaplib.IMAP4_SSL(host, timeout=30)
+    try:
+        client.login(user, password)
+        meddelande = EmailMessage()
+        meddelande["From"] = fran or user
+        meddelande["To"] = till
+        meddelande["Subject"] = amne
+        meddelande["Date"] = email.utils.formatdate()
+        meddelande.set_content(brodtext)
+
+        mappar = [m for m in (_skickatmapp(client),) if m] or list(SKICKAT_KANDIDATER)
+        sista_fel: object = None
+        for mapp in mappar:
+            try:
+                typ, svar = client.append(
+                    f'"{mapp}"', "\\Seen", imaplib.Time2Internaldate(time.time()),
+                    meddelande.as_bytes(),
+                )
+            except imaplib.IMAP4.error as error:
+                sista_fel = error
+                continue
+            if typ == "OK":
+                return
+            sista_fel = svar
+        raise RuntimeError(f"APPEND nekades av {host}: {sista_fel!r}")
+    finally:
+        try:
+            client.logout()
+        except Exception:
+            pass
+
+
+async def spara_i_skickat(
+    host: str, user: str, password: str, *, fran: str, till: str, amne: str, brodtext: str
+) -> str | None:
+    """Lägger en kopia av ett skickat mejl i kontots Skickat-mapp (APPEND).
+
+    Utskicken går över Resend/SMTP och passerar aldrig kundens eget konto —
+    utan den här kopian är "Skickat" i kundens mejlklient tomt. None vid
+    framgång, annars ett felmeddelande. Kastar aldrig: kopian är en
+    bekvämlighet och får inte fälla eller fördröja sändningen den speglar.
+    """
+    try:
+        await asyncio.to_thread(
+            _spara_skickat_sync, host, user, password,
+            fran=fran, till=till, amne=amne, brodtext=brodtext,
+        )
+        return None
+    except Exception as error:  # noqa: BLE001 — kopian får aldrig fälla sändningen
+        logger.warning("Kunde inte spara kopia i Skickat för %s@%s: %s", user, host, error)
+        return f"Kopian till Skickat misslyckades: {error}"

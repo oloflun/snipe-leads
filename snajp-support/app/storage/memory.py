@@ -298,6 +298,16 @@ class MemoryStorage:
         if tenant is None:
             return None
         tenant["active"] = active
+        # Speglar Postgres (080): spärren och etiketten skrivs tillsammans.
+        tenant["status"] = "aktiv" if active else "avstangd"
+        return dict(tenant)
+
+    async def set_tenant_status(self, tenant_id: str, *, status: str) -> dict[str, Any] | None:
+        tenant = self.tenants.get(tenant_id)
+        if tenant is None:
+            return None
+        tenant["status"] = status
+        tenant["active"] = status == "aktiv"
         return dict(tenant)
 
     async def get_tenant_products(self, tenant_id: str) -> list[str] | None:
@@ -2224,6 +2234,11 @@ class MemoryStorage:
                     # test satt produkter på tenanten — samma "ingen kopplad
                     # arbetsyta" som SQL:en ger.
                     "active": tenant.get("active", True),
+                    # Speglar Postgres t.status (080): etiketten följer spärren
+                    # när inget test satt den uttryckligen.
+                    "status": tenant.get(
+                        "status", "aktiv" if tenant.get("active", True) else "avstangd"
+                    ),
                     "products": tenant.get("products"),
                     # Speglar Postgres-frågans workspaces.trial_slut (074).
                     "trial_slut": tenant.get("trial_slut"),

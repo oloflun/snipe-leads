@@ -7,6 +7,7 @@ import {
   Gauge,
   LayoutDashboard,
   LogOut,
+  Package,
   Users
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -70,6 +71,7 @@ import { cn } from "@/lib/utils";
 const PLATTFORM: Array<{ href: string; label: { sv: string; en: string }; Icon: LucideIcon }> = [
   { href: "/admin", label: { sv: "Översikt", en: "Overview" }, Icon: LayoutDashboard },
   { href: "/admin/kunder", label: { sv: "Kunder", en: "Customers" }, Icon: Users },
+  { href: "/admin/paket", label: { sv: "Paket", en: "Plans" }, Icon: Package },
   { href: "/admin/korningar", label: { sv: "Körningar", en: "Runs" }, Icon: Activity },
   {
     href: "/admin/testkorningar",

@@ -46,7 +46,12 @@ from ..agentcore.instruktioner import las_instruktioner
 from ..agentcore.strukturera import strukturera as strukturera_text
 from ..leads.soul import SOUL_KIND
 from .deps import kraev_uuid, require_master_key
-from .schemas import InstruktionRequest, TenantAktivRequest, TenantProfilRequest
+from .schemas import (
+    InstruktionRequest,
+    TenantAktivRequest,
+    TenantProfilRequest,
+    TenantStatusRequest,
+)
 
 router = APIRouter(prefix="/api/admin", dependencies=[Depends(require_master_key)])
 
@@ -323,5 +328,46 @@ async def satt_tenant_aktiv(
         ),
         tenant_id=tenant_id,
         detail={"active": payload.active, "orsak": payload.orsak or ""},
+    )
+    return {"tenant": tenant}
+
+
+#: Besked per läge i händelseloggen. Pausen är en warning av samma skäl som
+#: avstängningen: det är händelsen någon kan behöva förklara i efterhand.
+_STATUS_BESKED = {
+    "aktiv": ("info", "Kontot återaktiverat"),
+    "pausad": ("warning", "Kontot pausat"),
+    "avstangd": ("warning", "Kontot avstängt"),
+}
+
+
+@router.put("/tenants/{tenant_id}/status")
+async def satt_tenant_status(
+    request: Request, tenant_id: str, payload: TenantStatusRequest
+) -> dict:
+    """Sätter kontots läge från adminytans paketflik (migration 080).
+
+    Spärren är fortfarande `ss_tenants.active` och skrivs i samma sats
+    (storage.set_tenant_status): 'pausad' och 'avstangd' låser ute lika hårt,
+    med 401 via validate_api_key precis som den gamla aktiv-vägen. Skillnaden
+    är AVSIKTEN — en paus ska öppnas igen, en avstängning är ett avslut — och
+    den skillnaden bär adminytan och händelseloggen, inte någon grind.
+
+    Ingenting raderas, oavsett läge. Data, inställningar och historik står
+    orörda, och 'aktiv' öppnar allt igen.
+    """
+    kraev_uuid(tenant_id, "Kunden")
+    storage = request.app.state.storage
+    tenant = await storage.set_tenant_status(tenant_id, status=payload.status)
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Kunden finns inte.")
+
+    niva, besked = _STATUS_BESKED[payload.status]
+    await storage.log_platform_event(
+        level=niva,
+        source="admin.kundstatus",
+        message=f"{besked}: {tenant.get('name') or tenant_id}.",
+        tenant_id=tenant_id,
+        detail={"status": payload.status, "orsak": payload.orsak or ""},
     )
     return {"tenant": tenant}
