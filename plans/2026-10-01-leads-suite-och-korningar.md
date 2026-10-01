@@ -345,3 +345,34 @@ egen auth — vi har tenant/RLS och Next redan.
 - [ ] `FLYTT_NYCKEL` sätts i main och development med `scripts/keys.py` (värdet hanteras aldrig av agenten)
 - [ ] Jev-nyckeln (`keys.py --key TYPESAFE_API_KEY`, `--push-jev development`) så Jev-rankningen kan skuggmätas
 - [ ] `bd dolt start` (dolt saknas i PATH) så spårningen kan flyttas från den här filen till beads
+
+
+---
+
+## Nya beställningar 2026-10-02 (ej påbörjade) och sessionens slutläge
+
+Se `HANDOFF-2026-10-02-LEADS-MERINFO-I18N.md` för detaljer och Antons ord.
+
+### Completed
+- [x] Del A körningar, del G menyn, tillfällig merinfo-källa (commits 5f05678, 13e9ea9, 469e729, 0db86ac, lokalt, ej pushade)
+
+### In Progress
+- [ ] Antons order "migrera, pusha, aktivera scrapegraph-kedjan och Jev i development" (avbruten efter rebasen; tester ej körda)
+
+### Remaining, i Antons ordning
+- [ ] H1 Adminytan trasig (main, troligen dev): main saknar 079 + 080_paket_admin. Läs loggen, kör migrationerna mot main på Antons ord, verifiera med skärmbild.
+- [ ] H2 Migrera development (080_korningar, 081), push, LEADS_MERINFO=scrapegraph, `keys.py --push-jev development` (fråga skugga eller pa).
+- [ ] H3 Listor: spara även rader med bara mejl (namn + roll krävs fortfarande), underflik telefon/mejl/båda med sortering i samma lista.
+- [ ] H4 Kombinera flera listor till en skräddarsydd (flera branscher i en region, en bransch i flera regioner; filter mejl/telefon/båda; dedup på orgnr).
+- [ ] H5 Flytta listrader till Iris eller "utkast för alla" i Iris, med research per bolag så varje utkast är anpassat.
+- [ ] H6 Översätt VARJE sida till engelska; börja med den här sessionens komponenter (IrisKorningar, LeadsRunForm-status, AppShell-railfot, LeadslistorView-telefon/CSV, IrisBolag).
+- [ ] H7 Tvåspråkighetsregeln i CLAUDE.md + AGENTS.md (+ DESIGN.md), gärna mekanisk som INV-I18N-001.
+- [ ] H8 Pixelgranskning A7/G4.
+
+### Blockers
+- Migrationer mot main kräver Antons uttryckliga ord.
+- merinfos villkor: källan får inte slås på i main innan avtal finns.
+- bd (beads) nere: dolt saknas i PATH.
+
+### Next Steps
+- Börja med H1.

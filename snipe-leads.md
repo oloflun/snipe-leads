@@ -12,7 +12,7 @@ milestone_blockers:
   - "PR #22 (support-eskalering, sprak, integrationer/kanaler, Iris-menyn) vantar bara pa Antons merge; migrationer och INTEGRATION_NYCKEL klara i main (2026-09-19)"
   - "IMAP_PASSWORD_LIVRUSTNING saknas pa Railway api (bade main och development)"
   - "Vantar pa kundens bekraftelse av garantiperioden"
-updated: 2026-09-19
+updated: 2026-10-02
 ---
 
 # Snipra / Snajp
@@ -489,3 +489,30 @@ Se [[wiki/projects/_index/connections|connections]] för nattens kopplingar och
 ## Kunskapsbas-källor
 
 - [[wiki/sources/2026-08-25-konvertera-till-svg-vektorer-snajp]] — Snajp S-symbol + ordmärke vektoriserat till SVG (potrace), inkl. bokstavskerning-justering (2026-08-29)
+
+## Relevanta källor
+
+- [[sources/2024-09-02-the-game-hormozi-738-best-sales-advice]] — show rate 74→91 %, same-day-bokning, personliga påminnelser (captured: 2026-09-23)
+- [[sources/2026-09-27-aterkommande-forsaljningsrad-kallringning-hemsidor]] — kallringningsstruktur + manus för småföretag med gammal/ingen sajt, NIX-filter (captured: 2026-09-27)
+- [[sources/2025-02-07-the-game-hormozi-42-rules-of-money]] — Hormozis 42 pengaregler: risk, leverage, villkor, sparande (captured: 2025-02-07)
+- [[sources/2025-05-08-veckans-ai-patentkoll-och-vibekodning]] — Veckans AI: supportbot −95 %, IP-screener, vibekodning (captured: 2025-05-08)
+- [[sources/2025-07-21-the-game-hormozi-12-persuasion-hacks]] — Hormozis 12 övertalningstrick för sälj och copy (captured: 2025-07-21)
+- [[sources/2026-01-01-the-game-hormozi-best-year-2026]] — Hormozi 7,5 h-kompilation (138 snips → 40 kluster): sälj som volym × feedback, inputs vs outputs, Rule of 100, ignorance debt, commitment (captured: 2026-01-01)
+- [[sources/2026-04-23-the-game-hormozi-fix-before-ads]] — laga grunden före annonser: priskrig, ads + sälj i takt, avatar-churn (captured: 2026-04-23)
+- [[sources/2026-05-05-the-game-hormozi-5-things-before-starting]] — fem strukturella fördelar innan man startar ett bolag (captured: 2026-05-05)
+- [[sources/2026-06-30-the-game-hormozi-content-that-leads-to-buyers]] — Innehåll som leder till köpare: reach ≠ intäkt, topp-20 %-analys, vertical value, UTM (captured: 2026-06-30)
+- [[sources/2026-08-21-veckans-ai-grok-bot-och-cv-tjanst]] — Veckans AI: Grok Bot, Cowrite CV/verifierade kompetenser (captured: 2026-08-21)
+- [[sources/2026-08-24-skit-om-ai-9-exponera-foretaget-i-tider-av-ai]] — Skit om AI #9: synlighet i AI-eran — teknisk SEO före AI-tjänster (captured: 2026-08-24)
+- [[sources/2026-08-25-startup-ideas-screensharing-top-takes]] — None (captured: 2026-08-25)
+- [[sources/2026-08-26-startup-ideas-webmcp-clearly-explained]] — WebMCP + två affärsidéer: konverteringsbyrå och agent mystery shopper (captured: 2026-08-26)
+- [[sources/2026-08-28-veckans-ai-reklamfilmer-och-viral-ai-agent]] — Veckans AI: Radarn-agentsystem, Runway-reklamfilm, Instinct (captured: 2026-08-28)
+- [[sources/2026-08-31-skit-om-ai-10-ai-downsizing]] — Skit om AI #10: AI-downsizing, Perplexity-nav, portabelt minne, local-first (captured: 2026-08-31)
+- [[sources/2026-08-31-startup-ideas-marketing-engineer]] — Marketing engineer: growth-repo, outbound-signalmotor, growth cockpit, 30-dagarsplan (captured: 2026-08-31)
+- [[sources/2026-09-02-startup-ideas-5-github-repos-goldmine]] — Fem repos: anti-slop, AI-CRM, Video Use, SkillSpector, Phone Harness (captured: 2026-09-02)
+- [[sources/2026-09-04-veckans-ai-chatgpt-rostlage-och-andlos-ai-slop]] — Veckans AI: MVP vs sälj, AI-boken, ChatGPT röstläge (captured: 2026-09-04)
+- [[sources/2026-08-13-a16z-two-ways-to-sell-ai-lighthouse-or-landgrab]] — a16z: två sätt att sälja AI (lighthouse vs landgrab), POC-, ACV- och säljanställningstaktik (captured: 2026-09-07)
+- [[sources/2026-09-03-the-game-hormozi-996-think-like-top-1-percent]] — Hormozis kontraintuitiva tillväxtdrag: höj pris tills du hör nej, nischa ner, betala talang mer, skala det som fungerar, irrelevans som konkurrent (captured: 2026-09-07)
+- [[sources/2026-07-07-the-game-hormozi-ltv-cac-two-numbers]] — Hormozi Ep 985: LTGP och CAC avgör överlevnad; målkvot 3:1 endast vid full automation, annars 6/9/>12:1 (captured: 2026-09-07)
+- [[sources/2026-09-18-startup-ideas-jev-is-here]] — Jev beslutsmodell: lead-scoring, AI-trafikpolis, 1 700 mejl för 0,18 USD (captured: 2026-09-18)
+- [[sources/2026-09-25-the-game-hormozi-price-service-business]] — prissättning av tjänsteföretag: kostnad × multipel, price lock, VSL, bundling (captured: 2026-09-25)
+- [[sources/2025-12-04-the-game-hormozi-14-years-in-70-minutes]] — Hormozi Ep 916: begränsningar och fem M, säljtiming, säljträning, SPCL, management-diamanten (captured: 2026-09-28)

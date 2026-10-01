@@ -1,5 +1,19 @@
 # Snipra Status
 
+## 2026-10-02 — Claude — Körningar, menyn i railen och merinfo-kedjan; adminytan trasig i main
+
+Iris-körningar går att följa och återvända till (vyn Iris › Körningar, migration
+080_korningar, INV-JOB-003), och kundytans meny ligger i railen. merinfo är byggd
+som registerkälla via ScrapeGraphAI enligt Antons arbetsflöde, bakom
+`LEADS_MERINFO=scrapegraph` och tillfälligt i väntan på API-avtal (migration 081
+för telefon). Fem commits ligger lokalt på `development`, inte pushade, och
+testerna efter rebasen är inte körda. Adminytan visar felsida i produktion:
+main saknar migrationerna 079 och 080_paket_admin som PR #29 kräver. Nästa:
+laga adminytan på Antons ord, sedan migrera, pusha och slå på merinfo och Jev i
+development, sedan listornas nya krav och översättningen till engelska.
+Handoff med Antons instruktioner ordagrant: `HANDOFF-2026-10-02-LEADS-MERINFO-I18N.md`.
+Logg: `session-logs/2026-10-02-session-log.md`.
+
 ## 2026-09-19 — Claude — Integrationer och kanaler för support-agenten (bd snipe-36u), release-PR #22
 
 Support-agenten kopplas till kundens egna system via HTTP-anrop i Ebbots format
