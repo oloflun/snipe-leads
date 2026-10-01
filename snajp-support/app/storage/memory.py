@@ -1355,6 +1355,9 @@ class MemoryStorage:
         status: str,
         scope: str = "research",
         prospect_id: str | None = None,
+        korning: dict[str, Any] | None = None,
+        error: str | None = None,
+        is_test: bool | None = None,
     ) -> None:
         # Samma värdemängd som check-villkoret i migration 059 — minnet ska
         # kasta där Postgres kastar (samma regel som AGENT_RUN_TYPES ovan).
@@ -1369,17 +1372,49 @@ class MemoryStorage:
                 "scope": scope,
                 "created_at": _now(),
                 "completed_at": None,
+                "korning": None,
+                "error": None,
+                "is_test": False,
             },
         )
         rad["status"] = status
+        rad["updated_at"] = _now()
         if status in ("completed", "failed"):
             rad["completed_at"] = _now()
+        # Djupkopia: motorn muterar sitt dict efter skrivningen, och
+        # liggaren ska visa det som skrevs — samma semantik som jsonb.
+        if korning is not None:
+            rad["korning"] = json.loads(json.dumps(korning))
+        if error is not None:
+            rad["error"] = error
+        if is_test is not None:
+            rad["is_test"] = is_test
 
     async def get_leads_job_status(self, tenant_id: str, job_id: str) -> str | None:
         rad = self.leads_job_ledger.get(job_id)
         if not rad or rad["tenant_id"] != tenant_id:
             return None
         return rad["status"]
+
+    _KORNINGSFALT = ("job_id", "status", "scope", "is_test", "created_at", "updated_at",
+                     "completed_at", "error", "korning")
+
+    def _korningsrad(self, rad: dict[str, Any]) -> dict[str, Any]:
+        return {f: rad.get(f) for f in self._KORNINGSFALT}
+
+    async def list_leads_korningar(self, tenant_id: str, *, limit: int = 20) -> list[dict[str, Any]]:
+        rader = [
+            r for r in self.leads_job_ledger.values()
+            if r["tenant_id"] == tenant_id and r["scope"] in ("batch", "lista")
+        ]
+        rader.sort(key=lambda r: r["created_at"], reverse=True)
+        return [self._korningsrad(r) for r in rader[:limit]]
+
+    async def get_leads_korning(self, tenant_id: str, job_id: str) -> dict[str, Any] | None:
+        rad = self.leads_job_ledger.get(job_id)
+        if not rad or rad["tenant_id"] != tenant_id or rad["scope"] not in ("batch", "lista"):
+            return None
+        return self._korningsrad(rad)
 
     # -- Leadslistor (tillägget 'leadlists', migration 060) -----------------
 

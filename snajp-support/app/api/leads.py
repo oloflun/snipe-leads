@@ -1306,6 +1306,32 @@ async def get_jev_statistik(request: Request, tenant: dict = Depends(require_ten
     return jev.statistik(rader)
 
 
+@router.get("/api/leads/korningar")
+async def lista_korningar(
+    request: Request, tenant: dict = Depends(require_tenant), limit: int = 20
+) -> dict:
+    """Kundens körningar ur liggaren (migration 080, INV-JOB-003): det som
+    går att följa, lämna och återvända till. `korning` är motorns tillstånd
+    (app/leads/korning.py) för Iris-körningar; listjobb (scope 'lista') har
+    inget tillstånd men syns med status och felorsak. Nyast först."""
+    rader = await request.app.state.storage.list_leads_korningar(
+        tenant["tenant_id"], limit=max(1, min(limit, 100))
+    )
+    return {"korningar": rader}
+
+
+@router.get("/api/leads/korningar/{job_id}")
+async def hamta_korning(
+    request: Request, job_id: str, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """EN körning. 404 när raden inte finns — inte ett tomt svar, så UI:t
+    kan skilja "borta" från "inte startad än"."""
+    rad = await request.app.state.storage.get_leads_korning(tenant["tenant_id"], job_id)
+    if rad is None:
+        raise HTTPException(status_code=404, detail="Körningen finns inte.")
+    return rad
+
+
 @router.get("/api/leads/queue")
 async def list_review_queue(
     request: Request, tenant: dict = Depends(require_tenant), limit: int = 100
@@ -1612,6 +1638,21 @@ async def _lagg_prospektjobb(
     return jobs
 
 
+async def _spara_korning(app_state, tenant_id: str, batch_id: str, k: dict) -> None:
+    """Liggaren får motorns tillstånd efter varje steg (migration 080,
+    INV-JOB-003). Redis-posten är snabbvägen; den här raden är det kunden
+    kan återvända till efter en omladdning, en timme eller en deploy.
+    Batchraden står i 'processing' tills motorn säger `klar`."""
+    await app_state.storage.set_leads_job_status(
+        tenant_id,
+        job_id=batch_id,
+        status="completed" if k.get("klar") else "processing",
+        scope="batch",
+        korning=k,
+        is_test=bool(k.get("is_test")),
+    )
+
+
 async def _fyll_pa(app_state, tenant: dict, batch_id: str) -> None:
     """Köar research tills körningen har N leverbara leads (INV-LEADS-N-001).
 
@@ -1675,11 +1716,13 @@ async def _fyll_pa(app_state, tenant: dict, batch_id: str) -> None:
         # ett tillstånd utan sig själv.
         resultat.update(korning=k, jobs=k["jobs"], count=len(k["jobs"]))
         await jobs.complete(batch_id, resultat)
+        await _spara_korning(app_state, tenant_id, batch_id, k)
     if k["pagaende"] == 0:
         iris_korning.avsluta(k, "klar" if k["levererade"] >= k["mal"] else (orsak or "slut_pa_kandidater"))
         k["sammanfattning"] = iris_korning.sammanfatta(k)
     resultat.update(korning=k, jobs=k["jobs"], count=len(k["jobs"]))
     await jobs.complete(batch_id, resultat)
+    await _spara_korning(app_state, tenant_id, batch_id, k)
 
 
 async def _rapportera_till_korning(
@@ -1696,6 +1739,7 @@ async def _rapportera_till_korning(
         iris_korning.registrera_utfall(k, namn=namn, leverbar=leverbar, skal=skal)
         resultat["korning"] = k
         await app_state.jobs.complete(batch_id, resultat)
+        await _spara_korning(app_state, tenant["tenant_id"], batch_id, k)
         await _fyll_pa(app_state, tenant, batch_id)
     except Exception:  # noqa: BLE001 — se docstringen
         logger.exception("Kunde inte rapportera till körning %s", batch_id)
@@ -1728,9 +1772,10 @@ async def _run_batch(app_state, payload: dict) -> None:
                 mal=req.limit, scope=req.scope, overrides=payload.get("overrides"), is_test=req.is_test
             )
             await app_state.jobs.complete(job_id, {"fase": "research", "jobs": [], "count": 0, "korning": k})
-            await app_state.storage.set_leads_job_status(
-                tenant["tenant_id"], job_id=job_id, status="completed", scope="batch"
-            )
+            # 'processing' med tillståndet, inte 'completed': sökjobbet är
+            # klart men KÖRNINGEN har just börjat (migration 080). Raden
+            # blir completed först när motorn säger `klar`.
+            await _spara_korning(app_state, tenant["tenant_id"], job_id, k)
             await _fyll_pa(app_state, tenant, job_id)
             return
         prospects = await _samla_korningens_prospekt(app_state.storage, tenant, req)
@@ -1800,23 +1845,26 @@ async def _run_batch(app_state, payload: dict) -> None:
     except HTTPException as fel:
         await app_state.jobs.fail(job_id, _http_feltext(fel))
         await app_state.storage.set_leads_job_status(
-            tenant["tenant_id"], job_id=job_id, status="failed", scope="batch"
+            tenant["tenant_id"], job_id=job_id, status="failed", scope="batch", error=_http_feltext(fel)
         )
     except DiscoveryError as fel:
         # En sökning som avvisades för att krediten är slut ska inte be kunden
         # "försöka igen" — samma klassning som resten av jobbvägarna. (Bär
         # DiscoveryError leverantörens svarstext, se app/leads/discovery.py.)
         await _larma_vid_kreditslut(app_state, tenant["tenant_id"], fel)
-        await app_state.jobs.fail(job_id, kundtext_for(fel) or _FEL_SOKNING)
+        feltext = kundtext_for(fel) or _FEL_SOKNING
+        await app_state.jobs.fail(job_id, feltext)
         await app_state.storage.set_leads_job_status(
-            tenant["tenant_id"], job_id=job_id, status="failed", scope="batch"
+            tenant["tenant_id"], job_id=job_id, status="failed", scope="batch", error=feltext
         )
     except Exception as fel:  # noqa: BLE001 — jobbet ska bli failed, inte tyst dö
         logger.exception("Batchsökning misslyckades (%s)", job_id)
         await _larma_vid_kreditslut(app_state, tenant["tenant_id"], fel)
+        # Felorsaken i liggaren (080): det var exakt den här raden som
+        # saknades när Antons körning 2026-09-30 dog utan spår.
         await app_state.jobs.fail(job_id, _jobbfeltext(fel))
         await app_state.storage.set_leads_job_status(
-            tenant["tenant_id"], job_id=job_id, status="failed", scope="batch"
+            tenant["tenant_id"], job_id=job_id, status="failed", scope="batch", error=_jobbfeltext(fel)
         )
     finally:
         avregistrera_aktiv(job_id)
@@ -1845,7 +1893,7 @@ async def start_batch_run(
         tenant_id=tenant["tenant_id"], status="queued"
     )
     await request.app.state.storage.set_leads_job_status(
-        tenant["tenant_id"], job_id=job_id, status="queued", scope="batch"
+        tenant["tenant_id"], job_id=job_id, status="queued", scope="batch", is_test=payload.is_test
     )
     post = {
         "kind": "batch",
@@ -2172,7 +2220,7 @@ async def bestall_leadslista(
     )
     job_id = await request.app.state.jobs.create(tenant_id=tenant["tenant_id"], status="queued")
     await storage.set_leads_job_status(
-        tenant["tenant_id"], job_id=job_id, status="queued", scope="lista"
+        tenant["tenant_id"], job_id=job_id, status="queued", scope="lista", is_test=payload.is_test
     )
     post = {
         "kind": "lista",
@@ -2436,7 +2484,9 @@ async def _run_list_job(app_state, payload: dict) -> None:
             logger.exception("Kunde inte rensa raderna för den misslyckade listan %s", lista["id"])
         await storage.set_lead_list_status(tenant_id, lista["id"], status="fel", felorsak=felorsak)
         await app_state.jobs.fail(job_id, felorsak)
-        await storage.set_leads_job_status(tenant_id, job_id=job_id, status="failed", scope="lista")
+        await storage.set_leads_job_status(
+            tenant_id, job_id=job_id, status="failed", scope="lista", error=felorsak
+        )
     finally:
         avregistrera_aktiv(job_id, lista["id"])
 

@@ -109,6 +109,10 @@ export const appRoutes: AppRoute[] = [
     product: "leads",
     children: [
       { href: "/dashboard/iris", labelKey: "nav.iris.bolag" },
+      // Körningar (migration 080, INV-JOB-003): det kunden kan följa, lämna
+      // och återvända till. Före 2026-10-01 fanns en körning bara i
+      // körformulärets state och i Redis en timme.
+      { href: "/dashboard/iris/korningar", labelKey: "nav.iris.korningar" },
       { href: "/dashboard/iris/granskning", labelKey: "nav.iris.granskning" },
       { href: "/dashboard/iris/installningar", labelKey: "nav.iris.installningar" }
     ]

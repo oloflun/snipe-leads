@@ -733,6 +733,23 @@ själv underkände, inga utkast, och körningen stannade vid "1/3 jobb".
 Test: snajp-support/tests/invariants/test_inv_leads_n_001.py
 Införd: 2026-09-30 · Upphävs endast genom waiver
 
+### INV-JOB-003 — En körnings tillstånd finns i liggaren efter varje steg; Redis-TTL är aldrig enda platsen
+Iris-motorn (`_fyll_pa`, `_rapportera_till_korning` i `app/api/leads.py`)
+skriver `korning` till `leads_job_ledger.korning` (migration 080) via
+`_spara_korning` efter varje steg, batchraden står i `processing` tills
+motorn säger `klar`, och varje fel skriver `error` i klartext. Kunden läser
+`GET /api/leads/korningar` (vyn Iris › Körningar) och kan följa, lämna och
+återvända till en körning; körformuläret återupptar en pågående körning ur
+liggaren efter omladdning.
+Varför: Anton startade en körning 2026-09-30 som inte hann bli klar; när han
+kom tillbaka fanns inget spår — tillståndet bodde bara i Redis (TTL 3 600 s)
+och i körformulärets React-state, och liggarens batchrad sattes till
+`completed` i samma ögonblick som motorn startade. Samma regel som
+INV-JOB-002, utvidgad från statusen till tillståndet: Postgres är sanningen,
+Redis är snabbvägen.
+Test: snajp-support/tests/invariants/test_inv_job_003.py
+Införd: 2026-10-01 · Upphävs endast genom waiver
+
 ## Roadmap
 
 Ids this plan will introduce, in the order `Genomförandeordning` builds them. Not yet enforced by CI.

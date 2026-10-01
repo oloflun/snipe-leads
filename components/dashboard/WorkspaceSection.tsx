@@ -16,6 +16,7 @@ import {
 import { IrisBolag } from "@/components/leads/IrisBolag";
 import { IrisGranskning } from "@/components/leads/IrisGranskning";
 import { IrisInstallningar } from "@/components/leads/IrisInstallningar";
+import { IrisKorningar } from "@/components/leads/IrisKorningar";
 import { resolveDashboardState } from "@/lib/data/dashboard";
 import type { ProductKey } from "@/lib/routes";
 
@@ -138,6 +139,13 @@ export async function WorkspaceSection({
       // Leads/kontroll hade — men under EN sektion i stället för tre, se
       // lib/routes.ts AppRoute.children. Ett okänt tredje slugsegment (`id`
       // utanför de två kända) är en 404, inte en tyst fallback till Bolag.
+      if (id === "korningar") {
+        return (
+          <PageShell title="Körningar">
+            <IrisKorningar />
+          </PageShell>
+        );
+      }
       if (id === "granskning") {
         return (
           <PageShell title="Granskning">

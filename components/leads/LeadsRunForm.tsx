@@ -2,7 +2,8 @@
 
 import { RefreshCw, Send } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { DemoKorning } from "@/components/leads/DemoKorning";
 import type { EmailStudioData } from "@/lib/data/emails";
@@ -211,6 +212,55 @@ export function LeadsRunForm({
   const [status, setStatus] = useState<string | null>(null);
   const [fel, setFel] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [batchId, setBatchId] = useState<string | null>(null);
+
+  // Körningens id överlever en omladdning (migration 080, INV-JOB-003).
+  // Nyckeln skiljer admin- och kundyta: adminens kundbesök byter tenant
+  // utan att sökvägen byter, och ett id som inte längre hittas rensas.
+  const pathname = usePathname() ?? "/dashboard/iris";
+  const bas = pathname.replace(/\/iris(\/.*)?$/, "/iris");
+  const korningsNyckel = `snipra:korning:${pathname.startsWith("/admin") ? "admin" : "kund"}`;
+
+  function glomKorning() {
+    try {
+      window.localStorage.removeItem(korningsNyckel);
+    } catch {
+      /* privat läge: inget att glömma */
+    }
+  }
+
+  useEffect(() => {
+    if (demo) return;
+    let id: string | null = null;
+    try {
+      id = window.localStorage.getItem(korningsNyckel);
+    } catch {
+      return;
+    }
+    if (!id) return;
+    const sparatId = id;
+    void (async () => {
+      try {
+        const rad = await anropa<{ status: string; korning?: Korning | null }>(
+          "/leads/korningar/" + sparatId,
+          { method: "GET" }
+        );
+        if (!rad.korning || rad.korning.klar || rad.status === "failed") {
+          glomKorning();
+          return;
+        }
+        setBatchId(sparatId);
+        setSvar({ jobs: [], count: rad.korning.mal, fase: "research" });
+        setStatus("Återupptar körningen…");
+        await följKörning(sparatId, rad.korning);
+      } catch {
+        glomKorning();
+      }
+    })();
+    // Bara vid montering: återupptagningen ska ske en gång, inte vid varje
+    // omrendering av formulärets fält.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function byggÖverskrivningar() {
     // Tomma fält skickas INTE. null betyder "använd arbetsytans sparade ICP",
@@ -294,10 +344,13 @@ export function LeadsRunForm({
           (k.pagaende ? " · researchar nästa" : " · letar fler bolag")
       );
       await new Promise((r) => setTimeout(r, 3000));
-      const jobb = await anropa<{ result?: { korning?: Korning } }>("/leads/jobb/" + batchId, { method: "GET" });
-      if (jobb.result?.korning) k = jobb.result.korning;
+      // Liggaren, inte Redis-posten (`/leads/jobb/`): den uppdateras efter
+      // varje steg och överlever både TTL:n och en deploy (INV-JOB-003).
+      const rad = await anropa<{ korning?: Korning | null }>("/leads/korningar/" + batchId, { method: "GET" });
+      if (rad.korning) k = rad.korning;
     }
     setStatus(k.klar ? k.sammanfattning ?? `Klart: ${k.levererade} leads.` : "Körningen fortsätter i bakgrunden.");
+    if (k.klar) glomKorning();
     window.dispatchEvent(new Event("snipra:leads-korning-klar"));
   }
 
@@ -341,6 +394,12 @@ export function LeadsRunForm({
           throw new Error(sok.error ?? "Sökningen hittade inga bolag.");
         }
         if (sok.korning) {
+          setBatchId(sokId);
+          try {
+            window.localStorage.setItem(korningsNyckel, sokId);
+          } catch {
+            /* privat läge: körningen syns ändå under Körningar */
+          }
           setSvar({ ...resultat, jobs: [], count: sok.korning.mal, fase: "research" });
           await följKörning(sokId, sok.korning);
           return;
@@ -508,7 +567,19 @@ export function LeadsRunForm({
         </button>
       )}
 
-      {status ? <p className="mt-3 text-[13px] text-ink-subtle">{status}</p> : null}
+      {status ? (
+        <p className="mt-3 text-[13px] text-ink-subtle">
+          {status}
+          {batchId && !demo ? (
+            <>
+              {" · "}
+              <Link href={`${bas}/korningar?id=${encodeURIComponent(batchId)}`} className="underline underline-offset-4 hover:text-ink">
+                Följ körningen
+              </Link>
+            </>
+          ) : null}
+        </p>
+      ) : null}
 
       {fel ? (
         <p role="alert" className="mt-5 max-w-[70ch] break-words text-[15px] text-danger">

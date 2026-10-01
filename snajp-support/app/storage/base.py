@@ -645,8 +645,15 @@ class Storage(Protocol):
         status: str,
         scope: str = "research",
         prospect_id: str | None = None,
+        korning: dict[str, Any] | None = None,
+        error: str | None = None,
+        is_test: bool | None = None,
     ) -> None:
-        """Skriver/uppdaterar EN rad i leads_job_ledger (migration 059).
+        """Skriver/uppdaterar EN rad i leads_job_ledger (migration 059, 080).
+
+        `korning`, `error` och `is_test` (080, INV-JOB-003) skrivs bara när de
+        ges — None lämnar kolumnen orörd, så ett statusbyte aldrig raderar
+        ett tillstånd som skrevs steget innan.
 
         Liggaren är sanningen om huruvida ett leads-jobb redan är färdigt.
         Redis-jobbposten (app/jobs/store.py) auto-failar efter 300 s och
@@ -663,6 +670,18 @@ class Storage(Protocol):
         """Läser liggarens status för ETT jobb: 'queued' | 'processing' |
         'completed' | 'failed' — eller None om raden saknas (jobb från före
         migration 059, eller en annan miljös jobb)."""
+        ...
+
+    async def list_leads_korningar(self, tenant_id: str, *, limit: int = 20) -> list[dict[str, Any]]:
+        """Tenantens körningar (liggarens batch- och listrader), nyast
+        först: job_id, status, scope, is_test, created_at, updated_at,
+        completed_at, error, korning (INV-JOB-003). Prospektjobben (scope
+        research/research_and_draft/draft) är inte körningar och tas inte
+        med — de är körningens barn och står i `korning.jobs`."""
+        ...
+
+    async def get_leads_korning(self, tenant_id: str, job_id: str) -> dict[str, Any] | None:
+        """EN körning med samma fält som list_leads_korningar, eller None."""
         ...
 
     async def sum_leads_tokens(self, tenant_id: str, *, hours: int = 24) -> int:

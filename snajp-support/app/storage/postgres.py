@@ -1871,14 +1871,25 @@ class PostgresStorage:
         status: str,
         scope: str = "research",
         prospect_id: str | None = None,
+        korning: dict[str, Any] | None = None,
+        error: str | None = None,
+        is_test: bool | None = None,
     ) -> None:
         async with self._scoped(tenant_id) as conn:
+            # coalesce(excluded.x, befintligt): None rör inte kolumnen, så ett
+            # rent statusbyte aldrig raderar tillståndet från steget innan
+            # (migration 080, INV-JOB-003).
             await conn.execute(
                 """
-                insert into leads_job_ledger (job_id, tenant_id, prospect_id, scope, status)
-                values ($1, $2, $3, $4, $5)
+                insert into leads_job_ledger
+                  (job_id, tenant_id, prospect_id, scope, status, korning, error, is_test)
+                values ($1, $2, $3, $4, $5, $6::jsonb, $7, coalesce($8, false))
                 on conflict (job_id) do update set
                   status = excluded.status,
+                  korning = coalesce(excluded.korning, leads_job_ledger.korning),
+                  error = coalesce(excluded.error, leads_job_ledger.error),
+                  is_test = coalesce($8, leads_job_ledger.is_test),
+                  updated_at = now(),
                   completed_at = case
                     when excluded.status in ('completed', 'failed') then now()
                     else leads_job_ledger.completed_at
@@ -1889,6 +1900,9 @@ class PostgresStorage:
                 prospect_id,
                 scope,
                 status,
+                json.dumps(korning, ensure_ascii=False) if korning is not None else None,
+                error,
+                is_test,
             )
 
     async def get_leads_job_status(self, tenant_id: str, job_id: str) -> str | None:
@@ -1898,6 +1912,25 @@ class PostgresStorage:
                 job_id,
                 tenant_id,
             )
+
+    _KORNING_SQL = """
+        select job_id, status, scope, is_test, created_at, updated_at, completed_at,
+               error, korning
+          from leads_job_ledger
+         where tenant_id = $1 and scope in ('batch', 'lista')
+    """
+
+    async def list_leads_korningar(self, tenant_id: str, *, limit: int = 20) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                self._KORNING_SQL + " order by created_at desc limit $2", tenant_id, limit
+            )
+        return [_avkoda_jsonb(_row(r), "korning") for r in records]
+
+    async def get_leads_korning(self, tenant_id: str, job_id: str) -> dict[str, Any] | None:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(self._KORNING_SQL + " and job_id = $2", tenant_id, job_id)
+        return _avkoda_jsonb(_row(record), "korning")
 
     # -- Leadslistor (tillägget 'leadlists', migration 060) -----------------
 
