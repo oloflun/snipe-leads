@@ -319,3 +319,4 @@ Antagande utan fråga: Fas 3 (regeln + grinden) före listorna, så det nya UI:t
 2. Fas 2.5 på development: lista "bygg, Mölndal, 10", Iris-körning 3 leads, Jev-tratt, Körningar-vyn, engelska läget.
 3. Fas 4B (migration 082, kombinera) och 4C (Flytta till Iris med batch_id).
 4. Fas 5 nästa batch i den ordning som står ovan.
+5. Tillgänglighet (stop-hookens route-gap 2026-10-02, a11y-audit aldrig laddad): kontaktvägsfliken i LeadslistorView och flikarna i DemoSupportYta bär `role="tablist"`/`role="tab"` utan pilnavigering och roving tabindex. Antingen fullt tabs-mönster (←/→, Home/End, en tabbstopp) eller byt till en `radiogroup`/segmentkontroll utan tab-roller. Kör `a11y-audit` på Körningar, listvyn och demon när development är deployad (Fas 6).
