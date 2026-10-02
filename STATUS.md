@@ -1,5 +1,20 @@
 # Snipra Status
 
+## 2026-10-02 (session 2) — Claude — adminfelet bekräftat, körningar härdade, tvåspråkighetsgrinden, listornas mejl-rader
+
+Adminfelet i produktion är en saknad kolumn (`ss_tenants.status`, migration
+080_paket_admin ej körd mot main), bekräftat i Railway-loggen; development är
+fri från felet. Förra sessionens commits granskades: ett uppgivet barnjobb lämnade
+körningen i `processing` för evigt, rättat tillsammans med återtag ur liggaren
+efter deploy och följ-loopen i körformuläret. Development migrerad (080, 081) och
+Jev i skarpt läge (`pa`). Regeln "varje komponent är tvåspråkig" står i CLAUDE.md,
+AGENTS.md och DESIGN.md med den mekaniska grinden INV-COPY-001; 37 komponenter
+översatta, 52 kvar på skuldlistan. Listorna sparar rader med bara mejl och har
+underfliken Telefon/Mejl/Båda. **Elva commits ligger lokalt och opushade:**
+behörighetsgrinden nekade `git push`, merinfo-flaggan och migrationen mot main,
+så de tre kommandona är Antons. Plan med tio faser:
+`plans/2026-10-02-knyta-ihop-korningen.md`. Logg: `session-logs/2026-10-02-session-log-2.md`.
+
 ## 2026-10-02 — Claude — Körningar, menyn i railen och merinfo-kedjan; adminytan trasig i main
 
 Iris-körningar går att följa och återvända till (vyn Iris › Körningar, migration

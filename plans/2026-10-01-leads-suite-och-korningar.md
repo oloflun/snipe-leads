@@ -360,13 +360,13 @@ Se `HANDOFF-2026-10-02-LEADS-MERINFO-I18N.md` för detaljer och Antons ord.
 - [ ] Antons order "migrera, pusha, aktivera scrapegraph-kedjan och Jev i development" (avbruten efter rebasen; tester ej körda)
 
 ### Remaining, i Antons ordning
-- [ ] H1 Adminytan trasig (main, troligen dev): main saknar 079 + 080_paket_admin. Läs loggen, kör migrationerna mot main på Antons ord, verifiera med skärmbild.
-- [ ] H2 Migrera development (080_korningar, 081), push, LEADS_MERINFO=scrapegraph, `keys.py --push-jev development` (fråga skugga eller pa).
-- [ ] H3 Listor: spara även rader med bara mejl (namn + roll krävs fortfarande), underflik telefon/mejl/båda med sortering i samma lista.
+- [ ] H1 (väntar på Antons kommando, behörighetsgrinden nekade agenten 2026-10-02; rotorsak bekräftad: `ss_tenants.status` saknas i main) Adminytan trasig (main, troligen dev): main saknar 079 + 080_paket_admin. Läs loggen, kör migrationerna mot main på Antons ord, verifiera med skärmbild.
+- [ ] H2 (dev migrerad + Jev `pa` 2026-10-02; push + LEADS_MERINFO väntar på Antons kommando) Migrera development (080_korningar, 081), push, LEADS_MERINFO=scrapegraph, `keys.py --push-jev development` (fråga skugga eller pa).
+- [x] H3 (2026-10-02, commit 6204c00) Listor: spara även rader med bara mejl (namn + roll krävs fortfarande), underflik telefon/mejl/båda med sortering i samma lista.
 - [ ] H4 Kombinera flera listor till en skräddarsydd (flera branscher i en region, en bransch i flera regioner; filter mejl/telefon/båda; dedup på orgnr).
 - [ ] H5 Flytta listrader till Iris eller "utkast för alla" i Iris, med research per bolag så varje utkast är anpassat.
-- [ ] H6 Översätt VARJE sida till engelska; börja med den här sessionens komponenter (IrisKorningar, LeadsRunForm-status, AppShell-railfot, LeadslistorView-telefon/CSV, IrisBolag).
-- [ ] H7 Tvåspråkighetsregeln i CLAUDE.md + AGENTS.md (+ DESIGN.md), gärna mekanisk som INV-I18N-001.
+- [ ] H6 (37 filer klara 2026-10-02, 52 kvar på INV-COPY-001:s skuldlista) Översätt VARJE sida till engelska; börja med den här sessionens komponenter (IrisKorningar, LeadsRunForm-status, AppShell-railfot, LeadslistorView-telefon/CSV, IrisBolag).
+- [x] H7 (2026-10-02, INV-COPY-001, commit a1ef11e) Tvåspråkighetsregeln i CLAUDE.md + AGENTS.md (+ DESIGN.md), gärna mekanisk som INV-I18N-001.
 - [ ] H8 Pixelgranskning A7/G4.
 
 ### Blockers
@@ -375,4 +375,4 @@ Se `HANDOFF-2026-10-02-LEADS-MERINFO-I18N.md` för detaljer och Antons ord.
 - bd (beads) nere: dolt saknas i PATH.
 
 ### Next Steps
-- Börja med H1.
+- Se plans/2026-10-02-knyta-ihop-korningen.md (tio faser, status per fas).

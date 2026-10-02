@@ -209,6 +209,8 @@ allt i supportportalens vy **Integrationer** (`support-webb/components/integrati
 
 ## Invariants and gotchas
 
+- **INV-COPY-001** (2026-10-02): svenska bokstäver i strängar eller JSX-text utan `{ sv, en }`-par fäller; data som råkar vara svenska markeras `// inte-copy`; en översatt fil stryks ur `_SKULD_2026_10_02` i samma commit.
+
 - **Skills are never edited — HARD RULE, mechanically enforced
   (`INV-SKILL-005`), now with an anvisad tuning surface (2026-08-14).** If a
   skill call fails or seems unread, harden the precondition gate / output
@@ -413,6 +415,17 @@ inte uppdaterats till Railway-topologin.** Det gör de fem maskinella stegen
 mot den döda kedjan; en riktig onboarding just nu kräver manuella steg mot
 Railway tills skriptet är omskrivet. Se `TENANTS.md` för den nuvarande
 processen och flagga skriptet innan du litar på det.
+
+## Current status (2026-10-02)
+
+Iris-körningar bor i liggaren (`leads_job_ledger.korning`, INV-JOB-003) och överlever
+TTL, deploy och uppgivna barnjobb; vyn Iris › Körningar läser därifrån. merinfo är
+registerkälla via ScrapeGraphAI (tillfällig, `LEADS_MERINFO=scrapegraph`), kontaktkrav
+namn + roll + telefon eller mejl. Varje komponent med text är tvåspråkig enligt
+INV-COPY-001 (`tests/invariants/test_inv_copy_001.py`, skuldlista 52 filer). Jev kör
+i läge `pa` på development. Elva commits väntar på push; adminytan i main väntar på
+migrationerna 079–081 (`railway_migrate.py --env main --apply`). Plan med tio faser:
+`plans/2026-10-02-knyta-ihop-korningen.md`.
 
 ## Current status (2026-08-28)
 
