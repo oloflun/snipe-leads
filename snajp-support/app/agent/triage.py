@@ -48,6 +48,9 @@ Eskalera vid: återbetalning, juridik/ARN, GDPR/kontoradering, sentiment < 0.3.
 Vid eskalering ska draft_reply vara ett artigt hållsvar. Hitta ALDRIG på fakta
 som inte står i kunskapsbasen — sätt låg confidence och eskalera hellre.
 
+{sprakregler} Skriv draft_reply som ren text utan markdown, och lämna ALDRIG
+kvar platshållare i hakparentes (skriv ut uppgiften eller utelämna den).
+
 Avsändarprofil (företaget du svarar för — bakgrund och identitet, INTE en
 faktakälla för sakuppgifter till kunden utöver bolagsuppgifterna):
 {profil}
@@ -78,7 +81,10 @@ async def triage_email_llm(
     # — se DPIA:ns R1. Maskeringen stänger inte risken, den gör den mindre.
     # Originalet ligger kvar i databasen; det är bara modellen som får en
     # maskerad kopia.
+    from ..textkvalitet import SPRAKREGLER
+
     prompt = _TRIAGE_PROMPT.format(
+        sprakregler=SPRAKREGLER,
         kb=kb_text,
         profil=foretagsprofil.strip() or "(ingen profil registrerad)",
         sender=sender,

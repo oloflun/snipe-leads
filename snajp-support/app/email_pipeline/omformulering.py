@@ -74,7 +74,10 @@ Regler, i den här ordningen:
    står i utkastet får förekomma, omformulerat.
 2. Behåll utkastets språk (svenska förblir svenska).
 3. Behåll formen: en hälsningsrad först, en avslutning med avsändaren sist.
-4. Svara ENBART med den omskrivna mejltexten — ingen rubrik, ingen
+4. Felfri svenska: korrekt stavning, grammatik, skiljetecken och
+   meningsbyggnad. Rätta språkfel som redan finns i utkastet, men ändra
+   aldrig namn, siffror, länkar eller sakinnehåll.
+5. Svara ENBART med den omskrivna mejltexten — ingen rubrik, ingen
    kommentar, inga citattecken runt svaret.
 
 Kundens mejl (kontext för ton och vad som frågades — INTE en källa för nya
@@ -173,4 +176,13 @@ async def omformulera_utkast(
         **tankande_kwargs(),
     )
     nytt = (response.choices[0].message.content or "").strip()
-    return nytt or content
+    if not nytt:
+        return content
+    # Deterministisk putsning (app/textkvalitet.py). Resultatet landar hos
+    # en granskare som ser och godkänner texten, så ingen LLM-korrektur
+    # behövs här — men blanksteg, hängande hälsningar och entydiga
+    # felstavningar ska inte ens nå granskarens ruta.
+    from ..textkvalitet import putsa
+
+    putsat, _ = putsa(nytt)
+    return putsat or content

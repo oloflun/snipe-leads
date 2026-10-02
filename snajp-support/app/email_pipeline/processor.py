@@ -486,11 +486,21 @@ async def process_email(
 
         content = _wrap_reply(triage.get("draft_body") or _NO_MATCH_BODY, email["from_name"], avsandare)
 
+        # Textkvalitetslagret (app/textkvalitet.py): putsar utkastet och
+        # flaggar språkrisker. Ett flaggat utkast får ALDRIG autoskickas —
+        # det degraderar till granskningskön, samma fail-mot-människa som
+        # misslyckad sändning nedan.
+        from ..textkvalitet import sakra_utgaende_text
+
+        kvalitet = await sakra_utgaende_text(content)
+        content = kvalitet.text
+
         # 4: autosvar — bara om regeln säger auto OCH säkerhetsvillkoren håller.
         auto_ok = (
             rule == "auto"
             and confidence >= settings.auto_send_min_confidence
             and (sentiment is None or sentiment >= 0.4)
+            and not kvalitet.kraver_granskning
         )
         if auto_ok:
             # Sändningen sker FÖRE varje statusskrivning, samma kontrakt som
@@ -542,8 +552,10 @@ async def process_email(
                 "rule": rule, "confidence": confidence,
                 "why_not_auto": (
                     "Regeln är 'draft'" if rule != "auto"
-                    else f"Konfidens {confidence} under tröskeln {settings.auto_send_min_confidence}"
+                    else f"Konfidensen {confidence} ligger under tröskeln {settings.auto_send_min_confidence}"
                     if confidence < settings.auto_send_min_confidence
+                    else f"Textkvalitetskontrollen flaggade utkastet: {kvalitet.sammanfattning()}"
+                    if kvalitet.kraver_granskning
                     else "Negativt sentiment"
                 ),
             },

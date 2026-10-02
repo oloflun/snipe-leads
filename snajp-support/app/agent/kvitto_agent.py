@@ -168,6 +168,13 @@ async def run_kvitto_chat_turn(
 
     if not verdikt.ok:
         svar = fallt_svar()
+    else:
+        # Textkvalitetslagret: deterministisk putsning av chattsvaret —
+        # blanksteg, hängande hälsningar, entydiga felstavningar. Körs inte
+        # på fallt_svar(), som är vår egen fasta text.
+        from ..textkvalitet import putsa
+
+        svar, _ = putsa(svar)
 
     return {
         "reply": svar,

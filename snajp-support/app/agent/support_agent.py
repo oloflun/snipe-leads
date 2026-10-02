@@ -1423,6 +1423,13 @@ async def run_support_agent(
     # Efter humaniseraren, före längdkapningen: en avslutningsfras utan namn
     # under är trasig oavsett vilket steg som skrev den.
     reply = strip_dangling_sign_off(reply)
+    # Textkvalitetslagret (app/textkvalitet.py): deterministisk putsning av
+    # blanksteg, hängande hälsningar och entydiga felstavningar. Medvetet
+    # bara putsningen här — faktagrinden nedan är redan svarets grind, och
+    # ett chattsvar ska inte kosta ett extra LLM-anrop.
+    from ..textkvalitet import putsa as _putsa_text
+
+    reply, _ = _putsa_text(reply)
 
     # --- Kod: faktagrinden (bd snipe-1fl) ----------------------------------
     #

@@ -98,7 +98,33 @@ async def _queue_outreach_draft_impl(
     humanizer_variant: str,
     force_review: bool = False,
 ) -> str:
+    # Textkvalitetslagret (app/textkvalitet.py): sista efterkontrollen innan
+    # texten kan nå en kund. Platshållare ("[förnamn]") kontrolleras på
+    # RÅTEXTEN — finalize_outreach_body raderar dem annars tyst och lämnar
+    # "Hej ," eller en mening med ett saknat ord, vilket är exakt de fel
+    # kunder har sett. Därefter putsas den strippade texten, med
+    # LLM-korrektur bara om något flaggats. Kvarstår en allvarlig
+    # anmärkning tvingas utkastet till mänsklig granskning — åt det
+    # försiktiga hållet, precis som force_review. Allt körs FÖRE sidfoten,
+    # som är kodens egen text.
+    from ..textkvalitet import kontrollera, sakra_utgaende_text
+
+    sprak = "en" if language_state == "en_confirmed" else "sv"
+    platshallare = [
+        a for a in kontrollera(body, sprak=sprak).allvarliga if a.kod == "platshallare"
+    ]
+
     finalized_body = finalize_outreach_body(body)
+    kvalitet = await sakra_utgaende_text(finalized_body, sprak=sprak)
+    finalized_body = kvalitet.text
+    textkvalitet_granskning: str | None = None
+    if kvalitet.kraver_granskning or platshallare:
+        force_review = True
+        delar = [a.beskrivning for a in platshallare] + (
+            [kvalitet.sammanfattning()] if kvalitet.kraver_granskning else []
+        )
+        textkvalitet_granskning = "; ".join(delar)
+
     finalized_body = await _med_lagstadgad_fot(outreach, finalized_body)
 
     try:
@@ -140,15 +166,15 @@ async def _queue_outreach_draft_impl(
         status=queue_status,
     )
     outreach.queued = True
-    return json.dumps(
-        {
-            "queued": True,
-            "queue_item_id": result["queue_item"]["id"],
-            "status": queue_status,
-            "awaiting_review": queue_status == "awaiting_review",
-        },
-        ensure_ascii=False,
-    )
+    svar = {
+        "queued": True,
+        "queue_item_id": result["queue_item"]["id"],
+        "status": queue_status,
+        "awaiting_review": queue_status == "awaiting_review",
+    }
+    if textkvalitet_granskning:
+        svar["textkvalitet"] = textkvalitet_granskning
+    return json.dumps(svar, ensure_ascii=False)
 
 
 async def _request_human_handoff_impl(outreach: OutreachContext, reason: str) -> str:
