@@ -1063,7 +1063,14 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
             <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
               <span className="min-w-0 break-all text-sm text-ink-muted">
                 {kontakt(rad)}
-                {rad.contact_phone ? ` · ${rad.contact_phone}` : ""}
+                {rad.contact_phone ? (
+                  <>
+                    {" · "}
+                    <a href={`tel:${rad.contact_phone.replace(/[^\d+]/g, "")}`} className="num underline-offset-4 hover:underline">
+                      {rad.contact_phone}
+                    </a>
+                  </>
+                ) : null}
               </span>
               {rad.source_url ? (
                 <a

@@ -3,7 +3,7 @@
 import { RefreshCw, Send } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { DemoKorning } from "@/components/leads/DemoKorning";
 import type { EmailStudioData } from "@/lib/data/emails";
@@ -213,6 +213,16 @@ export function LeadsRunForm({
   const [fel, setFel] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [batchId, setBatchId] = useState<string | null>(null);
+  // Följ-loopen lever bara så länge formuläret är monterat: "Följ körningen"
+  // byter vy, och utan den här vakten pollade loopen vidare i upp till 45 min
+  // och dubblerade Körningar-vyns egen pollning (granskning 2026-10-02).
+  const levande = useRef(true);
+  useEffect(() => {
+    levande.current = true;
+    return () => {
+      levande.current = false;
+    };
+  }, []);
 
   // Körningens id överlever en omladdning (migration 080, INV-JOB-003).
   // Nyckeln skiljer admin- och kundyta: adminens kundbesök byter tenant
@@ -240,12 +250,20 @@ export function LeadsRunForm({
     if (!id) return;
     const sparatId = id;
     void (async () => {
+      setBusy(true);
       try {
-        const rad = await anropa<{ status: string; korning?: Korning | null }>(
+        const rad = await anropa<{ status: string; error?: string | null; korning?: Korning | null }>(
           "/leads/korningar/" + sparatId,
           { method: "GET" }
         );
-        if (!rad.korning || rad.korning.klar || rad.status === "failed") {
+        if (rad.status === "failed") {
+          // En död körning sägs rakt ut, inte bara glöms.
+          glomKorning();
+          setBatchId(sparatId);
+          setFel(rad.error ?? "Körningen avbröts.");
+          return;
+        }
+        if (!rad.korning || rad.korning.klar) {
           glomKorning();
           return;
         }
@@ -253,8 +271,14 @@ export function LeadsRunForm({
         setSvar({ jobs: [], count: rad.korning.mal, fase: "research" });
         setStatus("Återupptar körningen…");
         await följKörning(sparatId, rad.korning);
-      } catch {
-        glomKorning();
+      } catch (cause) {
+        // 404 = körningen finns inte längre: glöm den. Ett tillfälligt fel
+        // (nät, 5xx) får inte radera nyckeln, då går nästa omladdning också bet.
+        if (/\b404\b/.test(String(cause))) glomKorning();
+        setStatus(null);
+        setFel(felmeddelande(cause));
+      } finally {
+        setBusy(false);
       }
     })();
     // Bara vid montering: återupptagningen ska ske en gång, inte vid varje
@@ -344,9 +368,22 @@ export function LeadsRunForm({
           (k.pagaende ? " · researchar nästa" : " · letar fler bolag")
       );
       await new Promise((r) => setTimeout(r, 3000));
+      if (!levande.current) return;
       // Liggaren, inte Redis-posten (`/leads/jobb/`): den uppdateras efter
       // varje steg och överlever både TTL:n och en deploy (INV-JOB-003).
-      const rad = await anropa<{ korning?: Korning | null }>("/leads/korningar/" + batchId, { method: "GET" });
+      const rad = await anropa<{ status?: string; error?: string | null; korning?: Korning | null }>(
+        "/leads/korningar/" + batchId,
+        { method: "GET" }
+      );
+      if (!levande.current) return;
+      if (rad.status === "failed") {
+        // Motorn dog (felorsaken står i liggaren): sluta polla, säg varför.
+        glomKorning();
+        setStatus(null);
+        setFel(rad.error ?? "Körningen avbröts.");
+        window.dispatchEvent(new Event("snipra:leads-korning-klar"));
+        return;
+      }
       if (rad.korning) k = rad.korning;
     }
     setStatus(k.klar ? k.sammanfattning ?? `Klart: ${k.levererade} leads.` : "Körningen fortsätter i bakgrunden.");

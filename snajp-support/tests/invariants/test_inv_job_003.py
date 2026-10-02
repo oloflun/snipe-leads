@@ -14,7 +14,11 @@ prospektjobb → `_rapportera_till_korning`) med fejkad sökning och research:
   a) batchraden står i 'processing' med tillstånd medan motorn arbetar,
   b) tillståndet överlever att jobbstoret töms (= Redis-TTL),
   c) ett fel i körningen ger status 'failed' och en felorsak i klartext,
-  d) körningslistan bär batch- och listrader, aldrig prospektjobben.
+  d) körningslistan bär batch- och listrader, aldrig prospektjobben,
+  e) ett barnjobb som strömmen ger upp räknas in, så körningen aldrig står
+     i 'processing' för evigt (granskningsfynd 2026-10-02),
+  f) ett återtag efter deploy fortsätter ur liggaren i stället för att söka
+     om från början, även när jobbstoret är tomt.
 """
 
 from __future__ import annotations
@@ -171,3 +175,66 @@ async def test_korningslistan_bar_batch_och_lista_men_inte_prospektjobb():
     # Ett statusbyte utan tillstånd raderar inte tillståndet.
     await storage.set_leads_job_status(t, job_id="b1", status="completed", scope="batch")
     assert (await storage.get_leads_korning(t, "b1"))["korning"] == {"mal": 3}
+
+
+async def test_ett_uppgivet_barnjobb_laser_inte_korningen(monkeypatch):
+    """(e). Strömmen ger upp ett prospektjobb (MAX_LEVERANSER): utan
+    rapporten till körningen gick `pagaende` aldrig till noll."""
+    _installera(monkeypatch, [], bra=set())
+    storage = MemoryStorage()
+    app_state = SimpleNamespace(jobs=MemoryJobStore(), storage=storage, leadsstrom=None)
+    t = TENANT["tenant_id"]
+    batch_id = await app_state.jobs.create(tenant_id=t, status="processing")
+    prospekt = await storage.create_prospect(t, company_name="Trasiga AB", contact_name=None, contact_email=None, origin="test")
+    k = korningsmodul.ny_korning(mal=1, scope="research", overrides=None, is_test=True)
+    k["pagaende"] = 1
+    k["jobs"] = [{"job_id": "barn-1", "prospect_id": prospekt["id"], "company_name": "Trasiga AB"}]
+    await app_state.jobs.complete(batch_id, {"korning": k, "jobs": k["jobs"], "count": 1})
+    await storage.set_leads_job_status(t, job_id=batch_id, status="processing", scope="batch", korning=k, is_test=True)
+    await storage.set_leads_job_status(t, job_id="barn-1", status="processing", scope="research", prospect_id=prospekt["id"])
+
+    await leads_api.ge_upp_leadsjobb(
+        app_state,
+        {"job_id": "barn-1", **TENANT, "kind": "research", "scope": "research",
+         "prospect_id": prospekt["id"], "batch_id": batch_id},
+    )
+
+    barn = await storage.get_leads_korning(t, "barn-1")
+    assert barn is None  # prospektjobb är inte körningar
+    rad = await storage.get_leads_korning(t, batch_id)
+    assert rad["status"] != "processing", rad
+    assert rad["korning"]["klar"] is True
+    assert rad["korning"]["pagaende"] == 0
+    assert any("gavs upp" in x["skal"] for x in rad["korning"]["tratt"])
+
+
+async def test_atertag_fortsatter_ur_liggaren_utan_jobbstore(monkeypatch):
+    """(f). Deploy mitt i motorn: Redis är tom, liggaren står i 'processing'
+    med tillståndet. Återtaget ska fylla på därifrån, inte köra `_run_batch`
+    (= ny sökning, dubbel researchkostnad)."""
+    _installera(monkeypatch, [], bra=set())
+
+    async def _aldrig(*_a, **_k):
+        raise AssertionError("_run_batch ska inte köras vid ett återtag av en pågående körning")
+
+    monkeypatch.setattr(leads_api, "_run_batch", _aldrig)
+    storage = MemoryStorage()
+    app_state = SimpleNamespace(jobs=MemoryJobStore(), storage=storage, leadsstrom=None)
+    t = TENANT["tenant_id"]
+    k = korningsmodul.ny_korning(mal=1, scope="research", overrides=None, is_test=True)
+    await storage.set_leads_job_status(t, job_id="b-deploy", status="processing", scope="batch", korning=k, is_test=True)
+    assert await app_state.jobs.get("b-deploy") is None
+
+    await leads_api.hantera_leads_jobb(app_state, _payload("b-deploy", 1))
+
+    rad = await storage.get_leads_korning(t, "b-deploy")
+    assert rad["korning"]["klar"] is True and rad["status"] == "completed"
+    assert rad["korning"]["slut_orsak"] == "slut_pa_kandidater"
+
+
+async def test_kandidatpoolen_lamnar_aldrig_apiet():
+    """Kandidaterna (namn, roll, telefon ur registret) är motorns arbetsminne."""
+    rad = {"job_id": "x", "korning": {"mal": 1, "kandidater": [{"company_name": "Alfa AB"}], "jobs": []}}
+    ut = leads_api._utan_kandidater(rad)
+    assert "kandidater" not in ut["korning"] and ut["korning"]["mal"] == 1
+    assert "kandidater" in rad["korning"], "originalet muteras inte"

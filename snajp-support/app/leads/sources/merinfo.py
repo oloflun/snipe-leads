@@ -42,6 +42,7 @@ import re
 import time
 import unicodedata
 from pathlib import Path
+from collections.abc import Awaitable, Callable
 from typing import Any
 from urllib.parse import unquote
 
@@ -92,7 +93,8 @@ async def hamta(url: str) -> str | None:
             md, fel = await _hamta_via_scrapegraph(nyckel, url)
         if md is not None or "rate limit" not in str(fel).casefold():
             break
-        await asyncio.sleep(5 * (forsok + 1))
+        if forsok < 3:
+            await asyncio.sleep(5 * (forsok + 1))
     if md is None:
         logger.warning("merinfo: %s gick inte att hämta (%s).", url, fel)
         return None
@@ -497,6 +499,7 @@ async def sok(
     *,
     uteslut: set[str] | frozenset[str] = frozenset(),
     profil: dict[str, Any] | None = None,
+    puls: Callable[[], Awaitable[Any]] | None = None,
 ) -> list[dict[str, Any]] | None:
     """Antons arbetsflöde: bransch → län/kommun → listsidor → bolagssidor →
     kontaktkravet → rangordning (Jev om påslagen) → de `antal` bästa.
@@ -508,7 +511,17 @@ async def sok(
     branscher = valj_branscher(list(dict.fromkeys([*(icp.get("industries") or []), *(p.get("branscher") or [])])))
     if not branscher and p.get("malgrupp"):
         branscher = valj_branscher([p["malgrupp"]])
-    geo = [*(icp.get("geography") or []), *(p.get("kommuner") or []), *(p.get("omraden") or [])]
+    # Regionnycklarna (icp.geo, app/leads/geo.py) är redan kommuner i
+    # profilen; utan profil (listjobb som inte kunde läsa den) expanderas de
+    # här, annars blev "goteborg" bara staden i stället för området.
+    from ..geo import REGIONER
+
+    geo = [
+        *(icp.get("geography") or []),
+        *(k.namn for n in (icp.get("geo") or []) if n in REGIONER for k in REGIONER[n].kommuner),
+        *(p.get("kommuner") or []),
+        *(p.get("omraden") or []),
+    ]
     platser = valj_platser(list(dict.fromkeys(geo)))
     if not branscher or platser is None:
         logger.info("merinfo: målgruppen gick inte att översätta (branscher=%s, platser=%s).", branscher, platser)
@@ -523,6 +536,8 @@ async def sok(
     while aktiva and len(kandidater) < mal and sida <= MAX_LISTSIDOR:
         for s in list(aktiva):
             md = await hamta(listsida_url(s[0], s[1], sida))
+            if puls:
+                await puls()
             rader = tolka_lista(md) if md else []
             if not rader:
                 aktiva.remove(s)
@@ -547,6 +562,8 @@ async def sok(
 
     async def granska(r: dict[str, Any]) -> dict[str, Any] | None:
         md = await hamta(r["url"])
+        if puls:
+            await puls()
         if not md:
             return None
         b = tolka_bolag(md, r["url"])

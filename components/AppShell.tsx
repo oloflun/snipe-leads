@@ -412,7 +412,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                 ) : null}
                 <AgentMenu yta="leads" kontext={`dashboard${pathname ? `:${pathname}` : ""}`} ton="rail" />
                 {userEmail && !demolage ? (
-                  <p className="truncate px-1 pt-0.5 text-[0.75rem] text-paper-subtle">{userEmail}</p>
+                  <p title={userEmail} className="truncate px-1 pt-0.5 text-[0.75rem] text-paper-subtle">{userEmail}</p>
                 ) : null}
               </div>
               <div className="hidden flex-col items-center gap-1 lg:flex lg:flex-row lg:justify-between">
@@ -492,6 +492,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                 <form action={signOut}>
                   <button
                     type="submit"
+                    aria-label="Logga ut"
                     className="focus-ring inline-flex min-h-11 items-center gap-1.5 rounded-input px-3 text-sm font-medium text-ink-subtle transition-colors hover:text-ink"
                   >
                     <LogOut className="h-4 w-4" aria-hidden />

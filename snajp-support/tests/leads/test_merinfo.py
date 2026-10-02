@@ -221,3 +221,27 @@ async def test_hitta_bolag_anvander_registret_bara_nar_flaggan_ar_satt(monkeypat
     monkeypatch.setenv("LEADS_MERINFO", "scrapegraph")
     assert await discovery.hitta_bolag({"industries": ["Bygg"]}, 2) == [{"company_name": "Alfa Bygg AB"}]
     assert anrop == [2]
+
+
+def test_regionnyckel_expanderas_utan_profil(monkeypatch):
+    """icp.geo bär regionnycklar (app/leads/geo.py). Profilen expanderar dem
+    normalt; utan profil ska `sok` göra det själv, annars blev "goteborg"
+    bara staden. Sju kommuner i samma län → länet (Antons regel)."""
+    sedda: list[tuple[str, str | None, int]] = []
+
+    def _url(bransch, plats, sida):
+        sedda.append((bransch, plats, sida))
+        return f"https://x/{bransch}/{plats}/{sida}"
+
+    async def _tom(url):
+        return None
+
+    monkeypatch.setattr(m, "listsida_url", _url)
+    monkeypatch.setattr(m, "hamta", _tom)
+    import asyncio
+
+    ut = asyncio.run(m.sok({"industries": ["bygg"], "geo": ["goteborg"]}, 3))
+    assert ut is None  # inga listrader: "kunde inte tolka", inte "inga bolag"
+    # Sex kommuner i Västra Götaland → länet; Kungsbacka ligger i Halland
+    # och blir en egen sökning (en kommun i ett annat län breddas inte).
+    assert {plats for _, plats, _ in sedda} == {"vastra-gotalands-lan", "kungsbacka"}, sedda

@@ -1317,7 +1317,16 @@ async def lista_korningar(
     rader = await request.app.state.storage.list_leads_korningar(
         tenant["tenant_id"], limit=max(1, min(limit, 100))
     )
-    return {"korningar": rader}
+    return {"korningar": [_utan_kandidater(r) for r in rader]}
+
+
+def _utan_kandidater(rad: dict) -> dict:
+    """Körningens kandidatpool (namn, roller, telefon från registret) är
+    motorns arbetsminne, inte kundens vy: den lämnar aldrig API:t."""
+    k = rad.get("korning")
+    if isinstance(k, dict) and "kandidater" in k:
+        return {**rad, "korning": {f: v for f, v in k.items() if f != "kandidater"}}
+    return rad
 
 
 @router.get("/api/leads/korningar/{job_id}")
@@ -1329,7 +1338,7 @@ async def hamta_korning(
     rad = await request.app.state.storage.get_leads_korning(tenant["tenant_id"], job_id)
     if rad is None:
         raise HTTPException(status_code=404, detail="Körningen finns inte.")
-    return rad
+    return _utan_kandidater(rad)
 
 
 @router.get("/api/leads/queue")
@@ -1657,6 +1666,55 @@ async def _spara_korning(app_state, tenant_id: str, batch_id: str, k: dict) -> N
     )
 
 
+async def _las_korning(app_state, tenant_id: str, batch_id: str) -> tuple[dict, dict | None]:
+    """Körningens tillstånd: Redis-posten först (snabbvägen), annars liggaren
+    (INV-JOB-003). Efter en deploy eller TTL är Redis tom medan raden i
+    Postgres står i 'processing' med tillståndet; utan den här reservvägen
+    låg en sådan körning kvar där för evigt."""
+    post = await app_state.jobs.get(batch_id) or {}
+    resultat = dict(post.get("result") or {})
+    k = resultat.get("korning")
+    if not k:
+        rad = await app_state.storage.get_leads_korning(tenant_id, batch_id)
+        k = (rad or {}).get("korning")
+        if k:
+            resultat.update(korning=k, jobs=k.get("jobs") or [], count=len(k.get("jobs") or []))
+    return resultat, k
+
+
+async def _markera_korning_fallen(app_state, tenant_id: str, batch_id: str, fel: BaseException) -> None:
+    """En motor som kastar lämnar annars raden i 'processing' utan felorsak:
+    exakt det spårlösa slutet 080 finns för att ta bort. Kastar aldrig."""
+    try:
+        await app_state.storage.set_leads_job_status(
+            tenant_id, job_id=batch_id, status="failed", scope="batch", error=_jobbfeltext(fel)
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("Kunde inte skriva felorsaken för körning %s", batch_id)
+
+
+async def _ateruppta_korning(app_state, payload: dict) -> bool:
+    """Återtag av ett batchjobb vars liggarrad står i 'processing' med
+    tillstånd (deploy eller krasch mitt i motorn): fortsätt där liggaren
+    står i stället för att söka om från början med dubbel researchkostnad.
+    False = inget att återuppta, kör vägen som vanligt."""
+    tenant = {"tenant_id": payload["tenant_id"], "tenant_name": payload.get("tenant_name")}
+    try:
+        rad = await app_state.storage.get_leads_korning(tenant["tenant_id"], payload["job_id"])
+    except Exception:  # noqa: BLE001 — en trasig liggarläsning får inte stoppa kön
+        logger.exception("Kunde inte läsa körningen %s för återupptagning.", payload["job_id"])
+        return False
+    k = (rad or {}).get("korning")
+    if not k or k.get("klar"):
+        return False
+    try:
+        await _fyll_pa(app_state, tenant, payload["job_id"])
+    except Exception as fel:  # noqa: BLE001
+        logger.exception("Återupptagningen av körning %s föll", payload["job_id"])
+        await _markera_korning_fallen(app_state, tenant["tenant_id"], payload["job_id"], fel)
+    return True
+
+
 async def _fyll_pa(app_state, tenant: dict, batch_id: str) -> None:
     """Köar research tills körningen har N leverbara leads (INV-LEADS-N-001).
 
@@ -1666,12 +1724,10 @@ async def _fyll_pa(app_state, tenant: dict, batch_id: str) -> None:
     Se app/leads/korning.py."""
     jobs = app_state.jobs
     storage = app_state.storage
-    post = await jobs.get(batch_id) or {}
-    resultat = dict(post.get("result") or {})
-    k = resultat.get("korning")
+    tenant_id = tenant["tenant_id"]
+    resultat, k = await _las_korning(app_state, tenant_id, batch_id)
     if not k or k.get("klar"):
         return
-    tenant_id = tenant["tenant_id"]
     profil, sok_icp = await _korningens_profil(storage, tenant_id, k.get("overrides"))
     orsak = None
     while k["levererade"] + k["pagaende"] < k["mal"]:
@@ -1735,9 +1791,7 @@ async def _rapportera_till_korning(
     """Ett prospektjobb är klart: räkna in det och fyll på. Kastar aldrig —
     en trasig motor får inte fälla ett researchjobb som redan är sparat."""
     try:
-        post = await app_state.jobs.get(batch_id) or {}
-        resultat = dict(post.get("result") or {})
-        k = resultat.get("korning")
+        resultat, k = await _las_korning(app_state, tenant["tenant_id"], batch_id)
         if not k:
             return
         iris_korning.registrera_utfall(k, namn=namn, leverbar=leverbar, skal=skal)
@@ -1745,8 +1799,9 @@ async def _rapportera_till_korning(
         await app_state.jobs.complete(batch_id, resultat)
         await _spara_korning(app_state, tenant["tenant_id"], batch_id, k)
         await _fyll_pa(app_state, tenant, batch_id)
-    except Exception:  # noqa: BLE001 — se docstringen
+    except Exception as fel:  # noqa: BLE001 — se docstringen
         logger.exception("Kunde inte rapportera till körning %s", batch_id)
+        await _markera_korning_fallen(app_state, tenant["tenant_id"], batch_id, fel)
 
 
 async def _run_batch(app_state, payload: dict) -> None:
@@ -2420,7 +2475,13 @@ async def _run_list_job(app_state, payload: dict) -> None:
             except Exception:  # noqa: BLE001 — utan profil rangordnar koden ensam
                 logger.warning("Profilen gick inte att läsa för listan %s.", lista["id"])
                 profil = None
-            traffar = await merinfo.sok(icp, int(lista["antal"]), profil=profil)
+            # Pulsen flyttar 300-sekundersklockan (app/jobs/store.py) vid
+            # varje hämtad sida: en lista på 40 listsidor + 90 bolagssidor
+            # tar längre än så, och utan puls visade UI:t "Tidsgräns
+            # överskriden" medan jobbet fortfarande byggde listan.
+            traffar = await merinfo.sok(
+                icp, int(lista["antal"]), profil=profil, puls=lambda: app_state.jobs.start(job_id)
+            )
         if traffar is None:
             traffar = await hitta_bolag(icp, int(lista["antal"]))
         rader: list[dict] = []
@@ -2561,6 +2622,9 @@ async def hantera_leads_jobb(app_state, payload: dict) -> None:
             liggarstatus = None
         if liggarstatus == "completed":
             return
+        if liggarstatus == "processing" and payload.get("kind") == "batch":
+            if await _ateruppta_korning(app_state, payload):
+                return
 
     befintligt = await jobs.get(job_id) or {}
     if befintligt.get("status") == "completed":
@@ -2623,7 +2687,22 @@ async def ge_upp_leadsjobb(app_state, payload: dict) -> None:
             status="failed",
             scope=payload.get("scope") or _KIND_TILL_SCOPE.get(payload.get("kind"), "research"),
             prospect_id=payload.get("prospect_id"),
+            error=UPPGIVET_JOBB,
         )
+        batch_id = payload.get("batch_id")
+        if batch_id and payload.get("prospect_id"):
+            # Barn i en Iris-körning: räknas in som bortvalt, annars går
+            # `pagaende` aldrig till noll och körningen står i 'processing'
+            # för evigt (INV-JOB-003).
+            prospekt = await storage.get_prospect(tenant_id, payload["prospect_id"]) or {}
+            await _rapportera_till_korning(
+                app_state,
+                {"tenant_id": tenant_id, "tenant_name": payload.get("tenant_name")},
+                batch_id,
+                namn=prospekt.get("company_name") or payload["prospect_id"],
+                leverbar=False,
+                skal="Researchen gavs upp efter upprepade försök.",
+            )
         list_id = payload.get("list_id")
         if payload.get("kind") == "lista" and list_id:
             lista = await storage.get_lead_list(tenant_id, list_id)

@@ -90,7 +90,9 @@ async def sokrunda(
             continue
         fakta = await mat_webbplats(kandidat.get("website"))
         kandidat["webbsignaler"] = fakta.get("rader") or []
-        triage = await jev.triage(
+        # Registerkällan (merinfo) har redan triagerat sina kandidater; en
+        # andra Jev-fråga på samma bolag är bara kostnad.
+        triage = kandidat.get("jev_triage") or await jev.triage(
             profil, kandidat, utdrag=fakta.get("utdrag") or "", signaler=kandidat["webbsignaler"]
         )
         if triage:

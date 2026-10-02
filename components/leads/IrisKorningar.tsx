@@ -97,11 +97,16 @@ export function IrisKorningar() {
   const [fel, setFel] = useState<string | null>(null);
   const [oppen, setOppen] = useState<string | null>(sok?.get("id") ?? null);
 
+  // Stoppad = sessionen är borta (401/403) eller vyn saknas (404): att polla
+  // vidare var tredje sekund ger bara samma svar.
+  const [stoppad, setStoppad] = useState(false);
+
   const hamta = useCallback(async () => {
     try {
       const response = await fetch("/api/snajp-support/leads/korningar?limit=30", { cache: "no-store" });
       const kropp = await readJsonBody<{ korningar?: KorningsRad[]; detail?: string }>(response);
       if (!response.ok || !kropp?.korningar) {
+        if ([401, 403, 404].includes(response.status)) setStoppad(true);
         setFel(kropp?.detail ?? "Körningarna gick inte att hämta.");
         return;
       }
@@ -116,13 +121,23 @@ export function IrisKorningar() {
     void hamta();
   }, [hamta]);
 
-  // Poll bara när något pågår. Ett intervall utan pågående körning är bara
-  // trafik.
-  const nagotPagar = (rader ?? []).some(pagar);
+  // Poll bara när något pågår, och nästa hämtning schemaläggs först när den
+  // förra svarat: ett intervall överlappade sig självt vid kallstart (proxyn
+  // tillåter 60 s) och kunde skriva ett äldre svar över ett nyare.
+  const nagotPagar = !stoppad && (rader ?? []).some(pagar);
   useEffect(() => {
     if (!nagotPagar) return;
-    const id = window.setInterval(() => void hamta(), 3000);
-    return () => window.clearInterval(id);
+    let timer = 0;
+    let aktiv = true;
+    const varv = async () => {
+      await hamta();
+      if (aktiv) timer = window.setTimeout(() => void varv(), 3000);
+    };
+    timer = window.setTimeout(() => void varv(), 3000);
+    return () => {
+      aktiv = false;
+      window.clearTimeout(timer);
+    };
   }, [nagotPagar, hamta]);
 
   // Körformuläret och Bolag-listan lyssnar på samma händelse.
@@ -136,7 +151,7 @@ export function IrisKorningar() {
     };
   }, [hamta]);
 
-  if (fel) {
+  if (fel && rader === null) {
     return (
       <p role="alert" className="text-[15px] text-danger">
         {fel}
@@ -164,6 +179,11 @@ export function IrisKorningar() {
 
   return (
     <div className="space-y-10">
+      {fel ? (
+        <p role="alert" className="text-[15px] text-danger">
+          {fel}
+        </p>
+      ) : null}
       {aktiv ? <Pagaende rad={aktiv} /> : null}
 
       <Tabell
@@ -317,7 +337,7 @@ function RadMedDetalj({
           <td colSpan={kolumner} className="bg-paper2/60 px-4 py-5">
             <div className="grid gap-8 md:grid-cols-2">
               <div>
-                <h3 className="text-[1.0625rem] font-semibold">Levererade bolag</h3>
+                <h3 className="text-[1.0625rem] font-semibold">Undersökta bolag</h3>
                 {k?.jobs?.length ? (
                   <ul className="mt-3 divide-y divide-ink/12 border-y border-ink/15">
                     {k.jobs.map((j) => (
@@ -333,7 +353,7 @@ function RadMedDetalj({
                   </ul>
                 ) : (
                   <p className={cn(meta, "mt-3")}>
-                    {rad.scope === "lista" ? "Raderna finns under Bolag › Listor." : "Inga bolag levererade."}
+                    {rad.scope === "lista" ? "Raderna finns under Bolag › Listor." : "Inga bolag undersökta."}
                   </p>
                 )}
                 {rad.error ? (
@@ -358,7 +378,7 @@ function RadMedDetalj({
                           <span className={cn(meta, "shrink-0")}>{t.steg}</span>
                         </div>
                         <p className="mt-0.5 text-[0.9375rem] text-ink-muted">{t.skal}</p>
-                        {t.belagg ? <p className={cn(meta, "mt-0.5 italic")}>{t.belagg}</p> : null}
+                        {t.belagg ? <p className={cn(meta, "mt-0.5")}>{t.belagg}</p> : null}
                       </li>
                     ))}
                   </ul>
