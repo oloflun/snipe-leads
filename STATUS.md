@@ -1,5 +1,17 @@
 # Snipra Status
 
+## 2026-10-02 (session 4) — Claude — driftsatt: development live, main migrerad till 087, adminytan i main lagad
+
+Anton körde push, `LEADS_MERINFO=scrapegraph` och migrationerna 082–086
+(development) och 079–086 (main); adminytan i main svarar 200. Agenten satte
+FLYTT_NYCKEL, FLYTT_MAL_URL och ENV_DEPLOY med nya `scripts/flytt_nycklar.py`,
+rättade åtta a11y-fynd i Iris-vyerna och gjorde offline-sidan tvåspråkig.
+Röktest på development 10/10 efter att två rättighetsfel hittats: radera sparad
+vy och "Koppla ur inkorgen" (fel sedan 077), båda lagade i migration 087 som
+körts i båda miljöerna, med en ny vakt. **Nattspegeln skriver över development
+02:00 UTC i natt.** Main väntar på Antons release. Handoff:
+`HANDOFF-2026-10-02-LEADS-SUITE-DRIFT.md`. Logg: `session-logs/2026-10-02-session-log-4.md`.
+
 ## 2026-10-02 (session 3) — Claude — hela beställningen från 2026-10-01 kodad: listor, översättning, Iris-kvalitet, inkorg, spegel, Leads Suite
 
 Alla tio faser i `plans/2026-10-02-knyta-ihop-korningen.md` är kodade på

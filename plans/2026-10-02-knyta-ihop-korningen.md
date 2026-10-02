@@ -305,6 +305,11 @@ Antagande utan fråga: Fas 3 (regeln + grinden) före listorna, så det nya UI:t
 - [x] Fas 6.1 lokalt: pixelgranskning av Pipeline, Tabell och importpanelen (demon, 1280 + 375, sv + en); ett fynd rättat (051f131). `a11y-audit` körd mot demons fyra Iris-vyer (Opus-agent, axe + tab_walk + reflow + contrast, fixturen `broken.html` fälld av varje skript): 0 axe-violations efter rättningarna, åtta materiella fynd rättade i samma commit (fokusring 2,17:1 → 3,4:1 via color-mix på `--focus`, danger 4,4:1 → 5,2:1, fokus kvar efter statusbyte i Pipeline/Tabell med role=status, Home/End på tablisten, fokus till raden efter val ur Tabell, demons Listor utan inloggningsfel, kontaktvägsvalet som aria-pressed-knappar, ingen trunkering). Kvar som skuld (30/90 d): radknappens långa tillgängliga namn och detaljpanelens placering efter listan i DOM (IrisBolag), filtrets träffantal ej annonserat (LeadsTabell), ingen skip-länk/contentinfo (AppShell), railens undermenyer 36 px, bannerlänkens tabbordning, Pipeline-korts sr-only-spann som ökar scrollWidth vid 320 px. Körningar-vyn och inloggade ytor kunde inte auditeras lokalt (ingen Postgres, inte i demon).
 - [x] Grindar vid avslut: backend 2463 passed/4 skipped, rotinvarianter 425, tsc rent, node 162.
 
+### Avslut 2026-10-02 (session 4)
+Alla rutor som ligger i agentens hand är klara. Öppet: nattspegeln 02:00 UTC,
+Antons release till main, flyttvägen skarpt, Docker-socketfilerna (admin) och
+de inloggade Iris-ytorna, a11y-skulden. Handoff: `HANDOFF-2026-10-02-LEADS-SUITE-DRIFT.md`.
+
 ### Uppdatering 2026-10-02 kväll — driftsatt
 - [x] Anton: push (c147904), `LEADS_MERINFO=scrapegraph` på development, migrationer 082–086 på development och 079–086 på main (adminfelet i main löst).
 - [x] `scripts/flytt_nycklar.py --apply`: FLYTT_NYCKEL i båda miljöerna, FLYTT_MAL_URL i development, ENV_DEPLOY (bara spegelns sex PG-rader) på GitHub. Development: nyckel=True mål=True.

@@ -138,6 +138,8 @@ separate thing entirely — user-message position only, never system. See
 | `snajp-support/app/api/admin_flytt.py` | Flytta till main (plan del E, migration 085): HMAC-signerat paket dev → main, mottagaren vägrar i en spegel. INV-DATA-003: enda skrivvägen. |
 | `.github/workflows/spegla-dev.yml` | Nattlig spegling main → development 02:00 UTC via `scripts/railway_seed_dev.py --behall-flyttko`. |
 | `components/leads/LeadsTabell.tsx`, `Pipeline.tsx`, `Tidslinje.tsx`, `ImportCsv.tsx`, `IrisAutomation.tsx` | Leads Suite-vyerna under Iris: tabell med inline-status och sparade vyer, kanban, tidslinje med anteckning/uppgift, CSV-import med kolumnkartor (`lib/leads/importmallar.ts`), automationsinställningar. |
+| `scripts/flytt_nycklar.py` | `--check`/`--apply`: FLYTT_NYCKEL (båda miljöerna), FLYTT_MAL_URL (development), GitHub-hemligheten ENV_DEPLOY (bara spegelns sex PG-rader). Visar aldrig värden; verifierar mot `/api/admin/flytt/status`. |
+| `HANDOFF-2026-10-02-LEADS-SUITE-DRIFT.md` | Senaste handoff: allt i beställningen 2026-10-01 byggt och driftsatt, verifiering, öppet, Antons instruktioner ordagrant. |
 | `plans/2026-08-29-redis-agentarkitektur.md` | The Redis architecture: deploy-surviving runs (Streams), tenant-scoped semantic answer cache, rolling conversation memory — plus the verdicts on Redis Iris (Agent Memory, LangCache, Context Retriever). |
 | `docs/REDIS_IRIS_EVAL.md` | The adoption gates and sandbox protocol for the managed Iris services — synthetic data only, eight gates before any production use. |
 
@@ -422,6 +424,14 @@ inte uppdaterats till Railway-topologin.** Det gör de fem maskinella stegen
 mot den döda kedjan; en riktig onboarding just nu kräver manuella steg mot
 Railway tills skriptet är omskrivet. Se `TENANTS.md` för den nuvarande
 processen och flagga skriptet innan du litar på det.
+
+## Current status (2026-10-02, session 4)
+
+Development live med hela beställningen från 2026-10-01; main migrerad till 087
+(adminytan lagad) men med gammal kod tills Antons release. Nycklar för Flytta
+till main och nattspegeln satta (`scripts/flytt_nycklar.py`); nattspegeln kör
+02:00 UTC. Ny vakt `snajp-support/tests/invariants/test_delete_grants.py`.
+Handoff: `HANDOFF-2026-10-02-LEADS-SUITE-DRIFT.md`.
 
 ## Current status (2026-10-02, session 3)
 
