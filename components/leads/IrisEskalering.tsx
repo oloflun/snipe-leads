@@ -4,6 +4,17 @@ import { useEffect, useRef, useState } from "react";
 import type { Eskaleringsregler } from "@/lib/iris";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
+import { useLocale, type Localized } from "@/lib/i18n";
+
+const UTAN_REGLER: Localized = {
+  sv: "Backenden svarade utan eskaleringsregler.",
+  en: "The backend replied without escalation rules."
+};
+
+function somText(orsak: unknown): Localized {
+  const m = felmeddelande(orsak);
+  return { sv: m, en: m };
+}
 
 /**
  * Eskaleringsreglerna: när Iris ska lämna över till en människa i stället
@@ -23,7 +34,7 @@ type LeadsConfig = { eskalering?: Eskaleringsregler };
 type Lage =
   | { fas: "laddar" }
   | { fas: "klar"; regler: Eskaleringsregler }
-  | { fas: "fel"; text: string };
+  | { fas: "fel"; text: Localized };
 
 function Vaxel({
   paslagen,
@@ -69,10 +80,11 @@ function Vaxel({
 }
 
 export function IrisEskalering() {
+  const { text } = useLocale();
   const [lage, setLage] = useState<Lage>({ fas: "laddar" });
   const [troskelText, setTroskelText] = useState("");
   const [sparar, setSparar] = useState(false);
-  const [sparfel, setSparfel] = useState<string | null>(null);
+  const [sparfel, setSparfel] = useState<Localized | null>(null);
   const [sparad, setSparad] = useState(false);
   const sparadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -82,12 +94,13 @@ export function IrisEskalering() {
         const response = await fetch("/api/snajp-support/leads/config", { cache: "no-store" });
         const config = await readJsonBody<LeadsConfig>(response);
         if (!response.ok || !config?.eskalering) {
-          throw new Error("Backenden svarade utan eskaleringsregler.");
+          setLage({ fas: "fel", text: UTAN_REGLER });
+          return;
         }
         setLage({ fas: "klar", regler: config.eskalering });
         setTroskelText(String(config.eskalering.kvalificeringstroskel));
       } catch (orsak) {
-        setLage({ fas: "fel", text: felmeddelande(orsak) });
+        setLage({ fas: "fel", text: somText(orsak) });
       }
     })();
     return () => {
@@ -101,6 +114,14 @@ export function IrisEskalering() {
     setLage({ fas: "klar", regler: { ...forra, ...andring } });
     setSparar(true);
     setSparfel(null);
+    const aterstall = (orsak: Localized) => {
+      setLage({ fas: "klar", regler: forra });
+      setTroskelText(String(forra.kvalificeringstroskel));
+      setSparfel({
+        sv: `Ändringen sparades inte: ${orsak.sv}`,
+        en: `The change was not saved: ${orsak.en}`
+      });
+    };
     try {
       const response = await fetch("/api/snajp-support/leads/config", {
         method: "PUT",
@@ -109,7 +130,8 @@ export function IrisEskalering() {
       });
       const svar = await readJsonBody<LeadsConfig>(response);
       if (!response.ok || !svar?.eskalering) {
-        throw new Error("Backenden svarade utan eskaleringsregler.");
+        aterstall(UTAN_REGLER);
+        return;
       }
       setLage({ fas: "klar", regler: svar.eskalering });
       setTroskelText(String(svar.eskalering.kvalificeringstroskel));
@@ -117,9 +139,7 @@ export function IrisEskalering() {
       if (sparadTimer.current) clearTimeout(sparadTimer.current);
       sparadTimer.current = setTimeout(() => setSparad(false), 2500);
     } catch (orsak) {
-      setLage({ fas: "klar", regler: forra });
-      setTroskelText(String(forra.kvalificeringstroskel));
-      setSparfel(`Ändringen sparades inte: ${felmeddelande(orsak)}`);
+      aterstall(somText(orsak));
     } finally {
       setSparar(false);
     }
@@ -137,8 +157,8 @@ export function IrisEskalering() {
   }
 
   return (
-    <section aria-label="Eskalering till människa">
-      <h3 className="kicker text-mineral">När Iris lämnar över till dig</h3>
+    <section aria-label={text({ sv: "Eskalering till människa", en: "Escalation to a person" })}>
+      <h3 className="kicker text-mineral">{text({ sv: "När Iris lämnar över till dig", en: "When Iris hands over to you" })}</h3>
 
       {lage.fas === "laddar" ? (
         <div className="mt-5 grid gap-px">
@@ -148,21 +168,24 @@ export function IrisEskalering() {
         </div>
       ) : lage.fas === "fel" ? (
         <p role="alert" className="mt-5 border-y border-ink/15 py-4 text-[15px] text-danger">
-          Reglerna kunde inte hämtas: {lage.text}
+          {text({ sv: "Reglerna kunde inte hämtas:", en: "The rules could not be fetched:" })} {text(lage.text)}
         </p>
       ) : (
         <div className="mt-5 divide-y divide-ink/12 border-y border-ink/15">
           <Vaxel
             paslagen={lage.regler.osaker_kvalificering}
-            etikett="Osäker kvalificering"
-            beskrivning="Bolag under tröskeln får inget automatiskt utkast."
+            etikett={text({ sv: "Osäker kvalificering", en: "Uncertain qualification" })}
+            beskrivning={text({
+              sv: "Bolag under tröskeln får inget automatiskt utkast.",
+              en: "Companies below the threshold get no automatic draft."
+            })}
             upptagen={sparar}
             onByt={(v) => void spara({ osaker_kvalificering: v })}
           />
           {lage.regler.osaker_kvalificering ? (
             <div className="flex flex-wrap items-center gap-x-6 gap-y-2 py-4">
               <label htmlFor="iris-troskel" className="text-[0.9375rem] font-medium text-ink">
-                Träffsäkerhetströskel
+                {text({ sv: "Träffsäkerhetströskel", en: "Confidence threshold" })}
               </label>
               <div className="flex items-center gap-2">
                 <input
@@ -181,28 +204,37 @@ export function IrisEskalering() {
                   }}
                   className="focus-ring h-11 w-24 rounded-input border border-ink/15 bg-paper px-3 text-[16px] disabled:opacity-60"
                 />
-                <span className="text-[0.9375rem] text-ink-muted">procent</span>
+                <span className="text-[0.9375rem] text-ink-muted">{text({ sv: "procent", en: "percent" })}</span>
               </div>
             </div>
           ) : null}
           <Vaxel
             paslagen={lage.regler.prisfragor}
-            etikett="Pris och budget"
-            beskrivning="Svar om pris, rabatt eller budget går till dig."
+            etikett={text({ sv: "Pris och budget", en: "Price and budget" })}
+            beskrivning={text({
+              sv: "Svar om pris, rabatt eller budget går till dig.",
+              en: "Replies about price, discounts or budget go to you."
+            })}
             upptagen={sparar}
             onByt={(v) => void spara({ prisfragor: v })}
           />
           <Vaxel
             paslagen={lage.regler.negativt_svar}
-            etikett="Negativt svar"
-            beskrivning="Mejl till dig när ett bolag svarar avvisande."
+            etikett={text({ sv: "Negativt svar", en: "Negative reply" })}
+            beskrivning={text({
+              sv: "Mejl till dig när ett bolag svarar avvisande.",
+              en: "An email to you when a company replies negatively."
+            })}
             upptagen={sparar}
             onByt={(v) => void spara({ negativt_svar: v })}
           />
           <Vaxel
             paslagen={lage.regler.juridik}
-            etikett="Avtal, juridik och personuppgifter"
-            beskrivning="Svar om avtal, juridik eller personuppgifter går till dig."
+            etikett={text({ sv: "Avtal, juridik och personuppgifter", en: "Contracts, legal and personal data" })}
+            beskrivning={text({
+              sv: "Svar om avtal, juridik eller personuppgifter går till dig.",
+              en: "Replies about contracts, legal matters or personal data go to you."
+            })}
             upptagen={sparar}
             onByt={(v) => void spara({ juridik: v })}
           />
@@ -213,7 +245,7 @@ export function IrisEskalering() {
         role={sparfel ? "alert" : "status"}
         className={cn("mt-2 min-h-5 text-[0.8125rem] leading-5", sparfel ? "text-danger" : "text-ink-subtle")}
       >
-        {sparfel ? sparfel : sparad ? "Sparat." : null}
+        {sparfel ? text(sparfel) : sparad ? text({ sv: "Sparat.", en: "Saved." }) : null}
       </p>
     </section>
   );

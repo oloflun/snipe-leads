@@ -7,6 +7,7 @@ import { EjAktiverad, arEjAktiverad } from "@/components/EjAktiverad";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
+import { useLocale, type Locale, type Localized } from "@/lib/i18n";
 
 /**
  * Analysvyn — veckovis utfall ur kundens EGEN tenant.
@@ -56,20 +57,21 @@ type Svar = { weeks?: Vecka[]; coverage?: Tackning };
 type Lage =
   | { fas: "laddar" }
   | { fas: "ejAktiverad" }
-  | { fas: "fel"; meddelande: string }
+  | { fas: "fel"; meddelande: Localized }
   | { fas: "klar"; veckor: Vecka[]; tackning: Tackning };
 
 const VECKOR = 8;
 
-function procent(del: number, av: number): string | null {
+function procent(del: number, av: number, locale: Locale): string | null {
   if (!av) return null;
-  return new Intl.NumberFormat("sv-SE", {
+  return new Intl.NumberFormat(locale === "en" ? "en-GB" : "sv-SE", {
     style: "percent",
     maximumFractionDigits: 0
   }).format(del / av);
 }
 
 export function Analys({ demo = false }: Readonly<{ demo?: boolean }>) {
+  const { locale, text } = useLocale();
   const [lage, setLage] = useState<Lage>({ fas: "laddar" });
 
   const hamta = useCallback(async () => {
@@ -107,14 +109,20 @@ export function Analys({ demo = false }: Readonly<{ demo?: boolean }>) {
           fas: "fel",
           meddelande:
             response.status >= 500
-              ? "Tjänsten svarar inte. Försök igen om en minut."
-              : `Kunde inte hämta statistiken (status ${response.status}).`
+              ? { sv: "Tjänsten svarar inte. Försök igen om en minut.", en: "The service is not responding. Try again in a minute." }
+              : {
+                  sv: `Kunde inte hämta statistiken (status ${response.status}).`,
+                  en: `Could not load the statistics (status ${response.status}).`
+                }
         });
         return;
       }
       const kropp = await readJsonBody<Svar & { offline?: boolean }>(response);
       if (!kropp || kropp.offline) {
-        setLage({ fas: "fel", meddelande: "Backenden svarade utan innehåll." });
+        setLage({
+          fas: "fel",
+          meddelande: { sv: "Backenden svarade utan innehåll.", en: "The backend replied without content." }
+        });
         return;
       }
       setLage({
@@ -125,7 +133,10 @@ export function Analys({ demo = false }: Readonly<{ demo?: boolean }>) {
     } catch (error) {
       setLage({
         fas: "fel",
-        meddelande: error instanceof Error ? error.message : "Kunde inte nå servern."
+        meddelande:
+          error instanceof Error
+            ? { sv: error.message, en: error.message }
+            : { sv: "Kunde inte nå servern.", en: "Could not reach the server." }
       });
     }
   }, [demo]);
@@ -139,7 +150,7 @@ export function Analys({ demo = false }: Readonly<{ demo?: boolean }>) {
   }
 
   if (lage.fas === "ejAktiverad") {
-    return <EjAktiverad yta="Analys" />;
+    return <EjAktiverad yta={text({ sv: "Analys", en: "Analytics" })} />;
   }
 
   if (lage.fas === "fel") {
@@ -147,14 +158,14 @@ export function Analys({ demo = false }: Readonly<{ demo?: boolean }>) {
       <div className="flex items-start gap-3 border-y border-ochre/40 bg-ochre/10 px-4 py-4">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
         <div className="min-w-0">
-          <p className="text-sm font-medium text-ink">Statistiken kunde inte hämtas</p>
-          <p className="mt-1 text-sm text-ink-muted">{lage.meddelande}</p>
+          <p className="text-sm font-medium text-ink">{text({ sv: "Statistiken kunde inte hämtas", en: "The statistics could not be loaded" })}</p>
+          <p className="mt-1 text-sm text-ink-muted">{text(lage.meddelande)}</p>
           <button
             type="button"
             onClick={() => void hamta()}
             className="focus-ring mt-3 inline-flex min-h-9 items-center rounded-input bg-paper2 px-3 text-[13px] font-medium"
           >
-            Försök igen
+            {text({ sv: "Försök igen", en: "Try again" })}
           </button>
         </div>
       </div>
@@ -172,7 +183,7 @@ export function Analys({ demo = false }: Readonly<{ demo?: boolean }>) {
 
   if (!veckor.length || !harTrafik) {
     return (
-      <EmptyState title="Ingen data ännu" />
+      <EmptyState title={text({ sv: "Ingen data ännu", en: "No data yet" })} />
     );
   }
 
@@ -182,32 +193,32 @@ export function Analys({ demo = false }: Readonly<{ demo?: boolean }>) {
         rubrik="Leads"
         veckor={veckor}
         kolumner={[
-          { nyckel: "sent", etikett: "Skick", tacks: tackning.sent },
-          { nyckel: "replies", etikett: "Svar", tacks: tackning.replies },
+          { nyckel: "sent", etikett: text({ sv: "Skick", en: "Sent" }), tacks: tackning.sent },
+          { nyckel: "replies", etikett: text({ sv: "Svar", en: "Replies" }), tacks: tackning.replies },
           {
             nyckel: "svarsfrekvens",
-            etikett: "Svarsfrekvens",
+            etikett: text({ sv: "Svarsfrekvens", en: "Reply rate" }),
             tacks: tackning.sent && tackning.replies,
-            varde: (v) => procent(v.replies, v.sent)
+            varde: (v) => procent(v.replies, v.sent, locale)
           },
-          { nyckel: "meetings", etikett: "Möten", tacks: tackning.meetings },
-          { nyckel: "leads_runs", etikett: "Körningar", tacks: tackning.leads_runs }
+          { nyckel: "meetings", etikett: text({ sv: "Möten", en: "Meetings" }), tacks: tackning.meetings },
+          { nyckel: "leads_runs", etikett: text({ sv: "Körningar", en: "Runs" }), tacks: tackning.leads_runs }
         ]}
         kurva={(v) => v.sent}
-        kurvetikett="Skick per vecka"
+        kurvetikett={text({ sv: "Skick per vecka", en: "Sent per week" })}
       />
 
       <AgentBlock
-        rubrik="Kundtjänst"
+        rubrik={text({ sv: "Kundtjänst", en: "Support" })}
         veckor={veckor}
         kolumner={[
-          { nyckel: "tickets", etikett: "Ärenden", tacks: tackning.tickets },
-          { nyckel: "resolved", etikett: "Avslutade", tacks: tackning.resolved },
-          { nyckel: "escalated", etikett: "Eskalerade", tacks: tackning.escalated },
-          { nyckel: "support_runs", etikett: "Körningar", tacks: tackning.support_runs }
+          { nyckel: "tickets", etikett: text({ sv: "Ärenden", en: "Tickets" }), tacks: tackning.tickets },
+          { nyckel: "resolved", etikett: text({ sv: "Avslutade", en: "Resolved" }), tacks: tackning.resolved },
+          { nyckel: "escalated", etikett: text({ sv: "Eskalerade", en: "Escalated" }), tacks: tackning.escalated },
+          { nyckel: "support_runs", etikett: text({ sv: "Körningar", en: "Runs" }), tacks: tackning.support_runs }
         ]}
         kurva={(v) => v.tickets}
-        kurvetikett="Ärenden per vecka"
+        kurvetikett={text({ sv: "Ärenden per vecka", en: "Tickets per week" })}
       />
 
       <OtackadeFotnot tackning={tackning} />
@@ -240,6 +251,7 @@ function AgentBlock({
   // Ett block där INGEN kolumn har en källa blir annars en tabell av streck —
   // sex rader gånger fyra kolumner som alla säger samma sak. En rad som säger
   // det en gång är samma information och ser inte trasig ut.
+  const { text } = useLocale();
   const nagotMats = kolumner.some((k) => k.tacks);
 
   return (
@@ -249,7 +261,7 @@ function AgentBlock({
       </header>
 
       {!nagotMats ? (
-        <p className="border-y border-ink/15 py-4 text-sm text-ink-muted">Ingenting mäts ännu.</p>
+        <p className="border-y border-ink/15 py-4 text-sm text-ink-muted">{text({ sv: "Ingenting mäts ännu.", en: "Nothing is measured yet." })}</p>
       ) : (
         <>
 
@@ -273,7 +285,7 @@ function AgentBlock({
           <thead>
             <tr className="border-y border-ink/15">
               <th scope="col" className="kicker py-3 text-left font-medium text-mineral">
-                Vecka
+                {text({ sv: "Vecka", en: "Week" })}
               </th>
               {kolumner.map((k) => (
                 <th
@@ -331,9 +343,10 @@ function AgentBlock({
 
 /** Ett mätvärde utan källa blir ett streck med en titel som säger varför. */
 function Cell({ kolumn, vecka }: Readonly<{ kolumn: Kolumn; vecka: Vecka }>) {
+  const { text } = useLocale();
   if (!kolumn.tacks) {
     return (
-      <span className="text-ink-subtle" title="Mäts inte ännu">
+      <span className="text-ink-subtle" title={text({ sv: "Mäts inte ännu", en: "Not measured yet" })}>
         —
       </span>
     );
@@ -372,7 +385,7 @@ function Trend({
           varianten där procenten alltid har något bestämt att räkna på. */}
       <div className="flex h-32 gap-1.5" role="img" aria-label={etikett}>
         {veckor.map((v, i) => {
-          const höjd = Math.round((tal[i] / tak) * 100);
+          const hojd = Math.round((tal[i] / tak) * 100);
           return (
             <div key={v.week} className="flex min-w-0 flex-1 flex-col gap-1.5">
               <div className="relative min-h-0 flex-1">
@@ -389,7 +402,7 @@ function Trend({
                   // Noll ska synas som en synlig grundlinje och inte som
                   // ingenting — annars går en tyst vecka inte att skilja från
                   // en vecka som saknas.
-                  style={{ height: `${Math.max(höjd, 2)}%` }}
+                  style={{ height: `${Math.max(hojd, 2)}%` }}
                 />
               </div>
               <span className="kicker truncate text-center text-[11px] text-ink-subtle">
@@ -404,6 +417,7 @@ function Trend({
 }
 
 function OtackadeFotnot({ tackning }: Readonly<{ tackning: Tackning }>) {
+  const { text } = useLocale();
   const saknas = Object.entries(tackning)
     .filter(([, tacks]) => !tacks)
     .map(([nyckel]) => nyckel);
@@ -412,20 +426,21 @@ function OtackadeFotnot({ tackning }: Readonly<{ tackning: Tackning }>) {
     return null;
   }
 
-  const etiketter: Record<string, string> = {
-    meetings: "möten",
-    sent: "skick",
-    replies: "svar",
-    tickets: "ärenden",
-    escalated: "eskalerade",
-    resolved: "avslutade",
-    leads_runs: "leads-körningar",
-    support_runs: "kundtjänstkörningar"
+  const etiketter: Record<string, Localized> = {
+    meetings: { sv: "möten", en: "meetings" },
+    sent: { sv: "skick", en: "sent" },
+    replies: { sv: "svar", en: "replies" },
+    tickets: { sv: "ärenden", en: "tickets" },
+    escalated: { sv: "eskalerade", en: "escalated" },
+    resolved: { sv: "avslutade", en: "resolved" },
+    leads_runs: { sv: "leads-körningar", en: "leads runs" },
+    support_runs: { sv: "kundtjänstkörningar", en: "support runs" }
   };
 
   return (
     <p className="border-t border-ink/15 pt-4 text-sm text-ink-muted">
-      Mäts inte ännu: {saknas.map((n) => etiketter[n] ?? n).join(", ")}.
+      {text({ sv: "Mäts inte ännu:", en: "Not measured yet:" })}{" "}
+      {saknas.map((n) => (etiketter[n] ? text(etiketter[n]) : n)).join(", ")}.
     </p>
   );
 }

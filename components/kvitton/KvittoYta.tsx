@@ -26,6 +26,9 @@ import {
 import { Integritetsnotis } from "@/components/kvitton/Integritetsnotis";
 import { HttpJsonError, felmeddelande, readJson } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
+import { useLocale, type Localized } from "@/lib/i18n";
+
+const ord = (s: string): Localized => ({ sv: s, en: s });
 
 /**
  * Kvittohanterarens arbetsyta — skanning, resultat och sammanfattning.
@@ -154,12 +157,15 @@ export function KvittoAttGora({
   rader,
   onGodkann
 }: Readonly<{ rader: Kvitto[]; onGodkann: (rad: Kvitto) => void }>) {
+  const { text } = useLocale();
   if (rader.length === 0) return null;
   const fler = rader.length - 5;
   return (
-    <section aria-label="Att göra" className="rounded-card bg-ink p-6 text-paper md:p-8">
+    <section aria-label={text({ sv: "Att göra", en: "To do" })} className="rounded-card bg-ink p-6 text-paper md:p-8">
       <h2 className="text-[1.25rem] font-semibold tracking-[-0.01em]">
-        {rader.length === 1 ? "1 kvitto väntar på dig" : `${rader.length} kvitton väntar på dig`}
+        {rader.length === 1
+          ? text({ sv: "1 kvitto väntar på dig", en: "1 receipt is waiting for you" })
+          : text({ sv: `${rader.length} kvitton väntar på dig`, en: `${rader.length} receipts are waiting for you` })}
       </h2>
       <ul className="mt-5 border-t border-paper/15">
         {rader.slice(0, 5).map((rad) => (
@@ -169,12 +175,12 @@ export function KvittoAttGora({
           >
             <div className="col-span-12 min-w-0 sm:col-span-7">
               <p className="truncate text-[0.9375rem] font-semibold">
-                {rad.motpart || rad.mejl_amne || rad.filnamn || "Kvitto"}
+                {rad.motpart || rad.mejl_amne || rad.filnamn || text({ sv: "Kvitto", en: "Receipt" })}
               </p>
               <p className="mt-0.5 truncate text-[0.8125rem] text-paper-muted">
                 {rad.anmarkning ||
                   [rad.datum, rad.kategorietikett].filter(Boolean).join(" · ") ||
-                  "Uppgifter saknas."}
+                  text({ sv: "Uppgifter saknas.", en: "Details missing." })}
               </p>
             </div>
             <div className="col-span-12 mt-2 flex items-center justify-between gap-4 sm:col-span-5 sm:mt-0 sm:justify-end">
@@ -186,7 +192,7 @@ export function KvittoAttGora({
                 onClick={() => onGodkann(rad)}
                 className="focus-ring inline-flex min-h-9 shrink-0 items-center rounded-input bg-paper px-4 text-[0.875rem] font-semibold text-ink transition-colors hover:bg-paper/85"
               >
-                Godkänn
+                {text({ sv: "Godkänn", en: "Approve" })}
               </button>
             </div>
           </li>
@@ -194,7 +200,9 @@ export function KvittoAttGora({
       </ul>
       {fler > 0 ? (
         <p className="mt-4 text-[0.8125rem] text-paper-muted">
-          {fler === 1 ? "1 till i tabellen nedan." : `${fler} till i tabellen nedan.`}
+          {fler === 1
+            ? text({ sv: "1 till i tabellen nedan.", en: "1 more in the table below." })
+            : text({ sv: `${fler} till i tabellen nedan.`, en: `${fler} more in the table below.` })}
         </p>
       ) : null}
     </section>
@@ -202,11 +210,12 @@ export function KvittoAttGora({
 }
 
 export function KvittoYta() {
+  const { text } = useLocale();
   const [konto, setKonto] = useState<Mejlkonto | null>(null);
   const [kvitton, setKvitton] = useState<Kvitto[] | null>(null);
   const [samman, setSamman] = useState<Sammanfattning | null>(null);
   const [period, setPeriod] = useState(innevarandeManad);
-  const [fel, setFel] = useState<string | null>(null);
+  const [fel, setFel] = useState<Localized | null>(null);
 
   const [skannar, setSkannar] = useState(false);
   const [handelser, setHandelser] = useState<Handelse[] | null>(null);
@@ -233,7 +242,7 @@ export function KvittoYta() {
       setKvitton(listaSvar?.kvitton ?? []);
       setSamman(sammanSvar);
     } catch (orsak) {
-      setFel(feltext(orsak));
+      setFel(ord(feltext(orsak)));
       setKvitton([]);
     }
   }, [period]);
@@ -278,7 +287,7 @@ export function KvittoYta() {
       setKvitton(data?.kvitton ?? []);
       setSamman(data ? { ...data.sammanfattning, text: data.text } : null);
     } catch (orsak) {
-      setFel(feltext(orsak));
+      setFel(ord(feltext(orsak)));
     } finally {
       setSkannar(false);
     }
@@ -314,34 +323,49 @@ export function KvittoYta() {
     if (rad.brutto === null) {
       const belopp = window.prompt(
         rad.belopp_original
-          ? `Kvittot är på ${rad.belopp_original}. Ange beloppet omräknat till kronor (t.ex. 495,00):`
-          : "Kvittot saknar läsbart belopp. Ange beloppet i kronor (t.ex. 495,00):"
+          ? text({
+              sv: `Kvittot är på ${rad.belopp_original}. Ange beloppet omräknat till kronor (t.ex. 495,00):`,
+              en: `The receipt is for ${rad.belopp_original}. Enter the amount converted to SEK (e.g. 495.00):`
+            })
+          : text({
+              sv: "Kvittot saknar läsbart belopp. Ange beloppet i kronor (t.ex. 495,00):",
+              en: "The receipt has no readable amount. Enter the amount in SEK (e.g. 495.00):"
+            })
       );
       if (!belopp) return;
       kropp.brutto = belopp.replace(/\s/g, "").replace(",", ".");
     }
     if (rad.momssats === null) {
-      const sats = window.prompt("Ange momssatsen i procent (25, 12, 6 eller 0):");
+      const sats = window.prompt(
+        text({ sv: "Ange momssatsen i procent (25, 12, 6 eller 0):", en: "Enter the VAT rate in percent (25, 12, 6 or 0):" })
+      );
       if (sats === null) return;
       const normaliserad = { "25": "0.25", "12": "0.12", "6": "0.06", "0": "0" }[sats.trim()];
       if (!normaliserad) {
-        setFel("Momssatsen ska vara 25, 12, 6 eller 0.");
+        setFel({ sv: "Momssatsen ska vara 25, 12, 6 eller 0.", en: "The VAT rate must be 25, 12, 6 or 0." });
         return;
       }
       kropp.momssats = normaliserad;
     }
     if (rad.datum === null) {
-      const datum = window.prompt("Kvittot saknar datum. Ange köpdatum (ÅÅÅÅ-MM-DD):");
+      const datum = window.prompt(
+        text({ sv: "Kvittot saknar datum. Ange köpdatum (ÅÅÅÅ-MM-DD):", en: "The receipt has no date. Enter the purchase date (YYYY-MM-DD):" })
+      );
       if (!datum) return;
       kropp.datum = datum.trim();
     }
     if (rad.motpart === null) {
-      const motpart = window.prompt("Vilken butik eller leverantör är kvittot från?");
+      const motpart = window.prompt(
+        text({ sv: "Vilken butik eller leverantör är kvittot från?", en: "Which shop or supplier is the receipt from?" })
+      );
       if (!motpart) return;
       kropp.motpart = motpart.trim();
     }    if (rad.kategori === null) {
       const kategori = window.prompt(
-        "Ange kategori: drivmedel, biljett, kost_och_logi, representation, kontorsmateriel, programvara, forbrukningsinventarier eller ovrig_extern_kostnad:"
+        text({
+          sv: "Ange kategori: drivmedel, biljett, kost_och_logi, representation, kontorsmateriel, programvara, forbrukningsinventarier eller ovrig_extern_kostnad:",
+          en: "Enter category: drivmedel, biljett, kost_och_logi, representation, kontorsmateriel, programvara, forbrukningsinventarier or ovrig_extern_kostnad:"
+        })
       );
       if (!kategori) return;
       kropp.kategori = kategori.trim().toLowerCase();
@@ -350,7 +374,10 @@ export function KvittoYta() {
       // Frågas, gissas aldrig: betalstatus avgör om kvittot bokas mot
       // bankkontot eller som en obetald skuld.
       const betald = window.confirm(
-        "Är kvittot redan betalt?\n\nOK = betalt (kort, Swish, kontant)\nAvbryt = obetald faktura"
+        text({
+          sv: "Är kvittot redan betalt?\n\nOK = betalt (kort, Swish, kontant)\nAvbryt = obetald faktura",
+          en: "Is the receipt already paid?\n\nOK = paid (card, Swish, cash)\nCancel = unpaid invoice"
+        })
       );
       kropp.betalstatus = betald ? "betald" : "obetald";
     }
@@ -362,21 +389,24 @@ export function KvittoYta() {
       });
       const data = await readJson<{ godkand: boolean; brister?: string[] }>(svar);
       if (data && !data.godkand) {
-        setFel(
-          `Kvittot kunde inte godkännas ännu: ${(data.brister ?? []).join("; ") || "fält saknas."}`
-        );
+        setFel({
+          sv: `Kvittot kunde inte godkännas ännu: ${(data.brister ?? []).join("; ") || "fält saknas."}`,
+          en: `The receipt could not be approved yet: ${(data.brister ?? []).join("; ") || "fields missing."}`
+        });
       }
       await hamta();
     } catch (orsak) {
-      setFel(feltext(orsak));
+      setFel(ord(feltext(orsak)));
     }
   }
 
   async function rensa() {
     if (!kvitton?.length) return;
     const bekraftat = window.confirm(
-      `Rensa ${period.fran} till ${period.till}?\n\n` +
-        `${kvitton.length} kvitton raderas. Det går inte att ångra.`
+      text({
+        sv: `Rensa ${period.fran} till ${period.till}?\n\n${kvitton.length} kvitton raderas. Det går inte att ångra.`,
+        en: `Clear ${period.fran} to ${period.till}?\n\n${kvitton.length} receipts will be deleted. This cannot be undone.`
+      })
     );
     if (!bekraftat) return;
     setRensar(true);
@@ -389,7 +419,7 @@ export function KvittoYta() {
       setHandelser(null);
       await hamta();
     } catch (orsak) {
-      setFel(feltext(orsak));
+      setFel(ord(feltext(orsak)));
     } finally {
       setRensar(false);
     }
@@ -400,7 +430,7 @@ export function KvittoYta() {
   const datumfalt = (
     <div className="flex flex-wrap items-end gap-2">
       <label className="flex flex-col gap-1">
-        <span className="text-[0.75rem] font-medium text-ink-subtle">Från</span>
+        <span className="text-[0.75rem] font-medium text-ink-subtle">{text({ sv: "Från", en: "From" })}</span>
         <input
           type="date"
           value={period.fran}
@@ -409,7 +439,7 @@ export function KvittoYta() {
         />
       </label>
       <label className="flex flex-col gap-1">
-        <span className="text-[0.75rem] font-medium text-ink-subtle">Till</span>
+        <span className="text-[0.75rem] font-medium text-ink-subtle">{text({ sv: "Till", en: "To" })}</span>
         <input
           type="date"
           value={period.till}
@@ -424,7 +454,7 @@ export function KvittoYta() {
     <div className="space-y-8">
       {fel ? (
         <p role="alert" className="max-w-[70ch] text-[14px] text-danger">
-          {fel}
+          {text(fel)}
         </p>
       ) : null}
 
@@ -440,7 +470,7 @@ export function KvittoYta() {
               title={
                 konto?.kopplad
                   ? undefined
-                  : "Ingen inkorg kopplad."
+                  : text({ sv: "Ingen inkorg kopplad.", en: "No mailbox connected." })
               }
               className={cn(btnPrimary, btnLiten)}
             >
@@ -449,7 +479,7 @@ export function KvittoYta() {
               ) : (
                 <ScanLine className="h-4 w-4" aria-hidden />
               )}
-              Skanna inkorgen
+              {text({ sv: "Skanna inkorgen", en: "Scan mailbox" })}
             </button>
             <button
               type="button"
@@ -462,7 +492,7 @@ export function KvittoYta() {
               ) : (
                 <Upload className="h-4 w-4" aria-hidden />
               )}
-              Ladda upp kvitto
+              {text({ sv: "Ladda upp kvitto", en: "Upload receipt" })}
             </button>
             <a
               href={
@@ -471,17 +501,17 @@ export function KvittoYta() {
                   : undefined
               }
               aria-disabled={!harKvitton}
-              title={harKvitton ? undefined : "Det finns inga kvitton att exportera."}
+              title={harKvitton ? undefined : text({ sv: "Det finns inga kvitton att exportera.", en: "There are no receipts to export." })}
               className={cn(btnSecondary, btnLiten, !harKvitton && "pointer-events-none opacity-40")}
             >
               <Download className="h-4 w-4" aria-hidden />
-              Exportera
+              {text({ sv: "Exportera", en: "Export" })}
             </a>
             <button
               type="button"
               disabled={rensar || !harKvitton}
               onClick={() => void rensa()}
-              title={harKvitton ? undefined : "Det finns inget att rensa i perioden."}
+              title={harKvitton ? undefined : text({ sv: "Det finns inget att rensa i perioden.", en: "There is nothing to clear in the period." })}
               className={cn(btnSecondary, btnLiten)}
             >
               {rensar ? (
@@ -489,7 +519,7 @@ export function KvittoYta() {
               ) : (
                 <Trash2 className="h-4 w-4" aria-hidden />
               )}
-              Rensa
+              {text({ sv: "Rensa", en: "Clear" })}
             </button>
           </div>
         </div>
@@ -497,29 +527,29 @@ export function KvittoYta() {
         <p className="mt-3 flex flex-wrap items-center gap-2 text-[0.875rem] text-ink-muted">
           <Mail className="h-4 w-4 shrink-0 text-mineral" aria-hidden />
           {konto === null ? (
-            "Hämtar mejlkontot…"
+            text({ sv: "Hämtar mejlkontot…", en: "Loading the email account…" })
           ) : konto.kopplad ? (
             <>
-              Kopplad inkorg:{" "}
+              {text({ sv: "Kopplad inkorg:", en: "Connected mailbox:" })}{" "}
               <span className="font-medium text-ink">{konto.adress}</span>
               <Badge tone="good">
                 {konto.leverantor === "gmail"
                   ? "Gmail"
                   : konto.leverantor === "microsoft"
                     ? "Outlook/Hotmail"
-                    : "Demokonto"}
+                    : text({ sv: "Demokonto", en: "Demo account" })}
               </Badge>
             </>
           ) : (
             <>
-              Ingen inkorg kopplad.{" "}
+              {text({ sv: "Ingen inkorg kopplad.", en: "No mailbox connected." })}{" "}
               <a
                 href="mailto:kontakt@snajp.se?subject=Koppla%20mejl%20till%20Kvittohanteraren"
                 className="focus-ring rounded-input font-medium text-ink underline underline-offset-4 hover:text-ochre"
               >
-                Hör av dig
+                {text({ sv: "Hör av dig", en: "Get in touch" })}
               </a>{" "}
-              så kopplar vi den.
+              {text({ sv: "så kopplar vi den.", en: "and we will connect it." })}
             </>
           )}
         </p>
@@ -531,12 +561,15 @@ export function KvittoYta() {
           <div className="flex items-baseline justify-between gap-4">
             <p className="kicker flex items-center gap-2 text-mineral">
               <Inbox className="h-3.5 w-3.5" aria-hidden />
-              Inkorgen
+              {text({ sv: "Inkorgen", en: "Mailbox" })}
             </p>
             <p className="text-[0.75rem] tabular-nums text-mineral" role="status">
               {uppspelningKlar
-                ? `${handelser.length} mejl genomlästa`
-                : `läser mejl ${Math.min(visadeHandelser + 1, handelser.length)} av ${handelser.length}…`}
+                ? text({ sv: `${handelser.length} mejl genomlästa`, en: `${handelser.length} emails read` })
+                : text({
+                    sv: `läser mejl ${Math.min(visadeHandelser + 1, handelser.length)} av ${handelser.length}…`,
+                    en: `reading email ${Math.min(visadeHandelser + 1, handelser.length)} of ${handelser.length}…`
+                  })}
             </p>
           </div>
           <ul className="mt-3 divide-y divide-ink/10 border-t border-ink/10">
@@ -549,19 +582,19 @@ export function KvittoYta() {
                   </p>
                   <span className="shrink-0">
                     {h.utfall === "kvitto" ? (
-                      <Badge tone="good">Kvitto</Badge>
+                      <Badge tone="good">{text({ sv: "Kvitto", en: "Receipt" })}</Badge>
                     ) : h.utfall === "kvitto_granska" ? (
-                      <Badge tone="warn">Granska</Badge>
+                      <Badge tone="warn">{text({ sv: "Granska", en: "Review" })}</Badge>
                     ) : h.utfall === "redan_last" ? (
-                      <span className="text-[0.75rem] text-mineral">redan inläst</span>
+                      <span className="text-[0.75rem] text-mineral">{text({ sv: "redan inläst", en: "already read" })}</span>
                     ) : (
-                      <span className="text-[0.75rem] text-mineral">inte ett kvitto</span>
+                      <span className="text-[0.75rem] text-mineral">{text({ sv: "inte ett kvitto", en: "not a receipt" })}</span>
                     )}
                   </span>
                 </div>
                 {h.belopp || h.belopp_original ? (
                   <p className="mt-1 font-mono text-[0.75rem] text-ink-subtle">
-                    Belopp:{" "}
+                    {text({ sv: "Belopp:", en: "Amount:" })}{" "}
                     <mark
                       className={cn(
                         "animate-belopp rounded-[3px] px-1 py-0.5 font-semibold text-ink",
@@ -578,7 +611,7 @@ export function KvittoYta() {
           {uppspelningKlar ? (
             <p className="mt-3 flex items-center gap-2 border-t border-ink/10 pt-3 text-[0.8125rem] text-moss">
               <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden />
-              Klart.
+              {text({ sv: "Klart.", en: "Done." })}
             </p>
           ) : null}
         </section>
@@ -590,7 +623,9 @@ export function KvittoYta() {
           <p className="flex items-center gap-2 text-[0.9375rem] font-semibold text-ink">
             <AlertTriangle className="h-4 w-4 text-warning" aria-hidden />
             {uppladdningsfel.length}{" "}
-            {uppladdningsfel.length === 1 ? "fil kom" : "filer kom"} inte in
+            {uppladdningsfel.length === 1
+              ? text({ sv: "fil kom inte in", en: "file did not get in" })
+              : text({ sv: "filer kom inte in", en: "files did not get in" })}
           </p>
           <ul className="mt-2 space-y-1">
             {uppladdningsfel.map((rad, i) => (
@@ -612,27 +647,27 @@ export function KvittoYta() {
 
       {/* Kvittona. */}
       <section>
-        <h2 className="font-display text-[1.25rem]">Kvitton i perioden</h2>
+        <h2 className="font-display text-[1.25rem]">{text({ sv: "Kvitton i perioden", en: "Receipts in the period" })}</h2>
         {kvitton === null ? (
           <div className="mt-4">
             <SkeletonRows />
           </div>
         ) : kvitton.length === 0 ? (
           <div className="mt-4">
-            <EmptyState title="Inga kvitton i perioden" />
+            <EmptyState title={text({ sv: "Inga kvitton i perioden", en: "No receipts in the period" })} />
           </div>
         ) : (
           <div className="mt-4">
             <Tabell
-              ariaLabel="Kvitton i perioden"
+              ariaLabel={text({ sv: "Kvitton i perioden", en: "Receipts in the period" })}
               kolumner={[
-                { rubrik: "Datum", bredd: "12%" },
-                { rubrik: "Butik", bredd: "32%" },
-                { rubrik: "Kategori", bredd: "16%" },
-                { rubrik: "Källa", bredd: "10%" },
-                { rubrik: "Moms", bredd: "8%", hoger: true },
-                { rubrik: "Belopp", bredd: "12%", hoger: true },
-                { rubrik: "Status", bredd: "10%", hoger: true }
+                { rubrik: text({ sv: "Datum", en: "Date" }), bredd: "12%" },
+                { rubrik: text({ sv: "Butik", en: "Shop" }), bredd: "32%" },
+                { rubrik: text({ sv: "Kategori", en: "Category" }), bredd: "16%" },
+                { rubrik: text({ sv: "Källa", en: "Source" }), bredd: "10%" },
+                { rubrik: text({ sv: "Moms", en: "VAT" }), bredd: "8%", hoger: true },
+                { rubrik: text({ sv: "Belopp", en: "Amount" }), bredd: "12%", hoger: true },
+                { rubrik: text({ sv: "Status", en: "Status" }), bredd: "10%", hoger: true }
               ]}
             >
               {kvitton.map((rad) => (
@@ -653,7 +688,7 @@ export function KvittoYta() {
                   </Cell>
                   <Cell>
                     <span className="text-ink-muted">
-                      {rad.kalla === "mejl" ? "Mejl" : "Uppladdad"}
+                      {rad.kalla === "mejl" ? text({ sv: "Mejl", en: "Email" }) : text({ sv: "Uppladdad", en: "Uploaded" })}
                     </span>
                   </Cell>
                   <Cell hoger>
@@ -667,7 +702,7 @@ export function KvittoYta() {
                   <Cell hoger>
                     <span className="flex flex-wrap items-center justify-end gap-1.5">
                       <Badge tone={rad.status === "granska_manuellt" ? "warn" : "good"}>
-                        {rad.status === "granska_manuellt" ? "Granska" : "Klar"}
+                        {rad.status === "granska_manuellt" ? text({ sv: "Granska", en: "Review" }) : text({ sv: "Klar", en: "Done" })}
                       </Badge>
                       {rad.status === "granska_manuellt" ? (
                         <button
@@ -675,7 +710,7 @@ export function KvittoYta() {
                           onClick={() => void godkann(rad)}
                           className="focus-ring rounded-input text-[0.8125rem] font-medium text-ink underline underline-offset-4 hover:text-ochre"
                         >
-                          Godkänn
+                          {text({ sv: "Godkänn", en: "Approve" })}
                         </button>
                       ) : null}
                     </span>
@@ -708,6 +743,7 @@ export function KvittoYta() {
  * veta om kolumnbrytningen.
  */
 export function KvittoSammanfattning() {
+  const { text } = useLocale();
   const [samman, setSamman] = useState<Sammanfattning | null>(null);
   const [period] = useState(innevarandeManad);
 
@@ -732,18 +768,21 @@ export function KvittoSammanfattning() {
 
   return (
     <div className="rounded-card border border-ink/12 bg-paper p-5">
-      <p className="kicker text-mineral">Sammanfattning</p>
+      <p className="kicker text-mineral">{text({ sv: "Sammanfattning", en: "Summary" })}</p>
       {samman === null ? (
-        <p className="mt-3 text-[0.875rem] text-ink-subtle">Hämtar…</p>
+        <p className="mt-3 text-[0.875rem] text-ink-subtle">{text({ sv: "Hämtar…", en: "Loading…" })}</p>
       ) : samman.antal === 0 ? (
-        <p className="mt-3 text-[0.875rem] leading-6 text-ink-subtle">Inga inlästa kvitton.</p>
+        <p className="mt-3 text-[0.875rem] leading-6 text-ink-subtle">{text({ sv: "Inga inlästa kvitton.", en: "No receipts read." })}</p>
       ) : (
         <>
           <p className="mt-3 font-display text-[2.25rem] leading-none tracking-[-0.01em]">
             {kronor(samman.totalt)}
           </p>
           <p className="mt-1 text-[0.8125rem] text-ink-subtle">
-            {samman.antal_klara} avlästa kvitton · ingående moms {kronor(samman.moms)}
+            {text({
+              sv: `${samman.antal_klara} avlästa kvitton · ingående moms ${kronor(samman.moms)}`,
+              en: `${samman.antal_klara} receipts read · input VAT ${kronor(samman.moms)}`
+            })}
           </p>
           {samman.per_kategori.length ? (
             <dl className="mt-4 divide-y divide-ink/10 border-y border-ink/10">

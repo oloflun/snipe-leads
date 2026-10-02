@@ -54,6 +54,7 @@ const PAKET_FOR_PRODUKTER: Record<string, string> = {
 export function PlanSettings() {
   const { products, addons, workspaceName } = useDashboard();
   const { text } = useLocale();
+  const perManad = text({ sv: "/mån", en: "/mo" });
 
   const nyckel = [...products].sort().join("+");
   const paketId = PAKET_FOR_PRODUKTER[nyckel];
@@ -62,7 +63,7 @@ export function PlanSettings() {
   return (
     <div className="grid gap-8">
       <div>
-        <h2 className="kicker text-mineral">Er plan</h2>
+        <h2 className="kicker text-mineral">{text({ sv: "Er plan", en: "Your plan" })}</h2>
         {/* Två kolumner: vad ni HAR till vänster, hur ni byter till höger.
             Staplat under md: två kolumner à sex på en telefon ger ett prisfält
             på halva bredden, samma fälla som gap-x-8 vid 320px (se
@@ -76,7 +77,7 @@ export function PlanSettings() {
                   <span className="text-[0.9375rem] text-mineral">
                     {paket.prisPerManad === null
                       ? text(PRIS_SAKNAS)
-                      : `${text(PRIS_PREFIX)} ${formateraPris(paket.prisPerManad)}/mån`}
+                      : `${text(PRIS_PREFIX)} ${formateraPris(paket.prisPerManad)}${perManad}`}
                   </span>
                 </p>
                 <p className="mt-2 max-w-[58ch] text-[0.9375rem] leading-6 text-ink-muted">
@@ -86,8 +87,11 @@ export function PlanSettings() {
             ) : (
               <p className="max-w-[58ch] text-[0.9375rem] leading-6 text-ink-muted">
                 {products.length === 0
-                  ? "Ingen aktiv produkt."
-                  : "Manuellt satt plan. Kontakta oss om ni vill byta."}
+                  ? text({ sv: "Ingen aktiv produkt.", en: "No active product." })
+                  : text({
+                      sv: "Manuellt satt plan. Kontakta oss om ni vill byta.",
+                      en: "Plan set manually. Contact us if you want to change it."
+                    })}
               </p>
             )}
           </div>
@@ -97,23 +101,26 @@ export function PlanSettings() {
               kunden. Knappen öppnar kundens mejlprogram med vår adress i
               Till-fältet. */}
           <div className="col-span-12 md:col-span-6">
-            <h3 className="kicker text-mineral">Byt paket</h3>
+            <h3 className="kicker text-mineral">{text({ sv: "Byt paket", en: "Change plan" })}</h3>
             <p className="mt-3 max-w-[46ch] text-[0.9375rem] leading-6 text-ink-muted">
-              Vill du uppgradera eller byta paket, kontakta oss nedan.
+              {text({
+                sv: "Vill du uppgradera eller byta paket, kontakta oss nedan.",
+                en: "To upgrade or change plan, contact us below."
+              })}
             </p>
             <a
-              href={mejlaOss(`Byte av paket${workspaceName ? `: ${workspaceName}` : ""}`)}
+              href={mejlaOss(`${text({ sv: "Byte av paket", en: "Plan change" })}${workspaceName ? `: ${workspaceName}` : ""}`)}
               className={cn(btnSecondary, btnLiten, "mt-4 border border-ink/15 hover:border-ink/30")}
             >
               <Mail className="h-3.5 w-3.5" aria-hidden />
-              Kontakta oss
+              {text({ sv: "Kontakta oss", en: "Contact us" })}
             </a>
           </div>
         </div>
       </div>
 
       <div>
-        <h2 className="kicker text-mineral">Det här ingår</h2>
+        <h2 className="kicker text-mineral">{text({ sv: "Det här ingår", en: "What is included" })}</h2>
         <ul className="mt-4 flex flex-col gap-2.5 border-y border-ink/15 py-5">
           {(paket?.ingar ?? []).map((rad, index) => (
             <li key={index} className="flex gap-2.5 text-[0.9375rem] leading-6 text-ink-muted">
@@ -123,7 +130,7 @@ export function PlanSettings() {
           ))}
           {addons.length > 0 ? (
             <li className="mt-2 text-[0.9375rem] leading-6 text-ink-muted">
-              Tillägg: {addons.join(", ")}
+              {text({ sv: "Tillägg", en: "Add-ons" })}: {addons.join(", ")}
             </li>
           ) : null}
           {paket ? null : (
@@ -139,20 +146,27 @@ export function PlanSettings() {
           finns inget kortformulär. Allt som rör betalning går via kontakt.
           Ingen förbrukningssiffra heller, se docstringen. */}
       <div>
-        <h2 className="kicker text-mineral">Fakturering</h2>
+        <h2 className="kicker text-mineral">{text({ sv: "Fakturering", en: "Billing" })}</h2>
         <div className="mt-4 border-y border-ink/15 py-5">
           <p className="max-w-[62ch] text-[0.9375rem] leading-6 text-ink-muted">
-            Vi skickar e-faktura till{" "}
-            {workspaceName ? <strong className="font-semibold text-ink">{workspaceName}</strong> : "er arbetsyta"}
-            . Ingen kortbetalning görs här i appen.
+            {text({ sv: "Vi skickar e-faktura till", en: "We send an e-invoice to" })}{" "}
+            {workspaceName ? (
+              <strong className="font-semibold text-ink">{workspaceName}</strong>
+            ) : (
+              text({ sv: "er arbetsyta", en: "your workspace" })
+            )}
+            {text({ sv: ". Ingen kortbetalning görs här i appen.", en: ". No card payment is made here in the app." })}
           </p>
           <p className="mt-3 max-w-[62ch] text-[0.9375rem] leading-6 text-ink-muted">
-            Vill ni ändra fakturauppgifter eller säga upp, hör av er till oss så ordnar vi det.
+            {text({
+              sv: "Vill ni ändra fakturauppgifter eller säga upp, hör av er till oss så ordnar vi det.",
+              en: "To change billing details or cancel, get in touch and we will sort it out."
+            })}
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-3">
-            <a href={mejlaOss("Fakturering")} className={cn(btnSecondary, btnLiten, "border border-ink/15 hover:border-ink/30")}>
+            <a href={mejlaOss(text({ sv: "Fakturering", en: "Billing" }))} className={cn(btnSecondary, btnLiten, "border border-ink/15 hover:border-ink/30")}>
               <Mail className="h-3.5 w-3.5" aria-hidden />
-              Kontakta oss
+              {text({ sv: "Kontakta oss", en: "Contact us" })}
             </a>
             <span className="text-[0.875rem] text-ink-subtle">{KONTAKT_MEJL}</span>
           </div>

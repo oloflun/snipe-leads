@@ -8,6 +8,9 @@ import { hamtaAffarskontext } from "@/lib/actions/affarskontext";
 import { Rad, Radlista, btnPrimary, btnSecondary } from "@/components/ui";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
+import { useLocale, type Localized } from "@/lib/i18n";
+
+const ord = (s: string): Localized => ({ sv: s, en: s });
 
 /**
  * Kunskapsbasen — dokumenten agenten svarar ur.
@@ -62,9 +65,10 @@ export function läsbar(namn: string): boolean {
  */
 export function KunskapsbasKort() {
   const vag = useArbetsvag();
+  const loc = useLocale();
   const [antal, setAntal] = useState<number | null>(null);
-  const [fel, setFel] = useState<string | null>(null);
-  const [meddelande, setMeddelande] = useState<string | null>(null);
+  const [fel, setFel] = useState<Localized | null>(null);
+  const [meddelande, setMeddelande] = useState<Localized | null>(null);
   const [busy, setBusy] = useState(false);
   // null = inte hämtad än. Kortet lovar både affärskontext och kunskapsbas i
   // rubriken; utan det här talade det bara om det ena.
@@ -126,16 +130,23 @@ export function KunskapsbasKort() {
         });
         const kropp = await readJsonBody<{ error?: string; detail?: string }>(response);
         if (!response.ok) {
-          throw new Error(kropp?.detail ?? kropp?.error ?? `Kunde inte spara (${response.status}).`);
+          throw new Error(
+            kropp?.detail ??
+              kropp?.error ??
+              loc.text({ sv: `Kunde inte spara (${response.status}).`, en: `Could not save (${response.status}).` })
+          );
         }
         setAntal((tidigare) => (tidigare ?? 0) + nya.length);
-        setMeddelande(`${nya.length} dokument tillagda.`);
+        setMeddelande({ sv: `${nya.length} dokument tillagda.`, en: `${nya.length} documents added.` });
       }
       if (avvisade.length) {
-        setFel(`Hoppade över ${avvisade.join(", ")} — läsbara format är ${LÄSBARA.join(", ")}.`);
+        setFel({
+          sv: `Hoppade över ${avvisade.join(", ")} — läsbara format är ${LÄSBARA.join(", ")}.`,
+          en: `Skipped ${avvisade.join(", ")}. Readable formats are ${LÄSBARA.join(", ")}.`
+        });
       }
     } catch (cause) {
-      setFel(felmeddelande(cause));
+      setFel(ord(felmeddelande(cause)));
     } finally {
       setBusy(false);
       if (filväljare.current) filväljare.current.value = "";
@@ -147,28 +158,30 @@ export function KunskapsbasKort() {
       <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
         <div className="min-w-0">
           <h2 className="text-[1.0625rem] font-semibold tracking-[-0.01em]">
-            Affärskontext och kunskapsbas
+            {loc.text({ sv: "Affärskontext och kunskapsbas", en: "Business context and knowledge base" })}
           </h2>
           <p className="mt-1 max-w-[62ch] text-[14px] leading-6 text-ink-muted">
-            {antal === 0 ? "Tom." : `${antal ?? "—"} dokument.`}
+            {antal === 0
+              ? loc.text({ sv: "Tom.", en: "Empty." })
+              : loc.text({ sv: `${antal ?? "—"} dokument.`, en: `${antal ?? "—"} documents.` })}
           </p>
           {/* Rubriken lovar två saker. Utan den här raden svarade kortet bara
               på den ena, och affärskontexten var något man fick hitta själv. */}
           <p className="mt-2 text-[13px] text-ink-subtle">
-            Affärskontext:{" "}
+            {loc.text({ sv: "Affärskontext:", en: "Business context:" })}{" "}
             {kontextIfylld === null ? (
-              "hämtar…"
+              loc.text({ sv: "hämtar…", en: "loading…" })
             ) : kontextIfylld ? (
-              <span className="text-moss">ifylld</span>
+              <span className="text-moss">{loc.text({ sv: "ifylld", en: "filled in" })}</span>
             ) : (
-              <span className="text-warning">inte ifylld ännu</span>
+              <span className="text-warning">{loc.text({ sv: "inte ifylld ännu", en: "not filled in yet" })}</span>
             )}{" "}
             ·{" "}
             <Link
               href={vag("/settings/affarskontext")}
               className="focus-ring rounded-input underline underline-offset-4 hover:text-ochre"
             >
-              {kontextIfylld ? "Ändra" : "Fyll i"}
+              {kontextIfylld ? loc.text({ sv: "Ändra", en: "Edit" }) : loc.text({ sv: "Fyll i", en: "Fill in" })}
             </Link>
           </p>
         </div>
@@ -188,20 +201,20 @@ export function KunskapsbasKort() {
             className={btnSecondary}
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Upload className="h-4 w-4" aria-hidden />}
-            Ladda upp dokument
+            {loc.text({ sv: "Ladda upp dokument", en: "Upload documents" })}
           </button>
           <Link
             href={vag("/settings/kunskapsbas")}
             className="focus-ring inline-flex min-h-11 items-center rounded-input px-3 text-[14px] font-medium text-ink-subtle hover:text-ink"
           >
-            Hantera
+            {loc.text({ sv: "Hantera", en: "Manage" })}
           </Link>
         </div>
       </div>
-      {meddelande ? <p className="mt-3 text-[14px] text-moss">{meddelande}</p> : null}
+      {meddelande ? <p className="mt-3 text-[14px] text-moss">{loc.text(meddelande)}</p> : null}
       {fel ? (
         <p role="alert" className="mt-3 max-w-[70ch] break-words text-[14px] text-danger">
-          {fel}
+          {loc.text(fel)}
         </p>
       ) : null}
     </section>
@@ -209,9 +222,10 @@ export function KunskapsbasKort() {
 }
 
 export function KunskapsbasPanel() {
+  const loc = useLocale();
   const [artiklar, setArtiklar] = useState<Artikel[] | null>(null);
-  const [fel, setFel] = useState<string | null>(null);
-  const [meddelande, setMeddelande] = useState<string | null>(null);
+  const [fel, setFel] = useState<Localized | null>(null);
+  const [meddelande, setMeddelande] = useState<Localized | null>(null);
   const [busy, setBusy] = useState(false);
   const [rubrik, setRubrik] = useState("");
   const [text, setText] = useState("");
@@ -223,14 +237,20 @@ export function KunskapsbasPanel() {
       const response = await fetch("/api/snajp-support/kb", { cache: "no-store" });
       const kropp = await readJsonBody<{ articles?: Artikel[]; error?: string }>(response);
       if (!response.ok) {
-        throw new Error(kropp?.error ?? `Kunde inte hämta kunskapsbasen (${response.status}).`);
+        throw new Error(
+          kropp?.error ??
+            loc.text({
+              sv: `Kunde inte hämta kunskapsbasen (${response.status}).`,
+              en: `Could not load the knowledge base (${response.status}).`
+            })
+        );
       }
       setArtiklar(kropp?.articles ?? []);
     } catch (cause) {
-      setFel(felmeddelande(cause));
+      setFel(ord(felmeddelande(cause)));
       setArtiklar([]);
     }
-  }, []);
+  }, [loc]);
 
   useEffect(() => {
     void ladda();
@@ -251,22 +271,26 @@ export function KunskapsbasPanel() {
         const kropp = await readJsonBody<{ error?: string; detail?: string }>(response);
         if (!response.ok) {
           throw new Error(
-            kropp?.detail ?? kropp?.error ?? `Kunde inte spara (${response.status}).`
+            kropp?.detail ??
+              kropp?.error ??
+              loc.text({ sv: `Kunde inte spara (${response.status}).`, en: `Could not save (${response.status}).` })
           );
         }
         setMeddelande(
-          nya.length === 1 ? "Sparat." : `${nya.length} dokument sparade.`
+          nya.length === 1
+            ? { sv: "Sparat.", en: "Saved." }
+            : { sv: `${nya.length} dokument sparade.`, en: `${nya.length} documents saved.` }
         );
         setRubrik("");
         setText("");
         await ladda();
       } catch (cause) {
-        setFel(felmeddelande(cause));
+        setFel(ord(felmeddelande(cause)));
       } finally {
         setBusy(false);
       }
     },
-    [ladda]
+    [ladda, loc]
   );
 
   async function väljFiler(filer: FileList | null) {
@@ -286,9 +310,10 @@ export function KunskapsbasPanel() {
       nya.push({ title: fil.name.replace(/\.[^.]+$/, ""), content: innehåll });
     }
     if (avvisade.length) {
-      setFel(
-        `Hoppade över ${avvisade.join(", ")}. PDF och Word: klistra in texten nedan.`
-      );
+      setFel({
+        sv: `Hoppade över ${avvisade.join(", ")}. PDF och Word: klistra in texten nedan.`,
+        en: `Skipped ${avvisade.join(", ")}. PDF and Word: paste the text below.`
+      });
     }
     await spara(nya);
     if (filväljare.current) filväljare.current.value = "";
@@ -300,7 +325,10 @@ export function KunskapsbasPanel() {
         <div className="rounded-card border border-dashed border-ink/25 bg-paper2/40 p-6 text-center">
           <FileText className="mx-auto h-6 w-6 text-ink-subtle" aria-hidden />
           <p className="mt-3 text-[13px] text-ink-subtle">
-            Textfiler ({LÄSBARA.join(", ")}). PDF och Word: klistra in texten nedan.
+            {loc.text({
+              sv: `Textfiler (${LÄSBARA.join(", ")}). PDF och Word: klistra in texten nedan.`,
+              en: `Text files (${LÄSBARA.join(", ")}). PDF and Word: paste the text below.`
+            })}
           </p>
           <input
             ref={filväljare}
@@ -318,25 +346,25 @@ export function KunskapsbasPanel() {
             className={cn(btnPrimary, "mt-5")}
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Upload className="h-4 w-4" aria-hidden />}
-            Välj filer
+            {loc.text({ sv: "Välj filer", en: "Choose files" })}
           </button>
         </div>
       </section>
 
       <section className="border-t border-ink/15 pt-6">
-        <h3 className="text-[15px] font-semibold">Skriv eller klistra in</h3>
+        <h3 className="text-[15px] font-semibold">{loc.text({ sv: "Skriv eller klistra in", en: "Write or paste" })}</h3>
         <div className="mt-4 grid gap-3">
           <input
             value={rubrik}
             onChange={(e) => setRubrik(e.target.value)}
-            placeholder="Rubrik — t.ex. Ångerrätt och returer"
+            placeholder={loc.text({ sv: "Rubrik — t.ex. Ångerrätt och returer", en: "Title, e.g. Returns and cancellations" })}
             className="w-full rounded-input border border-ink/15 bg-paper px-3 py-2 text-[15px] focus-ring"
           />
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
             rows={8}
-            placeholder="Texten agenterna ska svara ur"
+            placeholder={loc.text({ sv: "Texten agenterna ska svara ur", en: "The text the agents answer from" })}
             className="w-full resize-y rounded-input border border-ink/15 bg-paper px-3 py-2 text-[15px] leading-6 focus-ring"
           />
           <div>
@@ -346,7 +374,7 @@ export function KunskapsbasPanel() {
               onClick={() => void spara([{ title: rubrik.trim(), content: text.trim() }])}
               className={btnSecondary}
             >
-              {busy ? "Sparar…" : "Spara i kunskapsbasen"}
+              {busy ? loc.text({ sv: "Sparar…", en: "Saving…" }) : loc.text({ sv: "Spara i kunskapsbasen", en: "Save to knowledge base" })}
             </button>
           </div>
         </div>
@@ -354,21 +382,21 @@ export function KunskapsbasPanel() {
 
       {fel ? (
         <p role="alert" className="max-w-[70ch] break-words text-[15px] text-danger">
-          {fel}
+          {loc.text(fel)}
         </p>
       ) : null}
-      {meddelande ? <p className="text-[15px] text-moss">{meddelande}</p> : null}
+      {meddelande ? <p className="text-[15px] text-moss">{loc.text(meddelande)}</p> : null}
 
       <section className="border-t border-ink/15 pt-6">
         <h3 className="text-[15px] font-semibold">
-          I kunskapsbasen {artiklar ? `(${artiklar.length})` : ""}
+          {loc.text({ sv: "I kunskapsbasen", en: "In the knowledge base" })} {artiklar ? `(${artiklar.length})` : ""}
         </h3>
         {artiklar === null ? (
-          <p className="mt-4 text-[15px] text-ink-subtle">Hämtar…</p>
+          <p className="mt-4 text-[15px] text-ink-subtle">{loc.text({ sv: "Hämtar…", en: "Loading…" })}</p>
         ) : artiklar.length === 0 ? (
-          <p className="mt-4 text-[15px] leading-7 text-ink-muted">Tom.</p>
+          <p className="mt-4 text-[15px] leading-7 text-ink-muted">{loc.text({ sv: "Tom.", en: "Empty." })}</p>
         ) : (
-          <Radlista ariaLabel="Dokument i kunskapsbasen" className="mt-4">
+          <Radlista ariaLabel={loc.text({ sv: "Dokument i kunskapsbasen", en: "Documents in the knowledge base" })} className="mt-4">
             {artiklar.map((artikel, index) => (
               <Rad key={artikel.id ?? `${artikel.title}-${index}`}>
                 <p className="text-[15px] font-medium">{artikel.title}</p>

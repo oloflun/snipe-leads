@@ -6,6 +6,7 @@ import { EmptyState, Rad, Radlista, SkeletonRows } from "@/components/ui";
 import { EjAktiverad, arEjAktiverad } from "@/components/EjAktiverad";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { readJsonBody } from "@/lib/http/json";
+import { useLocale, type Locale, type Localized } from "@/lib/i18n";
 
 /**
  * Svar — vad prospekten faktiskt svarat.
@@ -45,29 +46,30 @@ type Svarsrad = {
 type Lage =
   | { fas: "laddar" }
   | { fas: "ejAktiverad" }
-  | { fas: "fel"; meddelande: string }
+  | { fas: "fel"; meddelande: Localized }
   | { fas: "klar"; svar: Svarsrad[] };
 
-const STATUS_ETIKETT: Record<string, string> = {
-  new: "Ny",
-  researching: "Research pågår",
-  ready: "Redo",
-  contacted: "Kontaktad",
-  replied: "Svarat",
-  meeting: "Möte",
-  won: "Vunnen",
-  lost: "Förlorad",
-  suppressed: "Spärrad"
+const STATUS_ETIKETT: Record<string, Localized> = {
+  new: { sv: "Ny", en: "New" },
+  researching: { sv: "Research pågår", en: "Researching" },
+  ready: { sv: "Redo", en: "Ready" },
+  contacted: { sv: "Kontaktad", en: "Contacted" },
+  replied: { sv: "Svarat", en: "Replied" },
+  meeting: { sv: "Möte", en: "Meeting" },
+  won: { sv: "Vunnen", en: "Won" },
+  lost: { sv: "Förlorad", en: "Lost" },
+  suppressed: { sv: "Spärrad", en: "Blocked" }
 };
 
-function nar(iso: string | null): string {
+function nar(iso: string | null, locale: Locale): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("sv-SE", { day: "numeric", month: "short" });
+  return d.toLocaleDateString(locale === "en" ? "en-GB" : "sv-SE", { day: "numeric", month: "short" });
 }
 
 export function Svar({ demo = false }: Readonly<{ demo?: boolean }>) {
+  const { locale, text } = useLocale();
   const [lage, setLage] = useState<Lage>({ fas: "laddar" });
 
   const hamta = useCallback(async () => {
@@ -95,21 +97,27 @@ export function Svar({ demo = false }: Readonly<{ demo?: boolean }>) {
           fas: "fel",
           meddelande:
             response.status >= 500
-              ? "Tjänsten svarar inte. Försök igen om en minut."
-              : `Kunde inte hämta svaren (status ${response.status}).`
+              ? { sv: "Tjänsten svarar inte. Försök igen om en minut.", en: "The service is not responding. Try again in a minute." }
+              : {
+                  sv: `Kunde inte hämta svaren (status ${response.status}).`,
+                  en: `Could not fetch the replies (status ${response.status}).`
+                }
         });
         return;
       }
       const kropp = await readJsonBody<{ replies?: Svarsrad[]; offline?: boolean }>(response);
       if (!kropp || kropp.offline) {
-        setLage({ fas: "fel", meddelande: "Backenden svarade utan innehåll." });
+        setLage({ fas: "fel", meddelande: { sv: "Backenden svarade utan innehåll.", en: "The backend replied without content." } });
         return;
       }
       setLage({ fas: "klar", svar: kropp.replies ?? [] });
     } catch (error) {
       setLage({
         fas: "fel",
-        meddelande: error instanceof Error ? error.message : "Kunde inte nå servern."
+        meddelande:
+          error instanceof Error
+            ? { sv: error.message, en: error.message }
+            : { sv: "Kunde inte nå servern.", en: "Could not reach the server." }
       });
     }
   }, [demo]);
@@ -121,7 +129,7 @@ export function Svar({ demo = false }: Readonly<{ demo?: boolean }>) {
   if (lage.fas === "laddar") return <SkeletonRows />;
 
   if (lage.fas === "ejAktiverad") {
-    return <EjAktiverad yta="Svar" />;
+    return <EjAktiverad yta={text({ sv: "Svar", en: "Replies" })} />;
   }
 
   if (lage.fas === "fel") {
@@ -129,14 +137,14 @@ export function Svar({ demo = false }: Readonly<{ demo?: boolean }>) {
       <div className="flex items-start gap-3 border-y border-ochre/40 bg-ochre/10 px-4 py-4">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
         <div className="min-w-0">
-          <p className="text-sm font-medium text-ink">Svaren kunde inte hämtas</p>
-          <p className="mt-1 text-sm text-ink-muted">{lage.meddelande}</p>
+          <p className="text-sm font-medium text-ink">{text({ sv: "Svaren kunde inte hämtas", en: "The replies could not be fetched" })}</p>
+          <p className="mt-1 text-sm text-ink-muted">{text(lage.meddelande)}</p>
           <button
             type="button"
             onClick={() => void hamta()}
             className="focus-ring mt-3 inline-flex min-h-9 items-center rounded-input bg-paper2 px-3 text-[13px] font-medium"
           >
-            Försök igen
+            {text({ sv: "Försök igen", en: "Try again" })}
           </button>
         </div>
       </div>
@@ -145,26 +153,26 @@ export function Svar({ demo = false }: Readonly<{ demo?: boolean }>) {
 
   if (!lage.svar.length) {
     return (
-      <EmptyState title="Inga svar ännu" />
+      <EmptyState title={text({ sv: "Inga svar ännu", en: "No replies yet" })} />
     );
   }
 
   // Radlista/Rad ur components/ui.tsx: samma hårlinjespråk som tabellerna,
   // skrivet en gång i stället för som lösa klasser här.
   return (
-    <Radlista ariaLabel="Svar från prospekt">
+    <Radlista ariaLabel={text({ sv: "Svar från prospekt", en: "Replies from prospects" })}>
       {lage.svar.map((s) => (
         <Rad key={s.id}>
           <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
             <p className="text-[1.0625rem] font-semibold tracking-[-0.01em]">
-              {s.contact_name ?? s.contact_email ?? "Okänd avsändare"}
+              {s.contact_name ?? s.contact_email ?? text({ sv: "Okänd avsändare", en: "Unknown sender" })}
               {s.company_name ? (
                 <span className="ml-2 text-[15px] font-normal text-ink-subtle">{s.company_name}</span>
               ) : null}
             </p>
             <span className="kicker shrink-0 text-mineral">
-              {nar(s.sent_at)}
-              {s.status ? ` · ${STATUS_ETIKETT[s.status] ?? s.status}` : ""}
+              {nar(s.sent_at, locale)}
+              {s.status ? ` · ${(STATUS_ETIKETT[s.status] ? text(STATUS_ETIKETT[s.status]) : s.status)}` : ""}
             </span>
           </div>
           <p className="mt-2 max-w-[75ch] whitespace-pre-line text-[15px] leading-6 text-ink-muted">

@@ -6,6 +6,7 @@ import { createDemoSupportApi } from "@/lib/demo/support-inbox";
 import { Rad, Radlista } from "@/components/ui";
 import { readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
+import { useLocale, type Localized } from "@/lib/i18n";
 
 /**
  * Autosvarsreglerna per fack.
@@ -23,25 +24,32 @@ import { cn } from "@/lib/utils";
 
 type Regel = { category: string; label: string; mode: "auto" | "draft" | "escalate" };
 
-const LAGEN: { varde: Regel["mode"]; etikett: string; forklaring: string }[] = [
+const LAGEN: { varde: Regel["mode"]; etikett: Localized; forklaring: Localized }[] = [
   {
     varde: "draft",
-    etikett: "Utkast",
-    forklaring: "Du godkänner innan det skickas."
+    etikett: { sv: "Utkast", en: "Draft" },
+    forklaring: { sv: "Du godkänner innan det skickas.", en: "You approve before it is sent." }
   },
   {
     varde: "auto",
-    etikett: "Auto",
-    forklaring: "Agenten väljer själv."
+    etikett: { sv: "Auto", en: "Auto" },
+    forklaring: { sv: "Agenten väljer själv.", en: "The agent decides." }
   },
-  { varde: "escalate", etikett: "Eskalera", forklaring: "Går alltid till en människa." }
+  {
+    varde: "escalate",
+    etikett: { sv: "Eskalera", en: "Escalate" },
+    forklaring: { sv: "Går alltid till en människa.", en: "Always goes to a person." }
+  }
 ];
 
+const ord = (s: string): Localized => ({ sv: s, en: s });
+
 export function SupportRegler({ demo = false }: Readonly<{ demo?: boolean }>) {
+  const { text } = useLocale();
   const [demoApi] = useState(() => (demo ? createDemoSupportApi() : null));
   const [regler, setRegler] = useState<Regel[] | null>(null);
   const [sparar, setSparar] = useState<string | null>(null);
-  const [fel, setFel] = useState<string | null>(null);
+  const [fel, setFel] = useState<Localized | null>(null);
   const [klart, setKlart] = useState<string | null>(null);
 
   const api = useCallback(
@@ -56,11 +64,18 @@ export function SupportRegler({ demo = false }: Readonly<{ demo?: boolean }>) {
         response
       );
       if (!response.ok || kropp?.offline) {
-        throw new Error(kropp?.detail ?? kropp?.error ?? `Kunde inte nå reglerna (${response.status}).`);
+        throw new Error(
+          kropp?.detail ??
+            kropp?.error ??
+            text({
+              sv: `Kunde inte nå reglerna (${response.status}).`,
+              en: `Could not reach the rules (${response.status}).`
+            })
+        );
       }
       return (kropp ?? ({} as T)) as T;
     },
-    [demoApi]
+    [demoApi, text]
   );
 
   const ladda = useCallback(async () => {
@@ -68,7 +83,11 @@ export function SupportRegler({ demo = false }: Readonly<{ demo?: boolean }>) {
       setFel(null);
       setRegler((await api<{ rules?: Regel[] }>("/rules")).rules ?? []);
     } catch (orsak) {
-      setFel(orsak instanceof Error ? orsak.message : "Kunde inte hämta reglerna.");
+      setFel(
+        orsak instanceof Error
+          ? ord(orsak.message)
+          : { sv: "Kunde inte hämta reglerna.", en: "Could not load the rules." }
+      );
       setRegler([]);
     }
   }, [api]);
@@ -88,7 +107,11 @@ export function SupportRegler({ demo = false }: Readonly<{ demo?: boolean }>) {
       // det sparades; en rad som säger samma sak igen är brus.
       setKlart(null);
     } catch (orsak) {
-      setFel(orsak instanceof Error ? orsak.message : "Kunde inte spara regeln.");
+      setFel(
+        orsak instanceof Error
+          ? ord(orsak.message)
+          : { sv: "Kunde inte spara regeln.", en: "Could not save the rule." }
+      );
     } finally {
       setSparar(null);
     }
@@ -109,13 +132,13 @@ export function SupportRegler({ demo = false }: Readonly<{ demo?: boolean }>) {
       <dl className="grid gap-4 border-t border-ink/15 pt-5 sm:grid-cols-3">
         {LAGEN.map((lage) => (
           <div key={lage.varde}>
-            <dt className="text-[0.9375rem] font-semibold">{lage.etikett}</dt>
-            <dd className="mt-1 text-[0.9375rem] leading-6 text-ink-muted">{lage.forklaring}</dd>
+            <dt className="text-[0.9375rem] font-semibold">{text(lage.etikett)}</dt>
+            <dd className="mt-1 text-[0.9375rem] leading-6 text-ink-muted">{text(lage.forklaring)}</dd>
           </div>
         ))}
       </dl>
 
-      <Radlista ariaLabel="Regler per fack">
+      <Radlista ariaLabel={text({ sv: "Regler per fack", en: "Rules per category" })}>
         {/* Fast schema: kategori i vänsterspalten, selecten alltid på samma
             plats längst till höger. Alla rader delar samma select-bredd
             eftersom alternativen är samma, så spalten står stilla. */}
@@ -132,7 +155,7 @@ export function SupportRegler({ demo = false }: Readonly<{ demo?: boolean }>) {
               <select
                 value={regel.mode}
                 disabled={sparar !== null}
-                aria-label={`Hantering av ${regel.label}`}
+                aria-label={text({ sv: `Hantering av ${regel.label}`, en: `Handling of ${regel.label}` })}
                 onChange={(e) => void satt(regel.category, e.target.value)}
                 className={cn(
                   "focus-ring min-h-11 rounded-input border border-ink/15 bg-paper px-3 text-[16px]",
@@ -141,7 +164,7 @@ export function SupportRegler({ demo = false }: Readonly<{ demo?: boolean }>) {
               >
                 {LAGEN.map((lage) => (
                   <option key={lage.varde} value={lage.varde}>
-                    {lage.etikett}
+                    {text(lage.etikett)}
                   </option>
                 ))}
               </select>
@@ -157,7 +180,7 @@ export function SupportRegler({ demo = false }: Readonly<{ demo?: boolean }>) {
       ) : null}
       {fel ? (
         <p role="alert" className="max-w-[62ch] break-words text-[0.9375rem] text-danger">
-          {fel}
+          {text(fel)}
         </p>
       ) : null}
     </div>

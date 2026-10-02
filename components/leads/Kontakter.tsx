@@ -8,6 +8,7 @@ import { Cell, EmptyState, SkeletonRows, Tabell, tabellRad } from "@/components/
 import { EjAktiverad, arEjAktiverad } from "@/components/EjAktiverad";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { readJsonBody } from "@/lib/http/json";
+import { useLocale, type Localized } from "@/lib/i18n";
 
 /**
  * Kontakterna — personerna bakom prospekten.
@@ -43,22 +44,23 @@ type Prospekt = {
 type Lage =
   | { fas: "laddar" }
   | { fas: "ejAktiverad" }
-  | { fas: "fel"; meddelande: string }
+  | { fas: "fel"; meddelande: Localized }
   | { fas: "klar"; prospekt: Prospekt[] };
 
-const STATUS_ETIKETT: Record<string, string> = {
-  new: "Ny",
-  researching: "Research pågår",
-  ready: "Redo",
-  contacted: "Kontaktad",
-  replied: "Svarat",
-  meeting: "Möte",
-  won: "Vunnen",
-  lost: "Förlorad",
-  suppressed: "Spärrad"
+const STATUS_ETIKETT: Record<string, Localized> = {
+  new: { sv: "Ny", en: "New" },
+  researching: { sv: "Research pågår", en: "Researching" },
+  ready: { sv: "Redo", en: "Ready" },
+  contacted: { sv: "Kontaktad", en: "Contacted" },
+  replied: { sv: "Svarat", en: "Replied" },
+  meeting: { sv: "Möte", en: "Meeting" },
+  won: { sv: "Vunnen", en: "Won" },
+  lost: { sv: "Förlorad", en: "Lost" },
+  suppressed: { sv: "Spärrad", en: "Blocked" }
 };
 
 export function Kontakter({ demo = false }: Readonly<{ demo?: boolean }>) {
+  const { text } = useLocale();
   const [lage, setLage] = useState<Lage>({ fas: "laddar" });
   const vag = useArbetsvag();
 
@@ -87,21 +89,27 @@ export function Kontakter({ demo = false }: Readonly<{ demo?: boolean }>) {
           fas: "fel",
           meddelande:
             response.status >= 500
-              ? "Tjänsten svarar inte. Försök igen om en minut."
-              : `Kunde inte hämta kontakterna (status ${response.status}).`
+              ? { sv: "Tjänsten svarar inte. Försök igen om en minut.", en: "The service is not responding. Try again in a minute." }
+              : {
+                  sv: `Kunde inte hämta kontakterna (status ${response.status}).`,
+                  en: `Could not fetch the contacts (status ${response.status}).`
+                }
         });
         return;
       }
       const kropp = await readJsonBody<{ prospects?: Prospekt[]; offline?: boolean }>(response);
       if (!kropp || kropp.offline) {
-        setLage({ fas: "fel", meddelande: "Backenden svarade utan innehåll." });
+        setLage({ fas: "fel", meddelande: { sv: "Backenden svarade utan innehåll.", en: "The backend replied without content." } });
         return;
       }
       setLage({ fas: "klar", prospekt: kropp.prospects ?? [] });
     } catch (error) {
       setLage({
         fas: "fel",
-        meddelande: error instanceof Error ? error.message : "Kunde inte nå servern."
+        meddelande:
+          error instanceof Error
+            ? { sv: error.message, en: error.message }
+            : { sv: "Kunde inte nå servern.", en: "Could not reach the server." }
       });
     }
   }, [demo]);
@@ -113,7 +121,7 @@ export function Kontakter({ demo = false }: Readonly<{ demo?: boolean }>) {
   if (lage.fas === "laddar") return <SkeletonRows />;
 
   if (lage.fas === "ejAktiverad") {
-    return <EjAktiverad yta="Kontakter" />;
+    return <EjAktiverad yta={text({ sv: "Kontakter", en: "Contacts" })} />;
   }
 
   if (lage.fas === "fel") {
@@ -121,14 +129,14 @@ export function Kontakter({ demo = false }: Readonly<{ demo?: boolean }>) {
       <div className="flex items-start gap-3 border-y border-ochre/40 bg-ochre/10 px-4 py-4">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
         <div className="min-w-0">
-          <p className="text-sm font-medium text-ink">Kontakterna kunde inte hämtas</p>
-          <p className="mt-1 text-sm text-ink-muted">{lage.meddelande}</p>
+          <p className="text-sm font-medium text-ink">{text({ sv: "Kontakterna kunde inte hämtas", en: "The contacts could not be fetched" })}</p>
+          <p className="mt-1 text-sm text-ink-muted">{text(lage.meddelande)}</p>
           <button
             type="button"
             onClick={() => void hamta()}
             className="focus-ring mt-3 inline-flex min-h-9 items-center rounded-input bg-paper2 px-3 text-[13px] font-medium"
           >
-            Försök igen
+            {text({ sv: "Försök igen", en: "Try again" })}
           </button>
         </div>
       </div>
@@ -139,7 +147,7 @@ export function Kontakter({ demo = false }: Readonly<{ demo?: boolean }>) {
 
   if (!kontakter.length) {
     return (
-      <EmptyState title="Inga kontaktpersoner ännu" />
+      <EmptyState title={text({ sv: "Inga kontaktpersoner ännu", en: "No contacts yet" })} />
     );
   }
 
@@ -148,12 +156,12 @@ export function Kontakter({ demo = false }: Readonly<{ demo?: boolean }>) {
   // components/ui.tsx för varför bredderna är deklarerade.
   return (
     <Tabell
-      ariaLabel="Kontaktpersoner"
+      ariaLabel={text({ sv: "Kontaktpersoner", en: "Contacts" })}
       kolumner={[
-        { rubrik: "Kontakt", bredd: "30%" },
-        { rubrik: "Bolag", bredd: "28%" },
-        { rubrik: "Segment", bredd: "26%" },
-        { rubrik: "Status", bredd: "16%", hoger: true }
+        { rubrik: text({ sv: "Kontakt", en: "Contact" }), bredd: "30%" },
+        { rubrik: text({ sv: "Bolag", en: "Company" }), bredd: "28%" },
+        { rubrik: text({ sv: "Segment", en: "Segment" }), bredd: "26%" },
+        { rubrik: text({ sv: "Status", en: "Status" }), bredd: "16%", hoger: true }
       ]}
     >
       {kontakter.map((p) => (
@@ -185,7 +193,7 @@ export function Kontakter({ demo = false }: Readonly<{ demo?: boolean }>) {
           </Cell>
           <Cell hoger>
             <span className="text-sm text-ink-muted">
-              {p.status ? (STATUS_ETIKETT[p.status] ?? p.status) : "–"}
+              {p.status ? (STATUS_ETIKETT[p.status] ? text(STATUS_ETIKETT[p.status]) : p.status) : "–"}
             </span>
           </Cell>
         </tr>

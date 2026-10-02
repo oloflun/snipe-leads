@@ -57,6 +57,30 @@ export const UTFALL_ETIKETT: Record<string, string> = {
   ej_satt: "Ej satt"
 };
 
+const NIVA_ETIKETT_EN: Record<string, string> = {
+  A: "Strong",
+  B: "Possible",
+  C: "Ruled out"
+};
+
+const UTFALL_ETIKETT_EN: Record<string, string> = {
+  träff: "Met",
+  delvis: "Partly",
+  miss: "Not met",
+  okänd: "Unknown",
+  ej_satt: "Not set"
+};
+
+/** Nivåns etikett på kundens språk (INV-COPY-001); okänd nivå ger `undefined`. */
+export function nivaEtikett(niva: string, locale: "sv" | "en"): string | undefined {
+  return (locale === "en" ? NIVA_ETIKETT_EN : NIVA_ETIKETT)[niva];
+}
+
+/** Utfallets etikett på kundens språk; okänt utfall ger `undefined`. */
+export function utfallEtikett(utfall: string, locale: "sv" | "en"): string | undefined {
+  return (locale === "en" ? UTFALL_ETIKETT_EN : UTFALL_ETIKETT)[utfall];
+}
+
 function arKriterium(v: unknown): v is Kriterium {
   return (
     typeof v === "object" &&
