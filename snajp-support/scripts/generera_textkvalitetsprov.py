@@ -43,8 +43,20 @@ def _las_env_deploy() -> dict[str, str]:
 
 _nycklar = _las_env_deploy()
 os.environ["LLM_PROVIDER"] = "gemini"
-os.environ["MODEL"] = "gemini-2.5-flash"
+#: PROV_ANTAL begränsar antalet prover per kategori (gratisnyckelns kvot).
+PROV_ANTAL = int(os.environ.get("PROV_ANTAL", "0")) or None
+# Produktionen kör gemini-2.5-flash via Vertex-servicekontot. AI Studio-
+# nyckeln (enda vägen lokalt) serverar inte längre 2.5-flash till nya
+# konton, så provet får köras på en nyare modell: sätt PROV_MODELL för att
+# styra. Prompts, grindar och kvalitetslager är desamma.
+os.environ["MODEL"] = os.environ.get("PROV_MODELL", "gemini-2.5-flash")
 os.environ["GEMINI_API_KEY"] = _nycklar["RAILWAY_DEVELOPMENT_GEMINI_API_KEY"]
+# PROV_NYCKEL=lokal => gratisnyckeln ur snajp-support/.env i stället för
+# den betalda ur .env.deploy (t.ex. när förskottskrediten är slut).
+if os.environ.get("PROV_NYCKEL") == "lokal":
+    for _rad in (ROT / ".env").read_text(encoding="utf-8-sig").splitlines():
+        if _rad.startswith("GEMINI_API_KEY="):
+            os.environ["GEMINI_API_KEY"] = _rad.partition("=")[2].strip().strip('"')
 os.environ.pop("GOOGLE_SERVICE_ACCOUNT_JSON", None)
 
 from app.agent.leads_research_v2 import run_outreach_draft_v2  # noqa: E402
@@ -157,7 +169,7 @@ def _bedomning(text: str, sprak: str = "sv") -> tuple[str, str]:
 
 async def _iris(rapport: list[str]) -> None:
     rapport.append("\n## Iris — V2-mejlutkast (10 st)\n")
-    for namn, sammanfattning, evidens in BOLAG:
+    for namn, sammanfattning, evidens in BOLAG[:PROV_ANTAL]:
         storage = MemoryStorage()
         await storage.save_context_doc(
             TENANT, kind="product_marketing",
@@ -205,7 +217,7 @@ async def _iris(rapport: list[str]) -> None:
 async def _omformulering(rapport: list[str]) -> None:
     for lage in ("forbattra", "kortare", "personligare"):
         rapport.append(f"\n## Omformulering — {lage} (10 st)\n")
-        for amne, utkast in OMFORMULERINGSUTKAST:
+        for amne, utkast in OMFORMULERINGSUTKAST[:PROV_ANTAL]:
             try:
                 nytt = await omformulera_utkast(
                     lage=lage, content=utkast,
@@ -221,7 +233,7 @@ async def _omformulering(rapport: list[str]) -> None:
 
 async def _triage(rapport: list[str]) -> None:
     rapport.append("\n## Mejltriage — svarsutkast (10 st)\n")
-    for avsandare, amne, brodtext in TRIAGE_MEJL:
+    for avsandare, amne, brodtext in TRIAGE_MEJL[:PROV_ANTAL]:
         try:
             data = await triage_email_llm(
                 sender=avsandare, subject=amne, body=brodtext,
