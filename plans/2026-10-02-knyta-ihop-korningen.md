@@ -293,6 +293,31 @@ Antagande utan fråga: Fas 3 (regeln + grinden) före listorna, så det nya UI:t
 
 ---
 
+## Status 2026-10-02 (session 3) — alla tio faser kodade, fyra moment kvar i Antons hand
+
+### Klart i kod (25 commits lokalt på `development`, opushade)
+- [x] Fas 4B kombinera (b0fc6a8, migration 082), Fas 4C Flytta till Iris (6112c9c).
+- [x] Fas 5 hela översättningen: skuldlistan `_SKULD_2026_10_02` är TOM (3a06b06, 6bc46fb).
+- [x] Fas 7 del C: register ∩ signaler, obligatorisk lägesbeskrivning, `_leverbarhet` utan mejlkrav (b027478, migration 083).
+- [x] Fas 8 del D: klassning support/lead/ej relaterat, leads-inkorgen under Iris, brevlådans syfte (1759872, 9cc0a8e, migration 084).
+- [x] Fas 9 del E: nattlig spegling + Flytta till main med HMAC, INV-DATA-003 (cbe2ae5, migration 085).
+- [x] Fas 10 del F: F1–F7 (1b0ba87 backend, ef028d0 frontend, migration 086): tidslinje, anteckningar, uppgifter, sparade vyer, Tabell-segment, Pipeline-kanban, CSV-import med kolumnkartor, automation per leadtyp, envägs CRM-synk HubSpot/Pipedrive.
+- [x] Fas 6.1 delvis: pixelgranskning av Pipeline, Tabell och importpanelen lokalt (demon, 1280 + 375, sv + en); ett fynd rättat (051f131). Flikarna i Iris › Bolag har pilnavigering (planens a11y-notering).
+- [x] Grindar vid avslut: backend 2463 passed/4 skipped, rotinvarianter 425, tsc rent, node 162.
+
+### Kvar — kräver Anton (behörighetsgrinden nekar auto-läget)
+- [ ] Fas 2.2/2.3: `git push origin development` + `railway variables --set LEADS_MERINFO=scrapegraph --service api --environment development`.
+- [ ] Fas 1: `python scripts/railway_migrate.py --env main` (torr) → `--apply` (079, 080_paket_admin, 080_korningar, 081 **plus nu 082–086**, alla additiva).
+- [ ] Development: `python scripts/railway_migrate.py --env development --apply` (082–086) FÖRE eller direkt efter pushen.
+- [ ] `FLYTT_NYCKEL` (main + development) och `FLYTT_MAL_URL` (development) via `scripts/keys.py`; repo-secret `ENV_DEPLOY` för `spegla-dev.yml`.
+- [ ] Fas 2.5 + 6.1 skarpt: lista, Iris-körning, Flytta till Iris, Pipeline/Tabell med riktiga rader, engelska läget på development; `a11y-audit` på Körningar och listvyn.
+
+### Känt och medvetet
+- `/simplify`-skillen finns inte installerad; förenklingspasset gjordes för hand i granskningen av Fas 10 (inget utöver rättningarna ovan).
+- Demon: Listor-segmentet anropar API:t och visar "Du måste vara inloggad" (fanns före Fas 10; importpanelen ärver det).
+- Pipeline på telefon är sidledsscroll med 256 px-kolumner; första kolumnen (Ny) är ofta tom.
+- Gamla prospekt med `origin='import'` går inte att skilja från CSV-importer; nya Iris-fynd får `'iris'`, listrader `'lista'`.
+
 ## Status 2026-10-02 (session 2) — /conclude
 
 ### Completed

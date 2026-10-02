@@ -1,5 +1,23 @@
 # Snipra Status
 
+## 2026-10-02 (session 3) — Claude — hela beställningen från 2026-10-01 kodad: listor, översättning, Iris-kvalitet, inkorg, spegel, Leads Suite
+
+Alla tio faser i `plans/2026-10-02-knyta-ihop-korningen.md` är kodade på
+`development`: kombinera listor och Flytta till Iris (migration 082), engelska
+översättningen klar med tom skuldlista (INV-COPY-001), obligatorisk
+lägesbeskrivning och kontaktväg i leverbarheten (083), Jev-sorterad inkorg och
+leads-inkorg under Iris (084), nattlig spegling main → development och Flytta
+till main (085, INV-DATA-003) och Leads Suite (086): tidslinje, anteckningar,
+uppgifter, sparade vyer, Tabell, Pipeline-kanban, CSV-import med kolumnkartor
+för HubSpot/Pipedrive/Salesforce/Upsales, automation per leadtyp och envägs
+CRM-synk. Backendsviten 2463 gröna, rotinvarianter 425, tsc rent; demon
+pixelgranskad lokalt. **25 commits ligger opushade** och adminfelet i main
+kvarstår tills migrationerna körs: push, `LEADS_MERINFO`, migrationerna 082–086
+mot development och 079–086 mot main, `FLYTT_NYCKEL`/`FLYTT_MAL_URL` och
+repo-secret `ENV_DEPLOY` är Antons kommandon (behörighetsgrinden). Nästa: skarp
+verifiering på development, a11y-audit och pixelgranskning av inloggade ytor.
+Logg: `session-logs/2026-10-02-session-log-3.md`.
+
 ## 2026-10-02 (session 2) — Claude — adminfelet bekräftat, körningar härdade, tvåspråkighetsgrinden, listornas mejl-rader
 
 Adminfelet i produktion är en saknad kolumn (`ss_tenants.status`, migration

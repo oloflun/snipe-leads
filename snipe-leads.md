@@ -131,6 +131,13 @@ separate thing entirely — user-message position only, never system. See
 | `scripts/redis_tls_pa.py` | Enables TLS on the dev Redis database AND rewrites `REDIS_URL` to `rediss://` in one sweep (the two steps are one change). Run by Anton — the auto-mode classifier blocks agents from cloud-infra writes. |
 | `scripts/redis_provisionera.py` | Prepares `main`'s own Redis database (EU, TLS, first paid tier with persistence+replication). `--planer` lists prices read-only; `--skapa` is gated behind §8.1a and an explicit flag. |
 | `scripts/gemini_web_konfig.py` | Copies `GEMINI_API_KEY` from the local env file onto Railway's `web` service (Fas 1.2) so Email-studio stops simulating for logged-in customers. Anton runs it — same classifier gate. |
+| `snajp-support/app/api/leads_suite.py` | Leads Suite (plan del F, migration 086): tidslinjen komponerad ur prospekt, statuslogg, mejltråd, anteckningar och uppgifter (ingen händelsetabell), sparade vyer, `POST /api/leads/import`. |
+| `snajp-support/app/leads/automation.py` | Automationsregler per leadtyp (iris/lista/import/inkorg): utkast_auto, uppfoljning_dagar (0 = av), jev_bortval. Standard = beteendet före reglerna; verkställs i uppföljningssvepet, inkorgen, till-iris och Jev-triagen. |
+| `snajp-support/app/leads/crm_synk.py` | Envägs synk ut till HubSpot/Pipedrive (bolag + anteckning per händelse), nyckeln ur integrationens `api_key`. Kastar aldrig, fire-and-forget från PATCH status och ny anteckning. |
+| `snajp-support/app/email_pipeline/klassning.py` | Inkorgens klassning support/lead/ej relaterat före triagen (kodregler → Jev choice ≥0,9 → standard support), migration 084. |
+| `snajp-support/app/api/admin_flytt.py` | Flytta till main (plan del E, migration 085): HMAC-signerat paket dev → main, mottagaren vägrar i en spegel. INV-DATA-003: enda skrivvägen. |
+| `.github/workflows/spegla-dev.yml` | Nattlig spegling main → development 02:00 UTC via `scripts/railway_seed_dev.py --behall-flyttko`. |
+| `components/leads/LeadsTabell.tsx`, `Pipeline.tsx`, `Tidslinje.tsx`, `ImportCsv.tsx`, `IrisAutomation.tsx` | Leads Suite-vyerna under Iris: tabell med inline-status och sparade vyer, kanban, tidslinje med anteckning/uppgift, CSV-import med kolumnkartor (`lib/leads/importmallar.ts`), automationsinställningar. |
 | `plans/2026-08-29-redis-agentarkitektur.md` | The Redis architecture: deploy-surviving runs (Streams), tenant-scoped semantic answer cache, rolling conversation memory — plus the verdicts on Redis Iris (Agent Memory, LangCache, Context Retriever). |
 | `docs/REDIS_IRIS_EVAL.md` | The adoption gates and sandbox protocol for the managed Iris services — synthetic data only, eight gates before any production use. |
 
@@ -416,7 +423,20 @@ mot den döda kedjan; en riktig onboarding just nu kräver manuella steg mot
 Railway tills skriptet är omskrivet. Se `TENANTS.md` för den nuvarande
 processen och flagga skriptet innan du litar på det.
 
-## Current status (2026-10-02)
+## Current status (2026-10-02, session 3)
+
+Hela beställningen från 2026-10-01 är kodad på `development` (25 opushade commits):
+kombinera listor och Flytta till Iris (082), engelska översättningen klar (skuldlistan
+i INV-COPY-001 är tom), obligatorisk lägesbeskrivning och kontaktväg i leverbarheten
+(083, `_leverbarhet`), Jev-sorterad inkorg och leads-inkorg under Iris (084), nattlig
+spegling main → development och Flytta till main (085, INV-DATA-003), Leads Suite (086):
+tidslinje, anteckningar, uppgifter, sparade vyer, Tabell, Pipeline, CSV-import,
+automation per leadtyp, envägs CRM-synk. Backend 2463 gröna, rotinvarianter 425, tsc
+rent. Kvar i Antons hand: push, `LEADS_MERINFO`, migrationerna 082–086 mot development
+och 079–086 mot main (adminfelet i main kvarstår tills dess), `FLYTT_NYCKEL`/
+`FLYTT_MAL_URL`, repo-secret `ENV_DEPLOY`. Plan: `plans/2026-10-02-knyta-ihop-korningen.md`.
+
+## Current status (2026-10-02, session 2) [historisk]
 
 Iris-körningar bor i liggaren (`leads_job_ledger.korning`, INV-JOB-003) och överlever
 TTL, deploy och uppgivna barnjobb; vyn Iris › Körningar läser därifrån. merinfo är
