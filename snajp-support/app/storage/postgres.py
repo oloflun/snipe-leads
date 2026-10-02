@@ -169,7 +169,7 @@ def _avkoda_prospekt(data: dict[str, Any] | None) -> dict[str, Any] | None:
     på prospects ska behöva läggas till på ETT ställe, inte fyra. Fyra platser
     som måste ändras tillsammans är hur den här buggen såg ut från början.
     """
-    return _avkoda_jsonb(data, "score_breakdown", "jev")
+    return _avkoda_jsonb(data, "score_breakdown", "jev", "signaler")
 
 
 class PostgresStorage:
@@ -331,22 +331,24 @@ class PostgresStorage:
         address: str,
         imap_host: str | None = None,
         secret_enc: str | None = None,
+        syfte: str = "support",
     ) -> dict[str, Any]:
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
                 """
                 insert into ss_mailboxes
-                    (tenant_id, provider, address, status, imap_host, secret_enc)
-                values ($1, $2, lower(trim($3)), 'active', $4, $5)
+                    (tenant_id, provider, address, status, imap_host, secret_enc, syfte)
+                values ($1, $2, lower(trim($3)), 'active', $4, $5, $6)
                 on conflict (tenant_id, address) do update set
                     provider = excluded.provider,
                     imap_host = excluded.imap_host,
                     secret_enc = excluded.secret_enc,
+                    syfte = excluded.syfte,
                     status = 'active',
                     last_error = null
                 returning *
                 """,
-                tenant_id, provider, address, imap_host, secret_enc,
+                tenant_id, provider, address, imap_host, secret_enc, syfte,
             )
         return _row(record)
 
@@ -1741,14 +1743,14 @@ class PostgresStorage:
         self, tenant_id: str, prospect_id: str, *, bedomning: dict[str, Any]
     ) -> dict[str, Any] | None:
         fields = {f: bedomning[f] for f in BEDOMNINGSFALT if bedomning.get(f) is not None}
-        for falt in ("score_breakdown", "jev"):
+        for falt in ("score_breakdown", "jev", "signaler"):
             if falt in fields:
                 fields[falt] = json.dumps(fields[falt], ensure_ascii=False)
         if not fields:
             return await self.get_prospect(tenant_id, prospect_id)
         # Kolumnnamnen kommer ur BEDOMNINGSFALT, aldrig ur anroparen.
         assignments = ", ".join(
-            f"{name} = ${index}" + ("::jsonb" if name in ("score_breakdown", "jev") else "")
+            f"{name} = ${index}" + ("::jsonb" if name in ("score_breakdown", "jev", "signaler") else "")
             for index, name in enumerate(fields, start=3)
         )
         async with self._scoped(tenant_id) as conn:
@@ -2444,6 +2446,7 @@ class PostgresStorage:
         limit: int = 50,
         is_test: bool | None = False,
         inkludera_larm: bool = False,
+        klass: str | None = None,
     ) -> list[dict[str, Any]]:
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(
@@ -2464,6 +2467,11 @@ class PostgresStorage:
                   -- rader, därav inkludera_larm ($7).
                   and (($2::text is null and ($7::boolean or e.status <> 'att_hantera'))
                        or e.status = $2)
+                  -- Klass (084): filtrerat när det ges; utan klass- och
+                  -- statusfilter syns varken leads eller dolda här.
+                  and ($8::text is null or e.klass = $8)
+                  and ($8::text is not null or $2::text is not null or $7::boolean
+                       or e.status not in ('lead', 'ej_relaterat'))
                   and ($3::text is null or exists(
                         select 1 from ss_classifications c
                         where c.email_id = e.id and c.category = $3))
@@ -2481,6 +2489,7 @@ class PostgresStorage:
                 limit,
                 is_test,
                 inkludera_larm,
+                klass,
             )
         results = []
         for record in records:
@@ -2515,6 +2524,8 @@ class PostgresStorage:
         ticket_id: str | None = None,
         is_test: bool | None = None,
         hanterad: bool | None = None,
+        klass: str | None = None,
+        klass_kalla: str | None = None,
     ) -> dict[str, Any] | None:
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
@@ -2528,6 +2539,8 @@ class PostgresStorage:
                     when $6 then coalesce(hanterad_at, now())
                     else null
                   end,
+                  klass = coalesce($7, klass),
+                  klass_kalla = coalesce($8, klass_kalla),
                   updated_at = now()
                 where tenant_id = $1 and id = $2 returning *
                 """,
@@ -2537,6 +2550,8 @@ class PostgresStorage:
                 ticket_id,
                 is_test,
                 hanterad,
+                klass,
+                klass_kalla,
             )
         return _row(record)
 

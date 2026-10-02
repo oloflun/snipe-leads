@@ -70,6 +70,11 @@ def normalisera_kunddata(falt: dict[str, Any]) -> dict[str, Any]:
 #: migration 024/031/079). En lista, delad av båda lagringarna, så att de
 #: aldrig kan glida isär.
 BEDOMNINGSFALT = (
+    # Migration 083 (plan del C): lägesbeskrivning, signaler, och telefonen
+    # ur källmaterialet när registret (081) saknade den.
+    "lagesbeskrivning",
+    "signaler",
+    "contact_phone",
     "niva",
     "score_total",
     "score_breakdown",
@@ -137,8 +142,10 @@ class Storage(Protocol):
         address: str,
         imap_host: str | None = None,
         secret_enc: str | None = None,
+        syfte: str = "support",
     ) -> dict[str, Any]:
         """Kopplar (eller kopplar OM) en inkorg — självbetjäningsvägen.
+        `syfte` (migration 084): support | leads | bada — styr klassningen.
 
         Upsert på (tenant_id, address): en kund som skriver in ett nytt
         app-lösenord för samma adress ska uppdatera raden, inte samla
@@ -992,9 +999,13 @@ class Storage(Protocol):
         limit: int = 50,
         is_test: bool | None = False,
         inkludera_larm: bool = False,
+        klass: str | None = None,
     ) -> list[dict[str, Any]]:
         """Utan statusfilter utesluts 'att_hantera' (migration 078) — utom
-        när `inkludera_larm` är satt, vilket get_email-uppslag behöver."""
+        när `inkludera_larm` är satt, vilket get_email-uppslag behöver.
+        `klass` (migration 084): support | lead | ej_relaterat; None = alla.
+        Utan klassfilter och utan statusfilter visas inte heller 'lead' och
+        'ej_relaterat' — de bor i leads-inkorgen respektive Dolda."""
         ...
 
     async def get_email(self, tenant_id: str, email_id: str) -> dict[str, Any] | None: ...
@@ -1008,10 +1019,13 @@ class Storage(Protocol):
         ticket_id: str | None = None,
         is_test: bool | None = None,
         hanterad: bool | None = None,
+        klass: str | None = None,
+        klass_kalla: str | None = None,
     ) -> dict[str, Any] | None:
         """`hanterad` styr `hanterad_at` (migration 071): True stämplar (om
         inte redan stämplad), False nollar, None rör inte. Oberoende av
-        `status` — se migrationens motivering."""
+        `status` — se migrationens motivering. `klass`/`klass_kalla`
+        (migration 084) skrivs bara när de ges."""
         ...
 
     async def add_attachment(

@@ -331,8 +331,11 @@ class MemoryStorage:
         address: str,
         imap_host: str | None = None,
         secret_enc: str | None = None,
+        syfte: str = "support",
     ) -> dict[str, Any]:
         adress = address.strip().lower()
+        if syfte not in ("support", "leads", "bada"):
+            raise ValueError(f"syfte={syfte!r} bryter mot ss_mailboxes-checken (084).")
         for rad in self.mailboxes.values():
             if rad["tenant_id"] == tenant_id and rad["address"] == adress:
                 rad.update(
@@ -341,6 +344,7 @@ class MemoryStorage:
                     secret_enc=secret_enc,
                     status="active",
                     last_error=None,
+                    syfte=syfte,
                 )
                 return rad
         rad = {
@@ -351,6 +355,7 @@ class MemoryStorage:
             "status": "active",
             "imap_host": imap_host,
             "secret_enc": secret_enc,
+            "syfte": syfte,
             "last_sync_at": None,
             "last_error": None,
             "created_at": _now(),
@@ -1850,6 +1855,7 @@ class MemoryStorage:
         limit: int = 50,
         is_test: bool | None = False,
         inkludera_larm: bool = False,
+        klass: str | None = None,
     ) -> list[dict[str, Any]]:
         rows = [e for e in self.emails.values() if e["tenant_id"] == tenant_id]
         rows.sort(key=lambda e: e["received_at"], reverse=True)
@@ -1861,8 +1867,13 @@ class MemoryStorage:
             summary = self._email_summary(email)
             if status and summary["status"] != status:
                 continue
-            # Samma som postgres: utan statusfilter syns inte larmen (078).
+            # Samma som postgres: utan statusfilter syns inte larmen (078),
+            # och utan klassfilter inte leads eller dolda (084).
             if not status and not inkludera_larm and summary["status"] == "att_hantera":
+                continue
+            if klass is not None and summary.get("klass") != klass:
+                continue
+            if klass is None and not status and not inkludera_larm and summary["status"] in ("lead", "ej_relaterat"):
                 continue
             if category and (
                 not summary["classification"]
@@ -1897,12 +1908,20 @@ class MemoryStorage:
         ticket_id: str | None = None,
         is_test: bool | None = None,
         hanterad: bool | None = None,
+        klass: str | None = None,
+        klass_kalla: str | None = None,
     ) -> dict[str, Any] | None:
         email = self.emails.get(email_id)
         if not email or email["tenant_id"] != tenant_id:
             return None
         if status:
             email["status"] = status
+        if klass is not None:
+            if klass not in ("support", "lead", "ej_relaterat"):
+                raise ValueError(f"klass={klass!r} bryter mot ss_emails-checken (084).")
+            email["klass"] = klass
+        if klass_kalla is not None:
+            email["klass_kalla"] = klass_kalla
         if ticket_id:
             email["ticket_id"] = ticket_id
         if is_test is not None:

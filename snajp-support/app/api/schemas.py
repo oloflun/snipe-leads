@@ -540,6 +540,14 @@ class KopplaInkorgRequest(BaseModel):
     address: str = Field(..., min_length=5, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     app_losenord: str = Field(..., min_length=6, max_length=200)
     imap_host: str | None = Field(default=None, max_length=253)
+    #: Migration 084: vad brevlådan används till — styr klassningen.
+    syfte: Literal["support", "leads", "bada"] = "support"
+
+
+class KlassaRequest(BaseModel):
+    """Manuell omklassning av ett mejl (migration 084) — blir lärdata."""
+
+    klass: Literal["support", "lead", "ej_relaterat"]
 
 
 class OmformuleraDraftRequest(BaseModel):

@@ -23,8 +23,8 @@ from ..config import (
 )
 from ..integrationer.hemligheter import IngenNyckelError, kryptera
 from ..scripts.seed_kb import ensure_tenant_kb
-from .deps import require_tenant
-from .schemas import HanteradRequest, IngestEmailRequest, KopplaInkorgRequest, SeedMockRequest
+from .deps import kraev_uuid, require_tenant
+from .schemas import HanteradRequest, IngestEmailRequest, KlassaRequest, KopplaInkorgRequest, SeedMockRequest
 
 logger = logging.getLogger("snajp-support.inbox")
 
@@ -294,6 +294,7 @@ async def koppla_inkorg(
         # behöver den utskriven — utom icloud, vars provider är 'imap'.
         imap_host=None if provider in ("gmail", "outlook") else host,
         secret_enc=hemlighet,
+        syfte=payload.syfte,
     )
     return {
         "connected": True,
@@ -452,7 +453,10 @@ async def list_inbox(
     q: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     is_test: bool | None = Query(default=None),
+    klass: str | None = Query(default=None),
 ) -> dict:
+    if klass is not None and klass not in ("support", "lead", "ej_relaterat"):
+        raise HTTPException(status_code=422, detail="klass är support, lead eller ej_relaterat.")
     storage = request.app.state.storage
     visar = await _visar_test_i_arenden(storage, tenant)
     lager = is_test
@@ -465,6 +469,7 @@ async def list_inbox(
         search=q,
         limit=limit,
         is_test=lager,
+        klass=klass,
     )
     counts: dict[str, int] = {}
     status_counts: dict[str, int] = {}
@@ -479,6 +484,31 @@ async def list_inbox(
         "status_counts": status_counts,
         "visar_test_i_arenden": visar,
     }
+
+
+@router.post("/api/inbox/{email_id}/klassa")
+async def klassa_om(
+    request: Request, email_id: str, payload: KlassaRequest, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Manuell omklassning (migration 084): människan rättar Jev eller regeln.
+    Beslutet loggas med källa 'manuell' så det går att mäta Jev mot
+    människan. Ett mejl som blir 'lead' flyttar till leads-inkorgen, ett
+    som blir 'ej_relaterat' döljs; ett som blir 'support' går tillbaka till
+    'new' så nästa processa-om tar det."""
+    kraev_uuid(email_id, "mejlet")
+    storage = request.app.state.storage
+    rad = await storage.get_email(tenant["tenant_id"], email_id)
+    if not rad:
+        raise HTTPException(status_code=404, detail="Mejlet finns inte.")
+    ny_status = {"lead": "lead", "ej_relaterat": "ej_relaterat", "support": "new"}[payload.klass]
+    uppdaterad = await storage.update_email(
+        tenant["tenant_id"], email_id, klass=payload.klass, klass_kalla="manuell", status=ny_status
+    )
+    await storage.log_decision(
+        tenant["tenant_id"], email_id=email_id, event="omklassning",
+        detail={"fran": rad.get("klass"), "till": payload.klass, "av": "manuell"},
+    )
+    return {"email": uppdaterad}
 
 
 @router.get("/api/inbox/{email_id}")
