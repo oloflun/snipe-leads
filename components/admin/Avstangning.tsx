@@ -4,6 +4,8 @@ import { useState, useTransition } from "react";
 
 import { btnBase, btnSecondary } from "@/components/ui";
 import { sattKundAktiv } from "@/lib/actions/avstangning";
+import { ordagrant } from "@/lib/admin/sprak";
+import { useLocale, type Localized } from "@/lib/i18n";
 
 /**
  * Manuell avstängning av kontot — trial-konverteringens mänskliga väg.
@@ -37,8 +39,9 @@ export function Avstangning({
   const [bekraftar, setBekraftar] = useState(false);
   const [arAktiv, setArAktiv] = useState(aktiv);
   const [orsak, setOrsak] = useState("");
-  const [fel, setFel] = useState<string | null>(null);
+  const [fel, setFel] = useState<Localized | null>(null);
   const [pending, start] = useTransition();
+  const { text } = useLocale();
 
   const trialDatum = trialSlut ? trialSlut.slice(0, 10) : null;
   // "Idag" i Europe/Stockholm på BÅDA sidor av hydreringen, som i Kundtabell:
@@ -55,7 +58,7 @@ export function Avstangning({
       setFel(null);
       const svar = await sattKundAktiv(tenantId, active, orsakstext);
       if (svar.error) {
-        setFel(svar.error);
+        setFel(ordagrant(svar.error));
         return;
       }
       setArAktiv(active);
@@ -66,18 +69,32 @@ export function Avstangning({
 
   return (
     <section className="mt-14 border-t border-ink/15 pt-8">
-      <h2 className="font-display text-2xl tracking-[-0.03em]">Avstängning</h2>
+      <h2 className="font-display text-2xl tracking-[-0.03em]">
+        {text({ sv: "Avstängning", en: "Suspension" })}
+      </h2>
 
       {arAktiv ? (
         <>
           <p className="mt-3 max-w-[70ch] text-[0.9375rem] leading-7 text-mineral">
             {avtalSignerat
-              ? `Avtal signerat ${avtalSignerat.slice(0, 10)} — kunden betalar. Avstängning härifrån är för uppsägning, inte trial.`
+              ? text({
+                  sv: `Avtal signerat ${avtalSignerat.slice(0, 10)} — kunden betalar. Avstängning härifrån är för uppsägning, inte trial.`,
+                  en: `Contract signed ${avtalSignerat.slice(0, 10)}, the customer pays. Suspending from here is for termination, not trial.`
+                })
               : trialSlutPasserad
-                ? `Provperioden gick ut ${trialDatum} och inget avtal är registrerat. Att stänga av kontot är den manuella trial-konverteringens nej — ingenting stängs av automatiskt.`
+                ? text({
+                    sv: `Provperioden gick ut ${trialDatum} och inget avtal är registrerat. Att stänga av kontot är den manuella trial-konverteringens nej — ingenting stängs av automatiskt.`,
+                    en: `The trial ended ${trialDatum} and no contract is registered. Suspending the account is the manual trial conversion's no. Nothing is suspended automatically.`
+                  })
                 : trialDatum
-                  ? `Provperioden löper till ${trialDatum}. Kunden mejlas 7 dagar och 1 dag innan; avstängning före det datumet är ett aktivt ingripande, inte en konvertering.`
-                  : "Ingen provperiod är registrerad för kontot."}
+                  ? text({
+                      sv: `Provperioden löper till ${trialDatum}. Kunden mejlas 7 dagar och 1 dag innan; avstängning före det datumet är ett aktivt ingripande, inte en konvertering.`,
+                      en: `The trial runs until ${trialDatum}. The customer is emailed 7 days and 1 day before. Suspending before that date is an active intervention, not a conversion.`
+                    })
+                  : text({
+                      sv: "Ingen provperiod är registrerad för kontot.",
+                      en: "No trial is registered for this account."
+                    })}
           </p>
 
           {!bekraftar ? (
@@ -86,28 +103,36 @@ export function Avstangning({
               onClick={() => {
                 setBekraftar(true);
                 if (!orsak && trialSlutPasserad) {
-                  setOrsak(`Provperioden gick ut ${trialDatum} utan avtal.`);
+                  setOrsak(
+                    text({
+                      sv: `Provperioden gick ut ${trialDatum} utan avtal.`,
+                      en: `The trial ended ${trialDatum} without a contract.`
+                    })
+                  );
                 }
               }}
               className={`${btnSecondary} mt-6 !text-danger hover:!bg-danger/10`}
             >
-              Stäng av kontot …
+              {text({ sv: "Stäng av kontot …", en: "Suspend the account …" })}
             </button>
           ) : (
             <div className="mt-6 max-w-[70ch] rounded-input border border-danger/40 bg-danger/5 p-5">
               <p className="text-[0.9375rem] leading-7 text-ink">
-                Avstängningen låser ute alla tre agenterna, den inloggade arbetsytan,
-                portalen och den publika chatten i samma ögonblick. Ingenting raderas —
-                data och inställningar står orörda, och en återaktivering öppnar allt
-                igen.
+                {text({
+                  sv: "Avstängningen låser ute alla tre agenterna, den inloggade arbetsytan, portalen och den publika chatten i samma ögonblick. Ingenting raderas — data och inställningar står orörda, och en återaktivering öppnar allt igen.",
+                  en: "Suspension locks out all three agents, the signed-in workspace, the portal and the public chat at once. Nothing is deleted. Data and settings stay untouched, and reactivating opens everything again."
+                })}
               </p>
               <label className="mt-4 block text-[13px] font-medium text-ink">
-                Orsak — hamnar i händelseloggen
+                {text({ sv: "Orsak — hamnar i händelseloggen", en: "Reason, goes into the event log" })}
                 <input
                   type="text"
                   value={orsak}
                   onChange={(event) => setOrsak(event.target.value)}
-                  placeholder="Provperioden gick ut utan avtal."
+                  placeholder={text({
+                    sv: "Provperioden gick ut utan avtal.",
+                    en: "The trial ended without a contract."
+                  })}
                   maxLength={500}
                   className="focus-ring mt-1.5 block w-full rounded-input border border-ink/15 bg-paper px-3 py-2.5 text-[0.9375rem]"
                 />
@@ -119,7 +144,9 @@ export function Avstangning({
                   onClick={() => skriv(false, orsak)}
                   className={`${btnBase} bg-danger text-paper hover:bg-danger/90`}
                 >
-                  {pending ? "Stänger av …" : `Stäng av ${namn}`}
+                  {pending
+                    ? text({ sv: "Stänger av …", en: "Suspending …" })
+                    : text({ sv: `Stäng av ${namn}`, en: `Suspend ${namn}` })}
                 </button>
                 <button
                   type="button"
@@ -130,7 +157,7 @@ export function Avstangning({
                   }}
                   className={btnSecondary}
                 >
-                  Avbryt
+                  {text({ sv: "Avbryt", en: "Cancel" })}
                 </button>
               </div>
             </div>
@@ -139,23 +166,27 @@ export function Avstangning({
       ) : (
         <>
           <p className="mt-3 max-w-[70ch] text-[0.9375rem] leading-7 text-mineral">
-            Kontot är avstängt: nycklarna avvisas och ingen av agenterna svarar.
-            Data och inställningar står orörda — återaktiveringen öppnar allt igen.
+            {text({
+              sv: "Kontot är avstängt: nycklarna avvisas och ingen av agenterna svarar. Data och inställningar står orörda — återaktiveringen öppnar allt igen.",
+              en: "The account is suspended: keys are rejected and none of the agents answer. Data and settings stay untouched. Reactivating opens everything again."
+            })}
           </p>
           <button
             type="button"
             disabled={pending}
-            onClick={() => skriv(true, "Återaktiverad från adminytan.")}
+            onClick={() => skriv(true, "Återaktiverad från adminytan.")} // inte-copy: händelseloggens orsak
             className={`${btnSecondary} mt-6`}
           >
-            {pending ? "Aktiverar …" : "Aktivera kontot igen"}
+            {pending
+              ? text({ sv: "Aktiverar …", en: "Activating …" })
+              : text({ sv: "Aktivera kontot igen", en: "Reactivate the account" })}
           </button>
         </>
       )}
 
       {fel ? (
         <p role="alert" className="mt-4 max-w-[70ch] rounded-input bg-danger/10 px-4 py-3 text-[0.875rem] text-danger">
-          {fel}
+          {text(fel)}
         </p>
       ) : null}
     </section>

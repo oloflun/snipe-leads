@@ -1,3 +1,4 @@
+import { AdminText } from "@/components/admin/AdminText";
 import { Testkorningar } from "@/components/admin/Testkorningar";
 import { Sidhuvud } from "@/components/ui";
 
@@ -13,7 +14,7 @@ export const dynamic = "force-dynamic";
 export default function Page() {
   return (
     <div>
-      <Sidhuvud title="Testkörningar" />
+      <Sidhuvud title={<AdminText n="testkorningarRubrik" />} />
       <div className="mt-8">
         <Testkorningar />
       </div>

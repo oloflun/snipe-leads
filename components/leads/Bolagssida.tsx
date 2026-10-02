@@ -41,6 +41,11 @@ type Prospekt = {
   company_name: string;
   contact_name: string | null;
   contact_email: string | null;
+  /** Registerkällan (081) och researchen (083). */
+  contact_role?: string | null;
+  contact_phone?: string | null;
+  lagesbeskrivning?: string | null;
+  signaler?: string[] | null;
   status: string;
   /** 'example' för de sex påhittade bolagen (se exempelbolag.py). Redan i svaret. */
   origin?: string | null;
@@ -91,6 +96,14 @@ type KöItem = {
 };
 
 const T = {
+  laget: { sv: "Läget", en: "The situation" },
+  ingenLagesbeskrivning: {
+    sv: "Ingen lägesbeskrivning än. Kör research så skriver Iris den ur källmaterialet.",
+    en: "No situation summary yet. Run research and Iris writes it from the source material."
+  },
+  signaler: { sv: "Signaler", en: "Signals" },
+  kontaktperson: { sv: "Kontaktperson", en: "Contact person" },
+  ingenPersonAn: { sv: "ingen verifierad person än", en: "no verified person yet" },
   tjanstenSvararInte: {
     sv: "Tjänsten svarar inte. Försök igen om en minut.",
     en: "The service is not responding. Try again in a minute."
@@ -653,6 +666,47 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
           {p.website ? (p.sni || p.ort ? " · " : "") + p.website : ""}
         </p>
       ) : null}
+
+      {/* Läget först (Antons krav 2026-10-01): lägesbeskrivning, signaler
+          och kontaktperson med roll och telefon — det kunden läser innan
+          poängen. */}
+      <section className="mb-10 rounded-card border border-ink/12 bg-paper2/40 p-5">
+        <h2 className="text-[1.0625rem] font-semibold">{text(T.laget)}</h2>
+        {p.lagesbeskrivning ? (
+          <p className="mt-2 max-w-[70ch] text-[15px] leading-7 text-ink">{p.lagesbeskrivning}</p>
+        ) : (
+          <p className="mt-2 text-[15px] text-ink-muted">{text(T.ingenLagesbeskrivning)}</p>
+        )}
+        {p.signaler?.length ? (
+          <ul className="mt-3 flex flex-wrap gap-2" aria-label={text(T.signaler)}>
+            {p.signaler.map((s, i) => (
+              <li key={i} className="rounded-input bg-ochre/12 px-2.5 py-1 text-[13px] text-warning">
+                {s}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <p className="mt-3 text-[15px]">
+          {text(T.kontaktperson)}:{" "}
+          {p.contact_name ? (
+            <>
+              <span className="font-medium">{p.contact_name}</span>
+              {p.contact_role ? `, ${p.contact_role}` : ""}
+              {p.contact_phone ? (
+                <>
+                  {" · "}
+                  <a href={`tel:${p.contact_phone.replace(/[^\d+]/g, "")}`} className="num underline-offset-4 hover:underline">
+                    {p.contact_phone}
+                  </a>
+                </>
+              ) : null}
+              {p.contact_email ? ` · ${p.contact_email}` : ""}
+            </>
+          ) : (
+            <span className="text-ink-muted">{text(T.ingenPersonAn)}</span>
+          )}
+        </p>
+      </section>
 
       <div className="grid grid-cols-12 gap-x-8 gap-y-10">
         <dl className="col-span-12 grid grid-cols-12 gap-x-8 gap-y-8">

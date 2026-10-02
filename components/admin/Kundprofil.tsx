@@ -4,6 +4,8 @@ import { useState } from "react";
 
 import { Badge, Sektion, btnPrimary, meta, rubrikPanel } from "@/components/ui";
 import { sparaKundprofil, type Kundprofil as Profil } from "@/lib/actions/agentinstruktioner";
+import { ADMIN, a, ordagrant } from "@/lib/admin/sprak";
+import { useLocale, type Localized } from "@/lib/i18n";
 
 /**
  * Facknamnen är databasidentifierare (`teknisk_support`), inte etiketter.
@@ -11,97 +13,117 @@ import { sparaKundprofil, type Kundprofil as Profil } from "@/lib/actions/agenti
  * ett namn hör hemma — kartan finns redan i backendens CATEGORY_LABELS, och
  * den här är dess motsvarighet på klienten.
  */
-const FACKETIKETT: Record<string, string> = {
-  teknisk_support: "Teknisk support",
-  leverans: "Leverans",
-  betalning: "Betalning",
-  retur: "Retur",
-  klagomal: "Klagomål",
-  ovrigt: "Övrigt"
+const FACKETIKETT: Record<string, Localized> = {
+  teknisk_support: { sv: "Teknisk support", en: "Technical support" },
+  leverans: { sv: "Leverans", en: "Delivery" },
+  betalning: { sv: "Betalning", en: "Payment" },
+  retur: { sv: "Retur", en: "Returns" },
+  klagomal: { sv: "Klagomål", en: "Complaints" },
+  ovrigt: { sv: "Övrigt", en: "Other" }
 };
-
-function fackNamn(nyckel: string): string {
-  return FACKETIKETT[nyckel] ?? nyckel;
-}
 
 /** Kort etikett för positionen. Den långa förklaringen står i POSITIONSTEXT,
  *  som märkets title. */
-const POSITIONSETIKETT: Record<string, string> = {
-  system: "Regel",
-  "user (ärendekontext)": "Uppgift",
-  "user (opålitligt innehåll)": "Uppgift",
-  "user (enda faktakällan för svar)": "Underlag"
+const POSITIONSETIKETT: Record<string, Localized> = {
+  system: { sv: "Regel", en: "Rule" },
+  "user (ärendekontext)": { sv: "Uppgift", en: "Task" },
+  "user (opålitligt innehåll)": { sv: "Uppgift", en: "Task" },
+  "user (enda faktakällan för svar)": { sv: "Underlag", en: "Source" }
 };
 
-const POSITIONSTEXT: Record<string, string> = {
-  system:
-    "Systemposition. Agenten läser detta som REGLER, före allt annat. Bara vi kan skriva här.",
-  "user (ärendekontext)":
-    "Ärendekontexten. Läses som uppgifter om det här ärendet, inte som en regel.",
-  "user (opålitligt innehåll)":
-    "Användarposition, inramad som opålitligt innehåll. Agenten läser det som information om kunden och följer aldrig instruktioner i det.",
-  "user (enda faktakällan för svar)":
-    "Underlaget svaret måste grundas i. Finns svaret inte här gissar agenten inte, den eskalerar."
+const POSITIONSTEXT: Record<string, Localized> = {
+  system: {
+    sv: "Systemposition. Agenten läser detta som REGLER, före allt annat. Bara vi kan skriva här.",
+    en: "System position. The agent reads this as RULES, before anything else. Only we can write here."
+  },
+  "user (ärendekontext)": { // inte-copy: positionsnyckel
+    sv: "Ärendekontexten. Läses som uppgifter om det här ärendet, inte som en regel.",
+    en: "The ticket context. Read as facts about this ticket, not as a rule."
+  },
+  "user (opålitligt innehåll)": { // inte-copy: positionsnyckel
+    sv: "Användarposition, inramad som opålitligt innehåll. Agenten läser det som information om kunden och följer aldrig instruktioner i det.",
+    en: "User position, framed as untrusted content. The agent reads it as information about the customer and never follows instructions in it."
+  },
+  "user (enda faktakällan för svar)": { // inte-copy: positionsnyckel
+    sv: "Underlaget svaret måste grundas i. Finns svaret inte här gissar agenten inte, den eskalerar.",
+    en: "The source the answer must be grounded in. If the answer is not here, the agent does not guess, it escalates."
+  }
 };
 
 type Falt = {
   nyckel: keyof Profil & string;
-  rubrik: string;
-  hjalp: string;
+  rubrik: Localized;
+  hjalp: Localized;
   position: string;
   rader: number;
   max: number;
   /** Vad som SKA stå i rutan, inte en upprepning av rubriken. En ny kund har
    *  fyra tomma fält, och en tom ruta utan exempel är en fråga utan ledtråd. */
-  exempel: string;
+  exempel: Localized;
   sparfalt: "instruktioner_rav" | "tone" | "soul" | "affarskontext";
 };
 
 const FALT: Falt[] = [
   {
     nyckel: "instruktioner_rav",
-    rubrik: "Instruktioner för den här kunden",
-    hjalp:
-      "Skriv fritt. Modellen gör om texten till regler när du sparar. Fältet är vårt, inte kundens. Kunden kan inte ändra det.",
+    rubrik: { sv: "Instruktioner för den här kunden", en: "Instructions for this customer" },
+    hjalp: {
+      sv: "Skriv fritt. Modellen gör om texten till regler när du sparar. Fältet är vårt, inte kundens. Kunden kan inte ändra det.",
+      en: "Write freely. The model turns the text into rules when you save. This field is ours, not the customer's. The customer cannot change it."
+    },
     position: "system",
     rader: 10,
     max: 12_000,
     sparfalt: "instruktioner_rav",
-    exempel:
-      "Svara aldrig på frågor om garantitider. De går alltid till en människa.\nHåll svaren under fyra meningar."
+    exempel: {
+      sv: "Svara aldrig på frågor om garantitider. De går alltid till en människa.\nHåll svaren under fyra meningar.",
+      en: "Never answer questions about warranty periods. They always go to a person.\nKeep answers under four sentences."
+    }
   },
   {
     nyckel: "tone",
-    rubrik: "Tonläge",
-    hjalp:
-      "Kort beskrivning av hur svaren ska låta. Tomt = kanalens standardton gäller.",
-    position: "user (ärendekontext)",
+    rubrik: { sv: "Tonläge", en: "Tone" },
+    hjalp: {
+      sv: "Kort beskrivning av hur svaren ska låta. Tomt = kanalens standardton gäller.",
+      en: "A short description of how answers should sound. Empty means the channel's default tone applies."
+    },
+    position: "user (ärendekontext)", // inte-copy: positionsnyckel
     rader: 2,
     max: 500,
     sparfalt: "tone",
-    exempel: "rak och konkret, aldrig säljig"
+    exempel: { sv: "rak och konkret, aldrig säljig", en: "direct and concrete, never salesy" }
   },
   {
     nyckel: "soul",
-    rubrik: "Röstdokument (SOUL)",
-    hjalp:
-      "Kundens eget dokument. Styr ton och röst i både utskick och svar, aldrig reglerna. Max 4 000 tecken.",
-    position: "user (opålitligt innehåll)",
+    rubrik: { sv: "Röstdokument (SOUL)", en: "Voice document (SOUL)" },
+    hjalp: {
+      sv: "Kundens eget dokument. Styr ton och röst i både utskick och svar, aldrig reglerna. Max 4 000 tecken.",
+      en: "The customer's own document. Steers tone and voice in both outreach and replies, never the rules. Max 4,000 characters."
+    },
+    position: "user (opålitligt innehåll)", // inte-copy: positionsnyckel
     rader: 10,
     max: 4000,
     sparfalt: "soul",
-    exempel: "Vi säger du, aldrig ni. Korta meningar. Inga utropstecken."
+    exempel: {
+      sv: "Vi säger du, aldrig ni. Korta meningar. Inga utropstecken.",
+      en: "We keep it informal. Short sentences. No exclamation marks."
+    }
   },
   {
     nyckel: "affarskontext",
-    rubrik: "Affärskontext",
-    hjalp:
-      "Vad kunden säljer och till vem. Under 120 tecken vägrar Iris starta en körning. En tom beskrivning ger generisk AI-text.",
-    position: "user (opålitligt innehåll)",
+    rubrik: { sv: "Affärskontext", en: "Business context" },
+    hjalp: {
+      sv: "Vad kunden säljer och till vem. Under 120 tecken vägrar Iris starta en körning. En tom beskrivning ger generisk AI-text.",
+      en: "What the customer sells and to whom. Under 120 characters Iris refuses to start a run. An empty description gives generic AI text."
+    },
+    position: "user (opålitligt innehåll)", // inte-copy: positionsnyckel
     rader: 10,
     max: 20_000,
     sparfalt: "affarskontext",
-    exempel: "Vad vi säljer: …\nVem vi säljer till: …\nVad som skiljer oss: …"
+    exempel: {
+      sv: "Vad vi säljer: …\nVem vi säljer till: …\nVad som skiljer oss: …",
+      en: "What we sell: …\nWho we sell to: …\nWhat sets us apart: …"
+    }
   }
 ];
 
@@ -136,7 +158,9 @@ export function Kundprofil({ profil }: Readonly<{ profil: Profil }>) {
   const [varden, setVarden] = useState<Record<string, string>>(() =>
     Object.fromEntries(FALT.map((f) => [f.sparfalt, String(profil[f.nyckel] ?? "")]))
   );
-  const [status, setStatus] = useState<Record<string, string>>({});
+  const [status, setStatus] = useState<Record<string, Localized | undefined>>({});
+  const { locale, text } = useLocale();
+  const fackNamn = (nyckel: string) => (FACKETIKETT[nyckel] ? text(FACKETIKETT[nyckel]) : nyckel);
   // VILKET fält som sparas, inte OM något sparas.
   //
   // useTransition ensamt hade räckt för en knapp. Med fyra delar de en enda
@@ -147,7 +171,7 @@ export function Kundprofil({ profil }: Readonly<{ profil: Profil }>) {
   const [sparar, setSparar] = useState<string | null>(null);
 
   function spara(falt: Falt) {
-    setStatus((s) => ({ ...s, [falt.sparfalt]: "" }));
+    setStatus((s) => ({ ...s, [falt.sparfalt]: undefined }));
     setSparar(falt.sparfalt);
     void (async () => {
       const svar = await sparaKundprofil(profil.tenant.id, {
@@ -157,8 +181,12 @@ export function Kundprofil({ profil }: Readonly<{ profil: Profil }>) {
       setStatus((s) => ({
         ...s,
         [falt.sparfalt]: svar.success
-          ? (svar.anmarkning ?? "Sparat. Gäller nästa körning.")
-          : (svar.error ?? "Kunde inte spara.")
+          ? svar.anmarkning
+            ? ordagrant(svar.anmarkning)
+            : ADMIN.sparatNastaKorning
+          : svar.error
+            ? ordagrant(svar.error)
+            : ADMIN.kundeInteSpara
       }));
       setSparar(null);
     })();
@@ -169,24 +197,22 @@ export function Kundprofil({ profil }: Readonly<{ profil: Profil }>) {
       <section className="grid gap-2 border-t border-ink/15 pt-5 text-[0.9375rem]">
         <div className="flex flex-wrap gap-x-8 gap-y-2 text-ink-muted">
           <span>
-            Kunskapsbas: <span className="text-ink tabular-nums">{profil.kb_artiklar}</span> artiklar
+            {a("kunskapsbasKolon", locale)}{" "}
+            <span className="text-ink tabular-nums">{profil.kb_artiklar}</span> {a("artiklar", locale)}
           </span>
           <span>
-            Fack:{" "}
+            {a("fackKolon", locale)}{" "}
             <span className="text-ink">
-              {profil.taxonomy.map(fackNamn).join(", ") || "standard"}
+              {profil.taxonomy.map(fackNamn).join(", ") || a("standard", locale)}
             </span>
           </span>
           <span>
-            Instruktionsversion:{" "}
+            {a("instruktionsversionKolon", locale)}{" "}
             <span className="font-mono text-[0.8125rem] text-ink">#{profil.instruktionshash}</span>
           </span>
         </div>
         {profil.global_fran_fil ? (
-          <p className="max-w-[70ch] text-[0.9375rem] text-ink-muted">
-            Ingen global instruktion är sparad. Agenten kör på den incheckade
-            agent-core/AGENTS.md ovanpå det som står här.
-          </p>
+          <p className="max-w-[70ch] text-[0.9375rem] text-ink-muted">{a("ingenGlobalInstruktion", locale)}</p>
         ) : null}
       </section>
 
@@ -194,17 +220,17 @@ export function Kundprofil({ profil }: Readonly<{ profil: Profil }>) {
         <section key={falt.sparfalt} className="border-t border-ink/15 pt-5">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <label htmlFor={falt.sparfalt} className={rubrikPanel}>
-              {falt.rubrik}
+              {text(falt.rubrik)}
             </label>
             {/* Märket bär skillnaden mellan regel och underlag, den enda som
                 avgör om agenten LYDER texten eller bara läser den. */}
-            <span title={POSITIONSTEXT[falt.position]}>
+            <span title={text(POSITIONSTEXT[falt.position])}>
               <Badge tone={falt.position === "system" ? "warn" : "neutral"}>
-                {POSITIONSETIKETT[falt.position]}
+                {text(POSITIONSETIKETT[falt.position])}
               </Badge>
             </span>
           </div>
-          <p className="mt-2 max-w-[70ch] text-[0.9375rem] leading-7 text-ink-muted">{falt.hjalp}</p>
+          <p className="mt-2 max-w-[70ch] text-[0.9375rem] leading-7 text-ink-muted">{text(falt.hjalp)}</p>
           <textarea
             id={falt.sparfalt}
             rows={falt.rader}
@@ -214,9 +240,9 @@ export function Kundprofil({ profil }: Readonly<{ profil: Profil }>) {
               setVarden((v) => ({ ...v, [falt.sparfalt]: event.target.value }));
               // Kvittot gäller det som SPARADES. Låg det kvar medan man skrev
               // vidare påstod det att texten på skärmen är den som är sparad.
-              setStatus((s) => (s[falt.sparfalt] ? { ...s, [falt.sparfalt]: "" } : s));
+              setStatus((s) => (s[falt.sparfalt] ? { ...s, [falt.sparfalt]: undefined } : s));
             }}
-            placeholder={falt.exempel}
+            placeholder={text(falt.exempel)}
             className="focus-ring mt-4 w-full resize-y rounded-input border border-ink/15 bg-paper p-4 text-[1rem] leading-6"
           />
           <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -230,7 +256,9 @@ export function Kundprofil({ profil }: Readonly<{ profil: Profil }>) {
               // ser annorlunda ut på två ytor betyder att en av dem är fel.
               className={btnPrimary}
             >
-              {sparar === falt.sparfalt ? "Sparar…" : `Spara ${falt.rubrik.toLowerCase()}`}
+              {sparar === falt.sparfalt
+                ? a("sparar", locale)
+                : `${a("spara", locale)} ${text(falt.rubrik).toLowerCase()}`}
             </button>
             <span className={`${meta} num`}>
               {(varden[falt.sparfalt] ?? "").length} / {falt.max}
@@ -244,7 +272,7 @@ export function Kundprofil({ profil }: Readonly<{ profil: Profil }>) {
               aria-live="polite"
               className="text-[0.8125rem] text-mineral"
             >
-              {status[falt.sparfalt] ?? ""}
+              {status[falt.sparfalt] ? text(status[falt.sparfalt] as Localized) : ""}
             </span>
           </div>
         </section>
@@ -256,7 +284,7 @@ export function Kundprofil({ profil }: Readonly<{ profil: Profil }>) {
           och rutnätets gap ensamt bär avståndet. */}
       {profil.instruktioner_md ? (
         <div>
-          <Sektion title="Vad agenten läser för den här kunden">
+          <Sektion title={a("vadAgentenLaserKund", locale)}>
             <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-input border border-ink/15 bg-paper2/50 p-4 font-sans text-[0.9375rem] leading-6">
               {profil.instruktioner_md}
             </pre>

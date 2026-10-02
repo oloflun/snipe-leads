@@ -1,3 +1,4 @@
+import { AdminText } from "@/components/admin/AdminText";
 import { Portfoljvy } from "@/components/admin/Portfoljvy";
 import { Sidhuvud } from "@/components/ui";
 import { berikaAlla } from "@/lib/admin/exempeldata";
@@ -32,7 +33,7 @@ export default async function Page() {
   if (error) {
     return (
       <div>
-        <Sidhuvud title="Översikt" />
+        <Sidhuvud title={<AdminText n="oversiktRubrik" />} />
         <p role="alert" className="mt-8 max-w-[70ch] break-words text-[0.9375rem] text-danger">
           {error}
         </p>

@@ -160,35 +160,6 @@ def test_grinden_fäller_det_den_ska():
 #: komponenter först, sedan demon, produktsidorna, Iris, support/kvitton/
 #: inställningar, auth/admin/marknad, juridiken.
 _SKULD_2026_10_02: set[str] = {
-    "app/admin/agentanvandning/page.tsx",
-    "app/admin/korningar/[id]/page.tsx",
-    "app/admin/korningar/page.tsx",
-    "app/admin/kunder/[id]/data/page.tsx",
-    "app/admin/kunder/[id]/page.tsx",
-    "app/admin/page.tsx",
-    "app/admin/paket/page.tsx",
-    "app/admin/testkorningar/page.tsx",
-    "app/angerratt/page.tsx",
-    "app/avregistrera/[token]/page.tsx",
-    "app/cookies/page.tsx",
-    "app/integritetspolicy/page.tsx",
-    "app/villkor/page.tsx",
-    "components/SoulEditor.tsx",
-    "components/admin/AgentAnvandning.tsx",
-    "components/admin/Agentinstruktioner.tsx",
-    "components/admin/Avstangning.tsx",
-    "components/admin/KonverteraTestkund.tsx",
-    "components/admin/Kunddata.tsx",
-    "components/admin/Kundprofil.tsx",
-    "components/admin/PaketHantering.tsx",
-    "components/admin/Testkorningar.tsx",
-    "components/auth/LoginForm.tsx",
-    "components/auth/OnboardingWizard.tsx",
-    "components/auth/ResetPasswordForm.tsx",
-    "components/crm/CrmDemo.tsx",
-    "components/snajp/InboxTriage.tsx",
-    "components/snajp/IntegrationSection.tsx",
-    "components/snajp/JournalVy.tsx",
 }
 
 

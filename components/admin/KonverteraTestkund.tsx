@@ -6,6 +6,8 @@ import {
   konverteraTestkund,
   type KonverteraRapport
 } from "@/lib/actions/konvertera";
+import { a, ordagrant } from "@/lib/admin/sprak";
+import { useLocale, type Localized } from "@/lib/i18n";
 
 type Mal = { slug: string; name: string };
 
@@ -25,8 +27,9 @@ export function KonverteraTestkund({
 }: Readonly<{ fran: string; mal: Mal[] }>) {
   const [till, setTill] = useState(mal[0]?.slug ?? "");
   const [rapport, setRapport] = useState<KonverteraRapport | null>(null);
-  const [fel, setFel] = useState<string | null>(null);
+  const [fel, setFel] = useState<Localized | null>(null);
   const [pending, start] = useTransition();
+  const { locale, text } = useLocale();
 
   const valda = useMemo(() => mal.find((m) => m.slug === till), [mal, till]);
 
@@ -36,7 +39,7 @@ export function KonverteraTestkund({
       setFel(null);
       const svar = await konverteraTestkund({ fran, till, apply });
       if (svar.error) {
-        setFel(svar.error);
+        setFel(ordagrant(svar.error));
         return;
       }
       setRapport(svar.rapport ?? null);
@@ -48,9 +51,9 @@ export function KonverteraTestkund({
   }
 
   return (
-    <Sektion title="Flytta till riktigt konto">
+    <Sektion title={a("flyttaTillRiktigt", locale)}>
       <label className={`block ${etikett}`}>
-        Målkonto
+        {a("malkonto", locale)}
         <select
           value={till}
           onChange={(event) => {
@@ -59,7 +62,7 @@ export function KonverteraTestkund({
           }}
           className="focus-ring mt-2 block min-h-11 w-full max-w-md rounded-input bg-paper2 px-3 text-[1rem] text-ink"
         >
-          {mal.length === 0 ? <option value="">Inga riktiga konton att flytta till</option> : null}
+          {mal.length === 0 ? <option value="">{a("ingaRiktigaKonton", locale)}</option> : null}
           {mal.map((m) => (
             <option key={m.slug} value={m.slug}>
               {m.name} ({m.slug})
@@ -75,7 +78,7 @@ export function KonverteraTestkund({
           onClick={() => kora(false)}
           className={btnSecondary}
         >
-          {pending ? "Kör…" : "Visa vad som skulle flyttas"}
+          {pending ? a("kor", locale) : a("visaVadSomFlyttas", locale)}
         </button>
         {rapport && !rapport.apply ? (
           <button
@@ -84,14 +87,14 @@ export function KonverteraTestkund({
             onClick={() => kora(true)}
             className={btnPrimary}
           >
-            Skriv över {valda?.name ?? till}
+            {a("skrivOver", locale)} {valda?.name ?? till}
           </button>
         ) : null}
       </div>
 
       {fel ? (
         <p role="alert" className="mt-4 text-[0.9375rem] text-danger">
-          {fel}
+          {text(fel)}
         </p>
       ) : null}
 
@@ -101,16 +104,16 @@ export function KonverteraTestkund({
           {rapport.kunskapsbas ? (
             <ul className="mt-3 space-y-1 text-ink-muted">
               <li>
-                Kunskapsbas: {rapport.kunskapsbas.till} rader i målet raderas,{" "}
-                {rapport.kunskapsbas.fran} kopieras.
+                {a("kunskapsbasKolon", locale)} {rapport.kunskapsbas.till} {a("raderIMaletRaderas", locale)}{" "}
+                {rapport.kunskapsbas.fran} {a("kopieras", locale)}
               </li>
               <li>
-                Röstdokument: {rapport.rostdokument?.till ?? 0} raderas,{" "}
-                {rapport.rostdokument?.fran ?? 0} kopieras.
+                {a("rostdokumentKolon", locale)} {rapport.rostdokument?.till ?? 0} {a("raderas", locale)}{" "}
+                {rapport.rostdokument?.fran ?? 0} {a("kopieras", locale)}
               </li>
               <li>
-                Fackregler: {rapport.fackregler?.till ?? 0} raderas,{" "}
-                {rapport.fackregler?.fran ?? 0} kopieras.
+                {a("fackreglerKolon", locale)} {rapport.fackregler?.till ?? 0} {a("raderas", locale)}{" "}
+                {rapport.fackregler?.fran ?? 0} {a("kopieras", locale)}
               </li>
             </ul>
           ) : null}

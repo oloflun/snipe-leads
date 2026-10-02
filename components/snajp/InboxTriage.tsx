@@ -4,7 +4,7 @@ import { ChevronDown, Inbox, Loader2, ShieldAlert, Sparkles } from "lucide-react
 import { useMemo, useState } from "react";
 import { Badge, btnPrimary } from "@/components/ui";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
-import { useLocale } from "@/lib/i18n";
+import { useLocale, type Localized } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 type SampleEmail = { from: string; subject: string; body: string };
@@ -24,34 +24,44 @@ const sampleEmails: SampleEmail[] = [
   {
     from: "anna.lindqvist@mail.se",
     subject: "Kan inte logga in",
-    body: "Hej! Jag försöker logga in på mitt konto men får bara felmeddelande. Har försökt återställa lösenordet men inget mail kommer. Kan ni hjälpa mig?"
+    body: "Hej! Jag försöker logga in på mitt konto men får bara felmeddelande. Har försökt återställa lösenordet men inget mail kommer. Kan ni hjälpa mig?" // inte-copy
   },
   {
     from: "johan.berg@mail.se",
-    subject: "Var är mitt paket?",
-    body: "Beställde för en vecka sedan och spårningen har inte uppdaterats på fyra dagar. Leveransen skulle ta 2–4 vardagar. När kommer paketet?"
+    subject: "Var är mitt paket?", // inte-copy
+    body: "Beställde för en vecka sedan och spårningen har inte uppdaterats på fyra dagar. Leveransen skulle ta 2–4 vardagar. När kommer paketet?" // inte-copy
   },
   {
     from: "sara.nystrom@mail.se",
-    subject: "Dubbeldragning på kortet",
-    body: "Jag ser två dragningar på exakt samma belopp för min beställning. Har ni debiterat mig dubbelt? Vill gärna få det utrett."
+    subject: "Dubbeldragning på kortet", // inte-copy
+    body: "Jag ser två dragningar på exakt samma belopp för min beställning. Har ni debiterat mig dubbelt? Vill gärna få det utrett." // inte-copy
   },
   {
     from: "erik.holm@mail.se",
-    subject: "Trasig vara, kräver återbetalning",
-    body: "Vasen kom fram i tusen bitar trots bubbelplast. Helt oacceptabelt!! Jag vill ha pengarna tillbaka omgående, annars anmäler jag er till ARN."
+    subject: "Trasig vara, kräver återbetalning", // inte-copy
+    body: "Vasen kom fram i tusen bitar trots bubbelplast. Helt oacceptabelt!! Jag vill ha pengarna tillbaka omgående, annars anmäler jag er till ARN." // inte-copy
   },
   {
     from: "maria.ek@mail.se",
     subject: "Radera mina uppgifter",
-    body: "Hej, jag vill radera mitt konto och alla personuppgifter ni har om mig enligt GDPR. Hur går jag tillväga?"
+    body: "Hej, jag vill radera mitt konto och alla personuppgifter ni har om mig enligt GDPR. Hur går jag tillväga?" // inte-copy
   },
   {
     from: "lars.strand@mail.se",
     subject: "Rabattkoden funkar inte?",
-    body: "Försökte använda välkomstkoden i kassan men den gick inte igenom. Är den bara för första köpet eller vad gäller?"
+    body: "Försökte använda välkomstkoden i kassan men den gick inte igenom. Är den bara för första köpet eller vad gäller?" // inte-copy
   }
 ];
+
+/** Demomejlen ovan skickas till triagen och är svenska med flit (inte-copy). */
+const T = {
+  offline: { sv: "Tjänsten är inte tillgänglig just nu. Försök igen om en stund.", en: "The service is not available right now. Try again in a moment." },
+  okant: { sv: "Okänt fel", en: "Unknown error" }
+} satisfies Record<string, Localized>;
+
+function ordagrant(varde: string): Localized {
+  return { sv: varde, en: varde };
+}
 
 const categoryOrder = [
   "teknisk_support",
@@ -66,7 +76,7 @@ export function InboxTriage() {
   const { text } = useLocale();
   const [results, setResults] = useState<TriageResult[] | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Localized | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
 
   const grouped = useMemo(() => {
@@ -98,15 +108,15 @@ export function InboxTriage() {
           results?: TriageResult[];
         }>(response)) ?? {};
       if (payload.offline) {
-        setError(payload.error ?? "Tjänsten är inte tillgänglig just nu. Försök igen om en stund.");
+        setError(payload.error ? ordagrant(payload.error) : T.offline);
         return;
       }
       if (!response.ok) {
-        throw new Error(payload.error ?? "Okänt fel");
+        throw new Error(payload.error ?? text(T.okant));
       }
       setResults(payload.results ?? []);
     } catch (caught) {
-      setError(felmeddelande(caught));
+      setError(ordagrant(felmeddelande(caught)));
     } finally {
       setBusy(false);
     }
@@ -134,7 +144,7 @@ export function InboxTriage() {
 
       {error ? (
         <div className="rounded-input bg-danger/10 px-4 py-3 text-[0.9375rem] text-ink-muted">
-          {error}
+          {text(error)}
         </div>
       ) : null}
 
