@@ -189,7 +189,6 @@ _SKULD_2026_10_02: set[str] = {
     "components/dashboard/AgentLast.tsx",
     "components/dashboard/Analys.tsx",
     "components/kvitton/KvittoChatt.tsx",
-    "components/kvitton/KvittoDemo.tsx",
     "components/kvitton/KvittoVy.tsx",
     "components/kvitton/KvittoYta.tsx",
     "components/leads/AgentLarande.tsx",
@@ -202,9 +201,6 @@ _SKULD_2026_10_02: set[str] = {
     "components/leads/LeadsControls.tsx",
     "components/leads/LeadsSnabbsok.tsx",
     "components/leads/Svar.tsx",
-    "components/marketing/BokaDemoFormular.tsx",
-    "components/marketing/LaddaNerAppen.tsx",
-    "components/marketing/ProduktBilder.tsx",
     "components/settings/Affarskontext.tsx",
     "components/settings/Inkorgar.tsx",
     "components/settings/Kunskapsbas.tsx",
@@ -213,11 +209,9 @@ _SKULD_2026_10_02: set[str] = {
     "components/settings/SupportRegler.tsx",
     "components/settings/TeamSettings.tsx",
     "components/settings/TemaSettings.tsx",
-    "components/snajp/Dashboard.tsx",
     "components/snajp/InboxTriage.tsx",
     "components/snajp/IntegrationSection.tsx",
     "components/snajp/JournalVy.tsx",
-    "components/snajp/SupportChat.tsx",
 }
 
 

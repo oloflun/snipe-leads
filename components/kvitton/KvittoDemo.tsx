@@ -15,6 +15,8 @@ import {
 } from "@/components/ui";
 import { Integritetsnotis } from "@/components/kvitton/Integritetsnotis";
 import { FRAGOR, MEJL, SAMMANFATTNING, SAMMANFATTNINGSTEXT } from "@/lib/demo/kvitton";
+import { useLocale } from "@/lib/i18n";
+import type { Localized } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /**
@@ -47,6 +49,40 @@ import { cn } from "@/lib/utils";
  */
 
 const STEG_MS = 520;
+
+/** Demons gränssnitt. Mejlen, butikerna och chattens frågor (lib/demo/kvitton) är exempeldata och stannar svenska. */
+const T = {
+  skanna: { sv: "Skanna inkorgen", en: "Scan the inbox" },
+  korIgen: { sv: "Kör igen", en: "Run again" },
+  laserMejl: { sv: "Läser mejl", en: "Reading email" },
+  av: { sv: "av", en: "of" },
+  kvittonHittade: { sv: "kvitton hittade", en: "receipts found" },
+  attGranska: { sv: "att granska", en: "to review" },
+  inkorgen: { sv: "Inkorgen", en: "Inbox" },
+  mejl: { sv: "mejl", en: "emails" },
+  instruktion: {
+    sv: "Tryck på Skanna inkorgen, så läser agenten mejlen ett i taget och plockar ut beloppen medan du tittar på.",
+    en: "Press Scan the inbox, and the agent reads the emails one at a time and picks out the amounts while you watch."
+  },
+  laser: { sv: "Läser…", en: "Reading…" },
+  kvitto: { sv: "Kvitto", en: "Receipt" },
+  granska: { sv: "Granska", en: "Review" },
+  inteKvitto: { sv: "Inte ett kvitto", en: "Not a receipt" },
+  utplockade: { sv: "Utplockade kvitton", en: "Extracted receipts" },
+  datum: { sv: "Datum", en: "Date" },
+  butik: { sv: "Butik", en: "Store" },
+  kategori: { sv: "Kategori", en: "Category" },
+  belopp: { sv: "Belopp", en: "Amount" },
+  sammanfattning: { sv: "Sammanfattning", en: "Summary" },
+  totalt: { sv: "Totalt", en: "Total" },
+  avlasta: { sv: "avlästa kvitton", en: "receipts read" },
+  ingaendeMoms: { sv: "Ingående moms", en: "Input VAT" },
+  vantaPaSummor: {
+    sv: "Periodens summor visas när skanningen är klar.",
+    en: "The period's totals appear when the scan is done."
+  },
+  fragaAssistenten: { sv: "Fråga kvitto-assistenten", en: "Ask the receipt assistant" }
+} satisfies Record<string, Localized>;
 
 function kr(varde: string): string {
   const tal = Number(varde);
@@ -109,6 +145,7 @@ function DemoChatt() {
 }
 
 export function KvittoDemo() {
+  const { text } = useLocale();
   /**
    * -1 = inte startad. 0..MEJL.length = så många mejl som hunnit läsas.
    * Två faser per mejl: det GLIDER IN (syns i inkorgen) i steg n, och
@@ -160,24 +197,25 @@ export function KvittoDemo() {
         {steg < 0 ? (
           <button type="button" onClick={starta} className={btnPrimary}>
             <Play className="h-4 w-4 text-warning" aria-hidden />
-            Skanna inkorgen
+            {text(T.skanna)}
           </button>
         ) : (
           <button type="button" onClick={nollstall} className={btnSecondary}>
             <RotateCcw className="h-4 w-4" aria-hidden />
-            Kör igen
+            {text(T.korIgen)}
           </button>
         )}
         {kor ? (
           <p className="flex items-center gap-2 text-[0.9375rem] text-ink-muted" role="status">
             <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-            Läser mejl {Math.min(steg + 1, MEJL.length)} av {MEJL.length}…
+            {text(T.laserMejl)} {Math.min(steg + 1, MEJL.length)} {text(T.av)} {MEJL.length}…
           </p>
         ) : null}
         {klar ? (
           <p className="flex items-center gap-2 text-[0.9375rem] text-moss" role="status">
             <CheckCircle2 className="h-4 w-4" aria-hidden />
-            {SAMMANFATTNING.antal} kvitton hittade, {SAMMANFATTNING.antalGranska} att granska
+            {SAMMANFATTNING.antal} {text(T.kvittonHittade)}, {SAMMANFATTNING.antalGranska}{" "}
+            {text(T.attGranska)}
           </p>
         ) : null}
       </div>
@@ -187,17 +225,16 @@ export function KvittoDemo() {
         <div className="min-w-0 lg:col-span-7">
           <div className="rounded-card border border-ink/12 bg-paper2/30 p-5">
             <div className="flex items-baseline justify-between gap-4">
-              <h2 className={rubrikPanel}>Inkorgen</h2>
+              <h2 className={rubrikPanel}>{text(T.inkorgen)}</h2>
               <p className={cn(meta, "num")}>
-                {synliga.length} av {MEJL.length} mejl
+                {synliga.length} {text(T.av)} {MEJL.length} {text(T.mejl)}
               </p>
             </div>
 
             {steg < 0 ? (
               <p className="mt-4 flex items-center gap-2 border-t border-ink/10 pt-4 text-[0.9375rem] leading-6 text-ink-muted">
                 <Mail className="h-4 w-4 shrink-0 text-mineral" aria-hidden />
-                Tryck på Skanna inkorgen, så läser agenten mejlen ett i taget och
-                plockar ut beloppen medan du tittar på.
+                {text(T.instruktion)}
               </p>
             ) : (
               <ul className="mt-3 divide-y divide-ink/10 border-t border-ink/10">
@@ -216,13 +253,13 @@ export function KvittoDemo() {
                         </p>
                         <span className="shrink-0">
                           {!last ? (
-                            <span className={meta}>Läser…</span>
+                            <span className={meta}>{text(T.laser)}</span>
                           ) : mejl.utfall === "kvitto" ? (
-                            <Badge tone="good">Kvitto</Badge>
+                            <Badge tone="good">{text(T.kvitto)}</Badge>
                           ) : mejl.utfall === "kvitto_granska" ? (
-                            <Badge tone="warn">Granska</Badge>
+                            <Badge tone="warn">{text(T.granska)}</Badge>
                           ) : (
-                            <span className={meta}>Inte ett kvitto</span>
+                            <span className={meta}>{text(T.inteKvitto)}</span>
                           )}
                         </span>
                       </div>
@@ -269,16 +306,16 @@ export function KvittoDemo() {
               upprepade statusraden överst. */}
           {kvitton.length ? (
             <div className="mt-6">
-              <h2 className={rubrikPanel}>Utplockade kvitton</h2>
+              <h2 className={rubrikPanel}>{text(T.utplockade)}</h2>
               <div className="mt-2">
                 <Tabell
-                  ariaLabel="Utplockade kvitton"
+                  ariaLabel={text(T.utplockade)}
                   minBredd={560}
                   kolumner={[
-                    { rubrik: "Datum", bredd: "18%" },
-                    { rubrik: "Butik", bredd: "40%" },
-                    { rubrik: "Kategori", bredd: "22%" },
-                    { rubrik: "Belopp", bredd: "20%", hoger: true }
+                    { rubrik: text(T.datum), bredd: "18%" },
+                    { rubrik: text(T.butik), bredd: "40%" },
+                    { rubrik: text(T.kategori), bredd: "22%" },
+                    { rubrik: text(T.belopp), bredd: "20%", hoger: true }
                   ]}
                 >
                   {kvitton.map((mejl) => (
@@ -296,7 +333,7 @@ export function KvittoDemo() {
                         {mejl.belopp ? (
                           <span className="font-medium">{kr(mejl.belopp)}</span>
                         ) : (
-                          <Badge tone="warn">Granska</Badge>
+                          <Badge tone="warn">{text(T.granska)}</Badge>
                         )}
                       </Cell>
                     </tr>
@@ -311,18 +348,18 @@ export function KvittoDemo() {
         <div className="min-w-0 lg:col-span-5">
           <div className="lg:sticky lg:top-6 space-y-6">
             <div className="rounded-card border border-ink/12 bg-paper p-5">
-              <h2 className={rubrikPanel}>Sammanfattning</h2>
+              <h2 className={rubrikPanel}>{text(T.sammanfattning)}</h2>
               {klar ? (
                 <>
                   <div className="mt-3">
                     <Nyckeltal
                       poster={[
                         {
-                          etikett: "Totalt",
+                          etikett: text(T.totalt),
                           varde: kr(SAMMANFATTNING.totalt),
-                          notis: `${SAMMANFATTNING.antalKlara} avlästa kvitton`
+                          notis: `${SAMMANFATTNING.antalKlara} ${text(T.avlasta)}`
                         },
-                        { etikett: "Ingående moms", varde: kr(SAMMANFATTNING.moms) }
+                        { etikett: text(T.ingaendeMoms), varde: kr(SAMMANFATTNING.moms) }
                       ]}
                     />
                   </div>
@@ -343,13 +380,13 @@ export function KvittoDemo() {
                 </>
               ) : (
                 <p className="mt-3 text-[0.9375rem] leading-6 text-ink-muted">
-                  Periodens summor visas när skanningen är klar.
+                  {text(T.vantaPaSummor)}
                 </p>
               )}
             </div>
 
             <div className="rounded-card border border-ink/12 bg-paper p-5">
-              <h2 className={rubrikPanel}>Fråga kvitto-assistenten</h2>
+              <h2 className={rubrikPanel}>{text(T.fragaAssistenten)}</h2>
               <div data-rullyta className="mt-4 lg:max-h-[24rem] lg:overflow-y-auto lg:pr-3">
                 <DemoChatt />
               </div>

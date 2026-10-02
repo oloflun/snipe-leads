@@ -26,6 +26,7 @@ import { Badge, btnPrimary, btnSecondary } from "@/components/ui";
 import { mejlaOss } from "@/components/marketing/copy";
 import { createDemoSupportApi } from "@/lib/demo/support-inbox";
 import { readJsonBody } from "@/lib/http/json";
+import { useLocale, type Localized } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 type Classification = {
@@ -76,59 +77,165 @@ type EmailDetail = EmailRow & {
 // Måste spegla CATEGORIES i snajp-support/app/config.py. Backenden (som
 // deployas från development) klassar numera i garanti och utbildning; utan
 // dem här visades facken utan etikett i den här vyn.
-const CATEGORY_LABELS: Record<string, string> = {
-  teknisk_support: "Teknisk support",
-  garanti: "Garanti",
-  leverans: "Leverans & frakt",
-  utbildning: "Utbildning & användarstöd",
-  retur_reklamation: "Reklamation & retur",
-  betalning: "Betalning & faktura",
-  orderstatus: "Orderstatus",
-  ovrigt: "Övrigt"
+const CATEGORY_LABELS: Record<string, Localized> = {
+  teknisk_support: { sv: "Teknisk support", en: "Technical support" },
+  garanti: { sv: "Garanti", en: "Warranty" },
+  leverans: { sv: "Leverans & frakt", en: "Delivery & shipping" },
+  utbildning: { sv: "Utbildning & användarstöd", en: "Training & user help" },
+  retur_reklamation: { sv: "Reklamation & retur", en: "Complaints & returns" },
+  betalning: { sv: "Betalning & faktura", en: "Payment & invoices" },
+  orderstatus: { sv: "Orderstatus", en: "Order status" },
+  ovrigt: { sv: "Övrigt", en: "Other" }
 };
 
-const STATUS_META: Record<string, { label: string; tone: "neutral" | "good" | "warn" | "danger" }> = {
-  new: { label: "Ny", tone: "neutral" },
-  processing: { label: "Bearbetas", tone: "neutral" },
-  awaiting_approval: { label: "Väntar på godkännande", tone: "warn" },
-  auto_sent: { label: "Autosvar skickat", tone: "good" },
-  sent: { label: "Besvarat", tone: "good" },
-  escalated: { label: "Eskalerat", tone: "danger" },
-  rejected: { label: "Utkast avvisat", tone: "neutral" },
-  taken_over: { label: "Manuellt övertaget", tone: "neutral" },
-  failed: { label: "Fel", tone: "danger" },
+const STATUS_META: Record<string, { label: Localized; tone: "neutral" | "good" | "warn" | "danger" }> = {
+  new: { label: { sv: "Ny", en: "New" }, tone: "neutral" },
+  processing: { label: { sv: "Bearbetas", en: "Processing" }, tone: "neutral" },
+  awaiting_approval: { label: { sv: "Väntar på godkännande", en: "Awaiting approval" }, tone: "warn" },
+  auto_sent: { label: { sv: "Autosvar skickat", en: "Auto-reply sent" }, tone: "good" },
+  sent: { label: { sv: "Besvarat", en: "Answered" }, tone: "good" },
+  escalated: { label: { sv: "Eskalerat", en: "Escalated" }, tone: "danger" },
+  rejected: { label: { sv: "Utkast avvisat", en: "Draft rejected" }, tone: "neutral" },
+  taken_over: { label: { sv: "Manuellt övertaget", en: "Taken over manually" }, tone: "neutral" },
+  failed: { label: { sv: "Fel", en: "Error" }, tone: "danger" },
   // Eskaleringslarm och notiser från Snajp (migration 078). Egen flik,
   // aldrig ett utkast — se processor.ar_snajp_notis.
-  att_hantera: { label: "Att hantera", tone: "warn" }
+  att_hantera: { label: { sv: "Att hantera", en: "To handle" }, tone: "warn" }
 };
 
-const EVENT_LABELS: Record<string, string> = {
-  received: "Mail mottaget",
-  notis: "Larm från Snajp, flyttat till Att hantera",
-  classified: "Klassificerat",
-  escalated: "Eskalerat till människa",
-  draft_created: "Utkast skapat",
-  auto_sent: "Autosvar skickat",
-  approved_and_sent: "Godkänt & skickat",
-  draft_rejected: "Utkast avvisat",
-  taken_over: "Manuellt övertaget",
-  failed: "Fel vid bearbetning",
-  rule_changed: "Regel ändrad",
-  befordrad: "Flyttad till ärenden"
+const EVENT_LABELS: Record<string, Localized> = {
+  received: { sv: "Mail mottaget", en: "Mail received" },
+  notis: { sv: "Larm från Snajp, flyttat till Att hantera", en: "Alert from Snajp, moved to To handle" },
+  classified: { sv: "Klassificerat", en: "Classified" },
+  escalated: { sv: "Eskalerat till människa", en: "Escalated to a person" },
+  draft_created: { sv: "Utkast skapat", en: "Draft created" },
+  auto_sent: { sv: "Autosvar skickat", en: "Auto-reply sent" },
+  approved_and_sent: { sv: "Godkänt & skickat", en: "Approved & sent" },
+  draft_rejected: { sv: "Utkast avvisat", en: "Draft rejected" },
+  taken_over: { sv: "Manuellt övertaget", en: "Taken over manually" },
+  failed: { sv: "Fel vid bearbetning", en: "Processing error" },
+  rule_changed: { sv: "Regel ändrad", en: "Rule changed" },
+  befordrad: { sv: "Flyttad till ärenden", en: "Moved to cases" }
 };
+
+const T = {
+  kundtjanst: { sv: "Kundtjänst", en: "Customer service" },
+  offline: {
+    sv: "Tjänsten är inte tillgänglig just nu. Försök igen om en stund.",
+    en: "The service is not available right now. Try again in a moment."
+  },
+  okantFel: { sv: "Okänt fel", en: "Unknown error" },
+  hamtaFel: { sv: "Kunde inte hämta inkorgen.", en: "Could not load the inbox." },
+  oppnaFel: { sv: "Kunde inte öppna mailet.", en: "Could not open the mail." },
+  nagotFel: { sv: "Något gick fel.", en: "Something went wrong." },
+  omformuleraFel: { sv: "Kunde inte skriva om utkastet.", en: "Could not rewrite the draft." },
+  kbTom: {
+    sv: "Testmailen är inlästa. Kunskapsbasen är tom, så agenterna eskalerar allt tills ni lagt in något — det är avsiktligt, de gissar aldrig.",
+    en: "The test mails are loaded. The knowledge base is empty, so the agents escalate everything until you add something. That is on purpose: they never guess."
+  },
+  ingenInkorg: { sv: "Ingen inkorg är kopplad ännu.", en: "No inbox is connected yet." },
+  synkTom: { sv: "Synk klar: inga nya olästa mail i inkorgen.", en: "Sync done: no new unread mail in the inbox." },
+  hamtaTestmail: { sv: "Hämta testmail", en: "Fetch test mail" },
+  synkaTitel: {
+    sv: "Hämtar olästa mail från er kopplade Gmail- eller Outlook-inkorg",
+    en: "Fetches unread mail from your connected Gmail or Outlook inbox"
+  },
+  synka: { sv: "Synka inkorg", en: "Sync inbox" },
+  koppla: { sv: "Koppla inkorg", en: "Connect inbox" },
+  lasOm: { sv: "Läser om inkorgen", en: "Reloads the inbox" },
+  nyaFack: { sv: "Hämtar nya testmail till det här facket", en: "Fetches new test mail for this category" },
+  nyaAlla: { sv: "Hämtar nya testmail till alla fack", en: "Fetches new test mail for all categories" },
+  uppdatera: { sv: "Uppdatera", en: "Refresh" },
+  sok: { sv: "Sök avsändare, ämne eller innehåll…", en: "Search sender, subject or content…" },
+  allaStatusar: { sv: "Alla statusar", en: "All statuses" },
+  regler: { sv: "Regler", en: "Rules" },
+  alla: { sv: "Alla", en: "All" },
+  baraOhanterade: { sv: "Bara ohanterade", en: "Unhandled only" },
+  ingetAttHantera: { sv: "Inget att hantera", en: "Nothing to handle" },
+  inkorgenTom: { sv: "Inkorgen är tom", en: "The inbox is empty" },
+  attHanteraTomt: {
+    sv: "Här hamnar eskaleringar och larm när ett ärende lämnas över till er. De får aldrig ett AI-utkast.",
+    en: "Escalations and alerts land here when a case is handed over to you. They never get an AI draft."
+  },
+  klickaPa: { sv: "Klicka på", en: "Click" },
+  testmailTomt: {
+    sv: "för att skicka testärenden mot den här profilens kunskapsbas och se hur agenten svarar.",
+    en: "to send test cases against this profile's knowledge base and see how the agent replies."
+  },
+  ingaArenden: {
+    sv: "Inga ärenden ännu. När en inkorg är kopplad hamnar kundmailen här.",
+    en: "No cases yet. When an inbox is connected, customer mail lands here."
+  },
+  kopplaRiktig: {
+    sv: "Vill ni koppla er riktiga inkorg? Koppla Gmail, Outlook eller iCloud under",
+    en: "Want to connect your real inbox? Connect Gmail, Outlook or iCloud under"
+  },
+  installningarInkorgar: { sv: "Inställningar → Inkorgar", en: "Settings → Inboxes" },
+  saHamtas: { sv: ", så hämtas era olästa kundmail hit.", en: " and your unread customer mail is fetched here." },
+  agentenLaser: { sv: "Agenten läser…", en: "Agent is reading…" },
+  utanAmne: { sv: "(utan ämne)", en: "(no subject)" },
+  hanterat: { sv: "Hanterat", en: "Handled" },
+  offert: { sv: "· Offert", en: "· Quote" },
+  utbildning: { sv: "· Utbildning", en: "· Training" },
+  stang: { sv: "Stäng", en: "Close" },
+  markeraOhanterat: { sv: "Markera som ohanterat", en: "Mark as unhandled" },
+  markeraHanterat: { sv: "Markera som hanterat", en: "Mark as handled" },
+  flyttaTillArenden: { sv: "Flytta till ärenden", en: "Move to cases" },
+  agentenSkriver: {
+    sv: "Agenten läser mailet och skriver ett utkast…",
+    en: "The agent is reading the mail and writing a draft…"
+  },
+  offertforfragan: { sv: "Offertförfrågan", en: "Quote request" },
+  utbildningsintresse: { sv: "Utbildningsintresse", en: "Training interest" },
+  eskalerat: { sv: "Eskalerat", en: "Escalated" },
+  kallor: { sv: "Källor:", en: "Sources:" },
+  autosvarSkickat: { sv: "Autosvar (skickat)", en: "Auto-reply (sent)" },
+  skickatSvar: { sv: "Skickat svar", en: "Sent reply" },
+  avvisatUtkast: { sv: "Avvisat utkast", en: "Rejected draft" },
+  vantarGodkannande: { sv: "AI-utkast, väntar på godkännande", en: "AI draft, awaiting approval" },
+  godkann: { sv: "Godkänn & skicka", en: "Approve & send" },
+  avvisa: { sv: "Avvisa", en: "Reject" },
+  taOver: { sv: "Ta över ärendet", en: "Take over the case" },
+  forbattra: { sv: "Förbättra", en: "Improve" },
+  kortare: { sv: "Kortare", en: "Shorter" },
+  personligare: { sv: "Mer personlig", en: "More personal" },
+  beslutslogg: { sv: "Beslutslogg", en: "Decision log" },
+  besvarat: { sv: "Ärendet är besvarat och stängt i CRM:et.", en: "The case is answered and closed in the CRM." }
+} satisfies Record<string, Localized>;
+
+/** Ett fel med färdig text på båda språken. Backendens egna meddelanden har
+ * bara ett språk och visas som de kom. */
+class CopyFel extends Error {
+  copy: Localized;
+  constructor(copy: Localized) {
+    super(copy.sv);
+    this.copy = copy;
+    this.name = "CopyFel";
+  }
+}
+
+function tillCopy(caught: unknown, reserv: Localized): Localized {
+  if (caught instanceof CopyFel) return caught.copy;
+  if (caught instanceof Error) return { sv: caught.message, en: caught.message };
+  return reserv;
+}
 
 /** Markör så refresh() kan skilja väntläget från riktiga fel utan texttolkning. */
 class EjAktiveradFel extends Error {
   constructor() {
-    super("Arbetsytan är inte aktiverad ännu.");
+    super("Arbetsytan är inte aktiverad ännu."); // inte-copy
     this.name = "EjAktiveradFel";
   }
 }
 
 function ConfidenceBar({ value }: Readonly<{ value: number }>) {
+  const { text } = useLocale();
   const percent = Math.round(value * 100);
   return (
-    <span className="inline-flex items-center gap-2" title={`Konfidens ${percent}%`}>
+    <span
+      className="inline-flex items-center gap-2"
+      title={`${text({ sv: "Konfidens", en: "Confidence" })} ${percent}%`}
+    >
       <span className="h-1.5 w-16 overflow-hidden rounded-full bg-ink/10">
         <span
           className={cn(
@@ -162,14 +269,15 @@ export function Dashboard({
   onMeta?: (meta: { visar_test_i_arenden: boolean }) => void;
 }>) {
   const vag = useArbetsvag();
+  const { text } = useLocale();
   const [emails, setEmails] = useState<EmailRow[]>([]);
   const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({});
   const [selected, setSelected] = useState<EmailDetail | null>(null);
   const [draftText, setDraftText] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Localized | null>(null);
   const [ejAktiverad, setEjAktiverad] = useState(false);
-  const [syncInfo, setSyncInfo] = useState<string | null>(null);
+  const [syncInfo, setSyncInfo] = useState<Localized | null>(null);
   const [search, setSearch] = useState("");
   /**
    * Söktexten som faktiskt ligger till grund för en fråga till backenden.
@@ -235,9 +343,8 @@ export function Dashboard({
       (await readJsonBody<T & { offline?: boolean; error?: string; detail?: string }>(response)) ??
       ({} as T & { offline?: boolean; error?: string; detail?: string });
     if (payload.offline) {
-      throw new Error(
-        payload.error ?? "Tjänsten är inte tillgänglig just nu. Försök igen om en stund."
-      );
+      if (payload.error) throw new Error(payload.error);
+      throw new CopyFel(T.offline);
     }
     if (!response.ok) {
       // Ej aktiverad är ett VÄNTLÄGE, inte ett fel — samma gräns som i
@@ -247,7 +354,9 @@ export function Dashboard({
       if (arEjAktiverad(response.status, payload)) {
         throw new EjAktiveradFel();
       }
-      throw new Error(payload.detail ?? payload.error ?? "Okänt fel");
+      const besked = payload.detail ?? payload.error;
+      if (besked) throw new Error(besked);
+      throw new CopyFel(T.okantFel);
     }
     return payload;
   }, [demo]);
@@ -275,7 +384,7 @@ export function Dashboard({
         setEjAktiverad(true);
         return;
       }
-      setError(caught instanceof Error ? caught.message : "Kunde inte hämta inkorgen.");
+      setError(tillCopy(caught, T.hamtaFel));
     }
   }, [api, sokning, statusFilter, categoryFilter, lager]);
 
@@ -318,7 +427,7 @@ export function Dashboard({
         setSelected(detail);
         setDraftText(detail.draft?.content ?? "");
       } catch (caught) {
-        setError(caught instanceof Error ? caught.message : "Kunde inte öppna mailet.");
+        setError(tillCopy(caught, T.oppnaFel));
       }
     },
     [api]
@@ -335,7 +444,7 @@ export function Dashboard({
           await openEmail(selected.id);
         }
       } catch (caught) {
-        setError(caught instanceof Error ? caught.message : "Något gick fel.");
+        setError(tillCopy(caught, T.nagotFel));
       } finally {
         setBusy(null);
       }
@@ -392,8 +501,11 @@ export function Dashboard({
       // vilket är rätt beteende och fel intryck.
       setSyncInfo(
         svar?.kb_tom
-          ? "Testmailen är inlästa. Kunskapsbasen är tom, så agenterna eskalerar allt tills ni lagt in något — det är avsiktligt, de gissar aldrig."
-          : `${svar?.ingested ?? 0} nya mail i inkorgen. Agenterna sorterar och skriver utkast nu.`
+          ? T.kbTom
+          : {
+              sv: `${svar?.ingested ?? 0} nya mail i inkorgen. Agenterna sorterar och skriver utkast nu.`,
+              en: `${svar?.ingested ?? 0} new mails in the inbox. The agents are sorting them and writing drafts now.`
+            }
       );
       if (svar?.processing) void pollaTills();
     });
@@ -413,7 +525,7 @@ export function Dashboard({
       // er inkorg ännu", och den rutan såg ut som en krasch.
       if (result.connected === false) {
         setInkorgKopplad(false);
-        setSyncInfo(result.error ?? "Ingen inkorg är kopplad ännu.");
+        setSyncInfo(result.error ? { sv: result.error, en: result.error } : T.ingenInkorg);
         return;
       }
       if (result.error) {
@@ -424,8 +536,11 @@ export function Dashboard({
       // medan agenten arbetar, annars ser nya rader ut att sakna fack.
       setSyncInfo(
         result.fetched === 0
-          ? "Synk klar: inga nya olästa mail i inkorgen."
-          : `${result.fetched} nya mail hämtade. Agenten sorterar och skriver utkast nu.`
+          ? T.synkTom
+          : {
+              sv: `${result.fetched} nya mail hämtade. Agenten sorterar och skriver utkast nu.`,
+              en: `${result.fetched} new mails fetched. The agent is sorting them and writing drafts now.`
+            }
       );
       if (result.processing) void pollaTills();
     });
@@ -459,7 +574,7 @@ export function Dashboard({
       );
       if (svar?.content) setDraftText(svar.content);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Kunde inte skriva om utkastet.");
+      setError(tillCopy(caught, T.omformuleraFel));
     } finally {
       setBusy(null);
     }
@@ -505,7 +620,7 @@ export function Dashboard({
   const canReview = selected?.draft?.status === "pending";
 
   if (ejAktiverad) {
-    return <EjAktiverad yta="Kundtjänst" />;
+    return <EjAktiverad yta={text(T.kundtjanst)} />;
   }
 
   return (
@@ -526,7 +641,7 @@ export function Dashboard({
             className={btnPrimary}
           >
             {busy === "seed" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Inbox className="h-4 w-4" />}
-            Hämta testmail
+            {text(T.hamtaTestmail)}
           </button>
         )}
         {/* Knappen finns bara när det finns en inkorg att synka. Den satt
@@ -538,18 +653,18 @@ export function Dashboard({
             type="button"
             onClick={syncInbox}
             disabled={busy !== null}
-            title="Hämtar olästa mail från er kopplade Gmail- eller Outlook-inkorg"
+            title={text(T.synkaTitel)}
             className={btnSecondary}
           >
             {busy === "sync" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
-            Synka inkorg
+            {text(T.synka)}
           </button>
         ) : inkorgKopplad === false && !demo ? (
           /* Utan kopplad inkorg leder knappen till guiden i stället för att
              försvinna — annars hittar ett nytt konto aldrig vägen dit. */
           <Link href={vag("/settings/mailboxes")} className={btnSecondary}>
             <Link2 className="h-4 w-4" />
-            Koppla inkorg
+            {text(T.koppla)}
           </Link>
         ) : null}
         {/* "Uppdatera" hämtar NYA testmail när inkorgen är en sandlåda: står
@@ -570,10 +685,10 @@ export function Dashboard({
           disabled={busy !== null}
           title={
             inkorgKopplad || lager === "att_hantera" || (lager === "arenden" && visarTestIArenden === false)
-              ? "Läser om inkorgen"
+              ? text(T.lasOm)
               : categoryFilter
-                ? "Hämtar nya testmail till det här facket"
-                : "Hämtar nya testmail till alla fack"
+                ? text(T.nyaFack)
+                : text(T.nyaAlla)
           }
           className={btnSecondary}
         >
@@ -582,14 +697,14 @@ export function Dashboard({
           ) : (
             <RefreshCw className="h-4 w-4" />
           )}
-          Uppdatera
+          {text(T.uppdatera)}
         </button>
         <div className="relative min-w-[220px] flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-subtle" />
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Sök avsändare, ämne eller innehåll…"
+            placeholder={text(T.sok)}
             className="focus-ring min-h-11 w-full rounded-input bg-paper py-2.5 pl-9 pr-3 text-sm outline-none placeholder:text-ink/35"
           />
         </div>
@@ -599,10 +714,10 @@ export function Dashboard({
           onChange={(event) => setStatusFilter(event.target.value || null)}
           className="focus-ring min-h-11 rounded-input bg-paper px-3 py-2.5 text-sm"
         >
-          <option value="">Alla statusar</option>
+          <option value="">{text(T.allaStatusar)}</option>
           {Object.entries(STATUS_META).map(([value, meta]) => (
             <option key={value} value={value}>
-              {meta.label}
+              {text(meta.label)}
             </option>
           ))}
           </select>
@@ -612,23 +727,23 @@ export function Dashboard({
         {demo || lager === "att_hantera" ? null : (
           <Link href={vag("/settings/regler")} className={btnSecondary}>
             <Settings2 className="h-4 w-4" />
-            Regler
+            {text(T.regler)}
           </Link>
         )}
       </div>
 
       {error ? (
-        <div className="rounded-[8px] border border-danger/25 bg-danger/5 px-4 py-3 text-sm text-ink-muted">{error}</div>
+        <div className="rounded-[8px] border border-danger/25 bg-danger/5 px-4 py-3 text-sm text-ink-muted">{text(error)}</div>
       ) : null}
       {syncInfo ? (
         <div
           className={
-            syncInfo.includes("Kunskapsbasen är tom")
+            syncInfo === T.kbTom
               ? "rounded-[8px] border border-ochre/40 bg-ochre/10 px-4 py-3 text-sm text-ink-muted"
               : "rounded-[8px] border border-moss/25 bg-moss/5 px-4 py-3 text-sm text-ink-muted"
           }
         >
-          {syncInfo}
+          {text(syncInfo)}
         </div>
       ) : null}
 
@@ -639,9 +754,9 @@ export function Dashboard({
       {lager === "att_hantera" ? null : (
         <div className="flex flex-wrap items-center gap-1.5">
           {[
-            { id: null as string | null, label: "Alla", antal: emails.length },
+            { id: null as string | null, label: text(T.alla), antal: emails.length },
             ...Object.entries(CATEGORY_LABELS)
-              .map(([id, label]) => ({ id: id as string | null, label, antal: categoryCounts[id] ?? 0 }))
+              .map(([id, label]) => ({ id: id as string | null, label: text(label), antal: categoryCounts[id] ?? 0 }))
               .filter((f) => f.antal > 0 || categoryFilter === f.id)
           ].map((f) => (
             <button
@@ -670,13 +785,17 @@ export function Dashboard({
               baraOhanterade ? "bg-ink text-paper" : "text-ink-muted hover:bg-paper2/70 hover:text-ink"
             )}
           >
-            Bara ohanterade
+            {text(T.baraOhanterade)}
           </button>
           {totalPending > 0 || totalEscalated > 0 ? (
             <span className="ml-auto text-[0.8125rem] text-ink-muted">
               {[
-                totalPending > 0 ? `${totalPending} väntar på dig` : null,
-                totalEscalated > 0 ? `${totalEscalated} eskalerade` : null
+                totalPending > 0
+                  ? text({ sv: `${totalPending} väntar på dig`, en: `${totalPending} waiting for you` })
+                  : null,
+                totalEscalated > 0
+                  ? text({ sv: `${totalEscalated} eskalerade`, en: `${totalEscalated} escalated` })
+                  : null
               ]
                 .filter(Boolean)
                 .join(" · ")}
@@ -692,7 +811,7 @@ export function Dashboard({
             <div className="rounded-card border border-dashed border-ink/15 bg-paper/45 p-10 text-center">
               <Inbox className="mx-auto h-6 w-6 text-mineral" />
               <h3 className="mt-4 font-semibold">
-                {lager === "att_hantera" ? "Inget att hantera" : "Inkorgen är tom"}
+                {lager === "att_hantera" ? text(T.ingetAttHantera) : text(T.inkorgenTom)}
               </h3>
               {/* Stod: "koppla en riktig inkorg (Gmail/Outlook via IMAP) i
                   backendens miljövariabler". En instruktion till oss, tryckt i
@@ -700,30 +819,25 @@ export function Dashboard({
                   anledning att veta vad IMAP är. */}
               <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-ink-muted">
                 {lager === "att_hantera" ? (
-                  <>
-                    Här hamnar eskaleringar och larm när ett ärende lämnas över till er. De får
-                    aldrig ett AI-utkast.
-                  </>
+                  <>{text(T.attHanteraTomt)}</>
                 ) : lager === "testmail" || visarTestIArenden !== false ? (
                   <>
-                    Klicka på <strong>Hämta testmail</strong> för att skicka testärenden mot
-                    den här profilens kunskapsbas och se hur agenten svarar.
+                    {text(T.klickaPa)} <strong>{text(T.hamtaTestmail)}</strong> {text(T.testmailTomt)}
                   </>
                 ) : (
-                  <>Inga ärenden ännu. När en inkorg är kopplad hamnar kundmailen här.</>
+                  <>{text(T.ingaArenden)}</>
                 )}
               </p>
               {inkorgKopplad || lager === "att_hantera" ? null : (
                 <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-ink-subtle">
-                  Vill ni koppla er riktiga inkorg? Koppla Gmail, Outlook eller iCloud
-                  under{" "}
+                  {text(T.kopplaRiktig)}{" "}
                   <Link
                     href={vag("/settings/mailboxes")}
                     className="focus-ring rounded-input underline underline-offset-4 hover:text-ochre"
                   >
-                    Inställningar → Inkorgar
+                    {text(T.installningarInkorgar)}
                   </Link>
-                  , så hämtas era olästa kundmail hit.
+                  {text(T.saHamtas)}
                 </p>
               )}
             </div>
@@ -737,13 +851,15 @@ export function Dashboard({
               {(baraOhanterade ? emails.filter((e) => !e.hanterad_at) : emails).map((email) => {
                 const meta = STATUS_META[email.status] ?? STATUS_META.new;
                 const lasesNu = bearbetas && !email.classification;
-                const statusText = lasesNu ? "Agenten läser…" : meta.label;
+                const statusText = lasesNu ? text(T.agentenLaser) : text(meta.label);
                 const prick = lasesNu
                   ? "bg-ink/25"
                   : { neutral: "bg-ink/25", good: "bg-moss", warn: "bg-ochre", danger: "bg-danger" }[meta.tone];
                 const detaljer = [
                   email.from_name || email.from_email,
-                  email.classification ? CATEGORY_LABELS[email.classification.category] : null
+                  email.classification && CATEGORY_LABELS[email.classification.category]
+                    ? text(CATEGORY_LABELS[email.classification.category])
+                    : null
                 ].filter(Boolean);
                 return (
                   <button
@@ -757,14 +873,14 @@ export function Dashboard({
                   >
                     <span className="flex min-w-0 items-center gap-2">
                       <span className={cn("truncate text-sm", email.hanterad_at ? "font-medium text-ink-muted" : "font-semibold")}>
-                        {email.subject || "(utan ämne)"}
+                        {email.subject || text(T.utanAmne)}
                       </span>
                       {email.has_image ? <ImageIcon className="h-3.5 w-3.5 shrink-0 text-ink-subtle" /> : null}
                       {email.is_test ? <span className="kicker shrink-0 text-mineral">Test</span> : null}
                     </span>
                     <span className="flex items-center gap-1.5 whitespace-nowrap text-[0.8125rem] text-ink-muted">
                       {email.hanterad_at ? (
-                        <CheckCircle2 className="h-3.5 w-3.5 text-moss" aria-label="Hanterat" />
+                        <CheckCircle2 className="h-3.5 w-3.5 text-moss" aria-label={text(T.hanterat)} />
                       ) : (
                         <span aria-hidden className={cn("h-1.5 w-1.5 rounded-full", prick)} />
                       )}
@@ -773,10 +889,10 @@ export function Dashboard({
                     <span className="col-span-2 mt-0.5 flex min-w-0 items-center gap-1.5 text-[0.8125rem] text-ink-subtle">
                       <span className="truncate">{detaljer.join(" · ")}</span>
                       {email.classification?.offertforfragan ? (
-                        <span className="shrink-0 font-medium text-warning">· Offert</span>
+                        <span className="shrink-0 font-medium text-warning">{text(T.offert)}</span>
                       ) : null}
                       {email.classification?.utbildningsintresse ? (
-                        <span className="shrink-0 font-medium text-moss">· Utbildning</span>
+                        <span className="shrink-0 font-medium text-moss">{text(T.utbildning)}</span>
                       ) : null}
                     </span>
                   </button>
@@ -792,7 +908,7 @@ export function Dashboard({
             <div className="space-y-5 rounded-card bg-paper p-5">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h3 className="break-words font-semibold">{selected.subject || "(utan ämne)"}</h3>
+                  <h3 className="break-words font-semibold">{selected.subject || text(T.utanAmne)}</h3>
                   <p className="mt-1 font-mono text-xs text-ink-subtle">
                     {selected.from_name ? `${selected.from_name} · ` : ""}
                     {selected.from_email}
@@ -802,7 +918,7 @@ export function Dashboard({
                   type="button"
                   onClick={() => setSelected(null)}
                   className="focus-ring rounded-full p-1.5 text-ink-subtle hover:text-ink"
-                  aria-label="Stäng"
+                  aria-label={text(T.stang)}
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -842,7 +958,7 @@ export function Dashboard({
                       className={cn("h-4 w-4", selected.hanterad_at ? "text-moss" : "")}
                     />
                   )}
-                  {selected.hanterad_at ? "Markera som ohanterat" : "Markera som hanterat"}
+                  {selected.hanterad_at ? text(T.markeraOhanterat) : text(T.markeraHanterat)}
                 </button>
                 {selected.is_test ? (
                   <button
@@ -852,24 +968,28 @@ export function Dashboard({
                     className={btnSecondary}
                   >
                     {busy === "befordra" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                    Flytta till ärenden
+                    {text(T.flyttaTillArenden)}
                   </button>
                 ) : null}
               </div>
 
               {!selected.classification && bearbetas ? (
-                <p className="text-sm leading-6 text-ink-subtle">Agenten läser mailet och skriver ett utkast…</p>
+                <p className="text-sm leading-6 text-ink-subtle">{text(T.agentenSkriver)}</p>
               ) : null}
 
               {selected.classification ? (
                 <div className="rounded-input border border-ink/10 bg-paper2/50 p-4">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge tone="neutral">{CATEGORY_LABELS[selected.classification.category]}</Badge>
+                    <Badge tone="neutral">
+                      {CATEGORY_LABELS[selected.classification.category]
+                        ? text(CATEGORY_LABELS[selected.classification.category])
+                        : null}
+                    </Badge>
                     {selected.classification.offertforfragan ? (
-                      <Badge tone="warn">Offertförfrågan</Badge>
+                      <Badge tone="warn">{text(T.offertforfragan)}</Badge>
                     ) : null}
                     {selected.classification.utbildningsintresse ? (
-                      <Badge tone="good">Utbildningsintresse</Badge>
+                      <Badge tone="good">{text(T.utbildningsintresse)}</Badge>
                     ) : null}
                     <ConfidenceBar value={selected.classification.confidence} />
                     {typeof selected.classification.sentiment === "number" ? (
@@ -888,7 +1008,7 @@ export function Dashboard({
                     {selected.classification.escalate ? (
                       <Badge tone="danger">
                         <ShieldAlert className="h-3 w-3" />
-                        Eskalerat
+                        {text(T.eskalerat)}
                       </Badge>
                     ) : null}
                   </div>
@@ -902,7 +1022,7 @@ export function Dashboard({
                   ) : null}
                   {selected.classification.kb_sources.length > 0 ? (
                     <p className="mt-2 text-xs text-ink-subtle">
-                      Källor: {selected.classification.kb_sources.map((s) => s.title).join(" · ")}
+                      {text(T.kallor)} {selected.classification.kb_sources.map((s) => s.title).join(" · ")}
                     </p>
                   ) : null}
                 </div>
@@ -913,12 +1033,12 @@ export function Dashboard({
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-[0.8125rem] font-medium text-moss">
                       {selected.draft.status === "auto_sent"
-                        ? "Autosvar (skickat)"
+                        ? text(T.autosvarSkickat)
                         : selected.draft.status === "approved"
-                          ? "Skickat svar"
+                          ? text(T.skickatSvar)
                           : selected.draft.status === "rejected"
-                            ? "Avvisat utkast"
-                            : "AI-utkast, väntar på godkännande"}
+                            ? text(T.avvisatUtkast)
+                            : text(T.vantarGodkannande)}
                     </p>
                     <ConfidenceBar value={selected.draft.confidence} />
                   </div>
@@ -947,7 +1067,7 @@ export function Dashboard({
                         ) : (
                           <Send className="h-4 w-4" />
                         )}
-                        Godkänn & skicka
+                        {text(T.godkann)}
                       </button>
                       <button
                         type="button"
@@ -956,7 +1076,7 @@ export function Dashboard({
                         className="focus-ring inline-flex min-h-10 items-center gap-2 rounded-input border border-danger/30 px-4 py-2 text-sm font-semibold text-danger transition hover:bg-danger/10 disabled:opacity-40"
                       >
                         <X className="h-4 w-4" />
-                        Avvisa
+                        {text(T.avvisa)}
                       </button>
                       <button
                         type="button"
@@ -965,7 +1085,7 @@ export function Dashboard({
                         className="focus-ring inline-flex min-h-10 items-center gap-2 rounded-input border border-ink/15 px-4 py-2 text-sm font-semibold text-ink-muted transition hover:text-ink disabled:opacity-40"
                       >
                         <UserRound className="h-4 w-4" />
-                        Ta över ärendet
+                        {text(T.taOver)}
                       </button>
                       {/* Omformuleringarna, avskilda med en tunn linje: de
                           ändrar bara texten i rutan, aldrig ärendets
@@ -973,9 +1093,9 @@ export function Dashboard({
                       <span aria-hidden className="mx-0.5 hidden self-center h-5 w-px bg-ink/15 sm:block" />
                       {(
                         [
-                          ["forbattra", "Förbättra", Sparkles],
-                          ["kortare", "Kortare", Scissors],
-                          ["personligare", "Mer personlig", Smile]
+                          ["forbattra", T.forbattra, Sparkles],
+                          ["kortare", T.kortare, Scissors],
+                          ["personligare", T.personligare, Smile]
                         ] as const
                       ).map(([lage, etikett, Ikon]) => (
                         <button
@@ -983,7 +1103,10 @@ export function Dashboard({
                           type="button"
                           onClick={() => void omformulera(lage)}
                           disabled={busy !== null}
-                          title={`Skriv om utkastet: ${etikett.toLowerCase()}. Inget skickas förrän du godkänner.`}
+                          title={text({
+                            sv: `Skriv om utkastet: ${etikett.sv.toLowerCase()}. Inget skickas förrän du godkänner.`,
+                            en: `Rewrite the draft: ${etikett.en.toLowerCase()}. Nothing is sent until you approve.`
+                          })}
                           className="focus-ring inline-flex min-h-10 items-center gap-1.5 rounded-input border border-ink/15 px-3 py-2 text-[0.8125rem] font-semibold text-ink-muted transition hover:text-ink disabled:opacity-40"
                         >
                           {busy === `omformulera-${lage}` ? (
@@ -991,7 +1114,7 @@ export function Dashboard({
                           ) : (
                             <Ikon className="h-3.5 w-3.5" />
                           )}
-                          {etikett}
+                          {text(etikett)}
                         </button>
                       ))}
                     </div>
@@ -1001,13 +1124,13 @@ export function Dashboard({
 
               {selected.decisions.length > 0 ? (
                 <div>
-                  <p className="text-[0.8125rem] font-medium text-ink-subtle">Beslutslogg</p>
+                  <p className="text-[0.8125rem] font-medium text-ink-subtle">{text(T.beslutslogg)}</p>
                   <ol className="mt-3 space-y-2 border-l border-ink/10 pl-4">
                     {selected.decisions.map((decision, index) => (
                       <li key={index} className="relative text-xs leading-5 text-ink-muted">
                         <span className="absolute -left-[21px] top-1.5 h-2 w-2 rounded-full bg-ochre" />
                         <span className="font-semibold text-ink-muted">
-                          {EVENT_LABELS[decision.event] ?? decision.event}
+                          {EVENT_LABELS[decision.event] ? text(EVENT_LABELS[decision.event]) : decision.event}
                         </span>
                         {decision.detail?.reasoning ? <>. {String(decision.detail.reasoning)}</> : null}
                         {decision.detail?.reason ? <>. {String(decision.detail.reason)}</> : null}
@@ -1022,7 +1145,7 @@ export function Dashboard({
               {selected.status === "sent" || selected.status === "auto_sent" ? (
                 <p className="flex items-center gap-2 text-xs text-ink-subtle">
                   <CheckCircle2 className="h-4 w-4 text-moss" />
-                  Ärendet är besvarat och stängt i CRM:et.
+                  {text(T.besvarat)}
                 </p>
               ) : null}
             </div>

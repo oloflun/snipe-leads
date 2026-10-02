@@ -2,6 +2,8 @@
 
 import { Check, Download, Share, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useLocale } from "@/lib/i18n";
+import type { Localized } from "@/lib/i18n";
 import { useInstallation, type Plattform } from "@/lib/pwa";
 import { cn } from "@/lib/utils";
 
@@ -36,30 +38,50 @@ import { cn } from "@/lib/utils";
  */
 
 const STEG: Record<Exclude<Plattform, "kan-installera" | "installerad">, {
-  rubrik: string;
-  steg: string[];
+  rubrik: Localized;
+  steg: Localized[];
 }> = {
   ios: {
-    rubrik: "På iPhone och iPad",
+    rubrik: { sv: "På iPhone och iPad", en: "On iPhone and iPad" },
     steg: [
-      "Tryck på Dela-ikonen i Safaris verktygsfält.",
-      "Välj “Lägg till på hemskärmen”."
+      { sv: "Tryck på Dela-ikonen i Safaris verktygsfält.", en: "Tap the Share icon in Safari's toolbar." },
+      { sv: "Välj “Lägg till på hemskärmen”.", en: "Choose “Add to Home Screen”." }
     ]
   },
   "mac-safari": {
-    rubrik: "I Safari på Mac",
-    steg: ["Öppna menyn Arkiv.", "Välj “Lägg till i Dock”."]
+    rubrik: { sv: "I Safari på Mac", en: "In Safari on Mac" },
+    steg: [
+      { sv: "Öppna menyn Arkiv.", en: "Open the File menu." },
+      { sv: "Välj “Lägg till i Dock”.", en: "Choose “Add to Dock”." }
+    ]
   },
   "utan-stod": {
-    rubrik: "Den här webbläsaren installerar inte appar",
+    rubrik: {
+      sv: "Den här webbläsaren installerar inte appar",
+      en: "This browser does not install apps"
+    },
     steg: [
-      "Öppna snajp.se i Chrome eller Edge.",
-      "Klicka på “Ladda ner appen” igen — då går det på ett klick."
+      { sv: "Öppna snajp.se i Chrome eller Edge.", en: "Open snajp.se in Chrome or Edge." },
+      {
+        sv: "Klicka på “Ladda ner appen” igen — då går det på ett klick.",
+        en: "Click “Download the app” again. It then takes one click."
+      }
     ]
   }
 };
 
+const UI = {
+  installerad: { sv: "Appen är installerad", en: "The app is installed" },
+  laddaNer: { sv: "Ladda ner appen", en: "Download the app" },
+  stang: { sv: "Stäng", en: "Close" },
+  delaIkonen: {
+    sv: "Dela-ikonen är fyrkanten med pilen uppåt.",
+    en: "The Share icon is the square with the arrow pointing up."
+  }
+} satisfies Record<string, Localized>;
+
 export function LaddaNerAppen({ tone = "ink" }: Readonly<{ tone?: "ink" | "paper" }>) {
+  const { text } = useLocale();
   const { plattform, installera } = useInstallation();
   const [öppen, setÖppen] = useState(false);
   const [klar, setKlar] = useState(false);
@@ -133,14 +155,14 @@ export function LaddaNerAppen({ tone = "ink" }: Readonly<{ tone?: "ink" | "paper
         ) : (
           <Download className="h-3.5 w-3.5 shrink-0 transition-transform group-hover:translate-y-0.5" aria-hidden />
         )}
-        {klar ? "Appen är installerad" : "Ladda ner appen"}
+        {text(klar ? UI.installerad : UI.laddaNer)}
       </button>
 
       {instruktion && öppen ? (
         <div
           ref={rutRef}
           role="dialog"
-          aria-label={instruktion.rubrik}
+          aria-label={text(instruktion.rubrik)}
           // Ankrad till knappen men vänsterjusterad mot den, och full bredd på
           // mobil: en absolut ruta som ärver knappens högerkant hamnar utanför
           // vyn på en telefon, och body har overflow-x: clip — den hade alltså
@@ -148,11 +170,11 @@ export function LaddaNerAppen({ tone = "ink" }: Readonly<{ tone?: "ink" | "paper
           className="absolute left-0 top-[calc(100%+0.6rem)] z-40 w-[min(20rem,calc(100vw-2.5rem))] rounded-card border border-ink/15 bg-paper p-4 text-ink shadow-lift"
         >
           <div className="flex items-start justify-between gap-3">
-            <p className="text-[0.875rem] font-semibold leading-6">{instruktion.rubrik}</p>
+            <p className="text-[0.875rem] font-semibold leading-6">{text(instruktion.rubrik)}</p>
             <button
               type="button"
               onClick={() => setÖppen(false)}
-              aria-label="Stäng"
+              aria-label={text(UI.stang)}
               className="focus-ring -mr-1 -mt-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-input text-ink-subtle hover:text-ink"
             >
               <X className="h-4 w-4" aria-hidden />
@@ -161,14 +183,14 @@ export function LaddaNerAppen({ tone = "ink" }: Readonly<{ tone?: "ink" | "paper
 
           <ol className="mt-3 grid gap-2.5">
             {instruktion.steg.map((s, i) => (
-              <li key={s} className="flex gap-2.5 text-[0.875rem] leading-6 text-ink-muted">
+              <li key={s.sv} className="flex gap-2.5 text-[0.875rem] leading-6 text-ink-muted">
                 <span
                   aria-hidden
                   className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-ochre/15 font-mono text-[0.6875rem] text-warning"
                 >
                   {i + 1}
                 </span>
-                <span>{s}</span>
+                <span>{text(s)}</span>
               </li>
             ))}
           </ol>
@@ -176,7 +198,7 @@ export function LaddaNerAppen({ tone = "ink" }: Readonly<{ tone?: "ink" | "paper
           {plattform === "ios" ? (
             <p className="mt-3 flex items-center gap-2 border-t border-ink/15 pt-3 text-[0.8125rem] text-ink-subtle">
               <Share className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              Dela-ikonen är fyrkanten med pilen uppåt.
+              {text(UI.delaIkonen)}
             </p>
           ) : null}
         </div>

@@ -6,7 +6,7 @@ import { btnLiten, btnPrimary, btnSecondary, etikett, meta } from "@/components/
 import { AgentMenu } from "@/components/snajp/AgentMenu";
 import { LÄSBARA, läsbar } from "@/components/settings/Kunskapsbas";
 import { HttpJsonError, felmeddelande, readJsonBody } from "@/lib/http/json";
-import { useLocale } from "@/lib/i18n";
+import { useLocale, type Locale, type Localized } from "@/lib/i18n";
 import { getTenant } from "@/lib/tenants";
 import { cn } from "@/lib/utils";
 
@@ -90,7 +90,7 @@ type ForslagKort = {
   rubrik: string;
   brodtext: string;
   status: "oppet" | "sparar" | "sparat" | "avfardar" | "avfardat" | "arende" | "fel";
-  fel?: string | null;
+  fel?: Localized | null;
 };
 
 type FeedItem = ChatMessage | KbForhandsvisningKort | ForslagKort;
@@ -131,21 +131,33 @@ type FeedbackLage = {
   fas: "vila" | "rattar" | "skickar" | "skickad" | "fel";
   verdict?: "good" | "bad";
   text?: string;
-  fel?: string;
+  fel?: Localized;
 };
 
-const examplePrompts = [
-  "Min faktura drogs två gånger från kortet, vad gör jag?",
-  "Mitt paket är försenat och spårningen har inte uppdaterats på fyra dagar.",
-  "Jag får felkod E-101 i kassan när jag försöker betala.",
-  "Varan kom fram trasig. Jag vill ha pengarna tillbaka NU!"
+const examplePrompts: Localized[] = [
+  {
+    sv: "Min faktura drogs två gånger från kortet, vad gör jag?",
+    en: "My invoice was charged twice to my card, what do I do?"
+  },
+  {
+    sv: "Mitt paket är försenat och spårningen har inte uppdaterats på fyra dagar.",
+    en: "My parcel is late and the tracking has not updated in four days."
+  },
+  {
+    sv: "Jag får felkod E-101 i kassan när jag försöker betala.",
+    en: "I get error code E-101 at checkout when I try to pay."
+  },
+  {
+    sv: "Varan kom fram trasig. Jag vill ha pengarna tillbaka NU!",
+    en: "The item arrived broken. I want my money back NOW!"
+  }
 ];
 
 async function downscaleImage(file: File, maxSize = 1024): Promise<string> {
   const dataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error("Kunde inte läsa filen"));
+    reader.onerror = () => reject(new Error("Kunde inte läsa filen")); // inte-copy
     reader.readAsDataURL(file);
   });
 
@@ -216,19 +228,34 @@ export type SupportChatProps = {
  * "Failed to fetch" i den publika chattens röda bubbla. Små pooler i stället
  * för en konstant, så att tre fel i rad inte läser som en papegoja.
  */
-const FELTEXTER = [
-  "Jag fick inte fram ett svar den här gången. Prova gärna att skicka frågan igen om en liten stund.",
-  "Något hakade upp sig på vägen, och frågan kom aldrig hela vägen fram. Skicka den gärna en gång till.",
-  "Där tappade jag tråden. Ställ gärna frågan igen, eller formulera den på ett annat sätt så gör jag ett nytt försök."
+const FELTEXTER: Localized[] = [
+  {
+    sv: "Jag fick inte fram ett svar den här gången. Prova gärna att skicka frågan igen om en liten stund.",
+    en: "I could not get an answer this time. Try sending the question again in a little while."
+  },
+  {
+    sv: "Något hakade upp sig på vägen, och frågan kom aldrig hela vägen fram. Skicka den gärna en gång till.",
+    en: "Something got stuck on the way and the question never arrived. Please send it once more."
+  },
+  {
+    sv: "Där tappade jag tråden. Ställ gärna frågan igen, eller formulera den på ett annat sätt så gör jag ett nytt försök.",
+    en: "I lost the thread there. Ask again, or phrase it another way, and I will try once more."
+  }
 ];
 
-const TIMEOUT_TEXTER = [
-  "Det här svaret tog längre tid än det borde. Skicka gärna frågan igen. Andra försöket brukar gå fortare.",
-  "Svaret hann inte bli klart. Prova igen om en liten stund, så tar jag det därifrån."
+const TIMEOUT_TEXTER: Localized[] = [
+  {
+    sv: "Det här svaret tog längre tid än det borde. Skicka gärna frågan igen. Andra försöket brukar gå fortare.",
+    en: "This answer took longer than it should. Send the question again. The second try is usually faster."
+  },
+  {
+    sv: "Svaret hann inte bli klart. Prova igen om en liten stund, så tar jag det därifrån.",
+    en: "The answer did not finish in time. Try again in a little while and I will pick it up from there."
+  }
 ];
 
-function slumpad(texter: string[]): string {
-  return texter[Math.floor(Math.random() * texter.length)];
+function slumpad(texter: Localized[], locale: Locale): string {
+  return texter[Math.floor(Math.random() * texter.length)][locale];
 }
 
 /** Ett fel vars text är skriven för kunden och därför FÅR visas ordagrant. */
@@ -308,11 +335,21 @@ export function SupportChat({
   // namnger en påhittad butik och ett sortiment kunden inte har. I testMode
   // finns inget varumärke att visa — bara arbetsytans eget namn, om det gavs.
   const tenantConfig = tenant ? getTenant(tenant) : null;
-  const brandLabel = testMode ? (workspaceLabel ?? "Din arbetsyta") : (tenantConfig?.name ?? "Nordlys Handel");
+  const { text, locale } = useLocale();
+  // Läses i fetch-callbacks via ref, så att de inte behöver locale som beroende:
+  // en systembubbla tar språket som gällde när den skrevs.
+  const localeRef = useRef<Locale>(locale);
+  localeRef.current = locale;
+  const brandLabel = testMode
+    ? (workspaceLabel ?? text({ sv: "Din arbetsyta", en: "Your workspace" }))
+    : (tenantConfig?.name ?? "Nordlys Handel");
   const intro = testMode
-    ? "Testa agenten mot din egen kunskapsbas. Körningar här märks som test och räknas inte som kundtrafik."
+    ? text({
+        sv: "Testa agenten mot din egen kunskapsbas. Körningar här märks som test och räknas inte som kundtrafik.",
+        en: "Test the agent against your own knowledge base. Runs here are marked as test and do not count as customer traffic."
+      })
     : (tenantConfig?.supportIntro ?? null);
-  const prompts = tenantConfig?.supportPrompts ?? examplePrompts;
+  const prompts = tenantConfig?.supportPrompts ?? examplePrompts.map(text);
 
   // The poll loop runs up to 90 iterations; without this it keeps writing state
   // after the component is gone.
@@ -327,7 +364,6 @@ export function SupportChat({
     alive.current = true;
     return () => { alive.current = false; };
   }, []);
-  const { text } = useLocale();
   const [messages, setMessages] = useState<FeedItem[]>([]);
   const [input, setInput] = useState("");
   const [attachment, setAttachment] = useState<string | null>(null);
@@ -478,7 +514,7 @@ export function SupportChat({
               // delad identitet, så att ingen ser spår av föregående besökare.
               // Testchatten har sin egen sessionsnyckel av samma skäl.
               customer_email: `${sessionId}@session.snajp.se`,
-              customer_name: testMode ? "Testchatt" : session ? "Webbesökare" : "Demo Kund",
+              customer_name: testMode ? "Testchatt" : session ? "Webbesökare" : "Demo Kund", // inte-copy
               session_key: sessionId,
               tenant,
               attachments,
@@ -526,7 +562,12 @@ export function SupportChat({
             {
               id: crypto.randomUUID(),
               role: "system",
-              content: payload.error ?? "Assistenten är inte tillgänglig just nu. Försök gärna igen om en liten stund."
+              content:
+                payload.error ??
+                {
+                  sv: "Assistenten är inte tillgänglig just nu. Försök gärna igen om en liten stund.",
+                  en: "The assistant is not available right now. Please try again in a little while."
+                }[localeRef.current]
             }
           ]);
           return;
@@ -544,7 +585,7 @@ export function SupportChat({
           throw new VisbartFel(
             (response.status === 429 || response.status === 403) && kvottext
               ? kvottext
-              : slumpad(FELTEXTER)
+              : slumpad(FELTEXTER, localeRef.current)
           );
         }
 
@@ -570,7 +611,12 @@ export function SupportChat({
               {
                 id: crypto.randomUUID(),
                 role: "system",
-                content: job.error ?? "Supporten är inte tillgänglig just nu. Försök igen om en stund."
+                content:
+                  job.error ??
+                  {
+                    sv: "Supporten är inte tillgänglig just nu. Försök igen om en stund.",
+                    en: "Support is not available right now. Try again in a moment."
+                  }[localeRef.current]
               }
             ]);
             return;
@@ -618,10 +664,10 @@ export function SupportChat({
             // (kvotfel.oversatt_felstext). Backendens text vinner alltså när
             // den finns; poolen är reserven för ett jobb utan feltext.
             const backendtext = typeof job.error === "string" ? job.error.trim() : "";
-            throw new VisbartFel(backendtext || slumpad(FELTEXTER));
+            throw new VisbartFel(backendtext || slumpad(FELTEXTER, localeRef.current));
           }
         }
-        throw new VisbartFel(slumpad(TIMEOUT_TEXTER));
+        throw new VisbartFel(slumpad(TIMEOUT_TEXTER, localeRef.current));
       } catch (error) {
         // VisbartFel är skrivet för kunden. HttpJsonError/AbortError/TypeError
         // får sina svenska texter via felmeddelande. Allt annat — okända
@@ -634,8 +680,8 @@ export function SupportChat({
           error instanceof VisbartFel
             ? error.message
             : error instanceof HttpJsonError || (error instanceof DOMException && error.name === "AbortError") || error instanceof TypeError
-              ? felmeddelande(error, slumpad(FELTEXTER))
-              : slumpad(FELTEXTER);
+              ? felmeddelande(error, slumpad(FELTEXTER, localeRef.current))
+              : slumpad(FELTEXTER, localeRef.current);
         setMessages((current) => [
           ...current,
           { id: crypto.randomUUID(), role: "system", content }
@@ -718,7 +764,10 @@ export function SupportChat({
         {
           id: crypto.randomUUID(),
           role: "system",
-          content: `${file.name} är för stor. Taket för PDF är ungefär 8 MB.`
+          content: {
+            sv: `${file.name} är för stor. Taket för PDF är ungefär 8 MB.`,
+            en: `${file.name} is too large. The limit for PDF is about 8 MB.`
+          }[localeRef.current]
         }
       ]);
       return;
@@ -740,7 +789,10 @@ export function SupportChat({
       const dataUrl = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(String(reader.result));
-        reader.onerror = () => reject(new Error("Kunde inte läsa filen."));
+        reader.onerror = () =>
+          reject(
+            new Error({ sv: "Kunde inte läsa filen.", en: "Could not read the file." }[localeRef.current])
+          );
         reader.readAsDataURL(file);
       });
       const response = await fetch("/api/snajp-support/kb/extrahera", {
@@ -756,7 +808,14 @@ export function SupportChat({
         detail?: string;
       }>(response);
       if (!response.ok) {
-        throw new Error(kropp?.detail ?? kropp?.error ?? `Kunde inte läsa PDF:en (${response.status}).`);
+        throw new Error(
+          kropp?.detail ??
+            kropp?.error ??
+            {
+              sv: `Kunde inte läsa PDF:en (${response.status}).`,
+              en: `Could not read the PDF (${response.status}).`
+            }[localeRef.current]
+        );
       }
       setMessages((current) =>
         current.map((item) =>
@@ -796,7 +855,10 @@ export function SupportChat({
           {
             id: crypto.randomUUID(),
             role: "system",
-            content: `Filformatet stöds inte. Läsbara format är ${LÄSBARA.join(", ")} samt PDF.`
+            content: {
+              sv: `Filformatet stöds inte. Läsbara format är ${LÄSBARA.join(", ")} samt PDF.`,
+              en: `The file format is not supported. Readable formats are ${LÄSBARA.join(", ")} and PDF.`
+            }[localeRef.current]
           }
         ]);
         return;
@@ -893,7 +955,7 @@ export function SupportChat({
       setMessages((current) =>
         current.map((item) =>
           item.id === kortId && item.role === "forslag-kort"
-            ? { ...item, status: "fel", fel: "Kunde inte spara. Försök igen." }
+            ? { ...item, status: "fel", fel: { sv: "Kunde inte spara. Försök igen.", en: "Could not save. Try again." } }
             : item
         )
       );
@@ -927,7 +989,11 @@ export function SupportChat({
         }
         uppdateraFeedback(messageId, { fas: "skickad", verdict });
       } catch {
-        uppdateraFeedback(messageId, { fas: "fel", verdict, fel: "Kunde inte skicka. Försök igen." });
+        uppdateraFeedback(messageId, {
+          fas: "fel",
+          verdict,
+          fel: { sv: "Kunde inte skicka. Försök igen.", en: "Could not send. Try again." }
+        });
       }
     },
     [uppdateraFeedback]
@@ -1111,7 +1177,7 @@ export function SupportChat({
         {attachment ? (
           <div className="mb-3 inline-flex items-center gap-2 rounded-input bg-paper p-1.5 pr-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={attachment} alt="Förhandsvisning" className="h-10 w-10 rounded-[6px] object-cover" />
+            <img src={attachment} alt={text({ sv: "Förhandsvisning", en: "Preview" })} className="h-10 w-10 rounded-[6px] object-cover" />
             <span className={meta}>{text({ sv: "Bild bifogad", en: "Image attached" })}</span>
             <button
               type="button"
@@ -1229,16 +1295,17 @@ function KbForhandsvisningKortVy({
   kort,
   onLaggTill
 }: Readonly<{ kort: KbForhandsvisningKort; onLaggTill: () => void }>) {
+  const { text } = useLocale();
   return (
     <div className="flex justify-start">
       <div className="max-w-[90%] rounded-card border border-ink/12 bg-paper2/60 px-4 py-3 text-[0.875rem] leading-6">
         <p className={etikett}>
-          {kort.kalla === "pdf" ? "PDF" : "Textfil"} · {kort.filnamn}
+          {kort.kalla === "pdf" ? "PDF" : text({ sv: "Textfil", en: "Text file" })} · {kort.filnamn}
         </p>
         {kort.status === "extraherar" ? (
           <p className="mt-2 flex items-center gap-2 text-ink-muted">
             <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-            Läser ut texten…
+            {text({ sv: "Läser ut texten…", en: "Extracting the text…" })}
           </p>
         ) : kort.status === "fel" ? (
           <p className="mt-2 text-danger">{kort.fel}</p>
@@ -1249,16 +1316,17 @@ function KbForhandsvisningKortVy({
               <p className="mt-1.5 max-w-[65ch] text-warning">{kort.varning}</p>
             ) : null}
             <div className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap rounded-input bg-paper px-3 py-2 text-ink-muted">
-              {kort.innehall || "(ingen text hittades i filen)"}
+              {kort.innehall || text({ sv: "(ingen text hittades i filen)", en: "(no text found in the file)" })}
             </div>
             {kort.sidor ? (
               <p className={cn(meta, "mt-1")}>
-                {kort.sidor} {kort.sidor === 1 ? "sida" : "sidor"}
+                {kort.sidor}{" "}
+                {kort.sidor === 1 ? text({ sv: "sida", en: "page" }) : text({ sv: "sidor", en: "pages" })}
               </p>
             ) : null}
             <div className="mt-3">
               {kort.status === "sparad" ? (
-                <p className="text-moss">Tillagt i kunskapsbasen.</p>
+                <p className="text-moss">{text({ sv: "Tillagt i kunskapsbasen.", en: "Added to the knowledge base." })}</p>
               ) : (
                 <button
                   type="button"
@@ -1267,7 +1335,9 @@ function KbForhandsvisningKortVy({
                   className={cn(btnSecondary, "min-h-9 disabled:opacity-50")}
                 >
                   <Check className="h-3.5 w-3.5" aria-hidden />
-                  {kort.status === "sparar" ? "Sparar…" : "Lägg till i kunskapsbasen"}
+                  {kort.status === "sparar"
+                    ? text({ sv: "Sparar…", en: "Saving…" })
+                    : text({ sv: "Lägg till i kunskapsbasen", en: "Add to knowledge base" })}
                 </button>
               )}
             </div>
@@ -1289,20 +1359,31 @@ function ForslagKortVy({
   onGodkann,
   onAvfard
 }: Readonly<{ kort: ForslagKort; onArende: () => void; onGodkann: () => void; onAvfard: () => void }>) {
+  const { text } = useLocale();
   return (
     <div className="flex justify-start">
       <div className="max-w-[90%] rounded-card border border-ochre/30 bg-ochre/5 px-4 py-3 text-[0.875rem] leading-6">
-        <p className={etikett}>Agenten behöver undersöka det här innan den svarar</p>
+        <p className={etikett}>
+          {text({
+            sv: "Agenten behöver undersöka det här innan den svarar",
+            en: "The agent needs to look into this before it answers"
+          })}
+        </p>
         <p className="mt-2 font-semibold text-ink">{kort.rubrik}</p>
         {kort.brodtext ? <p className="mt-1 whitespace-pre-wrap text-ink-muted">{kort.brodtext}</p> : null}
         {kort.status === "arende" ? (
           <p className="mt-3 text-moss">
-            Öppnat som ärende. Det ligger under Testkörningar tills ni har underlag att svara med.
+            {text({
+              sv: "Öppnat som ärende. Det ligger under Testkörningar tills ni har underlag att svara med.",
+              en: "Opened as a case. It stays under Test runs until you have source material to answer with."
+            })}
           </p>
         ) : kort.status === "sparat" ? (
-          <p className="mt-3 text-moss">Sparad som kunskapsartikel.</p>
+          <p className="mt-3 text-moss">
+            {text({ sv: "Sparad som kunskapsartikel.", en: "Saved as a knowledge article." })}
+          </p>
         ) : kort.status === "avfardat" ? (
-          <p className="mt-3 text-ink-subtle">Avfärdat.</p>
+          <p className="mt-3 text-ink-subtle">{text({ sv: "Avfärdat.", en: "Dismissed." })}</p>
         ) : (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <button
@@ -1312,7 +1393,9 @@ function ForslagKortVy({
               className="focus-ring inline-flex min-h-9 items-center gap-1.5 rounded-input bg-ink px-3 text-[0.8125rem] font-medium text-paper disabled:opacity-50"
             >
               <Check className="h-3.5 w-3.5" aria-hidden />
-              {kort.status === "sparar" ? "Öppnar…" : "Öppna som ärende"}
+              {kort.status === "sparar"
+                ? text({ sv: "Öppnar…", en: "Opening…" })
+                : text({ sv: "Öppna som ärende", en: "Open as case" })}
             </button>
             <button
               type="button"
@@ -1320,7 +1403,7 @@ function ForslagKortVy({
               onClick={onGodkann}
               className="focus-ring inline-flex min-h-9 items-center gap-1.5 rounded-input bg-paper2 px-3 text-[0.8125rem] font-medium disabled:opacity-50"
             >
-              Spara som kunskapsartikel
+              {text({ sv: "Spara som kunskapsartikel", en: "Save as knowledge article" })}
             </button>
             <button
               type="button"
@@ -1329,11 +1412,13 @@ function ForslagKortVy({
               className="focus-ring inline-flex min-h-9 items-center gap-1.5 rounded-input bg-paper2 px-3 text-[0.8125rem] font-medium disabled:opacity-50"
             >
               <X className="h-3.5 w-3.5" aria-hidden />
-              {kort.status === "avfardar" ? "Avfärdar…" : "Avfärda"}
+              {kort.status === "avfardar"
+                ? text({ sv: "Avfärdar…", en: "Dismissing…" })
+                : text({ sv: "Avfärda", en: "Dismiss" })}
             </button>
           </div>
         )}
-        {kort.fel ? <p className="mt-2 text-danger">{kort.fel}</p> : null}
+        {kort.fel ? <p className="mt-2 text-danger">{text(kort.fel)}</p> : null}
       </div>
     </div>
   );
@@ -1366,10 +1451,14 @@ function FeedbackRad({
   onDaligSkicka: () => void;
   onDaligHoppaOver: () => void;
 }>) {
+  const { text } = useLocale();
   if (lage.fas === "skickad") {
     return (
       <p className={cn(meta, "mt-1.5")}>
-        Feedbacken är kalibrerad in. Nästa testsvar tar hänsyn till den.
+        {text({
+          sv: "Feedbacken är kalibrerad in. Nästa testsvar tar hänsyn till den.",
+          en: "The feedback is calibrated in. The next test answer takes it into account."
+        })}
       </p>
     );
   }
@@ -1381,7 +1470,7 @@ function FeedbackRad({
           type="button"
           onClick={onBra}
           disabled={lage.fas === "skickar"}
-          aria-label="Bra svar"
+          aria-label={text({ sv: "Bra svar", en: "Good answer" })}
           className="focus-ring inline-flex h-8 w-8 items-center justify-center rounded-input text-ink-subtle transition-colors hover:bg-paper2 hover:text-moss disabled:opacity-50"
         >
           <ThumbsUp className="h-3.5 w-3.5" />
@@ -1390,7 +1479,7 @@ function FeedbackRad({
           type="button"
           onClick={onDaligOppna}
           disabled={lage.fas === "skickar"}
-          aria-label="Dåligt svar"
+          aria-label={text({ sv: "Dåligt svar", en: "Bad answer" })}
           aria-expanded={lage.fas === "rattar"}
           className={cn(
             "focus-ring inline-flex h-8 w-8 items-center justify-center rounded-input transition-colors hover:bg-paper2 hover:text-danger disabled:opacity-50",
@@ -1403,7 +1492,7 @@ function FeedbackRad({
       {lage.fas === "rattar" ? (
         <div className="mt-2 rounded-input border border-ink/12 bg-paper p-3">
           <label className={etikett} htmlFor={`feedback-rattning-${messageId}`}>
-            Vad borde agenten ha svarat? (frivilligt)
+            {text({ sv: "Vad borde agenten ha svarat? (frivilligt)", en: "What should the agent have answered? (optional)" })}
           </label>
           <textarea
             id={`feedback-rattning-${messageId}`}
@@ -1419,19 +1508,19 @@ function FeedbackRad({
               onClick={onDaligSkicka}
               className={cn(btnPrimary, btnLiten)}
             >
-              Skicka rättning
+              {text({ sv: "Skicka rättning", en: "Send correction" })}
             </button>
             <button
               type="button"
               onClick={onDaligHoppaOver}
               className={cn(btnSecondary, btnLiten)}
             >
-              Hoppa över
+              {text({ sv: "Hoppa över", en: "Skip" })}
             </button>
           </div>
         </div>
       ) : null}
-      {lage.fas === "fel" ? <p className="mt-1 text-[0.8125rem] text-danger">{lage.fel}</p> : null}
+      {lage.fas === "fel" ? <p className="mt-1 text-[0.8125rem] text-danger">{lage.fel ? text(lage.fel) : null}</p> : null}
     </div>
   );
 }
