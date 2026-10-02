@@ -1456,8 +1456,8 @@ function FeedbackRad({
     return (
       <p className={cn(meta, "mt-1.5")}>
         {text({
-          sv: "Feedbacken är kalibrerad in. Nästa testsvar tar hänsyn till den.",
-          en: "The feedback is calibrated in. The next test answer takes it into account."
+          sv: "Återkopplingen är sparad. Nästa testsvar tar hänsyn till den.",
+          en: "The feedback is saved. The next test answer takes it into account."
         })}
       </p>
     );

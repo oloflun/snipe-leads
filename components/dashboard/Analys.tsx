@@ -205,7 +205,7 @@ export function Analys({ demo = false }: Readonly<{ demo?: boolean }>) {
           { nyckel: "leads_runs", etikett: text({ sv: "Körningar", en: "Runs" }), tacks: tackning.leads_runs }
         ]}
         kurva={(v) => v.sent}
-        kurvetikett={text({ sv: "Skick per vecka", en: "Sent per week" })}
+        kurvetikett={text({ sv: "Utskick per vecka", en: "Sent per week" })}
       />
 
       <AgentBlock

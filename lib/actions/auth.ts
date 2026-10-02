@@ -34,8 +34,7 @@ const errorMessages: Record<string, string> = {
   // användaren inte tittade i.
   "credentialssignin": "Fel e-postadress eller lösenord.",
   "invalid login credentials":
-    "Fel e-postadress eller lösenord. Har du glömt lösenordet? Välj Glömt lösenordet? "
-    + "ovan.",
+    "Fel e-postadress eller lösenord. Har du glömt det? Välj ”Glömt lösenordet?” ovan.",
   "email not confirmed":
     "Adressen är inte verifierad än. Klicka på länken i mailet vi skickade — kolla skräpposten om det inte kommit fram.",
   "user already registered":
@@ -329,7 +328,7 @@ export async function signInWithOAuth(
   if (!configured) {
     return {
       success: false,
-      error: `${provider === "google" ? "Google" : "Microsoft"}-inloggning är inte konfigurerad än. Se AUTH.md.`
+      error: `${provider === "google" ? "Google" : "Microsoft"}-inloggning är inte konfigurerad än. Kontakta support.`
     };
   }
 

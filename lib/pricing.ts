@@ -165,15 +165,15 @@ export const PAKET: Paket[] = [
       en: "The receipt agent that reads your inbox and totals the receipts."
     },
     kampanj: {
-      sv: "Rabatt på extra-agent till kvittohanteringen nu för endast {belopp}.",
+      sv: "Lägg till Kvittohanteraren som extra agent — nu för endast {belopp}.",
       en: "Discount on an extra agent for bookkeeping, now only {belopp}."
     },
     ingar: [
-      { sv: "Kvitton ur mejlen: Gmail, Outlook och Hotmail (read-only)", en: "Receipts from mail: Gmail, Outlook and Hotmail (read-only)" },
+      { sv: "Kvitton ur mejlen: Gmail, Outlook och Hotmail (endast läsbehörighet)", en: "Receipts from mail: Gmail, Outlook and Hotmail (read-only)" },
       { sv: "Belopp, moms, datum och kategori avlästa per kvitto", en: "Amount, VAT, date and category read per receipt" },
       { sv: "Sammanställning per kategori med dublettkontroll", en: "Per-category totals with duplicate control" },
       { sv: "SIE4-export till ert bokföringsprogram", en: "SIE4 export to your accounting software" },
-      { sv: "Kvitto-assistent i chatt", en: "Receipt assistant in chat" }
+      { sv: "Kvittoassistent i chatten", en: "Receipt assistant in chat" }
     ]
   }
 ];

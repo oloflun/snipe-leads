@@ -610,7 +610,7 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
         const orsak: Localized = backendFel
           ? ordagrant(backendFel)
           : {
-              sv: `Kunde inte processa om (status ${response.status}).`,
+              sv: `Kunde inte bearbeta om (status ${response.status}).`,
               en: `Could not reprocess (status ${response.status}).`
             };
         setUtkastResultat(
@@ -639,7 +639,7 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
             ok: false,
             meddelande:
               klart.fel ??
-              (klart.error ? ordagrant(klart.error) : { sv: "Processningen misslyckades.", en: "Processing failed." })
+              (klart.error ? ordagrant(klart.error) : { sv: "Bearbetningen misslyckades.", en: "Processing failed." })
           });
         }
       }
@@ -732,8 +732,8 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
                 className={cn(btnSecondary, btnLiten)}
               >
                 {processarOm
-                  ? text({ sv: "Processar om…", en: "Reprocessing…" })
-                  : text({ sv: `Processa om (${valda.size})`, en: `Reprocess (${valda.size})` })}
+                  ? text({ sv: "Bearbetar om…", en: "Reprocessing…" })
+                  : text({ sv: `Bearbeta om (${valda.size})`, en: `Reprocess (${valda.size})` })}
               </button>
             </div>
           ) : (
@@ -814,7 +814,7 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
       {synliga.length === 0 ? (
         <Tomt>
           {text({
-            sv: `Alla ${antalTest} bolag just nu är testkörningar och är dolda. Slå på "Visa testkörningar" ovan för att se dem.`,
+            sv: `Alla ${antalTest} bolag är just nu testkörningar och döljs. Slå på "Visa testkörningar" ovan för att se dem.`,
             en: `All ${antalTest} companies right now are test runs and are hidden. Turn on "Show test runs" above to see them.`
           })}
         </Tomt>

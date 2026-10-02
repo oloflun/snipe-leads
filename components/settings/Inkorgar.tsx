@@ -102,7 +102,7 @@ const LOSENORDSGUIDE: Record<Guide, { lank?: { href: string; text: Localized }; 
       { sv: "Skapa ett applösenord och kopiera det.", en: "Create an app password and copy it." }
     ],
     not: {
-      sv: "Microsoft har stängt lösenordsinloggning för många konton, och företagskonton i Microsoft 365 tillåter den oftast inte. Nekas inloggningen i steg 3 hjälper vi er koppla på annat sätt.",
+      sv: "Microsoft har stängt lösenordsinloggning för många konton, och företagskonton i Microsoft 365 tillåter den oftast inte. Nekas inloggningen i steg 3 hjälper vi er att koppla på ett annat sätt.",
       en: "Microsoft has turned off password sign-in for many accounts, and Microsoft 365 work accounts usually do not allow it. If sign-in is refused in step 3, we will help you connect another way."
     }
   },

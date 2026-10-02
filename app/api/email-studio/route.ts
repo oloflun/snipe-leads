@@ -153,7 +153,7 @@ function parseRichRefine(content: string) {
     return {
       original_version: extractSection(trimmed, ['Ursprunglig version', 'Original version']) ?? null,
       new_version,
-      explanation: explanation || "Ändring utförd enligt marketingskills.",
+      explanation: explanation || "Texten är omarbetad.",
       subject_suggestions: subject_suggestions.length ? subject_suggestions : [],
       confidence_tips: tips
     };
@@ -227,7 +227,7 @@ const HONEST_FEL: Record<Exclude<Simuleringsorsak, "anonym">, { status: number; 
   },
   kvot: {
     status: 429,
-    text: "AI-leverantörens kvot är slut just nu. Det är inte ett fel i ditt ärende — din text är orörd, prova igen om en stund."
+    text: "AI-leverantörens kvot är slut just nu. Det är inget fel på din text — den är orörd, prova igen om en stund."
   },
   "tillfälligt fel": {
     status: 502,

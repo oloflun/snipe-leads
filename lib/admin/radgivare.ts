@@ -157,7 +157,7 @@ export function fragaRadgivaren(fraga: string, rader: Rad[], locale: Locale = "s
         sv
           ? `TYSTA (${tysta.length}): ${namnge(tysta)}. Ingen aktivitet på över ` +
               `${TYST_EFTER_DAGAR} dagar. De ser lönsamma ut just för att de inte används — ` +
-              `hör av er innan de gör det.`
+              `hör av er innan de säger upp sig.`
           : `DORMANT (${tysta.length}): ${namnge(tysta)}. No activity for over ` +
               `${TYST_EFTER_DAGAR} days. They look profitable precisely because they are unused — ` +
               `reach out before they do.`

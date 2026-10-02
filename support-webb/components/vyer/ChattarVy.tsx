@@ -261,7 +261,7 @@ function Chattar() {
                 ) : null}
                 {detalj.samtal.aktiv === false && detalj.samtal.lage === "overlamnad" ? (
                   <p className="mt-2 max-w-[62ch] text-[0.8125rem] text-ink-subtle">
-                    Vilande — agenten svarar igen tills du svarar.
+                    Vilande — agenten svarar inte förrän du har svarat.
                   </p>
                 ) : null}
 

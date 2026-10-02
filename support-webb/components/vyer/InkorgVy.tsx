@@ -42,7 +42,7 @@ const STATUSETIKETT: Record<string, string> = {
   approved_and_sent: "Godkänt & skickat",
   escalated: "Eskalerat",
   taken_over: "Övertaget",
-  failed: "Föll"
+  failed: "Misslyckades"
 };
 
 function Inkorg() {

@@ -35,6 +35,15 @@ type KöItem = {
   company_name?: string | null;
 };
 
+/** Klipp förhandsvisningen vid senaste ordgräns före 220 tecken, så att
+ *  texten inte huggs av mitt i ett ord. Finns inget mellanslag efter index
+ *  150 klipps den vid 220 som förut. */
+function klippVidOrdgrans(text: string): string {
+  const stycke = text.slice(0, 220);
+  const sistaMellanslag = stycke.lastIndexOf(" ");
+  return sistaMellanslag > 150 ? stycke.slice(0, sistaMellanslag) : stycke;
+}
+
 function tillStudioData(post: KöItem, utanAmne: string): EmailStudioData {
   return {
     source: "database",
@@ -184,7 +193,7 @@ export function IrisGranskning({ demo = false }: Readonly<{ demo?: boolean }>) {
 
                 {!öppen && post.body ? (
                   <p className="mt-3 max-w-[72ch] whitespace-pre-wrap text-[0.9375rem] leading-7 text-ink-muted">
-                    {post.body.length > 220 ? `${post.body.slice(0, 220)}…` : post.body}
+                    {post.body.length > 220 ? `${klippVidOrdgrans(post.body)}…` : post.body}
                   </p>
                 ) : null}
 

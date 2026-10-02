@@ -811,7 +811,7 @@ const KAPACITETSMARKORER = [
 
 /** Saknad erbjudandetext gäller varje rad lika — därför stoppar den svepet. */
 const OFFERT_SAKNAS: Localized = {
-  sv: "Fyll i Vad ni säljer under Inställningar först.",
+  sv: "Fyll i ”Vad ni säljer” under Inställningar först.",
   en: "Fill in What you sell under Settings first."
 };
 

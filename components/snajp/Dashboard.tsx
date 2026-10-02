@@ -130,6 +130,7 @@ const EVENT_LABELS: Record<string, Localized> = {
   auto_sent: { sv: "Autosvar skickat", en: "Auto-reply sent" },
   approved_and_sent: { sv: "Godkänt & skickat", en: "Approved & sent" },
   draft_rejected: { sv: "Utkast avvisat", en: "Draft rejected" },
+  draft_omformulerad: { sv: "Utkast omformulerat", en: "Draft rephrased" },
   taken_over: { sv: "Manuellt övertaget", en: "Taken over manually" },
   failed: { sv: "Fel vid bearbetning", en: "Processing error" },
   rule_changed: { sv: "Regel ändrad", en: "Rule changed" },
