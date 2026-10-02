@@ -113,6 +113,8 @@ export const appRoutes: AppRoute[] = [
       // och återvända till. Före 2026-10-01 fanns en körning bara i
       // körformulärets state och i Redis en timme.
       { href: "/dashboard/iris/korningar", labelKey: "nav.iris.korningar" },
+      // Leads-inkorgen (migration 084): svar och nya leads ur kundens brevlåda.
+      { href: "/dashboard/iris/inkorg", labelKey: "nav.iris.inkorg" },
       { href: "/dashboard/iris/granskning", labelKey: "nav.iris.granskning" },
       { href: "/dashboard/iris/installningar", labelKey: "nav.iris.installningar" }
     ]

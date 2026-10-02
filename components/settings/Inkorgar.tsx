@@ -144,6 +144,9 @@ export function Inkorgar() {
   // fallet är att supportmejlen går till samma adress kunden loggar in med.
   const [adress, setAdress] = useState("");
   const [losenord, setLosenord] = useState("");
+  // Vad brevlådan används till (migration 084): styr klassningen i
+  // app/email_pipeline/klassning.py. Leads-kunder väljer "Leads".
+  const [syfte, setSyfte] = useState<"support" | "leads" | "bada">("support");
   const [imapVard, setImapVard] = useState("");
   const [skickar, setSkickar] = useState(false);
   const [formFel, setFormFel] = useState<Localized | null>(null);
@@ -247,6 +250,7 @@ export function Inkorgar() {
         body: JSON.stringify({
           address: adress.trim(),
           app_losenord: losenord,
+          syfte,
           ...(behoverVard && imapVard.trim() ? { imap_host: imapVard.trim() } : {})
         })
       });
@@ -451,6 +455,18 @@ export function Inkorgar() {
                 placeholder={text({ sv: "info@erforetag.se", en: "info@yourcompany.com" })}
                 className="focus-ring min-h-11 w-full rounded-input border border-ink/15 bg-paper px-3 text-[16px]"
               />
+              <label className="mt-3 flex flex-col gap-1 text-[0.875rem] text-ink-muted">
+                {text({ sv: "Vad ska brevlådan användas till?", en: "What is the mailbox used for?" })}
+                <select
+                  value={syfte}
+                  onChange={(event) => setSyfte(event.target.value as typeof syfte)}
+                  className="focus-ring min-h-11 w-full rounded-input border border-ink/15 bg-paper px-3 text-[16px] text-ink"
+                >
+                  <option value="support">{text({ sv: "Kundtjänst", en: "Customer service" })}</option>
+                  <option value="leads">{text({ sv: "Leads (svar från prospekt och nya leads)", en: "Leads (replies from prospects and new leads)" })}</option>
+                  <option value="bada">{text({ sv: "Både kundtjänst och leads", en: "Both customer service and leads" })}</option>
+                </select>
+              </label>
               <p className="text-[0.875rem] leading-6 text-ink-muted" aria-live="polite">
                 {soker ? (
                   text({ sv: "Letar upp er mejlleverantör …", en: "Looking up your email provider …" })

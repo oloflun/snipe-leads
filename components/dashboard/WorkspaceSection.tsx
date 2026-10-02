@@ -16,6 +16,7 @@ import {
 import { IrisBolag } from "@/components/leads/IrisBolag";
 import { IrisGranskning } from "@/components/leads/IrisGranskning";
 import { IrisInstallningar } from "@/components/leads/IrisInstallningar";
+import { IrisInkorg } from "@/components/leads/IrisInkorg";
 import { IrisKorningar } from "@/components/leads/IrisKorningar";
 import { resolveDashboardState } from "@/lib/data/dashboard";
 import type { ProductKey } from "@/lib/routes";
@@ -143,6 +144,13 @@ export async function WorkspaceSection({
         return (
           <PageShell title={{ sv: "Körningar", en: "Runs" }}>
             <IrisKorningar />
+          </PageShell>
+        );
+      }
+      if (id === "inkorg") {
+        return (
+          <PageShell title={{ sv: "Inkorg", en: "Inbox" }}>
+            <IrisInkorg />
           </PageShell>
         );
       }

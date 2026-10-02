@@ -67,6 +67,9 @@ type EmailRow = {
   is_test?: boolean;
   /** Manuell avbockning (migration 071). Null/undefined = ohanterad. */
   hanterad_at?: string | null;
+  /** Klassningen (migration 084): support | lead | ej_relaterat, och vem som avgjorde. */
+  klass?: string | null;
+  klass_kalla?: string | null;
 };
 
 type EmailDetail = EmailRow & {
@@ -77,6 +80,21 @@ type EmailDetail = EmailRow & {
 // Måste spegla CATEGORIES i snajp-support/app/config.py. Backenden (som
 // deployas från development) klassar numera i garanti och utbildning; utan
 // dem här visades facken utan etikett i den här vyn.
+/** Klassen (migration 084) visas bara när den avviker från support, eller när
+ *  Jev avgjorde: då ska människan kunna se och rätta. */
+const KLASS_ETIKETT: Record<string, Localized> = {
+  lead: { sv: "Lead", en: "Lead" },
+  ej_relaterat: { sv: "Ej relaterat", en: "Unrelated" },
+  support: { sv: "Support", en: "Support" }
+};
+const KLASS_KALLA_ETIKETT: Record<string, Localized> = {
+  regel: { sv: "regel", en: "rule" },
+  jev: { sv: "Jev", en: "Jev" },
+  syfte: { sv: "brevlådans syfte", en: "mailbox purpose" },
+  standard: { sv: "standard", en: "default" },
+  manuell: { sv: "manuellt", en: "manual" }
+};
+
 const CATEGORY_LABELS: Record<string, Localized> = {
   teknisk_support: { sv: "Teknisk support", en: "Technical support" },
   garanti: { sv: "Garanti", en: "Warranty" },
@@ -265,7 +283,8 @@ export function Dashboard({
   onMeta
 }: Readonly<{
   demo?: boolean;
-  lager?: "arenden" | "testmail" | "att_hantera";
+  /** "leads" (migration 084): leads-inkorgen under Iris — samma vy, klass=lead. */
+  lager?: "arenden" | "testmail" | "att_hantera" | "leads";
   onMeta?: (meta: { visar_test_i_arenden: boolean }) => void;
 }>) {
   const vag = useArbetsvag();
@@ -372,6 +391,8 @@ export function Dashboard({
       // "Att hantera" är en egen status, inte ett filter i listan: fliken
       // visar BARA larmen, och huvudlistan utesluter dem (backenden).
       if (lager === "att_hantera") params.set("status", "att_hantera");
+      // Leads-inkorgen (084): raderna Jev eller reglerna klassat som lead.
+      if (lager === "leads") params.set("klass", "lead");
       const data = await api(`/inbox?${params.toString()}`);
       setEmails(data.emails);
       setCategoryCounts(data.category_counts);
@@ -633,7 +654,7 @@ export function Dashboard({
             Göms när en riktig inkorg är kopplad. Testmail bland en kunds
             verkliga ärenden är inte en demo, det är skräp i deras inkorg —
             och de har redan sett hur produkten fungerar. */}
-        {inkorgKopplad || lager === "att_hantera" || (lager === "arenden" && visarTestIArenden === false) ? null : (
+        {inkorgKopplad || lager === "att_hantera" || lager === "leads" || (lager === "arenden" && visarTestIArenden === false) ? null : (
           <button
             type="button"
             onClick={() => void seedMock(null)}
@@ -678,13 +699,13 @@ export function Dashboard({
         <button
           type="button"
           onClick={() =>
-            inkorgKopplad || lager === "att_hantera" || (lager === "arenden" && visarTestIArenden === false)
+            inkorgKopplad || lager === "att_hantera" || lager === "leads" || (lager === "arenden" && visarTestIArenden === false)
               ? void refresh()
               : void seedMock(categoryFilter)
           }
           disabled={busy !== null}
           title={
-            inkorgKopplad || lager === "att_hantera" || (lager === "arenden" && visarTestIArenden === false)
+            inkorgKopplad || lager === "att_hantera" || lager === "leads" || (lager === "arenden" && visarTestIArenden === false)
               ? text(T.lasOm)
               : categoryFilter
                 ? text(T.nyaFack)
@@ -708,7 +729,7 @@ export function Dashboard({
             className="focus-ring min-h-11 w-full rounded-input bg-paper py-2.5 pl-9 pr-3 text-sm outline-none placeholder:text-ink/35"
           />
         </div>
-        {lager === "att_hantera" ? null : (
+        {lager === "att_hantera" || lager === "leads" ? null : (
           <select
           value={statusFilter ?? ""}
           onChange={(event) => setStatusFilter(event.target.value || null)}
@@ -724,7 +745,7 @@ export function Dashboard({
         )}
         {/* Reglerna bor numera under Inställningar, bredvid leads-agentens
             motsvarande kontroll. Se components/settings/SupportRegler.tsx. */}
-        {demo || lager === "att_hantera" ? null : (
+        {demo || lager === "att_hantera" || lager === "leads" ? null : (
           <Link href={vag("/settings/regler")} className={btnSecondary}>
             <Settings2 className="h-4 w-4" />
             {text(T.regler)}
@@ -828,7 +849,7 @@ export function Dashboard({
                   <>{text(T.ingaArenden)}</>
                 )}
               </p>
-              {inkorgKopplad || lager === "att_hantera" ? null : (
+              {inkorgKopplad || lager === "att_hantera" || lager === "leads" ? null : (
                 <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-ink-subtle">
                   {text(T.kopplaRiktig)}{" "}
                   <Link
@@ -859,6 +880,13 @@ export function Dashboard({
                   email.from_name || email.from_email,
                   email.classification && CATEGORY_LABELS[email.classification.category]
                     ? text(CATEGORY_LABELS[email.classification.category])
+                    : null,
+                  email.klass && (email.klass !== "support" || email.klass_kalla === "jev") && KLASS_ETIKETT[email.klass]
+                    ? `${text(KLASS_ETIKETT[email.klass])}${
+                        email.klass_kalla && KLASS_KALLA_ETIKETT[email.klass_kalla]
+                          ? ` (${text(KLASS_KALLA_ETIKETT[email.klass_kalla])})`
+                          : ""
+                      }`
                     : null
                 ].filter(Boolean);
                 return (
