@@ -62,6 +62,19 @@ Alla tio faser i planen `plans/2026-10-02-knyta-ihop-korningen.md` är nu kodade
 ## Current State After This Session
 `development` bär hela beställningen från 2026-10-01 i kod, testad men inte deployad: 25 commits väntar på Antons push, och migrationerna 082–086 ska köras mot development och 079–086 mot main (adminfelet i produktion är fortfarande den saknade 080_paket_admin). Nästa session börjar med den skarpa verifieringen på development när Anton kört kommandona, sedan a11y-audit och pixelgranskning av de inloggade ytorna.
 
+## Tillägg efter conclude: a11y-audit och åtta rättningar (commit efter 6f1d75e)
+Stop-hooken krävde att allt i planen som går att göra utan behörighet görs. `a11y-audit`
+kördes som Opus-agent mot demons fyra Iris-vyer på den lokala dev-servern (axe, tab_walk,
+reflow, contrast; fixturen fälld av varje skript). Åtta materiella fynd rättade och
+verifierade i webbläsaren: fokusring 2,17:1 → 3,4:1 (`color-mix` på `--focus`, tenantsäkert),
+`--danger` 0,57 → 0,53 (4,4:1 → 5,2:1), fokus kvar på selecten efter statusbyte i Pipeline
+och Tabell (effekt efter commit, inte rAF) med `role=status`-meddelande, Home/End på Iris-
+tablisten, fokus till raden efter val ur Tabell, demons Listor utan "Du måste vara inloggad"
+(DEMO_STATE har `isDemo=false`, så `demo`-propen går IrisBolag → LeadslistorView → ImportCsv),
+kontaktvägsvalet som `aria-pressed`-knappar, ingen trunkering. Debt-ledger (ej rättat): se
+planens statusblock. Docker Desktop finns men är stoppat; lokal Postgres saknas, så inloggade
+ytor granskades inte i webbläsaren.
+
 <!-- session-state
 date: 2026-10-02
 type: feature

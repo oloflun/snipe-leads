@@ -302,7 +302,7 @@ Antagande utan fråga: Fas 3 (regeln + grinden) före listorna, så det nya UI:t
 - [x] Fas 8 del D: klassning support/lead/ej relaterat, leads-inkorgen under Iris, brevlådans syfte (1759872, 9cc0a8e, migration 084).
 - [x] Fas 9 del E: nattlig spegling + Flytta till main med HMAC, INV-DATA-003 (cbe2ae5, migration 085).
 - [x] Fas 10 del F: F1–F7 (1b0ba87 backend, ef028d0 frontend, migration 086): tidslinje, anteckningar, uppgifter, sparade vyer, Tabell-segment, Pipeline-kanban, CSV-import med kolumnkartor, automation per leadtyp, envägs CRM-synk HubSpot/Pipedrive.
-- [x] Fas 6.1 delvis: pixelgranskning av Pipeline, Tabell och importpanelen lokalt (demon, 1280 + 375, sv + en); ett fynd rättat (051f131). Flikarna i Iris › Bolag har pilnavigering (planens a11y-notering).
+- [x] Fas 6.1 lokalt: pixelgranskning av Pipeline, Tabell och importpanelen (demon, 1280 + 375, sv + en); ett fynd rättat (051f131). `a11y-audit` körd mot demons fyra Iris-vyer (Opus-agent, axe + tab_walk + reflow + contrast, fixturen `broken.html` fälld av varje skript): 0 axe-violations efter rättningarna, åtta materiella fynd rättade i samma commit (fokusring 2,17:1 → 3,4:1 via color-mix på `--focus`, danger 4,4:1 → 5,2:1, fokus kvar efter statusbyte i Pipeline/Tabell med role=status, Home/End på tablisten, fokus till raden efter val ur Tabell, demons Listor utan inloggningsfel, kontaktvägsvalet som aria-pressed-knappar, ingen trunkering). Kvar som skuld (30/90 d): radknappens långa tillgängliga namn och detaljpanelens placering efter listan i DOM (IrisBolag), filtrets träffantal ej annonserat (LeadsTabell), ingen skip-länk/contentinfo (AppShell), railens undermenyer 36 px, bannerlänkens tabbordning, Pipeline-korts sr-only-spann som ökar scrollWidth vid 320 px. Körningar-vyn och inloggade ytor kunde inte auditeras lokalt (ingen Postgres, inte i demon).
 - [x] Grindar vid avslut: backend 2463 passed/4 skipped, rotinvarianter 425, tsc rent, node 162.
 
 ### Kvar — kräver Anton (behörighetsgrinden nekar auto-läget)
@@ -310,7 +310,7 @@ Antagande utan fråga: Fas 3 (regeln + grinden) före listorna, så det nya UI:t
 - [ ] Fas 1: `python scripts/railway_migrate.py --env main` (torr) → `--apply` (079, 080_paket_admin, 080_korningar, 081 **plus nu 082–086**, alla additiva).
 - [ ] Development: `python scripts/railway_migrate.py --env development --apply` (082–086) FÖRE eller direkt efter pushen.
 - [ ] `FLYTT_NYCKEL` (main + development) och `FLYTT_MAL_URL` (development) via `scripts/keys.py`; repo-secret `ENV_DEPLOY` för `spegla-dev.yml`.
-- [ ] Fas 2.5 + 6.1 skarpt: lista, Iris-körning, Flytta till Iris, Pipeline/Tabell med riktiga rader, engelska läget på development; `a11y-audit` på Körningar och listvyn.
+- [ ] Fas 2.5 + 6.1 skarpt: lista, Iris-körning, Flytta till Iris, Pipeline/Tabell med riktiga rader, Automation, engelska läget på development; `a11y-audit` på Körningar och inloggade ytor (demon är auditerad).
 
 ### Känt och medvetet
 - `/simplify`-skillen finns inte installerad; förenklingspasset gjordes för hand i granskningen av Fas 10 (inget utöver rättningarna ovan).
