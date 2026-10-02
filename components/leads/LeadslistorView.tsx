@@ -387,7 +387,7 @@ function datum(varde: string | null | undefined): string | null {
   return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
 }
 
-export function LeadslistorView() {
+export function LeadslistorView({ demo = false }: Readonly<{ demo?: boolean }> = {}) {
   const { isDemo, vy } = useDashboard();
   const { locale, text } = useLocale();
 
@@ -447,6 +447,11 @@ export function LeadslistorView() {
 
   const hamtaListor = useCallback(async (tyst = false) => {
     if (!tyst) setListFel(null);
+    // Demon har inget konto: inget anrop, ingen "Du måste vara inloggad" (a11y-audit 2026-10-02).
+    if (demo || isDemo || vy === "demo") {
+      setListor([]);
+      return;
+    }
     try {
       const svar = await anropa<{ lists?: Lista[] }>("/leads/listor");
       setListor(svar.lists ?? []);
@@ -456,7 +461,7 @@ export function LeadslistorView() {
       // kan lyckas, och en lista som blinkar bort är värre än en gammal.
       if (!tyst || listor === null) setListFel(felmeddelande(fel));
     }
-  }, [listor]);
+  }, [listor, demo, isDemo, vy]);
 
   useEffect(() => {
     void hamtaListor();
@@ -601,7 +606,7 @@ export function LeadslistorView() {
 
         {importOppen ? (
           <div className="mt-4 rounded-card border border-ink/12 bg-paper2/40 p-4">
-            <ImportCsv onKlar={() => void hamtaListor(true)} />
+            <ImportCsv demo={demo || isDemo || vy === "demo"} onKlar={() => void hamtaListor(true)} />
           </div>
         ) : null}
 
@@ -1340,17 +1345,18 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
       {/* Underfliken: samma lista, filtrerad på kontaktväg. Sortering: båda →
           telefon → mejl, eller bolagsnamn. */}
       <div className="mt-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
-        <div className="flex flex-wrap gap-2" role="tablist" aria-label={text({ sv: "Kontaktväg", en: "Contact channel" })}>
+        {/* Tryckknappar, inte role=tab: ett filter över samma tabell har ingen
+            tabpanel, och tab-rollen lovar pilnavigering som inte finns (4.1.2). */}
+        <div className="flex flex-wrap gap-2" role="group" aria-label={text({ sv: "Kontaktväg", en: "Contact channel" })}>
           {KONTAKTFILTER.map((f) => (
             <button
               key={f.id}
               type="button"
-              role="tab"
-              aria-selected={kontaktfilter === f.id}
+              aria-pressed={kontaktfilter === f.id}
               onClick={() => setKontaktfilter(f.id)}
               className={cn(flik, kontaktfilter === f.id ? flikAktiv : flikInaktiv)}
             >
-              {text(f.etikett)} <span className="num tabular-nums opacity-70">{antalPer(f.id)}</span>
+              {text(f.etikett)} <span className="num tabular-nums">{antalPer(f.id)}</span>
             </button>
           ))}
         </div>

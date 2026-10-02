@@ -27,6 +27,7 @@ const T = {
   flyttaTill: { sv: "Flytta till", en: "Move to" },
   ingaKort: { sv: "Inga bolag", en: "No companies" },
   flyttFel: { sv: "Flytten sparades inte", en: "The move was not saved" },
+  flyttad: { sv: "flyttad till", en: "moved to" },
   poang: { sv: "poäng", en: "score" },
   demo: { sv: "Flytten sparas inte i demon.", en: "Moves are not saved in the demo." }
 } satisfies Record<string, Localized>;
@@ -37,6 +38,14 @@ export function Pipeline({ demo = false }: Readonly<{ demo?: boolean }>) {
   const [fel, setFel] = useState<string | null>(null);
   const [ejAktiverad, setEjAktiverad] = useState(false);
   const [flyttFel, setFlyttFel] = useState<string | null>(null);
+  const [flyttMeddelande, setFlyttMeddelande] = useState<string | null>(null);
+  const [fokusId, setFokusId] = useState<string | null>(null);
+
+  // Kortet byter kolumn och monteras om: fokus tillbaka till samma select EFTER
+  // commit, annars hamnar tangentbordet på body (2.4.3).
+  useEffect(() => {
+    if (fokusId) document.getElementById(`pipeline-val-${fokusId}`)?.focus();
+  }, [fokusId, prospekt]);
   const [visaSparrade, setVisaSparrade] = useState(false);
   const [over, setOver] = useState<string | null>(null);
 
@@ -65,6 +74,9 @@ export function Pipeline({ demo = false }: Readonly<{ demo?: boolean }>) {
     if (!forra || forra === status) return;
     setFlyttFel(null);
     setProspekt((rader) => rader?.map((p) => (p.id === id ? { ...p, status } : p)) ?? null);
+    const namn = prospekt?.find((p) => p.id === id)?.company_name ?? "";
+    setFlyttMeddelande(`${namn} ${text(T.flyttad)} ${text(STATUS_ETIKETT[status] ?? { sv: status, en: status })}`);
+    setFokusId(id);
     if (demo) return;
     try {
       await leadsAnrop(`/leads/prospects/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
@@ -112,6 +124,9 @@ export function Pipeline({ demo = false }: Readonly<{ demo?: boolean }>) {
           {flyttFel}
         </p>
       ) : null}
+      <p role="status" className="sr-only">
+        {flyttMeddelande}
+      </p>
 
       <div className="thin-scrollbar overflow-x-auto pb-2">
         <ol className="flex gap-4" aria-label={text(T.pipeline)}>
@@ -162,12 +177,13 @@ export function Pipeline({ demo = false }: Readonly<{ demo?: boolean }>) {
                             .filter(Boolean)
                             .join(" · ")}
                         </p>
-                        {p.contact_name ? <p className="mt-1 truncate text-[15px] text-ink-muted">{p.contact_name}</p> : null}
+                        {p.contact_name ? <p className="mt-1 break-words text-[15px] text-ink-muted">{p.contact_name}</p> : null}
                         <label className="mt-2 block">
                           <span className="sr-only">
                             {text(T.flyttaTill)} ({p.company_name})
                           </span>
                           <select
+                            id={`pipeline-val-${p.id}`}
                             value={p.status}
                             onChange={(e) => void flytta(p.id, e.target.value)}
                             className="focus-ring min-h-11 w-full rounded-input border border-ink/15 bg-paper px-2 text-[16px] text-ink"

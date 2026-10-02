@@ -61,7 +61,8 @@ const T = {
     en: "Tasks or saved views could not be loaded"
   },
   ingenUppgift: { sv: "Ingen", en: "None" },
-  statusFor: { sv: "Status för", en: "Status for" }
+  statusFor: { sv: "Status för", en: "Status for" },
+  statusAndrad: { sv: "Status ändrad till", en: "Status changed to" }
 } satisfies Record<string, Localized>;
 
 const KONTAKT_ETIKETT: Record<Kontaktvag, Localized> = {
@@ -100,6 +101,14 @@ export function LeadsTabell({
   const [fel, setFel] = useState<string | null>(null);
   const [ejAktiverad, setEjAktiverad] = useState(false);
   const [notis, setNotis] = useState<string | null>(null);
+  const [meddelande, setMeddelande] = useState<string | null>(null);
+  const [fokusId, setFokusId] = useState<string | null>(null);
+
+  // Raden kan lämna filtret efter statusbytet: fokus till samma select om den
+  // finns kvar efter commit, annars till statusfiltret (2.4.3).
+  useEffect(() => {
+    if (fokusId) (document.getElementById(`leads-status-${fokusId}`) ?? document.getElementById("leads-filter-status"))?.focus();
+  }, [fokusId, prospekt]);
   const [filter, setFilter] = useState<VyFilter>({});
   const [vyNamn, setVyNamn] = useState("");
   const [sparar, setSparar] = useState(false);
@@ -149,6 +158,9 @@ export function LeadsTabell({
     const forra = prospekt?.find((p) => p.id === id)?.status;
     if (!forra || forra === status) return;
     setProspekt((rader) => rader?.map((p) => (p.id === id ? { ...p, status } : p)) ?? null);
+    const namn = prospekt?.find((p) => p.id === id)?.company_name ?? "";
+    setMeddelande(`${namn}: ${text(T.statusAndrad)} ${text(STATUS_ETIKETT[status] ?? { sv: status, en: status })}`);
+    setFokusId(id);
     if (demo) return;
     setNotis(null);
     try {
@@ -212,6 +224,7 @@ export function LeadsTabell({
 
   const statusVal = (p: SuiteProspekt) => (
     <select
+      id={`leads-status-${p.id}`}
       value={p.status}
       onChange={(e) => void bytStatus(p.id, e.target.value)}
       aria-label={`${text(T.statusFor)} ${p.company_name}`}
@@ -246,7 +259,7 @@ export function LeadsTabell({
     if (!u) return <span className={meta}>{text(T.ingenUppgift)}</span>;
     return (
       <>
-        <span className="block truncate">{u.titel}</span>
+        <span className="block break-words">{u.titel}</span>
         {u.forfaller ? (
           <span className={meta}>
             {new Date(`${u.forfaller}T00:00:00`).toLocaleDateString(datumFormat(locale), { day: "numeric", month: "short" })}
@@ -310,6 +323,7 @@ export function LeadsTabell({
         <label className={cn(etikett, "flex flex-col gap-1")}>
           {text(T.filterStatus)}
           <select
+            id="leads-filter-status"
             value={filter.status ?? ""}
             onChange={(e) => setFilter((f) => ({ ...f, status: e.target.value }))}
             className={faltKlass}
@@ -393,6 +407,9 @@ export function LeadsTabell({
           {notis}
         </p>
       ) : null}
+      <p role="status" className="sr-only">
+        {meddelande}
+      </p>
 
       {synliga.length === 0 ? (
         <Tomt>{text(T.ingaTraffar)}</Tomt>

@@ -17,7 +17,8 @@
   --mineral: 0.50 0.015 252;
   --seal: 0.42 0.022 252;
   --moss: 0.42 0.071 142;
-  --danger: 0.57 0.18 27;
+  /* 0.53: 5.22:1 mot paper, 4.72:1 mot paper2 (a11y-audit 2026-10-02; 0.57 gav 4.4:1). */
+  --danger: 0.53 0.18 27;
   --focus: 0.74 0.16 64;
   /* Muted text-tokens. Ersätter text-ink/NN och text-paper/NN som textfärg —
      opacitetstrappan (20 distinkta steg, uppmätt) gav osystematiska kontraster
@@ -338,8 +339,11 @@ button {
   outline-offset: 2px;
 }
 
+/* Ringen är accenten mörkad 18 % (a11y-audit 2026-10-02): ochre 0.74 mätte
+   2.17:1 mot paper, under 3:1 (1.4.11). color-mix följer tenantens --focus
+   så en egen accent får samma lyft utan en token till. */
 .focus-ring:focus-visible {
-  outline-color: oklch(var(--ochre));
+  outline-color: color-mix(in oklch, oklch(var(--focus)), black 18%);
 }
 
 /* DESIGN.md: "Focus ring är ochre, 2px, 2px offset, no exceptions." Som opt-in
@@ -348,7 +352,7 @@ button {
    tabbar. :where() ger specificitet 0, så en komponent kan fortfarande skriva
    över den medvetet. */
 :where(a, button, input, textarea, select, [tabindex]):focus-visible {
-  outline: 2px solid oklch(var(--ochre));
+  outline: 2px solid color-mix(in oklch, oklch(var(--focus)), black 18%);
   outline-offset: 2px;
 }
 

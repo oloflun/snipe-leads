@@ -46,7 +46,8 @@ const T = {
     sv: `Högst ${MAX_RADER} rader per import. Dela upp filen.`,
     en: `At most ${MAX_RADER} rows per import. Split the file.`
   },
-  kolumn: { sv: "Kolumn", en: "Column" }
+  kolumn: { sv: "Kolumn", en: "Column" },
+  demo: { sv: "Importen sparas inte i demon.", en: "The import is not saved in the demo." }
 } satisfies Record<string, Localized>;
 
 const FALT_ETIKETT: Record<ImportFalt, Localized> = {
@@ -66,7 +67,7 @@ export type ImporteradLista = { id: string; titel: string; [nyckel: string]: unk
 
 const faltKlass = "focus-ring min-h-11 w-full rounded-input border border-ink/15 bg-paper px-3 text-[16px] text-ink";
 
-export function ImportCsv({ onKlar }: Readonly<{ onKlar: (lista: ImporteradLista) => void }>) {
+export function ImportCsv({ onKlar, demo = false }: Readonly<{ onKlar: (lista: ImporteradLista) => void; demo?: boolean }>) {
   const { text } = useLocale();
   const [fil, setFil] = useState<Fil | null>(null);
   const [mall, setMall] = useState<Mall>("egen");
@@ -213,7 +214,7 @@ export function ImportCsv({ onKlar }: Readonly<{ onKlar: (lista: ImporteradLista
                   {rader.slice(0, 5).map((r, i) => (
                     <tr key={i} className={tabellRad}>
                       {synligaFalt.map((f) => (
-                        <Cell key={f} className="truncate">
+                        <Cell key={f} className="break-words">
                           {r[f] ?? ""}
                         </Cell>
                       ))}
@@ -238,10 +239,11 @@ export function ImportCsv({ onKlar }: Readonly<{ onKlar: (lista: ImporteradLista
             </p>
           ) : null}
 
+          {demo ? <p className={meta}>{text(T.demo)}</p> : null}
           <button
             type="button"
             onClick={() => void importera()}
-            disabled={importerar || rader.length === 0 || rader.length > MAX_RADER}
+            disabled={demo || importerar || rader.length === 0 || rader.length > MAX_RADER}
             className={btnPrimary}
           >
             {importerar

@@ -474,10 +474,15 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
         role="tablist"
         aria-label={text(T.vy)}
         onKeyDown={(e) => {
-          if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+          if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
           e.preventDefault();
           const i = SEGMENT.indexOf(segmentVal);
-          const nasta = SEGMENT[(i + (e.key === "ArrowRight" ? 1 : SEGMENT.length - 1)) % SEGMENT.length];
+          const nasta =
+            e.key === "Home"
+              ? SEGMENT[0]
+              : e.key === "End"
+                ? SEGMENT[SEGMENT.length - 1]
+                : SEGMENT[(i + (e.key === "ArrowRight" ? 1 : SEGMENT.length - 1)) % SEGMENT.length];
           setSegmentVal(nasta);
           flikRefs.current[nasta]?.focus();
         }}
@@ -510,11 +515,13 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
               if (allaRader.find((p) => p.id === id)?.niva === "C") setVisaBortvalda(true);
               setSegmentVal("bolag");
               valjRad(id);
+              // Fokus följer med till raden (2.4.3): utan det hamnar det på body.
+              requestAnimationFrame(() => document.getElementById(`iris-rad-${id}`)?.focus());
             }}
           />
         ) : segmentVal === "listor" ? (
           harListaddon || demo ? (
-            <LeadslistorView />
+            <LeadslistorView demo={demo} />
           ) : (
             <ListorUpsell />
           )
@@ -551,6 +558,7 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
                       <li key={p.id}>
                         <button
                           type="button"
+                          id={`iris-rad-${p.id}`}
                           onClick={() => valjRad(p.id)}
                           aria-current={vald ? "true" : undefined}
                           className={cn(
