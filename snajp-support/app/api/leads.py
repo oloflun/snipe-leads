@@ -73,6 +73,7 @@ from .schemas import (
     LeadsConfigRequest,
     KombineraListorRequest,
     LeadsListaRequest,
+    TillIrisRequest,
     LeadsRunOverrides,
     ProspectPatchRequest,
     OnboardingChatRequest,
@@ -1729,6 +1730,16 @@ async def _fyll_pa(app_state, tenant: dict, batch_id: str) -> None:
     resultat, k = await _las_korning(app_state, tenant_id, batch_id)
     if not k or k.get("klar"):
         return
+    if k.get("kalla") == "lista":
+        # Körning ur en lista (Flytta till Iris): kandidaterna är givna, ingen
+        # sökrunda och ingen påfyllning. Klar när sista barnet rapporterat.
+        if k["pagaende"] == 0:
+            iris_korning.avsluta(k, "klar")
+            k["sammanfattning"] = iris_korning.sammanfatta(k)
+        resultat.update(korning=k, jobs=k["jobs"], count=len(k["jobs"]))
+        await jobs.complete(batch_id, resultat)
+        await _spara_korning(app_state, tenant_id, batch_id, k)
+        return
     profil, sok_icp = await _korningens_profil(storage, tenant_id, k.get("overrides"))
     orsak = None
     while k["levererade"] + k["pagaende"] < k["mal"]:
@@ -2474,6 +2485,14 @@ async def listrad_till_prospekt(
     if rad is None:
         raise HTTPException(status_code=404, detail="Raden finns inte i listan.")
 
+    prospect, skapad = await _befordra_listrad(storage, tenant_id, lista, rad)
+    return {"prospect": prospect, "skapad": skapad}
+
+
+async def _befordra_listrad(storage, tenant_id: str, lista: dict, rad: dict) -> tuple[dict, bool]:
+    """Listrad → prospekt (dedup på bolagsnamn casefold). Telefon och orgnr
+    (migration 081) följer med via profil-allowlisten. Returnerar
+    (prospekt, skapad). 422 om raden saknar bolagsnamn."""
     namn = (rad.get("company_name") or "").strip()
     if not namn:
         raise HTTPException(status_code=422, detail="Raden saknar bolagsnamn.")
@@ -2481,7 +2500,7 @@ async def listrad_till_prospekt(
     befintliga = await storage.list_prospects(tenant_id, limit=500)
     for p in befintliga:
         if str(p.get("company_name") or "").casefold() == namn.casefold():
-            return {"prospect": p, "skapad": False}
+            return p, False
 
     prospect = await storage.create_prospect(
         tenant_id,
@@ -2491,7 +2510,7 @@ async def listrad_till_prospekt(
         origin="test" if lista.get("is_test") else "import",
         profil={
             k: rad[k]
-            for k in ("website", "ort", "contact_role", "contact_level")
+            for k in ("website", "ort", "contact_role", "contact_level", "contact_phone", "orgnr")
             if rad.get(k) is not None
         },
     )
@@ -2517,7 +2536,75 @@ async def listrad_till_prospekt(
         except Exception:  # noqa: BLE001 — proveniens får inte fälla befordran
             logger.exception("Kunde inte registrera listkälla för %s", prospect["id"])
 
-    return {"prospect": prospect, "skapad": True}
+    return prospect, True
+
+
+@router.post("/api/leads/listor/{list_id}/till-iris", status_code=202)
+async def listan_till_iris(
+    request: Request, list_id: str, payload: TillIrisRequest, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Flyttar listans rader (eller de valda) till Iris: prospekt skapas med
+    telefon och orgnr, och en riktig körning köas med research per bolag —
+    lägesbeskrivning, poäng och nivå — och utkast när scope säger det. Det
+    ersätter "utkast till alla med mejladress", som skrev utkast ur radens
+    metadata utan research (minnesregeln "Aldrig mall som utkast").
+
+    Körningen bär `korning.kalla='lista'`: ingen sökrunda, ingen påfyllning,
+    och den syns i Iris › Körningar som vilken körning som helst (INV-JOB-003).
+    Känd gräns tills planens del C: `leverbar` kräver arbetsmejl, så en rad
+    med bara telefon får research och bedömning men inget utkast — tratten
+    i Körningar säger varför."""
+    _require_live_llm()
+    kraev_uuid(list_id, "listan")
+    storage = request.app.state.storage
+    tenant_id = tenant["tenant_id"]
+    lista = await storage.get_lead_list(tenant_id, list_id)
+    if not lista:
+        raise HTTPException(status_code=404, detail="Listan finns inte.")
+    rader = await storage.list_lead_list_items(tenant_id, list_id)
+    if payload.item_ids:
+        valda = {str(x) for x in payload.item_ids}
+        rader = [r for r in rader if str(r.get("id")) in valda]
+    if not rader:
+        raise HTTPException(status_code=422, detail="Inga rader att flytta.")
+    await _kraev_leads_budget(storage, tenant_id)
+
+    prospekt: list[dict] = []
+    nya = 0
+    sedda: set[str] = set()
+    for rad in rader:
+        try:
+            p, skapad = await _befordra_listrad(storage, tenant_id, lista, rad)
+        except HTTPException:
+            continue  # rad utan bolagsnamn
+        if p["id"] in sedda:
+            continue
+        sedda.add(p["id"])
+        prospekt.append(p)
+        nya += int(skapad)
+    if not prospekt:
+        raise HTTPException(status_code=422, detail="Ingen rad gick att flytta.")
+
+    is_test = payload.is_test or bool(lista.get("is_test"))
+    app_state = request.app.state
+    batch_id = await app_state.jobs.create(tenant_id=tenant_id, status="processing")
+    k = iris_korning.ny_korning(mal=len(prospekt), scope=payload.scope, overrides=None, is_test=is_test)
+    k.update(kalla="lista", list_id=list_id, list_titel=lista.get("titel"))
+    # Barnen är kända innan de köas: jobs och pagaende skrivs FÖRE kön, så
+    # ett barn som rapporterar direkt (create_task-vägen) inte läser ett
+    # tillstånd utan sig själv. job_id:t är kosmetiskt i vyn (React-nyckel).
+    k["jobs"] = [
+        {"job_id": f"prospekt:{p['id']}", "prospect_id": p["id"], "company_name": p.get("company_name")}
+        for p in prospekt
+    ]
+    k["pagaende"] = len(prospekt)
+    await app_state.jobs.complete(batch_id, {"korning": k, "jobs": k["jobs"], "count": len(k["jobs"]), "fase": "research"})
+    await _spara_korning(app_state, tenant_id, batch_id, k)
+    await _lagg_prospektjobb(
+        app_state, tenant, prospekt,
+        scope=payload.scope, overrides=None, is_test=is_test, limit=len(prospekt), batch_id=batch_id,
+    )
+    return {"batch_id": batch_id, "prospekt": len(prospekt), "nya": nya, "scope": payload.scope}
 
 
 async def _run_list_job(app_state, payload: dict) -> None:

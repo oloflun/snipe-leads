@@ -546,3 +546,69 @@ async def test_kombinera_vagrar_pa_ofardig_eller_okand_lista():
         await _kombinera(storage, {"titel": "x", "list_ids": [a["id"], c["id"]], "kontaktfilter": "bada"})
     assert fel.value.status_code == 422
     assert len(await storage.list_lead_lists(TENANT)) == 3
+
+
+# -- Flytta till Iris --------------------------------------------------------
+
+
+async def test_flytta_till_iris_koar_korning_med_research_per_bolag(monkeypatch):
+    """Raderna blir prospekt med telefon och orgnr, och en körning med
+    kalla='lista' går genom research (stubbad) tills alla barn rapporterat;
+    ingen sökrunda startas och liggaren slutar i 'completed'."""
+    import asyncio
+    from types import SimpleNamespace
+
+    from app.api import leads as leads_api
+    from app.api.schemas import TillIrisRequest
+
+    storage = MemoryStorage()
+    lista = await _lista_med_rader(storage, "Bygg Mölndal", [
+        _rad("Alfa Bygg AB", orgnr="556000-0001", tel="070-1", mejl="vd@alfa.se"),
+        _rad("Beta Måleri AB", orgnr="556000-0002", tel="070-2"),
+        {"company_name": "", "contact_name": "Utan Namn"},
+    ])
+
+    async def _research(storage_, tenant_id, *, prospect_id, **_k):
+        return {"qualified": True, "icp_fit": 0.9, "score_total": 90, "disqualifiers": [], "stopped_early": None}
+
+    async def _utkast(*_a, **_k):
+        return {"subject": "Hej"}
+
+    sokrundor: list[int] = []
+
+    async def _sokrunda(*_a, **_k):
+        sokrundor.append(1)
+
+    monkeypatch.setattr(leads_api, "_valj_leads_kedja", lambda: (_research, _utkast))
+    monkeypatch.setattr(leads_api, "_require_live_llm", lambda: None)
+
+    async def _ingen_budget(*_a, **_k):
+        return None
+
+    monkeypatch.setattr(leads_api, "_kraev_leads_budget", _ingen_budget)
+    monkeypatch.setattr(leads_api.iris_korning, "sokrunda", _sokrunda)
+
+    app_state = SimpleNamespace(jobs=MemoryJobStore(), storage=storage, leadsstrom=None)
+    req = SimpleNamespace(app=SimpleNamespace(state=app_state))
+    tenant = {"tenant_id": TENANT, "tenant_name": "Snajp"}
+    ut = await leads_api.listan_till_iris(req, lista["id"], TillIrisRequest(scope="research"), tenant)
+    assert ut["prospekt"] == 2 and ut["nya"] == 2
+
+    rad = None
+    for _ in range(200):
+        rad = await storage.get_leads_korning(TENANT, ut["batch_id"])
+        if rad and rad["korning"] and rad["korning"].get("klar"):
+            break
+        await asyncio.sleep(0.02)
+    assert rad and rad["status"] == "completed", rad
+    k = rad["korning"]
+    assert k["kalla"] == "lista" and k["list_id"] == lista["id"]
+    assert k["undersokta"] == 2 and k["pagaende"] == 0 and k["slut_orsak"] == "klar"
+    assert [j["company_name"] for j in k["jobs"]] == ["Alfa Bygg AB", "Beta Måleri AB"]
+    assert not sokrundor, "en listkörning söker aldrig fler bolag"
+    alfa = next(p for p in await storage.list_prospects(TENANT, limit=50) if p["company_name"] == "Alfa Bygg AB")
+    assert alfa.get("contact_phone") == "070-1" and alfa.get("orgnr") == "556000-0001"
+
+    # Samma rader igen: inga nya prospekt, ny körning.
+    ut2 = await leads_api.listan_till_iris(req, lista["id"], TillIrisRequest(scope="research"), tenant)
+    assert ut2["nya"] == 0 and ut2["prospekt"] == 2 and ut2["batch_id"] != ut["batch_id"]

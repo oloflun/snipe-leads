@@ -321,6 +321,17 @@ class KombineraListorRequest(BaseModel):
     kontaktfilter: Literal["alla", "telefon", "mejl", "bada"] = "alla"
 
 
+class TillIrisRequest(BaseModel):
+    """Flytta listrader till Iris (Antons beställning 2026-10-02): raderna blir
+    prospekt (dedup på bolagsnamn) och en riktig körning köas med research per
+    bolag, så varje utkast är anpassat till bolagets läge — aldrig en mall ur
+    radens metadata. Körningen syns i Iris › Körningar."""
+
+    item_ids: list[str] | None = None
+    scope: Literal["research", "research_and_draft"] = "research_and_draft"
+    is_test: bool = False
+
+
 class AgentFeedbackRequest(BaseModel):
     """Kundens dom över en agentkörning. corrected_output är människans egen
     formulering av vad svaret BORDE ha varit — den starkaste signalen in i

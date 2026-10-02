@@ -1,6 +1,8 @@
 "use client";
 
 import { Send } from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
@@ -113,6 +115,11 @@ function synligaRader(items: ListRad[], filter: Kontaktfilter, sortering: Sorter
 }
 
 const T = {
+  flyttOmfattning: { sv: "Vad Iris ska göra", en: "What Iris should do" },
+  flyttResearchOchUtkast: { sv: "Research och utkast", en: "Research and drafts" },
+  flyttBaraResearch: { sv: "Bara research", en: "Research only" },
+  flyttar: { sv: "Flyttar…", en: "Moving…" },
+  foljKorningen: { sv: "Följ körningen", en: "Follow the run" },
   kombineraRubrik: { sv: "Kombinera listor", en: "Combine lists" },
   kombineraHjalp: {
     sv: "Kryssa två eller fler klara listor. Dubbletter tas bort på organisationsnummer, källistorna rörs inte.",
@@ -995,12 +1002,46 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
 
   const medAdress = items.filter((rad) => rad.contact_email);
   const kandidater = medAdress.filter((rad) => !hanterade.has(rad.id));
+  // Flytta till Iris (2026-10-02): raderna blir prospekt och en riktig körning
+  // köas med research per bolag. Ersätter svepet "utkast till alla med
+  // mejladress", som skrev utkast ur radens metadata utan research.
+  const pathname = usePathname() ?? "/dashboard/iris";
+  const bas = pathname.replace(/\/iris(\/.*)?$/, "/iris");
+  const [flyttar, setFlyttar] = useState(false);
+  const [flyttScope, setFlyttScope] = useState<"research" | "research_and_draft">("research_and_draft");
+  const [flyttKvitto, setFlyttKvitto] = useState<{ batchId: string; antal: number; nya: number } | null>(null);
+  const [flyttFel, setFlyttFel] = useState<string | null>(null);
   const [kontaktfilter, setKontaktfilter] = useState<Kontaktfilter>("alla");
   const [sortering, setSortering] = useState<Sortering>("kontakt");
   const visade = synligaRader(items, kontaktfilter, sortering);
   const antalPer = (f: Kontaktfilter) => (f === "alla" ? items.length : items.filter((rad) => kontaktvag(rad) === f).length);
   const omgang = kandidater.slice(0, SVEP_TAK);
   const svepKor = svep?.fas === "kor";
+
+  async function flyttaTillIris() {
+    setFlyttar(true);
+    setFlyttFel(null);
+    setFlyttKvitto(null);
+    try {
+      const ut = await anropa<{ batch_id: string; prospekt: number; nya: number }>(
+        `/leads/listor/${encodeURIComponent(lista.id)}/till-iris`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            scope: flyttScope,
+            // De rader som syns: filtret på kontaktväg avgör vad som flyttas.
+            item_ids: kontaktfilter === "alla" ? null : visade.map((rad) => rad.id)
+          })
+        }
+      );
+      setFlyttKvitto({ batchId: ut.batch_id, antal: ut.prospekt, nya: ut.nya });
+      window.dispatchEvent(new Event("snipra:leads-korning-steg"));
+    } catch (cause) {
+      setFlyttFel(felmeddelande(cause));
+    } finally {
+      setFlyttar(false);
+    }
+  }
 
   const laggAllaIRegistret = useCallback(async () => {
     setLaggerAlla(true);
@@ -1129,35 +1170,33 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
           })}
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          {/* Snabbmail: ett utkast per rad med adress, rakt in i granskningskön.
-              Bekräftas först — det är upp till 25 LLM-jobb på ett klick. */}
-          {mejlbro && medAdress.length ? (
-            <button
-              type="button"
-              onClick={() => {
-                setSvepResultat(null);
-                setSvepStopp(null);
-                setSvep({ fas: "bekraftar" });
-              }}
-              disabled={svep !== null || kandidater.length === 0}
-              className={cn(btnSecondary, "disabled:opacity-60")}
-            >
-              {kandidater.length === 0
-                ? text(T.allaGenomgangna)
-                : text(T.skrivUtkastTillAlla)}
-            </button>
-          ) : null}
-          {/* Hela listan in i Leads-registret i ett svep — därifrån kan en
-              körning researcha och skriva utkast till flera på en gång. */}
+          {/* Flytta till Iris: prospekt + riktig körning med research per bolag.
+              Svepet "utkast till alla med mejladress" och "Lägg alla i registret"
+              ersattes 2026-10-02: utkast ska utgå från bolagets läge, inte en
+              mall ur radens metadata. (ponytail: svepets kod står kvar
+              oanropad tills /simplify tar den.) */}
           {mejlbro ? (
-            <button
-              type="button"
-              onClick={() => void laggAllaIRegistret()}
-              disabled={laggerAlla || svepKor}
-              className={cn(btnSecondary)}
-            >
-              {laggerAlla ? text(T.laggerIn) : text(T.laggAllaIRegistret)}
-            </button>
+            <>
+              <select
+                value={flyttScope}
+                onChange={(e) => setFlyttScope(e.target.value as typeof flyttScope)}
+                aria-label={text(T.flyttOmfattning)}
+                className="focus-ring min-h-11 rounded-input border border-ink/15 bg-paper px-2 text-[13px] text-ink"
+              >
+                <option value="research_and_draft">{text(T.flyttResearchOchUtkast)}</option>
+                <option value="research">{text(T.flyttBaraResearch)}</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => void flyttaTillIris()}
+                disabled={flyttar || visade.length === 0}
+                className={cn(btnPrimary, "disabled:opacity-60")}
+              >
+                {flyttar
+                  ? text(T.flyttar)
+                  : text({ sv: `Flytta ${visade.length} till Iris`, en: `Move ${visade.length} to Iris` })}
+              </button>
+            </>
           ) : null}
           {/* CSV:n byggs helt på klientsidan av raderna som redan är hämtade —
               ingen ny endpoint, och det som laddas ner är exakt det som syns. */}
@@ -1170,6 +1209,23 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
           </button>
         </div>
       </div>
+
+      {flyttFel ? (
+        <p role="alert" className="mt-3 text-[15px] text-danger">
+          {flyttFel}
+        </p>
+      ) : null}
+      {flyttKvitto ? (
+        <p role="status" className="mt-3 text-[15px] text-moss">
+          {text({
+            sv: `${flyttKvitto.antal} bolag i Iris (${flyttKvitto.nya} nya). Research pågår per bolag.`,
+            en: `${flyttKvitto.antal} companies in Iris (${flyttKvitto.nya} new). Research is running per company.`
+          })}{" "}
+          <Link href={`${bas}/korningar?id=${encodeURIComponent(flyttKvitto.batchId)}`} className="underline underline-offset-4 hover:text-ink">
+            {text(T.foljKorningen)}
+          </Link>
+        </p>
+      ) : null}
 
       {svep?.fas === "bekraftar" ? (
         <div
