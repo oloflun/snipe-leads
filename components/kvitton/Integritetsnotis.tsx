@@ -26,7 +26,7 @@ export function Integritetsnotis() {
       <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-moss" aria-hidden />
       <span>
         {text({
-          sv: "Read-only-åtkomst. Inget säljs eller delas med tredje part utöver AI-tjänsten som tolkar kvittotexten, under personuppgiftsbiträdesavtal. Mejlens text sparas inte, bara kvittofälten, avsändare, ämnesrad och en kontrollsumma.",
+          sv: "Endast läsbehörighet. Inget säljs eller delas med tredje part utöver AI-tjänsten som tolkar kvittotexten, under personuppgiftsbiträdesavtal. Mejlens text sparas inte, bara kvittofälten, avsändare, ämnesrad och en kontrollsumma.",
           en: "Read-only access. Nothing is sold or shared with third parties beyond the AI service that interprets the receipt text, under a data processing agreement. The email text is not stored, only the receipt fields, sender, subject line and a checksum."
         })}
       </span>
