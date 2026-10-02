@@ -71,5 +71,6 @@ open_threads: 5
 handoffs_pending: []
 priority_changes: true
 status_updated: true
+goals_updated: Ändringslogg 2026-10-02 (delmål 10 och 12 berörda, listan orörd)
 next_session_focus: "Flytta det som ska sparas före nattspegeln, Antons release till main, flyttvägen skarpt, Docker-fixen och inloggade Iris-ytor"
 session-state -->
