@@ -123,6 +123,19 @@ ICP:n går fel.
 - Hitta inte på en lucka för att ha något att säga: reveals_gap false med
   gap null är ett fullgott svar.
 
+## Lägesbeskrivning (obligatorisk — det kunden läser först)
+
+- `lagesbeskrivning`: 4–6 meningar till kunden: vad bolaget gör, vad som
+  hänt senast enligt källmaterialet (med källan nämnd), vad som matchar
+  profilen, och varför just nu är rätt tillfälle. Aldrig tom. Räcker inte
+  underlaget säger du det rakt ut i texten ("Källmaterialet visar ingen
+  nyhet senaste året"), i stället för att hitta på.
+- `contact_phone`: ENBART om numret bokstavligen står i källmaterialet,
+  annars null. Prospektraden bär ofta redan namn, roll och telefon ur ett
+  företagsregister: bekräfta eller komplettera, skriv aldrig över med null.
+- Ett lead utan lägesbeskrivning, utan kontaktperson med roll, eller utan
+  telefon eller arbetsmejl räknas inte som levererat (koden avgör).
+
 ## Svarsform
 
 ETT JSON-objekt med EXAKT fälten ovan (plus kontraktsfälten sources_used

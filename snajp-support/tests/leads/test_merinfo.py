@@ -270,3 +270,20 @@ def test_regionnyckel_expanderas_utan_profil(monkeypatch):
     # Sex kommuner i Västra Götaland → länet; Kungsbacka ligger i Halland
     # och blir en egen sökning (en kommun i ett annat län breddas inte).
     assert {plats for _, plats, _ in sedda} == {"vastra-gotalands-lan", "kungsbacka"}, sedda
+
+
+def test_register_rankas_av_signaler_inte_valjs_av_dem():
+    """Plan del C: en registerrad med signalträff går först och bär signalen;
+    en signalträff utanför registret är inte målgruppen och faller."""
+    register = [
+        {"company_name": "Alfa Bygg AB", "orgnr": "556000-0001", "website": "https://alfabygg.se"},
+        {"company_name": "Beta Måleri AB", "orgnr": "556000-0002", "website": "https://betamaleri.se"},
+    ]
+    signaler = [
+        {"company_name": "BETA MÅLERI AB", "signal": "rekryterar", "signal_detalj": "Målare", "source_url": "https://af.se/1"},
+        {"company_name": "Okänt Bolag AB", "signal": "nyhet", "source_url": "https://x.se"},
+    ]
+    ut = discovery._med_signaler(register, signaler)
+    assert [r["company_name"] for r in ut] == ["Beta Måleri AB", "Alfa Bygg AB"]
+    assert ut[0]["signal"] == "rekryterar" and ut[0]["signal_kalla"] == "https://af.se/1"
+    assert "signal" not in ut[1] or ut[1].get("signal") is None

@@ -52,6 +52,9 @@ def _bolag(namn: str) -> dict:
         "postnr": "421 32",
         "contact_email": f"info@{slug}.se",
         "contact_level": "role_address",
+        # Leverbart kräver sedan 2026-10-02 kontaktperson med roll (_leverbarhet).
+        "contact_name": "Test Testsson",
+        "contact_role": "VD",
         "anstallda": None,
     }
 
@@ -70,6 +73,7 @@ def _installera(monkeypatch, pool: list[dict], bra: set[str]) -> None:
             "score_total": 85 if ok else 30,
             "disqualifiers": [] if ok else ["Storlek: 700 anställda enligt källmaterialet"],
             "stopped_early": None if ok else "ej_kvalificerad",
+            "lagesbeskrivning": "Bolaget bygger i Göteborg och rekryterar enligt sajten." if ok else None,
         }
 
     async def _utkast(*_a, **_k):

@@ -38,6 +38,9 @@ def _bolag(namn: str) -> dict:
         "postnr": "421 32",
         "contact_email": f"info@{slug}.se",
         "contact_level": "role_address",
+        # Leverbart kräver sedan 2026-10-02 kontaktperson med roll (_leverbarhet).
+        "contact_name": "Test Testsson",
+        "contact_role": "VD",
         "anstallda": None,
     }
 
@@ -60,6 +63,7 @@ def _installera(monkeypatch, pool: list[dict], bra: set[str]) -> list[int]:
             "score_total": 85 if ok else 30,
             "disqualifiers": [] if ok else ["Storlek: 700 anställda enligt källmaterialet"],
             "stopped_early": None if ok else "ej_kvalificerad",
+            "lagesbeskrivning": "Bolaget bygger i Göteborg och rekryterar enligt sajten." if ok else None,
         }
 
     async def _utkast(*_a, **_k):
@@ -122,3 +126,22 @@ async def test_taket_hindrar_en_skenande_korning(monkeypatch):
     k = await _kor(1)
     assert k["undersokta"] <= korningsmodul.TAK_FAKTOR * 1
     assert k["klar"]
+
+
+def test_leverbart_kraver_kontaktperson_kontaktvag_och_lagesbeskrivning():
+    """Antons krav 2026-10-01, kodat i _leverbarhet (plan del C): det som
+    saknas syns som skäl i tratten, aldrig som ett levererat lead."""
+    from app.leads import eskalering
+
+    regler = eskalering.normalisera({"kvalificeringstroskel": 50})
+    ok = {"qualified": True, "icp_fit": 0.9, "score_total": 90, "lagesbeskrivning": "Bolaget …"}
+    rad = {"contact_name": "Test Testsson", "contact_role": "VD", "contact_phone": "070-1", "website": "https://alfa.se"}
+    assert leads_api._leverbarhet(rad, ok, regler) is None
+    assert leads_api._leverbarhet({**rad, "contact_role": None}, ok, regler) == "Ingen kontaktperson med roll"
+    assert leads_api._leverbarhet({**rad, "contact_phone": None}, ok, regler).startswith("Ingen kontaktväg")
+    # Arbetsmejl räcker som kontaktväg när telefon saknas.
+    assert leads_api._leverbarhet({**rad, "contact_phone": None, "contact_email": "vd@alfa.se"}, ok, regler) is None
+    assert leads_api._leverbarhet(rad, {**ok, "lagesbeskrivning": "  "}, regler) == "Ingen lägesbeskrivning"
+    # Lägesbeskrivningen får komma från raden (sparad av researchen).
+    assert leads_api._leverbarhet({**rad, "lagesbeskrivning": "Sparad."}, {**ok, "lagesbeskrivning": None}, regler) is None
+    assert leads_api._leverbarhet(rad, {**ok, "qualified": False, "disqualifiers": ["För stort"]}, regler) == "För stort"

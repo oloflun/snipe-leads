@@ -1992,6 +1992,27 @@ async def start_batch_run(
     }
 
 
+def _leverbarhet(rad: dict, result: dict, regler: dict) -> str | None:
+    """None = leverbart, annars skälet (tratten). Antons krav 2026-10-01,
+    kodat 2026-10-02 (plan del C): kvalificerat, över kundens tröskel, en
+    kontaktperson MED roll, en kontaktväg (telefon eller arbetsmejl) och en
+    lägesbeskrivning. Det är vad en körnings N räknar (INV-LEADS-N-001)."""
+    from ..leads.discovery import ar_arbetsmejl
+
+    if not result.get("qualified"):
+        return (result.get("disqualifiers") or ["Uppfyllde inte kriterierna"])[0]
+    if eskalering.under_troskel(regler, qualified=True, icp_fit=result.get("icp_fit")):
+        return f"Under tröskeln: poäng {result.get('score_total')} av {regler['kvalificeringstroskel']} krävda"
+    if not (rad.get("contact_name") and rad.get("contact_role")):
+        return "Ingen kontaktperson med roll"
+    mejl = rad.get("contact_email")
+    if not (rad.get("contact_phone") or (mejl and ar_arbetsmejl(mejl, webb=rad.get("website")))):
+        return "Ingen kontaktväg: varken telefon eller arbetsadress"
+    if not str(result.get("lagesbeskrivning") or rad.get("lagesbeskrivning") or "").strip():
+        return "Ingen lägesbeskrivning"
+    return None
+
+
 async def _run_batch_prospect(
     app_state, job_id: str, tenant: dict, *, prospect_id: str, scope: str,
     overrides: dict | None = None,
@@ -2034,20 +2055,13 @@ async def _run_batch_prospect(
         result["onboarding_missing"] = list(missing)
         result["prospect_id"] = prospect_id
 
-        # Leverbart = kvalificerat, över kundens tröskel och med en mejlväg
-        # (INV-LEADS-N-001) — det är vad körningens antal räknar.
-        from ..leads.discovery import ar_arbetsmejl as _ar_arbetsmejl
-
+        # Leverbart (INV-LEADS-N-001, skärpt 2026-10-02): se _leverbarhet.
         _rad = await storage.get_prospect(tenant["tenant_id"], prospect_id) or {}
         _regler = eskalering.normalisera(installningar.get("eskalering"))
-        _mejl = _rad.get("contact_email")
         utfall["namn"] = str(_rad.get("company_name") or "")
-        if not result.get("qualified"):
-            utfall["skal"] = (result.get("disqualifiers") or ["Uppfyllde inte kriterierna"])[0]
-        elif eskalering.under_troskel(_regler, qualified=True, icp_fit=result.get("icp_fit")):
-            utfall["skal"] = f"Under tröskeln: poäng {result.get('score_total')} av {_regler['kvalificeringstroskel']} krävda"
-        elif not (_mejl and _ar_arbetsmejl(_mejl, webb=_rad.get("website"))):
-            utfall["skal"] = "Ingen mejlväg: ingen arbetsadress hittades"
+        _skal = _leverbarhet(_rad, result, _regler)
+        if _skal:
+            utfall["skal"] = _skal
         else:
             utfall.update(leverbar=True, skal=None)
 
@@ -2100,7 +2114,10 @@ async def _run_batch_prospect(
             if not email:
                 # Kontaktformulär är inte en mottagare. Hoppa till nästa bolag.
                 result["draft_note"] = (
-                    "Research klar. Hoppar över utkastet: inget arbetsmejl "
+                    "Research klar. Ingen arbetsadress hittades: leadet levereras "
+                    "med telefon, ring kontaktpersonen."
+                    if prospect.get("contact_phone")
+                    else "Research klar. Hoppar över utkastet: inget arbetsmejl "
                     "hittades på bolagets sajt. Går vidare till nästa bolag."
                 )
             else:

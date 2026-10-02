@@ -75,6 +75,12 @@ _RESEARCH_V2_UPPGIFT = (
     "utslag är \"ja\", \"nej\" eller \"okänt\"; för en uteslutning betyder "
     "\"ja\" att bolaget ÄR det som ska uteslutas), motivering (2–3 meningar "
     "till kunden: varför bolaget passar eller inte, med konkreta belägg), "
+    "lagesbeskrivning (OBLIGATORISK, 4–6 meningar till kunden: vad bolaget gör, "
+    "vad som hänt senast enligt källmaterialet med källa, vad som matchar "
+    "profilen, och varför just nu; aldrig tom — saknas underlag säger du det "
+    "rakt ut i texten), contact_phone (ENBART om numret bokstavligen står i "
+    "källmaterialet, annars null; skriv aldrig över ett nummer prospektraden "
+    "redan bär), "
     "missing_information (lista), account_structure, decision_makers (lista "
     "med ROLLER), trigger_events (lista), open_questions (lista), "
     "prospect_positioning, comparison_angles (lista), honest_caveats (lista), "
@@ -209,6 +215,15 @@ async def run_research_step_v2(
     from ..leads.bedomning import bedom
 
     bedomning = bedom(profil, fynd, korpus=f"{material}\n{webbfakta_text}", kandidat=prospect_row)
+    # Lägesbeskrivningen (Antons krav 2026-10-01) och signalerna följer med
+    # bedömningen till raden (migration 083). Telefonen ur registret (081)
+    # står kvar; modellens tas bara när registret saknade den.
+    bedomning["lagesbeskrivning"] = str(fynd.get("lagesbeskrivning") or "").strip()[:1500] or None
+    bedomning["signaler"] = [
+        str(x).strip() for x in (fynd.get("trigger_events") or []) if str(x).strip()
+    ][:10] or None
+    if not prospect_row.get("contact_phone") and fynd.get("contact_phone"):
+        bedomning["contact_phone"] = str(fynd["contact_phone"]).strip()[:40]
     fynd = {
         **fynd,
         "qualified": bedomning["qualified"],
@@ -381,6 +396,8 @@ async def run_research_step_v2(
         )
 
     return {
+        "lagesbeskrivning": bedomning.get("lagesbeskrivning"),
+        "signaler": bedomning.get("signaler"),
         "scraped_sources": scraped_sources,
         "scrape_errors": scrape_errors,
         "source_chars": len(material),
