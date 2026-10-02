@@ -6,6 +6,7 @@ import { Dashboard as SupportDashboard } from "@/components/snajp/Dashboard";
 import { Badge, etikett, flik, flikAktiv, flikInaktiv } from "@/components/ui";
 import { CHATTFRAGOR } from "@/lib/demo/support-chatt";
 import { cn } from "@/lib/utils";
+import { useLocale } from "@/lib/i18n";
 
 /**
  * Demons kundtjänst: inkorgen OCH kundchatten, i samma flikform som
@@ -26,6 +27,7 @@ import { cn } from "@/lib/utils";
  */
 
 function Kundchatt() {
+  const { text } = useLocale();
   const [stallda, setStallda] = useState<number[]>([]);
   const kvar = CHATTFRAGOR.map((_, i) => i).filter((i) => !stallda.includes(i));
 
@@ -42,7 +44,7 @@ function Kundchatt() {
                 <p className="mb-1.5">
                   <Badge tone="danger">
                     <ShieldAlert className="h-3 w-3" aria-hidden />
-                    Eskalerat till en människa
+                    {text({ sv: "Eskalerat till en människa", en: "Escalated to a human" })}
                   </Badge>
                 </p>
               ) : null}
@@ -57,7 +59,9 @@ function Kundchatt() {
       {kvar.length ? (
         <div className={stallda.length ? "mt-5" : ""}>
           <p className={etikett}>
-            {stallda.length ? "Fråga något mer:" : "Klicka på en fråga, som kund:"}
+            {stallda.length
+              ? text({ sv: "Fråga något mer:", en: "Ask something else:" })
+              : text({ sv: "Klicka på en fråga, som kund:", en: "Click a question, as the customer:" })}
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
             {kvar.map((i) => (
@@ -78,17 +82,18 @@ function Kundchatt() {
 }
 
 export function DemoSupportYta() {
+  const { text } = useLocale();
   // `valdFlik` och inte `flik`: det namnet är klassen ur components/ui.tsx.
   const [valdFlik, setFlik] = useState<"inkorg" | "chatt">("inkorg");
 
   return (
     <div>
       {/* Samma flikform som SupportWorkspaceTabs. */}
-      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Kundtjänstens ytor">
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label={text({ sv: "Kundtjänstens ytor", en: "Customer service areas" })}>
         {(
           [
-            ["inkorg", "Inkorgen"],
-            ["chatt", "Kundchatten"]
+            ["inkorg", text({ sv: "Inkorgen", en: "The inbox" })],
+            ["chatt", text({ sv: "Kundchatten", en: "The customer chat" })]
           ] as const
         ).map(([id, etikett]) => (
           <button

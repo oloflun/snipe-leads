@@ -9,7 +9,8 @@ import { DemoKorning } from "@/components/leads/DemoKorning";
 import type { EmailStudioData } from "@/lib/data/emails";
 import { btnPrimary, btnSecondary } from "@/components/ui";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
-import { ICP_ETIKETTER } from "@/lib/leads/icpLabels";
+import { useLocale, type Locale, type Localized } from "@/lib/i18n";
+import { icpEtiketter } from "@/lib/leads/icpLabels";
 import { cn } from "@/lib/utils";
 
 /**
@@ -112,16 +113,74 @@ type Exempelbolag = {
  * Ordningen är formulärets, inte objektets: en sammanfattning som räknar upp
  * fälten i en annan ordning än de fylldes i tvingar läsaren att leta.
  */
-const ÖVERSKRIVNINGSETIKETTER: [string, string][] = [
-  ["industries", ICP_ETIKETTER.industries.label],
-  ["exclude_industries", ICP_ETIKETTER.exclude_industries.label],
-  ["geography", ICP_ETIKETTER.geography.label],
-  ["roles", ICP_ETIKETTER.roles.label],
-  ["must_have", ICP_ETIKETTER.must_have.label],
-  ["deal_breakers", ICP_ETIKETTER.deal_breakers.label],
-  ["anstallda_min", "Anställda, minst"],
-  ["anstallda_max", "Anställda, högst"]
-];
+function överskrivningsetiketter(locale: Locale): [string, string][] {
+  const e = icpEtiketter(locale);
+  return [
+    ["industries", e.industries.label],
+    ["exclude_industries", e.exclude_industries.label],
+    ["geography", e.geography.label],
+    ["roles", e.roles.label],
+    ["must_have", e.must_have.label],
+    ["deal_breakers", e.deal_breakers.label],
+    ["anstallda_min", { sv: "Anställda, minst", en: "Employees, at least" }[locale]],
+    ["anstallda_max", { sv: "Anställda, högst", en: "Employees, at most" }[locale]]
+  ];
+}
+
+const T = {
+  avbrots: { sv: "Körningen avbröts.", en: "The run was aborted." },
+  aterupptar: { sv: "Återupptar körningen…", en: "Resuming the run…" },
+  forLang: { sv: "Körningen tog för lång tid.", en: "The run took too long." },
+  researcharNasta: { sv: " · researchar nästa", en: " · researching the next" },
+  letarFler: { sv: " · letar fler bolag", en: " · looking for more companies" },
+  fortsatter: { sv: "Körningen fortsätter i bakgrunden.", en: "The run continues in the background." },
+  startar: { sv: "Startar körningen…", en: "Starting the run…" },
+  letarBolag: { sv: "Letar bolag som matchar målgruppen…", en: "Looking for companies that match the target group…" },
+  startadeInte: { sv: "Körningen startade inte. Försök igen.", en: "The run did not start. Try again." },
+  ingaBolag: { sv: "Sökningen hittade inga bolag.", en: "The search found no companies." },
+  ingaMatchade: {
+    sv: "Inga bolag matchade målgruppen. Prova en bredare sökning.",
+    en: "No companies matched the target group. Try a broader search."
+  },
+  doljFilter: { sv: "Dölj filter", en: "Hide filters" },
+  filtrera: { sv: "Filtrera", en: "Filter" },
+  kommaEmellan: { sv: "komma emellan", en: "comma separated" },
+  nischen: { sv: "nischen", en: "the niche" },
+  anstMin: { sv: "Anställda, min", en: "Employees, min" },
+  max: { sv: "max", en: "max" },
+  egnaBolag: { sv: "Egna bolag", en: "Own companies" },
+  valfritt: { sv: "valfritt, ett per rad", en: "optional, one per line" },
+  tomt: { sv: "Tomt: agenten letar själv", en: "Empty: the agent searches on its own" },
+  startarKnapp: { sv: "Startar…", en: "Starting…" },
+  startaTest: { sv: "Starta testkörning", en: "Start test run" },
+  starta: { sv: "Starta körning", en: "Start run" },
+  foljKorningen: { sv: "Följ körningen", en: "Follow the run" },
+  leadsBestallda: { sv: "leads beställda", en: "leads ordered" },
+  bolagIKorningen: { sv: "bolag i körningen", en: "companies in the run" },
+  researchOchUtkast: { sv: "research och utkast", en: "research and drafts" },
+  baraResearch: { sv: "bara research", en: "research only" },
+  testkorning: { sv: " · testkörning", en: " · test run" },
+  sparadMalgrupp: { sv: "Sparad målgrupp användes.", en: "The saved target group was used." },
+  av: { sv: "av", en: "of" },
+  leadsKlara: { sv: "leads klara", en: "leads done" },
+  bolagUndersokta: { sv: "bolag undersökta", en: "companies researched" },
+  stryptMest: { sv: " · det som strypte mest: ", en: " · the biggest bottleneck: " },
+  exempelbolagInlagda: { sv: "exempelbolag inlagda", en: "sample companies added" },
+  pahittade: { sv: "Påhittade. Kan aldrig mejlas.", en: "Made up. Can never be emailed." },
+  hamtar: { sv: "Hämtar…", en: "Loading…" },
+  uppdatera: { sv: "Uppdatera", en: "Refresh" },
+  exempel: { sv: "Exempel", en: "Sample" },
+  beslutsfattare: { sv: "Beslutsfattare", en: "Decision maker" },
+  anstallda: { sv: "anställda", en: "employees" },
+  doljUtkastet: { sv: "Dölj utkastet", en: "Hide the draft" },
+  oppnaUtkastet: { sv: "Öppna utkastet", en: "Open the draft" },
+  skickaTest: { sv: "Skicka test", en: "Send test" },
+  ingetSkickades: {
+    sv: "Ingenting skickades. Utkastet finns kvar här och bolaget är påhittat. Så här skulle utskicket ha sett ut.",
+    en: "Nothing was sent. The draft stays here and the company is made up. This is what the email would have looked like."
+  },
+  provarHelaVagen: { sv: "Provar hela vägen fram utan att något lämnar huset.", en: "Tests the whole way without anything leaving the building." }
+} satisfies Record<string, Localized>;
 
 const fältklass =
   "w-full rounded-input border border-ink/15 bg-paper px-3 py-2 text-[15px] focus-ring";
@@ -213,6 +272,8 @@ export function LeadsRunForm({
   const [fel, setFel] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [batchId, setBatchId] = useState<string | null>(null);
+  const { locale, text } = useLocale();
+  const etik = icpEtiketter(locale);
   // Följ-loopen lever bara så länge formuläret är monterat: "Följ körningen"
   // byter vy, och utan den här vakten pollade loopen vidare i upp till 45 min
   // och dubblerade Körningar-vyns egen pollning (granskning 2026-10-02).
@@ -260,7 +321,7 @@ export function LeadsRunForm({
           // En död körning sägs rakt ut, inte bara glöms.
           glomKorning();
           setBatchId(sparatId);
-          setFel(rad.error ?? "Körningen avbröts.");
+          setFel(rad.error ?? text(T.avbrots));
           return;
         }
         if (!rad.korning || rad.korning.klar) {
@@ -269,7 +330,7 @@ export function LeadsRunForm({
         }
         setBatchId(sparatId);
         setSvar({ jobs: [], count: rad.korning.mal, fase: "research" });
-        setStatus("Återupptar körningen…");
+        setStatus(text(T.aterupptar));
         await följKörning(sparatId, rad.korning);
       } catch (cause) {
         // 404 = körningen finns inte längre: glöm den. Ett tillfälligt fel
@@ -343,7 +404,7 @@ export function LeadsRunForm({
         return { status: jobb.status, error: jobb.error, jobs: jobb.result?.jobs, korning: jobb.result?.korning };
       }
     }
-    return { status: "timeout", error: "Körningen tog för lång tid." };
+    return { status: "timeout", error: text(T.forLang) };
   }
 
   /**
@@ -364,8 +425,10 @@ export function LeadsRunForm({
       }
       if (k.klar) break;
       setStatus(
-        `Iris har ${k.levererade} av ${k.mal} leads · ${k.undersokta} bolag undersökta` +
-          (k.pagaende ? " · researchar nästa" : " · letar fler bolag")
+        text({
+          sv: `Iris har ${k.levererade} av ${k.mal} leads · ${k.undersokta} bolag undersökta`,
+          en: `Iris has ${k.levererade} of ${k.mal} leads · ${k.undersokta} companies researched`
+        }) + (k.pagaende ? text(T.researcharNasta) : text(T.letarFler))
       );
       await new Promise((r) => setTimeout(r, 3000));
       if (!levande.current) return;
@@ -380,13 +443,17 @@ export function LeadsRunForm({
         // Motorn dog (felorsaken står i liggaren): sluta polla, säg varför.
         glomKorning();
         setStatus(null);
-        setFel(rad.error ?? "Körningen avbröts.");
+        setFel(rad.error ?? text(T.avbrots));
         window.dispatchEvent(new Event("snipra:leads-korning-klar"));
         return;
       }
       if (rad.korning) k = rad.korning;
     }
-    setStatus(k.klar ? k.sammanfattning ?? `Klart: ${k.levererade} leads.` : "Körningen fortsätter i bakgrunden.");
+    setStatus(
+      k.klar
+        ? (k.sammanfattning ?? text({ sv: `Klart: ${k.levererade} leads.`, en: `Done: ${k.levererade} leads.` }))
+        : text(T.fortsatter)
+    );
     if (k.klar) glomKorning();
     window.dispatchEvent(new Event("snipra:leads-korning-klar"));
   }
@@ -403,7 +470,7 @@ export function LeadsRunForm({
       const antal = Number(limit) || 1;
       const egna = rader(egnaBolag);
 
-      setStatus(egna.length ? "Startar körningen…" : "Letar bolag som matchar målgruppen…");
+      setStatus(egna.length ? text(T.startar) : text(T.letarBolag));
       const resultat = await anropa<LeadsSvar>("/leads/runs/batch", {
         method: "POST",
         body: JSON.stringify({
@@ -419,7 +486,7 @@ export function LeadsRunForm({
       if (resultat.fase === "soker") {
         const sokId = jobb[0]?.job_id;
         if (!sokId) {
-          throw new Error("Körningen startade inte. Försök igen.");
+          throw new Error(text(T.startadeInte));
         }
         // Sökfasen får vänta ~5 min, research-jobben ~3. Den grundade
         // sökningen tog 55–156 s i mätningen 2026-09-15 och backendens tak
@@ -428,7 +495,7 @@ export function LeadsRunForm({
         // för det riktiga beskedet.
         const sok = await pollaJobb(sokId, 150);
         if (sok.status !== "completed") {
-          throw new Error(sok.error ?? "Sökningen hittade inga bolag.");
+          throw new Error(sok.error ?? text(T.ingaBolag));
         }
         if (sok.korning) {
           setBatchId(sokId);
@@ -445,9 +512,7 @@ export function LeadsRunForm({
       }
 
       if (!jobb.length) {
-        throw new Error(
-          "Inga bolag matchade målgruppen. Prova en bredare sökning."
-        );
+        throw new Error(text(T.ingaMatchade));
       }
 
       setSvar({ ...resultat, jobs: jobb, count: jobb.length, fase: "research" });
@@ -455,20 +520,32 @@ export function LeadsRunForm({
       let klara = 0;
       let misslyckade = 0;
       setJobbLage({ klara: 0, totalt: jobb.length, misslyckade: 0 });
-      setStatus(jobb.length ? `Körningen pågår… (0/${jobb.length} klara)` : null);
+      setStatus(
+        jobb.length
+          ? text({ sv: `Körningen pågår… (0/${jobb.length} klara)`, en: `The run is in progress… (0/${jobb.length} done)` })
+          : null
+      );
 
       for (const rad of jobb) {
         const utfall = await pollaJobb(rad.job_id);
         if (utfall.status === "completed") klara += 1;
         else misslyckade += 1;
         setJobbLage({ klara, totalt: jobb.length, misslyckade });
-        setStatus(`Körningen pågår… (${klara + misslyckade}/${jobb.length} klara)`);
+        setStatus(
+          text({
+            sv: `Körningen pågår… (${klara + misslyckade}/${jobb.length} klara)`,
+            en: `The run is in progress… (${klara + misslyckade}/${jobb.length} done)`
+          })
+        );
       }
 
       setStatus(
         misslyckade
-          ? `Klart: ${klara} bolag researchade, ${misslyckade} misslyckades.`
-          : `Klart: ${klara} bolag researchade.`
+          ? text({
+              sv: `Klart: ${klara} bolag researchade, ${misslyckade} misslyckades.`,
+              en: `Done: ${klara} companies researched, ${misslyckade} failed.`
+            })
+          : text({ sv: `Klart: ${klara} bolag researchade.`, en: `Done: ${klara} companies researched.` })
       );
       window.dispatchEvent(new Event("snipra:leads-korning-klar"));
     } catch (cause) {
@@ -508,10 +585,10 @@ export function LeadsRunForm({
             className={cn(btnSecondary, "shrink-0 tabular-nums")}
           >
             {filterOppna
-              ? "Dölj filter"
+              ? text(T.doljFilter)
               : aktivaFilter
-                ? `Filtrera · ${aktivaFilter}`
-                : "Filtrera"}
+                ? `${text(T.filtrera)} · ${aktivaFilter}`
+                : text(T.filtrera)}
           </button>
         </div>
       ) : (
@@ -551,38 +628,38 @@ export function LeadsRunForm({
 
       {filterOppna ? (
       <div id="leads-filter" className="mt-6 grid max-w-[760px] gap-5 sm:grid-cols-2">
-        <Rad etikett={ICP_ETIKETTER.industries.label} hint="komma emellan">
-          <input value={branscher} onChange={(e) => setBranscher(e.target.value)} placeholder={ICP_ETIKETTER.industries.hint} className={fältklass} />
+        <Rad etikett={etik.industries.label} hint={text(T.kommaEmellan)}>
+          <input value={branscher} onChange={(e) => setBranscher(e.target.value)} placeholder={etik.industries.hint} className={fältklass} />
         </Rad>
-        <Rad etikett={ICP_ETIKETTER.exclude_industries.label}>
-          <input value={undvik} onChange={(e) => setUndvik(e.target.value)} placeholder={ICP_ETIKETTER.exclude_industries.hint} className={fältklass} />
+        <Rad etikett={etik.exclude_industries.label}>
+          <input value={undvik} onChange={(e) => setUndvik(e.target.value)} placeholder={etik.exclude_industries.hint} className={fältklass} />
         </Rad>
-        <Rad etikett={ICP_ETIKETTER.geography.label}>
-          <input value={geografi} onChange={(e) => setGeografi(e.target.value)} placeholder={ICP_ETIKETTER.geography.hint} className={fältklass} />
+        <Rad etikett={etik.geography.label}>
+          <input value={geografi} onChange={(e) => setGeografi(e.target.value)} placeholder={etik.geography.hint} className={fältklass} />
         </Rad>
-        <Rad etikett={ICP_ETIKETTER.roles.label}>
-          <input value={roller} onChange={(e) => setRoller(e.target.value)} placeholder={ICP_ETIKETTER.roles.hint} className={fältklass} />
+        <Rad etikett={etik.roles.label}>
+          <input value={roller} onChange={(e) => setRoller(e.target.value)} placeholder={etik.roles.hint} className={fältklass} />
         </Rad>
-        <Rad etikett={ICP_ETIKETTER.must_have.label} hint="nischen">
-          <input value={kravs} onChange={(e) => setKravs(e.target.value)} placeholder={ICP_ETIKETTER.must_have.hint} className={fältklass} />
+        <Rad etikett={etik.must_have.label} hint={text(T.nischen)}>
+          <input value={kravs} onChange={(e) => setKravs(e.target.value)} placeholder={etik.must_have.hint} className={fältklass} />
         </Rad>
-        <Rad etikett={ICP_ETIKETTER.deal_breakers.label}>
-          <input value={diskvalificerar} onChange={(e) => setDiskvalificerar(e.target.value)} placeholder={ICP_ETIKETTER.deal_breakers.hint} className={fältklass} />
+        <Rad etikett={etik.deal_breakers.label}>
+          <input value={diskvalificerar} onChange={(e) => setDiskvalificerar(e.target.value)} placeholder={etik.deal_breakers.hint} className={fältklass} />
         </Rad>
         <div className="grid grid-cols-2 gap-3">
-          <Rad etikett="Anställda, min">
+          <Rad etikett={text(T.anstMin)}>
             <input type="number" min={0} value={minAnst} onChange={(e) => setMinAnst(e.target.value)} className={fältklass} />
           </Rad>
-          <Rad etikett="max">
+          <Rad etikett={text(T.max)}>
             <input type="number" min={0} value={maxAnst} onChange={(e) => setMaxAnst(e.target.value)} className={fältklass} />
           </Rad>
         </div>
-        <Rad etikett="Egna bolag" hint="valfritt, ett per rad">
+        <Rad etikett={text(T.egnaBolag)} hint={text(T.valfritt)}>
           <textarea
             value={egnaBolag}
             onChange={(e) => setEgnaBolag(e.target.value)}
             rows={3}
-            placeholder="Tomt: agenten letar själv"
+            placeholder={text(T.tomt)}
             className={cn(fältklass, "resize-y")}
           />
         </Rad>
@@ -600,7 +677,7 @@ export function LeadsRunForm({
         demoAction ?? <DemoKorning />
       ) : (
         <button type="button" onClick={() => void kör()} disabled={busy} className={cn(btnPrimary, "mt-6")}>
-          {busy ? "Startar…" : isTest ? "Starta testkörning" : "Starta körning"}
+          {busy ? text(T.startarKnapp) : isTest ? text(T.startaTest) : text(T.starta)}
         </button>
       )}
 
@@ -611,7 +688,7 @@ export function LeadsRunForm({
             <>
               {" · "}
               <Link href={`${bas}/korningar?id=${encodeURIComponent(batchId)}`} className="underline underline-offset-4 hover:text-ink">
-                Följ körningen
+                {text(T.foljKorningen)}
               </Link>
             </>
           ) : null}
@@ -629,9 +706,9 @@ export function LeadsRunForm({
           <div className="rounded-card bg-paper2/60 p-5">
             <p className="text-[15px]">
               <strong className="font-semibold">{svar.count}</strong>{" "}
-              {korning ? "leads beställda" : "bolag i körningen"} ·{" "}
-              {svar.scope === "research_and_draft" ? "research och utkast" : "bara research"}
-              {svar.is_test ? " · testkörning" : null}
+              {korning ? text(T.leadsBestallda) : text(T.bolagIKorningen)} ·{" "}
+              {svar.scope === "research_and_draft" ? text(T.researchOchUtkast) : text(T.baraResearch)}
+              {svar.is_test ? text(T.testkorning) : null}
             </p>
 
             {/* Vad körningen FAKTISKT kördes med, inte vad formuläret råkade
@@ -644,7 +721,7 @@ export function LeadsRunForm({
                 interna namn, inte etiketterna som står i formuläret ovan. */}
             {svar.overrides ? (
               <dl className="mt-4 grid gap-x-8 gap-y-3 sm:grid-cols-2">
-                {ÖVERSKRIVNINGSETIKETTER.map(([nyckel, etikett]) => {
+                {överskrivningsetiketter(locale).map(([nyckel, etikett]) => {
                   const värde = svar.overrides?.[nyckel];
                   if (värde === undefined || värde === null) return null;
                   return (
@@ -661,18 +738,18 @@ export function LeadsRunForm({
               </dl>
             ) : (
               <p className="mt-2 text-[13px] text-ink-subtle">
-                Sparad målgrupp användes.
+                {text(T.sparadMalgrupp)}
               </p>
             )}
           </div>
 
           {korning ? (
             <p className="text-[14px] text-ink-muted" aria-live="polite">
-              <span className="num tabular-nums">{korning.levererade}</span> av{" "}
-              <span className="num tabular-nums">{korning.mal}</span> leads klara ·{" "}
-              <span className="num tabular-nums">{korning.undersokta}</span> bolag undersökta
+              <span className="num tabular-nums">{korning.levererade}</span> {text(T.av)}{" "}
+              <span className="num tabular-nums">{korning.mal}</span> {text(T.leadsKlara)} ·{" "}
+              <span className="num tabular-nums">{korning.undersokta}</span> {text(T.bolagUndersokta)}
               {korning.klar && korning.levererade < korning.mal && korning.flaskhals
-                ? ` · det som strypte mest: ${korning.flaskhals.toLowerCase()}`
+                ? `${text(T.stryptMest)}${korning.flaskhals.toLowerCase()}`
                 : null}
             </p>
           ) : null}
@@ -714,15 +791,16 @@ export function Exempelbolagslista({
   uppdaterar = false
 }: Readonly<{ bolag: Exempelbolag[]; onUppdatera?: () => void; uppdaterar?: boolean }>) {
   const [valt, setValt] = useState<string | null>(null);
+  const { text } = useLocale();
 
   return (
     <section aria-labelledby="exempelbolag" className="rounded-card bg-paper2/40 p-5 md:p-6">
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
         <div>
           <h3 id="exempelbolag" className="text-[1.0625rem] font-semibold tracking-[-0.01em]">
-            {bolag.length} exempelbolag inlagda
+            {bolag.length} {text(T.exempelbolagInlagda)}
           </h3>
-          <p className="mt-0.5 text-[13px] text-ink-subtle">Påhittade — kan aldrig mejlas</p>
+          <p className="mt-0.5 text-[13px] text-ink-subtle">{text(T.pahittade)}</p>
         </div>
 
         {/* Uppdatera startar INGEN körning. Den som vill se agenten formulera
@@ -736,7 +814,7 @@ export function Exempelbolagslista({
             className={cn(btnSecondary)}
           >
             <RefreshCw className={cn("h-4 w-4", uppdaterar && "animate-spin")} aria-hidden />
-            {uppdaterar ? "Hämtar…" : "Uppdatera"}
+            {uppdaterar ? text(T.hamtar) : text(T.uppdatera)}
           </button>
         ) : null}
       </div>
@@ -761,7 +839,7 @@ export function Exempelbolagslista({
                 </p>
               </div>
               <span className="shrink-0 rounded-input bg-ochre/15 px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.06em] text-warning">
-                Exempel
+                {text(T.exempel)}
               </span>
             </div>
 
@@ -771,8 +849,8 @@ export function Exempelbolagslista({
 
             <p className="mt-2 text-[13px] text-ink-subtle">
               {[
-                b.contact_name ? `Beslutsfattare: ${b.contact_name}` : null,
-                typeof b.anstallda === "number" ? `${b.anstallda} anställda` : null,
+                b.contact_name ? `${text(T.beslutsfattare)}: ${b.contact_name}` : null,
+                typeof b.anstallda === "number" ? `${b.anstallda} ${text(T.anstallda)}` : null,
                 b.bransch
               ]
                 .filter(Boolean)
@@ -780,7 +858,7 @@ export function Exempelbolagslista({
             </p>
 
             <p className="mt-2 text-[13px] font-medium text-warning">
-              {öppen ? "Dölj utkastet" : "Öppna utkastet"}
+              {öppen ? text(T.doljUtkastet) : text(T.oppnaUtkastet)}
             </p>
             </button>
 
@@ -791,9 +869,15 @@ export function Exempelbolagslista({
       </ul>
 
       <p className="mt-4 border-t border-ink/10 pt-4 text-[13px] leading-6 text-ink-subtle">
-        Organisationsnumren har medvetet fel kontrollsiffra och webbadresserna
-        ligger under <span className="font-mono text-[12px]">.example</span>, som aldrig kan
-        registreras. Ett påhittat bolag med giltiga uppgifter hade kunnat vara någon annans.
+        {text({
+          sv: "Organisationsnumren har medvetet fel kontrollsiffra och webbadresserna ligger under ",
+          en: "The organisation numbers deliberately have a wrong check digit and the web addresses are under "
+        })}
+        <span className="font-mono text-[12px]">.example</span>
+        {text({
+          sv: ", som aldrig kan registreras. Ett påhittat bolag med giltiga uppgifter hade kunnat vara någon annans.",
+          en: ", which can never be registered. A made-up company with valid details could have been someone else's."
+        })}
       </p>
     </section>
   );
@@ -823,6 +907,7 @@ export function Exempelbolagslista({
  */
 function Pitchutkast({ bolag }: Readonly<{ bolag: Exempelbolag }>) {
   const [skickat, setSkickat] = useState(false);
+  const { text } = useLocale();
 
   const data: EmailStudioData = {
     source: "mock",
@@ -855,12 +940,10 @@ function Pitchutkast({ bolag }: Readonly<{ bolag: Exempelbolag }>) {
           className={cn(btnSecondary)}
         >
           <Send className="h-4 w-4" aria-hidden />
-          Skicka test
+          {text(T.skickaTest)}
         </button>
         <p className="text-[13px] leading-6 text-ink-subtle">
-          {skickat
-            ? "Ingenting skickades. Utkastet finns kvar här och bolaget är påhittat — så här skulle utskicket ha sett ut."
-            : "Provar hela vägen fram utan att något lämnar huset."}
+          {skickat ? text(T.ingetSkickades) : text(T.provarHelaVagen)}
         </p>
       </div>
     </div>

@@ -114,14 +114,14 @@ function renderSektion(
       // slugsegment är en 404, inte en tyst fallback till Bolag.
       if (undersektion === "granskning") {
         return (
-          <PageShell title="Granskning">
+          <PageShell title={{ sv: "Granskning", en: "Review" }}>
             <IrisGranskning demo />
           </PageShell>
         );
       }
       if (undersektion === "installningar") {
         return (
-          <PageShell title="Inställningar">
+          <PageShell title={{ sv: "Inställningar", en: "Settings" }}>
             <IrisInstallningar demo />
           </PageShell>
         );
@@ -145,7 +145,7 @@ function renderSektion(
       // Följer filens regel — CrmDemo når varken session eller databas.
       // Att listan stannar i webbläsaren står i CrmDemos egen uppladdningsyta.
       return (
-        <PageShell title="CRM-lista">
+        <PageShell title={{ sv: "CRM-lista", en: "CRM list" }}>
           <CrmDemo />
         </PageShell>
       );
@@ -169,7 +169,7 @@ function renderSektion(
       // efter en session eller databasen — se filens docstring. KvittoDemo
       // renderar handräknade konstanter och spelar upp dem.
       return (
-        <PageShell title="Kvitton">
+        <PageShell title={{ sv: "Kvitton", en: "Receipts" }}>
           <KvittoDemo />
         </PageShell>
       );
@@ -182,7 +182,7 @@ function renderSektion(
       // DemoSupportYta lägger kundchatten (förladdade svar) som flik bredvid
       // inkorgen, samma flikmönster som arbetsytans SupportWorkspaceTabs.
       return (
-        <PageShell title="Kundtjänst">
+        <PageShell title={{ sv: "Kundtjänst", en: "Customer service" }}>
           <DemoSupportYta />
         </PageShell>
       );
@@ -193,7 +193,7 @@ function renderSektion(
 
 function ReglerDemo() {
   return (
-    <PageShell title="När agenten får svara själv">
+    <PageShell title={{ sv: "När agenten får svara själv", en: "When the agent may answer on its own" }}>
       <SupportRegler demo />
     </PageShell>
   );

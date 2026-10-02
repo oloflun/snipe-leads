@@ -10,6 +10,7 @@ import { EmptyState, SkeletonRows, btnPrimary } from "@/components/ui";
 import type { EmailStudioData } from "@/lib/data/emails";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
+import { sv, useLocale, type Locale, type Localized } from "@/lib/i18n";
 import { lasOffertForUtkast } from "@/lib/actions/affarskontext";
 import { ICP_ETIKETTER } from "@/lib/leads/icpLabels";
 import { kriterier } from "@/lib/prospekt";
@@ -60,7 +61,7 @@ type Prospekt = {
 type Lage =
   | { fas: "laddar" }
   | { fas: "saknas" }
-  | { fas: "fel"; meddelande: string }
+  | { fas: "fel"; meddelande: Localized }
   | { fas: "klar"; prospekt: Prospekt; kallor: string[] };
 
 /**
@@ -77,7 +78,7 @@ type UtkastLage =
   | { fas: "ingen" }
   | { fas: "letar-kontakt" }
   | { fas: "skapar" }
-  | { fas: "fel"; meddelande: string }
+  | { fas: "fel"; meddelande: Localized }
   | { fas: "klar"; data: EmailStudioData; queueItemId: string | null };
 
 /** Så som `/api/leads/queue` (send_queue join outreach_messages) svarar. */
@@ -88,6 +89,83 @@ type KöItem = {
   prospect_email?: string | null;
   company_name?: string | null;
 };
+
+const T = {
+  tjanstenSvararInte: {
+    sv: "Tjänsten svarar inte. Försök igen om en minut.",
+    en: "The service is not responding. Try again in a minute."
+  },
+  tomtSvar: { sv: "Backenden svarade utan innehåll.", en: "The backend replied without content." },
+  kundeInteNaServern: { sv: "Kunde inte nå servern.", en: "Could not reach the server." },
+  utkastTogForLang: { sv: "Utkastet tog för lång tid.", en: "The draft took too long." },
+  utkastKundeInte: { sv: "Utkastet kunde inte skrivas.", en: "The draft could not be written." },
+  utkastInteKlart: {
+    sv: "Utkastet blev inte klart. Försök igen om en stund.",
+    en: "The draft was not finished. Try again in a moment."
+  },
+  ingenKontaktadress: {
+    sv: "Iris hittade ingen kontaktadress på bolagets sajt. Försök igen om en stund, eller komplettera bolaget med en adress.",
+    en: "Iris found no contact address on the company's site. Try again in a moment, or add an address to the company."
+  },
+  hamtarBolaget: { sv: "Hämtar bolaget…", en: "Loading the company…" },
+  bolagetFinnsInte: { sv: "Bolaget finns inte", en: "Company not found" },
+  ingetSadantBolag: { sv: "Hittade inget sådant bolag", en: "No such company found" },
+  tillBolagen: { sv: "Till bolagen", en: "Back to companies" },
+  bolagetKundeInte: { sv: "Bolaget kunde inte hämtas", en: "Could not load the company" },
+  forsokIgen: { sv: "Försök igen", en: "Try again" },
+  score: { sv: "Score", en: "Score" },
+  diskvalificerad: { sv: "diskvalificerad", en: "disqualified" },
+  kvalificerad: { sv: "kvalificerad", en: "qualified" },
+  anstallda: { sv: "Anställda", en: "Employees" },
+  orgnrSaknas: { sv: "org.nr saknas", en: "no org. no." },
+  kallor: { sv: "Källor", en: "Sources" },
+  status: { sv: "Status", en: "Status" },
+  saRaknades: { sv: "Så räknades poängen", en: "How the score was calculated" },
+  vikt: { sv: "vikt", en: "weight" },
+  ingenMotivering: { sv: "Ingen poängmotivering sparad.", en: "No score reasoning saved." },
+  kontakt: { sv: "Kontakt", en: "Contact" },
+  ingenKontaktperson: { sv: "Ingen kontaktperson hittad", en: "No contact person found" },
+  ingaKallor: { sv: "Inga källor sparade.", en: "No sources saved." },
+  mejlutkast: { sv: "Mejlutkast", en: "Email draft" },
+  loggaIn: { sv: "Logga in för att skapa utkast", en: "Log in to create drafts" },
+  ingetUtkast: { sv: "Inget utkast ännu.", en: "No draft yet." },
+  skapaUtkast: { sv: "Skapa utkast", en: "Create draft" },
+  letarKontakt: {
+    sv: "Iris letar kontaktadress på bolagets sajt … Det tar ungefär en minut, och utkastet skrivs direkt efteråt.",
+    en: "Iris is looking for a contact address on the company's site … It takes about a minute, and the draft is written right after."
+  },
+  skriverUtkastet: { sv: "Skriver utkastet…", en: "Writing the draft…" },
+  andringarSparasInte: {
+    sv: "Ändringar ovan sparas inte. Godkänn skickar det sparade utkastet.",
+    en: "Changes above are not saved. Approve sends the saved draft."
+  },
+  godkant: { sv: "Godkänt. Utkastet ligger nu i sändkön.", en: "Approved. The draft is now in the send queue." },
+  godkanner: { sv: "Godkänner…", en: "Approving…" },
+  godkannOchSkicka: { sv: "Godkänn och skicka", en: "Approve and send" },
+  godkannIGranskning: { sv: "Godkänn i Iris › Granskning.", en: "Approve in Iris › Review." },
+  skrivAutomatiskt: { sv: "Skriv utkast automatiskt framöver", en: "Write drafts automatically from now on" },
+  redanPa: { sv: "(redan på)", en: "(already on)" },
+  skickaAutomatiskt: {
+    sv: "…och skickar automatiskt, utan granskning?",
+    en: "…and send automatically, without review?"
+  },
+  sparat: { sv: "Sparat.", en: "Saved." },
+  exempel: { sv: "Exempel", en: "Example" }
+} satisfies Record<string, Localized>;
+
+/** Samma text på båda språken: serverns egna felmeddelanden, som redan är färdiga. */
+function samma(text: string): Localized {
+  return { sv: text, en: text };
+}
+
+/**
+ * Språket för fetch-hjälparen, som anropas utanför komponenten och inte kan
+ * använda useLocale. LocaleProvider (lib/i18n.tsx) håller `<html lang>` i takt
+ * med valet, så attributet är samma källa som hooken läser.
+ */
+function sprak(): Locale {
+  return typeof document !== "undefined" && document.documentElement.lang === "en" ? "en" : "sv";
+}
 
 /**
  * Anrop mot snajp-support med läsbar felhantering.
@@ -117,7 +195,11 @@ async function snajpAnrop<T>(path: string, init?: RequestInit): Promise<T> {
       : typeof k.detail === "string"
         ? k.detail
         : undefined;
-    throw new Error(detaljtext ?? k.error ?? `Anropet avvisades (${response.status}).`);
+    const avvisat: Localized = {
+      sv: `Anropet avvisades (${response.status}).`,
+      en: `The request was rejected (${response.status}).`
+    };
+    throw new Error(detaljtext ?? k.error ?? avvisat[sprak()]);
   }
   return kropp;
 }
@@ -133,9 +215,9 @@ function byggForskningssammanfattning(p: Prospekt): string {
 /** Den starkaste träffen som "signalen" i Email Studio-kontexten. Ingen träff, inget påhitt. */
 function harledSignal(p: Prospekt): string | null {
   const lista = kriterier(p.score_breakdown);
-  const bäst = lista.find((k) => k.utfall !== "miss") ?? lista[0];
-  if (!bäst) return null;
-  return bäst.motivering ? `${bäst.etikett}: ${bäst.motivering}` : bäst.etikett;
+  const bast = lista.find((k) => k.utfall !== "miss") ?? lista[0];
+  if (!bast) return null;
+  return bast.motivering ? `${bast.etikett}: ${bast.motivering}` : bast.etikett;
 }
 
 function byggEmailStudioData(
@@ -184,7 +266,7 @@ async function hamtaOffertsammanfattning(): Promise<string> {
   return lasOffertForUtkast();
 }
 
-async function pollaLeadsJobb(jobId: string): Promise<{
+async function pollaLeadsJobb(jobId: string, locale: Locale): Promise<{
   status?: string;
   error?: string;
   result?: {
@@ -212,22 +294,23 @@ async function pollaLeadsJobb(jobId: string): Promise<{
       return jobb;
     }
   }
-  return { status: "timeout", error: "Utkastet tog för lång tid." };
+  return { status: "timeout", error: T.utkastTogForLang[locale] };
 }
 
-const STATUS_ETIKETT: Record<string, string> = {
-  new: "Ny",
-  researching: "Research pågår",
-  ready: "Redo",
-  contacted: "Kontaktad",
-  replied: "Svarat",
-  meeting: "Möte",
-  won: "Vunnen",
-  lost: "Förlorad",
-  suppressed: "Spärrad"
+const STATUS_ETIKETT: Record<string, Localized> = {
+  new: { sv: "Ny", en: "New" },
+  researching: { sv: "Research pågår", en: "Researching" },
+  ready: { sv: "Redo", en: "Ready" },
+  contacted: { sv: "Kontaktad", en: "Contacted" },
+  replied: { sv: "Svarat", en: "Replied" },
+  meeting: { sv: "Möte", en: "Meeting" },
+  won: { sv: "Vunnen", en: "Won" },
+  lost: { sv: "Förlorad", en: "Lost" },
+  suppressed: { sv: "Spärrad", en: "Blocked" }
 };
 
 export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: boolean }>) {
+  const { locale, text } = useLocale();
   const [lage, setLage] = useState<Lage>({ fas: "laddar" });
   const [utkastLage, setUtkastLage] = useState<UtkastLage>({ fas: "kontrollerar" });
   // "Godkänn och skicka"-knappen och uppföljningsfrågan efteråt — skilda från
@@ -331,8 +414,11 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
           fas: "fel",
           meddelande:
             response.status >= 500
-              ? "Tjänsten svarar inte. Försök igen om en minut."
-              : `Kunde inte hämta bolaget (status ${response.status}).`
+              ? T.tjanstenSvararInte
+              : {
+                  sv: `Kunde inte hämta bolaget (status ${response.status}).`,
+                  en: `Could not load the company (status ${response.status}).`
+                }
         });
         return;
       }
@@ -342,7 +428,7 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
         offline?: boolean;
       }>(response);
       if (!kropp?.prospect || kropp.offline) {
-        setLage({ fas: "fel", meddelande: "Backenden svarade utan innehåll." });
+        setLage({ fas: "fel", meddelande: T.tomtSvar });
         return;
       }
       setLage({ fas: "klar", prospekt: kropp.prospect, kallor: kropp.sources ?? [] });
@@ -350,7 +436,7 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
     } catch (error) {
       setLage({
         fas: "fel",
-        meddelande: error instanceof Error ? error.message : "Kunde inte nå servern."
+        meddelande: error instanceof Error ? samma(error.message) : T.kundeInteNaServern
       });
     }
   }, [id, demo, kontrolleraBefintligtUtkast]);
@@ -383,17 +469,13 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
           if (kropp.prospect?.contact_email) hittad = kropp.prospect;
         }
         if (!hittad) {
-          setUtkastLage({
-            fas: "fel",
-            meddelande:
-              "Iris hittade ingen kontaktadress på bolagets sajt. Försök igen om en stund, eller komplettera bolaget med en adress."
-          });
+          setUtkastLage({ fas: "fel", meddelande: T.ingenKontaktadress });
           return;
         }
         p = hittad;
         setLage({ fas: "klar", prospekt: hittad, kallor: lage.kallor });
       } catch (cause) {
-        setUtkastLage({ fas: "fel", meddelande: felmeddelande(cause) });
+        setUtkastLage({ fas: "fel", meddelande: samma(felmeddelande(cause)) });
         return;
       }
     }
@@ -416,10 +498,12 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
           prospect_email: p.contact_email,
           company_name: p.company_name,
           offer_summary: offerSummary,
-          brief:
-            `Skriv ett kort, personligt första mejl till kontaktpersonen på ${p.company_name}. ` +
-            "Utgå ifrån poängmotiveringen i researchunderlaget och håll dig till det som redan är " +
-            "känt. Ingen hype, inga superlativ, ren text. Utkastet ska köas för granskning, inte skickas.",
+          // Agentens instruktion, inte copy: alltid svenska, så att mejlet till
+          // det svenska bolaget blir svenskt oavsett gränssnittets språk.
+          brief: sv({
+            sv: `Skriv ett kort, personligt första mejl till kontaktpersonen på ${p.company_name}. Utgå ifrån poängmotiveringen i researchunderlaget och håll dig till det som redan är känt. Ingen hype, inga superlativ, ren text. Utkastet ska köas för granskning, inte skickas.`,
+            en: `Write a short, personal first email to the contact person at ${p.company_name}. Start from the score reasoning in the research and stick to what is already known. No hype, no superlatives, plain text. The draft is queued for review, not sent.`
+          }),
           research_summary: byggForskningssammanfattning(p),
           // OutreachDraftRequest.research_evidence har max_length 60 poster.
           research_evidence: lage.kallor.slice(0, 60)
@@ -428,9 +512,9 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
 
       let svar = koat;
       if (koat.job_id && (koat.fase === "skriver" || !koat.body)) {
-        const klart = await pollaLeadsJobb(koat.job_id);
+        const klart = await pollaLeadsJobb(koat.job_id, locale);
         if (klart.status !== "completed" || !klart.result) {
-          throw new Error(klart.error || "Utkastet kunde inte skrivas.");
+          throw new Error(klart.error || text(T.utkastKundeInte));
         }
         svar = klart.result;
       }
@@ -438,8 +522,7 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
       if (svar.escalated || !svar.body) {
         setUtkastLage({
           fas: "fel",
-          meddelande:
-            svar.escalation_reason || "Utkastet blev inte klart. Försök igen om en stund."
+          meddelande: svar.escalation_reason ? samma(svar.escalation_reason) : T.utkastInteKlart
         });
         return;
       }
@@ -456,9 +539,9 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
         queueItemId: svar.queue_item_id ?? null
       });
     } catch (cause) {
-      setUtkastLage({ fas: "fel", meddelande: felmeddelande(cause) });
+      setUtkastLage({ fas: "fel", meddelande: samma(felmeddelande(cause)) });
     }
-  }, [lage]);
+  }, [lage, locale, text]);
 
   /** 5.6: "Godkänn och skicka" — släpper utkastet till schemaläggaren. */
   const godkannOchSkicka = useCallback(async () => {
@@ -505,7 +588,7 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
 
   if (lage.fas === "laddar") {
     return (
-      <PageShell title="Hämtar bolaget…">
+      <PageShell title={text(T.hamtarBolaget)}>
         <SkeletonRows />
       </PageShell>
     );
@@ -513,10 +596,10 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
 
   if (lage.fas === "saknas") {
     return (
-      <PageShell title="Bolaget finns inte">
-        <EmptyState title="Hittade inget sådant bolag" />
+      <PageShell title={text(T.bolagetFinnsInte)}>
+        <EmptyState title={text(T.ingetSadantBolag)} />
         <Link href={vag("/dashboard/companies")} className={cn(btnPrimary, "mt-6")}>
-          Till bolagen
+          {text(T.tillBolagen)}
         </Link>
       </PageShell>
     );
@@ -524,17 +607,17 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
 
   if (lage.fas === "fel") {
     return (
-      <PageShell title="Bolaget kunde inte hämtas">
+      <PageShell title={text(T.bolagetKundeInte)}>
         <div className="flex items-start gap-3 border-y border-ochre/40 bg-ochre/10 px-4 py-4">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
           <div className="min-w-0">
-            <p className="text-sm text-ink-muted">{lage.meddelande}</p>
+            <p className="text-sm text-ink-muted">{text(lage.meddelande)}</p>
             <button
               type="button"
               onClick={() => void hamta()}
               className="focus-ring mt-3 inline-flex min-h-9 items-center rounded-input bg-paper2 px-3 text-[13px] font-medium"
             >
-              Försök igen
+              {text(T.forsokIgen)}
             </button>
           </div>
         </div>
@@ -559,7 +642,7 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
         // se sektionen "Mejlutkast" nedan. Kvar i action-sloten står bara
         // märkningen — samma stil som statusetiketterna i Bolagsregister
         // (kicker/mineral), inte en egen badgestil.
-        p.origin === "example" ? <span className="kicker text-mineral">Exempel</span> : null
+        p.origin === "example" ? <span className="kicker text-mineral">{text(T.exempel)}</span> : null
       }
     >
       {/* Vad kickern och beskrivningen bar: bransch/ort och webbplats,
@@ -573,18 +656,22 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
 
       <div className="grid grid-cols-12 gap-x-8 gap-y-10">
         <dl className="col-span-12 grid grid-cols-12 gap-x-8 gap-y-8">
-          <Matt label="Score" value={poang} detail={p.qualified === false ? "diskvalificerad" : "kvalificerad"} />
           <Matt
-            label="Anställda"
-            value={p.anstallda == null ? "—" : String(p.anstallda)}
-            detail={p.orgnr ? `org.nr ${p.orgnr}` : "org.nr saknas"}
+            label={text(T.score)}
+            value={poang}
+            detail={p.qualified === false ? text(T.diskvalificerad) : text(T.kvalificerad)}
           />
-          <Matt label="Källor" value={String(kallor.length)} />
-          <Matt label="Status" value={STATUS_ETIKETT[p.status] ?? p.status} />
+          <Matt
+            label={text(T.anstallda)}
+            value={p.anstallda == null ? "—" : String(p.anstallda)}
+            detail={p.orgnr ? text({ sv: `org.nr ${p.orgnr}`, en: `org. no. ${p.orgnr}` }) : text(T.orgnrSaknas)}
+          />
+          <Matt label={text(T.kallor)} value={String(kallor.length)} />
+          <Matt label={text(T.status)} value={STATUS_ETIKETT[p.status]?.[locale] ?? p.status} />
         </dl>
 
         <section className="col-span-12 md:col-span-7">
-          <h2 className="kicker text-mineral">Så räknades poängen</h2>
+          <h2 className="kicker text-mineral">{text(T.saRaknades)}</h2>
           {kriterier(p.score_breakdown).length ? (
             <ul className="mt-5 divide-y divide-ink/15 border-y border-ink/15">
               {kriterier(p.score_breakdown).map((k, i) => (
@@ -598,7 +685,7 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
                       )}
                     >
                       {k.utfall}
-                      {typeof k.vikt === "number" ? ` · vikt ${k.vikt}` : ""}
+                      {typeof k.vikt === "number" ? ` · ${text(T.vikt)} ${k.vikt}` : ""}
                     </span>
                   </div>
                   {k.motivering ? (
@@ -611,7 +698,7 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
             </ul>
           ) : (
             <p className="mt-5 border-y border-ink/15 py-4 text-[15px] text-ink-muted">
-              Ingen poängmotivering sparad.
+              {text(T.ingenMotivering)}
             </p>
           )}
 
@@ -630,15 +717,15 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
         </section>
 
         <section className="col-span-12 md:col-span-5">
-          <h2 className="kicker text-mineral">Kontakt</h2>
+          <h2 className="kicker text-mineral">{text(T.kontakt)}</h2>
           <div className="mt-4 border-y border-ink/15 py-4">
-            <p className="text-[15px]">{p.contact_name ?? "Ingen kontaktperson hittad"}</p>
+            <p className="text-[15px]">{p.contact_name ?? text(T.ingenKontaktperson)}</p>
             {p.contact_email ? (
               <p className="mt-1 break-all text-sm text-ink-muted">{p.contact_email}</p>
             ) : null}
           </div>
 
-          <h2 className="kicker mt-8 text-mineral">Källor</h2>
+          <h2 className="kicker mt-8 text-mineral">{text(T.kallor)}</h2>
           {kallor.length ? (
             <ul className="mt-4 space-y-2">
               {kallor.map((url) => (
@@ -655,7 +742,7 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
               ))}
             </ul>
           ) : (
-            <p className="mt-4 text-[15px] text-ink-muted">Inga källor sparade.</p>
+            <p className="mt-4 text-[15px] text-ink-muted">{text(T.ingaKallor)}</p>
           )}
         </section>
 
@@ -664,12 +751,12 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
             studion — den kunde bara visa E-Tech-exemplet, oavsett vilket
             bolag man tittade på. */}
         <section className="col-span-12 border-t border-ink/15 pt-8">
-          <h2 className="kicker text-mineral">Mejlutkast</h2>
+          <h2 className="kicker text-mineral">{text(T.mejlutkast)}</h2>
 
           {demo ? (
             <div className="mt-5 rounded-card bg-paper2/60 p-5">
               <Link href="/login" className={btnPrimary}>
-                Logga in för att skapa utkast
+                {text(T.loggaIn)}
               </Link>
             </div>
           ) : (
@@ -680,35 +767,34 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
 
               {utkastLage.fas === "ingen" ? (
                 <div>
-                  <p className="text-[15px] leading-7 text-ink-muted">Inget utkast ännu.</p>
+                  <p className="text-[15px] leading-7 text-ink-muted">{text(T.ingetUtkast)}</p>
                   <button type="button" onClick={() => void skapaUtkast()} className={cn(btnPrimary, "mt-4")}>
-                    Skapa utkast
+                    {text(T.skapaUtkast)}
                   </button>
                 </div>
               ) : null}
 
               {utkastLage.fas === "letar-kontakt" ? (
                 <p className="text-[14px] leading-6 text-ink-subtle">
-                  Iris letar kontaktadress på bolagets sajt … Det tar ungefär en minut,
-                  och utkastet skrivs direkt efteråt.
+                  {text(T.letarKontakt)}
                 </p>
               ) : null}
 
               {utkastLage.fas === "skapar" ? (
-                <p className="text-[14px] text-ink-subtle">Skriver utkastet…</p>
+                <p className="text-[14px] text-ink-subtle">{text(T.skriverUtkastet)}</p>
               ) : null}
 
               {utkastLage.fas === "fel" ? (
                 <div className="flex items-start gap-3 border-y border-ochre/40 bg-ochre/10 px-4 py-4">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
                   <div className="min-w-0">
-                    <p className="text-sm text-ink-muted">{utkastLage.meddelande}</p>
+                    <p className="text-sm text-ink-muted">{text(utkastLage.meddelande)}</p>
                     <button
                       type="button"
                       onClick={() => void skapaUtkast()}
                       className="focus-ring mt-3 inline-flex min-h-9 items-center rounded-input bg-paper2 px-3 text-[13px] font-medium"
                     >
-                      Försök igen
+                      {text(T.forsokIgen)}
                     </button>
                   </div>
                 </div>
@@ -724,13 +810,13 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
                       sparväg. Utan raden hade knappen sett ut att skicka det
                       som står i fälten just nu, vilket den inte gör. */}
                   <p className="mt-4 max-w-[65ch] text-[13px] leading-6 text-ink-subtle">
-                    Ändringar ovan sparas inte. Godkänn skickar det sparade utkastet.
+                    {text(T.andringarSparasInte)}
                   </p>
 
                   <div className="mt-5 border-t border-ink/15 pt-5">
                     {godkant ? (
                       <p role="status" className="text-[15px] text-moss">
-                        Godkänt. Utkastet ligger nu i sändkön.
+                        {text(T.godkant)}
                       </p>
                     ) : (
                       <>
@@ -741,11 +827,11 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
                           className={cn(btnPrimary, "disabled:cursor-wait disabled:opacity-60")}
                         >
                           <Send className="h-4 w-4" aria-hidden />
-                          {godkannBusy ? "Godkänner…" : "Godkänn och skicka"}
+                          {godkannBusy ? text(T.godkanner) : text(T.godkannOchSkicka)}
                         </button>
                         {!utkastLage.queueItemId ? (
                           <p className="mt-3 text-[13px] leading-6 text-ink-subtle">
-                            Godkänn i Iris › Granskning.
+                            {text(T.godkannIGranskning)}
                           </p>
                         ) : null}
                         {godkannFel ? (
@@ -768,8 +854,8 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
                             className="mt-1 h-4 w-4 accent-ochre"
                           />
                           <span className="text-[14px] leading-6 text-ink-muted">
-                            Skriv utkast automatiskt framöver{" "}
-                            <span className="text-ink-subtle">(redan på)</span>
+                            {text(T.skrivAutomatiskt)}{" "}
+                            <span className="text-ink-subtle">{text(T.redanPa)}</span>
                           </span>
                         </label>
 
@@ -782,7 +868,7 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
                             className="mt-1 h-4 w-4 accent-ochre disabled:cursor-wait"
                           />
                           <span className="text-[14px] leading-6 text-ink-muted">
-                            …och skickar automatiskt, utan granskning?
+                            {text(T.skickaAutomatiskt)}
                           </span>
                         </label>
 
@@ -793,7 +879,7 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
                         ) : null}
                         {autonomiSparad ? (
                           <p role="status" className="text-[13px] text-moss">
-                            Sparat.
+                            {text(T.sparat)}
                           </p>
                         ) : null}
                       </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { Clock } from "lucide-react";
+import { useLocale } from "@/lib/i18n";
 
 /**
  * "Din arbetsyta aktiveras" — det en NY kund ska möta, inte ett 409.
@@ -32,16 +33,20 @@ import { Clock } from "lucide-react";
  * inte `ochre` som bär tillstånd som VÄNTAR på användaren.
  */
 export function EjAktiverad({ yta }: Readonly<{ yta?: string }>) {
+  const { text } = useLocale();
   return (
     <div className="rounded-input border border-ink/15 bg-paper2/60 px-5 py-6">
       <div className="flex items-start gap-3">
         <Clock className="mt-0.5 h-4 w-4 shrink-0 text-mineral" aria-hidden />
         <div className="min-w-0">
           <p className="text-[1.0625rem] font-semibold tracking-[-0.01em] text-ink">
-            Din arbetsyta aktiveras
+            {text({ sv: "Din arbetsyta aktiveras", en: "Your workspace is being activated" })}
           </p>
           <p className="mt-2 max-w-[62ch] text-[15px] leading-7 text-ink-muted">
-            {yta ? `${yta} är` : "Vyn är"} redo när vi kopplat er till agenterna.
+            {text({
+              sv: `${yta ?? "Vyn"} är redo när vi kopplat er till agenterna.`,
+              en: `${yta ?? "The view"} is ready once we have connected you to the agents.`
+            })}
           </p>
         </div>
       </div>

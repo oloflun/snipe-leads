@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useLocale } from "@/lib/i18n";
 import { bolagsraden, dataskyddKontakt } from "@/lib/bolag";
 import { KONTAKT_MEJL } from "@/components/marketing/copy";
 
@@ -31,6 +34,7 @@ import { KONTAKT_MEJL } from "@/components/marketing/copy";
  * något i gränssnittet som påminner om att uppgifterna saknas.
  */
 export function Sidfot() {
+  const { text } = useLocale();
   return (
     <div className="border-t border-ink/12">
       <div className="mx-auto max-w-[1480px] px-6 py-8 md:px-10">
@@ -39,13 +43,13 @@ export function Sidfot() {
 
           <nav className="flex flex-wrap gap-x-6 gap-y-2">
             <Link href="/integritetspolicy" className="focus-ring hover:text-ink">
-              Integritetspolicy
+              {text({ sv: "Integritetspolicy", en: "Privacy policy" })}
             </Link>
             <Link href="/villkor" className="focus-ring hover:text-ink">
-              Användarvillkor
+              {text({ sv: "Användarvillkor", en: "Terms of service" })}
             </Link>
             <Link href="/angerratt" className="focus-ring hover:text-ink">
-              Ångerrätt
+              {text({ sv: "Ångerrätt", en: "Right of withdrawal" })}
             </Link>
             <Link href="/cookies" className="focus-ring hover:text-ink">
               Cookies
@@ -64,7 +68,7 @@ export function Sidfot() {
         </div>
 
         <p className="mt-4 text-[0.8125rem] text-ink-subtle">
-          Frågor om tjänsten: <a href={`mailto:${KONTAKT_MEJL}`} className="focus-ring hover:text-ink-muted">{KONTAKT_MEJL}</a>
+          {text({ sv: "Frågor om tjänsten: ", en: "Questions about the service: " })}<a href={`mailto:${KONTAKT_MEJL}`} className="focus-ring hover:text-ink-muted">{KONTAKT_MEJL}</a>
         </p>
       </div>
     </div>

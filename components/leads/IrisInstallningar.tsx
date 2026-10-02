@@ -3,6 +3,7 @@
 import { LeadsControls } from "@/components/leads/LeadsControls";
 import { IrisEskalering } from "@/components/leads/IrisEskalering";
 import { IrisProfil } from "@/components/leads/IrisProfil";
+import { useLocale } from "@/lib/i18n";
 
 /**
  * Iris › Inställningar — målgrupp och autonomi (LeadsControls, oförändrad)
@@ -12,6 +13,7 @@ import { IrisProfil } from "@/components/leads/IrisProfil";
  * bort ur arbetsytan 2026-09-19: förklarande text, inget att ställa in.
  */
 export function IrisInstallningar({ demo = false }: Readonly<{ demo?: boolean }>) {
+  const { text } = useLocale();
   return (
     <div className="grid gap-12">
       <IrisProfil demo={demo} />
@@ -19,7 +21,7 @@ export function IrisInstallningar({ demo = false }: Readonly<{ demo?: boolean }>
       <section className="border-t border-ink/15 pt-8">
         {/* Kicker, inte rubrik: en h3 direkt under sidans h1 utan
             mellanliggande h2 bryter axe heading-order (moderate, 2026-09-19). */}
-        <p className="kicker text-mineral">Målgrupp och autonomi</p>
+        <p className="kicker text-mineral">{text({ sv: "Målgrupp och autonomi", en: "Target group and autonomy" })}</p>
         <div className="mt-5">
           {/* Kön hör hemma i Iris › Granskning, inte här också — se
               components/leads/IrisGranskning.tsx. */}

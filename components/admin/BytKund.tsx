@@ -4,9 +4,16 @@ import { useEffect, useMemo, useState } from "react";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { bytVy } from "@/lib/actions/vy";
 import { readJsonBody } from "@/lib/http/json";
+import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 type Kund = { slug: string; name: string };
+
+const T = {
+  hamtaFel: { sv: "Kundlistan gick inte att hämta.", en: "The customer list could not be loaded." },
+  sok: { sv: "Sök kund eller slug…", en: "Search customer or slug…" },
+  hamtar: { sv: "Hämtar…", en: "Loading…" }
+};
 
 /**
  * Sökbar växel in i en kunds profil. Samma server action som "Öppna" på
@@ -28,6 +35,7 @@ type Kund = { slug: string; name: string };
  *  den ljusa plattan stack ut mot resten av railen). Listan fäller då UPPÅT
  *  och åt höger: nere i panelen hade den annars hamnat utanför skärmen. */
 export function BytKund({ ton = "ljus" }: Readonly<{ ton?: "ljus" | "rail" }> = {}) {
+  const { text } = useLocale();
   const { isPlatformAdmin, impersonation } = useDashboard();
   const [oppen, setOppen] = useState(false);
   const [q, setQ] = useState("");
@@ -45,7 +53,7 @@ export function BytKund({ ton = "ljus" }: Readonly<{ ton?: "ljus" | "rail" }> = 
         );
         if (avbruten) return;
         if (!response.ok || !kropp?.tenants) {
-          setFel("Kundlistan gick inte att hämta.");
+          setFel(text(T.hamtaFel));
           return;
         }
         setKunder(
@@ -54,7 +62,7 @@ export function BytKund({ ton = "ljus" }: Readonly<{ ton?: "ljus" | "rail" }> = 
             .map((t) => ({ slug: t.slug, name: t.name }))
         );
       } catch {
-        if (!avbruten) setFel("Kundlistan gick inte att hämta.");
+        if (!avbruten) setFel(text(T.hamtaFel));
       }
     })();
     return () => {
@@ -101,13 +109,13 @@ export function BytKund({ ton = "ljus" }: Readonly<{ ton?: "ljus" | "rail" }> = 
             type="search"
             value={q}
             onChange={(event) => setQ(event.target.value)}
-            placeholder="Sök kund eller slug…"
+            placeholder={text(T.sok)}
             autoFocus
             className="focus-ring min-h-11 w-full rounded-input bg-paper2 px-3 text-[1rem] outline-none placeholder:text-ink/35"
           />
           {fel ? <p className="mt-2 px-1 text-[13px] text-danger">{fel}</p> : null}
           {!fel && kunder === null ? (
-            <p className="mt-2 px-1 text-[13px] text-ink-subtle">Hämtar…</p>
+            <p className="mt-2 px-1 text-[13px] text-ink-subtle">{text(T.hamtar)}</p>
           ) : null}
           <ul className="mt-1 max-h-64 overflow-y-auto">
             {filtrerade.map((kund) => (

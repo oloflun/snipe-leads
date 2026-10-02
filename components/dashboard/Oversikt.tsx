@@ -5,10 +5,11 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useArbetsvag } from "@/components/AppShell";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
-import { Badge, Rad, Radlista, SkeletonRows, btnSecondary } from "@/components/ui";
+import { Badge, Rad, Radlista, SkeletonRows, btnSecondary, etikett as etikettKlass, meta } from "@/components/ui";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { createDemoSupportApi } from "@/lib/demo/support-inbox";
 import { readJsonBody } from "@/lib/http/json";
+import { useLocale, type Locale, type Localized } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /**
@@ -53,6 +54,57 @@ import { cn } from "@/lib/utils";
  * fördelning.
  */
 
+// -- Text ------------------------------------------------------------------
+
+/** Platshållaren för en ruta utan svar. Tankstreck, inte em-streck (DESIGN.md § Copy). */
+const TOM = "–";
+
+const T = {
+  attGora: { sv: "Att göra", en: "To do" },
+  komigang: { sv: "Innan agenterna kan börja", en: "Before the agents can start" },
+  ofullstandig: { sv: "Vissa siffror kunde inte hämtas.", en: "Some figures could not be loaded." },
+  forsokIgen: { sv: "Försök igen", en: "Try again" },
+  iDrift: { sv: "i drift", en: "running" },
+  arbetsyta: { sv: "Arbetsyta", en: "Workspace" },
+  agenten: { sv: "Agenten", en: "The agent" },
+  jobbar: { sv: "Jobbar", en: "Working" },
+  kunskapsbas: { sv: "Kunskapsbas", en: "Knowledge base" },
+  senasteKorning: { sv: "Senaste körning", en: "Latest run" },
+  saknarKontext: { sv: "Agenterna vet inte vad ni säljer.", en: "The agents don't know what you sell." },
+  fyllKontext: { sv: "Fyll i affärskontexten", en: "Fill in the business context" },
+  utkast: { sv: "Utkast", en: "Draft" },
+  utanAmnesrad: { sv: "Utan ämnesrad", en: "No subject line" },
+  oppnaGranskning: { sv: "Öppna granskningskön", en: "Open the review queue" },
+  prospekt: { sv: "Prospekt", en: "Prospects" },
+  kundeInteHamtas: { sv: "kunde inte hämtas", en: "could not be loaded" },
+  ingaExempel: { sv: "inga exempelbolag", en: "no example companies" },
+  kvalificerade: { sv: "Kvalificerade", en: "Qualified" },
+  ingenBedomning: { sv: "ingen bedömning ännu", en: "not assessed yet" },
+  vantarPaDig: { sv: "Väntar på dig", en: "Waiting for you" },
+  utkastIKon: { sv: "utkast i granskningskön", en: "drafts in the review queue" },
+  konTom: { sv: "granskningskön är tom", en: "the review queue is empty" },
+  korningar7: { sv: "Körningar 7 dgr", en: "Runs, 7 days" },
+  ingaEskalerade: { sv: "inga steg eskalerade", en: "no steps escalated" },
+  regler: { sv: "Regler", en: "Rules" },
+  senasteArendet: { sv: "Senaste ärendet", en: "Latest ticket" },
+  kbTom: { sv: "Kunskapsbasen är tom.", en: "The knowledge base is empty." },
+  fyllKb: { sv: "Fyll kunskapsbasen", en: "Fill the knowledge base" },
+  utanAmne: { sv: "(utan ämne)", en: "(no subject)" },
+  granskaUtkasten: { sv: "Granska utkasten", en: "Review the drafts" },
+  arenden: { sv: "Ärenden", en: "Tickets" },
+  iInkorgen: { sv: "i inkorgen", en: "in the inbox" },
+  klaradeSjalv: { sv: "Klarade själv", en: "Handled by the agents" },
+  ingaArenden: { sv: "inga ärenden ännu", en: "no tickets yet" },
+  utkastAttGodkanna: { sv: "utkast att godkänna", en: "drafts to approve" },
+  ingetUtkast: { sv: "inget utkast att granska", en: "no drafts to review" },
+  eskalerade: { sv: "Eskalerade", en: "Escalated" },
+  vadArendena: { sv: "Vad ärendena handlar om", en: "What the tickets are about" },
+  ingaKlassificerade: { sv: "Inga klassificerade ärenden ännu.", en: "No classified tickets yet." },
+  senasteArendena: { sv: "Senaste ärendena", en: "Latest tickets" },
+  oppnaInkorgen: { sv: "Öppna inkorgen", en: "Open the inbox" },
+  inkorgenTom: { sv: "Inkorgen är tom.", en: "The inbox is empty." }
+} satisfies Record<string, Localized>;
+
 // -- Hämtning --------------------------------------------------------------
 
 type Hamtare = <T>(path: string) => Promise<T | null>;
@@ -91,25 +143,27 @@ function useHamtare(demo: boolean): Hamtare {
   );
 }
 
-/** "3 dagar sedan". Tom sträng in ger em-streck ut. */
-function sedan(iso: string | null | undefined): string {
-  if (!iso) return "—";
+/** "3 dagar sedan". Tom sträng in ger tankstreck ut. */
+function sedan(iso: string | null | undefined, locale: Locale): string {
+  if (!iso) return TOM;
   const ms = Date.now() - new Date(iso).getTime();
-  if (Number.isNaN(ms)) return "—";
+  if (Number.isNaN(ms)) return TOM;
   const minuter = Math.floor(ms / 60000);
-  if (minuter < 1) return "nyss";
-  if (minuter < 60) return `${minuter} min sedan`;
+  if (minuter < 1) return { sv: "nyss", en: "just now" }[locale];
+  if (minuter < 60) return { sv: `${minuter} min sedan`, en: `${minuter} min ago` }[locale];
   const timmar = Math.floor(minuter / 60);
-  if (timmar < 24) return `${timmar} h sedan`;
+  if (timmar < 24) return { sv: `${timmar} h sedan`, en: `${timmar} h ago` }[locale];
   const dagar = Math.floor(timmar / 24);
-  return dagar === 1 ? "i går" : `${dagar} dagar sedan`;
+  if (dagar === 1) return { sv: "i går", en: "yesterday" }[locale];
+  return { sv: `${dagar} dagar sedan`, en: `${dagar} days ago` }[locale];
 }
 
-function andel(del: number, av: number): string {
-  if (!av) return "—";
-  return new Intl.NumberFormat("sv-SE", { style: "percent", maximumFractionDigits: 0 }).format(
-    del / av
-  );
+function andel(del: number, av: number, locale: Locale): string {
+  if (!av) return TOM;
+  return new Intl.NumberFormat(locale === "en" ? "en-GB" : "sv-SE", {
+    style: "percent",
+    maximumFractionDigits: 0
+  }).format(del / av);
 }
 
 // -- Delade byggstenar -----------------------------------------------------
@@ -124,11 +178,12 @@ type Tillstand = { etikett: string; varde: string; larm?: boolean; drift?: boole
  * när den är tom, och den skillnaden syntes ingenstans tidigare.
  */
 function Tillstandsrad({ poster }: Readonly<{ poster: Tillstand[] }>) {
+  const { text } = useLocale();
   return (
     <dl className="grid gap-x-8 gap-y-4 border-y border-ink/15 py-4 sm:grid-cols-2 lg:grid-cols-4">
       {poster.map((post) => (
         <div key={post.etikett} className="min-w-0">
-          <dt className="kicker text-mineral">{post.etikett}</dt>
+          <dt className={etikettKlass}>{post.etikett}</dt>
           <dd
             className={cn(
               "mt-1.5 flex items-center gap-2 truncate text-[0.9375rem]",
@@ -154,7 +209,7 @@ function Tillstandsrad({ poster }: Readonly<{ poster: Tillstand[] }>) {
             {post.drift ? (
               <span className="ml-1.5 inline-flex shrink-0 items-center">
                 <span className="h-2 w-2 rounded-full bg-moss" aria-hidden />
-                <span className="sr-only">i drift</span>
+                <span className="sr-only">{text(T.iDrift)}</span>
               </span>
             ) : null}
           </dd>
@@ -181,7 +236,7 @@ function Tal({
 }: Readonly<{ etikett: string; varde: string; detalj: string; larm?: boolean }>) {
   return (
     <div className={cn("border-t pt-4", larm ? "border-ochre" : "border-ink/15")}>
-      <p className="kicker text-mineral">{etikett}</p>
+      <p className={etikettKlass}>{etikett}</p>
       {/* Talet står i bläck, alltid. Ochre bär larmet som LINJE över rutan:
           2,17:1 för ochre text mot papper är under 3:1-golvet för stor text,
           och ingen grad räddar det. Linjen har inget kontrastkrav och syns
@@ -228,18 +283,18 @@ function Stapellista({
   if (rader.length === 0) {
     return <p className="max-w-[60ch] text-[0.875rem] leading-6 text-ink-subtle">{tomtext}</p>;
   }
-  const varden = rader.map(([, värde]) => värde);
-  const störst = Math.max(...varden);
-  // Ochre pekar ut vilket värde som LEDER. Är alla lika finns ingen ledare, och
+  const varden = rader.map(([, tal]) => tal);
+  const storst = Math.max(...varden);
+  // Ochre pekar ut vilket tal som LEDER. Är alla lika finns ingen ledare, och
   // att färga varje stapel hade gjort accenten till en tapet i stället för till
   // information — uppmätt i skärmdump: fem lika stora ochre staplar i rad.
-  const harLedare = störst > Math.min(...varden);
+  const harLedare = storst > Math.min(...varden);
   // Radlista bär hårlinjerna; varje rad har SAMMA deklarerade spann
   // (etikett 6, stapel 4, tal 2), så kolumnerna står stilla oavsett
   // hur lång en etikett är.
   return (
     <Radlista>
-      {rader.map(([etikett, värde]) => (
+      {rader.map(([etikett, tal]) => (
         <Rad key={etikett} className="grid grid-cols-12 items-center gap-x-4">
           <span className="col-span-6 truncate text-[0.875rem]" title={etikett}>
             {etikett}
@@ -249,14 +304,14 @@ function Stapellista({
               <span
                 className={cn(
                   "block h-full rounded-full",
-                  harLedare && värde === störst ? "bg-ochre" : "bg-ink/30"
+                  harLedare && tal === storst ? "bg-ochre" : "bg-ink/30"
                 )}
-                style={{ width: `${Math.max(4, Math.round((värde / störst) * 100))}%` }}
+                style={{ width: `${Math.max(4, Math.round((tal / storst) * 100))}%` }}
               />
             </span>
           </span>
           <span className="num col-span-2 text-right text-[0.875rem] tabular-nums text-ink-muted">
-            {värde}
+            {tal}
           </span>
         </Rad>
       ))}
@@ -313,13 +368,19 @@ function AttGora({
   href,
   knapp
 }: Readonly<{ rader: AttGoraRad[]; href: string; knapp: string }>) {
+  const { text } = useLocale();
   if (rader.length === 0) return null;
   const fler = rader.length - 5;
   return (
-    <section aria-label="Att göra" className="rounded-card bg-ink p-6 text-paper md:p-8">
+    <section aria-label={text(T.attGora)} className="rounded-card bg-ink p-6 text-paper md:p-8">
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
         <h2 className="text-[1.25rem] font-semibold tracking-[-0.01em]">
-          {rader.length === 1 ? "1 utkast väntar på dig" : `${rader.length} utkast väntar på dig`}
+          {rader.length === 1
+            ? text({ sv: "1 utkast väntar på dig", en: "1 draft waiting for you" })
+            : text({
+                sv: `${rader.length} utkast väntar på dig`,
+                en: `${rader.length} drafts waiting for you`
+              })}
         </h2>
         <Link
           href={href}
@@ -356,7 +417,9 @@ function AttGora({
       </ul>
       {fler > 0 ? (
         <p className="mt-4 text-[0.8125rem] text-paper-muted">
-          {fler === 1 ? "1 till i kön." : `${fler} till i kön.`}
+          {fler === 1
+            ? text({ sv: "1 till i kön.", en: "1 more in the queue." })
+            : text({ sv: `${fler} till i kön.`, en: `${fler} more in the queue.` })}
         </p>
       ) : null}
     </section>
@@ -380,6 +443,7 @@ function AttGora({
  * alltså arbete som väntar. Det här är uppstart, inte en kö.
  */
 function Komigang({ rader }: Readonly<{ rader: { text: string; href: string; knapp: string }[] }>) {
+  const { text } = useLocale();
   if (rader.length === 0) return null;
   // Ingen färgad kantlist på ena sidan. Den läser som ett AI-manér, och
   // detektorn namnger den ("side-tab accent border"). Ochre bär larmet med
@@ -391,7 +455,7 @@ function Komigang({ rader }: Readonly<{ rader: { text: string; href: string; kna
         className="flex items-center gap-2.5 text-[1.0625rem] font-semibold tracking-[-0.01em]"
       >
         <span className="h-2 w-2 shrink-0 rounded-full bg-ochre" aria-hidden />
-        Innan agenterna kan börja
+        {text(T.komigang)}
       </h2>
       <ul className="mt-4 grid gap-4">
         {rader.map((rad) => (
@@ -417,7 +481,7 @@ function Ledger({ rader, tomtext }: Readonly<{ rader: LedgerRad[]; tomtext: stri
     <div className="divide-y divide-ink/10 border-y border-ink/15">
       {rader.map((rad) => (
         <div key={rad.id} className="row grid grid-cols-12 items-baseline gap-x-4 gap-y-1 py-3.5">
-          <span className="kicker col-span-12 text-mineral sm:col-span-3">{rad.vanster}</span>
+          <span className={cn(meta, "col-span-12 sm:col-span-3")}>{rad.vanster}</span>
           <span className="col-span-12 truncate text-[0.875rem] sm:col-span-6" title={rad.mitten}>
             {rad.mitten}
           </span>
@@ -454,6 +518,7 @@ function OversiktShell({
   children: React.ReactNode;
 }>) {
   const [uppdaterar, setUppdaterar] = useState(false);
+  const { text } = useLocale();
 
   if (laddar) {
     return (
@@ -477,7 +542,7 @@ function OversiktShell({
           className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-card bg-paper2/60 px-4 py-3 text-[0.875rem] text-ink-muted"
         >
           <AlertTriangle className="h-4 w-4 shrink-0 text-warning" aria-hidden />
-          Vissa siffror kunde inte hämtas.
+          {text(T.ofullstandig)}
           <button
             type="button"
             disabled={uppdaterar}
@@ -494,7 +559,7 @@ function OversiktShell({
             ) : (
               <RefreshCw className="h-4 w-4" aria-hidden />
             )}
-            Försök igen
+            {text(T.forsokIgen)}
           </button>
         </p>
       ) : null}
@@ -569,6 +634,7 @@ export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
   const hamta = useHamtare(demo);
   const vag = useArbetsvag();
   const { workspaceName } = useDashboard();
+  const { locale, text } = useLocale();
   const [laddar, setLaddar] = useState(true);
   const [nyckel, setNyckel] = useState(0);
 
@@ -643,25 +709,28 @@ export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
     >
       <Tillstandsrad
         poster={[
-          { etikett: "Arbetsyta", varde: workspaceName ?? "—" },
+          { etikett: text(T.arbetsyta), varde: workspaceName ?? TOM },
           {
             // Stod "Agenten får" med autonomiläget som värde ("Skriver
             // utkast"). Etikett och värde lästes ihop till "Agenten får
             // skriver utkast", vilket inte är en mening. Raden säger nu att
             // agenten är i drift; autonomiläget styrs och visas under
             // Målgrupp och autonomi, där det hör hemma.
-            etikett: "Agenten",
-            varde: "Jobbar",
+            etikett: text(T.agenten),
+            varde: text(T.jobbar),
             drift: true
           },
           {
-            etikett: "Kunskapsbas",
-            varde: kbAntal === null ? "—" : `${kbAntal} dokument`,
+            etikett: text(T.kunskapsbas),
+            varde:
+              kbAntal === null
+                ? TOM
+                : text({ sv: `${kbAntal} dokument`, en: `${kbAntal} documents` }),
             larm: kbAntal === 0
           },
           {
-            etikett: "Senaste körning",
-            varde: korningar === null ? "—" : sedan(korningar[0]?.created_at)
+            etikett: text(T.senasteKorning),
+            varde: korningar === null ? TOM : sedan(korningar[0]?.created_at, locale)
           }
         ]}
       />
@@ -671,9 +740,9 @@ export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
           onboarding?.missing?.includes("product_marketing")
             ? [
                 {
-                  text: "Agenterna vet inte vad ni säljer.",
+                  text: text(T.saknarKontext),
                   href: vag("/settings/affarskontext"),
-                  knapp: "Fyll i affärskontexten"
+                  knapp: text(T.fyllKontext)
                 }
               ]
             : []
@@ -685,52 +754,69 @@ export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
       <AttGora
         rader={(ko ?? []).map((post) => ({
           id: post.id,
-          rubrik: post.company_name ?? post.prospect_email ?? "Utkast",
-          under: post.subject ?? "Utan ämnesrad",
-          meta: post.scheduled_at ? `köat ${sedan(post.scheduled_at)}` : undefined
+          rubrik: post.company_name ?? post.prospect_email ?? text(T.utkast),
+          under: post.subject ?? text(T.utanAmnesrad),
+          meta: post.scheduled_at
+            ? text({
+                sv: `köat ${sedan(post.scheduled_at, locale)}`,
+                en: `queued ${sedan(post.scheduled_at, locale)}`
+              })
+            : undefined
         }))}
         href={vag("/dashboard/iris/granskning")}
-        knapp="Öppna granskningskön"
+        knapp={text(T.oppnaGranskning)}
       />
 
       <Talrad>
         <Tal
-          etikett="Prospekt"
-          varde={prospekt === null ? "—" : String(rader.length)}
+          etikett={text(T.prospekt)}
+          varde={prospekt === null ? TOM : String(rader.length)}
           detalj={
             prospekt === null
-              ? "kunde inte hämtas"
+              ? text(T.kundeInteHamtas)
               : rader.length >= PROSPEKTTAK
-                ? `${exempel} exempelbolag · av de ${PROSPEKTTAK} senaste`
+                ? text({
+                    sv: `${exempel} exempelbolag · av de ${PROSPEKTTAK} senaste`,
+                    en: `${exempel} example companies · of the latest ${PROSPEKTTAK}`
+                  })
                 : exempel
-                  ? `${exempel} av dem är exempelbolag`
-                  : "inga exempelbolag"
+                  ? text({
+                      sv: `${exempel} av dem är exempelbolag`,
+                      en: `${exempel} of them are example companies`
+                    })
+                  : text(T.ingaExempel)
           }
         />
         <Tal
-          etikett="Kvalificerade"
-          varde={prospekt === null ? "—" : String(kvalificerade)}
+          etikett={text(T.kvalificerade)}
+          varde={prospekt === null ? TOM : String(kvalificerade)}
           detalj={
             snittFit === null
-              ? "ingen bedömning ännu"
-              : `snittpassning ${andel(snittFit, 1)} mot ert ICP`
+              ? text(T.ingenBedomning)
+              : text({
+                  sv: `snittpassning ${andel(snittFit, 1, locale)} mot ert ICP`,
+                  en: `average fit ${andel(snittFit, 1, locale)} against your ICP`
+                })
           }
         />
         <Tal
-          etikett="Väntar på dig"
-          varde={ko === null ? "—" : String(ko.length)}
-          detalj={ko?.length ? "utkast i granskningskön" : "granskningskön är tom"}
+          etikett={text(T.vantarPaDig)}
+          varde={ko === null ? TOM : String(ko.length)}
+          detalj={ko?.length ? text(T.utkastIKon) : text(T.konTom)}
           larm={Boolean(ko?.length)}
         />
         <Tal
-          etikett="Körningar 7 dgr"
-          varde={korningar === null ? "—" : String(veckansKorningar.length)}
+          etikett={text(T.korningar7)}
+          varde={korningar === null ? TOM : String(veckansKorningar.length)}
           detalj={
             korningar === null
-              ? "kunde inte hämtas"
+              ? text(T.kundeInteHamtas)
               : eskaleradeSteg
-                ? `${eskaleradeSteg} steg eskalerade till dig`
-                : "inga steg eskalerade"
+                ? text({
+                    sv: `${eskaleradeSteg} steg eskalerade till dig`,
+                    en: `${eskaleradeSteg} steps escalated to you`
+                  })
+                : text(T.ingaEskalerade)
           }
         />
       </Talrad>
@@ -770,22 +856,23 @@ type Regel = { category: string; label: string; mode: "auto" | "draft" | "escala
 const ARENDETAK = 200;
 
 /** Speglar STATUS_META i components/snajp/Dashboard.tsx — samma ord, samma ton. */
-const STATUSORD: Record<string, { text: string; ton: "neutral" | "good" | "warn" | "danger" }> = {
-  new: { text: "Ny", ton: "neutral" },
-  processing: { text: "Bearbetas", ton: "neutral" },
-  awaiting_approval: { text: "Väntar", ton: "warn" },
-  auto_sent: { text: "Autosvar", ton: "good" },
-  sent: { text: "Besvarat", ton: "good" },
-  escalated: { text: "Eskalerat", ton: "danger" },
-  rejected: { text: "Avvisat", ton: "neutral" },
-  taken_over: { text: "Övertaget", ton: "neutral" },
-  failed: { text: "Fel", ton: "danger" }
+const STATUSORD: Record<string, { text: Localized; ton: "neutral" | "good" | "warn" | "danger" }> = {
+  new: { text: { sv: "Ny", en: "New" }, ton: "neutral" },
+  processing: { text: { sv: "Bearbetas", en: "Processing" }, ton: "neutral" },
+  awaiting_approval: { text: { sv: "Väntar", en: "Waiting" }, ton: "warn" },
+  auto_sent: { text: { sv: "Autosvar", en: "Auto-reply" }, ton: "good" },
+  sent: { text: { sv: "Besvarat", en: "Answered" }, ton: "good" },
+  escalated: { text: { sv: "Eskalerat", en: "Escalated" }, ton: "danger" },
+  rejected: { text: { sv: "Avvisat", en: "Rejected" }, ton: "neutral" },
+  taken_over: { text: { sv: "Övertaget", en: "Taken over" }, ton: "neutral" },
+  failed: { text: { sv: "Fel", en: "Error" }, ton: "danger" }
 };
 
 export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
   const hamta = useHamtare(demo);
   const vag = useArbetsvag();
   const { workspaceName } = useDashboard();
+  const { locale, text } = useLocale();
   const [laddar, setLaddar] = useState(true);
   const [nyckel, setNyckel] = useState(0);
 
@@ -837,22 +924,28 @@ export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) 
     >
       <Tillstandsrad
         poster={[
-          { etikett: "Arbetsyta", varde: workspaceName ?? "—" },
+          { etikett: text(T.arbetsyta), varde: workspaceName ?? TOM },
           {
-            etikett: "Regler",
+            etikett: text(T.regler),
             varde:
               regler === null
-                ? "—"
-                : `${auto.length} auto · ${utkast} utkast · ${alltidManniska} eskalera`
+                ? TOM
+                : text({
+                    sv: `${auto.length} auto · ${utkast} utkast · ${alltidManniska} eskalera`,
+                    en: `${auto.length} auto · ${utkast} draft · ${alltidManniska} escalate`
+                  })
           },
           {
-            etikett: "Kunskapsbas",
-            varde: kbAntal === null ? "—" : `${kbAntal} dokument`,
+            etikett: text(T.kunskapsbas),
+            varde:
+              kbAntal === null
+                ? TOM
+                : text({ sv: `${kbAntal} dokument`, en: `${kbAntal} documents` }),
             larm: kbAntal === 0
           },
           {
-            etikett: "Senaste ärendet",
-            varde: arenden === null ? "—" : sedan(rader[0]?.received_at)
+            etikett: text(T.senasteArendet),
+            varde: arenden === null ? TOM : sedan(rader[0]?.received_at, locale)
           }
         ]}
       />
@@ -862,9 +955,9 @@ export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) 
           kbAntal === 0
             ? [
                 {
-                  text: "Kunskapsbasen är tom.",
+                  text: text(T.kbTom),
                   href: vag("/settings/kunskapsbas"),
-                  knapp: "Fyll kunskapsbasen"
+                  knapp: text(T.fyllKb)
                 }
               ]
             : []
@@ -875,77 +968,96 @@ export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) 
       <AttGora
         rader={vantar.map((a) => ({
           id: a.id,
-          rubrik: a.subject || "(utan ämne)",
+          rubrik: a.subject || text(T.utanAmne),
           under: a.from_name ? `${a.from_name} · ${a.from_email}` : a.from_email,
           meta: a.draft
-            ? `konfidens ${andel(a.draft.confidence, 1)}`
-            : sedan(a.received_at)
+            ? text({
+                sv: `konfidens ${andel(a.draft.confidence, 1, locale)}`,
+                en: `confidence ${andel(a.draft.confidence, 1, locale)}`
+              })
+            : sedan(a.received_at, locale)
         }))}
         href={vag("/dashboard/support")}
-        knapp="Granska utkasten"
+        knapp={text(T.granskaUtkasten)}
       />
 
       <Talrad>
         <Tal
-          etikett="Ärenden"
-          varde={arenden === null ? "—" : String(rader.length)}
+          etikett={text(T.arenden)}
+          varde={arenden === null ? TOM : String(rader.length)}
           detalj={
             arenden === null
-              ? "kunde inte hämtas"
+              ? text(T.kundeInteHamtas)
               : rader.length >= ARENDETAK
-                ? `de ${ARENDETAK} senaste i inkorgen`
-                : "i inkorgen"
+                ? text({
+                    sv: `de ${ARENDETAK} senaste i inkorgen`,
+                    en: `the latest ${ARENDETAK} in the inbox`
+                  })
+                : text(T.iInkorgen)
           }
         />
         <Tal
-          etikett="Klarade själv"
-          varde={arenden === null ? "—" : String(klarade.length)}
+          etikett={text(T.klaradeSjalv)}
+          varde={arenden === null ? TOM : String(klarade.length)}
           detalj={
-            rader.length ? `${andel(klarade.length, rader.length)} av ärendena` : "inga ärenden ännu"
+            rader.length
+              ? text({
+                  sv: `${andel(klarade.length, rader.length, locale)} av ärendena`,
+                  en: `${andel(klarade.length, rader.length, locale)} of tickets`
+                })
+              : text(T.ingaArenden)
           }
         />
         <Tal
-          etikett="Väntar på dig"
-          varde={arenden === null ? "—" : String(vantar.length)}
-          detalj={vantar.length ? "utkast att godkänna" : "inget utkast att granska"}
+          etikett={text(T.vantarPaDig)}
+          varde={arenden === null ? TOM : String(vantar.length)}
+          detalj={vantar.length ? text(T.utkastAttGodkanna) : text(T.ingetUtkast)}
           larm={vantar.length > 0}
         />
         <Tal
-          etikett="Eskalerade"
-          varde={arenden === null ? "—" : String(eskalerade.length)}
+          etikett={text(T.eskalerade)}
+          varde={arenden === null ? TOM : String(eskalerade.length)}
           detalj={
             rader.length
-              ? `${andel(eskalerade.length, rader.length)} gick till en människa`
-              : "inga ärenden ännu"
+              ? text({
+                  sv: `${andel(eskalerade.length, rader.length, locale)} gick till en människa`,
+                  en: `${andel(eskalerade.length, rader.length, locale)} went to a person`
+                })
+              : text(T.ingaArenden)
           }
         />
       </Talrad>
 
       {regler === null || auto.length === 0 ? null : (
-        <Pastaende markerat={`${auto.length} fack`}>
-          {`besvaras av agenterna själva: ${auto.map((r) => r.label.toLowerCase()).join(", ")}.`}
+        <Pastaende
+          markerat={text({ sv: `${auto.length} fack`, en: `${auto.length} categories` })}
+        >
+          {text({
+            sv: `besvaras av agenterna själva: ${auto.map((r) => r.label.toLowerCase()).join(", ")}.`,
+            en: `answered by the agents on their own: ${auto.map((r) => r.label.toLowerCase()).join(", ")}.`
+          })}
         </Pastaende>
       )}
 
       {/* "Hur väl agenterna kan grunda svaren" (Faktalista) stod bredvid.
           Borttagen 2026-09-19: mest streck i tomläge, för rörigt. */}
-      <Sektion rubrik="Vad ärendena handlar om">
+      <Sektion rubrik={text(T.vadArendena)}>
         <Stapellista
           rader={Object.entries(fack ?? {})
             .map(([kod, antal]) => [fackNamn.get(kod) ?? kod, antal] as [string, number])
             .sort((a, b) => b[1] - a[1])}
-          tomtext="Inga klassificerade ärenden ännu."
+          tomtext={text(T.ingaKlassificerade)}
         />
       </Sektion>
 
       <Sektion
-        rubrik="Senaste ärendena"
+        rubrik={text(T.senasteArendena)}
         bredvid={
           <Link
             href={vag("/dashboard/support")}
             className="focus-ring rounded-input text-[0.875rem] text-ink-subtle underline-offset-4 transition-colors hover:text-ink hover:underline"
           >
-            Öppna inkorgen
+            {text(T.oppnaInkorgen)}
           </Link>
         }
       >
@@ -954,13 +1066,13 @@ export function SupportOversikt({ demo = false }: Readonly<{ demo?: boolean }>) 
             const status = STATUSORD[a.status] ?? STATUSORD.new;
             return {
               id: a.id,
-              vanster: sedan(a.received_at),
-              mitten: `${a.subject || "(utan ämne)"} · ${a.from_name ?? a.from_email}`,
-              hoger: status.text,
+              vanster: sedan(a.received_at, locale),
+              mitten: `${a.subject || text(T.utanAmne)} · ${a.from_name ?? a.from_email}`,
+              hoger: text(status.text),
               ton: status.ton
             };
           })}
-          tomtext="Inkorgen är tom."
+          tomtext={text(T.inkorgenTom)}
         />
       </Sektion>
     </OversiktShell>

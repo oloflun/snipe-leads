@@ -5,7 +5,7 @@ import Link from "next/link";
 import { SoulEditor } from "@/components/SoulEditor";
 import { Agentinstruktioner } from "@/components/admin/Agentinstruktioner";
 import { PageShell, useArbetsvag } from "@/components/AppShell";
-import { btnPrimary, btnSecondary } from "@/components/ui";
+import { btnPrimary, btnSecondary, etikett } from "@/components/ui";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { SignOutButton } from "@/components/auth/SignOutButton";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
@@ -33,8 +33,109 @@ import { PlanSettings } from "@/components/settings/PlanSettings";
 // signals, findCompany, findContact) är borta: det renderades som kundens egna
 // bolag, kontakter, mejl och svar i en betald arbetsyta.
 import { workflowSteps } from "@/lib/mock-data";
+import { useLocale, type Localized } from "@/lib/i18n";
 import type { SettingsSectionKey } from "@/lib/routes";
 import type { Tema } from "@/lib/tema";
+import { cn } from "@/lib/utils";
+
+/** Exempelsamtalet i AssistantView. Skrivet, inte kört; se docstringen där. */
+const SAMTAL: [Localized, Localized][] = [
+  [
+    { sv: "Du", en: "You" },
+    {
+      sv: "Hitta byggbolag i Malmö med expansions- eller rekryteringssignal.",
+      en: "Find construction companies in Malmö with an expansion or hiring signal."
+    }
+  ],
+  [
+    { sv: "Snajp", en: "Snajp" },
+    {
+      sv: "37 bolag hittade. Byggkompaniet Syd är starkast: ny lokal i Hyllie, fyra platsannonser och tydlig kontaktroll.",
+      en: "Found 37 companies. Byggkompaniet Syd is the strongest: new premises in Hyllie, four job ads and a clear contact role."
+    }
+  ],
+  [
+    { sv: "Du", en: "You" },
+    {
+      sv: "Generera ett första mejl i mediumlängd.",
+      en: "Write a first email of medium length."
+    }
+  ],
+  [
+    { sv: "Snajp", en: "Snajp" },
+    {
+      sv: "Jag använder Hyllie-signalen, arbetsledarrekryteringen och CTA:n från business context. Tonen hålls lågmäld.",
+      en: "I'm using the Hyllie signal, the site manager hiring and the CTA from the business context. The tone stays low-key."
+    }
+  ]
+];
+
+const SETTINGS_TITLAR: Record<SettingsSectionKey, Localized> = {
+  foretaget: { sv: "Företaget", en: "Company" },
+  mailboxes: { sv: "Inkorgar", en: "Mailboxes" },
+  team: { sv: "Team", en: "Team" },
+  billing: { sv: "Plan och fakturering", en: "Plan and billing" },
+  affarskontext: { sv: "Affärskontext", en: "Business context" },
+  kunskapsbas: { sv: "Kunskapsbas", en: "Knowledge base" },
+  leads: { sv: "Målgrupp och autonomi", en: "Audience and autonomy" },
+  regler: { sv: "Fack och autosvar", en: "Categories and auto-replies" },
+  soul: { sv: "Er röst", en: "Your voice" },
+  notiser: { sv: "Notiser", en: "Notifications" },
+  tema: { sv: "Tema", en: "Theme" },
+  addons: { sv: "Tillägg", en: "Add-ons" },
+  agentinstruktioner: { sv: "Globala agentinstruktioner", en: "Global agent instructions" }
+};
+
+const SETTINGS_BESKRIVNINGAR: Partial<Record<SettingsSectionKey, Localized>> = {
+  affarskontext: { sv: "Vad ni säljer och till vem.", en: "What you sell and to whom." },
+  soul: { sv: "Tonen i utskick och svar.", en: "The tone of outreach and replies." },
+  notiser: { sv: "Gäller bara dig.", en: "Applies only to you." },
+  tema: { sv: "Gäller den här webbläsaren.", en: "Applies to this browser." },
+  agentinstruktioner: {
+    sv: "Reglerna varje agent läser först, för varje kund. Policy och säkerhet. Ton och röst hör hemma hos kunden.",
+    en: "The rules every agent reads first, for every customer. Policy and security. Tone and voice belong to the customer."
+  }
+};
+
+const T = {
+  assistent: { sv: "Assistent", en: "Assistant" },
+  exempel: { sv: "Exempel.", en: "Example." },
+  ejKopplad: { sv: "Inte kopplad till din arbetsyta.", en: "Not connected to your workspace." },
+  arbetsflode: { sv: "Stateful workflow", en: "Stateful workflow" },
+  arbetsyta: { sv: "Arbetsyta", en: "Workspace" },
+  testarbetsyta: { sv: "testarbetsyta", en: "test workspace" },
+  paket: { sv: "Paket", en: "Package" },
+  leads: { sv: "Leads", en: "Leads" },
+  kundtjanst: { sv: "Kundtjänst", en: "Customer service" },
+  och: { sv: " och ", en: " and " },
+  bolagsuppgifter: { sv: "Bolagsuppgifter", en: "Company details" },
+  andraIUppstart: { sv: "Ändra i uppstartsformuläret", en: "Edit in the onboarding form" },
+  snajpWorkspace: { sv: "Snajp workspace", en: "Snajp workspace" },
+  loggaIn: { sv: "Logga in", en: "Sign in" },
+  loggaInText: {
+    sv: "Logga in med lösenord eller magic link. Efter första inloggningen konfigurerar du business context innan dashboarden öppnas.",
+    en: "Sign in with a password or a magic link. After your first sign-in you set up the business context before the dashboard opens."
+  },
+  loadingTitel: {
+    sv: "Loading, empty och error states i Snajps formspråk",
+    en: "Loading, empty and error states in Snajp's design language"
+  },
+  loading: { sv: "Loading", en: "Loading" },
+  loadingText: {
+    sv: "Fyra linjer i ledgern får låg kontrast och shimmer via opacity, inte spinner.",
+    en: "Four lines in the ledger get low contrast and a shimmer via opacity, not a spinner."
+  },
+  empty: { sv: "Empty", en: "Empty" },
+  emptyText: {
+    sv: "Ingen kampanj vald. Välj en kampanj eller låt Snajp föreslå ett segment.",
+    en: "No campaign selected. Pick a campaign or let Snajp suggest a segment."
+  },
+  error: { sv: "Error", en: "Error" },
+  errorText: {
+    sv: "Provider saknas. LinkedIn enrichment kräver adapter eller användarauktoriserad input.",
+    en: "Provider missing. LinkedIn enrichment needs an adapter or user-authorised input."
+  }
+} satisfies Record<string, Localized>;
 
 /**
  * Assistenten — MÄRKT som exempel, eftersom den inte är kopplad än.
@@ -51,27 +152,23 @@ import type { Tema } from "@/lib/tema";
  * Ta bort rutan samma dag samtalet kommer ur en körning. Inte innan.
  */
 export function AssistantView() {
+  const { text } = useLocale();
   return (
-    <PageShell title="Assistent">
+    <PageShell title={text(T.assistent)}>
       <p className="mb-8 border-y border-ochre/40 bg-ochre/10 px-4 py-3 text-[15px] text-ink-muted">
-        <strong className="font-semibold">Exempel.</strong> Inte kopplad till din arbetsyta.
+        <strong className="font-semibold">{text(T.exempel)}</strong> {text(T.ejKopplad)}
       </p>
       <div className="grid grid-cols-12 gap-x-8 gap-y-10">
         <div className="col-span-12 border-y border-ink/15 md:col-span-7">
-          {[
-            ["Du", "Hitta byggbolag i Malmö med expansions- eller rekryteringssignal."],
-            ["Snajp", "37 bolag hittade. Byggkompaniet Syd är starkast: ny lokal i Hyllie, fyra platsannonser och tydlig kontaktroll."],
-            ["Du", "Generera ett första mejl i mediumlängd."],
-            ["Snajp", "Jag använder Hyllie-signalen, arbetsledarrekryteringen och CTA:n från business context. Tonen hålls lågmäld."]
-          ].map(([speaker, message]) => (
-            <div key={`${speaker}-${message}`} className="grid grid-cols-12 gap-x-6 border-b border-ink/15 py-5 last:border-b-0">
-              <div className="kicker col-span-3 text-mineral">{speaker}</div>
-              <p className="col-span-9 text-[16px] leading-7 text-ink-muted">{message}</p>
+          {SAMTAL.map(([speaker, message], index) => (
+            <div key={index} className="grid grid-cols-12 gap-x-6 border-b border-ink/15 py-5 last:border-b-0">
+              <div className={cn(etikett, "col-span-3")}>{text(speaker)}</div>
+              <p className="col-span-9 text-[16px] leading-7 text-ink-muted">{text(message)}</p>
             </div>
           ))}
         </div>
         <div className="col-span-12 md:col-span-5">
-          <div className="kicker text-mineral">Stateful workflow</div>
+          <div className={etikett}>{text(T.arbetsflode)}</div>
           <div className="mt-4 divide-y divide-ink/15 border-y border-ink/15">
             {workflowSteps.map((step, index) => (
               <div key={step} className="grid grid-cols-12 py-3">
@@ -95,8 +192,9 @@ export function AssistantView() {
 // /dashboard/companies-förhandsvyn nedan (CompaniesView/CompanyDetailView).
 
 export function CompaniesView({ demo = false }: Readonly<{ demo?: boolean }>) {
+  const { t } = useLocale();
   return (
-    <PageShell title="Företag">
+    <PageShell title={t("nav.companies")}>
       <Bolagsregister demo={demo} />
     </PageShell>
   );
@@ -113,7 +211,7 @@ export function CompanyDetailView({ id, demo = false }: Readonly<{ id: string; d
 function TextList({ title, items }: Readonly<{ title: string; items: string[] }>) {
   return (
     <div className="col-span-12 md:col-span-4">
-      <h2 className="kicker text-mineral">{title}</h2>
+      <h2 className={etikett}>{title}</h2>
       <div className="mt-4 divide-y divide-ink/15 border-y border-ink/15">
         {items.map((item) => (
           <p key={item} className="py-4 text-[15px] leading-6 text-ink-muted">{item}</p>
@@ -124,8 +222,9 @@ function TextList({ title, items }: Readonly<{ title: string; items: string[] }>
 }
 
 export function ContactsView({ demo = false }: Readonly<{ demo?: boolean }>) {
+  const { t } = useLocale();
   return (
-    <PageShell title="Kontakter">
+    <PageShell title={t("nav.contacts")}>
       <Kontakter demo={demo} />
     </PageShell>
   );
@@ -141,24 +240,27 @@ export function ContactsView({ demo = false }: Readonly<{ demo?: boolean }>) {
  * den, och för varför möteskolumnen är borta i stället för nollställd.
  */
 export function AnalyticsView({ demo = false }: Readonly<{ demo?: boolean }>) {
+  const { t } = useLocale();
   return (
-    <PageShell title="Analys">
+    <PageShell title={t("nav.analytics")}>
       <Analys demo={demo} />
     </PageShell>
   );
 }
 
 export function InboxView({ demo = false }: Readonly<{ demo?: boolean }>) {
+  const { t } = useLocale();
   return (
-    <PageShell title="Svar">
+    <PageShell title={t("nav.inbox")}>
       <Svar demo={demo} />
     </PageShell>
   );
 }
 
 export function AgentLarandeView() {
+  const { t } = useLocale();
   return (
-    <PageShell title="Lärande">
+    <PageShell title={t("nav.larande")}>
       <AgentLarande />
     </PageShell>
   );
@@ -168,41 +270,21 @@ export function SettingsView({
   section = "foretaget",
   tema = "ljust"
 }: Readonly<{ section?: SettingsSectionKey; tema?: Tema }>) {
-  const titles: Record<SettingsSectionKey, string> = {
-    foretaget: "Företaget",
-    mailboxes: "Inkorgar",
-    team: "Team",
-    billing: "Plan och fakturering",
-    affarskontext: "Affärskontext",
-    kunskapsbas: "Kunskapsbas",
-    leads: "Målgrupp och autonomi",
-    regler: "Fack och autosvar",
-    soul: "Er röst",
-    notiser: "Notiser",
-    tema: "Tema",
-    addons: "Tillägg",
-    agentinstruktioner: "Globala agentinstruktioner"
-  };
+  const { text } = useLocale();
+  const beskrivning = SETTINGS_BESKRIVNINGAR[section];
   // Beskrivningen var tidigare EN generisk sträng för alla sektioner. På
   // röstsidan blev den både felaktig (den beskriver inte sektionen) och
   // olämplig: den räknade upp "Supabase Auth och RLS" för en KUND, som varken
   // känner igen orden eller behöver veta vår stack. Att stacken sedan byttes
   // gjorde texten dessutom osann — vilket är själva argumentet mot att skriva
   // ut infrastruktur i en kundvänd yta.
-  // Sedan 2026-09-19 står en beskrivning bara där rubriken inte räcker.
-  const descriptions: Partial<Record<SettingsSectionKey, string>> = {
-    affarskontext: "Vad ni säljer och till vem.",
-    soul: "Tonen i utskick och svar.",
-    notiser: "Gäller bara dig.",
-    tema: "Gäller den här webbläsaren.",
-    agentinstruktioner:
-      "Reglerna varje agent läser först, för varje kund. Policy och säkerhet — ton och röst hör hemma hos kunden."
-  };
+  // Sedan 2026-09-19 står en beskrivning bara där rubriken inte räcker
+  // (SETTINGS_BESKRIVNINGAR överst i filen).
   return (
-    <PageShell title={titles[section]}>
-      {descriptions[section] ? (
+    <PageShell title={text(SETTINGS_TITLAR[section])}>
+      {beskrivning ? (
         <p className="-mt-4 mb-8 max-w-[68ch] text-[0.9375rem] leading-[1.6] text-ink-muted">
-          {descriptions[section]}
+          {text(beskrivning)}
         </p>
       ) : null}
       {/* gap-x först från md. grid-cols-12 med gap-x-8 kräver 11 x 32px = 352px
@@ -276,28 +358,33 @@ export function SettingsView({
  */
 function CompanySettings() {
   const { workspaceName, products, isDemo } = useDashboard();
+  const { text } = useLocale();
   return (
     <div className="grid gap-5">
       <div className="grid grid-cols-12 gap-x-6 border-t border-ink/15 pt-5">
-        <span className="kicker col-span-12 text-mineral md:col-span-3">Arbetsyta</span>
+        <span className={cn(etikett, "col-span-12 md:col-span-3")}>{text(T.arbetsyta)}</span>
         <span className="col-span-12 mt-2 text-[15px] md:col-span-9 md:mt-0">
-          {workspaceName ?? "—"}
-          {isDemo ? <span className="ml-2 text-[13px] text-warning">testarbetsyta</span> : null}
+          {workspaceName ?? "–"}
+          {isDemo ? (
+            <span className="ml-2 text-[13px] text-warning">{text(T.testarbetsyta)}</span>
+          ) : null}
         </span>
       </div>
       <div className="grid grid-cols-12 gap-x-6 border-t border-ink/15 pt-5">
-        <span className="kicker col-span-12 text-mineral md:col-span-3">Paket</span>
+        <span className={cn(etikett, "col-span-12 md:col-span-3")}>{text(T.paket)}</span>
         <span className="col-span-12 mt-2 text-[15px] md:col-span-9 md:mt-0">
           {products.length === 0
-            ? "—"
-            : products.map((p) => (p === "leads" ? "Leads" : "Kundtjänst")).join(" och ")}
+            ? "–"
+            : products
+                .map((p) => text(p === "leads" ? T.leads : T.kundtjanst))
+                .join(text(T.och))}
         </span>
       </div>
       <div className="grid grid-cols-12 gap-x-6 border-t border-ink/15 pt-5">
-        <span className="kicker col-span-12 text-mineral md:col-span-3">Bolagsuppgifter</span>
+        <span className={cn(etikett, "col-span-12 md:col-span-3")}>{text(T.bolagsuppgifter)}</span>
         <p className="col-span-12 mt-2 text-[15px] leading-7 text-ink-muted md:col-span-9 md:mt-0">
           <Link href="/onboarding" className="underline underline-offset-4 hover:text-ochre">
-            Ändra i uppstartsformuläret
+            {text(T.andraIUppstart)}
           </Link>
         </p>
       </div>
@@ -316,6 +403,7 @@ function CompanySettings() {
 // 'Viewer') — profiles.role har två värden: owner och member.
 
 export function LoginView() {
+  const { text } = useLocale();
   return (
     <main className="min-h-screen bg-paper text-ink">
       {/* gap-x först vid md — se kommentaren i OnboardingWizard.Falt: under md
@@ -324,10 +412,14 @@ export function LoginView() {
       <div className="mx-auto grid min-h-screen max-w-[1480px] grid-cols-12 px-6 py-10 md:gap-x-8 md:px-8">
         <section className="col-span-12 flex flex-col justify-between bg-ink p-8 text-paper md:col-span-6">
           <div>
-            <p className="kicker text-paper-muted">Snajp workspace</p>
-            <h1 className="mt-8 text-[1.75rem] font-semibold leading-tight tracking-[-0.02em]">Logga in</h1>
+            <p className="text-[0.8125rem] font-medium text-paper-muted">{text(T.snajpWorkspace)}</p>
+            <h1 className="mt-8 text-[1.75rem] font-semibold leading-tight tracking-[-0.02em]">
+              {text(T.loggaIn)}
+            </h1>
           </div>
-          <p className="mt-12 max-w-[44ch] text-[16px] leading-7 text-paper-muted">Logga in med lösenord eller magic link. Efter första inloggningen konfigurerar du business context innan dashboarden öppnas.</p>
+          <p className="mt-12 max-w-[44ch] text-[16px] leading-7 text-paper-muted">
+            {text(T.loggaInText)}
+          </p>
         </section>
         <section className="col-span-12 mt-8 flex items-center md:col-span-6 md:mt-0 md:pl-10">
           <LoginForm />
@@ -343,12 +435,13 @@ export function LoginView() {
 // kräver en server component — den här filen är "use client".
 
 export function LoadingStatesView() {
+  const { text } = useLocale();
   return (
-    <PageShell title="Loading, empty och error states i Snajps formspråk">
+    <PageShell title={text(T.loadingTitel)}>
       <div className="grid grid-cols-12 gap-x-8 gap-y-8">
-        <TextList title="Loading" items={["Fyra linjer i ledgern får låg kontrast och shimmer via opacity, inte spinner."]} />
-        <TextList title="Empty" items={["Ingen kampanj vald. Välj en kampanj eller låt Snajp föreslå ett segment."]} />
-        <TextList title="Error" items={["Provider saknas. LinkedIn enrichment kräver adapter eller användarauktoriserad input."]} />
+        <TextList title={text(T.loading)} items={[text(T.loadingText)]} />
+        <TextList title={text(T.empty)} items={[text(T.emptyText)]} />
+        <TextList title={text(T.error)} items={[text(T.errorText)]} />
       </div>
     </PageShell>
   );

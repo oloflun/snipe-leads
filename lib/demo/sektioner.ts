@@ -25,28 +25,30 @@
  * inloggning). Iris eget Inställningar-barn är däremot demobart, se nedan.
  */
 
-export type DemoNavChild = { slug: string; label: string };
+import type { Localized } from "@/lib/i18n";
 
-export type DemoNavItem = { slug: string; label: string; children?: DemoNavChild[] };
+export type DemoNavChild = { slug: string; label: Localized };
+
+export type DemoNavItem = { slug: string; label: Localized; children?: DemoNavChild[] };
 
 export const DEMO_NAV: DemoNavItem[] = [
-  { slug: "", label: "Översikt" },
+  { slug: "", label: { sv: "Översikt", en: "Overview" } },
   {
     slug: "iris",
-    label: "Iris",
+    label: { sv: "Iris", en: "Iris" },
     children: [
-      { slug: "iris", label: "Bolag" },
-      { slug: "iris/granskning", label: "Granskning" },
-      { slug: "iris/installningar", label: "Inställningar" },
+      { slug: "iris", label: { sv: "Bolag", en: "Companies" } },
+      { slug: "iris/granskning", label: { sv: "Granskning", en: "Review" } },
+      { slug: "iris/installningar", label: { sv: "Inställningar", en: "Settings" } },
       // Avsteg från spegelregeln ovan, med avsikt: CRM-listan är den omgjorda
       // leadsagentens demo av KUNDENS EGEN kundlista (i stället för att Iris
       // letar prospekt) och finns bara i demon — ett fjärde barn under Iris,
       // inte en egen toppnivåpost.
-      { slug: "crm", label: "CRM-lista" }
+      { slug: "crm", label: { sv: "CRM-lista", en: "CRM list" } }
     ]
   },
-  { slug: "support", label: "Kundtjänst" },
-  { slug: "kvitton", label: "Kvitton" }
+  { slug: "support", label: { sv: "Kundtjänst", en: "Customer service" } },
+  { slug: "kvitton", label: { sv: "Kvitton", en: "Receipts" } }
 ];
 
 /** Länken till en sektion. Tom sträng = demons startsida. */

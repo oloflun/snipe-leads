@@ -75,6 +75,10 @@ _STRANG = re.compile(r"\"(?:[^\"\\\n]|\\.)*\"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\\n]|\
 _TAGG = re.compile(r"<[^<>]*>")
 _UTTRYCK = re.compile(r"\{[^{}]*\}")
 _KODRAD = re.compile(r"[=(;]|^\s*(?:import|export|const|let|type|interface|return)\b")
+#: `paket.populärast`, `svar.korning` – egenskaper, inte text.
+_MEDLEM = re.compile(r"[\w$]+\.[\w$.]*")
+#: `sv: [` … `]` – ett språkpar vars halvor är listor över flera rader.
+_PARLISTA_START = re.compile(r"\b(?:sv|en)\s*:\s*\[\s*$")
 #: Personnamn och bolagsnamn i exempeldata ("Jonas Vikström") är desamma på engelska.
 _NAMNFALT = re.compile(r"\b(?:namn|name|company_name|avsandare)\s*:\s*[\"'`]")
 
@@ -87,17 +91,42 @@ def _synlig_svenska(rad: str) -> bool:
         return True
     # JSX-text på egen rad ("Inga körningar än.") har varken citattecken, taggar
     # eller uttryck kvar när de strukits — och ser inte ut som kod.
-    utan = _UTTRYCK.sub("", _TAGG.sub("", _STRANG.sub("", rad)))
+    utan = _MEDLEM.sub("", _UTTRYCK.sub("", _TAGG.sub("", _STRANG.sub("", rad))))
     return bool(_SVENSKA.search(utan)) and not _KODRAD.search(utan)
 
 
+#: Nexts `export const metadata = { title, description }` renderas på servern utan
+#: kundens språkval och är sidans sökmotortext, inte gränssnittet: utanför grinden.
+_METADATA = re.compile(r"^export const metadata\b[^\n]*=\s*\{.*?^\};?", re.DOTALL | re.MULTILINE)
+
+
+#: `// inte-copy` på raden: data som råkar vara svenska (en fixturnyckel, en
+#: backendfras koden matchar mot), inte text som når skärmen. Markören står
+#: synlig i källan; en \u-escape hade gömt samma sak.
+_MARKOR = "inte-copy"
+
+
 def _fynd(sokvag: Path) -> list[str]:
-    rader = _utan_kommentarer(sokvag.read_text(encoding="utf-8")).splitlines()
-    return [
-        f"{sokvag.relative_to(ROOT).as_posix()}:{nr}: {rad.strip()[:110]}"
-        for nr, rad in enumerate(rader, 1)
-        if _synlig_svenska(rad)
-    ]
+    ratext = sokvag.read_text(encoding="utf-8")
+    markerade = {nr for nr, rad in enumerate(ratext.splitlines(), 1) if _MARKOR in rad}
+    kalla = _utan_kommentarer(ratext)
+    kalla = _METADATA.sub(lambda m: "\n" * m.group(0).count("\n"), kalla)
+    rader = kalla.splitlines()
+    fynd: list[str] = []
+    i_parlista = False
+    for nr, rad in enumerate(rader, 1):
+        if i_parlista:
+            if rad.strip().startswith("]"):
+                i_parlista = False
+            continue
+        if _PARLISTA_START.search(rad):
+            i_parlista = True
+            continue
+        if nr in markerade:
+            continue
+        if _synlig_svenska(rad):
+            fynd.append(f"{sokvag.relative_to(ROOT).as_posix()}:{nr}: {rad.strip()[:110]}")
+    return fynd
 
 
 def _rel(p: Path) -> str:
@@ -121,6 +150,7 @@ def test_grinden_fäller_det_den_ska():
     assert not _synlig_svenska('  const värde = följKörning(sparatId);')
     assert not _synlig_svenska('  <p>{text({ sv: "Klar", en: "Done" })}</p>')
     assert not _synlig_svenska('  <p className="text-ink">Runs</p>')
+    assert not _synlig_svenska('                paket.populärast')
 
 
 #: Skuld, inte en permanent lucka: filerna som var enspråkiga när grinden sattes
@@ -141,84 +171,53 @@ _SKULD_2026_10_02: set[str] = {
     "app/angerratt/page.tsx",
     "app/avregistrera/[token]/page.tsx",
     "app/cookies/page.tsx",
-    "app/demo/[[...slug]]/page.tsx",
     "app/integritetspolicy/page.tsx",
-    "app/kvitton/page.tsx",
-    "app/leads/page.tsx",
-    "app/support/page.tsx",
     "app/villkor/page.tsx",
-    "components/AppShell.tsx",
-    "components/EjAktiverad.tsx",
-    "components/ImpersonationBanner.tsx",
     "components/SoulEditor.tsx",
-    "components/WorkspaceViews.tsx",
     "components/admin/AgentAnvandning.tsx",
     "components/admin/Agentinstruktioner.tsx",
     "components/admin/Avstangning.tsx",
-    "components/admin/BytKund.tsx",
     "components/admin/KonverteraTestkund.tsx",
     "components/admin/Kunddata.tsx",
     "components/admin/Kundprofil.tsx",
     "components/admin/PaketHantering.tsx",
     "components/admin/Testkorningar.tsx",
-    "components/admin/Tillaggsvaljare.tsx",
     "components/auth/LoginForm.tsx",
     "components/auth/OnboardingWizard.tsx",
     "components/auth/ResetPasswordForm.tsx",
     "components/crm/CrmDemo.tsx",
     "components/dashboard/AgentLast.tsx",
     "components/dashboard/Analys.tsx",
-    "components/dashboard/Oversikt.tsx",
-    "components/dashboard/WorkspaceSection.tsx",
-    "components/kvitton/Integritetsnotis.tsx",
     "components/kvitton/KvittoChatt.tsx",
     "components/kvitton/KvittoDemo.tsx",
     "components/kvitton/KvittoVy.tsx",
     "components/kvitton/KvittoYta.tsx",
     "components/leads/AgentLarande.tsx",
     "components/leads/Bolagsregister.tsx",
-    "components/leads/Bolagssida.tsx",
     "components/leads/DemoKorning.tsx",
-    "components/leads/IrisBolag.tsx",
     "components/leads/IrisEskalering.tsx",
     "components/leads/IrisGranskning.tsx",
-    "components/leads/IrisInstallningar.tsx",
-    "components/leads/IrisKorningar.tsx",
     "components/leads/IrisProfil.tsx",
     "components/leads/Kontakter.tsx",
     "components/leads/LeadsControls.tsx",
-    "components/leads/LeadsRunForm.tsx",
     "components/leads/LeadsSnabbsok.tsx",
-    "components/leads/LeadslistorView.tsx",
     "components/leads/Svar.tsx",
     "components/marketing/BokaDemoFormular.tsx",
     "components/marketing/LaddaNerAppen.tsx",
-    "components/marketing/PricingSection.tsx",
     "components/marketing/ProduktBilder.tsx",
-    "components/marketing/Sidfot.tsx",
-    "components/marketing/UspSection.tsx",
-    "components/settings/AddonSettings.tsx",
     "components/settings/Affarskontext.tsx",
     "components/settings/Inkorgar.tsx",
     "components/settings/Kunskapsbas.tsx",
-    "components/settings/NotisSettings.tsx",
     "components/settings/PlanSettings.tsx",
-    "components/settings/SettingsNav.tsx",
     "components/settings/SupportEskalering.tsx",
     "components/settings/SupportRegler.tsx",
     "components/settings/TeamSettings.tsx",
     "components/settings/TemaSettings.tsx",
-    "components/settings/Vaxel.tsx",
-    "components/snajp/AgentMenu.tsx",
     "components/snajp/Dashboard.tsx",
-    "components/snajp/DemoSupportYta.tsx",
-    "components/snajp/EmbedYta.tsx",
     "components/snajp/InboxTriage.tsx",
     "components/snajp/IntegrationSection.tsx",
     "components/snajp/JournalVy.tsx",
     "components/snajp/SupportChat.tsx",
-    "components/snajp/SupportWorkspaceTabs.tsx",
-    "lib/demo/sektioner.ts",
 }
 
 

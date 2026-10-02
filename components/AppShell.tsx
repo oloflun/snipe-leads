@@ -27,7 +27,7 @@ import { BytKund } from "@/components/admin/BytKund";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 import { LasrollBanner } from "@/components/LasrollBanner";
 import { VyVaxel } from "@/components/VyVaxel";
-import { useLocale } from "@/lib/i18n";
+import { useLocale, type Localized } from "@/lib/i18n";
 import { appRoutes, produktForInstallningsvag, routesForProducts, tillAdminvag } from "@/lib/routes";
 import type { Scope } from "@/lib/routes";
 import { cn } from "@/lib/utils";
@@ -159,7 +159,7 @@ export function useArbetsvag(): (href: string) => string {
 export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) {
   const pathname = usePathname();
   const router = useRouter();
-  const { t, locale, toggleLocale } = useLocale();
+  const { t, text, locale, toggleLocale } = useLocale();
   const {
     products,
     workspaceName,
@@ -284,11 +284,11 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
         const href = demoSektionsVag(item.slug);
         const children = item.children?.map((child) => {
           const childHref = demoSektionsVag(child.slug);
-          return { href: childHref, label: child.label, active: pathname === childHref };
+          return { href: childHref, label: text(child.label), active: pathname === childHref };
         });
         return {
           href,
-          label: item.label,
+          label: text(item.label),
           Icon: DEMO_IKONER[item.slug] ?? LayoutDashboard,
           // Föräldern räknas aktiv om man står på den, ELLER på ett av dess
           // barn — CRM-listan har t.ex. sökvägen /demo/crm, alltså inte under
@@ -362,7 +362,11 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
             ytans karta. Delad med AdminShell via components/shell/Rail.tsx. */}
         <Rail
           logoHref={demoAnpassa("/dashboard", pathname)}
-          logoAriaLabel={demolage ? "Snajp demo, till översikten" : "Snajp, till översikten"}
+          logoAriaLabel={
+            demolage
+              ? text({ sv: "Snajp demo, till översikten", en: "Snajp demo, to the overview" })
+              : text({ sv: "Snajp, till översikten", en: "Snajp, to the overview" })
+          }
           brand={
             // Arbetsytans namn — samma plats som "Bokföring"-etiketten i
             // bokforing-webbs rail. I demon står demomarkören här i stället:
@@ -423,7 +427,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                       className="focus-ring flex min-h-11 w-full items-center gap-1.5 rounded-input px-3 text-sm font-medium text-paper-muted transition-colors hover:bg-paper/5 hover:text-paper lg:justify-start"
                     >
                       <LogOut className="h-4 w-4 shrink-0" aria-hidden />
-                      <span>Logga ut</span>
+                      <span>{text({ sv: "Logga ut", en: "Sign out" })}</span>
                     </button>
                   </form>
                 ) : demolage ? (
@@ -432,13 +436,13 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                       href="/login"
                       className="focus-ring flex min-h-11 items-center rounded-input px-3 text-sm font-medium text-paper-muted transition-colors hover:bg-paper/5 hover:text-paper"
                     >
-                      Logga in
+                      {text({ sv: "Logga in", en: "Sign in" })}
                     </Link>
                     <Link
                       href="/"
                       className="focus-ring flex min-h-11 items-center rounded-input px-3 text-sm font-medium text-paper-muted transition-colors hover:bg-paper/5 hover:text-paper"
                     >
-                      Till startsidan
+                      {text({ sv: "Till startsidan", en: "To the start page" })}
                     </Link>
                   </div>
                 ) : null}
@@ -468,7 +472,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                   plats — utan den vet en mobil besökare inte vad ytan är. */}
               {demolage ? (
                 <span className="mr-auto inline-flex items-center rounded-input border border-ochre/40 bg-ochre/10 px-2.5 py-1 text-[13px] font-medium text-warning">
-                  Demo · exempeldata
+                  {text({ sv: "Demo · exempeldata", en: "Demo · sample data" })}
                 </span>
               ) : (
                 <span className="mr-auto truncate text-[13px] font-medium text-ink-subtle">
@@ -492,11 +496,11 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                 <form action={signOut}>
                   <button
                     type="submit"
-                    aria-label="Logga ut"
+                    aria-label={text({ sv: "Logga ut", en: "Sign out" })}
                     className="focus-ring inline-flex min-h-11 items-center gap-1.5 rounded-input px-3 text-sm font-medium text-ink-subtle transition-colors hover:text-ink"
                   >
                     <LogOut className="h-4 w-4" aria-hidden />
-                    <span className="hidden sm:inline">Logga ut</span>
+                    <span className="hidden sm:inline">{text({ sv: "Logga ut", en: "Sign out" })}</span>
                   </button>
                 </form>
               ) : null}
@@ -506,7 +510,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                   href="/login"
                   className="focus-ring inline-flex min-h-11 items-center rounded-input px-3 text-sm font-medium text-ink-subtle transition-colors hover:text-ink"
                 >
-                  Logga in
+                  {text({ sv: "Logga in", en: "Sign in" })}
                 </Link>
               ) : null}
             </div>
@@ -522,7 +526,10 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
               <div className="border-b border-ochre/30 bg-ochre/10">
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 md:px-6">
                   <span className="text-[13px] text-ink-muted">
-                    Allt här är exempeldata. Klicka fritt, inget skickas.
+                    {text({
+                      sv: "Allt här är exempeldata. Klicka fritt, inget skickas.",
+                      en: "Everything here is sample data. Click freely, nothing is sent."
+                    })}
                   </span>
                   {/* Ink-knapp, inte ochre-text: --ochre (L 0.74) ger 2.17:1
                       mot paper och duger aldrig som 13px text — se DESIGN.md
@@ -531,7 +538,10 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                     href="/login"
                     className="focus-ring ml-auto inline-flex min-h-8 items-center rounded-input bg-ink px-3 py-1 text-[13px] font-semibold text-paper transition-colors hover:bg-ink2"
                   >
-                    Testa fullständiga tjänsten med era egna data, kostnadsfritt
+                    {text({
+                      sv: "Testa fullständiga tjänsten med era egna data, kostnadsfritt",
+                      en: "Try the full service with your own data, free of charge"
+                    })}
                   </Link>
                 </div>
               </div>
@@ -549,7 +559,10 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                       exempelbutiken i en yta som visas för kunder. */}
                   {vy === "demo" ? null : (
                     <span className="text-[13px] text-ink-muted">
-                      Du testar Snajp med ett begränsat antal körningar.
+                      {text({
+                        sv: "Du testar Snajp med ett begränsat antal körningar.",
+                        en: "You are trying Snajp with a limited number of runs."
+                      })}
                     </span>
                   )}
                   {vy === "demo" ? null : (
@@ -586,11 +599,12 @@ export function PageShell({
   children,
   action
 }: Readonly<{
-  title: string;
+  title: string | Localized;
   children: React.ReactNode;
   action?: React.ReactNode;
 }>) {
   const pathname = usePathname();
+  const { text } = useLocale();
   // Under /admin bär `app/admin/layout.tsx` redan containern. Två containers
   // gav dubbel padding och en innerbredd 48px smalare än resten av ytan —
   // syns direkt när man växlar mellan en plattformsflik och en arbetsytesflik.
@@ -603,7 +617,7 @@ export function PageShell({
       <section className={iAdmin ? "" : "mx-auto w-full max-w-[1200px] px-4 py-8 md:px-8 md:py-10"}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <h1 className="min-w-0 break-words font-display text-[1.625rem] font-semibold leading-tight tracking-[-0.02em]">
-            {title}
+            {typeof title === "string" ? title : text(title)}
           </h1>
           {action ? <div className="shrink-0">{action}</div> : null}
         </div>

@@ -141,21 +141,21 @@ export async function WorkspaceSection({
       // utanför de två kända) är en 404, inte en tyst fallback till Bolag.
       if (id === "korningar") {
         return (
-          <PageShell title="Körningar">
+          <PageShell title={{ sv: "Körningar", en: "Runs" }}>
             <IrisKorningar />
           </PageShell>
         );
       }
       if (id === "granskning") {
         return (
-          <PageShell title="Granskning">
+          <PageShell title={{ sv: "Granskning", en: "Review" }}>
             <IrisGranskning />
           </PageShell>
         );
       }
       if (id === "installningar") {
         return (
-          <PageShell title="Inställningar">
+          <PageShell title={{ sv: "Inställningar", en: "Settings" }}>
             <IrisInstallningar />
           </PageShell>
         );

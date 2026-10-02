@@ -218,7 +218,7 @@ export function PricingSection() {
             { term: `${text(PRIS_PREFIX)} ${formateraPris(UPPSTARTSAVGIFT)}`, desc: text(copy.uppstart) },
             { term: `${text(PRIS_PREFIX)} ${formateraPris(EXTRA_PROSPEKT_PRIS)}`, desc: text(copy.extraProspekt) },
             { term: `${text(PRIS_PREFIX)} ${formateraPris(EXTRA_MEJL_PRIS)}`, desc: text(copy.extraMejl) },
-            { term: `${BINDNINGSTID_MANADER} mån`, desc: text(copy.bindning) }
+            { term: text({ sv: `${BINDNINGSTID_MANADER} mån`, en: `${BINDNINGSTID_MANADER} months` }), desc: text(copy.bindning) }
           ].map((rad) => (
             <div key={rad.desc} className="bg-paper px-5 py-4">
               <dt className="font-display text-[1.25rem] font-semibold tracking-[-0.02em]">
@@ -245,7 +245,7 @@ export function PricingSection() {
             </p>
           </div>
           <a
-            href={mejlaOss("Fråga om priser")}
+            href={mejlaOss(text({ sv: "Fråga om priser", en: "Question about pricing" }))}
             className="focus-ring inline-flex min-h-12 shrink-0 items-center justify-center rounded-input bg-ink px-7 text-[0.9375rem] font-semibold text-paper transition-colors hover:bg-ink2"
           >
             {text(copy.ctaKnapp)}

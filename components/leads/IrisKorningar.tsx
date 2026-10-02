@@ -5,6 +5,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Cell, Nyckeltal, Tabell, Tomt, btnSecondary, meta, tabellRad } from "@/components/ui";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
+import { useLocale, type Locale, type Localized } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /**
@@ -54,31 +55,80 @@ export type KorningsRad = {
   korning: Korning | null;
 };
 
-const STATUS_ETIKETT: Record<KorningsRad["status"], string> = {
-  queued: "Köad",
-  processing: "Pågår",
-  completed: "Klar",
-  failed: "Misslyckades"
+const T = {
+  hamtar: { sv: "Hämtar körningar…", en: "Loading runs…" },
+  hamtaFel: { sv: "Körningarna gick inte att hämta.", en: "The runs could not be loaded." },
+  tillBolag: { sv: "Till Bolag", en: "To Companies" },
+  tomt: {
+    sv: "Inga körningar än. Starta en under Bolag, så syns den här med förlopp och resultat.",
+    en: "No runs yet. Start one under Companies and it shows up here with progress and results."
+  },
+  tabell: { sv: "Körningar", en: "Runs" },
+  kolStartad: { sv: "Startad", en: "Started" },
+  kolTyp: { sv: "Typ", en: "Type" },
+  kolBestallt: { sv: "Beställt", en: "Ordered" },
+  kolLeads: { sv: "Leads · undersökta", en: "Leads · researched" },
+  kolStatus: { sv: "Status", en: "Status" },
+  kolUtfall: { sv: "Utfall", en: "Outcome" },
+  pagar: { sv: "Pågår", en: "Running" },
+  researcharNasta: { sv: "Researchar nästa bolag", en: "Researching the next company" },
+  letarFler: { sv: "Letar fler bolag", en: "Looking for more companies" },
+  seListor: { sv: "Se Bolag › Listor", en: "See Companies › Lists" },
+  klar: { sv: "Klar", en: "Done" },
+  leadsKlara: { sv: "Leads klara", en: "Leads done" },
+  bolagUndersokta: { sv: "Bolag undersökta", en: "Companies researched" },
+  bortvalda: { sv: "Bortvalda", en: "Dropped" },
+  justNu: { sv: "Just nu", en: "Right now" },
+  researchar: { sv: "Researchar", en: "Researching" },
+  letar: { sv: "Letar", en: "Searching" },
+  tak: { sv: "tak", en: "cap" },
+  underResearch: { sv: "bolag under research", en: "companies in research" },
+  sokrunda: { sv: "sökrunda", en: "search round" },
+  fortsatter: {
+    sv: "Körningen fortsätter på servern. Du kan lämna sidan och komma tillbaka hit.",
+    en: "The run continues on the server. You can leave this page and come back."
+  },
+  test: { sv: "test", en: "test" },
+  doljDetaljer: { sv: ", dölj detaljer", en: ", hide details" },
+  visaDetaljer: { sv: ", visa detaljer", en: ", show details" },
+  undersoktaBolag: { sv: "Undersökta bolag", en: "Companies researched" },
+  raderUnderListor: { sv: "Raderna finns under Bolag › Listor.", en: "The rows are under Companies › Lists." },
+  ingaUndersokta: { sv: "Inga bolag undersökta.", en: "No companies researched." },
+  ingetBortvalt: { sv: "Inget bolag valdes bort.", en: "No company was dropped." },
+  uppdaterad: { sv: "uppdaterad", en: "updated" },
+  av: { sv: "av", en: "of" }
+} satisfies Record<string, Localized>;
+
+const STATUS_ETIKETT: Record<KorningsRad["status"], Localized> = {
+  queued: { sv: "Köad", en: "Queued" },
+  processing: { sv: "Pågår", en: "Running" },
+  completed: { sv: "Klar", en: "Done" },
+  failed: { sv: "Misslyckades", en: "Failed" }
 };
 
 /** Motorns slutorsaker (app/leads/korning.py) i kundens ord. */
-const SLUT_ETIKETT: Record<string, string> = {
-  klar: "Målet nått",
-  tak: "Taket nått: fyra gånger så många bolag undersökta som beställda",
-  slut_pa_kandidater: "Inga fler bolag att pröva i målgruppen",
-  sokningen_foll: "Sökningen gick inte att genomföra",
-  budget: "Dagens budget för körningar är slut"
+const SLUT_ETIKETT: Record<string, Localized> = {
+  klar: { sv: "Målet nått", en: "Target reached" },
+  tak: {
+    sv: "Taket nått: fyra gånger så många bolag undersökta som beställda",
+    en: "Cap reached: four times as many companies researched as ordered"
+  },
+  slut_pa_kandidater: { sv: "Inga fler bolag att pröva i målgruppen", en: "No more companies to try in the target group" },
+  sokningen_foll: { sv: "Sökningen gick inte att genomföra", en: "The search could not be completed" },
+  budget: { sv: "Dagens budget för körningar är slut", en: "Today's budget for runs is used up" }
 };
 
-function nar(iso: string | null): string {
+function nar(iso: string | null, locale: Locale): string {
   if (!iso) return "–";
-  return new Date(iso).toLocaleString("sv-SE", { dateStyle: "short", timeStyle: "short" });
+  return new Date(iso).toLocaleString(locale === "en" ? "en-GB" : "sv-SE", { dateStyle: "short", timeStyle: "short" });
 }
 
-function typ(rad: KorningsRad): string {
-  if (rad.scope === "lista") return "Leadslista";
-  if (!rad.korning) return "Egna bolag";
-  return rad.korning.scope === "research_and_draft" ? "Iris · research och utkast" : "Iris · research";
+function typ(rad: KorningsRad): Localized {
+  if (rad.scope === "lista") return { sv: "Leadslista", en: "Lead list" };
+  if (!rad.korning) return { sv: "Egna bolag", en: "Own companies" };
+  return rad.korning.scope === "research_and_draft"
+    ? { sv: "Iris · research och utkast", en: "Iris · research and drafts" }
+    : { sv: "Iris · research", en: "Iris · research" };
 }
 
 /** Pågår? Både liggarens status och motorns eget `klar` räknas: raden kan
@@ -89,6 +139,7 @@ function pagar(rad: KorningsRad): boolean {
 }
 
 export function IrisKorningar() {
+  const { locale, text } = useLocale();
   const pathname = usePathname() ?? "/dashboard/iris/korningar";
   const sok = useSearchParams();
   // Samma vy under /dashboard, /admin och /demo: Bolag-länken följer basen.
@@ -96,7 +147,6 @@ export function IrisKorningar() {
   const [rader, setRader] = useState<KorningsRad[] | null>(null);
   const [fel, setFel] = useState<string | null>(null);
   const [oppen, setOppen] = useState<string | null>(sok?.get("id") ?? null);
-
   // Stoppad = sessionen är borta (401/403) eller vyn saknas (404): att polla
   // vidare var tredje sekund ger bara samma svar.
   const [stoppad, setStoppad] = useState(false);
@@ -107,7 +157,7 @@ export function IrisKorningar() {
       const kropp = await readJsonBody<{ korningar?: KorningsRad[]; detail?: string }>(response);
       if (!response.ok || !kropp?.korningar) {
         if ([401, 403, 404].includes(response.status)) setStoppad(true);
-        setFel(kropp?.detail ?? "Körningarna gick inte att hämta.");
+        setFel(kropp?.detail ?? text(T.hamtaFel));
         return;
       }
       setFel(null);
@@ -115,7 +165,7 @@ export function IrisKorningar() {
     } catch (cause) {
       setFel(felmeddelande(cause));
     }
-  }, []);
+  }, [text]);
 
   useEffect(() => {
     void hamta();
@@ -159,18 +209,18 @@ export function IrisKorningar() {
     );
   }
   if (rader === null) {
-    return <p className={meta}>Hämtar körningar…</p>;
+    return <p className={meta}>{text(T.hamtar)}</p>;
   }
   if (rader.length === 0) {
     return (
       <Tomt
         action={
           <Link href={bas} className={btnSecondary}>
-            Till Bolag
+            {text(T.tillBolag)}
           </Link>
         }
       >
-        Inga körningar än. Starta en under Bolag, så syns den här med förlopp och resultat.
+        {text(T.tomt)}
       </Tomt>
     );
   }
@@ -187,14 +237,14 @@ export function IrisKorningar() {
       {aktiv ? <Pagaende rad={aktiv} /> : null}
 
       <Tabell
-        ariaLabel="Körningar"
+        ariaLabel={text(T.tabell)}
         kolumner={[
-          { rubrik: "Startad", bredd: "16%" },
-          { rubrik: "Typ", bredd: "22%" },
-          { rubrik: "Beställt", bredd: "10%", hoger: true },
-          { rubrik: "Leads · undersökta", bredd: "16%", hoger: true },
-          { rubrik: "Status", bredd: "12%" },
-          { rubrik: "Utfall" }
+          { rubrik: text(T.kolStartad), bredd: "16%" },
+          { rubrik: text(T.kolTyp), bredd: "22%" },
+          { rubrik: text(T.kolBestallt), bredd: "10%", hoger: true },
+          { rubrik: text(T.kolLeads), bredd: "16%", hoger: true },
+          { rubrik: text(T.kolStatus), bredd: "12%" },
+          { rubrik: text(T.kolUtfall) }
         ]}
       >
         {rader.map((rad) => {
@@ -208,7 +258,7 @@ export function IrisKorningar() {
               oppen={arOppen}
               onToggle={() => setOppen(arOppen ? null : rad.job_id)}
             >
-              <Cell>{typ(rad)}</Cell>
+              <Cell>{text(typ(rad))}</Cell>
               <Cell hoger>{k ? k.mal : "–"}</Cell>
               <Cell hoger>
                 {k ? (
@@ -234,20 +284,20 @@ export function IrisKorningar() {
                       rad.status === "failed" ? "bg-danger" : pagar(rad) ? "bg-ochre" : "bg-moss"
                     )}
                   />
-                  {pagar(rad) ? "Pågår" : STATUS_ETIKETT[rad.status]}
+                  {pagar(rad) ? text(T.pagar) : text(STATUS_ETIKETT[rad.status])}
                 </span>
               </Cell>
               <Cell className="text-ink-muted">
                 {rad.error
                   ? rad.error
                   : k?.klar
-                    ? (k.sammanfattning ?? SLUT_ETIKETT[k.slut_orsak ?? ""] ?? "Klar")
+                    ? (k.sammanfattning ?? (SLUT_ETIKETT[k.slut_orsak ?? ""] ? text(SLUT_ETIKETT[k.slut_orsak ?? ""]) : text(T.klar)))
                     : k
                       ? k.pagaende
-                        ? "Researchar nästa bolag"
-                        : "Letar fler bolag"
+                        ? text(T.researcharNasta)
+                        : text(T.letarFler)
                       : rad.scope === "lista"
-                        ? "Se Bolag › Listor"
+                        ? text(T.seListor)
                         : "–"}
               </Cell>
             </RadMedDetalj>
@@ -259,11 +309,15 @@ export function IrisKorningar() {
 }
 
 function Pagaende({ rad }: Readonly<{ rad: KorningsRad }>) {
+  const { locale, text } = useLocale();
   const k = rad.korning;
   if (!k) {
     return (
       <p className="text-[15px] text-ink-muted" role="status">
-        En körning pågår sedan {nar(rad.created_at)}.
+        {text({
+          sv: `En körning pågår sedan ${nar(rad.created_at, locale)}.`,
+          en: `A run has been going since ${nar(rad.created_at, locale)}.`
+        })}
       </p>
     );
   }
@@ -271,25 +325,23 @@ function Pagaende({ rad }: Readonly<{ rad: KorningsRad }>) {
     <div role="status" aria-live="polite">
       <Nyckeltal
         poster={[
-          { etikett: "Leads klara", varde: `${k.levererade} av ${k.mal}` },
-          { etikett: "Bolag undersökta", varde: k.undersokta, notis: k.tak ? `tak ${k.tak}` : undefined },
-          { etikett: "Bortvalda", varde: (k.tratt ?? []).length },
+          { etikett: text(T.leadsKlara), varde: `${k.levererade} ${text(T.av)} ${k.mal}` },
+          { etikett: text(T.bolagUndersokta), varde: k.undersokta, notis: k.tak ? `${text(T.tak)} ${k.tak}` : undefined },
+          { etikett: text(T.bortvalda), varde: (k.tratt ?? []).length },
           {
-            etikett: "Just nu",
-            varde: k.pagaende ? "Researchar" : "Letar",
-            notis: k.pagaende ? `${k.pagaende} bolag under research` : `sökrunda ${(k.rundor ?? 0) + 1}`
+            etikett: text(T.justNu),
+            varde: k.pagaende ? text(T.researchar) : text(T.letar),
+            notis: k.pagaende ? `${k.pagaende} ${text(T.underResearch)}` : `${text(T.sokrunda)} ${(k.rundor ?? 0) + 1}`
           }
         ]}
       />
-      <p className={cn(meta, "mt-3")}>
-        Körningen fortsätter på servern. Du kan lämna sidan och komma tillbaka hit.
-      </p>
+      <p className={cn(meta, "mt-3")}>{text(T.fortsatter)}</p>
     </div>
   );
 }
 
 /**
- * En rad som fälls ut till sin detalj: levererade bolag med länk, tratten rad
+ * En rad som fälls ut till sin detalj: undersökta bolag med länk, tratten rad
  * för rad, och felorsaken. Tangentbordet når en RIKTIG knapp i radhuvudet
  * (datumet), inte en fokuserbar `<tr>`: en tabellrad med tabIndex och
  * tangentlyssnare läses som "rad", aldrig som "knapp, hopfälld", och
@@ -309,6 +361,7 @@ function RadMedDetalj({
   onToggle: () => void;
   children: React.ReactNode;
 }>) {
+  const { locale, text } = useLocale();
   const k = rad.korning;
   const kolumner = 6;
   return (
@@ -325,9 +378,9 @@ function RadMedDetalj({
             }}
             className="focus-ring -mx-1 inline-flex min-h-11 items-center rounded-input px-1 text-left"
           >
-            <span className="num tabular-nums">{nar(rad.created_at)}</span>
-            {rad.is_test ? <span className={cn(meta, "ml-2")}>test</span> : null}
-            <span className="sr-only">{oppen ? ", dölj detaljer" : ", visa detaljer"}</span>
+            <span className="num tabular-nums">{nar(rad.created_at, locale)}</span>
+            {rad.is_test ? <span className={cn(meta, "ml-2")}>{text(T.test)}</span> : null}
+            <span className="sr-only">{oppen ? text(T.doljDetaljer) : text(T.visaDetaljer)}</span>
           </button>
         </Cell>
         {children}
@@ -337,7 +390,7 @@ function RadMedDetalj({
           <td colSpan={kolumner} className="bg-paper2/60 px-4 py-5">
             <div className="grid gap-8 md:grid-cols-2">
               <div>
-                <h3 className="text-[1.0625rem] font-semibold">Undersökta bolag</h3>
+                <h3 className="text-[1.0625rem] font-semibold">{text(T.undersoktaBolag)}</h3>
                 {k?.jobs?.length ? (
                   <ul className="mt-3 divide-y divide-ink/12 border-y border-ink/15">
                     {k.jobs.map((j) => (
@@ -345,7 +398,7 @@ function RadMedDetalj({
                         <span className="min-w-0 truncate">{j.company_name ?? j.prospect_id ?? j.job_id}</span>
                         {j.prospect_id ? (
                           <Link href={bas} className="shrink-0 text-[13px] underline underline-offset-4">
-                            Till Bolag
+                            {text(T.tillBolag)}
                           </Link>
                         ) : null}
                       </li>
@@ -353,7 +406,7 @@ function RadMedDetalj({
                   </ul>
                 ) : (
                   <p className={cn(meta, "mt-3")}>
-                    {rad.scope === "lista" ? "Raderna finns under Bolag › Listor." : "Inga bolag undersökta."}
+                    {rad.scope === "lista" ? text(T.raderUnderListor) : text(T.ingaUndersokta)}
                   </p>
                 )}
                 {rad.error ? (
@@ -362,12 +415,14 @@ function RadMedDetalj({
                   </p>
                 ) : null}
                 {k?.klar && k.slut_orsak ? (
-                  <p className={cn(meta, "mt-4")}>{SLUT_ETIKETT[k.slut_orsak] ?? k.slut_orsak}</p>
+                  <p className={cn(meta, "mt-4")}>
+                    {SLUT_ETIKETT[k.slut_orsak] ? text(SLUT_ETIKETT[k.slut_orsak]) : k.slut_orsak}
+                  </p>
                 ) : null}
               </div>
               <div>
                 <h3 className="text-[1.0625rem] font-semibold">
-                  Bortvalda <span className={cn(meta, "font-normal")}>{(k?.tratt ?? []).length}</span>
+                  {text(T.bortvalda)} <span className={cn(meta, "font-normal")}>{(k?.tratt ?? []).length}</span>
                 </h3>
                 {k?.tratt?.length ? (
                   <ul className="mt-3 divide-y divide-ink/12 border-y border-ink/15">
@@ -383,12 +438,12 @@ function RadMedDetalj({
                     ))}
                   </ul>
                 ) : (
-                  <p className={cn(meta, "mt-3")}>Inget bolag valdes bort.</p>
+                  <p className={cn(meta, "mt-3")}>{text(T.ingetBortvalt)}</p>
                 )}
               </div>
             </div>
             <p className={cn(meta, "mt-5 font-mono text-[0.8125rem]")}>
-              {rad.job_id} · uppdaterad {nar(rad.updated_at)}
+              {rad.job_id} · {text(T.uppdaterad)} {nar(rad.updated_at, locale)}
             </p>
           </td>
         </tr>

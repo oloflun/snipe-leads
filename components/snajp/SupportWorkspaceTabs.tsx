@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import { useLocale } from "@/lib/i18n";
 import { Dashboard } from "./Dashboard";
 import { JournalVy } from "./JournalVy";
 import { SupportChat } from "./SupportChat";
@@ -24,6 +25,7 @@ import { SupportChat } from "./SupportChat";
  * räknas som kundvolym.
  */
 export function SupportWorkspaceTabs({ workspaceName }: Readonly<{ workspaceName: string | null }>) {
+  const { text } = useLocale();
   const [tab, setTab] = useState<"kundtjanst" | "att_hantera" | "testmail" | "testchatt" | "journal">("kundtjanst");
   /** null = vet inte än. false = riktig kund, Testmail-fliken ska synas. */
   const [visarTestIArenden, setVisarTestIArenden] = useState<boolean | null>(null);
@@ -40,16 +42,18 @@ export function SupportWorkspaceTabs({ workspaceName }: Readonly<{ workspaceName
 
   const flikar = (
     [
-      { id: "kundtjanst", label: "Kundtjänst" },
+      { id: "kundtjanst", label: { sv: "Kundtjänst", en: "Customer service" } },
       // Eskaleringar och larm (migration 078): egen flik så att de aldrig
       // blandas med kundärenden eller får ett AI-utkast (kundtest 2026-09-22).
-      { id: "att_hantera", label: "Att hantera" },
-      ...(visarTestIArenden === false ? [{ id: "testmail" as const, label: "Testmail" }] : []),
-      { id: "testchatt", label: "Testchatt" },
+      { id: "att_hantera", label: { sv: "Att hantera", en: "To handle" } },
+      ...(visarTestIArenden === false
+        ? [{ id: "testmail" as const, label: { sv: "Testmail", en: "Test mail" } }]
+        : []),
+      { id: "testchatt", label: { sv: "Testchatt", en: "Test chat" } },
       // Journalen (Livrustning-piloten): körningar, kostnad och
       // överlämningar för den egna tenanten — vyn kundens kontaktperson
       // (läsrollen) följer piloten i. Ren läsning, se JournalVy.tsx.
-      { id: "journal", label: "Journal" }
+      { id: "journal", label: { sv: "Journal", en: "Journal" } }
     ] as const
   );
 
@@ -66,7 +70,7 @@ export function SupportWorkspaceTabs({ workspaceName }: Readonly<{ workspaceName
               tab === item.id ? "border-ochre text-ink" : "border-transparent text-ink-subtle hover:text-ink"
             )}
           >
-            {item.label}
+            {text(item.label)}
           </button>
         ))}
       </div>

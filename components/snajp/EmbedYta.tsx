@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { SupportChat } from "@/components/snajp/SupportChat";
 import type { TenantLogo } from "@/lib/tenants";
+import { useLocale } from "@/lib/i18n";
 
 /**
  * Widgetens innehåll — det som renderas INUTI iframen på kundens sajt.
@@ -46,6 +47,7 @@ function tillForaldern(data: Record<string, string>) {
 }
 
 export function EmbedYta({ slug, namn, logo, farg, inbjudan }: EmbedYtaProps) {
+  const { text } = useLocale();
   // Sessionen skapas först på klienten — servern känner ingen identitet, och
   // utan vakten hade SSR och klient renderat olika props (hydreringskrock).
   const [session, setSession] = useState<string | null>(null);
@@ -90,7 +92,7 @@ export function EmbedYta({ slug, namn, logo, farg, inbjudan }: EmbedYtaProps) {
                   ? "text-paper-subtle hover:bg-paper/10 hover:text-paper"
                   : "text-mineral hover:bg-ink/5 hover:text-ink")
               }
-              aria-label={`Stäng chatten med ${namn}`}
+              aria-label={text({ sv: `Stäng chatten med ${namn}`, en: `Close the chat with ${namn}` })}
             >
               <X className="h-4 w-4" />
             </button>
