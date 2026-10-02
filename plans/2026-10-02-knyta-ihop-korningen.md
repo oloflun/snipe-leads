@@ -305,6 +305,15 @@ Antagande utan fråga: Fas 3 (regeln + grinden) före listorna, så det nya UI:t
 - [x] Fas 6.1 lokalt: pixelgranskning av Pipeline, Tabell och importpanelen (demon, 1280 + 375, sv + en); ett fynd rättat (051f131). `a11y-audit` körd mot demons fyra Iris-vyer (Opus-agent, axe + tab_walk + reflow + contrast, fixturen `broken.html` fälld av varje skript): 0 axe-violations efter rättningarna, åtta materiella fynd rättade i samma commit (fokusring 2,17:1 → 3,4:1 via color-mix på `--focus`, danger 4,4:1 → 5,2:1, fokus kvar efter statusbyte i Pipeline/Tabell med role=status, Home/End på tablisten, fokus till raden efter val ur Tabell, demons Listor utan inloggningsfel, kontaktvägsvalet som aria-pressed-knappar, ingen trunkering). Kvar som skuld (30/90 d): radknappens långa tillgängliga namn och detaljpanelens placering efter listan i DOM (IrisBolag), filtrets träffantal ej annonserat (LeadsTabell), ingen skip-länk/contentinfo (AppShell), railens undermenyer 36 px, bannerlänkens tabbordning, Pipeline-korts sr-only-spann som ökar scrollWidth vid 320 px. Körningar-vyn och inloggade ytor kunde inte auditeras lokalt (ingen Postgres, inte i demon).
 - [x] Grindar vid avslut: backend 2463 passed/4 skipped, rotinvarianter 425, tsc rent, node 162.
 
+### Uppdatering 2026-10-02 kväll — driftsatt
+- [x] Anton: push (c147904), `LEADS_MERINFO=scrapegraph` på development, migrationer 082–086 på development och 079–086 på main (adminfelet i main löst).
+- [x] `scripts/flytt_nycklar.py --apply`: FLYTT_NYCKEL i båda miljöerna, FLYTT_MAL_URL i development, ENV_DEPLOY (bara spegelns sex PG-rader) på GitHub. Development: nyckel=True mål=True.
+- [x] Röktest på development (demotenanten, syntetisk data): 10/10 endpoints gröna efter rättning. Fyndet: DELETE av sparad vy gav 500 (saknad grant); den nya vakten `test_delete_grants.py` hittade samma lucka i "Koppla ur inkorgen" (ss_mailboxes, sedan 077). Migration 087 körd på development.
+- [x] Demosidorna på development renderar (Pipeline, Tabell, Listor utan inloggningsfel, inga konsolfel).
+- [ ] Anton: `git push origin development` (0cc364b, e33b55e + dokument) och `python scripts/railway_migrate.py --env main --apply` (087).
+- [ ] Första speglingen: ENV_DEPLOY finns nu, så `spegla-dev.yml` kör 02:00 UTC och skriver över development med main. Tills dess saknar development `mirror_meta`, och panelen Flytta till main visas inte.
+- [ ] Main-verifiering av flyttvägen efter release (PR development → main).
+
 ### Kvar — kräver Anton (behörighetsgrinden nekar auto-läget)
 - [ ] Fas 2.2/2.3: `git push origin development` + `railway variables --set LEADS_MERINFO=scrapegraph --service api --environment development`.
 - [ ] Fas 1: `python scripts/railway_migrate.py --env main` (torr) → `--apply` (079, 080_paket_admin, 080_korningar, 081 **plus nu 082–086**, alla additiva).
