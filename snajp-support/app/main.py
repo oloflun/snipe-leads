@@ -34,6 +34,7 @@ from .api import (
     keys,
     kvitton,
     leads,
+    leads_suite,
     rules,
     sending_domains_api,
     support_config,
@@ -344,6 +345,7 @@ app.include_router(tickets.router)
 app.include_router(keys.router)
 app.include_router(kb.router)
 app.include_router(leads.router)
+app.include_router(leads_suite.router)
 app.include_router(demo.router)
 app.include_router(inbox.router)
 app.include_router(drafts.router)

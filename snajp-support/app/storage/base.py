@@ -556,7 +556,8 @@ class Storage(Protocol):
     async def list_outreach_threads(self, tenant_id: str) -> list[dict[str, Any]]:
         """Alla trådar med de aggregat uppföljningssvepet dömer på:
         outbound_sent_count, last_outbound_sent_at, last_inbound_at och
-        has_pending_item (köad/väntande post eller osänt utkast). Aggregaten
+        has_pending_item (köad/väntande post eller osänt utkast), plus
+        prospektets `origin` för automationsreglerna per typ. Aggregaten
         räknas i lagringen — policyn (NÄR en uppföljning är förfallen) bor i
         app/leads/follow_up_generator.py och är testbar utan databas."""
         ...
@@ -916,6 +917,7 @@ class Storage(Protocol):
         contact_role: str | None = None,
         contact_level: str | None = None,
         contact_form_url: str | None = None,
+        status_kalla: str = "kod",
     ) -> dict[str, Any] | None:
         """Fas B:s bedömning (icp_fit, qualified, disqualifiers) landar här,
         migration 024. Innan den fanns räknades icp_fit ut av modellen och
@@ -931,8 +933,50 @@ class Storage(Protocol):
         fallback-trappa: Fas B:s per-prospekt research läser det redan
         skrapade källmaterialet och kan hitta en namngiven person där den
         breda `hitta_bolag()`-sökningen bara verifierade en rollbaserad
-        adress. Se `app/agent/leads_agent.py::_uppgradera_kontakt`."""
+        adress. Se `app/agent/leads_agent.py::_uppgradera_kontakt`.
+
+        `status_kalla` (migration 086): när `status` ändrar prospektets status
+        skrivs en rad i `prospect_status_logg` med `kalla` — här och bara här,
+        så att svarshanteringen, sändningen och PATCH loggas likadant."""
         ...
+
+    # -- Leads Suite (migration 086) -----------------------------------------
+
+    async def add_lead_note(self, tenant_id: str, *, prospect_id: str, text: str) -> dict[str, Any]: ...
+
+    async def list_lead_notes(self, tenant_id: str, prospect_id: str) -> list[dict[str, Any]]:
+        """Äldst först."""
+        ...
+
+    async def add_lead_task(
+        self, tenant_id: str, *, prospect_id: str, titel: str, forfaller: str | None
+    ) -> dict[str, Any]: ...
+
+    async def update_lead_task(
+        self, tenant_id: str, task_id: str, *, klar: bool | None = None
+    ) -> dict[str, Any] | None:
+        """`klar_at` sätts när `klar` blir True och nollas när den blir False."""
+        ...
+
+    async def list_lead_tasks(
+        self, tenant_id: str, *, prospect_id: str | None = None, bara_oppna: bool = False
+    ) -> list[dict[str, Any]]:
+        """Förfallodag stigande, uppgifter utan förfallodag sist."""
+        ...
+
+    async def list_status_logg(
+        self, tenant_id: str, *, prospect_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Nyast först."""
+        ...
+
+    async def list_lead_views(self, tenant_id: str) -> list[dict[str, Any]]: ...
+
+    async def create_lead_view(
+        self, tenant_id: str, *, namn: str, filter: dict[str, Any]
+    ) -> dict[str, Any]: ...
+
+    async def delete_lead_view(self, tenant_id: str, view_id: str) -> bool: ...
 
     async def spara_bedomning(
         self, tenant_id: str, prospect_id: str, *, bedomning: dict[str, Any]

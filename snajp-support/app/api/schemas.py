@@ -78,6 +78,8 @@ class LeadsConfigRequest(BaseModel):
     )
     icp: dict | None = None
     eskalering: "EskaleringRequest | None" = None
+    automation: "AutomationRequest | None" = None
+    crm_synk: "CrmSynkRequest | None" = None
 
 
 class EskaleringRequest(BaseModel):
@@ -91,6 +93,46 @@ class EskaleringRequest(BaseModel):
     prisfragor: bool | None = None
     negativt_svar: bool | None = None
     juridik: bool | None = None
+
+
+class AutomationTypRequest(BaseModel):
+    """En lead-typs regler (app/leads/automation.py). Fältvis: en växel
+    skickar bara sitt eget fält."""
+
+    model_config = {"extra": "forbid"}
+
+    utkast_auto: bool | None = None
+    #: 0 = ingen uppföljning alls.
+    uppfoljning_dagar: int | None = Field(default=None, ge=0, le=60)
+
+
+class AutomationPerTypRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    iris: AutomationTypRequest | None = None
+    lista: AutomationTypRequest | None = None
+    import_: AutomationTypRequest | None = Field(default=None, alias="import")
+    inkorg: AutomationTypRequest | None = None
+
+
+class AutomationRequest(BaseModel):
+    """Automationsreglerna per lead-typ. Sammanslås fältvis per typ i
+    PUT /api/leads/config — resten står kvar."""
+
+    model_config = {"extra": "forbid"}
+
+    per_typ: AutomationPerTypRequest | None = None
+    jev_bortval: bool | None = None
+
+
+class CrmSynkRequest(BaseModel):
+    """Envägssynk ut (app/leads/crm_synk.py). `leverantor` None stänger av.
+    Integrationen ska bära hemligheten `api_key`."""
+
+    model_config = {"extra": "forbid"}
+
+    leverantor: Literal["hubspot", "pipedrive"] | None = None
+    integration_id: str | None = Field(default=None, max_length=64)
 
 
 LeadsConfigRequest.model_rebuild()
@@ -328,7 +370,8 @@ class TillIrisRequest(BaseModel):
     radens metadata. Körningen syns i Iris › Körningar."""
 
     item_ids: list[str] | None = None
-    scope: Literal["research", "research_and_draft"] = "research_and_draft"
+    #: None = automationsreglerna avgör (utkast_auto för listans typ).
+    scope: Literal["research", "research_and_draft"] | None = None
     is_test: bool = False
 
 

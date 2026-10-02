@@ -30,7 +30,7 @@ from ..leads.autonomy import kan_aktivera_auto_send
 from ..leads.autonomy import normalize as normalize_autonomy
 from ..leads.befordran import saknade_falt
 from ..leads.rollkoppling import med_rollflagga
-from ..leads import eskalering
+from ..leads import automation, crm_synk, eskalering
 from ..leads.business_context import (
     MissingBusinessContextError,
     ar_ifyllt as business_context_ar_ifyllt,
@@ -505,9 +505,24 @@ async def list_prospects(request: Request, tenant: dict = Depends(require_tenant
     # gamla default-checkboxen ska inte dyka upp som "fynd" hos en kund.
     if tenant["tenant_id"] != DEFAULT_TENANT_ID:
         prospects = [p for p in prospects if p.get("origin") != "example"]
+    # Senaste händelse (Leads Suite): EN läsning av statusloggen, grupperad
+    # här, i stället för en fråga per prospekt.
+    senast: dict[str, str] = {}
+    for rad in await request.app.state.storage.list_status_logg(tenant["tenant_id"]):
+        pid = str(rad["prospect_id"])
+        if rad["created_at"] > senast.get(pid, ""):
+            senast[pid] = rad["created_at"]
     # rollkoppling_oklar: underlag för intresseavvägningen, härlett vid
     # läsning — se app/leads/rollkoppling.py för varför den inte lagras.
-    return {"prospects": [med_rollflagga(p) for p in prospects]}
+    return {
+        "prospects": [
+            {
+                **med_rollflagga(p),
+                "senaste_handelse_at": senast.get(str(p["id"])) or p.get("created_at"),
+            }
+            for p in prospects
+        ]
+    }
 
 
 @router.get("/api/leads/prospects/{prospect_id}")
@@ -1192,6 +1207,8 @@ async def get_leads_config(request: Request, tenant: dict = Depends(require_tena
         ],
         "icp": normalize_icp(settings.get("icp")),
         "eskalering": eskalering.normalisera(settings.get("eskalering")),
+        "automation": automation.normalisera(settings.get("automation")),
+        "crm_synk": _crm_synk_val(settings),
         # Valen som finns att välja MELLAN, inte kundens val. UI:t ska kunna
         # rendera en lista utan att ha en egen kopia av geo.py och sni.py —
         # en andra kopia hade drivit isär, och symptomet blivit att ett
@@ -1243,6 +1260,24 @@ async def put_leads_config(
                 **payload.eskalering.model_dump(exclude_none=True),
             }
         )
+    if payload.automation is not None:
+        # Fältvis per typ, samma princip som eskaleringen.
+        regler = automation.normalisera(current.get("automation"))
+        andrat = payload.automation.model_dump(exclude_none=True, by_alias=True)
+        for typ, falt in (andrat.get("per_typ") or {}).items():
+            regler["per_typ"][typ].update(falt)
+        if "jev_bortval" in andrat:
+            regler["jev_bortval"] = andrat["jev_bortval"]
+        merged["automation"] = automation.normalisera(regler)
+    if payload.crm_synk is not None:
+        val = payload.crm_synk.model_dump()
+        if val["integration_id"]:
+            kraev_uuid(val["integration_id"], "Integrationen")
+            from ..integrationer import lagring as integrationer
+
+            if not await integrationer.hamta(storage, tenant["tenant_id"], val["integration_id"]):
+                raise HTTPException(status_code=422, detail="Integrationen finns inte.")
+        merged["crm_synk"] = val
 
     # auto_send-grinden körs EFTER sammanslagningen, mot det ICP som faktiskt
     # kommer att gälla. Hade den körts mot `current` kunde en och samma PUT
@@ -1277,6 +1312,17 @@ async def put_leads_config(
         "autonomy_description": describe_autonomy(autonomy),
         "icp": normalize_icp(saved.get("icp")),
         "eskalering": eskalering.normalisera(saved.get("eskalering")),
+        "automation": automation.normalisera(saved.get("automation")),
+        "crm_synk": _crm_synk_val(saved),
+    }
+
+
+def _crm_synk_val(settings: dict) -> dict:
+    val = settings.get("crm_synk") if isinstance(settings.get("crm_synk"), dict) else {}
+    leverantor = val.get("leverantor")
+    return {
+        "leverantor": leverantor if leverantor in ("hubspot", "pipedrive") else None,
+        "integration_id": val.get("integration_id") or None,
     }
 
 
@@ -1401,11 +1447,24 @@ async def patch_prospect(
     if not fields:
         raise HTTPException(status_code=422, detail="Inga fält att uppdatera.")
 
+    # Statusbyte härifrån är alltid en människas val (statusloggen, 086).
+    if "status" in fields:
+        fields["status_kalla"] = "manuell"
     updated = await request.app.state.storage.update_prospect(
         tenant["tenant_id"], prospect_id, **fields
     )
     if not updated:
         raise HTTPException(status_code=404, detail="Prospektet finns inte.")
+    if "status" in fields:
+        asyncio.create_task(
+            crm_synk.synka_prospekt(
+                request.app.state.storage,
+                tenant["tenant_id"],
+                updated,
+                handelse="status",
+                text=fields["status"],
+            )
+        )
     return {"prospect": updated}
 
 
@@ -1433,7 +1492,12 @@ async def _korningens_profil(storage, tenant_id: str, overrides: dict | None) ->
     settings = await storage.get_agent_settings(tenant_id, agent_type="leads")
     profil = await sakerstall_profil(storage, tenant_id)
     icp = normalize_icp(_med_overrides(settings.get("icp"), overrides) or {})
-    korningens = {**slå_ihop(profil, icp), "version": profil.get("version")}
+    korningens = {
+        **slå_ihop(profil, icp),
+        "version": profil.get("version"),
+        # Läses av jev.triage: False = Jev bedömer men väljer aldrig bort.
+        "jev_bortval": automation.normalisera(settings.get("automation"))["jev_bortval"],
+    }
     return korningens, som_icp(korningens, icp)
 
 
@@ -1489,7 +1553,9 @@ async def _samla_korningens_prospekt(
     """
     tenant_id = tenant["tenant_id"]
     origin_namn = "test" if payload.is_test else "manual"
-    origin_fynd = "test" if payload.is_test else "import"
+    # 'iris' (migration 086): skiljer Iris egna fynd från en CSV-import, så
+    # automationsreglerna per typ träffar rätt (app/leads/automation.py).
+    origin_fynd = "test" if payload.is_test else "iris"
     overrides = (
         payload.overrides.model_dump(exclude_none=True)
         if payload.overrides and payload.overrides.har_nagot()
@@ -1769,7 +1835,7 @@ async def _fyll_pa(app_state, tenant: dict, batch_id: str) -> None:
             break
         kandidat = k["kandidater"].pop(0)
         prospect = await _skapa_prospekt_ur_kandidat(
-            storage, tenant_id, kandidat, "test" if k.get("is_test") else "import"
+            storage, tenant_id, kandidat, "test" if k.get("is_test") else "iris"
         )
         barn = await _lagg_prospektjobb(
             app_state,
@@ -2506,6 +2572,14 @@ async def listrad_till_prospekt(
     return {"prospect": prospect, "skapad": skapad}
 
 
+def _listans_origin(lista: dict) -> str:
+    """Härkomsten för en listas rader: 'test' skyddas av spärr noll, en
+    CSV-import blir 'import', allt annat 'lista' (migration 086)."""
+    if lista.get("is_test"):
+        return "test"
+    return "import" if lista.get("kalla") == "import" else "lista"
+
+
 async def _befordra_listrad(storage, tenant_id: str, lista: dict, rad: dict) -> tuple[dict, bool]:
     """Listrad → prospekt (dedup på bolagsnamn casefold). Telefon och orgnr
     (migration 081) följer med via profil-allowlisten. Returnerar
@@ -2524,7 +2598,7 @@ async def _befordra_listrad(storage, tenant_id: str, lista: dict, rad: dict) -> 
         company_name=namn,
         contact_name=rad.get("contact_name"),
         contact_email=rad.get("contact_email"),
-        origin="test" if lista.get("is_test") else "import",
+        origin=_listans_origin(lista),
         profil={
             k: rad[k]
             for k in ("website", "ort", "contact_role", "contact_level", "contact_phone", "orgnr")
@@ -2603,9 +2677,16 @@ async def listan_till_iris(
         raise HTTPException(status_code=422, detail="Ingen rad gick att flytta.")
 
     is_test = payload.is_test or bool(lista.get("is_test"))
+    scope = payload.scope
+    if scope is None:
+        regler = automation.normalisera(
+            (await storage.get_agent_settings(tenant_id, agent_type="leads")).get("automation")
+        )
+        typ = "import" if lista.get("kalla") == "import" else "lista"
+        scope = "research_and_draft" if regler["per_typ"][typ]["utkast_auto"] else "research"
     app_state = request.app.state
     batch_id = await app_state.jobs.create(tenant_id=tenant_id, status="processing")
-    k = iris_korning.ny_korning(mal=len(prospekt), scope=payload.scope, overrides=None, is_test=is_test)
+    k = iris_korning.ny_korning(mal=len(prospekt), scope=scope, overrides=None, is_test=is_test)
     k.update(kalla="lista", list_id=list_id, list_titel=lista.get("titel"))
     # Barnen är kända innan de köas: jobs och pagaende skrivs FÖRE kön, så
     # ett barn som rapporterar direkt (create_task-vägen) inte läser ett
@@ -2619,9 +2700,9 @@ async def listan_till_iris(
     await _spara_korning(app_state, tenant_id, batch_id, k)
     await _lagg_prospektjobb(
         app_state, tenant, prospekt,
-        scope=payload.scope, overrides=None, is_test=is_test, limit=len(prospekt), batch_id=batch_id,
+        scope=scope, overrides=None, is_test=is_test, limit=len(prospekt), batch_id=batch_id,
     )
-    return {"batch_id": batch_id, "prospekt": len(prospekt), "nya": nya, "scope": payload.scope}
+    return {"batch_id": batch_id, "prospekt": len(prospekt), "nya": nya, "scope": scope}
 
 
 async def _run_list_job(app_state, payload: dict) -> None:

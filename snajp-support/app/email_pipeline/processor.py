@@ -246,6 +246,8 @@ async def _hantera_lead(storage: Storage, tenant_id: str, email: dict[str, Any],
             prospect_id = prospekt["id"]
         except Exception:  # noqa: BLE001 — ett prospekt som inte gick att skapa stoppar inte leadet
             logger.exception("Kunde inte skapa prospekt ur inkommande lead %s", email_id)
+        else:
+            await _utkast_for_inkorgslead(storage, tenant_id, prospekt)
     svar: dict[str, Any] | None = None
     if thread_id and not get_settings().is_simulation():
         try:
@@ -268,6 +270,41 @@ async def _hantera_lead(storage: Storage, tenant_id: str, email: dict[str, Any],
         detail={"prospect_id": prospect_id, "thread_id": thread_id, "svar": (svar or {}).get("klass")},
     )
     return {"action": "lead", "prospect_id": prospect_id, "thread_id": thread_id}
+
+
+async def _utkast_for_inkorgslead(storage: Storage, tenant_id: str, prospekt: dict[str, Any]) -> None:
+    """Köar research och utkast för ett NYTT inkorgslead när kunden slagit på
+    `inkorg.utkast_auto` (app/leads/automation.py). Standard av: då gör
+    inkorgen exakt det den gjorde innan reglerna fanns. Fäller aldrig leadet."""
+    from ..leads import automation
+
+    try:
+        regler = automation.normalisera(
+            (await storage.get_agent_settings(tenant_id, agent_type="leads")).get("automation")
+        )
+        if not regler["per_typ"]["inkorg"]["utkast_auto"] or get_settings().is_simulation():
+            return
+        from ..api.leads import _lagg_prospektjobb
+        from ..main import app
+
+        if getattr(app.state, "jobs", None) is None:
+            logger.warning("Jobbstoret saknas; inget utkast köat för inkorgsleadet %s.", prospekt.get("id"))
+            return
+        tenant = await storage.get_tenant(tenant_id) or {}
+        await _lagg_prospektjobb(
+            app.state,
+            {
+                "tenant_id": tenant_id,
+                "tenant_name": str(tenant.get("company_name") or tenant.get("name") or ""),
+            },
+            [prospekt],
+            scope="research_and_draft",
+            overrides=None,
+            is_test=False,
+            limit=1,
+        )
+    except Exception:  # noqa: BLE001 — automationen får inte fälla inkorgen
+        logger.exception("Kunde inte köa utkast för inkorgsleadet %s", prospekt.get("id"))
 
 
 def ar_snajp_notis(subject: str | None, body: str | None) -> bool:

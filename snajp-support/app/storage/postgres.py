@@ -1309,6 +1309,7 @@ class PostgresStorage:
                 select t.*,
                        p.company_name,
                        p.contact_email,
+                       p.origin,
                        count(m.id) filter (
                          where m.direction = 'outbound' and m.sent_at is not null
                        ) as outbound_sent_count,
@@ -1326,7 +1327,7 @@ class PostgresStorage:
                 left join outreach_messages m on m.thread_id = t.id
                 left join send_queue q on q.thread_id = t.id
                 where t.tenant_id = $1
-                group by t.id, p.company_name, p.contact_email
+                group by t.id, p.company_name, p.contact_email, p.origin
                 """,
                 tenant_id,
             )
@@ -1705,6 +1706,7 @@ class PostgresStorage:
         contact_role: str | None = None,
         contact_level: str | None = None,
         contact_form_url: str | None = None,
+        status_kalla: str = "kod",
     ) -> dict[str, Any] | None:
         # Dynamisk SET-lista: en PATCH ska kunna sätta ETT fält utan att nolla
         # de andra, och en fast update-sats hade krävt att anroparen skickar
@@ -1733,13 +1735,171 @@ class PostgresStorage:
             f"{name} = ${index}" for index, name in enumerate(fields, start=3)
         )
         async with self._scoped(tenant_id) as conn:
+            # Statusloggen (migration 086) i SAMMA transaktion: radlåset gör
+            # att `fran` är den status uppdateringen faktiskt ersatte.
+            fore = None
+            if status is not None:
+                fore = await conn.fetchrow(
+                    "select status from prospects where tenant_id = $1 and id = $2 for update",
+                    tenant_id,
+                    prospect_id,
+                )
             record = await conn.fetchrow(
                 f"update prospects set {assignments} where tenant_id = $1 and id = $2 returning *",
                 tenant_id,
                 prospect_id,
                 *fields.values(),
             )
+            if record is not None and fore is not None and fore["status"] != status:
+                await conn.execute(
+                    """
+                    insert into prospect_status_logg (tenant_id, prospect_id, fran, till, kalla)
+                    values ($1, $2, $3, $4, $5)
+                    """,
+                    tenant_id,
+                    prospect_id,
+                    fore["status"],
+                    status,
+                    status_kalla,
+                )
         return _avkoda_prospekt(_row(record))
+
+    # -- Leads Suite (migration 086) -----------------------------------------
+
+    async def add_lead_note(self, tenant_id: str, *, prospect_id: str, text: str) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                insert into lead_anteckningar (tenant_id, prospect_id, text)
+                values ($1, $2, $3) returning *
+                """,
+                tenant_id,
+                prospect_id,
+                text,
+            )
+        return _row(record)
+
+    async def list_lead_notes(self, tenant_id: str, prospect_id: str) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select * from lead_anteckningar
+                where tenant_id = $1 and prospect_id = $2
+                order by created_at, id
+                """,
+                tenant_id,
+                prospect_id,
+            )
+        return [_row(r) for r in records]
+
+    async def add_lead_task(
+        self, tenant_id: str, *, prospect_id: str, titel: str, forfaller: str | None
+    ) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                insert into lead_uppgifter (tenant_id, prospect_id, titel, forfaller)
+                values ($1, $2, $3, $4) returning *
+                """,
+                tenant_id,
+                prospect_id,
+                titel,
+                date.fromisoformat(forfaller) if forfaller else None,
+            )
+        return _row(record)
+
+    async def update_lead_task(
+        self, tenant_id: str, task_id: str, *, klar: bool | None = None
+    ) -> dict[str, Any] | None:
+        async with self._scoped(tenant_id) as conn:
+            if klar is None:
+                record = await conn.fetchrow(
+                    "select * from lead_uppgifter where tenant_id = $1 and id = $2",
+                    tenant_id,
+                    task_id,
+                )
+            else:
+                # klar_at rörs bara när klar faktiskt byter värde, så en
+                # upprepad PATCH inte flyttar tidpunkten.
+                record = await conn.fetchrow(
+                    """
+                    update lead_uppgifter
+                    set klar_at = case
+                          when klar = $3 then klar_at
+                          when $3 then now()
+                          else null
+                        end,
+                        klar = $3
+                    where tenant_id = $1 and id = $2
+                    returning *
+                    """,
+                    tenant_id,
+                    task_id,
+                    klar,
+                )
+        return _row(record) if record else None
+
+    async def list_lead_tasks(
+        self, tenant_id: str, *, prospect_id: str | None = None, bara_oppna: bool = False
+    ) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select * from lead_uppgifter
+                where tenant_id = $1
+                  and ($2::uuid is null or prospect_id = $2::uuid)
+                  and (not $3 or not klar)
+                order by forfaller asc nulls last, created_at
+                """,
+                tenant_id,
+                prospect_id,
+                bara_oppna,
+            )
+        return [_row(r) for r in records]
+
+    async def list_status_logg(
+        self, tenant_id: str, *, prospect_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select * from prospect_status_logg
+                where tenant_id = $1 and ($2::uuid is null or prospect_id = $2::uuid)
+                order by created_at desc, id
+                """,
+                tenant_id,
+                prospect_id,
+            )
+        return [_row(r) for r in records]
+
+    async def list_lead_views(self, tenant_id: str) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                "select * from lead_vyer where tenant_id = $1 order by created_at",
+                tenant_id,
+            )
+        return [_avkoda_jsonb(_row(r), "filter") for r in records]
+
+    async def create_lead_view(
+        self, tenant_id: str, *, namn: str, filter: dict[str, Any]
+    ) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                "insert into lead_vyer (tenant_id, namn, filter) values ($1, $2, $3::jsonb) returning *",
+                tenant_id,
+                namn,
+                json.dumps(filter, ensure_ascii=False),
+            )
+        return _avkoda_jsonb(_row(record), "filter")
+
+    async def delete_lead_view(self, tenant_id: str, view_id: str) -> bool:
+        async with self._scoped(tenant_id) as conn:
+            resultat = await conn.execute(
+                "delete from lead_vyer where tenant_id = $1 and id = $2",
+                tenant_id,
+                view_id,
+            )
+        return resultat.split()[-1] != "0"
 
     async def spara_bedomning(
         self, tenant_id: str, prospect_id: str, *, bedomning: dict[str, Any]

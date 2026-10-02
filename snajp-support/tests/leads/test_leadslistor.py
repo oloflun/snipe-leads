@@ -307,7 +307,7 @@ async def test_listrad_blir_prospekt_med_proveniens():
 
     assert svar["skapad"] is True
     p = svar["prospect"]
-    assert p["origin"] == "import", "en riktig listas rad ska vara skickbar"
+    assert p["origin"] == "lista", "en riktig listas rad ska vara skickbar (inte test/example)"
     assert p["contact_email"] == "kundservice@nordkapmoduler.se"
     assert p["website"] == "https://nordkapmoduler.se"
     assert p["ort"] == "Umeå"

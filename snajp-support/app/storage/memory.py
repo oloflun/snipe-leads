@@ -193,6 +193,11 @@ class MemoryStorage:
         # Leadslistor (tillägget 'leadlists', migration 060).
         self.lead_lists: dict[str, list[dict[str, Any]]] = {}
         self.lead_list_items: list[dict[str, Any]] = []
+        # Leads Suite (migration 086): platta listor, samma form som tabellerna.
+        self.lead_anteckningar: list[dict[str, Any]] = []
+        self.lead_uppgifter: list[dict[str, Any]] = []
+        self.prospect_status_logg: list[dict[str, Any]] = []
+        self.lead_vyer: list[dict[str, Any]] = []
         # Bokföring (migration 045). Filen sparas aldrig — bara sha256:n.
         self.bk_underlag: dict[str, list[dict[str, Any]]] = {}
         self.bk_verifikat: dict[str, list[dict[str, Any]]] = {}
@@ -981,6 +986,7 @@ class MemoryStorage:
                     **thread,
                     "company_name": p.get("company_name"),
                     "contact_email": p.get("contact_email"),
+                    "origin": p.get("origin"),
                     "outbound_sent_count": len(skickade),
                     "last_outbound_sent_at": max((m["sent_at"] for m in skickade), default=None),
                     # Osänt utkast ELLER aktiv köpost räknas — båda betyder att
@@ -1255,10 +1261,25 @@ class MemoryStorage:
         contact_role: str | None = None,
         contact_level: str | None = None,
         contact_form_url: str | None = None,
+        status_kalla: str = "kod",
     ) -> dict[str, Any] | None:
         prospect = await self.get_prospect(tenant_id, prospect_id)
         if not prospect:
             return None
+        if status is not None and status != prospect.get("status"):
+            if status_kalla not in ("kod", "manuell", "import"):
+                raise ValueError(f"status_kalla={status_kalla!r} bryter mot checken (086).")
+            self.prospect_status_logg.append(
+                {
+                    "id": str(uuid.uuid4()),
+                    "tenant_id": tenant_id,
+                    "prospect_id": prospect_id,
+                    "fran": prospect.get("status"),
+                    "till": status,
+                    "kalla": status_kalla,
+                    "created_at": _now(),
+                }
+            )
         for field, value in (
             ("status", status),
             ("icp_fit", icp_fit),
@@ -1276,6 +1297,114 @@ class MemoryStorage:
             if value is not None:
                 prospect[field] = value
         return prospect
+
+    # -- Leads Suite (migration 086) -----------------------------------------
+
+    def _ager_prospekt(self, tenant_id: str, prospect_id: str) -> None:
+        # Speglar FK + RLS: Postgres fäller en rad mot ett prospekt som inte
+        # finns hos tenanten, så minnet ska också göra det.
+        if not any(p["id"] == prospect_id for p in self.prospects.get(tenant_id, [])):
+            raise ValueError(f"Prospektet {prospect_id} finns inte hos tenanten.")
+
+    @staticmethod
+    def _nyast_forst(rader: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        # reversed först: lika tidsstämplar ska också ge den senast skrivna först.
+        return [dict(r) for r in sorted(reversed(rader), key=lambda r: r["created_at"], reverse=True)]
+
+    async def add_lead_note(self, tenant_id: str, *, prospect_id: str, text: str) -> dict[str, Any]:
+        self._ager_prospekt(tenant_id, prospect_id)
+        rad = {
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "prospect_id": prospect_id,
+            "text": text,
+            "created_at": _now(),
+        }
+        self.lead_anteckningar.append(rad)
+        return dict(rad)
+
+    async def list_lead_notes(self, tenant_id: str, prospect_id: str) -> list[dict[str, Any]]:
+        return [
+            dict(r)
+            for r in self.lead_anteckningar
+            if r["tenant_id"] == tenant_id and r["prospect_id"] == prospect_id
+        ]
+
+    async def add_lead_task(
+        self, tenant_id: str, *, prospect_id: str, titel: str, forfaller: str | None
+    ) -> dict[str, Any]:
+        self._ager_prospekt(tenant_id, prospect_id)
+        rad = {
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "prospect_id": prospect_id,
+            "titel": titel,
+            # Samma form som Postgres-vägen: date → ISO-sträng.
+            "forfaller": date.fromisoformat(forfaller).isoformat() if forfaller else None,
+            "klar": False,
+            "klar_at": None,
+            "created_at": _now(),
+        }
+        self.lead_uppgifter.append(rad)
+        return dict(rad)
+
+    async def update_lead_task(
+        self, tenant_id: str, task_id: str, *, klar: bool | None = None
+    ) -> dict[str, Any] | None:
+        for rad in self.lead_uppgifter:
+            if rad["id"] == task_id and rad["tenant_id"] == tenant_id:
+                if klar is not None and klar != rad["klar"]:
+                    rad["klar"] = klar
+                    rad["klar_at"] = _now() if klar else None
+                return dict(rad)
+        return None
+
+    async def list_lead_tasks(
+        self, tenant_id: str, *, prospect_id: str | None = None, bara_oppna: bool = False
+    ) -> list[dict[str, Any]]:
+        rader = [
+            r
+            for r in self.lead_uppgifter
+            if r["tenant_id"] == tenant_id
+            and (prospect_id is None or r["prospect_id"] == prospect_id)
+            and not (bara_oppna and r["klar"])
+        ]
+        rader.sort(key=lambda r: (r["forfaller"] is None, r["forfaller"] or "", r["created_at"]))
+        return [dict(r) for r in rader]
+
+    async def list_status_logg(
+        self, tenant_id: str, *, prospect_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        return self._nyast_forst(
+            [
+                r
+                for r in self.prospect_status_logg
+                if r["tenant_id"] == tenant_id and (prospect_id is None or r["prospect_id"] == prospect_id)
+            ]
+        )
+
+    async def list_lead_views(self, tenant_id: str) -> list[dict[str, Any]]:
+        return [dict(r) for r in self.lead_vyer if r["tenant_id"] == tenant_id]
+
+    async def create_lead_view(
+        self, tenant_id: str, *, namn: str, filter: dict[str, Any]
+    ) -> dict[str, Any]:
+        rad = {
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "namn": namn,
+            "filter": json.loads(json.dumps(filter)),
+            "created_at": _now(),
+        }
+        self.lead_vyer.append(rad)
+        return dict(rad)
+
+    async def delete_lead_view(self, tenant_id: str, view_id: str) -> bool:
+        fore = len(self.lead_vyer)
+        self.lead_vyer = [
+            r for r in self.lead_vyer if not (r["id"] == view_id and r["tenant_id"] == tenant_id)
+        ]
+        return len(self.lead_vyer) < fore
 
     async def spara_bedomning(
         self, tenant_id: str, prospect_id: str, *, bedomning: dict[str, Any]

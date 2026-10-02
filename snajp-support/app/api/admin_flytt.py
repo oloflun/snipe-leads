@@ -323,7 +323,7 @@ async def _importera_korning(storage, tenant_id: str, post: dict[str, Any], fran
         await storage.create_prospect(
             tenant_id, company_name=namn, contact_name=p.get("contact_name"),
             contact_email=p.get("contact_email"),
-            origin=str(p.get("origin") or "import") if p.get("origin") in ("manual", "example", "import", "test", "inkorg") else "import",
+            origin=str(p.get("origin") or "import") if p.get("origin") in ("manual", "example", "import", "test", "inkorg", "lista", "iris") else "import",
             profil=profil,
         )
         nya += 1
