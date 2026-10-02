@@ -378,7 +378,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                     gav bara 2.51:1 här. text-ochre ger 6.54:1 mot den
                     ochre-tonade railbakgrunden. */}
                 <span className="inline-flex items-center rounded-input border border-ochre/40 bg-ochre/10 px-2 py-0.5 text-[0.75rem] font-medium text-ochre">
-                  Demo · exempeldata
+                  {text({ sv: "Demo · exempeldata", en: "Demo · sample data" })}
                 </span>
               </p>
             ) : (

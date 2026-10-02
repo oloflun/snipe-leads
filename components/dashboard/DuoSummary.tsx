@@ -68,7 +68,7 @@ export function DuoSummary() {
           {text(copy.rubrik)}
         </h2>
         {markning ? (
-          <span className="kicker rounded-input bg-ochre/12 px-2.5 py-1 text-warning">
+          <span className="rounded-input bg-ochre/12 px-2.5 py-1 text-[0.8125rem] font-medium text-warning">
             {markning}
           </span>
         ) : null}

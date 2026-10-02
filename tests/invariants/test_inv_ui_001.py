@@ -120,7 +120,6 @@ _SKULD_2026_09_28 = {
     "components/snajp/Dashboard.tsx",
     "components/SoulEditor.tsx",
     "components/admin/Testkorningar.tsx",
-    "components/dashboard/DuoSummary.tsx",
     "components/leads/IrisEskalering.tsx",
     "components/leads/IrisInstallningar.tsx",
     "components/settings/NotisSettings.tsx",
