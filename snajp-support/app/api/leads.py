@@ -71,6 +71,7 @@ from .schemas import (
     ExempelbolagRequest,
     LeadsBatchRequest,
     LeadsConfigRequest,
+    KombineraListorRequest,
     LeadsListaRequest,
     LeadsRunOverrides,
     ProspectPatchRequest,
@@ -2295,6 +2296,96 @@ async def bestall_leadslista(
     else:
         asyncio.create_task(_run_list_job(request.app.state, post))
     return {"list_id": lista["id"], "job_id": job_id, "status": "bestalld"}
+
+
+#: Kolumner som följer med när en rad kopieras in i en kombinerad lista.
+_LISTRADSFALT = (
+    "item_typ", "company_name", "website", "ort", "contact_name", "contact_role",
+    "contact_email", "contact_level", "contact_phone", "orgnr", "source_name",
+    "source_url", "signal", "signal_detalj",
+)
+
+
+def _har_kontaktvag(rad: dict, filter: str) -> bool:
+    tel, mejl = bool(rad.get("contact_phone")), bool(rad.get("contact_email"))
+    return {"alla": True, "telefon": tel, "mejl": mejl, "bada": tel and mejl}[filter]
+
+
+def _dedupnyckel(rad: dict) -> str:
+    """orgnr när det finns (migration 081), annars bolagsnamnet casefold:
+    samma bolag i två listor ska bli EN rad i den kombinerade."""
+    orgnr = "".join(ch for ch in str(rad.get("orgnr") or "") if ch.isdigit())
+    return f"orgnr:{orgnr}" if orgnr else f"namn:{str(rad.get('company_name') or '').casefold().strip()}"
+
+
+@router.post("/api/leads/listor/kombinera", status_code=201)
+async def kombinera_leadslistor(
+    request: Request, payload: KombineraListorRequest, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Bygger en skräddarsydd lista ur flera färdiga (migration 082). Ingen
+    sökning, ingen LLM, ingen budgetdragning: bara kopiering med dedup och
+    filter. Källistorna står orörda. 404 om någon källa saknas, 409 om någon
+    inte är klar, 422 om filtret inte lämnar en enda rad."""
+    storage = request.app.state.storage
+    tenant_id = tenant["tenant_id"]
+    kallor: list[dict] = []
+    for lid in payload.list_ids:
+        kraev_uuid(lid, "listan")
+        lista = await storage.get_lead_list(tenant_id, lid)
+        if not lista:
+            raise HTTPException(status_code=404, detail="En av källistorna finns inte.")
+        if lista.get("status") != "klar":
+            raise HTTPException(status_code=409, detail=f"Listan {lista['titel']!r} är inte klar än.")
+        kallor.append(lista)
+
+    rader: list[dict] = []
+    sedda: set[str] = set()
+    dubbletter = 0
+    for kalla in kallor:
+        for rad in await storage.list_lead_list_items(tenant_id, kalla["id"]):
+            if not _har_kontaktvag(rad, payload.kontaktfilter):
+                continue
+            nyckel = _dedupnyckel(rad)
+            if nyckel in sedda:
+                dubbletter += 1
+                continue
+            sedda.add(nyckel)
+            rader.append(rad)
+    if not rader:
+        raise HTTPException(status_code=422, detail="Inga rader matchade filtret i de valda listorna.")
+
+    # ICP:n på den kombinerade listan är unionen av källornas, så vyn kan visa
+    # branscher och orter utan att läsa källistorna.
+    icp: dict = {}
+    for kalla in kallor:
+        for f, v in (kalla.get("icp") or {}).items():
+            if isinstance(v, list):
+                icp.setdefault(f, [])
+                icp[f] += [x for x in v if x not in icp[f]]
+            elif f not in icp:
+                icp[f] = v
+    ny = await storage.create_lead_list(
+        tenant_id,
+        titel=payload.titel,
+        icp=icp,
+        # ponytail: antal är check-begränsat 1–200; en kombinerad lista kan
+        # bära fler rader än så, kolumnen säger då taket, item_count sanningen.
+        antal=min(len(rader), 200),
+        is_test=any(bool(k.get("is_test")) for k in kallor),
+        kalla="kombinerad",
+        kallistor=[k["id"] for k in kallor],
+        kontaktfilter=payload.kontaktfilter,
+    )
+    nya: list[dict] = []
+    for rad in rader:
+        nya.append(
+            await storage.add_lead_list_item(
+                tenant_id, list_id=ny["id"], **{f: rad.get(f) for f in _LISTRADSFALT}
+            )
+        )
+    await storage.set_lead_list_status(tenant_id, ny["id"], status="klar")
+    ny["status"] = "klar"
+    return {"list": ny, "items": nya, "dubbletter_bort": dubbletter}
 
 
 @router.get("/api/leads/listor")

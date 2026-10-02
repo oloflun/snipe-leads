@@ -1422,11 +1422,27 @@ class MemoryStorage:
     _LEAD_LIST_STATUSAR = ("bestalld", "byggs", "klar", "fel")
     _LEAD_ITEM_TYPER = ("bolag", "privatperson")
 
+    _LEAD_LIST_KALLOR = ("sok", "kombinerad", "import")
+    _KONTAKTFILTER = ("alla", "telefon", "mejl", "bada")
+
     async def create_lead_list(
-        self, tenant_id: str, *, titel: str, icp: dict[str, Any], antal: int, is_test: bool = False
+        self,
+        tenant_id: str,
+        *,
+        titel: str,
+        icp: dict[str, Any],
+        antal: int,
+        is_test: bool = False,
+        kalla: str = "sok",
+        kallistor: list[str] | None = None,
+        kontaktfilter: str | None = None,
     ) -> dict[str, Any]:
         if not 1 <= antal <= 200:
             raise ValueError(f"antal={antal} bryter mot lead_lists-checken (1–200).")
+        if kalla not in self._LEAD_LIST_KALLOR:
+            raise ValueError(f"kalla={kalla!r} bryter mot lead_lists-checken (082).")
+        if kontaktfilter is not None and kontaktfilter not in self._KONTAKTFILTER:
+            raise ValueError(f"kontaktfilter={kontaktfilter!r} bryter mot lead_lists-checken (082).")
         rad = {
             "id": str(uuid.uuid4()),
             "tenant_id": tenant_id,
@@ -1436,6 +1452,9 @@ class MemoryStorage:
             "status": "bestalld",
             "felorsak": None,
             "is_test": is_test,
+            "kalla": kalla,
+            "kallistor": list(kallistor) if kallistor else None,
+            "kontaktfilter": kontaktfilter,
             "created_at": _now(),
             "completed_at": None,
         }

@@ -37,6 +37,10 @@ type Lista = {
   created_at?: string | null;
   completed_at?: string | null;
   item_count?: number | null;
+  /** Migration 082: 'sok' | 'kombinerad' | 'import', källistornas id och filtret. */
+  kalla?: string | null;
+  kallistor?: string[] | null;
+  kontaktfilter?: string | null;
 };
 
 type ListRad = {
@@ -109,6 +113,20 @@ function synligaRader(items: ListRad[], filter: Kontaktfilter, sortering: Sorter
 }
 
 const T = {
+  kombineraRubrik: { sv: "Kombinera listor", en: "Combine lists" },
+  kombineraHjalp: {
+    sv: "Kryssa två eller fler klara listor. Dubbletter tas bort på organisationsnummer, källistorna rörs inte.",
+    en: "Tick two or more finished lists. Duplicates are removed by organisation number; the source lists are left untouched."
+  },
+  kombineraTitel: { sv: "Namn på den nya listan", en: "Name of the new list" },
+  kombineraPlaceholder: { sv: "Bygg i Västsverige", en: "Construction in western Sweden" },
+  kontaktvag: { sv: "Kontaktväg", en: "Contact channel" },
+  filterAlla: { sv: "Alla rader", en: "All rows" },
+  filterTelefon: { sv: "Med telefon", en: "With phone" },
+  filterMejl: { sv: "Med mejl", en: "With email" },
+  filterBada: { sv: "Med både telefon och mejl", en: "With both phone and email" },
+  kombinerarKnapp: { sv: "Kombinerar…", en: "Combining…" },
+  valjForKombination: { sv: "Välj för kombination", en: "Select for combination" },
   beskrivBolag: { sv: "Beskriv vilka bolag listan ska hitta.", en: "Describe which companies the list should find." },
   antalGranser: { sv: "Antal bolag: minst 1, högst 200.", en: "Number of companies: at least 1, at most 200." },
   listanBestalld: { sv: "Listan är beställd.", en: "The list is ordered." },
@@ -375,6 +393,45 @@ export function LeadslistorView() {
   const [vald, setVald] = useState<{ lista: Lista; items: ListRad[] } | null>(null);
   const [oppnar, setOppnar] = useState<string | null>(null);
   const [detaljFel, setDetaljFel] = useState<string | null>(null);
+  // Kombinera (migration 082): kryssa flera klara listor, bygg en ny ur dem.
+  const [valdaListor, setValdaListor] = useState<Set<string>>(new Set());
+  const [kombTitel, setKombTitel] = useState("");
+  const [kombFilter, setKombFilter] = useState<"alla" | "telefon" | "mejl" | "bada">("alla");
+  const [kombinerar, setKombinerar] = useState(false);
+  const [kombFel, setKombFel] = useState<string | null>(null);
+  const [kombKvitto, setKombKvitto] = useState<Localized | null>(null);
+
+  function vaxlaVald(id: string) {
+    setValdaListor((fore) => {
+      const nasta = new Set(fore);
+      if (nasta.has(id)) nasta.delete(id);
+      else nasta.add(id);
+      return nasta;
+    });
+  }
+
+  async function kombinera() {
+    setKombinerar(true);
+    setKombFel(null);
+    setKombKvitto(null);
+    try {
+      const ut = await anropa<{ list: Lista; items: ListRad[]; dubbletter_bort: number }>("/leads/listor/kombinera", {
+        method: "POST",
+        body: JSON.stringify({ titel: kombTitel.trim(), list_ids: [...valdaListor], kontaktfilter: kombFilter })
+      });
+      setKombKvitto({
+        sv: `${ut.list.titel}: ${ut.items.length} rader, ${ut.dubbletter_bort} dubbletter borttagna.`,
+        en: `${ut.list.titel}: ${ut.items.length} rows, ${ut.dubbletter_bort} duplicates removed.`
+      });
+      setValdaListor(new Set());
+      setKombTitel("");
+      await hamtaListor();
+    } catch (cause) {
+      setKombFel(felmeddelande(cause));
+    } finally {
+      setKombinerar(false);
+    }
+  }
 
   const hamtaListor = useCallback(async (tyst = false) => {
     if (!tyst) setListFel(null);
@@ -542,12 +599,74 @@ export function LeadslistorView() {
             <EmptyState title={text(T.ingaListor)} />
           </div>
         ) : (
+          <>
+          {listor.filter((l) => l.status === "klar").length >= 2 ? (
+            <div className="mt-4 rounded-card border border-ink/12 bg-paper2/40 p-4">
+              <p className="text-[15px] font-semibold">{text(T.kombineraRubrik)}</p>
+              <p className="mt-1 text-[13px] text-ink-subtle">{text(T.kombineraHjalp)}</p>
+              <div className="mt-3 flex flex-wrap items-end gap-3">
+                <label className="flex min-w-[220px] flex-1 flex-col gap-1 text-[13px] text-ink-muted">
+                  {text(T.kombineraTitel)}
+                  <input
+                    value={kombTitel}
+                    onChange={(e) => setKombTitel(e.target.value)}
+                    placeholder={text(T.kombineraPlaceholder)}
+                    className="focus-ring min-h-11 rounded-input border border-ink/15 bg-paper px-3 text-[15px]"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-[13px] text-ink-muted">
+                  {text(T.kontaktvag)}
+                  <select
+                    value={kombFilter}
+                    onChange={(e) => setKombFilter(e.target.value as typeof kombFilter)}
+                    className="focus-ring min-h-11 rounded-input border border-ink/15 bg-paper px-2 text-[15px] text-ink"
+                  >
+                    <option value="alla">{text(T.filterAlla)}</option>
+                    <option value="telefon">{text(T.filterTelefon)}</option>
+                    <option value="mejl">{text(T.filterMejl)}</option>
+                    <option value="bada">{text(T.filterBada)}</option>
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => void kombinera()}
+                  disabled={kombinerar || valdaListor.size < 2 || !kombTitel.trim()}
+                  className={cn(btnPrimary, "disabled:opacity-60")}
+                >
+                  {kombinerar
+                    ? text(T.kombinerarKnapp)
+                    : text({ sv: `Kombinera ${valdaListor.size} valda`, en: `Combine ${valdaListor.size} selected` })}
+                </button>
+              </div>
+              {kombFel ? (
+                <p role="alert" className="mt-3 text-[15px] text-danger">
+                  {kombFel}
+                </p>
+              ) : null}
+              {kombKvitto ? (
+                <p role="status" className="mt-3 text-[15px] text-moss">
+                  {text(kombKvitto)}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           <ul className="mt-4 divide-y divide-ink/15 border-y border-ink/15">
             {listor.map((lista) => {
               const oppen = vald?.lista.id === lista.id;
               const klar = lista.status === "klar";
               return (
                 <li key={lista.id} className="py-4">
+                  {klar ? (
+                    <label className="mb-2 flex items-center gap-2 text-[13px] text-ink-muted">
+                      <input
+                        type="checkbox"
+                        checked={valdaListor.has(lista.id)}
+                        onChange={() => vaxlaVald(lista.id)}
+                        className="h-4 w-4 accent-ink"
+                      />
+                      {text(T.valjForKombination)}
+                    </label>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => void oppna(lista)}
@@ -565,7 +684,12 @@ export function LeadslistorView() {
                         </p>
                         <p className="mt-1 text-[13px] text-ink-subtle">
                           {[
-                            text({ sv: `${lista.antal} beställda`, en: `${lista.antal} ordered` }),
+                            lista.kalla === "kombinerad"
+                              ? text({
+                                  sv: `Kombinerad av ${lista.kallistor?.length ?? 0} listor`,
+                                  en: `Combined from ${lista.kallistor?.length ?? 0} lists`
+                                })
+                              : text({ sv: `${lista.antal} beställda`, en: `${lista.antal} ordered` }),
                             typeof lista.item_count === "number"
                               ? text({ sv: `${lista.item_count} träffar`, en: `${lista.item_count} matches` })
                               : null,
@@ -612,6 +736,7 @@ export function LeadslistorView() {
               );
             })}
           </ul>
+          </>
         )}
 
         {detaljFel ? (

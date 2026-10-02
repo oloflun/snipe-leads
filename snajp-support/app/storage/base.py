@@ -716,8 +716,21 @@ class Storage(Protocol):
     # signatur som bara finns i ett lager är så halvårsbuggar föds.
 
     async def create_lead_list(
-        self, tenant_id: str, *, titel: str, icp: dict[str, Any], antal: int, is_test: bool = False
-    ) -> dict[str, Any]: ...
+        self,
+        tenant_id: str,
+        *,
+        titel: str,
+        icp: dict[str, Any],
+        antal: int,
+        is_test: bool = False,
+        kalla: str = "sok",
+        kallistor: list[str] | None = None,
+        kontaktfilter: str | None = None,
+    ) -> dict[str, Any]:
+        """`kalla`, `kallistor`, `kontaktfilter` (migration 082): en kombinerad
+        lista bär sina källistor och filtret som användes, så bygget går att
+        granska i efterhand. 'sok' för allt som byggs av en sökning."""
+        ...
 
     async def set_lead_list_status(
         self, tenant_id: str, list_id: str, *, status: str, felorsak: str | None = None

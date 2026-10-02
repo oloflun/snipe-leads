@@ -468,3 +468,81 @@ async def test_misslyckat_sajtuppslag_lamnar_raden_utan_adress_inte_fel():
     assert rad["status"] == "klar", "uppslaget får aldrig fälla listan"
     items = await storage.list_lead_list_items(TENANT, lista["id"])
     assert items[0]["contact_email"] is None
+
+
+# -- Kombinerade listor (migration 082) --------------------------------------
+
+
+async def _lista_med_rader(storage, titel, rader, *, status="klar", is_test=False):
+    lista = await storage.create_lead_list(TENANT, titel=titel, icp={"industries": [titel]}, antal=25, is_test=is_test)
+    for r in rader:
+        await storage.add_lead_list_item(TENANT, list_id=lista["id"], **r)
+    await storage.set_lead_list_status(TENANT, lista["id"], status=status)
+    return lista
+
+
+def _rad(namn, *, orgnr=None, tel=None, mejl=None):
+    return {"company_name": namn, "orgnr": orgnr, "contact_phone": tel, "contact_email": mejl,
+            "contact_name": "Test Testsson", "contact_role": "VD", "source_name": "merinfo"}
+
+
+async def _kombinera(storage, body):
+    from app.api.leads import kombinera_leadslistor
+    from app.api.schemas import KombineraListorRequest
+
+    class _Req:
+        app = type("A", (), {"state": type("S", (), {"storage": storage})()})()
+
+    return await kombinera_leadslistor(_Req(), KombineraListorRequest(**body), {"tenant_id": TENANT, "tenant_name": "Snajp"})
+
+
+async def test_kombinera_dedupar_pa_orgnr_och_namn():
+    storage = MemoryStorage()
+    a = await _lista_med_rader(storage, "Bygg Mölndal", [
+        _rad("Alfa Bygg AB", orgnr="556000-0001", tel="070-1"),
+        _rad("Beta Måleri AB", orgnr="556000-0002", mejl="info@beta.se"),
+        _rad("Gamma Golv AB", tel="031-3"),
+    ])
+    b = await _lista_med_rader(storage, "Bygg Göteborg", [
+        _rad("Alfa Bygg AB", orgnr="5560000001", tel="070-1"),      # samma orgnr, annat format
+        _rad("gamma golv ab", tel="031-3"),                          # samma namn, annat skiftläge
+        _rad("Delta Snickeri AB", orgnr="556000-0004", tel="070-4", mejl="d@delta.se"),
+    ])
+    ut = await _kombinera(storage, {"titel": "Bygg väst", "list_ids": [a["id"], b["id"]]})
+    assert ut["dubbletter_bort"] == 2
+    assert [r["company_name"] for r in ut["items"]] == ["Alfa Bygg AB", "Beta Måleri AB", "Gamma Golv AB", "Delta Snickeri AB"]
+    assert ut["list"]["kalla"] == "kombinerad" and ut["list"]["kallistor"] == [a["id"], b["id"]]
+    assert ut["list"]["status"] == "klar" and ut["list"]["antal"] == 4
+    assert ut["list"]["icp"]["industries"] == ["Bygg Mölndal", "Bygg Göteborg"]
+    # Källistorna är orörda.
+    assert len(await storage.list_lead_list_items(TENANT, a["id"])) == 3
+
+
+async def test_kombinera_filtrerar_pa_kontaktvag():
+    storage = MemoryStorage()
+    a = await _lista_med_rader(storage, "A", [_rad("Ett", tel="1"), _rad("Två", mejl="2@x.se"), _rad("Tre", tel="3", mejl="3@x.se")])
+    b = await _lista_med_rader(storage, "B", [_rad("Fyra")])
+    for filter_, vantat in [("telefon", ["Ett", "Tre"]), ("mejl", ["Två", "Tre"]), ("bada", ["Tre"]), ("alla", ["Ett", "Två", "Tre", "Fyra"])]:
+        ut = await _kombinera(storage, {"titel": filter_, "list_ids": [a["id"], b["id"]], "kontaktfilter": filter_})
+        assert [r["company_name"] for r in ut["items"]] == vantat, filter_
+        assert ut["list"]["kontaktfilter"] == filter_
+
+
+async def test_kombinera_vagrar_pa_ofardig_eller_okand_lista():
+    from fastapi import HTTPException
+
+    storage = MemoryStorage()
+    a = await _lista_med_rader(storage, "A", [_rad("Ett", tel="1")])
+    b = await _lista_med_rader(storage, "B", [_rad("Två", tel="2")], status="byggs")
+    with pytest.raises(HTTPException) as fel:
+        await _kombinera(storage, {"titel": "x", "list_ids": [a["id"], b["id"]]})
+    assert fel.value.status_code == 409
+    with pytest.raises(HTTPException) as fel:
+        await _kombinera(storage, {"titel": "x", "list_ids": [a["id"], "00000000-0000-4000-a000-0000000000ff"]})
+    assert fel.value.status_code == 404
+    # Filtret lämnar inget: 422, ingen tom lista skapas.
+    c = await _lista_med_rader(storage, "C", [_rad("Tre")])
+    with pytest.raises(HTTPException) as fel:
+        await _kombinera(storage, {"titel": "x", "list_ids": [a["id"], c["id"]], "kontaktfilter": "bada"})
+    assert fel.value.status_code == 422
+    assert len(await storage.list_lead_lists(TENANT)) == 3

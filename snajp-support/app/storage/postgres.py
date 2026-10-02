@@ -1937,13 +1937,22 @@ class PostgresStorage:
     # -- Leadslistor (tillägget 'leadlists', migration 060) -----------------
 
     async def create_lead_list(
-        self, tenant_id: str, *, titel: str, icp: dict[str, Any], antal: int, is_test: bool = False
+        self,
+        tenant_id: str,
+        *,
+        titel: str,
+        icp: dict[str, Any],
+        antal: int,
+        is_test: bool = False,
+        kalla: str = "sok",
+        kallistor: list[str] | None = None,
+        kontaktfilter: str | None = None,
     ) -> dict[str, Any]:
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
                 """
-                insert into lead_lists (tenant_id, titel, icp, antal, is_test)
-                values ($1, $2, $3, $4, $5)
+                insert into lead_lists (tenant_id, titel, icp, antal, is_test, kalla, kallistor, kontaktfilter)
+                values ($1, $2, $3, $4, $5, $6, $7::uuid[], $8)
                 returning *
                 """,
                 tenant_id,
@@ -1951,8 +1960,15 @@ class PostgresStorage:
                 json.dumps(icp, ensure_ascii=False),
                 antal,
                 is_test,
+                kalla,
+                kallistor,
+                kontaktfilter,
             )
-        return _avkoda_jsonb(_row(record), "icp")
+        rad = _avkoda_jsonb(_row(record), "icp")
+        # asyncpg ger uuid[] som en lista av UUID-objekt; API:t talar strängar.
+        if rad.get("kallistor"):
+            rad["kallistor"] = [str(x) for x in rad["kallistor"]]
+        return rad
 
     async def set_lead_list_status(
         self, tenant_id: str, list_id: str, *, status: str, felorsak: str | None = None

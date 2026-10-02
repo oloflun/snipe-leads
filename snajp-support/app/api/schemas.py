@@ -308,6 +308,19 @@ class LeadsListaRequest(BaseModel):
     overrides: LeadsRunOverrides | None = None
 
 
+class KombineraListorRequest(BaseModel):
+    """Kombinera flera färdiga leadslistor till en skräddarsydd (migration 082,
+    Antons beställning 2026-10-02): flera branscher i samma region, samma
+    bransch i flera regioner, filtrerat på kontaktväg. Raderna kopieras och
+    dedupliceras på orgnr (annars bolagsnamn); källistorna rörs inte."""
+
+    titel: str = Field(..., min_length=1, max_length=200)
+    list_ids: list[str] = Field(..., min_length=2, max_length=10)
+    #: alla = varje rad; telefon = rader med telefon; mejl = rader med mejl;
+    #: bada = rader med både telefon och mejl.
+    kontaktfilter: Literal["alla", "telefon", "mejl", "bada"] = "alla"
+
+
 class AgentFeedbackRequest(BaseModel):
     """Kundens dom över en agentkörning. corrected_output är människans egen
     formulering av vad svaret BORDE ha varit — den starkaste signalen in i
