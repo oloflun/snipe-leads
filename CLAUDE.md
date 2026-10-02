@@ -14,6 +14,16 @@ For architecture questions, also read `10_SYSTEM_OVERVIEW.md`. For test/deploy q
 
 ## Projektregler — drift
 
+**Varje komponent med användarvänd text är tvåspråkig, utan undantag.**
+Svenska och engelska via `lib/i18n.tsx` (`useLocale().text({ sv, en })`, `t(nyckel)`
+eller en modulkonstant av `Localized`; adminytan via `lib/admin/sprak.ts`). Det
+gäller rubriker, knappar, tomlägen, felmeddelanden, `aria-label` och CSV-rubriker,
+i nya komponenter och i varje komponent som ändras. Grinden är mekanisk:
+`tests/invariants/test_inv_copy_001.py` (INV-COPY-001) fäller svenska bokstäver i
+strängar och JSX-text som saknar sitt par, och en fil som översatts ska strykas ur
+testets skuldlista i samma commit. Antons beställning 2026-10-02 efter att den
+engelska versionen visat sig vara svensk på de flesta sidor.
+
 **Allt arbete går till `development`, aldrig direkt till `main`.**
 
 **`development` deployar sig själv sedan 2026-08-27.** Railways deployment

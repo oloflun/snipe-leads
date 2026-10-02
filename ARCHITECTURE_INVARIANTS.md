@@ -697,6 +697,21 @@ plans/2026-09-27-appytor-enhetlighet.md.
 Test: tests/invariants/test_inv_ui_001.py
 Införd: 2026-09-28 · Upphävs endast genom waiver
 
+### INV-COPY-001 — Varje komponent med användarvänd text är tvåspråkig
+Ingen rad i appytorna, demon, produktsidorna, marknadsytan, inloggningen eller de
+juridiska sidorna bär svenska bokstäver i en strängliteral eller i JSX-text utan
+att vara halvan av ett `{ sv, en }`-par via `lib/i18n.tsx` (`text()`, `t()`, en
+`Localized`-konstant) eller `lib/admin/sprak.ts`. Identifierare, kommentarer och
+namnfält i exempeldata räknas inte. Filer som var enspråkiga när grinden sattes
+står på en skuldlista i testet som tvingar fram strykning när filen översatts.
+Varför: Anton visade 2026-10-02 femton skärmdumpar av den engelska versionen där
+`/kvitton`, `/support`, `/leads`, `/demo` och Iris-vyerna var till stor del svenska,
+och sessionens egna nya komponenter var enspråkiga trots en skriven regel. Samma
+form som INV-UI-001: en regel i prosa bryts av nästa komponent. Id:t är COPY, inte
+I18N, eftersom meta-testet bara parsar områden utan siffror.
+Test: tests/invariants/test_inv_copy_001.py
+Införd: 2026-10-02 · Upphävs endast genom waiver
+
 ### INV-LEADS-SCORE-001 — Ett researchat bolag har alltid poäng, nivå och motivering
 Efter research skriver `storage.spara_bedomning` (migration 079) på
 prospektraden: `score_total`, minst en `score_breakdown`-rad med motivering,

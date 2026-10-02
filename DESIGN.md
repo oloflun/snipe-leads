@@ -257,6 +257,11 @@ to change what a sentence asserts, that pass has overreached.
 
 No em-dashes in any visible string, in either language.
 
+Every component with user-facing text ships in both languages, Swedish and English,
+through `lib/i18n.tsx` (`text({ sv, en })`, `t()`, or a `Localized` constant; the admin
+area through `lib/admin/sprak.ts`). Headings, buttons, empty states, errors,
+`aria-label`s and CSV headers included. INV-COPY-001 enforces it.
+
 ## Accessibility floor
 
 A `.kicker` label is a caption, not a heading — mark it up as `<p>`/`<span>`, even sitting right under
