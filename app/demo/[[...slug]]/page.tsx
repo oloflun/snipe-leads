@@ -8,6 +8,7 @@ import { DemoSupportYta } from "@/components/snajp/DemoSupportYta";
 import { IrisBolag } from "@/components/leads/IrisBolag";
 import { IrisGranskning } from "@/components/leads/IrisGranskning";
 import { IrisInstallningar } from "@/components/leads/IrisInstallningar";
+import { Pipeline } from "@/components/leads/Pipeline";
 import { SupportRegler } from "@/components/settings/SupportRegler";
 import {
   AnalyticsView,
@@ -112,6 +113,13 @@ function renderSektion(
       // Samma tre undersidor som /dashboard/iris — se
       // components/dashboard/WorkspaceSection.tsx. Ett okänt tredje
       // slugsegment är en 404, inte en tyst fallback till Bolag.
+      if (undersektion === "pipeline") {
+        return (
+          <PageShell title={{ sv: "Pipeline", en: "Pipeline" }}>
+            <Pipeline demo />
+          </PageShell>
+        );
+      }
       if (undersektion === "granskning") {
         return (
           <PageShell title={{ sv: "Granskning", en: "Review" }}>

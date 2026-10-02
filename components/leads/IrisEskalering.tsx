@@ -36,18 +36,21 @@ type Lage =
   | { fas: "klar"; regler: Eskaleringsregler }
   | { fas: "fel"; text: Localized };
 
-function Vaxel({
+export function Vaxel({
   paslagen,
   etikett,
   beskrivning,
   upptagen,
-  onByt
+  onByt,
+  ariaLabel
 }: Readonly<{
   paslagen: boolean;
   etikett: string;
   beskrivning: string;
   upptagen: boolean;
   onByt: (v: boolean) => void;
+  /** När samma etikett står flera gånger på sidan (IrisAutomation, en per typ). */
+  ariaLabel?: string;
 }>) {
   return (
     <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-2 py-4">
@@ -59,21 +62,22 @@ function Vaxel({
         type="button"
         role="switch"
         aria-checked={paslagen}
-        aria-label={etikett}
+        aria-label={ariaLabel ?? etikett}
         disabled={upptagen}
         onClick={() => onByt(!paslagen)}
-        className={cn(
-          "focus-ring relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:cursor-wait disabled:opacity-60",
-          paslagen ? "bg-ink" : "bg-ink/20"
-        )}
+        className="focus-ring inline-flex min-h-11 shrink-0 items-center rounded-full disabled:cursor-wait disabled:opacity-60"
       >
         <span
           aria-hidden
-          className={cn(
-            "absolute top-1 h-5 w-5 rounded-full bg-paper transition-[left]",
-            paslagen ? "left-6" : "left-1"
-          )}
-        />
+          className={cn("relative block h-7 w-12 rounded-full transition-colors", paslagen ? "bg-ink" : "bg-ink/20")}
+        >
+          <span
+            className={cn(
+              "absolute top-1 h-5 w-5 rounded-full bg-paper transition-[left]",
+              paslagen ? "left-6" : "left-1"
+            )}
+          />
+        </span>
       </button>
     </div>
   );

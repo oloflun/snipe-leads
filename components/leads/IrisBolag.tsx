@@ -8,7 +8,9 @@ import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { LeadslistorView } from "@/components/leads/LeadslistorView";
 import { LeadsRunForm } from "@/components/leads/LeadsRunForm";
-import { EmptyState, SkeletonRows, btnPrimary, btnSecondary } from "@/components/ui";
+import { LeadsTabell } from "@/components/leads/LeadsTabell";
+import { Tidslinje } from "@/components/leads/Tidslinje";
+import { EmptyState, SkeletonRows, btnPrimary, btnSecondary, flik, flikAktiv, flikInaktiv } from "@/components/ui";
 import { mejlaOss } from "@/components/marketing/copy";
 import { addonSpec } from "@/lib/addons";
 import { lasOffertForUtkast } from "@/lib/actions/affarskontext";
@@ -17,7 +19,7 @@ import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { EXEMPELBOLAG, EXEMPEL_OMGANG_1, EXEMPEL_OMGANG_2, kontaktnamn, type ExempelBolag } from "@/lib/demo/iris-exempel";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { sv, useLocale, type Locale, type Localized } from "@/lib/i18n";
-import { NIVA_ETIKETT, UTFALL_ETIKETT, kriterier } from "@/lib/prospekt";
+import { NIVA_ETIKETT, STATUS_ETIKETT, UTFALL_ETIKETT, kriterier } from "@/lib/prospekt";
 import { cn } from "@/lib/utils";
 
 /**
@@ -82,16 +84,14 @@ type ListLage =
   | { fas: "fel"; meddelande: Localized }
   | { fas: "klar"; prospekt: Prospekt[] };
 
-const STATUS_ETIKETT: Record<string, Localized> = {
-  new: { sv: "Ny", en: "New" },
-  researching: { sv: "Research pågår", en: "Researching" },
-  ready: { sv: "Redo", en: "Ready" },
-  contacted: { sv: "Kontaktad", en: "Contacted" },
-  replied: { sv: "Svarat", en: "Replied" },
-  meeting: { sv: "Möte", en: "Meeting" },
-  won: { sv: "Vunnen", en: "Won" },
-  lost: { sv: "Förlorad", en: "Lost" },
-  suppressed: { sv: "Spärrad", en: "Blocked" }
+type Segment = "bolag" | "tabell" | "listor";
+
+const SEGMENT: Segment[] = ["bolag", "tabell", "listor"];
+
+const SEGMENT_ETIKETT: Record<Segment, Localized> = {
+  bolag: { sv: "Alla bolag", en: "All companies" },
+  tabell: { sv: "Tabell", en: "Table" },
+  listor: { sv: "Listor", en: "Lists" }
 };
 
 function statusEtikett(status: string, locale: Locale): string {
@@ -119,8 +119,6 @@ const T = {
   korExempel: { sv: "Kör exempel", en: "Run example" },
   korExempelkorningen: { sv: "Kör exempelkörningen", en: "Run the example" },
   vy: { sv: "Vy", en: "View" },
-  allaBolag: { sv: "Alla bolag", en: "All companies" },
-  listor: { sv: "Listor", en: "Lists" },
   doljBortvalda: { sv: "Dölj bortvalda", en: "Hide rejected" },
   bolag: { sv: "Bolag", en: "Companies" },
   ingaBolag: { sv: "Inga bolag ännu", en: "No companies yet" },
@@ -287,9 +285,11 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
 
   // Gammal adress /dashboard/leads/listor -> /dashboard/iris?vy=listor (se
   // WorkspaceSection.tsx) ska öppna på rätt segment, inte tyst landa på Bolag.
-  const [segmentVal, setSegmentVal] = useState<"bolag" | "listor">(
-    sokParams.get("vy") === "listor" ? "listor" : "bolag"
-  );
+  const [segmentVal, setSegmentVal] = useState<Segment>(() => {
+    const vy = sokParams.get("vy");
+    return vy === "listor" || vy === "tabell" ? vy : "bolag";
+  });
+  const flikRefs = useRef<Partial<Record<Segment, HTMLButtonElement | null>>>({});
   const [korOppen, setKorOppen] = useState(false);
   const [lage, setLage] = useState<ListLage>({ fas: "laddar" });
   const [exempelRader, setExempelRader] = useState<ExempelRad[]>([]);
@@ -467,35 +467,52 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label={text(T.vy)}>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={segmentVal === "bolag"}
-          onClick={() => setSegmentVal("bolag")}
-          className={cn(
-            "focus-ring rounded-input px-4 py-2 text-[13px] font-medium transition-colors",
-            segmentVal === "bolag" ? "bg-ink text-paper" : "bg-paper2 text-ink-muted hover:text-ink"
-          )}
-        >
-          {text(T.allaBolag)}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={segmentVal === "listor"}
-          onClick={() => setSegmentVal("listor")}
-          className={cn(
-            "focus-ring rounded-input px-4 py-2 text-[13px] font-medium transition-colors",
-            segmentVal === "listor" ? "bg-ink text-paper" : "bg-paper2 text-ink-muted hover:text-ink"
-          )}
-        >
-          {text(T.listor)}
-        </button>
+      {/* Pilnavigering (Fas 10, planens a11y-notering): vänster/höger flyttar
+          fokus och val, och bara den valda fliken ligger i tabbordningen. */}
+      <div
+        className="flex flex-wrap items-center gap-2"
+        role="tablist"
+        aria-label={text(T.vy)}
+        onKeyDown={(e) => {
+          if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+          e.preventDefault();
+          const i = SEGMENT.indexOf(segmentVal);
+          const nasta = SEGMENT[(i + (e.key === "ArrowRight" ? 1 : SEGMENT.length - 1)) % SEGMENT.length];
+          setSegmentVal(nasta);
+          flikRefs.current[nasta]?.focus();
+        }}
+      >
+        {SEGMENT.map((s) => (
+          <button
+            key={s}
+            ref={(el) => {
+              flikRefs.current[s] = el;
+            }}
+            type="button"
+            role="tab"
+            id={`iris-flik-${s}`}
+            aria-selected={segmentVal === s}
+            aria-controls="iris-flikpanel"
+            tabIndex={segmentVal === s ? 0 : -1}
+            onClick={() => setSegmentVal(s)}
+            className={cn(flik, segmentVal === s ? flikAktiv : flikInaktiv)}
+          >
+            {text(SEGMENT_ETIKETT[s])}
+          </button>
+        ))}
       </div>
 
-      <div className="mt-6">
-        {segmentVal === "listor" ? (
+      <div className="mt-6" role="tabpanel" id="iris-flikpanel" aria-labelledby={`iris-flik-${segmentVal}`}>
+        {segmentVal === "tabell" ? (
+          <LeadsTabell
+            demo={demo}
+            onValj={(id) => {
+              if (allaRader.find((p) => p.id === id)?.niva === "C") setVisaBortvalda(true);
+              setSegmentVal("bolag");
+              valjRad(id);
+            }}
+          />
+        ) : segmentVal === "listor" ? (
           harListaddon || demo ? (
             <LeadslistorView />
           ) : (
@@ -1208,6 +1225,10 @@ function LeadDetail({
             )}
           </div>
         ) : null}
+      </div>
+
+      <div className="mt-6 border-t border-ink/12 pt-5">
+        <Tidslinje prospectId={id} demo={demo || Boolean(exempel)} />
       </div>
     </div>
   );

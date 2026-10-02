@@ -38,6 +38,7 @@ export const DEMO_NAV: DemoNavItem[] = [
     label: { sv: "Iris", en: "Iris" },
     children: [
       { slug: "iris", label: { sv: "Bolag", en: "Companies" } },
+      { slug: "iris/pipeline", label: { sv: "Pipeline", en: "Pipeline" } },
       { slug: "iris/granskning", label: { sv: "Granskning", en: "Review" } },
       { slug: "iris/installningar", label: { sv: "Inställningar", en: "Settings" } },
       // Avsteg från spegelregeln ovan, med avsikt: CRM-listan är den omgjorda

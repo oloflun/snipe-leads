@@ -61,6 +61,7 @@ import { cn } from "@/lib/utils";
 const DEMO_VAGAR: Record<string, string> = {
   "/dashboard": "/demo",
   "/dashboard/iris": "/demo/iris",
+  "/dashboard/iris/pipeline": "/demo/iris/pipeline",
   "/dashboard/iris/granskning": "/demo/iris/granskning",
   "/dashboard/iris/installningar": "/demo/iris/installningar",
   "/dashboard/companies": "/demo/companies",

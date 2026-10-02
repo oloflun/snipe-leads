@@ -109,6 +109,8 @@ export const appRoutes: AppRoute[] = [
     product: "leads",
     children: [
       { href: "/dashboard/iris", labelKey: "nav.iris.bolag" },
+      // Pipeline (Fas 10, Leads Suite): kanban per status, flytt = PATCH status.
+      { href: "/dashboard/iris/pipeline", labelKey: "nav.iris.pipeline" },
       // Körningar (migration 080, INV-JOB-003): det kunden kan följa, lämna
       // och återvända till. Före 2026-10-01 fanns en körning bara i
       // körformulärets state och i Redis en timme.

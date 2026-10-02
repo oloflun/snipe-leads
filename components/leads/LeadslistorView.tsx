@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
+import { ImportCsv } from "@/components/leads/ImportCsv";
 import { btnPrimary, btnSecondary, EmptyState, SkeletonRows, flik, flikAktiv, flikInaktiv } from "@/components/ui";
 import { lasOffertForUtkast } from "@/lib/actions/affarskontext";
 import type { EmailStudioData } from "@/lib/data/emails";
@@ -121,6 +122,8 @@ const T = {
   flyttar: { sv: "Flyttar…", en: "Moving…" },
   foljKorningen: { sv: "Följ körningen", en: "Follow the run" },
   kombineraRubrik: { sv: "Kombinera listor", en: "Combine lists" },
+  importeraCsv: { sv: "Importera CSV", en: "Import CSV" },
+  kallaImport: { sv: "Import", en: "Import" },
   kombineraHjalp: {
     sv: "Kryssa två eller fler klara listor. Dubbletter tas bort på organisationsnummer, källistorna rörs inte.",
     en: "Tick two or more finished lists. Duplicates are removed by organisation number; the source lists are left untouched."
@@ -407,6 +410,8 @@ export function LeadslistorView() {
   const [kombinerar, setKombinerar] = useState(false);
   const [kombFel, setKombFel] = useState<string | null>(null);
   const [kombKvitto, setKombKvitto] = useState<Localized | null>(null);
+  // CSV-import (Fas 10): bredvid Kombinera, listan hämtas om när importen är klar.
+  const [importOppen, setImportOppen] = useState(false);
 
   function vaxlaVald(id: string) {
     setValdaListor((fore) => {
@@ -580,9 +585,25 @@ export function LeadslistorView() {
 
       {/* ---------------------------------------------- LISTORNA */}
       <section aria-labelledby="dina-listor" className="border-t border-ink/15 pt-8">
-        <h2 id="dina-listor" className="text-[1.125rem] font-semibold tracking-[-0.01em]">
-          {text(T.dinaListor)}
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 id="dina-listor" className="text-[1.125rem] font-semibold tracking-[-0.01em]">
+            {text(T.dinaListor)}
+          </h2>
+          <button
+            type="button"
+            aria-expanded={importOppen}
+            onClick={() => setImportOppen((v) => !v)}
+            className={btnSecondary}
+          >
+            {text(T.importeraCsv)}
+          </button>
+        </div>
+
+        {importOppen ? (
+          <div className="mt-4 rounded-card border border-ink/12 bg-paper2/40 p-4">
+            <ImportCsv onKlar={() => void hamtaListor(true)} />
+          </div>
+        ) : null}
 
         {listFel ? (
           <div className="mt-4">
@@ -696,7 +717,9 @@ export function LeadslistorView() {
                                   sv: `Kombinerad av ${lista.kallistor?.length ?? 0} listor`,
                                   en: `Combined from ${lista.kallistor?.length ?? 0} lists`
                                 })
-                              : text({ sv: `${lista.antal} beställda`, en: `${lista.antal} ordered` }),
+                              : lista.kalla === "import"
+                                ? text(T.kallaImport)
+                                : text({ sv: `${lista.antal} beställda`, en: `${lista.antal} ordered` }),
                             typeof lista.item_count === "number"
                               ? text({ sv: `${lista.item_count} träffar`, en: `${lista.item_count} matches` })
                               : null,

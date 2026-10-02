@@ -26,6 +26,7 @@ const commonCopy = {
   "nav.assistant": { sv: "Assistenten", en: "Assistant" },
   "nav.iris": { sv: "Iris", en: "Iris" },
   "nav.iris.bolag": { sv: "Bolag", en: "Companies" },
+  "nav.iris.pipeline": { sv: "Pipeline", en: "Pipeline" },
   "nav.iris.korningar": { sv: "Körningar", en: "Runs" },
   "nav.iris.inkorg": { sv: "Inkorg", en: "Inbox" },
   "nav.iris.granskning": { sv: "Granskning", en: "Review" },

@@ -1,6 +1,7 @@
 "use client";
 
 import { LeadsControls } from "@/components/leads/LeadsControls";
+import { IrisAutomation } from "@/components/leads/IrisAutomation";
 import { IrisEskalering } from "@/components/leads/IrisEskalering";
 import { IrisProfil } from "@/components/leads/IrisProfil";
 import { useLocale } from "@/lib/i18n";
@@ -34,9 +35,14 @@ export function IrisInstallningar({ demo = false }: Readonly<{ demo?: boolean }>
           Eskaleringsreglerna redigeras inte i demon.
         </p>
       ) : (
-        <div className="border-t border-ink/15 pt-8">
-          <IrisEskalering />
-        </div>
+        <>
+          <div className="border-t border-ink/15 pt-8">
+            <IrisEskalering />
+          </div>
+          <div className="border-t border-ink/15 pt-8">
+            <IrisAutomation />
+          </div>
+        </>
       )}
     </div>
   );

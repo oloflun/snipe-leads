@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useArbetsvag } from "@/components/AppShell";
 import { PageShell } from "@/components/AppShell";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
+import { Tidslinje } from "@/components/leads/Tidslinje";
 import { EmptyState, SkeletonRows, btnPrimary } from "@/components/ui";
 import type { EmailStudioData } from "@/lib/data/emails";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
@@ -707,6 +708,10 @@ export function Bolagssida({ id, demo = false }: Readonly<{ id: string; demo?: b
           )}
         </p>
       </section>
+
+      <div className="mb-10">
+        <Tidslinje prospectId={id} demo={demo} />
+      </div>
 
       <div className="grid grid-cols-12 gap-x-8 gap-y-10">
         <dl className="col-span-12 grid grid-cols-12 gap-x-8 gap-y-8">
