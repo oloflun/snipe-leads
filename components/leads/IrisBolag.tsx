@@ -19,7 +19,7 @@ import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { EXEMPELBOLAG, EXEMPEL_OMGANG_1, EXEMPEL_OMGANG_2, kontaktnamn, type ExempelBolag } from "@/lib/demo/iris-exempel";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { sv, useLocale, type Locale, type Localized } from "@/lib/i18n";
-import { NIVA_ETIKETT, STATUS_ETIKETT, UTFALL_ETIKETT, kriterier } from "@/lib/prospekt";
+import { STATUS_ETIKETT, UTFALL_ETIKETT, kriterier, nivaEtikett } from "@/lib/prospekt";
 import { cn } from "@/lib/utils";
 
 /**
@@ -586,7 +586,7 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
                                   {researchPagar(p)
                                     ? text(T.researchar)
                                     : p.niva
-                                      ? NIVA_ETIKETT[p.niva]
+                                      ? nivaEtikett(p.niva, locale)
                                       : statusEtikett(p.status, locale)}
                                 </p>
                               </div>
@@ -1072,7 +1072,7 @@ function LeadDetail({
             {researchPagar(p)
               ? text(T.researchar)
               : p.niva
-                ? NIVA_ETIKETT[p.niva]
+                ? nivaEtikett(p.niva, locale)
                 : statusEtikett(p.status, locale)}
           </dd>
         </div>
