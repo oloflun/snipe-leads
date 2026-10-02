@@ -134,6 +134,23 @@ class Storage(Protocol):
 
     async def list_mailboxes(self, tenant_id: str) -> list[dict[str, Any]]: ...
 
+    # -- Spegel och flytt (migration 085, plan del E) ------------------------
+
+    async def spegel_info(self) -> dict[str, Any] | None:
+        """Markören spegelskriptet sätter (scripts/railway_seed_dev.py,
+        tabellen public.mirror_meta): {environment, seeded_at} i en spegel,
+        None i main och i minneslagret. admin_flytt.importera vägrar i en
+        spegel; panelen Flytta till main renderas bara i en."""
+        ...
+
+    async def logga_flytt(self, tenant_id: str, *, typ: str, ref_id: str, resultat: str) -> None:
+        """Kvitto per flyttad rad (dev_flytt_ko). resultat: 'ok' | 'fel'."""
+        ...
+
+    async def list_flytt(self, tenant_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        """Senaste flyttarna, nyast först."""
+        ...
+
     async def upsert_mailbox(
         self,
         tenant_id: str,

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { bytVy } from "@/lib/actions/vy";
 import { readJsonBody } from "@/lib/http/json";
+import { FlyttTillMain } from "@/components/admin/FlyttTillMain";
 import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -137,8 +138,11 @@ export function BytKund({ ton = "ljus" }: Readonly<{ ton?: "ljus" | "rail" }> = 
             ))}
           </ul>
           {kunder && filtrerade.length === 0 ? (
-            <p className="px-1 py-2 text-[13px] text-ink-subtle">Ingen kund matchade.</p>
+            <p className="px-1 py-2 text-[13px] text-ink-subtle">{text({ sv: "Ingen kund matchade.", en: "No customer matched." })}</p>
           ) : null}
+          {/* Flytta till main (plan del E): bara i development, bara under ett
+              kundbesök — den enda vägen från spegeln till produktionen. */}
+          {impersonation ? <FlyttTillMain slug={impersonation.slug} /> : null}
         </div>
       ) : null}
     </div>

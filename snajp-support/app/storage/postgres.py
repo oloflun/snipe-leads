@@ -62,6 +62,8 @@ _PROSPEKT_PROFILFALT = frozenset(
         "contact_form_url",
         # Migration 081: kontaktpersonens telefon (registerkällan).
         "contact_phone",
+        # Migration 085: varifrån ett prospekt importerades (admin_flytt).
+        "importerad_fran",
     }
 )
 
@@ -3074,6 +3076,32 @@ class PostgresStorage:
     # API-lagret (require_master_key) och i att metoderna bara anropas
     # därifrån — inte i RLS, som per definition inte kan uttrycka
     # "alla tenants".
+
+    async def spegel_info(self) -> dict[str, Any] | None:
+        async with self.pool.acquire() as conn:
+            finns = await conn.fetchval("select to_regclass('public.mirror_meta') is not null")
+            if not finns:
+                return None
+            rad = await conn.fetchrow("select environment, seeded_at from public.mirror_meta limit 1")
+        return _row(rad) if rad else None
+
+    async def logga_flytt(self, tenant_id: str, *, typ: str, ref_id: str, resultat: str) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                """
+                insert into dev_flytt_ko (tenant_id, typ, ref_id, flyttad_at, resultat)
+                values ($1, $2, $3, case when $4 = 'ok' then now() else null end, $4)
+                """,
+                tenant_id, typ, ref_id, resultat,
+            )
+
+    async def list_flytt(self, tenant_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                "select * from dev_flytt_ko where tenant_id = $1 order by skapad_at desc limit $2",
+                tenant_id, limit,
+            )
+        return [_row(r) for r in records]
 
     async def list_tenants_with_stats(self) -> list[dict[str, Any]]:
         async with self.pool.acquire() as conn:

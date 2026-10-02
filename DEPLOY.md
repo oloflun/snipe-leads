@@ -685,3 +685,24 @@ kontrollera efteråt:
 select count(*) from supabase_migrations.schema_migrations where version ~ '^[0-9]{1,3}$';
 -- ska vara lika många som antalet filer i supabase/migrations/
 ```
+
+## Spegling main → development och Flytta till main (plan del E, 2026-10-02)
+
+- **Nattlig spegling:** `.github/workflows/spegla-dev.yml` (cron 02:00 UTC) kör
+  `scripts/railway_seed_dev.py --apply --behall-flyttko` med `.env.deploy` ur
+  repo-hemligheten `ENV_DEPLOY`. Envägs: truncate + copy, markören
+  `public.mirror_meta` sätts sist. Schemaversionerna måste matcha, annars
+  avbryter skriptet (kör migrationerna mot development först).
+- **Allt oflyttat i development försvinner vid speglingen.** Det som ska sparas
+  flyttas INNAN, via Byt kund → Flytta till main (bara synlig i development, bara
+  för plattformsadmin, bara under ett kundbesök).
+- **Flyttvägen:** development-api bygger ett paket (mejl eller körning med
+  prospekt), signerar det med HMAC-SHA256 (`FLYTT_NYCKEL`) och POSTar till
+  `FLYTT_MAL_URL/api/admin/flytt/importera`. Mottagaren kräver ingen masternyckel
+  (den kan inte: annan miljö, annan nyckel) utan verifierar signaturen, vägrar i en
+  spegel (409) och importerar idempotent. Kvitto per rad i `dev_flytt_ko`.
+- **Variabler (Antons hand, `scripts/keys.py`):** `FLYTT_NYCKEL` i main OCH
+  development (samma värde), `FLYTT_MAL_URL` bara i development (mains api-URL).
+  Utan dem är vägen stängd och panelen säger det.
+- **Spärren:** `--behall-flyttko` vägrar spegla om en flytt misslyckats de senaste
+  sju dagarna. Invariant: INV-DATA-003.

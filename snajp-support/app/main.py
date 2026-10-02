@@ -17,6 +17,7 @@ import asyncio
 
 from .api import (
     admin,
+    admin_flytt,
     admin_konvertera,
     admin_kunddata,
     admin_profil,
@@ -349,6 +350,8 @@ app.include_router(drafts.router)
 app.include_router(rules.router)
 app.include_router(sending_domains_api.router)
 app.include_router(admin.router)
+app.include_router(admin_flytt.router)
+app.include_router(admin_flytt.mottag)
 # Skrivytan mot agentprofilen. Egen modul, samma prefix och samma master-nyckel —
 # se docstringen i api/admin_profil.py för varför läsning och skrivning är skilda åt.
 app.include_router(admin_profil.router)

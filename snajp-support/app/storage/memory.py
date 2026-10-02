@@ -226,6 +226,7 @@ class MemoryStorage:
         # via /api/inbox. Dicten finns för att lagringsgränssnittet ska vara
         # detsamma i båda lägena.
         self.mailboxes: dict[str, dict[str, Any]] = {}
+        self.flytt_ko: list[dict[str, Any]] = []  # dev_flytt_ko (085)
         self.emails: dict[str, dict[str, Any]] = {}
         self.email_dedupe: set[tuple[str, str]] = set()  # (tenant_id, provider_message_id)
         self.attachments: dict[str, list[dict[str, Any]]] = {}  # email_id → [...]
@@ -319,6 +320,22 @@ class MemoryStorage:
         return [t for t in self.tenants.values() if t.get("active", True)]
 
     # -- Inkorgar -----------------------------------------------------------
+
+    async def spegel_info(self) -> dict[str, Any] | None:
+        return None  # minneslagret speglas aldrig
+
+    async def logga_flytt(self, tenant_id: str, *, typ: str, ref_id: str, resultat: str) -> None:
+        if typ not in ("mejl", "korning"):
+            raise ValueError(f"typ={typ!r} bryter mot dev_flytt_ko-checken (085).")
+        self.flytt_ko.append({
+            "id": str(uuid.uuid4()), "tenant_id": tenant_id, "typ": typ, "ref_id": ref_id,
+            "skapad_at": _now(), "flyttad_at": _now() if resultat == "ok" else None, "resultat": resultat,
+        })
+
+    async def list_flytt(self, tenant_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        rader = [r for r in self.flytt_ko if r["tenant_id"] == tenant_id]
+        rader.sort(key=lambda r: r["skapad_at"], reverse=True)
+        return [dict(r) for r in rader[:limit]]
 
     async def list_mailboxes(self, tenant_id: str) -> list[dict[str, Any]]:
         return [m for m in self.mailboxes.values() if m["tenant_id"] == tenant_id]
@@ -1202,6 +1219,7 @@ class MemoryStorage:
                     "contact_level",
                     "contact_form_url",
                     "contact_phone",
+                    "importerad_fran",
                 )
                 and värde is not None
             },
