@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Snajp — ingen uppkoppling</title>
+    <title>Snajp, ingen uppkoppling</title>
     <!--
       Fristående med flit: den här sidan visas när nätet är borta, så den kan
       inte hämta ett typsnitt, ett stilmall eller en logotyp över nätverket.
@@ -31,11 +31,10 @@
         -webkit-font-smoothing: antialiased;
       }
       main { max-width: 34rem; text-align: left; }
+      /* Vanlig etikett, ingen kicker (INV-UI-001): inga versaler, ingen spärrning. */
       .marke {
-        font-size: 0.75rem;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        color: var(--ochre);
+        font-size: 0.9375rem;
+        font-weight: 600;
         margin: 0 0 1.25rem;
       }
       h1 {
@@ -44,7 +43,8 @@
         letter-spacing: -0.02em;
         margin: 0 0 1rem;
       }
-      p { font-size: 1.0625rem; line-height: 1.65; margin: 0 0 1.75rem; opacity: 0.75; }
+      /* ink-muted (#4a525b, 7.2:1) i stället för opacity 0.75. */
+      p { font-size: 1.0625rem; line-height: 1.65; margin: 0 0 1.75rem; color: #4a525b; }
       button {
         font: inherit;
         font-weight: 500;
@@ -56,18 +56,32 @@
         color: var(--paper);
         cursor: pointer;
       }
-      button:focus-visible { outline: 2px solid var(--ochre); outline-offset: 2px; }
+      /* Samma ring som appen: accenten mörkad 18 %, 3.6:1 mot paper (1.4.11). */
+      button:focus-visible { outline: 2px solid #b76e14; outline-offset: 2px; }
     </style>
   </head>
   <body>
     <main>
       <p class="marke">Snajp</p>
-      <h1>Ingen uppkoppling</h1>
-      <p>
-        Appen når inte servern just nu. Din data ligger kvar — ingenting har gått förlorat.
-        Försök igen när du har nät.
-      </p>
-      <button type="button" onclick="location.reload()">Försök igen</button>
+      <h1 data-sv="Ingen uppkoppling" data-en="No connection">Ingen uppkoppling</h1>
+      <p
+        data-sv="Appen når inte servern just nu. Din data ligger kvar, ingenting har gått förlorat. Försök igen när du har nät."
+        data-en="The app cannot reach the server right now. Your data is still there and nothing has been lost. Try again when you are online."
+      >Appen når inte servern just nu. Din data ligger kvar, ingenting har gått förlorat. Försök igen när du har nät.</p>
+      <button type="button" onclick="location.reload()" data-sv="Försök igen" data-en="Try again">Försök igen</button>
     </main>
+    <script>
+      // Samma språkval som appen (lib/i18n.tsx, nyckeln snajp.locale); utan
+      // sparat val följer sidan webbläsarens språk. Tvåspråkig som allt annat.
+      (function () {
+        var sparat = null;
+        try { sparat = localStorage.getItem("snajp.locale"); } catch (e) {}
+        var en = sparat ? sparat === "en" : !/^sv\b/i.test(navigator.language || "sv");
+        if (!en) return;
+        document.documentElement.lang = "en";
+        document.title = "Snajp, no connection";
+        document.querySelectorAll("[data-en]").forEach(function (el) { el.textContent = el.getAttribute("data-en"); });
+      })();
+    </script>
   </body>
 </html>
