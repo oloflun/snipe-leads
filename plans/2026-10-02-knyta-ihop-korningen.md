@@ -310,7 +310,7 @@ Antagande utan fråga: Fas 3 (regeln + grinden) före listorna, så det nya UI:t
 - [x] `scripts/flytt_nycklar.py --apply`: FLYTT_NYCKEL i båda miljöerna, FLYTT_MAL_URL i development, ENV_DEPLOY (bara spegelns sex PG-rader) på GitHub. Development: nyckel=True mål=True.
 - [x] Röktest på development (demotenanten, syntetisk data): 10/10 endpoints gröna efter rättning. Fyndet: DELETE av sparad vy gav 500 (saknad grant); den nya vakten `test_delete_grants.py` hittade samma lucka i "Koppla ur inkorgen" (ss_mailboxes, sedan 077). Migration 087 körd på development.
 - [x] Demosidorna på development renderar (Pipeline, Tabell, Listor utan inloggningsfel, inga konsolfel).
-- [ ] Anton: `git push origin development` (0cc364b, e33b55e + dokument) och `python scripts/railway_migrate.py --env main --apply` (087).
+- [x] Push (02a8c97) och migration 087 på main. Båda miljöerna: torrkörning utan väntande migrationer; `/api/admin/tenants` svarar 200 i main och development (adminfelet borta).
 - [ ] Första speglingen: ENV_DEPLOY finns nu, så `spegla-dev.yml` kör 02:00 UTC och skriver över development med main. Tills dess saknar development `mirror_meta`, och panelen Flytta till main visas inte.
 - [ ] Main-verifiering av flyttvägen efter release (PR development → main).
 
