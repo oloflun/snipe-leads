@@ -235,7 +235,7 @@ async def larma_kreditslut(
             tenant_id=tenant_id or "alla kunder",
             vad=(
                 "Google avvisar varje modellanrop av betalningsskäl (slut "
-                "kredit, avstängd fakturering eller avstängt projekt). Alla "
+                "på krediten, avstängd fakturering eller avstängt projekt). Alla "
                 "agenter (leads, support, bokföring) är utan kapacitet tills "
                 "det åtgärdats."
                 + (f" Leverantörens svar: {utdrag}" if utdrag else "")

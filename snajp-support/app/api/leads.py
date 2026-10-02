@@ -2150,7 +2150,7 @@ async def _run_batch_prospect(
             # tröskel, eller saknar kontaktväg. Ett utkast är 4–7 LLM-anrop
             # till, för ett mejl som inte ska skickas automatiskt.
             if result["stopped_early"] == "ej_kvalificerad":
-                result["draft_note"] = "Hoppar över utkastet: bolaget kvalificerar inte mot målgruppen."
+                result["draft_note"] = "Hoppar över utkastet: bolaget uppfyller inte målgruppens kriterier."
             elif result["stopped_early"] == "under_troskel":
                 result["draft_note"] = (
                     "Hoppar över utkastet: träffsäkerheten ligger under din tröskel på "

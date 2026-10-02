@@ -52,7 +52,7 @@ mycket som slarvigt AI-innehåll. Bra svensk professionell text har en människa
 ### Tecken på röstlös text (även om den är tekniskt "ren"):
 - Varje mening har samma längd och struktur
 - Inga egna åsikter, bara neutral rapportering
-- Ingen erkänsla av komplexitet eller motstridiga tankar
+- Inget erkännande av komplexitet eller motstridiga tankar
 - Inget "jag" eller "vi" när det vore naturligt
 - Läses som en pressrelease eller myndighetstext
 
@@ -107,7 +107,7 @@ historiska vändpunkter eller avgörande skifte.
 
 ---
 
-### 2. Landskap- och trenduppramning
+### 2. Landskaps- och trenduppramning
 
 **Fraser att se upp med:**
 i en alltmer digitaliserad värld, i en allt mer föränderlig omvärld, i takt med den 
@@ -292,7 +292,7 @@ Förutom ovanstående, se särskilt upp med dessa i inlägg:
 
 ---
 
-### 11. Sycofantiska öppningar och avslutningar
+### 11. Inställsamma öppningar och avslutningar
 
 **Mönster:**
 - "Vilken bra fråga!" / "Det är en utmärkt observation."
@@ -384,7 +384,7 @@ informationen är osäker – inte att skribenten har begränsade kunskaper.
 
 ---
 
-### 15. Kopulaundvikande (utgör/representerar/utgör)
+### 15. Kopulaundvikande (utgör/representerar/fungerar som)
 
 **Problem:** AI undviker "är" och ersätter det med omskrivningar som låter tyngre 
 och mer formella. Det är ett av de tydligaste AI-tecknen i svensk text.
@@ -428,7 +428,7 @@ medier-inlägg signalerar det omedelbart ett AI-ursprung.
 > ✅ **Kvalitet:** Resultaten förbättras över tid.
 
 **Efter:**
-> Processen går snabbare, lösningen skalbar och kvaliteten förbättras när volymerna ökar.
+> Processen går snabbare, lösningen är skalbar och kvaliteten förbättras när volymerna ökar.
 
 **Undantag:** Bullet-listor är legitima när innehållet faktiskt är en lista – 
 tekniska specifikationer, åtgärdslistor, jämförelsetabeller. Problemet är när 
@@ -460,7 +460,7 @@ löpande resonemang styckas upp i listor utan att det tillför struktur.
 - Öppna med det specifika, inte det generella
 - Bygg på en verklig erfarenhet eller ett konkret exempel
 - CTA som är kopplad till en faktisk fråga, inte ett generellt "vad tänker du?"
-- Max 3 hashtags, välj dem utifrån relevans inte ambition
+- Max 3 hashtags, välj dem utifrån relevans, inte ambition
 
 ---
 
@@ -480,7 +480,7 @@ löpande resonemang styckas upp i listor utan att det tillför struktur.
 8. Svara kort med kvarvarande tecken
 9. Ställ frågan: **"Vad saknar texten för att låta skriven av en verklig person med 
    en verklig åsikt?"**
-10. Revidiera och presentera slutversionen
+10. Revidera och presentera slutversionen
 
 ## Utdataformat
 
@@ -509,12 +509,12 @@ löpande resonemang styckas upp i listor utan att det tillför struktur.
 **Utkast till omskrivning:**
 > Verktyget är byggt för att lösa ett konkret problem: för lång tid mellan kunddata 
 > och affärsbeslut. I dag tar det i genomsnitt tre veckor från att ett köpmönster 
-> förändras tills att sortimentet speglar det. Med vår plattform är det nere på 48 timmar. 
+> förändras tills sortimentet speglar det. Med vår plattform är det nere på 48 timmar. 
 > Det är inte en digital transformation, det är en kortare loop.
 
 **Vad avslöjar att det här fortfarande är AI-genererat?**
-- "I dag" och "48 timmar" är bra men vi gör ett antagande om tidsramarna som borde 
-  antingen bekräftas med ett riktigt kundcase eller mjukas upp
+- "I dag" och "48 timmar" är bra men vi gör ett antagande om tidsramarna som antingen 
+  borde bekräftas med ett riktigt kundcase eller mjukas upp
 - "Det är inte en digital transformation, det är en kortare loop" riskerar att låta 
   som en konstruerad one-liner
 
@@ -606,7 +606,7 @@ löpande resonemang styckas upp i listor utan att det tillför struktur.
 > #AI #Marknadsföring #DigitalTransformation #Framtid #Innovation
 
 **Utkast till omskrivning:**
-> Vi bytte ut vår brief-process med ett AI-verktyg i höstas. Resultatet: brieferna 
+> Vi bytte ut vår briefprocess mot ett AI-verktyg i höstas. Resultatet: brieferna 
 > är längre men sämre strukturerade. Inte för att verktyget är dåligt, utan för att 
 > vi inte hade en tydlig briefstandard att börja med. AI synliggjorde ett hål vi 
 > inte visste att vi hade.
@@ -620,7 +620,7 @@ löpande resonemang styckas upp i listor utan att det tillför struktur.
 - Frågan i slutet är bättre eftersom den är specifik, men den kan bli ännu vassare
 
 **Slutlig version:**
-> Vi bytte ut vår brief-process med ett AI-verktyg i höstas.
+> Vi bytte ut vår briefprocess mot ett AI-verktyg i höstas.
 >
 > Brieferna blev längre. Men inte bättre.
 >
@@ -628,7 +628,7 @@ löpande resonemang styckas upp i listor utan att det tillför struktur.
 > börja med. AI:n förstärkte det vi matade in, och det vi matade in var halvfärdiga 
 > tankar som vi tidigare hade löst muntligt i rummet.
 >
-> Nu har vi en briefstandard. Verktyget fyller ut den, inte ersätter den.
+> Nu har vi en briefstandard. Verktyget fyller ut den — det ersätter den inte.
 >
 > Har du upplevt att AI avslöjat ett processproblem du inte visste att du hade?
 >

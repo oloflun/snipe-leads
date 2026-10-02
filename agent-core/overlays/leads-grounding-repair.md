@@ -40,4 +40,4 @@ innehöll noll procentsiffror. Mejlet var på väg ut i kundens namn.
 
 Siffran var inte ett misstag i formuleringen — den var uppfunnen för att den
 lät bra. Det är precis det felet den här texten finns för att stoppa, och
-därför är "ta bort" alltid ett godkänt svar och "gissa bättre" aldrig är det.
+därför är "ta bort" alltid ett godkänt svar och "gissa bättre" är det aldrig.

@@ -313,6 +313,9 @@ def _regel_4_personuppgiftsflagga(*, avsandare, utskick, historik, nu) -> GuardB
 
 # -- Regel 5 ----------------------------------------------------------------
 
+#: %A ger engelska veckodagar oavsett tidszon — kundtexten ska vara svensk.
+_VECKODAGAR = ("måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag", "söndag")
+
 
 def _regel_5_volymtak(*, avsandare, utskick, historik, nu) -> GuardBeslut | None:
     """Tre tak: per dag under uppvärmningen, per företag och kvartal, samt
@@ -327,10 +330,11 @@ def _regel_5_volymtak(*, avsandare, utskick, historik, nu) -> GuardBeslut | None
     # 5a. Kontorstid, vardagar. Ett kallmejl 03:14 läses som maskinellt även
     # när texten är bra. Söndag är inte en arbetsdag för mottagaren heller.
     if lokal_tid.weekday() >= 5:
+        veckodag = _VECKODAGAR[lokal_tid.weekday()]
         return GuardBeslut(
             KOLA_OM,
             "5_volymtak",
-            f"{lokal_tid:%A} är helg. Utskick sker vardagar "
+            f"{veckodag.capitalize()} är helg. Utskick sker på vardagar "
             f"{TIDIGAST_TIMME}–{SENAST_TIMME} svensk tid.",
         )
     if not (TIDIGAST_TIMME <= lokal_tid.hour < SENAST_TIMME):

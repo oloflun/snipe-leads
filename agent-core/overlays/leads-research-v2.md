@@ -35,7 +35,7 @@ vilka regler som INTE får tappas. Vid konflikt gäller detta dokument.
 
 Mät prospektet mot kundens IRIS-PROFIL i kontextpaketet — inte mot en
 allmän uppfattning om vad som är ett bra bolag. Du avgör INTE själv om
-bolaget kvalificerar: koden gör det ur dina utslag (app/leads/bedomning.py).
+bolaget kvalificerar sig: koden gör det ur dina utslag (app/leads/bedomning.py).
 
 - `bedomningar`: ETT objekt per kriterium (k1, k2 …) och per uteslutning
   (u1, u2 …) i profilen: `{kriterie_id, belagg: [{url, citat}], resonemang,
@@ -102,7 +102,7 @@ demoskript, inga ROI-kalkylatorer.
   för DET HÄR prospektet ur köparens affärskontext. promise är konkret och
   infriad av produkten; proof är belägg som finns (inte påhittade
   kundcase); risk_reversal sänker tröskeln (t.ex. pilot, ingen bindning);
-  cta är EN låg-friktions-fråga.
+  cta är EN lågfriktionsfråga.
 - `weakest_lever`: vilken av spakarna som är svagast och varför.
 
 ## Osäkerhet (mk:ab-testing-kärnan)

@@ -271,7 +271,7 @@ async def koppla_inkorg(
             # i stället för ett generiskt "nekades".
             fel = (
                 "Ett app-lösenord från Google är exakt 16 tecken — det ni "
-                f"klistrade in är {len(rensat)}. Gå tillbaka till Google-kontot "
+                f"klistrade in är {len(rensat)} tecken. Gå tillbaka till Google-kontot "
                 "och kopiera hela koden."
             )
         raise HTTPException(status_code=422, detail=fel)
@@ -430,7 +430,7 @@ async def ingest_external(
     )
     email = await ingest_email(storage, tenant["tenant_id"], inbound)
     if email is None:
-        raise HTTPException(status_code=409, detail="Mailet är redan mottaget (dublett).")
+        raise HTTPException(status_code=409, detail="Mejlet har redan tagits emot (dubblett).")
     outcome = await process_email(storage, tenant["tenant_id"], email)
     return {"email_id": email["id"], **outcome}
 
@@ -517,7 +517,7 @@ async def get_email(
 ) -> dict:
     email = await request.app.state.storage.get_email(tenant["tenant_id"], email_id)
     if not email:
-        raise HTTPException(status_code=404, detail="Mailet finns inte.")
+        raise HTTPException(status_code=404, detail="Mejlet finns inte.")
     return email
 
 
@@ -529,7 +529,7 @@ async def takeover(
     storage = request.app.state.storage
     email = await storage.get_email(tenant["tenant_id"], email_id)
     if not email:
-        raise HTTPException(status_code=404, detail="Mailet finns inte.")
+        raise HTTPException(status_code=404, detail="Mejlet finns inte.")
     if email.get("draft") and email["draft"]["status"] == "pending":
         await storage.update_draft(tenant["tenant_id"], email["draft"]["id"], status="rejected")
         await storage.add_review(
@@ -562,7 +562,7 @@ async def markera_hanterad(
         tenant["tenant_id"], email_id, hanterad=hanterad
     )
     if not updated:
-        raise HTTPException(status_code=404, detail="Mailet finns inte.")
+        raise HTTPException(status_code=404, detail="Mejlet finns inte.")
     await storage.log_decision(
         tenant["tenant_id"], email_id=email_id,
         event="hanterad" if hanterad else "ohanterad",
@@ -597,14 +597,14 @@ async def processa_om_mail(
     storage = request.app.state.storage
     email = await storage.get_email(tenant["tenant_id"], email_id)
     if not email:
-        raise HTTPException(status_code=404, detail="Mailet finns inte.")
+        raise HTTPException(status_code=404, detail="Mejlet finns inte.")
     # 'new' hör hit sedan avtalsgrinden och supportbudgeten (070/071-arbetet):
     # ett mail som stoppades FÖRE triagen ligger kvar som new utan CRM-rader,
     # så en omkörning därifrån dubblerar lika lite som från failed.
     if email.get("status") not in ("failed", "new"):
         raise HTTPException(
             status_code=409,
-            detail=f"Mailet är {email.get('status')!r} — bara failed eller new kan processas om.",
+            detail=f"Mejlet har status {email.get('status')!r} — bara misslyckade eller nya mejl kan köras om.",
         )
 
     await storage.log_decision(
@@ -629,7 +629,7 @@ async def befordra_testmail(
     storage = request.app.state.storage
     email = await storage.get_email(tenant["tenant_id"], email_id)
     if not email:
-        raise HTTPException(status_code=404, detail="Mailet finns inte.")
+        raise HTTPException(status_code=404, detail="Mejlet finns inte.")
     updated = await storage.update_email(tenant["tenant_id"], email_id, is_test=False)
     ticket_id = (updated or email).get("ticket_id")
     if ticket_id:

@@ -166,7 +166,7 @@ async def _triage_email(
         grounded = article_in_category(articles, triage["category"])
         if grounded is not None and not triage["escalate"]:
             triage["draft_body"] = (
-                f"Tack för att du hör av dig om {CATEGORY_LABELS[triage['category']].lower()}. "
+                "Tack för att du hör av dig. "
                 f"{vision_note}Så här fungerar det hos oss:\n\n{grounded['content']}\n\n"
                 "Hör gärna av dig om något är oklart!"
             )
@@ -355,7 +355,7 @@ async def process_email(
     if await avtal_saknas(storage, tenant_id):
         await storage.log_decision(
             tenant_id, email_id=email_id, event="vantar_avtal",
-            detail={"note": "Avtalet är inte registrerat — mejlet väntar oprocessat."},
+            detail={"note": "Avtalet är inte registrerat — mejlet väntar obehandlat."},
         )
         return {"action": "vantar_avtal"}
 
@@ -366,7 +366,7 @@ async def process_email(
     except SupportBudgetExceededError:
         await storage.log_decision(
             tenant_id, email_id=email_id, event="budget",
-            detail={"note": "Dygnsbudgeten för support är förbrukad — mejlet väntar oprocessat."},
+            detail={"note": "Dygnsbudgeten för support är förbrukad — mejlet väntar obehandlat."},
         )
         return {"action": "budget"}
 
@@ -461,7 +461,7 @@ async def process_email(
         escalation_reason = triage.get("escalation_reason")
         if not must_escalate and not articles:
             must_escalate = True
-            escalation_reason = "Ingen träff i kunskapsbasen — grundningsregeln kräver människa."
+            escalation_reason = "Ingen träff i kunskapsbasen — grundningsregeln kräver att en människa tar ärendet."
 
         if must_escalate or rule == "escalate":
             reason = escalation_reason or f"Regeln för facket {CATEGORY_LABELS[triage['category']]} kräver mänsklig granskning."
@@ -575,7 +575,7 @@ async def process_email(
         if _ar_kvotfel(error):
             beskrivning = (
                 "AI-leverantörens kvot är slut just nu. Mejlet är sparat och "
-                "kan processas om när kvoten är åtgärdad — inget är förlorat."
+                "kan köras om när kvoten har fyllts på — inget är förlorat."
             )
         else:
             beskrivning = str(error)

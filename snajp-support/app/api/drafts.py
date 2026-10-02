@@ -10,6 +10,15 @@ from .schemas import ApproveDraftRequest, OmformuleraDraftRequest, RejectDraftRe
 
 router = APIRouter()
 
+#: Statusvärdena lagras på engelska — kundtexten ska visa svenska.
+_STATUS_SVENSKA = {
+    "approved": "godkänt",
+    "rejected": "avvisat",
+    "sent": "skickat",
+    "auto_sent": "autoskickat",
+    "pending": "väntande",
+}
+
 
 @router.post("/api/drafts/{draft_id}/approve")
 async def approve_draft(
@@ -24,7 +33,10 @@ async def approve_draft(
     if not draft:
         raise HTTPException(status_code=404, detail="Utkastet finns inte.")
     if draft["status"] not in ("pending",):
-        raise HTTPException(status_code=409, detail=f"Utkastet är redan {draft['status']}.")
+        raise HTTPException(
+            status_code=409,
+            detail=f"Utkastet är redan {_STATUS_SVENSKA.get(draft['status'], draft['status'])}.",
+        )
 
     edited = payload.edited_content is not None and payload.edited_content != draft["content"]
     content = payload.edited_content if edited else draft["content"]
@@ -96,7 +108,10 @@ async def omformulera_draft(
     if not draft:
         raise HTTPException(status_code=404, detail="Utkastet finns inte.")
     if draft["status"] not in ("pending",):
-        raise HTTPException(status_code=409, detail=f"Utkastet är redan {draft['status']}.")
+        raise HTTPException(
+            status_code=409,
+            detail=f"Utkastet är redan {_STATUS_SVENSKA.get(draft['status'], draft['status'])}.",
+        )
 
     # Samma dygnsbudget som resten av supporten: en omformulering är ett
     # LLM-anrop och ska inte kunna köras obegränsat när taket är nått.
@@ -131,7 +146,10 @@ async def reject_draft(
     if not draft:
         raise HTTPException(status_code=404, detail="Utkastet finns inte.")
     if draft["status"] not in ("pending",):
-        raise HTTPException(status_code=409, detail=f"Utkastet är redan {draft['status']}.")
+        raise HTTPException(
+            status_code=409,
+            detail=f"Utkastet är redan {_STATUS_SVENSKA.get(draft['status'], draft['status'])}.",
+        )
 
     await storage.update_draft(tenant_id, draft_id, status="rejected")
     await storage.add_review(

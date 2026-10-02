@@ -136,7 +136,7 @@ BESVARBARA = [
     _mail(
         fran="kalle.astrom@mail.se",
         namn="Kalle Åström",
-        amne="Får jag en kurs för nya medarbetare?",
+        amne="Kan vi boka en kurs för nya medarbetare?",
         text=(
             "Vi har anställt fyra nya på lagret. Kan vi boka en utbildning för dem, "
             "och hur många deltagare får plats per tillfälle?"
@@ -166,7 +166,7 @@ BESVARBARA = [
     _mail(
         fran="elin.sandberg@mail.se",
         namn="Elin Sandberg",
-        amne="Hämtar ni i ombud eller hem till dörren?",
+        amne="Levererar ni till ombud eller hem till dörren?",
         text=(
             "Hej! Levererar ni till ombud eller hem till dörren? Jag är sällan hemma "
             "på dagarna."

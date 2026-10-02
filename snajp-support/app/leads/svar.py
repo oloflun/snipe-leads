@@ -307,7 +307,7 @@ async def hantera_prospektsvar(
         handoff = route_handoff(
             prospect_id=prospect_id,
             tenant_id=tenant_id,
-            reason="Positivt svar — mötesbokning tas av människa.",
+            reason="Positivt svar — mötesbokningen sköts av en människa.",
             tenant_primary_contact=None,
         )
         utfall["handoff"] = True

@@ -135,7 +135,8 @@ def sammanfatta(korning: dict[str, Any]) -> str:
     delar = [f"{korning['undersokta']} undersökta"]
     typer = Counter(str(t.get("skal") or "").split(":")[0].strip() for t in korning["tratt"])
     delar += [f"{antal} bortvalda: {typ.lower()}" for typ, antal in typer.most_common(3) if typ]
-    text = ", ".join(delar) + f" → {korning['levererade']} leads."
+    levererade = korning["levererade"]
+    text = ", ".join(delar) + f" → {levererade} lead{'' if levererade == 1 else 's'}."
     if korning["levererade"] < korning["mal"] and korning.get("flaskhals"):
         text += f" Det som strypte mest: {korning['flaskhals'].lower()}."
     return text
