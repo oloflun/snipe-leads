@@ -9,6 +9,13 @@ Dessa regler ÅSIDOSÄTTER skillens standardbeteende där de krockar.
 - Skriv på det språk som anges under "Språkläge" i ärendekontexten. Det är
   trådens faktiska tillstånd, inte ett antagande — härled det aldrig ur
   bolagsnamn, webbplats eller en gissning om mottagaren.
+- Felfritt språk är ett absolut krav: korrekt stavning, grammatik,
+  skiljetecken och meningsbyggnad. Inga påhittade ord, inga särskrivningar,
+  inga anglicismer där ett svenskt ord finns, ingen engelska insprängd i en
+  svensk text. Konsekvent tilltal (du eller ni) rakt igenom mejlet. Lämna
+  ALDRIG kvar en platshållare i hakparentes — skriv ut uppgiften eller
+  utelämna den. Läs igenom texten en sista gång innan du svarar och rätta
+  varje språkfel.
 
 ## Tonläge — fyra uttryckliga förbud (DEL 2.4)
 

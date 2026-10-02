@@ -1414,7 +1414,8 @@ async def run_support_agent(
         trace,
         task=(
             "Gör texten naturlig svenska enligt skillen. Behåll all sakinformation. "
-            "Ren text, ingen markdown. Returnera JSON: final_reply (svenska)."
+            "Ren text, ingen markdown. Korrekturläs till sist: felfri stavning, "
+            "grammatik och skiljetecken. Returnera JSON: final_reply (svenska)."
         ),
         case_context=f"{case_context}\n\n## Text att humanisera\n{current_draft}",
     )

@@ -6,6 +6,7 @@ import { valjModell, type Modellval } from '@/lib/llm/modellval';
 import { hamtaVertexToken } from '@/lib/llm/vertex';
 import { kanForsokasOm, klassaModellfel, statuskod, type Modellfelklass } from '@/lib/llm/kvotfel';
 import { DIREKT_OMSKRIVNING, exempelresultat, finnExempelbolag } from '@/lib/demo/iris-exempel';
+import { putsaText } from '@/lib/textkvalitet';
 
 /**
  * Routen väntar på ett LLM-anrop och var den ENDA under app/api som saknade
@@ -300,6 +301,17 @@ Använd alltid principerna: "The email should read like it came from someone who
 **Output-format (EXAKT detta — ingen avvikelse):**
 Svara med ETT giltigt JSON-objekt och ingenting annat — ingen inledande text, ingen kodstängsel:
 {"new_version":"<den nya mejltexten>","explanation":"<kort, referera specifik princip, t.ex. 'Ruthlessly short enligt cold-email/SKILL.md'>","subject_suggestions":["<2-3 korta, interna, peer-liknande ämnesrader>"],"original_version":null,"confidence_tips":"<valfritt: förväntad reply-rate, compliance-not eller nästa steg>"}
+
+**SPRÅKKRAV (absoluta, gäller varje åtgärd):**
+- Korrekt, naturlig och professionell svenska: rätt stavning, grammatik,
+  skiljetecken och meningsbyggnad i varje mening. Inga påhittade ord, inga
+  särskrivningar, inga anglicismer där ett svenskt ord finns, ingen engelska
+  insprängd i en svensk text (om inte åtgärden är Översätt).
+- Konsekvent tilltal rakt igenom mejlet — byt aldrig mellan du och ni.
+- Lämna ALDRIG kvar en platshållare i hakparentes som "[namn]" eller
+  "[företag]" — skriv ut uppgiften eller utelämna den.
+- Ändra aldrig namn, siffror, länkar eller e-postadresser när du skriver om.
+- Läs igenom texten en sista gång innan du svarar och rätta varje språkfel.
 
 **Språk och variation (viktigt):**
 - Variera ditt språk. Upprepa inte samma fraser, meningsöppningar eller ordval inom en konversation eller mellan förslag. Om du nyss skrev "Såg att..." — öppna nästa gång annorlunda.
@@ -610,6 +622,16 @@ export async function POST(request: NextRequest) {
   if (!rich.new_version || !rich.new_version.trim()) {
     console.error(`[email-studio:modellfel] klass=tomt-svar provider=${modell.provider} modell=${modell.namn} åtgärd=${kandAction}`);
     return honestFel("tillfälligt fel");
+  }
+
+  // Textkvalitetslagret (lib/textkvalitet.ts): samma deterministiska
+  // putsning som backenden gör på sina utkast — blanksteg, mellanslag före
+  // skiljetecken och entydiga felstavningar. Rör aldrig länkar, adresser
+  // eller siffror. Resultatet landar hos en människa i editorn, så ingen
+  // hård grind behövs här — men språkskräp ska inte ens nå rutan.
+  rich.new_version = putsaText(rich.new_version);
+  if (Array.isArray(rich.subject_suggestions)) {
+    rich.subject_suggestions = rich.subject_suggestions.map((s: string) => putsaText(s));
   }
 
   return NextResponse.json({

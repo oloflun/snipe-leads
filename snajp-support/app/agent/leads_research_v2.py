@@ -596,8 +596,9 @@ async def run_outreach_draft_v2(
         trace,
         task=(
             "Gör texten till naturlig svenska enligt skillen. Behåll all sakinformation, "
-            "lägg inte till nya påståenden. Returnera JSON: final_subject (svenska), "
-            "final_body (svenska, ren text)."
+            "lägg inte till nya påståenden. Korrekturläs till sist: felfri stavning, "
+            "grammatik och skiljetecken, konsekvent tilltal — mänskligt är aldrig slarvigt. "
+            "Returnera JSON: final_subject (svenska), final_body (svenska, ren text)."
         ),
         case_context=(
             f"{humanizer_base}\n\n## Text att humanisera\n"

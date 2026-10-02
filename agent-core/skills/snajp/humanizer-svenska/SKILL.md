@@ -28,14 +28,19 @@ När du får en text att humanisera:
 
 1. **Fråga om texttyp om det är oklart** – Affärstext, rapport, artikel eller sociala medier 
    har olika register. Om det inte framgår av texten eller instruktionen, fråga innan du börjar.
-2. **Identifiera AI-mönster** – Scanna efter mönstren nedan
+2. **Identifiera AI-mönster** – Skanna efter mönstren nedan
 3. **Skriv om problematiska avsnitt** – Ersätt AI-ismer med naturliga alternativ
 4. **Bevara betydelsen** – Håll kärnbudskapet intakt
-5. **Matcha rätt register** – Applicera rätt ton utifrån texttypen
+5. **Matcha rätt register** – Använd rätt ton utifrån texttypen
 6. **Tillför röst** – Ta inte bara bort dåliga mönster, tillför verklig personlighet
 7. **Gör ett avslutande AI-test** – Fråga: "Vad avslöjar att det här fortfarande är AI-genererat?" 
    Svara kortfattat. Fråga sedan: "Vad saknar texten för att låta skriven av en verklig person 
-   med en verklig åsikt?" Revidiera baserat på båda svaren.
+   med en verklig åsikt?" Revidera baserat på båda svaren.
+8. **Korrekturläs till sist — felfri svenska är ett absolut krav.** Mänsklig text är inte
+   slarvig text: rätt stavning, grammatik, särskrivning, skiljetecken och meningsbyggnad i
+   varje mening. Inga påhittade ord. Konsekvent tilltal (du eller ni) rakt igenom. Ändra
+   aldrig namn, siffror, länkar eller sakuppgifter under korrekturen. Hittar du ett språkfel
+   i originalet rättar du det — "mänskligt" är aldrig en ursäkt för stavfel.
 
 ---
 
