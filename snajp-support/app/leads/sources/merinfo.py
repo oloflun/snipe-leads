@@ -427,8 +427,8 @@ def kontrollera(b: dict[str, Any], icp: dict[str, Any], profil: dict[str, Any] |
     for u in [*(icp.get("exclude_industries") or []), *((profil or {}).get("undvik_branscher") or [])]:
         if any(s in text for s in _stammar(u)):
             return f"Bransch kunden undviker: {u}."
-    if not b.get("personer") or not b.get("telefon"):
-        return "Ingen verifierad kontakt: namn, roll och telefon krävs."
+    if not b.get("personer") or not (b.get("telefon") or b.get("epost")):
+        return "Ingen verifierad kontakt: namn, roll och telefon eller mejl krävs."
     return None
 
 
@@ -454,6 +454,8 @@ def _kodpoang(b: dict[str, Any], icp: dict[str, Any], profil: dict[str, Any] | N
     if isinstance(b.get("anstallda"), int) and (lo is not None or hi is not None):
         poang += 1
     poang += 1 if b.get("website") else 0
+    # Telefon väger tyngre än mejl: Antons grundkrav, mejl är tillägget.
+    poang += 2.5 if b.get("telefon") else 0
     poang += 1 if b.get("epost") else 0
     poang += 0.5 if (b.get("omsattning") or 0) > 0 else 0
     onskat = " ".join([*(icp.get("must_have") or []), *(k.get("text", "") for k in p.get("kriterier") or [])])
@@ -502,7 +504,8 @@ async def sok(
     puls: Callable[[], Awaitable[Any]] | None = None,
 ) -> list[dict[str, Any]] | None:
     """Antons arbetsflöde: bransch → län/kommun → listsidor → bolagssidor →
-    kontaktkravet → rangordning (Jev om påslagen) → de `antal` bästa.
+    kontaktkravet (namn + roll + telefon eller mejl) → rangordning (Jev om
+    påslagen) → de `antal` bästa.
 
     None = målgruppen gick inte att översätta till merinfos träd (anroparen
     faller tillbaka på den gamla kedjan). [] = översatt, men inget bolag
@@ -548,16 +551,19 @@ async def sok(
                 if nyckel in sedda:
                     continue
                 sedda.add(nyckel)
-                # Kontaktkravet sållar redan här: utan listat telefonnummer
-                # finns inget att hämta på bolagssidan som klarar det.
-                if r["telefon"]:
-                    kandidater.append(r)
+                # Antons tillägg 2026-10-02: rader utan telefon sparas också,
+                # om bolagssidan (eller bolagets egen sajt) ger en mejladress.
+                # Mejl syns aldrig på listsidan, så raden måste få sin
+                # bolagssida hämtad; telefonraderna sorteras först så taket
+                # (MAX_BOLAGSSIDOR) träffar de rader som redan bär en kontakt.
+                kandidater.append(r)
         sida += 1
     if not gav_rader:
         # Ingen sluggkombination gav en enda listrad: branschordet fanns inte
         # som lista hos merinfo. Det är "kunde inte tolka", inte "inga bolag".
         logger.info("merinfo: inga listrader för %s.", sokningar)
         return None
+    kandidater.sort(key=lambda r: 0 if r["telefon"] else 1)
     kandidater = kandidater[:mal]
 
     async def granska(r: dict[str, Any]) -> dict[str, Any] | None:
@@ -569,6 +575,16 @@ async def sok(
         b = tolka_bolag(md, r["url"])
         b["telefon"] = b["telefon"] or r["telefon"]
         b["orgnr"] = b["orgnr"] or r["orgnr"]
+        if not b["telefon"] and not b.get("epost") and b.get("website") and b.get("personer"):
+            # Sista chansen för en rad utan kontaktväg: bolagets egen sajt,
+            # via httpx och regex (discovery.hamta_kontaktvag), aldrig LLM.
+            from ..discovery import hamta_kontaktvag
+
+            webb = b["website"] if str(b["website"]).startswith("http") else f"https://{b['website']}"
+            try:
+                b["epost"] = (await hamta_kontaktvag(webb)).get("contact_email")
+            except Exception:  # noqa: BLE001 — en trasig sajt fäller inte listan
+                logger.info("merinfo: kontaktvägen på %s gick inte att läsa.", webb)
         return b
 
     granskade = [b for b in await asyncio.gather(*(granska(r) for r in kandidater)) if b]

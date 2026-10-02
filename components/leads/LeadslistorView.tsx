@@ -4,7 +4,7 @@ import { Send } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
-import { btnPrimary, btnSecondary, EmptyState, SkeletonRows } from "@/components/ui";
+import { btnPrimary, btnSecondary, EmptyState, SkeletonRows, flik, flikAktiv, flikInaktiv } from "@/components/ui";
 import { lasOffertForUtkast } from "@/lib/actions/affarskontext";
 import type { EmailStudioData } from "@/lib/data/emails";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
@@ -65,6 +65,48 @@ const STATUS_ETIKETT: Record<string, Localized> = {
   klar: { sv: "Klar", en: "Done" },
   fel: { sv: "Fel", en: "Failed" }
 };
+
+/** Vilken väg raden går att nå: telefon, mejl eller båda. Antons underflik
+ *  (2026-10-02) sitter i SAMMA lista, inte som en separat mejllista. */
+type Kontaktvag = "telefon" | "mejl" | "bada";
+type Kontaktfilter = "alla" | Kontaktvag;
+type Sortering = "kontakt" | "bolag";
+
+function kontaktvag(rad: ListRad): Kontaktvag | null {
+  const tel = Boolean(rad.contact_phone);
+  const mejl = Boolean(rad.contact_email);
+  if (tel && mejl) return "bada";
+  if (tel) return "telefon";
+  if (mejl) return "mejl";
+  return null;
+}
+
+const KONTAKTFILTER: { id: Kontaktfilter; etikett: Localized }[] = [
+  { id: "alla", etikett: { sv: "Alla", en: "All" } },
+  { id: "telefon", etikett: { sv: "Telefon", en: "Phone" } },
+  { id: "mejl", etikett: { sv: "Mejl", en: "Email" } },
+  { id: "bada", etikett: { sv: "Båda", en: "Both" } }
+];
+
+const KONTAKTVAG_ETIKETT: Record<Kontaktvag, Localized> = {
+  telefon: { sv: "Telefon", en: "Phone" },
+  mejl: { sv: "Mejl", en: "Email" },
+  bada: { sv: "Telefon och mejl", en: "Phone and email" }
+};
+
+/** Filtrerad och sorterad vy över listans rader. Sortering på kontaktväg:
+ *  båda först, sedan telefon, sedan mejl; inom gruppen bolagsnamn A–Ö. */
+function synligaRader(items: ListRad[], filter: Kontaktfilter, sortering: Sortering): ListRad[] {
+  const ordning: Record<string, number> = { bada: 0, telefon: 1, mejl: 2 };
+  const kvar = filter === "alla" ? items : items.filter((rad) => kontaktvag(rad) === filter);
+  return [...kvar].sort((a, b) => {
+    if (sortering === "kontakt") {
+      const d = (ordning[kontaktvag(a) ?? "z"] ?? 3) - (ordning[kontaktvag(b) ?? "z"] ?? 3);
+      if (d !== 0) return d;
+    }
+    return a.company_name.localeCompare(b.company_name, "sv");
+  });
+}
 
 const T = {
   beskrivBolag: { sv: "Beskriv vilka bolag listan ska hitta.", en: "Describe which companies the list should find." },
@@ -828,6 +870,10 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
 
   const medAdress = items.filter((rad) => rad.contact_email);
   const kandidater = medAdress.filter((rad) => !hanterade.has(rad.id));
+  const [kontaktfilter, setKontaktfilter] = useState<Kontaktfilter>("alla");
+  const [sortering, setSortering] = useState<Sortering>("kontakt");
+  const visade = synligaRader(items, kontaktfilter, sortering);
+  const antalPer = (f: Kontaktfilter) => (f === "alla" ? items.length : items.filter((rad) => kontaktvag(rad) === f).length);
   const omgang = kandidater.slice(0, SVEP_TAK);
   const svepKor = svep?.fas === "kor";
 
@@ -953,8 +999,8 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
         <p className="text-[13px] text-ink-subtle">
           {text({
-            sv: `${items.length} bolag i listan · ${medAdress.length} med mejladress`,
-            en: `${items.length} companies in the list · ${medAdress.length} with an email address`
+            sv: `${items.length} bolag i listan · ${antalPer("telefon") + antalPer("bada")} med telefon · ${medAdress.length} med mejladress`,
+            en: `${items.length} companies in the list · ${antalPer("telefon") + antalPer("bada")} with a phone number · ${medAdress.length} with an email address`
           })}
         </p>
         <div className="flex flex-wrap items-center gap-2">
@@ -1087,6 +1133,36 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
           och summerar till 100 — se Tabell i components/ui.tsx. Knappkolumnen
           finns bara när mejlbron är på, så colgroup och expanderradens colSpan
           måste följa samma villkor som cellerna. */}
+      {/* Underfliken: samma lista, filtrerad på kontaktväg. Sortering: båda →
+          telefon → mejl, eller bolagsnamn. */}
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+        <div className="flex flex-wrap gap-2" role="tablist" aria-label={text({ sv: "Kontaktväg", en: "Contact channel" })}>
+          {KONTAKTFILTER.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              role="tab"
+              aria-selected={kontaktfilter === f.id}
+              onClick={() => setKontaktfilter(f.id)}
+              className={cn(flik, kontaktfilter === f.id ? flikAktiv : flikInaktiv)}
+            >
+              {text(f.etikett)} <span className="num tabular-nums opacity-70">{antalPer(f.id)}</span>
+            </button>
+          ))}
+        </div>
+        <label className="flex items-center gap-2 text-[13px] text-ink-subtle">
+          {text({ sv: "Sortera", en: "Sort" })}
+          <select
+            value={sortering}
+            onChange={(e) => setSortering(e.target.value as Sortering)}
+            className="focus-ring min-h-9 rounded-input border border-ink/15 bg-paper px-2 text-[13px] text-ink"
+          >
+            <option value="kontakt">{text({ sv: "Kontaktväg", en: "Contact channel" })}</option>
+            <option value="bolag">{text({ sv: "Bolag A–Ö", en: "Company A–Z" })}</option>
+          </select>
+        </label>
+      </div>
+
       <div className="mt-4 hidden overflow-x-auto border-y border-ink/15 md:block">
         <table className="w-full min-w-[960px] table-fixed border-collapse text-[15px]">
           <colgroup>
@@ -1117,7 +1193,7 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
             </tr>
           </thead>
           <tbody className="divide-y divide-ink/15">
-            {items.map((rad, index) => [
+            {visade.map((rad, index) => [
               <tr key={`${rad.company_name}-${index}`} className="transition hover:bg-paper2/60">
                 <th scope="row" className="py-4 pr-6 text-left font-normal">
                   <p className="text-[15px] font-semibold tracking-[-0.01em]">
@@ -1130,6 +1206,9 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
                 <td className="kicker py-4 pr-6 text-mineral">{rad.ort ?? "—"}</td>
                 <td className="py-4 pr-6">
                   <p className="text-[15px]">{kontakt(rad)}</p>
+                  {kontaktvag(rad) ? (
+                    <p className="mt-1 text-[12px] text-ink-subtle">{text(KONTAKTVAG_ETIKETT[kontaktvag(rad)!])}</p>
+                  ) : null}
                   {rad.contact_phone ? (
                     <a href={`tel:${rad.contact_phone.replace(/[^\d+]/g, "")}`} className="num mt-1 block text-sm text-ink-muted underline-offset-4 hover:underline">
                       {rad.contact_phone}
@@ -1176,7 +1255,7 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
       </div>
 
       <ul className="mt-4 space-y-2 md:hidden">
-        {items.map((rad, index) => (
+        {visade.map((rad, index) => (
           <li
             key={`${rad.company_name}-${index}`}
             className="rounded-input border border-ink/15 px-4 py-3"

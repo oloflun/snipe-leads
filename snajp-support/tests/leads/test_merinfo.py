@@ -28,7 +28,8 @@ Mölndal
 
 def bolagssida(namn: str, orgnr: str, *, roll: str | None = "Verkställande direktör", person: str = "Test Testsson",
                telefon: str | None = "070-111 11 11", anstallda: int = 4, status: str = "Bolaget är aktivt",
-               bolagsform: str = "Aktiebolag", verksamhet: str = "Bolaget skall bedriva byggverksamhet.") -> str:
+               bolagsform: str = "Aktiebolag", verksamhet: str = "Bolaget skall bedriva byggverksamhet.",
+               epost: str | None = None, hemsida: str | None = None) -> str:
     rollblock = (
         f"{roll}:\n     [ {person} ](https://www.merinfo.se/person/M%C3%B6lndal/Test-1970/xxxx)\n" if roll else ""
     )
@@ -51,9 +52,9 @@ Org.nummer:
 {rollblock}Styrelsesuppleant:
      [ Suppleant Person ](https://www.merinfo.se/person/M%C3%B6lndal/S-1980/yyyy)
 E-post:
-     __Lägg till e-post
+     {epost or "__Lägg till e-post"}
 Hemsida:
-     __Lägg till hemsida
+     {hemsida or "__Lägg till hemsida"}
 ## Bolagsfakta
 Antal anställda:
     {anstallda} st
@@ -144,6 +145,19 @@ def test_godkant_bolag_passerar():
     assert m.kontrollera(b, {"size": {"anstallda_min": 1, "anstallda_max": 49}}, None) is None
 
 
+def test_bara_mejl_racker_som_kontaktvag():
+    """Antons tillägg 2026-10-02: en rad med namn, roll och mejl men utan
+    telefon sparas också. Namn och roll krävs fortfarande."""
+    b = m.tolka_bolag(bolagssida("Beta Måleri AB", "556000-0002", telefon=None, epost="info@betamaleri.se"), "u")
+    assert b["telefon"] is None and b["epost"] == "info@betamaleri.se"
+    assert m.kontrollera(b, {}, None) is None
+    utan_person = m.tolka_bolag(bolagssida("Beta Måleri AB", "556000-0002", roll=None, epost="info@betamaleri.se"), "u")
+    assert str(m.kontrollera(utan_person, {}, None)).startswith("Ingen verifierad kontakt")
+    # Telefon väger tyngre än mejl vid rangordningen.
+    med_tel = m.tolka_bolag(bolagssida("Alfa Bygg AB", "556000-0001"), "u")
+    assert m._kodpoang(med_tel, {}, None) > m._kodpoang(b, {}, None)
+
+
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
@@ -168,24 +182,35 @@ async def test_hela_sokningen_levererar_bara_kvalificerade(monkeypatch):
         {
             "https://www.merinfo.se/byggbranschen/molndal/foretag/1": LISTA,
             rader["Alfa Bygg AB"]: bolagssida("Alfa Bygg AB", "556000-0001"),
+            # Beta saknar telefon både i listan och på bolagssidan, men har en
+            # sajt: mejlen hämtas därifrån (hamta_kontaktvag, stubbad nedan).
+            rader["Beta Måleri AB"]: bolagssida("Beta Måleri AB", "556000-0002", telefon=None,
+                                                hemsida="www.betamaleri.se"),
             # Gamma saknar namngiven person: fälls på kontaktkravet.
             rader["Gamma Golv AB"]: bolagssida("Gamma Golv AB", "556000-0003", roll=None),
             rader["Delta Snickeri AB"]: bolagssida("Delta Snickeri AB", "556000-0004", roll="Styrelseledamot",
                                                    person="Dora Delta", telefon="070-444 44 44"),
         },
     )
+    async def _kontaktvag(website):
+        assert website == "https://www.betamaleri.se"
+        return {"contact_email": "info@betamaleri.se", "contact_level": "role_address"}
+
+    monkeypatch.setattr(discovery, "hamta_kontaktvag", _kontaktvag)
     icp = {"industries": ["Bygg"], "geography": ["Mölndal"], "roles": ["VD"], "size": {"anstallda_min": 1, "anstallda_max": 49}}
     leads = await m.sok(icp, 5, uteslut=set(), profil=None)
 
-    assert [k["company_name"] for k in leads] == ["Alfa Bygg AB", "Delta Snickeri AB"]
+    assert [k["company_name"] for k in leads] == ["Alfa Bygg AB", "Beta Måleri AB", "Delta Snickeri AB"]
+    beta = leads[1]
+    assert beta["contact_phone"] is None and beta["contact_email"] == "info@betamaleri.se"
     alfa = leads[0]
     assert (alfa["contact_name"], alfa["contact_role"], alfa["contact_phone"]) == (
         "Test Testsson", "Verkställande direktör", "070-111 11 11")
     # VD matchar kundens önskade roll; ledamoten är en annan beslutsfattare.
-    assert alfa["contact_level"] == "named_role_match" and leads[1]["contact_level"] == "named_other"
+    assert alfa["contact_level"] == "named_role_match" and leads[2]["contact_level"] == "named_other"
     assert alfa["source_name"] == "merinfo" and alfa["source_url"].startswith("https://www.merinfo.se/foretag/")
-    # Beta saknade telefon redan i listan: dess bolagssida hämtades aldrig.
-    assert rader["Beta Måleri AB"] not in hamtade
+    # Beta saknade telefon i listan men hämtas ändå: mejl syns aldrig på listsidan.
+    assert rader["Beta Måleri AB"] in hamtade
 
 
 @pytest.mark.anyio
