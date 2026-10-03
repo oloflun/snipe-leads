@@ -53,7 +53,7 @@ export function TestchattVy() {
           return;
         }
         if (jobb?.status === "failed") {
-          throw new Error(jobb.error || "Agenten föll utan besked.");
+          throw new Error(jobb.error || "Agenten avbröts utan att svara.");
         }
         await new Promise((klar) => setTimeout(klar, POLL_MS));
       }

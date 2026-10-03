@@ -23,8 +23,8 @@ from ..config import (
 )
 from ..integrationer.hemligheter import IngenNyckelError, kryptera
 from ..scripts.seed_kb import ensure_tenant_kb
-from .deps import require_tenant
-from .schemas import HanteradRequest, IngestEmailRequest, KopplaInkorgRequest, SeedMockRequest
+from .deps import kraev_uuid, require_tenant
+from .schemas import HanteradRequest, IngestEmailRequest, KlassaRequest, KopplaInkorgRequest, SeedMockRequest
 
 logger = logging.getLogger("snajp-support.inbox")
 
@@ -271,7 +271,7 @@ async def koppla_inkorg(
             # i stället för ett generiskt "nekades".
             fel = (
                 "Ett app-lösenord från Google är exakt 16 tecken — det ni "
-                f"klistrade in är {len(rensat)}. Gå tillbaka till Google-kontot "
+                f"klistrade in är {len(rensat)} tecken. Gå tillbaka till Google-kontot "
                 "och kopiera hela koden."
             )
         raise HTTPException(status_code=422, detail=fel)
@@ -294,6 +294,7 @@ async def koppla_inkorg(
         # behöver den utskriven — utom icloud, vars provider är 'imap'.
         imap_host=None if provider in ("gmail", "outlook") else host,
         secret_enc=hemlighet,
+        syfte=payload.syfte,
     )
     return {
         "connected": True,
@@ -429,7 +430,7 @@ async def ingest_external(
     )
     email = await ingest_email(storage, tenant["tenant_id"], inbound)
     if email is None:
-        raise HTTPException(status_code=409, detail="Mailet är redan mottaget (dublett).")
+        raise HTTPException(status_code=409, detail="Mejlet har redan tagits emot (dubblett).")
     outcome = await process_email(storage, tenant["tenant_id"], email)
     return {"email_id": email["id"], **outcome}
 
@@ -452,7 +453,10 @@ async def list_inbox(
     q: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     is_test: bool | None = Query(default=None),
+    klass: str | None = Query(default=None),
 ) -> dict:
+    if klass is not None and klass not in ("support", "lead", "ej_relaterat"):
+        raise HTTPException(status_code=422, detail="klass är support, lead eller ej_relaterat.")
     storage = request.app.state.storage
     visar = await _visar_test_i_arenden(storage, tenant)
     lager = is_test
@@ -465,6 +469,7 @@ async def list_inbox(
         search=q,
         limit=limit,
         is_test=lager,
+        klass=klass,
     )
     counts: dict[str, int] = {}
     status_counts: dict[str, int] = {}
@@ -481,13 +486,38 @@ async def list_inbox(
     }
 
 
+@router.post("/api/inbox/{email_id}/klassa")
+async def klassa_om(
+    request: Request, email_id: str, payload: KlassaRequest, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Manuell omklassning (migration 084): människan rättar Jev eller regeln.
+    Beslutet loggas med källa 'manuell' så det går att mäta Jev mot
+    människan. Ett mejl som blir 'lead' flyttar till leads-inkorgen, ett
+    som blir 'ej_relaterat' döljs; ett som blir 'support' går tillbaka till
+    'new' så nästa processa-om tar det."""
+    kraev_uuid(email_id, "mejlet")
+    storage = request.app.state.storage
+    rad = await storage.get_email(tenant["tenant_id"], email_id)
+    if not rad:
+        raise HTTPException(status_code=404, detail="Mejlet finns inte.")
+    ny_status = {"lead": "lead", "ej_relaterat": "ej_relaterat", "support": "new"}[payload.klass]
+    uppdaterad = await storage.update_email(
+        tenant["tenant_id"], email_id, klass=payload.klass, klass_kalla="manuell", status=ny_status
+    )
+    await storage.log_decision(
+        tenant["tenant_id"], email_id=email_id, event="omklassning",
+        detail={"fran": rad.get("klass"), "till": payload.klass, "av": "manuell"},
+    )
+    return {"email": uppdaterad}
+
+
 @router.get("/api/inbox/{email_id}")
 async def get_email(
     request: Request, email_id: str, tenant: dict = Depends(require_tenant)
 ) -> dict:
     email = await request.app.state.storage.get_email(tenant["tenant_id"], email_id)
     if not email:
-        raise HTTPException(status_code=404, detail="Mailet finns inte.")
+        raise HTTPException(status_code=404, detail="Mejlet finns inte.")
     return email
 
 
@@ -499,7 +529,7 @@ async def takeover(
     storage = request.app.state.storage
     email = await storage.get_email(tenant["tenant_id"], email_id)
     if not email:
-        raise HTTPException(status_code=404, detail="Mailet finns inte.")
+        raise HTTPException(status_code=404, detail="Mejlet finns inte.")
     if email.get("draft") and email["draft"]["status"] == "pending":
         await storage.update_draft(tenant["tenant_id"], email["draft"]["id"], status="rejected")
         await storage.add_review(
@@ -532,7 +562,7 @@ async def markera_hanterad(
         tenant["tenant_id"], email_id, hanterad=hanterad
     )
     if not updated:
-        raise HTTPException(status_code=404, detail="Mailet finns inte.")
+        raise HTTPException(status_code=404, detail="Mejlet finns inte.")
     await storage.log_decision(
         tenant["tenant_id"], email_id=email_id,
         event="hanterad" if hanterad else "ohanterad",
@@ -567,14 +597,14 @@ async def processa_om_mail(
     storage = request.app.state.storage
     email = await storage.get_email(tenant["tenant_id"], email_id)
     if not email:
-        raise HTTPException(status_code=404, detail="Mailet finns inte.")
+        raise HTTPException(status_code=404, detail="Mejlet finns inte.")
     # 'new' hör hit sedan avtalsgrinden och supportbudgeten (070/071-arbetet):
     # ett mail som stoppades FÖRE triagen ligger kvar som new utan CRM-rader,
     # så en omkörning därifrån dubblerar lika lite som från failed.
     if email.get("status") not in ("failed", "new"):
         raise HTTPException(
             status_code=409,
-            detail=f"Mailet är {email.get('status')!r} — bara failed eller new kan processas om.",
+            detail=f"Mejlet har status {email.get('status')!r} — bara misslyckade eller nya mejl kan köras om.",
         )
 
     await storage.log_decision(
@@ -599,7 +629,7 @@ async def befordra_testmail(
     storage = request.app.state.storage
     email = await storage.get_email(tenant["tenant_id"], email_id)
     if not email:
-        raise HTTPException(status_code=404, detail="Mailet finns inte.")
+        raise HTTPException(status_code=404, detail="Mejlet finns inte.")
     updated = await storage.update_email(tenant["tenant_id"], email_id, is_test=False)
     ticket_id = (updated or email).get("ticket_id")
     if ticket_id:

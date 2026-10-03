@@ -60,6 +60,10 @@ _PROSPEKT_PROFILFALT = frozenset(
         "contact_role",
         "contact_level",
         "contact_form_url",
+        # Migration 081: kontaktpersonens telefon (registerkällan).
+        "contact_phone",
+        # Migration 085: varifrån ett prospekt importerades (admin_flytt).
+        "importerad_fran",
     }
 )
 
@@ -167,7 +171,7 @@ def _avkoda_prospekt(data: dict[str, Any] | None) -> dict[str, Any] | None:
     på prospects ska behöva läggas till på ETT ställe, inte fyra. Fyra platser
     som måste ändras tillsammans är hur den här buggen såg ut från början.
     """
-    return _avkoda_jsonb(data, "score_breakdown", "jev")
+    return _avkoda_jsonb(data, "score_breakdown", "jev", "signaler")
 
 
 class PostgresStorage:
@@ -329,22 +333,24 @@ class PostgresStorage:
         address: str,
         imap_host: str | None = None,
         secret_enc: str | None = None,
+        syfte: str = "support",
     ) -> dict[str, Any]:
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
                 """
                 insert into ss_mailboxes
-                    (tenant_id, provider, address, status, imap_host, secret_enc)
-                values ($1, $2, lower(trim($3)), 'active', $4, $5)
+                    (tenant_id, provider, address, status, imap_host, secret_enc, syfte)
+                values ($1, $2, lower(trim($3)), 'active', $4, $5, $6)
                 on conflict (tenant_id, address) do update set
                     provider = excluded.provider,
                     imap_host = excluded.imap_host,
                     secret_enc = excluded.secret_enc,
+                    syfte = excluded.syfte,
                     status = 'active',
                     last_error = null
                 returning *
                 """,
-                tenant_id, provider, address, imap_host, secret_enc,
+                tenant_id, provider, address, imap_host, secret_enc, syfte,
             )
         return _row(record)
 
@@ -1303,6 +1309,7 @@ class PostgresStorage:
                 select t.*,
                        p.company_name,
                        p.contact_email,
+                       p.origin,
                        count(m.id) filter (
                          where m.direction = 'outbound' and m.sent_at is not null
                        ) as outbound_sent_count,
@@ -1320,7 +1327,7 @@ class PostgresStorage:
                 left join outreach_messages m on m.thread_id = t.id
                 left join send_queue q on q.thread_id = t.id
                 where t.tenant_id = $1
-                group by t.id, p.company_name, p.contact_email
+                group by t.id, p.company_name, p.contact_email, p.origin
                 """,
                 tenant_id,
             )
@@ -1699,6 +1706,7 @@ class PostgresStorage:
         contact_role: str | None = None,
         contact_level: str | None = None,
         contact_form_url: str | None = None,
+        status_kalla: str = "kod",
     ) -> dict[str, Any] | None:
         # Dynamisk SET-lista: en PATCH ska kunna sätta ETT fält utan att nolla
         # de andra, och en fast update-sats hade krävt att anroparen skickar
@@ -1727,26 +1735,184 @@ class PostgresStorage:
             f"{name} = ${index}" for index, name in enumerate(fields, start=3)
         )
         async with self._scoped(tenant_id) as conn:
+            # Statusloggen (migration 086) i SAMMA transaktion: radlåset gör
+            # att `fran` är den status uppdateringen faktiskt ersatte.
+            fore = None
+            if status is not None:
+                fore = await conn.fetchrow(
+                    "select status from prospects where tenant_id = $1 and id = $2 for update",
+                    tenant_id,
+                    prospect_id,
+                )
             record = await conn.fetchrow(
                 f"update prospects set {assignments} where tenant_id = $1 and id = $2 returning *",
                 tenant_id,
                 prospect_id,
                 *fields.values(),
             )
+            if record is not None and fore is not None and fore["status"] != status:
+                await conn.execute(
+                    """
+                    insert into prospect_status_logg (tenant_id, prospect_id, fran, till, kalla)
+                    values ($1, $2, $3, $4, $5)
+                    """,
+                    tenant_id,
+                    prospect_id,
+                    fore["status"],
+                    status,
+                    status_kalla,
+                )
         return _avkoda_prospekt(_row(record))
+
+    # -- Leads Suite (migration 086) -----------------------------------------
+
+    async def add_lead_note(self, tenant_id: str, *, prospect_id: str, text: str) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                insert into lead_anteckningar (tenant_id, prospect_id, text)
+                values ($1, $2, $3) returning *
+                """,
+                tenant_id,
+                prospect_id,
+                text,
+            )
+        return _row(record)
+
+    async def list_lead_notes(self, tenant_id: str, prospect_id: str) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select * from lead_anteckningar
+                where tenant_id = $1 and prospect_id = $2
+                order by created_at, id
+                """,
+                tenant_id,
+                prospect_id,
+            )
+        return [_row(r) for r in records]
+
+    async def add_lead_task(
+        self, tenant_id: str, *, prospect_id: str, titel: str, forfaller: str | None
+    ) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                insert into lead_uppgifter (tenant_id, prospect_id, titel, forfaller)
+                values ($1, $2, $3, $4) returning *
+                """,
+                tenant_id,
+                prospect_id,
+                titel,
+                date.fromisoformat(forfaller) if forfaller else None,
+            )
+        return _row(record)
+
+    async def update_lead_task(
+        self, tenant_id: str, task_id: str, *, klar: bool | None = None
+    ) -> dict[str, Any] | None:
+        async with self._scoped(tenant_id) as conn:
+            if klar is None:
+                record = await conn.fetchrow(
+                    "select * from lead_uppgifter where tenant_id = $1 and id = $2",
+                    tenant_id,
+                    task_id,
+                )
+            else:
+                # klar_at rörs bara när klar faktiskt byter värde, så en
+                # upprepad PATCH inte flyttar tidpunkten.
+                record = await conn.fetchrow(
+                    """
+                    update lead_uppgifter
+                    set klar_at = case
+                          when klar = $3 then klar_at
+                          when $3 then now()
+                          else null
+                        end,
+                        klar = $3
+                    where tenant_id = $1 and id = $2
+                    returning *
+                    """,
+                    tenant_id,
+                    task_id,
+                    klar,
+                )
+        return _row(record) if record else None
+
+    async def list_lead_tasks(
+        self, tenant_id: str, *, prospect_id: str | None = None, bara_oppna: bool = False
+    ) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select * from lead_uppgifter
+                where tenant_id = $1
+                  and ($2::uuid is null or prospect_id = $2::uuid)
+                  and (not $3 or not klar)
+                order by forfaller asc nulls last, created_at
+                """,
+                tenant_id,
+                prospect_id,
+                bara_oppna,
+            )
+        return [_row(r) for r in records]
+
+    async def list_status_logg(
+        self, tenant_id: str, *, prospect_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select * from prospect_status_logg
+                where tenant_id = $1 and ($2::uuid is null or prospect_id = $2::uuid)
+                order by created_at desc, id
+                """,
+                tenant_id,
+                prospect_id,
+            )
+        return [_row(r) for r in records]
+
+    async def list_lead_views(self, tenant_id: str) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                "select * from lead_vyer where tenant_id = $1 order by created_at",
+                tenant_id,
+            )
+        return [_avkoda_jsonb(_row(r), "filter") for r in records]
+
+    async def create_lead_view(
+        self, tenant_id: str, *, namn: str, filter: dict[str, Any]
+    ) -> dict[str, Any]:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                "insert into lead_vyer (tenant_id, namn, filter) values ($1, $2, $3::jsonb) returning *",
+                tenant_id,
+                namn,
+                json.dumps(filter, ensure_ascii=False),
+            )
+        return _avkoda_jsonb(_row(record), "filter")
+
+    async def delete_lead_view(self, tenant_id: str, view_id: str) -> bool:
+        async with self._scoped(tenant_id) as conn:
+            resultat = await conn.execute(
+                "delete from lead_vyer where tenant_id = $1 and id = $2",
+                tenant_id,
+                view_id,
+            )
+        return resultat.split()[-1] != "0"
 
     async def spara_bedomning(
         self, tenant_id: str, prospect_id: str, *, bedomning: dict[str, Any]
     ) -> dict[str, Any] | None:
         fields = {f: bedomning[f] for f in BEDOMNINGSFALT if bedomning.get(f) is not None}
-        for falt in ("score_breakdown", "jev"):
+        for falt in ("score_breakdown", "jev", "signaler"):
             if falt in fields:
                 fields[falt] = json.dumps(fields[falt], ensure_ascii=False)
         if not fields:
             return await self.get_prospect(tenant_id, prospect_id)
         # Kolumnnamnen kommer ur BEDOMNINGSFALT, aldrig ur anroparen.
         assignments = ", ".join(
-            f"{name} = ${index}" + ("::jsonb" if name in ("score_breakdown", "jev") else "")
+            f"{name} = ${index}" + ("::jsonb" if name in ("score_breakdown", "jev", "signaler") else "")
             for index, name in enumerate(fields, start=3)
         )
         async with self._scoped(tenant_id) as conn:
@@ -1871,14 +2037,25 @@ class PostgresStorage:
         status: str,
         scope: str = "research",
         prospect_id: str | None = None,
+        korning: dict[str, Any] | None = None,
+        error: str | None = None,
+        is_test: bool | None = None,
     ) -> None:
         async with self._scoped(tenant_id) as conn:
+            # coalesce(excluded.x, befintligt): None rör inte kolumnen, så ett
+            # rent statusbyte aldrig raderar tillståndet från steget innan
+            # (migration 080, INV-JOB-003).
             await conn.execute(
                 """
-                insert into leads_job_ledger (job_id, tenant_id, prospect_id, scope, status)
-                values ($1, $2, $3, $4, $5)
+                insert into leads_job_ledger
+                  (job_id, tenant_id, prospect_id, scope, status, korning, error, is_test)
+                values ($1, $2, $3, $4, $5, $6::jsonb, $7, coalesce($8, false))
                 on conflict (job_id) do update set
                   status = excluded.status,
+                  korning = coalesce(excluded.korning, leads_job_ledger.korning),
+                  error = coalesce(excluded.error, leads_job_ledger.error),
+                  is_test = coalesce($8, leads_job_ledger.is_test),
+                  updated_at = now(),
                   completed_at = case
                     when excluded.status in ('completed', 'failed') then now()
                     else leads_job_ledger.completed_at
@@ -1889,6 +2066,9 @@ class PostgresStorage:
                 prospect_id,
                 scope,
                 status,
+                json.dumps(korning, ensure_ascii=False) if korning is not None else None,
+                error,
+                is_test,
             )
 
     async def get_leads_job_status(self, tenant_id: str, job_id: str) -> str | None:
@@ -1899,16 +2079,44 @@ class PostgresStorage:
                 tenant_id,
             )
 
+    _KORNING_SQL = """
+        select job_id, status, scope, is_test, created_at, updated_at, completed_at,
+               error, korning
+          from leads_job_ledger
+         where tenant_id = $1 and scope in ('batch', 'lista')
+    """
+
+    async def list_leads_korningar(self, tenant_id: str, *, limit: int = 20) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                self._KORNING_SQL + " order by created_at desc limit $2", tenant_id, limit
+            )
+        return [_avkoda_jsonb(_row(r), "korning") for r in records]
+
+    async def get_leads_korning(self, tenant_id: str, job_id: str) -> dict[str, Any] | None:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(self._KORNING_SQL + " and job_id = $2", tenant_id, job_id)
+        return _avkoda_jsonb(_row(record), "korning")
+
     # -- Leadslistor (tillägget 'leadlists', migration 060) -----------------
 
     async def create_lead_list(
-        self, tenant_id: str, *, titel: str, icp: dict[str, Any], antal: int, is_test: bool = False
+        self,
+        tenant_id: str,
+        *,
+        titel: str,
+        icp: dict[str, Any],
+        antal: int,
+        is_test: bool = False,
+        kalla: str = "sok",
+        kallistor: list[str] | None = None,
+        kontaktfilter: str | None = None,
     ) -> dict[str, Any]:
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
                 """
-                insert into lead_lists (tenant_id, titel, icp, antal, is_test)
-                values ($1, $2, $3, $4, $5)
+                insert into lead_lists (tenant_id, titel, icp, antal, is_test, kalla, kallistor, kontaktfilter)
+                values ($1, $2, $3, $4, $5, $6, $7::uuid[], $8)
                 returning *
                 """,
                 tenant_id,
@@ -1916,8 +2124,15 @@ class PostgresStorage:
                 json.dumps(icp, ensure_ascii=False),
                 antal,
                 is_test,
+                kalla,
+                kallistor,
+                kontaktfilter,
             )
-        return _avkoda_jsonb(_row(record), "icp")
+        rad = _avkoda_jsonb(_row(record), "icp")
+        # asyncpg ger uuid[] som en lista av UUID-objekt; API:t talar strängar.
+        if rad.get("kallistor"):
+            rad["kallistor"] = [str(x) for x in rad["kallistor"]]
+        return rad
 
     async def set_lead_list_status(
         self, tenant_id: str, list_id: str, *, status: str, felorsak: str | None = None
@@ -1972,8 +2187,9 @@ class PostgresStorage:
                 insert into lead_list_items
                   (list_id, tenant_id, item_typ, company_name, website, ort,
                    contact_name, contact_role, contact_email, contact_level,
-                   source_name, source_url, signal, signal_detalj)
-                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                   source_name, source_url, signal, signal_detalj,
+                   contact_phone, orgnr)
+                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
                 returning *
                 """,
                 list_id,
@@ -1990,6 +2206,8 @@ class PostgresStorage:
                 falt.get("source_url"),
                 falt.get("signal"),
                 falt.get("signal_detalj"),
+                falt.get("contact_phone"),
+                falt.get("orgnr"),
             )
         return _row(record)
 
@@ -2390,6 +2608,7 @@ class PostgresStorage:
         limit: int = 50,
         is_test: bool | None = False,
         inkludera_larm: bool = False,
+        klass: str | None = None,
     ) -> list[dict[str, Any]]:
         async with self._scoped(tenant_id) as conn:
             records = await conn.fetch(
@@ -2410,6 +2629,11 @@ class PostgresStorage:
                   -- rader, därav inkludera_larm ($7).
                   and (($2::text is null and ($7::boolean or e.status <> 'att_hantera'))
                        or e.status = $2)
+                  -- Klass (084): filtrerat när det ges; utan klass- och
+                  -- statusfilter syns varken leads eller dolda här.
+                  and ($8::text is null or e.klass = $8)
+                  and ($8::text is not null or $2::text is not null or $7::boolean
+                       or e.status not in ('lead', 'ej_relaterat'))
                   and ($3::text is null or exists(
                         select 1 from ss_classifications c
                         where c.email_id = e.id and c.category = $3))
@@ -2427,6 +2651,7 @@ class PostgresStorage:
                 limit,
                 is_test,
                 inkludera_larm,
+                klass,
             )
         results = []
         for record in records:
@@ -2461,6 +2686,8 @@ class PostgresStorage:
         ticket_id: str | None = None,
         is_test: bool | None = None,
         hanterad: bool | None = None,
+        klass: str | None = None,
+        klass_kalla: str | None = None,
     ) -> dict[str, Any] | None:
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
@@ -2474,6 +2701,8 @@ class PostgresStorage:
                     when $6 then coalesce(hanterad_at, now())
                     else null
                   end,
+                  klass = coalesce($7, klass),
+                  klass_kalla = coalesce($8, klass_kalla),
                   updated_at = now()
                 where tenant_id = $1 and id = $2 returning *
                 """,
@@ -2483,6 +2712,8 @@ class PostgresStorage:
                 ticket_id,
                 is_test,
                 hanterad,
+                klass,
+                klass_kalla,
             )
         return _row(record)
 
@@ -3005,6 +3236,32 @@ class PostgresStorage:
     # API-lagret (require_master_key) och i att metoderna bara anropas
     # därifrån — inte i RLS, som per definition inte kan uttrycka
     # "alla tenants".
+
+    async def spegel_info(self) -> dict[str, Any] | None:
+        async with self.pool.acquire() as conn:
+            finns = await conn.fetchval("select to_regclass('public.mirror_meta') is not null")
+            if not finns:
+                return None
+            rad = await conn.fetchrow("select environment, seeded_at from public.mirror_meta limit 1")
+        return _row(rad) if rad else None
+
+    async def logga_flytt(self, tenant_id: str, *, typ: str, ref_id: str, resultat: str) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                """
+                insert into dev_flytt_ko (tenant_id, typ, ref_id, flyttad_at, resultat)
+                values ($1, $2, $3, case when $4 = 'ok' then now() else null end, $4)
+                """,
+                tenant_id, typ, ref_id, resultat,
+            )
+
+    async def list_flytt(self, tenant_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                "select * from dev_flytt_ko where tenant_id = $1 order by skapad_at desc limit $2",
+                tenant_id, limit,
+            )
+        return [_row(r) for r in records]
 
     async def list_tenants_with_stats(self) -> list[dict[str, Any]]:
         async with self.pool.acquire() as conn:

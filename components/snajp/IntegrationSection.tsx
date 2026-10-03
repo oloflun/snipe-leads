@@ -13,11 +13,16 @@ const endpoints = [
   { method: "POST", path: "/api/keys", note: { sv: "Utfärda API-nyckel per kund (master)", en: "Issue per-tenant API key (master)" } }
 ];
 
+/* Exempelpayloaden är utvecklardokumentation och svensk med flit. Strängarna
+   står här och inte i mallen, så att markören inte hamnar i den visade koden. */
+const EXEMPEL_MEDDELANDE = "Min faktura drogs två gånger"; // inte-copy
+const EXEMPEL_SVAR = "Hej! Tack för att du hör av dig…"; // inte-copy
+
 const curlExample = `curl -X POST https://api.snajp.se/snajp-support/api/chat \\
   -H "X-API-Key: snajp_live_..." \\
   -H "Content-Type: application/json" \\
   -d '{
-    "message": "Min faktura drogs två gånger",
+    "message": "${EXEMPEL_MEDDELANDE}",
     "channel": "email",
     "customer_email": "kund@example.com",
     "attachments": [{ "data_url": "data:image/jpeg;base64,..." }]
@@ -85,7 +90,7 @@ export function IntegrationSection() {
       </div>
 
       <div className="rounded-[10px] border border-ink/15 bg-ink p-6 text-paper shadow-lift">
-        <p className="text-[0.8125rem] font-medium text-paper-muted">Exempel · cURL</p>
+        <p className="text-[0.8125rem] font-medium text-paper-muted">{text({ sv: "Exempel · cURL", en: "Example · cURL" })}</p>
         <pre className="mt-4 overflow-x-auto font-mono text-xs leading-6 text-paper-muted">
           <code>{curlExample}</code>
         </pre>
@@ -97,7 +102,7 @@ export function IntegrationSection() {
             <code>{`{
   "status": "completed",
   "result": {
-    "reply": "Hej! Tack för att du hör av dig…",
+    "reply": "${EXEMPEL_SVAR}",
     "category": "betalning",
     "ticket_id": "9f2c…",
     "sentiment": 0.4,

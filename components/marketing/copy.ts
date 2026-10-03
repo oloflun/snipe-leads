@@ -339,7 +339,7 @@ export const bokforingCopy: ProductCopy = {
     en: "The inbox, *read* in real time."
   },
   demoLede: {
-    sv: "Nedan rullar en exempelinkorg in och agenten plockar ut beloppen medan du tittar på. Du kan också fråga kvitto-assistenten om siffrorna.",
+    sv: "Nedan rullar en exempelinkorg in och agenten plockar ut beloppen medan du tittar på. Du kan också fråga kvittoassistenten om siffrorna.",
     en: "Below, an example inbox rolls in and the agent picks out the amounts while you watch. You can also ask the receipt assistant about the numbers."
   },
   exampleNote: { sv: "", en: "" },

@@ -307,7 +307,7 @@ async def test_listrad_blir_prospekt_med_proveniens():
 
     assert svar["skapad"] is True
     p = svar["prospect"]
-    assert p["origin"] == "import", "en riktig listas rad ska vara skickbar"
+    assert p["origin"] == "lista", "en riktig listas rad ska vara skickbar (inte test/example)"
     assert p["contact_email"] == "kundservice@nordkapmoduler.se"
     assert p["website"] == "https://nordkapmoduler.se"
     assert p["ort"] == "Umeå"
@@ -468,3 +468,147 @@ async def test_misslyckat_sajtuppslag_lamnar_raden_utan_adress_inte_fel():
     assert rad["status"] == "klar", "uppslaget får aldrig fälla listan"
     items = await storage.list_lead_list_items(TENANT, lista["id"])
     assert items[0]["contact_email"] is None
+
+
+# -- Kombinerade listor (migration 082) --------------------------------------
+
+
+async def _lista_med_rader(storage, titel, rader, *, status="klar", is_test=False):
+    lista = await storage.create_lead_list(TENANT, titel=titel, icp={"industries": [titel]}, antal=25, is_test=is_test)
+    for r in rader:
+        await storage.add_lead_list_item(TENANT, list_id=lista["id"], **r)
+    await storage.set_lead_list_status(TENANT, lista["id"], status=status)
+    return lista
+
+
+def _rad(namn, *, orgnr=None, tel=None, mejl=None):
+    return {"company_name": namn, "orgnr": orgnr, "contact_phone": tel, "contact_email": mejl,
+            "contact_name": "Test Testsson", "contact_role": "VD", "source_name": "merinfo"}
+
+
+async def _kombinera(storage, body):
+    from app.api.leads import kombinera_leadslistor
+    from app.api.schemas import KombineraListorRequest
+
+    class _Req:
+        app = type("A", (), {"state": type("S", (), {"storage": storage})()})()
+
+    return await kombinera_leadslistor(_Req(), KombineraListorRequest(**body), {"tenant_id": TENANT, "tenant_name": "Snajp"})
+
+
+async def test_kombinera_dedupar_pa_orgnr_och_namn():
+    storage = MemoryStorage()
+    a = await _lista_med_rader(storage, "Bygg Mölndal", [
+        _rad("Alfa Bygg AB", orgnr="556000-0001", tel="070-1"),
+        _rad("Beta Måleri AB", orgnr="556000-0002", mejl="info@beta.se"),
+        _rad("Gamma Golv AB", tel="031-3"),
+    ])
+    b = await _lista_med_rader(storage, "Bygg Göteborg", [
+        _rad("Alfa Bygg AB", orgnr="5560000001", tel="070-1"),      # samma orgnr, annat format
+        _rad("gamma golv ab", tel="031-3"),                          # samma namn, annat skiftläge
+        _rad("Delta Snickeri AB", orgnr="556000-0004", tel="070-4", mejl="d@delta.se"),
+    ])
+    ut = await _kombinera(storage, {"titel": "Bygg väst", "list_ids": [a["id"], b["id"]]})
+    assert ut["dubbletter_bort"] == 2
+    assert [r["company_name"] for r in ut["items"]] == ["Alfa Bygg AB", "Beta Måleri AB", "Gamma Golv AB", "Delta Snickeri AB"]
+    assert ut["list"]["kalla"] == "kombinerad" and ut["list"]["kallistor"] == [a["id"], b["id"]]
+    assert ut["list"]["status"] == "klar" and ut["list"]["antal"] == 4
+    assert ut["list"]["icp"]["industries"] == ["Bygg Mölndal", "Bygg Göteborg"]
+    # Källistorna är orörda.
+    assert len(await storage.list_lead_list_items(TENANT, a["id"])) == 3
+
+
+async def test_kombinera_filtrerar_pa_kontaktvag():
+    storage = MemoryStorage()
+    a = await _lista_med_rader(storage, "A", [_rad("Ett", tel="1"), _rad("Två", mejl="2@x.se"), _rad("Tre", tel="3", mejl="3@x.se")])
+    b = await _lista_med_rader(storage, "B", [_rad("Fyra")])
+    for filter_, vantat in [("telefon", ["Ett", "Tre"]), ("mejl", ["Två", "Tre"]), ("bada", ["Tre"]), ("alla", ["Ett", "Två", "Tre", "Fyra"])]:
+        ut = await _kombinera(storage, {"titel": filter_, "list_ids": [a["id"], b["id"]], "kontaktfilter": filter_})
+        assert [r["company_name"] for r in ut["items"]] == vantat, filter_
+        assert ut["list"]["kontaktfilter"] == filter_
+
+
+async def test_kombinera_vagrar_pa_ofardig_eller_okand_lista():
+    from fastapi import HTTPException
+
+    storage = MemoryStorage()
+    a = await _lista_med_rader(storage, "A", [_rad("Ett", tel="1")])
+    b = await _lista_med_rader(storage, "B", [_rad("Två", tel="2")], status="byggs")
+    with pytest.raises(HTTPException) as fel:
+        await _kombinera(storage, {"titel": "x", "list_ids": [a["id"], b["id"]]})
+    assert fel.value.status_code == 409
+    with pytest.raises(HTTPException) as fel:
+        await _kombinera(storage, {"titel": "x", "list_ids": [a["id"], "00000000-0000-4000-a000-0000000000ff"]})
+    assert fel.value.status_code == 404
+    # Filtret lämnar inget: 422, ingen tom lista skapas.
+    c = await _lista_med_rader(storage, "C", [_rad("Tre")])
+    with pytest.raises(HTTPException) as fel:
+        await _kombinera(storage, {"titel": "x", "list_ids": [a["id"], c["id"]], "kontaktfilter": "bada"})
+    assert fel.value.status_code == 422
+    assert len(await storage.list_lead_lists(TENANT)) == 3
+
+
+# -- Flytta till Iris --------------------------------------------------------
+
+
+async def test_flytta_till_iris_koar_korning_med_research_per_bolag(monkeypatch):
+    """Raderna blir prospekt med telefon och orgnr, och en körning med
+    kalla='lista' går genom research (stubbad) tills alla barn rapporterat;
+    ingen sökrunda startas och liggaren slutar i 'completed'."""
+    import asyncio
+    from types import SimpleNamespace
+
+    from app.api import leads as leads_api
+    from app.api.schemas import TillIrisRequest
+
+    storage = MemoryStorage()
+    lista = await _lista_med_rader(storage, "Bygg Mölndal", [
+        _rad("Alfa Bygg AB", orgnr="556000-0001", tel="070-1", mejl="vd@alfa.se"),
+        _rad("Beta Måleri AB", orgnr="556000-0002", tel="070-2"),
+        {"company_name": "", "contact_name": "Utan Namn"},
+    ])
+
+    async def _research(storage_, tenant_id, *, prospect_id, **_k):
+        return {"qualified": True, "icp_fit": 0.9, "score_total": 90, "disqualifiers": [], "stopped_early": None}
+
+    async def _utkast(*_a, **_k):
+        return {"subject": "Hej"}
+
+    sokrundor: list[int] = []
+
+    async def _sokrunda(*_a, **_k):
+        sokrundor.append(1)
+
+    monkeypatch.setattr(leads_api, "_valj_leads_kedja", lambda: (_research, _utkast))
+    monkeypatch.setattr(leads_api, "_require_live_llm", lambda: None)
+
+    async def _ingen_budget(*_a, **_k):
+        return None
+
+    monkeypatch.setattr(leads_api, "_kraev_leads_budget", _ingen_budget)
+    monkeypatch.setattr(leads_api.iris_korning, "sokrunda", _sokrunda)
+
+    app_state = SimpleNamespace(jobs=MemoryJobStore(), storage=storage, leadsstrom=None)
+    req = SimpleNamespace(app=SimpleNamespace(state=app_state))
+    tenant = {"tenant_id": TENANT, "tenant_name": "Snajp"}
+    ut = await leads_api.listan_till_iris(req, lista["id"], TillIrisRequest(scope="research"), tenant)
+    assert ut["prospekt"] == 2 and ut["nya"] == 2
+
+    rad = None
+    for _ in range(200):
+        rad = await storage.get_leads_korning(TENANT, ut["batch_id"])
+        if rad and rad["korning"] and rad["korning"].get("klar"):
+            break
+        await asyncio.sleep(0.02)
+    assert rad and rad["status"] == "completed", rad
+    k = rad["korning"]
+    assert k["kalla"] == "lista" and k["list_id"] == lista["id"]
+    assert k["undersokta"] == 2 and k["pagaende"] == 0 and k["slut_orsak"] == "klar"
+    assert [j["company_name"] for j in k["jobs"]] == ["Alfa Bygg AB", "Beta Måleri AB"]
+    assert not sokrundor, "en listkörning söker aldrig fler bolag"
+    alfa = next(p for p in await storage.list_prospects(TENANT, limit=50) if p["company_name"] == "Alfa Bygg AB")
+    assert alfa.get("contact_phone") == "070-1" and alfa.get("orgnr") == "556000-0001"
+
+    # Samma rader igen: inga nya prospekt, ny körning.
+    ut2 = await leads_api.listan_till_iris(req, lista["id"], TillIrisRequest(scope="research"), tenant)
+    assert ut2["nya"] == 0 and ut2["prospekt"] == 2 and ut2["batch_id"] != ut["batch_id"]

@@ -9,6 +9,7 @@ import {
   tokenkostnad
 } from "@/lib/admin/halsa";
 import { readJsonBody } from "@/lib/http/json";
+import { useLocale, type Localized } from "@/lib/i18n";
 
 /**
  * Journalen: vad agenten gjort och vad det kostat — tenant-scopat.
@@ -50,7 +51,43 @@ type ChattRad = {
   is_test?: boolean;
 };
 
+const T = {
+  offline: { sv: "Tjänsten är inte tillgänglig just nu.", en: "The service is not available right now." },
+  okant: { sv: "Okänt fel", en: "Unknown error" },
+  hamtaFel: { sv: "Kunde inte hämta journalen.", en: "Could not load the log." },
+  journalen: { sv: "Journalen", en: "The log" },
+  hamtar: { sv: "Hämtar journalen…", en: "Loading the log…" },
+  korningar30: { sv: "Körningar · 30 dagar", en: "Runs · 30 days" },
+  tokens30: { sv: "Tokens · 30 dagar", en: "Tokens · 30 days" },
+  kostnad30: { sv: "Uppskattad kostnad · 30 dagar", en: "Estimated cost · 30 days" },
+  listpris: { sv: "Listpris", en: "List price" },
+  uppskattning: { sv: "— en uppskattning, inte en faktura.", en: "is an estimate, not an invoice." },
+  dygnsbudget: { sv: "Dygnsbudget", en: "Daily budget" },
+  av: { sv: "av", en: "of" },
+  senasteDygnet: { sv: "tokens senaste dygnet", en: "tokens in the last 24 hours" },
+  naraTaket: { sv: "Nära taket — vid 100 % pausar agenten tills fönstret rullat vidare.", en: "Close to the cap. At 100 % the agent pauses until the window rolls forward." },
+  perDag: { sv: "Per dag", en: "Per day" },
+  ingaKorningar: { sv: "Inga körningar de senaste 30 dagarna.", en: "No runs in the last 30 days." },
+  korningar: { sv: "körningar", en: "runs" },
+  overlamnade: { sv: "Överlämnade samtal", en: "Handed-over conversations" },
+  ingaOverlamningar: { sv: "Inga överlämningar — agenten har hanterat samtalen själv.", en: "No handovers. The agent has handled the conversations on its own." },
+  okandKund: { sv: "Okänd kund", en: "Unknown customer" },
+  vantar: { sv: "Väntar på människa", en: "Waiting for a human" },
+  avslutad: { sv: "Avslutad", en: "Closed" }
+} satisfies Record<string, Localized>;
+
+function ordagrant(varde: string): Localized {
+  return { sv: varde, en: varde };
+}
+
 class EjAktiveradFel extends Error {}
+
+/** Bär sitt besked på båda språken; vyn väljer när den renderar. */
+class LokaliseratFel extends Error {
+  constructor(readonly besked: Localized) {
+    super(besked.sv);
+  }
+}
 
 async function hamta<T>(path: string): Promise<T> {
   const response = await fetch(`/api/snajp-support${path}`, {
@@ -60,11 +97,11 @@ async function hamta<T>(path: string): Promise<T> {
     (await readJsonBody<T & { offline?: boolean; error?: string }>(response)) ??
     ({} as T & { offline?: boolean; error?: string });
   if (payload.offline) {
-    throw new Error(payload.error ?? "Tjänsten är inte tillgänglig just nu.");
+    throw payload.error ? new Error(payload.error) : new LokaliseratFel(T.offline);
   }
   if (!response.ok) {
     if (arEjAktiverad(response.status, payload)) throw new EjAktiveradFel();
-    throw new Error(payload.error ?? "Okänt fel");
+    throw payload.error ? new Error(payload.error) : new LokaliseratFel(T.okant);
   }
   return payload;
 }
@@ -80,9 +117,10 @@ function datumtid(varde: string | null | undefined): string {
 }
 
 export function JournalVy() {
+  const { text } = useLocale();
   const [usage, setUsage] = useState<UsageSvar | null>(null);
   const [chattar, setChattar] = useState<ChattRad[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Localized | null>(null);
   const [ejAktiverad, setEjAktiverad] = useState(false);
 
   const ladda = useCallback(async () => {
@@ -99,7 +137,13 @@ export function JournalVy() {
         setEjAktiverad(true);
         return;
       }
-      setError(caught instanceof Error ? caught.message : "Kunde inte hämta journalen.");
+      setError(
+        caught instanceof LokaliseratFel
+          ? caught.besked
+          : caught instanceof Error
+            ? ordagrant(caught.message)
+            : T.hamtaFel
+      );
     }
   }, []);
 
@@ -108,13 +152,13 @@ export function JournalVy() {
   }, [ladda]);
 
   if (ejAktiverad) {
-    return <EjAktiverad yta="Journalen" />;
+    return <EjAktiverad yta={text(T.journalen)} />;
   }
 
   if (error) {
     return (
       <div className="rounded-[8px] border border-danger/25 bg-danger/5 px-4 py-3 text-sm text-ink-muted">
-        {error}
+        {text(error)}
       </div>
     );
   }
@@ -123,7 +167,7 @@ export function JournalVy() {
     return (
       <div className="flex items-center gap-2 text-sm text-ink-muted">
         <Loader2 className="h-4 w-4 animate-spin" />
-        Hämtar journalen…
+        {text(T.hamtar)}
       </div>
     );
   }
@@ -139,22 +183,22 @@ export function JournalVy() {
       {/* Nyckeltal — 30 dagar */}
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="rounded-card bg-paper p-5">
-          <p className="kicker text-mineral">Körningar · 30 dagar</p>
+          <p className="kicker text-mineral">{text(T.korningar30)}</p>
           <p className="mt-2 font-display text-[1.75rem] leading-none">{totalKorningar}</p>
         </div>
         <div className="rounded-card bg-paper p-5">
-          <p className="kicker text-mineral">Tokens · 30 dagar</p>
+          <p className="kicker text-mineral">{text(T.tokens30)}</p>
           <p className="mt-2 font-display text-[1.75rem] leading-none">
             {(totalTokensIn + totalTokensUt).toLocaleString("sv-SE")}
           </p>
         </div>
         <div className="rounded-card bg-paper p-5">
-          <p className="kicker text-mineral">Uppskattad kostnad · 30 dagar</p>
+          <p className="kicker text-mineral">{text(T.kostnad30)}</p>
           <p className="mt-2 font-display text-[1.75rem] leading-none">
             {kr(tokenkostnad(totalTokensIn, totalTokensUt))}
           </p>
           <p className="mt-2 text-xs leading-5 text-ink-subtle">
-            Listpris {TOKENKOSTNAD_MODELL} — en uppskattning, inte en faktura.
+            {text(T.listpris)} {TOKENKOSTNAD_MODELL} {text(T.uppskattning)}
           </p>
         </div>
       </div>
@@ -163,10 +207,10 @@ export function JournalVy() {
       {tak > 0 ? (
         <div className="rounded-card bg-paper p-5">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <p className="kicker text-mineral">Dygnsbudget</p>
+            <p className="kicker text-mineral">{text(T.dygnsbudget)}</p>
             <p className="text-sm text-ink-muted">
-              {forbrukat_24h.toLocaleString("sv-SE")} av {tak.toLocaleString("sv-SE")} tokens
-              senaste dygnet
+              {forbrukat_24h.toLocaleString("sv-SE")} {text(T.av)} {tak.toLocaleString("sv-SE")}{" "}
+              {text(T.senasteDygnet)}
             </p>
           </div>
           <div className="mt-3 h-2 overflow-hidden rounded-full bg-ink/10">
@@ -177,7 +221,7 @@ export function JournalVy() {
           </div>
           {budgetAndel >= 0.8 ? (
             <p className="mt-2 text-xs leading-5 text-danger">
-              Nära taket — vid 100 % pausar agenten tills fönstret rullat vidare.
+              {text(T.naraTaket)}
             </p>
           ) : null}
         </div>
@@ -185,9 +229,9 @@ export function JournalVy() {
 
       {/* Daglig serie */}
       <div>
-        <h3 className="kicker text-mineral">Per dag</h3>
+        <h3 className="kicker text-mineral">{text(T.perDag)}</h3>
         {usage.dagar.length === 0 ? (
-          <p className="mt-4 text-sm text-ink-muted">Inga körningar de senaste 30 dagarna.</p>
+          <p className="mt-4 text-sm text-ink-muted">{text(T.ingaKorningar)}</p>
         ) : (
           <div className="mt-4 divide-y divide-ink/10 overflow-hidden rounded-card bg-paper">
             {usage.dagar.map((dag) => (
@@ -199,7 +243,7 @@ export function JournalVy() {
                   {dag.datum}
                 </span>
                 <span className="col-span-4 sm:col-span-3">
-                  {dag.korningar} körningar
+                  {dag.korningar} {text(T.korningar)}
                   {dag.korningar_test > 0 ? (
                     <span className="text-ink-subtle"> (+{dag.korningar_test} test)</span>
                   ) : null}
@@ -218,10 +262,10 @@ export function JournalVy() {
 
       {/* Eskaleringar/överlämningar */}
       <div>
-        <h3 className="kicker text-mineral">Överlämnade samtal</h3>
+        <h3 className="kicker text-mineral">{text(T.overlamnade)}</h3>
         {chattar.length === 0 ? (
           <p className="mt-4 text-sm text-ink-muted">
-            Inga överlämningar — agenten har hanterat samtalen själv.
+            {text(T.ingaOverlamningar)}
           </p>
         ) : (
           <div className="mt-4 divide-y divide-ink/10 overflow-hidden rounded-card bg-paper">
@@ -232,13 +276,13 @@ export function JournalVy() {
               >
                 <ShieldAlert className="h-4 w-4 shrink-0 text-danger" aria-hidden />
                 <span className="min-w-0 flex-1 truncate font-medium">
-                  {rad.customer_name || rad.subject || "Okänd kund"}
+                  {rad.customer_name || rad.subject || text(T.okandKund)}
                 </span>
                 {rad.orsak_text ? <Badge tone="neutral">{rad.orsak_text}</Badge> : null}
                 {rad.channel ? <Badge tone="neutral">{rad.channel}</Badge> : null}
                 {rad.is_test ? <span className="kicker text-mineral">Test</span> : null}
                 <Badge tone={rad.aktiv ? "warn" : "good"}>
-                  {rad.aktiv ? "Väntar på människa" : "Avslutad"}
+                  {rad.aktiv ? text(T.vantar) : text(T.avslutad)}
                 </Badge>
                 <span className="font-mono text-xs text-ink-subtle">
                   {datumtid(rad.overlamnad_at)}

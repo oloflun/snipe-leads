@@ -44,7 +44,7 @@ export function SettingsNav() {
   const grupper = settingsGroupsForProducts(products, { visar: shows, vy });
 
   return (
-    <nav aria-label="Inställningar" className="grid gap-7">
+    <nav aria-label={text({ sv: "Inställningar", en: "Settings" })} className="grid gap-7">
       {grupper.map((grupp) => (
         <div key={grupp.label.sv}>
           <p className={etikett}>{text(grupp.label)}</p>

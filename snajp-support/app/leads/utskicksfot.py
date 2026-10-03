@@ -106,7 +106,7 @@ def bygg_fot(
         # kosmetik. Ordet "personuppgifter" på samma rad som länken är det
         # guarden letar efter — se _POLICY_MONSTER i send_guard.py.
         rader.append(f"Hur {foretagsnamn} behandlar personuppgifter: {policy_url.strip()}")
-    rader += ["", f"Vill du inte höra av oss igen: {lank}"]
+    rader += ["", f"Vill du inte få fler mejl från oss: {lank}"]
     return "\n".join(rader)
 
 

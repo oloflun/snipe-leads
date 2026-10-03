@@ -70,6 +70,11 @@ def normalisera_kunddata(falt: dict[str, Any]) -> dict[str, Any]:
 #: migration 024/031/079). En lista, delad av båda lagringarna, så att de
 #: aldrig kan glida isär.
 BEDOMNINGSFALT = (
+    # Migration 083 (plan del C): lägesbeskrivning, signaler, och telefonen
+    # ur källmaterialet när registret (081) saknade den.
+    "lagesbeskrivning",
+    "signaler",
+    "contact_phone",
     "niva",
     "score_total",
     "score_breakdown",
@@ -129,6 +134,23 @@ class Storage(Protocol):
 
     async def list_mailboxes(self, tenant_id: str) -> list[dict[str, Any]]: ...
 
+    # -- Spegel och flytt (migration 085, plan del E) ------------------------
+
+    async def spegel_info(self) -> dict[str, Any] | None:
+        """Markören spegelskriptet sätter (scripts/railway_seed_dev.py,
+        tabellen public.mirror_meta): {environment, seeded_at} i en spegel,
+        None i main och i minneslagret. admin_flytt.importera vägrar i en
+        spegel; panelen Flytta till main renderas bara i en."""
+        ...
+
+    async def logga_flytt(self, tenant_id: str, *, typ: str, ref_id: str, resultat: str) -> None:
+        """Kvitto per flyttad rad (dev_flytt_ko). resultat: 'ok' | 'fel'."""
+        ...
+
+    async def list_flytt(self, tenant_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        """Senaste flyttarna, nyast först."""
+        ...
+
     async def upsert_mailbox(
         self,
         tenant_id: str,
@@ -137,8 +159,10 @@ class Storage(Protocol):
         address: str,
         imap_host: str | None = None,
         secret_enc: str | None = None,
+        syfte: str = "support",
     ) -> dict[str, Any]:
         """Kopplar (eller kopplar OM) en inkorg — självbetjäningsvägen.
+        `syfte` (migration 084): support | leads | bada — styr klassningen.
 
         Upsert på (tenant_id, address): en kund som skriver in ett nytt
         app-lösenord för samma adress ska uppdatera raden, inte samla
@@ -532,7 +556,8 @@ class Storage(Protocol):
     async def list_outreach_threads(self, tenant_id: str) -> list[dict[str, Any]]:
         """Alla trådar med de aggregat uppföljningssvepet dömer på:
         outbound_sent_count, last_outbound_sent_at, last_inbound_at och
-        has_pending_item (köad/väntande post eller osänt utkast). Aggregaten
+        has_pending_item (köad/väntande post eller osänt utkast), plus
+        prospektets `origin` för automationsreglerna per typ. Aggregaten
         räknas i lagringen — policyn (NÄR en uppföljning är förfallen) bor i
         app/leads/follow_up_generator.py och är testbar utan databas."""
         ...
@@ -645,8 +670,15 @@ class Storage(Protocol):
         status: str,
         scope: str = "research",
         prospect_id: str | None = None,
+        korning: dict[str, Any] | None = None,
+        error: str | None = None,
+        is_test: bool | None = None,
     ) -> None:
-        """Skriver/uppdaterar EN rad i leads_job_ledger (migration 059).
+        """Skriver/uppdaterar EN rad i leads_job_ledger (migration 059, 080).
+
+        `korning`, `error` och `is_test` (080, INV-JOB-003) skrivs bara när de
+        ges — None lämnar kolumnen orörd, så ett statusbyte aldrig raderar
+        ett tillstånd som skrevs steget innan.
 
         Liggaren är sanningen om huruvida ett leads-jobb redan är färdigt.
         Redis-jobbposten (app/jobs/store.py) auto-failar efter 300 s och
@@ -663,6 +695,18 @@ class Storage(Protocol):
         """Läser liggarens status för ETT jobb: 'queued' | 'processing' |
         'completed' | 'failed' — eller None om raden saknas (jobb från före
         migration 059, eller en annan miljös jobb)."""
+        ...
+
+    async def list_leads_korningar(self, tenant_id: str, *, limit: int = 20) -> list[dict[str, Any]]:
+        """Tenantens körningar (liggarens batch- och listrader), nyast
+        först: job_id, status, scope, is_test, created_at, updated_at,
+        completed_at, error, korning (INV-JOB-003). Prospektjobben (scope
+        research/research_and_draft/draft) är inte körningar och tas inte
+        med — de är körningens barn och står i `korning.jobs`."""
+        ...
+
+    async def get_leads_korning(self, tenant_id: str, job_id: str) -> dict[str, Any] | None:
+        """EN körning med samma fält som list_leads_korningar, eller None."""
         ...
 
     async def sum_leads_tokens(self, tenant_id: str, *, hours: int = 24) -> int:
@@ -697,8 +741,21 @@ class Storage(Protocol):
     # signatur som bara finns i ett lager är så halvårsbuggar föds.
 
     async def create_lead_list(
-        self, tenant_id: str, *, titel: str, icp: dict[str, Any], antal: int, is_test: bool = False
-    ) -> dict[str, Any]: ...
+        self,
+        tenant_id: str,
+        *,
+        titel: str,
+        icp: dict[str, Any],
+        antal: int,
+        is_test: bool = False,
+        kalla: str = "sok",
+        kallistor: list[str] | None = None,
+        kontaktfilter: str | None = None,
+    ) -> dict[str, Any]:
+        """`kalla`, `kallistor`, `kontaktfilter` (migration 082): en kombinerad
+        lista bär sina källistor och filtret som användes, så bygget går att
+        granska i efterhand. 'sok' för allt som byggs av en sökning."""
+        ...
 
     async def set_lead_list_status(
         self, tenant_id: str, list_id: str, *, status: str, felorsak: str | None = None
@@ -860,6 +917,7 @@ class Storage(Protocol):
         contact_role: str | None = None,
         contact_level: str | None = None,
         contact_form_url: str | None = None,
+        status_kalla: str = "kod",
     ) -> dict[str, Any] | None:
         """Fas B:s bedömning (icp_fit, qualified, disqualifiers) landar här,
         migration 024. Innan den fanns räknades icp_fit ut av modellen och
@@ -875,8 +933,50 @@ class Storage(Protocol):
         fallback-trappa: Fas B:s per-prospekt research läser det redan
         skrapade källmaterialet och kan hitta en namngiven person där den
         breda `hitta_bolag()`-sökningen bara verifierade en rollbaserad
-        adress. Se `app/agent/leads_agent.py::_uppgradera_kontakt`."""
+        adress. Se `app/agent/leads_agent.py::_uppgradera_kontakt`.
+
+        `status_kalla` (migration 086): när `status` ändrar prospektets status
+        skrivs en rad i `prospect_status_logg` med `kalla` — här och bara här,
+        så att svarshanteringen, sändningen och PATCH loggas likadant."""
         ...
+
+    # -- Leads Suite (migration 086) -----------------------------------------
+
+    async def add_lead_note(self, tenant_id: str, *, prospect_id: str, text: str) -> dict[str, Any]: ...
+
+    async def list_lead_notes(self, tenant_id: str, prospect_id: str) -> list[dict[str, Any]]:
+        """Äldst först."""
+        ...
+
+    async def add_lead_task(
+        self, tenant_id: str, *, prospect_id: str, titel: str, forfaller: str | None
+    ) -> dict[str, Any]: ...
+
+    async def update_lead_task(
+        self, tenant_id: str, task_id: str, *, klar: bool | None = None
+    ) -> dict[str, Any] | None:
+        """`klar_at` sätts när `klar` blir True och nollas när den blir False."""
+        ...
+
+    async def list_lead_tasks(
+        self, tenant_id: str, *, prospect_id: str | None = None, bara_oppna: bool = False
+    ) -> list[dict[str, Any]]:
+        """Förfallodag stigande, uppgifter utan förfallodag sist."""
+        ...
+
+    async def list_status_logg(
+        self, tenant_id: str, *, prospect_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Nyast först."""
+        ...
+
+    async def list_lead_views(self, tenant_id: str) -> list[dict[str, Any]]: ...
+
+    async def create_lead_view(
+        self, tenant_id: str, *, namn: str, filter: dict[str, Any]
+    ) -> dict[str, Any]: ...
+
+    async def delete_lead_view(self, tenant_id: str, view_id: str) -> bool: ...
 
     async def spara_bedomning(
         self, tenant_id: str, prospect_id: str, *, bedomning: dict[str, Any]
@@ -960,9 +1060,13 @@ class Storage(Protocol):
         limit: int = 50,
         is_test: bool | None = False,
         inkludera_larm: bool = False,
+        klass: str | None = None,
     ) -> list[dict[str, Any]]:
         """Utan statusfilter utesluts 'att_hantera' (migration 078) — utom
-        när `inkludera_larm` är satt, vilket get_email-uppslag behöver."""
+        när `inkludera_larm` är satt, vilket get_email-uppslag behöver.
+        `klass` (migration 084): support | lead | ej_relaterat; None = alla.
+        Utan klassfilter och utan statusfilter visas inte heller 'lead' och
+        'ej_relaterat' — de bor i leads-inkorgen respektive Dolda."""
         ...
 
     async def get_email(self, tenant_id: str, email_id: str) -> dict[str, Any] | None: ...
@@ -976,10 +1080,13 @@ class Storage(Protocol):
         ticket_id: str | None = None,
         is_test: bool | None = None,
         hanterad: bool | None = None,
+        klass: str | None = None,
+        klass_kalla: str | None = None,
     ) -> dict[str, Any] | None:
         """`hanterad` styr `hanterad_at` (migration 071): True stämplar (om
         inte redan stämplad), False nollar, None rör inte. Oberoende av
-        `status` — se migrationens motivering."""
+        `status` — se migrationens motivering. `klass`/`klass_kalla`
+        (migration 084) skrivs bara när de ges."""
         ...
 
     async def add_attachment(

@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { SlidersHorizontal } from "lucide-react";
 
 import { OppnaArbetsyta } from "@/components/admin/OppnaArbetsyta";
+import { radLank } from "@/components/ui";
 import { Radmarke } from "@/components/admin/Radmarke";
 import type { BerikadTenant } from "@/lib/admin/exempeldata";
 import { a, antal, datum } from "@/lib/admin/sprak";
@@ -85,30 +85,30 @@ export function Kundtabell({ kunder }: Readonly<{ kunder: BerikadTenant[] }>) {
   return (
     <>
       <div className="mt-10 overflow-x-auto">
-        <table className="w-full min-w-[980px] border-collapse text-[15px]">
+        <table className="w-full min-w-[980px] border-collapse text-[0.875rem]">
           <thead>
             <tr className="border-b border-ink/15 text-left">
-              <th className="py-3 pr-6 font-medium text-mineral">{a("kolKund", locale)}</th>
-              <th className="py-3 pr-6 font-medium text-mineral">{a("kolSlug", locale)}</th>
-              <th className="py-3 pr-6 text-right font-medium text-mineral">
+              <th className="py-2.5 pr-6 font-medium text-mineral">{a("kolKund", locale)}</th>
+              <th className="py-2.5 pr-6 font-medium text-mineral">{a("kolSlug", locale)}</th>
+              <th className="py-2.5 pr-6 text-right font-medium text-mineral">
                 {a("kolKundSedan", locale)}
               </th>
-              <th className="py-3 pr-6 text-right font-medium text-mineral">
+              <th className="py-2.5 pr-6 text-right font-medium text-mineral">
                 {a("kolAvtal", locale)}
               </th>
-              <th className="py-3 pr-6 text-right font-medium text-mineral">
+              <th className="py-2.5 pr-6 text-right font-medium text-mineral">
                 {a("kolTrial", locale)}
               </th>
-              <th className="py-3 pr-6 text-right font-medium text-mineral">
+              <th className="py-2.5 pr-6 text-right font-medium text-mineral">
                 {a("kolArenden", locale)}
               </th>
-              <th className="py-3 pr-6 text-right font-medium text-mineral">
+              <th className="py-2.5 pr-6 text-right font-medium text-mineral">
                 {a("kolKorningar", locale)}
               </th>
-              <th className="py-3 pr-6 text-right font-medium text-mineral">
+              <th className="py-2.5 pr-6 text-right font-medium text-mineral">
                 {a("kolFel", locale)}
               </th>
-              <th className="py-3 pr-6 text-right font-medium text-mineral">
+              <th className="py-2.5 pr-6 text-right font-medium text-mineral">
                 {a("kolSenastAktiv", locale)}
               </th>
               <th className="py-3 text-right font-medium text-mineral">
@@ -119,7 +119,7 @@ export function Kundtabell({ kunder }: Readonly<{ kunder: BerikadTenant[] }>) {
           <tbody>
             {sorterade.map((kund) => (
               <tr key={kund.id} className="border-b border-ink/8">
-                <td className="py-3 pr-6">
+                <td className="py-2.5 pr-6">
                   {/* Namnet är vägen till registeruppgifterna. Ochre bara på
                       hover — en hel kolumn i accentfärg är ingen accent. */}
                   <span className="inline-flex items-baseline gap-2">
@@ -141,23 +141,23 @@ export function Kundtabell({ kunder }: Readonly<{ kunder: BerikadTenant[] }>) {
                     {kund.ar_exempel ? (
                       <span
                         title={a("exempeldataMarkning", locale)}
-                        className="shrink-0 rounded-[3px] border border-ink/20 px-1.5 py-px font-mono text-[10px] uppercase tracking-[0.14em] text-mineral"
+                        className="shrink-0 rounded-[3px] border border-ink/20 px-1.5 py-px text-[0.75rem] text-ink-muted"
                       >
                         {a("exempel", locale)}
                       </span>
                     ) : null}
                   </span>
                 </td>
-                <td className="py-3 pr-6 font-mono text-[13px] text-ink-subtle">
+                <td className="whitespace-nowrap py-2.5 pr-6 font-mono text-[0.8125rem] text-ink-subtle">
                   {kund.slug ?? <span className="text-danger">{a("saknas", locale)}</span>}
                 </td>
-                <td className="py-3 pr-6 text-right tabular-nums text-ink-muted">
+                <td className="whitespace-nowrap py-2.5 pr-6 text-right tabular-nums text-ink-muted">
                   {datum(kund.kund_sedan, locale)}
                 </td>
                 {/* Ett datum ÄR avtalsstatusen: null betyder att inget avtal
                     är registrerat, och det sägs med ett ord i stället för
                     ett tomt hål som ser ut som saknad data. */}
-                <td className="py-3 pr-6 text-right tabular-nums text-ink-muted">
+                <td className="whitespace-nowrap py-2.5 pr-6 text-right tabular-nums text-ink-muted">
                   {kund.avtal_signerat ? (
                     datum(kund.avtal_signerat, locale)
                   ) : (
@@ -172,8 +172,8 @@ export function Kundtabell({ kunder }: Readonly<{ kunder: BerikadTenant[] }>) {
                 <td className="whitespace-nowrap py-3 pr-6 text-right tabular-nums text-ink-muted">
                   {trialStatus(kund, locale, text)}
                 </td>
-                <td className="py-3 pr-6 text-right tabular-nums">{antal(kund.tickets, locale)}</td>
-                <td className="py-3 pr-6 text-right tabular-nums">
+                <td className="py-2.5 pr-6 text-right tabular-nums">{antal(kund.tickets, locale)}</td>
+                <td className="py-2.5 pr-6 text-right tabular-nums">
                   {antal(kund.runs, locale)}
                   {/* Samma redovisning som Översikten: testkörningar räknas
                       inte som kundvolym men göms inte heller. */}
@@ -183,18 +183,18 @@ export function Kundtabell({ kunder }: Readonly<{ kunder: BerikadTenant[] }>) {
                     </span>
                   ) : null}
                 </td>
-                <td className="py-3 pr-6 text-right tabular-nums">
+                <td className="py-2.5 pr-6 text-right tabular-nums">
                   {kund.errors > 0 ? <span className="text-danger">{kund.errors}</span> : "0"}
                 </td>
-                <td className="py-3 pr-6 text-right tabular-nums text-ink-muted">
+                <td className="whitespace-nowrap py-2.5 pr-6 text-right tabular-nums text-ink-muted">
                   {datum(kund.last_activity, locale)}
                 </td>
                 {/* Två vägar in, och de gör olika saker: "Profil" ändrar hur
                     agenten beter sig, "Öppna" visar kundens vy som den ser ut
                     för kunden. Att bara ha den senare var vad som saknades —
                     det gick att TITTA på varje kund men inte att styra någon. */}
-                <td className="py-3 text-right">
-                  <div className="inline-flex items-center gap-2">
+                <td className="py-2.5 text-right">
+                  <div className="inline-flex items-center gap-3">
                     {/* "Profil och tillägg", inte bara "Profil": tilläggen
                         (Leadslistor m.fl.) slås på på samma sida, och testaren
                         letade efter dem utan att ana att de låg bakom en
@@ -205,10 +205,9 @@ export function Kundtabell({ kunder }: Readonly<{ kunder: BerikadTenant[] }>) {
                         sv: `Öppna agentprofil och tillägg för ${kund.name}`,
                         en: `Open agent profile and add-ons for ${kund.name}`
                       })}
-                      className="focus-ring inline-flex min-h-9 items-center gap-1.5 whitespace-nowrap rounded-input bg-paper2 px-3 text-[13px] font-medium text-ink hover:bg-paper2/70"
+                      className={radLank}
                     >
-                      <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
-                      {text({ sv: "Profil och tillägg", en: "Profile and add-ons" })}
+                      {text({ sv: "Profil", en: "Profile" })}
                     </Link>
                     {kund.slug ? <OppnaArbetsyta slug={kund.slug} namn={kund.name} /> : null}
                   </div>

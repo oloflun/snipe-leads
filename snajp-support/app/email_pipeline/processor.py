@@ -22,6 +22,7 @@ from ..simulation.sim_agent import article_in_category
 from ..simulation.sim_triage import classify
 from ..storage.base import Storage
 from .flaggor import ar_offertforfragan, ar_utbildningsintresse
+from .klassning import klassa
 
 logger = logging.getLogger("snajp-support.processor")
 
@@ -165,7 +166,7 @@ async def _triage_email(
         grounded = article_in_category(articles, triage["category"])
         if grounded is not None and not triage["escalate"]:
             triage["draft_body"] = (
-                f"Tack för att du hör av dig om {CATEGORY_LABELS[triage['category']].lower()}. "
+                "Tack för att du hör av dig. "
                 f"{vision_note}Så här fungerar det hos oss:\n\n{grounded['content']}\n\n"
                 "Hör gärna av dig om något är oklart!"
             )
@@ -194,6 +195,116 @@ async def _triage_email(
     result.setdefault("reasoning", "LLM-klassificering.")
     result["model"] = get_settings().model
     return result, articles
+
+
+async def _klassa_och_styr(storage: Storage, tenant_id: str, email: dict[str, Any]) -> dict[str, Any] | None:
+    """Skriver klassen på raden och styr lead/ej relaterat bort från
+    supportkedjan. None = support, fortsätt som vanligt. Kastar aldrig."""
+    email_id = email["id"]
+    try:
+        syfte = "support"
+        if email.get("mailbox_id"):
+            for m in await storage.list_mailboxes(tenant_id):
+                if str(m.get("id")) == str(email["mailbox_id"]):
+                    syfte = str(m.get("syfte") or "support")
+                    break
+        utfall = await klassa(storage, tenant_id, email, syfte=syfte)
+        await storage.update_email(tenant_id, email_id, klass=utfall["klass"], klass_kalla=utfall["kalla"])
+        await storage.log_decision(
+            tenant_id, email_id=email_id, event="klassning",
+            detail={"klass": utfall["klass"], "kalla": utfall["kalla"], "stodrad": utfall.get("stodrad")},
+        )
+    except Exception:  # noqa: BLE001 — klassningen får aldrig stoppa supportkedjan
+        logger.exception("Klassningen av %s föll; mejlet går supportvägen.", email_id)
+        return None
+    if utfall["klass"] == "ej_relaterat":
+        await storage.update_email(tenant_id, email_id, status="ej_relaterat")
+        return {"action": "ej_relaterat"}
+    if utfall["klass"] == "lead":
+        return await _hantera_lead(storage, tenant_id, email, utfall)
+    return None
+
+
+async def _hantera_lead(storage: Storage, tenant_id: str, email: dict[str, Any], utfall: dict[str, Any]) -> dict[str, Any]:
+    """Ett lead i inkorgen: svar till en befintlig tråd går genom
+    leads/svar.py (klassning, kön, utkast till granskning); ett nytt
+    inkommande lead blir ett prospekt med origin 'inkorg'. Mejlet får status
+    'lead' och bor i leads-inkorgen under Iris — aldrig ett supportutkast."""
+    email_id = email["id"]
+    await storage.update_email(tenant_id, email_id, status="lead")
+    prospect_id = utfall.get("prospect_id")
+    thread_id = utfall.get("thread_id")
+    if not prospect_id:
+        fran = str(email.get("from_email") or "").strip().lower()
+        namn = str(email.get("from_name") or "").strip() or fran.rsplit("@", 1)[-1]
+        try:
+            prospekt = await storage.create_prospect(
+                tenant_id, company_name=namn, contact_name=email.get("from_name") or None,
+                contact_email=fran or None, origin="inkorg",
+                profil={"contact_level": "named_other" if email.get("from_name") else "role_address"},
+            )
+            prospect_id = prospekt["id"]
+        except Exception:  # noqa: BLE001 — ett prospekt som inte gick att skapa stoppar inte leadet
+            logger.exception("Kunde inte skapa prospekt ur inkommande lead %s", email_id)
+        else:
+            await _utkast_for_inkorgslead(storage, tenant_id, prospekt)
+    svar: dict[str, Any] | None = None
+    if thread_id and not get_settings().is_simulation():
+        try:
+            from ..api.leads import build_context_pack
+            from ..leads.svar import hantera_prospektsvar
+
+            tenant = await storage.get_tenant(tenant_id) or {}
+            context_pack, _ = await build_context_pack(storage, tenant_id)
+            svar = await hantera_prospektsvar(
+                storage, tenant_id, thread_id=thread_id,
+                body=str(email.get("body_text") or ""),
+                tenant_name=str(tenant.get("company_name") or tenant.get("name") or ""),
+                context_pack=context_pack,
+                publik_bas_url=get_settings().publik_bas_url,
+            )
+        except Exception:  # noqa: BLE001 — svarshanteringen får inte fälla inkorgen
+            logger.exception("Prospektsvaret %s gick inte att hantera", email_id)
+    await storage.log_decision(
+        tenant_id, email_id=email_id, event="lead",
+        detail={"prospect_id": prospect_id, "thread_id": thread_id, "svar": (svar or {}).get("klass")},
+    )
+    return {"action": "lead", "prospect_id": prospect_id, "thread_id": thread_id}
+
+
+async def _utkast_for_inkorgslead(storage: Storage, tenant_id: str, prospekt: dict[str, Any]) -> None:
+    """Köar research och utkast för ett NYTT inkorgslead när kunden slagit på
+    `inkorg.utkast_auto` (app/leads/automation.py). Standard av: då gör
+    inkorgen exakt det den gjorde innan reglerna fanns. Fäller aldrig leadet."""
+    from ..leads import automation
+
+    try:
+        regler = automation.normalisera(
+            (await storage.get_agent_settings(tenant_id, agent_type="leads")).get("automation")
+        )
+        if not regler["per_typ"]["inkorg"]["utkast_auto"] or get_settings().is_simulation():
+            return
+        from ..api.leads import _lagg_prospektjobb
+        from ..main import app
+
+        if getattr(app.state, "jobs", None) is None:
+            logger.warning("Jobbstoret saknas; inget utkast köat för inkorgsleadet %s.", prospekt.get("id"))
+            return
+        tenant = await storage.get_tenant(tenant_id) or {}
+        await _lagg_prospektjobb(
+            app.state,
+            {
+                "tenant_id": tenant_id,
+                "tenant_name": str(tenant.get("company_name") or tenant.get("name") or ""),
+            },
+            [prospekt],
+            scope="research_and_draft",
+            overrides=None,
+            is_test=False,
+            limit=1,
+        )
+    except Exception:  # noqa: BLE001 — automationen får inte fälla inkorgen
+        logger.exception("Kunde inte köa utkast för inkorgsleadet %s", prospekt.get("id"))
 
 
 def ar_snajp_notis(subject: str | None, body: str | None) -> bool:
@@ -229,6 +340,13 @@ async def process_email(
         )
         return {"action": "att_hantera"}
 
+    # Klassningen (migration 084, plan del D): support, lead eller ej
+    # relaterat, FÖRE avtalsgrinden och triagen. Kodregler och Jev kostar
+    # ingen modellbudget; bara support går vidare till LLM-triagen.
+    klass = await _klassa_och_styr(storage, tenant_id, email)
+    if klass is not None:
+        return klass
+
     # Avtalsgrinden FÖRE allt annat: ingen kundtext får gå till modell-
     # leverantören för en tenant utan registrerat avtal (migration 070).
     # Mejlet är redan sparat och listbart — det som skjuts upp är LLM-
@@ -237,7 +355,7 @@ async def process_email(
     if await avtal_saknas(storage, tenant_id):
         await storage.log_decision(
             tenant_id, email_id=email_id, event="vantar_avtal",
-            detail={"note": "Avtalet är inte registrerat — mejlet väntar oprocessat."},
+            detail={"note": "Avtalet är inte registrerat — mejlet väntar obehandlat."},
         )
         return {"action": "vantar_avtal"}
 
@@ -248,7 +366,7 @@ async def process_email(
     except SupportBudgetExceededError:
         await storage.log_decision(
             tenant_id, email_id=email_id, event="budget",
-            detail={"note": "Dygnsbudgeten för support är förbrukad — mejlet väntar oprocessat."},
+            detail={"note": "Dygnsbudgeten för support är förbrukad — mejlet väntar obehandlat."},
         )
         return {"action": "budget"}
 
@@ -343,7 +461,7 @@ async def process_email(
         escalation_reason = triage.get("escalation_reason")
         if not must_escalate and not articles:
             must_escalate = True
-            escalation_reason = "Ingen träff i kunskapsbasen — grundningsregeln kräver människa."
+            escalation_reason = "Ingen träff i kunskapsbasen — grundningsregeln kräver att en människa tar ärendet."
 
         if must_escalate or rule == "escalate":
             reason = escalation_reason or f"Regeln för facket {CATEGORY_LABELS[triage['category']]} kräver mänsklig granskning."
@@ -368,11 +486,21 @@ async def process_email(
 
         content = _wrap_reply(triage.get("draft_body") or _NO_MATCH_BODY, email["from_name"], avsandare)
 
+        # Textkvalitetslagret (app/textkvalitet.py): putsar utkastet och
+        # flaggar språkrisker. Ett flaggat utkast får ALDRIG autoskickas —
+        # det degraderar till granskningskön, samma fail-mot-människa som
+        # misslyckad sändning nedan.
+        from ..textkvalitet import sakra_utgaende_text
+
+        kvalitet = await sakra_utgaende_text(content)
+        content = kvalitet.text
+
         # 4: autosvar — bara om regeln säger auto OCH säkerhetsvillkoren håller.
         auto_ok = (
             rule == "auto"
             and confidence >= settings.auto_send_min_confidence
             and (sentiment is None or sentiment >= 0.4)
+            and not kvalitet.kraver_granskning
         )
         if auto_ok:
             # Sändningen sker FÖRE varje statusskrivning, samma kontrakt som
@@ -424,8 +552,10 @@ async def process_email(
                 "rule": rule, "confidence": confidence,
                 "why_not_auto": (
                     "Regeln är 'draft'" if rule != "auto"
-                    else f"Konfidens {confidence} under tröskeln {settings.auto_send_min_confidence}"
+                    else f"Konfidensen {confidence} ligger under tröskeln {settings.auto_send_min_confidence}"
                     if confidence < settings.auto_send_min_confidence
+                    else f"Textkvalitetskontrollen flaggade utkastet: {kvalitet.sammanfattning()}"
+                    if kvalitet.kraver_granskning
                     else "Negativt sentiment"
                 ),
             },
@@ -445,7 +575,7 @@ async def process_email(
         if _ar_kvotfel(error):
             beskrivning = (
                 "AI-leverantörens kvot är slut just nu. Mejlet är sparat och "
-                "kan processas om när kvoten är åtgärdad — inget är förlorat."
+                "kan köras om när kvoten har fyllts på — inget är förlorat."
             )
         else:
             beskrivning = str(error)

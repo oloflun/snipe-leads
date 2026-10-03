@@ -14,8 +14,8 @@ import {
   InboxView
 } from "@/components/WorkspaceViews";
 import { IrisBolag } from "@/components/leads/IrisBolag";
-import { IrisGranskning } from "@/components/leads/IrisGranskning";
-import { IrisInstallningar } from "@/components/leads/IrisInstallningar";
+import { AttGora } from "@/components/leads/AttGora";
+import { Aktivitet } from "@/components/dashboard/Aktivitet";
 import { resolveDashboardState } from "@/lib/data/dashboard";
 import type { ProductKey } from "@/lib/routes";
 
@@ -39,11 +39,11 @@ import type { ProductKey } from "@/lib/routes";
  */
 
 const sectionProduct: Record<string, ProductKey> = {
+  leads: "leads",
+  // Iris gamla undersidor (före Snajp Suite 2026-10-03). Grindas som Leads och
+  // omdirigeras sedan i switchen nedan, så att en spärrad arbetsyta får samma
+  // svar på den gamla adressen som på den nya. "emails" redirectas ovan.
   iris: "leads",
-  // "leads" och "emails" (de gamla sluggarna) står INTE här: de redirectas
-  // ovan, INNAN den här kartan slås upp, till sin Iris-motsvarighet — som
-  // sedan grindas på entitlement som vanligt. Två grindar för samma sak vore
-  // en för många.
   companies: "leads",
   contacts: "leads",
   inbox: "leads",
@@ -91,21 +91,33 @@ export async function WorkspaceSection({
     redirect(`${base}/kvitton`);
   }
 
-  // Iris flyttade in från tre separata ställen (Leads, Leadslistor, Email
-  // studio) 2026-09-19 — se lib/routes.ts. Gamla adresser ska landa på sin
-  // Iris-motsvarighet, inte i en 404. Görs FÖRE produktgrinden nedan skulle en
-  // spärrad arbetsyta läcka att "iris" finns; görs den EFTER (som här) delar
-  // den gamla adressen exakt samma entitlement-svar som den nya.
-  const gammalLeadsId: Record<string, string> = {
-    listor: `${base}/iris?vy=listor`,
-    kontroll: `${base}/iris/installningar`
-  };
-  if (section === "leads") {
-    redirect((id && gammalLeadsId[id]) || `${base}/iris`);
+  // Aktivitet är delad: innehållet följer vilka agenter arbetsytan har (se
+  // components/dashboard/Aktivitet.tsx), så inloggningen bär grinden.
+  if (section === "aktivitet") {
+    if (id) notFound();
+    return (
+      <PageShell title={{ sv: "Aktivitet", en: "Activity" }}>
+        <Aktivitet />
+      </PageShell>
+    );
   }
+
+  // Att göra är delad på samma sätt: kön visar bara agenter arbetsytan har.
+  if (section === "att-gora") {
+    if (id) notFound();
+    return (
+      <PageShell title={{ sv: "Att göra", en: "To do" }}>
+        <AttGora />
+      </PageShell>
+    );
+  }
+
   if (section === "emails") {
-    redirect(`${base}/iris`);
+    redirect(`${base}/leads`);
   }
+
+  // Iris inställningar bor i /settings sedan Snajp Suite (2026-10-03).
+  const leadsInstallningar = base === "/admin" ? "/admin/installningar/leads" : "/settings/leads";
 
   const product = sectionProduct[section];
   if (!product) {
@@ -120,7 +132,7 @@ export async function WorkspaceSection({
     // ska landa i agentens erbjudande — inte i en 404. Grinden är densamma:
     // ingen data för agenten renderas, bara pitchen. Preview-ytorna
     // (companies, contacts …) behåller 404:an — de står inte i någon meny.
-    if (section === "iris" || section === "support" || section === "kvitton") {
+    if (section === "leads" || section === "iris" || section === "support" || section === "kvitton") {
       const { AgentLast } = await import("@/components/dashboard/AgentLast");
       return <AgentLast product={product} />;
     }
@@ -133,29 +145,36 @@ export async function WorkspaceSection({
       // agentsajten och SSO-bron dit ("Kör Agent"-knappen) togs bort
       // 2026-09-19 — Kvittohanteraren är bara den här vyn nu.
       return <KvittoVy />;
-    case "iris":
-      // Tre undersidor (Bolag/Granskning/Inställningar), samma mönster som
-      // Leads/kontroll hade — men under EN sektion i stället för tre, se
-      // lib/routes.ts AppRoute.children. Ett okänt tredje slugsegment (`id`
-      // utanför de två kända) är en 404, inte en tyst fallback till Bolag.
-      if (id === "granskning") {
-        return (
-          <PageShell title="Granskning">
-            <IrisGranskning />
-          </PageShell>
-        );
-      }
-      if (id === "installningar") {
-        return (
-          <PageShell title="Inställningar">
-            <IrisInstallningar />
-          </PageShell>
-        );
-      }
+    case "leads": {
+      // Ett objekt, en sida: Pipeline, Tabell och Listor är vyer (?vy=) på
+      // Leads, inte egna adresser. De två äldsta adresserna under /leads
+      // (före Iris 2026-09-19) leder fortfarande rätt.
+      const gammal: Record<string, string> = {
+        listor: `${base}/leads?vy=listor`,
+        kontroll: leadsInstallningar
+      };
       if (id) {
+        if (gammal[id]) redirect(gammal[id]);
         notFound();
       }
       return <IrisBolag />;
+    }
+    case "iris": {
+      // Iris sex undersidor före Snajp Suite. Bokmärken och mejllänkar ska
+      // landa på sin nya plats, inte i en 404.
+      const ny: Record<string, string> = {
+        "": `${base}/leads`,
+        pipeline: `${base}/leads?vy=pipeline`,
+        korningar: `${base}/aktivitet`,
+        inkorg: `${base}/att-gora`,
+        granskning: `${base}/att-gora`,
+        installningar: leadsInstallningar
+      };
+      const mal = ny[id ?? ""];
+      if (!mal) notFound();
+      redirect(mal);
+    }
+    // eslint-disable-next-line no-fallthrough -- redirect/notFound kastar, nås aldrig
     case "companies":
       return id ? <CompanyDetailView id={id} /> : <CompaniesView />;
     case "contacts":
@@ -196,7 +215,7 @@ function SupportSection({ workspaceName }: Readonly<{ workspaceName: string | nu
   // — mönstret i components/snajp/SnajpSupportDemo.tsx, i dag oanvänd i
   // produkten men färdigt.
   return (
-    <PageShell title="Inkorg och utkast">
+    <PageShell title={{ sv: "Kundtjänst", en: "Customer service" }}>
       <AgentSajtKnapp agent="support" />
       <SupportWorkspaceTabs workspaceName={workspaceName} />
     </PageShell>

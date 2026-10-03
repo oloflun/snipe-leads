@@ -263,6 +263,15 @@ rebase. Ändringar behöver samordnas, inte bara pushas.
 
 ## Ändringslogg
 
+- 2026-10-02 — claude — Antons beställning 2026-10-01 byggd och driftsatt på
+  development: Körningar, merinfo + Jev, obligatorisk lägesbeskrivning, Jev-
+  sorterad inkorg med leads-inkorg, nattspegling main → development med Flytta
+  till main, Leads Suite (tabell, pipeline, tidslinje, import, automation,
+  CRM-synk) och hela engelska översättningen. Delmål 10: main har nu alla
+  migrationer (079–087) och adminytan fungerar, men koden kommer först med
+  Antons release. Delmål 12 berört: uppföljningens första väntan styrs nu per
+  leadtyp, själva kedjan är oförändrad. Delmålslistan är orörd.
+
 - 2026-09-19 — claude — delmål 1 utökat med integrationer och kanaler (bd
   snipe-36u): HTTP-anrop och MCP mot kundens egna system, händelsen "ärende
   eskalerat" till kundens ärendesystem, samt WhatsApp, Messenger, Slack och

@@ -109,6 +109,11 @@ def assert_source_is_main(cur) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--apply", action="store_true")
+    ap.add_argument(
+        "--behall-flyttko", action="store_true",
+        help="Vägra spegla om en flytt till main nyligen misslyckats (dev_flytt_ko, migration 085): "
+             "då finns något i development som skulle ha sparats och inte kom fram.",
+    )
     args = ap.parse_args()
 
     env = env_read()
@@ -131,6 +136,22 @@ def main() -> int:
         sys.exit(f"AVBRYT: schemaversionerna skiljer sig (main={sv}, development={dv}). "
                  f"Kör `python scripts/railway_migrate.py --env development --apply` först.")
     print(f"schemaversion: {sv} (matchar)")
+
+    # Flyttkön (plan del E): en misslyckad flytt de senaste sju dagarna betyder
+    # att något i development skulle ha sparats och inte kom fram. Då speglas
+    # inget: en spegling raderar det. Rätta flytten först.
+    if args.behall_flyttko:
+        dc.execute("select to_regclass('public.dev_flytt_ko') is not null")
+        if dc.fetchone()[0]:
+            dc.execute("select count(*) from public.dev_flytt_ko "
+                       "where resultat <> 'ok' and skapad_at > now() - interval '7 days'")
+            n = dc.fetchone()[0]
+            if n:
+                sys.exit(f"AVBRYT: {n} misslyckade flyttar till main de senaste sju dagarna "
+                         f"(dev_flytt_ko). Flytta om dem från Byt kund innan speglingen.")
+        dc.execute("select seeded_at from public.mirror_meta limit 1")
+        rad = dc.fetchone()
+        print(f"senast speglad: {rad[0] if rad else 'aldrig'}")
 
     tbls = tables(sc)
     print(f"tabeller att spegla: {len(tbls)} + auth.users")

@@ -19,7 +19,9 @@
  */
 
 export type Korsteg = {
-  text: string;
+  /** Stegets rad på skärmen, på båda språken (INV-COPY-001). Bolagen nedan är
+   *  fixturdata och står kvar på svenska. */
+  text: { sv: string; en: string };
   /** Hur länge steget "arbetar" innan nästa visas, i millisekunder. */
   varaktighet: number;
 };
@@ -38,10 +40,10 @@ export type Exempelresultat = {
 
 /** Stegen, i den ordning den riktiga körningen loggar dem. */
 export const KORSTEG: Korsteg[] = [
-  { text: "Letar bolag som matchar målgruppen", varaktighet: 1400 },
-  { text: "Läser signaler: nyheter, platsannonser, tillväxt", varaktighet: 1600 },
-  { text: "Gör behovsanalys per bolag", varaktighet: 1500 },
-  { text: "Skriver personliga utkast", varaktighet: 1300 }
+  { text: { sv: "Letar bolag som matchar målgruppen", en: "Finding companies that match the target group" }, varaktighet: 1400 },
+  { text: { sv: "Läser signaler: nyheter, platsannonser, tillväxt", en: "Reading signals: news, job ads, growth" }, varaktighet: 1600 },
+  { text: { sv: "Gör behovsanalys per bolag", en: "Analysing needs per company" }, varaktighet: 1500 },
+  { text: { sv: "Skriver personliga utkast", en: "Writing personal drafts" }, varaktighet: 1300 }
 ];
 
 export const EXEMPELRESULTAT: Exempelresultat[] = [

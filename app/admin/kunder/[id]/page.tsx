@@ -1,9 +1,12 @@
 import Link from "next/link";
 
+import { AdminText } from "@/components/admin/AdminText";
 import { Avstangning } from "@/components/admin/Avstangning";
 import { KonverteraTestkund } from "@/components/admin/KonverteraTestkund";
 import { Kundprofil } from "@/components/admin/Kundprofil";
 import { Tillaggsvaljare } from "@/components/admin/Tillaggsvaljare";
+import { KundHuvud } from "@/components/admin/KundHuvud";
+import { chip, chipAktiv, chipInaktiv, chiplista } from "@/components/ui";
 import { hamtaKundprofil } from "@/lib/actions/agentinstruktioner";
 import { hamtaTillagg } from "@/lib/actions/tillagg";
 import { listTenants, unwrap } from "@/lib/data/admin";
@@ -51,12 +54,14 @@ export default async function Page({
   if (error || !profil) {
     return (
       <div>
-        <h1 className="font-display text-4xl tracking-[-0.03em]">Kundprofil</h1>
+        <h1 className="font-display text-4xl tracking-[-0.03em]">
+          <AdminText n="kundprofilRubrik" />
+        </h1>
         <p role="alert" className="mt-6 max-w-[70ch] break-words text-[0.9375rem] text-danger">
-          {error ?? "Kunden gick inte att hämta."}
+          {error ?? <AdminText n="kundSaknas" />}
         </p>
         <Link href="/admin/kunder" className="mt-6 inline-block text-[0.9375rem] underline underline-offset-4">
-          Tillbaka till kundlistan
+          <AdminText n="tillbakaKundlistan" />
         </Link>
 
         {/* Tilläggen står kvar även när agentprofilen inte gick att hämta.
@@ -77,42 +82,29 @@ export default async function Page({
 
   return (
     <div>
-      <Link
-        href="/admin/kunder"
-        className="text-[0.8125rem] text-mineral underline underline-offset-4 hover:text-ochre"
-      >
-        Kunder
-      </Link>
-      <h1 className="mt-2 font-display text-4xl tracking-[-0.03em]">{profil.tenant.name}</h1>
-      <p className="mt-3 max-w-[70ch] text-[0.9375rem] leading-7 text-mineral">
-        Allt som formar den här kundens agent. Ändringar gäller nästa körning. Pågående
-        ärenden kör klart på de regler de startade med.
-      </p>
+      <KundHuvud id={profil.tenant.id} namn={profil.tenant.name} slug={profil.tenant.slug} />
 
       {/* Två agenter, två profiler. Samma kund kan behöva olika instruktioner för
-          kundtjänst och för utskick, och agent_configs är nycklad på båda. */}
-      <div className="mt-6 flex gap-2 text-[0.8125rem]">
+          kundtjänst och för utskick, och agent_configs är nycklad på båda.
+          Chips och inte en andra flikrad: valet filtrerar vyn ovanför. */}
+      <div className={`mt-5 ${chiplista}`}>
         {(["support", "leads"] as const).map((typ) => (
           <Link
             key={typ}
             href={`/admin/kunder/${profil.tenant.id}?agent=${typ}`}
             aria-current={agentType === typ ? "page" : undefined}
-            // min-h-11 = 44px, inte min-h-9. DESIGN.md sätter tryckytan till 44
-            // utan undantag, och en flik är lika mycket en tryckyta som en knapp.
-            // Hårfin linje på paper2-varianten av samma skäl som överallt annars:
-            // planet ligger 0.035 från pappret och separerar inte av sig självt.
-            className={`focus-ring inline-flex min-h-11 items-center rounded-input px-4 font-medium ${
-              agentType === typ
-                ? "bg-ink text-paper"
-                : "border border-ink/15 bg-paper2/50 text-ink hover:bg-paper2"
-            }`}
+            className={`${chip} ${agentType === typ ? chipAktiv : chipInaktiv}`}
           >
-            {typ === "support" ? "Kundtjänst" : "Leads"}
+            <AdminText n={typ === "support" ? "railKundtjanst" : "leads"} />
           </Link>
         ))}
       </div>
 
-      <div className="mt-10">
+      <p className="mt-3 max-w-[70ch] text-[0.875rem] leading-6 text-ink-muted">
+        <AdminText n="kundprofilIngress" />
+      </p>
+
+      <div className="mt-8">
         <Kundprofil profil={profil} />
       </div>
 

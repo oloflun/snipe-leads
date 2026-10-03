@@ -78,6 +78,8 @@ class LeadsConfigRequest(BaseModel):
     )
     icp: dict | None = None
     eskalering: "EskaleringRequest | None" = None
+    automation: "AutomationRequest | None" = None
+    crm_synk: "CrmSynkRequest | None" = None
 
 
 class EskaleringRequest(BaseModel):
@@ -91,6 +93,46 @@ class EskaleringRequest(BaseModel):
     prisfragor: bool | None = None
     negativt_svar: bool | None = None
     juridik: bool | None = None
+
+
+class AutomationTypRequest(BaseModel):
+    """En lead-typs regler (app/leads/automation.py). Fältvis: en växel
+    skickar bara sitt eget fält."""
+
+    model_config = {"extra": "forbid"}
+
+    utkast_auto: bool | None = None
+    #: 0 = ingen uppföljning alls.
+    uppfoljning_dagar: int | None = Field(default=None, ge=0, le=60)
+
+
+class AutomationPerTypRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    iris: AutomationTypRequest | None = None
+    lista: AutomationTypRequest | None = None
+    import_: AutomationTypRequest | None = Field(default=None, alias="import")
+    inkorg: AutomationTypRequest | None = None
+
+
+class AutomationRequest(BaseModel):
+    """Automationsreglerna per lead-typ. Sammanslås fältvis per typ i
+    PUT /api/leads/config — resten står kvar."""
+
+    model_config = {"extra": "forbid"}
+
+    per_typ: AutomationPerTypRequest | None = None
+    jev_bortval: bool | None = None
+
+
+class CrmSynkRequest(BaseModel):
+    """Envägssynk ut (app/leads/crm_synk.py). `leverantor` None stänger av.
+    Integrationen ska bära hemligheten `api_key`."""
+
+    model_config = {"extra": "forbid"}
+
+    leverantor: Literal["hubspot", "pipedrive"] | None = None
+    integration_id: str | None = Field(default=None, max_length=64)
 
 
 LeadsConfigRequest.model_rebuild()
@@ -308,6 +350,31 @@ class LeadsListaRequest(BaseModel):
     overrides: LeadsRunOverrides | None = None
 
 
+class KombineraListorRequest(BaseModel):
+    """Kombinera flera färdiga leadslistor till en skräddarsydd (migration 082,
+    Antons beställning 2026-10-02): flera branscher i samma region, samma
+    bransch i flera regioner, filtrerat på kontaktväg. Raderna kopieras och
+    dedupliceras på orgnr (annars bolagsnamn); källistorna rörs inte."""
+
+    titel: str = Field(..., min_length=1, max_length=200)
+    list_ids: list[str] = Field(..., min_length=2, max_length=10)
+    #: alla = varje rad; telefon = rader med telefon; mejl = rader med mejl;
+    #: bada = rader med både telefon och mejl.
+    kontaktfilter: Literal["alla", "telefon", "mejl", "bada"] = "alla"
+
+
+class TillIrisRequest(BaseModel):
+    """Flytta listrader till Iris (Antons beställning 2026-10-02): raderna blir
+    prospekt (dedup på bolagsnamn) och en riktig körning köas med research per
+    bolag, så varje utkast är anpassat till bolagets läge — aldrig en mall ur
+    radens metadata. Körningen syns i Iris › Körningar."""
+
+    item_ids: list[str] | None = None
+    #: None = automationsreglerna avgör (utkast_auto för listans typ).
+    scope: Literal["research", "research_and_draft"] | None = None
+    is_test: bool = False
+
+
 class AgentFeedbackRequest(BaseModel):
     """Kundens dom över en agentkörning. corrected_output är människans egen
     formulering av vad svaret BORDE ha varit — den starkaste signalen in i
@@ -516,6 +583,14 @@ class KopplaInkorgRequest(BaseModel):
     address: str = Field(..., min_length=5, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     app_losenord: str = Field(..., min_length=6, max_length=200)
     imap_host: str | None = Field(default=None, max_length=253)
+    #: Migration 084: vad brevlådan används till — styr klassningen.
+    syfte: Literal["support", "leads", "bada"] = "support"
+
+
+class KlassaRequest(BaseModel):
+    """Manuell omklassning av ett mejl (migration 084) — blir lärdata."""
+
+    klass: Literal["support", "lead", "ej_relaterat"]
 
 
 class OmformuleraDraftRequest(BaseModel):

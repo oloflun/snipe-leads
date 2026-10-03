@@ -5,8 +5,8 @@ import { StartView } from "@/components/dashboard/StartView";
 import { CrmDemo } from "@/components/crm/CrmDemo";
 import { KvittoDemo } from "@/components/kvitton/KvittoDemo";
 import { DemoSupportYta } from "@/components/snajp/DemoSupportYta";
+import { AttGora } from "@/components/leads/AttGora";
 import { IrisBolag } from "@/components/leads/IrisBolag";
-import { IrisGranskning } from "@/components/leads/IrisGranskning";
 import { IrisInstallningar } from "@/components/leads/IrisInstallningar";
 import { SupportRegler } from "@/components/settings/SupportRegler";
 import {
@@ -41,7 +41,7 @@ import { notFoundOnTenant } from "@/lib/tenants/server";
  * INGENTING här får sträcka sig efter en session eller databasen.
  *
  *  * `resolveDashboardState()` anropas INTE — state är en konstant nedan.
- *  * `IrisBolag`/`IrisGranskning`/`IrisInstallningar` läser demo-fixturer
+ *  * `IrisBolag`/`AttGora`/`IrisInstallningar` läser demo-fixturer
  *    (`lib/demo/oversikt.ts`, `lib/demo/iris-exempel.ts`) i stället för
  *    `/api/snajp-support/*` när `demo` är satt — se respektive komponent.
  *  * Vyerna under `WorkspaceViews` är klientkomponenter som läser
@@ -108,36 +108,40 @@ function renderSektion(
   switch (sektion) {
     case undefined:
       return <StartView demo />;
-    case "iris":
-      // Samma tre undersidor som /dashboard/iris — se
-      // components/dashboard/WorkspaceSection.tsx. Ett okänt tredje
-      // slugsegment är en 404, inte en tyst fallback till Bolag.
-      if (undersektion === "granskning") {
-        return (
-          <PageShell title="Granskning">
-            <IrisGranskning demo />
-          </PageShell>
-        );
-      }
-      if (undersektion === "installningar") {
-        return (
-          <PageShell title="Inställningar">
-            <IrisInstallningar demo />
-          </PageShell>
-        );
-      }
-      if (undersektion) {
-        return null;
-      }
-      return <IrisBolag demo />;
-    // Gamla adresserna — Iris flyttade in från tre separata ställen
-    // 2026-09-19 (se HANDOFF/plan). Bokmärken ska landa rätt, inte i en 404.
+    // Samma sidor som arbetsytan (Snajp Suite 2026-10-03), se
+    // components/dashboard/WorkspaceSection.tsx.
     case "leads":
+      return undersektion ? null : <IrisBolag demo />;
+    case "att-gora":
+      return undersektion ? null : (
+        <PageShell title={{ sv: "Att göra", en: "To do" }}>
+          <AttGora demo />
+        </PageShell>
+      );
+    case "installningar":
+      return undersektion ? null : (
+        <PageShell title={{ sv: "Inställningar", en: "Settings" }}>
+          <IrisInstallningar demo />
+        </PageShell>
+      );
+    // Gamla adresserna. Bokmärken ska landa rätt, inte i en 404.
+    case "iris": {
+      const ny: Record<string, string> = {
+        "": "/demo/leads",
+        pipeline: "/demo/leads?vy=pipeline",
+        granskning: "/demo/att-gora",
+        installningar: "/demo/installningar"
+      };
+      const mal = ny[undersektion ?? ""];
+      if (!mal) return null;
+      redirect(mal);
+    }
+    // eslint-disable-next-line no-fallthrough -- redirect kastar, nås aldrig
     case "emails":
-      redirect("/demo/iris");
+      redirect("/demo/leads");
     // eslint-disable-next-line no-fallthrough -- redirect kastar, nås aldrig
     case "kontroll":
-      redirect("/demo/iris/installningar");
+      redirect("/demo/installningar");
     // eslint-disable-next-line no-fallthrough -- redirect kastar, nås aldrig
     case "crm":
       // Den omgjorda leadsagenten i demoform: kundens egen CRM-lista in
@@ -145,7 +149,7 @@ function renderSektion(
       // Följer filens regel — CrmDemo når varken session eller databas.
       // Att listan stannar i webbläsaren står i CrmDemos egen uppladdningsyta.
       return (
-        <PageShell title="CRM-lista">
+        <PageShell title={{ sv: "CRM-lista", en: "CRM list" }}>
           <CrmDemo />
         </PageShell>
       );
@@ -169,7 +173,7 @@ function renderSektion(
       // efter en session eller databasen — se filens docstring. KvittoDemo
       // renderar handräknade konstanter och spelar upp dem.
       return (
-        <PageShell title="Kvitton">
+        <PageShell title={{ sv: "Kvitton", en: "Receipts" }}>
           <KvittoDemo />
         </PageShell>
       );
@@ -182,7 +186,7 @@ function renderSektion(
       // DemoSupportYta lägger kundchatten (förladdade svar) som flik bredvid
       // inkorgen, samma flikmönster som arbetsytans SupportWorkspaceTabs.
       return (
-        <PageShell title="Kundtjänst">
+        <PageShell title={{ sv: "Kundtjänst", en: "Customer service" }}>
           <DemoSupportYta />
         </PageShell>
       );
@@ -193,7 +197,7 @@ function renderSektion(
 
 function ReglerDemo() {
   return (
-    <PageShell title="När agenten får svara själv">
+    <PageShell title={{ sv: "När agenten får svara själv", en: "When the agent may answer on its own" }}>
       <SupportRegler demo />
     </PageShell>
   );

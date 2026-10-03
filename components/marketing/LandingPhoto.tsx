@@ -244,7 +244,7 @@ export function LandingPhoto({
                     /demo/bokforing funnits sedan den blev en egen produkt. */}
                 <div className="mt-5 flex flex-col gap-2 border-t border-paper/25 pt-4">
                   <Link
-                    href="/demo/iris"
+                    href="/demo/leads"
                     className="focus-ring group inline-flex items-center gap-2 text-[0.9375rem] font-medium text-paper-muted transition-colors hover:text-paper"
                   >
                     {text(shared.demoLeads)}

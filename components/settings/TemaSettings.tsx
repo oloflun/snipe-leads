@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Vaxel } from "@/components/settings/Vaxel";
 import { colorScheme, dataTheme, TEMA_COOKIE, type Tema } from "@/lib/tema";
+import { useLocale } from "@/lib/i18n";
 
 /**
  * Ljust eller mörkt — den enda inställningen utan Spara-knapp.
@@ -46,6 +47,7 @@ import { colorScheme, dataTheme, TEMA_COOKIE, type Tema } from "@/lib/tema";
  * stämpla <html>, läst i samma request.
  */
 export function TemaSettings({ initial }: Readonly<{ initial: Tema }>) {
+  const { text } = useLocale();
   const [tema, setTema] = useState<Tema>(initial);
 
   function valj(nytt: Tema) {
@@ -71,7 +73,7 @@ export function TemaSettings({ initial }: Readonly<{ initial: Tema }>) {
     <div className="grid gap-7">
       <div className="border-t border-ink/15 pt-5">
         <Vaxel
-          etikett="Mörkt läge"
+          etikett={text({ sv: "Mörkt läge", en: "Dark mode" })}
           pa={tema === "morkt"}
           onChange={(pa) => valj(pa ? "morkt" : "ljust")}
         />
@@ -82,19 +84,19 @@ export function TemaSettings({ initial }: Readonly<{ initial: Tema }>) {
           varandra, och det är där ett tema faktiskt går sönder: när accenten
           slutar synas mot papperet eller den dämpade texten blir oläslig. */}
       <div className="border-t border-ink/15 pt-5">
-        <p className="kicker text-mineral">Så ser ytorna ut</p>
+        <p className="kicker text-mineral">{text({ sv: "Så ser ytorna ut", en: "How the surfaces look" })}</p>
         <div className="mt-4 rounded-panel border border-ink/15 bg-paper2/50 p-5">
-          <p className="text-[15px] font-medium text-ink">Brödtext på papper</p>
-          <p className="mt-1 text-[0.875rem] leading-6 text-mineral">Dämpad text</p>
+          <p className="text-[15px] font-medium text-ink">{text({ sv: "Brödtext på papper", en: "Body text on paper" })}</p>
+          <p className="mt-1 text-[0.875rem] leading-6 text-mineral">{text({ sv: "Dämpad text", en: "Muted text" })}</p>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <span className="rounded-input bg-ink px-3 py-1.5 text-[0.8125rem] font-semibold text-paper">
-              Primär knapp
+              {text({ sv: "Primär knapp", en: "Primary button" })}
             </span>
             <span className="rounded-input border border-ochre/40 bg-ochre/10 px-3 py-1.5 text-[0.8125rem] text-warning">
               Accent
             </span>
-            <span className="text-[0.8125rem] text-moss">Klart</span>
-            <span className="text-[0.8125rem] text-danger">Fel</span>
+            <span className="text-[0.8125rem] text-moss">{text({ sv: "Klart", en: "Done" })}</span>
+            <span className="text-[0.8125rem] text-danger">{text({ sv: "Fel", en: "Error" })}</span>
           </div>
         </div>
       </div>

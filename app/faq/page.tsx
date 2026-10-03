@@ -23,7 +23,7 @@ export default async function Page() {
     <InnehallsSida>
       <SidRubrik
         rubrik="Frågor och svar"
-        ingress="Det vi får frågan om oftast, besvarat kort. Hittar du inte svaret tar vi det på en demo i stället."
+        ingress="Det vi oftast får frågor om, besvarat kort. Hittar du inte svaret tar vi det på en demo i stället."
       />
 
       <FaqDragspel />

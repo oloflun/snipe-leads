@@ -29,6 +29,52 @@
  * inte går att öppna är det inte.
  */
 
+import type { Localized } from "@/lib/i18n";
+
+/** Prospektets status (migration 010) i kanbanordning; `suppressed` sist. */
+export const STATUS_ORDNING = [
+  "new",
+  "researching",
+  "ready",
+  "contacted",
+  "replied",
+  "meeting",
+  "won",
+  "lost",
+  "suppressed"
+] as const;
+
+/** Statusens etikett, delad av Iris › Bolag, tabellen och pipelinen. */
+export const STATUS_ETIKETT: Record<string, Localized> = {
+  new: { sv: "Ny", en: "New" },
+  researching: { sv: "Research pågår", en: "Researching" },
+  ready: { sv: "Redo", en: "Ready" },
+  contacted: { sv: "Kontaktad", en: "Contacted" },
+  replied: { sv: "Svarat", en: "Replied" },
+  meeting: { sv: "Möte", en: "Meeting" },
+  won: { sv: "Vunnen", en: "Won" },
+  lost: { sv: "Förlorad", en: "Lost" },
+  suppressed: { sv: "Spärrad", en: "Blocked" }
+};
+
+/**
+ * Leadets typ ur `origin`, samma mappning som backendens
+ * `app/leads/automation.py::typ_av`: inkorg, import och lista är sina egna,
+ * allt annat (manual, example, test) är Iris.
+ */
+export type LeadTyp = "iris" | "lista" | "import" | "inkorg";
+
+export function leadTyp(origin: string | null | undefined): LeadTyp {
+  return origin === "inkorg" || origin === "import" || origin === "lista" ? origin : "iris";
+}
+
+export const LEAD_TYP_ETIKETT: Record<LeadTyp, Localized> = {
+  iris: { sv: "Iris", en: "Iris" },
+  lista: { sv: "Lista", en: "List" },
+  import: { sv: "Import", en: "Import" },
+  inkorg: { sv: "Inkorg", en: "Inbox" }
+};
+
 export type Kriterium = {
   /** Bolagssidan nycklar sina rader på den här när den finns. */
   nyckel?: string;
@@ -56,6 +102,30 @@ export const UTFALL_ETIKETT: Record<string, string> = {
   okänd: "Okänt",
   ej_satt: "Ej satt"
 };
+
+const NIVA_ETIKETT_EN: Record<string, string> = {
+  A: "Strong",
+  B: "Possible",
+  C: "Ruled out"
+};
+
+const UTFALL_ETIKETT_EN: Record<string, string> = {
+  träff: "Met",
+  delvis: "Partly",
+  miss: "Not met",
+  okänd: "Unknown",
+  ej_satt: "Not set"
+};
+
+/** Nivåns etikett på kundens språk (INV-COPY-001); okänd nivå ger `undefined`. */
+export function nivaEtikett(niva: string, locale: "sv" | "en"): string | undefined {
+  return (locale === "en" ? NIVA_ETIKETT_EN : NIVA_ETIKETT)[niva];
+}
+
+/** Utfallets etikett på kundens språk; okänt utfall ger `undefined`. */
+export function utfallEtikett(utfall: string, locale: "sv" | "en"): string | undefined {
+  return (locale === "en" ? UTFALL_ETIKETT_EN : UTFALL_ETIKETT)[utfall];
+}
 
 function arKriterium(v: unknown): v is Kriterium {
   return (

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { EmptyState, SkeletonRows } from "@/components/ui";
 import { EjAktiverad, arEjAktiverad } from "@/components/EjAktiverad";
 import { readJsonBody } from "@/lib/http/json";
+import { useLocale, type Locale, type Localized } from "@/lib/i18n";
 
 /**
  * Agentens lärande — förslagen och kundens domar, på ett ställe.
@@ -55,24 +56,24 @@ type Feedbackrad = {
 type Lage =
   | { fas: "laddar" }
   | { fas: "ejAktiverad" }
-  | { fas: "fel"; meddelande: string }
+  | { fas: "fel"; meddelande: Localized }
   | { fas: "klar"; forslag: Forslag[]; feedback: Feedbackrad[] };
 
-const KIND_ETIKETT: Record<string, string> = {
-  kb_article: "KB-artikel",
-  marknadsinsikt: "Marknadsinsikt"
+const KIND_ETIKETT: Record<string, Localized> = {
+  kb_article: { sv: "KB-artikel", en: "KB article" },
+  marknadsinsikt: { sv: "Marknadsinsikt", en: "Market insight" }
 };
 
-const VERDICT_ETIKETT: Record<string, string> = {
-  good: "Bra",
-  bad: "Fel",
-  needs_review: "Granska"
+const VERDICT_ETIKETT: Record<string, Localized> = {
+  good: { sv: "Bra", en: "Good" },
+  bad: { sv: "Fel", en: "Wrong" },
+  needs_review: { sv: "Granska", en: "Review" }
 };
 
-function nar(iso: string): string {
+function nar(iso: string, locale: Locale): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("sv-SE", { day: "numeric", month: "short" });
+  return d.toLocaleDateString(locale === "en" ? "en-GB" : "sv-SE", { day: "numeric", month: "short" });
 }
 
 type ForslagsInnehall = {
@@ -110,6 +111,7 @@ function innehall(f: Forslag): { rubrik: string; brodtext: string; belagg: strin
 }
 
 export function AgentLarande() {
+  const { locale, text } = useLocale();
   const [lage, setLage] = useState<Lage>({ fas: "laddar" });
   const [arbetar, setArbetar] = useState<string | null>(null);
 
@@ -132,8 +134,11 @@ export function AgentLarande() {
           fas: "fel",
           meddelande:
             fRes.status >= 500
-              ? "Tjänsten svarar inte. Försök igen om en minut."
-              : `Kunde inte hämta förslagen (status ${fRes.status}).`
+              ? { sv: "Tjänsten svarar inte. Försök igen om en minut.", en: "The service is not responding. Try again in a minute." }
+              : {
+                  sv: `Kunde inte hämta förslagen (status ${fRes.status}).`,
+                  en: `Could not fetch the suggestions (status ${fRes.status}).`
+                }
         });
         return;
       }
@@ -149,7 +154,10 @@ export function AgentLarande() {
     } catch (error) {
       setLage({
         fas: "fel",
-        meddelande: error instanceof Error ? error.message : "Kunde inte nå servern."
+        meddelande:
+          error instanceof Error
+            ? { sv: error.message, en: error.message }
+            : { sv: "Kunde inte nå servern.", en: "Could not reach the server." }
       });
     }
   }, []);
@@ -168,7 +176,10 @@ export function AgentLarande() {
         if (!response.ok) {
           setLage({
             fas: "fel",
-            meddelande: `Kunde inte ${handling === "godkann" ? "godkänna" : "avfärda"} förslaget (status ${response.status}).`
+            meddelande: {
+              sv: `Kunde inte ${handling === "godkann" ? "godkänna" : "avfärda"} förslaget (status ${response.status}).`,
+              en: `Could not ${handling === "godkann" ? "approve" : "dismiss"} the suggestion (status ${response.status}).`
+            }
           });
           return;
         }
@@ -181,21 +192,21 @@ export function AgentLarande() {
   );
 
   if (lage.fas === "laddar") return <SkeletonRows />;
-  if (lage.fas === "ejAktiverad") return <EjAktiverad yta="Lärande" />;
+  if (lage.fas === "ejAktiverad") return <EjAktiverad yta={text({ sv: "Lärande", en: "Learning" })} />;
 
   if (lage.fas === "fel") {
     return (
       <div className="flex items-start gap-3 border-y border-ochre/40 bg-ochre/10 px-4 py-4">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
         <div className="min-w-0">
-          <p className="text-sm font-medium text-ink">Lärandet kunde inte hämtas</p>
-          <p className="mt-1 text-sm text-ink-muted">{lage.meddelande}</p>
+          <p className="text-sm font-medium text-ink">{text({ sv: "Lärandet kunde inte hämtas", en: "Learning could not be fetched" })}</p>
+          <p className="mt-1 text-sm text-ink-muted">{text(lage.meddelande)}</p>
           <button
             type="button"
             onClick={() => void hamta()}
             className="focus-ring mt-3 inline-flex min-h-9 items-center rounded-input bg-paper2 px-3 text-[13px] font-medium"
           >
-            Försök igen
+            {text({ sv: "Försök igen", en: "Try again" })}
           </button>
         </div>
       </div>
@@ -205,10 +216,10 @@ export function AgentLarande() {
   return (
     <div className="space-y-12">
       <section>
-        <h2 className="kicker text-mineral">Väntar på ditt beslut</h2>
+        <h2 className="kicker text-mineral">{text({ sv: "Väntar på ditt beslut", en: "Waiting for your decision" })}</h2>
         {lage.forslag.length === 0 ? (
           <div className="mt-3">
-            <EmptyState title="Inga förslag just nu" />
+            <EmptyState title={text({ sv: "Inga förslag just nu", en: "No suggestions right now" })} />
           </div>
         ) : (
           <ul className="mt-3 divide-y divide-ink/15 border-y border-ink/15">
@@ -219,7 +230,7 @@ export function AgentLarande() {
                   <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                     <p className="text-[1.0625rem] font-semibold tracking-[-0.01em]">{rubrik}</p>
                     <span className="kicker shrink-0 text-mineral">
-                      {KIND_ETIKETT[f.kind] ?? f.kind} · {f.agent_type} · {nar(f.created_at)}
+                      {KIND_ETIKETT[f.kind] ? text(KIND_ETIKETT[f.kind]) : f.kind} · {f.agent_type} · {nar(f.created_at, locale)}
                     </span>
                   </div>
                   {brodtext ? (
@@ -244,7 +255,9 @@ export function AgentLarande() {
                       className="focus-ring inline-flex min-h-9 items-center gap-1.5 rounded-input bg-ink px-3 text-[13px] font-medium text-paper disabled:opacity-50"
                     >
                       <Check className="h-3.5 w-3.5" aria-hidden />
-                      {f.kind === "kb_article" ? "Godkänn — skapa artikeln" : "Godkänn"}
+                      {f.kind === "kb_article"
+                        ? text({ sv: "Godkänn — skapa artikeln", en: "Approve and create the article" })
+                        : text({ sv: "Godkänn", en: "Approve" })}
                     </button>
                     <button
                       type="button"
@@ -253,7 +266,7 @@ export function AgentLarande() {
                       className="focus-ring inline-flex min-h-9 items-center gap-1.5 rounded-input bg-paper2 px-3 text-[13px] font-medium disabled:opacity-50"
                     >
                       <X className="h-3.5 w-3.5" aria-hidden />
-                      Avfärda
+                      {text({ sv: "Avfärda", en: "Dismiss" })}
                     </button>
                   </div>
                 </li>
@@ -264,25 +277,25 @@ export function AgentLarande() {
       </section>
 
       <section>
-        <h2 className="kicker text-mineral">Domar från teamet</h2>
+        <h2 className="kicker text-mineral">{text({ sv: "Domar från teamet", en: "Verdicts from the team" })}</h2>
         {lage.feedback.length === 0 ? (
-          <p className="mt-3 text-[15px] leading-6 text-ink-muted">Inga domar ännu.</p>
+          <p className="mt-3 text-[15px] leading-6 text-ink-muted">{text({ sv: "Inga domar ännu.", en: "No verdicts yet." })}</p>
         ) : (
           <ul className="mt-3 divide-y divide-ink/15 border-y border-ink/15">
             {lage.feedback.map((r) => (
               <li key={r.id} className="py-4">
                 <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                   <p className="text-[15px] font-semibold">
-                    {VERDICT_ETIKETT[r.verdict] ?? r.verdict}
+                    {VERDICT_ETIKETT[r.verdict] ? text(VERDICT_ETIKETT[r.verdict]) : r.verdict}
                     {r.comment ? (
                       <span className="ml-2 font-normal text-ink-muted">{r.comment}</span>
                     ) : null}
                   </p>
-                  <span className="kicker shrink-0 text-mineral">{nar(r.created_at)}</span>
+                  <span className="kicker shrink-0 text-mineral">{nar(r.created_at, locale)}</span>
                 </div>
                 {r.corrected_output ? (
                   <p className="mt-2 max-w-[75ch] whitespace-pre-line text-[14px] leading-6 text-ink-muted">
-                    Rättad text: {r.corrected_output}
+                    {text({ sv: "Rättad text:", en: "Corrected text:" })} {r.corrected_output}
                   </p>
                 ) : null}
               </li>

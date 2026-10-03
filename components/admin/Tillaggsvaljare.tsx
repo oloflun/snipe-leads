@@ -6,6 +6,7 @@ import { Vaxel } from "@/components/settings/Vaxel";
 import { Sektion } from "@/components/ui";
 import { addonCatalog, type AddonKey } from "@/lib/addons";
 import { sattTillagg } from "@/lib/actions/tillagg";
+import { useLocale } from "@/lib/i18n";
 
 /**
  * Kundens tillägg, påslagna av oss.
@@ -47,6 +48,7 @@ export function Tillaggsvaljare({
   /** Migration 063 är inte körd. Växlarna visas men skriver inte — se tillagg.ts. */
   migrationSaknas?: boolean;
 }>) {
+  const { text } = useLocale();
   const [addons, setAddons] = useState<AddonKey[]>(initialaAddons);
   const [sparar, setSparar] = useState<AddonKey | null>(null);
   const [fel, setFel] = useState<string | null>(lasfel ?? null);
@@ -78,7 +80,7 @@ export function Tillaggsvaljare({
 
     if (!svar.success) {
       setAddons(fore);
-      setFel(svar.error ?? "Tillägget kunde inte sparas.");
+      setFel(svar.error ?? text({ sv: "Tillägget kunde inte sparas.", en: "The add-on could not be saved." }));
       if (svar.migrationSaknas) setSaknas(true);
       return;
     }
@@ -87,13 +89,13 @@ export function Tillaggsvaljare({
     const namn = addonCatalog.find((spec) => spec.key === nyckel)?.name ?? nyckel;
     setKvitto(
       pa
-        ? `${namn} är påslaget. Kunden ser vyn direkt.`
-        : `${namn} är avstängt. Vyn är borta ur kundens meny.`
+        ? text({ sv: `${namn} är påslaget. Kunden ser vyn direkt.`, en: `${namn} is on. The customer sees the view right away.` })
+        : text({ sv: `${namn} är avstängt. Vyn är borta ur kundens meny.`, en: `${namn} is off. The view is gone from the customer's menu.` })
     );
   }
 
   return (
-    <Sektion title="Tillägg">
+    <Sektion title={text({ sv: "Tillägg", en: "Add-ons" })}>
       <div className="divide-y divide-ink/12 border-y border-ink/15">
         {addonCatalog.map((spec) => (
           // `why` är vad tillägget KOSTAR oss att sätta upp — den texten står i

@@ -8,6 +8,9 @@ import type { EmailStudioData } from "@/lib/data/emails";
 import { EXEMPELBOLAG } from "@/lib/demo/iris-exempel";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
+import { useLocale, type Localized } from "@/lib/i18n";
+
+const UTAN_AMNE: Localized = { sv: "Utan ämnesrad", en: "No subject line" };
 
 /**
  * Iris › Granskning — utkasten Iris skrivit, i väntan på ett ja eller nej.
@@ -32,13 +35,22 @@ type KöItem = {
   company_name?: string | null;
 };
 
-function tillStudioData(post: KöItem): EmailStudioData {
+/** Klipp förhandsvisningen vid senaste ordgräns före 220 tecken, så att
+ *  texten inte huggs av mitt i ett ord. Finns inget mellanslag efter index
+ *  150 klipps den vid 220 som förut. */
+function klippVidOrdgrans(text: string): string {
+  const stycke = text.slice(0, 220);
+  const sistaMellanslag = stycke.lastIndexOf(" ");
+  return sistaMellanslag > 150 ? stycke.slice(0, sistaMellanslag) : stycke;
+}
+
+function tillStudioData(post: KöItem, utanAmne: string): EmailStudioData {
   return {
     source: "database",
     businessContext: null,
     email: {
       id: post.id,
-      subject: post.subject || "Utan ämnesrad",
+      subject: post.subject || utanAmne,
       body: post.body ?? "",
       variantLength: "medium",
       variantType: "cold_outreach",
@@ -66,8 +78,9 @@ function demoKo(): KöItem[] {
 }
 
 export function IrisGranskning({ demo = false }: Readonly<{ demo?: boolean }>) {
+  const { text } = useLocale();
   const [poster, setPoster] = useState<KöItem[] | null>(null);
-  const [fel, setFel] = useState<string | null>(null);
+  const [fel, setFel] = useState<Localized | null>(null);
   const [pagar, setPagar] = useState<string | null>(null);
   const [oppen, setOppen] = useState<string | null>(null);
   const [besked, setBesked] = useState<Record<string, "approve" | "reject">>({});
@@ -81,10 +94,18 @@ export function IrisGranskning({ demo = false }: Readonly<{ demo?: boolean }>) {
     try {
       const response = await fetch("/api/snajp-support/leads/queue", { cache: "no-store" });
       const svar = await readJsonBody<{ items?: KöItem[] }>(response);
-      if (!response.ok) throw new Error(`Kön kunde inte hämtas (status ${response.status}).`);
+      if (!response.ok) {
+        setFel({
+          sv: `Kön kunde inte hämtas (status ${response.status}).`,
+          en: `The queue could not be fetched (status ${response.status}).`
+        });
+        setPoster([]);
+        return;
+      }
       setPoster(svar?.items ?? []);
     } catch (orsak) {
-      setFel(felmeddelande(orsak));
+      const m = felmeddelande(orsak);
+      setFel({ sv: m, en: m });
       setPoster([]);
     }
   }
@@ -109,10 +130,17 @@ export function IrisGranskning({ demo = false }: Readonly<{ demo?: boolean }>) {
       const response = await fetch(`/api/snajp-support/leads/queue/${id}/${handling}`, {
         method: "POST"
       });
-      if (!response.ok) throw new Error(`Åtgärden misslyckades (status ${response.status}).`);
+      if (!response.ok) {
+        setFel({
+          sv: `Åtgärden misslyckades (status ${response.status}).`,
+          en: `The action failed (status ${response.status}).`
+        });
+        return;
+      }
       await hamta();
     } catch (orsak) {
-      setFel(felmeddelande(orsak));
+      const m = felmeddelande(orsak);
+      setFel({ sv: m, en: m });
     } finally {
       setPagar(null);
     }
@@ -121,19 +149,19 @@ export function IrisGranskning({ demo = false }: Readonly<{ demo?: boolean }>) {
   return (
     <div>
       {demo ? (
-        <p className="mb-6 text-[13px] leading-6 text-ink-subtle">Exempelutkast.</p>
+        <p className="mb-6 text-[13px] leading-6 text-ink-subtle">{text({ sv: "Exempelutkast.", en: "Example drafts." })}</p>
       ) : null}
 
       {fel ? (
         <p role="alert" className="mb-5 max-w-[70ch] text-[0.875rem] text-danger">
-          {fel}
+          {text(fel)}
         </p>
       ) : null}
 
       {poster === null ? (
         <SkeletonRows />
       ) : poster.length === 0 ? (
-        <EmptyState title="Granskningskön är tom" />
+        <EmptyState title={text({ sv: "Inga utkast väntar på dig", en: "No drafts are waiting for you" })} />
       ) : (
         <div className="divide-y divide-ink/15 border-y border-ink/15">
           {poster.map((post) => {
@@ -148,28 +176,30 @@ export function IrisGranskning({ demo = false }: Readonly<{ demo?: boolean }>) {
                 >
                   <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
                     <div className="min-w-0">
-                      <h2 className="truncate text-[1.0625rem] font-semibold text-ink">
-                        {post.subject || "Utan ämnesrad"}
-                      </h2>
+                      {/* h3: kön renderas under sektionsrubriken "Utkast att
+                          godkänna" i Att göra (components/leads/AttGora.tsx). */}
+                      <h3 className="truncate text-[1.0625rem] font-semibold text-ink">
+                        {post.subject || text(UTAN_AMNE)}
+                      </h3>
                       <p className="mt-0.5 text-[0.875rem] text-ink-subtle">
-                        {[post.company_name, post.prospect_email].filter(Boolean).join(" · ") || "Okänd mottagare"}
+                        {[post.company_name, post.prospect_email].filter(Boolean).join(" · ") || text({ sv: "Okänd mottagare", en: "Unknown recipient" })}
                       </p>
                     </div>
                     <span className="shrink-0 text-[0.8125rem] font-medium text-warning">
-                      {öppen ? "Dölj utkastet" : "Öppna utkastet"}
+                      {öppen ? text({ sv: "Dölj utkastet", en: "Hide draft" }) : text({ sv: "Öppna utkastet", en: "Open draft" })}
                     </span>
                   </div>
                 </button>
 
                 {!öppen && post.body ? (
                   <p className="mt-3 max-w-[72ch] whitespace-pre-wrap text-[0.9375rem] leading-7 text-ink-muted">
-                    {post.body.length > 220 ? `${post.body.slice(0, 220)}…` : post.body}
+                    {post.body.length > 220 ? `${klippVidOrdgrans(post.body)}…` : post.body}
                   </p>
                 ) : null}
 
                 {öppen ? (
                   <div className="mt-4">
-                    <EmailStudioEditor data={tillStudioData(post)} compact />
+                    <EmailStudioEditor data={tillStudioData(post, text(UTAN_AMNE))} compact />
                   </div>
                 ) : null}
 
@@ -185,7 +215,7 @@ export function IrisGranskning({ demo = false }: Readonly<{ demo?: boolean }>) {
                     ) : (
                       <Check className="h-4 w-4" aria-hidden />
                     )}
-                    Godkänn
+                    {text({ sv: "Godkänn", en: "Approve" })}
                   </button>
                   <button
                     type="button"
@@ -194,7 +224,7 @@ export function IrisGranskning({ demo = false }: Readonly<{ demo?: boolean }>) {
                     className={cn(btnSecondary, btnLiten)}
                   >
                     <X className="h-4 w-4" aria-hidden />
-                    Avvisa
+                    {text({ sv: "Avvisa", en: "Reject" })}
                   </button>
                 </div>
               </article>
@@ -206,7 +236,7 @@ export function IrisGranskning({ demo = false }: Readonly<{ demo?: boolean }>) {
       {demo && Object.keys(besked).length > 0 ? (
         <p role="status" className="mt-6 text-[13px] text-ink-subtle">
           {`${Object.entries(besked)
-            .map(([id, val]) => `${EXEMPELBOLAG.find((b) => b.id === id)?.companyName ?? id}: ${val === "approve" ? "godkänt" : "avvisat"}`)
+            .map(([id, val]) => `${EXEMPELBOLAG.find((b) => b.id === id)?.companyName ?? id}: ${val === "approve" ? text({ sv: "godkänt", en: "approved" }) : text({ sv: "avvisat", en: "rejected" })}`)
             .join(" · ")}.`}
         </p>
       ) : null}

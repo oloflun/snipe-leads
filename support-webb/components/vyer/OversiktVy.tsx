@@ -23,9 +23,9 @@ const STATUSETIKETT: Record<string, string> = {
   sent: "Skickat",
   rejected: "Avvisat",
   taken_over: "Övertaget",
-  auto_sent: "Skickade själv",
-  escalated: "Eskalerade",
-  failed: "Föll"
+  auto_sent: "Autosvar skickat",
+  escalated: "Eskalerat",
+  failed: "Misslyckades"
 };
 
 export function OversiktVy() {

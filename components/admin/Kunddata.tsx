@@ -22,6 +22,8 @@ import {
   type Kontakt,
   type Kunddata as Data
 } from "@/lib/actions/kunddata";
+import { ADMIN, a, ordagrant } from "@/lib/admin/sprak";
+import { useLocale, type Localized } from "@/lib/i18n";
 
 /**
  * Kundregistret för EN kund: kontaktpersoner överst, kunduppgifterna under.
@@ -51,23 +53,38 @@ import {
  * tillbaka till det automatiska, syns i märket efter sparning.
  */
 
-const FALT: { nyckel: string; etikett: string; typ: "text" | "date"; brett?: boolean }[] = [
-  { nyckel: "orgnr", etikett: "Organisationsnummer", typ: "text" },
-  { nyckel: "telefon", etikett: "Telefonnummer", typ: "text" },
-  { nyckel: "faktureringsmejl", etikett: "Faktureringsmejl", typ: "text" },
-  { nyckel: "kund_sedan", etikett: "Kund sedan", typ: "date" },
-  { nyckel: "faktureringsadress", etikett: "Faktureringsadress", typ: "text", brett: true },
-  { nyckel: "foretagsadress", etikett: "Företagets adress", typ: "text", brett: true },
+const FALT: { nyckel: string; etikett: Localized; typ: "text" | "date"; brett?: boolean }[] = [
+  { nyckel: "orgnr", etikett: { sv: "Organisationsnummer", en: "Company registration number" }, typ: "text" },
+  { nyckel: "telefon", etikett: { sv: "Telefonnummer", en: "Phone number" }, typ: "text" },
+  { nyckel: "faktureringsmejl", etikett: { sv: "Faktureringsmejl", en: "Billing email" }, typ: "text" },
+  { nyckel: "kund_sedan", etikett: { sv: "Kund sedan", en: "Customer since" }, typ: "date" },
+  {
+    nyckel: "faktureringsadress",
+    etikett: { sv: "Faktureringsadress", en: "Billing address" },
+    typ: "text",
+    brett: true
+  },
+  {
+    nyckel: "foretagsadress",
+    etikett: { sv: "Företagets adress", en: "Company address" },
+    typ: "text",
+    brett: true
+  },
   // Obligatorisk i kallmejlfoten sedan migration 073 — utan den blockerar
   // send_guard varje utskick för kunden, med besked som pekar hit.
-  { nyckel: "policy_url", etikett: "Integritetspolicy (URL)", typ: "text", brett: true },
-  { nyckel: "avtal_signerat", etikett: "Avtal signerat", typ: "date" }
+  {
+    nyckel: "policy_url",
+    etikett: { sv: "Integritetspolicy (URL)", en: "Privacy policy (URL)" },
+    typ: "text",
+    brett: true
+  },
+  { nyckel: "avtal_signerat", etikett: { sv: "Avtal signerat", en: "Contract signed" }, typ: "date" }
 ];
 
-const KALLETIKETT: Record<string, string> = {
-  manuell: "Manuellt ifylld",
-  onboarding: "Auto: onboardingen",
-  system: "Auto: registreringsdatum"
+const KALLETIKETT: Record<string, Localized> = {
+  manuell: { sv: "Manuellt ifylld", en: "Entered manually" },
+  onboarding: { sv: "Auto: onboardingen", en: "Auto: onboarding" },
+  system: { sv: "Auto: registreringsdatum", en: "Auto: registration date" }
 };
 
 // 16px textstorlek är golvet (iOS force-zoomar under det); det kompakta
@@ -76,12 +93,13 @@ const inputKlass =
   "focus-ring mt-1 w-full rounded-input border border-ink/15 bg-paper px-2.5 py-1.5 text-[1rem] leading-6 text-ink";
 
 function KallaBadge({ kalla }: Readonly<{ kalla: string | null }>) {
+  const { locale, text } = useLocale();
   if (!kalla) {
     // "Saknas" är arbetslistan i den här vyn — det är de fälten någon ska
     // fylla i. Warn-tonen pekar ut dem utan att skrika.
-    return <Badge tone="warn">Saknas</Badge>;
+    return <Badge tone="warn">{a("saknasStor", locale)}</Badge>;
   }
-  return <Badge tone="neutral">{KALLETIKETT[kalla] ?? kalla}</Badge>;
+  return <Badge tone="neutral">{KALLETIKETT[kalla] ? text(KALLETIKETT[kalla]) : kalla}</Badge>;
 }
 
 // -- Kontaktpersoner --------------------------------------------------------
@@ -97,18 +115,19 @@ function KontaktFalt({
   satt: (v: typeof TOM_KONTAKT) => void;
   prefix: string;
 }>) {
+  const { locale } = useLocale();
   return (
     <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
       {(
         [
-          ["namn", "Namn"],
-          ["roll", "Roll"],
-          ["mejl", "Mejl"],
-          ["telefon", "Direktnummer"]
+          ["namn", "kontaktNamn"],
+          ["roll", "kontaktRoll"],
+          ["mejl", "kontaktMejl"],
+          ["telefon", "kontaktDirektnummer"]
         ] as const
       ).map(([falt, etikett]) => (
         <label key={falt} className={`block ${etikett}`}>
-          {etikett}
+          {a(etikett, locale)}
           <input
             type={falt === "mejl" ? "email" : "text"}
             name={`${prefix}-${falt}`}
@@ -126,7 +145,8 @@ function KontaktRad({
   tenantId,
   kontakt,
   onFel
-}: Readonly<{ tenantId: string; kontakt: Kontakt; onFel: (fel: string) => void }>) {
+}: Readonly<{ tenantId: string; kontakt: Kontakt; onFel: (fel: Localized) => void }>) {
+  const { locale, text } = useLocale();
   const [varden, setVarden] = useState({
     namn: kontakt.namn,
     roll: kontakt.roll ?? "",
@@ -134,15 +154,15 @@ function KontaktRad({
     telefon: kontakt.telefon ?? ""
   });
   const [arbetar, setArbetar] = useState(false);
-  const [kvitto, setKvitto] = useState("");
+  const [kvitto, setKvitto] = useState<Localized | null>(null);
 
   function spara() {
     setArbetar(true);
-    setKvitto("");
+    setKvitto(null);
     void (async () => {
       const svar = await uppdateraKontakt(tenantId, kontakt.id, varden);
-      if (!svar.success) onFel(svar.error ?? "Kunde inte spara kontaktpersonen.");
-      else setKvitto("Sparat.");
+      if (!svar.success) onFel(svar.error ? ordagrant(svar.error) : ADMIN.kundeInteSparaKontakt);
+      else setKvitto(ADMIN.sparatPunkt);
       setArbetar(false);
     })();
   }
@@ -152,7 +172,7 @@ function KontaktRad({
     void (async () => {
       const svar = await taBortKontakt(tenantId, kontakt.id);
       if (!svar.success) {
-        onFel(svar.error ?? "Kunde inte ta bort kontaktpersonen.");
+        onFel(svar.error ? ordagrant(svar.error) : ADMIN.kundeInteTaBortKontakt);
         setArbetar(false);
       }
       // Lyckad borttagning: raden försvinner när sidan revalideras — att
@@ -165,7 +185,7 @@ function KontaktRad({
       <KontaktFalt varden={varden} satt={setVarden} prefix={kontakt.id} />
       <div className="mt-2.5 flex flex-wrap items-center gap-3">
         <button type="button" onClick={spara} disabled={arbetar} className={`${btnSecondary} ${btnLiten}`}>
-          {arbetar ? "Sparar…" : "Spara"}
+          {arbetar ? a("sparar", locale) : a("spara", locale)}
         </button>
         <button
           type="button"
@@ -173,10 +193,10 @@ function KontaktRad({
           disabled={arbetar}
           className="focus-ring inline-flex h-9 items-center rounded-input px-3 text-[0.875rem] font-medium text-danger hover:bg-danger/10"
         >
-          Ta bort
+          {a("taBort", locale)}
         </button>
         <span aria-live="polite" className="text-[0.8125rem] text-mineral">
-          {kvitto}
+          {kvitto ? text(kvitto) : ""}
         </span>
       </div>
     </Rad>
@@ -194,8 +214,9 @@ export function Kunddata({ data }: Readonly<{ data: Data }>) {
   );
   const [varden, setVarden] = useState(utgangslage);
   const [sparar, setSparar] = useState(false);
-  const [kvitto, setKvitto] = useState("");
-  const [fel, setFel] = useState("");
+  const [kvitto, setKvitto] = useState<Localized | null>(null);
+  const [fel, setFel] = useState<Localized | null>(null);
+  const { locale, text } = useLocale();
 
   const [ny, setNy] = useState(TOM_KONTAKT);
   const [laggerTill, setLaggerTill] = useState(false);
@@ -205,31 +226,31 @@ export function Kunddata({ data }: Readonly<{ data: Data }>) {
       Object.entries(varden).filter(([nyckel, varde]) => varde !== utgangslage[nyckel])
     );
     if (Object.keys(andrade).length === 0) {
-      setKvitto("Inget ändrat.");
+      setKvitto(ADMIN.ingetAndrat);
       return;
     }
     setSparar(true);
-    setKvitto("");
-    setFel("");
+    setKvitto(null);
+    setFel(null);
     void (async () => {
       const svar = await sparaKunddata(tenantId, andrade);
-      if (svar.success) setKvitto("Sparat.");
-      else setFel(svar.error ?? "Kunde inte spara.");
+      if (svar.success) setKvitto(ADMIN.sparatPunkt);
+      else setFel(svar.error ? ordagrant(svar.error) : ADMIN.kundeInteSpara);
       setSparar(false);
     })();
   }
 
   function laggTill() {
     if (!ny.namn.trim()) {
-      setFel("Kontaktpersonen behöver ett namn.");
+      setFel(ADMIN.kontaktBehoverNamn);
       return;
     }
     setLaggerTill(true);
-    setFel("");
+    setFel(null);
     void (async () => {
       const svar = await skapaKontakt(tenantId, ny);
       if (svar.success) setNy(TOM_KONTAKT);
-      else setFel(svar.error ?? "Kunde inte lägga till kontaktpersonen.");
+      else setFel(svar.error ? ordagrant(svar.error) : ADMIN.kundeInteLaggaTillKontakt);
       setLaggerTill(false);
     })();
   }
@@ -238,16 +259,16 @@ export function Kunddata({ data }: Readonly<{ data: Data }>) {
     <div>
       {fel ? (
         <p role="alert" className="mb-8 max-w-[70ch] break-words text-[0.9375rem] text-danger">
-          {fel}
+          {text(fel)}
         </p>
       ) : null}
 
       {/* Kontaktpersonerna först — det är det enda i vyn som ALLTID är
           manuellt, och den som öppnar en kund gör det oftast för att ringa
           någon, inte för att läsa ett orgnr. */}
-      <Sektion title="Kontaktpersoner">
+      <Sektion title={a("kontaktpersoner", locale)}>
         {data.kontakter.length === 0 ? (
-          <Tomt>Inga kontaktpersoner ännu.</Tomt>
+          <Tomt>{a("ingaKontaktpersoner", locale)}</Tomt>
         ) : (
           <Radlista>
             {data.kontakter.map((kontakt) => (
@@ -257,7 +278,7 @@ export function Kunddata({ data }: Readonly<{ data: Data }>) {
         )}
 
         <div className="mt-4 rounded-input border border-ink/15 bg-paper2/40 p-4">
-          <h3 className={rubrikPanel}>Lägg till kontaktperson</h3>
+          <h3 className={rubrikPanel}>{a("laggTillKontaktperson", locale)}</h3>
           <div className="mt-3">
             <KontaktFalt varden={ny} satt={setNy} prefix="ny" />
           </div>
@@ -267,12 +288,12 @@ export function Kunddata({ data }: Readonly<{ data: Data }>) {
             disabled={laggerTill}
             className={`${btnPrimary} ${btnLiten} mt-3`}
           >
-            {laggerTill ? "Lägger till…" : "Lägg till"}
+            {laggerTill ? a("laggerTill", locale) : a("laggTill", locale)}
           </button>
         </div>
       </Sektion>
 
-      <Sektion title="Kunduppgifter">
+      <Sektion title={a("kunduppgifter", locale)}>
         <div className="grid gap-x-6 gap-y-3.5 sm:grid-cols-2">
           {FALT.map((falt) => (
             <label
@@ -280,7 +301,7 @@ export function Kunddata({ data }: Readonly<{ data: Data }>) {
               className={`block ${etikett} ${falt.brett ? "sm:col-span-2" : ""}`}
             >
               <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                {falt.etikett}
+                {text(falt.etikett)}
                 <KallaBadge kalla={data.falt[falt.nyckel]?.kalla ?? null} />
               </span>
               <input
@@ -289,7 +310,7 @@ export function Kunddata({ data }: Readonly<{ data: Data }>) {
                 value={varden[falt.nyckel] ?? ""}
                 onChange={(e) => {
                   setVarden((v) => ({ ...v, [falt.nyckel]: e.target.value }));
-                  setKvitto("");
+                  setKvitto(null);
                 }}
                 className={inputKlass}
               />
@@ -304,10 +325,10 @@ export function Kunddata({ data }: Readonly<{ data: Data }>) {
             disabled={sparar}
             className={`${btnPrimary} ${btnLiten}`}
           >
-            {sparar ? "Sparar…" : "Spara kunduppgifter"}
+            {sparar ? a("sparar", locale) : a("sparaKunduppgifter", locale)}
           </button>
           <span aria-live="polite" className="text-[0.8125rem] text-mineral">
-            {kvitto}
+            {kvitto ? text(kvitto) : ""}
           </span>
         </div>
       </Sektion>

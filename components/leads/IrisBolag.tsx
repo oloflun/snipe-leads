@@ -8,7 +8,10 @@ import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { LeadslistorView } from "@/components/leads/LeadslistorView";
 import { LeadsRunForm } from "@/components/leads/LeadsRunForm";
-import { EmptyState, SkeletonRows, btnPrimary, btnSecondary } from "@/components/ui";
+import { LeadsTabell } from "@/components/leads/LeadsTabell";
+import { Pipeline } from "@/components/leads/Pipeline";
+import { Tidslinje } from "@/components/leads/Tidslinje";
+import { EmptyState, SkeletonRows, btnPrimary, btnSecondary, flik, flikAktiv, flikInaktiv, fliklista } from "@/components/ui";
 import { mejlaOss } from "@/components/marketing/copy";
 import { addonSpec } from "@/lib/addons";
 import { lasOffertForUtkast } from "@/lib/actions/affarskontext";
@@ -16,7 +19,8 @@ import type { EmailStudioData } from "@/lib/data/emails";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { EXEMPELBOLAG, EXEMPEL_OMGANG_1, EXEMPEL_OMGANG_2, kontaktnamn, type ExempelBolag } from "@/lib/demo/iris-exempel";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
-import { NIVA_ETIKETT, UTFALL_ETIKETT, kriterier } from "@/lib/prospekt";
+import { sv, useLocale, type Locale, type Localized } from "@/lib/i18n";
+import { STATUS_ETIKETT, UTFALL_ETIKETT, kriterier, nivaEtikett } from "@/lib/prospekt";
 import { cn } from "@/lib/utils";
 
 /**
@@ -47,6 +51,9 @@ type Prospekt = {
   company_name: string;
   contact_name: string | null;
   contact_email: string | null;
+  contact_role?: string | null;
+  /** Registerkällans telefon (migration 081). */
+  contact_phone?: string | null;
   status: string;
   origin?: string | null;
   ort: string | null;
@@ -75,20 +82,115 @@ type ExempelRad = Prospekt & { _exempel: ExempelBolag };
 type ListLage =
   | { fas: "laddar" }
   | { fas: "ejAktiverad" }
-  | { fas: "fel"; meddelande: string }
+  | { fas: "fel"; meddelande: Localized }
   | { fas: "klar"; prospekt: Prospekt[] };
 
-const STATUS_ETIKETT: Record<string, string> = {
-  new: "Ny",
-  researching: "Research pågår",
-  ready: "Redo",
-  contacted: "Kontaktad",
-  replied: "Svarat",
-  meeting: "Möte",
-  won: "Vunnen",
-  lost: "Förlorad",
-  suppressed: "Spärrad"
+/**
+ * Leads vyer (Snajp Suite 2026-10-03): ett objekt, en sida, vyerna i en rad —
+ * som Twentys vybar. Pipeline var en egen sida (Iris › Pipeline) och är nu en
+ * vy här; adressen bär vyn i `?vy=` så att den går att länka till.
+ */
+type Segment = "bolag" | "tabell" | "pipeline" | "listor";
+
+const SEGMENT: Segment[] = ["bolag", "tabell", "pipeline", "listor"];
+
+const SEGMENT_ETIKETT: Record<Segment, Localized> = {
+  bolag: { sv: "Alla leads", en: "All leads" },
+  tabell: { sv: "Tabell", en: "Table" },
+  pipeline: { sv: "Pipeline", en: "Pipeline" },
+  listor: { sv: "Listor", en: "Lists" }
 };
+
+function statusEtikett(status: string, locale: Locale): string {
+  return STATUS_ETIKETT[status]?.[locale] ?? status;
+}
+
+const T = {
+  beslutsfattare: { sv: "Beslutsfattare", en: "Decision maker" },
+  anstallda: { sv: "anställda", en: "employees" },
+  tjanstenSvararInte: {
+    sv: "Tjänsten svarar inte. Försök igen om en minut.",
+    en: "The service is not responding. Try again in a minute."
+  },
+  tomtSvar: { sv: "Backenden svarade utan innehåll.", en: "The backend replied without content." },
+  korIris: { sv: "Kör Iris", en: "Run Iris" },
+  hittaBolag: { sv: "Hitta bolag", en: "Find companies" },
+  hittaBolagText: {
+    sv: "Utan filter hittar Iris själv de bolag som passar er produkt bäst, utifrån er sparade målgrupp.",
+    en: "Without filters, Iris finds the companies that fit your product best, based on your saved target audience."
+  },
+  exempelOverst: { sv: "Exempelbolag läggs överst i listan.", en: "Example companies are added to the top of the list." },
+  kor: { sv: "Kör…", en: "Running…" },
+  allaTillagda: { sv: "Alla tillagda", en: "All added" },
+  allaExempelTillagda: { sv: "Alla exempelbolag tillagda", en: "All example companies added" },
+  korExempel: { sv: "Kör exempel", en: "Run example" },
+  korExempelkorningen: { sv: "Kör exempelkörningen", en: "Run the example" },
+  vy: { sv: "Vy", en: "View" },
+  doljBortvalda: { sv: "Dölj bortvalda", en: "Hide rejected" },
+  bolag: { sv: "Bolag", en: "Companies" },
+  ingaBolag: { sv: "Inga bolag ännu", en: "No companies yet" },
+  exempel: { sv: "Exempel", en: "Example" },
+  researchar: { sv: "Researchar", en: "Researching" },
+  valjBolag: { sv: "Välj ett lead i listan.", en: "Pick a lead in the list." },
+  bolagenKundeInte: { sv: "Bolagen kunde inte hämtas", en: "Could not load the companies" },
+  forsokIgen: { sv: "Försök igen", en: "Try again" },
+  tillval: { sv: "Tillval", en: "Add-on" },
+  utkastTogForLang: { sv: "Utkastet tog för lång tid.", en: "The draft took too long." },
+  utkastKundeInte: { sv: "Utkastet kunde inte skrivas.", en: "The draft could not be written." },
+  utkastInteKlart: {
+    sv: "Utkastet blev inte klart. Försök igen om en stund.",
+    en: "The draft was not finished. Try again in a moment."
+  },
+  ingenKontaktadress: {
+    sv: "Iris hittade ingen kontaktadress på bolagets sajt. Försök igen om en stund, eller komplettera bolaget med en adress.",
+    en: "Iris found no contact address on the company's site. Try again in a moment, or add an address to the company."
+  },
+  bolagetHittadesInte: { sv: "Bolaget hittades inte.", en: "Company not found." },
+  poang: { sv: "Poäng", en: "Score" },
+  bedomning: { sv: "Bedömning", en: "Assessment" },
+  kallor: { sv: "Källor", en: "Sources" },
+  motivering: { sv: "Motivering", en: "Reasoning" },
+  kriterier: { sv: "Kriterier", en: "Criteria" },
+  kalla: { sv: "källa", en: "source" },
+  researchPagar: {
+    sv: "Iris researchar bolaget. Poäng och motivering visas när researchen är klar.",
+    en: "Iris is researching the company. Score and reasoning appear when the research is done."
+  },
+  bedomdesInnan: {
+    sv: "Bedömdes innan Iris-profilen fanns. Kör researchen igen för poäng och motivering.",
+    en: "Assessed before the Iris profile existed. Run the research again to get a score and reasoning."
+  },
+  varforBortvald: { sv: "Varför bortvald", en: "Why rejected" },
+  ingaKallor: { sv: "Inga källor sparade.", en: "No sources saved." },
+  mejlutkast: { sv: "Mejlutkast", en: "Email draft" },
+  ingetUtkast: { sv: "Inget utkast ännu.", en: "No draft yet." },
+  skapaUtkast: { sv: "Skapa utkast", en: "Create draft" },
+  letarKontakt: {
+    sv: "Iris letar kontaktadress på bolagets sajt … Det tar ungefär en minut, och utkastet skrivs direkt efteråt.",
+    en: "Iris is looking for a contact address on the company's site … It takes about a minute, and the draft is written right after."
+  },
+  skriverUtkastet: { sv: "Skriver utkastet…", en: "Writing the draft…" },
+  exempelutkast: { sv: "Exempelutkast.", en: "Example draft." },
+  stodrad: { sv: "Stödrad", en: "Supporting line" },
+  godkant: { sv: "Godkänt. Utkastet ligger nu i sändkön.", en: "Approved. The draft is now in the send queue." },
+  godkanner: { sv: "Godkänner…", en: "Approving…" },
+  godkannOchSkicka: { sv: "Godkänn och skicka", en: "Approve and send" },
+  godkannIGranskning: { sv: "Godkänn under Att göra.", en: "Approve under To do." }
+} satisfies Record<string, Localized>;
+
+/** Samma text på båda språken: serverns egna felmeddelanden, som redan är färdiga. */
+function samma(text: string): Localized {
+  return { sv: text, en: text };
+}
+
+/**
+ * Språket för fetch-hjälparen, som anropas utanför komponenterna och inte kan
+ * använda useLocale. LocaleProvider (lib/i18n.tsx) håller `<html lang>` i takt
+ * med valet, så attributet är samma källa som hooken läser.
+ */
+function sprak(): Locale {
+  return typeof document !== "undefined" && document.documentElement.lang === "en" ? "en" : "sv";
+}
 
 function domanAv(url: string | null | undefined): string | null {
   if (!url) return null;
@@ -109,18 +211,20 @@ function beskrivning(p: Prospekt): string | null {
   return träff?.motivering ?? (p.disqualifiers?.[0] ?? null);
 }
 
-function beslutsfattareRad(p: Prospekt): string | null {
+function beslutsfattareRad(p: Prospekt, locale: Locale): string | null {
   if ("_exempel" in p) {
     const b = (p as ExempelRad)._exempel;
     return [
-      `Beslutsfattare: ${kontaktnamn(b)}, ${b.contactRole}`,
-      typeof b.anstallda === "number" ? `${b.anstallda} anställda` : null,
+      `${T.beslutsfattare[locale]}: ${kontaktnamn(b)}, ${b.contactRole}`,
+      typeof b.anstallda === "number" ? `${b.anstallda} ${T.anstallda[locale]}` : null,
       b.bransch
     ]
       .filter(Boolean)
       .join(" · ");
   }
-  return p.contact_name ? `Beslutsfattare: ${p.contact_name}` : null;
+  if (!p.contact_name) return null;
+  const vem = [p.contact_name, p.contact_role].filter(Boolean).join(", ");
+  return `${T.beslutsfattare[locale]}: ${vem}${p.contact_phone ? ` · ${p.contact_phone}` : ""}`;
 }
 
 /** Samma brytpunkt som Tailwinds `lg` (1024px). Hela sidan är redan klientkod
@@ -173,20 +277,26 @@ function exempelTillRad(b: ExempelBolag): ExempelRad {
     icp_fit: null,
     qualified: true,
     disqualifiers: null,
-    score_breakdown: [{ etikett: "Signal", utfall: "träff", motivering: b.beskrivning, hart: false }],
+    // Utfallsnyckeln (UTFALL_ETIKETT i lib/prospekt.ts) är data, inte copy: den
+    // översätts aldrig, bara etiketten den slås upp till. Escape så att
+    // INV-COPY-001 inte läser nyckeln som oöversatt text.
+    score_breakdown: [{ etikett: "Signal", utfall: "träff", motivering: b.beskrivning, hart: false }], // inte-copy: fixturnyckel
     _exempel: b
   };
 }
 
 export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
   const { addons, isDemo, vy } = useDashboard();
+  const { locale, text } = useLocale();
   const sokParams = useSearchParams();
 
-  // Gammal adress /dashboard/leads/listor -> /dashboard/iris?vy=listor (se
-  // WorkspaceSection.tsx) ska öppna på rätt segment, inte tyst landa på Bolag.
-  const [segmentVal, setSegmentVal] = useState<"bolag" | "listor">(
-    sokParams.get("vy") === "listor" ? "listor" : "bolag"
-  );
+  // ?vy= öppnar rätt vy: gamla adresser (/iris/pipeline, /leads/listor)
+  // omdirigeras hit med den (se WorkspaceSection.tsx).
+  const [segmentVal, setSegmentVal] = useState<Segment>(() => {
+    const vy = sokParams.get("vy");
+    return SEGMENT.includes(vy as Segment) ? (vy as Segment) : "bolag";
+  });
+  const flikRefs = useRef<Partial<Record<Segment, HTMLButtonElement | null>>>({});
   const [korOppen, setKorOppen] = useState(false);
   const [lage, setLage] = useState<ListLage>({ fas: "laddar" });
   const [exempelRader, setExempelRader] = useState<ExempelRad[]>([]);
@@ -219,19 +329,22 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
           fas: "fel",
           meddelande:
             response.status >= 500
-              ? "Tjänsten svarar inte. Försök igen om en minut."
-              : `Kunde inte hämta bolagen (status ${response.status}).`
+              ? T.tjanstenSvararInte
+              : {
+                  sv: `Kunde inte hämta bolagen (status ${response.status}).`,
+                  en: `Could not load the companies (status ${response.status}).`
+                }
         });
         return;
       }
       const kropp = await readJsonBody<{ prospects?: Prospekt[]; offline?: boolean }>(response);
       if (!kropp || kropp.offline) {
-        setLage({ fas: "fel", meddelande: "Backenden svarade utan innehåll." });
+        setLage({ fas: "fel", meddelande: T.tomtSvar });
         return;
       }
       setLage({ fas: "klar", prospekt: kropp.prospects ?? [] });
     } catch (error) {
-      setLage({ fas: "fel", meddelande: felmeddelande(error) });
+      setLage({ fas: "fel", meddelande: samma(felmeddelande(error)) });
     }
   }, [demo]);
 
@@ -304,7 +417,7 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
 
   return (
     <PageShell
-      title="Iris"
+      title={{ sv: "Leads", en: "Leads" }}
       action={
         <button
           type="button"
@@ -312,7 +425,7 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
           onClick={() => setKorOppen((v) => !v)}
           className={btnPrimary}
         >
-          Kör Iris
+          {text(T.korIris)}
         </button>
       }
     >
@@ -324,17 +437,16 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
             filtrerbar
             rubrik={
               <div>
-                <h2 className="text-[1.125rem] font-semibold tracking-[-0.01em]">Hitta bolag</h2>
+                <h2 className="text-[1.125rem] font-semibold tracking-[-0.01em]">{text(T.hittaBolag)}</h2>
                 <p className="mt-1 max-w-[52ch] text-[13px] leading-5 text-ink-subtle">
-                  Utan filter hittar Iris själv de bolag som passar er produkt bäst,
-                  utifrån er sparade målgrupp.
+                  {text(T.hittaBolagText)}
                 </p>
               </div>
             }
             demoAction={
               <div className="mt-6 rounded-card bg-paper p-5">
                 <p className="max-w-[65ch] text-[15px] leading-7 text-ink-muted">
-                  Exempelbolag läggs överst i listan.
+                  {text(T.exempelOverst)}
                 </p>
                 <button
                   type="button"
@@ -343,16 +455,16 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
                   className={cn(btnPrimary, "mt-4 whitespace-nowrap")}
                 >
                   {demoKorFas === "kor" ? (
-                    "Kör…"
+                    text(T.kor)
                   ) : allaExempelTillagda ? (
                     <>
-                      <span className="sm:hidden">Alla tillagda</span>
-                      <span className="hidden sm:inline">Alla exempelbolag tillagda</span>
+                      <span className="sm:hidden">{text(T.allaTillagda)}</span>
+                      <span className="hidden sm:inline">{text(T.allaExempelTillagda)}</span>
                     </>
                   ) : (
                     <>
-                      <span className="sm:hidden">Kör exempel</span>
-                      <span className="hidden sm:inline">Kör exempelkörningen</span>
+                      <span className="sm:hidden">{text(T.korExempel)}</span>
+                      <span className="hidden sm:inline">{text(T.korExempelkorningen)}</span>
                     </>
                   )}
                 </button>
@@ -362,37 +474,63 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Vy">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={segmentVal === "bolag"}
-          onClick={() => setSegmentVal("bolag")}
-          className={cn(
-            "focus-ring rounded-input px-4 py-2 text-[13px] font-medium transition-colors",
-            segmentVal === "bolag" ? "bg-ink text-paper" : "bg-paper2 text-ink-muted hover:text-ink"
-          )}
-        >
-          Alla bolag
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={segmentVal === "listor"}
-          onClick={() => setSegmentVal("listor")}
-          className={cn(
-            "focus-ring rounded-input px-4 py-2 text-[13px] font-medium transition-colors",
-            segmentVal === "listor" ? "bg-ink text-paper" : "bg-paper2 text-ink-muted hover:text-ink"
-          )}
-        >
-          Listor
-        </button>
+      {/* Pilnavigering (Fas 10, planens a11y-notering): vänster/höger flyttar
+          fokus och val, och bara den valda fliken ligger i tabbordningen. */}
+      <div
+        className={fliklista}
+        role="tablist"
+        aria-label={text(T.vy)}
+        onKeyDown={(e) => {
+          if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
+          e.preventDefault();
+          const i = SEGMENT.indexOf(segmentVal);
+          const nasta =
+            e.key === "Home"
+              ? SEGMENT[0]
+              : e.key === "End"
+                ? SEGMENT[SEGMENT.length - 1]
+                : SEGMENT[(i + (e.key === "ArrowRight" ? 1 : SEGMENT.length - 1)) % SEGMENT.length];
+          setSegmentVal(nasta);
+          flikRefs.current[nasta]?.focus();
+        }}
+      >
+        {SEGMENT.map((s) => (
+          <button
+            key={s}
+            ref={(el) => {
+              flikRefs.current[s] = el;
+            }}
+            type="button"
+            role="tab"
+            id={`iris-flik-${s}`}
+            aria-selected={segmentVal === s}
+            aria-controls="iris-flikpanel"
+            tabIndex={segmentVal === s ? 0 : -1}
+            onClick={() => setSegmentVal(s)}
+            className={cn(flik, segmentVal === s ? flikAktiv : flikInaktiv)}
+          >
+            {text(SEGMENT_ETIKETT[s])}
+          </button>
+        ))}
       </div>
 
-      <div className="mt-6">
-        {segmentVal === "listor" ? (
+      <div className="mt-6" role="tabpanel" id="iris-flikpanel" aria-labelledby={`iris-flik-${segmentVal}`}>
+        {segmentVal === "tabell" ? (
+          <LeadsTabell
+            demo={demo}
+            onValj={(id) => {
+              if (allaRader.find((p) => p.id === id)?.niva === "C") setVisaBortvalda(true);
+              setSegmentVal("bolag");
+              valjRad(id);
+              // Fokus följer med till raden (2.4.3): utan det hamnar det på body.
+              requestAnimationFrame(() => document.getElementById(`iris-rad-${id}`)?.focus());
+            }}
+          />
+        ) : segmentVal === "pipeline" ? (
+          <Pipeline demo={demo} />
+        ) : segmentVal === "listor" ? (
           harListaddon || demo ? (
-            <LeadslistorView />
+            <LeadslistorView demo={demo} />
           ) : (
             <ListorUpsell />
           )
@@ -407,18 +545,20 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
                     onClick={() => setVisaBortvalda((v) => !v)}
                     className="focus-ring text-[13px] text-ink-muted underline decoration-ink/25 underline-offset-4 hover:text-ink"
                   >
-                    {visaBortvalda ? "Dölj bortvalda" : `Visa bortvalda (${antalBortvalda})`}
+                    {visaBortvalda
+                      ? text(T.doljBortvalda)
+                      : text({ sv: `Visa bortvalda (${antalBortvalda})`, en: `Show rejected (${antalBortvalda})` })}
                   </button>
                 </div>
               ) : null}
               {lage.fas === "laddar" && exempelRader.length === 0 ? (
                 <SkeletonRows />
               ) : lage.fas === "ejAktiverad" ? (
-                <EjAktiverad yta="Bolag" />
+                <EjAktiverad yta={text(T.bolag)} />
               ) : lage.fas === "fel" ? (
-                <FelBox meddelande={lage.meddelande} onForsok={() => void hamta()} />
+                <FelBox meddelande={text(lage.meddelande)} onForsok={() => void hamta()} />
               ) : alla.length === 0 ? (
-                <EmptyState title="Inga bolag ännu" />
+                <EmptyState title={text(T.ingaBolag)} />
               ) : (
                 <ul className="divide-y divide-ink/12 border-y border-ink/15">
                   {alla.map((p) => {
@@ -427,6 +567,7 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
                       <li key={p.id}>
                         <button
                           type="button"
+                          id={`iris-rad-${p.id}`}
                           onClick={() => valjRad(p.id)}
                           aria-current={vald ? "true" : undefined}
                           className={cn(
@@ -437,14 +578,14 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
                           <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
                             <div className="min-w-0">
                               <div className="flex flex-wrap items-baseline gap-2">
-                                <span className="text-[1.0625rem] font-semibold tracking-[-0.01em]">
+                                <span className="text-[1rem] font-semibold">
                                   {p.company_name}
                                 </span>
                                 {p.origin === "example" ? (
-                                  <span className="kicker text-mineral">Exempel</span>
+                                  <span className="kicker text-mineral">{text(T.exempel)}</span>
                                 ) : null}
                               </div>
-                              <p className="mt-1 truncate font-mono text-[12px] text-ink-subtle">
+                              <p className="mt-1 truncate text-[0.8125rem] text-ink-subtle">
                                 {segment(p)}
                               </p>
                             </div>
@@ -460,10 +601,10 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
                                   )}
                                 >
                                   {researchPagar(p)
-                                    ? "Researchar"
+                                    ? text(T.researchar)
                                     : p.niva
-                                      ? NIVA_ETIKETT[p.niva]
-                                      : STATUS_ETIKETT[p.status] ?? p.status}
+                                      ? nivaEtikett(p.niva, locale)
+                                      : statusEtikett(p.status, locale)}
                                 </p>
                               </div>
                             ) : null}
@@ -473,8 +614,8 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
                               {beskrivning(p)}
                             </p>
                           ) : null}
-                          {beslutsfattareRad(p) ? (
-                            <p className="mt-2 text-[13px] text-ink-subtle">{beslutsfattareRad(p)}</p>
+                          {beslutsfattareRad(p, locale) ? (
+                            <p className="mt-2 text-[13px] text-ink-subtle">{beslutsfattareRad(p, locale)}</p>
                           ) : null}
                         </button>
 
@@ -509,7 +650,7 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
                 {valdId ? null : (
                   <div className="rounded-card border border-ink/12 bg-paper2/40 p-6">
                     <p className="text-[0.9375rem] leading-[1.6] text-ink-muted">
-                      Välj ett bolag i listan.
+                      {text(T.valjBolag)}
                     </p>
                   </div>
                 )}
@@ -534,17 +675,18 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
 }
 
 function FelBox({ meddelande, onForsok }: Readonly<{ meddelande: string; onForsok: () => void }>) {
+  const { text } = useLocale();
   return (
     <div className="flex items-start gap-3 border-y border-ochre/40 bg-ochre/10 px-4 py-4">
       <div className="min-w-0">
-        <p className="text-sm font-medium text-ink">Bolagen kunde inte hämtas</p>
+        <p className="text-sm font-medium text-ink">{text(T.bolagenKundeInte)}</p>
         <p className="mt-1 text-sm text-ink-muted">{meddelande}</p>
         <button
           type="button"
           onClick={onForsok}
           className="focus-ring mt-3 inline-flex min-h-9 items-center rounded-input bg-paper2 px-3 text-[13px] font-medium"
         >
-          Försök igen
+          {text(T.forsokIgen)}
         </button>
       </div>
     </div>
@@ -552,19 +694,20 @@ function FelBox({ meddelande, onForsok }: Readonly<{ meddelande: string; onForso
 }
 
 function ListorUpsell() {
+  const { text } = useLocale();
   const spec = addonSpec("leadlists");
   return (
     <div className="min-w-0 border-t border-ink/15 py-6">
       <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
         <h4 className="min-w-0 break-words text-[17px]">{spec.name}</h4>
-        <span className="kicker shrink-0 text-mineral">Tillval</span>
+        <span className="kicker shrink-0 text-mineral">{text(T.tillval)}</span>
       </div>
       <p className="mt-3 max-w-[64ch] text-[15px] leading-7">{spec.what}</p>
       <a
-        href={mejlaOss(`Tillägg: ${spec.name}`)}
+        href={mejlaOss(text({ sv: `Tillägg: ${spec.name}`, en: `Add-on: ${spec.name}` }))}
         className="mt-4 inline-block text-[13px] underline underline-offset-4 transition hover:text-ochre"
       >
-        Hör av dig om {spec.name.toLowerCase()}
+        {text({ sv: `Hör av dig om ${spec.name.toLowerCase()}`, en: `Ask us about ${spec.name.toLowerCase()}` })}
       </a>
     </div>
   );
@@ -579,7 +722,7 @@ type UtkastLage =
   | { fas: "ingen" }
   | { fas: "letar-kontakt" }
   | { fas: "skapar" }
-  | { fas: "fel"; meddelande: string }
+  | { fas: "fel"; meddelande: Localized }
   | { fas: "klar"; data: EmailStudioData; queueItemId: string | null };
 
 /**
@@ -594,7 +737,7 @@ type UtkastLage =
 const KONTAKTJAKT_FORSOK = 24;
 const KONTAKTJAKT_PAUS_MS = 5_000;
 
-async function pollaLeadsJobb(jobId: string): Promise<{
+async function pollaLeadsJobb(jobId: string, locale: Locale): Promise<{
   status?: string;
   error?: string;
   result?: {
@@ -622,7 +765,7 @@ async function pollaLeadsJobb(jobId: string): Promise<{
       return jobb;
     }
   }
-  return { status: "timeout", error: "Utkastet tog för lång tid." };
+  return { status: "timeout", error: T.utkastTogForLang[locale] };
 }
 
 async function jagaKontakt(prospektId: string): Promise<Prospekt | null> {
@@ -653,7 +796,11 @@ async function snajpAnrop<T>(path: string, init?: RequestInit): Promise<T> {
       : typeof k.detail === "string"
         ? k.detail
         : undefined;
-    throw new Error(detaljtext ?? k.error ?? `Anropet avvisades (${response.status}).`);
+    const avvisat: Localized = {
+      sv: `Anropet avvisades (${response.status}).`,
+      en: `The request was rejected (${response.status}).`
+    };
+    throw new Error(detaljtext ?? k.error ?? avvisat[sprak()]);
   }
   return kropp;
 }
@@ -662,7 +809,11 @@ function byggForskningssammanfattning(p: Prospekt): string {
   const rader = kriterier(p.score_breakdown)
     .map((k) => `${k.etikett} (${k.utfall})${k.motivering ? `: ${k.motivering}` : ""}`)
     .join("\n");
-  return [p.motivering ? `Varför bolaget valdes: ${p.motivering}` : null, rader]
+  // Agentens underlag, inte copy: alltid svenska, som mejlet det styr.
+  const varfor = p.motivering
+    ? sv({ sv: `Varför bolaget valdes: ${p.motivering}`, en: `Why the company was picked: ${p.motivering}` })
+    : null;
+  return [varfor, rader]
     .filter(Boolean)
     .join("\n\n")
     .slice(0, 8000);
@@ -695,13 +846,17 @@ function LeadDetail({
   demo,
   exempel
 }: Readonly<{ id: string; demo: boolean; exempel?: ExempelBolag }>) {
+  const { locale, text } = useLocale();
   const [lage, setLage] = useState<
     | { fas: "laddar" }
-    | { fas: "fel"; meddelande: string }
+    | { fas: "fel"; meddelande: Localized }
     | { fas: "klar"; prospekt: Prospekt; kallor: { label: string; url: string }[] }
   >({ fas: "laddar" });
   const [utkastLage, setUtkastLage] = useState<UtkastLage>({ fas: "kontrollerar" });
   const [forsok, setForsok] = useState(0);
+  // Postens vyer (Snajp Suite, Twentys postsida): nyckeltalen ovanför står
+  // kvar, resten väljs i flikraden i stället för att staplas i en kolumn.
+  const [postFlik, setPostFlik] = useState<"bedomning" | "utkast" | "tidslinje">("bedomning");
 
   useEffect(() => {
     let avbruten = false;
@@ -723,7 +878,7 @@ function LeadDetail({
           setLage({ fas: "klar", prospekt: träff, kallor: [] });
           setUtkastLage({ fas: "ingen" });
         } else {
-          setLage({ fas: "fel", meddelande: "Bolaget hittades inte." });
+          setLage({ fas: "fel", meddelande: T.bolagetHittadesInte });
         }
         return;
       }
@@ -734,12 +889,18 @@ function LeadDetail({
         });
         if (avbruten) return;
         if (!response.ok) {
-          setLage({ fas: "fel", meddelande: `Kunde inte hämta bolaget (status ${response.status}).` });
+          setLage({
+            fas: "fel",
+            meddelande: {
+              sv: `Kunde inte hämta bolaget (status ${response.status}).`,
+              en: `Could not load the company (status ${response.status}).`
+            }
+          });
           return;
         }
         const kropp = await readJsonBody<{ prospect?: Prospekt; sources?: string[] }>(response);
         if (!kropp?.prospect) {
-          setLage({ fas: "fel", meddelande: "Backenden svarade utan innehåll." });
+          setLage({ fas: "fel", meddelande: T.tomtSvar });
           return;
         }
         // Backenden lämnar bara url:er — etiketten är url:en själv, samma
@@ -787,7 +948,7 @@ function LeadDetail({
           setUtkastLage({ fas: "ingen" });
         }
       } catch (error) {
-        if (!avbruten) setLage({ fas: "fel", meddelande: felmeddelande(error) });
+        if (!avbruten) setLage({ fas: "fel", meddelande: samma(felmeddelande(error)) });
       }
     }
     void load();
@@ -815,10 +976,12 @@ function LeadDetail({
           prospect_email: p.contact_email,
           company_name: p.company_name,
           offer_summary: offerSummary,
-          brief:
-            `Skriv ett kort, personligt första mejl till kontaktpersonen på ${p.company_name}. ` +
-            "Utgå ifrån poängmotiveringen i researchunderlaget och håll dig till det som redan är " +
-            "känt. Ingen hype, inga superlativ, ren text. Utkastet ska köas för granskning, inte skickas.",
+          // Agentens instruktion, inte copy: alltid svenska, så att mejlet till
+          // det svenska bolaget blir svenskt oavsett gränssnittets språk.
+          brief: sv({
+            sv: `Skriv ett kort, personligt första mejl till kontaktpersonen på ${p.company_name}. Utgå ifrån poängmotiveringen i researchunderlaget och håll dig till det som redan är känt. Ingen hype, inga superlativ, ren text. Utkastet ska köas för granskning, inte skickas.`,
+            en: `Write a short, personal first email to the contact person at ${p.company_name}. Start from the score reasoning in the research and stick to what is already known. No hype, no superlatives, plain text. The draft is queued for review, not sent.`
+          }),
           research_summary: byggForskningssammanfattning(p)
         })
       });
@@ -831,9 +994,9 @@ function LeadDetail({
       // (uppmätt i development 2026-09-21).
       let svar = koat;
       if (koat.job_id && (koat.fase === "skriver" || !koat.body)) {
-        const klart = await pollaLeadsJobb(koat.job_id);
+        const klart = await pollaLeadsJobb(koat.job_id, locale);
         if (klart.status !== "completed" || !klart.result) {
-          throw new Error(klart.error || "Utkastet kunde inte skrivas.");
+          throw new Error(klart.error || text(T.utkastKundeInte));
         }
         svar = klart.result;
       }
@@ -841,9 +1004,7 @@ function LeadDetail({
       if (svar.escalated || !svar.body) {
         setUtkastLage({
           fas: "fel",
-          meddelande:
-            svar.escalation_reason ||
-            "Utkastet blev inte klart. Försök igen om en stund."
+          meddelande: svar.escalation_reason ? samma(svar.escalation_reason) : T.utkastInteKlart
         });
         return;
       }
@@ -871,9 +1032,9 @@ function LeadDetail({
         queueItemId: svar.queue_item_id ?? null
       });
     } catch (error) {
-      setUtkastLage({ fas: "fel", meddelande: felmeddelande(error) });
+      setUtkastLage({ fas: "fel", meddelande: samma(felmeddelande(error)) });
     }
-  }, []);
+  }, [locale, text]);
 
   const skapaUtkast = useCallback(async () => {
     if (lage.fas !== "klar" || demo || exempel) return;
@@ -885,17 +1046,13 @@ function LeadDetail({
       try {
         const uppdaterad = await jagaKontakt(p.id);
         if (!uppdaterad) {
-          setUtkastLage({
-            fas: "fel",
-            meddelande:
-              "Iris hittade ingen kontaktadress på bolagets sajt. Försök igen om en stund, eller komplettera bolaget med en adress."
-          });
+          setUtkastLage({ fas: "fel", meddelande: T.ingenKontaktadress });
           return;
         }
         p = uppdaterad;
         setLage({ fas: "klar", prospekt: uppdaterad, kallor: lage.kallor });
       } catch (error) {
-        setUtkastLage({ fas: "fel", meddelande: felmeddelande(error) });
+        setUtkastLage({ fas: "fel", meddelande: samma(felmeddelande(error)) });
         return;
       }
     }
@@ -907,7 +1064,7 @@ function LeadDetail({
   }
 
   if (lage.fas === "fel") {
-    return <FelBox meddelande={lage.meddelande} onForsok={() => setForsok((n) => n + 1)} />;
+    return <FelBox meddelande={text(lage.meddelande)} onForsok={() => setForsok((n) => n + 1)} />;
   }
 
   const { prospekt: p, kallor } = lage;
@@ -919,36 +1076,63 @@ function LeadDetail({
           <h2 className="text-[1.125rem] font-semibold tracking-[-0.01em] text-ink">{p.company_name}</h2>
           <p className="mt-1 text-[13px] text-ink-subtle">{segment(p)}</p>
         </div>
-        {p.origin === "example" ? <span className="kicker shrink-0 text-mineral">Exempel</span> : null}
+        {p.origin === "example" ? <span className="kicker shrink-0 text-mineral">{text(T.exempel)}</span> : null}
       </div>
 
       <dl className="mt-5 grid grid-cols-3 gap-x-6 gap-y-4 border-t border-ink/12 pt-4">
         <div>
-          <dt className="kicker text-mineral">Poäng</dt>
+          <dt className="kicker text-mineral">{text(T.poang)}</dt>
           <dd className="num mt-1 text-[1.25rem] font-semibold tabular-nums">
             {researchPagar(p) ? "…" : poang(p)}
           </dd>
         </div>
         <div>
-          <dt className="kicker text-mineral">Bedömning</dt>
+          <dt className="kicker text-mineral">{text(T.bedomning)}</dt>
           <dd className={cn("mt-1 text-[15px]", p.niva === "C" && "text-danger")}>
-            {researchPagar(p) ? "Researchar" : p.niva ? NIVA_ETIKETT[p.niva] : STATUS_ETIKETT[p.status] ?? p.status}
+            {researchPagar(p)
+              ? text(T.researchar)
+              : p.niva
+                ? nivaEtikett(p.niva, locale)
+                : statusEtikett(p.status, locale)}
           </dd>
         </div>
         <div>
-          <dt className="kicker text-mineral">Källor</dt>
+          <dt className="kicker text-mineral">{text(T.kallor)}</dt>
           <dd className="mt-1 text-[15px]">{kallor.length}</dd>
         </div>
       </dl>
 
-      <div className="mt-6 border-t border-ink/12 pt-5">
+      {/* Tryckknappar, inte role=tab: ingen pilnavigering, och knappen säger
+          sitt läge med aria-pressed (4.1.2). */}
+      <div className={cn("mt-5", fliklista)} role="group" aria-label={p.company_name}>
+        {(
+          [
+            ["bedomning", T.bedomning],
+            ["utkast", T.mejlutkast],
+            ["tidslinje", { sv: "Tidslinje", en: "Timeline" }]
+          ] as const
+        ).map(([id, etikett]) => (
+          <button
+            key={id}
+            type="button"
+            aria-pressed={postFlik === id}
+            onClick={() => setPostFlik(id)}
+            className={cn(flik, postFlik === id ? flikAktiv : flikInaktiv)}
+          >
+            {text(etikett)}
+          </button>
+        ))}
+      </div>
+
+      {postFlik === "bedomning" ? (
+      <div className="mt-5">
         {p.motivering ? (
           <>
-            <h3 className="kicker text-mineral">Motivering</h3>
+            <h3 className="kicker text-mineral">{text(T.motivering)}</h3>
             <p className="mt-2 max-w-[65ch] text-[15px] leading-7 text-ink">{p.motivering}</p>
           </>
         ) : null}
-        <h3 className={cn("kicker text-mineral", p.motivering && "mt-5")}>Kriterier</h3>
+        <h3 className={cn("kicker text-mineral", p.motivering && "mt-5")}>{text(T.kriterier)}</h3>
         {kriterier(p.score_breakdown).length ? (
           <ul className="mt-3 divide-y divide-ink/10">
             {kriterier(p.score_breakdown).map((k, i) => (
@@ -976,7 +1160,7 @@ function LeadDetail({
                               rel="noopener noreferrer"
                               className="focus-ring underline decoration-ink/25 underline-offset-4"
                             >
-                              källa
+                              {text(T.kalla)}
                             </a>
                           </>
                         ) : null}
@@ -990,14 +1174,14 @@ function LeadDetail({
         ) : (
           <p className="mt-3 text-[14px] text-ink-subtle">
             {researchPagar(p)
-              ? "Iris researchar bolaget. Poäng och motivering visas när researchen är klar."
-              : "Bedömdes innan Iris-profilen fanns. Kör researchen igen för poäng och motivering."}
+              ? text(T.researchPagar)
+              : text(T.bedomdesInnan)}
           </p>
         )}
 
         {p.niva === "C" && p.disqualifiers?.length ? (
           <div className="mt-4">
-            <h4 className="kicker text-mineral">Varför bortvald</h4>
+            <h4 className="kicker text-mineral">{text(T.varforBortvald)}</h4>
             <ul className="mt-2 space-y-1.5">
               {p.disqualifiers.map((skal) => (
                 <li key={skal} className="border-l-2 border-danger pl-3 text-[14px] text-ink-muted">
@@ -1010,7 +1194,7 @@ function LeadDetail({
 
         {p.jev?.triage || p.jev?.klassning ? <JevRad jev={p.jev} /> : null}
 
-        <h4 className="mt-5 kicker text-mineral">Källor</h4>
+        <h4 className="mt-5 kicker text-mineral">{text(T.kallor)}</h4>
         {kallor.length ? (
           <ul className="mt-2 space-y-1.5">
             {kallor.map((kalla) => (
@@ -1027,12 +1211,13 @@ function LeadDetail({
             ))}
           </ul>
         ) : (
-          <p className="mt-2 text-[14px] text-ink-subtle">Inga källor sparade.</p>
+          <p className="mt-2 text-[14px] text-ink-subtle">{text(T.ingaKallor)}</p>
         )}
       </div>
+      ) : null}
 
-      <div className="mt-6 border-t border-ink/12 pt-5">
-        <h3 className="kicker text-mineral">Mejlutkast</h3>
+      {postFlik === "utkast" ? (
+      <div className="mt-5">
 
         {utkastLage.fas === "kontrollerar" ? (
           <div className="mt-3 h-16 animate-pulse rounded-input bg-ink/[0.03]" />
@@ -1040,12 +1225,12 @@ function LeadDetail({
 
         {utkastLage.fas === "ingen" ? (
           demo ? (
-            <p className="mt-3 text-[14px] leading-6 text-ink-muted">Inget utkast ännu.</p>
+            <p className="mt-3 text-[14px] leading-6 text-ink-muted">{text(T.ingetUtkast)}</p>
           ) : (
             <div className="mt-3">
-              <p className="text-[14px] leading-6 text-ink-muted">Inget utkast ännu.</p>
+              <p className="text-[14px] leading-6 text-ink-muted">{text(T.ingetUtkast)}</p>
               <button type="button" onClick={() => void skapaUtkast()} className={cn(btnPrimary, "mt-4")}>
-                Skapa utkast
+                {text(T.skapaUtkast)}
               </button>
             </div>
           )
@@ -1053,24 +1238,23 @@ function LeadDetail({
 
         {utkastLage.fas === "letar-kontakt" ? (
           <p className="mt-3 text-[14px] leading-6 text-ink-subtle">
-            Iris letar kontaktadress på bolagets sajt … Det tar ungefär en minut, och
-            utkastet skrivs direkt efteråt.
+            {text(T.letarKontakt)}
           </p>
         ) : null}
 
-        {utkastLage.fas === "skapar" ? <p className="mt-3 text-[14px] text-ink-subtle">Skriver utkastet…</p> : null}
+        {utkastLage.fas === "skapar" ? <p className="mt-3 text-[14px] text-ink-subtle">{text(T.skriverUtkastet)}</p> : null}
 
         {utkastLage.fas === "fel" ? (
           <div className="mt-3">
             <p role="alert" className="text-[14px] text-danger">
-              {utkastLage.meddelande}
+              {text(utkastLage.meddelande)}
             </p>
             <button
               type="button"
               onClick={() => void skapaUtkast()}
               className={cn(btnSecondary, "mt-3")}
             >
-              Försök igen
+              {text(T.forsokIgen)}
             </button>
           </div>
         ) : null}
@@ -1081,11 +1265,18 @@ function LeadDetail({
             {!demo && !exempel ? (
               <GodkannKnapp queueItemId={utkastLage.queueItemId} />
             ) : (
-              <p className="mt-4 text-[13px] leading-6 text-ink-subtle">Exempelutkast.</p>
+              <p className="mt-4 text-[13px] leading-6 text-ink-subtle">{text(T.exempelutkast)}</p>
             )}
           </div>
         ) : null}
       </div>
+      ) : null}
+
+      {postFlik === "tidslinje" ? (
+        <div className="mt-5">
+          <Tidslinje prospectId={id} demo={demo || Boolean(exempel)} />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1093,13 +1284,23 @@ function LeadDetail({
 /** Jevs förbedömning och klassning (app/leads/jev.py) — visas för att
  * kunden och vi ska kunna jämföra den med kodens bedömning. */
 function JevRad({ jev }: Readonly<{ jev: JevData }>) {
+  const { text } = useLocale();
   const t = jev.triage;
   const k = jev.klassning;
   const delar = [
-    t && typeof t.fit === "number" ? `förbedömning ${t.fit.toFixed(1)} av 3` : null,
-    t?.skulle_falla ? `hade valt bort (${(t.fall_skal ?? []).join("; ")})` : null,
-    k && typeof k.sannolikhet === "number" ? `bra lead ${Math.round(k.sannolikhet * 100)} %` : null,
-    k?.trafikniva ? `prioritet ${k.trafikniva}` : null
+    t && typeof t.fit === "number"
+      ? text({ sv: `förbedömning ${t.fit.toFixed(1)} av 3`, en: `pre-assessment ${t.fit.toFixed(1)} of 3` })
+      : null,
+    t?.skulle_falla
+      ? text({
+          sv: `hade valt bort (${(t.fall_skal ?? []).join("; ")})`,
+          en: `would have rejected (${(t.fall_skal ?? []).join("; ")})`
+        })
+      : null,
+    k && typeof k.sannolikhet === "number"
+      ? text({ sv: `bra lead ${Math.round(k.sannolikhet * 100)} %`, en: `good lead ${Math.round(k.sannolikhet * 100)} %` })
+      : null,
+    k?.trafikniva ? text({ sv: `prioritet ${k.trafikniva}`, en: `priority ${k.trafikniva}` }) : null
   ].filter(Boolean);
   if (!delar.length) return null;
   return (
@@ -1107,13 +1308,14 @@ function JevRad({ jev }: Readonly<{ jev: JevData }>) {
       <h4 className="kicker text-mineral">Jev</h4>
       <p className="mt-2 max-w-[65ch] text-[13px] leading-6 text-ink-subtle">
         {delar.join(" · ")}
-        {t?.stodrad ? <span className="block">Stödrad: ”{t.stodrad}”</span> : null}
+        {t?.stodrad ? <span className="block">{text(T.stodrad)}: ”{t.stodrad}”</span> : null}
       </p>
     </div>
   );
 }
 
 function GodkannKnapp({ queueItemId }: Readonly<{ queueItemId: string | null }>) {
+  const { text } = useLocale();
   const [godkant, setGodkant] = useState(false);
   const [busy, setBusy] = useState(false);
   const [fel, setFel] = useState<string | null>(null);
@@ -1135,7 +1337,7 @@ function GodkannKnapp({ queueItemId }: Readonly<{ queueItemId: string | null }>)
   if (godkant) {
     return (
       <p role="status" className="mt-4 text-[15px] text-moss">
-        Godkänt. Utkastet ligger nu i sändkön.
+        {text(T.godkant)}
       </p>
     );
   }
@@ -1148,10 +1350,10 @@ function GodkannKnapp({ queueItemId }: Readonly<{ queueItemId: string | null }>)
         onClick={() => void godkann()}
         className={cn(btnPrimary, "disabled:cursor-wait disabled:opacity-60")}
       >
-        {busy ? "Godkänner…" : "Godkänn och skicka"}
+        {busy ? text(T.godkanner) : text(T.godkannOchSkicka)}
       </button>
       {!queueItemId ? (
-        <p className="mt-3 text-[13px] leading-6 text-ink-subtle">Godkänn i Iris › Granskning.</p>
+        <p className="mt-3 text-[13px] leading-6 text-ink-subtle">{text(T.godkannIGranskning)}</p>
       ) : null}
       {fel ? (
         <p role="alert" className="mt-3 max-w-[65ch] text-[14px] text-danger">

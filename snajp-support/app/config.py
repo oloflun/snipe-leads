@@ -388,6 +388,12 @@ class Settings(BaseSettings):
         "", validation_alias=AliasChoices("PUBLIK_BAS_URL", "publik_bas_url", "PUBLIC_BASE_URL")
     )
 
+    # Flytta till main (plan del E, app/api/admin_flytt.py): HMAC-nyckeln delas
+    # av main och development (sätts med scripts/keys.py, aldrig i koden);
+    # målet (mains api-URL) sätts bara i development. Tomt = vägen stängd.
+    flytt_nyckel: str = Field("", validation_alias=AliasChoices("FLYTT_NYCKEL", "flytt_nyckel"))
+    flytt_mal_url: str = Field("", validation_alias=AliasChoices("FLYTT_MAL_URL", "flytt_mal_url"))
+
     # SMTP-uppgifterna för snajpsupport@gmail.com. ETT konto för HELA
     # plattformen — det här är prioriterade mejl till OSS, inte kundutskick,
     # och har ingenting med per-tenant-avsändare att göra (se

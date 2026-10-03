@@ -1,0 +1,47 @@
+# Nattlig spegling main → development (plan del E, Antons beställning 2026-10-01).
+#
+# Development ska vara en envägs 1:1-kopia av main, så att ett kundproblem
+# kan testas mot exakt det kunden hade, utan att tester hamnar i den riktiga
+# miljön. scripts/railway_seed_dev.py bär de tre spärrarna (hårdkodat mål,
+# mirror_meta-markören, INV-DATA-001); det här jobbet är bara klockan.
+#
+# Allt som skapats i development och ska sparas måste flyttas till main
+# FÖRE körningen, via Byt kund → Flytta till main. --behall-flyttko får
+# skriptet att vägra om en flytt nyligen misslyckats.
+#
+# Fönsterlöst per definition: körs på GitHubs runner, inte på en lokal maskin.
+name: spegla-dev
+
+on:
+  schedule:
+    - cron: "0 2 * * *" # 04:00 svensk sommartid, 03:00 vintertid
+  workflow_dispatch:
+
+concurrency:
+  group: spegla-dev
+  cancel-in-progress: false
+
+jobs:
+  spegla:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install psycopg2-binary
+      # Skriptet läser .env.deploy (RAILWAY_MAIN_PG_* och RAILWAY_DEVELOPMENT_PG_*).
+      # Repo-hemligheten ENV_DEPLOY är filens innehåll; den skrivs aldrig ut.
+      - name: Skriv .env.deploy ur hemligheten
+        run: printf '%s\n' "$ENV_DEPLOY" > .env.deploy
+        env:
+          ENV_DEPLOY: ${{ secrets.ENV_DEPLOY }}
+      - name: Spegla
+        run: python scripts/railway_seed_dev.py --apply --behall-flyttko | tee spegling.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: spegling-${{ github.run_id }}
+          path: spegling.log
+          retention-days: 30

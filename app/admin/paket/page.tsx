@@ -1,8 +1,10 @@
+import { AdminNyckeltal, AdminText } from "@/components/admin/AdminText";
 import { PaketHantering } from "@/components/admin/PaketHantering";
-import { Nyckeltal, Sidhuvud, Tomt } from "@/components/ui";
+import { Tomt } from "@/components/ui";
 import { listTenants, unwrap } from "@/lib/data/admin";
 import { paketForProdukter } from "@/lib/paket";
 import { formateraPris } from "@/lib/pricing";
+import { AdminVyhuvud } from "@/components/admin/AdminVyhuvud";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -40,7 +42,7 @@ export default async function Page() {
 
   return (
     <div>
-      <Sidhuvud title="Paket" />
+      <AdminVyhuvud grupp="kunder" />
 
       {error ? (
         <p role="alert" className="mt-6 max-w-[70ch] break-words text-[0.9375rem] text-danger">
@@ -49,15 +51,15 @@ export default async function Page() {
       ) : (
         <>
           <div className="mt-8">
-            <Nyckeltal
+            <AdminNyckeltal
               poster={[
-                { etikett: "Aktiva kunder", varde: aktiva.length },
-                { etikett: "Pausade", varde: pausade.length },
-                { etikett: "Avslutade", varde: avstangda.length },
+                { n: "aktivaKunder", varde: aktiva.length },
+                { n: "pausade", varde: pausade.length },
+                { n: "avslutade", varde: avstangda.length },
                 {
-                  etikett: "Paketvärde per månad",
+                  n: "paketvardePerManad",
                   varde: formateraPris(manadsintakt),
-                  notis: "Aktiva kunder med exakt paket"
+                  notis: "aktivaMedExaktPaket"
                 }
               ]}
             />
@@ -65,7 +67,9 @@ export default async function Page() {
 
           <div className="mt-10">
             {kunder.length === 0 ? (
-              <Tomt>Inga kunder ännu. Raderna dyker upp när första kunden onboardats.</Tomt>
+              <Tomt>
+                <AdminText n="ingaKunderPaket" />
+              </Tomt>
             ) : (
               <PaketHantering tenants={kunder} />
             )}

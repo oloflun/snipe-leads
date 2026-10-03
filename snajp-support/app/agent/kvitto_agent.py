@@ -47,7 +47,7 @@ FORBEHALL = (
     "innan de används i bokföring eller deklaration."
 )
 
-CHATT_SYSTEMPROMPT = f"""Du är Snajps kvitto-assistent. Du svarar på svenska, kort och konkret,
+CHATT_SYSTEMPROMPT = f"""Du är Snajps kvitto-assistent. Du svarar på korrekt, felfri svenska (stavning, grammatik, skiljetecken), kort och konkret,
 om företagets kvitton och utlägg.
 
 ## Din grundregel, före allt annat
@@ -168,6 +168,13 @@ async def run_kvitto_chat_turn(
 
     if not verdikt.ok:
         svar = fallt_svar()
+    else:
+        # Textkvalitetslagret: deterministisk putsning av chattsvaret —
+        # blanksteg, hängande hälsningar, entydiga felstavningar. Körs inte
+        # på fallt_svar(), som är vår egen fasta text.
+        from ..textkvalitet import putsa
+
+        svar, _ = putsa(svar)
 
     return {
         "reply": svar,

@@ -1,9 +1,11 @@
 "use client";
 
 import {
+  Activity,
   ArrowLeftRight,
   FileText,
   LayoutDashboard,
+  ListTodo,
   LogOut,
   Mail,
   MessagesSquare,
@@ -27,10 +29,11 @@ import { BytKund } from "@/components/admin/BytKund";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 import { LasrollBanner } from "@/components/LasrollBanner";
 import { VyVaxel } from "@/components/VyVaxel";
-import { useLocale } from "@/lib/i18n";
+import { useLocale, type Localized } from "@/lib/i18n";
 import { appRoutes, produktForInstallningsvag, routesForProducts, tillAdminvag } from "@/lib/routes";
 import type { Scope } from "@/lib/routes";
 import { cn } from "@/lib/utils";
+import { rubrikSida } from "@/components/ui";
 
 /**
  * Operate mode. Samma tokens som marknadsytorna, produktens kadens: fast
@@ -60,9 +63,9 @@ import { cn } from "@/lib/utils";
  */
 const DEMO_VAGAR: Record<string, string> = {
   "/dashboard": "/demo",
-  "/dashboard/iris": "/demo/iris",
-  "/dashboard/iris/granskning": "/demo/iris/granskning",
-  "/dashboard/iris/installningar": "/demo/iris/installningar",
+  "/dashboard/att-gora": "/demo/att-gora",
+  "/dashboard/leads": "/demo/leads",
+  "/settings/leads": "/demo/installningar",
   "/dashboard/companies": "/demo/companies",
   "/dashboard/contacts": "/demo/contacts",
   "/dashboard/inbox": "/demo/inbox",
@@ -73,22 +76,19 @@ const DEMO_VAGAR: Record<string, string> = {
 };
 
 /**
- * Flikarna ÄR lägesväxeln.
+ * Lägesväxeln är pensionerad (Snajp Suite 2026-10-03).
  *
- * Tidigare fanns en separat kontroll (ScopeSwitch) bredvid flikraden, och den
- * gjorde en annan sak än flikarna: "Leads" tog dig till leads-sidan men lämnade
- * resten av appen i Duo, så inställningarna bakom fliken visade fortfarande
- * båda agenterna. Två kontroller för en sak, där den ena bara gjorde halva
- * jobbet.
- *
- * Nu smalnar Leads och Support av hela vyn, och Översikt tar tillbaka Duo.
- * Kartan är explicit: en route utan post här rör inte läget.
+ * Fram till i dag smalnade ett klick på Iris eller Kundtjänst av HELA vyn
+ * (`snajp.scope`), och menyn filtrerades på läget. Följden var uppmätt: i
+ * adminytan försvann Kundtjänst och Kvitton ur railen när man klickade Iris,
+ * och en Trio-kund som stod i Iris kunde inte nå Kvitton alls. Menyn är nu
+ * platt och visar alltid allt arbetsytan har; varje menyklick återställer
+ * läget till helvyn, så att en gammal cookie inte lämnar inställningarna
+ * avsmalnade. Scope-mekanismen står kvar för vyer som läser `shows()`.
  */
-export const FLIKENS_LAGE: Record<string, Scope> = {
-  "/dashboard": "both",
-  "/dashboard/iris": "leads",
-  "/dashboard/support": "support"
-};
+export function aterstallLage(availableScopes: readonly Scope[], setScope: (scope: Scope) => void): void {
+  if (availableScopes.includes("both")) setScope("both");
+}
 
 /**
  * Ikon per menypost. Railen bär ikoner även i smalt läge, så varje route som
@@ -101,7 +101,9 @@ export const FLIKENS_LAGE: Record<string, Scope> = {
  */
 export const RUTT_IKONER: Record<string, LucideIcon> = {
   "/dashboard": LayoutDashboard,
-  "/dashboard/iris": Target,
+  "/dashboard/att-gora": ListTodo,
+  "/dashboard/leads": Target,
+  "/dashboard/aktivitet": Activity,
   "/dashboard/support": MessagesSquare,
   "/dashboard/companies": Users,
   "/dashboard/contacts": Users,
@@ -115,10 +117,11 @@ export const RUTT_IKONER: Record<string, LucideIcon> = {
 
 const DEMO_IKONER: Record<string, typeof LayoutDashboard> = {
   "": LayoutDashboard,
-  iris: Target,
-  crm: Users,
+  "att-gora": ListTodo,
+  leads: Target,
   support: MessagesSquare,
-  kvitton: ScanLine
+  kvitton: ScanLine,
+  installningar: Settings
 };
 
 function iDemolage(pathname: string): boolean {
@@ -159,37 +162,24 @@ export function useArbetsvag(): (href: string) => string {
 export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) {
   const pathname = usePathname();
   const router = useRouter();
-  const { t, locale, toggleLocale } = useLocale();
+  const { t, text, locale, toggleLocale } = useLocale();
   const {
     products,
     workspaceName,
     shows,
     isDemo,
     signedIn,
+    userEmail,
     vy,
     availableScopes,
     setScope,
     isPlatformAdmin
   } = useDashboard();
 
-  // Entitlement decides what exists; the scope switch decides what is on screen
-  // right now. A nav listing eight Leads sections while the scope reads "Support"
-  // contradicts the control the user just used.
-  //
-  // MEN: lägesflikarna själva undantas från det filtret.
-  //
-  // Flikarna ÄR växeln (FLIKENS_LAGE). Filtrerades de på `shows()` göms den
-  // kontroll man skulle ha tryckt på: står man i Leads försvinner
-  // Kundtjänst-fliken, och enda vägen till kundtjänst blir att först gå via
-  // Översikt — vilket inte står någonstans. Uppmätt i skärmdump från demovyn,
-  // där menyn saknade Kundtjänst helt.
-  //
-  // Regeln: en kontroll får aldrig gömma sig själv. Entitlement styr att
-  // fliken finns; läget styr vad innehållet visar.
-  const navRoutes = routesForProducts(products, { isAdmin: isPlatformAdmin }).filter(
-    (route) =>
-      route.product === "shared" || route.href in FLIKENS_LAGE || shows(route.product)
-  );
+  // Entitlement styr menyn, inget annat (Snajp Suite 2026-10-03, se
+  // aterstallLage ovan). En meny som döljer poster efter läget gömmer den
+  // kontroll man skulle ha tryckt på.
+  const navRoutes = routesForProducts(products, { isAdmin: isPlatformAdmin });
 
   /**
    * Agenterna arbetsytan INTE har — de MÖRKLÄGGS i menyn i stället för att
@@ -217,15 +207,12 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   // /analytics och /assistant inte att öppna alls som kund, och koden på båda
   // ställena såg rätt ut var för sig.
   //
-  // Scope-skyddet står kvar orört: filtret på `shows()` gäller fortfarande, så
-  // den som smalnar av vyn till Support medan de står på en leads-sida
-  // dirigeras som förut.
+  // Sedan Snajp Suite filtreras det inte längre på läget: menyn visar allt
+  // arbetsytan äger, och en sida man når från menyn ska aldrig studsa.
   const natbaraRoutes = routesForProducts(products, {
     includePreview: true,
     isAdmin: isPlatformAdmin
-  }).filter(
-    (route) => route.product === "shared" || shows(route.product)
-  );
+  });
 
   const stranded =
     natbaraRoutes.every(
@@ -283,11 +270,11 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
         const href = demoSektionsVag(item.slug);
         const children = item.children?.map((child) => {
           const childHref = demoSektionsVag(child.slug);
-          return { href: childHref, label: child.label, active: pathname === childHref };
+          return { href: childHref, label: text(child.label), active: pathname === childHref };
         });
         return {
           href,
-          label: item.label,
+          label: text(item.label),
           Icon: DEMO_IKONER[item.slug] ?? LayoutDashboard,
           // Föräldern räknas aktiv om man står på den, ELLER på ett av dess
           // barn — CRM-listan har t.ex. sökvägen /demo/crm, alltså inte under
@@ -311,18 +298,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
             // Läget sätts vid klicket, inte i en effekt på den nya sidan: en
             // effekt hade hunnit rendera målsidan i det gamla läget först, och
             // bytet hade synts som ett hopp.
-            onClick: () => {
-              const lage = FLIKENS_LAGE[route.href];
-              if (lage && availableScopes.includes(lage)) {
-                setScope(lage);
-              }
-            },
-            // Barnen (Iris: Bolag/Granskning/Inställningar) — exakt match, inte
-            // prefix: /dashboard/iris/granskning ska inte markera /dashboard/iris.
-            children: route.children?.map((child) => {
-              const childHref = demoAnpassa(child.href, pathname);
-              return { href: childHref, label: t(child.labelKey), active: pathname === childHref };
-            })
+            onClick: () => aterstallLage(availableScopes, setScope)
           };
         }),
         // De mörklagda agenterna — syns, men nedtonade (se morkaRoutes ovan).
@@ -348,7 +324,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
         .map(({ grundHref: _grundHref, ...item }) => item);
 
   return (
-    <div className="min-h-screen bg-paper text-ink">
+    <div className="appyta min-h-screen bg-paper text-ink">
       {/* Före allt annat i DOM och med högre z-index: bannern ska ligga ÖVER
           det klistrade innehållet, inte försvinna bakom det vid scroll. */}
       <ImpersonationBanner />
@@ -361,7 +337,11 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
             ytans karta. Delad med AdminShell via components/shell/Rail.tsx. */}
         <Rail
           logoHref={demoAnpassa("/dashboard", pathname)}
-          logoAriaLabel={demolage ? "Snajp demo, till översikten" : "Snajp, till översikten"}
+          logoAriaLabel={
+            demolage
+              ? text({ sv: "Snajp demo, till översikten", en: "Snajp demo, to the overview" })
+              : text({ sv: "Snajp, till översikten", en: "Snajp, to the overview" })
+          }
           brand={
             // Arbetsytans namn — samma plats som "Bokföring"-etiketten i
             // bokforing-webbs rail. I demon står demomarkören här i stället:
@@ -373,7 +353,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                     gav bara 2.51:1 här. text-ochre ger 6.54:1 mot den
                     ochre-tonade railbakgrunden. */}
                 <span className="inline-flex items-center rounded-input border border-ochre/40 bg-ochre/10 px-2 py-0.5 text-[0.75rem] font-medium text-ochre">
-                  Demo · exempeldata
+                  {text({ sv: "Demo · exempeldata", en: "Demo · sample data" })}
                 </span>
               </p>
             ) : (
@@ -394,35 +374,88 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                   aktiv={pathname === "/settings" || pathname.startsWith("/settings/")}
                 />
               ) : null}
+
+              {/* Kontrollerna bor i railen sedan 2026-10-01, i exakt samma
+                  komposition som AdminShell: kunduppslag, vy-växel, menyn
+                  (kontakt, dataskydd, anmäl felaktigt svar), kontoadressen,
+                  och utloggning + språk på EN rad. Antons beställning: menyn
+                  ska inte ta plats överst på sidan. Bara vid lg+ — i ikonläget
+                  saknar kontrollerna ett ikon-only-läge, och mobilraden
+                  nedanför bär det som måste nås där. */}
+              <div className="hidden flex-col gap-1.5 border-t border-paper/10 px-1 pt-3 lg:flex">
+                {(isPlatformAdmin && !demolage) ? (
+                  <div className="flex flex-wrap items-center gap-1">
+                    <BytKund ton="rail" />
+                    <VyVaxel ton="rail" />
+                  </div>
+                ) : null}
+                <AgentMenu yta="leads" kontext={`dashboard${pathname ? `:${pathname}` : ""}`} ton="rail" />
+                {userEmail && !demolage ? (
+                  <p title={userEmail} className="truncate px-1 pt-0.5 text-[0.75rem] text-paper-subtle">{userEmail}</p>
+                ) : null}
+              </div>
+              <div className="hidden flex-col items-center gap-1 lg:flex lg:flex-row lg:justify-between">
+                {signedIn ? (
+                  <form action={signOut} className="w-full lg:w-auto lg:flex-1">
+                    <button
+                      type="submit"
+                      className="focus-ring flex min-h-11 w-full items-center gap-1.5 rounded-input px-3 text-sm font-medium text-paper-muted transition-colors hover:bg-paper/5 hover:text-paper lg:justify-start"
+                    >
+                      <LogOut className="h-4 w-4 shrink-0" aria-hidden />
+                      <span>{text({ sv: "Logga ut", en: "Sign out" })}</span>
+                    </button>
+                  </form>
+                ) : demolage ? (
+                  <div className="flex w-full flex-col lg:w-auto lg:flex-1">
+                    <Link
+                      href="/login"
+                      className="focus-ring flex min-h-11 items-center rounded-input px-3 text-sm font-medium text-paper-muted transition-colors hover:bg-paper/5 hover:text-paper"
+                    >
+                      {text({ sv: "Logga in", en: "Sign in" })}
+                    </Link>
+                    <Link
+                      href="/"
+                      className="focus-ring flex min-h-11 items-center rounded-input px-3 text-sm font-medium text-paper-muted transition-colors hover:bg-paper/5 hover:text-paper"
+                    >
+                      {text({ sv: "Till startsidan", en: "To the start page" })}
+                    </Link>
+                  </div>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={toggleLocale}
+                  className="focus-ring min-h-11 shrink-0 rounded-input px-3 text-[13px] font-medium text-paper-muted transition-colors hover:bg-paper/5 hover:text-paper"
+                >
+                  {locale === "sv" ? "EN" : "SV"}
+                </button>
+              </div>
             </>
           }
         />
 
         <div className="flex min-w-0 flex-1 flex-col">
-          {/* Kontrollraden. Railen bär navigationen; det här är allt som inte
-              är navigation — kontosaker, växlar, språk. De bor i en ljus rad
-              överst i innehållet i stället för på railen: BytKund, VyVaxel och
-              AgentMenu är ritade för ljus yta, och en mörk rail med tre ljusa
-              öar hade varit sämre än två renodlade ytor. */}
-          <header className="safe-top sticky top-0 z-30 border-b border-ink/10 bg-paper/85 backdrop-blur-xl">
+          {/* Mobilraden. Vid lg+ bär railens fot kontrollerna (samma
+              komposition som AdminShell, Antons beställning 2026-10-01: menyn
+              ska inte ta plats överst på sidan). Under lg är railen en ikonrail
+              utan plats för dem, så det som MÅSTE nås på en telefon står här:
+              ytans namn, menyn (kontakt, dataskydd, anmäl felaktigt svar),
+              språk och utloggning. Kunduppslag och vy-växel är adminverktyg
+              och saknas på mobilen — samma avgränsning som adminytan gör. */}
+          <header className="safe-top sticky top-0 z-30 border-b border-ink/10 bg-paper/85 backdrop-blur-xl lg:hidden">
             <div className="flex min-h-[52px] flex-wrap items-center justify-end gap-x-1.5 gap-y-1 px-4 py-1.5 md:px-6">
-              {/* Demomarkören igen, för smala skärmar där railens etikett inte
-                  får plats — utan den vet en mobil besökare inte vad ytan är. */}
+              {/* Demomarkören för smala skärmar där railens etikett inte får
+                  plats — utan den vet en mobil besökare inte vad ytan är. */}
               {demolage ? (
-                <span className="mr-auto inline-flex items-center rounded-input border border-ochre/40 bg-ochre/10 px-2.5 py-1 text-[13px] font-medium text-warning lg:hidden">
-                  Demo · exempeldata
+                <span className="mr-auto inline-flex items-center rounded-input border border-ochre/40 bg-ochre/10 px-2.5 py-1 text-[13px] font-medium text-warning">
+                  {text({ sv: "Demo · exempeldata", en: "Demo · sample data" })}
                 </span>
               ) : (
-                <span className="mr-auto truncate text-[13px] font-medium text-ink-subtle lg:hidden">
+                <span className="mr-auto truncate text-[13px] font-medium text-ink-subtle">
                   {workspaceName}
                 </span>
               )}
 
-              {/* Admin / Demo. Ersätter både den gamla /admin-länken längst ut
-                  i flikraden och lägesväxlaren: läget styrs numera av Leads-
-                  och Support-posterna i railen, se ovan. */}
-              <BytKund />
-              <VyVaxel />
+              <AgentMenu yta="leads" kontext={`dashboard${pathname ? `:${pathname}` : ""}`} />
               <button
                 type="button"
                 onClick={toggleLocale}
@@ -430,12 +463,6 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
               >
                 {locale === "sv" ? "EN" : "SV"}
               </button>
-              {/* Samma meny som på kundserviceytan. Den ligger i AppShell och
-                  inte per sida: kontaktuppgifter, dataskydd och möjligheten att
-                  anmäla ett felaktigt svar är lika relevanta på leads-vyn som
-                  på supportvyn, och en meny som bara finns på hälften av
-                  ytorna är en meny användaren slutar leta efter. */}
-              <AgentMenu yta="leads" kontext={`dashboard${pathname ? `:${pathname}` : ""}`} />
 
               {/* Utloggning. Formulär och inte onClick: signOut är en server
                   action, och ett formulär gör att den fungerar även innan
@@ -444,31 +471,22 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                 <form action={signOut}>
                   <button
                     type="submit"
+                    aria-label={text({ sv: "Logga ut", en: "Sign out" })}
                     className="focus-ring inline-flex min-h-11 items-center gap-1.5 rounded-input px-3 text-sm font-medium text-ink-subtle transition-colors hover:text-ink"
                   >
                     <LogOut className="h-4 w-4" aria-hidden />
-                    <span className="hidden sm:inline">Logga ut</span>
+                    <span className="hidden sm:inline">{text({ sv: "Logga ut", en: "Sign out" })}</span>
                   </button>
                 </form>
               ) : null}
 
-              {/* Demons två utvägar, i samma register som varje annan
-                  kontroll. */}
               {demolage ? (
-                <>
-                  <Link
-                    href="/"
-                    className="focus-ring hidden min-h-11 items-center rounded-input px-3 text-sm font-medium text-ink-subtle transition-colors hover:text-ink sm:inline-flex"
-                  >
-                    Till startsidan
-                  </Link>
-                  <Link
-                    href="/login"
-                    className="focus-ring inline-flex min-h-11 items-center rounded-input px-3 text-sm font-medium text-ink-subtle transition-colors hover:text-ink"
-                  >
-                    Logga in
-                  </Link>
-                </>
+                <Link
+                  href="/login"
+                  className="focus-ring inline-flex min-h-11 items-center rounded-input px-3 text-sm font-medium text-ink-subtle transition-colors hover:text-ink"
+                >
+                  {text({ sv: "Logga in", en: "Sign in" })}
+                </Link>
               ) : null}
             </div>
           </header>
@@ -483,7 +501,10 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
               <div className="border-b border-ochre/30 bg-ochre/10">
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 md:px-6">
                   <span className="text-[13px] text-ink-muted">
-                    Allt här är exempeldata. Klicka fritt, inget skickas.
+                    {text({
+                      sv: "Allt här är exempeldata. Klicka fritt, inget skickas.",
+                      en: "Everything here is sample data. Click freely, nothing is sent."
+                    })}
                   </span>
                   {/* Ink-knapp, inte ochre-text: --ochre (L 0.74) ger 2.17:1
                       mot paper och duger aldrig som 13px text — se DESIGN.md
@@ -492,7 +513,10 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                     href="/login"
                     className="focus-ring ml-auto inline-flex min-h-8 items-center rounded-input bg-ink px-3 py-1 text-[13px] font-semibold text-paper transition-colors hover:bg-ink2"
                   >
-                    Testa fullständiga tjänsten med era egna data, kostnadsfritt
+                    {text({
+                      sv: "Testa hela tjänsten med era egna data, kostnadsfritt",
+                      en: "Try the full service with your own data, free of charge"
+                    })}
                   </Link>
                 </div>
               </div>
@@ -510,7 +534,10 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                       exempelbutiken i en yta som visas för kunder. */}
                   {vy === "demo" ? null : (
                     <span className="text-[13px] text-ink-muted">
-                      Du testar Snajp med ett begränsat antal körningar.
+                      {text({
+                        sv: "Du testar Snajp med ett begränsat antal körningar.",
+                        en: "You are trying Snajp with a limited number of runs."
+                      })}
                     </span>
                   )}
                   {vy === "demo" ? null : (
@@ -547,11 +574,12 @@ export function PageShell({
   children,
   action
 }: Readonly<{
-  title: string;
+  title: string | Localized;
   children: React.ReactNode;
   action?: React.ReactNode;
 }>) {
   const pathname = usePathname();
+  const { text } = useLocale();
   // Under /admin bär `app/admin/layout.tsx` redan containern. Två containers
   // gav dubbel padding och en innerbredd 48px smalare än resten av ytan —
   // syns direkt när man växlar mellan en plattformsflik och en arbetsytesflik.
@@ -561,14 +589,16 @@ export function PageShell({
     <AppShell>
       {/* 1200 och inte 1400: innehållet delar numera raden med railen, och
           1400 hade gett över 90 tecken per rad i tabellerna på en bred skärm. */}
-      <section className={iAdmin ? "" : "mx-auto w-full max-w-[1200px] px-4 py-8 md:px-8 md:py-10"}>
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <h1 className="min-w-0 break-words font-display text-[1.625rem] font-semibold leading-tight tracking-[-0.02em]">
-            {title}
+      <section className={iAdmin ? "" : "mx-auto w-full max-w-[1200px] px-4 py-6 md:px-8 md:py-8"}>
+        {/* Sidans namn och dess enda handling på en rad, sedan datan. Samma
+            skala som Sidhuvud (ui.tsx rubrikSida). */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <h1 className={cn(rubrikSida, "min-w-0 break-words")}>
+            {typeof title === "string" ? title : text(title)}
           </h1>
           {action ? <div className="shrink-0">{action}</div> : null}
         </div>
-        <div className="mt-8">{children}</div>
+        <div className="mt-6">{children}</div>
       </section>
     </AppShell>
   );

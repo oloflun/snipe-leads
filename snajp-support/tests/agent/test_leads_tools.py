@@ -106,3 +106,51 @@ async def test_request_human_handoff_sets_escalation_fields():
     await _request_human_handoff_impl(ctx, "Prospektet svarade positivt")
     assert ctx.escalated is True
     assert ctx.escalation_reason == "Prospektet svarade positivt"
+
+
+@pytest.mark.anyio
+async def test_queue_outreach_draft_textkvalitet_putsar_brodtexten():
+    storage = MemoryStorage()
+    ctx = OutreachContext(
+        storage=storage, tenant_id=TENANT, thread_id="thread-tk1", prospect_email="p@example.se"
+    )
+
+    await _queue_outreach_draft_impl(
+        ctx,
+        subject="En idé till er",
+        body="Hej ,\n\nVi vill gärna sammarbeta kring er epost .",
+        language_state="sv",
+        humanizer_variant="snajp:humanizer-svenska",
+    )
+
+    message = storage.outreach_messages[TENANT][0]
+    assert message["body"].startswith("Hej,")
+    assert "samarbeta" in message["body"]
+    assert "e-post." in message["body"]
+
+
+@pytest.mark.anyio
+async def test_queue_outreach_draft_flaggad_text_tvingar_granskning():
+    """Textkvalitetslagret: en kvarlämnad platshållare får aldrig skickas
+    automatiskt — även med autonominivån first_contact ska utkastet landa i
+    awaiting_review (i simulering finns ingen LLM-korrektur som kan rädda det)."""
+    storage = MemoryStorage()
+    await storage.set_agent_settings(
+        TENANT, agent_type="leads", settings={"autonomy": "first_contact"}
+    )
+    ctx = OutreachContext(
+        storage=storage, tenant_id=TENANT, thread_id="thread-tk2",
+        prospect_email="p@example.se", sequence_index=0,
+    )
+
+    result = await _queue_outreach_draft_impl(
+        ctx,
+        subject="En idé till er",
+        body="Hej [förnamn]!\n\nVi hjälpte [Similar Company] att spara tid.",
+        language_state="sv",
+        humanizer_variant="snajp:humanizer-svenska",
+    )
+
+    queued = storage.send_queue[TENANT][0]
+    assert queued["status"] == "awaiting_review"
+    assert "textkvalitet" in result

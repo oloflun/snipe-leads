@@ -1,5 +1,64 @@
 # Snipra Status
 
+## 2026-10-02 (session 4) — Claude — driftsatt: development live, main migrerad till 087, adminytan i main lagad
+
+Anton körde push, `LEADS_MERINFO=scrapegraph` och migrationerna 082–086
+(development) och 079–086 (main); adminytan i main svarar 200. Agenten satte
+FLYTT_NYCKEL, FLYTT_MAL_URL och ENV_DEPLOY med nya `scripts/flytt_nycklar.py`,
+rättade åtta a11y-fynd i Iris-vyerna och gjorde offline-sidan tvåspråkig.
+Röktest på development 10/10 efter att två rättighetsfel hittats: radera sparad
+vy och "Koppla ur inkorgen" (fel sedan 077), båda lagade i migration 087 som
+körts i båda miljöerna, med en ny vakt. **Nattspegeln skriver över development
+02:00 UTC i natt.** Main väntar på Antons release. Handoff:
+`HANDOFF-2026-10-02-LEADS-SUITE-DRIFT.md`. Logg: `session-logs/2026-10-02-session-log-4.md`.
+
+## 2026-10-02 (session 3) — Claude — hela beställningen från 2026-10-01 kodad: listor, översättning, Iris-kvalitet, inkorg, spegel, Leads Suite
+
+Alla tio faser i `plans/2026-10-02-knyta-ihop-korningen.md` är kodade på
+`development`: kombinera listor och Flytta till Iris (migration 082), engelska
+översättningen klar med tom skuldlista (INV-COPY-001), obligatorisk
+lägesbeskrivning och kontaktväg i leverbarheten (083), Jev-sorterad inkorg och
+leads-inkorg under Iris (084), nattlig spegling main → development och Flytta
+till main (085, INV-DATA-003) och Leads Suite (086): tidslinje, anteckningar,
+uppgifter, sparade vyer, Tabell, Pipeline-kanban, CSV-import med kolumnkartor
+för HubSpot/Pipedrive/Salesforce/Upsales, automation per leadtyp och envägs
+CRM-synk. Backendsviten 2463 gröna, rotinvarianter 425, tsc rent; demon
+pixelgranskad lokalt. **25 commits ligger opushade** och adminfelet i main
+kvarstår tills migrationerna körs: push, `LEADS_MERINFO`, migrationerna 082–086
+mot development och 079–086 mot main, `FLYTT_NYCKEL`/`FLYTT_MAL_URL` och
+repo-secret `ENV_DEPLOY` är Antons kommandon (behörighetsgrinden). Nästa: skarp
+verifiering på development, a11y-audit och pixelgranskning av inloggade ytor.
+Logg: `session-logs/2026-10-02-session-log-3.md`.
+
+## 2026-10-02 (session 2) — Claude — adminfelet bekräftat, körningar härdade, tvåspråkighetsgrinden, listornas mejl-rader
+
+Adminfelet i produktion är en saknad kolumn (`ss_tenants.status`, migration
+080_paket_admin ej körd mot main), bekräftat i Railway-loggen; development är
+fri från felet. Förra sessionens commits granskades: ett uppgivet barnjobb lämnade
+körningen i `processing` för evigt, rättat tillsammans med återtag ur liggaren
+efter deploy och följ-loopen i körformuläret. Development migrerad (080, 081) och
+Jev i skarpt läge (`pa`). Regeln "varje komponent är tvåspråkig" står i CLAUDE.md,
+AGENTS.md och DESIGN.md med den mekaniska grinden INV-COPY-001; 37 komponenter
+översatta, 52 kvar på skuldlistan. Listorna sparar rader med bara mejl och har
+underfliken Telefon/Mejl/Båda. **Elva commits ligger lokalt och opushade:**
+behörighetsgrinden nekade `git push`, merinfo-flaggan och migrationen mot main,
+så de tre kommandona är Antons. Plan med tio faser:
+`plans/2026-10-02-knyta-ihop-korningen.md`. Logg: `session-logs/2026-10-02-session-log-2.md`.
+
+## 2026-10-02 — Claude — Körningar, menyn i railen och merinfo-kedjan; adminytan trasig i main
+
+Iris-körningar går att följa och återvända till (vyn Iris › Körningar, migration
+080_korningar, INV-JOB-003), och kundytans meny ligger i railen. merinfo är byggd
+som registerkälla via ScrapeGraphAI enligt Antons arbetsflöde, bakom
+`LEADS_MERINFO=scrapegraph` och tillfälligt i väntan på API-avtal (migration 081
+för telefon). Fem commits ligger lokalt på `development`, inte pushade, och
+testerna efter rebasen är inte körda. Adminytan visar felsida i produktion:
+main saknar migrationerna 079 och 080_paket_admin som PR #29 kräver. Nästa:
+laga adminytan på Antons ord, sedan migrera, pusha och slå på merinfo och Jev i
+development, sedan listornas nya krav och översättningen till engelska.
+Handoff med Antons instruktioner ordagrant: `HANDOFF-2026-10-02-LEADS-MERINFO-I18N.md`.
+Logg: `session-logs/2026-10-02-session-log.md`.
+
 ## 2026-09-19 — Claude — Integrationer och kanaler för support-agenten (bd snipe-36u), release-PR #22
 
 Support-agenten kopplas till kundens egna system via HTTP-anrop i Ebbots format

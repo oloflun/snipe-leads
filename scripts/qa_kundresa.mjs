@@ -197,8 +197,7 @@ try {
 // --- 4. Leads-körning -----------------------------------------------------
 console.log("\n=== 4. Leads-körning ===");
 try {
-  // `/dashboard/leads` studsar till `/dashboard/iris` sedan Iris tog över
-  // fliken (2026-09-19). Körformuläret ligger bakom "Kör Iris" i sidhuvudet
+  // `/dashboard/leads` är Leads-sidan sedan Snajp Suite (2026-10-03). Körformuläret ligger bakom "Kör Iris" i sidhuvudet
   // och finns inte i DOM:en förrän panelen är öppnad — utan klicket nedan
   // föll fyllningen på timeout och såg ut som ett produktfel.
   await page.goto(`${BASE}/dashboard/leads`, { waitUntil: "networkidle" });

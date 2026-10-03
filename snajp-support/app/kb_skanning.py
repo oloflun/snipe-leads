@@ -695,7 +695,7 @@ def _sanera_artikel(ra: dict, kallsidor: dict[str, Sida]) -> tuple[dict | None, 
     varningar: list[str] = []
     if kategori not in CATEGORIES:
         ny = kategori_for(sida.url, titel)
-        varningar.append(f"Modellen föreslog kategorin {kategori!r}, som inte finns — satt till {ny}.")
+        varningar.append(f"Modellen föreslog kategorin {kategori!r}, som inte finns — ändrad till {ny}.")
         kategori = ny
     try:
         konfidens = max(0.0, min(1.0, float(ra.get("confidence", 0.5))))
@@ -963,7 +963,7 @@ def bedom_luckor(genomsokning: Genomsokning, artiklar: list[dict]) -> list[dict]
     traff = [s for s in _sidor_som_traffar(sidor, villkor) if len(s.text) >= 400]
     if traff:
         satt("villkorstexter", "found", [s.url for s in traff],
-             "Villkor hittade på sajten. Stäm av att sajtens version är den som gäller i avtalet.")
+             "Villkor hittades på sajten. Stäm av att sajtens version är den som gäller i avtalet.")
     elif _sidor_som_traffar(sidor, villkor) or _lankar_som_traffar(ej_lasta, villkor):
         satt("villkorstexter", "partly",
              [s.url for s in _sidor_som_traffar(sidor, villkor)] + _lankar_som_traffar(ej_lasta, villkor),

@@ -16,7 +16,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 LISTVY = ROOT / "components" / "leads" / "LeadslistorView.tsx"
-DUO = ROOT / "components" / "dashboard" / "DuoSummary.tsx"
 TILLAGG = ROOT / "lib" / "actions" / "tillagg.ts"
 DASHBOARD = ROOT / "lib" / "data" / "dashboard.ts"
 HALSA = ROOT / "lib" / "admin" / "halsa.ts"
@@ -86,15 +85,8 @@ def test_bestallningen_skickar_titeln_som_sokvillkor():
 
 
 # -- Fynd 3: Duo-remsan efter Trio-bytet -----------------------------------
-
-
-def test_duo_remsan_hardkodar_inget_paketnamn():
-    text = _las(DUO)
-    for namn in ("Snajp Duo", "Snajp Trio", "Snajp Leads", "Snajp Support"):
-        assert namn not in text, (
-            f"DuoSummary hårdkodar {namn!r}. Paketnamnet ska härledas ur products via lib/pricing.ts."
-        )
-    assert "paketForProdukter(products)" in text
+# Remsan (DuoSummary) togs bort med Snajp Suite 2026-10-03: översikten har
+# inga länkkort längre, så det finns inget paketnamn att hårdkoda.
 
 
 # -- Fynd 4: tilläggen -----------------------------------------------------

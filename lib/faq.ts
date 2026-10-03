@@ -77,14 +77,14 @@ export const FAQ: FaqPost[] = [
     id: "manniska-godkanner",
     kategori: "plattform",
     fraga: {
-      sv: "Skickar agenten något utan att jag sett det?",
+      sv: "Skickar agenten något utan att vi har sett det?",
       en: "Does the agent send anything without me seeing it?"
     },
     svar: [
       {
         sv:
           "Nej. Utkast är standardläget, och sändknappen är er. Kvittohanteraren har dessutom " +
-          "en spärr som fäller svar där ett belopp inte går att härleda till ett underlag: hellre " +
+          "en spärr som stoppar svar där ett belopp inte går att härleda till ett underlag: hellre " +
           "”jag vet inte” än en siffra som ser rimlig ut.",
         en:
           "No. Draft is the default state, and the send button is yours. The receipt agent " +
@@ -350,7 +350,7 @@ export const FAQ: FaqPost[] = [
     svar: [
       {
         sv:
-          "Att koppla en inkorg och fylla kunskapsbasen är dagens arbete, inte månadens. Det " +
+          "Att koppla en inkorg och fylla kunskapsbasen tar en dag, inte en månad. Det " +
           "som tar tid är att komma överens om tonen i svaren, och det arbetet gör ni bäst " +
           "genom att köra agenten i utkastläge ett par dagar och rätta det som blir fel.",
         en:

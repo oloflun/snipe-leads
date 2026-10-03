@@ -969,6 +969,49 @@ def _profil_som_soktext(profil: dict[str, Any] | None, ring: int) -> str:
     return "Iris-profil (kundens egna kriterier):\n" + "\n".join(rader) + "\n"
 
 
+def _bolagsnyckel(rad: dict[str, Any]) -> set[str]:
+    """Nycklar som identifierar samma bolag i register och signalkälla:
+    orgnr (siffror), bolagsnamn (casefold), sajtens värd."""
+    nycklar: set[str] = set()
+    orgnr = "".join(ch for ch in str(rad.get("orgnr") or "") if ch.isdigit())
+    if orgnr:
+        nycklar.add(f"orgnr:{orgnr}")
+    namn = str(rad.get("company_name") or "").casefold().strip()
+    if namn:
+        nycklar.add(f"namn:{namn}")
+    webb = str(rad.get("website") or "").casefold()
+    webb = re.sub(r"^https?://(www\.)?", "", webb).split("/")[0]
+    if webb:
+        nycklar.add(f"webb:{webb}")
+    return nycklar
+
+
+def _med_signaler(register: list[dict[str, Any]], signaler: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Registerrader med en signalträff får signalen och går först; ordningen
+    inom grupperna behålls (registret är redan rangordnat)."""
+    if not signaler:
+        return register
+    per_nyckel: dict[str, dict[str, Any]] = {}
+    for s in signaler:
+        for n in _bolagsnyckel(s):
+            per_nyckel.setdefault(n, s)
+    med: list[dict[str, Any]] = []
+    utan: list[dict[str, Any]] = []
+    for rad in register:
+        traff = next((per_nyckel[n] for n in _bolagsnyckel(rad) if n in per_nyckel), None)
+        if traff:
+            rad = {
+                **rad,
+                "signal": traff.get("signal") or rad.get("signal"),
+                "signal_detalj": traff.get("signal_detalj") or rad.get("signal_detalj"),
+                "signal_kalla": traff.get("source_url"),
+            }
+            med.append(rad)
+        else:
+            utan.append(rad)
+    return med + utan
+
+
 async def hitta_bolag(
     icp: dict[str, Any],
     antal: int,
@@ -988,6 +1031,25 @@ async def hitta_bolag(
     if antal <= 0:
         return []
     uteslut = {n.casefold() for n in (uteslut_namn or set()) if n}
+
+    # Registerkällan först (merinfo via ScrapeGraphAI, TILLFÄLLIG tills ett
+    # API-avtal finns, se sources/merinfo.py). Bara när LEADS_MERINFO är
+    # satt. Färre träffar än beställt levereras som de är: utfyllnaden nedan
+    # saknar telefon och skulle bryta kontaktkravet. None betyder att
+    # målgruppen inte gick att översätta till merinfos träd, och då tar den
+    # gamla kedjan vid.
+    from .sources import merinfo
+
+    if merinfo.aktiv():
+        fran_register = await merinfo.sok(icp, antal, uteslut=uteslut, profil=profil)
+        if fran_register is not None:
+            # Register ∩ signaler (plan del C, 2026-10-02): annons- och
+            # nyhetskällorna avgör inte urvalet, de rankar det. Ett
+            # registerbolag med en signal går först; en signalträff utanför
+            # registret är inte målgruppen och faller. Körs bara när kunden
+            # kräver signaler, som den gamla kedjan.
+            signaler = await _sok_registrerade_kallor(icp, antal, uteslut) if icp.get("must_have") else []
+            return _med_signaler(fran_register, signaler)[:antal]
 
     from .platshallare import utan_platshallare
 

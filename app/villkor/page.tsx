@@ -1,9 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { JuridiskSida } from "@/components/marketing/JuridiskSida";
-import { BOLAG } from "@/lib/bolag";
-import { KONTAKT_MEJL } from "@/components/marketing/copy";
 import { notFoundOnTenant } from "@/lib/tenants/server";
+import { VillkorSida } from "./VillkorSida";
 
 export const metadata: Metadata = {
   title: "Användarvillkor — Snajp",
@@ -30,101 +27,12 @@ export const metadata: Metadata = {
  *
  * Ansvarsbegränsningen ska skrivas av jurist, inte av den som byggde produkten
  * och vill tro att den fungerar. Formulera den inte här.
+ *
+ * Texten bor i VillkorSida.tsx på svenska och engelska (Antons beslut
+ * 2026-10-02); den engelska är en översättning av den svenska.
  */
 export default async function Page() {
   await notFoundOnTenant();
 
-  return (
-    <JuridiskSida
-      rubrik="Användarvillkor"
-      ingress={`Dessa villkor gäller mellan ${BOLAG.namn} ("Snajp") och det företag ("Kunden") som registrerar ett konto eller tecknar avtal om Snajps tjänster.`}
-    >
-      <h2>Tjänsten</h2>
-      <p>
-        Snajp levererar en eller flera agenter enligt vad Kunden tecknat: supportagenten, som läser
-        och besvarar inkommande kundmejl; leadsagenten, som tar fram prospekt och skriver utgående
-        mejl; och, i förekommande fall, kvittohanteraren, som läser av kvitton
-        ur Kundens kopplade mejlkonto och uppladdade filer.
-      </p>
-
-      <h2>Kundens ansvar</h2>
-      <p>
-        Kunden ansvarar för att de uppgifter som matas in i tjänsten — till exempel den
-        kundtjänstinkorg som kopplas in — får behandlas av Snajp enligt gällande rätt, och för att
-        informera sina egna kunder och besökare om detta på sin egen webbplats.
-      </p>
-      <p>
-        Kunden ansvarar även för att arkivera räkenskapsinformation i enlighet med bokföringslagen.
-        Snajps kvittohanterare lagrar inte originalunderlag som kvitton, fakturor eller mejl, och
-        ersätter inte Kundens egen arkiveringsskyldighet.
-      </p>
-      <p>
-        Kunden ansvarar för att informera sina egna kunder om att inkommande ärenden behandlas
-        med hjälp av AI, i enlighet med artikel 13 i dataskyddsförordningen. Snajp tillhandahåller
-        en textmall för detta, men ansvaret för att texten finns på Kundens webbplats och stämmer
-        med Kundens verksamhet är Kundens.
-      </p>
-      <p>
-        <strong>Autonominivån är Kundens val och Kundens ansvar.</strong> Snajps supportagent
-        levereras med mänsklig granskning påslagen för samtliga ärendekategorier. Kunden kan
-        ställa om enskilda kategorier till automatiskt svar. Gör Kunden det upphör den mänskliga
-        inblandningen för de kategorierna, och Kunden ansvarar för att bedöma vad det innebär
-        enligt artikel 22 i dataskyddsförordningen.
-      </p>
-      <p>
-        Utgående mejl från leadsagenten skickas i Kundens namn. Snajp kontrollerar i kod att varje
-        utskick bär Kundens fullständiga företagsnamn, organisationsnummer, postadress och en
-        fungerande avregistreringslänk, och blockerar utskick som saknar något av det. Kunden
-        ansvarar för att de uppgifter vi identifierar Kunden med är korrekta.
-      </p>
-
-      <h2>Personuppgiftsbehandling</h2>
-      <p>
-        I den mån Snajp behandlar personuppgifter för Kundens räkning gäller det separata
-        personuppgiftsbiträdesavtalet, som är en integrerad del av detta avtal. Där framgår också
-        vilka underleverantörer som anlitas. Snajps behandling som personuppgiftsansvarig beskrivs i{" "}
-        <Link href="/integritetspolicy">integritetspolicyn</Link>.
-      </p>
-
-      <h2>Pris och betalning</h2>
-      <p>
-        Det här avsnittet är inte fastställt. Priserna framgår av{" "}
-        <Link href="/#priser">prislistan</Link>, men betalningsvillkor, indexering och vad som
-        gäller vid utebliven betalning är inte reglerat här. Skriv till oss på{" "}
-        <a href={`mailto:${KONTAKT_MEJL}`}>{KONTAKT_MEJL}</a> innan avtal tecknas.
-      </p>
-
-      <h2>Ansvarsbegränsning</h2>
-      <p>
-        Det här avsnittet är inte fastställt. Klausulen avgör vad ett fel kostar, och vi skriver
-        den inte själva — den ska formuleras av jurist. Tills dess finns ingen avtalad
-        ansvarsbegränsning. Skriv till oss på{" "}
-        <a href={`mailto:${KONTAKT_MEJL}`}>{KONTAKT_MEJL}</a> innan avtal tecknas.
-      </p>
-
-      <h2>Uppsägning och vad som händer med data</h2>
-      <p>
-        Uppsägningstiden är inte fastställd i de här villkoren. Bindningstiden är noll månader,
-        vilket inte är samma sak — skriv till oss på{" "}
-        <a href={`mailto:${KONTAKT_MEJL}`}>{KONTAKT_MEJL}</a> innan avtal tecknas.
-      </p>
-      <p>
-        Vid avtalets upphörande raderas eller återlämnas Kundens personuppgifter enligt
-        personuppgiftsbiträdesavtalets klausul om radering och återlämning, inom den tid som
-        anges där. Se även avsnittet om lagringstider i{" "}
-        <Link href="/integritetspolicy">integritetspolicyn</Link>.
-      </p>
-
-      <h2>Distansavtal och ångerrätt</h2>
-      <p>
-        Avtalet ingås på distans. Vad det innebär — och varför distansavtalslagens ångerrätt
-        inte gäller företagsavtal — beskrivs på sidan{" "}
-        <Link href="/angerratt">Distansavtal och ångerrätt</Link>, som är en del av
-        förhandsinformationen vid registreringen.
-      </p>
-
-      <h2>Tillämplig lag</h2>
-      <p>Svensk rätt gäller.</p>
-    </JuridiskSida>
-  );
+  return <VillkorSida />;
 }

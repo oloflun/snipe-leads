@@ -18,7 +18,9 @@ import {
 import { hamtaTillagg } from "@/lib/actions/tillagg";
 import { bytPaket } from "@/lib/actions/paket";
 import { sattKundStatus, type Kundstatus } from "@/lib/actions/kundstatus";
+import { ADMIN, a, ordagrant } from "@/lib/admin/sprak";
 import type { TenantRow } from "@/lib/data/admin";
+import { useLocale, type Locale, type Localized } from "@/lib/i18n";
 import { paketForProdukter } from "@/lib/paket";
 import { PAKET, formateraPris, type Paket } from "@/lib/pricing";
 import { cn } from "@/lib/utils";
@@ -51,11 +53,11 @@ import { cn } from "@/lib/utils";
 
 const STATUS_VISNING: Record<
   Kundstatus,
-  { text: string; tone: "good" | "warn" | "danger" }
+  { text: Localized; tone: "good" | "warn" | "danger" }
 > = {
-  aktiv: { text: "Aktiv", tone: "good" },
-  pausad: { text: "Pausad", tone: "warn" },
-  avstangd: { text: "Avstängd", tone: "danger" }
+  aktiv: { text: { sv: "Aktiv", en: "Active" }, tone: "good" },
+  pausad: { text: { sv: "Pausad", en: "Paused" }, tone: "warn" },
+  avstangd: { text: { sv: "Avstängd", en: "Suspended" }, tone: "danger" }
 };
 
 /** Radens läge: backendens status, eller härlett ur active för äldre svar. */
@@ -66,29 +68,30 @@ function statusForRad(rad: TenantRow): Kundstatus {
   return rad.active === false ? "avstangd" : "aktiv";
 }
 
-function prisText(paket: Paket | null): string {
+function prisText(paket: Paket | null, locale: Locale): string {
   if (!paket) return "";
   return paket.prisPerManad === null
-    ? "Pris på förfrågan"
-    : `${formateraPris(paket.prisPerManad)}/mån`;
+    ? a("prisPaForfragan", locale)
+    : `${formateraPris(paket.prisPerManad)}${a("perManad", locale)}`;
 }
 
 export function PaketHantering({ tenants }: Readonly<{ tenants: TenantRow[] }>) {
   const [oppen, setOppen] = useState<string | null>(null);
+  const { locale } = useLocale();
 
-  const rader = [...tenants].sort((a, b) => a.name.localeCompare(b.name, "sv"));
+  const rader = [...tenants].sort((x, y) => x.name.localeCompare(y.name, "sv"));
 
   return (
     <Tabell
-      ariaLabel="Kundernas paket och kontoläge"
+      ariaLabel={a("kundernasPaket", locale)}
       minBredd={760}
       kolumner={[
-        { rubrik: "Kund", bredd: "26%" },
-        { rubrik: "Paket", bredd: "18%" },
-        { rubrik: "Pris", bredd: "13%", hoger: true },
-        { rubrik: "Status", bredd: "13%" },
-        { rubrik: "Avtal", bredd: "18%" },
-        { rubrik: "Hantera", bredd: "12%", hoger: true, srOnly: true }
+        { rubrik: a("kolKund", locale), bredd: "26%" },
+        { rubrik: a("paketEtt", locale), bredd: "18%" },
+        { rubrik: a("pris", locale), bredd: "13%", hoger: true },
+        { rubrik: a("status", locale), bredd: "13%" },
+        { rubrik: a("kolAvtal", locale), bredd: "18%" },
+        { rubrik: a("hantera", locale), bredd: "12%", hoger: true, srOnly: true }
       ]}
     >
       {rader.map((rad) => (
@@ -111,6 +114,7 @@ function KundRad({
   const status = statusForRad(rad);
   const paket = paketForProdukter(rad.products);
   const visning = STATUS_VISNING[status];
+  const { locale, text } = useLocale();
 
   return (
     <>
@@ -123,22 +127,26 @@ function KundRad({
           {paket ? (
             paket.namn
           ) : rad.products && rad.products.length > 0 ? (
-            <span className={meta}>Eget urval: {rad.products.join(", ")}</span>
+            <span className={meta}>
+              {a("egetUrval", locale)} {rad.products.join(", ")}
+            </span>
           ) : (
-            <span className={meta}>Ingen arbetsyta</span>
+            <span className={meta}>{a("ingenArbetsyta", locale)}</span>
           )}
         </Cell>
-        <Cell hoger>{prisText(paket)}</Cell>
+        <Cell hoger>{prisText(paket, locale)}</Cell>
         <Cell>
-          <Badge tone={visning.tone}>{visning.text}</Badge>
+          <Badge tone={visning.tone}>{text(visning.text)}</Badge>
         </Cell>
         <Cell>
           {rad.avtal_signerat ? (
-            `Avtal ${String(rad.avtal_signerat).slice(0, 10)}`
+            `${a("kolAvtal", locale)} ${String(rad.avtal_signerat).slice(0, 10)}`
           ) : rad.trial_slut ? (
-            <span className={meta}>Trial till {String(rad.trial_slut).slice(0, 10)}</span>
+            <span className={meta}>
+              {a("trialTill", locale)} {String(rad.trial_slut).slice(0, 10)}
+            </span>
           ) : (
-            <span className={meta}>Inget avtal</span>
+            <span className={meta}>{a("ingetAvtal", locale)}</span>
           )}
         </Cell>
         <Cell hoger>
@@ -148,7 +156,7 @@ function KundRad({
             aria-expanded={oppen}
             className={cn(btnSecondary, btnLiten)}
           >
-            Hantera
+            {a("hantera", locale)}
             <ChevronDown
               className={cn("h-4 w-4 transition-transform", oppen && "rotate-180")}
               aria-hidden
@@ -177,9 +185,10 @@ function Paketval({
 }: Readonly<{ tenantId: string; namn: string; nuvarande: Paket | null; harArbetsyta: boolean }>) {
   const [aktuellt, setAktuellt] = useState<Paket | null>(nuvarande);
   const [valt, setValt] = useState<Paket["id"] | null>(null);
-  const [fel, setFel] = useState<string | null>(null);
-  const [kvitto, setKvitto] = useState<string | null>(null);
+  const [fel, setFel] = useState<Localized | null>(null);
+  const [kvitto, setKvitto] = useState<Localized | null>(null);
   const [pending, start] = useTransition();
+  const { locale, text } = useLocale();
 
   const kandidat = valt ? PAKET.find((p) => p.id === valt) : undefined;
 
@@ -190,21 +199,22 @@ function Paketval({
       setKvitto(null);
       const svar = await bytPaket(tenantId, kandidat.id);
       if (!svar.success) {
-        setFel(svar.error ?? "Paketet kunde inte bytas.");
+        setFel(svar.error ? ordagrant(svar.error) : ADMIN.paketetKundeInteBytas);
         return;
       }
       setAktuellt(paketForProdukter(svar.products) ?? kandidat);
       setValt(null);
-      setKvitto(`${namn} har nu ${kandidat.namn}. Kundens meny och vyer följer direkt.`);
+      setKvitto({
+        sv: `${namn} har nu ${kandidat.namn}. Kundens meny och vyer följer direkt.`,
+        en: `${namn} now has ${kandidat.namn}. The customer's menu and views follow immediately.`
+      });
     });
   };
 
   return (
-    <Sektion title="Paket">
+    <Sektion title={a("paketEtt", locale)}>
       {!harArbetsyta ? (
-        <p className={cn(meta, "max-w-[70ch]")}>
-          Kunden har ingen kopplad arbetsyta, så det finns inget paket att byta här.
-        </p>
+        <p className={cn(meta, "max-w-[70ch]")}>{a("ingenKoppladArbetsyta", locale)}</p>
       ) : (
         <>
           <div className="divide-y divide-ink/12 border-y border-ink/15">
@@ -228,13 +238,11 @@ function Paketval({
                 >
                   <span className="flex min-w-0 items-baseline gap-3">
                     <span className="font-medium">{paket.namn}</span>
-                    {arAktuellt ? <Badge tone="neutral">Nuvarande</Badge> : null}
-                    {arValt && !arAktuellt ? <Badge tone="warn">Valt</Badge> : null}
+                    {arAktuellt ? <Badge tone="neutral">{a("nuvarande", locale)}</Badge> : null}
+                    {arValt && !arAktuellt ? <Badge tone="warn">{a("valt", locale)}</Badge> : null}
                   </span>
                   <span className="num shrink-0 text-[0.9375rem] text-ink-muted">
-                    {paket.prisPerManad === null
-                      ? "Pris på förfrågan"
-                      : `${formateraPris(paket.prisPerManad)}/mån`}
+                    {prisText(paket, locale)}
                   </span>
                 </button>
               );
@@ -249,7 +257,7 @@ function Paketval({
                 onClick={skriv}
                 className={`${btnBase} bg-ink text-paper hover:bg-ink2`}
               >
-                {pending ? "Byter paket …" : `Byt till ${kandidat.namn}`}
+                {pending ? a("byterPaket", locale) : `${a("bytTill", locale)} ${kandidat.namn}`}
               </button>
               <button
                 type="button"
@@ -257,12 +265,9 @@ function Paketval({
                 onClick={() => setValt(null)}
                 className={btnSecondary}
               >
-                Avbryt
+                {a("avbryt", locale)}
               </button>
-              <p className={cn(meta, "basis-full")}>
-                Bytet gäller direkt: vyer utanför det nya paketet försvinner ur kundens meny,
-                och faktureringen är manuell så nästa faktura skrivs efter det nya paketet.
-              </p>
+              <p className={cn(meta, "basis-full")}>{a("bytetGallerDirekt", locale)}</p>
             </div>
           ) : null}
         </>
@@ -270,12 +275,12 @@ function Paketval({
 
       {fel ? (
         <p role="alert" className="mt-5 max-w-[70ch] break-words text-[0.9375rem] text-danger">
-          {fel}
+          {text(fel)}
         </p>
       ) : null}
       {kvitto && !fel ? (
         <p role="status" className="mt-5 text-[0.9375rem] text-moss">
-          {kvitto}
+          {text(kvitto)}
         </p>
       ) : null}
     </Sektion>
@@ -289,6 +294,7 @@ function TillaggPanel({ tenantId }: Readonly<{ tenantId: string }>) {
     migrationSaknas?: boolean;
   } | null>(null);
   const [laddar, setLaddar] = useState(true);
+  const { locale } = useLocale();
 
   useEffect(() => {
     let avbruten = false;
@@ -308,8 +314,8 @@ function TillaggPanel({ tenantId }: Readonly<{ tenantId: string }>) {
 
   if (laddar || !laddat) {
     return (
-      <Sektion title="Tillägg">
-        <p className={meta}>Hämtar tilläggen …</p>
+      <Sektion title={a("tillagg", locale)}>
+        <p className={meta}>{a("hamtarTillaggen", locale)}</p>
       </Sektion>
     );
   }
@@ -332,15 +338,16 @@ function Kontolage({
   const [lage, setLage] = useState<Kundstatus>(status);
   const [bekraftar, setBekraftar] = useState<"pausad" | "avstangd" | null>(null);
   const [orsak, setOrsak] = useState("");
-  const [fel, setFel] = useState<string | null>(null);
+  const [fel, setFel] = useState<Localized | null>(null);
   const [pending, start] = useTransition();
+  const { locale, text } = useLocale();
 
   const skriv = (nytt: Kundstatus, orsakstext: string) => {
     start(async () => {
       setFel(null);
       const svar = await sattKundStatus(tenantId, nytt, orsakstext);
       if (svar.error) {
-        setFel(svar.error);
+        setFel(ordagrant(svar.error));
         return;
       }
       setLage(svar.status ?? nytt);
@@ -350,21 +357,13 @@ function Kontolage({
   };
 
   return (
-    <Sektion title="Kontoläge">
+    <Sektion title={a("kontolage", locale)}>
       {lage === "aktiv" ? (
-        <p className="max-w-[70ch] text-[0.9375rem] leading-7 text-mineral">
-          Kontot är öppet: agenterna, arbetsytan och den publika chatten svarar.
-        </p>
+        <p className="max-w-[70ch] text-[0.9375rem] leading-7 text-mineral">{a("kontotOppet", locale)}</p>
       ) : lage === "pausad" ? (
-        <p className="max-w-[70ch] text-[0.9375rem] leading-7 text-mineral">
-          Kontot är pausat: nycklarna avvisas och inget svarar, men allt står orört
-          och väntar. Att öppna igen är ett klick.
-        </p>
+        <p className="max-w-[70ch] text-[0.9375rem] leading-7 text-mineral">{a("kontotPausat", locale)}</p>
       ) : (
-        <p className="max-w-[70ch] text-[0.9375rem] leading-7 text-mineral">
-          Kontot är avslutat: nycklarna avvisas och inget svarar. Ingenting är
-          raderat, så en återaktivering öppnar allt igen.
-        </p>
+        <p className="max-w-[70ch] text-[0.9375rem] leading-7 text-mineral">{a("kontotAvslutat", locale)}</p>
       )}
 
       {bekraftar ? (
@@ -375,18 +374,16 @@ function Kontolage({
           )}
         >
           <p className="text-[0.9375rem] leading-7 text-ink">
-            {bekraftar === "pausad"
-              ? "Pausen låser ute alla agenter, arbetsytan, portalen och chatten i samma ögonblick. Ingenting raderas, och kontot öppnas igen med ett klick här."
-              : "Avslutet låser ute alla agenter, arbetsytan, portalen och chatten i samma ögonblick. Ingenting raderas, men läget är tänkt som ett avslut, inte en paus."}
+            {bekraftar === "pausad" ? a("pausenLaser", locale) : a("avslutetLaser", locale)}
           </p>
           <label className="mt-4 block text-[13px] font-medium text-ink">
-            Orsak, hamnar i händelseloggen
+            {a("orsakHandelseloggen", locale)}
             <input
               type="text"
               value={orsak}
               onChange={(event) => setOrsak(event.target.value)}
               placeholder={
-                bekraftar === "pausad" ? "Kunden vill pausa över sommaren." : "Kunden har sagt upp avtalet."
+                bekraftar === "pausad" ? a("platsPausa", locale) : a("platsAvsluta", locale)
               }
               maxLength={500}
               className="focus-ring mt-1.5 block w-full rounded-input border border-ink/15 bg-paper px-3 py-2.5 text-[0.9375rem]"
@@ -406,11 +403,11 @@ function Kontolage({
             >
               {pending
                 ? bekraftar === "pausad"
-                  ? "Pausar …"
-                  : "Avslutar …"
+                  ? a("pausar", locale)
+                  : a("avslutar", locale)
                 : bekraftar === "pausad"
-                  ? `Pausa ${namn}`
-                  : `Avsluta ${namn}`}
+                  ? `${a("pausa", locale)} ${namn}`
+                  : `${a("avsluta", locale)} ${namn}`}
             </button>
             <button
               type="button"
@@ -421,7 +418,7 @@ function Kontolage({
               }}
               className={btnSecondary}
             >
-              Avbryt
+              {a("avbryt", locale)}
             </button>
           </div>
         </div>
@@ -430,14 +427,14 @@ function Kontolage({
           {lage === "aktiv" ? (
             <>
               <button type="button" onClick={() => setBekraftar("pausad")} className={btnSecondary}>
-                Pausa kontot …
+                {a("pausaKontot", locale)}
               </button>
               <button
                 type="button"
                 onClick={() => setBekraftar("avstangd")}
                 className={`${btnSecondary} !text-danger hover:!bg-danger/10`}
               >
-                Avsluta kontot …
+                {a("avslutaKontot", locale)}
               </button>
             </>
           ) : (
@@ -448,12 +445,12 @@ function Kontolage({
                 onClick={() =>
                   skriv(
                     "aktiv",
-                    lage === "pausad" ? "Pausen hävd från paketfliken." : "Återaktiverad från paketfliken."
+                    lage === "pausad" ? "Pausen hävd från paketfliken." : "Återaktiverad från paketfliken." // inte-copy: händelseloggens orsak
                   )
                 }
                 className={btnSecondary}
               >
-                {pending ? "Öppnar …" : "Öppna kontot igen"}
+                {pending ? a("oppnar", locale) : a("oppnaKontotIgen", locale)}
               </button>
               {lage === "pausad" ? (
                 <button
@@ -461,7 +458,7 @@ function Kontolage({
                   onClick={() => setBekraftar("avstangd")}
                   className={`${btnSecondary} !text-danger hover:!bg-danger/10`}
                 >
-                  Avsluta kontot …
+                  {a("avslutaKontot", locale)}
                 </button>
               ) : null}
             </>
@@ -474,7 +471,7 @@ function Kontolage({
           role="alert"
           className="mt-4 max-w-[70ch] rounded-input bg-danger/10 px-4 py-3 text-[0.875rem] text-danger"
         >
-          {fel}
+          {text(fel)}
         </p>
       ) : null}
     </Sektion>

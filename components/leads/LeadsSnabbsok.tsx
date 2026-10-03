@@ -4,6 +4,20 @@ import { useState } from "react";
 import { Badge, Rad, Radlista, btnPrimary, meta, rubrikPanel } from "@/components/ui";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
+import { useLocale, type Localized } from "@/lib/i18n";
+
+/** Ett fel vars text vi själva skrivit, och därför har på båda språken. */
+class LokalFel extends Error {
+  constructor(readonly lokal: Localized) {
+    super(lokal.sv);
+  }
+}
+
+function felText(error: unknown): Localized {
+  if (error instanceof LokalFel) return error.lokal;
+  const m = felmeddelande(error);
+  return { sv: m, en: m };
+}
 
 /**
  * Leads-snabbsökningen ("Sök Leads") — tilläggstjänstens panel.
@@ -51,11 +65,11 @@ type SokResultat = {
   utan_kontakt?: number;
 };
 
-const KONTAKTETIKETT: Record<string, string> = {
-  named_role_match: "Namngiven beslutsfattare",
-  named_other: "Namngiven kontakt",
-  role_address: "Rolladress",
-  contact_form: "Kontaktformulär"
+const KONTAKTETIKETT: Record<string, Localized> = {
+  named_role_match: { sv: "Namngiven beslutsfattare", en: "Named decision-maker" },
+  named_other: { sv: "Namngiven kontakt", en: "Named contact" },
+  role_address: { sv: "Rolladress", en: "Role address" },
+  contact_form: { sv: "Kontaktformulär", en: "Contact form" }
 };
 
 async function pollaJobb<T>(jobId: string): Promise<T> {
@@ -68,15 +82,22 @@ async function pollaJobb<T>(jobId: string): Promise<T> {
     const j =
       (await readJsonBody<{ status?: string; result?: T; error?: string }>(svar)) ?? {};
     if (j.status === "completed" && j.result) return j.result;
-    if (j.status === "failed") throw new Error(j.error ?? "Sökningen misslyckades.");
+    if (j.status === "failed") {
+      if (j.error) throw new Error(j.error);
+      throw new LokalFel({ sv: "Sökningen misslyckades.", en: "The search failed." });
+    }
   }
-  throw new Error("Sökningen tog för lång tid. Försök igen om en stund.");
+  throw new LokalFel({
+    sv: "Sökningen tog för lång tid. Försök igen om en stund.",
+    en: "The search took too long. Try again in a while."
+  });
 }
 
 export function LeadsSnabbsok({ isTest = false }: { isTest?: boolean }) {
+  const { text } = useLocale();
   const [fråga, setFråga] = useState("");
   const [busy, setBusy] = useState(false);
-  const [fel, setFel] = useState<string | null>(null);
+  const [fel, setFel] = useState<Localized | null>(null);
   const [leads, setLeads] = useState<SnabbLead[] | null>(null);
   const [utanKontakt, setUtanKontakt] = useState(0);
 
@@ -104,7 +125,11 @@ export function LeadsSnabbsok({ isTest = false }: { isTest?: boolean }) {
       if (!start.ok || !jobId) {
         const detalj =
           typeof startSvar.detail === "string" ? startSvar.detail : startSvar.error;
-        throw new Error(detalj ?? `Kunde inte starta sökningen (${start.status}).`);
+        if (detalj) throw new Error(detalj);
+        throw new LokalFel({
+          sv: `Kunde inte starta sökningen (${start.status}).`,
+          en: `Could not start the search (${start.status}).`
+        });
       }
       const resultat = await pollaJobb<SokResultat>(jobId);
       setLeads(resultat.prospects ?? []);
@@ -113,7 +138,7 @@ export function LeadsSnabbsok({ isTest = false }: { isTest?: boolean }) {
       // raderna finns där också, så registret ska uppdatera sig här med.
       window.dispatchEvent(new Event("snipra:leads-korning-klar"));
     } catch (e) {
-      setFel(felmeddelande(e));
+      setFel(felText(e));
     } finally {
       setBusy(false);
     }
@@ -122,7 +147,7 @@ export function LeadsSnabbsok({ isTest = false }: { isTest?: boolean }) {
   return (
     <section aria-labelledby="leads-snabbsok" className="rounded-card bg-paper2/60 p-5">
       <h3 id="leads-snabbsok" className={rubrikPanel}>
-        Sök bolag
+        {text({ sv: "Sök bolag", en: "Search companies" })}
       </h3>
 
       {/* Ingen ingress under rubriken (F-016). Det enda fältet inte själv säger
@@ -144,8 +169,8 @@ export function LeadsSnabbsok({ isTest = false }: { isTest?: boolean }) {
           // utan det kapas en längre inklistring TYST på servern, och
           // sökningen svarar på en annan rad än den kunden ser i fältet.
           maxLength={200}
-          placeholder="T.ex. byggbolag i Skåne som saknar chattsupport"
-          aria-label="Vilka kunder behöver du, och till vilken produkt?"
+          placeholder={text({ sv: "T.ex. byggbolag i Skåne som saknar chattsupport", en: "E.g. construction firms in Skåne without chat support" })}
+          aria-label={text({ sv: "Vilka kunder behöver du, och till vilken produkt?", en: "Which customers do you need, and for which product?" })}
           aria-describedby="leads-snabbsok-hjalp"
           // min-w-[180px] och inte min-w-0: med noll krymper fältet till en
           // springa bredvid knappen på 320px-skärmar. Med ett golv radbryts
@@ -153,30 +178,38 @@ export function LeadsSnabbsok({ isTest = false }: { isTest?: boolean }) {
           className="min-h-11 min-w-[180px] flex-1 rounded-input border border-ink/15 bg-paper px-3 py-2 text-base focus-ring"
         />
         <button type="submit" disabled={busy || !fråga.trim()} className={cn(btnPrimary)}>
-          {busy ? "Söker…" : "Sök"}
+          {busy ? text({ sv: "Söker…", en: "Searching…" }) : text({ sv: "Sök", en: "Search" })}
         </button>
       </form>
       <p id="leads-snabbsok-hjalp" className="mt-2 text-[0.9375rem] text-ink-muted">
-        Sökningen letar inom arbetsytans sparade målgrupp.
+        {text({
+          sv: "Sökningen letar inom arbetsytans sparade målgrupp.",
+          en: "The search looks within the workspace's saved target group."
+        })}
       </p>
 
       {busy ? (
         <p role="status" className="mt-3 text-[0.9375rem] text-ink-muted">
-          Söker bolag mot målgruppen. Det tar vanligen under en minut.
+          {text({
+            sv: "Söker bolag mot målgruppen. Det tar vanligen under en minut.",
+            en: "Searching for companies in the target group. It usually takes under a minute."
+          })}
         </p>
       ) : null}
 
       {fel ? (
         <p role="alert" className="mt-4 break-words text-[15px] text-danger">
-          {fel}
+          {text(fel)}
         </p>
       ) : null}
 
       {/* Inte "formuläret till vänster": under xl ligger formuläret ovanför. */}
       {leads && leads.length === 0 ? (
         <p className="mt-4 text-[0.9375rem] text-ink-muted">
-          Inga bolag med kontaktväg hittades. Prova en bredare beskrivning, eller starta en full
-          körning i formuläret.
+          {text({
+            sv: "Inga bolag med kontaktväg hittades. Prova en bredare beskrivning, eller starta en full körning i formuläret.",
+            en: "No companies with a way to contact them were found. Try a broader description, or start a full run in the form."
+          })}
         </p>
       ) : null}
 
@@ -189,7 +222,7 @@ export function LeadsSnabbsok({ isTest = false }: { isTest?: boolean }) {
               <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-3 gap-y-1">
                 <p className="min-w-0 break-words text-[0.9375rem] font-medium">{lead.company_name}</p>
                 {lead.contact_level ? (
-                  <Badge>{KONTAKTETIKETT[lead.contact_level] ?? lead.contact_level}</Badge>
+                  <Badge>{KONTAKTETIKETT[lead.contact_level] ? text(KONTAKTETIKETT[lead.contact_level]) : lead.contact_level}</Badge>
                 ) : null}
               </div>
               <p className="mt-1 break-words text-[0.9375rem] text-ink-muted">
@@ -202,7 +235,7 @@ export function LeadsSnabbsok({ isTest = false }: { isTest?: boolean }) {
                 ) : lead.contact_email ? (
                   lead.contact_email
                 ) : lead.contact_form_url ? (
-                  "Kontaktformulär på bolagets webbplats"
+                  text({ sv: "Kontaktformulär på bolagets webbplats", en: "Contact form on the company website" })
                 ) : null}
               </p>
               {lead.ort || lead.website ? (
@@ -230,8 +263,10 @@ export function LeadsSnabbsok({ isTest = false }: { isTest?: boolean }) {
 
       {leads && utanKontakt > 0 ? (
         <p className="mt-3 text-[0.9375rem] text-ink-muted">
-          {utanKontakt} träff{utanKontakt === 1 ? "" : "ar"} utan kontaktväg listas inte här, men
-          finns i bolagsregistret för komplettering.
+          {text({
+            sv: `${utanKontakt} träff${utanKontakt === 1 ? "" : "ar"} utan kontaktväg listas inte här, men finns i bolagsregistret för komplettering.`,
+            en: `${utanKontakt} ${utanKontakt === 1 ? "hit without a contact route is" : "hits without a contact route are"} not listed here, but can be completed in the company register.`
+          })}
         </p>
       ) : null}
     </section>

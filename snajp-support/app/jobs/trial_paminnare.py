@@ -40,8 +40,8 @@ from ..leads.send_provider import get_send_provider
 logger = logging.getLogger("snajp-support.trial")
 
 _AMNE = {
-    7: "Din provperiod hos Snajp går ut om en vecka",
-    1: "Din provperiod hos Snajp går ut imorgon",
+    7: "Er provperiod hos Snajp går ut om en vecka",
+    1: "Er provperiod hos Snajp går ut imorgon",
 }
 
 
@@ -51,10 +51,10 @@ def _brodtext(namn: str, trial_slut: date, dagar_kvar: int) -> str:
         [
             "Hej,",
             "",
-            f"den fria provperioden för {namn} hos Snajp går ut {nar}, "
+            f"den kostnadsfria provperioden för {namn} hos Snajp går ut {nar}, "
             f"den {trial_slut.isoformat()}.",
             "",
-            "Vill ni fortsätta använda era agenter efter det hör ni av er till oss,",
+            "Vill ni fortsätta använda era agenter efter det, hör ni av er till oss,",
             "så går vi igenom paket och pris tillsammans. Ingenting stängs av utan",
             "att vi har pratat med er först.",
             "",

@@ -191,7 +191,13 @@ async def triage(profil: dict[str, Any], kandidat: dict[str, Any], *, utdrag: st
         "lage": lage(),
         **tolkat,
         "skulle_falla": skulle_falla,
-        "beslut": "fall" if skulle_falla and lage() == "pa" else "vidare",
+        # jev_bortval (app/leads/automation.py) False: kunden vill se allt Jev
+        # skulle ha fällt — bedömningen sparas, men kandidaten går vidare.
+        "beslut": (
+            "fall"
+            if skulle_falla and lage() == "pa" and profil.get("jev_bortval", True) is not False
+            else "vidare"
+        ),
     }
 
 
