@@ -238,15 +238,15 @@ function Tal({
 }: Readonly<{ etikett: string; varde: string; detalj: string; larm?: boolean }>) {
   return (
     <div className={cn("border-t pt-4", larm ? "border-ochre" : "border-ink/15")}>
-      <p className={etikettKlass}>{etikett}</p>
+      <dt className={etikettKlass}>{etikett}</dt>
       {/* Talet står i bläck, alltid. Ochre bär larmet som LINJE över rutan:
           2,17:1 för ochre text mot papper är under 3:1-golvet för stor text,
           och ingen grad räddar det. Linjen har inget kontrastkrav och syns
           dessutom i ögonvrån, vilket en textfärg inte gör. */}
-      <p className="num mt-3 text-[2.5rem] font-semibold leading-none tabular-nums tracking-[-0.03em] text-ink">
+      <dd className="num mt-3 text-[2.5rem] font-semibold leading-none tabular-nums tracking-[-0.03em] text-ink">
         {varde}
-      </p>
-      <p className="mt-2.5 text-[0.8125rem] leading-5 text-ink-muted">{detalj}</p>
+      </dd>
+      <dd className="mt-2.5 text-[0.8125rem] leading-5 text-ink-muted">{detalj}</dd>
     </div>
   );
 }

@@ -58,6 +58,21 @@ Kedjans § 5: en runda byggs, verifieras helt (pixlar lästa), sedan nästa.
 
 **Runda 3: genomgång.** Varje route i 1440/375/320, fynd rättas, tills ett helt pass är rent.
 
+## Status 2026-10-03 natt
+
+| Runda | Läge | Commit |
+|---|---|---|
+| 1 Systemet | klar: understrukna flikar, täta tabeller och fält, sidrubrik 1.75rem, en inversion, `.appyta .kicker` | `19d1b10` (+ `323540e` LF) |
+| 2 Tyngsta sidorna | klar: LeadsControls, Alla leads, Listor, kundtabellen, kundprofilens flikar, adminrailens rubrik, tomlägen | `19d1b10` |
+| 3 Genomgång + Snajp Suite fas 3 | klar: admin Översikt/Kunder/Logg, kundposten, chips för filter, 089 | `3657240` |
+
+Granskat som pixlar: demon i 1440/375/320; inloggat mot lokal stack (syntetisk seed) admin
+Översikt, Kunder, Paket, Logg-vyerna, kundposten, Leads, Att göra, Aktivitet. axe 0 brott på
+demons Översikt, Leads, Tabell, Att göra, Inställningar (skannern bevisad mot broken.html: 5).
+Kvar: Leads-postens sidopanel med flikar (Översikt · Utkast · Tidslinje · Uppgifter) och
+Twenty-vybarens ⋮-meny (Importera, Beställ lista) är inte byggda; listrader som leads väntar på
+Antons beslut (fråga 2 i Snajp Suite-planen).
+
 ## Verifiering per runda
 
 Demo (`/demo`, `/demo/leads` alla vyer, `/demo/att-gora`, `/demo/support`, `/demo/kvitton`,
