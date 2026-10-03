@@ -1560,6 +1560,10 @@ class MemoryStorage:
             r for r in self.leads_job_ledger.values()
             if r["tenant_id"] == tenant_id and r["scope"] in ("batch", "lista")
         ]
+        # Senast insatta först INNAN sorteringen: sort() är stabil, så två
+        # jobb med samma created_at (snabb maskin, samma millisekund) behåller
+        # annars äldst-först-ordningen och bryter "nyast först"-kontraktet.
+        rader.reverse()
         rader.sort(key=lambda r: r["created_at"], reverse=True)
         return [self._korningsrad(r) for r in rader[:limit]]
 

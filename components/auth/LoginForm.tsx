@@ -35,7 +35,7 @@ const T = {
   provaDemo: { sv: "Prova demo", en: "Try the demo" },
   namn: { sv: "Namn", en: "Name" },
   dittNamn: { sv: "Ditt namn", en: "Your name" },
-  epost: { sv: "Email", en: "Email" },
+  epost: { sv: "E-post", en: "Email" },
   epostExempel: { sv: "du@bolag.se", en: "you@company.com" },
   losenord: { sv: "Lösenord", en: "Password" },
   glomt: { sv: "Glömt lösenordet?", en: "Forgot your password?" },
@@ -48,7 +48,7 @@ const T = {
   skickaAterstall: { sv: "Skicka återställningslänk", en: "Send reset link" },
   tillbaka: { sv: "Tillbaka till inloggningen", en: "Back to sign-in" },
   demoInfo: {
-    sv: "Prova demo: fyll i din mejl så skickar vi en åtkomstlänk. Ingen auto-inloggning — du behåller kontrollen.",
+    sv: "Prova demo: fyll i din mejladress så skickar vi en åtkomstlänk. Ingen auto-inloggning — du behåller kontrollen.",
     en: "Try the demo: enter your email and we will send you an access link. No automatic sign-in, so you stay in control."
   }
 } satisfies Record<string, Localized>;

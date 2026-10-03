@@ -50,21 +50,21 @@ const SAMTAL: [Localized, Localized][] = [
   [
     { sv: "Snajp", en: "Snajp" },
     {
-      sv: "37 bolag hittade. Byggkompaniet Syd är starkast: ny lokal i Hyllie, fyra platsannonser och tydlig kontaktroll.",
+      sv: "Hittade 37 bolag. Byggkompaniet Syd är starkast: ny lokal i Hyllie, fyra platsannonser och tydlig kontaktroll.",
       en: "Found 37 companies. Byggkompaniet Syd is the strongest: new premises in Hyllie, four job ads and a clear contact role."
     }
   ],
   [
     { sv: "Du", en: "You" },
     {
-      sv: "Generera ett första mejl i mediumlängd.",
+      sv: "Generera ett första medellångt mejl.",
       en: "Write a first email of medium length."
     }
   ],
   [
     { sv: "Snajp", en: "Snajp" },
     {
-      sv: "Jag använder Hyllie-signalen, arbetsledarrekryteringen och CTA:n från business context. Tonen hålls lågmäld.",
+      sv: "Jag använder Hyllie-signalen, arbetsledarrekryteringen och CTA:n från affärskontexten. Tonen hålls lågmäld.",
       en: "I'm using the Hyllie signal, the site manager hiring and the CTA from the business context. The tone stays low-key."
     }
   ]
@@ -101,7 +101,7 @@ const T = {
   assistent: { sv: "Assistent", en: "Assistant" },
   exempel: { sv: "Exempel.", en: "Example." },
   ejKopplad: { sv: "Inte kopplad till din arbetsyta.", en: "Not connected to your workspace." },
-  arbetsflode: { sv: "Stateful workflow", en: "Stateful workflow" },
+  arbetsflode: { sv: "Arbetsflöde med minne", en: "Stateful workflow" },
   arbetsyta: { sv: "Arbetsyta", en: "Workspace" },
   testarbetsyta: { sv: "testarbetsyta", en: "test workspace" },
   paket: { sv: "Paket", en: "Package" },
@@ -110,10 +110,10 @@ const T = {
   och: { sv: " och ", en: " and " },
   bolagsuppgifter: { sv: "Bolagsuppgifter", en: "Company details" },
   andraIUppstart: { sv: "Ändra i uppstartsformuläret", en: "Edit in the onboarding form" },
-  snajpWorkspace: { sv: "Snajp workspace", en: "Snajp workspace" },
+  snajpWorkspace: { sv: "Snajps arbetsyta", en: "Snajp workspace" },
   loggaIn: { sv: "Logga in", en: "Sign in" },
   loggaInText: {
-    sv: "Logga in med lösenord eller magic link. Efter första inloggningen konfigurerar du business context innan dashboarden öppnas.",
+    sv: "Logga in med lösenord eller magic link. Efter första inloggningen fyller du i affärskontexten innan översikten öppnas.",
     en: "Sign in with a password or a magic link. After your first sign-in you set up the business context before the dashboard opens."
   },
   loadingTitel: {

@@ -171,7 +171,7 @@ export const PAKET: Paket[] = [
     ingar: [
       { sv: "Kvitton ur mejlen: Gmail, Outlook och Hotmail (endast läsbehörighet)", en: "Receipts from mail: Gmail, Outlook and Hotmail (read-only)" },
       { sv: "Belopp, moms, datum och kategori avlästa per kvitto", en: "Amount, VAT, date and category read per receipt" },
-      { sv: "Sammanställning per kategori med dublettkontroll", en: "Per-category totals with duplicate control" },
+      { sv: "Sammanställning per kategori med dubblettkontroll", en: "Per-category totals with duplicate control" },
       { sv: "SIE4-export till ert bokföringsprogram", en: "SIE4 export to your accounting software" },
       { sv: "Kvittoassistent i chatten", en: "Receipt assistant in chat" }
     ]

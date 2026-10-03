@@ -81,7 +81,7 @@ const T = {
     sv: "Periodens summor visas när skanningen är klar.",
     en: "The period's totals appear when the scan is done."
   },
-  fragaAssistenten: { sv: "Fråga kvitto-assistenten", en: "Ask the receipt assistant" }
+  fragaAssistenten: { sv: "Fråga kvittoassistenten", en: "Ask the receipt assistant" }
 } satisfies Record<string, Localized>;
 
 function kr(varde: string): string {

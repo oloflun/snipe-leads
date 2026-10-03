@@ -307,7 +307,7 @@ export const ADMIN: Record<string, Localized> = {
   prisPaForfragan: { sv: "Pris på förfrågan", en: "Price on request" },
   egetUrval: { sv: "Eget urval:", en: "Custom selection:" },
   ingenArbetsyta: { sv: "Ingen arbetsyta", en: "No workspace" },
-  trialTill: { sv: "Trial till", en: "Trial until" },
+  trialTill: { sv: "Provperiod till", en: "Trial until" },
   ingetAvtal: { sv: "Inget avtal", en: "No contract" },
   ingenKoppladArbetsyta: {
     sv: "Kunden har ingen kopplad arbetsyta, så det finns inget paket att byta här.",
