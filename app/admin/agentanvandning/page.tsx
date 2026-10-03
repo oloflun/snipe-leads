@@ -1,7 +1,8 @@
 import { AdminText } from "@/components/admin/AdminText";
 import { AgentAnvandning } from "@/components/admin/AgentAnvandning";
-import { Sektion, Sidhuvud } from "@/components/ui";
+import { Sektion } from "@/components/ui";
 import { listRuns, unwrap, type RunRow } from "@/lib/data/admin";
+import { AdminVyhuvud } from "@/components/admin/AdminVyhuvud";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -89,7 +90,7 @@ export default async function Page() {
   // prisunderlaget bor i AgentAnvandning.tsx (PRISUNDERLAG).
   return (
     <div>
-      <Sidhuvud title={<AdminText n="agentanvandningRubrik" />} />
+      <AdminVyhuvud grupp="logg" />
 
       <div className="mt-8">
         {sektioner.map((sektion) => (

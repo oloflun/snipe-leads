@@ -3,7 +3,8 @@ import Link from "next/link";
 
 import { AdminNav, AdminText } from "@/components/admin/AdminText";
 import { Kunddata } from "@/components/admin/Kunddata";
-import { Sidhuvud, btnSecondary, meta } from "@/components/ui";
+import { KundHuvud } from "@/components/admin/KundHuvud";
+import { Sidhuvud, meta, radLank } from "@/components/ui";
 import { hamtaKunddata } from "@/lib/actions/kunddata";
 import { listTenants, unwrap } from "@/lib/data/admin";
 
@@ -53,23 +54,16 @@ export default async function Page({
 
   return (
     <div>
-      <Sidhuvud
-        title={kunddata.tenant.name}
-        action={
-          <Link href={`/admin/kunder/${kunddata.tenant.id}`} className={btnSecondary}>
-            <AdminText n="agentprofil" />
-          </Link>
-        }
-      />
+      <KundHuvud id={kunddata.tenant.id} namn={kunddata.tenant.name} slug={kunddata.tenant.slug} />
 
       {/* Bläddringen: samma ordning som kundlistan. Namnen står utskrivna —
           en pil utan namn säger inte vart den leder. Egen rad och inte i
           sidhuvudets åtgärder: två kundnamn bredvid rubriken bröt inte rad på
           smala skärmar. */}
       {position >= 0 && alla.length > 1 ? (
-        <AdminNav aria="bladdraKunder" className="mt-8 flex flex-wrap items-center gap-2">
+        <AdminNav aria="bladdraKunder" className="mt-5 flex flex-wrap items-center gap-2">
           {forra ? (
-            <Link href={`/admin/kunder/${forra.id}/data`} className={`${btnSecondary} max-w-[16rem]`}>
+            <Link href={`/admin/kunder/${forra.id}/data`} className={`${radLank} max-w-[16rem]`}>
               {/* Ord i stället för pilglyfer (gate 97): riktningen står i texten. */}
               <span className="min-w-0 truncate">
                 <AdminText n="forra" /> {forra.name}
@@ -80,7 +74,7 @@ export default async function Page({
             {position + 1} <AdminText n="av" /> {alla.length}
           </span>
           {nasta ? (
-            <Link href={`/admin/kunder/${nasta.id}/data`} className={`${btnSecondary} max-w-[16rem]`}>
+            <Link href={`/admin/kunder/${nasta.id}/data`} className={`${radLank} max-w-[16rem]`}>
               <span className="min-w-0 truncate">
                 <AdminText n="nasta" /> {nasta.name}
               </span>

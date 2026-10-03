@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { ImportCsv } from "@/components/leads/ImportCsv";
-import { btnPrimary, btnSecondary, EmptyState, SkeletonRows, flik, flikAktiv, flikInaktiv, fliklista } from "@/components/ui";
+import { btnPrimary, btnSecondary, EmptyState, SkeletonRows, chip, chipAktiv, chipInaktiv, chiplista } from "@/components/ui";
 import { lasOffertForUtkast } from "@/lib/actions/affarskontext";
 import type { EmailStudioData } from "@/lib/data/emails";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
@@ -1349,14 +1349,14 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
         {/* Tryckknappar, inte role=tab: ett filter över samma tabell har ingen
             tabpanel, och tab-rollen lovar pilnavigering som inte finns (4.1.2). */}
-        <div className={fliklista} role="group" aria-label={text({ sv: "Kontaktväg", en: "Contact channel" })}>
+        <div className={chiplista} role="group" aria-label={text({ sv: "Kontaktväg", en: "Contact channel" })}>
           {KONTAKTFILTER.map((f) => (
             <button
               key={f.id}
               type="button"
               aria-pressed={kontaktfilter === f.id}
               onClick={() => setKontaktfilter(f.id)}
-              className={cn(flik, kontaktfilter === f.id ? flikAktiv : flikInaktiv)}
+              className={cn(chip, kontaktfilter === f.id ? chipAktiv : chipInaktiv)}
             >
               {text(f.etikett)} <span className="num tabular-nums">{antalPer(f.id)}</span>
             </button>

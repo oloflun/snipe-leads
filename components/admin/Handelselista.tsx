@@ -6,13 +6,12 @@ import {
   Badge,
   Rad,
   Radlista,
-  Sidhuvud,
   Tomt,
   etikett,
-  flik,
-  flikAktiv,
-  flikInaktiv,
-  fliklista,
+  chip,
+  chipAktiv,
+  chipInaktiv,
+  chiplista,
   meta,
   rubrikPanel,
 } from "@/components/ui";
@@ -208,7 +207,7 @@ export function Handelsefilter({ niva }: Readonly<{ niva: string }>) {
   ];
 
   return (
-    <div className={cn("mt-6 min-w-0", fliklista)}>
+    <div className={cn("mt-5 min-w-0", chiplista)}>
       {val.map(({ varde, etikett: namn }) => {
         const pa = niva === varde;
         return (
@@ -218,7 +217,7 @@ export function Handelsefilter({ niva }: Readonly<{ niva: string }>) {
               varde ? `/admin/handelser?level=${varde}` : "/admin/handelser"
             }
             aria-current={pa ? "page" : undefined}
-            className={cn(flik, pa ? flikAktiv : flikInaktiv)}
+            className={cn(chip, pa ? chipAktiv : chipInaktiv)}
           >
             {namn}
           </Link>
@@ -228,11 +227,3 @@ export function Handelsefilter({ niva }: Readonly<{ niva: string }>) {
   );
 }
 
-/**
- * Sidrubriken. Klientsida av samma skäl som resten. Ingressen under den är
- * borta (F-016); `handelserIngress` i lib/admin/sprak.ts läses inte längre.
- */
-export function Handelserubrik() {
-  const { locale } = useLocale();
-  return <Sidhuvud title={a("handelser", locale)} />;
-}

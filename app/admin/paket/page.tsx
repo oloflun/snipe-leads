@@ -1,9 +1,10 @@
 import { AdminNyckeltal, AdminText } from "@/components/admin/AdminText";
 import { PaketHantering } from "@/components/admin/PaketHantering";
-import { Sidhuvud, Tomt } from "@/components/ui";
+import { Tomt } from "@/components/ui";
 import { listTenants, unwrap } from "@/lib/data/admin";
 import { paketForProdukter } from "@/lib/paket";
 import { formateraPris } from "@/lib/pricing";
+import { AdminVyhuvud } from "@/components/admin/AdminVyhuvud";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -41,7 +42,7 @@ export default async function Page() {
 
   return (
     <div>
-      <Sidhuvud title={<AdminText n="paketRubrik" />} />
+      <AdminVyhuvud grupp="kunder" />
 
       {error ? (
         <p role="alert" className="mt-6 max-w-[70ch] break-words text-[0.9375rem] text-danger">

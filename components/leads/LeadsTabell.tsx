@@ -3,7 +3,7 @@
 import { X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EjAktiverad } from "@/components/EjAktiverad";
-import { Badge, Cell, SkeletonRows, Tabell, Tomt, btnPrimary, btnSecondary, etikett, btnLiten, faltDiskret, faltTatt, flik, flikAktiv, flikInaktiv, fliklista, meta, tabellRad } from "@/components/ui";
+import { Badge, Cell, SkeletonRows, Tabell, Tomt, btnPrimary, btnSecondary, etikett, btnLiten, faltDiskret, faltTatt, chip, chipAktiv, chipInaktiv, chiplista, meta, tabellRad } from "@/components/ui";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { felmeddelande } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
@@ -280,13 +280,13 @@ export function LeadsTabell({
       {vyer.length || !demo ? (
         <div>
           <p className={etikett}>{text(T.vyer)}</p>
-          <ul className={cn("mt-2", fliklista)}>
+          <ul className={cn("mt-2", chiplista)}>
             <li>
               <button
                 type="button"
                 aria-pressed={aktivtFilter === "{}"}
                 onClick={() => setFilter({})}
-                className={cn(flik, aktivtFilter === "{}" ? flikAktiv : flikInaktiv)}
+                className={cn(chip, aktivtFilter === "{}" ? chipAktiv : chipInaktiv)}
               >
                 {text(T.alla)}
               </button>
@@ -299,7 +299,7 @@ export function LeadsTabell({
                     type="button"
                     aria-pressed={aktiv}
                     onClick={() => setFilter(rensat(vy.filter ?? {}))}
-                    className={cn(flik, aktiv ? flikAktiv : flikInaktiv)}
+                    className={cn(chip, aktiv ? chipAktiv : chipInaktiv)}
                   >
                     {vy.namn}
                   </button>
@@ -308,7 +308,7 @@ export function LeadsTabell({
                       type="button"
                       onClick={() => void raderaVy(vy.id)}
                       aria-label={text({ sv: `Radera vyn ${vy.namn}`, en: `Delete the view ${vy.namn}` })}
-                      className="focus-ring inline-flex h-11 w-11 items-center justify-center rounded-input text-ink-muted hover:text-ink"
+                      className="focus-ring inline-flex h-8 w-8 items-center justify-center rounded-full text-ink-muted hover:bg-paper2 hover:text-ink"
                     >
                       <X className="h-4 w-4" aria-hidden />
                     </button>

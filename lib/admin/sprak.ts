@@ -148,6 +148,8 @@ export const ADMIN: Record<string, Localized> = {
   /* -------------------------------------------------- Körningar */
   typIrisResearch: { sv: "Iris, research", en: "Iris, research" },
   typIrisUtskick: { sv: "Iris, utskick", en: "Iris, outreach" },
+  typIrisSvar: { sv: "Iris, svar", en: "Iris, replies" },
+  typIrisUppfoljning: { sv: "Iris, uppföljning", en: "Iris, follow-up" },
   typDemo: { sv: "Demo", en: "Demo" },
   ingaKorningarMatchar: { sv: "Inga körningar matchar.", en: "No runs match." },
   kolTid: { sv: "Tid", en: "Time" },

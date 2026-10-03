@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 
 import { FelOchEskaleringar } from "@/components/admin/FelOchEskaleringar";
-import { Kundrubrik } from "@/components/admin/Kundrubrik";
 import { Kundstatistik } from "@/components/admin/Kundstatistik";
 import { Kundtabell } from "@/components/admin/Kundtabell";
 import { berikaAlla } from "@/lib/admin/exempeldata";
 import { beraknaKundstatistik } from "@/lib/admin/statistik";
 import { listEvents, listTenants, unwrap } from "@/lib/data/admin";
+import { AdminVyhuvud } from "@/components/admin/AdminVyhuvud";
 
 export const dynamic = "force-dynamic";
 
@@ -53,7 +53,7 @@ export default async function Page() {
   if (error) {
     return (
       <div>
-        <Kundrubrik />
+        <AdminVyhuvud grupp="kunder" />
         <p role="alert" className="mt-8 max-w-[70ch] break-words text-[0.9375rem] text-danger">
           {error}
         </p>
@@ -72,7 +72,7 @@ export default async function Page() {
 
   return (
     <div>
-      <Kundrubrik />
+      <AdminVyhuvud grupp="kunder" />
 
       <Kundtabell kunder={kunder} />
 

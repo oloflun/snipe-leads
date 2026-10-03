@@ -128,6 +128,17 @@ export const flikInaktiv = "border-transparent text-ink-muted hover:border-ink/2
  * med mus följer fältet tabellens 14 px. WCAG 2.2 AA kräver 24 px; huset håller 44 px för navigering och
  * primära knappar, 36 px för täta kontroller i data (DESIGN.md § App surfaces).
  */
+/**
+ * Filter under en vy: chips, inte en andra flikrad. Vyer är flikar (ovan), filter
+ * är chips (Twenty; samma stil som kundtjänstens fackfilter). Två understrukna
+ * rader på varandra läste som två nivåer navigering.
+ */
+export const chiplista = "flex flex-wrap items-center gap-1.5";
+export const chip =
+  "focus-ring inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 text-[0.8125rem] font-medium transition-colors";
+export const chipAktiv = "bg-ink text-paper";
+export const chipInaktiv = "text-ink-muted hover:bg-paper2 hover:text-ink";
+
 /** Val inne i en datarad: läses som värdet, ramen kommer vid hovring och fokus. */
 export const faltDiskret =
   "focus-ring h-8 rounded-input border border-transparent bg-transparent px-1 text-[1rem] text-ink transition-colors hover:border-ink/15 focus:border-ink/15 [@media(pointer:fine)]:text-[0.875rem]";

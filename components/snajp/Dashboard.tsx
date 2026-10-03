@@ -832,7 +832,7 @@ export function Dashboard({
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
         {/* Maillista */}
         <div className={cn("min-w-0", selected ? "xl:col-span-6" : "xl:col-span-12")}>
-          {emails.length === 0 && arKo ? (
+          {emails.length === 0 && arKo && error ? null : emails.length === 0 && arKo ? (
             <p className="text-[0.875rem] leading-6 text-ink-subtle">
               {lager === "vantar"
                 ? text({ sv: "Inga svar väntar på godkännande.", en: "No replies are waiting for approval." })

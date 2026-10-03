@@ -5,7 +5,8 @@ import { Avstangning } from "@/components/admin/Avstangning";
 import { KonverteraTestkund } from "@/components/admin/KonverteraTestkund";
 import { Kundprofil } from "@/components/admin/Kundprofil";
 import { Tillaggsvaljare } from "@/components/admin/Tillaggsvaljare";
-import { flik, flikAktiv, flikInaktiv, fliklista, rubrikSida } from "@/components/ui";
+import { KundHuvud } from "@/components/admin/KundHuvud";
+import { chip, chipAktiv, chipInaktiv, chiplista } from "@/components/ui";
 import { hamtaKundprofil } from "@/lib/actions/agentinstruktioner";
 import { hamtaTillagg } from "@/lib/actions/tillagg";
 import { listTenants, unwrap } from "@/lib/data/admin";
@@ -81,34 +82,29 @@ export default async function Page({
 
   return (
     <div>
-      <Link
-        href="/admin/kunder"
-        className="text-[0.8125rem] text-mineral underline underline-offset-4 hover:text-ochre"
-      >
-        <AdminText n="kunderLank" />
-      </Link>
-      <h1 className={`mt-2 ${rubrikSida}`}>{profil.tenant.name}</h1>
-      <p className="mt-3 max-w-[70ch] text-[0.9375rem] leading-7 text-mineral">
-        <AdminText n="kundprofilIngress" />
-      </p>
+      <KundHuvud id={profil.tenant.id} namn={profil.tenant.name} slug={profil.tenant.slug} />
 
       {/* Två agenter, två profiler. Samma kund kan behöva olika instruktioner för
-          kundtjänst och för utskick, och agent_configs är nycklad på båda. */}
-      <div className={`mt-6 ${fliklista}`}>
+          kundtjänst och för utskick, och agent_configs är nycklad på båda.
+          Chips och inte en andra flikrad: valet filtrerar vyn ovanför. */}
+      <div className={`mt-5 ${chiplista}`}>
         {(["support", "leads"] as const).map((typ) => (
           <Link
             key={typ}
             href={`/admin/kunder/${profil.tenant.id}?agent=${typ}`}
             aria-current={agentType === typ ? "page" : undefined}
-            // Husets flikar (ui.tsx): understrukna, 44 px träffyta.
-            className={`${flik} ${agentType === typ ? flikAktiv : flikInaktiv}`}
+            className={`${chip} ${agentType === typ ? chipAktiv : chipInaktiv}`}
           >
             <AdminText n={typ === "support" ? "railKundtjanst" : "leads"} />
           </Link>
         ))}
       </div>
 
-      <div className="mt-10">
+      <p className="mt-3 max-w-[70ch] text-[0.875rem] leading-6 text-ink-muted">
+        <AdminText n="kundprofilIngress" />
+      </p>
+
+      <div className="mt-8">
         <Kundprofil profil={profil} />
       </div>
 

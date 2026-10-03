@@ -1,18 +1,10 @@
 "use client";
 
-import {
-  Activity,
-  Bell,
-  FlaskConical,
-  Gauge,
-  LayoutDashboard,
-  LogOut,
-  Package,
-  Users
-} from "lucide-react";
+import { Activity, LayoutDashboard, LogOut, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { aterstallLage, RUTT_IKONER } from "@/components/AppShell";
+import { ADMIN_GRUPPER } from "@/components/admin/AdminVyhuvud";
 import { BytKund } from "@/components/admin/BytKund";
 import { VyVaxel } from "@/components/VyVaxel";
 import { Rail } from "@/components/shell/Rail";
@@ -68,22 +60,31 @@ import { cn } from "@/lib/utils";
  * rätt), men `agentanvandning` är dess efterträdare och den enda som hör
  * hemma i navigationen.
  */
-const PLATTFORM: Array<{ href: string; label: { sv: string; en: string }; Icon: LucideIcon }> = [
+/**
+ * Snajp Suite fas 3 (2026-10-03): tre poster i stället för sju. Paket är en vy
+ * av Kunder; Körningar, Händelser, Testkörningar och Agentanvändning är vyer av
+ * Logg (components/admin/AdminVyhuvud.tsx). `ocksa` är vyernas adresser, så att
+ * posten lyser på var och en av dem.
+ */
+const PLATTFORM: Array<{
+  href: string;
+  label: { sv: string; en: string };
+  Icon: LucideIcon;
+  ocksa?: string[];
+}> = [
   { href: "/admin", label: { sv: "Översikt", en: "Overview" }, Icon: LayoutDashboard },
-  { href: "/admin/kunder", label: { sv: "Kunder", en: "Customers" }, Icon: Users },
-  { href: "/admin/paket", label: { sv: "Paket", en: "Plans" }, Icon: Package },
-  { href: "/admin/korningar", label: { sv: "Körningar", en: "Runs" }, Icon: Activity },
   {
-    href: "/admin/testkorningar",
-    label: { sv: "Testkörningar", en: "Test runs" },
-    Icon: FlaskConical
+    href: "/admin/kunder",
+    label: { sv: "Kunder", en: "Customers" },
+    Icon: Users,
+    ocksa: ADMIN_GRUPPER.kunder.vyer.map((v) => v.href)
   },
   {
-    href: "/admin/agentanvandning",
-    label: { sv: "Agentanvändning", en: "Agent usage" },
-    Icon: Gauge
-  },
-  { href: "/admin/handelser", label: { sv: "Händelser", en: "Events" }, Icon: Bell }
+    href: "/admin/korningar",
+    label: { sv: "Logg", en: "Log" },
+    Icon: Activity,
+    ocksa: ADMIN_GRUPPER.logg.vyer.map((v) => v.href)
+  }
 ];
 
 function matchar(pathname: string, href: string): boolean {
@@ -153,7 +154,7 @@ export function AdminShell({
     }));
 
   const aktiv = aktivHref(pathname, [
-    ...PLATTFORM.map((f) => f.href),
+    ...PLATTFORM.flatMap((f) => [f.href, ...(f.ocksa ?? [])]),
     ...arbetsyta.map((f) => f.href)
   ]);
 
@@ -163,7 +164,7 @@ export function AdminShell({
       href: flik.href,
       label: text(flik.label),
       Icon: flik.Icon,
-      active: aktiv === flik.href
+      active: aktiv === flik.href || (aktiv !== null && (flik.ocksa ?? []).includes(aktiv))
     }))
   };
 

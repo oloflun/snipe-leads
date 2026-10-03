@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { AdminTabell, AdminText } from "@/components/admin/AdminText";
-import { Cell, Sidhuvud, Tomt, flik, flikAktiv, flikInaktiv, fliklista, tabellRad } from "@/components/ui";
+import { Cell, Tomt, chip, chipAktiv, chipInaktiv, chiplista, tabellRad } from "@/components/ui";
 import { listRuns, unwrap } from "@/lib/data/admin";
 import { cn } from "@/lib/utils";
+import { AdminVyhuvud } from "@/components/admin/AdminVyhuvud";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,9 @@ const TYPES: [string, string][] = [
   ["support", "railKundtjanst"],
   ["leads_research", "typIrisResearch"],
   ["leads_outreach", "typIrisUtskick"],
+  // Samma typer som Kostnad per agent räknar (agentanvandning/page.tsx).
+  ["leads_svar", "typIrisSvar"],
+  ["leads_followup", "typIrisUppfoljning"],
   ["bookkeeping", "railKvitton"],
   ["demo", "typDemo"]
 ];
@@ -42,7 +46,7 @@ export default async function Page({
   if (error) {
     return (
       <div>
-        <Sidhuvud title={<AdminText n="korningarRubrik" />} />
+        <AdminVyhuvud grupp="logg" />
         <p role="alert" className="mt-8 max-w-[70ch] break-words text-[15px] text-danger">
           {error}
         </p>
@@ -55,15 +59,15 @@ export default async function Page({
 
   return (
     <div>
-      <Sidhuvud title={<AdminText n="korningarRubrik" />} />
+      <AdminVyhuvud grupp="logg" />
 
-      <div className={cn("mt-6 min-w-0", fliklista)}>
+      <div className={cn("mt-5 min-w-0", chiplista)}>
         {TYPES.map(([type, namn]) => (
           <Link
             key={type || "alla"}
             href={type ? `/admin/korningar?agent_type=${type}` : "/admin/korningar"}
             aria-current={active === type ? "page" : undefined}
-            className={cn(flik, active === type ? flikAktiv : flikInaktiv)}
+            className={cn(chip, active === type ? chipAktiv : chipInaktiv)}
           >
             <AdminText n={namn} />
           </Link>

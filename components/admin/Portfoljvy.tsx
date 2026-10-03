@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Radgivare } from "@/components/admin/Radgivare";
 import { Radmarke } from "@/components/admin/Radmarke";
-import { Badge, Cell, Nyckeltal, Sektion, Sidhuvud, Tabell, Tomt, meta, tabellRad } from "@/components/ui";
+import { Badge, Cell, Nyckeltal, Sektion, Sidhuvud, Tabell, Tomt, meta, radLank, tabellRad } from "@/components/ui";
 import type { BerikadTenant } from "@/lib/admin/exempeldata";
 import { a, antal } from "@/lib/admin/sprak";
 import { arTestyta } from "@/lib/admin/statistik";
@@ -143,7 +143,6 @@ export function Portfoljvy({
 
   const p = sammanfattaPortfolj(rader.map((r) => r.ekonomi));
   const kraver = rader.filter(({ ekonomi }) => kraverAtgard(ekonomi.halsa));
-  const ovriga = rader.filter(({ ekonomi }) => !kraverAtgard(ekonomi.halsa));
   const exempelrader = rader.filter(({ rad }) => rad.ar_exempel).length;
 
   // Samma tabell i två sektioner. En funktion i komponenten och inte en egen
@@ -250,69 +249,80 @@ export function Portfoljvy({
           rubricerades "Kunder" läste som samma vy renderad två gånger. */}
       <Sidhuvud title={a("oversiktRubrik", locale)} />
 
-      <div className="mt-8">
+      {/* Nyckeltalen först (Antons beställning 2026-10-03: "viktiga mätvärden
+          gömda längre ned"). Tidigare stod de efter hela kundtabellen. */}
+      <div className="mt-6">
         {rader.length === 0 ? (
           <Tomt>{a("ingaRegistrerade", locale)}</Tomt>
         ) : (
           <>
-            <Sektion title={a("kraverAtgard", locale)}>
+            <Nyckeltal
+              poster={[
+                {
+                  etikett: a("manadsintakt", locale),
+                  varde: formateraPris(p.mrr),
+                  notis: text({
+                    sv: `${p.antalBetalande} av ${p.antalKunder} kunder betalar`,
+                    en: `${p.antalBetalande} of ${p.antalKunder} customers pay`
+                  })
+                },
+                {
+                  // Modellen och "listpris" i notisen: "en uppskattning" utan
+                  // att säga av vad är ett förbehåll man inte kan kontrollera.
+                  etikett: text({ sv: "Uppskattad tokenkostnad", en: "Estimated token cost" }),
+                  varde: formateraPris(Math.round(p.kostnad)),
+                  notis: text({
+                    sv: `Listpris, ${TOKENKOSTNAD_MODELL}`,
+                    en: `List price, ${TOKENKOSTNAD_MODELL}`
+                  })
+                },
+                {
+                  etikett: text({ sv: "Marginal efter tokenkostnad", en: "Margin after token cost" }),
+                  varde: p.marginal === null ? "–" : `${Math.round(p.marginal * 100)} %`,
+                  notis: p.marginal === null ? a("ingenIntakt", locale) : undefined
+                },
+                {
+                  etikett: a("kraverAtgard", locale),
+                  varde: String(kraver.length),
+                  notis: text({
+                    sv: `av ${p.antalKunder} kunder`,
+                    en: `of ${p.antalKunder} customers`
+                  })
+                }
+              ]}
+            />
+            {/* Exempelraderna räknas med i talen ovan, och det ska synas
+                innan någon läser månadsintäkten som ett utfall. */}
+            {exempelrader > 0 ? (
+              <p className="mt-3 max-w-[70ch] text-[0.8125rem] text-ink-subtle">
+                {exempelrader === 1
+                  ? text({
+                      sv: "Nyckeltalen räknar med exempeldata från en kund.",
+                      en: "The key figures include example data from one customer."
+                    })
+                  : text({
+                      sv: `Nyckeltalen räknar med exempeldata från ${exempelrader} kunder.`,
+                      en: `The key figures include example data from ${exempelrader} customers.`
+                    })}
+              </p>
+            ) : null}
+
+            {/* Bara kunder med en anledning. Hela kundtabellen bor i Kunder;
+                "Övriga kunder" här var samma tabell en gång till. */}
+            <Sektion
+              title={a("kraverAtgard", locale)}
+              action={
+                <Link href="/admin/kunder" className={radLank}>
+                  {text({ sv: "Alla kunder", en: "All customers" })}
+                </Link>
+              }
+            >
               {kraver.length > 0 ? (
                 kundtabell(kraver)
               ) : (
                 <Tomt>{text({ sv: "Ingen kund kräver åtgärd.", en: "No customer needs attention." })}</Tomt>
               )}
             </Sektion>
-
-            <Sektion title={text({ sv: "Ekonomi", en: "Finances" })}>
-              <Nyckeltal
-                poster={[
-                  {
-                    etikett: a("manadsintakt", locale),
-                    varde: formateraPris(p.mrr),
-                    notis: text({
-                      sv: `${p.antalBetalande} av ${p.antalKunder} kunder betalar`,
-                      en: `${p.antalBetalande} of ${p.antalKunder} customers pay`
-                    })
-                  },
-                  {
-                    // Modellen och "listpris" i notisen: "en uppskattning" utan
-                    // att säga av vad är ett förbehåll man inte kan kontrollera.
-                    etikett: text({ sv: "Uppskattad tokenkostnad", en: "Estimated token cost" }),
-                    varde: formateraPris(Math.round(p.kostnad)),
-                    notis: text({
-                      sv: `Listpris, ${TOKENKOSTNAD_MODELL}`,
-                      en: `List price, ${TOKENKOSTNAD_MODELL}`
-                    })
-                  },
-                  {
-                    etikett: text({ sv: "Marginal efter tokenkostnad", en: "Margin after token cost" }),
-                    varde: p.marginal === null ? "–" : `${Math.round(p.marginal * 100)} %`,
-                    notis: p.marginal === null ? a("ingenIntakt", locale) : undefined
-                  }
-                ]}
-              />
-              {/* Exempelraderna räknas med i talen ovan, och det ska synas
-                  innan någon läser månadsintäkten som ett utfall. */}
-              {exempelrader > 0 ? (
-                <p className="mt-4 max-w-[70ch] text-[0.9375rem] text-ink-muted">
-                  {exempelrader === 1
-                    ? text({
-                        sv: "Nyckeltalen räknar med exempeldata från en kund.",
-                        en: "The key figures include example data from one customer."
-                      })
-                    : text({
-                        sv: `Nyckeltalen räknar med exempeldata från ${exempelrader} kunder.`,
-                        en: `The key figures include example data from ${exempelrader} customers.`
-                      })}
-                </p>
-              ) : null}
-            </Sektion>
-
-            {ovriga.length > 0 ? (
-              <Sektion title={text({ sv: "Övriga kunder", en: "Other customers" })}>
-                {kundtabell(ovriga)}
-              </Sektion>
-            ) : null}
           </>
         )}
 
