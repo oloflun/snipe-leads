@@ -514,7 +514,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
                     className="focus-ring ml-auto inline-flex min-h-8 items-center rounded-input bg-ink px-3 py-1 text-[13px] font-semibold text-paper transition-colors hover:bg-ink2"
                   >
                     {text({
-                      sv: "Testa hela tjänsten med era egna data — kostnadsfritt",
+                      sv: "Testa hela tjänsten med era egna data, kostnadsfritt",
                       en: "Try the full service with your own data, free of charge"
                     })}
                   </Link>
