@@ -854,6 +854,9 @@ function LeadDetail({
   >({ fas: "laddar" });
   const [utkastLage, setUtkastLage] = useState<UtkastLage>({ fas: "kontrollerar" });
   const [forsok, setForsok] = useState(0);
+  // Postens vyer (Snajp Suite, Twentys postsida): nyckeltalen ovanför står
+  // kvar, resten väljs i flikraden i stället för att staplas i en kolumn.
+  const [postFlik, setPostFlik] = useState<"bedomning" | "utkast" | "tidslinje">("bedomning");
 
   useEffect(() => {
     let avbruten = false;
@@ -1099,7 +1102,30 @@ function LeadDetail({
         </div>
       </dl>
 
-      <div className="mt-6 border-t border-ink/12 pt-5">
+      {/* Tryckknappar, inte role=tab: ingen pilnavigering, och knappen säger
+          sitt läge med aria-pressed (4.1.2). */}
+      <div className={cn("mt-5", fliklista)} role="group" aria-label={p.company_name}>
+        {(
+          [
+            ["bedomning", T.bedomning],
+            ["utkast", T.mejlutkast],
+            ["tidslinje", { sv: "Tidslinje", en: "Timeline" }]
+          ] as const
+        ).map(([id, etikett]) => (
+          <button
+            key={id}
+            type="button"
+            aria-pressed={postFlik === id}
+            onClick={() => setPostFlik(id)}
+            className={cn(flik, postFlik === id ? flikAktiv : flikInaktiv)}
+          >
+            {text(etikett)}
+          </button>
+        ))}
+      </div>
+
+      {postFlik === "bedomning" ? (
+      <div className="mt-5">
         {p.motivering ? (
           <>
             <h3 className="kicker text-mineral">{text(T.motivering)}</h3>
@@ -1188,9 +1214,10 @@ function LeadDetail({
           <p className="mt-2 text-[14px] text-ink-subtle">{text(T.ingaKallor)}</p>
         )}
       </div>
+      ) : null}
 
-      <div className="mt-6 border-t border-ink/12 pt-5">
-        <h3 className="kicker text-mineral">{text(T.mejlutkast)}</h3>
+      {postFlik === "utkast" ? (
+      <div className="mt-5">
 
         {utkastLage.fas === "kontrollerar" ? (
           <div className="mt-3 h-16 animate-pulse rounded-input bg-ink/[0.03]" />
@@ -1243,10 +1270,13 @@ function LeadDetail({
           </div>
         ) : null}
       </div>
+      ) : null}
 
-      <div className="mt-6 border-t border-ink/12 pt-5">
-        <Tidslinje prospectId={id} demo={demo || Boolean(exempel)} />
-      </div>
+      {postFlik === "tidslinje" ? (
+        <div className="mt-5">
+          <Tidslinje prospectId={id} demo={demo || Boolean(exempel)} />
+        </div>
+      ) : null}
     </div>
   );
 }
