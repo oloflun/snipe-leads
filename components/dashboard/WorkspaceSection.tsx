@@ -40,7 +40,6 @@ import type { ProductKey } from "@/lib/routes";
 
 const sectionProduct: Record<string, ProductKey> = {
   leads: "leads",
-  "att-gora": "leads",
   // Iris gamla undersidor (före Snajp Suite 2026-10-03). Grindas som Leads och
   // omdirigeras sedan i switchen nedan, så att en spärrad arbetsyta får samma
   // svar på den gamla adressen som på den nya. "emails" redirectas ovan.
@@ -103,6 +102,16 @@ export async function WorkspaceSection({
     );
   }
 
+  // Att göra är delad på samma sätt: kön visar bara agenter arbetsytan har.
+  if (section === "att-gora") {
+    if (id) notFound();
+    return (
+      <PageShell title={{ sv: "Att göra", en: "To do" }}>
+        <AttGora />
+      </PageShell>
+    );
+  }
+
   if (section === "emails") {
     redirect(`${base}/leads`);
   }
@@ -123,7 +132,7 @@ export async function WorkspaceSection({
     // ska landa i agentens erbjudande — inte i en 404. Grinden är densamma:
     // ingen data för agenten renderas, bara pitchen. Preview-ytorna
     // (companies, contacts …) behåller 404:an — de står inte i någon meny.
-    if (section === "leads" || section === "att-gora" || section === "iris" || section === "support" || section === "kvitton") {
+    if (section === "leads" || section === "iris" || section === "support" || section === "kvitton") {
       const { AgentLast } = await import("@/components/dashboard/AgentLast");
       return <AgentLast product={product} />;
     }
@@ -150,13 +159,6 @@ export async function WorkspaceSection({
       }
       return <IrisBolag />;
     }
-    case "att-gora":
-      if (id) notFound();
-      return (
-        <PageShell title={{ sv: "Att göra", en: "To do" }}>
-          <AttGora />
-        </PageShell>
-      );
     case "iris": {
       // Iris sex undersidor före Snajp Suite. Bokmärken och mejllänkar ska
       // landa på sin nya plats, inte i en 404.

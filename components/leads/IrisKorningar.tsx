@@ -99,7 +99,7 @@ const T = {
   av: { sv: "av", en: "of" }
 } satisfies Record<string, Localized>;
 
-const STATUS_ETIKETT: Record<KorningsRad["status"], Localized> = {
+export const KORNINGSSTATUS: Record<KorningsRad["status"], Localized> = {
   queued: { sv: "Köad", en: "Queued" },
   processing: { sv: "Pågår", en: "Running" },
   completed: { sv: "Klar", en: "Done" },
@@ -123,7 +123,7 @@ function nar(iso: string | null, locale: Locale): string {
   return new Date(iso).toLocaleString(locale === "en" ? "en-GB" : "sv-SE", { dateStyle: "short", timeStyle: "short" });
 }
 
-function typ(rad: KorningsRad): Localized {
+export function korningsTyp(rad: KorningsRad): Localized {
   if (rad.scope === "lista") return { sv: "Leadslista", en: "Lead list" };
   if (!rad.korning) return { sv: "Egna bolag", en: "Own companies" };
   return rad.korning.scope === "research_and_draft"
@@ -259,7 +259,7 @@ export function IrisKorningar() {
               oppen={arOppen}
               onToggle={() => setOppen(arOppen ? null : rad.job_id)}
             >
-              <Cell>{text(typ(rad))}</Cell>
+              <Cell>{text(korningsTyp(rad))}</Cell>
               <Cell hoger>{k ? k.mal : "–"}</Cell>
               <Cell hoger>
                 {k ? (
@@ -285,7 +285,7 @@ export function IrisKorningar() {
                       rad.status === "failed" ? "bg-danger" : pagar(rad) ? "bg-ochre" : "bg-moss"
                     )}
                   />
-                  {pagar(rad) ? text(T.pagar) : text(STATUS_ETIKETT[rad.status])}
+                  {pagar(rad) ? text(T.pagar) : text(KORNINGSSTATUS[rad.status])}
                 </span>
               </Cell>
               <Cell className="text-ink-muted">

@@ -163,12 +163,16 @@ def test_oversikten_anropar_de_vagar_talen_bygger_pa():
     # mäta något.
     vagar = _vagar_i(OVERSIKT)
 
+    # Snajp Suite (2026-10-03): körningarna läses ur jobbliggaren
+    # (/leads/korningar) i stället för agent_runs (/leads/runs), och
+    # autonomiläget (/leads/config) visas inte längre på översikten.
     for vag in (
         "/leads/prospects",
-        "/leads/runs",
+        "/leads/korningar",
         "/leads/queue",
-        "/leads/config",
+        "/leads/onboarding/status",
         "/inbox",
+        "/rules",
         "/kb",
     ):
         assert vag in vagar, f"Översikten hämtar inte längre {vag} — vilket tal försvann?"

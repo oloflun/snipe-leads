@@ -169,12 +169,7 @@ const T = {
   regler: { sv: "Regler", en: "Rules" },
   alla: { sv: "Alla", en: "All" },
   baraOhanterade: { sv: "Bara ohanterade", en: "Unhandled only" },
-  ingetAttHantera: { sv: "Inget att hantera", en: "Nothing to handle" },
   inkorgenTom: { sv: "Inkorgen är tom", en: "The inbox is empty" },
-  attHanteraTomt: {
-    sv: "Här hamnar eskaleringar och larm när ett ärende lämnas över till er. De får aldrig ett AI-utkast.",
-    en: "Escalations and alerts land here when a case is handed over to you. They never get an AI draft."
-  },
   klickaPa: { sv: "Klicka på", en: "Click" },
   testmailTomt: {
     sv: "för att skicka testärenden mot den här profilens kunskapsbas och se hur agenten svarar.",
@@ -283,12 +278,17 @@ export function Dashboard({
   onMeta
 }: Readonly<{
   demo?: boolean;
-  /** "leads" (migration 084): leads-inkorgen under Iris — samma vy, klass=lead. */
-  lager?: "arenden" | "testmail" | "att_hantera" | "leads";
+  /** "leads" (migration 084): leadsmejlen, klass=lead. "vantar" (Snajp Suite
+   *  2026-10-03): bara utkast som väntar på godkännande, för Att göra;
+   *  "eskalerade" på samma sätt för ärenden agenten lämnat över. */
+  lager?: "arenden" | "testmail" | "att_hantera" | "leads" | "vantar" | "eskalerade";
   onMeta?: (meta: { visar_test_i_arenden: boolean }) => void;
 }>) {
   const vag = useArbetsvag();
   const { text } = useLocale();
+  // Kölägena (Att göra): bara poster som väntar på ett beslut, utan
+  // inkorgens verktygsrad, statusfilter och fack.
+  const arKo = lager === "att_hantera" || lager === "vantar" || lager === "eskalerade";
   const [emails, setEmails] = useState<EmailRow[]>([]);
   const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({});
   const [selected, setSelected] = useState<EmailDetail | null>(null);
@@ -391,6 +391,8 @@ export function Dashboard({
       // "Att hantera" är en egen status, inte ett filter i listan: fliken
       // visar BARA larmen, och huvudlistan utesluter dem (backenden).
       if (lager === "att_hantera") params.set("status", "att_hantera");
+      if (lager === "vantar") params.set("status", "awaiting_approval");
+      if (lager === "eskalerade") params.set("status", "escalated");
       // Leads-inkorgen (084): raderna Jev eller reglerna klassat som lead.
       if (lager === "leads") params.set("klass", "lead");
       const data = await api(`/inbox?${params.toString()}`);
@@ -646,7 +648,8 @@ export function Dashboard({
 
   return (
     <div className="space-y-6">
-      {/* Åtgärdsrad */}
+      {/* Åtgärdsrad. Inte i kölägena (Att göra): där upprepades den per sektion. */}
+      {arKo ? null : (
       <div className="flex flex-wrap items-center gap-3">
         {/* Alltid alla fack: knappen ska visa hur en hel inkorg ser ut. Det
             fackvisa läget hör till "Uppdatera" bredvid.
@@ -654,7 +657,7 @@ export function Dashboard({
             Göms när en riktig inkorg är kopplad. Testmail bland en kunds
             verkliga ärenden är inte en demo, det är skräp i deras inkorg —
             och de har redan sett hur produkten fungerar. */}
-        {inkorgKopplad || lager === "att_hantera" || lager === "leads" || (lager === "arenden" && visarTestIArenden === false) ? null : (
+        {inkorgKopplad || arKo || lager === "leads" || (lager === "arenden" && visarTestIArenden === false) ? null : (
           <button
             type="button"
             onClick={() => void seedMock(null)}
@@ -699,13 +702,13 @@ export function Dashboard({
         <button
           type="button"
           onClick={() =>
-            inkorgKopplad || lager === "att_hantera" || lager === "leads" || (lager === "arenden" && visarTestIArenden === false)
+            inkorgKopplad || arKo || lager === "leads" || (lager === "arenden" && visarTestIArenden === false)
               ? void refresh()
               : void seedMock(categoryFilter)
           }
           disabled={busy !== null}
           title={
-            inkorgKopplad || lager === "att_hantera" || lager === "leads" || (lager === "arenden" && visarTestIArenden === false)
+            inkorgKopplad || arKo || lager === "leads" || (lager === "arenden" && visarTestIArenden === false)
               ? text(T.lasOm)
               : categoryFilter
                 ? text(T.nyaFack)
@@ -729,7 +732,7 @@ export function Dashboard({
             className="focus-ring min-h-11 w-full rounded-input bg-paper py-2.5 pl-9 pr-3 text-sm outline-none placeholder:text-ink/35"
           />
         </div>
-        {lager === "att_hantera" || lager === "leads" ? null : (
+        {arKo || lager === "leads" ? null : (
           <select
           value={statusFilter ?? ""}
           onChange={(event) => setStatusFilter(event.target.value || null)}
@@ -745,13 +748,14 @@ export function Dashboard({
         )}
         {/* Reglerna bor numera under Inställningar, bredvid leads-agentens
             motsvarande kontroll. Se components/settings/SupportRegler.tsx. */}
-        {demo || lager === "att_hantera" || lager === "leads" ? null : (
+        {demo || arKo || lager === "leads" ? null : (
           <Link href={vag("/settings/regler")} className={btnSecondary}>
             <Settings2 className="h-4 w-4" />
             {text(T.regler)}
           </Link>
         )}
       </div>
+      )}
 
       {error ? (
         <div className="rounded-[8px] border border-danger/25 bg-danger/5 px-4 py-3 text-sm text-ink-muted">{text(error)}</div>
@@ -772,7 +776,7 @@ export function Dashboard({
           nio chips där sju står på (0) var den största delen av bruset i
           inkorgen (kundtest 2026-09-22). Summeringen till höger är text, inte
           fler färgade rutor. Döljs i Att hantera: larmen har inga fack. */}
-      {lager === "att_hantera" ? null : (
+      {arKo ? null : (
         <div className="flex flex-wrap items-center gap-1.5">
           {[
             { id: null as string | null, label: text(T.alla), antal: emails.length },
@@ -828,20 +832,26 @@ export function Dashboard({
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
         {/* Maillista */}
         <div className={cn("min-w-0", selected ? "xl:col-span-6" : "xl:col-span-12")}>
-          {emails.length === 0 ? (
+          {emails.length === 0 && arKo ? (
+            <p className="text-[0.875rem] leading-6 text-ink-subtle">
+              {lager === "vantar"
+                ? text({ sv: "Inga svar väntar på godkännande.", en: "No replies are waiting for approval." })
+                : lager === "eskalerade"
+                  ? text({ sv: "Inga eskalerade ärenden.", en: "No escalated tickets." })
+                  : text({ sv: "Inga larm.", en: "No alerts." })}
+            </p>
+          ) : emails.length === 0 ? (
             <div className="rounded-card border border-dashed border-ink/15 bg-paper/45 p-10 text-center">
               <Inbox className="mx-auto h-6 w-6 text-mineral" />
               <h3 className="mt-4 font-semibold">
-                {lager === "att_hantera" ? text(T.ingetAttHantera) : text(T.inkorgenTom)}
+                {text(T.inkorgenTom)}
               </h3>
               {/* Stod: "koppla en riktig inkorg (Gmail/Outlook via IMAP) i
                   backendens miljövariabler". En instruktion till oss, tryckt i
                   kundens vy — kunden har varken tillgång till backenden eller
                   anledning att veta vad IMAP är. */}
               <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-ink-muted">
-                {lager === "att_hantera" ? (
-                  <>{text(T.attHanteraTomt)}</>
-                ) : lager === "testmail" || visarTestIArenden !== false ? (
+                {lager === "testmail" || visarTestIArenden !== false ? (
                   <>
                     {text(T.klickaPa)} <strong>{text(T.hamtaTestmail)}</strong> {text(T.testmailTomt)}
                   </>
@@ -849,7 +859,7 @@ export function Dashboard({
                   <>{text(T.ingaArenden)}</>
                 )}
               </p>
-              {inkorgKopplad || lager === "att_hantera" || lager === "leads" ? null : (
+              {inkorgKopplad || arKo || lager === "leads" ? null : (
                 <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-ink-subtle">
                   {text(T.kopplaRiktig)}{" "}
                   <Link

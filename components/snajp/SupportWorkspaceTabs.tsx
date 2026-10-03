@@ -25,7 +25,7 @@ import { SupportChat } from "./SupportChat";
  */
 export function SupportWorkspaceTabs({ workspaceName }: Readonly<{ workspaceName: string | null }>) {
   const { text } = useLocale();
-  const [tab, setTab] = useState<"kundtjanst" | "att_hantera" | "testmail" | "testchatt">("kundtjanst");
+  const [tab, setTab] = useState<"kundtjanst" | "testmail" | "testchatt">("kundtjanst");
   /** null = vet inte än. false = riktig kund, Testmail-fliken ska synas. */
   const [visarTestIArenden, setVisarTestIArenden] = useState<boolean | null>(null);
 
@@ -42,9 +42,9 @@ export function SupportWorkspaceTabs({ workspaceName }: Readonly<{ workspaceName
   const flikar = (
     [
       { id: "kundtjanst", label: { sv: "Ärenden", en: "Cases" } },
-      // Eskaleringar och larm (migration 078): egen flik så att de aldrig
-      // blandas med kundärenden eller får ett AI-utkast (kundtest 2026-09-22).
-      { id: "att_hantera", label: { sv: "Att hantera", en: "To handle" } },
+      // Eskaleringar och larm (migration 078) bor i Att göra sedan Snajp
+      // Suite 2026-10-03 (components/leads/AttGora.tsx), fortfarande skilda
+      // från kundärendena och utan AI-utkast.
       ...(visarTestIArenden === false
         ? [{ id: "testmail" as const, label: { sv: "Testmail", en: "Test mail" } }]
         : []),
@@ -77,14 +77,13 @@ export function SupportWorkspaceTabs({ workspaceName }: Readonly<{ workspaceName
         {tab === "kundtjanst" ? (
           <Dashboard onMeta={onMeta} />
         ) : null}
-        {tab === "att_hantera" ? <Dashboard lager="att_hantera" /> : null}
         {tab === "testmail" ? <Dashboard lager="testmail" /> : null}
         {tab === "testchatt" ? (
           <div className="mx-auto max-w-3xl">
             <SupportChat testMode workspaceLabel={workspaceName ?? undefined} />
           </div>
         ) : null}
-     </div>
+      </div>
     </div>
   );
 }

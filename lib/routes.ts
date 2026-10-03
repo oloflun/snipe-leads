@@ -104,7 +104,8 @@ export const appRoutes: AppRoute[] = [
   // Tabell och Listor VYER på Leads, granskningen är Att göra, körningarna är
   // Aktivitet och inställningarna bor i /settings. Gamla adresser omdirigeras
   // i WorkspaceSection. Menyn har inga undersidor längre.
-  { href: "/dashboard/att-gora", labelKey: "nav.attGora", product: "leads" },
+  // Delad: kön samlar alla agenters beslut (components/leads/AttGora.tsx).
+  { href: "/dashboard/att-gora", labelKey: "nav.attGora", product: "shared" },
   { href: "/dashboard/leads", labelKey: "nav.leads", product: "leads" },
   { href: "/dashboard/support", labelKey: "nav.support", product: "support" },
   { href: "/dashboard/companies", labelKey: "nav.companies", product: "leads", preview: true },

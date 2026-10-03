@@ -192,10 +192,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
     (route) =>
       route.product !== "shared" &&
       !route.preview &&
-      !products.includes(route.product) &&
-      // Att göra är en arbetskö, inte en agent: den pitchas inte. ponytail:
-      // försvinner när kön blir delad i planens fas 2.
-      route.href !== "/dashboard/att-gora"
+      !products.includes(route.product)
   );
 
   // Narrowing the scope while standing on a section it excludes would strand the

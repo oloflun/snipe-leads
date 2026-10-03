@@ -1,3 +1,4 @@
+import { EXEMPELBOLAG } from "@/lib/demo/iris-exempel";
 import { grundmejl } from "@/lib/demo/support-inbox";
 import { analyticsSeries, companies } from "@/lib/mock-data";
 
@@ -150,13 +151,15 @@ export function demoOversiktSvar(path: string): unknown | undefined {
   }
 
   if (rutt === "/leads/queue") {
+    // Samma utkast som demons Att göra (IrisGranskning demoKo), så att
+    // översiktens antal och kön visar samma sak.
     return {
-      items: companies.slice(0, 2).map((bolag) => ({
-        id: `demo-ko-${bolag.id}`,
-        company_name: bolag.name,
-        prospect_email: bolag.contacts[0]?.email ?? null,
-        subject: `Fråga om ${bolag.industry.toLowerCase()} i ${bolag.location}`,
-        scheduled_at: timmarSedan(5)
+      items: EXEMPELBOLAG.map((b, index) => ({
+        id: b.id,
+        company_name: b.companyName,
+        prospect_email: `${b.contactFirstName.toLowerCase()}@${b.website}`,
+        subject: b.draft.subject,
+        scheduled_at: timmarSedan(5 + index)
       }))
     };
   }
