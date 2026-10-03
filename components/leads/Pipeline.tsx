@@ -25,7 +25,7 @@ const T = {
   tomt: { sv: "Inga bolag ännu. Kör Iris så fylls pipelinen.", en: "No companies yet. Run Iris to fill the pipeline." },
   visaSparrade: { sv: "Visa spärrade", en: "Show blocked" },
   flyttaTill: { sv: "Flytta till", en: "Move to" },
-  ingaKort: { sv: "Inga bolag", en: "No companies" },
+  ingaKort: { sv: "Inga leads", en: "No leads" },
   flyttFel: { sv: "Flytten sparades inte", en: "The move was not saved" },
   flyttad: { sv: "flyttad till", en: "moved to" },
   poang: { sv: "poäng", en: "score" },

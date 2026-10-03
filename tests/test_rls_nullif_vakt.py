@@ -25,6 +25,11 @@ RATTADE_AV_068 = {
     "067_integrationer_och_kanaler.sql",
 }
 
+# Skrivna utan vakten efter 068, var och en rättad av en egen migration.
+RATTADE_SENARE = {
+    "20261003130000_085_flyttko.sql",  # rättad av 088_flyttko_nullif
+}
+
 RA_VILLKOR = re.compile(r"(?<!nullif\()current_setting\(\s*'app\.tenant_id'", re.IGNORECASE)
 
 
@@ -36,7 +41,7 @@ def _nummer(namn: str) -> int:
 def test_ingen_policy_efter_028_saknar_nullif():
     brott = []
     for fil in sorted(MIGRATIONS.glob("*.sql")):
-        if _nummer(fil.name) <= 28 or fil.name in RATTADE_AV_068:
+        if _nummer(fil.name) <= 28 or fil.name in RATTADE_AV_068 or fil.name in RATTADE_SENARE:
             continue
         text = fil.read_text(encoding="utf-8")
         # Kommentarer får nämna funktionen, bara policyvillkor räknas.
@@ -44,6 +49,12 @@ def test_ingen_policy_efter_028_saknar_nullif():
         if RA_VILLKOR.search(kod):
             brott.append(fil.name)
     assert not brott, f"current_setting('app.tenant_id') utan nullif i: {brott}"
+
+
+def test_088_ratter_flyttkon():
+    text = (MIGRATIONS / "20261004090000_088_flyttko_nullif.sql").read_text(encoding="utf-8")
+    assert "on public.dev_flytt_ko" in text
+    assert "nullif(current_setting('app.tenant_id', true), '')" in text
 
 
 def test_068_ratter_alla_elva():

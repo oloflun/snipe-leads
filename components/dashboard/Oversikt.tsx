@@ -74,7 +74,7 @@ const T = {
   fyllKontext: { sv: "Fyll i affärskontexten", en: "Fill in the business context" },
   utkast: { sv: "Utkast", en: "Draft" },
   utanAmnesrad: { sv: "Utan ämnesrad", en: "No subject line" },
-  oppnaGranskning: { sv: "Öppna granskningskön", en: "Open the review queue" },
+  oppnaGranskning: { sv: "Öppna Att göra", en: "Open To do" },
   prospekt: { sv: "Prospekt", en: "Prospects" },
   kundeInteHamtas: { sv: "kunde inte hämtas", en: "could not be loaded" },
   ingaExempel: { sv: "inga exempelbolag", en: "no example companies" },
@@ -763,7 +763,7 @@ export function LeadsOversikt({ demo = false }: Readonly<{ demo?: boolean }>) {
               })
             : undefined
         }))}
-        href={vag("/dashboard/iris/granskning")}
+        href={vag("/dashboard/att-gora")}
         knapp={text(T.oppnaGranskning)}
       />
 

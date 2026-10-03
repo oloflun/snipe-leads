@@ -21,7 +21,7 @@ import { useLocale, type Localized } from "@/lib/i18n";
 const AGENT_FOR_PRODUKT: Record<ProductKey, { paketId: string; demoVag: string; vad: Localized }> = {
   leads: {
     paketId: "leads",
-    demoVag: "/demo/iris",
+    demoVag: "/demo/leads",
     vad: {
       sv: "Iris hittar rätt bolag för er, gör researchen och skriver första mejlet — ni läser igenom och godkänner innan något går ut.",
       en: "Iris finds the right companies for you, does the research and writes the first email. You read it through and approve it before anything goes out."

@@ -1,9 +1,11 @@
 "use client";
 
 import {
+  Activity,
   ArrowLeftRight,
   FileText,
   LayoutDashboard,
+  ListTodo,
   LogOut,
   Mail,
   MessagesSquare,
@@ -60,10 +62,9 @@ import { cn } from "@/lib/utils";
  */
 const DEMO_VAGAR: Record<string, string> = {
   "/dashboard": "/demo",
-  "/dashboard/iris": "/demo/iris",
-  "/dashboard/iris/pipeline": "/demo/iris/pipeline",
-  "/dashboard/iris/granskning": "/demo/iris/granskning",
-  "/dashboard/iris/installningar": "/demo/iris/installningar",
+  "/dashboard/att-gora": "/demo/att-gora",
+  "/dashboard/leads": "/demo/leads",
+  "/settings/leads": "/demo/installningar",
   "/dashboard/companies": "/demo/companies",
   "/dashboard/contacts": "/demo/contacts",
   "/dashboard/inbox": "/demo/inbox",
@@ -74,22 +75,19 @@ const DEMO_VAGAR: Record<string, string> = {
 };
 
 /**
- * Flikarna ÄR lägesväxeln.
+ * Lägesväxeln är pensionerad (Snajp Suite 2026-10-03).
  *
- * Tidigare fanns en separat kontroll (ScopeSwitch) bredvid flikraden, och den
- * gjorde en annan sak än flikarna: "Leads" tog dig till leads-sidan men lämnade
- * resten av appen i Duo, så inställningarna bakom fliken visade fortfarande
- * båda agenterna. Två kontroller för en sak, där den ena bara gjorde halva
- * jobbet.
- *
- * Nu smalnar Leads och Support av hela vyn, och Översikt tar tillbaka Duo.
- * Kartan är explicit: en route utan post här rör inte läget.
+ * Fram till i dag smalnade ett klick på Iris eller Kundtjänst av HELA vyn
+ * (`snajp.scope`), och menyn filtrerades på läget. Följden var uppmätt: i
+ * adminytan försvann Kundtjänst och Kvitton ur railen när man klickade Iris,
+ * och en Trio-kund som stod i Iris kunde inte nå Kvitton alls. Menyn är nu
+ * platt och visar alltid allt arbetsytan har; varje menyklick återställer
+ * läget till helvyn, så att en gammal cookie inte lämnar inställningarna
+ * avsmalnade. Scope-mekanismen står kvar för vyer som läser `shows()`.
  */
-export const FLIKENS_LAGE: Record<string, Scope> = {
-  "/dashboard": "both",
-  "/dashboard/iris": "leads",
-  "/dashboard/support": "support"
-};
+export function aterstallLage(availableScopes: readonly Scope[], setScope: (scope: Scope) => void): void {
+  if (availableScopes.includes("both")) setScope("both");
+}
 
 /**
  * Ikon per menypost. Railen bär ikoner även i smalt läge, så varje route som
@@ -102,7 +100,9 @@ export const FLIKENS_LAGE: Record<string, Scope> = {
  */
 export const RUTT_IKONER: Record<string, LucideIcon> = {
   "/dashboard": LayoutDashboard,
-  "/dashboard/iris": Target,
+  "/dashboard/att-gora": ListTodo,
+  "/dashboard/leads": Target,
+  "/dashboard/aktivitet": Activity,
   "/dashboard/support": MessagesSquare,
   "/dashboard/companies": Users,
   "/dashboard/contacts": Users,
@@ -116,10 +116,11 @@ export const RUTT_IKONER: Record<string, LucideIcon> = {
 
 const DEMO_IKONER: Record<string, typeof LayoutDashboard> = {
   "": LayoutDashboard,
-  iris: Target,
-  crm: Users,
+  "att-gora": ListTodo,
+  leads: Target,
   support: MessagesSquare,
-  kvitton: ScanLine
+  kvitton: ScanLine,
+  installningar: Settings
 };
 
 function iDemolage(pathname: string): boolean {
@@ -174,24 +175,10 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
     isPlatformAdmin
   } = useDashboard();
 
-  // Entitlement decides what exists; the scope switch decides what is on screen
-  // right now. A nav listing eight Leads sections while the scope reads "Support"
-  // contradicts the control the user just used.
-  //
-  // MEN: lägesflikarna själva undantas från det filtret.
-  //
-  // Flikarna ÄR växeln (FLIKENS_LAGE). Filtrerades de på `shows()` göms den
-  // kontroll man skulle ha tryckt på: står man i Leads försvinner
-  // Kundtjänst-fliken, och enda vägen till kundtjänst blir att först gå via
-  // Översikt — vilket inte står någonstans. Uppmätt i skärmdump från demovyn,
-  // där menyn saknade Kundtjänst helt.
-  //
-  // Regeln: en kontroll får aldrig gömma sig själv. Entitlement styr att
-  // fliken finns; läget styr vad innehållet visar.
-  const navRoutes = routesForProducts(products, { isAdmin: isPlatformAdmin }).filter(
-    (route) =>
-      route.product === "shared" || route.href in FLIKENS_LAGE || shows(route.product)
-  );
+  // Entitlement styr menyn, inget annat (Snajp Suite 2026-10-03, se
+  // aterstallLage ovan). En meny som döljer poster efter läget gömmer den
+  // kontroll man skulle ha tryckt på.
+  const navRoutes = routesForProducts(products, { isAdmin: isPlatformAdmin });
 
   /**
    * Agenterna arbetsytan INTE har — de MÖRKLÄGGS i menyn i stället för att
@@ -205,7 +192,10 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
     (route) =>
       route.product !== "shared" &&
       !route.preview &&
-      !products.includes(route.product)
+      !products.includes(route.product) &&
+      // Att göra är en arbetskö, inte en agent: den pitchas inte. ponytail:
+      // försvinner när kön blir delad i planens fas 2.
+      route.href !== "/dashboard/att-gora"
   );
 
   // Narrowing the scope while standing on a section it excludes would strand the
@@ -219,15 +209,12 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
   // /analytics och /assistant inte att öppna alls som kund, och koden på båda
   // ställena såg rätt ut var för sig.
   //
-  // Scope-skyddet står kvar orört: filtret på `shows()` gäller fortfarande, så
-  // den som smalnar av vyn till Support medan de står på en leads-sida
-  // dirigeras som förut.
+  // Sedan Snajp Suite filtreras det inte längre på läget: menyn visar allt
+  // arbetsytan äger, och en sida man når från menyn ska aldrig studsa.
   const natbaraRoutes = routesForProducts(products, {
     includePreview: true,
     isAdmin: isPlatformAdmin
-  }).filter(
-    (route) => route.product === "shared" || shows(route.product)
-  );
+  });
 
   const stranded =
     natbaraRoutes.every(
@@ -313,18 +300,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
             // Läget sätts vid klicket, inte i en effekt på den nya sidan: en
             // effekt hade hunnit rendera målsidan i det gamla läget först, och
             // bytet hade synts som ett hopp.
-            onClick: () => {
-              const lage = FLIKENS_LAGE[route.href];
-              if (lage && availableScopes.includes(lage)) {
-                setScope(lage);
-              }
-            },
-            // Barnen (Iris: Bolag/Granskning/Inställningar) — exakt match, inte
-            // prefix: /dashboard/iris/granskning ska inte markera /dashboard/iris.
-            children: route.children?.map((child) => {
-              const childHref = demoAnpassa(child.href, pathname);
-              return { href: childHref, label: t(child.labelKey), active: pathname === childHref };
-            })
+            onClick: () => aterstallLage(availableScopes, setScope)
           };
         }),
         // De mörklagda agenterna — syns, men nedtonade (se morkaRoutes ovan).

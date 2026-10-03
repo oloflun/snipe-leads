@@ -78,11 +78,18 @@ _NEXT_PROXIES = ("/leads/jobb/",)
 def test_varje_anrop_traffar_en_route_som_finns():
     registrerade = _registrerade_vagar()
 
+    def finns(v: str) -> bool:
+        if f"/api{v}" in registrerade:
+            return True
+        # Mallsträng: anropa(`/leads/korningar/${id}`) fångas som
+        # "/leads/korningar/". Den träffar om backenden har en parametriserad
+        # väg direkt under, t.ex. /api/leads/korningar/{job_id}.
+        return v.endswith("/") and any(r.startswith(f"/api{v}{{") for r in registrerade)
+
     saknade = sorted(
         v
         for v in _ui_vagar()
-        if not any(v.startswith(p) for p in _NEXT_PROXIES)
-        and f"/api{v}" not in registrerade
+        if not any(v.startswith(p) for p in _NEXT_PROXIES) and not finns(v)
     )
 
     assert not saknade, (

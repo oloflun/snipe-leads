@@ -156,7 +156,7 @@ const T = {
   godkant: { sv: "Godkänt. Utkastet ligger nu i sändkön.", en: "Approved. The draft is now in the send queue." },
   godkanner: { sv: "Godkänner…", en: "Approving…" },
   godkannOchSkicka: { sv: "Godkänn och skicka", en: "Approve and send" },
-  godkannIGranskning: { sv: "Godkänn i Iris › Granskning.", en: "Approve in Iris › Review." },
+  godkannIGranskning: { sv: "Godkänn under Att göra.", en: "Approve under To do." },
   skrivAutomatiskt: { sv: "Skriv utkast automatiskt framöver", en: "Write drafts automatically from now on" },
   redanPa: { sv: "(redan på)", en: "(already on)" },
   skickaAutomatiskt: {

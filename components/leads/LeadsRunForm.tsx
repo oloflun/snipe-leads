@@ -288,8 +288,11 @@ export function LeadsRunForm({
   // Körningens id överlever en omladdning (migration 080, INV-JOB-003).
   // Nyckeln skiljer admin- och kundyta: adminens kundbesök byter tenant
   // utan att sökvägen byter, och ett id som inte längre hittas rensas.
-  const pathname = usePathname() ?? "/dashboard/iris";
-  const bas = pathname.replace(/\/iris(\/.*)?$/, "/iris");
+  const pathname = usePathname() ?? "/dashboard/leads";
+  // Ytans rot (/dashboard eller /admin): körningen följs i Aktivitet sedan
+  // Snajp Suite (2026-10-03), oavsett om formuläret står i Leads eller i
+  // adminens Testkörningar.
+  const bas = pathname.replace(/\/(leads|iris|testkorningar)(\/.*)?$/, "");
   const korningsNyckel = `snipra:korning:${pathname.startsWith("/admin") ? "admin" : "kund"}`;
 
   function glomKorning() {
@@ -687,7 +690,7 @@ export function LeadsRunForm({
           {batchId && !demo ? (
             <>
               {" · "}
-              <Link href={`${bas}/korningar?id=${encodeURIComponent(batchId)}`} className="underline underline-offset-4 hover:text-ink">
+              <Link href={`${bas}/aktivitet?id=${encodeURIComponent(batchId)}`} className="underline underline-offset-4 hover:text-ink">
                 {text(T.foljKorningen)}
               </Link>
             </>

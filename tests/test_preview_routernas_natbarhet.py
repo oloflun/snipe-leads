@@ -41,18 +41,26 @@ def test_stranded_raknas_med_preview_routerna():
     )
 
 
-def test_stranded_behaller_scope_filtret():
-    """Skyddet mot att smalna av vyn och bli kvar på en sida man inte kan nå.
+def test_menyn_filtreras_aldrig_pa_laget():
+    """Snajp Suite (2026-10-03): menyn visar allt arbetsytan har, alltid.
 
-    Det är hela skälet till att effekten finns. Ett underlag utan `shows()`
-    hade tagit bort den, och symptomet — en användare kvar på en leads-sida
-    efter att ha växlat till Support — hade inte synts i något annat test.
+    Ersätter `test_stranded_behaller_scope_filtret`. Lägesväxeln (ett klick på
+    Iris smalnade av hela vyn) gjorde att Kundtjänst och Kvitton försvann ur
+    adminens rail och att en Trio-kund i Iris inte nådde Kvitton. Både menyn
+    och stranded-underlaget räknas nu ur rättigheten ensam; ett `shows()` i
+    något av dem tar tillbaka felet.
     """
     block = APPSHELL.split("const stranded")[0].split("const navRoutes")[1]
+    assert "shows(" not in block, (
+        "AppShells meny eller stranded-underlag filtrerar på läget igen. Då "
+        "försvinner menyposter när man klickar en annan agent."
+    )
 
-    assert "shows(route.product)" in block, (
-        "Underlaget för stranded filtrerar inte längre på scope. Den som växlar "
-        "till Support medan de står på en leads-sida blir kvar där."
+    admin = (ROT / "components" / "admin" / "AdminShell.tsx").read_text(encoding="utf-8")
+    arbetsyta = admin.split("const arbetsyta")[1].split("const aktiv")[0]
+    assert "shows(" not in arbetsyta, (
+        "AdminShells arbetsytegrupp filtrerar på läget igen: ett klick på Iris "
+        "tar bort Kundtjänst och Kvitton ur railen."
     )
 
 

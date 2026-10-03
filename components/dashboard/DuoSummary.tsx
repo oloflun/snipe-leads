@@ -78,7 +78,7 @@ export function DuoSummary() {
         <Kort
           rubrik={text(copy.leads)}
           rad={text(copy.leadsRad)}
-          href={vag("/dashboard/iris")}
+          href={vag("/dashboard/leads")}
           knapp={text(copy.tillLeads)}
         />
         <Kort

@@ -152,7 +152,7 @@ export function IrisGranskning({ demo = false }: Readonly<{ demo?: boolean }>) {
       {poster === null ? (
         <SkeletonRows />
       ) : poster.length === 0 ? (
-        <EmptyState title={text({ sv: "Granskningskön är tom", en: "The review queue is empty" })} />
+        <EmptyState title={text({ sv: "Inga utkast väntar på dig", en: "No drafts are waiting for you" })} />
       ) : (
         <div className="divide-y divide-ink/15 border-y border-ink/15">
           {poster.map((post) => {
@@ -167,9 +167,11 @@ export function IrisGranskning({ demo = false }: Readonly<{ demo?: boolean }>) {
                 >
                   <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
                     <div className="min-w-0">
-                      <h2 className="truncate text-[1.0625rem] font-semibold text-ink">
+                      {/* h3: kön renderas under sektionsrubriken "Utkast att
+                          godkänna" i Att göra (components/leads/AttGora.tsx). */}
+                      <h3 className="truncate text-[1.0625rem] font-semibold text-ink">
                         {post.subject || text(UTAN_AMNE)}
-                      </h2>
+                      </h3>
                       <p className="mt-0.5 text-[0.875rem] text-ink-subtle">
                         {[post.company_name, post.prospect_email].filter(Boolean).join(" · ") || text({ sv: "Okänd mottagare", en: "Unknown recipient" })}
                       </p>

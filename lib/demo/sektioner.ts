@@ -20,9 +20,11 @@
  * sanningen om vad som är giltigt) — de annonseras bara inte i headern,
  * precis som på /dashboard.
  *
- * "Inställningar" står inte med som EGEN toppnivåpost: den har ingen
- * demomotsvarighet utanför Iris (arbetsytans /settings ligger bakom
- * inloggning). Iris eget Inställningar-barn är däremot demobart, se nedan.
+ * Snajp Suite (2026-10-03): samma platta meny som arbetsytan. Aktivitet
+ * saknas (demon har inga körningar att visa), och Inställningar visar bara
+ * Iris del, den enda som är demobar (arbetsytans /settings kräver inloggning).
+ * CRM-listan (/demo/crm) står inte längre i menyn: kundens egen lista in är
+ * i dag Leads › Listor › Importera CSV. Routen svarar fortfarande.
  */
 
 import type { Localized } from "@/lib/i18n";
@@ -33,23 +35,11 @@ export type DemoNavItem = { slug: string; label: Localized; children?: DemoNavCh
 
 export const DEMO_NAV: DemoNavItem[] = [
   { slug: "", label: { sv: "Översikt", en: "Overview" } },
-  {
-    slug: "iris",
-    label: { sv: "Iris", en: "Iris" },
-    children: [
-      { slug: "iris", label: { sv: "Bolag", en: "Companies" } },
-      { slug: "iris/pipeline", label: { sv: "Pipeline", en: "Pipeline" } },
-      { slug: "iris/granskning", label: { sv: "Granskning", en: "Review" } },
-      { slug: "iris/installningar", label: { sv: "Inställningar", en: "Settings" } },
-      // Avsteg från spegelregeln ovan, med avsikt: CRM-listan är den omgjorda
-      // leadsagentens demo av KUNDENS EGEN kundlista (i stället för att Iris
-      // letar prospekt) och finns bara i demon — ett fjärde barn under Iris,
-      // inte en egen toppnivåpost.
-      { slug: "crm", label: { sv: "CRM-lista", en: "CRM list" } }
-    ]
-  },
+  { slug: "att-gora", label: { sv: "Att göra", en: "To do" } },
+  { slug: "leads", label: { sv: "Leads", en: "Leads" } },
   { slug: "support", label: { sv: "Kundtjänst", en: "Customer service" } },
-  { slug: "kvitton", label: { sv: "Kvitton", en: "Receipts" } }
+  { slug: "kvitton", label: { sv: "Kvitton", en: "Receipts" } },
+  { slug: "installningar", label: { sv: "Inställningar", en: "Settings" } }
 ];
 
 /** Länken till en sektion. Tom sträng = demons startsida. */

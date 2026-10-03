@@ -15,7 +15,7 @@ import { Bolagsregister } from "@/components/leads/Bolagsregister";
 import { Bolagssida } from "@/components/leads/Bolagssida";
 import { Kontakter } from "@/components/leads/Kontakter";
 import { Svar } from "@/components/leads/Svar";
-import { LeadsControls } from "@/components/leads/LeadsControls";
+import { IrisInstallningar } from "@/components/leads/IrisInstallningar";
 import { Affarskontext } from "@/components/settings/Affarskontext";
 import { KunskapsbasPanel } from "@/components/settings/Kunskapsbas";
 import { SupportEskalering } from "@/components/settings/SupportEskalering";
@@ -75,11 +75,11 @@ const SETTINGS_TITLAR: Record<SettingsSectionKey, Localized> = {
   mailboxes: { sv: "Inkorgar", en: "Mailboxes" },
   team: { sv: "Team", en: "Team" },
   billing: { sv: "Plan och fakturering", en: "Plan and billing" },
-  affarskontext: { sv: "Affärskontext", en: "Business context" },
+  affarskontext: { sv: "Vad ni säljer", en: "What you sell" },
   kunskapsbas: { sv: "Kunskapsbas", en: "Knowledge base" },
-  leads: { sv: "Målgrupp och autonomi", en: "Audience and autonomy" },
-  regler: { sv: "Fack och autosvar", en: "Categories and auto-replies" },
-  soul: { sv: "Er röst", en: "Your voice" },
+  leads: { sv: "Målgrupp och automation", en: "Audience and automation" },
+  regler: { sv: "När agenten får svara själv", en: "When the agent may reply on its own" },
+  soul: { sv: "Så ska agenten låta", en: "How the agent should sound" },
   notiser: { sv: "Notiser", en: "Notifications" },
   tema: { sv: "Tema", en: "Theme" },
   addons: { sv: "Tillägg", en: "Add-ons" },
@@ -87,7 +87,7 @@ const SETTINGS_TITLAR: Record<SettingsSectionKey, Localized> = {
 };
 
 const SETTINGS_BESKRIVNINGAR: Partial<Record<SettingsSectionKey, Localized>> = {
-  affarskontext: { sv: "Vad ni säljer och till vem.", en: "What you sell and to whom." },
+  affarskontext: { sv: "Och till vem. Båda agenterna läser det här.", en: "And to whom. Both agents read this." },
   soul: { sv: "Tonen i utskick och svar.", en: "The tone of outreach and replies." },
   notiser: { sv: "Gäller bara dig.", en: "Applies only to you." },
   tema: { sv: "Gäller den här webbläsaren.", en: "Applies to this browser." },
@@ -333,7 +333,7 @@ export function SettingsView({
               <SupportEskalering />
             </>
           ) : null}
-          {section === "leads" ? <LeadsControls /> : null}
+          {section === "leads" ? <IrisInstallningar /> : null}
           {section === "soul" ? <SoulEditor /> : null}
           {section === "notiser" ? <NotisSettings /> : null}
           {section === "tema" ? <TemaSettings initial={tema} /> : null}

@@ -5,10 +5,9 @@ import { StartView } from "@/components/dashboard/StartView";
 import { CrmDemo } from "@/components/crm/CrmDemo";
 import { KvittoDemo } from "@/components/kvitton/KvittoDemo";
 import { DemoSupportYta } from "@/components/snajp/DemoSupportYta";
+import { AttGora } from "@/components/leads/AttGora";
 import { IrisBolag } from "@/components/leads/IrisBolag";
-import { IrisGranskning } from "@/components/leads/IrisGranskning";
 import { IrisInstallningar } from "@/components/leads/IrisInstallningar";
-import { Pipeline } from "@/components/leads/Pipeline";
 import { SupportRegler } from "@/components/settings/SupportRegler";
 import {
   AnalyticsView,
@@ -42,7 +41,7 @@ import { notFoundOnTenant } from "@/lib/tenants/server";
  * INGENTING här får sträcka sig efter en session eller databasen.
  *
  *  * `resolveDashboardState()` anropas INTE — state är en konstant nedan.
- *  * `IrisBolag`/`IrisGranskning`/`IrisInstallningar` läser demo-fixturer
+ *  * `IrisBolag`/`AttGora`/`IrisInstallningar` läser demo-fixturer
  *    (`lib/demo/oversikt.ts`, `lib/demo/iris-exempel.ts`) i stället för
  *    `/api/snajp-support/*` när `demo` är satt — se respektive komponent.
  *  * Vyerna under `WorkspaceViews` är klientkomponenter som läser
@@ -109,43 +108,40 @@ function renderSektion(
   switch (sektion) {
     case undefined:
       return <StartView demo />;
-    case "iris":
-      // Samma tre undersidor som /dashboard/iris — se
-      // components/dashboard/WorkspaceSection.tsx. Ett okänt tredje
-      // slugsegment är en 404, inte en tyst fallback till Bolag.
-      if (undersektion === "pipeline") {
-        return (
-          <PageShell title={{ sv: "Pipeline", en: "Pipeline" }}>
-            <Pipeline demo />
-          </PageShell>
-        );
-      }
-      if (undersektion === "granskning") {
-        return (
-          <PageShell title={{ sv: "Granskning", en: "Review" }}>
-            <IrisGranskning demo />
-          </PageShell>
-        );
-      }
-      if (undersektion === "installningar") {
-        return (
-          <PageShell title={{ sv: "Inställningar", en: "Settings" }}>
-            <IrisInstallningar demo />
-          </PageShell>
-        );
-      }
-      if (undersektion) {
-        return null;
-      }
-      return <IrisBolag demo />;
-    // Gamla adresserna — Iris flyttade in från tre separata ställen
-    // 2026-09-19 (se HANDOFF/plan). Bokmärken ska landa rätt, inte i en 404.
+    // Samma sidor som arbetsytan (Snajp Suite 2026-10-03), se
+    // components/dashboard/WorkspaceSection.tsx.
     case "leads":
+      return undersektion ? null : <IrisBolag demo />;
+    case "att-gora":
+      return undersektion ? null : (
+        <PageShell title={{ sv: "Att göra", en: "To do" }}>
+          <AttGora demo />
+        </PageShell>
+      );
+    case "installningar":
+      return undersektion ? null : (
+        <PageShell title={{ sv: "Inställningar", en: "Settings" }}>
+          <IrisInstallningar demo />
+        </PageShell>
+      );
+    // Gamla adresserna. Bokmärken ska landa rätt, inte i en 404.
+    case "iris": {
+      const ny: Record<string, string> = {
+        "": "/demo/leads",
+        pipeline: "/demo/leads?vy=pipeline",
+        granskning: "/demo/att-gora",
+        installningar: "/demo/installningar"
+      };
+      const mal = ny[undersektion ?? ""];
+      if (!mal) return null;
+      redirect(mal);
+    }
+    // eslint-disable-next-line no-fallthrough -- redirect kastar, nås aldrig
     case "emails":
-      redirect("/demo/iris");
+      redirect("/demo/leads");
     // eslint-disable-next-line no-fallthrough -- redirect kastar, nås aldrig
     case "kontroll":
-      redirect("/demo/iris/installningar");
+      redirect("/demo/installningar");
     // eslint-disable-next-line no-fallthrough -- redirect kastar, nås aldrig
     case "crm":
       // Den omgjorda leadsagenten i demoform: kundens egen CRM-lista in

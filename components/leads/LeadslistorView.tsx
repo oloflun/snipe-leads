@@ -206,7 +206,7 @@ const T = {
   godkant: { sv: "Godkänt. Mejlet ligger nu i sändkön.", en: "Approved. The email is now in the send queue." },
   godkanner: { sv: "Godkänner…", en: "Approving…" },
   godkannOchSkicka: { sv: "Godkänn och skicka", en: "Approve and send" },
-  godkannIGranskning: { sv: "Godkänn i Iris › Granskning.", en: "Approve in Iris › Review." },
+  godkannIGranskning: { sv: "Godkänn under Att göra.", en: "Approve under To do." },
   filnamn: { sv: "leadslista", en: "lead-list" }
 } satisfies Record<string, Localized>;
 
@@ -1033,8 +1033,10 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
   // Flytta till Iris (2026-10-02): raderna blir prospekt och en riktig körning
   // köas med research per bolag. Ersätter svepet "utkast till alla med
   // mejladress", som skrev utkast ur radens metadata utan research.
-  const pathname = usePathname() ?? "/dashboard/iris";
-  const bas = pathname.replace(/\/iris(\/.*)?$/, "/iris");
+  const pathname = usePathname() ?? "/dashboard/leads";
+  // Ytans rot (/dashboard eller /admin): körningen följs i Aktivitet sedan
+  // Snajp Suite (2026-10-03).
+  const bas = pathname.replace(/\/(leads|iris)(\/.*)?$/, "");
   const [flyttar, setFlyttar] = useState(false);
   const [flyttScope, setFlyttScope] = useState<"research" | "research_and_draft">("research_and_draft");
   const [flyttKvitto, setFlyttKvitto] = useState<{ batchId: string; antal: number; nya: number } | null>(null);
@@ -1249,7 +1251,7 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
             sv: `${flyttKvitto.antal} bolag i Iris (${flyttKvitto.nya} nya). Research pågår per bolag.`,
             en: `${flyttKvitto.antal} companies in Iris (${flyttKvitto.nya} new). Research is running per company.`
           })}{" "}
-          <Link href={`${bas}/korningar?id=${encodeURIComponent(flyttKvitto.batchId)}`} className="underline underline-offset-4 hover:text-ink">
+          <Link href={`${bas}/aktivitet?id=${encodeURIComponent(flyttKvitto.batchId)}`} className="underline underline-offset-4 hover:text-ink">
             {text(T.foljKorningen)}
           </Link>
         </p>

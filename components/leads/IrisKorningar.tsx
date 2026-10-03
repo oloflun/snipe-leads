@@ -58,10 +58,10 @@ export type KorningsRad = {
 const T = {
   hamtar: { sv: "Hämtar körningar…", en: "Loading runs…" },
   hamtaFel: { sv: "Körningarna gick inte att hämta.", en: "The runs could not be loaded." },
-  tillBolag: { sv: "Till Bolag", en: "To Companies" },
+  tillBolag: { sv: "Till Leads", en: "To Leads" },
   tomt: {
-    sv: "Inga körningar än. Starta en under Bolag, så syns den här med förlopp och resultat.",
-    en: "No runs yet. Start one under Companies and it shows up here with progress and results."
+    sv: "Inga körningar än. Starta en under Leads, så syns den här med förlopp och resultat.",
+    en: "No runs yet. Start one under Leads and it shows up here with progress and results."
   },
   tabell: { sv: "Körningar", en: "Runs" },
   kolStartad: { sv: "Startad", en: "Started" },
@@ -73,7 +73,7 @@ const T = {
   pagar: { sv: "Pågår", en: "Running" },
   researcharNasta: { sv: "Researchar nästa bolag", en: "Researching the next company" },
   letarFler: { sv: "Letar fler bolag", en: "Looking for more companies" },
-  seListor: { sv: "Se Bolag › Listor", en: "See Companies › Lists" },
+  seListor: { sv: "Se Leads › Listor", en: "See Leads › Lists" },
   klar: { sv: "Klar", en: "Done" },
   leadsKlara: { sv: "Leads klara", en: "Leads done" },
   bolagUndersokta: { sv: "Bolag undersökta", en: "Companies researched" },
@@ -92,7 +92,7 @@ const T = {
   doljDetaljer: { sv: ", dölj detaljer", en: ", hide details" },
   visaDetaljer: { sv: ", visa detaljer", en: ", show details" },
   undersoktaBolag: { sv: "Undersökta bolag", en: "Companies researched" },
-  raderUnderListor: { sv: "Raderna finns under Bolag › Listor.", en: "The rows are under Companies › Lists." },
+  raderUnderListor: { sv: "Raderna finns under Leads › Listor.", en: "The rows are under Leads › Lists." },
   ingaUndersokta: { sv: "Inga bolag undersökta.", en: "No companies researched." },
   ingetBortvalt: { sv: "Inget bolag valdes bort.", en: "No company was dropped." },
   uppdaterad: { sv: "uppdaterad", en: "updated" },
@@ -140,10 +140,11 @@ function pagar(rad: KorningsRad): boolean {
 
 export function IrisKorningar() {
   const { locale, text } = useLocale();
-  const pathname = usePathname() ?? "/dashboard/iris/korningar";
+  const pathname = usePathname() ?? "/dashboard/aktivitet";
   const sok = useSearchParams();
-  // Samma vy under /dashboard, /admin och /demo: Bolag-länken följer basen.
-  const bas = pathname.replace(/\/iris(\/.*)?$/, "/iris");
+  // Samma vy under /dashboard och /admin: Leads-länken följer basen. Vyn
+  // renderas i Aktivitet sedan Snajp Suite (2026-10-03).
+  const bas = pathname.replace(/\/(aktivitet|iris)(\/.*)?$/, "/leads");
   const [rader, setRader] = useState<KorningsRad[] | null>(null);
   const [fel, setFel] = useState<string | null>(null);
   const [oppen, setOppen] = useState<string | null>(sok?.get("id") ?? null);

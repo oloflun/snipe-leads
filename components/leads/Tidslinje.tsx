@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { useArbetsvag } from "@/components/AppShell";
 import { Rad, Radlista, Tomt, btnPrimary, btnSecondary, etikett, meta, rubrikPanel } from "@/components/ui";
 import { felmeddelande } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
@@ -27,7 +28,7 @@ const T = {
     sv: "Här samlas statusbyten, mejl, anteckningar och uppgifter för bolaget. I demon är tidslinjen tom.",
     en: "Status changes, emails, notes and tasks for the company gather here. In the demo the timeline is empty."
   },
-  svaraIInkorgen: { sv: "Svara i inkorgen", en: "Reply in the inbox" },
+  svaraIInkorgen: { sv: "Svara under Att göra", en: "Reply under To do" },
   anteckning: { sv: "Anteckning", en: "Note" },
   sparaAnteckning: { sv: "Spara anteckning", en: "Save note" },
   uppgift: { sv: "Uppgift", en: "Task" },
@@ -50,6 +51,8 @@ const faltKlass = "focus-ring min-h-11 w-full rounded-input border border-ink/15
 
 export function Tidslinje({ prospectId, demo = false }: Readonly<{ prospectId: string; demo?: boolean }>) {
   const { locale, text } = useLocale();
+  // Leadsmejlen ligger i Att göra sedan Snajp Suite; vägen följer ytan (/admin).
+  const vag = useArbetsvag();
   const [handelser, setHandelser] = useState<Handelse[] | null>(null);
   const [fel, setFel] = useState<string | null>(null);
   const [skrivFel, setSkrivFel] = useState<string | null>(null);
@@ -197,7 +200,7 @@ export function Tidslinje({ prospectId, demo = false }: Readonly<{ prospectId: s
               <>
                 {handelser.some((h) => h.typ === "mejl_in") ? (
                   <Link
-                    href="/dashboard/iris/inkorg"
+                    href={vag("/dashboard/att-gora")}
                     className="focus-ring mb-3 inline-flex min-h-11 items-center rounded-input text-[15px] font-medium underline underline-offset-4"
                   >
                     {text(T.svaraIInkorgen)}

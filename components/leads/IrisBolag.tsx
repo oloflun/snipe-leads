@@ -9,6 +9,7 @@ import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { LeadslistorView } from "@/components/leads/LeadslistorView";
 import { LeadsRunForm } from "@/components/leads/LeadsRunForm";
 import { LeadsTabell } from "@/components/leads/LeadsTabell";
+import { Pipeline } from "@/components/leads/Pipeline";
 import { Tidslinje } from "@/components/leads/Tidslinje";
 import { EmptyState, SkeletonRows, btnPrimary, btnSecondary, flik, flikAktiv, flikInaktiv } from "@/components/ui";
 import { mejlaOss } from "@/components/marketing/copy";
@@ -84,13 +85,19 @@ type ListLage =
   | { fas: "fel"; meddelande: Localized }
   | { fas: "klar"; prospekt: Prospekt[] };
 
-type Segment = "bolag" | "tabell" | "listor";
+/**
+ * Leads vyer (Snajp Suite 2026-10-03): ett objekt, en sida, vyerna i en rad —
+ * som Twentys vybar. Pipeline var en egen sida (Iris › Pipeline) och är nu en
+ * vy här; adressen bär vyn i `?vy=` så att den går att länka till.
+ */
+type Segment = "bolag" | "tabell" | "pipeline" | "listor";
 
-const SEGMENT: Segment[] = ["bolag", "tabell", "listor"];
+const SEGMENT: Segment[] = ["bolag", "tabell", "pipeline", "listor"];
 
 const SEGMENT_ETIKETT: Record<Segment, Localized> = {
-  bolag: { sv: "Alla bolag", en: "All companies" },
+  bolag: { sv: "Alla leads", en: "All leads" },
   tabell: { sv: "Tabell", en: "Table" },
+  pipeline: { sv: "Pipeline", en: "Pipeline" },
   listor: { sv: "Listor", en: "Lists" }
 };
 
@@ -124,7 +131,7 @@ const T = {
   ingaBolag: { sv: "Inga bolag ännu", en: "No companies yet" },
   exempel: { sv: "Exempel", en: "Example" },
   researchar: { sv: "Researchar", en: "Researching" },
-  valjBolag: { sv: "Välj ett bolag i listan.", en: "Pick a company in the list." },
+  valjBolag: { sv: "Välj ett lead i listan.", en: "Pick a lead in the list." },
   bolagenKundeInte: { sv: "Bolagen kunde inte hämtas", en: "Could not load the companies" },
   forsokIgen: { sv: "Försök igen", en: "Try again" },
   tillval: { sv: "Tillval", en: "Add-on" },
@@ -168,7 +175,7 @@ const T = {
   godkant: { sv: "Godkänt. Utkastet ligger nu i sändkön.", en: "Approved. The draft is now in the send queue." },
   godkanner: { sv: "Godkänner…", en: "Approving…" },
   godkannOchSkicka: { sv: "Godkänn och skicka", en: "Approve and send" },
-  godkannIGranskning: { sv: "Godkänn i Iris › Granskning.", en: "Approve in Iris › Review." }
+  godkannIGranskning: { sv: "Godkänn under Att göra.", en: "Approve under To do." }
 } satisfies Record<string, Localized>;
 
 /** Samma text på båda språken: serverns egna felmeddelanden, som redan är färdiga. */
@@ -283,11 +290,11 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
   const { locale, text } = useLocale();
   const sokParams = useSearchParams();
 
-  // Gammal adress /dashboard/leads/listor -> /dashboard/iris?vy=listor (se
-  // WorkspaceSection.tsx) ska öppna på rätt segment, inte tyst landa på Bolag.
+  // ?vy= öppnar rätt vy: gamla adresser (/iris/pipeline, /leads/listor)
+  // omdirigeras hit med den (se WorkspaceSection.tsx).
   const [segmentVal, setSegmentVal] = useState<Segment>(() => {
     const vy = sokParams.get("vy");
-    return vy === "listor" || vy === "tabell" ? vy : "bolag";
+    return SEGMENT.includes(vy as Segment) ? (vy as Segment) : "bolag";
   });
   const flikRefs = useRef<Partial<Record<Segment, HTMLButtonElement | null>>>({});
   const [korOppen, setKorOppen] = useState(false);
@@ -410,7 +417,7 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
 
   return (
     <PageShell
-      title="Iris"
+      title={{ sv: "Leads", en: "Leads" }}
       action={
         <button
           type="button"
@@ -519,6 +526,8 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
               requestAnimationFrame(() => document.getElementById(`iris-rad-${id}`)?.focus());
             }}
           />
+        ) : segmentVal === "pipeline" ? (
+          <Pipeline demo={demo} />
         ) : segmentVal === "listor" ? (
           harListaddon || demo ? (
             <LeadslistorView demo={demo} />

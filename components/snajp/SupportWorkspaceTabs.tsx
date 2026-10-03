@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useLocale } from "@/lib/i18n";
 import { Dashboard } from "./Dashboard";
-import { JournalVy } from "./JournalVy";
 import { SupportChat } from "./SupportChat";
 
 /**
@@ -26,7 +25,7 @@ import { SupportChat } from "./SupportChat";
  */
 export function SupportWorkspaceTabs({ workspaceName }: Readonly<{ workspaceName: string | null }>) {
   const { text } = useLocale();
-  const [tab, setTab] = useState<"kundtjanst" | "att_hantera" | "testmail" | "testchatt" | "journal">("kundtjanst");
+  const [tab, setTab] = useState<"kundtjanst" | "att_hantera" | "testmail" | "testchatt">("kundtjanst");
   /** null = vet inte än. false = riktig kund, Testmail-fliken ska synas. */
   const [visarTestIArenden, setVisarTestIArenden] = useState<boolean | null>(null);
 
@@ -42,18 +41,17 @@ export function SupportWorkspaceTabs({ workspaceName }: Readonly<{ workspaceName
 
   const flikar = (
     [
-      { id: "kundtjanst", label: { sv: "Kundtjänst", en: "Customer service" } },
+      { id: "kundtjanst", label: { sv: "Ärenden", en: "Cases" } },
       // Eskaleringar och larm (migration 078): egen flik så att de aldrig
       // blandas med kundärenden eller får ett AI-utkast (kundtest 2026-09-22).
       { id: "att_hantera", label: { sv: "Att hantera", en: "To handle" } },
       ...(visarTestIArenden === false
         ? [{ id: "testmail" as const, label: { sv: "Testmail", en: "Test mail" } }]
         : []),
-      { id: "testchatt", label: { sv: "Testchatt", en: "Test chat" } },
-      // Journalen (Livrustning-piloten): körningar, kostnad och
-      // överlämningar för den egna tenanten — vyn kundens kontaktperson
-      // (läsrollen) följer piloten i. Ren läsning, se JournalVy.tsx.
-      { id: "journal", label: { sv: "Journal", en: "Journal" } }
+      { id: "testchatt", label: { sv: "Testchatt", en: "Test chat" } }
+      // Journalen (körningar, kostnad, överlämningar) flyttade till
+      // Aktivitet 2026-10-03, Snajp Suite: alla agenters körningar på ett
+      // ställe. Se components/dashboard/Aktivitet.tsx.
     ] as const
   );
 
@@ -86,8 +84,7 @@ export function SupportWorkspaceTabs({ workspaceName }: Readonly<{ workspaceName
             <SupportChat testMode workspaceLabel={workspaceName ?? undefined} />
           </div>
         ) : null}
-        {tab === "journal" ? <JournalVy /> : null}
-      </div>
+     </div>
     </div>
   );
 }
