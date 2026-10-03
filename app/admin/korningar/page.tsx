@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { AdminTabell, AdminText } from "@/components/admin/AdminText";
-import { Cell, Sidhuvud, Tomt, flik, flikAktiv, flikInaktiv, tabellRad } from "@/components/ui";
+import { Cell, Sidhuvud, Tomt, flik, flikAktiv, flikInaktiv, fliklista, tabellRad } from "@/components/ui";
 import { listRuns, unwrap } from "@/lib/data/admin";
 import { cn } from "@/lib/utils";
 
@@ -57,7 +57,7 @@ export default async function Page({
     <div>
       <Sidhuvud title={<AdminText n="korningarRubrik" />} />
 
-      <div className="mt-8 flex min-w-0 flex-wrap gap-2">
+      <div className={cn("mt-6 min-w-0", fliklista)}>
         {TYPES.map(([type, namn]) => (
           <Link
             key={type || "alla"}

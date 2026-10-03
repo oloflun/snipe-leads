@@ -263,6 +263,18 @@ button {
   text-transform: uppercase;
 }
 
+/* Appytorna (AppShell, AdminShell bär .appyta): kickern är en etikett, inte
+   spärrad mono. Över hundra komponenter bär klassen, och på en arbetsyta läste
+   den som viskande AI-mikrotext (F-016, Antons dom 2026-10-03). Samma stil som
+   `etikett` i components/ui.tsx. Marknadssidorna behåller sin kicker. */
+.appyta .kicker {
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
 .rule {
   height: 1px;
   background: currentColor;

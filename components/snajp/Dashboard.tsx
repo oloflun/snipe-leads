@@ -22,7 +22,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useArbetsvag } from "@/components/AppShell";
 import { EjAktiverad, arEjAktiverad } from "@/components/EjAktiverad";
-import { Badge, btnPrimary, btnSecondary } from "@/components/ui";
+import { Badge, btnPrimary, btnSecondary, btnLiten, faltTatt } from "@/components/ui";
 import { mejlaOss } from "@/components/marketing/copy";
 import { createDemoSupportApi } from "@/lib/demo/support-inbox";
 import { readJsonBody } from "@/lib/http/json";
@@ -662,7 +662,7 @@ export function Dashboard({
             type="button"
             onClick={() => void seedMock(null)}
             disabled={busy !== null}
-            className={btnPrimary}
+            className={cn(btnSecondary, btnLiten)}
           >
             {busy === "seed" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Inbox className="h-4 w-4" />}
             {text(T.hamtaTestmail)}
@@ -678,7 +678,7 @@ export function Dashboard({
             onClick={syncInbox}
             disabled={busy !== null}
             title={text(T.synkaTitel)}
-            className={btnSecondary}
+            className={cn(btnSecondary, btnLiten)}
           >
             {busy === "sync" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
             {text(T.synka)}
@@ -686,7 +686,7 @@ export function Dashboard({
         ) : inkorgKopplad === false && !demo ? (
           /* Utan kopplad inkorg leder knappen till guiden i stället för att
              försvinna — annars hittar ett nytt konto aldrig vägen dit. */
-          <Link href={vag("/settings/mailboxes")} className={btnSecondary}>
+          <Link href={vag("/settings/mailboxes")} className={cn(btnSecondary, btnLiten)}>
             <Link2 className="h-4 w-4" />
             {text(T.koppla)}
           </Link>
@@ -714,7 +714,7 @@ export function Dashboard({
                 ? text(T.nyaFack)
                 : text(T.nyaAlla)
           }
-          className={btnSecondary}
+          className={cn(btnSecondary, btnLiten)}
         >
           {busy === "seed" && !inkorgKopplad ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -729,14 +729,14 @@ export function Dashboard({
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder={text(T.sok)}
-            className="focus-ring min-h-11 w-full rounded-input bg-paper py-2.5 pl-9 pr-3 text-sm outline-none placeholder:text-ink/35"
+            className="focus-ring h-9 w-full rounded-input border border-ink/15 bg-paper pl-9 pr-3 text-[1rem] outline-none placeholder:text-ink/35"
           />
         </div>
         {arKo || lager === "leads" ? null : (
           <select
           value={statusFilter ?? ""}
           onChange={(event) => setStatusFilter(event.target.value || null)}
-          className="focus-ring min-h-11 rounded-input bg-paper px-3 py-2.5 text-sm"
+          className={faltTatt}
         >
           <option value="">{text(T.allaStatusar)}</option>
           {Object.entries(STATUS_META).map(([value, meta]) => (
@@ -749,7 +749,7 @@ export function Dashboard({
         {/* Reglerna bor numera under Inställningar, bredvid leads-agentens
             motsvarande kontroll. Se components/settings/SupportRegler.tsx. */}
         {demo || arKo || lager === "leads" ? null : (
-          <Link href={vag("/settings/regler")} className={btnSecondary}>
+          <Link href={vag("/settings/regler")} className={cn(btnSecondary, btnLiten)}>
             <Settings2 className="h-4 w-4" />
             {text(T.regler)}
           </Link>

@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { ImportCsv } from "@/components/leads/ImportCsv";
-import { btnPrimary, btnSecondary, EmptyState, SkeletonRows, flik, flikAktiv, flikInaktiv } from "@/components/ui";
+import { btnPrimary, btnSecondary, EmptyState, SkeletonRows, flik, flikAktiv, flikInaktiv, fliklista } from "@/components/ui";
 import { lasOffertForUtkast } from "@/lib/actions/affarskontext";
 import type { EmailStudioData } from "@/lib/data/emails";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
@@ -575,7 +575,7 @@ export function LeadslistorView({ demo = false }: Readonly<{ demo?: boolean }> =
           type="button"
           onClick={() => void bestall()}
           disabled={bestaller}
-          className={cn(btnPrimary, "mt-6")}
+          className={cn(btnSecondary, "mt-5")}
         >
           {bestaller ? text(T.bestaller) : text(T.bestallLista)}
         </button>
@@ -1349,7 +1349,7 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
         {/* Tryckknappar, inte role=tab: ett filter över samma tabell har ingen
             tabpanel, och tab-rollen lovar pilnavigering som inte finns (4.1.2). */}
-        <div className="flex flex-wrap gap-2" role="group" aria-label={text({ sv: "Kontaktväg", en: "Contact channel" })}>
+        <div className={fliklista} role="group" aria-label={text({ sv: "Kontaktväg", en: "Contact channel" })}>
           {KONTAKTFILTER.map((f) => (
             <button
               key={f.id}

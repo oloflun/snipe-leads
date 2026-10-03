@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { EjAktiverad } from "@/components/EjAktiverad";
-import { SkeletonRows, Tomt, btnSecondary, etikett, meta } from "@/components/ui";
+import { SkeletonRows, Tomt, btnSecondary, etikett, faltDiskret, meta } from "@/components/ui";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { felmeddelande } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
@@ -177,8 +177,8 @@ export function Pipeline({ demo = false }: Readonly<{ demo?: boolean }>) {
                             .filter(Boolean)
                             .join(" · ")}
                         </p>
-                        {p.contact_name ? <p className="mt-1 break-words text-[15px] text-ink-muted">{p.contact_name}</p> : null}
-                        <label className="mt-2 block">
+                        {p.contact_name ? <p className="mt-1 break-words text-[0.875rem] text-ink-muted">{p.contact_name}</p> : null}
+                        <label className="mt-1.5 block">
                           <span className="sr-only">
                             {text(T.flyttaTill)} ({p.company_name})
                           </span>
@@ -186,7 +186,7 @@ export function Pipeline({ demo = false }: Readonly<{ demo?: boolean }>) {
                             id={`pipeline-val-${p.id}`}
                             value={p.status}
                             onChange={(e) => void flytta(p.id, e.target.value)}
-                            className="focus-ring min-h-11 w-full rounded-input border border-ink/15 bg-paper px-2 text-[16px] text-ink"
+                            className={cn(faltDiskret, "w-full text-ink-muted hover:text-ink")}
                           >
                             {STATUS_ORDNING.map((s) => (
                               <option key={s} value={s}>

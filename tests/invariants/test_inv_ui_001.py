@@ -99,7 +99,6 @@ def test_appytorna_finns():
 #: om på dem, en i taget, och stryker raden när filen är ren.
 #: plans/2026-09-27-appytor-enhetlighet.md är specen.
 _SKULD_2026_09_28 = {
-    "components/leads/LeadsControls.tsx",
     "components/leads/IrisBolag.tsx",
     "components/leads/LeadslistorView.tsx",
     "components/leads/Bolagssida.tsx",
@@ -121,7 +120,6 @@ _SKULD_2026_09_28 = {
     "components/SoulEditor.tsx",
     "components/admin/Testkorningar.tsx",
     "components/leads/IrisEskalering.tsx",
-    "components/leads/IrisInstallningar.tsx",
     "components/settings/NotisSettings.tsx",
     "components/settings/TemaSettings.tsx",
     "components/kvitton/KvittoVy.tsx",

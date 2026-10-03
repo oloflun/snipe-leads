@@ -3,7 +3,7 @@
 import { ShieldAlert } from "lucide-react";
 import { useState } from "react";
 import { Dashboard as SupportDashboard } from "@/components/snajp/Dashboard";
-import { Badge, etikett, flik, flikAktiv, flikInaktiv } from "@/components/ui";
+import { Badge, etikett, flik, flikAktiv, flikInaktiv, fliklista } from "@/components/ui";
 import { CHATTFRAGOR } from "@/lib/demo/support-chatt";
 import { cn } from "@/lib/utils";
 import { useLocale } from "@/lib/i18n";
@@ -89,7 +89,7 @@ export function DemoSupportYta() {
   return (
     <div>
       {/* Samma flikform som SupportWorkspaceTabs. */}
-      <div className="flex flex-wrap gap-2" role="tablist" aria-label={text({ sv: "Kundtjänstens ytor", en: "Customer service areas" })}>
+      <div className={fliklista} role="tablist" aria-label={text({ sv: "Kundtjänstens ytor", en: "Customer service areas" })}>
         {(
           [
             ["inkorg", text({ sv: "Inkorgen", en: "The inbox" })],

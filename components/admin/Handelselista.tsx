@@ -12,6 +12,7 @@ import {
   flik,
   flikAktiv,
   flikInaktiv,
+  fliklista,
   meta,
   rubrikPanel,
 } from "@/components/ui";
@@ -207,7 +208,7 @@ export function Handelsefilter({ niva }: Readonly<{ niva: string }>) {
   ];
 
   return (
-    <div className="mt-8 flex min-w-0 flex-wrap gap-2">
+    <div className={cn("mt-6 min-w-0", fliklista)}>
       {val.map(({ varde, etikett: namn }) => {
         const pa = niva === varde;
         return (

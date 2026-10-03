@@ -5,6 +5,13 @@ import { createDemoLeadsFetch } from "@/lib/demo/leads-controls";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { icpEtiketter } from "@/lib/leads/icpLabels";
 import { useLocale, type Localized } from "@/lib/i18n";
+import { btnLiten, btnPrimary, btnSecondary, etikett, meta, rubrikPanel, flik, flikAktiv, flikInaktiv, fliklista } from "@/components/ui";
+import { cn } from "@/lib/utils";
+
+/** Formulärfält i målgruppen: husets fält, inte de fyrkantiga plattorna i 48 px
+ *  med spärrade mono-etiketter som stod här före 2026-10-03. */
+const FALT =
+  "focus-ring h-10 rounded-input border border-ink/15 bg-paper px-3 text-[1rem] text-ink outline-none hover:border-ink/30 [@media(pointer:fine)]:text-[0.9375rem]";
 
 function somText(cause: unknown): Localized {
   const m = felmeddelande(cause);
@@ -228,10 +235,9 @@ export function LeadsControls({
   return (
     <div className="grid gap-12">
       <section>
-        {/* Kicker, inte rubrik — se DESIGN.md Accessibility floor. */}
-        <p className="kicker text-mineral">{text({ sv: "Hur långt agenterna får gå", en: "How far the agents may go" })}</p>
+        <h2 className={rubrikPanel}>{text({ sv: "Hur långt agenterna får gå", en: "How far the agents may go" })}</h2>
 
-        <div className="mt-5 flex min-w-0 flex-wrap gap-3">
+        <div className={cn("mt-3", fliklista)}>
           {config.autonomy_levels.map((level) => (
             <button
               key={level.value}
@@ -239,11 +245,7 @@ export function LeadsControls({
               disabled={isPending}
               aria-pressed={config.autonomy === level.value}
               onClick={() => save({ autonomy: level.value })}
-              className={
-                config.autonomy === level.value
-                  ? "border border-ochre bg-ochre/10 px-4 py-2 font-mono text-[12px] uppercase tracking-[0.18em] text-ink disabled:opacity-60"
-                  : "border border-ink/15 px-4 py-2 font-mono text-[12px] uppercase tracking-[0.18em] text-mineral transition hover:border-ochre hover:text-ochre disabled:opacity-60"
-              }
+              className={cn(flik, "disabled:opacity-60", config.autonomy === level.value ? flikAktiv : flikInaktiv)}
             >
               {text(AUTONOMY_LABEL[level.value])}
             </button>
@@ -252,17 +254,17 @@ export function LeadsControls({
 
         {/* Raden som säger vad valet BETYDER. Utan den är det tre ord som
             låter lika, och kunden väljer det som låter mest kapabelt. */}
-        <p className="mt-4 max-w-[64ch] text-[15px] leading-7">{config.autonomy_description}</p>
+        <p className="mt-4 max-w-[64ch] text-[0.9375rem] leading-7 text-ink-muted">{config.autonomy_description}</p>
       </section>
 
       <section className="border-t border-ink/15 pt-8">
-        <p className="kicker text-mineral">{text({ sv: "Målgrupp", en: "Target group" })}</p>
-        <p className="mt-3 text-[15px] leading-7 text-mineral">
+        <h2 className={rubrikPanel}>{text({ sv: "Målgrupp", en: "Target group" })}</h2>
+        <p className="mt-2 text-[0.9375rem] leading-7 text-ink-muted">
           {text({ sv: "Styr urvalet, inte tonen. Separera med komma.", en: "Steers the selection, not the tone. Separate with commas." })}
         </p>
 
         <form
-          className="mt-6 grid gap-5"
+          className="mt-5 grid gap-4"
           onSubmit={(event) => {
             event.preventDefault();
             const form = new FormData(event.currentTarget);
@@ -280,19 +282,19 @@ export function LeadsControls({
           }}
         >
           {ICP_FIELDS.map((field) => (
-            <label key={field.key} className="grid grid-cols-12 gap-x-6 border-t border-ink/15 pt-5">
-              <span className="kicker col-span-12 text-mineral md:col-span-3">{field.label}</span>
+            <label key={field.key} className="grid grid-cols-12 items-center gap-x-6 border-t border-ink/12 pt-4">
+              <span className={cn(etikett, "col-span-12 md:col-span-3")}>{field.label}</span>
               <input
                 name={field.key}
                 defaultValue={(config.icp[field.key] as string[]).join(", ")}
                 placeholder={field.hint}
-                className="col-span-12 mt-3 h-12 min-w-0 border border-ink/15 bg-paper2/70 px-4 outline-none focus:border-ochre md:col-span-9 md:mt-0"
+                className={cn(FALT, "col-span-12 mt-2 min-w-0 md:col-span-9 md:mt-0")}
               />
             </label>
           ))}
 
-          <div className="grid grid-cols-12 gap-x-6 border-t border-ink/15 pt-5">
-            <span className="kicker col-span-12 text-mineral md:col-span-3">{text({ sv: "Anställda", en: "Employees" })}</span>
+          <div className="grid grid-cols-12 items-center gap-x-6 border-t border-ink/12 pt-4">
+            <span className={cn(etikett, "col-span-12 md:col-span-3")}>{text({ sv: "Anställda", en: "Employees" })}</span>
             <div className="col-span-12 mt-3 flex min-w-0 flex-wrap items-center gap-3 md:col-span-9 md:mt-0">
               <input
                 name="size_min"
@@ -300,7 +302,7 @@ export function LeadsControls({
                 min={0}
                 defaultValue={config.icp.company_size.min ?? ""}
                 placeholder={text({ sv: "från", en: "from" })}
-                className="h-12 w-28 min-w-0 border border-ink/15 bg-paper2/70 px-4 outline-none focus:border-ochre"
+                className={cn(FALT, "w-28 min-w-0")}
               />
               <span className="text-mineral" aria-hidden>
                 –
@@ -311,7 +313,7 @@ export function LeadsControls({
                 min={0}
                 defaultValue={config.icp.company_size.max ?? ""}
                 placeholder={text({ sv: "till", en: "to" })}
-                className="h-12 w-28 min-w-0 border border-ink/15 bg-paper2/70 px-4 outline-none focus:border-ochre"
+                className={cn(FALT, "w-28 min-w-0")}
               />
             </div>
           </div>
@@ -320,7 +322,7 @@ export function LeadsControls({
             <button
               type="submit"
               disabled={isPending}
-              className="h-12 bg-ink px-5 font-mono text-[13px] uppercase tracking-[0.18em] text-paper transition-colors duration-500 hover:bg-ochre hover:text-ink disabled:opacity-60"
+              className={btnPrimary}
             >
               {isPending ? text({ sv: "Sparar...", en: "Saving..." }) : text({ sv: "Spara målgrupp", en: "Save target group" })}
             </button>
@@ -330,7 +332,7 @@ export function LeadsControls({
 
       {visaKo ? (
       <section className="border-t border-ink/15 pt-8">
-        <p className="kicker text-mineral">{text({ sv: "Väntar på dig", en: "Waiting for you" })}</p>
+        <h2 className={rubrikPanel}>{text({ sv: "Väntar på dig", en: "Waiting for you" })}</h2>
 
         {queue === null ? (
           <div className="mt-5 h-16 animate-pulse border-t border-ink/15 bg-ink/[0.03]" />
@@ -346,7 +348,7 @@ export function LeadsControls({
                   <span className="min-w-0 break-words text-[17px]">
                     {item.subject || text({ sv: "Utan ämnesrad", en: "No subject line" })}
                   </span>
-                  <span className="kicker shrink-0 text-mineral">
+                  <span className={cn(meta, "shrink-0")}>
                     {item.prospect_email ?? text({ sv: "okänd mottagare", en: "unknown recipient" })}
                   </span>
                 </div>
@@ -363,7 +365,7 @@ export function LeadsControls({
                     type="button"
                     disabled={isPending}
                     onClick={() => decide(item.id, "approve")}
-                    className="border border-ink px-4 py-2 font-mono text-[12px] uppercase tracking-[0.18em] transition hover:bg-ink hover:text-paper disabled:opacity-60"
+                    className={cn(btnPrimary, btnLiten)}
                   >
                     {text({ sv: "Godkänn", en: "Approve" })}
                   </button>
@@ -371,7 +373,7 @@ export function LeadsControls({
                     type="button"
                     disabled={isPending}
                     onClick={() => decide(item.id, "reject")}
-                    className="border border-ink/15 px-4 py-2 font-mono text-[12px] uppercase tracking-[0.18em] text-mineral transition hover:border-danger hover:text-danger disabled:opacity-60"
+                    className={cn(btnSecondary, btnLiten)}
                   >
                     {text({ sv: "Avvisa", en: "Reject" })}
                   </button>

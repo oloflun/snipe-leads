@@ -180,7 +180,7 @@ export function AdminShell({
   };
 
   return (
-    <div className="min-h-screen bg-paper text-ink">
+    <div className="appyta min-h-screen bg-paper text-ink">
       <div className="flex min-h-dvh">
         <Rail
           logoHref="/admin"
@@ -189,7 +189,7 @@ export function AdminShell({
             en: "Snajp admin, go to overview"
           })}
           brand={
-            <p className="hidden truncate px-5 pb-4 text-[0.75rem] font-medium uppercase tracking-[0.14em] text-paper-subtle lg:block">
+            <p className="hidden truncate px-5 pb-4 text-[0.8125rem] font-medium text-paper-muted lg:block">
               {workspaceName ? `Admin · ${workspaceName}` : "Admin"}
             </p>
           }

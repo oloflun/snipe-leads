@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useArbetsvag } from "@/components/AppShell";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
-import { Badge, Rad, Radlista, SkeletonRows, btnSecondary, etikett as etikettKlass, meta } from "@/components/ui";
+import { Badge, Rad, Radlista, SkeletonRows, btnLiten, btnSecondary, etikett as etikettKlass, meta } from "@/components/ui";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { createDemoSupportApi } from "@/lib/demo/support-inbox";
 import { readJsonBody } from "@/lib/http/json";
@@ -373,10 +373,13 @@ function AttGora({
   const { text } = useLocale();
   if (rader.length === 0) return null;
   const fler = rader.length - 5;
+  // Papper med hårlinjer, inte en mörk platta (2026-10-03): railen är appens
+  // enda tonala inversion (DESIGN.md § Macrostructure, App). Kön markeras i
+  // stället av ochre-linjen överst och antalet i rubriken.
   return (
-    <section aria-label={text(T.attGora)} className="rounded-card bg-ink p-6 text-paper md:p-8">
-      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
-        <h2 className="text-[1.25rem] font-semibold tracking-[-0.01em]">
+    <section aria-label={text(T.attGora)} className="border-t-2 border-ochre">
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 py-4">
+        <h2 className="text-[1.125rem] font-semibold tracking-[-0.01em]">
           {rader.length === 1
             ? text({ sv: "1 sak väntar på dig", en: "1 item waiting for you" })
             : text({
@@ -384,33 +387,22 @@ function AttGora({
                 en: `${rader.length} items waiting for you`
               })}
         </h2>
-        <Link
-          href={href}
-          className="focus-ring inline-flex min-h-11 items-center rounded-input bg-paper px-5 text-[0.9375rem] font-semibold text-ink transition-colors hover:bg-paper/85"
-        >
+        <Link href={href} className={cn(btnSecondary, btnLiten)}>
           {knapp}
         </Link>
       </div>
-      {/* Samma spannlogik som Stapellista, i mörk färgvärld: rubrik/underrad
-          8 spann, meta 4, deklarerat på VARJE rad — metakolumnen ritas även
-          tom, så den står på samma plats oavsett om en rad har meta. */}
-      <ul className="mt-5 border-t border-paper/15">
+      <ul className="divide-y divide-ink/12 border-y border-ink/12">
         {rader.slice(0, 5).map((rad) => (
-          <li key={rad.id} className="border-b border-paper/15">
+          <li key={rad.id}>
             <Link
               href={rad.href ?? href}
-              // text-paper uttryckligen: globals.css sätter `a { color: ink }`,
-              // och utan den här klassen står rubriken bläck-på-bläck. Uppmätt
-              // i skärmdump: raden såg ut att sakna sin rubrikrad helt.
-              className="focus-ring -mx-3 grid grid-cols-12 gap-x-4 rounded-input px-3 py-3.5 text-paper transition-colors hover:bg-paper/10"
+              className="focus-ring grid grid-cols-12 gap-x-4 rounded-input px-1 py-2.5 text-ink transition-colors hover:bg-paper2/60"
             >
               <span className="col-span-12 min-w-0 sm:col-span-8">
-                <span className="block truncate text-[0.9375rem] font-semibold">{rad.rubrik}</span>
-                <span className="mt-0.5 block truncate text-[0.8125rem] text-paper-muted">
-                  {rad.under}
-                </span>
+                <span className="block truncate text-[0.9375rem] font-medium">{rad.rubrik}</span>
+                <span className="mt-0.5 block truncate text-[0.8125rem] text-ink-subtle">{rad.under}</span>
               </span>
-              <span className="col-span-12 mt-1 truncate text-[0.8125rem] text-paper-muted sm:col-span-4 sm:mt-0 sm:self-center sm:text-right">
+              <span className="col-span-12 mt-1 truncate text-[0.8125rem] text-ink-muted sm:col-span-4 sm:mt-0 sm:self-center sm:text-right">
                 {rad.meta ?? ""}
               </span>
             </Link>
@@ -418,7 +410,7 @@ function AttGora({
         ))}
       </ul>
       {fler > 0 ? (
-        <p className="mt-4 text-[0.8125rem] text-paper-muted">
+        <p className="mt-3 text-[0.8125rem] text-ink-subtle">
           {fler === 1
             ? text({ sv: "1 till i kön.", en: "1 more in the queue." })
             : text({ sv: `${fler} till i kön.`, en: `${fler} more in the queue.` })}

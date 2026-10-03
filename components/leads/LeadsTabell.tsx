@@ -3,7 +3,7 @@
 import { X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EjAktiverad } from "@/components/EjAktiverad";
-import { Badge, Cell, SkeletonRows, Tabell, Tomt, btnPrimary, btnSecondary, etikett, flik, flikAktiv, flikInaktiv, meta, tabellRad } from "@/components/ui";
+import { Badge, Cell, SkeletonRows, Tabell, Tomt, btnPrimary, btnSecondary, etikett, btnLiten, faltDiskret, faltTatt, flik, flikAktiv, flikInaktiv, fliklista, meta, tabellRad } from "@/components/ui";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { felmeddelande } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
@@ -88,7 +88,8 @@ function rensat(f: VyFilter): VyFilter {
   return Object.fromEntries(Object.entries(f).filter(([, v]) => typeof v === "string" && v.trim() !== "")) as VyFilter;
 }
 
-const faltKlass = "focus-ring min-h-11 rounded-input border border-ink/15 bg-paper px-3 text-[16px] text-ink";
+// Täta fält (ui.tsx faltTatt): 36 px i verktygsraden och i tabellraderna.
+const faltKlass = faltTatt;
 
 export function LeadsTabell({
   onValj,
@@ -228,7 +229,7 @@ export function LeadsTabell({
       value={p.status}
       onChange={(e) => void bytStatus(p.id, e.target.value)}
       aria-label={`${text(T.statusFor)} ${p.company_name}`}
-      className={cn(faltKlass, "w-full px-2")}
+      className={cn(faltDiskret, "w-full")}
     >
       {STATUS_ORDNING.map((s) => (
         <option key={s} value={s}>
@@ -246,7 +247,7 @@ export function LeadsTabell({
       <button
         type="button"
         onClick={() => onValj(p.id)}
-        className="focus-ring -mx-1 inline-flex min-h-11 items-center rounded-input px-1 text-left font-semibold underline decoration-ink/25 underline-offset-4 hover:decoration-ink"
+        className="focus-ring -mx-1 inline-flex min-h-8 items-center rounded-input px-1 text-left font-medium decoration-ink/40 underline-offset-4 hover:underline"
       >
         {p.company_name}
       </button>
@@ -279,7 +280,7 @@ export function LeadsTabell({
       {vyer.length || !demo ? (
         <div>
           <p className={etikett}>{text(T.vyer)}</p>
-          <ul className="mt-2 flex flex-wrap items-center gap-2">
+          <ul className={cn("mt-2", fliklista)}>
             <li>
               <button
                 type="button"
@@ -319,7 +320,7 @@ export function LeadsTabell({
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="flex flex-wrap items-end gap-2">
         <label className={cn(etikett, "flex flex-col gap-1")}>
           {text(T.filterStatus)}
           <select
@@ -396,7 +397,7 @@ export function LeadsTabell({
               className={faltKlass}
             />
           </label>
-          <button type="submit" disabled={sparar || !vyNamn.trim()} className={btnPrimary}>
+          <button type="submit" disabled={sparar || !vyNamn.trim()} className={cn(btnSecondary, btnLiten)}>
             {sparar ? text(T.sparar) : text(T.sparaVy)}
           </button>
         </form>
@@ -420,13 +421,13 @@ export function LeadsTabell({
               ariaLabel={text(T.tabell)}
               minBredd={960}
               kolumner={[
-                { rubrik: text(T.kolBolag), bredd: "19%" },
-                { rubrik: text(T.kolStatus), bredd: "15%" },
+                { rubrik: text(T.kolBolag), bredd: "20%" },
+                { rubrik: text(T.kolStatus), bredd: "16%" },
                 { rubrik: text(T.kolNiva), bredd: "8%" },
-                { rubrik: text(T.kolPoang), bredd: "7%", hoger: true },
-                { rubrik: text(T.kolKontakt), bredd: "12%" },
-                { rubrik: text(T.kolSenaste), bredd: "12%" },
-                { rubrik: text(T.kolUppgift), bredd: "17%" },
+                { rubrik: text(T.kolPoang), bredd: "6%", hoger: true },
+                { rubrik: text(T.kolKontakt), bredd: "10%" },
+                { rubrik: text(T.kolSenaste), bredd: "16%" },
+                { rubrik: text(T.kolUppgift), bredd: "14%" },
                 { rubrik: text(T.kolTyp) }
               ]}
             >
@@ -437,7 +438,7 @@ export function LeadsTabell({
                   <Cell>{p.niva ? nivaEtikett(p.niva, locale) : ""}</Cell>
                   <Cell hoger>{poangAv(p)}</Cell>
                   <Cell>{kontaktChip(p)}</Cell>
-                  <Cell className="text-ink-muted">{relativTid(p.senaste_handelse_at ?? p.created_at, locale)}</Cell>
+                  <Cell className="truncate whitespace-nowrap text-ink-muted">{relativTid(p.senaste_handelse_at ?? p.created_at, locale)}</Cell>
                   <Cell>{uppgiftText(p)}</Cell>
                   <Cell className="text-ink-muted">{text(LEAD_TYP_ETIKETT[leadTyp(p.origin)])}</Cell>
                 </tr>

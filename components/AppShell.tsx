@@ -33,6 +33,7 @@ import { useLocale, type Localized } from "@/lib/i18n";
 import { appRoutes, produktForInstallningsvag, routesForProducts, tillAdminvag } from "@/lib/routes";
 import type { Scope } from "@/lib/routes";
 import { cn } from "@/lib/utils";
+import { rubrikSida } from "@/components/ui";
 
 /**
  * Operate mode. Samma tokens som marknadsytorna, produktens kadens: fast
@@ -323,7 +324,7 @@ export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) 
         .map(({ grundHref: _grundHref, ...item }) => item);
 
   return (
-    <div className="min-h-screen bg-paper text-ink">
+    <div className="appyta min-h-screen bg-paper text-ink">
       {/* Före allt annat i DOM och med högre z-index: bannern ska ligga ÖVER
           det klistrade innehållet, inte försvinna bakom det vid scroll. */}
       <ImpersonationBanner />
@@ -588,14 +589,16 @@ export function PageShell({
     <AppShell>
       {/* 1200 och inte 1400: innehållet delar numera raden med railen, och
           1400 hade gett över 90 tecken per rad i tabellerna på en bred skärm. */}
-      <section className={iAdmin ? "" : "mx-auto w-full max-w-[1200px] px-4 py-8 md:px-8 md:py-10"}>
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <h1 className="min-w-0 break-words font-display text-[1.625rem] font-semibold leading-tight tracking-[-0.02em]">
+      <section className={iAdmin ? "" : "mx-auto w-full max-w-[1200px] px-4 py-6 md:px-8 md:py-8"}>
+        {/* Sidans namn och dess enda handling på en rad, sedan datan. Samma
+            skala som Sidhuvud (ui.tsx rubrikSida). */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <h1 className={cn(rubrikSida, "min-w-0 break-words")}>
             {typeof title === "string" ? title : text(title)}
           </h1>
           {action ? <div className="shrink-0">{action}</div> : null}
         </div>
-        <div className="mt-8">{children}</div>
+        <div className="mt-6">{children}</div>
       </section>
     </AppShell>
   );

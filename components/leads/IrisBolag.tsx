@@ -11,7 +11,7 @@ import { LeadsRunForm } from "@/components/leads/LeadsRunForm";
 import { LeadsTabell } from "@/components/leads/LeadsTabell";
 import { Pipeline } from "@/components/leads/Pipeline";
 import { Tidslinje } from "@/components/leads/Tidslinje";
-import { EmptyState, SkeletonRows, btnPrimary, btnSecondary, flik, flikAktiv, flikInaktiv } from "@/components/ui";
+import { EmptyState, SkeletonRows, btnPrimary, btnSecondary, flik, flikAktiv, flikInaktiv, fliklista } from "@/components/ui";
 import { mejlaOss } from "@/components/marketing/copy";
 import { addonSpec } from "@/lib/addons";
 import { lasOffertForUtkast } from "@/lib/actions/affarskontext";
@@ -477,7 +477,7 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
       {/* Pilnavigering (Fas 10, planens a11y-notering): vänster/höger flyttar
           fokus och val, och bara den valda fliken ligger i tabbordningen. */}
       <div
-        className="flex flex-wrap items-center gap-2"
+        className={fliklista}
         role="tablist"
         aria-label={text(T.vy)}
         onKeyDown={(e) => {
@@ -578,14 +578,14 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
                           <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
                             <div className="min-w-0">
                               <div className="flex flex-wrap items-baseline gap-2">
-                                <span className="text-[1.0625rem] font-semibold tracking-[-0.01em]">
+                                <span className="text-[1rem] font-semibold">
                                   {p.company_name}
                                 </span>
                                 {p.origin === "example" ? (
                                   <span className="kicker text-mineral">{text(T.exempel)}</span>
                                 ) : null}
                               </div>
-                              <p className="mt-1 truncate font-mono text-[12px] text-ink-subtle">
+                              <p className="mt-1 truncate text-[0.8125rem] text-ink-subtle">
                                 {segment(p)}
                               </p>
                             </div>

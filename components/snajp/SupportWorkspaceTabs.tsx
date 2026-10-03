@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useLocale } from "@/lib/i18n";
+import { flik, flikAktiv, flikInaktiv, fliklista } from "@/components/ui";
 import { Dashboard } from "./Dashboard";
 import { SupportChat } from "./SupportChat";
 
@@ -57,16 +58,13 @@ export function SupportWorkspaceTabs({ workspaceName }: Readonly<{ workspaceName
 
   return (
     <div>
-      <div className="flex flex-wrap gap-2 border-b border-ink/12 pb-px">
+      <div className={fliklista}>
         {flikar.map((item) => (
           <button
             key={item.id}
             type="button"
             onClick={() => setTab(item.id)}
-            className={cn(
-              "focus-ring -mb-px border-b-2 px-4 py-3 text-sm font-semibold transition",
-              tab === item.id ? "border-ochre text-ink" : "border-transparent text-ink-subtle hover:text-ink"
-            )}
+            className={cn(flik, tab === item.id ? flikAktiv : flikInaktiv)}
           >
             {text(item.label)}
           </button>

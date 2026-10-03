@@ -22,10 +22,7 @@ export function IrisInstallningar({ demo = false }: Readonly<{ demo?: boolean }>
       <IrisProfil demo={demo} />
 
       <section className="border-t border-ink/15 pt-8">
-        {/* Kicker, inte rubrik: en h3 direkt under sidans h1 utan
-            mellanliggande h2 bryter axe heading-order (moderate, 2026-09-19). */}
-        <p className="kicker text-mineral">{text({ sv: "Målgrupp och autonomi", en: "Target group and autonomy" })}</p>
-        <div className="mt-5">
+        <div>
           {/* Kön hör hemma i Att göra, inte här också — se
               components/leads/IrisGranskning.tsx. */}
           <LeadsControls demo={demo} visaKo={false} />
