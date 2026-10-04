@@ -49,7 +49,7 @@ class SendProvider(Protocol):
     #: True bara för providers som faktiskt når internet.
     levererar: bool
 
-    async def send(self, *, to: str, subject: str, body: str, from_email: str | None = None, from_name: str | None = None, reply_to: str | None = None, tags: list[dict[str, str]] | None = None, headers: dict[str, str] | None = None) -> str | None: ...
+    async def send(self, *, to: str, subject: str, body: str, html: str | None = None, from_email: str | None = None, from_name: str | None = None, reply_to: str | None = None, tags: list[dict[str, str]] | None = None, headers: dict[str, str] | None = None) -> str | None: ...
 
 
 class LoggingSendProvider:
@@ -57,7 +57,7 @@ class LoggingSendProvider:
 
     levererar = False
 
-    async def send(self, *, to: str, subject: str, body: str) -> None:
+    async def send(self, *, to: str, subject: str, body: str, html: str | None = None) -> None:
         logger.info("SIMULERAT UTSKICK till %s: %r (%d tecken)", to, subject, len(body))
 
 
@@ -95,7 +95,13 @@ class SmtpMailer:
         self.avsandarnamn = avsandarnamn
 
     def _blockerande(
-        self, *, to: str, subject: str, body: str, headers: dict[str, str] | None = None
+        self,
+        *,
+        to: str,
+        subject: str,
+        body: str,
+        html: str | None = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         meddelande = EmailMessage()
         meddelande["Subject"] = subject
@@ -108,6 +114,10 @@ class SmtpMailer:
         for namn, varde in (headers or {}).items():
             meddelande[namn] = varde
         meddelande.set_content(body)
+        if html:
+            # multipart/alternative: textdelen är den granskade texten, HTML-
+            # delen samma text renderad med signaturens logotyp (signatur.py).
+            meddelande.add_alternative(html, subtype="html")
 
         # 465 är implicit TLS från första byte (SMTPS); allt annat är klartext
         # som uppgraderas med STARTTLS. Att alltid köra starttls() mot 465
@@ -125,7 +135,13 @@ class SmtpMailer:
             server.send_message(meddelande)
 
     async def send(
-        self, *, to: str, subject: str, body: str, headers: dict[str, str] | None = None
+        self,
+        *,
+        to: str,
+        subject: str,
+        body: str,
+        html: str | None = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         adress = (to or "").strip()
         if not adress or "@" not in adress:
@@ -137,7 +153,12 @@ class SmtpMailer:
         try:
             await asyncio.wait_for(
                 asyncio.to_thread(
-                    self._blockerande, to=adress, subject=subject, body=body, headers=headers
+                    self._blockerande,
+                    to=adress,
+                    subject=subject,
+                    body=body,
+                    html=html,
+                    headers=headers,
                 ),
                 timeout=SMTP_TIDSTAK_SEKUNDER + 5,
             )
@@ -176,7 +197,7 @@ class DryRunMailer:
     def __init__(self, outbox: str | Path) -> None:
         self.outbox = Path(outbox)
 
-    async def send(self, *, to: str, subject: str, body: str) -> None:
+    async def send(self, *, to: str, subject: str, body: str, html: str | None = None) -> None:
         self.outbox.mkdir(parents=True, exist_ok=True)
         nu = datetime.now(timezone.utc)
         filnamn = f"{nu:%Y%m%dT%H%M%S%f}-{_filnamnssaker(to)}.eml"
@@ -195,6 +216,9 @@ class DryRunMailer:
                     "",
                     body,
                 ]
+                # HTML-delen bevaras av samma skäl som brödtexten: en logga
+                # som pekar på fel URL syns bara i det som faktiskt renderas.
+                + (["", "--- HTML-DEL (multipart/alternative) ---", html] if html else [])
             ),
             encoding="utf-8",
         )
@@ -239,7 +263,7 @@ class ResendMailer:
     def _from(self) -> str:
         return f"{self.avsandarnamn} <{self.avsandare}>" if self.avsandarnamn else self.avsandare
 
-    async def send(self, *, to: str, subject: str, body: str, from_email: str | None = None, from_name: str | None = None, reply_to: str | None = None, tags: list[dict[str, str]] | None = None, headers: dict[str, str] | None = None) -> str | None:
+    async def send(self, *, to: str, subject: str, body: str, html: str | None = None, from_email: str | None = None, from_name: str | None = None, reply_to: str | None = None, tags: list[dict[str, str]] | None = None, headers: dict[str, str] | None = None) -> str | None:
         adress = (to or "").strip()
         if not adress or "@" not in adress:
             raise ValueError(f"Ogiltig mottagaradress: {to!r} — inget skickat.")
@@ -248,6 +272,10 @@ class ResendMailer:
         actual_from = from_email or self.avsandare
         display = from_name if from_name is not None else self.avsandarnamn
         payload = {"from": f"{display} <{actual_from}>" if display else actual_from, "to": [adress], "subject": subject, "text": body}
+        if html:
+            # text + html tillsammans ger multipart/alternative hos Resend —
+            # textdelen förblir den granskade texten, HTML-delen bär logotypen.
+            payload["html"] = html
         if reply_to: payload["reply_to"] = reply_to
         if tags: payload["tags"] = tags
         # Resend tar egna headrar rakt av — trådningen (In-Reply-To/References)

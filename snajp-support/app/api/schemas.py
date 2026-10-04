@@ -80,6 +80,29 @@ class LeadsConfigRequest(BaseModel):
     eskalering: "EskaleringRequest | None" = None
     automation: "AutomationRequest | None" = None
     crm_synk: "CrmSynkRequest | None" = None
+    signatur: "SignaturRequest | None" = None
+
+
+class SignaturRequest(BaseModel):
+    """Mejlsignaturen i Iris utgående leads-mejl (app/leads/signatur.py).
+
+    `extra: forbid` av samma skäl som ICP-valideringen: ett okänt fält som
+    smyger in i settings-json ska avvisas här, inte sparas och tolkas senare.
+    Normaliseringen (strippning, radsanering, https-kravet på logotypen) bor
+    i signatur.normalisera — EN plats, inte en pydantic-kopia som driver isär.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    aktiv: bool = True
+    namn: str = Field(..., min_length=1, max_length=200)
+    titel: str | None = Field(default=None, max_length=200)
+    telefon: str | None = Field(default=None, max_length=200)
+    epost: str | None = Field(default=None, max_length=200)
+    ort: str | None = Field(default=None, max_length=200)
+    webb: str | None = Field(default=None, max_length=200)
+    bolag: str | None = Field(default=None, max_length=200)
+    logotyp_url: str | None = Field(default=None, max_length=500)
 
 
 class EskaleringRequest(BaseModel):

@@ -35,6 +35,55 @@ type KöItem = {
   company_name?: string | null;
 };
 
+/** Tenantens mejlsignatur, normaliserad av backenden (app/leads/signatur.py).
+ *  `text` är blocket som redan ligger sist i brödtexten; logotypen finns bara
+ *  i mejlets HTML-del, så vyn renderar den här för att granskaren ska se det
+ *  mottagaren ser. */
+type Signatur = {
+  text: string;
+  namn: string;
+  titel?: string;
+  telefon?: string;
+  epost?: string;
+  ort?: string;
+  webb?: string;
+  bolag?: string;
+  logotyp_url?: string;
+};
+
+function SignaturBlock({ signatur }: Readonly<{ signatur: Signatur }>) {
+  const { text } = useLocale();
+  return (
+    <aside className="mt-4 rounded-input border border-ink/15 bg-paper px-4 py-3">
+      <p className="text-[0.75rem] font-medium uppercase tracking-wide text-ink-subtle">
+        {text({
+          sv: "Signaturen så som mottagaren ser den",
+          en: "The signature as the recipient sees it"
+        })}
+      </p>
+      <div className="mt-3 text-[0.8125rem] leading-6 text-ink">
+        <p className="font-semibold">{signatur.namn}</p>
+        {signatur.titel ? <p>{signatur.titel}</p> : null}
+        {signatur.telefon ? <p>{signatur.telefon}</p> : null}
+        {signatur.epost ? <p>{signatur.epost}</p> : null}
+        {signatur.logotyp_url ? (
+          // eslint-disable-next-line @next/next/no-img-element -- extern absolut
+          // URL (samma som i mejlets HTML-del); next/image kräver domänkonfig.
+          <img
+            src={signatur.logotyp_url}
+            alt={signatur.bolag ?? signatur.namn}
+            width={120}
+            className="my-3 block h-auto w-[120px]"
+          />
+        ) : null}
+        {signatur.ort ? <p>{signatur.ort}</p> : null}
+        {signatur.webb ? <p>{signatur.webb}</p> : null}
+        {signatur.bolag ? <p className="mt-3">{signatur.bolag}</p> : null}
+      </div>
+    </aside>
+  );
+}
+
 /** Klipp förhandsvisningen vid senaste ordgräns före 220 tecken, så att
  *  texten inte huggs av mitt i ett ord. Finns inget mellanslag efter index
  *  150 klipps den vid 220 som förut. */
@@ -80,6 +129,7 @@ function demoKo(): KöItem[] {
 export function IrisGranskning({ demo = false }: Readonly<{ demo?: boolean }>) {
   const { text } = useLocale();
   const [poster, setPoster] = useState<KöItem[] | null>(null);
+  const [signatur, setSignatur] = useState<Signatur | null>(null);
   const [fel, setFel] = useState<Localized | null>(null);
   const [pagar, setPagar] = useState<string | null>(null);
   const [oppen, setOppen] = useState<string | null>(null);
@@ -93,7 +143,7 @@ export function IrisGranskning({ demo = false }: Readonly<{ demo?: boolean }>) {
     }
     try {
       const response = await fetch("/api/snajp-support/leads/queue", { cache: "no-store" });
-      const svar = await readJsonBody<{ items?: KöItem[] }>(response);
+      const svar = await readJsonBody<{ items?: KöItem[]; signatur?: Signatur | null }>(response);
       if (!response.ok) {
         setFel({
           sv: `Kön kunde inte hämtas (status ${response.status}).`,
@@ -103,6 +153,7 @@ export function IrisGranskning({ demo = false }: Readonly<{ demo?: boolean }>) {
         return;
       }
       setPoster(svar?.items ?? []);
+      setSignatur(svar?.signatur ?? null);
     } catch (orsak) {
       const m = felmeddelande(orsak);
       setFel({ sv: m, en: m });
@@ -200,6 +251,7 @@ export function IrisGranskning({ demo = false }: Readonly<{ demo?: boolean }>) {
                 {öppen ? (
                   <div className="mt-4">
                     <EmailStudioEditor data={tillStudioData(post, text(UTAN_AMNE))} compact />
+                    {signatur ? <SignaturBlock signatur={signatur} /> : null}
                   </div>
                 ) : null}
 

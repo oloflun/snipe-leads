@@ -58,6 +58,8 @@ from ..leads.icp import (
     validate_icp,
 )
 from ..leads.icp import is_empty as icp_ar_tomt
+from ..leads.signatur import bygg_signaturtext
+from ..leads.signatur import normalisera as normalisera_signatur
 from ..leads.sni import SNI_NAMN, beskriv_kod
 from ..leads.onboarding_state import REQUIRED_KINDS, get_onboarding_state
 from ..leads import korning as iris_korning
@@ -1209,6 +1211,8 @@ async def get_leads_config(request: Request, tenant: dict = Depends(require_tena
         "eskalering": eskalering.normalisera(settings.get("eskalering")),
         "automation": automation.normalisera(settings.get("automation")),
         "crm_synk": _crm_synk_val(settings),
+        # Normaliserad — UI:t ska se samma värde som köningen använder.
+        "signatur": normalisera_signatur(settings.get("signatur")),
         # Valen som finns att välja MELLAN, inte kundens val. UI:t ska kunna
         # rendera en lista utan att ha en egen kopia av geo.py och sni.py —
         # en andra kopia hade drivit isär, och symptomet blivit att ett
@@ -1278,6 +1282,11 @@ async def put_leads_config(
             if not await integrationer.hamta(storage, tenant["tenant_id"], val["integration_id"]):
                 raise HTTPException(status_code=422, detail="Integrationen finns inte.")
         merged["crm_synk"] = val
+    if payload.signatur is not None:
+        # Sparas som den skickades (minus None-fält); läsarna normaliserar.
+        # `aktiv: false` är avstängningen — fältet nollas aldrig tyst av en
+        # PUT från ett annat formulär, samma princip som autonomi/ICP.
+        merged["signatur"] = payload.signatur.model_dump(exclude_none=True)
 
     # auto_send-grinden körs EFTER sammanslagningen, mot det ICP som faktiskt
     # kommer att gälla. Hade den körts mot `current` kunde en och samma PUT
@@ -1314,6 +1323,7 @@ async def put_leads_config(
         "eskalering": eskalering.normalisera(saved.get("eskalering")),
         "automation": automation.normalisera(saved.get("automation")),
         "crm_synk": _crm_synk_val(saved),
+        "signatur": normalisera_signatur(saved.get("signatur")),
     }
 
 
@@ -1394,11 +1404,19 @@ async def list_review_queue(
     request: Request, tenant: dict = Depends(require_tenant), limit: int = 100
 ) -> dict:
     """Utkast som väntar på granskning. Tom lista är ett giltigt svar och
-    betyder att agenten inte har något att visa — inte att något är fel."""
-    items = await request.app.state.storage.list_review_queue(
-        tenant["tenant_id"], limit=min(limit, 200)
-    )
-    return {"items": items}
+    betyder att agenten inte har något att visa — inte att något är fel.
+
+    `signatur` följer med så att arbetsytan kan rendera signaturblocket med
+    logotypen i utkastvyn — brödtexten bär bara textversionen (signatur.py),
+    och utan logotyp-URL:en hade granskaren inte sett det mottagaren ser."""
+    storage = request.app.state.storage
+    items = await storage.list_review_queue(tenant["tenant_id"], limit=min(limit, 200))
+    settings = await storage.get_agent_settings(tenant["tenant_id"], agent_type="leads")
+    sig = normalisera_signatur(settings.get("signatur"))
+    svar: dict = {"items": items}
+    if sig:
+        svar["signatur"] = {**sig, "text": bygg_signaturtext(sig)}
+    return svar
 
 
 @router.post("/api/leads/queue/{item_id}/approve")

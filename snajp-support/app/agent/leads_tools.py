@@ -20,6 +20,7 @@ from agents import RunContextWrapper, function_tool
 from ..leads.autonomy import allowed_action
 from ..leads.language_gate import LanguageGateError, check_send_gate
 from ..leads.outreach_playbook import finalize_outreach_body
+from ..leads.signatur import med_signatur, normalisera as normalisera_signatur
 from ..leads.timing_gate import check_cold_outreach_gate
 from ..leads.utskicksfot import avregistreringslank, bygg_fot, med_fot
 from ..notifications.prioriterat_mejl import skicka_prioriterat
@@ -125,6 +126,17 @@ async def _queue_outreach_draft_impl(
         )
         textkvalitet_granskning = "; ".join(delar)
 
+    # Signaturen (kodens text, inte modellens) läggs på efter kvalitets-
+    # kontrollen och före foten — vid köningen, så att granskningstexten är
+    # utskickstexten. Se app/leads/signatur.py. Inställningarna läses här och
+    # återanvänds av autonomigrinden nedan — en läsning, inte två.
+    agent_settings = await outreach.storage.get_agent_settings(
+        outreach.tenant_id, agent_type="leads"
+    )
+    signatur = normalisera_signatur(agent_settings.get("signatur"))
+    if signatur:
+        finalized_body = med_signatur(finalized_body, signatur)
+
     finalized_body = await _med_lagstadgad_fot(outreach, finalized_body)
 
     try:
@@ -152,8 +164,7 @@ async def _queue_outreach_draft_impl(
     if force_review:
         queue_status = "awaiting_review"
     else:
-        settings = await outreach.storage.get_agent_settings(outreach.tenant_id, agent_type="leads")
-        action = allowed_action(settings.get("autonomy"), outreach.sequence_index)
+        action = allowed_action(agent_settings.get("autonomy"), outreach.sequence_index)
         queue_status = "queued" if action == "send" else "awaiting_review"
 
     result = await outreach.storage.queue_outreach_message(
