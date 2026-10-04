@@ -448,6 +448,36 @@ def _amnesblock(installningar: support_regler.SupportInstallningar) -> str:
     )
 
 
+#: Frågeord som gör ett meddelande till en FRÅGA även utan frågetecken.
+#: Fail-open åt frågehållet: hellre ett riktigt svar för mycket än en kund
+#: som bara får kvitton (skärmdumpen 2026-10-05).
+_FRAGEORD = frozenset(
+    "vem vilka vad hur när nar var varför varfor kan finns går gar fungerar "
+    "vill behöver behover what how who why can does where".split()
+)
+
+
+def _ar_kvittensmeddelande(text: str) -> bool:
+    """Är meddelandet bara en kort bekräftelse ("ok", "tack", "ja")?
+
+    Under en överlämning kvitteras bekräftelser utan LLM-anrop — men allt
+    som ser ut som en fråga eller ett nytt ärende förtjänar ett riktigt
+    svar i stället för ett kvitto. Före 2026-10-05 kvitterades ALLT, och
+    "vilka har grundat snajp" fick "Noterat i ärendet".
+    """
+    t = text.strip().lower()
+    if not t:
+        return True
+    if "?" in t:
+        return False
+    ord_i_texten = re.findall(r"[a-zåäöé]+", t)
+    if any(o in _FRAGEORD for o in ord_i_texten):
+        return False
+    if support_regler.jakande_svar(t):
+        return True
+    return len(ord_i_texten) <= 4 and len(t) <= 30
+
+
 async def _svara_under_overlamning(
     storage: Storage,
     tenant_id: str,
@@ -492,6 +522,14 @@ async def _svara_under_overlamning(
 
     meddelanden = await storage.get_messages(tenant_id, ticket["conversation_id"])
     manniska_i_samtalet = any(m.get("author") == "human" for m in meddelanden)
+    # 2026-10-05 (Sebbes beställning): en NY FRÅGA medan kollegan ännu inte
+    # svarat ska få ett riktigt svar, inte ett kvitto. Inbound är redan
+    # sparad i ärendet ovan, så frågan syns för medarbetaren även om kedjan
+    # skulle fälla. None släpper vidare till gästläget i run_support_agent —
+    # kedjan svarar i SAMMA ärende och överlämningen hävs aldrig. När en
+    # människa är i samtalet tiger agenten som förut (INV-ESC-001:s kärna).
+    if not manniska_i_samtalet and not _ar_kvittensmeddelande(message):
+        return None
     reply = "" if manniska_i_samtalet else support_texter.text("kvittens", samtal.get("sprak"))
     if reply:
         await storage.save_message(
@@ -700,6 +738,7 @@ async def run_support_agent(
     # modell: när en människa tagit över är samtalet hennes tills hon lämnar
     # tillbaka det (eller det legat stilla i OVERLAMNING_GILTIG_TIMMAR).
     samtal = await _las_samtalslage(storage, tenant_id, customer["id"])
+    gastlage: dict[str, str] | None = None
     if ar_overlamnat(samtal):
         under_overlamning = await _svara_under_overlamning(
             storage,
@@ -715,6 +754,20 @@ async def run_support_agent(
         )
         if under_overlamning is not None:
             return under_overlamning
+        # None betyder två saker. Finns det överlämnade ärendet kvar är
+        # meddelandet en NY FRÅGA som ska besvaras i GÄSTLÄGE: kedjan kör
+        # som vanligt men i samma ärende (via aterta — inbound är redan
+        # sparad av _svara_under_overlamning) och samtalsläget förblir
+        # överlämnat i slutet. Är ärendet borta tar den vanliga kedjan
+        # över helt, som före 2026-10-05.
+        _ticket_id = samtal.get("overlamnad_ticket_id")
+        _arende = await storage.get_ticket(tenant_id, _ticket_id) if _ticket_id else None
+        if _arende and _arende.get("conversation_id"):
+            gastlage = {
+                "ticket_id": _arende["id"],
+                "conversation_id": _arende["conversation_id"],
+            }
+            aterta = aterta or gastlage
 
     # Kundminnet (migration 052) — mem0:s ADD-only-mönster. Bär ENBART vad
     # kunden själv uppgett i tidigare ärenden; agentens slutsatser lagras
@@ -1636,17 +1689,33 @@ async def run_support_agent(
     # från och med nu: nästa meddelande från kunden hamnar i DET HÄR ärendets
     # tråd och får ingen AI-replik (se _svara_under_overlamning). Annars
     # sparas räknaren för misslyckade rundor och om vi erbjöd en människa.
-    await _spara_samtalslage(
-        storage,
-        tenant_id,
-        customer["id"],
-        lage="overlamnad" if escalated else "agent",
-        misslyckade_i_rad=0 if escalated else misslyckade_nu,
-        erbjod_manniska=False if escalated else erbjod_manniska,
-        overlamnad_orsak=orsak if escalated else None,
-        overlamnad_ticket_id=ticket["id"] if escalated else None,
-        sprak=svar_sprak,
-    )
+    if gastlage:
+        # Gästläge: samtalet ägs fortfarande av en människa. Agentens
+        # sidosvar häver ALDRIG överlämningen — läget, orsaken och ärendet
+        # står kvar oavsett vad den här turen kom fram till (INV-ESC-001).
+        await _spara_samtalslage(
+            storage,
+            tenant_id,
+            customer["id"],
+            lage="overlamnad",
+            misslyckade_i_rad=0,
+            erbjod_manniska=False,
+            overlamnad_orsak=samtal.get("overlamnad_orsak"),
+            overlamnad_ticket_id=gastlage["ticket_id"],
+            sprak=svar_sprak,
+        )
+    else:
+        await _spara_samtalslage(
+            storage,
+            tenant_id,
+            customer["id"],
+            lage="overlamnad" if escalated else "agent",
+            misslyckade_i_rad=0 if escalated else misslyckade_nu,
+            erbjod_manniska=False if escalated else erbjod_manniska,
+            overlamnad_orsak=orsak if escalated else None,
+            overlamnad_ticket_id=ticket["id"] if escalated else None,
+            sprak=svar_sprak,
+        )
 
     # --- Fas R2: cache-STORE (INV-CACHE-001) --------------------------------
     #
@@ -1665,6 +1734,7 @@ async def run_support_agent(
         settings.semantic_cache in ("on", "shadow")
         and cache_kontext.behorig
         and not escalated
+        and not gastlage
         and svarslage == "besvara"
         and not erbjod_manniska
         and category in svarscache.CACHEBARA_KATEGORIER
@@ -1766,7 +1836,10 @@ async def run_support_agent(
         # faktagrindens utfall. `overlamnad` = en människa äger samtalet nu,
         # chattfönstret börjar hämta medarbetarens svar.
         "escalation_code": orsak,
-        "overlamnad": escalated,
+        # Gästläget: samtalet är fortfarande överlämnat även när den här
+        # turen besvarades av agenten — chattfönstret ska fortsätta hämta
+        # medarbetarens svar.
+        "overlamnad": escalated or bool(gastlage),
         "svarslage": svarslage,
         "faktagrind": faktagrind,
         "sprak": svar_sprak,
