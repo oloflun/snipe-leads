@@ -583,3 +583,18 @@ def test_faktagrinden_forstar_engelsk_tusentalsavgransare():
     # Fel belopp fälls fortfarande, i båda formaten.
     assert not support_faktagrind.kontrollera("It costs SEK 4,990.", niva="forsiktig", kallor=kallor).ok
     assert not support_faktagrind.kontrollera("Det kostar 4 990 kr.", niva="forsiktig", kallor=kallor).ok
+
+
+@pytest.mark.anyio
+async def test_fortsattningstur_forankrar_aktuella_meddelandet_efter_historiken():
+    """Recency-fixen (2026-10-05): i flerturssamtal besvarade modellen
+    konsekvent FÖRRA repliken — historiken låg sist i kontexten. Den
+    aktuella frågan ska därför upprepas EFTER historikblocket."""
+    storage = MemoryStorage()
+    await _tur(storage, _LLM(), "Vilka betalsätt tar ni?")
+    llm = _LLM()
+    await _tur(storage, llm, "Har ni öppet på lördagar?")
+    prompt = llm.user_by_skill["cs:ticket-triage"][-1]
+    assert "SVARA PÅ KUNDENS AKTUELLA MEDDELANDE" in prompt
+    # Förankringen ska ligga EFTER historiken och bära den aktuella frågan.
+    assert prompt.rfind("Har ni öppet på lördagar?") > prompt.find("Vilka betalsätt tar ni?")

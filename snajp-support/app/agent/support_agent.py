@@ -907,6 +907,19 @@ async def run_support_agent(
             else f"Samtalet pågår redan ({turn_count} tidigare repliker). Det här är en fortsättning."
         )
         + (f"\n\n{conversation_block}" if conversation_block else "")
+        # Förankringen (2026-10-05): historiken ligger SIST i kontexten, så
+        # dess senaste fråga stod närmast modellens svar — i skarptest mot
+        # dev besvarade 2.5-flash (tänkande av) konsekvent FÖRRA repliken i
+        # stället för den aktuella ("vilka har grundat Snajp?" fick förra
+        # frågans ärendesiffror). Den aktuella repliken upprepas därför
+        # EFTER historiken, så recency pekar på rätt fråga.
+        + (
+            "\n\nSVARA PÅ KUNDENS AKTUELLA MEDDELANDE, inte på något tidigare "
+            "i historiken ovan (den är bara bakgrund). Det aktuella "
+            f"meddelandet är:\n{maskera_personnummer(message)[:400]}"
+            if turn_count > 0
+            else ""
+        )
     )
     case_context = f"{case_context}\n\n{conversation_state}"
 
