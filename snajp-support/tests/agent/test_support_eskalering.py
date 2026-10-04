@@ -204,18 +204,42 @@ async def test_falsk_utanfor_kostar_aldrig_ett_svar_kunskapsbasen_bar():
 
 
 @pytest.mark.anyio
-async def test_tydlig_fraga_utan_svar_i_kunskapsbasen_lamnas_over_direkt():
-    """Ingen motfråga när frågan redan är tydlig — en motfråga där är en
-    gissningsloop, inte omsorg."""
+async def test_tydlig_fraga_utan_svar_i_kunskapsbasen_besvaras_arligt_med_erbjudande():
+    """2026-10-05 (Sebbes beställning): en tydlig fråga utanför kunskapsbasen
+    lämnar inte längre över per automatik — det låste samtalet och varje
+    senare fråga fick bara fasta kvitton. Agenten svarar ärligt på det
+    underlaget täcker, hittar inget på, och ERBJUDER en kollega. Kundens
+    "ja" på nästa tur blir överlämningen (testet nedan)."""
     storage = MemoryStorage()
     llm = _LLM(overrides={
         "cs:customer-research": {"kb_supports_answer": False, "behover_fortydligande": False},
     })
     svar = await _tur(storage, llm, "Levererar ni till Island?")
-    assert svar["escalated"] is True
-    assert svar["escalation_code"] == "utanfor_kunskapsbasen"
-    utkast = llm.user_by_skill["cs:draft-response"][-1]
-    assert "gissa inte" in utkast
+    assert svar["escalated"] is False
+    assert svar["svarslage"] == "besvara"
+    uppgift = llm.user_by_skill["cs:draft-response"][-1]
+    assert "Hitta ALDRIG på fakta" in uppgift
+    assert "kopplar in en kollega" in uppgift
+    # Erbjudandet är sparat i samtalsläget så att ett "ja" läses som en
+    # begäran om människa.
+    samtal = await storage.get_chat_state(TENANT, svar["customer_id"])
+    assert samtal["erbjod_manniska"] is True
+
+
+@pytest.mark.anyio
+async def test_ja_pa_erbjudandet_efter_kb_miss_lamnar_over():
+    """Andra halvan av kontraktet ovan: erbjudandet är inte kosmetik — ett
+    jakande svar på det ska ge en människa, precis som vid avgränsning."""
+    storage = MemoryStorage()
+    llm = _LLM(overrides={
+        "cs:customer-research": {"kb_supports_answer": False, "behover_fortydligande": False},
+    })
+    forsta = await _tur(storage, llm, "Levererar ni till Island?")
+    assert forsta["escalated"] is False
+
+    andra = await _tur(storage, _LLM(), "ja tack")
+    assert andra["escalated"] is True
+    assert andra["escalation_code"] == "kund_bad_om_manniska"
 
 
 # -- Trigger 4: taket för misslyckade rundor ---------------------------------

@@ -1129,8 +1129,15 @@ async def run_support_agent(
             orsak = "utanfor_amnesomradet"
     elif tak_nått:
         orsak = "fortydligandetak"
-    elif kb_saknar_svar and not behover_fortydligande:
-        orsak = "utanfor_kunskapsbasen"
+    # 2026-10-05 (Sebbes beställning): en tydlig fråga utanför kunskapsbasen
+    # lämnar inte längre över PER AUTOMATIK. Den gamla regeln låste samtalet —
+    # "vilka har grundat Snajp?" gav lage=overlamnad och varje senare fråga
+    # fick bara fasta kvitton. Nu svarar agenten ärligt på det underlaget
+    # täcker och ERBJUDER en kollega (kundens "ja" blir en överlämning via
+    # erbjod_manniska). Eskaleringsbedömningen (steg 4, körs redan vid varje
+    # KB-miss) kan fortfarande rösta överlämning när ärendet i sig kräver en
+    # människa. Grundningen är intakt: uppgiften förbjuder påhittade fakta
+    # och faktagrinden kör som vanligt.
 
     if orsak:
         svarslage = "overlamna"
@@ -1140,6 +1147,7 @@ async def run_support_agent(
         svarslage = "fraga"
     else:
         svarslage = "besvara"
+    arligt_utanfor_kb = svarslage == "besvara" and kb_saknar_svar
     # Namnet står kvar för läsbarhetens skull: det är vad eskaleringssteget
     # och testerna frågar efter ("ställer svaret en följdfråga?").
     fragar_uppfoljning = svarslage == "fraga"
@@ -1209,6 +1217,19 @@ async def run_support_agent(
             "Håll hela svaret kort. Ren text, ingen markdown. Returnera JSON: "
             "draft (svenska)."
         )
+    elif arligt_utanfor_kb:
+        uppgift = (
+            missade_rad
+            + "Kunskapsbasen saknar helt eller delvis svar på frågan, men ärendet "
+            "är varken juridiskt, säkerhetskritiskt eller en uppsägningsrisk. "
+            "Läs frågan noga och svara på det kunskapsbasen och ärendet FAKTISKT "
+            "täcker — även delvis hjälp är hjälp. Säg sedan rakt ut vilken "
+            "uppgift du inte har, utan att låta som att kundens fråga är "
+            "konstig. Hitta ALDRIG på fakta, siffror, namn eller löften. "
+            "Avsluta med att fråga om kunden vill att du kopplar in en kollega "
+            "för det du inte kunde svara på. Ren text, ingen markdown. "
+            "Returnera JSON: draft (svenska)."
+        )
     else:
         uppgift = (
             missade_rad
@@ -1277,6 +1298,17 @@ async def run_support_agent(
                     "förtydligande följdfråga — det är INTE ett skäl att eskalera "
                     "i den här turen. "
                     if fragar_uppfoljning
+                    # 2026-10-05: KB-missen ENSAM är inte längre eskaleringsskäl —
+                    # svaret säger ärligt vad som saknas och erbjuder en kollega,
+                    # och kundens ja blir överlämningen. Modellen ska bara fälla
+                    # ärenden som i sig kräver en människa.
+                    else "Kunskapsbasen saknar helt eller delvis svar, och svaret "
+                    "till kunden säger det ärligt och erbjuder en kollega. Att "
+                    "kunskapsbasen saknar svaret är därför INTE ensamt ett skäl "
+                    "att eskalera — eskalera bara om ärendet i sig måste till en "
+                    "människa enligt listan ovan, eller om svaret till kunden "
+                    "vore vilseledande utan en. "
+                    if arligt_utanfor_kb
                     else "Eskalera också om kunskapsbasen saknar svar och ingen "
                     "följdfråga kan göra frågan besvarbar. "
                 )
@@ -1443,7 +1475,10 @@ async def run_support_agent(
     # Fäller grinden igen kastas texten — hellre ett uttryckligt "det vet jag
     # inte" och ett erbjudande om en människa än en uppgift vi inte kan stå
     # för. Påhoppsrepliken kontrolleras inte: den är vår fasta text.
-    erbjod_manniska = svarslage == "avgransa"
+    # Ett "ja" på nästa tur blir en överlämning (rad ~1083): både när vi
+    # avgränsade och när vi svarade ärligt utanför kunskapsbasen och erbjöd
+    # en kollega för resten.
+    erbjod_manniska = svarslage == "avgransa" or arligt_utanfor_kb
     faktagrind: dict[str, Any] = {"niva": installningar["faktakontroll"], "ok": True}
     if reply and not abuse.ska_eskalera:
         kallor = _faktakallor(
