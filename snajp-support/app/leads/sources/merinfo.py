@@ -314,7 +314,12 @@ def valj_branscher(termer: list[str]) -> list[str]:
                 kandidat = (traff / len(stammar), -len(b["namn"]), b["slug"])
                 if bast is None or kandidat > bast:
                     bast = kandidat
-        slug = bast[2] if bast and bast[0] >= 0.5 else _slug(term)
+        # Egen slugg bara för ett branschord, aldrig för en mening: Alunix
+        # målgrupp ("Företag med gamla … hemsidor") blev annars en påhittad
+        # merinfo-bransch, noll träffar och ett "ärligt nej" i stället för
+        # reservkedjan (provkörningen 2026-10-04).
+        ensamt_ord = len(re.findall(r"[a-z0-9]+", _norm(term))) <= 2
+        slug = bast[2] if bast and bast[0] >= 0.5 else (_slug(term) if ensamt_ord else None)
         if slug and slug not in ut:
             ut.append(slug)
     return ut[:3]

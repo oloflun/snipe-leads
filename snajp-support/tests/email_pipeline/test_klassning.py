@@ -61,7 +61,7 @@ async def test_brevladans_syfte_leads_ger_lead():
 
 async def test_jev_avgor_bara_nar_den_ar_saker(monkeypatch):
     storage = MemoryStorage()
-    monkeypatch.setattr(klassning.jev, "aktiv", lambda: True)
+    monkeypatch.setattr(klassning, "_jev_nyckel", lambda: True)
 
     async def _saker(state, fragor):
         return {"klass": {"choice": "lead", "confidence": 0.95}}
@@ -87,7 +87,7 @@ async def test_jev_ser_aldrig_adresser_och_fragas_bara_med_lov(monkeypatch):
     """INKORG_JEV: utan `med_jev` inget anrop alls; med det bara domän och
     text utan adresser/telefon (Antons beslut 2026-09-30 i app/leads/jev.py)."""
     storage = MemoryStorage()
-    monkeypatch.setattr(klassning.jev, "aktiv", lambda: True)
+    monkeypatch.setattr(klassning, "_jev_nyckel", lambda: True)
     sett = []
 
     async def _fanga(state, fragor):

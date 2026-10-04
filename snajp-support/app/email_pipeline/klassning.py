@@ -86,6 +86,14 @@ def jev_lage() -> str:
     return varde if varde in ("off", "prov", "auto") else "off"
 
 
+def _jev_nyckel() -> bool:
+    """Inkorgen styrs av INKORG_JEV ensam, inte av IRIS_JEV: en kund kan vilja
+    ha Jev i inkorgen utan Jev i Iris och tvärtom. Nyckeln är det enda delade."""
+    from ..config import get_settings
+
+    return bool(get_settings().typesafe_api_key)
+
+
 async def klassa(
     storage, tenant_id: str, email: dict[str, Any], *, syfte: str = "support", med_jev: bool = False
 ) -> dict[str, Any]:
@@ -120,7 +128,7 @@ async def klassa(
     # 2. Jev, bara när svaret är säkert. Ett osäkert svar fäller inget men
     # följer med som `jev`, så Provsortera kan visa vad Jev trodde.
     gissning = None
-    if med_jev and jev.aktiv():
+    if med_jev and _jev_nyckel():
         try:
             svar = await jev.fraga(
                 {

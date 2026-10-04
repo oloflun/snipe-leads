@@ -120,6 +120,8 @@ def test_branschval():
     assert m.valj_branscher(["fastighet"]) == ["fastighetsbranschen"]
     # Utan träff i sitemapen provas ordet som egen slugg.
     assert m.valj_branscher(["golvläggare"]) == ["golvlaggare"]
+    # En målgruppsmening är ingen bransch (Alunix 2026-10-04).
+    assert m.valj_branscher(["Företag med gamla, dåligt optimerade hemsidor eller ingen sida alls."]) == []
 
 
 @pytest.mark.parametrize(
