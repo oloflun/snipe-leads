@@ -135,10 +135,15 @@ async def test_utskriften_kapas_till_de_senaste_turerna():
     assert len(rader) <= MAX_HISTORY_TURNS
 
     # Kapningen tar de SENASTE turerna, inte de första. "Fråga 5" är det
-    # AKTUELLA meddelandet och hör inte hemma i utskriften — historiken hämtas
-    # innan ärendet skapas, så den innehåller bara avslutade turer.
-    assert "Kunden: Fråga 4" in transcript
-    assert "Fråga 5" not in transcript
+    # AKTUELLA meddelandet och hör inte hemma i UTSKRIFTEN — historiken hämtas
+    # innan ärendet skapas, så den innehåller bara avslutade turer. Sedan
+    # 2026-10-05 upprepas den aktuella repliken däremot EFTER utskriften
+    # (förankringen mot recency-felet), så fönstret slutar där den börjar.
+    utskrift = transcript.split("SVARA PÅ KUNDENS AKTUELLA MEDDELANDE", 1)[0]
+    assert "Kunden: Fråga 4" in utskrift
+    assert "Fråga 5" not in utskrift
+    # Förankringen bär den aktuella repliken.
+    assert "Fråga 5" in transcript
     assert "Fråga 0" not in transcript
     assert "Fråga 1" not in transcript
 
