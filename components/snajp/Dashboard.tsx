@@ -95,6 +95,15 @@ const KLASS_KALLA_ETIKETT: Record<string, Localized> = {
   manuell: { sv: "manuellt", en: "manual" }
 };
 
+/** Provsortera (POST /inbox/sortera): klassningens förslag, inte skrivet än. */
+type Forslag = {
+  email_id: string;
+  nuvarande: string | null;
+  klass: string;
+  kalla: string;
+  jev: { klass: string; konfidens: number } | null;
+};
+
 const CATEGORY_LABELS: Record<string, Localized> = {
   teknisk_support: { sv: "Teknisk support", en: "Technical support" },
   garanti: { sv: "Garanti", en: "Warranty" },
@@ -286,7 +295,7 @@ export function Dashboard({
   onMeta?: (meta: { visar_test_i_arenden: boolean }) => void;
 }>) {
   const vag = useArbetsvag();
-  const { text } = useLocale();
+  const { text, locale } = useLocale();
   // Kölägena (Att göra): bara poster som väntar på ett beslut, utan
   // inkorgens verktygsrad, statusfilter och fack.
   const arKo = lager === "att_hantera" || lager === "vantar" || lager === "eskalerade";
@@ -321,6 +330,7 @@ export function Dashboard({
   const [baraOhanterade, setBaraOhanterade] = useState(false);
   /** True medan bakgrundsklassningen av nyss hämtade testmail pågår. */
   const [bearbetas, setBearbetas] = useState(false);
+  const [sortering, setSortering] = useState<{ jev: string; forslag: Record<string, Forslag> } | null>(null);
   /** Demo-/testkonton visar testmail under Ärenden. null = inte hämtat än. */
   const [visarTestIArenden, setVisarTestIArenden] = useState<boolean | null>(null);
   const onMetaRef = useRef(onMeta);
@@ -534,6 +544,50 @@ export function Dashboard({
       if (svar?.processing) void pollaTills();
     });
 
+  // Provsortera: samma klassning som inkorgen kör, på de synliga mejlen,
+  // utan att skriva. Människan ser förslaget innan något flyttas.
+  const provsortera = () =>
+    act("sortera", async () => {
+      const ids = (baraOhanterade ? emails.filter((e) => !e.hanterad_at) : emails).slice(0, 25).map((e) => e.id);
+      const svar = await api<{ jev: string; forslag: Forslag[] }>("/inbox/sortera", {
+        method: "POST",
+        body: JSON.stringify({ email_ids: ids })
+      });
+      setSortering({ jev: svar.jev, forslag: Object.fromEntries(svar.forslag.map((f) => [f.email_id, f])) });
+    });
+
+  // Ett oklassat mejl (från före 084) går redan supportvägen: "support" är
+  // inget byte för det.
+  const byterKlass = (f: Forslag) => f.klass !== (f.nuvarande ?? "support");
+  // Mejl som pipelinen inte släppt än klassar den själv strax (backenden
+  // hoppar över dem vid tillämpning), så de räknas inte här.
+  const iPipelinen = new Set(emails.filter((e) => e.status === "new" || e.status === "processing").map((e) => e.id));
+  const andrade = sortering
+    ? Object.values(sortering.forslag).filter((f) => byterKlass(f) && !iPipelinen.has(f.email_id))
+    : [];
+
+  const tillampaSortering = () =>
+    act("tillampa", async () => {
+      await api("/inbox/sortera", {
+        method: "POST",
+        body: JSON.stringify({ email_ids: andrade.map((f) => f.email_id), tillampa: true })
+      });
+      setSortering(null);
+    });
+
+  const forslagText = (f: Forslag) => {
+    const tal = (n: number) => (locale === "sv" ? n.toFixed(2).replace(".", ",") : n.toFixed(2));
+    const kalla =
+      f.kalla === "jev" && f.jev
+        ? `Jev ${tal(f.jev.konfidens)}`
+        : text(KLASS_KALLA_ETIKETT[f.kalla] ?? { sv: f.kalla, en: f.kalla });
+    const gissning =
+      f.kalla !== "jev" && f.jev
+        ? text({ sv: `, Jev gissade ${text(KLASS_ETIKETT[f.jev.klass])} ${tal(f.jev.konfidens)}`, en: `, Jev guessed ${text(KLASS_ETIKETT[f.jev.klass])} ${tal(f.jev.konfidens)}` })
+        : "";
+    return `${text({ sv: "Förslag", en: "Suggested" })}: ${text(KLASS_ETIKETT[f.klass])} (${kalla}${gissning})`;
+  };
+
   const syncInbox = () =>
     act("sync", async () => {
       setSyncInfo(null);
@@ -724,6 +778,21 @@ export function Dashboard({
           )}
           {text(T.uppdatera)}
         </button>
+        {demo || arKo || lager === "leads" || emails.length === 0 ? null : (
+          <button
+            type="button"
+            onClick={provsortera}
+            disabled={busy !== null}
+            title={text({
+              sv: "Visar hur mejlen hade sorterats i support, lead och ej relaterat. Inget flyttas förrän du tillämpar.",
+              en: "Shows how the emails would be sorted into support, lead and unrelated. Nothing moves until you apply."
+            })}
+            className={cn(btnSecondary, btnLiten)}
+          >
+            {busy === "sortera" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            {text({ sv: "Provsortera", en: "Test sorting" })}
+          </button>
+        )}
         <div className="relative min-w-[220px] flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-subtle" />
           <input
@@ -770,6 +839,33 @@ export function Dashboard({
           }
         >
           {text(syncInfo)}
+        </div>
+      ) : null}
+      {sortering ? (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-[8px] border border-ink/12 bg-paper2/60 px-4 py-3 text-sm text-ink-muted">
+          <span className="min-w-0 flex-1" role="status">
+            {text({
+              sv: `Förslag för ${Object.keys(sortering.forslag).length} mejl, ${andrade.length} skulle flyttas.`,
+              en: `Suggestions for ${Object.keys(sortering.forslag).length} emails, ${andrade.length} would move.`
+            })}{" "}
+            {sortering.jev === "off"
+              ? text({ sv: "Jev är avstängd i inkorgen, så bara reglerna har sorterat.", en: "Jev is off for the inbox, so only the rules sorted." })
+              : text({ sv: "Reglerna först, sedan Jev när den är säker (minst 0,90).", en: "Rules first, then Jev when it is confident (0.90 or more)." })}
+          </span>
+          {andrade.length > 0 ? (
+            <button
+              type="button"
+              onClick={tillampaSortering}
+              disabled={busy !== null}
+              className={cn(btnPrimary, btnLiten)}
+            >
+              {busy === "tillampa" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {text({ sv: `Tillämpa ${andrade.length}`, en: `Apply ${andrade.length}` })}
+            </button>
+          ) : null}
+          <button type="button" onClick={() => setSortering(null)} className={cn(btnSecondary, btnLiten)}>
+            {text({ sv: "Stäng", en: "Close" })}
+          </button>
         </div>
       ) : null}
 
@@ -927,6 +1023,18 @@ export function Dashboard({
                     </span>
                     <span className="col-span-2 mt-0.5 flex min-w-0 items-center gap-1.5 text-[0.8125rem] text-ink-subtle">
                       <span className="truncate">{detaljer.join(" · ")}</span>
+                      {sortering?.forslag[email.id] ? (
+                        <span
+                          className={cn(
+                            "shrink-0",
+                            byterKlass(sortering.forslag[email.id])
+                              ? "font-medium text-ink"
+                              : "text-ink-subtle"
+                          )}
+                        >
+                          {forslagText(sortering.forslag[email.id])}
+                        </span>
+                      ) : null}
                       {email.classification?.offertforfragan ? (
                         <span className="shrink-0 font-medium text-warning">{text(T.offert)}</span>
                       ) : null}

@@ -15,6 +15,7 @@ from ..email_pipeline.poller import (
     sync_mailbox,
     upptack_imap,
 )
+from ..email_pipeline.klassning import jev_lage, klassa
 from ..email_pipeline.processor import process_email
 from ..config import (
     CATEGORIES,
@@ -24,7 +25,7 @@ from ..config import (
 from ..integrationer.hemligheter import IngenNyckelError, kryptera
 from ..scripts.seed_kb import ensure_tenant_kb
 from .deps import kraev_uuid, require_tenant
-from .schemas import HanteradRequest, IngestEmailRequest, KlassaRequest, KopplaInkorgRequest, SeedMockRequest
+from .schemas import HanteradRequest, IngestEmailRequest, KlassaRequest, KopplaInkorgRequest, SeedMockRequest, SorteraRequest
 
 logger = logging.getLogger("snajp-support.inbox")
 
@@ -484,6 +485,54 @@ async def list_inbox(
         "status_counts": status_counts,
         "visar_test_i_arenden": visar,
     }
+
+
+@router.post("/api/inbox/sortera")
+async def sortera(request: Request, payload: SorteraRequest, tenant: dict = Depends(require_tenant)) -> dict:
+    """Provsortera (Anton 2026-10-04: "testa i realtid innan vi automatiserar").
+
+    Kör samma klassning som inkorgen (regler → Jev → standard) på de valda
+    mejlen och svarar med förslaget. Utan `tillampa` skrivs ingenting. Med
+    `tillampa` skrivs klassen med sin riktiga källa (regel/jev/syfte, inte
+    'manuell': det var maskinen som avgjorde) och mejlet flyttar som vid en
+    omklassning. Ett lead blir här inget prospekt; det gör bara den
+    automatiska vägen (processor._hantera_lead).
+    """
+    storage = request.app.state.storage
+    tid = tenant["tenant_id"]
+    lage = jev_lage()
+    syften = {str(m.get("id")): str(m.get("syfte") or "support") for m in await storage.list_mailboxes(tid)}
+    forslag = []
+    for email_id in dict.fromkeys(payload.email_ids):
+        kraev_uuid(email_id, "mejlet")
+        rad = await storage.get_email(tid, email_id)
+        if not rad:
+            continue
+        utfall = await klassa(
+            storage, tid, rad, syfte=syften.get(str(rad.get("mailbox_id")), "support"), med_jev=lage != "off"
+        )
+        # Ett mejl som pipelinen ännu inte släppt (new/processing) klassas av
+        # den strax och skriver då över; tillämpning där vore en kapplöpning
+        # (lokalt prov 2026-10-04: klassen skrevs över sex sekunder senare).
+        hoppad = rad.get("status") in ("new", "processing")
+        if payload.tillampa and not hoppad:
+            andring = {"klass": utfall["klass"], "klass_kalla": utfall["kalla"]}
+            if utfall["klass"] != "support":
+                andring["status"] = utfall["klass"]
+            await storage.update_email(tid, email_id, **andring)
+            await storage.log_decision(
+                tid, email_id=email_id, event="klassning",
+                detail={"klass": utfall["klass"], "kalla": utfall["kalla"], "stodrad": utfall.get("stodrad"), "av": "provsortera"},
+            )
+        forslag.append({
+            "email_id": email_id,
+            "nuvarande": rad.get("klass"),
+            "klass": utfall["klass"],
+            "kalla": utfall["kalla"],
+            "jev": utfall.get("jev"),
+            "hoppad": payload.tillampa and hoppad,
+        })
+    return {"jev": lage, "tillampat": payload.tillampa, "forslag": forslag}
 
 
 @router.post("/api/inbox/{email_id}/klassa")

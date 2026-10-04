@@ -19,6 +19,15 @@ Iris-profilen: koden avgör, Jev är förgrind, modellen formulerar):
 
 Varje beslut bär sin källa (`kalla`) så en manuell omklassning blir lärdata
 och Jev går att mäta mot människan.
+
+## Jev i inkorgen är en egen brytare (INKORG_JEV, 2026-10-04)
+
+Kundmejl är kundens data, och Antons beslut 2026-09-30 (app/leads/jev.py)
+är att Jev aldrig ser kundmejl eller e-postadresser. IRIS_JEV räcker därför
+inte: inkorgen frågar Jev bara när `INKORG_JEV` säger det — `off` (standard,
+bara kodregler), `prov` (knappen Provsortera, aldrig automatiskt) eller
+`auto` (varje nytt mejl). Även då går bara avsändarens domän och en text
+utan adresser och telefonnummer till Jev.
 """
 
 from __future__ import annotations
@@ -70,8 +79,18 @@ _ALLMANNA_DOMANER = {
 }
 
 
-async def klassa(storage, tenant_id: str, email: dict[str, Any], *, syfte: str = "support") -> dict[str, Any]:
-    """→ {klass, kalla, stodrad, prospect_id, thread_id}. Kastar aldrig."""
+def jev_lage() -> str:
+    from ..config import get_settings
+
+    varde = (get_settings().inkorg_jev or "off").strip().lower()
+    return varde if varde in ("off", "prov", "auto") else "off"
+
+
+async def klassa(
+    storage, tenant_id: str, email: dict[str, Any], *, syfte: str = "support", med_jev: bool = False
+) -> dict[str, Any]:
+    """→ {klass, kalla, stodrad, prospect_id, thread_id, jev}. Kastar aldrig.
+    `med_jev`: anroparen har läst INKORG_JEV och får fråga Jev."""
     fran = str(email.get("from_email") or "").casefold().strip()
     amne = str(email.get("subject") or "")
     text = str(email.get("body_text") or "")
@@ -98,14 +117,16 @@ async def klassa(storage, tenant_id: str, email: dict[str, Any], *, syfte: str =
     if syfte == "leads":
         return _utfall("lead", "syfte", "Brevlådan används bara för leads.")
 
-    # 2. Jev, bara när svaret är säkert.
-    if jev.aktiv():
+    # 2. Jev, bara när svaret är säkert. Ett osäkert svar fäller inget men
+    # följer med som `jev`, så Provsortera kan visa vad Jev trodde.
+    gissning = None
+    if med_jev and jev.aktiv():
         try:
             svar = await jev.fraga(
                 {
-                    "sender": fran,
-                    "subject": amne[:200],
-                    "excerpt": text[:1500],
+                    "sender_domain": _doman(fran),
+                    "subject": jev._utan_personuppgifter(amne)[:200],
+                    "excerpt": jev._utan_personuppgifter(text)[:1500],
                     "mailbox_purpose": syfte,
                 },
                 {
@@ -122,18 +143,21 @@ async def klassa(storage, tenant_id: str, email: dict[str, Any], *, syfte: str =
             )
             val = (svar.get("klass") or {}).get("choice")
             konf = (svar.get("klass") or {}).get("confidence")
-            if val in KLASSER and isinstance(konf, (int, float)) and konf >= JEV_TROSKEL:
-                return _utfall(val, "jev", f"Jev: {val} ({konf:.2f})")
+            if val in KLASSER and isinstance(konf, (int, float)):
+                gissning = {"klass": val, "konfidens": round(float(konf), 2)}
+                if konf >= JEV_TROSKEL:
+                    return _utfall(val, "jev", f"Jev: {val} ({konf:.2f})", jev_svar=gissning)
         except Exception:  # noqa: BLE001 — Jev faller öppet
             logger.warning("Jev-klassningen gick inte att köra; standardvägen tar vid.")
 
     # 3. Standard.
-    return _utfall("support", "standard", None)
+    return _utfall("support", "standard", None, jev_svar=gissning)
 
 
 def _utfall(klass: str, kalla: str, stodrad: str | None, *, prospect_id: str | None = None,
-            thread_id: str | None = None) -> dict[str, Any]:
-    return {"klass": klass, "kalla": kalla, "stodrad": stodrad, "prospect_id": prospect_id, "thread_id": thread_id}
+            thread_id: str | None = None, jev_svar: dict[str, Any] | None = None) -> dict[str, Any]:
+    return {"klass": klass, "kalla": kalla, "stodrad": stodrad, "prospect_id": prospect_id,
+            "thread_id": thread_id, "jev": jev_svar}
 
 
 def demo() -> None:

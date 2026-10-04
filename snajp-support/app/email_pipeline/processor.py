@@ -22,7 +22,7 @@ from ..simulation.sim_agent import article_in_category
 from ..simulation.sim_triage import classify
 from ..storage.base import Storage
 from .flaggor import ar_offertforfragan, ar_utbildningsintresse
-from .klassning import klassa
+from .klassning import jev_lage, klassa
 
 logger = logging.getLogger("snajp-support.processor")
 
@@ -208,7 +208,7 @@ async def _klassa_och_styr(storage: Storage, tenant_id: str, email: dict[str, An
                 if str(m.get("id")) == str(email["mailbox_id"]):
                     syfte = str(m.get("syfte") or "support")
                     break
-        utfall = await klassa(storage, tenant_id, email, syfte=syfte)
+        utfall = await klassa(storage, tenant_id, email, syfte=syfte, med_jev=jev_lage() == "auto")
         await storage.update_email(tenant_id, email_id, klass=utfall["klass"], klass_kalla=utfall["kalla"])
         await storage.log_decision(
             tenant_id, email_id=email_id, event="klassning",

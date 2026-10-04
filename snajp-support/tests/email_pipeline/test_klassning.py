@@ -70,23 +70,44 @@ async def test_jev_avgor_bara_nar_den_ar_saker(monkeypatch):
         return {"klass": {"choice": "ej_relaterat", "confidence": 0.6}}
 
     monkeypatch.setattr(klassning.jev, "fraga", _saker)
-    ut = await klassning.klassa(storage, TENANT, _mejl("ny@kund.se"))
+    ut = await klassning.klassa(storage, TENANT, _mejl("ny@kund.se"), med_jev=True)
     assert ut["klass"] == "lead" and ut["kalla"] == "jev"
     monkeypatch.setattr(klassning.jev, "fraga", _osaker)
-    ut = await klassning.klassa(storage, TENANT, _mejl("ny@kund.se"))
+    ut = await klassning.klassa(storage, TENANT, _mejl("ny@kund.se"), med_jev=True)
     assert ut["klass"] == "support" and ut["kalla"] == "standard"
 
     async def _faller(state, fragor):
         raise RuntimeError("nere")
 
     monkeypatch.setattr(klassning.jev, "fraga", _faller)
-    assert (await klassning.klassa(storage, TENANT, _mejl("ny@kund.se")))["klass"] == "support"
+    assert (await klassning.klassa(storage, TENANT, _mejl("ny@kund.se"), med_jev=True))["klass"] == "support"
+
+
+async def test_jev_ser_aldrig_adresser_och_fragas_bara_med_lov(monkeypatch):
+    """INKORG_JEV: utan `med_jev` inget anrop alls; med det bara domän och
+    text utan adresser/telefon (Antons beslut 2026-09-30 i app/leads/jev.py)."""
+    storage = MemoryStorage()
+    monkeypatch.setattr(klassning.jev, "aktiv", lambda: True)
+    sett = []
+
+    async def _fanga(state, fragor):
+        sett.append(state)
+        return {"klass": {"choice": "lead", "confidence": 0.7}}
+
+    monkeypatch.setattr(klassning.jev, "fraga", _fanga)
+    mejl = _mejl("anna@kund.se", text="Ring mig på 070-123 45 67 eller anna@kund.se")
+    await klassning.klassa(storage, TENANT, mejl)
+    assert sett == []
+    ut = await klassning.klassa(storage, TENANT, mejl, med_jev=True)
+    assert ut["kalla"] == "standard" and ut["jev"] == {"klass": "lead", "konfidens": 0.7}
+    skickat = repr(sett[0])
+    assert "anna@" not in skickat and "070-123" not in skickat and sett[0]["sender_domain"] == "kund.se"
 
 
 async def test_standard_ar_support():
     storage = MemoryStorage()
     ut = await klassning.klassa(storage, TENANT, _mejl("kund@foretag.se"))
-    assert ut == {"klass": "support", "kalla": "standard", "stodrad": None, "prospect_id": None, "thread_id": None}
+    assert ut == {"klass": "support", "kalla": "standard", "stodrad": None, "prospect_id": None, "thread_id": None, "jev": None}
 
 
 async def test_lagret_bar_klass_och_filtrerar():

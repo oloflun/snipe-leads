@@ -289,6 +289,10 @@ class Settings(BaseSettings):
     # bredvid LLM-bedömningen, fäller inget) | "pa" (fäller uppenbara missar
     # före researchanropet). Nyckeln bor i Railways variabellager.
     iris_jev: str = "off"
+    # Jev i inkorgen (app/email_pipeline/klassning.py): "off" | "prov"
+    # (bara knappen Provsortera) | "auto" (varje nytt mejl). Egen brytare:
+    # kundmejl är kunddata, IRIS_JEV gäller publika bolagsuppgifter.
+    inkorg_jev: str = "off"
     typesafe_api_key: str = ""
     # Leads-budgeten (INV-JOB-002-arbetet, app/leads/budget.py): max summa
     # tokens_in+tokens_out per tenant och rullande 24 timmar över leads-

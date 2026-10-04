@@ -616,6 +616,14 @@ class KlassaRequest(BaseModel):
     klass: Literal["support", "lead", "ej_relaterat"]
 
 
+class SorteraRequest(BaseModel):
+    """Provsortera: klassa mejlen nu och visa förslaget; `tillampa` skriver
+    det. Taket håller ett knapptryck inom några sekunder även med Jev."""
+
+    email_ids: list[str] = Field(..., min_length=1, max_length=25)
+    tillampa: bool = False
+
+
 class OmformuleraDraftRequest(BaseModel):
     """Skriv om utkastet i en riktning — Förbättra, Kortare, Mer personlig.
 
