@@ -1,0 +1,2393 @@
+{
+ "kalla": "https://www.merinfo.se/sitemap/bransch",
+ "branscher": [
+  {
+   "slug": "all-ovrig-verksamhet-juridik-ekonomi-vetenskap-teknik",
+   "namn": "All övrig verksamhet inom juridik, ekonomi, vetenskap och teknik"
+  },
+  {
+   "slug": "allman-service-reparation-motorfordon-utom-motorcyklar",
+   "namn": "Allmän service och reparation av motorfordon utom motorcyklar"
+  },
+  {
+   "slug": "ambulanstransporter-ambulanssjukvard",
+   "namn": "Ambulanstransporter och ambulanssjukvård"
+  },
+  {
+   "slug": "andra-bygginstallationer",
+   "namn": "Andra bygginstallationer"
+  },
+  {
+   "slug": "anlaggningsarbeten-el",
+   "namn": "Anläggningsarbeten för el"
+  },
+  {
+   "slug": "anlaggningsarbeten-telekommunikation",
+   "namn": "Anläggningsarbeten för telekommunikation"
+  },
+  {
+   "slug": "annan-atervinning-avfall",
+   "namn": "Annan återvinning av avfall"
+  },
+  {
+   "slug": "annan-distribution-medieinnehall",
+   "namn": "Annan distribution av medieinnehåll"
+  },
+  {
+   "slug": "annan-gummivarutillverkning",
+   "namn": "Annan gummivarutillverkning"
+  },
+  {
+   "slug": "annan-it-dataverksamhet",
+   "namn": "Annan it- och dataverksamhet"
+  },
+  {
+   "slug": "annan-jarnvagstransport-passagerartrafik",
+   "namn": "Annan järnvägstransport, passagerartrafik"
+  },
+  {
+   "slug": "annan-naturvetenskaplig-teknisk-forskning-utveckling",
+   "namn": "Annan naturvetenskaplig och teknisk forskning och utveckling"
+  },
+  {
+   "slug": "annan-ovrig-halso-sjukvard",
+   "namn": "Annan övrig hälso- och sjukvård"
+  },
+  {
+   "slug": "annan-plastvarutillverkning",
+   "namn": "Annan plastvarutillverkning"
+  },
+  {
+   "slug": "annan-rengoring",
+   "namn": "Annan rengöring"
+  },
+  {
+   "slug": "annan-specialiserad-bygg-anlaggningsverksamhet-samband-byggande-hus",
+   "namn": "Annan specialiserad bygg- och anläggningsverksamhet i samband med byggande av hus"
+  },
+  {
+   "slug": "annan-specialiserad-designverksamhet",
+   "namn": "Annan specialiserad designverksamhet"
+  },
+  {
+   "slug": "annan-stodverksamhet-avseende-konstnarligt-skapande-scenkonst",
+   "namn": "Annan stödverksamhet avseende konstnärligt skapande och scenkonst"
+  },
+  {
+   "slug": "annan-stodverksamhet-avseende-transport",
+   "namn": "Annan stödverksamhet avseende transport"
+  },
+  {
+   "slug": "annan-varuhus-stormarknadshandel",
+   "namn": "Annan varuhus- eller stormarknadshandel"
+  },
+  {
+   "slug": "annat-bortskaffande-avfall",
+   "namn": "Annat bortskaffande av avfall"
+  },
+  {
+   "slug": "annat-konstnarligt-skapande",
+   "namn": "Annat konstnärligt skapande"
+  },
+  {
+   "slug": "annonstidningsutgivning",
+   "namn": "Annonstidningsutgivning"
+  },
+  {
+   "slug": "arkivverksamhet",
+   "namn": "Arkivverksamhet"
+  },
+  {
+   "slug": "atervinning-farligt-avfall-",
+   "namn": "Återvinning av farligt avfall"
+  },
+  {
+   "slug": "atervinning-kallsorterat-material-",
+   "namn": "Återvinning av källsorterat material"
+  },
+  {
+   "slug": "bearbetning-slutbehandling-plastvaror",
+   "namn": "Bearbetning och slutbehandling av plastvaror"
+  },
+  {
+   "slug": "bearbetning-slutbehandling-tra",
+   "namn": "Bearbetning och slutbehandling av trä"
+  },
+  {
+   "slug": "begravningsverksamhet",
+   "namn": "Begravningsverksamhet"
+  },
+  {
+   "slug": "belaggning-overdragning-metall",
+   "namn": "Beläggning och överdragning av metall"
+  },
+  {
+   "slug": "bevakningsverksamhet-privat-sakerhetsverksamhet",
+   "namn": "Bevakningsverksamhet och privat säkerhetsverksamhet"
+  },
+  {
+   "slug": "bevarande-restaurering-annan-stodverksamhet-avseende-kulturarv",
+   "namn": "Bevarande, restaurering och annan stödverksamhet avseende kulturarv"
+  },
+  {
+   "slug": "biblioteksverksamhet",
+   "namn": "Biblioteksverksamhet"
+  },
+  {
+   "slug": "bildkonst",
+   "namn": "Bildkonst"
+  },
+  {
+   "slug": "bioteknisk-forskning-utveckling",
+   "namn": "Bioteknisk forskning och utveckling"
+  },
+  {
+   "slug": "butiker",
+   "namn": "Butiker"
+  },
+  {
+   "slug": "byggande-bostadshus-andra-byggnader",
+   "namn": "Byggande av bostadshus och andra byggnader"
+  },
+  {
+   "slug": "byggande-militara-skepp-fartyg",
+   "namn": "Byggande av militära skepp och fartyg"
+  },
+  {
+   "slug": "byggbranschen",
+   "namn": "Byggbranschen"
+  },
+  {
+   "slug": "byggplastvarutillverkning",
+   "namn": "Byggplastvarutillverkning"
+  },
+  {
+   "slug": "centralkoksverksamhet-sjukhus-skolor-omsorgs-andra-institutioner",
+   "namn": "Centralköksverksamhet för sjukhus, skolor, omsorgs- och andra institutioner"
+  },
+  {
+   "slug": "conduitverksamhet",
+   "namn": "Conduitverksamhet"
+  },
+  {
+   "slug": "dagspa-bastu-angbastu",
+   "namn": "Dagspa, bastu och ångbastu"
+  },
+  {
+   "slug": "dagstidningsutgivning",
+   "namn": "Dagstidningsutgivning"
+  },
+  {
+   "slug": "datainfrastruktur-databehandling-hosting-od",
+   "namn": "Datainfrastruktur, databehandling, hosting o.d."
+  },
+  {
+   "slug": "datakonsultverksamhet",
+   "namn": "Datakonsultverksamhet"
+  },
+  {
+   "slug": "dataprogrammering",
+   "namn": "Dataprogrammering"
+  },
+  {
+   "slug": "demontering-elektrisk-elektronisk-utrustning",
+   "namn": "Demontering av elektrisk och elektronisk utrustning"
+  },
+  {
+   "slug": "demontering-ovrig-kasserad-utrustning",
+   "namn": "Demontering av övrig kasserad utrustning"
+  },
+  {
+   "slug": "demontering-uttjanta-fordon",
+   "namn": "Demontering av uttjänta fordon"
+  },
+  {
+   "slug": "deponering-slutforvaring-farligt-avfall",
+   "namn": "Deponering eller slutförvaring av farligt avfall"
+  },
+  {
+   "slug": "deponering-slutforvaring-icke-farligt-avfall",
+   "namn": "Deponering eller slutförvaring av icke-farligt avfall"
+  },
+  {
+   "slug": "detaljhandel-andra-livsmedel-utom-halsokost",
+   "namn": "Detaljhandel med andra livsmedel utom hälsokost"
+  },
+  {
+   "slug": "detaljhandel-andra-ovriga-kultur-fritidsartiklar",
+   "namn": "Detaljhandel med andra övriga kultur- och fritidsartiklar"
+  },
+  {
+   "slug": "detaljhandel-apoteksvaror-utom-via-internet-postorder",
+   "namn": "Detaljhandel med apoteksvaror, utom via internet eller postorder"
+  },
+  {
+   "slug": "detaljhandel-batar",
+   "namn": "Detaljhandel med båtar"
+  },
+  {
+   "slug": "detaljhandel-belysningsartiklar-bordsartiklar-hushallsartiklar-utom-mobler",
+   "namn": "Detaljhandel med belysningsartiklar, bordsartiklar och hushållsartiklar utom möbler"
+  },
+  {
+   "slug": "detaljhandel-bocker-utom-via-internet-postorder",
+   "namn": "Detaljhandel med böcker, utom via internet eller postorder"
+  },
+  {
+   "slug": "detaljhandel-cyklar",
+   "namn": "Detaljhandel med cyklar"
+  },
+  {
+   "slug": "detaljhandel-datorer-programvara-data-tv-spel",
+   "namn": "Detaljhandel med datorer, programvara, data- och tv-spel"
+  },
+  {
+   "slug": "detaljhandel-elektriska-hushallsmaskiner-hushallsapparater-utom-via-internet-postorder",
+   "namn": "Detaljhandel med elektriska hushållsmaskiner och hushållsapparater, utom via internet eller postorder"
+  },
+  {
+   "slug": "detaljhandel-glasogon-andra-optiska-artiklar-utom-fotoutrustning",
+   "namn": "Detaljhandel med glasögon och andra optiska artiklar utom fotoutrustning"
+  },
+  {
+   "slug": "detaljhandel-halsokost",
+   "namn": "Detaljhandel med hälsokost"
+  },
+  {
+   "slug": "detaljhandel-husvagnar-husbilar-slapfordon-pahangsvagnar",
+   "namn": "Detaljhandel med husvagnar, husbilar, släpfordon och påhängsvagnar"
+  },
+  {
+   "slug": "detaljhandel-konst-galleriverksamhet",
+   "namn": "Detaljhandel med konst samt galleriverksamhet"
+  },
+  {
+   "slug": "detaljhandel-kosmetika-hygienartiklar-utom-via-internet-postorder",
+   "namn": "Detaljhandel med kosmetika och hygienartiklar, utom via internet eller postorder"
+  },
+  {
+   "slug": "detaljhandel-lastbilar-bussar-specialfordon",
+   "namn": "Detaljhandel med lastbilar, bussar och specialfordon"
+  },
+  {
+   "slug": "detaljhandel-ljud-bildanlaggningar-videoutrustning",
+   "namn": "Detaljhandel med ljud- och bildanläggningar samt videoutrustning"
+  },
+  {
+   "slug": "detaljhandel-media-musik-bild",
+   "namn": "Detaljhandel med media för musik och bild"
+  },
+  {
+   "slug": "detaljhandel-medicinska-ortopediska-artiklar-utom-glasogon-andra-optiska-artiklar",
+   "namn": "Detaljhandel med medicinska och ortopediska artiklar, utom glasögon och andra optiska artiklar"
+  },
+  {
+   "slug": "detaljhandel-mobler",
+   "namn": "Detaljhandel med möbler"
+  },
+  {
+   "slug": "detaljhandel-motorcyklar-reservdelar-tillbehor-motorcyklar",
+   "namn": "Detaljhandel med motorcyklar, reservdelar och tillbehör till motorcyklar"
+  },
+  {
+   "slug": "detaljhandel-musikinstrument-noter",
+   "namn": "Detaljhandel med musikinstrument och noter"
+  },
+  {
+   "slug": "detaljhandel-personbilar-latta-motorfordon",
+   "namn": "Detaljhandel med personbilar och lätta motorfordon"
+  },
+  {
+   "slug": "detaljhandel-sport-fritidsartiklar-utom-cyklar-batar",
+   "namn": "Detaljhandel med sport- och fritidsartiklar utom cyklar och båtar"
+  },
+  {
+   "slug": "detaljhandel-telekommunikationsutrustning",
+   "namn": "Detaljhandel med telekommunikationsutrustning"
+  },
+  {
+   "slug": "detaljhandel-via-internet-postorder-apoteksvaror",
+   "namn": "Detaljhandel via internet eller postorder med apoteksvaror"
+  },
+  {
+   "slug": "detaljhandel-via-internet-postorder-bocker",
+   "namn": "Detaljhandel via internet eller postorder med böcker"
+  },
+  {
+   "slug": "detaljhandel-via-internet-postorder-brett-sortiment",
+   "namn": "Detaljhandel via internet eller postorder med brett sortiment"
+  },
+  {
+   "slug": "detaljhandel-via-internet-postorder-brett-sortiment-mest-livsmedel-drycker-tobak",
+   "namn": "Detaljhandel via internet eller postorder med brett sortiment, mest livsmedel, drycker och tobak"
+  },
+  {
+   "slug": "detaljhandel-via-internet-postorder-elektriska-hushallsmaskiner-hushallsapparater",
+   "namn": "Detaljhandel via internet eller postorder med elektriska hushållsmaskiner och hushållsapparater"
+  },
+  {
+   "slug": "detaljhandel-via-internet-postorder-informations-kommunikationsutrustning",
+   "namn": "Detaljhandel via internet eller postorder med informations- och kommunikationsutrustning"
+  },
+  {
+   "slug": "detaljhandel-via-internet-postorder-kosmetika-hygienartiklar",
+   "namn": "Detaljhandel via internet eller postorder med kosmetika och hygienartiklar"
+  },
+  {
+   "slug": "detaljhandel-via-internet-postorder-mattor-inredningstextilier",
+   "namn": "Detaljhandel via internet eller postorder med mattor och inredningstextilier"
+  },
+  {
+   "slug": "detaljhandel-via-internet-postorder-mobler-belysningsartiklar-bordsartiklar-hushallsartiklar",
+   "namn": "Detaljhandel via internet eller postorder med möbler, belysningsartiklar, bordsartiklar och hushållsartiklar"
+  },
+  {
+   "slug": "detaljhandel-via-internet-postorder-ovriga-kultur-fritidsartiklar",
+   "namn": "Detaljhandel via internet eller postorder med övriga kultur- och fritidsartiklar"
+  },
+  {
+   "slug": "detaljhandel-via-internet-postorder-skodon-ladervaror",
+   "namn": "Detaljhandel via internet eller postorder med skodon och lädervaror"
+  },
+  {
+   "slug": "detaljhandel-via-internet-postorder-sport-fritidsartiklar",
+   "namn": "Detaljhandel via internet eller postorder med sport- och fritidsartiklar"
+  },
+  {
+   "slug": "diverse-ovrig-specialiserad-partihandel",
+   "namn": "Diverse övrig specialiserad partihandel"
+  },
+  {
+   "slug": "diverse-ovriga-konsumenttjanster",
+   "namn": "Diverse övriga konsumenttjänster"
+  },
+  {
+   "slug": "drift-botaniska-tradgardar-djurparker-",
+   "namn": "Drift av botaniska trädgårdar och djurparker"
+  },
+  {
+   "slug": "drift-naturreservat",
+   "namn": "Drift av naturreservat"
+  },
+  {
+   "slug": "drift-personalmatsalar",
+   "namn": "Drift av personalmatsalar"
+  },
+  {
+   "slug": "drift-teatrar-konserthus-od",
+   "namn": "Drift av teatrar, konserthus o.d."
+  },
+  {
+   "slug": "eftergymnasial-utbildning-annat-universitet-hogskola",
+   "namn": "Eftergymnasial utbildning vid annat än universitet eller högskola"
+  },
+  {
+   "slug": "energidistributorer",
+   "namn": "Energidistributörer"
+  },
+  {
+   "slug": "fastighetsbranschen",
+   "namn": "Fastighetsbranschen"
+  },
+  {
+   "slug": "finansbranschen",
+   "namn": "Finansbranschen"
+  },
+  {
+   "slug": "forbranning-utan-energiatervinning",
+   "namn": "Förbränning utan energiåtervinning"
+  },
+  {
+   "slug": "fordonshandel-service",
+   "namn": "Fordonshandel och service"
+  },
+  {
+   "slug": "foretagstjanster",
+   "namn": "Företagstjänster"
+  },
+  {
+   "slug": "formedling-avseende-godstransport",
+   "namn": "Förmedling avseende godstransport"
+  },
+  {
+   "slug": "formedling-avseende-hotell-logiverksamhet",
+   "namn": "Förmedling avseende hotell- och logiverksamhet"
+  },
+  {
+   "slug": "formedling-avseende-icke-specialiserad-detaljhandel",
+   "namn": "Förmedling avseende icke-specialiserad detaljhandel"
+  },
+  {
+   "slug": "formedling-avseende-konsumenttjanster",
+   "namn": "Förmedling avseende konsumenttjänster"
+  },
+  {
+   "slug": "formedling-avseende-kurser-ovrig-undervisning",
+   "namn": "Förmedling avseende kurser och övrig undervisning"
+  },
+  {
+   "slug": "formedling-avseende-ovrig-stodverksamhet-foretag",
+   "namn": "Förmedling avseende övrig stödverksamhet till företag"
+  },
+  {
+   "slug": "formedling-avseende-passagerartransport",
+   "namn": "Förmedling avseende passagerartransport"
+  },
+  {
+   "slug": "formedling-avseende-postbefordran-kurirverksamhet",
+   "namn": "Förmedling avseende postbefordran samt kurirverksamhet"
+  },
+  {
+   "slug": "formedling-avseende-reparation-underhall-datorer-hushallsartiklar-varor-personligt-bruk-motorfordon-motorcyklar",
+   "namn": "Förmedling avseende reparation och underhåll av datorer, hushållsartiklar och varor för personligt bruk samt motorfordon och motorcyklar"
+  },
+  {
+   "slug": "formedling-avseende-restaurang-catering-barverksamhet",
+   "namn": "Förmedling avseende restaurang-, catering- och barverksamhet"
+  },
+  {
+   "slug": "formedling-avseende-sjukvard-tandvard-annan-halso-sjukvard",
+   "namn": "Förmedling avseende sjukvård, tandvård och annan hälso- och sjukvård"
+  },
+  {
+   "slug": "formedling-avseende-specialiserad-bygg-anlaggningsverksamhet",
+   "namn": "Förmedling avseende specialiserad bygg- och anläggningsverksamhet"
+  },
+  {
+   "slug": "formedling-avseende-specialiserad-detaljhandel",
+   "namn": "Förmedling avseende specialiserad detaljhandel"
+  },
+  {
+   "slug": "formedling-avseende-uthyrning-leasing-andra-materiella-tillgangar-icke-finansiella-immateriella-tillgangar",
+   "namn": "Förmedling avseende uthyrning och leasing av andra materiella tillgångar och icke-finansiella immateriella tillgångar"
+  },
+  {
+   "slug": "formedling-avseende-uthyrning-leasing-personbilar-husbilar-slapfordon",
+   "namn": "Förmedling avseende uthyrning och leasing av personbilar, husbilar och släpfordon"
+  },
+  {
+   "slug": "formedling-avseende-vard-omsorg-boende",
+   "namn": "Förmedling avseende vård och omsorg med boende"
+  },
+  {
+   "slug": "forvaltning-och-handel-vardepapper-en-begransad-sluten-krets-agare",
+   "namn": "Förvaltning av och handel med värdepapper, för en begränsad och sluten krets av ägare"
+  },
+  {
+   "slug": "fotoverksamhet",
+   "namn": "Fotoverksamhet"
+  },
+  {
+   "slug": "frisorer-barberare",
+   "namn": "Frisörer och barberare"
+  },
+  {
+   "slug": "fritidsbranschen",
+   "namn": "Fritidsbranschen"
+  },
+  {
+   "slug": "fysioterapeutisk-verksamhet",
+   "namn": "Fysioterapeutisk verksamhet"
+  },
+  {
+   "slug": "grafisk-design-visuell-kommunikation",
+   "namn": "Grafisk design och visuell kommunikation"
+  },
+  {
+   "slug": "grossister",
+   "namn": "Grossister"
+  },
+  {
+   "slug": "handel-egna-fastigheter",
+   "namn": "Handel med egna fastigheter"
+  },
+  {
+   "slug": "handel-elektricitet",
+   "namn": "Handel med elektricitet"
+  },
+  {
+   "slug": "heldygnsvard-boende-barn-ungdomar-sociala-problem",
+   "namn": "Heldygnsvård med boende för barn och ungdomar med sociala problem"
+  },
+  {
+   "slug": "holdingverksamhet-finansiella-koncerner",
+   "namn": "Holdingverksamhet i finansiella koncerner"
+  },
+  {
+   "slug": "holdingverksamhet-icke-finansiella-koncerner",
+   "namn": "Holdingverksamhet i icke-finansiella koncerner"
+  },
+  {
+   "slug": "hotell-boenden",
+   "namn": "Hotell och boenden"
+  },
+  {
+   "slug": "industri-institutionstvatt",
+   "namn": "Industri- och institutionstvätt"
+  },
+  {
+   "slug": "industridesign-modedesign",
+   "namn": "Industridesign och modedesign"
+  },
+  {
+   "slug": "inredningsdesign",
+   "namn": "Inredningsdesign"
+  },
+  {
+   "slug": "installation-isolering",
+   "namn": "Installation av isolering"
+  },
+  {
+   "slug": "intresseorganisationer",
+   "namn": "Intresseorganisationer"
+  },
+  {
+   "slug": "kabinbanor-skidliftar-passagerartrafik",
+   "namn": "Kabinbanor och skidliftar, passagerartrafik"
+  },
+  {
+   "slug": "kemikalieindustrier",
+   "namn": "Kemikalieindustrier"
+  },
+  {
+   "slug": "konsultverksamhet-avseende-foretags-organisation",
+   "namn": "Konsultverksamhet avseende företags organisation"
+  },
+  {
+   "slug": "konsumenttjanster",
+   "namn": "Konsumenttjänster"
+  },
+  {
+   "slug": "konsumenttvatt",
+   "namn": "Konsumenttvätt"
+  },
+  {
+   "slug": "kontorstjanster",
+   "namn": "Kontorstjänster"
+  },
+  {
+   "slug": "lagring-elektricitet",
+   "namn": "Lagring av elektricitet"
+  },
+  {
+   "slug": "lagring-gas-som-del-natforsorjningstjanster",
+   "namn": "Lagring av gas som en del i nätförsörjningstjänster"
+  },
+  {
+   "slug": "litterart-skapande-musikkomposition",
+   "namn": "Litterärt skapande och musikkomposition"
+  },
+  {
+   "slug": "livsmedelsindustrier",
+   "namn": "Livsmedelsindustrier"
+  },
+  {
+   "slug": "logistikbranschen",
+   "namn": "Logistikbranschen"
+  },
+  {
+   "slug": "logistikverksamhet",
+   "namn": "Logistikverksamhet"
+  },
+  {
+   "slug": "maklare-agenter-el-naturgas",
+   "namn": "Mäklare och agenter för el och naturgas"
+  },
+  {
+   "slug": "maskinindustrier",
+   "namn": "Maskinindustrier"
+  },
+  {
+   "slug": "massatillverkning-",
+   "namn": "Massatillverkning"
+  },
+  {
+   "slug": "medicinsk-laboratorieverksamhet-bilddiagnostik",
+   "namn": "Medicinsk laboratorieverksamhet och bilddiagnostik"
+  },
+  {
+   "slug": "mediebranchen",
+   "namn": "Mediebranchen"
+  },
+  {
+   "slug": "metallegoarbeten",
+   "namn": "Metallegoarbeten"
+  },
+  {
+   "slug": "metallvaruindustrier",
+   "namn": "Metallvaruindustrier"
+  },
+  {
+   "slug": "miljo-avfallshantering",
+   "namn": "Miljö och avfallshantering"
+  },
+  {
+   "slug": "mineralindustrier",
+   "namn": "Mineralindustrier"
+  },
+  {
+   "slug": "mobil-restaurangverksamhet",
+   "namn": "Mobil restaurangverksamhet"
+  },
+  {
+   "slug": "murarbeten",
+   "namn": "Murarbeten"
+  },
+  {
+   "slug": "museiverksamhet-museisamlingar",
+   "namn": "Museiverksamhet och museisamlingar"
+  },
+  {
+   "slug": "naturbruksbranchen",
+   "namn": "Naturbruksbranchen"
+  },
+  {
+   "slug": "nyhetsformedling",
+   "namn": "Nyhetsförmedling"
+  },
+  {
+   "slug": "offentlig-forvaltning",
+   "namn": "Offentlig förvaltning"
+  },
+  {
+   "slug": "offentlig-forvaltning-naringslivsprogram",
+   "namn": "Offentlig förvaltning av näringslivsprogram"
+  },
+  {
+   "slug": "omsorg-sociala-insatser-ovriga-boendeformer-vuxna",
+   "namn": "Omsorg och sociala insatser i övriga boendeformer för vuxna"
+  },
+  {
+   "slug": "overgripande-offentlig-forvaltning",
+   "namn": "Övergripande offentlig förvaltning"
+  },
+  {
+   "slug": "ovrig-centralkoks-cateringverksamhet",
+   "namn": "Övrig centralköks- och cateringverksamhet"
+  },
+  {
+   "slug": "ovrig-detaljhandel-brett-sortiment",
+   "namn": "Övrig detaljhandel med brett sortiment"
+  },
+  {
+   "slug": "ovrig-informationsverksamhet",
+   "namn": "Övrig informationsverksamhet"
+  },
+  {
+   "slug": "ovrig-sakerhetsverksamhet",
+   "namn": "Övrig säkerhetsverksamhet"
+  },
+  {
+   "slug": "ovrig-stodverksamhet-utbildningsvasendet",
+   "namn": "Övrig stödverksamhet för utbildningsväsendet"
+  },
+  {
+   "slug": "ovrig-travarutillverkning",
+   "namn": "Övrig trävarutillverkning"
+  },
+  {
+   "slug": "ovrig-uppfodning-andra-djur",
+   "namn": "Övrig uppfödning av andra djur"
+  },
+  {
+   "slug": "ovriga-tillverkare",
+   "namn": "Övriga tillverkare"
+  },
+  {
+   "slug": "ovriga-verksamheter",
+   "namn": "Övriga verksamheter"
+  },
+  {
+   "slug": "ovrigt-tillhandahallande-personalfunktioner",
+   "namn": "Övrigt tillhandahållande av personalfunktioner"
+  },
+  {
+   "slug": "partihandel-andra-insatsvaror",
+   "namn": "Partihandel med andra insatsvaror"
+  },
+  {
+   "slug": "partihandel-avfall-skrot-icke-metall",
+   "namn": "Partihandel med avfall och skrot av icke-metall"
+  },
+  {
+   "slug": "partihandel-branslen",
+   "namn": "Partihandel med bränslen"
+  },
+  {
+   "slug": "partihandel-datorer-kringutrustning-programvara-annan-kontorsutrustning",
+   "namn": "Partihandel med datorer och kringutrustning samt programvara; samt annan kontorsutrustning"
+  },
+  {
+   "slug": "partihandel-datoriserad-materialhanteringsutrustning",
+   "namn": "Partihandel med datoriserad materialhanteringsutrustning"
+  },
+  {
+   "slug": "partihandel-diverse-andra-maskiner-diverse-annan-utrustning",
+   "namn": "Partihandel med diverse andra maskiner och diverse annan utrustning"
+  },
+  {
+   "slug": "partihandel-elektronikkomponenter",
+   "namn": "Partihandel med elektronikkomponenter"
+  },
+  {
+   "slug": "partihandel-fisk-fiskprodukter",
+   "namn": "Partihandel med fisk- och fiskprodukter"
+  },
+  {
+   "slug": "partihandel-husvagnar-husbilar-slapfordon-pahangsvagnar",
+   "namn": "Partihandel med husvagnar, husbilar, släpfordon och påhängsvagnar"
+  },
+  {
+   "slug": "partihandel-jarnhandelsvaror",
+   "namn": "Partihandel med järnhandelsvaror"
+  },
+  {
+   "slug": "partihandel-kemiska-produkter",
+   "namn": "Partihandel med kemiska produkter"
+  },
+  {
+   "slug": "partihandel-kontorsmobler",
+   "namn": "Partihandel med kontorsmöbler"
+  },
+  {
+   "slug": "partihandel-kott-kottvaror",
+   "namn": "Partihandel med kött och köttvaror"
+  },
+  {
+   "slug": "partihandel-lastbilar-bussar-specialfordon",
+   "namn": "Partihandel med lastbilar, bussar och specialfordon"
+  },
+  {
+   "slug": "partihandel-mat-precisionsinstrument",
+   "namn": "Partihandel med mät- och precisionsinstrument"
+  },
+  {
+   "slug": "partihandel-metallavfall-metallskrot",
+   "namn": "Partihandel med metallavfall och metallskrot"
+  },
+  {
+   "slug": "partihandel-metaller-metallmalmer",
+   "namn": "Partihandel med metaller och metallmalmer"
+  },
+  {
+   "slug": "partihandel-mobler-mattor-belysningsartiklar",
+   "namn": "Partihandel med möbler, mattor och belysningsartiklar"
+  },
+  {
+   "slug": "partihandel-motorcyklar-reservdelar-tillbehor",
+   "namn": "Partihandel med motorcyklar, reservdelar och tillbehör till motorcyklar"
+  },
+  {
+   "slug": "partihandel-personbilar-latta-motorfordon",
+   "namn": "Partihandel med personbilar och lätta motorfordon"
+  },
+  {
+   "slug": "partihandel-sanitetsgods",
+   "namn": "Partihandel med sanitetsgods"
+  },
+  {
+   "slug": "partihandel-telekommunikationsutrustning",
+   "namn": "Partihandel med telekommunikationsutrustning"
+  },
+  {
+   "slug": "partihandel-uttjanta-fordon",
+   "namn": "Partihandel med uttjänta fordon"
+  },
+  {
+   "slug": "partihandel-virke-andra-byggmaterial",
+   "namn": "Partihandel med virke och andra byggmaterial"
+  },
+  {
+   "slug": "partihandel-vvs-varor",
+   "namn": "Partihandel med VVS-varor"
+  },
+  {
+   "slug": "passagerartrafik-bestallning-fordon-forare",
+   "namn": "Passagerartrafik på beställning, fordon med förare"
+  },
+  {
+   "slug": "patentformedling-marknadsforing-patent",
+   "namn": "Patentförmedling samt marknadsföring av patent"
+  },
+  {
+   "slug": "penningmarknadsfonder-andra-fonder-penningmarknadsfonder",
+   "namn": "Penningmarknadsfonder och andra fonder än penningmarknadsfonder"
+  },
+  {
+   "slug": "personaluthyrning",
+   "namn": "Personaluthyrning"
+  },
+  {
+   "slug": "plat-lack-glasreparationer-motorfordon-utom-motorcyklar",
+   "namn": "Plåt-, lack- och glasreparationer på motorfordon utom motorcyklar"
+  },
+  {
+   "slug": "pr-kommunikation",
+   "namn": "PR och kommunikation"
+  },
+  {
+   "slug": "provisionshandel-annat-specialsortiment-utom-motorfordon",
+   "namn": "Provisionshandel med annat specialsortiment utom motorfordon"
+  },
+  {
+   "slug": "provisionshandel-motorfordon-reservdelar-tillbehor-motorfordon",
+   "namn": "Provisionshandel med motorfordon, och reservdelar och tillbehör till motorfordon"
+  },
+  {
+   "slug": "psykologi-psykoterapiverksamhet-utom-lakare",
+   "namn": "Psykologi- och psykoterapiverksamhet, utom läkare"
+  },
+  {
+   "slug": "reguljar-vagtransport-passagerartrafik",
+   "namn": "Reguljär vägtransport, passagerartrafik"
+  },
+  {
+   "slug": "renskotsel",
+   "namn": "Renskötsel"
+  },
+  {
+   "slug": "reparation-datorer-kringutrustning",
+   "namn": "Reparation av datorer och kringutrustning"
+  },
+  {
+   "slug": "reparation-kommunikationsutrustning",
+   "namn": "Reparation av kommunikationsutrustning"
+  },
+  {
+   "slug": "reparation-underhall-militara-stridsfordon-skepp-batar-luftfartyg-rymdfarkoster",
+   "namn": "Reparation och underhåll av militära stridsfordon, skepp, båtar, luftfartyg och rymdfarkoster"
+  },
+  {
+   "slug": "reparation-underhall-motorcyklar",
+   "namn": "Reparation och underhåll av motorcyklar"
+  },
+  {
+   "slug": "resebranschen",
+   "namn": "Resebranschen"
+  },
+  {
+   "slug": "restaurangbranchen",
+   "namn": "Restaurangbranchen"
+  },
+  {
+   "slug": "restaurangverksamhet",
+   "namn": "Restaurangverksamhet"
+  },
+  {
+   "slug": "sagning-tra",
+   "namn": "Sågning av trä"
+  },
+  {
+   "slug": "scenkonst",
+   "namn": "Scenkonst"
+  },
+  {
+   "slug": "sjukskoterske-barnmorskeverksamhet",
+   "namn": "Sjuksköterske- och barnmorskeverksamhet"
+  },
+  {
+   "slug": "skonhetsvard-andra-skonhetsbehandlingar",
+   "namn": "Skönhetsvård och andra skönhetsbehandlingar"
+  },
+  {
+   "slug": "slutbehandling-varor-tra",
+   "namn": "Slutbehandling av varor av trä"
+  },
+  {
+   "slug": "specialiserad-bygg-anlaggningsverksamhet-samband-anlaggningsarbeten",
+   "namn": "Specialiserad bygg- och anläggningsverksamhet i samband med anläggningsarbeten"
+  },
+  {
+   "slug": "sprangamnestillverkning",
+   "namn": "Sprängämnestillverkning"
+  },
+  {
+   "slug": "stiftelser-dodsbon-brevladeforetag",
+   "namn": "Stiftelser, dödsbon och brevlådeföretag"
+  },
+  {
+   "slug": "stodverksamhet-avseende-fiske-vattenbruk",
+   "namn": "Stödverksamhet avseende fiske och vattenbruk"
+  },
+  {
+   "slug": "stodverksamhet-avseende-skogsbruk",
+   "namn": "Stödverksamhet avseende skogsbruk"
+  },
+  {
+   "slug": "takarbeten-andra-material-plat",
+   "namn": "Takarbeten av andra material än plåt"
+  },
+  {
+   "slug": "takarbeten-plat",
+   "namn": "Takarbeten av plåt"
+  },
+  {
+   "slug": "tandhygienistverksamhet",
+   "namn": "Tandhygienistverksamhet"
+  },
+  {
+   "slug": "textil-laderindustrier",
+   "namn": "Textil- och läderindustrier"
+  },
+  {
+   "slug": "tillhandahallande-konsumenttjanster-hemmet",
+   "namn": "Tillhandahållande av konsumenttjänster i hemmet"
+  },
+  {
+   "slug": "tillverkning-andra-cisterner-tankar-kar-andra-behallare-metall",
+   "namn": "Tillverkning av andra cisterner, tankar, kar och andra behållare av metall"
+  },
+  {
+   "slug": "tillverkning-andra-glasvaror-inklusive-tekniska-glasvaror",
+   "namn": "Tillverkning av andra glasvaror inklusive tekniska glasvaror"
+  },
+  {
+   "slug": "tillverkning-andra-keramiska-produkter",
+   "namn": "Tillverkning av andra keramiska produkter"
+  },
+  {
+   "slug": "tillverkning-andra-mobler-madrasser",
+   "namn": "Tillverkning av andra möbler och madrasser"
+  },
+  {
+   "slug": "tillverkning-andra-pappers-pappvaror",
+   "namn": "Tillverkning av andra pappers- och pappvaror"
+  },
+  {
+   "slug": "tillverkning-andra-varor-betong-cement-gips",
+   "namn": "Tillverkning av andra varor av betong, cement och gips"
+  },
+  {
+   "slug": "tillverkning-andra-verktygsmaskiner",
+   "namn": "Tillverkning av andra verktygsmaskiner"
+  },
+  {
+   "slug": "tillverkning-arbets-skydds-overdragsklader",
+   "namn": "Tillverkning av arbets-, skydds- och överdragskläder"
+  },
+  {
+   "slug": "tillverkning-civila-luftfartyg-rymdfarkoster-od",
+   "namn": "Tillverkning av civila luftfartyg, rymdfarkoster o.d."
+  },
+  {
+   "slug": "tillverkning-diverse-ovriga-bekladnadsvaror-tillbehor",
+   "namn": "Tillverkning av diverse övriga beklädnadsvaror och tillbehör"
+  },
+  {
+   "slug": "tillverkning-dorrar-fonster-tra",
+   "namn": "Tillverkning av dörrar och fönster av trä"
+  },
+  {
+   "slug": "tillverkning-eteriska-oljor",
+   "namn": "Tillverkning av eteriska oljor"
+  },
+  {
+   "slug": "tillverkning-fasta-branslen-vegetabilisk-biomassa",
+   "namn": "Tillverkning av fasta bränslen av vegetabilisk biomassa"
+  },
+  {
+   "slug": "tillverkning-gang-ytterklader",
+   "namn": "Tillverkning av gång- och ytterkläder"
+  },
+  {
+   "slug": "tillverkning-hushallstextilier-andra-sydda-inredningsartiklar",
+   "namn": "Tillverkning av hushållstextilier och andra sydda inredningsartiklar"
+  },
+  {
+   "slug": "tillverkning-kakao-choklad-sockerkonfektyrer",
+   "namn": "Tillverkning av kakao, choklad- och sockerkonfektyrer"
+  },
+  {
+   "slug": "tillverkning-koksinredningar",
+   "namn": "Tillverkning av köksinredningar"
+  },
+  {
+   "slug": "tillverkning-koksmobler",
+   "namn": "Tillverkning av köksmöbler"
+  },
+  {
+   "slug": "tillverkning-kontors-butiksinredningar",
+   "namn": "Tillverkning av kontors- och butiksinredningar"
+  },
+  {
+   "slug": "tillverkning-kontors-butiksmobler",
+   "namn": "Tillverkning av kontors- och butiksmöbler"
+  },
+  {
+   "slug": "tillverkning-lader-skinnklader-palsvaror",
+   "namn": "Tillverkning av läder- och skinnkläder samt pälsvaror"
+  },
+  {
+   "slug": "tillverkning-lim",
+   "namn": "Tillverkning av lim"
+  },
+  {
+   "slug": "tillverkning-maskiner-additiv-tillverkning",
+   "namn": "Tillverkning av maskiner för additiv tillverkning"
+  },
+  {
+   "slug": "tillverkning-militara-luftfartyg-rymdfarkoster-od",
+   "namn": "Tillverkning av militära luftfartyg, rymdfarkoster o.d."
+  },
+  {
+   "slug": "tillverkning-ovriga-kemiska-produkter",
+   "namn": "Tillverkning av övriga kemiska produkter"
+  },
+  {
+   "slug": "tillverkning-trikavaror",
+   "namn": "Tillverkning av trikåvaror"
+  },
+  {
+   "slug": "tillverkning-underklader-skjortor-blusar",
+   "namn": "Tillverkning av underkläder, skjortor och blusar"
+  },
+  {
+   "slug": "tillverkning-varor-kork-halm-rotting-od",
+   "namn": "Tillverkning av varor av kork, halm, rotting o.d."
+  },
+  {
+   "slug": "tillverkning-verktyg-redskap",
+   "namn": "Tillverkning av verktyg och redskap"
+  },
+  {
+   "slug": "tra-pappindustrier",
+   "namn": "Trä- och pappindustrier"
+  },
+  {
+   "slug": "traditionell-komplementar-alternativ-medicin",
+   "namn": "Traditionell, komplementär och alternativ medicin"
+  },
+  {
+   "slug": "tung-jarnvagstransport-passagerartrafik",
+   "namn": "Tung järnvägstransport, passagerartrafik"
+  },
+  {
+   "slug": "universitets-hogskoleutbildning",
+   "namn": "Universitets- eller högskoleutbildning"
+  },
+  {
+   "slug": "uppfodning-sallskapsdjur",
+   "namn": "Uppfödning av sällskapsdjur"
+  },
+  {
+   "slug": "utbildningar-skolor",
+   "namn": "Utbildningar och skolor"
+  },
+  {
+   "slug": "utformning-byggprojekt",
+   "namn": "Utformning av byggprojekt"
+  },
+  {
+   "slug": "utgivning-tidskrifter",
+   "namn": "Utgivning av tidskrifter"
+  },
+  {
+   "slug": "uthyrningsbranschen",
+   "namn": "Uthyrningsbranschen"
+  },
+  {
+   "slug": "vard-historiska-minnesmarken-monument",
+   "namn": "Vård av historiska minnesmärken och monument"
+  },
+  {
+   "slug": "vardbranschen",
+   "namn": "Vårdbranschen"
+  },
+  {
+   "slug": "varmebehandling-metall",
+   "namn": "Värmebehandling av metall"
+  },
+  {
+   "slug": "vattenforsorjning",
+   "namn": "Vattenförsörjning"
+  }
+ ],
+ "lan": [
+  {
+   "slug": "blekinge-lan",
+   "namn": "Blekinge län",
+   "kommuner": [
+    {
+     "slug": "karlshamn",
+     "namn": "Karlshamn"
+    },
+    {
+     "slug": "karlskrona",
+     "namn": "Karlskrona"
+    },
+    {
+     "slug": "olofstrom",
+     "namn": "Olofström"
+    },
+    {
+     "slug": "ronneby",
+     "namn": "Ronneby"
+    },
+    {
+     "slug": "solvesborg",
+     "namn": "Sölvesborg"
+    }
+   ]
+  },
+  {
+   "slug": "dalarnas-lan",
+   "namn": "Dalarnas län",
+   "kommuner": [
+    {
+     "slug": "alvdalen",
+     "namn": "Älvdalen"
+    },
+    {
+     "slug": "avesta",
+     "namn": "Avesta"
+    },
+    {
+     "slug": "borlange",
+     "namn": "Borlänge"
+    },
+    {
+     "slug": "falun",
+     "namn": "Falun"
+    },
+    {
+     "slug": "gagnef",
+     "namn": "Gagnef"
+    },
+    {
+     "slug": "hedemora",
+     "namn": "Hedemora"
+    },
+    {
+     "slug": "leksand",
+     "namn": "Leksand"
+    },
+    {
+     "slug": "ludvika",
+     "namn": "Ludvika"
+    },
+    {
+     "slug": "malung",
+     "namn": "Malung"
+    },
+    {
+     "slug": "mora",
+     "namn": "Mora"
+    },
+    {
+     "slug": "orsa",
+     "namn": "Orsa"
+    },
+    {
+     "slug": "rattvik",
+     "namn": "Rättvik"
+    },
+    {
+     "slug": "sater",
+     "namn": "Säter"
+    },
+    {
+     "slug": "smedjebacken",
+     "namn": "Smedjebacken"
+    },
+    {
+     "slug": "vansbro",
+     "namn": "Vansbro"
+    }
+   ]
+  },
+  {
+   "slug": "gavleborgs-lan",
+   "namn": "Gävleborgs län",
+   "kommuner": [
+    {
+     "slug": "bollnas",
+     "namn": "Bollnäs"
+    },
+    {
+     "slug": "gavle",
+     "namn": "Gävle"
+    },
+    {
+     "slug": "hofors",
+     "namn": "Hofors"
+    },
+    {
+     "slug": "hudiksvall",
+     "namn": "Hudiksvall"
+    },
+    {
+     "slug": "ljusdal",
+     "namn": "Ljusdal"
+    },
+    {
+     "slug": "nordanstig",
+     "namn": "Nordanstig"
+    },
+    {
+     "slug": "ockelbo",
+     "namn": "Ockelbo"
+    },
+    {
+     "slug": "ovanaker",
+     "namn": "Ovanåker"
+    },
+    {
+     "slug": "sandviken",
+     "namn": "Sandviken"
+    },
+    {
+     "slug": "soderhamn",
+     "namn": "Söderhamn"
+    }
+   ]
+  },
+  {
+   "slug": "gotlands-lan",
+   "namn": "Gotlands län",
+   "kommuner": [
+    {
+     "slug": "gotland",
+     "namn": "Gotland"
+    }
+   ]
+  },
+  {
+   "slug": "hallands-lan",
+   "namn": "Hallands län",
+   "kommuner": [
+    {
+     "slug": "falkenberg",
+     "namn": "Falkenberg"
+    },
+    {
+     "slug": "halmstad",
+     "namn": "Halmstad"
+    },
+    {
+     "slug": "hylte",
+     "namn": "Hylte"
+    },
+    {
+     "slug": "kungsbacka",
+     "namn": "Kungsbacka"
+    },
+    {
+     "slug": "laholm",
+     "namn": "Laholm"
+    },
+    {
+     "slug": "varberg",
+     "namn": "Varberg"
+    }
+   ]
+  },
+  {
+   "slug": "jamtlands-lan",
+   "namn": "Jämtlands län",
+   "kommuner": [
+    {
+     "slug": "are",
+     "namn": "Åre"
+    },
+    {
+     "slug": "berg",
+     "namn": "Berg"
+    },
+    {
+     "slug": "bracke",
+     "namn": "Bräcke"
+    },
+    {
+     "slug": "harjedalen",
+     "namn": "Härjedalen"
+    },
+    {
+     "slug": "krokom",
+     "namn": "Krokom"
+    },
+    {
+     "slug": "ostersund",
+     "namn": "Östersund"
+    },
+    {
+     "slug": "ragunda",
+     "namn": "Ragunda"
+    },
+    {
+     "slug": "stromsund",
+     "namn": "Strömsund"
+    }
+   ]
+  },
+  {
+   "slug": "jonkopings-lan",
+   "namn": "Jönköpings län",
+   "kommuner": [
+    {
+     "slug": "aneby",
+     "namn": "Aneby"
+    },
+    {
+     "slug": "eksjo",
+     "namn": "Eksjö"
+    },
+    {
+     "slug": "gislaved",
+     "namn": "Gislaved"
+    },
+    {
+     "slug": "gnosjo",
+     "namn": "Gnosjö"
+    },
+    {
+     "slug": "habo",
+     "namn": "Habo"
+    },
+    {
+     "slug": "jonkoping",
+     "namn": "Jönköping"
+    },
+    {
+     "slug": "mullsjo",
+     "namn": "Mullsjö"
+    },
+    {
+     "slug": "nassjo",
+     "namn": "Nässjö"
+    },
+    {
+     "slug": "savsjo",
+     "namn": "Sävsjö"
+    },
+    {
+     "slug": "tranas",
+     "namn": "Tranås"
+    },
+    {
+     "slug": "vaggeryd",
+     "namn": "Vaggeryd"
+    },
+    {
+     "slug": "varnamo",
+     "namn": "Värnamo"
+    },
+    {
+     "slug": "vetlanda",
+     "namn": "Vetlanda"
+    }
+   ]
+  },
+  {
+   "slug": "kalmar-lan",
+   "namn": "Kalmar län",
+   "kommuner": [
+    {
+     "slug": "borgholm",
+     "namn": "Borgholm"
+    },
+    {
+     "slug": "emmaboda",
+     "namn": "Emmaboda"
+    },
+    {
+     "slug": "hogsby",
+     "namn": "Högsby"
+    },
+    {
+     "slug": "hultsfred",
+     "namn": "Hultsfred"
+    },
+    {
+     "slug": "kalmar",
+     "namn": "Kalmar"
+    },
+    {
+     "slug": "monsteras",
+     "namn": "Mönsterås"
+    },
+    {
+     "slug": "morbylanga",
+     "namn": "Mörbylånga"
+    },
+    {
+     "slug": "nybro",
+     "namn": "Nybro"
+    },
+    {
+     "slug": "oskarshamn",
+     "namn": "Oskarshamn"
+    },
+    {
+     "slug": "torsas",
+     "namn": "Torsås"
+    },
+    {
+     "slug": "vastervik",
+     "namn": "Västervik"
+    },
+    {
+     "slug": "vimmerby",
+     "namn": "Vimmerby"
+    }
+   ]
+  },
+  {
+   "slug": "kronobergs-lan",
+   "namn": "Kronobergs län",
+   "kommuner": [
+    {
+     "slug": "almhult",
+     "namn": "Älmhult"
+    },
+    {
+     "slug": "alvesta",
+     "namn": "Alvesta"
+    },
+    {
+     "slug": "lessebo",
+     "namn": "Lessebo"
+    },
+    {
+     "slug": "ljungby",
+     "namn": "Ljungby"
+    },
+    {
+     "slug": "markaryd",
+     "namn": "Markaryd"
+    },
+    {
+     "slug": "tingsryd",
+     "namn": "Tingsryd"
+    },
+    {
+     "slug": "uppvidinge",
+     "namn": "Uppvidinge"
+    },
+    {
+     "slug": "vaxjo",
+     "namn": "Växjö"
+    }
+   ]
+  },
+  {
+   "slug": "norrbottens-lan",
+   "namn": "Norrbottens län",
+   "kommuner": [
+    {
+     "slug": "alvsbyn",
+     "namn": "Älvsbyn"
+    },
+    {
+     "slug": "arjeplog",
+     "namn": "Arjeplog"
+    },
+    {
+     "slug": "arvidsjaur",
+     "namn": "Arvidsjaur"
+    },
+    {
+     "slug": "boden",
+     "namn": "Boden"
+    },
+    {
+     "slug": "gallivare",
+     "namn": "Gällivare"
+    },
+    {
+     "slug": "haparanda",
+     "namn": "Haparanda"
+    },
+    {
+     "slug": "jokkmokk",
+     "namn": "Jokkmokk"
+    },
+    {
+     "slug": "kalix",
+     "namn": "Kalix"
+    },
+    {
+     "slug": "kiruna",
+     "namn": "Kiruna"
+    },
+    {
+     "slug": "lulea",
+     "namn": "Luleå"
+    },
+    {
+     "slug": "overkalix",
+     "namn": "Överkalix"
+    },
+    {
+     "slug": "overtornea",
+     "namn": "Övertorneå"
+    },
+    {
+     "slug": "pajala",
+     "namn": "Pajala"
+    },
+    {
+     "slug": "pitea",
+     "namn": "Piteå"
+    }
+   ]
+  },
+  {
+   "slug": "orebro-lan",
+   "namn": "Örebro län",
+   "kommuner": [
+    {
+     "slug": "askersund",
+     "namn": "Askersund"
+    },
+    {
+     "slug": "degerfors",
+     "namn": "Degerfors"
+    },
+    {
+     "slug": "hallefors",
+     "namn": "Hällefors"
+    },
+    {
+     "slug": "hallsberg",
+     "namn": "Hallsberg"
+    },
+    {
+     "slug": "karlskoga",
+     "namn": "Karlskoga"
+    },
+    {
+     "slug": "kumla",
+     "namn": "Kumla"
+    },
+    {
+     "slug": "laxa",
+     "namn": "Laxå"
+    },
+    {
+     "slug": "lekeberg",
+     "namn": "Lekeberg"
+    },
+    {
+     "slug": "lindesberg",
+     "namn": "Lindesberg"
+    },
+    {
+     "slug": "ljusnarsberg",
+     "namn": "Ljusnarsberg"
+    },
+    {
+     "slug": "nora",
+     "namn": "Nora"
+    },
+    {
+     "slug": "orebro",
+     "namn": "Örebro"
+    }
+   ]
+  },
+  {
+   "slug": "ostergotlands-lan",
+   "namn": "Östergötlands län",
+   "kommuner": [
+    {
+     "slug": "atvidaberg",
+     "namn": "Åtvidaberg"
+    },
+    {
+     "slug": "boxholm",
+     "namn": "Boxholm"
+    },
+    {
+     "slug": "finspang",
+     "namn": "Finspång"
+    },
+    {
+     "slug": "kinda",
+     "namn": "Kinda"
+    },
+    {
+     "slug": "linkoping",
+     "namn": "Linköping"
+    },
+    {
+     "slug": "mjolby",
+     "namn": "Mjölby"
+    },
+    {
+     "slug": "motala",
+     "namn": "Motala"
+    },
+    {
+     "slug": "norrkoping",
+     "namn": "Norrköping"
+    },
+    {
+     "slug": "odeshog",
+     "namn": "Ödeshög"
+    },
+    {
+     "slug": "soderkoping",
+     "namn": "Söderköping"
+    },
+    {
+     "slug": "vadstena",
+     "namn": "Vadstena"
+    },
+    {
+     "slug": "valdemarsvik",
+     "namn": "Valdemarsvik"
+    },
+    {
+     "slug": "ydre",
+     "namn": "Ydre"
+    }
+   ]
+  },
+  {
+   "slug": "skane-lan",
+   "namn": "Skåne län",
+   "kommuner": [
+    {
+     "slug": "angelholm",
+     "namn": "Ängelholm"
+    },
+    {
+     "slug": "astorp",
+     "namn": "Åstorp"
+    },
+    {
+     "slug": "bastad",
+     "namn": "Båstad"
+    },
+    {
+     "slug": "bjuv",
+     "namn": "Bjuv"
+    },
+    {
+     "slug": "bromolla",
+     "namn": "Bromölla"
+    },
+    {
+     "slug": "burlov",
+     "namn": "Burlöv"
+    },
+    {
+     "slug": "eslov",
+     "namn": "Eslöv"
+    },
+    {
+     "slug": "hassleholm",
+     "namn": "Hässleholm"
+    },
+    {
+     "slug": "helsingborg",
+     "namn": "Helsingborg"
+    },
+    {
+     "slug": "hoganas",
+     "namn": "Höganäs"
+    },
+    {
+     "slug": "hoor",
+     "namn": "Höör"
+    },
+    {
+     "slug": "horby",
+     "namn": "Hörby"
+    },
+    {
+     "slug": "kavlinge",
+     "namn": "Kävlinge"
+    },
+    {
+     "slug": "klippan",
+     "namn": "Klippan"
+    },
+    {
+     "slug": "kristianstad",
+     "namn": "Kristianstad"
+    },
+    {
+     "slug": "landskrona",
+     "namn": "Landskrona"
+    },
+    {
+     "slug": "lomma",
+     "namn": "Lomma"
+    },
+    {
+     "slug": "lund",
+     "namn": "Lund"
+    },
+    {
+     "slug": "malmo",
+     "namn": "Malmö"
+    },
+    {
+     "slug": "orkelljunga",
+     "namn": "Örkelljunga"
+    },
+    {
+     "slug": "osby",
+     "namn": "Osby"
+    },
+    {
+     "slug": "ostra-goinge",
+     "namn": "Östra Göinge"
+    },
+    {
+     "slug": "perstorp",
+     "namn": "Perstorp"
+    },
+    {
+     "slug": "simrishamn",
+     "namn": "Simrishamn"
+    },
+    {
+     "slug": "sjobo",
+     "namn": "Sjöbo"
+    },
+    {
+     "slug": "skurup",
+     "namn": "Skurup"
+    },
+    {
+     "slug": "staffanstorp",
+     "namn": "Staffanstorp"
+    },
+    {
+     "slug": "svalov",
+     "namn": "Svalöv"
+    },
+    {
+     "slug": "svedala",
+     "namn": "Svedala"
+    },
+    {
+     "slug": "tomelilla",
+     "namn": "Tomelilla"
+    },
+    {
+     "slug": "trelleborg",
+     "namn": "Trelleborg"
+    },
+    {
+     "slug": "vellinge",
+     "namn": "Vellinge"
+    },
+    {
+     "slug": "ystad",
+     "namn": "Ystad"
+    }
+   ]
+  },
+  {
+   "slug": "sodermanlands-lan",
+   "namn": "Södermanlands län",
+   "kommuner": [
+    {
+     "slug": "eskilstuna",
+     "namn": "Eskilstuna"
+    },
+    {
+     "slug": "flen",
+     "namn": "Flen"
+    },
+    {
+     "slug": "gnesta",
+     "namn": "Gnesta"
+    },
+    {
+     "slug": "katrineholm",
+     "namn": "Katrineholm"
+    },
+    {
+     "slug": "nykoping",
+     "namn": "Nyköping"
+    },
+    {
+     "slug": "oxelosund",
+     "namn": "Oxelösund"
+    },
+    {
+     "slug": "strangnas",
+     "namn": "Strängnäs"
+    },
+    {
+     "slug": "trosa",
+     "namn": "Trosa"
+    },
+    {
+     "slug": "vingaker",
+     "namn": "Vingåker"
+    }
+   ]
+  },
+  {
+   "slug": "stockholms-lan",
+   "namn": "Stockholms län",
+   "kommuner": [
+    {
+     "slug": "botkyrka",
+     "namn": "Botkyrka"
+    },
+    {
+     "slug": "danderyd",
+     "namn": "Danderyd"
+    },
+    {
+     "slug": "ekero",
+     "namn": "Ekerö"
+    },
+    {
+     "slug": "haninge",
+     "namn": "Haninge"
+    },
+    {
+     "slug": "huddinge",
+     "namn": "Huddinge"
+    },
+    {
+     "slug": "jarfalla",
+     "namn": "Järfälla"
+    },
+    {
+     "slug": "lidingo",
+     "namn": "Lidingö"
+    },
+    {
+     "slug": "nacka",
+     "namn": "Nacka"
+    },
+    {
+     "slug": "norrtalje",
+     "namn": "Norrtälje"
+    },
+    {
+     "slug": "nykvarn",
+     "namn": "Nykvarn"
+    },
+    {
+     "slug": "nynashamn",
+     "namn": "Nynäshamn"
+    },
+    {
+     "slug": "osteraker",
+     "namn": "Österåker"
+    },
+    {
+     "slug": "salem",
+     "namn": "Salem"
+    },
+    {
+     "slug": "sigtuna",
+     "namn": "Sigtuna"
+    },
+    {
+     "slug": "sodertalje",
+     "namn": "Södertälje"
+    },
+    {
+     "slug": "sollentuna",
+     "namn": "Sollentuna"
+    },
+    {
+     "slug": "solna",
+     "namn": "Solna"
+    },
+    {
+     "slug": "stockholm",
+     "namn": "Stockholm"
+    },
+    {
+     "slug": "sundbyberg",
+     "namn": "Sundbyberg"
+    },
+    {
+     "slug": "taby",
+     "namn": "Täby"
+    },
+    {
+     "slug": "tyreso",
+     "namn": "Tyresö"
+    },
+    {
+     "slug": "upplands-bro",
+     "namn": "Upplands-Bro"
+    },
+    {
+     "slug": "upplands-vasby",
+     "namn": "Upplands Väsby"
+    },
+    {
+     "slug": "vallentuna",
+     "namn": "Vallentuna"
+    },
+    {
+     "slug": "varmdo",
+     "namn": "Värmdö"
+    },
+    {
+     "slug": "vaxholm",
+     "namn": "Vaxholm"
+    }
+   ]
+  },
+  {
+   "slug": "uppsala-lan",
+   "namn": "Uppsala län",
+   "kommuner": [
+    {
+     "slug": "alvkarleby",
+     "namn": "Älvkarleby"
+    },
+    {
+     "slug": "enkoping",
+     "namn": "Enköping"
+    },
+    {
+     "slug": "haabo",
+     "namn": "Håbo"
+    },
+    {
+     "slug": "heby",
+     "namn": "Heby"
+    },
+    {
+     "slug": "knivsta",
+     "namn": "Knivsta"
+    },
+    {
+     "slug": "osthammar",
+     "namn": "Östhammar"
+    },
+    {
+     "slug": "tierp",
+     "namn": "Tierp"
+    },
+    {
+     "slug": "uppsala",
+     "namn": "Uppsala"
+    }
+   ]
+  },
+  {
+   "slug": "varmlands-lan",
+   "namn": "Värmlands län",
+   "kommuner": [
+    {
+     "slug": "arjang",
+     "namn": "Årjäng"
+    },
+    {
+     "slug": "arvika",
+     "namn": "Arvika"
+    },
+    {
+     "slug": "eda",
+     "namn": "Eda"
+    },
+    {
+     "slug": "filipstad",
+     "namn": "Filipstad"
+    },
+    {
+     "slug": "forshaga",
+     "namn": "Forshaga"
+    },
+    {
+     "slug": "grums",
+     "namn": "Grums"
+    },
+    {
+     "slug": "hagfors",
+     "namn": "Hagfors"
+    },
+    {
+     "slug": "hammaro",
+     "namn": "Hammarö"
+    },
+    {
+     "slug": "karlstad",
+     "namn": "Karlstad"
+    },
+    {
+     "slug": "kil",
+     "namn": "Kil"
+    },
+    {
+     "slug": "kristinehamn",
+     "namn": "Kristinehamn"
+    },
+    {
+     "slug": "munkfors",
+     "namn": "Munkfors"
+    },
+    {
+     "slug": "saffle",
+     "namn": "Säffle"
+    },
+    {
+     "slug": "storfors",
+     "namn": "Storfors"
+    },
+    {
+     "slug": "sunne",
+     "namn": "Sunne"
+    },
+    {
+     "slug": "torsby",
+     "namn": "Torsby"
+    }
+   ]
+  },
+  {
+   "slug": "vasterbottens-lan",
+   "namn": "Västerbottens län",
+   "kommuner": [
+    {
+     "slug": "asele",
+     "namn": "Åsele"
+    },
+    {
+     "slug": "bjurholm",
+     "namn": "Bjurholm"
+    },
+    {
+     "slug": "dorotea",
+     "namn": "Dorotea"
+    },
+    {
+     "slug": "lycksele",
+     "namn": "Lycksele"
+    },
+    {
+     "slug": "mala",
+     "namn": "Malå"
+    },
+    {
+     "slug": "nordmaling",
+     "namn": "Nordmaling"
+    },
+    {
+     "slug": "norsjo",
+     "namn": "Norsjö"
+    },
+    {
+     "slug": "robertsfors",
+     "namn": "Robertsfors"
+    },
+    {
+     "slug": "skelleftea",
+     "namn": "Skellefteå"
+    },
+    {
+     "slug": "sorsele",
+     "namn": "Sorsele"
+    },
+    {
+     "slug": "storuman",
+     "namn": "Storuman"
+    },
+    {
+     "slug": "umea",
+     "namn": "Umeå"
+    },
+    {
+     "slug": "vannas",
+     "namn": "Vännäs"
+    },
+    {
+     "slug": "vilhelmina",
+     "namn": "Vilhelmina"
+    },
+    {
+     "slug": "vindeln",
+     "namn": "Vindeln"
+    }
+   ]
+  },
+  {
+   "slug": "vasternorrlands-lan",
+   "namn": "Västernorrlands län",
+   "kommuner": [
+    {
+     "slug": "ange",
+     "namn": "Ånge"
+    },
+    {
+     "slug": "harnosand",
+     "namn": "Härnösand"
+    },
+    {
+     "slug": "kramfors",
+     "namn": "Kramfors"
+    },
+    {
+     "slug": "ornskoldsvik",
+     "namn": "Örnsköldsvik"
+    },
+    {
+     "slug": "solleftea",
+     "namn": "Sollefteå"
+    },
+    {
+     "slug": "sundsvall",
+     "namn": "Sundsvall"
+    },
+    {
+     "slug": "timra",
+     "namn": "Timrå"
+    }
+   ]
+  },
+  {
+   "slug": "vastmanlands-lan",
+   "namn": "Västmanlands län",
+   "kommuner": [
+    {
+     "slug": "arboga",
+     "namn": "Arboga"
+    },
+    {
+     "slug": "fagersta",
+     "namn": "Fagersta"
+    },
+    {
+     "slug": "hallstahammar",
+     "namn": "Hallstahammar"
+    },
+    {
+     "slug": "koping",
+     "namn": "Köping"
+    },
+    {
+     "slug": "kungsor",
+     "namn": "Kungsör"
+    },
+    {
+     "slug": "norberg",
+     "namn": "Norberg"
+    },
+    {
+     "slug": "sala",
+     "namn": "Sala"
+    },
+    {
+     "slug": "skinnskatteberg",
+     "namn": "Skinnskatteberg"
+    },
+    {
+     "slug": "surahammar",
+     "namn": "Surahammar"
+    },
+    {
+     "slug": "vasteras",
+     "namn": "Västerås"
+    }
+   ]
+  },
+  {
+   "slug": "vastra-gotalands-lan",
+   "namn": "Västra Götalands län",
+   "kommuner": [
+    {
+     "slug": "ale",
+     "namn": "Ale"
+    },
+    {
+     "slug": "alingsas",
+     "namn": "Alingsås"
+    },
+    {
+     "slug": "amal",
+     "namn": "Åmål"
+    },
+    {
+     "slug": "bengtsfors",
+     "namn": "Bengtsfors"
+    },
+    {
+     "slug": "bollebygd",
+     "namn": "Bollebygd"
+    },
+    {
+     "slug": "boras",
+     "namn": "Borås"
+    },
+    {
+     "slug": "dals-ed",
+     "namn": "Dals-Ed"
+    },
+    {
+     "slug": "essunga",
+     "namn": "Essunga"
+    },
+    {
+     "slug": "falkoping",
+     "namn": "Falköping"
+    },
+    {
+     "slug": "fargelanda",
+     "namn": "Färgelanda"
+    },
+    {
+     "slug": "goteborg",
+     "namn": "Göteborg"
+    },
+    {
+     "slug": "gotene",
+     "namn": "Götene"
+    },
+    {
+     "slug": "grastorp",
+     "namn": "Grästorp"
+    },
+    {
+     "slug": "gullspang",
+     "namn": "Gullspång"
+    },
+    {
+     "slug": "harryda",
+     "namn": "Härryda"
+    },
+    {
+     "slug": "herrljunga",
+     "namn": "Herrljunga"
+    },
+    {
+     "slug": "hjo",
+     "namn": "Hjo"
+    },
+    {
+     "slug": "karlsborg",
+     "namn": "Karlsborg"
+    },
+    {
+     "slug": "kungalv",
+     "namn": "Kungälv"
+    },
+    {
+     "slug": "lerum",
+     "namn": "Lerum"
+    },
+    {
+     "slug": "lidkoping",
+     "namn": "Lidköping"
+    },
+    {
+     "slug": "lilla-edet",
+     "namn": "Lilla Edet"
+    },
+    {
+     "slug": "lysekil",
+     "namn": "Lysekil"
+    },
+    {
+     "slug": "mariestad",
+     "namn": "Mariestad"
+    },
+    {
+     "slug": "mark",
+     "namn": "Mark"
+    },
+    {
+     "slug": "mellerud",
+     "namn": "Mellerud"
+    },
+    {
+     "slug": "molndal",
+     "namn": "Mölndal"
+    },
+    {
+     "slug": "munkedal",
+     "namn": "Munkedal"
+    },
+    {
+     "slug": "ockero",
+     "namn": "Öckerö"
+    },
+    {
+     "slug": "orust",
+     "namn": "Orust"
+    },
+    {
+     "slug": "partille",
+     "namn": "Partille"
+    },
+    {
+     "slug": "skara",
+     "namn": "Skara"
+    },
+    {
+     "slug": "skovde",
+     "namn": "Skövde"
+    },
+    {
+     "slug": "sotenas",
+     "namn": "Sotenäs"
+    },
+    {
+     "slug": "stenungsund",
+     "namn": "Stenungsund"
+    },
+    {
+     "slug": "stromstad",
+     "namn": "Strömstad"
+    },
+    {
+     "slug": "svenljunga",
+     "namn": "Svenljunga"
+    },
+    {
+     "slug": "tanum",
+     "namn": "Tanum"
+    },
+    {
+     "slug": "tibro",
+     "namn": "Tibro"
+    },
+    {
+     "slug": "tidaholm",
+     "namn": "Tidaholm"
+    },
+    {
+     "slug": "tjorn",
+     "namn": "Tjörn"
+    },
+    {
+     "slug": "toreboda",
+     "namn": "Töreboda"
+    },
+    {
+     "slug": "tranemo",
+     "namn": "Tranemo"
+    },
+    {
+     "slug": "trollhattan",
+     "namn": "Trollhättan"
+    },
+    {
+     "slug": "uddevalla",
+     "namn": "Uddevalla"
+    },
+    {
+     "slug": "ulricehamn",
+     "namn": "Ulricehamn"
+    },
+    {
+     "slug": "vanersborg",
+     "namn": "Vänersborg"
+    },
+    {
+     "slug": "vara",
+     "namn": "Vara"
+    },
+    {
+     "slug": "vargarda",
+     "namn": "Vårgårda"
+    }
+   ]
+  }
+ ]
+}

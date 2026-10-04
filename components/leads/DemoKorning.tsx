@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { EXEMPELRESULTAT, KORSTEG } from "@/lib/demo/leads-korning";
 import { Badge, btnPrimary, etikett, meta } from "@/components/ui";
 import { cn } from "@/lib/utils";
+import { useLocale } from "@/lib/i18n";
 
 /**
  * Demons körning: färdiggenererad, triggbar, redigerbar.
@@ -32,6 +33,7 @@ import { cn } from "@/lib/utils";
 type Fas = "vilar" | "kor" | "klar";
 
 export function DemoKorning() {
+  const { text } = useLocale();
   const [fas, setFas] = useState<Fas>("vilar");
   const [klaraSteg, setKlaraSteg] = useState(0);
   const [oppet, setOppet] = useState<number | null>(0);
@@ -63,19 +65,20 @@ export function DemoKorning() {
       {fas === "vilar" ? (
         <>
           <p className="max-w-[65ch] text-[15px] leading-7 text-ink-muted">
-            Prova en färdiggenererad exempelkörning: stegen är desamma som i en
-            riktig körning, men bolagen är påhittade och utkasten skrivna i
-            förväg. Ingen modell körs och inget skickas.
+            {text({
+              sv: "Prova en färdiggenererad exempelkörning: stegen är desamma som i en riktig körning, men bolagen är påhittade och utkasten skrivna i förväg. Ingen modell körs och inget skickas.",
+              en: "Try a pre-generated example run: the steps are the same as in a real run, but the companies are made up and the drafts written in advance. No model runs and nothing is sent."
+            })}
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <button type="button" onClick={kor} className={btnPrimary}>
-              Kör exempelkörningen
+              {text({ sv: "Kör exempelkörningen", en: "Run the example" })}
             </button>
             <Link
               href="/login"
               className="focus-ring text-[0.9375rem] font-medium underline underline-offset-4 hover:text-ochre"
             >
-              Kör mot er egen målgrupp med ett konto
+              {text({ sv: "Kör mot er egen målgrupp med ett konto", en: "Run against your own target group with an account" })}
             </Link>
           </div>
         </>
@@ -83,13 +86,13 @@ export function DemoKorning() {
         <>
           {/* Stegen. Spelas upp i körningens egen takt så att besökaren ser
               ARBETSGÅNGEN, inte bara slutresultatet. */}
-          <ol className="grid gap-2" aria-label="Körningens steg">
+          <ol className="grid gap-2" aria-label={text({ sv: "Körningens steg", en: "Run steps" })}>
             {KORSTEG.map((steg, i) => {
               const klar = i < klaraSteg;
               const pagaende = i === klaraSteg && fas === "kor";
               return (
                 <li
-                  key={steg.text}
+                  key={steg.text.sv}
                   className={cn(
                     "flex items-center gap-2.5 text-[0.9375rem]",
                     klar ? "text-ink-muted" : pagaende ? "text-ink" : "text-ink-subtle"
@@ -102,7 +105,7 @@ export function DemoKorning() {
                   ) : (
                     <span aria-hidden className="inline-block h-4 w-4 shrink-0" />
                   )}
-                  {steg.text}
+                  {text(steg.text)}
                 </li>
               );
             })}
@@ -112,7 +115,7 @@ export function DemoKorning() {
             <div className="mt-5 border-t border-ink/12 pt-5">
               {/* Märkningen sitter på varje rad (Exempel-brickan), inte som en
                   liten notis ovanför listan: raden är det som läses. */}
-              <ul className="divide-y divide-ink/12 border-y border-ink/15" aria-label="Exempelkörningens resultat">
+              <ul className="divide-y divide-ink/12 border-y border-ink/15" aria-label={text({ sv: "Exempelkörningens resultat", en: "Example run results" })}>
                 {EXEMPELRESULTAT.map((resultat, i) => {
                   const arOppet = oppet === i;
                   return (
@@ -126,7 +129,7 @@ export function DemoKorning() {
                         <span className="col-span-12 min-w-0 sm:col-span-4">
                           <span className="flex min-w-0 items-center gap-2">
                             <span className="truncate font-semibold">{resultat.bolag}</span>
-                            <Badge>Exempel</Badge>
+                            <Badge>{text({ sv: "Exempel", en: "Example" })}</Badge>
                           </span>
                           <span className={cn(meta, "block truncate")}>
                             {resultat.kontakt} · {resultat.ort}
@@ -148,7 +151,7 @@ export function DemoKorning() {
                           <p className="max-w-[65ch] text-[0.875rem] leading-6 text-ink-muted">
                             {resultat.behov}
                           </p>
-                          <p className={cn(etikett, "mt-4")}>Ämnesrad</p>
+                          <p className={cn(etikett, "mt-4")}>{text({ sv: "Ämnesrad", en: "Subject line" })}</p>
                           <p className="mt-1 text-[1rem] font-semibold tracking-[-0.01em]">
                             {resultat.amne}
                           </p>
@@ -156,7 +159,7 @@ export function DemoKorning() {
                             htmlFor={`demo-utkast-${i}`}
                             className={cn(etikett, "mt-4 block")}
                           >
-                            Utkastet, ditt att ändra i
+                            {text({ sv: "Utkastet, ditt att ändra i", en: "The draft, yours to edit" })}
                           </label>
                           <textarea
                             id={`demo-utkast-${i}`}
@@ -167,7 +170,7 @@ export function DemoKorning() {
                             }
                             className="focus-ring mt-2 min-h-[200px] w-full resize-y rounded-card border border-ink/12 bg-paper p-4 text-[0.9375rem] leading-7 outline-none transition-colors focus:border-ink/30"
                           />
-                          <p className="mt-2 text-[0.9375rem] text-ink-muted">Inget skickas härifrån.</p>
+                          <p className="mt-2 text-[0.9375rem] text-ink-muted">{text({ sv: "Inget skickas härifrån.", en: "Nothing is sent from here." })}</p>
                         </div>
                       ) : null}
                     </li>

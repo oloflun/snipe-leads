@@ -161,14 +161,14 @@ export async function saveBusinessContext(input: OnboardingInput): Promise<Onboa
     } catch (repairError) {
       return {
         success: false,
-        error: `Ditt konto saknar ett workspace och kunde inte repareras: ${(repairError as Error).message}`
+        error: `Ditt konto saknar en arbetsyta och kunde inte repareras: ${(repairError as Error).message}`
       };
     }
     profile = await getProfileForUser(user.id);
   }
 
   if (!profile) {
-    return { success: false, error: "Ditt konto saknar ett workspace. Kontakta support." };
+    return { success: false, error: "Ditt konto saknar en arbetsyta. Kontakta support." };
   }
 
   // Serversidan validerar OM. lib/orgnr.ts kör samma kontroll i webbläsaren,

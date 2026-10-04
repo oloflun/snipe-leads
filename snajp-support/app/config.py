@@ -289,6 +289,10 @@ class Settings(BaseSettings):
     # bredvid LLM-bedömningen, fäller inget) | "pa" (fäller uppenbara missar
     # före researchanropet). Nyckeln bor i Railways variabellager.
     iris_jev: str = "off"
+    # Jev i inkorgen (app/email_pipeline/klassning.py): "off" | "prov"
+    # (bara knappen Provsortera) | "auto" (varje nytt mejl). Egen brytare:
+    # kundmejl är kunddata, IRIS_JEV gäller publika bolagsuppgifter.
+    inkorg_jev: str = "off"
     typesafe_api_key: str = ""
     # Leads-budgeten (INV-JOB-002-arbetet, app/leads/budget.py): max summa
     # tokens_in+tokens_out per tenant och rullande 24 timmar över leads-
@@ -387,6 +391,12 @@ class Settings(BaseSettings):
     publik_bas_url: str = Field(
         "", validation_alias=AliasChoices("PUBLIK_BAS_URL", "publik_bas_url", "PUBLIC_BASE_URL")
     )
+
+    # Flytta till main (plan del E, app/api/admin_flytt.py): HMAC-nyckeln delas
+    # av main och development (sätts med scripts/keys.py, aldrig i koden);
+    # målet (mains api-URL) sätts bara i development. Tomt = vägen stängd.
+    flytt_nyckel: str = Field("", validation_alias=AliasChoices("FLYTT_NYCKEL", "flytt_nyckel"))
+    flytt_mal_url: str = Field("", validation_alias=AliasChoices("FLYTT_MAL_URL", "flytt_mal_url"))
 
     # SMTP-uppgifterna för snajpsupport@gmail.com. ETT konto för HELA
     # plattformen — det här är prioriterade mejl till OSS, inte kundutskick,

@@ -170,15 +170,29 @@ read as a different product.
 
 | Role | Primitive | Set in |
 |---|---|---|
-| Page title | `Sidhuvud` · `rubrikSida` | Fraunces 2.25rem roman, never italic |
+| Page title | `Sidhuvud` · `rubrikSida` (PageShell shares it) | Fraunces 1.75rem semibold, never italic |
 | Section heading | `Sektion` · `rubrikSektion` | Fraunces 1.5rem |
 | Panel, card, row title | `rubrikPanel` | Geist 1.0625rem semibold |
 | Body / secondary | | Geist 0.9375rem, `ink` / `ink-muted` |
 | Label (field, column, stat, nav group) | `etikett` | Geist 0.8125rem medium, `ink-muted`, sentence case |
 | Meta (date, domain, count in a row) | `meta` | Geist 0.8125rem, `ink-subtle` |
 | Stat | `Nyckeltal` | Fraunces 2rem `tnum`, label above, hairlines |
-| Tabs and filters | `flik` · `flikAktiv` · `flikInaktiv` | ink pill active, `paper2` pill inactive |
-| Empty state | `Tomt` | one sentence on a `paper2` plate with a hairline |
+| Tabs and filters | `fliklista` · `flik` · `flikAktiv` · `flikInaktiv` | underlined: ochre 2px under the selected, hairline under the row, 44px hit area |
+| Field in a toolbar | `faltTatt` | 36px, 16px text on coarse pointers, 14px with a mouse |
+| Choice inside a data row | `faltDiskret` | reads as the value; the border appears on hover and focus |
+| Action inside a table row | `radLank` | a quiet link, never a button per row |
+| Table data | `Tabell` · `Cell` | 0.875rem, `py-2.5` |
+| Empty state | `Tomt` · `EmptyState` | one sentence on a `paper2` plate with a hairline, no icon |
+
+**2026-10-03, Anton: "Det ser inte särskilt bra ut"** (plans/2026-10-03-appytor-design.md). The app
+surfaces read as a document, not a workbench. Pill tabs in 44px ink looked like primary buttons and
+competed with the page's one action; tables ran `py-4` at 15px, so half as many rows fit as in Twenty;
+two buttons per row owned the admin customer table; 44px fields doubled every row they sat in. The
+reference lock is Twenty (dominant: object name small, a view row, dense tables) with Mailchimp's
+console (serif title on a dense surface, underlined tabs). **Tap targets:** 44px holds for navigation,
+tabs and primary buttons; controls inside data rows are 32–36px, which clears WCAG 2.2 AA (24px).
+**Kicker on app surfaces:** `.appyta .kicker` (globals.css) renders it as `etikett`; the shells carry
+`appyta`. **One tonal inversion:** the rail. Nothing in the content column is an ink plate.
 
 **What replaced the kicker.** Not nothing: the `etikett` does the kicker's one legitimate job
 (saying what a value is) at a reading size in the body face, and the Fraunces section heading does
@@ -256,6 +270,11 @@ premises" to "signed a new lease" is a different factual claim, not a humanisati
 to change what a sentence asserts, that pass has overreached.
 
 No em-dashes in any visible string, in either language.
+
+Every component with user-facing text ships in both languages, Swedish and English,
+through `lib/i18n.tsx` (`text({ sv, en })`, `t()`, or a `Localized` constant; the admin
+area through `lib/admin/sprak.ts`). Headings, buttons, empty states, errors,
+`aria-label`s and CSV headers included. INV-COPY-001 enforces it.
 
 ## Accessibility floor
 

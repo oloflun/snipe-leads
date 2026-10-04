@@ -15,6 +15,7 @@ from ..email_pipeline.poller import (
     sync_mailbox,
     upptack_imap,
 )
+from ..email_pipeline.klassning import jev_lage, klassa
 from ..email_pipeline.processor import process_email
 from ..config import (
     CATEGORIES,
@@ -23,8 +24,8 @@ from ..config import (
 )
 from ..integrationer.hemligheter import IngenNyckelError, kryptera
 from ..scripts.seed_kb import ensure_tenant_kb
-from .deps import require_tenant
-from .schemas import HanteradRequest, IngestEmailRequest, KopplaInkorgRequest, SeedMockRequest
+from .deps import kraev_uuid, require_tenant
+from .schemas import HanteradRequest, IngestEmailRequest, KlassaRequest, KopplaInkorgRequest, SeedMockRequest, SorteraRequest
 
 logger = logging.getLogger("snajp-support.inbox")
 
@@ -271,7 +272,7 @@ async def koppla_inkorg(
             # i stället för ett generiskt "nekades".
             fel = (
                 "Ett app-lösenord från Google är exakt 16 tecken — det ni "
-                f"klistrade in är {len(rensat)}. Gå tillbaka till Google-kontot "
+                f"klistrade in är {len(rensat)} tecken. Gå tillbaka till Google-kontot "
                 "och kopiera hela koden."
             )
         raise HTTPException(status_code=422, detail=fel)
@@ -294,6 +295,7 @@ async def koppla_inkorg(
         # behöver den utskriven — utom icloud, vars provider är 'imap'.
         imap_host=None if provider in ("gmail", "outlook") else host,
         secret_enc=hemlighet,
+        syfte=payload.syfte,
     )
     return {
         "connected": True,
@@ -429,7 +431,7 @@ async def ingest_external(
     )
     email = await ingest_email(storage, tenant["tenant_id"], inbound)
     if email is None:
-        raise HTTPException(status_code=409, detail="Mailet är redan mottaget (dublett).")
+        raise HTTPException(status_code=409, detail="Mejlet har redan tagits emot (dubblett).")
     outcome = await process_email(storage, tenant["tenant_id"], email)
     return {"email_id": email["id"], **outcome}
 
@@ -452,7 +454,10 @@ async def list_inbox(
     q: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     is_test: bool | None = Query(default=None),
+    klass: str | None = Query(default=None),
 ) -> dict:
+    if klass is not None and klass not in ("support", "lead", "ej_relaterat"):
+        raise HTTPException(status_code=422, detail="klass är support, lead eller ej_relaterat.")
     storage = request.app.state.storage
     visar = await _visar_test_i_arenden(storage, tenant)
     lager = is_test
@@ -465,6 +470,7 @@ async def list_inbox(
         search=q,
         limit=limit,
         is_test=lager,
+        klass=klass,
     )
     counts: dict[str, int] = {}
     status_counts: dict[str, int] = {}
@@ -481,13 +487,86 @@ async def list_inbox(
     }
 
 
+@router.post("/api/inbox/sortera")
+async def sortera(request: Request, payload: SorteraRequest, tenant: dict = Depends(require_tenant)) -> dict:
+    """Provsortera (Anton 2026-10-04: "testa i realtid innan vi automatiserar").
+
+    Kör samma klassning som inkorgen (regler → Jev → standard) på de valda
+    mejlen och svarar med förslaget. Utan `tillampa` skrivs ingenting. Med
+    `tillampa` skrivs klassen med sin riktiga källa (regel/jev/syfte, inte
+    'manuell': det var maskinen som avgjorde) och mejlet flyttar som vid en
+    omklassning. Ett lead blir här inget prospekt; det gör bara den
+    automatiska vägen (processor._hantera_lead).
+    """
+    storage = request.app.state.storage
+    tid = tenant["tenant_id"]
+    lage = jev_lage()
+    syften = {str(m.get("id")): str(m.get("syfte") or "support") for m in await storage.list_mailboxes(tid)}
+    forslag = []
+    for email_id in dict.fromkeys(payload.email_ids):
+        kraev_uuid(email_id, "mejlet")
+        rad = await storage.get_email(tid, email_id)
+        if not rad:
+            continue
+        utfall = await klassa(
+            storage, tid, rad, syfte=syften.get(str(rad.get("mailbox_id")), "support"), med_jev=lage != "off"
+        )
+        # Ett mejl som pipelinen ännu inte släppt (new/processing) klassas av
+        # den strax och skriver då över; tillämpning där vore en kapplöpning
+        # (lokalt prov 2026-10-04: klassen skrevs över sex sekunder senare).
+        hoppad = rad.get("status") in ("new", "processing")
+        if payload.tillampa and not hoppad:
+            andring = {"klass": utfall["klass"], "klass_kalla": utfall["kalla"]}
+            if utfall["klass"] != "support":
+                andring["status"] = utfall["klass"]
+            await storage.update_email(tid, email_id, **andring)
+            await storage.log_decision(
+                tid, email_id=email_id, event="klassning",
+                detail={"klass": utfall["klass"], "kalla": utfall["kalla"], "stodrad": utfall.get("stodrad"), "av": "provsortera"},
+            )
+        forslag.append({
+            "email_id": email_id,
+            "nuvarande": rad.get("klass"),
+            "klass": utfall["klass"],
+            "kalla": utfall["kalla"],
+            "jev": utfall.get("jev"),
+            "hoppad": payload.tillampa and hoppad,
+        })
+    return {"jev": lage, "tillampat": payload.tillampa, "forslag": forslag}
+
+
+@router.post("/api/inbox/{email_id}/klassa")
+async def klassa_om(
+    request: Request, email_id: str, payload: KlassaRequest, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Manuell omklassning (migration 084): människan rättar Jev eller regeln.
+    Beslutet loggas med källa 'manuell' så det går att mäta Jev mot
+    människan. Ett mejl som blir 'lead' flyttar till leads-inkorgen, ett
+    som blir 'ej_relaterat' döljs; ett som blir 'support' går tillbaka till
+    'new' så nästa processa-om tar det."""
+    kraev_uuid(email_id, "mejlet")
+    storage = request.app.state.storage
+    rad = await storage.get_email(tenant["tenant_id"], email_id)
+    if not rad:
+        raise HTTPException(status_code=404, detail="Mejlet finns inte.")
+    ny_status = {"lead": "lead", "ej_relaterat": "ej_relaterat", "support": "new"}[payload.klass]
+    uppdaterad = await storage.update_email(
+        tenant["tenant_id"], email_id, klass=payload.klass, klass_kalla="manuell", status=ny_status
+    )
+    await storage.log_decision(
+        tenant["tenant_id"], email_id=email_id, event="omklassning",
+        detail={"fran": rad.get("klass"), "till": payload.klass, "av": "manuell"},
+    )
+    return {"email": uppdaterad}
+
+
 @router.get("/api/inbox/{email_id}")
 async def get_email(
     request: Request, email_id: str, tenant: dict = Depends(require_tenant)
 ) -> dict:
     email = await request.app.state.storage.get_email(tenant["tenant_id"], email_id)
     if not email:
-        raise HTTPException(status_code=404, detail="Mailet finns inte.")
+        raise HTTPException(status_code=404, detail="Mejlet finns inte.")
     return email
 
 
@@ -499,7 +578,7 @@ async def takeover(
     storage = request.app.state.storage
     email = await storage.get_email(tenant["tenant_id"], email_id)
     if not email:
-        raise HTTPException(status_code=404, detail="Mailet finns inte.")
+        raise HTTPException(status_code=404, detail="Mejlet finns inte.")
     if email.get("draft") and email["draft"]["status"] == "pending":
         await storage.update_draft(tenant["tenant_id"], email["draft"]["id"], status="rejected")
         await storage.add_review(
@@ -532,7 +611,7 @@ async def markera_hanterad(
         tenant["tenant_id"], email_id, hanterad=hanterad
     )
     if not updated:
-        raise HTTPException(status_code=404, detail="Mailet finns inte.")
+        raise HTTPException(status_code=404, detail="Mejlet finns inte.")
     await storage.log_decision(
         tenant["tenant_id"], email_id=email_id,
         event="hanterad" if hanterad else "ohanterad",
@@ -567,14 +646,14 @@ async def processa_om_mail(
     storage = request.app.state.storage
     email = await storage.get_email(tenant["tenant_id"], email_id)
     if not email:
-        raise HTTPException(status_code=404, detail="Mailet finns inte.")
+        raise HTTPException(status_code=404, detail="Mejlet finns inte.")
     # 'new' hör hit sedan avtalsgrinden och supportbudgeten (070/071-arbetet):
     # ett mail som stoppades FÖRE triagen ligger kvar som new utan CRM-rader,
     # så en omkörning därifrån dubblerar lika lite som från failed.
     if email.get("status") not in ("failed", "new"):
         raise HTTPException(
             status_code=409,
-            detail=f"Mailet är {email.get('status')!r} — bara failed eller new kan processas om.",
+            detail=f"Mejlet har status {email.get('status')!r} — bara misslyckade eller nya mejl kan köras om.",
         )
 
     await storage.log_decision(
@@ -599,7 +678,7 @@ async def befordra_testmail(
     storage = request.app.state.storage
     email = await storage.get_email(tenant["tenant_id"], email_id)
     if not email:
-        raise HTTPException(status_code=404, detail="Mailet finns inte.")
+        raise HTTPException(status_code=404, detail="Mejlet finns inte.")
     updated = await storage.update_email(tenant["tenant_id"], email_id, is_test=False)
     ticket_id = (updated or email).get("ticket_id")
     if ticket_id:

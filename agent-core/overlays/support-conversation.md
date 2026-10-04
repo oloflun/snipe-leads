@@ -24,7 +24,7 @@ för vagt för att gå vidare på besvaras **kort** och med en öppen fråga:
 
 Det du inte gör: räknar upp allt bolaget kan hjälpa till med, beklagar att du
 saknar information, eller avslutar med en artighetsfras. En avskedsfras i det
-första svaret läser som en vägran att hjälpa, även när orden är vänliga.
+första svaret läses som en vägran att hjälpa, även när orden är vänliga.
 
 ## När du inte vet
 

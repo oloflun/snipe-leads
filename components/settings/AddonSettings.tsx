@@ -4,6 +4,7 @@ import { addonCatalog } from "@/lib/addons";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { mejlaOss } from "@/components/marketing/copy";
 import { Rad, Radlista } from "@/components/ui";
+import { useLocale } from "@/lib/i18n";
 
 /**
  * Tilläggstjänsterna, aktiva och låsta i samma lista.
@@ -18,6 +19,7 @@ import { Rad, Radlista } from "@/components/ui";
  */
 export function AddonSettings() {
   const { addons } = useDashboard();
+  const { text } = useLocale();
 
   return (
     <div className="grid gap-8">
@@ -26,7 +28,7 @@ export function AddonSettings() {
           andra ord — två meningar om samma sak, synligt bredvid varandra i
           samma vy. Sett i pixlar. */}
 
-      <Radlista ariaLabel="Tilläggstjänster">
+      <Radlista ariaLabel={text({ sv: "Tilläggstjänster", en: "Add-on services" })}>
         {addonCatalog.map((addon) => {
           const active = addons.includes(addon.key);
           return (
@@ -43,7 +45,7 @@ export function AddonSettings() {
                       : "kicker shrink-0 text-mineral"
                   }
                 >
-                  {active ? "Ingår" : "Tillval"}
+                  {active ? text({ sv: "Ingår", en: "Included" }) : text({ sv: "Tillval", en: "Optional" })}
                 </span>
               </div>
 
@@ -51,10 +53,10 @@ export function AddonSettings() {
 
               {!active ? (
                 <a
-                  href={mejlaOss(`Tillägg: ${addon.name}`)}
+                  href={mejlaOss(text({ sv: `Tillägg: ${addon.name}`, en: `Add-on: ${addon.name}` }))}
                   className="mt-4 inline-block text-[13px] underline underline-offset-4 transition hover:text-ochre"
                 >
-                  Hör av dig om {addon.name.toLowerCase()}
+                  {text({ sv: "Hör av dig om ", en: "Get in touch about " })}{addon.name.toLowerCase()}
                 </a>
               ) : null}
             </Rad>

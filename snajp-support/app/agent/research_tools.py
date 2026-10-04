@@ -169,7 +169,18 @@ async def _hamta_direkt(url: str) -> tuple[str | None, str | None]:
     typ = (svar.headers.get("content-type") or "").lower()
     if typ and "html" not in typ and not typ.startswith("text/"):
         return None, f"direkthämtning: inte en webbsida ({typ.split(';')[0]})"
-    text = html_till_text(svar.text[:_DIREKT_MAX_TECKEN])
+    # Saknar svaret charset i headern avkodar httpx som UTF-8 med
+    # ersättningstecken — en ISO-8859-1-sida (charset bara i <meta>) blev då
+    # "F�retag", och tecknet kunde vandra via "ordagranna citat" rakt in i
+    # ett kundutkast (rotorsaksanalysen 2026-10-03). Latin-1 kan avkoda varje
+    # bytesekvens, så den är rätt reserv för svenska sidor när UTF-8 fäller.
+    ratext = svar.text
+    if "�" in ratext:
+        try:
+            svar.content.decode("utf-8")
+        except UnicodeDecodeError:
+            ratext = svar.content.decode("latin-1", errors="replace")
+    text = html_till_text(ratext[:_DIREKT_MAX_TECKEN])
     if not text:
         return None, "direkthämtning: sidan var tom"
     return text, None

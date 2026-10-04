@@ -1,18 +1,10 @@
 "use client";
 
-import {
-  Activity,
-  Bell,
-  FlaskConical,
-  Gauge,
-  LayoutDashboard,
-  LogOut,
-  Package,
-  Users
-} from "lucide-react";
+import { Activity, LayoutDashboard, LogOut, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { usePathname } from "next/navigation";
-import { FLIKENS_LAGE, RUTT_IKONER } from "@/components/AppShell";
+import { aterstallLage, RUTT_IKONER } from "@/components/AppShell";
+import { ADMIN_GRUPPER } from "@/components/admin/AdminVyhuvud";
 import { BytKund } from "@/components/admin/BytKund";
 import { VyVaxel } from "@/components/VyVaxel";
 import { Rail } from "@/components/shell/Rail";
@@ -68,22 +60,31 @@ import { cn } from "@/lib/utils";
  * rätt), men `agentanvandning` är dess efterträdare och den enda som hör
  * hemma i navigationen.
  */
-const PLATTFORM: Array<{ href: string; label: { sv: string; en: string }; Icon: LucideIcon }> = [
+/**
+ * Snajp Suite fas 3 (2026-10-03): tre poster i stället för sju. Paket är en vy
+ * av Kunder; Körningar, Händelser, Testkörningar och Agentanvändning är vyer av
+ * Logg (components/admin/AdminVyhuvud.tsx). `ocksa` är vyernas adresser, så att
+ * posten lyser på var och en av dem.
+ */
+const PLATTFORM: Array<{
+  href: string;
+  label: { sv: string; en: string };
+  Icon: LucideIcon;
+  ocksa?: string[];
+}> = [
   { href: "/admin", label: { sv: "Översikt", en: "Overview" }, Icon: LayoutDashboard },
-  { href: "/admin/kunder", label: { sv: "Kunder", en: "Customers" }, Icon: Users },
-  { href: "/admin/paket", label: { sv: "Paket", en: "Plans" }, Icon: Package },
-  { href: "/admin/korningar", label: { sv: "Körningar", en: "Runs" }, Icon: Activity },
   {
-    href: "/admin/testkorningar",
-    label: { sv: "Testkörningar", en: "Test runs" },
-    Icon: FlaskConical
+    href: "/admin/kunder",
+    label: { sv: "Kunder", en: "Customers" },
+    Icon: Users,
+    ocksa: ADMIN_GRUPPER.kunder.vyer.map((v) => v.href)
   },
   {
-    href: "/admin/agentanvandning",
-    label: { sv: "Agentanvändning", en: "Agent usage" },
-    Icon: Gauge
-  },
-  { href: "/admin/handelser", label: { sv: "Händelser", en: "Events" }, Icon: Bell }
+    href: "/admin/korningar",
+    label: { sv: "Logg", en: "Log" },
+    Icon: Activity,
+    ocksa: ADMIN_GRUPPER.logg.vyer.map((v) => v.href)
+  }
 ];
 
 function matchar(pathname: string, href: string): boolean {
@@ -117,7 +118,7 @@ export function AdminShell({
 }: Readonly<{ email: string | null; children: React.ReactNode }>) {
   const pathname = usePathname();
   const { t, text, locale, toggleLocale } = useLocale();
-  const { products, workspaceName, shows, availableScopes, setScope } = useDashboard();
+  const { products, workspaceName, availableScopes, setScope } = useDashboard();
 
   // Samma entitlement- och scope-filter som kundens nav. Adminytan är en
   // superset av arbetsytan, inte en genväg förbi dess regler.
@@ -132,17 +133,15 @@ export function AdminShell({
   // en plattformsadmin skickas dessutom hit från /dashboard
   // (app/dashboard/layout.tsx). Bokföringsfliken fanns alltså ingenstans för
   // just den publik den är byggd för.
+  // Ingen lägesfiltrering sedan Snajp Suite (2026-10-03): ett klick på Iris
+  // tog tidigare bort Kundtjänst och Kvitton ur den här gruppen. Se
+  // aterstallLage i AppShell.
   const arbetsyta = routesForProducts(products, { isAdmin: true })
-    .filter((route) => route.product === "shared" || shows(route.product))
     .map((route) => ({
       // Originalrouten (före tillAdminvag) — nyckeln RUTT_IKONER känner igen,
       // så samma /dashboard/*-route bär samma ikon på båda ytorna.
       origHref: route.href,
       href: tillAdminvag(route.href),
-      // Samma flik, samma läge. Utan den här raden byter Iris-fliken vy på
-      // kundens yta men inte på adminens, och samma knapp gör då olika saker
-      // beroende på var man står.
-      lage: FLIKENS_LAGE[route.href],
       // "Min arbetsyta" och inte t("nav.dashboard") ("Översikt"): plattforms-
       // gruppen har redan en post som heter Översikt, och två poster med
       // samma namn i samma rail är inte en etikett utan en gissningslek.
@@ -151,22 +150,12 @@ export function AdminShell({
       label:
         route.href === "/dashboard"
           ? text({ sv: "Min arbetsyta", en: "My workspace" })
-          : t(route.labelKey),
-      // Iris tre barn, körda genom samma tillAdminvag-karta som föräldern —
-      // /dashboard/iris/granskning blir /admin/iris/granskning, inte en
-      // hårdkodad andra karta som kan glida isär från den här.
-      children: route.children?.map((child) => ({
-        href: tillAdminvag(child.href),
-        label: t(child.labelKey)
-      }))
+          : t(route.labelKey)
     }));
 
-  // Alla hrefs, INKLUSIVE barnens — annars markerar t.ex.
-  // /admin/iris/granskning bara "Iris" som aktiv utan att någon barnrad lyser.
   const aktiv = aktivHref(pathname, [
-    ...PLATTFORM.map((f) => f.href),
-    ...arbetsyta.map((f) => f.href),
-    ...arbetsyta.flatMap((f) => f.children?.map((c) => c.href) ?? [])
+    ...PLATTFORM.flatMap((f) => [f.href, ...(f.ocksa ?? [])]),
+    ...arbetsyta.map((f) => f.href)
   ]);
 
   const plattformGroup: RailNavGroup = {
@@ -175,36 +164,24 @@ export function AdminShell({
       href: flik.href,
       label: text(flik.label),
       Icon: flik.Icon,
-      active: aktiv === flik.href
+      active: aktiv === flik.href || (aktiv !== null && (flik.ocksa ?? []).includes(aktiv))
     }))
   };
 
   const arbetsytaGroup: RailNavGroup = {
     key: "arbetsyta",
     label: text({ sv: "Arbetsyta", en: "Workspace" }),
-    items: arbetsyta.map((flik) => {
-      const barnAktiva = flik.children?.some((c) => aktiv === c.href) ?? false;
-      return {
-        href: flik.href,
-        label: flik.label,
-        Icon: RUTT_IKONER[flik.origHref] ?? LayoutDashboard,
-        active: aktiv === flik.href || barnAktiva,
-        onClick: () => {
-          if (flik.lage && availableScopes.includes(flik.lage)) {
-            setScope(flik.lage);
-          }
-        },
-        children: flik.children?.map((child) => ({
-          href: child.href,
-          label: child.label,
-          active: aktiv === child.href
-        }))
-      };
-    })
+    items: arbetsyta.map((flik) => ({
+      href: flik.href,
+      label: flik.label,
+      Icon: RUTT_IKONER[flik.origHref] ?? LayoutDashboard,
+      active: aktiv === flik.href,
+      onClick: () => aterstallLage(availableScopes, setScope)
+    }))
   };
 
   return (
-    <div className="min-h-screen bg-paper text-ink">
+    <div className="appyta min-h-screen bg-paper text-ink">
       <div className="flex min-h-dvh">
         <Rail
           logoHref="/admin"
@@ -213,7 +190,7 @@ export function AdminShell({
             en: "Snajp admin, go to overview"
           })}
           brand={
-            <p className="hidden truncate px-5 pb-4 text-[0.75rem] font-medium uppercase tracking-[0.14em] text-paper-subtle lg:block">
+            <p className="hidden truncate px-5 pb-4 text-[0.8125rem] font-medium text-paper-muted lg:block">
               {workspaceName ? `Admin · ${workspaceName}` : "Admin"}
             </p>
           }

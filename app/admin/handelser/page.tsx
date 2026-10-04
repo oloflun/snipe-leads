@@ -1,9 +1,9 @@
 import {
   Handelsefilter,
-  Handelselista,
-  Handelserubrik
+  Handelselista
 } from "@/components/admin/Handelselista";
 import { listEvents, unwrap } from "@/lib/data/admin";
+import { AdminVyhuvud } from "@/components/admin/AdminVyhuvud";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +35,7 @@ export default async function Page({
   if (error) {
     return (
       <div>
-        <Handelserubrik />
+        <AdminVyhuvud grupp="logg" />
         <p role="alert" className="mt-8 max-w-[70ch] break-words text-[15px] text-danger">
           {error}
         </p>
@@ -45,7 +45,7 @@ export default async function Page({
 
   return (
     <div>
-      <Handelserubrik />
+      <AdminVyhuvud grupp="logg" />
       <Handelsefilter niva={niva} />
       <Handelselista events={data ?? []} niva={niva} />
     </div>

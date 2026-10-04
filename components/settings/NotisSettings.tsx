@@ -6,6 +6,7 @@ import { btnPrimary } from "@/components/ui";
 import { Vaxel } from "@/components/settings/Vaxel";
 import { hamtaNotiser, sparaNotiser } from "@/lib/actions/notiser";
 import { STANDARD, type Notishandelse, type Notisinstallningar } from "@/lib/notiser";
+import { useLocale, type Localized } from "@/lib/i18n";
 
 /**
  * Mejlnotiser — vill du bli störd, och av vad.
@@ -27,16 +28,16 @@ import { STANDARD, type Notishandelse, type Notisinstallningar } from "@/lib/not
  * är regeln som är rätt.
  */
 
-const HANDELSER: { nyckel: Notishandelse; etikett: string; beskrivning: string }[] = [
+const HANDELSER: { nyckel: Notishandelse; etikett: Localized; beskrivning: Localized }[] = [
   {
     nyckel: "lead",
-    etikett: "Nytt lead",
-    beskrivning: "Ett mejl per kvalificerat bolag."
+    etikett: { sv: "Nytt lead", en: "New lead" },
+    beskrivning: { sv: "Ett mejl per kvalificerat bolag.", en: "One email per qualified company." }
   },
   {
     nyckel: "escalation",
-    etikett: "Eskalering",
-    beskrivning: "Ett ärende lämnades över till dig."
+    etikett: { sv: "Eskalering", en: "Escalation" },
+    beskrivning: { sv: "Ett ärende lämnades över till dig.", en: "A case was handed over to you." }
   }
 ];
 
@@ -46,6 +47,7 @@ export function NotisSettings() {
   const [busy, setBusy] = useState(false);
   const [fel, setFel] = useState<string | null>(null);
   const [klart, setKlart] = useState<string | null>(null);
+  const { text } = useLocale();
 
   useEffect(() => {
     let avbruten = false;
@@ -101,12 +103,16 @@ export function NotisSettings() {
     try {
       const svar = await sparaNotiser(falt);
       if (!svar.success) {
-        setFel(svar.error ?? "Kunde inte spara.");
+        setFel(svar.error ?? text({ sv: "Kunde inte spara.", en: "Could not save." }));
         return;
       }
-      setKlart(falt.epost ? "Sparat. Notiserna går till din inloggningsadress." : "Sparat.");
+      setKlart(
+        falt.epost
+          ? text({ sv: "Sparat. Notiserna går till din inloggningsadress.", en: "Saved. Notifications go to your sign-in address." })
+          : text({ sv: "Sparat.", en: "Saved." })
+      );
     } catch (orsak) {
-      setFel(orsak instanceof Error ? orsak.message : "Kunde inte spara.");
+      setFel(orsak instanceof Error ? orsak.message : text({ sv: "Kunde inte spara.", en: "Could not save." }));
     } finally {
       setBusy(false);
     }
@@ -116,14 +122,14 @@ export function NotisSettings() {
     <div className="grid gap-7">
       <div className="border-t border-ink/15 pt-5">
         <Vaxel
-          etikett="Mejla mig"
+          etikett={text({ sv: "Mejla mig", en: "Email me" })}
           pa={falt.epost}
           onChange={vaxlaEpost}
         />
       </div>
 
       <fieldset className="border-t border-ink/15 pt-5" disabled={!falt.epost}>
-        <legend className="kicker text-mineral">Vad vi mejlar om</legend>
+        <legend className="kicker text-mineral">{text({ sv: "Vad vi mejlar om", en: "What we email about" })}</legend>
 
         {/* Nedtonad, inte gömd. Se docstringen: den som slår på notiser ska
             kunna se vad hen tackar ja till innan hen gör det. */}
@@ -133,8 +139,8 @@ export function NotisSettings() {
           {HANDELSER.map((h) => (
             <Vaxel
               key={h.nyckel}
-              etikett={h.etikett}
-              beskrivning={h.beskrivning}
+              etikett={text(h.etikett)}
+              beskrivning={text(h.beskrivning)}
               pa={falt.handelser.includes(h.nyckel)}
               disabled={!falt.epost}
               onChange={(pa) => vaxlaHandelse(h.nyckel, pa)}
@@ -151,11 +157,11 @@ export function NotisSettings() {
           className={btnPrimary}
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
-          {busy ? "Sparar…" : "Spara notisinställningarna"}
+          {busy ? text({ sv: "Sparar…", en: "Saving…" }) : text({ sv: "Spara notisinställningarna", en: "Save notification settings" })}
         </button>
         {saknasSession ? (
           <p role="status" className="max-w-[60ch] text-[0.875rem] text-mineral">
-            Kräver inloggning.
+            {text({ sv: "Kräver inloggning.", en: "Requires sign-in." })}
           </p>
         ) : null}
         {klart ? (

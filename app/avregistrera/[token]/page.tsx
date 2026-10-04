@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { sql } from "@/lib/db";
+import { Avregistrering, type Utfall } from "./Avregistrering";
 
 export const metadata: Metadata = {
   title: "Avregistrera dig från utskick",
@@ -37,37 +38,10 @@ export const metadata: Metadata = {
  * oautentiserad besökare har in i `suppressions`. Alternativet hade varit att
  * öppna tabellen för en anonym roll, alltså riva spärren för att komma åt en
  * dörr. Se migrationen.
+ *
+ * Texten besökaren läser (sv + en) bor i Avregistrering.tsx: språkvalet finns
+ * bara i klienten.
  */
-
-type Utfall = "avregistrerad" | "redan_avregistrerad" | "okand_token" | "fel";
-
-const BESKED: Record<Utfall, { rubrik: string; text: string }> = {
-  avregistrerad: {
-    rubrik: "Klart. Du hör inte av oss igen.",
-    text:
-      "Din adress är borttagen från utskicken. Det gäller omedelbart och för " +
-      "alla framtida utskick från avsändaren, inte bara den här kampanjen."
-  },
-  redan_avregistrerad: {
-    rubrik: "Du var redan avregistrerad.",
-    text:
-      "Adressen fanns redan i spärrlistan. Får du ändå ett mejl från oss är " +
-      "det ett fel vi vill veta om — svara på mejlet så tittar vi på det."
-  },
-  okand_token: {
-    rubrik: "Länken går inte att känna igen.",
-    text:
-      "Den kan ha blivit avklippt när mejlet vidarebefordrades. Svara på " +
-      "mejlet du fick och skriv att du vill bli avregistrerad, så gör vi det " +
-      "för hand."
-  },
-  fel: {
-    rubrik: "Något gick fel på vår sida.",
-    text:
-      "Din avregistrering blev inte sparad. Svara på mejlet du fick så gör " +
-      "vi det för hand — du ska inte behöva försöka igen."
-  }
-};
 
 async function avregistrera(formData: FormData): Promise<void> {
   "use server";
@@ -103,37 +77,5 @@ export default async function Page({
 }>) {
   const { token } = await params;
   const { utfall } = await searchParams;
-  const besked = utfall && utfall in BESKED ? BESKED[utfall as Utfall] : null;
-
-  return (
-    <main className="mx-auto flex min-h-screen max-w-[64ch] flex-col justify-center px-6 py-16">
-      {besked ? (
-        <>
-          <h1 className="font-display text-[clamp(1.75rem,4vw,2.5rem)] font-semibold leading-tight tracking-[-0.02em]">
-            {besked.rubrik}
-          </h1>
-          <p className="mt-5 text-[1.0625rem] leading-[1.7] text-ink-muted">{besked.text}</p>
-        </>
-      ) : (
-        <>
-          <h1 className="font-display text-[clamp(1.75rem,4vw,2.5rem)] font-semibold leading-tight tracking-[-0.02em]">
-            Vill du sluta få de här mejlen?
-          </h1>
-          <p className="mt-5 text-[1.0625rem] leading-[1.7] text-ink-muted">
-            Tryck på knappen så tas din adress bort ur utskicken. Det gäller
-            omedelbart och för alla framtida utskick från avsändaren.
-          </p>
-          <form action={avregistrera} className="mt-9">
-            <input type="hidden" name="token" value={token} />
-            <button
-              type="submit"
-              className="focus-ring inline-flex min-h-12 items-center rounded-input bg-ink px-7 text-[1rem] font-semibold text-paper transition-colors hover:bg-ink2"
-            >
-              Avregistrera mig
-            </button>
-          </form>
-        </>
-      )}
-    </main>
-  );
+  return <Avregistrering utfall={utfall} token={token} action={avregistrera} />;
 }

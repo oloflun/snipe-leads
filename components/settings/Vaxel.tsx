@@ -1,6 +1,7 @@
 "use client";
 
 import { useId } from "react";
+import { useLocale } from "@/lib/i18n";
 import { rubrikPanel } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
@@ -37,6 +38,7 @@ export function Vaxel({
   onChange: (nytt: boolean) => void;
   disabled?: boolean;
 }>) {
+  const { text } = useLocale();
   // Etiketten och hjälpmeningen KOPPLAS till knappen. Förut stod de bara
   // bredvid den, så skärmläsaren läste växeln som "På" eller "Av" utan namn.
   const id = useId();
@@ -75,7 +77,7 @@ export function Vaxel({
         {/* Skärmläsaren får tillståndet ur aria-checked. Den här texten finns
             för att en växel som BARA är en färgad pinne är osynlig för den som
             inte skiljer ochre från grått — kontrast är inte den enda kanalen. */}
-        <span className="sr-only">{pa ? "På" : "Av"}</span>
+        <span className="sr-only">{pa ? text({ sv: "På", en: "On" }) : text({ sv: "Av", en: "Off" })}</span>
         <span
           aria-hidden
           className={cn(

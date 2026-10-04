@@ -1,6 +1,8 @@
+import { AdminText } from "@/components/admin/AdminText";
 import { AgentAnvandning } from "@/components/admin/AgentAnvandning";
-import { Sektion, Sidhuvud } from "@/components/ui";
+import { Sektion } from "@/components/ui";
 import { listRuns, unwrap, type RunRow } from "@/lib/data/admin";
+import { AdminVyhuvud } from "@/components/admin/AdminVyhuvud";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -17,14 +19,6 @@ export const maxDuration = 60;
  */
 
 const LEADS_TYPER = ["leads", "leads_research", "leads_outreach", "leads_svar", "leads_followup"];
-
-function arBokforingschatt(run: RunRow): boolean {
-  try {
-    return JSON.stringify(run.step_log ?? "").includes("bokforing-chatt");
-  } catch {
-    return false;
-  }
-}
 
 /**
  * Backendens tak per anrop (snajp-support/app/api/admin.py, `min(limit, 200)`).
@@ -57,40 +51,36 @@ export default async function Page() {
   // agent_type-familjerna: samma agent ska inte ha två namn i samma app.
   const sektioner = [
     {
-      rubrik: "Iris",
+      rubrik: "railIris",
       fel: leadsFel,
       innehall: (
         <AgentAnvandning
           runs={leadsRuns}
           vidTaket={leadsVidTaket ? TAK : null}
-          tomtext="Ingen leadskörning loggad ännu."
+          tomtext={{ sv: "Ingen leadskörning loggad ännu.", en: "No leads run logged yet." }}
         />
       )
     },
     {
-      rubrik: "Kundtjänst",
+      rubrik: "railKundtjanst",
       fel: sup.error,
       innehall: (
         <AgentAnvandning
           runs={sup.data ?? []}
           vidTaket={(sup.data?.length ?? 0) >= TAK ? TAK : null}
-          tomtext="Ingen supportkörning loggad ännu."
+          tomtext={{ sv: "Ingen supportkörning loggad ännu.", en: "No support run logged yet." }}
         />
       )
     },
     {
-      rubrik: "Kvitton",
+      rubrik: "railKvitton",
       fel: bok.error,
       innehall: (
         <AgentAnvandning
           runs={bok.data ?? []}
           vidTaket={(bok.data?.length ?? 0) >= TAK ? TAK : null}
-          delning={{
-            etikettA: "Underlag",
-            etikettB: "Frågor",
-            arB: arBokforingschatt
-          }}
-          tomtext="Ingen bokföringskörning loggad ännu."
+          delning="bokforing"
+          tomtext={{ sv: "Ingen bokföringskörning loggad ännu.", en: "No bookkeeping run logged yet." }}
         />
       )
     }
@@ -100,11 +90,11 @@ export default async function Page() {
   // prisunderlaget bor i AgentAnvandning.tsx (PRISUNDERLAG).
   return (
     <div>
-      <Sidhuvud title="Agentanvändning" />
+      <AdminVyhuvud grupp="logg" />
 
       <div className="mt-8">
         {sektioner.map((sektion) => (
-          <Sektion key={sektion.rubrik} title={sektion.rubrik}>
+          <Sektion key={sektion.rubrik} title={<AdminText n={sektion.rubrik} />}>
             {sektion.fel ? (
               <p role="alert" className="max-w-[70ch] break-words text-[15px] text-danger">
                 {sektion.fel}

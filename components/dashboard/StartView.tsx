@@ -1,101 +1,28 @@
 "use client";
 
 import { PageShell } from "@/components/AppShell";
-import { useDashboard } from "@/components/dashboard/DashboardContext";
-import { DuoSummary } from "@/components/dashboard/DuoSummary";
-import { LeadsOversikt, SupportOversikt } from "@/components/dashboard/Oversikt";
-import { KunskapsbasKort } from "@/components/settings/Kunskapsbas";
-import { useLocale } from "@/lib/i18n";
-import type { Localized } from "@/lib/i18n";
+import { Oversikten } from "@/components/dashboard/Oversikt";
 
 /**
  * Startsidan — en ÖVERSIKT, inte agentens råa arbetsvy.
  *
- * ## Två omtag, och varför det här är det rätta
+ * Svarar på "vad har hänt och vad väntar på mig" med siffror ur kundens egen
+ * tenant (components/dashboard/Oversikt.tsx). Arbetsvyerna (Leads, Kundtjänst,
+ * Kvitton) gör jobbet.
  *
- * Först renderade `/dashboard` en sammanfattning ur `lib/mock-data.ts` ovanför
- * de riktiga vyerna: ett extra klick varje gång, till siffror som inte kom ur
- * kundens data.
+ * Snajp Suite (2026-10-03): EN översikt för alla agenter, nyckeltalen överst.
+ * Borta: "Gemensam översikt" (två länkkort utan data, DuoSummary), de staplade
+ * leads- och kundtjänstdelarna med var sitt "N utkast väntar"-kort, och
+ * kunskapsbaskortet längst ned (uppladdningen bor i Inställningar ›
+ * Kunskapsbas; en tom bas syns som larm i lägesraden och som Kom igång-rad).
  *
- * Sedan blev startsidan agentens arbetsvy rakt av och sammanfattningen sköts
- * in i `/settings/arbetsyta`. Det löste mock-problemet genom att ta bort
- * översikten, vilket är en annan sorts fel: inloggningen landade i
- * discovery-formulärets tomläge ("Inget här ännu"), och den enda vy som
- * svarade på "vad har hänt" gick att nå först efter tre klick i
- * inställningarna. Uppmätt i skärmdump.
- *
- * Nu: startsidan svarar på **vad har hänt och vad väntar på mig**, med siffror
- * ur kundens egen tenant (se components/dashboard/Oversikt.tsx). Arbetsvyerna
- * ligger kvar på `/dashboard/leads` och `/dashboard/support` och gör jobbet.
- * Båda flikarna finns för alla kunder sedan `duoOnly` togs bort i
- * lib/routes.ts — utan dem hade en enproduktskund inte nått sin arbetsvy alls.
- *
- * ## Demoytan
- *
- * `demo` går vidare till översikterna, som byter ut backend-anropen mot
- * exempeldata i webbläsaren. Utan den flaggan anropade startsidan den
- * inloggade backenden från /demo, där ingen session finns — och panelen svarade
- * "Du måste vara inloggad" mitt i produktdemon.
- *
- * ## Duo-kunder
- *
- * Med båda paketen styr scope-växeln vad som visas, och `DuoSummary` ligger
- * högst upp när båda är på.
+ * `demo` går vidare till översikten, som byter ut backend-anropen mot
+ * exempeldata i webbläsaren — utan den anropade /demo den inloggade backenden.
  */
-
-const copy = {
-  titleLeads: { sv: "Leads", en: "Leads" },
-  titleSupport: { sv: "Kundtjänst", en: "Support" },
-  titleBoth: { sv: "Arbetsytan", en: "Workspace" },
-  leadsHeading: { sv: "Leads", en: "Leads" },
-  supportHeading: { sv: "Kundtjänst", en: "Support" }
-} satisfies Record<string, Localized>;
-
 export function StartView({ demo = false }: Readonly<{ demo?: boolean }>) {
-  const { text } = useLocale();
-  const { shows, scope } = useDashboard();
-
-  const bada = shows("leads") && shows("support");
-  const title = bada ? copy.titleBoth : shows("leads") ? copy.titleLeads : copy.titleSupport;
-
   return (
-    <PageShell title={text(title)}>
-      <div className="space-y-14">
-        {/* Högst upp bland vyerna, och bara när båda produkterna visas.
-            Komponenten returnerar null av sig själv annars — se DuoSummary. */}
-        <DuoSummary />
-
-        {shows("leads") ? (
-          <section>
-            {scope === "both" ? (
-              <h2 className="mb-6 text-[1.125rem] font-semibold tracking-[-0.01em]">
-                {text(copy.leadsHeading)}
-              </h2>
-            ) : null}
-            <LeadsOversikt demo={demo} />
-          </section>
-        ) : null}
-
-        {shows("support") ? (
-          <section>
-            {scope === "both" ? (
-              <h2 className="mb-6 text-[1.125rem] font-semibold tracking-[-0.01em]">
-                {text(copy.supportHeading)}
-              </h2>
-            ) : null}
-            <SupportOversikt demo={demo} />
-          </section>
-        ) : null}
-
-        {/* Underlaget SIST, inte först.
-            Kortet låg tidigare överst, före allt annat på startsidan. Det är
-            rätt prioritering första dagen och fel varje dag därefter: en kund
-            med en fylld bas fick en uppladdningsruta mellan sig och sina
-            siffror. Nu står bristen i tillståndsraden högst upp (0 dokument
-            markeras), och verktyget för att åtgärda den ligger här.
-            Inte på demoytan: där finns ingen session att ladda upp till. */}
-        {demo ? null : <KunskapsbasKort />}
-      </div>
+    <PageShell title={{ sv: "Översikt", en: "Overview" }}>
+      <Oversikten demo={demo} />
     </PageShell>
   );
 }

@@ -697,6 +697,33 @@ plans/2026-09-27-appytor-enhetlighet.md.
 Test: tests/invariants/test_inv_ui_001.py
 Införd: 2026-09-28 · Upphävs endast genom waiver
 
+### INV-DATA-003 — Enda skrivvägen från development till main är admin_flytt.importera
+`scripts/railway_seed_dev.py` speglar envägs main → development (målet
+hårdkodat, `mirror_meta`-markören, ingen `--target`). Det enda som går andra
+vägen är ett HMAC-signerat paket (`FLYTT_NYCKEL`) som `POST /api/admin/flytt/
+importera` tar emot utan masternyckel, vägrar i en spegel (409) och importerar
+idempotent med `importerad_fran` på raden. Ingen annan modul skriver det fältet.
+Varför: Antons beställning 2026-10-01: alla konton skapas i main, development
+ska vara en isolerad spegel för att testa kundproblem, och tester får aldrig
+dyka upp i kundmiljön — men EN admin-väg tillbaka ska finnas, och bara en.
+Test: snajp-support/tests/invariants/test_inv_data_003.py
+Införd: 2026-10-02 · Upphävs endast genom waiver
+
+### INV-COPY-001 — Varje komponent med användarvänd text är tvåspråkig
+Ingen rad i appytorna, demon, produktsidorna, marknadsytan, inloggningen eller de
+juridiska sidorna bär svenska bokstäver i en strängliteral eller i JSX-text utan
+att vara halvan av ett `{ sv, en }`-par via `lib/i18n.tsx` (`text()`, `t()`, en
+`Localized`-konstant) eller `lib/admin/sprak.ts`. Identifierare, kommentarer och
+namnfält i exempeldata räknas inte. Filer som var enspråkiga när grinden sattes
+står på en skuldlista i testet som tvingar fram strykning när filen översatts.
+Varför: Anton visade 2026-10-02 femton skärmdumpar av den engelska versionen där
+`/kvitton`, `/support`, `/leads`, `/demo` och Iris-vyerna var till stor del svenska,
+och sessionens egna nya komponenter var enspråkiga trots en skriven regel. Samma
+form som INV-UI-001: en regel i prosa bryts av nästa komponent. Id:t är COPY, inte
+I18N, eftersom meta-testet bara parsar områden utan siffror.
+Test: tests/invariants/test_inv_copy_001.py
+Införd: 2026-10-02 · Upphävs endast genom waiver
+
 ### INV-LEADS-SCORE-001 — Ett researchat bolag har alltid poäng, nivå och motivering
 Efter research skriver `storage.spara_bedomning` (migration 079) på
 prospektraden: `score_total`, minst en `score_breakdown`-rad med motivering,
@@ -730,8 +757,28 @@ poolen, taket (4×N undersökta) eller dygnsbudgeten tar slut — och avslutar
 då med en tratt som namnger det strypande kriteriet.
 Varför: uppmätt 2026-09-29 — 3 beställda leads blev 3 kandidater som Iris
 själv underkände, inga utkast, och körningen stannade vid "1/3 jobb".
+Leverbart är skärpt 2026-10-02 (Antons krav, plan del C): kvalificerat, över
+tröskeln, kontaktperson MED roll, telefon ELLER arbetsmejl, och en
+lägesbeskrivning (migration 083) — `_leverbarhet` i `app/api/leads.py`.
 Test: snajp-support/tests/invariants/test_inv_leads_n_001.py
 Införd: 2026-09-30 · Upphävs endast genom waiver
+
+### INV-JOB-003 — En körnings tillstånd finns i liggaren efter varje steg; Redis-TTL är aldrig enda platsen
+Iris-motorn (`_fyll_pa`, `_rapportera_till_korning` i `app/api/leads.py`)
+skriver `korning` till `leads_job_ledger.korning` (migration 080) via
+`_spara_korning` efter varje steg, batchraden står i `processing` tills
+motorn säger `klar`, och varje fel skriver `error` i klartext. Kunden läser
+`GET /api/leads/korningar` (vyn Iris › Körningar) och kan följa, lämna och
+återvända till en körning; körformuläret återupptar en pågående körning ur
+liggaren efter omladdning.
+Varför: Anton startade en körning 2026-09-30 som inte hann bli klar; när han
+kom tillbaka fanns inget spår — tillståndet bodde bara i Redis (TTL 3 600 s)
+och i körformulärets React-state, och liggarens batchrad sattes till
+`completed` i samma ögonblick som motorn startade. Samma regel som
+INV-JOB-002, utvidgad från statusen till tillståndet: Postgres är sanningen,
+Redis är snabbvägen.
+Test: snajp-support/tests/invariants/test_inv_job_003.py
+Införd: 2026-10-01 · Upphävs endast genom waiver
 
 ## Roadmap
 

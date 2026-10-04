@@ -59,6 +59,8 @@ def _force_simulation_mode(monkeypatch):
         # Iris-profilen (2026-09-30): webbsignalerna hämtar varje kandidats
         # startsida, och Jev anropar TypeSafe. Sjätte gången — båda av här.
         "LEADS_WEBBSIGNAL",
+        # Registerkällan (merinfo via ScrapeGraphAI, 2026-10-01): sjunde gången.
+        "LEADS_MERINFO",
         "TYPESAFE_API_KEY",
         "IRIS_JEV",
     ):

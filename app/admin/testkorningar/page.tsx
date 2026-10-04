@@ -1,5 +1,6 @@
+import { AdminText } from "@/components/admin/AdminText";
 import { Testkorningar } from "@/components/admin/Testkorningar";
-import { Sidhuvud } from "@/components/ui";
+import { AdminVyhuvud } from "@/components/admin/AdminVyhuvud";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,7 @@ export const dynamic = "force-dynamic";
 export default function Page() {
   return (
     <div>
-      <Sidhuvud title="Testkörningar" />
+      <AdminVyhuvud grupp="logg" />
       <div className="mt-8">
         <Testkorningar />
       </div>

@@ -98,21 +98,15 @@ export type AppRoute = {
  */
 export const appRoutes: AppRoute[] = [
   { href: "/dashboard", labelKey: "nav.dashboard", product: "shared" },
-  // Iris (leadsagenten, döpt om 2026-09-16) fick 2026-09-19 en egen sida i
-  // stället för att vara utspridd över Leads, Leadslistor och Email studio.
-  // Leadslistor (migration 060, tillägget "leadlists") är ett SEGMENT inuti
-  // Bolag, inte en egen menypost — grinden på tillägget avgörs numera i
-  // klienten (useDashboard().addons), se components/leads/IrisBolag.tsx.
-  {
-    href: "/dashboard/iris",
-    labelKey: "nav.iris",
-    product: "leads",
-    children: [
-      { href: "/dashboard/iris", labelKey: "nav.iris.bolag" },
-      { href: "/dashboard/iris/granskning", labelKey: "nav.iris.granskning" },
-      { href: "/dashboard/iris/installningar", labelKey: "nav.iris.installningar" }
-    ]
-  },
+  // Snajp Suite (plans/2026-10-03-snajp-suite-struktur.md): ett objekt = en
+  // menypost = en sida, efter Twenty. Iris hade sex undersidor (Bolag,
+  // Pipeline, Körningar, Inkorg, Granskning, Inställningar); nu är Pipeline,
+  // Tabell och Listor VYER på Leads, granskningen är Att göra, körningarna är
+  // Aktivitet och inställningarna bor i /settings. Gamla adresser omdirigeras
+  // i WorkspaceSection. Menyn har inga undersidor längre.
+  // Delad: kön samlar alla agenters beslut (components/leads/AttGora.tsx).
+  { href: "/dashboard/att-gora", labelKey: "nav.attGora", product: "shared" },
+  { href: "/dashboard/leads", labelKey: "nav.leads", product: "leads" },
   { href: "/dashboard/support", labelKey: "nav.support", product: "support" },
   { href: "/dashboard/companies", labelKey: "nav.companies", product: "leads", preview: true },
   { href: "/dashboard/contacts", labelKey: "nav.contacts", product: "leads", preview: true },
@@ -127,6 +121,9 @@ export const appRoutes: AppRoute[] = [
   // (migration 047), och en nyckel i databasen byter man inte namn på för att
   // produkten gjorde det. Grindas på entitlement som leads och support.
   { href: "/dashboard/kvitton", labelKey: "nav.kvitton", product: "bookkeeping" },
+  // Alla agenters körningar på ett ställe: Iris jobbliggare (migration 080)
+  // och kundtjänstens journal. Innehållet följer vilka agenter arbetsytan har.
+  { href: "/dashboard/aktivitet", labelKey: "nav.aktivitet", product: "shared" },
   { href: "/settings", labelKey: "nav.settings", product: "shared" }
 ];
 
@@ -230,24 +227,32 @@ export type SettingsGroup = {
 };
 
 export const settingsGroups: SettingsGroup[] = [
+  // Snajp Suite (2026-10-03): EN plats för alla inställningar, grupperad per
+  // agent. Iris egna sida (Iris › Inställningar) är borta — den bor nu i
+  // /settings/leads, och dubbletten av LeadsControls med den.
   {
-    // Underlaget, inte agenten. Kunskapsbasen först: det är den som släcker
-    // eskaleringsväggen. Affärskontexten är "vad ni säljer" på vanlig svenska.
-    label: { sv: "Underlag", en: "Source material" },
+    // Underlaget, som båda agenterna läser.
+    label: { sv: "Företaget", en: "Company" },
     routes: [
-      { href: "/settings/kunskapsbas", label: { sv: "Kunskapsbas", en: "Knowledge base" } },
+      { href: "/settings", label: { sv: "Företaget", en: "Company" } },
       { href: "/settings/affarskontext", label: { sv: "Vad ni säljer", en: "What you sell" } },
+      { href: "/settings/kunskapsbas", label: { sv: "Kunskapsbas", en: "Knowledge base" } },
       { href: "/settings/soul", label: { sv: "Så ska agenten låta", en: "How the agent should sound" } }
     ]
   },
   {
-    label: { sv: "Så får agenten göra", en: "What the agent may do" },
+    label: { sv: "Iris", en: "Iris" },
     routes: [
       {
         href: "/settings/leads",
-        label: { sv: "Vilka bolag ni vill nå", en: "Companies you want to reach" },
+        label: { sv: "Målgrupp och automation", en: "Audience and automation" },
         product: "leads"
-      },
+      }
+    ]
+  },
+  {
+    label: { sv: "Kundtjänst", en: "Customer service" },
+    routes: [
       {
         href: "/settings/regler",
         label: {
@@ -257,13 +262,6 @@ export const settingsGroups: SettingsGroup[] = [
         product: "support"
       },
       { href: "/settings/mailboxes", label: { sv: "Inkorgar", en: "Mailboxes" }, product: "support" }
-    ]
-  },
-  {
-    label: { sv: "Dina inställningar", en: "Your preferences" },
-    routes: [
-      { href: "/settings/notiser", label: { sv: "Notiser", en: "Notifications" } },
-      { href: "/settings/tema", label: { sv: "Tema", en: "Theme" } }
     ]
   },
   {
@@ -286,10 +284,12 @@ export const settingsGroups: SettingsGroup[] = [
   {
     label: { sv: "Kontot", en: "Account" },
     routes: [
-      { href: "/settings", label: { sv: "Företaget", en: "Company" } },
       { href: "/settings/team", label: { sv: "Team", en: "Team" }, doldIDemo: true },
       { href: "/settings/billing", label: { sv: "Plan och fakturering", en: "Plan and billing" } },
-      { href: "/settings/addons", label: { sv: "Tillägg", en: "Add-ons" } }
+      { href: "/settings/addons", label: { sv: "Tillägg", en: "Add-ons" } },
+      // Personliga: gäller den inloggade, inte arbetsytan.
+      { href: "/settings/notiser", label: { sv: "Notiser", en: "Notifications" } },
+      { href: "/settings/tema", label: { sv: "Tema", en: "Theme" } }
     ]
   }
 ];

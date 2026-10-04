@@ -12,6 +12,8 @@ import {
   etikett,
   meta
 } from "@/components/ui";
+import { ADMIN, a, ordagrant } from "@/lib/admin/sprak";
+import { useLocale, type Localized } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import {
   forhandsgranskaInstruktioner,
@@ -47,16 +49,17 @@ export function Agentinstruktioner() {
   const [rav, setRav] = useState("");
   const [dokument, setDokument] = useState("");
   const [redigerat, setRedigerat] = useState(false);
-  const [fel, setFel] = useState<string | null>(null);
-  const [meddelande, setMeddelande] = useState<string | null>(null);
+  const [fel, setFel] = useState<Localized | null>(null);
+  const [meddelande, setMeddelande] = useState<Localized | null>(null);
   const [laddar, setLaddar] = useState(true);
   const [vantar, startTransition] = useTransition();
+  const { locale, text } = useLocale();
 
   useEffect(() => {
     let avbruten = false;
     hamtaInstruktioner().then(({ lage: hamtat, error }) => {
       if (avbruten) return;
-      if (error) setFel(error);
+      if (error) setFel(ordagrant(error));
       if (hamtat) {
         setLage(hamtat);
         setRav(hamtat.ravtext);
@@ -74,10 +77,11 @@ export function Agentinstruktioner() {
     setMeddelande(null);
     startTransition(async () => {
       const svar = await forhandsgranskaInstruktioner(rav);
-      if (!svar.success) return setFel(svar.error ?? "Kunde inte strukturera texten.");
+      if (!svar.success)
+        return setFel(svar.error ? ordagrant(svar.error) : ADMIN.kundeInteStrukturera);
       setDokument(svar.dokument ?? "");
       setRedigerat(false);
-      setMeddelande(svar.anmarkning ?? "Förhandsgranskning. Ingenting är sparat ännu.");
+      setMeddelande(svar.anmarkning ? ordagrant(svar.anmarkning) : ADMIN.forhandsgranskningEjSparad);
     });
   }
 
@@ -92,10 +96,10 @@ export function Agentinstruktioner() {
         ravtext: rav,
         strukturerad_md: redigerat ? dokument : undefined
       });
-      if (!svar.success) return setFel(svar.error ?? "Kunde inte spara.");
+      if (!svar.success) return setFel(svar.error ? ordagrant(svar.error) : ADMIN.kundeInteSpara);
       setDokument(svar.dokument ?? "");
       setRedigerat(false);
-      setMeddelande(svar.anmarkning ?? "Sparat. Gäller nästa körning, för alla kunder.");
+      setMeddelande(svar.anmarkning ? ordagrant(svar.anmarkning) : ADMIN.sparatAllaKunder);
       const { lage: nytt } = await hamtaInstruktioner();
       if (nytt) setLage(nytt);
     });
@@ -107,7 +111,7 @@ export function Agentinstruktioner() {
     // allt nedanför när innehållet landade.
     return (
       <div className="grid gap-8" aria-busy="true" aria-live="polite">
-        <span className="sr-only">Hämtar instruktionerna</span>
+        <span className="sr-only">{a("hamtarInstruktionerna", locale)}</span>
         <div className="h-24 animate-pulse rounded-card bg-ink/[0.055]" />
         <div className="grid gap-8 lg:grid-cols-2">
           <div className="h-96 animate-pulse rounded-card bg-ink/[0.055]" />
@@ -125,34 +129,36 @@ export function Agentinstruktioner() {
           rättighetsfel får någon att skriva om instruktionerna i onödan. */}
       {fel ? (
         <p role="alert" className="border-t border-danger/40 pt-5 text-[0.9375rem] leading-7 text-ink">
-          Instruktionerna kunde inte hämtas: {fel}
+          {a("instruktionernaKundeInteHamtas", locale)} {text(fel)}
         </p>
       ) : null}
 
-      <Sektion title="Vad agenten läser just nu">
+      <Sektion title={a("vadAgentenLaserNu", locale)}>
         {/* `lage` är null när hämtningen föll. Den grenen MÅSTE finnas för sig:
             föll den ihop med "ingen rad sparad" påstod sidan "Sparad —, sparad
             som den skrevs" med ett tomt datum och ett ensamt brädgårdstecken.
             Trovärdigt, och osant. */}
         <p className="max-w-[70ch] text-[0.9375rem] leading-7 text-ink-muted">
           {!lage ? (
-            "Läget kunde inte läsas."
+            a("lagetKundeInteLasas", locale)
           ) : lage.fran_fil ? (
             <>
-              Ingen instruktion är sparad. Agenten kör på den incheckade{" "}
+              {a("ingenInstruktionSparad", locale)}{" "}
               <span className="font-mono text-[0.8125rem]">agent-core/AGENTS.md</span>.
             </>
           ) : (
-            `Sparad ${
-              lage.uppdaterad ? new Date(lage.uppdaterad).toLocaleString("sv-SE") : "okänt datum"
-            }, ${lage.kalla === "ai" ? "strukturerad av modellen" : "sparad som den skrevs"}.`
+            `${a("sparad", locale)} ${
+              lage.uppdaterad
+                ? new Date(lage.uppdaterad).toLocaleString("sv-SE")
+                : a("oknatDatum", locale)
+            }, ${lage.kalla === "ai" ? a("struktureradAvModellen", locale) : a("sparadSomDenSkrevs", locale)}.`
           )}
           {lage?.hash ? (
             <span className="ml-2 font-mono text-[0.8125rem] text-ink-muted">#{lage.hash}</span>
           ) : null}
         </p>
         <pre className="mt-4 max-h-64 overflow-auto whitespace-pre-wrap rounded-input border border-ink/15 bg-paper2/50 p-4 text-[0.8125rem] leading-6">
-          {lage?.aktiv_text || "(tomt)"}
+          {lage?.aktiv_text || a("tomtParentes", locale)}
         </pre>
       </Sektion>
 
@@ -163,12 +169,12 @@ export function Agentinstruktioner() {
       {/* Den enda raden som styr VAD som skrivs här: ton och röst är kundens
           (SOUL, /settings/soul), plattformens instruktioner är policy. */}
       <p className="mt-12 max-w-[70ch] text-[0.9375rem] leading-7 text-ink-muted">
-        Här står policy och säkerhet. Ton och röst ställer varje kund in själv.
+        {a("policyOchSakerhet", locale)}
       </p>
       <div className="mt-6 grid gap-8 lg:grid-cols-2">
         <section>
           <label htmlFor="rav" className={cn(etikett, "block")}>
-            Dina instruktioner och din feedback
+            {a("dinaInstruktioner", locale)}
           </label>
           <textarea
             id="rav"
@@ -177,18 +183,19 @@ export function Agentinstruktioner() {
             onChange={(event) => setRav(event.target.value)}
             rows={18}
             className="focus-ring mt-2 w-full resize-y rounded-input border border-ink/15 bg-paper p-4 text-[1rem] leading-6"
-            placeholder={
-              "Agenten svarar för långt i chatten.\nDen ska aldrig lova återbetalning. Det går alltid till en människa.\nSluta inleda varje replik med Hej."
-            }
+            placeholder={text({
+              sv: "Agenten svarar för långt i chatten.\nDen ska aldrig lova återbetalning. Det går alltid till en människa.\nSluta inleda varje replik med Hej.",
+              en: "The agent answers too long in the chat.\nIt must never promise a refund. That always goes to a person.\nStop opening every reply with Hi."
+            })}
           />
           <p className={cn(meta, "num mt-2")}>
-            {rav.length} / {MAX} tecken
+            {rav.length} / {MAX} {a("tecken", locale)}
           </p>
         </section>
 
         <section>
           <label htmlFor="dokument" className={cn(etikett, "block")}>
-            Vad agenten kommer att läsa
+            {a("vadAgentenKommerLasa", locale)}
           </label>
           <textarea
             id="dokument"
@@ -200,10 +207,10 @@ export function Agentinstruktioner() {
             }}
             rows={18}
             className="focus-ring mt-2 w-full resize-y rounded-input border border-ink/15 bg-paper p-4 text-[1rem] leading-6"
-            placeholder="(struktureras när du förhandsgranskar eller sparar)"
+            placeholder={a("strukturerasNar", locale)}
           />
           <p className={cn(meta, "mt-2")}>
-            {redigerat ? "Redigerad för hand, sparas ordagrant." : "Struktureras av modellen."}
+            {redigerat ? a("redigeradForHand", locale) : a("strukturerasAvModellen", locale)}
           </p>
         </section>
       </div>
@@ -215,7 +222,7 @@ export function Agentinstruktioner() {
           disabled={vantar || !rav.trim()}
           className={btnSecondary}
         >
-          Förhandsgranska
+          {a("forhandsgranska", locale)}
         </button>
         <button
           type="button"
@@ -223,7 +230,7 @@ export function Agentinstruktioner() {
           disabled={vantar}
           className={btnPrimary}
         >
-          {vantar ? "Sparar…" : "Spara och aktivera"}
+          {vantar ? a("sparar", locale) : a("sparaOchAktivera", locale)}
         </button>
         {/* Felet renderas i toppen, inte här: två röda rader för samma fel
             läser som två fel. */}
@@ -232,30 +239,30 @@ export function Agentinstruktioner() {
             aldrig upp. Elementet renderas ALLTID — en region som tillkommer
             samtidigt som sin text annonseras inte av alla skärmläsare. */}
         <span aria-live="polite" className="text-[0.9375rem] text-ink-muted">
-          {meddelande ?? ""}
+          {meddelande ? text(meddelande) : ""}
         </span>
       </div>
 
       {/* Varje sparning är en ny version; de inaktiva finns kvar för att en
           körning ska gå att förklara i efterhand. Tabulär data, alltså Tabell. */}
       {lage?.historik?.length ? (
-        <Sektion title="Historik">
+        <Sektion title={a("historik", locale)}>
           <Tabell
             minBredd={480}
-            ariaLabel="Historik"
+            ariaLabel={a("historik", locale)}
             kolumner={[
-              { rubrik: "Sparad", bredd: "34%" },
-              { rubrik: "Källa", bredd: "26%" },
-              { rubrik: "Tecken", bredd: "20%", hoger: true },
-              { rubrik: "Status", bredd: "20%", hoger: true }
+              { rubrik: a("sparad", locale), bredd: "34%" },
+              { rubrik: a("kalla", locale), bredd: "26%" },
+              { rubrik: a("teckenRubrik", locale), bredd: "20%", hoger: true },
+              { rubrik: a("status", locale), bredd: "20%", hoger: true }
             ]}
           >
             {lage.historik.map((rad) => (
               <tr key={rad.id}>
                 <Cell className="num">{new Date(rad.created_at).toLocaleString("sv-SE")}</Cell>
-                <Cell>{rad.kalla === "ai" ? "Strukturerad" : "Manuell"}</Cell>
+                <Cell>{rad.kalla === "ai" ? a("strukturerad", locale) : a("manuell", locale)}</Cell>
                 <Cell hoger>{rad.strukturerad_tecken}</Cell>
-                <Cell hoger>{rad.aktiv ? <Badge tone="good">Aktiv</Badge> : "–"}</Cell>
+                <Cell hoger>{rad.aktiv ? <Badge tone="good">{a("aktiv", locale)}</Badge> : "–"}</Cell>
               </tr>
             ))}
           </Tabell>

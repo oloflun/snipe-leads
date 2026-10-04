@@ -155,6 +155,26 @@ async def test_kopiera_till_skickat_anvander_kopplad_inkorg(monkeypatch):
     ]
 
 
+async def test_kopian_valjer_inkorg_efter_syfte(monkeypatch):
+    """Migration 084: leadsutskick i leadsinkorgen, supportsvar i supportinkorgen."""
+    storage = MemoryStorage()
+    storage.tenants[TENANT] = {"id": TENANT, "slug": "umeawebdesign", "name": "Umeå Webdesign"}
+    for adress, syfte in (("support@kund.se", "support"), ("salj@kund.se", "leads")):
+        await storage.upsert_mailbox(
+            TENANT, provider="gmail", address=adress, secret_enc=kryptera({"losenord": APP_LOSENORD}), syfte=syfte,
+        )
+    anrop: list[str] = []
+
+    async def fejk(host, user, password, **kwargs):
+        anrop.append(user)
+        return None
+
+    monkeypatch.setattr(imap_connector, "spara_i_skickat", fejk)
+    await kopiera_till_skickat(storage, TENANT, till="p@x.se", amne="a", brodtext="b", syfte="leads")
+    await kopiera_till_skickat(storage, TENANT, till="p@x.se", amne="a", brodtext="b")
+    assert anrop == ["salj@kund.se", "support@kund.se"]
+
+
 async def test_kopiera_utan_inkorg_gor_ingenting(monkeypatch):
     storage = MemoryStorage()
     storage.tenants[TENANT] = {"id": TENANT, "slug": "umeawebdesign"}

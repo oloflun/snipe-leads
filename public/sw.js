@@ -41,7 +41,7 @@
  * Höjd till v3 2026-08-25: `snipe_logo.svg` bytt mot den nya varumärkesfilen.
  */
 
-const CACHE = "snajp-v3";
+const CACHE = "snajp-v4";
 
 const SKAL = [
   "/offline.html",

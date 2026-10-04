@@ -12,7 +12,7 @@ milestone_blockers:
   - "PR #22 (support-eskalering, sprak, integrationer/kanaler, Iris-menyn) vantar bara pa Antons merge; migrationer och INTEGRATION_NYCKEL klara i main (2026-09-19)"
   - "IMAP_PASSWORD_LIVRUSTNING saknas pa Railway api (bade main och development)"
   - "Vantar pa kundens bekraftelse av garantiperioden"
-updated: 2026-09-19
+updated: 2026-10-02
 ---
 
 # Snipra / Snajp
@@ -131,6 +131,15 @@ separate thing entirely — user-message position only, never system. See
 | `scripts/redis_tls_pa.py` | Enables TLS on the dev Redis database AND rewrites `REDIS_URL` to `rediss://` in one sweep (the two steps are one change). Run by Anton — the auto-mode classifier blocks agents from cloud-infra writes. |
 | `scripts/redis_provisionera.py` | Prepares `main`'s own Redis database (EU, TLS, first paid tier with persistence+replication). `--planer` lists prices read-only; `--skapa` is gated behind §8.1a and an explicit flag. |
 | `scripts/gemini_web_konfig.py` | Copies `GEMINI_API_KEY` from the local env file onto Railway's `web` service (Fas 1.2) so Email-studio stops simulating for logged-in customers. Anton runs it — same classifier gate. |
+| `snajp-support/app/api/leads_suite.py` | Leads Suite (plan del F, migration 086): tidslinjen komponerad ur prospekt, statuslogg, mejltråd, anteckningar och uppgifter (ingen händelsetabell), sparade vyer, `POST /api/leads/import`. |
+| `snajp-support/app/leads/automation.py` | Automationsregler per leadtyp (iris/lista/import/inkorg): utkast_auto, uppfoljning_dagar (0 = av), jev_bortval. Standard = beteendet före reglerna; verkställs i uppföljningssvepet, inkorgen, till-iris och Jev-triagen. |
+| `snajp-support/app/leads/crm_synk.py` | Envägs synk ut till HubSpot/Pipedrive (bolag + anteckning per händelse), nyckeln ur integrationens `api_key`. Kastar aldrig, fire-and-forget från PATCH status och ny anteckning. |
+| `snajp-support/app/email_pipeline/klassning.py` | Inkorgens klassning support/lead/ej relaterat före triagen (kodregler → Jev choice ≥0,9 → standard support), migration 084. |
+| `snajp-support/app/api/admin_flytt.py` | Flytta till main (plan del E, migration 085): HMAC-signerat paket dev → main, mottagaren vägrar i en spegel. INV-DATA-003: enda skrivvägen. |
+| `.github/workflows/spegla-dev.yml` | Nattlig spegling main → development 02:00 UTC via `scripts/railway_seed_dev.py --behall-flyttko`. |
+| `components/leads/LeadsTabell.tsx`, `Pipeline.tsx`, `Tidslinje.tsx`, `ImportCsv.tsx`, `IrisAutomation.tsx` | Leads Suite-vyerna under Iris: tabell med inline-status och sparade vyer, kanban, tidslinje med anteckning/uppgift, CSV-import med kolumnkartor (`lib/leads/importmallar.ts`), automationsinställningar. |
+| `scripts/flytt_nycklar.py` | `--check`/`--apply`: FLYTT_NYCKEL (båda miljöerna), FLYTT_MAL_URL (development), GitHub-hemligheten ENV_DEPLOY (bara spegelns sex PG-rader). Visar aldrig värden; verifierar mot `/api/admin/flytt/status`. |
+| `HANDOFF-2026-10-02-LEADS-SUITE-DRIFT.md` | Senaste handoff: allt i beställningen 2026-10-01 byggt och driftsatt, verifiering, öppet, Antons instruktioner ordagrant. |
 | `plans/2026-08-29-redis-agentarkitektur.md` | The Redis architecture: deploy-surviving runs (Streams), tenant-scoped semantic answer cache, rolling conversation memory — plus the verdicts on Redis Iris (Agent Memory, LangCache, Context Retriever). |
 | `docs/REDIS_IRIS_EVAL.md` | The adoption gates and sandbox protocol for the managed Iris services — synthetic data only, eight gates before any production use. |
 
@@ -208,6 +217,8 @@ allt i supportportalens vy **Integrationer** (`support-webb/components/integrati
 (`snipe-36u.7`).
 
 ## Invariants and gotchas
+
+- **INV-COPY-001** (2026-10-02): svenska bokstäver i strängar eller JSX-text utan `{ sv, en }`-par fäller; data som råkar vara svenska markeras `// inte-copy`; en översatt fil stryks ur `_SKULD_2026_10_02` i samma commit.
 
 - **Skills are never edited — HARD RULE, mechanically enforced
   (`INV-SKILL-005`), now with an anvisad tuning surface (2026-08-14).** If a
@@ -414,6 +425,38 @@ mot den döda kedjan; en riktig onboarding just nu kräver manuella steg mot
 Railway tills skriptet är omskrivet. Se `TENANTS.md` för den nuvarande
 processen och flagga skriptet innan du litar på det.
 
+## Current status (2026-10-02, session 4)
+
+Development live med hela beställningen från 2026-10-01; main migrerad till 087
+(adminytan lagad) men med gammal kod tills Antons release. Nycklar för Flytta
+till main och nattspegeln satta (`scripts/flytt_nycklar.py`); nattspegeln kör
+02:00 UTC. Ny vakt `snajp-support/tests/invariants/test_delete_grants.py`.
+Handoff: `HANDOFF-2026-10-02-LEADS-SUITE-DRIFT.md`.
+
+## Current status (2026-10-02, session 3)
+
+Hela beställningen från 2026-10-01 är kodad på `development` (25 opushade commits):
+kombinera listor och Flytta till Iris (082), engelska översättningen klar (skuldlistan
+i INV-COPY-001 är tom), obligatorisk lägesbeskrivning och kontaktväg i leverbarheten
+(083, `_leverbarhet`), Jev-sorterad inkorg och leads-inkorg under Iris (084), nattlig
+spegling main → development och Flytta till main (085, INV-DATA-003), Leads Suite (086):
+tidslinje, anteckningar, uppgifter, sparade vyer, Tabell, Pipeline, CSV-import,
+automation per leadtyp, envägs CRM-synk. Backend 2463 gröna, rotinvarianter 425, tsc
+rent. Kvar i Antons hand: push, `LEADS_MERINFO`, migrationerna 082–086 mot development
+och 079–086 mot main (adminfelet i main kvarstår tills dess), `FLYTT_NYCKEL`/
+`FLYTT_MAL_URL`, repo-secret `ENV_DEPLOY`. Plan: `plans/2026-10-02-knyta-ihop-korningen.md`.
+
+## Current status (2026-10-02, session 2) [historisk]
+
+Iris-körningar bor i liggaren (`leads_job_ledger.korning`, INV-JOB-003) och överlever
+TTL, deploy och uppgivna barnjobb; vyn Iris › Körningar läser därifrån. merinfo är
+registerkälla via ScrapeGraphAI (tillfällig, `LEADS_MERINFO=scrapegraph`), kontaktkrav
+namn + roll + telefon eller mejl. Varje komponent med text är tvåspråkig enligt
+INV-COPY-001 (`tests/invariants/test_inv_copy_001.py`, skuldlista 52 filer). Jev kör
+i läge `pa` på development. Elva commits väntar på push; adminytan i main väntar på
+migrationerna 079–081 (`railway_migrate.py --env main --apply`). Plan med tio faser:
+`plans/2026-10-02-knyta-ihop-korningen.md`.
+
 ## Current status (2026-08-28)
 
 **Sjufasplan för skarpa körningar skriven** —
@@ -489,3 +532,30 @@ Se [[wiki/projects/_index/connections|connections]] för nattens kopplingar och
 ## Kunskapsbas-källor
 
 - [[wiki/sources/2026-08-25-konvertera-till-svg-vektorer-snajp]] — Snajp S-symbol + ordmärke vektoriserat till SVG (potrace), inkl. bokstavskerning-justering (2026-08-29)
+
+## Relevanta källor
+
+- [[sources/2024-09-02-the-game-hormozi-738-best-sales-advice]] — show rate 74→91 %, same-day-bokning, personliga påminnelser (captured: 2026-09-23)
+- [[sources/2026-09-27-aterkommande-forsaljningsrad-kallringning-hemsidor]] — kallringningsstruktur + manus för småföretag med gammal/ingen sajt, NIX-filter (captured: 2026-09-27)
+- [[sources/2025-02-07-the-game-hormozi-42-rules-of-money]] — Hormozis 42 pengaregler: risk, leverage, villkor, sparande (captured: 2025-02-07)
+- [[sources/2025-05-08-veckans-ai-patentkoll-och-vibekodning]] — Veckans AI: supportbot −95 %, IP-screener, vibekodning (captured: 2025-05-08)
+- [[sources/2025-07-21-the-game-hormozi-12-persuasion-hacks]] — Hormozis 12 övertalningstrick för sälj och copy (captured: 2025-07-21)
+- [[sources/2026-01-01-the-game-hormozi-best-year-2026]] — Hormozi 7,5 h-kompilation (138 snips → 40 kluster): sälj som volym × feedback, inputs vs outputs, Rule of 100, ignorance debt, commitment (captured: 2026-01-01)
+- [[sources/2026-04-23-the-game-hormozi-fix-before-ads]] — laga grunden före annonser: priskrig, ads + sälj i takt, avatar-churn (captured: 2026-04-23)
+- [[sources/2026-05-05-the-game-hormozi-5-things-before-starting]] — fem strukturella fördelar innan man startar ett bolag (captured: 2026-05-05)
+- [[sources/2026-06-30-the-game-hormozi-content-that-leads-to-buyers]] — Innehåll som leder till köpare: reach ≠ intäkt, topp-20 %-analys, vertical value, UTM (captured: 2026-06-30)
+- [[sources/2026-08-21-veckans-ai-grok-bot-och-cv-tjanst]] — Veckans AI: Grok Bot, Cowrite CV/verifierade kompetenser (captured: 2026-08-21)
+- [[sources/2026-08-24-skit-om-ai-9-exponera-foretaget-i-tider-av-ai]] — Skit om AI #9: synlighet i AI-eran — teknisk SEO före AI-tjänster (captured: 2026-08-24)
+- [[sources/2026-08-25-startup-ideas-screensharing-top-takes]] — None (captured: 2026-08-25)
+- [[sources/2026-08-26-startup-ideas-webmcp-clearly-explained]] — WebMCP + två affärsidéer: konverteringsbyrå och agent mystery shopper (captured: 2026-08-26)
+- [[sources/2026-08-28-veckans-ai-reklamfilmer-och-viral-ai-agent]] — Veckans AI: Radarn-agentsystem, Runway-reklamfilm, Instinct (captured: 2026-08-28)
+- [[sources/2026-08-31-skit-om-ai-10-ai-downsizing]] — Skit om AI #10: AI-downsizing, Perplexity-nav, portabelt minne, local-first (captured: 2026-08-31)
+- [[sources/2026-08-31-startup-ideas-marketing-engineer]] — Marketing engineer: growth-repo, outbound-signalmotor, growth cockpit, 30-dagarsplan (captured: 2026-08-31)
+- [[sources/2026-09-02-startup-ideas-5-github-repos-goldmine]] — Fem repos: anti-slop, AI-CRM, Video Use, SkillSpector, Phone Harness (captured: 2026-09-02)
+- [[sources/2026-09-04-veckans-ai-chatgpt-rostlage-och-andlos-ai-slop]] — Veckans AI: MVP vs sälj, AI-boken, ChatGPT röstläge (captured: 2026-09-04)
+- [[sources/2026-08-13-a16z-two-ways-to-sell-ai-lighthouse-or-landgrab]] — a16z: två sätt att sälja AI (lighthouse vs landgrab), POC-, ACV- och säljanställningstaktik (captured: 2026-09-07)
+- [[sources/2026-09-03-the-game-hormozi-996-think-like-top-1-percent]] — Hormozis kontraintuitiva tillväxtdrag: höj pris tills du hör nej, nischa ner, betala talang mer, skala det som fungerar, irrelevans som konkurrent (captured: 2026-09-07)
+- [[sources/2026-07-07-the-game-hormozi-ltv-cac-two-numbers]] — Hormozi Ep 985: LTGP och CAC avgör överlevnad; målkvot 3:1 endast vid full automation, annars 6/9/>12:1 (captured: 2026-09-07)
+- [[sources/2026-09-18-startup-ideas-jev-is-here]] — Jev beslutsmodell: lead-scoring, AI-trafikpolis, 1 700 mejl för 0,18 USD (captured: 2026-09-18)
+- [[sources/2026-09-25-the-game-hormozi-price-service-business]] — prissättning av tjänsteföretag: kostnad × multipel, price lock, VSL, bundling (captured: 2026-09-25)
+- [[sources/2025-12-04-the-game-hormozi-14-years-in-70-minutes]] — Hormozi Ep 916: begränsningar och fem M, säljtiming, säljträning, SPCL, management-diamanten (captured: 2026-09-28)

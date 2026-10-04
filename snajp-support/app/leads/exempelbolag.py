@@ -95,7 +95,7 @@ _SIGNALER: tuple[tuple[str, str, str, str], ...] = (
         "har utökat med en andra anläggning i år",
         "en ny anläggning ska utrustas och bemannas, och besluten tas medan den byggs",
         "Jag såg att ni öppnat en andra anläggning",
-        "brukar det vara enklast att ta med från början än att lägga till efteråt",
+        "brukar det vara enklare att ta med det från början än att lägga till det efteråt",
     ),
     (
         "rekryterar till produktionen — tre annonser ute",
@@ -356,7 +356,7 @@ def _bygg_pitch(
             f"{varfor_nu}.",
             f"Vi säljer {produkt}. I det läge {bolagsnamn} är i {passning}.",
             "Är det något ni tittar på? I så fall svarar jag gärna på hur det "
-            "brukar se ut — annars säger du bara till, så hör jag inte av mig igen.",
+            "brukar se ut — annars säger ni bara till, så hör jag inte av mig igen.",
             f"Vänliga hälsningar,\n{avsandare}",
         ]
     )

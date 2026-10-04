@@ -1,4 +1,4 @@
-import { ArrowUpRight, CheckCircle2, Loader2 } from "lucide-react";
+import { ArrowUpRight, Loader2 } from "lucide-react";
 import type { Localized } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
  * them with a one-line change and keep their own element and handlers.
  */
 export const btnBase =
-  "focus-ring inline-flex min-h-11 items-center justify-center gap-2 rounded-input px-5 text-[0.9375rem] font-semibold transition-colors active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40";
+  "focus-ring inline-flex min-h-11 items-center justify-center gap-2 rounded-input px-4 text-[0.875rem] font-semibold transition-colors active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40";
 
 export const btnPrimary = `${btnBase} bg-ink text-paper hover:bg-ink2`;
 
@@ -92,7 +92,9 @@ export function ButtonLink({
  *
  * Klassträngar av samma skäl som knapparna ovan: anropsställena behåller sina element.
  */
-export const rubrikSida = "font-display text-[2.25rem] leading-[1.1] tracking-[-0.02em]";
+// 1.75rem semibold sedan 2026-10-03 (plans/2026-10-03-appytor-design.md): sidans namn ska
+// säga var man är, inte konkurrera med datan. PageShell och Sidhuvud delar den.
+export const rubrikSida = "font-display text-[1.75rem] font-semibold leading-tight tracking-[-0.02em]";
 export const rubrikSektion = "font-display text-[1.5rem] leading-tight tracking-[-0.015em]";
 export const rubrikPanel = "text-[1.0625rem] font-semibold leading-snug text-ink";
 
@@ -106,18 +108,50 @@ export const etikett = "text-[0.8125rem] font-medium text-ink-muted";
 /** Meta: datum, domän, stad, antal — det som identifierar en rad utan att vara dess rubrik. */
 export const meta = "text-[0.8125rem] text-ink-subtle";
 
-/** Filter- och vyflikar. Pillren Iris redan hade, nu det enda flikspråket. */
+/**
+ * Vy- och filterflikar: understrukna, med ochre under den valda (Mailchimp-konsolen,
+ * Twentys vybar; redan husets i SupportWorkspaceTabs). Pillren i 44 px med svart
+ * platta läste som primärknappar och tävlade med sidans enda riktiga handling
+ * (2026-10-03). Träffytan är fortfarande 44 px; det är bara plattan som är borta.
+ * `fliklista` är raden de står i: hårlinjen som understrykningen vilar på.
+ */
+export const fliklista = "flex flex-wrap items-end gap-x-4 gap-y-1 border-b border-ink/12 sm:gap-x-6";
 export const flik =
-  "focus-ring inline-flex min-h-11 items-center rounded-input px-4 text-[0.875rem] font-medium transition-colors";
-export const flikAktiv = "bg-ink text-paper";
-export const flikInaktiv = "bg-paper2 text-ink-muted hover:text-ink";
+  "focus-ring -mb-px inline-flex min-h-11 items-center gap-1.5 border-b-2 px-0.5 text-[0.9375rem] font-medium transition-colors";
+export const flikAktiv = "border-ochre text-ink";
+export const flikInaktiv = "border-transparent text-ink-muted hover:border-ink/25 hover:text-ink";
+
+/**
+ * Fält i en verktygsrad eller tabellrad (filter, statusval). 16 px text (iOS zoomar
+ * under det) men 36 px höjd: en tabellrad med 44 px-fält blev dubbelt så hög som
+ * datan i den. 16 px bara med grov pekare (iOS zoomar fält under 16 px vid fokus);
+ * med mus följer fältet tabellens 14 px. WCAG 2.2 AA kräver 24 px; huset håller 44 px för navigering och
+ * primära knappar, 36 px för täta kontroller i data (DESIGN.md § App surfaces).
+ */
+/**
+ * Filter under en vy: chips, inte en andra flikrad. Vyer är flikar (ovan), filter
+ * är chips (Twenty; samma stil som kundtjänstens fackfilter). Två understrukna
+ * rader på varandra läste som två nivåer navigering.
+ */
+export const chiplista = "flex flex-wrap items-center gap-1.5";
+export const chip =
+  "focus-ring inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 text-[0.8125rem] font-medium transition-colors";
+export const chipAktiv = "bg-ink text-paper";
+export const chipInaktiv = "text-ink-muted hover:bg-paper2 hover:text-ink";
+
+/** Val inne i en datarad: läses som värdet, ramen kommer vid hovring och fokus. */
+export const faltDiskret =
+  "focus-ring h-8 rounded-input border border-transparent bg-transparent px-1 text-[1rem] text-ink transition-colors hover:border-ink/15 focus:border-ink/15 [@media(pointer:fine)]:text-[0.875rem]";
+
+export const faltTatt =
+  "focus-ring h-9 rounded-input border border-ink/15 bg-paper px-2.5 text-[1rem] text-ink hover:border-ink/30 [@media(pointer:fine)]:text-[0.875rem]";
 
 export function Sidhuvud({
   title,
   action
 }: Readonly<{ title: React.ReactNode; action?: React.ReactNode }>) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="flex flex-wrap items-center justify-between gap-4">
       <h1 className={cn(rubrikSida, "min-w-0 break-words")}>{title}</h1>
       {/* min-w-0, inte shrink-0: breda åtgärder ska bryta rad vid 320 px, inte
           trycka sidan i sidled. */}
@@ -189,12 +223,16 @@ export function Tomt({
   );
 }
 
+/**
+ * Äldre namn på tomläget. Samma form som `Tomt` sedan 2026-10-03: en mening på en
+ * paper2-platta med hårlinje. Den gröna bocken och den streckade ramen sa "klart"
+ * om något som bara var tomt (DESIGN.md § App surfaces, Empty state).
+ */
 export function EmptyState({ title, body }: Readonly<{ title: string; body?: string }>) {
   return (
-    <div className="rounded-[8px] border border-dashed border-ink/15 bg-paper/45 p-8 text-center">
-      <CheckCircle2 className="mx-auto h-6 w-6 text-moss" />
-      <h3 className="mt-4 font-semibold">{title}</h3>
-      {body ? <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-ink-muted">{body}</p> : null}
+    <div className="rounded-input border border-ink/10 bg-paper2 px-5 py-4 text-[0.9375rem]">
+      <p className="font-medium text-ink">{title}</p>
+      {body ? <p className="mt-1 max-w-[65ch] leading-6 text-ink-muted">{body}</p> : null}
     </div>
   );
 }
@@ -264,7 +302,7 @@ export function Tabell({
     <div className="thin-scrollbar overflow-x-auto">
       <table
         aria-label={ariaLabel}
-        className="w-full table-fixed border-collapse text-[15px]"
+        className="w-full table-fixed border-collapse text-[0.875rem]"
         style={{ minWidth: `${minBredd}px` }}
       >
         <colgroup>
@@ -283,7 +321,7 @@ export function Tabell({
                 // filens ordning som avgör vilken som vinner — se btnLiten.
                 className={cn(
                   etikett,
-                  "py-3 pr-4 last:pr-0",
+                  "py-2.5 pr-4 last:pr-0",
                   kolumn.hoger ? "text-right" : "text-left"
                 )}
               >
@@ -297,6 +335,10 @@ export function Tabell({
     </div>
   );
 }
+
+/** En handling inne i en tabellrad: länk i radens ton, inte en knapp per rad. */
+export const radLank =
+  "focus-ring inline-flex min-h-8 items-center gap-1.5 whitespace-nowrap rounded-input px-1 text-[0.8125rem] font-medium text-ink-muted underline-offset-4 hover:text-ink hover:underline";
 
 /** Radklassen för Tabell-rader — hover hör till rader man kan agera på. */
 export const tabellRad = "transition-colors hover:bg-paper2/60";
@@ -317,7 +359,7 @@ export function Cell({
     <Element
       scope={titel ? "row" : undefined}
       className={cn(
-        "py-4 pr-4 align-top font-normal last:pr-0",
+        "py-2.5 pr-4 align-middle font-normal last:pr-0",
         // Samma regel som i huvudet: en av dem, aldrig båda.
         hoger ? "num text-right" : "text-left",
         className
@@ -349,5 +391,5 @@ export function Rad({
   className,
   children
 }: Readonly<{ className?: string; children: React.ReactNode }>) {
-  return <li className={cn("py-4", className)}>{children}</li>;
+  return <li className={cn("py-3", className)}>{children}</li>;
 }

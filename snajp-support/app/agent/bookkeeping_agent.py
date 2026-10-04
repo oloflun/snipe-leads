@@ -438,7 +438,7 @@ CHATT_STEG = "snajp:bokforing-chatt"
 #: människa innan den visas för en kund, samma ordning som gällde för
 #: konteringsförbehållet.
 
-CHATT_SYSTEMPROMPT = f"""Du är Snajps bokföringsassistent. Du svarar på svenska, kort och konkret.
+CHATT_SYSTEMPROMPT = f"""Du är Snajps bokföringsassistent. Du svarar på korrekt, felfri svenska (stavning, grammatik, skiljetecken), kort och konkret.
 
 ## Din grundregel, före allt annat
 DU RÄKNAR ALDRIG. Varje siffra du skriver måste komma från ett verktygsanrop i
@@ -902,6 +902,11 @@ async def run_bookkeeping_chat_turn(
         polerat = await _polera(svar, trace)
         if polerat != svar and check_belopp(polerat, context.resultat).ok:
             svar = polerat
+        # Textkvalitetslagret: deterministisk putsning sist — rör aldrig
+        # siffror, så beloppsgrindens verdikt står sig.
+        from ..textkvalitet import putsa
+
+        svar, _ = putsa(svar)
     else:
         svar = fallt_svar()
         # Kunskapsfångsten körs FÖRE mejlet, så att mejlets "varför" kan bli

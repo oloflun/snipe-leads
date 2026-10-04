@@ -193,6 +193,11 @@ class MemoryStorage:
         # Leadslistor (tillägget 'leadlists', migration 060).
         self.lead_lists: dict[str, list[dict[str, Any]]] = {}
         self.lead_list_items: list[dict[str, Any]] = []
+        # Leads Suite (migration 086): platta listor, samma form som tabellerna.
+        self.lead_anteckningar: list[dict[str, Any]] = []
+        self.lead_uppgifter: list[dict[str, Any]] = []
+        self.prospect_status_logg: list[dict[str, Any]] = []
+        self.lead_vyer: list[dict[str, Any]] = []
         # Bokföring (migration 045). Filen sparas aldrig — bara sha256:n.
         self.bk_underlag: dict[str, list[dict[str, Any]]] = {}
         self.bk_verifikat: dict[str, list[dict[str, Any]]] = {}
@@ -226,6 +231,7 @@ class MemoryStorage:
         # via /api/inbox. Dicten finns för att lagringsgränssnittet ska vara
         # detsamma i båda lägena.
         self.mailboxes: dict[str, dict[str, Any]] = {}
+        self.flytt_ko: list[dict[str, Any]] = []  # dev_flytt_ko (085)
         self.emails: dict[str, dict[str, Any]] = {}
         self.email_dedupe: set[tuple[str, str]] = set()  # (tenant_id, provider_message_id)
         self.attachments: dict[str, list[dict[str, Any]]] = {}  # email_id → [...]
@@ -320,6 +326,22 @@ class MemoryStorage:
 
     # -- Inkorgar -----------------------------------------------------------
 
+    async def spegel_info(self) -> dict[str, Any] | None:
+        return None  # minneslagret speglas aldrig
+
+    async def logga_flytt(self, tenant_id: str, *, typ: str, ref_id: str, resultat: str) -> None:
+        if typ not in ("mejl", "korning"):
+            raise ValueError(f"typ={typ!r} bryter mot dev_flytt_ko-checken (085).")
+        self.flytt_ko.append({
+            "id": str(uuid.uuid4()), "tenant_id": tenant_id, "typ": typ, "ref_id": ref_id,
+            "skapad_at": _now(), "flyttad_at": _now() if resultat == "ok" else None, "resultat": resultat,
+        })
+
+    async def list_flytt(self, tenant_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        rader = [r for r in self.flytt_ko if r["tenant_id"] == tenant_id]
+        rader.sort(key=lambda r: r["skapad_at"], reverse=True)
+        return [dict(r) for r in rader[:limit]]
+
     async def list_mailboxes(self, tenant_id: str) -> list[dict[str, Any]]:
         return [m for m in self.mailboxes.values() if m["tenant_id"] == tenant_id]
 
@@ -331,8 +353,11 @@ class MemoryStorage:
         address: str,
         imap_host: str | None = None,
         secret_enc: str | None = None,
+        syfte: str = "support",
     ) -> dict[str, Any]:
         adress = address.strip().lower()
+        if syfte not in ("support", "leads", "bada"):
+            raise ValueError(f"syfte={syfte!r} bryter mot ss_mailboxes-checken (084).")
         for rad in self.mailboxes.values():
             if rad["tenant_id"] == tenant_id and rad["address"] == adress:
                 rad.update(
@@ -341,6 +366,7 @@ class MemoryStorage:
                     secret_enc=secret_enc,
                     status="active",
                     last_error=None,
+                    syfte=syfte,
                 )
                 return rad
         rad = {
@@ -351,6 +377,7 @@ class MemoryStorage:
             "status": "active",
             "imap_host": imap_host,
             "secret_enc": secret_enc,
+            "syfte": syfte,
             "last_sync_at": None,
             "last_error": None,
             "created_at": _now(),
@@ -959,6 +986,7 @@ class MemoryStorage:
                     **thread,
                     "company_name": p.get("company_name"),
                     "contact_email": p.get("contact_email"),
+                    "origin": p.get("origin"),
                     "outbound_sent_count": len(skickade),
                     "last_outbound_sent_at": max((m["sent_at"] for m in skickade), default=None),
                     # Osänt utkast ELLER aktiv köpost räknas — båda betyder att
@@ -1196,6 +1224,8 @@ class MemoryStorage:
                     "contact_role",
                     "contact_level",
                     "contact_form_url",
+                    "contact_phone",
+                    "importerad_fran",
                 )
                 and värde is not None
             },
@@ -1231,10 +1261,25 @@ class MemoryStorage:
         contact_role: str | None = None,
         contact_level: str | None = None,
         contact_form_url: str | None = None,
+        status_kalla: str = "kod",
     ) -> dict[str, Any] | None:
         prospect = await self.get_prospect(tenant_id, prospect_id)
         if not prospect:
             return None
+        if status is not None and status != prospect.get("status"):
+            if status_kalla not in ("kod", "manuell", "import"):
+                raise ValueError(f"status_kalla={status_kalla!r} bryter mot checken (086).")
+            self.prospect_status_logg.append(
+                {
+                    "id": str(uuid.uuid4()),
+                    "tenant_id": tenant_id,
+                    "prospect_id": prospect_id,
+                    "fran": prospect.get("status"),
+                    "till": status,
+                    "kalla": status_kalla,
+                    "created_at": _now(),
+                }
+            )
         for field, value in (
             ("status", status),
             ("icp_fit", icp_fit),
@@ -1252,6 +1297,114 @@ class MemoryStorage:
             if value is not None:
                 prospect[field] = value
         return prospect
+
+    # -- Leads Suite (migration 086) -----------------------------------------
+
+    def _ager_prospekt(self, tenant_id: str, prospect_id: str) -> None:
+        # Speglar FK + RLS: Postgres fäller en rad mot ett prospekt som inte
+        # finns hos tenanten, så minnet ska också göra det.
+        if not any(p["id"] == prospect_id for p in self.prospects.get(tenant_id, [])):
+            raise ValueError(f"Prospektet {prospect_id} finns inte hos tenanten.")
+
+    @staticmethod
+    def _nyast_forst(rader: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        # reversed först: lika tidsstämplar ska också ge den senast skrivna först.
+        return [dict(r) for r in sorted(reversed(rader), key=lambda r: r["created_at"], reverse=True)]
+
+    async def add_lead_note(self, tenant_id: str, *, prospect_id: str, text: str) -> dict[str, Any]:
+        self._ager_prospekt(tenant_id, prospect_id)
+        rad = {
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "prospect_id": prospect_id,
+            "text": text,
+            "created_at": _now(),
+        }
+        self.lead_anteckningar.append(rad)
+        return dict(rad)
+
+    async def list_lead_notes(self, tenant_id: str, prospect_id: str) -> list[dict[str, Any]]:
+        return [
+            dict(r)
+            for r in self.lead_anteckningar
+            if r["tenant_id"] == tenant_id and r["prospect_id"] == prospect_id
+        ]
+
+    async def add_lead_task(
+        self, tenant_id: str, *, prospect_id: str, titel: str, forfaller: str | None
+    ) -> dict[str, Any]:
+        self._ager_prospekt(tenant_id, prospect_id)
+        rad = {
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "prospect_id": prospect_id,
+            "titel": titel,
+            # Samma form som Postgres-vägen: date → ISO-sträng.
+            "forfaller": date.fromisoformat(forfaller).isoformat() if forfaller else None,
+            "klar": False,
+            "klar_at": None,
+            "created_at": _now(),
+        }
+        self.lead_uppgifter.append(rad)
+        return dict(rad)
+
+    async def update_lead_task(
+        self, tenant_id: str, task_id: str, *, klar: bool | None = None
+    ) -> dict[str, Any] | None:
+        for rad in self.lead_uppgifter:
+            if rad["id"] == task_id and rad["tenant_id"] == tenant_id:
+                if klar is not None and klar != rad["klar"]:
+                    rad["klar"] = klar
+                    rad["klar_at"] = _now() if klar else None
+                return dict(rad)
+        return None
+
+    async def list_lead_tasks(
+        self, tenant_id: str, *, prospect_id: str | None = None, bara_oppna: bool = False
+    ) -> list[dict[str, Any]]:
+        rader = [
+            r
+            for r in self.lead_uppgifter
+            if r["tenant_id"] == tenant_id
+            and (prospect_id is None or r["prospect_id"] == prospect_id)
+            and not (bara_oppna and r["klar"])
+        ]
+        rader.sort(key=lambda r: (r["forfaller"] is None, r["forfaller"] or "", r["created_at"]))
+        return [dict(r) for r in rader]
+
+    async def list_status_logg(
+        self, tenant_id: str, *, prospect_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        return self._nyast_forst(
+            [
+                r
+                for r in self.prospect_status_logg
+                if r["tenant_id"] == tenant_id and (prospect_id is None or r["prospect_id"] == prospect_id)
+            ]
+        )
+
+    async def list_lead_views(self, tenant_id: str) -> list[dict[str, Any]]:
+        return [dict(r) for r in self.lead_vyer if r["tenant_id"] == tenant_id]
+
+    async def create_lead_view(
+        self, tenant_id: str, *, namn: str, filter: dict[str, Any]
+    ) -> dict[str, Any]:
+        rad = {
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "namn": namn,
+            "filter": json.loads(json.dumps(filter)),
+            "created_at": _now(),
+        }
+        self.lead_vyer.append(rad)
+        return dict(rad)
+
+    async def delete_lead_view(self, tenant_id: str, view_id: str) -> bool:
+        fore = len(self.lead_vyer)
+        self.lead_vyer = [
+            r for r in self.lead_vyer if not (r["id"] == view_id and r["tenant_id"] == tenant_id)
+        ]
+        return len(self.lead_vyer) < fore
 
     async def spara_bedomning(
         self, tenant_id: str, prospect_id: str, *, bedomning: dict[str, Any]
@@ -1355,6 +1508,9 @@ class MemoryStorage:
         status: str,
         scope: str = "research",
         prospect_id: str | None = None,
+        korning: dict[str, Any] | None = None,
+        error: str | None = None,
+        is_test: bool | None = None,
     ) -> None:
         # Samma värdemängd som check-villkoret i migration 059 — minnet ska
         # kasta där Postgres kastar (samma regel som AGENT_RUN_TYPES ovan).
@@ -1369,11 +1525,23 @@ class MemoryStorage:
                 "scope": scope,
                 "created_at": _now(),
                 "completed_at": None,
+                "korning": None,
+                "error": None,
+                "is_test": False,
             },
         )
         rad["status"] = status
+        rad["updated_at"] = _now()
         if status in ("completed", "failed"):
             rad["completed_at"] = _now()
+        # Djupkopia: motorn muterar sitt dict efter skrivningen, och
+        # liggaren ska visa det som skrevs — samma semantik som jsonb.
+        if korning is not None:
+            rad["korning"] = json.loads(json.dumps(korning))
+        if error is not None:
+            rad["error"] = error
+        if is_test is not None:
+            rad["is_test"] = is_test
 
     async def get_leads_job_status(self, tenant_id: str, job_id: str) -> str | None:
         rad = self.leads_job_ledger.get(job_id)
@@ -1381,16 +1549,56 @@ class MemoryStorage:
             return None
         return rad["status"]
 
+    _KORNINGSFALT = ("job_id", "status", "scope", "is_test", "created_at", "updated_at",
+                     "completed_at", "error", "korning")
+
+    def _korningsrad(self, rad: dict[str, Any]) -> dict[str, Any]:
+        return {f: rad.get(f) for f in self._KORNINGSFALT}
+
+    async def list_leads_korningar(self, tenant_id: str, *, limit: int = 20) -> list[dict[str, Any]]:
+        rader = [
+            r for r in self.leads_job_ledger.values()
+            if r["tenant_id"] == tenant_id and r["scope"] in ("batch", "lista")
+        ]
+        # Senast insatta först INNAN sorteringen: sort() är stabil, så två
+        # jobb med samma created_at (snabb maskin, samma millisekund) behåller
+        # annars äldst-först-ordningen och bryter "nyast först"-kontraktet.
+        rader.reverse()
+        rader.sort(key=lambda r: r["created_at"], reverse=True)
+        return [self._korningsrad(r) for r in rader[:limit]]
+
+    async def get_leads_korning(self, tenant_id: str, job_id: str) -> dict[str, Any] | None:
+        rad = self.leads_job_ledger.get(job_id)
+        if not rad or rad["tenant_id"] != tenant_id or rad["scope"] not in ("batch", "lista"):
+            return None
+        return self._korningsrad(rad)
+
     # -- Leadslistor (tillägget 'leadlists', migration 060) -----------------
 
     _LEAD_LIST_STATUSAR = ("bestalld", "byggs", "klar", "fel")
     _LEAD_ITEM_TYPER = ("bolag", "privatperson")
 
+    _LEAD_LIST_KALLOR = ("sok", "kombinerad", "import")
+    _KONTAKTFILTER = ("alla", "telefon", "mejl", "bada")
+
     async def create_lead_list(
-        self, tenant_id: str, *, titel: str, icp: dict[str, Any], antal: int, is_test: bool = False
+        self,
+        tenant_id: str,
+        *,
+        titel: str,
+        icp: dict[str, Any],
+        antal: int,
+        is_test: bool = False,
+        kalla: str = "sok",
+        kallistor: list[str] | None = None,
+        kontaktfilter: str | None = None,
     ) -> dict[str, Any]:
         if not 1 <= antal <= 200:
             raise ValueError(f"antal={antal} bryter mot lead_lists-checken (1–200).")
+        if kalla not in self._LEAD_LIST_KALLOR:
+            raise ValueError(f"kalla={kalla!r} bryter mot lead_lists-checken (082).")
+        if kontaktfilter is not None and kontaktfilter not in self._KONTAKTFILTER:
+            raise ValueError(f"kontaktfilter={kontaktfilter!r} bryter mot lead_lists-checken (082).")
         rad = {
             "id": str(uuid.uuid4()),
             "tenant_id": tenant_id,
@@ -1400,6 +1608,9 @@ class MemoryStorage:
             "status": "bestalld",
             "felorsak": None,
             "is_test": is_test,
+            "kalla": kalla,
+            "kallistor": list(kallistor) if kallistor else None,
+            "kontaktfilter": kontaktfilter,
             "created_at": _now(),
             "completed_at": None,
         }
@@ -1456,6 +1667,8 @@ class MemoryStorage:
             "source_url": falt.get("source_url"),
             "signal": falt.get("signal"),
             "signal_detalj": falt.get("signal_detalj"),
+            "contact_phone": falt.get("contact_phone"),
+            "orgnr": falt.get("orgnr"),
             "created_at": _now(),
         }
         self.lead_list_items.append(rad)
@@ -1793,6 +2006,7 @@ class MemoryStorage:
         limit: int = 50,
         is_test: bool | None = False,
         inkludera_larm: bool = False,
+        klass: str | None = None,
     ) -> list[dict[str, Any]]:
         rows = [e for e in self.emails.values() if e["tenant_id"] == tenant_id]
         rows.sort(key=lambda e: e["received_at"], reverse=True)
@@ -1804,8 +2018,13 @@ class MemoryStorage:
             summary = self._email_summary(email)
             if status and summary["status"] != status:
                 continue
-            # Samma som postgres: utan statusfilter syns inte larmen (078).
+            # Samma som postgres: utan statusfilter syns inte larmen (078),
+            # och utan klassfilter inte leads eller dolda (084).
             if not status and not inkludera_larm and summary["status"] == "att_hantera":
+                continue
+            if klass is not None and summary.get("klass") != klass:
+                continue
+            if klass is None and not status and not inkludera_larm and summary["status"] in ("lead", "ej_relaterat"):
                 continue
             if category and (
                 not summary["classification"]
@@ -1840,12 +2059,20 @@ class MemoryStorage:
         ticket_id: str | None = None,
         is_test: bool | None = None,
         hanterad: bool | None = None,
+        klass: str | None = None,
+        klass_kalla: str | None = None,
     ) -> dict[str, Any] | None:
         email = self.emails.get(email_id)
         if not email or email["tenant_id"] != tenant_id:
             return None
         if status:
             email["status"] = status
+        if klass is not None:
+            if klass not in ("support", "lead", "ej_relaterat"):
+                raise ValueError(f"klass={klass!r} bryter mot ss_emails-checken (084).")
+            email["klass"] = klass
+        if klass_kalla is not None:
+            email["klass_kalla"] = klass_kalla
         if ticket_id:
             email["ticket_id"] = ticket_id
         if is_test is not None:

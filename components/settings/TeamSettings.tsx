@@ -3,6 +3,9 @@
 import { useEffect, useState, useTransition } from "react";
 import { Rad, Radlista } from "@/components/ui";
 import { inviteMember, listTeam, revokeInvite, type TeamMember } from "@/lib/actions/team";
+import { useLocale, type Localized } from "@/lib/i18n";
+
+const ord = (s: string): Localized => ({ sv: s, en: s });
 
 /**
  * Teamvyn. Ersätter fyra hårdkodade strängar med den faktiska arbetsytan.
@@ -16,11 +19,12 @@ import { inviteMember, listTeam, revokeInvite, type TeamMember } from "@/lib/act
  * längre ned är precis en inbjudan som skickas två gånger.
  */
 export function TeamSettings() {
+  const { text } = useLocale();
   const [members, setMembers] = useState<TeamMember[] | null>(null);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("member");
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<Localized | null>(null);
+  const [message, setMessage] = useState<Localized | null>(null);
   const [isPending, startTransition] = useTransition();
 
   async function reload() {
@@ -30,7 +34,11 @@ export function TeamSettings() {
       setMembers(await listTeam());
     } catch (orsak) {
       setMembers([]);
-      setError(orsak instanceof Error ? orsak.message : "Kunde inte hämta teamet.");
+      setError(
+        orsak instanceof Error
+          ? ord(orsak.message)
+          : { sv: "Kunde inte hämta teamet.", en: "Could not load the team." }
+      );
     }
   }
 
@@ -45,10 +53,14 @@ export function TeamSettings() {
     startTransition(async () => {
       const result = await inviteMember(email, role);
       if (!result.success) {
-        setError(result.error ?? "Inbjudan gick inte att skapa.");
+        setError(
+          result.error
+            ? ord(result.error)
+            : { sv: "Inbjudan gick inte att skapa.", en: "The invite could not be created." }
+        );
         return;
       }
-      setMessage(result.message ?? "Inbjudan skapad.");
+      setMessage(result.message ? ord(result.message) : { sv: "Inbjudan skapad.", en: "Invite created." });
       setEmail("");
       await reload();
     });
@@ -60,7 +72,11 @@ export function TeamSettings() {
     startTransition(async () => {
       const result = await revokeInvite(inviteId);
       if (!result.success) {
-        setError(result.error ?? "Inbjudan gick inte att ta bort.");
+        setError(
+          result.error
+            ? ord(result.error)
+            : { sv: "Inbjudan gick inte att ta bort.", en: "The invite could not be removed." }
+        );
         return;
       }
       await reload();
@@ -70,7 +86,7 @@ export function TeamSettings() {
   return (
     <div className="grid gap-8">
       <div>
-        <h3 className="kicker text-mineral">Teamet</h3>
+        <h3 className="kicker text-mineral">{text({ sv: "Teamet", en: "Team" })}</h3>
 
         {members === null ? (
           // Skelettrader, inte en spinnare mitt i innehållet: raderna hoppar
@@ -82,10 +98,10 @@ export function TeamSettings() {
           </div>
         ) : members.length === 0 ? (
           <p className="mt-5 border-t border-ink/15 pt-5 text-[15px] text-mineral">
-            Du är ensam i arbetsytan.
+            {text({ sv: "Du är ensam i arbetsytan.", en: "You are the only one in the workspace." })}
           </p>
         ) : (
-          <Radlista ariaLabel="Personer med åtkomst" className="mt-5">
+          <Radlista ariaLabel={text({ sv: "Personer med åtkomst", en: "People with access" })} className="mt-5">
             {/* Fast schema: namn/e-post | roll | åtgärd. Åtgärdsspalten har fast
                 bredd så att "Ta bort" står på samma plats på varje rad — och
                 lämnar ett tomt fält på rader utan åtgärd i stället för att
@@ -98,11 +114,11 @@ export function TeamSettings() {
                 <span className="min-w-0 break-words text-[15px]">{member.label}</span>
                 <span className="kicker justify-self-end text-mineral">
                   {member.role === "owner"
-                    ? "Ägare"
+                    ? text({ sv: "Ägare", en: "Owner" })
                     : member.role === "viewer"
-                      ? "Läsbehörighet"
-                      : "Medlem"}
-                  {member.status === "invited" ? " · inbjuden" : null}
+                      ? text({ sv: "Läsbehörighet", en: "Read only" })
+                      : text({ sv: "Medlem", en: "Member" })}
+                  {member.status === "invited" ? text({ sv: " · inbjuden", en: " · invited" }) : null}
                 </span>
                 {member.status === "invited" ? (
                   <button
@@ -111,7 +127,7 @@ export function TeamSettings() {
                     onClick={() => handleRevoke(member.id)}
                     className="justify-self-end text-[13px] text-mineral underline underline-offset-4 transition hover:text-danger disabled:opacity-60"
                   >
-                    Ta bort
+                    {text({ sv: "Ta bort", en: "Remove" })}
                   </button>
                 ) : (
                   <span aria-hidden />
@@ -123,7 +139,7 @@ export function TeamSettings() {
       </div>
 
       <form onSubmit={handleInvite} className="border-t border-ink/15 pt-6">
-        <h3 className="kicker text-mineral">Bjud in</h3>
+        <h3 className="kicker text-mineral">{text({ sv: "Bjud in", en: "Invite" })}</h3>
 
         <div className="mt-5 flex min-w-0 flex-wrap items-end gap-4">
           {/* basis-full under sm: `flex-1 min-w-0` kan krympa till noll i stället
@@ -131,29 +147,29 @@ export function TeamSettings() {
               knappen ~30px åt adressfältet. Etiketten bröts till "E-/POST" och
               fältet gick inte att skriva i. Uppmätt i pixlar, inte antaget. */}
           <label className="grid min-w-0 basis-full gap-2 text-[15px] sm:flex-1 sm:basis-0">
-            <span className="kicker text-mineral">E-post</span>
+            <span className="kicker text-mineral">{text({ sv: "E-post", en: "Email" })}</span>
             <input
               type="email"
               required
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              placeholder="kollega@bolag.se"
+              placeholder={text({ sv: "kollega@bolag.se", en: "colleague@company.com" })}
               className="h-12 w-full min-w-0 border border-ink/15 bg-paper2/70 px-4 outline-none focus:border-ochre"
             />
           </label>
 
           <label className="grid gap-2 text-[15px]">
-            <span className="kicker text-mineral">Roll</span>
+            <span className="kicker text-mineral">{text({ sv: "Roll", en: "Role" })}</span>
             <select
               value={role}
               onChange={(event) => setRole(event.target.value)}
               className="h-12 border border-ink/15 bg-paper2/70 px-4 outline-none focus:border-ochre"
             >
-              <option value="member">Medlem</option>
-              <option value="owner">Ägare</option>
+              <option value="member">{text({ sv: "Medlem", en: "Member" })}</option>
+              <option value="owner">{text({ sv: "Ägare", en: "Owner" })}</option>
               {/* Läsrollen: extern kontakt (t.ex. kundens pilotansvarige) som
                   följer allt men inte kan ändra något. Spärren är serverside. */}
-              <option value="viewer">Läsbehörighet</option>
+              <option value="viewer">{text({ sv: "Läsbehörighet", en: "Read only" })}</option>
             </select>
           </label>
 
@@ -162,18 +178,18 @@ export function TeamSettings() {
             disabled={isPending}
             className="h-12 bg-ink px-5 font-mono text-[13px] uppercase tracking-[0.18em] text-paper transition-colors duration-500 hover:bg-ochre hover:text-ink disabled:opacity-60"
           >
-            {isPending ? "Sparar..." : "Bjud in"}
+            {isPending ? text({ sv: "Sparar...", en: "Saving..." }) : text({ sv: "Bjud in", en: "Invite" })}
           </button>
         </div>
 
         {error ? (
           <p role="alert" className="mt-5 break-words text-[14px] text-danger">
-            {error}
+            {text(error)}
           </p>
         ) : null}
         {message ? (
           <p role="status" className="mt-5 break-words text-[14px] text-moss">
-            {message}
+            {text(message)}
           </p>
         ) : null}
       </form>

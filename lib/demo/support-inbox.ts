@@ -159,7 +159,7 @@ export function grundmejl(): DemoEmail[] {
         auto: false,
         confidence: 0.88,
         content:
-          "Hej Johan,\n\nTack för att du hörde av dig, och ledsen för väntan. En spårning som stått stilla i fyra dagar betyder oftast att paketet fastnat i en terminal.\n\nJag har begärt en eftersökning hos transportören. Den tar normalt 1–2 arbetsdagar, och du hör från mig så snart jag vet mer. Är paketet borta skickar vi en ny leverans utan kostnad.\n\nVänliga hälsningar,\nKundtjänst"
+          "Hej Johan,\n\nTack för att du hörde av dig, och ledsen att du har fått vänta. En spårning som stått stilla i fyra dagar betyder oftast att paketet fastnat i en terminal.\n\nJag har begärt en eftersökning hos transportören. Den tar normalt 1–2 arbetsdagar, och jag hör av mig så snart jag vet mer. Är paketet borta skickar vi en ny leverans utan kostnad.\n\nVänliga hälsningar,\nKundtjänst"
       },
       decisions: [
         { event: "received", detail: {}, created_at: minuterSedan(38) },

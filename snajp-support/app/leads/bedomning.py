@@ -197,6 +197,13 @@ def bedom(
     elif fallt and niva == "C" and not any(f.split(":")[0] in motivering for f in fallt):
         motivering = f"Bortvald: {fallt[0]}. {motivering}"
 
+    # Textkvalitetslagret: motiveringen är kundtext (INV-LEADS-SCORE-001) —
+    # putsa blanksteg och entydiga felstavningar innan den sparas. Kapningen
+    # till 1200 görs EFTER putsningen så att gränsen gäller den text som visas.
+    from ..textkvalitet import putsa as _putsa_text
+
+    motivering, _ = _putsa_text(motivering)
+
     return {
         "niva": niva,
         "score_total": int(total),

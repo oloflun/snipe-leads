@@ -28,9 +28,12 @@ logger = logging.getLogger("snajp-support.skickatkopia")
 
 
 async def kopiera_till_skickat(
-    storage, tenant_id: str, *, till: str, amne: str, brodtext: str, fran: str = ""
+    storage, tenant_id: str, *, till: str, amne: str, brodtext: str, fran: str = "",
+    syfte: str = "support",
 ) -> str | None:
-    """Lägger kopian i tenantens första synkbara inkorg. None när kopian är
+    """Lägger kopian i den synkbara inkorg vars syfte (migration 084) passar
+    utskicket: samma syfte först, sedan 'bada', sist vilken som helst — en
+    kund med en enda inkorg får kopian där som förut. None när kopian är
     lagd eller när det inte finns någon inkorg att lägga den i; annars ett
     felmeddelande för loggen. Kastar aldrig."""
     # Lata importer: poller drar in processorn, och den kedjan ska inte
@@ -41,7 +44,9 @@ async def kopiera_till_skickat(
     try:
         tenant = await storage.get_tenant(tenant_id)
         slug = (tenant or {}).get("slug") or ""
-        for mailbox in await storage.list_mailboxes(tenant_id):
+        rang = {syfte: 0, "bada": 1}
+        brevlador = sorted(await storage.list_mailboxes(tenant_id), key=lambda m: rang.get(m.get("syfte") or "support", 2))
+        for mailbox in brevlador:
             if mailbox.get("status") != "active" or mailbox.get("provider") == "mock":
                 continue
             host = host_for_mailbox(mailbox)

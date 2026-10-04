@@ -90,7 +90,9 @@ async def sokrunda(
             continue
         fakta = await mat_webbplats(kandidat.get("website"))
         kandidat["webbsignaler"] = fakta.get("rader") or []
-        triage = await jev.triage(
+        # Registerkällan (merinfo) har redan triagerat sina kandidater; en
+        # andra Jev-fråga på samma bolag är bara kostnad.
+        triage = kandidat.get("jev_triage") or await jev.triage(
             profil, kandidat, utdrag=fakta.get("utdrag") or "", signaler=kandidat["webbsignaler"]
         )
         if triage:
@@ -133,7 +135,8 @@ def sammanfatta(korning: dict[str, Any]) -> str:
     delar = [f"{korning['undersokta']} undersökta"]
     typer = Counter(str(t.get("skal") or "").split(":")[0].strip() for t in korning["tratt"])
     delar += [f"{antal} bortvalda: {typ.lower()}" for typ, antal in typer.most_common(3) if typ]
-    text = ", ".join(delar) + f" → {korning['levererade']} leads."
+    levererade = korning["levererade"]
+    text = ", ".join(delar) + f" → {levererade} lead{'' if levererade == 1 else 's'}."
     if korning["levererade"] < korning["mal"] and korning.get("flaskhals"):
         text += f" Det som strypte mest: {korning['flaskhals'].lower()}."
     return text

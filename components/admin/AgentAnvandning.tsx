@@ -1,5 +1,9 @@
+"use client";
+
 import { Cell, Nyckeltal, Tabell, Tomt, meta } from "@/components/ui";
+import { a as at } from "@/lib/admin/sprak";
 import type { RunRow } from "@/lib/data/admin";
+import { useLocale, type Localized } from "@/lib/i18n";
 
 /**
  * En agents användning och AI-kostnad, per kund — samma vy för bokföring,
@@ -24,10 +28,31 @@ function usd(varde: number): string {
 }
 
 export type Slagdelning = {
-  etikettA: string;
-  etikettB: string;
+  etikettA: Localized;
+  etikettB: Localized;
   /** true = körningen räknas till B-kolumnen. */
   arB: (run: RunRow) => boolean;
+};
+
+function arBokforingschatt(run: RunRow): boolean {
+  try {
+    return JSON.stringify(run.step_log ?? "").includes("bokforing-chatt");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Delningarna bor här och inte i sidan: komponenten är en klientkomponent (den
+ * byter språk), och en funktion kan inte skickas från en server-komponent som
+ * prop. Sidan väljer delning med namn.
+ */
+const DELNINGAR: Record<"bokforing", Slagdelning> = {
+  bokforing: {
+    etikettA: { sv: "Underlag", en: "Receipts" },
+    etikettB: { sv: "Frågor", en: "Questions" },
+    arB: arBokforingschatt
+  }
 };
 
 type Rad = {
@@ -39,10 +64,10 @@ type Rad = {
   senast: string | null;
 };
 
-function summera(runs: RunRow[], delning: Slagdelning | null) {
+function summera(runs: RunRow[], delning: Slagdelning | null, okand: string) {
   const perKund = new Map<string, Rad>();
   for (const run of runs) {
-    const kund = run.tenant_name || run.tenant_slug || "okänd";
+    const kund = run.tenant_name || run.tenant_slug || okand;
     const rad =
       perKund.get(kund) ?? { kund, a: 0, b: 0, tokensIn: 0, tokensUt: 0, senast: null };
     if (delning?.arB(run)) rad.b += 1;
@@ -73,7 +98,10 @@ function summera(runs: RunRow[], delning: Slagdelning | null) {
  * behövs bara av den som vill kontrollera det, och var tidigare en ingress
  * under sidrubriken (F-016).
  */
-const PRISUNDERLAG = `Räknad på Vertex listpris för Gemini 2.5 Flash ($${USD_PER_MILJON.in} per miljon tokens in, $${USD_PER_MILJON.ut} per miljon ut, avläst 2026-09-15), inte på Googles faktura.`;
+const PRISUNDERLAG: Localized = {
+  sv: `Räknad på Vertex listpris för Gemini 2.5 Flash ($${USD_PER_MILJON.in} per miljon tokens in, $${USD_PER_MILJON.ut} per miljon ut, avläst 2026-09-15), inte på Googles faktura.`,
+  en: `Based on the Vertex list price for Gemini 2.5 Flash ($${USD_PER_MILJON.in} per million tokens in, $${USD_PER_MILJON.ut} per million out, read 2026-09-15), not on Google's invoice.`
+};
 
 /**
  * Fyra nyckeltal i varje sektion, alltid samma fyra: sex poster i ett
@@ -83,20 +111,22 @@ const PRISUNDERLAG = `Räknad på Vertex listpris för Gemini 2.5 Flash ($${USD_
  */
 export function AgentAnvandning({
   runs,
-  delning = null,
+  delning: delningsnamn = null,
   tomtext,
   vidTaket = null
 }: Readonly<{
   runs: RunRow[];
-  delning?: Slagdelning | null;
-  tomtext: string;
+  delning?: keyof typeof DELNINGAR | null;
+  tomtext: Localized;
   /** Satt när hämtningen nådde backendens tak: talen är då en undre gräns. */
   vidTaket?: number | null;
 }>) {
-  const { rader, a, b, tokensIn, tokensUt } = summera(runs, delning);
+  const { locale, text } = useLocale();
+  const delning = delningsnamn ? DELNINGAR[delningsnamn] : null;
+  const { rader, a, b, tokensIn, tokensUt } = summera(runs, delning, at("okand", locale));
 
   if (runs.length === 0) {
-    return <Tomt>{tomtext}</Tomt>;
+    return <Tomt>{text(tomtext)}</Tomt>;
   }
 
   return (
@@ -104,23 +134,26 @@ export function AgentAnvandning({
       <Nyckeltal
         poster={[
           {
-            etikett: "Körningar",
+            etikett: at("kolKorningar", locale),
             varde: vidTaket ? `${a + b}+` : a + b,
             notis: vidTaket
-              ? `De senaste ${vidTaket} per agenttyp. Äldre körningar räknas inte.`
+              ? text({
+                  sv: `De senaste ${vidTaket} per agenttyp. Äldre körningar räknas inte.`,
+                  en: `The latest ${vidTaket} per agent type. Older runs are not counted.`
+                })
               : delning
-                ? `${a} ${delning.etikettA.toLowerCase()}, ${b} ${delning.etikettB.toLowerCase()}`
+                ? `${a} ${text(delning.etikettA).toLowerCase()}, ${b} ${text(delning.etikettB).toLowerCase()}`
                 : undefined
           },
-          { etikett: "Kunder", varde: rader.length },
+          { etikett: at("kunderLank", locale), varde: rader.length },
           {
-            etikett: "Tokens",
+            etikett: at("kolTokens", locale),
             varde: (tokensIn + tokensUt).toLocaleString("sv-SE"),
-            notis: `${tokensIn.toLocaleString("sv-SE")} in, ${tokensUt.toLocaleString("sv-SE")} ut`
+            notis: `${tokensIn.toLocaleString("sv-SE")} in, ${tokensUt.toLocaleString("sv-SE")} ${at("ut", locale)}`
           },
           {
-            etikett: "AI-kostnad, uppskattad",
-            varde: <span title={PRISUNDERLAG}>{usd(kostnadUsd(tokensIn, tokensUt))}</span>
+            etikett: at("aiKostnadUppskattad", locale),
+            varde: <span title={text(PRISUNDERLAG)}>{usd(kostnadUsd(tokensIn, tokensUt))}</span>
           }
         ]}
       />
@@ -129,12 +162,16 @@ export function AgentAnvandning({
         <Tabell
           minBredd={560}
           kolumner={[
-            { rubrik: "Kund" },
-            { rubrik: delning?.etikettA ?? "Körningar", bredd: "13%", hoger: true },
-            ...(delning ? [{ rubrik: delning.etikettB, bredd: "13%", hoger: true }] : []),
-            { rubrik: "Tokens", bredd: "16%", hoger: true },
-            { rubrik: "Kostnad", bredd: "13%", hoger: true },
-            { rubrik: "Senast", bredd: "20%", hoger: true }
+            { rubrik: at("kolKund", locale) },
+            {
+              rubrik: delning ? text(delning.etikettA) : at("kolKorningar", locale),
+              bredd: "13%",
+              hoger: true
+            },
+            ...(delning ? [{ rubrik: text(delning.etikettB), bredd: "13%", hoger: true }] : []),
+            { rubrik: at("kolTokens", locale), bredd: "16%", hoger: true },
+            { rubrik: at("kolKostnad", locale), bredd: "13%", hoger: true },
+            { rubrik: at("senast", locale), bredd: "20%", hoger: true }
           ]}
         >
           {rader.map((rad) => (

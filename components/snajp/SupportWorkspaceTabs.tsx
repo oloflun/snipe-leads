@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import { useLocale } from "@/lib/i18n";
+import { flik, flikAktiv, flikInaktiv, fliklista } from "@/components/ui";
 import { Dashboard } from "./Dashboard";
-import { JournalVy } from "./JournalVy";
 import { SupportChat } from "./SupportChat";
 
 /**
@@ -24,7 +25,8 @@ import { SupportChat } from "./SupportChat";
  * räknas som kundvolym.
  */
 export function SupportWorkspaceTabs({ workspaceName }: Readonly<{ workspaceName: string | null }>) {
-  const [tab, setTab] = useState<"kundtjanst" | "att_hantera" | "testmail" | "testchatt" | "journal">("kundtjanst");
+  const { text } = useLocale();
+  const [tab, setTab] = useState<"kundtjanst" | "testmail" | "testchatt">("kundtjanst");
   /** null = vet inte än. false = riktig kund, Testmail-fliken ska synas. */
   const [visarTestIArenden, setVisarTestIArenden] = useState<boolean | null>(null);
 
@@ -40,33 +42,31 @@ export function SupportWorkspaceTabs({ workspaceName }: Readonly<{ workspaceName
 
   const flikar = (
     [
-      { id: "kundtjanst", label: "Kundtjänst" },
-      // Eskaleringar och larm (migration 078): egen flik så att de aldrig
-      // blandas med kundärenden eller får ett AI-utkast (kundtest 2026-09-22).
-      { id: "att_hantera", label: "Att hantera" },
-      ...(visarTestIArenden === false ? [{ id: "testmail" as const, label: "Testmail" }] : []),
-      { id: "testchatt", label: "Testchatt" },
-      // Journalen (Livrustning-piloten): körningar, kostnad och
-      // överlämningar för den egna tenanten — vyn kundens kontaktperson
-      // (läsrollen) följer piloten i. Ren läsning, se JournalVy.tsx.
-      { id: "journal", label: "Journal" }
+      { id: "kundtjanst", label: { sv: "Ärenden", en: "Cases" } },
+      // Eskaleringar och larm (migration 078) bor i Att göra sedan Snajp
+      // Suite 2026-10-03 (components/leads/AttGora.tsx), fortfarande skilda
+      // från kundärendena och utan AI-utkast.
+      ...(visarTestIArenden === false
+        ? [{ id: "testmail" as const, label: { sv: "Testmail", en: "Test mail" } }]
+        : []),
+      { id: "testchatt", label: { sv: "Testchatt", en: "Test chat" } }
+      // Journalen (körningar, kostnad, överlämningar) flyttade till
+      // Aktivitet 2026-10-03, Snajp Suite: alla agenters körningar på ett
+      // ställe. Se components/dashboard/Aktivitet.tsx.
     ] as const
   );
 
   return (
     <div>
-      <div className="flex flex-wrap gap-2 border-b border-ink/12 pb-px">
+      <div className={fliklista}>
         {flikar.map((item) => (
           <button
             key={item.id}
             type="button"
             onClick={() => setTab(item.id)}
-            className={cn(
-              "focus-ring -mb-px border-b-2 px-4 py-3 text-sm font-semibold transition",
-              tab === item.id ? "border-ochre text-ink" : "border-transparent text-ink-subtle hover:text-ink"
-            )}
+            className={cn(flik, tab === item.id ? flikAktiv : flikInaktiv)}
           >
-            {item.label}
+            {text(item.label)}
           </button>
         ))}
       </div>
@@ -75,14 +75,12 @@ export function SupportWorkspaceTabs({ workspaceName }: Readonly<{ workspaceName
         {tab === "kundtjanst" ? (
           <Dashboard onMeta={onMeta} />
         ) : null}
-        {tab === "att_hantera" ? <Dashboard lager="att_hantera" /> : null}
         {tab === "testmail" ? <Dashboard lager="testmail" /> : null}
         {tab === "testchatt" ? (
           <div className="mx-auto max-w-3xl">
             <SupportChat testMode workspaceLabel={workspaceName ?? undefined} />
           </div>
         ) : null}
-        {tab === "journal" ? <JournalVy /> : null}
       </div>
     </div>
   );

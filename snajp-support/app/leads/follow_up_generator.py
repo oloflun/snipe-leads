@@ -52,6 +52,7 @@ from ..agentcore.instruktioner import las_instruktioner
 from ..agentcore.overlays import pack_version
 from ..agentcore.packs import Playbook, PlaybookStep, RunLedger
 from ..config import get_settings
+from . import automation as automationsregler
 from .follow_up import LEVERS
 from .gissnings_gate import check_gissningar
 from .grounding_gate import build_permitted_facts, check_grounding
@@ -122,15 +123,23 @@ FOLLOWUP_V1 = Playbook(
 
 
 def trad_som_ar_forfallna(
-    threads: list[dict[str, Any]], *, now: datetime
+    threads: list[dict[str, Any]], *, now: datetime, automation: dict[str, Any] | None = None
 ) -> list[tuple[dict[str, Any], int]]:
     """Vilka trådar som är förfallna för nästa steg, och vilket steget är.
 
     Ren funktion över aggregaten från `storage.list_outreach_threads` —
     policyn ska gå att falsifiera i ett test utan databas.
+
+    `automation` (app/leads/automation.py) styr väntan före FÖRSTA
+    uppföljningen per lead-typ; 0 dagar = tråden får inga uppföljningar alls.
+    Steg 2–4 följer FOLLOW_UP_DELAYS. None = standardreglerna.
     """
+    regler = automationsregler.normalisera(automation)
     forfallna: list[tuple[dict[str, Any], int]] = []
     for thread in threads:
+        dagar = regler["per_typ"][automationsregler.typ_av(thread.get("origin"))]["uppfoljning_dagar"]
+        if dagar == 0:
+            continue  # kunden har stängt av uppföljningar för typen
         sent = int(thread.get("outbound_sent_count") or 0)
         if sent < 1 or sent >= MAX_OUTBOUND:
             continue  # inget initialt skickat än, eller sekvensen färdig
@@ -145,7 +154,8 @@ def trad_som_ar_forfallna(
             senast = datetime.fromisoformat(senast)
         if senast.tzinfo is None:
             senast = senast.replace(tzinfo=now.tzinfo)
-        if now - senast >= FOLLOW_UP_DELAYS[sent]:
+        vanta = timedelta(days=dagar) if sent == 1 else FOLLOW_UP_DELAYS[sent]
+        if now - senast >= vanta:
             forfallna.append((thread, sent))
     return forfallna
 
@@ -164,7 +174,8 @@ async def generate_due_follow_ups(
     andra trådarna — samma princip som batchkörningen.
     """
     threads = await storage.list_outreach_threads(tenant_id)
-    forfallna = trad_som_ar_forfallna(threads, now=now)
+    settings = await storage.get_agent_settings(tenant_id, agent_type="leads")
+    forfallna = trad_som_ar_forfallna(threads, now=now, automation=settings.get("automation"))
     if not forfallna:
         return []
 

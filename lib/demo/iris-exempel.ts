@@ -158,7 +158,7 @@ const LUNDSUND: ExempelBolag = {
     body:
       "Hej Karin,\n\n" +
       "Grattis till rollen som inköpschef. Jag såg att tjänsten stått öppen sedan i våras, så ni har säkert en hel del att komma igång med.\n\n" +
-      "En sak som ofta hamnar sist på en sådan lista är hjärtstartare och HLR för teamet, trots att den snabbt blir en fråga någon efterfrågar. Vi monterar en hjärtstartare i lokalen och håller en kort HLR-genomgång för hela teamet, bokad innan sommaren.\n\n" +
+      "En sak som ofta hamnar sist på en sådan lista är hjärtstartare och HLR för teamet, trots att någon snart brukar fråga efter det. Vi monterar en hjärtstartare i lokalen och håller en kort HLR-genomgång för hela teamet, bokad innan sommaren.\n\n" +
       "Vill du att jag skickar ett förslag anpassat efter er lokal?\n\n" +
       "Vänliga hälsningar,\nAnna, Hjärtsäker AB"
   },
@@ -166,7 +166,7 @@ const LUNDSUND: ExempelBolag = {
     shorter: {
       new_version:
         "Hej Karin,\n\n" +
-        "Grattis till rollen som inköpschef. En hjärtstartare och en kort HLR-genomgång brukar hamna sist på en sådan lista, trots att den efterfrågas snabbt.\n\n" +
+        "Grattis till rollen som inköpschef. En hjärtstartare och en kort HLR-genomgång brukar hamna sist på en sådan lista, trots att det snabbt efterfrågas.\n\n" +
         "Vill du ha ett förslag anpassat efter er lokal?\n\n" +
         "Vänliga hälsningar,\nAnna, Hjärtsäker AB",
       explanation:
@@ -188,7 +188,7 @@ const LUNDSUND: ExempelBolag = {
       new_version:
         "Hej Karin,\n\n" +
         "Grattis till rollen som inköpschef på Lundsund. Tjänsten har stått öppen sedan i våras, så listan är sannolikt lång redan.\n\n" +
-        "Hjärtstartare och HLR-utbildning brukar hamna långt ner på den, trots att den är snabb att lösa: vi monterar hjärtstartaren i lokalen och håller en HLR-genomgång för hela teamet, bokad innan sommaren.\n\n" +
+        "Hjärtstartare och HLR-utbildning brukar hamna långt ner på den, trots att det är snabbt löst: vi monterar hjärtstartaren i lokalen och håller en HLR-genomgång för hela teamet, bokad innan sommaren.\n\n" +
         "Ska jag skicka ett förslag anpassat efter er lokal?\n\n" +
         "Vänliga hälsningar,\nAnna, Hjärtsäker AB",
       explanation:
@@ -221,7 +221,7 @@ const LUNDSUND: ExempelBolag = {
       new_version:
         "Variant A (problemet som blir liggande):\n" +
         "Hej Karin,\n\n" +
-        "En inköpschefstjänst som stått öppen sedan i våras brukar betyda en lista av saker som fått vänta. Hjärtstartare och HLR är ofta en av dem, trots att den är enkel att lösa.\n\n" +
+        "En inköpschefstjänst som stått öppen sedan i våras brukar betyda en lista av saker som fått vänta. Hjärtstartare och HLR är ofta en av dem, trots att det är enkelt att lösa.\n\n" +
         "Vi monterar en hjärtstartare i lokalen och håller en HLR-genomgång för hela teamet, bokad innan sommaren.\n\n" +
         "Vill du att jag skickar ett förslag anpassat efter er lokal?\n\n" +
         "Vänliga hälsningar,\nAnna, Hjärtsäker AB\n\n" +
@@ -248,7 +248,7 @@ const LUNDSUND: ExempelBolag = {
       new_version:
         "Hej Karin,\n\n" +
         "Grattis till rollen som inköpschef. Jag såg att tjänsten stått öppen sedan i våras, så ni har säkert en hel del att komma igång med.\n\n" +
-        "En sak som ofta hamnar sist på en sådan lista är hjärtstartare och HLR för teamet, trots att den snabbt blir en fråga någon efterfrågar. Vi monterar en hjärtstartare i lokalen och håller en kort HLR-genomgång för hela teamet, bokad innan sommaren.\n\n" +
+        "En sak som ofta hamnar sist på en sådan lista är hjärtstartare och HLR för teamet, trots att någon snart brukar fråga efter det. Vi monterar en hjärtstartare i lokalen och håller en kort HLR-genomgång för hela teamet, bokad innan sommaren.\n\n" +
         "Vill du att jag skickar ett förslag anpassat efter er lokal?\n\n" +
         "Vänliga hälsningar,\nAnna, Hjärtsäker AB",
       explanation:
@@ -408,7 +408,7 @@ const HAMMARNAS: ExempelBolag = {
     subject: "Den nya lokalen hos Hammarnäs",
     body:
       "Hej Sara,\n\n" +
-      "Grattis till den nya, större lokalen. Med fler kvadratmeter och 31 anställda på plats blir avstånd till en hjärtstartare snabbt en annan fråga än i den gamla lokalen.\n\n" +
+      "Grattis till den nya, större lokalen. Med fler kvadratmeter och 31 anställda på plats blir avståndet till en hjärtstartare snabbt en annan fråga än i den gamla lokalen.\n\n" +
       "Vi monterar en hjärtstartare i den nya lokalen och håller en HLR-genomgång för hela teamet, uppdelad på två pass så att produktionen inte behöver stå still.\n\n" +
       "Vill du att jag skickar ett förslag anpassat efter de 31 anställda?\n\n" +
       "Vänliga hälsningar,\nAnna, Hjärtsäker AB"
@@ -493,7 +493,7 @@ const HAMMARNAS: ExempelBolag = {
     analyze: {
       new_version:
         "Hej Sara,\n\n" +
-        "Grattis till den nya, större lokalen. Med fler kvadratmeter och 31 anställda på plats blir avstånd till en hjärtstartare snabbt en annan fråga än i den gamla lokalen.\n\n" +
+        "Grattis till den nya, större lokalen. Med fler kvadratmeter och 31 anställda på plats blir avståndet till en hjärtstartare snabbt en annan fråga än i den gamla lokalen.\n\n" +
         "Vi monterar en hjärtstartare i den nya lokalen och håller en HLR-genomgång för hela teamet, uppdelad på två pass så att produktionen inte behöver stå still.\n\n" +
         "Vill du att jag skickar ett förslag anpassat efter de 31 anställda?\n\n" +
         "Vänliga hälsningar,\nAnna, Hjärtsäker AB",
@@ -573,7 +573,7 @@ const GRANSTRAND: ExempelBolag = {
     personalize: {
       new_version:
         "Hej Erik,\n\n" +
-        "Tre annonser ute samtidigt säger något: ni har antagligen redan en introduktion som ska hinna med mycket på kort tid. Säkerhetsdelen är lätt att den hamnar sist i en sådan lista, trots att den borde ligga tidigt.\n\n" +
+        "Tre annonser ute samtidigt säger något: ni har antagligen redan en introduktion som ska hinna med mycket på kort tid. Säkerhetsdelen hamnar lätt sist i en sådan lista, trots att den borde ligga tidigt.\n\n" +
         "Vi sätter en hjärtstartare i produktionslokalen och lägger en HLR-genomgång direkt i introduktionen, så att den inte beror på vem som visar runt den veckan.\n\n" +
         "Vill du att HLR-genomgången läggs in i introduktionen för de nya?\n\n" +
         "Vänliga hälsningar,\nAnna, Hjärtsäker AB",
@@ -666,7 +666,7 @@ const SJOHAGA: ExempelBolag = {
     shorter: {
       new_version:
         "Hej Lina,\n\n" +
-        "Ni har precis bytt affärssystem. Ett sånt byte brukar vara läget att också se över annat som väntat, som en hjärtstartare i lagerlokalen och en HLR-genomgång.\n\n" +
+        "Ni har precis bytt affärssystem. Ett sånt byte brukar vara ett bra läge att också se över annat som väntat, som en hjärtstartare i lagerlokalen och en HLR-genomgång.\n\n" +
         "Vill du ha ett förslag du kan boka digitalt?\n\n" +
         "Vänliga hälsningar,\nAnna, Hjärtsäker AB",
       explanation: "Kortare: bakgrunden om bloggen är struken, systembytet och kopplingen till hjärtstartaren står kvar i en mening.",
@@ -685,7 +685,7 @@ const SJOHAGA: ExempelBolag = {
     improve: {
       new_version:
         "Hej Lina,\n\n" +
-        "Jag läste att ni bytt affärssystem. Ett sånt byte brukar vara läget att också se över annat som legat och väntat.\n\n" +
+        "Jag läste att ni bytt affärssystem. Ett sånt byte brukar vara ett bra läge att också se över annat som legat och väntat.\n\n" +
         "Vi sätter en hjärtstartare i lagerlokalen och lägger en HLR-genomgång som går att boka digitalt, samma väg som ni redan lagt om till.\n\n" +
         "Vill du ha ett förslag du kan boka direkt?\n\n" +
         "Vänliga hälsningar,\nAnna, Hjärtsäker AB",
@@ -717,7 +717,7 @@ const SJOHAGA: ExempelBolag = {
       new_version:
         "Variant A (rätt läge):\n" +
         "Hej Lina,\n\n" +
-        "Ett systembyte brukar vara läget att också se över annat som legat och väntat. Hjärtstartare i lagerlokalen och en HLR-genomgång hör ofta dit.\n\n" +
+        "Ett systembyte brukar vara ett bra läge att också se över annat som legat och väntat. Hjärtstartare i lagerlokalen och en HLR-genomgång hör ofta dit.\n\n" +
         "Vill du ha ett förslag du kan boka direkt digitalt?\n\n" +
         "Vänliga hälsningar,\nAnna, Hjärtsäker AB\n\n" +
         "Variant B (samma linje):\n" +

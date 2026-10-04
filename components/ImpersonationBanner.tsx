@@ -3,6 +3,7 @@
 import { Eye } from "lucide-react";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { bytVy } from "@/lib/actions/vy";
+import { useLocale } from "@/lib/i18n";
 
 /**
  * "Du tittar som <kund> — admin-läge."
@@ -28,6 +29,7 @@ import { bytVy } from "@/lib/actions/vy";
  * flagga i klienten ritar en banner utan att ge tillgång till någonting.
  */
 export function ImpersonationBanner() {
+  const { text } = useLocale();
   const { impersonation } = useDashboard();
 
   if (!impersonation) {
@@ -42,10 +44,14 @@ export function ImpersonationBanner() {
       <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2 md:px-6">
         <Eye className="h-4 w-4 shrink-0 text-warning" aria-hidden />
         <p className="text-[13px] font-medium text-ink">
-          Du testar som <strong className="font-semibold">{impersonation.namn}</strong>.
+          {text({ sv: "Du testar som ", en: "You are testing as " })}
+          <strong className="font-semibold">{impersonation.namn}</strong>.
         </p>
         <p className="text-[13px] text-ink-muted">
-          Allt du kör här är test och syns inte på kundens riktiga profil. Inga skärmdumpar.
+          {text({
+            sv: "Allt du kör här är test och syns inte på kundens riktiga profil. Inga skärmdumpar.",
+            en: "Everything you run here is a test and is not visible on the customer's real profile. No screenshots."
+          })}
         </p>
 
         <form action={bytVy} className="ml-auto">

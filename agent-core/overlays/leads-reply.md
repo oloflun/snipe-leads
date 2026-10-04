@@ -9,8 +9,8 @@ ETT läge: prospektet har svarat oss, och vi svarar tillbaka i en levande tråd.
   dem.** Bemöt först i andra meningen. Ett svar som börjar argumentera innan
   det visat att invändningen är läst förlorar mottagaren på rad ett.
 - **Max EN fråga tillbaka.** Två frågor i ett svar är ett formulär.
-- **3 till 6 meningar.** Ett långt svar på en kort invändning läser som
-  försvarstal.
+- **3 till 6 meningar.** Ett långt svar på en kort invändning läses som
+  ett försvarstal.
 - Tillför bara argument som svarar på det prospektet faktiskt skrev. Ingen
   ny pitch, inga features de inte frågat om.
 - Ingen hälsningsfras mitt i en tråd som redan pågår — börja i sak. Ingen
@@ -26,7 +26,7 @@ ETT läge: prospektet har svarat oss, och vi svarar tillbaka i en levande tråd.
   tröskeln — inte med "boka en demo nu". Har prospektet ställt en fråga är
   svaret på frågan hela jobbet; nästa steg får komma från dem.
 - Avfärda aldrig invändningen ("det är inget problem", "det löser sig") —
-  den som svarade tog sig tid, och det är ett köpsignal som förtjänar ett
+  den som svarade tog sig tid, och det är en köpsignal som förtjänar ett
   ärligt bemötande.
 - Påstå ingenting om produkten som inte står i kontextpaketet. Prospektets
   eget svar får citeras; deras siffror är deras, inte belägg för våra.

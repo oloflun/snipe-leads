@@ -216,8 +216,8 @@ export const SAMMANFATTNING = {
 
 /** Textsammanfattningen bredvid resultatet. Bara tal som står ovanför. */
 export const SAMMANFATTNINGSTEXT =
-  "Agenten hittade 11 kvitton i perioden 1–30 september, varav 8 lästes av " +
-  "komplett på totalt 7 817,50 kr. Mest pengar gick till verktyg & förbrukning " +
+  "Agenten hittade 11 kvitton i perioden 1–30 september, varav 8 kunde läsas av " +
+  "fullständigt på totalt 7 817,50 kr. Mest pengar gick till verktyg & förbrukning " +
   "(2 340,00 kr) och logi (1 890,00 kr). Den ingående momsen i de " +
   "avlästa kvittona är 1 194,60 kr. 3 kvitton flaggades för manuell granskning: " +
   "en möjlig dubblett, ett kvitto i utländsk valuta och ett utan läsbart belopp. " +
@@ -247,7 +247,7 @@ export const FRAGOR: Demofraga[] = [
     svar:
       "Tre stycken. Kopian av kvitto #48213 från Skrivbo Kontorsvaror är en " +
       "möjlig dubblett av ett kvitto som redan är inläst. Figmara-kvittot är på " +
-      "45.00 USD och räknas inte om till kronor automatiskt. Parkeringskvittot " +
+      "45,00 USD och räknas inte om till kronor automatiskt. Parkeringskvittot " +
       "saknar läsbart belopp.\n\n" +
       "Ingen av dem räknas in i summorna förrän du godkänt dem — det är så " +
       "dubbletter aldrig blir dubbla kostnader."
@@ -255,7 +255,7 @@ export const FRAGOR: Demofraga[] = [
   {
     fraga: "Hur mycket ingående moms finns i kvittona?",
     svar:
-      "1 194,60 kr, ur de 8 kvitton som lästes av komplett. Momsen räknas ur " +
+      "1 194,60 kr, ur de 8 kvitton som kunde läsas av fullständigt. Momsen räknas ur " +
       "varje kvittos totalbelopp och sats — den största posten är borrmaskinen " +
       "från Verktygsboden med 468,00 kr.\n\n" +
       "Exakt vad som får dras av i deklarationen stämmer du av med en " +

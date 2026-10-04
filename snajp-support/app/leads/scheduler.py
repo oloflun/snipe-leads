@@ -34,6 +34,8 @@ from .send_guard import (
     foretagsnyckel,
 )
 from .send_provider import SendProvider, get_send_provider
+from .signatur import bygg_html as bygg_signatur_html
+from .signatur import normalisera as normalisera_signatur
 
 logger = logging.getLogger("snajp-support.leads-scheduler")
 
@@ -220,10 +222,30 @@ async def process_due_item(
                 "queued": "requeued",
             }[status]
 
+        # HTML-delen renderas ur den GRANSKADE texten i sändögonblicket —
+        # signaturens logotyp finns bara där (app/leads/signatur.py). Mjukt
+        # kontrakt som i email_pipeline/sender.py: bara providers som tar
+        # `html` får den; testernas fejkproviders med smala signaturer berörs
+        # inte, och textdelen är alltid exakt send_queue.body.
+        extra: dict = {}
+        sig = normalisera_signatur(
+            (await storage.get_agent_settings(tenant_id, agent_type="leads")).get("signatur")
+        )
+        if sig:
+            import inspect
+
+            params = inspect.signature(provider.send).parameters
+            har_kwargs = any(
+                p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()
+            )
+            if "html" in params or har_kwargs:
+                extra["html"] = bygg_signatur_html(message["body"], sig)
+
         await provider.send(
             to=thread.get("prospect_email", "okänd"),
             subject=message.get("subject", ""),
             body=message["body"],
+            **extra,
         )
         await storage.mark_outreach_message_sent(tenant_id, message["id"], now)
         await storage.update_send_queue_status(
@@ -243,6 +265,7 @@ async def process_due_item(
                 amne=message.get("subject", ""),
                 brodtext=message["body"],
                 fran=getattr(provider, "avsandare", ""),
+                syfte="leads",
             )
         return "sent"
 

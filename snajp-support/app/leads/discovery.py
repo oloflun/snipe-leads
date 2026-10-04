@@ -721,6 +721,75 @@ async def hamta_kontaktvag(website: str) -> dict[str, Any]:
     return {"contact_email": epost, "contact_level": "role_address"}
 
 
+_TELEFON_PA_SIDA = re.compile(r"(?:\+46|0)\s?\d{1,3}(?:[\s\-]?\d{2,3}){2,4}")
+_EPOST_PA_SIDA = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
+
+
+def _asci(text: str) -> str:
+    import unicodedata
+
+    bas = unicodedata.normalize("NFKD", text.casefold())
+    return "".join(t for t in bas if not unicodedata.combining(t))
+
+
+def vd_uppgift_i_text(text: str, vd_namn: str, website: str) -> dict[str, Any] | None:
+    """VD:ns mejl eller telefon ur sidtext, BARA när uppgiften går att knyta
+    till VD (Antons regel 2026-10-04: ett nummer som inte kan styrkas tillhöra
+    en viss person används inte). Mejl: arbetsmejl på bolagets domän vars
+    lokaldel bär VD:ns för- eller efternamn. Telefon: står inom 200 tecken från
+    VD:ns fullständiga namn på sidan.
+    ponytail: närhet i text, inte DOM-struktur; byt mot en strukturerad
+    tolkning om sajter med flera personer per rad ger fel par."""
+    led = [d for d in re.findall(r"[a-z]+", _asci(vd_namn)) if len(d) >= 3]
+    if len(led) < 2:
+        return None
+    ren = re.sub(r"<[^>]+>", " ", text)
+    ren = re.sub(r"\s+", " ", ren)
+    asc = _asci(ren)
+    for adress in dict.fromkeys(_EPOST_PA_SIDA.findall(ren)):
+        lokal = _asci(adress.split("@")[0])
+        if any(d in lokal for d in led) and ar_arbetsmejl(adress, webb=website):
+            return {"contact_email": adress, "contact_phone": None}
+    fullt = f"{led[0]} {led[-1]}"
+    for m in re.finditer(re.escape(fullt), asc):
+        # Efter namnet först ("Anna Andersson, VD, 070-…"), sedan närmast före;
+        # ett växelnummer längre upp på sidan ska inte vinna (testet).
+        efter = _TELEFON_PA_SIDA.search(ren[m.end(): m.end() + 200])
+        fore = list(_TELEFON_PA_SIDA.finditer(ren[max(0, m.start() - 80): m.start()]))
+        tel = efter or (fore[-1] if fore else None)
+        if tel:
+            return {"contact_email": None, "contact_phone": tel.group(0).strip()}
+    return None
+
+
+async def hamta_vd_kontakt(website: str, vd_namn: str) -> dict[str, Any] | None:
+    """Startsidan plus upp till tre kontakt-/om oss-sidor; första uppgift som
+    går att knyta till VD vinner. Kastar aldrig."""
+    try:
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(8.0), follow_redirects=True,
+            headers={"user-agent": "snajp-leads/1.0 (+https://snajp.se)"},
+        ) as client:
+            svar = await client.get(website)
+            if svar.status_code >= 400:
+                return None
+            hit = vd_uppgift_i_text(svar.text, vd_namn, website)
+            if hit:
+                return hit
+            for lank in extrahera_kontaktlankar(svar.text, website, tak=3):
+                try:
+                    undersida = await client.get(lank)
+                except httpx.HTTPError:
+                    continue
+                if undersida.status_code < 400:
+                    hit = vd_uppgift_i_text(undersida.text, vd_namn, website)
+                    if hit:
+                        return hit
+    except httpx.HTTPError:
+        return None
+    return None
+
+
 def _slugga_bolagsnamn(namn: str) -> str:
     """'Nordkap Moduler AB' -> 'nordkapmoduler' — kandidatdomänens stam."""
     stam = namn.lower()
@@ -969,6 +1038,49 @@ def _profil_som_soktext(profil: dict[str, Any] | None, ring: int) -> str:
     return "Iris-profil (kundens egna kriterier):\n" + "\n".join(rader) + "\n"
 
 
+def _bolagsnyckel(rad: dict[str, Any]) -> set[str]:
+    """Nycklar som identifierar samma bolag i register och signalkälla:
+    orgnr (siffror), bolagsnamn (casefold), sajtens värd."""
+    nycklar: set[str] = set()
+    orgnr = "".join(ch for ch in str(rad.get("orgnr") or "") if ch.isdigit())
+    if orgnr:
+        nycklar.add(f"orgnr:{orgnr}")
+    namn = str(rad.get("company_name") or "").casefold().strip()
+    if namn:
+        nycklar.add(f"namn:{namn}")
+    webb = str(rad.get("website") or "").casefold()
+    webb = re.sub(r"^https?://(www\.)?", "", webb).split("/")[0]
+    if webb:
+        nycklar.add(f"webb:{webb}")
+    return nycklar
+
+
+def _med_signaler(register: list[dict[str, Any]], signaler: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Registerrader med en signalträff får signalen och går först; ordningen
+    inom grupperna behålls (registret är redan rangordnat)."""
+    if not signaler:
+        return register
+    per_nyckel: dict[str, dict[str, Any]] = {}
+    for s in signaler:
+        for n in _bolagsnyckel(s):
+            per_nyckel.setdefault(n, s)
+    med: list[dict[str, Any]] = []
+    utan: list[dict[str, Any]] = []
+    for rad in register:
+        traff = next((per_nyckel[n] for n in _bolagsnyckel(rad) if n in per_nyckel), None)
+        if traff:
+            rad = {
+                **rad,
+                "signal": traff.get("signal") or rad.get("signal"),
+                "signal_detalj": traff.get("signal_detalj") or rad.get("signal_detalj"),
+                "signal_kalla": traff.get("source_url"),
+            }
+            med.append(rad)
+        else:
+            utan.append(rad)
+    return med + utan
+
+
 async def hitta_bolag(
     icp: dict[str, Any],
     antal: int,
@@ -988,6 +1100,25 @@ async def hitta_bolag(
     if antal <= 0:
         return []
     uteslut = {n.casefold() for n in (uteslut_namn or set()) if n}
+
+    # Registerkällan först (merinfo via ScrapeGraphAI, TILLFÄLLIG tills ett
+    # API-avtal finns, se sources/merinfo.py). Bara när LEADS_MERINFO är
+    # satt. Färre träffar än beställt levereras som de är: utfyllnaden nedan
+    # saknar telefon och skulle bryta kontaktkravet. None betyder att
+    # målgruppen inte gick att översätta till merinfos träd, och då tar den
+    # gamla kedjan vid.
+    from .sources import merinfo
+
+    if merinfo.aktiv():
+        fran_register = await merinfo.sok(icp, antal, uteslut=uteslut, profil=profil)
+        if fran_register is not None:
+            # Register ∩ signaler (plan del C, 2026-10-02): annons- och
+            # nyhetskällorna avgör inte urvalet, de rankar det. Ett
+            # registerbolag med en signal går först; en signalträff utanför
+            # registret är inte målgruppen och faller. Körs bara när kunden
+            # kräver signaler, som den gamla kedjan.
+            signaler = await _sok_registrerade_kallor(icp, antal, uteslut) if icp.get("must_have") else []
+            return _med_signaler(fran_register, signaler)[:antal]
 
     from .platshallare import utan_platshallare
 

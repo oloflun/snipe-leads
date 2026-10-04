@@ -62,6 +62,15 @@
       "port": 8000
     },
     {
+      "name": "backend-lokal",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "lokal_stack_backend.py"
+      ],
+      "cwd": "snajp-support",
+      "port": 8000
+    },
+    {
       "name": "support-sajt-dev",
       "runtimeExecutable": "npm",
       "runtimeArgs": [

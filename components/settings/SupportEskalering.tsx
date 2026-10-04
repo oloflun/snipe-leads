@@ -6,6 +6,7 @@ import { Rad, Radlista, btnLiten, btnSecondary } from "@/components/ui";
 import { Vaxel } from "@/components/settings/Vaxel";
 import { readJsonBody } from "@/lib/http/json";
 import { cn } from "@/lib/utils";
+import { useLocale, type Localized } from "@/lib/i18n";
 
 /**
  * Kundtjänstagentens ton, faktakontroll och eskaleringsgränser — per kund.
@@ -32,30 +33,41 @@ type Installningar = {
   options?: { amnesomrade_tak?: number };
 };
 
-const TONLAGEN: { varde: Installningar["tonlage"]; etikett: string }[] = [
-  { varde: "standard", etikett: "Standard" },
-  { varde: "formell", etikett: "Formell" },
-  { varde: "personlig", etikett: "Personlig" },
-  { varde: "kortfattad", etikett: "Kortfattad" }
+const TONLAGEN: { varde: Installningar["tonlage"]; etikett: Localized }[] = [
+  { varde: "standard", etikett: { sv: "Standard", en: "Standard" } },
+  { varde: "formell", etikett: { sv: "Formell", en: "Formal" } },
+  { varde: "personlig", etikett: { sv: "Personlig", en: "Personal" } },
+  { varde: "kortfattad", etikett: { sv: "Kortfattad", en: "Brief" } }
 ];
 
-const FAKTAKONTROLL: { varde: Installningar["faktakontroll"]; etikett: string; forklaring: string }[] = [
+const FAKTAKONTROLL: { varde: Installningar["faktakontroll"]; etikett: Localized; forklaring: Localized }[] = [
   {
     varde: "tillatande",
-    etikett: "Tillåtande",
-    forklaring: "Telefonnummer, mejladresser och länkar måste finnas i kunskapsbasen."
+    etikett: { sv: "Tillåtande", en: "Lenient" },
+    forklaring: {
+      sv: "Telefonnummer, mejladresser och länkar måste finnas i kunskapsbasen.",
+      en: "Phone numbers, email addresses and links must be in the knowledge base."
+    }
   },
   {
     varde: "forsiktig",
-    etikett: "Försiktig",
-    forklaring: "Dessutom siffror: priser, frister, leveranstider."
+    etikett: { sv: "Försiktig", en: "Careful" },
+    forklaring: {
+      sv: "Dessutom siffror: priser, frister, leveranstider.",
+      en: "Also figures: prices, deadlines, delivery times."
+    }
   },
   {
     varde: "strikt",
-    etikett: "Strikt",
-    forklaring: "Dessutom löften som gratis, återbetalning eller garanti."
+    etikett: { sv: "Strikt", en: "Strict" },
+    forklaring: {
+      sv: "Dessutom löften som gratis, återbetalning eller garanti.",
+      en: "Also promises such as free, refund or warranty."
+    }
   }
 ];
+
+const ord = (s: string): Localized => ({ sv: s, en: s });
 
 const SENTIMENTGRANSER = [0, 10, 20, 30, 40, 50, 60];
 
@@ -65,10 +77,11 @@ const valjarKlass = cn(
 );
 
 export function SupportEskalering() {
+  const { text } = useLocale();
   const [data, setData] = useState<Installningar | null>(null);
   const [amne, setAmne] = useState("");
   const [sparar, setSparar] = useState<string | null>(null);
-  const [fel, setFel] = useState<string | null>(null);
+  const [fel, setFel] = useState<Localized | null>(null);
 
   const anropa = useCallback(async (init?: RequestInit): Promise<Installningar> => {
     const response = await fetch("/api/snajp-support/support/config", {
@@ -81,11 +94,15 @@ export function SupportEskalering() {
       throw new Error(
         typeof kropp?.detail === "string"
           ? kropp.detail
-          : (kropp?.error ?? `Kunde inte nå inställningarna (${response.status}).`)
+          : (kropp?.error ??
+              text({
+                sv: `Kunde inte nå inställningarna (${response.status}).`,
+                en: `Could not reach the settings (${response.status}).`
+              }))
       );
     }
     return kropp;
-  }, []);
+  }, [text]);
 
   const ladda = useCallback(async () => {
     setFel(null);
@@ -94,7 +111,11 @@ export function SupportEskalering() {
       setData(svar);
       setAmne(svar.amnesomrade ?? "");
     } catch (orsak) {
-      setFel(orsak instanceof Error ? orsak.message : "Kunde inte hämta inställningarna.");
+      setFel(
+        orsak instanceof Error
+          ? ord(orsak.message)
+          : { sv: "Kunde inte hämta inställningarna.", en: "Could not load the settings." }
+      );
     }
   }, [anropa]);
 
@@ -123,7 +144,7 @@ export function SupportEskalering() {
       if (falt === "amnesomrade") setAmne(svar.amnesomrade ?? "");
     } catch (orsak) {
       if (fore) setData(fore);
-      setFel(orsak instanceof Error ? orsak.message : "Kunde inte spara.");
+      setFel(orsak instanceof Error ? ord(orsak.message) : { sv: "Kunde inte spara.", en: "Could not save." });
     } finally {
       setSparar(null);
     }
@@ -133,10 +154,10 @@ export function SupportEskalering() {
     return fel ? (
       <div className="mt-10">
         <p role="alert" className="max-w-[62ch] break-words text-[0.875rem] text-danger">
-          {fel}
+          {text(fel)}
         </p>
         <button type="button" onClick={() => void ladda()} className={cn(btnSecondary, btnLiten, "mt-3")}>
-          Försök igen
+          {text({ sv: "Försök igen", en: "Try again" })}
         </button>
       </div>
     ) : (
@@ -157,18 +178,20 @@ export function SupportEskalering() {
   return (
     <div className="mt-12 grid gap-7">
       <div>
-        <h2 className="font-display text-[1.25rem]">Ton, språk, faktakontroll och överlämning</h2>
+        <h2 className="font-display text-[1.25rem]">
+          {text({ sv: "Ton, språk, faktakontroll och överlämning", en: "Tone, language, fact check and handover" })}
+        </h2>
       </div>
 
-      <Radlista ariaLabel="Ton och faktakontroll">
+      <Radlista ariaLabel={text({ sv: "Ton och faktakontroll", en: "Tone and fact check" })}>
         <Rad className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6">
-          <span className="min-w-0 text-[0.9375rem]">Tonläge</span>
+          <span className="min-w-0 text-[0.9375rem]">{text({ sv: "Tonläge", en: "Tone" })}</span>
           <span className="flex items-center gap-2 justify-self-end">
             {spinner("tonlage")}
             <select
               value={data.tonlage}
               disabled={upptagen}
-              aria-label="Tonläge"
+              aria-label={text({ sv: "Tonläge", en: "Tone" })}
               onChange={(e) => {
                 const tonlage = e.target.value as Installningar["tonlage"];
                 void spara("tonlage", { tonlage }, (nu) => ({ ...nu, tonlage }));
@@ -177,36 +200,36 @@ export function SupportEskalering() {
             >
               {TONLAGEN.map((t) => (
                 <option key={t.varde} value={t.varde}>
-                  {t.etikett}
+                  {text(t.etikett)}
                 </option>
               ))}
             </select>
           </span>
         </Rad>
         <Rad className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6">
-          <span className="min-w-0 text-[0.9375rem]">Svarsspråk</span>
+          <span className="min-w-0 text-[0.9375rem]">{text({ sv: "Svarsspråk", en: "Reply language" })}</span>
           <span className="flex items-center gap-2 justify-self-end">
             {spinner("sprak")}
             <select
               value={data.sprak}
               disabled={upptagen}
-              aria-label="Svarsspråk"
+              aria-label={text({ sv: "Svarsspråk", en: "Reply language" })}
               onChange={(e) => {
                 const sprak = e.target.value as Installningar["sprak"];
                 void spara("sprak", { sprak }, (nu) => ({ ...nu, sprak }));
               }}
               className={valjarKlass}
             >
-              <option value="kundens">Kundens språk</option>
-              <option value="svenska">Alltid svenska</option>
+              <option value="kundens">{text({ sv: "Kundens språk", en: "Customer's language" })}</option>
+              <option value="svenska">{text({ sv: "Alltid svenska", en: "Always Swedish" })}</option>
             </select>
           </span>
         </Rad>
         <Rad className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6">
           <span className="min-w-0 text-[0.9375rem]">
-            Faktakontroll
+            {text({ sv: "Faktakontroll", en: "Fact check" })}
             <span className="mt-0.5 block text-[0.8125rem] leading-5 text-ink-muted">
-              {FAKTAKONTROLL.find((f) => f.varde === data.faktakontroll)?.forklaring}
+              {text(FAKTAKONTROLL.find((f) => f.varde === data.faktakontroll)?.forklaring ?? { sv: "", en: "" })}
             </span>
           </span>
           <span className="flex items-center gap-2 justify-self-end">
@@ -214,7 +237,7 @@ export function SupportEskalering() {
             <select
               value={data.faktakontroll}
               disabled={upptagen}
-              aria-label="Faktakontroll"
+              aria-label={text({ sv: "Faktakontroll", en: "Fact check" })}
               onChange={(e) => {
                 const faktakontroll = e.target.value as Installningar["faktakontroll"];
                 void spara("faktakontroll", { faktakontroll }, (nu) => ({ ...nu, faktakontroll }));
@@ -223,7 +246,7 @@ export function SupportEskalering() {
             >
               {FAKTAKONTROLL.map((f) => (
                 <option key={f.varde} value={f.varde}>
-                  {f.etikett}
+                  {text(f.etikett)}
                 </option>
               ))}
             </select>
@@ -231,12 +254,15 @@ export function SupportEskalering() {
         </Rad>
       </Radlista>
 
-      <Radlista ariaLabel="När en människa tar över">
+      <Radlista ariaLabel={text({ sv: "När en människa tar över", en: "When a person takes over" })}>
         <Rad className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6">
           <span className="min-w-0 text-[0.9375rem]">
-            Misslyckade försök innan överlämning
+            {text({ sv: "Misslyckade försök innan överlämning", en: "Failed attempts before handover" })}
             <span className="mt-0.5 block text-[0.8125rem] leading-5 text-ink-muted">
-              Motfrågor i följd, eller gånger kunden säger att svaret missade.
+              {text({
+                sv: "Motfrågor i följd, eller gånger kunden säger att svaret missade.",
+                en: "Follow-up questions in a row, or times the customer says the answer missed."
+              })}
             </span>
           </span>
           <span className="flex items-center gap-2 justify-self-end">
@@ -244,7 +270,7 @@ export function SupportEskalering() {
             <select
               value={esk.max_misslyckade}
               disabled={upptagen}
-              aria-label="Misslyckade försök innan överlämning"
+              aria-label={text({ sv: "Misslyckade försök innan överlämning", en: "Failed attempts before handover" })}
               onChange={(e) => {
                 const max_misslyckade = Number(e.target.value);
                 void spara("max_misslyckade", { eskalering: { max_misslyckade } }, (nu) => ({
@@ -264,9 +290,9 @@ export function SupportEskalering() {
         </Rad>
         <Rad className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6">
           <span className="min-w-0 text-[0.9375rem]">
-            Lämna över vid missnöje under
+            {text({ sv: "Lämna över vid missnöje under", en: "Hand over when satisfaction drops below" })}
             <span className="mt-0.5 block text-[0.8125rem] leading-5 text-ink-muted">
-              Hur negativ kundens ton får vara.
+              {text({ sv: "Hur negativ kundens ton får vara.", en: "How negative the customer's tone may get." })}
             </span>
           </span>
           <span className="flex items-center gap-2 justify-self-end">
@@ -274,7 +300,7 @@ export function SupportEskalering() {
             <select
               value={esk.sentimentgrans}
               disabled={upptagen}
-              aria-label="Gräns för missnöje"
+              aria-label={text({ sv: "Gräns för missnöje", en: "Dissatisfaction threshold" })}
               onChange={(e) => {
                 const sentimentgrans = Number(e.target.value);
                 void spara("sentimentgrans", { eskalering: { sentimentgrans } }, (nu) => ({
@@ -295,13 +321,13 @@ export function SupportEskalering() {
           </span>
         </Rad>
         <Rad className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6">
-          <span className="min-w-0 text-[0.9375rem]">Frågor utanför ämnesområdet</span>
+          <span className="min-w-0 text-[0.9375rem]">{text({ sv: "Frågor utanför ämnesområdet", en: "Questions outside the scope" })}</span>
           <span className="flex items-center gap-2 justify-self-end">
             {spinner("utanfor_amnet")}
             <select
               value={esk.utanfor_amnet}
               disabled={upptagen}
-              aria-label="Frågor utanför ämnesområdet"
+              aria-label={text({ sv: "Frågor utanför ämnesområdet", en: "Questions outside the scope" })}
               onChange={(e) => {
                 const utanfor_amnet = e.target.value as Installningar["eskalering"]["utanfor_amnet"];
                 void spara("utanfor_amnet", { eskalering: { utanfor_amnet } }, (nu) => ({
@@ -311,15 +337,15 @@ export function SupportEskalering() {
               }}
               className={valjarKlass}
             >
-              <option value="erbjud">Erbjud en människa</option>
-              <option value="eskalera">Lämna över direkt</option>
+              <option value="erbjud">{text({ sv: "Erbjud en människa", en: "Offer a person" })}</option>
+              <option value="eskalera">{text({ sv: "Lämna över direkt", en: "Hand over right away" })}</option>
             </select>
           </span>
         </Rad>
       </Radlista>
 
       <Vaxel
-        etikett="Räkna frustration som ett misslyckat försök"
+        etikett={text({ sv: "Räkna frustration som ett misslyckat försök", en: "Count frustration as a failed attempt" })}
         pa={esk.frustration_raknas}
         disabled={upptagen}
         onChange={(nytt) =>
@@ -332,10 +358,10 @@ export function SupportEskalering() {
 
       <div>
         <label htmlFor="amnesomrade" className="text-[0.9375rem] font-semibold">
-          Vad agenten ska hjälpa till med
+          {text({ sv: "Vad agenten ska hjälpa till med", en: "What the agent should help with" })}
         </label>
         <p className="mt-1 text-[0.875rem] leading-6 text-ink-muted">
-          Tomt: agenten utgår från kunskapsbasen.
+          {text({ sv: "Tomt: agenten utgår från kunskapsbasen.", en: "Empty: the agent works from the knowledge base." })}
         </p>
         <textarea
           id="amnesomrade"
@@ -353,7 +379,7 @@ export function SupportEskalering() {
             className={cn(btnSecondary, btnLiten)}
           >
             {spinner("amnesomrade")}
-            Spara
+            {text({ sv: "Spara", en: "Save" })}
           </button>
           <span className="text-[0.8125rem] num text-ink-subtle">
             {amne.length} / {tak}
@@ -363,7 +389,7 @@ export function SupportEskalering() {
 
       {fel ? (
         <p role="alert" className="max-w-[62ch] break-words text-[0.875rem] text-danger">
-          {fel}
+          {text(fel)}
         </p>
       ) : null}
     </div>

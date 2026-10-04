@@ -27,6 +27,12 @@ import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { lasOffertForUtkast } from "@/lib/actions/affarskontext";
 import { cn } from "@/lib/utils";
+import { sv, useLocale, type Localized } from "@/lib/i18n";
+
+/** Text vi inte skrivit själva (backendens fel, ett undantag): samma på båda språken. */
+function ordagrant(m: string): Localized {
+  return { sv: m, en: m };
+}
 
 /**
  * Bolagsregistret — kundens EGNA prospekt.
@@ -77,7 +83,7 @@ type Prospekt = {
 type Lage =
   | { fas: "laddar" }
   | { fas: "ejAktiverad" }
-  | { fas: "fel"; meddelande: string }
+  | { fas: "fel"; meddelande: Localized }
   | { fas: "klar"; prospekt: Prospekt[] };
 
 /**
@@ -95,7 +101,7 @@ type Utfallsrad = {
    *  kan 422:a på saknade fält — till_test har inga förutsättningar). */
   riktning: Riktning;
   /** Bara satt när ok=false. Backendens 422-lista, redan på svenska. */
-  saknas?: string[];
+  saknas?: Localized[];
 };
 
 /** Svaret /befordra och /degradera ger, tolkat oavsett statuskod (se readJsonBody). */
@@ -109,20 +115,20 @@ type UtkastRad = {
   id: string;
   company_name: string;
   ok: boolean;
-  meddelande?: string;
+  meddelande?: Localized;
 };
 
 /** Backendens statusvärden, på svenska. Speglar check-villkoret i migration 010. */
-const STATUS_ETIKETT: Record<string, string> = {
-  new: "Ny",
-  researching: "Research pågår",
-  ready: "Redo",
-  contacted: "Kontaktad",
-  replied: "Svarat",
-  meeting: "Möte",
-  won: "Vunnen",
-  lost: "Förlorad",
-  suppressed: "Spärrad"
+const STATUS_ETIKETT: Record<string, Localized> = {
+  new: { sv: "Ny", en: "New" },
+  researching: { sv: "Research pågår", en: "Researching" },
+  ready: { sv: "Redo", en: "Ready" },
+  contacted: { sv: "Kontaktad", en: "Contacted" },
+  replied: { sv: "Svarat", en: "Replied" },
+  meeting: { sv: "Möte", en: "Meeting" },
+  won: { sv: "Vunnen", en: "Won" },
+  lost: { sv: "Förlorad", en: "Lost" },
+  suppressed: { sv: "Spärrad", en: "Blocked" }
 };
 
 /** Status som betyder att något väntar på kunden — bär ochre, resten är neutrala. */
@@ -161,10 +167,10 @@ function poang(p: Prospekt): string {
  *  `flyttaOverValda`. Fel riktning tyst i en knapptext är precis den sortens
  *  fel som gör att någon flyttar ett riktigt prospekt in i testytan, eller
  *  tvärtom, utan att märka det. */
-function flyttaKnappText(riktning: Riktning, antal: number): string {
+function flyttaKnappText(riktning: Riktning, antal: number): Localized {
   return riktning === "till_test"
-    ? `Flytta till testytan (${antal})`
-    : `Flytta till skarpa listan (${antal})`;
+    ? { sv: `Flytta till testytan (${antal})`, en: `Move to the test area (${antal})` }
+    : { sv: `Flytta till skarpa listan (${antal})`, en: `Move to the live list (${antal})` };
 }
 
 /**
@@ -189,6 +195,8 @@ type LeadsJobbSvar = {
     draft_note?: string;
     prospect_id?: string;
   };
+  /** Ett fel vi själva formulerat (timeout, felstatus), på båda språken. */
+  fel?: Localized;
 };
 
 async function pollaLeadsJobb(jobId: string): Promise<LeadsJobbSvar> {
@@ -199,13 +207,19 @@ async function pollaLeadsJobb(jobId: string): Promise<LeadsJobbSvar> {
     });
     const kropp = await readJsonBody<LeadsJobbSvar>(response).catch(() => null);
     if (!response.ok) {
-      return { status: "failed", error: extraheraFelmeddelande((kropp as { detail?: unknown } | null)?.detail) || `Jobbet svarade ${response.status}.` };
+      const detalj = extraheraFelmeddelande((kropp as { detail?: unknown } | null)?.detail);
+      return {
+        status: "failed",
+        fel: detalj
+          ? ordagrant(detalj)
+          : { sv: `Jobbet svarade ${response.status}.`, en: `The job responded ${response.status}.` }
+      };
     }
     if (kropp?.status === "completed" || kropp?.status === "failed") {
       return kropp;
     }
   }
-  return { status: "timeout", error: "Körningen tog för lång tid." };
+  return { status: "timeout", fel: { sv: "Körningen tog för lång tid.", en: "The run took too long." } };
 }
 
 /** Poängmotiveringen som forskningsunderlag åt utkastet — samma källa som
@@ -231,6 +245,7 @@ function extraheraFelmeddelande(detail: unknown): string | undefined {
 }
 
 export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
+  const { text } = useLocale();
   const [lage, setLage] = useState<Lage>({ fas: "laddar" });
   const vag = useArbetsvag();
 
@@ -261,21 +276,30 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
           fas: "fel",
           meddelande:
             response.status >= 500
-              ? "Tjänsten svarar inte just nu. Den vaknar ur viloläge och kan ta upp till en minut."
-              : `Kunde inte hämta bolagen (status ${response.status}).`
+              ? {
+                  sv: "Tjänsten svarar inte just nu. Den vaknar ur viloläge och kan ta upp till en minut.",
+                  en: "The service is not responding right now. It is waking from sleep mode and can take up to a minute."
+                }
+              : {
+                  sv: `Kunde inte hämta bolagen (status ${response.status}).`,
+                  en: `Could not fetch the companies (status ${response.status}).`
+                }
         });
         return;
       }
       const kropp = await readJsonBody<{ prospects?: Prospekt[]; offline?: boolean }>(response);
       if (!kropp || kropp.offline) {
-        setLage({ fas: "fel", meddelande: "Backenden svarade utan innehåll." });
+        setLage({ fas: "fel", meddelande: { sv: "Backenden svarade utan innehåll.", en: "The backend replied without content." } });
         return;
       }
       setLage({ fas: "klar", prospekt: kropp.prospects ?? [] });
     } catch (error) {
       setLage({
         fas: "fel",
-        meddelande: error instanceof Error ? error.message : "Kunde inte nå servern."
+        meddelande:
+          error instanceof Error
+            ? ordagrant(error.message)
+            : { sv: "Kunde inte nå servern.", en: "Could not reach the server." }
       });
     }
   }, [demo]);
@@ -403,11 +427,14 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
             ok: false,
             riktning,
             saknas: saknas.length
-              ? saknas
+              ? saknas.map(ordagrant)
               : [
                   typeof detalj === "string"
-                    ? detalj
-                    : `Kunde inte flytta (status ${response.status}).`
+                    ? ordagrant(detalj)
+                    : {
+                        sv: `Kunde inte flytta (status ${response.status}).`,
+                        en: `Could not move (status ${response.status}).`
+                      }
                 ]
           });
         } catch (error) {
@@ -416,7 +443,7 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
             company_name: p.company_name,
             ok: false,
             riktning,
-            saknas: [felmeddelande(error)]
+            saknas: [ordagrant(felmeddelande(error))]
           });
         }
       }
@@ -457,7 +484,7 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
             id: p.id,
             company_name: p.company_name,
             ok: false,
-            meddelande: felmeddelande(fel)
+            meddelande: ordagrant(felmeddelande(fel))
           }))
         );
         return;
@@ -470,7 +497,7 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
             id: p.id,
             company_name: p.company_name,
             ok: false,
-            meddelande: "Prospektet saknar en mottagaradress."
+            meddelande: { sv: "Prospektet saknar en mottagaradress.", en: "The prospect has no recipient address." }
           });
           continue;
         }
@@ -483,11 +510,11 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
               prospect_email: p.contact_email,
               company_name: p.company_name,
               offer_summary: offerSummary,
-              brief:
-                `Skriv ett kort, personligt första mejl till kontaktpersonen på ${p.company_name}. ` +
-                "Utgå ifrån poängmotiveringen i researchunderlaget och håll dig till det som redan " +
-                "är känt. Ingen hype, inga superlativ, ren text. Utkastet ska köas för granskning, " +
-                "inte skickas.",
+              // Instruktion till modellen, inte text på skärmen: alltid svenska.
+              brief: sv({
+                sv: `Skriv ett kort, personligt första mejl till kontaktpersonen på ${p.company_name}. Utgå ifrån poängmotiveringen i researchunderlaget och håll dig till det som redan är känt. Ingen hype, inga superlativ, ren text. Utkastet ska köas för granskning, inte skickas.`,
+                en: `Write a short, personal first email to the contact at ${p.company_name}. Start from the score rationale in the research and stick to what is already known. No hype, no superlatives, plain text. The draft is queued for review, not sent.`
+              }),
               research_summary: byggForskningssammanfattning(p)
             })
           });
@@ -506,15 +533,14 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
               resultat.push({ id: p.id, company_name: p.company_name, ok: true });
               continue;
             }
+            const jobbText = klart.error || utkast?.escalation_reason || utkast?.draft_note;
             resultat.push({
               id: p.id,
               company_name: p.company_name,
               ok: false,
               meddelande:
-                klart.error ||
-                utkast?.escalation_reason ||
-                utkast?.draft_note ||
-                "Kunde inte skapa utkast."
+                klart.fel ??
+                (jobbText ? ordagrant(jobbText) : { sv: "Kunde inte skapa utkast.", en: "Could not create a draft." })
             });
             continue;
           }
@@ -522,17 +548,20 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
             resultat.push({ id: p.id, company_name: p.company_name, ok: true });
             continue;
           }
-          const meddelande =
-            kropp?.escalation_reason ||
-            extraheraFelmeddelande(kropp?.detail) ||
-            `Kunde inte skapa utkast (status ${response.status}).`;
+          const backendFel = kropp?.escalation_reason || extraheraFelmeddelande(kropp?.detail);
+          const meddelande: Localized = backendFel
+            ? ordagrant(backendFel)
+            : {
+                sv: `Kunde inte skapa utkast (status ${response.status}).`,
+                en: `Could not create a draft (status ${response.status}).`
+              };
           resultat.push({ id: p.id, company_name: p.company_name, ok: false, meddelande });
         } catch (error) {
           resultat.push({
             id: p.id,
             company_name: p.company_name,
             ok: false,
-            meddelande: felmeddelande(error)
+            meddelande: ordagrant(felmeddelande(error))
           });
         }
       }
@@ -558,7 +587,7 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
             id: p.id,
             company_name: p.company_name,
             ok: false,
-            meddelande: felmeddelande(fel)
+            meddelande: ordagrant(felmeddelande(fel))
           }))
         );
         return;
@@ -577,14 +606,22 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
         detail?: unknown;
       }>(response).catch(() => null);
       if (!response.ok || !kropp?.jobs?.length) {
-        throw new Error(
-          extraheraFelmeddelande(kropp?.detail) || `Kunde inte processa om (status ${response.status}).`
+        const backendFel = extraheraFelmeddelande(kropp?.detail);
+        const orsak: Localized = backendFel
+          ? ordagrant(backendFel)
+          : {
+              sv: `Kunde inte bearbeta om (status ${response.status}).`,
+              en: `Could not reprocess (status ${response.status}).`
+            };
+        setUtkastResultat(
+          kandidater.map((p) => ({ id: p.id, company_name: p.company_name, ok: false, meddelande: orsak }))
         );
+        return;
       }
       const namn = new Map(kandidater.map((p) => [p.id, p.company_name]));
       const resultat: UtkastRad[] = [];
       for (const jobb of kropp.jobs) {
-        const namnRad = namn.get(jobb.prospect_id ?? "") ?? jobb.prospect_id ?? "Bolag";
+        const namnRad = namn.get(jobb.prospect_id ?? "") ?? jobb.prospect_id ?? text({ sv: "Bolag", en: "Company" });
         const klart = await pollaLeadsJobb(jobb.job_id);
         const id = jobb.prospect_id ?? jobb.job_id;
         if (klart.status === "completed") {
@@ -593,14 +630,16 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
             id,
             company_name: namnRad,
             ok: !note,
-            meddelande: note
+            meddelande: note ? ordagrant(note) : undefined
           });
         } else {
           resultat.push({
             id,
             company_name: namnRad,
             ok: false,
-            meddelande: klart.error || "Processningen misslyckades."
+            meddelande:
+              klart.fel ??
+              (klart.error ? ordagrant(klart.error) : { sv: "Bearbetningen misslyckades.", en: "Processing failed." })
           });
         }
       }
@@ -612,20 +651,20 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
           id: p.id,
           company_name: p.company_name,
           ok: false,
-          meddelande: felmeddelande(error)
+          meddelande: ordagrant(felmeddelande(error))
         }))
       );
     } finally {
       setProcessarOm(false);
     }
-  }, [lage, valda, hamta]);
+  }, [lage, valda, hamta, text]);
 
   if (lage.fas === "laddar") {
     return <SkeletonRows />;
   }
 
   if (lage.fas === "ejAktiverad") {
-    return <EjAktiverad yta="Företag" />;
+    return <EjAktiverad yta={text({ sv: "Företag", en: "Companies" })} />;
   }
 
   if (lage.fas === "fel") {
@@ -633,10 +672,10 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
       <div className="flex items-start gap-3 border-y border-ochre/40 bg-ochre/10 px-4 py-4">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
         <div className="min-w-0">
-          <p className="text-[0.9375rem] font-medium text-ink">Bolagen kunde inte hämtas</p>
-          <p className="mt-1 text-[0.9375rem] text-ink-muted">{lage.meddelande}</p>
+          <p className="text-[0.9375rem] font-medium text-ink">{text({ sv: "Bolagen kunde inte hämtas", en: "The companies could not be fetched" })}</p>
+          <p className="mt-1 text-[0.9375rem] text-ink-muted">{text(lage.meddelande)}</p>
           <button type="button" onClick={() => void hamta()} className={cn(btnSecondary, btnLiten, "mt-3")}>
-            Försök igen
+            {text({ sv: "Försök igen", en: "Try again" })}
           </button>
         </div>
       </div>
@@ -646,7 +685,14 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
   // "Formuläret ovan" som den gamla tomtexten pekade på finns inte längre här
   // (Discovery.tsx togs bort) — körningen startas från Iris.
   if (!lage.prospekt.length) {
-    return <Tomt>Inga bolag ännu. Kör Iris för att hitta bolag som matchar er målgrupp.</Tomt>;
+    return (
+      <Tomt>
+        {text({
+          sv: "Inga bolag ännu. Kör Iris för att hitta bolag som matchar er målgrupp.",
+          en: "No companies yet. Run Iris to find companies that match your target group."
+        })}
+      </Tomt>
+    );
   }
 
   // Fas 2 §3, 2.4-UI: testkörningar döljs som default, exempelbolag aldrig.
@@ -667,7 +713,7 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
                 onClick={() => void flyttaOverValda()}
                 className={cn(btnSecondary, btnLiten)}
               >
-                {flyttar ? "Flyttar…" : flyttaKnappText(riktning, valda.size)}
+                {flyttar ? text({ sv: "Flyttar…", en: "Moving…" }) : text(flyttaKnappText(riktning, valda.size))}
               </button>
               <button
                 type="button"
@@ -675,7 +721,9 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
                 onClick={() => void skapaUtkastForValda()}
                 className={cn(btnSecondary, btnLiten)}
               >
-                {genererarUtkast ? "Skapar utkast…" : `Skapa utkast för valda (${valda.size})`}
+                {genererarUtkast
+                  ? text({ sv: "Skapar utkast…", en: "Creating drafts…" })
+                  : text({ sv: `Skapa utkast för valda (${valda.size})`, en: `Create drafts for selected (${valda.size})` })}
               </button>
               <button
                 type="button"
@@ -683,7 +731,9 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
                 onClick={() => void processaOmValda()}
                 className={cn(btnSecondary, btnLiten)}
               >
-                {processarOm ? "Processar om…" : `Processa om (${valda.size})`}
+                {processarOm
+                  ? text({ sv: "Bearbetar om…", en: "Reprocessing…" })
+                  : text({ sv: `Bearbeta om (${valda.size})`, en: `Reprocess (${valda.size})` })}
               </button>
             </div>
           ) : (
@@ -700,7 +750,7 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
               onClick={() => setVisaTest((v) => !v)}
               className={cn(flik, visaTest ? flikAktiv : flikInaktiv)}
             >
-              {`Visa testkörningar (${antalTest})`}
+              {text({ sv: `Visa testkörningar (${antalTest})`, en: `Show test runs (${antalTest})` })}
             </button>
           ) : null}
         </div>
@@ -714,11 +764,17 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
               {rad.ok ? (
                 <span className="text-moss">
                   {rad.riktning === "till_skarp"
-                    ? "flyttades över till den riktiga listan."
-                    : "flyttades till testytan och kan inte längre skickas."}
+                    ? text({ sv: "flyttades över till den riktiga listan.", en: "was moved to the live list." })
+                    : text({
+                        sv: "flyttades till testytan och kan inte längre skickas.",
+                        en: "was moved to the test area and can no longer be sent."
+                      })}
                 </span>
               ) : (
-                <span className="text-danger">kunde inte flyttas: {rad.saknas?.join(" ")}</span>
+                <span className="text-danger">
+                  {text({ sv: "kunde inte flyttas:", en: "could not be moved:" })}{" "}
+                  {rad.saknas?.map((s) => text(s)).join(" ")}
+                </span>
               )}
               {!rad.ok && rad.riktning === "till_skarp" ? (
                 <Ifyllnad
@@ -742,9 +798,13 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
             <li key={rad.id} className="text-[0.9375rem] leading-6">
               <span className="font-medium text-ink">{rad.company_name}</span>{" "}
               {rad.ok ? (
-                <span className="text-moss">utkast skapat och köat för granskning.</span>
+                <span className="text-moss">
+                  {text({ sv: "utkast skapat och köat för granskning.", en: "draft created and queued for review." })}
+                </span>
               ) : (
-                <span className="text-danger">inget utkast: {rad.meddelande}</span>
+                <span className="text-danger">
+                  {text({ sv: "inget utkast:", en: "no draft:" })} {rad.meddelande ? text(rad.meddelande) : null}
+                </span>
               )}
             </li>
           ))}
@@ -753,8 +813,10 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
 
       {synliga.length === 0 ? (
         <Tomt>
-          Alla {antalTest} bolag just nu är testkörningar och är dolda. Slå på &quot;Visa
-          testkörningar&quot; ovan för att se dem.
+          {text({
+            sv: `Alla ${antalTest} bolag är just nu testkörningar och döljs. Slå på "Visa testkörningar" ovan för att se dem.`,
+            en: `All ${antalTest} companies right now are test runs and are hidden. Turn on "Show test runs" above to see them.`
+          })}
         </Tomt>
       ) : (
         <>
@@ -768,16 +830,16 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
               till 100 % bredvid kryssrutans fasta 44px. */}
           <div className="hidden md:block">
             <Tabell
-              ariaLabel="Bolag"
+              ariaLabel={text({ sv: "Bolag", en: "Companies" })}
               minBredd={900}
               kolumner={[
-                ...(!demo ? [{ rubrik: "Välj", bredd: "44px", srOnly: true }] : []),
-                { rubrik: "Bolag", bredd: "24%" },
-                { rubrik: "Segment", bredd: "14%" },
-                { rubrik: "Kontakt", bredd: "18%" },
-                { rubrik: "Signal", bredd: "24%" },
-                { rubrik: "Poäng", bredd: "8%", hoger: true },
-                { rubrik: "Status", bredd: "12%", hoger: true }
+                ...(!demo ? [{ rubrik: text({ sv: "Välj", en: "Select" }), bredd: "44px", srOnly: true }] : []),
+                { rubrik: text({ sv: "Bolag", en: "Company" }), bredd: "24%" },
+                { rubrik: text({ sv: "Segment", en: "Segment" }), bredd: "14%" },
+                { rubrik: text({ sv: "Kontakt", en: "Contact" }), bredd: "18%" },
+                { rubrik: text({ sv: "Signal", en: "Signal" }), bredd: "24%" },
+                { rubrik: text({ sv: "Poäng", en: "Score" }), bredd: "8%", hoger: true },
+                { rubrik: text({ sv: "Status", en: "Status" }), bredd: "12%", hoger: true }
               ]}
             >
               {synliga.map((p) => (
@@ -788,7 +850,7 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
                         type="checkbox"
                         checked={valda.has(p.id)}
                         onChange={() => vaxlaVal(p.id)}
-                        aria-label={`Välj ${p.company_name}`}
+                        aria-label={text({ sv: `Välj ${p.company_name}`, en: `Select ${p.company_name}` })}
                         className="h-4 w-4 accent-ochre"
                       />
                     </Cell>
@@ -807,8 +869,8 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
                       )}
                       {/* Ett påhittat bolag ska inte gå att ta för en riktig
                           AI-körning — samma Badge som statusen. */}
-                      {p.origin === "example" ? <Badge>Exempel</Badge> : null}
-                      {p.origin === "test" ? <Badge>Test</Badge> : null}
+                      {p.origin === "example" ? <Badge>{text({ sv: "Exempel", en: "Example" })}</Badge> : null}
+                      {p.origin === "test" ? <Badge>{text({ sv: "Test", en: "Test" })}</Badge> : null}
                     </div>
                     {/* truncate: i en fast tabell är det cellen som ger med
                         sig, aldrig kolumnen. */}
@@ -849,7 +911,7 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
                         type="checkbox"
                         checked={valda.has(p.id)}
                         onChange={() => vaxlaVal(p.id)}
-                        aria-label={`Välj ${p.company_name}`}
+                        aria-label={text({ sv: `Välj ${p.company_name}`, en: `Select ${p.company_name}` })}
                         className="h-4 w-4 shrink-0 accent-ochre"
                       />
                     ) : null}
@@ -863,14 +925,14 @@ export function Bolagsregister({ demo = false }: Readonly<{ demo?: boolean }>) {
                         {p.company_name}
                       </Link>
                     )}
-                    {p.origin === "example" ? <Badge>Exempel</Badge> : null}
+                    {p.origin === "example" ? <Badge>{text({ sv: "Exempel", en: "Example" })}</Badge> : null}
                   </div>
                   <span className="num shrink-0 text-[0.9375rem] font-semibold">{poang(p)}</span>
                 </div>
                 <p className={cn(meta, "mt-1")}>{segment(p)}</p>
                 <p className="mt-2 line-clamp-2 text-[0.9375rem] leading-6 text-ink-muted">{signal(p)}</p>
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                  <span className="text-[0.9375rem] text-ink-muted">{p.contact_name ?? "Ingen kontakt"}</span>
+                  <span className="text-[0.9375rem] text-ink-muted">{p.contact_name ?? text({ sv: "Ingen kontakt", en: "No contact" })}</span>
                   <StatusOrd status={p.status} />
                 </div>
               </Rad>
@@ -895,6 +957,7 @@ function Ifyllnad({
   onChange: (varden: { orgnr: string; website: string; contact_email: string }) => void;
   onSubmit: () => void;
 }>) {
+  const { text } = useLocale();
   return (
     <form
       className="mt-3 grid gap-2 sm:grid-cols-3"
@@ -904,7 +967,7 @@ function Ifyllnad({
       }}
     >
       <label className={cn(etikett, "block")}>
-        Organisationsnummer
+        {text({ sv: "Organisationsnummer", en: "Company registration number" })}
         <input
           name={`${id}-orgnr`}
           value={varden.orgnr}
@@ -914,28 +977,28 @@ function Ifyllnad({
         />
       </label>
       <label className={cn(etikett, "block")}>
-        Webbplats
+        {text({ sv: "Webbplats", en: "Website" })}
         <input
           name={`${id}-website`}
           value={varden.website}
           onChange={(event) => onChange({ ...varden, website: event.target.value })}
-          placeholder="https://bolaget.se"
+          placeholder={text({ sv: "https://bolaget.se", en: "https://company.com" })}
           className="focus-ring mt-1 block min-h-11 w-full rounded-input bg-paper2 px-3 text-sm text-ink"
         />
       </label>
       <label className={cn(etikett, "block")}>
-        E-post
+        {text({ sv: "E-post", en: "Email" })}
         <input
           name={`${id}-email`}
           value={varden.contact_email}
           onChange={(event) => onChange({ ...varden, contact_email: event.target.value })}
-          placeholder="info@bolaget.se"
+          placeholder={text({ sv: "info@bolaget.se", en: "info@company.com" })}
           className="focus-ring mt-1 block min-h-11 w-full rounded-input bg-paper2 px-3 text-sm text-ink"
         />
       </label>
       <div className="sm:col-span-3">
         <button type="submit" disabled={disabled} className={cn(btnSecondary, btnLiten)}>
-          Spara och flytta
+          {text({ sv: "Spara och flytta", en: "Save and move" })}
         </button>
       </div>
     </form>
@@ -944,7 +1007,10 @@ function Ifyllnad({
 
 /** Status som Badge: det som väntar på kunden bär ochre-tonen, resten är neutralt. */
 function StatusOrd({ status }: Readonly<{ status: string }>) {
+  const { text } = useLocale();
   return (
-    <Badge tone={AKTIV_STATUS.has(status) ? "warn" : "neutral"}>{STATUS_ETIKETT[status] ?? status}</Badge>
+    <Badge tone={AKTIV_STATUS.has(status) ? "warn" : "neutral"}>
+      {STATUS_ETIKETT[status] ? text(STATUS_ETIKETT[status]) : status}
+    </Badge>
   );
 }

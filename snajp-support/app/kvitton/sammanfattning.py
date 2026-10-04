@@ -184,7 +184,7 @@ def summeringstext(samman: dict[str, Any], fran: str, till: str) -> str:
         f"Agenten hittade {antal} kvitto{'n' if antal != 1 else ''} i perioden "
         f"{fran} till {till}"
         + (
-            f", varav {klara} lästes av komplett på totalt {_kr_text(totalt)}."
+            f", varav {klara} lästes av fullständigt, totalt {_kr_text(totalt)}."
             if granska
             else f", totalt {_kr_text(totalt)}."
         )
@@ -192,7 +192,7 @@ def summeringstext(samman: dict[str, Any], fran: str, till: str) -> str:
 
     if kategorier:
         toppar = kategorier[:2]
-        namn = " och ".join(p["etikett"].lower() for p in toppar)
+        namn = " och ".join(_gem(p["etikett"]) for p in toppar)
         delar.append(
             f"Mest pengar gick till {namn} "
             f"({', '.join(_kr_text(p['summa']) for p in toppar)})."
@@ -220,6 +220,15 @@ def summeringstext(samman: dict[str, Any], fran: str, till: str) -> str:
 # kan hitta på. Frågan tolkas grovt (månad + kategori); allt annat besvaras med
 # periodens sammanfattning. Det är demons och den lokala stackens läge — i
 # drift svarar den riktiga agenten i kvitto_agent.py.
+
+def _gem(etikett: str) -> str:
+    """Gemener för löptext — utan att "IT-tjänster" blir "it-tjänster".
+    Sänker bara första bokstaven, och bara när etiketten inte inleds med en
+    versalförkortning (två versaler i rad)."""
+    if len(etikett) >= 2 and etikett[0].isupper() and etikett[1].isupper():
+        return etikett
+    return etikett[:1].lower() + etikett[1:]
+
 
 _MANADER = {
     "januari": 1, "februari": 2, "mars": 3, "april": 4, "maj": 5, "juni": 6,
@@ -279,7 +288,7 @@ def svara_utan_modell(
     if any(ord_ in saenkt for ord_ in ("granska", "flagga", "dubblett", "manuell")):
         granska = [r for r in rader if r.get("status") != STATUS_KLAR]
         if not granska:
-            return "Inga kvitton väntar på granskning i perioden — allt lästes av komplett."
+            return "Inga kvitton väntar på granskning i perioden — alla lästes av fullständigt."
         punkter = "; ".join(
             f"{r.get('motpart') or r.get('filnamn')} ({(r.get('anmarkning') or 'saknar fält').rstrip('. ')})"
             for r in granska[:5]
@@ -297,7 +306,7 @@ def svara_utan_modell(
                 if r.get("status") == STATUS_KLAR and (r.get("kategori") or "") in nycklar
             ]
             summa = sum((r["brutto"] for r in träffar if r.get("brutto") is not None), Decimal("0"))
-            etikett = " och ".join(kategorietikett(n).lower() for n in nycklar)
+            etikett = " och ".join(_gem(kategorietikett(n)) for n in nycklar)
             if not träffar:
                 return (
                     f"Jag hittar inga avlästa kvitton inom {etikett} i perioden "
