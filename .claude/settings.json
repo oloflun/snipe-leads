@@ -1,4 +1,10 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(python scripts/railway_tenantnyckel.py *)",
+      "Bash(snajp-support/.venv/Scripts/python.exe scripts/railway_tenantnyckel.py *)"
+    ]
+  },
   "enabledPlugins": {
     "foreman@foreman-marketplace": true,
     "super-intelligence@super-intelligence": true
