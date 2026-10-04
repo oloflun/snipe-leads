@@ -1556,6 +1556,21 @@ async def _skapa_prospekt_ur_kandidat(storage, tenant_id: str, bolag: dict, orig
         )
     if bolag.get("website"):
         await _registrera_webb(storage, tenant_id, prospect["id"], bolag["website"])
+    # Registersidan (merinfo) är det enda källmaterialet för ett bolag utan
+    # webbplats. Utan den här raden fick researchen inget att läsa och skrev
+    # "ingen information kunde hittas" i lägesbeskrivningen (provkörningen på
+    # Alunix 2026-10-04: fem av fem leads).
+    if bolag.get("source_name") == "merinfo" and bolag.get("source_url"):
+        try:
+            await storage.create_prospect_source(
+                tenant_id,
+                prospect_id=prospect["id"],
+                source_url=bolag["source_url"],
+                source_type="business_register",
+                lawful_basis=_LAGLIG_GRUND_LISTKALLA,
+            )
+        except Exception:  # noqa: BLE001 — proveniens får inte fälla körningen
+            logger.exception("Kunde inte registrera registerkällan för %s", prospect["id"])
     return prospect
 
 
@@ -2532,6 +2547,7 @@ _LAGLIG_GRUND_LISTKALLA = (
 #: check-villkor (migration 010). Okänt ursprung faller till 'other' —
 #: aldrig till en mer specifik typ än belägget bär.
 _LISTKALLA_TILL_SOURCE_TYPE = {
+    "merinfo": "business_register",
     "jobtech": "job_signal",
     "nyheter": "public_news",
     "rss": "public_news",

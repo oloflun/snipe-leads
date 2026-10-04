@@ -265,6 +265,7 @@ async def process_due_item(
                 amne=message.get("subject", ""),
                 brodtext=message["body"],
                 fran=getattr(provider, "avsandare", ""),
+                syfte="leads",
             )
         return "sent"
 

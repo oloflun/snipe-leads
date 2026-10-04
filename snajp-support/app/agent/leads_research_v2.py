@@ -165,6 +165,17 @@ async def run_research_step_v2(
     material, scraped_sources, scrape_errors, kontakt_diagnostik = await _gather_registered_sources(
         storage, tenant_id, prospect_id, webbplats=prospect_row.get("website")
     )
+    # merinfos bolagssida hämtas via ScrapeGraph (samma väg som merinfo-
+    # kedjan; den vanliga skrapan blockeras där). Den bär verksamhets-
+    # beskrivning, bokslut och styrelse — för ett bolag utan webbplats det
+    # enda underlaget till lägesbeskrivningen.
+    from ..leads.sources import merinfo
+
+    for url in sorted(await storage.list_prospect_source_urls(tenant_id, prospect_id)):
+        if "merinfo.se" in url and url not in material:
+            md = await merinfo.hamta(url)
+            if md:
+                material = f"{material}\n\n## Registeruppgifter (källa: {url})\n{md[:6000]}".strip()
     sources_block = material or "(inget källmaterial kunde hämtas — se scrape_errors)"
 
     # Iris-profilen (app/leads/profil.py) är kundens instruktionsfil: den

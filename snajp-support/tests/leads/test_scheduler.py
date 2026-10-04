@@ -139,7 +139,8 @@ async def test_levererande_provider_lagger_kopia_i_skickat(monkeypatch):
 
     anrop: list[dict] = []
 
-    async def fejk_kopia(storage_, tenant_id, *, till, amne, brodtext, fran=""):
+    async def fejk_kopia(storage_, tenant_id, *, till, amne, brodtext, fran="", syfte="support"):
+        assert syfte == "leads"  # leadsutskick hör hemma i leadsinkorgen (084)
         anrop.append({"tenant_id": tenant_id, "till": till, "amne": amne, "fran": fran})
         return None
 
