@@ -2790,7 +2790,8 @@ async def _run_list_job(app_state, payload: dict) -> None:
             # tar längre än så, och utan puls visade UI:t "Tidsgräns
             # överskriden" medan jobbet fortfarande byggde listan.
             traffar = await merinfo.sok(
-                icp, int(lista["antal"]), profil=profil, puls=lambda: app_state.jobs.start(job_id)
+                icp, int(lista["antal"]), profil=profil, puls=lambda: app_state.jobs.start(job_id),
+                lage="lista",
             )
         if traffar is None:
             traffar = await hitta_bolag(icp, int(lista["antal"]))

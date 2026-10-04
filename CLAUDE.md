@@ -76,6 +76,33 @@ Kör `python scripts/lokal_stack.py --apply` i stället.
 
 Fullständig beskrivning av miljöer, variabler och fällor: [`DEPLOY.md`](DEPLOY.md).
 
+## Leads: källor, filter och kontakter (Antons regler 2026-10-04)
+
+**Gäller tills Anton säger annat. Bygg varje ny leadsfunktion utifrån dem.**
+
+1. **Registret (merinfo, senare allabolag via API) är ett filter, inte en
+   kontaktkälla.** Det väljer bolag på bransch, geografi, storlek och
+   omsättning. Registrets personer och telefonnummer blir aldrig ett leads
+   kontakt: ett bolagsnummer går inte att knyta till en viss person.
+2. **Jev är första filtret.** Bolagen som passerat registret klassas av Jev
+   mot kundens kriterier (Iris-profilen) innan något dyrare steg körs.
+3. **Kontakta bara VD.** Aldrig styrelseledamöter, suppleanter eller
+   revisorer. En kontaktuppgift används bara om den kan styrkas tillhöra en
+   viss person.
+4. **Iris-leads (de detaljerade):** använd registerdatan för att hitta
+   bolagets webbplats. Kontaktperson, roll och bolagshändelser/nyheter hämtas
+   därifrån och bygger ingången i mejlet. **Har bolaget ingen webbplats, gå
+   vidare till nästa.**
+5. **Listor:** det räcker med mejladress eller telefonnummer, men bara om
+   uppgiften kan styrkas tillhöra VD (mindre bolag utan hemsida har oftast VD
+   som beslutsfattare). Ett nummer som inte kan knytas till VD hör inte hemma
+   i en lista.
+6. **Inga privatpersonsidor.** Registrets personsidor (bostad, ålder,
+   familj) är inte B2B-källor och används inte.
+
+Koden: `snajp-support/app/leads/sources/merinfo.py` (filtret, `lage="iris"`
+och `lage="lista"`), `app/leads/discovery.py:hamta_vd_kontakt` (VD-kontrollen).
+
 ## Dataskydd: DeepSeek får inte se kunddata
 
 **Beslut 2026-08-24. Vänd inte tillbaka det utan att läsa varför.**

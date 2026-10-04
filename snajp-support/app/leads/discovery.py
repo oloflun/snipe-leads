@@ -721,6 +721,75 @@ async def hamta_kontaktvag(website: str) -> dict[str, Any]:
     return {"contact_email": epost, "contact_level": "role_address"}
 
 
+_TELEFON_PA_SIDA = re.compile(r"(?:\+46|0)\s?\d{1,3}(?:[\s\-]?\d{2,3}){2,4}")
+_EPOST_PA_SIDA = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
+
+
+def _asci(text: str) -> str:
+    import unicodedata
+
+    bas = unicodedata.normalize("NFKD", text.casefold())
+    return "".join(t for t in bas if not unicodedata.combining(t))
+
+
+def vd_uppgift_i_text(text: str, vd_namn: str, website: str) -> dict[str, Any] | None:
+    """VD:ns mejl eller telefon ur sidtext, BARA när uppgiften går att knyta
+    till VD (Antons regel 2026-10-04: ett nummer som inte kan styrkas tillhöra
+    en viss person används inte). Mejl: arbetsmejl på bolagets domän vars
+    lokaldel bär VD:ns för- eller efternamn. Telefon: står inom 200 tecken från
+    VD:ns fullständiga namn på sidan.
+    ponytail: närhet i text, inte DOM-struktur; byt mot en strukturerad
+    tolkning om sajter med flera personer per rad ger fel par."""
+    led = [d for d in re.findall(r"[a-z]+", _asci(vd_namn)) if len(d) >= 3]
+    if len(led) < 2:
+        return None
+    ren = re.sub(r"<[^>]+>", " ", text)
+    ren = re.sub(r"\s+", " ", ren)
+    asc = _asci(ren)
+    for adress in dict.fromkeys(_EPOST_PA_SIDA.findall(ren)):
+        lokal = _asci(adress.split("@")[0])
+        if any(d in lokal for d in led) and ar_arbetsmejl(adress, webb=website):
+            return {"contact_email": adress, "contact_phone": None}
+    fullt = f"{led[0]} {led[-1]}"
+    for m in re.finditer(re.escape(fullt), asc):
+        # Efter namnet först ("Anna Andersson, VD, 070-…"), sedan närmast före;
+        # ett växelnummer längre upp på sidan ska inte vinna (testet).
+        efter = _TELEFON_PA_SIDA.search(ren[m.end(): m.end() + 200])
+        fore = list(_TELEFON_PA_SIDA.finditer(ren[max(0, m.start() - 80): m.start()]))
+        tel = efter or (fore[-1] if fore else None)
+        if tel:
+            return {"contact_email": None, "contact_phone": tel.group(0).strip()}
+    return None
+
+
+async def hamta_vd_kontakt(website: str, vd_namn: str) -> dict[str, Any] | None:
+    """Startsidan plus upp till tre kontakt-/om oss-sidor; första uppgift som
+    går att knyta till VD vinner. Kastar aldrig."""
+    try:
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(8.0), follow_redirects=True,
+            headers={"user-agent": "snajp-leads/1.0 (+https://snajp.se)"},
+        ) as client:
+            svar = await client.get(website)
+            if svar.status_code >= 400:
+                return None
+            hit = vd_uppgift_i_text(svar.text, vd_namn, website)
+            if hit:
+                return hit
+            for lank in extrahera_kontaktlankar(svar.text, website, tak=3):
+                try:
+                    undersida = await client.get(lank)
+                except httpx.HTTPError:
+                    continue
+                if undersida.status_code < 400:
+                    hit = vd_uppgift_i_text(undersida.text, vd_namn, website)
+                    if hit:
+                        return hit
+    except httpx.HTTPError:
+        return None
+    return None
+
+
 def _slugga_bolagsnamn(namn: str) -> str:
     """'Nordkap Moduler AB' -> 'nordkapmoduler' — kandidatdomänens stam."""
     stam = namn.lower()

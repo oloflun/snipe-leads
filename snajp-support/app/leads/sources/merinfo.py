@@ -27,10 +27,21 @@ valde den här vägen under tiden — ett affärsbeslut, inte ett kodbeslut. Dä
   är bundet till HTML/markdown; urvalet (bransch, geografi, kontaktkrav,
   rangordning) står kvar oförändrat.
 
-## Kontaktkravet (Antons minsta krav för ett kvalificerat lead)
+## Merinfo är ett filter, inte en kontaktkälla (Anton 2026-10-04)
 
-En namngiven person MED roll OCH ett telefonnummer. Ett bolag som saknar
-något av de tre blir aldrig en rad, oavsett hur bra det matchar.
+Merinfo väljer BOLAG på bransch, geografi, storlek och omsättning. Jev
+klassar dem mot kundens kriterier som första filter. Merinfos personer och
+telefonnummer blir aldrig ett leads kontakt: bolagsnumret går inte att knyta
+till en viss person, och styrelseledamöter kontaktas inte.
+
+* Iris (`lage="iris"`): bolagets webbplats letas upp (merinfos fält, annars
+  ett uppslag); kontaktperson, roll och händelser hämtas därifrån i
+  researchen. Utan webbplats går körningen vidare till nästa bolag.
+* Listor (`lage="lista"`): en rad kräver VD:ns mejl eller telefon, och bara
+  om uppgiften går att knyta till VD (discovery.hamta_vd_kontakt). VD:ns
+  namn kommer från merinfo, uppgiften från bolagets egen webbplats. Merinfos
+  personsidor används inte: de är privatpersonsidor (bostad, familj) och
+  numren ligger bakom betalvägg (kontrollerat 2026-10-04).
 """
 from __future__ import annotations
 
@@ -432,36 +443,36 @@ def kontrollera(b: dict[str, Any], icp: dict[str, Any], profil: dict[str, Any] |
     for u in [*(icp.get("exclude_industries") or []), *((profil or {}).get("undvik_branscher") or [])]:
         if any(s in text for s in _stammar(u)):
             return f"Bransch kunden undviker: {u}."
-    if not b.get("personer") or not (b.get("telefon") or b.get("epost")):
-        return "Ingen verifierad kontakt: namn, roll och telefon eller mejl krävs."
+    storlek = icp.get("size") or {}
+    lo_oms = (profil or {}).get("omsattning_min", storlek.get("omsattning_min"))
+    hi_oms = (profil or {}).get("omsattning_max", storlek.get("omsattning_max"))
+    oms = b.get("omsattning")
+    if isinstance(oms, int):
+        if hi_oms is not None and oms > hi_oms:
+            return f"För hög omsättning: {oms} kr."
+        if lo_oms is not None and oms < lo_oms:
+            return f"För låg omsättning: {oms} kr."
     return None
 
 
-def _roll_matchar(roll: str, roller: list[str]) -> bool:
-    r = _norm(roll)
-    for onskad in roller:
-        o = _norm(onskad)
-        if o in ("vd", "ceo") and ("verkstallande direktor" in r or r == "vd"):
-            return True
-        if o and (o in r or r in o):
-            return True
-    return False
+_VD_ROLLER = ("verkställande direktör", "vd", "extern verkställande direktör")
+
+
+def vd_namn(b: dict[str, Any]) -> str | None:
+    """VD enligt registret, eller None. Bara VD, aldrig en ledamot."""
+    return next((p["namn"] for p in b.get("personer") or [] if p["roll"].casefold() in _VD_ROLLER), None)
 
 
 def _kodpoang(b: dict[str, Any], icp: dict[str, Any], profil: dict[str, Any] | None) -> float:
     """Rangordningen utan Jev: hur väl det KÄNDA matchar kundens målgrupp."""
     p = profil or {}
     poang = 0.0
-    roller = [*(icp.get("roles") or []), *(p.get("roller") or [])]
-    if b["personer"] and _roll_matchar(b["personer"][0]["roll"], roller or ["vd"]):
-        poang += 2
+    # Bara bolagsfakta: merinfos kontaktuppgifter väger inte (filter, inte källa).
+    poang += 1 if vd_namn(b) else 0
     lo, hi = _intervall(icp, profil)
     if isinstance(b.get("anstallda"), int) and (lo is not None or hi is not None):
         poang += 1
     poang += 1 if b.get("website") else 0
-    # Telefon väger tyngre än mejl: Antons grundkrav, mejl är tillägget.
-    poang += 2.5 if b.get("telefon") else 0
-    poang += 1 if b.get("epost") else 0
     poang += 0.5 if (b.get("omsattning") or 0) > 0 else 0
     onskat = " ".join([*(icp.get("must_have") or []), *(k.get("text", "") for k in p.get("kriterier") or [])])
     text = _norm(f"{b.get('verksamhet') or ''} {b.get('sni_namn') or ''}")
@@ -470,9 +481,8 @@ def _kodpoang(b: dict[str, Any], icp: dict[str, Any], profil: dict[str, Any] | N
 
 
 def till_kandidat(b: dict[str, Any], icp: dict[str, Any], profil: dict[str, Any] | None) -> dict[str, Any]:
-    """Bolagssidan i hitta_bolag-formen, som resten av kedjan redan läser."""
-    person = b["personer"][0]
-    roller = [*(icp.get("roles") or []), *((profil or {}).get("roller") or [])]
+    """Bolagssidan i hitta_bolag-formen, som resten av kedjan redan läser.
+    Utan kontakt: den fylls av webbplatsen (Iris) eller VD-kontrollen (lista)."""
     webb = b.get("website")
     if webb and not webb.startswith("http"):
         webb = f"https://{webb}"
@@ -482,12 +492,13 @@ def till_kandidat(b: dict[str, Any], icp: dict[str, Any], profil: dict[str, Any]
         "orgnr": b.get("orgnr"),
         "ort": b.get("ort"),
         "postnr": b.get("postnr"),
-        "contact_name": person["namn"],
-        "contact_role": person["roll"],
-        "contact_phone": b.get("telefon"),
-        "contact_email": b.get("epost"),
-        "contact_level": "named_role_match" if _roll_matchar(person["roll"], roller or ["vd"]) else "named_other",
+        "contact_name": None,
+        "contact_role": None,
+        "contact_phone": None,
+        "contact_email": None,
+        "contact_level": None,
         "contact_form_url": None,
+        "vd_namn": vd_namn(b),
         "anstallda": b.get("anstallda"),
         "omsattning": b.get("omsattning"),
         "sni": b.get("sni"),
@@ -507,14 +518,16 @@ async def sok(
     uteslut: set[str] | frozenset[str] = frozenset(),
     profil: dict[str, Any] | None = None,
     puls: Callable[[], Awaitable[Any]] | None = None,
+    lage: str = "iris",
 ) -> list[dict[str, Any]] | None:
     """Antons arbetsflöde: bransch → län/kommun → listsidor → bolagssidor →
-    kontaktkravet (namn + roll + telefon eller mejl) → rangordning (Jev om
-    påslagen) → de `antal` bästa.
+    filter på bolagsfakta → Jev mot kundens kriterier (första filtret) →
+    rangordning → webbplats (Iris) eller VD-kontakt (lista) → de `antal`
+    bästa.
 
     None = målgruppen gick inte att översätta till merinfos träd (anroparen
     faller tillbaka på den gamla kedjan). [] = översatt, men inget bolag
-    klarade kontaktkravet — ett ärligt nej, ingen utfyllnad utan telefon."""
+    klarade filtret och steget efter — ett ärligt nej, ingen utfyllnad."""
     p = profil or {}
     branscher = valj_branscher(list(dict.fromkeys([*(icp.get("industries") or []), *(p.get("branscher") or [])])))
     if not branscher and p.get("malgrupp"):
@@ -568,7 +581,6 @@ async def sok(
         # som lista hos merinfo. Det är "kunde inte tolka", inte "inga bolag".
         logger.info("merinfo: inga listrader för %s.", sokningar)
         return None
-    kandidater.sort(key=lambda r: 0 if r["telefon"] else 1)
     kandidater = kandidater[:mal]
 
     async def granska(r: dict[str, Any]) -> dict[str, Any] | None:
@@ -578,18 +590,7 @@ async def sok(
         if not md:
             return None
         b = tolka_bolag(md, r["url"])
-        b["telefon"] = b["telefon"] or r["telefon"]
         b["orgnr"] = b["orgnr"] or r["orgnr"]
-        if not b["telefon"] and not b.get("epost") and b.get("website") and b.get("personer"):
-            # Sista chansen för en rad utan kontaktväg: bolagets egen sajt,
-            # via httpx och regex (discovery.hamta_kontaktvag), aldrig LLM.
-            from ..discovery import hamta_kontaktvag
-
-            webb = b["website"] if str(b["website"]).startswith("http") else f"https://{b['website']}"
-            try:
-                b["epost"] = (await hamta_kontaktvag(webb)).get("contact_email")
-            except Exception:  # noqa: BLE001 — en trasig sajt fäller inte listan
-                logger.info("merinfo: kontaktvägen på %s gick inte att läsa.", webb)
         return b
 
     granskade = [b for b in await asyncio.gather(*(granska(r) for r in kandidater)) if b]
@@ -614,11 +615,63 @@ async def sok(
         k["merinfo_poang"] = round(poang, 2)
         rankade.append((poang, k))
     rankade.sort(key=lambda t: t[0], reverse=True)
+    ut = await _komplettera([k for _, k in rankade], antal, lage=lage, puls=puls)
     logger.info(
-        "merinfo: %d sökningar, %d kandidater, %d granskade, %d klarade kontaktkravet → %d levereras.",
-        len(sokningar), len(kandidater), len(granskade), len(godkanda), min(antal, len(rankade)),
+        "merinfo (%s): %d sökningar, %d kandidater, %d granskade, %d klarade filtret, %d efter Jev → %d levereras.",
+        lage, len(sokningar), len(kandidater), len(granskade), len(godkanda), len(rankade), len(ut),
     )
-    return [k for _, k in rankade[:antal]]
+    return ut
+
+
+#: Hur många rangordnade bolag som provas per beställt lead i steget efter
+#: filtret. Varje prov kan kosta ett webbplatsuppslag (ett grounded anrop).
+PROV_PER_LEAD = 4
+
+
+async def _webbplats(k: dict[str, Any]) -> str | None:
+    from .. import discovery
+
+    webb = k.get("website")
+    if not webb:
+        try:
+            webb = await discovery.sla_upp_webbplats(k["company_name"], geografi=k.get("ort"))
+        except Exception:  # noqa: BLE001 — ett uppslag får inte fälla körningen
+            logger.info("merinfo: webbplatsuppslaget för %s föll.", k["company_name"])
+            return None
+    if not webb or not discovery.webbplats_ar_bolagets(webb):
+        return None
+    if not discovery.webbplats_matchar_namn(k["company_name"], webb):
+        return None
+    return webb if webb.startswith("http") else f"https://{webb}"
+
+
+async def _komplettera(
+    rankade: list[dict[str, Any]], antal: int, *, lage: str, puls: Callable[[], Awaitable[Any]] | None
+) -> list[dict[str, Any]]:
+    """Iris: bolag MED webbplats, utan kontakt (researchen hämtar den från
+    sajten). Lista: bolag där VD:ns mejl eller telefon står på sajten."""
+    from .. import discovery
+
+    ut: list[dict[str, Any]] = []
+    for k in rankade[: max(antal, 1) * PROV_PER_LEAD]:
+        if len(ut) >= antal:
+            break
+        if lage == "lista" and not k.get("vd_namn"):
+            continue
+        webb = await _webbplats(k)
+        if puls:
+            await puls()
+        if not webb:
+            continue  # Anton: "Om det inte finns en hemsida, gå vidare."
+        k = {**k, "website": webb}
+        if lage == "lista":
+            kontakt = await discovery.hamta_vd_kontakt(webb, k["vd_namn"])
+            if not kontakt:
+                continue
+            k = {**k, **kontakt, "contact_name": k["vd_namn"], "contact_role": "VD",
+                 "contact_level": "named_role_match"}
+        ut.append(k)
+    return ut
 
 
 if __name__ == "__main__":

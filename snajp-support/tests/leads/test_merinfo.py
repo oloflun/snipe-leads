@@ -1,5 +1,5 @@
 """Registerkällan merinfo (sources/merinfo.py): tolkning, Antons geografiregel,
-kontaktkravet och hela sökningen — utan ett enda nätanrop.
+filtret (bolagsfakta, aldrig registrets kontakter) och hela sökningen — utan ett enda nätanrop.
 
 Sidorna nedan är SYNTETISKA men i exakt det markdown-format ScrapeGraphAI
 gav för merinfos list- och bolagssidor 2026-10-01. Riktiga sidor checkas
@@ -127,37 +127,46 @@ def test_branschval():
 @pytest.mark.parametrize(
     ("andring", "skal"),
     [
-        ({"roll": None}, "Ingen verifierad kontakt"),
-        ({"telefon": None}, "Ingen verifierad kontakt"),
         ({"status": "Bolaget är avregistrerat"}, "Inte aktivt"),
         ({"bolagsform": "Enskild firma"}, "Enskild firma"),
         ({"anstallda": 80}, "För stort"),
     ],
 )
-def test_kontaktkravet_och_kanda_fakta_faller(andring, skal):
+def test_kanda_bolagsfakta_faller(andring, skal):
     b = m.tolka_bolag(bolagssida("Alfa Bygg AB", "556000-0001", **andring), "u")
-    if andring.get("telefon", "x") is None:
-        b["telefon"] = None
     utfall = m.kontrollera(b, {"size": {"anstallda_min": 1, "anstallda_max": 49}}, None)
     assert utfall and utfall.startswith(skal)
 
 
-def test_godkant_bolag_passerar():
+def test_merinfo_ar_ett_filter_inte_en_kontaktkalla():
+    """Anton 2026-10-04: bolag utan person eller telefon i registret passerar
+    filtret; registrets kontaktuppgifter blir aldrig leadets."""
+    for andring in ({"roll": None}, {"telefon": None}, {"roll": "Styrelseledamot"}):
+        b = m.tolka_bolag(bolagssida("Alfa Bygg AB", "556000-0001", **andring), "u")
+        assert m.kontrollera(b, {"size": {"anstallda_min": 1, "anstallda_max": 49}}, None) is None
     b = m.tolka_bolag(bolagssida("Alfa Bygg AB", "556000-0001"), "u")
-    assert m.kontrollera(b, {"size": {"anstallda_min": 1, "anstallda_max": 49}}, None) is None
+    k = m.till_kandidat(b, {}, None)
+    assert (k["contact_name"], k["contact_phone"], k["contact_role"]) == (None, None, None)
+    assert k["vd_namn"] == "Test Testsson"
+    ledamot = m.tolka_bolag(bolagssida("Delta AB", "556000-0004", roll="Styrelseledamot"), "u")
+    assert m.vd_namn(ledamot) is None
+    # Omsättningsfiltret (merinfo anger tkr; profilen kronor).
+    assert str(m.kontrollera(b, {"size": {"omsattning_max": 1_000_000}}, None)).startswith("För hög omsättning")
 
 
-def test_bara_mejl_racker_som_kontaktvag():
-    """Antons tillägg 2026-10-02: en rad med namn, roll och mejl men utan
-    telefon sparas också. Namn och roll krävs fortfarande."""
-    b = m.tolka_bolag(bolagssida("Beta Måleri AB", "556000-0002", telefon=None, epost="info@betamaleri.se"), "u")
-    assert b["telefon"] is None and b["epost"] == "info@betamaleri.se"
-    assert m.kontrollera(b, {}, None) is None
-    utan_person = m.tolka_bolag(bolagssida("Beta Måleri AB", "556000-0002", roll=None, epost="info@betamaleri.se"), "u")
-    assert str(m.kontrollera(utan_person, {}, None)).startswith("Ingen verifierad kontakt")
-    # Telefon väger tyngre än mejl vid rangordningen.
-    med_tel = m.tolka_bolag(bolagssida("Alfa Bygg AB", "556000-0001"), "u")
-    assert m._kodpoang(med_tel, {}, None) > m._kodpoang(b, {}, None)
+def test_vd_uppgift_maste_ga_att_knyta_till_vd():
+    sida = (
+        "<p>Kontakta oss: info@alfabygg.se, 031-11 11 11</p>"
+        "<div>Test Testsson, VD<br>Tel 070-123 45 67</div>"
+    )
+    assert discovery.vd_uppgift_i_text(sida, "Test Testsson", "https://alfabygg.se") == {
+        "contact_email": None, "contact_phone": "070-123 45 67"}
+    mejl = "<p>Test Testsson</p><a href='mailto:test.testsson@alfabygg.se'>test.testsson@alfabygg.se</a>"
+    assert discovery.vd_uppgift_i_text(mejl, "Test Testsson", "https://alfabygg.se")["contact_email"] == (
+        "test.testsson@alfabygg.se")
+    # Ett växelnummer eller info@ som inte står vid VD:ns namn räknas inte.
+    assert discovery.vd_uppgift_i_text("<p>info@alfabygg.se 031-11 11 11</p>", "Test Testsson",
+                                       "https://alfabygg.se") is None
 
 
 @pytest.fixture
@@ -176,43 +185,61 @@ def _installera_sidor(monkeypatch, sidor: dict[str, str]) -> list[str]:
     return hamtade
 
 
-@pytest.mark.anyio
-async def test_hela_sokningen_levererar_bara_kvalificerade(monkeypatch):
+def _sidor_for_sokningen():
     rader = {r["company_name"]: r["url"] for r in m.tolka_lista(LISTA)}
-    hamtade = _installera_sidor(
-        monkeypatch,
-        {
-            "https://www.merinfo.se/byggbranschen/molndal/foretag/1": LISTA,
-            rader["Alfa Bygg AB"]: bolagssida("Alfa Bygg AB", "556000-0001"),
-            # Beta saknar telefon både i listan och på bolagssidan, men har en
-            # sajt: mejlen hämtas därifrån (hamta_kontaktvag, stubbad nedan).
-            rader["Beta Måleri AB"]: bolagssida("Beta Måleri AB", "556000-0002", telefon=None,
-                                                hemsida="www.betamaleri.se"),
-            # Gamma saknar namngiven person: fälls på kontaktkravet.
-            rader["Gamma Golv AB"]: bolagssida("Gamma Golv AB", "556000-0003", roll=None),
-            rader["Delta Snickeri AB"]: bolagssida("Delta Snickeri AB", "556000-0004", roll="Styrelseledamot",
-                                                   person="Dora Delta", telefon="070-444 44 44"),
-        },
-    )
-    async def _kontaktvag(website):
-        assert website == "https://www.betamaleri.se"
-        return {"contact_email": "info@betamaleri.se", "contact_level": "role_address"}
+    return rader, {
+        "https://www.merinfo.se/byggbranschen/molndal/foretag/1": LISTA,
+        rader["Alfa Bygg AB"]: bolagssida("Alfa Bygg AB", "556000-0001", hemsida="www.alfabygg.se"),
+        # Beta har ingen hemsida i registret: den slås upp.
+        rader["Beta Måleri AB"]: bolagssida("Beta Måleri AB", "556000-0002", telefon=None),
+        # Gamma: ingen VD och ingen hemsida att hitta.
+        rader["Gamma Golv AB"]: bolagssida("Gamma Golv AB", "556000-0003", roll=None),
+        rader["Delta Snickeri AB"]: bolagssida("Delta Snickeri AB", "556000-0004", roll="Styrelseledamot",
+                                               person="Dora Delta", hemsida="www.deltasnickeri.se"),
+    }
 
-    monkeypatch.setattr(discovery, "hamta_kontaktvag", _kontaktvag)
-    icp = {"industries": ["Bygg"], "geography": ["Mölndal"], "roles": ["VD"], "size": {"anstallda_min": 1, "anstallda_max": 49}}
+
+@pytest.mark.anyio
+async def test_iris_far_bolag_med_webbplats_och_ingen_registerkontakt(monkeypatch):
+    rader, sidor = _sidor_for_sokningen()
+    _installera_sidor(monkeypatch, sidor)
+
+    async def _uppslag(namn, geografi=None):
+        return {"Beta Måleri AB": "https://www.betamaleri.se"}.get(namn)
+
+    monkeypatch.setattr(discovery, "sla_upp_webbplats", _uppslag)
+    icp = {"industries": ["Bygg"], "geography": ["Mölndal"], "size": {"anstallda_min": 1, "anstallda_max": 49}}
     leads = await m.sok(icp, 5, uteslut=set(), profil=None)
 
-    assert [k["company_name"] for k in leads] == ["Alfa Bygg AB", "Beta Måleri AB", "Delta Snickeri AB"]
-    beta = leads[1]
-    assert beta["contact_phone"] is None and beta["contact_email"] == "info@betamaleri.se"
-    alfa = leads[0]
-    assert (alfa["contact_name"], alfa["contact_role"], alfa["contact_phone"]) == (
-        "Test Testsson", "Verkställande direktör", "070-111 11 11")
-    # VD matchar kundens önskade roll; ledamoten är en annan beslutsfattare.
-    assert alfa["contact_level"] == "named_role_match" and leads[2]["contact_level"] == "named_other"
-    assert alfa["source_name"] == "merinfo" and alfa["source_url"].startswith("https://www.merinfo.se/foretag/")
-    # Beta saknade telefon i listan men hämtas ändå: mejl syns aldrig på listsidan.
-    assert rader["Beta Måleri AB"] in hamtade
+    # Gamma saknar webbplats: Iris går vidare (Anton 2026-10-04).
+    assert sorted(k["company_name"] for k in leads) == ["Alfa Bygg AB", "Beta Måleri AB", "Delta Snickeri AB"]
+    assert all(k["contact_name"] is None and k["contact_phone"] is None for k in leads)
+    beta = next(k for k in leads if k["company_name"] == "Beta Måleri AB")
+    assert beta["website"] == "https://www.betamaleri.se"
+    assert all(k["source_name"] == "merinfo" for k in leads)
+
+
+@pytest.mark.anyio
+async def test_lista_kraver_kontakt_som_gar_att_knyta_till_vd(monkeypatch):
+    rader, sidor = _sidor_for_sokningen()
+    _installera_sidor(monkeypatch, sidor)
+
+    async def _uppslag(namn, geografi=None):
+        return {"Beta Måleri AB": "https://www.betamaleri.se"}.get(namn)
+
+    async def _vd_kontakt(webb, vd):
+        assert vd == "Test Testsson"
+        return {"contact_email": "test@alfabygg.se", "contact_phone": None} if "alfabygg" in webb else None
+
+    monkeypatch.setattr(discovery, "sla_upp_webbplats", _uppslag)
+    monkeypatch.setattr(discovery, "hamta_vd_kontakt", _vd_kontakt)
+    icp = {"industries": ["Bygg"], "geography": ["Mölndal"]}
+    leads = await m.sok(icp, 5, uteslut=set(), profil=None, lage="lista")
+
+    # Beta: VD men inget på sajten som går att knyta till VD. Delta: ingen VD.
+    assert [k["company_name"] for k in leads] == ["Alfa Bygg AB"]
+    assert (leads[0]["contact_name"], leads[0]["contact_role"], leads[0]["contact_email"]) == (
+        "Test Testsson", "VD", "test@alfabygg.se")
 
 
 @pytest.mark.anyio
