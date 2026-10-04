@@ -55,7 +55,7 @@ function SignaturBlock({ signatur }: Readonly<{ signatur: Signatur }>) {
   const { text } = useLocale();
   return (
     <aside className="mt-4 rounded-input border border-ink/15 bg-paper px-4 py-3">
-      <p className="text-[0.75rem] font-medium uppercase tracking-wide text-ink-subtle">
+      <p className="text-[0.8125rem] font-medium text-ink-subtle">
         {text({
           sv: "Signaturen så som mottagaren ser den",
           en: "The signature as the recipient sees it"
