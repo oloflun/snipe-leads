@@ -21,6 +21,11 @@ class ChatRequest(BaseModel):
     #: medan fältet saknades här, så varje admintest räknades som kundvolym.
     #: Samma fält och samma innebörd som LeadsBatchRequest.is_test.
     is_test: bool = False
+    #: 2026-10-05: arbetsytans hjälpchatt får ett sifferblock med tenantens
+    #: egna nyckeltal (app/agent/arbetsyta_siffror.py). Flaggan sätts BARA av
+    #: den autentiserade testchatt-routen i Next och STRIPPAS av den publika
+    #: chat-routen — en slutkund ska aldrig kunna fråga ut företagets siffror.
+    arbetsyta: bool = False
 
 
 class TriageEmail(BaseModel):

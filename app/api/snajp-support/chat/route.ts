@@ -24,11 +24,20 @@ export async function POST(request: NextRequest) {
   // förfalskad slug ger på sin höjd fel kunds publika kunskapsbas, aldrig
   // åtkomst till någons data.
   let tenant: string | null = null;
+  let payload = body;
   try {
-    tenant = (JSON.parse(body) as { tenant?: string }).tenant ?? null;
+    const parsed = JSON.parse(body) as { tenant?: string; arbetsyta?: unknown };
+    tenant = parsed.tenant ?? null;
+    // `arbetsyta` ger agenten tenantens interna nyckeltal och får BARA
+    // sättas av den autentiserade testchatt-routen. Här är vem som helst —
+    // fältet strippas, oavsett värde (2026-10-05).
+    if ("arbetsyta" in parsed) {
+      delete (parsed as Record<string, unknown>).arbetsyta;
+      payload = JSON.stringify(parsed);
+    }
   } catch {
     // Ogiltig JSON får backenden avvisa med sitt eget felmeddelande.
   }
 
-  return proxyToBackend("/api/chat", { method: "POST", body }, tenant);
+  return proxyToBackend("/api/chat", { method: "POST", body: payload }, tenant);
 }

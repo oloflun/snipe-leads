@@ -31,6 +31,7 @@ from ..cache import svarscache, versioner
 from ..integrationer import handelser as integrationshandelser
 from ..integrationer import uppslag as integrationsuppslag
 from ..minne import arbetsminne
+from . import arbetsyta_siffror
 from ..moderation.abuse_gate import check_abuse, ton_instruktion
 from ..moderation.maskering import maskera_personnummer
 from ..leads.soul import load_soul
@@ -632,6 +633,11 @@ async def run_support_agent(
     # integrationernas {{kund.telefon}}. Båda None = oförändrat beteende.
     kund_id: str | None = None,
     customer_phone: str | None = None,
+    # 2026-10-05: arbetsytans hjälpchatt (autentiserad testchatt) får ett
+    # sifferblock med tenantens egna nyckeltal. Flaggan gated:as i Next —
+    # se app/agent/arbetsyta_siffror.py för varför den aldrig får sättas
+    # för en slutkund.
+    arbetsyta: bool = False,
 ) -> dict[str, Any]:
     started = time.monotonic()
     settings = get_settings()
@@ -862,6 +868,15 @@ async def run_support_agent(
         + (f"\n\n{soul_block}" if soul_block else "")
         + (f"\n\n{minnesblock}" if minnesblock else "")
     )
+    # Arbetsytans siffror (2026-10-05): bara i den autentiserade
+    # hjälpchatten. Vår egen kördata, inte kundskriven text — ingen
+    # wrapping. Blocket läggs också i faktagrindens källor längre ned, så
+    # att siffrorna får citeras utan att grinden stryker dem.
+    sifferblock = ""
+    if arbetsyta:
+        sifferblock = await arbetsyta_siffror.bygg_sifferblock(storage, tenant_id)
+        if sifferblock:
+            case_context = f"{case_context}\n\n{sifferblock}"
     # Kundens valda tonläge och ämnesområde (bd snipe-1fl). Tonläget är vår
     # text via ett enumval; ämnesområdet är kundskrivet och wrappat.
     for block in (_tonblock(installningar), _amnesblock(installningar)):
@@ -1540,6 +1555,10 @@ async def run_support_agent(
         # Lyckade svar ur kundens system (bd snipe-36u) är stöd precis som
         # kunskapsbasen — annars fälls ett korrekt återgivet leveransdatum.
         kallor += underlag.kallor
+        # Arbetsytans siffror är vår egen kördata: ett korrekt återgivet
+        # nyckeltal ska inte strykas som ostött.
+        if sifferblock:
+            kallor.append(sifferblock)
         dom = support_faktagrind.kontrollera(
             reply, niva=installningar["faktakontroll"], kallor=kallor, tenant_namn=tenant_namn
         )

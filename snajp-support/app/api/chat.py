@@ -91,6 +91,7 @@ async def _process(
                 aterta=aterta,
                 vid_arende=vid_arende,
                 is_test=request.is_test,
+                arbetsyta=request.arbetsyta,
             )
         # Bokför de LLM-anrop körningen FAKTISKT gjorde — ett steg är ett
         # anrop, och antalet varierar med eskalering och omkörning. Ett tak
