@@ -269,36 +269,162 @@ export async function requestDemoAccess(
 }
 
 /**
- * Glömt lösenord, steg 1.
+ * Glömt lösenord, steg 1: skapa en engångstoken och mejla länken.
  *
- * Samma sak: återställningsmail kräver en sändväg. Formuläret finns kvar och
- * svarar ärligt i stället för att svara "om kontot finns har vi skickat" på ett
- * mail som aldrig lämnar servern.
+ * Svaret är ALLTID detsamma för en adress med och utan konto — annars är
+ * formuläret en kontolista för vem som helst att fråga (samma princip som
+ * felmeddelandet vid inloggning). Mail går bara till adresser som redan HAR
+ * ett konto: utan rad i auth.users skapas ingen token och inget mail, och
+ * länken kan aldrig bli en väg att registrera sig.
+ *
+ * Saknar miljön en mailväg svarar formuläret ärligt med ett konfigurationsfel
+ * i stället för att låtsas skicka — det beskedet avslöjar inget om adressen,
+ * eftersom det ges innan någon användaruppslagning gjorts.
  */
 export async function requestPasswordReset(email: string): Promise<AuthActionResult> {
-  return {
-    success: false,
-    error: `Återställning via mail är inte kopplad än. Kontakta support så återställs lösenordet manuellt. (${email})`
-  };
+  const { harMailvag, skickaTransaktionsmail, appBasUrl } = await import("@/lib/mail");
+  if (!harMailvag()) {
+    return {
+      success: false,
+      error:
+        "Återställning via mail är inte konfigurerad i den här miljön. Kontakta support så återställs lösenordet manuellt."
+    };
+  }
+
+  const userId = await anvandarId(email);
+  if (!userId) {
+    // Neutralt "skickat" — se blockkommentaren. Inget mail och ingen token.
+    return { success: true };
+  }
+
+  const { nyResetToken, RESET_TOKEN_GILTIG_MINUTER } = await import("@/lib/reset-token");
+  const { token, hash } = nyResetToken();
+
+  // En aktiv länk per konto: en ny begäran ogiltigförklarar den gamla. Det
+  // håller tabellen ren och gör "jag tryckte tre gånger" förutsägbart — den
+  // senaste länken gäller, punkt.
+  await sql("delete from public.password_reset_tokens where user_id = $1", [userId]);
+  await sql(
+    `insert into public.password_reset_tokens (user_id, token_hash, expires_at)
+     values ($1, $2, now() + make_interval(mins => $3))`,
+    [userId, hash, RESET_TOKEN_GILTIG_MINUTER]
+  );
+
+  const lank = `${appBasUrl()}/auth/reset?token=${token}`;
+  try {
+    await skickaTransaktionsmail({
+      till: email,
+      amne: "Återställ ditt lösenord hos Snajp / Reset your Snajp password",
+      brodtext: [
+        "Hej!",
+        "",
+        "Du (eller någon annan) har begärt en lösenordsåterställning för det här kontot hos Snajp.",
+        `Klicka på länken för att välja ett nytt lösenord — den gäller i ${RESET_TOKEN_GILTIG_MINUTER} minuter och kan bara användas en gång:`,
+        "",
+        lank,
+        "",
+        "Har du inte begärt någon återställning kan du ignorera det här mailet — lösenordet är oförändrat.",
+        "",
+        "— — —",
+        "",
+        "Hi!",
+        "",
+        "A password reset was requested for this Snajp account.",
+        `Click the link to choose a new password — it is valid for ${RESET_TOKEN_GILTIG_MINUTER} minutes and can only be used once:`,
+        "",
+        lank,
+        "",
+        "If you did not request a reset you can ignore this email — your password is unchanged.",
+        "",
+        "Snajp — snajp.se"
+      ].join("\n")
+    });
+  } catch (fel) {
+    // Sändfelet (Resend-status, kvot, domän) hör hemma i loggen, inte hos
+    // användaren — men beskedet måste vara ärligt: inget mail gick iväg.
+    console.error("requestPasswordReset:", (fel as Error).message);
+    await sql("delete from public.password_reset_tokens where token_hash = $1", [hash]);
+    return {
+      success: false,
+      error: "Mailet kunde inte skickas just nu. Vänta en stund och försök igen, eller kontakta support."
+    };
+  }
+
+  return { success: true };
 }
 
 /**
  * Glömt lösenord, steg 2: sätt det nya.
  *
- * Kräver en inloggad session. Utan session kastar den, och det är rätt —
- * annars hade en oinloggad kunnat posta hit och byta lösenord på vem som helst.
+ * Två giltiga vägar in, aldrig noll:
+ *  - En TOKEN från återställningsmailet. Den förbrukas atomiskt — used_at
+ *    sätts i samma UPDATE som validerar den — så en länk ger exakt ett byte
+ *    även om två flikar postar samtidigt. Token kan bara peka på en rad som
+ *    redan finns i auth.users: flödet kan byta ett lösenord, aldrig skapa
+ *    ett konto.
+ *  - En inloggad session (lösenordsbyte inifrån appen).
+ *
+ * Utan någon av dem vägrar den, och det är rätt — annars hade en oinloggad
+ * kunnat posta hit och byta lösenord på vem som helst.
  */
-export async function updatePassword(password: string): Promise<AuthActionResult> {
+export async function updatePassword(password: string, token?: string): Promise<AuthActionResult> {
   if (password.length < MIN_PASSWORD_LENGTH) {
     return { success: false, error: "Lösenordet är för kort." };
   }
 
+  const ogiltig: AuthActionResult = {
+    success: false,
+    error: "Återställningslänken är inte längre giltig. Begär en ny nedan."
+  };
+
+  if (token !== undefined) {
+    const { hashaResetToken, serUtSomResetToken } = await import("@/lib/reset-token");
+    if (!serUtSomResetToken(token)) {
+      return ogiltig;
+    }
+    const rader = await sql<{ user_id: string }>(
+      `update public.password_reset_tokens
+          set used_at = now()
+        where token_hash = $1 and used_at is null and expires_at > now()
+        returning user_id`,
+      [hashaResetToken(token)]
+    );
+    const userId = rader[0]?.user_id;
+    if (!userId) {
+      return ogiltig;
+    }
+
+    const konto = await sql<{ email: string }>("select email from auth.users where id = $1", [
+      userId
+    ]);
+    const email = konto[0]?.email;
+    if (!email) {
+      return ogiltig;
+    }
+
+    await sql("update auth.users set encrypted_password = $2, updated_at = now() where id = $1", [
+      userId,
+      await hashPassword(password)
+    ]);
+
+    // Logga in med det nyss satta lösenordet så användaren landar direkt i
+    // appen — samma väg som en vanlig inloggning, inga specialfall.
+    try {
+      await signIn("credentials", { email, password, redirect: false });
+    } catch (fel) {
+      if (fel instanceof AuthError) {
+        // Lösenordet ÄR bytt; bara auto-inloggningen föll. Säg det, i stället
+        // för att få bytet att se misslyckat ut.
+        return { success: true, message: "Lösenordet är bytt. Logga in med det nya lösenordet." };
+      }
+      throw fel;
+    }
+    return { success: true, message: "Lösenordet är bytt. Du är inloggad." };
+  }
+
   const session = await auth();
   if (!session?.user?.id) {
-    return {
-      success: false,
-      error: "Återställningslänken är inte längre giltig. Begär en ny nedan."
-    };
+    return ogiltig;
   }
 
   await sql("update auth.users set encrypted_password = $2, updated_at = now() where id = $1", [

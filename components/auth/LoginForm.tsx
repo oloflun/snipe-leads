@@ -19,7 +19,12 @@ const T = {
     sv: "Länken gick inte att använda. Den kan ha gått ut eller redan vara förbrukad — begär en ny nedan.",
     en: "The link could not be used. It may have expired or already been used. Request a new one below."
   },
-  aterstallSkickad: { sv: "Återställningslänk skickad.", en: "Reset link sent." },
+  // Samma besked oavsett om adressen har ett konto — formuläret får inte
+  // fungera som en kontolista (samma princip som inloggningens felmeddelande).
+  aterstallSkickad: {
+    sv: "Om adressen har ett konto hos oss har vi skickat en återställningslänk. Kolla inkorgen — och skräpposten.",
+    en: "If the address has an account with us, we have sent a reset link. Check your inbox — and the spam folder."
+  },
   atkomstSkickad: { sv: "Åtkomstlänk skickad.", en: "Access link sent." },
   kontoSkapat: { sv: "Konto skapat.", en: "Account created." },
   nagotFel: { sv: "Något gick fel.", en: "Something went wrong." },

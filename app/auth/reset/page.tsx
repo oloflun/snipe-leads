@@ -1,45 +1,54 @@
-import Link from "next/link";
-import { ResetPasswordForm } from "@/components/auth/ResetPasswordForm";
+import { ResetLankOgiltig, ResetPasswordForm } from "@/components/auth/ResetPasswordForm";
+import { hashaResetToken, serUtSomResetToken } from "@/lib/reset-token";
+import { hasDatabase, sql } from "@/lib/db";
 import { getWorkspaceContext } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Steg 2 i glömt-lösenord. Recovery-koden är redan växlad mot en session av
- * /auth/callback (se requestPasswordReset), så sidan behöver bara kontrollera
- * att sessionen finns.
+ * Steg 2 i glömt-lösenord. Länken i mailet bär en engångstoken i `?token=`;
+ * sidan kontrollerar att den finns, är oförbrukad och inte gått ut INNAN
+ * formuläret visas — ett formulär som postar mot en död token hade sett ut
+ * att fungera och misslyckats vid sparningen, efter att användaren valt och
+ * upprepat ett lösenord.
  *
- * Utan session visas inte formuläret alls. Ett formulär som postar mot en
- * session som inte finns hade sett ut att fungera och misslyckats vid
- * sparningen — felet ska synas innan användaren skrivit något.
+ * Kontrollen här är läsande; själva förbrukningen (used_at) sker atomiskt i
+ * updatePassword när det nya lösenordet sparas. Token kan bara matcha en rad
+ * som pekar på ett BEFINTLIGT konto i auth.users — sidan kan aldrig användas
+ * för att skapa ett konto.
+ *
+ * Utan token fungerar sidan som förut för en redan inloggad användare
+ * (lösenordsbyte på en aktiv session).
  */
-export default async function Page() {
-  const context = await getWorkspaceContext();
+export default async function Page({
+  searchParams
+}: Readonly<{ searchParams: Promise<{ token?: string }> }>) {
+  const { token } = await searchParams;
 
-  if (!context) {
+  if (token !== undefined) {
+    const giltig =
+      serUtSomResetToken(token) &&
+      hasDatabase() &&
+      (
+        await sql<{ ok: boolean }>(
+          `select true as ok from public.password_reset_tokens
+            where token_hash = $1 and used_at is null and expires_at > now()`,
+          [hashaResetToken(token)]
+        )
+      ).length > 0;
+
     return (
       <main className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center px-6">
-        <h1 className="font-display text-5xl italic-disp tighten">Länken gäller inte längre</h1>
-        <p className="mt-4 max-w-xl text-[15px] text-mineral">
-          Återställningslänkar går ut, och de kan bara användas en gång. Begär en
-          ny från inloggningssidan.
-        </p>
-        <div className="mt-8">
-          <Link
-            href="/login"
-            className="inline-flex items-center gap-3 bg-ink px-5 py-3 font-mono text-[13px] uppercase tracking-[0.18em] text-paper transition-colors duration-500 hover:bg-ochre hover:text-ink"
-          >
-            Till inloggningen
-            <span aria-hidden>↗</span>
-          </Link>
-        </div>
+        {giltig ? <ResetPasswordForm token={token} /> : <ResetLankOgiltig />}
       </main>
     );
   }
 
+  const context = await getWorkspaceContext();
+
   return (
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center px-6">
-      <ResetPasswordForm />
+      {context ? <ResetPasswordForm /> : <ResetLankOgiltig />}
     </main>
   );
 }
