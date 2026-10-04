@@ -1,5 +1,19 @@
 # Snipra Status
 
+## 2026-10-04 — Claude — Snajp Suite + design klara, Jev i alla inkorgar, Antons leadsregler, release-PR #30 bedömd
+
+Snajp Suite fas 1–3 och designpasset är byggda (meny Översikt/Att göra/Leads/
+Kundtjänst/Aktivitet, adminen som Översikt/Kunder/Logg). Provsortera i
+inkorgen, Jev i drift för alla inkorgar bakom egen brytare `INKORG_JEV=auto`
+(development driftsatt, main verkar efter mergen) och utan adresser i anropet.
+Antons leadsregler (registret är filter, Jev först, bara VD med styrkt kontakt,
+Iris via webbplatsen) står i CLAUDE.md/AGENTS.md och i koden; provet på Alunix
+gav 1 Iris-lead och 0 listrader — reglerna fungerar, volymen är låg. Sebbes
+arbete granskat: en krock (Skickat-kopian) rättad. **Före Antons merge av PR #30:
+migration 090/091 mot main (hans ord) och en Ej relaterat-vy i inkorgen (annars
+kan kundärenden försvinna tyst).** ScrapeGraph-krediten är slut. Handoff:
+`HANDOFF-2026-10-04-SUITE-JEV-MERINFO.md`. Logg: `session-logs/2026-10-04-session-log.md`.
+
 ## 2026-10-02 (session 4) — Claude — driftsatt: development live, main migrerad till 087, adminytan i main lagad
 
 Anton körde push, `LEADS_MERINFO=scrapegraph` och migrationerna 082–086

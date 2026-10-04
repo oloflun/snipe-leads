@@ -321,3 +321,9 @@ rebase. Ändringar behöver samordnas, inte bara pushas.
   `gemini-3.6-flash`, dubblas 2027-01-01). Målbilden i övrigt orörd — sessionen
   var gränssnittsarbete i adminytan, se
   `plans/2026-08-29-adminytan-exempeldata-och-sprak.md`.
+- 2026-10-04 — claude — punkt 10 (produktionen i fas med development) har nu
+  en konkret väg: release-PR #30 (Sebbe) bär allt; före Antons merge ska
+  migration 090/091 köras mot main och en Ej relaterat-vy finnas i inkorgen.
+  Ny bestående regel för leads (Anton): registret är ett filter, Jev första
+  filtret, bara VD-kontakter som går att styrka, Iris via bolagets webbplats
+  (CLAUDE.md § Leads). Handoff: `HANDOFF-2026-10-04-SUITE-JEV-MERINFO.md`.
