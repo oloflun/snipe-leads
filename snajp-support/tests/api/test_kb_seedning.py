@@ -151,3 +151,36 @@ def test_snajp_kb_bar_grundarna_och_arbetsytan():
     # bokför ingenting, och paketet heter Snajp Kvitton.
     assert "Snajp Kvitton" in allt
     assert "Snajp Bokföring" not in allt
+
+
+@pytest.mark.anyio
+async def test_snajp_seedning_uppdaterar_andrat_innehall():
+    """Filen äger snajp-artiklarna: en rättad text ska nå databasen vid
+    nästa seedning (2026-10-05 — Kvitton-rättelsen nådde aldrig dev förrän
+    detta). Kundens egna rubriker rörs aldrig."""
+    from app.scripts.seed_kb import seed_tenant
+    from app.storage.memory import MemoryStorage
+
+    storage = MemoryStorage()
+    await seed_tenant(storage, "snajp")
+    tenant = await storage.create_tenant(slug="snajp", name="Snajp")
+
+    # Förvanska en filägd artikel och lägg till en kundskriven.
+    artiklar = await storage.list_kb(tenant["id"])
+    om_snajp = next(a for a in artiklar if a["title"] == "Om Snajp")
+    await storage.delete_kb_article(tenant["id"], om_snajp["id"])
+    await storage.add_kb_article(
+        tenant["id"], title="Om Snajp", content="GAMMAL INAKTUELL TEXT",
+        category="ovrigt", embedding=None,
+    )
+    await storage.add_kb_article(
+        tenant["id"], title="Kundens egen artikel", content="Skriven i UI:t.",
+        category="ovrigt", embedding=None,
+    )
+
+    await seed_tenant(storage, "snajp")
+
+    artiklar = await storage.list_kb(tenant["id"])
+    om_snajp = next(a for a in artiklar if a["title"] == "Om Snajp")
+    assert "GAMMAL INAKTUELL TEXT" not in om_snajp["content"]
+    assert any(a["title"] == "Kundens egen artikel" for a in artiklar)
