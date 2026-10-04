@@ -132,3 +132,22 @@ async def test_seedningen_ar_idempotent():
 
             efter = len((await client.get("/api/kb", headers=nyckel)).json()["articles"])
             assert efter == forst
+
+
+def test_snajp_kb_bar_grundarna_och_arbetsytan():
+    """Chatten kunde inte svara på "vilka har grundat Snajp" (2026-10-05):
+    grundarna fanns bara i lib/team.ts, inte i kunskapsbasen, och KB-missen
+    gav direkt överlämning. Artiklarna nedan är svaret — försvinner de
+    återkommer felet."""
+    from app.tenants.snajp_kb import KB_ARTICLES
+
+    allt = " ".join(a["content"] for a in KB_ARTICLES)
+    assert "Sebastian Bergman" in allt
+    assert "Anton Lundin" in allt
+    assert "kontakt@snajp.se" in allt
+    # Arbetsytans navigering ska vara beskriven.
+    assert any(a["title"] == "Hitta rätt på arbetsytan" for a in KB_ARTICLES)
+    # Produktnamnen ska spegla sajten (lib/pricing.ts): Kvittohanteraren
+    # bokför ingenting, och paketet heter Snajp Kvitton.
+    assert "Snajp Kvitton" in allt
+    assert "Snajp Bokföring" not in allt

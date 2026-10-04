@@ -24,11 +24,66 @@ KB_ARTICLES: list[dict] = [
         "content": (
             "Snajp bygger AI-agenter för svenska B2B-bolag. Vi levererar tre agenter: en "
             "kundservice-agent som svarar på inkommande ärenden utifrån kundens egen "
-            "kunskapsbas, en leads-agent som hittar företag med konkreta signaler och "
-            "skriver utkast till mejl, och en bokföringsagent som läser kvitton och "
-            "fakturor och föreslår kontering. Verksamheten drivs från Göteborg och Umeå och "
-            "arbetar med bolag i hela landet. Vi bygger inte om kundens hemsida — kunden "
+            "kunskapsbas, Iris — leads-agenten som hittar företag med konkreta signaler "
+            "och skriver utkast till mejl — och Kvittohanteraren, som läser kvitton ur "
+            "mejlen och sammanställer dem. Kvittohanteraren bokför ingenting själv; den "
+            "läser av, sammanställer och exporterar som SIE4 till kundens eget "
+            "bokföringsprogram. Verksamheten drivs från Göteborg och Umeå och arbetar "
+            "med bolag i hela landet. Vi bygger inte om kundens hemsida — kunden "
             "behåller sin egen sajt, och det vi levererar är agenterna."
+        ),
+    },
+    {
+        "title": "Vilka står bakom Snajp",
+        "category": "ovrigt",
+        # Speglar lib/team.ts och /vart-team (2026-10-05). Namnen är
+        # bekräftade uppgifter, inte härledda — se team.ts egen docstring.
+        "content": (
+            "Snajp har två grundare: Sebastian Bergman och Anton Lundin. Båda har "
+            "titeln Grundare — det finns ingen uppdelning i vd eller teknikchef, och "
+            "det är medvetet: två grundare i ett litet bolag som gör allting "
+            "tillsammans. Sebastian har byggt det mesta av plattformen: agenternas "
+            "backend, databasen och gränssnittet kunderna arbetar i. Anton har byggt "
+            "agenternas färdighetsregister — spelböckerna som avgör vad de kan och hur "
+            "de resonerar. Snajp byggs i Göteborg och Umeå. Mer om teamet finns på "
+            "sidan /vart-team på snajp.se."
+        ),
+    },
+    {
+        "title": "Kontakt med Snajp",
+        "category": "ovrigt",
+        "content": (
+            "Mejladressen till Snajp är kontakt@snajp.se — den gäller både frågor om "
+            "tjänsten och övriga ärenden. En demo bokas på /boka-demo (15–20 minuter). "
+            "Telefonnummer och supporttider är inte fastställda i vårt underlag; "
+            "frågar kunden efter dem, hänvisa till mejladressen eller koppla in en "
+            "kollega."
+        ),
+    },
+    {
+        "title": "Hitta rätt på arbetsytan",
+        "category": "teknisk_support",
+        # Speglar arbetsytans faktiska navigering (components/AppShell.tsx,
+        # vyerna under components/). Uppdatera när menyn ändras.
+        "content": (
+            "Arbetsytan nås efter inloggning på snajp.se och har en meny till "
+            "vänster:\n"
+            "• Översikt — nyckeltalen överst (väntande utkast, nya leads, ärenden) "
+            "och Att göra för alla agenter.\n"
+            "• Iris — leads-agenten: Bolag (prospekten med bedömning och utkast), "
+            "Granskning (utkast som väntar på godkännande), Inställningar (målgrupp "
+            "och automation) och CRM-lista. Knappen \"Kör Iris\" startar en körning.\n"
+            "• Kundtjänst — Inkorgen (mejl med svarsutkast att godkänna, knapparna "
+            "Förbättra, Kortare och Mer personlig skriver om utkastet) och "
+            "Kundchatten.\n"
+            "• Kvitton — Kvittohanteraren: koppla inkorgen och tryck \"Skanna "
+            "inkorgen\", ställ frågor till kvittoassistenten i chatten.\n"
+            "• Inställningar — här kopplas mejlinkorgen (med app-lösenord från "
+            "mejlleverantören), kunskapsbasen fylls på, affärskontexten \"Vad ni "
+            "säljer\" skrivs in, och eskaleringsregler ställs in.\n\n"
+            "Ingenting skickas till riktiga mottagare utan godkännande enligt den "
+            "autonominivå kunden valt. Går något inte att hitta: be kunden beskriva "
+            "vad den försöker göra, eller koppla in en kollega."
         ),
     },
     {
@@ -67,12 +122,13 @@ KB_ARTICLES: list[dict] = [
             "egen kunskapsbas.\n"
             "• Snajp Leads — 4 490 kr/mån. Leads-agenten som hittar och skriver till rätt "
             "företag.\n"
-            "• Snajp Bokföring — 2 690 kr/mån. Bokföringsagenten som läser kvitton och "
-            "föreslår kontering.\n"
+            "• Snajp Kvitton — 2 690 kr/mån. Kvittohanteraren som läser kvitton ur "
+            "mejlen (endast läsbehörighet) och exporterar som SIE4. Den bokför "
+            "ingenting själv.\n"
             "• Snajp Duo — 6 990 kr/mån. Leads- och kundservice-agenten i samma dashboard, "
             "med delad kunddata.\n"
             "• Snajp Trio — 9 990 kr/mån. Alla tre agenterna: leads, kundtjänst och "
-            "bokföring.\n"
+            "kvitton.\n"
             "Duo kostar 1 490 kr mindre per månad än att köpa Support och Leads var för "
             "sig (3 990 + 4 490 = 8 480 kr). Trio kostar 1 180 kr mindre än alla tre var "
             "för sig (3 990 + 4 490 + 2 690 = 11 170 kr)."
@@ -101,7 +157,7 @@ KB_ARTICLES: list[dict] = [
             "3 kr.\n\n"
             "Snajp Support har obegränsade chattar — där finns alltså inget volymtak att "
             "räkna på.\n\n"
-            "Snajp Bokföring säljs med en kampanj: en extra bokföringsagent kostar 999 kr. "
+            "Snajp Kvitton säljs med en kampanj: en extra kvittoagent kostar 999 kr. "
             "Frågar kunden hur länge kampanjen gäller, eller vad en extra agent innebär i "
             "praktiken: det är inte fastställt i vårt underlag. Lämna över till en "
             "människa.\n\n"
