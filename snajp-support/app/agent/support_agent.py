@@ -315,11 +315,39 @@ _LOVAR_KOLLEGA = re.compile(
     # "svara på mejlet så skickar jag det vidare" (skarptest 2026-10-06).
     r"\b(skickat|lämnat|vidarebefordrat)\s+(\w+\s+){0,3}?vidare\b|"
     r"\bhar\s+(\w+\s+){0,2}?vidarebefordrat\b|"
-    r"\b(kollega|medarbetare|handläggare)\w*\s+(\w+\s+){0,3}?"
-    r"(återkommer|tar\s+över|hör\s+av\s+sig|kontaktar|svarar)\b|"
-    r"\bcolleague\w*\s+(\w+\s+){0,3}?(will|get|take|reply|respond|contact)",
+    # Ett löfte till kunden, inte en beskrivning av hur produkten fungerar:
+    # "Sedan erbjuder den att en kollega tar över" (dev 2026-10-06) är det
+    # senare. Därför krävs "till dig"/"nu"/"härifrån", eller "återkommer"
+    # direkt efter kollegan.
+    r"\b(kollega|medarbetare|handläggare)\w*\s+(som\s+)?"
+    r"(återkommer|kommer\s+att\s+återkomma|hör\s+av\s+sig\s+till\s+dig|"
+    r"kontaktar\s+dig|svarar\s+dig)\b|"
+    r"\b(kollega|medarbetare)\w*\s+tar\s+över\s+(nu|härifrån|ärendet|här\b)|"
+    r"\bcolleague\w*\s+will\s+(get\s+back|contact\s+you|reply|respond|take\s+over)|"
+    r"\bi\s+have\s+(forwarded|passed\s+on|handed\s+over)\b",
     re.IGNORECASE,
 )
+
+
+#: Humaniseraren har en arbetsgång i skillen (utkast → granskning → slutlig
+#: version). Dev 2026-10-06 fick HELA arbetsgången i final_reply, rubriker och
+#: AI-granskning inräknade, rakt ut till kunden.
+_SLUTLIG_VERSION = re.compile(
+    r"(?im)^[ \t]*(?:slutlig(?:\s+version)?|final(?:\s+version)?|färdig\s+text)[ \t]*:[ \t]*\n?"
+)
+_ARBETSRUBRIK = re.compile(
+    r"(?im)^[ \t]*(?:utkast(?:\s+till\s+omskrivning)?|draft)[ \t]*:[ \t]*\n?"
+)
+
+
+def slutlig_text(text: str) -> str:
+    """Bara den slutliga versionen när modellen skrivit ut sin arbetsgång."""
+    if not text:
+        return text
+    traffar = list(_SLUTLIG_VERSION.finditer(text))
+    if traffar:
+        text = text[traffar[-1].end():]
+    return _ARBETSRUBRIK.sub("", text).strip()
 
 #: Käll-ID:n i kundtext: "[KB-1]", "(KB-2, KB-3)", "KB-4". Grundprompten 10.10
 #: förbjuder dem mot kund; skarptest 2026-10-06 fick ändå "[KB-1]" i ett mejl.
@@ -1894,12 +1922,16 @@ async def run_support_agent(
             "'enda', 'alltid', 'bara', 'går inte'), och behåll varje 'det har jag "
             "ingen uppgift om' och varje erbjudande om en kollega som det står. "
             "Ren text, ingen markdown. Korrekturläs till sist: felfri stavning, "
-            "grammatik och skiljetecken. Returnera JSON: final_reply (svenska)."
+            "grammatik och skiljetecken. Returnera JSON: final_reply (svenska) — "
+            "BARA den färdiga texten till kunden, aldrig utkast, granskning, "
+            "rubriker eller din arbetsgång."
         ),
         case_context=f"{case_context}\n\n## Text att humanisera\n{current_draft}",
     )
 
-    reply = strip_markdown(_textfalt(humanized, "final_reply") or current_draft or "").strip()
+    reply = slutlig_text(
+        strip_markdown(_textfalt(humanized, "final_reply") or current_draft or "").strip()
+    )
     # Efter humaniseraren, före längdkapningen: en avslutningsfras utan namn
     # under är trasig oavsett vilket steg som skrev den.
     reply = strip_dangling_sign_off(reply)
@@ -1982,7 +2014,7 @@ async def run_support_agent(
                 case_context=f"{case_context}\n\n## Kunskapsbas\n{kb_block}{systemblock}\n\n## Text att rätta\n{reply}",
             )
             kandidat = strip_dangling_sign_off(
-                strip_markdown(_textfalt(rattning, "final_reply")).strip()
+                slutlig_text(strip_markdown(_textfalt(rattning, "final_reply")).strip())
             )
             if kandidat and support_faktagrind.kontrollera(
                 kandidat, niva=installningar["faktakontroll"], kallor=kallor, tenant_namn=tenant_namn

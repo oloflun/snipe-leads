@@ -500,3 +500,33 @@ async def test_triagens_escalate_definieras_som_63_amnen():
     llm = _LLM()
     await _tur(MemoryStorage(), llm, "Hur fungerar agenten?")
     assert "Aldrig för en vanlig fråga, en säljfråga" in llm.user_by_skill["cs:ticket-triage"]
+
+
+def test_slutlig_text_skalar_bort_humaniserarens_arbetsgang():
+    from app.agent.support_agent import slutlig_text
+
+    lackt = (
+        "Utkast till omskrivning:\nHej, utkastet.\n\n"
+        "Vad avslöjar att det här är AI-genererat?\n– Formellt.\n\n"
+        "Slutlig version:\nHej, den riktiga texten."
+    )
+    assert slutlig_text(lackt) == "Hej, den riktiga texten."
+    assert slutlig_text("Hej, vanlig text.") == "Hej, vanlig text."
+
+
+def test_beskrivning_av_produkten_ar_inget_kollegalofte():
+    assert not _LOVAR_KOLLEGA.search(
+        "Sedan erbjuder den att en kollega tar över. Om du vill det lämnas ärendet över."
+    )
+    assert not _LOVAR_KOLLEGA.search("A colleague can take a look if you want.")
+    assert _LOVAR_KOLLEGA.search("En kollega tar över härifrån.")
+    assert _LOVAR_KOLLEGA.search("A colleague will get back to you shortly.")
+
+
+@pytest.mark.anyio
+async def test_lackt_arbetsgang_nar_aldrig_kunden():
+    storage = MemoryStorage()
+    lackt = "Utkast till omskrivning:\nX\n\nSlutlig version:\nDu kan betala med Swish eller kort."
+    llm = _LLM(overrides={"snajp:humanizer-svenska": {"final_reply": lackt}})
+    svar = await _tur(storage, llm, "Vilka betalsätt har ni?")
+    assert svar["reply"] == "Du kan betala med Swish eller kort."
