@@ -1,5 +1,9 @@
 # Snipra Status
 
+## 2026-10-05 (kväll) — Claude — körningar går att pausa/avbryta och överlever deploy
+
+Paus/återuppta/avbryt i Körningar; städaren, hjärtslaget, idempotent rapport och väckning gör körningar deploysäkra; flera körningar kan startas. development = `266aeca`, ingår i #31. Handoff: `HANDOFF-2026-10-05-IRIS-KOSTNAD-YTOR.md` § 6. Logg: `session-logs/2026-10-05-session-log-2.md`.
+
 ## 2026-10-05 — Claude — Iris billigare och skarpare, inkorgen sorterar rätt, Leads/Att göra/Översikt omgjorda, flytt till main lagad
 
 Antons sju problem från provet 2026-10-04 är lösta och driftsatta på development
