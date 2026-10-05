@@ -57,6 +57,61 @@ def verifierade_belagg(belagg: object, korpus: str) -> list[dict[str, str]]:
     return ut
 
 
+#: Riktningen på ett webbkriterium. "Företag med gamla hemsidor" vill ha en
+#: dålig sajt; "har en modern webbshop" en bra. Okänd riktning = koden avgör
+#: inte, modellens citerade utslag gäller som förut.
+_VILL_HA_DALIG = re.compile(
+    r"gaml|föråldr|dålig|långsam|omodern|utan |ingen |saknar|äldre|old|outdated|slow|poor|bad", re.I
+)
+_INGEN_SAJT_INGAR = re.compile(r"(ingen|utan|saknar)\s+(hem)?sid|(ingen|utan|saknar)\s+webb|no\s+website", re.I)
+_VILL_HA_BRA = re.compile(r"modern|snabb|ny |nya |professionell|fast|new ", re.I)
+#: Gränserna på bildbedömningens tiogradiga skala (webbrevision.VISIONPROMPT).
+#: Kalibrerade mot Antons facit 2026-10-04: Byggarna Berggren och Vicht
+#: (dåliga) under, Björkekärr och Eustaff (bra) över, Ställningskompaniet
+#: (gränsfall) mellan.
+DALIG_HOGST = 4
+BRA_MINST = 7
+
+
+def webbutslag(kriterium: str, rev: dict[str, Any] | None, *, utan_webbplats: bool = False) -> tuple[str, str] | None:
+    """(utfall, motivering) för ett webbkriterium ur webbrevisionen, eller
+    None när koden inte kan avgöra (ingen revision eller okänd riktning).
+
+    Avgörs i kod för att samma citat inte ska kunna styrka båda hållen: före
+    2026-10-05 räckte raden "Ingen webbplats hittades" som belägg både för ja
+    (100 poäng) och nej (fälld)."""
+    if not rev or (rev.get("modernitet") is None and not rev.get("saknas") and not rev.get("svarar_inte")):
+        return None
+    if _VILL_HA_DALIG.search(kriterium):
+        vill_dalig = True
+    elif _VILL_HA_BRA.search(kriterium):
+        vill_dalig = False
+    else:
+        return None
+    if rev.get("saknas"):
+        # Profilens utan_webbplats, eller kriteriet självt ("gammal eller
+        # ingen hemsida"), avgör i kod. Förut var det en mening i prompten
+        # som låg inuti det opålitliga omslaget och därför kunde ignoreras.
+        if vill_dalig and (utan_webbplats or _INGEN_SAJT_INGAR.search(kriterium)):
+            return TRAFF, "Bolaget saknar webbplats, och kundens målgrupp tar med bolag utan sajt."
+        return MISS, "Bolaget saknar webbplats."
+    if rev.get("svarar_inte") and rev.get("modernitet") is None:
+        # Vicht (facit 2026-10-04): en sajt som inte svarar är en dålig sajt.
+        return (TRAFF if vill_dalig else MISS), "Webbplatsen svarade inte när den mättes."
+    m = int(rev["modernitet"])
+    brister = "; ".join(rev.get("brister") or [])
+    if m <= DALIG_HOGST:
+        lage, text = "dalig", f"Startsidan bedöms som föråldrad (modernitet {m} av 10)."
+    elif m >= BRA_MINST:
+        lage, text = "bra", f"Startsidan bedöms som modern och professionell (modernitet {m} av 10)."
+    else:
+        return OKAND, f"Gränsfall: startsidan är varken tydligt föråldrad eller modern (modernitet {m} av 10)." + (
+            f" Brister: {brister}." if brister else "")
+    if brister and lage == "dalig":
+        text += f" Brister: {brister}."
+    return (TRAFF if (lage == "dalig") == vill_dalig else MISS), text
+
+
 def _rad(nyckel: str, etikett: str, vikt: int, utfall: str, motivering: str, *, hart: bool,
          belagg: list[dict[str, str]] | None = None) -> dict[str, Any]:
     return {
@@ -94,11 +149,19 @@ def _ort_rad(profil: dict[str, Any], fynd: dict[str, Any], kand: dict[str, Any])
     return _rad("ort", etikett, 2, OKAND, "Adressen framgick inte av källmaterialet.", hart=True)
 
 
-def _storlek_rad(profil: dict[str, Any], fynd: dict[str, Any], kand: dict[str, Any]) -> dict[str, Any] | None:
+def _storlek_rad(profil: dict[str, Any], fynd: dict[str, Any], kand: dict[str, Any],
+                 rev: dict[str, Any] | None = None) -> dict[str, Any] | None:
     lo, hi = profil.get("anstallda_min"), profil.get("anstallda_max")
     if lo is None and hi is None:
         return None
     etikett = f"Storlek {lo if lo is not None else '—'}–{hi if hi is not None else '—'} anställda"
+    if hi is not None and (rev or {}).get("internationell"):
+        # Ostia (Antons granskning 2026-10-04): den svenska enheten har en
+        # anställd i registret, men bolaget är internationellt. Ett tak på
+        # antalet anställda betyder att kunden söker små, lokala bolag.
+        return _rad("storlek", etikett, 1, MISS,
+                    "Webbplatsen visar en internationell verksamhet; den svenska enhetens "
+                    "anställda speglar inte bolagets storlek.", hart=True)
     antal = fynd.get("antal_anstallda")
     if antal is None:
         antal = kand.get("anstallda")
@@ -119,6 +182,7 @@ def bedom(
     *,
     korpus: str,
     kandidat: dict[str, Any] | None = None,
+    webbrevision: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Modellens utslag + hårda fakta → nivå, poäng, rader och motivering.
 
@@ -135,7 +199,7 @@ def bedom(
     rader: list[dict[str, Any]] = []
     fallt: list[str] = []
 
-    for rad in (_ort_rad(profil, fynd, kand), _storlek_rad(profil, fynd, kand)):
+    for rad in (_ort_rad(profil, fynd, kand), _storlek_rad(profil, fynd, kand, webbrevision)):
         if rad:
             rader.append(rad)
             if rad["utfall"] == MISS:
@@ -143,6 +207,18 @@ def bedom(
 
     for k in profil.get("kriterier") or []:
         b = utslag_per_id.get(k["id"], {})
+        kod = (
+            webbutslag(k["text"], webbrevision, utan_webbplats=bool(profil.get("utan_webbplats")))
+            if k.get("belagg") == "webbsignal" else None
+        )
+        if kod:
+            utfall, motivering = kod
+            belagg = [{"url": str(kand.get("website") or ""), "citat": r} for r in (webbrevision or {}).get("rader") or []][:3]
+            rader.append(_rad(k["id"], k["text"], k["vikt"], utfall, motivering, hart=k["krav"] == "maste",
+                              belagg=belagg))
+            if utfall == MISS and k["krav"] == "maste":
+                fallt.append(f"{k['text']}: {motivering}")
+            continue
         utfall = UTSLAG.get(str(b.get("utslag") or "").casefold(), OKAND)
         belagg = verifierade_belagg(b.get("belagg"), korpus)
         if utfall != OKAND and not belagg:

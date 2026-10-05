@@ -171,11 +171,16 @@ async def run_research_step_v2(
     # enda underlaget till lägesbeskrivningen.
     from ..leads.sources import merinfo
 
+    # Bara bolagsfakta, aldrig sidans personer och telefonnummer: registret är
+    # ett filter, inte en kontaktkälla (Antons regler 1 och 3, 2026-10-04).
+    # Råsidan i materialet gav leads med "Beslutsfattare: <styrelseledamot> ·
+    # <nummer>" (granskningen 2026-10-05).
     for url in sorted(await storage.list_prospect_source_urls(tenant_id, prospect_id)):
-        if "merinfo.se" in url and url not in material:
+        if "merinfo.se" in url:
             md = await merinfo.hamta(url)
             if md:
-                material = f"{material}\n\n## Registeruppgifter (källa: {url})\n{md[:6000]}".strip()
+                fakta = merinfo.bolagsfakta_text(md, url)
+                material = f"{material}\n\n## Registeruppgifter (källa: {url})\n{fakta}".strip()
     sources_block = material or "(inget källmaterial kunde hämtas — se scrape_errors)"
 
     # Iris-profilen (app/leads/profil.py) är kundens instruktionsfil: den
@@ -189,6 +194,19 @@ async def run_research_step_v2(
     if icp is not None:
         profil = {**slå_ihop(profil, icp), "version": profil.get("version")}
     webbfakta = await mat_webbplats(prospect_row.get("website"))
+    # Hur sajten ser ut och presterar (PageSpeed + bildbedömning). Raderna är
+    # citerbara fakta som webbsignalerna; betyget avgör webbkriterierna i kod.
+    from ..leads.webbrevision import revidera
+
+    webbrevision = (
+        await revidera(prospect_row.get("website"), webbfakta) if webbfakta.get("har_webbplats") else {"saknas": True}
+    )
+    if webbfakta.get("har_webbplats") and webbrevision.get("modernitet") is None and any(
+        "svarade inte" in r or "svarade med fel" in r for r in webbfakta.get("rader") or []
+    ):
+        webbrevision = {**webbrevision, "svarar_inte": True}
+    if webbrevision.get("rader"):
+        webbfakta = {**webbfakta, "rader": [*(webbfakta.get("rader") or []), *webbrevision["rader"]]}
     webbfakta_text = som_text(webbfakta)
 
     soul_block = await load_soul(storage, tenant_id)
@@ -225,7 +243,11 @@ async def run_research_step_v2(
     # samma sak som tidigare.
     from ..leads.bedomning import bedom
 
-    bedomning = bedom(profil, fynd, korpus=f"{material}\n{webbfakta_text}", kandidat=prospect_row)
+    bedomning = bedom(
+        profil, fynd, korpus=f"{material}\n{webbfakta_text}", kandidat=prospect_row, webbrevision=webbrevision
+    )
+    if webbrevision and not webbrevision.get("saknas"):
+        bedomning["webbrevision"] = webbrevision
     # Lägesbeskrivningen (Antons krav 2026-10-01) och signalerna följer med
     # bedömningen till raden (migration 083). Telefonen ur registret (081)
     # står kvar; modellens tas bara när registret saknade den.

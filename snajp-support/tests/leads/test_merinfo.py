@@ -200,23 +200,50 @@ def _sidor_for_sokningen():
 
 
 @pytest.mark.anyio
-async def test_iris_far_bolag_med_webbplats_och_ingen_registerkontakt(monkeypatch):
+async def test_iris_kraver_sajt_och_vd_kontakt_resten_gar_till_listsparet(monkeypatch):
+    """Antons regler 3-4 (2026-10-04) och planen 2026-10-05: ett Iris-lead har
+    en sajt och en VD-kontakt på den, aldrig registrets uppgifter. Bolag utan
+    sajt eller utan VD-kontakt kastas inte: de går till listspåret."""
     rader, sidor = _sidor_for_sokningen()
     _installera_sidor(monkeypatch, sidor)
 
     async def _uppslag(namn, geografi=None):
         return {"Beta Måleri AB": "https://www.betamaleri.se"}.get(namn)
 
-    monkeypatch.setattr(discovery, "sla_upp_webbplats", _uppslag)
-    icp = {"industries": ["Bygg"], "geography": ["Mölndal"], "size": {"anstallda_min": 1, "anstallda_max": 49}}
-    leads = await m.sok(icp, 5, uteslut=set(), profil=None)
+    async def _vd_kontakt(webb, vd):
+        return {"contact_email": f"vd@{webb.split('www.')[-1]}", "contact_phone": None}
 
-    # Gamma saknar webbplats: Iris går vidare (Anton 2026-10-04).
-    assert sorted(k["company_name"] for k in leads) == ["Alfa Bygg AB", "Beta Måleri AB", "Delta Snickeri AB"]
-    assert all(k["contact_name"] is None and k["contact_phone"] is None for k in leads)
+    monkeypatch.setattr(discovery, "sla_upp_webbplats", _uppslag)
+    monkeypatch.setattr(discovery, "hamta_vd_kontakt", _vd_kontakt)
+    icp = {"industries": ["Bygg"], "geography": ["Mölndal"], "size": {"anstallda_min": 1, "anstallda_max": 49}}
+    listspar: list[dict] = []
+    leads = await m.sok(icp, 5, uteslut=set(), profil=None, listspar=listspar)
+
+    assert sorted(k["company_name"] for k in leads) == ["Alfa Bygg AB", "Beta Måleri AB"]
+    assert all((k["contact_name"], k["contact_role"]) == ("Test Testsson", "VD") for k in leads)
+    assert all(k["contact_phone"] is None for k in leads), "registrets nummer blir aldrig Iris-kontakt"
     beta = next(k for k in leads if k["company_name"] == "Beta Måleri AB")
     assert beta["website"] == "https://www.betamaleri.se"
-    assert all(k["source_name"] == "merinfo" for k in leads)
+    # Gamma: ingen sajt. Delta: sajt men ingen VD i registret att knyta en kontakt till.
+    assert {r["company_name"]: r["signal_detalj"] for r in listspar} == {
+        "Gamma Golv AB": "Ingen webbplats",
+        "Delta Snickeri AB": "Ingen VD-kontakt på webbplatsen",
+    }
+    # Gamma har fyra anställda: VD är inte ensam, så inget nummer på listraden.
+    assert all(r["contact_phone"] is None for r in listspar)
+
+
+def test_ensam_vd_far_registrets_nummer_men_bara_da():
+    """Antons beslut 2026-10-05: registrets telefonnummer får användas när VD
+    är den enda personen i bolaget (högst en anställd, ingen annan med roll)."""
+    ensam = m.tolka_bolag(bolagssida("Ett AB", "556000-0009", anstallda=1, telefon="070-999 99 99"), "u")
+    assert m.ensam_vd_telefon(ensam) == "070-999 99 99"
+    tva = m.tolka_bolag(bolagssida("Två AB", "556000-0010", anstallda=2), "u")
+    assert m.ensam_vd_telefon(tva) is None
+    ledamot = m.tolka_bolag(bolagssida("Led AB", "556000-0011", anstallda=1, roll="Styrelseledamot"), "u")
+    assert m.ensam_vd_telefon(ledamot) is None
+    # Suppleanten i mallen räknas inte som en annan person med roll.
+    assert all(p["roll"] != "Styrelsesuppleant" for p in ensam["personer"])
 
 
 @pytest.mark.anyio
@@ -333,6 +360,11 @@ async def test_sokningen_hamtar_i_takt_med_behovet(monkeypatch):
         )
     hamtade = _installera_sidor(monkeypatch, sidor)
     monkeypatch.setattr(discovery, "webbplats_matchar_namn", lambda namn, webb: True)
+
+    async def _vd_kontakt(webb, vd):
+        return {"contact_email": "vd@exempel.se", "contact_phone": None}
+
+    monkeypatch.setattr(discovery, "hamta_vd_kontakt", _vd_kontakt)
     icp = {"industries": ["Bygg"], "geography": ["Mölndal"], "size": {"anstallda_min": 1, "anstallda_max": 49}}
     leads = await m.sok(icp, 5, uteslut=set(), profil=None)
     assert len(leads) == 5

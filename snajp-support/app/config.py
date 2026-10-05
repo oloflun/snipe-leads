@@ -241,6 +241,9 @@ class Settings(BaseSettings):
     # Fas B research (G4). Tomt => research-verktyget vägrar med ett tydligt
     # fel i stället för att krascha eller tyst hoppa över skrapningen.
     scrapegraphai_api_key: str = ""
+    # Google PageSpeed Insights (app/leads/webbrevision.py). Valfri: utan nyckel
+    # fungerar API:t med lägre dygnsgräns. Ingen kunddata går dit, bara en publik URL.
+    pagespeed_api_key: str = ""
     database_url: str = ""
     redis_url: str = ""
     # Fas R1 (bd snipe-lr7): antal worker-tasks som läser crm:jobb:chatt

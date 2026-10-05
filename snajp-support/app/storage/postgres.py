@@ -171,7 +171,7 @@ def _avkoda_prospekt(data: dict[str, Any] | None) -> dict[str, Any] | None:
     på prospects ska behöva läggas till på ETT ställe, inte fyra. Fyra platser
     som måste ändras tillsammans är hur den här buggen såg ut från början.
     """
-    return _avkoda_jsonb(data, "score_breakdown", "jev", "signaler")
+    return _avkoda_jsonb(data, "score_breakdown", "jev", "signaler", "webbrevision")
 
 
 class PostgresStorage:
@@ -1905,14 +1905,14 @@ class PostgresStorage:
         self, tenant_id: str, prospect_id: str, *, bedomning: dict[str, Any]
     ) -> dict[str, Any] | None:
         fields = {f: bedomning[f] for f in BEDOMNINGSFALT if bedomning.get(f) is not None}
-        for falt in ("score_breakdown", "jev", "signaler"):
+        for falt in ("score_breakdown", "jev", "signaler", "webbrevision"):
             if falt in fields:
                 fields[falt] = json.dumps(fields[falt], ensure_ascii=False)
         if not fields:
             return await self.get_prospect(tenant_id, prospect_id)
         # Kolumnnamnen kommer ur BEDOMNINGSFALT, aldrig ur anroparen.
         assignments = ", ".join(
-            f"{name} = ${index}" + ("::jsonb" if name in ("score_breakdown", "jev", "signaler") else "")
+            f"{name} = ${index}" + ("::jsonb" if name in ("score_breakdown", "jev", "signaler", "webbrevision") else "")
             for index, name in enumerate(fields, start=3)
         )
         async with self._scoped(tenant_id) as conn:

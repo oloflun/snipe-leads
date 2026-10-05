@@ -81,7 +81,11 @@ async def sokrunda(
     antal = min(MAX_PER_RUNDA, max(3, 2 * behov))
     ring = korning["rundor"]
     korning["rundor"] += 1
-    fynd = await hitta_bolag(icp, antal, uteslut_namn=uteslut, profil=profil, ring=ring)
+    listspar: list[dict[str, Any]] = []
+    fynd = await hitta_bolag(icp, antal, uteslut_namn=uteslut, profil=profil, ring=ring, listspar=listspar)
+    for rad in listspar:
+        korning["tratt"].append({"namn": rad["company_name"], "steg": "listspår", "skal": rad["signal_detalj"]})
+    korning.setdefault("listspar", []).extend(listspar)
     kvar: list[dict[str, Any]] = []
     for kandidat in fynd:
         skal = forfiltrera(profil, kandidat, exclude_domains=icp.get("exclude_domains"))

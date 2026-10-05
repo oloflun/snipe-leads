@@ -1088,8 +1088,13 @@ async def hitta_bolag(
     uteslut_namn: set[str] | None = None,
     profil: dict[str, Any] | None = None,
     ring: int = 0,
+    listspar: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Returnerar upp till `antal` riktiga bolag. Tom lista = inga verifierbara traffar.
+
+    `listspar` (plan 2026-10-05): registerkällan lägger där de bolag som inte
+    blir Iris-leads men hör hemma i en lista (ingen sajt, parkerad domän,
+    ingen VD-kontakt på sajten).
 
     Sedan 2026-09-02 är den grounded Gemini-sökningen UTFYLLNAD, inte
     förstahandsval: de registrerade källorna (JobTech-annonser, nyhets-RSS —
@@ -1110,7 +1115,7 @@ async def hitta_bolag(
     from .sources import merinfo
 
     if merinfo.aktiv():
-        fran_register = await merinfo.sok(icp, antal, uteslut=uteslut, profil=profil)
+        fran_register = await merinfo.sok(icp, antal, uteslut=uteslut, profil=profil, listspar=listspar)
         if fran_register is not None:
             # Register ∩ signaler (plan del C, 2026-10-02): annons- och
             # nyhetskällorna avgör inte urvalet, de rankar det. Ett

@@ -88,6 +88,8 @@ BEDOMNINGSFALT = (
     "ort",
     "postnr",
     "anstallda",
+    # Migration 094 (plan 2026-10-05, fas 3): PageSpeed och bildbedömningen.
+    "webbrevision",
 )
 
 class Storage(Protocol):

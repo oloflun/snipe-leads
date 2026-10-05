@@ -27,6 +27,26 @@ _GENERATOR = re.compile(r"<meta[^>]+name=[\"']generator[\"'][^>]+content=[\"']([
 _JQUERY = re.compile(r"jquery[.-]?(\d+\.\d+(?:\.\d+)?)(?:\.min)?\.js", re.IGNORECASE)
 _VIEWPORT = re.compile(r"<meta[^>]+name=[\"']viewport[\"']", re.IGNORECASE)
 
+#: Plattformar som syns i markupen även utan generator-tagg.
+_PLATTFORMAR = (
+    ("Wix", re.compile(r"static\.wixstatic\.com|wix-code|_wixCIDX", re.I)),
+    ("Squarespace", re.compile(r"squarespace\.com|static1\.squarespace", re.I)),
+    ("Webflow", re.compile(r"data-wf-page|webflow\.js|assets\.website-files\.com", re.I)),
+    ("Next.js", re.compile(r"/_next/static/|__NEXT_DATA__", re.I)),
+    ("WordPress", re.compile(r"/wp-content/|/wp-includes/", re.I)),
+    ("Joomla", re.compile(r"/media/jui/|joomla", re.I)),
+    ("Shopify", re.compile(r"cdn\.shopify\.com", re.I)),
+)
+#: Rörelse: bibliotek och CSS-mekanismer som bara finns på sajter med animationer.
+_ANIMATION = re.compile(
+    r"gsap|scrolltrigger|framer-motion|lottie|aos\.js|data-aos=|swiper|splide|locomotive-scroll|lenis|"
+    r"@keyframes|animation\s*:|scroll-behavior\s*:\s*smooth|IntersectionObserver",
+    re.I,
+)
+_MODERN_LAYOUT = re.compile(r"display\s*:\s*(flex|grid)|\b(d-flex|flex|grid|grid-cols-\d+)\b", re.I)
+_MODERNA_BILDER = re.compile(r"\.(webp|avif)\b|<picture\b|srcset=", re.I)
+_NAV_LANK = re.compile(r"<nav\b.*?</nav>", re.I | re.S)
+
 
 def analysera(
     *, url: str | None, html: str | None, headers: dict[str, str] | None = None,
@@ -64,6 +84,22 @@ def analysera(
         fakta["jquery"] = jq.group(1)
         if int(jq.group(1).split(".")[0]) < 3:
             rader.append(f"Webbplatsen använder jQuery {jq.group(1)}, en äldre version.")
+
+    plattform = next((namn for namn, m in _PLATTFORMAR if m.search(html)), None)
+    if plattform:
+        fakta["plattform"] = plattform
+        if not gen:
+            rader.append(f"Webbplatsen är byggd med {plattform}.")
+    fakta["animationer"] = bool(_ANIMATION.search(html))
+    fakta["modern_layout"] = bool(_MODERN_LAYOUT.search(html))
+    fakta["moderna_bilder"] = bool(_MODERNA_BILDER.search(html))
+    if not fakta["animationer"]:
+        rader.append("Startsidan har inga animationer eller rörliga element.")
+    if not fakta["moderna_bilder"] and "<img" in html.lower():
+        rader.append("Bilderna saknar moderna format och storleksanpassning (webp, avif, srcset).")
+    nav = _NAV_LANK.search(html)
+    if nav:
+        fakta["menyval"] = len(re.findall(r"<a\b", nav.group(0), re.I))
 
     fakta["sidvikt_kb"] = round(len(html.encode("utf-8", "ignore")) / 1024)
     if svarstid_s is not None:
@@ -134,8 +170,15 @@ def demo() -> None:
     )
     assert not gammal["https"] and not gammal["mobilanpassad"] and gammal["copyright_ar"] == 2013
     assert any("jQuery 1.8.3" in r for r in gammal["rader"])
-    ny = analysera(url="https://ny.se", html='<meta name="viewport" content="x"><div>© 2026</div>', idag=date(2026, 9, 30))
-    assert ny["rader"] == ["Inga tecken på föråldrad teknik hittades på startsidan."]
+    ny = analysera(
+        url="https://ny.se",
+        html='<meta name="viewport" content="x"><div class="grid">© 2026</div><script src="/_next/static/a.js">'
+        '</script><style>@keyframes in{}</style><img srcset="a.webp 1x">',
+        idag=date(2026, 9, 30),
+    )
+    assert ny["rader"] == ["Webbplatsen är byggd med Next.js."]
+    assert ny["animationer"] and ny["modern_layout"] and ny["moderna_bilder"]
+    assert "Startsidan har inga animationer eller rörliga element." in gammal["rader"]
     assert analysera(url=None, html=None)["har_webbplats"] is False
     print("webbsignal: ok")
 

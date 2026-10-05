@@ -546,7 +546,11 @@ async def _gather_registered_sources(
         tenant_id=tenant_id,
         prospect_id=prospect_id,
     )
-    urls = sorted(await storage.list_prospect_source_urls(tenant_id, prospect_id))
+    # Bolagsregister (merinfo) skrapas inte som källmaterial här: råsidan bär
+    # personer och telefonnummer, och registret är ett filter, inte en
+    # kontaktkälla. V2 lägger till registrets bolagsfakta utan dem
+    # (merinfo.bolagsfakta_text, plan 2026-10-05).
+    urls = sorted(u for u in await storage.list_prospect_source_urls(tenant_id, prospect_id) if not ar_registersida(u))
 
     scraped: dict[str, str] = {}
     errors: list[str] = []

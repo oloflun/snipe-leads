@@ -11,6 +11,7 @@ import asyncio
 import json
 import logging
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -1902,9 +1903,34 @@ async def _fyll_pa(app_state, tenant: dict, batch_id: str) -> None:
     if k["pagaende"] == 0:
         iris_korning.avsluta(k, "klar" if k["levererade"] >= k["mal"] else (orsak or "slut_pa_kandidater"))
         k["sammanfattning"] = iris_korning.sammanfatta(k)
+        await _spara_listspar(storage, tenant_id, k)
     resultat.update(korning=k, jobs=k["jobs"], count=len(k["jobs"]))
     await jobs.complete(batch_id, resultat)
     await _spara_korning(app_state, tenant_id, batch_id, k)
+
+
+async def _spara_listspar(storage, tenant_id: str, k: dict) -> None:
+    """Bolagen som inte blev Iris-leads men hör hemma i en lista (plan
+    2026-10-05): en färdig lista per körning, "Utan webbplats", så att kunden
+    kan skapa utkast med ett mer generellt erbjudande senare. Körs en gång;
+    kastar aldrig — listan får inte fälla en körning som redan levererat."""
+    rader = k.get("listspar") or []
+    if not rader or k.get("listspar_lista"):
+        return
+    try:
+        lista = await storage.create_lead_list(
+            tenant_id,
+            titel=f"Utan webbplats, Iris {datetime.now(timezone.utc):%Y-%m-%d}",
+            icp={},
+            antal=len(rader),
+            is_test=bool(k.get("is_test")),
+        )
+        for rad in rader:
+            await storage.add_lead_list_item(tenant_id, list_id=lista["id"], **rad)
+        await storage.set_lead_list_status(tenant_id, lista["id"], status="klar")
+        k["listspar_lista"] = lista["id"]
+    except Exception:  # noqa: BLE001
+        logger.exception("Listspåret för körningen gick inte att spara.")
 
 
 async def _rapportera_till_korning(

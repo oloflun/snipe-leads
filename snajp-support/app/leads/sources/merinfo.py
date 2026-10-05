@@ -198,6 +198,28 @@ def tolka_bolag(md: str, url: str) -> dict[str, Any]:
     }
 
 
+def bolagsfakta_text(md: str, url: str) -> str:
+    """Bolagssidan som källmaterial, utan personer och telefonnummer.
+
+    Registret är ett filter, inte en kontaktkälla (Antons regel 1,
+    2026-10-04): det som når researchprompten är bolagsfakta, aldrig namn
+    eller nummer som modellen kan göra till leadets kontakt."""
+    b = tolka_bolag(md, url)
+    falt = (
+        ("Bolag", b.get("company_name")),
+        ("Organisationsnummer", b.get("orgnr")),
+        ("Postadress", " ".join(filter(None, [b.get("postnr"), b.get("ort")])) or None),
+        ("Antal anställda", b.get("anstallda")),
+        ("Omsättning (kr)", b.get("omsattning")),
+        ("Bolagsform", b.get("bolagsform")),
+        ("Status", b.get("status")),
+        ("Bransch", b.get("sni_namn")),
+        ("Verksamhet", b.get("verksamhet")),
+        ("Webbplats enligt registret", b.get("website")),
+    )
+    return "\n".join(f"{namn}: {varde}" for namn, varde in falt if varde not in (None, ""))
+
+
 # -- Trädet (bransch + geografi) ---------------------------------------------
 
 _SITEMAPLANK = re.compile(
@@ -480,6 +502,9 @@ def till_kandidat(b: dict[str, Any], icp: dict[str, Any], profil: dict[str, Any]
         "signal": "bransch" if b.get("sni_namn") else None,
         "signal_detalj": b.get("sni_namn"),
         "verksamhet": b.get("verksamhet"),
+        # Bara för listspåret (Antons beslut 2026-10-05); blir aldrig ett
+        # Iris-leads kontakt.
+        "_ensam_vd_telefon": ensam_vd_telefon(b),
     }
 
 
@@ -491,6 +516,7 @@ async def sok(
     profil: dict[str, Any] | None = None,
     puls: Callable[[], Awaitable[Any]] | None = None,
     lage: str = "iris",
+    listspar: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]] | None:
     """Antons arbetsflöde: bransch → län/kommun → listsidor → bolagssidor →
     filter på bolagsfakta → Jev mot kundens kriterier (första filtret) →
@@ -568,6 +594,13 @@ async def sok(
         b["orgnr"] = b["orgnr"] or r["orgnr"]
         return b
 
+    # Jev frågas inte om webbkriterierna här: den har ingen sajt att titta på
+    # än, och utslaget räknas i kod ur webbrevisionen under researchen.
+    jev_profil = (
+        {**profil, "kriterier": [k for k in profil.get("kriterier") or [] if k.get("belagg") != "webbsignal"]}
+        if profil else None
+    )
+
     async def ranka(granskade: list[dict[str, Any]]) -> list[dict[str, Any]]:
         rankade: list[tuple[float, dict[str, Any]]] = []
         for b in granskade:
@@ -575,9 +608,9 @@ async def sok(
                 continue
             k = till_kandidat(b, icp, profil)
             poang = _kodpoang(b, icp, profil)
-            if profil and jev.aktiv():
+            if jev_profil and jev.aktiv():
                 triage = await jev.triage(
-                    profil, k, utdrag="\n".join(filter(None, [b.get("verksamhet"), b.get("sni_namn")])), signaler=[]
+                    jev_profil, k, utdrag="\n".join(filter(None, [b.get("verksamhet"), b.get("sni_namn")])), signaler=[]
                 )
                 if triage:
                     k["jev_triage"] = triage
@@ -607,7 +640,7 @@ async def sok(
         granskade = [b for b in await asyncio.gather(*(granska(r) for r in batch)) if b]
         rankade = await ranka(granskade)
         godkanda_n += len(rankade)
-        ut += await _komplettera(rankade, behov, lage=lage, puls=puls)
+        ut += await _komplettera(rankade, behov, lage=lage, puls=puls, listspar=listspar)
         kontext = sidhamtning.aktuell()
         if kontext and kontext.slut:
             logger.info("merinfo: kredittaket (%d anrop) nått.", kontext.tak)
@@ -646,12 +679,56 @@ async def _webbplats(k: dict[str, Any]) -> str | None:
     return webb if webb.startswith("http") else f"https://{webb}"
 
 
+def ensam_vd_telefon(b: dict[str, Any]) -> str | None:
+    """Registrets telefonnummer när VD är den enda personen i bolaget, annars
+    None. Antons beslut 2026-10-05: då tillhör numret i praktiken VD (regel 5),
+    och undantaget från regel 1 gäller bara då. Ensam = högst en anställd och
+    ingen annan person med roll (suppleanter och revisorer räknas inte; de
+    är aldrig kontakt och tolkas inte in i `personer`)."""
+    vd = vd_namn(b)
+    if not vd or not b.get("telefon"):
+        return None
+    if not isinstance(b.get("anstallda"), int) or b["anstallda"] > 1:
+        return None
+    if any(p["namn"].casefold() != vd.casefold() for p in b.get("personer") or []):
+        return None
+    return b["telefon"]
+
+
+def _listrad(k: dict[str, Any], skal: str) -> dict[str, Any]:
+    """Ett bolag som inte blir ett Iris-lead men hör hemma i en lista, så att
+    kunden kan nå det med ett mer generellt erbjudande (Anton 2026-10-05:
+    bolag utan sajt är pengar på bordet för en webbyrå)."""
+    tel = k.get("_ensam_vd_telefon")
+    return {
+        **{f: k.get(f) for f in ("company_name", "website", "ort", "orgnr", "source_name", "source_url")},
+        "contact_name": k.get("vd_namn") if tel else None,
+        "contact_role": "VD" if tel else None,
+        "contact_phone": tel,
+        "contact_email": None,
+        "contact_level": "named_role_match" if tel else None,
+        "signal": "listspar",
+        "signal_detalj": skal,
+    }
+
+
 async def _komplettera(
-    rankade: list[dict[str, Any]], antal: int, *, lage: str, puls: Callable[[], Awaitable[Any]] | None
+    rankade: list[dict[str, Any]], antal: int, *, lage: str, puls: Callable[[], Awaitable[Any]] | None,
+    listspar: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Iris: bolag MED webbplats, utan kontakt (researchen hämtar den från
-    sajten). Lista: bolag där VD:ns mejl eller telefon står på sajten."""
+    """Iris: bolag MED webbplats och en VD-kontakt på sajten (regel 3 och 4).
+    Lista: bolag där VD:ns mejl eller telefon står på sajten, eller där VD är
+    ensam i bolaget och registrets nummer därför är VD:s.
+
+    Iris-kandidater utan sajt, med parkerad domän eller utan VD-kontakt på
+    sajten läggs i `listspar` (plan 2026-10-05, fas 3) i stället för att
+    kastas, och får ingen dyr research."""
     from .. import discovery
+    from ..platshallare import platshallare_for_webbplats
+
+    def till_lista(k: dict[str, Any], skal: str) -> None:
+        if listspar is not None:
+            listspar.append(_listrad(k, skal))
 
     ut: list[dict[str, Any]] = []
     for k in rankade[: max(antal, 1) * PROV_PER_LEAD]:
@@ -663,14 +740,26 @@ async def _komplettera(
         if puls:
             await puls()
         if not webb:
-            continue  # Anton: "Om det inte finns en hemsida, gå vidare."
+            if lage == "lista" and k.get("_ensam_vd_telefon"):
+                ut.append({**_listrad(k, "Ingen webbplats; VD är ensam i bolaget"), "signal": None})
+            else:
+                till_lista(k, "Ingen webbplats")  # Anton: "Om det inte finns en hemsida, gå vidare."
+            continue
         k = {**k, "website": webb}
-        if lage == "lista":
-            kontakt = await discovery.hamta_vd_kontakt(webb, k["vd_namn"])
-            if not kontakt:
+        if lage == "iris":
+            parkerad = await platshallare_for_webbplats(webb)
+            if parkerad:
+                till_lista(k, f"Parkerad domän: {parkerad}")
                 continue
-            k = {**k, **kontakt, "contact_name": k["vd_namn"], "contact_role": "VD",
-                 "contact_level": "named_role_match"}
+        kontakt = await discovery.hamta_vd_kontakt(webb, k["vd_namn"]) if k.get("vd_namn") else None
+        if not kontakt:
+            if lage == "lista" and k.get("_ensam_vd_telefon"):
+                ut.append({**_listrad(k, "VD är ensam i bolaget"), "signal": None})
+            else:
+                till_lista(k, "Ingen VD-kontakt på webbplatsen")
+            continue
+        k = {**k, **kontakt, "contact_name": k["vd_namn"], "contact_role": "VD",
+             "contact_level": "named_role_match"}
         ut.append(k)
     return ut
 

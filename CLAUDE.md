@@ -100,6 +100,22 @@ Fullständig beskrivning av miljöer, variabler och fällor: [`DEPLOY.md`](DEPLO
 6. **Inga privatpersonsidor.** Registrets personsidor (bostad, ålder,
    familj) är inte B2B-källor och används inte.
 
+**Tillägg 2026-10-05 (Anton):**
+
+7. **Ensam VD är undantaget från regel 1.** När VD är den enda personen i
+   bolaget (högst en anställd, ingen annan med roll; suppleant och revisor
+   räknas inte) får registrets telefonnummer användas: det är då VD:s.
+   Bara i listor, aldrig som Iris-kontakt. Kod: `merinfo.ensam_vd_telefon`.
+8. **Bolag som inte blir Iris-leads kastas inte.** Utan webbplats, med
+   parkerad domän eller utan VD-kontakt på sajten hamnar bolaget i
+   körningens lista "Utan webbplats" (listspåret), för utkast med ett mer
+   generellt erbjudande senare. Ingen dyr research körs på dem.
+9. **Webbkriterier avgörs i kod.** Betyget från webbrevisionen (PageSpeed
+   plus bildbedömning, `app/leads/webbrevision.py`) översätts till träff,
+   miss eller gränsfall i `bedomning.webbutslag`, inte av modellens fria
+   utslag. Merinfos råsida når aldrig researchprompten, bara bolagsfakta
+   utan personer och nummer (`merinfo.bolagsfakta_text`).
+
 Koden: `snajp-support/app/leads/sources/merinfo.py` (filtret, `lage="iris"`
 och `lage="lista"`), `app/leads/discovery.py:hamta_vd_kontakt` (VD-kontrollen).
 
