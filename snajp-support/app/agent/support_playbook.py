@@ -60,7 +60,12 @@ SUPPORT_V1 = Playbook(
         # (agent_suggestions, migration 051) i stället för att kastas.
         PlaybookStep(
             skill="cs:kb-article",
-            requires=("skill:cs:customer-escalation",),
+            # 2026-10-05: research, inte escalation. Ärligt-läget (KB-miss
+            # med tydlig fråga) hoppar numera över bedömningssteget, och en
+            # lucka som besvaras ärligt är fortfarande en lucka värd ett
+            # artikelförslag. Research körs alltid före och är det underlag
+            # steget faktiskt resonerar kring.
+            requires=("skill:cs:customer-research",),
             condition="kb_gap_or_escalation",
         ),
         # ÖPPEN FRÅGA: thinking-läge inte beslutat här. Triggas bara när

@@ -1098,7 +1098,10 @@ async def run_support_agent(
             "kb_supports_answer (bool), missing_info (svenska eller null), "
             "behover_fortydligande (bool: frågan är för vag eller tvetydig för att "
             "besvaras, och en motfråga skulle göra den besvarbar. false när frågan "
-            "är tydlig — även om kunskapsbasen saknar svaret)."
+            "är tydlig — även om kunskapsbasen saknar svaret. ALLTID false när "
+            "findings redan innehåller svaret på frågan: att be kunden välja "
+            "mellan tolkningar du redan kan besvara är en gissningsloop, inte "
+            "omsorg)."
             + (integrationsuppslag.RESEARCH_TILLAGG if underlag else "")
         ),
         case_context=(
@@ -1245,7 +1248,14 @@ async def run_support_agent(
             missade_rad
             + "Kunskapsbasen räcker inte för att svara på frågan, men ärendet är "
             "varken juridiskt, säkerhetskritiskt eller en uppsägningsrisk. "
-            "Lämna INTE över till en människa. Ställ i stället EN kort, öppen "
+            "Lämna INTE över till en människa. "
+            # Skarptest 2026-10-05: "Jag har information om vilka som grundat
+            # Snajp. Vill du veta personerna eller ägarstrukturen?" — en
+            # motfråga om något underlaget redan besvarar är gissningsloopen
+            # i ny kostym.
+            "MEN FÖRST: täcker researchen eller kunskapsbasen redan frågan — "
+            "besvara den då direkt och ställ ingen motfråga alls. Annars: "
+            "ställ EN kort, öppen "
             "följdfråga som skulle göra frågan besvarbar — den mest användbara "
             "du kan komma på. Säg gärna i en halv mening vad du uppfattat, så att "
             "kunden ser vad som saknas. Påstå ingenting om produkten eller "
@@ -1385,6 +1395,13 @@ async def run_support_agent(
         (kb_saknar_svar or sakerhetskritiskt)
         and orsak != "kund_bad_om_manniska"
         and svarslage != "avgransa"
+        # 2026-10-05: i ärligt-läget erbjuder svaret redan en kollega och
+        # kundens "ja" blir överlämningen — modellbedömningen röstade ändå
+        # över på "hur kommer vi igång?" och LÅSTE samtalet (batteritestet,
+        # fråga 3, som dessutom kaskadlåste resten av samtalet). Säkerhets-
+        # fallen går sin egen kodväg (orsak="sakerhet") och ingår inte här.
+        # Bonus: kedjans dyraste anrop (thinking) sparas på varje KB-miss.
+        and not (arligt_utanfor_kb and not sakerhetskritiskt)
     )
     if not behover_eskaleringsbedomning:
         escalation: dict[str, Any] = {"should_escalate": False, "reason": None}
@@ -1481,7 +1498,10 @@ async def run_support_agent(
     # per motfrågetur.
     if (
         (kb_saknar_svar or sakerhetskritiskt)
-        and behover_eskaleringsbedomning
+        # Ärligt-läget hoppar över bedömningssteget men luckan är lika
+        # verklig — annars hade KB:n slutat växa ur precis de ärenden som
+        # numera besvaras ärligt i stället för att eskaleras (2026-10-05).
+        and (behover_eskaleringsbedomning or arligt_utanfor_kb)
         and svarslage != "fraga"
     ):
         kb_forslag = await steg(

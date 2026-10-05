@@ -614,3 +614,23 @@ async def test_mallformat_i_utkastet_kors_om_en_gang():
     assert llm.calls.count("cs:draft-response") == 2
     assert "FÖRRA FÖRSÖKET bröt formatet" in llm.user_by_skill["cs:draft-response"][-1]
     assert "Swish" in svar["reply"]
+
+
+@pytest.mark.anyio
+async def test_arligt_lage_hoppar_over_modellbedomningen():
+    """Batteritestet 2026-10-05, fråga 3: svaret erbjöd redan en kollega men
+    modellbedömningen röstade över och LÅSTE samtalet (vilket kaskadlåste
+    resten). I ärligt-läget avgör kundens "ja" — bedömningssteget (kedjans
+    dyraste anrop) hoppas över när inget är säkerhetskritiskt."""
+    storage = MemoryStorage()
+    llm = _LLM(overrides={
+        "cs:customer-research": {"kb_supports_answer": False, "behover_fortydligande": False},
+        # Skulle bedömningen köras röstar den här JA — testet fälls då.
+        "cs:customer-escalation": {"should_escalate": True, "reason": "KB saknar svar"},
+    })
+    svar = await _tur(storage, llm, "Levererar ni till Island?")
+    assert "cs:customer-escalation" not in llm.calls
+    assert svar["escalated"] is False
+    samtal = await storage.get_chat_state(TENANT, svar["customer_id"])
+    assert samtal["lage"] == "agent"
+    assert samtal["erbjod_manniska"] is True
