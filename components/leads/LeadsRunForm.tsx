@@ -284,6 +284,12 @@ export function LeadsRunForm({
       levande.current = false;
     };
   }, []);
+  // Vilken körning formuläret följer. Knappen släpps så fort en körning är
+  // överlämnad till servern (Anton 2026-10-05: en ny körning gick inte att
+  // starta medan en annan pågick); startas en till tar den över raden och den
+  // äldre följ-loopen tystnar. Den äldre körningen fortsätter på servern och
+  // syns under Körningar.
+  const foljer = useRef(0);
 
   // Körningens id överlever en omladdning (migration 080, INV-JOB-003).
   // Nyckeln skiljer admin- och kundyta: adminens kundbesök byter tenant
@@ -417,9 +423,14 @@ export function LeadsRunForm({
    * Körningen fortsätter på servern även om fliken stängs.
    */
   async function följKörning(batchId: string, första: Korning) {
+    const min = ++foljer.current;
+    const aktuell = () => levande.current && foljer.current === min;
+    // Överlämnad till servern: knappen kan starta nästa körning.
+    setBusy(false);
     let k = första;
     let sett = -1;
     for (let forsok = 0; forsok < 900; forsok += 1) {
+      if (!aktuell()) return;
       setKorning(k);
       const klara = k.undersokta + k.levererade;
       if (klara !== sett) {
@@ -434,14 +445,14 @@ export function LeadsRunForm({
         }) + (k.pagaende ? text(T.researcharNasta) : text(T.letarFler))
       );
       await new Promise((r) => setTimeout(r, 3000));
-      if (!levande.current) return;
+      if (!aktuell()) return;
       // Liggaren, inte Redis-posten (`/leads/jobb/`): den uppdateras efter
       // varje steg och överlever både TTL:n och en deploy (INV-JOB-003).
       const rad = await anropa<{ status?: string; error?: string | null; korning?: Korning | null }>(
         "/leads/korningar/" + batchId,
         { method: "GET" }
       );
-      if (!levande.current) return;
+      if (!aktuell()) return;
       if (rad.status === "failed") {
         // Motorn dog (felorsaken står i liggaren): sluta polla, säg varför.
         glomKorning();
@@ -462,6 +473,7 @@ export function LeadsRunForm({
   }
 
   async function kör() {
+    foljer.current += 1;
     setBusy(true);
     setFel(null);
     setSvar(null);
