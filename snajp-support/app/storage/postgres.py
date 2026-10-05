@@ -2093,6 +2093,26 @@ class PostgresStorage:
             )
         return [_avkoda_jsonb(_row(r), "korning") for r in records]
 
+    async def get_sidcache(self, tenant_id: str, url: str) -> dict[str, Any] | None:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                "select innehall, fel, hamtad_at from leads_sidcache where tenant_id = $1 and url = $2",
+                tenant_id, url,
+            )
+        return _row(record) if record else None
+
+    async def put_sidcache(self, tenant_id: str, url: str, *, innehall: str | None, fel: str | None) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                """
+                insert into leads_sidcache (tenant_id, url, innehall, fel, hamtad_at)
+                values ($1, $2, $3, $4, now())
+                on conflict (tenant_id, url) do update
+                  set innehall = excluded.innehall, fel = excluded.fel, hamtad_at = now()
+                """,
+                tenant_id, url, innehall, (fel or "")[:500] or None,
+            )
+
     async def get_leads_korning(self, tenant_id: str, job_id: str) -> dict[str, Any] | None:
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(self._KORNING_SQL + " and job_id = $2", tenant_id, job_id)

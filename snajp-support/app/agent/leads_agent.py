@@ -75,7 +75,7 @@ from .leads_tools import (
     _request_human_handoff_impl,
 )
 from .llm import get_agent_model
-from .research_tools import _scrape_registered_source_impl
+from .research_tools import _scrape_registered_source_impl, ar_registersida
 from .step_runner import RunTrace, run_step
 from .tools import strip_markdown
 
@@ -504,6 +504,10 @@ def _gissa_hemsida(urls: list[str], webbplats: str | None) -> str | None:
             normaliserad = None
         if normaliserad in urls:
             return normaliserad
+    # Ett bolagsregister är aldrig bolagets startsida. Utan spärren blev
+    # merinfo-URL:en "hemsida" för bolag utan egen sajt, och tre merinfo-
+    # undersidor skrapades som "kontaktsidor" (plan 2026-10-05, fas 2).
+    urls = [u for u in urls if not ar_registersida(u)]
     if not urls:
         return None
     return min(urls, key=lambda u: (len(urlparse(u).path.strip("/")), u))

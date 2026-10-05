@@ -61,6 +61,13 @@ def _force_simulation_mode(monkeypatch):
         "LEADS_WEBBSIGNAL",
         # Registerkällan (merinfo via ScrapeGraphAI, 2026-10-01): sjunde gången.
         "LEADS_MERINFO",
+        # Gratis-först-hämtningen (app/leads/sidhamtning.py, 2026-10-05) gör
+        # en riktig httpx-förfrågan före ScrapeGraph. Tom = ScrapeGraph först
+        # som förut, med direkthämtningen som reserv. Åttonde gången.
+        "LEADS_DIREKTHAMTNING",
+        # Webbrevisionen (app/leads/webbrevision.py) anropar PageSpeed och
+        # bildmodellen för varje researchad sajt. Tom = av. Nionde gången.
+        "LEADS_WEBBREVISION",
         "TYPESAFE_API_KEY",
         "IRIS_JEV",
     ):

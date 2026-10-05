@@ -50,7 +50,6 @@ import json
 import logging
 import os
 import re
-import time
 import unicodedata
 from pathlib import Path
 from collections.abc import Awaitable, Callable
@@ -62,15 +61,9 @@ logger = logging.getLogger("snajp-support.leads.sources.merinfo")
 BAS = "https://www.merinfo.se"
 TAXONOMI_FIL = Path(__file__).with_name("merinfo_taxonomi.json")
 
-MIN_INTERVALL_S = 1.0
-SAMTIDIGA = 2
 MAX_LISTSIDOR = 40          # per (bransch, plats)
-KANDIDAT_FAKTOR = 3         # bolagssidor att granska per beställt lead
 MAX_BOLAGSSIDOR = 90        # tak per körning, oavsett antal
 
-_SEM = asyncio.Semaphore(SAMTIDIGA)
-_SENAST = [0.0]
-_CACHE: dict[str, str] = {}  # ponytail: processcache utan TTL; byt mot lead_source_cache (plan del B) vid fler repliker
 
 
 def aktiv() -> bool:
@@ -80,36 +73,15 @@ def aktiv() -> bool:
 # -- Hämtning ---------------------------------------------------------------
 
 
-async def hamta(url: str) -> str | None:
-    """Sidans markdown via ScrapeGraphAI, eller None. Kastar aldrig."""
-    if url in _CACHE:
-        return _CACHE[url]
-    from ...agent.research_tools import _hamta_via_scrapegraph
-    from ...config import get_settings
+async def hamta(url: str, *, fas: str = "bolag") -> str | None:
+    """Sidans markdown, eller None. Kastar aldrig. merinfo blockerar
+    direkthämtning, så sidan går via ScrapeGraph — genom sidhamtning, som
+    cachar per kund och räknar mot körningens kredittak (plan 2026-10-05)."""
+    from .. import sidhamtning
 
-    nyckel = get_settings().scrapegraphai_api_key
-    if not nyckel:
-        logger.warning("merinfo: SCRAPEGRAPHAI_API_KEY saknas.")
-        return None
-    md, fel = None, None
-    # ScrapeGraphAI har en egen hastighetsgräns ("Rate limited - slow down
-    # and retry", uppmätt 2026-10-01 under trädbygget). Vänta och försök igen
-    # i stället för att tappa sidan; andra fel försöks inte om.
-    for forsok in range(4):
-        async with _SEM:
-            vanta = MIN_INTERVALL_S - (time.monotonic() - _SENAST[0])
-            if vanta > 0:
-                await asyncio.sleep(vanta)
-            _SENAST[0] = time.monotonic()
-            md, fel = await _hamta_via_scrapegraph(nyckel, url)
-        if md is not None or "rate limit" not in str(fel).casefold():
-            break
-        if forsok < 3:
-            await asyncio.sleep(5 * (forsok + 1))
+    md, fel, _via = await sidhamtning.hamta(url, fas=fas, direkt=False)
     if md is None:
         logger.warning("merinfo: %s gick inte att hämta (%s).", url, fel)
-        return None
-    _CACHE[url] = md
     return md
 
 
@@ -548,43 +520,46 @@ async def sok(
         logger.info("merinfo: målgruppen gick inte att översätta (branscher=%s, platser=%s).", branscher, platser)
         return None
     sokningar = [(b, pl) for b in branscher for pl in platser][:10]
-    mal = min(MAX_BOLAGSSIDOR, max(antal, 1) * KANDIDAT_FAKTOR)
+    from .. import jev, sidhamtning
+    from ..forfilter import ar_enskild_firma
+
     sedda = {n.casefold() for n in uteslut}
-    kandidater: list[dict[str, Any]] = []
+    rader: list[dict[str, Any]] = []
     aktiva = list(sokningar)
     sida = 1
     gav_rader = False
-    while aktiva and len(kandidater) < mal and sida <= MAX_LISTSIDOR:
-        for s in list(aktiva):
-            md = await hamta(listsida_url(s[0], s[1], sida))
-            if puls:
-                await puls()
-            rader = tolka_lista(md) if md else []
-            if not rader:
-                aktiva.remove(s)
-                continue
-            gav_rader = True
-            for r in rader:
-                nyckel = r["company_name"].casefold()
-                if nyckel in sedda:
+
+    async def fyll_rader(behov: int) -> None:
+        """Listsidor tills `behov` rader väntar eller listorna är slut. Varje
+        listsida är ett betalt anrop: loopen bryts så fort det räcker, i
+        stället för att bläddra alla sökningar en sida djupare i onödan."""
+        nonlocal sida, gav_rader
+        while aktiva and len(rader) < behov and sida <= MAX_LISTSIDOR:
+            for s in list(aktiva):
+                if len(rader) >= behov:
+                    return
+                md = await hamta(listsida_url(s[0], s[1], sida), fas="lista")
+                if puls:
+                    await puls()
+                listrader = tolka_lista(md) if md else []
+                if not listrader:
+                    aktiva.remove(s)
                     continue
-                sedda.add(nyckel)
-                # Antons tillägg 2026-10-02: rader utan telefon sparas också,
-                # om bolagssidan (eller bolagets egen sajt) ger en mejladress.
-                # Mejl syns aldrig på listsidan, så raden måste få sin
-                # bolagssida hämtad; telefonraderna sorteras först så taket
-                # (MAX_BOLAGSSIDOR) träffar de rader som redan bär en kontakt.
-                kandidater.append(r)
-        sida += 1
-    if not gav_rader:
-        # Ingen sluggkombination gav en enda listrad: branschordet fanns inte
-        # som lista hos merinfo. Det är "kunde inte tolka", inte "inga bolag".
-        logger.info("merinfo: inga listrader för %s.", sokningar)
-        return None
-    kandidater = kandidater[:mal]
+                gav_rader = True
+                for r in listrader:
+                    nyckel = r["company_name"].casefold()
+                    if nyckel in sedda:
+                        continue
+                    sedda.add(nyckel)
+                    # Förfilter utan hämtning: en enskild firma fälls ändå av
+                    # kontrollera(), och orgnr står redan på listraden.
+                    if ar_enskild_firma(r.get("orgnr")):
+                        continue
+                    rader.append(r)
+            sida += 1
 
     async def granska(r: dict[str, Any]) -> dict[str, Any] | None:
-        md = await hamta(r["url"])
+        md = await hamta(r["url"], fas="bolag")
         if puls:
             await puls()
         if not md:
@@ -593,32 +568,58 @@ async def sok(
         b["orgnr"] = b["orgnr"] or r["orgnr"]
         return b
 
-    granskade = [b for b in await asyncio.gather(*(granska(r) for r in kandidater)) if b]
-    godkanda = [b for b in granskade if kontrollera(b, icp, profil) is None]
+    async def ranka(granskade: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        rankade: list[tuple[float, dict[str, Any]]] = []
+        for b in granskade:
+            if kontrollera(b, icp, profil) is not None:
+                continue
+            k = till_kandidat(b, icp, profil)
+            poang = _kodpoang(b, icp, profil)
+            if profil and jev.aktiv():
+                triage = await jev.triage(
+                    profil, k, utdrag="\n".join(filter(None, [b.get("verksamhet"), b.get("sni_namn")])), signaler=[]
+                )
+                if triage:
+                    k["jev_triage"] = triage
+                    if triage.get("beslut") == "fall":
+                        continue
+                    if isinstance(triage.get("fit"), (int, float)):
+                        poang += 10 * triage["fit"]
+            k["merinfo_poang"] = round(poang, 2)
+            rankade.append((poang, k))
+        rankade.sort(key=lambda t: t[0], reverse=True)
+        return [k for _, k in rankade]
 
-    from .. import jev
-
-    rankade: list[tuple[float, dict[str, Any]]] = []
-    for b in godkanda:
-        k = till_kandidat(b, icp, profil)
-        poang = _kodpoang(b, icp, profil)
-        if profil and jev.aktiv():
-            triage = await jev.triage(
-                profil, k, utdrag="\n".join(filter(None, [b.get("verksamhet"), b.get("sni_namn")])), signaler=[]
-            )
-            if triage:
-                k["jev_triage"] = triage
-                if triage.get("beslut") == "fall":
-                    continue
-                if isinstance(triage.get("fit"), (int, float)):
-                    poang += 10 * triage["fit"]
-        k["merinfo_poang"] = round(poang, 2)
-        rankade.append((poang, k))
-    rankade.sort(key=lambda t: t[0], reverse=True)
-    ut = await _komplettera([k for _, k in rankade], antal, lage=lage, puls=puls)
+    # I takt med behovet (plan 2026-10-05): bolagssidor för två kandidater per
+    # saknat lead åt gången, och fler bara om omgången inte räckte. Tidigare
+    # hämtades tre per beställt lead på en gång (upp till 90 sidor), och alla
+    # filter kördes först efteråt.
+    ut: list[dict[str, Any]] = []
+    granskade_n = godkanda_n = 0
+    while len(ut) < antal and granskade_n < MAX_BOLAGSSIDOR:
+        behov = antal - len(ut)
+        omgang = min(behov * 2, MAX_BOLAGSSIDOR - granskade_n)
+        await fyll_rader(omgang)
+        if not rader:
+            break
+        batch, rader[:] = rader[:omgang], rader[omgang:]
+        granskade_n += len(batch)
+        granskade = [b for b in await asyncio.gather(*(granska(r) for r in batch)) if b]
+        rankade = await ranka(granskade)
+        godkanda_n += len(rankade)
+        ut += await _komplettera(rankade, behov, lage=lage, puls=puls)
+        kontext = sidhamtning.aktuell()
+        if kontext and kontext.slut:
+            logger.info("merinfo: kredittaket (%d anrop) nått.", kontext.tak)
+            break
+    if not gav_rader:
+        # Ingen sluggkombination gav en enda listrad: branschordet fanns inte
+        # som lista hos merinfo. Det är "kunde inte tolka", inte "inga bolag".
+        logger.info("merinfo: inga listrader för %s.", sokningar)
+        return None
     logger.info(
-        "merinfo (%s): %d sökningar, %d kandidater, %d granskade, %d klarade filtret, %d efter Jev → %d levereras.",
-        lage, len(sokningar), len(kandidater), len(granskade), len(godkanda), len(rankade), len(ut),
+        "merinfo (%s): %d sökningar, %d bolagssidor granskade, %d efter filter och Jev → %d levereras.",
+        lage, len(sokningar), granskade_n, godkanda_n, len(ut),
     )
     return ut
 

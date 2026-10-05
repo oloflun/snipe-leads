@@ -26,7 +26,6 @@ from urllib.parse import urlparse
 import httpx
 from agents import RunContextWrapper, function_tool
 
-from ..config import get_settings
 from ..leads.platshallare import html_till_text, platshallarskal
 from ..leads.untrusted_content import wrap_untrusted_content
 from .leads_context import ResearchContext
@@ -81,23 +80,14 @@ async def _scrape_registered_source_impl(research: ResearchContext, url: str) ->
             ensure_ascii=False,
         )
 
-    settings = get_settings()
-    if not settings.scrapegraphai_api_key:
-        return json.dumps(
-            {"error": "SCRAPEGRAPHAI_API_KEY saknas — research-skrapning är inte konfigurerad."}
-        )
+    # Cache, kredittak och ordningen gratis-först bor i sidhamtning (plan
+    # 2026-10-05). Ett register (merinfo) blockerar direkthämtning och går
+    # bara via ScrapeGraph; bolagets egen sajt hämtas direkt först.
+    from ..leads import sidhamtning
 
-    markdown, sgai_fel = await _hamta_via_scrapegraph(settings.scrapegraphai_api_key, url)
-    via = "scrapegraphai"
+    markdown, fel, via = await sidhamtning.hamta(url, fas="research", direkt=not ar_registersida(url))
     if markdown is None:
-        markdown, direkt_fel = await _hamta_direkt(url)
-        via = "direkt"
-        if markdown is None:
-            return json.dumps(
-                {"error": f"{sgai_fel} Reservhämtningen gav inget heller: {direkt_fel}."},
-                ensure_ascii=False,
-            )
-        logger.info("ScrapeGraphAI fallerade för %s (%s) — direkthämtningen tog vid.", url, sgai_fel)
+        return json.dumps({"error": fel or "Sidan gick inte att hämta."}, ensure_ascii=False)
 
     platshallare = platshallarskal(markdown)
     post: dict = {"url": url, "length": len(markdown), "via": via}
@@ -138,6 +128,16 @@ async def _hamta_via_scrapegraph(api_key: str, url: str) -> tuple[str | None, st
     if not markdown:
         return None, "Skrapningen gav inget markdown-innehåll."
     return markdown, None
+
+
+#: Bolagsregister som researchen läser bolagsfakta ur. De blockerar vanlig
+#: hämtning och är aldrig bolagets egen sajt (ingen kontaktjakt där).
+REGISTERDOMANER = ("merinfo.se", "allabolag.se")
+
+
+def ar_registersida(url: str) -> bool:
+    host = urlparse(url).netloc.lower()
+    return any(host == d or host.endswith("." + d) for d in REGISTERDOMANER)
 
 
 def _samma_varddator(a: str, b: str) -> bool:

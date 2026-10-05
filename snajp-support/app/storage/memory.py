@@ -1567,6 +1567,15 @@ class MemoryStorage:
         rader.sort(key=lambda r: r["created_at"], reverse=True)
         return [self._korningsrad(r) for r in rader[:limit]]
 
+    async def get_sidcache(self, tenant_id: str, url: str) -> dict[str, Any] | None:
+        rad = self.__dict__.setdefault("sidcache", {}).get((tenant_id, url))
+        return dict(rad) if rad else None
+
+    async def put_sidcache(self, tenant_id: str, url: str, *, innehall: str | None, fel: str | None) -> None:
+        self.__dict__.setdefault("sidcache", {})[(tenant_id, url)] = {
+            "innehall": innehall, "fel": fel, "hamtad_at": datetime.now(timezone.utc),
+        }
+
     async def get_leads_korning(self, tenant_id: str, job_id: str) -> dict[str, Any] | None:
         rad = self.leads_job_ledger.get(job_id)
         if not rad or rad["tenant_id"] != tenant_id or rad["scope"] not in ("batch", "lista"):

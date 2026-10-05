@@ -139,6 +139,10 @@ def sammanfatta(korning: dict[str, Any]) -> str:
     text = ", ".join(delar) + f" → {levererade} lead{'' if levererade == 1 else 's'}."
     if korning["levererade"] < korning["mal"] and korning.get("flaskhals"):
         text += f" Det som strypte mest: {korning['flaskhals'].lower()}."
+    skrap = korning.get("skrap") or {}
+    betalda = sum(int(v) for k, v in skrap.items() if k != "cache" and isinstance(v, (int, float)))
+    if skrap:
+        text += f" {betalda} betalda sidhämtningar, {int(skrap.get('cache') or 0)} ur cachen."
     return text
 
 

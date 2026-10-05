@@ -177,7 +177,7 @@ def anyio_backend():
 def _installera_sidor(monkeypatch, sidor: dict[str, str]) -> list[str]:
     hamtade: list[str] = []
 
-    async def _hamta(url):
+    async def _hamta(url, **_):
         hamtade.append(url)
         return sidor.get(url)
 
@@ -287,7 +287,7 @@ def test_regionnyckel_expanderas_utan_profil(monkeypatch):
         sedda.append((bransch, plats, sida))
         return f"https://x/{bransch}/{plats}/{sida}"
 
-    async def _tom(url):
+    async def _tom(url, **_):
         return None
 
     monkeypatch.setattr(m, "listsida_url", _url)
@@ -316,3 +316,34 @@ def test_register_rankas_av_signaler_inte_valjs_av_dem():
     assert [r["company_name"] for r in ut] == ["Beta Måleri AB", "Alfa Bygg AB"]
     assert ut[0]["signal"] == "rekryterar" and ut[0]["signal_kalla"] == "https://af.se/1"
     assert "signal" not in ut[1] or ut[1].get("signal") is None
+
+
+@pytest.mark.anyio
+async def test_sokningen_hamtar_i_takt_med_behovet(monkeypatch):
+    """Plan 2026-10-05: N=5 får inte kosta mer än 20 hämtningar när målgruppen
+    är tät. Förut: alla listsidor en sida djupare och tre bolagssidor per
+    beställt lead (15) på en gång, före något filter."""
+    rader = "\n".join(
+        f"##  [ Bolag {i} AB ](https://www.merinfo.se/foretag/Bolag-{i}-AB-55600{i:05d}/2k{i})" for i in range(60)
+    )
+    sidor = {f"https://www.merinfo.se/byggbranschen/molndal/foretag/{s}": rader for s in (1, 2, 3)}
+    for i in range(60):
+        sidor[f"https://www.merinfo.se/foretag/Bolag-{i}-AB-55600{i:05d}/2k{i}"] = bolagssida(
+            f"Bolag {i} AB", f"55600{i:05d}"[:6] + "-" + f"55600{i:05d}"[6:], hemsida=f"www.bolag{i}.se"
+        )
+    hamtade = _installera_sidor(monkeypatch, sidor)
+    monkeypatch.setattr(discovery, "webbplats_matchar_namn", lambda namn, webb: True)
+    icp = {"industries": ["Bygg"], "geography": ["Mölndal"], "size": {"anstallda_min": 1, "anstallda_max": 49}}
+    leads = await m.sok(icp, 5, uteslut=set(), profil=None)
+    assert len(leads) == 5
+    assert len(hamtade) <= 20, hamtade
+    # En listsida räckte: loopen bläddrar inte vidare när raderna räcker.
+    assert sum("/foretag/1" in u or "/foretag/2" in u for u in hamtade if "byggbranschen" in u) == 1
+
+
+@pytest.mark.anyio
+async def test_enskild_firma_falls_innan_bolagssidan_hamtas(monkeypatch):
+    lista = "##  [ Anna Andersson Bygg ](https://www.merinfo.se/foretag/Anna-Andersson-Bygg-8001011234/2k0e)\n"
+    hamtade = _installera_sidor(monkeypatch, {"https://www.merinfo.se/byggbranschen/molndal/foretag/1": lista})
+    assert await m.sok({"industries": ["Bygg"], "geography": ["Mölndal"]}, 3) == []
+    assert not any("Anna-Andersson" in u for u in hamtade)

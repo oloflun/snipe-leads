@@ -705,6 +705,14 @@ class Storage(Protocol):
         med — de är körningens barn och står i `korning.jobs`."""
         ...
 
+    async def get_sidcache(self, tenant_id: str, url: str) -> dict[str, Any] | None:
+        """Sidcachen (migration 093, app/leads/sidhamtning.py): {innehall, fel, hamtad_at}."""
+        ...
+
+    async def put_sidcache(self, tenant_id: str, url: str, *, innehall: str | None, fel: str | None) -> None:
+        """Skriver över raden för (kund, url) och stämplar hamtad_at = nu."""
+        ...
+
     async def get_leads_korning(self, tenant_id: str, job_id: str) -> dict[str, Any] | None:
         """EN körning med samma fält som list_leads_korningar, eller None."""
         ...

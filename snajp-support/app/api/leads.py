@@ -24,6 +24,7 @@ from ..jobs.stadare import (
     stada_tenant,
 )
 from ..kvotfel import ar_kreditslut, kundtext_for, larma_kreditslut
+from ..leads import sidhamtning
 from ..leads.autonomy import LEVELS as AUTONOMY_LEVELS
 from ..leads.autonomy import describe as describe_autonomy
 from ..leads.autonomy import kan_aktivera_auto_send
@@ -1853,6 +1854,11 @@ async def _fyll_pa(app_state, tenant: dict, batch_id: str) -> None:
             uteslut = {str(r.get("company_name") or "") for r in befintliga} | {
                 str(t.get("namn") or "") for t in k["tratt"]
             }
+            # Kredittaket gäller hela körningen (plan 2026-10-05): varje runda
+            # får det som återstår, och summan står i liggaren (Körningar).
+            skrap = sidhamtning.starta(
+                storage, tenant_id, tak=sidhamtning.STANDARD_TAK - sidhamtning.betalda(k.get("skrap"))
+            )
             try:
                 await iris_korning.sokrunda(profil, sok_icp, k, uteslut=uteslut)
             except DiscoveryError:
@@ -1860,6 +1866,11 @@ async def _fyll_pa(app_state, tenant: dict, batch_id: str) -> None:
                 if k["rundor"] >= iris_korning.MAX_RUNDOR:
                     orsak = "sokningen_foll"
                     break
+            finally:
+                k["skrap"] = sidhamtning.summera(k.get("skrap"), skrap)
+            if skrap.slut and not k["kandidater"]:
+                orsak = "kredittak"
+                break
             continue
         try:
             await kontrollera_leads_budget(storage, tenant_id)
@@ -1897,7 +1908,8 @@ async def _fyll_pa(app_state, tenant: dict, batch_id: str) -> None:
 
 
 async def _rapportera_till_korning(
-    app_state, tenant: dict, batch_id: str, *, namn: str, leverbar: bool, skal: str | None
+    app_state, tenant: dict, batch_id: str, *, namn: str, leverbar: bool, skal: str | None,
+    skrap: dict | None = None,
 ) -> None:
     """Ett prospektjobb är klart: räkna in det och fyll på. Kastar aldrig —
     en trasig motor får inte fälla ett researchjobb som redan är sparat."""
@@ -1906,6 +1918,8 @@ async def _rapportera_till_korning(
         if not k:
             return
         iris_korning.registrera_utfall(k, namn=namn, leverbar=leverbar, skal=skal)
+        if skrap:
+            k["skrap"] = sidhamtning.summera(k.get("skrap"), skrap)
         resultat["korning"] = k
         await app_state.jobs.complete(batch_id, resultat)
         await _spara_korning(app_state, tenant["tenant_id"], batch_id, k)
@@ -2127,6 +2141,7 @@ async def _run_batch_prospect(
         tenant["tenant_id"], job_id=job_id, status="processing", scope=scope, prospect_id=prospect_id
     )
     registrera_aktiv(job_id)
+    skrap = sidhamtning.starta(storage, tenant["tenant_id"], tak=sidhamtning.RESEARCH_TAK)
     try:
         # `overrides` togs emot av funktionen men skickades aldrig vidare, så
         # varje jobb i batchen kördes mot den SPARADE ICP:n oavsett vad
@@ -2324,6 +2339,7 @@ async def _run_batch_prospect(
                 namn=utfall["namn"],
                 leverbar=utfall["leverbar"],
                 skal=utfall["skal"],
+                skrap=skrap.som_dict(),
             )
 
 
@@ -2767,6 +2783,7 @@ async def _run_list_job(app_state, payload: dict) -> None:
 
     registrera_aktiv(job_id, lista["id"])
     await storage.set_lead_list_status(tenant_id, lista["id"], status="byggs")
+    sidhamtning.starta(storage, tenant_id)
     try:
         from ..leads.discovery import hamta_kontaktvag, sla_upp_webbplats
 
