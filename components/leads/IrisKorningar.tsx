@@ -429,7 +429,7 @@ function Pagaende({ rad, onStyrd }: Readonly<{ rad: KorningsRad; onStyrd: () => 
               {text(T.pausa)}
             </StyrKnapp>
           )}
-          <StyrKnapp atgard="avbryt" skickar={skickar} onClick={styr} className="text-danger">
+          <StyrKnapp atgard="avbryt" skickar={skickar} onClick={styr} className="!text-danger">
             {text(T.avbryt)}
           </StyrKnapp>
         </div>
