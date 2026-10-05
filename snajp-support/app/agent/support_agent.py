@@ -1119,7 +1119,14 @@ async def run_support_agent(
         trace,
         task=(
             "Klassificera ärendet. Returnera JSON med: category (exakt ett av de "
-            "giltiga), priority (P1-P4), sentiment (0.0-1.0), escalate (bool), "
+            "giltiga), priority (P1-P4), sentiment (0.0-1.0), "
+            # Driftregeln 2026-10-06: dev-testet fick "Kan ni garantera att
+            # agenten aldrig svarar fel?" flaggat och överlämnat som säkerhet.
+            "escalate (bool: true BARA när ärendet rör pengar tillbaka eller "
+            "kompensation, betalningsproblem eller fakturafel, juridik eller "
+            "myndighet, en GDPR-begäran, personskada eller säkerhetsrisk, en kund "
+            "i kris, eller en arg kund. Aldrig för en vanlig fråga, en säljfråga "
+            "eller en fråga kunskapsbasen inte besvarar), "
             "reasoning (svenska), "
             "kundfakta (lista med korta, stabila fakta kunden SJÄLV uppger i "
             "meddelandet — produkt, enhet, ordernummer, preferens. Bara det som "
@@ -2000,6 +2007,11 @@ async def run_support_agent(
             # Ett DELVIS/ESKALERA-utkast (mall 6/7) säger redan att en kollega
             # tar över — då hade raden sagt det en gång till.
             reply = f"{reply}\n\n{support_texter.text("overlamningsrad", svar_sprak)}"
+    elif escalated and not abuse.ska_eskalera and reply and not _NAMNER_KOLLEGA.search(reply):
+        # En överlämning beslutad i KOD (säkerhet, uppsägningsrisk …) ska också
+        # synas för kunden. Dev-testet 2026-10-06: garantifrågan lämnades över
+        # med ett svar som inte nämnde det — kunden hade väntat på ingenting.
+        reply = f"{reply}\n\n{support_texter.text("overlamningsrad", svar_sprak)}"
 
     # Påhoppsspärren appliceras EFTER humaniseraren, och det är hela poängen.
     # Ett kontrollerat säkerhetssvar ska inte formuleras om av en modell — den

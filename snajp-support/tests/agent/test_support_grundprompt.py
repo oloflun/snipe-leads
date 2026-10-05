@@ -479,3 +479,24 @@ async def test_felbedomd_research_men_besvarat_utkast_ar_ett_besvarat_arende():
     assert "cs:customer-escalation" not in llm.calls
     samtal = await storage.get_chat_state(TENANT, svar["customer_id"])
     assert samtal["misslyckade_i_rad"] == 0
+
+
+@pytest.mark.anyio
+async def test_kodbeslutad_overlamning_syns_for_kunden():
+    storage = MemoryStorage()
+    text = "Agenten svarar utifrån din kunskapsbas."
+    llm = _LLM(overrides={
+        "cs:ticket-triage": {"escalate": True},
+        "cs:draft-response": {"draft": text, "beslut": "SVARA"},
+        "snajp:humanizer-svenska": {"final_reply": text},
+    })
+    svar = await _tur(storage, llm, "Hur fungerar agenten?")
+    assert svar["escalated"] is True
+    assert "kollega" in svar["reply"]
+
+
+@pytest.mark.anyio
+async def test_triagens_escalate_definieras_som_63_amnen():
+    llm = _LLM()
+    await _tur(MemoryStorage(), llm, "Hur fungerar agenten?")
+    assert "Aldrig för en vanlig fråga, en säljfråga" in llm.user_by_skill["cs:ticket-triage"]
