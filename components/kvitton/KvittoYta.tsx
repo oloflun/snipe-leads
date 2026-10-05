@@ -74,7 +74,92 @@ type Kvitto = {
   valuta: string;
   belopp_original: string | null;
   anmarkning: string;
+  // Kvittohanterarens granskning (grundprompten, migration 096). Saknas på
+  // rader som lästes in före 2026-10-06.
+  granskningsstatus?: Granskningsstatus | null;
+  flaggor?: string[];
+  forfallodatum?: string | null;
 };
+
+type Granskningsstatus =
+  | "KLAR_FÖR_GRANSKNING" // inte-copy: backendens statuskod
+  | "BEHÖVER_GRANSKNING" // inte-copy: backendens statuskod
+  | "PRIORITERAD_GRANSKNING" // inte-copy: backendens statuskod
+  | "KRÄVER_MANUELL_HÄMTNING"; // inte-copy: backendens statuskod
+
+const PRIORITERAD: Granskningsstatus = "PRIORITERAD_GRANSKNING"; // inte-copy: backendens statuskod
+const MANUELL_HAMTNING: Granskningsstatus = "KRÄVER_MANUELL_HÄMTNING"; // inte-copy: backendens statuskod
+
+/** Flaggorna ur grundpromptens avsnitt 9.1, som granskaren läser dem. */
+const FLAGGETIKETT: Record<string, Localized> = {
+  "oläsligt": { sv: "Svårläst", en: "Hard to read" },
+  "belopp_stämmer_inte": { sv: "Beloppen går inte ihop", en: "Amounts don't add up" },
+  "saknar_moms": { sv: "Moms saknas", en: "VAT missing" },
+  "saknar_obligatoriska_fält": { sv: "Uppgifter saknas", en: "Details missing" },
+  "utländsk_valuta": { sv: "Utländsk valuta", en: "Foreign currency" },
+  "utländsk_leverantör": { sv: "Utländsk leverantör", en: "Foreign supplier" },
+  "omvänd_skattskyldighet": { sv: "Omvänd skattskyldighet", en: "Reverse charge" },
+  "tvetydigt_datum": { sv: "Tvetydigt datum", en: "Ambiguous date" },
+  "osäker_klassning": { sv: "Osäker klassning", en: "Uncertain classification" },
+  "osäker_dokumenttyp": { sv: "Osäker dokumenttyp", en: "Uncertain document type" },
+  "fel_mottagare": { sv: "Annan mottagare", en: "Different recipient" },
+  "möjligt_privat_köp": { sv: "Möjligt privat köp", en: "Possible private purchase" },
+  "möjlig_dubblett": { sv: "Möjlig dubblett", en: "Possible duplicate" },
+  "misstänkt_bedrägeri": { sv: "Kontrollera betalningsuppgifterna", en: "Check the payment details" },
+  "instruktion_i_innehåll": { sv: "Innehåller instruktioner", en: "Contains instructions" },
+  "många_rader": { sv: "Många rader", en: "Many lines" },
+  "förfaller_snart": { sv: "Förfaller snart", en: "Due soon" },
+  "förfallen": { sv: "Förfallen", en: "Overdue" }
+};
+
+/** Prioriterade först, sedan de som kräver hämtning, sedan resten. */
+const GRANSKNINGSORDNING: Record<string, number> = {
+  "PRIORITERAD_GRANSKNING": 0, // inte-copy: backendens statuskod
+  "KRÄVER_MANUELL_HÄMTNING": 1, // inte-copy: backendens statuskod
+  "BEHÖVER_GRANSKNING": 2, // inte-copy: backendens statuskod
+  "KLAR_FÖR_GRANSKNING": 3 // inte-copy: backendens statuskod
+};
+
+function granskningsordning(rad: Kvitto): number {
+  return GRANSKNINGSORDNING[rad.granskningsstatus ?? ""] ?? 2;
+}
+
+/** Granskningens märke, eller null när statusen inte behöver ett eget. */
+function Granskningsmarke({ rad }: Readonly<{ rad: Kvitto }>) {
+  const { text } = useLocale();
+  if (rad.granskningsstatus === PRIORITERAD) {
+    return <Badge tone="danger">{text({ sv: "Prioriterad", en: "Priority" })}</Badge>;
+  }
+  if (rad.granskningsstatus === MANUELL_HAMTNING) {
+    return <Badge tone="warn">{text({ sv: "Hämta underlaget", en: "Fetch the document" })}</Badge>;
+  }
+  return null;
+}
+
+/** Flaggorna som små etiketter. `mork` för Att göra-kortets inverterade yta. */
+function Flaggrad({ flaggor, mork = false }: Readonly<{ flaggor?: string[]; mork?: boolean }>) {
+  const { text } = useLocale();
+  const kanda = (flaggor ?? []).filter((f) => FLAGGETIKETT[f]);
+  if (kanda.length === 0) return null;
+  return (
+    <ul
+      aria-label={text({ sv: "Flaggor", en: "Flags" })}
+      className="mt-1.5 flex flex-wrap gap-1.5"
+    >
+      {kanda.map((f) => (
+        <li
+          key={f}
+          className={cn(
+            "rounded-[3px] border px-1.5 py-0.5 text-[0.75rem]",
+            mork ? "border-paper/25 text-paper-muted" : "border-ink/15 text-ink-muted"
+          )}
+        >
+          {text(FLAGGETIKETT[f])}
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 type Sammanfattning = {
   antal: number;
@@ -96,6 +181,7 @@ type Handelse = {
   belopp_original?: string | null;
   kategori?: string | null;
   motpart?: string | null;
+  granskningsstatus?: Granskningsstatus | null;
 };
 
 function innevarandeManad(): { fran: string; till: string } {
@@ -168,20 +254,28 @@ export function KvittoAttGora({
           : text({ sv: `${rader.length} kvitton väntar på dig`, en: `${rader.length} receipts are waiting for you` })}
       </h2>
       <ul className="mt-5 border-t border-paper/15">
-        {rader.slice(0, 5).map((rad) => (
+        {[...rader].sort((a, b) => granskningsordning(a) - granskningsordning(b)).slice(0, 5).map((rad) => (
           <li
             key={rad.id}
             className="grid grid-cols-12 items-center gap-x-4 border-b border-paper/15 py-3.5"
           >
             <div className="col-span-12 min-w-0 sm:col-span-7">
-              <p className="truncate text-[0.9375rem] font-semibold">
-                {rad.motpart || rad.mejl_amne || rad.filnamn || text({ sv: "Kvitto", en: "Receipt" })}
+              <p className="flex min-w-0 items-center gap-2 text-[0.9375rem] font-semibold">
+                <span className="truncate">
+                  {rad.motpart || rad.mejl_amne || rad.filnamn || text({ sv: "Kvitto", en: "Receipt" })}
+                </span>
+                {rad.granskningsstatus === PRIORITERAD ? (
+                  <span className="shrink-0 rounded-[3px] bg-paper px-1.5 py-0.5 text-[0.6875rem] font-semibold uppercase tracking-[0.04em] text-ink">
+                    {text({ sv: "Prioriterad", en: "Priority" })}
+                  </span>
+                ) : null}
               </p>
-              <p className="mt-0.5 truncate text-[0.8125rem] text-paper-muted">
+              <p className="mt-0.5 line-clamp-2 text-[0.8125rem] text-paper-muted">
                 {rad.anmarkning ||
                   [rad.datum, rad.kategorietikett].filter(Boolean).join(" · ") ||
                   text({ sv: "Uppgifter saknas.", en: "Details missing." })}
               </p>
+              <Flaggrad flaggor={rad.flaggor} mork />
             </div>
             <div className="col-span-12 mt-2 flex items-center justify-between gap-4 sm:col-span-5 sm:mt-0 sm:justify-end">
               <span className="num text-[0.875rem] tabular-nums text-paper-muted">
@@ -583,6 +677,8 @@ export function KvittoYta() {
                   <span className="shrink-0">
                     {h.utfall === "kvitto" ? (
                       <Badge tone="good">{text({ sv: "Kvitto", en: "Receipt" })}</Badge>
+                    ) : h.utfall === "kvitto_granska" && h.granskningsstatus === PRIORITERAD ? (
+                      <Badge tone="danger">{text({ sv: "Prioriterad", en: "Priority" })}</Badge>
                     ) : h.utfall === "kvitto_granska" ? (
                       <Badge tone="warn">{text({ sv: "Granska", en: "Review" })}</Badge>
                     ) : h.utfall === "redan_last" ? (
@@ -682,6 +778,7 @@ export function KvittoYta() {
                         {rad.anmarkning}
                       </p>
                     ) : null}
+                    <Flaggrad flaggor={rad.flaggor} />
                   </Cell>
                   <Cell>
                     <span className="text-ink-muted">{rad.kategorietikett}</span>
@@ -701,6 +798,7 @@ export function KvittoYta() {
                   </Cell>
                   <Cell hoger>
                     <span className="flex flex-wrap items-center justify-end gap-1.5">
+                      {rad.status === "granska_manuellt" ? <Granskningsmarke rad={rad} /> : null}
                       <Badge tone={rad.status === "granska_manuellt" ? "warn" : "good"}>
                         {rad.status === "granska_manuellt" ? text({ sv: "Granska", en: "Review" }) : text({ sv: "Klar", en: "Done" })}
                       </Badge>

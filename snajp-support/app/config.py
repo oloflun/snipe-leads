@@ -375,6 +375,11 @@ class Settings(BaseSettings):
     # "auto" = modellen när nyckel finns; "deterministisk" tvingar regexläsaren
     # (kvitton/tolkning.py) — testsvitens och den lokala stackens läge.
     kvitto_tolkning: str = "auto"
+    # Kvittohanterarens grundprompt (agent-core/prompts/kvittohanterare-
+    # systemprompt.md): {{BOKFÖRINGSPROGRAM}} och {{DAGAR_FÖRFALLO_VARNING}}.
+    # Tomt program => "sitt eget bokföringsprogram".
+    kvitto_bokforingsprogram: str = ""
+    kvitto_dagar_forfallo_varning: int = 7
 
     # Publik bas-URL för länkar som hamnar i utgående mejl (idag bara
     # avregistreringslänken). MÅSTE peka på Next-appen, inte på det här API:t —

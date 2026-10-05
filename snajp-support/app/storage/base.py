@@ -1403,8 +1403,15 @@ class Storage(Protocol):
         mejl_avsandare: str | None = None,
         valuta: str = "SEK",
         belopp_original: str | None = None,
+        granskning: dict[str, Any] | None = None,
+        granskningsstatus: str | None = None,
     ) -> dict[str, Any]:
         """Ett underlag, med de fält avläsningen faktiskt hittade.
+
+        `granskning`/`granskningsstatus` (migration 096) bär kvittohanterarens
+        hela avläsning enligt grundprompten: varje fält med säkerhet och källa,
+        flaggorna, kontrollräkningarna och statusen ur avsnitt 9.2. De platta
+        kolumnerna ovan är det verifikatet och summorna räknar på.
 
         Kvittofälten (migration 063): `kalla` säger VAR kvittot kom ifrån
         (uppladdning eller mejl), mejl_*-fälten bär avsändare och ämne när
@@ -1417,6 +1424,16 @@ class Storage(Protocol):
         Grinden, inte databasen, avgör om det får bli en periodrapport.
         """
         ...
+
+    async def markera_kvittomejl_last(
+        self, tenant_id: str, fingeravtryck: str, *, klass: str
+    ) -> None:
+        """Ett mejl kvittohanteraren läst och som INTE gav något underlag
+        (migration 096). Utan minnet hade samma nyhetsbrev lästs av modellen
+        vid varje skanning. Idempotent."""
+        ...
+
+    async def ar_kvittomejl_last(self, tenant_id: str, fingeravtryck: str) -> bool: ...
 
     async def get_bk_underlag(
         self, tenant_id: str, underlag_id: str
@@ -1607,6 +1624,25 @@ def kontrollera_bk_kalla(kalla: str) -> None:
     if kalla not in BK_KALLOR:
         raise BkValideringsfel(
             f"kalla={kalla!r} finns inte i bk_underlag check-villkoret {BK_KALLOR}."
+        )
+
+
+#: Kvittohanterarens status ur grundpromptens avsnitt 9.2 (migration 096).
+#: Spegel av check-villkoret; `kvitton/granskning.GRANSKNINGSSTATUSAR` ska
+#: vara samma lista (testas i tests/kvitton/test_granskning.py).
+BK_GRANSKNINGSSTATUSAR: tuple[str, ...] = (
+    "KLAR_FÖR_GRANSKNING",
+    "BEHÖVER_GRANSKNING",
+    "PRIORITERAD_GRANSKNING",
+    "KRÄVER_MANUELL_HÄMTNING",
+)
+
+
+def kontrollera_bk_granskningsstatus(status: str | None) -> None:
+    if status is not None and status not in BK_GRANSKNINGSSTATUSAR:
+        raise BkValideringsfel(
+            f"granskningsstatus={status!r} finns inte i bk_underlag "
+            f"check-villkoret {BK_GRANSKNINGSSTATUSAR}."
         )
 
 
