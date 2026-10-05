@@ -802,7 +802,16 @@ export function Oversikten({ demo = false }: Readonly<{ demo?: boolean }>) {
       {leads ? (
         <Sektion
           rubrik={text({ sv: "Pipeline", en: "Pipeline" })}
-          bredvid={<Lank href={vag("/dashboard/leads")}>{text({ sv: "Öppna Leads", en: "Open Leads" })}</Lank>}
+          bredvid={
+            <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1">
+              {/* CRM-kundlistan (migration 098): befintliga kunder som Iris och
+                  listorna hoppar över. Landar öppen i Leads › Listor. */}
+              <Lank href={vag("/dashboard/leads?vy=listor&crm=1")}>
+                {text({ sv: "Ladda upp befintlig CRM-kundlista", en: "Upload existing CRM customer list" })}
+              </Lank>
+              <Lank href={vag("/dashboard/leads")}>{text({ sv: "Öppna Leads", en: "Open Leads" })}</Lank>
+            </div>
+          }
         >
           <PipelineStapel steg={steg} href={vag("/dashboard/leads")} />
         </Sektion>

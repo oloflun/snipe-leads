@@ -17,7 +17,6 @@ dokumenterar).
 
 from __future__ import annotations
 
-import base64
 import csv
 import io
 import logging
@@ -28,7 +27,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile
 from fastapi import File as FastAPIFile
 
-from ..agent.bookkeeping_agent import bygg_verifikat, las_underlag
+from ..agent.bookkeeping_agent import bygg_verifikat
 from ..agent.kvitto_agent import (
     AGENT_TYPE,
     FORBEHALL,
@@ -40,10 +39,8 @@ from ..bookkeeping.kontoplan import KOSTNADSKATEGORIER
 from ..bookkeeping.underlag import (
     UnderlagsfelError,
     kontrollera_fil,
-    las_bild_text,
     las_pdf_text,
     normalisera_belopp,
-    normalisera_falt,
     normalisera_momssats,
     sha256_av,
 )
@@ -58,8 +55,8 @@ from ..kvitton.sammanfattning import (
     svara_utan_modell,
     tolka_period_ur_fraga,
 )
+from ..kvitton.hanterare import Inkommande, hantera, spara
 from ..kvitton.skanning import skanna_inkorg
-from ..kvitton.tolkning import tolka_deterministiskt, valutaspärr
 from .bookkeeping import _kvotsvar
 from .deps import require_bookkeeping_tenant, require_tenant
 
@@ -93,6 +90,33 @@ def _kvitto_ut(rad: dict[str, Any]) -> dict[str, Any]:
         "valuta": "SEK" if rad.get("brutto") is not None else (rad.get("valuta") or "SEK"),
         "belopp_original": rad.get("belopp_original"),
         "anmarkning": rad.get("anmarkning") or "",
+        **_granskning_ut(rad),
+    }
+
+
+def _granskning_ut(rad: dict[str, Any]) -> dict[str, Any]:
+    """Kvittohanterarens granskning (migration 096) i listans form.
+
+    Äldre rader saknar den — då är allt None/tomt och gränssnittet visar
+    raden som förut.
+    """
+    gr = rad.get("granskning") if isinstance(rad.get("granskning"), dict) else {}
+    falt = gr.get("fält") if isinstance(gr.get("fält"), dict) else {}
+    return {
+        "granskningsstatus": rad.get("granskningsstatus"),
+        "klass": gr.get("klass"),
+        "dokumenttyp": gr.get("dokumenttyp"),
+        "flaggor": list(gr.get("flaggor") or []),
+        "intern_notering": gr.get("intern_notering") or "",
+        "mojlig_dubblett_av": gr.get("möjlig_dubblett_av"),
+        "dokumentnummer": (falt.get("dokumentnummer") or {}).get("värde"),
+        "forfallodatum": (falt.get("förfallodatum") or {}).get("värde"),
+        # Fält för fält med säkerhet och källa — granskningsvyns underlag.
+        "falt": {
+            namn: post
+            for namn, post in falt.items()
+            if isinstance(post, dict) and post.get("värde") is not None
+        },
     }
 
 
@@ -175,9 +199,12 @@ async def skanna(
             f"{resultat.nya_kvitton} nya kvitton, "
             f"{resultat.hoppade_dubbletter} redan lästa"
         ),
-        step_log=[{"steg": "snajp:kvitto-skanning", "handelser": len(resultat.handelser)}],
-        tokens_in=0,
-        tokens_out=0,
+        step_log=[
+            {"steg": "snajp:kvitto-skanning", "handelser": len(resultat.handelser)},
+            *resultat.steg,
+        ],
+        tokens_in=resultat.tokens_in,
+        tokens_out=resultat.tokens_out,
         latency_ms=0,
         model=f"{settings.llm_provider}:{settings.model}",
     )
@@ -260,10 +287,11 @@ async def ta_emot_kvittofil(
 ) -> dict[str, Any]:
     """Kvittot in via fil: kontrollera, läs av, spara fälten — kasta filen.
 
-    Samma ordning och samma dubblettspärr som bokföringens ta_emot_underlag.
-    Skillnaderna: raden märks `kalla="uppladdning"`, och utan LLM-nyckel
-    används den deterministiska läsaren i stället för att anropet faller —
-    den lokala stacken och demon ska kunna ta emot en fil utan modell.
+    Samma kvittohanterare och samma grundprompt som mejlskanningen
+    (`kvitton/hanterare.py`), med filen som enda bilaga. Raden märks
+    `kalla="uppladdning"`. Utan LLM-nyckel används den deterministiska
+    läsaren — den lokala stacken och demon ska kunna ta emot en fil utan
+    modell.
     """
     kontrollera_fil(data, mimetyp)
 
@@ -279,83 +307,52 @@ async def ta_emot_kvittofil(
         )
 
     if mimetyp == "application/pdf":
-        text = las_pdf_text(data)
-        if not text:
+        if not las_pdf_text(data):
             raise UnderlagsfelError(
                 "PDF:en saknar textlager (troligen en skanning). Ladda upp "
                 "den som bild i stället, så läses den av bildvägen."
             )
     else:
-        data_url = f"data:{mimetyp};base64,{base64.b64encode(data).decode()}"
-        text = await las_bild_text(data_url)
+        from ..agent.llm import get_vision_client
 
-    settings = get_settings()
-    valuta, belopp_original = "SEK", None
-    if settings.is_simulation() or (
-        (getattr(settings, "kvitto_tolkning", "") or "").strip().lower() == "deterministisk"
-    ):
-        avlast = tolka_deterministiskt(text)
-        falt = normalisera_falt(avlast.falt)
-        valuta, belopp_original = avlast.valuta, avlast.belopp_original
-        verdikt = check_underlag(falt)
-        verifikatrader = bygg_verifikat(falt) if verdikt.ok else ()
-        status = verdikt.status
-        brister = verdikt.as_report()
-        # Bristerna in i anmärkningen: kvittolistan visar anmärkningen, och en
-        # granska-rad utan förklaring är en fråga kunden inte kan besvara.
-        anmarkning = "; ".join(
-            dict.fromkeys(a for a in (avlast.anmarkning, *brister) if a)
-        )
-    else:
-        avlasning = await las_underlag(text)
-        falt, valuta, belopp_original, valutaanmarkning = valutaspärr(
-            dict(avlasning.falt), text
-        )
-        anmarkning = avlasning.anmarkning or "; ".join(avlasning.verdikt.as_report())
-        verifikatrader = avlasning.verifikat
-        status = avlasning.status
-        brister = avlasning.verdikt.as_report()
-        if valuta != "SEK":
-            # Modellens verifikat bygger på ett utländskt belopp läst som
-            # kronor — det får varken sparas eller räknas. Kvittot väntar på
-            # det omräknade beloppet i granskningskön.
-            verifikatrader = ()
-            status = STATUS_GRANSKA
-            anmarkning = "; ".join(a for a in (valutaanmarkning, anmarkning) if a)
+        if get_vision_client() is None:
+            raise UnderlagsfelError(
+                "ingen bildklient är konfigurerad — ladda upp kvittot som PDF eller "
+                "mata in uppgifterna för hand"
+            )
 
-    underlag = await storage.create_bk_underlag(
-        tenant_id,
-        sha256=sha256,
-        filnamn=filnamn or "kvitto",
-        mimetyp=mimetyp,
-        status=status,
-        anmarkning=anmarkning,
-        kalla="uppladdning",
-        valuta=valuta,
-        belopp_original=belopp_original,
-        **{
-            k: v
-            for k, v in falt.items()
-            if k in ("datum", "motpart", "brutto", "momssats", "riktning", "kategori", "betalstatus")
-        },
+    hantering = await hantera(
+        storage, tenant_id, Inkommande.fran_fil(data, mimetyp, filnamn)
     )
-
-    if verifikatrader:
-        # nummer=None: nästa lediga i serien sätts av lagringen (snipe-a4y).
-        await storage.create_bk_verifikat(
-            tenant_id,
-            underlag_id=underlag["id"],
-            serie="A",
-            nummer=None,
-            datum=falt["datum"],
-            text=falt.get("motpart", ""),
-            rader=[
-                {"konto": r.konto, "debet": r.debet, "kredit": r.kredit, "text": r.text}
-                for r in verifikatrader
-            ],
+    if not hantering.resultat["underlag"]:
+        raise UnderlagsfelError(
+            "Filen ser inte ut att vara ett kvitto eller en faktura, så den sparades "
+            "inte. Är det ett underlag kan du mata in uppgifterna för hand."
         )
 
-    return {"underlag": _kvitto_ut(underlag), "status": status, "brister": brister}
+    sparade = []
+    for nr, u in enumerate(hantering.resultat["underlag"]):
+        sparade.append(
+            await spara(
+                storage,
+                tenant_id,
+                u,
+                hantering.resultat,
+                sha256=sha256 if nr == 0 else f"{sha256}#{nr + 1}",
+                filnamn=filnamn or "kvitto",
+                mimetyp=mimetyp,
+                kalla="uppladdning",
+            )
+        )
+
+    forsta = sparade[0]
+    return {
+        "underlag": _kvitto_ut(forsta.rad),
+        "status": forsta.status,
+        "granskningsstatus": forsta.granskningsstatus,
+        "brister": forsta.brister,
+        "alla": [_kvitto_ut(x.rad) for x in sparade],
+    }
 
 
 @router.post("/api/kvitton/underlag")

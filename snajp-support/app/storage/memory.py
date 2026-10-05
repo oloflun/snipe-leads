@@ -37,6 +37,7 @@ from .base import (
     kontrollera_bk_balans,
     normalisera_kunddata,
     kontrollera_bk_betalstatus,
+    kontrollera_bk_granskningsstatus,
     kontrollera_bk_kalla,
     kontrollera_bk_riktning,
     kontrollera_bk_status,
@@ -200,6 +201,7 @@ class MemoryStorage:
         self.lead_vyer: list[dict[str, Any]] = []
         # Bokföring (migration 045). Filen sparas aldrig — bara sha256:n.
         self.bk_underlag: dict[str, list[dict[str, Any]]] = {}
+        self.kvittomejl_lasta: dict[str, dict[str, str]] = {}
         self.bk_verifikat: dict[str, list[dict[str, Any]]] = {}
         # (scope_kind, scope_id, kind) -> tidsstämplar. Inte tenant-nycklad,
         # eftersom demons IP-scope inte har någon tenant (migration 019).
@@ -1599,7 +1601,7 @@ class MemoryStorage:
     _LEAD_LIST_STATUSAR = ("bestalld", "byggs", "klar", "fel")
     _LEAD_ITEM_TYPER = ("bolag", "privatperson")
 
-    _LEAD_LIST_KALLOR = ("sok", "kombinerad", "import")
+    _LEAD_LIST_KALLOR = ("sok", "kombinerad", "import", "crm")
     _KONTAKTFILTER = ("alla", "telefon", "mejl", "bada")
 
     async def create_lead_list(
@@ -1701,6 +1703,10 @@ class MemoryStorage:
             for i in self.lead_list_items
             if i["list_id"] == list_id and i["tenant_id"] == tenant_id
         ]
+
+    async def lista_upptagna_bolag(self, tenant_id: str) -> list[dict[str, Any]]:
+        rader = [*self.prospects.get(tenant_id, []), *(i for i in self.lead_list_items if i["tenant_id"] == tenant_id)]
+        return [{"company_name": r.get("company_name"), "orgnr": r.get("orgnr")} for r in rader]
 
     async def rensa_lead_list_items(self, tenant_id: str, list_id: str) -> int:
         fore = len(self.lead_list_items)
@@ -2695,11 +2701,14 @@ class MemoryStorage:
         mejl_avsandare: str | None = None,
         valuta: str = "SEK",
         belopp_original: str | None = None,
+        granskning: dict[str, Any] | None = None,
+        granskningsstatus: str | None = None,
     ) -> dict[str, Any]:
         kontrollera_bk_status(status)
         kontrollera_bk_riktning(riktning)
         kontrollera_bk_betalstatus(betalstatus)
         kontrollera_bk_kalla(kalla)
+        kontrollera_bk_granskningsstatus(granskningsstatus)
         rad = {
             "id": str(uuid.uuid4()),
             "tenant_id": tenant_id,
@@ -2724,10 +2733,23 @@ class MemoryStorage:
             "mejl_avsandare": mejl_avsandare,
             "valuta": valuta,
             "belopp_original": belopp_original,
+            # Rundtur genom JSON: Postgres lagrar jsonb, och en dict med
+            # Decimal i hade sett rätt ut här men fallit vid första riktiga
+            # skrivningen.
+            "granskning": None if granskning is None else json.loads(json.dumps(granskning)),
+            "granskningsstatus": granskningsstatus,
             "created_at": _now(),
         }
         self.bk_underlag.setdefault(tenant_id, []).append(rad)
         return dict(rad)
+
+    async def markera_kvittomejl_last(
+        self, tenant_id: str, fingeravtryck: str, *, klass: str
+    ) -> None:
+        self.kvittomejl_lasta.setdefault(tenant_id, {}).setdefault(fingeravtryck, klass)
+
+    async def ar_kvittomejl_last(self, tenant_id: str, fingeravtryck: str) -> bool:
+        return fingeravtryck in self.kvittomejl_lasta.get(tenant_id, {})
 
     async def get_bk_underlag(self, tenant_id: str, underlag_id: str) -> dict[str, Any] | None:
         for rad in self.bk_underlag.get(tenant_id, []):

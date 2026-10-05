@@ -23,6 +23,7 @@ from urllib.parse import urljoin, urlparse
 import httpx
 
 from ..config import get_settings
+from . import upptagna
 
 logger = logging.getLogger("snajp-support.leads-discovery")
 
@@ -579,13 +580,14 @@ def _rena_kontaktformular(url: object, *, webb: str | None) -> str | None:
 def _rena_traffar(
     rader: list[dict[str, Any]], *, uteslut: set[str], tak: int, tillat_utan_webb: bool = False
 ) -> list[dict[str, Any]]:
+    uteslut = upptagna.nycklar(uteslut)
     rena: list[dict[str, Any]] = []
     sedda: set[str] = set()
     for rad in rader:
         if not isinstance(rad, dict):
             continue
         namn = str(rad.get("company_name") or "").strip()
-        if not namn or namn.casefold() in uteslut or namn.casefold() in sedda:
+        if not namn or upptagna.upptagen(uteslut, namn, rad.get("orgnr")) or upptagna.nyckel(namn) in sedda:
             continue
         webb = rad.get("website")
         webb = normalisera_webbplats(str(webb)) if webb else None
@@ -597,7 +599,7 @@ def _rena_traffar(
             if not (tillat_utan_webb and (rad.get("orgnr") or ar_arbetsmejl(epost_rad or None))):
                 continue
             webb = None
-        sedda.add(namn.casefold())
+        sedda.add(upptagna.nyckel(namn))
 
         # Kontaktfälten är ALLA valfria på radnivå — company_name och website
         # är de enda hårda kraven (oförändrat). En rad med kontaktuppgifter
@@ -912,7 +914,7 @@ async def _sok_registrerade_kallor(
     from .sources import standardkallor
 
     traffar: list[dict[str, Any]] = []
-    sedda = set(uteslut)
+    sedda = upptagna.nycklar(uteslut)
     for kalla in standardkallor():
         if len(traffar) >= antal:
             break
@@ -922,7 +924,7 @@ async def _sok_registrerade_kallor(
             logger.warning("Källan %s svarade inte: %s", kalla.name, fel)
             continue
         for p in kandidater:
-            nyckel = p.company_name.casefold()
+            nyckel = upptagna.nyckel(p.company_name)
             if nyckel in sedda:
                 continue
             webb = p.website
@@ -1081,6 +1083,17 @@ def _med_signaler(register: list[dict[str, Any]], signaler: list[dict[str, Any]]
     return med + utan
 
 
+#: Så många uteslutna namn som skrivs in i sökprompten. En uppladdad
+#: CRM-lista kan bära tusentals; resten fälls av _rena_traffar efteråt.
+PROMPT_UTESLUT_TAK = 150
+
+
+def _uteslut_i_prompt(uteslut: set[str]) -> str:
+    namn = upptagna.bara_namn(uteslut)[:PROMPT_UTESLUT_TAK]
+    # Prompten går genom str.format: klamrar i ett bolagsnamn får inte tolkas.
+    return (", ".join(namn) or "(inga)").replace("{", "{{").replace("}", "}}")
+
+
 async def hitta_bolag(
     icp: dict[str, Any],
     antal: int,
@@ -1104,7 +1117,10 @@ async def hitta_bolag(
     """
     if antal <= 0:
         return []
-    uteslut = {n.casefold() for n in (uteslut_namn or set()) if n}
+    uteslut = upptagna.nycklar(uteslut_namn or ())
+    # Prompten får namnen som de skrevs, inte jämförelsenycklarna: "Nordkap
+    # Moduler AB" säger modellen mer än "nordkap moduler".
+    prompt_namn = {n.casefold() for n in (uteslut_namn or ()) if n}
 
     # Registerkällan först (merinfo via ScrapeGraphAI, TILLFÄLLIG tills ett
     # API-avtal finns, se sources/merinfo.py). Bara när LEADS_MERINFO är
@@ -1140,7 +1156,8 @@ async def hitta_bolag(
     fran_kallor = await _sok_registrerade_kallor(icp, antal, uteslut) if kor_kallor else []
     if len(fran_kallor) >= antal:
         return fran_kallor[:antal]
-    uteslut = uteslut | {t["company_name"].casefold() for t in fran_kallor}
+    uteslut = uteslut | {upptagna.nyckel(t["company_name"]) for t in fran_kallor}
+    prompt_namn |= {t["company_name"].casefold() for t in fran_kallor}
     antal_kvar = antal - len(fran_kallor)
     # Reserverna ryms i SAMMA sökanrop — taket på ett grounded anrop per
     # körning står kvar.
@@ -1190,7 +1207,7 @@ async def hitta_bolag(
         "contact_form_url MASTE vara pa samma doman som website.\n\n"
         f"Malgrupp:\n{_icp_som_text(icp)}\n"
         f"{_profil_som_soktext(profil, ring)}"
-        f"Uteslut dessa namn: {', '.join(sorted(uteslut)) or '(inga)'}\n"
+        f"Uteslut dessa namn: {_uteslut_i_prompt(prompt_namn)}\n"
     ).format(antal=antal_begart)
     try:
         text = await _gemini_med_sokning(prompt)

@@ -31,6 +31,7 @@ from .base import (
     bk_datum,
     kontrollera_bk_balans,
     kontrollera_bk_betalstatus,
+    kontrollera_bk_granskningsstatus,
     kontrollera_bk_kalla,
     kontrollera_bk_riktning,
     kontrollera_bk_status,
@@ -121,6 +122,11 @@ def _rrf_fusion(
             rader.setdefault(nyckel, rad)
     ordnade = sorted(poang, key=lambda n: poang[n], reverse=True)
     return [rader[n] for n in ordnade[:limit]]
+
+
+def _bk_rad(record: asyncpg.Record | None) -> dict[str, Any] | None:
+    """En bk_underlag-rad med `granskning` (jsonb, migration 096) avkodad."""
+    return _avkoda_jsonb(_row(record), "granskning")
 
 
 def _avkoda_jsonb(data: dict[str, Any] | None, *nycklar: str) -> dict[str, Any] | None:
@@ -2263,6 +2269,16 @@ class PostgresStorage:
             )
         return [_row(r) for r in records]
 
+    async def lista_upptagna_bolag(self, tenant_id: str) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """select company_name, orgnr from prospects where tenant_id = $1
+                   union
+                   select company_name, orgnr from lead_list_items where tenant_id = $1""",
+                tenant_id,
+            )
+        return [_row(r) for r in records]
+
     async def rensa_lead_list_items(self, tenant_id: str, list_id: str) -> int:
         async with self._scoped(tenant_id) as conn:
             status = await conn.execute(
@@ -3652,20 +3668,24 @@ class PostgresStorage:
         mejl_avsandare: str | None = None,
         valuta: str = "SEK",
         belopp_original: str | None = None,
+        granskning: dict[str, Any] | None = None,
+        granskningsstatus: str | None = None,
     ) -> dict[str, Any]:
         kontrollera_bk_status(status)
         kontrollera_bk_riktning(riktning)
         kontrollera_bk_betalstatus(betalstatus)
         kontrollera_bk_kalla(kalla)
+        kontrollera_bk_granskningsstatus(granskningsstatus)
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
                 """
                 insert into bk_underlag
                   (tenant_id, sha256, filnamn, mimetyp, status, datum, motpart,
                    brutto, momssats, riktning, kategori, betalstatus, anmarkning,
-                   kalla, mejl_id, mejl_amne, mejl_avsandare, valuta, belopp_original)
+                   kalla, mejl_id, mejl_amne, mejl_avsandare, valuta, belopp_original,
+                   granskning, granskningsstatus)
                 values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-                        $14, $15, $16, $17, $18, $19)
+                        $14, $15, $16, $17, $18, $19, $20::jsonb, $21)
                 returning *
                 """,
                 tenant_id,
@@ -3687,13 +3707,38 @@ class PostgresStorage:
                 mejl_avsandare,
                 valuta,
                 belopp_original,
+                None if granskning is None else json.dumps(granskning, ensure_ascii=False),
+                granskningsstatus,
             )
-        return _row(record)
+        return _bk_rad(record)
+
+    async def markera_kvittomejl_last(
+        self, tenant_id: str, fingeravtryck: str, *, klass: str
+    ) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                """
+                insert into kvitto_mejl_lasta (tenant_id, fingeravtryck, klass)
+                values ($1, $2, $3)
+                on conflict (tenant_id, fingeravtryck) do nothing
+                """,
+                tenant_id,
+                fingeravtryck,
+                klass,
+            )
+
+    async def ar_kvittomejl_last(self, tenant_id: str, fingeravtryck: str) -> bool:
+        async with self._scoped(tenant_id) as conn:
+            varde = await conn.fetchval(
+                "select 1 from kvitto_mejl_lasta where fingeravtryck = $1 limit 1",
+                fingeravtryck,
+            )
+        return varde is not None
 
     async def get_bk_underlag(self, tenant_id: str, underlag_id: str) -> dict[str, Any] | None:
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow("select * from bk_underlag where id = $1", underlag_id)
-        return _row(record)
+        return _bk_rad(record)
 
     async def get_bk_underlag_by_sha256(
         self, tenant_id: str, sha256: str
@@ -3703,7 +3748,7 @@ class PostgresStorage:
                 "select * from bk_underlag where sha256 = $1 order by created_at limit 1",
                 sha256,
             )
-        return _row(record)
+        return _bk_rad(record)
 
     async def list_bk_underlag(
         self,
@@ -3726,7 +3771,7 @@ class PostgresStorage:
                 bk_datum(till),
                 limit,
             )
-        return [_row(r) for r in records]
+        return [_bk_rad(r) for r in records]
 
     async def update_bk_underlag(
         self,
@@ -3779,7 +3824,7 @@ class PostgresStorage:
                 underlag_id,
                 *[varde for _, varde in satta],
             )
-        return _row(record)
+        return _bk_rad(record)
 
     async def create_bk_verifikat(
         self,

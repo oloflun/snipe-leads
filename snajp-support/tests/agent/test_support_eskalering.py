@@ -219,7 +219,7 @@ async def test_tydlig_fraga_utan_svar_i_kunskapsbasen_besvaras_arligt_med_erbjud
     assert svar["svarslage"] == "besvara"
     uppgift = llm.user_by_skill["cs:draft-response"][-1]
     assert "Hitta ALDRIG på fakta" in uppgift
-    assert "kopplar in en kollega" in uppgift
+    assert "fråga om kunden vill att en kollega tittar på just" in uppgift
     # Erbjudandet är sparat i samtalsläget så att ett "ja" läses som en
     # begäran om människa.
     samtal = await storage.get_chat_state(TENANT, svar["customer_id"])

@@ -26,7 +26,7 @@ from ..jobs.stadare import (
     stada_tenant,
 )
 from ..kvotfel import ar_kreditslut, kundtext_for, larma_kreditslut
-from ..leads import sidhamtning
+from ..leads import sidhamtning, upptagna
 from ..leads.autonomy import LEVELS as AUTONOMY_LEVELS
 from ..leads.autonomy import describe as describe_autonomy
 from ..leads.autonomy import kan_aktivera_auto_send
@@ -1633,13 +1633,13 @@ async def _samla_korningens_prospekt(
         # körningen vägrade starta utan stad). Den finns alltid efter
         # onboarding; kompileras vid behov.
         profil, sok_icp = await _korningens_profil(storage, tenant_id, overrides)
-        befintliga_rader = await storage.list_prospects(tenant_id, limit=500)
         try:
+            # Prospekt, listrader och CRM-kunder (app/leads/upptagna.py): Iris
+            # hämtar aldrig ett bolag som redan ligger i en lista.
             fynd = await hitta_bolag(
                 sok_icp,
                 saknas,
-                uteslut_namn={p["company_name"] for p in skapade}
-                | {str(rad.get("company_name") or "") for rad in befintliga_rader},
+                uteslut_namn={p["company_name"] for p in skapade} | await upptagna.hamta(storage, tenant_id),
                 profil=profil,
             )
         except DiscoveryError as fel:
@@ -1905,8 +1905,9 @@ async def _fyll_pa(app_state, tenant: dict, batch_id: str) -> None:
             if k["rundor"] >= iris_korning.MAX_RUNDOR:
                 orsak = "slut_pa_kandidater"
                 break
-            befintliga = await storage.list_prospects(tenant_id, limit=500)
-            uteslut = {str(r.get("company_name") or "") for r in befintliga} | {
+            # Prospekt, listrader och CRM-kunder (app/leads/upptagna.py) plus
+            # det körningen redan prövat.
+            uteslut = await upptagna.hamta(storage, tenant_id) | {
                 str(t.get("namn") or "") for t in k["tratt"]
             }
             # Kredittaket gäller hela körningen (plan 2026-10-05): varje runda
@@ -1971,15 +1972,24 @@ async def _spara_listspar(storage, tenant_id: str, k: dict) -> None:
     2026-10-05): en färdig lista per körning, "Utan webbplats", så att kunden
     kan skapa utkast med ett mer generellt erbjudande senare. Körs en gång;
     kastar aldrig — listan får inte fälla en körning som redan levererat."""
-    rader = k.get("listspar") or []
-    if not rader or k.get("listspar_lista"):
+    if k.get("listspar_lista"):
         return
     try:
+        # Ett bolag som redan står i en lista (eller är kundens CRM-kund) ska
+        # inte komma tillbaka i nästa körnings "Utan webbplats".
+        sedda = await upptagna.hamta(storage, tenant_id)
+        rader: list[dict] = []
+        for rad in k.get("listspar") or []:
+            if not upptagna.upptagen(sedda, rad.get("company_name"), rad.get("orgnr")):
+                sedda.add(upptagna.nyckel(rad.get("company_name")))
+                rader.append(rad)
+        if not rader:
+            return
         lista = await storage.create_lead_list(
             tenant_id,
             titel=f"Utan webbplats, Iris {datetime.now(timezone.utc):%Y-%m-%d}",
             icp={},
-            antal=len(rader),
+            antal=min(len(rader), 200),
             is_test=bool(k.get("is_test")),
         )
         for rad in rader:
@@ -2587,6 +2597,16 @@ def _dedupnyckel(rad: dict) -> str:
     return f"orgnr:{orgnr}" if orgnr else f"namn:{str(rad.get('company_name') or '').casefold().strip()}"
 
 
+_FEL_CRM_LISTA = "En CRM-kundlista är kundens befintliga kunder. Den prospekteras inte och kombineras inte."
+
+
+def _kraev_ej_crm(lista: dict) -> None:
+    """CRM-kundlistan (migration 098) finns för att UTESLUTA bolag, inte för
+    att bearbeta dem: den lyfts aldrig till Iris eller in i en annan lista."""
+    if lista.get("kalla") == "crm":
+        raise HTTPException(status_code=409, detail=_FEL_CRM_LISTA)
+
+
 @router.post("/api/leads/listor/kombinera", status_code=201)
 async def kombinera_leadslistor(
     request: Request, payload: KombineraListorRequest, tenant: dict = Depends(require_tenant)
@@ -2605,6 +2625,7 @@ async def kombinera_leadslistor(
             raise HTTPException(status_code=404, detail="En av källistorna finns inte.")
         if lista.get("status") != "klar":
             raise HTTPException(status_code=409, detail=f"Listan {lista['titel']!r} är inte klar än.")
+        _kraev_ej_crm(lista)
         kallor.append(lista)
 
     rader: list[dict] = []
@@ -2743,6 +2764,7 @@ async def listrad_till_prospekt(
     )
     if rad is None:
         raise HTTPException(status_code=404, detail="Raden finns inte i listan.")
+    _kraev_ej_crm(lista)
 
     prospect, skapad = await _befordra_listrad(storage, tenant_id, lista, rad)
     return {"prospect": prospect, "skapad": skapad}
@@ -2828,6 +2850,7 @@ async def listan_till_iris(
     lista = await storage.get_lead_list(tenant_id, list_id)
     if not lista:
         raise HTTPException(status_code=404, detail="Listan finns inte.")
+    _kraev_ej_crm(lista)
     rader = await storage.list_lead_list_items(tenant_id, list_id)
     if payload.item_ids:
         valda = {str(x) for x in payload.item_ids}
@@ -2916,6 +2939,10 @@ async def _run_list_job(app_state, payload: dict) -> None:
         icp = lista.get("icp") or {}
         from ..leads.sources import merinfo
 
+        # Listorna är Iris kalla motsvarighet, inte en kopia (Sebbe
+        # 2026-10-06): inget bolag som redan är ett Iris-prospekt, står i en
+        # annan lista eller är kundens egen CRM-kund.
+        uteslut = await upptagna.hamta(storage, tenant_id)
         traffar = None
         if merinfo.aktiv():
             # Registerkällan med kundens profil, så Jev kan rangordna mot
@@ -2933,11 +2960,12 @@ async def _run_list_job(app_state, payload: dict) -> None:
             # tar längre än så, och utan puls visade UI:t "Tidsgräns
             # överskriden" medan jobbet fortfarande byggde listan.
             traffar = await merinfo.sok(
-                icp, int(lista["antal"]), profil=profil, puls=lambda: app_state.jobs.start(job_id),
-                lage="lista",
+                icp, int(lista["antal"]), uteslut=uteslut, profil=profil,
+                puls=lambda: app_state.jobs.start(job_id), lage="lista",
             )
         if traffar is None:
-            traffar = await hitta_bolag(icp, int(lista["antal"]))
+            traffar = await hitta_bolag(icp, int(lista["antal"]), uteslut_namn=uteslut)
+        traffar = [t for t in traffar if not upptagna.upptagen(uteslut, t.get("company_name"), t.get("orgnr"))]
         rader: list[dict] = []
         geografi = (icp.get("geography") or [None])[0] if isinstance(icp.get("geography"), list) else icp.get("geography")
         for traff in traffar:

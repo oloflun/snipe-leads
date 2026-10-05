@@ -24,6 +24,13 @@ import random
 
 _TEXTER: dict[str, dict[str, tuple[str, ...]]] = {
     "sv": {
+        # Krisraden (grundprompten 6.3) läggs på i kod när kunden verkar vara
+        # i kris och svaret saknar hänvisningen. 112 och Mind Självmordslinjen
+        # 90101 är allmänna svenska nummer, inte uppgifter om kundföretaget.
+        "kris": (
+            "Är du i akut fara, ring 112. Behöver du prata med någon nu kan du "
+            "ringa Mind Självmordslinjen på 90101.",
+        ),
         "kvittens": (
             "Det är tillagt i ärendet, så kollegan ser det direkt när ärendet tas "
             "över. Svaret kommer här i chatten.",
@@ -63,6 +70,10 @@ _TEXTER: dict[str, dict[str, tuple[str, ...]]] = {
         ),
     },
     "en": {
+        "kris": (
+            "If you are in immediate danger, please call 112. If you need someone "
+            "to talk to right now, you can call Mind's suicide helpline on 90101.",
+        ),
         "kvittens": (
             "That's added to your case, so my colleague sees it as soon as they "
             "take over. The reply will come here in the chat.",

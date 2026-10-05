@@ -99,6 +99,11 @@ class StepResult:
     # "kundens instruktioner nådde inte prompten" — och det var precis den
     # skillnaden som inte gick att se när fältet var dött.
     kund_chars: int = 0
+    #: Grundpromptens längd (Instruktionslager.agent_md). 0 = nådde inte fram.
+    grundprompt_chars: int = 0
+    #: Tokens leverantörens implicita cache träffade (Vertex/Gemini rabatterar
+    #: dem). Utan siffran går den verkliga kostnaden inte att läsa ur spåret.
+    cached_tokens: int = 0
     instruktionshash: str = ""
     # Vad modellen faktiskt FICK. Utan de här kan spårvyn visa skillnamn,
     # tokens och latens men inte svara på "varför skrev den så här?" — och
@@ -167,6 +172,8 @@ class RunTrace:
                 "overlay_chars": s.overlay_chars,
                 "global_chars": s.global_chars,
                 "kund_chars": s.kund_chars,
+                "grundprompt_chars": s.grundprompt_chars,
+                "cached_tokens": s.cached_tokens,
                 "instruktionshash": s.instruktionshash[:12],
                 "sources_used": s.output.get("sources_used", []),
                 "context_refs": s.output.get("context_refs", []),
@@ -232,6 +239,9 @@ async def run_step(
 
     # Systempromptens ordning är inte godtycklig:
     #   1. GLOBALT     — mest generell policy, så skill/overlay kan specialisera
+    #   1b. GRUNDPROMPT — agenttypens grundprompt (support: kundtjänstpolicyn
+    #                    som allt kundarbete utgår från). Före skillen, med
+    #                    egen avgränsare som säger att den vinner över den.
     #   2. skill_text  — den vendorade metodiken
     #   3. overlay     — vår specialisering per STEG; "senare vinner vid
     #                    konflikt", och delimitertexten säger det explicit
@@ -257,6 +267,8 @@ async def run_step(
     system_parts: list[str] = []
     if lager.global_block:
         system_parts.append(lager.global_block)
+    if lager.agent_block:
+        system_parts.append(lager.agent_block)
     system_parts.append(
         f"Du utför ETT steg i {playbook_role}. Steget styrs av "
         f"skillen {step.skill}, vars fullständiga innehåll följer nedan. Följ "
@@ -276,7 +288,7 @@ async def run_step(
     ]
 
     output: dict[str, Any] = {}
-    tokens_in = tokens_out = reasoning_tokens = 0
+    tokens_in = tokens_out = reasoning_tokens = cached_tokens = 0
     reasoning_content: str | None = None
     started = time.monotonic()
     # Steget vinner över den globala defaulten om det deklarerar en egen
@@ -347,6 +359,9 @@ async def run_step(
         if usage:
             tokens_in += getattr(usage, "prompt_tokens", 0) or 0
             tokens_out += getattr(usage, "completion_tokens", 0) or 0
+            prompt_detaljer = getattr(usage, "prompt_tokens_details", None)
+            if prompt_detaljer:
+                cached_tokens += getattr(prompt_detaljer, "cached_tokens", 0) or 0
             details = getattr(usage, "completion_tokens_details", None)
             if details:
                 reasoning_tokens += getattr(details, "reasoning_tokens", 0) or 0
@@ -407,6 +422,8 @@ async def run_step(
             overlay_chars=overlay_chars_total,
             global_chars=len(lager.global_md),
             kund_chars=len(lager.kund_md),
+            grundprompt_chars=len(lager.agent_md),
+            cached_tokens=cached_tokens,
             instruktionshash=lager.hash,
             # messages[0]/[1] är systemprompten och användarmeddelandet SOM DE
             # SÅG UT VID FÖRSTA ANROPET. Eventuella omförsök lägger till fler

@@ -11,12 +11,12 @@ from __future__ import annotations
 
 import asyncio
 from datetime import date, datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
-from ..leads import crm_synk
+from ..leads import crm_synk, upptagna
 from .deps import kraev_uuid, require_tenant
 
 router = APIRouter()
@@ -69,6 +69,10 @@ class Importrad(BaseModel):
 class ImportRequest(BaseModel):
     titel: str = Field(..., min_length=1, max_length=200)
     rader: list[Importrad] = Field(..., min_length=1, max_length=2000)
+    #: 'import' = leads från ett annat CRM, att bearbeta. 'crm' = kundens
+    #: BEFINTLIGA kunder (migration 098): utesluts av Iris och listbygget och
+    #: prospekteras aldrig.
+    kalla: Literal["import", "crm"] = "import"
 
 
 async def _kraev_prospekt(storage, tenant_id: str, prospect_id: str) -> dict:
@@ -231,7 +235,11 @@ _IMPORTFALT = ("company_name", "orgnr", "contact_name", "contact_role", "contact
 async def importera(request: Request, payload: ImportRequest, tenant: dict = Depends(require_tenant)) -> dict:
     """CSV-import från ett annat CRM → en leadslista med `kalla='import'`.
     Ingen dedup mot registret här: Flytta till Iris (`till-iris`) gör den, på
-    samma sätt som för varje annan lista."""
+    samma sätt som för varje annan lista.
+
+    `kalla='crm'`: kundens befintliga kundbas. Den sparas som en egen lista
+    som Iris och listbygget utesluter (app/leads/upptagna.py), dubbletter i
+    filen slås ihop, och den kan inte flyttas till Iris."""
     storage = request.app.state.storage
     tenant_id = tenant["tenant_id"]
     rader: list[dict[str, Any]] = []
@@ -239,6 +247,18 @@ async def importera(request: Request, payload: ImportRequest, tenant: dict = Dep
         falt = {f: (str(getattr(rad, f) or "").strip() or None) for f in _IMPORTFALT}
         if falt["company_name"]:
             rader.append(falt)
+    if payload.kalla == "crm":
+        # Samma kund två gånger i exporten (två kontaktpersoner, två rader)
+        # blir en rad: listan är en uteslutningsmängd, inte en kontaktbok.
+        sedda: set[str] = set()
+        unika: list[dict[str, Any]] = []
+        for falt in rader:
+            nycklar = upptagna.bolagsnycklar([falt])
+            if nycklar & sedda:
+                continue
+            sedda |= nycklar
+            unika.append(falt)
+        rader = unika
     hoppade_over = len(payload.rader) - len(rader)
     if not rader:
         raise HTTPException(status_code=422, detail="Ingen rad hade ett bolagsnamn.")
@@ -250,7 +270,7 @@ async def importera(request: Request, payload: ImportRequest, tenant: dict = Dep
         # ponytail: antal är check-begränsat 1–200 (migration 060), samma tak
         # som kombinerade listor; item_count bär det riktiga antalet.
         antal=min(len(rader), 200),
-        kalla="import",
+        kalla=payload.kalla,
     )
     for falt in rader:
         await storage.add_lead_list_item(tenant_id, list_id=lista["id"], **falt)
