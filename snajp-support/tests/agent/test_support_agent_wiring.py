@@ -32,11 +32,13 @@ EXPECTED_ORDER_NORMAL = [
 
 # Med kunskapslucka (eller säkerhetskritiskt ärende) körs kunskapssteget,
 # på sin deklarerade plats före humaniseraren.
+# 2026-10-05: KB-lucka med tydlig fråga är ÄRLIGT-läget — bedömningssteget
+# (kedjans dyraste anrop) hoppas över: svaret erbjuder redan en kollega och
+# kundens "ja" avgör. Luckan blir fortfarande ett artikelförslag.
 EXPECTED_ORDER_KB_GAP = [
     "cs:ticket-triage",
     "cs:customer-research",
     "cs:draft-response",
-    "cs:customer-escalation",
     "cs:kb-article",
     "snajp:humanizer-svenska",
 ]

@@ -16,6 +16,12 @@ inte skrivna någonstans i repot. En agent som gissar dem åt kundens räkning �
 värre än en som lämnar över till en människa — se TENANTS.md.
 """
 
+#: Rubriker som funnits i den här filen men döpts om — seedningen raderar
+#: dem så att en omdöpt artikel inte lämnar en föråldrad dubblett i basen.
+FORLEGADE_RUBRIKER: tuple[str, ...] = (
+    "Hur man kommer igång, och hur lång tid det tar",
+)
+
 KB_ARTICLES: list[dict] = [
     # -- Företaget och produkten -------------------------------------------
     {
@@ -220,20 +226,25 @@ KB_ARTICLES: list[dict] = [
     # med "TODO: bekräfta med Sebbe" (provperiodens längd, uppsägningstid)
     # speglas INTE — de är kodade som eskalering i artikeln nedan. ----------
     {
-        "title": "Hur man kommer igång, och hur lång tid det tar",
+        "title": "Komma igång: testa, demo och hur lång tid det tar",
         "category": "ovrigt",
+        # "testa/test" måste stå i texten: fulltextsökningen hittade inte
+        # artikeln på "Hur kommer vi igång om vi vill testa?" när den bara
+        # sa "prova" (batteritestet 2026-10-05).
         "content": (
-            "Första steget är en demo på 15–20 minuter, bokas på /boka-demo. Vi går "
-            "igenom kundens egna ärenden eller kunder live, kunden ser vad agenten "
-            "föreslår, och vi säger rakt ut om vi tror att det passar. Inga "
-            "förpliktelser.\n\n"
+            "Vill ni testa Snajp finns två vägar. Alla tre agenterna går att testa "
+            "direkt i webbläsaren utan konto, med exempeldata — på produktsidorna "
+            "för leads, support och kvitton. Nästa steg är en demo på 15–20 "
+            "minuter, bokas på /boka-demo: vi går igenom kundens egna ärenden "
+            "eller kunder live, kunden ser vad agenten föreslår, och vi säger "
+            "rakt ut om vi tror att det passar. Inga förpliktelser.\n\n"
             "Att koppla en inkorg och fylla kunskapsbasen är dagens arbete, inte "
             "månadens. Det som tar tid är att komma överens om tonen i svaren, och det "
             "görs bäst genom att köra agenten i utkastläge ett par dagar och rätta det "
             "som blir fel.\n\n"
-            "Alla tre agenterna går dessutom att prova direkt i webbläsaren utan "
-            "konto, med exempeldata — på produktsidorna för leads, support och "
-            "bokföring."
+            "Frågar kunden om en längre kostnadsfri testperiod eller provperiod på "
+            "ett eget konto: villkoren är inte fastställda i vårt underlag — lämna "
+            "över till en människa i stället för att gissa."
         ),
     },
     {

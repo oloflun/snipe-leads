@@ -598,3 +598,68 @@ async def test_fortsattningstur_forankrar_aktuella_meddelandet_efter_historiken(
     assert "SVARA PÅ KUNDENS AKTUELLA MEDDELANDE" in prompt
     # Förankringen ska ligga EFTER historiken och bära den aktuella frågan.
     assert prompt.rfind("Har ni öppet på lördagar?") > prompt.find("Vilka betalsätt tar ni?")
+
+
+@pytest.mark.anyio
+async def test_mallformat_i_utkastet_kors_om_en_gang():
+    """Skarptest 2026-10-05: utkaststeget svarade i skillens To/Re/Notes-
+    objekt med fel svar i mallfältet. Grinden kör om steget EN gång med
+    tillsägelse när draft inte är en sträng."""
+    storage = MemoryStorage()
+    llm = _LLM(sekvens={"cs:draft-response": [
+        {"draft": {"To": "kund@example.se", "Draft response text": "Hej, hur kan jag hjälpa dig?"}},
+        {"draft": "Du kan betala med Swish eller kort."},
+    ]})
+    svar = await _tur(storage, llm, "Vilka betalsätt tar ni?")
+    assert llm.calls.count("cs:draft-response") == 2
+    assert "FÖRRA FÖRSÖKET bröt formatet" in llm.user_by_skill["cs:draft-response"][-1]
+    assert "Swish" in svar["reply"]
+
+
+@pytest.mark.anyio
+async def test_arligt_lage_hoppar_over_modellbedomningen():
+    """Batteritestet 2026-10-05, fråga 3: svaret erbjöd redan en kollega men
+    modellbedömningen röstade över och LÅSTE samtalet (vilket kaskadlåste
+    resten). I ärligt-läget avgör kundens "ja" — bedömningssteget (kedjans
+    dyraste anrop) hoppas över när inget är säkerhetskritiskt."""
+    storage = MemoryStorage()
+    llm = _LLM(overrides={
+        "cs:customer-research": {"kb_supports_answer": False, "behover_fortydligande": False},
+        # Skulle bedömningen köras röstar den här JA — testet fälls då.
+        "cs:customer-escalation": {"should_escalate": True, "reason": "KB saknar svar"},
+    })
+    svar = await _tur(storage, llm, "Levererar ni till Island?")
+    assert "cs:customer-escalation" not in llm.calls
+    assert svar["escalated"] is False
+    samtal = await storage.get_chat_state(TENANT, svar["customer_id"])
+    assert samtal["lage"] == "agent"
+    assert samtal["erbjod_manniska"] is True
+
+
+@pytest.mark.anyio
+async def test_halsningssvar_pa_riktig_fraga_kors_om():
+    """Batteritestet 2026-10-05: 'Hej! Vilka har grundat Snajp?' fick
+    intermittent bara 'Hej, hur kan jag hjälpa dig?' — formatkorrekt sträng,
+    så mallgrinden släppte igenom innehållsfelet. Grinden är nu
+    innehållsmedveten: hälsningssvar på en riktig fråga körs om EN gång."""
+    storage = MemoryStorage()
+    llm = _LLM(sekvens={"cs:draft-response": [
+        {"draft": "Hej, hur kan jag hjälpa dig?"},
+        {"draft": "Du kan betala med Swish eller kort."},
+    ]})
+    svar = await _tur(storage, llm, "Hej! Vilka betalsätt tar ni?")
+    assert llm.calls.count("cs:draft-response") == 2
+    assert "besvara frågan" in llm.user_by_skill["cs:draft-response"][-1]
+    assert "Swish" in svar["reply"]
+
+
+@pytest.mark.anyio
+async def test_halsningssvar_pa_bara_en_halsning_ar_ok():
+    """Skriver kunden BARA 'Hej!' är en hälsning tillbaka rätt svar —
+    grinden ska inte tvinga fram en omkörning då."""
+    storage = MemoryStorage()
+    llm = _LLM(overrides={"cs:draft-response": {"draft": "Hej! Hur kan jag hjälpa dig?"},
+                          "snajp:humanizer-svenska": {"final_reply": "Hej! Hur kan jag hjälpa dig?"}})
+    svar = await _tur(storage, llm, "Hej!")
+    assert llm.calls.count("cs:draft-response") == 1
+    assert svar["reply"]

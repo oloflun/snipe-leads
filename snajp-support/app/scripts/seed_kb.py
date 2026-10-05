@@ -158,10 +158,18 @@ async def seed_tenant(storage, tenant_slug: str, *, embeddings=None) -> int:
         # nådde aldrig dev). Ändrat innehåll byts genom delete + add — det
         # finns ingen update-metod, och artiklar kunden själv lagt till
         # (rubriker som inte finns i filen) rörs aldrig.
+        from ..tenants.snajp_kb import FORLEGADE_RUBRIKER
+
         befintliga = {
             (artikel.get("title") or "").strip().lower(): artikel
             for artikel in await storage.list_kb(tenant["id"])
         }
+        # Omdöpta filartiklar: den gamla rubrikens rad raderas, annars svarar
+        # chatten ur två versioner av samma artikel.
+        for rubrik in FORLEGADE_RUBRIKER:
+            gammal = befintliga.pop(rubrik.strip().lower(), None)
+            if gammal is not None:
+                await storage.delete_kb_article(tenant["id"], gammal["id"])
         tillagda = 0
         for article in articles:
             rubrik = article["title"].strip().lower()
