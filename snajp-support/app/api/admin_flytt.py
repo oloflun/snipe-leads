@@ -38,6 +38,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from ..config import get_settings
+from ..storage.base import BEDOMNINGSFALT
 from .deps import require_master_key
 
 logger = logging.getLogger("snajp-support.admin-flytt")
@@ -98,6 +99,7 @@ _PROSPEKTFALT = (
     "orgnr", "sni", "anstallda", "omsattning", "contact_role", "contact_level",
     "contact_form_url", "contact_phone", "niva", "score_total", "score_breakdown",
     "motivering", "icp_fit", "qualified", "disqualifiers", "lagesbeskrivning", "signaler",
+    "status", "webbrevision", "profil_version", "jev",
 )
 
 
@@ -320,12 +322,18 @@ async def _importera_korning(storage, tenant_id: str, post: dict[str, Any], fran
             continue
         profil = {f: p[f] for f in _PROSPEKTFALT if f not in ("company_name", "contact_name", "contact_email", "origin") and p.get(f) is not None}
         profil["importerad_fran"] = fran
-        await storage.create_prospect(
+        skapad = await storage.create_prospect(
             tenant_id, company_name=namn, contact_name=p.get("contact_name"),
             contact_email=p.get("contact_email"),
             origin=str(p.get("origin") or "import") if p.get("origin") in ("manual", "example", "import", "test", "inkorg", "lista", "iris") else "import",
             profil=profil,
         )
+        # Bedömningen följer med (2026-10-05): create_prospect tar bara
+        # grundfälten, så nivå, poäng, motivering, kriterier, lägesbeskrivning
+        # och webbrevisionen föll bort och leadet landade i main obedömt.
+        bedomning = {f: p[f] for f in BEDOMNINGSFALT if p.get(f) is not None}
+        if bedomning:
+            await storage.spara_bedomning(tenant_id, skapad["id"], bedomning=bedomning)
         nya += 1
     await storage.set_leads_job_status(
         tenant_id, job_id=job_id, status=str(k.get("status") or "completed"), scope=str(k.get("scope") or "batch"),

@@ -143,3 +143,30 @@ def test_skicka_utan_mal_ger_503(client):
     slug = _slug(client)
     svar = client.post("/api/admin/flytt/skicka", headers=_master(client), json={"slug": slug, "typ": "mejl", "ids": ["x"]})
     assert svar.status_code == 503
+
+
+@pytest.mark.anyio
+async def test_bedomningen_foljer_med_till_main(client):
+    """2026-10-05: create_prospect tar bara grundfälten, så nivå, poäng,
+    motivering och webbrevision föll bort och leadet landade obedömt i main."""
+    storage = app.state.storage
+    p = await storage.create_prospect(DEFAULT_TENANT_ID, company_name="Bedömda Bolaget AB", origin="iris")
+    await storage.spara_bedomning(DEFAULT_TENANT_ID, p["id"], bedomning={
+        "niva": "A", "score_total": 91, "motivering": "Gammal sajt i målområdet.",
+        "score_breakdown": [{"nyckel": "k1", "utfall": "träff"}], "webbrevision": {"modernitet": 3},
+    })
+    k = {"mal": 1, "levererade": 1, "undersokta": 1, "pagaende": 0, "klar": True,
+         "jobs": [{"job_id": "j9", "prospect_id": p["id"]}], "tratt": []}
+    await storage.set_leads_job_status(DEFAULT_TENANT_ID, job_id="batch-bed", status="completed", scope="batch", korning=k, is_test=True)
+    paket = client.post("/api/admin/flytt/paket", headers=_master(client),
+                        json={"slug": _slug(client), "typ": "korning", "ids": ["batch-bed"]}).json()["paket"]
+    # Mottagaren: samma lager, så byt namn och job_id för att få en ny rad.
+    paket["poster"][0]["korning"]["job_id"] = paket["poster"][0]["ref_id"] = "batch-bed-2"
+    paket["poster"][0]["prospekt"][0]["company_name"] = "Bedömda Bolaget Main AB"
+    kropp = json.dumps(paket, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    ut = client.post("/api/admin/flytt/importera", content=kropp, headers={
+        "Content-Type": "application/json", admin_flytt.SIGNATURHUVUD: admin_flytt.signera(paket, get_settings().flytt_nyckel)})
+    assert ut.status_code == 200 and ut.json()["rader"][0]["prospekt"] == 1, ut.text
+    ny = next(x for x in await storage.list_prospects(DEFAULT_TENANT_ID, limit=500) if x["company_name"] == "Bedömda Bolaget Main AB")
+    assert (ny["niva"], ny["score_total"], ny["motivering"]) == ("A", 91, "Gammal sajt i målområdet.")
+    assert ny["webbrevision"] == {"modernitet": 3} and ny["score_breakdown"]
