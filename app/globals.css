@@ -16,6 +16,19 @@
      muted-text-token, den var bara för ljus. */
   --mineral: 0.50 0.015 252;
   --seal: 0.42 0.022 252;
+  /* Andra dataserien i Översiktens grafer (plan 2026-10-05, fas 6), bredvid
+     ochre. Validerad med dataviz/validate_palette.js mot paper: kroma 0.12,
+     ΔE 37 normalt och 30 vid protan mot ochre. Bara för datamärken. */
+  --chart-blue: 0.48 0.12 252;
+  --chart-ochre: 0.74 0.16 64;
+  /* Sekventiell rampa för pipelinens steg (ordnad data: en nyans, ljust till
+     mörkt). Samma nyans som --chart-blue. */
+  --chart-ramp-1: 0.86 0.04 252;
+  --chart-ramp-2: 0.76 0.07 252;
+  --chart-ramp-3: 0.64 0.10 252;
+  --chart-ramp-4: 0.52 0.12 252;
+  --chart-ramp-5: 0.40 0.11 252;
+  --chart-ramp-6: 0.30 0.08 252;
   --moss: 0.42 0.071 142;
   /* 0.53: 5.22:1 mot paper, 4.72:1 mot paper2 (a11y-audit 2026-10-02; 0.57 gav 4.4:1). */
   --danger: 0.53 0.18 27;
@@ -132,6 +145,17 @@
      och "starkare" betyder längre bort från papperet åt det håll papperet
      inte ligger. */
   --seal: 0.80 0.020 252;
+  /* Grafernas serier i mörkt läge: validatorns ljushetsband mot den mörka
+     ytan (0.681 föll, 0.66 och 0.62 klarar alla fem kontrollerna). */
+  --chart-blue: 0.62 0.12 252;
+  --chart-ochre: 0.66 0.15 64;
+  /* Rampan vänd mot den mörka ytan: det första steget ligger närmast ytan. */
+  --chart-ramp-1: 0.36 0.05 252;
+  --chart-ramp-2: 0.46 0.08 252;
+  --chart-ramp-3: 0.56 0.10 252;
+  --chart-ramp-4: 0.66 0.11 252;
+  --chart-ramp-5: 0.76 0.09 252;
+  --chart-ramp-6: 0.86 0.05 252;
   --moss: 0.74 0.10 142;
   --danger: 0.71 0.17 27;
   --focus: 0.80 0.15 64;
@@ -629,6 +653,28 @@ body {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* Leads-lådan (components/leads/LeadsSida.tsx): glider in från höger över en
+ * tonad bakgrund. Bara transform och opacity, så den går på kompositorn. */
+@keyframes ladaIn {
+  from {
+    opacity: 0;
+    transform: translateX(32px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 

@@ -2425,6 +2425,12 @@ class PostgresStorage:
                    where r.tenant_id = $1 and not r.is_test
                    group by 1
                 ),
+                nya as (
+                  select date_trunc('week', p.created_at) as vecka, count(*) as nya_leads
+                    from prospects p
+                   where p.tenant_id = $1 and coalesce(p.origin, '') not in ('example', 'test')
+                   group by 1
+                ),
                 arenden as (
                   select date_trunc('week', t.created_at) as vecka,
                          count(*)                                              as arenden,
@@ -2441,11 +2447,13 @@ class PostgresStorage:
                        coalesce(k.support_runs, 0)  as support_runs,
                        coalesce(a.arenden, 0)       as arenden,
                        coalesce(a.eskalerade, 0)    as eskalerade,
-                       coalesce(a.avslutade, 0)     as avslutade
+                       coalesce(a.avslutade, 0)     as avslutade,
+                       coalesce(n.nya_leads, 0)     as nya_leads
                   from veckor v
                   left join utskick   u on u.vecka = v.vecka
                   left join korningar k on k.vecka = v.vecka
                   left join arenden   a on a.vecka = v.vecka
+                  left join nya       n on n.vecka = v.vecka
                  order by v.vecka
                 """,
                 tenant_id,
@@ -2464,6 +2472,7 @@ class PostgresStorage:
                     "tickets": r["arenden"],
                     "escalated": r["eskalerade"],
                     "resolved": r["avslutade"],
+                    "new_leads": r["nya_leads"],
                 }
                 for r in records
             ],

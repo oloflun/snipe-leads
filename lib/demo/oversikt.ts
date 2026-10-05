@@ -260,7 +260,9 @@ export function demoOversiktSvar(path: string): unknown | undefined {
           support_runs: arenden,
           tickets: arenden,
           escalated: Math.round(arenden * eskaleradeAndel),
-          resolved: Math.round(arenden * avslutadeAndel)
+          resolved: Math.round(arenden * avslutadeAndel),
+          // Samma form som leadsserien: ungefär en ny lead per sex skick.
+          new_leads: Math.round(punkt.sent / 6)
         };
       }),
       coverage: {
@@ -271,6 +273,7 @@ export function demoOversiktSvar(path: string): unknown | undefined {
         tickets: true,
         escalated: true,
         resolved: true,
+        new_leads: true,
         // Även i demon. Möten mäts inte i drift, och en demo som visar en
         // möteskolumn säljer in en funktion som inte finns.
         meetings: false

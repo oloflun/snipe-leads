@@ -1846,6 +1846,10 @@ class MemoryStorage:
                     "resolved": sum(
                         1 for t in veckans_ärenden if t["status"] in ("resolved", "closed")
                     ),
+                    "new_leads": len(
+                        [p for p in i_veckan(self.prospects.get(tenant_id, []), "created_at")
+                         if p.get("origin") not in ("example", "test")]
+                    ),
                 }
             )
 

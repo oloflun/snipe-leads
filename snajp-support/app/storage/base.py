@@ -1693,6 +1693,7 @@ ANALYTICS_COVERAGE: dict[str, bool] = {
     "tickets": True,
     "escalated": True,
     "resolved": True,
+    "new_leads": True,
     "meetings": False,
 }
 
