@@ -724,14 +724,27 @@ def _verifiera_dubbletter(u: dict, tidigare: list[dict], noter: list[str]) -> No
         noter.append(dubblettnot(original))
 
 
+def kronor_svenskt(tal: Decimal) -> str:
+    """1245 → "1 245,00 kr" — samma form som kvittolistan visar."""
+    heltal, decimaler = f"{abs(tal):.2f}".split(".")
+    grupperat = f"{int(heltal):,}".replace(",", " ")
+    return f"{'−' if tal < 0 else ''}{grupperat},{decimaler} kr"
+
+
 def dubblettnot(original: dict[str, Any]) -> str:
     """Kundens version av "möjlig dubblett": vilket underlag, i ord — inte id."""
+    belopp = ""
+    tal = tolka_belopp(original.get("totalbelopp"))
+    if tal is not None:
+        valuta = original.get("valuta") or ""
+        if valuta in ("SEK", ""):
+            belopp = kronor_svenskt(tal)
+        else:
+            belopp = f"{tal:.2f} {valuta}"
     delar = [
         str(original.get("leverantör_namn") or "").strip(),
         str(original.get("dokumentdatum") or "").strip(),
-        f"{original['totalbelopp']} {original.get('valuta') or ''}".strip()
-        if original.get("totalbelopp")
-        else "",
+        belopp,
     ]
     beskrivning = ", ".join(d for d in delar if d) or "ett tidigare underlag"
     return f"Möjlig dubblett av {beskrivning}. Beloppet räknas inte förrän du godkänt underlaget."

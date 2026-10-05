@@ -124,16 +124,19 @@ function granskningsordning(rad: Kvitto): number {
   return GRANSKNINGSORDNING[rad.granskningsstatus ?? ""] ?? 2;
 }
 
-/** Granskningens märke, eller null när statusen inte behöver ett eget. */
+/**
+ * Märket för ett kvitto som väntar på granskning. ETT märke per rad: det
+ * skarpaste skälet ersätter "Granska" i stället för att staplas ovanpå.
+ */
 function Granskningsmarke({ rad }: Readonly<{ rad: Kvitto }>) {
   const { text } = useLocale();
   if (rad.granskningsstatus === PRIORITERAD) {
     return <Badge tone="danger">{text({ sv: "Prioriterad", en: "Priority" })}</Badge>;
   }
   if (rad.granskningsstatus === MANUELL_HAMTNING) {
-    return <Badge tone="warn">{text({ sv: "Hämta underlaget", en: "Fetch the document" })}</Badge>;
+    return <Badge tone="warn">{text({ sv: "Hämta själv", en: "Fetch it" })}</Badge>;
   }
-  return null;
+  return <Badge tone="warn">{text({ sv: "Granska", en: "Review" })}</Badge>;
 }
 
 /** Flaggorna som små etiketter. `mork` för Att göra-kortets inverterade yta. */
@@ -798,10 +801,11 @@ export function KvittoYta() {
                   </Cell>
                   <Cell hoger>
                     <span className="flex flex-wrap items-center justify-end gap-1.5">
-                      {rad.status === "granska_manuellt" ? <Granskningsmarke rad={rad} /> : null}
-                      <Badge tone={rad.status === "granska_manuellt" ? "warn" : "good"}>
-                        {rad.status === "granska_manuellt" ? text({ sv: "Granska", en: "Review" }) : text({ sv: "Klar", en: "Done" })}
-                      </Badge>
+                      {rad.status === "granska_manuellt" ? (
+                        <Granskningsmarke rad={rad} />
+                      ) : (
+                        <Badge tone="good">{text({ sv: "Klar", en: "Done" })}</Badge>
+                      )}
                       {rad.status === "granska_manuellt" ? (
                         <button
                           type="button"
