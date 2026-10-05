@@ -152,14 +152,24 @@ async def seed_tenant(storage, tenant_slug: str, *, embeddings=None) -> int:
     if await storage.list_kb(tenant["id"]):
         if tenant_slug != "snajp":
             return 0
+        # Filen ÄGER snajp-artiklarna: en rättad text i snajp_kb.py ska nå
+        # databasen vid nästa seedning, annars säger chatten inaktuella
+        # sakuppgifter för evigt (upptäckt 2026-10-05: Kvitton-rättelsen
+        # nådde aldrig dev). Ändrat innehåll byts genom delete + add — det
+        # finns ingen update-metod, och artiklar kunden själv lagt till
+        # (rubriker som inte finns i filen) rörs aldrig.
         befintliga = {
-            (artikel.get("title") or "").strip().lower()
+            (artikel.get("title") or "").strip().lower(): artikel
             for artikel in await storage.list_kb(tenant["id"])
         }
         tillagda = 0
         for article in articles:
-            if article["title"].strip().lower() in befintliga:
-                continue
+            rubrik = article["title"].strip().lower()
+            gammal = befintliga.get(rubrik)
+            if gammal is not None:
+                if (gammal.get("content") or "").strip() == article["content"].strip():
+                    continue
+                await storage.delete_kb_article(tenant["id"], gammal["id"])
             await storage.add_kb_article(
                 tenant["id"],
                 title=article["title"],

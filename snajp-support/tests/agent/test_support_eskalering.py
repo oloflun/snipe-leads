@@ -204,18 +204,42 @@ async def test_falsk_utanfor_kostar_aldrig_ett_svar_kunskapsbasen_bar():
 
 
 @pytest.mark.anyio
-async def test_tydlig_fraga_utan_svar_i_kunskapsbasen_lamnas_over_direkt():
-    """Ingen motfråga när frågan redan är tydlig — en motfråga där är en
-    gissningsloop, inte omsorg."""
+async def test_tydlig_fraga_utan_svar_i_kunskapsbasen_besvaras_arligt_med_erbjudande():
+    """2026-10-05 (Sebbes beställning): en tydlig fråga utanför kunskapsbasen
+    lämnar inte längre över per automatik — det låste samtalet och varje
+    senare fråga fick bara fasta kvitton. Agenten svarar ärligt på det
+    underlaget täcker, hittar inget på, och ERBJUDER en kollega. Kundens
+    "ja" på nästa tur blir överlämningen (testet nedan)."""
     storage = MemoryStorage()
     llm = _LLM(overrides={
         "cs:customer-research": {"kb_supports_answer": False, "behover_fortydligande": False},
     })
     svar = await _tur(storage, llm, "Levererar ni till Island?")
-    assert svar["escalated"] is True
-    assert svar["escalation_code"] == "utanfor_kunskapsbasen"
-    utkast = llm.user_by_skill["cs:draft-response"][-1]
-    assert "gissa inte" in utkast
+    assert svar["escalated"] is False
+    assert svar["svarslage"] == "besvara"
+    uppgift = llm.user_by_skill["cs:draft-response"][-1]
+    assert "Hitta ALDRIG på fakta" in uppgift
+    assert "kopplar in en kollega" in uppgift
+    # Erbjudandet är sparat i samtalsläget så att ett "ja" läses som en
+    # begäran om människa.
+    samtal = await storage.get_chat_state(TENANT, svar["customer_id"])
+    assert samtal["erbjod_manniska"] is True
+
+
+@pytest.mark.anyio
+async def test_ja_pa_erbjudandet_efter_kb_miss_lamnar_over():
+    """Andra halvan av kontraktet ovan: erbjudandet är inte kosmetik — ett
+    jakande svar på det ska ge en människa, precis som vid avgränsning."""
+    storage = MemoryStorage()
+    llm = _LLM(overrides={
+        "cs:customer-research": {"kb_supports_answer": False, "behover_fortydligande": False},
+    })
+    forsta = await _tur(storage, llm, "Levererar ni till Island?")
+    assert forsta["escalated"] is False
+
+    andra = await _tur(storage, _LLM(), "ja tack")
+    assert andra["escalated"] is True
+    assert andra["escalation_code"] == "kund_bad_om_manniska"
 
 
 # -- Trigger 4: taket för misslyckade rundor ---------------------------------
@@ -298,19 +322,50 @@ async def test_sentimentgransen_ar_kundens():
 
 
 @pytest.mark.anyio
-async def test_efter_overlamning_hamnar_kundens_meddelande_i_samma_arende_utan_llm():
+async def test_efter_overlamning_kvitteras_bekraftelser_utan_llm():
+    """En kort bekräftelse medan kunden väntar kostar fortfarande 0 anrop
+    och hamnar i det överlämnade ärendets tråd."""
     storage = MemoryStorage()
     forsta = await _tur(storage, _LLM(), "Jag vill prata med en människa.")
     llm = _LLM()
-    andra = await _tur(storage, llm, "Hallå, är någon där?")
+    andra = await _tur(storage, llm, "ok tack")
 
-    assert llm.calls == [], "Ett överlämnat samtal fick en AI-körning."
+    assert llm.calls == [], "En bekräftelse ska inte kosta en AI-körning."
     assert andra["ticket_id"] == forsta["ticket_id"], "Kunden fick ett nytt ärende."
     assert andra["overlamnad"] is True
     assert andra["reply"], "Kunden som väntar ska få en kvittens."
     arende = await storage.get_ticket(TENANT, forsta["ticket_id"])
     innehall = [m["content"] for m in arende["messages"]]
-    assert "Hallå, är någon där?" in innehall
+    assert "ok tack" in innehall
+
+
+@pytest.mark.anyio
+async def test_efter_overlamning_besvaras_nya_fragor_i_samma_arende():
+    """2026-10-05 (Sebbes beställning): en NY FRÅGA medan kollegan ännu inte
+    svarat får ett riktigt svar — inte "Noterat i ärendet". Svaret går i
+    SAMMA ärende, och överlämningen hävs aldrig: medarbetaren äger
+    fortfarande samtalet och ser hela utbytet i sin tråd."""
+    storage = MemoryStorage()
+    forsta = await _tur(storage, _LLM(), "Jag vill prata med en människa.")
+    llm = _LLM()
+    andra = await _tur(storage, llm, "Vilka betalsätt tar ni?")
+
+    assert llm.calls, "En ny fråga ska besvaras av kedjan, inte kvitteras."
+    assert andra["ticket_id"] == forsta["ticket_id"], "Kunden fick ett nytt ärende."
+    assert andra["overlamnad"] is True
+    assert andra["reply"]
+    assert "Noterat i ärendet" not in andra["reply"]
+
+    # Överlämningen står kvar: läget, orsaken och ärendet är orörda.
+    samtal = await storage.get_chat_state(TENANT, forsta["customer_id"])
+    assert samtal["lage"] == "overlamnad"
+    assert samtal["overlamnad_ticket_id"] == forsta["ticket_id"]
+
+    # Både frågan och agentens svar ligger i medarbetarens tråd.
+    arende = await storage.get_ticket(TENANT, forsta["ticket_id"])
+    innehall = [m["content"] for m in arende["messages"]]
+    assert "Vilka betalsätt tar ni?" in innehall
+    assert andra["reply"] in innehall
 
 
 @pytest.mark.anyio
@@ -330,6 +385,13 @@ async def test_medarbetarens_svar_nar_samma_chatt_och_agenten_tystnar():
 
     # Nu är en människa i samtalet: ingen kvittens mellan två människor.
     svar = await _tur(storage, _LLM(), "Hej Sara!")
+    assert svar["reply"] == ""
+
+    # Även en NY FRÅGA är medarbetarens när hen är aktiv i samtalet —
+    # agenten svarar bara i väntfasen (INV-ESC-001:s kärna står kvar).
+    tyst_llm = _LLM()
+    svar = await _tur(storage, tyst_llm, "Vilka betalsätt tar ni?")
+    assert tyst_llm.calls == []
     assert svar["reply"] == ""
 
 
@@ -521,3 +583,18 @@ def test_faktagrinden_forstar_engelsk_tusentalsavgransare():
     # Fel belopp fälls fortfarande, i båda formaten.
     assert not support_faktagrind.kontrollera("It costs SEK 4,990.", niva="forsiktig", kallor=kallor).ok
     assert not support_faktagrind.kontrollera("Det kostar 4 990 kr.", niva="forsiktig", kallor=kallor).ok
+
+
+@pytest.mark.anyio
+async def test_fortsattningstur_forankrar_aktuella_meddelandet_efter_historiken():
+    """Recency-fixen (2026-10-05): i flerturssamtal besvarade modellen
+    konsekvent FÖRRA repliken — historiken låg sist i kontexten. Den
+    aktuella frågan ska därför upprepas EFTER historikblocket."""
+    storage = MemoryStorage()
+    await _tur(storage, _LLM(), "Vilka betalsätt tar ni?")
+    llm = _LLM()
+    await _tur(storage, llm, "Har ni öppet på lördagar?")
+    prompt = llm.user_by_skill["cs:ticket-triage"][-1]
+    assert "SVARA PÅ KUNDENS AKTUELLA MEDDELANDE" in prompt
+    # Förankringen ska ligga EFTER historiken och bära den aktuella frågan.
+    assert prompt.rfind("Har ni öppet på lördagar?") > prompt.find("Vilka betalsätt tar ni?")

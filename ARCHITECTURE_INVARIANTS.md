@@ -663,7 +663,7 @@ test_uppdateringsprompten_bar_kontamineringssparren — regressionstest på
 KONTAMINERINGSSPARR:s exakta formulering)
 Införd: 2026-08-29 · Upphävs endast genom waiver
 
-### INV-ESC-001 — En kund som ber om en människa får en, och ett överlämnat samtal får aldrig ett AI-svar
+### INV-ESC-001 — En kund som ber om en människa får en, och agenten häver aldrig en överlämning
 Överlämningen avgörs i KOD i `app/agent/support_agent.run_support_agent`, med
 en orsakskod ur `app/agent/support_regler.ORSAKER`. En uttrycklig begäran
 (`support_regler.ber_om_manniska`, triagens `ber_om_manniska`, eller ett ja på
@@ -671,19 +671,29 @@ agentens eget erbjudande) lämnar över utan att eskaleringssteget ens körs —
 modellen kan inte rösta nej. Därefter äger en människa samtalet
 (`ss_chat_state.lage = 'overlamnad'`, migration 066): kundens nästa
 meddelanden hamnar i DET överlämnade ärendets tråd via
-`_svara_under_overlamning`, som inte gör ett enda LLM-anrop, och agenten
-tiger helt när en medarbetare svarat. Samtalet går tillbaka till agenten
-bara när medarbetaren lämnar tillbaka det (`overlamning.aterlamna`) eller
-efter `OVERLAMNING_GILTIG_TIMMAR` utan livstecken. Medarbetarens svar sparas
+`_svara_under_overlamning`, och agenten tiger helt så fort en medarbetare
+svarat (`author='human'`). I VÄNTFASEN — innan någon medarbetare hunnit
+svara — kvitteras korta bekräftelser utan LLM-anrop, medan en ny fråga
+besvaras av kedjan i GÄSTLÄGE (reviderat 2026-10-05 på Sebbes beställning:
+"Noterat i ärendet" på "vilka har grundat snajp" låste chatten): svaret går
+i SAMMA ärende via `aterta`, samtalsläget skrivs tillbaka som
+`overlamnad` med ursprunglig orsak och ärende, och ingen ny
+överlämningssidoeffekt dubbleras. Agenten sätter ALDRIG själv
+`lage='agent'` på ett överlämnat samtal: tillbaka går det bara när
+medarbetaren lämnar tillbaka det (`overlamning.aterlamna`) eller efter
+`OVERLAMNING_GILTIG_TIMMAR` utan livstecken. Medarbetarens svar sparas
 med `author='human'` och når kundens eget chattfönster (`POST /api/chat/samtal`,
 som bara läser tillbaka sessionsidentiteter).
 Varför: Ebbot-researchen 2026-09-18 (bd snipe-1fl). Före ändringen kunde
 eskaleringssteget rösta nej till "jag vill prata med en människa", och ett
 överlämnat samtal fick ett nytt AI-svar på nästa meddelande — ett ärende som
 en människa redan ägde besvarades av en bot i hennes namn, och kunden fick
-börja om i en annan kanal.
+börja om i en annan kanal. 2026-10-05-revideringen behåller den kärnan
+(människan äger samtalet, agenten tar det aldrig tillbaka, tystnad när
+medarbetaren är aktiv) men slutar straffa kunden som ställer en ny fråga
+medan hen väntar.
 Test: snajp-support/tests/agent/test_support_eskalering.py
-Införd: 2026-09-18 · Upphävs endast genom waiver
+Införd: 2026-09-18 · Reviderad: 2026-10-05 · Upphävs endast genom waiver
 
 ### INV-UI-001 — Appytorna bär ingen mikrotext och ingen andra typografi
 Ingen fil under `/admin`, `/dashboard`, `/settings` eller deras komponentkataloger

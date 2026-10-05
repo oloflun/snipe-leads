@@ -179,7 +179,9 @@ async def test_kvittensen_under_overlamning_foljer_samtalets_sprak():
     forsta = await _tur(storage, llm, "Can I talk to a human?")
     assert forsta["escalated"] is True
 
-    andra = await _tur(storage, _LLM(), "Hello?")
+    # "Hello?" är sedan 2026-10-05 en FRÅGA (besvaras i gästläge) — en ren
+    # bekräftelse är det som kvitteras, och kvittensen ska följa språket.
+    andra = await _tur(storage, _LLM(), "ok thanks")
     assert andra["reply"] in support_texter._TEXTER["en"]["kvittens"]
 
 

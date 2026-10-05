@@ -91,6 +91,7 @@ async def _process(
                 aterta=aterta,
                 vid_arende=vid_arende,
                 is_test=request.is_test,
+                arbetsyta=request.arbetsyta,
             )
         # Bokför de LLM-anrop körningen FAKTISKT gjorde — ett steg är ett
         # anrop, och antalet varierar med eskalering och omkörning. Ett tak
@@ -208,6 +209,7 @@ async def hantera_strom_jobb(app_state, payload: dict[str, Any]) -> None:
         customer_email=payload.get("customer_email"),
         customer_name=payload.get("customer_name"),
         is_test=bool(payload.get("is_test")),
+        arbetsyta=bool(payload.get("arbetsyta")),
     )
     # x-snajp-user/is_demo gick igenom strömmen som RÅA primitiver (aldrig
     # ett Scope-objekt, se chat() nedan) — scopes byggs om här, exakt som de
@@ -288,6 +290,12 @@ async def chat(
                 "rate_limit_user": x_snajp_user,
                 "rate_limit_is_demo": is_demo,
                 "is_test": payload.is_test,
+                # Tappades först (2026-10-05): rekonstruktionen i
+                # hantera_strom_jobb byggde ChatRequest utan fältet, så
+                # sifferblocket försvann EXAKT i drift (Redis-vägen) men
+                # aldrig lokalt (paritetsvägen). Varje nytt ChatRequest-fält
+                # måste med både här och i rekonstruktionen.
+                "arbetsyta": payload.arbetsyta,
             }
         )
     else:

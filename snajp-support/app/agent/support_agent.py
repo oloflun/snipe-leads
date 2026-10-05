@@ -31,6 +31,7 @@ from ..cache import svarscache, versioner
 from ..integrationer import handelser as integrationshandelser
 from ..integrationer import uppslag as integrationsuppslag
 from ..minne import arbetsminne
+from . import arbetsyta_siffror
 from ..moderation.abuse_gate import check_abuse, ton_instruktion
 from ..moderation.maskering import maskera_personnummer
 from ..leads.soul import load_soul
@@ -448,6 +449,36 @@ def _amnesblock(installningar: support_regler.SupportInstallningar) -> str:
     )
 
 
+#: Frågeord som gör ett meddelande till en FRÅGA även utan frågetecken.
+#: Fail-open åt frågehållet: hellre ett riktigt svar för mycket än en kund
+#: som bara får kvitton (skärmdumpen 2026-10-05).
+_FRAGEORD = frozenset(
+    "vem vilka vad hur när nar var varför varfor kan finns går gar fungerar "
+    "vill behöver behover what how who why can does where".split()
+)
+
+
+def _ar_kvittensmeddelande(text: str) -> bool:
+    """Är meddelandet bara en kort bekräftelse ("ok", "tack", "ja")?
+
+    Under en överlämning kvitteras bekräftelser utan LLM-anrop — men allt
+    som ser ut som en fråga eller ett nytt ärende förtjänar ett riktigt
+    svar i stället för ett kvitto. Före 2026-10-05 kvitterades ALLT, och
+    "vilka har grundat snajp" fick "Noterat i ärendet".
+    """
+    t = text.strip().lower()
+    if not t:
+        return True
+    if "?" in t:
+        return False
+    ord_i_texten = re.findall(r"[a-zåäöé]+", t)
+    if any(o in _FRAGEORD for o in ord_i_texten):
+        return False
+    if support_regler.jakande_svar(t):
+        return True
+    return len(ord_i_texten) <= 4 and len(t) <= 30
+
+
 async def _svara_under_overlamning(
     storage: Storage,
     tenant_id: str,
@@ -492,6 +523,14 @@ async def _svara_under_overlamning(
 
     meddelanden = await storage.get_messages(tenant_id, ticket["conversation_id"])
     manniska_i_samtalet = any(m.get("author") == "human" for m in meddelanden)
+    # 2026-10-05 (Sebbes beställning): en NY FRÅGA medan kollegan ännu inte
+    # svarat ska få ett riktigt svar, inte ett kvitto. Inbound är redan
+    # sparad i ärendet ovan, så frågan syns för medarbetaren även om kedjan
+    # skulle fälla. None släpper vidare till gästläget i run_support_agent —
+    # kedjan svarar i SAMMA ärende och överlämningen hävs aldrig. När en
+    # människa är i samtalet tiger agenten som förut (INV-ESC-001:s kärna).
+    if not manniska_i_samtalet and not _ar_kvittensmeddelande(message):
+        return None
     reply = "" if manniska_i_samtalet else support_texter.text("kvittens", samtal.get("sprak"))
     if reply:
         await storage.save_message(
@@ -594,6 +633,11 @@ async def run_support_agent(
     # integrationernas {{kund.telefon}}. Båda None = oförändrat beteende.
     kund_id: str | None = None,
     customer_phone: str | None = None,
+    # 2026-10-05: arbetsytans hjälpchatt (autentiserad testchatt) får ett
+    # sifferblock med tenantens egna nyckeltal. Flaggan gated:as i Next —
+    # se app/agent/arbetsyta_siffror.py för varför den aldrig får sättas
+    # för en slutkund.
+    arbetsyta: bool = False,
 ) -> dict[str, Any]:
     started = time.monotonic()
     settings = get_settings()
@@ -700,6 +744,7 @@ async def run_support_agent(
     # modell: när en människa tagit över är samtalet hennes tills hon lämnar
     # tillbaka det (eller det legat stilla i OVERLAMNING_GILTIG_TIMMAR).
     samtal = await _las_samtalslage(storage, tenant_id, customer["id"])
+    gastlage: dict[str, str] | None = None
     if ar_overlamnat(samtal):
         under_overlamning = await _svara_under_overlamning(
             storage,
@@ -715,6 +760,20 @@ async def run_support_agent(
         )
         if under_overlamning is not None:
             return under_overlamning
+        # None betyder två saker. Finns det överlämnade ärendet kvar är
+        # meddelandet en NY FRÅGA som ska besvaras i GÄSTLÄGE: kedjan kör
+        # som vanligt men i samma ärende (via aterta — inbound är redan
+        # sparad av _svara_under_overlamning) och samtalsläget förblir
+        # överlämnat i slutet. Är ärendet borta tar den vanliga kedjan
+        # över helt, som före 2026-10-05.
+        _ticket_id = samtal.get("overlamnad_ticket_id")
+        _arende = await storage.get_ticket(tenant_id, _ticket_id) if _ticket_id else None
+        if _arende and _arende.get("conversation_id"):
+            gastlage = {
+                "ticket_id": _arende["id"],
+                "conversation_id": _arende["conversation_id"],
+            }
+            aterta = aterta or gastlage
 
     # Kundminnet (migration 052) — mem0:s ADD-only-mönster. Bär ENBART vad
     # kunden själv uppgett i tidigare ärenden; agentens slutsatser lagras
@@ -809,6 +868,15 @@ async def run_support_agent(
         + (f"\n\n{soul_block}" if soul_block else "")
         + (f"\n\n{minnesblock}" if minnesblock else "")
     )
+    # Arbetsytans siffror (2026-10-05): bara i den autentiserade
+    # hjälpchatten. Vår egen kördata, inte kundskriven text — ingen
+    # wrapping. Blocket läggs också i faktagrindens källor längre ned, så
+    # att siffrorna får citeras utan att grinden stryker dem.
+    sifferblock = ""
+    if arbetsyta:
+        sifferblock = await arbetsyta_siffror.bygg_sifferblock(storage, tenant_id)
+        if sifferblock:
+            case_context = f"{case_context}\n\n{sifferblock}"
     # Kundens valda tonläge och ämnesområde (bd snipe-1fl). Tonläget är vår
     # text via ett enumval; ämnesområdet är kundskrivet och wrappat.
     for block in (_tonblock(installningar), _amnesblock(installningar)):
@@ -839,6 +907,19 @@ async def run_support_agent(
             else f"Samtalet pågår redan ({turn_count} tidigare repliker). Det här är en fortsättning."
         )
         + (f"\n\n{conversation_block}" if conversation_block else "")
+        # Förankringen (2026-10-05): historiken ligger SIST i kontexten, så
+        # dess senaste fråga stod närmast modellens svar — i skarptest mot
+        # dev besvarade 2.5-flash (tänkande av) konsekvent FÖRRA repliken i
+        # stället för den aktuella ("vilka har grundat Snajp?" fick förra
+        # frågans ärendesiffror). Den aktuella repliken upprepas därför
+        # EFTER historiken, så recency pekar på rätt fråga.
+        + (
+            "\n\nSVARA PÅ KUNDENS AKTUELLA MEDDELANDE, inte på något tidigare "
+            "i historiken ovan (den är bara bakgrund). Det aktuella "
+            f"meddelandet är:\n{maskera_personnummer(message)[:400]}"
+            if turn_count > 0
+            else ""
+        )
     )
     case_context = f"{case_context}\n\n{conversation_state}"
 
@@ -1129,8 +1210,15 @@ async def run_support_agent(
             orsak = "utanfor_amnesomradet"
     elif tak_nått:
         orsak = "fortydligandetak"
-    elif kb_saknar_svar and not behover_fortydligande:
-        orsak = "utanfor_kunskapsbasen"
+    # 2026-10-05 (Sebbes beställning): en tydlig fråga utanför kunskapsbasen
+    # lämnar inte längre över PER AUTOMATIK. Den gamla regeln låste samtalet —
+    # "vilka har grundat Snajp?" gav lage=overlamnad och varje senare fråga
+    # fick bara fasta kvitton. Nu svarar agenten ärligt på det underlaget
+    # täcker och ERBJUDER en kollega (kundens "ja" blir en överlämning via
+    # erbjod_manniska). Eskaleringsbedömningen (steg 4, körs redan vid varje
+    # KB-miss) kan fortfarande rösta överlämning när ärendet i sig kräver en
+    # människa. Grundningen är intakt: uppgiften förbjuder påhittade fakta
+    # och faktagrinden kör som vanligt.
 
     if orsak:
         svarslage = "overlamna"
@@ -1140,6 +1228,7 @@ async def run_support_agent(
         svarslage = "fraga"
     else:
         svarslage = "besvara"
+    arligt_utanfor_kb = svarslage == "besvara" and kb_saknar_svar
     # Namnet står kvar för läsbarhetens skull: det är vad eskaleringssteget
     # och testerna frågar efter ("ställer svaret en följdfråga?").
     fragar_uppfoljning = svarslage == "fraga"
@@ -1209,6 +1298,19 @@ async def run_support_agent(
             "Håll hela svaret kort. Ren text, ingen markdown. Returnera JSON: "
             "draft (svenska)."
         )
+    elif arligt_utanfor_kb:
+        uppgift = (
+            missade_rad
+            + "Kunskapsbasen saknar helt eller delvis svar på frågan, men ärendet "
+            "är varken juridiskt, säkerhetskritiskt eller en uppsägningsrisk. "
+            "Läs frågan noga och svara på det kunskapsbasen och ärendet FAKTISKT "
+            "täcker — även delvis hjälp är hjälp. Säg sedan rakt ut vilken "
+            "uppgift du inte har, utan att låta som att kundens fråga är "
+            "konstig. Hitta ALDRIG på fakta, siffror, namn eller löften. "
+            "Avsluta med att fråga om kunden vill att du kopplar in en kollega "
+            "för det du inte kunde svara på. Ren text, ingen markdown. "
+            "Returnera JSON: draft (svenska)."
+        )
     else:
         uppgift = (
             missade_rad
@@ -1277,6 +1379,17 @@ async def run_support_agent(
                     "förtydligande följdfråga — det är INTE ett skäl att eskalera "
                     "i den här turen. "
                     if fragar_uppfoljning
+                    # 2026-10-05: KB-missen ENSAM är inte längre eskaleringsskäl —
+                    # svaret säger ärligt vad som saknas och erbjuder en kollega,
+                    # och kundens ja blir överlämningen. Modellen ska bara fälla
+                    # ärenden som i sig kräver en människa.
+                    else "Kunskapsbasen saknar helt eller delvis svar, och svaret "
+                    "till kunden säger det ärligt och erbjuder en kollega. Att "
+                    "kunskapsbasen saknar svaret är därför INTE ensamt ett skäl "
+                    "att eskalera — eskalera bara om ärendet i sig måste till en "
+                    "människa enligt listan ovan, eller om svaret till kunden "
+                    "vore vilseledande utan en. "
+                    if arligt_utanfor_kb
                     else "Eskalera också om kunskapsbasen saknar svar och ingen "
                     "följdfråga kan göra frågan besvarbar. "
                 )
@@ -1443,7 +1556,10 @@ async def run_support_agent(
     # Fäller grinden igen kastas texten — hellre ett uttryckligt "det vet jag
     # inte" och ett erbjudande om en människa än en uppgift vi inte kan stå
     # för. Påhoppsrepliken kontrolleras inte: den är vår fasta text.
-    erbjod_manniska = svarslage == "avgransa"
+    # Ett "ja" på nästa tur blir en överlämning (rad ~1083): både när vi
+    # avgränsade och när vi svarade ärligt utanför kunskapsbasen och erbjöd
+    # en kollega för resten.
+    erbjod_manniska = svarslage == "avgransa" or arligt_utanfor_kb
     faktagrind: dict[str, Any] = {"niva": installningar["faktakontroll"], "ok": True}
     if reply and not abuse.ska_eskalera:
         kallor = _faktakallor(
@@ -1452,6 +1568,10 @@ async def run_support_agent(
         # Lyckade svar ur kundens system (bd snipe-36u) är stöd precis som
         # kunskapsbasen — annars fälls ett korrekt återgivet leveransdatum.
         kallor += underlag.kallor
+        # Arbetsytans siffror är vår egen kördata: ett korrekt återgivet
+        # nyckeltal ska inte strykas som ostött.
+        if sifferblock:
+            kallor.append(sifferblock)
         dom = support_faktagrind.kontrollera(
             reply, niva=installningar["faktakontroll"], kallor=kallor, tenant_namn=tenant_namn
         )
@@ -1601,17 +1721,33 @@ async def run_support_agent(
     # från och med nu: nästa meddelande från kunden hamnar i DET HÄR ärendets
     # tråd och får ingen AI-replik (se _svara_under_overlamning). Annars
     # sparas räknaren för misslyckade rundor och om vi erbjöd en människa.
-    await _spara_samtalslage(
-        storage,
-        tenant_id,
-        customer["id"],
-        lage="overlamnad" if escalated else "agent",
-        misslyckade_i_rad=0 if escalated else misslyckade_nu,
-        erbjod_manniska=False if escalated else erbjod_manniska,
-        overlamnad_orsak=orsak if escalated else None,
-        overlamnad_ticket_id=ticket["id"] if escalated else None,
-        sprak=svar_sprak,
-    )
+    if gastlage:
+        # Gästläge: samtalet ägs fortfarande av en människa. Agentens
+        # sidosvar häver ALDRIG överlämningen — läget, orsaken och ärendet
+        # står kvar oavsett vad den här turen kom fram till (INV-ESC-001).
+        await _spara_samtalslage(
+            storage,
+            tenant_id,
+            customer["id"],
+            lage="overlamnad",
+            misslyckade_i_rad=0,
+            erbjod_manniska=False,
+            overlamnad_orsak=samtal.get("overlamnad_orsak"),
+            overlamnad_ticket_id=gastlage["ticket_id"],
+            sprak=svar_sprak,
+        )
+    else:
+        await _spara_samtalslage(
+            storage,
+            tenant_id,
+            customer["id"],
+            lage="overlamnad" if escalated else "agent",
+            misslyckade_i_rad=0 if escalated else misslyckade_nu,
+            erbjod_manniska=False if escalated else erbjod_manniska,
+            overlamnad_orsak=orsak if escalated else None,
+            overlamnad_ticket_id=ticket["id"] if escalated else None,
+            sprak=svar_sprak,
+        )
 
     # --- Fas R2: cache-STORE (INV-CACHE-001) --------------------------------
     #
@@ -1630,6 +1766,7 @@ async def run_support_agent(
         settings.semantic_cache in ("on", "shadow")
         and cache_kontext.behorig
         and not escalated
+        and not gastlage
         and svarslage == "besvara"
         and not erbjod_manniska
         and category in svarscache.CACHEBARA_KATEGORIER
@@ -1731,7 +1868,10 @@ async def run_support_agent(
         # faktagrindens utfall. `overlamnad` = en människa äger samtalet nu,
         # chattfönstret börjar hämta medarbetarens svar.
         "escalation_code": orsak,
-        "overlamnad": escalated,
+        # Gästläget: samtalet är fortfarande överlämnat även när den här
+        # turen besvarades av agenten — chattfönstret ska fortsätta hämta
+        # medarbetarens svar.
+        "overlamnad": escalated or bool(gastlage),
         "svarslage": svarslage,
         "faktagrind": faktagrind,
         "sprak": svar_sprak,
