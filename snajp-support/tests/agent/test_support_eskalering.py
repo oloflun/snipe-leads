@@ -634,3 +634,32 @@ async def test_arligt_lage_hoppar_over_modellbedomningen():
     samtal = await storage.get_chat_state(TENANT, svar["customer_id"])
     assert samtal["lage"] == "agent"
     assert samtal["erbjod_manniska"] is True
+
+
+@pytest.mark.anyio
+async def test_halsningssvar_pa_riktig_fraga_kors_om():
+    """Batteritestet 2026-10-05: 'Hej! Vilka har grundat Snajp?' fick
+    intermittent bara 'Hej, hur kan jag hjälpa dig?' — formatkorrekt sträng,
+    så mallgrinden släppte igenom innehållsfelet. Grinden är nu
+    innehållsmedveten: hälsningssvar på en riktig fråga körs om EN gång."""
+    storage = MemoryStorage()
+    llm = _LLM(sekvens={"cs:draft-response": [
+        {"draft": "Hej, hur kan jag hjälpa dig?"},
+        {"draft": "Du kan betala med Swish eller kort."},
+    ]})
+    svar = await _tur(storage, llm, "Hej! Vilka betalsätt tar ni?")
+    assert llm.calls.count("cs:draft-response") == 2
+    assert "besvara frågan" in llm.user_by_skill["cs:draft-response"][-1]
+    assert "Swish" in svar["reply"]
+
+
+@pytest.mark.anyio
+async def test_halsningssvar_pa_bara_en_halsning_ar_ok():
+    """Skriver kunden BARA 'Hej!' är en hälsning tillbaka rätt svar —
+    grinden ska inte tvinga fram en omkörning då."""
+    storage = MemoryStorage()
+    llm = _LLM(overrides={"cs:draft-response": {"draft": "Hej! Hur kan jag hjälpa dig?"},
+                          "snajp:humanizer-svenska": {"final_reply": "Hej! Hur kan jag hjälpa dig?"}})
+    svar = await _tur(storage, llm, "Hej!")
+    assert llm.calls.count("cs:draft-response") == 1
+    assert svar["reply"]

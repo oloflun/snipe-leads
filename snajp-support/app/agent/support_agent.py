@@ -458,6 +458,23 @@ _FRAGEORD = frozenset(
 )
 
 
+_HALSNINGSSVAR = re.compile(
+    r"(hur|vad) kan jag hjälpa( dig| er)?( i ?dag)?|hej[!,. ]*$", re.IGNORECASE
+)
+
+
+def _ar_tomt_halsningssvar(text: str) -> bool:
+    """Är utkastet bara en hälsning ("Hej, hur kan jag hjälpa dig?")?
+
+    2.5-flash läser ibland ett meddelande som inleds med "Hej!" som ENBART
+    en hälsning och svarar med en motfras — trots att frågan står i samma
+    mening och researchen redan bar svaret (batteritesten 2026-10-05, ca
+    var tredje körning). Ett sådant svar på en riktig fråga är alltid fel.
+    """
+    t = " ".join(text.split()).strip()
+    return len(t) <= 70 and bool(_HALSNINGSSVAR.search(t))
+
+
 def _ar_kvittensmeddelande(text: str) -> bool:
     """Är meddelandet bara en kort bekräftelse ("ok", "tack", "ja")?
 
@@ -1362,19 +1379,30 @@ async def run_support_agent(
             f"## Research\n{research.get('findings', '')}"
         ),
     )
-    # Kodgrind mot mallformatet: ett draft-objekt i stället för en sträng är
-    # ett brutet kontrakt som instruktionen ovan inte alltid stoppar (en
-    # prompt går att prata omkull; grinden gör det inte). EN omkörning med
-    # tillsägelse — samma mönster som step_runnerns kontraktsbrott.
+    # Kodgrind mot två kända felsvar (EN omkörning med tillsägelse — samma
+    # mönster som step_runnerns kontraktsbrott; en prompt går att prata
+    # omkull, grinden gör det inte):
+    # 1. Mallformatet: draft som objekt (skillens To/Re/Notes-mall).
+    # 2. Tomt hälsningssvar på en riktig fråga ("Hej, hur kan jag hjälpa
+    #    dig?" på "Hej! Vilka har grundat Snajp?").
+    tillsagelse = ""
     if not isinstance(draft.get("draft"), str):
+        tillsagelse = (
+            "FÖRRA FÖRSÖKET bröt formatet: draft var ett objekt (skillens "
+            "To/Re/Notes-mall), inte en sträng. Gör om. "
+        )
+    elif _ar_tomt_halsningssvar(draft["draft"]) and not _ar_kvittensmeddelande(message):
+        tillsagelse = (
+            "FÖRRA FÖRSÖKET svarade bara med en hälsning. Kundens meddelande "
+            "innehåller en FRÅGA efter hälsningen — läs hela meddelandet och "
+            "besvara frågan. "
+        )
+    if tillsagelse:
         draft = await steg(
             steps["cs:draft-response"],
             ledger,
             trace,
-            task=(
-                "FÖRRA FÖRSÖKET bröt formatet: draft var ett objekt (skillens "
-                "To/Re/Notes-mall), inte en sträng. Gör om. " + uppgift
-            ),
+            task=tillsagelse + uppgift,
             case_context=(
                 f"{case_context}\n\n## Kunskapsbas\n{kb_block}{systemblock}\n\n"
                 f"## Research\n{research.get('findings', '')}"
