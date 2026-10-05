@@ -14,7 +14,8 @@ Sätter på tjänsten `web`, per miljö:
   * SMTP_FROM / SMTP_FROM_NAME — läses från API-TJÄNSTEN i samma miljö, så
     webbens avsändare alltid är identisk med den Resend-verifierade identitet
     resten av plattformen använder. Divergens här ger tysta avvisningar.
-  * SITE_URL — ur RAILWAY_<MILJÖ>_WEB_URL i .env.deploy. Läses av
+  * SITE_URL — tjänstens egen domän i Railway (www.snajp.se i main), annars
+    RAILWAY_<MILJÖ>_WEB_URL i .env.deploy. Läses av
     lib/mail.ts (appBasUrl) för länken i mailet; aldrig ur Host-headern,
     se kommentaren där om password reset poisoning.
 
@@ -64,6 +65,20 @@ def variabler(env_id: str, service_id: str) -> dict[str, str]:
         "query($p:String!,$e:String!,$s:String!){ variables(projectId:$p, environmentId:$e, serviceId:$s) }",
         {"p": PROJECT_ID, "e": env_id, "s": service_id},
     )["variables"]
+
+
+def kunddoman(env_id: str) -> str:
+    """Tjänstens egen domän (www.snajp.se i main), tom om ingen finns.
+
+    Går före RAILWAY_<MILJÖ>_WEB_URL i .env.deploy: den raden är Railways
+    interna adress, och en återställningslänk dit ser ut som nätfiske för
+    kunden. Uppmätt 2026-10-05: SITE_URL i main pekade på railway.app.
+    """
+    d = gql(
+        "query($p:String!,$e:String!,$s:String!){ domains(projectId:$p, environmentId:$e, serviceId:$s){ customDomains{ domain } } }",
+        {"p": PROJECT_ID, "e": env_id, "s": WEB_SERVICE_ID},
+    )["domains"]["customDomains"]
+    return f"https://{d[0]['domain']}" if d else ""
 
 
 def satt(env_id: str, namn_varden: dict[str, str]) -> None:
@@ -132,7 +147,7 @@ def main() -> int:
     for miljo in miljoer:
         env_id = MILJOER[miljo]
         api_vars = variabler(env_id, API_SERVICE_ID)
-        site_url = env.get(f"RAILWAY_{miljo.upper()}_WEB_URL", "").rstrip("/")
+        site_url = kunddoman(env_id) or env.get(f"RAILWAY_{miljo.upper()}_WEB_URL", "").rstrip("/")
         smtp_from = api_vars.get("SMTP_FROM", "")
         smtp_namn = api_vars.get("SMTP_FROM_NAME", "")
         if not site_url:
