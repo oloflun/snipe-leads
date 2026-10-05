@@ -6,7 +6,7 @@ import { CrmDemo } from "@/components/crm/CrmDemo";
 import { KvittoDemo } from "@/components/kvitton/KvittoDemo";
 import { DemoSupportYta } from "@/components/snajp/DemoSupportYta";
 import { AttGora } from "@/components/leads/AttGora";
-import { IrisBolag } from "@/components/leads/IrisBolag";
+import { IrisBolag } from "@/components/leads/LeadsSida";
 import { IrisInstallningar } from "@/components/leads/IrisInstallningar";
 import { SupportRegler } from "@/components/settings/SupportRegler";
 import {

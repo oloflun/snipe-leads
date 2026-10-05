@@ -12,7 +12,7 @@ import type { EmailStudioData } from "@/lib/data/emails";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { sv, useLocale, type Locale, type Localized } from "@/lib/i18n";
-import { lasOffertForUtkast } from "@/lib/actions/affarskontext";
+import { offertForUtkast } from "@/lib/leads/offert";
 import { ICP_ETIKETTER } from "@/lib/leads/icpLabels";
 import { kriterier } from "@/lib/prospekt";
 import { cn } from "@/lib/utils";
@@ -277,7 +277,7 @@ function byggEmailStudioData(
  * sträng till outreach/draft — se rapportens avsnitt om saknat UI-data.
  */
 async function hamtaOffertsammanfattning(): Promise<string> {
-  return lasOffertForUtkast();
+  return offertForUtkast();
 }
 
 async function pollaLeadsJobb(jobId: string, locale: Locale): Promise<{

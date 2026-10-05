@@ -3,7 +3,7 @@
 import { X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EjAktiverad } from "@/components/EjAktiverad";
-import { Badge, Cell, SkeletonRows, Tabell, Tomt, btnPrimary, btnSecondary, etikett, btnLiten, faltDiskret, faltTatt, chip, chipAktiv, chipInaktiv, chiplista, meta, tabellRad } from "@/components/ui";
+import { Badge, Cell, SkeletonRows, Tabell, Tomt, btnSecondary, etikett, btnLiten, faltDiskret, faltTatt, chip, chipAktiv, chipInaktiv, chiplista, meta, tabellRad } from "@/components/ui";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { felmeddelande } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
@@ -24,10 +24,19 @@ import { LEAD_TYP_ETIKETT, STATUS_ETIKETT, STATUS_ORDNING, leadTyp, nivaEtikett,
 import { cn } from "@/lib/utils";
 
 /**
- * Iris › Bolag › Tabell (Fas 10, Leads Suite F4): alla prospekt i en tabell
- * med inline-status, nästa uppgift och sparade vyer. Statusbytet sparas
- * direkt (PATCH) och återställs om sparningen faller. Under md blir raderna
- * kort i stället för en tabell som scrollar i sidled.
+ * Leads › Leads (plan 2026-10-05, fas 4): EN vy i full bredd i stället för
+ * tre (Alla leads, Tabell, Pipeline). Antons beställning: alla datapunkter på
+ * ett ställe, en enkel statusmarkering i stället för pipelinen, och leadsen
+ * över hela ytan i stället för en halv sida "Välj ett lead i listan".
+ *
+ * - Statusremsan överst är pipelinen i kompakt form: varje steg är en räknare
+ *   som filtrerar listan.
+ * - Varje rad bär bolaget, motiveringens första mening, status (byts direkt,
+ *   PATCH, återställs om sparningen faller), poäng och nivå, webbbetyget ur
+ *   webbrevisionen, kontaktväg, senaste händelse, nästa uppgift och typ.
+ * - Klick på bolaget öppnar detaljen (Bedömning, Mejlutkast, Tidslinje) i en
+ *   låda från höger — det ägs av IrisBolag via `onValj`.
+ * - Bortvalda (nivå C) ligger bakom en växel: de är Iris arbete, inte leverans.
  */
 
 const T = {
@@ -38,18 +47,18 @@ const T = {
   ingaTraffar: { sv: "Inga leads matchar filtret.", en: "No leads match the filter." },
   kolBolag: { sv: "Bolag", en: "Company" },
   kolStatus: { sv: "Status", en: "Status" },
-  kolNiva: { sv: "Nivå", en: "Tier" },
   kolPoang: { sv: "Poäng", en: "Score" },
+  kolWebb: { sv: "Webbplats", en: "Website" },
   kolKontakt: { sv: "Kontaktväg", en: "Contact" },
   kolSenaste: { sv: "Senaste händelse", en: "Last event" },
   kolUppgift: { sv: "Nästa uppgift", en: "Next task" },
   kolTyp: { sv: "Typ", en: "Type" },
-  filterStatus: { sv: "Status", en: "Status" },
   filterNiva: { sv: "Nivå", en: "Tier" },
   filterTyp: { sv: "Typ", en: "Type" },
   filterSok: { sv: "Sök", en: "Search" },
   sokPlaceholder: { sv: "Bolag eller kontakt", en: "Company or contact" },
   alla: { sv: "Alla", en: "All" },
+  pipeline: { sv: "Status", en: "Status" },
   vyer: { sv: "Sparade vyer", en: "Saved views" },
   vyNamn: { sv: "Namn på vyn", en: "View name" },
   vyPlaceholder: { sv: "Heta leads i Göteborg", en: "Hot leads in Gothenburg" },
@@ -62,7 +71,12 @@ const T = {
   },
   ingenUppgift: { sv: "Ingen", en: "None" },
   statusFor: { sv: "Status för", en: "Status for" },
-  statusAndrad: { sv: "Status ändrad till", en: "Status changed to" }
+  statusAndrad: { sv: "Status ändrad till", en: "Status changed to" },
+  doljBortvalda: { sv: "Dölj bortvalda", en: "Hide rejected" },
+  exempel: { sv: "Exempel", en: "Example" },
+  researchar: { sv: "Researchar", en: "Researching" },
+  oppna: { sv: "Öppna", en: "Open" },
+  modernitet: { sv: "Modernitet", en: "Modernity" }
 } satisfies Record<string, Localized>;
 
 const KONTAKT_ETIKETT: Record<Kontaktvag, Localized> = {
@@ -73,6 +87,9 @@ const KONTAKT_ETIKETT: Record<Kontaktvag, Localized> = {
 };
 
 const TYPER: LeadTyp[] = ["iris", "lista", "import", "inkorg"];
+
+/** Stegen i remsan: arbetsflödets ordning, utan Spärrad (den har egen väg). */
+const REMSA = STATUS_ORDNING.filter((s) => s !== "suppressed");
 
 function matchar(p: SuiteProspekt, f: VyFilter): boolean {
   if (f.status && p.status !== f.status) return false;
@@ -88,13 +105,48 @@ function rensat(f: VyFilter): VyFilter {
   return Object.fromEntries(Object.entries(f).filter(([, v]) => typeof v === "string" && v.trim() !== "")) as VyFilter;
 }
 
-// Täta fält (ui.tsx faltTatt): 36 px i verktygsraden och i tabellraderna.
-const faltKlass = faltTatt;
+function domanAv(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url.startsWith("http") ? url : `https://${url}`).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+/** Motiveringens första mening: raden ska gå att skumma, detaljen bär resten. */
+function forstaMening(p: SuiteProspekt): string | null {
+  const text = p.motivering ?? p.disqualifiers?.[0] ?? null;
+  if (!text) return null;
+  const slut = text.search(/[.!?](\s|$)/);
+  return slut > 0 ? text.slice(0, slut + 1) : text;
+}
+
+/** Researchen är köad eller pågår: raden finns men är inte bedömd än. */
+function researchPagar(p: SuiteProspekt): boolean {
+  return p.origin !== "example" && !p.niva && p.score_total == null && p.icp_fit == null;
+}
+
+/** Bedömda först (A före B, högst poäng först), pågående sist — exemplen överst. */
+function sortera(rader: SuiteProspekt[]): SuiteProspekt[] {
+  const rang = (p: SuiteProspekt) =>
+    p.origin === "example" ? 0 : p.niva === "A" ? 1 : p.niva === "B" ? 2 : researchPagar(p) ? 4 : 3;
+  return [...rader].sort((a, b) => rang(a) - rang(b) || (b.score_total ?? -1) - (a.score_total ?? -1));
+}
 
 export function LeadsTabell({
   onValj,
+  valdId = null,
+  exempel = [],
   demo = false
-}: Readonly<{ onValj?: (id: string) => void; demo?: boolean }>) {
+}: Readonly<{
+  onValj?: (id: string) => void;
+  /** Leadet vars låda är öppen: raden markeras. */
+  valdId?: string | null;
+  /** Demons exempelbolag, överst i listan. */
+  exempel?: SuiteProspekt[];
+  demo?: boolean;
+}>) {
   const { locale, text } = useLocale();
   const [prospekt, setProspekt] = useState<SuiteProspekt[] | null>(null);
   const [uppgifter, setUppgifter] = useState<Uppgift[]>([]);
@@ -104,11 +156,13 @@ export function LeadsTabell({
   const [notis, setNotis] = useState<string | null>(null);
   const [meddelande, setMeddelande] = useState<string | null>(null);
   const [fokusId, setFokusId] = useState<string | null>(null);
+  const [visaBortvalda, setVisaBortvalda] = useState(false);
+  const [sparaOppen, setSparaOppen] = useState(false);
 
   // Raden kan lämna filtret efter statusbytet: fokus till samma select om den
-  // finns kvar efter commit, annars till statusfiltret (2.4.3).
+  // finns kvar efter commit, annars till remsans Alla (2.4.3).
   useEffect(() => {
-    if (fokusId) (document.getElementById(`leads-status-${fokusId}`) ?? document.getElementById("leads-filter-status"))?.focus();
+    if (fokusId) (document.getElementById(`leads-status-${fokusId}`) ?? document.getElementById("leads-remsa-alla"))?.focus();
   }, [fokusId, prospekt]);
   const [filter, setFilter] = useState<VyFilter>({});
   const [vyNamn, setVyNamn] = useState("");
@@ -146,6 +200,17 @@ export function LeadsTabell({
     void hamta();
   }, [hamta]);
 
+  // En pågående körning (Kör Iris) lägger till rader medan man tittar.
+  useEffect(() => {
+    const uppdatera = () => void hamta();
+    window.addEventListener("snipra:leads-korning-steg", uppdatera);
+    window.addEventListener("snipra:leads-korning-klar", uppdatera);
+    return () => {
+      window.removeEventListener("snipra:leads-korning-steg", uppdatera);
+      window.removeEventListener("snipra:leads-korning-klar", uppdatera);
+    };
+  }, [hamta]);
+
   const nastaUppgift = useMemo(() => {
     // Backenden sorterar förfallodatum stigande med null sist: första öppna per prospekt vinner.
     const karta = new Map<string, Uppgift>();
@@ -153,7 +218,16 @@ export function LeadsTabell({
     return karta;
   }, [uppgifter]);
 
-  const synliga = useMemo(() => (prospekt ?? []).filter((p) => matchar(p, filter)), [prospekt, filter]);
+  const allaRader = useMemo(() => sortera([...exempel, ...(prospekt ?? [])]), [exempel, prospekt]);
+  const antalBortvalda = allaRader.filter((p) => p.niva === "C").length;
+  const urval = visaBortvalda ? allaRader : allaRader.filter((p) => p.niva !== "C");
+  const synliga = useMemo(() => urval.filter((p) => matchar(p, filter)), [urval, filter]);
+  const harWebb = synliga.some((p) => typeof p.webbrevision?.modernitet === "number");
+  const perStatus = useMemo(() => {
+    const karta = new Map<string, number>();
+    for (const p of urval) if (matchar(p, { ...filter, status: undefined })) karta.set(p.status, (karta.get(p.status) ?? 0) + 1);
+    return karta;
+  }, [urval, filter]);
 
   async function bytStatus(id: string, status: string) {
     const forra = prospekt?.find((p) => p.id === id)?.status;
@@ -187,6 +261,7 @@ export function LeadsTabell({
       });
       setVyer((forra) => [...forra, svar.vy]);
       setVyNamn("");
+      setSparaOppen(false);
     } catch (orsak) {
       setNotis(felmeddelande(orsak));
     } finally {
@@ -218,42 +293,90 @@ export function LeadsTabell({
       </div>
     );
   }
-  if (prospekt === null) return <SkeletonRows />;
-  if (prospekt.length === 0) return <Tomt>{text(T.tomt)}</Tomt>;
+  if (prospekt === null && exempel.length === 0) return <SkeletonRows />;
+  if (allaRader.length === 0) return <Tomt>{text(T.tomt)}</Tomt>;
 
   const aktivtFilter = JSON.stringify(rensat(filter));
 
-  const statusVal = (p: SuiteProspekt) => (
-    <select
-      id={`leads-status-${p.id}`}
-      value={p.status}
-      onChange={(e) => void bytStatus(p.id, e.target.value)}
-      aria-label={`${text(T.statusFor)} ${p.company_name}`}
-      className={cn(faltDiskret, "w-full")}
-    >
-      {STATUS_ORDNING.map((s) => (
-        <option key={s} value={s}>
-          {text(STATUS_ETIKETT[s])}
-        </option>
-      ))}
-      {STATUS_ORDNING.includes(p.status as (typeof STATUS_ORDNING)[number]) ? null : (
-        <option value={p.status}>{p.status}</option>
-      )}
-    </select>
-  );
-
-  const bolag = (p: SuiteProspekt) =>
-    onValj ? (
-      <button
-        type="button"
-        onClick={() => onValj(p.id)}
-        className="focus-ring -mx-1 inline-flex min-h-8 items-center rounded-input px-1 text-left font-medium decoration-ink/40 underline-offset-4 hover:underline"
-      >
-        {p.company_name}
-      </button>
+  const statusVal = (p: SuiteProspekt) =>
+    p.origin === "example" ? (
+      <span className="text-ink-muted">{text(STATUS_ETIKETT[p.status] ?? { sv: p.status, en: p.status })}</span>
     ) : (
-      <span className="font-semibold">{p.company_name}</span>
+      <select
+        id={`leads-status-${p.id}`}
+        value={p.status}
+        onChange={(e) => void bytStatus(p.id, e.target.value)}
+        aria-label={`${text(T.statusFor)} ${p.company_name}`}
+        className={cn(faltDiskret, "w-full")}
+      >
+        {STATUS_ORDNING.map((s) => (
+          <option key={s} value={s}>
+            {text(STATUS_ETIKETT[s])}
+          </option>
+        ))}
+        {STATUS_ORDNING.includes(p.status as (typeof STATUS_ORDNING)[number]) ? null : (
+          <option value={p.status}>{p.status}</option>
+        )}
+      </select>
     );
+
+  const bolag = (p: SuiteProspekt) => {
+    const doman = domanAv(p.website);
+    const motivering = forstaMening(p);
+    return (
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-baseline gap-x-2">
+          {onValj ? (
+            <button
+              type="button"
+              id={`iris-rad-${p.id}`}
+              onClick={() => onValj(p.id)}
+              aria-label={`${text(T.oppna)} ${p.company_name}`}
+              className="focus-ring -mx-1 rounded-input px-1 text-left font-semibold decoration-ink/40 underline-offset-4 hover:underline"
+            >
+              {p.company_name}
+            </button>
+          ) : (
+            <span className="font-semibold">{p.company_name}</span>
+          )}
+          {p.origin === "example" ? <Badge>{text(T.exempel)}</Badge> : null}
+        </div>
+        {p.ort || doman ? <p className={cn(meta, "mt-0.5 truncate")}>{[p.ort, doman].filter(Boolean).join(" · ")}</p> : null}
+        {motivering ? (
+          <p className="mt-1 line-clamp-2 max-w-[70ch] text-[0.875rem] leading-6 text-ink-muted">{motivering}</p>
+        ) : null}
+      </div>
+    );
+  };
+
+  const poangCell = (p: SuiteProspekt) =>
+    researchPagar(p) ? (
+      <span className={meta}>{text(T.researchar)}</span>
+    ) : (
+      <span className="inline-flex flex-col items-end leading-tight">
+        <span className="num font-semibold tabular-nums">{poangAv(p)}</span>
+        {p.niva ? (
+          <span className={cn("text-[0.75rem]", p.niva === "C" ? "text-danger" : "text-ink-subtle")}>
+            {nivaEtikett(p.niva, locale)}
+          </span>
+        ) : null}
+      </span>
+    );
+
+  const webbCell = (p: SuiteProspekt) => {
+    const m = p.webbrevision?.modernitet;
+    if (typeof m !== "number") return null;
+    const brist = p.webbrevision?.brister?.[0];
+    return (
+      <span className="inline-flex flex-col gap-1" title={brist ?? undefined}>
+        <Badge tone={m <= 4 ? "good" : m >= 7 ? "neutral" : "warn"}>
+          <span className="sr-only">{text(T.modernitet)} </span>
+          {m}/10
+        </Badge>
+        {brist ? <span className={cn(meta, "line-clamp-1 max-w-[18ch]")}>{brist}</span> : null}
+      </span>
+    );
+  };
 
   const uppgiftText = (p: SuiteProspekt) => {
     const u = nastaUppgift.get(p.id);
@@ -276,21 +399,99 @@ export function LeadsTabell({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+      {/* Statusremsan: pipelinen som räknare. Ett klick filtrerar, ett till släpper. */}
+      <nav aria-label={text(T.pipeline)} className="-mx-1 overflow-x-auto px-1">
+        <ul className="flex min-w-max gap-1.5">
+          <li>
+            <button
+              type="button"
+              id="leads-remsa-alla"
+              aria-pressed={!filter.status}
+              onClick={() => setFilter((f) => ({ ...f, status: undefined }))}
+              className={cn(chip, !filter.status ? chipAktiv : chipInaktiv)}
+            >
+              {text(T.alla)} <span className="num ml-1 tabular-nums opacity-70">{urval.filter((p) => matchar(p, { ...filter, status: undefined })).length}</span>
+            </button>
+          </li>
+          {REMSA.map((s) => {
+            const antal = perStatus.get(s) ?? 0;
+            const aktiv = filter.status === s;
+            return (
+              <li key={s}>
+                <button
+                  type="button"
+                  aria-pressed={aktiv}
+                  onClick={() => setFilter((f) => ({ ...f, status: aktiv ? undefined : s }))}
+                  className={cn(chip, aktiv ? chipAktiv : chipInaktiv, antal === 0 && !aktiv && "text-ink-subtle")}
+                >
+                  {text(STATUS_ETIKETT[s])} <span className="num ml-1 tabular-nums opacity-70">{antal}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+
+      <div className="flex flex-wrap items-end gap-2">
+        <label className={cn(etikett, "flex flex-col gap-1")}>
+          {text(T.filterNiva)}
+          <select
+            value={filter.niva ?? ""}
+            onChange={(e) => setFilter((f) => ({ ...f, niva: e.target.value }))}
+            className={faltTatt}
+          >
+            <option value="">{text(T.alla)}</option>
+            {(["A", "B", "C"] as const).map((n) => (
+              <option key={n} value={n}>
+                {nivaEtikett(n, locale)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className={cn(etikett, "flex flex-col gap-1")}>
+          {text(T.filterTyp)}
+          <select
+            value={filter.typ ?? ""}
+            onChange={(e) => setFilter((f) => ({ ...f, typ: e.target.value }))}
+            className={faltTatt}
+          >
+            <option value="">{text(T.alla)}</option>
+            {TYPER.map((t) => (
+              <option key={t} value={t}>
+                {text(LEAD_TYP_ETIKETT[t])}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className={cn(etikett, "flex min-w-[200px] flex-1 flex-col gap-1")}>
+          {text(T.filterSok)}
+          <input
+            type="search"
+            value={filter.sok ?? ""}
+            onChange={(e) => setFilter((f) => ({ ...f, sok: e.target.value }))}
+            placeholder={text(T.sokPlaceholder)}
+            className={faltTatt}
+          />
+        </label>
+        {antalBortvalda > 0 ? (
+          <button
+            type="button"
+            aria-pressed={visaBortvalda}
+            onClick={() => setVisaBortvalda((v) => !v)}
+            className={cn(btnSecondary, btnLiten)}
+          >
+            {visaBortvalda
+              ? text(T.doljBortvalda)
+              : text({ sv: `Visa bortvalda (${antalBortvalda})`, en: `Show rejected (${antalBortvalda})` })}
+          </button>
+        ) : null}
+      </div>
+
       {vyer.length || !demo ? (
-        <div>
-          <p className={etikett}>{text(T.vyer)}</p>
-          <ul className={cn("mt-2", chiplista)}>
-            <li>
-              <button
-                type="button"
-                aria-pressed={aktivtFilter === "{}"}
-                onClick={() => setFilter({})}
-                className={cn(chip, aktivtFilter === "{}" ? chipAktiv : chipInaktiv)}
-              >
-                {text(T.alla)}
-              </button>
-            </li>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={etikett}>{text(T.vyer)}</span>
+          <ul className={chiplista}>
             {vyer.map((vy) => {
               const aktiv = aktivtFilter === JSON.stringify(rensat(vy.filter ?? {}));
               return (
@@ -298,7 +499,7 @@ export function LeadsTabell({
                   <button
                     type="button"
                     aria-pressed={aktiv}
-                    onClick={() => setFilter(rensat(vy.filter ?? {}))}
+                    onClick={() => setFilter(aktiv ? {} : rensat(vy.filter ?? {}))}
                     className={cn(chip, aktiv ? chipAktiv : chipInaktiv)}
                   >
                     {vy.namn}
@@ -317,91 +518,41 @@ export function LeadsTabell({
               );
             })}
           </ul>
+          {demo ? null : sparaOppen ? (
+            <form
+              className="flex flex-wrap items-center gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void sparaVy();
+              }}
+            >
+              <label className="sr-only" htmlFor="leads-vy-namn">
+                {text(T.vyNamn)}
+              </label>
+              <input
+                id="leads-vy-namn"
+                value={vyNamn}
+                onChange={(e) => setVyNamn(e.target.value)}
+                placeholder={text(T.vyPlaceholder)}
+                maxLength={80}
+                autoFocus
+                className={cn(faltTatt, "w-56")}
+              />
+              <button type="submit" disabled={sparar || !vyNamn.trim()} className={cn(btnSecondary, btnLiten)}>
+                {sparar ? text(T.sparar) : text(T.sparaVy)}
+              </button>
+            </form>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setSparaOppen(true)}
+              className="focus-ring text-[0.8125rem] text-ink-muted underline decoration-ink/25 underline-offset-4 hover:text-ink"
+            >
+              {text(T.sparaVy)}
+            </button>
+          )}
         </div>
       ) : null}
-
-      <div className="flex flex-wrap items-end gap-2">
-        <label className={cn(etikett, "flex flex-col gap-1")}>
-          {text(T.filterStatus)}
-          <select
-            id="leads-filter-status"
-            value={filter.status ?? ""}
-            onChange={(e) => setFilter((f) => ({ ...f, status: e.target.value }))}
-            className={faltKlass}
-          >
-            <option value="">{text(T.alla)}</option>
-            {STATUS_ORDNING.map((s) => (
-              <option key={s} value={s}>
-                {text(STATUS_ETIKETT[s])}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className={cn(etikett, "flex flex-col gap-1")}>
-          {text(T.filterNiva)}
-          <select
-            value={filter.niva ?? ""}
-            onChange={(e) => setFilter((f) => ({ ...f, niva: e.target.value }))}
-            className={faltKlass}
-          >
-            <option value="">{text(T.alla)}</option>
-            {(["A", "B", "C"] as const).map((n) => (
-              <option key={n} value={n}>
-                {nivaEtikett(n, locale)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className={cn(etikett, "flex flex-col gap-1")}>
-          {text(T.filterTyp)}
-          <select
-            value={filter.typ ?? ""}
-            onChange={(e) => setFilter((f) => ({ ...f, typ: e.target.value }))}
-            className={faltKlass}
-          >
-            <option value="">{text(T.alla)}</option>
-            {TYPER.map((t) => (
-              <option key={t} value={t}>
-                {text(LEAD_TYP_ETIKETT[t])}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className={cn(etikett, "flex min-w-[200px] flex-1 flex-col gap-1")}>
-          {text(T.filterSok)}
-          <input
-            type="search"
-            value={filter.sok ?? ""}
-            onChange={(e) => setFilter((f) => ({ ...f, sok: e.target.value }))}
-            placeholder={text(T.sokPlaceholder)}
-            className={faltKlass}
-          />
-        </label>
-      </div>
-
-      {demo ? null : (
-        <form
-          className="flex flex-wrap items-end gap-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void sparaVy();
-          }}
-        >
-          <label className={cn(etikett, "flex min-w-[200px] flex-1 flex-col gap-1 sm:max-w-xs")}>
-            {text(T.vyNamn)}
-            <input
-              value={vyNamn}
-              onChange={(e) => setVyNamn(e.target.value)}
-              placeholder={text(T.vyPlaceholder)}
-              maxLength={80}
-              className={faltKlass}
-            />
-          </label>
-          <button type="submit" disabled={sparar || !vyNamn.trim()} className={cn(btnSecondary, btnLiten)}>
-            {sparar ? text(T.sparar) : text(T.sparaVy)}
-          </button>
-        </form>
-      )}
 
       {notis ? (
         <p role="alert" className="text-[15px] text-danger">
@@ -416,29 +567,31 @@ export function LeadsTabell({
         <Tomt>{text(T.ingaTraffar)}</Tomt>
       ) : (
         <>
-          <div className="hidden md:block">
+          <div className="hidden lg:block">
             <Tabell
               ariaLabel={text(T.tabell)}
-              minBredd={960}
+              minBredd={1040}
               kolumner={[
-                { rubrik: text(T.kolBolag), bredd: "20%" },
-                { rubrik: text(T.kolStatus), bredd: "16%" },
-                { rubrik: text(T.kolNiva), bredd: "8%" },
-                { rubrik: text(T.kolPoang), bredd: "6%", hoger: true },
-                { rubrik: text(T.kolKontakt), bredd: "10%" },
-                { rubrik: text(T.kolSenaste), bredd: "16%" },
-                { rubrik: text(T.kolUppgift), bredd: "14%" },
+                { rubrik: text(T.kolBolag), bredd: harWebb ? "32%" : "38%" },
+                { rubrik: text(T.kolStatus), bredd: "13%" },
+                { rubrik: text(T.kolPoang), bredd: "7%", hoger: true },
+                // Webbkolumnen bara när någon rad har ett betyg (webbrevisionen):
+                // en tom kolumn är bredd utan information.
+                ...(harWebb ? [{ rubrik: text(T.kolWebb), bredd: "11%" }] : []),
+                { rubrik: text(T.kolKontakt), bredd: "9%" },
+                { rubrik: text(T.kolSenaste), bredd: "11%" },
+                { rubrik: text(T.kolUppgift), bredd: "10%" },
                 { rubrik: text(T.kolTyp) }
               ]}
             >
               {synliga.map((p) => (
-                <tr key={p.id} className={tabellRad}>
+                <tr key={p.id} className={cn(tabellRad, "align-top", p.id === valdId && "bg-ochre/10")}>
                   <Cell titel>{bolag(p)}</Cell>
                   <Cell>{statusVal(p)}</Cell>
-                  <Cell>{p.niva ? nivaEtikett(p.niva, locale) : ""}</Cell>
-                  <Cell hoger>{poangAv(p)}</Cell>
+                  <Cell hoger>{poangCell(p)}</Cell>
+                  {harWebb ? <Cell>{webbCell(p)}</Cell> : null}
                   <Cell>{kontaktChip(p)}</Cell>
-                  <Cell className="truncate whitespace-nowrap text-ink-muted">{relativTid(p.senaste_handelse_at ?? p.created_at, locale)}</Cell>
+                  <Cell className="text-ink-muted">{relativTid(p.senaste_handelse_at ?? p.created_at, locale)}</Cell>
                   <Cell>{uppgiftText(p)}</Cell>
                   <Cell className="text-ink-muted">{text(LEAD_TYP_ETIKETT[leadTyp(p.origin)])}</Cell>
                 </tr>
@@ -446,27 +599,25 @@ export function LeadsTabell({
             </Tabell>
           </div>
 
-          <ul className="space-y-3 md:hidden" aria-label={text(T.tabell)}>
+          <ul className="space-y-3 lg:hidden" aria-label={text(T.tabell)}>
             {synliga.map((p) => (
-              <li key={p.id} className="rounded-card border border-ink/12 bg-paper2/40 p-4">
+              <li key={p.id} className={cn("rounded-card border border-ink/12 bg-paper2/40 p-4", p.id === valdId && "border-ochre/50")}>
                 <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">{bolag(p)}</div>
-                  <span className="num shrink-0 tabular-nums">{poangAv(p)}</span>
+                  {bolag(p)}
+                  <div className="shrink-0 text-right">{poangCell(p)}</div>
                 </div>
-                <p className={cn(meta, "mt-1")}>
-                  {[
-                    p.niva ? nivaEtikett(p.niva, locale) : null,
-                    text(LEAD_TYP_ETIKETT[leadTyp(p.origin)]),
-                    relativTid(p.senaste_handelse_at ?? p.created_at, locale)
-                  ]
+                <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+                  <div>{statusVal(p)}</div>
+                  <div className="flex flex-wrap items-start justify-end gap-2">
+                    {webbCell(p)}
+                    {kontaktChip(p)}
+                  </div>
+                </div>
+                <p className={cn(meta, "mt-3")}>
+                  {[text(LEAD_TYP_ETIKETT[leadTyp(p.origin)]), relativTid(p.senaste_handelse_at ?? p.created_at, locale)]
                     .filter(Boolean)
                     .join(" · ")}
                 </p>
-                <div className="mt-3">{statusVal(p)}</div>
-                <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
-                  {kontaktChip(p)}
-                  <div className="min-w-0 text-right text-[15px]">{uppgiftText(p)}</div>
-                </div>
               </li>
             ))}
           </ul>

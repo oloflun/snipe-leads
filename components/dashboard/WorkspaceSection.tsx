@@ -13,7 +13,7 @@ import {
   ContactsView,
   InboxView
 } from "@/components/WorkspaceViews";
-import { IrisBolag } from "@/components/leads/IrisBolag";
+import { IrisBolag } from "@/components/leads/LeadsSida";
 import { AttGora } from "@/components/leads/AttGora";
 import { Aktivitet } from "@/components/dashboard/Aktivitet";
 import { resolveDashboardState } from "@/lib/data/dashboard";
@@ -164,10 +164,10 @@ export async function WorkspaceSection({
       // landa på sin nya plats, inte i en 404.
       const ny: Record<string, string> = {
         "": `${base}/leads`,
-        pipeline: `${base}/leads?vy=pipeline`,
-        korningar: `${base}/aktivitet`,
-        inkorg: `${base}/att-gora`,
-        granskning: `${base}/att-gora`,
+        pipeline: `${base}/leads`,
+        korningar: `${base}/leads?vy=korningar`,
+        inkorg: `${base}/leads?vy=inkorg`,
+        granskning: `${base}/leads?vy=utkast`,
         installningar: leadsInstallningar
       };
       const mal = ny[id ?? ""];

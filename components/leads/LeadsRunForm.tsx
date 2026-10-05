@@ -690,7 +690,7 @@ export function LeadsRunForm({
           {batchId && !demo ? (
             <>
               {" · "}
-              <Link href={`${bas}/aktivitet?id=${encodeURIComponent(batchId)}`} className="underline underline-offset-4 hover:text-ink">
+              <Link href={`${bas}/leads?vy=korningar&id=${encodeURIComponent(batchId)}`} className="underline underline-offset-4 hover:text-ink">
                 {text(T.foljKorningen)}
               </Link>
             </>

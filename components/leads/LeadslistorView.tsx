@@ -8,7 +8,7 @@ import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { ImportCsv } from "@/components/leads/ImportCsv";
 import { btnPrimary, btnSecondary, EmptyState, SkeletonRows, chip, chipAktiv, chipInaktiv, chiplista } from "@/components/ui";
-import { lasOffertForUtkast } from "@/lib/actions/affarskontext";
+import { offertForUtkast } from "@/lib/leads/offert";
 import type { EmailStudioData } from "@/lib/data/emails";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { sv, useLocale, type Locale, type Localized } from "@/lib/i18n";
@@ -905,7 +905,7 @@ async function skrivUtkastForRad(
   // kan kasta på (utloggad, tom affärskontext) har samma åtgärd för kunden.
   let offert: string;
   try {
-    offert = await lasOffertForUtkast();
+    offert = await offertForUtkast();
   } catch {
     throw new Error(OFFERT_SAKNAS[locale]);
   }

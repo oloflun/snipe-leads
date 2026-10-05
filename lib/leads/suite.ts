@@ -23,6 +23,12 @@ export type SuiteProspekt = {
   created_at?: string | null;
   /** Senaste statusbyte ur loggen, annars created_at (GET /leads/prospects). */
   senaste_handelse_at?: string | null;
+  website?: string | null;
+  ort?: string | null;
+  motivering?: string | null;
+  disqualifiers?: string[] | null;
+  /** Webbrevisionen (migration 094): bildbedömningens betyg och synliga brister. */
+  webbrevision?: { modernitet?: number | null; brister?: string[] | null } | null;
 };
 
 export type Uppgift = {

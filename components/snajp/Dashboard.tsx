@@ -286,7 +286,9 @@ function ConfidenceBar({ value }: Readonly<{ value: number }>) {
 export function Dashboard({
   demo = false,
   lager = "arenden",
-  onMeta
+  onMeta,
+  tak,
+  onAntal
 }: Readonly<{
   demo?: boolean;
   /** "leads" (migration 084): leadsmejlen, klass=lead. "vantar" (Snajp Suite
@@ -294,6 +296,10 @@ export function Dashboard({
    *  "eskalerade" på samma sätt för ärenden agenten lämnat över. */
   lager?: "arenden" | "testmail" | "att_hantera" | "leads" | "vantar" | "eskalerade" | "ej_relaterat";
   onMeta?: (meta: { visar_test_i_arenden: boolean }) => void;
+  /** Visa högst så många rader tills användaren ber om alla (Att göra). */
+  tak?: number;
+  /** Antalet mejl i vyn, för Att görasummeringen. */
+  onAntal?: (antal: number) => void;
 }>) {
   const vag = useArbetsvag();
   const { text, locale } = useLocale();
@@ -713,6 +719,38 @@ export function Dashboard({
       })
     );
 
+  // Kölägena i Att göra (plan 2026-10-05, fas 5): larm med samma ämne blir en
+  // rad med räknare i stället för tolv likadana, och listan visar `tak` rader
+  // tills man ber om alla.
+  const [visaAlla, setVisaAlla] = useState(false);
+  const larmgrupper = useMemo(() => {
+    const grupper = new Map<string, EmailRow[]>();
+    if (lager !== "att_hantera") return grupper;
+    for (const e of emails) {
+      const nyckel = e.subject || "";
+      grupper.set(nyckel, [...(grupper.get(nyckel) ?? []), e]);
+    }
+    return grupper;
+  }, [emails, lager]);
+  const allaRader = useMemo(() => {
+    const bas = baraOhanterade ? emails.filter((e) => !e.hanterad_at) : emails;
+    if (lager !== "att_hantera") return bas;
+    const sedda = new Set<string>();
+    return bas.filter((e) => {
+      const nyckel = e.subject || "";
+      if (sedda.has(nyckel)) return false;
+      sedda.add(nyckel);
+      return true;
+    });
+  }, [emails, baraOhanterade, lager]);
+  const radertotalt = allaRader.length;
+  const synligaRader = tak && !visaAlla ? allaRader.slice(0, tak) : allaRader;
+  const onAntalRef = useRef(onAntal);
+  onAntalRef.current = onAntal;
+  useEffect(() => {
+    onAntalRef.current?.(emails.length);
+  }, [emails.length]);
+
   const totalPending = useMemo(
     () => emails.filter((e) => e.status === "awaiting_approval").length,
     [emails]
@@ -1031,8 +1069,9 @@ export function Dashboard({
                står som text i metaraden; konfidensen och motiveringen finns
                kvar i detaljpanelen, där de faktiskt läses. */
             <div className="divide-y divide-ink/10 overflow-hidden rounded-card bg-paper">
-              {(baraOhanterade ? emails.filter((e) => !e.hanterad_at) : emails).map((email) => {
+              {synligaRader.map((email) => {
                 const meta = STATUS_META[email.status] ?? STATUS_META.new;
+                const likadana = larmgrupper.get(email.subject || "")?.length ?? 1;
                 const lasesNu = bearbetas && !email.classification;
                 const statusText = lasesNu ? text(T.agentenLaser) : text(meta.label);
                 const prick = lasesNu
@@ -1067,6 +1106,14 @@ export function Dashboard({
                       </span>
                       {email.has_image ? <ImageIcon className="h-3.5 w-3.5 shrink-0 text-ink-subtle" /> : null}
                       {email.is_test ? <span className="kicker shrink-0 text-mineral">Test</span> : null}
+                      {likadana > 1 ? (
+                        <span
+                          className="num shrink-0 rounded-[6px] bg-paper2 px-1.5 text-[0.75rem] font-medium tabular-nums text-ink-muted"
+                          aria-label={text({ sv: `${likadana} likadana`, en: `${likadana} identical` })}
+                        >
+                          ×{likadana}
+                        </span>
+                      ) : null}
                     </span>
                     <span className="flex items-center gap-1.5 whitespace-nowrap text-[0.8125rem] text-ink-muted">
                       {email.hanterad_at ? (
@@ -1100,6 +1147,18 @@ export function Dashboard({
                   </button>
                 );
               })}
+              {tak && radertotalt > tak ? (
+                <button
+                  type="button"
+                  onClick={() => setVisaAlla((v) => !v)}
+                  aria-expanded={visaAlla}
+                  className="focus-ring w-full px-4 py-2.5 text-left text-[0.8125rem] font-medium text-ink-muted transition hover:bg-paper2/50 hover:text-ink"
+                >
+                  {visaAlla
+                    ? text({ sv: "Visa färre", en: "Show fewer" })
+                    : text({ sv: `Visa alla (${radertotalt})`, en: `Show all (${radertotalt})` })}
+                </button>
+              ) : null}
             </div>
           )}
         </div>

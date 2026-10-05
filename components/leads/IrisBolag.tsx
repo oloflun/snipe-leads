@@ -1,41 +1,24 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { PageShell } from "@/components/AppShell";
-import { EjAktiverad, arEjAktiverad } from "@/components/EjAktiverad";
+import { useCallback, useEffect, useState } from "react";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
-import { useDashboard } from "@/components/dashboard/DashboardContext";
-import { LeadslistorView } from "@/components/leads/LeadslistorView";
-import { LeadsRunForm } from "@/components/leads/LeadsRunForm";
-import { LeadsTabell } from "@/components/leads/LeadsTabell";
-import { Pipeline } from "@/components/leads/Pipeline";
 import { Tidslinje } from "@/components/leads/Tidslinje";
-import { EmptyState, SkeletonRows, btnPrimary, btnSecondary, flik, flikAktiv, flikInaktiv, fliklista } from "@/components/ui";
+import { SkeletonRows, btnPrimary, btnSecondary, flik, flikAktiv, flikInaktiv, fliklista } from "@/components/ui";
 import { mejlaOss } from "@/components/marketing/copy";
 import { addonSpec } from "@/lib/addons";
-import { lasOffertForUtkast } from "@/lib/actions/affarskontext";
+import { offertForUtkast } from "@/lib/leads/offert";
 import type { EmailStudioData } from "@/lib/data/emails";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
-import { EXEMPELBOLAG, EXEMPEL_OMGANG_1, EXEMPEL_OMGANG_2, kontaktnamn, type ExempelBolag } from "@/lib/demo/iris-exempel";
+import { kontaktnamn, type ExempelBolag } from "@/lib/demo/iris-exempel";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { sv, useLocale, type Locale, type Localized } from "@/lib/i18n";
 import { STATUS_ETIKETT, UTFALL_ETIKETT, kriterier, nivaEtikett } from "@/lib/prospekt";
 import { cn } from "@/lib/utils";
 
 /**
- * Iris › Bolag — leadslistan och prospektdetaljerna på samma sida, ersätter
- * den tidigare uppdelningen mellan Discovery (körformuläret), Bolagsregister
- * (tabellen) och Bolagssida (en egen undersida per prospekt).
- *
- * ## Master/detalj, inte tre sidor
- *
- * Ett klick på en rad väljer prospektet och fyller detaljpanelen till höger
- * (≥lg) eller under listan (mindre skärmar) — samma mönster som
- * `components/crm/CrmDemo.tsx`. Ingen navigering till en egen URL: det är
- * det som gör raden klickbar även i demon, där en sida bakom inloggning
- * tidigare stoppade klicket (se `components/leads/Bolagsregister.tsx`s
- * gamla `demo ? <span> : <Link>`-gren).
+ * Leadets detaljpanel (Bedömning, Mejlutkast, Tidslinje) och delarna den
+ * behöver. Sidan själv — underflikarna, listan i full bredd och lådan som
+ * detaljen öppnas i — bor sedan 2026-10-05 i `components/leads/LeadsSida.tsx`.
  *
  * ## Exempelbolagen
  *
@@ -77,29 +60,7 @@ type JevData = {
   klassning?: { lage?: string; sannolikhet?: number | null; trafikniva?: string | null; insats?: string | null } | null;
 };
 
-type ExempelRad = Prospekt & { _exempel: ExempelBolag };
-
-type ListLage =
-  | { fas: "laddar" }
-  | { fas: "ejAktiverad" }
-  | { fas: "fel"; meddelande: Localized }
-  | { fas: "klar"; prospekt: Prospekt[] };
-
-/**
- * Leads vyer (Snajp Suite 2026-10-03): ett objekt, en sida, vyerna i en rad —
- * som Twentys vybar. Pipeline var en egen sida (Iris › Pipeline) och är nu en
- * vy här; adressen bär vyn i `?vy=` så att den går att länka till.
- */
-type Segment = "bolag" | "tabell" | "pipeline" | "listor";
-
-const SEGMENT: Segment[] = ["bolag", "tabell", "pipeline", "listor"];
-
-const SEGMENT_ETIKETT: Record<Segment, Localized> = {
-  bolag: { sv: "Alla leads", en: "All leads" },
-  tabell: { sv: "Tabell", en: "Table" },
-  pipeline: { sv: "Pipeline", en: "Pipeline" },
-  listor: { sv: "Listor", en: "Lists" }
-};
+export type ExempelRad = Prospekt & { _exempel: ExempelBolag };
 
 function statusEtikett(status: string, locale: Locale): string {
   return STATUS_ETIKETT[status]?.[locale] ?? status;
@@ -211,46 +172,9 @@ function beskrivning(p: Prospekt): string | null {
   return träff?.motivering ?? (p.disqualifiers?.[0] ?? null);
 }
 
-function beslutsfattareRad(p: Prospekt, locale: Locale): string | null {
-  if ("_exempel" in p) {
-    const b = (p as ExempelRad)._exempel;
-    return [
-      `${T.beslutsfattare[locale]}: ${kontaktnamn(b)}, ${b.contactRole}`,
-      typeof b.anstallda === "number" ? `${b.anstallda} ${T.anstallda[locale]}` : null,
-      b.bransch
-    ]
-      .filter(Boolean)
-      .join(" · ");
-  }
-  if (!p.contact_name) return null;
-  const vem = [p.contact_name, p.contact_role].filter(Boolean).join(", ");
-  return `${T.beslutsfattare[locale]}: ${vem}${p.contact_phone ? ` · ${p.contact_phone}` : ""}`;
-}
-
-/** Samma brytpunkt som Tailwinds `lg` (1024px). Hela sidan är redan klientkod
- * och innan effekten hunnit köra spelar defaultvärdet ingen roll: inget är
- * valt förrän användaren klickar. */
-function useDesktop(): boolean {
-  const [desktop, setDesktop] = useState(true);
-  useEffect(() => {
-    const mql = window.matchMedia("(min-width: 1024px)");
-    const uppdatera = () => setDesktop(mql.matches);
-    uppdatera();
-    mql.addEventListener("change", uppdatera);
-    return () => mql.removeEventListener("change", uppdatera);
-  }, []);
-  return desktop;
-}
-
 /** Researchen är köad eller pågår: raden finns men är inte bedömd än. */
 function researchPagar(p: Prospekt): boolean {
   return p.origin !== "example" && !p.niva && p.score_total == null && p.icp_fit == null;
-}
-
-/** Bedömda först (A före B, högst poäng först), pågående sist — exemplen ligger kvar överst. */
-function sortera(rader: Prospekt[]): Prospekt[] {
-  const rang = (p: Prospekt) => (p.origin === "example" ? 0 : p.niva === "A" ? 1 : p.niva === "B" ? 2 : researchPagar(p) ? 4 : 3);
-  return [...rader].sort((a, b) => rang(a) - rang(b) || (b.score_total ?? -1) - (a.score_total ?? -1));
 }
 
 function poang(p: Prospekt): string {
@@ -260,7 +184,7 @@ function poang(p: Prospekt): string {
 }
 
 /** Fixturbolaget som ett prospekt-format radlistan redan vet hur den ritar. */
-function exempelTillRad(b: ExempelBolag): ExempelRad {
+export function exempelTillRad(b: ExempelBolag): ExempelRad {
   return {
     id: b.id,
     company_name: b.companyName,
@@ -277,6 +201,7 @@ function exempelTillRad(b: ExempelBolag): ExempelRad {
     icp_fit: null,
     qualified: true,
     disqualifiers: null,
+    motivering: b.beskrivning,
     // Utfallsnyckeln (UTFALL_ETIKETT i lib/prospekt.ts) är data, inte copy: den
     // översätts aldrig, bara etiketten den slås upp till. Escape så att
     // INV-COPY-001 inte läser nyckeln som oöversatt text.
@@ -285,396 +210,7 @@ function exempelTillRad(b: ExempelBolag): ExempelRad {
   };
 }
 
-export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
-  const { addons, isDemo, vy } = useDashboard();
-  const { locale, text } = useLocale();
-  const sokParams = useSearchParams();
-
-  // ?vy= öppnar rätt vy: gamla adresser (/iris/pipeline, /leads/listor)
-  // omdirigeras hit med den (se WorkspaceSection.tsx).
-  const [segmentVal, setSegmentVal] = useState<Segment>(() => {
-    const vy = sokParams.get("vy");
-    return SEGMENT.includes(vy as Segment) ? (vy as Segment) : "bolag";
-  });
-  const flikRefs = useRef<Partial<Record<Segment, HTMLButtonElement | null>>>({});
-  const [korOppen, setKorOppen] = useState(false);
-  const [lage, setLage] = useState<ListLage>({ fas: "laddar" });
-  const [exempelRader, setExempelRader] = useState<ExempelRad[]>([]);
-  const [demoKorFas, setDemoKorFas] = useState<"vilar" | "kor">("vilar");
-  const [valdId, setValdId] = useState<string | null>(null);
-  const [oppnade, setOppnade] = useState<string[]>([]);
-  const [visaBortvalda, setVisaBortvalda] = useState(false);
-  const detaljRef = useRef<HTMLDivElement>(null);
-  const listaRef = useRef<HTMLDivElement>(null);
-  const isDesktop = useDesktop();
-
-  const hamta = useCallback(async (tyst = false) => {
-    if (!tyst) setLage({ fas: "laddar" });
-    if (demo) {
-      const svar = demoOversiktSvar("/leads/prospects") as { prospects?: Prospekt[] } | undefined;
-      setLage({ fas: "klar", prospekt: svar?.prospects ?? [] });
-      return;
-    }
-    try {
-      const response = await fetch("/api/snajp-support/leads/prospects", { cache: "no-store" });
-      if (response.status === 409) {
-        const kropp = await readJsonBody<unknown>(response).catch(() => null);
-        if (arEjAktiverad(response.status, kropp)) {
-          setLage({ fas: "ejAktiverad" });
-          return;
-        }
-      }
-      if (!response.ok) {
-        setLage({
-          fas: "fel",
-          meddelande:
-            response.status >= 500
-              ? T.tjanstenSvararInte
-              : {
-                  sv: `Kunde inte hämta bolagen (status ${response.status}).`,
-                  en: `Could not load the companies (status ${response.status}).`
-                }
-        });
-        return;
-      }
-      const kropp = await readJsonBody<{ prospects?: Prospekt[]; offline?: boolean }>(response);
-      if (!kropp || kropp.offline) {
-        setLage({ fas: "fel", meddelande: T.tomtSvar });
-        return;
-      }
-      setLage({ fas: "klar", prospekt: kropp.prospects ?? [] });
-    } catch (error) {
-      setLage({ fas: "fel", meddelande: samma(felmeddelande(error)) });
-    }
-  }, [demo]);
-
-  useEffect(() => {
-    void hamta();
-  }, [hamta]);
-
-  // Körningen (riktig eller exempel) stänger sin egen disclosure och lämnar
-  // fokus/scrollen överst i listan när den är klar, så de infogade raderna
-  // syns direkt i stället för att stå gömda bakom ett fortfarande öppet
-  // formulär. En riktig körning håller panelen öppen ända tills den faktiskt
-  // är klar — händelsen dispatchas först i slutet av LeadsRunForms kör().
-  const avslutaKorning = useCallback(() => {
-    setKorOppen(false);
-    requestAnimationFrame(() => {
-      listaRef.current?.focus();
-      listaRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-  }, []);
-
-  useEffect(() => {
-    const lyssna = () => {
-      void hamta(true);
-      avslutaKorning();
-    };
-    const uppdatera = () => void hamta(true);
-    window.addEventListener("snipra:leads-korning-klar", lyssna);
-    window.addEventListener("snipra:leads-korning-steg", uppdatera);
-    return () => {
-      window.removeEventListener("snipra:leads-korning-klar", lyssna);
-      window.removeEventListener("snipra:leads-korning-steg", uppdatera);
-    };
-  }, [hamta, avslutaKorning]);
-
-  const allaRader = useMemo<Prospekt[]>(() => {
-    if (lage.fas !== "klar") return exempelRader;
-    return sortera([...exempelRader, ...lage.prospekt]);
-  }, [lage, exempelRader]);
-  // Bortvalda (nivå C) är Iris eget arbete, inte leverans — de ligger bakom
-  // en växel i stället för att fylla listan (Alunix 2026-09-29).
-  const antalBortvalda = allaRader.filter((p) => p.niva === "C").length;
-  const alla = visaBortvalda ? allaRader : allaRader.filter((p) => p.niva !== "C");
-
-  function valjRad(id: string) {
-    setOppnade((forr) => (forr.includes(id) ? forr : [...forr, id]));
-    setValdId(id);
-    if (!isDesktop) {
-      requestAnimationFrame(() => detaljRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
-    }
-  }
-
-  const allaExempelTillagda = exempelRader.length >= EXEMPELBOLAG.length;
-
-  function korExempel() {
-    if (demoKorFas === "kor" || allaExempelTillagda) return;
-    setDemoKorFas("kor");
-    window.setTimeout(() => {
-      setExempelRader((forr) => {
-        const redan = new Set(forr.map((r) => r.id));
-        const kandidat = EXEMPEL_OMGANG_1.some((b) => !redan.has(b.id)) ? EXEMPEL_OMGANG_1 : EXEMPEL_OMGANG_2;
-        const nya = kandidat.filter((b) => !redan.has(b.id)).map(exempelTillRad);
-        return [...nya, ...forr];
-      });
-      setDemoKorFas("vilar");
-      avslutaKorning();
-    }, 650);
-  }
-
-  const harListaddon = addons.includes("leadlists");
-
-  return (
-    <PageShell
-      title={{ sv: "Leads", en: "Leads" }}
-      action={
-        <button
-          type="button"
-          aria-expanded={korOppen}
-          onClick={() => setKorOppen((v) => !v)}
-          className={btnPrimary}
-        >
-          {text(T.korIris)}
-        </button>
-      }
-    >
-      {korOppen ? (
-        <div className="mb-10 rounded-card border border-ink/12 bg-paper2/40 p-5 md:p-6">
-          <LeadsRunForm
-            isTest={demo || isDemo || vy === "demo"}
-            demo={demo}
-            filtrerbar
-            rubrik={
-              <div>
-                <h2 className="text-[1.125rem] font-semibold tracking-[-0.01em]">{text(T.hittaBolag)}</h2>
-                <p className="mt-1 max-w-[52ch] text-[13px] leading-5 text-ink-subtle">
-                  {text(T.hittaBolagText)}
-                </p>
-              </div>
-            }
-            demoAction={
-              <div className="mt-6 rounded-card bg-paper p-5">
-                <p className="max-w-[65ch] text-[15px] leading-7 text-ink-muted">
-                  {text(T.exempelOverst)}
-                </p>
-                <button
-                  type="button"
-                  disabled={demoKorFas === "kor" || allaExempelTillagda}
-                  onClick={korExempel}
-                  className={cn(btnPrimary, "mt-4 whitespace-nowrap")}
-                >
-                  {demoKorFas === "kor" ? (
-                    text(T.kor)
-                  ) : allaExempelTillagda ? (
-                    <>
-                      <span className="sm:hidden">{text(T.allaTillagda)}</span>
-                      <span className="hidden sm:inline">{text(T.allaExempelTillagda)}</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="sm:hidden">{text(T.korExempel)}</span>
-                      <span className="hidden sm:inline">{text(T.korExempelkorningen)}</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            }
-          />
-        </div>
-      ) : null}
-
-      {/* Pilnavigering (Fas 10, planens a11y-notering): vänster/höger flyttar
-          fokus och val, och bara den valda fliken ligger i tabbordningen. */}
-      <div
-        className={fliklista}
-        role="tablist"
-        aria-label={text(T.vy)}
-        onKeyDown={(e) => {
-          if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
-          e.preventDefault();
-          const i = SEGMENT.indexOf(segmentVal);
-          const nasta =
-            e.key === "Home"
-              ? SEGMENT[0]
-              : e.key === "End"
-                ? SEGMENT[SEGMENT.length - 1]
-                : SEGMENT[(i + (e.key === "ArrowRight" ? 1 : SEGMENT.length - 1)) % SEGMENT.length];
-          setSegmentVal(nasta);
-          flikRefs.current[nasta]?.focus();
-        }}
-      >
-        {SEGMENT.map((s) => (
-          <button
-            key={s}
-            ref={(el) => {
-              flikRefs.current[s] = el;
-            }}
-            type="button"
-            role="tab"
-            id={`iris-flik-${s}`}
-            aria-selected={segmentVal === s}
-            aria-controls="iris-flikpanel"
-            tabIndex={segmentVal === s ? 0 : -1}
-            onClick={() => setSegmentVal(s)}
-            className={cn(flik, segmentVal === s ? flikAktiv : flikInaktiv)}
-          >
-            {text(SEGMENT_ETIKETT[s])}
-          </button>
-        ))}
-      </div>
-
-      <div className="mt-6" role="tabpanel" id="iris-flikpanel" aria-labelledby={`iris-flik-${segmentVal}`}>
-        {segmentVal === "tabell" ? (
-          <LeadsTabell
-            demo={demo}
-            onValj={(id) => {
-              if (allaRader.find((p) => p.id === id)?.niva === "C") setVisaBortvalda(true);
-              setSegmentVal("bolag");
-              valjRad(id);
-              // Fokus följer med till raden (2.4.3): utan det hamnar det på body.
-              requestAnimationFrame(() => document.getElementById(`iris-rad-${id}`)?.focus());
-            }}
-          />
-        ) : segmentVal === "pipeline" ? (
-          <Pipeline demo={demo} />
-        ) : segmentVal === "listor" ? (
-          harListaddon || demo ? (
-            <LeadslistorView demo={demo} />
-          ) : (
-            <ListorUpsell />
-          )
-        ) : (
-          <div className="grid gap-8 lg:grid-cols-12 lg:items-start">
-            <div ref={listaRef} tabIndex={-1} className="min-w-0 outline-none lg:col-span-5">
-              {antalBortvalda > 0 ? (
-                <div className="mb-3 flex justify-end">
-                  <button
-                    type="button"
-                    aria-pressed={visaBortvalda}
-                    onClick={() => setVisaBortvalda((v) => !v)}
-                    className="focus-ring text-[13px] text-ink-muted underline decoration-ink/25 underline-offset-4 hover:text-ink"
-                  >
-                    {visaBortvalda
-                      ? text(T.doljBortvalda)
-                      : text({ sv: `Visa bortvalda (${antalBortvalda})`, en: `Show rejected (${antalBortvalda})` })}
-                  </button>
-                </div>
-              ) : null}
-              {lage.fas === "laddar" && exempelRader.length === 0 ? (
-                <SkeletonRows />
-              ) : lage.fas === "ejAktiverad" ? (
-                <EjAktiverad yta={text(T.bolag)} />
-              ) : lage.fas === "fel" ? (
-                <FelBox meddelande={text(lage.meddelande)} onForsok={() => void hamta()} />
-              ) : alla.length === 0 ? (
-                <EmptyState title={text(T.ingaBolag)} />
-              ) : (
-                <ul className="divide-y divide-ink/12 border-y border-ink/15">
-                  {alla.map((p) => {
-                    const vald = p.id === valdId;
-                    return (
-                      <li key={p.id}>
-                        <button
-                          type="button"
-                          id={`iris-rad-${p.id}`}
-                          onClick={() => valjRad(p.id)}
-                          aria-current={vald ? "true" : undefined}
-                          className={cn(
-                            "focus-ring block w-full px-3 py-4 text-left transition-colors",
-                            vald ? "bg-ochre/10" : "hover:bg-paper2/60"
-                          )}
-                        >
-                          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-                            <div className="min-w-0">
-                              <div className="flex flex-wrap items-baseline gap-2">
-                                <span className="text-[1rem] font-semibold">
-                                  {p.company_name}
-                                </span>
-                                {p.origin === "example" ? (
-                                  <span className="kicker text-mineral">{text(T.exempel)}</span>
-                                ) : null}
-                              </div>
-                              <p className="mt-1 truncate text-[0.8125rem] text-ink-subtle">
-                                {segment(p)}
-                              </p>
-                            </div>
-                            {p.origin !== "example" ? (
-                              <div className="shrink-0 text-right">
-                                <p className="num text-[1.0625rem] font-semibold tabular-nums">
-                                  {researchPagar(p) ? "…" : poang(p)}
-                                </p>
-                                <p
-                                  className={cn(
-                                    "kicker mt-0.5",
-                                    p.niva === "C" ? "text-danger" : "text-mineral"
-                                  )}
-                                >
-                                  {researchPagar(p)
-                                    ? text(T.researchar)
-                                    : p.niva
-                                      ? nivaEtikett(p.niva, locale)
-                                      : statusEtikett(p.status, locale)}
-                                </p>
-                              </div>
-                            ) : null}
-                          </div>
-                          {beskrivning(p) ? (
-                            <p className="mt-2 max-w-[65ch] text-[14px] leading-6 text-ink-muted">
-                              {beskrivning(p)}
-                            </p>
-                          ) : null}
-                          {beslutsfattareRad(p, locale) ? (
-                            <p className="mt-2 text-[13px] text-ink-subtle">{beslutsfattareRad(p, locale)}</p>
-                          ) : null}
-                        </button>
-
-                        {/* Under lg visas detaljen direkt under sin rad, inte
-                            efter HELA listan. Samma instans som den sticky
-                            kolumnen nedan skulle rendera, aldrig båda
-                            samtidigt: `isDesktop` styr vilken av de två som
-                            monterar LeadDetail (och därmed EmailStudioEditor)
-                            för ett givet bolag. */}
-                        {!isDesktop && oppnade.includes(p.id) ? (
-                          <div
-                            ref={vald ? detaljRef : undefined}
-                            hidden={!vald}
-                            className={vald ? "scroll-mt-6 px-3 pb-5" : undefined}
-                          >
-                            <LeadDetail
-                              id={p.id}
-                              demo={demo}
-                              exempel={"_exempel" in p ? (p as ExempelRad)._exempel : undefined}
-                            />
-                          </div>
-                        ) : null}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-
-            {isDesktop ? (
-              <div ref={detaljRef} className="min-w-0 scroll-mt-6 lg:sticky lg:top-24 lg:col-span-7">
-                {valdId ? null : (
-                  <div className="rounded-card border border-ink/12 bg-paper2/40 p-6">
-                    <p className="text-[0.9375rem] leading-[1.6] text-ink-muted">
-                      {text(T.valjBolag)}
-                    </p>
-                  </div>
-                )}
-                {alla
-                  .filter((p) => oppnade.includes(p.id))
-                  .map((p) => (
-                    <div key={p.id} hidden={p.id !== valdId}>
-                      <LeadDetail
-                        id={p.id}
-                        demo={demo}
-                        exempel={"_exempel" in p ? (p as ExempelRad)._exempel : undefined}
-                      />
-                    </div>
-                  ))}
-              </div>
-            ) : null}
-          </div>
-        )}
-      </div>
-    </PageShell>
-  );
-}
-
-function FelBox({ meddelande, onForsok }: Readonly<{ meddelande: string; onForsok: () => void }>) {
+export function FelBox({ meddelande, onForsok }: Readonly<{ meddelande: string; onForsok: () => void }>) {
   const { text } = useLocale();
   return (
     <div className="flex items-start gap-3 border-y border-ochre/40 bg-ochre/10 px-4 py-4">
@@ -693,7 +229,7 @@ function FelBox({ meddelande, onForsok }: Readonly<{ meddelande: string; onForso
   );
 }
 
-function ListorUpsell() {
+export function ListorUpsell() {
   const { text } = useLocale();
   const spec = addonSpec("leadlists");
   return (
@@ -841,7 +377,7 @@ function exempelStudioData(b: ExempelBolag): EmailStudioData {
   };
 }
 
-function LeadDetail({
+export function LeadDetail({
   id,
   demo,
   exempel
@@ -960,7 +496,7 @@ function LeadDetail({
   const skapaUtkastFor = useCallback(async (p: Prospekt) => {
     setUtkastLage({ fas: "skapar" });
     try {
-      const offerSummary = await lasOffertForUtkast();
+      const offerSummary = await offertForUtkast();
       const koat = await snajpAnrop<{
         job_id?: string;
         fase?: string;
