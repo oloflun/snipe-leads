@@ -12,6 +12,7 @@ import json
 import logging
 import uuid
 from datetime import datetime, timezone
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -1818,6 +1819,50 @@ async def _ateruppta_korning(app_state, payload: dict) -> bool:
     return True
 
 
+async def _styrning(app_state, tenant_id: str, batch_id: str) -> str | None:
+    """'paus' | 'avbruten' | None, ur liggaren (inte Redis-posten, som bär
+    motorns egen kopia av tillståndet och kan vara äldre än kundens knapptryck)."""
+    rad = await app_state.storage.get_leads_korning(tenant_id, batch_id)
+    return ((rad or {}).get("korning") or {}).get("styrning")
+
+
+_STYRNING = {"pausa": "paus", "aterupta": None, "avbryt": "avbruten"}
+AVBRUTEN_KORNING = "Körningen avbröts innan researchen startade."
+
+
+@router.post("/api/leads/korningar/{job_id}/{atgard}")
+async def styr_korning(
+    request: Request,
+    job_id: str,
+    atgard: Literal["pausa", "aterupta", "avbryt"],
+    tenant: dict = Depends(require_tenant),
+) -> dict:
+    """Pausar, återupptar eller avbryter en pågående Iris-körning.
+
+    Paus: inga nya prospekt köas; de som redan forskas blir klara och räknas
+    in. Avbryt: dessutom hoppar köade men ej startade prospekt över sin
+    research (ingen kostnad), och körningen avslutas med slutorsak
+    'avbruten' när det sista barnet rapporterat. 409 när körningen inte är
+    en pågående Iris-körning (klar, föll, eller ett listjobb)."""
+    storage = request.app.state.storage
+    tenant_id = tenant["tenant_id"]
+    if await storage.get_leads_korning(tenant_id, job_id) is None:
+        raise HTTPException(status_code=404, detail="Körningen finns inte.")
+    if not await storage.set_korning_styrning(tenant_id, job_id, _STYRNING[atgard]):
+        raise HTTPException(status_code=409, detail="Körningen pågår inte och kan inte styras.")
+    if atgard != "pausa":
+        # Väck motorn: återupptagningsvägen fyller på igen, eller avslutar
+        # direkt när inget barn är kvar i flykten.
+        post = {"kind": "batch", "job_id": job_id, "tenant_id": tenant_id,
+                "tenant_name": tenant["tenant_name"]}
+        leadsstrom = getattr(request.app.state, "leadsstrom", None)
+        if leadsstrom is not None:
+            await leadsstrom.enqueue(post)
+        else:
+            asyncio.create_task(_ateruppta_korning(request.app.state, post))
+    return {"job_id": job_id, "styrning": _STYRNING[atgard]}
+
+
 async def _fyll_pa(app_state, tenant: dict, batch_id: str) -> None:
     """Köar research tills körningen har N leverbara leads (INV-LEADS-N-001).
 
@@ -1835,7 +1880,10 @@ async def _fyll_pa(app_state, tenant: dict, batch_id: str) -> None:
         # Körning ur en lista (Flytta till Iris): kandidaterna är givna, ingen
         # sökrunda och ingen påfyllning. Klar när sista barnet rapporterat.
         if k["pagaende"] == 0:
-            iris_korning.avsluta(k, "klar")
+            # Avbruten: barnen har hoppat över sin research själva (_run_batch_prospect).
+            iris_korning.avsluta(
+                k, "avbruten" if await _styrning(app_state, tenant_id, batch_id) == "avbruten" else "klar"
+            )
             k["sammanfattning"] = iris_korning.sammanfatta(k)
         resultat.update(korning=k, jobs=k["jobs"], count=len(k["jobs"]))
         await jobs.complete(batch_id, resultat)
@@ -1843,7 +1891,13 @@ async def _fyll_pa(app_state, tenant: dict, batch_id: str) -> None:
         return
     profil, sok_icp = await _korningens_profil(storage, tenant_id, k.get("overrides"))
     orsak = None
+    styr = None
     while k["levererade"] + k["pagaende"] < k["mal"]:
+        # Läses varje varv, inte en gång: en sökrunda kan ta minuter och
+        # kunden ska kunna stoppa mellan två köade prospekt.
+        styr = await _styrning(app_state, tenant_id, batch_id)
+        if styr:
+            break
         if k["undersokta"] + k["pagaende"] >= k["tak"]:
             orsak = "tak"
             break
@@ -1900,8 +1954,11 @@ async def _fyll_pa(app_state, tenant: dict, batch_id: str) -> None:
         resultat.update(korning=k, jobs=k["jobs"], count=len(k["jobs"]))
         await jobs.complete(batch_id, resultat)
         await _spara_korning(app_state, tenant_id, batch_id, k)
-    if k["pagaende"] == 0:
-        iris_korning.avsluta(k, "klar" if k["levererade"] >= k["mal"] else (orsak or "slut_pa_kandidater"))
+    if k["pagaende"] == 0 and styr != "paus":
+        if styr == "avbruten":
+            iris_korning.avsluta(k, "avbruten")
+        else:
+            iris_korning.avsluta(k, "klar" if k["levererade"] >= k["mal"] else (orsak or "slut_pa_kandidater"))
         k["sammanfattning"] = iris_korning.sammanfatta(k)
         await _spara_listspar(storage, tenant_id, k)
     resultat.update(korning=k, jobs=k["jobs"], count=len(k["jobs"]))
@@ -1934,24 +1991,42 @@ async def _spara_listspar(storage, tenant_id: str, k: dict) -> None:
 
 
 async def _rapportera_till_korning(
-    app_state, tenant: dict, batch_id: str, *, namn: str, leverbar: bool, skal: str | None,
-    skrap: dict | None = None,
+    app_state, tenant: dict, batch_id: str, *, job_id: str, namn: str, leverbar: bool,
+    skal: str | None, skrap: dict | None = None, undersokt: bool = True, fyll: bool = True,
 ) -> None:
     """Ett prospektjobb är klart: räkna in det och fyll på. Kastar aldrig —
-    en trasig motor får inte fälla ett researchjobb som redan är sparat."""
+    en trasig motor får inte fälla ett researchjobb som redan är sparat.
+
+    Idempotent per `job_id` (`korning.rapporterade`): ett barn som körts två
+    gånger (återtag efter deploy) räknas en gång. `fyll=False` sparar bara
+    utfallet; anroparen väcker motorn själv (_vacka_korning)."""
     try:
         resultat, k = await _las_korning(app_state, tenant["tenant_id"], batch_id)
         if not k:
             return
-        iris_korning.registrera_utfall(k, namn=namn, leverbar=leverbar, skal=skal)
-        if skrap:
-            k["skrap"] = sidhamtning.summera(k.get("skrap"), skrap)
-        resultat["korning"] = k
-        await app_state.jobs.complete(batch_id, resultat)
-        await _spara_korning(app_state, tenant["tenant_id"], batch_id, k)
-        await _fyll_pa(app_state, tenant, batch_id)
+        rapporterade = k.setdefault("rapporterade", [])
+        if job_id not in rapporterade:
+            rapporterade.append(job_id)
+            iris_korning.registrera_utfall(k, namn=namn, leverbar=leverbar, skal=skal, undersokt=undersokt)
+            if skrap:
+                k["skrap"] = sidhamtning.summera(k.get("skrap"), skrap)
+            resultat["korning"] = k
+            await app_state.jobs.complete(batch_id, resultat)
+            await _spara_korning(app_state, tenant["tenant_id"], batch_id, k)
     except Exception as fel:  # noqa: BLE001 — se docstringen
         logger.exception("Kunde inte rapportera till körning %s", batch_id)
+        await _markera_korning_fallen(app_state, tenant["tenant_id"], batch_id, fel)
+        return
+    if fyll:
+        await _vacka_korning(app_state, tenant, batch_id)
+
+
+async def _vacka_korning(app_state, tenant: dict, batch_id: str) -> None:
+    """Låt motorn fylla på (eller avsluta). Kastar aldrig."""
+    try:
+        await _fyll_pa(app_state, tenant, batch_id)
+    except Exception as fel:  # noqa: BLE001
+        logger.exception("Påfyllningen av körning %s föll", batch_id)
         await _markera_korning_fallen(app_state, tenant["tenant_id"], batch_id, fel)
 
 
@@ -2162,6 +2237,23 @@ async def _run_batch_prospect(
     utfall: dict = {"namn": "", "leverbar": False, "skal": "Researchen misslyckades."}
 
     storage = app_state.storage
+    if batch_id and await _styrning(app_state, tenant["tenant_id"], batch_id) == "avbruten":
+        await app_state.jobs.fail(job_id, AVBRUTEN_KORNING)
+        await storage.set_leads_job_status(
+            tenant["tenant_id"], job_id=job_id, status="failed", scope=scope,
+            prospect_id=prospect_id, error=AVBRUTEN_KORNING,
+        )
+        await _rapportera_till_korning(
+            app_state, tenant, batch_id, job_id=job_id, namn="", leverbar=False, skal=None,
+            undersokt=False,
+        )
+        return
+    # Ordningen i finally (INV-JOB-003): körningen räknar in barnet FÖRST,
+    # sedan blir barnets liggarrad completed/failed, sist fyller motorn på.
+    # Dör processen mellan stegen tar återtaget vid: rapporten är idempotent
+    # per job_id, och ett återtaget barn som redan står completed väcker bara
+    # körningen (se hantera_leads_jobb).
+    slutstatus: str | None = None
     await app_state.jobs.start(job_id)
     await storage.set_leads_job_status(
         tenant["tenant_id"], job_id=job_id, status="processing", scope=scope, prospect_id=prospect_id
@@ -2339,9 +2431,7 @@ async def _run_batch_prospect(
                     )
 
         await app_state.jobs.complete(job_id, result)
-        await storage.set_leads_job_status(
-            tenant["tenant_id"], job_id=job_id, status="completed", scope=scope, prospect_id=prospect_id
-        )
+        slutstatus = "completed"
     except Exception as error:  # noqa: BLE001 — ett trasigt prospekt fäller inte batchen
         logger.exception("Leads-jobb %s (prospekt %s) misslyckades", job_id, prospect_id)
         await _larma_vid_kreditslut(app_state, tenant["tenant_id"], error)
@@ -2352,21 +2442,31 @@ async def _run_batch_prospect(
         await app_state.jobs.fail(
             job_id, kundtext or f"Prospekt {prospect_id}: {_jobbfeltext(error)}"
         )
-        await storage.set_leads_job_status(
-            tenant["tenant_id"], job_id=job_id, status="failed", scope=scope, prospect_id=prospect_id
-        )
+        slutstatus = "failed"
     finally:
         avregistrera_aktiv(job_id)
+    # Här och inte i finally: avbröts tasken (deploy, SIGTERM) finns inget
+    # utfall att rapportera. Förr rapporterades då "Researchen misslyckades"
+    # och återtaget rapporterade en gång till, så `pagaende` räknades ned två
+    # gånger för samma barn.
+    if slutstatus is not None:
         if batch_id:
             await _rapportera_till_korning(
                 app_state,
                 tenant,
                 batch_id,
+                job_id=job_id,
+                fyll=False,
                 namn=utfall["namn"],
                 leverbar=utfall["leverbar"],
                 skal=utfall["skal"],
                 skrap=skrap.som_dict(),
             )
+        await storage.set_leads_job_status(
+            tenant["tenant_id"], job_id=job_id, status=slutstatus, scope=scope, prospect_id=prospect_id
+        )
+        if batch_id:
+            await _vacka_korning(app_state, tenant, batch_id)
 
 
 @router.post("/api/leads/prospects/processa-om", status_code=202)
@@ -2975,6 +3075,14 @@ async def hantera_leads_jobb(app_state, payload: dict) -> None:
             logger.exception("Kunde inte läsa leads_job_ledger för %s — kör på Redis-vakten.", job_id)
             liggarstatus = None
         if liggarstatus == "completed":
+            # Ett barn som hann bli completed men dog innan motorn fyllt på:
+            # utan väckningen stod körningen still tills städaren fällde den.
+            if payload.get("batch_id"):
+                await _vacka_korning(
+                    app_state,
+                    {"tenant_id": tenant_id, "tenant_name": payload.get("tenant_name")},
+                    payload["batch_id"],
+                )
             return
         if liggarstatus == "processing" and payload.get("kind") == "batch":
             if await _ateruppta_korning(app_state, payload):
@@ -3053,6 +3161,7 @@ async def ge_upp_leadsjobb(app_state, payload: dict) -> None:
                 app_state,
                 {"tenant_id": tenant_id, "tenant_name": payload.get("tenant_name")},
                 batch_id,
+                job_id=job_id,
                 namn=prospekt.get("company_name") or payload["prospect_id"],
                 leverbar=False,
                 skal="Researchen gavs upp efter upprepade försök.",

@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
+import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { Cell, Nyckeltal, Tabell, Tomt, btnSecondary, meta, tabellRad } from "@/components/ui";
+import { Cell, Nyckeltal, Tabell, Tomt, btnLiten, btnSecondary, meta, tabellRad } from "@/components/ui";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { useLocale, type Locale, type Localized } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -22,6 +23,11 @@ import { cn } from "@/lib/utils";
  *
  * En pågående körning pollas var tredje sekund tills den säger `klar`.
  * Allt annat är statiskt tills användaren laddar om.
+ *
+ * Den pågående körningen går att pausa, återuppta och avbryta
+ * (POST /leads/korningar/{id}/pausa|aterupta|avbryt). Paus köar inga nya
+ * bolag; avbrott hoppar dessutom över köade bolag som inte hunnit startas.
+ * Bolag som redan researchas blir klara i båda fallen.
  */
 
 type Tratt = { namn: string; steg: string; skal: string; belagg?: string | null };
@@ -41,6 +47,8 @@ export type Korning = {
   scope?: string;
   tratt?: Tratt[];
   jobs?: Jobb[];
+  /** Kundens styrning: satt av pausa/avbryt, borta när körningen går. */
+  styrning?: "paus" | "avbruten" | null;
 };
 
 export type KorningsRad = {
@@ -96,7 +104,26 @@ const T = {
   ingaUndersokta: { sv: "Inga bolag undersökta.", en: "No companies researched." },
   ingetBortvalt: { sv: "Inget bolag valdes bort.", en: "No company was dropped." },
   uppdaterad: { sv: "uppdaterad", en: "updated" },
-  av: { sv: "av", en: "of" }
+  av: { sv: "av", en: "of" },
+  pausad: { sv: "Pausad", en: "Paused" },
+  avbryter: { sv: "Avbryts", en: "Cancelling" },
+  pausa: { sv: "Pausa", en: "Pause" },
+  aterupta: { sv: "Återuppta", en: "Resume" },
+  avbryt: { sv: "Avbryt körningen", en: "Cancel run" },
+  styrning: { sv: "Styr körningen", en: "Control the run" },
+  bekraftaAvbryt: {
+    sv: "Avbryta körningen? Bolag som redan researchas blir klara, inga nya startas. Det går inte att ångra.",
+    en: "Cancel the run? Companies already in research finish, no new ones start. This cannot be undone."
+  },
+  pausNotis: {
+    sv: "Pausad. Inga nya bolag startas; de som redan researchas blir klara.",
+    en: "Paused. No new companies start; those already in research finish."
+  },
+  avbrytNotis: {
+    sv: "Avbryts. Körningen avslutas när bolagen som redan researchas är klara.",
+    en: "Cancelling. The run ends once the companies already in research are done."
+  },
+  styrFel: { sv: "Körningen gick inte att styra.", en: "The run could not be controlled." }
 } satisfies Record<string, Localized>;
 
 export const KORNINGSSTATUS: Record<KorningsRad["status"], Localized> = {
@@ -119,8 +146,18 @@ const SLUT_ETIKETT: Record<string, Localized> = {
   kredittak: {
     sv: "Körningens tak för sidhämtningar är nått",
     en: "The run's cap on page fetches was reached"
-  }
+  },
+  avbruten: { sv: "Avbruten", en: "Cancelled" }
 };
+
+/** Statusen i kundens ord. Paus och avbrott har ingen egen liggarstatus:
+ *  raden står i 'processing' tills motorn säger klar. */
+function statusText(rad: KorningsRad): Localized {
+  if (!pagar(rad)) return KORNINGSSTATUS[rad.status];
+  if (rad.korning?.styrning === "paus") return T.pausad;
+  if (rad.korning?.styrning === "avbruten") return T.avbryter;
+  return T.pagar;
+}
 
 function nar(iso: string | null, locale: Locale): string {
   if (!iso) return "–";
@@ -239,7 +276,7 @@ export function IrisKorningar() {
           {fel}
         </p>
       ) : null}
-      {aktiv ? <Pagaende rad={aktiv} /> : null}
+      {aktiv ? <Pagaende rad={aktiv} onStyrd={hamta} /> : null}
 
       <Tabell
         ariaLabel={text(T.tabell)}
@@ -289,7 +326,7 @@ export function IrisKorningar() {
                       rad.status === "failed" ? "bg-danger" : pagar(rad) ? "bg-ochre" : "bg-moss"
                     )}
                   />
-                  {pagar(rad) ? text(T.pagar) : text(KORNINGSSTATUS[rad.status])}
+                  {text(statusText(rad))}
                 </span>
               </Cell>
               <Cell className="text-ink-muted">
@@ -313,9 +350,35 @@ export function IrisKorningar() {
   );
 }
 
-function Pagaende({ rad }: Readonly<{ rad: KorningsRad }>) {
+type Atgard = "pausa" | "aterupta" | "avbryt";
+
+function Pagaende({ rad, onStyrd }: Readonly<{ rad: KorningsRad; onStyrd: () => Promise<void> }>) {
   const { locale, text } = useLocale();
   const k = rad.korning;
+  const [skickar, setSkickar] = useState<Atgard | null>(null);
+  const [styrFel, setStyrFel] = useState<string | null>(null);
+
+  async function styr(atgard: Atgard) {
+    if (atgard === "avbryt" && !window.confirm(text(T.bekraftaAvbryt))) return;
+    setSkickar(atgard);
+    setStyrFel(null);
+    try {
+      const response = await fetch(
+        `/api/snajp-support/leads/korningar/${encodeURIComponent(rad.job_id)}/${atgard}`,
+        { method: "POST" }
+      );
+      if (!response.ok) {
+        const kropp = await readJsonBody<{ detail?: string }>(response);
+        setStyrFel(kropp?.detail ?? text(T.styrFel));
+      }
+      await onStyrd();
+    } catch (cause) {
+      setStyrFel(felmeddelande(cause));
+    } finally {
+      setSkickar(null);
+    }
+  }
+
   if (!k) {
     return (
       <p className="text-[15px] text-ink-muted" role="status">
@@ -335,13 +398,75 @@ function Pagaende({ rad }: Readonly<{ rad: KorningsRad }>) {
           { etikett: text(T.bortvalda), varde: (k.tratt ?? []).length },
           {
             etikett: text(T.justNu),
-            varde: k.pagaende ? text(T.researchar) : text(T.letar),
+            varde:
+              k.styrning === "paus"
+                ? text(T.pausad)
+                : k.styrning === "avbruten"
+                  ? text(T.avbryter)
+                  : k.pagaende
+                    ? text(T.researchar)
+                    : text(T.letar),
             notis: k.pagaende ? `${k.pagaende} ${text(T.underResearch)}` : `${text(T.sokrunda)} ${(k.rundor ?? 0) + 1}`
           }
         ]}
       />
-      <p className={cn(meta, "mt-3")}>{text(T.fortsatter)}</p>
+      <p className={cn(meta, "mt-3")}>
+        {k.styrning === "paus"
+          ? text(T.pausNotis)
+          : k.styrning === "avbruten"
+            ? text(T.avbrytNotis)
+            : text(T.fortsatter)}
+      </p>
+      {/* Avbrott är slutgiltigt: då finns inget kvar att styra. */}
+      {k.styrning !== "avbruten" ? (
+        <div role="group" aria-label={text(T.styrning)} className="mt-4 flex flex-wrap gap-2">
+          {k.styrning === "paus" ? (
+            <StyrKnapp atgard="aterupta" skickar={skickar} onClick={styr}>
+              {text(T.aterupta)}
+            </StyrKnapp>
+          ) : (
+            <StyrKnapp atgard="pausa" skickar={skickar} onClick={styr}>
+              {text(T.pausa)}
+            </StyrKnapp>
+          )}
+          <StyrKnapp atgard="avbryt" skickar={skickar} onClick={styr} className="text-danger">
+            {text(T.avbryt)}
+          </StyrKnapp>
+        </div>
+      ) : null}
+      {styrFel ? (
+        <p role="alert" className="mt-3 text-[15px] text-danger">
+          {styrFel}
+        </p>
+      ) : null}
     </div>
+  );
+}
+
+function StyrKnapp({
+  atgard,
+  skickar,
+  onClick,
+  className,
+  children
+}: Readonly<{
+  atgard: Atgard;
+  skickar: Atgard | null;
+  onClick: (atgard: Atgard) => Promise<void>;
+  className?: string;
+  children: React.ReactNode;
+}>) {
+  return (
+    <button
+      type="button"
+      className={cn(btnSecondary, btnLiten, className)}
+      disabled={skickar !== null}
+      aria-busy={skickar === atgard}
+      onClick={() => void onClick(atgard)}
+    >
+      {skickar === atgard ? <Loader2 aria-hidden className="h-4 w-4 animate-spin" /> : null}
+      {children}
+    </button>
   );
 }
 

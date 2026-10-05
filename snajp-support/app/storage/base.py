@@ -715,6 +715,14 @@ class Storage(Protocol):
         """Skriver över raden för (kund, url) och stämplar hamtad_at = nu."""
         ...
 
+    async def set_korning_styrning(self, tenant_id: str, job_id: str, styrning: str | None) -> bool:
+        """Sätter `korning.styrning` ('paus' | 'avbruten' | None) atomiskt på
+        en pågående Iris-körning. Bara den här metoden skriver fältet:
+        set_leads_job_status bevarar det, så motorns helskrivning av
+        tillståndet (som kan ha läst före pausen) aldrig nollar den. False när
+        körningen inte finns, inte är en pågående batch eller redan är klar."""
+        ...
+
     async def get_leads_korning(self, tenant_id: str, job_id: str) -> dict[str, Any] | None:
         """EN körning med samma fält som list_leads_korningar, eller None."""
         ...
@@ -802,8 +810,8 @@ class Storage(Protocol):
     async def stada_hangande_leadsjobb(
         self, tenant_id: str, *, aldre_an_minuter: int, utom: list[str] | None = None
     ) -> list[str]:
-        """Markerar liggarrader i queued/processing med created_at äldre än
-        `aldre_an_minuter` som failed. `utom` är job_id som körs i den här
+        """Markerar liggarrader i queued/processing med updated_at äldre än
+        `aldre_an_minuter` som failed (pausade körningar undantagna). `utom` är job_id som körs i den här
         processen och aldrig ska städas. Returnerar de städade job_id:na.
         Se app/jobs/stadare.py."""
         ...

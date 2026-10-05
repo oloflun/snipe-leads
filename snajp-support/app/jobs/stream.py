@@ -76,6 +76,13 @@ READ_COUNT = 10
 #: någonsin behöver.
 MAX_LEVERANSER = 3
 
+#: Hjärtslag medan hanteraren kör: XCLAIM till sig själv nollar postens
+#: idle-tid. Utan det mätte MIN_IDLE_MS tid sedan LEVERANSEN, inte sedan
+#: senaste livstecknet, och en research som tog mer än 60 s togs över av en
+#: syskonprocess (överlappet vid en Railway-deploy) och kördes två gånger
+#: parallellt. Dör processen tystnar hjärtslaget och återtaget sker som förut.
+HJARTSLAG_S = 20
+
 
 def consumer_name(suffix: str | int | None = None) -> str:
     """Ett consumentnamn som är stabilt så länge PROCESSEN lever.
@@ -172,6 +179,7 @@ class ChattStrom:
         msg_id: str,
         falt: dict[str, Any],
         hanterare: Callable[[dict[str, Any]], Awaitable[None]],
+        namn: str | None = None,
     ) -> None:
         """Kör hanteraren och kvitterar (XACK) när den är KLAR.
 
@@ -195,8 +203,25 @@ class ChattStrom:
             )
             await self.client.xack(self.stream_key, self.group, msg_id)
             return
-        await hanterare(payload)
+        hjartslag = asyncio.create_task(self._hjartslag(msg_id, namn or consumer_name()))
+        try:
+            await hanterare(payload)
+        finally:
+            hjartslag.cancel()
         await self.client.xack(self.stream_key, self.group, msg_id)
+
+    async def _hjartslag(self, msg_id: str, namn: str) -> None:
+        """Se HJARTSLAG_S. JUSTID: räknar inte upp leveransräknaren, så
+        MAX_LEVERANSER fortsätter räkna riktiga omleveranser."""
+        while True:
+            await asyncio.sleep(HJARTSLAG_S)
+            try:
+                await self.client.xclaim(
+                    self.stream_key, self.group, namn, min_idle_time=0,
+                    message_ids=[msg_id], justid=True,
+                )
+            except Exception:  # noqa: BLE001 — ett missat slag ger i värsta fall ett återtag
+                logger.warning("Ström %s: hjärtslaget för %s misslyckades.", self.stream_key, msg_id)
 
     async def kor_ett_varv(
         self, namn: str, hanterare: Callable[[dict[str, Any]], Awaitable[None]]
@@ -215,7 +240,7 @@ class ChattStrom:
         antal = 0
         for _stream_namn, meddelanden in svar:
             for msg_id, falt in meddelanden:
-                await self._kor_och_kvittera(msg_id, falt, hanterare)
+                await self._kor_och_kvittera(msg_id, falt, hanterare, namn)
                 antal += 1
         return antal
 
@@ -312,7 +337,7 @@ class ChattStrom:
                             )
                     await self.client.xack(self.stream_key, self.group, msg_id)
                     continue
-                await self._kor_och_kvittera(msg_id, falt, hanterare)
+                await self._kor_och_kvittera(msg_id, falt, hanterare, agent)
                 antal += 1
             # Slutvillkor, TVÅ ben med flit. "0-0" är riktig Redis egen
             # signal att genomsökningen gått hela varvet — men fakeredis

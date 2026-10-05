@@ -1537,7 +1537,10 @@ class MemoryStorage:
         # Djupkopia: motorn muterar sitt dict efter skrivningen, och
         # liggaren ska visa det som skrevs — samma semantik som jsonb.
         if korning is not None:
-            rad["korning"] = json.loads(json.dumps(korning))
+            ny = {k: v for k, v in json.loads(json.dumps(korning)).items() if k != "styrning"}
+            if "styrning" in (rad["korning"] or {}):
+                ny["styrning"] = rad["korning"]["styrning"]
+            rad["korning"] = ny
         if error is not None:
             rad["error"] = error
         if is_test is not None:
@@ -1575,6 +1578,15 @@ class MemoryStorage:
         self.__dict__.setdefault("sidcache", {})[(tenant_id, url)] = {
             "innehall": innehall, "fel": fel, "hamtad_at": datetime.now(timezone.utc),
         }
+
+    async def set_korning_styrning(self, tenant_id: str, job_id: str, styrning: str | None) -> bool:
+        rad = self.leads_job_ledger.get(job_id)
+        if (not rad or rad["tenant_id"] != tenant_id or rad["scope"] != "batch"
+                or rad["status"] != "processing" or not rad["korning"] or rad["korning"].get("klar")):
+            return False
+        rad["korning"]["styrning"] = styrning
+        rad["updated_at"] = _now()
+        return True
 
     async def get_leads_korning(self, tenant_id: str, job_id: str) -> dict[str, Any] | None:
         rad = self.leads_job_ledger.get(job_id)
@@ -1703,7 +1715,7 @@ class MemoryStorage:
         self, tenant_id: str, *, aldre_an_minuter: int, utom: list[str] | None = None
     ) -> list[str]:
         # Speglar UPDATE ... RETURNING i postgres.py: samma statusar, samma
-        # klocka (created_at), completed_at sätts.
+        # klocka (updated_at), pausade körningar orörda, completed_at sätts.
         grans = datetime.now(timezone.utc) - timedelta(minutes=aldre_an_minuter)
         undantag = set(utom or ())
         stadade: list[str] = []
@@ -1712,7 +1724,8 @@ class MemoryStorage:
                 rad["tenant_id"] == tenant_id
                 and rad["status"] in ("queued", "processing")
                 and rad["job_id"] not in undantag
-                and datetime.fromisoformat(rad["created_at"]) < grans
+                and (rad.get("korning") or {}).get("styrning") != "paus"
+                and datetime.fromisoformat(rad.get("updated_at") or rad["created_at"]) < grans
             ):
                 rad["status"] = "failed"
                 rad["completed_at"] = _now()

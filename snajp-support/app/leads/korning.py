@@ -116,9 +116,11 @@ async def sokrunda(
     korning["kandidater"].extend(kvar)
 
 
-def registrera_utfall(korning: dict[str, Any], *, namn: str, leverbar: bool, skal: str | None) -> None:
+def registrera_utfall(
+    korning: dict[str, Any], *, namn: str, leverbar: bool, skal: str | None, undersokt: bool = True
+) -> None:
     korning["pagaende"] = max(0, korning["pagaende"] - 1)
-    korning["undersokta"] += 1
+    korning["undersokta"] += int(undersokt)
     if leverbar:
         korning["levererade"] += 1
     elif skal:

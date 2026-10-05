@@ -2052,7 +2052,14 @@ class PostgresStorage:
                 values ($1, $2, $3, $4, $5, $6::jsonb, $7, coalesce($8, false))
                 on conflict (job_id) do update set
                   status = excluded.status,
-                  korning = coalesce(excluded.korning, leads_job_ledger.korning),
+                  -- `styrning` (paus/avbrott) ägs av set_korning_styrning:
+                  -- motorns helskrivning av tillståndet får aldrig skriva över den.
+                  korning = case when excluded.korning is null then leads_job_ledger.korning
+                    else (excluded.korning - 'styrning')
+                         || case when leads_job_ledger.korning ? 'styrning'
+                              then jsonb_build_object('styrning', leads_job_ledger.korning -> 'styrning')
+                              else '{}'::jsonb end
+                  end,
                   error = coalesce(excluded.error, leads_job_ledger.error),
                   is_test = coalesce($8, leads_job_ledger.is_test),
                   updated_at = now(),
@@ -2112,6 +2119,21 @@ class PostgresStorage:
                 """,
                 tenant_id, url, innehall, (fel or "")[:500] or None,
             )
+
+    async def set_korning_styrning(self, tenant_id: str, job_id: str, styrning: str | None) -> bool:
+        async with self._scoped(tenant_id) as conn:
+            # coalesce: to_jsonb(null) är SQL-null, och jsonb_set med null nollar hela tillståndet.
+            return bool(await conn.fetchval(
+                """
+                update leads_job_ledger
+                   set korning = jsonb_set(korning, '{styrning}', coalesce(to_jsonb($3::text), 'null'::jsonb)),
+                       updated_at = now()
+                 where job_id = $1 and tenant_id = $2 and scope = 'batch' and status = 'processing'
+                   and korning is not null and not coalesce((korning ->> 'klar')::boolean, false)
+                returning true
+                """,
+                job_id, tenant_id, styrning,
+            ))
 
     async def get_leads_korning(self, tenant_id: str, job_id: str) -> dict[str, Any] | None:
         async with self._scoped(tenant_id) as conn:
@@ -2265,7 +2287,10 @@ class PostgresStorage:
                   completed_at = now()
                 where tenant_id = $1
                   and status in ('queued', 'processing')
-                  and created_at < now() - make_interval(mins => $2)
+                  -- updated_at (080), inte created_at: en Iris-körning skriver
+                  -- liggaren efter varje steg och får leva längre än en timme.
+                  and updated_at < now() - make_interval(mins => $2)
+                  and coalesce(korning ->> 'styrning', '') <> 'paus'
                   and not (job_id = any($3::text[]))
                 returning job_id
                 """,
