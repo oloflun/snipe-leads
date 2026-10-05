@@ -2269,6 +2269,16 @@ class PostgresStorage:
             )
         return [_row(r) for r in records]
 
+    async def lista_upptagna_bolag(self, tenant_id: str) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """select company_name, orgnr from prospects where tenant_id = $1
+                   union
+                   select company_name, orgnr from lead_list_items where tenant_id = $1""",
+                tenant_id,
+            )
+        return [_row(r) for r in records]
+
     async def rensa_lead_list_items(self, tenant_id: str, list_id: str) -> int:
         async with self._scoped(tenant_id) as conn:
             status = await conn.execute(

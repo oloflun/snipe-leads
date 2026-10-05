@@ -799,6 +799,12 @@ class Storage(Protocol):
         self, tenant_id: str, list_id: str
     ) -> list[dict[str, Any]]: ...
 
+    async def lista_upptagna_bolag(self, tenant_id: str) -> list[dict[str, Any]]:
+        """`company_name` och `orgnr` för varje bolag kunden redan har: alla
+        prospekt och alla rader i alla leadslistor (CRM-kunder inräknade).
+        Iris och listbygget utesluter dem (app/leads/upptagna.py)."""
+        ...
+
     async def rensa_lead_list_items(self, tenant_id: str, list_id: str) -> int:
         """Tar bort EN listas rader. Returnerar antal borttagna.
 

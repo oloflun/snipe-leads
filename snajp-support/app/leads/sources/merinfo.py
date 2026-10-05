@@ -549,7 +549,11 @@ async def sok(
     from .. import jev, sidhamtning
     from ..forfilter import ar_enskild_firma
 
-    sedda = {n.casefold() for n in uteslut}
+    from .. import upptagna
+
+    # Namn och orgnr (app/leads/upptagna.py): Iris-prospekt, listrader och
+    # kundens CRM-kunder, så Iris och listorna aldrig hämtar samma bolag.
+    sedda = upptagna.nycklar(uteslut)
     rader: list[dict[str, Any]] = []
     aktiva = list(sokningar)
     sida = 1
@@ -573,10 +577,9 @@ async def sok(
                     continue
                 gav_rader = True
                 for r in listrader:
-                    nyckel = r["company_name"].casefold()
-                    if nyckel in sedda:
+                    if upptagna.upptagen(sedda, r["company_name"], r.get("orgnr")):
                         continue
-                    sedda.add(nyckel)
+                    sedda.add(upptagna.nyckel(r["company_name"]))
                     # Förfilter utan hämtning: en enskild firma fälls ändå av
                     # kontrollera(), och orgnr står redan på listraden.
                     if ar_enskild_firma(r.get("orgnr")):

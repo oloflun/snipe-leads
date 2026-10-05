@@ -1601,7 +1601,7 @@ class MemoryStorage:
     _LEAD_LIST_STATUSAR = ("bestalld", "byggs", "klar", "fel")
     _LEAD_ITEM_TYPER = ("bolag", "privatperson")
 
-    _LEAD_LIST_KALLOR = ("sok", "kombinerad", "import")
+    _LEAD_LIST_KALLOR = ("sok", "kombinerad", "import", "crm")
     _KONTAKTFILTER = ("alla", "telefon", "mejl", "bada")
 
     async def create_lead_list(
@@ -1703,6 +1703,10 @@ class MemoryStorage:
             for i in self.lead_list_items
             if i["list_id"] == list_id and i["tenant_id"] == tenant_id
         ]
+
+    async def lista_upptagna_bolag(self, tenant_id: str) -> list[dict[str, Any]]:
+        rader = [*self.prospects.get(tenant_id, []), *(i for i in self.lead_list_items if i["tenant_id"] == tenant_id)]
+        return [{"company_name": r.get("company_name"), "orgnr": r.get("orgnr")} for r in rader]
 
     async def rensa_lead_list_items(self, tenant_id: str, list_id: str) -> int:
         fore = len(self.lead_list_items)

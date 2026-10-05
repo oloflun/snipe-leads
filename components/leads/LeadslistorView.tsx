@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
+import { CrmKundlista } from "@/components/leads/CrmKundlista";
 import { ImportCsv } from "@/components/leads/ImportCsv";
 import { btnPrimary, btnSecondary, EmptyState, SkeletonRows, chip, chipAktiv, chipInaktiv, chiplista } from "@/components/ui";
 import { offertForUtkast } from "@/lib/leads/offert";
@@ -40,7 +41,7 @@ type Lista = {
   created_at?: string | null;
   completed_at?: string | null;
   item_count?: number | null;
-  /** Migration 082: 'sok' | 'kombinerad' | 'import', källistornas id och filtret. */
+  /** Migration 082/098: 'sok' | 'kombinerad' | 'import' | 'crm', källistornas id och filtret. */
   kalla?: string | null;
   kallistor?: string[] | null;
   kontaktfilter?: string | null;
@@ -124,6 +125,14 @@ const T = {
   kombineraRubrik: { sv: "Kombinera listor", en: "Combine lists" },
   importeraCsv: { sv: "Importera CSV", en: "Import CSV" },
   kallaImport: { sv: "Import", en: "Import" },
+  listorSkiljs: {
+    sv: "Listorna är bredare och kallare än Iris: bolag med VD:ns telefon eller mejl, för samtal eller ett mer generellt utskick. Ett bolag som redan är ett Iris-lead, står i en annan lista eller är din befintliga kund kommer aldrig med.",
+    en: "Lists are broader and colder than Iris: companies with the CEO's phone or email, for calls or a more general outreach. A company that is already an Iris lead, sits in another list or is an existing customer is never included."
+  },
+  kallaCrm: {
+    sv: "CRM-kunder, utesluts från Iris och listor",
+    en: "CRM customers, excluded from Iris and lists"
+  },
   kombineraHjalp: {
     sv: "Kryssa två eller fler klara listor. Dubbletter tas bort på organisationsnummer, källistorna rörs inte.",
     en: "Tick two or more finished lists. Duplicates are removed by organisation number; the source lists are left untouched."
@@ -387,7 +396,10 @@ function datum(varde: string | null | undefined): string | null {
   return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
 }
 
-export function LeadslistorView({ demo = false }: Readonly<{ demo?: boolean }> = {}) {
+export function LeadslistorView({
+  demo = false,
+  crmOppen = false
+}: Readonly<{ demo?: boolean; crmOppen?: boolean }> = {}) {
   const { isDemo, vy } = useDashboard();
   const { locale, text } = useLocale();
 
@@ -544,11 +556,19 @@ export function LeadslistorView({ demo = false }: Readonly<{ demo?: boolean }> =
 
   return (
     <div className="grid gap-12">
+      {/* ------------------------------------- CRM-KUNDLISTAN (098) */}
+      <CrmKundlista
+        demo={demo || isDemo || vy === "demo"}
+        startOppen={crmOppen}
+        onKlar={() => void hamtaListor(true)}
+      />
+
       {/* ------------------------------------------- BESTÄLLNING */}
       <section aria-labelledby="bestall-lista">
         <h2 id="bestall-lista" className="text-[1.125rem] font-semibold tracking-[-0.01em]">
           {text(T.bestallEnLista)}
         </h2>
+        <p className="mt-1 max-w-[64ch] text-[14px] leading-6 text-ink-subtle">{text(T.listorSkiljs)}</p>
 
         <div className="mt-6 grid max-w-[760px] gap-5 sm:grid-cols-2">
           <Rad etikett={text(T.vilkaBolag)}>
@@ -633,7 +653,7 @@ export function LeadslistorView({ demo = false }: Readonly<{ demo?: boolean }> =
           </div>
         ) : (
           <>
-          {listor.filter((l) => l.status === "klar").length >= 2 ? (
+          {listor.filter((l) => l.status === "klar" && l.kalla !== "crm").length >= 2 ? (
             <div className="mt-4 rounded-card border border-ink/12 bg-paper2/40 p-4">
               <p className="text-[15px] font-semibold">{text(T.kombineraRubrik)}</p>
               <p className="mt-1 text-[13px] text-ink-subtle">{text(T.kombineraHjalp)}</p>
@@ -689,7 +709,7 @@ export function LeadslistorView({ demo = false }: Readonly<{ demo?: boolean }> =
               const klar = lista.status === "klar";
               return (
                 <li key={lista.id} className="py-4">
-                  {klar ? (
+                  {klar && lista.kalla !== "crm" ? (
                     <label className="mb-2 flex items-center gap-2 text-[13px] text-ink-muted">
                       <input
                         type="checkbox"
@@ -722,7 +742,9 @@ export function LeadslistorView({ demo = false }: Readonly<{ demo?: boolean }> =
                                   sv: `Kombinerad av ${lista.kallistor?.length ?? 0} listor`,
                                   en: `Combined from ${lista.kallistor?.length ?? 0} lists`
                                 })
-                              : lista.kalla === "import"
+                              : lista.kalla === "crm"
+                                ? text(T.kallaCrm)
+                                : lista.kalla === "import"
                                 ? text(T.kallaImport)
                                 : text({ sv: `${lista.antal} beställda`, en: `${lista.antal} ordered` }),
                             typeof lista.item_count === "number"
@@ -999,7 +1021,9 @@ function Listtabell({ lista, items }: Readonly<{ lista: Lista; items: ListRad[] 
   // CSV:n står kvar.
   const { isDemo, vy } = useDashboard();
   const { locale, text } = useLocale();
-  const mejlbro = !isDemo && vy !== "demo";
+  // En CRM-kundlista (migration 098) är kundens befintliga kunder: den är en
+  // uteslutningsmängd och prospekteras inte — ingen flytt till Iris, inga utkast.
+  const mejlbro = !isDemo && vy !== "demo" && lista.kalla !== "crm";
 
   // Skriv mejl: rutan med Email studio öppnas UNDER raden. Ett öppet rad-id i
   // taget: två samtidiga utkastjobb från samma lista är dubbel kostnad för

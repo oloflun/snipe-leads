@@ -11,6 +11,7 @@ import { IrisKorningar } from "@/components/leads/IrisKorningar";
 import { LeadDetail, ListorUpsell, exempelTillRad, type ExempelRad } from "@/components/leads/IrisBolag";
 import { LeadsRunForm } from "@/components/leads/LeadsRunForm";
 import { LeadsTabell } from "@/components/leads/LeadsTabell";
+import { CrmKundlista } from "@/components/leads/CrmKundlista";
 import { LeadslistorView } from "@/components/leads/LeadslistorView";
 import { btnPrimary, flik, flikAktiv, flikInaktiv, fliklista } from "@/components/ui";
 import { EXEMPELBOLAG, EXEMPEL_OMGANG_1, EXEMPEL_OMGANG_2 } from "@/lib/demo/iris-exempel";
@@ -83,6 +84,8 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
 
   const segmentVal = tolkaSegment(sokParams.get("vy"));
   const valdId = segmentVal === "leads" ? sokParams.get("lead") : null;
+  // Översiktens "Ladda upp CRM-kundlista" landar på ?vy=listor&crm=1.
+  const crmOppen = segmentVal === "listor" && sokParams.get("crm") === "1";
   const flikRefs = useRef<Partial<Record<Segment, HTMLButtonElement | null>>>({});
   const [korOppen, setKorOppen] = useState(false);
   const [exempelRader, setExempelRader] = useState<ExempelRad[]>([]);
@@ -233,7 +236,16 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
         ) : segmentVal === "utkast" ? (
           <IrisGranskning demo={demo} />
         ) : segmentVal === "listor" ? (
-          harListaddon || demo ? <LeadslistorView demo={demo} /> : <ListorUpsell />
+          harListaddon || demo ? (
+            <LeadslistorView demo={demo} crmOppen={crmOppen} />
+          ) : (
+            // CRM-kundlistan gäller Iris också (uteslutningen), så den står
+            // här även utan listtillägget.
+            <div className="grid gap-8">
+              <CrmKundlista startOppen={crmOppen} />
+              <ListorUpsell />
+            </div>
+          )
         ) : segmentVal === "korningar" ? (
           <IrisKorningar />
         ) : (
