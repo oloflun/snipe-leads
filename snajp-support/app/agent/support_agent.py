@@ -1657,17 +1657,18 @@ async def run_support_agent(
     # och när frågan ligger utanför ämnesområdet med kundens val "erbjud":
     # där hade stegets "eskalera om kunskapsbasen saknar svar" lämnat över en
     # väderfråga.
+    #
+    # 2026-10-06 (driftregeln, Sebbe: "sällan eskalera"): bara när ärendet är
+    # säkerhetskritiskt. En kunskapslucka — i ärligt-läget, i motfrågeläget
+    # eller som DELVIS — avgörs av utkastets beslut och kundens svar på
+    # erbjudandet. Skarptest i dev: "Hej! Vilka har grundat Snajp?" fick en
+    # felbedömd research (motfrågeläge), steget röstade över och kunden fick
+    # ett överlämningsbesked på en fråga kunskapsbasen bar svaret på. Bonus:
+    # kedjans dyraste anrop (thinking) körs inte längre på någon KB-miss.
     behover_eskaleringsbedomning = bool(
-        (kb_saknar_svar or sakerhetskritiskt)
+        sakerhetskritiskt
         and orsak != "kund_bad_om_manniska"
         and svarslage != "avgransa"
-        # 2026-10-05: i ärligt-läget erbjuder svaret redan en kollega och
-        # kundens "ja" blir överlämningen — modellbedömningen röstade ändå
-        # över på "hur kommer vi igång?" och LÅSTE samtalet (batteritestet,
-        # fråga 3, som dessutom kaskadlåste resten av samtalet). Säkerhets-
-        # fallen går sin egen kodväg (orsak="sakerhet") och ingår inte här.
-        # Bonus: kedjans dyraste anrop (thinking) sparas på varje KB-miss.
-        and not (arligt_utanfor_kb and not sakerhetskritiskt)
     )
     if not behover_eskaleringsbedomning:
         escalation: dict[str, Any] = {"should_escalate": False, "reason": None}
@@ -1725,6 +1726,14 @@ async def run_support_agent(
     # åt andra hållet — ett SVARA tar inte bort en överlämning koden beslutat.
     # Avgränsningen ("utanför ämnet", kundens val "erbjud") rörs inte.
     utkastbeslut = tolka_beslut(draft)
+    # Researchen bedömde frågan som oklar, men utkastet hittade svaret och
+    # besvarade den (uppgiften säger "besvara direkt om underlaget täcker
+    # frågan"). Då är det ett besvarat ärende, inte en misslyckad runda —
+    # annars räknar taket för motfrågor upp mot en överlämning på frågor som
+    # faktiskt fick svar.
+    if svarslage == "fraga" and utkastbeslut["beslut"] == "SVARA" and not missforstadd:
+        svarslage = "besvara"
+        misslyckade_nu = 0
     # Driftregeln (2026-10-06, Sebbe: "sällan behöva eskalera"): bara ESKALERA
     # lämnar över. DELVIS är en kunskapslucka, och den besvaras med ett
     # erbjudande — kundens "ja" blir överlämningen via erbjod_manniska.

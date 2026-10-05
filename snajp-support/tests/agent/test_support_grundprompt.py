@@ -461,3 +461,21 @@ def test_mejlets_kall_id_tvattas_och_erbjudandet_eskalerar_inte():
     )
     assert "KB-" not in resultat["draft_reply"]
     assert resultat["escalate"] is False
+
+
+@pytest.mark.anyio
+async def test_felbedomd_research_men_besvarat_utkast_ar_ett_besvarat_arende():
+    """Dev 2026-10-06: researchen kallade "Vilka har grundat Snajp?" oklar,
+    utkastet svarade ändå. Då gäller utkastet: ingen överlämning och ingen
+    misslyckad runda mot motfrågetaket."""
+    storage = MemoryStorage()
+    llm = _LLM(overrides={
+        "cs:customer-research": {"kb_supports_answer": False, "behover_fortydligande": True},
+        "cs:customer-escalation": {"should_escalate": True, "reason": "x"},
+    })
+    svar = await _tur(storage, llm, "Hej! Vilka har grundat Snajp?")
+    assert svar["escalated"] is False
+    assert svar["svarslage"] == "besvara"
+    assert "cs:customer-escalation" not in llm.calls
+    samtal = await storage.get_chat_state(TENANT, svar["customer_id"])
+    assert samtal["misslyckade_i_rad"] == 0
