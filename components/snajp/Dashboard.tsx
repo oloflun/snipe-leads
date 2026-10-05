@@ -102,6 +102,7 @@ type Forslag = {
   klass: string;
   kalla: string;
   jev: { klass: string; konfidens: number } | null;
+  hoppad?: boolean;
 };
 
 const CATEGORY_LABELS: Record<string, Localized> = {
@@ -291,7 +292,7 @@ export function Dashboard({
   /** "leads" (migration 084): leadsmejlen, klass=lead. "vantar" (Snajp Suite
    *  2026-10-03): bara utkast som väntar på godkännande, för Att göra;
    *  "eskalerade" på samma sätt för ärenden agenten lämnat över. */
-  lager?: "arenden" | "testmail" | "att_hantera" | "leads" | "vantar" | "eskalerade";
+  lager?: "arenden" | "testmail" | "att_hantera" | "leads" | "vantar" | "eskalerade" | "ej_relaterat";
   onMeta?: (meta: { visar_test_i_arenden: boolean }) => void;
 }>) {
   const vag = useArbetsvag();
@@ -299,6 +300,8 @@ export function Dashboard({
   // Kölägena (Att göra): bara poster som väntar på ett beslut, utan
   // inkorgens verktygsrad, statusfilter och fack.
   const arKo = lager === "att_hantera" || lager === "vantar" || lager === "eskalerade";
+  // Leads och Dolda: läsvyer utan testmail, provsortering och statusfilter.
+  const smalVy = lager === "leads" || lager === "ej_relaterat";
   const [emails, setEmails] = useState<EmailRow[]>([]);
   const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({});
   const [selected, setSelected] = useState<EmailDetail | null>(null);
@@ -406,6 +409,9 @@ export function Dashboard({
       if (lager === "eskalerade") params.set("status", "escalated");
       // Leads-inkorgen (084): raderna Jev eller reglerna klassat som lead.
       if (lager === "leads") params.set("klass", "lead");
+      // Dolda (plan 2026-10-05): utskick och notiser som klassningen lyfte
+      // ur kundtjänsten. Utan den här vyn försvann de spårlöst.
+      if (lager === "ej_relaterat") params.set("klass", "ej_relaterat");
       const data = await api(`/inbox?${params.toString()}`);
       setEmails(data.emails);
       setCategoryCounts(data.category_counts);
@@ -668,6 +674,27 @@ export function Dashboard({
     selected &&
     act("takeover", () => api(`/inbox/${selected.id}/takeover`, { method: "POST" }));
 
+  /** Tillbaka från Dolda: mejlet var ett ärende ändå. Backenden sätter det
+   * till 'new' så nästa bearbetning tar det, och beslutet blir lärdata. */
+  const tillbakaTillKundtjanst = () =>
+    selected &&
+    act("klassa", async () => {
+      await api(`/inbox/${selected.id}/klassa`, { method: "POST", body: JSON.stringify({ klass: "support" }) });
+      setSelected(null);
+    });
+
+  /** Sortera om hela den eskalerade kön med kodreglerna (utskick, notiser,
+   * maskinadresser). Ärenden och utkast följer med bort. */
+  const [omsorterat, setOmsorterat] = useState<number | null>(null);
+  const sorteraBortUtskick = () =>
+    act("omsortera", async () => {
+      const svar = await api<{ forslag: Forslag[] }>("/inbox/sortera", {
+        method: "POST",
+        body: JSON.stringify({ status: "escalated", tillampa: true })
+      });
+      setOmsorterat(svar.forslag.filter((f) => f.klass !== "support" && !f.hoppad).length);
+    });
+
   const flyttaTillArenden = () =>
     selected &&
     act("befordra", async () => {
@@ -712,7 +739,7 @@ export function Dashboard({
             Göms när en riktig inkorg är kopplad. Testmail bland en kunds
             verkliga ärenden är inte en demo, det är skräp i deras inkorg —
             och de har redan sett hur produkten fungerar. */}
-        {inkorgKopplad || arKo || lager === "leads" || (lager === "arenden" && visarTestIArenden === false) ? null : (
+        {inkorgKopplad || arKo || smalVy || (lager === "arenden" && visarTestIArenden === false) ? null : (
           <button
             type="button"
             onClick={() => void seedMock(null)}
@@ -757,13 +784,13 @@ export function Dashboard({
         <button
           type="button"
           onClick={() =>
-            inkorgKopplad || arKo || lager === "leads" || (lager === "arenden" && visarTestIArenden === false)
+            inkorgKopplad || arKo || smalVy || (lager === "arenden" && visarTestIArenden === false)
               ? void refresh()
               : void seedMock(categoryFilter)
           }
           disabled={busy !== null}
           title={
-            inkorgKopplad || arKo || lager === "leads" || (lager === "arenden" && visarTestIArenden === false)
+            inkorgKopplad || arKo || smalVy || (lager === "arenden" && visarTestIArenden === false)
               ? text(T.lasOm)
               : categoryFilter
                 ? text(T.nyaFack)
@@ -778,7 +805,7 @@ export function Dashboard({
           )}
           {text(T.uppdatera)}
         </button>
-        {demo || arKo || lager === "leads" || emails.length === 0 ? null : (
+        {demo || arKo || smalVy || emails.length === 0 ? null : (
           <button
             type="button"
             onClick={provsortera}
@@ -802,7 +829,7 @@ export function Dashboard({
             className="focus-ring h-9 w-full rounded-input border border-ink/15 bg-paper pl-9 pr-3 text-[1rem] outline-none placeholder:text-ink/35"
           />
         </div>
-        {arKo || lager === "leads" ? null : (
+        {arKo || smalVy ? null : (
           <select
           value={statusFilter ?? ""}
           onChange={(event) => setStatusFilter(event.target.value || null)}
@@ -818,7 +845,7 @@ export function Dashboard({
         )}
         {/* Reglerna bor numera under Inställningar, bredvid leads-agentens
             motsvarande kontroll. Se components/settings/SupportRegler.tsx. */}
-        {demo || arKo || lager === "leads" ? null : (
+        {demo || arKo || smalVy ? null : (
           <Link href={vag("/settings/regler")} className={cn(btnSecondary, btnLiten)}>
             <Settings2 className="h-4 w-4" />
             {text(T.regler)}
@@ -926,12 +953,40 @@ export function Dashboard({
         </div>
       )}
 
+      {lager === "eskalerade" && !demo && emails.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={sorteraBortUtskick}
+            disabled={busy !== null}
+            title={text({
+              sv: "Flyttar nyhetsbrev, notiser och automatiska utskick till Dolda under Kundtjänst. Riktiga ärenden står kvar.",
+              en: "Moves newsletters, notices and automated mail to Hidden under Customer service. Real cases stay."
+            })}
+            className={cn(btnSecondary, btnLiten)}
+          >
+            {busy === "omsortera" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            {text({ sv: "Sortera bort utskick", en: "Clear out automated mail" })}
+          </button>
+          {omsorterat !== null ? (
+            <p role="status" className="text-[0.875rem] text-ink-subtle">
+              {text({
+                sv: `${omsorterat} mejl flyttade till Dolda.`,
+                en: `${omsorterat} emails moved to Hidden.`
+              })}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
         {/* Maillista */}
         <div className={cn("min-w-0", selected ? "xl:col-span-6" : "xl:col-span-12")}>
-          {emails.length === 0 && arKo && error ? null : emails.length === 0 && arKo ? (
+          {emails.length === 0 && arKo && error ? null : emails.length === 0 && (arKo || lager === "ej_relaterat") ? (
             <p className="text-[0.875rem] leading-6 text-ink-subtle">
-              {lager === "vantar"
+              {lager === "ej_relaterat"
+                ? text({ sv: "Inget har sorterats bort. Nyhetsbrev och automatiska utskick hamnar här.", en: "Nothing has been sorted out. Newsletters and automated mail land here." })
+                : lager === "vantar"
                 ? text({ sv: "Inga svar väntar på godkännande.", en: "No replies are waiting for approval." })
                 : lager === "eskalerade"
                   ? text({ sv: "Inga eskalerade ärenden.", en: "No escalated tickets." })
@@ -956,7 +1011,7 @@ export function Dashboard({
                   <>{text(T.ingaArenden)}</>
                 )}
               </p>
-              {inkorgKopplad || arKo || lager === "leads" ? null : (
+              {inkorgKopplad || arKo || smalVy ? null : (
                 <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-ink-subtle">
                   {text(T.kopplaRiktig)}{" "}
                   <Link
@@ -1107,6 +1162,17 @@ export function Dashboard({
                   )}
                   {selected.hanterad_at ? text(T.markeraOhanterat) : text(T.markeraHanterat)}
                 </button>
+                {lager === "ej_relaterat" ? (
+                  <button
+                    type="button"
+                    onClick={() => void tillbakaTillKundtjanst()}
+                    disabled={busy !== null}
+                    className={btnSecondary}
+                  >
+                    {busy === "klassa" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    {text({ sv: "Flytta till kundtjänst", en: "Move to customer service" })}
+                  </button>
+                ) : null}
                 {selected.is_test ? (
                   <button
                     type="button"

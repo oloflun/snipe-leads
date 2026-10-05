@@ -49,6 +49,25 @@ _NYHETSBREV = re.compile(
 )
 
 
+#: Sidfotsfraser i utskick. Bara i brödtextens slut och utan "no-reply": en
+#: kund kan skriva "jag fick ett mejl från no-reply" mitt i ett riktigt ärende.
+_SIDFOT = re.compile(
+    r"(unsubscribe|avregistrera|avsluta (din )?prenumeration|hantera (dina )?prenumerationer|"
+    r"manage (your )?(email )?(preferences|subscriptions?)|view (this email )?in (your )?browser|"
+    r"visa (mejlet|e-postmeddelandet) i (din )?webbläsare)",
+    re.IGNORECASE,
+)
+
+#: Maskinadresser, var som helst i lokaldelen: CloudPlatform-noreply@,
+#: notifications@, mailer-daemon@ (Alunix 2026-10-04 — prefixkollen missade dem).
+_MASKINADRESS = re.compile(r"(no-?reply|do-?not-?reply|notifications?|mailer-daemon|postmaster|bounces?)")
+
+
+def ar_maskinavsandare(fran: str) -> bool:
+    lokal = fran.rsplit("@", 1)[0] if "@" in fran else ""
+    return bool(lokal and _MASKINADRESS.search(lokal))
+
+
 def _doman(adress: str) -> str:
     return adress.rsplit("@", 1)[-1].casefold().strip() if "@" in adress else ""
 
@@ -109,9 +128,16 @@ async def klassa(
             return _utfall("ej_relaterat", "regel", "Avsändaren har avregistrerat sig.")
     except Exception:  # noqa: BLE001 — en trasig suppressionsläsning fäller inte klassningen
         logger.exception("Kunde inte läsa suppressions för %s", tenant_id)
-    if _NYHETSBREV.search(amne) or (fran.startswith("noreply") or fran.startswith("no-reply")):
-        return _utfall("ej_relaterat", "regel", "Nyhetsbrev eller automatutskick.")
     prospekt = await _prospektmatch(storage, tenant_id, fran)
+    # Kontaktpersonen själv som svarar är aldrig ett utskick, även om
+    # mejlklienten sätter en listheader. Bara domänen räcker inte: bolagets
+    # eget nyhetsbrev från samma domän är fortfarande ett utskick.
+    sjalv = bool(prospekt) and str(prospekt.get("contact_email") or "").casefold() == fran
+    if not sjalv:
+        if email.get("automatutskick"):
+            return _utfall("ej_relaterat", "regel", "Automatiskt utskick enligt mejlets headers.")
+        if _NYHETSBREV.search(amne) or ar_maskinavsandare(fran) or _SIDFOT.search(text[-1500:]):
+            return _utfall("ej_relaterat", "regel", "Nyhetsbrev eller automatutskick.")
     if prospekt:
         trad = None
         try:
@@ -173,6 +199,10 @@ def demo() -> None:
     assert _NYHETSBREV.search("Vårt nyhetsbrev vecka 40")
     assert _doman("Anna@Alfa.SE") == "alfa.se"
     assert _webbdoman("https://www.alfa.se/kontakt") == "alfa.se"
+    assert ar_maskinavsandare("cloudplatform-noreply@google.com")
+    assert ar_maskinavsandare("notifications@github.com")
+    assert not ar_maskinavsandare("anna@alfa.se")
+    assert _SIDFOT.search("Hälsningar. Klicka här för att avregistrera dig")
 
 
 if __name__ == "__main__":

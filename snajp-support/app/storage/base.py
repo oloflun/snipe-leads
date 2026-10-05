@@ -1022,6 +1022,8 @@ class Storage(Protocol):
         body_text: str,
         received_at: str | None = None,
         is_test: bool = False,
+        automatutskick: bool = False,
+        mailbox_id: str | None = None,
     ) -> dict[str, Any] | None:
         """Sparar ett inkommande mail. Returnerar None vid dublett (dedupe)."""
         ...

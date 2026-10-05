@@ -1917,6 +1917,8 @@ class MemoryStorage:
         body_text: str,
         received_at: str | None = None,
         is_test: bool = False,
+        automatutskick: bool = False,
+        mailbox_id: str | None = None,
     ) -> dict[str, Any] | None:
         dedupe_key = (tenant_id, provider_message_id)
         if dedupe_key in self.email_dedupe:
@@ -1935,6 +1937,8 @@ class MemoryStorage:
             "status": "new",
             "ticket_id": None,
             "is_test": is_test,
+            "automatutskick": automatutskick,
+            "mailbox_id": mailbox_id,
             "hanterad_at": None,
             "created_at": _now(),
             "updated_at": _now(),

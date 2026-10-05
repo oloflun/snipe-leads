@@ -2549,14 +2549,17 @@ class PostgresStorage:
         body_text: str,
         received_at: str | None = None,
         is_test: bool = False,
+        automatutskick: bool = False,
+        mailbox_id: str | None = None,
     ) -> dict[str, Any] | None:
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
                 """
                 insert into ss_emails
                   (tenant_id, provider, provider_message_id, from_email, from_name,
-                   subject, body_text, received_at, is_test)
-                values ($1, $2, $3, $4, $5, $6, $7, coalesce($8::timestamptz, now()), $9)
+                   subject, body_text, received_at, is_test, automatutskick, mailbox_id)
+                values ($1, $2, $3, $4, $5, $6, $7, coalesce($8::timestamptz, now()), $9, $10,
+                        $11::uuid)
                 on conflict (tenant_id, provider_message_id) do nothing
                 returning *
                 """,
@@ -2569,6 +2572,8 @@ class PostgresStorage:
                 body_text,
                 received_at,
                 is_test,
+                automatutskick,
+                mailbox_id,
             )
         return _row(record)
 

@@ -620,8 +620,17 @@ class SorteraRequest(BaseModel):
     """Provsortera: klassa mejlen nu och visa förslaget; `tillampa` skriver
     det. Taket håller ett knapptryck inom några sekunder även med Jev."""
 
-    email_ids: list[str] = Field(..., min_length=1, max_length=25)
+    email_ids: list[str] = Field(default_factory=list, max_length=25)
     tillampa: bool = False
+    # Omsortering i bulk (plan 2026-10-05): alla mejl i en status, i stället
+    # för 25 synliga. Rader som pipelinen fortfarande håller i nås aldrig.
+    status: Literal["escalated", "awaiting_approval"] | None = None
+
+    @model_validator(mode="after")
+    def _ett_urval(self) -> "SorteraRequest":
+        if not self.email_ids and not self.status:
+            raise ValueError("Ange email_ids eller status.")
+        return self
 
 
 class OmformuleraDraftRequest(BaseModel):

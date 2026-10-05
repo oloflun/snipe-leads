@@ -26,3 +26,8 @@ class InboundEmail:
     # markerar läst FÖRST efter lyckad ingest — se imap.mark_seen. None för
     # mock och API-ingest, som inte har någon server att markera på.
     imap_uid: str | None = None
+    # Utskick enligt headers (List-Unsubscribe, Auto-Submitted, Precedence …).
+    # Klassningens första regel: ett automatiskt utskick är aldrig ett ärende.
+    automatutskick: bool = False
+    # Brevlådan mejlet hämtades från — dess syfte (support/leads) styr klassningen.
+    mailbox_id: str | None = None

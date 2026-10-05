@@ -240,6 +240,7 @@ async def sync_mailbox(
     ingestade_uids: list[str] = []
     ingest_fel: str | None = None
     for message in inbound:
+        message.mailbox_id = str(mailbox["id"]) if mailbox.get("id") else None
         try:
             email = await ingest_email(storage, tenant_id, message)
         except Exception as fel:  # noqa: BLE001 — resten av mejlen ska stå kvar olästa

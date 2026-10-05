@@ -30,6 +30,8 @@ async def ingest_email(
         body_text=inbound.body_text,
         received_at=_received_at_for_storage(inbound.received_at),
         is_test=is_test or inbound.provider == "mock",
+        automatutskick=inbound.automatutskick,
+        mailbox_id=inbound.mailbox_id,
     )
     if email is None:
         logger.info("Dublett hoppad: %s", inbound.provider_message_id)

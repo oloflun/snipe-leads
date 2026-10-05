@@ -26,7 +26,7 @@ import { SupportChat } from "./SupportChat";
  */
 export function SupportWorkspaceTabs({ workspaceName }: Readonly<{ workspaceName: string | null }>) {
   const { text } = useLocale();
-  const [tab, setTab] = useState<"kundtjanst" | "testmail" | "testchatt">("kundtjanst");
+  const [tab, setTab] = useState<"kundtjanst" | "testmail" | "dolda" | "testchatt">("kundtjanst");
   /** null = vet inte än. false = riktig kund, Testmail-fliken ska synas. */
   const [visarTestIArenden, setVisarTestIArenden] = useState<boolean | null>(null);
 
@@ -49,6 +49,9 @@ export function SupportWorkspaceTabs({ workspaceName }: Readonly<{ workspaceName
       ...(visarTestIArenden === false
         ? [{ id: "testmail" as const, label: { sv: "Testmail", en: "Test mail" } }]
         : []),
+      // Dolda (plan 2026-10-05): det klassningen sorterade bort som utskick
+      // eller ej relaterat — synligt och möjligt att flytta tillbaka.
+      { id: "dolda", label: { sv: "Dolda", en: "Hidden" } },
       { id: "testchatt", label: { sv: "Testchatt", en: "Test chat" } }
       // Journalen (körningar, kostnad, överlämningar) flyttade till
       // Aktivitet 2026-10-03, Snajp Suite: alla agenters körningar på ett
@@ -76,6 +79,7 @@ export function SupportWorkspaceTabs({ workspaceName }: Readonly<{ workspaceName
           <Dashboard onMeta={onMeta} />
         ) : null}
         {tab === "testmail" ? <Dashboard lager="testmail" /> : null}
+        {tab === "dolda" ? <Dashboard lager="ej_relaterat" /> : null}
         {tab === "testchatt" ? (
           <div className="mx-auto max-w-3xl">
             <SupportChat testMode workspaceLabel={workspaceName ?? undefined} />
