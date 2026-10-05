@@ -203,6 +203,15 @@ def tolka_belopp(varde: Any) -> Decimal | None:
     return -tal if negativ else tal
 
 
+def _oren(tal: Decimal | None) -> Decimal | None:
+    """Belopp med två decimaler: modellen svarar ofta med JSON-talet 1250.0,
+    och det ska sparas och visas som 1250.00. Aldrig avrundning av ören —
+    ett belopp med fler decimaler lämnas som det står."""
+    if tal is None or tal.as_tuple().exponent < -2:
+        return tal
+    return tal.quantize(Decimal("0.01"))
+
+
 def tolka_datum(varde: Any) -> str | None:
     """Bara ÅÅÅÅ-MM-DD godtas — prompten kräver formatet, och ett annat
     format är exakt den tvetydighet (03/04) som ska flaggas, inte tolkas."""
@@ -234,7 +243,7 @@ def _normalisera_falt(namn: str, rat: Any, flaggor: set[str]) -> dict[str, Any]:
     kalla = str(kalla).strip() if kalla not in (None, "") else None
 
     if namn in BELOPPSFALT:
-        varde = tolka_belopp(varde)
+        varde = _oren(tolka_belopp(varde))
     elif namn in DATUMFALT:
         if varde not in (None, "") and tolka_datum(varde) is None:
             # Ett datum i annat format än ÅÅÅÅ-MM-DD: modellen har inte
@@ -290,8 +299,8 @@ def _normalisera_underlag(rat: Any) -> dict[str, Any]:
         moms_per_sats.append(
             {
                 "sats": sats,
-                "underlag": tolka_belopp(_hamta(post, "underlag")),
-                "moms": tolka_belopp(_hamta(post, "moms")),
+                "underlag": _oren(tolka_belopp(_hamta(post, "underlag"))),
+                "moms": _oren(tolka_belopp(_hamta(post, "moms"))),
             }
         )
 

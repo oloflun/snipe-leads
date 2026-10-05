@@ -310,6 +310,14 @@ def test_okanda_flaggor_och_nycklar_utan_prickar():
     assert set(u["fält"]) == set(granskning.FALT)
 
 
+def test_belopp_som_jsontal_far_tva_decimaler():
+    rat = {"klass": "UNDERLAG_I_TEXT", "underlag": [_underlag(totalbelopp=1250.0)]}
+    rat["underlag"][0]["moms_per_sats"] = [{"sats": 25, "underlag": 1000, "moms": 250.0}]
+    u = granskning.normalisera_resultat(rat, "m-1")["underlag"][0]
+    assert f"{u['fält']['totalbelopp']['värde']:f}" == "1250.00"
+    assert f"{u['moms_per_sats'][0]['moms']:f}" == "250.00"
+
+
 def test_tvetydigt_datumformat_flaggas():
     rat = {"klass": "UNDERLAG_I_TEXT", "underlag": [_underlag(dokumentdatum="03/04/2026")]}
     u = granskning.normalisera_resultat(rat, "m-1")["underlag"][0]
