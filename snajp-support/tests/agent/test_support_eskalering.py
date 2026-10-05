@@ -598,3 +598,19 @@ async def test_fortsattningstur_forankrar_aktuella_meddelandet_efter_historiken(
     assert "SVARA PÅ KUNDENS AKTUELLA MEDDELANDE" in prompt
     # Förankringen ska ligga EFTER historiken och bära den aktuella frågan.
     assert prompt.rfind("Har ni öppet på lördagar?") > prompt.find("Vilka betalsätt tar ni?")
+
+
+@pytest.mark.anyio
+async def test_mallformat_i_utkastet_kors_om_en_gang():
+    """Skarptest 2026-10-05: utkaststeget svarade i skillens To/Re/Notes-
+    objekt med fel svar i mallfältet. Grinden kör om steget EN gång med
+    tillsägelse när draft inte är en sträng."""
+    storage = MemoryStorage()
+    llm = _LLM(sekvens={"cs:draft-response": [
+        {"draft": {"To": "kund@example.se", "Draft response text": "Hej, hur kan jag hjälpa dig?"}},
+        {"draft": "Du kan betala med Swish eller kort."},
+    ]})
+    svar = await _tur(storage, llm, "Vilka betalsätt tar ni?")
+    assert llm.calls.count("cs:draft-response") == 2
+    assert "FÖRRA FÖRSÖKET bröt formatet" in llm.user_by_skill["cs:draft-response"][-1]
+    assert "Swish" in svar["reply"]

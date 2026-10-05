@@ -1322,6 +1322,16 @@ async def run_support_agent(
             "något närliggande), hämtat ur kunskapsbasen eller ärendet — inte en "
             "standardfras. Ren text, ingen markdown. Returnera JSON: draft (svenska)."
         )
+    # Mallformat-spärren gäller ALLA språk (2026-10-05): den stod bara i den
+    # icke-svenska varianten, och i skarptest svarade utkaststeget på svenska
+    # i skillens To/Re/Notes-objekt — med fel svar i mallfältet ("kunden har
+    # bara skickat en hälsning") trots att researchen bar hela svaret.
+    uppgift += (
+        " Fältet draft ska vara EN sträng med hela svaret till kunden — "
+        "aldrig skillens mallformat (To/Re/Notes) och aldrig ett objekt. "
+        "Läs HELA kundens meddelande: en inledande hälsning är inte ärendet, "
+        "svara på frågan som följer efter den."
+    )
     if underlag:
         uppgift += integrationsuppslag.UTKAST_TILLAGG
     if not ar_svenska:
@@ -1342,6 +1352,24 @@ async def run_support_agent(
             f"## Research\n{research.get('findings', '')}"
         ),
     )
+    # Kodgrind mot mallformatet: ett draft-objekt i stället för en sträng är
+    # ett brutet kontrakt som instruktionen ovan inte alltid stoppar (en
+    # prompt går att prata omkull; grinden gör det inte). EN omkörning med
+    # tillsägelse — samma mönster som step_runnerns kontraktsbrott.
+    if not isinstance(draft.get("draft"), str):
+        draft = await steg(
+            steps["cs:draft-response"],
+            ledger,
+            trace,
+            task=(
+                "FÖRRA FÖRSÖKET bröt formatet: draft var ett objekt (skillens "
+                "To/Re/Notes-mall), inte en sträng. Gör om. " + uppgift
+            ),
+            case_context=(
+                f"{case_context}\n\n## Kunskapsbas\n{kb_block}{systemblock}\n\n"
+                f"## Research\n{research.get('findings', '')}"
+            ),
+        )
 
     # --- Steg 4: eskaleringsbedömning (villkorat) ---------------------------
     #
