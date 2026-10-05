@@ -100,9 +100,11 @@ async def triage(
             articles = await storage.search_kb(
                 tenant_id, f"{email.subject} {email.body}".strip(), embedding=embedding
             )
+            tenantrad = await storage.get_tenant(tenant_id) or {}
             result = await triage_email_llm(
                 sender=email.sender, subject=email.subject, body=email.body,
                 kb_articles=articles,
+                foretagsnamn=str(tenantrad.get("company_name") or tenantrad.get("name") or ""),
             )
             result["kb_sources"] = [
                 {"title": a["title"], "similarity": a["similarity"]} for a in articles

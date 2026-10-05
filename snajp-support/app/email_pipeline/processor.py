@@ -108,7 +108,7 @@ _ESCALATION_BODY = (
     "Tack för ditt meddelande. Jag förstår att det här är viktigt, och den här typen "
     "av ärende hanteras alltid av en av våra medarbetare. Ärendet har fått hög "
     "prioritet och all information är vidarebefordrad — du får svar från vår "
-    "kundtjänst så snart som möjligt, senast inom en vardag."
+    "kundtjänst så snart som möjligt."
 )
 
 _NO_MATCH_BODY = (
@@ -140,6 +140,7 @@ async def _triage_email(
     email: dict[str, Any],
     image_urls: list[str],
     foretagsprofil: str = "",
+    foretagsnamn: str = "",
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Returnerar (triage-resultat med confidence/reasoning/draft_body, KB-träffar)."""
     settings = get_settings()
@@ -190,6 +191,7 @@ async def _triage_email(
         kb_articles=articles,
         image_urls=image_urls,
         foretagsprofil=foretagsprofil,
+        foretagsnamn=foretagsnamn,
     )
     result["draft_body"] = result.pop("draft_reply", None)
     result.setdefault("reasoning", "LLM-klassificering.")
@@ -388,7 +390,9 @@ async def process_email(
             or _STANDARD_AVSANDARE
         )
 
-        triage, articles = await _triage_email(storage, tenant_id, email, image_urls, profil)
+        triage, articles = await _triage_email(
+            storage, tenant_id, email, image_urls, profil, foretagsnamn=avsandare
+        )
         kb_sources = [
             {"title": a["title"], "similarity": a["similarity"]} for a in articles
         ]
@@ -468,6 +472,15 @@ async def process_email(
             body = _ESCALATION_BODY if must_escalate and articles else (
                 _NO_MATCH_BODY if not articles else _ESCALATION_BODY
             )
+            # Grundprompten (2026-10-05): vid DELVIS/ESKALERA skriver modellen
+            # själv svaret enligt mall 6/7 — delsvaret på det kunskapsbasen
+            # bär, och ärligt om resten. Det är bättre än den fasta texten,
+            # som dessutom inte kan svara på något alls. Den fasta texten
+            # gäller fortfarande utan KB-träffar (ingen källa = inget delsvar)
+            # och när modellen inte gav något utkast. Utkastet går ALLTID till
+            # granskning här, aldrig ut automatiskt.
+            if articles and triage.get("beslut") in ("DELVIS", "ESKALERA") and triage.get("draft_body"):
+                body = triage["draft_body"]
             content = _wrap_reply(body, email["from_name"], avsandare)
             await storage.update_ticket(
                 tenant_id, ticket["id"], status="escalated", priority="high",
