@@ -269,3 +269,20 @@ Skriptet `scripts/jamfor_skrapare.py` hämtar samma 20 URL:er med båda tjänste
 ## Antons beslut 2026-10-05 (fas 3.5)
 
 Listspåret för bolag utan webbplats: registrets telefonnummer **får** användas när VD är den enda personen i bolaget. Villkor i kod: en anställd (eller färre) och VD är ende person med roll på bolagssidan, inga övriga ledamöter. Då räknas numret som VD:s (regel 5). Annars sparas raden med bolagsfakta och VD:ns namn utan nummer. Undantaget skrivs in i CLAUDE.md/AGENTS.md under "Leads: källor, filter och kontakter" som ett preciserat undantag från regel 1, och testas i `test_merinfo.py`.
+
+
+## Läge 2026-10-05 (conclude)
+
+### Completed
+- [x] Fas 1–6 byggda, testade (backend 2557, invarianter 433, tsc, axe) och driftsatta på development.
+- [x] Flytta till main lagad (095, bedömningen följer med); 092–095 körda mot main.
+- [x] Release-PR #31 öppen.
+
+### Remaining
+- [ ] Antons merge av #31.
+- [ ] Skarpt Iris-prov N=5 på Alunix efter ScrapeGraph-påfyllning.
+- [ ] PAGESPEED_API_KEY (Anton).
+- [ ] Fas 7 Firecrawl-mätning (väntar på konto).
+
+### Next Steps
+- Se `HANDOFF-2026-10-05-IRIS-KOSTNAD-YTOR.md` § 3.

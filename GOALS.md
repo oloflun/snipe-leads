@@ -263,6 +263,10 @@ rebase. Ändringar behöver samordnas, inte bara pushas.
 
 ## Ändringslogg
 
+- 2026-10-05 — claude — Iris-kostnaden begränsad och webbbedömningen avgjord i
+  kod (delmål 2); inkorgen sorterar bort utskick; Leads, Att göra och Översikten
+  omgjorda; leadsregel 7–9 (ensam VD, listspår, webbkriterier i kod). Release-PR
+  #31 öppen, main migrerad till 095 (delmål 10 väntar på Antons merge).
 - 2026-10-02 — claude — Antons beställning 2026-10-01 byggd och driftsatt på
   development: Körningar, merinfo + Jev, obligatorisk lägesbeskrivning, Jev-
   sorterad inkorg med leads-inkorg, nattspegling main → development med Flytta

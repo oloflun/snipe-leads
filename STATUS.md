@@ -1,5 +1,19 @@
 # Snipra Status
 
+## 2026-10-05 — Claude — Iris billigare och skarpare, inkorgen sorterar rätt, Leads/Att göra/Översikt omgjorda, flytt till main lagad
+
+Antons sju problem från provet 2026-10-04 är lösta och driftsatta på development
+(`357f637`): utskick sorteras bort före Jev med Kundtjänst › Dolda; ScrapeGraph-
+anropen begränsade (cache per kund, gratis först, kredittak; N=5 ≤ 20 i test);
+webbkriterierna avgörs i kod ur PageSpeed + bildbedömning, kalibrerad skarpt mot
+Antons facit; bolag utan sajt går till listspåret; Leads har underflikarna
+Leads/Inkorg/Utkast/Listor/Körningar och en tabell i full bredd; Att göra är en
+kö; Översikten är en dashboard. Flytta till main lagad (spegelmarkören dold av
+radnivåsäkerhet, bedömningen föll bort). Migration 092–095 körda mot båda
+miljöerna. **Kvar: Antons merge av PR #31, ScrapeGraph-påfyllning, PageSpeed-
+nyckel, Firecrawl-konto (fas 7).** Handoff: `HANDOFF-2026-10-05-IRIS-KOSTNAD-YTOR.md`.
+Logg: `session-logs/2026-10-05-session-log.md`.
+
 ## 2026-10-04 — Claude — Snajp Suite + design klara, Jev i alla inkorgar, Antons leadsregler, release-PR #30 bedömd
 
 Snajp Suite fas 1–3 och designpasset är byggda (meny Översikt/Att göra/Leads/
