@@ -179,7 +179,7 @@ function renderSektion(
       // (KvittoDemoYta) räknar på lib/demo/kvitto-oversikt.ts.
       return (
         <PageShell title={{ sv: "Kvitton", en: "Receipts" }}>
-          <KvittoDemoYta />
+          <KvittoDemoYta visaDrift={visaDrift} />
         </PageShell>
       );
     case "regler":
