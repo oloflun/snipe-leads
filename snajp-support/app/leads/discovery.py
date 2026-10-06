@@ -908,11 +908,18 @@ def person_kontakt_i_text(text: str, website: str) -> dict[str, Any] | None:
 async def hamta_person_kontakt(website: str, vd_namn: str | None = None) -> dict[str, Any] | None:
     """Bästa namngivna kontakt på sajten: VD först (när registret namngett
     en), sedan ägare/chef, sist en namngiven anställd. Startsidan plus upp
-    till tre kontakt-/om oss-sidor. Kastar aldrig.
+    till tre kontakt-/om oss-sidor.
+
+    Sidorna går genom sidhämtningen (app/leads/sidhamtning.py): gratis
+    direkthämtning först, ScrapeGraph som reserv — en JS-renderad sajt gav
+    annars noll text och noll kontakt (körningarna 2026-10-07) — cachat per
+    kund och räknat mot körningens sidtak. Kastar aldrig.
 
     Returen bär contact_name/contact_role/contact_email/contact_phone och
     contact_level ('named_role_match' när rollen står på sajten,
     'named_other' för en namngiven person utan uttalad roll)."""
+    from . import sidhamtning
+
     basta: dict[str, Any] | None = None
 
     def vag(sidtext: str) -> dict[str, Any] | None:
@@ -934,27 +941,21 @@ async def hamta_person_kontakt(website: str, vd_namn: str | None = None) -> dict
         return None
 
     try:
-        async with httpx.AsyncClient(
-            timeout=httpx.Timeout(8.0), follow_redirects=True,
-            headers={"user-agent": "snajp-leads/1.0 (+https://snajp.se)"},
-        ) as client:
-            svar = await client.get(website)
-            if svar.status_code >= 400:
-                return None
-            vinnare = vag(svar.text)
-            if vinnare:
-                return vinnare
-            for lank in extrahera_kontaktlankar(svar.text, website, tak=3):
-                try:
-                    undersida = await client.get(lank)
-                except httpx.HTTPError:
-                    continue
-                if undersida.status_code < 400:
-                    vinnare = vag(undersida.text)
-                    if vinnare:
-                        return vinnare
-    except httpx.HTTPError:
-        return None
+        text, _fel, _via = await sidhamtning.hamta(website, fas="webb", direkt=True)
+        if not text:
+            return None
+        vinnare = vag(text)
+        if vinnare:
+            return vinnare
+        for lank in extrahera_kontaktlankar(text, website, tak=3):
+            undersida, _fel, _via = await sidhamtning.hamta(lank, fas="webb", direkt=True)
+            if undersida:
+                vinnare = vag(undersida)
+                if vinnare:
+                    return vinnare
+    except Exception:  # noqa: BLE001 — kontaktjakten får aldrig fälla sökningen;
+        # ett redan funnet (lägre rankat) fynd behålls och rankas nedan.
+        logger.exception("Kontaktjakten föll för %s", website)
     if basta is None:
         return None
     rang = basta.pop("rang")

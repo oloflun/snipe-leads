@@ -2102,7 +2102,10 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> None:
             # bolag och svalt varje liten körning; en beställning på 50 var
             # omöjlig per konstruktion. 20 sidor per beställt lead, golv 40,
             # tak 160 — kostnadsvakten finns kvar, men i proportion.
-            korningstak = min(160, max(sidhamtning.STANDARD_TAK, 20 * int(k["mal"])))
+            # 40 räckte till ~29 granskade bolag i en målgrupp där tre av
+            # fyra saknar webbplats — en 2-beställning svalt ändå. 30 per
+            # beställt lead med golvet 60 ger småbeställningar en ärlig chans.
+            korningstak = min(160, max(60, 30 * int(k["mal"])))
             skrap = sidhamtning.starta(
                 storage, tenant_id, tak=korningstak - sidhamtning.betalda(k.get("skrap"))
             )
