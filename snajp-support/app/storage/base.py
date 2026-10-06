@@ -865,6 +865,24 @@ class Storage(Protocol):
         Returnerar de städade list_id:na. Se app/jobs/stadare.py."""
         ...
 
+    async def support_oversikt_underlag(
+        self, tenant_id: str, *, sedan: str, is_test: bool | None
+    ) -> dict[str, Any]:
+        """Råraderna bakom Kundtjänst › Översikt (app/support_oversikt.py).
+
+        Returnerar `{"mejl": [...], "korningar": {...}, "kb_artiklar": int}`.
+        Varje mejl: `id, received_at, status, category, escalate,
+        kb_traffar (int | None), forsta_svar (iso | None)`, för supportmejl
+        mottagna från och med `sedan`. Larm, leads och dolda räknas inte.
+        `forsta_svar` är första `auto_sent`/`approved_and_sent` i
+        beslutsloggen. `korningar` summerar periodens supportkörningar
+        (utan is_test): `antal, tokens_in, tokens_out, cache, modell`.
+
+        Aggregeringen sker i Python och inte här, så att Postgres och minnet
+        inte kan räkna olika.
+        """
+        ...
+
     async def weekly_analytics(self, tenant_id: str, *, weeks: int = 8) -> dict[str, Any]:
         """Veckovis utfall för kundens analysvy — EN tenant, aldrig aggregerat.
 

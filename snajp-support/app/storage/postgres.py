@@ -2490,6 +2490,94 @@ class PostgresStorage:
             for r in records
         ]
 
+    async def support_oversikt_underlag(
+        self, tenant_id: str, *, sedan: str, is_test: bool | None
+    ) -> dict[str, Any]:
+        # Se protokollet i base.py. kb_sources läses rått och avkodas i
+        # Python: en dubbelkodad jsonb-sträng hade gett jsonb_array_length
+        # ett fel i stället för ett tal.
+        from datetime import datetime as _dt
+
+        fran = _dt.fromisoformat(sedan)
+        async with self._scoped(tenant_id) as conn:
+            mejl = await conn.fetch(
+                """
+                select e.id, e.received_at, e.status,
+                       c.category, c.escalate, c.kb_sources,
+                       (select min(d.created_at) from ss_decision_log d
+                         where d.email_id = e.id
+                           and d.event in ('auto_sent', 'approved_and_sent')) as forsta_svar
+                  from ss_emails e
+                  left join lateral (
+                    select c.category, c.escalate, c.kb_sources
+                      from ss_classifications c
+                     where c.email_id = e.id
+                     order by c.created_at desc
+                     limit 1
+                  ) c on true
+                 where e.tenant_id = $1
+                   and e.received_at >= $2
+                   and e.status not in ('att_hantera', 'lead', 'ej_relaterat')
+                   and coalesce(e.klass, 'support') = 'support'
+                   and ($3::boolean is null or e.is_test = $3)
+                """,
+                tenant_id,
+                fran,
+                is_test,
+            )
+            korning = await conn.fetchrow(
+                """
+                select count(*) as antal,
+                       coalesce(sum(tokens_in), 0) as tokens_in,
+                       coalesce(sum(tokens_out), 0) as tokens_out,
+                       count(*) filter (where model = 'svarscache') as cache,
+                       mode() within group (order by model)
+                         filter (where model is not null and model <> 'svarscache') as modell
+                  from agent_runs
+                 where tenant_id = $1 and agent_type = 'support'
+                   and not is_test and created_at >= $2
+                """,
+                tenant_id,
+                fran,
+            )
+            kb = await conn.fetchval(
+                "select count(*) from ss_knowledge_base where tenant_id = $1",
+                tenant_id,
+            )
+
+        def _traffar(varde: Any) -> int | None:
+            if varde is None:
+                return None
+            if isinstance(varde, str):
+                try:
+                    varde = json.loads(varde)
+                except ValueError:
+                    return None
+            return len(varde) if isinstance(varde, list) else None
+
+        return {
+            "mejl": [
+                {
+                    "id": str(r["id"]),
+                    "received_at": r["received_at"].isoformat(),
+                    "status": r["status"],
+                    "category": r["category"],
+                    "escalate": r["escalate"],
+                    "kb_traffar": _traffar(r["kb_sources"]),
+                    "forsta_svar": r["forsta_svar"].isoformat() if r["forsta_svar"] else None,
+                }
+                for r in mejl
+            ],
+            "korningar": {
+                "antal": int(korning["antal"]),
+                "tokens_in": int(korning["tokens_in"]),
+                "tokens_out": int(korning["tokens_out"]),
+                "cache": int(korning["cache"]),
+                "modell": korning["modell"],
+            },
+            "kb_artiklar": int(kb or 0),
+        }
+
     async def weekly_analytics(self, tenant_id: str, *, weeks: int = 8) -> dict[str, Any]:
         # Se protokollet i base.py för varför `coverage` finns.
         #

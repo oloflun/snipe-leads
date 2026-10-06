@@ -39,6 +39,7 @@ from .api import (
     rules,
     sending_domains_api,
     support_config,
+    support_oversikt,
     tickets,
     triage,
     usage,
@@ -366,6 +367,7 @@ app.include_router(admin_konvertera.router)
 # docstringen i api/admin_ombedom.py.
 app.include_router(admin_ombedom.router)
 app.include_router(analytics.router)
+app.include_router(support_oversikt.router)
 # Journalens tenant-scopade förbrukning (Livrustning-piloten) — samma fråga
 # som /api/admin/usage men med kundens egen nyckel. Se api/usage.py.
 app.include_router(usage.router)

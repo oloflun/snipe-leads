@@ -77,13 +77,16 @@ const DEMO_STATE = {
 };
 
 export default async function Page({
-  params
-}: Readonly<{ params: Promise<{ slug?: string[] }> }>) {
+  params,
+  searchParams
+}: Readonly<{ params: Promise<{ slug?: string[] }>; searchParams: Promise<{ drift?: string }> }>) {
   await notFoundOnTenant();
   const { slug = [] } = await params;
+  // ?drift=1 visar supportöversiktens driftruta (Snajp-admins vy) i demon.
+  const { drift } = await searchParams;
   const [sektion, undersektion] = slug;
 
-  const innehall = renderSektion(sektion, undersektion);
+  const innehall = renderSektion(sektion, undersektion, drift === "1");
   if (innehall === null) {
     notFound();
   }
@@ -103,7 +106,8 @@ export default async function Page({
 /** null = okänd sektion, alltså 404. */
 function renderSektion(
   sektion: string | undefined,
-  undersektion?: string
+  undersektion?: string,
+  visaDrift = false
 ): React.ReactNode | null {
   switch (sektion) {
     case undefined:
@@ -188,7 +192,7 @@ function renderSektion(
       // inkorgen, samma flikmönster som arbetsytans SupportWorkspaceTabs.
       return (
         <PageShell title={{ sv: "Kundtjänst", en: "Customer service" }}>
-          <DemoSupportYta />
+          <DemoSupportYta visaDrift={visaDrift} />
         </PageShell>
       );
     default:

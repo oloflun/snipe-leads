@@ -1866,6 +1866,78 @@ class MemoryStorage:
             total += int(r.get("tokens_in") or 0) + int(r.get("tokens_out") or 0)
         return total
 
+    async def support_oversikt_underlag(
+        self, tenant_id: str, *, sedan: str, is_test: bool | None
+    ) -> dict[str, Any]:
+        # Speglar SQL-varianten i postgres.py: samma urval, samma fält.
+        def _tid(iso: str | None) -> datetime | None:
+            if not iso:
+                return None
+            t = datetime.fromisoformat(iso)
+            return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+
+        fran = _tid(sedan)
+        svar: dict[str, datetime] = {}
+        for d in self.decisions:
+            if d["tenant_id"] != tenant_id or d["event"] not in ("auto_sent", "approved_and_sent"):
+                continue
+            eid = d.get("email_id")
+            tid = _tid(d["created_at"])
+            if eid and tid and (eid not in svar or tid < svar[eid]):
+                svar[eid] = tid
+
+        mejl = []
+        for e in self.emails.values():
+            if e["tenant_id"] != tenant_id:
+                continue
+            if e["status"] in ("att_hantera", "lead", "ej_relaterat"):
+                continue
+            if (e.get("klass") or "support") != "support":
+                continue
+            if is_test is not None and bool(e.get("is_test")) != is_test:
+                continue
+            mottaget = _tid(e["received_at"])
+            if fran and mottaget and mottaget < fran:
+                continue
+            c = self.classifications.get(e["id"]) or {}
+            kallor = c.get("kb_sources")
+            forsta = svar.get(e["id"])
+            mejl.append(
+                {
+                    "id": e["id"],
+                    "received_at": mottaget.isoformat() if mottaget else e["received_at"],
+                    "status": e["status"],
+                    "category": c.get("category"),
+                    "escalate": c.get("escalate"),
+                    "kb_traffar": len(kallor) if isinstance(kallor, list) else None,
+                    "forsta_svar": forsta.isoformat() if forsta else None,
+                }
+            )
+
+        korningar = [
+            r
+            for r in self.agent_runs.get(tenant_id, [])
+            if r["agent_type"] == "support"
+            and not r.get("is_test")
+            and (not fran or (_tid(r["created_at"]) or fran) >= fran)
+        ]
+        modeller: dict[str, int] = {}
+        for r in korningar:
+            m = r.get("model")
+            if m and m != "svarscache":
+                modeller[m] = modeller.get(m, 0) + 1
+        return {
+            "mejl": mejl,
+            "korningar": {
+                "antal": len(korningar),
+                "tokens_in": sum(int(r.get("tokens_in") or 0) for r in korningar),
+                "tokens_out": sum(int(r.get("tokens_out") or 0) for r in korningar),
+                "cache": sum(1 for r in korningar if r.get("model") == "svarscache"),
+                "modell": max(modeller, key=lambda k: modeller[k]) if modeller else None,
+            },
+            "kb_artiklar": len(self.kb.get(tenant_id, [])),
+        }
+
     async def weekly_analytics(self, tenant_id: str, *, weeks: int = 8) -> dict[str, Any]:
         # Speglar SQL-varianten i postgres.py, inklusive de tomma veckorna:
         # serien byggs ur kalendern, inte ur raderna. Skulle den här räkna på

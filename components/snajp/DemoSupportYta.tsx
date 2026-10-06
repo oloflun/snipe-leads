@@ -3,6 +3,7 @@
 import { ShieldAlert } from "lucide-react";
 import { useState } from "react";
 import { Dashboard as SupportDashboard } from "@/components/snajp/Dashboard";
+import { SupportOversikt } from "@/components/snajp/SupportOversikt";
 import { Badge, etikett, flik, flikAktiv, flikInaktiv, fliklista } from "@/components/ui";
 import { CHATTFRAGOR } from "@/lib/demo/support-chatt";
 import { cn } from "@/lib/utils";
@@ -81,10 +82,10 @@ function Kundchatt() {
   );
 }
 
-export function DemoSupportYta() {
+export function DemoSupportYta({ visaDrift = false }: Readonly<{ visaDrift?: boolean }>) {
   const { text } = useLocale();
   // `valdFlik` och inte `flik`: det namnet är klassen ur components/ui.tsx.
-  const [valdFlik, setFlik] = useState<"inkorg" | "chatt">("inkorg");
+  const [valdFlik, setFlik] = useState<"oversikt" | "inkorg" | "chatt">("oversikt");
 
   return (
     <div>
@@ -92,6 +93,7 @@ export function DemoSupportYta() {
       <div className={fliklista} role="tablist" aria-label={text({ sv: "Kundtjänstens ytor", en: "Customer service areas" })}>
         {(
           [
+            ["oversikt", text({ sv: "Översikt", en: "Overview" })],
             ["inkorg", text({ sv: "Inkorgen", en: "The inbox" })],
             ["chatt", text({ sv: "Kundchatten", en: "The customer chat" })]
           ] as const
@@ -110,7 +112,13 @@ export function DemoSupportYta() {
       </div>
 
       <div className="mt-6">
-        {valdFlik === "inkorg" ? <SupportDashboard demo /> : <Kundchatt />}
+        {valdFlik === "oversikt" ? (
+          <SupportOversikt demo visaDrift={visaDrift} onOppnaArenden={() => setFlik("inkorg")} />
+        ) : valdFlik === "inkorg" ? (
+          <SupportDashboard demo />
+        ) : (
+          <Kundchatt />
+        )}
       </div>
     </div>
   );
