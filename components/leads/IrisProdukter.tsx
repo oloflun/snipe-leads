@@ -153,7 +153,7 @@ export function IrisProdukter() {
             <button
               type="button"
               onClick={() => setProdukter(produkter.filter((_, j) => j !== i))}
-              className={cn(btnSecondary, btnLiten)}
+              className={cn(btnSecondary, btnLiten, "justify-self-start")}
               aria-label={`${text(T.taBort)}: ${p.namn || text(T.produkter)}`}
             >
               <Trash2 className="h-4 w-4" aria-hidden />

@@ -135,9 +135,9 @@ export function AgentOnskemal({ agent }: Readonly<{ agent: Agent }>) {
 
       <div>
         <p className={etikett}>{text(T.nu)}</p>
-        <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap rounded-input border border-ink/15 bg-paper2/50 p-4 text-[0.875rem] leading-6">
+        <p className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-input border border-ink/15 bg-paper2/50 p-4 text-[0.9375rem] leading-6">
           {lage.dokument || text(T.tomt)}
-        </pre>
+        </p>
       </div>
 
       <div>
@@ -239,7 +239,7 @@ export function AgentOnskemal({ agent }: Readonly<{ agent: Agent }>) {
                     <span className="num">{relativTid(v.created_at, locale)}</span>
                     {v.feedback ? <span className="ml-2 text-ink-muted">{v.feedback.slice(0, 80)}</span> : null}
                   </summary>
-                  <pre className="mt-2 whitespace-pre-wrap text-[0.875rem] leading-6">{v.content || text(T.tomt)}</pre>
+                  <p className="mt-2 whitespace-pre-wrap break-words text-[0.875rem] leading-6">{v.content || text(T.tomt)}</p>
                 </details>
                 {i === 0 ? (
                   <Badge tone="good">{text(T.aktiv)}</Badge>
