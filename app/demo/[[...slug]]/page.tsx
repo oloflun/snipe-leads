@@ -3,7 +3,7 @@ import { PageShell } from "@/components/AppShell";
 import { DashboardProvider } from "@/components/dashboard/DashboardContext";
 import { StartView } from "@/components/dashboard/StartView";
 import { CrmDemo } from "@/components/crm/CrmDemo";
-import { KvittoDemo } from "@/components/kvitton/KvittoDemo";
+import { KvittoDemoYta } from "@/components/kvitton/KvittoDemoYta";
 import { DemoSupportYta } from "@/components/snajp/DemoSupportYta";
 import { AttGora } from "@/components/leads/AttGora";
 import { IrisBolag } from "@/components/leads/LeadsSida";
@@ -171,10 +171,11 @@ function renderSektion(
       // Egen demokomponent och inte `KvittoVy`. Den vyn anropar backenden,
       // och regeln för den här routen är att INGENTING här får sträcka sig
       // efter en session eller databasen — se filens docstring. KvittoDemo
-      // renderar handräknade konstanter och spelar upp dem.
+      // renderar handräknade konstanter och spelar upp dem; Översikten
+      // (KvittoDemoYta) räknar på lib/demo/kvitto-oversikt.ts.
       return (
         <PageShell title={{ sv: "Kvitton", en: "Receipts" }}>
-          <KvittoDemo />
+          <KvittoDemoYta />
         </PageShell>
       );
     case "regler":

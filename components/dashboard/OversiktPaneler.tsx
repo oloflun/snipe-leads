@@ -145,7 +145,19 @@ export function KpiKort({ kpi, perioden }: Readonly<{ kpi: Kpi; perioden: Locali
 
 // -- Aktivitetsgrafen ---------------------------------------------------------
 
-export type Vecka = { week: string; new_leads?: number; replies?: number; sent?: number; tickets?: number; resolved?: number; escalated?: number };
+export type Vecka = {
+  week: string;
+  new_leads?: number;
+  replies?: number;
+  sent?: number;
+  tickets?: number;
+  resolved?: number;
+  escalated?: number;
+  /** Kvittohanteraren: utlägg och ingående moms i hela kronor, antal kvitton. */
+  utlagg?: number;
+  moms?: number;
+  kvitton?: number;
+};
 
 type Serie = { nyckel: keyof Vecka; etikett: Localized; ton: "chart-ochre" | "chart-blue" };
 
@@ -155,7 +167,11 @@ type Serie = { nyckel: keyof Vecka; etikett: Localized; ton: "chart-ochre" | "ch
  * låga kontrast mot papper har en synlig etikett (dataviz-validatorns krav).
  * Hårkors och tooltip vid hovring.
  */
-export function Aktivitetsgraf({ veckor, serier }: Readonly<{ veckor: Vecka[]; serier: Serie[] }>) {
+export function Aktivitetsgraf({
+  veckor,
+  serier,
+  axelbredd = 44
+}: Readonly<{ veckor: Vecka[]; serier: Serie[]; /** Bredare för kronbelopp, så att 3 500 inte klipps. */ axelbredd?: number }>) {
   const { locale, text } = useLocale();
   const farger = useTokenfarger();
   const id = useId().replace(/:/g, "");
@@ -175,7 +191,7 @@ export function Aktivitetsgraf({ veckor, serier }: Readonly<{ veckor: Vecka[]; s
       </figcaption>
       <div className="h-56 w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -18 }}>
+          <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: axelbredd > 44 ? -4 : -18 }}>
             <defs>
               {serier.map((s) => (
                 <linearGradient key={String(s.nyckel)} id={`${id}-${String(s.nyckel)}`} x1="0" y1="0" x2="0" y2="1">
@@ -193,7 +209,7 @@ export function Aktivitetsgraf({ veckor, serier }: Readonly<{ veckor: Vecka[]; s
               interval="preserveStartEnd"
               minTickGap={24}
             />
-            <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fill: farger["ink-subtle"], fontSize: 12 }} width={44} />
+            <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fill: farger["ink-subtle"], fontSize: 12 }} width={axelbredd} />
             <Tooltip
               cursor={{ stroke: farger["ink-subtle"], strokeOpacity: 0.5, strokeWidth: 1 }}
               content={({ active, payload, label }) =>

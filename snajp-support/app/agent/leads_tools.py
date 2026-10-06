@@ -161,7 +161,13 @@ async def _queue_outreach_draft_impl(
     # tvärtom: ett svar i ett levande samtal (app/leads/svar.py) granskas
     # alltid av en människa, oavsett vilken nivå kunden valt för den utgående
     # sekvensen.
-    if force_review:
+    # Två skäl till granskning oavsett nivå (2026-10-07): en testkörning
+    # skickar aldrig till riktiga bolag, och utan schemaläggare
+    # (SEND_QUEUE_POLL_SECONDS osatt, i dag i båda miljöerna) blev ett
+    # 'queued' utkast liggande osynligt — varken skickat eller granskningsbart.
+    from ..config import get_settings
+
+    if force_review or outreach.is_test or get_settings().send_queue_poll_seconds <= 0:
         queue_status = "awaiting_review"
     else:
         action = allowed_action(agent_settings.get("autonomy"), outreach.sequence_index)

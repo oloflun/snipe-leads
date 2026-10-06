@@ -826,6 +826,7 @@ async def run_outreach_draft_v2(
         tenant_id=tenant_id,
         thread_id=thread_id,
         prospect_email=prospect_email,
+        is_test=is_test,
     )
     escalated_steps = [s.skill for s in trace.steps if s.escalated]
     queue_result: dict[str, Any] = {}
