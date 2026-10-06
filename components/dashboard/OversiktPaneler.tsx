@@ -323,6 +323,78 @@ export function PipelineStapel({ steg, href }: Readonly<{ steg: Steg[]; href: st
   );
 }
 
+// -- Fördelningsmunken ----------------------------------------------------------
+
+export type Andel = { id: string; etikett: Localized; antal: number; /** CSS-färg, t.ex. oklch(var(--moss)). */ farg: string };
+
+/**
+ * Munkdiagram (Leads › Översikt, Sebbe 2026-10-07): en helhet uppdelad i
+ * delar, totalen i mitten och en teckenförklaring med antal och andel bredvid,
+ * så att ingen del bärs av färg ensam. Färgerna går som style, inte attribut:
+ * ett SVG-attribut löser inte upp var(--x).
+ */
+export function Munkdiagram({ delar, etikett, mitt }: Readonly<{ delar: Andel[]; etikett: Localized; mitt: Localized }>) {
+  const { locale, text } = useLocale();
+  const synliga = delar.filter((d) => d.antal > 0);
+  const total = synliga.reduce((s, d) => s + d.antal, 0);
+  const r = 34;
+  const omkrets = 2 * Math.PI * r;
+  const glapp = synliga.length > 1 ? 2 : 0;
+  let forskjutning = 0;
+  return (
+    <figure className="m-0 flex flex-wrap items-center gap-x-6 gap-y-4">
+      <div className="relative h-28 w-28 shrink-0">
+        <svg viewBox="0 0 80 80" className="h-full w-full -rotate-90" aria-hidden>
+          <circle cx="40" cy="40" r={r} fill="none" strokeWidth="10" className="stroke-ink/10" />
+          {synliga.map((d) => {
+            const langd = (d.antal / total) * omkrets;
+            const segment = (
+              <circle
+                key={d.id}
+                cx="40"
+                cy="40"
+                r={r}
+                fill="none"
+                strokeWidth="10"
+                strokeDasharray={`${Math.max(0, langd - glapp)} ${omkrets}`}
+                strokeDashoffset={-forskjutning}
+                style={{ stroke: d.farg }}
+              >
+                <title>{`${text(d.etikett)}: ${d.antal}`}</title>
+              </circle>
+            );
+            forskjutning += langd;
+            return segment;
+          })}
+        </svg>
+        <span className="absolute inset-0 grid place-items-center text-center">
+          <span>
+            <span className="num block text-[1.375rem] font-semibold leading-none tabular-nums text-ink">{tal(total, locale)}</span>
+            <span className="mt-1 block text-[0.6875rem] text-ink-subtle">{text(mitt)}</span>
+          </span>
+        </span>
+      </div>
+      <figcaption className="min-w-[10rem] flex-1">
+        <p className={etikettKlass}>{text(etikett)}</p>
+        {total === 0 ? (
+          <p className={cn(meta, "mt-2")}>{text({ sv: "Inget att visa än.", en: "Nothing to show yet." })}</p>
+        ) : (
+          <ul className="mt-2 space-y-1.5">
+            {synliga.map((d) => (
+              <li key={d.id} className="flex items-center gap-2 text-[0.8125rem] text-ink-muted">
+                <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: d.farg }} aria-hidden />
+                <span className="min-w-0 flex-1 truncate">{text(d.etikett)}</span>
+                <span className="num font-medium tabular-nums text-ink">{tal(d.antal, locale)}</span>
+                <span className="num w-10 text-right tabular-nums text-ink-subtle">{Math.round((d.antal / total) * 100)} %</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </figcaption>
+    </figure>
+  );
+}
+
 // -- Självlösningsgraden ------------------------------------------------------
 
 /** En ring, inte en paj: en andel av en helhet, med talet i mitten. */

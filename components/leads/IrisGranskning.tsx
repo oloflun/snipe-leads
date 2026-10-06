@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Loader2, X } from "lucide-react";
+import { Check, ChevronDown, Loader2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { EmptyState, SkeletonRows, btnLiten, btnPrimary, btnSecondary } from "@/components/ui";
@@ -33,6 +33,8 @@ type KöItem = {
   body?: string | null;
   prospect_email?: string | null;
   company_name?: string | null;
+  created_at?: string | null;
+  scheduled_at?: string | null;
 };
 
 /** Tenantens mejlsignatur, normaliserad av backenden (app/leads/signatur.py).
@@ -131,12 +133,20 @@ function demoKo(): KöItem[] {
  * Multivalet (Sebbe 2026-10-06): markera flera och godkänn eller avvisa i
  * ett svep — varje post går ändå genom samma endpoint och samma grindar som
  * ett enskilt beslut, i tur och ordning.
+ *
+ * `kompakt` (Leads › Översikt, Sebbe 2026-10-07): de `max` senaste utkasten
+ * som enradiga poster, nyast först; ett klick öppnar utkastet och det går att
+ * godkänna och skicka direkt därifrån. "Visa alla" expanderar till hela kön
+ * med flervalet.
  */
 export function IrisGranskning({
   demo = false,
-  onAntal
-}: Readonly<{ demo?: boolean; onAntal?: (antal: number) => void }>) {
+  onAntal,
+  kompakt = false,
+  max = 3
+}: Readonly<{ demo?: boolean; onAntal?: (antal: number) => void; kompakt?: boolean; max?: number }>) {
   const { text } = useLocale();
+  const [allaVisas, setAllaVisas] = useState(false);
   const [poster, setPoster] = useState<KöItem[] | null>(null);
   const [signatur, setSignatur] = useState<Signatur | null>(null);
   const [fel, setFel] = useState<Localized | null>(null);
@@ -243,9 +253,19 @@ export function IrisGranskning({
     }
   }
 
+  // Kön kommer äldst först (scheduled_at); den kompakta rutan visar de senaste.
+  const ordnade =
+    kompakt && poster
+      ? [...poster].sort((a, b) =>
+          (b.created_at ?? b.scheduled_at ?? "").localeCompare(a.created_at ?? a.scheduled_at ?? "")
+        )
+      : poster;
+  const begransad = kompakt && !allaVisas;
+  const visade = ordnade && begransad ? ordnade.slice(0, max) : ordnade;
+
   return (
     <div>
-      {demo ? (
+      {demo && !kompakt ? (
         <p className="mb-6 text-[13px] leading-6 text-ink-subtle">{text({ sv: "Exempelutkast.", en: "Example drafts." })}</p>
       ) : null}
 
@@ -255,7 +275,7 @@ export function IrisGranskning({
         </p>
       ) : null}
 
-      {poster && poster.length > 1 ? (
+      {poster && poster.length > 1 && !begransad ? (
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <label className="inline-flex min-h-9 items-center gap-2 text-[0.8125rem] font-medium text-ink-muted">
             <input
@@ -295,17 +315,22 @@ export function IrisGranskning({
         </div>
       ) : null}
 
-      {poster === null ? (
+      {poster === null || visade === null ? (
         <SkeletonRows />
       ) : poster.length === 0 ? (
-        <EmptyState title={text({ sv: "Inga utkast väntar på dig", en: "No drafts are waiting for you" })} />
+        kompakt ? (
+          <p className="text-[0.875rem] text-ink-subtle">{text({ sv: "Inga utkast väntar på dig.", en: "No drafts are waiting for you." })}</p>
+        ) : (
+          <EmptyState title={text({ sv: "Inga utkast väntar på dig", en: "No drafts are waiting for you" })} />
+        )
       ) : (
-        <div className="divide-y divide-ink/15 border-y border-ink/15">
-          {poster.map((post) => {
+        <div className={cn("divide-y divide-ink/15", !kompakt && "border-y border-ink/15")}>
+          {visade.map((post) => {
             const öppen = oppen === post.id;
             return (
-              <article key={post.id} className="py-5">
+              <article key={post.id} className={kompakt ? "py-3" : "py-5"}>
                 <div className="flex items-start gap-3">
+                {begransad ? null : (
                 <label className="mt-1 inline-flex shrink-0">
                   <input
                     type="checkbox"
@@ -315,31 +340,39 @@ export function IrisGranskning({
                     className="h-4 w-4 accent-ink"
                   />
                 </label>
+                )}
                 <button
                   type="button"
                   onClick={() => setOppen(öppen ? null : post.id)}
                   aria-expanded={öppen}
                   className="focus-ring block w-full rounded-input text-left"
                 >
-                  <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+                  <div className={cn("flex justify-between gap-x-6 gap-y-2", kompakt ? "items-start" : "flex-wrap items-baseline")}>
                     <div className="min-w-0">
                       {/* h3: kön renderas under sektionsrubriken "Utkast att
                           godkänna" i Att göra (components/leads/AttGora.tsx). */}
-                      <h3 className="truncate text-[1.0625rem] font-semibold text-ink">
+                      <h3 className={cn("truncate font-semibold text-ink", kompakt ? "text-[0.9375rem]" : "text-[1.0625rem]")}>
                         {post.subject || text(UTAN_AMNE)}
                       </h3>
-                      <p className="mt-0.5 text-[0.875rem] text-ink-subtle">
+                      <p className={cn("mt-0.5 truncate text-ink-subtle", kompakt ? "text-[0.8125rem]" : "text-[0.875rem]")}>
                         {[post.company_name, post.prospect_email].filter(Boolean).join(" · ") || text({ sv: "Okänd mottagare", en: "Unknown recipient" })}
                       </p>
                     </div>
-                    <span className="shrink-0 text-[0.8125rem] font-medium text-warning">
-                      {öppen ? text({ sv: "Dölj utkastet", en: "Hide draft" }) : text({ sv: "Öppna utkastet", en: "Open draft" })}
-                    </span>
+                    {kompakt ? (
+                      <ChevronDown
+                        aria-hidden
+                        className={cn("mt-0.5 h-4 w-4 shrink-0 text-ink-muted transition-transform", öppen && "rotate-180")}
+                      />
+                    ) : (
+                      <span className="shrink-0 text-[0.8125rem] font-medium text-warning">
+                        {öppen ? text({ sv: "Dölj utkastet", en: "Hide draft" }) : text({ sv: "Öppna utkastet", en: "Open draft" })}
+                      </span>
+                    )}
                   </div>
                 </button>
                 </div>
 
-                {!öppen && post.body ? (
+                {!öppen && !kompakt && post.body ? (
                   <p className="mt-3 max-w-[72ch] whitespace-pre-wrap text-[0.9375rem] leading-7 text-ink-muted">
                     {post.body.length > 220 ? `${klippVidOrdgrans(post.body)}…` : post.body}
                   </p>
@@ -352,6 +385,7 @@ export function IrisGranskning({
                   </div>
                 ) : null}
 
+                {kompakt && !öppen ? null : (
                 <div className="mt-4 flex shrink-0 items-center gap-2">
                   <button
                     type="button"
@@ -364,7 +398,7 @@ export function IrisGranskning({
                     ) : (
                       <Check className="h-4 w-4" aria-hidden />
                     )}
-                    {text({ sv: "Godkänn", en: "Approve" })}
+                    {kompakt ? text({ sv: "Godkänn och skicka", en: "Approve and send" }) : text({ sv: "Godkänn", en: "Approve" })}
                   </button>
                   <button
                     type="button"
@@ -376,11 +410,28 @@ export function IrisGranskning({
                     {text({ sv: "Avvisa", en: "Reject" })}
                   </button>
                 </div>
+                )}
               </article>
             );
           })}
         </div>
       )}
+
+      {kompakt && poster && poster.length > max ? (
+        <button
+          type="button"
+          aria-expanded={allaVisas}
+          onClick={() => {
+            setAllaVisas((v) => !v);
+            setValda(new Set());
+          }}
+          className="focus-ring mt-3 text-[0.8125rem] font-medium text-ink-muted underline underline-offset-4 hover:text-ink"
+        >
+          {allaVisas
+            ? text({ sv: "Visa färre", en: "Show fewer" })
+            : text({ sv: `Visa alla ${poster.length} utkast`, en: `Show all ${poster.length} drafts` })}
+        </button>
+      ) : null}
 
       {demo && Object.keys(besked).length > 0 ? (
         <p role="status" className="mt-6 text-[13px] text-ink-subtle">

@@ -5,6 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useId, useMemo, useR
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { hamtaSaljlista, laggTillSaljrad, sattSaljstatus, taBortSaljrad, uppdateraSaljrad } from "@/lib/actions/saljlista";
 import { mejlaOss } from "@/components/marketing/copy";
+import { useSmal } from "@/components/leads/smal";
 import { SALJLISTA_EXEMPEL } from "@/lib/demo/saljlista-exempel";
 import {
   SALJLISTA_FALT,
@@ -290,6 +291,7 @@ export function Saljlista({
 
 function SaljlistaYta({ api, demo }: Readonly<{ api: SaljlistaApi; demo: boolean }>) {
   const { text } = useLocale();
+  const smal = useSmal();
   const las = useContext(LasLage);
   const [rader, setRader] = useState<Saljrad[] | null>(null);
   const [laddFel, setLaddFel] = useState<string | null>(null);
@@ -750,7 +752,7 @@ function SaljlistaYta({ api, demo }: Readonly<{ api: SaljlistaApi; demo: boolean
         ) : (
           <>
             {/* Bred skärm: tabellen, med kolumnerna i kalkylarkets ordning. */}
-            <div className="hidden md:block">
+            <div className={smal ? "hidden" : "hidden md:block"}>
               <Tabell
                 minBredd={1080}
                 ariaLabel={text(T.rubrik)}
@@ -771,7 +773,7 @@ function SaljlistaYta({ api, demo }: Readonly<{ api: SaljlistaApi; demo: boolean
               </Tabell>
             </div>
             {/* Telefon: ett kort per bolag, numret överst att ringa från. */}
-            <ul className="grid gap-3 md:hidden" aria-label={text(T.rubrik)}>
+            <ul className={cn("grid gap-3", !smal && "md:hidden")} aria-label={text(T.rubrik)}>
               {synliga.map((rad) => (
                 <Kort key={rad.id} rad={rad} idag={idag} onSpara={uppdatera} onStatus={sattStatus} onTaBort={taBort} />
               ))}

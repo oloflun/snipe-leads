@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EjAktiverad } from "@/components/EjAktiverad";
 import { Badge, Cell, SkeletonRows, Tabell, Tomt, btnSecondary, etikett, btnLiten, faltDiskret, faltTatt, chip, chipAktiv, chipInaktiv, chiplista, meta, tabellRad } from "@/components/ui";
+import { useSmal } from "@/components/leads/smal";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { felmeddelande } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
@@ -175,6 +176,7 @@ export function LeadsTabell({
   onAntal?: (antal: number) => void;
 }>) {
   const { locale, text } = useLocale();
+  const smal = useSmal();
   const [prospekt, setProspekt] = useState<SuiteProspekt[] | null>(null);
   const [uppgifter, setUppgifter] = useState<Uppgift[]>([]);
   const [vyer, setVyer] = useState<Vy[]>([]);
@@ -500,7 +502,7 @@ export function LeadsTabell({
     <div className="space-y-5">
       {/* Statusremsan: pipelinen som räknare. Ett klick filtrerar, ett till släpper. */}
       <nav aria-label={text(T.pipeline)} className="-mx-1 overflow-x-auto px-1">
-        <ul className="flex min-w-max gap-1.5">
+        <ul className={cn("flex gap-1.5", smal ? "flex-wrap" : "min-w-max")}>
           <li>
             <button
               type="button"
@@ -691,7 +693,7 @@ export function LeadsTabell({
         <Tomt>{text(T.ingaTraffar)}</Tomt>
       ) : (
         <>
-          <div className="hidden lg:block">
+          <div className={smal ? "hidden" : "hidden lg:block"}>
             <Tabell
               ariaLabel={text(T.tabell)}
               minBredd={1040}
@@ -735,7 +737,7 @@ export function LeadsTabell({
             </Tabell>
           </div>
 
-          <ul className="space-y-3 lg:hidden" aria-label={text(T.tabell)}>
+          <ul className={cn("space-y-3", !smal && "lg:hidden")} aria-label={text(T.tabell)}>
             {synliga.map((p) => (
               <li key={p.id} className={cn("rounded-card border border-ink/12 bg-paper2/40 p-4", p.id === valdId && "border-ochre/50")}>
                 <div className="flex items-start justify-between gap-3">
