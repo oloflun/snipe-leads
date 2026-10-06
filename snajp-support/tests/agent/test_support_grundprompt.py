@@ -726,3 +726,43 @@ async def test_429_utan_vertex_kastas_som_forut():
                 SUPPORT_V1.steps[0], RunLedger(satisfied={"context_pack"}), step_runner.RunTrace(),
                 task="Klassa.", case_context="## Ärendet\nHej",
             )
+
+
+@pytest.mark.anyio
+async def test_delvis_utan_erbjudande_far_ett_i_kod():
+    """Dev 2026-10-06: Fortnox-luckan (DELVIS) slutade med en motfråga och
+    nämnde aldrig en kollega. Erbjudandet läggs på i kod, och ett ja blir
+    en överlämning."""
+    storage = MemoryStorage()
+    text = "Jag har ingen uppgift om Fortnox. Vill du berätta mer om vad du vill göra?"
+    llm = _LLM(overrides={
+        "cs:draft-response": {
+            "draft": text, "beslut": "DELVIS",
+            "kundens_frågor": [{"fråga": "Fortnox", "status": "saknar_underlag", "källor": []}],
+        },
+        "snajp:humanizer-svenska": {"final_reply": text},
+    })
+    svar = await _tur(storage, llm, "Har ni en integration med Fortnox?")
+    assert svar["escalated"] is False
+    assert "kollega" in svar["reply"]
+    samtal = await storage.get_chat_state(TENANT, svar["customer_id"])
+    assert samtal["erbjod_manniska"] is True
+
+    ja = await _tur(storage, _LLM(), "ja")
+    assert ja["escalated"] is True
+    assert ja["escalation_code"] == "kund_bad_om_manniska"
+
+
+def test_erbjudandet_ar_inget_lofte():
+    from app.agent import support_texter
+
+    for sprak in ("sv", "en"):
+        for text in support_texter._TEXTER[sprak]["erbjudande"]:
+            assert not _LOVAR_KOLLEGA.search(text), text
+
+
+@pytest.mark.anyio
+async def test_svara_utan_lucka_far_inget_erbjudande():
+    storage = MemoryStorage()
+    svar = await _tur(storage, _LLM(), "Vilka betalsätt har ni?")
+    assert "kollega" not in svar["reply"]
