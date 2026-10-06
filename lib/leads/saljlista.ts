@@ -32,7 +32,10 @@ export type Saljrad = {
 };
 
 export type Saljfel =
-  | "ej_admin"
+  | "ej_inloggad"
+  | "fel_vy"
+  | "saknar_tillagg"
+  | "las_roll"
   | "migration_saknas"
   | "databasfel"
   | "namn_saknas"

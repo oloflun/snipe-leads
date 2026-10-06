@@ -78,7 +78,7 @@ export const addonCatalog: readonly AddonSpec[] = [
   {
     key: "leadlists",
     name: "Leadslistor",
-    what: "Agenten bygger färdiga, granskningsbara leadslistor: verifierade svenska B2B-bolag med kontaktväg, källa och signal per rad, exporterbara som CSV.",
+    what: "Agenten bygger färdiga, granskningsbara leadslistor: verifierade svenska B2B-bolag med kontaktväg, källa och signal per rad, exporterbara som CSV. I tillägget ingår också en säljlista där ni håller ordning på bolagen ni ringt.",
     why: "Volymkörningar med egen kvot och egen granskning. Det är ett eget arbetsflöde vid sidan av de riktade utskicken."
   }
 ];

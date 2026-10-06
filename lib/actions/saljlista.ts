@@ -1,26 +1,34 @@
 "use server";
 
-import { getPlatformAdmin } from "@/lib/auth/admin";
+import { addonKeys } from "@/lib/addons";
+import { arLasare } from "@/lib/auth/lasroll";
 import { sqlAsUser } from "@/lib/db";
 import {
   RAD_ID,
   SALJLISTA_FALT,
   normaliseraFalt,
   type Saljfalt,
+  type Saljfel,
   type Saljrad,
   type Saljsvar
 } from "@/lib/leads/saljlista";
+import { aktivVy } from "@/lib/vy";
+import { getWorkspaceContext } from "@/lib/workspace";
 
 /**
- * Snajps egen säljlista — plattformsadminens CRM över bolag vi ringt
- * (migration 100, Sebbes beställning 2026-10-06).
+ * Säljlistan — CRM över bolag man ringt, en per arbetsyta. Ingår i tillägget
+ * Leadslistor (Sebbes beslut 2026-10-06); tillägget slås på av oss när kunden
+ * hört av sig. Tabellen är `saljlista` (migration 100 + 103).
  *
  * ## Grinden står i varje funktion
  *
  * En server action är en POST-endpoint med ett genererat id; att den bara
- * anropas från adminvyn är ett antagande om klienten (samma regel som
- * paket.ts och tillagg.ts). `getPlatformAdmin()` körs därför först i varje
- * funktion, och RLS-policyn i 100 kontrollerar platform_admins en gång till.
+ * anropas från Listor-vyn är ett antagande om klienten (samma regel som
+ * paket.ts och tillagg.ts). `grind()` körs därför först i varje funktion:
+ * inloggad, tillägget på arbetsytan, adminens egen vy (i demovyn och i ett
+ * kundbesök hade skrivningen hamnat i adminens EGEN arbetsyta medan skärmen
+ * visade någon annans), och skrivningar nekas läsrollen. RLS-policyn i 103
+ * isolerar sedan arbetsytorna från varandra.
  *
  * ## Felkoder, inte feltexter
  *
@@ -33,10 +41,23 @@ const KOLUMNER = `id, foretagsnamn, orgnr, kontaktperson, kontaktnummer, kontakt
   to_char(senast_kontaktad, 'YYYY-MM-DD') as senast_kontaktad, anteckningar,
   created_at::text as created_at, updated_at::text as updated_at`;
 
-/** 42P01 är undefined_table: migration 100 är inte körd i miljön. */
+const TILLAGG = "leadlists" satisfies (typeof addonKeys)[number];
+
+type Behorighet = { ok: true; userId: string; workspaceId: string } | { ok: false; fel: Saljfel };
+
+async function grind(skriv: boolean): Promise<Behorighet> {
+  const context = await getWorkspaceContext();
+  if (!context) return { ok: false, fel: "ej_inloggad" };
+  if ((await aktivVy()).vy !== "admin") return { ok: false, fel: "fel_vy" };
+  if (!(context.workspace.addons ?? []).includes(TILLAGG)) return { ok: false, fel: "saknar_tillagg" };
+  if (skriv && arLasare(context)) return { ok: false, fel: "las_roll" };
+  return { ok: true, userId: context.user.id, workspaceId: context.workspace.id };
+}
+
+/** 42P01 undefined_table / 42703 undefined_column: 100 eller 103 är inte körd i miljön. */
 function felsvar(error: unknown): Saljsvar<never> {
   const fel = error as { code?: string; message?: string } | null;
-  if (fel?.code === "42P01" || /snajp_saljlista.*does not exist/i.test(fel?.message ?? "")) {
+  if (fel?.code === "42P01" || fel?.code === "42703") {
     return { ok: false, fel: "migration_saknas" };
   }
   console.error("saljlista:", fel?.message);
@@ -44,12 +65,13 @@ function felsvar(error: unknown): Saljsvar<never> {
 }
 
 export async function hamtaSaljlista(): Promise<Saljsvar<Saljrad[]>> {
-  const admin = await getPlatformAdmin();
-  if (!admin) return { ok: false, fel: "ej_admin" };
+  const g = await grind(false);
+  if (!g.ok) return g;
   try {
     const rader = await sqlAsUser<Saljrad>(
-      admin.userId,
-      `select ${KOLUMNER} from public.snajp_saljlista order by created_at desc`
+      g.userId,
+      `select ${KOLUMNER} from public.saljlista where workspace_id = $1::uuid order by created_at desc`,
+      [g.workspaceId]
     );
     return { ok: true, data: rader };
   } catch (error) {
@@ -60,8 +82,8 @@ export async function hamtaSaljlista(): Promise<Saljsvar<Saljrad[]>> {
 export async function laggTillSaljrad(
   falt: Partial<Record<Saljfalt, string | null>>
 ): Promise<Saljsvar<Saljrad>> {
-  const admin = await getPlatformAdmin();
-  if (!admin) return { ok: false, fel: "ej_admin" };
+  const g = await grind(true);
+  if (!g.ok) return g;
 
   const varden: Record<Saljfalt, string | null> = {} as Record<Saljfalt, string | null>;
   for (const namn of SALJLISTA_FALT) {
@@ -73,13 +95,14 @@ export async function laggTillSaljrad(
 
   try {
     const rader = await sqlAsUser<Saljrad>(
-      admin.userId,
-      `insert into public.snajp_saljlista
-         (foretagsnamn, orgnr, kontaktperson, kontaktnummer, kontaktmail,
+      g.userId,
+      `insert into public.saljlista
+         (workspace_id, foretagsnamn, orgnr, kontaktperson, kontaktnummer, kontaktmail,
           senast_kontaktad, anteckningar, skapad_av, uppdaterad_av)
-       values ($1, $2, $3, $4, $5, $6::date, $7, $8::uuid, $8::uuid)
+       values ($1::uuid, $2, $3, $4, $5, $6, $7::date, $8, $9::uuid, $9::uuid)
        returning ${KOLUMNER}`,
       [
+        g.workspaceId,
         varden.foretagsnamn,
         varden.orgnr ?? "",
         varden.kontaktperson ?? "",
@@ -87,7 +110,7 @@ export async function laggTillSaljrad(
         varden.kontaktmail ?? "",
         varden.senast_kontaktad,
         varden.anteckningar ?? "",
-        admin.userId
+        g.userId
       ]
     );
     const rad = rader[0];
@@ -102,8 +125,8 @@ export async function uppdateraSaljrad(
   namn: Saljfalt,
   varde: string | null
 ): Promise<Saljsvar<Saljrad>> {
-  const admin = await getPlatformAdmin();
-  if (!admin) return { ok: false, fel: "ej_admin" };
+  const g = await grind(true);
+  if (!g.ok) return g;
 
   if (!RAD_ID.test(id)) return { ok: false, fel: "finns_inte" };
   // Kolumnnamnet interpoleras i SQL:en — därför vitlistan, aldrig klientens sträng rakt av.
@@ -117,12 +140,12 @@ export async function uppdateraSaljrad(
 
   try {
     const rader = await sqlAsUser<Saljrad>(
-      admin.userId,
-      `update public.snajp_saljlista
-          set ${namn} = $2${typ}, uppdaterad_av = $3::uuid, updated_at = now()
-        where id = $1::uuid
+      g.userId,
+      `update public.saljlista
+          set ${namn} = $3${typ}, uppdaterad_av = $4::uuid, updated_at = now()
+        where id = $1::uuid and workspace_id = $2::uuid
         returning ${KOLUMNER}`,
-      [id, nytt, admin.userId]
+      [id, g.workspaceId, nytt, g.userId]
     );
     const rad = rader[0];
     return rad ? { ok: true, data: rad } : { ok: false, fel: "finns_inte" };
@@ -132,14 +155,14 @@ export async function uppdateraSaljrad(
 }
 
 export async function taBortSaljrad(id: string): Promise<Saljsvar<{ id: string }>> {
-  const admin = await getPlatformAdmin();
-  if (!admin) return { ok: false, fel: "ej_admin" };
+  const g = await grind(true);
+  if (!g.ok) return g;
   if (!RAD_ID.test(id)) return { ok: false, fel: "finns_inte" };
   try {
     const rader = await sqlAsUser<{ id: string }>(
-      admin.userId,
-      "delete from public.snajp_saljlista where id = $1::uuid returning id",
-      [id]
+      g.userId,
+      "delete from public.saljlista where id = $1::uuid and workspace_id = $2::uuid returning id",
+      [id, g.workspaceId]
     );
     return rader[0] ? { ok: true, data: rader[0] } : { ok: false, fel: "finns_inte" };
   } catch (error) {

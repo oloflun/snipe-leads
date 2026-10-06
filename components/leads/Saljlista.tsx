@@ -1,7 +1,7 @@
 "use client";
 
 import { Download, Mail, Phone, Plus, Search, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { hamtaSaljlista, laggTillSaljrad, taBortSaljrad, uppdateraSaljrad } from "@/lib/actions/saljlista";
 import {
@@ -39,14 +39,15 @@ import { useLocale, type Localized } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /**
- * Snajps säljlista (Sebbes beställning 2026-10-06): CRM:et över bolagen vi
- * ringt för att få in kunder till Snajp. Kolumnerna är kalkylarkets —
- * Företagsnamn, Organisationsnummer, Kontaktperson, Kontaktnummer,
- * Kontaktmail, Senast kontaktad, Anteckningar/Info.
+ * Säljlistan (Sebbes beställning 2026-10-06): CRM:et över bolagen man ringt.
+ * Kolumnerna är kalkylarkets — Företagsnamn, Organisationsnummer,
+ * Kontaktperson, Kontaktnummer, Kontaktmail, Senast kontaktad,
+ * Anteckningar/Info.
  *
- * Står överst i Leads › Listor, bara för plattformsadmin i adminvyn (inte i
- * demovyn, inte i kundbesök). Tabellen `snajp_saljlista` (migration 100) är
- * plattformens och påverkar inte vad kundernas Iris hittar.
+ * Ingår i tillägget Leadslistor, som vi slår på när kunden hört av sig; en
+ * lista per arbetsyta (tabellen `saljlista`, migration 100 + 103). Snajps egen
+ * arbetsyta har tillägget och använder listan för vår egen utringning. Står
+ * överst i Leads › Listor; läsrollen ser listan men kan inte ändra den.
  *
  * Varje cell sparas när fältet lämnas (eller på Enter); Esc ångrar. `api` går
  * att byta ut så att ytan kan provas utan databas.
@@ -67,8 +68,9 @@ const SERVERAPI: SaljlistaApi = {
 };
 
 const T = {
-  rubrik: { sv: "Snajps säljlista", en: "Snajp sales list" },
-  baraAdmin: { sv: "Bara admin", en: "Admin only" },
+  rubrik: { sv: "Säljlista", en: "Sales list" },
+  ingarTillagg: { sv: "Ingår i Leadslistor", en: "Included in Lead lists" },
+  lasbehorighet: { sv: "Läsbehörighet", en: "Read-only" },
   laggTill: { sv: "Lägg till företag", en: "Add company" },
   exportera: { sv: "Exportera CSV", en: "Export CSV" },
   sok: { sv: "Sök företag, person, nummer eller anteckning", en: "Search company, person, number or note" },
@@ -120,7 +122,13 @@ const T = {
 } satisfies Record<string, Localized>;
 
 const FEL: Record<Saljfel, Localized> = {
-  ej_admin: { sv: "Bara Snajps administratörer kan använda säljlistan.", en: "Only Snajp administrators can use the sales list." },
+  ej_inloggad: { sv: "Du är inte inloggad. Logga in igen och ladda om sidan.", en: "You are not signed in. Sign in again and reload the page." },
+  fel_vy: { sv: "Säljlistan går bara att använda i din egen arbetsyta.", en: "The sales list can only be used in your own workspace." },
+  saknar_tillagg: {
+    sv: "Säljlistan ingår i tillägget Leadslistor. Hör av dig till oss så slår vi på det.",
+    en: "The sales list is included in the Lead lists add-on. Get in touch and we will turn it on."
+  },
+  las_roll: { sv: "Ditt konto har läsbehörighet och kan inte ändra säljlistan.", en: "Your account is read-only and cannot change the sales list." },
   migration_saknas: {
     sv: "Säljlistans tabell finns inte i den här miljön än (migration 100). Kör migrationerna och ladda om sidan.",
     en: "The sales list table does not exist in this environment yet (migration 100). Run the migrations and reload the page."
@@ -178,20 +186,32 @@ function relativ(datum: string | null, idag: string, text: (v: Localized) => str
   return text({ sv: `för ${dagar} dagar sedan`, en: `${dagar} days ago` });
 }
 
+/** Läsrollen ser listan men kan inte ändra den. */
+const LasLage = createContext(false);
+
 /**
- * Säljlistan med sin grind: bara plattformsadmin i sin egen adminvy — aldrig
- * i demovyn eller när admin tittar som en kund. Står i BÅDA grenarna av
- * Leads › Listor (med och utan listtillägget): Snajps egen arbetsyta har inte
- * tillägget, och den första versionen syntes därför inte alls där.
+ * Säljlistan med sin grind: arbetsytan har tillägget Leadslistor (som slås på
+ * av oss när kunden hört av sig), och det är den egna vyn — aldrig demovyn
+ * eller ett kundbesök, där skrivningarna hade hamnat i adminens egen
+ * arbetsyta. Samma villkor står i server actions (lib/actions/saljlista.ts).
  */
-export function SnajpSaljlista({ demo = false }: Readonly<{ demo?: boolean }>) {
-  const { isPlatformAdmin, vy, impersonation, isDemo } = useDashboard();
-  if (!isPlatformAdmin || vy !== "admin" || impersonation || demo || isDemo) return null;
-  return <Saljlista />;
+export function SaljlistaSektion({ demo = false }: Readonly<{ demo?: boolean }>) {
+  const { addons, vy, impersonation, isDemo, arLasare } = useDashboard();
+  if (!addons.includes("leadlists") || vy !== "admin" || impersonation || demo || isDemo) return null;
+  return <Saljlista las={arLasare} />;
 }
 
-export function Saljlista({ api = SERVERAPI }: Readonly<{ api?: SaljlistaApi }>) {
+export function Saljlista({ api = SERVERAPI, las = false }: Readonly<{ api?: SaljlistaApi; las?: boolean }>) {
+  return (
+    <LasLage.Provider value={las}>
+      <SaljlistaYta api={api} />
+    </LasLage.Provider>
+  );
+}
+
+function SaljlistaYta({ api }: Readonly<{ api: SaljlistaApi }>) {
   const { text } = useLocale();
+  const las = useContext(LasLage);
   const [rader, setRader] = useState<Saljrad[] | null>(null);
   const [laddFel, setLaddFel] = useState<string | null>(null);
   const [fel, setFel] = useState<string | null>(null);
@@ -363,7 +383,7 @@ export function Saljlista({ api = SERVERAPI }: Readonly<{ api?: SaljlistaApi }>)
             <h2 id="saljlista-rubrik" className="text-[1.25rem] font-semibold tracking-[-0.015em]">
               {text(T.rubrik)}
             </h2>
-            <Badge>{text(T.baraAdmin)}</Badge>
+            <Badge>{las ? text(T.lasbehorighet) : text(T.ingarTillagg)}</Badge>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -376,21 +396,23 @@ export function Saljlista({ api = SERVERAPI }: Readonly<{ api?: SaljlistaApi }>)
             <Download aria-hidden className="h-4 w-4" />
             {text(T.exportera)}
           </button>
-          <button
-            type="button"
-            aria-expanded={formOppen}
-            aria-controls="saljlista-ny"
-            onClick={() => setFormOppen((v) => !v)}
-            className={cn(btnPrimary, btnLiten)}
-          >
-            <Plus aria-hidden className="h-4 w-4" />
-            {text(T.laggTill)}
-          </button>
+          {las ? null : (
+            <button
+              type="button"
+              aria-expanded={formOppen}
+              aria-controls="saljlista-ny"
+              onClick={() => setFormOppen((v) => !v)}
+              className={cn(btnPrimary, btnLiten)}
+            >
+              <Plus aria-hidden className="h-4 w-4" />
+              {text(T.laggTill)}
+            </button>
+          )}
         </div>
       </div>
 
       {/* --------------------------------------------- NYTT BOLAG */}
-      {formOppen ? (
+      {formOppen && !las ? (
         <NyttForetag
           rader={rader ?? []}
           onSpara={laggTill}
@@ -464,7 +486,7 @@ export function Saljlista({ api = SERVERAPI }: Readonly<{ api?: SaljlistaApi }>)
         ) : rader.length === 0 ? (
           <Tomt
             action={
-              formOppen ? null : (
+              formOppen || las ? null : (
                 <button type="button" onClick={() => setFormOppen(true)} className={cn(btnPrimary, btnLiten)}>
                   <Plus aria-hidden className="h-4 w-4" />
                   {text(T.laggTill)}
@@ -562,6 +584,7 @@ function Falt({
   className?: string;
   etikettText: string;
 }>) {
+  const las = useContext(LasLage);
   const sparat = rad[namn] ?? "";
   const [varde, setVarde] = useState(sparat);
   const [fokus, setFokus] = useState(false);
@@ -590,6 +613,7 @@ function Falt({
     value: varde,
     "aria-label": `${etikettText}, ${rad.foretagsnamn}`,
     "aria-invalid": felaktigt || undefined,
+    readOnly: las,
     // Ett tomt fält ska gå att se och träffa, men aldrig se ut som ett värde.
     placeholder: typ === "date" ? undefined : "–",
     onFocus: () => setFokus(true),
@@ -601,6 +625,7 @@ function Falt({
       faltDiskret,
       "w-full min-w-0 placeholder:text-ink-subtle/50",
       felaktigt && "!border-danger/60",
+      las && "hover:!border-transparent",
       className
     )
   };
@@ -680,6 +705,7 @@ function Kontaktdatum({
   onSpara
 }: Readonly<{ rad: Saljrad; idag: string; onSpara: SaljlistaFn }>) {
   const { text } = useLocale();
+  const las = useContext(LasLage);
   const relativText = relativ(rad.senast_kontaktad, idag, text);
   const dagar = rad.senast_kontaktad && idag ? dagarSedan(rad.senast_kontaktad, idag) : null;
   return (
@@ -693,7 +719,7 @@ function Kontaktdatum({
         ) : (
           <Badge tone="warn">{text(T.aldrig)}</Badge>
         )}
-        {idag && rad.senast_kontaktad !== idag ? (
+        {idag && rad.senast_kontaktad !== idag && !las ? (
           <button
             type="button"
             title={text(T.satIdag)}
@@ -711,6 +737,7 @@ function Kontaktdatum({
 
 function TaBortKnapp({ rad, onTaBort }: Readonly<{ rad: Saljrad; onTaBort: (rad: Saljrad) => void }>) {
   const { text } = useLocale();
+  if (useContext(LasLage)) return null;
   return (
     <button
       type="button"

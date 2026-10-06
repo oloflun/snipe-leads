@@ -8,7 +8,7 @@ import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { CrmKundlista } from "@/components/leads/CrmKundlista";
 import { ImportCsv } from "@/components/leads/ImportCsv";
-import { SnajpSaljlista } from "@/components/leads/Saljlista";
+import { SaljlistaSektion } from "@/components/leads/Saljlista";
 import { btnPrimary, btnSecondary, EmptyState, SkeletonRows, chip, chipAktiv, chipInaktiv, chiplista } from "@/components/ui";
 import { offertForUtkast } from "@/lib/leads/offert";
 import type { EmailStudioData } from "@/lib/data/emails";
@@ -557,8 +557,8 @@ export function LeadslistorView({
 
   return (
     <div className="grid gap-12">
-      {/* ------------------------------- SNAJPS SÄLJLISTA (100) */}
-      <SnajpSaljlista demo={demo} />
+      {/* ------------------------------ SÄLJLISTAN (100, 103) */}
+      <SaljlistaSektion demo={demo} />
 
       {/* ------------------------------------- CRM-KUNDLISTAN (098) */}
       <CrmKundlista
