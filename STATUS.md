@@ -1,5 +1,20 @@
 # Snipra Status
 
+## 2026-10-06 — Claude — Iris och listorna delar aldrig bolag, CRM-kundlistor kan laddas upp
+
+Listbygget uteslöt ingenting, så samma bolag kunde bli både Iris-lead och
+listrad. Nu bildar Iris-prospekt, rader i varje lista och kundens CRM-kunder en
+gemensam uteslutningsmängd (`snajp-support/app/leads/upptagna.py`, orgnr eller
+namn utan bolagsform) som Iris-sökningen, listbygget och listspåret läser.
+Kunder och Snajp-admin (i kundens vy) laddar upp sin befintliga CRM-kundlista i
+Leads › Listor, med länk från översiktens Pipeline; den sparas som
+`kalla='crm'` (migration 098) och prospekteras aldrig. Commit `b57316f` på
+development, 098 körd där, backend 2668 gröna. **Kvar: Antons ja till
+migrationerna 096–098 mot main (torrkörda, exakt de tre), sedan hans merge av
+PR #31; prov av uppladdningen med syntetisk CSV; Sebbes besked om listorna bara
+ska ta Iris-underkända bolag.** Plan: `plans/2026-10-06-listor-crm-separation.md`.
+Logg: `session-logs/2026-10-06-session-log.md`.
+
 ## 2026-10-05 — Claude — Iris billigare och skarpare, inkorgen sorterar rätt, Leads/Att göra/Översikt omgjorda, flytt till main lagad
 
 Antons sju problem från provet 2026-10-04 är lösta och driftsatta på development
