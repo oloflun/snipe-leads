@@ -1,7 +1,7 @@
 ---
 type: goals
 project_slug: snipe-leads
-updated: 2026-09-02
+updated: 2026-10-06
 updated_by: claude
 ---
 
@@ -267,6 +267,12 @@ rebase. Ändringar behöver samordnas, inte bara pushas.
    en kanal?
 
 ## Ändringslogg
+
+- 2026-10-06 (4) — claude — delmål 2 (leads-agenten hittar inte på): ett lead måste
+  uppfylla kraven (inget nej, alla måste styrkta) och bortvalda visas aldrig; dubbletter
+  mellan Iris och listorna spärras även vid samtidiga körningar. Delmål 6: kunden kan
+  ge sin agent egna önskemål (användarposition) och admin ser allt agenten läser
+  (Underlag och flöde). Delmålslistan orörd.
 
 - 2026-10-06 — claude — delmål 2 (leads-agenten hittar inte på) skärpt i kod:
   existensgrind, inget utkast utan hämtat underlag, bara privata bolag, bara

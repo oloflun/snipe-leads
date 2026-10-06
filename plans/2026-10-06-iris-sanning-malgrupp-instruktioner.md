@@ -1,5 +1,12 @@
 # Iris: påhittade bolag, läckt webbpitch, platta utkast, fel målgrupp och agentinstruktioner som skrivs över
 
+## Status 2026-10-06 (kväll)
+
+- **Klart och pushat till development:** fas 1–6 (förra sessionen), fas 1b, fas 7, fas 8, fas 9 (omindexering, kalibrering; hybridsökningen fanns redan), skillmätningen (variant (c) kvar), dubblettspärren Iris ↔ listor.
+- **Kvar (Anton):** radera de nio bolagen, återställ development-instruktionerna, migration 101/102 i development, ja till 096–102 mot main, gallringsperiod för spårets fulltext.
+- **Kvar (agent):** visuell kontroll + a11y av Underlag och flöde, skarpt Iris-prov N=5 (kräver ScrapeGraph-kredit), husets kantkontrast.
+- Detalj: `HANDOFF-2026-10-06-KVALITET-INSYN-KUNDYTA.md`.
+
 ## Kontext
 
 Provkörningarna 2026-10-05 (Snajp, utan filter, development) gav tre bolag som inte finns, utkast utan innehåll, en webbdesignpitch i ett mejl från Snajp, skolor och kommuner som leads och en slagsida mot bygg. När utkastmallen klistrades in under Globala agentinstruktioner ersattes dessutom hela instruktionsblocket. Planen rättar varje orsak i kod (grindar, inte bara prompttext), delar instruktionerna per agent och gör att feedback bakas in i stället för att ersätta. Delmål i `GOALS.md`: 2 (leads-agenten hittar inte på) och 6 (instruktioner når agenten); grunden för kundernas egen tuning.

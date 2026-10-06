@@ -1,5 +1,17 @@
 # Snipra Status
 
+## 2026-10-06 (4) — Claude — bara leads som uppfyller kraven, insyn, kundens yta, dubblettspärr
+
+Iris visar bara leads som uppfyller kraven (varje nej eller ostyrkt måste-krav ger nivå C, och nivå C når
+aldrig listan) och nyaste överst. Planens fas 7 (Admin › Kund › Underlag och flöde), fas 8 (kundens
+produkter, segment och egna önskemål per agent), fas 9 (KB-omindexering, kalibrering mot kundens utslag)
+och skillmätningen (variant (c) kvar; tilltal och mallfält rättade i grinden) är byggda och pushade till
+development, liksom en sista dubblettkontroll mellan Iris och listorna. Migration 099 körd i development.
+**Kvar för Anton:** radera de nio bolagen (`scripts/radera_prospekt.py`, kommandot i handoffen), återställ
+development-instruktionerna, migration 101/102 i development, ja till 096–102 mot main, beslut om
+gallringsperiod för spårets fulltext. Handoff: `HANDOFF-2026-10-06-KVALITET-INSYN-KUNDYTA.md`. Logg:
+`session-logs/2026-10-06-session-log-4.md`.
+
 ## 2026-10-06 (3) — Claude/Sebbe — varje Iris-lead måste kunna köpa kundens produkt
 
 Iris bedömer nu varje bolag på produktmatchningen `kp`: bara ett belagt behov

@@ -13,7 +13,8 @@ milestone_blockers:
   - "ScrapeGraph-krediten slut: 21 leads i development foll utan bedomning vid ombedomningen 2026-10-06 (kor ombedom_leads.py --utan-underlag efter pafyllning)"
   - "IMAP_PASSWORD_LIVRUSTNING saknas pa Railway api (bade main och development)"
   - "Vantar pa kundens bekraftelse av garantiperioden"
-  - "Migration 099 (agentinstruktioner per agent) kord i development 2026-10-06, mot main vantar den pa Antons ja"
+  - "Migration 099 kord i development 2026-10-06; 101 (prompt_lager) och 102 (kundonskemal) ej korda nagonstans; 096-102 mot main vantar pa Antons ja"
+  - "Nio ostyrkta Iris-leads i development ska raderas av Anton (scripts/radera_prospekt.py, agenten nekades); development-instruktionerna ska aterstallas (agenten nekades)"
 updated: 2026-10-06
 ---
 
