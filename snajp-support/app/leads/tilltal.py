@@ -41,7 +41,68 @@ def ratta_tilltal(body: str, mottagare: str | None) -> str:
     return text[: traff.start()] + ny + text[traff.end():]
 
 
+#: Bolagsformer som hör hemma i registret men inte i ett mejl. Utkasten
+#: 2026-10-07 hade "Bygg- och renoveringsprojekt i Göteborg – Roy Johnsson
+#: Linnéstaden Bygg & Service Aktiebolag" som ämnesrad.
+_BOLAGSFORM = r"(?:aktiebolag|ab|\(publ\)|publ|handelsbolag|hb|kommanditbolag|kb)"
+_FORM_SIST = re.compile(rf"(?:[\s,]+{_BOLAGSFORM})+\s*$", re.IGNORECASE)
+_FORM_FORST = re.compile(r"^(?:ab|aktiebolaget)\s+", re.IGNORECASE)
+
+
+def _ur_versaler(namn: str) -> str:
+    """Registrets VERSALNAMN ("HÄRLANDA FOG & BYGGSERVICE") blir vanlig
+    skrift. Bara när hela namnet är versaler; ord på två bokstäver och ord
+    med siffror eller bindestreck (förkortningar som "JM", "EK-RA") lämnas."""
+    bokstaver = [t for t in namn if t.isalpha()]
+    if not bokstaver or not all(t.isupper() for t in bokstaver):
+        return namn
+    return " ".join(
+        o.capitalize() if len(o) > 2 and o.isalpha() else o for o in namn.split(" ")
+    )
+
+
+def kortnamn(namn: str | None) -> str:
+    """Namnet ett mejl kallar bolaget: utan bolagsform, i vanlig skrift.
+    Blir inget kvar returneras originalet."""
+    original = str(namn or "").strip()
+    kort = _FORM_FORST.sub("", _FORM_SIST.sub("", original)).strip(" ,")
+    return _ur_versaler(kort) if kort else original
+
+
+def korta_bolagsnamn(text: str, namn: str | None) -> str:
+    """Byter bolagets registernamn mot kortnamnet i en färdig text, oavsett
+    skiftläge och om bolagsformen står med. Modellen läser registernamnet i
+    researchen och skriver det ibland ordagrant trots uppdraget."""
+    kort = kortnamn(namn)
+    if not text or not kort:
+        return text
+    monster = re.compile(
+        rf"(?:\bab\s+)?(?P<namn>{re.escape(kort)})(?:[\s,]+{_BOLAGSFORM}(?![\wåäö]))*",
+        re.IGNORECASE,
+    )
+    # Modellens egen stavning av namnet står kvar ("Tolered Snickeri & Bygg");
+    # bara bolagsformen tas bort, och versaler blir vanlig skrift.
+    return monster.sub(lambda m: _ur_versaler(m.group("namn")), text)
+
+
 def demo() -> None:
+    assert kortnamn("Roy Johnsson Linnéstaden Bygg & Service Aktiebolag") == (
+        "Roy Johnsson Linnéstaden Bygg & Service"
+    )
+    assert kortnamn("HÄRLANDA FOG & BYGGSERVICE AB") == "Härlanda Fog & Byggservice"
+    assert kortnamn("Volvo AB (publ)") == "Volvo"
+    assert kortnamn("AB Volvo") == "Volvo"
+    assert kortnamn("EK-RA BYGG & ENTREPRENAD AB") == "EK-RA Bygg & Entreprenad"
+    assert kortnamn("AB") == "AB"
+    assert korta_bolagsnamn(
+        "Hej,\nJag såg att Tolered Snickeri & Bygg AB gör kök.", "Tolered snickeri & bygg AB"
+    ) == "Hej,\nJag såg att Tolered Snickeri & Bygg gör kök."
+    assert korta_bolagsnamn(
+        "Snabb service – Härlanda Fog & Byggservice AB", "HÄRLANDA FOG & BYGGSERVICE AB"
+    ) == "Snabb service – Härlanda Fog & Byggservice"
+    assert korta_bolagsnamn("Abbe på Volvo Abisko", "Volvo AB") == "Abbe på Volvo Abisko"
+    print("kortnamn: ok")
+
     assert ratta_tilltal("Hej Mikael,\nJag såg", "Jonas Ek") == "Hej Jonas,\nJag såg"
     assert ratta_tilltal("Hej [VD:ns förnamn],\nText", "Anna Berg") == "Hej Anna,\nText"
     assert ratta_tilltal("Hej [VD:ns förnamn],\nText", None) == "Hej,\nText"

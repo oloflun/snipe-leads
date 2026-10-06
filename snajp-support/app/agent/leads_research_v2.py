@@ -43,6 +43,7 @@ from ..leads.language_gate import last_humanizer_variant
 from ..leads.outreach_playbook import OUTREACH_V2
 from ..leads.research_playbook import RESEARCH_V2
 from ..leads.soul import load_soul
+from ..leads.tilltal import korta_bolagsnamn, kortnamn, ratta_tilltal
 from . import leads_systemprompt
 from .leads_context import OutreachContext
 from .leads_tools import _queue_outreach_draft_impl, _request_human_handoff_impl
@@ -733,7 +734,9 @@ async def run_outreach_draft_v2(
     lager = replace(lager, agent_md=leads_systemprompt.rendera(foretagsnamn=tenant_name, steg="utkast", mall=lager.agent_mall or None))
 
     base = (
-        f"## Uppdrag\nDu skriver ett kallt första mejl till {company_name} åt {tenant_name}.\n\n"
+        f"## Uppdrag\nDu skriver ett kallt första mejl till {kortnamn(company_name)} åt {tenant_name}. "
+        f"Kalla bolaget \"{kortnamn(company_name)}\", utan bolagsform (AB, Aktiebolag), "
+        "i både ämnesrad och brödtext.\n\n"
         f"## Brief\n{brief}\n\n"
         f"## Erbjudandet som styr vinkeln\n{offer_summary}\n\n"
         f"## Språkläge\n{language_state}\n\n"
@@ -812,7 +815,6 @@ async def run_outreach_draft_v2(
     body = sign_off(strip_markdown(humanized.get("final_body") or draft.get("body") or ""), tenant_name)
     # Hälsningen avgörs i kod (leads/tilltal.py): mätningen 2026-10-06 fann ett
     # påhittat förnamn och mallens platshållare i hälsningen.
-    from ..leads.tilltal import ratta_tilltal
 
     try:
         mottagare = ((json.loads(research_summary or "{}") or {}).get("mottagare") or {}).get("namn")
@@ -860,6 +862,10 @@ async def run_outreach_draft_v2(
         escalated_steps = [s.skill for s in trace.steps if s.escalated]
         # Reparationen kan ha skrivit om hälsningen; samma regel igen.
         body = ratta_tilltal(body, mottagare)
+        # Registernamnet ("… Aktiebolag") blir kortnamnet i det som köas, i
+        # kod och sist: modellen läser registernamnet i researchen.
+        subject = korta_bolagsnamn(subject, company_name)
+        body = korta_bolagsnamn(body, company_name)
 
         if not grounding["ok"]:
             await _request_human_handoff_impl(
@@ -876,7 +882,7 @@ async def run_outreach_draft_v2(
             queue_result = json.loads(
                 await _queue_outreach_draft_impl(
                     context,
-                    subject=subject or f"Fråga till {company_name}",
+                    subject=subject or f"Fråga till {kortnamn(company_name)}",
                     body=body,
                     language_state=language_state,
                     humanizer_variant=last_humanizer_variant(trace.skills_used),

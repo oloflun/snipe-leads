@@ -240,3 +240,30 @@ def test_mailto_och_obfuskerade_adresser_skordas():
     obfuskerat = "<p>Per Palm, Platschef: per (at) bolaget (punkt) se</p>"
     traff = person_kontakt_i_text(obfuskerat, "https://bolaget.se")
     assert (traff["contact_name"], traff["contact_email"], traff["rang"]) == ("Per Palm", "per@bolaget.se", 1)
+
+
+def test_utkastet_kallar_bolaget_vid_kortnamn():
+    """Utkasten 2026-10-07 bar registernamnet i ämnesraden ("… Linnéstaden
+    Bygg & Service Aktiebolag") och VERSALNAMN ur registret. Bolagsformen tas
+    bort i kod, modellens egen stavning av namnet står kvar."""
+    from app.leads.tilltal import korta_bolagsnamn, kortnamn
+
+    assert kortnamn("Roy Johnsson Linnéstaden Bygg & Service Aktiebolag") == (
+        "Roy Johnsson Linnéstaden Bygg & Service"
+    )
+    assert kortnamn("HÄRLANDA FOG & BYGGSERVICE AB") == "Härlanda Fog & Byggservice"
+    assert kortnamn("Volvo AB (publ)") == "Volvo"
+    assert kortnamn("AB") == "AB", "blir inget kvar står originalet"
+    assert (
+        korta_bolagsnamn(
+            "Bygg i Göteborg – Roy Johnsson Linnéstaden Bygg & Service Aktiebolag",
+            "Roy Johnsson Linnéstaden Bygg & Service Aktiebolag",
+        )
+        == "Bygg i Göteborg – Roy Johnsson Linnéstaden Bygg & Service"
+    )
+    assert (
+        korta_bolagsnamn("Jag såg att Tolered Snickeri & Bygg AB gör kök.", "Tolered snickeri & bygg AB")
+        == "Jag såg att Tolered Snickeri & Bygg gör kök."
+    )
+    # "AB" som början på ett ord är inte bolagsformen.
+    assert korta_bolagsnamn("Volvo Abisko", "Volvo AB") == "Volvo Abisko"
