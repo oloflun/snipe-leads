@@ -1203,6 +1203,25 @@ class PostgresStorage:
                 foretagsnyckel,
             )
 
+    async def get_send_queue_item(self, tenant_id: str, item_id: str) -> dict[str, Any] | None:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                "select * from send_queue where tenant_id = $1 and id = $2", tenant_id, item_id
+            )
+        return _avkoda_jsonb(_row(record), "gate_checks") if record else None
+
+    async def update_outreach_message_text(
+        self, tenant_id: str, message_id: str, *, subject: str, body: str
+    ) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                """
+                update outreach_messages set subject = $3, body = $4
+                 where tenant_id = $1 and id = $2 and sent_at is null
+                """,
+                tenant_id, message_id, subject, body,
+            )
+
     async def get_pending_outreach_message(
         self, tenant_id: str, thread_id: str
     ) -> dict[str, Any] | None:

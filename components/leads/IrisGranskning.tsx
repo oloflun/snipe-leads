@@ -155,6 +155,13 @@ export function IrisGranskning({
   const [besked, setBesked] = useState<Record<string, "approve" | "reject">>({});
   const [valda, setValda] = useState<Set<string>>(new Set());
   const [svep, setSvep] = useState<"approve" | "reject" | null>(null);
+  // Granskarens redigering per utkast (editorn rapporterar varje ändring,
+  // egen eller AI:ns). Sparas i utkastet före godkännandet, så att det är
+  // den texten som skickas.
+  const [andrat, setAndrat] = useState<Record<string, { subject: string; body: string }>>({});
+  // Vad som hände med det senaste godkännandet: skickat, väntar på
+  // sändfönstret eller stoppat av en sändspärr.
+  const [utfall, setUtfall] = useState<Localized | null>(null);
 
   useEffect(() => {
     if (poster !== null) onAntal?.(poster.length);
@@ -201,9 +208,25 @@ export function IrisGranskning({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [demo]);
 
+  async function sparaAndring(post: KöItem): Promise<boolean> {
+    const ny = andrat[post.id];
+    if (!ny || (ny.subject === (post.subject ?? "") && ny.body === (post.body ?? ""))) return true;
+    const response = await fetch(`/api/snajp-support/leads/queue/${post.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(ny)
+    });
+    if (response.ok) return true;
+    const svar = await readJsonBody<{ detail?: string }>(response);
+    const orsak = typeof svar?.detail === "string" ? svar.detail : `status ${response.status}`;
+    setFel({ sv: `Ändringen kunde inte sparas (${orsak}).`, en: `The edit could not be saved (${orsak}).` });
+    return false;
+  }
+
   async function avgor(id: string, handling: "approve" | "reject") {
     setPagar(id);
     setFel(null);
+    setUtfall(null);
     if (demo) {
       // Demon avgör bara lokalt state — inget skickas, se docstringen.
       await new Promise((r) => setTimeout(r, 250));
@@ -213,6 +236,8 @@ export function IrisGranskning({
       return;
     }
     try {
+      const post = poster?.find((p) => p.id === id);
+      if (handling === "approve" && post && !(await sparaAndring(post))) return;
       const response = await fetch(`/api/snajp-support/leads/queue/${id}/${handling}`, {
         method: "POST"
       });
@@ -223,6 +248,28 @@ export function IrisGranskning({
         });
         return;
       }
+      if (handling === "approve") {
+        const svar = await readJsonBody<{ utfall?: string; besked?: string }>(response);
+        const mottagare = post?.prospect_email ?? post?.company_name ?? "";
+        const skal = svar?.besked?.split(": ").slice(1).join(": ");
+        if (svar?.utfall === "sent") {
+          setUtfall({ sv: `Skickat till ${mottagare}.`, en: `Sent to ${mottagare}.` });
+        } else if (svar?.utfall === "requeued") {
+          setUtfall({
+            sv: `Godkänt. Mejlet till ${mottagare} skickas när sändfönstret öppnar (vardagar 08–16).`,
+            en: `Approved. The email to ${mottagare} goes out when the sending window opens (weekdays 08–16).`
+          });
+        } else {
+          setFel({
+            sv: `Inte skickat${skal ? `: ${skal}` : "."}`,
+            en: `Not sent${skal ? `: ${skal}` : "."}`
+          });
+        }
+      }
+      setAndrat((f) => {
+        const { [id]: _bort, ...resten } = f;
+        return resten;
+      });
       await hamta();
     } catch (orsak) {
       const m = felmeddelande(orsak);
@@ -272,6 +319,11 @@ export function IrisGranskning({
       {fel ? (
         <p role="alert" className="mb-5 max-w-[70ch] text-[0.875rem] text-danger">
           {text(fel)}
+        </p>
+      ) : null}
+      {utfall ? (
+        <p role="status" className="mb-5 max-w-[70ch] text-[0.875rem] text-moss">
+          {text(utfall)}
         </p>
       ) : null}
 
@@ -380,7 +432,11 @@ export function IrisGranskning({
 
                 {öppen ? (
                   <div className="mt-4">
-                    <EmailStudioEditor data={tillStudioData(post, text(UTAN_AMNE))} compact />
+                    <EmailStudioEditor
+                      data={tillStudioData(post, text(UTAN_AMNE))}
+                      compact
+                      onAndring={(subject, body) => setAndrat((f) => ({ ...f, [post.id]: { subject, body } }))}
+                    />
                     {signatur ? <SignaturBlock signatur={signatur} /> : null}
                   </div>
                 ) : null}
@@ -398,7 +454,7 @@ export function IrisGranskning({
                     ) : (
                       <Check className="h-4 w-4" aria-hidden />
                     )}
-                    {kompakt ? text({ sv: "Godkänn och skicka", en: "Approve and send" }) : text({ sv: "Godkänn", en: "Approve" })}
+                    {text({ sv: "Godkänn och skicka", en: "Approve and send" })}
                   </button>
                   <button
                     type="button"

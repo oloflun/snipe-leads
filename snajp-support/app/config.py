@@ -354,6 +354,12 @@ class Settings(BaseSettings):
     # inbox_poll_seconds: 0 = av (ingen bakgrundstask), sätts explicit i
     # produktion. Håller test/dev-uppstart fri från överraskande bakgrundsjobb.
     send_queue_poll_seconds: int = 0
+    # Sändaren för GODKÄNDA utkast (2026-10-07, app/leads/scheduler.
+    # run_godkand_sandare): skickar bara det en människa godkänt i
+    # granskningskön och som väntat på sändfönstret. Startar bara när den
+    # fulla schemaläggaren ovan är avstängd (den hanterar godkända själv).
+    # 0 stänger av.
+    godkanda_utskick_sekunder: int = 60
     auto_send_min_confidence: float = 0.75
     imap_host: str = ""  # t.ex. imap.gmail.com eller outlook.office365.com
     imap_user: str = ""

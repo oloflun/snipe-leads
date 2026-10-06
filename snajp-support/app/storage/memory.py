@@ -886,6 +886,21 @@ class MemoryStorage:
         ]
         return max(tidpunkter) if tidpunkter else None
 
+    async def get_send_queue_item(self, tenant_id: str, item_id: str) -> dict[str, Any] | None:
+        for item in self.send_queue.get(tenant_id, []):
+            if item["id"] == item_id:
+                return item
+        return None
+
+    async def update_outreach_message_text(
+        self, tenant_id: str, message_id: str, *, subject: str, body: str
+    ) -> None:
+        for message in self.outreach_messages.get(tenant_id, []):
+            if message["id"] == message_id and message["sent_at"] is None:
+                message["subject"] = subject
+                message["body"] = body
+                return
+
     async def get_pending_outreach_message(
         self, tenant_id: str, thread_id: str
     ) -> dict[str, Any] | None:

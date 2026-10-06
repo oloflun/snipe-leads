@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import type { EmailStudioAction } from "@/lib/agent/email-studio-prompt";
 import type { EmailStudioData } from "@/lib/data/emails";
 import { btnPrimary } from "@/components/ui";
@@ -134,11 +134,21 @@ function toRefineContext(data: EmailStudioData) {
 
 export function EmailStudioEditor({
   data,
-  compact = false
-}: Readonly<{ data: EmailStudioData; compact?: boolean }>) {
+  compact = false,
+  onAndring
+}: Readonly<{
+  data: EmailStudioData;
+  compact?: boolean;
+  /** Ämne och text efter varje ändring, egen eller AI:ns (granskningskön sparar dem före godkännandet). */
+  onAndring?: (subject: string, body: string) => void;
+}>) {
   const { text } = useLocale();
   const [subject, setSubject] = useState(data.email.subject);
   const [body, setBody] = useState(data.email.body);
+  useEffect(() => {
+    onAndring?.(subject, body);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subject, body]);
   const [error, setError] = useState<string | null>(null);
   const [activeAction, setActiveAction] = useState<EmailStudioAction | null>(null);
   const [isPending, startTransition] = useTransition();

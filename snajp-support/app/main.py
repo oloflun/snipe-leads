@@ -279,6 +279,11 @@ async def lifespan(app: FastAPI):
         from .leads.scheduler import run_send_scheduler
 
         send_scheduler_task = asyncio.create_task(run_send_scheduler(app.state))
+    elif settings.godkanda_utskick_sekunder > 0:
+        # Bara godkända utkast: autonomt köade rörs inte (se config).
+        from .leads.scheduler import run_godkand_sandare
+
+        send_scheduler_task = asyncio.create_task(run_godkand_sandare(app.state))
 
     # Leads-städaren: hängande leads-jobb och leadslistor (en krasch, en
     # uppgiven strömpost, en process som dog i en 429-sömn) får ett ärligt

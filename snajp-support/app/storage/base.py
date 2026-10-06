@@ -497,6 +497,17 @@ class Storage(Protocol):
 
     async def get_outreach_thread(self, tenant_id: str, thread_id: str) -> dict[str, Any] | None: ...
 
+    async def get_send_queue_item(self, tenant_id: str, item_id: str) -> dict[str, Any] | None:
+        """En send_queue-post, eller None om den inte finns hos tenanten."""
+        ...
+
+    async def update_outreach_message_text(
+        self, tenant_id: str, message_id: str, *, subject: str, body: str
+    ) -> None:
+        """Skriver om ett EJ skickat utkasts ämne och text (granskarens
+        redigering). Ett skickat meddelande rörs aldrig."""
+        ...
+
     async def get_pending_outreach_message(
         self, tenant_id: str, thread_id: str
     ) -> dict[str, Any] | None:

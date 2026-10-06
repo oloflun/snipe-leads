@@ -170,9 +170,27 @@ def _ar_personlig(epost) -> bool:
 
 
 async def process_due_item(
-    storage: Storage, tenant_id: str, item: dict, provider: SendProvider, *, now: datetime
+    storage: Storage,
+    tenant_id: str,
+    item: dict,
+    provider: SendProvider,
+    *,
+    now: datetime,
+    godkant: dict | None = None,
 ) -> str:
-    """Returnerar 'sent' | 'requeued' | 'blocked' | 'awaiting_review'."""
+    """Returnerar 'sent' | 'requeued' | 'blocked' | 'awaiting_review'.
+
+    `godkant` (2026-10-07): en människa har godkänt just det här utkastet i
+    granskningskön. Då är autonominivån redan besvarad — det är människan
+    nivån lämnar över till — men tidsgrinden (INV-TIME-001), språkgrinden
+    och alla sex sändspärrarna körs som vanligt. Godkännandet följer med i
+    varje statusskrivning, så att ett utkast som väntar på sändfönstret
+    fortfarande är godkänt när fönstret öppnar."""
+
+    async def satt_status(*, status: str, gate_checks: dict) -> None:
+        await storage.update_send_queue_status(
+            tenant_id, item["id"], status=status, gate_checks={**gate_checks, **(godkant or {})}
+        )
     thread = await storage.get_outreach_thread(tenant_id, item["thread_id"])
     message = (
         await storage.get_pending_outreach_message(tenant_id, item["thread_id"]) if thread else None
@@ -185,14 +203,11 @@ async def process_due_item(
     # regel som gällde igår.
     #
     # sequence_index räknas ur trådens redan skickade utgående meddelanden.
-    if decision.action == "send":
+    if decision.action == "send" and not godkant:
         sent_before = await _outbound_sent_count(storage, tenant_id, item["thread_id"])
         settings = await storage.get_agent_settings(tenant_id, agent_type="leads")
         if allowed_action(settings.get("autonomy"), sent_before) != "send":
-            await storage.update_send_queue_status(
-                tenant_id,
-                item["id"],
-                status="awaiting_review",
+            await satt_status(status="awaiting_review",
                 gate_checks={
                     "decision": decision.reason,
                     "autonomy": normalize(settings.get("autonomy")),
@@ -209,16 +224,16 @@ async def process_due_item(
         # En guard som körts vid köningen hade dömt på gårdagens sanning: en
         # mottagare kan ha avregistrerat sig medan utkastet låg i kön.
         guard = await _kor_send_guard(storage, tenant_id, thread, message, now=now)
-        if guard.atgard != SG_SKICKA:
+        # Regel 6 kräver att en människa granskar de tre första utskicken. Ett
+        # godkänt utkast ÄR den granskningen; alla andra spärrar gäller.
+        granskat = godkant and guard.regel == "6_granskningsko"
+        if guard.atgard != SG_SKICKA and not granskat:
             status = {
                 SG_BLOCKERA: "blocked",
                 SG_GRANSKA: "awaiting_review",
                 SG_KOLA_OM: "queued",
             }[guard.atgard]
-            await storage.update_send_queue_status(
-                tenant_id,
-                item["id"],
-                status=status,
+            await satt_status(status=status,
                 gate_checks={
                     "decision": decision.reason,
                     "send_guard_regel": guard.regel,
@@ -260,8 +275,7 @@ async def process_due_item(
             **extra,
         )
         await storage.mark_outreach_message_sent(tenant_id, message["id"], now)
-        await storage.update_send_queue_status(
-            tenant_id, item["id"], status="sent", gate_checks={"decision": decision.reason}
+        await satt_status(status="sent", gate_checks={"decision": decision.reason}
         )
         if getattr(provider, "levererar", False):
             # Riktiga utskick passerar aldrig kundens eget mejlkonto (Resend/
@@ -282,16 +296,105 @@ async def process_due_item(
         return "sent"
 
     if decision.action == "block":
-        await storage.update_send_queue_status(
-            tenant_id, item["id"], status="blocked", gate_checks={"decision": decision.reason}
+        await satt_status(status="blocked", gate_checks={"decision": decision.reason}
         )
         return "blocked"
 
     # requeue: status förblir 'queued' — fångas upp igen nästa gång fönstret är öppet.
-    await storage.update_send_queue_status(
-        tenant_id, item["id"], status="queued", gate_checks={"decision": decision.reason}
+    await satt_status(status="queued", gate_checks={"decision": decision.reason}
     )
     return "requeued"
+
+
+def godkannande(item: dict) -> dict | None:
+    """Godkännandet ur postens grindanteckningar, eller None."""
+    gc = item.get("gate_checks") or {}
+    if isinstance(gc, str):
+        import json
+
+        try:
+            gc = json.loads(gc)
+        except ValueError:
+            return None
+    if gc.get("approved_by") != "human":
+        return None
+    return {k: gc[k] for k in ("approved_by", "via", "godkand_at") if k in gc}
+
+
+async def skicka_godkant(
+    storage: Storage, tenant_id: str, item_id: str, provider: SendProvider, *, now: datetime
+) -> tuple[str, str | None]:
+    """Granskarens "Godkänn och skicka" (2026-10-07): (utfall, skäl).
+
+    Utfall: 'sent', 'requeued' (godkänt, väntar på sändfönstret 08–16
+    vardagar), 'blocked'/'awaiting_review' (en sändspärr sa nej, skälet
+    följer med), 'saknas' eller 'redan_hanterad'."""
+    item = await storage.get_send_queue_item(tenant_id, item_id)
+    if item is None:
+        return "saknas", None
+    if item.get("status") not in ("awaiting_review", "queued"):
+        return "redan_hanterad", None
+    godkant = {"approved_by": "human", "via": "granskningskön", "godkand_at": now.isoformat()}
+    await storage.update_send_queue_status(tenant_id, item_id, status="queued", gate_checks=godkant)
+    utfall = await process_due_item(
+        storage, tenant_id, {**item, "status": "queued"}, provider, now=now, godkant=godkant
+    )
+    efter = await storage.get_send_queue_item(tenant_id, item_id) or {}
+    gc = efter.get("gate_checks") or {}
+    if isinstance(gc, str):
+        import json
+
+        gc = json.loads(gc)
+    skal = gc.get("send_guard_skal") or gc.get("held") or gc.get("decision")
+    return utfall, (None if utfall == "sent" else skal)
+
+
+async def process_godkanda(storage: Storage, provider: SendProvider) -> list[dict]:
+    """Skickar BARA utkast en människa har godkänt och som väntat på
+    sändfönstret. Autonomt köade utkast rörs inte — den vägen är
+    schemaläggaren (SEND_QUEUE_POLL_SECONDS), som är avstängd.
+
+    I en spegel (development, mirror_meta) räknas bara godkännanden gjorda
+    EFTER speglingen: ett godkännande som kopierats in från produktionen
+    skickas av produktionen, och hade annars gått ut två gånger."""
+    now = datetime.now(timezone.utc)
+    spegel = None
+    try:
+        spegel = await storage.spegel_info()
+    except Exception:  # noqa: BLE001 — en trasig markörläsning ska fela åt det försiktiga hållet
+        logger.exception("Kunde inte läsa spegelmarkören — hoppar över godkända utskick.")
+        return []
+    seedad = str((spegel or {}).get("seeded_at") or "")
+    results: list[dict] = []
+    for tenant in await storage.list_tenants():
+        for item in await storage.list_due_send_queue(tenant["id"], now):
+            godkant = godkannande(item)
+            if not godkant:
+                continue
+            if spegel and str(godkant.get("godkand_at") or "") <= seedad:
+                continue
+            try:
+                outcome = await process_due_item(storage, tenant["id"], item, provider, now=now, godkant=godkant)
+            except Exception:  # noqa: BLE001
+                logger.exception("Godkänt utkast %s misslyckades oväntat", item.get("id"))
+                outcome = "error"
+            results.append({"tenant": tenant.get("slug"), "item_id": item.get("id"), "outcome": outcome})
+    return results
+
+
+async def run_godkand_sandare(app_state) -> None:
+    """Bakgrundsloopen för godkända utkast som väntar på sändfönstret."""
+    interval = max(get_settings().godkanda_utskick_sekunder, 30)
+    provider = get_send_provider()
+    logger.info("Sändare för godkända utkast aktiv: var %s sekund.", interval)
+    while True:
+        try:
+            for result in await process_godkanda(app_state.storage, provider):
+                if result["outcome"] != "requeued":
+                    logger.info("godkänt utkast %s (%s): %s", result["item_id"], result["tenant"], result["outcome"])
+        except Exception:  # noqa: BLE001 — loopen får aldrig dö
+            logger.exception("Oväntat fel i sändaren för godkända utkast — fortsätter nästa varv.")
+        await asyncio.sleep(interval)
 
 
 async def process_all_due(storage: Storage, provider: SendProvider) -> list[dict]:
@@ -300,7 +403,9 @@ async def process_all_due(storage: Storage, provider: SendProvider) -> list[dict
     for tenant in await storage.list_tenants():
         for item in await storage.list_due_send_queue(tenant["id"], now):
             try:
-                outcome = await process_due_item(storage, tenant["id"], item, provider, now=now)
+                outcome = await process_due_item(
+                    storage, tenant["id"], item, provider, now=now, godkant=godkannande(item)
+                )
             except Exception:  # noqa: BLE001 — en trasig post stoppar inte de andra
                 logger.exception("send_queue-post %s misslyckades oväntat", item.get("id"))
                 outcome = "error"

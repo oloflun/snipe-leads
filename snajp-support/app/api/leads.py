@@ -1541,22 +1541,69 @@ async def list_review_queue(
     return svar
 
 
+@router.put("/api/leads/queue/{item_id}")
+async def update_queue_item_text(
+    request: Request, item_id: str, payload: dict, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Granskarens redigering (Skriv om, Förbättra, egen text) sparas i
+    utkastet före godkännandet, så att det är den texten som skickas. Bara
+    ett utkast som väntar; ett skickat mejl går inte att skriva om."""
+    storage = request.app.state.storage
+    tenant_id = tenant["tenant_id"]
+    item = await storage.get_send_queue_item(tenant_id, item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Utkastet finns inte.")
+    if item.get("status") not in ("awaiting_review", "queued"):
+        raise HTTPException(status_code=409, detail="Utkastet är redan hanterat och kan inte ändras.")
+    amne = str(payload.get("subject") or "").strip()
+    text = str(payload.get("body") or "").strip()
+    if not amne or not text:
+        raise HTTPException(status_code=422, detail="Ämnesrad och text får inte vara tomma.")
+    if len(amne) > 200 or len(text) > 8000:
+        raise HTTPException(status_code=422, detail="Ämnesraden får vara högst 200 tecken och texten 8 000.")
+    meddelande = await storage.get_pending_outreach_message(tenant_id, item["thread_id"])
+    if meddelande is None:
+        raise HTTPException(status_code=409, detail="Utkastet har ingen text att ändra.")
+    await storage.update_outreach_message_text(tenant_id, meddelande["id"], subject=amne, body=text)
+    return {"id": item_id, "subject": amne}
+
+
+#: Granskarens besked per utfall (Godkänn och skicka).
+_UTFALL_TEXT = {
+    "sent": "Skickat.",
+    "requeued": "Godkänt. Mejlet skickas när sändfönstret öppnar (vardagar 08–16).",
+    "blocked": "Stoppat av en sändspärr",
+    "awaiting_review": "Inte skickat, behöver granskas",
+    "redan_hanterad": "Utkastet är redan hanterat.",
+}
+
+
 @router.post("/api/leads/queue/{item_id}/approve")
 async def approve_queue_item(
     request: Request, item_id: str, tenant: dict = Depends(require_tenant)
 ) -> dict:
-    """Släpper ett granskat utkast till schemaläggaren.
+    """Godkänn och skicka (2026-10-07): skickar just det här utkastet direkt,
+    genom samma grindar som schemaläggaren — tidsgrinden (INV-TIME-001),
+    språkgrinden och de sex sändspärrarna. Utanför sändfönstret står det
+    kvar som godkänt och skickas när fönstret öppnar (run_godkand_sandare).
+    Före 2026-10-07 satte knappen bara status 'queued', och eftersom ingen
+    schemaläggare körde skickades ingenting."""
+    from datetime import datetime, timezone
 
-    Går via status 'queued', inte direkt till utskick: schemaläggaren kör
-    språk- och tidsgrindarna en gång till vid faktisk utskickstid, och den
-    kontrollen ska inte gå att hoppa över genom att godkänna."""
-    await request.app.state.storage.update_send_queue_status(
-        tenant["tenant_id"],
-        item_id,
-        status="queued",
-        gate_checks={"approved_by": "human", "via": "granskningskön"},
+    from ..leads.scheduler import skicka_godkant
+    from ..leads.send_provider import get_send_provider
+
+    utfall, skal = await skicka_godkant(
+        request.app.state.storage, tenant["tenant_id"], item_id, get_send_provider(),
+        now=datetime.now(timezone.utc),
     )
-    return {"id": item_id, "status": "queued"}
+    if utfall == "saknas":
+        raise HTTPException(status_code=404, detail="Utkastet finns inte.")
+    besked = _UTFALL_TEXT.get(utfall, utfall)
+    if skal and utfall in ("blocked", "awaiting_review"):
+        besked = f"{besked}: {skal}"
+    status = {"sent": "sent", "requeued": "queued"}.get(utfall, utfall)
+    return {"id": item_id, "status": status, "utfall": utfall, "besked": besked}
 
 
 @router.post("/api/leads/queue/{item_id}/reject")
