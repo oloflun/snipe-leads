@@ -71,6 +71,24 @@ class ProspectRequest(BaseModel):
     contact_email: str | None = None
 
 
+class ProduktRequest(BaseModel):
+    """En av kundens produkter. Kundskriven text: hamnar i användarposition."""
+
+    model_config = {"extra": "forbid"}
+
+    namn: str = Field(min_length=1, max_length=80)
+    nytta: str = Field(default="", max_length=400)
+
+
+class SegmentRequest(BaseModel):
+    """Ett målsegment: ett sökbart branschord och varför det passar."""
+
+    model_config = {"extra": "forbid"}
+
+    bransch: str = Field(min_length=1, max_length=80)
+    varfor: str = Field(default="", max_length=240)
+
+
 class LeadsConfigRequest(BaseModel):
     """Båda fälten är valfria: UI:t har två separata formulär, och en PUT från
     det ena får inte nolla det andra."""
@@ -86,6 +104,12 @@ class LeadsConfigRequest(BaseModel):
     automation: "AutomationRequest | None" = None
     crm_synk: "CrmSynkRequest | None" = None
     signatur: "SignaturRequest | None" = None
+    #: Kundens produkter: Iris väljer EN per bolag (leads_research_v2).
+    produkter: "list[ProduktRequest] | None" = Field(default=None, max_length=8)
+    #: Rangordnade målsegment, bäst först (leads/profil.py).
+    segment: "list[SegmentRequest] | None" = Field(default=None, max_length=6)
+    #: True bara när kunden själv säljer till offentlig sektor eller skolor.
+    offentlig_sektor: bool | None = None
 
 
 class SignaturRequest(BaseModel):

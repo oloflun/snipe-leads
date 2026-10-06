@@ -1291,6 +1291,17 @@ async def put_leads_config(
         # `aktiv: false` är avstängningen — fältet nollas aldrig tyst av en
         # PUT från ett annat formulär, samma princip som autonomi/ICP.
         merged["signatur"] = payload.signatur.model_dump(exclude_none=True)
+    # Produkter, målsegment och offentlig sektor (2026-10-06). Kundens
+    # uttryckliga val: produktvalet i researchen läser `produkter`, och
+    # profilkompilatorn läser `segment` och `offentlig_sektor` före sin egen
+    # tolkning (leads/profil.kundval). En ändring här kompilerar om profilen
+    # vid nästa körning, eftersom de ingår i profilens indatahash.
+    if payload.produkter is not None:
+        merged["produkter"] = [p.model_dump() for p in payload.produkter]
+    if payload.segment is not None:
+        merged["segment"] = [s.model_dump() for s in payload.segment]
+    if payload.offentlig_sektor is not None:
+        merged["offentlig_sektor"] = payload.offentlig_sektor
 
     # auto_send-grinden körs EFTER sammanslagningen, mot det ICP som faktiskt
     # kommer att gälla. Hade den körts mot `current` kunde en och samma PUT

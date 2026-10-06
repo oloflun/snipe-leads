@@ -132,3 +132,29 @@ async def test_modellens_andringar_tillampas_och_resten_star_kvar(monkeypatch):
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
+
+
+def test_produkter_och_segment_sparas_och_nar_profilen(client: TestClient):
+    """settings.produkter läses av produktvalet, segment och offentlig_sektor
+    av profilkompilatorn (leads/profil.kundval)."""
+    from app.leads.profil import kundval
+
+    kund = {"X-API-Key": get_settings().snajp_demo_api_key}
+    svar = client.put(
+        "/api/leads/config", headers=kund,
+        json={
+            "produkter": [{"namn": "Iris", "nytta": "hittar kunder"}],
+            "segment": [{"bransch": "utbildningsföretag", "varfor": "säljer till företag"}],
+            "offentlig_sektor": False,
+        },
+    )
+    assert svar.status_code == 200, svar.text
+    import asyncio
+
+    from app.config import DEFAULT_TENANT_ID
+
+    falt = asyncio.run(app.state.storage.get_agent_settings(DEFAULT_TENANT_ID, agent_type="leads"))
+    assert falt["produkter"] == [{"namn": "Iris", "nytta": "hittar kunder"}]
+    val = kundval(falt)
+    assert val["segment"][0]["bransch"] == "utbildningsföretag" and val["offentlig_sektor"] is False
+    assert client.put("/api/leads/config", headers=kund, json={"produkter": [{"namn": "X", "pris": 1}]}).status_code == 422
