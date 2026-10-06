@@ -19,6 +19,7 @@ from .api import (
     admin,
     admin_flytt,
     admin_konvertera,
+    admin_ombedom,
     admin_kunddata,
     admin_profil,
     analytics,
@@ -361,6 +362,9 @@ app.include_router(admin_profil.router)
 # se docstringen i api/admin_kunddata.py.
 app.include_router(admin_kunddata.router)
 app.include_router(admin_konvertera.router)
+# Ombedömning av sparade Iris-leads efter regelskärpningen 2026-10-06; se
+# docstringen i api/admin_ombedom.py.
+app.include_router(admin_ombedom.router)
 app.include_router(analytics.router)
 # Journalens tenant-scopade förbrukning (Livrustning-piloten) — samma fråga
 # som /api/admin/usage men med kundens egen nyckel. Se api/usage.py.
