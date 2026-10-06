@@ -101,8 +101,10 @@ KB_ARTICLES: list[dict] = [
             "och skriver färdiga svarsutkast grundade i kundens egen kunskapsbas. "
             "I paketet ingår kundservice-agent, egen kunskapsbas, obegränsade chattar och "
             "e-posttriage. Agenten svarar aldrig ur en allmän modell — saknas svaret i "
-            "kunskapsbasen säger den det och lämnar över till en människa i stället för "
-            "att gissa."
+            "kunskapsbasen säger den det rakt ut i stället för att gissa, svarar på det "
+            "den har stöd för och erbjuder att en kollega tittar på resten. Ärenden som "
+            "rör pengar tillbaka, fakturafel, juridik, GDPR, säkerhet eller en kund i "
+            "kris lämnar den alltid över till en människa direkt."
         ),
     },
     {
@@ -199,10 +201,15 @@ KB_ARTICLES: list[dict] = [
             "uppstarten utifrån kundens webbplats, villkor och det kunden berättar. Den "
             "hämtar alltså inte svar ur en allmän språkmodell.\n\n"
             "Hittar agenten inget stöd för ett svar i kunskapsbasen svarar den inte ändå. "
-            "Då säger den att den inte har uppgiften och kopplar in en människa. Det är ett "
-            "medvetet val: ett trovärdigt men felaktigt svar i kundens namn är värre än ett "
-            "ärligt överlämnande. Samma regel gäller motstridiga uppgifter — står två olika "
-            "saker i underlaget jämkar agenten inte ihop dem, den eskalerar."
+            "Då säger den att den inte har uppgiften, svarar på det den har stöd för, och "
+            "erbjuder att en kollega tittar på frågan — tackar kunden ja lämnas ärendet "
+            "över i samma samtal. Det är ett medvetet val: ett trovärdigt men felaktigt "
+            "svar i kundens namn är värre än ett ärligt \"det vet jag inte\", och kunden "
+            "slipper vänta på en människa för en fråga hen kanske inte behöver svar på.\n\n"
+            "Vissa ärenden lämnar agenten alltid över direkt: pengar tillbaka, fakturafel, "
+            "juridik, GDPR-begäranden, säkerhet, en kund i kris, en arg kund eller en "
+            "kund som ber om en människa. Samma sak gäller motstridiga uppgifter — står "
+            "två olika saker i underlaget jämkar agenten inte ihop dem, den eskalerar."
         ),
     },
     {
