@@ -2690,10 +2690,20 @@ async def _run_batch_prospect(
                         research_evidence=tuple(result.get("research_evidence") or ()),
                         is_test=is_test,
                     )
+                    # `queued` är utkaststegets eget besked, inte en konstant:
+                    # ett utkast som faktagrinden eller utdatakontraktet stoppade
+                    # stod här som köat (verifieringen 2026-10-07 läste "3 köade"
+                    # ur jobbresultaten medan granskningskön var tom).
+                    koad = bool(draft.get("queued"))
                     result["draft"] = {
                         "subject": draft.get("subject"),
-                        "queued": True,
+                        "queued": koad,
                     }
+                    if not koad:
+                        result["draft_note"] = (
+                            "Research klar, men utkastet stoppades före kön: "
+                            + (draft.get("escalation_reason") or _FEL_UTKAST)
+                        )
                 except MissingBusinessContextError as fel:
                     result["draft_note"] = str(fel)
                 except Exception as fel:  # noqa: BLE001 — researchen är klar, utkastet är bonus
