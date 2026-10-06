@@ -144,8 +144,17 @@ def test_ort_och_storlek_racker_inte_till_niva_a():
     b = bedomning.bedom(
         _PROFIL_UTAN_KRITERIER, {"ort": "Göteborg", "antal_anstallda": 15}, korpus="Göteborg, 15 anställda",
     )
-    assert b["score_total"] == 100
-    assert b["niva"] == "B"
+    # Inget belagt behov av det kunden säljer: inget lead alls (2026-10-06).
+    assert b["niva"] == "C"
+    med_behov = bedomning.bedom(
+        _PROFIL_UTAN_KRITERIER,
+        {"ort": "Göteborg", "antal_anstallda": 15, "bedomningar": [
+            {"kriterie_id": "kp", "utslag": "ja", "resonemang": "Växer.", "belagg": [{"citat": "15 anställda"}]}
+        ]},
+        korpus="Göteborg, 15 anställda",
+    )
+    assert med_behov["score_total"] == 100
+    assert med_behov["niva"] == "B"
 
 
 def test_registrets_tal_kallas_inte_kallmaterial():

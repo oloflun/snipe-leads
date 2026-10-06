@@ -1,4 +1,4 @@
--- 100: promptlagren, en gång per unik text (plan 2026-10-06, fas 7).
+-- 101: promptlagren, en gång per unik text (plan 2026-10-06, fas 7).
 --
 -- Spårvyn kapade varje fält i agent_runs.step_log vid 8 000 tecken
 -- (step_runner.TRACE_FIELD_MAX_CHARS). Utkaststegets systemprompt är runt

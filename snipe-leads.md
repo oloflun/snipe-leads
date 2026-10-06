@@ -9,7 +9,8 @@ money_weight: 4
 goal: "AI outbound SaaS: Snipra (leads-dashboard) + Snajp (support-agent) i ett repo, multi-tenant Next.js/Supabase"
 next_milestone: "main uppdaterad till samma kod som development, och Livrustning-tenantens garantiperiod bekraftad av kund"
 milestone_blockers:
-  - "PR #31 (release development -> main) vantar pa Antons ja till migrationerna 096-098 mot main (torrkorda 2026-10-06) och pa hans merge"
+  - "PR #31 (release development -> main) vantar pa Antons ja till migrationerna 096-099 mot main (torrkorda 2026-10-06) och pa hans merge"
+  - "ScrapeGraph-krediten slut: 21 leads i development foll utan bedomning vid ombedomningen 2026-10-06 (kor ombedom_leads.py --utan-underlag efter pafyllning)"
   - "IMAP_PASSWORD_LIVRUSTNING saknas pa Railway api (bade main och development)"
   - "Vantar pa kundens bekraftelse av garantiperioden"
   - "Migration 099 (agentinstruktioner per agent) kord i development 2026-10-06, mot main vantar den pa Antons ja"

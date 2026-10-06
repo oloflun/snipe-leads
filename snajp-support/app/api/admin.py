@@ -188,6 +188,13 @@ async def tenant_leads_underlag(request: Request, tenant_id: str, limit: int = 2
                 "hamtat_tecken": len((cache or {}).get("innehall") or ""),
                 "hamtfel": (cache or {}).get("fel"),
                 "created_at": p.get("created_at"),
+                # Bara nyckel och utfall ("kp:träff"): räcker för att se vilka
+                # regler ett lead bedömdes med, utan att motiveringen skrivs ut.
+                "bedomning": [
+                    f"{r.get('nyckel')}:{r.get('utfall')}"
+                    for r in (p.get("score_breakdown") or [])
+                    if isinstance(r, dict)
+                ],
             }
         )
     return {"leads": ut}

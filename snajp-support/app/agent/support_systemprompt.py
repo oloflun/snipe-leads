@@ -131,8 +131,8 @@ def _varden(
         "TILLÅTNA_SPRÅK": (
             "svenska"
             if installningar["sprak"] == "svenska"
-            else "alla språk — svara på kundens språk. Svarsspråket för ärendet "
-            "anges i uppgiften när det inte är svenska."
+            else "svenska och engelska. Svarsspråket för ärendet anges i "
+            "uppgiften när det inte är svenska."
         ),
         "KATEGORIER": (
             ", ".join(kategorier)

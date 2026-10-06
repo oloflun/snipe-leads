@@ -32,11 +32,21 @@ def _fake_deepseek_key(monkeypatch):
     get_settings.cache_clear()
 
 
+#: Ett belagt ja på produktmatchningen: varje testsida börjar med bolagsnamnet.
+_KP_JA = {"kriterie_id": "kp", "utslag": "ja", "resonemang": "Kan använda produkten.",
+          "belagg": [{"url": "https://exempelbolaget.se", "citat": "Exempelbolaget"}]}
+
+
 async def _kor(
-    overrides: dict, *, sida: str | None = None, icp: dict | None = None, profil: dict | None = None
+    overrides: dict, *, sida: str | None = None, icp: dict | None = None, profil: dict | None = None,
+    kp: bool = True,
 ) -> dict:
     storage = MemoryStorage()
     prospect_id = await _prepare_prospect(storage)
+    if kp:
+        # Produktmatchningen (2026-10-06) är ett krav för varje lead; testerna
+        # här gäller andra grindar och får därför ett belagt ja som grund.
+        overrides = {**overrides, "bedomningar": [*(overrides.get("bedomningar") or []), _KP_JA]}
     llm = _FakeLLM(overrides={"sa:account-research": overrides})
     skrap = _fake_scrape(sida) if sida is not None else _fake_scrape()
     with (
@@ -216,3 +226,42 @@ async def test_regeln_okant_ar_inte_fel_nar_modellen():
 async def test_okand_storlek_stoppar_inte():
     result = await _kor({"qualified": True, "antal_anstallda": None}, icp=_NORDFORM)
     assert result["stopped_early"] is None
+
+
+async def test_utan_belagd_produktmatchning_blir_bolaget_aldrig_ett_lead():
+    """Sebbe 2026-10-06: leads som kunden inte kan sälja sin produkt till är
+    värdelösa. Utan kriterier i profilen blev ett obelagt bolag förut en B."""
+    for profil in (_PROFIL, {"version": "tom"}):
+        result = await _kor({"qualified": True}, profil=profil, kp=False)
+        assert result["qualified"] is False
+        assert result["niva"] == "C"
+        assert result["stopped_early"] == "ej_kvalificerad"
+        assert any("kunden säljer" in d for d in result["disqualifiers"])
+
+
+async def test_produktmatchning_med_pahittat_citat_faller():
+    svar = {"bedomningar": [{"kriterie_id": "kp", "utslag": "ja", "resonemang": "Behöver det.",
+                             "belagg": [{"citat": "står inte på sidan"}]}]}
+    result = await _kor(svar, profil={"version": "tom"}, kp=False)
+    assert result["qualified"] is False
+
+
+async def test_ingen_av_kundens_produkter_passar_faller():
+    """Researchen svarade produkt=null ("ingen passar") och bolaget levererades
+    ändå. Med en produktlista måste en av produkterna väljas."""
+    storage = MemoryStorage()
+    prospect_id = await _prepare_prospect(storage)
+    await storage.set_agent_settings(
+        TENANT, agent_type="leads", settings={"produkter": [{"namn": "Supportagent", "nytta": "Svarar kunder"}]}
+    )
+    for produkt, vantat in ((None, False), ("Supportagent", True)):
+        llm = _FakeLLM(overrides={"sa:account-research": {"produkt": produkt, "bedomningar": [_KP_JA]}})
+        with (
+            patch("app.agent.step_runner.get_llm_client", return_value=llm),
+            patch("app.agent.leads_agent._scrape_registered_source_impl", new=_fake_scrape()),
+        ):
+            result = await run_research_step_v2(
+                storage, TENANT, prospect_id=prospect_id, tenant_name="Snajp",
+                context_pack="## Kontextpaket", brief="", is_test=True, profil={"version": "tom"},
+            )
+        assert result["qualified"] is vantat, produkt

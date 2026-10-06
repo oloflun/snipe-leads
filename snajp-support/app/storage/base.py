@@ -653,7 +653,7 @@ class Storage(Protocol):
         # körde någon modell alls. None för anropare som (ännu) inte skickar
         # det — kolumnen är nullable av samma skäl.
         model: str | None = None,
-        # Fas 7 (migration 100): systemlagrens text, {hash: text}, ur
+        # Fas 7 (migration 101): systemlagrens text, {hash: text}, ur
         # RunTrace.lagertexter(). Läggs EN gång per unik hash i prompt_lager
         # (insert … on conflict do nothing); step_log bär bara hashen. Ett fel
         # där fäller aldrig loggningen av körningen.
@@ -679,7 +679,7 @@ class Storage(Protocol):
     ) -> list[dict[str, Any]]: ...
 
     async def get_prompt_lager(self, hashar: list[str]) -> dict[str, str]:
-        """Lagertexterna för de givna hasharna (prompt_lager, migration 100).
+        """Lagertexterna för de givna hasharna (prompt_lager, migration 101).
         Saknade hashar saknas i svaret — en äldre körning, eller en text vars
         skrivning föll."""
         ...
@@ -1597,7 +1597,7 @@ AGENT_RUN_TYPES = (
     "leads_svar",
     "leads_followup",
     # Anropen utanför stegmotorn — bolagssökningen, Jev-triagen och
-    # profilkompileringen (migration 100, app/agentcore/insyn.samla_anrop).
+    # profilkompileringen (migration 101, app/agentcore/insyn.samla_anrop).
     "leads_underlag",
 )
 

@@ -84,8 +84,10 @@ KB_ARTICLES: list[dict] = [
             "Kundchatten.\n"
             "• Kvitton — Kvittohanteraren: koppla inkorgen och tryck \"Skanna "
             "inkorgen\", ställ frågor till kvittoassistenten i chatten.\n"
-            "• Inställningar — här kopplas mejlinkorgen (med app-lösenord från "
-            "mejlleverantören), kunskapsbasen fylls på, affärskontexten \"Vad ni "
+            "• Inställningar — här kopplas mejlinkorgen, till exempel en Gmail-"
+            "inkorg, med ett app-lösenord från mejlleverantören (för Gmail skapas "
+            "det i Google-kontots säkerhetsinställningar). Här fylls också "
+            "kunskapsbasen på, affärskontexten \"Vad ni "
             "säljer\" skrivs in, och eskaleringsregler ställs in.\n\n"
             "Ingenting skickas till riktiga mottagare utan godkännande enligt den "
             "autonominivå kunden valt. Går något inte att hitta: be kunden beskriva "
@@ -260,7 +262,37 @@ KB_ARTICLES: list[dict] = [
         "content": (
             "Ja. Agenterna hämtar sina formuleringar ur kundens egen kunskapsbas, så "
             "tonen blir kundens egen och inte en översättning. Produkten är byggd för "
-            "svensk B2B från början, inte lokaliserad i efterhand."
+            "svensk B2B från början, inte lokaliserad i efterhand. Utöver svenska "
+            "svarar agenterna på engelska."
+        ),
+    },
+    {
+        # Sebbe 2026-10-06: svenska och engelska, inga andra språk. Agenten
+        # följer samma gräns i kod (support_regler.TILLATNA_SPRAK).
+        "title": "Vilka språk agenterna svarar på",
+        "category": "teknisk_support",
+        "content": (
+            "Snajps agenter svarar på svenska och engelska. Kundservice-agenten svarar "
+            "på samma språk som den som skriver, så länge det är svenska eller "
+            "engelska — en engelskspråkig kund får alltså svar på engelska, även om "
+            "kunskapsbasen är skriven på svenska.\n\n"
+            "Andra språk än svenska och engelska erbjuds inte. Skriver någon på ett "
+            "annat språk svarar agenten på svenska och berättar att ärendet kan "
+            "hanteras på svenska eller engelska."
+        ),
+    },
+    {
+        # Sebbe 2026-10-06: inkorgen och hemsidans chatt, inga sociala medier.
+        "title": "Var supportagenten svarar: inkorgen och chatten på hemsidan",
+        "category": "teknisk_support",
+        "content": (
+            "Snajp Support arbetar i två kanaler: kundens mejlinkorg och som chattbot "
+            "på kundens egen hemsida. I inkorgen läser agenten inkommande mejl, "
+            "sorterar dem och skriver svarsutkast. I chatten svarar den besökarna på "
+            "hemsidan direkt.\n\n"
+            "Agenten svarar inte i sociala medier — inte på Facebook, Instagram, "
+            "LinkedIn, Messenger eller WhatsApp — och inte i några andra kanaler än "
+            "mejlinkorgen och chatten på hemsidan."
         ),
     },
     {

@@ -1200,6 +1200,16 @@ async def run_support_agent(
     )
     ar_svenska = svar_sprak == "sv"
     sprak_namn = support_regler.spraknamn(svar_sprak)
+    # Kunden skriver på ett språk utanför svenska och engelska: svaret skrivs
+    # på svenska och säger det (grundprompten 8.3). Läggs på utkastets uppgift.
+    sprakrad = (
+        f" Kunden skriver på {support_regler.spraknamn(str(triage.get('sprak'))[:2].lower())}, "
+        "som vi inte erbjuder. Svara på enkel svenska och nämn i en kort mening, "
+        "på kundens språk, att ärendet kan hanteras på svenska eller engelska."
+        if not installningar["sprak"] == "svenska"
+        and support_regler.utanfor_sprakstodet(triage.get("sprak"))
+        else ""
+    )
 
     # --- Kod: kundminne, ärende, inkommande meddelande ---------------------
     nya_fakta = [str(f).strip() for f in (triage.get("kundfakta") or []) if str(f).strip()]
@@ -1369,7 +1379,9 @@ async def run_support_agent(
         if nya:
             kb_forsok.append(f"missing_info ({saknas[:60]!r})")
             hade_underlag = bool(articles)
-            articles = _sla_ihop(articles, nya)
+            # De nya träffarna får alltid plats (högst två): _sla_ihop kapar
+            # vid KB_TAK, och ett redan fullt underlag hade kastat just dem.
+            articles = [*nya[:2], *articles][:KB_TAK]
             kb_block = _kb_block(articles)
             if hade_underlag:
                 research = await steg(
@@ -1636,6 +1648,7 @@ async def run_support_agent(
         "bara en gång. Följ driftregeln sist i grundprompten: ESKALERA bara för "
         "ämnena i 6.3, aldrig för en vanlig kunskapslucka."
     )
+    uppgift += sprakrad
     if underlag:
         uppgift += integrationsuppslag.UTKAST_TILLAGG
     if not ar_svenska:

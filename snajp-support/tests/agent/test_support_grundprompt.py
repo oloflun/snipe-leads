@@ -601,3 +601,128 @@ async def test_ingen_omskrivning_utan_nya_traffar():
         {"draft_reply": "vet ej", "escalate": False, "obesvarade": ["xyzzy qwerty plugh"]},
     ])
     assert len(anrop) == 1
+
+
+@pytest.mark.anyio
+async def test_varje_fraga_far_plats_aven_nar_underlaget_ar_fullt():
+    """Dev 2026-10-06: hela mejlet och ämnesraden fyllde de fem platserna och
+    Gmail-frågans artikel kom aldrig med. Frågorna söks först och får egna
+    platser."""
+    from app.email_pipeline.processor import _bred_sokning
+
+    storage = MemoryStorage()
+    await storage.add_kb_article(
+        TENANT, title="Koppla Gmail", content="Gmail kopplas under Inställningar.", category="ovrigt"
+    )
+    fullt = [{"id": f"x{i}", "title": f"Annat {i}", "content": "..."} for i in range(5)]
+    ut = await _bred_sokning(storage, TENANT, fullt, ["Hur kopplar vi in vår Gmail?", "Frågor"])
+    assert "Koppla Gmail" in [a["title"] for a in ut]
+    assert len(ut) <= 7
+
+
+@pytest.mark.anyio
+async def test_chattens_omkorning_behaller_nya_traffar_aven_med_fullt_underlag():
+    storage = MemoryStorage()
+    await storage.add_kb_article(
+        TENANT, title="Presentkort", content="Presentkort säljs i webbutiken.", category="ovrigt"
+    )
+    llm = _LLM(overrides={
+        "cs:ticket-triage": {"sokfraga_sv": "frakt leverans betalning retur"},
+        "cs:customer-research": {
+            "kb_supports_answer": False, "behover_fortydligande": False,
+            "missing_info": "presentkort",
+        },
+    })
+    svar = await _tur(storage, llm, "Hur fungerar frakt, retur och betalning, och har ni presentkort?")
+    assert "Presentkort" in [k["title"] for k in svar["kb_sources"]]
+
+
+@pytest.mark.anyio
+async def test_omkorning_vid_miss_tappar_inte_en_annan_fragas_artikel():
+    """Dev 2026-10-06, exakt förloppet: taket nåddes, fråga 3 blev obesvarad,
+    omkörningen hämtade dess artikel — och ersatte listans sista, som var
+    Gmail-frågans. Varje fråga ska ha kvar sin bästa träff."""
+    from app.email_pipeline.processor import _bred_sokning
+
+    storage = MemoryStorage()
+    for titel, text in (
+        ("Koppla Gmail", "Gmail kopplas under Inställningar med app-lösenord."),
+        ("Språkstöd", "Agenten svarar på svenska och engelska."),
+        ("Bindningstid", "Det finns ingen bindningstid."),
+    ):
+        await storage.add_kb_article(TENANT, title=titel, content=text, category="ovrigt")
+    hela = [{"id": f"h{i}", "title": f"Allmän {i}", "content": "..."} for i in range(3)]
+    ut = await _bred_sokning(storage, TENANT, hela, [
+        "Kan agenten svara på engelska?", "Hur kopplar vi in Gmail?", "Finns det bindningstid?",
+    ])
+    titlar = [a["title"] for a in ut]
+    assert {"Koppla Gmail", "Språkstöd", "Bindningstid"} <= set(titlar)
+    assert titlar[0] == "Allmän 0"
+    # Omkörningen lägger nya träffar först och kapar bakifrån.
+    nya = [{"id": "n1", "title": "Ny", "content": "..."}]
+    efter = [*nya, *ut][:7]
+    assert {"Koppla Gmail", "Språkstöd", "Bindningstid"} <= {a["title"] for a in efter}
+
+
+class _Fel429(Exception):
+    status_code = 429
+    response = None
+
+
+@pytest.mark.anyio
+async def test_vertex_429_far_korta_omtag_i_chatten():
+    """Dev 2026-10-06: varannan chattfråga föll på Vertex DSQ-429. På Vertex
+    går den över på sekunder — två korta omtag i stället för ett felbesked."""
+    from app.agent import step_runner
+    from app.agent.support_playbook import SUPPORT_V1
+    from app.agentcore.packs import RunLedger
+
+    forsok = {"n": 0}
+    llm = _LLM()
+
+    async def skapa(**kwargs):
+        forsok["n"] += 1
+        if forsok["n"] <= 2:
+            raise _Fel429("Resource exhausted")
+        return await llm.create(**kwargs)
+
+    klient = type("K", (), {})()
+    klient.chat = type("C", (), {})()
+    klient.chat.completions = type("X", (), {"create": staticmethod(skapa)})()
+    vantat: list[float] = []
+
+    async def sov(sekunder):
+        vantat.append(sekunder)
+
+    with patch.object(step_runner, "get_llm_client", return_value=klient), patch.object(
+        step_runner, "_uses_vertex", return_value=True
+    ), patch.object(step_runner.asyncio, "sleep", new=sov):
+        ut = await step_runner.run_step(
+            SUPPORT_V1.steps[0], RunLedger(satisfied={"context_pack"}), step_runner.RunTrace(),
+            task="Klassa.", case_context="## Ärendet\nHej",
+        )
+    assert forsok["n"] == 3
+    assert vantat == [3.0, 8.0]
+    assert ut.get("category") == "betalning"
+
+
+@pytest.mark.anyio
+async def test_429_utan_vertex_kastas_som_forut():
+    from app.agent import step_runner
+    from app.agent.support_playbook import SUPPORT_V1
+    from app.agentcore.packs import RunLedger
+
+    async def skapa(**kwargs):
+        raise _Fel429("quota")
+
+    klient = type("K", (), {})()
+    klient.chat = type("C", (), {})()
+    klient.chat.completions = type("X", (), {"create": staticmethod(skapa)})()
+    with patch.object(step_runner, "get_llm_client", return_value=klient), patch.object(
+        step_runner, "_uses_vertex", return_value=False
+    ):
+        with pytest.raises(_Fel429):
+            await step_runner.run_step(
+                SUPPORT_V1.steps[0], RunLedger(satisfied={"context_pack"}), step_runner.RunTrace(),
+                task="Klassa.", case_context="## Ärendet\nHej",
+            )

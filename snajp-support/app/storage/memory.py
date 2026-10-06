@@ -188,7 +188,7 @@ class MemoryStorage:
         self.prospects: dict[str, list[dict[str, Any]]] = {}
         self.prospect_sources: dict[str, list[dict[str, Any]]] = {}
         self.agent_runs: dict[str, list[dict[str, Any]]] = {}
-        #: prompt_lager (migration 100): {hash: text}, global som tabellen.
+        #: prompt_lager (migration 101): {hash: text}, global som tabellen.
         self.prompt_lager: dict[str, str] = {}
         # Leads-jobbens liggare (INV-JOB-002, migration 059). Nycklad på
         # job_id precis som Postgres-tabellens primärnyckel.

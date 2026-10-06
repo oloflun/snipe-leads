@@ -184,7 +184,7 @@ Tester: segmentlistan är identisk med den skickade prompten; ett ifyllt underla
 2. **Kundens egen feedback till sin agent.** En ruta per agent där kunden skriver feedback med egna ord. Samma `baka_in` som i fas 5, med förhandsgranskning, historik och Återställ. Skillnaden: basdokumentet är kundens eget (`agent_context_docs`, typ `kundonskemal_<agent>`), och det läggs i **användarposition**, inslaget som opålitligt innehåll under rubriken "Kundens egna önskemål", precis som röstdokumentet (INV-SEC-009). Kunden kan styra ton, fokus och formuleringar men kan inte upphäva reglerna, och kodgrindarna körs efteråt som vanligt. Våra lager i systemposition rörs aldrig av kundens feedback. Tak på antal inbakningar per dygn och kund.
 3. Båda syns i källmatrisen (fas 7), så det går att se att kundens text når rätt steg.
 
-*Byggt 2026-10-06:* `components/leads/IrisProdukter.tsx`, `components/settings/AgentOnskemal.tsx` (Iris › Inställningar och Inställningar › Regler), `app/leads/onskemal.py`, migration 101, förhandsvisning `/forhandsvisning/kundinstallningar`. A11y-granskningens sex HIGH-fynd i de nya filerna är rättade och mätta (fokus stannar på knappen eller flyttas till Ändringar, ångra vid borttagning, inget sparbart formulär efter misslyckad hämtning, hela feedbacken nåbar).
+*Byggt 2026-10-06:* `components/leads/IrisProdukter.tsx`, `components/settings/AgentOnskemal.tsx` (Iris › Inställningar och Inställningar › Regler), `app/leads/onskemal.py`, migration 102, förhandsvisning `/forhandsvisning/kundinstallningar`. A11y-granskningens sex HIGH-fynd i de nya filerna är rättade och mätta (fokus stannar på knappen eller flyttas till Ändringar, ångra vid borttagning, inget sparbart formulär efter misslyckad hämtning, hela feedbacken nåbar).
 **Skuld i husets mönster, inte nytt här:** fältkanten `border-ink/15` på `bg-paper` mäter 1,37:1 (ljust) och 1,47:1 (mörkt) mot kravet 3:1 (WCAG 1.4.11), i 17 filer; `btnLiten` är 36 px (klarar 2.5.8 AA, under 44 px-rekommendationen, beslutat i DESIGN.md). Rättas som ett eget pass över hela appen, inte i två filer.
 
 Tester: kundens önskemål hamnar i användarmeddelandet och aldrig i systemprompten (tillägg i `tests/invariants/test_inv_sec_009.py`); en feedback som ber agenten strunta i reglerna ändrar inte systemlagren; produkter och segment sparade i ytan når profilen och utkastet.
@@ -219,6 +219,22 @@ Tester: kundens önskemål hamnar i användarmeddelandet och aldrig i systemprom
 **Två saker för dig:** Redis marknadsför nu "Iris" som namn på en produkt för AI-agenter, samma namn som vår leadsagent. Värt att känna till inför varumärkesarbetet. Och varje ny Redis-tjänst som tar emot kundtext måste in i underbiträdeslistan och PUB-avtalet innan den slås på.
 
 Tester: inbäddningsanropet ger vektorer i development (mätt, inte antaget); hybridsökningen hittar en omformulerad fråga som fulltexten missar; kalibreringen hämtar bara den egna kundens utslag; ett avvisat bolag kommer inte tillbaka i nästa körning.
+
+## Fas 1c – Produktmatchning för varje lead (Sebbes krav 2026-10-06)
+
+### Completed
+- [x] Kriteriet `kp` i `bedomning._produktmatch_rad`: bara ett belagt ja blir ett lead; ingen vald produkt (när kunden har en lista) fäller (`aa02fc2`).
+- [x] Prompt, overlay och INV-LEADS-EXIST-001 uppdaterade; V1 fäller tomt källmaterial.
+- [x] Ombedömning av sparade leads: `admin_ombedom.py` + `scripts/ombedom_leads.py` (`63b9cf1`, `038541d`).
+- [x] Körd i development: 51 leads, alla 30 med material bär `kp`, kvar synliga Snajp 3, Alunix 0.
+
+### Remaining
+- [ ] 21 leads föll utan bedömning (ScrapeGraph-krediten slut): `ombedom_leads.py --env development --utan-underlag --apply` efter påfyllning.
+- [ ] Ombedömning mot main efter mergen, på Antons ord (`--apply --main-godkant`).
+- [ ] Mät leverans per Iris-körning under de skärpta reglerna.
+
+### Blockers
+- ScrapeGraph-kredit; Antons migrationer 096–099 mot main och merge av PR #31.
 
 ## Utanför den här planen
 

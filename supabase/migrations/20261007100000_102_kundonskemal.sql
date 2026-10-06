@@ -1,4 +1,4 @@
--- 101: Kundens egna önskemål till sin agent (fas 8, 2026-10-06).
+-- 102: Kundens egna önskemål till sin agent (fas 8, 2026-10-06).
 --
 -- Kunden skriver feedback med egna ord, den bakas in i kundens eget dokument
 -- (app/leads/onskemal.py) och sparas som en ny version per gång. Dokumentet

@@ -32,7 +32,7 @@ from ..agentcore.overlays import load_overlay
 from ..agentcore.packs import PlaybookStep, RunLedger, check_output_contract, check_preconditions
 from ..config import get_settings
 from ..kvotfel import ar_kreditslut
-from .llm import gemini_tank_kwargs, get_llm_client
+from .llm import _uses_vertex, gemini_tank_kwargs, get_llm_client
 
 _OVERLAY_OPEN = """## TILLÄGGSINSTRUKTIONER (Snajp-overlay: {name})
 Dessa kommer FRÅN OSS, inte från skillen ovan, och gäller ÖVER den där de
@@ -92,7 +92,7 @@ class Segment:
 
     def som_post(self) -> dict[str, Any]:
         """Lagret utan texten — det step_log bär. Texten ligger en gång per
-        hash i prompt_lager (migration 100)."""
+        hash i prompt_lager (migration 101)."""
         return {
             "etikett": self.etikett,
             "kalla": self.kalla,
@@ -485,16 +485,24 @@ async def run_step(
                 # (jobb-fail, larm, ärlig kundtext) får det i stället.
                 if ar_429 and ar_kreditslut(fel):
                     raise
-                if not (talamod_429 and ar_429 and vanta_forsok < 3):
+                # Vertex (2026-10-06): ingen dygnskvot där — en 429 är den
+                # delade kapaciteten (DSQ) som är tillfälligt full, och den
+                # går över på sekunder. Dev-testet: varannan chattfråga föll
+                # på det, och kunden fick ett felmeddelande i stället för ett
+                # svar. Därför två korta omtag (3 s, 8 s) även för anropare
+                # som inte får vänta länge. Gemini-API:ts dygnskvot är
+                # oförändrad: där hjälper ingen väntan.
+                vertex_kort = ar_429 and not talamod_429 and _uses_vertex(settings)
+                if not ((talamod_429 or vertex_kort) and ar_429 and vanta_forsok < 3):
                     raise
-                paus = 20.0 * vanta_forsok
+                paus = (3.0 if vanta_forsok == 1 else 8.0) if vertex_kort else 20.0 * vanta_forsok
                 svar_huvud = getattr(getattr(fel, "response", None), "headers", None)
                 if svar_huvud is not None:
                     try:
                         paus = max(paus, float(svar_huvud.get("retry-after") or 0))
                     except (TypeError, ValueError):
                         pass
-                await asyncio.sleep(min(paus, 90.0))
+                await asyncio.sleep(min(paus, 10.0 if vertex_kort else 90.0))
         usage = getattr(response, "usage", None)
         if usage:
             tokens_in += getattr(usage, "prompt_tokens", 0) or 0

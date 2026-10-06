@@ -2006,7 +2006,7 @@ class PostgresStorage:
     ) -> dict[str, Any]:
         if prompt_lager:
             # Egen anslutning och egen transaktion, FÖRE körningen: ett fel här
-            # (tabellen saknas därför att migration 100 inte körts) hade annars
+            # (tabellen saknas därför att migration 101 inte körts) hade annars
             # avbrutit transaktionen och tagit körningsraden med sig. Lagren
             # är visningens råvara; körningen är revisionsloggen.
             try:
@@ -2021,7 +2021,7 @@ class PostgresStorage:
                         list(prompt_lager.values()),
                     )
             except Exception:  # noqa: BLE001 — se kommentaren ovan
-                logger.exception("Kunde inte spara promptlagren (migration 100 körd?).")
+                logger.exception("Kunde inte spara promptlagren (migration 101 körd?).")
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
                 """

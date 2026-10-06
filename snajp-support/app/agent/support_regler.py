@@ -103,6 +103,11 @@ FAKTAKONTROLL = ("tillatande", "forsiktig", "strikt")
 #: "same as user"); "svenska" = alltid svenska, oavsett vad kunden skriver.
 SPRAKVAL = ("kundens", "svenska")
 
+#: Språken Snajp erbjuder (Sebbe 2026-10-06): svenska och engelska. "kundens"
+#: betyder kundens språk BLAND dessa — fram till dess svarade agenten på
+#: vilket språk som helst (bd snipe-xtr).
+TILLATNA_SPRAK = ("sv", "en")
+
 #: Språknamn för prompten. En ISO-kod utanför listan skickas som kod —
 #: modellen känner dem — men de vanligaste får ett namn, så att instruktionen
 #: inte kan läsas som något annat än ett språk.
@@ -149,8 +154,18 @@ def svarsprak(
     for kandidat in (signal, tidigare):
         kod = str(kandidat or "").strip().lower()[:2]
         if _ISO_KOD.match(kod):
-            return kod
+            # Snajp erbjuder svenska och engelska (Sebbe 2026-10-06). Ett
+            # tredje språk får svenska — och grundprompten 8.3 säger att
+            # svaret då nämner att ärendet kan hanteras på svenska eller
+            # engelska.
+            return kod if kod in TILLATNA_SPRAK else "sv"
     return "sv"
+
+
+def utanfor_sprakstodet(signal: Any) -> bool:
+    """Skriver kunden på ett språk utanför svenska och engelska?"""
+    kod = str(signal or "").strip().lower()[:2]
+    return bool(_ISO_KOD.match(kod)) and kod not in TILLATNA_SPRAK
 
 
 def spraknamn(kod: str) -> str:
