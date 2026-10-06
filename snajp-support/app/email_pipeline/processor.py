@@ -170,22 +170,38 @@ async def _bred_sokning(
     from ..agent.support_agent import KB_TAK
 
     tak = KB_TAK + 2
-    ut = list(artiklar)
-    sedda = {_nyckel(a) for a in ut}
+    per_fraga: list[list[dict[str, Any]]] = []
     for fraga in fragor:
-        if len(ut) >= tak:
-            break
         fraga = (fraga or "").strip()
         if not fraga:
             continue
         try:
-            traffar = await storage.search_kb(tenant_id, fraga, embedding=None)
+            per_fraga.append(await storage.search_kb(tenant_id, fraga, embedding=None))
         except Exception:  # noqa: BLE001 — en extra sökning får aldrig fälla mejlet
             logger.exception("Bredare KB-sökning misslyckades (tenant %s).", tenant_id)
-            continue
-        for artikel in [a for a in traffar if _nyckel(a) not in sedda][:2]:
-            ut.append(artikel)
+
+    # Ordningen avgör vad som viker när taket nås — och omkörningen vid miss
+    # ersätter listans SISTA artiklar. Därför: hela mejlets bästa träff,
+    # sedan varje frågas bästa, sedan varje frågas andra, och hela mejlets
+    # övriga sist. Dev-testet 2026-10-06 tappade Gmail-frågans artikel just
+    # för att frågornas träffar låg sist och ersattes.
+    ut: list[dict[str, Any]] = []
+    sedda: set[str] = set()
+
+    def _lagg_till(artikel: dict[str, Any]) -> None:
+        if _nyckel(artikel) not in sedda:
             sedda.add(_nyckel(artikel))
+            ut.append(artikel)
+
+    for artikel in artiklar[:1]:
+        _lagg_till(artikel)
+    for _ in range(2):  # första varvet: varje frågas bästa; andra: näst bästa
+        for traffar in per_fraga:
+            nya = [a for a in traffar if _nyckel(a) not in sedda]
+            if nya:
+                _lagg_till(nya[0])
+    for artikel in artiklar[1:]:
+        _lagg_till(artikel)
     return ut[:tak]
 
 
@@ -310,9 +326,10 @@ async def _triage_email(
             if _nyckel(a) not in kanda
         ]
         if nya:
-            # De nya träffarna får alltid plats: de äldsta (lägst rankade)
-            # träffarna för hela mejlet viker i stället.
-            articles = [*articles[: KB_TAK + 2 - len(nya[:2])], *nya[:2]]
+            # De nya träffarna läggs FÖRST och listan kapas bakifrån: där
+            # ligger hela mejlets allmänna träffar (se _bred_sokning), inte
+            # någon frågas egen artikel.
+            articles = [*nya[:2], *articles][: KB_TAK + 2]
             result = await _skriv(articles)
             result["reasoning"] = (
                 f"{result.get('reasoning') or ''} (Utkastet skrevs om efter en bredare "

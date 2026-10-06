@@ -635,3 +635,30 @@ async def test_chattens_omkorning_behaller_nya_traffar_aven_med_fullt_underlag()
     })
     svar = await _tur(storage, llm, "Hur fungerar frakt, retur och betalning, och har ni presentkort?")
     assert "Presentkort" in [k["title"] for k in svar["kb_sources"]]
+
+
+@pytest.mark.anyio
+async def test_omkorning_vid_miss_tappar_inte_en_annan_fragas_artikel():
+    """Dev 2026-10-06, exakt förloppet: taket nåddes, fråga 3 blev obesvarad,
+    omkörningen hämtade dess artikel — och ersatte listans sista, som var
+    Gmail-frågans. Varje fråga ska ha kvar sin bästa träff."""
+    from app.email_pipeline.processor import _bred_sokning
+
+    storage = MemoryStorage()
+    for titel, text in (
+        ("Koppla Gmail", "Gmail kopplas under Inställningar med app-lösenord."),
+        ("Språkstöd", "Agenten svarar på svenska och engelska."),
+        ("Bindningstid", "Det finns ingen bindningstid."),
+    ):
+        await storage.add_kb_article(TENANT, title=titel, content=text, category="ovrigt")
+    hela = [{"id": f"h{i}", "title": f"Allmän {i}", "content": "..."} for i in range(3)]
+    ut = await _bred_sokning(storage, TENANT, hela, [
+        "Kan agenten svara på engelska?", "Hur kopplar vi in Gmail?", "Finns det bindningstid?",
+    ])
+    titlar = [a["title"] for a in ut]
+    assert {"Koppla Gmail", "Språkstöd", "Bindningstid"} <= set(titlar)
+    assert titlar[0] == "Allmän 0"
+    # Omkörningen lägger nya träffar först och kapar bakifrån.
+    nya = [{"id": "n1", "title": "Ny", "content": "..."}]
+    efter = [*nya, *ut][:7]
+    assert {"Koppla Gmail", "Språkstöd", "Bindningstid"} <= {a["title"] for a in efter}

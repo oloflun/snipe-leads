@@ -1372,7 +1372,7 @@ async def run_support_agent(
             hade_underlag = bool(articles)
             # De nya träffarna får alltid plats (högst två): _sla_ihop kapar
             # vid KB_TAK, och ett redan fullt underlag hade kastat just dem.
-            articles = [*articles[: KB_TAK - len(nya[:2])], *nya[:2]]
+            articles = [*nya[:2], *articles][:KB_TAK]
             kb_block = _kb_block(articles)
             if hade_underlag:
                 research = await steg(
