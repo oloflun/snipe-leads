@@ -722,6 +722,7 @@ class MemoryStorage:
         embedding: list[float] | None = None,
     ) -> dict[str, Any]:
         row = _kb_row(tenant_id, {"title": title, "content": content, "category": category})
+        row["embedding"] = embedding
         self.kb.setdefault(tenant_id, []).append(row)
         return {"id": row["id"], "title": title, "category": category}
 
@@ -730,6 +731,17 @@ class MemoryStorage:
         kvar = [a for a in artiklar if str(a["id"]) != str(artikel_id)]
         self.kb[tenant_id] = kvar
         return len(kvar) < len(artiklar)
+
+    async def kb_utan_vektor(self, tenant_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        return [
+            {"id": a["id"], "title": a["title"], "content": a["content"]}
+            for a in self.kb.get(tenant_id, []) if a.get("embedding") is None
+        ][:limit]
+
+    async def satt_kb_vektor(self, tenant_id: str, artikel_id: str, embedding: list[float]) -> None:
+        for a in self.kb.get(tenant_id, []):
+            if str(a["id"]) == str(artikel_id):
+                a["embedding"] = embedding
 
     # -- Kanaler & metrics --------------------------------------------------
 

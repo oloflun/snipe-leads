@@ -359,6 +359,13 @@ class Storage(Protocol):
         åt, och det ska de vara). Kräver migration 069 (delete-grant)."""
         ...
 
+    async def kb_utan_vektor(self, tenant_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        """Artiklar som sparades medan inbäddningarna var trasiga (2026-09-12
+        till 2026-10-06), äldst först. Omindexeringen fyller på dem."""
+        ...
+
+    async def satt_kb_vektor(self, tenant_id: str, artikel_id: str, embedding: list[float]) -> None: ...
+
     # -- Agentens föreslagna lärdomar (självlärning, 2026-08-26) -------------
     #
     # Supportens cs:kb-article och leads _fanga_kunskap RÄKNADE UT lärdomar på

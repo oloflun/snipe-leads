@@ -953,6 +953,27 @@ class PostgresStorage:
             )
         return str(resultat).endswith(" 1")
 
+    async def kb_utan_vektor(self, tenant_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select id, title, content from ss_knowledge_base
+                where tenant_id = $1 and embedding is null order by created_at limit $2
+                """,
+                tenant_id,
+                limit,
+            )
+        return [_row(r) for r in records]
+
+    async def satt_kb_vektor(self, tenant_id: str, artikel_id: str, embedding: list[float]) -> None:
+        async with self._scoped(tenant_id) as conn:
+            await conn.execute(
+                "update ss_knowledge_base set embedding = $3 where tenant_id = $1 and id = $2::uuid",
+                tenant_id,
+                str(artikel_id),
+                embedding,
+            )
+
     # -- Kanaler & metrics --------------------------------------------------
 
     async def get_channel_config(self, tenant_id: str, channel: str) -> dict[str, Any]:

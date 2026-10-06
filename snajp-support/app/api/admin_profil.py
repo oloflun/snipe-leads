@@ -462,3 +462,45 @@ async def satt_tenant_status(
         detail={"status": payload.status, "orsak": payload.orsak or ""},
     )
     return {"tenant": tenant}
+
+
+@router.post("/kb/badda-in")
+async def badda_in_kb(request: Request, apply: bool = False, tenant_id: str | None = None) -> dict:
+    """Bäddar in kunskapsartiklar som saknar vektor, för alla kunder eller en.
+
+    Artiklarna som sparades medan inbäddningarna var trasiga (2026-09-12 till
+    2026-10-06) söks bara med fulltext, och hybridsökningens vektorgren är tom
+    för dem. `apply=False` räknar bara. Högst 50 artiklar per kund och anrop:
+    kör om tills `kvar` är 0. Artikeltexten skrivs aldrig om, bara vektorn."""
+    from ..agent.embeddings import embed_text
+    from ..cache import versioner
+
+    storage = request.app.state.storage
+    if tenant_id:
+        kraev_uuid(tenant_id, "Kunden")
+        tenants = [{"id": tenant_id}]
+    else:
+        tenants = await storage.list_tenants()
+    per_kund = []
+    for t in tenants:
+        tid = str(t["id"])
+        utan = await storage.kb_utan_vektor(tid)
+        inbaddade = 0
+        if apply:
+            for a in utan:
+                vektor = await embed_text(f"{a['title']}\n{a['content']}")
+                if vektor is None:
+                    break  # inbäddningarna svarar inte: samma fel för resten
+                await storage.satt_kb_vektor(tid, a["id"], vektor)
+                inbaddade += 1
+            if inbaddade:
+                await versioner.bumpa_kb(tid)
+        if utan:
+            kvar = len(await storage.kb_utan_vektor(tid)) if inbaddade else len(utan) - inbaddade
+            per_kund.append({"tenant_id": tid, "utan_vektor": len(utan), "inbaddade": inbaddade, "kvar": kvar})
+    if apply:
+        await storage.log_platform_event(
+            level="info", source="admin.kb", message="Kunskapsartiklar inbäddade på nytt.",
+            detail={"kunder": per_kund},
+        )
+    return {"apply": apply, "kunder": per_kund, "kvar": sum(k["kvar"] for k in per_kund)}
