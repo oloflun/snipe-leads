@@ -248,7 +248,7 @@ async def run_research_step_v2(
         webbrevision = {}
         webbfakta_text = ""
 
-    soul_block = await load_soul(storage, tenant_id)
+    soul_block = await load_soul(storage, tenant_id, agent="leads")
     lager = await las_instruktioner(storage, tenant_id, agent_type="leads", tenant_namn=tenant_name)
     # Iris grundprompt (agent-core/prompts/leads-systemprompt.md, eller en sparad
     # version) som eget lager i varje steg, före skillen.
@@ -663,7 +663,7 @@ async def run_outreach_draft_v2(
 
     thread = await storage.get_outreach_thread(tenant_id, thread_id) or {}
     language_state = thread.get("language_state") or "sv"
-    soul_block = await load_soul(storage, tenant_id)
+    soul_block = await load_soul(storage, tenant_id, agent="leads")
     lager = await las_instruktioner(storage, tenant_id, agent_type="leads", tenant_namn=tenant_name)
     # Iris grundprompt (agent-core/prompts/leads-systemprompt.md, eller en sparad
     # version) som eget lager i varje steg, före skillen.

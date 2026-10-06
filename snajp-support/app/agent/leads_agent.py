@@ -675,7 +675,7 @@ async def run_research_step(
     )
     sources_block = material or "(inget källmaterial kunde hämtas — se scrape_errors)"
 
-    soul_block = await load_soul(storage, tenant_id)
+    soul_block = await load_soul(storage, tenant_id, agent="leads")
     lager = await las_instruktioner(
         storage, tenant_id, agent_type="leads", tenant_namn=tenant_name
     )
@@ -1062,7 +1062,7 @@ async def run_outreach_draft(
 
     thread = await storage.get_outreach_thread(tenant_id, thread_id) or {}
     language_state = thread.get("language_state") or "sv"
-    soul_block = await load_soul(storage, tenant_id)
+    soul_block = await load_soul(storage, tenant_id, agent="leads")
     lager = await las_instruktioner(
         storage, tenant_id, agent_type="leads", tenant_namn=tenant_name
     )

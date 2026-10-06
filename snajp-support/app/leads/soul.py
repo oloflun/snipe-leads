@@ -57,17 +57,22 @@ def render_soul(content: str | None) -> str:
     )
 
 
-async def load_soul(storage, tenant_id: str) -> str:
+async def load_soul(storage, tenant_id: str, *, agent: str | None = None) -> str:
     """Läser kundens SOUL och renderar det. Tom sträng om inget finns.
 
     Ett för långt dokument fäller inte körningen: taket verkställs vid
     skrivning (API:t), och en kund vars gamla dokument ligger över gränsen
     ska få sina mejl skrivna, inte ett 500-fel. Vi kapar i stället.
+
+    Med `agent` följer kundens egna önskemål till just den agenten med
+    (leads/onskemal.py, fas 8): samma position, samma inslagning, och varje
+    plats som läser rösten läser därmed också önskemålen.
     """
+    from .onskemal import load as load_onskemal
+
     doc = await storage.get_latest_context_doc(tenant_id, kind=SOUL_KIND)
-    if not doc:
-        return ""
-    content = doc.get("content") or ""
+    content = (doc or {}).get("content") or ""
     if len(content) > SOUL_MAX_CHARS:
         content = content[:SOUL_MAX_CHARS]
-    return render_soul(content)
+    onskemal = await load_onskemal(storage, tenant_id, agent) if agent else ""
+    return "\n\n".join(b for b in (render_soul(content), onskemal) if b)

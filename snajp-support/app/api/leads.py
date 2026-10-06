@@ -69,6 +69,10 @@ from ..leads.onboarding_state import REQUIRED_KINDS, get_onboarding_state
 from ..leads import korning as iris_korning
 from ..leads.profil import las_kundtext, sakerstall_profil, slå_ihop, som_icp
 from .deps import kraev_uuid, require_tenant
+from ..agent.leads_research_v2 import las_produkter
+from ..agentcore.baka_in import baka_in
+from ..leads import onskemal
+from ..leads.profil import validera_segment
 from ..leads.soul import SOUL_KIND, SOUL_MAX_CHARS
 from .schemas import (
     AgentFeedbackRequest,
@@ -89,6 +93,7 @@ from .schemas import (
     ProspectSourceRequest,
     ProspektsvarRequest,
     ResearchStepRequest,
+    OnskemalRequest,
     SoulRequest,
 )
 
@@ -770,6 +775,92 @@ async def put_soul(
     return {"saved": True, "version": doc["version"], "chars": len(payload.content)}
 
 
+# -- Fas 8: kundens egna önskemål till sin agent ------------------------------
+
+
+def _onskemal_agent(agent: str) -> str:
+    if agent not in onskemal.AGENTER:
+        raise HTTPException(status_code=404, detail="Agenten finns inte.")
+    return agent
+
+
+@router.get("/api/agent/onskemal/{agent}")
+async def hamta_onskemal(agent: str, request: Request, tenant: dict = Depends(require_tenant)) -> dict:
+    """Kundens dokument som agenten läser det, plus historiken (nyast först)."""
+    docs = await request.app.state.storage.list_context_docs(
+        tenant["tenant_id"], kind=onskemal.kind(_onskemal_agent(agent))
+    )
+    return {
+        "dokument": (docs[0]["content"] if docs else ""),
+        "max_tecken": onskemal.MAX_TECKEN,
+        "historik": [
+            {"id": d["id"], "created_at": d.get("created_at"), "content": d.get("content") or "",
+             "feedback": d.get("source") or ""}
+            for d in docs[:20]
+        ],
+    }
+
+
+async def _kraev_under_dygnstak(storage, tenant_id: str, agent: str) -> None:
+    if await onskemal.sparade_idag(storage, tenant_id, agent) >= onskemal.MAX_PER_DYGN:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Högst {onskemal.MAX_PER_DYGN} ändringar per dygn och agent. Försök igen i morgon.",
+        )
+
+
+@router.post("/api/agent/onskemal/{agent}/forhandsgranska")
+async def forhandsgranska_onskemal(
+    agent: str, payload: OnskemalRequest, request: Request, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Bakar in feedbacken UTAN att spara och visar varje ändring med skäl."""
+    storage = request.app.state.storage
+    _onskemal_agent(agent)
+    await _kraev_under_dygnstak(storage, tenant["tenant_id"], agent)
+    doc = await storage.get_latest_context_doc(tenant["tenant_id"], kind=onskemal.kind(agent))
+    bakning = await baka_in((doc or {}).get("content") or "", payload.feedback, tak=onskemal.MAX_TECKEN)
+    return bakning.som_dict()
+
+
+@router.put("/api/agent/onskemal/{agent}")
+async def spara_onskemal(
+    agent: str, payload: OnskemalRequest, request: Request, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Sparar en ny version. Kunden har sett förhandsgranskningen och skickar
+    det godkända dokumentet; utan dokument bakas feedbacken in här."""
+    storage = request.app.state.storage
+    _onskemal_agent(agent)
+    await _kraev_under_dygnstak(storage, tenant["tenant_id"], agent)
+    dokument = payload.dokument
+    if dokument is None:
+        doc = await storage.get_latest_context_doc(tenant["tenant_id"], kind=onskemal.kind(agent))
+        dokument = (await baka_in((doc or {}).get("content") or "", payload.feedback,
+                                  tak=onskemal.MAX_TECKEN)).dokument
+    rad = await storage.save_context_doc(
+        tenant["tenant_id"], kind=onskemal.kind(agent), content=dokument.strip()[: onskemal.MAX_TECKEN],
+        source=payload.feedback.strip()[:4000],
+    )
+    return {"id": rad["id"], "dokument": rad.get("content") or dokument}
+
+
+@router.post("/api/agent/onskemal/{agent}/aterstall/{doc_id}")
+async def aterstall_onskemal(
+    agent: str, doc_id: str, request: Request, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """En tidigare version blir aktiv igen, som en ny rad: historiken ska visa
+    att en återställning skett."""
+    storage = request.app.state.storage
+    docs = await storage.list_context_docs(tenant["tenant_id"], kind=onskemal.kind(_onskemal_agent(agent)))
+    gammal = next((d for d in docs if str(d["id"]) == doc_id), None)
+    if gammal is None:
+        raise HTTPException(status_code=404, detail="Versionen finns inte.")
+    rad = await storage.save_context_doc(
+        tenant["tenant_id"], kind=onskemal.kind(agent), content=gammal.get("content") or "",
+        source=f"Återställd version från {gammal.get('created_at')}",
+    )
+    return {"id": rad["id"], "dokument": rad.get("content") or ""}
+
+
 # -- Fas B/C: research och outreach ---------------------------------------
 
 
@@ -1221,6 +1312,10 @@ async def get_leads_config(request: Request, tenant: dict = Depends(require_tena
         "crm_synk": _crm_synk_val(settings),
         # Normaliserad — UI:t ska se samma värde som köningen använder.
         "signatur": normalisera_signatur(settings.get("signatur")),
+        # Fas 8: kundens egna produkter och segment, som researchen läser dem.
+        "produkter": las_produkter(settings),
+        "segment": validera_segment(settings.get("segment")),
+        "offentlig_sektor": bool(settings.get("offentlig_sektor")),
         # Valen som finns att välja MELLAN, inte kundens val. UI:t ska kunna
         # rendera en lista utan att ha en egen kopia av geo.py och sni.py —
         # en andra kopia hade drivit isär, och symptomet blivit att ett

@@ -885,7 +885,7 @@ async def run_support_agent(
     # Kundens röstdokument. Ligger i case_context, alltså i USERposition —
     # aldrig i systemprompten. Se app/leads/soul.py för varför den gränsen
     # är själva mekanismen och inte en försiktighetsåtgärd (INV-SEC-009).
-    soul_block = await load_soul(storage, tenant_id)
+    soul_block = await load_soul(storage, tenant_id, agent="support")
 
     # Affärskontexten nådde tidigare BARA leads-agenten. En supportkund kunde
     # alltså beskriva vad de säljer och till vem, och supportsvaren visste

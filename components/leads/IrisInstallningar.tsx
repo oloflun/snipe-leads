@@ -3,7 +3,9 @@
 import { LeadsControls } from "@/components/leads/LeadsControls";
 import { IrisAutomation } from "@/components/leads/IrisAutomation";
 import { IrisEskalering } from "@/components/leads/IrisEskalering";
+import { IrisProdukter } from "@/components/leads/IrisProdukter";
 import { IrisProfil } from "@/components/leads/IrisProfil";
+import { AgentOnskemal } from "@/components/settings/AgentOnskemal";
 import { useLocale } from "@/lib/i18n";
 
 /**
@@ -42,7 +44,13 @@ export function IrisInstallningar({ demo = false }: Readonly<{ demo?: boolean }>
             <IrisEskalering />
           </div>
           <div className="border-t border-ink/15 pt-8">
+            <IrisProdukter />
+          </div>
+          <div className="border-t border-ink/15 pt-8">
             <IrisAutomation />
+          </div>
+          <div className="border-t border-ink/15 pt-8">
+            <AgentOnskemal agent="leads" />
           </div>
         </>
       )}

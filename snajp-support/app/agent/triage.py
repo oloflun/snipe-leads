@@ -90,7 +90,10 @@ async def triage_email_llm(
     foretagsprofil: str = "",
     foretagsnamn: str = "",
     grundprompt_mall: str | None = None,
+    onskemal: str = "",
 ) -> dict[str, Any]:
+    """`onskemal`: kundens egna önskemål till supportagenten, redan inslagna
+    (leads/onskemal.py). Läggs sist i användarmeddelandet, aldrig i systemet."""
     settings = get_settings()
     # Käll-ID:n som grundprompten kräver (avsnitt 3), och wrappat: kunskaps-
     # basen är kundskriven text och hör hemma i användarposition (INV-SEC-009).
@@ -120,7 +123,7 @@ async def triage_email_llm(
         sender=sender,
         subject=maskera_personnummer(subject),
         body=maskera_personnummer(body),
-    )
+    ) + (f"\n\n{onskemal}" if onskemal else "")
     # Grundprompten är systemmeddelandet: allt kundarbete utgår från den.
     grundprompt = rendera(
         foretagsnamn=foretagsnamn,

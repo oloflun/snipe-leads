@@ -455,6 +455,18 @@ class SoulRequest(BaseModel):
     content: str = Field(default="", max_length=4000)
 
 
+class OnskemalRequest(BaseModel):
+    """Kundens feedback till sin agent (app/leads/onskemal.py).
+
+    `feedback` = vad kunden skrev; `dokument` = den förhandsgranskade texten
+    kunden godkänt. Utan `dokument` bakas feedbacken in vid sparningen."""
+
+    model_config = {"extra": "forbid"}
+
+    feedback: str = Field(default="", max_length=4000)
+    dokument: str | None = Field(default=None, max_length=4000)
+
+
 class InstruktionRequest(BaseModel):
     """Globala eller kundspecifika agentinstruktioner, skrivna av admin.
 

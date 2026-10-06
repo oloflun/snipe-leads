@@ -268,6 +268,9 @@ async def _triage_email(
     from ..agentcore.instruktioner import las_agent_mall
 
     grundprompt_mall = await las_agent_mall(storage, "support") or None
+    from ..leads.onskemal import load as load_onskemal
+
+    onskemal = await load_onskemal(storage, tenant_id, "support")
 
     async def _skriv(underlag: list[dict[str, Any]]) -> dict[str, Any]:
         return await triage_email_llm(
@@ -279,6 +282,7 @@ async def _triage_email(
             foretagsprofil=foretagsprofil,
             foretagsnamn=foretagsnamn,
             grundprompt_mall=grundprompt_mall,
+            onskemal=onskemal,
         )
 
     result = await _skriv(articles)
