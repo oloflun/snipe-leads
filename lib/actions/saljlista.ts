@@ -6,10 +6,12 @@ import { sqlAsUser } from "@/lib/db";
 import {
   RAD_ID,
   SALJLISTA_FALT,
+  arSaljstatus,
   normaliseraFalt,
   type Saljfalt,
   type Saljfel,
   type Saljrad,
+  type Saljstatus,
   type Saljsvar
 } from "@/lib/leads/saljlista";
 import { aktivVy } from "@/lib/vy";
@@ -38,7 +40,7 @@ import { getWorkspaceContext } from "@/lib/workspace";
  */
 
 const KOLUMNER = `id, foretagsnamn, orgnr, kontaktperson, kontaktnummer, kontaktmail,
-  to_char(senast_kontaktad, 'YYYY-MM-DD') as senast_kontaktad, anteckningar,
+  to_char(senast_kontaktad, 'YYYY-MM-DD') as senast_kontaktad, anteckningar, status,
   created_at::text as created_at, updated_at::text as updated_at`;
 
 const TILLAGG = "leadlists" satisfies (typeof addonKeys)[number];
@@ -146,6 +148,28 @@ export async function uppdateraSaljrad(
         where id = $1::uuid and workspace_id = $2::uuid
         returning ${KOLUMNER}`,
       [id, g.workspaceId, nytt, g.userId]
+    );
+    const rad = rader[0];
+    return rad ? { ok: true, data: rad } : { ok: false, fel: "finns_inte" };
+  } catch (error) {
+    return felsvar(error);
+  }
+}
+
+/** Radens statusfärg (migration 104). Egen väg: status är ett val, inte fritext. */
+export async function sattSaljstatus(id: string, status: Saljstatus): Promise<Saljsvar<Saljrad>> {
+  const g = await grind(true);
+  if (!g.ok) return g;
+  if (!RAD_ID.test(id)) return { ok: false, fel: "finns_inte" };
+  if (!arSaljstatus(status)) return { ok: false, fel: "okant_falt" };
+  try {
+    const rader = await sqlAsUser<Saljrad>(
+      g.userId,
+      `update public.saljlista
+          set status = $3, uppdaterad_av = $4::uuid, updated_at = now()
+        where id = $1::uuid and workspace_id = $2::uuid
+        returning ${KOLUMNER}`,
+      [id, g.workspaceId, status, g.userId]
     );
     const rad = rader[0];
     return rad ? { ok: true, data: rad } : { ok: false, fel: "finns_inte" };
