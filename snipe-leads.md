@@ -13,7 +13,8 @@ milestone_blockers:
   - "PR #22 (support-eskalering, sprak, integrationer/kanaler, Iris-menyn) vantar bara pa Antons merge; migrationer och INTEGRATION_NYCKEL klara i main (2026-09-19)"
   - "IMAP_PASSWORD_LIVRUSTNING saknas pa Railway api (bade main och development)"
   - "Vantar pa kundens bekraftelse av garantiperioden"
-updated: 2026-10-05
+  - "Iris-rattelserna 2026-10-06 (7 commits) opushade; migration 099 ej kord; development kor fortfarande pa en overskriven global instruktion (2026-10-06)"
+updated: 2026-10-06
 ---
 
 # Snipra / Snajp

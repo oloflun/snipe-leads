@@ -263,6 +263,11 @@ rebase. Ändringar behöver samordnas, inte bara pushas.
 
 ## Ändringslogg
 
+- 2026-10-06 — claude — delmål 2 (leads-agenten hittar inte på) skärpt i kod:
+  existensgrind, inget utkast utan hämtat underlag, bara privata bolag, bara
+  VD, faktagrind mot onamngivna case. Delmål 6 (instruktioner når agenten):
+  instruktioner per agent, feedback bakas in i stället för att ersätta, Iris
+  egen grundprompt. Opushat; migration 099 ej körd. Delmålslistan orörd.
 - 2026-10-05 — claude — Iris-kostnaden begränsad och webbbedömningen avgjord i
   kod (delmål 2); inkorgen sorterar bort utskick; Leads, Att göra och Översikten
   omgjorda; leadsregel 7–9 (ensam VD, listspår, webbkriterier i kod). Release-PR
