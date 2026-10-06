@@ -295,8 +295,9 @@ export function IrisKorningar() {
     );
   }
 
-  const aktiv = rader.find(pagar) ?? null;
-
+  // Styrningen (Pausa/Avbryt) bor i den utfällda raden, inte ovanför
+  // tabellen: med flera pågående körningar gick det inte att se vilken
+  // panelen gällde (den tog bara den första). Sebbe 2026-10-07.
   return (
     <div className="space-y-10">
       {fel ? (
@@ -304,7 +305,6 @@ export function IrisKorningar() {
           {fel}
         </p>
       ) : null}
-      {aktiv ? <Pagaende rad={aktiv} onStyrd={hamta} /> : null}
 
       <Tabell
         ariaLabel={text(T.tabell)}
@@ -327,6 +327,7 @@ export function IrisKorningar() {
               bas={bas}
               oppen={arOppen}
               onToggle={() => setOppen(arOppen ? null : rad.job_id)}
+              onStyrd={hamta}
             >
               <Cell>{text(korningsTyp(rad))}</Cell>
               <Cell hoger>{k ? k.mal : "–"}</Cell>
@@ -519,12 +520,14 @@ function RadMedDetalj({
   bas,
   oppen,
   onToggle,
+  onStyrd,
   children
 }: Readonly<{
   rad: KorningsRad;
   bas: string;
   oppen: boolean;
   onToggle: () => void;
+  onStyrd: () => Promise<void>;
   children: React.ReactNode;
 }>) {
   const { locale, text } = useLocale();
@@ -554,6 +557,11 @@ function RadMedDetalj({
       {oppen ? (
         <tr id={`korning-${rad.job_id}`}>
           <td colSpan={kolumner} className="bg-paper2/60 px-4 py-5">
+            {pagar(rad) ? (
+              <div className="mb-8 border-b border-ink/15 pb-8">
+                <Pagaende rad={rad} onStyrd={onStyrd} />
+              </div>
+            ) : null}
             <div className="grid gap-8 md:grid-cols-2">
               <div>
                 <h3 className="text-[1.0625rem] font-semibold">{text(T.undersoktaBolag)}</h3>
