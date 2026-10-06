@@ -21,9 +21,10 @@ till dem (INV-LEADS-N-001).
     kriterium som strypte.
 
 Körningens tillstånd bor i batchjobbets eget resultat (jobbstoret, TTL 1 h)
-— ingen ny tabell. ponytail: en leads-worker per process (config
-leads_workers=1) gör läs-ändra-skriv sekventiellt; fler workers eller
-repliker kräver ett lås runt `uppdatera`.
+— ingen ny tabell. Läs-ändra-skriv skyddas av ett lås per körning
+(`_korningslas` i app/api/leads.py, infört 2026-10-06 när leads_workers
+höjdes över 1): workers i samma process serialiseras per körning, olika
+körningar går parallellt. Fler REPLIKER av processen kräver ett Redis-lås.
 """
 
 from __future__ import annotations

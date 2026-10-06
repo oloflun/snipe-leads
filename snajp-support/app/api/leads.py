@@ -11,6 +11,7 @@ import asyncio
 import json
 import logging
 import uuid
+import weakref
 from datetime import datetime, timezone
 from typing import Literal
 
@@ -1885,6 +1886,31 @@ async def _lagg_prospektjobb(
     return jobs
 
 
+#: Ett lås per körning (Sebbes krav 2026-10-06: flera användare på samma
+#: konto kör agenter samtidigt, och leads_workers > 1 låter två barn i SAMMA
+#: körning rapportera parallellt). Motorns tillstånd uppdateras med
+#: läs-ändra-skriv (_las_korning → mutera → _spara_korning), och utan låset
+#: skriver den sist sparande över den andras rapport: `pagaende` når aldrig
+#: noll och körningen står i 'processing' för evigt (INV-JOB-003-slutet).
+#: Låsen är per PROCESS — workers är asyncio-tasks i samma process
+#: (app/main.py) — och rensas aldrig per körning: ett Lock per körning under
+#: processens livstid är några hundra byte, och en rensning som poppar ett
+#: lås någon fortfarande väntar på hade släppt in två skrivare igen. Yttre
+#: nyckeln är event-loopen (weakref: en död testloop städar sina lås själv) —
+#: ett asyncio.Lock är bundet till sin loop, och i driften finns bara en.
+#: Fler REPLIKER av api-processen kräver ett Redis-lås i stället — höj inte
+#: replikantalet utan att bygga det.
+_KORNINGSLAS: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, dict[str, asyncio.Lock]]" = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def _korningslas(batch_id: str) -> asyncio.Lock:
+    # setdefault är atomärt nog här: ingen await mellan uppslag och insättning.
+    tabell = _KORNINGSLAS.setdefault(asyncio.get_running_loop(), {})
+    return tabell.setdefault(batch_id, asyncio.Lock())
+
+
 async def _spara_korning(app_state, tenant_id: str, batch_id: str, k: dict) -> None:
     """Liggaren får motorns tillstånd efter varje steg (migration 080,
     INV-JOB-003). Redis-posten är snabbvägen; den här raden är det kunden
@@ -1999,7 +2025,18 @@ async def _fyll_pa(app_state, tenant: dict, batch_id: str) -> None:
     Läser körningens tillstånd ur batchjobbets resultat, köar så många
     kandidater som behövs, kör en ny sökrunda i nästa geo-ring när poolen är
     tom, och avslutar ärligt när målet är nått eller det inte går längre.
-    Se app/leads/korning.py."""
+    Se app/leads/korning.py.
+
+    Hela påfyllningen håller körningens lås: en väckning som kommer medan en
+    annan worker redan fyller på ska läsa det tillstånd den påfyllningen
+    skrev, inte en kopia från före den — annars köas samma kandidat två
+    gånger. Priset är att en barnrapport för samma körning väntar ut en
+    pågående sökrunda; andra körningar har egna lås och går parallellt."""
+    async with _korningslas(batch_id):
+        await _fyll_pa_last(app_state, tenant, batch_id)
+
+
+async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> None:
     jobs = app_state.jobs
     storage = app_state.storage
     tenant_id = tenant["tenant_id"]
@@ -2157,20 +2194,23 @@ async def _rapportera_till_korning(
 
     Idempotent per `job_id` (`korning.rapporterade`): ett barn som körts två
     gånger (återtag efter deploy) räknas en gång. `fyll=False` sparar bara
-    utfallet; anroparen väcker motorn själv (_vacka_korning)."""
+    utfallet; anroparen väcker motorn själv (_vacka_korning). Läs-ändra-skriv
+    under körningens lås: med leads_workers > 1 rapporterar två barn annars
+    över varandra och den enas utfall försvinner."""
     try:
-        resultat, k = await _las_korning(app_state, tenant["tenant_id"], batch_id)
-        if not k:
-            return
-        rapporterade = k.setdefault("rapporterade", [])
-        if job_id not in rapporterade:
-            rapporterade.append(job_id)
-            iris_korning.registrera_utfall(k, namn=namn, leverbar=leverbar, skal=skal, undersokt=undersokt)
-            if skrap:
-                k["skrap"] = sidhamtning.summera(k.get("skrap"), skrap)
-            resultat["korning"] = k
-            await app_state.jobs.complete(batch_id, resultat)
-            await _spara_korning(app_state, tenant["tenant_id"], batch_id, k)
+        async with _korningslas(batch_id):
+            resultat, k = await _las_korning(app_state, tenant["tenant_id"], batch_id)
+            if not k:
+                return
+            rapporterade = k.setdefault("rapporterade", [])
+            if job_id not in rapporterade:
+                rapporterade.append(job_id)
+                iris_korning.registrera_utfall(k, namn=namn, leverbar=leverbar, skal=skal, undersokt=undersokt)
+                if skrap:
+                    k["skrap"] = sidhamtning.summera(k.get("skrap"), skrap)
+                resultat["korning"] = k
+                await app_state.jobs.complete(batch_id, resultat)
+                await _spara_korning(app_state, tenant["tenant_id"], batch_id, k)
     except Exception as fel:  # noqa: BLE001 — se docstringen
         logger.exception("Kunde inte rapportera till körning %s", batch_id)
         await _markera_korning_fallen(app_state, tenant["tenant_id"], batch_id, fel)

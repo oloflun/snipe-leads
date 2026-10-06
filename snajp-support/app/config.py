@@ -250,17 +250,26 @@ class Settings(BaseSettings):
     # (app/jobs/stream.py) PER PROCESS. Bara relevant när redis_url är satt
     # — utan Redis finns ingen ström att läsa, och app.state.chattstrom är
     # None (se app/main.py). Fler än 1 så en enskild långsam agentkörning
-    # inte blockerar nästa chattmeddelande i kön.
-    chat_workers: int = 2
+    # inte blockerar nästa chattmeddelande i kön. 2 -> 4 (Sebbes krav
+    # 2026-10-06): varje arbetsyta har flera användare som kör agenter
+    # samtidigt, och med 2 workers stod tredje samtidiga chatten bakom en
+    # agentkörning på uppåt en minut.
+    chat_workers: int = 4
     # Fas R4 (bd snipe-2xj): antal worker-tasks som läser crm:jobb:leads
     # (samma ChattStrom-klass som chatten, andra stream_key/group — se
-    # app/jobs/stream.py) PER PROCESS. Default 1, inte 2 som chatten: ett
-    # leads-jobb är ÅTTA LLM-anrop (research-steget, app/agent/leads_agent.py)
-    # mot chattens sex-sju, och en batch kan innehålla upp till 50 prospekt
-    # (LeadsBatchRequest.limit) — flera parallella workers hade kunnat
-    # brännsprinta genom hela tenant-timkvoten på sekunder i stället för att
-    # köa disciplinerat. Höjs bara efter att kvotmarginalen mätts i drift.
-    leads_workers: int = 1
+    # app/jobs/stream.py) PER PROCESS. 1 -> 3 (Sebbes krav 2026-10-06:
+    # flera användare på samma konto — och flera konton — ska kunna köra
+    # körningar samtidigt; med 1 worker stod Antons körning i kö bakom
+    # Sebbes). Säkert sedan körningslåset i app/api/leads.py
+    # (_korningslas): två barn i samma körning som rapporterar parallellt
+    # serialiseras per körning, olika körningar går parallellt.
+    # Kostnadsvakterna som motiverade 1:an finns kvar och gäller per tenant
+    # oavsett workers: dygnsbudgeten (leads_daily_token_budget, 429 vid
+    # taket) och sidhämtningstaket per körning. Ursprungsskälet — ett
+    # leads-jobb är ÅTTA LLM-anrop och en batch upp till 50 prospekt, så
+    # fler workers bränner timkvoten snabbare — är sedan Vertex-flytten
+    # (betald kvot, 2026-09-14) en svagare invändning än väntande kunder.
+    leads_workers: int = 3
     # V2-kostnadsarbetet (2026-09-02): vilken leads-kedja som körs.
     # "v1" = niostegsresearchen + fyrstegsutkastet (dagens beteende).
     # "v2" = 1 research-anrop + 2 utkastanrop (RESEARCH_V2/OUTREACH_V2,
