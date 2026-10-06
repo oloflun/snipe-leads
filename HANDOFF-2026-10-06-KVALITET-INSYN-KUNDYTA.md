@@ -11,11 +11,9 @@ Föregående handoff: `HANDOFF-2026-10-06-IRIS-SANNING-INSTRUKTIONER.md`. Logg: 
   se 4. Fällor).
 - **Sviten:** backend 2 771 gröna, 4 skippade; rotinvarianter 450 gröna; `tsc` rent (bortsett från kända
   `.next/dev/types/validator.ts`).
-- **development (Railway):** migration 099 körd. Koden med fas 1b, 7, 8, 9 och dubblettspärren deployar
-  automatiskt efter pushen. **Migration 101 (prompt_lager) och 102 (kundonskemal) är INTE körda någonstans**
-  — utan 101 sparas körningar utan lagertexter (loggas, fäller inget); utan 102 faller sparning av kundens
-  önskemål på check-constrainten.
-- **main:** opåverkad. 096–099 (+ Sebbes 100) väntar på Antons ja; 101–102 tillkommer.
+- **development (Railway):** migration 099–102 körda (101 och 102 2026-10-06 på morgonen, se § 3 KLART).
+  Koden med fas 1b, 7, 8, 9 och dubblettspärren är deployad.
+- **main:** opåverkad. 096–102 (inkl. Sebbes 100) väntar på Antons ja.
 - **Antons ocommittade filer, orörda:** `docs/utkast-*`, `next-env.d.ts`, `package.json`, `strategies.md`,
   `gsap.js`, `smooth-scroll.js`, `session-logs/2026-09-30-session-log.md`.
 
@@ -34,18 +32,18 @@ Föregående handoff: `HANDOFF-2026-10-06-IRIS-SANNING-INSTRUKTIONER.md`. Logg: 
 
 ## 3. Kvar, i prioritetsordning
 
-**Antons handgrepp (agenten nekades eller får inte):**
-1. **Radera de 9 bolagen i development** — klassificeraren nekade agenten. Kommandot (torrkört, träffar exakt de 9):
-   ```
-   python scripts/radera_prospekt.py --kund snajp --apply --id d9a3f7a3-4b13-4b25-a218-79d039f26427 --id bb20abe4-4d27-4149-b2d1-2ecc28865ae5 --id de14461a-1a2e-44f1-b860-39046acaa041 --id ceb08116-4d87-4beb-a4c5-ab61f447aa17 --id 0c28ef7e-a9f3-447c-bb23-050ab9fd7f9d --id 32f3098b-29f4-41e2-afab-bde5e0c46712 --id ccde38d1-9d03-4bf1-a331-3a047f427057 --id 58aaa52e-0993-42c8-aaf5-9e1605807032 --id 16a533bc-528f-4f04-9df3-8778fa2a117f
-   ```
-   (Intermezzon, Yrkeshögskolan Umeå Kommun, IHM Business School, MBD Bygg, BA Bygg i Väst AB, AF Bygg Väst AB,
-   Byggmästarna i Göteborg AB, Detaljhandel Design AB, Exempel E-handel AB.) Main gick inte att inventera
-   (endpointen finns inte där än).
-2. **Återställ development-instruktionerna** (klassificeraren nekade): Admin › Agentinstruktioner › Gemensamt,
-   spara en tom version → agenterna läser `agent-core/AGENTS.md` igen. Mallens fem rader gäller fortfarande där.
-3. **Migration 101 och 102 mot development:** `python scripts/railway_migrate.py --env development --apply`
-   (torrkör först utan `--apply`).
+**KLART 2026-10-06 (morgon, på Antons uttryckliga ord, verifierat). Gör INTE om dessa:**
+1. ~~Radera de 9 bolagen i development~~ — raderade med `scripts/radera_prospekt.py --kund snajp --apply` (de nio
+   id:na: Intermezzon, Yrkeshögskolan Umeå Kommun, IHM Business School, MBD Bygg, BA Bygg i Väst AB, AF Bygg Väst AB,
+   Byggmästarna i Göteborg AB, Detaljhandel Design AB, Exempel E-handel AB). Torrkörning först träffade exakt de 9;
+   efteråt svarar skriptet "0 av N id:n hör till snajp". Main är fortfarande inte inventerad (endpointen finns inte där än).
+2. ~~Återställ development-instruktionerna~~ — tom version sparad i det gemensamma lagret
+   (`PUT /api/admin/instruktioner`, agent `alla`, id `d2642ef2-…`). `scripts/las_agentinstruktioner.py --env development`
+   visar "Läser agenten filen? ja", 3 611 tecken (var 279). Mallversionen ligger kvar som inaktiv i historiken.
+3. ~~Migration 101 och 102 mot development~~ — körda med `railway_migrate.py --env development --apply`;
+   omkörd torrkörning visar båda som `=`.
+
+**Antons handgrepp (agenten får inte):**
 4. **Ja till migrationerna 096–102 mot main**, sedan merge av PR #31. Annars pausar nattspeglingen (schemat skiljer).
 5. **Beslut: gallringsperiod för spårets fulltext.** Fas 7 sparar hela användarmeddelandet (kundmejl, bolagsmaterial)
    utan tak. Förslag 30 dagar. Dataskyddsfråga — inget gallras förrän du sagt ett tal.
