@@ -188,6 +188,8 @@ class MemoryStorage:
         self.prospects: dict[str, list[dict[str, Any]]] = {}
         self.prospect_sources: dict[str, list[dict[str, Any]]] = {}
         self.agent_runs: dict[str, list[dict[str, Any]]] = {}
+        #: prompt_lager (migration 100): {hash: text}, global som tabellen.
+        self.prompt_lager: dict[str, str] = {}
         # Leads-jobbens liggare (INV-JOB-002, migration 059). Nycklad på
         # job_id precis som Postgres-tabellens primärnyckel.
         self.leads_job_ledger: dict[str, dict[str, Any]] = {}
@@ -1475,6 +1477,8 @@ class MemoryStorage:
         is_test: bool = False,
         # Migration 055. Se base.py:s docstring för värdemängden.
         model: str | None = None,
+        prompt_lager: dict[str, str] | None = None,
+        prospect_id: str | None = None,
     ) -> dict[str, Any]:
         # Samma värdemängd som check-villkoret i migration 025. Utan den här
         # raden tar minnet emot vad som helst medan Postgres kastar — och det
@@ -1499,10 +1503,17 @@ class MemoryStorage:
             "tokens_in": tokens_in,
             "tokens_out": tokens_out,
             "latency_ms": latency_ms,
+            "prospect_id": prospect_id,
             "created_at": _now(),
         }
         self.agent_runs.setdefault(tenant_id, []).append(run)
+        # on conflict do nothing: första texten per hash står kvar.
+        for hash_, text in (prompt_lager or {}).items():
+            self.prompt_lager.setdefault(hash_, text)
         return run
+
+    async def get_prompt_lager(self, hashar: list[str]) -> dict[str, str]:
+        return {h: self.prompt_lager[h] for h in hashar if h in self.prompt_lager}
 
     async def list_agent_runs(
         self, tenant_id: str, *, agent_type: str | None = None, limit: int = 50
@@ -2561,6 +2572,7 @@ class MemoryStorage:
         tenant_id: str | None = None,
         agent_type: str | None = None,
         limit: int = 50,
+        prospect_id: str | None = None,
     ) -> list[dict[str, Any]]:
         runs = [
             run
@@ -2570,6 +2582,8 @@ class MemoryStorage:
         ]
         if agent_type:
             runs = [r for r in runs if r["agent_type"] == agent_type]
+        if prospect_id:
+            runs = [r for r in runs if str(r.get("prospect_id") or "") == str(prospect_id)]
         runs.sort(key=lambda r: r["created_at"], reverse=True)
         return runs[:limit]
 

@@ -160,7 +160,20 @@ _UTKAST_V2_UPPGIFT = (
 )
 
 
-async def run_research_step_v2(
+async def run_research_step_v2(*args: Any, **kwargs: Any) -> dict[str, Any]:
+    """Fas B för ETT prospekt i ETT LLM-anrop — se _research_v2.
+
+    Omslaget samlar anropen utanför stegmotorn som görs under researchen
+    (Jev-klassningen, webbrevisionen, en profilkompilering) och lägger dem i
+    bolagets researchkörning, så att insynens kedja (Fas 7) visar vad de fick
+    och svarade. Utan omslaget lämnade de inget spår alls."""
+    from ..agentcore.insyn import samla_anrop
+
+    async with samla_anrop() as sidoanrop:
+        return await _research_v2(*args, sidoanrop=sidoanrop, **kwargs)
+
+
+async def _research_v2(
     storage,
     tenant_id: str,
     *,
@@ -171,6 +184,7 @@ async def run_research_step_v2(
     is_test: bool = False,
     icp: dict[str, Any] | None = None,
     profil: dict[str, Any] | None = None,
+    sidoanrop: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Fas B för ETT prospekt i ETT LLM-anrop. Samma returnycklar som
     leads_agent.run_research_step — plus company_summary/likely_pains på
@@ -445,7 +459,36 @@ async def run_research_step_v2(
         indent=2,
     )
 
+    contact_missing = kontakt_saknas
+    if not contact_missing:
+        contact_missing_reason = None
+    elif not kontakt_diagnostik["hemsidematerial_tillgangligt"]:
+        contact_missing_reason = (
+            "Startsidan gick inte att hämta — kontaktsökningen kunde inte köras."
+        )
+    elif not kontakt_diagnostik["kandidater"]:
+        contact_missing_reason = "Hittade ingen kontakt- eller om oss-länk på bolagets webbplats."
+    elif not kontakt_diagnostik["skrapade"]:
+        contact_missing_reason = "Kontaktsidan/-sidorna hittades men gick inte att hämta."
+    else:
+        contact_missing_reason = (
+            "Kontaktsidan hittades men innehöll ingen verifierbar kontaktperson eller adress."
+        )
+
     latency_ms = int((time.monotonic() - started) * 1000)
+    # Kodgrindarnas utslag som egna poster i spåret (Fas 7). Nyckeln "step",
+    # inte "skill": de är kod, inga LLM-steg. Insynens kedja läser dem för att
+    # peka ut var kedjan stannade — "Källmaterial: 0 tecken" på researchnoden
+    # är precis den rad som saknades när de påhittade bolagen gick igenom.
+    grindar = [
+        {"step": "grind:kallmaterial", "tecken": len(material), "utslag": "slappt" if har_underlag else "falld",
+         "kallor": [s.get("url") if isinstance(s, dict) else s for s in scraped_sources][:20]},
+        {"step": "grind:bedomning", "qualified": bool(bedomning["qualified"]), "niva": bedomning.get("niva"),
+         "score_total": bedomning.get("score_total"), "disqualifiers": bedomning.get("disqualifiers"),
+         "rader": bedomning.get("score_breakdown")},
+        {"step": "grind:kontakt", "kontaktniva": slutlig_kontaktniva, "saknas": kontakt_saknas,
+         "skal": contact_missing_reason},
+    ]
     await storage.log_agent_run(
         tenant_id,
         agent_type="leads_research",
@@ -453,12 +496,14 @@ async def run_research_step_v2(
         skills_used=trace.skills_used,
         input_text=brief,
         output_text=final_output,
-        step_log=trace.as_log(),
+        step_log=[*trace.as_log(), *(sidoanrop or []), *grindar],
+        prompt_lager=trace.lagertexter(),
         tokens_in=trace.total_tokens_in,
         tokens_out=trace.total_tokens_out,
         latency_ms=latency_ms,
         is_test=is_test,
         model=f"{settings.llm_provider}:{settings.model}",
+        prospect_id=prospect_id,
     )
 
     # Samma belägg-urval som V1: citat + pains + triggers — ALDRIG hela
@@ -490,22 +535,6 @@ async def run_research_step_v2(
         (p for p in produkter if p["namn"].casefold() == str(fynd.get("produkt") or "").strip().casefold()),
         None,
     )
-
-    contact_missing = kontakt_saknas
-    if not contact_missing:
-        contact_missing_reason = None
-    elif not kontakt_diagnostik["hemsidematerial_tillgangligt"]:
-        contact_missing_reason = (
-            "Startsidan gick inte att hämta — kontaktsökningen kunde inte köras."
-        )
-    elif not kontakt_diagnostik["kandidater"]:
-        contact_missing_reason = "Hittade ingen kontakt- eller om oss-länk på bolagets webbplats."
-    elif not kontakt_diagnostik["skrapade"]:
-        contact_missing_reason = "Kontaktsidan/-sidorna hittades men gick inte att hämta."
-    else:
-        contact_missing_reason = (
-            "Kontaktsidan hittades men innehöll ingen verifierbar kontaktperson eller adress."
-        )
 
     return {
         "lagesbeskrivning": bedomning.get("lagesbeskrivning"),
@@ -806,6 +835,15 @@ async def run_outreach_draft_v2(
     skills_used_logg = list(trace.skills_used)
     if "mk:cold-email" not in skills_used_logg:
         skills_used_logg.insert(1, "mk:cold-email")
+    # Faktagrindens och köns utslag i spåret (Fas 7), samma form som
+    # researchens grindposter. Insynens kedja pekar ut dem som noder.
+    grindar = [
+        {"step": "grind:faktagrind", "ok": bool(grounding.get("ok")), "fired": bool(grounding.get("fired")),
+         "repaired": bool(grounding.get("repaired")),
+         "unsupported_before": grounding.get("unsupported_before"),
+         "unsupported_after": grounding.get("unsupported_after")},
+        {"step": "grind:ko", "koad": bool(context.queued), "skal": context.escalation_reason},
+    ]
     await storage.log_agent_run(
         tenant_id,
         agent_type="leads_outreach",
@@ -813,12 +851,14 @@ async def run_outreach_draft_v2(
         skills_used=skills_used_logg,
         input_text=brief,
         output_text=f"{subject}\n\n{final_body}",
-        step_log=trace.as_log(),
+        step_log=[*trace.as_log(), *grindar],
+        prompt_lager=trace.lagertexter(),
         tokens_in=trace.total_tokens_in,
         tokens_out=trace.total_tokens_out,
         latency_ms=latency_ms,
         is_test=is_test,
         model=f"{settings.llm_provider}:{settings.model}",
+        prospect_id=thread.get("prospect_id"),
     )
 
     return {

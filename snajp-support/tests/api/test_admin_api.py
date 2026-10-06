@@ -184,3 +184,37 @@ def test_leads_underlag_visar_vad_varje_lead_vilar_pa():
         # Kundnyckeln kommer inte in.
         kund = {"X-API-Key": get_settings().snajp_demo_api_key}
         assert client.get(f"/api/admin/tenants/{DEFAULT_TENANT_ID}/leads-underlag", headers=kund).status_code == 403
+
+
+def test_insynens_lasvagar_ar_oppna_bara_for_master():
+    """Fas 7: kartan, skillfilen, KB-provet och kedjan. Läsning bakom
+    master-nyckeln; kundnyckeln kommer inte in."""
+    import asyncio
+
+    with TestClient(app) as client:
+        huvud = {"X-API-Key": get_settings().snajp_master_api_key}
+        kund = {"X-API-Key": get_settings().snajp_demo_api_key}
+        bas = f"/api/admin/tenants/{DEFAULT_TENANT_ID}/insyn"
+        for agent in ("leads", "support"):
+            svar = client.get(f"{bas}?agent={agent}", headers=huvud)
+            assert svar.status_code == 200, svar.text
+            assert svar.json()["insyn"]["matris"]["rader"]
+        assert client.get(f"{bas}?agent=leads", headers=kund).status_code == 403
+        assert client.get(f"{bas}?agent=okand", headers=huvud).status_code == 422
+
+        fil = client.get("/api/admin/skills/fil?skill=sa:draft-outreach&fil=SKILL.md", headers=huvud)
+        assert fil.status_code == 200 and fil.json()["fil"]["orord"] is True
+        utanfor = "/api/admin/skills/fil?skill=sa:draft-outreach&fil=../../AGENTS.md"
+        assert client.get(utanfor, headers=huvud).status_code == 422
+
+        prov = client.post(f"{bas}/kb-prov", headers=huvud, json={"fraga": "leveranstid"})
+        assert prov.status_code == 200 and "artiklar" in prov.json()["prov"]
+
+        prospekt = asyncio.run(
+            app.state.storage.create_prospect(DEFAULT_TENANT_ID, company_name="Kedjebolaget AB", origin="manual")
+        )
+        kedja = client.get(
+            f"/api/admin/prospects/{prospekt['id']}/kedja?tenant_id={DEFAULT_TENANT_ID}", headers=huvud
+        )
+        assert kedja.status_code == 200
+        assert {n["id"]: n["utfall"] for n in kedja.json()["kedja"]["noder"]}["grind:forfilter"] == "hoppad"

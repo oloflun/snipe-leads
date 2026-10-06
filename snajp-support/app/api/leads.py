@@ -46,6 +46,7 @@ from ..leads.context_pack import (
     build_context_pack,
     materialize_product_marketing,
 )
+from ..agentcore.insyn import samla_anrop
 from ..leads.discovery import (
     DiscoveryError,
     LAGLIG_GRUND_EGEN_WEBB,
@@ -1670,12 +1671,9 @@ async def _samla_korningens_prospekt(
         try:
             # Prospekt, listrader och CRM-kunder (app/leads/upptagna.py): Iris
             # hämtar aldrig ett bolag som redan ligger i en lista.
-            fynd = await hitta_bolag(
-                sok_icp,
-                saknas,
-                uteslut_namn={p["company_name"] for p in skapade} | await upptagna.hamta(storage, tenant_id),
-                profil=profil,
-            )
+            uteslut_namn = {p["company_name"] for p in skapade} | await upptagna.hamta(storage, tenant_id)
+            async with samla_anrop(storage, tenant_id, is_test=bool(payload.is_test), input_text="bolagssökning"):
+                fynd = await hitta_bolag(sok_icp, saknas, uteslut_namn=uteslut_namn, profil=profil)
         except DiscoveryError as fel:
             if not skapade:
                 raise HTTPException(status_code=503, detail=_FEL_SOKNING) from fel
@@ -1957,7 +1955,9 @@ async def _fyll_pa(app_state, tenant: dict, batch_id: str) -> None:
                 storage, tenant_id, tak=sidhamtning.STANDARD_TAK - sidhamtning.betalda(k.get("skrap"))
             )
             try:
-                await iris_korning.sokrunda(profil, sok_icp, k, uteslut=uteslut)
+                # Sökningen och Jev-triagen loggas som en egen post (Fas 7).
+                async with samla_anrop(storage, tenant_id, is_test=bool(k.get("is_test")), input_text=f"sökrunda {k['rundor'] + 1}"):
+                    await iris_korning.sokrunda(profil, sok_icp, k, uteslut=uteslut)
             except DiscoveryError:
                 logger.warning("Sökrundan i körning %s misslyckades.", batch_id)
                 if k["rundor"] >= iris_korning.MAX_RUNDOR:
@@ -3052,12 +3052,14 @@ async def _run_list_job(app_state, payload: dict) -> None:
             # varje hämtad sida: en lista på 40 listsidor + 90 bolagssidor
             # tar längre än så, och utan puls visade UI:t "Tidsgräns
             # överskriden" medan jobbet fortfarande byggde listan.
-            traffar = await merinfo.sok(
-                icp, int(lista["antal"]), uteslut=uteslut, profil=profil,
-                puls=lambda: app_state.jobs.start(job_id), lage="lista",
-            )
+            async with samla_anrop(storage, tenant_id, input_text="listsökning (register)"):
+                traffar = await merinfo.sok(
+                    icp, int(lista["antal"]), uteslut=uteslut, profil=profil,
+                    puls=lambda: app_state.jobs.start(job_id), lage="lista",
+                )
         if traffar is None:
-            traffar = await hitta_bolag(icp, int(lista["antal"]), uteslut_namn=uteslut)
+            async with samla_anrop(storage, tenant_id, input_text="listsökning"):
+                traffar = await hitta_bolag(icp, int(lista["antal"]), uteslut_namn=uteslut)
         traffar = [t for t in traffar if not upptagna.upptagen(uteslut, t.get("company_name"), t.get("orgnr"))]
         rader: list[dict] = []
         geografi = (icp.get("geography") or [None])[0] if isinstance(icp.get("geography"), list) else icp.get("geography")

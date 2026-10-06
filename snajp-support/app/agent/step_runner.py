@@ -19,7 +19,9 @@ steg här — de görs i kod av anroparen. Modellen resonerar; koden agerar.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -64,6 +66,145 @@ def thinking_kwargs(mode: str) -> dict[str, Any]:
 
 # Geminis motsvarighet bor i llm.py (gemini_tank_kwargs), eftersom även
 # småanropen utanför stegmotorn använder den.
+
+
+@dataclass(frozen=True)
+class Segment:
+    """Ett lager i prompten: vad det heter, var texten kommer ifrån, och texten.
+
+    Insynen (Fas 7) visar prompten lager för lager. Den visningen är sann bara
+    om den byggs av SAMMA lista som skickas till modellen — därför bygger
+    run_step sin systemprompt genom att foga ihop exakt den här listan, och
+    ett test kräver att de två är teckenidentiska."""
+
+    etikett: str  # gemensamt | agent | skill | overlay | kund | kontrakt | rubrik i användarmeddelandet
+    kalla: str  # fil eller tabell
+    position: str  # system | user
+    text: str
+
+    @property
+    def tecken(self) -> int:
+        return len(self.text)
+
+    @property
+    def hash(self) -> str:
+        return hashlib.sha256(self.text.encode("utf-8")).hexdigest()
+
+    def som_post(self) -> dict[str, Any]:
+        """Lagret utan texten — det step_log bär. Texten ligger en gång per
+        hash i prompt_lager (migration 100)."""
+        return {
+            "etikett": self.etikett,
+            "kalla": self.kalla,
+            "position": self.position,
+            "tecken": self.tecken,
+            "hash": self.hash,
+        }
+
+
+#: Avgränsaren mellan systemlagren. Står här och inte inline i run_step, så
+#: att insynen fogar ihop lagren på precis samma sätt.
+SYSTEM_FOG = "\n\n"
+
+#: Temperaturen för steg som inte deklarerar en egen (analys och bedömning).
+#: Formuleringssteg sätter sin egen i playbooken. Konstant så att insynen
+#: visar samma tal som anropet får.
+STANDARD_TEMPERATUR = 0.3
+
+
+def bygg_systemprompt(
+    step: PlaybookStep, lager: Instruktionslager, roll: str
+) -> list[Segment]:
+    """Systempromptens lager i verklig ordning. `run_step` fogar ihop listan
+    med SYSTEM_FOG; insynen visar den.
+
+    Ordningen är inte godtycklig:
+      1. GLOBALT     — mest generell policy, så skill/overlay kan specialisera
+      1b. GRUNDPROMPT — agenttypens grundprompt (support: kundtjänstpolicyn
+                       som allt kundarbete utgår från). Före skillen, med
+                       egen avgränsare som säger att den vinner över den.
+      2. skill_text  — den vendorade metodiken
+      3. overlay     — vår specialisering per STEG; "senare vinner vid
+                       konflikt", och delimitertexten säger det explicit
+      4. KUND        — vår specialisering per KUND, alltså den mest specifika
+                       av våra nivåer och därför sist av instruktionerna
+      5. kontraktet  — SIST och ovillkorligt. Läggs på av kod som varken en
+                       overlay, en kundinstruktion eller en SOUL kan nå, så
+                       utdatakontraktet inte kan försvagas av tuninglagren.
+    ALLT här är VÅR text — inklusive kundlagret, som är admin-only. KUNDSKRIVEN
+    text (SOUL, affärskontext, kunskapsbas) går i user-position, aldrig här.
+    Den skillnaden ÄR säkerhetsgränsen; se app/leads/soul.py och
+    app/agentcore/instruktioner.py (INV-SEC-009).
+    """
+    segment: list[Segment] = []
+    if lager.global_block:
+        segment.append(
+            Segment(
+                "gemensamt",
+                "agent-core/AGENTS.md" if lager.global_fran_fil else "agent_global_instructions (alla)",
+                "system",
+                lager.global_block,
+            )
+        )
+    if lager.agent_block:
+        segment.append(
+            Segment(
+                "agent",
+                "agent_global_instructions (agentlager)" if lager.agent_mall else "agent-core/prompts/",
+                "system",
+                lager.agent_block,
+            )
+        )
+    segment.append(
+        Segment(
+            "skill",
+            f"agent-core/skills/{step.skill.replace(':', '/')}",
+            "system",
+            f"Du utför ETT steg i {roll}. Steget styrs av "
+            f"skillen {step.skill}, vars fullständiga innehåll följer nedan. Följ "
+            f"den. Uppfinn aldrig fakta.\n\n{step.render()}",
+        )
+    )
+    # Flera overlays renderas i deklarationsordning, var och en med sin egen
+    # avgränsare — "senare vinner vid konflikt" gäller alltså även MELLAN
+    # overlays, så ett stegs syftesoverlay kan specialisera de hårda reglerna.
+    for namn in step.overlay_names:
+        segment.append(
+            Segment(
+                "overlay",
+                f"agent-core/overlays/{namn}.md",
+                "system",
+                f"{_OVERLAY_OPEN.format(name=namn)}\n{load_overlay(namn)}\n{_OVERLAY_CLOSE}",
+            )
+        )
+    if lager.kund_block:
+        segment.append(Segment("kund", "agent_configs.instructions_md", "system", lager.kund_block))
+    segment.append(Segment("kontrakt", "app/agent/step_runner.py", "system", _CONTRACT_INSTRUCTION))
+    return segment
+
+
+_RUBRIK = re.compile(r"^#{2,3} ", re.MULTILINE)
+
+
+def dela_anvandarmeddelande(text: str) -> list[Segment]:
+    """Användarmeddelandet delat vid sina rubriker (## och ###).
+
+    Meddelandet byggs av anroparna som rubricerade block (uppdrag, brief,
+    kontextpaket, profil, röstdokument, källmaterial, kunskapsbas …). Delningen
+    gör inget annat än att klippa vid rubrikerna: "".join(texterna) är
+    meddelandet, tecken för tecken. Etiketten är rubrikraden."""
+    starter = [m.start() for m in _RUBRIK.finditer(text)]
+    if not starter or starter[0] != 0:
+        starter.insert(0, 0)
+    ut: list[Segment] = []
+    for i, start in enumerate(starter):
+        bit = text[start : starter[i + 1] if i + 1 < len(starter) else len(text)]
+        if not bit:
+            continue
+        forsta = bit.split("\n", 1)[0]
+        etikett = forsta.lstrip("#").strip()[:120] if _RUBRIK.match(forsta) else "(inledning)"
+        ut.append(Segment(etikett, "användarmeddelandet", "user", bit))
+    return ut
 
 
 @dataclass
@@ -111,6 +252,17 @@ class StepResult:
     # (INV-AUDIT-001, migration 027).
     system_prompt: str = ""
     user_message: str = ""
+    #: Systempromptens lager (bygg_systemprompt) — samma lista som fogades
+    #: ihop till system_prompt. Tom för steg som inte går genom run_step
+    #: (bokföringens egna anrop); då bär system_prompt hela texten.
+    segment: tuple[Segment, ...] = ()
+    #: Filerna och sektionerna skill-lagret läste, med manifestkontrollen
+    #: VID KÖRNINGEN (PlaybookStep.lasta_delar).
+    skilldelar: tuple[dict[str, Any], ...] = ()
+    temperature: float | None = None
+    #: playbook_role — vilken bana steget kördes i (insynen skiljer
+    #: utkastets humanizer från grundningens med den).
+    roll: str = ""
 
 
 @dataclass
@@ -136,11 +288,25 @@ class RunTrace:
     def total_reasoning_tokens(self) -> int:
         return sum(s.reasoning_tokens for s in self.steps)
 
-    #: Kapning per fält i step_log. Räcker till felsökning; hela prompten är
-    #: sällan det man läser, och en spårvy som drar 200 kB per rad är en
-    #: spårvy ingen öppnar.
-    #: ponytail: 8k per fält; flytta till objektlagring om vi behöver mer.
-    TRACE_FIELD_MAX_CHARS = 8_000
+    #: Spårformatet. 2 = lagren lagrade per hash (Fas 7); spårvyn visar
+    #: lagerstapeln för 2 och de gamla kapade fälten för allt annat.
+    SPAR_VERSION = 2
+
+    # Taket på 8 000 tecken per fält (2026-08) är borta. Utkaststegets
+    # systemprompt är runt 19 000 tecken, så overlay, kundlager och kontrakt
+    # syntes aldrig i spårvyn. De stabila lagren lagras nu en gång per unik
+    # hash i prompt_lager (lagertexter() -> log_agent_run), och det som
+    # varierar per körning — användarmeddelandet, svaret, resonemanget — står
+    # i sin helhet på steget.
+    #
+    # GALLRING: ingen ännu. Förslaget är 30 dagar för den varierande texten
+    # (den bär kundmejl och bolagsmaterial), därefter bara mätvärden och
+    # hashar. Perioden är Antons beslut; tills ett tal finns gallras inget.
+
+    def lagertexter(self) -> dict[str, str]:
+        """{hash: text} för systemlagren i den här körningen — det som ska in
+        i prompt_lager. Skickas till storage.log_agent_run(prompt_lager=...)."""
+        return {seg.hash: seg.text for s in self.steps for seg in s.segment}
 
     def as_log(self, *, verbose: bool = True) -> list[dict[str, Any]]:
         """Det som skrivs till agent_runs.step_log.
@@ -149,11 +315,26 @@ class RunTrace:
         default: vi är i pilotfas och behöver spåret mer än vi behöver
         diskutrymmet. Utan det innehåller loggen mätvärden men ingen text,
         vilket räcker för att se ATT ett steg gick fel och inte för att se
-        varför."""
-        def _cap(value: str | None) -> str | None:
-            if value is None:
-                return None
-            return value[: RunTrace.TRACE_FIELD_MAX_CHARS]
+        varför. Lagren (namn, källa, tecken, hash) följer med i båda lägena —
+        de är mätvärden, inte text."""
+
+        def _lager(s: StepResult) -> list[dict[str, Any]]:
+            return [seg.som_post() for seg in s.segment] + [
+                seg.som_post() for seg in dela_anvandarmeddelande(s.user_message)
+            ]
+
+        def _texter(s: StepResult) -> dict[str, Any]:
+            if not verbose:
+                return {}
+            ut: dict[str, Any] = {
+                "user_message": s.user_message,
+                "raw_output": json.dumps(s.output, ensure_ascii=False) if s.output else "",
+                "reasoning_content": s.reasoning_content,
+            }
+            # Steg utanför run_step har inga lager — då bär fältet hela texten.
+            if not s.segment:
+                ut["system_prompt"] = s.system_prompt
+            return ut
 
         return [
             {
@@ -177,18 +358,12 @@ class RunTrace:
                 "instruktionshash": s.instruktionshash[:12],
                 "sources_used": s.output.get("sources_used", []),
                 "context_refs": s.output.get("context_refs", []),
-                **(
-                    {
-                        "system_prompt": _cap(s.system_prompt),
-                        "user_message": _cap(s.user_message),
-                        "raw_output": _cap(
-                            json.dumps(s.output, ensure_ascii=False) if s.output else ""
-                        ),
-                        "reasoning_content": _cap(s.reasoning_content),
-                    }
-                    if verbose
-                    else {}
-                ),
+                "temperature": s.temperature,
+                "roll": s.roll,
+                "spar": RunTrace.SPAR_VERSION if s.segment else 1,
+                "lager": _lager(s) if s.segment else [],
+                "skilldelar": list(s.skilldelar),
+                **_texter(s),
             }
             for s in self.steps
         ]
@@ -237,53 +412,18 @@ async def run_step(
     client = get_llm_client()
     skill_text = step.render()
 
-    # Systempromptens ordning är inte godtycklig:
-    #   1. GLOBALT     — mest generell policy, så skill/overlay kan specialisera
-    #   1b. GRUNDPROMPT — agenttypens grundprompt (support: kundtjänstpolicyn
-    #                    som allt kundarbete utgår från). Före skillen, med
-    #                    egen avgränsare som säger att den vinner över den.
-    #   2. skill_text  — den vendorade metodiken
-    #   3. overlay     — vår specialisering per STEG; "senare vinner vid
-    #                    konflikt", och delimitertexten säger det explicit
-    #   4. KUND        — vår specialisering per KUND, alltså den mest specifika
-    #                    av våra nivåer och därför sist av instruktionerna
-    #   5. kontraktet  — SIST och ovillkorligt. Läggs på av kod som varken en
-    #                    overlay, en kundinstruktion eller en SOUL kan nå, så
-    #                    utdatakontraktet inte kan försvagas av tuninglagren.
-    # ALLT här är VÅR text — inklusive kundlagret, som är admin-only. KUNDSKRIVEN
-    # text (SOUL, affärskontext, kunskapsbas) går i user-position, aldrig här.
-    # Den skillnaden ÄR säkerhetsgränsen; se app/leads/soul.py och
-    # app/agentcore/instruktioner.py.
+    # Ordningen och skälen till den står i bygg_systemprompt. Prompten fogas
+    # ihop av exakt den lista insynen visar — en visning som byggde sin egen
+    # kopia hade kunnat ljuga utan att någon märkt det.
     lager = instruktioner or Instruktionslager(
         global_md=load_global_instructions_fil(), kund_md=""
     )
-    # Flera overlays renderas i deklarationsordning, var och en med sin egen
-    # avgränsare — "senare vinner vid konflikt" gäller alltså även MELLAN
-    # overlays, så ett stegs syftesoverlay kan specialisera de hårda reglerna.
-    overlay_texts = [(namn, load_overlay(namn)) for namn in step.overlay_names]
-    overlay_chars_total = sum(len(text) for _, text in overlay_texts)
-    overlay_label = "+".join(namn for namn, _ in overlay_texts) or None
-
-    system_parts: list[str] = []
-    if lager.global_block:
-        system_parts.append(lager.global_block)
-    if lager.agent_block:
-        system_parts.append(lager.agent_block)
-    system_parts.append(
-        f"Du utför ETT steg i {playbook_role}. Steget styrs av "
-        f"skillen {step.skill}, vars fullständiga innehåll följer nedan. Följ "
-        f"den. Uppfinn aldrig fakta.\n\n{skill_text}"
-    )
-    for namn, overlay_text in overlay_texts:
-        system_parts.append(
-            f"{_OVERLAY_OPEN.format(name=namn)}\n{overlay_text}\n{_OVERLAY_CLOSE}"
-        )
-    if lager.kund_block:
-        system_parts.append(lager.kund_block)
-    system_parts.append(_CONTRACT_INSTRUCTION)
+    segment = bygg_systemprompt(step, lager, playbook_role)
+    overlay_chars_total = sum(len(load_overlay(namn)) for namn in step.overlay_names)
+    overlay_label = "+".join(step.overlay_names) or None
 
     messages = [
-        {"role": "system", "content": "\n\n".join(system_parts)},
+        {"role": "system", "content": SYSTEM_FOG.join(s.text for s in segment)},
         {"role": "user", "content": f"{case_context}\n\n## Din uppgift i det här steget\n{task}"},
     ]
 
@@ -305,7 +445,7 @@ async def run_step(
     # i playbooken; analys- och bedömningssteg ärver den kalla defaulten.
     # Transportfel (timeout, 429, 5xx) hanteras av AsyncOpenAI-klientens egna
     # omtag med exponentiell backoff — se get_llm_client i agent/llm.py.
-    effective_temperature = step.temperature if step.temperature is not None else 0.3
+    effective_temperature = step.temperature if step.temperature is not None else STANDARD_TEMPERATUR
 
     # Per-steg-modellval: steget kan peka ut ett Settings-fält (t.ex.
     # leads_draft_model) vars värde ersätter huvudmodellen för just det här
@@ -431,6 +571,20 @@ async def run_step(
             # svarar på "vad bad vi om".
             system_prompt=messages[0]["content"],
             user_message=messages[1]["content"],
+            segment=tuple(segment),
+            skilldelar=tuple(_skilldelar(step)),
+            temperature=effective_temperature,
+            roll=playbook_role,
         )
     )
     return output
+
+
+def _skilldelar(step: PlaybookStep) -> list[dict[str, Any]]:
+    """Filerna steget läste, med manifestkontrollen. Spåret är bokföring:
+    faller kontrollen (en fil som inte går att läsa om) står posten tom i
+    stället för att fälla ett steg som redan körts."""
+    try:
+        return step.lasta_delar()
+    except Exception:  # noqa: BLE001 — se docstringen
+        return []

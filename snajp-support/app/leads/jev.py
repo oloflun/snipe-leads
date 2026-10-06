@@ -36,6 +36,7 @@ vidare till researchen (fail open — Jev är en besparing, inte en grind).
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from typing import Any
@@ -81,15 +82,28 @@ def _rader(utdrag: str) -> list[str]:
 
 async def fraga(state: dict[str, Any], fragor: dict[str, Any]) -> dict[str, Any]:
     """Ett anrop. Kastar vid fel — anroparen avgör vad ett fel betyder."""
+    from ..agentcore.insyn import Tidtagare, logga_anrop
+
     nyckel = get_settings().typesafe_api_key
-    async with httpx.AsyncClient(timeout=TIMEOUT_S) as client:
-        svar = await client.post(
-            ENDPOINT,
-            json={"state": state, "model": MODELL, "questions": fragor},
-            headers={"Authorization": f"Bearer {nyckel}"},
-        )
-    svar.raise_for_status()
-    return svar.json().get("answers") or {}
+    with Tidtagare() as tid:
+        async with httpx.AsyncClient(timeout=TIMEOUT_S) as client:
+            svar = await client.post(
+                ENDPOINT,
+                json={"state": state, "model": MODELL, "questions": fragor},
+                headers={"Authorization": f"Bearer {nyckel}"},
+            )
+        svar.raise_for_status()
+        svaren = svar.json().get("answers") or {}
+    # Insynen (Fas 7): vad Jev fick (bolagsdata utan personuppgifter, se
+    # _utan_personuppgifter) och vad den svarade.
+    logga_anrop(
+        "jev",
+        prompt=json.dumps({"state": state, "questions": fragor}, ensure_ascii=False),
+        svar=json.dumps(svaren, ensure_ascii=False),
+        modell=MODELL,
+        latens_ms=tid.ms,
+    )
+    return svaren
 
 
 def _state(profil: dict[str, Any], kandidat: dict[str, Any], rader: list[str], signaler: list[str]) -> dict:

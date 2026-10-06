@@ -160,6 +160,15 @@ def _steps_by_skill() -> dict[str, Any]:
     return {step.skill: step for step in SUPPORT_V1.steps}
 
 
+#: Stegen som får HELA grundprompten (`steg_hel` nedan); övriga får kärnan.
+#: Står som konstant för insynen (app/agentcore/insyn.py), som visar varje
+#: stegs lager exakt som de byggs. tests/agentcore/test_insyn.py läser
+#: anropen i den här filen och fäller om listan och koden glider isär.
+HELA_GRUNDPROMPTEN = frozenset(
+    {"cs:draft-response", "cs:customer-escalation", "snajp:retention-conversation"}
+)
+
+
 #: Ämnen där en följdfråga är fel svar, oavsett hur tunt biblioteket är.
 #:
 #: Kontrollen görs i KOD och inte bara av `cs:customer-escalation`, av samma
@@ -2287,6 +2296,7 @@ async def run_support_agent(
         input_text=message,
         output_text=reply,
         step_log=steglogg,
+        prompt_lager=trace.lagertexter(),
         tokens_in=trace.total_tokens_in,
         tokens_out=trace.total_tokens_out,
         latency_ms=latency_ms,

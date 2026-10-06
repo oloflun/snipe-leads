@@ -214,6 +214,17 @@ async def visuell(url: str, skarmbild: str, fakta: dict[str, Any]) -> dict[str, 
     except Exception as fel:  # noqa: BLE001 — utan bedömning faller kriteriet tillbaka på texten
         logger.info("Bildbedömningen av %s föll: %s", url, type(fel).__name__)
         return None
+    from ..agentcore.insyn import logga_anrop
+
+    # Insynen (Fas 7): textdelen av prompten och svaret. Skärmbilden själv
+    # (en data-url på hundratals kB) loggas inte.
+    logga_anrop(
+        "webbrevision",
+        prompt=text,
+        svar=svar.choices[0].message.content or "",
+        modell=get_settings().vision_model,
+        kallor=[url],
+    )
     data = _json_ur(svar.choices[0].message.content or "")
     if not data or not isinstance(data.get("modernitet"), (int, float)):
         return None

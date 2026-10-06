@@ -653,6 +653,15 @@ class Storage(Protocol):
         # körde någon modell alls. None för anropare som (ännu) inte skickar
         # det — kolumnen är nullable av samma skäl.
         model: str | None = None,
+        # Fas 7 (migration 100): systemlagrens text, {hash: text}, ur
+        # RunTrace.lagertexter(). Läggs EN gång per unik hash i prompt_lager
+        # (insert … on conflict do nothing); step_log bär bara hashen. Ett fel
+        # där fäller aldrig loggningen av körningen.
+        prompt_lager: dict[str, str] | None = None,
+        # Kolumnen finns sedan migration 025 men skrevs aldrig. Insynens kedja
+        # per bolag (GET /api/admin/prospects/{id}/kedja) hittar körningarna
+        # genom den.
+        prospect_id: str | None = None,
     ) -> dict[str, Any]:
         """Skrivs för VARJE körning. Krävs för DSAR och för att kunna felsöka
         ett dåligt svar i efterhand (plan G10).
@@ -668,6 +677,12 @@ class Storage(Protocol):
     async def list_agent_runs(
         self, tenant_id: str, *, agent_type: str | None = None, limit: int = 50
     ) -> list[dict[str, Any]]: ...
+
+    async def get_prompt_lager(self, hashar: list[str]) -> dict[str, str]:
+        """Lagertexterna för de givna hasharna (prompt_lager, migration 100).
+        Saknade hashar saknas i svaret — en äldre körning, eller en text vars
+        skrivning föll."""
+        ...
 
     # -- Leads-jobbens liggare (INV-JOB-002) --------------------------------
 
@@ -1326,6 +1341,8 @@ class Storage(Protocol):
         tenant_id: str | None = None,
         agent_type: str | None = None,
         limit: int = 50,
+        # Insynens kedja per bolag (Fas 7). None = alla.
+        prospect_id: str | None = None,
     ) -> list[dict[str, Any]]: ...
 
     async def get_agent_run(self, run_id: str) -> dict[str, Any] | None: ...
@@ -1579,6 +1596,9 @@ AGENT_RUN_TYPES = (
     # regel: konstanten och migrationen i SAMMA ändring.
     "leads_svar",
     "leads_followup",
+    # Anropen utanför stegmotorn — bolagssökningen, Jev-triagen och
+    # profilkompileringen (migration 100, app/agentcore/insyn.samla_anrop).
+    "leads_underlag",
 )
 
 #: Agenttyperna som räknas mot leads-budgeten (sum_leads_tokens /
