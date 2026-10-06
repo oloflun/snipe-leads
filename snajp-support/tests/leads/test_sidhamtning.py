@@ -120,6 +120,51 @@ def test_summan_i_liggaren():
     k = sidhamtning.Skrapkontext(anrop={"bolag": 3}, cachetraffar=2)
     assert sidhamtning.summera({"bolag": 1, "lista": 2}, k) == {"bolag": 4, "lista": 2, "cache": 2}
     assert sidhamtning.betalda({"bolag": 4, "lista": 2, "cache": 9}) == 6
+    # tjanstefel är en diagnos, inte ett betalt anrop: den följer med i
+    # liggaren men räknas aldrig som kostnad (korning.sammanfatta läser båda).
+    k2 = sidhamtning.Skrapkontext(anrop={"lista": 1}, cachetraffar=3, tjanstefel=2)
+    assert k2.som_dict() == {"lista": 1, "cache": 3, "tjanstefel": 2}
+    assert sidhamtning.betalda(k2.som_dict()) == 1
+
+
+def test_tjanstefel_cachas_kort_sidfel_lange():
+    """Tre körningar 2026-10-06 svalt på ett cachat kreditfel i ett dygn:
+    ett tjänstefel säger inget om sidan och får bara skydda krediterna en
+    kort stund. Ett sidfel (för lite text, JS-skal) står sig en dag."""
+    from datetime import datetime, timedelta, timezone
+
+    nu = datetime.now(timezone.utc)
+    kredit = {"innehall": None, "fel": "Payment required: no credits left (402)"}
+    assert sidhamtning._farsk({**kredit, "hamtad_at": nu}, "lista") is True
+    assert sidhamtning._farsk({**kredit, "hamtad_at": nu - timedelta(minutes=11)}, "lista") is False
+    sidfel = {"innehall": None, "fel": "direkthämtning: för lite text (JS-renderad sida?)"}
+    assert sidhamtning._farsk({**sidfel, "hamtad_at": nu - timedelta(minutes=11)}, "lista") is True
+    assert sidhamtning._farsk({**sidfel, "hamtad_at": nu - timedelta(days=2)}, "lista") is False
+
+
+async def test_cachat_tjanstefel_raknas_som_tjanstefel(betalda):
+    """Serveras ett kreditfel ur cachen ska körningen ändå veta att
+    hämtningen föll hos tjänsten — annars slutar den 'slut på kandidater'
+    med grönt Klar (Sebbes tre körningar 2026-10-06)."""
+    storage = MemoryStorage()
+    url = "https://www.merinfo.se/bygg/goteborg/foretag/1"
+    await storage.put_sidcache(TENANT, url, innehall=None, fel="rate limit: 429 Too Many Requests")
+    kontext = sidhamtning.starta(storage, TENANT)
+    text, fel, via = await sidhamtning.hamta(url, fas="lista", direkt=False)
+    assert text is None and via == "cache" and "429" in str(fel)
+    assert kontext.tjanstefel == 1
+    assert kontext.som_dict()["tjanstefel"] == 1
+
+
+def test_sammanfattningen_namnger_tjanstefel():
+    from app.leads import korning as iris_korning
+
+    k = iris_korning.ny_korning(mal=2, scope="research", overrides=None, is_test=False)
+    k["klar"] = True
+    k["skrap"] = {"lista": 0, "cache": 6, "tjanstefel": 3}
+    text = iris_korning.sammanfatta(k)
+    assert "0 betalda sidhämtningar, 6 ur cachen" in text
+    assert "3 hämtningar föll hos tjänsten" in text
 
 
 async def test_registersida_ar_aldrig_hemsida():

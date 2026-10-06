@@ -206,9 +206,15 @@ def sammanfatta(korning: dict[str, Any]) -> str:
     if korning["levererade"] < korning["mal"] and korning.get("flaskhals"):
         text += f" Det som strypte mest: {korning['flaskhals'].lower()}."
     skrap = korning.get("skrap") or {}
-    betalda = sum(int(v) for k, v in skrap.items() if k != "cache" and isinstance(v, (int, float)))
+    betalda = sum(
+        int(v) for k, v in skrap.items() if k not in ("cache", "tjanstefel") and isinstance(v, (int, float))
+    )
     if skrap:
         text += f" {betalda} betalda sidhämtningar, {int(skrap.get('cache') or 0)} ur cachen."
+    # Sanningsregeln: ett slut som beror på tjänsten ska säga det, inte låta
+    # som att målgruppen var tom (tre körningar 2026-10-06 slutade så).
+    if int(skrap.get("tjanstefel") or 0) > 0:
+        text += f" {int(skrap['tjanstefel'])} hämtningar föll hos tjänsten (kredit, kvot eller tidsgräns)."
     return text
 
 

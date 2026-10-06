@@ -123,7 +123,9 @@ const T = {
     sv: "Avbryts. Körningen avslutas när bolagen som redan researchas är klara.",
     en: "Cancelling. The run ends once the companies already in research are done."
   },
-  styrFel: { sv: "Körningen gick inte att styra.", en: "The run could not be controlled." }
+  styrFel: { sv: "Körningen gick inte att styra.", en: "The run could not be controlled." },
+  stannade: { sv: "Stannade utan leads", en: "Stalled without leads" },
+  underMalet: { sv: "Klar, under målet", en: "Done, under target" }
 } satisfies Record<string, Localized>;
 
 export const KORNINGSSTATUS: Record<KorningsRad["status"], Localized> = {
@@ -154,10 +156,32 @@ const SLUT_ETIKETT: Record<string, Localized> = {
   avbruten: { sv: "Avbruten", en: "Cancelled" }
 };
 
+/**
+ * Hur gick det? En avslutad körning utan ett enda lead är ett MISSLYCKANDE
+ * för kunden, inte ett grönt "Klar" (Sebbe 2026-10-06: tre körningar
+ * stannade på 0 och såg klara ut). Under målet är gult: den levererade,
+ * men inte det som beställdes.
+ */
+type Utfallston = "ok" | "under" | "stannade";
+
+function utfallston(rad: KorningsRad): Utfallston {
+  const k = rad.korning;
+  if (rad.status !== "completed" || !k?.klar || !k.mal) return "ok";
+  if (k.slut_orsak === "avbruten") return "ok";
+  if (k.levererade === 0) return "stannade";
+  if (k.levererade < k.mal) return "under";
+  return "ok";
+}
+
 /** Statusen i kundens ord. Paus och avbrott har ingen egen liggarstatus:
  *  raden står i 'processing' tills motorn säger klar. */
 function statusText(rad: KorningsRad): Localized {
-  if (!pagar(rad)) return KORNINGSSTATUS[rad.status];
+  if (!pagar(rad)) {
+    const ton = utfallston(rad);
+    if (ton === "stannade") return T.stannade;
+    if (ton === "under") return T.underMalet;
+    return KORNINGSSTATUS[rad.status];
+  }
   if (rad.korning?.styrning === "paus") return T.pausad;
   if (rad.korning?.styrning === "avbruten") return T.avbryter;
   return T.pagar;
@@ -320,14 +344,22 @@ export function IrisKorningar() {
                 <span
                   className={cn(
                     "inline-flex items-center gap-1.5",
-                    rad.status === "failed" ? "text-danger" : pagar(rad) ? "text-warning" : "text-ink"
+                    rad.status === "failed" || utfallston(rad) === "stannade"
+                      ? "text-danger"
+                      : pagar(rad) || utfallston(rad) === "under"
+                        ? "text-warning"
+                        : "text-ink"
                   )}
                 >
                   <span
                     aria-hidden
                     className={cn(
                       "h-1.5 w-1.5 rounded-full",
-                      rad.status === "failed" ? "bg-danger" : pagar(rad) ? "bg-ochre" : "bg-moss"
+                      rad.status === "failed" || utfallston(rad) === "stannade"
+                        ? "bg-danger"
+                        : pagar(rad) || utfallston(rad) === "under"
+                          ? "bg-ochre"
+                          : "bg-moss"
                     )}
                   />
                   {text(statusText(rad))}

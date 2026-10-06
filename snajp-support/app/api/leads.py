@@ -521,7 +521,13 @@ async def list_prospects(request: Request, tenant: dict = Depends(require_tenant
     # Bara leads som uppfyller kraven visas (Antons krav 2026-10-06): ett
     # bortvalt bolag med motiveringen "uppfyller inte ..." är brus för kunden.
     # Raden står kvar i databasen så att nästa sökning utesluter bolaget.
-    prospects = [p for p in prospects if p.get("niva") != "C" and p.get("qualified") is not False]
+    # `?bortvalda=1` listar i stället just de bortvalda (Sebbe 2026-10-06:
+    # inget får SE UT som raderat — ett dolt bolag måste gå att hitta igen;
+    # raderas görs bara med uttrycklig handling).
+    if request.query_params.get("bortvalda") == "1":
+        prospects = [p for p in prospects if p.get("niva") == "C" or p.get("qualified") is False]
+    else:
+        prospects = [p for p in prospects if p.get("niva") != "C" and p.get("qualified") is not False]
     # Senaste händelse (Leads Suite): EN läsning av statusloggen, grupperad
     # här, i stället för en fråga per prospekt.
     senast: dict[str, str] = {}
@@ -2070,7 +2076,12 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> None:
             break
         if not k["kandidater"]:
             if k["rundor"] >= iris_korning.MAX_RUNDOR:
-                orsak = "slut_pa_kandidater"
+                # "Slut på kandidater" förutsätter att sidorna gick att hämta.
+                # Föll hämtningarna hos tjänsten (kredit, kvot, 429) och inget
+                # levererades är det sökningen som föll — kunden ska se rött,
+                # inte ett grönt "Klar" med noll leads (Sebbe 2026-10-06).
+                tjanstefel = int((k.get("skrap") or {}).get("tjanstefel") or 0)
+                orsak = "sokningen_foll" if tjanstefel and k["levererade"] == 0 else "slut_pa_kandidater"
                 break
             if not iris_korning.har_malgrupp(profil, sok_icp):
                 # Ingenting att sikta på: varken bransch, segment, kriterium
@@ -2144,6 +2155,11 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> None:
         if styr == "avbruten":
             iris_korning.avsluta(k, "avbruten")
         else:
+            if not orsak and k["levererade"] < k["mal"]:
+                # Samma sanningsregel som i loopen: tjänstefel utan leverans
+                # är "sökningen föll", inte "slut på kandidater".
+                tjanstefel = int((k.get("skrap") or {}).get("tjanstefel") or 0)
+                orsak = "sokningen_foll" if tjanstefel and k["levererade"] == 0 else "slut_pa_kandidater"
             iris_korning.avsluta(k, "klar" if k["levererade"] >= k["mal"] else (orsak or "slut_pa_kandidater"))
         k["sammanfattning"] = iris_korning.sammanfatta(k)
         await _spara_listspar(storage, tenant_id, k)

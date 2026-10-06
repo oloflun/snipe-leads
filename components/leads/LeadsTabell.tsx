@@ -65,6 +65,15 @@ const T = {
   sparaVy: { sv: "Spara vy", en: "Save view" },
   sparar: { sv: "Sparar…", en: "Saving…" },
   statusSparadesInte: { sv: "Statusen sparades inte", en: "The status was not saved" },
+  bortvalda: { sv: "Bortvalda", en: "Dropped" },
+  bortvaldaRubrik: { sv: "Bortvalda bolag", en: "Dropped companies" },
+  bortvaldaText: {
+    sv: "Bolag Iris valde bort för att de inte uppfyller kraven. Inget är raderat: de står kvar här och nästa sökning hoppar över dem. Radera går bara att göra inne på bolaget.",
+    en: "Companies Iris dropped because they do not meet the requirements. Nothing is deleted: they stay here and the next search skips them. Deleting is only done on the company itself."
+  },
+  bortvaldaTomt: { sv: "Inga bortvalda bolag.", en: "No dropped companies." },
+  bortvaldaFel: { sv: "De bortvalda bolagen kunde inte hämtas.", en: "The dropped companies could not be loaded." },
+  bortvald: { sv: "Bortvald", en: "Dropped" },
   sidodata: {
     sv: "Uppgifter eller sparade vyer kunde inte hämtas",
     en: "Tasks or saved views could not be loaded"
@@ -163,6 +172,11 @@ export function LeadsTabell({
     if (fokusId) (document.getElementById(`leads-status-${fokusId}`) ?? document.getElementById("leads-remsa-alla"))?.focus();
   }, [fokusId, prospekt]);
   const [filter, setFilter] = useState<VyFilter>({});
+  // Bortvalda (nivå C): dolda som standard (Antons krav), nåbara på begäran
+  // (Sebbes krav: inget får se ut som raderat). Hämtas först vid klick.
+  const [visaBortvalda, setVisaBortvalda] = useState(false);
+  const [bortvalda, setBortvalda] = useState<SuiteProspekt[] | null>(null);
+  const [bortvaldaFel, setBortvaldaFel] = useState<string | null>(null);
   const [vyNamn, setVyNamn] = useState("");
   const [sparar, setSparar] = useState(false);
 
@@ -227,6 +241,20 @@ export function LeadsTabell({
     for (const p of urval) if (matchar(p, { ...filter, status: undefined })) karta.set(p.status, (karta.get(p.status) ?? 0) + 1);
     return karta;
   }, [urval, filter]);
+
+  async function vaxlaBortvalda() {
+    const nu = !visaBortvalda;
+    setVisaBortvalda(nu);
+    if (!nu || bortvalda !== null || demo) return;
+    setBortvaldaFel(null);
+    try {
+      const svar = await leadsAnrop<{ prospects?: SuiteProspekt[] }>("/leads/prospects?bortvalda=1");
+      setBortvalda(sortera(svar.prospects ?? []));
+    } catch (orsak) {
+      setBortvaldaFel(felmeddelande(orsak));
+      setBortvalda([]);
+    }
+  }
 
   async function bytStatus(id: string, status: string) {
     const forra = prospekt?.find((p) => p.id === id)?.status;
@@ -429,6 +457,19 @@ export function LeadsTabell({
               </li>
             );
           })}
+          <li>
+            <button
+              type="button"
+              aria-pressed={visaBortvalda}
+              onClick={() => void vaxlaBortvalda()}
+              className={cn(chip, visaBortvalda ? chipAktiv : chipInaktiv)}
+            >
+              {text(T.bortvalda)}
+              {bortvalda !== null ? (
+                <span className="num ml-1 tabular-nums opacity-70">{bortvalda.length}</span>
+              ) : null}
+            </button>
+          </li>
         </ul>
       </nav>
 
@@ -610,6 +651,50 @@ export function LeadsTabell({
           </ul>
         </>
       )}
+
+      {/* ------------------------------------------ BORTVALDA (nivå C) */}
+      {visaBortvalda ? (
+        <section aria-labelledby="leads-bortvalda" className="rounded-card border border-ink/12 bg-paper2/40 p-4 sm:p-5">
+          <h3 id="leads-bortvalda" className="text-[1rem] font-semibold">
+            {text(T.bortvaldaRubrik)}
+          </h3>
+          <p className="mt-1 max-w-[72ch] text-[14px] leading-6 text-ink-subtle">{text(T.bortvaldaText)}</p>
+          {bortvaldaFel ? (
+            <p role="alert" className="mt-3 text-[14px] text-danger">
+              {bortvaldaFel}
+            </p>
+          ) : bortvalda === null ? (
+            <div className="mt-4">
+              <SkeletonRows />
+            </div>
+          ) : bortvalda.length === 0 ? (
+            <p className={cn(meta, "mt-3")}>{text(T.bortvaldaTomt)}</p>
+          ) : (
+            <ul className="mt-3 divide-y divide-ink/10">
+              {bortvalda.map((p) => (
+                <li key={p.id} className="py-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                    <button
+                      type="button"
+                      onClick={() => onValj?.(p.id)}
+                      className="focus-ring min-w-0 truncate text-left text-[0.9375rem] font-medium text-ink-muted underline-offset-4 hover:text-ink hover:underline"
+                    >
+                      {p.company_name}
+                    </button>
+                    <span className="flex shrink-0 items-center gap-2">
+                      <Badge tone="warn">{text(T.bortvald)}</Badge>
+                      <span className={meta}>{relativTid(p.senaste_handelse_at ?? p.created_at, locale)}</span>
+                    </span>
+                  </div>
+                  {(p.disqualifiers?.[0] || p.motivering) ? (
+                    <p className={cn(meta, "mt-0.5 max-w-[80ch]")}>{p.disqualifiers?.[0] ?? p.motivering}</p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : null}
     </div>
   );
 }
