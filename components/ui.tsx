@@ -299,7 +299,9 @@ export function Tabell({
   children: React.ReactNode;
 }>) {
   return (
-    <div className="thin-scrollbar overflow-x-auto">
+    // relative: sr-only-rubriker (absolute) i en bred tabell förankras annars
+    // mot SIDAN och drog ut dokumentet i sidled (uppmätt 38 px vid 1280).
+    <div className="thin-scrollbar relative overflow-x-auto">
       <table
         aria-label={ariaLabel}
         className="w-full table-fixed border-collapse text-[0.875rem]"

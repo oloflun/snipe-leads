@@ -126,7 +126,16 @@ function demoKo(): KöItem[] {
   }));
 }
 
-export function IrisGranskning({ demo = false }: Readonly<{ demo?: boolean }>) {
+/**
+ * `onAntal` säger till översikten hur många utkast som väntar (nyckeltalet).
+ * Multivalet (Sebbe 2026-10-06): markera flera och godkänn eller avvisa i
+ * ett svep — varje post går ändå genom samma endpoint och samma grindar som
+ * ett enskilt beslut, i tur och ordning.
+ */
+export function IrisGranskning({
+  demo = false,
+  onAntal
+}: Readonly<{ demo?: boolean; onAntal?: (antal: number) => void }>) {
   const { text } = useLocale();
   const [poster, setPoster] = useState<KöItem[] | null>(null);
   const [signatur, setSignatur] = useState<Signatur | null>(null);
@@ -134,6 +143,22 @@ export function IrisGranskning({ demo = false }: Readonly<{ demo?: boolean }>) {
   const [pagar, setPagar] = useState<string | null>(null);
   const [oppen, setOppen] = useState<string | null>(null);
   const [besked, setBesked] = useState<Record<string, "approve" | "reject">>({});
+  const [valda, setValda] = useState<Set<string>>(new Set());
+  const [svep, setSvep] = useState<"approve" | "reject" | null>(null);
+
+  useEffect(() => {
+    if (poster !== null) onAntal?.(poster.length);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [poster]);
+
+  function vaxla(id: string) {
+    setValda((nu) => {
+      const nasta = new Set(nu);
+      if (nasta.has(id)) nasta.delete(id);
+      else nasta.add(id);
+      return nasta;
+    });
+  }
 
   async function hamta() {
     setFel(null);
@@ -197,6 +222,27 @@ export function IrisGranskning({ demo = false }: Readonly<{ demo?: boolean }>) {
     }
   }
 
+  async function avgorValda(handling: "approve" | "reject") {
+    if (valda.size === 0 || svep) return;
+    if (
+      handling === "reject" &&
+      !window.confirm(text({ sv: `Avvisa ${valda.size} utkast?`, en: `Reject ${valda.size} drafts?` }))
+    )
+      return;
+    setSvep(handling);
+    try {
+      // I tur och ordning, inte parallellt: varje beslut går genom samma
+      // endpoint och grindar som ett enskilt klick.
+      for (const id of [...valda]) {
+        // eslint-disable-next-line no-await-in-loop
+        await avgor(id, handling);
+      }
+      setValda(new Set());
+    } finally {
+      setSvep(null);
+    }
+  }
+
   return (
     <div>
       {demo ? (
@@ -209,6 +255,46 @@ export function IrisGranskning({ demo = false }: Readonly<{ demo?: boolean }>) {
         </p>
       ) : null}
 
+      {poster && poster.length > 1 ? (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <label className="inline-flex min-h-9 items-center gap-2 text-[0.8125rem] font-medium text-ink-muted">
+            <input
+              type="checkbox"
+              checked={valda.size === poster.length}
+              onChange={() => setValda(valda.size === poster.length ? new Set() : new Set(poster.map((p) => p.id)))}
+              className="h-4 w-4 accent-ink"
+            />
+            {text({ sv: "Markera alla", en: "Select all" })}
+          </label>
+          {valda.size > 0 ? (
+            <>
+              <button
+                type="button"
+                disabled={svep !== null || pagar !== null}
+                onClick={() => void avgorValda("approve")}
+                className={cn(btnPrimary, btnLiten)}
+              >
+                {svep === "approve" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                ) : (
+                  <Check className="h-4 w-4" aria-hidden />
+                )}
+                {text({ sv: `Godkänn och skicka ${valda.size} valda`, en: `Approve and send ${valda.size} selected` })}
+              </button>
+              <button
+                type="button"
+                disabled={svep !== null || pagar !== null}
+                onClick={() => void avgorValda("reject")}
+                className={cn(btnSecondary, btnLiten)}
+              >
+                <X className="h-4 w-4" aria-hidden />
+                {text({ sv: `Avvisa ${valda.size} valda`, en: `Reject ${valda.size} selected` })}
+              </button>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+
       {poster === null ? (
         <SkeletonRows />
       ) : poster.length === 0 ? (
@@ -219,6 +305,16 @@ export function IrisGranskning({ demo = false }: Readonly<{ demo?: boolean }>) {
             const öppen = oppen === post.id;
             return (
               <article key={post.id} className="py-5">
+                <div className="flex items-start gap-3">
+                <label className="mt-1 inline-flex shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={valda.has(post.id)}
+                    onChange={() => vaxla(post.id)}
+                    aria-label={text({ sv: `Markera ${post.company_name ?? post.subject ?? "utkastet"}`, en: `Select ${post.company_name ?? post.subject ?? "the draft"}` })}
+                    className="h-4 w-4 accent-ink"
+                  />
+                </label>
                 <button
                   type="button"
                   onClick={() => setOppen(öppen ? null : post.id)}
@@ -241,6 +337,7 @@ export function IrisGranskning({ demo = false }: Readonly<{ demo?: boolean }>) {
                     </span>
                   </div>
                 </button>
+                </div>
 
                 {!öppen && post.body ? (
                   <p className="mt-3 max-w-[72ch] whitespace-pre-wrap text-[0.9375rem] leading-7 text-ink-muted">

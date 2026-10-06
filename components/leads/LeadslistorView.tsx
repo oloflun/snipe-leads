@@ -556,7 +556,7 @@ export function LeadslistorView({
   }
 
   return (
-    <div className="grid gap-12">
+    <div className="flex min-w-0 flex-col gap-12">
       {/* ------------------------------ SÄLJLISTAN (100, 103) */}
       <SaljlistaSektion demo={demo} />
 

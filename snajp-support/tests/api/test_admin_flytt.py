@@ -170,3 +170,35 @@ async def test_bedomningen_foljer_med_till_main(client):
     ny = next(x for x in await storage.list_prospects(DEFAULT_TENANT_ID, limit=500) if x["company_name"] == "Bedömda Bolaget Main AB")
     assert (ny["niva"], ny["score_total"], ny["motivering"]) == ("A", 91, "Gammal sajt i målområdet.")
     assert ny["webbrevision"] == {"modernitet": 3} and ny["score_breakdown"]
+
+
+async def test_prospekt_flyttas_enskilt(client):
+    """typ='prospekt' (Sebbe 2026-10-06): markerade leads flyttas utan sin
+    körning. Dedup på bolagsnamnet — finns bolaget är det redan flyttat."""
+    storage = app.state.storage
+    p = await storage.create_prospect(
+        DEFAULT_TENANT_ID, company_name="Flyttbart AB", contact_name="Vera VD",
+        contact_email="vera@flyttbart.example", origin="iris", profil={"ort": "Umeå", "niva": "A"},
+    )
+    slug = _slug(client)
+    svar = client.post("/api/admin/flytt/paket", headers=_master(client),
+                       json={"slug": slug, "typ": "prospekt", "ids": [p["id"]]})
+    assert svar.status_code == 200, svar.text
+    paket, signatur = svar.json()["paket"], svar.json()["signatur"]
+    assert paket["poster"][0]["prospekt"][0]["company_name"] == "Flyttbart AB"
+
+    # Samma lager: bolaget finns redan → redan_flyttad (idempotent).
+    kropp = json.dumps(paket, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    ut = client.post("/api/admin/flytt/importera", content=kropp,
+                     headers={"Content-Type": "application/json", admin_flytt.SIGNATURHUVUD: signatur})
+    assert ut.status_code == 200 and ut.json()["rader"][0]["resultat"] == "redan_flyttad"
+
+    # Ett nytt namn importeras på riktigt, med profilen i behåll.
+    paket["poster"][0]["prospekt"][0]["company_name"] = "Flyttbart Syd AB"
+    kropp = json.dumps(paket, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    sig = admin_flytt.signera(paket, get_settings().flytt_nyckel)
+    ut = client.post("/api/admin/flytt/importera", content=kropp,
+                     headers={"Content-Type": "application/json", admin_flytt.SIGNATURHUVUD: sig})
+    assert ut.status_code == 200 and ut.json()["importerade"] == 1, ut.text
+    ny = await storage.get_prospect(DEFAULT_TENANT_ID, ut.json()["rader"][0]["id"])
+    assert ny["company_name"] == "Flyttbart Syd AB" and ny.get("ort") == "Umeå"

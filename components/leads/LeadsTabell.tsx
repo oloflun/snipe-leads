@@ -99,6 +99,19 @@ const TYPER: LeadTyp[] = ["iris", "lista", "import", "inkorg"];
 /** Stegen i remsan: arbetsflödets ordning, utan Spärrad (den har egen väg). */
 const REMSA = STATUS_ORDNING.filter((s) => s !== "suppressed");
 
+/**
+ * Pipelinestatus i säljlistans färgsystem (Sebbe 2026-10-06): grönt = i hamn,
+ * blått = på väg mot affär, rött = nej, gult = kontaktad utan svar. Samma
+ * tokens som components/leads/Saljlista.tsx (moss/chart-blue/danger/ochre).
+ */
+const STATUSPRICK: Record<string, string> = {
+  won: "bg-moss",
+  replied: "bg-chart-blue",
+  meeting: "bg-chart-blue",
+  contacted: "bg-ochre",
+  lost: "bg-danger"
+};
+
 function matchar(p: SuiteProspekt, f: VyFilter): boolean {
   if (f.status && p.status !== f.status) return false;
   if (f.niva && p.niva !== f.niva) return false;
@@ -146,7 +159,9 @@ export function LeadsTabell({
   onValj,
   valdId = null,
   exempel = [],
-  demo = false
+  demo = false,
+  flyttbar = false,
+  onAntal
 }: Readonly<{
   onValj?: (id: string) => void;
   /** Leadet vars låda är öppen: raden markeras. */
@@ -154,6 +169,10 @@ export function LeadsTabell({
   /** Demons exempelbolag, överst i listan. */
   exempel?: SuiteProspekt[];
   demo?: boolean;
+  /** Plattformsadmin i development: markera leads och flytta dem till main. */
+  flyttbar?: boolean;
+  /** Översiktens nyckeltal: hur många leads listan bär. */
+  onAntal?: (antal: number) => void;
 }>) {
   const { locale, text } = useLocale();
   const [prospekt, setProspekt] = useState<SuiteProspekt[] | null>(null);
@@ -172,6 +191,11 @@ export function LeadsTabell({
     if (fokusId) (document.getElementById(`leads-status-${fokusId}`) ?? document.getElementById("leads-remsa-alla"))?.focus();
   }, [fokusId, prospekt]);
   const [filter, setFilter] = useState<VyFilter>({});
+  // Flytta till main (admin, development): markerade leads skickas genom
+  // samma signerade flyttväg som Byt kund-panelen (lib/actions/flytt.ts).
+  const [valdaFlytt, setValdaFlytt] = useState<Set<string>>(new Set());
+  const [flyttar, setFlyttar] = useState(false);
+  const [flyttNotis, setFlyttNotis] = useState<string | null>(null);
   // Bortvalda (nivå C): dolda som standard (Antons krav), nåbara på begäran
   // (Sebbes krav: inget får se ut som raderat). Hämtas först vid klick.
   const [visaBortvalda, setVisaBortvalda] = useState(false);
@@ -231,6 +255,10 @@ export function LeadsTabell({
   }, [uppgifter]);
 
   const allaRader = useMemo(() => sortera([...exempel, ...(prospekt ?? [])]), [exempel, prospekt]);
+  useEffect(() => {
+    if (prospekt !== null) onAntal?.(allaRader.length);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prospekt, allaRader.length]);
   // Bortvalda bolag når aldrig listan: API:t lämnar bara leads som uppfyller
   // kraven (snajp-support/app/api/leads.py, list_prospects).
   const urval = allaRader;
@@ -273,6 +301,43 @@ export function LeadsTabell({
     } catch (orsak) {
       setProspekt((rader) => rader?.map((p) => (p.id === id ? { ...p, status: forra } : p)) ?? null);
       setNotis(`${text(T.statusSparadesInte)}: ${felmeddelande(orsak)}`);
+    }
+  }
+
+  function vaxlaFlytt(id: string) {
+    setValdaFlytt((nu) => {
+      const nasta = new Set(nu);
+      if (nasta.has(id)) nasta.delete(id);
+      else nasta.add(id);
+      return nasta;
+    });
+  }
+
+  async function flyttaValda() {
+    if (valdaFlytt.size === 0 || flyttar) return;
+    setFlyttar(true);
+    setFlyttNotis(null);
+    try {
+      const { flyttaProspektTillMain } = await import("@/lib/actions/flytt");
+      const svar = await flyttaProspektTillMain([...valdaFlytt]);
+      if (svar.error) {
+        setFlyttNotis(svar.error);
+        return;
+      }
+      const ok = (svar.rader ?? []).filter((r) => r.resultat === "importerad").length;
+      const redan = (svar.rader ?? []).filter((r) => r.resultat === "redan_flyttad").length;
+      const fel = (svar.rader ?? []).filter((r) => r.resultat === "fel").length;
+      setFlyttNotis(
+        text({
+          sv: `Flytt till main: ${ok} flyttade${redan ? `, ${redan} fanns redan` : ""}${fel ? `, ${fel} föll` : ""}.`,
+          en: `Move to main: ${ok} moved${redan ? `, ${redan} already there` : ""}${fel ? `, ${fel} failed` : ""}.`
+        })
+      );
+      if (fel === 0) setValdaFlytt(new Set());
+    } catch (orsak) {
+      setFlyttNotis(felmeddelande(orsak));
+    } finally {
+      setFlyttar(false);
     }
   }
 
@@ -327,8 +392,13 @@ export function LeadsTabell({
 
   const statusVal = (p: SuiteProspekt) =>
     p.origin === "example" ? (
-      <span className="text-ink-muted">{text(STATUS_ETIKETT[p.status] ?? { sv: p.status, en: p.status })}</span>
+      <span className="inline-flex items-center gap-1.5 text-ink-muted">
+        {STATUSPRICK[p.status] ? <span aria-hidden className={cn("h-2 w-2 shrink-0 rounded-full", STATUSPRICK[p.status])} /> : null}
+        {text(STATUS_ETIKETT[p.status] ?? { sv: p.status, en: p.status })}
+      </span>
     ) : (
+      <span className="flex items-center gap-1.5">
+        {STATUSPRICK[p.status] ? <span aria-hidden className={cn("h-2 w-2 shrink-0 rounded-full", STATUSPRICK[p.status])} /> : null}
       <select
         id={`leads-status-${p.id}`}
         value={p.status}
@@ -345,6 +415,7 @@ export function LeadsTabell({
           <option value={p.status}>{p.status}</option>
         )}
       </select>
+      </span>
     );
 
   const bolag = (p: SuiteProspekt) => {
@@ -582,6 +653,31 @@ export function LeadsTabell({
         </div>
       ) : null}
 
+      {flyttbar && valdaFlytt.size > 0 ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-input border border-ink/12 bg-paper2/60 px-3.5 py-2.5">
+          <span className="num text-[0.875rem] font-medium">
+            {text({ sv: `${valdaFlytt.size} markerade`, en: `${valdaFlytt.size} selected` })}
+          </span>
+          <button type="button" disabled={flyttar} onClick={() => void flyttaValda()} className={cn(btnSecondary, btnLiten)}>
+            {flyttar
+              ? text({ sv: "Flyttar…", en: "Moving…" })
+              : text({ sv: "Flytta till main", en: "Move to main" })}
+          </button>
+          <button
+            type="button"
+            onClick={() => setValdaFlytt(new Set())}
+            className="focus-ring text-[0.8125rem] text-ink-muted underline underline-offset-4 hover:text-ink"
+          >
+            {text({ sv: "Avmarkera", en: "Clear selection" })}
+          </button>
+        </div>
+      ) : null}
+      {flyttNotis ? (
+        <p role="status" className="text-[14px] text-ink-muted">
+          {flyttNotis}
+        </p>
+      ) : null}
+
       {notis ? (
         <p role="alert" className="text-[15px] text-danger">
           {notis}
@@ -600,6 +696,7 @@ export function LeadsTabell({
               ariaLabel={text(T.tabell)}
               minBredd={1040}
               kolumner={[
+                ...(flyttbar ? [{ rubrik: text({ sv: "Markera", en: "Select" }), bredd: "36px", srOnly: true }] : []),
                 { rubrik: text(T.kolBolag), bredd: harWebb ? "32%" : "38%" },
                 { rubrik: text(T.kolStatus), bredd: "13%" },
                 { rubrik: text(T.kolPoang), bredd: "7%", hoger: true },
@@ -614,6 +711,17 @@ export function LeadsTabell({
             >
               {synliga.map((p) => (
                 <tr key={p.id} className={cn(tabellRad, "align-top", p.id === valdId && "bg-ochre/10")}>
+                  {flyttbar ? (
+                    <Cell>
+                      <input
+                        type="checkbox"
+                        checked={valdaFlytt.has(p.id)}
+                        onChange={() => vaxlaFlytt(p.id)}
+                        aria-label={text({ sv: `Markera ${p.company_name}`, en: `Select ${p.company_name}` })}
+                        className="h-4 w-4 accent-ink"
+                      />
+                    </Cell>
+                  ) : null}
                   <Cell titel>{bolag(p)}</Cell>
                   <Cell>{statusVal(p)}</Cell>
                   <Cell hoger>{poangCell(p)}</Cell>
@@ -631,6 +739,15 @@ export function LeadsTabell({
             {synliga.map((p) => (
               <li key={p.id} className={cn("rounded-card border border-ink/12 bg-paper2/40 p-4", p.id === valdId && "border-ochre/50")}>
                 <div className="flex items-start justify-between gap-3">
+                  {flyttbar ? (
+                    <input
+                      type="checkbox"
+                      checked={valdaFlytt.has(p.id)}
+                      onChange={() => vaxlaFlytt(p.id)}
+                      aria-label={text({ sv: `Markera ${p.company_name}`, en: `Select ${p.company_name}` })}
+                      className="mt-1.5 h-4 w-4 shrink-0 accent-ink"
+                    />
+                  ) : null}
                   {bolag(p)}
                   <div className="shrink-0 text-right">{poangCell(p)}</div>
                 </div>

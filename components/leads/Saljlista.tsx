@@ -123,8 +123,8 @@ const T = {
   bestallStarta: { sv: "Beställ körningen", en: "Order the run" },
   bestaller: { sv: "Beställer…", en: "Ordering…" },
   bestallPagar: {
-    sv: "Körningen pågår. Bolagen läggs här i säljlistan när den är klar — du kan lämna sidan under tiden.",
-    en: "The run is in progress. The companies are added to this sales list when it finishes — you can leave the page meanwhile."
+    sv: "Körningen pågår. Bolagen läggs här i säljlistan när den är klar, och du kan lämna sidan under tiden.",
+    en: "The run is in progress. The companies are added to this sales list when it finishes, and you can leave the page meanwhile."
   },
   bestallKlar: { sv: "Körningen är klar", en: "The run is done" },
   bestallKlarInga: {
@@ -1408,7 +1408,7 @@ export function SaljlistaUtforska({ startOppen = false }: Readonly<{ startOppen?
   const [api] = useState(() => demoApi());
 
   return (
-    <section aria-labelledby="saljlista-utforska" className="grid gap-4">
+    <section aria-labelledby="saljlista-utforska" className="flex min-w-0 flex-col gap-4">
       <div className="rounded-card border border-ink/12 bg-paper2/40 p-4 sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
           <div className="min-w-0 max-w-[64ch]">

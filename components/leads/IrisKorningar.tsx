@@ -162,9 +162,9 @@ const SLUT_ETIKETT: Record<string, Localized> = {
  * stannade på 0 och såg klara ut). Under målet är gult: den levererade,
  * men inte det som beställdes.
  */
-type Utfallston = "ok" | "under" | "stannade";
+export type Utfallston = "ok" | "under" | "stannade";
 
-function utfallston(rad: KorningsRad): Utfallston {
+export function utfallston(rad: KorningsRad): Utfallston {
   const k = rad.korning;
   if (rad.status !== "completed" || !k?.klar || !k.mal) return "ok";
   if (k.slut_orsak === "avbruten") return "ok";
@@ -175,7 +175,7 @@ function utfallston(rad: KorningsRad): Utfallston {
 
 /** Statusen i kundens ord. Paus och avbrott har ingen egen liggarstatus:
  *  raden står i 'processing' tills motorn säger klar. */
-function statusText(rad: KorningsRad): Localized {
+export function statusText(rad: KorningsRad): Localized {
   if (!pagar(rad)) {
     const ton = utfallston(rad);
     if (ton === "stannade") return T.stannade;
@@ -202,7 +202,7 @@ export function korningsTyp(rad: KorningsRad): Localized {
 
 /** Pågår? Både liggarens status och motorns eget `klar` räknas: raden kan
  *  stå i 'completed' från sökjobbet medan motorn fortfarande fyller på. */
-function pagar(rad: KorningsRad): boolean {
+export function pagar(rad: KorningsRad): boolean {
   if (rad.status === "queued" || rad.status === "processing") return true;
   return Boolean(rad.korning && !rad.korning.klar && rad.status !== "failed");
 }
