@@ -328,6 +328,7 @@ async def _en_uppfoljning(
         input_text=f"uppföljning {sekvens} till {company_name}",
         output_text=f"{subject}\n\n{body}",
         step_log=trace.as_log(),
+        prompt_lager=trace.lagertexter(),
         tokens_in=trace.total_tokens_in,
         tokens_out=trace.total_tokens_out,
         latency_ms=int((time.monotonic() - started) * 1000),

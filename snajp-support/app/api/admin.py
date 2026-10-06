@@ -58,10 +58,83 @@ async def list_runs(
 
 @router.get("/runs/{run_id}")
 async def get_run(request: Request, run_id: str) -> dict:
-    run = await request.app.state.storage.get_agent_run(run_id)
+    storage = request.app.state.storage
+    run = await storage.get_agent_run(run_id)
     if not run:
         raise HTTPException(status_code=404, detail="Körningen finns inte.")
-    return {"run": run}
+    # Spår av version 2 (Fas 7) bär systemlagren som hashar; texterna står en
+    # gång per hash i prompt_lager. Spårvyn får dem bredvid körningen.
+    logg = run.get("step_log") if isinstance(run.get("step_log"), list) else []
+    hashar = sorted(
+        {
+            lager["hash"]
+            for steg in logg
+            if isinstance(steg, dict)
+            for lager in steg.get("lager") or []
+            if lager.get("position") == "system" and lager.get("hash")
+        }
+    )
+    return {"run": {**run, "lagertexter": await storage.get_prompt_lager(hashar)}}
+
+
+# -- Insyn (Fas 7): allt agenten läser, visat som flöde --------------------
+#
+# Läsning, som resten av filen. Visningen byggs ur samma funktioner som
+# bygger prompten (app/agentcore/insyn.py) — aldrig ur en egen beskrivning.
+
+
+@router.get("/tenants/{tenant_id}/insyn")
+async def tenant_insyn(request: Request, tenant_id: str, agent: str = "leads", kanal: str = "chat") -> dict:
+    from ..agentcore import insyn
+
+    if agent not in ("leads", "support"):
+        raise HTTPException(status_code=422, detail="agent måste vara leads eller support.")
+    if not await request.app.state.storage.get_tenant(tenant_id):
+        raise HTTPException(status_code=404, detail="Kunden finns inte.")
+    return {"insyn": await insyn.oversikt(request.app.state.storage, tenant_id, agent, kanal=kanal)}
+
+
+@router.get("/skills/fil")
+async def skill_fil(skill: str, fil: str) -> dict:
+    """Hela skillfilen och om den är orörd mot manifestet. Läser bara filer
+    registret känner till (parse_skill_name + registrets läsväg), så en
+    sökväg utanför agent-core/skills/ går inte att be om."""
+    from ..agentcore import insyn
+    from ..agentcore.registry import SkillRegistryError
+
+    if ".." in fil or fil.startswith(("/", "\\")):
+        raise HTTPException(status_code=422, detail="Ogiltig sökväg.")
+    try:
+        return {"fil": insyn.skillfil(skill, fil)}
+    except SkillRegistryError as fel:
+        raise HTTPException(status_code=404, detail=str(fel)) from fel
+
+
+@router.post("/tenants/{tenant_id}/insyn/kb-prov")
+async def kb_prov(request: Request, tenant_id: str, payload: dict) -> dict:
+    """Vilka kunskapsartiklar en fråga hade hämtat. POST bara för att frågan
+    kan vara lång och inte hör hemma i en url eller en åtkomstlogg; anropet
+    skriver ingenting och gör inget språkmodellanrop. Därför här i
+    läsroutern och inte i admin_profil.py, vars hela poäng är att den skriver."""
+    from ..agentcore import insyn
+
+    fraga = str((payload or {}).get("fraga") or "").strip()[:2000]
+    if not fraga:
+        raise HTTPException(status_code=422, detail="Skriv en fråga.")
+    return {"prov": await insyn.kb_prov(request.app.state.storage, tenant_id, fraga)}
+
+
+@router.get("/prospects/{prospect_id}/kedja")
+async def prospect_kedja(request: Request, prospect_id: str, tenant_id: str) -> dict:
+    """En körnings flöde för ett bolag: utfall per nod, in- och utdata,
+    grindarnas utslag och var kedjan stannade. `tenant_id` krävs: prospekten
+    läses alltid inom sin kund (RLS), även av admin."""
+    from ..agentcore import insyn
+
+    ut = await insyn.kedja(request.app.state.storage, tenant_id, prospect_id)
+    if ut is None:
+        raise HTTPException(status_code=404, detail="Bolaget finns inte hos kunden.")
+    return {"kedja": ut}
 
 
 @router.get("/events")

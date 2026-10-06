@@ -106,17 +106,20 @@ async def sokrunda(
     korning.setdefault("listspar", []).extend(listspar)
     kvar: list[dict[str, Any]] = []
     for kandidat in fynd:
+        namn = kandidat["company_name"]
         skal = forfiltrera(profil, kandidat, exclude_domains=icp.get("exclude_domains"))
+        utslag(korning, namn, "förfilter", skal)
         if skal:
-            korning["tratt"].append({"namn": kandidat["company_name"], "steg": "förfilter", "skal": skal})
+            korning["tratt"].append({"namn": namn, "steg": "förfilter", "skal": skal})
             continue
         fakta = await mat_webbplats(kandidat.get("website"))
         # Existensgrinden (leads/existens.py): en kandidat som inte kommer ur
         # registret måste styrkas av sin egen webbplats innan den kostar ett
         # Jev- eller researchanrop.
         ostyrkt = styrk(kandidat, fakta)
+        utslag(korning, namn, "existens", ostyrkt)
         if ostyrkt:
-            korning["tratt"].append({"namn": kandidat["company_name"], "steg": "existens", "skal": ostyrkt})
+            korning["tratt"].append({"namn": namn, "steg": "existens", "skal": ostyrkt})
             continue
         kandidat["webbsignaler"] = fakta.get("rader") or []
         # Registerkällan (merinfo) har redan triagerat sina kandidater; en
@@ -126,6 +129,7 @@ async def sokrunda(
         )
         if triage:
             kandidat["jev_triage"] = triage
+            utslag(korning, namn, "jev", "; ".join(triage.get("fall_skal") or []) if triage.get("beslut") == "fall" else None)
             if triage.get("beslut") == "fall":
                 korning["tratt"].append(
                     {
@@ -141,11 +145,24 @@ async def sokrunda(
     korning["kandidater"].extend(kvar)
 
 
+def utslag(korning: dict[str, Any], namn: str, grind: str, skal: str | None) -> None:
+    """Kodgrindens utslag för ett bolag, släppt som fällt (Fas 7, insynen).
+
+    Tratten bär bara bortvalen och räknas i sammanfattningen till kunden; en
+    släppt rad där hade blivit en "bortvald" utan skäl. Utslagen ligger därför
+    bredvid, i korning["utslag"], och följer med körningens tillstånd till
+    liggaren (set_leads_job_status)."""
+    korning.setdefault("utslag", []).append(
+        {"namn": namn, "grind": grind, "utslag": "falld" if skal else "slappt", "skal": skal}
+    )
+
+
 def registrera_utfall(
     korning: dict[str, Any], *, namn: str, leverbar: bool, skal: str | None, undersokt: bool = True
 ) -> None:
     korning["pagaende"] = max(0, korning["pagaende"] - 1)
     korning["undersokta"] += int(undersokt)
+    utslag(korning, namn, "research", None if leverbar else (skal or "inte leverbar"))
     if leverbar:
         korning["levererade"] += 1
     elif skal:

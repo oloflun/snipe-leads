@@ -22,7 +22,8 @@ export function KundHuvud({
   const { text } = useLocale();
   const vyer = [
     { href: `/admin/kunder/${id}`, etikett: text({ sv: "Agentprofil och tillägg", en: "Agent profile and add-ons" }) },
-    { href: `/admin/kunder/${id}/data`, etikett: text({ sv: "Uppgifter och kontakter", en: "Details and contacts" }) }
+    { href: `/admin/kunder/${id}/data`, etikett: text({ sv: "Uppgifter och kontakter", en: "Details and contacts" }) },
+    { href: `/admin/kunder/${id}/insyn`, etikett: text({ sv: "Underlag och flöde", en: "Inputs and flow" }) }
   ];
   return (
     <>

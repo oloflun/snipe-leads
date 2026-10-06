@@ -2001,14 +2001,34 @@ class PostgresStorage:
         is_test: bool = False,
         # Migration 055. Se base.py:s docstring för värdemängden.
         model: str | None = None,
+        prompt_lager: dict[str, str] | None = None,
+        prospect_id: str | None = None,
     ) -> dict[str, Any]:
+        if prompt_lager:
+            # Egen anslutning och egen transaktion, FÖRE körningen: ett fel här
+            # (tabellen saknas därför att migration 100 inte körts) hade annars
+            # avbrutit transaktionen och tagit körningsraden med sig. Lagren
+            # är visningens råvara; körningen är revisionsloggen.
+            try:
+                async with self.pool.acquire() as conn:
+                    await conn.execute(
+                        """
+                        insert into prompt_lager (hash, text)
+                        select * from unnest($1::text[], $2::text[])
+                        on conflict (hash) do nothing
+                        """,
+                        list(prompt_lager.keys()),
+                        list(prompt_lager.values()),
+                    )
+            except Exception:  # noqa: BLE001 — se kommentaren ovan
+                logger.exception("Kunde inte spara promptlagren (migration 100 körd?).")
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
                 """
                 insert into agent_runs
                   (tenant_id, agent_type, pack_version, skills_used, input, output,
-                   step_log, tokens_in, tokens_out, latency_ms, is_test, model)
-                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                   step_log, tokens_in, tokens_out, latency_ms, is_test, prospect_id, model)
+                values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                 returning *
                 """,
                 tenant_id,
@@ -2022,9 +2042,19 @@ class PostgresStorage:
                 tokens_out,
                 latency_ms,
                 is_test,
+                prospect_id,
                 model,
             )
         return _row(record)
+
+    async def get_prompt_lager(self, hashar: list[str]) -> dict[str, str]:
+        if not hashar:
+            return {}
+        async with self.pool.acquire() as conn:
+            records = await conn.fetch(
+                "select hash, text from prompt_lager where hash = any($1::text[])", list(hashar)
+            )
+        return {r["hash"]: r["text"] for r in records}
 
     async def list_agent_runs(
         self, tenant_id: str, *, agent_type: str | None = None, limit: int = 50
@@ -3473,6 +3503,7 @@ class PostgresStorage:
         tenant_id: str | None = None,
         agent_type: str | None = None,
         limit: int = 50,
+        prospect_id: str | None = None,
     ) -> list[dict[str, Any]]:
         async with self.pool.acquire() as conn:
             records = await conn.fetch(
@@ -3482,12 +3513,14 @@ class PostgresStorage:
                 join ss_tenants t on t.id = r.tenant_id
                 where ($1::uuid is null or r.tenant_id = $1)
                   and ($2::text is null or r.agent_type = $2)
+                  and ($4::uuid is null or r.prospect_id = $4)
                 order by r.created_at desc
                 limit $3
                 """,
                 tenant_id,
                 agent_type,
                 limit,
+                prospect_id,
             )
         return [_avkoda_jsonb(_row(r), "step_log", "grounding") for r in records]
 

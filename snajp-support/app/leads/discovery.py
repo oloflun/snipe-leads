@@ -519,12 +519,28 @@ async def _gemini_med_sokning(prompt: str) -> str:
         break
     assert svar is not None  # loopen antingen `break`:ar med svar eller kastar
     data = svar.json()
-    delar = (
-        (data.get("candidates") or [{}])[0]
-        .get("content", {})
-        .get("parts", [])
+    kandidat = (data.get("candidates") or [{}])[0]
+    delar = kandidat.get("content", {}).get("parts", [])
+    text = "".join(str(p.get("text") or "") for p in delar)
+    # Insynen (Fas 7): prompten, råsvaret och SÖKNINGENS KÄLLADRESSER. De
+    # påhittade bolagen 2026-10-05 kom ur det här anropet, och utan källorna
+    # går det inte att se om en träff hade en sida bakom sig eller inte.
+    from ..agentcore.insyn import logga_anrop
+
+    metadata = kandidat.get("groundingMetadata") or {}
+    logga_anrop(
+        "sokning",
+        prompt=prompt,
+        svar=text,
+        modell=modell,
+        kallor=[
+            str((chunk.get("web") or {}).get("uri") or "")
+            for chunk in metadata.get("groundingChunks") or []
+            if (chunk.get("web") or {}).get("uri")
+        ],
+        utfall={"sokfragor": metadata.get("webSearchQueries") or []},
     )
-    return "".join(str(p.get("text") or "") for p in delar)
+    return text
 
 
 def _giltig_kontaktniva(rad: dict[str, Any], *, har_epost: bool) -> str | None:

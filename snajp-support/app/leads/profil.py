@@ -527,27 +527,33 @@ async def _anropa_modell(kundtext: str, icp: dict[str, Any]) -> dict[str, Any]:
     from ..agent.llm import get_llm_client, tankande_kwargs
     from ..config import get_settings
 
+    from ..agentcore.insyn import Tidtagare, logga_anrop
+
     settings = get_settings()
     client = get_llm_client()
-    svar = await client.chat.completions.create(
-        model=settings.iris_profil_model or settings.model,
-        response_format={"type": "json_object"},
-        temperature=0.1,
-        messages=[
-            {"role": "system", "content": _SYSTEM},
-            {
-                "role": "user",
-                "content": (
-                    "## Säljarens text\n"
-                    + wrap_untrusted_content(kundtext, source="kundens affärskontext")
-                    + "\n\n## Redan ifyllda filter (gäller oavsett texten)\n"
-                    + json.dumps(icp, ensure_ascii=False)
-                ),
-            },
-        ],
-        **tankande_kwargs(),
+    modell = settings.iris_profil_model or settings.model
+    anvandare = (
+        "## Säljarens text\n"
+        + wrap_untrusted_content(kundtext, source="kundens affärskontext")
+        + "\n\n## Redan ifyllda filter (gäller oavsett texten)\n"
+        + json.dumps(icp, ensure_ascii=False)
     )
-    return json.loads(svar.choices[0].message.content or "{}")
+    with Tidtagare() as tid:
+        svar = await client.chat.completions.create(
+            model=modell,
+            response_format={"type": "json_object"},
+            temperature=0.1,
+            messages=[
+                {"role": "system", "content": _SYSTEM},
+                {"role": "user", "content": anvandare},
+            ],
+            **tankande_kwargs(),
+        )
+    innehall = svar.choices[0].message.content or "{}"
+    # Insynen (Fas 7): systemtexten är vår och står i koden, användartexten
+    # bär kundens affärskontext (inslagen som opålitlig, som i prompten).
+    logga_anrop("profil", prompt=f"{_SYSTEM}\n\n{anvandare}", svar=innehall, modell=modell, latens_ms=tid.ms)
+    return json.loads(innehall)
 
 
 async def kompilera(kundtext: str, icp: object, val: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -612,7 +618,12 @@ async def sakerstall_profil(storage, tenant_id: str, *, tvinga: bool = False) ->
         and sparad.get("schema") == SCHEMA
     ):
         return sparad
-    profil = await kompilera(kundtext, installningar.get("icp"), val)
+    from ..agentcore.insyn import samla_anrop
+
+    # Kompileringen är ett anrop utanför stegmotorn: en egen post i
+    # agent_runs ('leads_underlag'), så att insynen visar vad modellen fick.
+    async with samla_anrop(storage, tenant_id, input_text="profilkompilering"):
+        profil = await kompilera(kundtext, installningar.get("icp"), val)
     # Läs om före skrivning: kompileringen tar sekunder, och en samtidig
     # PUT /leads/config får inte skrivas över av en äldre kopia.
     farska = await storage.get_agent_settings(tenant_id, agent_type="leads")

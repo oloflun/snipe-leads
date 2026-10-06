@@ -22,7 +22,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable
 
-from .registry import load_full_skill, load_reference, load_section, parse_skill_name
+from .registry import load_full_skill, load_reference, load_section, load_skill_md, parse_skill_name
 
 
 class ScopeWithoutRationaleError(ValueError):
@@ -171,6 +171,36 @@ class PlaybookStep:
         for gammal, ny, _skal in self.radandringar:
             text = text.replace(gammal, ny)
         return text
+
+    def lasta_delar(self) -> list[dict[str, object]]:
+        """Filerna och sektionerna steget läser, i den ordning de renderas.
+
+        Insynens utfällning av skill-lagret (Fas 7). Följer _rendera_last gren
+        för gren — hel skill = SKILL.md + references/, skopa = exakt de
+        deklarerade posterna — och läser texten med samma funktioner, så
+        teckenantalen är de som faktiskt hamnar i prompten. Varje post bär
+        kontrollen mot manifestet (registry.fil_kontroll)."""
+        from .registry import fil_kontroll, reference_files
+
+        delar: list[dict[str, object]] = []
+
+        def _skill(namn: str, skopa: tuple[str, ...]) -> None:
+            poster = skopa or ("SKILL.md", *reference_files(namn))
+            for post in poster:
+                if post.startswith("§ "):
+                    fil, text = "SKILL.md", load_section(namn, post[2:])
+                elif post == "SKILL.md":
+                    fil, text = post, load_skill_md(namn)
+                else:
+                    fil, text = post, load_reference(namn, post)
+                delar.append(
+                    {"skill": namn, "del": post, "fil": fil, "tecken": len(text), **fil_kontroll(namn, fil)}
+                )
+
+        _skill(self.skill, self.scope)
+        for extra_namn, extra_skopa in self.extra_skills:
+            _skill(extra_namn, extra_skopa)
+        return delar
 
     def _rendera_last(self) -> str:
         """Skilltexten exakt som den läses, före textändringarna."""
