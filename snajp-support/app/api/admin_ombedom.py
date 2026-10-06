@@ -17,6 +17,15 @@ eller Redo. Ett lead kunden redan arbetar med (kontaktad, svarat, möte, vunnen,
 förlorad) rörs aldrig: att det plötsligt försvann ur listan vore värre än en
 gammal bedömning. Endast research, aldrig utkast.
 
+## Leads som föll för att hämtningen misslyckades
+
+Ett lead vars sidor inte gick att hämta vid ombedömningen blir nivå C med
+raden "Källmaterial" (bedomning.bedom, har_underlag=False) — utan att någon
+bedömning gjorts. Uppmätt 2026-10-06: ScrapeGraph-krediten var slut, och 13
+av Alunix 18 leads föll så. `utan_underlag=true` tar med just de, så att de
+kan bedömas om när hämtningen fungerar igen. Ett lead som Iris faktiskt
+bedömt och valt bort tas aldrig med.
+
 Torrkörning som standard (samma mönster som admin_konvertera.py). Ligger inte
 i admin.py: den filen skriver inte.
 """
@@ -40,10 +49,23 @@ MAX_PER_ANROP = 100
 
 class OmbedomRequest(BaseModel):
     apply: bool = False
+    utan_underlag: bool = False
 
 
-def ska_ombedomas(p: dict) -> bool:
-    return p.get("origin") in URSPRUNG and p.get("niva") in ("A", "B") and p.get("status") in STATUS
+def foll_utan_underlag(p: dict) -> bool:
+    """Nivå C enbart för att inget källmaterial gick att hämta."""
+    return p.get("niva") == "C" and any(
+        isinstance(r, dict) and r.get("nyckel") == "underlag" and r.get("etikett") == "Källmaterial"
+        for r in p.get("score_breakdown") or []
+    )
+
+
+def ska_ombedomas(p: dict, *, utan_underlag: bool = False) -> bool:
+    if p.get("origin") not in URSPRUNG or p.get("status") not in STATUS:
+        return False
+    if utan_underlag:
+        return foll_utan_underlag(p)
+    return p.get("niva") in ("A", "B")
 
 
 @router.post("/tenants/{tenant_id}/leads-ombedom")
@@ -56,7 +78,10 @@ async def ombedom_leads(request: Request, tenant_id: str, payload: OmbedomReques
     if not kund:
         raise HTTPException(status_code=404, detail="Kunden finns inte.")
 
-    kandidater = [p for p in await storage.list_prospects(tenant_id, limit=500) if ska_ombedomas(p)]
+    kandidater = [
+        p for p in await storage.list_prospects(tenant_id, limit=500)
+        if ska_ombedomas(p, utan_underlag=payload.utan_underlag)
+    ]
     svar: dict = {
         "antal": len(kandidater),
         "leads": [

@@ -88,3 +88,25 @@ async def test_kundnyckeln_kommer_inte_in():
                 f"/api/admin/tenants/{tenant_id}/leads-ombedom", headers={"X-API-Key": nyckel}, json={}
             )
             assert svar.status_code == 403
+
+
+@pytest.mark.anyio
+async def test_utan_underlag_tar_bara_leads_som_foll_for_att_hamtningen_misslyckades():
+    """2026-10-06: ScrapeGraph-krediten var slut och 13 av Alunix 18 leads föll
+    utan bedömning. De ska gå att köra om; ett lead Iris valt bort ska inte."""
+    async with app.router.lifespan_context(app):
+        async with _client() as client:
+            tenant_id, _, ids = await _kund_med_leads(client)
+            storage = app.state.storage
+            for p in storage.prospects[tenant_id]:
+                if p["company_name"] == "Bortvald":
+                    p["score_breakdown"] = [{"nyckel": "kp", "etikett": "x", "utfall": "miss"}]
+            utan = await storage.create_prospect(tenant_id, company_name="Utan material")
+            utan.update(origin="iris", niva="C", status="new", score_breakdown=[
+                {"nyckel": "underlag", "etikett": "Källmaterial", "utfall": "miss"}])
+            svar = await client.post(f"/api/admin/tenants/{tenant_id}/leads-ombedom", headers=MASTER,
+                                     json={"utan_underlag": True})
+            assert [l["id"] for l in svar.json()["leads"]] == [str(utan["id"])]
+            lasvy = await client.get(f"/api/admin/tenants/{tenant_id}/leads-underlag", headers=MASTER)
+            rad = next(l for l in lasvy.json()["leads"] if l["id"] == str(utan["id"]))
+            assert rad["bedomning"] == ["underlag:miss"]

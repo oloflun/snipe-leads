@@ -5,6 +5,9 @@
     python scripts/ombedom_leads.py --env development --apply        # köa ombedömningen
     python scripts/ombedom_leads.py --env development --kund snajp --apply
     python scripts/ombedom_leads.py --env development --rapport      # utfallet efteråt
+    python scripts/ombedom_leads.py --env development --utan-underlag --apply
+        # leads som föll för att sidorna inte gick att hämta (t.ex. slut på
+        # ScrapeGraph-kredit) — kör när hämtningen fungerar igen
 
 Skälet (2026-10-06): varje lead kräver nu ett belagt behov av det kunden
 säljer, och ett obelagt måste-krav fäller. Leads som redan står i listan
@@ -39,6 +42,8 @@ def main() -> None:
     parser.add_argument("--kund", help="bara den här kundens slug")
     parser.add_argument("--apply", action="store_true", help="köa ombedömningen (annars torrkörning)")
     parser.add_argument("--rapport", action="store_true", help="visa nivåerna för Iris-leads nu")
+    parser.add_argument("--utan-underlag", action="store_true",
+                        help="bara leads som föll för att källmaterialet inte gick att hämta")
     parser.add_argument("--main-godkant", action="store_true", help="Anton har godkänt skrivningen mot main")
     args = parser.parse_args()
     if args.env == "main" and args.apply and not args.main_godkant:
@@ -62,9 +67,13 @@ def main() -> None:
             if leads:
                 per = collections.Counter(l.get("niva") or "-" for l in leads)
                 print(f"{namn}: " + ", ".join(f"nivå {k}: {v}" for k, v in sorted(per.items())))
+                utan = sum(1 for l in leads if "underlag:miss" in (l.get("bedomning") or []))
+                med_kp = sum(1 for l in leads if any(b.startswith("kp:") for b in l.get("bedomning") or []))
+                print(f"  bedömda med produktmatchning: {med_kp}, föll utan källmaterial: {utan}")
             continue
         status, svar = api.anrop(
-            "POST", f"/api/admin/tenants/{kund['id']}/leads-ombedom", {"apply": args.apply}
+            "POST", f"/api/admin/tenants/{kund['id']}/leads-ombedom",
+            {"apply": args.apply, "utan_underlag": args.utan_underlag}
         )
         if status == 404 and "Kunden" not in str(svar):
             sys.exit("AVBRYTER: api:t saknar /leads-ombedom. Vänta in deployen.")
