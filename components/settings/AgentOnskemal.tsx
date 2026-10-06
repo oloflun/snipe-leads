@@ -3,7 +3,7 @@
 /* design · pre-emit critique: P4 H4 E4 S4 R5 V3 — Operate-yta i det låsta systemet
    (DESIGN.md, Tier 0): samma ändringslista som adminens Agentinstruktioner. */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Badge, btnLiten, btnPrimary, btnSecondary, etikett, meta, rubrikPanel } from "@/components/ui";
 import { felmeddelande } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
@@ -18,6 +18,10 @@ import { cn } from "@/lib/utils";
  * användarposition, inslaget som opålitligt innehåll (INV-SEC-009): kunden
  * styr ton och fokus men kan inte upphäva reglerna. Backend:
  * `snajp-support/app/leads/onskemal.py`.
+ *
+ * Tillgänglighet (granskning 2026-10-06): knapparna är `aria-disabled` så att
+ * fokus inte tappas under ett anrop; när förhandsgranskningen kommer flyttas
+ * fokus till rubriken Ändringar; varje steg annonseras i statusregionen.
  */
 
 type Agent = "leads" | "support";
@@ -38,8 +42,11 @@ const T = {
   nu: { sv: "Det agenten läser nu", en: "What the agent reads now" },
   tomt: { sv: "Inga önskemål sparade.", en: "No instructions saved." },
   feedback: { sv: "Er feedback", en: "Your feedback" },
+  skrivForst: { sv: "Skriv feedback först.", en: "Write feedback first." },
+  forhandsgranskaForst: { sv: "Förhandsgranska först.", en: "Preview first." },
   forhandsgranska: { sv: "Förhandsgranska", en: "Preview" },
   arbetar: { sv: "Arbetar…", en: "Working…" },
+  andringarKlara: { sv: "Förhandsgranskningen är klar. Inget är sparat än.", en: "The preview is ready. Nothing is saved yet." },
   andringar: { sv: "Ändringar", en: "Changes" },
   skal: { sv: "Skäl:", en: "Reason:" },
   typ: {
@@ -52,6 +59,8 @@ const T = {
   godkann: { sv: "Godkänn och spara", en: "Approve and save" },
   sparat: { sv: "Sparat. Gäller från nästa svar.", en: "Saved. Applies from the next reply." },
   historik: { sv: "Tidigare versioner", en: "Earlier versions" },
+  dinFeedback: { sv: "Feedback:", en: "Feedback:" },
+  dokumentet: { sv: "Dokumentet:", en: "The document:" },
   aterstall: { sv: "Återställ", en: "Restore" },
   aterstalld: { sv: "Återställd. Gäller från nästa svar.", en: "Restored. Applies from the next reply." },
   aktiv: { sv: "Aktiv", en: "Active" },
@@ -68,7 +77,9 @@ export function AgentOnskemal({ agent }: Readonly<{ agent: Agent }>) {
   const [busy, setBusy] = useState(false);
   const [fel, setFel] = useState<string | null>(null);
   const [kvitto, setKvitto] = useState<Localized | null>(null);
+  const andringarRubrik = useRef<HTMLHeadingElement>(null);
   const bas = `/agent/onskemal/${agent}`;
+  const id = `onskemal-${agent}`;
 
   async function hamta() {
     try {
@@ -84,6 +95,10 @@ export function AgentOnskemal({ agent }: Readonly<{ agent: Agent }>) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- hämtas om bara när agenten byts
   }, [agent]);
 
+  useEffect(() => {
+    if (bakning) andringarRubrik.current?.focus();
+  }, [bakning]);
+
   async function kor(steg: () => Promise<void>) {
     setBusy(true);
     setFel(null);
@@ -97,32 +112,40 @@ export function AgentOnskemal({ agent }: Readonly<{ agent: Agent }>) {
     }
   }
 
-  const forhandsgranska = () =>
-    kor(async () => {
+  const kanForhandsgranska = !busy && Boolean(feedback.trim());
+  const kanSpara = !busy && Boolean(bakning);
+
+  const forhandsgranska = () => {
+    if (!kanForhandsgranska) return;
+    void kor(async () => {
       setBakning(
         await leadsAnrop<Bakning>(`${bas}/forhandsgranska`, { method: "POST", body: JSON.stringify({ feedback }) })
       );
+      setKvitto(T.andringarKlara);
     });
+  };
 
-  const spara = () =>
-    kor(async () => {
-      if (!bakning) return;
+  const spara = () => {
+    if (!kanSpara || !bakning) return;
+    void kor(async () => {
       await leadsAnrop(bas, { method: "PUT", body: JSON.stringify({ feedback, dokument: bakning.dokument }) });
       setFeedback("");
       setBakning(null);
       setKvitto(T.sparat);
       await hamta();
     });
+  };
 
-  const aterstall = (id: string) =>
-    kor(async () => {
-      await leadsAnrop(`${bas}/aterstall/${id}`, { method: "POST" });
+  const aterstall = (versionId: string) => {
+    if (busy) return;
+    void kor(async () => {
+      await leadsAnrop(`${bas}/aterstall/${versionId}`, { method: "POST" });
       setKvitto(T.aterstalld);
       await hamta();
     });
+  };
 
   if (!lage) return <div className="h-40 animate-pulse rounded-card bg-ink/[0.055]" aria-busy="true" />;
-  const id = `onskemal-${agent}`;
 
   return (
     <section aria-labelledby={`${id}-rubrik`} className="grid gap-6">
@@ -134,8 +157,10 @@ export function AgentOnskemal({ agent }: Readonly<{ agent: Agent }>) {
       </div>
 
       <div>
-        <p className={etikett}>{text(T.nu)}</p>
-        <p className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-input border border-ink/15 bg-paper2/50 p-4 text-[0.9375rem] leading-6">
+        <h3 className={etikett}>{text(T.nu)}</h3>
+        {/* Ingen egen scrollruta: en ruta med overflow men utan tabindex går
+            inte att scrolla med tangentbordet i alla webbläsare. */}
+        <p className="mt-2 whitespace-pre-wrap break-words rounded-input border border-ink/15 bg-paper2/50 p-4 text-[0.9375rem] leading-6">
           {lage.dokument || text(T.tomt)}
         </p>
       </div>
@@ -149,25 +174,39 @@ export function AgentOnskemal({ agent }: Readonly<{ agent: Agent }>) {
           value={feedback}
           maxLength={lage.max_tecken}
           rows={4}
+          aria-describedby={`${id}-raknare`}
           onChange={(e) => {
             setFeedback(e.target.value);
             setBakning(null);
           }}
           className="focus-ring mt-2 w-full resize-y rounded-input border border-ink/15 bg-paper p-3 text-[16px] leading-6"
         />
-        <button
-          type="button"
-          onClick={() => void forhandsgranska()}
-          disabled={busy || !feedback.trim()}
-          className={cn(btnSecondary, "mt-3")}
-        >
-          {busy && !bakning ? text(T.arbetar) : text(T.forhandsgranska)}
-        </button>
+        <p id={`${id}-raknare`} className={cn(meta, "num mt-1")}>
+          {feedback.length} / {lage.max_tecken} {text(T.tecken)}
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={forhandsgranska}
+            aria-disabled={!kanForhandsgranska || undefined}
+            aria-describedby={!feedback.trim() ? `${id}-krav` : undefined}
+            className={cn(btnSecondary, "aria-disabled:opacity-60")}
+          >
+            {busy && !bakning ? text(T.arbetar) : text(T.forhandsgranska)}
+          </button>
+          {!feedback.trim() ? (
+            <span id={`${id}-krav`} className={meta}>
+              {text(T.skrivForst)}
+            </span>
+          ) : null}
+        </div>
       </div>
 
       {bakning ? (
         <div>
-          <p className={etikett}>{text(T.andringar)}</p>
+          <h3 ref={andringarRubrik} tabIndex={-1} className={cn(etikett, "focus-ring rounded-input")}>
+            {text(T.andringar)}
+          </h3>
           {bakning.sammanfattning ? (
             <p className="mt-2 max-w-[62ch] text-[0.9375rem] leading-6">{bakning.sammanfattning}</p>
           ) : null}
@@ -215,9 +254,20 @@ export function AgentOnskemal({ agent }: Readonly<{ agent: Agent }>) {
       ) : null}
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-        <button type="button" onClick={() => void spara()} disabled={busy || !bakning} className={btnPrimary}>
+        <button
+          type="button"
+          onClick={spara}
+          aria-disabled={!kanSpara || undefined}
+          aria-describedby={!bakning ? `${id}-sparakrav` : undefined}
+          className={cn(btnPrimary, "aria-disabled:opacity-60")}
+        >
           {busy && bakning ? text(T.arbetar) : text(T.godkann)}
         </button>
+        {!bakning ? (
+          <span id={`${id}-sparakrav`} className="sr-only">
+            {text(T.forhandsgranskaForst)}
+          </span>
+        ) : null}
         <span aria-live="polite" className="text-[0.9375rem] text-moss">
           {kvitto ? text(kvitto) : ""}
         </span>
@@ -230,25 +280,36 @@ export function AgentOnskemal({ agent }: Readonly<{ agent: Agent }>) {
 
       {lage.historik.length ? (
         <div>
-          <p className={etikett}>{text(T.historik)}</p>
+          <h3 className={etikett}>{text(T.historik)}</h3>
           <ol className="mt-2 divide-y divide-ink/12 border-y border-ink/12">
             {lage.historik.map((v, i) => (
               <li key={v.id} className="flex flex-wrap items-start justify-between gap-3 py-3">
                 <details className="min-w-0 flex-1">
-                  <summary className="focus-ring cursor-pointer rounded-input text-[0.9375rem]">
+                  <summary className="focus-ring cursor-pointer rounded-input py-1 text-[0.9375rem]">
                     <span className="num">{relativTid(v.created_at, locale)}</span>
-                    {v.feedback ? <span className="ml-2 text-ink-muted">{v.feedback.slice(0, 80)}</span> : null}
+                    {v.feedback ? (
+                      <span className="ml-2 text-ink-muted">
+                        {v.feedback.length > 80 ? `${v.feedback.slice(0, 80)}…` : v.feedback}
+                      </span>
+                    ) : null}
                   </summary>
-                  <p className="mt-2 whitespace-pre-wrap break-words text-[0.875rem] leading-6">{v.content || text(T.tomt)}</p>
+                  {v.feedback ? (
+                    <p className="mt-2 whitespace-pre-wrap break-words text-[0.875rem] leading-6">
+                      <span className="text-ink-muted">{text(T.dinFeedback)}</span> {v.feedback}
+                    </p>
+                  ) : null}
+                  <p className="mt-2 whitespace-pre-wrap break-words text-[0.875rem] leading-6">
+                    <span className="text-ink-muted">{text(T.dokumentet)}</span> {v.content || text(T.tomt)}
+                  </p>
                 </details>
                 {i === 0 ? (
                   <Badge tone="good">{text(T.aktiv)}</Badge>
                 ) : (
                   <button
                     type="button"
-                    onClick={() => void aterstall(v.id)}
-                    disabled={busy}
-                    className={cn(btnSecondary, btnLiten)}
+                    onClick={() => aterstall(v.id)}
+                    aria-disabled={busy || undefined}
+                    className={cn(btnSecondary, btnLiten, "aria-disabled:opacity-60")}
                   >
                     {text(T.aterstall)}
                   </button>

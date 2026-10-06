@@ -183,6 +183,9 @@ Tester: segmentlistan är identisk med den skickade prompten; ett ifyllt underla
 2. **Kundens egen feedback till sin agent.** En ruta per agent där kunden skriver feedback med egna ord. Samma `baka_in` som i fas 5, med förhandsgranskning, historik och Återställ. Skillnaden: basdokumentet är kundens eget (`agent_context_docs`, typ `kundonskemal_<agent>`), och det läggs i **användarposition**, inslaget som opålitligt innehåll under rubriken "Kundens egna önskemål", precis som röstdokumentet (INV-SEC-009). Kunden kan styra ton, fokus och formuleringar men kan inte upphäva reglerna, och kodgrindarna körs efteråt som vanligt. Våra lager i systemposition rörs aldrig av kundens feedback. Tak på antal inbakningar per dygn och kund.
 3. Båda syns i källmatrisen (fas 7), så det går att se att kundens text når rätt steg.
 
+*Byggt 2026-10-06:* `components/leads/IrisProdukter.tsx`, `components/settings/AgentOnskemal.tsx` (Iris › Inställningar och Inställningar › Regler), `app/leads/onskemal.py`, migration 101, förhandsvisning `/forhandsvisning/kundinstallningar`. A11y-granskningens sex HIGH-fynd i de nya filerna är rättade och mätta (fokus stannar på knappen eller flyttas till Ändringar, ångra vid borttagning, inget sparbart formulär efter misslyckad hämtning, hela feedbacken nåbar).
+**Skuld i husets mönster, inte nytt här:** fältkanten `border-ink/15` på `bg-paper` mäter 1,37:1 (ljust) och 1,47:1 (mörkt) mot kravet 3:1 (WCAG 1.4.11), i 17 filer; `btnLiten` är 36 px (klarar 2.5.8 AA, under 44 px-rekommendationen, beslutat i DESIGN.md). Rättas som ett eget pass över hela appen, inte i två filer.
+
 Tester: kundens önskemål hamnar i användarmeddelandet och aldrig i systemprompten (tillägg i `tests/invariants/test_inv_sec_009.py`); en feedback som ber agenten strunta i reglerna ändrar inte systemlagren; produkter och segment sparade i ytan når profilen och utkastet.
 
 ## Fas 9 – Kontextlagret: vad Redis Iris ger oss och vad vi gör i stället
