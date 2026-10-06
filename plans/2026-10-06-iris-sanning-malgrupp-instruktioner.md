@@ -3,7 +3,8 @@
 ## Status 2026-10-06 (kväll)
 
 - **Klart och pushat till development:** fas 1–6 (förra sessionen), fas 1b, fas 7, fas 8, fas 9 (omindexering, kalibrering; hybridsökningen fanns redan), skillmätningen (variant (c) kvar), dubblettspärren Iris ↔ listor.
-- **Kvar (Anton):** radera de nio bolagen, återställ development-instruktionerna, migration 101/102 i development, ja till 096–102 mot main, gallringsperiod för spårets fulltext.
+- **Klart 2026-10-06 (logg -5):** nio bolag raderade, instruktionerna återställda, 101/102 körda i development.
+- **Kvar (Anton):** ja till 096–102 mot main, gallringsperiod för spårets fulltext.
 - **Kvar (agent):** visuell kontroll + a11y av Underlag och flöde, skarpt Iris-prov N=5 (kräver ScrapeGraph-kredit), husets kantkontrast.
 - Detalj: `HANDOFF-2026-10-06-KVALITET-INSYN-KUNDYTA.md`.
 
