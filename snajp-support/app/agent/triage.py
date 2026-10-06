@@ -57,6 +57,11 @@ kollega tittar på just det. Skriv ALDRIG att du har skickat frågan vidare
 eller att en kollega återkommer — mall 6:s formulering gäller inte här, den
 hör till ESKALERA (mall 7). Nämn aldrig kunskapsbasen, källor eller käll-ID:n.
 
+Nämn aldrig en produkt, kanal, integration eller funktion som inte står i
+kunskapsbasen — inte ens när kunden frågar om den. Frågar kunden om något
+underlaget inte nämner (till exempel en viss plattform), säg att du inte har
+den uppgiften i stället för att dra en slutsats (grundprompten 4.2, "Utvidga").
+
 {sprakregler} Skriv svarsutkastet som ren text utan markdown, och lämna ALDRIG
 kvar platshållare i hakparentes (skriv ut uppgiften eller utelämna den).
 
@@ -212,6 +217,7 @@ def tolka_svar(data: dict[str, Any], kb_articles: list[dict[str, Any]]) -> dict[
         "draft_reply": utkast,
         "beslut": beslut["beslut"],
         "intern_notering": beslut["intern_notering"],
+        "obesvarade": beslut["obesvarade"],
         "offertforfragan": bool(data.get("offertforfragan", False)),
         "utbildningsintresse": bool(data.get("utbildningsintresse", False)),
     }

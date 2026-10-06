@@ -9,11 +9,10 @@ money_weight: 4
 goal: "AI outbound SaaS: Snipra (leads-dashboard) + Snajp (support-agent) i ett repo, multi-tenant Next.js/Supabase"
 next_milestone: "main uppdaterad till samma kod som development, och Livrustning-tenantens garantiperiod bekraftad av kund"
 milestone_blockers:
-  - "PR #30 (release development -> main) vantar pa Antons merge; migration 090/091 mot main och en Ej relaterat-vy i inkorgen ska goras fore (2026-10-04)"
-  - "PR #22 (support-eskalering, sprak, integrationer/kanaler, Iris-menyn) vantar bara pa Antons merge; migrationer och INTEGRATION_NYCKEL klara i main (2026-09-19)"
+  - "PR #31 (release development -> main) vantar pa Antons ja till migrationerna 096-098 mot main (torrkorda 2026-10-06) och pa hans merge"
   - "IMAP_PASSWORD_LIVRUSTNING saknas pa Railway api (bade main och development)"
   - "Vantar pa kundens bekraftelse av garantiperioden"
-  - "Iris-rattelserna 2026-10-06 (7 commits) opushade; migration 099 ej kord; development kor fortfarande pa en overskriven global instruktion (2026-10-06)"
+  - "Migration 099 (agentinstruktioner per agent) kord i development 2026-10-06, mot main vantar den pa Antons ja"
 updated: 2026-10-06
 ---
 
@@ -426,6 +425,20 @@ inte uppdaterats till Railway-topologin.** Det gör de fem maskinella stegen
 mot den döda kedjan; en riktig onboarding just nu kräver manuella steg mot
 Railway tills skriptet är omskrivet. Se `TENANTS.md` för den nuvarande
 processen och flagga skriptet innan du litar på det.
+
+## Current status (2026-10-06)
+
+Iris och leadslistorna delar aldrig bolag: en gemensam uteslutningsmängd
+(`snajp-support/app/leads/upptagna.py`, orgnr eller namn utan bolagsform) av
+Iris-prospekt, alla listrader och CRM-kunder läses av Iris-sökningen
+(`app/api/leads.py`, `app/leads/discovery.py`, `app/leads/sources/merinfo.py`),
+listbygget och listspåret. CRM-kundlistan (`components/leads/CrmKundlista.tsx`,
+`kalla='crm'`, migration 098) laddas upp i Leads › Listor och prospekteras
+aldrig (409 på flytt/befordran/kombinera). Gotcha: en ny leadskälla måste få
+`await upptagna.hamta(storage, tenant_id)` som uteslutning, annars återkommer
+överlappen. Verifiera: `snajp-support/tests/leads/test_upptagna_bolag.py`.
+Development driftsatt med 098; main väntar på Antons ja till 096–098 och hans
+merge av PR #31.
 
 ## Current status (2026-10-02, session 4)
 

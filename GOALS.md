@@ -166,6 +166,11 @@ tydligt inte nått i dag, och de två sakerna som saknas är konkreta:
   sandlåda. Antons beslut. Följden är att den ska behandlas med samma sekretess.
 - **Gallringsperioden är medvetet inte satt** — det är ett affärsbeslut, inte ett
   tekniskt.
+- **Iris-leads och leadslistor är skilda spår som aldrig delar bolag.** Sebbe
+  2026-10-06: Iris tar de kvalificerade bolagen med research, listorna är
+  kallare och för samtal eller generella utskick. Kundens befintliga kunder,
+  uppladdade som CRM-kundlista, blir aldrig leads i något av spåren. Öppet:
+  om listorna bara ska innehålla bolag som underkänts för Iris.
 
 ### Föreslaget — ej beslutat
 
@@ -268,6 +273,11 @@ rebase. Ändringar behöver samordnas, inte bara pushas.
   VD, faktagrind mot onamngivna case. Delmål 6 (instruktioner når agenten):
   instruktioner per agent, feedback bakas in i stället för att ersätta, Iris
   egen grundprompt. Opushat; migration 099 ej körd. Delmålslistan orörd.
+- 2026-10-06 — claude — delmål 2 (leads): Iris och leadslistorna delar aldrig
+  bolag (gemensam uteslutningsmängd), och kunder laddar upp sin befintliga
+  CRM-kundlista som aldrig prospekteras (migration 098). Ny post under
+  Beslutat. Delmål 10: PR #31 bär nu även 098; migrationerna 096–098 mot main
+  väntar på Antons ja. Delmålslistan är orörd.
 - 2026-10-05 — claude — Iris-kostnaden begränsad och webbbedömningen avgjord i
   kod (delmål 2); inkorgen sorterar bort utskick; Leads, Att göra och Översikten
   omgjorda; leadsregel 7–9 (ensam VD, listspår, webbkriterier i kod). Release-PR
