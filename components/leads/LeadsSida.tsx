@@ -10,7 +10,7 @@ import { IrisKorningar } from "@/components/leads/IrisKorningar";
 import { LeadDetail, exempelTillRad, type ExempelRad } from "@/components/leads/IrisBolag";
 import { LeadsOversikt } from "@/components/leads/LeadsOversikt";
 import { LeadsRunForm } from "@/components/leads/LeadsRunForm";
-import { btnPrimary, flik, flikAktiv, flikInaktiv, fliklista } from "@/components/ui";
+import { btnPrimary, btnSecondary, flik, flikAktiv, flikInaktiv, fliklista } from "@/components/ui";
 import { EXEMPELBOLAG, EXEMPEL_OMGANG_1, EXEMPEL_OMGANG_2 } from "@/lib/demo/iris-exempel";
 import { useLocale, type Localized } from "@/lib/i18n";
 import type { SuiteProspekt } from "@/lib/leads/suite";
@@ -142,21 +142,22 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
     <PageShell
       title={{ sv: "Leads", en: "Leads" }}
       action={
-        segmentVal === "listor" && harListaddon && !demo ? (
-          // Listor-fliken beställer körningar som landar i säljlistan
-          // (Sebbe 2026-10-06): knappen öppnar formuläret där nere.
-          <button
-            type="button"
-            onClick={() => window.dispatchEvent(new Event("snipra:saljlista-bestall"))}
-            className={btnPrimary}
-          >
-            {text(T.bestallLeads)}
-          </button>
-        ) : (
+        <>
+          {segmentVal === "listor" && harListaddon && !demo ? (
+            // Beställningen landar i säljlistan (Sebbe 2026-10-06): knappen
+            // öppnar formuläret där nere. Kör Iris står alltid kvar bredvid.
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new Event("snipra:saljlista-bestall"))}
+              className={btnSecondary}
+            >
+              {text(T.bestallLeads)}
+            </button>
+          ) : null}
           <button type="button" aria-expanded={korOppen} onClick={() => setKorOppen((v) => !v)} className={btnPrimary}>
             {text(T.korIris)}
           </button>
-        )
+        </>
       }
     >
       {korOppen ? (
