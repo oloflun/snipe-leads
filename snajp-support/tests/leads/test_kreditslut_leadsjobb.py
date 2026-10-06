@@ -138,7 +138,11 @@ async def test_utkast_kreditslut_larmar_och_ger_kundsaker_anteckning(
     job_id = await app_state.jobs.create(tenant_id=TENANT, status="queued")
 
     async def research(*_a, **_k):
-        return {"qualified": True, "lagesbeskrivning": "Bolaget bygger moduler och hallar."}
+        return {
+            "qualified": True,
+            "lagesbeskrivning": "Bolaget bygger moduler och hallar.",
+            "citat": ["Vi bygger moduler och hallar."],
+        }
 
     async def utkast(*_a, **_k):
         raise _Kreditfel()
@@ -172,7 +176,11 @@ async def test_utkast_ovrigt_leverantorsfel_lacker_ingen_ratext(monkeypatch, lar
     job_id = await app_state.jobs.create(tenant_id=TENANT, status="queued")
 
     async def research(*_a, **_k):
-        return {"qualified": True, "lagesbeskrivning": "Bolaget bygger moduler och hallar."}
+        return {
+            "qualified": True,
+            "lagesbeskrivning": "Bolaget bygger moduler och hallar.",
+            "citat": ["Vi bygger moduler och hallar."],
+        }
 
     async def utkast(*_a, **_k):
         raise _Leverantorsfel()

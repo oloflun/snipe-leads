@@ -123,13 +123,26 @@ _CUSTOMER_FRAMES = re.compile(
     r"(?P<name>[A-ZÅÄÖ][\wÅÄÖåäö&-]*(?:\s+[A-ZÅÄÖ][\wÅÄÖåäö&-]*)?)",
     re.UNICODE,
 )
+# Onamngivna case: "Den hjälpte nyligen ett annat byggföretag i Göteborg att
+# korta ledtiderna med flera veckor" (provkörningen 2026-10-05). Ramen ovan
+# kräver ett versalt namn och missade det. Ett påstående om tidigare kunder är
+# ett påstående även utan namn, och det får bara stå när kundens eget
+# underlag bär ett sådant (PermittedFacts.case_ok).
+_UNNAMED_CASE = re.compile(
+    r"(?i)(?<![a-zåäö])(?:"
+    r"hjälp(?:t|te)\s+(?:nyligen\s+|redan\s+)?(?:ett|en|flera|många|andra|liknande|\d+)\s"
+    r"|(?:ett|en)\s+annat?\s+[a-zåäö]*(?:företag|bolag|byrå|kund)"
+    r"|(?:för|hos|åt|med)\s+liknande\s+(?:företag|bolag|byråer|kunder)"
+    r"|(?:andra|liknande)\s+(?:företag|bolag|byråer|kunder)\s+(?:har|som\s+vi)"
+    r")",
+)
 # Versala ordsekvenser — används BARA för att bygga den tillåtna mängden.
 _ENTITY_RE = re.compile(r"\b[A-ZÅÄÖ][\wÅÄÖåäö&-]*(?:\s+[A-ZÅÄÖ][\wÅÄÖåäö&-]*)?")
 
 
 @dataclass(frozen=True)
 class Claim:
-    kind: str  # "number" | "percent" | "amount" | "named_customer" | "superlative"
+    kind: str  # "number" | "percent" | "amount" | "named_customer" | "unnamed_case" | "superlative"
     raw: str
     normalized: str
     span: tuple[int, int]
@@ -144,6 +157,9 @@ class PermittedFacts:
     entities: frozenset[str]
     superlatives: frozenset[str]
     source_labels: tuple[str, ...]
+    #: Kundens eget underlag bär ett case ("vi har hjälpt flera byggföretag").
+    #: Då får utkastet hänvisa till det utan namn; annars aldrig.
+    case_ok: bool = False
 
 
 @dataclass(frozen=True)
@@ -266,6 +282,7 @@ def build_permitted_facts(
         entities=frozenset(entities),
         superlatives=frozenset(superlatives),
         source_labels=tuple(labels),
+        case_ok=bool(_UNNAMED_CASE.search(blob)),
     )
 
 
@@ -302,6 +319,17 @@ def check_grounding(text: str, facts: PermittedFacts) -> GroundingVerdict:
                 span=match.span("name"),
             )
         )
+
+    if not facts.case_ok:
+        for match in _UNNAMED_CASE.finditer(masked):
+            unsupported.append(
+                Claim(
+                    kind="unnamed_case",
+                    raw=match.group(0).strip(),
+                    normalized=match.group(0).strip().lower(),
+                    span=match.span(),
+                )
+            )
 
     # ponytail: en påhittad kund utanför de uppräknade ramarna ("Ett av Sveriges
     # största modeföretag valde oss") passerar. Uppräknade ramar ÄR taket —

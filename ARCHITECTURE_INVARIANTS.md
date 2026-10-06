@@ -45,9 +45,13 @@ Införd: 2026-08-07 · Upphävs endast genom waiver
 
 ### INV-SKILL-003 — Skopad laddning kräver `rationale`
 `PlaybookStep.__post_init__` kastar `ScopeWithoutRationaleError` om `scope`
-är satt utan `rationale`. Standard är hel skill.
+är satt utan `rationale`. Standard är hel skill. Samma krav gäller en
+textändring i den lästa skilltexten (`radandringar`, 2026-10-06): varje
+ändring bär ett skäl, och en ändring vars text inte längre finns i skillen
+kastar `RadandringSaknasError` vid import. Skillfilen rörs aldrig.
 Varför: skopning utan motivering är hur "spara utrymme" i tysthet blir
-"tyst urholkning av läsgarantin" (Del C).
+"tyst urholkning av läsgarantin" (Del C). Textändringarna prövas i
+snajp-support/tests/agentcore/test_radandringar.py.
 Test: snajp-support/tests/agentcore/test_packs.py
 Införd: 2026-08-07 · Upphävs endast genom waiver
 

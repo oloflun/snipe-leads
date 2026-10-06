@@ -2388,11 +2388,28 @@ async def _run_batch_prospect(
             result["contact_role"] = prospect.get("contact_role")
             result["contact_level"] = prospect.get("contact_level")
             result["contact_form_url"] = prospect.get("contact_form_url")
-            from ..leads.discovery import ar_arbetsmejl
+            from ..leads.discovery import ar_arbetsmejl, vd_mottagare
 
             if email and not ar_arbetsmejl(email, webb=prospect.get("website")):
                 email = None
-            if not email:
+            # Bara VD, och bara en adress som bär VD:ns namn (Antons regel 3,
+            # discovery.vd_mottagare). En funktionsadress eller en annan roll
+            # ger inget utkast; telefonen till VD står kvar på leadet.
+            vd_epost = vd_mottagare(prospect) if email else None
+            if email and not vd_epost:
+                result["draft_note"] = (
+                    "Research klar. Inget utkast: e-postadressen går inte att knyta till bolagets VD"
+                    + (", ring VD i stället." if prospect.get("contact_phone") else ".")
+                )
+            elif email and not result.get("citat"):
+                # Underlagsgolvet: utan ett enda ordagrant citat ur bolagets
+                # egna sidor finns inget att öppna mejlet med, och utkastet blir
+                # "Jag såg att ni ligger i Göteborg" (provkörningen 2026-10-05).
+                result["draft_note"] = (
+                    "Research klar. Inget utkast: för tunt underlag för ett personligt mejl. "
+                    "Bolagets sidor sa för lite om verksamheten."
+                )
+            elif not email:
                 # Kontaktformulär är inte en mottagare. Hoppa till nästa bolag.
                 result["draft_note"] = (
                     "Research klar. Ingen arbetsadress hittades: leadet levereras "
@@ -2440,17 +2457,33 @@ async def _run_batch_prospect(
                             "vinklar": result.get("vinklar"),
                             "uppfyllda_kriterier": result.get("uppfyllda_kriterier"),
                             "webbsignaler": result.get("webbsignaler"),
+                            # Underlaget som gör mejlet personligt (2026-10-06).
+                            "citat": (result.get("citat") or [])[:6],
+                            "lagesbeskrivning": result.get("lagesbeskrivning"),
+                            "mottagare": {
+                                "namn": prospect.get("contact_name"),
+                                "roll": prospect.get("contact_role"),
+                            },
+                            "vald_produkt": result.get("produkt"),
                         },
                         ensure_ascii=False,
+                    )
+                    # Den valda produkten i stället för hela produktbeskrivningen:
+                    # Snajps utkast räknade upp alla tre agenterna och erbjöd ingen.
+                    vald = result.get("produkt")
+                    erbjudande = (
+                        f"{vald['namn']}: {vald['nytta']}\n{result.get('offer_summary') or ''}".strip()
+                        if vald
+                        else offer[:2000]
                     )
                     draft = await run_outreach_draft(
                         storage,
                         tenant["tenant_id"],
                         thread_id=thread["id"],
-                        prospect_email=email,
+                        prospect_email=vd_epost,
                         tenant_name=tenant["tenant_name"],
                         company_name=prospect.get("company_name") or "",
-                        offer_summary=offer[:2000],
+                        offer_summary=erbjudande,
                         context_pack=context_pack,
                         brief="",
                         research_summary=sammanfattning,

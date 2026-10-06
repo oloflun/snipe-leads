@@ -65,8 +65,11 @@ tömmer målgruppen.
 
 - `company_summary`, `business_model`: vad de gör och hur de tjänar
   pengar, ur källmaterialet.
-- `likely_pains`: problem hos prospektet som köparens produkt löser —
-  gärna ur de MÄTTA WEBBSIGNALERNA när kunden säljer webb eller marknadsföring.
+- `likely_pains`: problem hos prospektet som köparens produkt löser, ur det
+  bolaget självt skriver. De MÄTTA WEBBSIGNALERNA används bara när de står i
+  underlaget, och de står där bara när kundens profil har ett kriterium om
+  webbplatsen. Webbplatsens skick är aldrig en ingång för en kund som inte
+  säljer webb.
 - `evidence`: korta ORDAGRANNA citat ur källmaterialet som stöder pains —
   det här är de enda påståenden ett senare mejl får luta sig mot.
 

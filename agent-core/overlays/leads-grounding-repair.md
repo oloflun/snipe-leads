@@ -22,6 +22,10 @@ För varje påstående i listan `unsupported`:
    alltid bättre än ett mejl med en osanning.
 3. **Ersätt aldrig ett ostött påstående med ett annat ostött påstående.** Har
    du inte en siffra, skriv ingen siffra — skriv inte en vagare siffra.
+4. **`unnamed_case`** är ett påstående om tidigare kunder utan namn ("hjälpte
+   nyligen ett annat byggföretag", "vi har hjälpt liknande företag").
+   Underlaget bär inget sådant case. Stryk påståendet och resultatet det
+   påstår. Säg i stället vad produkten gör, med underlagets egna ord.
 
 ## Vad du inte ska göra
 

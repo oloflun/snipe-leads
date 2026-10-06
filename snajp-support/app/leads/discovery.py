@@ -764,6 +764,35 @@ def vd_uppgift_i_text(text: str, vd_namn: str, website: str) -> dict[str, Any] |
     return None
 
 
+#: Rollen VD i de former den står på svenska sajter ("VD", "vd & grundare",
+#: "Verkställande direktör", "CEO").
+_VD_ROLL = re.compile(r"(?i)(?<![a-zåäö])(?:vd|verkställande\s+direktör|ceo)(?![a-zåäö])")
+
+
+def ar_vd(roll: object) -> bool:
+    return bool(_VD_ROLL.search(str(roll or "")))
+
+
+def vd_mottagare(prospekt: dict[str, Any]) -> str | None:
+    """Adressen ett Iris-utkast får skickas till, eller None.
+
+    Antons regel 3 (2026-10-04): kontakta bara VD, och bara med en uppgift som
+    går att styrka tillhöra VD. Det kräver att rollen är VD och att adressens
+    lokaldel bär VD:ns för- eller efternamn på bolagets egen domän, samma krav
+    som `vd_uppgift_i_text`. En funktionsadress (info@, rekrytering@) går inte
+    att knyta till en person. Provkörningen 2026-10-05 skrev ett utkast till
+    rekrytering@ och ett till en inköpschef."""
+    namn = str(prospekt.get("contact_name") or "")
+    epost = str(prospekt.get("contact_email") or "").strip()
+    if not (ar_vd(prospekt.get("contact_role")) and namn and epost):
+        return None
+    if not ar_arbetsmejl(epost, webb=prospekt.get("website")):
+        return None
+    led = [d for d in re.findall(r"[a-z]+", _asci(namn)) if len(d) >= 3]
+    lokal = _asci(epost.split("@", 1)[0])
+    return epost if any(d in lokal for d in led) else None
+
+
 async def hamta_vd_kontakt(website: str, vd_namn: str) -> dict[str, Any] | None:
     """Startsidan plus upp till tre kontakt-/om oss-sidor; första uppgift som
     går att knyta till VD vinner. Kastar aldrig."""

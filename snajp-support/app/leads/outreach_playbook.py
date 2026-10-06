@@ -85,6 +85,36 @@ OUTREACH_V1 = Playbook(
 # utan invariantändring. Grundningscykeln (villkorad, max 1 runda) och
 # tomtext-omförsöket behålls exakt — se run_outreach_draft_v2 i
 # app/agent/leads_research_v2.py.
+#: sa:draft-outreach är skriven för amerikansk säljprospektering med verktyg
+#: kopplade. Fyra ställen gav fel effekt i ett svenskt kallmejl skrivet ur
+#: färdig research. Varje rad: (exakt text ur skillen, ersättning, skäl).
+_UTKAST_RADANDRINGAR: tuple[tuple[str, str, str], ...] = (
+    (
+        "[Desire: Brief proof point - similar company result]",
+        "[Desire: the chosen product's concrete benefit for them. Proof only if a named case is in the material.]",
+        "Bad om ett liknande bolags resultat; utan sådant i underlaget blev det "
+        "ett påhittat case (provkörningen 2026-10-05).",
+    ),
+    (
+        "as usage grows. We helped [Similar Company] cut their AI\nserving costs 40% while improving latency.",
+        "as usage grows.",
+        "Exemplets påhittade case med siffra drar modellen mot samma form.",
+    ),
+    (
+        "**Use research-prospect skill internally:**\n```\n1. Web search for company + person\n"
+        "2. If Enrichment connected: Get verified contact info, background\n"
+        "3. If CRM connected: Check for prior relationship\n```",
+        "**The research is already done.** The research section of the case is the only source "
+        "about the recipient. Do not search or assume anything beyond it.",
+        "Steget har ingen sökning eller CRM; instruktionen fick modellen att fylla luckor själv.",
+    ),
+    (
+        "- Case study from a similar company\n",
+        "",
+        "Stilguidens exempellista erbjöd ett case från ett liknande bolag.",
+    ),
+)
+
 OUTREACH_V2 = Playbook(
     name="leads/outreach-v2",
     steps=(
@@ -137,14 +167,23 @@ OUTREACH_V2 = Playbook(
                 "Check, What to Avoid) — resten är metodik för kampanjer och "
                 "uppföljningssekvenser som steget inte utför."
             ),
+            # 2026-10-06: kallmejlsmallen "Cold Outreach (No Prior Relationship)"
+            # är borttagen ur skopan. Den bar raden "[Brief proof: We helped
+            # [Similar Company] achieve [Result]]" och gav ett påhittat case
+            # i ett skarpt utkast (provkörningen 2026-10-05). Strukturen kommer
+            # i stället ur grundmallen i Iris grundprompt, och två mallar i
+            # samma prompt konkurrerar om formen.
             scope=(
                 "§ Execution Flow",
-                "§ Cold Outreach (No Prior Relationship)",
                 "§ Email Style Guidelines",
                 "§ What NOT to Do",
                 "§ Example",
                 "§ Outreach Draft: David Tibbitts @ Notion",
             ),
+            # Textändringar i de sektioner som står kvar (PlaybookStep.
+            # radandringar): samma mönster på fyra ställen, ändrat rad för rad
+            # i stället för att hela arbetsflödet och exemplet stryks.
+            radandringar=_UTKAST_RADANDRINGAR,
             extra_skills=(
                 (
                     "mk:cold-email",
