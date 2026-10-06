@@ -766,6 +766,18 @@ async def run_research_step(
     prospecting = skarp_kvalificering(
         prospecting, icp, company_name=str(prospect_row.get("company_name") or "")
     )
+    # Inget källmaterial = inget belägg för att kunden kan sälja något till
+    # bolaget. Samma regel som V2 (bedomning.py), 2026-10-06.
+    if not material.strip():
+        prospecting = {
+            **prospecting,
+            "qualified": False,
+            "icp_fit": 0.0,
+            "disqualifiers": [
+                *(prospecting.get("disqualifiers") or []),
+                "Inget källmaterial gick att hämta, så det finns inget belägg för ett behov av produkten.",
+            ],
+        }
 
     # GRINDEN (2026-09-02, kundkrav: nischning + kontaktperson). Två villkor,
     # båda kod-härledda — `qualified` är visserligen modellens bedömning, men

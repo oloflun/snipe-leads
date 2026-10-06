@@ -26,7 +26,7 @@ import re
 from typing import Any
 
 from .geo import _prefix_ur_postnr
-from .profil import KOMMUNER
+from .profil import KOMMUNER, PRODUKTMATCH, produktmatch_text
 from .scoring import MISS, OKAND, TRAFF
 
 UTSLAG = {"ja": TRAFF, "nej": MISS, "okänt": OKAND, "okant": OKAND}
@@ -187,6 +187,43 @@ def _storlek_rad(profil: dict[str, Any], fynd: dict[str, Any], kand: dict[str, A
                 f"{antal} anställda enligt {kalla}.", hart=True)
 
 
+def _produktmatch_rad(profil: dict[str, Any], b: dict[str, Any], korpus: str,
+                      kriterierader: list[dict[str, Any]], produkt_vald: bool | None) -> dict[str, Any]:
+    """Kan bolaget köpa det kunden säljer? Bara ett belagt ja räcker.
+
+    Sebbes krav 2026-10-06: ett lead som kunden inte kan sälja sin produkt
+    till är inget lead. Okänt är här inte neutralt. Förut blev ett bolag en B
+    när profilen saknade kriterier och modellen inte kunde visa någonting,
+    och ett bolag där researchen svarat "ingen av kundens produkter passar"
+    levererades ändå.
+
+    `produkt_vald`: None när kunden saknar produktlista, annars om researchen
+    valde en av produkterna. Ett webbkriterium som koden avgjort som träff
+    räknar som belägg: profilens webbkriterier ÄR kundens egen beskrivning av
+    vem som behöver produkten ("företag med gamla hemsidor" hos en webbyrå),
+    och betyget är mätt."""
+    etikett = produktmatch_text(profil)
+    if produkt_vald is False:
+        return _rad(PRODUKTMATCH, etikett, 3, MISS, "Ingen av kundens produkter passar bolaget.", hart=True)
+    utfall = UTSLAG.get(str(b.get("utslag") or "").casefold(), OKAND)
+    belagg = verifierade_belagg(b.get("belagg"), korpus)
+    resonemang = str(b.get("resonemang") or "").strip()
+    if utfall == TRAFF and belagg:
+        return _rad(PRODUKTMATCH, etikett, 3, TRAFF, resonemang or "Källmaterialet visar behovet.",
+                    hart=True, belagg=belagg)
+    webbtraff = next((r for r in kriterierader if r["hart"] and r["utfall"] == TRAFF and r.get("webbkod")), None)
+    if webbtraff:
+        return _rad(PRODUKTMATCH, etikett, 3, TRAFF, f"{webbtraff['etikett']}: {webbtraff['motivering']}",
+                    hart=True, belagg=webbtraff["belagg"])
+    if utfall == MISS and belagg:
+        motivering = resonemang or "Källmaterialet visar att bolaget inte behöver produkten."
+    elif utfall == TRAFF:
+        motivering = "Behovet påstods men kunde inte beläggas med ett citat ur källmaterialet."
+    else:
+        motivering = "Källmaterialet visar inget behov av det kunden säljer."
+    return _rad(PRODUKTMATCH, etikett, 3, MISS, motivering, hart=True, belagg=belagg)
+
+
 def bedom(
     profil: dict[str, Any],
     fynd: dict[str, Any],
@@ -195,6 +232,7 @@ def bedom(
     kandidat: dict[str, Any] | None = None,
     webbrevision: dict[str, Any] | None = None,
     har_underlag: bool = True,
+    produkt_vald: bool | None = None,
 ) -> dict[str, Any]:
     """Modellens utslag + hårda fakta → nivå, poäng, rader och motivering.
 
@@ -242,8 +280,8 @@ def bedom(
         if kod:
             utfall, motivering = kod
             belagg = [{"url": str(kand.get("website") or ""), "citat": r} for r in (webbrevision or {}).get("rader") or []][:3]
-            rader.append(_rad(k["id"], k["text"], k["vikt"], utfall, motivering, hart=k["krav"] == "maste",
-                              belagg=belagg))
+            rader.append({**_rad(k["id"], k["text"], k["vikt"], utfall, motivering, hart=k["krav"] == "maste",
+                                 belagg=belagg), "webbkod": True})
             if utfall == MISS:
                 fallt.append(f"{k['text']}: {motivering}")
             continue
@@ -263,6 +301,11 @@ def bedom(
             fallt.append(f"{k['text']}: {motivering}")
         elif utfall == OKAND and k["krav"] == "maste":
             fallt.append(f"{k['text']}: kravet kunde inte styrkas i källmaterialet")
+
+    kp = _produktmatch_rad(profil, utslag_per_id.get(PRODUKTMATCH, {}), korpus, rader, produkt_vald)
+    rader.append(kp)
+    if kp["utfall"] != TRAFF:
+        fallt.append(f"Ingen belagd koppling till det kunden säljer: {kp['motivering']}")
 
     for i, u in enumerate(profil.get("uteslut") or [], start=1):
         b = utslag_per_id.get(f"u{i}", {})
@@ -291,7 +334,7 @@ def bedom(
     styrkt = any(
         r["utfall"] == TRAFF
         for r in rader
-        if not r["nyckel"].startswith("u") and r["nyckel"] not in ("ort", "storlek")
+        if not r["nyckel"].startswith("u") and r["nyckel"] not in ("ort", "storlek", PRODUKTMATCH)
     )
     if not fallt and not styrkt and profil.get("kriterier"):
         fallt.append("Inget kriterium kunde styrkas: bolaget uppfyller inte kraven med belägg")
@@ -332,7 +375,7 @@ def bedom(
     return {
         "niva": niva,
         "score_total": int(total),
-        "score_breakdown": rader,
+        "score_breakdown": [{k: v for k, v in r.items() if k != "webbkod"} for r in rader],
         "motivering": motivering[:1200],
         "qualified": niva in ("A", "B"),
         "icp_fit": round(total / 100, 2),
@@ -349,8 +392,11 @@ def demo() -> None:
         "uteslut": [{"text": "bemanningsföretag"}],
     }
     korpus = "Välkommen till Åbergs. © 2014 Åbergs AB. Besöksadress: Sisjövägen 1, 421 32 Västra Frölunda"
+    behov = {"kriterie_id": PRODUKTMATCH, "utslag": "ja", "resonemang": "Sajten är från 2014.",
+             "belagg": [{"url": "u", "citat": "© 2014 Åbergs AB"}]}
     bra = bedom(profil, {"postnummer": "421 32", "antal_anstallda": 2, "bedomningar": [
-        {"kriterie_id": "k1", "utslag": "ja", "resonemang": "Copyright 2014.", "belagg": [{"url": "u", "citat": "© 2014 Åbergs AB"}]}
+        {"kriterie_id": "k1", "utslag": "ja", "resonemang": "Copyright 2014.", "belagg": [{"url": "u", "citat": "© 2014 Åbergs AB"}]},
+        behov,
     ]}, korpus=korpus)
     assert bra["niva"] == "A" and bra["qualified"] and bra["motivering"], bra
     # Påhittat citat: utslaget räknas som okänt — och ett måste-krav utan
@@ -367,8 +413,18 @@ def demo() -> None:
     ]}, korpus=korpus)
     assert nej_bor["niva"] == "C" and not nej_bor["qualified"], nej_bor
     okand_bor = bedom(bor, {"postnummer": "421 32", "motivering": "Bolaget uppfyller inte alla kriterier.",
-                            "bedomningar": [ja_k1]}, korpus=korpus)
+                            "bedomningar": [ja_k1, behov]}, korpus=korpus)
     assert okand_bor["qualified"] and "inte" not in okand_bor["motivering"], okand_bor
+    # Produktmatchningen (2026-10-06): utan ett belagt behov av det kunden
+    # säljer blir bolaget inget lead, och inte heller när ingen av kundens
+    # produkter passar — även om kriterierna är uppfyllda.
+    utan_behov = bedom(profil, {"postnummer": "421 32", "bedomningar": [ja_k1]}, korpus=korpus)
+    assert utan_behov["niva"] == "C" and not utan_behov["qualified"], utan_behov
+    ingen_produkt = bedom(profil, {"postnummer": "421 32", "bedomningar": [ja_k1, behov]}, korpus=korpus,
+                          produkt_vald=False)
+    assert ingen_produkt["niva"] == "C", ingen_produkt
+    utan_kriterier = bedom({}, {"bedomningar": []}, korpus=korpus)
+    assert utan_kriterier["niva"] == "C", utan_kriterier
     stort = bedom(profil, {"antal_anstallda": 700, "bedomningar": []}, korpus=korpus)
     assert stort["niva"] == "C" and stort["score_total"] <= TAK_FALLD and stort["disqualifiers"]
     print("bedomning: ok")

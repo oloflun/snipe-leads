@@ -773,7 +773,12 @@ och blir varken Redo eller får ett utkast (`bedomning.bedom(har_underlag=...)`,
 `leads_research_v2`). Nivå A kräver minst ett uppfyllt kriterium. Ett lead
 uppfyller kraven: varje måste-kriterium styrkt och inget uttryckligt nej, och
 `GET /api/leads/prospects` returnerar aldrig ett bortvalt bolag (nivå C)
-(Antons krav 2026-10-06). Sändspärren
+(Antons krav 2026-10-06). Varje bolag bedöms dessutom på produktmatchningen
+`kp`, oavsett profil: bara ett belagt ja (citat, eller ett webbkriterium som
+koden avgjort som träff) blir ett lead, och när kunden har en produktlista
+måste researchen ha valt en av produkterna (`bedomning._produktmatch_rad`,
+Sebbes krav 2026-10-06: ett lead kunden inte kan sälja sin produkt till är
+värdelöst). Sändspärren
 blockerar ett Iris-lead utan godkänd bedömning (`app/leads/scheduler.py`).
 Det sista undantaget från INV-LEADS-PROFIL-001: "inget källmaterial" fäller i
 kod, inte modellen.

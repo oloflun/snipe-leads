@@ -71,7 +71,8 @@ _RESEARCH_V2_UPPGIFT = (
     "antal_anstallda (heltal eller null — BARA om källmaterialet anger antalet "
     "eller bär ett tydligt belägg som ”vi är 12 konsulter”; aldrig en "
     "uppskattning), bedomningar (lista — ETT objekt per kriterium k1, k2 … OCH "
-    "per uteslutning u1, u2 … i IRIS-PROFILEN, i formen {kriterie_id, belagg: "
+    "per uteslutning u1, u2 … i IRIS-PROFILEN, OCH ALLTID ett för "
+    "produktmatchningen kp, i formen {kriterie_id, belagg: "
     "[{url, citat}], resonemang, utslag}; skriv belagg och resonemang FÖRE "
     "utslag; citat ORDAGRANT ur källmaterialet eller ur MÄTTA WEBBSIGNALER; "
     "utslag är \"ja\", \"nej\" eller \"okänt\"; för en uteslutning betyder "
@@ -97,6 +98,17 @@ _RESEARCH_V2_UPPGIFT = (
     "kvalificerar — du ger ett utslag per kriterium och uteslutning. Bransch, "
     "storlek eller annat som profilen inte nämner är aldrig ett skäl. Kundens "
     "EGEN bransch är inte målgruppen.\n\n"
+    # Sebbes krav 2026-10-06: ett lead som kunden inte kan sälja sin produkt
+    # till är inget lead. Koden (bedomning._produktmatch_rad) fäller varje
+    # bolag utan ett belagt ja här, så okänt betyder bortvalt.
+    "PRODUKTMATCHNINGEN kp (bedöms ALLTID): kan bolaget köpa och använda det "
+    "kunden säljer (\"Kunden säljer\" i profilen, kundens produkter och "
+    "affärskontexten)? Utslaget är \"ja\" bara när ett ordagrant citat ur "
+    "källmaterialet visar en verksamhet, brist eller händelse som kundens "
+    "produkt konkret löser hos just det här bolaget; resonemanget säger hur "
+    "produkten skulle användas där. \"nej\" när materialet visar att bolaget "
+    "inte kan ha nytta av produkten. \"okänt\" annars. Bara ett belagt ja "
+    "blir ett lead, så gissa aldrig fram ett ja.\n\n"
     "OKÄNT ÄR INTE FEL: saknas underlag i källmaterialet är utslaget "
     "\"okänt\" och uppgiften hör hemma i missing_information. Ett \"ja\" "
     "eller \"nej\" utan ordagrant citat räknas som okänt av koden.\n\n"
@@ -305,9 +317,16 @@ async def run_research_step_v2(
     # samma sak som tidigare.
     from ..leads.bedomning import bedom, verifierade_belagg
 
+    # Kunden har en produktlista och researchen valde ingen av dem: då finns
+    # inget att sälja till bolaget (produktmatchningen fäller).
+    produkt_vald = (
+        any(p["namn"].casefold() == str(fynd.get("produkt") or "").strip().casefold() for p in produkter)
+        if produkter
+        else None
+    )
     bedomning = bedom(
         profil, fynd, korpus=f"{material}\n{webbfakta_text}", kandidat=prospect_row, webbrevision=webbrevision,
-        har_underlag=har_underlag,
+        har_underlag=har_underlag, produkt_vald=produkt_vald,
     )
     if webbrevision and not webbrevision.get("saknas"):
         bedomning["webbrevision"] = webbrevision

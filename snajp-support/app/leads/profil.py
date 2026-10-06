@@ -67,6 +67,22 @@ _ADMINRADER = re.compile(
 )
 
 
+#: Produktmatchningens kriterie-id. Bedöms för VARJE bolag, oavsett profil:
+#: ett Iris-lead ska vara ett bolag som kan köpa det kunden säljer (Sebbes
+#: krav 2026-10-06). Ligger inte i profilen: kunden ska inte kunna redigera
+#: bort det, och en profil utan kriterier ska inte släppa igenom bolag som
+#: ingenting visar att produkten passar.
+PRODUKTMATCH = "kp"
+
+
+def produktmatch_text(profil: dict[str, Any] | None) -> str:
+    """Kriteriets etikett, med kundens erbjudande när profilen bär det."""
+    erbjudande = _text((profil or {}).get("erbjudande"), 160)
+    if erbjudande:
+        return f"Har ett belagt behov av det kunden säljer: {erbjudande}"
+    return "Har ett belagt behov av det kunden säljer"
+
+
 def utan_adminrader(text: str | None) -> str:
     return "\n".join(r for r in (text or "").splitlines() if not _ADMINRADER.match(r)).strip()
 
