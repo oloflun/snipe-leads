@@ -29,20 +29,27 @@ def anyio_backend():
 # -- Mottagaren -------------------------------------------------------------
 
 
-def test_mottagaren_ar_den_namngivna_kontakten_med_adress_som_bar_namnet():
-    """Sebbes revidering 2026-10-07 av Antons regel 3: mottagaren måste vara
-    den namngivna kontaktpersonen — inte nödvändigtvis VD — och adressen
-    måste bära personens namn på bolagets domän. Funktionsadresser aldrig."""
+def test_mottagaren_ar_bolagets_kontaktmejl():
+    """Sebbes beslut 2026-10-07: det enda kravet är en kontaktmejl till
+    bolaget som utkastet kan nå fram till. Personens adress föredras i
+    urvalet, men info@/kontakt@ på bolagets domän duger. Aldrig en privat
+    adress, en främmande domän eller en HR-, ekonomi- eller robotadress."""
     vd = {"contact_name": "Adam Wartecki", "contact_role": "VD", "website": "https://prestigo.se"}
     assert vd_mottagare({**vd, "contact_email": "adam@prestigo.se"}) == "adam@prestigo.se"
-    assert vd_mottagare({**vd, "contact_email": "a.wartecki@prestigo.se"}) == "a.wartecki@prestigo.se"
-    assert vd_mottagare({**vd, "contact_email": "info@prestigo.se"}) is None
-    assert vd_mottagare({**vd, "contact_email": "rekrytering@prestigo.se"}) is None
-    # En annan roll — eller ingen alls — duger numera, så länge personen är namngiven.
-    assert vd_mottagare({**vd, "contact_role": "Inköpschef", "contact_email": "adam@prestigo.se"}) == "adam@prestigo.se"
-    assert vd_mottagare({**vd, "contact_role": None, "contact_email": "adam@prestigo.se"}) == "adam@prestigo.se"
-    assert vd_mottagare({**vd, "contact_name": "", "contact_email": "adam@prestigo.se"}) is None
-    assert vd_mottagare({**vd, "contact_email": "adam@gmail.com"}) is None
+    assert vd_mottagare({**vd, "contact_email": "info@prestigo.se"}) == "info@prestigo.se"
+    assert vd_mottagare({"website": "https://prestigo.se", "contact_email": "kontakt@prestigo.se"}) == "kontakt@prestigo.se"
+    for fel in ("rekrytering@prestigo.se", "noreply@prestigo.se", "faktura@prestigo.se", "adam@gmail.com", "info@annat.se"):
+        assert vd_mottagare({**vd, "contact_email": fel}) is None, fel
+    assert vd_mottagare({**vd, "contact_email": None}) is None
+
+
+def test_bolagsadressen_plockas_ur_sidan():
+    from app.leads.discovery import bolagsadress_i_text
+
+    sida = '<p>Jobba hos oss: <a href="mailto:jobb@alfa.se">jobb</a></p><footer>Kontakt: info (at) alfa (punkt) se</footer>'
+    assert bolagsadress_i_text(sida, "https://www.alfa.se") == "info@alfa.se"
+    assert bolagsadress_i_text("Skriv till hej@gmail.com", "https://alfa.se") is None
+    assert bolagsadress_i_text("Kontakt: sales@alfa.se eller info@alfa.se", "https://alfa.se") == "sales@alfa.se"
 
 
 def test_vd_i_de_former_den_star_pa_sajter():

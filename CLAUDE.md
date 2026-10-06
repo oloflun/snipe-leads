@@ -128,6 +128,21 @@ Fullständig beskrivning av miljöer, variabler och fällor: [`DEPLOY.md`](DEPLO
     REGISTRET står kvar, liksom listspårets VD-krav (regel 5 och 7).
     Kod: `app/leads/discovery.py:hamta_person_kontakt` / `mottagare`.
 
+**Ändring 2026-10-07 (Sebbe) — ersätter regel 3 och 4 för Iris-leads:**
+
+10. **Det enda kontaktkravet för ett Iris-lead är en kontaktmejl till
+    bolaget** som utkastet kan nå fram till. Ingen VD krävs, ingen
+    namngiven person krävs. En namngiven persons styrkta adress föredras;
+    annars duger bolagets egen adress (info@, kontakt@) på bolagets domän.
+    Aldrig en privat adress, en främmande domän eller en HR-, ekonomi- eller
+    robotadress (`discovery.mottagare`, `_EJ_SALJADRESS`). En telefon ensam
+    räcker inte. Bolaget måste fortfarande ha en webbplats (adressen hämtas
+    därifrån); utan webbplats går det till listspåret som förut.
+11. **Ger registret färre bolag än beställt fyller den gamla sökkedjan på**
+    (grounded sökning + existensgrinden), så att körningar hittar leads som
+    innan merinfo-filtret. Listornas VD-krav (regel 5, 7) är oförändrat.
+    Anton ska informeras om ändringen.
+
 Koden: `snajp-support/app/leads/sources/merinfo.py` (filtret, `lage="iris"`
 och `lage="lista"`), `app/leads/discovery.py:hamta_person_kontakt`
 (kontaktkontrollen; `hamta_vd_kontakt` är listspårets strängare VD-variant).

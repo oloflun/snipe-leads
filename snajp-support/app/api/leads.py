@@ -2435,18 +2435,20 @@ def _leverbarhet(rad: dict, result: dict, regler: dict) -> str | None:
     NAMNGIVEN kontaktperson (Sebbes revidering 2026-10-07: rollen föredras
     men krävs inte — en namngiven anställd duger i sista hand), en
     kontaktväg (telefon eller arbetsmejl) och en lägesbeskrivning. Det är
-    vad en körnings N räknar (INV-LEADS-N-001)."""
-    from ..leads.discovery import ar_arbetsmejl
+    vad en körnings N räknar (INV-LEADS-N-001).
+
+    Sebbes beslut 2026-10-07 (ersätter namn- och telefonkravet): kontakten
+    som krävs är en kontaktmejl till bolaget som utkastet kan nå fram till
+    (discovery.mottagare) — en namngiven person föredras, info@ duger, en
+    telefon ensam räcker inte."""
+    from ..leads.discovery import mottagare
 
     if not result.get("qualified"):
         return (result.get("disqualifiers") or ["Uppfyllde inte kriterierna"])[0]
     if eskalering.under_troskel(regler, qualified=True, icp_fit=result.get("icp_fit")):
         return f"Under tröskeln: poäng {result.get('score_total')} av {regler['kvalificeringstroskel']} krävda"
-    if not rad.get("contact_name"):
-        return "Ingen namngiven kontaktperson"
-    mejl = rad.get("contact_email")
-    if not (rad.get("contact_phone") or (mejl and ar_arbetsmejl(mejl, webb=rad.get("website")))):
-        return "Ingen kontaktväg: varken telefon eller arbetsadress"
+    if not mottagare(rad):
+        return "Ingen kontaktmejl till bolaget"
     if not str(result.get("lagesbeskrivning") or rad.get("lagesbeskrivning") or "").strip():
         return "Ingen lägesbeskrivning"
     return None
@@ -2566,7 +2568,7 @@ async def _run_batch_prospect(
                 )
         elif scope == "research_and_draft" and _skal:
             # Utkast skrivs bara för ett LEVERBART lead (_leverbarhet): en
-            # namngiven kontaktperson med roll, en kontaktväg och en
+            # kontaktmejl till bolaget (Sebbe 2026-10-07) och en
             # lägesbeskrivning. Kontrollen räknade förut bara in körningens
             # utfall, och ett bolag som stod som "bortvalt: ingen
             # kontaktperson med roll" fick ändå status Redo och ett utkast
@@ -2587,14 +2589,13 @@ async def _run_batch_prospect(
 
             if email and not ar_arbetsmejl(email, webb=prospect.get("website")):
                 email = None
-            # Bara leadets namngivna kontaktperson, och bara en adress som bär
-            # personens namn (Sebbes revidering 2026-10-07 av regel 3 —
-            # discovery.mottagare). En funktionsadress ger inget utkast;
-            # telefonen till kontakten står kvar på leadet.
+            # Bolagets kontaktmejl: personens adress eller info@ på bolagets
+            # domän (Sebbes beslut 2026-10-07, discovery.mottagare). En HR-,
+            # ekonomi- eller robotadress ger inget utkast.
             vd_epost = mottagare(prospect) if email else None
             if email and not vd_epost:
                 result["draft_note"] = (
-                    "Research klar. Inget utkast: e-postadressen går inte att knyta till kontaktpersonen"
+                    "Research klar. Inget utkast: e-postadressen är ingen säljingång (HR, ekonomi eller automatisk)"
                     + (", ring i stället." if prospect.get("contact_phone") else ".")
                 )
             elif email and not result.get("citat"):

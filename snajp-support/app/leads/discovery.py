@@ -772,6 +772,40 @@ def _synliggor_adresser(html: str) -> str:
     return _OBFUSKERAT_PUNKT.sub(".", text)
 
 
+#: Funktionsadresser som aldrig är en säljingång: ett utkast dit når HR,
+#: ekonomi eller en robot, inte någon som köper (provkörningen 2026-10-05
+#: skrev ett utkast till rekrytering@).
+_EJ_SALJADRESS = re.compile(
+    r"(?i)^(?:no-?reply|do-?not-?reply|rekrytering|jobb|jobs?|career|karriar|"
+    r"faktura|fakturor|invoice|ekonomi|lon|payroll|gdpr|dataskydd|privacy|press|"
+    r"abuse|postmaster|webmaster|bounce)"
+)
+
+
+def ar_saljadress(epost: str | None) -> bool:
+    """Inte en HR-, ekonomi- eller robotadress (se _EJ_SALJADRESS)."""
+    return bool(epost) and "@" in str(epost) and not _EJ_SALJADRESS.search(str(epost).split("@", 1)[0])
+
+
+def bolagsadress_i_text(text: str, website: str) -> str | None:
+    """Bolagets bästa kontaktadress på sidan: en adress på bolagets EGEN
+    domän, info@/kontakt@ duger (Sebbes beslut 2026-10-07: det enda kravet
+    för ett Iris-lead är en kontaktmejl till bolaget som utkastet kan nå
+    fram till). Rankas som plocka_arbetsmejl: en roll-lik lokaldel före
+    info@, en främmande domän eller privat adress aldrig. Kastar aldrig."""
+    from urllib.parse import unquote
+
+    ren = unquote(_synliggor_adresser(text or ""))
+    tillatna = [
+        a.rstrip(".,;:)>\"'")
+        for a in _EPOST_PA_SIDA.findall(ren)
+        if ar_saljadress(a)
+    ]
+    epost = plocka_arbetsmejl(" ".join(tillatna), website)
+    epost = epost.strip() if epost else None
+    return epost if epost and ar_arbetsmejl(epost, webb=website) else None
+
+
 def vd_uppgift_i_text(text: str, vd_namn: str, website: str) -> dict[str, Any] | None:
     """VD:ns mejl eller telefon ur sidtext, BARA när uppgiften går att knyta
     till VD (Antons regel 2026-10-04: ett nummer som inte kan styrkas tillhöra
@@ -814,6 +848,12 @@ def ar_vd(roll: object) -> bool:
 def mottagare(prospekt: dict[str, Any]) -> str | None:
     """Adressen ett Iris-utkast får skickas till, eller None.
 
+    Sebbes beslut 2026-10-07 (andra revideringen, ersätter stycket nedan):
+    det enda kravet är en kontaktmejl till BOLAGET. En namngiven persons
+    styrkta adress föredras; annars duger bolagets egen adress (info@,
+    kontakt@) på bolagets domän. Aldrig en privat adress, en främmande
+    domän eller en HR-/ekonomi-/robotadress (_EJ_SALJADRESS).
+
     Sebbes revidering 2026-10-07 av Antons regel 3: mottagaren måste vara
     leadets NAMNGIVNA kontaktperson, men behöver inte vara VD — VD föredras
     i urvalet (hamta_person_kontakt), en annan namngiven person duger.
@@ -821,15 +861,10 @@ def mottagare(prospekt: dict[str, Any]) -> str | None:
     eller efternamn på bolagets egen domän. En funktionsadress (info@,
     rekrytering@) går aldrig att knyta till en person och får aldrig ett
     utkast (provkörningen 2026-10-05 skrev ett utkast till rekrytering@)."""
-    namn = str(prospekt.get("contact_name") or "")
     epost = str(prospekt.get("contact_email") or "").strip()
-    if not (namn and epost):
+    if not epost or not ar_arbetsmejl(epost, webb=prospekt.get("website")):
         return None
-    if not ar_arbetsmejl(epost, webb=prospekt.get("website")):
-        return None
-    led = [d for d in re.findall(r"[a-z]+", _asci(namn)) if len(d) >= 3]
-    lokal = _asci(epost.split("@", 1)[0])
-    return epost if any(d in lokal for d in led) else None
+    return epost if ar_saljadress(epost) else None
 
 
 #: Äldre namn, från tiden då bara VD fick utkast. Semantiken är mottagare():s.
@@ -905,7 +940,9 @@ def person_kontakt_i_text(text: str, website: str) -> dict[str, Any] | None:
     return basta
 
 
-async def hamta_person_kontakt(website: str, vd_namn: str | None = None) -> dict[str, Any] | None:
+async def hamta_person_kontakt(
+    website: str, vd_namn: str | None = None, *, bolagsadress_racker: bool = False
+) -> dict[str, Any] | None:
     """Bästa namngivna kontakt på sajten: VD först (när registret namngett
     en), sedan ägare/chef, sist en namngiven anställd. Startsidan plus upp
     till tre kontakt-/om oss-sidor.
@@ -917,13 +954,20 @@ async def hamta_person_kontakt(website: str, vd_namn: str | None = None) -> dict
 
     Returen bär contact_name/contact_role/contact_email/contact_phone och
     contact_level ('named_role_match' när rollen står på sajten,
-    'named_other' för en namngiven person utan uttalad roll)."""
+    'named_other' för en namngiven person utan uttalad roll).
+
+    `bolagsadress_racker` (Iris, Sebbes beslut 2026-10-07): finns ingen
+    namngiven person duger bolagets egen adress (info@, kontakt@), som
+    'role_address' utan namn. Samma sidor, inga extra hämtningar."""
     from . import sidhamtning
 
     basta: dict[str, Any] | None = None
+    bolagsadress: str | None = None
 
     def vag(sidtext: str) -> dict[str, Any] | None:
-        nonlocal basta
+        nonlocal basta, bolagsadress
+        if bolagsadress_racker and bolagsadress is None:
+            bolagsadress = bolagsadress_i_text(sidtext, website)
         if vd_namn:
             hit = vd_uppgift_i_text(sidtext, vd_namn, website)
             if hit:
@@ -957,6 +1001,11 @@ async def hamta_person_kontakt(website: str, vd_namn: str | None = None) -> dict
         # ett redan funnet (lägre rankat) fynd behålls och rankas nedan.
         logger.exception("Kontaktjakten föll för %s", website)
     if basta is None:
+        if bolagsadress:
+            return {
+                "contact_name": None, "contact_role": None, "contact_email": bolagsadress,
+                "contact_phone": None, "contact_level": "role_address",
+            }
         return None
     rang = basta.pop("rang")
     return {**basta, "contact_level": "named_role_match" if rang == 1 else "named_other"}
@@ -1322,22 +1371,33 @@ async def hitta_bolag(
 
     # Registerkällan först (merinfo via ScrapeGraphAI, TILLFÄLLIG tills ett
     # API-avtal finns, se sources/merinfo.py). Bara när LEADS_MERINFO är
-    # satt. Färre träffar än beställt levereras som de är: utfyllnaden nedan
-    # saknar telefon och skulle bryta kontaktkravet. None betyder att
-    # målgruppen inte gick att översätta till merinfos träd, och då tar den
-    # gamla kedjan vid.
+    # satt. None betyder att målgruppen inte gick att översätta till merinfos
+    # träd, och då tar den gamla kedjan vid helt.
+    #
+    # Färre träffar än beställt fylls på med den gamla kedjan (Sebbes beslut
+    # 2026-10-07: "det ska gå att hitta leads som innan"). Förut levererades
+    # registrets få träffar som de var, eftersom utfyllnaden saknade VD-
+    # kontakt; sedan kravet blev en kontaktmejl till bolaget, hämtad ur
+    # bolagets egen sajt i researchen, bryter utfyllnaden inget krav.
+    # Existensgrinden (leads/existens.py) står kvar för varje sökträff.
     from .sources import merinfo
 
+    fran_register: list[dict[str, Any]] = []
     if merinfo.aktiv():
-        fran_register = await merinfo.sok(icp, antal, uteslut=uteslut, profil=profil, listspar=listspar)
-        if fran_register is not None:
+        registret = await merinfo.sok(icp, antal, uteslut=uteslut, profil=profil, listspar=listspar)
+        if registret is not None:
             # Register ∩ signaler (plan del C, 2026-10-02): annons- och
             # nyhetskällorna avgör inte urvalet, de rankar det. Ett
             # registerbolag med en signal går först; en signalträff utanför
             # registret är inte målgruppen och faller. Körs bara när kunden
             # kräver signaler, som den gamla kedjan.
             signaler = await _sok_registrerade_kallor(icp, antal, uteslut) if icp.get("must_have") else []
-            return _med_signaler(fran_register, signaler)[:antal]
+            fran_register = _med_signaler(registret, signaler)[:antal]
+            if len(fran_register) >= antal:
+                return fran_register
+            uteslut = uteslut | {upptagna.nyckel(t["company_name"]) for t in fran_register}
+            prompt_namn |= {t["company_name"].casefold() for t in fran_register}
+            antal -= len(fran_register)
 
     from .platshallare import utan_platshallare
 
@@ -1353,7 +1413,7 @@ async def hitta_bolag(
     kor_kallor = profil is None or bool(icp.get("must_have"))
     fran_kallor = await _sok_registrerade_kallor(icp, antal, uteslut) if kor_kallor else []
     if len(fran_kallor) >= antal:
-        return fran_kallor[:antal]
+        return fran_register + fran_kallor[:antal]
     uteslut = uteslut | {upptagna.nyckel(t["company_name"]) for t in fran_kallor}
     prompt_namn |= {t["company_name"].casefold() for t in fran_kallor}
     antal_kvar = antal - len(fran_kallor)
@@ -1398,11 +1458,11 @@ async def hitta_bolag(
     try:
         text = await _gemini_med_sokning(prompt)
     except DiscoveryError:
-        if fran_kallor:
-            # Källträffarna är redan verifierade — en fallen utfyllnad ska
-            # inte kasta bort dem. Färre än beställt är ett giltigt utfall.
-            logger.warning("Discovery-utfyllnaden misslyckades — levererar källträffarna.")
-            return fran_kallor
+        if fran_register or fran_kallor:
+            # Register- och källträffarna är redan verifierade — en fallen
+            # utfyllnad ska inte kasta bort dem. Färre än beställt är giltigt.
+            logger.warning("Discovery-utfyllnaden misslyckades — levererar register- och källträffarna.")
+            return fran_register + fran_kallor
         logger.warning("Discovery-sokningen misslyckades.")
         raise
     utan_webb = bool(profil and profil.get("utan_webbplats"))
@@ -1415,7 +1475,7 @@ async def hitta_bolag(
     # existensgrinden (leads/existens.py) och researchen styrkt det. Kontakten
     # följer därför inte med till prospektet (api/leads.py), och ort och
     # storlek räknas inte som fakta i bedömningen (leads/bedomning.py).
-    return fran_kallor + [{**rad, "kalla": "gemini"} for rad in rena[:antal_kvar]]
+    return fran_register + fran_kallor + [{**rad, "kalla": "gemini"} for rad in rena[:antal_kvar]]
 
 
 async def sla_upp_webbplats(company_name: str, *, geografi: str | None = None) -> str | None:

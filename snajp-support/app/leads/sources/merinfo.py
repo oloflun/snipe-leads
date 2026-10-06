@@ -741,9 +741,9 @@ async def _komplettera(
     rankade: list[dict[str, Any]], antal: int, *, lage: str, puls: Callable[[], Awaitable[Any]] | None,
     listspar: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Iris: bolag MED webbplats och en NAMNGIVEN kontakt på sajten — VD
-    föredras, ägare/chef därnäst, en namngiven anställd i sista hand
-    (Sebbes revidering 2026-10-07 av regel 3). Lista: oförändrat VD-krav —
+    """Iris: bolag MED webbplats och en kontaktmejl till bolaget på sajten —
+    en namngiven person föredras (VD, ägare/chef, anställd), annars duger
+    bolagets egen adress, info@/kontakt@ (Sebbes beslut 2026-10-07). Lista: oförändrat VD-krav —
     VD:ns mejl eller telefon på sajten, eller ensam-VD-undantaget.
 
     Iris-kandidater utan sajt, med parkerad domän eller utan en namngiven
@@ -780,7 +780,9 @@ async def _komplettera(
         if lage == "iris":
             # Vilken namngiven person som helst duger, i prioritetsordning;
             # hamta_person_kontakt provar VD först när registret namngett en.
-            kontakt = await discovery.hamta_person_kontakt(webb, k.get("vd_namn"))
+            kontakt = await discovery.hamta_person_kontakt(
+                webb, k.get("vd_namn"), bolagsadress_racker=True
+            )
         else:
             kontakt = await discovery.hamta_vd_kontakt(webb, k["vd_namn"]) if k.get("vd_namn") else None
         if not kontakt:
@@ -790,7 +792,7 @@ async def _komplettera(
                 till_lista(
                     k,
                     "Ingen VD-kontakt på webbplatsen" if lage == "lista"
-                    else "Ingen namngiven kontakt på webbplatsen",
+                    else "Ingen kontaktmejl på webbplatsen",
                 )
             continue
         if lage == "iris":
