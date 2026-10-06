@@ -13,6 +13,7 @@ import { LeadsRunForm } from "@/components/leads/LeadsRunForm";
 import { LeadsTabell } from "@/components/leads/LeadsTabell";
 import { CrmKundlista } from "@/components/leads/CrmKundlista";
 import { LeadslistorView } from "@/components/leads/LeadslistorView";
+import { SnajpSaljlista } from "@/components/leads/Saljlista";
 import { btnPrimary, flik, flikAktiv, flikInaktiv, fliklista } from "@/components/ui";
 import { EXEMPELBOLAG, EXEMPEL_OMGANG_1, EXEMPEL_OMGANG_2 } from "@/lib/demo/iris-exempel";
 import { useLocale, type Localized } from "@/lib/i18n";
@@ -242,6 +243,7 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
             // CRM-kundlistan gäller Iris också (uteslutningen), så den står
             // här även utan listtillägget.
             <div className="grid gap-8">
+              <SnajpSaljlista />
               <CrmKundlista startOppen={crmOppen} />
               <ListorUpsell />
             </div>

@@ -2,6 +2,7 @@
 
 import { Download, Mail, Phone, Plus, Search, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { hamtaSaljlista, laggTillSaljrad, taBortSaljrad, uppdateraSaljrad } from "@/lib/actions/saljlista";
 import {
   SALJLISTA_FALT,
@@ -175,6 +176,18 @@ function relativ(datum: string | null, idag: string, text: (v: Localized) => str
   if (dagar === 1) return text(T.igar);
   if (dagar < 0) return text({ sv: `om ${-dagar} dagar`, en: `in ${-dagar} days` });
   return text({ sv: `för ${dagar} dagar sedan`, en: `${dagar} days ago` });
+}
+
+/**
+ * Säljlistan med sin grind: bara plattformsadmin i sin egen adminvy — aldrig
+ * i demovyn eller när admin tittar som en kund. Står i BÅDA grenarna av
+ * Leads › Listor (med och utan listtillägget): Snajps egen arbetsyta har inte
+ * tillägget, och den första versionen syntes därför inte alls där.
+ */
+export function SnajpSaljlista({ demo = false }: Readonly<{ demo?: boolean }>) {
+  const { isPlatformAdmin, vy, impersonation, isDemo } = useDashboard();
+  if (!isPlatformAdmin || vy !== "admin" || impersonation || demo || isDemo) return null;
+  return <Saljlista />;
 }
 
 export function Saljlista({ api = SERVERAPI }: Readonly<{ api?: SaljlistaApi }>) {
