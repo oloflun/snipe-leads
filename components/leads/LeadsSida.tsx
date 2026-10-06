@@ -145,7 +145,7 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
         <>
           {segmentVal === "listor" && harListaddon && !demo ? (
             // Beställningen landar i säljlistan (Sebbe 2026-10-06): knappen
-            // öppnar formuläret där nere. Kör Iris står alltid kvar bredvid.
+            // öppnar formuläret där nere. Kör Iris står kvar bredvid.
             <button
               type="button"
               onClick={() => window.dispatchEvent(new Event("snipra:saljlista-bestall"))}
@@ -154,13 +154,16 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
               {text(T.bestallLeads)}
             </button>
           ) : null}
-          <button type="button" aria-expanded={korOppen} onClick={() => setKorOppen((v) => !v)} className={btnPrimary}>
-            {text(T.korIris)}
-          </button>
+          {/* Fliken Körningar bär ingen Kör Iris-knapp (Sebbe 2026-10-07). */}
+          {segmentVal === "korningar" ? null : (
+            <button type="button" aria-expanded={korOppen} onClick={() => setKorOppen((v) => !v)} className={btnPrimary}>
+              {text(T.korIris)}
+            </button>
+          )}
         </>
       }
     >
-      {korOppen ? (
+      {korOppen && segmentVal !== "korningar" ? (
         <div className="mb-10 rounded-card border border-ink/12 bg-paper2/40 p-5 md:p-6">
           <LeadsRunForm
             isTest={demo || isDemo || vy === "demo"}
