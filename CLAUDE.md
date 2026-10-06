@@ -116,8 +116,21 @@ Fullständig beskrivning av miljöer, variabler och fällor: [`DEPLOY.md`](DEPLO
    utslag. Merinfos råsida når aldrig researchprompten, bara bolagsfakta
    utan personer och nummer (`merinfo.bolagsfakta_text`).
 
+**Tillägg 2026-10-07 (Sebbe):**
+
+10. **Iris-leads kräver en namngiven kontaktperson — inte nödvändigtvis VD.**
+    Regel 3 reviderad för Iris: kontakten måste vara en namngiven person
+    styrkt från bolagets egen sajt (namnet intill adressen, lokaldelen bär
+    namnet). VD föredras, ägare/chef/ansvarig därnäst, och en namngiven
+    anställd utan uttalad roll duger i sista hand. Utkast går bara till en
+    adress som bär personens namn på bolagets domän — funktionsadresser
+    aldrig. Förbudet mot styrelseledamöter, suppleanter och revisorer UR
+    REGISTRET står kvar, liksom listspårets VD-krav (regel 5 och 7).
+    Kod: `app/leads/discovery.py:hamta_person_kontakt` / `mottagare`.
+
 Koden: `snajp-support/app/leads/sources/merinfo.py` (filtret, `lage="iris"`
-och `lage="lista"`), `app/leads/discovery.py:hamta_vd_kontakt` (VD-kontrollen).
+och `lage="lista"`), `app/leads/discovery.py:hamta_person_kontakt`
+(kontaktkontrollen; `hamta_vd_kontakt` är listspårets strängare VD-variant).
 
 ## Dataskydd: DeepSeek får inte se kunddata
 

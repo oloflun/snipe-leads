@@ -802,7 +802,9 @@ då med en tratt som namnger det strypande kriteriet.
 Varför: uppmätt 2026-09-29 — 3 beställda leads blev 3 kandidater som Iris
 själv underkände, inga utkast, och körningen stannade vid "1/3 jobb".
 Leverbart är skärpt 2026-10-02 (Antons krav, plan del C): kvalificerat, över
-tröskeln, kontaktperson MED roll, telefon ELLER arbetsmejl, och en
+tröskeln, NAMNGIVEN kontaktperson (rollen föredras men krävs inte sedan
+Sebbes revidering 2026-10-07 — en namngiven anställd duger i sista hand),
+telefon ELLER arbetsmejl, och en
 lägesbeskrivning (migration 083) — `_leverbarhet` i `app/api/leads.py`.
 Test: snajp-support/tests/invariants/test_inv_leads_n_001.py
 Införd: 2026-09-30 · Upphävs endast genom waiver

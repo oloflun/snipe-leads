@@ -2423,16 +2423,18 @@ async def start_batch_run(
 def _leverbarhet(rad: dict, result: dict, regler: dict) -> str | None:
     """None = leverbart, annars skälet (tratten). Antons krav 2026-10-01,
     kodat 2026-10-02 (plan del C): kvalificerat, över kundens tröskel, en
-    kontaktperson MED roll, en kontaktväg (telefon eller arbetsmejl) och en
-    lägesbeskrivning. Det är vad en körnings N räknar (INV-LEADS-N-001)."""
+    NAMNGIVEN kontaktperson (Sebbes revidering 2026-10-07: rollen föredras
+    men krävs inte — en namngiven anställd duger i sista hand), en
+    kontaktväg (telefon eller arbetsmejl) och en lägesbeskrivning. Det är
+    vad en körnings N räknar (INV-LEADS-N-001)."""
     from ..leads.discovery import ar_arbetsmejl
 
     if not result.get("qualified"):
         return (result.get("disqualifiers") or ["Uppfyllde inte kriterierna"])[0]
     if eskalering.under_troskel(regler, qualified=True, icp_fit=result.get("icp_fit")):
         return f"Under tröskeln: poäng {result.get('score_total')} av {regler['kvalificeringstroskel']} krävda"
-    if not (rad.get("contact_name") and rad.get("contact_role")):
-        return "Ingen kontaktperson med roll"
+    if not rad.get("contact_name"):
+        return "Ingen namngiven kontaktperson"
     mejl = rad.get("contact_email")
     if not (rad.get("contact_phone") or (mejl and ar_arbetsmejl(mejl, webb=rad.get("website")))):
         return "Ingen kontaktväg: varken telefon eller arbetsadress"
@@ -2572,18 +2574,19 @@ async def _run_batch_prospect(
             result["contact_role"] = prospect.get("contact_role")
             result["contact_level"] = prospect.get("contact_level")
             result["contact_form_url"] = prospect.get("contact_form_url")
-            from ..leads.discovery import ar_arbetsmejl, vd_mottagare
+            from ..leads.discovery import ar_arbetsmejl, mottagare
 
             if email and not ar_arbetsmejl(email, webb=prospect.get("website")):
                 email = None
-            # Bara VD, och bara en adress som bär VD:ns namn (Antons regel 3,
-            # discovery.vd_mottagare). En funktionsadress eller en annan roll
-            # ger inget utkast; telefonen till VD står kvar på leadet.
-            vd_epost = vd_mottagare(prospect) if email else None
+            # Bara leadets namngivna kontaktperson, och bara en adress som bär
+            # personens namn (Sebbes revidering 2026-10-07 av regel 3 —
+            # discovery.mottagare). En funktionsadress ger inget utkast;
+            # telefonen till kontakten står kvar på leadet.
+            vd_epost = mottagare(prospect) if email else None
             if email and not vd_epost:
                 result["draft_note"] = (
-                    "Research klar. Inget utkast: e-postadressen går inte att knyta till bolagets VD"
-                    + (", ring VD i stället." if prospect.get("contact_phone") else ".")
+                    "Research klar. Inget utkast: e-postadressen går inte att knyta till kontaktpersonen"
+                    + (", ring i stället." if prospect.get("contact_phone") else ".")
                 )
             elif email and not result.get("citat"):
                 # Underlagsgolvet: utan ett enda ordagrant citat ur bolagets

@@ -741,13 +741,14 @@ async def _komplettera(
     rankade: list[dict[str, Any]], antal: int, *, lage: str, puls: Callable[[], Awaitable[Any]] | None,
     listspar: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Iris: bolag MED webbplats och en VD-kontakt på sajten (regel 3 och 4).
-    Lista: bolag där VD:ns mejl eller telefon står på sajten, eller där VD är
-    ensam i bolaget och registrets nummer därför är VD:s.
+    """Iris: bolag MED webbplats och en NAMNGIVEN kontakt på sajten — VD
+    föredras, ägare/chef därnäst, en namngiven anställd i sista hand
+    (Sebbes revidering 2026-10-07 av regel 3). Lista: oförändrat VD-krav —
+    VD:ns mejl eller telefon på sajten, eller ensam-VD-undantaget.
 
-    Iris-kandidater utan sajt, med parkerad domän eller utan VD-kontakt på
-    sajten läggs i `listspar` (plan 2026-10-05, fas 3) i stället för att
-    kastas, och får ingen dyr research."""
+    Iris-kandidater utan sajt, med parkerad domän eller utan en namngiven
+    kontakt på sajten läggs i `listspar` (plan 2026-10-05, fas 3) i stället
+    för att kastas, och får ingen dyr research."""
     from .. import discovery
     from ..platshallare import platshallare_for_webbplats
 
@@ -776,15 +777,27 @@ async def _komplettera(
             if parkerad:
                 till_lista(k, f"Parkerad domän: {parkerad}")
                 continue
-        kontakt = await discovery.hamta_vd_kontakt(webb, k["vd_namn"]) if k.get("vd_namn") else None
+        if lage == "iris":
+            # Vilken namngiven person som helst duger, i prioritetsordning;
+            # hamta_person_kontakt provar VD först när registret namngett en.
+            kontakt = await discovery.hamta_person_kontakt(webb, k.get("vd_namn"))
+        else:
+            kontakt = await discovery.hamta_vd_kontakt(webb, k["vd_namn"]) if k.get("vd_namn") else None
         if not kontakt:
             if lage == "lista" and k.get("_ensam_vd_telefon"):
                 ut.append({**_listrad(k, "VD är ensam i bolaget"), "signal": None})
             else:
-                till_lista(k, "Ingen VD-kontakt på webbplatsen")
+                till_lista(
+                    k,
+                    "Ingen VD-kontakt på webbplatsen" if lage == "lista"
+                    else "Ingen namngiven kontakt på webbplatsen",
+                )
             continue
-        k = {**k, **kontakt, "contact_name": k["vd_namn"], "contact_role": "VD",
-             "contact_level": "named_role_match"}
+        if lage == "iris":
+            k = {**k, **kontakt}
+        else:
+            k = {**k, **kontakt, "contact_name": k["vd_namn"], "contact_role": "VD",
+                 "contact_level": "named_role_match"}
         ut.append(k)
     return ut
 

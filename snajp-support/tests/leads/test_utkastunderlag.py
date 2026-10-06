@@ -29,13 +29,19 @@ def anyio_backend():
 # -- Mottagaren -------------------------------------------------------------
 
 
-def test_bara_vd_med_adress_som_bar_namnet():
+def test_mottagaren_ar_den_namngivna_kontakten_med_adress_som_bar_namnet():
+    """Sebbes revidering 2026-10-07 av Antons regel 3: mottagaren måste vara
+    den namngivna kontaktpersonen — inte nödvändigtvis VD — och adressen
+    måste bära personens namn på bolagets domän. Funktionsadresser aldrig."""
     vd = {"contact_name": "Adam Wartecki", "contact_role": "VD", "website": "https://prestigo.se"}
     assert vd_mottagare({**vd, "contact_email": "adam@prestigo.se"}) == "adam@prestigo.se"
     assert vd_mottagare({**vd, "contact_email": "a.wartecki@prestigo.se"}) == "a.wartecki@prestigo.se"
     assert vd_mottagare({**vd, "contact_email": "info@prestigo.se"}) is None
     assert vd_mottagare({**vd, "contact_email": "rekrytering@prestigo.se"}) is None
-    assert vd_mottagare({**vd, "contact_role": "Inköpschef", "contact_email": "adam@prestigo.se"}) is None
+    # En annan roll — eller ingen alls — duger numera, så länge personen är namngiven.
+    assert vd_mottagare({**vd, "contact_role": "Inköpschef", "contact_email": "adam@prestigo.se"}) == "adam@prestigo.se"
+    assert vd_mottagare({**vd, "contact_role": None, "contact_email": "adam@prestigo.se"}) == "adam@prestigo.se"
+    assert vd_mottagare({**vd, "contact_name": "", "contact_email": "adam@prestigo.se"}) is None
     assert vd_mottagare({**vd, "contact_email": "adam@gmail.com"}) is None
 
 
@@ -151,3 +157,34 @@ def test_platshallare_och_pahittat_tilltal_nar_aldrig_kon():
     assert not dom.ok and {c.kind for c in dom.unsupported} == {"placeholder"}
     assert ratta_tilltal("Hej Mikael,\nJag såg", "Jonas Ek").startswith("Hej Jonas,")
     assert ratta_tilltal("Hej [VD:ns förnamn],\nJag såg", None).startswith("Hej,")
+
+
+def test_person_kontakt_rangordnar_vd_chef_ansvarig_anstalld():
+    """Sebbes revidering 2026-10-07: bästa NAMNGIVNA kontakt vinner — VD
+    före chef, chef före namngiven anställd. Beviset är detsamma som för
+    VD: namnet står intill adressen och lokaldelen bär namnet."""
+    from app.leads.discovery import person_kontakt_i_text
+
+    sida = (
+        "<h2>Kontakt</h2>"
+        "<p>Lisa Lind, Säljare — lisa@bolaget.se</p>"
+        "<p>Per Palm, Försäljningschef — per@bolaget.se</p>"
+        "<p>Eva Ek, VD — eva@bolaget.se</p>"
+        "<p>Info — info@bolaget.se</p>"
+    )
+    basta = person_kontakt_i_text(sida, "https://bolaget.se")
+    assert (basta["contact_name"], basta["contact_email"]) == ("Eva Ek", "eva@bolaget.se")
+    assert basta["rang"] == 0
+
+    utan_vd = person_kontakt_i_text(sida.replace("Eva Ek, VD — eva@bolaget.se", ""), "https://bolaget.se")
+    assert (utan_vd["contact_name"], utan_vd["rang"]) == ("Per Palm", 1)
+    assert "chef" in utan_vd["contact_role"].lower()
+
+    bara_anstalld = person_kontakt_i_text(
+        "<p>Lisa Lind — lisa@bolaget.se</p><p>info@bolaget.se</p>", "https://bolaget.se"
+    )
+    assert (bara_anstalld["contact_name"], bara_anstalld["contact_role"], bara_anstalld["rang"]) == (
+        "Lisa Lind", None, 2)
+
+    # En funktionsadress utan namn intill ger INGEN kontakt — hellre tomt än gissat.
+    assert person_kontakt_i_text("<p>Kontakta oss: info@bolaget.se</p>", "https://bolaget.se") is None

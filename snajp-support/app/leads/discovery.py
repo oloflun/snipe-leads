@@ -789,24 +789,154 @@ def ar_vd(roll: object) -> bool:
     return bool(_VD_ROLL.search(str(roll or "")))
 
 
-def vd_mottagare(prospekt: dict[str, Any]) -> str | None:
+def mottagare(prospekt: dict[str, Any]) -> str | None:
     """Adressen ett Iris-utkast får skickas till, eller None.
 
-    Antons regel 3 (2026-10-04): kontakta bara VD, och bara med en uppgift som
-    går att styrka tillhöra VD. Det kräver att rollen är VD och att adressens
-    lokaldel bär VD:ns för- eller efternamn på bolagets egen domän, samma krav
-    som `vd_uppgift_i_text`. En funktionsadress (info@, rekrytering@) går inte
-    att knyta till en person. Provkörningen 2026-10-05 skrev ett utkast till
-    rekrytering@ och ett till en inköpschef."""
+    Sebbes revidering 2026-10-07 av Antons regel 3: mottagaren måste vara
+    leadets NAMNGIVNA kontaktperson, men behöver inte vara VD — VD föredras
+    i urvalet (hamta_person_kontakt), en annan namngiven person duger.
+    Beviskravet står orubbat: adressens lokaldel måste bära personens för-
+    eller efternamn på bolagets egen domän. En funktionsadress (info@,
+    rekrytering@) går aldrig att knyta till en person och får aldrig ett
+    utkast (provkörningen 2026-10-05 skrev ett utkast till rekrytering@)."""
     namn = str(prospekt.get("contact_name") or "")
     epost = str(prospekt.get("contact_email") or "").strip()
-    if not (ar_vd(prospekt.get("contact_role")) and namn and epost):
+    if not (namn and epost):
         return None
     if not ar_arbetsmejl(epost, webb=prospekt.get("website")):
         return None
     led = [d for d in re.findall(r"[a-z]+", _asci(namn)) if len(d) >= 3]
     lokal = _asci(epost.split("@", 1)[0])
     return epost if any(d in lokal for d in led) else None
+
+
+#: Äldre namn, från tiden då bara VD fick utkast. Semantiken är mottagare():s.
+vd_mottagare = mottagare
+
+
+#: Roller som pekar ut en beslutsfattare som inte är VD: ägare, grundare,
+#: chefer och ansvariga. Ordet fångas som det står så att rollen på leadet
+#: är sajtens egen, aldrig vår tolkning (INV-DATA-001).
+_LEDNINGSROLL = re.compile(
+    r"(?i)(?<![a-zåäö])("
+    r"ägare|delägare|grundare|medgrundare|founder|co-?founder|partner|"
+    r"[a-zåäö]{0,15}chef|c[ofto]o|[a-zåäö]{0,15}ansvarig|platsansvarig|"
+    r"verksamhetsledare|teamleader|team\s?lead"
+    r")(?![a-zåäö])"
+)
+
+#: Två versalinledda ord = ett personnamn som det står på sidan. Medvetet
+#: strikt: hellre ingen kontakt än ett gissat namn.
+_PERSONNAMN = re.compile(r"\b([A-ZÅÄÖ][a-zåäöé]{2,})\s+([A-ZÅÄÖ][a-zåäöé\-]{1,})\b")  # Ek, Alm: korta efternamn finns
+
+
+def person_kontakt_i_text(text: str, website: str) -> dict[str, Any] | None:
+    """Bästa NAMNGIVNA kontakt på sidan, VD eller inte (Sebbes revidering
+    2026-10-07 av regel 3: kontaktpersonen måste vara namngiven och styrkt,
+    men behöver inte vara VD — en annan roll duger, en namngiven anställd i
+    sista hand).
+
+    Beviskedjan är densamma som för VD, fast åt andra hållet: för varje
+    arbetsmejl på bolagets egen domän måste ett personnamn stå inom räckhåll
+    OCH adressens lokaldel bära namnets led. Rollen läses ur texten intill
+    namnet om den står där. `rang`: 0 = VD, 1 = ägare/chef/ansvarig,
+    2 = namngiven utan uttalad roll. Funktionsadresser (info@, kontakt@)
+    passerar aldrig: lokaldelen bär inget namn."""
+    ren = re.sub(r"<[^>]+>", " ", text)
+    ren = re.sub(r"\s+", " ", ren)
+    basta: dict[str, Any] | None = None
+    for traff in _EPOST_PA_SIDA.finditer(ren):
+        adress = traff.group(0)
+        if not ar_arbetsmejl(adress, webb=website):
+            continue
+        lokal = _asci(adress.split("@", 1)[0])
+        narhet = ren[max(0, traff.start() - 160): traff.end() + 160]
+        for namn_traff in _PERSONNAMN.finditer(narhet):
+            led = [d for d in (_asci(namn_traff.group(1)), _asci(namn_traff.group(2))) if len(d) >= 3]
+            if not led or not any(d in lokal for d in led):
+                continue
+            namn = f"{namn_traff.group(1)} {namn_traff.group(2)}"
+            # Rollen står intill SITT namn ("Eva Ek, VD — eva@…"), inte hos
+            # grannen på raden under: fönstret är snålt med flit, annars
+            # ärvde "Per Palm, Försäljningschef" grannens "VD" (testet).
+            intill = narhet[max(0, namn_traff.start() - 25): namn_traff.end() + 35]
+            roll_vd = _VD_ROLL.search(intill)
+            roll_ledning = _LEDNINGSROLL.search(intill)
+            if roll_vd:
+                rang, roll = 0, roll_vd.group(0)
+            elif roll_ledning:
+                rang, roll = 1, roll_ledning.group(0)
+            else:
+                rang, roll = 2, None
+            kandidat = {
+                "contact_name": namn,
+                "contact_role": roll,
+                "contact_email": adress,
+                "contact_phone": None,
+                "rang": rang,
+            }
+            if basta is None or rang < basta["rang"]:
+                basta = kandidat
+            if basta["rang"] == 0:
+                return basta
+            break  # första styrkta namnet per adress räcker
+    return basta
+
+
+async def hamta_person_kontakt(website: str, vd_namn: str | None = None) -> dict[str, Any] | None:
+    """Bästa namngivna kontakt på sajten: VD först (när registret namngett
+    en), sedan ägare/chef, sist en namngiven anställd. Startsidan plus upp
+    till tre kontakt-/om oss-sidor. Kastar aldrig.
+
+    Returen bär contact_name/contact_role/contact_email/contact_phone och
+    contact_level ('named_role_match' när rollen står på sajten,
+    'named_other' för en namngiven person utan uttalad roll)."""
+    basta: dict[str, Any] | None = None
+
+    def vag(sidtext: str) -> dict[str, Any] | None:
+        nonlocal basta
+        if vd_namn:
+            hit = vd_uppgift_i_text(sidtext, vd_namn, website)
+            if hit:
+                return {
+                    "contact_name": vd_namn, "contact_role": "VD",
+                    "contact_level": "named_role_match", **hit,
+                }
+        kandidat = person_kontakt_i_text(sidtext, website)
+        if kandidat:
+            if kandidat["rang"] == 0:
+                kandidat.pop("rang")
+                return {**kandidat, "contact_level": "named_role_match"}
+            if basta is None or kandidat["rang"] < basta["rang"]:
+                basta = kandidat
+        return None
+
+    try:
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(8.0), follow_redirects=True,
+            headers={"user-agent": "snajp-leads/1.0 (+https://snajp.se)"},
+        ) as client:
+            svar = await client.get(website)
+            if svar.status_code >= 400:
+                return None
+            vinnare = vag(svar.text)
+            if vinnare:
+                return vinnare
+            for lank in extrahera_kontaktlankar(svar.text, website, tak=3):
+                try:
+                    undersida = await client.get(lank)
+                except httpx.HTTPError:
+                    continue
+                if undersida.status_code < 400:
+                    vinnare = vag(undersida.text)
+                    if vinnare:
+                        return vinnare
+    except httpx.HTTPError:
+        return None
+    if basta is None:
+        return None
+    rang = basta.pop("rang")
+    return {**basta, "contact_level": "named_role_match" if rang == 1 else "named_other"}
 
 
 async def hamta_vd_kontakt(website: str, vd_namn: str) -> dict[str, Any] | None:

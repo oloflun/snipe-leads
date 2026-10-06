@@ -139,7 +139,10 @@ def test_leverbart_kraver_kontaktperson_kontaktvag_och_lagesbeskrivning():
     ok = {"qualified": True, "icp_fit": 0.9, "score_total": 90, "lagesbeskrivning": "Bolaget …"}
     rad = {"contact_name": "Test Testsson", "contact_role": "VD", "contact_phone": "070-1", "website": "https://alfa.se"}
     assert leads_api._leverbarhet(rad, ok, regler) is None
-    assert leads_api._leverbarhet({**rad, "contact_role": None}, ok, regler) == "Ingen kontaktperson med roll"
+    # Sebbes revidering 2026-10-07: rollen föredras men krävs inte — en
+    # namngiven person utan uttalad roll är leverbar. Namnlös är det aldrig.
+    assert leads_api._leverbarhet({**rad, "contact_role": None}, ok, regler) is None
+    assert leads_api._leverbarhet({**rad, "contact_name": None}, ok, regler) == "Ingen namngiven kontaktperson"
     assert leads_api._leverbarhet({**rad, "contact_phone": None}, ok, regler).startswith("Ingen kontaktväg")
     # Arbetsmejl räcker som kontaktväg när telefon saknas.
     assert leads_api._leverbarhet({**rad, "contact_phone": None, "contact_email": "vd@alfa.se"}, ok, regler) is None
