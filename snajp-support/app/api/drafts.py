@@ -123,11 +123,14 @@ async def omformulera_draft(
     email = await storage.get_email(tenant_id, draft["email_id"])
     text = payload.content if (payload.content or "").strip() else draft["content"]
     tenantrad = await storage.get_tenant(tenant_id) or {}
+    from ..agentcore.instruktioner import las_agent_mall
+
     nytt = await omformulera_utkast(
         lage=payload.lage,
         content=text,
         email=email,
         foretagsnamn=str(tenantrad.get("company_name") or tenantrad.get("name") or ""),
+        grundprompt_mall=await las_agent_mall(storage, "support") or None,
     )
 
     await storage.log_decision(

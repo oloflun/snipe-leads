@@ -147,6 +147,10 @@ const SLUT_ETIKETT: Record<string, Localized> = {
     sv: "Körningens tak för sidhämtningar är nått",
     en: "The run's cap on page fetches was reached"
   },
+  ingen_malgrupp: {
+    sv: "Ingen målgrupp att söka i. Fyll i målgrupp under Inställningar eller välj bransch i filtret.",
+    en: "No target group to search in. Fill in your target group under Settings or choose an industry in the filter."
+  },
   avbruten: { sv: "Avbruten", en: "Cancelled" }
 };
 

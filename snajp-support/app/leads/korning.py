@@ -33,6 +33,7 @@ from typing import Any
 
 from . import jev
 from .discovery import hitta_bolag
+from .existens import styrk
 from .forfilter import forfiltrera
 from .geo import _prefix_ur_postnr
 from .webbsignal import mat_webbplats
@@ -60,6 +61,23 @@ def ny_korning(*, mal: int, scope: str, overrides: dict | None, is_test: bool) -
         "overrides": overrides,
         "is_test": is_test,
     }
+
+
+def har_malgrupp(profil: dict[str, Any], icp: dict[str, Any]) -> bool:
+    """Har körningen något att sikta på utöver ort och storlek?
+
+    Bransch (kundens filter, profilens segment eller SNI), ett kriterium eller
+    en signal kunden kräver, eller en målgruppstext som sökningen kan läsa.
+    Standarduteslutningen räknas inte: den säger bara vad som INTE söks."""
+    return bool(
+        icp.get("industries")
+        or icp.get("sni_codes")
+        or icp.get("must_have")
+        or profil.get("branscher")
+        or profil.get("segment")
+        or profil.get("kriterier")
+        or str(profil.get("malgrupp") or "").strip()
+    )
 
 
 def _ring_index(profil: dict[str, Any], kandidat: dict[str, Any]) -> int:
@@ -93,6 +111,13 @@ async def sokrunda(
             korning["tratt"].append({"namn": kandidat["company_name"], "steg": "förfilter", "skal": skal})
             continue
         fakta = await mat_webbplats(kandidat.get("website"))
+        # Existensgrinden (leads/existens.py): en kandidat som inte kommer ur
+        # registret måste styrkas av sin egen webbplats innan den kostar ett
+        # Jev- eller researchanrop.
+        ostyrkt = styrk(kandidat, fakta)
+        if ostyrkt:
+            korning["tratt"].append({"namn": kandidat["company_name"], "steg": "existens", "skal": ostyrkt})
+            continue
         kandidat["webbsignaler"] = fakta.get("rader") or []
         # Registerkällan (merinfo) har redan triagerat sina kandidater; en
         # andra Jev-fråga på samma bolag är bara kostnad.
@@ -132,14 +157,31 @@ def avsluta(korning: dict[str, Any], orsak: str) -> None:
     korning["klar"] = True
     korning["slut_orsak"] = orsak
     if korning["levererade"] < korning["mal"] and korning["tratt"]:
-        typer = Counter(str(t.get("skal") or "").split(":")[0].strip() for t in korning["tratt"])
+        typer = Counter(_skalstyp(t.get("skal")) for t in korning["tratt"])
         korning["flaskhals"] = typer.most_common(1)[0][0] or None
+
+
+def _skalstyp(skal: object) -> str:
+    """Skälets rubrik, för räkningen i sammanfattningen.
+
+    De flesta skäl är redan "Rubrik: detalj". Bedömningens bortval
+    (bedomning.py) har formen "<kriteriets namn>: <vad som föll>", och
+    kriteriets namn är det kunden VILL ha: sammanfattningen sa "3 bortvalda:
+    ligger i göteborg" om bolag som låg utanför Göteborg (provkörningen
+    2026-10-05). Ort och storlek får därför sin egen rubrik."""
+    text = str(skal or "").strip()
+    rubrik = text.split(":")[0].strip()
+    if rubrik.casefold().startswith("ligger i "):
+        return "Utanför målområdet"
+    if rubrik.casefold().startswith("storlek "):
+        return "Fel storlek"
+    return rubrik
 
 
 def sammanfatta(korning: dict[str, Any]) -> str:
     """Tratten i en mening, för kunden."""
     delar = [f"{korning['undersokta']} undersökta"]
-    typer = Counter(str(t.get("skal") or "").split(":")[0].strip() for t in korning["tratt"])
+    typer = Counter(_skalstyp(t.get("skal")) for t in korning["tratt"])
     delar += [f"{antal} bortvalda: {typ.lower()}" for typ, antal in typer.most_common(3) if typ]
     levererade = korning["levererade"]
     text = ", ".join(delar) + f" → {levererade} lead{'' if levererade == 1 else 's'}."

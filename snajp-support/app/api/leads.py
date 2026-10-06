@@ -26,7 +26,8 @@ from ..jobs.stadare import (
     stada_tenant,
 )
 from ..kvotfel import ar_kreditslut, kundtext_for, larma_kreditslut
-from ..leads import sidhamtning, upptagna
+from ..leads import existens, sidhamtning, upptagna
+from ..leads.webbsignal import mat_webbplats
 from ..leads.autonomy import LEVELS as AUTONOMY_LEVELS
 from ..leads.autonomy import describe as describe_autonomy
 from ..leads.autonomy import kan_aktivera_auto_send
@@ -510,6 +511,10 @@ async def list_prospects(request: Request, tenant: dict = Depends(require_tenant
     # gamla default-checkboxen ska inte dyka upp som "fynd" hos en kund.
     if tenant["tenant_id"] != DEFAULT_TENANT_ID:
         prospects = [p for p in prospects if p.get("origin") != "example"]
+    # Bara leads som uppfyller kraven visas (Antons krav 2026-10-06): ett
+    # bortvalt bolag med motiveringen "uppfyller inte ..." är brus för kunden.
+    # Raden står kvar i databasen så att nästa sökning utesluter bolaget.
+    prospects = [p for p in prospects if p.get("niva") != "C" and p.get("qualified") is not False]
     # Senaste händelse (Leads Suite): EN läsning av statusloggen, grupperad
     # här, i stället för en fråga per prospekt.
     senast: dict[str, str] = {}
@@ -1290,6 +1295,17 @@ async def put_leads_config(
         # `aktiv: false` är avstängningen — fältet nollas aldrig tyst av en
         # PUT från ett annat formulär, samma princip som autonomi/ICP.
         merged["signatur"] = payload.signatur.model_dump(exclude_none=True)
+    # Produkter, målsegment och offentlig sektor (2026-10-06). Kundens
+    # uttryckliga val: produktvalet i researchen läser `produkter`, och
+    # profilkompilatorn läser `segment` och `offentlig_sektor` före sin egen
+    # tolkning (leads/profil.kundval). En ändring här kompilerar om profilen
+    # vid nästa körning, eftersom de ingår i profilens indatahash.
+    if payload.produkter is not None:
+        merged["produkter"] = [p.model_dump() for p in payload.produkter]
+    if payload.segment is not None:
+        merged["segment"] = [s.model_dump() for s in payload.segment]
+    if payload.offentlig_sektor is not None:
+        merged["offentlig_sektor"] = payload.offentlig_sektor
 
     # auto_send-grinden körs EFTER sammanslagningen, mot det ICP som faktiskt
     # kommer att gälla. Hade den körts mot `current` kunde en och samma PUT
@@ -1523,6 +1539,17 @@ async def _korningens_profil(storage, tenant_id: str, overrides: dict | None) ->
 
 
 async def _skapa_prospekt_ur_kandidat(storage, tenant_id: str, bolag: dict, origin: str) -> dict:
+    if bolag.get("kalla") == "gemini":
+        # En sökträff bär modellens PÅSTÅENDEN om kontakt, ort och storlek.
+        # Provkörningen 2026-10-05: en gissad info@-adress på en påhittad
+        # domän räknades som kontaktväg och gav ett utkast, och gissad ort och
+        # storlek gav poäng 100. Researchen hämtar kontakten ur bolagets egna
+        # sidor (leads_agent._uppgradera_kontakt) och orten ur källmaterialet.
+        bolag = {
+            k: v for k, v in bolag.items()
+            if k not in ("contact_name", "contact_email", "contact_role", "contact_level",
+                         "contact_form_url", "ort", "postnr", "anstallda")
+        }
     prospect = await storage.create_prospect(
         tenant_id,
         company_name=bolag["company_name"],
@@ -1611,6 +1638,13 @@ async def _samla_korningens_prospekt(
             origin=origin_namn,
         )
         webb = await sla_upp_webbplats(bolagsnamn, geografi=geo)
+        # Uppslaget är modellens svar. Bär sajten inte bolagets namn hör den
+        # till någon annan, och researchen hade då läst fel bolags sidor.
+        if webb and existens.styrk(
+            {"company_name": bolagsnamn, "website": webb, "kalla": "gemini"}, await mat_webbplats(webb)
+        ):
+            logger.info("Uppslagen webbplats för %s gick inte att styrka och används inte.", bolagsnamn)
+            webb = None
         if webb:
             uppdaterad = await storage.update_prospect(
                 tenant_id, prospect["id"], website=webb
@@ -1904,6 +1938,13 @@ async def _fyll_pa(app_state, tenant: dict, batch_id: str) -> None:
         if not k["kandidater"]:
             if k["rundor"] >= iris_korning.MAX_RUNDOR:
                 orsak = "slut_pa_kandidater"
+                break
+            if not iris_korning.har_malgrupp(profil, sok_icp):
+                # Ingenting att sikta på: varken bransch, segment, kriterium
+                # eller målgruppstext. En sådan sökning är "hitta vilket bolag
+                # som helst", och det var den som gav påhittade bolag och en
+                # slagsida mot bygg i provkörningen 2026-10-05.
+                orsak = "ingen_malgrupp"
                 break
             # Prospekt, listrader och CRM-kunder (app/leads/upptagna.py) plus
             # det körningen redan prövat.
@@ -2304,6 +2345,13 @@ async def _run_batch_prospect(
         _skal = _leverbarhet(_rad, result, _regler)
         if _skal:
             utfall["skal"] = _skal
+            # Ett bolag som inte är leverbart är inget lead: nivå C döljer det
+            # för kunden (list_prospects), oavsett om skälet är kriterierna,
+            # tröskeln eller kontakten.
+            await storage.spara_bedomning(
+                tenant["tenant_id"], prospect_id,
+                bedomning={"niva": "C", "qualified": False, "disqualifiers": [_skal]},
+            )
         else:
             utfall.update(leverbar=True, skal=None)
 
@@ -2325,19 +2373,31 @@ async def _run_batch_prospect(
             # Grinden föll — bolaget kvalificerar inte, ligger under kundens
             # tröskel, eller saknar kontaktväg. Ett utkast är 4–7 LLM-anrop
             # till, för ett mejl som inte ska skickas automatiskt.
-            if result["stopped_early"] == "ej_kvalificerad":
+            if result["stopped_early"] == "inget_underlag":
+                result["draft_note"] = (
+                    "Hoppar över utkastet: bolagets sidor gick inte att hämta, så det finns "
+                    "inget att bedöma eller skriva om."
+                )
+            elif result["stopped_early"] == "ej_kvalificerad":
                 result["draft_note"] = "Hoppar över utkastet: bolaget uppfyller inte målgruppens kriterier."
             elif result["stopped_early"] == "under_troskel":
                 result["draft_note"] = (
                     "Hoppar över utkastet: träffsäkerheten ligger under din tröskel på "
-                    f"{regler['kvalificeringstroskel']} procent. Bolaget står kvar i Prospekt "
-                    "för din bedömning."
+                    f"{regler['kvalificeringstroskel']} procent, så bolaget blir inget lead."
                 )
             else:
                 result["draft_note"] = (
                     "Hoppar över utkastet: ingen kontaktperson eller kontaktväg "
                     "hittades. Komplettera kontakten i registret och kör Processa om."
                 )
+        elif scope == "research_and_draft" and _skal:
+            # Utkast skrivs bara för ett LEVERBART lead (_leverbarhet): en
+            # namngiven kontaktperson med roll, en kontaktväg och en
+            # lägesbeskrivning. Kontrollen räknade förut bara in körningens
+            # utfall, och ett bolag som stod som "bortvalt: ingen
+            # kontaktperson med roll" fick ändå status Redo och ett utkast
+            # till en funktionsadress (provkörningen 2026-10-05).
+            result["draft_note"] = f"Research klar. Inget utkast: {_skal[:1].lower()}{_skal[1:].rstrip('.')}."
         elif scope == "research_and_draft":
             prospect = await storage.get_prospect(tenant["tenant_id"], prospect_id) or {}
             email = prospect.get("contact_email")
@@ -2349,11 +2409,28 @@ async def _run_batch_prospect(
             result["contact_role"] = prospect.get("contact_role")
             result["contact_level"] = prospect.get("contact_level")
             result["contact_form_url"] = prospect.get("contact_form_url")
-            from ..leads.discovery import ar_arbetsmejl
+            from ..leads.discovery import ar_arbetsmejl, vd_mottagare
 
             if email and not ar_arbetsmejl(email, webb=prospect.get("website")):
                 email = None
-            if not email:
+            # Bara VD, och bara en adress som bär VD:ns namn (Antons regel 3,
+            # discovery.vd_mottagare). En funktionsadress eller en annan roll
+            # ger inget utkast; telefonen till VD står kvar på leadet.
+            vd_epost = vd_mottagare(prospect) if email else None
+            if email and not vd_epost:
+                result["draft_note"] = (
+                    "Research klar. Inget utkast: e-postadressen går inte att knyta till bolagets VD"
+                    + (", ring VD i stället." if prospect.get("contact_phone") else ".")
+                )
+            elif email and not result.get("citat"):
+                # Underlagsgolvet: utan ett enda ordagrant citat ur bolagets
+                # egna sidor finns inget att öppna mejlet med, och utkastet blir
+                # "Jag såg att ni ligger i Göteborg" (provkörningen 2026-10-05).
+                result["draft_note"] = (
+                    "Research klar. Inget utkast: för tunt underlag för ett personligt mejl. "
+                    "Bolagets sidor sa för lite om verksamheten."
+                )
+            elif not email:
                 # Kontaktformulär är inte en mottagare. Hoppa till nästa bolag.
                 result["draft_note"] = (
                     "Research klar. Ingen arbetsadress hittades: leadet levereras "
@@ -2401,17 +2478,33 @@ async def _run_batch_prospect(
                             "vinklar": result.get("vinklar"),
                             "uppfyllda_kriterier": result.get("uppfyllda_kriterier"),
                             "webbsignaler": result.get("webbsignaler"),
+                            # Underlaget som gör mejlet personligt (2026-10-06).
+                            "citat": (result.get("citat") or [])[:6],
+                            "lagesbeskrivning": result.get("lagesbeskrivning"),
+                            "mottagare": {
+                                "namn": prospect.get("contact_name"),
+                                "roll": prospect.get("contact_role"),
+                            },
+                            "vald_produkt": result.get("produkt"),
                         },
                         ensure_ascii=False,
+                    )
+                    # Den valda produkten i stället för hela produktbeskrivningen:
+                    # Snajps utkast räknade upp alla tre agenterna och erbjöd ingen.
+                    vald = result.get("produkt")
+                    erbjudande = (
+                        f"{vald['namn']}: {vald['nytta']}\n{result.get('offer_summary') or ''}".strip()
+                        if vald
+                        else offer[:2000]
                     )
                     draft = await run_outreach_draft(
                         storage,
                         tenant["tenant_id"],
                         thread_id=thread["id"],
-                        prospect_email=email,
+                        prospect_email=vd_epost,
                         tenant_name=tenant["tenant_name"],
                         company_name=prospect.get("company_name") or "",
-                        offer_summary=offer[:2000],
+                        offer_summary=erbjudande,
                         context_pack=context_pack,
                         brief="",
                         research_summary=sammanfattning,

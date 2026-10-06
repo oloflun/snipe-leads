@@ -70,6 +70,11 @@ def _force_simulation_mode(monkeypatch):
         "LEADS_WEBBREVISION",
         "TYPESAFE_API_KEY",
         "IRIS_JEV",
+        # Vertex-kontot: med JSON-nyckeln i .env tar bolagssökningen
+        # (discovery._gemini_med_sokning) Vertex-grenen även när GEMINI_API_KEY
+        # är tom, och ett omockat test hade gjort ett riktigt sökanrop. Tionde
+        # gången.
+        "GOOGLE_SERVICE_ACCOUNT_JSON",
     ):
         monkeypatch.setenv(name, "")
     get_settings.cache_clear()

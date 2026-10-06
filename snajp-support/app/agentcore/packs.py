@@ -29,6 +29,10 @@ class ScopeWithoutRationaleError(ValueError):
     """INV-SKILL-003: en skopa utan motivering. Standard är hel skill."""
 
 
+class RadandringSaknasError(ValueError):
+    """En textändring pekar på text som inte finns i den lästa skillen."""
+
+
 class MissingRequirementError(RuntimeError):
     """Förvillkorsgrinden: steget vägras köra. Inte en prompt-önskan."""
 
@@ -82,6 +86,17 @@ class PlaybookStep:
     # anropet, modellen väljer aldrig. En skopad extra-skill kräver att
     # STEGET bär en rationale (INV-SKILL-003 gäller även här).
     extra_skills: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    # Textändringar i den lästa skilltexten (2026-10-06): (exakt text ur
+    # skillen, ersättning, skäl). Tom ersättning stryker texten. Skillfilen
+    # rörs aldrig (INV-SKILL-005); ändringen sker på texten efter läsningen,
+    # står här i playbooken med sitt skäl och syns i spåret. Behövdes när en
+    # enda rad i en annars användbar sektion fick fel effekt: sa:draft-outreachs
+    # "[Brief proof: We helped [Similar Company] achieve [Result]]" gav ett
+    # påhittat case i ett svenskt kallmejl, och att skopa bort hela sektionen
+    # hade tagit arbetsflödet och exemplet med sig. Finns texten inte i skillen
+    # (efter en ny vendoring) faller importen: en ändring kan aldrig tyst sluta
+    # gälla.
+    radandringar: tuple[tuple[str, str, str], ...] = ()
 
     @property
     def overlay_names(self) -> tuple[str, ...]:
@@ -120,6 +135,18 @@ class PlaybookStep:
             raise ValueError(
                 f"{self.skill}: thinking måste vara None/'enabled'/'disabled', fick {self.thinking!r}."
             )
+        if self.radandringar:
+            lasta = self._rendera_last()
+            for gammal, _ny, skal in self.radandringar:
+                if not skal.strip():
+                    raise ScopeWithoutRationaleError(
+                        f"{self.skill}: en textändring kräver ett skäl (INV-SKILL-003)."
+                    )
+                if not gammal or gammal not in lasta:
+                    raise RadandringSaknasError(
+                        f"{self.skill}: texten som ska ändras finns inte i den lästa skillen "
+                        f"(ny vendoring?): {gammal[:80]!r}"
+                    )
 
     @staticmethod
     def _render_scoped(skill: str, scope: tuple[str, ...], rationale: str | None) -> str:
@@ -138,7 +165,15 @@ class PlaybookStep:
         Skopad = exakt de deklarerade referensfilerna, aldrig något modellen
         väljer vid körning (Del C, 'Playbooken bestämmer, aldrig modellen').
         Deklarerade extra_skills renderas EFTER huvudskillen, var och en
-        under sin egen rubrik — samma motor-injektionsgaranti."""
+        under sin egen rubrik — samma motor-injektionsgaranti. Textändringarna
+        (`radandringar`) tillämpas sist."""
+        text = self._rendera_last()
+        for gammal, ny, _skal in self.radandringar:
+            text = text.replace(gammal, ny)
+        return text
+
+    def _rendera_last(self) -> str:
+        """Skilltexten exakt som den läses, före textändringarna."""
         if not self.scope:
             rendered = load_full_skill(self.skill)
         else:

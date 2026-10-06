@@ -12,6 +12,7 @@ milestone_blockers:
   - "PR #31 (release development -> main) vantar pa Antons ja till migrationerna 096-098 mot main (torrkorda 2026-10-06) och pa hans merge"
   - "IMAP_PASSWORD_LIVRUSTNING saknas pa Railway api (bade main och development)"
   - "Vantar pa kundens bekraftelse av garantiperioden"
+  - "Migration 099 (agentinstruktioner per agent) kord i development 2026-10-06, mot main vantar den pa Antons ja"
 updated: 2026-10-06
 ---
 

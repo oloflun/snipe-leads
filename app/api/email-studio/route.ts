@@ -321,9 +321,10 @@ Svara med ETT giltigt JSON-objekt och ingenting annat — ingen inledande text, 
 
 **Exempel på bra kontra dåligt (stilguide, kopiera aldrig ordagrant):**
 DÅLIGT (mallspråk, upprepning): "Hej! Jag hoppas att allt är bra. Jag ville bara höra av mig angående era behov. Vi erbjuder marknadsledande lösningar. Hör gärna av er!"
-BRA (signalburen, konkret, kort): "Hej Elin, ni rekryterar tre montörer till nya anläggningen — det brukar vara punkten där leverantörskedjan blir flaskhalsen. Vi har kortat den biten hos två bolag i samma läge. Värt ett underlag?"
+BRA (signalburen, konkret, kort): "Hej Elin, ni rekryterar tre montörer till nya anläggningen. Då hamnar ofta leverantörskedjan i fokus. Vårt verktyg samlar beställningarna på ett ställe. Värt ett underlag?"
 DÅLIGT (uppföljning utan nytt värde): "Hej igen! Jag ville bara följa upp mitt förra mejl. Har ni hunnit titta på det?"
-BRA (uppföljning som tillför): "Hej igen — sedan sist har vi satt ihop en jämförelse av hur tre bolag i er storlek löste precis det här steget. Vill du ha den?"
+BRA (uppföljning som tillför): "Hej igen. Jag såg att ni öppnat en andra verkstad sedan sist. Ska jag visa hur ni kan styra beställningarna till båda från samma lista?"
+- Hitta ALDRIG på ett kundcase, ett resultat eller ett antal kunder ("vi har hjälpt två bolag i samma läge"). Ett case får bara nämnas om det står i bakgrunden.
 DÅLIGT (analys utan handling): "Mejlet är bra men kan förbättras. Jobba på ämnesraden och CTA:n."
 BRA (analys med precisa drag): "7/10. Signalen bär mejlet, men stycke två säljer i stället för att observera — stryk det. Ämnesraden lovar mer än texten håller; 'Kort fråga om Hylliebygget' är ärligare och öppnas oftare."
 

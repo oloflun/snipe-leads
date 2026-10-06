@@ -91,6 +91,18 @@ async def _kor_send_guard(storage, tenant_id: str, thread: dict, message: dict, 
                 if origin == "example"
                 else "Prospektet kommer från en egen provkörning och kan aldrig kontaktas.",
             )
+        # Ett bolag som Iris själv hittat får bara kontaktas när det bedömts
+        # mot hämtat källmaterial och klarat bedömningen (nivå A eller B).
+        # Provkörningen 2026-10-05: tre påhittade bolag hade origin='iris',
+        # ett färdigt utkast och ingenting som hindrade ett godkännande från
+        # att bli ett utskick. Kundens egna bolag (origin 'manual', listor)
+        # berörs inte: där har kunden själv pekat ut mottagaren.
+        if origin == "iris" and prospect.get("niva") not in ("A", "B"):
+            return GuardBeslut(
+                SG_BLOCKERA,
+                "ej_styrkt",
+                "Bolaget är inte bedömt mot hämtat källmaterial och kan inte kontaktas.",
+            )
 
     tenant = await storage.get_tenant(tenant_id) or {}
     dygnets_start = now.replace(hour=0, minute=0, second=0, microsecond=0)

@@ -265,6 +265,9 @@ async def _triage_email(
     articles = await _bred_sokning(
         storage, tenant_id, articles, [email.get("subject") or "", *_fragor_i(email["body_text"])]
     )
+    from ..agentcore.instruktioner import las_agent_mall
+
+    grundprompt_mall = await las_agent_mall(storage, "support") or None
 
     async def _skriv(underlag: list[dict[str, Any]]) -> dict[str, Any]:
         return await triage_email_llm(
@@ -275,6 +278,7 @@ async def _triage_email(
             image_urls=image_urls,
             foretagsprofil=foretagsprofil,
             foretagsnamn=foretagsnamn,
+            grundprompt_mall=grundprompt_mall,
         )
 
     result = await _skriv(articles)

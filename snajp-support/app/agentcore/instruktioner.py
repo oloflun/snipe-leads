@@ -103,6 +103,11 @@ class Instruktionslager:
     #: inte ur databasen utan sätts av anroparen (dataclasses.replace) när
     #: kanalen är känd — support_systemprompt.rendera. Tom = inget lager.
     agent_md: str = ""
+    #: En sparad version av agenttypens grundprompt (agent_global_instructions,
+    #: agent_type 'support' eller 'leads', migration 099), ännu inte ifylld.
+    #: Tom = filen i agent-core/prompts/ gäller. Anroparen renderar den till
+    #: agent_md när kanalen och kunden är kända.
+    agent_mall: str = ""
 
     @property
     def global_block(self) -> str:
@@ -162,7 +167,7 @@ async def las_instruktioner(
     global_md = ""
     fran_fil = True
     try:
-        rad = await storage.get_global_instructions()
+        rad = await storage.get_global_instructions("alla")
     except Exception:  # noqa: BLE001 — se docstringen
         rad = None
     if rad and (rad.get("strukturerad_md") or "").strip():
@@ -170,6 +175,8 @@ async def las_instruktioner(
         fran_fil = False
     else:
         global_md = _kapa(load_global_instructions_fil())
+
+    agent_mall = await las_agent_mall(storage, agent_type)
 
     kund_md = ""
     if tenant_id:
@@ -184,7 +191,25 @@ async def las_instruktioner(
         kund_md=kund_md,
         tenant_namn=tenant_namn,
         global_fran_fil=fran_fil,
+        agent_mall=agent_mall,
     )
+
+
+#: Agenttyperna som har en egen grundprompt (migration 099).
+AGENTER_MED_GRUNDPROMPT = ("support", "leads")
+MAX_TECKEN_GRUNDPROMPT = 40_000
+
+
+async def las_agent_mall(storage, agent_type: str) -> str:
+    """Den sparade versionen av agenttypens grundprompt, eller tom sträng
+    (filen gäller). Felar aldrig."""
+    if agent_type not in AGENTER_MED_GRUNDPROMPT:
+        return ""
+    try:
+        rad = await storage.get_global_instructions(agent_type)
+    except Exception:  # noqa: BLE001 — en trasig läsning ger filen, inte ett dött ärende
+        return ""
+    return ((rad or {}).get("strukturerad_md") or "").strip()[:MAX_TECKEN_GRUNDPROMPT]
 
 
 def demo() -> None:

@@ -53,13 +53,21 @@ async def embed_text(text: str) -> list[float] | None:
         return None
     settings = get_settings()
     try:
-        response = await client.embeddings.create(
-            model=settings.embedding_model,
-            input=text[:8000],
-            # Måste begäras. Utan `dimensions` ger gemini-embedding-001 3072
-            # värden, och kolumnen är vector(1536) — se config.py.
-            dimensions=settings.embedding_dimensions,
-        )
+        if settings.google_service_account_json:
+            # Vertex egna inbäddnings-API (:predict). Den OpenAI-kompatibla
+            # vägen hos Vertex svarar 500 på varje inbäddningsanrop sedan
+            # 2026-09-12, uppmätt igen 2026-10-06, och kunskapsbasen söktes
+            # därför bara med fulltext i alla miljöer.
+            vektor = await _vertex_predict(settings, text[:8000])
+        else:
+            response = await client.embeddings.create(
+                model=settings.embedding_model,
+                input=text[:8000],
+                # Måste begäras. Utan `dimensions` ger gemini-embedding-001 3072
+                # värden, och kolumnen är vector(1536) — se config.py.
+                dimensions=settings.embedding_dimensions,
+            )
+            vektor = response.data[0].embedding
     except Exception as fel:  # noqa: BLE001 — se docstringen
         if not _har_klagat:
             _har_klagat = True
@@ -70,9 +78,35 @@ async def embed_text(text: str) -> list[float] | None:
                 str(fel)[:300],
             )
         return None
-    vektor = response.data[0].embedding
     await cache.set(text, vektor)
     return vektor
+
+
+async def _vertex_predict(settings, text: str) -> list[float]:
+    """En vektor via Vertex :predict, i samma region som språkmodellen (EU)."""
+    import json
+
+    import httpx
+
+    from .llm import _vertex_token
+
+    projekt = json.loads(settings.google_service_account_json)["project_id"]
+    region = settings.google_cloud_region
+    url = (
+        f"https://{region}-aiplatform.googleapis.com/v1/projects/{projekt}/locations/{region}"
+        f"/publishers/google/models/{settings.embedding_model}:predict"
+    )
+    async with httpx.AsyncClient(timeout=30.0) as klient:
+        svar = await klient.post(
+            url,
+            headers={"Authorization": f"Bearer {_vertex_token(settings)}"},
+            json={
+                "instances": [{"content": text}],
+                "parameters": {"outputDimensionality": settings.embedding_dimensions},
+            },
+        )
+    svar.raise_for_status()
+    return svar.json()["predictions"][0]["embeddings"]["values"]
 
 
 def embeddings_tillgangliga() -> bool:

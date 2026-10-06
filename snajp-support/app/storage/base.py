@@ -1229,8 +1229,9 @@ class Storage(Protocol):
     # affärskontext, KB) ligger kvar i USERposition — se app/leads/soul.py för
     # varför den skillnaden är mekanismen och inte en försiktighetsåtgärd.
 
-    async def get_global_instructions(self) -> dict[str, Any] | None:
-        """Den aktiva globala instruktionen, eller None.
+    async def get_global_instructions(self, agent_type: str = "alla") -> dict[str, Any] | None:
+        """Den aktiva globala instruktionen för `agent_type` (migration 099:
+        'alla', 'support' eller 'leads'), eller None.
 
         None betyder "ingen har skrivit någon ännu" och är inte ett fel:
         app/agentcore/instruktioner.py faller då tillbaka på den incheckade
@@ -1245,15 +1246,24 @@ class Storage(Protocol):
         strukturerad_md: str,
         kalla: str = "ai",
         uppdaterad_av: str | None = None,
+        agent_type: str = "alla",
+        feedback: str = "",
     ) -> dict[str, Any]:
-        """Ny version. Avaktiverar den föregående i SAMMA transaktion — det
+        """Ny version för `agent_type`. Avaktiverar den föregående i SAMMA transaktion — det
         partiella unika indexet tillåter bara en aktiv rad, så två steg utan
         transaktion hade kunnat lämna noll aktiva efter ett avbrott."""
         ...
 
-    async def list_global_instructions(self, *, limit: int = 20) -> list[dict[str, Any]]:
-        """Historiken, nyast först. Driftverktyg: svarar på 'vad stod det när
+    async def list_global_instructions(
+        self, *, limit: int = 20, agent_type: str = "alla", med_text: bool = False
+    ) -> list[dict[str, Any]]:
+        """Historiken för `agent_type`, nyast först. `med_text` tar med
+        dokumentet och feedbacken (för återställning och visning). Driftverktyg: svarar på 'vad stod det när
         den där körningen gjordes?'."""
+        ...
+
+    async def get_global_instruction(self, instruktion_id: str) -> dict[str, Any] | None:
+        """En version, aktiv eller inte, med hela texten. För återställning."""
         ...
 
     async def get_agent_config(self, tenant_id: str, *, agent_type: str) -> dict[str, Any]:

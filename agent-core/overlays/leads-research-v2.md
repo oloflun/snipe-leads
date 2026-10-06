@@ -42,6 +42,12 @@ bolaget kvalificerar sig: koden gör det ur dina utslag (app/leads/bedomning.py)
   utslag}`. Skriv belägg och resonemang FÖRE utslaget. `utslag` är "ja",
   "nej" eller "okänt". För en uteslutning betyder "ja" att bolaget ÄR det
   kunden vill utesluta.
+- **Produktmatchningen `kp` bedöms ALLTID**, även när profilen saknar
+  kriterier: kan bolaget köpa och använda det kunden säljer? "ja" kräver ett
+  ordagrant citat som visar en verksamhet, brist eller händelse som kundens
+  produkt konkret löser hos just det här bolaget. Okänt är här INTE neutralt:
+  koden väljer bort varje bolag utan ett belagt ja, och ett bolag där ingen
+  av kundens produkter passar. Gissa aldrig fram ett ja.
 - **Beläggen verifieras i kod.** `citat` ska stå ordagrant i källmaterialet
   eller under MÄTTA WEBBSIGNALER. Ett "ja" eller "nej" utan verifierbart
   citat räknas som "okänt".
@@ -65,8 +71,11 @@ tömmer målgruppen.
 
 - `company_summary`, `business_model`: vad de gör och hur de tjänar
   pengar, ur källmaterialet.
-- `likely_pains`: problem hos prospektet som köparens produkt löser —
-  gärna ur de MÄTTA WEBBSIGNALERNA när kunden säljer webb eller marknadsföring.
+- `likely_pains`: problem hos prospektet som köparens produkt löser, ur det
+  bolaget självt skriver. De MÄTTA WEBBSIGNALERNA används bara när de står i
+  underlaget, och de står där bara när kundens profil har ett kriterium om
+  webbplatsen. Webbplatsens skick är aldrig en ingång för en kund som inte
+  säljer webb.
 - `evidence`: korta ORDAGRANNA citat ur källmaterialet som stöder pains —
   det här är de enda påståenden ett senare mejl får luta sig mot.
 

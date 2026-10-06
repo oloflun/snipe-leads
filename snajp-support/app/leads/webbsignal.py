@@ -126,20 +126,32 @@ async def mat_webbplats(url: str | None) -> dict[str, Any]:
         return analysera(url=None, html=None)
     # LEADS_WEBBSIGNAL: OSATT = på, tom/"0" = av — testsvitens läge
     # (tests/conftest.py), samma mönster som platshållarkontrollen.
+    #
+    # `matt` säger om sidan faktiskt hämtades. Existensgrinden
+    # (leads/existens.py) fäller bara på en MÄTNING: `svarar_inte` (DNS-fel,
+    # timeout) eller `http_status` (felsvar). Före 2026-10-06 såg en domän
+    # som inte finns likadan ut som en långsam sajt, och tre påhittade bolag
+    # gick vidare till research.
     if os.environ.get("LEADS_WEBBSIGNAL", "1").strip() in ("", "0"):
-        return {"har_webbplats": True, "url": url, "rader": [], "utdrag": ""}
+        return {"har_webbplats": True, "url": url, "rader": [], "utdrag": "", "matt": False}
     start = time.monotonic()
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=True) as client:
             svar = await client.get(url, headers={"User-Agent": "Mozilla/5.0 (Snajp Iris)"})
         tid = time.monotonic() - start
         if svar.status_code >= 400:
-            return {"har_webbplats": True, "url": url,
+            return {"har_webbplats": True, "url": url, "matt": True, "http_status": svar.status_code,
                     "rader": [f"Startsidan svarade med fel ({svar.status_code})."]}
-        return analysera(url=str(svar.url), html=svar.text[:400_000], headers=dict(svar.headers),
-                         svarstid_s=tid)
+        html = svar.text[:400_000]
+        return {
+            **analysera(url=str(svar.url), html=html, headers=dict(svar.headers), svarstid_s=tid),
+            "matt": True,
+            # Hela sidans synliga text (utdraget är kapat vid 3 000 tecken, och
+            # bolagsnamnet står ofta bara i sidfoten).
+            "sidtext": synlig_text(html, tak=200_000),
+        }
     except httpx.HTTPError:
-        return {"har_webbplats": True, "url": url,
+        return {"har_webbplats": True, "url": url, "matt": True, "svarar_inte": True,
                 "rader": [f"Startsidan svarade inte inom {int(_TIMEOUT)} sekunder."]}
 
 

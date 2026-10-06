@@ -29,6 +29,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import time
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -59,7 +60,13 @@ FEL_LIVSLANGD = timedelta(days=1)
 #: är bara golvet för en tom mall. Små riktiga sajter är korta (Byggarna
 #: Berggrens hela startsida är cirka 120 tecken), så den får inte ligga högre.
 MIN_TEXT = 40
-_JS_SKAL = ("enable javascript", "aktivera javascript", "you need to enable", "requires javascript")
+#: Fel som säger att TJÄNSTEN inte kunde leverera, till skillnad från en sida
+#: som inte finns. Fritext från SDK:t, därav mönstret.
+_TJANSTEFEL = re.compile(
+    r"credit|kredit|quota|kvot|payment|rate limit|\b40[1239]\b|\b429\b|svarade inte inom|API_KEY saknas|unauthori",
+    re.IGNORECASE,
+)
+_JS_SKAL =("enable javascript", "aktivera javascript", "you need to enable", "requires javascript")
 
 # ScrapeGraphs hastighetsgräns (uppmätt 2026-10-01): två samtidiga, en per sekund.
 _SEM = asyncio.Semaphore(2)
@@ -75,6 +82,10 @@ class Skrapkontext:
     #: Betalda ScrapeGraph-anrop per fas (lista, bolag, webb, research).
     anrop: dict[str, int] = field(default_factory=dict)
     cachetraffar: int = 0
+    #: Betalda hämtningar som föll på TJÄNSTEN (kredit, kvot, nyckel, tidsgräns),
+    #: inte på sidan. Registerkällan läser den för att skilja "listan gick inte
+    #: att hämta" från "listan finns inte" (sources/merinfo.py).
+    tjanstefel: int = 0
 
     @property
     def totalt(self) -> int:
@@ -206,6 +217,8 @@ async def hamta(url: str, *, fas: str, direkt: bool) -> tuple[str | None, str | 
         if md:
             text, fel, via = md, None, "scrapegraphai"
         else:
+            if kontext and _TJANSTEFEL.search(str(sg_fel or "")):
+                kontext.tjanstefel += 1
             fel = "; ".join(filter(None, [fel, sg_fel]))
             if direkt and not forst and get_settings().scrapegraphai_api_key:
                 # Reservvägen (som förut): SAMMA url direkt när tjänsten fallerar.

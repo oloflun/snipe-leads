@@ -32,11 +32,21 @@ def _fake_deepseek_key(monkeypatch):
     get_settings.cache_clear()
 
 
+#: Ett belagt ja på produktmatchningen: varje testsida börjar med bolagsnamnet.
+_KP_JA = {"kriterie_id": "kp", "utslag": "ja", "resonemang": "Kan använda produkten.",
+          "belagg": [{"url": "https://exempelbolaget.se", "citat": "Exempelbolaget"}]}
+
+
 async def _kor(
-    overrides: dict, *, sida: str | None = None, icp: dict | None = None, profil: dict | None = None
+    overrides: dict, *, sida: str | None = None, icp: dict | None = None, profil: dict | None = None,
+    kp: bool = True,
 ) -> dict:
     storage = MemoryStorage()
     prospect_id = await _prepare_prospect(storage)
+    if kp:
+        # Produktmatchningen (2026-10-06) är ett krav för varje lead; testerna
+        # här gäller andra grindar och får därför ett belagt ja som grund.
+        overrides = {**overrides, "bedomningar": [*(overrides.get("bedomningar") or []), _KP_JA]}
     llm = _FakeLLM(overrides={"sa:account-research": overrides})
     skrap = _fake_scrape(sida) if sida is not None else _fake_scrape()
     with (
@@ -83,8 +93,10 @@ async def test_modellens_fria_underkannande_faller_inte_utan_profilkriterium():
     fast profilen inte nämnde bransch. Ett fritt qualified=false utan utslag
     på ett profilkriterium får inte fälla."""
     result = await _kor({"qualified": False, "disqualifiers": ["Fel bransch"]}, profil=_PROFIL)
-    assert result["qualified"] is True
-    assert result["niva"] == "B"
+    # Bolaget faller ändå sedan 2026-10-06 — men på att måste-kravet inte
+    # styrktes, aldrig på modellens fria skäl.
+    assert "Fel bransch" not in result["disqualifiers"]
+    assert any("kunde inte styrkas" in d for d in result["disqualifiers"])
     assert result["motivering"]
 
 
@@ -94,7 +106,10 @@ async def test_nej_utan_verifierat_citat_faller_inte():
                           "belagg": [{"citat": "står inte på sidan"}]}]},
         profil=_PROFIL,
     )
-    assert result["qualified"] is True
+    # Nejet räknas inte (citatet finns inte); bolaget faller på att kravet
+    # inte styrktes, inte på gissningen.
+    assert not any("Gissning" in d for d in result["disqualifiers"])
+    assert any("kunde inte styrkas" in d for d in result["disqualifiers"])
 
 
 async def test_kvalificerat_bolag_utan_kontaktvag_stoppas():
@@ -103,6 +118,53 @@ async def test_kvalificerat_bolag_utan_kontaktvag_stoppas():
         sida="# Exempelbolaget\nFri retur inom 30 dagar. Ingen adress här.",
     )
     assert result["stopped_early"] == "kontakt_saknas"
+
+
+async def test_utan_kallmaterial_gors_inget_modellanrop_och_inget_blir_redo():
+    """Provkörningen 2026-10-05: tre påhittade bolag gick genom researchen på
+    raden "(inget källmaterial kunde hämtas)" och kom ut med poäng 100, status
+    Redo och ett utkast."""
+    storage = MemoryStorage()
+    prospect_id = await _prepare_prospect(storage)
+    llm = _FakeLLM(overrides={"sa:account-research": {"qualified": True, "ort": "Göteborg"}})
+    with (
+        patch("app.agent.step_runner.get_llm_client", return_value=llm),
+        patch("app.agent.leads_agent._scrape_registered_source_impl", new=_fake_scrape("")),
+    ):
+        result = await run_research_step_v2(
+            storage, TENANT, prospect_id=prospect_id, tenant_name="Snajp",
+            context_pack="## Kontextpaket\nICP: svensk e-handel.", brief="", is_test=True,
+            profil={"version": "test", "kommuner": ["Göteborg"]},
+        )
+    assert llm.calls == [], "inget underlag ska inte kosta ett modellanrop"
+    assert result["stopped_early"] == "inget_underlag"
+    assert result["qualified"] is False and result["niva"] == "C" and result["score_total"] == 0
+    assert (await storage.get_prospect(TENANT, prospect_id)).get("status") != "ready"
+
+
+async def test_webbmatningen_kors_bara_for_kunder_med_webbkriterium(monkeypatch):
+    """Ett mejl från Snajp öppnade med "Er webbplats är byggd med Next.js":
+    mätningen som byggdes åt webbyråerna kördes för alla kunder."""
+    matt: list[str] = []
+
+    async def _mat(url):
+        matt.append(url)
+        return {"har_webbplats": True, "url": url, "matt": True, "rader": ["Webbplatsen är byggd med Next.js."]}
+
+    monkeypatch.setattr("app.leads.webbsignal.mat_webbplats", _mat)
+
+    utan = await _kor({"qualified": True}, profil=_PROFIL)
+    assert matt == []
+    assert utan["webbsignaler"] == []
+    assert not any("Next.js" in rad for rad in utan["research_evidence"])
+
+    webbprofil = {
+        **_PROFIL,
+        "kriterier": [{"id": "k1", "text": "Gammal hemsida", "krav": "bor", "vikt": 2, "belagg": "webbsignal"}],
+    }
+    med = await _kor({"qualified": True}, profil=webbprofil)
+    assert len(matt) == 1
+    assert "Webbplatsen är byggd med Next.js." in med["webbsignaler"]
 
 
 async def test_kvalificerat_bolag_med_kontakt_gar_vidare():
@@ -125,8 +187,12 @@ async def test_kodgrinden_faller_kand_storlek_over_taket_fore_utkastet():
 
 async def test_bemanning_falls_bara_via_profilens_uteslutning():
     sida = "# Exempelbolaget\nVi hyr ut IT-konsulter till kunder.\nKontakta oss: kundservice@exempelbolaget.se"
-    svar = {"bedomningar": [{"kriterie_id": "u1", "utslag": "ja", "resonemang": "Hyr ut konsulter.",
-                             "belagg": [{"citat": "Vi hyr ut IT-konsulter till kunder."}]}]}
+    svar = {"bedomningar": [
+        {"kriterie_id": "k1", "utslag": "ja", "resonemang": "Säljer online.",
+         "belagg": [{"citat": "Vi hyr ut IT-konsulter till kunder."}]},
+        {"kriterie_id": "u1", "utslag": "ja", "resonemang": "Hyr ut konsulter.",
+         "belagg": [{"citat": "Vi hyr ut IT-konsulter till kunder."}]},
+    ]}
     med = await _kor(svar, sida=sida, profil=_PROFIL)
     assert med["stopped_early"] == "ej_kvalificerad"
     utan = await _kor(svar, sida=sida, profil={**_PROFIL, "uteslut": []})
@@ -160,3 +226,42 @@ async def test_regeln_okant_ar_inte_fel_nar_modellen():
 async def test_okand_storlek_stoppar_inte():
     result = await _kor({"qualified": True, "antal_anstallda": None}, icp=_NORDFORM)
     assert result["stopped_early"] is None
+
+
+async def test_utan_belagd_produktmatchning_blir_bolaget_aldrig_ett_lead():
+    """Sebbe 2026-10-06: leads som kunden inte kan sälja sin produkt till är
+    värdelösa. Utan kriterier i profilen blev ett obelagt bolag förut en B."""
+    for profil in (_PROFIL, {"version": "tom"}):
+        result = await _kor({"qualified": True}, profil=profil, kp=False)
+        assert result["qualified"] is False
+        assert result["niva"] == "C"
+        assert result["stopped_early"] == "ej_kvalificerad"
+        assert any("kunden säljer" in d for d in result["disqualifiers"])
+
+
+async def test_produktmatchning_med_pahittat_citat_faller():
+    svar = {"bedomningar": [{"kriterie_id": "kp", "utslag": "ja", "resonemang": "Behöver det.",
+                             "belagg": [{"citat": "står inte på sidan"}]}]}
+    result = await _kor(svar, profil={"version": "tom"}, kp=False)
+    assert result["qualified"] is False
+
+
+async def test_ingen_av_kundens_produkter_passar_faller():
+    """Researchen svarade produkt=null ("ingen passar") och bolaget levererades
+    ändå. Med en produktlista måste en av produkterna väljas."""
+    storage = MemoryStorage()
+    prospect_id = await _prepare_prospect(storage)
+    await storage.set_agent_settings(
+        TENANT, agent_type="leads", settings={"produkter": [{"namn": "Supportagent", "nytta": "Svarar kunder"}]}
+    )
+    for produkt, vantat in ((None, False), ("Supportagent", True)):
+        llm = _FakeLLM(overrides={"sa:account-research": {"produkt": produkt, "bedomningar": [_KP_JA]}})
+        with (
+            patch("app.agent.step_runner.get_llm_client", return_value=llm),
+            patch("app.agent.leads_agent._scrape_registered_source_impl", new=_fake_scrape()),
+        ):
+            result = await run_research_step_v2(
+                storage, TENANT, prospect_id=prospect_id, tenant_name="Snajp",
+                context_pack="## Kontextpaket", brief="", is_test=True, profil={"version": "tom"},
+            )
+        assert result["qualified"] is vantat, produkt

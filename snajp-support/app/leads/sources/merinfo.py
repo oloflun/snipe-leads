@@ -426,6 +426,15 @@ def kontrollera(b: dict[str, Any], icp: dict[str, Any], profil: dict[str, Any] |
         return f"Inte aktivt: {b['status']}."
     if ar_enskild_firma(b.get("orgnr")) or "enskild" in str(b.get("bolagsform") or "").casefold():
         return "Enskild firma: personuppgifter, och e-post kräver förhandssamtycke (MFL 19 §)."
+    # Bara privata bolag, om kunden inte själv pekat ut offentlig sektor eller
+    # skolor (leads/offentlig.py). Registret bär bolagsformen, så här fälls
+    # även stiftelser och föreningar som namnet inte avslöjar.
+    if not (profil or {}).get("offentlig_sektor"):
+        from ..offentlig import offentlig_eller_skola
+
+        offentligt = offentlig_eller_skola(b)
+        if offentligt:
+            return offentligt
     lo, hi = _intervall(icp, profil)
     antal = b.get("anstallda")
     if isinstance(antal, int):
@@ -649,6 +658,19 @@ async def sok(
             logger.info("merinfo: kredittaket (%d anrop) nått.", kontext.tak)
             break
     if not gav_rader:
+        # Sidorna gick inte att HÄMTA: kredittaket, slut på kredit hos
+        # ScrapeGraph eller tjänsten nere (sidhamtning räknar det). Det är
+        # inte "kunde inte tolka". Före 2026-10-06 gav även det None, och
+        # körningen föll tillbaka på den öppna Gemini-sökningen, som hittade
+        # på bolag.
+        kontext = sidhamtning.aktuell()
+        if kontext and kontext.slut:
+            logger.info("merinfo: kredittaket (%d anrop) nått före första listraden.", kontext.tak)
+            return []
+        if kontext and kontext.tjanstefel:
+            from ..discovery import DiscoveryError
+
+            raise DiscoveryError("Registret gick inte att läsa: listsidorna kunde inte hämtas.")
         # Ingen sluggkombination gav en enda listrad: branschordet fanns inte
         # som lista hos merinfo. Det är "kunde inte tolka", inte "inga bolag".
         logger.info("merinfo: inga listrader för %s.", sokningar)

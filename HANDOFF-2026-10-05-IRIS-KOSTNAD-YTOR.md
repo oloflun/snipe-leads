@@ -61,3 +61,60 @@ Sebbes stödchatts-/utkastgrindsarbete mergades in två gånger utan konflikt; s
 > Se även till att det går att flytta över körningar från development till main nu
 
 > Kör /conclude
+
+---
+
+## 6. Tillägg 2026-10-05 kväll — paus/avbryt, deploysäkra körningar, parallella körningar
+
+Senare session samma dag. Avsnitt 1–5 ovan står orörda; det här gäller ovanpå dem.
+
+### 6.1 Läget, verifierat
+
+- **Git:** `development` = `origin/development` = `266aeca` (tre nya commits ovanpå `df81313`). Antons ocommittade filer orörda (samma lista som i 1).
+- **Railway development:** `api` och `web` deployade `e318cad` med SUCCESS; `7224491` och `266aeca` pushade efter det (Railway deployar själv). Ingen migration behövdes: `updated_at` och `korning` finns sedan 080.
+- **#31 innehåller detta:** PR:n pekar på grenen `development` och har nu 27 commits, sista `266aeca` (kontrollerat med `gh pr view 31`). En merge av #31 tar alltså med paus/avbryt och deployfixarna till main. Ingen migration behövs före.
+- **Sviten:** 2 567 gröna, 4 skippade (full körning efter pushen).
+- **Anton har testat skarpt i development:** avbryt fungerar på en pågående körning.
+
+### 6.2 Vad som byggdes
+
+| Vad | Commit | Verifiering |
+|---|---|---|
+| Paus/återuppta/avbryt Iris-körningar: `POST /api/leads/korningar/{id}/pausa\|aterupta\|avbryt`; `korning.styrning` skrivs atomiskt av `set_korning_styrning` (base/memory/postgres) och bevaras när motorn skriver om hela tillståndet. Paus köar inga nya prospekt; avbrott låter köade barn hoppa över researchen (`AVBRUTEN_KORNING`, räknas inte som undersökta) och avslutar med `slut_orsak="avbruten"` | `e318cad` | `tests/test_korning_styrning.py` (7 tester); Antons skarpa avbrott |
+| **Deployfix 1, städaren:** `stada_hangande_leadsjobb` mäter `updated_at` (tystnad), inte `created_at` (ålder), och rör aldrig `styrning='paus'`. Tidigare fälldes varje Iris-körning äldre än 60 min, även friska | `e318cad` | `test_stadaren_mater_tystnad_inte_alder`; `tests/leads/test_stadare.py` uppdaterad |
+| **Deployfix 2, hjärtslag:** `ChattStrom._hjartslag` gör `XCLAIM ... JUSTID` var 20:e s medan hanteraren kör. Utan det mättes `MIN_IDLE_MS` från leveransen, och en research över 60 s togs över av den nya containern under deployöverlappet och kördes två gånger | `e318cad` | `test_hjartslaget_hindrar_overtag`, falsifierat (failar med hjärtslaget avslaget) |
+| **Deployfix 3, räkningen:** `_rapportera_till_korning` är idempotent per `job_id` (`korning.rapporterade`); inget rapporteras vid processdöd (CancelledError) | `e318cad` | `test_dubbel_rapport_raknas_en_gang` |
+| **Deployfix 4, stillastående körning:** barnet rapporteras till körningen FÖRE sin egen completed-rad, sedan väcks motorn (`_vacka_korning`); ett återtaget barn som redan står completed väcker körningen i `hantera_leads_jobb` | `e318cad` | `test_atertaget_completed_barn_vacker_korningen` |
+| UI: Pausa/Återuppta + Avbryt körningen (bekräftelse) i panelen för pågående körning i `IrisKorningar.tsx`; status "Pausad"/"Avbryts" i tabellen; slutorsak "Avbruten" | `e318cad` | renderat på stubbad förhandsvisning, 800 px och 375 px, inga konsolfel |
+| Avbryt-knappen röd: `!text-danger` (husets `cn()` slår inte ihop klasser, så `btnSecondary`:s `text-ink` vann) | `7224491` | skärmbild |
+| Körformuläret (`LeadsRunForm.tsx`) släpper knappen när körningen är överlämnad till servern; en ny körning tar över statusraden, den äldre följ-loopen tystnar (`foljer`-ref). Servern hindrade aldrig parallella körningar | `266aeca` | stubbad förhandsvisning: två körningar i rad, knappen aktiv igen efter ~3 s |
+
+### 6.3 Vad som återstår (utöver 3 ovan)
+
+1. **Två skarpa körningar parallellt i development** är inte provat; bara stubbat. Med `leads_workers=1` turas de om, så var och en tar längre tid.
+2. **Knappen står fortfarande i "Startar…" under sökfasen** (1–3 min innan researchen börjar). Liten följdändring om Anton vill starta flera även då.
+3. **"Researchar" bryts mitt i ordet** i Nyckeltal-panelen vid smal bredd (fanns före, ej åtgärdat).
+4. **Inkorgspollern i development** kan inte dekryptera inkorgshemligheterna för `snajpsupport@gmail.com` och `o.anton.lundin@gmail.com` med nuvarande `INTEGRATION_NYCKEL` (syns i api-loggen vid uppstart). Orelaterat till detta, inte undersökt.
+5. **Listjobb (`scope='lista'`) går inte att pausa/avbryta**: de saknar motortillstånd. Endpointen svarar 409.
+6. **Paus stoppar inte köade barn**, bara nya. Med en körning ur en lista (`kalla='lista'`, alla barn köas direkt) gör paus därför lite; avbryt fungerar.
+
+### 6.4 Fällor (nya)
+
+- **`npx prettier` installerar en främmande prettier** (repot har ingen konfig) och formaterar om hela filen. Använd inte; formatera för hand.
+- **`.next/dev/types/validator.ts` minns raderade sidor** och ger ett tsc-fel tills nästa `next dev`/build. Ofarligt.
+- **Git Bash saknades tillfälligt** (`usr\bin\bash.exe` borta) mitt i sessionen; Anton uppdaterade. PowerShell-`git` gav då "fork bomb".
+- **Förhandsvisning utan kunddata:** en okommitterad `app/forhandsvisning/<namn>/page.tsx` som stubbar `window.fetch` räcker för att se körningsytorna; ta bort den efteråt.
+
+### 6.5 Antons instruktioner ordagrant
+
+> Innan du gör något annat, lägg till en funktion för att pausa samt avbryta pågående leads-körningar.
+
+> Innan du pushar, undersök om pågående körningar dör vid ny push och deploy på Railway
+
+> Gör alla fixarna och fixa sedan UI:n för att manuellt kunna avbryta och pausa pågående körningar. Git bash är updaterat nu
+
+> Pusha ändringarna så vi kan pausa den pågående körningen innan de drar mer
+
+> Det går att avbryta pågående körningar, men jag kunde bara testa en åt gången eftersom det inte går att starta en ny körning under en pågående
+
+> Okej, updatera senaste agentens handoff med dina ändringar, utan att ta bort något.

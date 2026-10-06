@@ -132,12 +132,17 @@ async def test_utkast_kreditslut_larmar_och_ger_kundsaker_anteckning(
     app_state = _app_state()
     storage = app_state.storage
     prospekt = await storage.create_prospect(
-        TENANT, company_name="Nordkap Moduler AB", contact_email="anna@nordkapmoduler.se"
+        TENANT, company_name="Nordkap Moduler AB", contact_name="Anna Berg",
+        contact_email="anna@nordkapmoduler.se", profil={"contact_role": "VD"},
     )
     job_id = await app_state.jobs.create(tenant_id=TENANT, status="queued")
 
     async def research(*_a, **_k):
-        return {"qualified": True}
+        return {
+            "qualified": True,
+            "lagesbeskrivning": "Bolaget bygger moduler och hallar.",
+            "citat": ["Vi bygger moduler och hallar."],
+        }
 
     async def utkast(*_a, **_k):
         raise _Kreditfel()
@@ -165,12 +170,17 @@ async def test_utkast_ovrigt_leverantorsfel_lacker_ingen_ratext(monkeypatch, lar
     app_state = _app_state()
     storage = app_state.storage
     prospekt = await storage.create_prospect(
-        TENANT, company_name="Smålands Stålhallar AB", contact_email="per@stalhallar.se"
+        TENANT, company_name="Smålands Stålhallar AB", contact_name="Per Holm",
+        contact_email="per@stalhallar.se", profil={"contact_role": "VD"},
     )
     job_id = await app_state.jobs.create(tenant_id=TENANT, status="queued")
 
     async def research(*_a, **_k):
-        return {"qualified": True}
+        return {
+            "qualified": True,
+            "lagesbeskrivning": "Bolaget bygger moduler och hallar.",
+            "citat": ["Vi bygger moduler och hallar."],
+        }
 
     async def utkast(*_a, **_k):
         raise _Leverantorsfel()

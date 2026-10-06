@@ -1,5 +1,22 @@
 # Snipra Status
 
+## 2026-10-06 — Claude — Iris: inga påhittade bolag, bara privata bolag, utkast till VD, instruktioner per agent
+
+Antons fynd från provkörningen 2026-10-05 är rättade i kod på `development`
+(sju commits, **opushade**): existensgrind och inget utkast utan hämtat
+underlag (INV-LEADS-EXIST-001), bara privata bolag och målgrupp krävs, utkast
+bara till VD med verifierade citat och vald produkt, påhittade kundexempel
+fälls, Iris egen grundprompt, instruktioner per agent där feedback bakas in
+(migration 099, **ej körd**), produkter och segment per kund, inbäddningar via
+Vertex. **Development kör fortfarande på mallens fem rader som globala
+instruktioner.** Kvar för Anton: push, migration 099 i båda miljöerna,
+återställning av instruktionerna. Adminvyn ej visuellt kontrollerad (minne).
+Handoff: `HANDOFF-2026-10-06-IRIS-SANNING-INSTRUKTIONER.md`. Logg:
+`session-logs/2026-10-06-session-log.md`.
+
+## 2026-10-05 (kväll) — Claude — körningar går att pausa/avbryta och överlever deploy
+
+Paus/återuppta/avbryt i Körningar; städaren, hjärtslaget, idempotent rapport och väckning gör körningar deploysäkra; flera körningar kan startas. development = `266aeca`, ingår i #31. Handoff: `HANDOFF-2026-10-05-IRIS-KOSTNAD-YTOR.md` § 6. Logg: `session-logs/2026-10-05-session-log-2.md`.
 ## 2026-10-06 — Claude — Iris och listorna delar aldrig bolag, CRM-kundlistor kan laddas upp
 
 Listbygget uteslöt ingenting, så samma bolag kunde bli både Iris-lead och

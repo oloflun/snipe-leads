@@ -268,6 +268,11 @@ rebase. Ändringar behöver samordnas, inte bara pushas.
 
 ## Ändringslogg
 
+- 2026-10-06 — claude — delmål 2 (leads-agenten hittar inte på) skärpt i kod:
+  existensgrind, inget utkast utan hämtat underlag, bara privata bolag, bara
+  VD, faktagrind mot onamngivna case. Delmål 6 (instruktioner når agenten):
+  instruktioner per agent, feedback bakas in i stället för att ersätta, Iris
+  egen grundprompt. Opushat; migration 099 ej körd. Delmålslistan orörd.
 - 2026-10-06 — claude — delmål 2 (leads): Iris och leadslistorna delar aldrig
   bolag (gemensam uteslutningsmängd), och kunder laddar upp sin befintliga
   CRM-kundlista som aldrig prospekteras (migration 098). Ny post under

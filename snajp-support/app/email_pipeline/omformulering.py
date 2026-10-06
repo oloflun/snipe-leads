@@ -145,6 +145,7 @@ async def omformulera_utkast(
     content: str,
     email: dict[str, Any] | None,
     foretagsnamn: str = "",
+    grundprompt_mall: str | None = None,
 ) -> str:
     """Det omskrivna utkastet. Kastar ValueError på okänt läge.
 
@@ -175,7 +176,8 @@ async def omformulera_utkast(
     from ..agent.support_systemprompt import rendera
 
     grundprompt = rendera(
-        foretagsnamn=foretagsnamn, kanal="email", avsandare=foretagsnamn, lage="omformulering"
+        foretagsnamn=foretagsnamn, kanal="email", avsandare=foretagsnamn, lage="omformulering",
+        mall=grundprompt_mall,
     )
     response = await get_llm_client().chat.completions.create(
         model=settings.model,

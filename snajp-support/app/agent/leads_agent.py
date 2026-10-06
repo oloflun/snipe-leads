@@ -48,6 +48,7 @@ from ..config import get_settings
 from ..leads.business_context import require_business_context
 from ..leads.discovery import (
     LAGLIG_GRUND_EGEN_WEBB,
+    _asci,
     ar_privat_epost,
     ar_arbetsmejl,
     extrahera_kontaktlankar,
@@ -395,6 +396,15 @@ async def _uppgradera_kontakt(
     # verifierad arbetsadress lämnas ifred (även när vi sätter ett namn).
     if _saknar_arbetsmejl(prospect, webb):
         vald = fynd_epost or scrape_epost
+        # En funktionsadress (info@, rekrytering@) fästs aldrig på en
+        # namngiven person: då ser raden ut som "Anna Berg, VD,
+        # rekrytering@…" fast adressen inte går till henne (provkörningen
+        # 2026-10-05). Adressen måste bära personens namn.
+        person = namn or str(prospect.get("contact_name") or "")
+        if vald and person:
+            led = [d for d in re.findall(r"[a-z]+", _asci(person)) if len(d) >= 3]
+            if not any(d in _asci(vald.split("@", 1)[0]) for d in led):
+                vald = None
         if vald:
             falt["contact_email"] = vald
             if "contact_level" not in falt:
@@ -756,6 +766,18 @@ async def run_research_step(
     prospecting = skarp_kvalificering(
         prospecting, icp, company_name=str(prospect_row.get("company_name") or "")
     )
+    # Inget källmaterial = inget belägg för att kunden kan sälja något till
+    # bolaget. Samma regel som V2 (bedomning.py), 2026-10-06.
+    if not material.strip():
+        prospecting = {
+            **prospecting,
+            "qualified": False,
+            "icp_fit": 0.0,
+            "disqualifiers": [
+                *(prospecting.get("disqualifiers") or []),
+                "Inget källmaterial gick att hämta, så det finns inget belägg för ett behov av produkten.",
+            ],
+        }
 
     # GRINDEN (2026-09-02, kundkrav: nischning + kontaktperson). Två villkor,
     # båda kod-härledda — `qualified` är visserligen modellens bedömning, men

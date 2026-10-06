@@ -863,6 +863,7 @@ async def run_support_agent(
     renderat = partial(
         support_systemprompt.rendera,
         foretagsnamn=tenant_namn, kanal=channel, installningar=installningar,
+        mall=lager.agent_mall or None,
     )
     lager_karna = replace(lager, agent_md=renderat(karna=True))
     lager = replace(lager, agent_md=renderat())

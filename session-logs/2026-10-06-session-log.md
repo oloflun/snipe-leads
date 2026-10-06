@@ -1,93 +1,84 @@
 # Session Log — 2026-10-06
 
 ## Session Summary
-Iris och leadslistorna hämtar inte längre samma bolag: Iris-prospekt, rader i varje lista och kundens CRM-kunder bildar nu en gemensam uteslutningsmängd som både Iris-sökningen och listbygget läser. Kunder (och Snajp-admin i kundens vy) kan ladda upp sin befintliga CRM-kundlista under Leads › Listor, med en länk från översikten; listan prospekteras aldrig. Allt ligger i commit `b57316f` på `development` och i release-PR #31; migration 098 är körd mot development och torrkörd mot main, där skrivningen väntar på Antons godkännande.
+Iris rättades i kod efter provkörningen 2026-10-05: inga påhittade bolag (existensgrind, inget underlag ger varken bedömning eller utkast), bara privata bolag och en målgrupp krävs, utkast bara till VD med verifierade citat och vald produkt, och påhittade kundexempel fälls. Iris fick en egen grundprompt, instruktionerna delades per agent med feedback som bakas in i stället för att ersätta, och inbäddningarna lagades. Sju commits på `development`, opushade; migration 099 ej körd; adminvyn ej visuellt kontrollerad. Handoff: `HANDOFF-2026-10-06-IRIS-SANNING-INSTRUKTIONER.md`.
 
 ## What Changed
 
 ### Files Created
-- `~/snipe-leads/snajp-support/app/leads/upptagna.py` — uteslutningsmängden: nyckel på orgnr eller på namnet utan bolagsform, `hamta()` läser prospekt + alla listrader.
-- `~/snipe-leads/components/leads/CrmKundlista.tsx` — panelen "Ladda upp befintlig CRM-kundlista" överst i Leads › Listor.
-- `~/snipe-leads/supabase/migrations/20261006120000_098_listor_crm.sql` — `lead_lists.kalla` tillåter `'crm'` + index på `lead_list_items(tenant_id)`.
-- `~/snipe-leads/snajp-support/tests/leads/test_upptagna_bolag.py` — 10 tester: nycklar, listbygget, merinfo på orgnr, listspåret, CRM-import och 409-spärrarna.
-- `~/snipe-leads/plans/2026-10-06-listor-crm-separation.md` — planen för det här arbetet.
+- `snajp-support/app/leads/existens.py` — existensgrinden för sökträffar
+- `snajp-support/app/leads/offentlig.py` — offentlig sektor och skolor utesluts
+- `snajp-support/app/agent/leads_systemprompt.py` — renderar Iris grundprompt per steg
+- `snajp-support/app/agentcore/baka_in.py` — feedback bakas in som ändringar
+- `agent-core/prompts/leads-systemprompt.md` — Iris grundprompt
+- `supabase/migrations/20261006140000_099_agentinstruktioner_per_agent.sql` — instruktioner per agent
+- `scripts/granska_leads_underlag.py`, `scripts/las_agentinstruktioner.py`, `scripts/snajp_malgrupp.py`
+- Tester: `tests/leads/test_existens.py`, `tests/leads/test_utkastunderlag.py`, `tests/agentcore/test_radandringar.py`, `tests/api/test_admin_instruktioner_per_agent.py`, `tests/agent/test_embeddings_vertex.py`, `tests/invariants/test_inv_leads_exist_001.py`
+- `plans/2026-10-06-iris-sanning-malgrupp-instruktioner.md`, `HANDOFF-2026-10-06-IRIS-SANNING-INSTRUKTIONER.md`
 
 ### Files Modified
-- `~/snipe-leads/snajp-support/app/api/leads.py` — Iris-sökningen och körningsloopen läser uteslutningsmängden; listbygget skickar den till merinfo och discovery och filtrerar efteråt; listspåret dubblerar inte befintliga listor; `_kraev_ej_crm` (409) på till-iris, prospektbefordran och kombinera.
-- `~/snipe-leads/snajp-support/app/api/leads_suite.py` — `ImportRequest.kalla` (`import`|`crm`), CRM-importen slår ihop dubbletter.
-- `~/snipe-leads/snajp-support/app/leads/discovery.py` — normaliserade nycklar i `_rena_traffar`, källfederationen och `hitta_bolag`; sökprompten får högst 150 uteslutna namn, klamrar escapade.
-- `~/snipe-leads/snajp-support/app/leads/sources/merinfo.py` — `sok` hoppar över upptagna bolag på namn eller orgnr innan bolagssidan hämtas.
-- `~/snipe-leads/snajp-support/app/storage/{base,memory,postgres}.py` — `lista_upptagna_bolag`; minnet tillåter `kalla='crm'`.
-- `~/snipe-leads/components/leads/ImportCsv.tsx` — `kalla`-prop med CRM-texter.
-- `~/snipe-leads/components/leads/LeadslistorView.tsx` — CRM-panelen, förklaring under "Beställ en lista", CRM-listor utan kombinera/flytta/skriv mejl.
-- `~/snipe-leads/components/leads/LeadsSida.tsx` — `?crm=1` öppnar panelen; panelen syns även utan listtillägget.
-- `~/snipe-leads/components/dashboard/Oversikt.tsx` — länken "Ladda upp befintlig CRM-kundlista" vid Pipeline.
-- `~/snipe-leads/components/AppShell.tsx` — `demoAnpassa` behåller frågesträngen (länkar med `?vy=` lämnade demon).
-- `~/snipe-leads/GOALS.md`, `~/snipe-leads/STATUS.md`, `~/snipe-leads/snipe-leads.md` — läget efter sessionen.
-- PR #31 (GitHub) — titel och beskrivning: CRM-avsnitt, migration 098, steget "Anton godkänner" före migrationerna mot main.
-
-### Files Moved/Deleted
-- Inga.
+- `snajp-support/app/leads/{discovery,korning,bedomning,forfilter,profil,scheduler,sidhamtning,webbsignal,grounding_gate,outreach_playbook}.py`, `sources/merinfo.py` — grindar, sökprompt, profil, faktagrind, radändringar
+- `snajp-support/app/agent/{leads_research_v2,leads_agent,support_systemprompt,support_agent,triage,embeddings}.py`, `agentcore/{packs,instruktioner}.py`
+- `snajp-support/app/api/{leads,admin,admin_profil,schemas,drafts,triage}.py`, `email_pipeline/{processor,omformulering}.py`, `storage/{base,memory,postgres}.py`
+- `agent-core/overlays/{leads-research-v2,leads-grounding-repair}.md`, `app/api/email-studio/route.ts`
+- `components/admin/Agentinstruktioner.tsx`, `components/leads/IrisKorningar.tsx`, `lib/actions/agentinstruktioner.ts`, `lib/admin/sprak.ts`, `lib/snajp/standard.ts`
+- `ARCHITECTURE_INVARIANTS.md` (INV-LEADS-EXIST-001, INV-SKILL-003), `snipe-leads.md`, `STATUS.md`, `GOALS.md`, flera tester
 
 ## Decisions Made
-- **Separation genom uteslutning, inte genom urval:** listorna får aldrig innehålla ett bolag som redan är ett Iris-lead, står i en annan lista eller är kundens kund — men listbygget begränsas inte till bolag som underkänts för Iris. Att bara ta underkända bolag hade krympt listorna kraftigt; frågan är ställd till Sebbe.
-- **CRM-listan är en lista med `kalla='crm'`, inte en egen tabell:** återanvänder import, visning och CSV-mallarna, och uteslutningen täcker den automatiskt eftersom alla listrader räknas.
-- **CRM-listan prospekteras aldrig:** backenden svarar 409 på flytt, befordran och kombinering; UI:t döljer knapparna.
-- **Admin laddar upp i kundens vy:** befintlig kundvy räcker; importen läser inte `is_test`, så listan blir skarp även när admin tittar som kund.
-- **Migration 098 mot main väntar på Antons ord:** torrkörningen visar exakt 096–098 och alla är bakåtkompatibla, men CLAUDE.md kräver hans uttryckliga ord för releasesteg mot produktion.
+- **Bygg vidare på Sebbes grundpromptslager:** hans `agent_md` och supportprompt fanns redan; ett eget lager hade dubblerat.
+- **Sökningen frågar bara efter bolag:** kontaktkravet drev modellen att hitta på; kontakt hämtas ur bolagets sidor.
+- **Inget underlag ⇒ inget modellanrop:** både sanning och kostnad.
+- **Radändringar i playbooken i stället för skillredigering:** skillfilen rörs inte, ändringen bär skäl och faller vid import.
+- **Redis Iris tas inte in nu:** vår svarscache är strängare, Agent Memory bryter kontamineringsspärren, Context Retriever kräver data i Redis; inbäddningarna var den verkliga svagheten.
+- **Bara privata bolag som standard** (Antons regel), med `offentlig_sektor` som kundval.
 
 ## Context & Discussion
-- Sebbes beställning: listor är "kalla samtal" med mindre information och ska inte hämta samma leads som Iris; kunder och Snajp-admin ska kunna ladda upp färdiga CRM-listor under leadslistor, nåbart från översikten.
-- Sebbes sista instruktion: "lägg in allt i pr, i development och mot main men Anton måste godkänna" — tolkat som PR + development klara, main torrkörd, skrivningen efter Antons ja.
-- En parallell session arbetade samtidigt med supportagenten (commits `c32aab4`, `6976c68`, `3f630b5`, `520d7f9` och ocommittad `snajp-support/app/agent/triage.py`); bara explicita sökvägar committades.
-- Stopphooken krävde designskills: `next-best-practices` och `impeccable` (operate) kördes i efterhand, inga ändringar behövdes.
+- Development kör sedan 2026-10-05 20:05 UTC på mallens fem rader som globala instruktioner; sanningsreglerna saknas där.
+- Skillkedjan är hel: 414 filer, noll avvikelser mot manifestet; alla tio playbooks renderar. Spårvyn kapar varje fält vid 8 000 tecken.
+- Anton bad om steg-för-steg-förklaring av hur skills läses (motorn injicerar, modellen anropar inte) och var filerna ligger; besvarat i chatten.
 
 ## Open Threads
-- Anton ska godkänna migrationerna 096–098 mot main; därefter kör agenten `python scripts/railway_migrate.py --env main --apply` och Anton mergar PR #31.
-- Nattspeglingen main → development pausar tills 098 finns i main (schemaskillnad) — den går igen när migrationerna körts mot main.
-- CRM-uppladdningen med en riktig fil är inte klickad igenom i UI:t (knappen är avstängd i demon och development bär kunddata); nästa steg är ett prov med en syntetisk CSV på en testtenant.
-- Sebbe behöver avgöra om listorna bara ska innehålla bolag som underkänts för Iris; i dag utesluts bara bolag som redan finns någonstans.
-- CI-kontrollen "Supabase Preview" är röd på PR #31 av den döda Supabase-grenen, inte av releasen.
+- Push av development efter sammanslagning med Sebbes tre nya commits (Antons ord).
+- Migration 099 mot båda miljöerna samma dag (Anton).
+- Återställ development-instruktionerna och kör `snajp_malgrupp.py --apply` (Antons ord).
+- Visuell kontroll + a11y av instruktionsvyn (blockerad av minne).
+- Bädda in KB-artiklar på nytt; skarpt Iris-prov N=5; inventering av gamla påhittade leads.
+- Fas 7 (insynsvyn), fas 8 (kundens yta), resten av fas 9.
 
 ## Cross-Project Handoffs
 None this session.
 
 ## Current State After This Session
-`development` bär separationen och CRM-kundlistan och är driftsatt; migration 098 är körd där. Release-PR #31 (development → main) innehåller allt och väntar på Antons godkännande av migrationerna 096–098 mot main och på hans merge. Nästa session: kör migrationerna mot main när Anton sagt ja, prova CRM-uppladdningen med syntetisk data, och ta Sebbes besked om listornas urval.
-
-upstream: no changes · config sync: no diff (CLAUDE.md/AGENTS.md orörda)
+Koden för alla fel Anton såg 2026-10-05 finns lokalt på development och är testad, men ingenting är driftsatt och development kör fortfarande på överskrivna instruktioner. Nästa session: slå ihop Sebbes nya commits, pusha på Antons ord, kör migration 099, återställ instruktionerna, och gör sedan ett skarpt Iris-prov. Därefter fas 7 och 8.
 
 <!-- session-state
 date: 2026-10-06
-type: feature
+type: bugfix-and-feature
 files_created:
-  - snajp-support/app/leads/upptagna.py
-  - components/leads/CrmKundlista.tsx
-  - supabase/migrations/20261006120000_098_listor_crm.sql
-  - snajp-support/tests/leads/test_upptagna_bolag.py
-  - plans/2026-10-06-listor-crm-separation.md
-  - session-logs/2026-10-06-session-log.md
+  - ~/snipe-leads/snajp-support/app/leads/existens.py
+  - ~/snipe-leads/snajp-support/app/leads/offentlig.py
+  - ~/snipe-leads/snajp-support/app/agent/leads_systemprompt.py
+  - ~/snipe-leads/snajp-support/app/agentcore/baka_in.py
+  - ~/snipe-leads/agent-core/prompts/leads-systemprompt.md
+  - ~/snipe-leads/supabase/migrations/20261006140000_099_agentinstruktioner_per_agent.sql
+  - ~/snipe-leads/scripts/granska_leads_underlag.py
+  - ~/snipe-leads/scripts/las_agentinstruktioner.py
+  - ~/snipe-leads/scripts/snajp_malgrupp.py
+  - ~/snipe-leads/plans/2026-10-06-iris-sanning-malgrupp-instruktioner.md
+  - ~/snipe-leads/HANDOFF-2026-10-06-IRIS-SANNING-INSTRUKTIONER.md
 files_modified:
-  - snajp-support/app/api/leads.py
-  - snajp-support/app/api/leads_suite.py
-  - snajp-support/app/leads/discovery.py
-  - snajp-support/app/leads/sources/merinfo.py
-  - snajp-support/app/storage/base.py
-  - snajp-support/app/storage/memory.py
-  - snajp-support/app/storage/postgres.py
-  - components/leads/ImportCsv.tsx
-  - components/leads/LeadslistorView.tsx
-  - components/leads/LeadsSida.tsx
-  - components/dashboard/Oversikt.tsx
-  - components/AppShell.tsx
-  - GOALS.md
-  - STATUS.md
-  - snipe-leads.md
-decisions_made: 5
-open_threads: 5
+  - ~/snipe-leads/snajp-support/app/api/leads.py
+  - ~/snipe-leads/snajp-support/app/agent/leads_research_v2.py
+  - ~/snipe-leads/components/admin/Agentinstruktioner.tsx
+  - ~/snipe-leads/ARCHITECTURE_INVARIANTS.md
+  - ~/snipe-leads/STATUS.md
+  - ~/snipe-leads/GOALS.md
+  - ~/snipe-leads/snipe-leads.md
+decisions_made: 6
+open_threads: 6
 handoffs_pending: []
-priority_changes: false
+priority_changes: true
 status_updated: true
 goals_updated: yes
-next_session_focus: "Kör migrationerna 096–098 mot main efter Antons ja, prova CRM-uppladdningen med syntetisk CSV, ta Sebbes besked om listornas urval"
+next_session_focus: "Slå ihop Sebbes nya commits, push och migration 099 på Antons ord, återställ development-instruktionerna, skarpt Iris-prov"
 session-state -->

@@ -72,7 +72,6 @@ const T = {
   ingenUppgift: { sv: "Ingen", en: "None" },
   statusFor: { sv: "Status för", en: "Status for" },
   statusAndrad: { sv: "Status ändrad till", en: "Status changed to" },
-  doljBortvalda: { sv: "Dölj bortvalda", en: "Hide rejected" },
   exempel: { sv: "Exempel", en: "Example" },
   researchar: { sv: "Researchar", en: "Researching" },
   oppna: { sv: "Öppna", en: "Open" },
@@ -127,11 +126,11 @@ function researchPagar(p: SuiteProspekt): boolean {
   return p.origin !== "example" && !p.niva && p.score_total == null && p.icp_fit == null;
 }
 
-/** Bedömda först (A före B, högst poäng först), pågående sist — exemplen överst. */
+/** Nyaste överst — exemplen först. Sorteringen på nivå och poäng lade nya
+ *  leads mitt i listan (Antons krav 2026-10-06). */
 function sortera(rader: SuiteProspekt[]): SuiteProspekt[] {
-  const rang = (p: SuiteProspekt) =>
-    p.origin === "example" ? 0 : p.niva === "A" ? 1 : p.niva === "B" ? 2 : researchPagar(p) ? 4 : 3;
-  return [...rader].sort((a, b) => rang(a) - rang(b) || (b.score_total ?? -1) - (a.score_total ?? -1));
+  const rang = (p: SuiteProspekt) => (p.origin === "example" ? 0 : 1);
+  return [...rader].sort((a, b) => rang(a) - rang(b) || (b.created_at ?? "").localeCompare(a.created_at ?? ""));
 }
 
 export function LeadsTabell({
@@ -156,7 +155,6 @@ export function LeadsTabell({
   const [notis, setNotis] = useState<string | null>(null);
   const [meddelande, setMeddelande] = useState<string | null>(null);
   const [fokusId, setFokusId] = useState<string | null>(null);
-  const [visaBortvalda, setVisaBortvalda] = useState(false);
   const [sparaOppen, setSparaOppen] = useState(false);
 
   // Raden kan lämna filtret efter statusbytet: fokus till samma select om den
@@ -219,8 +217,9 @@ export function LeadsTabell({
   }, [uppgifter]);
 
   const allaRader = useMemo(() => sortera([...exempel, ...(prospekt ?? [])]), [exempel, prospekt]);
-  const antalBortvalda = allaRader.filter((p) => p.niva === "C").length;
-  const urval = visaBortvalda ? allaRader : allaRader.filter((p) => p.niva !== "C");
+  // Bortvalda bolag når aldrig listan: API:t lämnar bara leads som uppfyller
+  // kraven (snajp-support/app/api/leads.py, list_prospects).
+  const urval = allaRader;
   const synliga = useMemo(() => urval.filter((p) => matchar(p, filter)), [urval, filter]);
   const harWebb = synliga.some((p) => typeof p.webbrevision?.modernitet === "number");
   const perStatus = useMemo(() => {
@@ -474,18 +473,6 @@ export function LeadsTabell({
             className={faltTatt}
           />
         </label>
-        {antalBortvalda > 0 ? (
-          <button
-            type="button"
-            aria-pressed={visaBortvalda}
-            onClick={() => setVisaBortvalda((v) => !v)}
-            className={cn(btnSecondary, btnLiten)}
-          >
-            {visaBortvalda
-              ? text(T.doljBortvalda)
-              : text({ sv: `Visa bortvalda (${antalBortvalda})`, en: `Show rejected (${antalBortvalda})` })}
-          </button>
-        ) : null}
       </div>
 
       {vyer.length || !demo ? (

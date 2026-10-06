@@ -290,6 +290,51 @@ export const ADMIN: Record<string, Localized> = {
     sv: "Sparat. Gäller nästa körning, för alla kunder.",
     en: "Saved. Applies from the next run, for all customers."
   },
+  instruktionslager: { sv: "Instruktionslager", en: "Instruction layer" },
+  lagerAlla: { sv: "Gemensamt", en: "Shared" },
+  lagerSupport: { sv: "Supportagenten", en: "Support agent" },
+  lagerLeads: { sv: "Iris", en: "Iris" },
+  lagerOmAlla: {
+    sv: "Sanningsreglerna som gäller alla agenter, i varje steg.",
+    en: "The truth rules that apply to every agent, in every step."
+  },
+  lagerOmSupport: {
+    sv: "Supportagentens grundprompt. Gäller chatten, mejlinkorgen och omskrivningar.",
+    en: "The support agent's base prompt. Applies to chat, the email inbox and rewrites."
+  },
+  lagerOmLeads: {
+    sv: "Iris grundprompt. Gäller research och utkast.",
+    en: "Iris's base prompt. Applies to research and drafts."
+  },
+  ingenVersionSparad: {
+    sv: "Ingen version är sparad. Agenten läser den incheckade filen",
+    en: "No version is saved. The agent reads the checked-in file"
+  },
+  dinFeedback: { sv: "Din feedback", en: "Your feedback" },
+  andringar: { sv: "Ändringar", en: "Changes" },
+  typLaggTill: { sv: "Läggs till", en: "Added" },
+  typErsatt: { sv: "Ersätts", en: "Replaced" },
+  typTaBort: { sv: "Tas bort", en: "Removed" },
+  skalKolon: { sv: "Skäl:", en: "Reason:" },
+  fore: { sv: "Före", en: "Before" },
+  efter: { sv: "Efter", en: "After" },
+  ejTillampade: { sv: "Gick inte att tillämpa", en: "Could not be applied" },
+  dokumentetEfter: { sv: "Dokumentet efter ändringarna", en: "The document after the changes" },
+  forhandsgranskaForst: {
+    sv: "Förhandsgranska för att se ändringarna innan något sparas.",
+    en: "Preview to see the changes before anything is saved."
+  },
+  lastBorttagningarna: { sv: "Jag har läst borttagningarna", en: "I have read the removals" },
+  kundeInteBakaIn: { sv: "Kunde inte baka in feedbacken.", en: "Could not add the feedback." },
+  aterstall:{ sv: "Återställ", en: "Restore" },
+  aterstalldNastaKorning: {
+    sv: "Återställd. Gäller från nästa körning.",
+    en: "Restored. Applies from the next run."
+  },
+  kallaBakad: { sv: "Inbakad feedback", en: "Feedback added" },
+  kallaAterstalld: { sv: "Återställd", en: "Restored" },
+  feedbackRubrik: { sv: "Feedback", en: "Feedback" },
+  visa: { sv: "Visa", en: "Show" },
 
   /* -------------------------------------------------- Paket */
   aktivaKunder: { sv: "Aktiva kunder", en: "Active customers" },
