@@ -2719,6 +2719,12 @@ async def _run_batch_prospect(
                         + (kundtext_for(fel) or _FEL_UTKAST)
                     )
 
+        # Utfallet följer med jobbposten: dör processen mellan complete() och
+        # rapporten nedan (rapporten väntar på körningens lås, som en sökrunda
+        # kan hålla i minuter) slutför återtaget bokföringen ur posten i
+        # stället för att lämna körningen väntande på ett barn som aldrig
+        # rapporterar (1fdbcf8e, 2026-10-06: 2 av 3 leads, stod still).
+        result["_korningsutfall"] = {**utfall, "skrap": skrap.som_dict()}
         await app_state.jobs.complete(job_id, result)
         slutstatus = "completed"
     except Exception as error:  # noqa: BLE001 — ett trasigt prospekt fäller inte batchen
@@ -3454,6 +3460,8 @@ async def hantera_leads_jobb(app_state, payload: dict) -> None:
 
     befintligt = await jobs.get(job_id) or {}
     if befintligt.get("status") == "completed":
+        if tenant_id and payload.get("batch_id") and liggarstatus in ("queued", "processing"):
+            await _slutfor_aterupptaget_barn(app_state, payload, befintligt.get("result") or {})
         return
 
     if payload.get("kind") == "batch":
@@ -3481,6 +3489,35 @@ async def hantera_leads_jobb(app_state, payload: dict) -> None:
         is_test=bool(payload.get("is_test")),
         batch_id=payload.get("batch_id"),
     )
+
+
+async def _slutfor_aterupptaget_barn(app_state, payload: dict, resultat: dict) -> None:
+    """Ett barn vars research blev klar (Redis-posten completed) men vars
+    process dog innan körningen fick rapporten och liggaren sin slutstatus.
+
+    Vakten kvitterade förut bara posten: körningen väntade sedan för evigt på
+    ett barn som aldrig rapporterade, och städaren fällde den efter en timme
+    som "avbruten", med leads som redan var klara. Här görs resten av
+    _run_batch_prospects slut i samma ordning (INV-JOB-003): rapport,
+    liggare, väckning. Rapporten är idempotent per job_id."""
+    tenant = {"tenant_id": payload["tenant_id"], "tenant_name": payload.get("tenant_name")}
+    utfall = resultat.get("_korningsutfall") or {}
+    if not utfall:
+        # Posten skrevs av kod från före utfallsfältet: räkna barnet som
+        # bortvalt hellre än att låta körningen stå still.
+        prospekt = await app_state.storage.get_prospect(tenant["tenant_id"], payload["prospect_id"]) or {}
+        utfall = {"namn": prospekt.get("company_name") or "", "leverbar": False,
+                  "skal": "Researchen avbröts av en omstart."}
+    await _rapportera_till_korning(
+        app_state, tenant, payload["batch_id"], job_id=payload["job_id"], fyll=False,
+        namn=str(utfall.get("namn") or ""), leverbar=bool(utfall.get("leverbar")),
+        skal=utfall.get("skal"), skrap=utfall.get("skrap"),
+    )
+    await app_state.storage.set_leads_job_status(
+        tenant["tenant_id"], job_id=payload["job_id"], status="completed",
+        scope=payload.get("scope") or "research", prospect_id=payload.get("prospect_id"),
+    )
+    await _vacka_korning(app_state, tenant, payload["batch_id"])
 
 
 #: nyttolastens `kind` -> liggarens scope (prospektjobb bär sitt eget `scope`).

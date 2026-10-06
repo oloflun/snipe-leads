@@ -159,3 +159,38 @@ async def test_registersida_ar_aldrig_hemsida():
     merinfo = "https://www.merinfo.se/foretag/Alfa-Bygg-AB-5560000001/2k"
     assert _gissa_hemsida([merinfo], None) is None
     assert _gissa_hemsida([merinfo, "https://alfabygg.se/"], None) == "https://alfabygg.se/"
+
+
+async def test_429_pausar_alla_hamtningar_gemensamt(monkeypatch):
+    """Tre körningar fick 429 två gånger i sekunden i en halv minut
+    (2026-10-06 23:15): varje anrop väntade ut sin egen backoff medan de
+    andra fortsatte. Ett 429 ska pausa HELA processen, och pausen växer."""
+    monkeypatch.setenv("SCRAPEGRAPHAI_API_KEY", "sgai-test")
+    get_settings.cache_clear()
+    klocka = [1000.0]
+    sovit: list[float] = []
+
+    async def sov(s):
+        sovit.append(round(s, 1))
+        klocka[0] += s
+
+    svar = iter([(None, "Skrapning misslyckades: Rate limited - slow down and retry."),
+                 (None, "Skrapning misslyckades: Rate limited - slow down and retry."),
+                 ("# sida", None)])
+
+    async def sg(_nyckel, _url):
+        return next(svar)
+
+    monkeypatch.setattr(sidhamtning.time, "monotonic", lambda: klocka[0])
+    monkeypatch.setattr(sidhamtning.asyncio, "sleep", sov)
+    monkeypatch.setattr("app.agent.research_tools._hamta_via_scrapegraph", sg)
+    monkeypatch.setattr(sidhamtning, "_PAUS_TILL", [0.0])
+    monkeypatch.setattr(sidhamtning, "_SENAST", [0.0])
+    monkeypatch.setattr(sidhamtning, "_RAD_429", [0])
+    try:
+        md, fel = await sidhamtning._scrapegraph("https://www.merinfo.se/foretag/x")
+    finally:
+        get_settings.cache_clear()
+    assert md == "# sida" and fel is None
+    assert sovit == [5.0, 10.0], sovit
+    assert sidhamtning._RAD_429[0] == 0, "en lyckad hämtning nollställer serien"

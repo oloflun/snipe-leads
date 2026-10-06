@@ -72,6 +72,20 @@ _JS_SKAL =("enable javascript", "aktivera javascript", "you need to enable", "re
 _SEM = asyncio.Semaphore(2)
 _SENAST = [0.0]
 MIN_INTERVALL_S = 1.0
+#: Gemensam paus efter ett 429, för HELA processen. Uppmätt 2026-10-06 23:15:
+#: tre samtidiga körningar fick 429 två gånger i sekunden i en halv minut,
+#: eftersom varje anrop väntade ut sin egen backoff medan de andra fortsatte
+#: hamra. Merinfo-sidorna föll, och körningen slutade med "slut på kandidater"
+#: och 0 leads fast registret hade bolag. Nu väntar alla tills pausen är slut,
+#: och pausen växer för varje 429 i rad (5, 10, 20, 40, tak 60 s).
+_PAUS_TILL = [0.0]
+_RAD_429 = [0]
+MAX_FORSOK = 7
+
+
+def _rate_limit(fel: object) -> bool:
+    text = str(fel or "").casefold()
+    return "rate limit" in text or "429" in text or "too many requests" in text
 
 
 @dataclass
@@ -160,17 +174,22 @@ async def _scrapegraph(url: str) -> tuple[str | None, str | None]:
     if not nyckel:
         return None, "SCRAPEGRAPHAI_API_KEY saknas."
     md, fel = None, None
-    for forsok in range(4):
+    for _forsok in range(MAX_FORSOK):
         async with _SEM:
-            vanta = MIN_INTERVALL_S - (time.monotonic() - _SENAST[0])
-            if vanta > 0:
+            # Pausen läses INNANFÖR semaforen: ett anrop som väntat på platsen
+            # ska se en paus som sattes medan det väntade.
+            while (vanta := max(_PAUS_TILL[0], _SENAST[0] + MIN_INTERVALL_S) - time.monotonic()) > 0:
                 await asyncio.sleep(vanta)
             _SENAST[0] = time.monotonic()
             md, fel = await _hamta_via_scrapegraph(nyckel, url)
-        if md is not None or "rate limit" not in str(fel).casefold():
-            break
-        if forsok < 3:
-            await asyncio.sleep(5 * (forsok + 1))
+            if md is not None or not _rate_limit(fel):
+                _RAD_429[0] = 0
+                break
+            # Semaforen hålls medan pausen sätts, så att nästa i kön ser den.
+            _RAD_429[0] += 1
+            paus = min(60.0, 5.0 * 2 ** (_RAD_429[0] - 1))
+            _PAUS_TILL[0] = max(_PAUS_TILL[0], time.monotonic() + paus)
+            logger.info("ScrapeGraph 429: alla hämtningar pausar %.0f s (%d i rad).", paus, _RAD_429[0])
     return md, fel
 
 
