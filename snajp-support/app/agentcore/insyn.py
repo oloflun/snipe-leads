@@ -670,7 +670,7 @@ def bygg_kedja(
                 satt(nod, "kord", None, run_id=str(research.get("id")), post=post,
                      sidoanrop=[p for p in rlogg if str(p.get("step", "")).startswith("anrop:")])
             else:
-                satt(nod, "okant", {"kod": "inget_steg_i_spåret"}, run_id=str(research.get("id")))
+                satt(nod, "okant", {"kod": "inget_steg_i_sparet"}, run_id=str(research.get("id")))
         elif g == "bedomning":
             b = _hitta(rlogg, "grind:bedomning")
             if b is None:
