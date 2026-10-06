@@ -346,3 +346,8 @@ rebase. Ändringar behöver samordnas, inte bara pushas.
   Ny bestående regel för leads (Anton): registret är ett filter, Jev första
   filtret, bara VD-kontakter som går att styrka, Iris via bolagets webbplats
   (CLAUDE.md § Leads). Handoff: `HANDOFF-2026-10-04-SUITE-JEV-MERINFO.md`.
+- 2026-10-06 — claude — delmål 2 skärpt: varje Iris-lead kräver ett belagt
+  behov av kundens produkt (kriteriet `kp`, även utan profilkriterier, och en
+  vald produkt när kunden har en produktlista). Sparade leads bedöms om med
+  `scripts/ombedom_leads.py`. Punkt 10 (main i fas) väntar på migrationerna
+  096–099 och Antons merge av PR #31.

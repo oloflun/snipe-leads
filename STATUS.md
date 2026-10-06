@@ -1,5 +1,18 @@
 # Snipra Status
 
+## 2026-10-06 (3) — Claude/Sebbe — varje Iris-lead måste kunna köpa kundens produkt
+
+Iris bedömer nu varje bolag på produktmatchningen `kp`: bara ett belagt behov
+av det kunden säljer blir ett lead, och har kunden en produktlista måste Iris
+välja en av produkterna (`aa02fc2`, ovanpå Antons `30cd4de` som redan gav
+nyaste överst och dolda bortvalda). Sparade leads kan bedömas om med
+`scripts/ombedom_leads.py` (`63b9cf1`, `038541d`); körd i development: 51
+leads, kvar synliga Snajp 3 och Alunix 0, 21 föll utan bedömning för att
+ScrapeGraph-krediten är slut. **Kvar:** Antons migrationer 096–099 mot main
+(torrkörda) och merge av PR #31; påfylld ScrapeGraph, sedan
+`ombedom_leads.py --env development --utan-underlag --apply`. Logg:
+`session-logs/2026-10-06-session-log-3.md`.
+
 ## 2026-10-06 — Claude — Iris: inga påhittade bolag, bara privata bolag, utkast till VD, instruktioner per agent
 
 Antons fynd från provkörningen 2026-10-05 är rättade i kod på `development`

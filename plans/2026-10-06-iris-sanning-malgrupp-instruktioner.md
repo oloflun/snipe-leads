@@ -214,6 +214,22 @@ Tester: kundens önskemål hamnar i användarmeddelandet och aldrig i systemprom
 
 Tester: inbäddningsanropet ger vektorer i development (mätt, inte antaget); hybridsökningen hittar en omformulerad fråga som fulltexten missar; kalibreringen hämtar bara den egna kundens utslag; ett avvisat bolag kommer inte tillbaka i nästa körning.
 
+## Fas 1c – Produktmatchning för varje lead (Sebbes krav 2026-10-06)
+
+### Completed
+- [x] Kriteriet `kp` i `bedomning._produktmatch_rad`: bara ett belagt ja blir ett lead; ingen vald produkt (när kunden har en lista) fäller (`aa02fc2`).
+- [x] Prompt, overlay och INV-LEADS-EXIST-001 uppdaterade; V1 fäller tomt källmaterial.
+- [x] Ombedömning av sparade leads: `admin_ombedom.py` + `scripts/ombedom_leads.py` (`63b9cf1`, `038541d`).
+- [x] Körd i development: 51 leads, alla 30 med material bär `kp`, kvar synliga Snajp 3, Alunix 0.
+
+### Remaining
+- [ ] 21 leads föll utan bedömning (ScrapeGraph-krediten slut): `ombedom_leads.py --env development --utan-underlag --apply` efter påfyllning.
+- [ ] Ombedömning mot main efter mergen, på Antons ord (`--apply --main-godkant`).
+- [ ] Mät leverans per Iris-körning under de skärpta reglerna.
+
+### Blockers
+- ScrapeGraph-kredit; Antons migrationer 096–099 mot main och merge av PR #31.
+
 ## Utanför den här planen
 
 - Release till main: PR från development, din merge.
