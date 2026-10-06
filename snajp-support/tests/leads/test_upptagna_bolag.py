@@ -231,3 +231,57 @@ async def test_crm_lista_kan_inte_flyttas_till_iris_eller_kombineras(monkeypatch
         )
     assert fel.value.status_code == 409
     assert await storage.list_prospects(TENANT) == []
+
+
+async def test_bolag_som_iris_tar_under_listbygget_och_dubbletter_i_listan_skrivs_aldrig():
+    """Antons krav 2026-10-06: inga dubbletter ens när Iris och listbygget
+    körs samtidigt. Mängden läses om precis före skrivningen."""
+    storage = MemoryStorage()
+    jobs = MemoryJobStore()
+    app_state = SimpleNamespace(storage=storage, jobs=jobs)
+    lista = await storage.create_lead_list(TENANT, titel="Ny", icp={}, antal=10)
+    job_id = await jobs.create(tenant_id=TENANT, status="queued")
+    traffar = [
+        {"company_name": "Samtidig AB", "contact_email": "vd@samtidig.se"},
+        {"company_name": "Dubbel AB", "contact_email": "vd@dubbel.se"},
+        {"company_name": "DUBBEL AB", "contact_email": "info@dubbel.se"},
+    ]
+
+    async def sok(*args, **kwargs):
+        # Iris skapar samma bolag medan listans sökning pågår.
+        await storage.create_prospect(TENANT, company_name="Samtidig AB", origin="iris")
+        return traffar
+
+    with (
+        patch("app.leads.sources.merinfo.aktiv", return_value=False),
+        patch("app.api.leads.hitta_bolag", new=sok),
+    ):
+        await _run_list_job(app_state, {"job_id": job_id, "tenant_id": TENANT, "list_id": lista["id"]})
+
+    items = await storage.list_lead_list_items(TENANT, lista["id"])
+    assert [i["company_name"] for i in items] == ["Dubbel AB"]
+
+
+async def test_iris_skapar_aldrig_ett_bolag_som_en_lista_tagit_efter_sokrundan():
+    from app.api.leads import _fyll_pa
+    from app.leads import korning
+
+    storage = MemoryStorage()
+    jobs = MemoryJobStore()
+    app_state = SimpleNamespace(storage=storage, jobs=jobs)
+    lista = await storage.create_lead_list(TENANT, titel="L", icp={}, antal=1)
+    await storage.add_lead_list_item(TENANT, list_id=lista["id"], company_name="Listbolaget AB")
+    k = korning.ny_korning(mal=1, scope="research", overrides=None, is_test=True)
+    k["kandidater"] = [{"company_name": "Listbolaget", "website": "https://listbolaget.se"}]
+    k["rundor"] = korning.MAX_RUNDOR
+    batch_id = await jobs.create(tenant_id=TENANT, status="processing")
+    await jobs.complete(batch_id, {"korning": k})
+    tenant = {"tenant_id": TENANT, "tenant_name": "Test"}
+    with patch("app.api.leads._las_korning", new=AsyncMock(return_value=({}, k))), \
+         patch("app.api.leads.kontrollera_leads_budget", new=AsyncMock()), \
+         patch("app.api.leads._spara_korning", new=AsyncMock()), \
+         patch("app.api.leads._styrning", new=AsyncMock(return_value=None)), \
+         patch("app.api.leads._lagg_prospektjobb", new=AsyncMock(return_value=[])):
+        await _fyll_pa(app_state, tenant, batch_id)
+    assert not [p for p in await storage.list_prospects(TENANT) if "Listbolaget" in p["company_name"]]
+    assert any(t.get("steg") == "dubblett" for t in k["tratt"])

@@ -1778,6 +1778,9 @@ async def _samla_korningens_prospekt(
         for bolag in fynd:
             if forfiltrera(profil, bolag, exclude_domains=sok_icp.get("exclude_domains")):
                 continue
+            # Sista kontrollen före skrivningen, se _fyll_pa.
+            if upptagna.upptagen(await upptagna.hamta(storage, tenant_id), bolag.get("company_name"), bolag.get("orgnr")):
+                continue
             skapade.append(await _skapa_prospekt_ur_kandidat(storage, tenant_id, bolag, origin_fynd))
 
     if not skapade:
@@ -2070,6 +2073,15 @@ async def _fyll_pa(app_state, tenant: dict, batch_id: str) -> None:
             orsak = "budget"
             break
         kandidat = k["kandidater"].pop(0)
+        # Sista kontrollen mot listorna (Antons krav 2026-10-06): mängden
+        # lästes när sökrundan började, och ett listbygge som körts sedan dess
+        # kan ha tagit samma bolag. Läses om precis före skrivningen.
+        if upptagna.upptagen(
+            await upptagna.hamta(storage, tenant_id), kandidat.get("company_name"), kandidat.get("orgnr")
+        ):
+            k["tratt"].append({"namn": kandidat.get("company_name"), "steg": "dubblett",
+                               "skal": "Finns redan: bolaget står redan i en lista eller som lead"})
+            continue
         prospect = await _skapa_prospekt_ur_kandidat(
             storage, tenant_id, kandidat, "test" if k.get("is_test") else "iris"
         )
@@ -3200,6 +3212,18 @@ async def _run_list_job(app_state, payload: dict) -> None:
         # ett fel i sökningen eller skörden aldrig tabellen, och städaren
         # (app/jobs/stadare.py) hittar inga rader att ta bort under ett
         # pågående bygge.
+        #
+        # Sista kontrollen mot Iris (Antons krav 2026-10-06): mängden lästes
+        # före sökningen, och en Iris-körning under bygget kan ha tagit samma
+        # bolag. Läses om här, och samma bolag två gånger i listan stryks.
+        sista = await upptagna.hamta(storage, tenant_id)
+        unika: list[dict] = []
+        for traff in rader:
+            if upptagna.upptagen(sista, traff.get("company_name"), traff.get("orgnr")):
+                continue
+            sista |= upptagna.bolagsnycklar([traff])
+            unika.append(traff)
+        rader = traffar = unika
         for traff in rader:
             await storage.add_lead_list_item(
                 tenant_id,
