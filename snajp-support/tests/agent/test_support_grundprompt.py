@@ -662,3 +662,67 @@ async def test_omkorning_vid_miss_tappar_inte_en_annan_fragas_artikel():
     nya = [{"id": "n1", "title": "Ny", "content": "..."}]
     efter = [*nya, *ut][:7]
     assert {"Koppla Gmail", "Språkstöd", "Bindningstid"} <= {a["title"] for a in efter}
+
+
+class _Fel429(Exception):
+    status_code = 429
+    response = None
+
+
+@pytest.mark.anyio
+async def test_vertex_429_far_korta_omtag_i_chatten():
+    """Dev 2026-10-06: varannan chattfråga föll på Vertex DSQ-429. På Vertex
+    går den över på sekunder — två korta omtag i stället för ett felbesked."""
+    from app.agent import step_runner
+    from app.agent.support_playbook import SUPPORT_V1
+    from app.agentcore.packs import RunLedger
+
+    forsok = {"n": 0}
+    llm = _LLM()
+
+    async def skapa(**kwargs):
+        forsok["n"] += 1
+        if forsok["n"] <= 2:
+            raise _Fel429("Resource exhausted")
+        return await llm.create(**kwargs)
+
+    klient = type("K", (), {})()
+    klient.chat = type("C", (), {})()
+    klient.chat.completions = type("X", (), {"create": staticmethod(skapa)})()
+    vantat: list[float] = []
+
+    async def sov(sekunder):
+        vantat.append(sekunder)
+
+    with patch.object(step_runner, "get_llm_client", return_value=klient), patch.object(
+        step_runner, "_uses_vertex", return_value=True
+    ), patch.object(step_runner.asyncio, "sleep", new=sov):
+        ut = await step_runner.run_step(
+            SUPPORT_V1.steps[0], RunLedger(satisfied={"context_pack"}), step_runner.RunTrace(),
+            task="Klassa.", case_context="## Ärendet\nHej",
+        )
+    assert forsok["n"] == 3
+    assert vantat == [3.0, 8.0]
+    assert ut.get("category") == "betalning"
+
+
+@pytest.mark.anyio
+async def test_429_utan_vertex_kastas_som_forut():
+    from app.agent import step_runner
+    from app.agent.support_playbook import SUPPORT_V1
+    from app.agentcore.packs import RunLedger
+
+    async def skapa(**kwargs):
+        raise _Fel429("quota")
+
+    klient = type("K", (), {})()
+    klient.chat = type("C", (), {})()
+    klient.chat.completions = type("X", (), {"create": staticmethod(skapa)})()
+    with patch.object(step_runner, "get_llm_client", return_value=klient), patch.object(
+        step_runner, "_uses_vertex", return_value=False
+    ):
+        with pytest.raises(_Fel429):
+            await step_runner.run_step(
+                SUPPORT_V1.steps[0], RunLedger(satisfied={"context_pack"}), step_runner.RunTrace(),
+                task="Klassa.", case_context="## Ärendet\nHej",
+            )
