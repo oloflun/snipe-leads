@@ -33,16 +33,23 @@ import { readJsonBody } from "@/lib/http/json";
  * se agent-core/AGENTS.md och app/agentcore/instruktioner.py.
  */
 
+/** Vilket lager: det gemensamma (agent-core/AGENTS.md) eller en agents grundprompt. */
+export type Agentlager = "alla" | "support" | "leads";
+
 export type Instruktionslage = {
+  agent: Agentlager;
   ravtext: string;
+  /** Admins feedback bakom den aktiva versionen, ordagrant. */
+  feedback: string;
   strukturerad_md: string;
   kalla: string;
   uppdaterad: string | null;
-  /** Vad agenten FAKTISKT läser just nu — inklusive fil-fallbacken. */
+  /** Vad agenten FAKTISKT läser just nu, inklusive fil-fallbacken. */
   aktiv_text: string;
-  /** True = ingen rad i databasen, agent-core/AGENTS.md gäller. */
+  /** True = ingen sparad version, den incheckade filen gäller. */
   fran_fil: boolean;
   hash: string;
+  tak: number;
   historik: {
     id: string;
     kalla: string;
@@ -50,7 +57,23 @@ export type Instruktionslage = {
     created_at: string;
     ravtext_tecken: number;
     strukturerad_tecken: number;
+    strukturerad_md?: string;
+    feedback?: string;
   }[];
+};
+
+/** En ändring modellen föreslog och koden tillämpade (app/agentcore/baka_in.py). */
+export type Andring = { typ: "lagg_till" | "ersatt" | "ta_bort"; befintlig: string; ny: string; skal: string };
+
+export type Bakning = {
+  dokument: string;
+  andringar: Andring[];
+  ej_tillampade: (Partial<Andring> & { fel: string })[];
+  kalla: string;
+  sammanfattning: string;
+  anmarkning: string;
+  borttaget_tecken: number;
+  varning: string;
 };
 
 export type Sparresultat = {
@@ -89,52 +112,53 @@ async function masterFetch<T>(
   return { data: (body ?? {}) as T };
 }
 
-export async function hamtaInstruktioner(): Promise<
-  { lage?: Instruktionslage; error?: string }
-> {
+export async function hamtaInstruktioner(
+  agent: Agentlager = "alla"
+): Promise<{ lage?: Instruktionslage; error?: string }> {
   const { data, error } = await masterFetch<{ instruktioner: Instruktionslage }>(
-    "/instruktioner",
+    `/instruktioner?agent=${agent}`,
     { method: "GET" }
   );
   return error ? { error } : { lage: data?.instruktioner };
 }
 
 /**
- * Strukturera utan att spara.
+ * Baka in feedbacken utan att spara, och få tillbaka varje ändring med skäl.
  *
- * Skild från sparandet med flit: den som vill se vad modellen gör av sina
- * anteckningar ska kunna göra det utan att den aktiva instruktionen byts under
- * en pågående körning.
+ * Skild från sparandet med flit: den som vill se vad modellen gör av sin
+ * feedback ska kunna göra det utan att den aktiva instruktionen byts under en
+ * pågående körning. Dokumentet som visas är det som sparas vid godkännande.
  */
-export async function forhandsgranskaInstruktioner(ravtext: string): Promise<Sparresultat> {
-  const { data, error } = await masterFetch<{
-    dokument: string;
-    anmarkning: string;
-  }>("/instruktioner/forhandsgranska", {
+export async function forhandsgranskaInstruktioner(
+  agent: Agentlager,
+  feedback: string
+): Promise<{ bakning?: Bakning; error?: string }> {
+  const { data, error } = await masterFetch<Bakning>("/instruktioner/forhandsgranska", {
     method: "POST",
-    body: JSON.stringify({ ravtext })
+    body: JSON.stringify({ agent, feedback })
   });
-  if (error) return { success: false, error };
-  return {
-    success: true,
-    dokument: data?.dokument ?? "",
-    anmarkning: data?.anmarkning || undefined
-  };
+  return error ? { error } : { bakning: data };
 }
 
+/**
+ * Sparar ett dokument. Med `dokument` sparas exakt den texten (den granskade
+ * förhandsvisningen, eventuellt handredigerad); utan bakar backenden in
+ * feedbacken själv.
+ */
 export async function sparaInstruktioner(input: {
-  ravtext: string;
-  /** Satt = användaren redigerade utkastet och vill INTE ha det omstrukturerat. */
-  strukturerad_md?: string;
+  agent: Agentlager;
+  feedback: string;
+  dokument?: string;
 }): Promise<Sparresultat> {
   const { data, error } = await masterFetch<{
     instruktioner: { strukturerad_md: string; anmarkning: string };
   }>("/instruktioner", {
     method: "PUT",
     body: JSON.stringify({
-      ravtext: input.ravtext,
-      strukturerad_md: input.strukturerad_md ?? null,
-      strukturera: !input.strukturerad_md
+      agent: input.agent,
+      feedback: input.feedback,
+      strukturerad_md: input.dokument ?? null,
+      strukturera: true
     })
   });
   if (error) return { success: false, error };
@@ -145,6 +169,16 @@ export async function sparaInstruktioner(input: {
     dokument: data?.instruktioner.strukturerad_md ?? "",
     anmarkning: data?.instruktioner.anmarkning || undefined
   };
+}
+
+/** Gör en tidigare version aktiv igen, som en ny version. */
+export async function aterstallInstruktioner(id: string): Promise<Sparresultat> {
+  const { error } = await masterFetch<unknown>(`/instruktioner/${encodeURIComponent(id)}/aterstall`, {
+    method: "POST"
+  });
+  if (error) return { success: false, error };
+  revalidatePath("/admin/installningar/agentinstruktioner");
+  return { success: true };
 }
 
 // -- Kundprofilen ---------------------------------------------------------
