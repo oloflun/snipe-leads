@@ -1384,7 +1384,15 @@ async def hitta_bolag(
 
     fran_register: list[dict[str, Any]] = []
     if merinfo.aktiv():
-        registret = await merinfo.sok(icp, antal, uteslut=uteslut, profil=profil, listspar=listspar)
+        try:
+            registret = await merinfo.sok(icp, antal, uteslut=uteslut, profil=profil, listspar=listspar)
+        except DiscoveryError:
+            # Registret gick inte att läsa (429, kredit, tjänsten nere). Förut
+            # föll hela sökrundan, tre rundor i rad, och körningen slutade med
+            # 0 leads. Sedan 2026-10-07 fyller sökkedjan på (regel 11), och
+            # existensgrinden står kvar för varje sökträff.
+            logger.warning("Registret gick inte att läsa — sökkedjan tar hela rundan.")
+            registret = None
         if registret is not None:
             # Register ∩ signaler (plan del C, 2026-10-02): annons- och
             # nyhetskällorna avgör inte urvalet, de rankar det. Ett
@@ -1466,7 +1474,14 @@ async def hitta_bolag(
         logger.warning("Discovery-sokningen misslyckades.")
         raise
     utan_webb = bool(profil and profil.get("utan_webbplats"))
-    rena = _rena_traffar(_plocka_json(text), uteslut=uteslut, tak=antal_begart, tillat_utan_webb=utan_webb)
+    raa = _plocka_json(text)
+    rena = _rena_traffar(raa, uteslut=uteslut, tak=antal_begart, tillat_utan_webb=utan_webb)
+    # En tom sökning syntes inte i loggen alls (463a9087, tre rundor utan ett
+    # bolag): var svaret tomt, eller föll träffarna på webbplats/uteslutning?
+    logger.info(
+        "Discovery-sökningen (ring %d): %d träffar i svaret, %d efter rensning, %d från register/källor.",
+        ring, len(raa), len(rena), len(fran_register) + len(fran_kallor),
+    )
     # En platshållarsida ("under konstruktion") ÄR målgruppen när kunden
     # söker bolag utan fungerande webbplats — den mäts av webbsignal i stället.
     if not utan_webb:

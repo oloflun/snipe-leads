@@ -296,6 +296,25 @@ def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", _norm(text)).strip("-")
 
 
+#: Ord som aldrig blir en egen merinfo-slugg: de säger vem kunden säljer
+#: till, inte vilken bransch bolaget har. "B2B/B2C" blev /b2b-b2c/…, 404 på
+#: varje sida och en körning utan ett enda bolag (2026-10-06, 463a9087).
+_EJ_SLUGG = {"b2b", "b2c", "b2b-b2c", "b2c-b2b", "b2g", "smb", "sme", "foretag", "bolag", "kunder", "alla"}
+
+
+def _delfraser(termer: list[str]) -> list[str]:
+    """Kundens branschfält delat i sina delar: "e-utbildning & möblerfirmor
+    för företagskontor" är två branscher, och som en fras matchade den ingen
+    (2026-10-06: registret föll bort helt). Delarna provas efter frasen."""
+    ut: list[str] = []
+    for term in termer:
+        ut.append(term)
+        delar = [d.strip() for d in re.split(r"\s*(?:[&,;/+]|\boch\b|\bsamt\b|\bfor\b|\bför\b|\btill\b)\s*", str(term)) if d.strip()]
+        if len(delar) > 1:
+            ut += delar
+    return list(dict.fromkeys(ut))
+
+
 def valj_branscher(termer: list[str]) -> list[str]:
     """Kundens branschord → merinfos branschsluggar, en per ord, högst tre.
 
@@ -307,7 +326,7 @@ def valj_branscher(termer: list[str]) -> list[str]:
     ponytail: stammatchning, inget LLM; byt mot ett modellval när en kund
     beskriver branschen i fraser som ingen stam träffar."""
     ut: list[str] = []
-    for term in termer:
+    for term in _delfraser(termer):
         stammar = _stammar(term)
         if not stammar:
             continue
@@ -324,7 +343,10 @@ def valj_branscher(termer: list[str]) -> list[str]:
         # merinfo-bransch, noll träffar och ett "ärligt nej" i stället för
         # reservkedjan (provkörningen 2026-10-04).
         ensamt_ord = len(re.findall(r"[a-z0-9]+", _norm(term))) <= 2
-        slug = bast[2] if bast and bast[0] >= 0.5 else (_slug(term) if ensamt_ord else None)
+        egen = _slug(term) if ensamt_ord else None
+        if egen and (egen in _EJ_SLUGG or set(egen.split("-")) <= _EJ_SLUGG):
+            egen = None
+        slug = bast[2] if bast and bast[0] >= 0.5 else egen
         if slug and slug not in ut:
             ut.append(slug)
     return ut[:3]
