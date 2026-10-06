@@ -1370,7 +1370,9 @@ async def run_support_agent(
         if nya:
             kb_forsok.append(f"missing_info ({saknas[:60]!r})")
             hade_underlag = bool(articles)
-            articles = _sla_ihop(articles, nya)
+            # De nya träffarna får alltid plats (högst två): _sla_ihop kapar
+            # vid KB_TAK, och ett redan fullt underlag hade kastat just dem.
+            articles = [*articles[: KB_TAK - len(nya[:2])], *nya[:2]]
             kb_block = _kb_block(articles)
             if hade_underlag:
                 research = await steg(

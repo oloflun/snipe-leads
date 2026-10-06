@@ -601,3 +601,37 @@ async def test_ingen_omskrivning_utan_nya_traffar():
         {"draft_reply": "vet ej", "escalate": False, "obesvarade": ["xyzzy qwerty plugh"]},
     ])
     assert len(anrop) == 1
+
+
+@pytest.mark.anyio
+async def test_varje_fraga_far_plats_aven_nar_underlaget_ar_fullt():
+    """Dev 2026-10-06: hela mejlet och ämnesraden fyllde de fem platserna och
+    Gmail-frågans artikel kom aldrig med. Frågorna söks först och får egna
+    platser."""
+    from app.email_pipeline.processor import _bred_sokning
+
+    storage = MemoryStorage()
+    await storage.add_kb_article(
+        TENANT, title="Koppla Gmail", content="Gmail kopplas under Inställningar.", category="ovrigt"
+    )
+    fullt = [{"id": f"x{i}", "title": f"Annat {i}", "content": "..."} for i in range(5)]
+    ut = await _bred_sokning(storage, TENANT, fullt, ["Hur kopplar vi in vår Gmail?", "Frågor"])
+    assert "Koppla Gmail" in [a["title"] for a in ut]
+    assert len(ut) <= 7
+
+
+@pytest.mark.anyio
+async def test_chattens_omkorning_behaller_nya_traffar_aven_med_fullt_underlag():
+    storage = MemoryStorage()
+    await storage.add_kb_article(
+        TENANT, title="Presentkort", content="Presentkort säljs i webbutiken.", category="ovrigt"
+    )
+    llm = _LLM(overrides={
+        "cs:ticket-triage": {"sokfraga_sv": "frakt leverans betalning retur"},
+        "cs:customer-research": {
+            "kb_supports_answer": False, "behover_fortydligande": False,
+            "missing_info": "presentkort",
+        },
+    })
+    svar = await _tur(storage, llm, "Hur fungerar frakt, retur och betalning, och har ni presentkort?")
+    assert "Presentkort" in [k["title"] for k in svar["kb_sources"]]

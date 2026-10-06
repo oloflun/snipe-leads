@@ -160,23 +160,33 @@ def _nyckel(artikel: dict[str, Any]) -> str:
 async def _bred_sokning(
     storage: Storage, tenant_id: str, artiklar: list[dict[str, Any]], fragor: list[str]
 ) -> list[dict[str, Any]]:
-    """`artiklar` plus träffarna för varje fråga, utan dubbletter, högst
-    KB_TAK. Fulltext utan embedding: varje embedding är ett API-anrop, och
-    den första sökningen på hela mejlet har redan den semantiska vägen."""
-    from ..agent.support_agent import KB_TAK, _sla_ihop
+    """`artiklar` plus de bästa NYA träffarna för varje fråga, i frågornas
+    ordning: högst två per fråga och högst KB_TAK + 2 totalt. Varje fråga får
+    alltså sin egen plats i underlaget — förut fyllde hela mejlet och
+    ämnesraden platserna innan frågorna ens söktes (dev-testet 2026-10-06:
+    Gmail-frågan kom aldrig fram). Fulltext utan embedding: varje embedding
+    är ett API-anrop, och sökningen på hela mejlet har redan den semantiska
+    vägen."""
+    from ..agent.support_agent import KB_TAK
 
+    tak = KB_TAK + 2
     ut = list(artiklar)
+    sedda = {_nyckel(a) for a in ut}
     for fraga in fragor:
-        if len(ut) >= KB_TAK:
+        if len(ut) >= tak:
             break
         fraga = (fraga or "").strip()
         if not fraga:
             continue
         try:
-            ut = _sla_ihop(ut, await storage.search_kb(tenant_id, fraga, embedding=None))
+            traffar = await storage.search_kb(tenant_id, fraga, embedding=None)
         except Exception:  # noqa: BLE001 — en extra sökning får aldrig fälla mejlet
             logger.exception("Bredare KB-sökning misslyckades (tenant %s).", tenant_id)
-    return ut
+            continue
+        for artikel in [a for a in traffar if _nyckel(a) not in sedda][:2]:
+            ut.append(artikel)
+            sedda.add(_nyckel(artikel))
+    return ut[:tak]
 
 
 async def _faktakontroll(
@@ -263,7 +273,8 @@ async def _triage_email(
     # stod som fråga 2 av 3 och artikeln om arbetsytan kom aldrig med.
     # Ämnesraden och varje fråga söks för sig, med fulltext — inga LLM-anrop.
     articles = await _bred_sokning(
-        storage, tenant_id, articles, [email.get("subject") or "", *_fragor_i(email["body_text"])]
+        # Frågorna FÖRE ämnesraden: de bär det kunden faktiskt frågar om.
+        storage, tenant_id, articles, [*_fragor_i(email["body_text"]), email.get("subject") or ""]
     )
     from ..agentcore.instruktioner import las_agent_mall
 
@@ -299,7 +310,9 @@ async def _triage_email(
             if _nyckel(a) not in kanda
         ]
         if nya:
-            articles = [*articles, *nya][: KB_TAK + 2]
+            # De nya träffarna får alltid plats: de äldsta (lägst rankade)
+            # träffarna för hela mejlet viker i stället.
+            articles = [*articles[: KB_TAK + 2 - len(nya[:2])], *nya[:2]]
             result = await _skriv(articles)
             result["reasoning"] = (
                 f"{result.get('reasoning') or ''} (Utkastet skrevs om efter en bredare "
