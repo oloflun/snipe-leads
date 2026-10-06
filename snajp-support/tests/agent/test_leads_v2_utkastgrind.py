@@ -83,8 +83,10 @@ async def test_modellens_fria_underkannande_faller_inte_utan_profilkriterium():
     fast profilen inte nämnde bransch. Ett fritt qualified=false utan utslag
     på ett profilkriterium får inte fälla."""
     result = await _kor({"qualified": False, "disqualifiers": ["Fel bransch"]}, profil=_PROFIL)
-    assert result["qualified"] is True
-    assert result["niva"] == "B"
+    # Bolaget faller ändå sedan 2026-10-06 — men på att måste-kravet inte
+    # styrktes, aldrig på modellens fria skäl.
+    assert "Fel bransch" not in result["disqualifiers"]
+    assert any("kunde inte styrkas" in d for d in result["disqualifiers"])
     assert result["motivering"]
 
 
@@ -94,7 +96,10 @@ async def test_nej_utan_verifierat_citat_faller_inte():
                           "belagg": [{"citat": "står inte på sidan"}]}]},
         profil=_PROFIL,
     )
-    assert result["qualified"] is True
+    # Nejet räknas inte (citatet finns inte); bolaget faller på att kravet
+    # inte styrktes, inte på gissningen.
+    assert not any("Gissning" in d for d in result["disqualifiers"])
+    assert any("kunde inte styrkas" in d for d in result["disqualifiers"])
 
 
 async def test_kvalificerat_bolag_utan_kontaktvag_stoppas():
@@ -172,8 +177,12 @@ async def test_kodgrinden_faller_kand_storlek_over_taket_fore_utkastet():
 
 async def test_bemanning_falls_bara_via_profilens_uteslutning():
     sida = "# Exempelbolaget\nVi hyr ut IT-konsulter till kunder.\nKontakta oss: kundservice@exempelbolaget.se"
-    svar = {"bedomningar": [{"kriterie_id": "u1", "utslag": "ja", "resonemang": "Hyr ut konsulter.",
-                             "belagg": [{"citat": "Vi hyr ut IT-konsulter till kunder."}]}]}
+    svar = {"bedomningar": [
+        {"kriterie_id": "k1", "utslag": "ja", "resonemang": "Säljer online.",
+         "belagg": [{"citat": "Vi hyr ut IT-konsulter till kunder."}]},
+        {"kriterie_id": "u1", "utslag": "ja", "resonemang": "Hyr ut konsulter.",
+         "belagg": [{"citat": "Vi hyr ut IT-konsulter till kunder."}]},
+    ]}
     med = await _kor(svar, sida=sida, profil=_PROFIL)
     assert med["stopped_early"] == "ej_kvalificerad"
     utan = await _kor(svar, sida=sida, profil={**_PROFIL, "uteslut": []})

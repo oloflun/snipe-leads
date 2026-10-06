@@ -362,6 +362,8 @@ async def run_research_step_v2(
     # nivå för jämförelse; den ändrar aldrig nivån.
     from ..leads import jev
 
+    # Ett bortvalt bolag visas aldrig för kunden: jämförelseklassningen vore
+    # bara ett modellanrop till ingen nytta.
     jev_klass = await jev.klassa(
         profil,
         prospect_row,
@@ -369,7 +371,7 @@ async def run_research_step_v2(
             [str(fynd.get("company_summary") or ""), bedomning["motivering"], *(webbfakta.get("rader") or [])]
         ),
         signaler=list(webbfakta.get("rader") or []),
-    )
+    ) if bedomning["qualified"] else None
     antal = fynd.get("antal_anstallda")
     try:
         await storage.spara_bedomning(

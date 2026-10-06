@@ -49,6 +49,23 @@ Provkörningarna 2026-10-05 (Snajp, utan filter, development) gav tre bolag som 
 
 Tester (`tests/leads/test_existens.py`, tillägg i `test_discovery.py`, `tests/agent/test_leads_v2_wiring.py`): påhittad `.se`-domän som inte svarar faller, sajt utan bolagsnamnet faller, tomt material ger varken Redo eller utkast, kredittak ger ingen Gemini-sökning, sammanfattningens etikett. `tests/conftest.py` nollar även `GOOGLE_SERVICE_ACCOUNT_JSON`.
 
+## Fas 1b – Bara leads som uppfyller kraven, nyaste överst (Antons krav 2026-10-06)
+
+Anton såg leads vars motivering säger att de inte uppfyller kriterierna, och nya leads som hamnade mitt i listan. Kravet: visa bara leads som uppfyller kraven, och nyaste alltid överst.
+
+| Orsak | Ändring |
+|---|---|
+| `bedomning.bedom` gav nivå B när ett måste-kriterium var okänt eller ett bör-kriterium hade ett uttryckligt nej | Varje nej fäller (även bör och webbkriterier); ett måste utan belägg fäller ("kravet kunde inte styrkas"); inget styrkt kriterium ger nivå C när profilen har kriterier |
+| Modellens fria motivering ("uppfyller inte …") visades på godkända bolag | `_SAGER_NEJ`: en godkänd rad får kodens egen motivering |
+| Ett bolag som föll på leverbarheten (tröskel, kontakt, kontaktväg) stod kvar som prospekt | `_run_batch_prospect` sparar nivå C med skälet |
+| `GET /api/leads/prospects` skickade nivå C, tabellen gömde dem bakom "Visa bortvalda" | API:t filtrerar bort nivå C och `qualified=false`; knappen borttagen. Raden står kvar i databasen för dedupliceringen |
+| Tabellen sorterade på nivå och poäng | `LeadsTabell.sortera`: `created_at` fallande, exemplen först |
+| Jevs jämförelseklassning kördes även på bortvalda | Körs bara för kvalificerade (ett modellanrop mindre per bortvalt bolag) |
+
+Följd: volymen sjunker, eftersom okända måste-krav tidigare blev B. Provkörningen mäter hur mycket.
+
+Tester: `bedomning.demo()` (nej på bör fäller, okänt måste fäller, självmotsägande motivering ersätts), `tests/agent/test_leads_v2_utkastgrind.py` (modellens fria skäl och påhittade citat fäller fortfarande aldrig), `tests/invariants/test_inv_leads_exist_001.py` (listan returnerar aldrig nivå C).
+
 ## Fas 2 – Rätt målgrupp
 
 1. **Bara privata bolag som standard.** `forfilter.forfiltrera` fäller organisationsnummer med prefix 2 (stat, region, kommun) via `orgnr.juridisk_form`, registrets bolagsform som inte är privat bolag, kommun- och myndighetsdomäner samt namnord (kommun, region, komvux, folkhögskola, gymnasium, grundskola, universitet, högskola, yrkeshögskola, myndighet). Profilen får flaggan `offentlig_sektor`, som kompilatorn bara sätter när kundens målgruppstext uttryckligen nämner offentlig sektor eller skolor.

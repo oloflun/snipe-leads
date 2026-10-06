@@ -39,6 +39,13 @@ TAK_FALLD = 30
 #: Lägsta poäng för A-nivå (alla måste-kriterier ja krävs dessutom).
 A_GRANS = 70
 
+#: "uppfyller inte", "inte uppfyller", "uppfylls inte", "does not meet".
+_SAGER_NEJ = re.compile(
+    r"\buppfyll\w*\s+(?:\w+\s+){0,2}?inte\b|\binte\s+(?:\w+\s+){0,2}?uppfyll|"
+    r"\b(?:does|do)\s+not\s+(?:meet|fulfil|satisfy)",
+    re.IGNORECASE,
+)
+
 
 def _norm(text: str) -> str:
     return re.sub(r"\s+", " ", (text or "").casefold()).strip(" .\"'”“")
@@ -237,7 +244,7 @@ def bedom(
             belagg = [{"url": str(kand.get("website") or ""), "citat": r} for r in (webbrevision or {}).get("rader") or []][:3]
             rader.append(_rad(k["id"], k["text"], k["vikt"], utfall, motivering, hart=k["krav"] == "maste",
                               belagg=belagg))
-            if utfall == MISS and k["krav"] == "maste":
+            if utfall == MISS:
                 fallt.append(f"{k['text']}: {motivering}")
             continue
         utfall = UTSLAG.get(str(b.get("utslag") or "").casefold(), OKAND)
@@ -249,8 +256,13 @@ def bedom(
             motivering = str(b.get("resonemang") or "").strip() or "Inget underlag i källmaterialet."
         rader.append(_rad(k["id"], k["text"], k["vikt"], utfall, motivering, hart=k["krav"] == "maste",
                           belagg=belagg))
-        if utfall == MISS and k["krav"] == "maste":
+        # Varje uttryckligt nej fäller, även på ett bör-kriterium, och ett
+        # måste-kriterium utan belägg fäller också: ett lead ska uppfylla
+        # kraven, inte bara inte motsäga dem (Antons krav 2026-10-06).
+        if utfall == MISS:
             fallt.append(f"{k['text']}: {motivering}")
+        elif utfall == OKAND and k["krav"] == "maste":
+            fallt.append(f"{k['text']}: kravet kunde inte styrkas i källmaterialet")
 
     for i, u in enumerate(profil.get("uteslut") or [], start=1):
         b = utslag_per_id.get(f"u{i}", {})
@@ -281,6 +293,8 @@ def bedom(
         for r in rader
         if not r["nyckel"].startswith("u") and r["nyckel"] not in ("ort", "storlek")
     )
+    if not fallt and not styrkt and profil.get("kriterier"):
+        fallt.append("Inget kriterium kunde styrkas: bolaget uppfyller inte kraven med belägg")
     if fallt:
         niva = "C"
         total = min(total, TAK_FALLD)
@@ -290,6 +304,10 @@ def bedom(
         niva = "B"
 
     motivering = str(fynd.get("motivering") or fynd.get("qualification_reasoning") or "").strip()
+    if niva != "C" and _SAGER_NEJ.search(motivering):
+        # Modellens text säger att bolaget inte uppfyller kraven fast koden
+        # godkände det: kunden ska aldrig läsa ett lead som motsäger sig självt.
+        motivering = ""
     if not motivering:
         ja = [r["etikett"] for r in rader if r["utfall"] == TRAFF]
         okanda = [r["etikett"] for r in rader if r["utfall"] == OKAND]
@@ -335,11 +353,22 @@ def demo() -> None:
         {"kriterie_id": "k1", "utslag": "ja", "resonemang": "Copyright 2014.", "belagg": [{"url": "u", "citat": "© 2014 Åbergs AB"}]}
     ]}, korpus=korpus)
     assert bra["niva"] == "A" and bra["qualified"] and bra["motivering"], bra
-    # Påhittat citat: utslaget räknas som okänt, bolaget fälls inte.
+    # Påhittat citat: utslaget räknas som okänt — och ett måste-krav utan
+    # belägg är inte uppfyllt, så bolaget blir inget lead.
     gissat = bedom(profil, {"postnummer": "421 32", "bedomningar": [
         {"kriterie_id": "k1", "utslag": "nej", "resonemang": "Modern sajt.", "belagg": [{"citat": "byggd 2025"}]}
     ]}, korpus=korpus)
-    assert gissat["niva"] == "B" and gissat["qualified"], gissat
+    assert gissat["niva"] == "C" and not gissat["qualified"], gissat
+    # Ett nej på ett bör-kriterium fäller också; ett okänt bör ger B.
+    bor = {**profil, "kriterier": [*profil["kriterier"], {"id": "k2", "text": "Har webbshop", "krav": "bor", "vikt": 1}]}
+    ja_k1 = {"kriterie_id": "k1", "utslag": "ja", "resonemang": "Copyright 2014.", "belagg": [{"url": "u", "citat": "© 2014 Åbergs AB"}]}
+    nej_bor = bedom(bor, {"postnummer": "421 32", "bedomningar": [
+        ja_k1, {"kriterie_id": "k2", "utslag": "nej", "resonemang": "Ingen shop.", "belagg": [{"citat": "Välkommen till Åbergs"}]}
+    ]}, korpus=korpus)
+    assert nej_bor["niva"] == "C" and not nej_bor["qualified"], nej_bor
+    okand_bor = bedom(bor, {"postnummer": "421 32", "motivering": "Bolaget uppfyller inte alla kriterier.",
+                            "bedomningar": [ja_k1]}, korpus=korpus)
+    assert okand_bor["qualified"] and "inte" not in okand_bor["motivering"], okand_bor
     stort = bedom(profil, {"antal_anstallda": 700, "bedomningar": []}, korpus=korpus)
     assert stort["niva"] == "C" and stort["score_total"] <= TAK_FALLD and stort["disqualifiers"]
     print("bedomning: ok")

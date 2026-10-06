@@ -770,7 +770,10 @@ på sidan eller i domänen (`app/leads/existens.py`, anropad i
 kontakt, ort och storlek följer aldrig med till prospektet. Utan hämtat
 källmaterial görs inget modellanrop, bolaget får nivå C med skälet utskrivet
 och blir varken Redo eller får ett utkast (`bedomning.bedom(har_underlag=...)`,
-`leads_research_v2`). Nivå A kräver minst ett uppfyllt kriterium. Sändspärren
+`leads_research_v2`). Nivå A kräver minst ett uppfyllt kriterium. Ett lead
+uppfyller kraven: varje måste-kriterium styrkt och inget uttryckligt nej, och
+`GET /api/leads/prospects` returnerar aldrig ett bortvalt bolag (nivå C)
+(Antons krav 2026-10-06). Sändspärren
 blockerar ett Iris-lead utan godkänd bedömning (`app/leads/scheduler.py`).
 Det sista undantaget från INV-LEADS-PROFIL-001: "inget källmaterial" fäller i
 kod, inte modellen.

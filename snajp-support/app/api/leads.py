@@ -511,6 +511,10 @@ async def list_prospects(request: Request, tenant: dict = Depends(require_tenant
     # gamla default-checkboxen ska inte dyka upp som "fynd" hos en kund.
     if tenant["tenant_id"] != DEFAULT_TENANT_ID:
         prospects = [p for p in prospects if p.get("origin") != "example"]
+    # Bara leads som uppfyller kraven visas (Antons krav 2026-10-06): ett
+    # bortvalt bolag med motiveringen "uppfyller inte ..." är brus för kunden.
+    # Raden står kvar i databasen så att nästa sökning utesluter bolaget.
+    prospects = [p for p in prospects if p.get("niva") != "C" and p.get("qualified") is not False]
     # Senaste händelse (Leads Suite): EN läsning av statusloggen, grupperad
     # här, i stället för en fråga per prospekt.
     senast: dict[str, str] = {}
@@ -2341,6 +2345,13 @@ async def _run_batch_prospect(
         _skal = _leverbarhet(_rad, result, _regler)
         if _skal:
             utfall["skal"] = _skal
+            # Ett bolag som inte är leverbart är inget lead: nivå C döljer det
+            # för kunden (list_prospects), oavsett om skälet är kriterierna,
+            # tröskeln eller kontakten.
+            await storage.spara_bedomning(
+                tenant["tenant_id"], prospect_id,
+                bedomning={"niva": "C", "qualified": False, "disqualifiers": [_skal]},
+            )
         else:
             utfall.update(leverbar=True, skal=None)
 
@@ -2372,8 +2383,7 @@ async def _run_batch_prospect(
             elif result["stopped_early"] == "under_troskel":
                 result["draft_note"] = (
                     "Hoppar över utkastet: träffsäkerheten ligger under din tröskel på "
-                    f"{regler['kvalificeringstroskel']} procent. Bolaget står kvar i Prospekt "
-                    "för din bedömning."
+                    f"{regler['kvalificeringstroskel']} procent, så bolaget blir inget lead."
                 )
             else:
                 result["draft_note"] = (
