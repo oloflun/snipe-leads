@@ -89,7 +89,8 @@ def _payload(job_id: str, mal: int) -> dict:
         "job_id": job_id,
         **TENANT,
         "scope": "research",
-        "overrides": None,
+        # En körning behöver en målgrupp att söka i (korning.har_malgrupp).
+        "overrides": {"industries": ["Redovisning"]},
         "is_test": True,
         "limit": mal,
         "company_names": [],
@@ -225,7 +226,9 @@ async def test_atertag_fortsatter_ur_liggaren_utan_jobbstore(monkeypatch):
     storage = MemoryStorage()
     app_state = SimpleNamespace(jobs=MemoryJobStore(), storage=storage, leadsstrom=None)
     t = TENANT["tenant_id"]
-    k = korningsmodul.ny_korning(mal=1, scope="research", overrides=None, is_test=True)
+    k = korningsmodul.ny_korning(
+        mal=1, scope="research", overrides={"industries": ["Redovisning"]}, is_test=True
+    )
     await storage.set_leads_job_status(t, job_id="b-deploy", status="processing", scope="batch", korning=k, is_test=True)
     assert await app_state.jobs.get("b-deploy") is None
 

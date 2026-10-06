@@ -758,6 +758,26 @@ bransch lästes som målbransch.
 Test: snajp-support/tests/invariants/test_inv_leads_score_001.py
 Införd: 2026-09-30 · Upphävs endast genom waiver
 
+### INV-LEADS-EXIST-001 — Ett bolag som inte går att styrka blir aldrig ett lead
+Varje kandidat som inte kommer ur registret måste styrkas av sin egen
+webbplats innan den blir ett prospekt: startsidan svarar, och bolagsnamnet står
+på sidan eller i domänen (`app/leads/existens.py`, anropad i
+`korning.sokrunda`). Grinden fäller vid osäkerhet. En sökträffs påstådda
+kontakt, ort och storlek följer aldrig med till prospektet. Utan hämtat
+källmaterial görs inget modellanrop, bolaget får nivå C med skälet utskrivet
+och blir varken Redo eller får ett utkast (`bedomning.bedom(har_underlag=...)`,
+`leads_research_v2`). Nivå A kräver minst ett uppfyllt kriterium. Sändspärren
+blockerar ett Iris-lead utan godkänd bedömning (`app/leads/scheduler.py`).
+Det sista undantaget från INV-LEADS-PROFIL-001: "inget källmaterial" fäller i
+kod, inte modellen.
+Varför: provkörningen 2026-10-05 gav tre bolag som inte finns ("Exempel
+E-handel AB", "Detaljhandel Design AB", "Byggmästarna i Göteborg AB") med
+påhittade domäner, poäng 100, status Redo och färdiga utkast. De kom ur den
+grounded sökningen, och ingenting mellan sökningen och utkastet kontrollerade
+att bolaget fanns.
+Test: snajp-support/tests/invariants/test_inv_leads_exist_001.py
+Införd: 2026-10-06 · Upphävs endast genom waiver
+
 ### INV-LEADS-N-001 — En körning levererar N leverbara leads eller säger ärligt varför inte
 En Iris-körning utan egna bolagsnamn räknar LEVERBARA leads (kvalificerade,
 över kundens tröskel, med mejlväg) — inte kandidater. `_fyll_pa`

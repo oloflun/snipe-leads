@@ -177,7 +177,7 @@ async def test_bortsorterad_plats_fylls_pa_ur_reserverna(monkeypatch):
 
     assert [t["company_name"] for t in traffar] == ["Ekord AB", "Dear Friends"]
     assert gemini.await_count == 1, "reserverna ska komma ur SAMMA sökanrop"
-    assert "Hitta 4 RIKTIGA" in gemini.await_args.args[0]
+    assert "Hitta upp till 4 RIKTIGA" in gemini.await_args.args[0]
 
 
 @pytest.mark.anyio

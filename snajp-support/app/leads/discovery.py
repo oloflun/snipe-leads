@@ -1162,50 +1162,38 @@ async def hitta_bolag(
     # Reserverna ryms i SAMMA sökanrop — taket på ett grounded anrop per
     # körning står kvar.
     antal_begart = antal_kvar + _reserver(antal_kvar)
-    roller = [str(r).strip() for r in (icp.get("roles") or []) if str(r).strip()]
-    roll_text = (
-        ", ".join(roller)
-        if roller
-        else "en beslutsfattare (VD, grundare eller motsvarande — malgruppen "
-        "angav ingen specifik roll)"
+    # Sökningen ska hitta BOLAG, ingenting annat. Före 2026-10-06 krävde
+    # prompten en kontaktuppgift för varje bolag ("OBLIGATORISKT") och bad om
+    # ort och antal anställda. Under det trycket fyllde modellen i fälten
+    # själv: tre bolag som inte finns, med gissade info@-adresser, och ort och
+    # storlek som ekade målgruppens filter och gav poäng 100. Antons regler
+    # 2026-10-04 gäller i stället: bara VD, och bara en uppgift som går att
+    # styrka. Kontakten, orten och storleken hämtas därför ur bolagets egna
+    # sidor i researchen, och fälten nedan följer inte med till prospektet
+    # (api/leads.py, _skapa_prospekt_ur_kandidat). Rollerna i kundens filter
+    # hör inte heller hemma här: "Platschef" drog sökningen mot byggbolag.
+    offentligt = (
+        ""
+        if (profil or {}).get("offentlig_sektor")
+        else "Bara PRIVATA bolag: inga kommuner, regioner, myndigheter, statliga "
+        "eller kommunala bolag och inga skolor.\n"
     )
-    # Kundkrav, ordagrant: "forsok ALLTID hitta en kontaktperson som ar
-    # NARMAST onskemalet, det viktiga ar att det kommer fram, i varsta fall
-    # officiell kontakt-mail, men ALLTID kontaktuppgifter." Kontaktuppgift ar
-    # darfor ett KRAV har, inte ett tillval som i den gamla prompten — och
-    # trappan nedan ger modellen en konkret lagsta niva att falla tillbaka pa
-    # i stallet for att lamna faltet null nar en namngiven person inte gar
-    # att verifiera.
     prompt = (
-        "Hitta {antal} RIKTIGA svenska aktiebolag som matchar malgruppen nedan. "
-        "Anvand sokning. Hitta inte pa bolag och hitta inte pa personer.\n\n"
-        "KONTAKTUPPGIFT AR OBLIGATORISKT for varje bolag du returnerar — inte "
-        "ett tillval. Folj den har prioritetsordningen och stanna vid FORSTA "
-        "nivan du kan verifiera i sokresultatet. Hitta ALDRIG pa for att na en "
-        "hogre niva; en gissad kontakt ar varre an ingen:\n"
-        f"  1. En NAMNGIVEN person i rollen '{roll_text}', hittad pa bolagets "
-        "egen sajt (om oss/ledning/kontakt) eller i en kalla som namnger "
-        'personen. contact_level="named_role_match", fyll i contact_name, '
-        "contact_role och contact_email om den star pa sajten.\n"
-        "  2. Om ingen i den sokta rollen gar att verifiera: nagon ANNAN "
-        'namngiven beslutsfattare pa bolagets sajt. contact_level="named_other".\n'
-        "  3. Om ingen namngiven person gar att verifiera: en ROLLBASERAD "
-        "adress pa bolagets EGEN doman — info@, kontakt@, hej@ eller sales@. "
-        'contact_level="role_address", contact_name lamnas null.\n'
-        "  4. Om INGEN namngiven person gaar att verifiera men en officiell "
-        "kontaktadress star pa sajten (info@, kontakt@, hej@ pa bolagets EGEN "
-        'doman): contact_level="role_address". En kontaktformular-URL far folja '
-        "med som metadata men ersatter ALDRIG en e-postadress. Returnera inte "
-        "ett bolag utan contact_email om adressen star nagonstans pa den egna "
-        "sajten. Privat gmail/hotmail/icloud ar FORBUDET.\n\n"
+        "Hitta upp till {antal} RIKTIGA svenska bolag som matchar malgruppen nedan. "
+        "Anvand sokning.\n\n"
+        "Varje bolag MASTE komma ur ett sokresultat du faktiskt fatt. Hitta "
+        "ALDRIG pa ett bolagsnamn eller en webbadress, och fyll ALDRIG ut listan "
+        "for att na antalet. Farre bolag an begart ar ett korrekt svar, och en "
+        "tom lista [] ar ett korrekt svar nar sokningen inte gav nagot.\n"
+        f"{offentligt}\n"
         "Returnera ENBART en JSON-lista:\n"
-        '[{{"company_name":"...","website":"https://...","orgnr":null,"ort":"...",'
-        '"contact_name":null,"contact_role":null,"contact_email":null,'
-        '"contact_level":null,"contact_form_url":null,"anstallda":null,"postnr":null}}]\n'
-        "website MÅSTE vara bolagets egen officiella sajt, inte allabolag/hitta/ratsit/"
-        "linkedin. orgnr bara om det star pa bolagets egen sajt. contact_email och "
-        "contact_form_url MASTE vara pa samma doman som website.\n\n"
-        f"Malgrupp:\n{_icp_som_text(icp)}\n"
+        '[{{"company_name":"...","website":"https://...","orgnr":null}}]\n'
+        "website MASTE vara bolagets egen officiella sajt sa som den star i "
+        "sokresultatet, inte allabolag/hitta/ratsit/linkedin och inte en adress "
+        "du satt ihop av bolagsnamnet. orgnr bara om det star pa bolagets egen "
+        "sajt. Ange inga kontaktpersoner, e-postadresser, orter eller antal "
+        "anstallda: de hamtas fran bolagets sajt i nasta steg.\n\n"
+        f"Malgrupp:\n{_icp_som_text({**icp, 'roles': []})}\n"
         f"{_profil_som_soktext(profil, ring)}"
         f"Uteslut dessa namn: {_uteslut_i_prompt(prompt_namn)}\n"
     ).format(antal=antal_begart)
@@ -1225,7 +1213,11 @@ async def hitta_bolag(
     # söker bolag utan fungerande webbplats — den mäts av webbsignal i stället.
     if not utan_webb:
         rena = await utan_platshallare(rena)
-    return fran_kallor + rena[:antal_kvar]
+    # Märks som sökträffar: allt på raden är modellens påstående tills
+    # existensgrinden (leads/existens.py) och researchen styrkt det. Kontakten
+    # följer därför inte med till prospektet (api/leads.py), och ort och
+    # storlek räknas inte som fakta i bedömningen (leads/bedomning.py).
+    return fran_kallor + [{**rad, "kalla": "gemini"} for rad in rena[:antal_kvar]]
 
 
 async def sla_upp_webbplats(company_name: str, *, geografi: str | None = None) -> str | None:

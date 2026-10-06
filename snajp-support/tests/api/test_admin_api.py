@@ -153,3 +153,34 @@ def test_kundens_utkast_gar_via_samma_granskningsko(client):
     )
     assert response.status_code == 200
     assert "queue" in response.json()
+
+
+def test_leads_underlag_visar_vad_varje_lead_vilar_pa():
+    """Inventeringen av redan sparade leads (scripts/granska_leads_underlag.py):
+    källor, hämtat material och bedömning per bolag, aldrig kontaktpersoner."""
+    import asyncio
+
+    from fastapi.testclient import TestClient
+
+    from app.config import DEFAULT_TENANT_ID, get_settings
+    from app.main import app
+
+    with TestClient(app) as client:
+        storage = app.state.storage
+        prospekt = asyncio.run(
+            storage.create_prospect(
+                DEFAULT_TENANT_ID, company_name="Detaljhandel Design AB", origin="iris",
+                contact_name="Anna Exempel", contact_email="anna@detaljhandeldesign.se",
+                profil={"website": "https://detaljhandeldesign.se"},
+            )
+        )
+        huvud = {"X-API-Key": get_settings().snajp_master_api_key}
+        svar = client.get(f"/api/admin/tenants/{DEFAULT_TENANT_ID}/leads-underlag", headers=huvud)
+        assert svar.status_code == 200
+        rad = next(l for l in svar.json()["leads"] if l["id"] == str(prospekt["id"]))
+        assert rad["website"] == "https://detaljhandeldesign.se"
+        assert rad["hamtat_tecken"] == 0 and rad["register"] is False and rad["kallor"] == []
+        assert "contact_name" not in rad and "contact_email" not in rad
+        # Kundnyckeln kommer inte in.
+        kund = {"X-API-Key": get_settings().snajp_demo_api_key}
+        assert client.get(f"/api/admin/tenants/{DEFAULT_TENANT_ID}/leads-underlag", headers=kund).status_code == 403

@@ -39,7 +39,12 @@ from .untrusted_content import wrap_untrusted_content
 
 #: Schemaversion. Höjs när formen ändras, så en sparad profil i gammal form
 #: kompileras om i stället för att läsas fel.
-SCHEMA = 1
+#: 2 (2026-10-06): `segment`, `offentlig_sektor` och standarduteslutningen av
+#: offentlig sektor och skolor.
+SCHEMA = 2
+
+#: Högst så här många målsegment. Sökningen delar sina sidor mellan dem.
+MAX_SEGMENT = 6
 
 MAX_KRITERIER = 8
 MAX_POSTER = 12
@@ -74,6 +79,12 @@ def tom_profil() -> dict[str, Any]:
         "erbjudande": "",
         "malgrupp": "",
         "branscher": [],
+        # Rangordnade målsegment: [{bransch, varfor}], bäst först. Det är de
+        # som gör att en körning utan filter söker i rätt branscher i stället
+        # för "alla" (provkörningen 2026-10-05 drog mot bygg av en slump).
+        "segment": [],
+        # True bara när kunden själv pekat ut offentlig sektor eller skolor.
+        "offentlig_sektor": False,
         "undvik_branscher": [],
         "kommuner": [],
         "omraden": [],
@@ -123,6 +134,20 @@ def _prefix(v: object) -> str | None:
     return siffror[:3] if len(siffror) >= 3 else None
 
 
+def validera_segment(raw: object) -> list[dict[str, str]]:
+    """[{bransch, varfor}] i rangordning, utan dubbletter och tomma rader."""
+    ut: list[dict[str, str]] = []
+    for s in (raw if isinstance(raw, list) else [])[:MAX_SEGMENT]:
+        if isinstance(s, str):
+            s = {"bransch": s}
+        if not isinstance(s, dict):
+            continue
+        bransch = _text(s.get("bransch"), 80)
+        if bransch and bransch.casefold() not in {u["bransch"].casefold() for u in ut}:
+            ut.append({"bransch": bransch, "varfor": _text(s.get("varfor"))})
+    return ut
+
+
 def validera_profil(raw: object) -> dict[str, Any]:
     """Modellens JSON → en profil i exakt vår form. Okända nycklar tas bort,
     listor kapas, kommuner utanför geo-tabellen tas bort (vi kan inte
@@ -139,6 +164,11 @@ def validera_profil(raw: object) -> dict[str, Any]:
     p["roller"] = _textlista(raw.get("roller"))
     p["ej_tolkat"] = _textlista(raw.get("ej_tolkat"))
     p["utan_webbplats"] = raw.get("utan_webbplats") is True
+    p["offentlig_sektor"] = raw.get("offentlig_sektor") is True
+    p["segment"] = validera_segment(raw.get("segment"))
+    # Segmenten ÄR branscherna att söka i när kunden inte räknat upp några.
+    if not p["branscher"]:
+        p["branscher"] = [s["bransch"] for s in p["segment"]]
 
     kommuner = []
     for namn in _textlista(raw.get("kommuner")):
@@ -290,6 +320,22 @@ def som_icp(profil: dict[str, Any], icp: object) -> dict[str, Any]:
     return ut
 
 
+def med_standarduteslutning(profil: dict[str, Any]) -> dict[str, Any]:
+    """Offentlig sektor och skolor utesluts som standard (leads/offentlig.py).
+
+    Förfiltret tar det som syns på namn, organisationsnummer och bolagsform.
+    Raden här låter researchen bedöma gränsfallen mot bolagets egna sidor,
+    med samma krav på ordagrant citat som varje annan uteslutning. Kunden ser
+    raden i sin profil. Den läggs inte till när kunden själv pekat ut
+    offentlig sektor eller skolor som målgrupp."""
+    from .offentlig import UTESLUTNING
+
+    uteslut = [u for u in profil.get("uteslut") or [] if u.get("text") != UTESLUTNING]
+    if not profil.get("offentlig_sektor"):
+        uteslut.append({"text": UTESLUTNING, "kallmening": "Snajps standard: bara privata bolag"})
+    return {**profil, "uteslut": uteslut}
+
+
 # -- Täckning: inget tappas tyst ---------------------------------------------
 
 
@@ -357,6 +403,10 @@ def render_profil(profil: dict[str, Any] | None) -> str:
         )
     if profil.get("malgrupp"):
         rader.append(f"- Målgrupp: {profil['malgrupp']}")
+    for i, seg in enumerate(profil.get("segment") or [], start=1):
+        rader.append(
+            f"- Målsegment {i}: {seg['bransch']}" + (f" — {seg['varfor']}" if seg.get("varfor") else "")
+        )
     if profil.get("branscher"):
         rader.append("- Branscher att söka i: " + ", ".join(profil["branscher"]))
     else:
@@ -411,7 +461,18 @@ Regler:
 1. Skilj på säljarens EGEN bransch (egen_bransch) och MÅLGRUPPENS branscher
    (branscher). "Bransch: Marknadsföring" om säljaren själv är INTE en
    målbransch. Nämner texten ingen målbransch: branscher = [] (alla).
-2. kommuner: svenska kommunnamn målgruppen ska ligga i. Stadsdelar och
+   segment: de branscher eller typer av företag målgruppen finns i, bäst
+   först, som [{bransch, varfor}]. bransch = ett kort branschord som går att
+   söka på (t.ex. "utbildningsföretag", "redovisningsbyråer"), varfor = EN
+   mening om varför segmentet passar det säljaren erbjuder. Bara segment
+   texten stöder. Säger texten inget om vilka kunderna är: segment = [].
+   offentlig_sektor: true BARA om texten uttryckligen pekar ut kommuner,
+   regioner, myndigheter, statliga bolag eller skolor som målgrupp. Annars
+   false: målgruppen är privata bolag.
+2. kommuner: svenska kommunnamn målgruppen ska ligga i. Var SÄLJAREN själv
+   har kontor eller är verksam ("vi sitter i", "drivs från", "med kontor i")
+   är INTE målgruppens geografi. kommuner fylls bara när texten säger var
+   KUNDERNA ska ligga; annars kommuner = [] (hela landet). Stadsdelar och
    områden (t.ex. Sisjön, Västra Frölunda) blir geo_prioritet-ringar i
    kommunen de ligger i, med tresiffriga postnummerprefix du är säker på.
    Ordningen i geo_prioritet = den ordning kunden vill börja i.
@@ -431,16 +492,31 @@ Regler:
 8. Uppfinn inget. Svenska.
 
 Svara med ETT JSON-objekt med exakt nycklarna: egen_bransch, erbjudande,
-malgrupp, branscher, undvik_branscher, kommuner, geo_prioritet
+malgrupp, branscher, segment ([{bransch, varfor}]), offentlig_sektor,
+undvik_branscher, kommuner, geo_prioritet
 ([{etikett, postnr_prefix}]), geo_kallmening, anstallda_min, anstallda_max, utan_webbplats,
 kriterier ([{text, krav, vikt, belagg, kallmening}]), uteslut
 ([{text, kallmening}]), roller, vinklar ([{kriterie_id: "k1".., vinkel}]),
 ej_tolkat."""
 
 
-def indata_hash(kundtext: str, icp: object) -> str:
+def kundval(installningar: dict[str, Any] | None) -> dict[str, Any]:
+    """Det kunden valt UTTRYCKLIGEN utöver ICP:n: egna målsegment och om
+    offentlig sektor ingår (agent_configs.settings, satta i kundens
+    inställningar eller av ett skript). Regel 1: strukturerat vinner."""
+    i = installningar or {}
+    ut: dict[str, Any] = {}
+    segment = validera_segment(i.get("segment"))
+    if segment:
+        ut["segment"] = segment
+    if isinstance(i.get("offentlig_sektor"), bool):
+        ut["offentlig_sektor"] = i["offentlig_sektor"]
+    return ut
+
+
+def indata_hash(kundtext: str, icp: object, val: dict[str, Any] | None = None) -> str:
     kanon = json.dumps(
-        {"s": SCHEMA, "t": (kundtext or "").strip(), "i": normalize_icp(icp)},
+        {"s": SCHEMA, "t": (kundtext or "").strip(), "i": normalize_icp(icp), "k": val or {}},
         sort_keys=True,
         ensure_ascii=False,
     )
@@ -474,10 +550,13 @@ async def _anropa_modell(kundtext: str, icp: dict[str, Any]) -> dict[str, Any]:
     return json.loads(svar.choices[0].message.content or "{}")
 
 
-async def kompilera(kundtext: str, icp: object) -> dict[str, Any]:
+async def kompilera(kundtext: str, icp: object, val: dict[str, Any] | None = None) -> dict[str, Any]:
     """Kundtext + ICP → sammanslagen profil. Kastar aldrig: faller modellen
     blir profilen regelbaserad (bara ICP:n) och hela texten står i
-    ej_tolkat — ärligt, i stället för en tom profil som låtsas vara klar."""
+    ej_tolkat — ärligt, i stället för en tom profil som låtsas vara klar.
+
+    `val` (se `kundval`) är kundens uttryckliga segment och ställningstagande
+    om offentlig sektor. De ersätter tolkningens."""
     from ..config import get_settings
 
     kundtext = utan_adminrader(kundtext)
@@ -493,9 +572,17 @@ async def kompilera(kundtext: str, icp: object) -> dict[str, Any]:
     if profil["kalla"] != "ai":
         profil["ej_tolkat"] = _meningar(kundtext)[:MAX_POSTER]
     profil = slå_ihop(profil, icp_n)
+    val = val or {}
+    if val.get("segment"):
+        profil["segment"] = val["segment"]
+        if not icp_n.get("industries"):
+            profil["branscher"] = [s["bransch"] for s in val["segment"]]
+    if "offentlig_sektor" in val:
+        profil["offentlig_sektor"] = val["offentlig_sektor"]
+    profil = med_standarduteslutning(profil)
     profil["otolkat"] = tackning(kundtext, profil) if profil["kalla"] == "ai" else []
     profil["anmarkning"] = anmarkning
-    profil["indata_hash"] = indata_hash(kundtext, icp_n)
+    profil["indata_hash"] = indata_hash(kundtext, icp_n, val)
     profil["version"] = hashlib.sha256(
         json.dumps(profil, sort_keys=True, ensure_ascii=False).encode("utf-8")
     ).hexdigest()[:12]
@@ -515,7 +602,8 @@ async def sakerstall_profil(storage, tenant_id: str, *, tvinga: bool = False) ->
     Profilen är aldrig inaktuell i en körning: hashen över indata avgör."""
     installningar = await storage.get_agent_settings(tenant_id, agent_type="leads")
     kundtext = await las_kundtext(storage, tenant_id)
-    hash_ = indata_hash(kundtext, installningar.get("icp"))
+    val = kundval(installningar)
+    hash_ = indata_hash(kundtext, installningar.get("icp"), val)
     sparad = installningar.get("profil")
     if (
         not tvinga
@@ -524,7 +612,7 @@ async def sakerstall_profil(storage, tenant_id: str, *, tvinga: bool = False) ->
         and sparad.get("schema") == SCHEMA
     ):
         return sparad
-    profil = await kompilera(kundtext, installningar.get("icp"))
+    profil = await kompilera(kundtext, installningar.get("icp"), val)
     # Läs om före skrivning: kompileringen tar sekunder, och en samtidig
     # PUT /leads/config får inte skrivas över av en äldre kopia.
     farska = await storage.get_agent_settings(tenant_id, agent_type="leads")

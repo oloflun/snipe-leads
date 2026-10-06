@@ -163,8 +163,12 @@ def _storlek_rad(profil: dict[str, Any], fynd: dict[str, Any], kand: dict[str, A
                     "Webbplatsen visar en internationell verksamhet; den svenska enhetens "
                     "anställda speglar inte bolagets storlek.", hart=True)
     antal = fynd.get("antal_anstallda")
+    # Prospektradens tal kommer ur registret: en sökträffs påstådda storlek
+    # följer aldrig med till raden (api/leads.py, _skapa_prospekt_ur_kandidat).
+    kalla = "källmaterialet"
     if antal is None:
         antal = kand.get("anstallda")
+        kalla = "registret"
     try:
         antal = int(antal) if antal is not None and not isinstance(antal, bool) else None
     except (TypeError, ValueError):
@@ -173,7 +177,7 @@ def _storlek_rad(profil: dict[str, Any], fynd: dict[str, Any], kand: dict[str, A
         return _rad("storlek", etikett, 1, OKAND, "Antalet anställda framgick inte.", hart=True)
     inne = (lo is None or antal >= lo) and (hi is None or antal <= hi)
     return _rad("storlek", etikett, 1, TRAFF if inne else MISS,
-                f"{antal} anställda enligt källmaterialet.", hart=True)
+                f"{antal} anställda enligt {kalla}.", hart=True)
 
 
 def bedom(
@@ -183,14 +187,31 @@ def bedom(
     korpus: str,
     kandidat: dict[str, Any] | None = None,
     webbrevision: dict[str, Any] | None = None,
+    har_underlag: bool = True,
 ) -> dict[str, Any]:
     """Modellens utslag + hårda fakta → nivå, poäng, rader och motivering.
 
     `korpus` = skrapat material + mätta webbsignaler; beläggen verifieras mot
     den. Returnerar fälten som sparas på prospektraden plus de bakåt-
     kompatibla `qualified`/`icp_fit`/`disqualifiers` som resten av kedjan
-    (eskalering, utkastgrind) redan läser."""
+    (eskalering, utkastgrind) redan läser.
+
+    `har_underlag=False`: inget källmaterial gick att hämta. Bolaget bedöms
+    då inte alls: nivå C med skälet utskrivet, oavsett vad modellen svarade.
+    Provkörningen 2026-10-05 gav poäng 100 och nivå A till tre påhittade bolag
+    med motiveringen "det finns inget källmaterial"."""
     kand = kandidat or {}
+    if not har_underlag:
+        skal = "Inget källmaterial: bolagets sidor gick inte att hämta, så bolaget kunde inte bedömas."
+        return {
+            "niva": "C",
+            "score_total": 0,
+            "score_breakdown": [_rad("underlag", "Källmaterial", 1, MISS, skal, hart=True)],
+            "motivering": skal,
+            "qualified": False,
+            "icp_fit": 0.0,
+            "disqualifiers": [skal],
+        }
     utslag_per_id: dict[str, dict[str, Any]] = {}
     for b in fynd.get("bedomningar") or []:
         if isinstance(b, dict) and b.get("kriterie_id"):
@@ -250,10 +271,20 @@ def bedom(
     total = round(100 * sum(w * v for w, v in viktat) / sum(w for w, _ in viktat)) if viktat else 50
 
     maste = [r for r in rader if r["hart"] and not r["nyckel"].startswith("u") and r["nyckel"] not in ("ort", "storlek")]
+    # Nivå A kräver minst ETT uppfyllt kriterium. Ett ja på en kriterierad är
+    # alltid styrkt: modellens ja utan verifierat citat har redan blivit okänt
+    # ovan, och webbkriterierna avgörs i kod. Utan kravet var `all([])` sant
+    # för en profil utan kriterier, och ort plus storlek räckte till "Stark"
+    # (provkörningen 2026-10-05).
+    styrkt = any(
+        r["utfall"] == TRAFF
+        for r in rader
+        if not r["nyckel"].startswith("u") and r["nyckel"] not in ("ort", "storlek")
+    )
     if fallt:
         niva = "C"
         total = min(total, TAK_FALLD)
-    elif all(r["utfall"] == TRAFF for r in maste) and total >= A_GRANS:
+    elif styrkt and all(r["utfall"] == TRAFF for r in maste) and total >= A_GRANS:
         niva = "A"
     else:
         niva = "B"

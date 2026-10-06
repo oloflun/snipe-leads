@@ -26,7 +26,8 @@ from ..jobs.stadare import (
     stada_tenant,
 )
 from ..kvotfel import ar_kreditslut, kundtext_for, larma_kreditslut
-from ..leads import sidhamtning, upptagna
+from ..leads import existens, sidhamtning, upptagna
+from ..leads.webbsignal import mat_webbplats
 from ..leads.autonomy import LEVELS as AUTONOMY_LEVELS
 from ..leads.autonomy import describe as describe_autonomy
 from ..leads.autonomy import kan_aktivera_auto_send
@@ -1523,6 +1524,17 @@ async def _korningens_profil(storage, tenant_id: str, overrides: dict | None) ->
 
 
 async def _skapa_prospekt_ur_kandidat(storage, tenant_id: str, bolag: dict, origin: str) -> dict:
+    if bolag.get("kalla") == "gemini":
+        # En sökträff bär modellens PÅSTÅENDEN om kontakt, ort och storlek.
+        # Provkörningen 2026-10-05: en gissad info@-adress på en påhittad
+        # domän räknades som kontaktväg och gav ett utkast, och gissad ort och
+        # storlek gav poäng 100. Researchen hämtar kontakten ur bolagets egna
+        # sidor (leads_agent._uppgradera_kontakt) och orten ur källmaterialet.
+        bolag = {
+            k: v for k, v in bolag.items()
+            if k not in ("contact_name", "contact_email", "contact_role", "contact_level",
+                         "contact_form_url", "ort", "postnr", "anstallda")
+        }
     prospect = await storage.create_prospect(
         tenant_id,
         company_name=bolag["company_name"],
@@ -1611,6 +1623,13 @@ async def _samla_korningens_prospekt(
             origin=origin_namn,
         )
         webb = await sla_upp_webbplats(bolagsnamn, geografi=geo)
+        # Uppslaget är modellens svar. Bär sajten inte bolagets namn hör den
+        # till någon annan, och researchen hade då läst fel bolags sidor.
+        if webb and existens.styrk(
+            {"company_name": bolagsnamn, "website": webb, "kalla": "gemini"}, await mat_webbplats(webb)
+        ):
+            logger.info("Uppslagen webbplats för %s gick inte att styrka och används inte.", bolagsnamn)
+            webb = None
         if webb:
             uppdaterad = await storage.update_prospect(
                 tenant_id, prospect["id"], website=webb
@@ -1904,6 +1923,13 @@ async def _fyll_pa(app_state, tenant: dict, batch_id: str) -> None:
         if not k["kandidater"]:
             if k["rundor"] >= iris_korning.MAX_RUNDOR:
                 orsak = "slut_pa_kandidater"
+                break
+            if not iris_korning.har_malgrupp(profil, sok_icp):
+                # Ingenting att sikta på: varken bransch, segment, kriterium
+                # eller målgruppstext. En sådan sökning är "hitta vilket bolag
+                # som helst", och det var den som gav påhittade bolag och en
+                # slagsida mot bygg i provkörningen 2026-10-05.
+                orsak = "ingen_malgrupp"
                 break
             # Prospekt, listrader och CRM-kunder (app/leads/upptagna.py) plus
             # det körningen redan prövat.
@@ -2325,7 +2351,12 @@ async def _run_batch_prospect(
             # Grinden föll — bolaget kvalificerar inte, ligger under kundens
             # tröskel, eller saknar kontaktväg. Ett utkast är 4–7 LLM-anrop
             # till, för ett mejl som inte ska skickas automatiskt.
-            if result["stopped_early"] == "ej_kvalificerad":
+            if result["stopped_early"] == "inget_underlag":
+                result["draft_note"] = (
+                    "Hoppar över utkastet: bolagets sidor gick inte att hämta, så det finns "
+                    "inget att bedöma eller skriva om."
+                )
+            elif result["stopped_early"] == "ej_kvalificerad":
                 result["draft_note"] = "Hoppar över utkastet: bolaget uppfyller inte målgruppens kriterier."
             elif result["stopped_early"] == "under_troskel":
                 result["draft_note"] = (
@@ -2338,6 +2369,14 @@ async def _run_batch_prospect(
                     "Hoppar över utkastet: ingen kontaktperson eller kontaktväg "
                     "hittades. Komplettera kontakten i registret och kör Processa om."
                 )
+        elif scope == "research_and_draft" and _skal:
+            # Utkast skrivs bara för ett LEVERBART lead (_leverbarhet): en
+            # namngiven kontaktperson med roll, en kontaktväg och en
+            # lägesbeskrivning. Kontrollen räknade förut bara in körningens
+            # utfall, och ett bolag som stod som "bortvalt: ingen
+            # kontaktperson med roll" fick ändå status Redo och ett utkast
+            # till en funktionsadress (provkörningen 2026-10-05).
+            result["draft_note"] = f"Research klar. Inget utkast: {_skal[:1].lower()}{_skal[1:].rstrip('.')}."
         elif scope == "research_and_draft":
             prospect = await storage.get_prospect(tenant["tenant_id"], prospect_id) or {}
             email = prospect.get("contact_email")

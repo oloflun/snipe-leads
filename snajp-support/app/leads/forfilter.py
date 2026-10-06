@@ -19,6 +19,7 @@ import re
 from typing import Any
 
 from .geo import _prefix_ur_postnr
+from .offentlig import offentlig_eller_skola
 from .profil import KOMMUNER
 
 #: Enskild firma: marknadsföringslagen 19 § kräver förhandssamtycke för
@@ -41,6 +42,13 @@ def forfiltrera(profil: dict[str, Any], kandidat: dict[str, Any], *, exclude_dom
     """None = gå vidare till research. Annars skälet, på svenska."""
     if ar_enskild_firma(kandidat.get("orgnr")):
         return "Enskild firma — e-post kräver förhandssamtycke (marknadsföringslagen 19 §)."
+
+    # Bara privata bolag, om kunden inte själv pekat ut offentlig sektor
+    # eller skolor som målgrupp (Antons regel 2026-10-06, leads/offentlig.py).
+    if not profil.get("offentlig_sektor"):
+        offentligt = offentlig_eller_skola(kandidat)
+        if offentligt:
+            return offentligt
 
     antal = kandidat.get("anstallda")
     if isinstance(antal, int) and not isinstance(antal, bool):
@@ -80,6 +88,8 @@ def demo() -> None:
     assert forfiltrera(profil, {"company_name": "X", "orgnr": "990402-1392"})
     assert forfiltrera(profil, {"company_name": "X", "orgnr": "556824-9022", "postnr": "421 32", "anstallda": 4}) is None
     assert forfiltrera(profil, {"company_name": "Okänd AB"}) is None
+    assert forfiltrera(profil, {"company_name": "Yrkeshögskolan Umeå Kommun"})
+    assert forfiltrera({**profil, "offentlig_sektor": True}, {"company_name": "Umeå Folkhögskola"}) is None
     print("forfilter: ok")
 
 

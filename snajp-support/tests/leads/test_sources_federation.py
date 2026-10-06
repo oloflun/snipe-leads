@@ -340,7 +340,7 @@ async def test_delvisa_kallor_fylls_upp_av_gemini(monkeypatch):
     prompt = gemini.await_args.args[0]
     # Det som fattas (1) plus reserver (2) för platshållarfiltret — i SAMMA
     # anrop; överskottet kapas (se discovery._reserver).
-    assert "Hitta 3 RIKTIGA" in prompt
+    assert "Hitta upp till 3 RIKTIGA" in prompt
     assert "nordkap moduler ab" in prompt.lower(), "källträffen ska uteslutas ur sökningen"
     assert [t["company_name"] for t in traffar] == [
         "Nordkap Moduler AB",

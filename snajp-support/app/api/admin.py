@@ -87,6 +87,39 @@ async def tenant_inbox(request: Request, tenant_id: str, limit: int = 50) -> dic
     }
 
 
+@router.get("/tenants/{tenant_id}/leads-underlag")
+async def tenant_leads_underlag(request: Request, tenant_id: str, limit: int = 200) -> dict:
+    """Vad varje lead faktiskt vilar på: källor, hämtat material och bedömning.
+
+    Svarar på frågan "finns bolaget?" för redan sparade leads (scripts/
+    granska_leads_underlag.py). Bara bolagsuppgifter, aldrig kontaktpersoner:
+    granskningen gäller bolaget, och svaret skrivs ut i en terminal.
+    """
+    storage = request.app.state.storage
+    ut: list[dict] = []
+    for p in await storage.list_prospects(tenant_id, limit=min(limit, 500)):
+        webb = p.get("website")
+        cache = await storage.get_sidcache(tenant_id, webb) if webb else None
+        kallor = sorted(await storage.list_prospect_source_urls(tenant_id, str(p["id"])))
+        ut.append(
+            {
+                "id": str(p["id"]),
+                "company_name": p.get("company_name"),
+                "website": webb,
+                "origin": p.get("origin"),
+                "status": p.get("status"),
+                "niva": p.get("niva"),
+                "score_total": p.get("score_total"),
+                "kallor": kallor,
+                "register": any("merinfo.se" in k for k in kallor),
+                "hamtat_tecken": len((cache or {}).get("innehall") or ""),
+                "hamtfel": (cache or {}).get("fel"),
+                "created_at": p.get("created_at"),
+            }
+        )
+    return {"leads": ut}
+
+
 @router.get("/tenants/{tenant_id}/drafts")
 async def tenant_drafts(request: Request, tenant_id: str, limit: int = 50) -> dict:
     """Kundens utkast. Går via samma granskningskö som kunden själv ser —

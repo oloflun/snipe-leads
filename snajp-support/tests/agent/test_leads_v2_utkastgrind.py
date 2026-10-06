@@ -105,6 +105,53 @@ async def test_kvalificerat_bolag_utan_kontaktvag_stoppas():
     assert result["stopped_early"] == "kontakt_saknas"
 
 
+async def test_utan_kallmaterial_gors_inget_modellanrop_och_inget_blir_redo():
+    """Provkörningen 2026-10-05: tre påhittade bolag gick genom researchen på
+    raden "(inget källmaterial kunde hämtas)" och kom ut med poäng 100, status
+    Redo och ett utkast."""
+    storage = MemoryStorage()
+    prospect_id = await _prepare_prospect(storage)
+    llm = _FakeLLM(overrides={"sa:account-research": {"qualified": True, "ort": "Göteborg"}})
+    with (
+        patch("app.agent.step_runner.get_llm_client", return_value=llm),
+        patch("app.agent.leads_agent._scrape_registered_source_impl", new=_fake_scrape("")),
+    ):
+        result = await run_research_step_v2(
+            storage, TENANT, prospect_id=prospect_id, tenant_name="Snajp",
+            context_pack="## Kontextpaket\nICP: svensk e-handel.", brief="", is_test=True,
+            profil={"version": "test", "kommuner": ["Göteborg"]},
+        )
+    assert llm.calls == [], "inget underlag ska inte kosta ett modellanrop"
+    assert result["stopped_early"] == "inget_underlag"
+    assert result["qualified"] is False and result["niva"] == "C" and result["score_total"] == 0
+    assert (await storage.get_prospect(TENANT, prospect_id)).get("status") != "ready"
+
+
+async def test_webbmatningen_kors_bara_for_kunder_med_webbkriterium(monkeypatch):
+    """Ett mejl från Snajp öppnade med "Er webbplats är byggd med Next.js":
+    mätningen som byggdes åt webbyråerna kördes för alla kunder."""
+    matt: list[str] = []
+
+    async def _mat(url):
+        matt.append(url)
+        return {"har_webbplats": True, "url": url, "matt": True, "rader": ["Webbplatsen är byggd med Next.js."]}
+
+    monkeypatch.setattr("app.leads.webbsignal.mat_webbplats", _mat)
+
+    utan = await _kor({"qualified": True}, profil=_PROFIL)
+    assert matt == []
+    assert utan["webbsignaler"] == []
+    assert not any("Next.js" in rad for rad in utan["research_evidence"])
+
+    webbprofil = {
+        **_PROFIL,
+        "kriterier": [{"id": "k1", "text": "Gammal hemsida", "krav": "bor", "vikt": 2, "belagg": "webbsignal"}],
+    }
+    med = await _kor({"qualified": True}, profil=webbprofil)
+    assert len(matt) == 1
+    assert "Webbplatsen är byggd med Next.js." in med["webbsignaler"]
+
+
 async def test_kvalificerat_bolag_med_kontakt_gar_vidare():
     result = await _kor({"qualified": True})
     assert result["stopped_early"] is None

@@ -84,7 +84,8 @@ async def _kor(mal: int) -> dict:
             "job_id": job_id,
             **TENANT,
             "scope": "research",
-            "overrides": None,
+            # En körning behöver en målgrupp att söka i (korning.har_malgrupp).
+            "overrides": {"industries": ["Redovisning"]},
             "is_test": True,
             "limit": mal,
             "company_names": [],
