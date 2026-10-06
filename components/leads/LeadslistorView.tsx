@@ -657,7 +657,7 @@ export function LeadslistorView({
           </div>
         ) : (
           <>
-          {listor.filter((l) => l.status === "klar" && l.kalla !== "crm").length >= 2 ? (
+          {listor.filter((l) => l.status === "klar" && l.kalla !== "crm" && l.kalla !== "saljlista").length >= 2 ? (
             <div className="mt-4 rounded-card border border-ink/12 bg-paper2/40 p-4">
               <p className="text-[15px] font-semibold">{text(T.kombineraRubrik)}</p>
               <p className="mt-1 text-[13px] text-ink-subtle">{text(T.kombineraHjalp)}</p>
@@ -708,7 +708,11 @@ export function LeadslistorView({
             </div>
           ) : null}
           <ul className="mt-4 divide-y divide-ink/15 border-y border-ink/15">
-            {listor.map((lista) => {
+            {listor
+              // En säljlistebeställning (105) är ingen lista att öppna:
+              // raderna ligger i säljlistan ovanför, resten är uteslutning.
+              .filter((lista) => lista.kalla !== "saljlista")
+              .map((lista) => {
               const oppen = vald?.lista.id === lista.id;
               const klar = lista.status === "klar";
               return (

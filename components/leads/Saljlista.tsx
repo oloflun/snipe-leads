@@ -39,7 +39,9 @@ import {
   tabellRad,
   Tomt
 } from "@/components/ui";
+import { felmeddelande } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
+import { leadsAnrop } from "@/lib/leads/suite";
 import { cn } from "@/lib/utils";
 
 /**
@@ -110,6 +112,28 @@ const T = {
   demoNotis: { sv: "Demon är ifylld med påhittade bolag. Ändringarna sparas inte.", en: "The demo is filled with fictional companies. Changes are not saved." },
   tillval: { sv: "Tillval", en: "Add-on" },
   utforska: { sv: "Utforska i demo", en: "Explore in demo" },
+  bestallLeads: { sv: "Beställ leads-lista", en: "Order a lead list" },
+  bestallText: {
+    sv: "Iris gör en färdig körning och lägger bolagen direkt här i säljlistan. Bara bolag med allt ifyllt kommer med: organisationsnummer, kontaktperson, kontaktnummer och kontaktmail.",
+    en: "Iris runs a full search and puts the companies straight into this sales list. Only companies with everything filled in make it: registration number, contact person, phone number and contact email."
+  },
+  bestallVilka: { sv: "Vilka bolag letar vi efter?", en: "What companies are we looking for?" },
+  bestallVilkaExempel: { sv: "t.ex. Byggbolag i Umeå", en: "e.g. Construction companies in Umeå" },
+  bestallAntal: { sv: "Antal bolag", en: "Number of companies" },
+  bestallStarta: { sv: "Beställ körningen", en: "Order the run" },
+  bestaller: { sv: "Beställer…", en: "Ordering…" },
+  bestallPagar: {
+    sv: "Körningen pågår. Bolagen läggs här i säljlistan när den är klar — du kan lämna sidan under tiden.",
+    en: "The run is in progress. The companies are added to this sales list when it finishes — you can leave the page meanwhile."
+  },
+  bestallKlar: { sv: "Körningen är klar", en: "The run is done" },
+  bestallKlarInga: {
+    sv: "Körningen är klar, men inget bolag bar full kontaktinformation. Inget lades i listan.",
+    en: "The run finished, but no company carried full contact information. Nothing was added to the list."
+  },
+  bestallFel: { sv: "Beställningen gick inte att starta.", en: "The order could not be started." },
+  bestallFoll: { sv: "Körningen föll", en: "The run failed" },
+  nyaBolag: { sv: "nya bolag i listan", en: "new companies in the list" },
   stangDemo: { sv: "Stäng demon", en: "Close the demo" },
   horAvDig: { sv: "Hör av dig om leadslistor", en: "Ask us about lead lists" },
   utforskaText: {
@@ -277,6 +301,30 @@ function SaljlistaYta({ api, demo }: Readonly<{ api: SaljlistaApi; demo: boolean
   const [sortering, setSortering] = useState<Sortering>("nya");
   const [formOppen, setFormOppen] = useState(false);
   const [idag, setIdag] = useState("");
+  // Beställ leads-lista (migration 105): Iris listspår rakt in i säljlistan.
+  const [bestallOppen, setBestallOppen] = useState(false);
+  const [bestallFraga, setBestallFraga] = useState("");
+  const [bestallAntal, setBestallAntal] = useState("10");
+  const [bestaller, setBestaller] = useState(false);
+  const [bestallStatus, setBestallStatus] = useState<Localized | null>(null);
+  const [bestallFel, setBestallFel] = useState<string | null>(null);
+  const raknareFore = useRef(0);
+  const pollRef = useRef<number | null>(null);
+  const rotRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => () => {
+    if (pollRef.current) window.clearInterval(pollRef.current);
+  }, []);
+
+  // Sidhuvudets knapp på Listor-fliken öppnar beställningen härifrån.
+  useEffect(() => {
+    function oppna() {
+      setBestallOppen(true);
+      rotRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+    }
+    window.addEventListener("snipra:saljlista-bestall", oppna);
+    return () => window.removeEventListener("snipra:saljlista-bestall", oppna);
+  }, []);
 
   useEffect(() => setIdag(idagLokalt()), []);
 
@@ -429,6 +477,63 @@ function SaljlistaYta({ api, demo }: Readonly<{ api: SaljlistaApi; demo: boolean
     URL.revokeObjectURL(url);
   }
 
+  async function bestallKorning(e: React.FormEvent) {
+    e.preventDefault();
+    const titel = bestallFraga.trim();
+    const antal = Math.min(50, Math.max(1, Number(bestallAntal) || 10));
+    if (!titel || bestaller) return;
+    setBestaller(true);
+    setBestallFel(null);
+    setBestallStatus(null);
+    raknareFore.current = rader?.length ?? 0;
+    try {
+      const svar = await leadsAnrop<{ list_id: string }>("/leads/listor", {
+        method: "POST",
+        body: JSON.stringify({ titel, antal, mal: "saljlista" })
+      });
+      setBestallStatus(T.bestallPagar);
+      setBestallOppen(false);
+      // Pollar listan tills den är klar eller föll; bolagen dyker upp här.
+      if (pollRef.current) window.clearInterval(pollRef.current);
+      pollRef.current = window.setInterval(async () => {
+        try {
+          const lage = await leadsAnrop<{ list?: { status?: string; felorsak?: string | null } }>(
+            `/leads/listor/${encodeURIComponent(svar.list_id)}`
+          );
+          const status = lage.list?.status;
+          if (status === "klar" || status === "fel") {
+            if (pollRef.current) window.clearInterval(pollRef.current);
+            pollRef.current = null;
+            if (status === "fel") {
+              setBestallStatus(null);
+              setBestallFel(`${text(T.bestallFoll)}: ${lage.list?.felorsak ?? ""}`.trim());
+              return;
+            }
+            await hamta();
+          }
+        } catch {
+          // Nästa varv försöker igen; körningen fortsätter på servern.
+        }
+      }, 5000);
+    } catch (orsak) {
+      setBestallFel(`${text(T.bestallFel)} ${felmeddelande(orsak)}`.trim());
+    } finally {
+      setBestaller(false);
+    }
+  }
+
+  // När pollningen hämtat om efter "klar": säg vad som hände.
+  useEffect(() => {
+    if (!bestallStatus || bestallStatus !== T.bestallPagar || rader === null || pollRef.current) return;
+    const nya = rader.length - raknareFore.current;
+    setBestallStatus(
+      nya > 0
+        ? { sv: `Körningen är klar: ${nya} nya bolag i listan.`, en: `The run is done: ${nya} new companies in the list.` }
+        : T.bestallKlarInga
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rader]);
+
   const filterval: { id: Filter; etikett: Localized }[] = [
     { id: "alla", etikett: T.filterAlla },
     { id: "aldrig", etikett: T.filterAldrig },
@@ -440,8 +545,9 @@ function SaljlistaYta({ api, demo }: Readonly<{ api: SaljlistaApi; demo: boolean
 
   return (
     <section
+      ref={rotRef}
       aria-labelledby="saljlista-rubrik"
-      className="rounded-card border border-ink/12 bg-paper p-4 shadow-hairline sm:p-6"
+      className="scroll-mt-24 rounded-card border border-ink/12 bg-paper p-4 shadow-hairline sm:p-6"
     >
       {/* ------------------------------------------------ HUVUD */}
       <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
@@ -457,6 +563,17 @@ function SaljlistaYta({ api, demo }: Readonly<{ api: SaljlistaApi; demo: boolean
           {demo ? <p className="mt-1.5 text-[14px] leading-6 text-ink-subtle">{text(T.demoNotis)}</p> : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {las || demo ? null : (
+            <button
+              type="button"
+              aria-expanded={bestallOppen}
+              aria-controls="saljlista-bestall"
+              onClick={() => setBestallOppen((v) => !v)}
+              className={cn(btnSecondary, btnLiten)}
+            >
+              {text(T.bestallLeads)}
+            </button>
+          )}
           <button
             type="button"
             onClick={exportera}
@@ -480,6 +597,65 @@ function SaljlistaYta({ api, demo }: Readonly<{ api: SaljlistaApi; demo: boolean
           )}
         </div>
       </div>
+
+      {/* ------------------------------- BESTÄLL LEADS-LISTA (105) */}
+      {bestallOppen && !las && !demo ? (
+        <form
+          id="saljlista-bestall"
+          onSubmit={(e) => void bestallKorning(e)}
+          className="mt-5 rounded-input border border-ink/12 bg-paper2/50 p-4 sm:p-5"
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setBestallOppen(false);
+          }}
+        >
+          <h3 className="text-[0.9375rem] font-semibold">{text(T.bestallLeads)}</h3>
+          <p className="mt-1 max-w-[70ch] text-[14px] leading-6 text-ink-subtle">{text(T.bestallText)}</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_140px]">
+            <label className="grid min-w-0 gap-1">
+              <span className={etikett}>
+                {text(T.bestallVilka)}
+                <span aria-hidden className="text-copper"> *</span>
+              </span>
+              <input
+                value={bestallFraga}
+                onChange={(e) => setBestallFraga(e.target.value)}
+                placeholder={text(T.bestallVilkaExempel)}
+                maxLength={200}
+                className={cn(faltTatt, "w-full placeholder:text-ink-subtle/60")}
+              />
+            </label>
+            <label className="grid gap-1">
+              <span className={etikett}>{text(T.bestallAntal)}</span>
+              <input
+                type="number"
+                min={1}
+                max={50}
+                value={bestallAntal}
+                onChange={(e) => setBestallAntal(e.target.value)}
+                className={cn(faltTatt, "w-full")}
+              />
+            </label>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <button type="submit" disabled={bestaller || !bestallFraga.trim()} className={cn(btnPrimary, btnLiten)}>
+              {bestaller ? text(T.bestaller) : text(T.bestallStarta)}
+            </button>
+            <button type="button" onClick={() => setBestallOppen(false)} className={cn(btnSecondary, btnLiten)}>
+              {text(T.avbryt)}
+            </button>
+          </div>
+        </form>
+      ) : null}
+      {bestallStatus ? (
+        <p role="status" aria-live="polite" className="mt-4 rounded-input border border-ink/12 bg-paper2/60 px-3.5 py-2.5 text-[14px] text-ink">
+          {text(bestallStatus)}
+        </p>
+      ) : null}
+      {bestallFel ? (
+        <p role="alert" className="mt-4 text-[14px] text-danger">
+          {bestallFel}
+        </p>
+      ) : null}
 
       {/* ----------------------------------- STATUSFÄRGERNA (104) */}
       <Statusforklaring />

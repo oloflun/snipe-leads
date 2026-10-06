@@ -2812,6 +2812,9 @@ async def bestall_leadslista(
         icp=icp,
         antal=payload.antal,
         is_test=payload.is_test,
+        # "Beställ leads-lista" (migration 105): raderna landar i säljlistan,
+        # inte under "Dina listor".
+        kalla="saljlista" if payload.mal == "saljlista" else "sok",
     )
     job_id = await request.app.state.jobs.create(tenant_id=tenant["tenant_id"], status="queued")
     await storage.set_leads_job_status(
@@ -2854,13 +2857,39 @@ def _dedupnyckel(rad: dict) -> str:
 
 
 _FEL_CRM_LISTA = "En CRM-kundlista är kundens befintliga kunder. Den prospekteras inte och kombineras inte."
+_FEL_SALJLISTA_LISTA = "Den här körningens rader ligger i säljlistan. Listan lyfts inte till Iris och kombineras inte."
+
+
+def saljlista_kvalificerade(rader: list[dict], *, titel: str) -> list[dict]:
+    """Raderna som får ligga i säljlistan: ALLA kolumner kalkylarket kräver
+    (Sebbe 2026-10-06 — orgnr, kontaktperson, kontaktnummer, kontaktmail;
+    namn förstås). En rad som saknar något är inte relevant nog och blir
+    kvar i den dolda listan i stället. Ren funktion, testad för sig."""
+    ut: list[dict] = []
+    for rad in rader:
+        falt = {
+            "foretagsnamn": str(rad.get("company_name") or "").strip(),
+            "orgnr": str(rad.get("orgnr") or "").strip(),
+            "kontaktperson": str(rad.get("contact_name") or "").strip(),
+            "kontaktnummer": str(rad.get("contact_phone") or "").strip(),
+            "kontaktmail": str(rad.get("contact_email") or "").strip(),
+        }
+        if not all(falt.values()):
+            continue
+        detalj = str(rad.get("signal_detalj") or "").strip()
+        falt["anteckningar"] = f"Ur beställningen ”{titel}”." + (f" {detalj}" if detalj else "")
+        ut.append(falt)
+    return ut
 
 
 def _kraev_ej_crm(lista: dict) -> None:
     """CRM-kundlistan (migration 098) finns för att UTESLUTA bolag, inte för
-    att bearbeta dem: den lyfts aldrig till Iris eller in i en annan lista."""
+    att bearbeta dem: den lyfts aldrig till Iris eller in i en annan lista.
+    Samma sak gäller en säljlistebeställning (105): raderna bor i säljlistan."""
     if lista.get("kalla") == "crm":
         raise HTTPException(status_code=409, detail=_FEL_CRM_LISTA)
+    if lista.get("kalla") == "saljlista":
+        raise HTTPException(status_code=409, detail=_FEL_SALJLISTA_LISTA)
 
 
 @router.post("/api/leads/listor/kombinera", status_code=201)
@@ -3299,8 +3328,22 @@ async def _run_list_job(app_state, payload: dict) -> None:
                 signal_detalj=traff.get("signal_detalj"),
             )
         await storage.set_lead_list_status(tenant_id, lista["id"], status="klar")
+        # Säljlistebeställningen (migration 105): raderna som bär ALLT
+        # säljlistan kräver läggs direkt där. Resten står kvar i den dolda
+        # listan — de är inte relevanta nog (Sebbes krav 2026-10-06).
+        saljlista_inlagda = None
+        if lista.get("kalla") == "saljlista":
+            saljlista_inlagda = await storage.saljlista_fyll_pa(
+                tenant_id, saljlista_kvalificerade(rader, titel=str(lista.get("titel") or ""))
+            )
+            logger.info(
+                "Säljlistebeställning %s: %d av %d rader kvalificerade in i säljlistan.",
+                lista["id"], saljlista_inlagda, len(rader),
+            )
         await app_state.jobs.complete(
-            job_id, {"list_id": lista["id"], "count": len(traffar), "status": "klar"}
+            job_id,
+            {"list_id": lista["id"], "count": len(traffar), "status": "klar",
+             **({"saljlista_inlagda": saljlista_inlagda} if saljlista_inlagda is not None else {})},
         )
         await storage.set_leads_job_status(tenant_id, job_id=job_id, status="completed", scope="lista")
     except Exception as fel:  # noqa: BLE001 — listan ska bli 'fel', inte tyst dö

@@ -50,6 +50,7 @@ const GAMLA: Record<string, Segment> = { bolag: "leads", tabell: "leads", pipeli
 
 const T = {
   korIris: { sv: "Kör Iris", en: "Run Iris" },
+  bestallLeads: { sv: "Beställ leads-lista", en: "Order a lead list" },
   hittaBolag: { sv: "Hitta bolag", en: "Find companies" },
   hittaBolagText: {
     sv: "Utan filter hittar Iris själv de bolag som passar er produkt bäst, utifrån er sparade målgrupp.",
@@ -141,9 +142,21 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
     <PageShell
       title={{ sv: "Leads", en: "Leads" }}
       action={
-        <button type="button" aria-expanded={korOppen} onClick={() => setKorOppen((v) => !v)} className={btnPrimary}>
-          {text(T.korIris)}
-        </button>
+        segmentVal === "listor" && harListaddon && !demo ? (
+          // Listor-fliken beställer körningar som landar i säljlistan
+          // (Sebbe 2026-10-06): knappen öppnar formuläret där nere.
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event("snipra:saljlista-bestall"))}
+            className={btnPrimary}
+          >
+            {text(T.bestallLeads)}
+          </button>
+        ) : (
+          <button type="button" aria-expanded={korOppen} onClick={() => setKorOppen((v) => !v)} className={btnPrimary}>
+            {text(T.korIris)}
+          </button>
+        )
       }
     >
       {korOppen ? (

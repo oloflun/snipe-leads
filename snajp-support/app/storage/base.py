@@ -808,6 +808,14 @@ class Storage(Protocol):
         """Nyaste först, med `item_count` per rad."""
         ...
 
+    async def saljlista_fyll_pa(self, tenant_id: str, rader: list[dict[str, Any]]) -> int:
+        """Skriver färdiga rader till arbetsytans säljlista (public.saljlista,
+        migration 103/105): nycklarna foretagsnamn, orgnr, kontaktperson,
+        kontaktnummer, kontaktmail, anteckningar. Dedupliklerar mot befintliga
+        rader på orgnr-siffror eller bolagsnamn och returnerar antalet
+        inlagda. Finns ingen arbetsyta för tenanten skrivs ingenting (0)."""
+        ...
+
     async def get_lead_list(self, tenant_id: str, list_id: str) -> dict[str, Any] | None: ...
 
     async def add_lead_list_item(

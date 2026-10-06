@@ -195,6 +195,8 @@ class MemoryStorage:
         self.leads_job_ledger: dict[str, dict[str, Any]] = {}
         # Leadslistor (tillägget 'leadlists', migration 060).
         self.lead_lists: dict[str, list[dict[str, Any]]] = {}
+        #: Säljlistan (public.saljlista) som motorn fyller på (migration 105).
+        self._saljlista: dict[str, list[dict[str, Any]]] = {}
         self.lead_list_items: list[dict[str, Any]] = []
         # Leads Suite (migration 086): platta listor, samma form som tabellerna.
         self.lead_anteckningar: list[dict[str, Any]] = []
@@ -1624,7 +1626,7 @@ class MemoryStorage:
     _LEAD_LIST_STATUSAR = ("bestalld", "byggs", "klar", "fel")
     _LEAD_ITEM_TYPER = ("bolag", "privatperson")
 
-    _LEAD_LIST_KALLOR = ("sok", "kombinerad", "import", "crm")
+    _LEAD_LIST_KALLOR = ("sok", "kombinerad", "import", "crm", "saljlista")
     _KONTAKTFILTER = ("alla", "telefon", "mejl", "bada")
 
     async def create_lead_list(
@@ -1662,6 +1664,40 @@ class MemoryStorage:
         }
         self.lead_lists.setdefault(tenant_id, []).append(rad)
         return dict(rad)
+
+
+    async def saljlista_fyll_pa(self, tenant_id: str, rader: list[dict[str, Any]]) -> int:
+        """Minnesformen av 105:ans SQL-funktion: samma dedupnycklar
+        (orgnr-siffror eller gement bolagsnamn), samma fält."""
+        lista = self._saljlista.setdefault(tenant_id, [])
+
+        def _siffror(v: Any) -> str:
+            return "".join(c for c in str(v or "") if c.isdigit())
+
+        n = 0
+        for rad in rader:
+            namn = str(rad.get("foretagsnamn") or "").strip()
+            if not namn:
+                continue
+            orgnr = _siffror(rad.get("orgnr"))
+            if any(
+                (orgnr and _siffror(r.get("orgnr")) == orgnr)
+                or r.get("foretagsnamn", "").casefold() == namn.casefold()
+                for r in lista
+            ):
+                continue
+            lista.append(
+                {
+                    "foretagsnamn": namn,
+                    "orgnr": str(rad.get("orgnr") or ""),
+                    "kontaktperson": str(rad.get("kontaktperson") or ""),
+                    "kontaktnummer": str(rad.get("kontaktnummer") or ""),
+                    "kontaktmail": str(rad.get("kontaktmail") or ""),
+                    "anteckningar": str(rad.get("anteckningar") or ""),
+                }
+            )
+            n += 1
+        return n
 
     async def set_lead_list_status(
         self, tenant_id: str, list_id: str, *, status: str, felorsak: str | None = None

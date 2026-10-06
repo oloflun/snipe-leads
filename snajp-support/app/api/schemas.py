@@ -400,6 +400,10 @@ class LeadsListaRequest(BaseModel):
     antal: int = Field(default=25, ge=1, le=200)
     is_test: bool = False
     overrides: LeadsRunOverrides | None = None
+    #: 'saljlista' (migration 105): körningens färdiga rader med full
+    #: kontaktinformation läggs direkt i arbetsytans säljlista, och listan
+    #: själv visas aldrig under "Dina listor". 'lista' är den vanliga listan.
+    mal: Literal["lista", "saljlista"] = "lista"
 
 
 class KombineraListorRequest(BaseModel):

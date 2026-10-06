@@ -2268,6 +2268,19 @@ class PostgresStorage:
             )
         return [_avkoda_jsonb(_row(r), "icp") for r in records]
 
+    async def saljlista_fyll_pa(self, tenant_id: str, rader: list[dict[str, Any]]) -> int:
+        """Via 105:ans security definer-funktion: säljlistan ägs av webben
+        (RLS för snajp_web) och funktionen är motorns enda väg in."""
+        if not rader:
+            return 0
+        async with self._scoped(tenant_id) as conn:
+            varde = await conn.fetchval(
+                "select public.saljlista_fyll_pa($1::uuid, $2::jsonb)",
+                tenant_id,
+                json.dumps(rader, ensure_ascii=False),
+            )
+        return int(varde or 0)
+
     async def get_lead_list(self, tenant_id: str, list_id: str) -> dict[str, Any] | None:
         async with self._scoped(tenant_id) as conn:
             record = await conn.fetchrow(
