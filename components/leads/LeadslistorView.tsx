@@ -8,6 +8,7 @@ import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
 import { CrmKundlista } from "@/components/leads/CrmKundlista";
 import { ImportCsv } from "@/components/leads/ImportCsv";
+import { Saljlista } from "@/components/leads/Saljlista";
 import { btnPrimary, btnSecondary, EmptyState, SkeletonRows, chip, chipAktiv, chipInaktiv, chiplista } from "@/components/ui";
 import { offertForUtkast } from "@/lib/leads/offert";
 import type { EmailStudioData } from "@/lib/data/emails";
@@ -400,8 +401,11 @@ export function LeadslistorView({
   demo = false,
   crmOppen = false
 }: Readonly<{ demo?: boolean; crmOppen?: boolean }> = {}) {
-  const { isDemo, vy } = useDashboard();
+  const { isDemo, vy, isPlatformAdmin, impersonation } = useDashboard();
   const { locale, text } = useLocale();
+  // Snajps egen säljlista (migration 100): bara plattformsadmin i sin egen
+  // adminvy — aldrig i demovyn eller när admin tittar som en kund.
+  const visaSaljlista = isPlatformAdmin && vy === "admin" && !impersonation && !demo && !isDemo;
 
   const [titel, setTitel] = useState("");
   const [antal, setAntal] = useState("25");
@@ -556,6 +560,9 @@ export function LeadslistorView({
 
   return (
     <div className="grid gap-12">
+      {/* ------------------------------- SNAJPS SÄLJLISTA (100) */}
+      {visaSaljlista ? <Saljlista /> : null}
+
       {/* ------------------------------------- CRM-KUNDLISTAN (098) */}
       <CrmKundlista
         demo={demo || isDemo || vy === "demo"}
