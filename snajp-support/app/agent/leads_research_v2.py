@@ -556,10 +556,25 @@ async def _research_v2(
     # Utkastets råvara: citat som ORDAGRANT står på bolagets egna sidor.
     # Modellens citat utan träff i materialet följer inte med; de hade varit
     # en observation om bolaget som ingen kan peka på.
-    citat = [
-        c["citat"]
-        for c in verifierade_belagg([{"citat": str(e)} for e in fynd.get("evidence") or []], material)
+    # Bedömningens belägg räknas också (2026-10-07): ett leverbart lead har
+    # alltid ett ordagrant citat bakom sitt produktmatchnings-ja, men när
+    # modellen lämnade `evidence` tom stoppade underlagsgolvet varje utkast
+    # (verifieringskörningen: 3 leads, 0 utkast). Samma ordagrannhetskontroll.
+    bedomningscitat = [
+        b
+        for rad in fynd.get("bedomningar") or []
+        if isinstance(rad, dict)
+        for b in rad.get("belagg") or []
+        if isinstance(b, dict)
     ]
+    citat = list(
+        dict.fromkeys(
+            c["citat"]
+            for c in verifierade_belagg(
+                [{"citat": str(e)} for e in fynd.get("evidence") or []] + bedomningscitat, material
+            )
+        )
+    )
     vald_produkt = next(
         (p for p in produkter if p["namn"].casefold() == str(fynd.get("produkt") or "").strip().casefold()),
         None,

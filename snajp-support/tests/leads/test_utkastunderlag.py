@@ -139,6 +139,31 @@ async def test_researchen_valjer_en_produkt_och_behaller_bara_citat_som_star_pa_
     assert "PRODUKTVAL" in llm.user_messages[0]
 
 
+async def test_bedomningens_belagg_racker_som_citat_nar_evidence_ar_tom():
+    """Verifieringskörningen 2026-10-07: tre leverbara leads, noll utkast,
+    eftersom modellen lämnade evidence tom fast produktmatchningen stod på
+    ett ordagrant citat. Bedömningens belägg räknas, med samma kontroll."""
+    storage = MemoryStorage()
+    prospect_id = await _prepare_prospect(storage)
+    llm = _FakeLLM(overrides={"sa:account-research": {
+        "qualified": True,
+        "evidence": [],
+        "bedomningar": [
+            {"kriterie_id": "kp", "utslag": "ja", "resonemang": "Returer.",
+             "belagg": [{"url": "u", "citat": "Fri retur inom 30 dagar."}, {"url": "u", "citat": "Påhittat citat."}]},
+        ],
+    }})
+    with (
+        patch("app.agent.step_runner.get_llm_client", return_value=llm),
+        patch("app.agent.leads_agent._scrape_registered_source_impl", new=_fake_scrape()),
+    ):
+        result = await run_research_step_v2(
+            storage, TENANT, prospect_id=prospect_id, tenant_name="Snajp",
+            context_pack="## Kontextpaket\nICP: e-handel.", brief="", is_test=True, profil={"version": "t"},
+        )
+    assert result["citat"] == ["Fri retur inom 30 dagar."]
+
+
 def test_utkastet_far_mottagare_produkt_och_citat_forst():
     import json
 
