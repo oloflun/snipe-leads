@@ -703,7 +703,7 @@ function SaljlistaYta({ api, demo }: Readonly<{ api: SaljlistaApi; demo: boolean
                 className={cn(faltTatt, "w-full pl-8")}
               />
             </label>
-            <label className="w-full sm:w-auto">
+            <label className="relative w-full sm:w-auto">
               <span className="sr-only">{text(T.sortera)}</span>
               <select
                 value={sortering}

@@ -354,7 +354,11 @@ export function LeadsOversikt({
     antal: riktiga.filter((p) => kontaktvagAv(p) === k.id).length
   }));
 
-  const kolumn = cn(kort, "min-w-0", bred && "thin-scrollbar max-h-[56rem] overflow-y-auto");
+  // relative: en rullbar kolumn utan position släpper sina absoluta barn
+  // (sr-only-etiketter) till <body>, som då placerar dem på deras plats LÅNGT
+  // ner i det rullade innehållet. Dokumentet växte ~600 px under kolumnerna,
+  // och vänsterraden tog slut mitt på sidan (Sebbe 2026-10-07, /admin/leads).
+  const kolumn = cn(kort, "relative min-w-0", bred && "thin-scrollbar max-h-[56rem] overflow-y-auto");
 
   return (
     // flex-kolumn, inte grid: ett grid-items min-width:auto lät tabellernas
