@@ -747,6 +747,15 @@ async def run_outreach_draft_v2(
 
     subject = strip_markdown(humanized.get("final_subject") or draft.get("subject") or "").strip()
     body = sign_off(strip_markdown(humanized.get("final_body") or draft.get("body") or ""), tenant_name)
+    # Hälsningen avgörs i kod (leads/tilltal.py): mätningen 2026-10-06 fann ett
+    # påhittat förnamn och mallens platshållare i hälsningen.
+    from ..leads.tilltal import ratta_tilltal
+
+    try:
+        mottagare = ((json.loads(research_summary or "{}") or {}).get("mottagare") or {}).get("namn")
+    except (TypeError, ValueError, AttributeError):
+        mottagare = None
+    body = ratta_tilltal(body, mottagare)
 
     # --- Kod: sidoeffekter — identisk grindlogik med V1 -------------------
     context = OutreachContext(
@@ -785,6 +794,8 @@ async def run_outreach_draft_v2(
             ),
         )
         escalated_steps = [s.skill for s in trace.steps if s.escalated]
+        # Reparationen kan ha skrivit om hälsningen; samma regel igen.
+        body = ratta_tilltal(body, mottagare)
 
         if not grounding["ok"]:
             await _request_human_handoff_impl(

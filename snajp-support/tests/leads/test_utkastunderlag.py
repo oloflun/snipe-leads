@@ -137,3 +137,17 @@ def test_utkastet_far_mottagare_produkt_och_citat_forst():
         "vald_produkt": _PRODUKTER[1],
     })))
     assert list(vy)[:4] == ["mottagare", "vald_produkt", "citat_ur_bolagets_sidor", "lagesbeskrivning"]
+
+
+def test_platshallare_och_pahittat_tilltal_nar_aldrig_kon():
+    """Mätningen 2026-10-06: "Hej Mikael," (påhittat) och "Hej [VD:ns
+    förnamn]," (mallfält) i köade utkast."""
+    from app.leads.grounding_gate import build_permitted_facts, check_grounding
+    from app.leads.tilltal import ratta_tilltal
+
+    fakta = build_permitted_facts(context_pack="Snajp", research_evidence=(), offer_summary="", brief="",
+                                  tenant_name="Snajp", company_name="Smålands Stålhallar AB")
+    dom = check_grounding("Hej {förnamn},\nVi ses [datum].", fakta)
+    assert not dom.ok and {c.kind for c in dom.unsupported} == {"placeholder"}
+    assert ratta_tilltal("Hej Mikael,\nJag såg", "Jonas Ek").startswith("Hej Jonas,")
+    assert ratta_tilltal("Hej [VD:ns förnamn],\nJag såg", None).startswith("Hej,")

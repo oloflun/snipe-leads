@@ -136,13 +136,17 @@ _UNNAMED_CASE = re.compile(
     r"|(?:andra|liknande)\s+(?:företag|bolag|byråer|kunder)\s+(?:har|som\s+vi)"
     r")",
 )
+# Oifyllda mallfält: "[VD:ns förnamn]", "{företagsnamn}". Grundmallen i Iris
+# grundprompt anger delarna med sådana fält, och mätningen 2026-10-06 fann
+# dem ordagrant i tio av femton köade utkast (scripts/mat_skillvarianter.py).
+_PLATSHALLARE = re.compile(r"\[[^\]\n]{2,60}\]|\{[^}\n]{2,60}\}")
 # Versala ordsekvenser — används BARA för att bygga den tillåtna mängden.
 _ENTITY_RE = re.compile(r"\b[A-ZÅÄÖ][\wÅÄÖåäö&-]*(?:\s+[A-ZÅÄÖ][\wÅÄÖåäö&-]*)?")
 
 
 @dataclass(frozen=True)
 class Claim:
-    kind: str  # "number" | "percent" | "amount" | "named_customer" | "unnamed_case" | "superlative"
+    kind: str  # "number" | "percent" | "amount" | "named_customer" | "unnamed_case" | "superlative" | "placeholder"
     raw: str
     normalized: str
     span: tuple[int, int]
@@ -330,6 +334,11 @@ def check_grounding(text: str, facts: PermittedFacts) -> GroundingVerdict:
                     span=match.span(),
                 )
             )
+
+    for match in _PLATSHALLARE.finditer(masked):
+        unsupported.append(
+            Claim(kind="placeholder", raw=match.group(0), normalized=match.group(0).lower(), span=match.span())
+        )
 
     # ponytail: en påhittad kund utanför de uppräknade ramarna ("Ett av Sveriges
     # största modeföretag valde oss") passerar. Uppräknade ramar ÄR taket —
