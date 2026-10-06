@@ -157,6 +157,8 @@ export type Vecka = {
   utlagg?: number;
   moms?: number;
   kvitton?: number;
+  /** Kvittohanteraren: fakturerat (kundfakturor) i hela kronor. */
+  intakter?: number;
 };
 
 type Serie = { nyckel: keyof Vecka; etikett: Localized; ton: "chart-ochre" | "chart-blue" };
@@ -349,7 +351,18 @@ export type Andel = { id: string; etikett: Localized; antal: number; /** CSS-fä
  * så att ingen del bärs av färg ensam. Färgerna går som style, inte attribut:
  * ett SVG-attribut löser inte upp var(--x).
  */
-export function Munkdiagram({ delar, etikett, mitt }: Readonly<{ delar: Andel[]; etikett: Localized; mitt: Localized }>) {
+export function Munkdiagram({
+  delar,
+  etikett,
+  mitt,
+  mittVarde
+}: Readonly<{
+  delar: Andel[];
+  etikett: Localized;
+  mitt: Localized;
+  /** Talet i mitten när det inte är delarnas summa (t.ex. in minus ut). */
+  mittVarde?: string;
+}>) {
   const { locale, text } = useLocale();
   const synliga = delar.filter((d) => d.antal > 0);
   const total = synliga.reduce((s, d) => s + d.antal, 0);
@@ -385,7 +398,7 @@ export function Munkdiagram({ delar, etikett, mitt }: Readonly<{ delar: Andel[];
         </svg>
         <span className="absolute inset-0 grid place-items-center text-center">
           <span>
-            <span className="num block text-[1.375rem] font-semibold leading-none tabular-nums text-ink">{tal(total, locale)}</span>
+            <span className="num block text-[1.375rem] font-semibold leading-none tabular-nums text-ink">{mittVarde ?? tal(total, locale)}</span>
             <span className="mt-1 block text-[0.6875rem] text-ink-subtle">{text(mitt)}</span>
           </span>
         </span>

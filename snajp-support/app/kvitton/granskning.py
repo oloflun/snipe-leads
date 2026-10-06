@@ -43,7 +43,12 @@ DOKUMENTTYPER = (
     "kreditfaktura",
     "kontoutdrag_eller_specifikation",
     "okänd",
+    # Sätts av KODEN, aldrig av modellen: grundprompten känner bara
+    # leverantörsdokument. Se `markera_som_intakt`.
+    "kundfaktura",
 )
+#: Underlagets riktning, samma värden som bk_underlag.riktning.
+RIKTNINGAR = ("kostnad", "intakt")
 KLAR = "KLAR_FÖR_GRANSKNING"
 BEHOVER = "BEHÖVER_GRANSKNING"
 PRIORITERAD = "PRIORITERAD_GRANSKNING"
@@ -331,6 +336,7 @@ def _normalisera_underlag(rat: Any) -> dict[str, Any]:
     dubblett = _hamta(rat, "möjlig_dubblett_av")
     return {
         "dokumenttyp": typ,
+        "riktning": "kostnad",
         "status": None,
         "fält": falt,
         "moms_per_sats": moms_per_sats,
@@ -636,7 +642,7 @@ def _verifiera_forfallo(u: dict, idag: date, dagar_varning: int) -> None:
         return
     u["flaggor"].discard("förfallen")
     u["flaggor"].discard("förfaller_snart")
-    if f["betalstatus"]["värde"] == "betald":
+    if f["betalstatus"]["värde"] == "betald" or u.get("riktning") == "intakt":
         return
     dagar = (date.fromisoformat(forfaller) - idag).days
     if dagar < 0:
@@ -687,7 +693,59 @@ def _verifiera_kredit(u: dict) -> None:
             rad["belopp"] = -rad["belopp"]
 
 
+def _samma_orgnr(a: str | None, b: str | None) -> bool:
+    return bool(a) and bool(b) and _kompakt(str(a))[-10:] == _kompakt(str(b))[-10:]
+
+
+def markera_som_intakt(u: dict) -> None:
+    """Underlaget är företagets EGEN faktura till en kund: en intäkt.
+
+    Leverantörsfältet är då företaget självt och köparfältet kunden, så
+    flaggorna som förutsätter att företaget är köpare släpps: `fel_mottagare`
+    (köparen är kunden, inte företaget), förfallodagarna (det är kunden som
+    ska betala) och bedrägerisignalen på betalningsuppgifterna (det är
+    företagets egna). En intäkt konteras på momssatsen, så kategorin töms.
+    """
+    u["riktning"] = "intakt"
+    if u["dokumenttyp"] in ("kvitto", "leverantörsfaktura", "okänd"):
+        u["dokumenttyp"] = "kundfaktura"
+    u["kategori"] = None
+    for flagga in ("fel_mottagare", "förfaller_snart", "förfallen", "möjligt_privat_köp", "osäker_dokumenttyp"):
+        u["flaggor"].discard(flagga)
+
+
+def _verifiera_riktning(u: dict, foretag_orgnr: str, foretag_namn: str, noter: list[str]) -> None:
+    """Kundfaktura eller kostnad, avgjort i kod (Sebbe 2026-10-07).
+
+    Grundprompten är kundlevererad och ordagrann och känner bara
+    leverantörsdokument. En faktura där SÄLJAREN är företaget självt är
+    företagets egen faktura till en kund — en intäkt. Orgnumret avgör; utan
+    orgnummer räcker namnet, men då med `osäker_klassning` så att en
+    människa bekräftar innan intäkten räknas.
+    """
+    u.setdefault("riktning", "kostnad")
+    f = u["fält"]
+    if _samma_orgnr(f["leverantör_orgnummer"]["värde"], foretag_orgnr):
+        markera_som_intakt(u)
+        return
+    if u["dokumenttyp"] == "kundfaktura":
+        # Modellen sa kundfaktura utan att orgnumret bär det: en människa avgör.
+        markera_som_intakt(u)
+        u["flaggor"].add("osäker_klassning")
+        return
+    namn = _normaliserat_namn(foretag_namn)
+    if namn and not f["leverantör_orgnummer"]["värde"] and _normaliserat_namn(f["leverantör_namn"]["värde"]) == namn:
+        markera_som_intakt(u)
+        u["flaggor"].add("osäker_klassning")
+        noter.append(
+            "Säljaren på fakturan har företagets namn men inget organisationsnummer att jämföra; "
+            "bekräfta att det är en kundfaktura innan intäkten räknas."
+        )
+
+
 def _verifiera_mottagare(u: dict, foretag_orgnr: str) -> None:
+    if u.get("riktning") == "intakt":
+        return
     kopare = u["fält"]["köpare_orgnummer"]["värde"]
     if not kopare or not foretag_orgnr:
         return
@@ -752,6 +810,8 @@ def dubblettnot(original: dict[str, Any]) -> str:
 
 def _verifiera_betalningsuppgifter(u: dict, tidigare: list[dict], noter: list[str]) -> None:
     """8.3: betalningsuppgifter som skiljer sig från samma leverantörs tidigare."""
+    if u.get("riktning") == "intakt":
+        return
     for namn in BETALNINGSFALT:
         nu = u["fält"][namn]["värde"]
         if not nu:
@@ -796,6 +856,7 @@ def verifiera(
     idag: date,
     dagar_varning: int,
     foretag_orgnr: str = "",
+    foretag_namn: str = "",
     tidigare: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Kör hela kontrollen på ett normaliserat resultat (muterar och returnerar det).
@@ -808,6 +869,7 @@ def verifiera(
     instruktion = bool(_INSTRUKTION.search(kalltext or ""))
     for u in resultat["underlag"]:
         _verifiera_text(u, kalltext, noter)
+        _verifiera_riktning(u, foretag_orgnr, foretag_namn, noter)
         _verifiera_kredit(u)
         _verifiera_nummer(u, noter)
         _kontrollrakna(u, noter)
@@ -819,6 +881,8 @@ def verifiera(
         _verifiera_betalningsuppgifter(u, tidigare, noter)
         if instruktion:
             u["flaggor"].add("instruktion_i_innehåll")
+        if u["riktning"] == "intakt":
+            u["kategori"] = None
         if u["kategori"] is not None:
             from ..bookkeeping.kontoplan import KOSTNADSKATEGORIER
 

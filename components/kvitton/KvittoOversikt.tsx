@@ -17,11 +17,15 @@ import {
   Flaggrad,
   Granskningsmarke,
   FLAGGETIKETT,
+  KUNDFAKTURA,
   MANUELL_HAMTNING,
   PRIORITERAD,
+  arIntakt,
+  bytRiktning,
   godkannKvitto,
   granskningsordning,
   kronor,
+  radbelopp,
   type Kvitto
 } from "@/components/kvitton/KvittoYta";
 import { btnLiten, btnPrimary, btnSecondary, etikett, meta } from "@/components/ui";
@@ -34,25 +38,27 @@ import { cn } from "@/lib/utils";
  * Kvitton › Översikt (Sebbes beställning 2026-10-07): Leads-översiktens
  * layout (components/leads/LeadsOversikt.tsx) anpassad för Kvittohanteraren.
  *
- *   nyckeltal (utlägg, att granska, ingående moms, inlästa kvitton)
- *   utlägg och moms per vecka · munkdiagram för kategori och granskning
- *   kvitton att granska (expanderbar, godkänn direkt) · moms per sats
- *   senaste kvittona | leverantörer och obetalda fakturor   (split view)
+ *   nyckeltal (fakturerat, utlägg, momsnetto, att granska)
+ *   in och ut per vecka · munkdiagram för in/ut, kategori och granskning
+ *   underlag att granska (expanderbar, godkänn direkt) · moms per sats
+ *   senaste underlagen | kunder, leverantörer och obetalda fakturor
  *   avläsningsrutan för Snajp-admin (flaggor, källor, saknade fält)
  *
  * ## Allt räknas ur kvittolistan
  *
  * Ett anrop: `/kvitton` för de senaste tolv veckorna. Veckoserien, perioderna
  * och fördelningarna räknas här i ÖREN (heltal), aldrig i flyttal, så att
- * summorna blir desamma som backendens Decimal-summor. Bara kvitton med
+ * summorna blir desamma som backendens Decimal-summor. Bara underlag med
  * status "klar" bidrar med belopp — samma regel som `sammanstall` i
- * snajp-support/app/kvitton/sammanfattning.py: ett flaggat kvitto står i
+ * snajp-support/app/kvitton/sammanfattning.py: ett flaggat underlag står i
  * granskningsräkningen i stället för att bidra med ett osäkert tal.
  *
- * ## Inga intäkter
+ * ## Intäkter (sedan 2026-10-07)
  *
- * Kvittohanteraren tar bara emot utlägg (`bara_utlagg` i backenden filtrerar
- * bort kundfakturor), så översikten visar vart pengarna går, inte resultatet.
+ * Kundfakturor (`riktning: "intakt"`, företagets egna fakturor till kunder)
+ * räknas för sig och aldrig som utlägg. Deras moms är UTGÅENDE moms; momsnetto
+ * är utgående minus ingående. "Över" är in minus ut exklusive moms — ett mått
+ * på de inlästa underlagen, inte ett bokslut.
  */
 
 const BAS = "/api/snajp-support/kvitton";
@@ -60,44 +66,59 @@ const PERIOD = 4;
 const VECKOR = 12;
 
 const T = {
+  fakturerat: { sv: "Fakturerat", en: "Invoiced" },
   utlagg: { sv: "Utlägg", en: "Expenses" },
+  momsnetto: { sv: "Moms, netto", en: "VAT, net" },
+  attBetala: { sv: "att betala in, senaste 4 veckorna", en: "to pay, last 4 weeks" },
+  attFa: { sv: "att få tillbaka, senaste 4 veckorna", en: "to reclaim, last 4 weeks" },
   attGranska: { sv: "Att granska", en: "To review" },
   vantarPaDig: { sv: "väntar på ditt ja", en: "waiting for your yes" },
   prioriterad1: { sv: "prioriterad", en: "priority" },
   prioriterade: { sv: "prioriterade", en: "priority" },
-  moms: { sv: "Ingående moms", en: "Input VAT" },
-  kvitton: { sv: "Inlästa kvitton", en: "Receipts read" },
-  franMejl: { sv: "från mejlen", en: "from email" },
-  uppladdade: { sv: "uppladdade", en: "uploaded" },
-  aktivitet: { sv: "Utlägg per vecka", en: "Expenses per week" },
-  ingenAktivitet: { sv: "Inga kvitton att visa än.", en: "No receipts to show yet." },
-  snitt: { sv: "Snittkvitto", en: "Average receipt" },
+  kundfakturor: { sv: "kundfakturor", en: "customer invoices" },
+  kvitton: { sv: "kvitton", en: "receipts" },
+  aktivitet: { sv: "In och ut per vecka", en: "In and out per week" },
+  ingenAktivitet: { sv: "Inga underlag att visa än.", en: "No documents to show yet." },
+  over: { sv: "Över, exkl. moms", en: "Surplus, excl. VAT" },
+  overText: { sv: "fakturerat minus utlägg", en: "invoiced minus expenses" },
   storsta: { sv: "Största utlägget", en: "Largest expense" },
   utanHjalp: { sv: "Lästa utan anmärkning", en: "Read without remarks" },
   fordelning: { sv: "Fördelning", en: "Breakdown" },
   fordelningText: { sv: "Senaste fyra veckorna.", en: "Last four weeks." },
+  inOchUt: { sv: "Pengar in och ut", en: "Money in and out" },
+  overMitt: { sv: "kr över", en: "SEK surplus" },
+  underMitt: { sv: "kr under", en: "SEK short" },
   perKategori: { sv: "Utlägg per kategori", en: "Expenses by category" },
   granskning: { sv: "Granskning", en: "Review" },
   krMitt: { sv: "kr", en: "SEK" },
-  kvittonMitt: { sv: "kvitton", en: "receipts" },
-  granskaRubrik: { sv: "Kvitton att granska", en: "Receipts to review" },
-  ingaAttGranska: { sv: "Inget väntar på dig. Alla kvitton är avlästa.", en: "Nothing is waiting for you. Every receipt has been read." },
+  underlagMitt: { sv: "underlag", en: "documents" },
+  granskaRubrik: { sv: "Att granska", en: "To review" },
+  ingaAttGranska: { sv: "Inget väntar på dig. Allt är avläst.", en: "Nothing is waiting for you. Everything has been read." },
   visaAlla: { sv: "Visa alla", en: "Show all" },
   visaFarre: { sv: "Visa färre", en: "Show fewer" },
   godkann: { sv: "Godkänn", en: "Approve" },
-  momsRubrik: { sv: "Ingående moms per sats", en: "Input VAT by rate" },
+  arKundfaktura: { sv: "Är en kundfaktura", en: "Is a customer invoice" },
+  arKvitto: { sv: "Är ett kvitto", en: "Is a receipt" },
+  momsRubrik: { sv: "Moms per sats", en: "VAT by rate" },
   momsText: {
-    sv: "Underlaget till momsdeklarationen, senaste fyra veckorna. Stäm av med din redovisningskonsult.",
-    en: "The basis for your VAT return, last four weeks. Check it with your accountant."
+    sv: "Utgående moms på fakturorna och ingående på kvittona, senaste fyra veckorna. Underlag till momsdeklarationen, stäm av med din redovisningskonsult.",
+    en: "Output VAT on invoices and input VAT on receipts, last four weeks. A basis for your VAT return; check it with your accountant."
   },
-  brutto: { sv: "brutto", en: "gross" },
-  summa: { sv: "Summa", en: "Total" },
-  senaste: { sv: "Senaste kvittona", en: "Latest receipts" },
-  senasteText: { sv: "Med status i samma färger som kvittotabellen.", en: "With status in the same colours as the receipt table." },
-  allaKvitton: { sv: "Alla kvitton", en: "All receipts" },
+  ut: { sv: "ut", en: "out" },
+  in: { sv: "in", en: "in" },
+  utgaende: { sv: "Utgående moms", en: "Output VAT" },
+  ingaende: { sv: "Ingående moms", en: "Input VAT" },
+  netto: { sv: "Att betala in", en: "To pay" },
+  nettoTillbaka: { sv: "Att få tillbaka", en: "To reclaim" },
+  senaste: { sv: "Senaste underlagen", en: "Latest documents" },
+  senasteText: { sv: "Kvitton och kundfakturor, med status i samma färger som tabellen.", en: "Receipts and customer invoices, with status in the same colours as the table." },
+  allaKvitton: { sv: "Alla underlag", en: "All documents" },
+  motparter: { sv: "Kunder och leverantörer", en: "Customers and suppliers" },
+  motparterText: { sv: "Var pengarna kommit ifrån och gått till de senaste tolv veckorna.", en: "Where the money came from and went over the last twelve weeks." },
+  kunder: { sv: "Kunder", en: "Customers" },
   leverantorer: { sv: "Leverantörer", en: "Suppliers" },
-  leverantorerText: { sv: "Vart pengarna gått de senaste tolv veckorna.", en: "Where the money went over the last twelve weeks." },
-  obetalda: { sv: "Obetalda fakturor", en: "Unpaid invoices" },
+  kundfordringar: { sv: "Obetalda kundfakturor", en: "Unpaid customer invoices" },
+  obetalda: { sv: "Obetalda leverantörsfakturor", en: "Unpaid supplier invoices" },
   forfaller: { sv: "förfaller", en: "due" },
   iKorthet: { sv: "I korthet", en: "In short" },
   kopplad: { sv: "Kopplad inkorg:", en: "Connected mailbox:" },
@@ -105,13 +126,13 @@ const T = {
   skanna: { sv: "Skanna och ladda upp", en: "Scan and upload" },
   avlasning: { sv: "Avläsning", en: "Reading" },
   avlasningText: {
-    sv: "Syns bara för Snajp-admin. Hur ofta agenten läser kvittona utan hjälp, och vad som stoppar den.",
-    en: "Visible to Snajp admins only. How often the agent reads receipts unaided, and what stops it."
+    sv: "Syns bara för Snajp-admin. Hur ofta agenten läser underlagen utan hjälp, och vad som stoppar den.",
+    en: "Visible to Snajp admins only. How often the agent reads documents unaided, and what stops it."
   },
   utanAnmarkning: { sv: "utan anmärkning, tolv veckor", en: "without remarks, twelve weeks" },
   vanligasteFlaggor: { sv: "Vanligaste flaggorna", en: "Most common flags" },
   ingaFlaggor: { sv: "Inga flaggor de senaste tolv veckorna.", en: "No flags in the last twelve weeks." },
-  utanKategori: { sv: "Utan kategori", en: "No category" },
+  utanKategori: { sv: "Kvitton utan kategori", en: "Receipts, no category" },
   utanMoms: { sv: "Utan momssats", en: "No VAT rate" },
   utanDatum: { sv: "Utan datum", en: "No date" },
   kalla: { sv: "Mejl / uppladdat", en: "Email / uploaded" },
@@ -145,6 +166,7 @@ const OKATEGORISERAT: Localized = { sv: "Okategoriserat", en: "Uncategorised" };
 const OVRIGA: Localized = { sv: "Övriga kategorier", en: "Other categories" };
 
 function kategoriAv(rad: Kvitto): Localized {
+  if (arIntakt(rad)) return KUNDFAKTURA;
   if (!rad.kategori) return OKATEGORISERAT;
   return KATEGORI[rad.kategori] ?? { sv: rad.kategorietikett || rad.kategori, en: rad.kategorietikett || rad.kategori };
 }
@@ -192,6 +214,10 @@ function momsOre(rad: Kvitto): number {
   return Math.round((b * procent) / (100 + procent));
 }
 
+function bruttoOre(rad: Kvitto): number {
+  return ore(rad.brutto) ?? 0;
+}
+
 function oreTillStrang(n: number): string {
   const tecken = n < 0 ? "-" : "";
   const a = Math.abs(n);
@@ -199,7 +225,8 @@ function oreTillStrang(n: number): string {
 }
 
 function helaKronor(n: number, locale: "sv" | "en"): string {
-  return `${new Intl.NumberFormat(locale === "en" ? "en-GB" : "sv-SE", { maximumFractionDigits: 0 }).format(Math.round(n / 100))} kr`;
+  const avrundat = Math.round(n / 100);
+  return `${avrundat < 0 ? "−" : ""}${new Intl.NumberFormat(locale === "en" ? "en-GB" : "sv-SE", { maximumFractionDigits: 0 }).format(Math.abs(avrundat))} kr`;
 }
 
 function procent(n: number, locale: "sv" | "en"): string {
@@ -286,61 +313,81 @@ function useKvittodata(demo: boolean) {
   return { idag, kvitton, setKvitton, konto, fel, ladda };
 }
 
+/** Summor för en uppsättning klara underlag, i ören. */
+type Summor = { in: number; ut: number; utgaende: number; ingaende: number };
+
+function summor(rader: Kvitto[]): Summor {
+  const s: Summor = { in: 0, ut: 0, utgaende: 0, ingaende: 0 };
+  for (const k of rader) {
+    if (k.status !== "klar") continue;
+    if (arIntakt(k)) {
+      s.in += bruttoOre(k);
+      s.utgaende += momsOre(k);
+    } else {
+      s.ut += bruttoOre(k);
+      s.ingaende += momsOre(k);
+    }
+  }
+  return s;
+}
+
 type Statistik = {
   veckor: Vecka[];
+  /** Momsnetto per vecka i hela kronor (utgående − ingående), för sparklinen. */
+  momsnetto: number[];
   klara: Kvitto[];
   granska: Kvitto[];
   period: Kvitto[];
-  forra: Kvitto[];
-  utlaggNu: number;
-  utlaggForra: number;
-  momsNu: number;
-  momsForra: number;
+  nu: Summor;
+  forra: Summor;
+  antalNu: { kvitton: number; fakturor: number };
 };
 
 function berakna(kvitton: Kvitto[], idag: string): Statistik {
   const man = mandagar(idag);
   const index = new Map(man.map((m, i) => [m, i]));
-  const veckor: Vecka[] = man.map((m) => ({ week: `v${isoVecka(m)}`, utlagg: 0, moms: 0, kvitton: 0 }));
-  const utlaggOre = Array<number>(VECKOR).fill(0);
-  const momsOreV = Array<number>(VECKOR).fill(0);
-  const klara = kvitton.filter((k) => k.status === "klar");
-  const granska = kvitton.filter((k) => k.status !== "klar");
+  const per = man.map(() => [] as Kvitto[]);
   const veckaAv = (k: Kvitto) => (k.datum ? index.get(mandagFor(k.datum)) : undefined);
-
   for (const k of kvitton) {
     const i = veckaAv(k);
-    if (i === undefined) continue;
-    veckor[i].kvitton = (veckor[i].kvitton ?? 0) + 1;
-    if (k.status !== "klar") continue;
-    utlaggOre[i] += ore(k.brutto) ?? 0;
-    momsOreV[i] += momsOre(k);
+    if (i !== undefined) per[i].push(k);
   }
-  veckor.forEach((v, i) => {
-    v.utlagg = Math.round(utlaggOre[i] / 100);
-    v.moms = Math.round(momsOreV[i] / 100);
+  const veckor: Vecka[] = man.map((m, i) => {
+    const s = summor(per[i]);
+    return {
+      week: `v${isoVecka(m)}`,
+      utlagg: Math.round(s.ut / 100),
+      intakter: Math.round(s.in / 100),
+      moms: Math.round(s.ingaende / 100),
+      kvitton: per[i].filter((k) => !arIntakt(k)).length
+    };
   });
-
+  const momsnetto = man.map((_, i) => {
+    const s = summor(per[i]);
+    return Math.round((s.utgaende - s.ingaende) / 100);
+  });
   const start = VECKOR - PERIOD;
-  const iPerioden = (k: Kvitto, fran: number, till: number) => {
-    const i = veckaAv(k);
-    return i !== undefined && i >= fran && i < till;
-  };
-  const period = kvitton.filter((k) => iPerioden(k, start, VECKOR));
-  const forra = kvitton.filter((k) => iPerioden(k, start - PERIOD, start));
-  const sum = (rader: Kvitto[], f: (k: Kvitto) => number) => rader.filter((k) => k.status === "klar").reduce((s, k) => s + f(k), 0);
-
+  const period = per.slice(start).flat();
+  const forra = per.slice(start - PERIOD, start).flat();
   return {
     veckor,
-    klara,
-    granska,
+    momsnetto,
+    klara: kvitton.filter((k) => k.status === "klar"),
+    granska: kvitton.filter((k) => k.status !== "klar"),
     period,
-    forra,
-    utlaggNu: sum(period, (k) => ore(k.brutto) ?? 0),
-    utlaggForra: sum(forra, (k) => ore(k.brutto) ?? 0),
-    momsNu: sum(period, momsOre),
-    momsForra: sum(forra, momsOre)
+    nu: summor(period),
+    forra: summor(forra),
+    // Godkända underlag, samma tal som beloppen bredvid räknas på.
+    antalNu: {
+      kvitton: period.filter((k) => k.status === "klar" && !arIntakt(k)).length,
+      fakturor: period.filter((k) => k.status === "klar" && arIntakt(k)).length
+    }
   };
+}
+
+/** In minus ut exklusive moms, i ören. */
+function over(s: Summor): number {
+  return s.in - s.utgaende - (s.ut - s.ingaende);
 }
 
 // -- Delarna -------------------------------------------------------------------
@@ -359,15 +406,16 @@ function statusAv(rad: Kvitto): keyof typeof STATUSPRICK {
   return "granska";
 }
 
-function belopp(rad: Kvitto): string {
-  return rad.brutto !== null ? kronor(rad.brutto) : (rad.belopp_original ?? "–");
+function namnAv(rad: Kvitto, text: (v: Localized) => string): string {
+  return rad.motpart || rad.mejl_amne || rad.filnamn || text(arIntakt(rad) ? KUNDFAKTURA : T.kvitto);
 }
 
 /** Granskningsrutan: tre mest angelägna, fäll ut till alla, godkänn på raden. */
 function GranskaRuta({
   rader,
-  onGodkann
-}: Readonly<{ rader: Kvitto[]; onGodkann: (rad: Kvitto) => Promise<void> }>) {
+  onGodkann,
+  onByt
+}: Readonly<{ rader: Kvitto[]; onGodkann: (rad: Kvitto) => Promise<void>; onByt: (rad: Kvitto) => Promise<void> }>) {
   const { text, locale } = useLocale();
   const [alla, setAlla] = useState(false);
   const [oppen, setOppen] = useState<string | null>(null);
@@ -376,6 +424,15 @@ function GranskaRuta({
     (a, b) => granskningsordning(a) - granskningsordning(b) || (b.datum ?? "").localeCompare(a.datum ?? "")
   );
   const visade = alla ? sorterade : sorterade.slice(0, 3);
+
+  async function medArbete(rad: Kvitto, f: (rad: Kvitto) => Promise<void>) {
+    setArbetar(rad.id);
+    try {
+      await f(rad);
+    } finally {
+      setArbetar(null);
+    }
+  }
 
   return (
     <section aria-labelledby="kvitto-granska" className={cn(kort, "min-w-0")}>
@@ -409,15 +466,20 @@ function GranskaRuta({
                   className="focus-ring -mx-1 flex w-[calc(100%+0.5rem)] items-center gap-3 rounded-input px-1 py-0.5 text-left hover:bg-paper2/60"
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[0.9375rem] font-medium">
-                      {rad.motpart || rad.mejl_amne || rad.filnamn || text(T.kvitto)}
-                    </span>
+                    <span className="block truncate text-[0.9375rem] font-medium">{namnAv(rad, text)}</span>
                     <span className={cn(meta, "block truncate")}>
                       {[datumKort(rad.datum, locale), text(kategoriAv(rad))].join(" · ")}
-                      <span className="num tabular-nums sm:hidden"> · {belopp(rad)}</span>
+                      <span className="num tabular-nums sm:hidden"> · {radbelopp(rad)}</span>
                     </span>
                   </span>
-                  <span className="num hidden shrink-0 text-[0.8125rem] tabular-nums text-ink-muted sm:inline">{belopp(rad)}</span>
+                  <span
+                    className={cn(
+                      "num hidden shrink-0 text-[0.8125rem] tabular-nums sm:inline",
+                      arIntakt(rad) ? "text-moss" : "text-ink-muted"
+                    )}
+                  >
+                    {radbelopp(rad)}
+                  </span>
                   <span className="shrink-0">
                     <Granskningsmarke rad={rad} />
                   </span>
@@ -432,21 +494,24 @@ function GranskaRuta({
                         {text(T.forfaller)} {datumKort(rad.forfallodatum, locale)}
                       </p>
                     ) : null}
-                    <button
-                      type="button"
-                      disabled={arbetar === rad.id}
-                      onClick={async () => {
-                        setArbetar(rad.id);
-                        try {
-                          await onGodkann(rad);
-                        } finally {
-                          setArbetar(null);
-                        }
-                      }}
-                      className={cn(btnPrimary, btnLiten, "mt-2.5")}
-                    >
-                      {text(T.godkann)}
-                    </button>
+                    <div className="mt-2.5 flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        disabled={arbetar === rad.id}
+                        onClick={() => void medArbete(rad, onGodkann)}
+                        className={cn(btnPrimary, btnLiten)}
+                      >
+                        {text(T.godkann)}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={arbetar === rad.id}
+                        onClick={() => void medArbete(rad, onByt)}
+                        className="focus-ring rounded-input text-[0.8125rem] font-medium text-ink-muted underline underline-offset-4 hover:text-ink"
+                      >
+                        {text(arIntakt(rad) ? T.arKvitto : T.arKundfaktura)}
+                      </button>
+                    </div>
                   </div>
                 ) : null}
               </li>
@@ -458,7 +523,7 @@ function GranskaRuta({
   );
 }
 
-/** Horisontella staplar per momssats. Talet står alltid vid stapeln. */
+/** Moms per sats: utgående (fakturorna) och ingående (kvittona), och nettot. */
 function MomsRuta({ period }: Readonly<{ period: Kvitto[] }>) {
   const { text, locale } = useLocale();
   const klara = period.filter((k) => k.status === "klar");
@@ -466,42 +531,65 @@ function MomsRuta({ period }: Readonly<{ period: Kvitto[] }>) {
     const deras = klara.filter((k) => normaliseradSats(k.momssats) === s.sats);
     return {
       ...s,
-      moms: deras.reduce((a, k) => a + momsOre(k), 0),
-      brutto: deras.reduce((a, k) => a + (ore(k.brutto) ?? 0), 0),
-      antal: deras.length
+      ut: deras.filter(arIntakt).reduce((a, k) => a + momsOre(k), 0),
+      in: deras.filter((k) => !arIntakt(k)).reduce((a, k) => a + momsOre(k), 0)
     };
   });
-  const storst = Math.max(1, ...rader.map((r) => r.brutto));
-  const totalMoms = rader.reduce((a, r) => a + r.moms, 0);
+  const storst = Math.max(1, ...rader.flatMap((r) => [r.ut, r.in]));
+  const utgaende = rader.reduce((a, r) => a + r.ut, 0);
+  const ingaende = rader.reduce((a, r) => a + r.in, 0);
+  const netto = utgaende - ingaende;
   return (
     <section aria-labelledby="kvitto-moms" className={cn(kort, "min-w-0")}>
       <h2 id="kvitto-moms" className="text-[1rem] font-semibold">
         {text(T.momsRubrik)}
       </h2>
       <p className={cn(meta, "mb-4 mt-1")}>{text(T.momsText)}</p>
-      <ul className="space-y-2.5">
-        {rader.map((r, i) => (
-          <li key={r.sats} className="grid grid-cols-[3rem_1fr_auto] items-center gap-3 text-[0.8125rem]">
-            <span className="num tabular-nums text-ink-muted">{r.etikett}</span>
-            <span className="h-2.5 overflow-hidden rounded-full bg-ink/[0.06]">
-              <span
-                className="block h-full rounded-full"
-                style={{ width: `${(r.brutto / storst) * 100}%`, background: `oklch(var(--chart-ramp-${6 - i}))` }}
-              />
+      <div className="mb-2 flex gap-4 text-[0.75rem] text-ink-muted">
+        <span className="inline-flex items-center gap-1.5">
+          <span aria-hidden className="h-2 w-3 rounded-full bg-chart-blue" />
+          {text(T.utgaende)}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span aria-hidden className="h-2 w-3 rounded-full bg-chart-ochre" />
+          {text(T.ingaende)}
+        </span>
+      </div>
+      <ul className="space-y-3">
+        {rader.map((r) => (
+          <li key={r.sats} className="grid grid-cols-[3rem_1fr_auto] items-center gap-x-3 gap-y-1 text-[0.8125rem]">
+            <span className="num row-span-2 tabular-nums text-ink-muted">{r.etikett}</span>
+            <span className="h-2 overflow-hidden rounded-full bg-ink/[0.06]">
+              <span className="block h-full rounded-full bg-chart-blue" style={{ width: `${(r.ut / storst) * 100}%` }} />
             </span>
-            <span className="num text-right tabular-nums">
-              <span className="font-medium text-ink">{helaKronor(r.moms, locale)}</span>
-              <span className="ml-1.5 text-ink-subtle">
-                {helaKronor(r.brutto, locale)} {text(T.brutto)}
-              </span>
+            <span className="num text-right tabular-nums text-ink">
+              <span className="sr-only">{text(T.utgaende)} </span>
+              {helaKronor(r.ut, locale)}
+            </span>
+            <span className="h-2 overflow-hidden rounded-full bg-ink/[0.06]">
+              <span className="block h-full rounded-full bg-chart-ochre" style={{ width: `${(r.in / storst) * 100}%` }} />
+            </span>
+            <span className="num text-right tabular-nums text-ink-muted">
+              <span className="sr-only">{text(T.ingaende)} </span>
+              {helaKronor(r.in, locale)}
             </span>
           </li>
         ))}
       </ul>
-      <p className="mt-4 flex items-baseline justify-between gap-4 border-t border-ink/10 pt-3 text-[0.875rem]">
-        <span className="text-ink-muted">{text(T.summa)}</span>
-        <span className="num font-semibold tabular-nums text-ink">{kronor(oreTillStrang(totalMoms))}</span>
-      </p>
+      <dl className="mt-4 space-y-1 border-t border-ink/10 pt-3 text-[0.875rem]">
+        <div className="flex items-baseline justify-between gap-4">
+          <dt className="text-ink-muted">{text(T.utgaende)}</dt>
+          <dd className="num tabular-nums text-ink">{kronor(oreTillStrang(utgaende))}</dd>
+        </div>
+        <div className="flex items-baseline justify-between gap-4">
+          <dt className="text-ink-muted">{text(T.ingaende)}</dt>
+          <dd className="num tabular-nums text-ink">−{kronor(oreTillStrang(ingaende))}</dd>
+        </div>
+        <div className="flex items-baseline justify-between gap-4 font-semibold">
+          <dt>{text(netto >= 0 ? T.netto : T.nettoTillbaka)}</dt>
+          <dd className="num tabular-nums text-ink">{kronor(oreTillStrang(Math.abs(netto)))}</dd>
+        </div>
+      </dl>
     </section>
   );
 }
@@ -515,16 +603,16 @@ function Kvittolista({ rader }: Readonly<{ rader: Kvitto[] }>) {
         return (
           <li key={rad.id} className="flex flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[0.9375rem] font-medium">
-                {rad.motpart || rad.mejl_amne || rad.filnamn || text(T.kvitto)}
-              </span>
+              <span className="block truncate text-[0.9375rem] font-medium">{namnAv(rad, text)}</span>
               <span className={cn(meta, "block truncate")}>
                 {text(kategoriAv(rad))} · {datumKort(rad.datum, locale)} ·{" "}
                 {rad.kalla === "mejl" ? text({ sv: "Mejl", en: "Email" }) : text({ sv: "Uppladdad", en: "Uploaded" })}
               </span>
             </span>
             <span className="flex shrink-0 items-center gap-4">
-              <span className="num text-[0.875rem] font-medium tabular-nums">{belopp(rad)}</span>
+              <span className={cn("num text-[0.875rem] font-medium tabular-nums", arIntakt(rad) && "text-moss")}>
+                {radbelopp(rad)}
+              </span>
               <span className={cn("inline-flex w-28 items-center gap-1.5 text-[0.8125rem]", s.text)}>
                 <span aria-hidden className={cn("h-1.5 w-1.5 shrink-0 rounded-full", s.prick)} />
                 {text(s.etikett)}
@@ -537,52 +625,80 @@ function Kvittolista({ rader }: Readonly<{ rader: Kvitto[] }>) {
   );
 }
 
-function Leverantorer({ klara, obetalda }: Readonly<{ klara: Kvitto[]; obetalda: Kvitto[] }>) {
-  const { text, locale } = useLocale();
+/** Motparterna summerade, största först, med en stapel för andelen. */
+function Topplista({ rader, farg, tak }: Readonly<{ rader: Kvitto[]; farg: string; tak: number }>) {
+  const { locale } = useLocale();
   const per = new Map<string, { namn: string; antal: number; summa: number }>();
-  for (const k of klara) {
+  for (const k of rader) {
     const namn = k.motpart || k.filnamn || "–";
     const post = per.get(namn) ?? { namn, antal: 0, summa: 0 };
     post.antal += 1;
-    post.summa += ore(k.brutto) ?? 0;
+    post.summa += bruttoOre(k);
     per.set(namn, post);
   }
-  const lista = [...per.values()].sort((a, b) => b.summa - a.summa).slice(0, 8);
-  const total = klara.reduce((s, k) => s + (ore(k.brutto) ?? 0), 0) || 1;
+  const lista = [...per.values()].sort((a, b) => b.summa - a.summa).slice(0, tak);
+  const total = rader.reduce((s, k) => s + bruttoOre(k), 0) || 1;
   return (
-    <div className="grid gap-6">
-      <ul className="space-y-3">
-        {lista.map((l) => (
-          <li key={l.namn}>
-            <div className="flex items-baseline justify-between gap-4 text-[0.875rem]">
-              <span className="min-w-0 truncate font-medium text-ink">
-                {l.namn}
-                <span className="ml-1.5 text-[0.75rem] font-normal text-ink-subtle">×{l.antal}</span>
-              </span>
-              <span className="num shrink-0 tabular-nums text-ink">{helaKronor(l.summa, locale)}</span>
-            </div>
-            <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-ink/[0.06]">
-              <span className="block h-full rounded-full bg-chart-blue" style={{ width: `${(l.summa / total) * 100}%` }} />
+    <ul className="space-y-3">
+      {lista.map((l) => (
+        <li key={l.namn}>
+          <div className="flex items-baseline justify-between gap-4 text-[0.875rem]">
+            <span className="min-w-0 truncate font-medium text-ink">
+              {l.namn}
+              <span className="ml-1.5 text-[0.75rem] font-normal text-ink-subtle">×{l.antal}</span>
             </span>
+            <span className="num shrink-0 tabular-nums text-ink">{helaKronor(l.summa, locale)}</span>
+          </div>
+          <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-ink/[0.06]">
+            <span className={cn("block h-full rounded-full", farg)} style={{ width: `${(l.summa / total) * 100}%` }} />
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function Forfallolista({ rubrik, rader }: Readonly<{ rubrik: Localized; rader: Kvitto[] }>) {
+  const { text, locale } = useLocale();
+  if (rader.length === 0) return null;
+  return (
+    <div>
+      <p className={etikett}>{text(rubrik)}</p>
+      <ul className="mt-2 divide-y divide-ink/10">
+        {rader.map((k) => (
+          <li key={k.id} className="flex items-baseline justify-between gap-4 py-2 text-[0.8125rem]">
+            <span className="min-w-0 truncate text-ink-muted">{k.motpart || k.filnamn}</span>
+            <span className="num shrink-0 tabular-nums text-ink-subtle">
+              {text(T.forfaller)} {datumKort(k.forfallodatum ?? null, locale)}
+            </span>
+            <span className="num w-24 shrink-0 text-right font-medium tabular-nums text-ink">{kronor(k.brutto)}</span>
           </li>
         ))}
       </ul>
-      {obetalda.length ? (
+    </div>
+  );
+}
+
+function Motparter({ klara, obetalda }: Readonly<{ klara: Kvitto[]; obetalda: Kvitto[] }>) {
+  const { text } = useLocale();
+  const fakturor = klara.filter(arIntakt);
+  const kvitton = klara.filter((k) => !arIntakt(k));
+  return (
+    <div className="grid gap-6">
+      {fakturor.length ? (
         <div>
-          <p className={etikett}>{text(T.obetalda)}</p>
-          <ul className="mt-2 divide-y divide-ink/10">
-            {obetalda.map((k) => (
-              <li key={k.id} className="flex items-baseline justify-between gap-4 py-2 text-[0.8125rem]">
-                <span className="min-w-0 truncate text-ink-muted">{k.motpart || k.filnamn}</span>
-                <span className="num shrink-0 tabular-nums text-ink-subtle">
-                  {text(T.forfaller)} {datumKort(k.forfallodatum ?? null, locale)}
-                </span>
-                <span className="num w-24 shrink-0 text-right font-medium tabular-nums text-ink">{belopp(k)}</span>
-              </li>
-            ))}
-          </ul>
+          <p className={cn(etikett, "mb-2")}>{text(T.kunder)}</p>
+          <Topplista rader={fakturor} farg="bg-moss" tak={5} />
         </div>
       ) : null}
+      {kvitton.length ? (
+        <div>
+          <p className={cn(etikett, "mb-2")}>{text(T.leverantorer)}</p>
+          <Topplista rader={kvitton} farg="bg-chart-blue" tak={8} />
+        </div>
+      ) : null}
+      <Forfallolista rubrik={T.kundfordringar} rader={obetalda.filter(arIntakt)} />
+      <Forfallolista rubrik={T.obetalda} rader={obetalda.filter((k) => !arIntakt(k))} />
     </div>
   );
 }
@@ -599,7 +715,7 @@ function Avlasningsruta({ kvitton }: Readonly<{ kvitton: Kvitto[] }>) {
   const mejl = kvitton.filter((k) => k.kalla === "mejl").length;
   const rader: { etikett: Localized; varde: string }[] = [
     { etikett: T.kalla, varde: `${mejl} / ${kvitton.length - mejl}` },
-    { etikett: T.utanKategori, varde: String(kvitton.filter((k) => !k.kategori).length) },
+    { etikett: T.utanKategori, varde: String(kvitton.filter((k) => !arIntakt(k) && !k.kategori).length) },
     { etikett: T.utanMoms, varde: String(kvitton.filter((k) => k.momssats === null).length) },
     { etikett: T.utanDatum, varde: String(kvitton.filter((k) => !k.datum).length) }
   ];
@@ -661,12 +777,12 @@ export function KvittoOversikt({
   const { text, locale } = useLocale();
   const arDemo = demo || isDemo || vy === "demo";
   const { idag, kvitton, setKvitton, konto, fel, ladda } = useKvittodata(arDemo);
-  const [godkannFel, setGodkannFel] = useState<Localized | null>(null);
+  const [atgardsfel, setAtgardsfel] = useState<Localized | null>(null);
 
   const s = useMemo(() => (kvitton ? berakna(kvitton, idag) : null), [kvitton, idag]);
 
   async function godkann(rad: Kvitto) {
-    setGodkannFel(null);
+    setAtgardsfel(null);
     if (arDemo) {
       // Demon har ingen backend: godkännandet flyttar bara raden lokalt.
       setKvitton((nu) => (nu ?? []).map((k) => (k.id === rad.id ? { ...k, status: "klar", flaggor: [] } : k)));
@@ -674,27 +790,56 @@ export function KvittoOversikt({
     }
     const utfall = await godkannKvitto(rad, text);
     if (utfall === "avbrutet") return;
-    if (utfall) setGodkannFel(utfall);
+    if (utfall) setAtgardsfel(utfall);
+    await ladda();
+  }
+
+  async function byt(rad: Kvitto) {
+    setAtgardsfel(null);
+    const ny = arIntakt(rad) ? "kostnad" : "intakt";
+    if (arDemo) {
+      setKvitton((nu) => (nu ?? []).map((k) => (k.id === rad.id ? { ...k, riktning: ny } : k)));
+      return;
+    }
+    const utfall = await bytRiktning(rad, ny);
+    if (utfall) setAtgardsfel(utfall);
     await ladda();
   }
 
   const perioden: Localized = { sv: `de ${PERIOD} veckorna före`, en: `the ${PERIOD} weeks before` };
-  const detalj: Localized = { sv: `senaste ${PERIOD} veckorna`, en: `last ${PERIOD} weeks` };
   const serie = (k: keyof Vecka) => (s ? s.veckor.slice(-8).map((v) => Number(v[k] ?? 0)) : undefined);
-
   const prioriterade = s ? s.granska.filter((k) => k.granskningsstatus === PRIORITERAD).length : 0;
-  const franMejl = s ? s.period.filter((k) => k.kalla === "mejl").length : 0;
+  const momsnetto = s ? s.nu.utgaende - s.nu.ingaende : 0;
 
   const kpier: Kpi[] = [
     {
-      id: "utlagg",
+      id: "in",
+      etikett: T.fakturerat,
+      varde: null,
+      visning: s ? helaKronor(s.nu.in, locale) : "–",
+      forandring: s ? forandring(s.nu.in, s.forra.in) : undefined,
+      serie: serie("intakter"),
+      detalj: s
+        ? { sv: `${s.antalNu.fakturor} ${T.kundfakturor.sv}, 4 veckor`, en: `${s.antalNu.fakturor} ${T.kundfakturor.en}, 4 weeks` }
+        : T.fordelningText
+    },
+    {
+      id: "ut",
       etikett: T.utlagg,
       varde: null,
-      visning: s ? helaKronor(s.utlaggNu, locale) : "–",
-      forandring: s ? forandring(s.utlaggNu, s.utlaggForra) : undefined,
+      visning: s ? helaKronor(s.nu.ut, locale) : "–",
+      forandring: s ? forandring(s.nu.ut, s.forra.ut) : undefined,
       battre: "ner",
       serie: serie("utlagg"),
-      detalj
+      detalj: s ? { sv: `${s.antalNu.kvitton} ${T.kvitton.sv}, 4 veckor`, en: `${s.antalNu.kvitton} ${T.kvitton.en}, 4 weeks` } : T.fordelningText
+    },
+    {
+      id: "moms",
+      etikett: T.momsnetto,
+      varde: null,
+      visning: s ? helaKronor(Math.abs(momsnetto), locale) : "–",
+      serie: s ? s.momsnetto.slice(-8) : undefined,
+      detalj: momsnetto >= 0 ? T.attBetala : T.attFa
     },
     {
       id: "granska",
@@ -707,40 +852,17 @@ export function KvittoOversikt({
             en: `${T.vantarPaDig.en} · ${prioriterade} ${T.prioriterade.en}`
           }
         : T.vantarPaDig
-    },
-    {
-      id: "moms",
-      etikett: T.moms,
-      varde: null,
-      visning: s ? helaKronor(s.momsNu, locale) : "–",
-      forandring: s ? forandring(s.momsNu, s.momsForra) : undefined,
-      battre: "ner",
-      serie: serie("moms"),
-      detalj
-    },
-    {
-      id: "kvitton",
-      etikett: T.kvitton,
-      varde: s ? s.period.length : null,
-      forandring: s ? forandring(s.period.length, s.forra.length) : undefined,
-      serie: serie("kvitton"),
-      detalj: s
-        ? {
-            sv: `${franMejl} ${T.franMejl.sv} · ${s.period.length - franMejl} ${T.uppladdade.sv}`,
-            en: `${franMejl} ${T.franMejl.en} · ${s.period.length - franMejl} ${T.uppladdade.en}`
-          }
-        : detalj
     }
   ];
 
-  // Fördelningarna: periodens klara kvitton per kategori (kronor), och
-  // periodens kvitton per granskningsläge (antal).
+  // Fördelningarna, periodens klara underlag.
   const periodKlara = s ? s.period.filter((k) => k.status === "klar") : [];
+  const periodKvitton = periodKlara.filter((k) => !arIntakt(k));
   const perKategori = new Map<string, { etikett: Localized; ore: number }>();
-  for (const k of periodKlara) {
+  for (const k of periodKvitton) {
     const nyckel = k.kategori ?? "";
     const post = perKategori.get(nyckel) ?? { etikett: kategoriAv(k), ore: 0 };
-    post.ore += ore(k.brutto) ?? 0;
+    post.ore += bruttoOre(k);
     perKategori.set(nyckel, post);
   }
   const kategorier = [...perKategori.entries()].sort((a, b) => b[1].ore - a[1].ore);
@@ -758,6 +880,11 @@ export function KvittoOversikt({
       farg: "oklch(var(--ink-subtle))"
     });
   }
+  const inUtDelar: Andel[] = [
+    { id: "in", etikett: T.fakturerat, antal: s ? Math.round(s.nu.in / 100) : 0, farg: "oklch(var(--moss))" },
+    { id: "ut", etikett: T.utlagg, antal: s ? Math.round(s.nu.ut / 100) : 0, farg: "oklch(var(--chart-ochre))" }
+  ];
+  const overNu = s ? over(s.nu) : 0;
   const statusdelar: Andel[] = [
     { id: "klar", etikett: T.klar, farg: "oklch(var(--moss))" },
     { id: "granska", etikett: T.granska, farg: "oklch(var(--chart-ochre))" },
@@ -765,15 +892,11 @@ export function KvittoOversikt({
     { id: "prioriterad", etikett: T.prioriterad, farg: "oklch(var(--danger))" }
   ].map((d) => ({ ...d, antal: s ? s.period.filter((k) => statusAv(k) === d.id).length : 0 }));
 
-  const storsta = periodKlara.reduce<Kvitto | null>((a, k) => (!a || (ore(k.brutto) ?? 0) > (ore(a.brutto) ?? 0) ? k : a), null);
+  const storsta = periodKvitton.reduce<Kvitto | null>((a, k) => (!a || bruttoOre(k) > bruttoOre(a) ? k : a), null);
   const medGranskning = s ? s.period.filter((k) => k.granskningsstatus) : [];
   const nyckeltal: { etikett: Localized; varde: string; under?: string }[] = [
-    { etikett: T.snitt, varde: periodKlara.length && s ? helaKronor(s.utlaggNu / periodKlara.length, locale) : "–" },
-    {
-      etikett: T.storsta,
-      varde: storsta ? helaKronor(ore(storsta.brutto) ?? 0, locale) : "–",
-      under: storsta?.motpart ?? undefined
-    },
+    { etikett: T.over, varde: s ? helaKronor(overNu, locale) : "–", under: text(T.overText) },
+    { etikett: T.storsta, varde: storsta ? helaKronor(bruttoOre(storsta), locale) : "–", under: storsta?.motpart ?? undefined },
     {
       etikett: T.utanHjalp,
       varde: medGranskning.length
@@ -782,33 +905,45 @@ export function KvittoOversikt({
     }
   ];
 
-  // I korthet: en mening ur talen ovan, på båda språken. Ingen modell.
+  // I korthet: meningar ur talen ovan, på båda språken. Ingen modell.
   const toppKategori = kategorier[0];
-  const korthetsdelar: Localized[] =
-    s && periodKlara.length
-      ? [
-          {
-            sv: `${periodKlara.length} avlästa kvitton på ${helaKronor(s.utlaggNu, "sv")} de senaste fyra veckorna, varav ${helaKronor(s.momsNu, "sv")} ingående moms.`,
-            en: `${periodKlara.length} receipts read for ${helaKronor(s.utlaggNu, "en")} over the last four weeks, including ${helaKronor(s.momsNu, "en")} input VAT.`
-          },
-          ...(toppKategori
-            ? [
-                {
-                  sv: `Mest gick till ${toppKategori[1].etikett.sv.toLowerCase()} (${helaKronor(toppKategori[1].ore, "sv")}).`,
-                  en: `Most went to ${toppKategori[1].etikett.en.toLowerCase()} (${helaKronor(toppKategori[1].ore, "en")}).`
-                }
-              ]
-            : []),
-          ...(s.granska.length
-            ? [
-                {
-                  sv: `${s.granska.length} kvitton väntar på granskning och räknas inte in förrän du godkänt dem.`,
-                  en: `${s.granska.length} receipts are waiting for review and are not counted until you approve them.`
-                }
-              ]
-            : [])
-        ]
-      : [];
+  const fakturorKlara = periodKlara.filter(arIntakt).length;
+  const korthetsdelar: Localized[] = s
+    ? [
+        ...(fakturorKlara
+          ? [
+              {
+                sv: `${fakturorKlara} kundfakturor på ${helaKronor(s.nu.in, "sv")} de senaste fyra veckorna, med ${helaKronor(s.nu.utgaende, "sv")} i utgående moms.`,
+                en: `${fakturorKlara} customer invoices for ${helaKronor(s.nu.in, "en")} over the last four weeks, with ${helaKronor(s.nu.utgaende, "en")} in output VAT.`
+              }
+            ]
+          : []),
+        ...(periodKvitton.length
+          ? [
+              {
+                sv: `${periodKvitton.length} avlästa kvitton på ${helaKronor(s.nu.ut, "sv")}, varav ${helaKronor(s.nu.ingaende, "sv")} ingående moms.`,
+                en: `${periodKvitton.length} receipts read for ${helaKronor(s.nu.ut, "en")}, including ${helaKronor(s.nu.ingaende, "en")} input VAT.`
+              }
+            ]
+          : []),
+        ...(toppKategori
+          ? [
+              {
+                sv: `Mest gick till ${toppKategori[1].etikett.sv.toLowerCase()} (${helaKronor(toppKategori[1].ore, "sv")}).`,
+                en: `Most went to ${toppKategori[1].etikett.en.toLowerCase()} (${helaKronor(toppKategori[1].ore, "en")}).`
+              }
+            ]
+          : []),
+        ...(s.granska.length
+          ? [
+              {
+                sv: `${s.granska.length} underlag väntar på granskning och räknas inte in förrän du godkänt dem.`,
+                en: `${s.granska.length} documents are waiting for review and are not counted until you approve them.`
+              }
+            ]
+          : [])
+      ]
+    : [];
   const korthet: Localized | null = korthetsdelar.length
     ? { sv: korthetsdelar.map((d) => d.sv).join(" "), en: korthetsdelar.map((d) => d.en).join(" ") }
     : null;
@@ -816,10 +951,10 @@ export function KvittoOversikt({
   const senaste = kvitton ? [...kvitton].sort((a, b) => (b.datum ?? "").localeCompare(a.datum ?? "")).slice(0, 15) : [];
   const obetalda = kvitton
     ? kvitton
-        .filter((k) => k.betalstatus === "obetald" && k.forfallodatum)
+        .filter((k) => k.status === "klar" && k.betalstatus === "obetald" && k.forfallodatum)
         .sort((a, b) => (a.forfallodatum ?? "").localeCompare(b.forfallodatum ?? ""))
     : [];
-  const harVeckor = s !== null && s.veckor.some((v) => (v.kvitton ?? 0) > 0);
+  const harVeckor = s !== null && s.veckor.some((v) => (v.kvitton ?? 0) > 0 || (v.intakter ?? 0) > 0);
   const kolumn = cn(kort, "relative min-w-0 thin-scrollbar xl:max-h-[40rem] xl:overflow-y-auto");
 
   return (
@@ -847,12 +982,12 @@ export function KvittoOversikt({
 
       {fel ? (
         <p role="alert" className="text-[0.875rem] text-danger">
-          {text({ sv: "Kvittona gick inte att hämta just nu.", en: "The receipts could not be loaded right now." })}
+          {text({ sv: "Underlagen gick inte att hämta just nu.", en: "The documents could not be loaded right now." })}
         </p>
       ) : null}
-      {godkannFel ? (
+      {atgardsfel ? (
         <p role="alert" className="text-[0.875rem] text-danger">
-          {text(godkannFel)}
+          {text(atgardsfel)}
         </p>
       ) : null}
 
@@ -871,17 +1006,17 @@ export function KvittoOversikt({
             <>
               <Aktivitetsgraf
                 veckor={s.veckor}
-                axelbredd={56}
+                axelbredd={60}
                 serier={[
-                  { nyckel: "utlagg", etikett: { sv: "Utlägg, kr", en: "Expenses, SEK" }, ton: "chart-ochre" },
-                  { nyckel: "moms", etikett: { sv: "Ingående moms, kr", en: "Input VAT, SEK" }, ton: "chart-blue" }
+                  { nyckel: "intakter", etikett: { sv: "Fakturerat, kr", en: "Invoiced, SEK" }, ton: "chart-blue" },
+                  { nyckel: "utlagg", etikett: { sv: "Utlägg, kr", en: "Expenses, SEK" }, ton: "chart-ochre" }
                 ]}
               />
               <dl className="mt-5 grid grid-cols-1 gap-3 border-t border-ink/10 pt-4 sm:grid-cols-3 sm:gap-4">
                 {nyckeltal.map((x) => (
                   <div key={x.etikett.sv} className="flex items-baseline justify-between gap-3 sm:block">
                     <dt className={etikett}>{text(x.etikett)}</dt>
-                    <dd className="sm:mt-1">
+                    <dd className="text-right sm:mt-1 sm:text-left">
                       <span className="num block text-[1.25rem] font-semibold tabular-nums text-ink">{x.varde}</span>
                       {x.under ? <span className={cn(meta, "block truncate")}>{x.under}</span> : null}
                     </dd>
@@ -904,15 +1039,23 @@ export function KvittoOversikt({
             <p className={meta}>…</p>
           ) : (
             <div className="grid gap-6">
+              <Munkdiagram
+                delar={inUtDelar}
+                etikett={T.inOchUt}
+                mitt={overNu >= 0 ? T.overMitt : T.underMitt}
+                mittVarde={new Intl.NumberFormat(locale === "en" ? "en-GB" : "sv-SE", { maximumFractionDigits: 0 }).format(
+                  Math.abs(Math.round(overNu / 100))
+                )}
+              />
               <Munkdiagram delar={kategoridelar} etikett={T.perKategori} mitt={T.krMitt} />
-              <Munkdiagram delar={statusdelar} etikett={T.granskning} mitt={T.kvittonMitt} />
+              <Munkdiagram delar={statusdelar} etikett={T.granskning} mitt={T.underlagMitt} />
             </div>
           )}
         </section>
       </div>
 
       <div className="grid min-w-0 gap-4 lg:grid-cols-2">
-        <GranskaRuta rader={s?.granska ?? []} onGodkann={godkann} />
+        <GranskaRuta rader={s?.granska ?? []} onGodkann={godkann} onByt={byt} />
         <MomsRuta period={s?.period ?? []} />
       </div>
 
@@ -935,18 +1078,18 @@ export function KvittoOversikt({
           <p className={cn(meta, "mb-2 mt-1 max-w-[70ch]")}>{text(T.senasteText)}</p>
           {kvitton === null ? <p className={meta}>…</p> : senaste.length ? <Kvittolista rader={senaste} /> : <p className={meta}>{text(T.ingenAktivitet)}</p>}
         </section>
-        <section aria-labelledby="kvitto-leverantorer" className={kolumn}>
-          <h2 id="kvitto-leverantorer" className="text-[1.0625rem] font-semibold tracking-[-0.01em]">
-            {text(T.leverantorer)}
+        <section aria-labelledby="kvitto-motparter" className={kolumn}>
+          <h2 id="kvitto-motparter" className="text-[1.0625rem] font-semibold tracking-[-0.01em]">
+            {text(T.motparter)}
           </h2>
-          <p className={cn(meta, "mb-4 mt-1 max-w-[70ch]")}>{text(T.leverantorerText)}</p>
+          <p className={cn(meta, "mb-4 mt-1 max-w-[70ch]")}>{text(T.motparterText)}</p>
           {korthet ? (
             <div className="mb-5 rounded-input bg-paper2/50 px-3 py-2.5">
               <p className={etikett}>{text(T.iKorthet)}</p>
               <p className="mt-1 text-[0.875rem] leading-6 text-ink-muted">{text(korthet)}</p>
             </div>
           ) : null}
-          {s ? <Leverantorer klara={s.klara} obetalda={obetalda} /> : <p className={meta}>…</p>}
+          {s ? <Motparter klara={s.klara} obetalda={obetalda} /> : <p className={meta}>…</p>}
         </section>
       </div>
 

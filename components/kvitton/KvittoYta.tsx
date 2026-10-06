@@ -66,6 +66,8 @@ export type Kvitto = {
   momssats: string | null;
   kategori: string | null;
   kategorietikett: string;
+  /** "intakt" = företagets egen faktura till en kund (sedan 2026-10-07). */
+  riktning?: "kostnad" | "intakt";
   status: string;
   betalstatus: string | null;
   kalla: string;
@@ -164,7 +166,18 @@ export function Flaggrad({ flaggor, mork = false }: Readonly<{ flaggor?: string[
   );
 }
 
+type Intakter = {
+  antal: number;
+  antal_klara: number;
+  antal_granska: number;
+  totalt: string;
+  moms: string;
+  antal_obetalda: number;
+  obetalt: string;
+};
+
 type Sammanfattning = {
+  intakter?: Intakter;
   antal: number;
   antal_klara: number;
   antal_granska: number;
@@ -202,6 +215,36 @@ export function kronor(varde: string | null): string {
   const [heltal, decimaler = "00"] = varde.replace("-", "").split(".");
   const grupperat = heltal.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   return `${negativt ? "−" : ""}${grupperat},${decimaler.padEnd(2, "0")} kr`;
+}
+
+export function arIntakt(rad: Pick<Kvitto, "riktning">): boolean {
+  return rad.riktning === "intakt";
+}
+
+/** Beloppet som det står i listorna: en intäkt med plustecken. */
+export function radbelopp(rad: Kvitto): string {
+  if (rad.brutto === null) return rad.belopp_original ?? "—";
+  return `${arIntakt(rad) ? "+" : ""}${kronor(rad.brutto)}`;
+}
+
+export const KUNDFAKTURA: Localized = { sv: "Kundfaktura", en: "Customer invoice" };
+
+/**
+ * Människans besked om att ett underlag i granskningen är en kundfaktura
+ * (intäkt) eller ett kvitto (kostnad). Svarar null eller felet att visa.
+ */
+export async function bytRiktning(rad: Kvitto, riktning: "kostnad" | "intakt"): Promise<Localized | null> {
+  try {
+    const svar = await fetch(`${BAS}/${rad.id}/riktning`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ riktning })
+    });
+    await readJson(svar);
+    return null;
+  } catch (orsak) {
+    return ord(feltext(orsak));
+  }
 }
 
 const MOMSETIKETT: Record<string, string> = {
@@ -282,7 +325,7 @@ export function KvittoAttGora({
             </div>
             <div className="col-span-12 mt-2 flex items-center justify-between gap-4 sm:col-span-5 sm:mt-0 sm:justify-end">
               <span className="num text-[0.875rem] tabular-nums text-paper-muted">
-                {rad.brutto !== null ? kronor(rad.brutto) : (rad.belopp_original ?? "—")}
+                {radbelopp(rad)}
               </span>
               <button
                 type="button"
@@ -354,12 +397,14 @@ export async function godkannKvitto(
   }
   if (rad.motpart === null) {
     const motpart = window.prompt(
-      text({ sv: "Vilken butik eller leverantör är kvittot från?", en: "Which shop or supplier is the receipt from?" })
+      arIntakt(rad)
+        ? text({ sv: "Vilken kund är fakturan till?", en: "Which customer is the invoice to?" })
+        : text({ sv: "Vilken butik eller leverantör är kvittot från?", en: "Which shop or supplier is the receipt from?" })
     );
     if (!motpart) return "avbrutet";
     kropp.motpart = motpart.trim();
   }
-  if (rad.kategori === null) {
+  if (rad.kategori === null && !arIntakt(rad)) {
     const kategori = window.prompt(
       text({
         sv: "Ange kategori: drivmedel, biljett, kost_och_logi, representation, kontorsmateriel, programvara, forbrukningsinventarier eller ovrig_extern_kostnad:",
@@ -373,10 +418,15 @@ export async function godkannKvitto(
     // Frågas, gissas aldrig: betalstatus avgör om kvittot bokas mot
     // bankkontot eller som en obetald skuld.
     const betald = window.confirm(
-      text({
-        sv: "Är kvittot redan betalt?\n\nOK = betalt (kort, Swish, kontant)\nAvbryt = obetald faktura",
-        en: "Is the receipt already paid?\n\nOK = paid (card, Swish, cash)\nCancel = unpaid invoice"
-      })
+      arIntakt(rad)
+        ? text({
+            sv: "Har kunden redan betalat fakturan?\n\nOK = betald\nAvbryt = obetald (kundfordran)",
+            en: "Has the customer already paid the invoice?\n\nOK = paid\nCancel = unpaid (receivable)"
+          })
+        : text({
+            sv: "Är kvittot redan betalt?\n\nOK = betalt (kort, Swish, kontant)\nAvbryt = obetald faktura",
+            en: "Is the receipt already paid?\n\nOK = paid (card, Swish, cash)\nCancel = unpaid invoice"
+          })
     );
     kropp.betalstatus = betald ? "betald" : "obetald";
   }
@@ -415,6 +465,7 @@ export function KvittoYta() {
   const [uppladdningsfel, setUppladdningsfel] = useState<string[]>([]);
   const [rensar, setRensar] = useState(false);
   const filväljare = useRef<HTMLInputElement>(null);
+  const fakturaväljare = useRef<HTMLInputElement>(null);
 
   const hamta = useCallback(async () => {
     setFel(null);
@@ -483,7 +534,7 @@ export function KvittoYta() {
     }
   }
 
-  async function laddaUpp(filer: File[]) {
+  async function laddaUpp(filer: File[], riktning: "kostnad" | "intakt" = "kostnad") {
     if (!filer.length) return;
     setLaddarUpp(true);
     setFel(null);
@@ -494,6 +545,7 @@ export function KvittoYta() {
         try {
           const kropp = new FormData();
           kropp.append("fil", fil);
+          if (riktning === "intakt") kropp.append("riktning", "intakt");
           const svar = await fetch(`${BAS}/underlag`, { method: "POST", body: kropp });
           await readJson(svar);
         } catch (orsak) {
@@ -511,6 +563,13 @@ export function KvittoYta() {
     setFel(null);
     const utfall = await godkannKvitto(rad, text);
     if (utfall === "avbrutet") return;
+    if (utfall) setFel(utfall);
+    await hamta();
+  }
+
+  async function andraRiktning(rad: Kvitto) {
+    setFel(null);
+    const utfall = await bytRiktning(rad, arIntakt(rad) ? "kostnad" : "intakt");
     if (utfall) setFel(utfall);
     await hamta();
   }
@@ -608,6 +667,19 @@ export function KvittoYta() {
                 <Upload className="h-4 w-4" aria-hidden />
               )}
               {text({ sv: "Ladda upp kvitto", en: "Upload receipt" })}
+            </button>
+            <button
+              type="button"
+              disabled={laddarUpp}
+              onClick={() => fakturaväljare.current?.click()}
+              title={text({
+                sv: "En faktura ni skickat till en kund. Den räknas som intäkt, inte som utlägg.",
+                en: "An invoice you sent to a customer. It counts as income, not as an expense."
+              })}
+              className={cn(btnSecondary, btnLiten)}
+            >
+              <Upload className="h-4 w-4" aria-hidden />
+              {text({ sv: "Ladda upp kundfaktura", en: "Upload customer invoice" })}
             </button>
             <a
               href={
@@ -779,7 +851,7 @@ export function KvittoYta() {
               ariaLabel={text({ sv: "Kvitton i perioden", en: "Receipts in the period" })}
               kolumner={[
                 { rubrik: text({ sv: "Datum", en: "Date" }), bredd: "12%" },
-                { rubrik: text({ sv: "Butik", en: "Shop" }), bredd: "32%" },
+                { rubrik: text({ sv: "Motpart", en: "Counterparty" }), bredd: "32%" },
                 { rubrik: text({ sv: "Kategori", en: "Category" }), bredd: "16%" },
                 { rubrik: text({ sv: "Källa", en: "Source" }), bredd: "10%" },
                 { rubrik: text({ sv: "Moms", en: "VAT" }), bredd: "8%", hoger: true },
@@ -802,7 +874,11 @@ export function KvittoYta() {
                     <Flaggrad flaggor={rad.flaggor} />
                   </Cell>
                   <Cell>
-                    <span className="text-ink-muted">{rad.kategorietikett}</span>
+                    {arIntakt(rad) ? (
+                      <Badge tone="good">{text(KUNDFAKTURA)}</Badge>
+                    ) : (
+                      <span className="text-ink-muted">{rad.kategorietikett}</span>
+                    )}
                   </Cell>
                   <Cell>
                     <span className="text-ink-muted">
@@ -813,9 +889,7 @@ export function KvittoYta() {
                     <span className="text-ink-muted">{procent(rad.momssats)}</span>
                   </Cell>
                   <Cell hoger>
-                    <span className="font-medium">
-                      {rad.brutto !== null ? kronor(rad.brutto) : (rad.belopp_original ?? "—")}
-                    </span>
+                    <span className={cn("font-medium", arIntakt(rad) && "text-moss")}>{radbelopp(rad)}</span>
                   </Cell>
                   <Cell hoger>
                     <span className="flex flex-wrap items-center justify-end gap-1.5">
@@ -831,6 +905,17 @@ export function KvittoYta() {
                           className="focus-ring rounded-input text-[0.8125rem] font-medium text-ink underline underline-offset-4 hover:text-ochre"
                         >
                           {text({ sv: "Godkänn", en: "Approve" })}
+                        </button>
+                      ) : null}
+                      {rad.status === "granska_manuellt" ? (
+                        <button
+                          type="button"
+                          onClick={() => void andraRiktning(rad)}
+                          className="focus-ring rounded-input text-[0.8125rem] text-ink-muted underline underline-offset-4 hover:text-ink"
+                        >
+                          {arIntakt(rad)
+                            ? text({ sv: "Är ett kvitto", en: "Is a receipt" })
+                            : text({ sv: "Är en kundfaktura", en: "Is a customer invoice" })}
                         </button>
                       ) : null}
                     </span>
@@ -849,6 +934,17 @@ export function KvittoYta() {
         accept={LASBARA}
         onChange={(e) => {
           void laddaUpp(Array.from(e.target.files ?? []));
+          e.target.value = "";
+        }}
+        className="sr-only"
+      />
+      <input
+        ref={fakturaväljare}
+        type="file"
+        multiple
+        accept={LASBARA}
+        onChange={(e) => {
+          void laddaUpp(Array.from(e.target.files ?? []), "intakt");
           e.target.value = "";
         }}
         className="sr-only"
@@ -891,7 +987,7 @@ export function KvittoSammanfattning() {
       <p className="kicker text-mineral">{text({ sv: "Sammanfattning", en: "Summary" })}</p>
       {samman === null ? (
         <p className="mt-3 text-[0.875rem] text-ink-subtle">{text({ sv: "Hämtar…", en: "Loading…" })}</p>
-      ) : samman.antal === 0 ? (
+      ) : samman.antal === 0 && !samman.intakter?.antal ? (
         <p className="mt-3 text-[0.875rem] leading-6 text-ink-subtle">{text({ sv: "Inga inlästa kvitton.", en: "No receipts read." })}</p>
       ) : (
         <>
@@ -904,6 +1000,15 @@ export function KvittoSammanfattning() {
               en: `${samman.antal_klara} receipts read · input VAT ${kronor(samman.moms)}`
             })}
           </p>
+          {samman.intakter?.antal_klara ? (
+            <p className="mt-3 flex items-baseline justify-between gap-4 rounded-input bg-moss/10 px-3 py-2 text-[0.875rem]">
+              <span className="text-ink-muted">
+                {text({ sv: "Fakturerat", en: "Invoiced" })}
+                <span className="ml-1.5 text-[0.75rem] text-mineral">×{samman.intakter.antal_klara}</span>
+              </span>
+              <span className="num font-medium text-ink">+{kronor(samman.intakter.totalt)}</span>
+            </p>
+          ) : null}
           {samman.per_kategori.length ? (
             <dl className="mt-4 divide-y divide-ink/10 border-y border-ink/10">
               {samman.per_kategori.map((rad) => (

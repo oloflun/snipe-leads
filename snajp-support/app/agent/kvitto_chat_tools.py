@@ -64,9 +64,9 @@ async def _hamta_kvittosammanfattning_impl(
     if t < f:
         return ctx.spara({"fel": "Slutdatumet ligger före startdatumet."})
 
-    rader = bara_utlagg(
-        await ctx.storage.list_bk_underlag(ctx.tenant_id, fran=f, till=t, limit=100_000)
-    )
+    # Alla rader: sammanstall räknar utläggen och intäkterna (kundfakturorna)
+    # var för sig, så en faktura blir aldrig ett utlägg.
+    rader = await ctx.storage.list_bk_underlag(ctx.tenant_id, fran=f, till=t, limit=100_000)
     samman = sammanstall(rader)
     text = summeringstext(samman, f.isoformat(), t.isoformat())
     return ctx.spara(
@@ -85,7 +85,9 @@ async def hamta_kvittosammanfattning(
 ) -> str:
     """Summorna för en period: antal kvitton, totalbelopp, ingående moms,
     summan per kategori och summan per kategorigrupp (per_grupp, till exempel
-    "resor" = transport och logi). Samma uträkning som resultatvyn i produkten.
+    "resor" = transport och logi). Under "intakter": kundfakturorna för sig
+    (fakturerat totalt, utgående moms, obetalt). Samma uträkning som
+    resultatvyn i produkten.
 
     Args:
         fran: Första dagen i perioden, ÅÅÅÅ-MM-DD.

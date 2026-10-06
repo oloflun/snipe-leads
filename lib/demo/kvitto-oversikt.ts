@@ -34,6 +34,7 @@ function rad(del: Partial<Kvitto> & Pick<Kvitto, "id" | "datum" | "motpart">): K
     momssats: null,
     kategori: null,
     kategorietikett: "",
+    riktning: "kostnad",
     status: "klar",
     betalstatus: "betald",
     kalla: "mejl",
@@ -177,8 +178,64 @@ const EXTRA: Kvitto[] = [
   })
 ];
 
+/**
+ * Exempelbolagets egna fakturor till kunder: intäkterna (sedan 2026-10-07).
+ * Sommaren är en mall som kvittona; september står utskriven, med en faktura
+ * som väntar på bekräftelse (bara namnet pekade ut den som kundfaktura).
+ */
+const KUNDER: Mall[] = [
+  { motpart: "Mälardalens Bygg AB", kategori: "", etikett: "", sats: "0.25", bas: 1_800_000, variation: 1_200_000, varje: 2, forskjut: 0, dag: 4, semester: true },
+  { motpart: "Fastighetsbolaget Norr AB", kategori: "", etikett: "", sats: "0.25", bas: 1_250_000, variation: 0, varje: 4, forskjut: 1, dag: 0 },
+  { motpart: "Café Linnégatan", kategori: "", etikett: "", sats: "0.25", bas: 420_000, variation: 360_000, varje: 3, forskjut: 2, dag: 2 }
+];
+
+function sommarensFakturor(): Kvitto[] {
+  const rader: Kvitto[] = [];
+  MANDAGAR.forEach((mandag, i) => {
+    const semester = i >= 1 && i <= 3;
+    KUNDER.forEach((m, j) => {
+      if ((i + m.forskjut) % m.varje !== 0) return;
+      if (semester && m.semester) return;
+      const ore = m.bas + (m.variation ? Math.round((((i + 3) * 7919 + j * 104_729) % m.variation) / 5000) * 5000 : 0);
+      rader.push(
+        rad({
+          id: `demo-f${i}-${j}`,
+          datum: plusDagar(mandag, m.dag),
+          motpart: m.motpart,
+          brutto: kr(ore),
+          momssats: m.sats,
+          riktning: "intakt",
+          kategorietikett: "Kundfaktura",
+          kalla: "uppladdning"
+        })
+      );
+    });
+  });
+  return rader;
+}
+
+const SEPTEMBERS_FAKTUROR: Kvitto[] = [
+  rad({ id: "demo-fs1", datum: "2026-09-03", motpart: "Mälardalens Bygg AB", brutto: "28750.00", momssats: "0.25", riktning: "intakt", kategorietikett: "Kundfaktura", betalstatus: "obetald", forfallodatum: "2026-10-03", kalla: "uppladdning" }),
+  rad({ id: "demo-fs2", datum: "2026-09-10", motpart: "Café Linnégatan", brutto: "6250.00", momssats: "0.25", riktning: "intakt", kategorietikett: "Kundfaktura" }),
+  rad({ id: "demo-fs3", datum: "2026-09-11", motpart: "Fastighetsbolaget Norr AB", brutto: "12500.00", momssats: "0.25", riktning: "intakt", kategorietikett: "Kundfaktura", betalstatus: "obetald", forfallodatum: "2026-10-11" }),
+  rad({
+    id: "demo-fs4",
+    datum: "2026-09-15",
+    motpart: "Stenhuggeriet i Kumla AB",
+    brutto: "9375.00",
+    momssats: "0.25",
+    riktning: "intakt",
+    kategorietikett: "Kundfaktura",
+    status: "granska_manuellt",
+    betalstatus: null,
+    granskningsstatus: "BEHÖVER_GRANSKNING", // inte-copy: backendens statuskod
+    flaggor: ["osäker_klassning"],
+    anmarkning: "Säljaren på fakturan har företagets namn men inget organisationsnummer att jämföra; bekräfta att det är en kundfaktura innan intäkten räknas."
+  })
+];
+
 export function demoKvitton(): Kvitto[] {
-  return [...sommarensKvitton(), ...septembersKvitton(), ...EXTRA];
+  return [...sommarensKvitton(), ...septembersKvitton(), ...EXTRA, ...sommarensFakturor(), ...SEPTEMBERS_FAKTUROR];
 }
 
 export const DEMO_MEJLKONTO = { kopplad: true, leverantor: "demo", adress: "kvitton@exempelbolaget.se" } as const;
