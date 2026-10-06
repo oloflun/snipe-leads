@@ -190,7 +190,10 @@ async def hamta(url: str, *, fas: str, direkt: bool) -> tuple[str | None, str | 
         except Exception:  # noqa: BLE001 — en trasig cacheläsning kostar bara ett anrop
             logger.exception("Sidcachen gick inte att läsa för %s", url)
             rad = None
-        if rad and _farsk(rad, fas):
+        # Ett cachat TJÄNSTEFEL (kredit, kvot, nyckel) säger inget om sidan och
+        # ignoreras: rader från före 2026-10-06 bar kreditslutet på en gammal
+        # nyckel i ett dygn efter att en ny nyckel med krediter lagts in.
+        if rad and _farsk(rad, fas) and (rad.get("innehall") or not _TJANSTEFEL.search(str(rad.get("fel") or ""))):
             kontext.cachetraffar += 1
             return (rad.get("innehall") or None), rad.get("fel"), "cache"
 
@@ -227,7 +230,8 @@ async def hamta(url: str, *, fas: str, direkt: bool) -> tuple[str | None, str | 
                     fel, via = None, "direkt"
                 else:
                     fel = f"{fel} Reservhämtningen gav inget heller: {direkt_fel}."
-    if lager is not None:
+    # Tjänstefel cachas inte: nästa anrop ska få pröva igen med påfylld kredit.
+    if lager is not None and (text or not _TJANSTEFEL.search(str(fel or ""))):
         try:
             await lager.put_sidcache(kontext.tenant_id, url, innehall=text, fel=None if text else fel)
         except Exception:  # noqa: BLE001

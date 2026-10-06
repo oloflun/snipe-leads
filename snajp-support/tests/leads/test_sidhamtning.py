@@ -84,6 +84,38 @@ async def test_utan_kontext_inget_tak_och_ingen_cache(betalda):
     assert len(anrop["sg"]) == 2
 
 
+async def test_tjanstefel_cachas_inte_och_gammalt_tjanstefel_ignoreras(betalda, monkeypatch):
+    """Dev 2026-10-06: kreditslutet på en gammal nyckel cachades som sidans
+    fel i ett dygn, så merinfo "misslyckades" på 20 ms även efter att en ny
+    nyckel med krediter lagts in. Tjänstens fel säger inget om sidan."""
+    anrop, _ = betalda
+    storage = MemoryStorage()
+    url = "https://www.merinfo.se/byggbranschen/goteborg/foretag/1"
+    # En rad som den gamla koden skrev: fel från tjänsten, ingen text.
+    await storage.put_sidcache(TENANT, url, innehall=None, fel="Skrapning misslyckades: Insufficient credits.")
+    kontext = sidhamtning.starta(storage, TENANT)
+    text, fel, via = await sidhamtning.hamta(url, fas="lista", direkt=False)
+    assert via == "scrapegraphai" and text and fel is None and kontext.cachetraffar == 0
+
+    async def slut_kredit(_url):
+        anrop["sg"].append(_url)
+        return None, "Skrapning misslyckades: Insufficient credits."
+
+    monkeypatch.setattr(sidhamtning, "_scrapegraph", slut_kredit)
+    annan = "https://www.merinfo.se/detaljhandel/goteborg/foretag/1"
+    sidhamtning.starta(storage, TENANT)
+    assert (await sidhamtning.hamta(annan, fas="lista", direkt=False))[0] is None
+    assert await storage.get_sidcache(TENANT, annan) is None
+    # Ett riktigt sidfel (sidan finns inte) cachas fortfarande.
+    async def saknas(_url):
+        return None, "Skrapning misslyckades: page not found."
+
+    monkeypatch.setattr(sidhamtning, "_scrapegraph", saknas)
+    borta = "https://www.merinfo.se/foretag/finns-inte"
+    await sidhamtning.hamta(borta, fas="bolag", direkt=False)
+    assert (await storage.get_sidcache(TENANT, borta))["fel"]
+
+
 def test_summan_i_liggaren():
     k = sidhamtning.Skrapkontext(anrop={"bolag": 3}, cachetraffar=2)
     assert sidhamtning.summera({"bolag": 1, "lista": 2}, k) == {"bolag": 4, "lista": 2, "cache": 2}
