@@ -127,33 +127,19 @@ def test_summan_i_liggaren():
     assert sidhamtning.betalda(k2.som_dict()) == 1
 
 
-def test_tjanstefel_cachas_kort_sidfel_lange():
-    """Tre körningar 2026-10-06 svalt på ett cachat kreditfel i ett dygn:
-    ett tjänstefel säger inget om sidan och får bara skydda krediterna en
-    kort stund. Ett sidfel (för lite text, JS-skal) står sig en dag."""
-    from datetime import datetime, timedelta, timezone
-
-    nu = datetime.now(timezone.utc)
-    kredit = {"innehall": None, "fel": "Payment required: no credits left (402)"}
-    assert sidhamtning._farsk({**kredit, "hamtad_at": nu}, "lista") is True
-    assert sidhamtning._farsk({**kredit, "hamtad_at": nu - timedelta(minutes=11)}, "lista") is False
-    sidfel = {"innehall": None, "fel": "direkthämtning: för lite text (JS-renderad sida?)"}
-    assert sidhamtning._farsk({**sidfel, "hamtad_at": nu - timedelta(minutes=11)}, "lista") is True
-    assert sidhamtning._farsk({**sidfel, "hamtad_at": nu - timedelta(days=2)}, "lista") is False
-
-
-async def test_cachat_tjanstefel_raknas_som_tjanstefel(betalda):
-    """Serveras ett kreditfel ur cachen ska körningen ändå veta att
-    hämtningen föll hos tjänsten — annars slutar den 'slut på kandidater'
-    med grönt Klar (Sebbes tre körningar 2026-10-06)."""
+async def test_cachat_tjanstefel_ignoreras_och_provas_igen(betalda):
+    """5c357ff: ett tjänstefel (kredit, kvot, 429) cachas aldrig och en gammal
+    cachad rad med ett sådant fel ignoreras — nästa anrop provar igen. Tre
+    körningar 2026-10-06 svalt annars i ett dygn på ett kreditslut från en
+    utbytt nyckel."""
+    anrop, _ = betalda
     storage = MemoryStorage()
     url = "https://www.merinfo.se/bygg/goteborg/foretag/1"
     await storage.put_sidcache(TENANT, url, innehall=None, fel="rate limit: 429 Too Many Requests")
-    kontext = sidhamtning.starta(storage, TENANT)
+    sidhamtning.starta(storage, TENANT)
     text, fel, via = await sidhamtning.hamta(url, fas="lista", direkt=False)
-    assert text is None and via == "cache" and "429" in str(fel)
-    assert kontext.tjanstefel == 1
-    assert kontext.som_dict()["tjanstefel"] == 1
+    assert via == "scrapegraphai" and text and fel is None
+    assert len(anrop["sg"]) == 1
 
 
 def test_sammanfattningen_namnger_tjanstefel():

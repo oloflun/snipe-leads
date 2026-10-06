@@ -54,13 +54,6 @@ LIVSLANGD = {
     "research": timedelta(days=14),
 }
 FEL_LIVSLANGD = timedelta(days=1)
-#: Ett TJÄNSTEFEL (kredit slut, kvot, 429) säger inget om sidan — det säger
-#: att tjänsten inte kunde leverera just då. Cachad en hel dag svälte det
-#: varje körning i ett dygn: tre körningar 2026-10-06 slutade "0 undersökta →
-#: 0 leads, 6 ur cachen" med grönt Klar, för att listsidornas kreditfel
-#: serverades ur cachen i stället för att provas om när krediten var
-#: tillbaka. Tio minuter skyddar krediterna mot hamrande och läker självt.
-TJANSTEFEL_LIVSLANGD = timedelta(minutes=10)
 
 #: Under så här mycket text räknas en direkthämtning som misslyckad. En
 #: JS-renderad sida fångas främst av _JS_SKAL ("Aktivera JavaScript"); gränsen
@@ -150,12 +143,7 @@ def _farsk(rad: dict[str, Any], fas: str) -> bool:
         return False
     if hamtad.tzinfo is None:
         hamtad = hamtad.replace(tzinfo=timezone.utc)
-    if rad.get("innehall"):
-        livslangd = LIVSLANGD.get(fas, LIVSLANGD["webb"])
-    elif _TJANSTEFEL.search(str(rad.get("fel") or "")):
-        livslangd = TJANSTEFEL_LIVSLANGD
-    else:
-        livslangd = FEL_LIVSLANGD
+    livslangd = LIVSLANGD.get(fas, LIVSLANGD["webb"]) if rad.get("innehall") else FEL_LIVSLANGD
     return datetime.now(timezone.utc) - hamtad < livslangd
 
 
@@ -216,11 +204,6 @@ async def hamta(url: str, *, fas: str, direkt: bool) -> tuple[str | None, str | 
         # nyckel i ett dygn efter att en ny nyckel med krediter lagts in.
         if rad and _farsk(rad, fas) and (rad.get("innehall") or not _TJANSTEFEL.search(str(rad.get("fel") or ""))):
             kontext.cachetraffar += 1
-            # Ett cachat tjänstefel är fortfarande ett tjänstefel för den här
-            # körningen: utan räknaren slutade körningen "slut på kandidater"
-            # fast ingenting gick att hämta.
-            if not rad.get("innehall") and _TJANSTEFEL.search(str(rad.get("fel") or "")):
-                kontext.tjanstefel += 1
             return (rad.get("innehall") or None), rad.get("fel"), "cache"
 
     async def direkthamta() -> tuple[str | None, str | None]:
