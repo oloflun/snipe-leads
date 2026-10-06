@@ -530,3 +530,74 @@ async def test_lackt_arbetsgang_nar_aldrig_kunden():
     llm = _LLM(overrides={"snajp:humanizer-svenska": {"final_reply": lackt}})
     svar = await _tur(storage, llm, "Vilka betalsätt har ni?")
     assert svar["reply"] == "Du kan betala med Swish eller kort."
+
+
+# -- Mejlvägens bredare sökning (2026-10-06) ----------------------------------
+
+
+def test_mejlets_fragor_plockas_ut_var_for_sig():
+    from app.email_pipeline.processor import _fragor_i
+
+    text = (
+        "Hej,\n\nTre frågor:\n1. Kan agenten svara på engelska också?\n"
+        "2. Hur kopplar vi in vår Gmail?\n3. Finns det någon bindningstid?\n\nTack"
+    )
+    assert _fragor_i(text) == [
+        "Kan agenten svara på engelska också?",
+        "Hur kopplar vi in vår Gmail?",
+        "Finns det någon bindningstid?",
+    ]
+    assert _fragor_i("Tack för hjälpen!") == []
+
+
+async def _mejltriage(storage, svar_per_anrop):
+    from app.email_pipeline import processor
+
+    anrop: list[list[str]] = []
+
+    async def fake_triage(**kwargs):
+        anrop.append([a["title"] for a in kwargs["kb_articles"]])
+        return dict(svar_per_anrop[min(len(anrop) - 1, len(svar_per_anrop) - 1)])
+
+    with patch("app.agent.embeddings.embed_text", new=AsyncMock(return_value=None)), patch(
+        "app.agent.triage.triage_email_llm", new=fake_triage
+    ):
+        resultat, artiklar = await processor._triage_email(
+            storage, TENANT,
+            {"subject": "Frågor", "body_text": "Hej! Hur gör jag en retur? Vad kostar frakten?",
+             "from_email": "a@example.invalid"},
+            [],
+        )
+    return anrop, resultat, artiklar
+
+
+@pytest.mark.anyio
+async def test_mejlet_far_traffar_for_varje_fraga():
+    storage = MemoryStorage()
+    anrop, _, artiklar = await _mejltriage(storage, [{"draft_reply": "x", "escalate": False}])
+    assert len(anrop) == 1
+    assert len(artiklar) > 3 or len(anrop[0]) >= 2
+
+
+@pytest.mark.anyio
+async def test_obesvarad_fraga_soks_och_utkastet_skrivs_om_en_gang():
+    storage = MemoryStorage()
+    await storage.add_kb_article(
+        TENANT, title="Presentkort", content="Presentkort säljs i webbutiken.", category="ovrigt"
+    )
+    anrop, resultat, artiklar = await _mejltriage(storage, [
+        {"draft_reply": "vet ej", "escalate": False, "obesvarade": ["Säljer ni presentkort?"]},
+        {"draft_reply": "Presentkort säljs i webbutiken.", "escalate": False, "obesvarade": []},
+    ])
+    assert len(anrop) == 2
+    assert "Presentkort" in anrop[1]
+    assert resultat["draft_body"] == "Presentkort säljs i webbutiken."
+
+
+@pytest.mark.anyio
+async def test_ingen_omskrivning_utan_nya_traffar():
+    storage = MemoryStorage()
+    anrop, _, _ = await _mejltriage(storage, [
+        {"draft_reply": "vet ej", "escalate": False, "obesvarade": ["xyzzy qwerty plugh"]},
+    ])
+    assert len(anrop) == 1

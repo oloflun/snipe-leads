@@ -210,6 +210,7 @@ def tolka_svar(data: dict[str, Any], kb_articles: list[dict[str, Any]]) -> dict[
         "draft_reply": utkast,
         "beslut": beslut["beslut"],
         "intern_notering": beslut["intern_notering"],
+        "obesvarade": beslut["obesvarade"],
         "offertforfragan": bool(data.get("offertforfragan", False)),
         "utbildningsintresse": bool(data.get("utbildningsintresse", False)),
     }
