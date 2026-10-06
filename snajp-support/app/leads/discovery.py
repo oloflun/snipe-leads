@@ -750,6 +750,28 @@ def _asci(text: str) -> str:
     return "".join(t for t in bas if not unicodedata.combining(t))
 
 
+#: mailto-länkens adress lyfts in i den synliga texten INTILL länktexten
+#: (namnet), annars försvinner den med taggen: `<a href="mailto:eva@b.se">Eva
+#: Ek</a>` blev bara "Eva Ek" efter taggstrippen, och sajter som enbart bär
+#: adressen i länken gav aldrig en kontakt (körningarna 2026-10-07: 8 bolag
+#: med sajt, 0 styrkta kontakter).
+_MAILTO = re.compile(r"""<a[^>]+href\s*=\s*["']mailto:([^"'?>]+)["'][^>]*>""", re.IGNORECASE)
+#: Utskriven obfuskering: "eva (at) bolaget (punkt) se", snabel-a.
+_OBFUSKERAT_AT = re.compile(r"\s*[\(\[\{]\s*(?:at|snabel-?a)\s*[\)\]\}]\s*", re.IGNORECASE)
+_OBFUSKERAT_PUNKT = re.compile(r"\s*[\(\[\{]\s*(?:dot|punkt)\s*[\)\]\}]\s*", re.IGNORECASE)
+
+
+def _synliggor_adresser(html: str) -> str:
+    """Gör sidans adresser läsbara för närhetsmatchningen: mailto-länkar
+    skrivs ut intill sin länktext och (at)/(punkt)-obfuskering vecklas ut.
+    Körs FÖRE taggstrippen i båda kontaktvägarna."""
+    # Ersättningen är ren text — ett löst "<" här hade ätit länktexten
+    # (namnet) i taggstrippen steget efter.
+    text = _MAILTO.sub(lambda m: f" {m.group(1)} ", html)
+    text = _OBFUSKERAT_AT.sub("@", text)
+    return _OBFUSKERAT_PUNKT.sub(".", text)
+
+
 def vd_uppgift_i_text(text: str, vd_namn: str, website: str) -> dict[str, Any] | None:
     """VD:ns mejl eller telefon ur sidtext, BARA när uppgiften går att knyta
     till VD (Antons regel 2026-10-04: ett nummer som inte kan styrkas tillhöra
@@ -761,7 +783,7 @@ def vd_uppgift_i_text(text: str, vd_namn: str, website: str) -> dict[str, Any] |
     led = [d for d in re.findall(r"[a-z]+", _asci(vd_namn)) if len(d) >= 3]
     if len(led) < 2:
         return None
-    ren = re.sub(r"<[^>]+>", " ", text)
+    ren = re.sub(r"<[^>]+>", " ", _synliggor_adresser(text))
     ren = re.sub(r"\s+", " ", ren)
     asc = _asci(ren)
     for adress in dict.fromkeys(_EPOST_PA_SIDA.findall(ren)):
@@ -842,7 +864,7 @@ def person_kontakt_i_text(text: str, website: str) -> dict[str, Any] | None:
     namnet om den står där. `rang`: 0 = VD, 1 = ägare/chef/ansvarig,
     2 = namngiven utan uttalad roll. Funktionsadresser (info@, kontakt@)
     passerar aldrig: lokaldelen bär inget namn."""
-    ren = re.sub(r"<[^>]+>", " ", text)
+    ren = re.sub(r"<[^>]+>", " ", _synliggor_adresser(text))
     ren = re.sub(r"\s+", " ", ren)
     basta: dict[str, Any] | None = None
     for traff in _EPOST_PA_SIDA.finditer(ren):

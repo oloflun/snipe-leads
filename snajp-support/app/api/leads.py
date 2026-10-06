@@ -2097,8 +2097,14 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> None:
             }
             # Kredittaket gäller hela körningen (plan 2026-10-05): varje runda
             # får det som återstår, och summan står i liggaren (Körningar).
+            # Taket skalar med beställningen (Sebbe 2026-10-07: Iris måste
+            # kunna hitta leads igen): 40 sidor räckte till ~29 granskade
+            # bolag och svalt varje liten körning; en beställning på 50 var
+            # omöjlig per konstruktion. 20 sidor per beställt lead, golv 40,
+            # tak 160 — kostnadsvakten finns kvar, men i proportion.
+            korningstak = min(160, max(sidhamtning.STANDARD_TAK, 20 * int(k["mal"])))
             skrap = sidhamtning.starta(
-                storage, tenant_id, tak=sidhamtning.STANDARD_TAK - sidhamtning.betalda(k.get("skrap"))
+                storage, tenant_id, tak=korningstak - sidhamtning.betalda(k.get("skrap"))
             )
             try:
                 # Sökningen och Jev-triagen loggas som en egen post (Fas 7).

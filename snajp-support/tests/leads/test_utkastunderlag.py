@@ -188,3 +188,23 @@ def test_person_kontakt_rangordnar_vd_chef_ansvarig_anstalld():
 
     # En funktionsadress utan namn intill ger INGEN kontakt — hellre tomt än gissat.
     assert person_kontakt_i_text("<p>Kontakta oss: info@bolaget.se</p>", "https://bolaget.se") is None
+
+
+def test_mailto_och_obfuskerade_adresser_skordas():
+    """Körningarna 2026-10-07: 8 bolag med sajt, 0 styrkta kontakter — för
+    att adressen bara låg i mailto-länken (taggstrippen åt den) eller var
+    utskriven som "eva (at) bolaget (punkt) se"."""
+    from app.leads.discovery import person_kontakt_i_text, vd_uppgift_i_text
+
+    mailto = '<p><a href="mailto:eva.ek@bolaget.se">Eva Ek</a>, VD</p>'
+    traff = person_kontakt_i_text(mailto, "https://bolaget.se")
+    assert (traff["contact_name"], traff["contact_email"], traff["rang"]) == ("Eva Ek", "eva.ek@bolaget.se", 0)
+    # VD-varianten (listspåret) har kvar sitt tvåledskrav på >=3 tecken,
+    # så den provas med ett längre namn — mailto-skörden är poängen här.
+    vd_mailto = '<p><a href="mailto:eva.ekberg@bolaget.se">Eva Ekberg</a>, VD</p>'
+    assert vd_uppgift_i_text(vd_mailto, "Eva Ekberg", "https://bolaget.se") == {
+        "contact_email": "eva.ekberg@bolaget.se", "contact_phone": None}
+
+    obfuskerat = "<p>Per Palm, Platschef: per (at) bolaget (punkt) se</p>"
+    traff = person_kontakt_i_text(obfuskerat, "https://bolaget.se")
+    assert (traff["contact_name"], traff["contact_email"], traff["rang"]) == ("Per Palm", "per@bolaget.se", 1)
