@@ -184,6 +184,8 @@ async def _triage_email(
 
     embedding = await embed_text(query)
     articles = await storage.search_kb(tenant_id, query, embedding=embedding)
+    from ..agentcore.instruktioner import las_agent_mall
+
     result = await triage_email_llm(
         sender=email["from_email"],
         subject=email["subject"],
@@ -192,6 +194,7 @@ async def _triage_email(
         image_urls=image_urls,
         foretagsprofil=foretagsprofil,
         foretagsnamn=foretagsnamn,
+        grundprompt_mall=await las_agent_mall(storage, "support") or None,
     )
     result["draft_body"] = result.pop("draft_reply", None)
     result.setdefault("reasoning", "LLM-klassificering.")

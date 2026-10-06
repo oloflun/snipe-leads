@@ -3119,12 +3119,19 @@ class PostgresStorage:
 
     # -- Instruktionslagret (migration 049) ---------------------------------
 
-    async def get_global_instructions(self) -> dict[str, Any] | None:
+    async def get_global_instructions(self, agent_type: str = "alla") -> dict[str, Any] | None:
         # Ingen tenant-scoping: tabellen är plattformens och har ingen
         # tenant_id. Vägen hit går bara via master-nyckeln (api/deps.py).
         async with self.pool.acquire() as conn:
             record = await conn.fetchrow(
-                "select * from agent_global_instructions where aktiv"
+                "select * from agent_global_instructions where aktiv and agent_type = $1", agent_type
+            )
+        return _row(record)
+
+    async def get_global_instruction(self, instruktion_id: str) -> dict[str, Any] | None:
+        async with self.pool.acquire() as conn:
+            record = await conn.fetchrow(
+                "select * from agent_global_instructions where id = $1::uuid", instruktion_id
             )
         return _row(record)
 
@@ -3135,6 +3142,8 @@ class PostgresStorage:
         strukturerad_md: str,
         kalla: str = "ai",
         uppdaterad_av: str | None = None,
+        agent_type: str = "alla",
+        feedback: str = "",
     ) -> dict[str, Any]:
         async with self.pool.acquire() as conn:
             # EN transaktion. Det partiella unika indexet tillåter exakt en
@@ -3143,35 +3152,43 @@ class PostgresStorage:
             # faller tyst tillbaka på filen som om ingen instruktion fanns.
             async with conn.transaction():
                 await conn.execute(
-                    "update agent_global_instructions set aktiv = false where aktiv"
+                    "update agent_global_instructions set aktiv = false where aktiv and agent_type = $1",
+                    agent_type,
                 )
                 record = await conn.fetchrow(
                     """
                     insert into agent_global_instructions
-                        (ravtext, strukturerad_md, kalla, uppdaterad_av, aktiv)
-                    values ($1, $2, $3, $4, true)
+                        (ravtext, strukturerad_md, kalla, uppdaterad_av, aktiv, agent_type, feedback)
+                    values ($1, $2, $3, $4, true, $5, $6)
                     returning *
                     """,
                     ravtext,
                     strukturerad_md,
                     kalla,
                     uppdaterad_av,
+                    agent_type,
+                    feedback,
                 )
         return _row(record)
 
-    async def list_global_instructions(self, *, limit: int = 20) -> list[dict[str, Any]]:
+    async def list_global_instructions(
+        self, *, limit: int = 20, agent_type: str = "alla", med_text: bool = False
+    ) -> list[dict[str, Any]]:
         limit = max(1, min(limit, 200))
+        text_kolumner = ", strukturerad_md, feedback" if med_text else ""
         async with self.pool.acquire() as conn:
             records = await conn.fetch(
-                """
-                select id, kalla, aktiv, uppdaterad_av, created_at,
+                f"""
+                select id, agent_type, kalla, aktiv, uppdaterad_av, created_at,
                        length(ravtext) as ravtext_tecken,
-                       length(strukturerad_md) as strukturerad_tecken
+                       length(strukturerad_md) as strukturerad_tecken{text_kolumner}
                 from agent_global_instructions
+                where agent_type = $2
                 order by created_at desc
                 limit $1
                 """,
                 limit,
+                agent_type,
             )
         return [_row(r) for r in records]
 

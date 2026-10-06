@@ -2372,8 +2372,14 @@ class MemoryStorage:
 
     # -- Instruktionslagret (migration 049) ---------------------------------
 
-    async def get_global_instructions(self) -> dict[str, Any] | None:
-        return next((dict(rad) for rad in self.global_instructions if rad["aktiv"]), None)
+    async def get_global_instructions(self, agent_type: str = "alla") -> dict[str, Any] | None:
+        return next(
+            (dict(rad) for rad in self.global_instructions if rad["aktiv"] and rad["agent_type"] == agent_type),
+            None,
+        )
+
+    async def get_global_instruction(self, instruktion_id: str) -> dict[str, Any] | None:
+        return next((dict(rad) for rad in self.global_instructions if rad["id"] == instruktion_id), None)
 
     async def save_global_instructions(
         self,
@@ -2382,11 +2388,16 @@ class MemoryStorage:
         strukturerad_md: str,
         kalla: str = "ai",
         uppdaterad_av: str | None = None,
+        agent_type: str = "alla",
+        feedback: str = "",
     ) -> dict[str, Any]:
         for rad in self.global_instructions:
-            rad["aktiv"] = False
+            if rad["agent_type"] == agent_type:
+                rad["aktiv"] = False
         rad = {
             "id": str(uuid.uuid4()),
+            "agent_type": agent_type,
+            "feedback": feedback,
             "ravtext": ravtext,
             "strukturerad_md": strukturerad_md,
             "kalla": kalla,
@@ -2397,18 +2408,22 @@ class MemoryStorage:
         self.global_instructions.insert(0, rad)
         return dict(rad)
 
-    async def list_global_instructions(self, *, limit: int = 20) -> list[dict[str, Any]]:
+    async def list_global_instructions(
+        self, *, limit: int = 20, agent_type: str = "alla", med_text: bool = False
+    ) -> list[dict[str, Any]]:
         return [
             {
                 "id": rad["id"],
+                "agent_type": rad["agent_type"],
                 "kalla": rad["kalla"],
                 "aktiv": rad["aktiv"],
                 "uppdaterad_av": rad["uppdaterad_av"],
                 "created_at": rad["created_at"],
                 "ravtext_tecken": len(rad["ravtext"]),
                 "strukturerad_tecken": len(rad["strukturerad_md"]),
+                **({"strukturerad_md": rad["strukturerad_md"], "feedback": rad["feedback"]} if med_text else {}),
             }
-            for rad in self.global_instructions[:limit]
+            for rad in [r for r in self.global_instructions if r["agent_type"] == agent_type][:limit]
         ]
 
     async def get_agent_config(self, tenant_id: str, *, agent_type: str) -> dict[str, Any]:

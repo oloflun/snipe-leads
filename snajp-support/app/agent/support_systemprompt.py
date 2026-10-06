@@ -303,8 +303,12 @@ def rendera(
     lage: str = "kedja",
     nu: datetime | None = None,
     karna: bool = False,
+    mall: str | None = None,
 ) -> str:
     """Grundprompten med varje `{{PLATSHÅLLARE}}` ifylld, plus lägesavsnittet.
+
+    `mall` är en sparad version (agent_global_instructions, agent_type
+    'support', migration 099); utan den gäller filen.
 
     `kategorier` skickas bara när listan är VÅR (mejlinkorgens fasta fack);
     chattens taxonomi kan vara kundsatt och står därför i användarmeddelandet.
@@ -325,7 +329,7 @@ def rendera(
             raise OkandPlatshallare(nyckel)
         return varden[nyckel]
 
-    text = _PLATSHALLARE.sub(_byt, _OM_FILEN.sub("", _mall()))
+    text = _PLATSHALLARE.sub(_byt, _OM_FILEN.sub("", mall or _mall()))
     text = _INSTALLNINGSBLOCK.sub(_KALLRUBRIK, text).rstrip()
     if karna:
         return f"{_avsnitt(text, KARNAN)}\n\n---\n\n{_KARNA_TEXT}"

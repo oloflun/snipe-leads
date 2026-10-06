@@ -444,10 +444,16 @@ class InstruktionRequest(BaseModel):
     """
 
     ravtext: str = Field(default="", max_length=12_000)
-    #: Sätts av den som redigerat modellens utkast direkt. Tom => struktureras
-    #: ur ravtext.
-    strukturerad_md: str | None = Field(default=None, max_length=12_000)
+    #: Det färdiga dokumentet: den granskade förhandsvisningen eller en
+    #: handredigering. Tom => feedbacken bakas in (agentcore/baka_in.py).
+    #: Taket följer agentens grundprompt; endpointen kapar per agent.
+    strukturerad_md: str | None = Field(default=None, max_length=40_000)
     strukturera: bool = True
+    #: Vilket lager: 'alla' (gemensamt), 'support' eller 'leads' (migration 099).
+    agent: str = Field(default="alla", pattern="^(alla|support|leads)$")
+    #: Admins feedback, ordagrant. Bakas in i dokumentet som gäller och sparas
+    #: bredvid versionen. None => `ravtext` används (äldre klienter).
+    feedback: str | None = Field(default=None, max_length=20_000)
 
 
 class TenantAktivRequest(BaseModel):

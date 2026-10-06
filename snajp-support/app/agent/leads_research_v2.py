@@ -30,6 +30,7 @@ import hashlib
 import json
 import logging
 import time
+from dataclasses import replace
 from typing import Any
 
 from ..agentcore.instruktioner import las_instruktioner
@@ -42,6 +43,7 @@ from ..leads.language_gate import last_humanizer_variant
 from ..leads.outreach_playbook import OUTREACH_V2
 from ..leads.research_playbook import RESEARCH_V2
 from ..leads.soul import load_soul
+from . import leads_systemprompt
 from .leads_context import OutreachContext
 from .leads_tools import _queue_outreach_draft_impl, _request_human_handoff_impl
 from .leads_agent import (
@@ -248,6 +250,9 @@ async def run_research_step_v2(
 
     soul_block = await load_soul(storage, tenant_id)
     lager = await las_instruktioner(storage, tenant_id, agent_type="leads", tenant_namn=tenant_name)
+    # Iris grundprompt (agent-core/prompts/leads-systemprompt.md, eller en sparad
+    # version) som eget lager i varje steg, före skillen.
+    lager = replace(lager, agent_md=leads_systemprompt.rendera(foretagsnamn=tenant_name, steg="research", mall=lager.agent_mall or None))
     # Kundens produkter (agent_configs.settings.produkter). En kund som säljer
     # flera saker (Snajp: support, Iris, kvitton) ska erbjuda DEN som passar
     # bolaget, inte hela listan. Utan lista gäller hela produktbeskrivningen.
@@ -648,6 +653,9 @@ async def run_outreach_draft_v2(
     language_state = thread.get("language_state") or "sv"
     soul_block = await load_soul(storage, tenant_id)
     lager = await las_instruktioner(storage, tenant_id, agent_type="leads", tenant_namn=tenant_name)
+    # Iris grundprompt (agent-core/prompts/leads-systemprompt.md, eller en sparad
+    # version) som eget lager i varje steg, före skillen.
+    lager = replace(lager, agent_md=leads_systemprompt.rendera(foretagsnamn=tenant_name, steg="utkast", mall=lager.agent_mall or None))
 
     base = (
         f"## Uppdrag\nDu skriver ett kallt första mejl till {company_name} åt {tenant_name}.\n\n"

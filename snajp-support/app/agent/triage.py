@@ -76,6 +76,7 @@ async def triage_email_llm(
     image_urls: list[str] | None = None,
     foretagsprofil: str = "",
     foretagsnamn: str = "",
+    grundprompt_mall: str | None = None,
 ) -> dict[str, Any]:
     settings = get_settings()
     # Käll-ID:n som grundprompten kräver (avsnitt 3), och wrappat: kunskaps-
@@ -114,6 +115,7 @@ async def triage_email_llm(
         avsandare=foretagsnamn,
         kategorier=CATEGORIES,
         lage="mejl",
+        mall=grundprompt_mall,
     )
     # Vision stöds bara av OpenAI-modellerna; DeepSeek (deepseek-chat) är textbaserad.
     content: str | list[dict[str, Any]] = prompt
