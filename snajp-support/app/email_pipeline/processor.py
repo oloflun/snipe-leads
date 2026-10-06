@@ -179,6 +179,34 @@ async def _bred_sokning(
     return ut
 
 
+async def _faktakontroll(
+    storage: Storage,
+    tenant_id: str,
+    utkast: str,
+    *,
+    articles: list[dict[str, Any]],
+    email: dict[str, Any],
+    profil: str,
+    avsandare: str,
+):
+    """support_faktagrind på mejlutkastet, på kundens valda nivå. Underlaget
+    är kunskapsbasens träffar, kundens eget mejl och avsändarprofilen
+    (bolagsuppgifterna hör hemma i ett kostnadsförslag)."""
+    from ..agent import support_faktagrind, support_regler
+
+    try:
+        niva = support_regler.normalisera(
+            await storage.get_agent_settings(tenant_id, agent_type="support")
+        )["faktakontroll"]
+    except Exception:  # noqa: BLE001 — standardnivån hellre än ingen kontroll
+        niva = "forsiktig"
+    kallor = [f"{a.get('title') or ''}\n{a.get('content') or ''}" for a in articles]
+    kallor += [email.get("subject") or "", email.get("body_text") or "", profil or ""]
+    return support_faktagrind.kontrollera(
+        utkast, niva=niva, kallor=kallor, tenant_namn=avsandare
+    )
+
+
 async def _triage_email(
     storage: Storage,
     tenant_id: str,
@@ -588,12 +616,32 @@ async def process_email(
         kvalitet = await sakra_utgaende_text(content)
         content = kvalitet.text
 
+        # Faktagrinden, samma som chatten (2026-10-06). Mejlvägen hade ingen:
+        # dev-testet fick "inkluderar meddelanden från Facebook Messenger" i
+        # ett utkast fast ingen artikel nämner Messenger. Ett utkast som inte
+        # håller mot underlaget på kundens nivå skickas ALDRIG automatiskt —
+        # det går till granskningskön, och det ostödda står i beslutsloggen.
+        faktadom = await _faktakontroll(
+            storage, tenant_id, triage.get("draft_body") or "",
+            articles=articles, email=email, profil=profil, avsandare=avsandare,
+        )
+        if not faktadom.ok:
+            await storage.log_decision(
+                tenant_id, email_id=email_id, event="faktagrind",
+                detail={
+                    "note": "Utkastet innehåller uppgifter som inte står i underlaget — "
+                    "kräver granskning, skickas aldrig automatiskt.",
+                    "ostodda": list(faktadom.ostodda)[:10],
+                },
+            )
+
         # 4: autosvar — bara om regeln säger auto OCH säkerhetsvillkoren håller.
         auto_ok = (
             rule == "auto"
             and confidence >= settings.auto_send_min_confidence
             and (sentiment is None or sentiment >= 0.4)
             and not kvalitet.kraver_granskning
+            and faktadom.ok
         )
         if auto_ok:
             # Sändningen sker FÖRE varje statusskrivning, samma kontrakt som
