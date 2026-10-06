@@ -36,9 +36,11 @@ def anyio_backend():
 
 
 def _bolag(namn: str) -> dict:
+    from tests.orgnr_fixtur import orgnr_for
+
     slug = namn.lower().replace(" ", "")
     return {
-        "company_name": namn, "website": f"https://{slug}.se", "orgnr": "556824-9022",
+        "company_name": namn, "website": f"https://{slug}.se", "orgnr": orgnr_for(namn),
         "ort": "Göteborg", "postnr": "421 32", "contact_email": f"info@{slug}.se",
         "contact_level": "role_address", "contact_name": "Test Testsson", "contact_role": "VD",
         "anstallda": None,

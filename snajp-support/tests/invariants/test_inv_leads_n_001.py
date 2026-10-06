@@ -15,6 +15,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.api import leads as leads_api
+from tests.orgnr_fixtur import orgnr_for
 from app.jobs.store import MemoryJobStore
 from app.leads import korning as korningsmodul
 from app.storage.memory import MemoryStorage
@@ -33,7 +34,7 @@ def _bolag(namn: str) -> dict:
     return {
         "company_name": namn,
         "website": f"https://{slug}.se",
-        "orgnr": "556824-9022",
+        "orgnr": orgnr_for(namn),
         "ort": "Göteborg",
         "postnr": "421 32",
         "contact_email": f"info@{slug}.se",
