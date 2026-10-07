@@ -904,17 +904,19 @@ def fordela(k: dict[str, Any], kontakt: dict[str, Any] | None) -> tuple[str, str
     `kontakt` svaret från discovery.hamta_person_kontakt.
 
     * "iris": en mejladress, från sajten eller registrets bolags-e-post.
-    * "ring": ingen mejladress men en telefon (sajtens eller registrets
-      bolagsnummer) och en VD namngiven i registret.
+    * "ring": ingen mejladress men sajtens publicerade telefon, eller
+      registrets bolagsnummer och en VD namngiven i registret.
     * "prova_om": sökningen stoppades av sidtaket, eller sajten finns men
       inget kontaktsätt hittades på den. Varken lista eller uteslutning:
       bolaget prövas nästa körning (regel 12).
-    * "ej_kvalificerad": enskild firma (NIX-spärren och MFL 19 §), telefon
-      utan namngiven VD, eller varken sajt, mejl eller telefon.
+    * "ej_kvalificerad": enskild firma (NIX-spärren och MFL 19 §), registrets
+      nummer utan namngiven VD och utan sajt, eller varken sajt, mejl eller
+      telefon.
 
-    Tolkning: en sajt vars enda kontaktsätt är en telefon, utan namngiven VD,
-    blir ej kvalificerad (regel 16, "utan namngiven VD") — en ny sökning på
-    sajten ändrar inte det.
+    Tolkning (orkestratorn 2026-10-08): regel 12 går före VD-kravet. En sajt
+    vars enda kontaktsätt är en telefon hamnar på ringlistan även utan VD i
+    registret: numret är bolagets eget publicerade. VD-kravet i regel 15
+    gäller registrets nummer, som annars inte går att knyta till någon.
 
     Ren funktion: används av körningen (_komplettera) och av
     scripts/omklassa_listspar.py."""
@@ -925,12 +927,13 @@ def fordela(k: dict[str, Any], kontakt: dict[str, Any] | None) -> tuple[str, str
         return "prova_om", "Stoppad av sidtaket"
     if kontakt.get("contact_email") or registrets_epost(k):
         return "iris", None
-    telefon = kontakt.get("contact_phone") or k.get("_telefon")
-    if telefon and k.get("vd_namn"):
+    if kontakt.get("contact_phone"):
         return "ring", None
-    if k.get("website") and not kontakt.get("contact_phone"):
+    if k.get("_telefon") and k.get("vd_namn"):
+        return "ring", None
+    if k.get("website"):
         return "prova_om", "Sajt utan hittad kontakt"
-    if telefon:
+    if k.get("_telefon"):
         return "ej_kvalificerad", "Ingen namngiven VD"
     return "ej_kvalificerad", "Inget kontaktsätt"
 
@@ -951,23 +954,26 @@ def iris_kandidat(k: dict[str, Any], kontakt: dict[str, Any] | None) -> dict[str
 
 
 def ringrad(k: dict[str, Any], kontakt: dict[str, Any] | None) -> dict[str, Any]:
-    """Prospektet på ringlistan (regel 15): VD ur registret, bolagets telefon
-    och antal anställda, så att säljaren vet att numret kan gå till någon
-    annan. contact_level 'named_role_match' (VD namngiven, rollen VD) —
-    värdet måste klara prospects-checken i migration 058."""
-    telefon = (kontakt or {}).get("contact_phone") or k.get("_telefon")
+    """Prospektet på ringlistan (regel 15): VD ur registret (annars personen
+    sajten nämner vid numret), bolagets telefon och antal anställda, så att
+    säljaren vet att numret kan gå till någon annan. contact_level ur
+    migration 058:s värden: 'named_role_match' när VD är namngiven,
+    'role_address' när numret bara är bolagets växel."""
+    kontakt = kontakt or {}
+    telefon = kontakt.get("contact_phone") or k.get("_telefon")
+    vd = k.get("vd_namn")
     return {
         **{f: k.get(f) for f in (
             "company_name", "website", "ort", "postnr", "orgnr", "anstallda", "omsattning", "sni",
             "source_name", "source_url", "jev_triage",
         )},
-        "contact_name": k.get("vd_namn"),
-        "contact_role": "VD",
+        "contact_name": vd or kontakt.get("contact_name"),
+        "contact_role": "VD" if vd else kontakt.get("contact_role"),
         "contact_phone": telefon,
         "contact_email": None,
-        "contact_level": "named_role_match",
+        "contact_level": "named_role_match" if vd else "role_address",
         "signal": "ring",
-        "signal_detalj": "Bara telefon, VD namngiven i registret",
+        "signal_detalj": "Bara telefon, VD namngiven i registret" if vd else "Bara telefon på sajten",
         "spar": "ring",
     }
 

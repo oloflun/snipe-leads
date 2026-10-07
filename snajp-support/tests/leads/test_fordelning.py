@@ -56,7 +56,8 @@ def _kandidat(**andring) -> dict:
         # Telefon utan namngiven VD → ej kvalificerad (regel 16).
         (_kandidat(website=None, vd_namn=None, _telefon="031-12 34 56"), None,
          ("ej_kvalificerad", "Ingen namngiven VD")),
-        (_kandidat(vd_namn=None), {"contact_phone": "031-12 34 56"}, ("ej_kvalificerad", "Ingen namngiven VD")),
+        # Sajtens eget nummer räcker utan VD (regel 12 går före VD-kravet).
+        (_kandidat(vd_namn=None), {"contact_phone": "031-12 34 56"}, ("ring", None)),
         # Enskild firma → aldrig ringlistan, aldrig Iris (NIX, MFL 19 §).
         (_kandidat(orgnr="800101-1234", _telefon="070-111 11 11"), {"contact_email": "anna@gmail.com"},
          ("ej_kvalificerad", "Enskild firma (NIX-kontroll krävs)")),
@@ -260,3 +261,9 @@ async def test_epostdomanen_och_gissningen_provas_fore_det_betalda(monkeypatch):
     monkeypatch.setattr(discovery, "sla_upp_webbplats", _gissa)
     assert await m._webbplats(_kandidat(website=None, _epost="alfa@comhem.se")) is None
     assert provade == []
+
+
+def test_ringraden_utan_vd_bar_sajtens_kontakt_och_vaxelnivan():
+    rad = m.ringrad(_kandidat(vd_namn=None), {"contact_phone": "031-12 34 56", "contact_name": "Per Persson"})
+    assert (rad["contact_name"], rad["contact_role"], rad["contact_level"], rad["signal_detalj"]) == (
+        "Per Persson", None, "role_address", "Bara telefon på sajten")
