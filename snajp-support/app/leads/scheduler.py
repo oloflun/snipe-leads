@@ -103,6 +103,20 @@ async def _kor_send_guard(storage, tenant_id: str, thread: dict, message: dict, 
                 "ej_styrkt",
                 "Bolaget är inte bedömt mot hämtat källmaterial och kan inte kontaktas.",
             )
+        # Ett avslutat eller arkiverat lead (2026-10-08): "ej intresserad",
+        # "kontakta inte" (samtal eller svar) och Arkivera är beslut som ett
+        # godkännande från i går inte får gå förbi. Utkasten ställs in när
+        # beslutet tas; spärren här fångar det som ändå hann bli liggande.
+        if prospect.get("arkiverad_at"):
+            return GuardBeslut(SG_BLOCKERA, "arkiverad", "Leadet är arkiverat och kontaktas inte.")
+        if prospect.get("status") in ("lost", "suppressed"):
+            return GuardBeslut(
+                SG_BLOCKERA,
+                "avslutad",
+                "Leadet har avböjt eller bett att inte bli kontaktat."
+                if prospect.get("status") == "suppressed"
+                else "Leadet är markerat som ej intresserat.",
+            )
 
     tenant = await storage.get_tenant(tenant_id) or {}
     dygnets_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -116,8 +130,10 @@ async def _kor_send_guard(storage, tenant_id: str, thread: dict, message: dict, 
         skickade_totalt=await storage.count_sent_outreach(tenant_id),
         skickade_idag=await storage.count_sent_outreach(tenant_id, since=dygnets_start),
         tenant_alder_dagar=_alder_i_dagar(tenant.get("created_at"), now),
+        # Leadets egen tråd räknas inte: 90-dagarsspärren gäller ett NYTT
+        # kallmejl, inte uppföljningen eller svaret i samma samtal.
         senaste_kontakt_med_foretaget=await storage.last_contact_with_company(
-            tenant_id, nyckel
+            tenant_id, nyckel, utom_trad=thread.get("id")
         ),
         suppressions=frozenset(await storage.list_suppressions(tenant_id)),
         # Trådens egna tidigare kontakter räknas inte som "tidigare kontaktad" —
@@ -478,11 +494,27 @@ async def process_godkanda(storage: Storage, provider: SendProvider) -> list[dic
     return results
 
 
+#: Bevakningen i sändaren för godkända utkast: uppföljningssvepet körs högst
+#: så här ofta. Förfallodagarna räknas i dygn, men ett svar som kommer in ska
+#: inte hinna mötas av en uppföljning skriven en timme tidigare — och svepet är
+#: billigt när inget är förfallet (en fråga per tenant, ingen modell).
+BEVAKNING_SEKUNDER = 600
+
+
 async def run_godkand_sandare(app_state) -> None:
-    """Bakgrundsloopen för godkända utkast som väntar på sändfönstret."""
+    """Bakgrundsloopen för godkända utkast som väntar på sändfönstret.
+
+    Sedan 2026-10-08 kör den också bevakningen: uppföljningssvepet, högst var
+    tionde minut. Före det startade svepet bara med SEND_QUEUE_POLL_SECONDS>0,
+    osatt i båda miljöerna, och ingen uppföljning skrevs någonsin. Svepet
+    skriver BARA utkast till granskning (force_review i
+    follow_up_generator), aldrig autonoma utskick."""
+    import time as _time
+
     interval = max(get_settings().godkanda_utskick_sekunder, 30)
     provider = get_send_provider()
     logger.info("Sändare för godkända utkast aktiv: var %s sekund.", interval)
+    senaste_svep = 0.0
     while True:
         try:
             for result in await process_godkanda(app_state.storage, provider):
@@ -490,6 +522,13 @@ async def run_godkand_sandare(app_state) -> None:
                     logger.info("godkänt utkast %s (%s): %s", result["item_id"], result["tenant"], result["outcome"])
         except Exception:  # noqa: BLE001 — loopen får aldrig dö
             logger.exception("Oväntat fel i sändaren för godkända utkast — fortsätter nästa varv.")
+        try:
+            if _time.monotonic() - senaste_svep >= BEVAKNING_SEKUNDER:
+                senaste_svep = _time.monotonic()
+                for rad in await sweep_follow_ups(app_state.storage):
+                    logger.info("uppföljning (%s): %s", rad.get("tenant"), rad)
+        except Exception:  # noqa: BLE001 — svepet får inte döda sändaren
+            logger.exception("Oväntat fel i bevakningen — fortsätter nästa varv.")
         await asyncio.sleep(interval)
 
 
@@ -515,13 +554,28 @@ async def process_all_due(storage: Storage, provider: SendProvider) -> list[dict
 FOLLOW_UP_SWEEP_SECONDS = 3600
 
 
+#: Ett svep i taget per process: sändaren för godkända utkast och den gamla
+#: schemaläggaren (SEND_QUEUE_POLL_SECONDS) kan båda köra det, och två svep
+#: samtidigt hade hunnit skriva två uppföljningar i samma tråd innan
+#: has_pending_item såg den första.
+_svepslas = asyncio.Lock()
+
+
 async def sweep_follow_ups(storage: Storage) -> list[dict]:
-    """Ett uppföljningssvep över alla tenants. Del av schemaläggarloopen.
+    """Ett uppföljningssvep över alla tenants. Del av schemaläggarloopen och
+    av bevakningen i run_godkand_sandare.
 
     Hoppar över simulering (inga LLM-anrop utan modell) och tenants utan
     affärskontext (utan den finns inget att grunda ett mejl i — och inget
     initialt mejl kan ha gått ut den vägen heller). Ett trasigt tenantsvep
     fäller inte de andras, samma princip som process_all_due.
+
+    Spegelvakten (2026-10-08): i en spegel (development, mirror_meta) får bara
+    trådar vars FÖRSTA utskick gick efter speglingen följas upp. Trådarna som
+    kopierats från produktionen följs upp av produktionen; development hade
+    annars skrivit en andra uppföljning till samma riktiga bolag. Går
+    markören inte att läsa körs inget svep alls — åt det försiktiga hållet,
+    samma princip som process_godkanda.
     """
     from datetime import datetime, timezone as _tz
 
@@ -530,25 +584,36 @@ async def sweep_follow_ups(storage: Storage) -> list[dict]:
 
     if get_settings().is_simulation():
         return []
+    try:
+        spegel = await storage.spegel_info()
+    except Exception:  # noqa: BLE001
+        logger.exception("Kunde inte läsa spegelmarkören — hoppar över uppföljningssvepet.")
+        return []
+    seedad = (spegel or {}).get("seeded_at")
+    if spegel and not seedad:
+        logger.warning("Spegel utan seeded_at — hoppar över uppföljningssvepet.")
+        return []
 
-    now = datetime.now(_tz.utc)
-    resultat: list[dict] = []
-    for tenant in await storage.list_tenants():
-        try:
-            context_pack, missing = await build_context_pack(storage, tenant["id"])
-            if "product_marketing" in missing:
-                continue
-            for rad in await generate_due_follow_ups(
-                storage,
-                tenant["id"],
-                now=now,
-                tenant_name=tenant.get("name") or tenant.get("slug") or "",
-                context_pack=context_pack,
-            ):
-                resultat.append({"tenant": tenant.get("slug"), **rad})
-        except Exception:  # noqa: BLE001 — en tenant fäller inte svepet
-            logger.exception("Uppföljningssvepet för %s misslyckades.", tenant.get("slug"))
-    return resultat
+    async with _svepslas:
+        now = datetime.now(_tz.utc)
+        resultat: list[dict] = []
+        for tenant in await storage.list_tenants():
+            try:
+                context_pack, missing = await build_context_pack(storage, tenant["id"])
+                if "product_marketing" in missing:
+                    continue
+                for rad in await generate_due_follow_ups(
+                    storage,
+                    tenant["id"],
+                    now=now,
+                    tenant_name=tenant.get("name") or tenant.get("slug") or "",
+                    context_pack=context_pack,
+                    forst_skickad_efter=seedad,
+                ):
+                    resultat.append({"tenant": tenant.get("slug"), **rad})
+            except Exception:  # noqa: BLE001 — en tenant fäller inte svepet
+                logger.exception("Uppföljningssvepet för %s misslyckades.", tenant.get("slug"))
+        return resultat
 
 
 async def run_send_scheduler(app_state) -> None:
