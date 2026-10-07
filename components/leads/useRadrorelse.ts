@@ -2,6 +2,11 @@
 
 import { useLayoutEffect, useRef, type RefObject } from "react";
 
+/** DESIGN.md § Motion: --dur-mid och --ease-out. */
+const DUR_MID = 300;
+const EASE_OUT = "cubic-bezier(0.16, 1, 0.3, 1)";
+const MARKERING = 900;
+
 /**
  * Rörelse för en lista som uppdateras live (Sebbe 2026-10-07: "så man ser hur
  * de flyttas och granskas"). Tre saker, alla med Web Animations API så att
@@ -12,6 +17,14 @@ import { useLayoutEffect, useRef, type RefObject } from "react";
  *   poäng) glider från sin gamla plats till den nya — FLIP mot förra
  *   renderingens offsetTop, som inte påverkas av scroll.
  * - Rad som bytt status blinkar till i ockra och tonar tillbaka.
+ *
+ * Bara ny DATA animeras (kritiken 2026-10-07): när användaren själv byter
+ * filter är det inte en nyhet att raderna flyttar, och glidningen följde
+ * hans egna klick. Arrayen `rader` byts bara när datat hämtats om, så dess
+ * identitet skiljer en datauppdatering från ett filterbyte.
+ *
+ * Tiderna är DESIGN.md:s (--dur-mid 300 ms, --ease-out). Färgmarkeringen
+ * tonar längre, 900 ms: den är en markering som ska hinna ses, inte en rörelse.
  *
  * Första datat animeras aldrig (det vore hela listan som flimrade vid
  * sidladdning). `prefers-reduced-motion` stänger av glidningarna men inte
@@ -28,6 +41,7 @@ export function useRadrorelse(
 ): void {
   const positioner = useRef(new Map<string, number>());
   const forraStatus = useRef<Map<string, string> | null>(null);
+  const forraRader = useRef(rader);
 
   // Utan beroendelista med flit: positionerna ska mätas efter VARJE
   // rendering, annars blir "First" i FLIP en gammal mätning.
@@ -38,6 +52,8 @@ export function useRadrorelse(
     const forra = forraStatus.current;
     const nu = new Map(rader.map((r) => [r.id, r.status]));
     const andrat = forra === null || forra.size !== nu.size || [...nu].some(([id, s]) => forra.get(id) !== s);
+    const nyttData = rader !== forraRader.current;
+    forraRader.current = rader;
     const ton = ockra();
     const nyaPositioner = new Map<string, number>();
 
@@ -51,27 +67,28 @@ export function useRadrorelse(
 
       const bas = getComputedStyle(el).backgroundColor;
       if (!forra.has(id)) {
-        el.animate(
-          lugn
-            ? [{ backgroundColor: ton }, { backgroundColor: ton, offset: 0.35 }, { backgroundColor: bas }]
-            : [
-                { opacity: 0, transform: "translateY(-8px)", backgroundColor: ton },
-                { opacity: 1, transform: "none", backgroundColor: ton, offset: 0.35 },
-                { opacity: 1, transform: "none", backgroundColor: bas }
-              ],
-          { duration: 1600, easing: "cubic-bezier(.2,.8,.2,1)" }
-        );
+        // Rörelsen i husets takt, markeringen för sig och längre.
+        if (!lugn) {
+          el.animate([{ opacity: 0, transform: "translateY(-8px)" }, { opacity: 1, transform: "none" }], {
+            duration: DUR_MID,
+            easing: EASE_OUT
+          });
+        }
+        el.animate([{ backgroundColor: ton }, { backgroundColor: ton, offset: 0.3 }, { backgroundColor: bas }], {
+          duration: MARKERING,
+          easing: EASE_OUT
+        });
         continue;
       }
       const fran = positioner.current.get(id);
-      if (!lugn && fran !== undefined && fran !== topp && Math.abs(fran - topp) < 4000) {
+      if (nyttData && !lugn && fran !== undefined && fran !== topp && Math.abs(fran - topp) < 4000) {
         el.animate([{ transform: `translateY(${fran - topp}px)` }, { transform: "none" }], {
-          duration: 550,
-          easing: "cubic-bezier(.2,.8,.2,1)"
+          duration: DUR_MID,
+          easing: EASE_OUT
         });
       }
       if (andrat && forra.get(id) !== nu.get(id)) {
-        el.animate([{ backgroundColor: ton }, { backgroundColor: bas }], { duration: 1600, easing: "ease-out" });
+        el.animate([{ backgroundColor: ton }, { backgroundColor: bas }], { duration: MARKERING, easing: EASE_OUT });
       }
     }
 

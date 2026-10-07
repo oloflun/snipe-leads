@@ -3,7 +3,7 @@
 import { X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EjAktiverad } from "@/components/EjAktiverad";
-import { Badge, Cell, SkeletonRows, Tabell, Tomt, btnSecondary, etikett, btnLiten, faltDiskret, faltTatt, chip, chipAktiv, chipInaktiv, chiplista, meta, tabellRad } from "@/components/ui";
+import { Badge, Cell, SkeletonRows, Tabell, Tomt, btnSecondary, etikett, btnLiten, faltDiskret, faltTatt, chip, chipAktiv, chipInaktiv, chiplista, meta, rubrikPanel, tabellRad } from "@/components/ui";
 import { useSmal } from "@/components/leads/smal";
 import { SkickatLista, type SkickatRad } from "@/components/leads/SkickatLista";
 import { useRadrorelse } from "@/components/leads/useRadrorelse";
@@ -185,15 +185,16 @@ function nyast(a: SuiteProspekt, b: SuiteProspekt): number {
  * De bästa leadsen överst (Sebbe 2026-10-07): poäng, sedan nivå (Stark före
  * Möjlig) vid lika poäng, sedan nyast. Poängen är rangpoängen
  * (snajp-support/app/leads/rangpoang.py) och mäter just hur bra leadet är;
- * med nivån först stod "Stark 58" över "Möjlig 78". Exemplen först. Bolag
- * under research har inget betyg än och står överst, så att man ser dem bli
- * klara och glida ner till sin plats.
+ * med nivån först stod "Stark 58" över "Möjlig 78". Bolag under research har
+ * inget betyg än och står överst, så att man ser dem bli klara och glida ner
+ * till sin plats. Exemplen sorteras som allt annat (kritiken 2026-10-07: med
+ * exemplen först läste demon 91, 79, research, 88).
  *
  * Ersätter Antons "nyaste överst" (2026-10-06), vars skäl var att nya leads
  * hamnade mitt i listan: de nya har nu en egen flik, Ny.
  */
 function sortera(rader: SuiteProspekt[]): SuiteProspekt[] {
-  const grupp = (p: SuiteProspekt) => (p.origin === "example" ? 0 : iResearch(p) ? 1 : 2);
+  const grupp = (p: SuiteProspekt) => (iResearch(p) ? 0 : 1);
   return [...rader].sort(
     (a, b) =>
       grupp(a) - grupp(b) ||
@@ -205,6 +206,35 @@ function sortera(rader: SuiteProspekt[]): SuiteProspekt[] {
 
 /** Tidtakten medan något pågår: tätt nog att se ett bolag byta flik. */
 const LIVE_MS = 4000;
+
+/**
+ * Demons uppspelade körning (kritiken 2026-10-07: det som Sebbe beställt,
+ * leads som flyttar live från Research pågår till Ny, syntes aldrig i demon,
+ * som är säljytan). Två påhittade bolag dyker upp under research och blir
+ * klara ett i taget. Exempeldata, märkt som allt annat i demon.
+ */
+const DEMO_KORNING: { id: string; namn: string; ort: Localized; webb: string; niva: "A" | "B"; poang: number; varfor: Localized }[] = [
+  {
+    id: "demo-live-1",
+    namn: "Norrsken Snickeri AB",
+    ort: { sv: "Umeå", en: "Umeå" },
+    webb: "norrskensnickeri.se",
+    niva: "B",
+    poang: 71,
+    varfor: { sv: "Snickeri med sju anställda som just öppnat en andra verkstad.", en: "Joinery with seven employees that just opened a second workshop." }
+  },
+  {
+    id: "demo-live-2",
+    namn: "Kustvik Elteknik AB",
+    ort: { sv: "Luleå", en: "Luleå" },
+    webb: "kustvikel.se",
+    niva: "A",
+    poang: 86,
+    varfor: { sv: "Elfirma som söker fler företagskunder och rekryterar en säljare.", en: "Electrical firm looking for more business customers and hiring a salesperson." }
+  }
+];
+/** När i demons körning: bolagen dyker upp, och när vart och ett blir klart. */
+const DEMO_TIDER = { start: 2500, klara: [6500, 10000] };
 
 export function LeadsTabell({
   onValj,
@@ -314,6 +344,41 @@ export function LeadsTabell({
     void hamta();
   }, [hamta]);
 
+  // Demons körning spelas upp en gång per besök, i stället för att polla.
+  const [demoKorning, setDemoKorning] = useState(false);
+  useEffect(() => {
+    if (!demo) return;
+    const nu = new Date().toISOString();
+    const rad = (k: (typeof DEMO_KORNING)[number], klar: boolean): SuiteProspekt => ({
+      id: k.id,
+      company_name: k.namn,
+      ort: text(k.ort),
+      website: k.webb,
+      origin: "manual",
+      created_at: nu,
+      status: klar ? "new" : "researching",
+      niva: klar ? k.niva : null,
+      score_total: klar ? k.poang : null,
+      motivering: klar ? text(k.varfor) : null,
+      contact_email: klar ? `info@${k.webb}` : null
+    });
+    const timers = [
+      window.setTimeout(() => {
+        setDemoKorning(true);
+        setProspekt((forra) => [...(forra ?? []), ...DEMO_KORNING.map((k) => rad(k, false))]);
+      }, DEMO_TIDER.start),
+      ...DEMO_KORNING.map((k, i) =>
+        window.setTimeout(() => {
+          setProspekt((forra) => (forra ?? []).map((p) => (p.id === k.id ? rad(k, true) : p)));
+          if (i === DEMO_KORNING.length - 1) setDemoKorning(false);
+        }, DEMO_TIDER.klara[i])
+      )
+    ];
+    return () => timers.forEach((t) => window.clearTimeout(t));
+    // Språket läses när raden blir klar; ett språkbyte mitt i spelar inte om körningen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demo]);
+
   // Bara leadsen, tyst: livetakten ska inte blinka fram fel eller skelett.
   const hamtaLeads = useCallback(async () => {
     if (demo) return;
@@ -328,9 +393,12 @@ export function LeadsTabell({
   // Live (Sebbe 2026-10-07): medan en körning pågår eller något bolag
   // researchas hämtas listan var fjärde sekund, så att bolagen syns flytta
   // från Research pågår till Ny. När det tystnar hämtas allt en sista gång.
-  const live = !demo && (korningPagar || (prospekt ?? []).some(iResearch));
+  // Demon: bara den uppspelade körningen. Dess exempelrad som står i
+  // research för alltid får inte hålla indikatorn tänd.
+  const live = demo ? demoKorning : korningPagar || (prospekt ?? []).some(iResearch);
   const varLive = useRef(false);
   useEffect(() => {
+    if (demo) return;
     if (!live) {
       if (varLive.current) void hamta();
       varLive.current = false;
@@ -341,7 +409,7 @@ export function LeadsTabell({
       if (document.visibilityState === "visible") void hamtaLeads();
     }, LIVE_MS);
     return () => window.clearInterval(id);
-  }, [live, hamta, hamtaLeads]);
+  }, [demo, live, hamta, hamtaLeads]);
 
   // En pågående körning (Kör Iris) lägger till rader medan man tittar.
   useEffect(() => {
@@ -495,7 +563,7 @@ export function LeadsTabell({
   if (fel) {
     return (
       <div>
-        <p role="alert" className="text-[15px] text-danger">
+        <p role="alert" className="text-[0.9375rem] text-danger">
           {text(T.hamtaFel)} {fel}
         </p>
         <button type="button" onClick={() => void hamta()} className={cn(btnSecondary, "mt-4")}>
@@ -579,7 +647,7 @@ export function LeadsTabell({
       <span className="inline-flex flex-col items-end leading-tight">
         <span className="num font-semibold tabular-nums">{poangAv(p)}</span>
         {p.niva ? (
-          <span className={cn("text-[0.75rem]", p.niva === "C" ? "text-danger" : "text-ink-subtle")}>
+          <span className={cn("text-[0.8125rem]", p.niva === "C" ? "text-danger" : "text-ink-subtle")}>
             {nivaEtikett(p.niva, locale)}
           </span>
         ) : null}
@@ -855,13 +923,13 @@ export function LeadsTabell({
         </div>
       ) : null}
       {flyttNotis ? (
-        <p role="status" className="text-[14px] text-ink-muted">
+        <p role="status" className="text-[0.875rem] text-ink-muted">
           {flyttNotis}
         </p>
       ) : null}
 
       {notis ? (
-        <p role="alert" className="text-[15px] text-danger">
+        <p role="alert" className="text-[0.9375rem] text-danger">
           {notis}
         </p>
       ) : null}
@@ -961,12 +1029,12 @@ export function LeadsTabell({
       {/* ------------------------------------------ BORTVALDA (nivå C) */}
       {visaBortvalda && !visaSkickat ? (
         <section aria-labelledby="leads-bortvalda" className="rounded-card border border-ink/12 bg-paper2/40 p-4 sm:p-5">
-          <h3 id="leads-bortvalda" className="text-[1rem] font-semibold">
+          <h3 id="leads-bortvalda" className={rubrikPanel}>
             {text(T.bortvaldaRubrik)}
           </h3>
-          <p className="mt-1 max-w-[72ch] text-[14px] leading-6 text-ink-subtle">{text(T.bortvaldaText)}</p>
+          <p className="mt-1 max-w-[72ch] text-[0.875rem] leading-6 text-ink-subtle">{text(T.bortvaldaText)}</p>
           {bortvaldaFel ? (
-            <p role="alert" className="mt-3 text-[14px] text-danger">
+            <p role="alert" className="mt-3 text-[0.875rem] text-danger">
               {bortvaldaFel}
             </p>
           ) : bortvalda === null ? (
