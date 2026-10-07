@@ -3,7 +3,7 @@
 import { X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EjAktiverad } from "@/components/EjAktiverad";
-import { Badge, Cell, SkeletonRows, Tabell, Tomt, btnSecondary, etikett, btnLiten, faltDiskret, faltTatt, chip, chipAktiv, chipInaktiv, chiplista, meta, rubrikPanel, tabellRad } from "@/components/ui";
+import { Badge, Cell, SkeletonRows, Tabell, Tomt, btnPrimary, btnSecondary, etikett, btnLiten, faltDiskret, faltTatt, chip, chipAktiv, chipInaktiv, chiplista, meta, rubrikPanel, tabellRad } from "@/components/ui";
 import { useSmal } from "@/components/leads/smal";
 import { SkickatLista, type SkickatRad } from "@/components/leads/SkickatLista";
 import { useRadrorelse } from "@/components/leads/useRadrorelse";
@@ -290,9 +290,13 @@ export function LeadsTabell({
   const [filter, setFilter] = useState<VyFilter>({});
   // Flytta till main (admin, development): markerade leads skickas genom
   // samma signerade flyttväg som Byt kund-panelen (lib/actions/flytt.ts).
-  const [valdaFlytt, setValdaFlytt] = useState<Set<string>>(new Set());
+  const [valda, setValda] = useState<Set<string>>(new Set());
   const [flyttar, setFlyttar] = useState(false);
   const [flyttNotis, setFlyttNotis] = useState<string | null>(null);
+  // Skicka de markerades utkast (Sebbe 2026-10-07: markera alla med en knapp
+  // och skicka ut alla därifrån).
+  const [skickar, setSkickar] = useState(false);
+  const [skickaNotis, setSkickaNotis] = useState<{ text: string; fel: boolean } | null>(null);
   // Bortvalda (nivå C): dolda som standard (Antons krav), nåbara på begäran
   // (Sebbes krav: inget får se ut som raderat). Hämtas först vid klick.
   const [visaBortvalda, setVisaBortvalda] = useState(false);
@@ -525,8 +529,8 @@ export function LeadsTabell({
     }
   }
 
-  function vaxlaFlytt(id: string) {
-    setValdaFlytt((nu) => {
+  function vaxlaVald(id: string) {
+    setValda((nu) => {
       const nasta = new Set(nu);
       if (nasta.has(id)) nasta.delete(id);
       else nasta.add(id);
@@ -534,13 +538,95 @@ export function LeadsTabell({
     });
   }
 
+  /**
+   * Godkänn och skicka de markerade leadsens väntande utkast, ett i taget,
+   * genom samma väg som granskningen (POST /leads/queue/{id}/approve:
+   * tidsgrinden, språkgrinden och de sex sändspärrarna). Ett markerat lead
+   * utan väntande utkast hoppas över och räknas i beskedet.
+   */
+  async function skickaValda() {
+    if (valda.size === 0 || skickar) return;
+    setSkickaNotis(null);
+    if (demo) {
+      setSkickaNotis({
+        text: text({
+          sv: `Demo: utkasten till de ${valda.size} markerade bolagen skulle godkännas och skickas. Inget skickas i demon.`,
+          en: `Demo: the drafts to the ${valda.size} selected companies would be approved and sent. Nothing is sent in the demo.`
+        }),
+        fel: false
+      });
+      setValda(new Set());
+      return;
+    }
+    setSkickar(true);
+    try {
+      const ko = await leadsAnrop<{ items?: { id: string; prospect_id?: string | null }[] }>("/leads/queue?limit=200");
+      const poster = (ko.items ?? []).filter((i) => i.prospect_id && valda.has(i.prospect_id));
+      const utan = valda.size - new Set(poster.map((i) => i.prospect_id)).size;
+      if (poster.length === 0) {
+        setSkickaNotis({
+          text: text({
+            sv: "Inget av de markerade bolagen har ett utkast som väntar. Utkast skrivs under Körningar eller av Iris i nästa körning.",
+            en: "None of the selected companies has a draft waiting. Drafts are written under Runs or by Iris in the next run."
+          }),
+          fel: true
+        });
+        return;
+      }
+      const fraga = text({
+        sv: `Godkänna och skicka ${poster.length} utkast?${utan ? ` ${utan} av de markerade har inget utkast och hoppas över.` : ""} Varje mejl går genom sändspärrarna; utanför vardagar 08–16 skickas det när fönstret öppnar.`,
+        en: `Approve and send ${poster.length} drafts?${utan ? ` ${utan} of the selected have no draft and are skipped.` : ""} Every email passes the send guards; outside weekdays 08–16 it goes out when the window opens.`
+      });
+      if (!window.confirm(fraga)) return;
+      let skickade = 0;
+      let vantar = 0;
+      const stoppade: string[] = [];
+      for (const post of poster) {
+        try {
+          const svar = await leadsAnrop<{ utfall?: string; besked?: string }>(
+            `/leads/queue/${encodeURIComponent(post.id)}/approve`,
+            { method: "POST" }
+          );
+          if (svar.utfall === "sent") skickade += 1;
+          else if (svar.utfall === "requeued") vantar += 1;
+          else stoppade.push(svar.besked ?? post.id);
+        } catch (orsak) {
+          stoppade.push(felmeddelande(orsak));
+        }
+      }
+      setSkickaNotis({
+        text: text({
+          sv: [
+            `${skickade} skickade`,
+            vantar ? `${vantar} skickas när sändfönstret öppnar (vardagar 08–16)` : null,
+            stoppade.length ? `${stoppade.length} stoppades: ${stoppade.join("; ")}` : null,
+            utan ? `${utan} saknade utkast` : null
+          ].filter(Boolean).join(", ") + ".",
+          en: [
+            `${skickade} sent`,
+            vantar ? `${vantar} go out when the sending window opens (weekdays 08–16)` : null,
+            stoppade.length ? `${stoppade.length} were stopped: ${stoppade.join("; ")}` : null,
+            utan ? `${utan} had no draft` : null
+          ].filter(Boolean).join(", ") + "."
+        }),
+        fel: stoppade.length > 0
+      });
+      setValda(new Set());
+      await hamta();
+    } catch (orsak) {
+      setSkickaNotis({ text: felmeddelande(orsak), fel: true });
+    } finally {
+      setSkickar(false);
+    }
+  }
+
   async function flyttaValda() {
-    if (valdaFlytt.size === 0 || flyttar) return;
+    if (valda.size === 0 || flyttar) return;
     setFlyttar(true);
     setFlyttNotis(null);
     try {
       const { flyttaProspektTillMain } = await import("@/lib/actions/flytt");
-      const svar = await flyttaProspektTillMain([...valdaFlytt]);
+      const svar = await flyttaProspektTillMain([...valda]);
       if (svar.error) {
         const kand: Record<string, Localized> = {
           miljo: { sv: "Flytt till main går bara från development.", en: "Moving to main only works from development." },
@@ -559,7 +645,7 @@ export function LeadsTabell({
           en: `Move to main: ${ok} moved${redan ? `, ${redan} already there` : ""}${fel ? `, ${fel} failed` : ""}.`
         })
       );
-      if (fel === 0) setValdaFlytt(new Set());
+      if (fel === 0) setValda(new Set());
     } catch (orsak) {
       setFlyttNotis(felmeddelande(orsak));
     } finally {
@@ -943,24 +1029,55 @@ export function LeadsTabell({
         </div>
       ) : null}
 
-      {flyttbar && valdaFlytt.size > 0 ? (
-        <div className="flex flex-wrap items-center gap-3 rounded-input border border-ink/12 bg-paper2/60 px-3.5 py-2.5">
-          <span className="num text-[0.875rem] font-medium">
-            {text({ sv: `${valdaFlytt.size} markerade`, en: `${valdaFlytt.size} selected` })}
-          </span>
-          <button type="button" disabled={flyttar} onClick={() => void flyttaValda()} className={cn(btnSecondary, btnLiten)}>
-            {flyttar
-              ? text({ sv: "Flyttar…", en: "Moving…" })
-              : text({ sv: "Flytta till main", en: "Move to main" })}
-          </button>
-          <button
-            type="button"
-            onClick={() => setValdaFlytt(new Set())}
-            className="focus-ring text-[0.8125rem] text-ink-muted underline underline-offset-4 hover:text-ink"
-          >
-            {text({ sv: "Avmarkera", en: "Clear selection" })}
-          </button>
+      {synliga.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          {(() => {
+            const markerbara = synliga.filter((p) => p.origin !== "example" || demo).map((p) => p.id);
+            const allaValda = markerbara.length > 0 && markerbara.every((id) => valda.has(id));
+            return (
+              <button
+                type="button"
+                onClick={() => setValda(allaValda ? new Set() : new Set(markerbara))}
+                className={cn(btnSecondary, btnLiten)}
+              >
+                {allaValda
+                  ? text({ sv: "Avmarkera alla", en: "Clear all" })
+                  : text({ sv: `Markera alla (${markerbara.length})`, en: `Select all (${markerbara.length})` })}
+              </button>
+            );
+          })()}
+          {valda.size > 0 ? (
+            <>
+              <span className="num text-[0.875rem] font-medium">
+                {text({ sv: `${valda.size} markerade`, en: `${valda.size} selected` })}
+              </span>
+              <button type="button" disabled={skickar} onClick={() => void skickaValda()} className={cn(btnPrimary, btnLiten)}>
+                {skickar
+                  ? text({ sv: "Skickar…", en: "Sending…" })
+                  : text({ sv: "Skicka utkasten", en: "Send the drafts" })}
+              </button>
+              {flyttbar ? (
+                <button type="button" disabled={flyttar} onClick={() => void flyttaValda()} className={cn(btnSecondary, btnLiten)}>
+                  {flyttar
+                    ? text({ sv: "Flyttar…", en: "Moving…" })
+                    : text({ sv: "Flytta till main", en: "Move to main" })}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => setValda(new Set())}
+                className="focus-ring text-[0.8125rem] text-ink-muted underline underline-offset-4 hover:text-ink"
+              >
+                {text({ sv: "Avmarkera", en: "Clear selection" })}
+              </button>
+            </>
+          ) : null}
         </div>
+      ) : null}
+      {skickaNotis ? (
+        <p role={skickaNotis.fel ? "alert" : "status"} className={cn("text-[0.875rem]", skickaNotis.fel ? "text-danger" : "text-moss")}>
+          {skickaNotis.text}
+        </p>
       ) : null}
       {flyttNotis ? (
         <p role="status" className="text-[0.875rem] text-ink-muted">
@@ -986,7 +1103,7 @@ export function LeadsTabell({
               ariaLabel={text(T.tabell)}
               minBredd={1040}
               kolumner={[
-                ...(flyttbar ? [{ rubrik: text({ sv: "Markera", en: "Select" }), bredd: "36px", srOnly: true }] : []),
+                { rubrik: text({ sv: "Markera", en: "Select" }), bredd: "36px", srOnly: true },
                 { rubrik: text(T.kolBolag), bredd: harWebb ? "32%" : "38%" },
                 { rubrik: text(T.kolStatus), bredd: "13%" },
                 { rubrik: text(T.kolPoang), bredd: "7%", hoger: true },
@@ -1001,17 +1118,19 @@ export function LeadsTabell({
             >
               {synliga.map((p) => (
                 <tr key={p.id} data-rad-id={p.id} className={cn(tabellRad, "align-top", p.id === valdId && "bg-ochre/10")}>
-                  {flyttbar ? (
+                  {p.origin !== "example" || demo ? (
                     <Cell>
                       <input
                         type="checkbox"
-                        checked={valdaFlytt.has(p.id)}
-                        onChange={() => vaxlaFlytt(p.id)}
+                        checked={valda.has(p.id)}
+                        onChange={() => vaxlaVald(p.id)}
                         aria-label={text({ sv: `Markera ${p.company_name}`, en: `Select ${p.company_name}` })}
                         className="h-4 w-4 accent-ink"
                       />
                     </Cell>
-                  ) : null}
+                  ) : (
+                    <Cell>{null}</Cell>
+                  )}
                   <Cell titel>{bolag(p)}</Cell>
                   <Cell>{statusVal(p)}</Cell>
                   <Cell hoger>{poangCell(p)}</Cell>
@@ -1033,11 +1152,11 @@ export function LeadsTabell({
                 className={cn("rounded-card border border-ink/12 bg-paper2/40 p-4", p.id === valdId && "border-ochre/50")}
               >
                 <div className="flex items-start justify-between gap-3">
-                  {flyttbar ? (
+                  {p.origin !== "example" || demo ? (
                     <input
                       type="checkbox"
-                      checked={valdaFlytt.has(p.id)}
-                      onChange={() => vaxlaFlytt(p.id)}
+                      checked={valda.has(p.id)}
+                      onChange={() => vaxlaVald(p.id)}
                       aria-label={text({ sv: `Markera ${p.company_name}`, en: `Select ${p.company_name}` })}
                       className="mt-1.5 h-4 w-4 shrink-0 accent-ink"
                     />
