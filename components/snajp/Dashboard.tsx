@@ -27,6 +27,7 @@ import { mejlaOss } from "@/components/marketing/copy";
 import { createDemoSupportApi } from "@/lib/demo/support-inbox";
 import { readJsonBody } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
+import { useSmal } from "@/components/leads/smal";
 import { cn } from "@/lib/utils";
 
 type Classification = {
@@ -298,8 +299,8 @@ export function Dashboard({
   onMeta?: (meta: { visar_test_i_arenden: boolean }) => void;
   /** Visa högst så många rader tills användaren ber om alla (Att göra). */
   tak?: number;
-  /** Antalet mejl i vyn, för Att görasummeringen. */
-  onAntal?: (antal: number) => void;
+  /** Antalet mejl i vyn och när de kom, för Att görasummeringen (köns ålder). */
+  onAntal?: (antal: number, rader: { received_at: string; subject: string }[]) => void;
 }>) {
   const vag = useArbetsvag();
   const { text, locale } = useLocale();
@@ -400,6 +401,10 @@ export function Dashboard({
     return payload;
   }, [demo]);
 
+  // Första svaret (eller felet) har kommit. Före det är listan tom för att
+  // den inte hämtats, och Att göra ska inte hinna visa "inget väntar".
+  const [hamtad, setHamtad] = useState(false);
+
   const refresh = useCallback(async () => {
     try {
       setError(null);
@@ -431,6 +436,8 @@ export function Dashboard({
         return;
       }
       setError(tillCopy(caught, T.hamtaFel));
+    } finally {
+      setHamtad(true);
     }
   }, [api, sokning, statusFilter, categoryFilter, lager]);
 
@@ -748,8 +755,11 @@ export function Dashboard({
   const onAntalRef = useRef(onAntal);
   onAntalRef.current = onAntal;
   useEffect(() => {
-    onAntalRef.current?.(emails.length);
-  }, [emails.length]);
+    if (hamtad) onAntalRef.current?.(emails.length, emails);
+  }, [emails, hamtad]);
+  // Att göra ställer köerna i kolumner: där får detaljpanelen hamna under
+  // listan, inte bredvid den i en halv kolumn.
+  const smal = useSmal();
 
   const totalPending = useMemo(
     () => emails.filter((e) => e.status === "awaiting_approval").length,
@@ -1017,7 +1027,7 @@ export function Dashboard({
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
+      <div className={cn("grid grid-cols-1 gap-6", !smal && "xl:grid-cols-12")}>
         {/* Maillista */}
         <div className={cn("min-w-0", selected ? "xl:col-span-6" : "xl:col-span-12")}>
           {emails.length === 0 && arKo && error ? null : emails.length === 0 && (arKo || lager === "ej_relaterat") ? (

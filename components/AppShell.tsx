@@ -72,7 +72,8 @@ const DEMO_VAGAR: Record<string, string> = {
   "/dashboard/analytics": "/demo/analytics",
   "/dashboard/assistant": "/demo/assistant",
   "/dashboard/support": "/demo/support",
-  "/dashboard/kvitton": "/demo/kvitton"
+  "/dashboard/kvitton": "/demo/kvitton",
+  "/dashboard/aktivitet": "/demo/aktivitet"
 };
 
 /**

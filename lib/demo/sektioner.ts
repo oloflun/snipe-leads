@@ -21,8 +21,9 @@
  * precis som på /dashboard.
  *
  * Snajp Suite (2026-10-03): samma platta meny som arbetsytan. Aktivitet
- * saknas (demon har inga körningar att visa), och Inställningar visar bara
- * Iris del, den enda som är demobar (arbetsytans /settings kräver inloggning).
+ * finns sedan 2026-10-07 med exempelkörningar (lib/demo/aktivitet.ts), och
+ * Inställningar visar bara Iris del, den enda som är demobar (arbetsytans
+ * /settings kräver inloggning).
  * CRM-listan (/demo/crm) står inte längre i menyn: kundens egen lista in är
  * i dag Leads › Listor › Importera CSV. Routen svarar fortfarande.
  */
@@ -39,6 +40,7 @@ export const DEMO_NAV: DemoNavItem[] = [
   { slug: "leads", label: { sv: "Leads", en: "Leads" } },
   { slug: "support", label: { sv: "Kundtjänst", en: "Customer service" } },
   { slug: "kvitton", label: { sv: "Kvitton", en: "Receipts" } },
+  { slug: "aktivitet", label: { sv: "Aktivitet", en: "Activity" } },
   { slug: "installningar", label: { sv: "Inställningar", en: "Settings" } }
 ];
 

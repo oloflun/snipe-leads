@@ -170,6 +170,11 @@ export type Vecka = {
   kvitton?: number;
   /** Kvittohanteraren: fakturerat (kundfakturor) i hela kronor. */
   intakter?: number;
+  /** Aktivitet: Iris beställda och levererade leads, kundtjänstens körningar. */
+  bestallt?: number;
+  levererade?: number;
+  korningar?: number;
+  korningar_test?: number;
 };
 
 type Serie = { nyckel: keyof Vecka; etikett: Localized; ton: "chart-ochre" | "chart-blue" };
@@ -191,7 +196,9 @@ export function Aktivitetsgraf({
   const data = veckor.map((v) => ({ ...v }));
   const sista = data[data.length - 1];
   return (
-    <figure className="m-0">
+    // relative: den sr-only tabellen nedan (absolute) förankras annars mot
+    // sidan och drog ut dokumentet i sidled på mobil (uppmätt 32 px vid 375).
+    <figure className="relative m-0">
       <figcaption className="mb-3 flex flex-wrap gap-x-5 gap-y-1.5">
         {serier.map((s) => (
           <span key={String(s.nyckel)} className="inline-flex items-center gap-2 text-[0.8125rem] text-ink-muted">
@@ -462,5 +469,40 @@ export function Andelsring({ andel, etikett }: Readonly<{ andel: number | null; 
         {andel === null ? "–" : `${Math.round(andel * 100)} %`}
       </span>
     </div>
+  );
+}
+
+// -- Fördelningsstaplar ---------------------------------------------------------
+
+export type Stapel = { id: string; etikett: Localized; antal: number; /** CSS-färg, t.ex. oklch(var(--danger)). */ farg: string };
+
+/**
+ * Liggande staplar med antal och andel (Kundtjänst › Svarstider, Att göra ›
+ * Hur länge det väntat). Ordningen är given — hinkar, inte en topplista — så
+ * raderna sorteras aldrig om. Varje stapel har sin etikett och sitt tal i
+ * klartext; färgen förstärker bara.
+ */
+export function Fordelningsstaplar({ staplar }: Readonly<{ staplar: Stapel[] }>) {
+  const { text, locale } = useLocale();
+  const total = staplar.reduce((s, x) => s + x.antal, 0);
+  const storst = Math.max(1, ...staplar.map((x) => x.antal));
+  return (
+    <ul className="space-y-3">
+      {staplar.map((x) => (
+        <li key={x.id} className="grid grid-cols-[6.5rem_1fr_4.75rem] items-center gap-3 text-[0.8125rem] sm:grid-cols-[8rem_1fr_5rem]">
+          <span className="truncate text-ink-muted">{text(x.etikett)}</span>
+          <span className="h-2 overflow-hidden rounded-full bg-ink/[0.06]">
+            <span
+              className="block h-full rounded-full"
+              style={{ width: x.antal ? `max(0.5rem, ${(x.antal / storst) * 100}%)` : 0, background: x.farg }}
+            />
+          </span>
+          <span className="num text-right tabular-nums">
+            <span className="font-medium text-ink">{tal(x.antal, locale)}</span>
+            <span className="ml-1.5 inline-block w-9 text-ink-subtle">{total ? `${Math.round((x.antal / total) * 100)} %` : "–"}</span>
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }

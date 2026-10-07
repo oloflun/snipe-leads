@@ -207,21 +207,32 @@ export function pagar(rad: KorningsRad): boolean {
   return Boolean(rad.korning && !rad.korning.klar && rad.status !== "failed");
 }
 
-export function IrisKorningar() {
+export function IrisKorningar({
+  demoRader,
+  tak
+}: Readonly<{
+  /** /demo: fasta rader, ingen hämtning och ingen styrning (lib/demo/aktivitet.ts). */
+  demoRader?: KorningsRad[];
+  /** Visa högst så många rader tills användaren ber om alla (Aktivitet). */
+  tak?: number;
+}> = {}) {
   const { locale, text } = useLocale();
+  const demo = demoRader !== undefined;
   const pathname = usePathname() ?? "/dashboard/aktivitet";
   const sok = useSearchParams();
   // Samma vy under /dashboard och /admin: Leads-länken följer basen. Vyn
   // renderas i Aktivitet sedan Snajp Suite (2026-10-03).
   const bas = pathname.replace(/\/(aktivitet|iris)(\/.*)?$/, "/leads");
-  const [rader, setRader] = useState<KorningsRad[] | null>(null);
+  const [rader, setRader] = useState<KorningsRad[] | null>(demoRader ?? null);
   const [fel, setFel] = useState<string | null>(null);
   const [oppen, setOppen] = useState<string | null>(sok?.get("id") ?? null);
+  const [visaAlla, setVisaAlla] = useState(false);
   // Stoppad = sessionen är borta (401/403) eller vyn saknas (404): att polla
   // vidare var tredje sekund ger bara samma svar.
   const [stoppad, setStoppad] = useState(false);
 
   const hamta = useCallback(async () => {
+    if (demo) return;
     try {
       const response = await fetch("/api/snajp-support/leads/korningar?limit=30", { cache: "no-store" });
       const kropp = await readJsonBody<{ korningar?: KorningsRad[]; detail?: string }>(response);
@@ -235,16 +246,20 @@ export function IrisKorningar() {
     } catch (cause) {
       setFel(felmeddelande(cause));
     }
-  }, [text]);
+  }, [text, demo]);
 
   useEffect(() => {
     void hamta();
   }, [hamta]);
 
+  useEffect(() => {
+    if (demoRader) setRader(demoRader);
+  }, [demoRader]);
+
   // Poll bara när något pågår, och nästa hämtning schemaläggs först när den
   // förra svarat: ett intervall överlappade sig självt vid kallstart (proxyn
   // tillåter 60 s) och kunde skriva ett äldre svar över ett nyare.
-  const nagotPagar = !stoppad && (rader ?? []).some(pagar);
+  const nagotPagar = !demo && !stoppad && (rader ?? []).some(pagar);
   useEffect(() => {
     if (!nagotPagar) return;
     let timer = 0;
@@ -317,7 +332,7 @@ export function IrisKorningar() {
           { rubrik: text(T.kolUtfall) }
         ]}
       >
-        {rader.map((rad) => {
+        {(tak && !visaAlla ? rader.slice(0, tak) : rader).map((rad) => {
           const k = rad.korning;
           const arOppen = oppen === rad.job_id;
           return (
@@ -328,6 +343,7 @@ export function IrisKorningar() {
               oppen={arOppen}
               onToggle={() => setOppen(arOppen ? null : rad.job_id)}
               onStyrd={hamta}
+              styrbar={!demo}
             >
               <Cell>{text(korningsTyp(rad))}</Cell>
               <Cell hoger>{k ? k.mal : "–"}</Cell>
@@ -383,13 +399,29 @@ export function IrisKorningar() {
           );
         })}
       </Tabell>
+      {tak && rader.length > tak ? (
+        <button
+          type="button"
+          onClick={() => setVisaAlla((v) => !v)}
+          aria-expanded={visaAlla}
+          className="focus-ring -mt-6 inline-flex items-center rounded-input text-[0.8125rem] font-medium text-ink-muted underline-offset-4 hover:text-ink hover:underline"
+        >
+          {visaAlla
+            ? text({ sv: "Visa färre", en: "Show fewer" })
+            : text({ sv: `Visa alla (${rader.length})`, en: `Show all (${rader.length})` })}
+        </button>
+      ) : null}
     </div>
   );
 }
 
 type Atgard = "pausa" | "aterupta" | "avbryt";
 
-function Pagaende({ rad, onStyrd }: Readonly<{ rad: KorningsRad; onStyrd: () => Promise<void> }>) {
+function Pagaende({
+  rad,
+  onStyrd,
+  styrbar = true
+}: Readonly<{ rad: KorningsRad; onStyrd: () => Promise<void>; styrbar?: boolean }>) {
   const { locale, text } = useLocale();
   const k = rad.korning;
   const [skickar, setSkickar] = useState<Atgard | null>(null);
@@ -455,7 +487,7 @@ function Pagaende({ rad, onStyrd }: Readonly<{ rad: KorningsRad; onStyrd: () => 
             : text(T.fortsatter)}
       </p>
       {/* Avbrott är slutgiltigt: då finns inget kvar att styra. */}
-      {k.styrning !== "avbruten" ? (
+      {styrbar && k.styrning !== "avbruten" ? (
         <div role="group" aria-label={text(T.styrning)} className="mt-4 flex flex-wrap gap-2">
           {k.styrning === "paus" ? (
             <StyrKnapp atgard="aterupta" skickar={skickar} onClick={styr}>
@@ -521,6 +553,7 @@ function RadMedDetalj({
   oppen,
   onToggle,
   onStyrd,
+  styrbar,
   children
 }: Readonly<{
   rad: KorningsRad;
@@ -528,6 +561,7 @@ function RadMedDetalj({
   oppen: boolean;
   onToggle: () => void;
   onStyrd: () => Promise<void>;
+  styrbar: boolean;
   children: React.ReactNode;
 }>) {
   const { locale, text } = useLocale();
@@ -559,7 +593,7 @@ function RadMedDetalj({
           <td colSpan={kolumner} className="bg-paper2/60 px-4 py-5">
             {pagar(rad) ? (
               <div className="mb-8 border-b border-ink/15 pb-8">
-                <Pagaende rad={rad} onStyrd={onStyrd} />
+                <Pagaende rad={rad} onStyrd={onStyrd} styrbar={styrbar} />
               </div>
             ) : null}
             <div className="grid gap-8 md:grid-cols-2">
