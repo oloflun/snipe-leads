@@ -19,6 +19,7 @@ import {
   meta,
   tabellRad
 } from "@/components/ui";
+import { useSmal } from "@/components/leads/smal";
 import { felmeddelande } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
 import { UTFALL_ETIKETT, datumFormat, leadsAnrop, type Samtalsrad, type Utfall } from "@/lib/leads/suite";
@@ -28,18 +29,20 @@ import { cn } from "@/lib/utils";
  * Leads › Samtal (Antons beställning 2026-10-07, leadsregel 15 och 17).
  *
  * Två listor över samma arbete, att ringa:
- *   Återkoppling — Iris-leads som fått mejl och har telefon, äldst kontakt först.
- *   Ringlista    — bolag med bara telefon och namngiven VD (registrets nummer).
+ *   Återkoppling: Iris-leads som fått mejl och har telefon, äldst kontakt först.
+ *   Ringlista: bolag med bara telefon och namngiven VD (registrets nummer).
  *
  * "Ringd" fäller ut utfallen. Backenden (app/leads/samtal.py) verkställer dem:
  * avslutande utfall stoppar alla väntande utskick, kontakta inte spärrar
  * adressen, och ej svar/återkom tar fram leadet igen när det är dags. De som
- * ska ringas i dag står överst.
+ * ska ringas i dag står överst. Tabell på bred skärm, kort på telefon med
+ * numret överst (samma uppdelning som Säljlistan).
  */
 
 type Lista = "aterkoppling" | "ring";
 
 const UTFALL: Utfall[] = ["ej_svar", "aterkom", "ej_intresserad", "kontakta_inte", "mote"];
+const AVSLUTANDE: Utfall[] = ["ej_intresserad", "kontakta_inte", "mote"];
 
 const T = {
   aterkoppling: { sv: "Återkoppling", en: "Follow-up calls" },
@@ -63,7 +66,7 @@ const T = {
   nasta: { sv: "Nästa", en: "Next" },
   handling: { sv: "Handling", en: "Action" },
   ringd: { sv: "Ringd", en: "Called" },
-  ringIdag: { sv: "Ring i dag", en: "Call today" },
+  idagMarke: { sv: "I dag", en: "Today" },
   aldrig: { sv: "Inte ringd", en: "Not called" },
   utfall: { sv: "Utfall", en: "Outcome" },
   aterkomDatum: { sv: "Ring tillbaka", en: "Call back on" },
@@ -72,7 +75,6 @@ const T = {
   sparar: { sv: "Sparar…", en: "Saving…" },
   avbryt: { sv: "Avbryt", en: "Cancel" },
   valjDatum: { sv: "Välj ett datum för återkom.", en: "Pick a date to call back." },
-  ringaTill: { sv: "Ring", en: "Call" },
   listval: { sv: "Samtalslista", en: "Call list" }
 } satisfies Record<string, Localized>;
 
@@ -107,6 +109,7 @@ function demoRader(lista: Lista): Samtalsrad[] {
 
 export function Samtalslista({ demo = false }: Readonly<{ demo?: boolean }>) {
   const { locale, text } = useLocale();
+  const smal = useSmal();
   const [lista, setLista] = useState<Lista>("aterkoppling");
   const [rader, setRader] = useState<Record<Lista, Samtalsrad[] | null>>({ aterkoppling: null, ring: null });
   const [fel, setFel] = useState<string | null>(null);
@@ -138,6 +141,27 @@ export function Samtalslista({ demo = false }: Readonly<{ demo?: boolean }>) {
   const visade = rader[lista];
   const antalIdag = (l: Lista) => rader[l]?.filter((r) => r.ring_idag).length ?? 0;
 
+  const radProps = (rad: Samtalsrad) => ({
+    oppen: oppen === rad.prospect_id,
+    onOppna: () => setOppen(oppen === rad.prospect_id ? null : rad.prospect_id),
+    datum,
+    demo,
+    onSparat: (utfall: Utfall) => {
+      setOppen(null);
+      if (!demo) {
+        void hamta();
+        return;
+      }
+      // Demon har ingen backend: avslutade försvinner, resten väntar till nästa gång.
+      setRader((nu) => ({
+        ...nu,
+        [lista]: (nu[lista] ?? [])
+          .filter((r) => r.prospect_id !== rad.prospect_id || !AVSLUTANDE.includes(utfall))
+          .map((r) => (r.prospect_id === rad.prospect_id ? { ...r, senaste_utfall: utfall, ring_idag: false } : r))
+      }));
+    }
+  });
+
   return (
     <section aria-label={text(T.listval)} className="space-y-4">
       <div role="tablist" aria-label={text(T.listval)} className={chiplista}>
@@ -167,64 +191,177 @@ export function Samtalslista({ demo = false }: Readonly<{ demo?: boolean }>) {
       ) : visade.length === 0 ? (
         <Tomt>{text(lista === "ring" ? T.tomRing : T.tomAterkoppling)}</Tomt>
       ) : (
-        <Tabell
-          ariaLabel={text(T[lista])}
-          minBredd={860}
-          kolumner={[
-            { rubrik: text(T.bolag), bredd: "22%" },
-            { rubrik: text(T.kontakt), bredd: "18%" },
-            { rubrik: text(T.telefon), bredd: "21%" },
-            { rubrik: text(T.kontaktad), bredd: "10%" },
-            { rubrik: text(T.senast), bredd: "12%" },
-            { rubrik: text(T.nasta), bredd: "8%" },
-            { rubrik: text(T.handling), srOnly: true }
-          ]}
-        >
-          {visade.map((rad) => (
-            <SamtalRad
-              key={rad.prospect_id}
-              rad={rad}
-              oppen={oppen === rad.prospect_id}
-              onOppna={() => setOppen(oppen === rad.prospect_id ? null : rad.prospect_id)}
-              datum={datum}
-              demo={demo}
-              onSparat={(utfall) => {
-                setOppen(null);
-                if (demo) {
-                  // Demon har ingen backend: avslutade försvinner, resten får nästa dag.
-                  setRader((nu) => ({
-                    ...nu,
-                    [lista]: (nu[lista] ?? [])
-                      .filter((r) => r.prospect_id !== rad.prospect_id || !["ej_intresserad", "kontakta_inte", "mote"].includes(utfall))
-                      .map((r) => (r.prospect_id === rad.prospect_id ? { ...r, senaste_utfall: utfall, ring_idag: false } : r))
-                  }));
-                } else {
-                  void hamta();
-                }
-              }}
-            />
-          ))}
-        </Tabell>
+        <>
+          {/* Bred skärm: tabellen. */}
+          <div className={smal ? "hidden" : "hidden md:block"}>
+            <Tabell
+              ariaLabel={text(T[lista])}
+              minBredd={860}
+              kolumner={[
+                { rubrik: text(T.bolag), bredd: "22%" },
+                { rubrik: text(T.kontakt), bredd: "18%" },
+                { rubrik: text(T.telefon), bredd: "21%" },
+                { rubrik: text(T.kontaktad), bredd: "10%" },
+                { rubrik: text(T.senast), bredd: "12%" },
+                { rubrik: text(T.nasta), bredd: "8%" },
+                { rubrik: text(T.handling), srOnly: true }
+              ]}
+            >
+              {visade.map((rad) => (
+                <TabellRad key={rad.prospect_id} rad={rad} {...radProps(rad)} />
+              ))}
+            </Tabell>
+          </div>
+          {/* Telefon: ett kort per bolag, numret överst att ringa från. */}
+          <ul className={cn("grid gap-3", !smal && "md:hidden")} aria-label={text(T[lista])}>
+            {visade.map((rad) => (
+              <Kort key={rad.prospect_id} rad={rad} {...radProps(rad)} />
+            ))}
+          </ul>
+        </>
       )}
     </section>
   );
 }
 
-function SamtalRad({
-  rad,
-  oppen,
-  onOppna,
-  datum,
-  demo,
-  onSparat
-}: Readonly<{
+type RadProps = Readonly<{
   rad: Samtalsrad;
   oppen: boolean;
   onOppna: () => void;
   datum: (iso: string | null) => string;
   demo: boolean;
   onSparat: (utfall: Utfall) => void;
-}>) {
+}>;
+
+function Telefon({ rad }: Readonly<{ rad: Samtalsrad }>) {
+  const { text } = useLocale();
+  const anstallda = anstalldaText(rad, text);
+  return (
+    <>
+      {rad.contact_phone ? (
+        <a
+          href={`tel:${rad.contact_phone.replace(/[^\d+]/g, "")}`}
+          aria-label={text({ sv: `Ring ${rad.company_name ?? ""}`, en: `Call ${rad.company_name ?? ""}` })}
+          className="focus-ring inline-flex min-h-8 items-center gap-1.5 rounded-input font-medium text-ink underline-offset-4 hover:underline"
+        >
+          <Phone className="h-3.5 w-3.5" aria-hidden="true" />
+          <span className="num">{rad.contact_phone}</span>
+        </a>
+      ) : (
+        "–"
+      )}
+      {anstallda ? <span className={cn(meta, "mt-0.5 block")}>{anstallda}</span> : null}
+    </>
+  );
+}
+
+function Senaste({ rad, datum }: Readonly<{ rad: Samtalsrad; datum: (iso: string | null) => string }>) {
+  const { text } = useLocale();
+  return rad.senaste_utfall ? (
+    <>
+      <span className="block">{text(UTFALL_ETIKETT[rad.senaste_utfall])}</span>
+      <span className={meta}>{datum(rad.senaste_samtal)}</span>
+    </>
+  ) : (
+    <span className="text-ink-muted">{text(T.aldrig)}</span>
+  );
+}
+
+function RingdKnapp({ oppen, onOppna, formId }: Readonly<{ oppen: boolean; onOppna: () => void; formId: string }>) {
+  const { text } = useLocale();
+  return (
+    <button
+      type="button"
+      aria-expanded={oppen}
+      aria-controls={formId}
+      onClick={onOppna}
+      className={cn(oppen ? btnPrimary : btnSecondary, btnLiten)}
+    >
+      {text(T.ringd)}
+    </button>
+  );
+}
+
+function TabellRad({ rad, oppen, onOppna, datum, demo, onSparat }: RadProps) {
+  const { text } = useLocale();
+  const formId = `${useId()}-form`;
+  return (
+    <>
+      <tr className={tabellRad}>
+        <Cell titel>
+          <span className="block truncate font-medium text-ink">{rad.company_name ?? "–"}</span>
+          {rad.ort ? <span className={cn(meta, "block truncate")}>{rad.ort}</span> : null}
+        </Cell>
+        <Cell>
+          <span className="block truncate">{rad.contact_name ?? "–"}</span>
+          {rad.contact_role ? <span className={cn(meta, "block truncate")}>{rad.contact_role}</span> : null}
+        </Cell>
+        <Cell>
+          <Telefon rad={rad} />
+        </Cell>
+        <Cell>{datum(rad.kontaktad)}</Cell>
+        <Cell>
+          <Senaste rad={rad} datum={datum} />
+        </Cell>
+        <Cell>{rad.ring_idag ? <Badge tone="warn">{text(T.idagMarke)}</Badge> : datum(rad.nasta)}</Cell>
+        <Cell>
+          <RingdKnapp oppen={oppen} onOppna={onOppna} formId={formId} />
+        </Cell>
+      </tr>
+      {oppen ? (
+        <tr id={formId}>
+          <td colSpan={7} className="bg-paper2/60 px-3 py-4">
+            <UtfallForm rad={rad} demo={demo} onSparat={onSparat} onAvbryt={onOppna} />
+          </td>
+        </tr>
+      ) : null}
+    </>
+  );
+}
+
+function Kort({ rad, oppen, onOppna, datum, demo, onSparat }: RadProps) {
+  const { text } = useLocale();
+  const formId = `${useId()}-form`;
+  return (
+    <li className="rounded-card border border-ink/12 bg-paper p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-medium text-ink">{rad.company_name ?? "–"}</p>
+          <p className={cn(meta, "truncate")}>
+            {[rad.contact_name, rad.contact_role, rad.ort].filter(Boolean).join(" · ") || "–"}
+          </p>
+        </div>
+        {rad.ring_idag ? <Badge tone="warn">{text(T.idagMarke)}</Badge> : <span className={meta}>{datum(rad.nasta)}</span>}
+      </div>
+      <div className="mt-3">
+        <Telefon rad={rad} />
+      </div>
+      <dl className={cn(meta, "mt-3 grid grid-cols-2 gap-x-4 gap-y-1")}>
+        <dt>{text(T.kontaktad)}</dt>
+        <dd className="text-ink">{datum(rad.kontaktad)}</dd>
+        <dt>{text(T.senast)}</dt>
+        <dd className="text-ink">
+          <Senaste rad={rad} datum={datum} />
+        </dd>
+      </dl>
+      <div className="mt-3">
+        <RingdKnapp oppen={oppen} onOppna={onOppna} formId={formId} />
+      </div>
+      {oppen ? (
+        <div id={formId} className="mt-3 border-t border-ink/12 pt-3">
+          <UtfallForm rad={rad} demo={demo} onSparat={onSparat} onAvbryt={onOppna} />
+        </div>
+      ) : null}
+    </li>
+  );
+}
+
+function UtfallForm({
+  rad,
+  demo,
+  onSparat,
+  onAvbryt
+}: Readonly<{ rad: Samtalsrad; demo: boolean; onSparat: (utfall: Utfall) => void; onAvbryt: () => void }>) {
   const { text } = useLocale();
   const id = useId();
   const [utfall, setUtfall] = useState<Utfall>("ej_svar");
@@ -232,7 +369,6 @@ function SamtalRad({
   const [anteckning, setAnteckning] = useState("");
   const [sparar, setSparar] = useState(false);
   const [fel, setFel] = useState<string | null>(null);
-  const anstallda = anstalldaText(rad, text);
   const idag = new Date().toISOString().slice(0, 10);
 
   async function spara() {
@@ -262,109 +398,58 @@ function SamtalRad({
   }
 
   return (
-    <>
-      <tr className={tabellRad}>
-        <Cell titel>
-          <span className="block truncate font-medium text-ink">{rad.company_name ?? "–"}</span>
-          {rad.ort ? <span className={cn(meta, "block truncate")}>{rad.ort}</span> : null}
-        </Cell>
-        <Cell>
-          <span className="block truncate">{rad.contact_name ?? "–"}</span>
-          {rad.contact_role ? <span className={cn(meta, "block truncate")}>{rad.contact_role}</span> : null}
-        </Cell>
-        <Cell>
-          {rad.contact_phone ? (
-            <a
-              href={`tel:${rad.contact_phone.replace(/[^\d+]/g, "")}`}
-              aria-label={text({ sv: `Ring ${rad.company_name ?? ""}`, en: `Call ${rad.company_name ?? ""}` })}
-              className="focus-ring inline-flex items-center gap-1.5 rounded-input font-medium text-ink underline-offset-4 hover:underline"
-            >
-              <Phone className="h-3.5 w-3.5" aria-hidden="true" />
-              <span className="num">{rad.contact_phone}</span>
-            </a>
-          ) : (
-            "–"
-          )}
-          {anstallda ? <span className={cn(meta, "mt-0.5 block")}>{anstallda}</span> : null}
-        </Cell>
-        <Cell>{datum(rad.kontaktad)}</Cell>
-        <Cell>
-          {rad.senaste_utfall ? (
-            <>
-              <span className="block">{text(UTFALL_ETIKETT[rad.senaste_utfall])}</span>
-              <span className={meta}>{datum(rad.senaste_samtal)}</span>
-            </>
-          ) : (
-            <span className="text-ink-muted">{text(T.aldrig)}</span>
-          )}
-        </Cell>
-        <Cell>{rad.ring_idag ? <Badge tone="warn">{text(T.idag)}</Badge> : datum(rad.nasta)}</Cell>
-        <Cell>
-          <button
-            type="button"
-            aria-expanded={oppen}
-            aria-controls={`${id}-form`}
-            onClick={onOppna}
-            className={cn(oppen ? btnPrimary : btnSecondary, btnLiten)}
+    <fieldset className="space-y-3">
+      <legend className={etikett}>{text(T.utfall)}</legend>
+      <div className={chiplista}>
+        {UTFALL.map((u) => (
+          <label
+            key={u}
+            className={cn(chip, "cursor-pointer has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ochre", utfall === u ? chipAktiv : chipInaktiv)}
           >
-            {text(T.ringd)}
+            <input
+              type="radio"
+              name={`${id}-utfall`}
+              value={u}
+              checked={utfall === u}
+              onChange={() => setUtfall(u)}
+              className="sr-only"
+            />
+            {text(UTFALL_ETIKETT[u])}
+          </label>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-end gap-3">
+        {utfall === "aterkom" ? (
+          <label className="grid gap-1">
+            <span className={etikett}>{text(T.aterkomDatum)}</span>
+            <input
+              type="date"
+              min={idag}
+              value={aterkom}
+              onChange={(e) => setAterkom(e.target.value)}
+              className="focus-ring min-h-10 rounded-input border border-ink/15 bg-paper px-3 text-[16px] text-ink"
+            />
+          </label>
+        ) : null}
+        <label className="grid min-w-0 flex-1 basis-56 gap-1">
+          <span className={etikett}>{text(T.anteckning)}</span>
+          <input
+            value={anteckning}
+            onChange={(e) => setAnteckning(e.target.value)}
+            maxLength={4000}
+            className="focus-ring min-h-10 w-full rounded-input border border-ink/15 bg-paper px-3 text-[16px] text-ink"
+          />
+        </label>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => void spara()} disabled={sparar} className={cn(btnPrimary, btnLiten)}>
+            {sparar ? text(T.sparar) : text(T.spara)}
           </button>
-        </Cell>
-      </tr>
-      {oppen ? (
-        <tr id={`${id}-form`}>
-          <td colSpan={7} className="bg-paper2/60 px-3 py-4">
-            <fieldset className="space-y-3">
-              <legend className={etikett}>{text(T.utfall)}</legend>
-              <div className={chiplista}>
-                {UTFALL.map((u) => (
-                  <label key={u} className={cn(chip, "cursor-pointer", utfall === u ? chipAktiv : chipInaktiv)}>
-                    <input
-                      type="radio"
-                      name={`${id}-utfall`}
-                      value={u}
-                      checked={utfall === u}
-                      onChange={() => setUtfall(u)}
-                      className="sr-only"
-                    />
-                    {text(UTFALL_ETIKETT[u])}
-                  </label>
-                ))}
-              </div>
-              <div className="flex flex-wrap items-end gap-3">
-                {utfall === "aterkom" ? (
-                  <label className="grid gap-1">
-                    <span className={etikett}>{text(T.aterkomDatum)}</span>
-                    <input
-                      type="date"
-                      min={idag}
-                      value={aterkom}
-                      onChange={(e) => setAterkom(e.target.value)}
-                      className="focus-ring min-h-10 rounded-input border border-ink/15 bg-paper px-3 text-[16px] text-ink"
-                    />
-                  </label>
-                ) : null}
-                <label className="grid min-w-[16rem] flex-1 gap-1">
-                  <span className={etikett}>{text(T.anteckning)}</span>
-                  <input
-                    value={anteckning}
-                    onChange={(e) => setAnteckning(e.target.value)}
-                    maxLength={4000}
-                    className="focus-ring min-h-10 w-full rounded-input border border-ink/15 bg-paper px-3 text-[16px] text-ink"
-                  />
-                </label>
-                <button type="button" onClick={() => void spara()} disabled={sparar} className={cn(btnPrimary, btnLiten)}>
-                  {sparar ? text(T.sparar) : text(T.spara)}
-                </button>
-                <button type="button" onClick={onOppna} className={cn(btnSecondary, btnLiten)}>
-                  {text(T.avbryt)}
-                </button>
-              </div>
-              {fel ? <p role="alert" className="text-[0.875rem] text-danger">{fel}</p> : null}
-            </fieldset>
-          </td>
-        </tr>
-      ) : null}
-    </>
+          <button type="button" onClick={onAvbryt} className={cn(btnSecondary, btnLiten)}>
+            {text(T.avbryt)}
+          </button>
+        </div>
+      </div>
+      {fel ? <p role="alert" className="text-[0.875rem] text-danger">{fel}</p> : null}
+    </fieldset>
   );
 }

@@ -1135,13 +1135,16 @@ export function LeadsTabell({
                   : text({ sv: "Flytta till main", en: "Move to main" })}
               </button>
             ) : null}
-            <button
-              type="button"
-              onClick={() => setValda(new Set())}
-              className="focus-ring text-[0.8125rem] text-ink-muted underline underline-offset-4 hover:text-ink"
-            >
-              {text({ sv: "Avmarkera", en: "Clear selection" })}
-            </button>
+            {/* När allt är markerat gör knappen först i raden samma sak. */}
+            {allaValda ? null : (
+              <button
+                type="button"
+                onClick={() => setValda(new Set())}
+                className="focus-ring text-[0.8125rem] text-ink-muted underline underline-offset-4 hover:text-ink"
+              >
+                {text({ sv: "Avmarkera", en: "Clear selection" })}
+              </button>
+            )}
           </>
         ) : null}
       </div>
@@ -1478,20 +1481,22 @@ export function LeadsTabell({
           <div className={smal ? "hidden" : "hidden lg:block"}>
             <Tabell
               ariaLabel={text(T.tabell)}
-              minBredd={1160}
+              // Typ står inte som kolumn sedan Utkast kom in (2026-10-08): med den
+              // rullade tabellen i sidled vid 1440. Typfiltret ovanför och lådan
+              // visar typen.
+              minBredd={1040}
               kolumner={[
                 { rubrik: text({ sv: "Markera", en: "Select" }), bredd: "36px", srOnly: true },
-                { rubrik: text(T.kolBolag), bredd: harWebb ? "27%" : "32%" },
+                { rubrik: text(T.kolBolag), bredd: harWebb ? "27%" : "33%" },
                 { rubrik: text(T.kolStatus), bredd: "12%" },
                 { rubrik: text(T.kolPoang), bredd: "7%", hoger: true },
                 // Webbkolumnen bara när någon rad har ett betyg (webbrevisionen):
                 // en tom kolumn är bredd utan information.
                 ...(harWebb ? [{ rubrik: text(T.kolWebb), bredd: "10%" }] : []),
-                { rubrik: text(T.kolUtkast), bredd: "13%" },
-                { rubrik: text(T.kolKontakt), bredd: "8%" },
-                { rubrik: text(T.kolSenaste), bredd: "10%" },
-                { rubrik: text(T.kolUppgift), bredd: "9%" },
-                { rubrik: text(T.kolTyp) }
+                { rubrik: text(T.kolUtkast), bredd: "14%" },
+                { rubrik: text(T.kolKontakt), bredd: "9%" },
+                { rubrik: text(T.kolSenaste), bredd: "11%" },
+                { rubrik: text(T.kolUppgift) }
               ]}
             >
               {synliga.map((p) => (
@@ -1509,7 +1514,6 @@ export function LeadsTabell({
                   <Cell>{kontaktChip(p)}</Cell>
                   <Cell className="text-ink-muted">{relativTid(p.senaste_handelse_at ?? p.created_at, locale)}</Cell>
                   <Cell>{uppgiftText(p)}</Cell>
-                  <Cell className="text-ink-muted">{text(LEAD_TYP_ETIKETT[leadTyp(p.origin)])}</Cell>
                 </tr>
               ))}
             </Tabell>
