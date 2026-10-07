@@ -324,7 +324,7 @@ class PostgresStorage:
             records = await conn.fetch(
                 """
                 select id, tenant_id, provider, address, status, imap_host,
-                       secret_enc, last_sync_at, last_error
+                       secret_enc, last_sync_at, last_error, syfte
                 from ss_mailboxes where tenant_id = $1 order by created_at
                 """,
                 tenant_id,
@@ -3268,6 +3268,29 @@ class PostgresStorage:
                  where m.tenant_id = $1
                    and m.direction = 'inbound'
                  order by m.sent_at desc nulls last
+                 limit $2
+                """,
+                tenant_id,
+                limit,
+            )
+        return [_row(r) for r in records]
+
+    async def list_skickade(self, tenant_id: str, *, limit: int = 200) -> list[dict[str, Any]]:
+        limit = max(1, min(limit, 500))
+        async with self._scoped(tenant_id) as conn:
+            records = await conn.fetch(
+                """
+                select m.id, m.subject, m.body, m.sent_at, m.thread_id,
+                       t.last_inbound_at,
+                       p.id as prospect_id, p.company_name, p.contact_name,
+                       p.contact_email as prospect_email, p.status
+                  from outreach_messages m
+                  join outreach_threads t on t.id = m.thread_id and t.tenant_id = m.tenant_id
+                  left join prospects p on p.id = t.prospect_id and p.tenant_id = m.tenant_id
+                 where m.tenant_id = $1
+                   and m.direction = 'outbound'
+                   and m.sent_at is not null
+                 order by m.sent_at desc
                  limit $2
                 """,
                 tenant_id,

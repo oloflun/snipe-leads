@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EjAktiverad } from "@/components/EjAktiverad";
 import { Badge, Cell, SkeletonRows, Tabell, Tomt, btnSecondary, etikett, btnLiten, faltDiskret, faltTatt, chip, chipAktiv, chipInaktiv, chiplista, meta, tabellRad } from "@/components/ui";
 import { useSmal } from "@/components/leads/smal";
+import { SkickatLista, type SkickatRad } from "@/components/leads/SkickatLista";
 import { useRadrorelse } from "@/components/leads/useRadrorelse";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { felmeddelande } from "@/lib/http/json";
@@ -244,6 +245,28 @@ export function LeadsTabell({
   // (Sebbes krav: inget får se ut som raderat). Hämtas först vid klick.
   const [visaBortvalda, setVisaBortvalda] = useState(false);
   const [bortvalda, setBortvalda] = useState<SuiteProspekt[] | null>(null);
+  // Skickat (Sebbe 2026-10-07): varje leadsmejl som gått ut. Hämtas direkt,
+  // så att antalet står på fliken; listan ersätter tabellen när fliken är vald.
+  const [visaSkickat, setVisaSkickat] = useState(false);
+  const [skickat, setSkickat] = useState<SkickatRad[] | null>(null);
+  const [skickatFel, setSkickatFel] = useState<string | null>(null);
+  useEffect(() => {
+    if (demo) {
+      setSkickat([]);
+      return;
+    }
+    let aktiv = true;
+    leadsAnrop<{ skickat?: SkickatRad[] }>("/leads/skickat")
+      .then((svar) => aktiv && setSkickat(svar.skickat ?? []))
+      .catch((orsak) => {
+        if (!aktiv) return;
+        setSkickatFel(felmeddelande(orsak));
+        setSkickat([]);
+      });
+    return () => {
+      aktiv = false;
+    };
+  }, [demo]);
   const [bortvaldaFel, setBortvaldaFel] = useState<string | null>(null);
   const [vyNamn, setVyNamn] = useState("");
   const [sparar, setSparar] = useState(false);
@@ -603,21 +626,27 @@ export function LeadsTabell({
               type="button"
               id="leads-remsa-alla"
               aria-pressed={!filter.status}
-              onClick={() => setFilter((f) => ({ ...f, status: undefined }))}
-              className={cn(chip, !filter.status ? chipAktiv : chipInaktiv)}
+              onClick={() => {
+                setVisaSkickat(false);
+                setFilter((f) => ({ ...f, status: undefined }));
+              }}
+              className={cn(chip, !filter.status && !visaSkickat ? chipAktiv : chipInaktiv)}
             >
               {text(T.alla)} <span className="num ml-1 tabular-nums opacity-70">{urval.filter((p) => matchar(p, { ...filter, status: undefined })).length}</span>
             </button>
           </li>
           {REMSA.map((s) => {
             const antal = perStatus.get(s) ?? 0;
-            const aktiv = filter.status === s;
+            const aktiv = filter.status === s && !visaSkickat;
             return (
               <li key={s}>
                 <button
                   type="button"
                   aria-pressed={aktiv}
-                  onClick={() => setFilter((f) => ({ ...f, status: aktiv ? undefined : s }))}
+                  onClick={() => {
+                    setVisaSkickat(false);
+                    setFilter((f) => ({ ...f, status: aktiv ? undefined : s }));
+                  }}
                   className={cn(chip, aktiv ? chipAktiv : chipInaktiv, antal === 0 && !aktiv && "text-ink-subtle")}
                 >
                   {text(STATUS_ETIKETT[s])} <span className="num ml-1 tabular-nums opacity-70">{antal}</span>
@@ -638,9 +667,24 @@ export function LeadsTabell({
               ) : null}
             </button>
           </li>
+          <li>
+            <button
+              type="button"
+              aria-pressed={visaSkickat}
+              onClick={() => setVisaSkickat((v) => !v)}
+              className={cn(chip, visaSkickat ? chipAktiv : chipInaktiv)}
+            >
+              {text({ sv: "Skickat", en: "Sent" })}
+              {skickat !== null ? <span className="num ml-1 tabular-nums opacity-70">{skickat.length}</span> : null}
+            </button>
+          </li>
         </ul>
       </nav>
 
+      {visaSkickat ? (
+        <SkickatLista rader={skickat} fel={skickatFel} onValj={onValj} />
+      ) : (
+      <>
       <div className="flex flex-wrap items-end gap-2">
         <label className={cn(etikett, "flex flex-col gap-1")}>
           {text(T.filterNiva)}
@@ -870,8 +914,11 @@ export function LeadsTabell({
         </>
       )}
 
+      </>
+      )}
+
       {/* ------------------------------------------ BORTVALDA (nivå C) */}
-      {visaBortvalda ? (
+      {visaBortvalda && !visaSkickat ? (
         <section aria-labelledby="leads-bortvalda" className="rounded-card border border-ink/12 bg-paper2/40 p-4 sm:p-5">
           <h3 id="leads-bortvalda" className="text-[1rem] font-semibold">
             {text(T.bortvaldaRubrik)}

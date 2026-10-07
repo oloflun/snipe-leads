@@ -1317,6 +1317,23 @@ async def list_replies(
     return {"replies": svar}
 
 
+@router.get("/api/leads/skickat")
+async def list_skickat(
+    request: Request, limit: int = 200, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Alla skickade leadsmejl, senast först — fliken Skickat i Iris-leads
+    (Sebbe 2026-10-07): mejlet, vad som skrevs och vilket bolag det gick till.
+    `svarat` är sant när bolaget svarat efter utskicket."""
+    rader = await request.app.state.storage.list_skickade(tenant["tenant_id"], limit=limit)
+    for r in rader:
+        inn, ut = r.get("last_inbound_at"), r.get("sent_at")
+        try:
+            r["svarat"] = bool(inn and ut and inn >= ut)
+        except TypeError:  # datetime mot sträng (MemoryStorage): jämför ISO-texten
+            r["svarat"] = bool(inn and ut and str(inn) >= str(ut))
+    return {"skickat": rader}
+
+
 @router.get("/api/leads/config")
 async def get_leads_config(request: Request, tenant: dict = Depends(require_tenant)) -> dict:
     settings = await request.app.state.storage.get_agent_settings(

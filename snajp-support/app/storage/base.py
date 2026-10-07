@@ -521,6 +521,12 @@ class Storage(Protocol):
 
     async def mark_outreach_message_sent(self, tenant_id: str, message_id: str, sent_at: Any) -> None: ...
 
+    async def list_skickade(self, tenant_id: str, *, limit: int = 200) -> list[dict[str, Any]]:
+        """Skickade leadsmejl (outbound, sent_at satt) över alla trådar, senast
+        först, med bolag och mottagare — fliken Skickat i Iris-leads
+        (Sebbe 2026-10-07). `last_inbound_at` säger om bolaget svarat."""
+        ...
+
     async def list_replies(self, tenant_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
         """Inkomna svar över ALLA trådar, senast först — arbetsytans Svar-flik.
 

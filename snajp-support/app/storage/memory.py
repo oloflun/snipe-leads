@@ -2488,6 +2488,34 @@ class MemoryStorage:
         self.api_keys[key_hash] = record
         return record
 
+    async def list_skickade(self, tenant_id: str, *, limit: int = 200) -> list[dict[str, Any]]:
+        limit = max(1, min(limit, 500))
+        trådar = self.outreach_threads.get(tenant_id, {})
+        prospekt = {p["id"]: p for p in self.prospects.get(tenant_id, [])}
+        rader = []
+        for m in self.outreach_messages.get(tenant_id, []):
+            if m["direction"] != "outbound" or not m.get("sent_at"):
+                continue
+            tråd = trådar.get(m["thread_id"]) or {}
+            p = prospekt.get(tråd.get("prospect_id")) or {}
+            rader.append(
+                {
+                    "id": m["id"],
+                    "subject": m.get("subject"),
+                    "body": m["body"],
+                    "sent_at": m["sent_at"],
+                    "thread_id": m["thread_id"],
+                    "last_inbound_at": tråd.get("last_inbound_at"),
+                    "prospect_id": p.get("id"),
+                    "company_name": p.get("company_name"),
+                    "contact_name": p.get("contact_name"),
+                    "prospect_email": p.get("contact_email"),
+                    "status": p.get("status"),
+                }
+            )
+        rader.sort(key=lambda r: str(r["sent_at"]), reverse=True)
+        return rader[:limit]
+
     async def list_replies(self, tenant_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
         # Speglar SQL-varianten: inbound över alla trådar, senast först, med
         # prospektets namn hopslaget. En avvikelse här hade gett en grön svit

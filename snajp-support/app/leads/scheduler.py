@@ -287,19 +287,23 @@ async def _process_due_item(
         # kontrakt som i email_pipeline/sender.py: bara providers som tar
         # `html` får den; testernas fejkproviders med smala signaturer berörs
         # inte, och textdelen är alltid exakt send_queue.body.
+        import inspect
+
         extra: dict = {}
+        params = inspect.signature(provider.send).parameters
+        har_kwargs = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
         sig = normalisera_signatur(
             (await storage.get_agent_settings(tenant_id, agent_type="leads")).get("signatur")
         )
-        if sig:
-            import inspect
-
-            params = inspect.signature(provider.send).parameters
-            har_kwargs = any(
-                p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()
-            )
-            if "html" in params or har_kwargs:
-                extra["html"] = bygg_signatur_html(message["body"], sig)
+        if sig and ("html" in params or har_kwargs):
+            extra["html"] = bygg_signatur_html(message["body"], sig)
+        # Avsändare och svarsadress (Sebbe 2026-10-07: svaren ska synas i
+        # Leads › Inkorg). Förut gick utskicket från plattformens adress utan
+        # Reply-To, så prospektets svar hamnade där och aldrig i kundens
+        # synkade brevlåda — den inkorgen läser. Samma mjuka kontrakt som
+        # email_pipeline/sender.py: bara providers som tar parametrarna.
+        if "reply_to" in params or har_kwargs:
+            extra.update(await _avsandaridentitet(storage, tenant_id))
 
         await provider.send(
             to=thread.get("prospect_email", "okänd"),
@@ -310,6 +314,14 @@ async def _process_due_item(
         await storage.mark_outreach_message_sent(tenant_id, message["id"], now)
         await satt_status(status="sent", gate_checks={"decision": decision.reason}
         )
+        # Ett skickat första mejl gör bolaget Kontaktat — statusen sattes förut
+        # bara för hand, och fliken Kontaktad stod tom fast mejlen gått ut.
+        # Bara framåt: ett bolag som redan svarat eller bokat möte flyttas inte
+        # tillbaka.
+        if thread.get("prospect_id"):
+            prospekt = await storage.get_prospect(tenant_id, thread["prospect_id"]) or {}
+            if prospekt and (prospekt.get("status") or "new") in ("new", "researching", "ready"):
+                await storage.update_prospect(tenant_id, thread["prospect_id"], status="contacted")
         if getattr(provider, "levererar", False):
             # Riktiga utskick passerar aldrig kundens eget mejlkonto (Resend/
             # SMTP) — kopian är det som gör att de syns i kundens "Skickat".
@@ -323,7 +335,7 @@ async def _process_due_item(
                 till=thread.get("prospect_email", ""),
                 amne=message.get("subject", ""),
                 brodtext=message["body"],
-                fran=getattr(provider, "avsandare", ""),
+                fran=extra.get("from_email") or getattr(provider, "avsandare", ""),
                 syfte="leads",
             )
         return "sent"
@@ -352,6 +364,43 @@ def godkannande(item: dict) -> dict | None:
     if gc.get("approved_by") != "human":
         return None
     return {k: gc[k] for k in ("approved_by", "via", "godkand_at") if k in gc}
+
+
+async def _avsandaridentitet(storage: Storage, tenant_id: str) -> dict:
+    """from_email/from_name/reply_to för ett leadsutskick.
+
+    Från: tenantens verifierade sändningsdomän, annars providerns standard
+    (samma regel som supportsvaren, email_pipeline/sender.py). Svar till: den
+    synkade brevlådan, leads-brevlådan först (migration 084), så att
+    prospektets svar når kundens inkorg, klassas som lead
+    (email_pipeline/klassning: avsändaren matchar prospektet) och syns i
+    Leads › Inkorg. Utan synkad brevlåda: domänens egen reply_to, annars
+    ingen — då går svaret till avsändaradressen som förut."""
+    ut: dict = {}
+    try:
+        from ..sending_domains import get_config
+
+        cfg = await get_config(storage, tenant_id)
+        if cfg and cfg.get("status") == "verified":
+            ut["from_email"] = f"{cfg['from_local_part']}@{cfg['sending_domain']}"
+            ut["from_name"] = cfg.get("from_name") or None
+            if cfg.get("reply_to"):
+                ut["reply_to"] = cfg["reply_to"]
+    except Exception:  # noqa: BLE001 — identiteten får aldrig fälla ett utskick
+        logger.exception("Sändningsdomänen kunde inte läsas för %s", tenant_id)
+    try:
+        rang = {"leads": 0, "bada": 1}
+        brevlador = [
+            m
+            for m in await storage.list_mailboxes(tenant_id)
+            if m.get("status") == "active" and m.get("provider") != "mock" and m.get("address")
+        ]
+        if brevlador:
+            basta = min(brevlador, key=lambda m: rang.get(m.get("syfte") or "support", 2))
+            ut["reply_to"] = basta["address"]
+    except Exception:  # noqa: BLE001
+        logger.exception("Brevlådorna kunde inte läsas för %s", tenant_id)
+    return ut
 
 
 async def skicka_godkant(
