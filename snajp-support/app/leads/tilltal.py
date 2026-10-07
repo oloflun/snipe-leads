@@ -147,6 +147,15 @@ def ett_bolagsnamn(subject: str, body: str, namn: str | None) -> tuple[str, str]
     ny = "".join(delar) + body[pos:]
     # "Prestigo är verksamt" blev "ni är verksamt": predikatet följer ni.
     ny = re.sub(r"\b([Nn]i är) verksamt\b", r"\1 verksamma", ny)
+    # Reflexiven följer också: "Fiskebäck Byggservice specialiserar sig" blev
+    # "ni specialiserar sig". Bara inom två ord efter ni, så att "ni hjälper
+    # kunder att hitta sin väg" lämnas.
+    reflexiv = {"sig": "er", "sin": "er", "sitt": "ert", "sina": "era"}
+    ny = re.sub(
+        r"\b([Nn]i(?: [\wåäöÅÄÖ]+){1,2}) (sig|sin|sitt|sina)\b",
+        lambda m: f"{m.group(1)} {reflexiv[m.group(2)]}",
+        ny,
+    )
     return subject, ny
 
 
@@ -198,6 +207,14 @@ def demo() -> None:
     assert ny == "Jag såg att du erbjuder redovisning.", ny
     _, ny = ett_bolagsnamn("Vinovo och er etablering", "Jag såg att ni nyligen bildat Vinovo med målet.", "Vinovo AB")
     assert ny == "Jag såg att ni nyligen bildat företaget med målet.", ny
+    _, ny = ett_bolagsnamn(
+        "ROT – Fiskebäck Byggservice",
+        "Jag såg att Fiskebäck Byggservice specialiserar sig på ROT. Fiskebäck Byggservice har utvecklat sina tjänster.",
+        "Fiskebäck Byggservice AB",
+    )
+    assert ny == "Jag såg att ni specialiserar er på ROT. Ni har utvecklat era tjänster.", ny
+    _, ny = ett_bolagsnamn("Ämne", "Ni hjälper kunder att hitta sin väg.", "X AB")
+    assert ny == "Ni hjälper kunder att hitta sin väg.", "reflexiv långt från ni lämnas"
     _, ny = ett_bolagsnamn("EC Utbildning: nya LIA-företag", "Jag såg att EC Utbildning växer.", "EC Utbildning AB")
     assert ny == "Jag såg att ni växer.", ny
     _, ny = ett_bolagsnamn("Ämne", "EC:s kurser och EC.", "EC AB")
