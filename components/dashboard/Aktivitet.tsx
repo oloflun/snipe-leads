@@ -689,6 +689,7 @@ export function Aktivitet({ demo = false }: Readonly<{ demo?: boolean }>) {
                     <Laddar hojd="h-64" />
                   ) : harIris ? (
                     <Aktivitetsgraf
+                      typ="staplar"
                       veckor={it.veckor}
                       serier={[
                         { nyckel: "bestallt", etikett: T.bestallt, ton: "chart-ochre" },
