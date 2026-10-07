@@ -48,10 +48,11 @@ from ..config import get_settings
 from ..leads.business_context import require_business_context
 from ..leads.discovery import (
     LAGLIG_GRUND_EGEN_WEBB,
-    _asci,
     ar_privat_epost,
     ar_arbetsmejl,
+    ar_saljadress,
     extrahera_kontaktlankar,
+    mottagare,
     normalisera_webbplats,
     plocka_arbetsmejl,
 )
@@ -341,8 +342,9 @@ def _verifierad_epost(kandidat: str | None, material: str, webb: str | None) -> 
 
 
 def _saknar_arbetsmejl(prospect: dict[str, Any], webb: str | None) -> bool:
-    nu = prospect.get("contact_email")
-    return not ar_arbetsmejl(nu, webb=webb)
+    """Ingen adress som ett utkast får gå till (discovery.mottagare): tom,
+    privat utanför regel 13, eller en HR-/ekonomi-/robotadress."""
+    return not mottagare({**prospect, "website": webb})
 
 
 async def _uppgradera_kontakt(
@@ -386,25 +388,26 @@ async def _uppgradera_kontakt(
     falt: dict[str, Any] = {}
 
     # Namngiven uppgradering — samma rangordning som tidigare. Kräver namn,
-    # och får inte degradera named_role_match.
-    if namn and _kontaktniva_rank("named_other") > _kontaktniva_rank(prospect.get("contact_level")):
+    # och får inte degradera named_role_match. Har kontaktsökningen redan
+    # gett leadet en adress som duger står dess tilltal kvar (Antons regel
+    # 14, 2026-10-07): modellens namn skriver inte över hälsningen.
+    if (
+        namn
+        and _kontaktniva_rank("named_other") > _kontaktniva_rank(prospect.get("contact_level"))
+        and _saknar_arbetsmejl(prospect, webb)
+    ):
         falt["contact_name"] = namn
         falt["contact_role"] = roll
         falt["contact_level"] = "named_other"
 
     # Arbetsmejl: byt ut privat/tom, fyll i från fynd eller skrap. En redan
     # verifierad arbetsadress lämnas ifred (även när vi sätter ett namn).
+    # Bolagets adress (info@) duger även när leadet bär ett namn (Sebbes
+    # beslut 2026-10-07, regel 10/13): grinden som krävde personens namn i
+    # adressen var en rest av den ersatta regel 10a. HR-, ekonomi- och
+    # robotadresser fästs aldrig (provkörningen 2026-10-05: rekrytering@).
     if _saknar_arbetsmejl(prospect, webb):
-        vald = fynd_epost or scrape_epost
-        # En funktionsadress (info@, rekrytering@) fästs aldrig på en
-        # namngiven person: då ser raden ut som "Anna Berg, VD,
-        # rekrytering@…" fast adressen inte går till henne (provkörningen
-        # 2026-10-05). Adressen måste bära personens namn.
-        person = namn or str(prospect.get("contact_name") or "")
-        if vald and person:
-            led = [d for d in re.findall(r"[a-z]+", _asci(person)) if len(d) >= 3]
-            if not any(d in _asci(vald.split("@", 1)[0]) for d in led):
-                vald = None
+        vald = next((e for e in (fynd_epost, scrape_epost) if e and ar_saljadress(e)), None)
         if vald:
             falt["contact_email"] = vald
             if "contact_level" not in falt:
