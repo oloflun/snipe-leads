@@ -129,7 +129,11 @@ def ett_bolagsnamn(subject: str, body: str, namn: str | None) -> tuple[str, str]
     if not body or not kort:
         return subject, body
     subject, body = korta_bolagsnamn(subject or "", namn), korta_bolagsnamn(body, namn)
-    monster = re.compile(rf"(?<![\wåäöÅÄÖ]){re.escape(kort)}(?![\wåäöÅÄÖ:'’])", re.IGNORECASE)
+    # Ägandeform ("EC:s", "Volvo's") räknas inte, men ett kolon gör det:
+    # ämnet "EC Utbildning: nya LIA-företag" missades annars.
+    monster = re.compile(
+        rf"(?<![\wåäöÅÄÖ]){re.escape(kort)}(?![\wåäöÅÄÖ])(?![:'’]s\b)", re.IGNORECASE
+    )
     behall = 0 if monster.search(subject or "") else 1
     delar: list[str] = []
     pos = 0
@@ -194,6 +198,10 @@ def demo() -> None:
     assert ny == "Jag såg att du erbjuder redovisning.", ny
     _, ny = ett_bolagsnamn("Vinovo och er etablering", "Jag såg att ni nyligen bildat Vinovo med målet.", "Vinovo AB")
     assert ny == "Jag såg att ni nyligen bildat företaget med målet.", ny
+    _, ny = ett_bolagsnamn("EC Utbildning: nya LIA-företag", "Jag såg att EC Utbildning växer.", "EC Utbildning AB")
+    assert ny == "Jag såg att ni växer.", ny
+    _, ny = ett_bolagsnamn("Ämne", "EC:s kurser och EC.", "EC AB")
+    assert ny == "EC:s kurser och EC.", "ägandeform räknas inte"
     _, ny = ett_bolagsnamn("Prestigo och nya projekt", "Jag ser att Prestigo är verksamt i Göteborg.", "Prestigo")
     assert ny == "Jag ser att ni är verksamma i Göteborg.", ny
     print("ett bolagsnamn: ok")
