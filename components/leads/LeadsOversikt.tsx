@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
-import type { Vecka } from "@/components/dashboard/OversiktPaneler";
 import { CrmKundlista } from "@/components/leads/CrmKundlista";
 import { IrisGranskning } from "@/components/leads/IrisGranskning";
 import {
@@ -14,7 +13,6 @@ import {
   type KorningsRad
 } from "@/components/leads/IrisKorningar";
 import { ListorUpsell } from "@/components/leads/IrisBolag";
-import { useLeadsdata } from "@/components/leads/LeadsDiagram";
 import { LeadsTabell } from "@/components/leads/LeadsTabell";
 import { LeadslistorView } from "@/components/leads/LeadslistorView";
 import { SaljlistaUtforska } from "@/components/leads/Saljlista";
@@ -75,10 +73,6 @@ const T = {
 const PERIOD = 4;
 
 const kort = "rounded-card border border-ink/12 bg-paper p-4 sm:p-5";
-
-function summa(veckor: Vecka[], nyckel: keyof Vecka, fran: number, till: number): number {
-  return veckor.slice(fran, till).reduce((s, v) => s + Number(v[nyckel] ?? 0), 0);
-}
 
 /**
  * Rutan med pågående körningar: kompakta rader, pollas var tionde sekund så
@@ -218,14 +212,18 @@ export function LeadsOversikt({
   const { text, locale } = useLocale();
   const arDemo = demo || isDemo || vy === "demo";
   const harListaddon = addons.includes("leadlists");
-  const { veckor } = useLeadsdata(arDemo);
   // Listans egna tal (LeadsTabell.onAntal): samma rader som Alla och Ny visar,
-  // så att nyckeltalet och listan aldrig säger två olika saker.
+  // och skickat/svar ur samma lista som Inkorg › Skickat (GET /leads/skickat,
+  // de senaste fyra veckorna), så att nyckeltalen och listorna aldrig säger
+  // två olika saker. Förut räknades Skickade ur veckoanalysen och stod på 0
+  // medan Skickat-listan visade mejlen (2026-10-07). Tabellen hämtar om efter
+  // varje massåtgärd, och talen följer med.
   const [antalLeads, setAntalLeads] = useState<{
     alla: number;
     nya: number;
     skickat: number | null;
     svarat: number | null;
+    godkanda: number;
   } | null>(null);
   const [antalUtkast, setAntalUtkast] = useState<number | null>(null);
   // Körningsrutan vet om en Iris-körning pågår; tabellen går då i livetakt.
@@ -235,10 +233,6 @@ export function LeadsOversikt({
   // kundbesök. I main svarar flyttvägen själv med ett tydligt nej.
   const flyttbar = isPlatformAdmin && vy === "admin" && !impersonation && !arDemo;
 
-  const v = veckor ?? [];
-  const n = v.length;
-  const nu = (k: keyof Vecka) => summa(v, k, Math.max(0, n - PERIOD), n);
-  const harVeckor = veckor !== null && n > 0;
   const fmt = (varde: number | null) => (varde === null ? "–" : varde.toLocaleString(locale === "en" ? "en-GB" : "sv-SE"));
   const senaste = text({ sv: `senaste ${PERIOD} veckorna`, en: `last ${PERIOD} weeks` });
 
@@ -248,15 +242,21 @@ export function LeadsOversikt({
       varde: fmt(antalLeads?.alla ?? null),
       notis: antalLeads ? text({ sv: `${antalLeads.nya} nya`, en: `${antalLeads.nya} new` }) : null
     },
-    { etikett: text(T.utkastVantar), varde: fmt(antalUtkast), notis: text(T.vantarPaDig) },
-    // Demon räknar ur sina exempelleads (samma källa som fliken Skickat);
-    // arbetsytan ur utskicksloggen, de senaste veckorna.
-    arDemo
-      ? { etikett: text(T.skickade), varde: fmt(antalLeads?.skickat ?? null), notis: text(T.exempelLeads) }
-      : { etikett: text(T.skickade), varde: fmt(harVeckor ? nu("sent") : null), notis: senaste },
-    arDemo
-      ? { etikett: text(T.svar), varde: fmt(antalLeads?.svarat ?? null), notis: text(T.exempelLeads) }
-      : { etikett: text(T.svar), varde: fmt(harVeckor ? nu("replies") : null), notis: senaste }
+    {
+      etikett: text(T.utkastVantar),
+      varde: fmt(antalUtkast),
+      // Godkända utkast som väntar på sändfönstret (vardagar 08–16) syntes
+      // förut ingenstans: de är inte "att godkänna" och inte skickade än.
+      notis: antalLeads?.godkanda
+        ? text({
+            sv: `${antalLeads.godkanda} godkända väntar på sändfönstret`,
+            en: `${antalLeads.godkanda} approved, waiting for the sending window`
+          })
+        : text(T.vantarPaDig)
+    },
+    // Demon räknar ur sina exempelleads; arbetsytan ur utskicksloggen.
+    { etikett: text(T.skickade), varde: fmt(antalLeads?.skickat ?? null), notis: arDemo ? text(T.exempelLeads) : senaste },
+    { etikett: text(T.svar), varde: fmt(antalLeads?.svarat ?? null), notis: arDemo ? text(T.exempelLeads) : senaste }
   ];
 
   const kolumn = cn(kort, "relative min-w-0");

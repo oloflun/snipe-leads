@@ -1,6 +1,7 @@
 import { arEjAktiverad } from "@/components/EjAktiverad";
 import { readJsonBody } from "@/lib/http/json";
 import type { Locale, Localized } from "@/lib/i18n";
+import type { Utkastfalt } from "@/lib/leads/utkast";
 
 /**
  * Leads Suite (Fas 10, plan del F): typerna och anropet som tabellen,
@@ -29,7 +30,9 @@ export type SuiteProspekt = {
   disqualifiers?: string[] | null;
   /** Webbrevisionen (migration 094): bildbedömningens betyg och synliga brister. */
   webbrevision?: { modernitet?: number | null; brister?: string[] | null } | null;
-};
+  /** Arkiverad (migration 107): dold i Iris-listan, nåbar under Arkiverade. */
+  arkiverad_at?: string | null;
+} & Utkastfalt;
 
 export type Uppgift = {
   id: string;

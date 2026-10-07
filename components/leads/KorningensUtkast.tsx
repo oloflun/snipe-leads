@@ -27,7 +27,9 @@ import { cn } from "@/lib/utils";
  * avvisas (POST /leads/queue/{id}/reject: utkastet skickas aldrig).
  */
 
-type Status = "vantar" | "godkant" | "skickat" | "avvisat" | "stoppat" | "saknas";
+/** Samma härledning som Iris-listan och lådan (snajp-support/app/leads/utkaststatus.py).
+ *  `koad`: köat utan mänskligt godkännande (äldre utkast). */
+type Status = "vantar" | "godkant" | "koad" | "skickat" | "avvisat" | "stoppat" | "saknas";
 
 type Lead = {
   prospect_id: string;
@@ -48,6 +50,7 @@ type Svar = { leads: Lead[]; antal: Partial<Record<Status | "kan_skrivas", numbe
 const STATUS: Record<Status, { etikett: Localized; ton: string }> = {
   vantar: { etikett: { sv: "Utkast väntar", en: "Draft waiting" }, ton: "text-warning" },
   godkant: { etikett: { sv: "Godkänt, skickas 08–16", en: "Approved, sends 08–16" }, ton: "text-ink-muted" },
+  koad: { etikett: { sv: "Köat, ej granskat", en: "Queued, not reviewed" }, ton: "text-warning" },
   skickat: { etikett: { sv: "Skickat", en: "Sent" }, ton: "text-moss" },
   avvisat: { etikett: { sv: "Avvisat", en: "Rejected" }, ton: "text-ink-subtle" },
   stoppat: { etikett: { sv: "Stoppat av sändspärr", en: "Stopped by a send guard" }, ton: "text-danger" },

@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { EmailStudioEditor } from "@/components/email/EmailStudioEditor";
+import { MejlSvans, type Signatur } from "@/components/leads/IrisGranskning";
 import { Tidslinje } from "@/components/leads/Tidslinje";
 import { SkeletonRows, btnPrimary, btnSecondary, flik, flikAktiv, flikInaktiv, fliklista } from "@/components/ui";
 import { mejlaOss } from "@/components/marketing/copy";
 import { addonSpec } from "@/lib/addons";
 import { offertForUtkast } from "@/lib/leads/offert";
+import { UTKAST_TON, meddelaLeadsUppdaterade, utkastText, type UtkastStatus } from "@/lib/leads/utkast";
 import type { EmailStudioData } from "@/lib/data/emails";
 import { demoOversiktSvar } from "@/lib/demo/oversikt";
 import { kontaktnamn, type ExempelBolag } from "@/lib/demo/iris-exempel";
@@ -133,10 +135,17 @@ const T = {
   skriverUtkastet: { sv: "Skriver utkastet…", en: "Writing the draft…" },
   exempelutkast: { sv: "Exempelutkast.", en: "Example draft." },
   stodrad: { sv: "Stödrad", en: "Supporting line" },
-  godkant: { sv: "Godkänt. Utkastet ligger nu i sändkön.", en: "Approved. The draft is now in the send queue." },
+  godkant: {
+    sv: "Godkänt. Mejlet skickas när sändfönstret öppnar (vardagar 08–16).",
+    en: "Approved. The email goes out when the sending window opens (weekdays 08–16)."
+  },
+  skickatNu: { sv: "Skickat.", en: "Sent." },
   godkanner: { sv: "Godkänner…", en: "Approving…" },
   godkannOchSkicka: { sv: "Godkänn och skicka", en: "Approve and send" },
-  godkannIGranskning: { sv: "Godkänn under Att göra.", en: "Approve under To do." }
+  sparaAndring: { sv: "Spara ändringen", en: "Save the edit" },
+  sparar: { sv: "Sparar…", en: "Saving…" },
+  sparat: { sv: "Ändringen är sparad.", en: "The edit is saved." },
+  skapaNytt: { sv: "Skapa nytt utkast", en: "Create a new draft" }
 } satisfies Record<string, Localized>;
 
 /** Samma text på båda språken: serverns egna felmeddelanden, som redan är färdiga. */
@@ -259,7 +268,74 @@ type UtkastLage =
   | { fas: "letar-kontakt" }
   | { fas: "skapar" }
   | { fas: "fel"; meddelande: Localized }
-  | { fas: "klar"; data: EmailStudioData; queueItemId: string | null };
+  | {
+      fas: "klar";
+      data: EmailStudioData;
+      queueItemId: string | null;
+      /** Utkastets RIKTIGA status (backendens härledning). null = exempel/demo. */
+      status: UtkastStatus | null;
+      skal?: string | null;
+      skickasTidigast?: string | null;
+      /** Signatur och lagstadgad fot: visas under texten, redigeras aldrig. */
+      svans?: string | null;
+      signatur?: Signatur | null;
+      /** Det sparade ämnet och brödtexten — en redigering jämförs mot dem. */
+      amne: string;
+      brodtext: string;
+    };
+
+/** Statusar vars utkast går att redigera (PUT /leads/queue/{id}). */
+const REDIGERBARA: ReadonlySet<string> = new Set(["vantar", "koad", "godkant"]);
+
+/**
+ * Leadets utkast med dess riktiga status (GET /leads/prospects/{id}/utkast,
+ * 2026-10-08). Förut visades trådens senaste meddelande oavsett status, märkt
+ * som utkast: ett skickat eller avvisat mejl såg ut som ett som väntade.
+ * Brödtexten och svansen (signatur + fot) kommer delade, som i granskningen.
+ */
+async function lasUtkast(prospekt: Prospekt): Promise<UtkastLage> {
+  const svar = await snajpAnrop<{
+    utkast?: { id: string; subject?: string | null; body?: string | null; brodtext?: string | null; svans?: string | null } | null;
+    queue_item_id?: string | null;
+    utkast_status?: UtkastStatus | null;
+    utkast_skal?: string | null;
+    skickas_tidigast?: string | null;
+    signatur?: Signatur | null;
+  }>(`/leads/prospects/${prospekt.id}/utkast`);
+  if (!svar.utkast?.body) return { fas: "ingen" };
+  const amne = svar.utkast.subject || `Till ${prospekt.company_name}`;
+  const brodtext = svar.utkast.brodtext ?? svar.utkast.body;
+  return {
+    fas: "klar",
+    data: {
+      source: "database",
+      businessContext: null,
+      email: {
+        id: svar.utkast.id,
+        subject: amne,
+        body: brodtext,
+        variantLength: "medium",
+        variantType: "cold_outreach",
+        status: "draft",
+        companyId: prospekt.id,
+        contactId: null,
+        companyName: prospekt.company_name,
+        signal: beskrivning(prospekt),
+        offer: null,
+        cta: null,
+        contactName: prospekt.contact_name
+      }
+    },
+    queueItemId: svar.queue_item_id ?? null,
+    status: svar.utkast_status ?? null,
+    skal: svar.utkast_skal ?? null,
+    skickasTidigast: svar.skickas_tidigast ?? null,
+    svans: svar.utkast.svans ?? null,
+    signatur: svar.signatur ?? null,
+    amne,
+    brodtext
+  };
+}
 
 /**
  * Prospekt utan kontaktmail: "Skapa utkast" slutade förut i ett dött
@@ -402,7 +478,15 @@ export function LeadDetail({
 
       if (exempel) {
         setLage({ fas: "klar", prospekt: exempelTillRad(exempel), kallor: exempel.kallor });
-        setUtkastLage({ fas: "klar", data: exempelStudioData(exempel), queueItemId: null });
+        const data = exempelStudioData(exempel);
+        setUtkastLage({
+          fas: "klar",
+          data,
+          queueItemId: null,
+          status: null,
+          amne: data.email.subject,
+          brodtext: data.email.body
+        });
         return;
       }
 
@@ -448,40 +532,10 @@ export function LeadDetail({
           kallor: (kropp.sources ?? []).map((url) => ({ label: url, url }))
         });
         try {
-          const utkast = await snajpAnrop<{
-            utkast?: { id: string; subject?: string | null; body?: string | null } | null;
-            queue_item_id?: string | null;
-          }>(`/leads/prospects/${id}/utkast`);
-          if (avbruten) return;
-          if (utkast.utkast?.body) {
-            setUtkastLage({
-              fas: "klar",
-              data: {
-                source: "database",
-                businessContext: null,
-                email: {
-                  id: utkast.utkast.id,
-                  subject: utkast.utkast.subject || `Till ${kropp.prospect.company_name}`,
-                  body: utkast.utkast.body,
-                  variantLength: "medium",
-                  variantType: "cold_outreach",
-                  status: "draft",
-                  companyId: kropp.prospect.id,
-                  contactId: null,
-                  companyName: kropp.prospect.company_name,
-                  signal: beskrivning(kropp.prospect),
-                  offer: null,
-                  cta: null,
-                  contactName: kropp.prospect.contact_name
-                }
-              },
-              queueItemId: utkast.queue_item_id ?? null
-            });
-          } else {
-            setUtkastLage({ fas: "ingen" });
-          }
+          const utkast = await lasUtkast(kropp.prospect);
+          if (!avbruten) setUtkastLage(utkast);
         } catch {
-          setUtkastLage({ fas: "ingen" });
+          if (!avbruten) setUtkastLage({ fas: "ingen" });
         }
       } catch (error) {
         if (!avbruten) setLage({ fas: "fel", meddelande: samma(felmeddelande(error)) });
@@ -544,6 +598,18 @@ export function LeadDetail({
         });
         return;
       }
+      // Listan och nyckeltalen får det nya utkastet; lådan läser dess
+      // riktiga status. Går läsningen inte visas jobbets svar som förut.
+      meddelaLeadsUppdaterade("lada");
+      try {
+        const utkast = await lasUtkast(p);
+        if (utkast.fas === "klar") {
+          setUtkastLage(utkast);
+          return;
+        }
+      } catch {
+        // faller igenom till jobbets svar
+      }
       setUtkastLage({
         fas: "klar",
         data: {
@@ -565,7 +631,10 @@ export function LeadDetail({
             contactName: p.contact_name
           }
         },
-        queueItemId: svar.queue_item_id ?? null
+        queueItemId: svar.queue_item_id ?? null,
+        status: svar.queue_item_id ? "vantar" : null,
+        amne: svar.subject || `Till ${p.company_name}`,
+        brodtext: svar.body
       });
     } catch (error) {
       setUtkastLage({ fas: "fel", meddelande: samma(felmeddelande(error)) });
@@ -796,14 +865,15 @@ export function LeadDetail({
         ) : null}
 
         {utkastLage.fas === "klar" ? (
-          <div className="mt-4">
-            <EmailStudioEditor data={utkastLage.data} compact />
-            {!demo && !exempel ? (
-              <GodkannKnapp queueItemId={utkastLage.queueItemId} />
-            ) : (
-              <p className="mt-4 text-[13px] leading-6 text-ink-subtle">{text(T.exempelutkast)}</p>
-            )}
-          </div>
+          <UtkastIRutan
+            lage={utkastLage}
+            skarp={!demo && !exempel}
+            onAndrat={() => {
+              meddelaLeadsUppdaterade("lada");
+              void lasUtkast(p).then(setUtkastLage, () => undefined);
+            }}
+            onSkapaNytt={() => void skapaUtkast()}
+          />
         ) : null}
       </div>
       ) : null}
@@ -850,50 +920,152 @@ function JevRad({ jev }: Readonly<{ jev: JevData }>) {
   );
 }
 
-function GodkannKnapp({ queueItemId }: Readonly<{ queueItemId: string | null }>) {
-  const { text } = useLocale();
-  const [godkant, setGodkant] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [fel, setFel] = useState<string | null>(null);
+/**
+ * Mejlutkastet i lådan med sin riktiga status (2026-10-08).
+ *
+ * - Väntar, köat eller godkänt: editorn. Ändringen sparas med
+ *   PUT /leads/queue/{id} FÖRE godkännandet — samma väg som granskningen
+ *   (IrisGranskning.sparaAndring) — så att det är den texten som skickas.
+ *   Förut gick redigeringen här förlorad. Godkänn och skicka finns för det
+ *   som väntar (och äldre köade utan granskning); ett godkänt utkast väntar
+ *   redan på sändfönstret och kan bara sparas om.
+ * - Skickat, avvisat eller stoppat: texten som den är, utan editor — ett
+ *   skickat mejl går inte att skriva om. Ett avvisat utkast kan ersättas.
+ * - Exempel och demo: editorn som förut, inga anrop.
+ */
+function UtkastIRutan({
+  lage,
+  skarp,
+  onAndrat,
+  onSkapaNytt
+}: Readonly<{
+  lage: Extract<UtkastLage, { fas: "klar" }>;
+  skarp: boolean;
+  onAndrat: () => void;
+  onSkapaNytt: () => void;
+}>) {
+  const { locale, text } = useLocale();
+  const [andring, setAndring] = useState<{ subject: string; brodtext: string } | null>(null);
+  const [busy, setBusy] = useState<"spara" | "godkann" | null>(null);
+  const [besked, setBesked] = useState<{ text: string; fel: boolean } | null>(null);
 
-  async function godkann() {
-    if (!queueItemId) return;
-    setBusy(true);
-    setFel(null);
+  const status = lage.status;
+  const redigerbar = !skarp || status === null || REDIGERBARA.has(status);
+  const andrad = andring !== null && (andring.subject !== lage.amne || andring.brodtext !== lage.brodtext);
+  const kanGodkannas = skarp && Boolean(lage.queueItemId) && (status === "vantar" || status === "koad");
+  const svans = lage.svans ? <MejlSvans signatur={lage.signatur ?? null} svans={lage.svans} /> : null;
+
+  async function spara(): Promise<boolean> {
+    if (!andring || !andrad || !lage.queueItemId) return true;
+    await snajpAnrop(`/leads/queue/${encodeURIComponent(lage.queueItemId)}`, {
+      method: "PUT",
+      body: JSON.stringify({ subject: andring.subject, brodtext: andring.brodtext })
+    });
+    return true;
+  }
+
+  async function sparaAndring() {
+    setBusy("spara");
+    setBesked(null);
     try {
-      await snajpAnrop(`/leads/queue/${encodeURIComponent(queueItemId)}/approve`, { method: "POST" });
-      setGodkant(true);
+      await spara();
+      setBesked({ text: text(T.sparat), fel: false });
+      onAndrat();
     } catch (error) {
-      setFel(felmeddelande(error));
+      setBesked({ text: felmeddelande(error), fel: true });
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
-  if (godkant) {
-    return (
-      <p role="status" className="mt-4 text-[15px] text-moss">
-        {text(T.godkant)}
-      </p>
-    );
+  async function godkann() {
+    if (!lage.queueItemId) return;
+    setBusy("godkann");
+    setBesked(null);
+    try {
+      await spara();
+      const svar = await snajpAnrop<{ utfall?: string; besked?: string }>(
+        `/leads/queue/${encodeURIComponent(lage.queueItemId)}/approve`,
+        { method: "POST" }
+      );
+      const skal = svar.besked?.split(": ").slice(1).join(": ");
+      setBesked(
+        svar.utfall === "sent"
+          ? { text: text(T.skickatNu), fel: false }
+          : svar.utfall === "requeued"
+            ? { text: text(T.godkant), fel: false }
+            : { text: text({ sv: `Inte skickat${skal ? `: ${skal}` : "."}`, en: `Not sent${skal ? `: ${skal}` : "."}` }), fel: true }
+      );
+      onAndrat();
+    } catch (error) {
+      setBesked({ text: felmeddelande(error), fel: true });
+    } finally {
+      setBusy(null);
+    }
   }
 
   return (
     <div className="mt-4">
-      <button
-        type="button"
-        disabled={busy || !queueItemId}
-        onClick={() => void godkann()}
-        className={cn(btnPrimary, "disabled:cursor-wait disabled:opacity-60")}
-      >
-        {busy ? text(T.godkanner) : text(T.godkannOchSkicka)}
-      </button>
-      {!queueItemId ? (
-        <p className="mt-3 text-[13px] leading-6 text-ink-subtle">{text(T.godkannIGranskning)}</p>
+      {skarp && status ? (
+        <p className={cn("mb-3 text-[14px] font-medium", UTKAST_TON[status])}>
+          {utkastText({ utkast_status: status, skickas_tidigast: lage.skickasTidigast }, locale, text)}
+          {lage.skal && (status === "stoppat" || status === "vantar") ? (
+            <span className="mt-1 block max-w-[65ch] text-[13px] font-normal leading-6 text-ink-muted">{lage.skal}</span>
+          ) : null}
+        </p>
       ) : null}
-      {fel ? (
-        <p role="alert" className="mt-3 max-w-[65ch] text-[14px] text-danger">
-          {fel}
+
+      {redigerbar ? (
+        <EmailStudioEditor
+          data={lage.data}
+          compact
+          onAndring={(subject, body) => setAndring({ subject, brodtext: body })}
+          efterText={svans}
+        />
+      ) : (
+        <>
+          <div className="rounded-card border border-ink/12 bg-paper px-4 py-4 sm:px-5">
+            <p className="text-[0.9375rem] font-semibold text-ink">{lage.amne}</p>
+            <p className="mt-3 whitespace-pre-wrap break-words text-[0.9375rem] leading-7 text-ink">{lage.brodtext}</p>
+          </div>
+          {svans}
+        </>
+      )}
+
+      {!skarp ? (
+        <p className="mt-4 text-[13px] leading-6 text-ink-subtle">{text(T.exempelutkast)}</p>
+      ) : (
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          {kanGodkannas ? (
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={() => void godkann()}
+              className={cn(btnPrimary, "disabled:cursor-wait disabled:opacity-60")}
+            >
+              {busy === "godkann" ? text(T.godkanner) : text(T.godkannOchSkicka)}
+            </button>
+          ) : null}
+          {redigerbar && andrad && lage.queueItemId ? (
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={() => void sparaAndring()}
+              className={cn(btnSecondary, "disabled:cursor-wait disabled:opacity-60")}
+            >
+              {busy === "spara" ? text(T.sparar) : text(T.sparaAndring)}
+            </button>
+          ) : null}
+          {status === "avvisat" ? (
+            <button type="button" onClick={onSkapaNytt} className={btnSecondary}>
+              {text(T.skapaNytt)}
+            </button>
+          ) : null}
+        </div>
+      )}
+      {besked ? (
+        <p role={besked.fel ? "alert" : "status"} className={cn("mt-3 max-w-[65ch] text-[14px]", besked.fel ? "text-danger" : "text-moss")}>
+          {besked.text}
         </p>
       ) : null}
     </div>

@@ -8,6 +8,7 @@ import type { EmailStudioData } from "@/lib/data/emails";
 import { EXEMPELBOLAG } from "@/lib/demo/iris-exempel";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { offertForUtkast } from "@/lib/leads/offert";
+import { LEADS_UPPDATERADE, meddelaLeadsUppdaterade } from "@/lib/leads/utkast";
 import { cn } from "@/lib/utils";
 import { useLocale, type Localized } from "@/lib/i18n";
 
@@ -50,7 +51,7 @@ type KöItem = {
  *  `text` är blocket som redan ligger sist i brödtexten; logotypen finns bara
  *  i mejlets HTML-del, så vyn renderar den här för att granskaren ska se det
  *  mottagaren ser. */
-type Signatur = {
+export type Signatur = {
   text: string;
   namn: string;
   titel?: string;
@@ -70,7 +71,7 @@ type Signatur = {
  * Står direkt under textrutan, som fortsättningen på mejlet — förut låg
  * signaturen som råtext i rutan och kunde skrivas om bort av AI-knapparna.
  */
-function MejlSvans({ signatur, svans }: Readonly<{ signatur: Signatur | null; svans: string }>) {
+export function MejlSvans({ signatur, svans }: Readonly<{ signatur: Signatur | null; svans: string }>) {
   const { text } = useLocale();
   const sig = signatur && svans.startsWith(signatur.text) ? signatur : null;
   const fot = (sig ? svans.slice(sig.text.length) : svans).trim();
@@ -268,6 +269,18 @@ export function IrisGranskning({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [demo]);
 
+  // En massåtgärd i Iris-listan (Skapa om, Skicka, Arkivera …) eller ett
+  // beslut i lådan ändrar kön: hämta om. Den egna signalen ignoreras — hamta
+  // har redan körts.
+  useEffect(() => {
+    const uppdatera = (e: Event) => {
+      if ((e as CustomEvent<string>).detail !== "granskning") void hamta();
+    };
+    window.addEventListener(LEADS_UPPDATERADE, uppdatera);
+    return () => window.removeEventListener(LEADS_UPPDATERADE, uppdatera);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demo]);
+
   async function sparaAndring(post: KöItem): Promise<boolean> {
     const ny = andrat[post.id];
     if (!ny || (ny.subject === (post.subject ?? "") && ny.brodtext === brodtextFor(post))) return true;
@@ -337,6 +350,8 @@ export function IrisGranskning({
         return resten;
       });
       await hamta();
+      // Listan och nyckeltalen (godkända som väntar, skickade) hämtar om.
+      meddelaLeadsUppdaterade("granskning");
       return utfall;
     } catch (orsak) {
       const m = felmeddelande(orsak);
