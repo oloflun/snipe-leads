@@ -64,7 +64,7 @@ from ..leads.icp import (
     validate_icp,
 )
 from ..leads.icp import is_empty as icp_ar_tomt
-from ..leads.signatur import bygg_signaturtext
+from ..leads.signatur import HALSNING, bygg_signaturtext, dela_utkast, sla_ihop
 from ..leads.signatur import normalisera as normalisera_signatur
 from ..leads.sni import SNI_NAMN, beskriv_kod
 from ..leads.onboarding_state import REQUIRED_KINDS, get_onboarding_state
@@ -1535,6 +1535,11 @@ async def list_review_queue(
     items = await storage.list_review_queue(tenant["tenant_id"], limit=min(limit, 200))
     settings = await storage.get_agent_settings(tenant["tenant_id"], agent_type="leads")
     sig = normalisera_signatur(settings.get("signatur"))
+    # Brödtexten är det granskaren och AI-knapparna arbetar på; svansen
+    # (signatur + lagstadgad fot) är kodens text och visas, men redigeras
+    # aldrig — se signatur.dela_utkast.
+    for item in items:
+        item["brodtext"], item["svans"] = dela_utkast(item.get("body") or "", sig)
     svar: dict = {"items": items}
     if sig:
         svar["signatur"] = {**sig, "text": bygg_signaturtext(sig)}
@@ -1556,7 +1561,8 @@ async def update_queue_item_text(
     if item.get("status") not in ("awaiting_review", "queued"):
         raise HTTPException(status_code=409, detail="Utkastet är redan hanterat och kan inte ändras.")
     amne = str(payload.get("subject") or "").strip()
-    text = str(payload.get("body") or "").strip()
+    brodtext = payload.get("brodtext")
+    text = str((brodtext if brodtext is not None else payload.get("body")) or "").strip()
     if not amne or not text:
         raise HTTPException(status_code=422, detail="Ämnesrad och text får inte vara tomma.")
     if len(amne) > 200 or len(text) > 8000:
@@ -1564,6 +1570,19 @@ async def update_queue_item_text(
     meddelande = await storage.get_pending_outreach_message(tenant_id, item["thread_id"])
     if meddelande is None:
         raise HTTPException(status_code=409, detail="Utkastet har ingen text att ändra.")
+    # Signaturen och den lagstadgade foten är kodens text: de följer med från
+    # det köade utkastet oavsett vad redigeringen gjorde. Utan dem gick mejlet
+    # ut utan logga (bygg_html hittar inte blocket) eller stoppades av
+    # send_guard (foten saknas). Skickas hela mejlet (`body`, äldre klient)
+    # skalas en eventuell svans av först, så att den inte hamnar dubbelt.
+    settings = await storage.get_agent_settings(tenant_id, agent_type="leads")
+    sig = normalisera_signatur(settings.get("signatur"))
+    _, svans = dela_utkast(meddelande.get("body") or "", sig)
+    if brodtext is None:
+        text, _ = dela_utkast(text, sig)
+    trad = await storage.get_outreach_thread(tenant_id, item["thread_id"]) or {}
+    sprak = "en" if trad.get("language_state") == "en_confirmed" else "sv"
+    text = sla_ihop(text, svans, sig, halsning=HALSNING[sprak])
     await storage.update_outreach_message_text(tenant_id, meddelande["id"], subject=amne, body=text)
     return {"id": item_id, "subject": amne}
 

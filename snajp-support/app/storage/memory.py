@@ -2606,12 +2606,31 @@ class MemoryStorage:
         return dict(rad)
 
     async def list_review_queue(self, tenant_id: str, *, limit: int = 100) -> list[dict[str, Any]]:
-        items = [
-            item
-            for item in self.send_queue.get(tenant_id, [])
-            if item["status"] == "awaiting_review"
-        ]
-        return items[:limit]
+        # Speglar Postgres-joinen: väntande meddelandets text plus prospektets
+        # mottagar- och lägesfält.
+        trader = self.outreach_threads.get(tenant_id, {})
+        prospekt = {p["id"]: p for p in self.prospects.get(tenant_id, [])}
+        svar: list[dict[str, Any]] = []
+        for item in self.send_queue.get(tenant_id, []):
+            if item["status"] != "awaiting_review":
+                continue
+            m = await self.get_pending_outreach_message(tenant_id, item["thread_id"]) or {}
+            p = prospekt.get((trader.get(item["thread_id"]) or {}).get("prospect_id"), {})
+            svar.append({
+                **item,
+                "subject": m.get("subject"),
+                "body": m.get("body"),
+                "message_id": m.get("id"),
+                "prospect_email": p.get("contact_email"),
+                "company_name": p.get("company_name"),
+                "contact_name": p.get("contact_name"),
+                "contact_role": p.get("contact_role"),
+                "website": p.get("website"),
+                "lagesbeskrivning": p.get("lagesbeskrivning"),
+                "signaler": p.get("signaler"),
+            })
+        svar.sort(key=lambda r: str(r.get("scheduled_at") or ""))
+        return svar[:limit]
 
     # -- Rate limiting ------------------------------------------------------
     #

@@ -7,6 +7,7 @@ import { EmptyState, SkeletonRows, btnLiten, btnPrimary, btnSecondary } from "@/
 import type { EmailStudioData } from "@/lib/data/emails";
 import { EXEMPELBOLAG } from "@/lib/demo/iris-exempel";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
+import { offertForUtkast } from "@/lib/leads/offert";
 import { cn } from "@/lib/utils";
 import { useLocale, type Localized } from "@/lib/i18n";
 
@@ -35,6 +36,14 @@ type KöItem = {
   company_name?: string | null;
   created_at?: string | null;
   scheduled_at?: string | null;
+  /** Backenden delar mejlet (signatur.dela_utkast): brödtexten redigeras och
+   *  skrivs om av AI-knapparna; svansen (signatur + lagstadgad fot) visas men
+   *  rörs aldrig, och PUT lägger tillbaka den. */
+  brodtext?: string | null;
+  svans?: string | null;
+  contact_name?: string | null;
+  lagesbeskrivning?: string | null;
+  signaler?: string[] | string | null;
 };
 
 /** Tenantens mejlsignatur, normaliserad av backenden (app/leads/signatur.py).
@@ -53,36 +62,59 @@ type Signatur = {
   logotyp_url?: string;
 };
 
-function SignaturBlock({ signatur }: Readonly<{ signatur: Signatur }>) {
+/**
+ * Det som står efter brödtexten i det skickade mejlet, renderat som
+ * mottagaren ser det: signaturen i samma ordning som HTML-delen
+ * (signatur._signatur_html, som speglar Gmail-signaturen) med loggan mellan
+ * kontaktraderna och orten, och den lagstadgade foten i liten grå text.
+ * Står direkt under textrutan, som fortsättningen på mejlet — förut låg
+ * signaturen som råtext i rutan och kunde skrivas om bort av AI-knapparna.
+ */
+function MejlSvans({ signatur, svans }: Readonly<{ signatur: Signatur | null; svans: string }>) {
   const { text } = useLocale();
+  const sig = signatur && svans.startsWith(signatur.text) ? signatur : null;
+  const fot = (sig ? svans.slice(sig.text.length) : svans).trim();
+  if (!sig && !fot) return null;
+  const webbHref = sig?.webb ? (sig.webb.startsWith("http") ? sig.webb : `https://${sig.webb}`) : null;
   return (
-    <aside className="mt-4 rounded-input border border-ink/15 bg-paper px-4 py-3">
-      <p className="text-[0.8125rem] font-medium text-ink-subtle">
+    <div className="mt-2 rounded-card border border-ink/12 bg-paper px-5 py-4">
+      <p className="text-[0.75rem] font-medium text-ink-subtle">
         {text({
-          sv: "Signaturen så som mottagaren ser den",
-          en: "The signature as the recipient sees it"
+          sv: "Läggs till sist i mejlet, så som mottagaren ser det",
+          en: "Added at the end of the email, as the recipient sees it"
         })}
       </p>
-      <div className="mt-3 text-[0.8125rem] leading-6 text-ink">
-        <p className="font-semibold">{signatur.namn}</p>
-        {signatur.titel ? <p>{signatur.titel}</p> : null}
-        {signatur.telefon ? <p>{signatur.telefon}</p> : null}
-        {signatur.epost ? <p>{signatur.epost}</p> : null}
-        {signatur.logotyp_url ? (
-          // eslint-disable-next-line @next/next/no-img-element -- extern absolut
-          // URL (samma som i mejlets HTML-del); next/image kräver domänkonfig.
-          <img
-            src={signatur.logotyp_url}
-            alt={signatur.bolag ?? signatur.namn}
-            width={120}
-            className="my-3 block h-auto w-[120px]"
-          />
-        ) : null}
-        {signatur.ort ? <p>{signatur.ort}</p> : null}
-        {signatur.webb ? <p>{signatur.webb}</p> : null}
-        {signatur.bolag ? <p className="mt-3">{signatur.bolag}</p> : null}
-      </div>
-    </aside>
+      {sig ? (
+        <div className="mt-3 font-[Arial,Helvetica,sans-serif] text-[0.8125rem] leading-[1.5] text-ink">
+          <p className="font-bold">{sig.namn}</p>
+          {sig.titel ? <p>{sig.titel}</p> : null}
+          {sig.telefon ? <p>{sig.telefon}</p> : null}
+          {sig.epost ? <p>{sig.epost}</p> : null}
+          {sig.logotyp_url ? (
+            // eslint-disable-next-line @next/next/no-img-element -- extern absolut
+            // URL (samma som i mejlets HTML-del); next/image kräver domänkonfig.
+            <img
+              src={sig.logotyp_url}
+              alt={sig.bolag ?? sig.namn}
+              width={120}
+              className="my-3 block h-auto w-[120px]"
+            />
+          ) : (
+            <span className="block h-3" aria-hidden />
+          )}
+          {sig.ort ? <p>{sig.ort}</p> : null}
+          {sig.webb && webbHref ? (
+            <p>
+              <a href={webbHref} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+                {sig.webb}
+              </a>
+            </p>
+          ) : null}
+          {sig.bolag ? <p className="mt-3">{sig.bolag}</p> : null}
+        </div>
+      ) : null}
+      {fot ? <p className="mt-4 whitespace-pre-wrap text-[0.75rem] leading-5 text-ink-subtle">{fot}</p> : null}
+    </div>
   );
 }
 
@@ -95,24 +127,48 @@ function klippVidOrdgrans(text: string): string {
   return sistaMellanslag > 150 ? stycke.slice(0, sistaMellanslag) : stycke;
 }
 
-function tillStudioData(post: KöItem, utanAmne: string): EmailStudioData {
+/** Brödtexten — det enda granskaren och AI-knapparna arbetar på. Äldre
+ *  backend utan delningen ger hela mejlet, som förut. */
+function brodtextFor(post: KöItem): string {
+  return post.brodtext ?? post.body ?? "";
+}
+
+/** Läget hos bolaget, som AI-knapparna (Förbättra, Personalisera …) skriver
+ *  om utifrån. Utan det fick de bara bolagsnamnet och kunde inte göra mejlet
+ *  mer personligt än det redan var. */
+function signalFor(post: KöItem): string | null {
+  const signaler = Array.isArray(post.signaler)
+    ? post.signaler
+    : typeof post.signaler === "string" && post.signaler.trim()
+      ? [post.signaler]
+      : [];
+  const delar = [post.lagesbeskrivning?.trim(), signaler.length ? `Signaler: ${signaler.join("; ")}` : null];
+  const ifyllda = delar.filter((d): d is string => Boolean(d));
+  return ifyllda.length ? ifyllda.join(" ") : null;
+}
+
+/** `offer` är kundens erbjudande (Inställningar → Affärskontext). Utan det
+ *  hittade Personalisera och Förbättra på vad avsändaren säljer — uppmätt
+ *  2026-10-07 mot Vertex: "Vårt verktyg hjälper byggföretag att hitta
+ *  bostadsrättsföreningar", ur ingenting. */
+function tillStudioData(post: KöItem, utanAmne: string, offer: string | null): EmailStudioData {
   return {
     source: "database",
     businessContext: null,
     email: {
       id: post.id,
       subject: post.subject || utanAmne,
-      body: post.body ?? "",
+      body: brodtextFor(post),
       variantLength: "medium",
       variantType: "cold_outreach",
       status: "draft",
       companyId: null,
       contactId: null,
       companyName: post.company_name ?? null,
-      signal: null,
-      offer: null,
+      signal: signalFor(post),
+      offer,
       cta: null,
-      contactName: null
+      contactName: post.contact_name ?? null
     }
   };
 }
@@ -149,6 +205,7 @@ export function IrisGranskning({
   const [allaVisas, setAllaVisas] = useState(false);
   const [poster, setPoster] = useState<KöItem[] | null>(null);
   const [signatur, setSignatur] = useState<Signatur | null>(null);
+  const [offer, setOffer] = useState<string | null>(null);
   const [fel, setFel] = useState<Localized | null>(null);
   const [pagar, setPagar] = useState<string | null>(null);
   const [oppen, setOppen] = useState<string | null>(null);
@@ -158,7 +215,7 @@ export function IrisGranskning({
   // Granskarens redigering per utkast (editorn rapporterar varje ändring,
   // egen eller AI:ns). Sparas i utkastet före godkännandet, så att det är
   // den texten som skickas.
-  const [andrat, setAndrat] = useState<Record<string, { subject: string; body: string }>>({});
+  const [andrat, setAndrat] = useState<Record<string, { subject: string; brodtext: string }>>({});
   // Vad som hände med det senaste godkännandet: skickat, väntar på
   // sändfönstret eller stoppat av en sändspärr.
   const [utfall, setUtfall] = useState<Localized | null>(null);
@@ -205,12 +262,15 @@ export function IrisGranskning({
 
   useEffect(() => {
     void hamta();
+    // Ett saknat erbjudande stoppar inte granskningen: knapparna körs då
+    // utan bakgrund, som förut.
+    if (!demo) void offertForUtkast().then(setOffer, () => setOffer(null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [demo]);
 
   async function sparaAndring(post: KöItem): Promise<boolean> {
     const ny = andrat[post.id];
-    if (!ny || (ny.subject === (post.subject ?? "") && ny.body === (post.body ?? ""))) return true;
+    if (!ny || (ny.subject === (post.subject ?? "") && ny.brodtext === brodtextFor(post))) return true;
     const response = await fetch(`/api/snajp-support/leads/queue/${post.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -455,20 +515,22 @@ export function IrisGranskning({
                 </button>
                 </div>
 
-                {!öppen && !kompakt && post.body ? (
+                {!öppen && !kompakt && brodtextFor(post) ? (
                   <p className="mt-3 max-w-[72ch] whitespace-pre-wrap text-[0.9375rem] leading-7 text-ink-muted">
-                    {post.body.length > 220 ? `${klippVidOrdgrans(post.body)}…` : post.body}
+                    {brodtextFor(post).length > 220 ? `${klippVidOrdgrans(brodtextFor(post))}…` : brodtextFor(post)}
                   </p>
                 ) : null}
 
                 {öppen ? (
                   <div className="mt-4">
                     <EmailStudioEditor
-                      data={tillStudioData(post, text(UTAN_AMNE))}
+                      data={tillStudioData(post, text(UTAN_AMNE), offer)}
                       compact
-                      onAndring={(subject, body) => setAndrat((f) => ({ ...f, [post.id]: { subject, body } }))}
+                      onAndring={(subject, body) =>
+                        setAndrat((f) => ({ ...f, [post.id]: { subject, brodtext: body } }))
+                      }
+                      efterText={post.svans ? <MejlSvans signatur={signatur} svans={post.svans} /> : null}
                     />
-                    {signatur ? <SignaturBlock signatur={signatur} /> : null}
                   </div>
                 ) : null}
 

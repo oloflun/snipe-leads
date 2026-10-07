@@ -3427,7 +3427,11 @@ class PostgresStorage:
             records = await conn.fetch(
                 """
                 select q.*, m.subject, m.body, m.id as message_id,
-                       p.contact_email as prospect_email, p.company_name
+                       p.contact_email as prospect_email, p.company_name,
+                       -- Kontexten AI-knapparna (Förbättra, Personalisera …)
+                       -- skriver om utifrån: vem mejlet går till och läget hos bolaget.
+                       p.contact_name, p.contact_role, p.website,
+                       p.lagesbeskrivning, p.signaler
                 from send_queue q
                 join outreach_threads t on t.id = q.thread_id
                 left join prospects p on p.id = t.prospect_id

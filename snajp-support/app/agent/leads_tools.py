@@ -20,7 +20,7 @@ from agents import RunContextWrapper, function_tool
 from ..leads.autonomy import allowed_action
 from ..leads.language_gate import LanguageGateError, check_send_gate
 from ..leads.outreach_playbook import finalize_outreach_body
-from ..leads.signatur import med_signatur, normalisera as normalisera_signatur
+from ..leads.signatur import HALSNING, med_signatur, normalisera as normalisera_signatur
 from ..leads.timing_gate import check_cold_outreach_gate
 from ..leads.utskicksfot import avregistreringslank, bygg_fot, med_fot
 from ..notifications.prioriterat_mejl import skicka_prioriterat
@@ -135,7 +135,7 @@ async def _queue_outreach_draft_impl(
     )
     signatur = normalisera_signatur(agent_settings.get("signatur"))
     if signatur:
-        finalized_body = med_signatur(finalized_body, signatur)
+        finalized_body = med_signatur(finalized_body, signatur, halsning=HALSNING[sprak])
 
     finalized_body = await _med_lagstadgad_fot(outreach, finalized_body)
 

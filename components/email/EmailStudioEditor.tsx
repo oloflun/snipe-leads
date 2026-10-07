@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState, useTransition, type ReactNode } from "react";
 import type { EmailStudioAction } from "@/lib/agent/email-studio-prompt";
 import type { EmailStudioData } from "@/lib/data/emails";
 import { btnPrimary } from "@/components/ui";
@@ -135,10 +135,15 @@ function toRefineContext(data: EmailStudioData) {
 export function EmailStudioEditor({
   data,
   compact = false,
-  onAndring
+  onAndring,
+  efterText
 }: Readonly<{
   data: EmailStudioData;
   compact?: boolean;
+  /** Det som står efter brödtexten i det skickade mejlet (signatur med logga,
+   *  lagstadgad fot). Visas direkt under textrutan men ingår aldrig i texten
+   *  som knapparna skriver om: då hade en omskrivning kunnat stryka loggan. */
+  efterText?: ReactNode;
   /** Ämne och text efter varje ändring, egen eller AI:ns (granskningskön sparar dem före godkännandet). */
   onAndring?: (subject: string, body: string) => void;
 }>) {
@@ -170,7 +175,7 @@ export function EmailStudioEditor({
             action,
             draft: body,
             subject,
-            context: refineContext,
+            context: { ...refineContext, harSignatur: Boolean(efterText) },
             userId: "current-user"
           })
         });
@@ -292,6 +297,7 @@ export function EmailStudioEditor({
             compact ? "min-h-[210px]" : "min-h-[320px]"
           )}
         />
+        {efterText}
 
         <div className="hrule mt-6 flex flex-wrap gap-2 pt-5">
           {STUDIO_ACTIONS.map((item) => {
