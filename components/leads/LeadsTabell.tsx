@@ -174,9 +174,12 @@ function nyast(a: SuiteProspekt, b: SuiteProspekt): number {
 }
 
 /**
- * De bästa leadsen överst (Sebbe 2026-10-07): nivå (Stark före Möjlig), sedan
- * poäng, sedan nyast. Exemplen först. Bolag under research har inget betyg än
- * och står överst, så att man ser dem bli klara och glida ner till sin plats.
+ * De bästa leadsen överst (Sebbe 2026-10-07): poäng, sedan nivå (Stark före
+ * Möjlig) vid lika poäng, sedan nyast. Poängen är rangpoängen
+ * (snajp-support/app/leads/rangpoang.py) och mäter just hur bra leadet är;
+ * med nivån först stod "Stark 58" över "Möjlig 78". Exemplen först. Bolag
+ * under research har inget betyg än och står överst, så att man ser dem bli
+ * klara och glida ner till sin plats.
  *
  * Ersätter Antons "nyaste överst" (2026-10-06), vars skäl var att nya leads
  * hamnade mitt i listan: de nya har nu en egen flik, Ny.
@@ -186,8 +189,8 @@ function sortera(rader: SuiteProspekt[]): SuiteProspekt[] {
   return [...rader].sort(
     (a, b) =>
       grupp(a) - grupp(b) ||
-      (NIVA_RANG[a.niva ?? ""] ?? 2) - (NIVA_RANG[b.niva ?? ""] ?? 2) ||
       kvalitet(b) - kvalitet(a) ||
+      (NIVA_RANG[a.niva ?? ""] ?? 2) - (NIVA_RANG[b.niva ?? ""] ?? 2) ||
       nyast(a, b)
   );
 }
