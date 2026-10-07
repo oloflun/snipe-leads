@@ -12,9 +12,9 @@ import { KorningensUtkast } from "@/components/leads/KorningensUtkast";
  */
 
 const LEADS = [
-  { prospect_id: "p1", company_name: "Provbygget", contact_email: "info@provbygget.example", kan_mejlas: true, status: "vantar", subject: "Nya kontoret i Holmsund", notis: null },
-  { prospect_id: "p2", company_name: "Exempelrör", contact_email: "anna@exempelror.example", kan_mejlas: true, status: "vantar", subject: "Två nya montörer i Luleå", notis: null },
-  { prospect_id: "p3", company_name: "Testmåleri", contact_email: "info@testmaleri.example", kan_mejlas: true, status: "skickat", subject: "Fasadsäsongen i Skellefteå", notis: null },
+  { prospect_id: "p1", company_name: "Provbygget", contact_email: "info@provbygget.example", kan_mejlas: true, status: "vantar", subject: "Nya kontoret i Holmsund", body: "Hej,\n\nJag såg att ni växer. Exempeltext i förhandsvisningen.\n\nVänliga hälsningar\nIris", notis: null },
+  { prospect_id: "p2", company_name: "Exempelrör", contact_email: "anna@exempelror.example", kan_mejlas: true, status: "vantar", subject: "Två nya montörer i Luleå", body: "Hej,\n\nJag såg att ni växer. Exempeltext i förhandsvisningen.\n\nVänliga hälsningar\nIris", notis: null },
+  { prospect_id: "p3", company_name: "Testmåleri", contact_email: "info@testmaleri.example", kan_mejlas: true, status: "skickat", subject: "Fasadsäsongen i Skellefteå", body: "Hej,\n\nJag såg att ni växer. Exempeltext i förhandsvisningen.\n\nVänliga hälsningar\nIris", notis: null },
   { prospect_id: "p4", company_name: "Demosnickarna", contact_email: "info@demosnickarna.example", kan_mejlas: true, status: "saknas", subject: null, notis: "Research klar, men utkastet stoppades före kön: faktagrinden." },
   { prospect_id: "p5", company_name: "Påhittat Golv", contact_email: null, kan_mejlas: false, status: "saknas", subject: null, notis: "Inget arbetsmejl hittades på bolagets sajt." }
 ];

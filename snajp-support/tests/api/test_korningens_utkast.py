@@ -70,6 +70,8 @@ async def test_status_skriv_och_skicka_galler_bara_korningens_leads(monkeypatch)
             status = {l["prospect_id"]: l for l in svar["leads"]}
             assert ids["utanfor"] not in status
             assert status[ids["med"]]["status"] == "vantar" and status[ids["med"]]["queue_item_id"]
+            # Utkastets text följer med, så att listan kan visa den vid klick.
+            assert status[ids["med"]]["body"] and status[ids["utan"]]["body"] is None
             assert status[ids["utan"]]["status"] == "saknas" and status[ids["utan"]]["kan_mejlas"]
             assert status[ids["mejllos"]]["kan_mejlas"] is False and status[ids["mejllos"]]["notis"]
             assert svar["antal"] == {"vantar": 1, "saknas": 2, "kan_skrivas": 1}

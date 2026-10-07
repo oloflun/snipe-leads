@@ -1598,11 +1598,14 @@ async def _korningens_leads(request: Request, tenant: dict, job_id: str) -> tupl
             "status": "saknas",
             "queue_item_id": None,
             "subject": None,
+            # Utkastets text (Sebbe 2026-10-07: klicka på ett lead i listan och
+            # se dess utkast). Det väntande utkastet, annars senaste meddelandet.
+            "body": None,
             "notis": None,
         }
         if pid in vantande:
             item = vantande[pid]
-            post.update(status="vantar", queue_item_id=item["id"], subject=item.get("subject"))
+            post.update(status="vantar", queue_item_id=item["id"], subject=item.get("subject"), body=item.get("body"))
         else:
             trad = await storage.find_outreach_thread(tenant_id, prospect_id=pid)
             meddelanden = await storage.list_outreach_messages(tenant_id, trad["id"]) if trad else []
@@ -1618,6 +1621,7 @@ async def _korningens_leads(request: Request, tenant: dict, job_id: str) -> tupl
                 }.get(ko.get("status") or "", "saknas")
             if meddelanden:
                 post["subject"] = meddelanden[-1].get("subject")
+                post["body"] = meddelanden[-1].get("body")
         if post["status"] == "saknas":
             barn = await request.app.state.jobs.get(j["job_id"]) or {}
             notis = ((barn.get("result") or {}) if isinstance(barn.get("result"), dict) else {}).get("draft_note")

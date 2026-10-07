@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Loader2, PenLine } from "lucide-react";
+import { Check, ChevronDown, Loader2, PenLine } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { btnLiten, btnPrimary, btnSecondary, meta, rubrikPanel } from "@/components/ui";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
@@ -18,6 +18,10 @@ import { cn } from "@/lib/utils";
  *
  * Backend: GET/POST /api/leads/korningar/{id}/utkast(/skriv|/skicka).
  * Skicka går genom samma sändspärrar som ett enskilt "Godkänn och skicka".
+ *
+ * Sebbe 2026-10-07: klicka på ett lead i listan och se dess utkast. Raden
+ * fäller ut ämne, mottagare och text på plats; ett lead utan utkast har
+ * inget att fälla ut och är ingen knapp.
  */
 
 type Status = "vantar" | "godkant" | "skickat" | "avvisat" | "stoppat" | "saknas";
@@ -29,6 +33,8 @@ type Lead = {
   kan_mejlas: boolean;
   status: Status;
   subject: string | null;
+  /** Utkastets text: det väntande utkastet, annars senaste meddelandet. */
+  body?: string | null;
   notis: string | null;
 };
 
@@ -54,6 +60,7 @@ export function KorningensUtkast({ jobId }: Readonly<{ jobId: string }>) {
   const [besked, setBesked] = useState<Localized | null>(null);
   const [pagar, setPagar] = useState<"skriv" | "skicka" | null>(null);
   const [skriver, setSkriver] = useState(0);
+  const [oppen, setOppen] = useState<string | null>(null);
   const poll = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const bas = `/api/snajp-support/leads/korningar/${encodeURIComponent(jobId)}/utkast`;
@@ -251,24 +258,86 @@ export function KorningensUtkast({ jobId }: Readonly<{ jobId: string }>) {
         <p className={cn(meta, "mt-3")}>{text({ sv: "Inga leads i körningen.", en: "No leads in this run." })}</p>
       ) : svar ? (
         <ul className="mt-3 divide-y divide-ink/12 border-y border-ink/15">
-          {svar.leads.map((l) => (
-            <li key={l.prospect_id} className="py-2.5">
+          {svar.leads.map((l) => {
+            const harUtkast = Boolean(l.subject || l.body);
+            const oppnad = harUtkast && oppen === l.prospect_id;
+            const rubrikrad = (
               <div className="flex items-baseline justify-between gap-3">
-                <span className="min-w-0 truncate font-medium">{l.company_name ?? l.prospect_id}</span>
+                <span className="flex min-w-0 items-baseline gap-1.5">
+                  <span className="min-w-0 truncate font-medium">{l.company_name ?? l.prospect_id}</span>
+                  {harUtkast ? (
+                    <ChevronDown
+                      aria-hidden
+                      className={cn("h-3.5 w-3.5 shrink-0 self-center text-ink-subtle transition-transform", oppnad && "rotate-180")}
+                    />
+                  ) : null}
+                </span>{" "}
                 <span className={cn("shrink-0 text-[0.8125rem] font-medium", STATUS[l.status].ton)}>
                   {text(STATUS[l.status].etikett)}
                 </span>
               </div>
-              {l.status === "saknas" ? (
+            );
+            const undertext =
+              l.status === "saknas" ? (
                 l.notis ? <p className={cn(meta, "mt-0.5")}>{l.notis}</p> : null
-              ) : l.subject ? (
+              ) : l.subject && !oppnad ? (
                 <p className={cn(meta, "mt-0.5 truncate")}>
                   {l.subject}
                   {l.contact_email ? ` · ${l.contact_email}` : ""}
                 </p>
-              ) : null}
-            </li>
-          ))}
+              ) : null;
+            return (
+              <li key={l.prospect_id} className="py-2.5">
+                {harUtkast ? (
+                  <button
+                    type="button"
+                    aria-expanded={oppnad}
+                    aria-controls={`utkast-${jobId}-${l.prospect_id}`}
+                    onClick={() => setOppen(oppnad ? null : l.prospect_id)}
+                    className="focus-ring -mx-1 block w-[calc(100%+0.5rem)] rounded-input px-1 text-left hover:bg-paper2"
+                  >
+                    {rubrikrad}
+                    {undertext}
+                  </button>
+                ) : (
+                  <>
+                    {rubrikrad}
+                    {undertext}
+                  </>
+                )}
+                {oppnad ? (
+                  <div
+                    id={`utkast-${jobId}-${l.prospect_id}`}
+                    className="mt-2 rounded-input border border-ink/10 bg-paper2 px-4 py-3"
+                  >
+                    <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-[0.875rem]">
+                      {l.contact_email ? (
+                        <>
+                          <dt className="text-ink-subtle">{text({ sv: "Till", en: "To" })}</dt>
+                          <dd className="min-w-0 break-words">{l.contact_email}</dd>
+                        </>
+                      ) : null}
+                      {l.subject ? (
+                        <>
+                          <dt className="text-ink-subtle">{text({ sv: "Ämne", en: "Subject" })}</dt>
+                          <dd className="min-w-0 break-words font-medium">{l.subject}</dd>
+                        </>
+                      ) : null}
+                    </dl>
+                    {l.body ? (
+                      <p className="mt-3 max-w-[70ch] whitespace-pre-wrap border-t border-ink/10 pt-3 text-[0.9375rem] leading-6 text-ink">
+                        {l.body}
+                      </p>
+                    ) : (
+                      <p className={cn(meta, "mt-3")}>
+                        {text({ sv: "Utkastets text gick inte att läsa.", en: "The draft text could not be read." })}
+                      </p>
+                    )}
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       ) : null}
     </section>
