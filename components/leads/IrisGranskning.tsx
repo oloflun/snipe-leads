@@ -347,11 +347,11 @@ export function IrisGranskning({
     }
   }
 
-  async function avgorValda(handling: "approve" | "reject") {
-    if (valda.size === 0 || svep) return;
+  async function avgorValda(handling: "approve" | "reject", ids: string[] = [...valda]) {
+    if (ids.length === 0 || svep) return;
     if (
       handling === "reject" &&
-      !window.confirm(text({ sv: `Avvisa ${valda.size} utkast?`, en: `Reject ${valda.size} drafts?` }))
+      !window.confirm(text({ sv: `Avvisa ${ids.length} utkast?`, en: `Reject ${ids.length} drafts?` }))
     )
       return;
     setSvep(handling);
@@ -359,7 +359,7 @@ export function IrisGranskning({
       // I tur och ordning, inte parallellt: varje beslut går genom samma
       // endpoint och grindar som ett enskilt klick.
       const utfall: Awaited<ReturnType<typeof avgor>>[] = [];
-      for (const id of [...valda]) {
+      for (const id of ids) {
         // eslint-disable-next-line no-await-in-loop
         utfall.push(await avgor(id, handling));
       }
@@ -416,6 +416,37 @@ export function IrisGranskning({
         <p role="status" className="mb-5 max-w-[70ch] text-[0.875rem] text-moss">
           {text(utfall)}
         </p>
+      ) : null}
+
+      {/* Den kompakta rutan (översikten) visar bara de senaste; en knapp
+          räcker för att skicka hela kön, utan att först fälla ut listan. */}
+      {begransad && poster && poster.length > 1 ? (
+        <div className="mb-3">
+          <button
+            type="button"
+            disabled={svep !== null || pagar !== null}
+            onClick={() => {
+              const ids = poster.map((p) => p.id);
+              if (
+                window.confirm(
+                  text({
+                    sv: `Godkänna och skicka alla ${ids.length} utkast? Varje mejl går genom sändspärrarna.`,
+                    en: `Approve and send all ${ids.length} drafts? Every email passes the send guards.`
+                  })
+                )
+              )
+                void avgorValda("approve", ids);
+            }}
+            className={cn(btnPrimary, btnLiten)}
+          >
+            {svep === "approve" ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            ) : (
+              <Check className="h-4 w-4" aria-hidden />
+            )}
+            {text({ sv: `Godkänn och skicka alla ${poster.length}`, en: `Approve and send all ${poster.length}` })}
+          </button>
+        </div>
       ) : null}
 
       {poster && poster.length > 1 && !begransad ? (

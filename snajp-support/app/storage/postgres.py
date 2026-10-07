@@ -1210,6 +1210,18 @@ class PostgresStorage:
             )
         return _avkoda_jsonb(_row(record), "gate_checks") if record else None
 
+    async def senaste_ko_for_trad(self, tenant_id: str, thread_id: str) -> dict[str, Any] | None:
+        async with self._scoped(tenant_id) as conn:
+            record = await conn.fetchrow(
+                """
+                select * from send_queue where tenant_id = $1 and thread_id = $2
+                order by scheduled_at desc limit 1
+                """,
+                tenant_id,
+                thread_id,
+            )
+        return _avkoda_jsonb(_row(record), "gate_checks") if record else None
+
     async def update_outreach_message_text(
         self, tenant_id: str, message_id: str, *, subject: str, body: str
     ) -> None:
@@ -3430,7 +3442,7 @@ class PostgresStorage:
                        p.contact_email as prospect_email, p.company_name,
                        -- Kontexten AI-knapparna (Förbättra, Personalisera …)
                        -- skriver om utifrån: vem mejlet går till och läget hos bolaget.
-                       p.contact_name, p.contact_role, p.website,
+                       p.id as prospect_id, p.contact_name, p.contact_role, p.website,
                        p.lagesbeskrivning, p.signaler
                 from send_queue q
                 join outreach_threads t on t.id = q.thread_id

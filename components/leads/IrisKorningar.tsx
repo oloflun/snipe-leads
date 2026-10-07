@@ -8,6 +8,7 @@ import { Cell, Nyckeltal, Tabell, Tomt, btnLiten, btnSecondary, meta, tabellRad 
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
 import { useLocale, type Locale, type Localized } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { KorningensUtkast } from "./KorningensUtkast";
 
 /**
  * Körningar — det kunden kan följa, lämna och återvända till.
@@ -598,6 +599,13 @@ function RadMedDetalj({
             ) : null}
             <div className="grid gap-8 md:grid-cols-2">
               <div>
+                {/* Utkastpanelen ersätter namnlistan i den riktiga vyn: varje
+                    lead med utkaststatus, och skriv/skicka för alla på en gång.
+                    Demon (styrbar=false) har ingen backend och behåller listan. */}
+                {styrbar && rad.scope === "batch" && k?.jobs?.length ? (
+                  <KorningensUtkast jobId={rad.job_id} />
+                ) : (
+                <>
                 <h3 className="text-[1.0625rem] font-semibold">{text(T.undersoktaBolag)}</h3>
                 {k?.jobs?.length ? (
                   <ul className="mt-3 divide-y divide-ink/12 border-y border-ink/15">
@@ -616,6 +624,8 @@ function RadMedDetalj({
                   <p className={cn(meta, "mt-3")}>
                     {rad.scope === "lista" ? text(T.raderUnderListor) : text(T.ingaUndersokta)}
                   </p>
+                )}
+                </>
                 )}
                 {rad.error ? (
                   <p className="mt-4 text-[15px] text-danger" role="alert">

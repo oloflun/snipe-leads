@@ -501,6 +501,11 @@ class Storage(Protocol):
         """En send_queue-post, eller None om den inte finns hos tenanten."""
         ...
 
+    async def senaste_ko_for_trad(self, tenant_id: str, thread_id: str) -> dict[str, Any] | None:
+        """Trådens senaste send_queue-post (vilken status som helst), eller None.
+        Körningens utkastvy läser status per lead härifrån."""
+        ...
+
     async def update_outreach_message_text(
         self, tenant_id: str, message_id: str, *, subject: str, body: str
     ) -> None:

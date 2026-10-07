@@ -894,6 +894,10 @@ class MemoryStorage:
                 return item
         return None
 
+    async def senaste_ko_for_trad(self, tenant_id: str, thread_id: str) -> dict[str, Any] | None:
+        poster = [i for i in self.send_queue.get(tenant_id, []) if i["thread_id"] == thread_id]
+        return poster[-1] if poster else None
+
     async def update_outreach_message_text(
         self, tenant_id: str, message_id: str, *, subject: str, body: str
     ) -> None:
@@ -2621,6 +2625,7 @@ class MemoryStorage:
                 "subject": m.get("subject"),
                 "body": m.get("body"),
                 "message_id": m.get("id"),
+                "prospect_id": p.get("id"),
                 "prospect_email": p.get("contact_email"),
                 "company_name": p.get("company_name"),
                 "contact_name": p.get("contact_name"),

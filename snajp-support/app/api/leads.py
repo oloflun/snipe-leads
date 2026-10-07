@@ -1521,6 +1521,161 @@ async def hamta_korning(
     return _utan_kandidater(rad)
 
 
+# -- En körnings utkast: se, skriv och skicka för alla leads på en gång -----
+#
+# Sebbe 2026-10-07: "Det ska inte vara svårt" att skicka ut till alla leads
+# Iris hittar. Före de här tre endpointsen fanns körningens leads bara som
+# namn i körningsvyn; utkasten låg i granskningskön utan koppling till
+# körningen, och "Godkänn och skicka" gick en post i taget.
+
+
+async def _korningens_leads(request: Request, tenant: dict, job_id: str) -> tuple[dict, list[dict]]:
+    """(körningsraden, en post per lead med utkaststatus).
+
+    status: 'vantar' (utkastet väntar på godkännande), 'godkant' (godkänt,
+    skickas när sändfönstret öppnar), 'skickat', 'avvisat', 'stoppat' (en
+    sändspärr sa nej) eller 'saknas' (inget utkast). `notis` är skälet när
+    utkast saknas — ur barnjobbets resultat, annars härlett ur prospektet.
+    """
+    from ..leads.discovery import mottagare
+
+    storage = request.app.state.storage
+    tenant_id = tenant["tenant_id"]
+    rad = await storage.get_leads_korning(tenant_id, job_id)
+    if rad is None:
+        raise HTTPException(status_code=404, detail="Körningen finns inte.")
+    jobb = [j for j in ((rad.get("korning") or {}).get("jobs") or []) if j.get("prospect_id")]
+    vantande = {
+        i.get("prospect_id"): i for i in await storage.list_review_queue(tenant_id, limit=200)
+    }
+    leads: list[dict] = []
+    sedda: set[str] = set()
+    for j in jobb:
+        pid = j["prospect_id"]
+        if pid in sedda:
+            continue
+        sedda.add(pid)
+        prospect = await storage.get_prospect(tenant_id, pid)
+        if not prospect:
+            continue
+        post = {
+            "prospect_id": pid,
+            "company_name": prospect.get("company_name") or j.get("company_name"),
+            "contact_email": prospect.get("contact_email"),
+            "kan_mejlas": bool(mottagare(prospect)),
+            "status": "saknas",
+            "queue_item_id": None,
+            "subject": None,
+            "notis": None,
+        }
+        if pid in vantande:
+            item = vantande[pid]
+            post.update(status="vantar", queue_item_id=item["id"], subject=item.get("subject"))
+        else:
+            trad = await storage.find_outreach_thread(tenant_id, prospect_id=pid)
+            meddelanden = await storage.list_outreach_messages(tenant_id, trad["id"]) if trad else []
+            if any(m.get("sent_at") for m in meddelanden):
+                post["status"] = "skickat"
+            elif meddelanden and trad:
+                ko = await storage.senaste_ko_for_trad(tenant_id, trad["id"]) or {}
+                post["status"] = {
+                    "queued": "godkant",
+                    "cancelled": "avvisat",
+                    "blocked": "stoppat",
+                    "sent": "skickat",
+                }.get(ko.get("status") or "", "saknas")
+            if meddelanden:
+                post["subject"] = meddelanden[-1].get("subject")
+        if post["status"] == "saknas":
+            barn = await request.app.state.jobs.get(j["job_id"]) or {}
+            notis = ((barn.get("result") or {}) if isinstance(barn.get("result"), dict) else {}).get("draft_note")
+            if not notis:
+                notis = (
+                    "Inget arbetsmejl hittades på bolagets sajt."
+                    if not post["kan_mejlas"]
+                    else "Inget utkast skrevs i körningen."
+                )
+            post["notis"] = notis
+        leads.append(post)
+    return rad, leads
+
+
+def _antal_per_status(leads: list[dict]) -> dict[str, int]:
+    antal: dict[str, int] = {}
+    for lead in leads:
+        antal[lead["status"]] = antal.get(lead["status"], 0) + 1
+    antal["kan_skrivas"] = sum(1 for l in leads if l["status"] == "saknas" and l["kan_mejlas"])
+    return antal
+
+
+@router.get("/api/leads/korningar/{job_id}/utkast")
+async def korningens_utkast(
+    request: Request, job_id: str, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Körningens leads med utkaststatus per lead och antal per status."""
+    _, leads = await _korningens_leads(request, tenant, job_id)
+    return {"leads": leads, "antal": _antal_per_status(leads)}
+
+
+@router.post("/api/leads/korningar/{job_id}/utkast/skriv", status_code=202)
+async def skriv_korningens_utkast(
+    request: Request, job_id: str, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Skriver utkast till körningens leads som saknar ett men har en
+    kontaktmejl (regel 10). Samma kedja som "Processa om" med utkast — ingen
+    egen utkastväg — så faktagrinden, underlagsgolvet och mottagarregeln
+    gäller precis som i körningen. Leads utan kontaktmejl hoppas över."""
+    _require_live_llm()
+    storage = request.app.state.storage
+    rad, leads = await _korningens_leads(request, tenant, job_id)
+    att_skriva = [l for l in leads if l["status"] == "saknas" and l["kan_mejlas"]][:50]
+    if not att_skriva:
+        return {"count": 0, "jobs": []}
+    await _kraev_leads_budget(storage, tenant["tenant_id"])
+    prospekt = [p for l in att_skriva if (p := await storage.get_prospect(tenant["tenant_id"], l["prospect_id"]))]
+    jobs = await _lagg_prospektjobb(
+        request.app.state,
+        tenant,
+        prospekt,
+        scope="research_and_draft",
+        overrides=None,
+        is_test=bool(rad.get("is_test")),
+        limit=len(prospekt),
+    )
+    return {"count": len(jobs), "jobs": jobs}
+
+
+@router.post("/api/leads/korningar/{job_id}/utkast/skicka")
+async def skicka_korningens_utkast(
+    request: Request, job_id: str, tenant: dict = Depends(require_tenant)
+) -> dict:
+    """Godkänn och skicka ALLA körningens väntande utkast. Varje utkast går
+    genom samma väg som ett enskilt klick (scheduler.skicka_godkant): tids-
+    grinden, språkgrinden och de sex sändspärrarna — ett ja här går aldrig
+    förbi dem. I tur och ordning, inte parallellt."""
+    from datetime import datetime, timezone
+
+    from ..leads.scheduler import skicka_godkant
+    from ..leads.send_provider import get_send_provider
+
+    _, leads = await _korningens_leads(request, tenant, job_id)
+    provider = get_send_provider()
+    utfall: list[dict] = []
+    for lead in leads:
+        if lead["status"] != "vantar" or not lead["queue_item_id"]:
+            continue
+        res, skal = await skicka_godkant(
+            request.app.state.storage, tenant["tenant_id"], lead["queue_item_id"], provider,
+            now=datetime.now(timezone.utc),
+        )
+        utfall.append({"company_name": lead["company_name"], "utfall": res, "skal": skal})
+    return {
+        "skickade": sum(1 for u in utfall if u["utfall"] == "sent"),
+        "vantar_pa_fonstret": sum(1 for u in utfall if u["utfall"] == "requeued"),
+        "stoppade": [u for u in utfall if u["utfall"] not in ("sent", "requeued")],
+    }
+
+
 @router.get("/api/leads/queue")
 async def list_review_queue(
     request: Request, tenant: dict = Depends(require_tenant), limit: int = 100
