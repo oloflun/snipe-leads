@@ -2398,7 +2398,9 @@ async def _fyll_pa_last(app_state, tenant: dict, batch_id: str) -> None:
                     break
             finally:
                 k["skrap"] = sidhamtning.summera(k.get("skrap"), skrap)
-            if skrap.slut and not k["kandidater"]:
+            # Även webbsidornas tak: utan dem blir en ny runda bara betalda
+            # bolagssidor för bolag som ändå prövas om nästa körning.
+            if (skrap.slut or skrap.webb_slut) and not k["kandidater"]:
                 orsak = "kredittak"
                 break
             continue
