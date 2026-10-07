@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
  *   POST /leads/listor            {titel, antal, is_test?, overrides?} → 202 {list_id, job_id}
  *   GET  /leads/listor            → {lists: [...]}
  *   GET  /leads/listor/{id}       → {list: {...}, items: [...]}
+ *   DELETE /leads/listor/{id}     → {id, raderad}  (Ta bort lista, 2026-10-08; 409 medan den byggs)
  * 429 betyder budgettak — feltexten kommer i `detail` och visas som den är.
  */
 
@@ -862,6 +863,19 @@ export function LeadslistorView({
                       </p>
                     ) : null}
                   </button>
+
+                  <ListaAtgarder
+                    lista={lista}
+                    onBorttagen={() => {
+                      if (vald?.lista.id === lista.id) setVald(null);
+                      setValdaListor((fore) => {
+                        const nasta = new Set(fore);
+                        nasta.delete(lista.id);
+                        return nasta;
+                      });
+                      void hamtaListor(true);
+                    }}
+                  />
 
                   {oppen && vald ? (
                     <Listtabell lista={vald.lista} items={vald.items} onUppdatera={() => uppdatera(vald.lista.id)} />
@@ -2007,4 +2021,177 @@ function byggStudioData(
       contactName: rad.contact_name ?? null
     }
   };
+}
+
+/**
+ * Ta bort lista (kunden och adminen) och, för plattformsadmin, Kopiera eller
+ * Flytta till en annan kund (Antons beställning 2026-10-08). Raderna följer
+ * med när listan tas bort, och bolagen blir lediga för nästa körning. En
+ * lista som byggs går inte att ta bort (backenden svarar 409). Kopian och
+ * flytten går genom en serveraction med masternyckeln (lib/actions/listor.ts);
+ * kunderna att välja bland är desamma som Byt kund erbjuder (/api/admin/kunder).
+ */
+function ListaAtgarder({ lista, onBorttagen }: Readonly<{ lista: Lista; onBorttagen: () => void }>) {
+  const { isPlatformAdmin, isDemo, vy, arLasare } = useDashboard();
+  const { text } = useLocale();
+  const [tarBort, setTarBort] = useState(false);
+  const [kundval, setKundval] = useState(false);
+  const [kunder, setKunder] = useState<{ slug: string; name: string }[] | null>(null);
+  const [vald, setVald] = useState("");
+  const [skickar, setSkickar] = useState<"kopiera" | "flytta" | null>(null);
+  const [besked, setBesked] = useState<{ text: string; fel: boolean } | null>(null);
+
+  useEffect(() => {
+    if (!kundval || kunder) return;
+    let avbruten = false;
+    void (async () => {
+      try {
+        const response = await fetch("/api/admin/kunder", { cache: "no-store" });
+        const kropp = await readJsonBody<{ tenants?: { slug?: string | null; name?: string | null }[] }>(response);
+        if (avbruten) return;
+        if (!response.ok || !kropp?.tenants) {
+          setBesked({ text: text({ sv: "Kundlistan gick inte att hämta.", en: "The customer list could not be loaded." }), fel: true });
+          return;
+        }
+        setKunder(
+          kropp.tenants
+            .filter((t): t is { slug: string; name: string } => Boolean(t.slug && t.name))
+            .map((t) => ({ slug: t.slug, name: t.name }))
+            .sort((a, b) => a.name.localeCompare(b.name, "sv"))
+        );
+      } catch {
+        if (!avbruten) {
+          setBesked({ text: text({ sv: "Kundlistan gick inte att hämta.", en: "The customer list could not be loaded." }), fel: true });
+        }
+      }
+    })();
+    return () => {
+      avbruten = true;
+    };
+  }, [kundval, kunder, text]);
+
+  if (isDemo || vy === "demo" || arLasare || PAGAENDE.has(lista.status)) return null;
+
+  async function taBort() {
+    const rader = typeof lista.item_count === "number" ? lista.item_count : null;
+    const fraga = text({
+      sv: `Ta bort listan ”${lista.titel}”${rader !== null ? ` med ${rader} rader` : ""}? Det går inte att ångra.`,
+      en: `Delete the list “${lista.titel}”${rader !== null ? ` with ${rader} rows` : ""}? This cannot be undone.`
+    });
+    if (!window.confirm(fraga)) return;
+    setTarBort(true);
+    setBesked(null);
+    try {
+      await anropa(`/leads/listor/${encodeURIComponent(lista.id)}`, { method: "DELETE" });
+      onBorttagen();
+    } catch (fel) {
+      setBesked({ text: felmeddelande(fel), fel: true });
+      setTarBort(false);
+    }
+  }
+
+  async function tillKund(flytta: boolean) {
+    const kund = kunder?.find((k) => k.slug === vald);
+    if (!kund) return;
+    if (
+      flytta &&
+      !window.confirm(
+        text({
+          sv: `Flytta listan ”${lista.titel}” till ${kund.name}? Den tas bort här när den kopierats.`,
+          en: `Move the list “${lista.titel}” to ${kund.name}? It is removed here once copied.`
+        })
+      )
+    ) {
+      return;
+    }
+    setSkickar(flytta ? "flytta" : "kopiera");
+    setBesked(null);
+    try {
+      const { listaTillKund } = await import("@/lib/actions/listor");
+      const svar = await listaTillKund(lista.id, kund.slug, flytta);
+      if (svar.error) {
+        const kand: Record<string, Localized> = {
+          admin: { sv: "Kräver plattformsadmin.", en: "Requires platform admin." },
+          nyckel: { sv: "Masternyckeln saknas i den här miljön.", en: "The master key is missing in this environment." },
+          indata: { sv: "Ogiltig lista eller kund.", en: "Invalid list or customer." },
+          kund: { sv: "Kunden gick inte att läsa.", en: "The customer could not be read." }
+        };
+        setBesked({ text: svar.felkod ? text(kand[svar.felkod]) : svar.error, fel: true });
+        return;
+      }
+      const upptagna = svar.upptagna ?? 0;
+      setBesked({
+        text: text({
+          sv: `${svar.kopierade ?? 0} rader ${svar.flyttad ? "flyttade" : "kopierade"} till ${kund.name}.${upptagna ? ` ${upptagna} bolag fanns redan hos kunden och hoppades över.` : ""}`,
+          en: `${svar.kopierade ?? 0} rows ${svar.flyttad ? "moved" : "copied"} to ${kund.name}.${upptagna ? ` ${upptagna} companies were already at the customer and were skipped.` : ""}`
+        }),
+        fel: false
+      });
+      if (svar.flyttad) onBorttagen();
+    } catch (fel) {
+      setBesked({ text: felmeddelande(fel), fel: true });
+    } finally {
+      setSkickar(null);
+    }
+  }
+
+  const lank = "focus-ring text-[0.8125rem] font-medium text-ink-muted underline underline-offset-4 hover:text-ink disabled:opacity-60";
+
+  return (
+    <div className="mt-2">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <button type="button" disabled={tarBort} onClick={() => void taBort()} className={lank}>
+          {tarBort ? text({ sv: "Tar bort…", en: "Deleting…" }) : text({ sv: "Ta bort lista", en: "Delete list" })}
+        </button>
+        {isPlatformAdmin && lista.status === "klar" ? (
+          <button type="button" aria-expanded={kundval} onClick={() => setKundval((v) => !v)} className={lank}>
+            {text({ sv: "Kopiera eller flytta till kund", en: "Copy or move to customer" })}
+          </button>
+        ) : null}
+      </div>
+      {kundval && isPlatformAdmin ? (
+        <div className="mt-3 flex flex-wrap items-end gap-3 rounded-card border border-ink/12 bg-paper2/40 p-3">
+          <label className="flex min-w-[220px] flex-1 flex-col gap-1 text-[13px] text-ink-muted">
+            {text({ sv: "Till kund", en: "To customer" })}
+            <select
+              value={vald}
+              onChange={(e) => setVald(e.target.value)}
+              disabled={kunder === null}
+              className="focus-ring min-h-11 rounded-input border border-ink/15 bg-paper px-2 text-[15px] text-ink"
+            >
+              <option value="">
+                {kunder === null ? text({ sv: "Hämtar kunder…", en: "Loading customers…" }) : text({ sv: "Välj kund", en: "Choose customer" })}
+              </option>
+              {(kunder ?? []).map((k) => (
+                <option key={k.slug} value={k.slug}>
+                  {k.name} ({k.slug})
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            disabled={!vald || skickar !== null}
+            onClick={() => void tillKund(false)}
+            className={cn(btnSecondary, "disabled:opacity-60")}
+          >
+            {skickar === "kopiera" ? text({ sv: "Kopierar…", en: "Copying…" }) : text({ sv: "Kopiera till kund", en: "Copy to customer" })}
+          </button>
+          <button
+            type="button"
+            disabled={!vald || skickar !== null}
+            onClick={() => void tillKund(true)}
+            className={cn(btnSecondary, "disabled:opacity-60")}
+          >
+            {skickar === "flytta" ? text({ sv: "Flyttar…", en: "Moving…" }) : text({ sv: "Flytta till kund", en: "Move to customer" })}
+          </button>
+        </div>
+      ) : null}
+      {besked ? (
+        <p role={besked.fel ? "alert" : "status"} className={cn("mt-2 text-[14px]", besked.fel ? "text-danger" : "text-moss")}>
+          {besked.text}
+        </p>
+      ) : null}
+    </div>
+  );
 }
