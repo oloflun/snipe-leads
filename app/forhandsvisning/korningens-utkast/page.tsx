@@ -50,6 +50,11 @@ function installeraFetch() {
       return svar({ skickade: 2, vantar_pa_fonstret: 0, stoppade: [] });
     }
     if (url.endsWith("/utkast/skriv")) return svar({ count: 1, jobs: [] }, 202);
+    if (url.endsWith("/reject")) {
+      const id = url.split("/").at(-2);
+      for (const l of LEADS) if ((l as { queue_item_id?: string }).queue_item_id === id) l.status = "avvisat";
+      return svar({ id, status: "cancelled" });
+    }
     if (url.endsWith("/approve")) {
       const id = url.split("/").at(-2);
       for (const l of LEADS) if ((l as { queue_item_id?: string }).queue_item_id === id) l.status = "skickat";

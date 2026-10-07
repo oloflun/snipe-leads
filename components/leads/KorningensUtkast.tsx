@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronDown, Loader2, PenLine } from "lucide-react";
+import { Check, ChevronDown, Loader2, PenLine, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { btnLiten, btnPrimary, btnSecondary, meta, rubrikPanel } from "@/components/ui";
 import { felmeddelande, readJsonBody } from "@/lib/http/json";
@@ -23,7 +23,8 @@ import { cn } from "@/lib/utils";
  * fäller ut ämne, mottagare och text på plats; ett lead utan utkast har
  * inget att fälla ut och är ingen knapp. Ett väntande utkast godkänns och
  * skickas därifrån, ett i taget, genom samma väg som granskningen
- * (POST /leads/queue/{id}/approve: tidsgrinden och sändspärrarna).
+ * (POST /leads/queue/{id}/approve: tidsgrinden och sändspärrarna), eller
+ * avvisas (POST /leads/queue/{id}/reject: utkastet skickas aldrig).
  */
 
 type Status = "vantar" | "godkant" | "skickat" | "avvisat" | "stoppat" | "saknas";
@@ -65,7 +66,8 @@ export function KorningensUtkast({ jobId }: Readonly<{ jobId: string }>) {
   const [pagar, setPagar] = useState<"skriv" | "skicka" | null>(null);
   const [skriver, setSkriver] = useState(0);
   const [oppen, setOppen] = useState<string | null>(null);
-  const [godkanner, setGodkanner] = useState<string | null>(null);
+  // Vilket utkast som hanteras just nu, och hur: knapparna låses under tiden.
+  const [hanterar, setHanterar] = useState<{ id: string; hur: "godkann" | "avvisa" } | null>(null);
   const poll = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const bas = `/api/snajp-support/leads/korningar/${encodeURIComponent(jobId)}/utkast`;
@@ -191,7 +193,7 @@ export function KorningensUtkast({ jobId }: Readonly<{ jobId: string }>) {
 
   async function godkann(l: Lead) {
     if (!l.queue_item_id) return;
-    setGodkanner(l.prospect_id);
+    setHanterar({ id: l.prospect_id, hur: "godkann" });
     setFel(null);
     setBesked(null);
     const mottagare = l.contact_email ?? l.company_name ?? "";
@@ -222,7 +224,35 @@ export function KorningensUtkast({ jobId }: Readonly<{ jobId: string }>) {
       const m = felmeddelande(orsak);
       setFel({ sv: m, en: m });
     } finally {
-      setGodkanner(null);
+      setHanterar(null);
+    }
+  }
+
+  async function avvisa(l: Lead) {
+    if (!l.queue_item_id) return;
+    setHanterar({ id: l.prospect_id, hur: "avvisa" });
+    setFel(null);
+    setBesked(null);
+    const bolag = l.company_name ?? l.contact_email ?? "";
+    try {
+      const response = await fetch(`/api/snajp-support/leads/queue/${encodeURIComponent(l.queue_item_id)}/reject`, {
+        method: "POST"
+      });
+      if (!response.ok) {
+        setFel({
+          sv: `Utkastet kunde inte avvisas (status ${response.status}).`,
+          en: `The draft could not be rejected (status ${response.status}).`
+        });
+        return;
+      }
+      setBesked({ sv: `Utkastet till ${bolag} är avvisat och skickas inte.`, en: `The draft to ${bolag} is rejected and will not be sent.` });
+      setOppen(null);
+      await hamta();
+    } catch (orsak) {
+      const m = felmeddelande(orsak);
+      setFel({ sv: m, en: m });
+    } finally {
+      setHanterar(null);
     }
   }
 
@@ -379,16 +409,29 @@ export function KorningensUtkast({ jobId }: Readonly<{ jobId: string }>) {
                       <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-ink/10 pt-3">
                         <button
                           type="button"
-                          disabled={godkanner !== null || pagar !== null}
+                          disabled={hanterar !== null || pagar !== null}
                           onClick={() => void godkann(l)}
                           className={cn(btnPrimary, btnLiten)}
                         >
-                          {godkanner === l.prospect_id ? (
+                          {hanterar?.id === l.prospect_id && hanterar.hur === "godkann" ? (
                             <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
                           ) : (
                             <Check className="h-4 w-4" aria-hidden />
                           )}
                           {text({ sv: "Godkänn och skicka", en: "Approve and send" })}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={hanterar !== null || pagar !== null}
+                          onClick={() => void avvisa(l)}
+                          className={cn(btnSecondary, btnLiten)}
+                        >
+                          {hanterar?.id === l.prospect_id && hanterar.hur === "avvisa" ? (
+                            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                          ) : (
+                            <X className="h-4 w-4" aria-hidden />
+                          )}
+                          {text({ sv: "Avvisa", en: "Reject" })}
                         </button>
                         <span className={meta}>
                           {text({
