@@ -82,7 +82,7 @@ export function SupportWorkspaceTabs({ workspaceName }: Readonly<{ workspaceName
         {tab === "kundtjanst" ? (
           <Dashboard onMeta={onMeta} />
         ) : null}
-        {tab === "oversikt" ? <SupportOversikt onOppnaArenden={() => setTab("kundtjanst")} /> : null}
+        {tab === "oversikt" ? <SupportOversikt onOppnaArenden={() => setTab("kundtjanst")} onMeta={onMeta} /> : null}
         {tab === "testmail" ? <Dashboard lager="testmail" /> : null}
         {tab === "dolda" ? <Dashboard lager="ej_relaterat" /> : null}
         {tab === "testchatt" ? (

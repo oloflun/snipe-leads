@@ -94,8 +94,10 @@ export function DemoSupportYta({ visaDrift = false }: Readonly<{ visaDrift?: boo
         {(
           [
             ["oversikt", text({ sv: "Översikt", en: "Overview" })],
-            ["inkorg", text({ sv: "Inkorgen", en: "The inbox" })],
-            ["chatt", text({ sv: "Kundchatten", en: "The customer chat" })]
+            // Samma namn som arbetsytans flik (SupportWorkspaceTabs), så att
+            // översiktens "Öppna i Ärenden" pekar på något som finns.
+            ["inkorg", text({ sv: "Ärenden", en: "Cases" })],
+            ["chatt", text({ sv: "Kundchatten", en: "Customer chat" })]
           ] as const
         ).map(([id, etikett]) => (
           <button

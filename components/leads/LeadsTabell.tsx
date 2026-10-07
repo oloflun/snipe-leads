@@ -275,7 +275,12 @@ export function LeadsTabell({
   async function vaxlaBortvalda() {
     const nu = !visaBortvalda;
     setVisaBortvalda(nu);
-    if (!nu || bortvalda !== null || demo) return;
+    if (!nu || bortvalda !== null) return;
+    // Demon har inga bortvalda bolag; utan det här stod chippen och laddade.
+    if (demo) {
+      setBortvalda([]);
+      return;
+    }
     setBortvaldaFel(null);
     try {
       const svar = await leadsAnrop<{ prospects?: SuiteProspekt[] }>("/leads/prospects?bortvalda=1");
@@ -323,7 +328,12 @@ export function LeadsTabell({
       const { flyttaProspektTillMain } = await import("@/lib/actions/flytt");
       const svar = await flyttaProspektTillMain([...valdaFlytt]);
       if (svar.error) {
-        setFlyttNotis(svar.error);
+        const kand: Record<string, Localized> = {
+          miljo: { sv: "Flytt till main går bara från development.", en: "Moving to main only works from development." },
+          arbetsyta: { sv: "Arbetsytan gick inte att läsa.", en: "The workspace could not be read." },
+          antal: { sv: "Markera 1–50 leads.", en: "Select 1–50 leads." }
+        };
+        setFlyttNotis(svar.felkod ? text(kand[svar.felkod]) : svar.error);
         return;
       }
       const ok = (svar.rader ?? []).filter((r) => r.resultat === "importerad").length;

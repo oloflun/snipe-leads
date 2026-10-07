@@ -76,13 +76,18 @@ export async function flyttaTillMain(
  */
 export async function flyttaProspektTillMain(
   ids: string[]
-): Promise<{ rader?: { ref_id: string; resultat: string; fel?: string }[]; error?: string }> {
-  if (aktivMiljo() !== "development") return { error: "Flytt till main går bara från development." };
+): Promise<{
+  rader?: { ref_id: string; resultat: string; fel?: string }[];
+  error?: string;
+  /** Det här lagrets egna fel, översatta i vyn (LeadsTabell). */
+  felkod?: "miljo" | "arbetsyta" | "antal";
+}> {
+  if (aktivMiljo() !== "development") return { error: "Flytt till main går bara från development.", felkod: "miljo" };
   const context = await getWorkspaceContext();
   const slug = context?.workspace?.slug;
-  if (!slug) return { error: "Arbetsytan gick inte att läsa." };
+  if (!slug) return { error: "Arbetsytan gick inte att läsa.", felkod: "arbetsyta" };
   if (!Array.isArray(ids) || ids.length === 0 || ids.length > 50) {
-    return { error: "Markera 1-50 leads." };
+    return { error: "Markera 1–50 leads.", felkod: "antal" };
   }
   return flyttaTillMain(String(slug), "prospekt", ids.map(String));
 }

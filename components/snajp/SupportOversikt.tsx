@@ -2,7 +2,7 @@
 
 import { ArrowRight, BookOpen, ChevronDown } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useArbetsvag } from "@/components/AppShell";
 import { kostnadUsd } from "@/components/admin/AgentAnvandning";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
@@ -87,7 +87,7 @@ const T = {
   vantarPaDig: { sv: "väntar på ditt ja", en: "waiting for your yes" },
   aldsta: { sv: "äldsta", en: "oldest" },
   agentSvar: { sv: "Besvarat av agenten", en: "Answered by the agent" },
-  agentSvarDetalj: { sv: "helt utan människa", en: "with no human involved" },
+  agentSvarDetalj: { sv: "utan mänsklig hjälp", en: "with no human help" },
   svarstid: { sv: "Svarstid, median", en: "Response time, median" },
   svarstidDetalj: { sv: "till första svaret", en: "to the first reply" },
   aktivitet: { sv: "Ärenden per vecka", en: "Cases per week" },
@@ -139,10 +139,10 @@ const T = {
 const KATEGORI: Record<string, Localized> = {
   teknisk_support: { sv: "Teknisk support", en: "Technical support" },
   garanti: { sv: "Garanti", en: "Warranty" },
-  leverans: { sv: "Leverans och frakt", en: "Delivery and shipping" },
-  utbildning: { sv: "Användarstöd", en: "User help" },
-  retur_reklamation: { sv: "Reklamation och retur", en: "Complaints and returns" },
-  betalning: { sv: "Betalning och faktura", en: "Payment and invoice" },
+  leverans: { sv: "Leverans & frakt", en: "Delivery & shipping" },
+  utbildning: { sv: "Utbildning & användarstöd", en: "Training & user help" },
+  retur_reklamation: { sv: "Reklamation & retur", en: "Complaints & returns" },
+  betalning: { sv: "Betalning & faktura", en: "Payment & invoices" },
   orderstatus: { sv: "Orderstatus", en: "Order status" },
   ovrigt: { sv: "Övrigt", en: "Other" },
   okand: { sv: "Ej klassad", en: "Not classified" }
@@ -228,8 +228,13 @@ function enheter(nu: number | null, forra: number | null): number | undefined {
 
 type Laddat = { svar: OversiktSvar | null; arenden: Mejl[] | null; utkast: Mejl[] | null; fel: boolean };
 
-function useSupportOversikt(demo: boolean): Laddat & { ladda: () => void } {
+function useSupportOversikt(
+  demo: boolean,
+  onMeta?: (meta: { visar_test_i_arenden: boolean }) => void
+): Laddat & { ladda: () => void } {
   const [data, setData] = useState<Laddat>({ svar: null, arenden: null, utkast: null, fel: false });
+  const onMetaRef = useRef(onMeta);
+  onMetaRef.current = onMeta;
 
   const ladda = useCallback(async () => {
     if (demo) {
@@ -253,9 +258,15 @@ function useSupportOversikt(demo: boolean): Laddat & { ladda: () => void } {
     };
     const [svar, arenden, utkast] = await Promise.all([
       hamta<OversiktSvar>("/support/oversikt"),
-      hamta<{ emails?: Mejl[] }>("/inbox?limit=8"),
+      hamta<{ emails?: Mejl[]; visar_test_i_arenden?: boolean }>("/inbox?limit=8"),
       hamta<{ emails?: Mejl[] }>("/inbox?status=awaiting_approval&limit=30")
     ]);
+    // Inkorgens meta avgör om fliken Testmail ska synas. Översikten är
+    // förvald flik, så utan det här syntes Testmail först efter ett besök i
+    // Ärenden.
+    if (typeof arenden?.visar_test_i_arenden === "boolean") {
+      onMetaRef.current?.({ visar_test_i_arenden: arenden.visar_test_i_arenden });
+    }
     setData({
       svar,
       arenden: arenden ? (arenden.emails ?? []) : [],
@@ -550,11 +561,17 @@ function Driftruta({ svar }: Readonly<{ svar: OversiktSvar }>) {
 export function SupportOversikt({
   demo = false,
   visaDrift = false,
-  onOppnaArenden
-}: Readonly<{ demo?: boolean; visaDrift?: boolean; onOppnaArenden?: () => void }>) {
+  onOppnaArenden,
+  onMeta
+}: Readonly<{
+  demo?: boolean;
+  visaDrift?: boolean;
+  onOppnaArenden?: () => void;
+  onMeta?: (meta: { visar_test_i_arenden: boolean }) => void;
+}>) {
   const { isPlatformAdmin } = useDashboard();
   const { text, locale } = useLocale();
-  const { svar, arenden, utkast, fel, ladda } = useSupportOversikt(demo);
+  const { svar, arenden, utkast, fel, ladda } = useSupportOversikt(demo, onMeta);
 
   if (fel) {
     return (
@@ -572,7 +589,7 @@ export function SupportOversikt({
   const veckor = svar?.veckor ?? [];
   const dygn = svar?.period_dygn ?? 28;
   const perioden: Localized = { sv: `de ${dygn} dygnen före`, en: `the ${dygn} days before` };
-  const detalj = (bas: Localized): Localized => ({ sv: `${bas.sv}, ${dygn} dygn`, en: `${bas.en}, ${dygn} days` });
+  const detalj = (bas: Localized): Localized => ({ sv: `${bas.sv}, senaste ${dygn} dygnen`, en: `${bas.en}, last ${dygn} days` });
 
   const autoNu = nu ? andel(nu.auto, nu.inkomna) : null;
   const autoForra = forra ? andel(forra.auto, forra.inkomna) : null;
@@ -607,6 +624,7 @@ export function SupportOversikt({
       varde: null,
       visning: nu ? procent(autoNu, locale) : undefined,
       forandring: enheter(autoNu, autoForra),
+      forandringEnhet: "pe",
       detalj: detalj(T.agentSvarDetalj)
     },
     {

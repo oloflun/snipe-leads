@@ -1,5 +1,6 @@
 import { EXEMPELBOLAG } from "@/lib/demo/iris-exempel";
 import { grundmejl } from "@/lib/demo/support-inbox";
+import { isoVecka } from "@/lib/admin/statistik";
 import { analyticsSeries, companies } from "@/lib/mock-data";
 
 /**
@@ -248,11 +249,16 @@ export function demoOversiktSvar(path: string): unknown | undefined {
     const avslutadeAndel = mejl.filter((m) => m.status === "auto_sent").length / mejl.length;
     const toppSkick = Math.max(...analyticsSeries.map((p) => p.sent), 1);
 
+    // Veckoetiketterna räknas bakåt från innevarande vecka. Mock-seriens
+    // egna (v16–v21) låg ett halvår bak i tiden bredvid "senaste 4 veckorna".
+    const nu = Date.now();
+    const sista = analyticsSeries.length - 1;
+
     return {
-      weeks: analyticsSeries.map((punkt) => {
+      weeks: analyticsSeries.map((punkt, i) => {
         const arenden = Math.round(mejl.length * (punkt.sent / toppSkick) * 3);
         return {
-          week: punkt.week,
+          week: `v${isoVecka(new Date(nu - (sista - i) * 7 * 86_400_000))}`,
           start: null,
           sent: punkt.sent,
           replies: punkt.replies,

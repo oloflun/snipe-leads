@@ -223,7 +223,9 @@ export function IrisGranskning({
     return false;
   }
 
-  async function avgor(id: string, handling: "approve" | "reject") {
+  /** Utfallet returneras så att "Godkänn N valda" kan sammanfatta alla, i
+   *  stället för att varje post skriver över föregående posts besked. */
+  async function avgor(id: string, handling: "approve" | "reject"): Promise<"skickat" | "vantar" | "stoppat" | "fel" | "klar"> {
     setPagar(id);
     setFel(null);
     setUtfall(null);
@@ -233,11 +235,11 @@ export function IrisGranskning({
       setBesked((f) => ({ ...f, [id]: handling }));
       setPoster((f) => (f ? f.filter((p) => p.id !== id) : f));
       setPagar(null);
-      return;
+      return "klar";
     }
     try {
       const post = poster?.find((p) => p.id === id);
-      if (handling === "approve" && post && !(await sparaAndring(post))) return;
+      if (handling === "approve" && post && !(await sparaAndring(post))) return "fel";
       const response = await fetch(`/api/snajp-support/leads/queue/${id}/${handling}`, {
         method: "POST"
       });
@@ -246,20 +248,24 @@ export function IrisGranskning({
           sv: `Åtgärden misslyckades (status ${response.status}).`,
           en: `The action failed (status ${response.status}).`
         });
-        return;
+        return "fel";
       }
+      let utfall: "skickat" | "vantar" | "stoppat" | "klar" = "klar";
       if (handling === "approve") {
         const svar = await readJsonBody<{ utfall?: string; besked?: string }>(response);
         const mottagare = post?.prospect_email ?? post?.company_name ?? "";
         const skal = svar?.besked?.split(": ").slice(1).join(": ");
         if (svar?.utfall === "sent") {
           setUtfall({ sv: `Skickat till ${mottagare}.`, en: `Sent to ${mottagare}.` });
+          utfall = "skickat";
         } else if (svar?.utfall === "requeued") {
           setUtfall({
             sv: `Godkänt. Mejlet till ${mottagare} skickas när sändfönstret öppnar (vardagar 08–16).`,
             en: `Approved. The email to ${mottagare} goes out when the sending window opens (weekdays 08–16).`
           });
+          utfall = "vantar";
         } else {
+          utfall = "stoppat";
           setFel({
             sv: `Inte skickat${skal ? `: ${skal}` : "."}`,
             en: `Not sent${skal ? `: ${skal}` : "."}`
@@ -271,9 +277,11 @@ export function IrisGranskning({
         return resten;
       });
       await hamta();
+      return utfall;
     } catch (orsak) {
       const m = felmeddelande(orsak);
       setFel({ sv: m, en: m });
+      return "fel";
     } finally {
       setPagar(null);
     }
@@ -290,11 +298,34 @@ export function IrisGranskning({
     try {
       // I tur och ordning, inte parallellt: varje beslut går genom samma
       // endpoint och grindar som ett enskilt klick.
+      const utfall: Awaited<ReturnType<typeof avgor>>[] = [];
       for (const id of [...valda]) {
         // eslint-disable-next-line no-await-in-loop
-        await avgor(id, handling);
+        utfall.push(await avgor(id, handling));
       }
       setValda(new Set());
+      if (handling === "approve" && utfall.length > 1) {
+        const antal = (u: string) => utfall.filter((x) => x === u).length;
+        const [skickat, vantar, ej] = [antal("skickat"), antal("vantar"), antal("stoppat") + antal("fel")];
+        const delar = [
+          skickat ? { sv: `${skickat} skickade`, en: `${skickat} sent` } : null,
+          vantar ? { sv: `${vantar} väntar på sändfönstret`, en: `${vantar} waiting for the sending window` } : null
+        ].filter((d): d is Localized => d !== null);
+        const sammanfattning: Localized = {
+          sv: delar.map((d) => d.sv).join(", ") || "Inget skickat",
+          en: delar.map((d) => d.en).join(", ") || "Nothing sent"
+        };
+        if (ej) {
+          setUtfall(null);
+          setFel({
+            sv: `${sammanfattning.sv}. ${ej} skickades inte: en sändspärr sa nej eller anropet föll. Öppna dem en i taget för skälet.`,
+            en: `${sammanfattning.en}. ${ej} were not sent: a send guard said no or the request failed. Open them one at a time to see why.`
+          });
+        } else {
+          setFel(null);
+          setUtfall({ sv: `${sammanfattning.sv}.`, en: `${sammanfattning.en}.` });
+        }
+      }
     } finally {
       setSvep(null);
     }

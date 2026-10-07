@@ -14,7 +14,7 @@ export function KvittoDemoYta({ visaDrift = false }: Readonly<{ visaDrift?: bool
   const [vald, setVald] = useState<KvittoFlik>("oversikt");
   return (
     <div>
-      <KvittoFlikar vald={vald} onValj={setVald} etiketter={{ kvitton: { sv: "Skanningen", en: "The scan" } }} />
+      <KvittoFlikar vald={vald} onValj={setVald} etiketter={{ kvitton: { sv: "Skanningen", en: "Scanning" } }} />
       <div className="mt-6">
         {vald === "oversikt" ? <KvittoOversikt demo visaDrift={visaDrift} onOppnaKvitton={() => setVald("kvitton")} /> : <KvittoDemo />}
       </div>

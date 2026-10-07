@@ -141,9 +141,9 @@ const T = {
     sv: "Håll ordning på bolagen ni ringt: kontaktuppgifter, senaste samtalet och statusfärger för sålt, väntar på signering, nej och ej svar. Säljlistan ingår i tillägget Leadslistor. Hör av dig så slår vi på det.",
     en: "Keep track of the companies you have called: contact details, the latest call and status colours for sold, awaiting signing, no and no answer. The sales list is included in the Lead lists add-on. Get in touch and we will turn it on."
   },
-  idag: { sv: "Idag", en: "Today" },
-  satIdag: { sv: "Sätt senast kontaktad till idag", en: "Set last contacted to today" },
-  igar: { sv: "Igår", en: "Yesterday" },
+  idag: { sv: "I dag", en: "Today" },
+  satIdag: { sv: "Sätt senast kontaktad till i dag", en: "Set last contacted to today" },
+  igar: { sv: "I går", en: "Yesterday" },
   aldrig: { sv: "Ej kontaktad", en: "Not contacted" },
   ring: { sv: "Ring", en: "Call" },
   mejla: { sv: "Mejla", en: "Email" },
@@ -491,7 +491,9 @@ function SaljlistaYta({ api, demo }: Readonly<{ api: SaljlistaApi; demo: boolean
     try {
       const svar = await leadsAnrop<{ list_id: string }>("/leads/listor", {
         method: "POST",
-        body: JSON.stringify({ titel, antal, mal: "saljlista" })
+        // Det kunden skrev STYR sökningen (samma form som LeadslistorView);
+        // utan overrides blev "Byggbolag i Umeå" bara listans namn.
+        body: JSON.stringify({ titel, antal, mal: "saljlista", overrides: { must_have: [titel] } })
       });
       setBestallStatus(T.bestallPagar);
       setBestallOppen(false);

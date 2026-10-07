@@ -76,17 +76,19 @@ const T = {
   prioriterad1: { sv: "prioriterad", en: "priority" },
   prioriterade: { sv: "prioriterade", en: "priority" },
   kundfakturor: { sv: "kundfakturor", en: "customer invoices" },
+  kundfaktura: { sv: "kundfaktura", en: "customer invoice" },
   kvitton: { sv: "kvitton", en: "receipts" },
+  kvittoLitet: { sv: "kvitto", en: "receipt" },
   aktivitet: { sv: "In och ut per vecka", en: "In and out per week" },
   ingenAktivitet: { sv: "Inga underlag att visa än.", en: "No documents to show yet." },
-  over: { sv: "Över, exkl. moms", en: "Surplus, excl. VAT" },
+  over: { sv: "Överskott exkl. moms", en: "Surplus excl. VAT" },
   overText: { sv: "fakturerat minus utlägg", en: "invoiced minus expenses" },
   storsta: { sv: "Största utlägget", en: "Largest expense" },
-  utanHjalp: { sv: "Lästa utan anmärkning", en: "Read without remarks" },
+  utanHjalp: { sv: "Lästa utan anmärkning", en: "Read without issues" },
   fordelning: { sv: "Fördelning", en: "Breakdown" },
-  fordelningText: { sv: "Senaste fyra veckorna.", en: "Last four weeks." },
+  fordelningText: { sv: "Senaste fyra veckorna", en: "Last four weeks" },
   inOchUt: { sv: "Pengar in och ut", en: "Money in and out" },
-  overMitt: { sv: "kr över", en: "SEK surplus" },
+  overMitt: { sv: "kr överskott", en: "SEK surplus" },
   underMitt: { sv: "kr under", en: "SEK short" },
   perKategori: { sv: "Utlägg per kategori", en: "Expenses by category" },
   granskning: { sv: "Granskning", en: "Review" },
@@ -111,10 +113,10 @@ const T = {
   netto: { sv: "Att betala in", en: "To pay" },
   nettoTillbaka: { sv: "Att få tillbaka", en: "To reclaim" },
   senaste: { sv: "Senaste underlagen", en: "Latest documents" },
-  senasteText: { sv: "Kvitton och kundfakturor, med status i samma färger som tabellen.", en: "Receipts and customer invoices, with status in the same colours as the table." },
+  senasteText: { sv: "Kvitton och kundfakturor, med status i samma färger som i tabellen.", en: "Receipts and customer invoices, with status in the same colours as in the table." },
   allaKvitton: { sv: "Alla underlag", en: "All documents" },
   motparter: { sv: "Kunder och leverantörer", en: "Customers and suppliers" },
-  motparterText: { sv: "Var pengarna kommit ifrån och gått till de senaste tolv veckorna.", en: "Where the money came from and went over the last twelve weeks." },
+  motparterText: { sv: "Var pengarna kom ifrån och vart de gick, senaste tolv veckorna.", en: "Where the money came from and where it went, last twelve weeks." },
   kunder: { sv: "Kunder", en: "Customers" },
   leverantorer: { sv: "Leverantörer", en: "Suppliers" },
   kundfordringar: { sv: "Obetalda kundfakturor", en: "Unpaid customer invoices" },
@@ -299,9 +301,11 @@ function useKvittodata(demo: boolean) {
       const svar = await readJsonBody<{ kvitton?: Kvitto[] }>(lista);
       setKvitton(svar?.kvitton ?? []);
       setFel(false);
-      if (k.ok) setKonto(await readJsonBody<Mejlkonto>(k));
+      // Ett fel på kontoläsningen får inte lämna raden på "…" för alltid.
+      setKonto(k.ok ? ((await readJsonBody<Mejlkonto>(k)) ?? { kopplad: false }) : { kopplad: false });
     } catch {
       setFel(true);
+      setKonto((nu) => nu ?? { kopplad: false });
       setKvitton((nu) => nu ?? []);
     }
   }, [demo, fran, idag]);
@@ -820,7 +824,10 @@ export function KvittoOversikt({
       forandring: s ? forandring(s.nu.in, s.forra.in) : undefined,
       serie: serie("intakter"),
       detalj: s
-        ? { sv: `${s.antalNu.fakturor} ${T.kundfakturor.sv}, 4 veckor`, en: `${s.antalNu.fakturor} ${T.kundfakturor.en}, 4 weeks` }
+        ? (() => {
+            const ord = s.antalNu.fakturor === 1 ? T.kundfaktura : T.kundfakturor;
+            return { sv: `${s.antalNu.fakturor} ${ord.sv}, 4 veckor`, en: `${s.antalNu.fakturor} ${ord.en}, 4 weeks` };
+          })()
         : T.fordelningText
     },
     {
@@ -831,7 +838,12 @@ export function KvittoOversikt({
       forandring: s ? forandring(s.nu.ut, s.forra.ut) : undefined,
       battre: "ner",
       serie: serie("utlagg"),
-      detalj: s ? { sv: `${s.antalNu.kvitton} ${T.kvitton.sv}, 4 veckor`, en: `${s.antalNu.kvitton} ${T.kvitton.en}, 4 weeks` } : T.fordelningText
+      detalj: s
+        ? (() => {
+            const ord = s.antalNu.kvitton === 1 ? T.kvittoLitet : T.kvitton;
+            return { sv: `${s.antalNu.kvitton} ${ord.sv}, 4 veckor`, en: `${s.antalNu.kvitton} ${ord.en}, 4 weeks` };
+          })()
+        : T.fordelningText
     },
     {
       id: "moms",
@@ -913,16 +925,16 @@ export function KvittoOversikt({
         ...(fakturorKlara
           ? [
               {
-                sv: `${fakturorKlara} kundfakturor på ${helaKronor(s.nu.in, "sv")} de senaste fyra veckorna, med ${helaKronor(s.nu.utgaende, "sv")} i utgående moms.`,
-                en: `${fakturorKlara} customer invoices for ${helaKronor(s.nu.in, "en")} over the last four weeks, with ${helaKronor(s.nu.utgaende, "en")} in output VAT.`
+                sv: `${fakturorKlara} ${fakturorKlara === 1 ? "kundfaktura" : "kundfakturor"} på ${helaKronor(s.nu.in, "sv")} de senaste fyra veckorna, med ${helaKronor(s.nu.utgaende, "sv")} i utgående moms.`,
+                en: `${fakturorKlara} ${fakturorKlara === 1 ? "customer invoice" : "customer invoices"} for ${helaKronor(s.nu.in, "en")} over the last four weeks, with ${helaKronor(s.nu.utgaende, "en")} in output VAT.`
               }
             ]
           : []),
         ...(periodKvitton.length
           ? [
               {
-                sv: `${periodKvitton.length} avlästa kvitton på ${helaKronor(s.nu.ut, "sv")}, varav ${helaKronor(s.nu.ingaende, "sv")} ingående moms.`,
-                en: `${periodKvitton.length} receipts read for ${helaKronor(s.nu.ut, "en")}, including ${helaKronor(s.nu.ingaende, "en")} input VAT.`
+                sv: `${periodKvitton.length} ${periodKvitton.length === 1 ? "avläst kvitto" : "avlästa kvitton"} på ${helaKronor(s.nu.ut, "sv")}, varav ${helaKronor(s.nu.ingaende, "sv")} ingående moms.`,
+                en: `${periodKvitton.length} ${periodKvitton.length === 1 ? "receipt" : "receipts"} read for ${helaKronor(s.nu.ut, "en")}, including ${helaKronor(s.nu.ingaende, "en")} input VAT.`
               }
             ]
           : []),

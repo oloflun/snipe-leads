@@ -86,7 +86,8 @@ export function Tillaggsvaljare({
     }
 
     setAddons(svar.addons ?? nasta);
-    const namn = addonCatalog.find((spec) => spec.key === nyckel)?.name ?? nyckel;
+    const spec = addonCatalog.find((rad) => rad.key === nyckel);
+    const namn = spec ? text(spec.name) : nyckel;
     setKvitto(
       pa
         ? text({ sv: `${namn} är påslaget. Kunden ser vyn direkt.`, en: `${namn} is on. The customer sees the view right away.` })
@@ -103,10 +104,10 @@ export function Tillaggsvaljare({
           // påminnelse om vad ett påslag förbinder oss till (lib/addons.ts).
           // Som radens title sedan 2026-09-27: en andra finstilt rad under
           // växelns egen beskrivning var en förklaring för mycket (F-016).
-          <div key={spec.key} className="py-5" title={spec.why}>
+          <div key={spec.key} className="py-5" title={text(spec.why)}>
             <Vaxel
-              etikett={sparar === spec.key ? `${spec.name} (sparar…)` : spec.name}
-              beskrivning={spec.what}
+              etikett={sparar === spec.key ? `${text(spec.name)} (${text({ sv: "sparar…", en: "saving…" })})` : text(spec.name)}
+              beskrivning={text(spec.what)}
               pa={addons.includes(spec.key)}
               onChange={(nytt) => void vaxla(spec.key, nytt)}
             />

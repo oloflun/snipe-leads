@@ -34,7 +34,7 @@ export function AddonSettings() {
           return (
             <Rad key={addon.key} className="min-w-0">
               <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-                <h4 className="min-w-0 break-words text-[17px]">{addon.name}</h4>
+                <h4 className="min-w-0 break-words text-[17px]">{text(addon.name)}</h4>
                 {/* Ochre bara på avvikelsen — här "ingår", som är det
                     ovanliga tillståndet. Ett aktivt tillägg är nyheten;
                     ett låst är utgångsläget och behöver ingen färg. */}
@@ -49,14 +49,14 @@ export function AddonSettings() {
                 </span>
               </div>
 
-              <p className="mt-3 max-w-[64ch] text-[15px] leading-7">{addon.what}</p>
+              <p className="mt-3 max-w-[64ch] text-[15px] leading-7">{text(addon.what)}</p>
 
               {!active ? (
                 <a
-                  href={mejlaOss(text({ sv: `Tillägg: ${addon.name}`, en: `Add-on: ${addon.name}` }))}
+                  href={mejlaOss(text({ sv: `Tillägg: ${addon.name.sv}`, en: `Add-on: ${addon.name.en}` }))}
                   className="mt-4 inline-block text-[13px] underline underline-offset-4 transition hover:text-ochre"
                 >
-                  {text({ sv: "Hör av dig om ", en: "Get in touch about " })}{addon.name.toLowerCase()}
+                  {text({ sv: `Hör av dig om ${addon.name.sv.toLowerCase()}`, en: `Get in touch about ${addon.name.en.toLowerCase()}` })}
                 </a>
               ) : null}
             </Rad>

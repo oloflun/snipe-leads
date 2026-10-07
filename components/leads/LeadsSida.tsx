@@ -80,7 +80,7 @@ function tolkaSegment(vy: string | null): Segment {
 }
 
 export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
-  const { addons, isDemo, vy } = useDashboard();
+  const { addons, isDemo, vy, impersonation, arLasare } = useDashboard();
   const { text } = useLocale();
   const router = useRouter();
   const pathname = usePathname();
@@ -143,7 +143,10 @@ export function IrisBolag({ demo = false }: Readonly<{ demo?: boolean }>) {
       title={{ sv: "Leads", en: "Leads" }}
       action={
         <>
-          {segmentVal === "listor" && harListaddon && !demo ? (
+          {/* Samma grind som SaljlistaSektion: formuläret knappen öppnar finns
+              bara i den egna, skrivbara säljlistan — inte i demon, inte under
+              ett kundbesök. */}
+          {segmentVal === "listor" && harListaddon && !demo && !isDemo && vy === "admin" && !impersonation && !arLasare ? (
             // Beställningen landar i säljlistan (Sebbe 2026-10-06): knappen
             // öppnar formuläret där nere. Kör Iris står kvar bredvid.
             <button

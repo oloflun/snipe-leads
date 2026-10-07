@@ -51,6 +51,11 @@ function tal(n: number | null, locale: "sv" | "en"): string {
   return new Intl.NumberFormat(locale === "en" ? "en-GB" : "sv-SE").format(n);
 }
 
+/** Veckoetiketten kommer som "v41"; på engelska skrivs den "W41". */
+function veckoetikett(v: string, locale: "sv" | "en"): string {
+  return locale === "en" ? v.replace(/^v(\d+)$/, "W$1") : v;
+}
+
 /** Förändring mot föregående period i hela procent; null när jämförelsen saknar grund. */
 export function forandring(nu: number, forra: number): number | null {
   if (forra === 0) return nu === 0 ? 0 : null;
@@ -66,6 +71,8 @@ export type Kpi = {
   /** Visas i stället för talet, t.ex. en procentsats. */
   visning?: string;
   forandring?: number | null;
+  /** "pe": förändringen är procentenheter (andelar), inte procent. */
+  forandringEnhet?: "procent" | "pe";
   /** Är en ökning bra (nya leads) eller dålig (eskalerade)? */
   battre?: "upp" | "ner";
   serie?: number[];
@@ -94,18 +101,21 @@ export function KpiKort({ kpi, perioden }: Readonly<{ kpi: Kpi; perioden: Locali
         {f !== undefined ? (
           <Badge tone={bra === null ? "neutral" : bra ? "good" : "danger"}>
             <Pil className="h-3 w-3" aria-hidden />
-            <span className="num tabular-nums">{f === null ? text({ sv: "ny", en: "new" }) : `${f > 0 ? "+" : ""}${f} %`}</span>
+            <span className="num tabular-nums">{f === null
+                ? text({ sv: "ny", en: "new" })
+                : `${f > 0 ? "+" : ""}${f}${kpi.forandringEnhet === "pe" ? text({ sv: " p.e.", en: " pp" }) : " %"}`}</span>
             <span className="sr-only">{text({ sv: `jämfört med ${perioden.sv}`, en: `compared with ${perioden.en}` })}</span>
           </Badge>
         ) : null}
       </div>
-      <p className="num mt-3 text-[2.25rem] font-semibold leading-none tracking-[-0.03em] text-ink tabular-nums">
-        {kpi.visning ?? tal(kpi.varde, locale)}
-      </p>
+      {/* Talet och sparklinen delar rad, undertexten får hela bredden under:
+          bredvid sparklinen bröts den i tre korta rader. */}
       <div className="mt-3 flex items-end justify-between gap-4">
-        <p className={cn(meta, "max-w-[22ch]")}>{text(kpi.detalj)}</p>
+        <p className="num shrink-0 whitespace-nowrap text-[2.25rem] font-semibold leading-none tracking-[-0.03em] text-ink tabular-nums">
+          {kpi.visning ?? tal(kpi.varde, locale)}
+        </p>
         {kpi.serie && kpi.serie.length > 1 ? (
-          <div className="h-9 w-28 shrink-0" aria-hidden>
+          <div className="h-9 min-w-0 max-w-28 flex-1" aria-hidden>
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={kpi.serie.map((v, i) => ({ i, v }))} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
                 <defs>
@@ -127,6 +137,7 @@ export function KpiKort({ kpi, perioden }: Readonly<{ kpi: Kpi; perioden: Locali
           </div>
         ) : null}
       </div>
+      <p className={cn(meta, "mt-3")}>{text(kpi.detalj)}</p>
     </>
   );
   const ram = cn(
@@ -210,14 +221,15 @@ export function Aktivitetsgraf({
               tick={{ fill: farger["ink-subtle"], fontSize: 12 }}
               interval="preserveStartEnd"
               minTickGap={24}
+              tickFormatter={(v: string) => veckoetikett(v, locale)}
             />
-            <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fill: farger["ink-subtle"], fontSize: 12 }} width={axelbredd} />
+            <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fill: farger["ink-subtle"], fontSize: 12 }} tickFormatter={(v: number) => tal(v, locale)} width={axelbredd} />
             <Tooltip
               cursor={{ stroke: farger["ink-subtle"], strokeOpacity: 0.5, strokeWidth: 1 }}
               content={({ active, payload, label }) =>
                 active && payload?.length ? (
                   <div className="rounded-input border border-ink/12 bg-paper px-3 py-2 text-[0.8125rem] shadow-sm">
-                    <p className="font-medium text-ink">{label}</p>
+                    <p className="font-medium text-ink">{veckoetikett(String(label ?? ""), locale)}</p>
                     {serier.map((s) => {
                       const rad = payload.find((p) => p.dataKey === s.nyckel);
                       return (
