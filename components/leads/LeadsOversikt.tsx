@@ -18,7 +18,6 @@ import { useLeadsdata } from "@/components/leads/LeadsDiagram";
 import { LeadsTabell } from "@/components/leads/LeadsTabell";
 import { LeadslistorView } from "@/components/leads/LeadslistorView";
 import { SaljlistaUtforska } from "@/components/leads/Saljlista";
-import { SmalKolumn } from "@/components/leads/smal";
 import { Nyckeltal, btnLiten, btnSecondary, meta, rubrikPanel } from "@/components/ui";
 import { readJsonBody } from "@/lib/http/json";
 import { useLocale, type Localized } from "@/lib/i18n";
@@ -29,8 +28,14 @@ import { cn } from "@/lib/utils";
  * Leads › Översikt (Sebbes beställning 2026-10-06, omgjord 2026-10-07).
  *
  *   en rad nyckeltal (hårlinjer, inga kort)
- *   Iris-leads | listor och säljlista   (split view från 1280 px)
  *   de tre senaste utkasten (expanderbar, skicka direkt) · körningarna
+ *   Iris-leads i full bredd (tabellen från lg)
+ *   listor och säljlista
+ *
+ * Kritik 2 samma dag (24/40): högerkolumnen (säljlista, CRM, beställning)
+ * blev 7 400 px och tryckte ner utkasten, och delad vy tvingade fram kort så
+ * att tabellen aldrig syntes på 1280. Ordningen är nu nyckeltal → utkast och
+ * körningar → Iris-leads i full bredd (tabellen) → listor och säljlista.
  *
  * Impeccable-kritiken 2026-10-07 (26/40): första skärmen var statistik och
  * listan började under vecket. Listan står nu först; aktivitetsdiagrammet och
@@ -38,11 +43,8 @@ import { cn } from "@/lib/utils";
  * (components/leads/LeadsDiagram.tsx). Kolumnerna rullar inte längre inuti
  * sidan: två rullningar i varandra var svåra att styra.
  *
- * Sebbe 2026-10-07: utkasten och de platta siffrorna tog all plats, och
- * leads och listor byggde på höjden. Utkasten är nu en liten ruta som visar
- * de tre senaste och fäller ut till alla; leads och listor står bredvid
- * varandra i varsin rullbar kolumn, där tabellerna visar sina kort
- * (SmalKolumn) eftersom kolumnen är smal fast fönstret är brett.
+ * Sebbe 2026-10-07: utkasten är en liten ruta som visar de tre senaste och
+ * fäller ut till alla.
  */
 
 const T = {
@@ -51,6 +53,7 @@ const T = {
   skickade: { sv: "Skickade mejl", en: "Emails sent" },
   svar: { sv: "Svar från leads", en: "Replies from leads" },
   leadsIListan: { sv: "Leads i listan", en: "Leads in the list" },
+  exempelLeads: { sv: "bland exempelleadsen", en: "among the example leads" },
   utkastRubrik: { sv: "Senaste utkasten", en: "Latest drafts" },
   pagaendeKorningar: { sv: "Pågående körningar", en: "Runs in progress" },
   senasteKorning: { sv: "Senaste körningen", en: "Latest run" },
@@ -61,8 +64,8 @@ const T = {
   // Poängen förklaras där den visas (kritiken: poäng och nivå förklarades
   // ingenstans). Samma vikter som app/leads/rangpoang.py.
   irisLeadsText: {
-    sv: "De bästa överst. Poängen väger hur väl bolaget passar, styrkta citat från sajten, kontakten och om tidpunkten är rätt.",
-    en: "Best first. The score weighs how well the company fits, verified quotes from its site, the contact and whether the timing is right."
+    sv: "De bästa överst. Poängen väger hur väl bolaget passar, styrkta citat från sajten, kontakten och om tidpunkten är rätt. Ny är bolag Iris just hittat, Redo de du granskat och vill kontakta.",
+    en: "Best first. The score weighs how well the company fits, verified quotes from its site, the contact and whether the timing is right. New is companies Iris just found, Ready the ones you have reviewed and want to contact."
   },
   listorRubrik: { sv: "Listor och säljlista", en: "Lists and sales list" },
   av: { sv: "av", en: "of" },
@@ -75,19 +78,6 @@ const kort = "rounded-card border border-ink/12 bg-paper p-4 sm:p-5";
 
 function summa(veckor: Vecka[], nyckel: keyof Vecka, fran: number, till: number): number {
   return veckor.slice(fran, till).reduce((s, v) => s + Number(v[nyckel] ?? 0), 0);
-}
-
-/** Bredare än 1280 px: leads och listor står bredvid varandra. */
-function useBred(): boolean {
-  const [bred, setBred] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia("(min-width: 1280px)");
-    const satt = () => setBred(mq.matches);
-    satt();
-    mq.addEventListener("change", satt);
-    return () => mq.removeEventListener("change", satt);
-  }, []);
-  return bred;
 }
 
 /**
@@ -228,11 +218,15 @@ export function LeadsOversikt({
   const { text, locale } = useLocale();
   const arDemo = demo || isDemo || vy === "demo";
   const harListaddon = addons.includes("leadlists");
-  const bred = useBred();
   const { veckor } = useLeadsdata(arDemo);
   // Listans egna tal (LeadsTabell.onAntal): samma rader som Alla och Ny visar,
   // så att nyckeltalet och listan aldrig säger två olika saker.
-  const [antalLeads, setAntalLeads] = useState<{ alla: number; nya: number } | null>(null);
+  const [antalLeads, setAntalLeads] = useState<{
+    alla: number;
+    nya: number;
+    skickat: number | null;
+    svarat: number | null;
+  } | null>(null);
   const [antalUtkast, setAntalUtkast] = useState<number | null>(null);
   // Körningsrutan vet om en Iris-körning pågår; tabellen går då i livetakt.
   const [pagaendeKorningar, setPagaendeKorningar] = useState(0);
@@ -255,8 +249,14 @@ export function LeadsOversikt({
       notis: antalLeads ? text({ sv: `${antalLeads.nya} nya`, en: `${antalLeads.nya} new` }) : null
     },
     { etikett: text(T.utkastVantar), varde: fmt(antalUtkast), notis: text(T.vantarPaDig) },
-    { etikett: text(T.skickade), varde: fmt(harVeckor ? nu("sent") : null), notis: senaste },
-    { etikett: text(T.svar), varde: fmt(harVeckor ? nu("replies") : null), notis: senaste }
+    // Demon räknar ur sina exempelleads (samma källa som fliken Skickat);
+    // arbetsytan ur utskicksloggen, de senaste veckorna.
+    arDemo
+      ? { etikett: text(T.skickade), varde: fmt(antalLeads?.skickat ?? null), notis: text(T.exempelLeads) }
+      : { etikett: text(T.skickade), varde: fmt(harVeckor ? nu("sent") : null), notis: senaste },
+    arDemo
+      ? { etikett: text(T.svar), varde: fmt(antalLeads?.svarat ?? null), notis: text(T.exempelLeads) }
+      : { etikett: text(T.svar), varde: fmt(harVeckor ? nu("replies") : null), notis: senaste }
   ];
 
   const kolumn = cn(kort, "relative min-w-0");
@@ -266,41 +266,6 @@ export function LeadsOversikt({
     // minsta bredd växa hela sidan i sidled (uppmätt 1318 px vid 1280).
     <div className="flex min-w-0 flex-col gap-6">
       <Nyckeltal poster={nyckeltal} />
-
-      <SmalKolumn value={bred}>
-        <div className="grid min-w-0 items-start gap-4 xl:grid-cols-2">
-          <section aria-labelledby="leads-iris" className={kolumn}>
-            <h2 id="leads-iris" className={rubrikPanel}>
-              {text(T.irisLeads)}
-            </h2>
-            <p className={cn(meta, "mb-4 mt-1 max-w-[70ch]")}>{text(T.irisLeadsText)}</p>
-            <LeadsTabell
-              demo={demo}
-              valdId={valdId}
-              exempel={exempel}
-              onValj={onValjLead}
-              flyttbar={flyttbar}
-              korningPagar={pagaendeKorningar > 0}
-              onAntal={(alla, nya) => setAntalLeads({ alla, nya })}
-            />
-          </section>
-
-          <section aria-labelledby="leads-listor" className={kolumn}>
-            <h2 id="leads-listor" className={cn(rubrikPanel, "mb-4")}>
-              {text(T.listorRubrik)}
-            </h2>
-            {harListaddon || arDemo ? (
-              <LeadslistorView demo={demo} crmOppen={crmOppen} />
-            ) : (
-              <div className="grid gap-8">
-                <SaljlistaUtforska />
-                <CrmKundlista startOppen={crmOppen} />
-                <ListorUpsell />
-              </div>
-            )}
-          </section>
-        </div>
-      </SmalKolumn>
 
       <div className={cn("grid min-w-0 items-start gap-4", !arDemo && "lg:grid-cols-2")}>
         <section aria-labelledby="leads-utkastruta" className={cn(kort, "min-w-0")}>
@@ -312,6 +277,37 @@ export function LeadsOversikt({
         </section>
         {arDemo ? null : <KorningsRuta onOppna={(jobId) => onOppnaKorningar?.(jobId)} onPagaende={setPagaendeKorningar} />}
       </div>
+
+      <section aria-labelledby="leads-iris" className={kolumn}>
+        <h2 id="leads-iris" className={rubrikPanel}>
+          {text(T.irisLeads)}
+        </h2>
+        <p className={cn(meta, "mb-4 mt-1 max-w-[70ch]")}>{text(T.irisLeadsText)}</p>
+        <LeadsTabell
+          demo={demo}
+          valdId={valdId}
+          exempel={exempel}
+          onValj={onValjLead}
+          flyttbar={flyttbar}
+          korningPagar={pagaendeKorningar > 0}
+          onAntal={setAntalLeads}
+        />
+      </section>
+
+      <section aria-labelledby="leads-listor" className={kolumn}>
+        <h2 id="leads-listor" className={cn(rubrikPanel, "mb-4")}>
+          {text(T.listorRubrik)}
+        </h2>
+        {harListaddon || arDemo ? (
+          <LeadslistorView demo={demo} crmOppen={crmOppen} />
+        ) : (
+          <div className="grid gap-8">
+            <SaljlistaUtforska />
+            <CrmKundlista startOppen={crmOppen} />
+            <ListorUpsell />
+          </div>
+        )}
+      </section>
     </div>
   );
 }

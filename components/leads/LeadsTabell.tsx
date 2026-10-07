@@ -102,7 +102,17 @@ const KONTAKT_ETIKETT: Record<Kontaktvag, Localized> = {
 const TYPER: LeadTyp[] = ["iris", "lista", "import", "inkorg"];
 
 /** Stegen i remsan: arbetsflödets ordning, utan Spärrad (den har egen väg). */
-const REMSA = STATUS_ORDNING.filter((s) => s !== "suppressed");
+const REMSA = ["researching", "new", "ready", "contacted", "replied", "meeting", "won", "lost"] as const;
+
+/** Lägen som systemet sätter, aldrig kunden: research pågår medan ett jobb
+ *  lever (härlett i API:t) och spärrad via avregistreringen. I statusvalet
+ *  visas de bara när raden redan står i dem. */
+const SYSTEMSTATUS = new Set(["researching", "suppressed"]);
+
+/** Statusar där ett mejl gått ut, och där leadet svarat. Demons Skickat-lista
+ *  och nyckeltal räknas ur dem, så att demon säger samma sak på båda ställena. */
+const SKICKADE = new Set(["contacted", "replied", "meeting", "won", "lost"]);
+const SVARADE = new Set(["replied", "meeting", "won"]);
 
 /**
  * Pipelinestatus i säljlistans färgsystem (Sebbe 2026-10-06): grönt = i hamn,
@@ -256,8 +266,9 @@ export function LeadsTabell({
   /** En Iris-körning pågår (översiktens körningsruta): listan hämtas tätt
    *  även innan första bolaget hunnit köas. */
   korningPagar?: boolean;
-  /** Översiktens nyckeltal: hur många leads listan bär. */
-  onAntal?: (alla: number, nya: number) => void;
+  /** Översiktens nyckeltal: listans egna tal, så att de aldrig säger
+   *  något annat än listan. `skickat`/`svarat` är null tills de hämtats. */
+  onAntal?: (tal: { alla: number; nya: number; skickat: number | null; svarat: number | null }) => void;
 }>) {
   const { locale, text } = useLocale();
   const smal = useSmal();
@@ -432,10 +443,38 @@ export function LeadsTabell({
   const allaRader = useMemo(() => sortera([...exempel, ...(prospekt ?? [])]), [exempel, prospekt]);
   const listref = useRef<HTMLDivElement>(null);
   useRadrorelse(listref, prospekt === null ? null : allaRader);
+  // Demon har ingen utskickslogg: dess Skickat byggs av samma exempelleads
+  // som listan (kritiken 2: "Skickade 1 122" bredvid "Skickat 0").
+  const skickatVisat = useMemo<SkickatRad[] | null>(() => {
+    if (!demo) return skickat;
+    return allaRader
+      .filter((p) => SKICKADE.has(p.status))
+      .map((p) => ({
+        id: `demo-skickat-${p.id}`,
+        subject: text({ sv: `Hej ${p.company_name}`, en: `Hello ${p.company_name}` }),
+        body: text({
+          sv: "Exempelmejl i demon. I din arbetsyta står mejlet som det skickades.",
+          en: "Example email in the demo. In your workspace the email appears as it was sent."
+        }),
+        sent_at: p.senaste_handelse_at ?? p.created_at ?? new Date().toISOString(),
+        prospect_id: p.id,
+        company_name: p.company_name,
+        contact_name: p.contact_name ?? null,
+        prospect_email: p.contact_email ?? null,
+        svarat: SVARADE.has(p.status)
+      }));
+  }, [demo, skickat, allaRader, text]);
+
   useEffect(() => {
-    if (prospekt !== null) onAntal?.(allaRader.length, allaRader.filter((p) => p.status === "new").length);
+    if (prospekt === null) return;
+    onAntal?.({
+      alla: allaRader.length,
+      nya: allaRader.filter((p) => p.status === "new").length,
+      skickat: skickatVisat ? skickatVisat.length : null,
+      svarat: skickatVisat ? skickatVisat.filter((r) => r.svarat).length : null
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prospekt, allaRader]);
+  }, [prospekt, allaRader, skickatVisat]);
   // Bortvalda bolag når aldrig listan: API:t lämnar bara leads som uppfyller
   // kraven (snajp-support/app/api/leads.py, list_prospects).
   const urval = allaRader;
@@ -593,8 +632,8 @@ export function LeadsTabell({
         aria-label={`${text(T.statusFor)} ${p.company_name}`}
         className={cn(faltDiskret, "w-full")}
       >
-        {STATUS_ORDNING.map((s) => (
-          <option key={s} value={s}>
+        {STATUS_ORDNING.filter((s) => !SYSTEMSTATUS.has(s) || s === p.status).map((s) => (
+          <option key={s} value={s} disabled={SYSTEMSTATUS.has(s)}>
             {text(STATUS_ETIKETT[s])}
           </option>
         ))}
@@ -729,7 +768,8 @@ export function LeadsTabell({
           {REMSA.map((s) => {
             const antal = perStatus.get(s) ?? 0;
             const aktiv = filter.status === s && !visaSkickat && !visaBortvalda;
-            if (antal === 0 && !aktiv) return null;
+            const halls = live && (s === "researching" || s === "new");
+            if (antal === 0 && !aktiv && !halls) return null;
             return (
               <li key={s}>
                 <button
@@ -779,10 +819,10 @@ export function LeadsTabell({
               className={cn(chip, visaSkickat ? chipAktiv : chipInaktiv)}
             >
               {text({ sv: "Skickat", en: "Sent" })}
-              {skickat !== null ? (
+              {skickatVisat !== null ? (
                 <>
                   {" "}
-                  <Antal aktiv={visaSkickat}>{skickat.length}</Antal>
+                  <Antal aktiv={visaSkickat}>{skickatVisat.length}</Antal>
                 </>
               ) : null}
             </button>
@@ -791,7 +831,7 @@ export function LeadsTabell({
       </nav>
 
       {visaSkickat ? (
-        <SkickatLista rader={skickat} fel={skickatFel} onValj={onValj} />
+        <SkickatLista rader={skickatVisat} fel={skickatFel} onValj={onValj} />
       ) : visaBortvalda ? null : (
       <>
       <div className="flex flex-wrap items-end gap-2">
@@ -803,7 +843,7 @@ export function LeadsTabell({
             className={faltTatt}
           >
             <option value="">{text(T.alla)}</option>
-            {(["A", "B", "C"] as const).map((n) => (
+            {(["A", "B"] as const).map((n) => (
               <option key={n} value={n}>
                 {nivaEtikett(n, locale)}
               </option>
