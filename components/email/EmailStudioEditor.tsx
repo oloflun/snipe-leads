@@ -294,7 +294,10 @@ export function EmailStudioEditor({
           onChange={(event) => setBody(event.target.value)}
           className={cn(
             "focus-ring mt-2 w-full resize-y rounded-card border border-ink/12 bg-paper p-5 text-[1rem] leading-7 text-ink outline-none transition-colors focus:border-ink/30",
-            compact ? "min-h-[210px]" : "min-h-[320px]"
+            compact ? "min-h-[210px]" : "min-h-[320px]",
+            // Med signaturen under växer rutan med texten: annars scrollade
+            // hälsningsfrasen undan och mejlet såg avklippt ut ovanför namnet.
+            efterText ? "[field-sizing:content]" : null
           )}
         />
         {efterText}
